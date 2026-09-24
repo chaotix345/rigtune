@@ -1,153 +1,218 @@
-# RigTune API Reference: Minecraft Java 26.2 (Mojang-mapped, unobfuscated)
+# Minecraft / Fabric / Sodium API Reference — MC 26.2 (26.2-0.19.5)
 
-Research date: 2026-09-24. Source jars (read-only, never modified):
+Research notes for RigTune (client Fabric mod). All signatures below were extracted with `javap`
+(`-p [-c/-v]`) from the JDK at `C:/Dev/Tools/jdk/jdk-25.0.4.1+1/bin/` directly against the real game
+files under `%APPDATA%/ModrinthApp` — **no signature here is guessed from memory or from older MC
+versions.** Sources used:
 
-- **Vanilla client**: `%APPDATA%/ModrinthApp/meta/versions/26.2-0.19.5/26.2-0.19.5.jar` — confirmed unobfuscated/real Mojang names (`net/minecraft/client/Minecraft.class`, `net/minecraft/client/Options.class` etc. present verbatim; 10,952 classes total).
-- **Libraries**: `%APPDATA%/ModrinthApp/meta/libraries/` (LWJGL 3.4.1, OSHI 6.9.0, etc.)
-- **Sodium**: `sodium-fabric-0.9.2+mc26.2.jar`
-- **Fabric API**: `fabric-api-0.161.0+26.2.jar` (jar-in-jar; 42 nested modules under `META-INF/jars/`, extracted individually)
-- **User's real configs** (read-only reference): `Fabric 26.2/options.txt`, `Fabric 26.2/config/sodium-options.json`
+- Vanilla client: `%APPDATA%/ModrinthApp/meta/versions/26.2-0.19.5/26.2-0.19.5.jar` — confirmed
+  **unobfuscated** (real Mojang names: `net/minecraft/client/Minecraft.class`,
+  `net/minecraft/client/Options.class` etc. present directly, 10952 classes total).
+- Libraries: `%APPDATA%/ModrinthApp/meta/libraries/` (LWJGL 3.4.1, OSHI 6.9.0).
+- Sodium: `.../profiles/Fabric 26.2/mods/sodium-fabric-0.9.2+mc26.2.jar`.
+- Fabric API: `.../profiles/Fabric 26.2/mods/fabric-api-0.161.0+26.2.jar`, jar-in-jar — all 42 nested
+  `META-INF/jars/*.jar` modules extracted and cross-checked against `fabric.mod.json`.
+- User's real config, read-only, cross-referenced for key names:
+  `.../profiles/Fabric 26.2/options.txt` and `.../profiles/Fabric 26.2/config/sodium-options.json`.
 
-All signatures below are `javap -p` output against these exact jars, not recalled from training data. Where behavior required bytecode reading (`javap -c`), that's noted explicitly.
+Everything under `%APPDATA%/ModrinthApp` was treated strictly read-only throughout (jars copied out
+to a scratchpad and extracted there; nothing in ModrinthApp was modified).
+
+## Contents
+1. [`net.minecraft.client.Options`](#1-netminecraftclientoptions)
+2. [GPU info](#2-gpu-info-vendor--renderer--driver--backend-vram)
+3. [Window and monitor](#3-window-and-monitor)
+4. [FPS and frame timing](#4-fps-and-frame-timing)
+5. [Chunk/section readiness](#5-chunksection-readiness)
+6. [Sodium 0.9.2 configuration](#6-sodium-092-configuration)
+7. [GUI in 26.2](#7-gui-in-262)
+8. [Fabric API modules](#8-fabric-api-modules-fabric-api-0161026-nested-jars-under-meta-infjars)
+9. [Player and camera control](#9-player-and-camera-control-benchmark-automation)
+10. [OSHI (hardware info)](#10-oshi-hardware-info)
+11. [Gotchas](#gotchas)
 
 ---
 
-## 1. `net.minecraft.client.Options`
+# 1. `net.minecraft.client.Options`
 
-### 1.1 `OptionInstance<T>` — the generic wrapper
+All signatures below were extracted with `javap -p [-c/-v]` against the unobfuscated
+`26.2-0.19.5.jar`. Package for everything option-related is flat `net.minecraft.client`
+(not `net.minecraft.client.OptionsFoo` sub-packages).
+
+## 1.1 OptionInstance<T> — the generic wrapper
 
 ```java
 public final class net.minecraft.client.OptionInstance<T> {
+  // fields
+  private final ValueSet<T> values;
+  private final Codec<T> codec;
+  private final T initialValue;
+  private final ValueUpdateListener<? super T> onValueUpdate;
+  private final Component caption;
+  private T value;
+
+  // key API
   public T get();
   public void set(T);
   public OptionInstance$ValueSet<T> values();
   public Codec<T> codec();
 
+  // construction
   public OptionInstance(String, TooltipSupplier<T>, CaptionBasedToString<T>, ValueSet<T>, T, ValueUpdateListener<? super T>);
   public OptionInstance(String, TooltipSupplier<T>, CaptionBasedToString<T>, ValueSet<T>, Codec<T>, T, ValueUpdateListener<? super T>);
-  public static OptionInstance<Boolean> createBoolean(String, boolean);   // + 3 overloads w/ tooltip/listener
+  public static OptionInstance<Boolean> createBoolean(String, boolean);                                  // + 3 more overloads with tooltip/listener
 }
+```
 
-public interface OptionInstance$ValueUpdateListener<T> { void valueChanged(T); }
-public interface OptionInstance$ValueSet<T> {
+**`get()`** just returns the cached `value` field — cheap, call every frame if needed.
+
+**`set(T newValue)` bytecode-verified behavior:**
+1. `values.validateValue(newValue)` — clamps/rejects via the `ValueSet` (e.g. `IntRange`), falls back to current value via `Optional.orElseGet` if invalid.
+2. If `Minecraft.getInstance().isRunning()` is `false` (still booting), it just stores the value and returns — **no listener fires during early bootstrap**.
+3. Otherwise, if `Objects.equals(oldValue, newValue)` — no-op, listener is **not** invoked when the value hasn't actually changed.
+4. Otherwise: `value = newValue;` then `onValueUpdate.valueChanged(newValue)` (interface `OptionInstance$ValueUpdateListener<T>`, single abstract method `void valueChanged(T)`).
+
+So **all** side effects of changing a setting happen inside that one listener callback, which is supplied per-field when `Options`'s constructor builds each `OptionInstance`. There is no generic "on any option changed" hook — you have to either wrap `set()` yourself (e.g. via a mixin on the specific `Options` field accessor or on `OptionInstance.set`) or poll `get()`.
+
+The first `String` constructor arg (e.g. `"options.renderDistance"`) is a **translation key** for the settings-screen caption, not the options.txt save key (see §1.4 for the actual save key mapping).
+
+### `OptionInstance$ValueSet<T>` (interface)
+```java
+public interface ValueSet<T> {
   Function<OptionInstance<T>, AbstractWidget> createButton(TooltipSupplier<T>, Options, int, int, int, ValueUpdateListener<? super T>);
   Optional<T> validateValue(T);
   Codec<T> codec();
 }
-public final class OptionInstance$IntRange extends Record implements IntRangeBase {
+```
+Concrete implementations used throughout `Options`: `OptionInstance$IntRange`, `OptionInstance$Enum<T>` (backs `CycleButton`), plus others (`OptionInstance$UnitDouble`-style ones weren't inspected in depth).
+
+### `OptionInstance$IntRange` (record, implements `IntRangeBase`)
+```java
+public final class IntRange extends Record implements IntRangeBase {
   public IntRange(int minInclusive, int maxInclusive);
   public IntRange(int minInclusive, int maxInclusive, boolean applyValueImmediately);
   public Optional<Integer> validateValue(Integer);
+  public int minInclusive(); public int maxInclusive(); public boolean applyValueImmediately();
 }
-public final class OptionInstance$Enum<T> extends Record implements CycleableValueSet<T> {
+```
+Interesting: `applyValueImmediately` is a real, per-slider flag. Bytecode-confirmed example: `renderDistance`'s `IntRange` is constructed as `new IntRange(2, hasEnoughMemory ? 32 : 16, false)` — **`applyValueImmediately = false`**, i.e. the vanilla render-distance slider does *not* pretend to apply live the way some other integer sliders do. `simulationDistance` is built the same way (`false`). If you build your own slider widget around these `OptionInstance`s in a mixed-in screen, respect this flag if you want vanilla-consistent behavior.
+
+### `OptionInstance$Enum<T>` (record, implements `CycleableValueSet<T>`)
+```java
+public final class Enum<T> extends Record implements CycleableValueSet<T> {
   public Enum(List<T> values, Codec<T> codec);
+  public Optional<T> validateValue(T);
   public CycleButton$ValueListSupplier<T> valueListSupplier();
 }
 ```
+Backs every `OptionInstance<SomeEnum>` field (graphicsPreset, preferredGraphicsBackend, textureFiltering, etc.) and drives `CycleButton` generation directly.
 
-**`get()`** returns the cached field directly — cheap to call every frame.
+## 1.2 Relevant `OptionInstance<T>` fields/accessors on `Options` (video & performance)
 
-**`set(T newValue)` behavior (bytecode-verified):**
-1. `values.validateValue(newValue)` clamps/rejects via the `ValueSet` (e.g. `IntRange`); falls back to the current value if invalid.
-2. If `Minecraft.getInstance().isRunning()` is `false` (still booting), the value is just stored — **no listener fires during bootstrap**.
-3. If `Objects.equals(oldValue, newValue)`, it's a no-op — listener does **not** fire when the value hasn't actually changed.
-4. Otherwise: field is updated, then `onValueUpdate.valueChanged(newValue)` fires.
+Every field is `private final OptionInstance<T> name;` with a matching `public OptionInstance<T> name();` getter (no setter — call `.get()`/`.set(v)` on the returned instance). Table cross-checked against the user's real `options.txt` (`Fabric 26.2/options.txt`):
 
-All side effects of changing a setting happen inside that per-field listener supplied when `Options`'s constructor builds each `OptionInstance` — there is no generic "any option changed" hook. To intercept every change you'd have to mixin `OptionInstance.set` itself.
-
-The first `String` ctor arg (e.g. `"options.renderDistance"`) is the settings-screen **translation key**, not the options.txt save key.
-
-### 1.2 Video/performance `OptionInstance` accessors, cross-checked against the user's `options.txt`
-
-Every field is `private final OptionInstance<T> name;` with a matching `public OptionInstance<T> name();` getter — call `.get()`/`.set(v)` on the returned instance, there's no setter on `Options` itself.
-
-| Accessor | Type | options.txt key | Notes |
+| Field / accessor | Type | options.txt key | Notes |
 |---|---|---|---|
-| `renderDistance()` | `OptionInstance<Integer>` | `renderDistance` | range `[2, 16 or 32]` (32 if enough RAM); `applyValueImmediately=false` |
-| `simulationDistance()` | `OptionInstance<Integer>` | `simulationDistance` | `applyValueImmediately=false` |
+| `renderDistance()` | `OptionInstance<Integer>` | `renderDistance` | range `[2, 16 or 32]` (32 if `Runtime.maxMemory() >= 1_000_000_000L`), `applyValueImmediately=false` |
+| `simulationDistance()` | `OptionInstance<Integer>` | `simulationDistance` | range `[2 or 5, 16 or 32]`, `applyValueImmediately=false` |
 | `entityDistanceScaling()` | `OptionInstance<Double>` | `entityDistanceScaling` | |
-| `framerateLimit()` | `OptionInstance<Integer>` | `maxFps` | **key renamed**; `UNLIMITED_FRAMERATE_CUTOFF` constant = "Unlimited" |
-| `preferredGraphicsBackend()` | `OptionInstance<PreferredGraphicsApi>` | `preferredGraphicsBackend` | OpenGL/Vulkan choice, see §1.3 |
-| `graphicsPreset()` | `OptionInstance<GraphicsPreset>` | `graphicsPreset` | Fast/Fancy/Fabulous/Custom, see §1.3 |
+| `framerateLimit()` | `OptionInstance<Integer>` | `maxFps` | `UNLIMITED_FRAMERATE_CUTOFF` constant marks "Unlimited" |
+| `preferredGraphicsBackend()` | `OptionInstance<PreferredGraphicsApi>` | `preferredGraphicsBackend` | see §1.3 |
+| `graphicsPreset()` | `OptionInstance<GraphicsPreset>` | `graphicsPreset` | see §1.3 |
 | `inactivityFpsLimit()` | `OptionInstance<InactivityFpsLimit>` | `inactivityFpsLimit` | enum `MINIMIZED`/`AFK` |
-| `cloudStatus()` | `OptionInstance<CloudStatus>` | `renderClouds` | **key renamed**; enum `OFF`/`FAST`/`FANCY` |
+| `cloudStatus()` | `OptionInstance<CloudStatus>` | `renderClouds` | note key rename vs field name |
 | `cloudRange()` | `OptionInstance<Integer>` | `cloudRange` | |
-| `weatherRadius()` | `OptionInstance<Integer>` | `weatherRadius` | |
-| `cutoutLeaves()` | `OptionInstance<Boolean>` | `cutoutLeaves` | |
+| `weatherRadius()` | `OptionInstance<Integer>` | `weatherRadius` | confirmed present |
+| `cutoutLeaves()` | `OptionInstance<Boolean>` | `cutoutLeaves` | confirmed present |
 | `vignette()` | `OptionInstance<Boolean>` | `vignette` | |
-| `improvedTransparency()` | `OptionInstance<Boolean>` | `improvedTransparency` | |
-| `ambientOcclusion()` | `OptionInstance<Boolean>` | `ao` | **key renamed** |
-| `chunkSectionFadeInTime()` | `OptionInstance<Double>` | `chunkSectionFadeInTime` | seconds; `0.0` disables fade |
+| `improvedTransparency()` | `OptionInstance<Boolean>` | `improvedTransparency` | confirmed present |
+| `ambientOcclusion()` | `OptionInstance<Boolean>` | `ao` | key rename |
+| `chunkSectionFadeInTime()` | `OptionInstance<Double>` | `chunkSectionFadeInTime` | confirmed present |
 | `prioritizeChunkUpdates()` | `OptionInstance<PrioritizeChunkUpdates>` | `prioritizeChunkUpdates` | enum `NONE`/`PLAYER_AFFECTED`/`NEARBY` |
 | `mipmapLevels()` | `OptionInstance<Integer>` | `mipmapLevels` | |
-| `maxAnisotropyBit()` | `OptionInstance<Integer>` | `maxAnisotropyBit` | raw bit count; see `maxAnisotropyValue()` below |
-| `textureFiltering()` | `OptionInstance<TextureFilteringMethod>` | `textureFiltering` | enum `NONE`/`RGSS`/`ANISOTROPIC` |
-| `guiScale()` | `OptionInstance<Integer>` | `guiScale` | `0` = auto |
-| `gamma()` | `OptionInstance<Double>` | (not in default options.txt) | brightness |
-| `fov()` | `OptionInstance<Integer>` | `fov` | stored normalized `0.0–1.0`, not degrees |
+| `maxAnisotropyBit()` | `OptionInstance<Integer>` | `maxAnisotropyBit` | confirmed present; see also `maxAnisotropyValue()` below |
+| `textureFiltering()` | `OptionInstance<TextureFilteringMethod>` | `textureFiltering` | confirmed present; enum `NONE`/`RGSS`/`ANISOTROPIC` |
+| `guiScale()` | `OptionInstance<Integer>` | `guiScale` | `AUTO_GUI_SCALE` = 0 |
+| `gamma()` | `OptionInstance<Double>` | — (not in user's options.txt; brightness) | |
+| `fov()` | `OptionInstance<Integer>` | `fov` | |
 | `particles()` | `OptionInstance<ParticleStatus>` (`net.minecraft.server.level.ParticleStatus`) | `particles` | |
 | `entityShadows()` | `OptionInstance<Boolean>` | `entityShadows` | |
 | `biomeBlendRadius()` | `OptionInstance<Integer>` | `biomeBlendRadius` | |
 | `enableVsync()` | `OptionInstance<Boolean>` | `enableVsync` | |
 | `fullscreen()` | `OptionInstance<Boolean>` | `fullscreen` | |
-| `exclusiveFullscreen()` | `OptionInstance<Boolean>` | `exclusiveFullscreen` | also plain field `exclusiveFullscreenFromStartup` (captured at launch) |
+| `exclusiveFullscreen()` | `OptionInstance<Boolean>` | `exclusiveFullscreen` | new-ish; also `exclusiveFullscreenFromStartup` plain field |
 | `menuBackgroundBlurriness()` | `OptionInstance<Integer>` | `menuBackgroundBlurriness` | also plain int getter `getMenuBackgroundBlurriness()` |
 
-Other renamed keys seen in the real `options.txt`: `mouseSensitivity`↔`sensitivity`, `discrete_mouse_scroll`↔`discreteMouseScroll`, `hideLightningFlashes`↔`hideLightningFlash`, `panoramaScrollSpeed`↔`panoramaSpeed`. `syncChunkWrites` is a plain `boolean` field, not an `OptionInstance`. Most other keys match the field name 1:1.
+Other options.txt keys that differ from the Java field name (mapping confirmed by reading options.txt + matching semantics, not from literal bytecode key strings): `maxFps`↔`framerateLimit`, `ao`↔`ambientOcclusion`, `renderClouds`↔`cloudStatus`, `mouseSensitivity`↔`sensitivity`, `discrete_mouse_scroll`↔`discreteMouseScroll`, `hideLightningFlashes`↔`hideLightningFlash`, `syncChunkWrites`↔`syncWrites` (plain `boolean` field, not an `OptionInstance`), `panoramaScrollSpeed`↔`panoramaSpeed`. Most other keys match the field name 1:1 (`renderDistance`, `simulationDistance`, `cutoutLeaves`, `weatherRadius`, `improvedTransparency`, `chunkSectionFadeInTime`, `textureFiltering`, `maxAnisotropyBit`, `graphicsPreset`, `preferredGraphicsBackend`, `mipmapLevels`, `vignette`, `entityShadows`, `entityDistanceScaling`, `biomeBlendRadius`, `guiScale`, `fov`, `particles`, `enableVsync`, `fullscreen`, `exclusiveFullscreen`, `menuBackgroundBlurriness`, `cloudRange`, `prioritizeChunkUpdates`, `inactivityFpsLimit`).
 
-The literal save-key strings live in `processOptions(Options$FieldAccess)`, called by both `load()` and `save()` — the single source of truth if you need airtight certainty for a field not in this table:
+The exact key strings are compiled into an anonymous class `Options$3` (constructed inside `save()`) and its `load()` counterpart, both implementing `Options$FieldAccess`:
 ```java
 interface Options$OptionAccess { <T> void process(String key, OptionInstance<T> option); }
 interface Options$FieldAccess extends Options$OptionAccess {
-  int process(String, int); boolean process(String, boolean); String process(String, String); float process(String, float);
+  int process(String, int);
+  boolean process(String, boolean);
+  String process(String, String);
+  float process(String, float);
   <T> T process(String, T, Function<String,T> parse, Function<T,String> serialize);
 }
-private void processOptions(Options$FieldAccess);
+private void processOptions(Options$FieldAccess);   // single source of truth for ALL save/load key<->field pairs
+public void load();
+public void save();
 ```
+`processOptions` is a single big method that calls `access.process("someKey", someField)` once per persisted field/OptionInstance — it is the definitive place to find the literal key string for any field if you need 100% certainty (not fully enumerated here since it's ~150 call sites; grep the disassembly's `processOptions` body for `ldc` string constants immediately preceding each `process` invocation).
 
-`maxAnisotropyValue(): int` — derives the real sample count from the raw `maxAnisotropyBit` `OptionInstance<Integer>`.
-`isRestartRequiredToApplyVideoSettings(): boolean` — for showing a restart banner on a custom settings screen.
+`maxAnisotropyValue()` — separate `public int maxAnisotropyValue()` derives the actual anisotropy sample count (likely `1 << maxAnisotropyBit`) from the raw bit-count `OptionInstance<Integer>`.
 
-### 1.3 Graphics preset & graphics-API selection (26.x-new)
+`isRestartRequiredToApplyVideoSettings()` — `public boolean` — exists; a video-settings screen can call this to show a "restart required" banner.
+
+## 1.3 Graphics preset & graphics-API selection (26.x new APIs)
 
 ```java
 public final class net.minecraft.client.GraphicsPreset extends Enum<GraphicsPreset> implements StringRepresentable {
   public static final GraphicsPreset FAST, FANCY, FABULOUS, CUSTOM;
-  public String getSerializedName();   // "fast"/"fancy"/"fabulous"/"custom"
-  public void apply(Minecraft);        // pushes preset values into ~15 OptionInstances
+  public static final Codec<GraphicsPreset> CODEC;
+  public String getSerializedName();  // -> "fast" / "fancy" / "fabulous" / "custom" (matches options.txt graphicsPreset:"custom")
+  public String getKey();
+  public void apply(Minecraft);       // pushes preset values into ~15 OptionInstances, see below
+  private static <T> void set(OptionsSubScreen, OptionInstance<T>, T);  // helper used by apply()
 }
 ```
-`GraphicsPreset.apply(Minecraft)` calls `.set(...)` on, in order: `biomeBlendRadius`, `renderDistance`, `prioritizeChunkUpdates`, `simulationDistance`, `ambientOcclusion`, `cloudStatus`, `particles`, `mipmapLevels`, `entityShadows`, `entityDistanceScaling`, `menuBackgroundBlurriness`, `cloudRange`, `cutoutLeaves`, `improvedTransparency`, `weatherRadius`, and continues (almost certainly also `textureFiltering`/`vignette`/`chunkSectionFadeInTime`/`maxAnisotropyBit`, not walked to completion) — via a private static helper that takes a live `OptionsSubScreen`, so applying a preset through this exact method is coupled to an open settings screen, not trivially callable headless. **`Options.applyGraphicsPreset(GraphicsPreset)` is the public entry point** — it sets a guard flag `isApplyingGraphicsPreset = true` then applies.
+`GraphicsPreset.apply(Minecraft mc)` (bytecode-walked) calls `Options.<field>().set(...)` (via the private static `set(OptionsSubScreen, OptionInstance<T>, T)` helper — note it actually takes an `OptionsSubScreen`, so applying a preset is coupled to a live settings screen instance, not something you can trivially call headless) for, in this order: `biomeBlendRadius`, `renderDistance`, `prioritizeChunkUpdates`, `simulationDistance`, `ambientOcclusion`, `cloudStatus` (→`CloudStatus.FAST`), `particles`, `mipmapLevels`, `entityShadows`, `entityDistanceScaling`, `menuBackgroundBlurriness`, `cloudRange`, `cutoutLeaves`, `improvedTransparency`, `weatherRadius`, (continues beyond what was captured, almost certainly also `textureFiltering`/`vignette`/`chunkSectionFadeInTime`/`maxAnisotropyBit`). Each preset (FAST/FANCY/FABULOUS) has a different constant baked in for each field; CUSTOM is a sentinel that means "user has hand-tuned at least one of these" — see below.
 
-`Options.setGraphicsPresetToCustom()` — **private**, bytecode-confirmed to be invoked from the `valueChanged` listener of essentially every individual graphics-related `OptionInstance` (cutoutLeaves, improvedTransparency, vignette, ambientOcclusion, textureFiltering, weatherRadius, mipmapLevels, etc). **Hand-editing any one of these via `.set()` silently flips `graphicsPreset` to `CUSTOM`** — same as the vanilla screen showing "Custom" the moment you touch one slider after picking a preset. No way to avoid this short of not using the vanilla setter.
+`Options.applyGraphicsPreset(GraphicsPreset)` — public method on `Options` itself, sets `isApplyingGraphicsPreset = true` (a guard flag), likely delegates to `GraphicsPreset.apply(minecraft)`.
+
+`Options.setGraphicsPresetToCustom()` — **private**, but bytecode-confirmed to be invoked from the `valueChanged` listener of essentially every individual graphics-related `OptionInstance` (cutoutLeaves, improvedTransparency, vignette, ambientOcclusion, textureFiltering, weatherRadius, mipmapLevels, etc.) — i.e. hand-editing any one of these flips `graphicsPreset` to `CUSTOM` automatically, the same way vanilla's video settings screen shows "Custom" once you touch an individual slider after picking Fast/Fancy/Fabulous. **If your mod calls `.set()` on any of these fields directly, `graphicsPreset` will silently flip to CUSTOM as a side effect** — there's no way to avoid it short of not using the vanilla setter.
 
 ```java
 public final class net.minecraft.client.PreferredGraphicsApi extends Enum<PreferredGraphicsApi> implements StringRepresentable {
   public static final PreferredGraphicsApi DEFAULT, OPENGL, VULKAN;
-  public String getSerializedName();          // "default"/"opengl"/"vulkan"
-  public GpuBackend[] getBackendsToTry();      // com.mojang.blaze3d.systems.GpuBackend[]
+  public static final Codec<PreferredGraphicsApi> CODEC;
+  public Component caption();
+  public String getSerializedName();               // "default" / "opengl" / "vulkan" — matches options.txt preferredGraphicsBackend:"default"
+  public GpuBackend[] getBackendsToTry();           // com.mojang.blaze3d.systems.GpuBackend[] — the actual backend-selection fallback list
 }
 ```
-**26.2 has a first-class OpenGL-vs-Vulkan preference**: `Options.preferredGraphicsBackend()`, serialized as `preferredGraphicsBackend`. It requires a **restart** to take effect (restart-warning `Component`s present, `GRAPHICS_API_TOOLTIP_VULKAN`) — the plain field `preferredGraphicsBackendFromStartup` holds what's *actually active right now* vs. the pending choice in the `OptionInstance`. Both `com.mojang.blaze3d.opengl.GlBackend` and `com.mojang.blaze3d.vulkan.VulkanBackend` exist as concrete `GpuBackend` implementations in this jar — Vulkan is a real, working backend in 26.2, not a stub.
+`Options.preferredGraphicsBackend()` is the live `OptionInstance<PreferredGraphicsApi>`. There's also a plain field `private PreferredGraphicsApi preferredGraphicsBackendFromStartup;` captured once at launch (since the active backend can't be hot-swapped — changing this option requires a restart, consistent with `GRAPHICS_API_TOOLTIP`/`GRAPHICS_API_TOOLTIP_VULKAN` restart-warning `Component`s present in the class). **This confirms 26.2 does have a first-class OpenGL-vs-Vulkan preference**, exposed as `Options.preferredGraphicsBackend()`, serialized to `options.txt` as `preferredGraphicsBackend`, and it requires a restart to take effect (read `preferredGraphicsBackendFromStartup` if you need to know what's *actually active* right now, not just the pending choice).
 
-Other enums: `TextureFilteringMethod` (`NONE`/`RGSS`/`ANISOTROPIC`), `InactivityFpsLimit` (`MINIMIZED`/`AFK`), `PrioritizeChunkUpdates` (`NONE`/`PLAYER_AFFECTED`/`NEARBY`), `CloudStatus` (`OFF`/`FAST`/`FANCY`).
+Also present: `TextureFilteringMethod` (`NONE`/`RGSS`/`ANISOTROPIC`, each with a `Component caption()` and a legacy int-id `Codec`), `InactivityFpsLimit` (`MINIMIZED`/`AFK`), `PrioritizeChunkUpdates` (`NONE`/`PLAYER_AFFECTED`/`NEARBY`).
 
-### 1.4 `set()` side effects — chunk/geometry invalidation (bytecode-verified)
+## 1.4 `set()` side effects — chunk/geometry invalidation (bytecode-verified, not guessed)
 
+`Options` has a private static helper:
 ```java
-private static void Options.operateOnLevelExtractor(Consumer<net.minecraft.client.renderer.extract.LevelExtractor> action);
+private static void operateOnLevelExtractor(java.util.function.Consumer<net.minecraft.client.renderer.extract.LevelExtractor> action);
 ```
-Fetches `Minecraft.getInstance().levelExtractor`; if non-null (a level is loaded) runs `action.accept(levelExtractor)`; if null (main menu) it's a safe no-op. Called from the `valueChanged` listeners of multiple graphics `OptionInstance`s, wired to two distinct method references via `invokedynamic`/`LambdaMetafactory`:
-- **`LevelExtractor::allChanged`** — the "recompile everything" trigger, used by cutoutLeaves and other boolean/enum graphics toggles.
-- **`LevelExtractor::resetSampler`** — lighter-weight, used specifically by `textureFiltering`'s listener.
+Bytecode: fetches `Minecraft.getInstance().levelExtractor` (a field on `Minecraft`); if it's non-null (i.e. a level/world is currently loaded), runs `action.accept(levelExtractor)`; if null (main menu, no world), it's a safe no-op.
 
-**Non-obvious finding:** `renderDistance`'s own listener does **only** `setGraphicsPresetToCustom()` — it does **not** call `LevelExtractor.allChanged()` or any chunk-reload method. Calling `options.renderDistance().set(x)` does not itself force an immediate chunk-grid rebuild; that must be picked up elsewhere (polled each tick, same as pre-26.x). Don't assume an instant visual effect for a benchmark — you may need to poke the poller or wait a tick. `simulationDistance` very likely follows the same "Custom-flip only" pattern but wasn't individually bytecode-walked.
+This is called from the `valueChanged` listeners of multiple `OptionInstance`s. Two distinct method references were found wired up via `invokedynamic`/`LambdaMetafactory` (confirmed from the class's `BootstrapMethods` table, not inferred):
+- `LevelExtractor::allChanged` (`public void allChanged()`) — used by, among others, the listeners for **cutoutLeaves**, **vignette-adjacent boolean options**, and other "recompile everything" style toggles (confirmed call sites: the listeners paired with `setGraphicsPresetToCustom()` for several boolean/enum graphics fields).
+- `LevelExtractor::resetSampler` (`public void resetSampler()`) — used specifically by **textureFiltering**'s listener (lighter-weight than a full `allChanged()`).
 
-`net.minecraft.client.renderer.extract.LevelExtractor` (new in 26.x — companion/successor to `LevelRenderer`'s old reload logic; see §5) relevant surface:
+`net.minecraft.client.renderer.extract.LevelExtractor` (new in 26.x — this is the successor/companion to the old `LevelRenderer` reload logic) relevant surface:
 ```java
 public class LevelExtractor implements ResourceManagerReloadListener {
   public void setLevel(ClientLevel);
-  public void allChanged();
+  public void allChanged();          // full re-extract/recompile trigger
   public void resetSampler();
   public void blockChanged(BlockPos, int);
   public void setBlockDirty(BlockPos, boolean);
@@ -158,255 +223,294 @@ public class LevelExtractor implements ResourceManagerReloadListener {
 }
 ```
 
-### 1.5 `save()` / `load()`
+**Important, non-obvious finding:** `renderDistance`'s own `valueChanged` listener (`Options.lambda$new$106(Integer)`, bytecode-dumped in full) does **only** `this.setGraphicsPresetToCustom();` — it does **not** call `LevelExtractor.allChanged()` or any chunk-reload method directly. So changing `renderDistance` via `OptionInstance.set()` does not itself force a resend/rebuild of the chunk grid from `Options`'s side — that must be picked up elsewhere (most likely polled each tick by `ClientChunkCache`/`Minecraft` comparing the option's current value against the tracked view-distance, similar to how it always worked pre-26.x). Don't assume calling `options.renderDistance().set(x)` alone will visibly change loaded chunks the same frame; if you need an instant visual effect for a benchmark, you may need to also poke whatever polls it, or just wait a tick.
+
+`simulationDistance`'s listener is `Options.lambda$new$104`-adjacent territory but was not individually bytecode-dumped here — treat it as very likely following the same "flip to Custom only" pattern as renderDistance unless you verify otherwise.
+
+## 1.5 `save()` / `load()`
 
 ```java
-public void save();
+public void save();   // writes directly to this.optionsFile
 public void load();
+private CompoundTag dataFix(CompoundTag);   // for migrating old formats
 public File getFile();
-public String dumpOptionsForReport();   // crash-report / F3 dump
+public String dumpOptionsForReport();       // for crash reports / F3 debug dump
 ```
-`save()` opens `new PrintWriter(new OutputStreamWriter(new FileOutputStream(optionsFile), UTF_8))`, writes `"version:" + dataVersion` first, then `processOptions(new Options$3(this, writer))` which `println`s `key:value` per option (quoted strings for enums, e.g. `"custom"`) — matches the real file format exactly. Afterward it separately writes `fullscreenVideoModeString`, resource pack lists, key bindings (`key_<name>:<binding>`), sound volumes (`soundCategory_<name>:<vol>`), model parts (`modelPart_<name>:<bool>`).
-`optionsFile` is set once in the constructor: `new File(gameDir, "options.txt")`. Only public constructor: `Options(Minecraft, File gameDir)`.
+`save()` bytecode: opens `new PrintWriter(new OutputStreamWriter(new FileOutputStream(optionsFile), UTF_8))`, writes `"version:" + SharedConstants.getCurrentVersion().dataVersion().version()` as the first line, then calls `processOptions(new Options$3(this, writer))` where `Options$3` is an anonymous `FieldAccess` that `println`s `key + ":" + value` for every option (matches the real `options.txt` format: `key:value`, one per line, quoted strings for enums like `"custom"`). After that it separately writes `fullscreenVideoModeString`, resource pack lists, key bindings (`key_<name>:<binding>`), sound category volumes (`soundCategory_<name>:<vol>`), and model parts (`modelPart_<name>:<bool>`) — all visible as distinct sections in the real options.txt.
+
+`optionsFile` is a plain `java.io.File` field set once in the constructor to `new File(gameDir, "options.txt")`.
+
+`Options(Minecraft, File)` — the only public constructor; takes the game directory, not the options file directly.
 
 ---
 
-## 2. GPU info: vendor, renderer, driver, backend, VRAM
+# 2. GPU info (vendor / renderer / driver / backend, VRAM)
 
-**The `AdapterInfo` class and the `"Found graphics adapter: AdapterInfo{...}"` log line described in the task brief do not exist anywhere in this 26.2 build** (exhaustive case-insensitive content grep across all 10,952 extracted classes for `"adapter"` and `"AdapterInfo"` — zero hits). That's either a memory of an older/different snapshot or a log line this build doesn't emit. Don't build detection logic around it.
+**Important correction to the brief's premise**: the exact strings `"Found graphics adapter: AdapterInfo{...}"` and a class literally named `AdapterInfo` do **not exist anywhere in vanilla's 26.2 client jar** (exhaustively grepped every `.class` under `net/minecraft` and `com/mojang` for both `"AdapterInfo"` and `"Found graphics adapter"` — zero matches). That log line is **Sodium's**, not vanilla's: Sodium 0.9.2 has `net.caffeinemc.mods.sodium.client.compatibility.environment.probe.GraphicsAdapterInfo` (an interface) and `GraphicsAdapterProbe` (finds them), used purely for its own driver-workaround detection — see §6. If you saw that exact log text, Sodium was installed. Don't build RigTune's GPU-info reader around a vanilla `AdapterInfo` class — it isn't there.
 
-What 26.2 actually has and logs (bytecode-confirmed call sites in `Minecraft.class`, right after window/device creation):
+Vanilla **does** confirm-print `"Using graphics backend {}, using drivers: {}"` (SLF4J template, found in `Minecraft.class`) — that line is real vanilla output.
+
+## The real vanilla API: `com.mojang.blaze3d.systems.GpuDevice` / `DeviceInfo`
 
 ```java
-com.mojang.blaze3d.systems.RenderSystem
-  public static GpuDevice getDevice();       // throws/asserts if not yet initialized
-  public static GpuDevice tryGetDevice();     // null-safe
+public static com.mojang.blaze3d.systems.RenderSystem;
+  public static GpuDevice getDevice();          // throws/asserts if not yet initialized
+  public static GpuDevice tryGetDevice();        // null-safe
   public static String getBackendDescription();
+  public static void initRenderer(GpuDevice);
 
-com.mojang.blaze3d.systems.GpuDevice
+public class com.mojang.blaze3d.systems.GpuDevice {
   public DeviceInfo getDeviceInfo();
+  public List<String> getLastDebugMessages();
+  public boolean isDebuggingEnabled();
+  // + createTexture/createBuffer/createSampler/... (pipeline plumbing, not needed for a benchmark mod)
+}
 
 public final class com.mojang.blaze3d.systems.DeviceInfo extends Record {
-  public String name();                 // GPU model name, e.g. "NVIDIA GeForce RTX 4080"
+  public String name();            // GPU/renderer name string
   public String vendorName();
-  public String driverInfo();           // driver version string
-  public String backendName();          // e.g. "OpenGL"/"Vulkan"
-  public DeviceType type();             // OTHER/INTEGRATED/DISCRETE/VIRTUAL/CPU
+  public String driverInfo();      // driver version string
+  public String backendName();     // e.g. "OpenGL" / "Vulkan"
+  public boolean isZZeroToOne();
   public float timestampPeriod();
   public DeviceLimits limits();
   public DeviceFeatures features();
   public Set<String> underlyingExtensions();
   public HintsAndWorkarounds hintsAndWorkarounds();
+  public DeviceType type();        // OTHER / INTEGRATED / DISCRETE / VIRTUAL / CPU
 }
 ```
+**Use**: `RenderSystem.getDevice().getDeviceInfo()` gives you vendor, renderer name, driver version string, and active backend name (OpenGL/Vulkan) in one call, live, any time after renderer init. `DeviceType` tells you integrated-vs-discrete without string-parsing the name. This is the correct, stable, in-game-readable equivalent of what the brief called "AdapterInfo".
 
-Exact real log lines (bytecode-verified string constants + arg order in `Minecraft.class`):
-- `"Using graphics backend {}, using drivers: {}"` — args: `deviceInfo.backendName()`, `deviceInfo.driverInfo()`
-- `"Using graphics device: {} ({})"` — args: `deviceInfo.name()`, `deviceInfo.vendorName()`
-- `"Using graphics device extensions: {}"` — arg: `String.join(",", deviceInfo.underlyingExtensions())`
-
-Backend selection is also visible on the window itself:
 ```java
-com.mojang.blaze3d.platform.Window
-  public com.mojang.blaze3d.systems.GpuBackend backend();   // the actual active backend for this window
-com.mojang.blaze3d.systems.GpuBackend  (interface)
-  public String getName();
-  public GpuDevice createDevice(long, ShaderSource, GpuDebugOptions, Runnable) throws BackendCreationException;
+public final class com.mojang.blaze3d.systems.DeviceLimits extends Record {
+  public int maxAnisotropy(); public int minUniformOffsetAlignment(); public int maxTextureSize();
+  public long maxMemoryAllocationSize();   // NOT total VRAM — just the max single-allocation size
+  public int maxMultiDrawDirectInterleavedDrawCount(); public int maxColorAttachments();
+}
+public final class com.mojang.blaze3d.systems.HintsAndWorkarounds extends Record {
+  public boolean writeToBufferIsSlow(); public boolean anisotropyHasKnownIssues();
+}
+public final class com.mojang.blaze3d.systems.DeviceFeatures extends Record {
+  public boolean shaderDrawParameters(); public boolean multiDrawDirectInterleaved();
+  public boolean multiDrawDirectSeparate(); public boolean multiDrawIndirect();
+  public boolean drawIndirect(); public boolean nonZeroFirstInstance(); public boolean persistentMapping();
+}
+public final class com.mojang.blaze3d.systems.DeviceType extends Enum<DeviceType> { OTHER, INTEGRATED, DISCRETE, VIRTUAL, CPU }
 ```
-Concrete implementations present in the jar: `com.mojang.blaze3d.opengl.GlBackend`, `com.mojang.blaze3d.vulkan.VulkanBackend`.
 
-**RigTune usage:** `RenderSystem.tryGetDevice().getDeviceInfo()` gives vendor/renderer/driver/backend name/device type in one call, null-safe before the renderer is up. Cross-reference `Options.preferredGraphicsBackend().get()` (pending choice, §1.3) against `deviceInfo.backendName()` (what's actually active) to detect a pending-restart mismatch.
+## Can we read VRAM anywhere?
 
-**VRAM: not exposed here.** `DeviceLimits` only has `maxMemoryAllocationSize(): long` (max single allocation, not total VRAM) plus texture-size/anisotropy/alignment limits — no total-VRAM getter anywhere in `com.mojang.blaze3d`. For actual VRAM size, use OSHI's `GraphicsCard.getVRam()` (§10) — this is also exactly what Mojang's own `SystemReport` does (§10), so it's proven to work in-game.
+**Not from `GpuDevice`/`DeviceInfo`/`DeviceLimits`.** None of blaze3d's device-info records expose a total-VRAM number (`maxMemoryAllocationSize` is a per-allocation cap, not total memory). Sodium's own `GraphicsAdapterInfo` (vendor + name only) doesn't have it either. **The only real source of total VRAM is OSHI's `GraphicsCard.getVRam()`** (§10) — use that, same as vanilla's own `SystemReport` does.
+
+## Backend enum
+
+```java
+public interface com.mojang.blaze3d.systems.GpuBackend {
+  String getName();
+  void setWindowHints();
+  void handleWindowCreationErrors(GLFWErrorCapture$Error) throws BackendCreationException;
+  GpuDevice createDevice(long windowHandle, ShaderSource, GpuDebugOptions, Runnable) throws BackendCreationException;
+}
+```
+The active backend instance is reachable off `Window.backend()` (see §3) and drives which `GpuDevice` implementation gets created. Which backend is *preferred* (pending, may need restart) vs *actually active* is the `Options.preferredGraphicsBackend()` vs `preferredGraphicsBackendFromStartup` split documented in §1.3.
 
 ---
 
-## 3. Window and monitor
+# 3. Window and monitor
 
 ```java
 public final class com.mojang.blaze3d.platform.Window implements AutoCloseable {
-  public long handle();                        // the GLFW window handle
-  public com.mojang.blaze3d.systems.GpuBackend backend();
-  public int getWidth();  public int getHeight();
+  public long handle();                          // raw GLFW window handle
+  public int getRefreshRate();                    // from GLFW, of the monitor the window is on
+  public boolean isFullscreen();
+  public boolean isFocused();
+  public boolean isIconified();
+  public boolean isMinimized();
+  public int getWidth(); public int getHeight();               // framebuffer-adjacent window size
   public int getScreenWidth(); public int getScreenHeight();
   public int getGuiScaledWidth(); public int getGuiScaledHeight();
   public int getX(); public int getY();
   public int getGuiScale();
-  public int getRefreshRate();
-  public boolean isFullscreen();
-  public boolean isFocused(); public boolean isIconified(); public boolean isMinimized();
-  public void toggleFullScreen();
-  public void setWindowed(int, int);
-  public void changeFullscreenVideoMode();
-  public void updateFullscreenIfChanged();
+  public Monitor findBestMonitor();
   public Optional<VideoMode> getPreferredFullscreenVideoMode();
   public void setPreferredFullscreenVideoMode(Optional<VideoMode>);
-  public Monitor findBestMonitor();
-  public void setGuiScale(int);
+  public void changeFullscreenVideoMode();
+  public void toggleFullScreen();
+  public void setWindowed(int, int);
+  public GpuBackend backend();
+  public static String getPlatform();
 }
+```
+Reach it via `Minecraft.getInstance().getWindow()` (confirmed method, returns `Window`). There's also `Minecraft.windowSurface()` → `com.mojang.blaze3d.systems.GpuSurface` (the actual swapchain/surface object, backend-specific — not needed for a settings/benchmark mod, but exists if you need it).
 
+```java
 public final class com.mojang.blaze3d.platform.Monitor extends Record {
-  public static Monitor tryCreate(long glfwMonitorHandle);
   public String monitorName();
   public long monitor();                        // GLFW monitor handle
   public List<VideoMode> videoModes();
   public VideoMode currentMode();
   public int x(); public int y();
-  public VideoMode getPreferredVidMode(Optional<VideoMode>);
-  public int modeCount();
+  public static Monitor tryCreate(long glfwMonitorHandle);
+  public VideoMode getPreferredVidMode(Optional<VideoMode> override);
+  public int indexOfMode(VideoMode);
   public VideoMode mode(int index);
+  public int modeCount();
 }
 
 public final class com.mojang.blaze3d.platform.VideoMode {
   public VideoMode(int width, int height, int redBits, int greenBits, int blueBits, int refreshRate);
-  public VideoMode(org.lwjgl.glfw.GLFWVidMode);
+  public VideoMode(org.lwjgl.glfw.GLFWVidMode);           // wraps a raw GLFW vidmode
   public int getWidth(); public int getHeight();
   public int getRedBits(); public int getGreenBits(); public int getBlueBits();
   public int getRefreshRate();
-  public String write();                         // serialized form used in options.txt's fullscreenVideoModeString
-  public static Optional<VideoMode> read(String);
-}
-
-public class com.mojang.blaze3d.platform.MonitorManager implements AutoCloseable {
-  public Monitor getMonitor(long glfwHandle);
-  public Monitor findBestMonitor(Window);
+  public static Optional<VideoMode> read(String);          // parses options.txt's fullscreenVideoModeString format
+  public String write();
 }
 ```
-
-**Use:** `Minecraft.getInstance().getWindow()` → `Window`. Refresh rate via `Window.getRefreshRate()` (queries the current monitor) or `Monitor.currentMode().getRefreshRate()`. `Window.handle()` is the raw GLFW `long` for any direct LWJGL GLFW calls RigTune needs (e.g. `GLFW.glfwGetWindowAttrib`). `Window.backend()` is the fastest way to check OpenGL-vs-Vulkan at runtime without going through `RenderSystem`.
+**Use**: `Minecraft.getInstance().getWindow().getRefreshRate()` is the simplest live refresh-rate read. For full monitor enumeration (e.g. to list available fullscreen resolutions for a benchmark preset picker), `window.findBestMonitor().videoModes()`. `Options.fullscreenVideoModeString` (plain `String` field, §1) round-trips through `VideoMode.read(String)`/`.write()`.
 
 ---
 
-## 4. FPS and frame timing
+# 4. FPS and frame timing
 
 ```java
 public class net.minecraft.client.Minecraft {
-  public int getFps();
-  public long getFrameTimeNs();
-  public DebugScreenOverlay getDebugOverlay();
+  public int getFps();          // static `fps` field — updates once per second (smoothed frame count), NOT per-frame
+  public long getFrameTimeNs(); // instance `frameTimeNs` field — set EVERY frame in the main run loop, nanoseconds
 }
 ```
+Bytecode-confirmed call order inside `Minecraft`'s per-frame loop: `frameTimeNs` is set from the measured frame duration, then `DebugScreenOverlay.logFrameDuration(long)` is called with that same value (feeding the F3 chart), then once per second the smoothed `fps` static field is updated from accumulated frame count.
 
-Per-frame timing is logged into a ring-buffer sampler on the F3 debug overlay:
+**For 1% lows, use `getFrameTimeNs()`, not `getFps()`.** `getFps()` is already a 1-second-smoothed average — useless for percentile computation. `getFrameTimeNs()` gives you the raw per-frame duration; sample it every frame yourself (see hook options below) and compute your own percentiles (sort samples over a window, take the value at the 99th percentile of frame *time* = the "1% low" frame).
 
+## Vanilla's own frame-time ring buffer (F3 chart) — exists but has no public accessor
+
+```java
+package net.minecraft.util.debugchart;
+public interface SampleLogger { void logFullSample(long[]); void logSample(long); void logPartialSample(long, int); }
+public interface SampleStorage { int capacity(); int size(); long get(int); long get(int, int); void reset(); }
+public abstract class AbstractSampleLogger implements SampleLogger { /* ring buffer over `sample`/`defaults` */ }
+public class LocalSampleLogger extends AbstractSampleLogger implements SampleStorage {
+  public static final int CAPACITY;   // ring buffer size (matches F3 chart width, ~240)
+  public long get(int); public long get(int, int); public int size(); public int capacity(); public void reset();
+}
+```
 ```java
 public class net.minecraft.client.gui.components.DebugScreenOverlay {
-  private final LocalSampleLogger frameTimeLogger;    // NO public getter — see Gotchas
+  private final LocalSampleLogger frameTimeLogger;   // <-- PRIVATE, no getter exposed
   private final LocalSampleLogger tickTimeLogger;
-  public LocalSampleLogger getTickTimeLogger();
-  public LocalSampleLogger getPingLogger();
-  public LocalSampleLogger getBandwidthLogger();
-  public void logFrameDuration(long nanos);            // public — called once per frame from Minecraft.class
-  public boolean showFpsCharts();
-  public void toggleFpsCharts();
+  public LocalSampleLogger getTickTimeLogger();       // has a getter
+  public LocalSampleLogger getPingLogger();           // has a getter
+  public LocalSampleLogger getBandwidthLogger();      // has a getter
+  public void logFrameDuration(long);                 // write-only, called by Minecraft's frame loop
+  public boolean showFpsCharts(); public void toggleFpsCharts();
 }
 ```
+**Gotcha**: `frameTimeLogger` has **no public getter** (unlike `tickTimeLogger`/`pingLogger`/`bandwidthLogger`, which do). To read Mojang's own F3 frame-time ring buffer you'd need an Accessor mixin on `DebugScreenOverlay`. It's simpler to just maintain your own ring buffer fed from `Minecraft.getInstance().getFrameTimeNs()`.
 
-`Minecraft.class` (bytecode-confirmed call site): computes a frame's CPU duration in nanos, then calls `this.getDebugOverlay().logFrameDuration(nanos)` every frame regardless of whether the F3 charts are visible — so the sampler is always being fed live data, not just when the overlay is open.
+`net.minecraft.client.gui.components.debugchart.FpsDebugChart extends AbstractDebugChart` — the F3 chart widget itself, constructed with `(Font, SampleStorage)`; not useful headless, but confirms the chart is driven by a plain `SampleStorage`, so if you do mixin-accessor your way to `frameTimeLogger`, `LocalSampleLogger.get(int)` gives you raw nanosecond samples directly (same data as the chart).
 
-```java
-public class net.minecraft.util.debugchart.LocalSampleLogger implements SampleStorage {
-  public static final int CAPACITY;
-  public LocalSampleLogger(int lines);
-  public void logSample(long value);            // AbstractSampleLogger
-  public void logFullSample(long[] values);
-  public void logPartialSample(long, int line);
-  public int capacity();
-  public int size();
-  public long get(int index);                   // ring-buffer read, most-recent-relative
-  public long get(int index, int line);
-  public void reset();
-}
+## Per-frame hooks
 
-public class net.minecraft.client.gui.components.debugchart.FpsDebugChart extends AbstractDebugChart {
-  public FpsDebugChart(Font, SampleStorage);
-  protected String toDisplayString(double);       // formats a sample as ms/fps text
-}
-```
-
-**Gotcha / RigTune plan:** `frameTimeLogger` has **no public getter** on `DebugScreenOverlay` (unlike `tickTimeLogger`/`pingLogger`/`bandwidthLogger`, which do). Two options for computing average FPS + 1% lows:
-1. **Accessor mixin** (`@Accessor("frameTimeLogger")` on `DebugScreenOverlay`) to reach the existing ring buffer and read its samples directly via `get(int)`.
-2. **Simpler: mixin/inject at `DebugScreenOverlay.logFrameDuration(long)` (or wherever `Minecraft.class` calls it)** to capture each frame's nanosecond duration into RigTune's own rolling buffer — no accessor needed, and you get the exact same values the vanilla FPS chart uses. This is the recommended approach: `Minecraft.getFrameTimeNs()` alone only gives you the *current* frame, not history, so you need either this hook or your own per-frame sampling loop.
-
-Fabric API alternative to a mixin: `LevelRenderEvents.END_MAIN` / `START_MAIN` (renamed from `WorldRenderEvents`, see §8) fire once per rendered frame on the render thread and are a clean non-mixin hook point for sampling `Minecraft.getFrameTimeNs()` or driving your own frame-time ring buffer.
+- **`Minecraft.getFrameTimeNs()` polled from any per-frame callback.** The cleanest per-frame hook available from Fabric API (with WorldRenderEvents gone in 26.x, see §8) is `LevelRenderEvents.END_MAIN` (`net.fabricmc.fabric.api.client.rendering.v1.level`, fires once per world-render frame) or a `HudElement.extractRenderState(...)` registered via `HudElementRegistry` (also runs every frame, even simpler to wire up since it needs no world/level to be loaded — good for a benchmark overlay). A mixin injecting into `Minecraft`'s render loop directly (near where `frameTimeNs` is written) is the most precise option if you need to sample before any other mod's HUD/render-event code runs.
+- Ticks (`ClientTickEvents.END_CLIENT_TICK`, §8) are 20/s fixed-rate — **not** suitable for per-frame FPS sampling, only for driving benchmark scripting logic (camera moves, command dispatch) that doesn't need frame granularity.
 
 ---
 
-## 5. Chunk/section render readiness
+# 5. Chunk/section readiness
 
-Vanilla:
+## Vanilla: `LevelRenderer` + the new `LevelExtractor` (26.x split)
+
+26.x splits the old monolithic `LevelRenderer` into extraction (`net.minecraft.client.renderer.extract.LevelExtractor`, §1.4) and render-submission (`LevelRenderer` itself). Section-readiness queries are split across both:
+
 ```java
-public class net.minecraft.client.renderer.LevelRenderer {
+public class net.minecraft.client.renderer.LevelRenderer implements AutoCloseable {
   public boolean hasRenderedAllSections();
-  public boolean isSectionCompiledAndVisible(BlockPos);
-  public SectionRenderDispatcher sectionRenderDispatcher();
+  public boolean isSectionCompiledAndVisible(net.minecraft.core.BlockPos);
+  public void invalidateCompiledGeometry(ClientLevel, Options, Camera, BlockColors);
+  public void clearVisibleSections();
+  public void resetLevelRenderData();
   public ObjectArrayList<SectionRenderDispatcher$RenderSection> visibleSections();
   public ObjectArrayList<SectionRenderDispatcher$RenderSection> nearbyVisibleSections();
+  public LongCollection expectedChunks();
+  public SectionOcclusionGraph sectionOcclusionGraph();
+  public SectionRenderDispatcher sectionRenderDispatcher();
 }
 
 public class net.minecraft.client.renderer.extract.LevelExtractor implements ResourceManagerReloadListener {
-  public int countRenderedSections();
+  public void allChanged();                 // force full recompile (see §1.4)
+  public void resetSampler();
+  public int countRenderedSections();        // <-- brief's "countRenderedSections" lives HERE, not on LevelRenderer
   public double totalSections();
   public double lastViewDistance();
-  public void allChanged();
   public String sectionStatistics();
   public String entityStatistics();
 }
 ```
-`hasRenderedAllSections()` is the direct yes/no answer ("has the renderer finished compiling everything currently in view"). `LevelExtractor.countRenderedSections()`/`totalSections()` give the numeric progress (new in 26.x — `LevelExtractor` is a sibling of `LevelRenderer` introduced by the extract/render-thread split, see §7's `extractRenderState` note). Get the instance via `Minecraft.getInstance().levelExtractor` (package-visible-ish field) or `Minecraft.getInstance().levelRenderer`.
+**Use for a benchmark "warm-up complete" gate**: poll `levelRenderer.hasRenderedAllSections()` each frame/tick after teleporting the player; combine with `levelExtractor.countRenderedSections()` vs `levelExtractor.totalSections()` if you want a progress percentage rather than a boolean. Reach the live instances via `Minecraft.getInstance().levelRenderer` and `Minecraft.getInstance().levelExtractor` (both fields exist on `Minecraft`, confirmed — `levelExtractor` specifically confirmed via `Options.operateOnLevelExtractor`'s bytecode in §1.4).
 
-**Sodium 0.9.2 overrides this.** With Sodium installed, `LevelRenderer`'s chunk data is actually driven by Sodium's own renderer, and Sodium mixes directly into both `LevelRenderer` (`net.caffeinemc.mods.sodium.mixin.core.render.world.LevelRendererMixin`, plus a second sky-specific `LevelRendererMixin`) and the new `LevelExtractor` (`net.caffeinemc.mods.sodium.mixin.core.render.world.LevelExtractorMixin`) — so vanilla's `hasRenderedAllSections()`/`countRenderedSections()` may not reflect reality with Sodium loaded. Use Sodium's own renderer instead:
+## Sodium 0.9.2 **overrides both of the above wholesale** — confirmed via mixin inspection
+
+Sodium ships two core mixins that fully replace (not just decorate) the relevant vanilla methods:
 
 ```java
-public class net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer {
+// net.caffeinemc.mods.sodium.mixin.core.render.world.LevelRendererMixin
+public boolean hasRenderedAllSections();               // @Overwrite, same signature as vanilla
+public boolean isSectionCompiledAndVisible(BlockPos);  // @Overwrite
+public ChunkSectionsToRender prepareChunkRenders(Matrix4fc); // @Overwrite
+public SodiumWorldRenderer sodium$getWorldRenderer();   // accessor added to LevelRenderer
+
+// net.caffeinemc.mods.sodium.mixin.core.render.world.LevelExtractorMixin
+public int countRenderedSections();                    // @Overwrite
+public String sectionStatistics();                     // @Overwrite
+public void setBlocksDirty(int,int,int,int,int,int);   // @Overwrite
+public void setSectionDirtyWithNeighbors(int,int,int);  // @Overwrite
+```
+Both mixins delegate to a single `SodiumWorldRenderer` instance they hold a reference to. **So whichever vanilla method you call (`LevelRenderer.hasRenderedAllSections()` etc.), you transparently get Sodium's answer once Sodium is installed** — you don't need to special-case Sodium for these specific calls, vanilla's own method names keep working. You only need Sodium-specific APIs for things vanilla doesn't expose at all (visible chunk count, per-section readiness by coordinate, debug strings).
+
+## Sodium's own API: `net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer`
+
+```java
+public class SodiumWorldRenderer {
   public static SodiumWorldRenderer instance();          // throws if not initialized
-  public static SodiumWorldRenderer instanceNullable();  // null-safe
-  public boolean isTerrainRenderComplete();               // exact equivalent of hasRenderedAllSections()
-  public boolean isSectionReady(int chunkX, int chunkY, int chunkZ);
+  public static SodiumWorldRenderer instanceNullable();  // null-safe, use this for a mod that may run before world load
+  public boolean isTerrainRenderComplete();               // <-- exact match for the brief's ask
   public int getVisibleChunkCount();
+  public boolean isSectionReady(int x, int y, int z);      // per-section-coordinate readiness
   public String getChunksDebugString();
   public Collection<String> getDebugStrings(boolean);
+  public void scheduleRebuildForChunk(int x, int y, int z, boolean important);
+  public void scheduleRebuildForChunks(int x0,int y0,int z0,int x1,int y1,int z1, boolean important);
+  public void scheduleRebuildForBlockArea(int,int,int,int,int,int, boolean);
+  public void scheduleTerrainUpdate();
 }
 ```
-Also reachable off a live `LevelRenderer` instance via Sodium's extension interface (avoids the static singleton if you already have the renderer):
-```java
-public interface net.caffeinemc.mods.sodium.client.world.LevelRendererExtension {
-  SodiumWorldRenderer sodium$getWorldRenderer();
-}
-// ((LevelRendererExtension) minecraft.levelRenderer).sodium$getWorldRenderer()
-```
-
-**RigTune usage:** detect Sodium via `FabricLoader.getInstance().isModLoaded("sodium")`; if present, poll `SodiumWorldRenderer.instanceNullable().isTerrainRenderComplete()` for the benchmark's "world is fully loaded, start measuring" gate; otherwise fall back to `Minecraft.getInstance().levelRenderer.hasRenderedAllSections()`.
+**Use**: `SodiumWorldRenderer.instanceNullable()` (guard against Sodium not being present — it's a soft/optional dependency, check with `FabricLoader.getInstance().isModLoaded("sodium")` first) then `.isTerrainRenderComplete()` is the most direct "has the renderer finished building all visible chunks" signal when Sodium is active — arguably more reliable than vanilla's `hasRenderedAllSections()` for gating a benchmark start, since it's Sodium's own notion of "done" (queue-drained) rather than vanilla's occlusion-graph-based notion (which Sodium's mixin overrides anyway, so in practice they should agree, but `SodiumWorldRenderer` is the canonical source once Sodium owns the pipeline).
 
 ---
 
-## 6. Sodium 0.9.2 config
+# 6. Sodium 0.9.2 configuration
 
-### Loading/saving
+## Options class(es) — `net.caffeinemc.mods.sodium.client.gui.SodiumOptions`
 
 ```java
-public class net.caffeinemc.mods.sodium.client.SodiumClientMod {
-  public static SodiumOptions options();          // the live singleton — read/write fields directly
-  private static SodiumOptions loadConfig();       // called once at init
-  public static void restoreDefaultOptions();
-  public static boolean allowDebuggingOptions();
-}
-
-public class net.caffeinemc.mods.sodium.client.gui.SodiumOptions {
+public class SodiumOptions {
   public final QualitySettings quality;
   public final PerformanceSettings performance;
   public final AdvancedSettings advanced;
   public final DebugSettings debug;
   public final NotificationSettings notifications;
+
   public static SodiumOptions defaults();
   public static SodiumOptions loadFromDisk();
-  public static void writeToDisk(SodiumOptions) throws IOException;   // <config>/sodium-options.json
+  public static void writeToDisk(SodiumOptions) throws IOException;
   public boolean isReadOnly(); public void setReadOnly();
 }
 ```
-Config file path is resolved internally (`private static Path getConfigPath()`, not exposed) — always goes through `SodiumClientMod.options()` + `SodiumOptions.writeToDisk(options())`, don't hardcode the path yourself.
+Static accessor (confirmed): **`net.caffeinemc.mods.sodium.client.SodiumClientMod.options()`** → returns the live loaded `SodiumOptions` instance. Also on `SodiumClientMod`: `restoreDefaultOptions()`, `logger()`, `getVersion()`, `allowDebuggingOptions()`. Save is `SodiumOptions.writeToDisk(options)` — call it after mutating fields on the instance returned by `SodiumClientMod.options()`, there's no auto-save-on-mutation.
 
-### Nested settings classes and their real fields
+Field groups (all plain mutable public fields, `Gson` serialized — **field naming policy is a naive camelCase→snake_case converter**, confirmed by the real config file having `use_no_error_g_l_context` for `useNoErrorGLContext`, i.e. every capital letter gets its own underscore, including consecutive ones — don't hand-write the JSON key for an acronym field without checking this):
 
 ```java
 public class SodiumOptions$QualitySettings {
@@ -417,13 +521,13 @@ public class SodiumOptions$QualitySettings {
 }
 public class SodiumOptions$PerformanceSettings {
   public int chunkBuilderThreads;
-  public net.caffeinemc.mods.sodium.client.render.chunk.DeferMode chunkBuildDeferMode;
+  public DeferMode chunkBuildDeferMode;
   public boolean animateOnlyVisibleTextures;
   public boolean useEntityCulling;
   public boolean useFogOcclusion;
   public boolean useBlockFaceCulling;
   public boolean useNoErrorGLContext;
-  public net.caffeinemc.mods.sodium.client.render.chunk.translucent_sorting.QuadSplittingMode quadSplittingMode;
+  public QuadSplittingMode quadSplittingMode;
 }
 public class SodiumOptions$AdvancedSettings { public boolean enableMemoryTracing; }
 public class SodiumOptions$DebugSettings { public boolean terrainSortingEnabled; }
@@ -434,49 +538,27 @@ public class SodiumOptions$NotificationSettings {
 }
 ```
 
-### Real `config/sodium-options.json` structure (ground truth, read from the user's live file)
-
+**Real `config/sodium-options.json` from the user's profile** (ground truth, matches the fields above exactly):
 ```json
 {
-  "quality": {
-    "hidden_fluid_culling": true,
-    "improved_fluid_shaping": false,
-    "use_closest_point_entity_sort": false,
-    "pixel_filtering_mode": "NEAREST"
-  },
-  "performance": {
-    "chunk_builder_threads": 0,
-    "chunk_build_defer_mode": "ALWAYS",
-    "animate_only_visible_textures": true,
-    "use_entity_culling": true,
-    "use_fog_occlusion": true,
-    "use_block_face_culling": true,
-    "use_no_error_g_l_context": true,
-    "quad_splitting_mode": "SAFE"
-  },
+  "quality": { "hidden_fluid_culling": true, "improved_fluid_shaping": false, "use_closest_point_entity_sort": false, "pixel_filtering_mode": "NEAREST" },
+  "performance": { "chunk_builder_threads": 0, "chunk_build_defer_mode": "ALWAYS", "animate_only_visible_textures": true, "use_entity_culling": true, "use_fog_occlusion": true, "use_block_face_culling": true, "use_no_error_g_l_context": true, "quad_splitting_mode": "SAFE" },
   "advanced": { "enable_memory_tracing": false },
   "debug": { "terrain_sorting_enabled": true },
   "notifications": { "has_cleared_donation_button": false, "has_seen_donation_prompt": true, "has_edited_fullscreen_option": true }
 }
 ```
-Gson lower-snake-case naming policy auto-derives JSON keys from the Java field names — note the mechanical (slightly odd) result `useNoErrorGLContext` → `use_no_error_g_l_context` (each capital letter run gets its own underscore, "GL" splits into "G_L"). Don't hand-write key names; derive them the same way Gson would if you add fields.
+Note how small this is compared to older Sodium versions — **render distance, vsync, FOV, GUI scale, brightness, fullscreen etc. are no longer Sodium's own options**; Sodium 0.9.2's own settings screen (`SodiumConfigBuilder`) just re-displays/edits the *vanilla* `Options` fields for those (bytecode-confirmed: its page-building code directly references `options.renderDistance`, `options.simulationDistance`, `options.gamma`, `options.guiScale`, translation keys `options.renderDistance` etc.) rather than duplicating them into `sodium-options.json`. Only genuinely Sodium-specific renderer-internals settings live in this file.
 
-### `DeferMode` (`chunk_build_defer_mode`) and `QuadSplittingMode` (`quad_splitting_mode`) — full enum lists
+## Enum values
 
 ```java
-public enum net.caffeinemc.mods.sodium.client.render.chunk.DeferMode {
-  ALWAYS, ONE_FRAME, ZERO_FRAMES;
-  public boolean allowsUnlimitedUploadDuration();
-}
-public enum net.caffeinemc.mods.sodium.client.render.chunk.translucent_sorting.QuadSplittingMode {
-  OFF, SAFE, UNLIMITED;
-  public boolean allowsSplitting();
-  public boolean quantizeTriggerNormals();
-  public int getMaxTotalQuads(int);
-}
+public enum net.caffeinemc.mods.sodium.client.render.chunk.DeferMode { ALWAYS, ONE_FRAME, ZERO_FRAMES }
+public enum net.caffeinemc.mods.sodium.client.render.chunk.translucent_sorting.QuadSplittingMode { OFF, SAFE, UNLIMITED }
 ```
+(Confirmed against the real JSON: `chunk_build_defer_mode: "ALWAYS"`, `quad_splitting_mode: "SAFE"`.)
 
-### Workaround / driver-detection
+## Workaround / driver-detection classes
 
 ```java
 public class net.caffeinemc.mods.sodium.client.compatibility.workarounds.Workarounds {
@@ -488,360 +570,632 @@ public enum Workarounds$Reference {
   NO_ERROR_CONTEXT_UNSUPPORTED,
   INTEL_FRAMEBUFFER_BLIT_CRASH_WHEN_UNFOCUSED,
   INTEL_DEPTH_BUFFER_COMPARISON_UNRELIABLE,
-  AMD_GAME_OPTIMIZATION_BROKEN;
+  AMD_GAME_OPTIMIZATION_BROKEN,
 }
 ```
-Vendor-specific detector classes exist alongside: `...workarounds.amd.AmdWorkarounds`, `...workarounds.intel.IntelWorkarounds`, `...workarounds.nvidia.NvidiaWorkarounds`.
+Vendor-specific detector classes also present (not fully enumerated, just confirmed to exist): `compatibility.workarounds.amd.AmdWorkarounds`, `.intel.IntelWorkarounds`, `.nvidia.NvidiaWorkarounds` + `NvidiaDriverVersion`. Separate from these, the **adapter identification** classes (used by the workaround detectors, and the likely source of the log text the brief quoted) are:
+```java
+public interface net.caffeinemc.mods.sodium.client.compatibility.environment.probe.GraphicsAdapterInfo {
+  GraphicsAdapterVendor vendor();
+  String name();
+}
+public class GraphicsAdapterProbe {
+  public static void findAdapters();
+  public static Collection<? extends GraphicsAdapterInfo> getAdapters();
+}
+```
+All of this is under `.compatibility.` — internal, not part of Sodium's public API package (below); don't build RigTune features against it, it can change without notice.
 
-### Vulkan
+## Vulkan backend — no user-facing Sodium option; it's auto-derived
 
-**Sodium 0.9.2 has no dedicated Vulkan on/off option of its own** — no `vulkan`-named field anywhere in `SodiumOptions`, and nothing backend-related in the real `sodium-options.json`. It follows whatever `Options.preferredGraphicsBackend()` picks (§1.3). It does, however, ship Vulkan-specific **compatibility mixins** confirming it actively hooks the Vulkan backend rather than just tolerating it: `net.caffeinemc.mods.sodium.mixin.core.VulkanPipelineMixin`, `...VulkanRenderPassAccessor`.
+Sodium 0.9.2 has real internal Vulkan draw-path support (`VKIndirectDrawBatch`, `VKMultiDrawBatch`, `VKDrawContext`, `VulkanPipelineMixin`, `VulkanRenderPassAccessor` all present in the jar), exposed through:
+```java
+public enum net.caffeinemc.mods.sodium.client.gpu.device.backend.DrawBackend {
+  OPENGL, VK_MULTIDRAW, VK_INDIRECT,
+  BACKEND;                       // the auto-selected active one
+  private static DrawBackend chooseBackend();   // private — no setter, not user-configurable
+}
+```
+**There is no field in `SodiumOptions` for backend selection** — `sodium-options.json` has nothing Vulkan-related. Sodium's draw backend is entirely derived from `chooseBackend()` at startup based on whatever vanilla's active `GpuDevice`/backend already is (driven by `Options.preferredGraphicsBackend`, §1.3) plus hardware capability — Sodium adapts to vanilla's backend choice, it doesn't offer an independent one. If RigTune wants to report "is Sodium using the Vulkan multidraw or indirect path", read `DrawBackend.BACKEND` (reflection/mixin needed, it's not a published API).
 
-### Public API — `net.caffeinemc.mods.sodium.api.*`
+## Sodium's public API package — `net.caffeinemc.mods.sodium.api.*`
 
-What other mods (RigTune included) can do without touching Sodium internals:
-- **`api.config.*`** (`ConfigEntryPoint`, `ConfigBuilder`, `ModOptionsBuilder`, `OptionPageBuilder`/`OptionGroupBuilder`, `BooleanOptionBuilder`/`IntegerOptionBuilder`/`EnumOptionBuilder`, `StorageEventHandler`) — lets a mod register its **own config page inside Sodium's video settings screen** (`registerConfigLate(ConfigBuilder)` entry point).
-- **`api.vertex.buffer.VertexBufferWriter`** / **`api.vertex.format.*`** / **`api.vertex.attributes.common.*`** — direct-memory vertex writing compatible with Sodium's chunk vertex formats, for mods that want to feed geometry into Sodium's fast path (`VertexBufferWriter.of(VertexConsumer)`, `push(MemoryStack, long, int, VertexFormat)`).
-- **`api.memory.MemoryIntrinsics`** — low-level intrinsics for the above.
-- **`api.blockentity.BlockEntityRenderHandler` / `BlockEntityRenderPredicate`** — hook block-entity render culling.
-- **`api.util.ColorARGB`/`ColorABGR`/`ColorMixer`/`ColorU8`/`NormI8`** — packing helpers matching Sodium's internal formats.
-- **`api.texture.SpriteUtil`** — sprite/texture helpers.
+This package (distinct from `.client.`/`.mixin.`/`.compatibility.` — those are internal) is what Sodium explicitly supports other mods depending on:
 
-None of this is needed just to *read* Sodium's settings/render state (§5/§6 above cover that) — it's for mods that want to render through Sodium's pipeline.
+- **`api.config.*`** — lets another mod contribute its own page into Sodium's video-settings UI: `ConfigEntryPoint` (`registerConfigEarly`/`registerConfigLate(ConfigBuilder)`), `structure.ConfigBuilder`/`ModOptionsBuilder`/`OptionPageBuilder`/`OptionGroupBuilder`/`BooleanOptionBuilder`/`IntegerOptionBuilder`/`EnumOptionBuilder`/`ExternalButtonOptionBuilder`, plus `option.OptionBinding`/`OptionFlag`/`OptionImpact`/`Range`/`Validator`. (Exact discovery mechanism — Fabric entrypoint key vs `ServiceLoader` — wasn't pinned down; no `META-INF/services` entry for `ConfigEntryPoint` was found in the jar and no `FabricLoader.getEntrypoints("sodium:config", ...)` call site was found either, so treat the registration path as unconfirmed until you test it, though the interface itself is real and public.) There's also `ConfigEntryPointForge`, confirming this API is written to be loader-agnostic.
+- **`api.blockentity.*`** — `BlockEntityRenderHandler`, `BlockEntityRenderPredicate`: opt a custom block entity renderer out of Sodium's culling/batching.
+- **`api.vertex.*`** — `VertexBufferWriter` + `attributes.common.*` (`PositionAttribute`, `ColorAttribute`, `LightAttribute`, `NormalAttribute`, `OverlayAttribute`, `TextureAttribute`) + `format.common.*` (`EntityVertex`, `GlyphVertex`, `ParticleVertex`) + `format.VertexFormatRegistry`/`VertexFormatExtensions` + `serializer.VertexSerializer`/`VertexSerializerRegistry` — the fast-path for mods writing custom geometry compatible with Sodium's renderer.
+- **`api.texture.SpriteUtil`**, **`api.math.MatrixHelper`**, **`api.memory.MemoryIntrinsics`**, **`api.util.{ColorABGR,ColorARGB,ColorMixer,ColorU8,NormI8}`** — small standalone utility helpers, safe to depend on directly.
+
+RigTune likely doesn't need any of this beyond maybe `SodiumWorldRenderer` (which is under `.client.render`, not `.api.` — technically internal, but this is the standard/expected way every perf-overlay mod reads Sodium's state; treat it as de-facto stable, not de-jure public API).
+
+## Load/save timing
+
+`SodiumOptions.loadFromDisk()` is called once at startup (from `SodiumClientMod`'s private `loadConfig()`); `SodiumClientMod.options()` thereafter just returns the cached static instance — mutate its fields directly, then call `SodiumOptions.writeToDisk(SodiumClientMod.options())` yourself to persist (no auto-save, no listener/callback mechanism analogous to vanilla's `OptionInstance.ValueUpdateListener`, §1). Config path is computed by a private `getConfigPath()`; the default file name constant is `DEFAULT_FILE_NAME` (confirmed to resolve to `config/sodium-options.json`, matching the real file location).
 
 ---
 
-## 7. GUI in 26.2
+# 7. GUI in 26.2
 
-### `Screen`
+## Screen (`net.minecraft.client.gui.screens.Screen`)
 
 ```java
-public final void init(int width, int height);       // final — do not override
-protected void init();                                 // override this to add widgets
+protected Screen(Component title);
+protected Screen(Minecraft minecraft, Font font, Component title);
 
-// RENAMED render pipeline — no render(GuiGraphics,...) any more:
+public final void init(int width, int height);      // final; calls init()
+protected void init();                                // override this, not the final one
+
+// RENAMED render pipeline (no more render(GuiGraphics,...)):
 public void extractRenderState(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick);
 public final void extractRenderStateWithTooltipAndSubtitles(GuiGraphicsExtractor, int, int, float);
+public void extractBackground(GuiGraphicsExtractor, int, int, float);
+protected void extractBlurredBackground(GuiGraphicsExtractor);
+protected void extractPanorama(GuiGraphicsExtractor, float);
+protected void extractMenuBackground(GuiGraphicsExtractor);
+protected void extractMenuBackground(GuiGraphicsExtractor, int, int, int, int);
+public void extractTransparentBackground(GuiGraphicsExtractor);
 
 public void onClose();
 public boolean shouldCloseOnEsc();
 
 protected <T extends GuiEventListener & Renderable & NarratableEntry> T addRenderableWidget(T widget);
 protected <T extends Renderable> T addRenderableOnly(T widget);
+protected <T extends GuiEventListener & NarratableEntry> T addWidget(T widget);
+protected void removeWidget(GuiEventListener);
+protected void clearWidgets();
 
-public boolean keyPressed(net.minecraft.client.input.KeyEvent event);   // event object, not (int,int,int)
+public boolean keyPressed(net.minecraft.client.input.KeyEvent event); // takes a KeyEvent object, not (int,int,int)
+public void tick();
+public void removed();
+public void added();
+public void resize(int width, int height);
 public Font getFont();
 ```
-Override `init()` (not the `final init(int,int)`) to add widgets, and `extractRenderState(GuiGraphicsExtractor, mouseX, mouseY, partialTick)` (not `render`) to draw. `addRenderableWidget` still registers a widget for both rendering and input in one call.
 
-### `GuiGraphics` → **`net.minecraft.client.gui.GuiGraphicsExtractor`**
+**Use:** Override `init()` (not `init(int,int)` — that one's `final`) to add widgets, and `extractRenderState(GuiGraphicsExtractor, mouseX, mouseY, partialTick)` (not `render`) to draw. Call `super.extractRenderState(...)` if you want the default background. `addRenderableWidget` registers a widget for both rendering and event handling in one call — same contract as 1.21.x, just against the new render-state object.
 
-**There is no class literally named `GuiGraphics` in 26.2.** Screens/widgets *extract render state* into a `GuiRenderState` object instead of drawing immediately (actual GPU submission happens later — this is the same extract/render split as `LevelExtractor`/`LevelRenderer` in §5).
+## GuiGraphics -> `net.minecraft.client.gui.GuiGraphicsExtractor`
+
+**There is no class literally named `GuiGraphics` in 26.2.** It was replaced by `net.minecraft.client.gui.GuiGraphicsExtractor`, part of the new "extract render state" pipeline (screens/widgets populate a `GuiRenderState` object instead of issuing immediate draw calls; the actual GPU submission happens later). Constructor:
 
 ```java
-public void text(Font, String, int x, int y, int color);
-public void text(Font, String, int x, int y, int color, boolean dropShadow);
-public void text(Font, Component, int x, int y, int color);
+public GuiGraphicsExtractor(Minecraft minecraft, net.minecraft.client.renderer.state.gui.GuiRenderState renderState, int width, int height);
+```
+
+Renamed drawing methods (no `drawString`/`drawText` — it's just `text(...)`):
+
+```java
+public void text(Font font, String text, int x, int y, int color);
+public void text(Font font, String text, int x, int y, int color, boolean dropShadow);
+public void text(Font font, FormattedCharSequence text, int x, int y, int color);
+public void text(Font font, FormattedCharSequence text, int x, int y, int color, boolean dropShadow);
+public void text(Font font, Component text, int x, int y, int color);
+public void text(Font font, Component text, int x, int y, int color, boolean dropShadow);
+public void centeredText(Font, String, int x, int y, int color);
 public void centeredText(Font, Component, int x, int y, int color);
+public void centeredText(Font, FormattedCharSequence, int x, int y, int color);
 public void textWithWordWrap(Font, FormattedText, int x, int y, int wrapWidth, int color);
+public void textWithBackdrop(Font, Component, int x, int y, int wrapWidth, int color);
 
 public void fill(int x1, int y1, int x2, int y2, int color);
+public void fill(RenderPipeline, int x1, int y1, int x2, int y2, int color);
 public void fillGradient(int x1, int y1, int x2, int y2, int colorFrom, int colorTo);
 public void outline(int x1, int y1, int x2, int y2, int color);
+public void horizontalLine(int x1, int x2, int y, int color);
+public void verticalLine(int x, int y1, int y2, int color);
 
-public void blit(RenderPipeline, Identifier texture, int x, int y, float u, float v, int w, int h, int texW, int texH);
+public void blit(RenderPipeline, Identifier texture, int x, int y, float u, float v, int w, int h, int texW, int texH);   // + overloads
+public void blitSprite(RenderPipeline, Identifier atlas, int x, int y, int w, int h);                                    // + overloads
 public void item(ItemStack, int x, int y);
-public void setTooltipForNextFrame(Font, Component, int x, int y);
+public void itemDecorations(Font, ItemStack, int x, int y);
+public void setTooltipForNextFrame(Font, Component, int x, int y);   // + many overloads (List<Component>, FormattedCharSequence, TooltipComponent...)
 
-public org.joml.Matrix3x2fStack pose();          // 2D-only transform stack, not the old 3D PoseStack
-public void enableScissor(int,int,int,int); public void disableScissor();
-public ActiveTextCollector textRenderer();        // not a plain Font field
+public org.joml.Matrix3x2fStack pose();     // 2D transform stack (replaces old PoseStack usage in GUI code)
+public void enableScissor(int x1, int y1, int x2, int y2);
+public void disableScissor();
+public int guiWidth();
+public int guiHeight();
+
+// Text/font access — NOT a simple `.font` field, it's via a collector:
+public ActiveTextCollector textRenderer();
+public ActiveTextCollector textRenderer(GuiGraphicsExtractor.HoveredTextEffects);
+public ActiveTextCollector textRendererForWidget(AbstractWidget, GuiGraphicsExtractor.HoveredTextEffects);
 ```
-No `drawString`/`drawCenteredString` — it's `text(...)`/`centeredText(...)`. `Font` is still `net.minecraft.client.gui.Font` (unchanged) and passed explicitly (get it from `Screen.getFont()`).
 
-### `Button`
+**Use / gotcha:** Every screen/widget method that used to take `GuiGraphics` now takes `GuiGraphicsExtractor`, and every `draw*` call is a plain `text(...)`/`fill(...)`/`blit(...)` — they *populate* a `GuiRenderState`, they don't draw immediately. `Font` is still `net.minecraft.client.gui.Font` (unchanged) and is passed explicitly into `text(...)` calls (get it from `Screen.getFont()` / `Minecraft.font`), it is not pulled implicitly off the extractor except through `textRenderer()`.
+
+## Button (`net.minecraft.client.gui.components.Button`)
 
 ```java
-public static Button.Builder Button.builder(Component message, Button.OnPress onPress);
+public static Button.Builder builder(Component message, Button.OnPress onPress);
+
 public class Button.Builder {
-  Builder pos(int x, int y); Builder size(int w, int h); Builder bounds(int x, int y, int w, int h);
-  Builder tooltip(Tooltip); Builder createNarration(Button.CreateNarration);
-  Button build();
+  public Button.Builder(Component message, Button.OnPress onPress);
+  public Button.Builder pos(int x, int y);
+  public Button.Builder width(int w);
+  public Button.Builder size(int w, int h);
+  public Button.Builder bounds(int x, int y, int w, int h);
+  public Button.Builder tooltip(Tooltip tooltip);
+  public Button.Builder createNarration(Button.CreateNarration);
+  public Button build();
+}
+
+public interface Button.OnPress {
+  void onPress(Button button);   // unchanged shape
 }
 ```
 
-### Scrollable lists
+Note: `Button.onPress(InputWithModifiers)` (the instance method invoked on click, distinct from the `OnPress` functional interface) now takes a `net.minecraft.client.input.InputWithModifiers`, reflecting the same input-event refactor seen in `Screen.keyPressed(KeyEvent)`.
+
+## Scrollable lists
 
 ```java
-AbstractSelectionList<E extends AbstractSelectionList.Entry<E>> extends AbstractContainerWidget
-ObjectSelectionList<E extends ObjectSelectionList.Entry<E>> extends AbstractSelectionList<E>
-ContainerObjectSelectionList<E extends ContainerObjectSelectionList.Entry<E>> extends AbstractSelectionList<E>
+net.minecraft.client.gui.components.AbstractSelectionList<E extends AbstractSelectionList.Entry<E>>
+  extends AbstractContainerWidget
+net.minecraft.client.gui.components.ObjectSelectionList<E extends ObjectSelectionList.Entry<E>>
+  extends AbstractSelectionList<E>
+net.minecraft.client.gui.components.ContainerObjectSelectionList<E extends ContainerObjectSelectionList.Entry<E>>
+  extends AbstractSelectionList<E>
+```
 
+```java
 public AbstractSelectionList(Minecraft, int width, int height, int y0, int itemHeight);
 protected int addEntry(E entry);
-public void replaceEntries(Collection<E>);
-public void setSelected(E); public E getSelected();
+public void replaceEntries(Collection<E> entries);
+public void setSelected(E entry);
+public E getSelected();
+public void setScrollAmount(double amount);
+protected void scrollToEntry(E entry);
 protected void extractListItems(GuiGraphicsExtractor, int, int, float);   // renamed from renderList
 protected void extractItem(GuiGraphicsExtractor, int, int, float, E);     // renamed from renderItem
 ```
-`ObjectSelectionList` = simple single-column list. `ContainerObjectSelectionList` = entries with their own focusable child widgets.
 
-### Checkbox / CycleButton / text widgets
+`ObjectSelectionList` adds nothing but `updateWidgetNarration`; use it for simple single-column lists. `ContainerObjectSelectionList` is for entries that themselves contain focusable child widgets (it implements container-style focus/child navigation).
+
+## Checkbox / CycleButton
 
 ```java
 public static Checkbox.Builder Checkbox.builder(Component message, Font font);
-Checkbox.Builder.selected(OptionInstance<Boolean> option);   // binds directly to an Options OptionInstance!
+public class Checkbox.Builder {
+  Builder pos(int x, int y);
+  Builder onValueChange(Checkbox.OnValueChange);
+  Builder selected(boolean);
+  Builder selected(OptionInstance<Boolean> option);   // can bind directly to an OptionInstance<Boolean>!
+  Builder tooltip(Tooltip);
+  Builder maxWidth(int);
+  Checkbox build();
+}
 
+public static <T> CycleButton.Builder<T> CycleButton.builder(Function<T,Component> valueStringifier, Supplier<T> defaultValueSupplier);
 public static <T> CycleButton.Builder<T> CycleButton.builder(Function<T,Component>, T defaultValue);
+public static CycleButton.Builder<Boolean> CycleButton.booleanBuilder(Component onText, Component offText, boolean initial);
 public static CycleButton.Builder<Boolean> CycleButton.onOffBuilder(boolean initial);
-CycleButton<T> Builder.create(Component name, CycleButton.OnValueChange<T> onChange);
 
-public StringWidget(Component, Font);              // + x/y/w/h overloads, setMaxWidth(int)
-public MultiLineTextWidget(Component, Font);        // + setMaxWidth/setMaxRows/setCentered
+public class CycleButton.Builder<T> {
+  Builder<T> withValues(Collection<T>);
+  Builder<T> withValues(T... values);
+  Builder<T> withTooltip(OptionInstance.TooltipSupplier<T>);
+  Builder<T> displayOnlyValue();
+  CycleButton<T> create(Component name, CycleButton.OnValueChange<T> onChange);
+  CycleButton<T> create(int x, int y, int w, int h, Component name);
+  CycleButton<T> create(int x, int y, int w, int h, Component name, CycleButton.OnValueChange<T> onChange);
+}
 ```
 
-### `Component`
+## StringWidget / MultiLineTextWidget
+
+```java
+public StringWidget(Component, Font);
+public StringWidget(int x, int y, Component, Font);
+public StringWidget(int x, int y, int w, int h, Component, Font);
+public StringWidget setMaxWidth(int);
+
+public MultiLineTextWidget(Component, Font);
+public MultiLineTextWidget(int x, int y, Component, Font);
+public MultiLineTextWidget setMaxWidth(int);
+public MultiLineTextWidget setMaxRows(int);
+public MultiLineTextWidget setCentered(boolean);
+```
+
+Both extend `AbstractStringWidget` (package `net.minecraft.client.gui.components`, unchanged location).
+
+## Component
 
 ```java
 public static MutableComponent Component.literal(String text);
+public static MutableComponent Component.translatable(String key);
 public static MutableComponent Component.translatable(String key, Object... args);
 ```
+
 Unchanged from 1.21.x.
 
-### `SystemToast`
+## SystemToast (simple notification)
 
 ```java
 package net.minecraft.client.gui.components.toasts;
-public static void SystemToast.add(ToastManager, SystemToast.SystemToastId, Component title, Component message);
-```
-Get the `ToastManager` off `Gui`, **not** directly off `Minecraft`: `Minecraft.getInstance().gui.toastManager()`.
 
-### `TitleScreen` / `OptionsScreen` / `VideoSettingsScreen` — unchanged package/class names
+public SystemToast(SystemToast.SystemToastId id, Component title, @Nullable Component message);
+
+public static void add(ToastManager toastManager, SystemToast.SystemToastId id, Component title, @Nullable Component message);
+public static void addOrUpdate(ToastManager, SystemToast.SystemToastId, Component, Component);
+```
+
+Get the `ToastManager`: **not** on `Minecraft` directly — it hangs off the public `gui` field:
 
 ```java
-net.minecraft.client.gui.screens.TitleScreen(boolean fading, LogoRenderer);
-net.minecraft.client.gui.screens.options.OptionsScreen(Screen lastScreen, Options, boolean gamemasterWarning);
-net.minecraft.client.gui.screens.options.VideoSettingsScreen extends OptionsSubScreen
-  (Screen lastScreen, Minecraft, Options);
+public final net.minecraft.client.gui.Gui gui;          // field on Minecraft
+public ToastManager Gui.toastManager();                  // getter on Gui
 ```
-Only the internal render plumbing changed (they implement `extractRenderState` like every other `Screen`).
+
+So: `SystemToast.add(Minecraft.getInstance().gui.toastManager(), SystemToast.SystemToastId.PACK_LOAD_FAILURE /* or make your own id */, Component.literal("Title"), Component.literal("Body"));`
+`SystemToastId` is a small record/enum-like type in `SystemToast` — for a custom mod toast, reuse the constructor pattern Mojang uses in `onLowDiskSpace` etc. (construct a `SystemToastId` and call `SystemToast.add`).
+
+## TitleScreen / OptionsScreen / VideoSettingsScreen
+
+```java
+net.minecraft.client.gui.screens.TitleScreen
+  TitleScreen();
+  TitleScreen(boolean fading);
+  TitleScreen(boolean fading, LogoRenderer logoRenderer);
+
+net.minecraft.client.gui.screens.options.OptionsScreen
+  OptionsScreen(Screen lastScreen, Options options, boolean gamemasterWarning);
+
+net.minecraft.client.gui.screens.options.VideoSettingsScreen extends OptionsSubScreen
+  VideoSettingsScreen(Screen lastScreen, Minecraft minecraft, Options options);
+```
+
+All three package/class names are unchanged versus what you'd expect from recent 1.21.x snapshots — no rename here, only the rendering plumbing inside them changed (they now implement `extractRenderState` like every other `Screen`).
 
 ---
 
-## 8. Fabric API modules (`fabric-api-0.161.0+26.2`, 42 nested jars)
+# 8. Fabric API modules (fabric-api-0.161.0+26.2, nested jars under META-INF/jars)
 
-All 42 declared modules extracted and cross-checked 1:1 against `fabric.mod.json`'s `jars` array. **Two things asked for in the brief are not part of this build**: `fabric-client-gametest-api-v1` (absent entirely — not declared, no nested jar) and a standalone HUD-API module (HUD API lives inside `fabric-rendering-v1` instead, see below).
+All 42 declared nested modules were extracted and cross-checked against `fabric.mod.json`'s `jars` array (exact match, 42/42). Two modules the brief asked about are **not part of this build**:
 
-### `ScreenEvents` / `Screens` — `fabric-screen-api-v1` (5.2.1)
+- **`fabric-client-gametest-api-v1` is ABSENT.** Not declared in fabric.mod.json, not present as a nested jar. This Fabric API build does not ship the client gametest API at runtime — RigTune cannot depend on `ClientGameTestContext` / `TestSingleplayerContext` / `TestWorldBuilder` / `TestClientWorldContext` from this jar. (It may exist only as a separate Gradle/Loom test-sourceset artifact that isn't bundled into the distributed mod jar — not confirmed, low priority to chase further.)
+- **There is no separate "HUD API" module** — it lives inside `fabric-rendering-v1` (see below). No standalone `fabric-hud-api-v1` jar exists.
+
+## ScreenEvents / Screens — `fabric-screen-api-v1` (5.2.1)
 
 ```java
 public final class net.fabricmc.fabric.api.client.screen.v1.ScreenEvents {
   public static final Event<ScreenEvents.BeforeInit> BEFORE_INIT;
   public static final Event<ScreenEvents.AfterInit> AFTER_INIT;
-  public static Event<ScreenEvents.AfterExtract> afterExtract(Screen);   // per-frame, extract-phase
+  public static Event<ScreenEvents.Remove> remove(Screen);
+  public static Event<ScreenEvents.BeforeExtract> beforeExtract(Screen);
+  public static Event<ScreenEvents.AfterBackground> afterBackground(Screen);
+  public static Event<ScreenEvents.AfterForeground> afterForeground(Screen);
+  public static Event<ScreenEvents.AfterExtract> afterExtract(Screen);
+  public static Event<ScreenEvents.BeforeTick> beforeTick(Screen);
+  public static Event<ScreenEvents.AfterTick> afterTick(Screen);
 }
-public interface ScreenEvents.AfterInit { void afterInit(Minecraft, Screen, int, int); }
 
-public final class Screens {
-  public static List<AbstractWidget> getWidgets(Screen);   // renamed from getButtons(Screen)
+public interface ScreenEvents.BeforeInit { void beforeInit(Minecraft, Screen, int, int); }
+public interface ScreenEvents.AfterInit  { void afterInit(Minecraft, Screen, int, int); }
+```
+
+Register on `AFTER_INIT` to add a button to `TitleScreen`/`OptionsScreen`:
+```java
+ScreenEvents.AFTER_INIT.register((client, screen, w, h) -> {
+    if (screen instanceof TitleScreen) {
+        Screens.getWidgets(screen).add(...); // see below — no getButtons() any more
+    }
+});
+```
+Note `26.x` also has per-screen render pipeline events (`beforeExtract`/`afterExtract`/`afterBackground`/`afterForeground`) reflecting the new `extractRenderState`-based GUI render split (see §7) — extract happens once per frame, background/foreground are draw phases.
+
+```java
+public final class net.fabricmc.fabric.api.client.screen.v1.Screens {
+  public static List<AbstractWidget> getWidgets(Screen);   // NOT getButtons() any more
   public static Font getFont(Screen);
+  public static Minecraft getMinecraft(Screen);
 }
 ```
-Register a button on `TitleScreen`/`OptionsScreen` via `ScreenEvents.AFTER_INIT.register((client, screen, w, h) -> { if (screen instanceof TitleScreen) Screens.getWidgets(screen).add(...); })`.
+**Rename vs older Fabric API**: `Screens.getButtons(Screen)` (pre-1.21ish, when button lists were `List<AbstractWidget>` typed as buttons) is gone — use `getWidgets(Screen)`, which returns `List<AbstractWidget>` covering every renderable/narratable widget, not just buttons.
 
-### `ClientTickEvents` / `ClientLifecycleEvents` — `fabric-lifecycle-events-v1` (4.1.4)
+## ClientTickEvents / ClientLifecycleEvents — `fabric-lifecycle-events-v1` (4.1.4)
 
 ```java
 public final class ClientTickEvents {
   public static final Event<StartTick> START_CLIENT_TICK;
-  public static final Event<EndTick> END_CLIENT_TICK;    // once per game tick — good for scripted camera moves
+  public static final Event<EndTick> END_CLIENT_TICK;
+  public static final Event<StartLevelTick> START_LEVEL_TICK;
+  public static final Event<EndLevelTick> END_LEVEL_TICK;
 }
+public interface StartTick      { void onStartTick(Minecraft); }
+public interface EndTick        { void onEndTick(Minecraft); }
+public interface StartLevelTick { void onStartTick(ClientLevel); }
+public interface EndLevelTick   { void onEndTick(ClientLevel); }
+```
+`END_CLIENT_TICK` is the standard hook for a benchmark harness that needs to run once per game tick (not per frame) — e.g. sampling FPS counters or driving scripted camera moves.
+
+```java
 public final class ClientLifecycleEvents {
   public static final Event<ClientStarted> CLIENT_STARTED;
   public static final Event<ClientStopping> CLIENT_STOPPING;
 }
+public interface ClientStarted  { void onClientStarted(Minecraft); }
+public interface ClientStopping { void onClientStopping(Minecraft); }
 ```
 
-### `KeyMappingHelper` — `fabric-key-mapping-api-v1` (2.0.5)
+## KeyMappingHelper — `fabric-key-mapping-api-v1` (2.0.5)
 
-**Renamed from `KeyBindingHelper`**, package `net.fabricmc.fabric.api.client.keymapping.v1` (not `keybinding.v1`):
+**Renamed from `KeyBindingHelper`** (package is `net.fabricmc.fabric.api.client.keymapping.v1`, not `keybinding.v1`):
 ```java
-public final class KeyMappingHelper {
+public final class net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper {
   public static KeyMapping registerKeyMapping(KeyMapping);
   public static InputConstants.Key getBoundKeyOf(KeyMapping);
 }
 ```
-Vanilla `net.minecraft.client.KeyMapping` (confirmed on the vanilla jar):
+
+Vanilla `net.minecraft.client.KeyMapping` in 26.2 (confirmed via javap on the vanilla jar):
 ```java
 public KeyMapping(String name, int keyCode, KeyMapping.Category category);
 public KeyMapping(String name, InputConstants.Type type, int keyCode, KeyMapping.Category category);
+public KeyMapping(String name, InputConstants.Type type, int keyCode, KeyMapping.Category category, int order);
 public KeyMapping.Category getCategory();
-
+```
+**Confirmed category rewrite (1.21.9+ change, carries into 26.2)**: the 3rd/4th constructor arg is `KeyMapping.Category`, not `String`. `Category` is now a **record** (`net.minecraft.client.KeyMapping$Category extends java.lang.Record`) wrapping a `net.minecraft.resources.Identifier id`, with built-in constants:
+```java
 public final class KeyMapping.Category extends Record {
   public static final Category MOVEMENT, MISC, MULTIPLAYER, GAMEPLAY, INVENTORY, CREATIVE, SPECTATOR, DEBUG;
+  public KeyMapping.Category(Identifier id);
   public static Category register(Identifier id);   // custom categories
+  public Component label();
+  public Identifier id();
 }
 ```
-**1.21.9+ category rewrite carries into 26.2**: the category arg is `KeyMapping.Category` (a record wrapping an `Identifier`), not a translation-key `String`. Custom category: `KeyMapping.Category.register(Identifier.fromNamespaceAndPath("rigtune", "benchmark"))`.
+A mod adding its own keybinding category must call `KeyMapping.Category.register(Identifier.fromNamespaceAndPath("rigtune", "benchmark"))` and pass the result into the `KeyMapping` constructor — a bare string category (old-style) will not compile.
 
-### HUD render API — inside `fabric-rendering-v1` (25.3.3), package `...rendering.v1.hud`
+**Also confirmed**: `net.minecraft.resources.ResourceLocation` has been **renamed to `net.minecraft.resources.Identifier`** in 26.2 (no `ResourceLocation` class exists in the jar at all — see Gotchas). This affects every API signature that used to take `ResourceLocation`.
 
-**No `HudRenderCallback` any more.** Replaced by a layered registry:
+## HUD render API — inside `fabric-rendering-v1` (25.3.3), package `...rendering.v1.hud`
+
+**No `HudRenderCallback` any more.** Replaced by a layered element-registry API:
 ```java
-public interface HudElementRegistry {
-  static void addFirst(Identifier id, HudElement element);
-  static void addLast(Identifier id, HudElement element);
-  static void attachElementBefore(Identifier anchor, Identifier id, HudElement element);
-  static void removeElement(Identifier id);
+public interface net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry {
+  public static void addFirst(Identifier id, HudElement element);
+  public static void addLast(Identifier id, HudElement element);
+  public static void attachElementBefore(Identifier anchor, Identifier id, HudElement element);
+  public static void attachElementAfter(Identifier anchor, Identifier id, HudElement element);
+  public static void removeElement(Identifier id);
+  public static void replaceElement(Identifier id, Function<HudElement, HudElement> replacer);
 }
-public interface HudElement {
+
+public interface net.fabricmc.fabric.api.client.rendering.v1.hud.HudElement {
   void extractRenderState(GuiGraphicsExtractor guiGraphicsExtractor, DeltaTracker deltaTracker);
 }
 ```
-`VanillaHudElements` gives `Identifier` anchors for built-ins (`CROSSHAIR`, `HOTBAR`, `HEALTH_BAR`, `BOSS_BAR`, `CHAT`, etc) for `attachElementBefore`/`After`. For an FPS/1%-low overlay: `HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("rigtune","overlay"), element)`.
+Note the callback method is `extractRenderState`, matching the vanilla 26.x GUI's extract/render split (see §7) — a HUD element extracts a render *state* object off the render thread's frame data rather than drawing directly.
 
-### World render events → **`LevelRenderEvents` + `LevelExtractionEvents`**
+`VanillaHudElements` gives the `Identifier` anchors for every built-in HUD piece (useful for `attachElementBefore`/`After`), e.g. `CROSSHAIR`, `HOTBAR`, `ARMOR_BAR`, `HEALTH_BAR`, `FOOD_BAR`, `AIR_BAR`, `MOUNT_HEALTH`, `INFO_BAR`, `EXPERIENCE_LEVEL`, `HELD_ITEM_TOOLTIP`, `SPECTATOR_TOOLTIP`, `MOB_EFFECTS`, `BOSS_BAR`, `SLEEP`, `DEMO_TIMER`, `SCOREBOARD`, `OVERLAY_MESSAGE`, `TITLE_AND_SUBTITLE`, `CHAT`, `PLAYER_LIST`, `SUBTITLES`, `MISC_OVERLAYS`, `SPECTATOR_MENU`.
 
-**`WorldRenderEvents` does not exist in this Fabric API build** (grepped every nested module, zero hits). Replaced by `net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents`:
+For an on-screen FPS/1%-low overlay, register a `HudElement` with `HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("rigtune","overlay"), element)`.
+
+## WorldRenderEvents — RENAMED/RESTRUCTURED to `LevelRenderEvents` + `LevelExtractionEvents`
+
+**`WorldRenderEvents` does not exist anywhere in this Fabric API build** (grepped every nested module jar — zero hits). It has been replaced by two classes in `net.fabricmc.fabric.api.client.rendering.v1.level`:
+
 ```java
 public final class LevelRenderEvents {
   public static final Event<StartMain> START_MAIN;
-  public static final Event<EndMain> END_MAIN;             // closest equivalent to old WorldRenderEvents.END
   public static final Event<AfterOpaqueTerrain> AFTER_OPAQUE_TERRAIN;
+  public static final Event<CollectSubmits> COLLECT_SUBMITS;
+  public static final Event<AfterSolidFeatures> AFTER_SOLID_FEATURES;
+  public static final Event<AfterTranslucentFeatures> AFTER_TRANSLUCENT_FEATURES;
+  public static final Event<BeforeBlockOutline> BEFORE_BLOCK_OUTLINE;
+  public static final Event<BeforeGizmos> BEFORE_GIZMOS;
+  public static final Event<BeforeTranslucentTerrain> BEFORE_TRANSLUCENT_TERRAIN;
+  public static final Event<AfterTranslucentTerrain> AFTER_TRANSLUCENT_TERRAIN;
+  public static final Event<EndMain> END_MAIN;
+  public static final Event<LevelExtractionEvents.AfterBlockOutlineExtraction> AFTER_BLOCK_OUTLINE_EXTRACTION;
   public static final Event<LevelExtractionEvents.EndExtraction> END_EXTRACTION;
-  // + AFTER_SOLID_FEATURES, AFTER_TRANSLUCENT_FEATURES, BEFORE_BLOCK_OUTLINE, BEFORE_GIZMOS, ...
 }
 ```
-Callback params are `LevelRenderContext`/`LevelTerrainRenderContext`, not the old `WorldRenderContext`. `START_MAIN`/`END_MAIN` fire once per world-render frame on the render thread — a clean non-mixin hook for per-frame benchmark sampling (see §4).
+Callback params are `LevelRenderContext` / `LevelTerrainRenderContext` (for `StartMain`/`AfterOpaqueTerrain`) rather than the old `WorldRenderContext`. `START_MAIN`/`END_MAIN` are the closest equivalents to the old `WorldRenderEvents.START`/`END` for "run code once per world-render frame" (e.g. driving a benchmark's frame-time sampling from the render thread instead of the tick thread). This split (extraction vs. render-thread events, `LevelExtractionEvents` separate from `LevelRenderEvents`) mirrors vanilla's own extract/render split in 26.x (see §7's `extractRenderState` note).
 
-### Client gametest API
-
-**Confirmed absent** from this build (re-verified against the 42-entry `fabric.mod.json` jar list) — no `fabric-client-gametest-api-v1` nested jar, so `ClientGameTestContext`/`TestSingleplayerContext`/`TestWorldBuilder`/`TestClientWorldContext` are not available from this Fabric API jar. Don't plan RigTune's benchmark automation around it; use the manual command-dispatch approach in §9 instead.
+# Gotchas relevant to §8
+- `fabric-client-gametest-api-v1` is not bundled in this Fabric API release — don't plan on it.
+- `Screens.getButtons()` → `Screens.getWidgets()`.
+- `HudRenderCallback` → `HudElementRegistry`/`HudElement` (extract-based, layered, keyed by `Identifier`).
+- `WorldRenderEvents` → `LevelRenderEvents` + `LevelExtractionEvents` (also renamed World→Level throughout, consistent with vanilla's Level naming).
+- `KeyBindingHelper` → `KeyMappingHelper`, package `client.keymapping.v1` not `client.keybinding.v1`.
+- `KeyMapping`'s category parameter is now `KeyMapping.Category` (a record with an `Identifier`, registered via `Category.register(Identifier)`), not a translation-key `String`.
+- `ResourceLocation` → `Identifier` (`net.minecraft.resources.Identifier`), used pervasively by the above APIs.
 
 ---
 
-## 9. Player and camera control for a singleplayer benchmark
+# 9. Player and camera control (benchmark automation)
 
-### Rotation / teleport — inherited from `net.minecraft.world.entity.Entity`
+## Rotation / teleport — `net.minecraft.world.entity.Entity` (superclass of `LocalPlayer` via `AbstractClientPlayer`)
+`LocalPlayer` itself declares no rotation/teleport methods — use the ones inherited from `Entity`:
 
-`LocalPlayer` declares no rotation/teleport methods itself — use `Entity`'s:
 ```java
-public void setYRot(float); public void setXRot(float);
+public void setYRot(float);
+public void setXRot(float);
 
-// instant, non-interpolated, client-side position set — no smoothing:
+// "snap" = instant, non-interpolated position set (client-side, no smoothing):
 public void snapTo(double x, double y, double z);
 public void snapTo(double x, double y, double z, float yRot, float xRot);
+public void snapTo(net.minecraft.world.phys.Vec3 pos);
 public void snapTo(net.minecraft.world.phys.Vec3 pos, float yRot, float xRot);
+public void snapTo(net.minecraft.core.BlockPos pos, float yRot, float xRot);
+public void absSnapTo(double x, double y, double z);
+public void absSnapTo(double x, double y, double z, float yRot, float xRot);
 
-public void teleportTo(double x, double y, double z);                       // client-safe simple overload
+// "teleport" family (mostly server-authoritative / cross-dimension):
+public void teleportTo(double x, double y, double z);   // client-safe simple overload
 public boolean teleportTo(ServerLevel, double, double, double, Set<Relative>, float yRot, float xRot, boolean); // server-side
-```
-**No plain `moveTo(double,double,double)` on `Entity` in 26.2.** For a client-side benchmark camera in singleplayer, use `snapTo(x, y, z, yRot, xRot)` — instant position+rotation, no server round-trip. `setYRot`/`setXRot` alone only change facing.
+public Entity teleport(TeleportTransition);              // server-side, dimension change etc.
+public void teleportRelative(double, double, double);
 
-### Flying — `net.minecraft.world.entity.player.Abilities`
+public final void setPos(double, double, double);
+public final void setPos(net.minecraft.world.phys.Vec3);
+public final double getX(); public final double getY(); public final double getZ();
+```
+
+**Renamed vs 1.21.x expectations**: there is no plain `moveTo(double,double,double)` on `Entity` in 26.2 — that name doesn't appear. For a client-side benchmark camera (singleplayer, own player), use `snapTo(x,y,z,yRot,xRot)` — it sets position and rotation instantly without server round-trip smoothing. `setYRot`/`setXRot` alone only change facing, not position.
+
+## Flying — `net.minecraft.world.entity.player.Abilities`
 ```java
 public class Abilities {
-  public boolean invulnerable, flying, mayfly, instabuild, mayBuild;
+    public boolean invulnerable;
+    public boolean flying;
+    public boolean mayfly;
+    public boolean instabuild;
+    public boolean mayBuild;
+    private float flyingSpeed;
+    private float walkingSpeed;
 }
 ```
-Set `player.getAbilities().flying = true;` then call `player.onUpdateAbilities()` (public, on `LocalPlayer`) to push the change to the server.
+Access via `Entity`/`Player`'s `getAbilities()` (inherited, not shown above but standard). Set `abilities.flying = true` then call `player.onUpdateAbilities()` (declared directly on `LocalPlayer`, public) to push the change to the server.
 
-### Running commands against the integrated server
-
+## Running commands against the integrated server
 ```java
 // net.minecraft.client.Minecraft
 public boolean hasSingleplayerServer();
-public IntegratedServer getSingleplayerServer();
+public net.minecraft.client.server.IntegratedServer getSingleplayerServer();
 
 // net.minecraft.server.MinecraftServer
-public Commands getCommands();
-public CommandSourceStack createCommandSourceStack();
+public net.minecraft.commands.Commands getCommands();
+public net.minecraft.commands.CommandSourceStack createCommandSourceStack();
 
 // net.minecraft.commands.Commands
-public void performPrefixedCommand(CommandSourceStack source, String command);   // handles leading "/"
+public void performPrefixedCommand(CommandSourceStack source, String command); // handles leading "/"
+public void performCommand(com.mojang.brigadier.ParseResults<CommandSourceStack> parsed, String command);
 ```
+Usage pattern for a benchmark mod (singleplayer, from the client thread — must still be marshalled onto the server thread, e.g. via `server.execute(Runnable)` inherited from `MinecraftServer`, since the integrated server runs on its own thread even in singleplayer):
 ```java
 IntegratedServer server = Minecraft.getInstance().getSingleplayerServer();
 if (server != null) {
-    server.execute(() -> server.getCommands()
-        .performPrefixedCommand(server.createCommandSourceStack(), "gamemode spectator @s"));
+    server.execute(() -> server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), "gamemode spectator @s"));
 }
 ```
-The integrated server runs on its own thread even in singleplayer — must marshal onto it via `server.execute(Runnable)`.
 
-### Client-side command dispatch (alternative)
-
-`LocalPlayer.connection` is `net.minecraft.client.multiplayer.ClientPacketListener`:
+## Sending a command from the client connection
+`net.minecraft.client.multiplayer.ClientPacketListener` (the type of `LocalPlayer.connection`, confirmed field: `public final ClientPacketListener connection;`):
 ```java
-public final ClientPacketListener connection;   // field on LocalPlayer
-public void sendCommand(String command);          // no leading "/"; signing handled internally
+public void sendChat(String message);
+public void sendCommand(String command);              // <-- exact match for what the brief guessed; no leading "/"
+public void sendUnattendedCommand(String command, net.minecraft.client.gui.screens.Screen sourceScreen);
 ```
-`Minecraft.getInstance().player.connection.sendCommand("gamemode spectator")` works exactly as the task brief guessed. **For singleplayer automation prefer the direct server-side `performPrefixedCommand` above** — it skips network/command-signing round trips entirely and is more reliable inside the same JVM.
+`Minecraft.getInstance().player.connection.sendCommand("gamemode spectator")` works exactly as named — no renaming here despite the modern command-signing infrastructure (signing is handled internally by `sendCommand`, see `lambda$sendCommand$0` building a `MessageSignature`). For singleplayer automation, prefer the direct server-side `performPrefixedCommand` above — it skips network/signing round trips entirely and is more reliable for a benchmark harness running in the same JVM.
 
 ---
 
-## 10. OSHI (hardware info)
+# 10. OSHI (hardware info)
 
-**Version on the classpath: `oshi-core-6.9.0`** (`%APPDATA%/ModrinthApp/meta/libraries/com/github/oshi/oshi-core/6.9.0/oshi-core-6.9.0.jar`).
+**Version confirmed**: `oshi-core-6.9.0.jar` at `%APPDATA%/ModrinthApp/meta/libraries/com/github/oshi/oshi-core/6.9.0/oshi-core-6.9.0.jar`.
 
+## Entry point
 ```java
 oshi.SystemInfo si = new oshi.SystemInfo();
 oshi.hardware.HardwareAbstractionLayer hal = si.getHardware();
+oshi.software.os.OperatingSystem os = si.getOperatingSystem();
 ```
 
+## CPU — `oshi.hardware.CentralProcessor` (interface, via `hal.getProcessor()`)
 ```java
-// CPU — oshi.hardware.CentralProcessor (hal.getProcessor())
-CentralProcessor.ProcessorIdentifier getProcessorIdentifier();   // .getVendor() .getName() .getFamily() .getModel()
-long getMaxFreq();                    // Hz
-int getLogicalProcessorCount();
-int getPhysicalProcessorCount();
-
-// Memory — oshi.hardware.GlobalMemory (hal.getMemory())
-long getTotal();       // bytes
-long getAvailable();   // bytes
-
-// Battery — oshi.hardware.PowerSource (hal.getPowerSources())
-double getRemainingCapacityPercent();
-boolean isCharging();
-
-// GPU — oshi.hardware.GraphicsCard (hal.getGraphicsCards())
-String getName(); String getVendor(); String getVersionInfo();   // driver version string
-long getVRam();    // bytes — the only reliable VRAM source, see §2
+public abstract CentralProcessor.ProcessorIdentifier getProcessorIdentifier();
+public abstract long getMaxFreq();                 // Hz
+public abstract long[] getCurrentFreq();            // Hz per logical core
+public abstract int getLogicalProcessorCount();
+public abstract int getPhysicalProcessorCount();
+public abstract int getPhysicalPackageCount();
+public default  double getSystemCpuLoad(long ticksMs);
+```
+`CentralProcessor.ProcessorIdentifier` (via `getProcessorIdentifier()`):
+```java
+public String getVendor();
+public String getName();          // full marketing name, e.g. "AMD Ryzen 9 ..."
+public String getFamily();
+public String getModel();
+public boolean isCpu64bit();
+public long getVendorFreq();      // Hz, from brand string
 ```
 
-### How vanilla itself uses OSHI — proof it works in-game
+## Memory — `oshi.hardware.GlobalMemory` (via `hal.getMemory()`)
+```java
+public abstract long getTotal();      // bytes
+public abstract long getAvailable();  // bytes
+public abstract VirtualMemory getVirtualMemory();
+public abstract List<PhysicalMemory> getPhysicalMemory();
+```
 
-`net.minecraft.SystemReport` is the reference implementation (used for crash reports / F3 dump):
+## Battery — `oshi.hardware.PowerSource` (via `hal.getPowerSources()`, not shown by name above but standard OSHI API — list getter on `HardwareAbstractionLayer`)
+```java
+public interface PowerSource {
+    String getName();
+    double getRemainingCapacityPercent();
+    boolean isPowerOnLine();
+    boolean isCharging();
+    boolean isDischarging();
+    int getCurrentCapacity();
+    int getMaxCapacity();
+    ...
+}
+```
+Not referenced anywhere in vanilla's `SystemReport` (see below) — untested by Mojang in-game, but the interface is present on the 6.9.0 classpath and safe to call; wrap in try/catch like vanilla does for all its OSHI calls (see `ignoreErrors`, below).
+
+## GPU — `oshi.hardware.GraphicsCard` (via `hal.getGraphicsCards()`)
+```java
+public interface GraphicsCard {
+    String getName();
+    String getDeviceId();
+    String getVendor();
+    String getVersionInfo();  // driver version string
+    long getVRam();           // bytes
+}
+```
+
+## How vanilla itself uses OSHI — proof it works in-game
+`net.minecraft.SystemReport` (built by `Minecraft`'s crash/debug reporting) is the reference implementation:
 ```java
 private void putHardware(oshi.SystemInfo);
-private void putProcessor(oshi.hardware.CentralProcessor);
+private void putSoftware(oshi.SystemInfo);
+private void putPhysicalMemory(List<oshi.hardware.PhysicalMemory>);
+private void putVirtualMemory(oshi.hardware.VirtualMemory);
 private void putMemory(oshi.hardware.GlobalMemory);
 private void putGraphics(List<oshi.hardware.GraphicsCard>);
-private void ignoreErrors(String label, Runnable r);   // wraps every OSHI call
+private void putProcessor(oshi.hardware.CentralProcessor);
+private void ignoreErrors(String label, Runnable r);   // wraps every OSHI call — exceptions are swallowed and logged, not fatal
 ```
-Call chain (bytecode-confirmed): `new SystemInfo() → getHardware() → getProcessor()/getMemory()/getGraphicsCards()`, each wrapped in `ignoreErrors(...)`. **`PowerSource` (battery) is not used by vanilla at all** — only CPU, memory, and graphics cards are queried in-game.
-
-**RigTune usage:** every OSHI call in vanilla is defensively wrapped — on some systems WMI/registry-backed queries can throw or stall briefly on Windows. Copy that pattern (try/catch or a cached background-computed result); don't call OSHI directly on the render thread unguarded. `PowerSource` is best-effort only and will be an empty list on most benchmarking desktops.
+Decompiled bytecode confirms the exact call chain:
+```
+new oshi.SystemInfo()
+  -> SystemInfo.getHardware() -> HardwareAbstractionLayer
+       -> hal.getProcessor()            -> putProcessor(...)
+            .getProcessorIdentifier()   -> vendor/name/freq
+            .getLogicalProcessorCount() / getPhysicalProcessorCount() / getPhysicalPackageCount()
+       -> hal.getMemory()               -> putMemory(...) -> getVirtualMemory(), getPhysicalMemory()
+       -> hal.getGraphicsCards()        -> putGraphics(...) -> card.getVRam(), etc. (checkcast oshi/hardware/GraphicsCard)
+  -> SystemInfo.getOperatingSystem()    -> putSoftware(...) -> os.getCurrentProcess() -> OSProcess (RSS, virtual size, up time...)
+```
+**Important for RigTune**: every OSHI call in vanilla is wrapped in `ignoreErrors(String, Runnable)` — on some systems/drivers OSHI hardware queries can throw or hang briefly (WMI/registry access on Windows). Copy this defensive pattern: never call OSHI methods directly on the render thread without a try/catch or a cached background-computed result. `PowerSource` is **not** used by vanilla at all — only CPU, memory, graphics cards, and the current OS process are queried.
 
 ---
 
-## Gotchas (surprising vs. 1.21.x expectations)
+# Gotchas
 
-- **`GuiGraphics` does not exist in 26.2.** It's `net.minecraft.client.gui.GuiGraphicsExtractor`. `drawString`/`drawCenteredString` → `text(...)`/`centeredText(...)`. This is the single biggest source of compile breakage porting 1.21.x mixins/screens.
-- **`Screen.render(GuiGraphics, int, int, float)` does not exist.** It's `Screen.extractRenderState(GuiGraphicsExtractor, int, int, float)` — screens/widgets *extract render state* into a `GuiRenderState`, actual GPU submission happens later. `LevelRenderer`/`LevelExtractor` (§5) is the same split applied to world rendering. Any mixin targeting `render` needs to retarget `extractRenderState` (or `extractContents`/`extractWidgetRenderState` depending on the class).
-- **`Screen.keyPressed` takes a `net.minecraft.client.input.KeyEvent`**, not `(int, int, int)`. Part of a broader input-event-object refactor in 26.x.
-- **The task brief's `"Found graphics adapter: AdapterInfo{...}"` log line and `AdapterInfo` class do not exist in this build** — confirmed via exhaustive content grep. Use `RenderSystem.tryGetDevice().getDeviceInfo()` and the real log lines `"Using graphics backend {}, using drivers: {}"` / `"Using graphics device: {} ({})"` instead (§2).
-- **No total-VRAM getter anywhere in `com.mojang.blaze3d`.** `DeviceLimits.maxMemoryAllocationSize()` is a max-single-allocation cap, not total VRAM. Use OSHI `GraphicsCard.getVRam()` (§10) — same as vanilla's own `SystemReport`.
-- **Changing `renderDistance`/`simulationDistance` via `OptionInstance.set()` does not itself trigger a chunk rebuild** — bytecode-confirmed their listeners only flip `graphicsPreset` to `CUSTOM`. Other graphics toggles (cutoutLeaves, textureFiltering, etc.) *do* call `LevelExtractor.allChanged()`/`resetSampler()`. Don't assume uniform behavior across all `OptionInstance` fields.
-- **Editing any single graphics `OptionInstance` silently flips `Options.graphicsPreset()` to `CUSTOM`** — there is no way to hand-tune a value through the vanilla setter without losing the preset label.
-- **`DebugScreenOverlay.frameTimeLogger` has no public getter** (unlike `tickTimeLogger`/`pingLogger`/`bandwidthLogger`, which do). Need an accessor mixin, or simpler, hook `logFrameDuration(long)` directly (§4).
-- **`WorldRenderEvents` (Fabric API) is gone** → `LevelRenderEvents` + `LevelExtractionEvents`, with `LevelRenderContext`/`LevelTerrainRenderContext` replacing `WorldRenderContext`.
-- **`HudRenderCallback` (Fabric API) is gone** → `HudElementRegistry`/`HudElement`, keyed by `Identifier`, extract-based like everything else in 26.x's GUI split.
-- **`KeyBindingHelper` → `KeyMappingHelper`**, and package is `client.keymapping.v1` not `client.keybinding.v1`. `KeyMapping`'s category constructor arg is now `KeyMapping.Category` (a record), not a `String`.
-- **`net.minecraft.resources.ResourceLocation` has been renamed to `net.minecraft.resources.Identifier`** — no `ResourceLocation` class exists in the jar at all. Affects every Fabric API and vanilla signature that used to take `ResourceLocation`.
-- **`fabric-client-gametest-api-v1` is not part of Fabric API 0.161.0+26.2.** Confirmed absent (not declared in `fabric.mod.json`, no nested jar). Don't build test/benchmark automation around it in this build; use manual command dispatch (§9) instead.
-- **No plain `Entity.moveTo(double,double,double)` in 26.2** — use `snapTo(...)` for an instant, non-interpolated client-side camera move.
-- **Sodium overrides vanilla's chunk-readiness bookkeeping.** With Sodium loaded, prefer `SodiumWorldRenderer.instanceNullable().isTerrainRenderComplete()` over vanilla `LevelRenderer.hasRenderedAllSections()` (Sodium mixes into both `LevelRenderer` and the new `LevelExtractor`).
-- **Sodium 0.9.2 has no dedicated Vulkan option** — it follows vanilla's `Options.preferredGraphicsBackend()`, though it does ship active Vulkan-pipeline compatibility mixins.
-- **Sodium's JSON key naming is mechanical Gson snake_case**, producing slightly odd keys like `use_no_error_g_l_context` for `useNoErrorGLContext` — derive new keys the same way rather than guessing.
-- **`ResourceLocation`→`Identifier` and the `GuiGraphics`→`GuiGraphicsExtractor`/extract-render-state split are the two changes most likely to break naive ports of existing 1.21.x mod code.**
+Consolidated list of the most surprising/breaking findings across all sections (each section above also has inline notes; this is the "read this before you start coding" summary):
+
+1. **`GuiGraphics` does not exist in 26.2.** It's `net.minecraft.client.gui.GuiGraphicsExtractor`. Every `drawString`/`drawCenteredString` call is now `text(...)`/`centeredText(...)`. This is the single biggest source of compile breakage porting mixins/screens from 1.21.x. (§7)
+2. **`Screen.render(GuiGraphics, int, int, float)` does not exist.** It's `Screen.extractRenderState(GuiGraphicsExtractor, int, int, float)`. Screens/widgets *extract render state* into a `GuiRenderState` object; actual GPU draw calls happen later in the frame (consistent with 26.x's Vulkan-capable renderer). Any mixin targeting `render` needs to retarget `extractRenderState`/`extractContents`/`extractWidgetRenderState`. (§7)
+3. **`Screen.keyPressed` takes a `net.minecraft.client.input.KeyEvent`**, not `(int,int,int)`; `Button.onPress` takes `InputWithModifiers`. Broader input-handling refactor in 26.x. (§7)
+4. **`ResourceLocation` → `Identifier`** (`net.minecraft.resources.Identifier`). No `ResourceLocation` class exists in the 26.2 jar at all. Affects every API that used to take `ResourceLocation`, including Fabric API's HUD/keymapping APIs. (§8)
+5. **`KeyMapping`'s category is now `KeyMapping.Category`**, a record wrapping an `Identifier`, registered via `Category.register(Identifier)` — a bare string category will not compile. `KeyBindingHelper` is also renamed to `KeyMappingHelper` (package `client.keymapping.v1`, not `keybinding.v1`). (§8)
+6. **`WorldRenderEvents` doesn't exist in Fabric API 0.161.0+26.2** — replaced by `LevelRenderEvents` + `LevelExtractionEvents`. **`HudRenderCallback` doesn't exist either** — replaced by `HudElementRegistry`/`HudElement` (extract-based). **`fabric-client-gametest-api-v1` is not bundled** in this Fabric API build at all. (§8)
+7. **The brief's `"Found graphics adapter: AdapterInfo{...}"` log line and `AdapterInfo` class are not vanilla** — exhaustively grepped, zero hits in `net.minecraft`/`com.mojang`. That's **Sodium's** `GraphicsAdapterProbe`/`GraphicsAdapterInfo` (driver-workaround detection), not a vanilla API. Vanilla's real GPU-info API is `RenderSystem.getDevice().getDeviceInfo()` → `DeviceInfo` (name/vendorName/driverInfo/backendName/type). (§2)
+8. **No VRAM total anywhere in blaze3d's device-info classes.** `DeviceLimits.maxMemoryAllocationSize()` is a per-allocation cap, not total VRAM. The only real source is OSHI's `GraphicsCard.getVRam()`. (§2, §10)
+9. **`Options.renderDistance()`'s change listener does NOT trigger a chunk-rebuild call** (`LevelExtractor.allChanged()`) — bytecode-confirmed it *only* flips `graphicsPreset` to `CUSTOM`. Many other graphics booleans/enums (cutoutLeaves, textureFiltering, etc.) *do* call `LevelExtractor.allChanged()`/`resetSampler()` from their listeners. Don't assume `.set()` on renderDistance has an immediate visible effect. (§1.4)
+10. **Editing any individual graphics `OptionInstance` silently flips `graphicsPreset` to `CUSTOM`** (`Options.setGraphicsPresetToCustom()` is wired into nearly every one of their `valueChanged` listeners) — there's no way to hand-tune a setting without losing the Fast/Fancy/Fabulous preset label. (§1.3)
+11. **`DebugScreenOverlay.frameTimeLogger` has no public getter** (unlike `tickTimeLogger`/`pingLogger`/`bandwidthLogger`, which do). For FPS/1%-low tracking, poll `Minecraft.getFrameTimeNs()` yourself every frame rather than trying to reach Mojang's private ring buffer. `Minecraft.getFps()` is a 1-second-smoothed average, not raw per-frame data — useless for percentile math. (§4)
+12. **Sodium 0.9.2's own config (`sodium-options.json`) is much smaller than older Sodium versions** — render distance, vsync, FOV, GUI scale, brightness, fullscreen etc. are no longer duplicated into Sodium's config; its settings screen just edits vanilla's `Options` fields directly for those. Only genuinely Sodium-internal renderer settings (quality/performance/advanced/debug/notifications) live in the JSON. **No Vulkan backend toggle exists in Sodium's config** — its `DrawBackend` (OPENGL/VK_MULTIDRAW/VK_INDIRECT) is auto-derived from vanilla's active backend, not user-configurable. (§6)
+13. **Sodium's JSON field naming is a naive camelCase→snake_case converter** — every capital letter gets its own underscore, so `useNoErrorGLContext` becomes `use_no_error_g_l_context` (confirmed against the real file), not `use_no_error_gl_context`. Don't hand-write JSON keys for acronym-containing fields without checking this.
+14. **Sodium fully `@Overwrite`s `LevelRenderer.hasRenderedAllSections()`/`isSectionCompiledAndVisible()` and `LevelExtractor.countRenderedSections()`** — calling vanilla's own method names still works correctly with Sodium installed (they delegate to `SodiumWorldRenderer` internally), so you don't need Sodium-specific branching for these specific calls — only for things vanilla doesn't expose at all (`isTerrainRenderComplete()`, `getVisibleChunkCount()`, `isSectionReady(x,y,z)`). (§5)
+15. **`Entity.moveTo(double,double,double)` doesn't exist in 26.2** — use `snapTo(...)` for an instant, non-interpolated client-side position set (good for a benchmark camera). (§9)
+16. **`ClientPacketListener.sendCommand(String)` exists exactly as named** despite the command-signing overhaul — but prefer the server-side `Commands.performPrefixedCommand` via `IntegratedServer.execute(...)` for singleplayer automation, it skips network/signing round trips entirely. (§9)
+17. **OSHI `PowerSource` (battery) is completely unused by vanilla's `SystemReport`** — only CPU, memory, graphics cards, and the current OS process are queried. Treat battery info as best-effort/unverified; most benchmarking rigs are desktops with an empty `PowerSource` list anyway. (§10)
+18. Every OSHI call in vanilla's `SystemReport` is wrapped in a `ignoreErrors(String, Runnable)` helper that swallows exceptions — copy this defensive pattern, OSHI hardware queries can throw or hang on some Windows driver/WMI configurations. (§10)
