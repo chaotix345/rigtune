@@ -52,6 +52,10 @@ public class RigTuneClientGameTest implements FabricClientGameTest {
 
 	@Override
 	public void runTest(ClientGameTestContext context) {
+		if (Boolean.getBoolean("rigtune.smoke")) {
+			ProductionSmoke.run(context);
+			return;
+		}
 		context.waitForScreen(TitleScreen.class);
 		context.waitFor(mc -> RigTuneClient.hardware() != null && RigTuneClient.controller().report() != null, 1200);
 		context.waitTicks(30);
