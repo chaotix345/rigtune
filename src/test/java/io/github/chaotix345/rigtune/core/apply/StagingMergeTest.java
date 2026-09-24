@@ -10,10 +10,14 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -170,5 +174,37 @@ class StagingMergeTest {
 			assertEquals(List.of("sodium-0.7.0.jar.disabled", "sodium-0.7.1.jar.rigtune-superseded", "sodium-0.7.2.jar"),
 					files.map(p -> p.getFileName().toString()).sorted().toList());
 		}
+	}
+
+	// Review 2, N3: the RigTune screen's "Discard pending" button.
+	@Test
+	void discardRetiresTheDownloadsAndDeletesThePlanUnderTheLock() throws IOException {
+		Path pending = PendingActions.defaultPath(config);
+		Path a = Files.writeString(pendingJar("a.jar"), "a");
+		Path b = Files.writeString(pendingJar("b.jar"), "b");
+		Files.writeString(mods.resolve("c.jar"), "c");
+		Path outside = Files.writeString(dir.resolve("d.jar" + PendingActions.PENDING_SUFFIX), "d");
+		List<Op> ops = new ArrayList<>(List.of(Op.enableFile(a, mods.resolve("a.jar"))));
+		ops.addAll(update("c.jar", "b.jar", "b"));
+		ops.add(Op.enableFile(outside, mods.resolve("d.jar")));
+		ops.add(Op.patchJson(config.resolve("sodium-options.json"), Map.of("a", "1")));
+		plan(ops).save(pending);
+
+		try (ApplyLock helper = ApplyLock.acquire(ApplyLock.besidePlan(pending), Duration.ZERO)) {
+			assertNotNull(helper);
+			assertEquals(-1, PendingActions.discard(pending, Duration.ofMillis(100)));
+			assertTrue(Files.exists(pending));
+			assertTrue(Files.exists(a));
+		}
+
+		assertEquals(5, PendingActions.discard(pending, Duration.ZERO));
+
+		assertFalse(Files.exists(pending));
+		try (Stream<Path> files = Files.list(mods)) {
+			assertEquals(List.of("a.jar.rigtune-superseded", "b.jar.rigtune-superseded", "c.jar"),
+					files.map(p -> p.getFileName().toString()).sorted().toList());
+		}
+		assertTrue(Files.exists(outside));
+		assertEquals(0, PendingActions.discard(pending, Duration.ZERO));
 	}
 }

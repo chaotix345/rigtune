@@ -7,7 +7,9 @@ import com.google.gson.JsonParseException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -27,34 +29,39 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 	}
 
 	// id: unique per staged op. group: ops sharing one are applied all-or-nothing (an update is {disable old, enable new}).
-	// modId: the fabric.mod.json id of the jar an ENABLE_FILE op brings in.
-	public record Op(Type type, String from, String to, String path, Map<String, String> patches, String id, String group, String modId) {
+	// modId: the fabric.mod.json id of the jar an ENABLE_FILE op brings in. attempts: helper runs this op has failed in.
+	public record Op(Type type, String from, String to, String path, Map<String, String> patches, String id, String group, String modId,
+			int attempts) {
 		public Op {
 			patches = patches == null ? null : Collections.unmodifiableMap(new LinkedHashMap<>(patches));
 		}
 
 		public Op(Type type, String from, String to, String path, Map<String, String> patches) {
-			this(type, from, to, path, patches, null, null, null);
+			this(type, from, to, path, patches, null, null, null, 0);
 		}
 
 		public static Op enableFile(Path from, Path to) {
-			return new Op(Type.ENABLE_FILE, from.toString(), to.toString(), null, null, newId(), null, null);
+			return new Op(Type.ENABLE_FILE, from.toString(), to.toString(), null, null, newId(), null, null, 0);
 		}
 
 		public static Op disableFile(Path path) {
-			return new Op(Type.DISABLE_FILE, null, null, path.toString(), null, newId(), null, null);
+			return new Op(Type.DISABLE_FILE, null, null, path.toString(), null, newId(), null, null, 0);
 		}
 
 		public static Op patchJson(Path path, Map<String, String> patches) {
-			return new Op(Type.PATCH_JSON, null, null, path.toString(), patches, newId(), null, null);
+			return new Op(Type.PATCH_JSON, null, null, path.toString(), patches, newId(), null, null, 0);
 		}
 
 		public Op inGroup(String newGroup) {
-			return new Op(type, from, to, path, patches, id, newGroup, modId);
+			return new Op(type, from, to, path, patches, id, newGroup, modId, attempts);
 		}
 
 		public Op withModId(String newModId) {
-			return new Op(type, from, to, path, patches, id, group, newModId);
+			return new Op(type, from, to, path, patches, id, group, newModId, attempts);
+		}
+
+		public Op withAttempts(int newAttempts) {
+			return new Op(type, from, to, path, patches, id, group, modId, newAttempts);
 		}
 
 		// Same file change, whatever its id or group.
@@ -103,6 +110,13 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 
 	public PendingActions withOps(List<Op> newOps) {
 		return new PendingActions(createdAt, gamePid, modsDir, configDir, newOps);
+	}
+
+	// The plan as seen from this instance's folders (derived from where pending.json is): they are recorded afresh, for
+	// information only, and ops outside them are dropped, since they belong to the instance this one was copied from.
+	public PendingActions relocated(Path newModsDir, Path newConfigDir) {
+		List<Op> kept = ops.stream().filter(op -> ApplyExecutor.problem(op, newModsDir, newConfigDir) == null).toList();
+		return new PendingActions(createdAt, gamePid, newModsDir.toString(), newConfigDir.toString(), kept);
 	}
 
 	public record Merged(PendingActions plan, List<Path> superseded) {
@@ -172,6 +186,44 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 		}
 		Files.move(pendingJar, target);
 		return target;
+	}
+
+	// Retires the download of a dropped ENABLE_FILE op: only a .rigtune-pending file directly in modsDir.
+	static void retireDownload(Op op, Path modsDir) {
+		if (op == null || op.type() != Type.ENABLE_FILE || op.from() == null || !op.from().endsWith(PENDING_SUFFIX)) {
+			return;
+		}
+		try {
+			Path from = Path.of(op.from());
+			if (SafeFileNames.isDirectChild(modsDir, from)) {
+				retire(from);
+			}
+		} catch (IOException | InvalidPathException ignored) {
+			// It stays a .rigtune-pending file, which Fabric ignores.
+		}
+	}
+
+	// Cancels every staged change under the apply lock: the downloads of staged enables become .rigtune-superseded
+	// (never deleted) and pending.json is deleted. Returns how many ops were dropped, or -1 if the lock is busy.
+	public static int discard(Path pendingFile, Duration lockWait) throws IOException {
+		try (ApplyLock lock = ApplyLock.acquire(ApplyLock.besidePlan(pendingFile), lockWait)) {
+			if (lock == null) {
+				return -1;
+			}
+			if (!Files.exists(pendingFile)) {
+				return 0;
+			}
+			List<Op> ops;
+			try {
+				ops = load(pendingFile).ops();
+			} catch (IOException e) {
+				ops = List.of();
+			}
+			Path modsDir = InstanceDirs.modsDirOf(pendingFile);
+			ops.forEach(op -> retireDownload(op, modsDir));
+			Files.deleteIfExists(pendingFile);
+			return ops.size();
+		}
 	}
 
 	public static PendingActions load(Path file) throws IOException {

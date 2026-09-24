@@ -26,4 +26,14 @@ public interface RigTuneController {
 	default @Nullable Component status() {
 		return null;
 	}
+
+	/** True while staged mod or Sodium changes wait for a restart (config/rigtune/pending.json exists). */
+	default boolean hasPendingChanges() {
+		return false;
+	}
+
+	/** Drops every staged change; returns a status message. */
+	default Component discardPending() {
+		return Component.translatable("rigtune.status.nothing");
+	}
 }

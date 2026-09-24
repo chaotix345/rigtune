@@ -55,37 +55,35 @@ class ApplyLockTest {
 		return finished.pid();
 	}
 
-	private static boolean heldElsewhere(Path lockFile) throws Exception {
-		try (ApplyLock probe = ApplyLock.acquire(lockFile, Duration.ZERO)) {
-			return probe == null;
-		}
-	}
-
+	// A game JVM can linger after its window closes; a relaunched game must still be able to stage meanwhile.
 	@Test
-	void helperHoldsTheLockWhileWaitingAndAKilledHelperReleasesIt(@TempDir Path dir) throws Exception {
+	void helperLeavesTheLockFreeWhileTheGameIsStillRunning(@TempDir Path dir) throws Exception {
 		Path mods = Files.createDirectories(dir.resolve("mods"));
 		Path config = Files.createDirectories(dir.resolve("config"));
 		Path jar = Files.writeString(mods.resolve("a.jar"), "a");
 		Path pending = PendingActions.defaultPath(config);
 		PendingActions.create(1, mods, config, List.of(Op.disableFile(jar))).save(pending);
 		Path lockFile = ApplyLock.defaultPath(config);
+		Path log = dir.resolve("helper.log");
 
 		// The helper waits for this (live) test JVM, as it would for a game that is still closing.
-		Process helper = helper(ProcessHandle.current().pid(), pending, dir.resolve("helper.log"));
+		Process helper = helper(ProcessHandle.current().pid(), pending, log);
 		try {
 			long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(60);
-			while (!heldElsewhere(lockFile) && System.nanoTime() < deadline && helper.isAlive()) {
+			while (!Files.readString(log).contains("Waiting for game process") && System.nanoTime() < deadline && helper.isAlive()) {
 				Thread.sleep(100);
 			}
-			assertTrue(heldElsewhere(lockFile), Files.readString(dir.resolve("helper.log")));
-			assertNull(ApplyLock.acquire(lockFile, Duration.ofMillis(300)));
+			assertTrue(Files.readString(log).contains("Waiting for game process"), Files.readString(log));
+			for (int i = 0; i < 5; i++) {
+				try (ApplyLock staging = ApplyLock.acquire(lockFile, Duration.ofMillis(200))) {
+					assertNotNull(staging, "staging must not wait for a helper that is only waiting for the game: " + Files.readString(log));
+				}
+				Thread.sleep(200);
+			}
+			assertTrue(helper.isAlive(), Files.readString(log));
 		} finally {
 			helper.destroyForcibly();
 			assertTrue(helper.waitFor(30, TimeUnit.SECONDS));
-		}
-
-		try (ApplyLock lock = ApplyLock.acquire(lockFile, Duration.ofSeconds(10))) {
-			assertNotNull(lock, "a killed helper's lock is released by the OS");
 		}
 		assertTrue(Files.exists(jar));
 		assertEquals(1, PendingActions.load(pending).ops().size());

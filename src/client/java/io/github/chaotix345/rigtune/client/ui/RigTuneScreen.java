@@ -105,10 +105,11 @@ public class RigTuneScreen extends Screen {
 		headerBottom = headerTop + Math.max(1, headerLines.size()) * LINE + 2;
 		int listTop = headerBottom + 4;
 
-		int buttonCount = 4;
+		boolean pending = controller.hasPendingChanges();
+		int buttonCount = pending ? 5 : 4;
 		int available = column;
 		boolean twoRows = (available - GAP * (buttonCount - 1)) / buttonCount < 80;
-		int perRow = twoRows ? 2 : buttonCount;
+		int perRow = twoRows ? (buttonCount + 1) / 2 : buttonCount;
 		int buttonWidth = Math.min(twoRows ? 150 : 120, (available - GAP * (perRow - 1)) / perRow);
 		int rows = twoRows ? 2 : 1;
 		int footerTop = height - MARGIN / 2 - rows * 20 - (rows - 1) * GAP;
@@ -133,12 +134,21 @@ public class RigTuneScreen extends Screen {
 			controller.rescan();
 			rebuildWidgets();
 		}).build());
+		if (pending) {
+			Button discard = Button.builder(Component.translatable("rigtune.screen.discard"), b -> {
+				status = controller.discardPending();
+				rebuildWidgets();
+			}).build();
+			discard.setTooltip(Tooltip.create(Component.translatable("rigtune.screen.discard.tooltip")));
+			buttons.add(discard);
+		}
 		buttons.add(Button.builder(Component.translatable("gui.done"), b -> onClose()).build());
 
-		int rowWidth = perRow * buttonWidth + (perRow - 1) * GAP;
 		for (int i = 0; i < buttons.size(); i++) {
 			int row = i / perRow;
 			int col = i % perRow;
+			int inRow = Math.min(perRow, buttons.size() - row * perRow);
+			int rowWidth = inRow * buttonWidth + (inRow - 1) * GAP;
 			Button button = buttons.get(i);
 			button.setRectangle(buttonWidth, 20, (width - rowWidth) / 2 + col * (buttonWidth + GAP), footerTop + row * (20 + GAP));
 			addRenderableWidget(button);

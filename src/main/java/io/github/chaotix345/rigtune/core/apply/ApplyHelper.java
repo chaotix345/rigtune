@@ -35,21 +35,26 @@ public final class ApplyHelper {
 			return 2;
 		}
 		Path pending = Path.of(args[1]);
+		int waited = waitForGame(pid, pending);
+		if (waited != 0) {
+			return waited;
+		}
 
-		// Held from before the game exits until the plan is rewritten, so the next launch and staging can't race us.
+		// Taken only once the game has exited (a lingering JVM must not block staging in a relaunched game), and held
+		// until the plan is rewritten, so the next launch and staging can't race the renames.
 		try (ApplyLock lock = ApplyLock.acquire(ApplyLock.besidePlan(pending), LOCK_WAIT)) {
 			if (lock == null) {
 				log("Another RigTune apply still holds " + ApplyLock.besidePlan(pending) + "; leaving " + pending + " for the next exit");
 				return 3;
 			}
-			return runLocked(pid, pending);
+			return applyLocked(pending);
 		} catch (IOException e) {
 			log("Could not take the apply lock: " + e);
 			return 3;
 		}
 	}
 
-	private static int runLocked(long pid, Path pending) {
+	private static int waitForGame(long pid, Path pending) {
 		Optional<ProcessHandle> game = ProcessHandle.of(pid);
 		if (game.isPresent()) {
 			log("Waiting for game process " + pid + " to exit");
@@ -74,7 +79,10 @@ public final class ApplyHelper {
 			Thread.currentThread().interrupt();
 			return 3;
 		}
+		return 0;
+	}
 
+	private static int applyLocked(Path pending) {
 		if (!Files.exists(pending)) {
 			log("Nothing to apply: " + pending + " does not exist");
 			return 0;
@@ -86,7 +94,8 @@ public final class ApplyHelper {
 			for (ApplyResult.OpResult r : result.results()) {
 				log(r.status() + " " + (r.op() == null ? "?" : r.op().type()) + ": " + r.message());
 			}
-			log(result.allSucceeded() ? "All operations done" : "Some operations failed; they remain in " + pending);
+			log(result.allSucceeded() ? "All operations done"
+					: "Some operations were not applied; failed ones remain in " + pending + ", abandoned ones were dropped");
 			return result.allSucceeded() ? 0 : 1;
 		} catch (IOException | RuntimeException e) {
 			log("Apply failed: " + e);

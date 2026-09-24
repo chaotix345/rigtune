@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.client.probe;
 
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import net.fabricmc.loader.api.FabricLoader;
@@ -32,7 +33,7 @@ public final class ModScanner {
 
 	public static List<InstalledMod> scan() {
 		List<InstalledMod> out = new ArrayList<>();
-		Path modsDir = FabricLoader.getInstance().getGameDir().resolve("mods");
+		Path modsDir = InstanceDirs.modsDir(FabricLoader.getInstance().getGameDir());
 		for (ModContainer mod : FabricLoader.getInstance().getAllMods()) {
 			try {
 				String id = mod.getMetadata().getId();
@@ -59,7 +60,8 @@ public final class ModScanner {
 	}
 
 	// Only a jar directly in this instance's mods folder may be disabled or updated. Jars from elsewhere
-	// (-Dfabric.addMods, a launcher-shared folder) keep their hash for update checks but get no file.
+	// (-Dfabric.addMods, a launcher-shared folder) keep their hash for update checks but get no file. The mods folder
+	// honours -Dfabric.modsFolder, as Fabric does (see InstanceDirs).
 	static Path fileAction(Path jar, Path modsDir) {
 		return jar != null && SafeFileNames.isDirectChild(modsDir, jar) ? jar : null;
 	}
