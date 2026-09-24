@@ -30,6 +30,8 @@ class RemoteRulesFetcherTest {
 		serve("/good", 200, "{\"schemaVersion\":1,\"revision\":42}");
 		serve("/missing", 404, "not found");
 		serve("/bad", 200, "{\"schemaVersion\":7}");
+		serve("/huge", 200, "{\"schemaVersion\":1,\"revision\":50}" + " ".repeat((int) RulesLoader.MAX_RULES_BYTES));
+		serve("/large", 200, "{\"schemaVersion\":1,\"revision\":51}" + " ".repeat((int) RulesLoader.MAX_RULES_BYTES / 2));
 		server.start();
 	}
 
@@ -69,6 +71,14 @@ class RemoteRulesFetcherTest {
 		assertFalse(new RemoteRulesFetcher(uri("/missing"), "0.1.0", cache).fetch().isPresent());
 		assertFalse(new RemoteRulesFetcher(uri("/bad"), "0.1.0", cache).fetch().isPresent());
 		assertFalse(Files.exists(cache));
+	}
+
+	@Test
+	void rulesLargerThanTheCapAreRejectedWithoutCaching(@TempDir Path dir) {
+		Path cache = dir.resolve("rules-cache.json");
+		assertFalse(new RemoteRulesFetcher(uri("/huge"), "0.1.0", cache).fetch().isPresent());
+		assertFalse(Files.exists(cache));
+		assertEquals(51, new RemoteRulesFetcher(uri("/large"), "0.1.0", cache).fetch().orElseThrow().revision);
 	}
 
 	@Test

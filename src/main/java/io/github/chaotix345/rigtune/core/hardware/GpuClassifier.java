@@ -44,8 +44,7 @@ public final class GpuClassifier {
 		GpuVendor vendor = detectVendor(vendorString, renderer);
 
 		for (GpuTierRule rule : rules) {
-			Pattern pattern = rule.compiled();
-			if (pattern == null || !vendorCompatible(rule.vendor, vendor) || !pattern.matcher(subject).find()) {
+			if (!vendorCompatible(rule.vendor, vendor) || !rule.find(subject)) {
 				continue;
 			}
 			GpuVendor resolved = vendor == GpuVendor.UNKNOWN || vendor == GpuVendor.OTHER ? parseVendor(rule.vendor, vendor) : vendor;

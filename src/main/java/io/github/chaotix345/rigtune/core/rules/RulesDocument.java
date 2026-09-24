@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.core.rules;
 
 import com.google.gson.JsonElement;
+import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.core.model.Impact;
 
 import java.util.ArrayList;
@@ -76,19 +77,39 @@ public final class RulesDocument {
 	}
 
 	public abstract static class PatternRule {
+		public static final int MAX_PATTERN_LENGTH = 200;
+
 		public String pattern;
 		private transient Pattern compiled;
 		private transient boolean invalid;
 
+		// Null for a missing, invalid or overlong pattern.
 		public Pattern compiled() {
 			if (compiled == null && !invalid) {
 				try {
+					if (pattern.length() > MAX_PATTERN_LENGTH) {
+						throw new PatternSyntaxException("longer than " + MAX_PATTERN_LENGTH + " characters", pattern, -1);
+					}
 					compiled = Pattern.compile(pattern);
 				} catch (PatternSyntaxException | NullPointerException e) {
 					invalid = true;
 				}
 			}
 			return compiled;
+		}
+
+		// A match that runs out of its read budget (catastrophic backtracking) counts as no match.
+		public boolean find(String subject) {
+			Pattern p = compiled();
+			if (p == null || subject == null) {
+				return false;
+			}
+			Boolean found = BudgetedChars.find(p, subject, BudgetedChars.DEFAULT_BUDGET);
+			if (found == null) {
+				RigTune.LOGGER.warn("Rules regex {} gave up on \"{}\"; treating it as no match", pattern, subject);
+				return false;
+			}
+			return found;
 		}
 	}
 
