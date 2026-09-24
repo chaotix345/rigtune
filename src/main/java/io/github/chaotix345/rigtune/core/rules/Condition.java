@@ -1,6 +1,8 @@
 package io.github.chaotix345.rigtune.core.rules;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public final class Condition {
 	public Boolean always;
@@ -32,4 +34,15 @@ public final class Condition {
 	public List<String> flags;
 	public List<Condition> anyOf;
 	public Condition not;
+
+	// Schema v2 (docs/v0.2/SPEC.md item 2). Only rules-v2.json may use these; the updater keeps them out of rules-v1.json.
+	public String gpuModelMatches;
+	public Long displayPixelsAtLeast;
+	public Long displayPixelsAtMost;
+	public Map<String, String> modVersion;
+	public String mcVersionRange;
+
+	// Keys of this object that this client doesn't know, filled in while parsing. Any unknown key anywhere in a
+	// condition tree makes the whole top-level condition false (fail closed).
+	public transient Set<String> unknownFields;
 }

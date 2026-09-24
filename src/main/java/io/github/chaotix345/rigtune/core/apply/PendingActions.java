@@ -25,7 +25,9 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 	static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
 	public enum Type {
-		ENABLE_FILE, DISABLE_FILE, PATCH_JSON
+		ENABLE_FILE, DISABLE_FILE, PATCH_JSON,
+		// v0.2: DistantHorizons.toml and iris.properties (TomlConfigPatcher, PropertiesConfigPatcher).
+		PATCH_TOML, PATCH_PROPERTIES
 	}
 
 	// id: unique per staged op. group: ops sharing one are applied all-or-nothing (an update is {disable old, enable new}).
@@ -50,6 +52,14 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 
 		public static Op patchJson(Path path, Map<String, String> patches) {
 			return new Op(Type.PATCH_JSON, null, null, path.toString(), patches, newId(), null, null, 0);
+		}
+
+		public static Op patchToml(Path path, Map<String, String> patches) {
+			return new Op(Type.PATCH_TOML, null, null, path.toString(), patches, newId(), null, null, 0);
+		}
+
+		public static Op patchProperties(Path path, Map<String, String> patches) {
+			return new Op(Type.PATCH_PROPERTIES, null, null, path.toString(), patches, newId(), null, null, 0);
 		}
 
 		public Op inGroup(String newGroup) {

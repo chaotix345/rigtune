@@ -27,6 +27,8 @@ public final class RulesDocument {
 	public List<AdviceRule> advice = new ArrayList<>();
 	public Map<String, List<String>> availability = new LinkedHashMap<>();
 	public Map<String, UpstreamPack> upstream = new LinkedHashMap<>();
+	// v2: human-readable names for settings keys and their values.
+	public Map<String, SettingLabel> settingLabels = new LinkedHashMap<>();
 
 	private transient String source;
 
@@ -49,6 +51,7 @@ public final class RulesDocument {
 		if (advice == null) advice = new ArrayList<>();
 		if (availability == null) availability = new LinkedHashMap<>();
 		if (upstream == null) upstream = new LinkedHashMap<>();
+		if (settingLabels == null) settingLabels = new LinkedHashMap<>();
 		gpuTiers.removeIf(r -> r == null);
 		cpuTiers.removeIf(r -> r == null);
 		heapTiers.removeIf(r -> r == null);
@@ -129,6 +132,8 @@ public final class RulesDocument {
 	}
 
 	public static final class ModRule {
+		// v2: client features this rule needs; a client that lacks one skips the rule.
+		public List<String> requires;
 		public String slug;
 		public String projectId;
 		public String title;
@@ -154,6 +159,8 @@ public final class RulesDocument {
 	}
 
 	public static final class ObsoleteRule {
+		// v2: client features this rule needs; a client that lacks one skips the rule.
+		public List<String> requires;
 		public List<String> modIds = new ArrayList<>();
 		public String title;
 		public String reason;
@@ -161,6 +168,8 @@ public final class RulesDocument {
 	}
 
 	public static final class SettingRule {
+		// v2: client features this rule needs; a client that lacks one skips the rule.
+		public List<String> requires;
 		public String key;
 		public JsonElement value;
 		public Double min;
@@ -180,12 +189,19 @@ public final class RulesDocument {
 	}
 
 	public static final class AdviceRule {
+		// v2: client features this rule needs; a client that lacks one skips the rule.
+		public List<String> requires;
 		public String id;
 		public Condition when;
 		public String impact;
 		public String title;
 		public String text;
 		public String kind;
+	}
+
+	public static final class SettingLabel {
+		public String name;
+		public Map<String, String> values = new LinkedHashMap<>();
 	}
 
 	public static final class UpstreamPack {

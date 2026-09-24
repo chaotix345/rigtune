@@ -269,7 +269,7 @@ public final class ApplyExecutor {
 		return switch (op.type()) {
 			case DISABLE_FILE -> 0;
 			case ENABLE_FILE -> 1;
-			case PATCH_JSON -> 2;
+			case PATCH_JSON, PATCH_TOML, PATCH_PROPERTIES -> 2;
 		};
 	}
 
@@ -277,7 +277,7 @@ public final class ApplyExecutor {
 		return switch (op.type()) {
 			case ENABLE_FILE -> "enabling " + fileName(op.to());
 			case DISABLE_FILE -> "disabling " + fileName(op.path());
-			case PATCH_JSON -> "patching " + fileName(op.path());
+			case PATCH_JSON, PATCH_TOML, PATCH_PROPERTIES -> "patching " + fileName(op.path());
 		};
 	}
 
@@ -334,7 +334,7 @@ public final class ApplyExecutor {
 			case DISABLE_FILE -> op.path() == null ? "missing path"
 					: SafeFileNames.isDirectChild(modsDir, Path.of(op.path())) ? null
 					: op.path() + " is not directly inside the mods folder " + modsDir;
-			case PATCH_JSON -> op.path() == null ? "missing path"
+			case PATCH_JSON, PATCH_TOML, PATCH_PROPERTIES -> op.path() == null ? "missing path"
 					: SafeFileNames.isInside(configDir, Path.of(op.path())) ? null
 					: op.path() + " is not inside the config folder " + configDir;
 		};
@@ -349,6 +349,8 @@ public final class ApplyExecutor {
 			case ENABLE_FILE -> retrying(op, () -> enable(op, index));
 			case DISABLE_FILE -> retrying(op, () -> disable(op, index));
 			case PATCH_JSON -> retrying(op, () -> new Applied(patchJson(op), null));
+			case PATCH_TOML -> retrying(op, () -> new Applied(patchConfig(op, TomlConfigPatcher.patchFile(Path.of(op.path()), patchesOf(op))), null));
+			case PATCH_PROPERTIES -> retrying(op, () -> new Applied(patchConfig(op, PropertiesConfigPatcher.patchFile(Path.of(op.path()), patchesOf(op))), null));
 		};
 	}
 
@@ -419,6 +421,17 @@ public final class ApplyExecutor {
 		Map<String, String> patches = op.patches() == null ? Map.of() : op.patches();
 		return SodiumConfigPatcher.patchFile(path, patches)
 				? new OpResult(op, Status.OK, "Patched " + patches.size() + " value(s) in " + path.getFileName())
+				: new OpResult(op, Status.SKIPPED_ALREADY_DONE, path.getFileName() + " already has these values");
+	}
+
+	private static Map<String, String> patchesOf(Op op) {
+		return op.patches() == null ? Map.of() : op.patches();
+	}
+
+	private static OpResult patchConfig(Op op, boolean changed) {
+		Path path = Path.of(op.path());
+		return changed
+				? new OpResult(op, Status.OK, "Patched " + patchesOf(op).size() + " value(s) in " + path.getFileName())
 				: new OpResult(op, Status.SKIPPED_ALREADY_DONE, path.getFileName() + " already has these values");
 	}
 }
