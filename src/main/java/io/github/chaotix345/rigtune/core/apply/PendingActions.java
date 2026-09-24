@@ -19,6 +19,7 @@ import java.util.UUID;
 
 public record PendingActions(String createdAt, long gamePid, String modsDir, String configDir, List<Op> ops) {
 	public static final String PENDING_SUFFIX = ".rigtune-pending";
+	public static final String SUPERSEDED_SUFFIX = ".rigtune-superseded";
 	static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
 	public enum Type {
@@ -103,6 +104,75 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 
 	public PendingActions withOps(List<Op> newOps) {
 		return new PendingActions(createdAt, gamePid, modsDir, configDir, newOps);
+	}
+
+	public record Merged(PendingActions plan, List<Path> superseded) {
+	}
+
+	// Adds staged ops. An op that repeats a staged change is dropped and the two groups are joined. An ENABLE_FILE
+	// whose mod id already has a staged ENABLE_FILE replaces it, taking over the rest of its group (such as the
+	// update's disable), and the replaced op's pending jar is returned for the caller to retire.
+	public Merged merge(List<Op> incoming) {
+		List<Op> merged = new ArrayList<>(ops);
+		List<Path> superseded = new ArrayList<>();
+		for (Op op : incoming) {
+			Op same = merged.stream().filter(existing -> existing.sameChange(op)).findFirst().orElse(null);
+			if (same != null) {
+				if (op.group() != null && !op.group().equals(same.group())) {
+					regroup(merged, same, op.group());
+				}
+				continue;
+			}
+			Op next = op;
+			if (op.type() == Type.ENABLE_FILE && op.modId() != null) {
+				for (Op old : List.copyOf(merged)) {
+					if (old.type() != Type.ENABLE_FILE || !op.modId().equals(old.modId())) {
+						continue;
+					}
+					merged.remove(old);
+					if (old.group() != null) {
+						if (next.group() == null) {
+							next = next.inGroup(old.group());
+						} else {
+							regroup(merged, old, next.group());
+						}
+					}
+					if (old.from() != null && !old.from().equals(op.from())) {
+						superseded.add(Path.of(old.from()));
+					}
+				}
+			}
+			merged.add(next);
+		}
+		List<Path> retire = superseded.stream()
+				.filter(p -> merged.stream().noneMatch(o -> p.toString().equals(o.from())))
+				.distinct()
+				.toList();
+		return new Merged(withOps(merged), retire);
+	}
+
+	private static void regroup(List<Op> ops, Op member, String group) {
+		for (int i = 0; i < ops.size(); i++) {
+			Op op = ops.get(i);
+			if (op == member || (member.group() != null && member.group().equals(op.group()))) {
+				ops.set(i, op.inGroup(group));
+			}
+		}
+	}
+
+	// Leaves a replaced download inert: x.jar.rigtune-pending becomes x.jar.rigtune-superseded (never deleted).
+	public static Path retire(Path pendingJar) throws IOException {
+		if (!Files.exists(pendingJar)) {
+			return null;
+		}
+		String name = pendingJar.getFileName().toString();
+		String base = name.endsWith(PENDING_SUFFIX) ? name.substring(0, name.length() - PENDING_SUFFIX.length()) : name;
+		Path target = pendingJar.resolveSibling(base + SUPERSEDED_SUFFIX);
+		for (int i = 1; Files.exists(target); i++) {
+			target = pendingJar.resolveSibling(base + SUPERSEDED_SUFFIX + "." + i);
+		}
+		Files.move(pendingJar, target);
+		return target;
 	}
 
 	public static PendingActions load(Path file) throws IOException {

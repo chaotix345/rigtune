@@ -1,7 +1,5 @@
 package io.github.chaotix345.rigtune.client;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
@@ -10,6 +8,7 @@ import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
+import io.github.chaotix345.rigtune.core.apply.ModJars;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
@@ -36,13 +35,11 @@ import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -50,8 +47,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 public final class RealController implements RigTuneController {
 	private static final String VANILLA = SettingsBridge.VANILLA_PREFIX;
@@ -332,6 +327,7 @@ public final class RealController implements RigTuneController {
 		if (scanned != null) {
 			scanned.forEach(m -> loadedIds.add(m.modId()));
 		}
+		Map<String, String> stagedJars = stagedJarsByModId();
 		List<Op> ops = new ArrayList<>();
 		List<String> ids = new ArrayList<>();
 		List<String> errors = new ArrayList<>();
@@ -353,13 +349,16 @@ public final class RealController implements RigTuneController {
 							}
 							Path pending = fetch(file);
 							// A second jar with an already-loaded mod id would stop Fabric from starting, so drop it.
-							String jarModId = modIdOf(pending);
+							String jarModId = ModJars.modIdOf(pending);
 							if (jarModId != null && !loadedIds.add(jarModId)) {
 								RigTune.LOGGER.info("Skipping {}: mod {} is already present", file.filename(), jarModId);
-								Files.deleteIfExists(pending);
+								if (!stagedJars.containsValue(pending.toString())) {
+									Files.deleteIfExists(pending);
+								}
 								continue;
 							}
-							recOps.add(Op.enableFile(pending, target));
+							noteReplaced(stagedJars, jarModId, pending);
+							recOps.add(Op.enableFile(pending, target).withModId(jarModId));
 						}
 					}
 					case Action.UpdateMod update -> {
@@ -372,8 +371,10 @@ public final class RealController implements RigTuneController {
 						}
 						Path target = SafeFileNames.resolveJar(modsDir, file.filename());
 						Path pending = fetch(file);
+						String jarModId = Objects.requireNonNullElse(ModJars.modIdOf(pending), update.modId());
+						noteReplaced(stagedJars, jarModId, pending);
 						recOps.add(Op.disableFile(update.currentFile()));
-						recOps.add(Op.enableFile(pending, target));
+						recOps.add(Op.enableFile(pending, target).withModId(jarModId));
 					}
 					default -> {
 					}
@@ -389,19 +390,28 @@ public final class RealController implements RigTuneController {
 		return new DownloadResult(ops, ids, errors);
 	}
 
-	static @Nullable String modIdOf(Path jar) {
-		try (ZipFile zip = new ZipFile(jar.toFile())) {
-			ZipEntry entry = zip.getEntry("fabric.mod.json");
-			if (entry == null) {
-				return null;
+	// Mod ids that already have a staged ENABLE_FILE, with that op's pending jar. A newer download for the same id
+	// replaces the staged one when it is merged (see PendingActions.merge).
+	private Map<String, String> stagedJarsByModId() {
+		Map<String, String> out = new HashMap<>();
+		if (Files.exists(pendingFile)) {
+			try {
+				for (Op op : PendingActions.load(pendingFile).ops()) {
+					if (op.type() == PendingActions.Type.ENABLE_FILE && op.modId() != null && op.from() != null) {
+						out.put(op.modId(), op.from());
+					}
+				}
+			} catch (IOException e) {
+				RigTune.LOGGER.warn("Could not read {}", pendingFile, e);
 			}
-			try (Reader reader = new InputStreamReader(zip.getInputStream(entry), StandardCharsets.UTF_8)) {
-				JsonElement root = JsonParser.parseReader(reader);
-				return root.isJsonObject() && root.getAsJsonObject().has("id") ? root.getAsJsonObject().get("id").getAsString() : null;
-			}
-		} catch (IOException | RuntimeException e) {
-			RigTune.LOGGER.warn("Could not read the mod id of {}", jar, e);
-			return null;
+		}
+		return out;
+	}
+
+	private static void noteReplaced(Map<String, String> stagedJars, @Nullable String modId, Path pending) {
+		String old = modId == null ? null : stagedJars.get(modId);
+		if (old != null && !old.equals(pending.toString())) {
+			RigTune.LOGGER.info("{} replaces the staged {} for mod {}", pending.getFileName(), Path.of(old).getFileName(), modId);
 		}
 	}
 
@@ -425,16 +435,22 @@ public final class RealController implements RigTuneController {
 					RigTune.LOGGER.warn("Replacing unreadable {}", pendingFile, e);
 				}
 			}
-			List<Op> merged = new ArrayList<>(plan == null ? List.of() : plan.ops());
-			for (Op op : ops) {
-				if (!merged.contains(op)) {
-					merged.add(op);
+			PendingActions base = plan != null ? plan : PendingActions.create(ProcessHandle.current().pid(), modsDir, configDir, List.of());
+			PendingActions.Merged merged = base.merge(ops);
+			merged.plan().save(pendingFile);
+			for (Path old : merged.superseded()) {
+				if (!SafeFileNames.isDirectChild(modsDir, old)) {
+					continue;
+				}
+				try {
+					Path retired = PendingActions.retire(old);
+					if (retired != null) {
+						RigTune.LOGGER.info("Replaced staged {}; kept it as {}", old.getFileName(), retired.getFileName());
+					}
+				} catch (IOException e) {
+					RigTune.LOGGER.warn("Could not retire replaced {}; it stays inert", old, e);
 				}
 			}
-			PendingActions out = plan == null
-					? PendingActions.create(ProcessHandle.current().pid(), modsDir, configDir, merged)
-					: plan.withOps(merged);
-			out.save(pendingFile);
 			staged.addAll(ids);
 			return true;
 		} catch (IOException | RuntimeException e) {
