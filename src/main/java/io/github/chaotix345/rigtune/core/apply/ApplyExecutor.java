@@ -24,6 +24,7 @@ import java.util.stream.Stream;
 public final class ApplyExecutor {
 	public static final int DEFAULT_ATTEMPTS = 10;
 	public static final long DEFAULT_RETRY_DELAY_MILLIS = 300;
+	public static final int MAX_FAILED_RUNS = 3;
 
 	interface Mover {
 		void move(Path from, Path to) throws IOException;
@@ -53,15 +54,41 @@ public final class ApplyExecutor {
 	public ApplyResult run(PendingActions plan, Path pendingFile) throws IOException {
 		Path configDir = InstanceDirs.configDirOf(pendingFile);
 		Path modsDir = InstanceDirs.modsDirOf(pendingFile);
-		ApplyResult result = new ApplyResult(Instant.now().toString(), execute(plan, modsDir, configDir));
+		ApplyResult result = new ApplyResult(Instant.now().toString(), giveUpOnRepeatFailures(execute(plan, modsDir, configDir)));
 		writeRemaining(plan, pendingFile, result, modsDir);
 		result.save(ApplyResult.defaultPath(configDir));
 		return result;
 	}
 
-	// Ops that are done or abandoned leave the plan. An abandoned enable's download is renamed to .rigtune-superseded.
+	// A group with an op that has now failed in MAX_FAILED_RUNS helper runs is abandoned as a whole, so a change that
+	// can never apply doesn't come back at every exit.
+	static List<OpResult> giveUpOnRepeatFailures(List<OpResult> results) {
+		Set<String> givenUp = new HashSet<>();
+		for (int i = 0; i < results.size(); i++) {
+			OpResult r = results.get(i);
+			if (r.status() == Status.FAILED && r.op() != null && r.op().attempts() + 1 >= MAX_FAILED_RUNS) {
+				givenUp.add(groupKey(r.op(), i));
+			}
+		}
+		List<OpResult> out = new ArrayList<>(results);
+		for (int i = 0; i < out.size(); i++) {
+			OpResult r = out.get(i);
+			if (r.status() == Status.FAILED && r.op() != null && givenUp.contains(groupKey(r.op(), i))) {
+				out.set(i, new OpResult(r.op(), Status.ABANDONED, "Gave up after " + MAX_FAILED_RUNS + " failed attempts: " + r.message()));
+			}
+		}
+		return out;
+	}
+
+	private static String groupKey(Op op, int index) {
+		return op.group() != null ? "group:" + op.group() : "op:" + index;
+	}
+
+	// Ops that are done or abandoned leave the plan, and failed ones count another attempt. An abandoned enable's
+	// download is renamed to .rigtune-superseded.
 	private static void writeRemaining(PendingActions plan, Path pendingFile, ApplyResult result, Path modsDir) throws IOException {
-		List<Op> leaving = result.results().stream().filter(r -> r.status() != Status.FAILED).map(OpResult::op).toList();
+		List<Op> leaving = result.results().stream().filter(r -> r.status() != Status.FAILED).map(OpResult::op).filter(Objects::nonNull).toList();
+		List<Op> failed = result.results().stream().filter(r -> r.status() == Status.FAILED).map(OpResult::op).filter(Objects::nonNull).toList();
 		PendingActions base = plan;
 		if (Files.exists(pendingFile)) {
 			try {
@@ -70,29 +97,22 @@ public final class ApplyExecutor {
 				base = plan;
 			}
 		}
-		List<Op> remaining = base.ops().stream().filter(op -> leaving.stream().noneMatch(d -> d != null && d.sameOp(op))).toList();
+		List<Op> remaining = new ArrayList<>();
+		for (Op op : base.ops()) {
+			if (leaving.stream().anyMatch(d -> d.sameOp(op))) {
+				continue;
+			}
+			remaining.add(op != null && failed.stream().anyMatch(f -> f.sameOp(op)) ? op.withAttempts(op.attempts() + 1) : op);
+		}
 		if (remaining.isEmpty()) {
 			Files.deleteIfExists(pendingFile);
 		} else {
 			base.withOps(remaining).save(pendingFile);
 		}
 		for (Op op : result.abandonedOps()) {
-			retireDownload(op, remaining, modsDir);
-		}
-	}
-
-	private static void retireDownload(Op op, List<Op> remaining, Path modsDir) {
-		if (op == null || op.type() != PendingActions.Type.ENABLE_FILE || op.from() == null || !op.from().endsWith(PendingActions.PENDING_SUFFIX)
-				|| remaining.stream().anyMatch(o -> op.from().equals(o.from()))) {
-			return;
-		}
-		try {
-			Path from = Path.of(op.from());
-			if (SafeFileNames.isDirectChild(modsDir, from)) {
-				PendingActions.retire(from);
+			if (op != null && remaining.stream().noneMatch(o -> o != null && op.from() != null && op.from().equals(o.from()))) {
+				PendingActions.retireDownload(op, modsDir);
 			}
-		} catch (IOException | InvalidPathException ignored) {
-			// It stays a .rigtune-pending file, which Fabric ignores.
 		}
 	}
 

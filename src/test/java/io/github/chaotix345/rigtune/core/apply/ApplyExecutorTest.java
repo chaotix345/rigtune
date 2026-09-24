@@ -105,7 +105,7 @@ class ApplyExecutorTest {
 		assertFalse(result.allSucceeded());
 		assertEquals("existing a", Files.readString(mods.resolve("a.jar")));
 		assertEquals("new a", Files.readString(mods.resolve("a.jar.rigtune-pending")));
-		assertEquals(List.of(clash, missing), PendingActions.load(pending).ops());
+		assertEquals(List.of(clash.withAttempts(1), missing.withAttempts(1)), PendingActions.load(pending).ops());
 		assertEquals(result, ApplyResult.load(ApplyResult.defaultPath(config)));
 	}
 

@@ -174,7 +174,7 @@ class HelperLauncherTest {
 			assertEquals(1, helper.exitValue(), output);
 			assertEquals(List.of("rigtune-1.0.jar"), update.enabledRigTuneJars());
 			assertTrue(Files.exists(update.mods().resolve("rigtune-2.0.jar" + PendingActions.PENDING_SUFFIX)));
-			assertEquals(update.ops(), PendingActions.load(update.pending()).ops());
+			assertEquals(update.ops().stream().map(op -> op.withAttempts(1)).toList(), PendingActions.load(update.pending()).ops());
 		}
 	}
 

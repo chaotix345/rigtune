@@ -63,6 +63,10 @@ class ApplyGroupsTest {
 		return PendingActions.group(Op.disableFile(oldJar), Op.enableFile(newPending, newJar));
 	}
 
+	private static List<Op> failedOnce(List<Op> ops) {
+		return ops.stream().map(op -> op.withAttempts(1)).toList();
+	}
+
 	private static List<Status> statuses(ApplyResult result) {
 		return result.results().stream().map(OpResult::status).toList();
 	}
@@ -99,7 +103,7 @@ class ApplyGroupsTest {
 		assertEquals(List.of("sodium-0.7.0.jar"), enabledJars());
 		assertEquals("new", Files.readString(newPending));
 		assertFalse(moves.stream().anyMatch(m -> m.startsWith(newPending.getFileName().toString())), moves.toString());
-		assertEquals(ops, PendingActions.load(pending).ops());
+		assertEquals(failedOnce(ops), PendingActions.load(pending).ops());
 	}
 
 	@Test
@@ -116,7 +120,7 @@ class ApplyGroupsTest {
 		assertEquals("someone else's copy", Files.readString(newJar));
 		assertEquals("new", Files.readString(newPending));
 		assertFalse(Files.exists(mods.resolve("sodium-0.7.0.jar.disabled")));
-		assertEquals(ops, PendingActions.load(pending).ops());
+		assertEquals(failedOnce(ops), PendingActions.load(pending).ops());
 	}
 
 	@Test
@@ -141,7 +145,7 @@ class ApplyGroupsTest {
 		assertEquals(List.of(Status.FAILED, Status.FAILED), statuses(first));
 		assertTrue(first.results().get(0).message().startsWith("Rollback failed"), first.results().get(0).message());
 		assertEquals(List.of("sodium-0.7.0.jar.disabled"), modsListing());
-		assertEquals(ops, PendingActions.load(pending).ops());
+		assertEquals(failedOnce(ops), PendingActions.load(pending).ops());
 
 		Files.writeString(newPending, "new");
 		ApplyResult retry = executor((a, b) -> false).run(PendingActions.load(pending), pending);
@@ -200,7 +204,7 @@ class ApplyGroupsTest {
 
 		assertEquals(List.of(Status.FAILED, Status.FAILED, Status.OK), statuses(result));
 		assertTrue(Files.exists(mods.resolve("lithium.jar.disabled")));
-		assertEquals(ops.subList(0, 2), PendingActions.load(pending).ops());
+		assertEquals(failedOnce(ops.subList(0, 2)), PendingActions.load(pending).ops());
 	}
 
 	@Test
@@ -245,5 +249,52 @@ class ApplyGroupsTest {
 		executor((a, b) -> false).run(plan, pending);
 
 		assertEquals(List.of(other), PendingActions.load(pending).ops());
+	}
+
+	// Review 2, N3: a change that can never apply is dropped after three helper runs instead of coming back forever.
+	@Test
+	void aGroupThatKeepsFailingIsAbandonedOnItsThirdRun() throws IOException {
+		Files.writeString(newJar, "someone else's copy");
+		Path libPending = Files.writeString(mods.resolve("lib.jar" + PendingActions.PENDING_SUFFIX), "lib");
+		Path lithium = Files.writeString(mods.resolve("lithium.jar"), "l");
+		List<Op> group = PendingActions.group(Op.disableFile(oldJar), Op.enableFile(newPending, newJar), Op.enableFile(libPending, mods.resolve("lib.jar")));
+
+		ApplyResult first = run(executor((a, b) -> false), group);
+		assertEquals(List.of(Status.FAILED, Status.FAILED, Status.FAILED), statuses(first));
+		assertEquals(List.of(1, 1, 1), PendingActions.load(pending).ops().stream().map(Op::attempts).toList());
+
+		// Staged between runs: it has its own count and isn't abandoned with the group.
+		PendingActions plan = PendingActions.load(pending);
+		List<Op> withLater = new ArrayList<>(plan.ops());
+		withLater.add(Op.disableFile(lithium));
+		plan.withOps(withLater).save(pending);
+
+		ApplyResult second = executor((from, to) -> from.equals(lithium)).run(PendingActions.load(pending), pending);
+		assertEquals(List.of(Status.FAILED, Status.FAILED, Status.FAILED, Status.FAILED), statuses(second));
+		assertEquals(List.of(2, 2, 2, 1), PendingActions.load(pending).ops().stream().map(Op::attempts).toList());
+
+		ApplyResult third = executor((from, to) -> from.equals(lithium)).run(PendingActions.load(pending), pending);
+
+		assertEquals(List.of(Status.ABANDONED, Status.ABANDONED, Status.ABANDONED, Status.FAILED), statuses(third));
+		assertTrue(third.results().get(1).message().startsWith("Gave up after 3 failed attempts: "), third.results().get(1).message());
+		assertEquals(3, third.abandonedOps().size());
+		assertEquals(statuses(third), statuses(ApplyResult.load(ApplyResult.defaultPath(config))));
+		assertEquals(List.of(lithium.toString()), PendingActions.load(pending).ops().stream().map(Op::path).toList());
+		assertEquals(2, PendingActions.load(pending).ops().getFirst().attempts());
+		assertEquals(List.of("lib.jar.rigtune-superseded", "lithium.jar", "sodium-0.7.0.jar", "sodium-0.7.1.jar",
+				"sodium-0.7.1.jar.rigtune-superseded"), modsListing());
+		assertEquals("someone else's copy", Files.readString(newJar));
+	}
+
+	@Test
+	void anOpThatJoinedAGroupLaterIsAbandonedWithIt() {
+		Op old = Op.disableFile(oldJar).inGroup("g").withAttempts(2);
+		Op joined = Op.enableFile(newPending, newJar).inGroup("g");
+		Op alone = Op.disableFile(mods.resolve("x.jar")).withAttempts(1);
+		List<OpResult> results = List.of(new OpResult(old, Status.FAILED, "a"), new OpResult(joined, Status.FAILED, "b"),
+				new OpResult(alone, Status.FAILED, "c"));
+
+		assertEquals(List.of(Status.ABANDONED, Status.ABANDONED, Status.FAILED),
+				ApplyExecutor.giveUpOnRepeatFailures(results).stream().map(OpResult::status).toList());
 	}
 }

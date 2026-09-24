@@ -168,6 +168,12 @@ public final class RigTuneClient implements ClientModInitializer {
 						Component.translatable("rigtune.toast.failed.title", failed, total),
 						Component.translatable("rigtune.toast.failed.body"));
 			}
+			int abandoned = result.abandonedOps().size();
+			if (abandoned > 0) {
+				SystemToast.add(minecraft.gui.toastManager(), new SystemToast.SystemToastId(10000L),
+						Component.translatable("rigtune.toast.abandoned.title", abandoned),
+						Component.translatable("rigtune.toast.abandoned.body"));
+			}
 			Path configDir = FabricLoader.getInstance().getConfigDir();
 			ClientState state = ClientState.shared(configDir);
 			state.lastShownApply = result.finishedAt();

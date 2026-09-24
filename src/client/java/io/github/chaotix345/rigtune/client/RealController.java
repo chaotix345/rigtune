@@ -64,7 +64,7 @@ public final class RealController implements RigTuneController {
 	private final ModrinthClient modrinth;
 	private final ClientState state;
 	private final Set<String> staged = new HashSet<>();
-	private final int carriedOverOps;
+	private int carriedOverOps;
 	private final boolean selfFileActions = HelperLauncher.selfUpdateSupported();
 
 	private volatile @Nullable RulesDocument rules;
@@ -454,5 +454,30 @@ public final class RealController implements RigTuneController {
 	@Override
 	public @Nullable Component status() {
 		return status;
+	}
+
+	@Override
+	public boolean hasPendingChanges() {
+		return Files.isRegularFile(pendingFile);
+	}
+
+	@Override
+	public Component discardPending() {
+		if (downloading) {
+			return Component.translatable("rigtune.status.busy");
+		}
+		try {
+			int dropped = PendingActions.discard(pendingFile, STAGE_LOCK_WAIT);
+			if (dropped < 0) {
+				return Component.translatable("rigtune.status.discard_busy");
+			}
+			staged.clear();
+			carriedOverOps = 0;
+			rebuild();
+			return Component.translatable("rigtune.status.discarded", dropped);
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.error("Could not discard {}", pendingFile, e);
+			return Component.translatable("rigtune.status.discard_failed");
+		}
 	}
 }
