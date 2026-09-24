@@ -63,7 +63,11 @@ public final class RigTuneClient implements ClientModInitializer {
 		RealController real = new RealController();
 		controller = real;
 		KeyMapping.Category category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(RigTune.MOD_ID, "rigtune"));
-		openKey = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.rigtune.open", InputConstants.Type.KEYSYM, InputConstants.KEY_F8, category));
+		//? if >=26.3 {
+		/*InputConstants.Type keyboard = InputConstants.Type.KEYBOARD;
+		*///?} else
+		InputConstants.Type keyboard = InputConstants.Type.KEYSYM;
+		openKey = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.rigtune.open", keyboard, InputConstants.KEY_F8, category));
 
 		ClientLifecycleEvents.CLIENT_STARTED.register(real::start);
 		ClientLifecycleEvents.CLIENT_STOPPING.register(minecraft -> {

@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.client.benchmark;
 
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen;
 import io.github.chaotix345.rigtune.core.benchmark.FrameStats;
@@ -85,7 +86,7 @@ public final class BenchmarkController {
 		originals.put(VSYNC, SettingsBridge.encode(options.enableVsync()).orElseThrow());
 		originals.put(INACTIVITY_LIMIT, SettingsBridge.encode(options.inactivityFpsLimit()).orElseThrow());
 		this.originalSettings = Map.copyOf(originals);
-		this.targetFps = Math.min(SettingValues.refreshRateCap(minecraft.getWindow().getRefreshRate()), MAX_TARGET_FPS);
+		this.targetFps = Math.min(SettingValues.refreshRateCap(HardwareProbe.refreshRate(minecraft.getWindow())), MAX_TARGET_FPS);
 		int maxRd = Math.max(MIN_RD, Math.min(MAX_RD, maxRenderDistance(options, minecraft.hasSingleplayerServer())));
 		this.planner = new RenderDistancePlanner(MIN_RD, maxRd, originalRd, targetFps, config.maxSteps());
 		this.steps = config.maxSteps();

@@ -1,8 +1,10 @@
 plugins {
-	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'net.fabricmc.fabric-loom'
 }
 
-version = project.mod_version
+// This script runs once per Minecraft version (versions/<mc>/), with that version's gradle.properties.
+def mcVersion = stonecutter.current.version
+version = "${project.mod_version}+mc${mcVersion}"
 group = project.maven_group
 
 base {
@@ -45,7 +47,7 @@ fabricApi {
 }
 
 dependencies {
-	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	minecraft "com.mojang:minecraft:${mcVersion}"
 	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
@@ -69,12 +71,17 @@ test {
 	doFirst { workingDir.mkdirs() }
 }
 
+// The game tests only run on demand (runClientGameTest), but every version's must at least compile.
+tasks.named("check") {
+	dependsOn tasks.named("gametestClasses")
+}
+
 processResources {
-	def version = project.version
-	inputs.property "version", version
+	def props = ["version": project.version, "minecraft_dependency": project.minecraft_dependency]
+	inputs.properties props
 
 	filesMatching("fabric.mod.json") {
-		expand "version": version
+		expand props
 	}
 }
 
@@ -91,17 +98,18 @@ java {
 }
 
 jar {
-	def projectName = project.name
+	def projectName = rootProject.name
 	inputs.property "projectName", projectName
 
-	from("LICENSE") {
+	from(rootProject.file("LICENSE")) {
 		rename { "${it}_$projectName" }
 	}
 }
 
 // A production client with a player's own mods, driven by the client game test in smoke mode (see ProductionSmoke):
-// ./gradlew runProductionSmoke -PextraModsDir=<dir of mod jars> [-PuserOptions=<options.txt>] [-PuserConfigDir=<config dir>]
-// The jars are mirrored into run/mods, where RigTune treats them as the instance's own mods, as in a launcher instance.
+// ./gradlew :<mc>:runProductionSmoke -PextraModsDir=<dir of mod jars> [-PuserOptions=<options.txt>] [-PuserConfigDir=<config dir>]
+// The paths are relative to the repository root. The jars (built for that <mc>) are mirrored into versions/<mc>/run/mods,
+// where RigTune treats them as the instance's own mods, as in a launcher instance.
 configurations {
 	productionSmokeMods {
 		canBeConsumed = false
@@ -125,9 +133,9 @@ interface InjectedFs {
 }
 
 def smokeRunDir = layout.projectDirectory.dir("run")
-def extraModsDir = providers.gradleProperty("extraModsDir").map { layout.projectDirectory.dir(it).asFile }
-def userOptions = providers.gradleProperty("userOptions").map { layout.projectDirectory.file(it).asFile }
-def userConfigDir = providers.gradleProperty("userConfigDir").map { layout.projectDirectory.dir(it).asFile }
+def extraModsDir = providers.gradleProperty("extraModsDir").map { rootProject.layout.projectDirectory.dir(it).asFile }
+def userOptions = providers.gradleProperty("userOptions").map { rootProject.layout.projectDirectory.file(it).asFile }
+def userConfigDir = providers.gradleProperty("userConfigDir").map { rootProject.layout.projectDirectory.dir(it).asFile }
 
 def prepareProductionSmoke = tasks.register("prepareProductionSmoke") {
 	def fs = objects.newInstance(InjectedFs).fs
