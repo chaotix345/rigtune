@@ -1,0 +1,15 @@
+{
+	"schemaVersion": 1,
+	"id": "rigtune-gametest",
+	"version": "1.0.0",
+	"name": "RigTune game tests",
+	"environment": "client",
+	"entrypoints": {
+		"fabric-client-gametest": [
+			"io.github.chaotix345.rigtune.gametest.RigTuneClientGameTest"
+		]
+	},
+	"depends": {
+		"rigtune": "*"
+	}
+}

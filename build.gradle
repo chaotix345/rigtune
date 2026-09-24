@@ -56,8 +56,17 @@ dependencies {
 	testImplementation "net.fabricmc:fabric-loader-junit:${project.loader_version}"
 }
 
+sourceSets {
+	test {
+		compileClasspath += sourceSets.client.compileClasspath + sourceSets.client.output
+		runtimeClasspath += sourceSets.client.runtimeClasspath + sourceSets.client.output
+	}
+}
+
 test {
 	useJUnitPlatform()
+	workingDir = layout.buildDirectory.dir("junit-run").get().asFile
+	doFirst { workingDir.mkdirs() }
 }
 
 processResources {
