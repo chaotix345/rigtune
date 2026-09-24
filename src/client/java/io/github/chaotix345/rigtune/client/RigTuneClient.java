@@ -2,9 +2,12 @@ package io.github.chaotix345.rigtune.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
+import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
+import io.github.chaotix345.rigtune.core.apply.ApplyResult;
+import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
+import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Impact;
@@ -14,11 +17,15 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenMouseEvents;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -31,6 +38,9 @@ import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.Identifier;
 import org.jspecify.annotations.Nullable;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 public final class RigTuneClient implements ClientModInitializer {
@@ -38,21 +48,36 @@ public final class RigTuneClient implements ClientModInitializer {
 	private static final SystemToast.SystemToastId TOAST_ID = new SystemToast.SystemToastId();
 	private static final int BUTTON_WIDTH = 60;
 
+	private static final SystemToast.SystemToastId NOTICE_ID = new SystemToast.SystemToastId(8000L);
+	private static final Identifier HUD_ID = Identifier.fromNamespaceAndPath(RigTune.MOD_ID, "benchmark");
+
 	private static RigTuneController controller;
 	private static volatile @Nullable HardwareProfile hardware;
 	private static KeyMapping openKey;
 	private static boolean titleSeen;
 	private static boolean toastShown;
+	private static boolean noticesShown;
 
 	@Override
 	public void onInitializeClient() {
-		controller = new StubController(() -> hardware);
+		RealController real = new RealController();
+		controller = real;
 		KeyMapping.Category category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(RigTune.MOD_ID, "rigtune"));
 		openKey = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.rigtune.open", InputConstants.Type.KEYSYM, InputConstants.KEY_F8, category));
 
-		ClientLifecycleEvents.CLIENT_STARTED.register(RigTuneClient::onStarted);
+		ClientLifecycleEvents.CLIENT_STARTED.register(real::start);
+		ClientLifecycleEvents.CLIENT_STOPPING.register(minecraft -> launchHelperIfPending());
 		ClientTickEvents.END_CLIENT_TICK.register(RigTuneClient::onTick);
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> addEntryButton(screen, width, height));
+		// The sleep overlay is the one vanilla HUD layer drawn while the GUI is hidden, which the benchmark does.
+		HudElementRegistry.attachElementAfter(VanillaHudElements.SLEEP, HUD_ID, (graphics, delta) -> {
+			Component progress = BenchmarkController.progress();
+			if (progress != null) {
+				Font font = Minecraft.getInstance().font;
+				graphics.fill(4, 4, 12 + font.width(progress), 18, 0x90000000);
+				graphics.text(font, progress, 8, 7, 0xFFFFFFFF, false);
+			}
+		});
 	}
 
 	public static RigTuneController controller() {
@@ -67,6 +92,13 @@ public final class RigTuneClient implements ClientModInitializer {
 		return hardware;
 	}
 
+	static void setHardware(@Nullable HardwareProfile profile) {
+		if (profile != null && hardware == null) {
+			RigTune.LOGGER.info("Hardware: {}", profile);
+		}
+		hardware = profile;
+	}
+
 	public static KeyMapping openKey() {
 		return openKey;
 	}
@@ -77,29 +109,35 @@ public final class RigTuneClient implements ClientModInitializer {
 		return screen;
 	}
 
-	private static void onStarted(Minecraft minecraft) {
+	private static void launchHelperIfPending() {
+		Path configDir = FabricLoader.getInstance().getConfigDir();
+		Path pending = PendingActions.defaultPath(configDir);
+		if (!Files.isRegularFile(pending)) {
+			return;
+		}
 		try {
-			HardwareProbe.probe(minecraft).whenComplete((profile, error) -> {
-				if (error != null) {
-					RigTune.LOGGER.warn("Hardware probe failed", error);
-					return;
-				}
-				hardware = profile;
-				RigTune.LOGGER.info("Hardware: {}", profile);
-				minecraft.execute(() -> controller.rescan());
-			});
-		} catch (RuntimeException e) {
-			RigTune.LOGGER.warn("Hardware probe failed", e);
+			HelperLauncher.launch(configDir, pending);
+			RigTune.LOGGER.info("Started the RigTune apply helper for {}", pending);
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.error("Could not start the RigTune apply helper; staged changes stay in {}", pending, e);
 		}
 	}
 
 	private static void onTick(Minecraft minecraft) {
+		BenchmarkController.tick(minecraft);
 		while (openKey.consumeClick()) {
-			if (!(minecraft.gui.screen() instanceof RigTuneScreen)) {
+			if (!(minecraft.gui.screen() instanceof RigTuneScreen) && !BenchmarkController.running()) {
 				open(minecraft.gui.screen());
 			}
 		}
-		if (titleSeen && !toastShown && minecraft.gui.screen() instanceof TitleScreen) {
+		if (!titleSeen || !(minecraft.gui.screen() instanceof TitleScreen)) {
+			return;
+		}
+		if (!noticesShown) {
+			noticesShown = true;
+			showNotices(minecraft);
+		}
+		if (!toastShown) {
 			Report report = controller.report();
 			if (report != null) {
 				toastShown = true;
@@ -110,6 +148,33 @@ public final class RigTuneClient implements ClientModInitializer {
 							Component.translatable("rigtune.toast.body", openKey.getTranslatedKeyMessage()));
 				}
 			}
+		}
+	}
+
+	public static void showNotices(Minecraft minecraft) {
+		ApplyResult result = RigTunePreLaunch.takeUnseenResult();
+		if (result != null) {
+			int total = result.results().size();
+			int failed = result.failedOps().size();
+			if (failed == 0) {
+				SystemToast.add(minecraft.gui.toastManager(), NOTICE_ID,
+						Component.translatable("rigtune.toast.applied.title", total),
+						Component.translatable("rigtune.toast.applied.body"));
+			} else {
+				SystemToast.add(minecraft.gui.toastManager(), NOTICE_ID,
+						Component.translatable("rigtune.toast.failed.title", failed, total),
+						Component.translatable("rigtune.toast.failed.body"));
+			}
+			Path configDir = FabricLoader.getInstance().getConfigDir();
+			ClientState state = ClientState.load(configDir);
+			state.lastShownApply = result.finishedAt();
+			state.save(configDir);
+		}
+		int leftover = RigTunePreLaunch.takeLeftoverOps();
+		if (leftover > 0) {
+			SystemToast.add(minecraft.gui.toastManager(), new SystemToast.SystemToastId(10000L),
+					Component.translatable("rigtune.toast.leftover.title", leftover),
+					Component.translatable("rigtune.toast.leftover.body"));
 		}
 	}
 

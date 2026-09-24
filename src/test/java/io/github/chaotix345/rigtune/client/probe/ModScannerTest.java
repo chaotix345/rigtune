@@ -1,6 +1,5 @@
 package io.github.chaotix345.rigtune.client.probe;
 
-import net.fabricmc.loader.api.metadata.ModOrigin;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -16,11 +15,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ModScannerTest {
 	@Test
-	void skipsBuiltinAndNestedMods() {
-		assertTrue(ModScanner.skip("minecraft", "builtin", ModOrigin.Kind.UNKNOWN, false));
-		assertTrue(ModScanner.skip("mixinextras", "fabric", ModOrigin.Kind.PATH, false));
-		assertTrue(ModScanner.skip("fabric-api-base", "fabric", ModOrigin.Kind.NESTED, true));
-		assertFalse(ModScanner.skip("sodium", "fabric", ModOrigin.Kind.PATH, false));
+	void skipsBuiltinMods() {
+		assertTrue(ModScanner.skip("minecraft", "builtin"));
+		assertTrue(ModScanner.skip("java", "builtin"));
+		assertTrue(ModScanner.skip("mixinextras", "fabric"));
+		assertFalse(ModScanner.skip("fabric-api-base", "fabric"));
+		assertFalse(ModScanner.skip("sodium", "fabric"));
 	}
 
 	@Test

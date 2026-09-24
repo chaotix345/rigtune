@@ -1,5 +1,7 @@
 package io.github.chaotix345.rigtune.client.ui;
 
+import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
+import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.GraphicsBackend;
@@ -20,6 +22,7 @@ import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.FormattedCharSequence;
@@ -59,11 +62,14 @@ public class RigTuneScreen extends Screen {
 	private int statusY;
 	private @Nullable RecommendationList list;
 	private @Nullable Button applyButton;
+	private @Nullable Map<String, String> captions;
+	private @Nullable Component seenControllerStatus;
 
 	public RigTuneScreen(@Nullable Screen parent, RigTuneController controller) {
 		super(Component.translatable("rigtune.screen.title"));
 		this.parent = parent;
 		this.controller = controller;
+		this.seenControllerStatus = controller.status();
 	}
 
 	public RigTuneController controller() {
@@ -72,6 +78,9 @@ public class RigTuneScreen extends Screen {
 
 	@Override
 	protected void init() {
+		if (captions == null) {
+			captions = SettingsBridge.captions(minecraft.options);
+		}
 		shown = controller.report();
 		syncSelection(shown);
 
@@ -266,9 +275,34 @@ public class RigTuneScreen extends Screen {
 
 	@Override
 	public void tick() {
+		Component latest = controller.status();
+		if (latest != null && latest != seenControllerStatus) {
+			seenControllerStatus = latest;
+			status = latest;
+		}
 		if (controller.report() != shown) {
 			rebuildWidgets();
 		}
+	}
+
+	private String displayTitle(Recommendation r) {
+		if (r.action() instanceof Action.SetSetting set && set.key().startsWith(SettingsBridge.VANILLA_PREFIX) && captions != null) {
+			String caption = captions.get(set.key().substring(SettingsBridge.VANILLA_PREFIX.length()));
+			if (caption != null && !caption.isBlank()) {
+				return caption + ": " + prettyValue(set.currentValue()) + " → " + prettyValue(set.newValue());
+			}
+		}
+		return r.title();
+	}
+
+	private static String prettyValue(String value) {
+		if ("true".equals(value)) {
+			return CommonComponents.OPTION_ON.getString();
+		}
+		if ("false".equals(value)) {
+			return CommonComponents.OPTION_OFF.getString();
+		}
+		return value;
 	}
 
 	@Override
@@ -406,7 +440,7 @@ public class RigTuneScreen extends Screen {
 				int impactWidth = font.width(impact) + 8;
 				int titleWidth = Math.max(40, width - textIndent - impactWidth);
 				int reasonWidth = Math.max(40, width - textIndent);
-				Component title = Component.literal(recommendation.title());
+				Component title = Component.literal(displayTitle(recommendation));
 				List<FormattedCharSequence> split = font.split(title, titleWidth);
 				this.titleLines = split.size() > 2 ? List.of(split.get(0), ComponentRenderUtils.clipText(title, font, titleWidth)) : split;
 				this.reasonLines = recommendation.reason() == null || recommendation.reason().isBlank()

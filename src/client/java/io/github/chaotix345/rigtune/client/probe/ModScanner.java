@@ -36,10 +36,11 @@ public final class ModScanner {
 				String id = mod.getMetadata().getId();
 				ModOrigin origin = mod.getOrigin();
 				ModOrigin.Kind kind = origin == null ? ModOrigin.Kind.UNKNOWN : origin.getKind();
-				if (skip(id, mod.getMetadata().getType(), kind, mod.getContainingMod().isPresent())) {
+				if (skip(id, mod.getMetadata().getType())) {
 					continue;
 				}
-				Path jar = kind == ModOrigin.Kind.PATH ? singleJar(origin.getPaths()) : null;
+				boolean nested = kind == ModOrigin.Kind.NESTED || mod.getContainingMod().isPresent();
+				Path jar = !nested && kind == ModOrigin.Kind.PATH ? singleJar(origin.getPaths()) : null;
 				out.add(new InstalledMod(id, mod.getMetadata().getName(), mod.getMetadata().getVersion().getFriendlyString(),
 						jar, jar == null ? null : sha1(jar)));
 			} catch (RuntimeException e) {
@@ -50,8 +51,9 @@ public final class ModScanner {
 		return List.copyOf(out);
 	}
 
-	static boolean skip(String id, String type, ModOrigin.Kind kind, boolean contained) {
-		return BUILTIN_IDS.contains(id) || "builtin".equals(type) || kind == ModOrigin.Kind.NESTED || contained;
+	// Nested jar-in-jar mods stay in the list (their ids matter to the rules) but get no file or hash.
+	static boolean skip(String id, String type) {
+		return BUILTIN_IDS.contains(id) || "builtin".equals(type);
 	}
 
 	static Path singleJar(List<Path> paths) {

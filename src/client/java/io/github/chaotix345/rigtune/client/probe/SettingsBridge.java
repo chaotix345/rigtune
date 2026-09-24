@@ -80,6 +80,26 @@ public final class SettingsBridge {
 		return out;
 	}
 
+	public static Map<String, String> captions(Options options) {
+		Map<String, String> out = new LinkedHashMap<>();
+		try {
+			visit(options, new Visitor() {
+				@Override
+				public void option(String key, OptionInstance<?> option) {
+					out.put(key, option.toString());
+				}
+
+				@Override
+				public Object field(String key, Object current, Function<Object, String> serialize, Function<String, Object> parse) {
+					return current;
+				}
+			});
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.warn("Could not read option captions", e);
+		}
+		return out;
+	}
+
 	public static Map<String, String> readSodium(Path file) {
 		if (!Files.isRegularFile(file)) {
 			return Map.of();

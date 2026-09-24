@@ -133,3 +133,12 @@ All MC-touching code lives in `client/`, and it uses Fabric API events rather th
 - **ApplyHelper**: exit codes are 0 (all done), 1 (some ops failed), 2 (bad args) and 3 (game still running after 15 min, or interrupted). On a timeout it applies nothing and leaves `pending.json` for the next launch.
 - **HelperLauncher**: `launch(configDir, pendingJson)` uses the current pid and truncates `config/rigtune/helper.log` on each run.
 - **RenderDistancePlanner**: upward steps are +2, +4, +8… from the last pass. A pass recorded above the lowest failing RD is treated as noise, so the result stays conservative.
+
+## Deviations (client)
+- **ModScanner** keeps nested jar-in-jar mods in the list with a null file and hash, as `InstalledMod` documents, so rules see every real mod id (never `provides` aliases). Only top-level jars are hashed and sent to Modrinth.
+- **SettingsBridge** drives the private `Options.processOptions(FieldAccess)` through a `java.lang.reflect.Proxy`, because `FieldAccess` is package-private. Writes validate against the option's `ValueSet` before `set()` (an invalid value would otherwise reset the option to its default), and `graphicsPreset` is applied before any other key so explicit values win.
+- **Entry buttons**: on the title screen the button sits left of Options; on vanilla video settings right of Done. Sodium replaces the video screen and its page list swallows clicks, so there the button goes bottom-left and claims its clicks through `ScreenMouseEvents.allowMouseClick`.
+- **Keybind** (F8, unused by vanilla) works in game only, like every vanilla key mapping; menus use the buttons.
+- **Benchmark HUD** is attached after `VanillaHudElements.SLEEP`, the one layer vanilla still draws while the GUI is hidden.
+- **AddMod** downloads are checked for a `fabric.mod.json` id that is already loaded and dropped if so, since a second top-level jar with the same id stops Fabric from starting.
+- **Client game tests** need no extra build config: the `fabric-api` POM pulls `fabric-client-gametest-api-v1` in transitively even though the fat jar doesn't nest it. `runClientGameTest` starts from a fresh run directory each time.

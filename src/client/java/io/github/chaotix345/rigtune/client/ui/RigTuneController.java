@@ -21,4 +21,9 @@ public interface RigTuneController {
 	void startBenchmark();
 
 	void rescan();
+
+	/** Latest message from background work (downloads, benchmark), polled by the screen. */
+	default @Nullable Component status() {
+		return null;
+	}
 }

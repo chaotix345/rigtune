@@ -1,4 +1,4 @@
-package io.github.chaotix345.rigtune.client;
+package io.github.chaotix345.rigtune.gametest;
 
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.core.model.Action;
@@ -53,7 +53,7 @@ public final class StubController implements RigTuneController {
 
 	@Override
 	public Component apply(List<Recommendation> selected) {
-		return Component.translatable("rigtune.status.stub_applied", selected.size());
+		return Component.literal("Stub: " + selected.size() + " change(s) would be applied.");
 	}
 
 	@Override
