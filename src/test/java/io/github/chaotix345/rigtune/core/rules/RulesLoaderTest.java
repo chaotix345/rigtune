@@ -1,0 +1,142 @@
+package io.github.chaotix345.rigtune.core.rules;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Optional;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class RulesLoaderTest {
+	private static RulesDocument doc(int revision) {
+		return RulesLoader.parse("{\"schemaVersion\":1,\"revision\":" + revision + "}");
+	}
+
+	@Test
+	void parsesMinimalDocumentWithEmptyLists() {
+		RulesDocument doc = doc(3);
+		assertEquals(3, doc.revision);
+		assertTrue(doc.mods.isEmpty());
+		assertTrue(doc.settings.isEmpty());
+		assertTrue(doc.availability.isEmpty());
+	}
+
+	@Test
+	void rejectsInvalidDocuments() {
+		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse("{\"schemaVersion\":2,\"revision\":9}"));
+		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse("{\"revision\":9}"));
+		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse("not json at all {"));
+		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse(""));
+		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse("{\"schemaVersion\":1,\"mods\":\"oops\"}"));
+	}
+
+	@Test
+	void skipsInvalidRegexes() {
+		RulesDocument doc = RulesLoader.parse("""
+				{"schemaVersion":1,"revision":1,
+				 "gpuTiers":[{"pattern":"(?i)[unclosed","tier":3},{"pattern":"(?i)rtx","tier":4}],
+				 "cpuTiers":[{"pattern":"*bad","tier":1},{"pattern":"(?i)ryzen","tier":4}]}
+				""");
+		assertEquals(1, doc.gpuTiers.size());
+		assertEquals("(?i)rtx", doc.gpuTiers.get(0).pattern);
+		assertEquals(1, doc.cpuTiers.size());
+	}
+
+	@Test
+	void pickNewestTakesHighestRevisionAndRecordsSource() {
+		RulesDocument bundled = doc(1);
+		RulesDocument cache = doc(3);
+		RulesDocument remote = doc(2);
+		Optional<RulesDocument> picked = RulesLoader.pickNewest(List.of(
+				new RulesLoader.Candidate(RulesLoader.SOURCE_BUNDLED, bundled),
+				new RulesLoader.Candidate(RulesLoader.SOURCE_CACHE, cache),
+				new RulesLoader.Candidate(RulesLoader.SOURCE_REMOTE, remote)));
+		assertSame(cache, picked.orElseThrow());
+		assertEquals("cache", cache.source());
+	}
+
+	@Test
+	void pickNewestKeepsFirstOnTiesAndSkipsMissing() {
+		RulesDocument bundled = doc(2);
+		RulesDocument remote = doc(2);
+		RulesDocument picked = RulesLoader.pickNewest(List.of(
+				new RulesLoader.Candidate(RulesLoader.SOURCE_BUNDLED, bundled),
+				new RulesLoader.Candidate(RulesLoader.SOURCE_CACHE, null),
+				new RulesLoader.Candidate(RulesLoader.SOURCE_REMOTE, remote))).orElseThrow();
+		assertSame(bundled, picked);
+		assertEquals("bundled", picked.source());
+		assertFalse(RulesLoader.pickNewest(List.of()).isPresent());
+	}
+
+	@Test
+	void remoteWinsWhenNewer() {
+		RulesDocument remote = doc(5);
+		RulesDocument picked = RulesLoader.pickNewest(List.of(
+				new RulesLoader.Candidate(RulesLoader.SOURCE_BUNDLED, doc(1)),
+				new RulesLoader.Candidate(RulesLoader.SOURCE_REMOTE, remote))).orElseThrow();
+		assertSame(remote, picked);
+		assertEquals("remote", picked.source());
+	}
+
+	@Test
+	void cacheRoundTrip(@TempDir Path dir) throws IOException {
+		Path file = dir.resolve("config/rigtune/rules-cache.json");
+		assertFalse(RulesLoader.loadCache(file).isPresent());
+		RulesLoader.saveCache(file, "{\"schemaVersion\":1,\"revision\":7}");
+		RulesDocument cached = RulesLoader.loadCache(file).orElseThrow();
+		assertEquals(7, cached.revision);
+		assertEquals("cache", cached.source());
+		Files.writeString(file, "{\"schemaVersion\":99}");
+		assertFalse(RulesLoader.loadCache(file).isPresent());
+	}
+
+	@Test
+	void bundledRulesAreComplete() {
+		RulesDocument doc = RulesLoader.loadBundled();
+		assertEquals(1, doc.schemaVersion);
+		assertTrue(doc.revision >= 1);
+		assertEquals("bundled", doc.source());
+		assertNotNull(doc.generatedAt);
+		assertFalse(doc.gpuTiers.isEmpty());
+		assertFalse(doc.cpuTiers.isEmpty());
+		assertFalse(doc.heapTiers.isEmpty());
+		assertFalse(doc.obsolete.isEmpty());
+		assertFalse(doc.advice.isEmpty());
+		for (RulesDocument.ModRule mod : doc.mods) {
+			assertNotNull(mod.projectId, mod.slug);
+			assertFalse(mod.modIds.isEmpty(), mod.slug);
+			assertNotNull(mod.reason, mod.slug);
+			assertNotNull(mod.title, mod.slug);
+			assertNotNull(RulesDocument.impactOf(mod.impact, null), mod.slug);
+		}
+		for (RulesDocument.SettingRule setting : doc.settings) {
+			assertTrue(setting.key.startsWith("vanilla.") || setting.key.startsWith("sodium."), setting.key);
+			assertTrue(setting.isValueEntry() ^ setting.isClampEntry(), setting.key);
+			assertNotNull(setting.reason, setting.key);
+		}
+		for (RulesDocument.AdviceRule advice : doc.advice) {
+			assertTrue(List.of("info", "warning", "critical").contains(advice.kind), advice.id);
+			assertNotNull(advice.title, advice.id);
+			assertNotNull(advice.text, advice.id);
+		}
+	}
+
+	@Test
+	void bundledCopiesMatchRepositoryRules() throws IOException {
+		Path repoRules = Path.of("rules", "rules-v1.json");
+		if (Files.exists(repoRules)) {
+			String repo = Files.readString(repoRules);
+			String bundled = new String(RulesLoader.class.getResourceAsStream(RulesLoader.BUNDLED_RESOURCE).readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+			assertEquals(repo.replace("\r\n", "\n"), bundled.replace("\r\n", "\n"));
+		}
+	}
+}
