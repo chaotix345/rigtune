@@ -87,12 +87,12 @@ class RecommenderTest {
 		Fixtures.Hw hw = Fixtures.userRig();
 		hw.display = new DisplayInfo(1920, 1080, 144, true);
 		Map<String, Recommendation> recs = byId(run(rules, hw, List.of(), settings, OnlineData.offline()));
-		assertEquals("141", ((Action.SetSetting) recs.get("set:vanilla.maxFps").action()).newValue());
-		assertEquals("144", ((Action.SetSetting) recs.get("set:vanilla.other").action()).newValue());
+		assertEquals("140", ((Action.SetSetting) recs.get("set:vanilla.maxFps").action()).newValue());
+		assertEquals("140", ((Action.SetSetting) recs.get("set:vanilla.other").action()).newValue());
 
 		hw.display = new DisplayInfo(1920, 1080, -1, true);
 		recs = byId(run(rules, hw, List.of(), settings, OnlineData.offline()));
-		assertEquals("57", ((Action.SetSetting) recs.get("set:vanilla.maxFps").action()).newValue());
+		assertEquals("60", ((Action.SetSetting) recs.get("set:vanilla.maxFps").action()).newValue());
 		assertEquals("60", ((Action.SetSetting) recs.get("set:vanilla.other").action()).newValue());
 
 		hw.display = new DisplayInfo(1920, 1080, 24, true);

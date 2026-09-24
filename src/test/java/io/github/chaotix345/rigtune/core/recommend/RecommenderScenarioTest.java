@@ -120,7 +120,7 @@ class RecommenderScenarioTest {
 		assertFalse(recs.containsKey("add:moonrise-opt"));
 		assertFalse(recs.containsKey("add:vulkanmod"));
 
-		assertEquals(new Action.SetSetting("vanilla.maxFps", "170", "177"), setting(report, "vanilla.maxFps").orElseThrow());
+		assertFalse(setting(report, "vanilla.maxFps").isPresent(), "170 is already the 10-step cap for 180 Hz");
 		assertFalse(setting(report, "vanilla.enableVsync").isPresent());
 		assertFalse(setting(report, "vanilla.simulationDistance").isPresent());
 		assertFalse(report.recommendations().stream().anyMatch(r -> r.id().startsWith("set:sodium.")));

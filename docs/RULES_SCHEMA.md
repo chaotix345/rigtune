@@ -95,7 +95,7 @@ If it's installed, recommend disabling it (impact high).
 - **Clamp entries** (`min`/`max`) are applied after that, in file order. If a clamp changes the value, its reason is appended. When no value entry matched, a clamp applies to the current value, so a clamp alone means "at most" / "at least" and never moves a setting the other way.
 - **Computed values**:
   - `"$refreshRate"` means the display refresh rate, or 60 if it's unknown.
-  - `"$refreshRateCap"` means the refresh rate minus 3 (a VRR-friendly cap), with a minimum of 30.
+  - `"$refreshRateCap"` is a VRR-friendly cap just under the refresh rate. Vanilla only accepts multiples of 10, so it is floor(hz/10)*10, minus 10 more when that equals hz and hz >= 100, clamped to 30..250 (180 Hz → 170, 144 Hz → 140, 60 Hz → 60). `"$refreshRate"` rounds to the nearest multiple of 10 (30..260).
 - A recommendation is emitted only when the resolved value differs from the current value, after normalisation (case-insensitive; `1.0` equals `1`). It is also emitted only when the key is present in the current `SettingsSnapshot`: unknown keys are skipped, so rules for Sodium keys do nothing when Sodium is absent.
 
 ## AdviceRule

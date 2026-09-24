@@ -23,11 +23,16 @@ final class SettingValues {
 	static String resolveTokens(String value, DisplayInfo display) {
 		String trimmed = value.trim();
 		int hz = display != null && display.refreshRate() > 0 ? display.refreshRate() : 60;
+		// vanilla's framerate limit only accepts multiples of 10 (260 = unlimited)
 		if (trimmed.equals(REFRESH_RATE)) {
-			return Integer.toString(hz);
+			return Integer.toString(Math.clamp(Math.round(hz / 10.0) * 10, 30, 260));
 		}
 		if (trimmed.equals(REFRESH_RATE_CAP)) {
-			return Integer.toString(Math.max(30, hz - 3));
+			int cap = hz / 10 * 10;
+			if (cap == hz && hz >= 100) {
+				cap -= 10;
+			}
+			return Integer.toString(Math.clamp(cap, 30, 250));
 		}
 		return value;
 	}
