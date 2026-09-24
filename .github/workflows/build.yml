@@ -18,6 +18,18 @@ jobs:
         with:
           distribution: microsoft
           java-version: '25'
+      # Stonecutter rewrites src/ when the active Minecraft version is switched. Commits must be in the state
+      # of the VCS version, 26.2 (settings.gradle vcsVersion, stonecutter.gradle active), with canonical comments.
+      - name: Check sources are in the committed 26.2 state
+        env:
+          VCS_MC: '26.2'
+        run: |
+          set -eu
+          grep -qF "vcsVersion = '$VCS_MC'" settings.gradle || { echo "settings.gradle: vcsVersion must be '$VCS_MC'"; exit 1; }
+          grep -qxF "stonecutter.active '$VCS_MC'" stonecutter.gradle || { echo "stonecutter.gradle: active version must be '$VCS_MC'; run ./gradlew \"Reset active project\" and commit"; exit 1; }
+          ./gradlew "Reset active project"
+          git diff --exit-code || { echo "Sources are in a switched state; run ./gradlew \"Reset active project\" and commit"; exit 1; }
+      # Builds and unit-tests every Minecraft version (versions/<mc>/); check also compiles each version's game tests.
       - name: Build and test
         run: ./gradlew build
       - name: Upload jars
@@ -25,7 +37,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: rigtune-jars
-          path: build/libs/*.jar
+          path: versions/*/build/libs/*.jar
           if-no-files-found: ignore
       - name: Upload test reports
         if: always()
@@ -33,8 +45,8 @@ jobs:
         with:
           name: test-reports
           path: |
-            build/reports/tests/**
-            build/test-results/**
+            versions/*/build/reports/tests/**
+            versions/*/build/test-results/**
           if-no-files-found: ignore
 
   python:
