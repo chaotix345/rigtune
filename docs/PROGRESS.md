@@ -16,25 +16,21 @@ Brief: the user's v0.2.0 prompt (full autonomy: research → release, including 
 
 ### Status
 - [x] Phase 0: orient. Docs read; baseline green.
-- [ ] Phase 1: research (docs/research/v0.2/, one owner each, running in the main checkout, no game launches):
-  - r-multiversion → multi-version.md (opus; prototype in scratchpad/r-multiversion/proto)
-  - r-apidiff → api-diff.md
-  - r-modrinth → modrinth.md
-  - r-dhiris → dh-iris.md
-  - r-benchmark → benchmark.md
-  - r-triage → triage.md
-- [ ] Phase 2: SPEC.md, DESIGN/RULES_SCHEMA updates, PLAN.md, independent plan review
-- [ ] Phase 3: multi-version build restructure, alone; merge into feat/v0.2.0; CI green for every version
-- [ ] Phase 4: features in manual worktrees (C:/Dev/Worktrees/rigtune-<name>); one game-test runner at a time
+- [x] Phase 1: research DONE and committed (docs/research/v0.2/: multi-version, api-diff, modrinth, dh-iris, benchmark, triage).
+- [x] Phase 2 (mostly): docs/v0.2/SPEC.md (all 13 items, ACs), contracts commit cae06b8 on feat/v0.2.0, docs/v0.2/PLAN.md (553b58e: workstreams WS-A..H, ownership, hotspots, game-test lock `C:/Dev/Worktrees/.gametest-lock`).
+  - [ ] Independent plan review RUNNING (agent plan-review -> scratchpad/plan-review.md). Apply fixes to SPEC/PLAN, then launch Wave A.
+- [ ] Phase 3: RUNNING. Agent p3-multiversion, branch feat/multi-version, worktree C:/Dev/Worktrees/rigtune-mv (Stonecutter 0.9.8, from the prototype patch). It's the only game-test runner right now. When done: review, CI green, merge into feat/v0.2.0.
+- [ ] Phase 4: Wave A = WS-A rules-v2, WS-B undo, WS-C benchmark-v2, WS-D dh-iris, WS-E settings-ui, WS-F modrinth, WS-G self-update-e2e (after the Phase 3 merge); Wave B = WS-H knowledge (after WS-A).
 - [ ] Phase 5: verification (unit + game tests per version, production smoke 26.2 with a copy of the user's mods, 26.3 representative set, self-update E2E)
-- [ ] Phase 6: two review rounds → docs/reviews/review-3.md, review-4.md
-- [ ] Phase 7: PR to main, CI green, merge, bump, CHANGELOG, tag v0.2.0, release assets, Modrinth, rules v1+v2 live, update-rules run
-- [ ] Phase 8: README, PROGRESS, memory, cleanup, final report
+- [ ] Phase 6: two review rounds -> docs/reviews/review-3.md, review-4.md
+- [ ] Phase 7: PR to main, CI green, merge, bump 0.2.0-dev -> 0.2.0, CHANGELOG, tag v0.2.0, release assets, Modrinth versions, rules v1+v2 live, update-rules run
+- [ ] Phase 8: README, fold docs/v0.2/design/*.md into DESIGN.md, PROGRESS, memory, cleanup, final report
 
 ### Agents
 | name | branch | worktree | status |
 |---|---|---|---|
-| (research agents write in the main checkout; no branches) | | | |
+| p3-multiversion | feat/multi-version | C:/Dev/Worktrees/rigtune-mv | running |
+| plan-review | (read-only) | - | running |
 
 ## Lessons (carried over from v0.1.0; don't relearn)
 - The Bash tool is Git Bash. Use absolute paths; `cd` inside a command changes the session's working directory.
@@ -55,4 +51,5 @@ Brief: the user's v0.2.0 prompt (full autonomy: research → release, including 
 
 ## Log
 - 2026-09-24: v0.1.0 built, reviewed twice, merged (#1, 2cf4317), tagged and released.
-- 2026-09-25: v0.2.0 started; integration branch feat/v0.2.0; Phase 1 research launched (6 agents).
+- 2026-09-25: v0.2.0 started; integration branch feat/v0.2.0; Phase 1 research (6 agents) done; spec, contracts and plan committed; Phase 3 and the plan review running.
+- Decisions: Stonecutter 0.9.8 (VCS version 26.2); mod_version 0.2.0-dev until the release; Modrinth project is created through the API by WS-F, v0.1.0 is uploaded, and the project is submitted for review early to start the moderation clock.
