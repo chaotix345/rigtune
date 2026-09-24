@@ -169,7 +169,7 @@ public final class RigTuneClient implements ClientModInitializer {
 						Component.translatable("rigtune.toast.failed.body"));
 			}
 			Path configDir = FabricLoader.getInstance().getConfigDir();
-			ClientState state = ClientState.load(configDir);
+			ClientState state = ClientState.shared(configDir);
 			state.lastShownApply = result.finishedAt();
 			state.save(configDir);
 		}

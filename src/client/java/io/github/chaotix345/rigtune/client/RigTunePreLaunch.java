@@ -22,7 +22,7 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 			Path last = ApplyResult.defaultPath(configDir);
 			if (Files.isRegularFile(last)) {
 				ApplyResult result = ApplyResult.load(last);
-				if (!Objects.equals(result.finishedAt(), ClientState.load(configDir).lastShownApply)) {
+				if (!Objects.equals(result.finishedAt(), ClientState.shared(configDir).lastShownApply)) {
 					unseenResult = result;
 				}
 			}
