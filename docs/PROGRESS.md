@@ -37,7 +37,8 @@ The user gave full autonomy on 2026-09-24 and also approved creating and fully s
   - F3: MERGED. Findings #11, #12 (Python), #18. 61 Python tests.
   - All three merged. runClientGameTest on merged mvp PASSED (benchmark uncapped: RD 8, 1% low 582 vs target 170). README screenshots updated.
   - Re-review DONE (docs/reviews/review-2.md): all 18 FIXED; 7 new (N1, N2 medium; N3 low-medium; N4-N7 low).
-- [ ] Review round 2 fixes: RUNNING in C:/Dev/Worktrees/rigtune-fix4, branch fix/review-round-2 (unit tests only; no game launch). After it: merge, runClientGameTest, final quick review.
+- [x] Review round 2 fixes: MERGED (1aa6687). N1-N7 fixed, 238 tests. Rules revision 4: Distant Horizons caps vanilla RD at 12; tier 4/5 RD raises are medium and unticked.
+- [ ] NEXT: merge test/production-smoke once its agent finishes, then run runClientGameTest (check the Discard button and the new toasts in the screenshots), then PR -> main, merge, tag v0.1.0.
 - [ ] Production smoke: RUNNING in C:/Dev/Worktrees/rigtune-prod, branch test/production-smoke. It adds a runProductionSmoke task with the user's 43 mods (copied to scratchpad/usermods) and writes docs/smoke/ with screenshots and a report dump.
 - [x] Rules triage: MERGED (rules revision 3; +renderscale, structure-layout-optimizer, zfastnoise, zmaterial-rule-compiler, asynclogger; reviewIgnore; beta/alpha update filter). Java 107 / Python 46 green.
   - Lesson: ALWAYS rerun `./gradlew test` after regenerating rules. The scenario tests read the bundled rules, and b291ef4 broke CI this way.
