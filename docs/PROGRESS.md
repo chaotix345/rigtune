@@ -32,9 +32,9 @@ The user gave full autonomy on 2026-09-24 and also approved creating and fully s
 - [x] Live updater run: rules revision 2 committed and pushed. CI green on GitHub.
 - [x] A4 client: MERGED (58c6d6a, fast-forward). Build + runClientGameTest green. The UI screenshots look good.
 - [ ] Review round 1: 18 findings in docs/reviews/review-1.md (1 critical, 3 high, 8 medium, 6 low). Fixes running in parallel:
-  - F1: fix/review-round-1 @ C:/Dev/Worktrees/rigtune-fix. Findings #7, #8, #9, #14, #15, #16 plus the benchmark FPS-cap fix.
+  - F1: MERGED (5 commits). Findings #7, #8, #9, #14, #15, #16 plus the FPS-cap fix; the singleplayer RD cap bug is also fixed.
   - F2: fix/apply-hardening @ C:/Dev/Worktrees/rigtune-fix2. Findings #1-#6, #10, #12 (Java), #13, #17.
-  - F3: fix/tools-hardening @ C:/Dev/Worktrees/rigtune-fix3. Findings #11, #12 (Python), #18.
+  - F3: MERGED. Findings #11, #12 (Python), #18. 61 Python tests.
   - After all three: merge (expect RealController/Recommender overlaps), full build + runClientGameTest, then a re-review of the diff.
 - [ ] Production verification: Loom ClientProductionRunTask (runProductionClientGameTest) with a COPY of the user's 44 mods, to screenshot the real report for their setup.
 - [x] Rules triage: MERGED (rules revision 3; +renderscale, structure-layout-optimizer, zfastnoise, zmaterial-rule-compiler, asynclogger; reviewIgnore; beta/alpha update filter). Java 107 / Python 46 green.
@@ -57,3 +57,4 @@ The user gave full autonomy on 2026-09-24 and also approved creating and fully s
 
 ## Log
 - 2026-09-24: research done; scaffold; A1–A4 launched; A2 and A3 merged; GitHub repo created and branch pushed.
+- Game tests: run only ONE Minecraft client at a time (the user saw a Not Responding window when two agents ran them in parallel).
