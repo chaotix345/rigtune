@@ -31,9 +31,11 @@ The user gave full autonomy on 2026-09-24 and also approved creating and fully s
 - [x] A1 brain: MERGED. 60 tests, 21 mods, 6 obsolete. I fixed $refreshRateCap to snap to vanilla's multiples of 10.
 - [x] Live updater run: rules revision 2 committed and pushed. CI green on GitHub.
 - [x] A4 client: MERGED (58c6d6a, fast-forward). Build + runClientGameTest green. The UI screenshots look good.
-- [ ] Review round 1:
-  - The code-reviewer agent (read-only) writes to scratchpad/review-1.md.
-  - The fixer agent works in C:/Dev/Worktrees/rigtune-fix on branch fix/review-round-1. It is fixing the benchmark measuring under the user's FPS cap (target should be $refreshRateCap, measured uncapped). Next, send it the review findings.
+- [ ] Review round 1: 18 findings in docs/reviews/review-1.md (1 critical, 3 high, 8 medium, 6 low). Fixes running in parallel:
+  - F1: fix/review-round-1 @ C:/Dev/Worktrees/rigtune-fix. Findings #7, #8, #9, #14, #15, #16 plus the benchmark FPS-cap fix.
+  - F2: fix/apply-hardening @ C:/Dev/Worktrees/rigtune-fix2. Findings #1-#6, #10, #12 (Java), #13, #17.
+  - F3: fix/tools-hardening @ C:/Dev/Worktrees/rigtune-fix3. Findings #11, #12 (Python), #18.
+  - After all three: merge (expect RealController/Recommender overlaps), full build + runClientGameTest, then a re-review of the diff.
 - [ ] Production verification: Loom ClientProductionRunTask (runProductionClientGameTest) with a COPY of the user's 44 mods, to screenshot the real report for their setup.
 - [x] Rules triage: MERGED (rules revision 3; +renderscale, structure-layout-optimizer, zfastnoise, zmaterial-rule-compiler, asynclogger; reviewIgnore; beta/alpha update filter). Java 107 / Python 46 green.
   - Lesson: ALWAYS rerun `./gradlew test` after regenerating rules. The scenario tests read the bundled rules, and b291ef4 broke CI this way.
