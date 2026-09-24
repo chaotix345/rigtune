@@ -9,7 +9,14 @@ Compatibility promise: a 0.1.x client must never get an unsafe recommendation fr
 ---
 
 ## 1. Multi-version support (P0)
-PENDING RESEARCH (multi-version.md, api-diff.md).
+Sources: docs/research/v0.2/multi-version.md (Stonecutter prototype that builds both), api-diff.md (javap diff).
+- Versions: MC 26.2 and 26.3 (26.4 is snapshot-only on 2026-09-25). Loader 0.19.5; fabric-api 0.161.0+26.2 / 0.161.0+26.3; Mod Menu 20.0.2 / 21.0.0; Sodium mc26.2-0.9.2 / mc26.3-0.9.2 (dev runtime only).
+- Tooling: Stonecutter 0.9.8 on the existing Groovy build, Loom 1.17-SNAPSHOT, Gradle 9.5.1. One shared `src/`; `versions/<mc>/gradle.properties` per version; `//? if >=26.3` comments at the few differing sites. **The committed ("VCS") active version is 26.2**; a CI check fails if sources are committed while switched. The Loom 1.18/Gradle 9.8 upgrade is out of scope.
+- A single jar can't serve both: `InputConstants.KEY_F8` is inlined (297 vs 65) and `GpuDevice`/`DeviceInfo` moved to `com.mojang.renderpearl.api.device`. So one jar per version: `rigtune-<ver>+mc26.2.jar`, `rigtune-<ver>+mc26.3.jar` (+ sources), each with `depends.minecraft` `~26.2` / `~26.3`.
+- Code sites (api-diff.md): RigTuneClient keybind (KEYSYM → KEYBOARD, F8), HardwareProbe (device import move, `Window.getRefreshRate()` removed → active video mode, float refresh rate, `Window.isFullscreen()` removed → a verified replacement such as `options.fullscreen()`), BenchmarkController refresh rate, game test Escape key.
+- CI: one job builds and unit-tests every version and compiles the gametest sources; the release job collects exactly one jar + sources jar per version and fails if any is missing. Game tests in CI are P2 (item 11).
+- Dev workflow documented (README "Build from source" + DESIGN "Porting"): `./gradlew build` builds all; `./gradlew :26.3:runClientGameTest`; how to switch the active version and switch back before committing; how to add 26.4 later (a new `versions/26.4`, the version list, fixing conditional sites).
+- AC1.1 `./gradlew build` produces both jars; all unit tests pass on both versions. AC1.2 `:26.2:runClientGameTest` and `:26.3:runClientGameTest` pass, run serially; the coordinator reviews the 26.3 screenshots (F8 opens the screen, the report shows a real refresh rate). AC1.3 CI is green with both versions. AC1.4 The 26.3 production smoke run with a representative Modrinth mod set works (Phase 5).
 
 ## 2. Rules schema v2 with safe evolution (P0)
 
