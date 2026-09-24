@@ -400,7 +400,7 @@ public final class RealController implements RigTuneController {
 							throw new IOException("No file for " + update.update().newVersionNumber());
 						}
 						if (!SafeFileNames.isDirectChild(modsDir, update.currentFile())) {
-							throw new IOException(update.currentFile() + " is not in this instance's mods folder");
+							throw new IOException("it isn't in this instance's mods folder; update it in your launcher");
 						}
 						Path target = SafeFileNames.resolveJar(modsDir, file.filename());
 						Path pending = fetch(file);

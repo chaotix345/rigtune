@@ -32,6 +32,18 @@ class ModScannerTest {
 	}
 
 	@Test
+	void onlyJarsDirectlyInTheModsFolderGetAFile(@TempDir Path dir) {
+		Path mods = dir.resolve("mods");
+		assertEquals(mods.resolve("a.jar"), ModScanner.fileAction(mods.resolve("a.jar"), mods));
+		Path roundabout = mods.resolve("x").resolve("..").resolve("a.jar");
+		assertEquals(roundabout, ModScanner.fileAction(roundabout, mods));
+		assertNull(ModScanner.fileAction(mods.resolve("sub").resolve("a.jar"), mods));
+		assertNull(ModScanner.fileAction(dir.resolve("shared-mods").resolve("a.jar"), mods));
+		assertNull(ModScanner.fileAction(dir.resolve("a.jar"), mods));
+		assertNull(ModScanner.fileAction(null, mods));
+	}
+
+	@Test
 	void ignoresDirectoriesAndMultiplePaths(@TempDir Path dir) throws IOException {
 		Path jar = Files.writeString(dir.resolve("a.jar"), "x");
 		assertNull(ModScanner.singleJar(List.of(dir)));
