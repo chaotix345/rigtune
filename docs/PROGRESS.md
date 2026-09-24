@@ -28,9 +28,10 @@ The user gave full autonomy on 2026-09-24 and also approved creating and fully s
 - [x] Scaffold builds: Loom 1.17-SNAPSHOT, MC 26.2, Fabric API 0.161.0+26.2, Mod Menu 20.0.2, Sodium localRuntime
 - [x] A3 updater: MERGED. 39 Python tests. tools/update_rules.py and the build/update-rules/release workflows. Live smoke: FO 38 / Additive 50 mods at 26.3.
 - [x] A2 apply: MERGED. 45 tests. core.modrinth, core.apply, core.benchmark.
-- [ ] A1 brain: RUNNING. Worktree C:/Dev/Worktrees/rigtune-brain, branch feat/core-brain. Covers core.hardware/rules/recommend and rules/source/knowledge.json.
-- [ ] A4 client: RUNNING. Worktree C:/Dev/Worktrees/rigtune-client, branch feat/client. Phase A is UI/probe/gametest with a stub; Phase B merges the core branches. It has been told core-apply is ready; tell it when core-brain is ready.
-- [ ] After A1: merge into mvp; run `python tools/update_rules.py` for real to generate rules-v1.json (+ bundled copy); commit.
+- [x] A1 brain: MERGED. 60 tests, 21 mods, 6 obsolete. I fixed $refreshRateCap to snap to vanilla's multiples of 10.
+- [x] Live updater run: rules revision 2 committed and pushed. CI green on GitHub.
+- [ ] A4 client: RUNNING. Worktree C:/Dev/Worktrees/rigtune-client, branch feat/client. Told to `git merge feat/rigtune-mvp` for Phase B, with notes: real mod ids, not provides (ScalableLux provides starlight); AddMod goes through DependencyResolver; vanilla setting rows show the OptionInstance caption; pass modVersion.
+- [ ] Rules triage agent: RUNNING. Worktree C:/Dev/Worktrees/rigtune-rules, branch feat/rules-triage. Adds renderscale and the world-gen mods, reviewIgnore support in the updater, and the beta/alpha update filter in OnlineDataFetcher.
 - [ ] After A4: merge feat/client; full build + runClientGameTest; view the screenshots.
 - [ ] Dev run with the user's mod set copied (not moved) into run/mods to sanity-check recommendations against the real setup.
 - [ ] Code review (opus code-reviewer) and fixes; README with screenshots; icon.
