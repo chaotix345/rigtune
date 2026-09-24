@@ -6,25 +6,30 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.model.ModFile;
+import io.github.chaotix345.rigtune.core.net.BoundedHttp;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InterruptedIOException;
-import java.io.OutputStream;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.security.DigestInputStream;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HexFormat;
@@ -37,18 +42,33 @@ public final class HttpModrinthClient implements ModrinthClient {
 	public static final String DEFAULT_BASE_URL = "https://api.modrinth.com";
 	private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
 	private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(20);
+	private static final long DOWNLOAD_SLACK_BYTES = 1024;
+	private static final long ERROR_BODY_BYTES = 64 * 1024;
+
+	// maxRetryWait caps how long a 429's Retry-After is honoured before the single retry.
+	record Limits(long maxJsonBytes, long maxDownloadBytes, Duration jsonStall, Duration jsonDeadline,
+			Duration downloadStall, Duration downloadDeadline, Duration maxRetryWait) {
+		static final Limits DEFAULT = new Limits(16L << 20, 256L << 20, Duration.ofSeconds(30), Duration.ofSeconds(60),
+				Duration.ofSeconds(30), Duration.ofMinutes(10), Duration.ofSeconds(10));
+	}
 
 	private final HttpClient http;
 	private final String baseUrl;
 	private final String userAgent;
+	private final Limits limits;
 
 	public HttpModrinthClient(String modVersion) {
 		this(modVersion, DEFAULT_BASE_URL);
 	}
 
 	public HttpModrinthClient(String modVersion, String baseUrl) {
+		this(modVersion, baseUrl, Limits.DEFAULT);
+	}
+
+	HttpModrinthClient(String modVersion, String baseUrl, Limits limits) {
 		this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
 		this.userAgent = userAgent(modVersion);
+		this.limits = limits;
 		this.http = HttpClient.newBuilder()
 				.connectTimeout(CONNECT_TIMEOUT)
 				.followRedirects(HttpClient.Redirect.NORMAL)
@@ -127,27 +147,34 @@ public final class HttpModrinthClient implements ModrinthClient {
 		}
 		Path dir = target.toAbsolutePath().getParent();
 		Files.createDirectories(dir);
+		long cap = file.size() > 0 ? Math.min(file.size() + DOWNLOAD_SLACK_BYTES, limits.maxDownloadBytes()) : limits.maxDownloadBytes();
 		HttpRequest request = request(URI.create(file.url())).GET().build();
-		HttpResponse<InputStream> response = send(request, HttpResponse.BodyHandlers.ofInputStream());
-		try (InputStream in = response.body()) {
+		Path tmp = Files.createTempFile(dir, target.getFileName() + ".", ".tmp");
+		try {
+			MessageDigest digest = sha512();
+			HttpResponse<Void> response;
+			try (FileChannel out = FileChannel.open(tmp, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+				response = exchange(request, (info, progress) -> info.statusCode() / 100 == 2
+						? BoundedHttp.capped(cap, false, progress, buffer -> {
+							digest.update(buffer.duplicate());
+							while (buffer.hasRemaining()) {
+								out.write(buffer);
+							}
+						})
+						: BoundedHttp.capped(ERROR_BODY_BYTES, true, progress, buffer -> buffer.position(buffer.limit())),
+						limits.downloadStall(), limits.downloadDeadline());
+			}
 			if (response.statusCode() / 100 != 2) {
 				throw error(request, response.statusCode(), "");
 			}
-			Path tmp = Files.createTempFile(dir, target.getFileName() + ".", ".tmp");
-			try {
-				MessageDigest digest = sha512();
-				try (OutputStream out = Files.newOutputStream(tmp); DigestInputStream din = new DigestInputStream(in, digest)) {
-					din.transferTo(out);
-				}
-				String actual = HexFormat.of().formatHex(digest.digest());
-				if (!actual.equalsIgnoreCase(file.sha512())) {
-					throw new IOException("SHA-512 mismatch for " + file.filename() + ": expected " + file.sha512() + ", got " + actual);
-				}
-				moveAtomically(tmp, target);
-			} catch (IOException | RuntimeException e) {
-				Files.deleteIfExists(tmp);
-				throw e;
+			String actual = HexFormat.of().formatHex(digest.digest());
+			if (!actual.equalsIgnoreCase(file.sha512())) {
+				throw new IOException("SHA-512 mismatch for " + file.filename() + ": expected " + file.sha512() + ", got " + actual);
 			}
+			moveAtomically(tmp, target);
+		} catch (IOException | RuntimeException e) {
+			Files.deleteIfExists(tmp);
+			throw e;
 		}
 	}
 
@@ -183,19 +210,58 @@ public final class HttpModrinthClient implements ModrinthClient {
 	}
 
 	private String sendForString(HttpRequest request) throws IOException {
-		HttpResponse<String> response = send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+		HttpResponse<byte[]> response = exchange(request, (info, progress) -> info.statusCode() / 100 == 2
+				? BoundedHttp.bytes(limits.maxJsonBytes(), false, progress)
+				: BoundedHttp.bytes(ERROR_BODY_BYTES, true, progress), limits.jsonStall(), limits.jsonDeadline());
+		String body = new String(response.body(), StandardCharsets.UTF_8);
 		if (response.statusCode() / 100 != 2) {
-			throw error(request, response.statusCode(), response.body());
+			throw error(request, response.statusCode(), body);
 		}
-		return response.body();
+		return body;
 	}
 
-	private <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> handler) throws IOException {
+	private interface Handler<T> {
+		HttpResponse.BodySubscriber<T> apply(HttpResponse.ResponseInfo info, BoundedHttp.Progress progress);
+	}
+
+	// A 429 is retried once, after its Retry-After (capped at limits.maxRetryWait()).
+	private <T> HttpResponse<T> exchange(HttpRequest request, Handler<T> handler, Duration stall, Duration deadline) throws IOException {
+		for (int attempt = 1; ; attempt++) {
+			BoundedHttp.Progress progress = new BoundedHttp.Progress();
+			HttpResponse<T> response = BoundedHttp.send(http, request, info -> handler.apply(info, progress), progress, stall, deadline);
+			if (response.statusCode() != 429 || attempt > 1) {
+				return response;
+			}
+			Duration wait = retryAfter(response.headers(), limits.maxRetryWait());
+			try {
+				Thread.sleep(wait);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				throw new InterruptedIOException("Interrupted while rate limited: " + request.uri());
+			}
+		}
+	}
+
+	static Duration retryAfter(HttpHeaders headers, Duration max) {
+		Duration wait = headers.firstValue("Retry-After").map(HttpModrinthClient::parseRetryAfter)
+				.or(() -> headers.firstValue("X-Ratelimit-Reset").map(HttpModrinthClient::parseRetryAfter))
+				.orElse(Duration.ofSeconds(1));
+		if (wait.isNegative()) {
+			return Duration.ZERO;
+		}
+		return wait.compareTo(max) > 0 ? max : wait;
+	}
+
+	private static Duration parseRetryAfter(String value) {
+		String text = value.trim();
 		try {
-			return http.send(request, handler);
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			throw new InterruptedIOException("Interrupted: " + request.method() + " " + request.uri());
+			return Duration.ofSeconds(Long.parseLong(text));
+		} catch (NumberFormatException ignored) {
+		}
+		try {
+			return Duration.between(Instant.now(), ZonedDateTime.parse(text, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant());
+		} catch (DateTimeParseException ignored) {
+			return null;
 		}
 	}
 

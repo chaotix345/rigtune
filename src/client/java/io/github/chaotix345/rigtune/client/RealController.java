@@ -74,7 +74,7 @@ public final class RealController implements RigTuneController {
 	private volatile @Nullable Component status;
 	private volatile Goal goal;
 	private int generation;
-	private boolean downloading;
+	private volatile boolean downloading;
 
 	public RealController() {
 		FabricLoader loader = FabricLoader.getInstance();
@@ -304,31 +304,50 @@ public final class RealController implements RigTuneController {
 
 	private void startDownloads(List<Recommendation> downloads) {
 		downloading = true;
-		Set<String> installedProjects = new HashSet<>(online.projectIdsByModId().values());
-		HardwareProfile hw = hardware;
-		String mcVersion = hw == null ? "26.2" : hw.mcVersion();
-		CompletableFuture.supplyAsync(() -> download(downloads, installedProjects, mcVersion), Probes.EXECUTOR)
-				.whenComplete((result, error) -> minecraft.execute(() -> {
-					downloading = false;
-					if (error != null) {
-						RigTune.LOGGER.error("RigTune downloads failed", error);
-						status = Component.translatable("rigtune.status.download_failed", error.getMessage());
-						return;
-					}
-					boolean ok = result.ops().isEmpty() || stage(result.ops(), result.ids());
-					List<Component> parts = new ArrayList<>();
-					if (!result.errors().isEmpty()) {
-						parts.add(Component.translatable("rigtune.status.download_failed", String.join("; ", result.errors())));
-					}
-					if (!ok) {
-						parts.add(Component.translatable("rigtune.status.some_failed", result.ids().size()));
-					}
-					if (pendingChanges() > 0) {
-						parts.add(Component.translatable("rigtune.status.restart", pendingChanges()));
-					}
-					status = join(parts);
-					rebuild();
-				}));
+		try {
+			Set<String> installedProjects = new HashSet<>(online.projectIdsByModId().values());
+			HardwareProfile hw = hardware;
+			String mcVersion = hw == null ? "26.2" : hw.mcVersion();
+			CompletableFuture.supplyAsync(() -> download(downloads, installedProjects, mcVersion), Probes.EXECUTOR)
+					.whenComplete((result, error) -> {
+						try {
+							minecraft.execute(() -> {
+								try {
+									finishDownloads(result, error);
+								} finally {
+									downloading = false;
+								}
+							});
+						} catch (RuntimeException e) {
+							downloading = false;
+							RigTune.LOGGER.error("Could not hand the RigTune downloads back to the game", e);
+						}
+					});
+		} catch (RuntimeException e) {
+			downloading = false;
+			throw e;
+		}
+	}
+
+	private void finishDownloads(@Nullable DownloadResult result, @Nullable Throwable error) {
+		if (error != null || result == null) {
+			RigTune.LOGGER.error("RigTune downloads failed", error);
+			status = Component.translatable("rigtune.status.download_failed", error == null ? "?" : error.getMessage());
+			return;
+		}
+		boolean ok = result.ops().isEmpty() || stage(result.ops(), result.ids());
+		List<Component> parts = new ArrayList<>();
+		if (!result.errors().isEmpty()) {
+			parts.add(Component.translatable("rigtune.status.download_failed", String.join("; ", result.errors())));
+		}
+		if (!ok) {
+			parts.add(Component.translatable("rigtune.status.some_failed", result.ids().size()));
+		}
+		if (pendingChanges() > 0) {
+			parts.add(Component.translatable("rigtune.status.restart", pendingChanges()));
+		}
+		status = join(parts);
+		rebuild();
 	}
 
 	private record DownloadResult(List<Op> ops, List<String> ids, List<String> errors) {

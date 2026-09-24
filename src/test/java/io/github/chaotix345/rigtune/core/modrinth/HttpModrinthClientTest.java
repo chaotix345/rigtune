@@ -15,16 +15,29 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
+import java.net.http.HttpHeaders;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
+import java.util.Deque;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -44,24 +57,43 @@ class HttpModrinthClientTest {
 	private HttpModrinthClient client;
 	private final Map<String, Recorded> requests = new ConcurrentHashMap<>();
 	private final Map<String, Response> responses = new ConcurrentHashMap<>();
+	private final Map<String, Deque<Response>> queued = new ConcurrentHashMap<>();
+	private final Map<String, AtomicInteger> hits = new ConcurrentHashMap<>();
+	private final CountDownLatch release = new CountDownLatch(1);
+	private ExecutorService handlers;
+
+	private static final HttpModrinthClient.Limits FAST = new HttpModrinthClient.Limits(16L << 20, 256L << 20,
+			Duration.ofSeconds(30), Duration.ofSeconds(60), Duration.ofSeconds(30), Duration.ofMinutes(10), Duration.ofMillis(50));
 
 	private record Recorded(String method, String query, String body, String userAgent) {
 	}
 
-	private record Response(int status, byte[] body) {
+	// stall: send the headers and this body, then hang without finishing the (longer) announced length.
+	private record Response(int status, byte[] body, Map<String, String> headers, boolean stall) {
+		Response(int status, byte[] body) {
+			this(status, body, Map.of(), false);
+		}
 	}
 
 	@BeforeEach
 	void start() throws IOException {
 		server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
 		server.createContext("/", this::handle);
+		handlers = Executors.newCachedThreadPool();
+		server.setExecutor(handlers);
 		server.start();
-		client = new HttpModrinthClient("1.2.3", "http://127.0.0.1:" + server.getAddress().getPort() + "/");
+		client = client(FAST);
+	}
+
+	private HttpModrinthClient client(HttpModrinthClient.Limits limits) {
+		return new HttpModrinthClient("1.2.3", "http://127.0.0.1:" + server.getAddress().getPort() + "/", limits);
 	}
 
 	@AfterEach
 	void stop() {
+		release.countDown();
 		server.stop(0);
+		handlers.shutdownNow();
 	}
 
 	private void handle(HttpExchange exchange) throws IOException {
@@ -69,10 +101,54 @@ class HttpModrinthClientTest {
 		String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
 		requests.put(path, new Recorded(exchange.getRequestMethod(), exchange.getRequestURI().getRawQuery(), body,
 				exchange.getRequestHeaders().getFirst("User-Agent")));
-		Response response = responses.getOrDefault(path, new Response(404, "{}".getBytes(StandardCharsets.UTF_8)));
+		hits.computeIfAbsent(path, k -> new AtomicInteger()).incrementAndGet();
+		Deque<Response> queue = queued.get(path);
+		Response next = queue == null ? null : queue.poll();
+		Response response = next != null ? next : responses.getOrDefault(path, new Response(404, "{}".getBytes(StandardCharsets.UTF_8)));
+		response.headers().forEach((name, value) -> exchange.getResponseHeaders().add(name, value));
+		if (response.stall()) {
+			exchange.sendResponseHeaders(response.status(), response.body().length * 10L);
+			OutputStream out = exchange.getResponseBody();
+			out.write(response.body());
+			out.flush();
+			try {
+				release.await(30, TimeUnit.SECONDS);
+			} catch (InterruptedException ignored) {
+			}
+			exchange.close();
+			return;
+		}
 		exchange.sendResponseHeaders(response.status(), response.body().length);
 		try (OutputStream out = exchange.getResponseBody()) {
 			out.write(response.body());
+		}
+	}
+
+	private void queue(String path, Response... sequence) {
+		queued.put(path, new ConcurrentLinkedDeque<>(List.of(sequence)));
+	}
+
+	private int hits(String path) {
+		AtomicInteger count = hits.get(path);
+		return count == null ? 0 : count.get();
+	}
+
+	private static byte[] bytes(int size) {
+		byte[] out = new byte[size];
+		Arrays.fill(out, (byte) 'x');
+		return out;
+	}
+
+	private static String sha512(byte[] data) throws Exception {
+		return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-512").digest(data));
+	}
+
+	private static List<Path> listing(Path dir) throws IOException {
+		if (!Files.exists(dir)) {
+			return List.of();
+		}
+		try (var files = Files.list(dir)) {
+			return files.toList();
 		}
 	}
 
@@ -201,6 +277,145 @@ class HttpModrinthClientTest {
 		try (var files = Files.list(target.getParent())) {
 			assertEquals(List.of(target), files.toList());
 		}
+	}
+
+	@Test
+	void downloadStopsPastTheAnnouncedSizePlusSlack(@TempDir Path dir) throws Exception {
+		byte[] body = bytes(3000);
+		responses.put("/cdn/big.jar", new Response(200, body));
+		Path target = dir.resolve("big.jar.rigtune-pending");
+
+		IOException e = assertThrows(IOException.class, () -> client.download(new ModFile(url("/cdn/big.jar"), "big.jar", sha512(body), 100), target));
+
+		assertTrue(e.getMessage().contains("larger than 1124 bytes"), e.getMessage());
+		assertEquals(List.of(), listing(dir));
+	}
+
+	@Test
+	void downloadHasAHardCapWhenTheSizeIsUnknown(@TempDir Path dir) throws Exception {
+		byte[] body = bytes(2000);
+		responses.put("/cdn/big.jar", new Response(200, body));
+		HttpModrinthClient capped = client(new HttpModrinthClient.Limits(16L << 20, 500, Duration.ofSeconds(30),
+				Duration.ofSeconds(60), Duration.ofSeconds(30), Duration.ofMinutes(10), Duration.ofMillis(50)));
+		Path target = dir.resolve("big.jar.rigtune-pending");
+
+		IOException e = assertThrows(IOException.class, () -> capped.download(new ModFile(url("/cdn/big.jar"), "big.jar", sha512(body), 0), target));
+
+		assertTrue(e.getMessage().contains("larger than 500 bytes"), e.getMessage());
+		assertEquals(List.of(), listing(dir));
+
+		byte[] small = bytes(400);
+		responses.put("/cdn/small.jar", new Response(200, small));
+		capped.download(new ModFile(url("/cdn/small.jar"), "small.jar", sha512(small), 0), dir.resolve("small.jar.rigtune-pending"));
+		assertEquals(400, Files.size(dir.resolve("small.jar.rigtune-pending")));
+	}
+
+	@Test
+	void jsonBodiesAreCapped() {
+		respond("/v2/projects", 200, "[" + "{},".repeat(500) + "{}]");
+		HttpModrinthClient capped = client(new HttpModrinthClient.Limits(100, 256L << 20, Duration.ofSeconds(30),
+				Duration.ofSeconds(60), Duration.ofSeconds(30), Duration.ofMinutes(10), Duration.ofMillis(50)));
+
+		IOException e = assertThrows(IOException.class, () -> capped.projects(List.of("sodium")));
+
+		assertTrue(e.getMessage().contains("larger than 100 bytes"), e.getMessage());
+	}
+
+	@Test
+	void stalledDownloadGivesUpAndCleansUp(@TempDir Path dir) throws Exception {
+		responses.put("/cdn/slow.jar", new Response(200, bytes(1000), Map.of(), true));
+		HttpModrinthClient impatient = client(new HttpModrinthClient.Limits(16L << 20, 256L << 20, Duration.ofSeconds(30),
+				Duration.ofSeconds(60), Duration.ofMillis(400), Duration.ofMinutes(10), Duration.ofMillis(50)));
+		Path target = dir.resolve("slow.jar.rigtune-pending");
+
+		long start = System.nanoTime();
+		IOException e = assertThrows(IOException.class, () -> impatient.download(new ModFile(url("/cdn/slow.jar"), "slow.jar", "00ff", 10_000), target));
+
+		assertTrue(e.getMessage().contains("stalled"), e.getMessage());
+		assertTrue(System.nanoTime() - start < TimeUnit.SECONDS.toNanos(10));
+		assertEquals(List.of(), listing(dir));
+	}
+
+	@Test
+	void downloadHitsTheOverallDeadline(@TempDir Path dir) {
+		responses.put("/cdn/slow.jar", new Response(200, bytes(1000), Map.of(), true));
+		HttpModrinthClient impatient = client(new HttpModrinthClient.Limits(16L << 20, 256L << 20, Duration.ofSeconds(30),
+				Duration.ofSeconds(60), Duration.ofSeconds(30), Duration.ofMillis(500), Duration.ofMillis(50)));
+
+		IOException e = assertThrows(IOException.class, () -> impatient.download(
+				new ModFile(url("/cdn/slow.jar"), "slow.jar", "00ff", 10_000), dir.resolve("slow.jar.rigtune-pending")));
+
+		assertTrue(e.getMessage().contains("took longer than"), e.getMessage());
+	}
+
+	@Test
+	void stalledJsonGivesUp() {
+		responses.put("/v2/projects", new Response(200, "[".getBytes(StandardCharsets.UTF_8), Map.of(), true));
+		HttpModrinthClient impatient = client(new HttpModrinthClient.Limits(16L << 20, 256L << 20, Duration.ofMillis(400),
+				Duration.ofSeconds(60), Duration.ofSeconds(30), Duration.ofMinutes(10), Duration.ofMillis(50)));
+
+		IOException e = assertThrows(IOException.class, () -> impatient.projects(List.of("sodium")));
+
+		assertTrue(e.getMessage().contains("stalled"), e.getMessage());
+	}
+
+	@Test
+	void rateLimitIsRetriedOnceAfterRetryAfter() throws IOException {
+		byte[] limited = "{\"error\":\"ratelimit_error\"}".getBytes(StandardCharsets.UTF_8);
+		queue("/v2/projects", new Response(429, limited, Map.of("Retry-After", "1"), false));
+		respond("/v2/projects", 200, "[]");
+		HttpModrinthClient patient = client(HttpModrinthClient.Limits.DEFAULT);
+
+		long start = System.nanoTime();
+		assertEquals(List.of(), patient.projects(List.of("sodium")));
+
+		assertEquals(2, hits("/v2/projects"));
+		assertTrue(System.nanoTime() - start >= TimeUnit.MILLISECONDS.toNanos(900));
+	}
+
+	@Test
+	void rateLimitWaitIsCappedAndThereIsOnlyOneRetry() {
+		byte[] limited = "{}".getBytes(StandardCharsets.UTF_8);
+		responses.put("/v2/projects", new Response(429, limited, Map.of("Retry-After", "3600"), false));
+
+		long start = System.nanoTime();
+		ModrinthException e = assertThrows(ModrinthException.class, () -> client.projects(List.of("sodium")));
+
+		assertTrue(e.rateLimited());
+		assertEquals(2, hits("/v2/projects"));
+		assertTrue(System.nanoTime() - start < TimeUnit.SECONDS.toNanos(5));
+	}
+
+	@Test
+	void rateLimitedDownloadIsRetried(@TempDir Path dir) throws Exception {
+		byte[] jar = bytes(50);
+		queue("/cdn/mod.jar", new Response(429, "slow down".getBytes(StandardCharsets.UTF_8), Map.of("Retry-After", "0"), false));
+		responses.put("/cdn/mod.jar", new Response(200, jar));
+		Path target = dir.resolve("mod.jar.rigtune-pending");
+
+		client.download(new ModFile(url("/cdn/mod.jar"), "mod.jar", sha512(jar), jar.length), target);
+
+		assertEquals(50, Files.size(target));
+		assertEquals(2, hits("/cdn/mod.jar"));
+	}
+
+	@Test
+	void parsesRetryAfterAsSecondsOrHttpDate() {
+		Duration max = Duration.ofSeconds(10);
+		assertEquals(Duration.ofSeconds(3), HttpModrinthClient.retryAfter(headers("Retry-After", "3"), max));
+		assertEquals(max, HttpModrinthClient.retryAfter(headers("Retry-After", "86400"), max));
+		String soon = DateTimeFormatter.RFC_1123_DATE_TIME.format(ZonedDateTime.now(ZoneOffset.UTC).plusSeconds(5));
+		Duration fromDate = HttpModrinthClient.retryAfter(headers("Retry-After", soon), max);
+		assertTrue(fromDate.compareTo(Duration.ofSeconds(3)) > 0 && fromDate.compareTo(Duration.ofSeconds(6)) <= 0, fromDate.toString());
+		String past = DateTimeFormatter.RFC_1123_DATE_TIME.format(ZonedDateTime.now(ZoneOffset.UTC).minusHours(1));
+		assertEquals(Duration.ZERO, HttpModrinthClient.retryAfter(headers("Retry-After", past), max));
+		assertEquals(Duration.ofSeconds(1), HttpModrinthClient.retryAfter(headers("Retry-After", "soon"), max));
+		assertEquals(Duration.ofSeconds(4), HttpModrinthClient.retryAfter(headers("X-Ratelimit-Reset", "4"), max));
+		assertEquals(Duration.ofSeconds(1), HttpModrinthClient.retryAfter(HttpHeaders.of(Map.of(), (a, b) -> true), max));
+	}
+
+	private static HttpHeaders headers(String name, String value) {
+		return HttpHeaders.of(Map.of(name, List.of(value)), (a, b) -> true);
 	}
 
 	@Test

@@ -1,10 +1,12 @@
 package io.github.chaotix345.rigtune.core.modrinth;
 
+import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -76,6 +78,11 @@ public final class OnlineDataFetcher {
 
 			return new Result(new OnlineData(true, Map.copyOf(available), Map.copyOf(updates)), Map.copyOf(projectIds));
 		} catch (Exception e) {
+			if (e instanceof IOException) {
+				RigTune.LOGGER.warn("Modrinth lookups failed; using offline data: {}", e.toString());
+			} else {
+				RigTune.LOGGER.warn("Modrinth lookups failed; using offline data", e);
+			}
 			return Result.offline();
 		}
 	}
