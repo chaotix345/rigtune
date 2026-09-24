@@ -44,3 +44,5 @@ replay_*.log
 run/
 __pycache__/
 *.pyc
+config/
+logs/

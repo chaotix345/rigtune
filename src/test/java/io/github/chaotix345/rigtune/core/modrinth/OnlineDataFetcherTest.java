@@ -74,6 +74,38 @@ class OnlineDataFetcherTest {
 	}
 
 	@Test
+	void releaseInstallIsNotOfferedAnAlphaOrBetaUpdate() {
+		FakeModrinthClient client = new FakeModrinthClient();
+		client.current.put("aaa", version("rel1", "X", "1.0", "release", OLD));
+		client.latest.put("aaa", version("alpha1", "X", "2.0-alpha", "alpha", NEW));
+
+		OnlineData data = new OnlineDataFetcher(client).fetch(List.of(mod("x", "aaa")), List.of(), "26.2");
+		assertTrue(data.updatesByModId().isEmpty());
+
+		client.latest.put("aaa", version("beta1", "X", "2.0-beta", "beta", NEW));
+		data = new OnlineDataFetcher(client).fetch(List.of(mod("x", "aaa")), List.of(), "26.2");
+		assertTrue(data.updatesByModId().isEmpty());
+
+		client.latest.put("aaa", version("rel2", "X", "2.0", "release", NEW));
+		data = new OnlineDataFetcher(client).fetch(List.of(mod("x", "aaa")), List.of(), "26.2");
+		assertEquals("rel2", data.updatesByModId().get("x").newVersionId());
+	}
+
+	@Test
+	void alphaInstallCanBeOfferedBetaOrReleaseUpdate() {
+		FakeModrinthClient client = new FakeModrinthClient();
+		client.current.put("aaa", version("alpha1", "X", "1.0-alpha", "alpha", OLD));
+		client.latest.put("aaa", version("beta1", "X", "2.0-beta", "beta", NEW));
+
+		OnlineData data = new OnlineDataFetcher(client).fetch(List.of(mod("x", "aaa")), List.of(), "26.2");
+		assertEquals("beta1", data.updatesByModId().get("x").newVersionId());
+
+		client.latest.put("aaa", version("rel1", "X", "2.0", "release", NEW));
+		data = new OnlineDataFetcher(client).fetch(List.of(mod("x", "aaa")), List.of(), "26.2");
+		assertEquals("rel1", data.updatesByModId().get("x").newVersionId());
+	}
+
+	@Test
 	void skipsCallsWithNothingToAsk() {
 		FakeModrinthClient client = new FakeModrinthClient();
 		OnlineData data = new OnlineDataFetcher(client).fetch(List.of(mod("builtin", null)), List.of(), "26.2");

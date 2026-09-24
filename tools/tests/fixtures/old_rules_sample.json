@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "revision": 7,
+  "generatedAt": "2026-09-01T00:00:00Z",
+  "gpuTiers": [],
+  "gpuVendorFallback": {},
+  "cpuTiers": [],
+  "heapTiers": [],
+  "mods": [
+    {
+      "slug": "sodium",
+      "projectId": "AANobbMI",
+      "title": "Sodium",
+      "modIds": ["sodium"],
+      "category": "rendering",
+      "impact": "high",
+      "stability": "stable",
+      "reason": "Rewrites the chunk renderer.",
+      "recommendWhen": { "always": true },
+      "defaultSelected": true,
+      "upstream": { "fabulouslyOptimized": true, "additive": true }
+    },
+    {
+      "slug": "oldmod",
+      "projectId": "zzzzzzzz",
+      "title": "OldMod",
+      "modIds": ["oldmod"],
+      "category": "utility",
+      "impact": "low",
+      "stability": "stable",
+      "reason": "Was once useful.",
+      "recommendWhen": { "always": true },
+      "defaultSelected": true,
+      "upstream": { "fabulouslyOptimized": true, "additive": false }
+    }
+  ],
+  "obsolete": [],
+  "settings": [],
+  "advice": [],
+  "availability": { "26.2": ["sodium"] },
+  "upstream": {
+    "fabulouslyOptimized": { "mcVersion": "26.2", "slugs": ["sodium", "oldmod"] },
+    "additive": { "mcVersion": "26.2", "slugs": ["sodium"] }
+  }
+}

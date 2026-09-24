@@ -1,0 +1,1730 @@
+{
+  "schemaVersion": 1,
+  "revision": 3,
+  "generatedAt": "2026-09-24T05:02:00Z",
+  "gpuTiers": [
+    {
+      "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
+      "vendor": "software",
+      "integrated": false,
+      "tier": 0
+    },
+    {
+      "pattern": "(?i)RTX\\s*(?:40[89]0|50[89]0)\\b.*Laptop",
+      "vendor": "nvidia",
+      "integrated": false,
+      "tier": 4
+    },
+    {
+      "pattern": "(?i)RTX\\s*(?:30[6-8]0|40[67]0|50[67]0)\\b.*Laptop",
+      "vendor": "nvidia",
+      "integrated": false,
+      "tier": 3
+    },
+    {
+      "pattern": "(?i)(?:RTX|GTX)\\s*\\d{3,4}\\b.*Laptop",
+      "vendor": "nvidia",
+      "integrated": false,
+      "tier": 2
+    },
+    {
+      "pattern": "(?i)RTX\\s*(?:40[89]0|50[789]0)\\b",
+      "vendor": "nvidia",
+      "integrated": false,
+      "tier": 5
+    },
+    {
+      "pattern": "(?i)RTX\\s*(?:30[6-9]0|40[67]0|5060)\\b",
+      "vendor": "nvidia",
+      "integrated": false,
+      "tier": 4
+    },
+    {
+      "pattern": "(?i)RTX\\s*(?:20[5-8]0|3050)\\b|GTX\\s*(?:10[6-8]0|16[56]0)\\b",
+      "vendor": "nvidia",
+      "integrated": false,
+      "tier": 3
+    },
+    {
+      "pattern": "(?i)GTX\\s*(?:10[3-5]0|9[5-8]0|16[34]0)\\b",
+      "vendor": "nvidia",
+      "integrated": false,
+      "tier": 2
+    },
+    {
+      "pattern": "(?i)\\bMX\\s*\\d{3}\\b|GeForce\\s*(?:GT|GTS)\\s*\\d{3,4}\\b|GTX\\s*[4-9]\\d0\\b",
+      "vendor": "nvidia",
+      "integrated": false,
+      "tier": 1
+    },
+    {
+      "pattern": "(?i)Quadro|RTX\\s*A\\d{3,4}\\b|RTX\\s*\\d{4}\\s*Ada|NVIDIA\\s*T\\d{3,4}\\b",
+      "vendor": "nvidia",
+      "integrated": false,
+      "tier": 3
+    },
+    {
+      "pattern": "(?i)Radeon(?:\\s*\\(TM\\))?\\s*80[4-6]0S",
+      "vendor": "amd",
+      "integrated": true,
+      "tier": 4
+    },
+    {
+      "pattern": "(?i)Radeon(?:\\s*\\(TM\\))?\\s*(?:680M|7[6-8]0M|8[89]0M)",
+      "vendor": "amd",
+      "integrated": true,
+      "tier": 3
+    },
+    {
+      "pattern": "(?i)Radeon(?:\\s*\\(TM\\))?\\s*\\d{3}M\\b",
+      "vendor": "amd",
+      "integrated": true,
+      "tier": 2
+    },
+    {
+      "pattern": "(?i)Vega\\s*[2-6]\\s*Graphics",
+      "vendor": "amd",
+      "integrated": true,
+      "tier": 1
+    },
+    {
+      "pattern": "(?i)Vega\\s*\\d{1,2}\\s*Graphics",
+      "vendor": "amd",
+      "integrated": true,
+      "tier": 2
+    },
+    {
+      "pattern": "(?i)Radeon(?:\\s*\\(TM\\))?\\s*Graphics",
+      "vendor": "amd",
+      "integrated": true,
+      "tier": 2
+    },
+    {
+      "pattern": "(?i)RX\\s*\\d{4}\\s?[MS]\\b",
+      "vendor": "amd",
+      "integrated": false,
+      "tier": 3
+    },
+    {
+      "pattern": "(?i)RX\\s*(?:6[89][05]0|7[89]00|90[7-9]0)\\b",
+      "vendor": "amd",
+      "integrated": false,
+      "tier": 5
+    },
+    {
+      "pattern": "(?i)RX\\s*(?:6[67][05]0|7[67]00|9060)\\b",
+      "vendor": "amd",
+      "integrated": false,
+      "tier": 4
+    },
+    {
+      "pattern": "(?i)RX\\s*(?:5[67]\\d0|Vega)\\b|Radeon\\s*VII",
+      "vendor": "amd",
+      "integrated": false,
+      "tier": 3
+    },
+    {
+      "pattern": "(?i)RX\\s*(?:[45]\\d0|5[3-5]00|6[45]00)\\b",
+      "vendor": "amd",
+      "integrated": false,
+      "tier": 2
+    },
+    {
+      "pattern": "(?i)Radeon\\s*(?:\\(TM\\)\\s*)?R9\\s*(?:Fury|Nano|3[89]0|290)",
+      "vendor": "amd",
+      "integrated": false,
+      "tier": 2
+    },
+    {
+      "pattern": "(?i)Radeon\\s*(?:\\(TM\\)\\s*)?(?:HD|R[579])\\b",
+      "vendor": "amd",
+      "integrated": false,
+      "tier": 1
+    },
+    {
+      "pattern": "(?i)Arc(?:\\s*\\(TM\\))?\\s*(?:A7[5-9]0|B5[78]0|B7\\d0)\\b",
+      "vendor": "intel",
+      "integrated": false,
+      "tier": 4
+    },
+    {
+      "pattern": "(?i)Arc(?:\\s*\\(TM\\))?\\s*A\\d{3}M\\b",
+      "vendor": "intel",
+      "integrated": false,
+      "tier": 3
+    },
+    {
+      "pattern": "(?i)Arc(?:\\s*\\(TM\\))?\\s*A5\\d0\\b",
+      "vendor": "intel",
+      "integrated": false,
+      "tier": 3
+    },
+    {
+      "pattern": "(?i)Arc(?:\\s*\\(TM\\))?\\s*A3\\d0\\b",
+      "vendor": "intel",
+      "integrated": false,
+      "tier": 2
+    },
+    {
+      "pattern": "(?i)Arc(?:\\s*\\(TM\\))?\\s*(?:\\d{3}V|B3\\d0|Graphics)",
+      "vendor": "intel",
+      "integrated": true,
+      "tier": 3
+    },
+    {
+      "pattern": "(?i)Iris(?:\\s*\\(R\\))?\\s*Xe\\s*MAX",
+      "vendor": "intel",
+      "integrated": false,
+      "tier": 2
+    },
+    {
+      "pattern": "(?i)Iris(?:\\s*\\(R\\))?\\s*Xe",
+      "vendor": "intel",
+      "integrated": true,
+      "tier": 3
+    },
+    {
+      "pattern": "(?i)Iris(?:\\s*\\(R\\))?\\s*(?:Plus|Pro)?\\s*Graphics",
+      "vendor": "intel",
+      "integrated": true,
+      "tier": 2
+    },
+    {
+      "pattern": "(?i)(?:UHD|HD)\\s*Graphics\\s*(?:500|505|600|605|610)\\b",
+      "vendor": "intel",
+      "integrated": true,
+      "tier": 1
+    },
+    {
+      "pattern": "(?i)(?:UHD|HD)\\s*Graphics\\s*[5-7]\\d{2}\\b",
+      "vendor": "intel",
+      "integrated": true,
+      "tier": 2
+    },
+    {
+      "pattern": "(?i)UHD\\s*Graphics",
+      "vendor": "intel",
+      "integrated": true,
+      "tier": 2
+    },
+    {
+      "pattern": "(?i)HD\\s*Graphics|GMA",
+      "vendor": "intel",
+      "integrated": true,
+      "tier": 1
+    },
+    {
+      "pattern": "(?i)Apple\\s*M\\d+\\s*Ultra",
+      "vendor": "apple",
+      "integrated": true,
+      "tier": 5
+    },
+    {
+      "pattern": "(?i)Apple\\s*M\\d+\\s*(?:Pro|Max)",
+      "vendor": "apple",
+      "integrated": true,
+      "tier": 4
+    },
+    {
+      "pattern": "(?i)Apple\\s*M\\d+",
+      "vendor": "apple",
+      "integrated": true,
+      "tier": 3
+    },
+    {
+      "pattern": "(?i)Adreno",
+      "vendor": "qualcomm",
+      "integrated": true,
+      "tier": 2
+    }
+  ],
+  "gpuVendorFallback": {
+    "nvidia": 3,
+    "amd": 3,
+    "intel": 2,
+    "apple": 3,
+    "qualcomm": 2,
+    "software": 0,
+    "other": 2,
+    "unknown": 2
+  },
+  "cpuTiers": [
+    {
+      "pattern": "(?i)Ryzen\\s*\\d\\s*\\d{4}X3D",
+      "tier": 5
+    },
+    {
+      "pattern": "(?i)Ryzen\\s*[579]\\s*[79]\\d{3}X\\b",
+      "tier": 5
+    },
+    {
+      "pattern": "(?i)Core\\(TM\\)\\s*i[579]-1[2-4]\\d{3}K",
+      "tier": 5
+    },
+    {
+      "pattern": "(?i)Core\\(TM\\)\\s*Ultra\\s*[579]\\s*2\\d{2}K",
+      "tier": 5
+    },
+    {
+      "pattern": "(?i)Apple\\s*M\\d+\\s*(?:Pro|Max|Ultra)",
+      "tier": 5
+    },
+    {
+      "pattern": "(?i)Apple\\s*M\\d+",
+      "tier": 4
+    },
+    {
+      "pattern": "(?i)Celeron|Atom|Core\\(TM\\)2|Pentium|AMD\\s+(?:A\\d{1,2}|E\\d?)-\\d",
+      "tier": 1
+    },
+    {
+      "pattern": "(?i)Xeon.*\\bE5-\\d{4}\\b|Xeon.*\\bX5\\d{3}\\b",
+      "tier": 3
+    }
+  ],
+  "heapTiers": [
+    {
+      "atLeastMb": 5632,
+      "tier": 5
+    },
+    {
+      "atLeastMb": 3840,
+      "tier": 4
+    },
+    {
+      "atLeastMb": 2816,
+      "tier": 3
+    },
+    {
+      "atLeastMb": 1792,
+      "tier": 2
+    },
+    {
+      "atLeastMb": 0,
+      "tier": 1
+    }
+  ],
+  "mods": [
+    {
+      "slug": "sodium",
+      "projectId": "AANobbMI",
+      "title": "Sodium",
+      "modIds": [
+        "sodium"
+      ],
+      "category": "rendering",
+      "impact": "high",
+      "stability": "stable",
+      "reason": "Replaces Minecraft's chunk renderer with a much faster one; usually the single biggest FPS boost you can get.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [
+        "optifabric",
+        "vulkanmod"
+      ],
+      "upstream": {
+        "fabulouslyOptimized": true,
+        "additive": true
+      }
+    },
+    {
+      "slug": "lithium",
+      "projectId": "gvQqBUqZ",
+      "title": "Lithium",
+      "modIds": [
+        "lithium"
+      ],
+      "category": "logic",
+      "impact": "medium",
+      "stability": "stable",
+      "reason": "Speeds up game logic such as mob AI, block ticking and collisions, so your singleplayer world spends less time on each tick.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [],
+      "upstream": {
+        "fabulouslyOptimized": true,
+        "additive": true
+      }
+    },
+    {
+      "slug": "ferrite-core",
+      "projectId": "uXXizFIs",
+      "title": "FerriteCore",
+      "modIds": [
+        "ferritecore"
+      ],
+      "category": "memory",
+      "impact": "medium",
+      "stability": "stable",
+      "reason": "Cuts the memory Minecraft uses for block and model data, which means fewer stutters while the game frees up memory.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [],
+      "upstream": {
+        "fabulouslyOptimized": true,
+        "additive": true
+      }
+    },
+    {
+      "slug": "modernfix-mvus",
+      "projectId": "TjSm1wrD",
+      "title": "ModernFix-mVUS",
+      "modIds": [
+        "modernfix"
+      ],
+      "category": "startup",
+      "impact": "medium",
+      "stability": "stable",
+      "reason": "Makes the game start faster and use less memory. This is the community build for Minecraft 26.2, because the original ModernFix has no 26.2 release.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [],
+      "upstream": {
+        "fabulouslyOptimized": true,
+        "additive": true
+      }
+    },
+    {
+      "slug": "immediatelyfast",
+      "projectId": "5ZwdcRci",
+      "title": "ImmediatelyFast",
+      "modIds": [
+        "immediatelyfast"
+      ],
+      "category": "rendering",
+      "impact": "medium",
+      "stability": "stable",
+      "reason": "Speeds up drawing the HUD, text, items and other on-screen elements, which helps most in busy menus and around lots of signs or name tags.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [],
+      "upstream": {
+        "fabulouslyOptimized": true,
+        "additive": true
+      }
+    },
+    {
+      "slug": "entityculling",
+      "projectId": "NNAgCjsB",
+      "title": "Entity Culling",
+      "modIds": [
+        "entityculling"
+      ],
+      "category": "rendering",
+      "impact": "medium",
+      "stability": "stable",
+      "reason": "Skips drawing mobs, chests and other entities hidden behind walls, which raises FPS in bases, villages and farms.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [],
+      "upstream": {
+        "fabulouslyOptimized": true,
+        "additive": true
+      }
+    },
+    {
+      "slug": "moreculling",
+      "projectId": "51shyZVL",
+      "title": "More Culling",
+      "modIds": [
+        "moreculling"
+      ],
+      "category": "rendering",
+      "impact": "medium",
+      "stability": "stable",
+      "reason": "Skips drawing even more things you can't see, such as hidden leaf faces and item frames, on top of what Sodium and Entity Culling already skip.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [],
+      "upstream": {
+        "fabulouslyOptimized": true,
+        "additive": false
+      }
+    },
+    {
+      "slug": "better-block-entities",
+      "projectId": "ONZm0H7Y",
+      "title": "Better Block Entities",
+      "modIds": [
+        "betterblockentities"
+      ],
+      "category": "rendering",
+      "impact": "medium",
+      "stability": "beta",
+      "reason": "Draws chests, signs, beds and similar blocks much more cheaply, which helps a lot in storage rooms and large bases.",
+      "recommendWhen": {
+        "modPresent": [
+          "sodium"
+        ]
+      },
+      "conflictsWith": [
+        "optifabric"
+      ],
+      "upstream": {
+        "fabulouslyOptimized": true,
+        "additive": true
+      }
+    },
+    {
+      "slug": "ixeris",
+      "projectId": "p8RJPJIC",
+      "title": "Ixeris",
+      "modIds": [
+        "ixeris"
+      ],
+      "category": "utility",
+      "impact": "low",
+      "stability": "stable",
+      "reason": "Handles window and input events on a separate thread, which can smooth out frame times and slightly reduce input lag.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [],
+      "upstream": {
+        "fabulouslyOptimized": true,
+        "additive": true
+      }
+    },
+    {
+      "slug": "badoptimizations",
+      "projectId": "g96Z4WVZ",
+      "title": "BadOptimizations",
+      "modIds": [
+        "badoptimizations"
+      ],
+      "category": "logic",
+      "impact": "low",
+      "stability": "stable",
+      "reason": "A set of small client-side optimisations, such as skipping lighting and sky-colour updates when nothing has changed. It isn't part of the popular optimisation modpacks, so it starts unticked.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [],
+      "defaultSelected": false,
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": false
+      }
+    },
+    {
+      "slug": "scalablelux",
+      "projectId": "Ps1zyz6x",
+      "title": "ScalableLux",
+      "modIds": [
+        "scalablelux"
+      ],
+      "category": "lighting",
+      "impact": "medium",
+      "stability": "alpha",
+      "reason": "A faster lighting engine based on Starlight, so loading chunks and changing blocks costs less CPU time.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [
+        "moonrise-opt"
+      ],
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": true
+      }
+    },
+    {
+      "slug": "c2me-fabric",
+      "projectId": "VSNURh3q",
+      "title": "C2ME",
+      "modIds": [
+        "c2me"
+      ],
+      "category": "worldgen",
+      "impact": "medium",
+      "stability": "alpha",
+      "reason": "Generates and loads chunks on several CPU cores at once, so new terrain appears faster while you explore.",
+      "recommendWhen": {
+        "cpuTierAtLeast": 3
+      },
+      "conflictsWith": [
+        "moonrise-opt"
+      ],
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": true
+      }
+    },
+    {
+      "slug": "moonrise-opt",
+      "projectId": "KOHu7RCS",
+      "title": "Moonrise",
+      "modIds": [
+        "moonrise"
+      ],
+      "category": "logic",
+      "impact": "medium",
+      "stability": "stable",
+      "reason": "Replaces the chunk system and parts of entity handling for the built-in server. It can't be used together with C2ME or ScalableLux, so RigTune doesn't suggest adding it.",
+      "recommendWhen": {
+        "always": false
+      },
+      "conflictsWith": [
+        "c2me-fabric",
+        "scalablelux"
+      ],
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": false
+      }
+    },
+    {
+      "slug": "krypton",
+      "projectId": "fQEb0iXm",
+      "title": "Krypton",
+      "modIds": [
+        "krypton"
+      ],
+      "category": "network",
+      "impact": "low",
+      "stability": "stable",
+      "reason": "Optimises Minecraft's networking code. The gain on your side is small and mostly shows on busy multiplayer servers.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [
+        "zfastnoise",
+        "zmaterial-rule-compiler"
+      ],
+      "defaultSelected": false,
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": false
+      }
+    },
+    {
+      "slug": "structure-layout-optimizer",
+      "projectId": "ayPU0OHc",
+      "title": "Structure Layout Optimizer",
+      "modIds": [
+        "structure_layout_optimizer"
+      ],
+      "category": "worldgen",
+      "impact": "low",
+      "stability": "stable",
+      "reason": "Speeds up how jigsaw structures like villages, bastions and ancient cities generate, which cuts stutter from worldgen on your singleplayer world's built-in server.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [],
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": true
+      }
+    },
+    {
+      "slug": "zfastnoise",
+      "projectId": "OnlVIpq5",
+      "title": "Fast Noise",
+      "modIds": [
+        "zfastnoise"
+      ],
+      "category": "worldgen",
+      "impact": "low",
+      "stability": "beta",
+      "reason": "Speeds up vanilla's terrain noise generation, which cuts stutter from worldgen on your singleplayer world's built-in server. Its own issue tracker reports a rare chunk-generation crash when Lithium and C2ME are both installed, so it's off by default when C2ME is present.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [
+        "moonrise-opt",
+        "krypton",
+        "c2me-fabric"
+      ],
+      "defaultSelected": false,
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": true
+      }
+    },
+    {
+      "slug": "zmaterial-rule-compiler",
+      "projectId": "vnpqfrJN",
+      "title": "Material Rule Compiler",
+      "modIds": [
+        "zmatcomp"
+      ],
+      "category": "worldgen",
+      "impact": "low",
+      "stability": "beta",
+      "reason": "Compiles vanilla's surface-generation material rules into faster code, which cuts stutter from worldgen on your singleplayer world's built-in server. From the same project as Fast Noise, with the same rare chunk-generation crash risk when C2ME is installed.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [
+        "moonrise-opt",
+        "krypton",
+        "c2me-fabric"
+      ],
+      "defaultSelected": false,
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": true
+      }
+    },
+    {
+      "slug": "asynclogger",
+      "projectId": "zvNzKfGF",
+      "title": "Async Logger",
+      "modIds": [
+        "asynclogger"
+      ],
+      "category": "utility",
+      "impact": "low",
+      "stability": "stable",
+      "reason": "Moves Minecraft's log writing off the main thread and filters noisy log spam, which avoids small stutters from disk I/O.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [],
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": true
+      }
+    },
+    {
+      "slug": "dynamic-fps",
+      "projectId": "LQ3K71Q1",
+      "title": "Dynamic FPS",
+      "modIds": [
+        "dynamic_fps"
+      ],
+      "category": "utility",
+      "impact": "medium",
+      "stability": "stable",
+      "reason": "Lowers the frame rate while Minecraft is in the background or minimised, which saves power, reduces heat and frees your PC for other apps.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [],
+      "upstream": {
+        "fabulouslyOptimized": true,
+        "additive": true
+      }
+    },
+    {
+      "slug": "sodium-extra",
+      "projectId": "PtjYWJkn",
+      "title": "Sodium Extra",
+      "modIds": [
+        "sodium-extra"
+      ],
+      "category": "rendering",
+      "impact": "low",
+      "stability": "stable",
+      "reason": "Adds extra video options to Sodium, such as turning off individual animations, particles or fog, so you can trade looks for FPS.",
+      "recommendWhen": {
+        "modPresent": [
+          "sodium"
+        ]
+      },
+      "conflictsWith": [],
+      "defaultSelected": false,
+      "upstream": {
+        "fabulouslyOptimized": true,
+        "additive": true
+      }
+    },
+    {
+      "slug": "nvidium",
+      "projectId": "SfMw2IZN",
+      "title": "Nvidium",
+      "modIds": [
+        "nvidium"
+      ],
+      "category": "rendering",
+      "impact": "high",
+      "stability": "beta",
+      "reason": "Replaces Sodium's terrain renderer with one built on NVIDIA mesh shaders, which can greatly raise FPS at high render distances.",
+      "recommendWhen": {
+        "gpuVendor": [
+          "nvidia"
+        ],
+        "gpuIntegrated": false,
+        "gpuTierAtLeast": 4,
+        "modPresent": [
+          "sodium"
+        ]
+      },
+      "avoidWhen": {
+        "anyOf": [
+          {
+            "not": {
+              "gpuVendor": [
+                "nvidia"
+              ]
+            }
+          },
+          {
+            "gpuTierAtMost": 2
+          },
+          {
+            "flags": [
+              "shaders-enabled"
+            ]
+          }
+        ]
+      },
+      "avoidReason": "Nvidium needs an NVIDIA GTX 16-series or RTX graphics card and switches itself off while a shader pack is on, so it can't help on this setup.",
+      "conflictsWith": [],
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": false
+      }
+    },
+    {
+      "slug": "renderscale",
+      "projectId": "Va8PJBFX",
+      "title": "RenderScale",
+      "modIds": [
+        "renderscale"
+      ],
+      "category": "rendering",
+      "impact": "medium",
+      "stability": "beta",
+      "reason": "Renders the game at a lower internal resolution and upscales it, which cuts GPU work on weak or integrated graphics at the cost of some sharpness.",
+      "recommendWhen": {
+        "anyOf": [
+          {
+            "gpuTierAtMost": 2
+          },
+          {
+            "gpuIntegrated": true
+          }
+        ]
+      },
+      "avoidWhen": {
+        "modPresent": [
+          "distanthorizons"
+        ],
+        "flags": [
+          "shaders-enabled"
+        ]
+      },
+      "avoidReason": "Players have reported Distant Horizons terrain rendering in front of everything else when RenderScale runs together with Iris shaders.",
+      "conflictsWith": [],
+      "defaultSelected": false,
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": true
+      }
+    },
+    {
+      "slug": "vulkanmod",
+      "projectId": "JYQhtZtO",
+      "title": "VulkanMod",
+      "modIds": [
+        "vulkanmod"
+      ],
+      "category": "rendering",
+      "impact": "high",
+      "stability": "beta",
+      "reason": "Replaces Minecraft's renderer with its own Vulkan renderer. It can't run alongside Sodium or Iris and has no Minecraft 26.2 release, so RigTune doesn't suggest adding it.",
+      "recommendWhen": {
+        "always": false
+      },
+      "conflictsWith": [
+        "sodium",
+        "iris"
+      ],
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": false
+      }
+    },
+    {
+      "slug": "fastquit",
+      "projectId": "x1hIzbuY",
+      "title": "FastQuit",
+      "modIds": [
+        "fastquit"
+      ],
+      "category": "utility",
+      "impact": "low",
+      "stability": "stable",
+      "reason": "Takes you back to the title screen straight away while your world finishes saving in the background.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [],
+      "upstream": {
+        "fabulouslyOptimized": true,
+        "additive": true
+      }
+    },
+    {
+      "slug": "debugify",
+      "projectId": "QwxR6Gcd",
+      "title": "Debugify",
+      "modIds": [
+        "debugify"
+      ],
+      "category": "utility",
+      "impact": "low",
+      "stability": "stable",
+      "reason": "Fixes a long list of known vanilla bugs. Only a few affect performance, so it starts unticked.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [],
+      "defaultSelected": false,
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": false
+      }
+    },
+    {
+      "slug": "particle-core",
+      "projectId": "RSeLon5O",
+      "title": "Particle Core",
+      "modIds": [
+        "particle_core"
+      ],
+      "category": "rendering",
+      "impact": "low",
+      "stability": "stable",
+      "reason": "Skips particles you can't see and makes particle-heavy moments like explosions, fireworks and potion effects cheaper to draw.",
+      "recommendWhen": {
+        "tierAtMost": 3
+      },
+      "conflictsWith": [],
+      "defaultSelected": false,
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": true
+      }
+    }
+  ],
+  "obsolete": [
+    {
+      "modIds": [
+        "indium"
+      ],
+      "title": "Indium",
+      "reason": "Indium's job has been built into Sodium since version 0.6, and the separate mod conflicts with current Sodium.",
+      "replacement": "sodium"
+    },
+    {
+      "modIds": [
+        "starlight"
+      ],
+      "title": "Starlight",
+      "reason": "Minecraft's own lighting engine has included Starlight's improvements since 1.20, and Starlight has no build for this version."
+    },
+    {
+      "modIds": [
+        "phosphor"
+      ],
+      "title": "Phosphor",
+      "reason": "Phosphor was replaced by Starlight years ago, whose improvements are now part of Minecraft itself, and it doesn't work on current versions."
+    },
+    {
+      "modIds": [
+        "optifabric",
+        "optifine"
+      ],
+      "title": "OptiFabric",
+      "reason": "OptiFabric (OptiFine on Fabric) is incompatible with Sodium and hasn't been updated since Minecraft 1.20.4.",
+      "replacement": "sodium"
+    },
+    {
+      "modIds": [
+        "lazydfu"
+      ],
+      "title": "LazyDFU",
+      "reason": "Minecraft now starts its data fixer efficiently by itself, so LazyDFU no longer helps, and it has no build for this version."
+    },
+    {
+      "modIds": [
+        "smoothboot"
+      ],
+      "title": "Smooth Boot",
+      "reason": "Smooth Boot is abandoned, and changing thread priorities at start-up gives no benefit with modern Windows, macOS or Linux schedulers."
+    }
+  ],
+  "settings": [
+    {
+      "key": "vanilla.renderDistance",
+      "value": 6,
+      "when": {
+        "tierAtMost": 1
+      },
+      "impact": "high",
+      "reason": "Your hardware is at the low end, so 6 chunks keeps the frame rate playable; the benchmark can raise it if there's headroom."
+    },
+    {
+      "key": "vanilla.renderDistance",
+      "value": 8,
+      "when": {
+        "tierAtLeast": 2,
+        "tierAtMost": 2
+      },
+      "impact": "high",
+      "reason": "8 chunks is a good balance of view distance and frame rate for entry-level hardware."
+    },
+    {
+      "key": "vanilla.renderDistance",
+      "value": 10,
+      "when": {
+        "tierAtLeast": 3,
+        "tierAtMost": 3
+      },
+      "impact": "high",
+      "reason": "10 chunks is a comfortable starting point for mid-range hardware; the benchmark can fine-tune it."
+    },
+    {
+      "key": "vanilla.renderDistance",
+      "value": 12,
+      "when": {
+        "tierAtLeast": 4,
+        "tierAtMost": 4
+      },
+      "impact": "high",
+      "reason": "Your hardware can handle 12 chunks smoothly; the benchmark can fine-tune it."
+    },
+    {
+      "key": "vanilla.renderDistance",
+      "value": 16,
+      "when": {
+        "tierAtLeast": 5
+      },
+      "impact": "high",
+      "reason": "Your hardware is strong enough for 16 chunks as a starting point; the benchmark can push it further."
+    },
+    {
+      "key": "vanilla.renderDistance",
+      "max": 8,
+      "when": {
+        "heapMbAtMost": 2100
+      },
+      "reason": "With 2 GB or less of memory for Minecraft, more chunks won't fit in memory and cause stutter."
+    },
+    {
+      "key": "vanilla.renderDistance",
+      "max": 12,
+      "when": {
+        "heapMbAtMost": 3100
+      },
+      "reason": "With 3 GB or less of memory for Minecraft, going past 12 chunks causes memory stutter."
+    },
+    {
+      "key": "vanilla.renderDistance",
+      "max": 16,
+      "when": {
+        "heapMbAtMost": 4200
+      },
+      "reason": "With 4 GB or less of memory for Minecraft, going past 16 chunks causes memory stutter."
+    },
+    {
+      "key": "vanilla.simulationDistance",
+      "max": 5,
+      "when": {
+        "tierAtMost": 1
+      },
+      "impact": "medium",
+      "reason": "A short simulation distance means fewer mobs, crops and redstone for your CPU to update each tick."
+    },
+    {
+      "key": "vanilla.simulationDistance",
+      "max": 6,
+      "when": {
+        "tierAtLeast": 2,
+        "tierAtMost": 2
+      },
+      "impact": "medium",
+      "reason": "Simulating up to 6 chunks keeps nearby farms working without overloading an entry-level CPU."
+    },
+    {
+      "key": "vanilla.simulationDistance",
+      "max": 8,
+      "when": {
+        "tierAtLeast": 3,
+        "tierAtMost": 3
+      },
+      "impact": "medium",
+      "reason": "Simulating up to 8 chunks around you is a good balance for a mid-range CPU."
+    },
+    {
+      "key": "vanilla.simulationDistance",
+      "max": 10,
+      "when": {
+        "tierAtLeast": 4,
+        "tierAtMost": 4
+      },
+      "impact": "medium",
+      "reason": "Keeping the simulation distance at 10 chunks or less keeps the CPU load comfortable on this hardware."
+    },
+    {
+      "key": "vanilla.maxFps",
+      "value": "$refreshRateCap",
+      "when": {
+        "refreshRateAtLeast": 30,
+        "not": {
+          "onBattery": true
+        }
+      },
+      "impact": "medium",
+      "reason": "Capping the frame rate just below your monitor's refresh rate keeps FreeSync/G-Sync active and avoids rendering frames you can't see, without VSync's input lag."
+    },
+    {
+      "key": "vanilla.enableVsync",
+      "value": false,
+      "when": {
+        "refreshRateAtLeast": 30,
+        "not": {
+          "onBattery": true
+        }
+      },
+      "impact": "low",
+      "reason": "With the frame-rate cap in place, VSync mostly adds input lag. Turn it back on if you see screen tearing and your monitor has no FreeSync or G-Sync."
+    },
+    {
+      "key": "vanilla.maxFps",
+      "value": 60,
+      "when": {
+        "onBattery": true
+      },
+      "impact": "medium",
+      "reason": "On battery, capping at 60 FPS cuts the work your GPU does and makes the battery last noticeably longer."
+    },
+    {
+      "key": "vanilla.enableVsync",
+      "value": true,
+      "when": {
+        "onBattery": true
+      },
+      "impact": "low",
+      "reason": "On battery, VSync stops the GPU drawing frames your screen can't show, which saves power."
+    },
+    {
+      "key": "vanilla.inactivityFpsLimit",
+      "value": "afk",
+      "when": {
+        "hasBattery": true
+      },
+      "impact": "low",
+      "reason": "Lowers the frame rate when you're away from the keyboard, which saves battery on a laptop."
+    },
+    {
+      "key": "vanilla.particles",
+      "min": 2,
+      "when": {
+        "tierAtMost": 1
+      },
+      "impact": "medium",
+      "reason": "Set Particles to Minimal: explosions, rain and potion effects stop causing frame drops on weak hardware."
+    },
+    {
+      "key": "vanilla.particles",
+      "min": 1,
+      "when": {
+        "tierAtLeast": 2,
+        "tierAtMost": 2
+      },
+      "impact": "low",
+      "reason": "Set Particles to Decreased to avoid frame drops during explosions and heavy rain."
+    },
+    {
+      "key": "vanilla.biomeBlendRadius",
+      "max": 0,
+      "when": {
+        "tierAtMost": 1
+      },
+      "impact": "medium",
+      "reason": "Turning Biome Blend off makes chunks build faster; biome borders just look sharper."
+    },
+    {
+      "key": "vanilla.biomeBlendRadius",
+      "max": 1,
+      "when": {
+        "tierAtLeast": 2,
+        "tierAtMost": 2
+      },
+      "impact": "low",
+      "reason": "A Biome Blend of 3x3 or less builds chunks faster and still smooths biome borders."
+    },
+    {
+      "key": "vanilla.entityDistanceScaling",
+      "max": 0.5,
+      "when": {
+        "tierAtMost": 1
+      },
+      "impact": "medium",
+      "reason": "Drawing mobs and item frames only when they're closer saves a lot of work in busy areas."
+    },
+    {
+      "key": "vanilla.entityDistanceScaling",
+      "max": 0.75,
+      "when": {
+        "tierAtLeast": 2,
+        "tierAtMost": 2
+      },
+      "impact": "low",
+      "reason": "Drawing entities slightly closer than normal saves work in busy areas with little visible difference."
+    },
+    {
+      "key": "vanilla.entityShadows",
+      "value": false,
+      "when": {
+        "tierAtMost": 2
+      },
+      "impact": "low",
+      "reason": "Entity shadows cost a little FPS for a small visual touch."
+    },
+    {
+      "key": "vanilla.renderClouds",
+      "value": "false",
+      "when": {
+        "tierAtMost": 2
+      },
+      "impact": "low",
+      "reason": "Turning clouds off saves GPU time on entry-level graphics."
+    },
+    {
+      "key": "vanilla.cutoutLeaves",
+      "value": false,
+      "when": {
+        "tierAtMost": 2
+      },
+      "impact": "medium",
+      "reason": "Turning off See-Through Leaves makes forests much cheaper to draw."
+    },
+    {
+      "key": "vanilla.improvedTransparency",
+      "value": false,
+      "when": {
+        "tierAtMost": 3
+      },
+      "impact": "medium",
+      "reason": "Improved Transparency uses extra screen shaders that cost a lot of GPU time on this hardware."
+    },
+    {
+      "key": "vanilla.textureFiltering",
+      "value": 0,
+      "when": {
+        "tierAtMost": 2
+      },
+      "impact": "low",
+      "reason": "Set Texture Filtering to None: RGSS and Anisotropic filtering cost GPU time and video memory that weaker graphics can't spare."
+    },
+    {
+      "key": "vanilla.weatherRadius",
+      "value": 5,
+      "when": {
+        "tierAtMost": 2
+      },
+      "impact": "low",
+      "reason": "A smaller weather radius draws less rain and snow around you."
+    },
+    {
+      "key": "vanilla.prioritizeChunkUpdates",
+      "value": 0,
+      "when": {
+        "modAbsent": [
+          "sodium"
+        ],
+        "tierAtMost": 3
+      },
+      "impact": "low",
+      "reason": "The Threaded chunk builder keeps the frame rate steady when blocks change; the blocking modes can cause frame drops on slower CPUs."
+    },
+    {
+      "key": "sodium.performance.use_fog_occlusion",
+      "value": true,
+      "when": {
+        "always": true
+      },
+      "impact": "low",
+      "reason": "Sodium skips chunks hidden by fog; it's free performance and should stay on."
+    },
+    {
+      "key": "sodium.performance.use_block_face_culling",
+      "value": true,
+      "when": {
+        "always": true
+      },
+      "impact": "medium",
+      "reason": "Sodium only draws block faces that point towards you, which greatly improves performance; only turn it off if a resource pack shows holes."
+    },
+    {
+      "key": "sodium.performance.use_entity_culling",
+      "value": true,
+      "when": {
+        "always": true
+      },
+      "impact": "low",
+      "reason": "Sodium skips drawing entities in chunks you can't see."
+    },
+    {
+      "key": "sodium.performance.animate_only_visible_textures",
+      "value": true,
+      "when": {
+        "always": true
+      },
+      "impact": "low",
+      "reason": "Sodium only updates animated textures like water and lava that are on screen."
+    },
+    {
+      "key": "sodium.performance.chunk_builder_threads",
+      "value": 0,
+      "when": {
+        "always": true
+      },
+      "impact": "low",
+      "defaultSelected": false,
+      "reason": "Letting Sodium pick the number of chunk update threads (auto) is right for almost every PC."
+    },
+    {
+      "key": "sodium.performance.chunk_build_defer_mode",
+      "value": "ALWAYS",
+      "when": {
+        "tierAtMost": 3
+      },
+      "impact": "low",
+      "reason": "Deferred chunk updates never make a frame wait for chunk building, which gives the highest FPS; blocks may take a moment to appear."
+    },
+    {
+      "key": "sodium.performance.chunk_build_defer_mode",
+      "value": "ONE_FRAME",
+      "when": {
+        "tierAtLeast": 4,
+        "goal": [
+          "quality"
+        ]
+      },
+      "impact": "low",
+      "reason": "Your hardware has headroom, so Sodium can show block changes within one frame at a small FPS cost."
+    },
+    {
+      "key": "sodium.performance.quad_splitting_mode",
+      "value": "OFF",
+      "when": {
+        "tierAtMost": 1
+      },
+      "impact": "low",
+      "reason": "Skipping Sodium's extra work for overlapping see-through blocks (like waterlogged glass panes) helps very weak GPUs; those blocks may look slightly wrong."
+    }
+  ],
+  "advice": [
+    {
+      "id": "software-rendering",
+      "when": {
+        "gpuVendor": [
+          "software"
+        ]
+      },
+      "kind": "critical",
+      "impact": "high",
+      "title": "No graphics driver in use",
+      "text": "Minecraft is being drawn by your CPU instead of a graphics card, which usually means the graphics driver is missing or broken, or you're in a virtual machine or remote desktop. Install the latest driver from NVIDIA, AMD or Intel and restart; no mod or setting can fix this."
+    },
+    {
+      "id": "ram-low",
+      "when": {
+        "heapMbAtMost": 2560,
+        "ramMbAtLeast": 6144
+      },
+      "kind": "warning",
+      "impact": "high",
+      "title": "Give Minecraft more memory",
+      "text": "Your launcher lets Minecraft use about 2 GB of memory or less, which causes stutter as the game keeps freeing memory. Set it to 4 GB in your launcher's Java or memory settings."
+    },
+    {
+      "id": "ram-low-system",
+      "when": {
+        "ramMbAtMost": 6143
+      },
+      "kind": "info",
+      "impact": "medium",
+      "title": "Low system memory",
+      "text": "This PC has less than 6 GB of RAM. Don't give Minecraft more than about half of it; closing your browser and other apps while playing helps more."
+    },
+    {
+      "id": "ram-too-much",
+      "when": {
+        "ramMbAtMost": 8192,
+        "heapMbAtLeast": 5000
+      },
+      "kind": "warning",
+      "impact": "medium",
+      "title": "Minecraft has too much of your RAM",
+      "text": "Minecraft is allowed to use most of this PC's memory, which leaves too little for your system and graphics driver and can cause stutter. 3 to 4 GB is enough on an 8 GB PC."
+    },
+    {
+      "id": "ram-huge",
+      "when": {
+        "heapMbAtLeast": 12288,
+        "cpuTierAtMost": 3
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "Very large memory allocation",
+      "text": "Giving Minecraft 12 GB or more can make memory clean-up pauses longer on older CPUs. Unless you use a large modpack or shaders with Distant Horizons, 6 to 8 GB is plenty."
+    },
+    {
+      "id": "ram-distant-horizons",
+      "when": {
+        "modPresent": [
+          "distanthorizons"
+        ],
+        "heapMbAtMost": 5500,
+        "ramMbAtLeast": 12000
+      },
+      "kind": "warning",
+      "impact": "medium",
+      "title": "Distant Horizons needs more memory",
+      "text": "Distant Horizons keeps far-away terrain in memory and needs roughly 2 to 4 GB more than normal. Allocate at least 6 GB in your launcher."
+    },
+    {
+      "id": "ram-shaders",
+      "when": {
+        "flags": [
+          "shaders-enabled"
+        ],
+        "heapMbAtMost": 5500,
+        "ramMbAtLeast": 12000
+      },
+      "kind": "warning",
+      "impact": "medium",
+      "title": "Shaders need more memory",
+      "text": "Shader packs use extra memory, and with less than 6 GB for Minecraft you may get stutter. Allocate 6 GB in your launcher."
+    },
+    {
+      "id": "ram-distant-horizons-shaders",
+      "when": {
+        "modPresent": [
+          "distanthorizons"
+        ],
+        "flags": [
+          "shaders-enabled"
+        ],
+        "heapMbAtMost": 7500,
+        "ramMbAtLeast": 16000
+      },
+      "kind": "warning",
+      "impact": "medium",
+      "title": "Distant Horizons with shaders needs more memory",
+      "text": "Distant Horizons with a shader pack is one of the heaviest setups. You have plenty of RAM, so allocate about 8 GB to Minecraft in your launcher."
+    },
+    {
+      "id": "battery",
+      "when": {
+        "onBattery": true
+      },
+      "kind": "info",
+      "impact": "medium",
+      "title": "Running on battery",
+      "text": "Laptops slow down the CPU and GPU on battery to save power, so expect lower FPS. Plug in for full performance, or keep RigTune's battery-saving settings."
+    },
+    {
+      "id": "laptop-gpu-choice",
+      "when": {
+        "hasBattery": true,
+        "gpuIntegrated": true,
+        "backend": [
+          "opengl"
+        ],
+        "os": [
+          "windows"
+        ]
+      },
+      "kind": "info",
+      "impact": "medium",
+      "title": "Check which graphics chip Minecraft uses",
+      "text": "Minecraft is running on integrated graphics. If this laptop also has a dedicated graphics card, set Java (javaw.exe) to High performance in Windows Settings > System > Display > Graphics, then restart the game."
+    },
+    {
+      "id": "vulkan-backend",
+      "when": {
+        "backend": [
+          "vulkan"
+        ]
+      },
+      "kind": "info",
+      "impact": "medium",
+      "title": "Experimental Vulkan renderer",
+      "text": "Minecraft is using its experimental Vulkan renderer, which can be slower or less stable on some PCs, and some mods may not support it yet. If you have problems, set Video Settings > Graphics API back to Default and restart."
+    },
+    {
+      "id": "intel-igpu-driver",
+      "when": {
+        "gpuVendor": [
+          "intel"
+        ],
+        "gpuIntegrated": true,
+        "gpuTierAtMost": 1,
+        "os": [
+          "windows"
+        ]
+      },
+      "kind": "warning",
+      "impact": "medium",
+      "title": "Update your Intel graphics driver",
+      "text": "Older Intel integrated graphics have crash and flicker bugs that are only fixed in Intel's own drivers. Install the newest driver from Intel's website instead of relying on Windows Update."
+    },
+    {
+      "id": "heavy-shaders",
+      "when": {
+        "flags": [
+          "shaders-enabled"
+        ],
+        "gpuTierAtMost": 3
+      },
+      "kind": "warning",
+      "impact": "high",
+      "title": "Shaders are heavy for this GPU",
+      "text": "A shader pack is on, and on this graphics card shaders usually cost more FPS than every other setting combined. Try a lighter pack or a lower shader quality preset, or turn shaders off in Video Settings > Shader Packs."
+    },
+    {
+      "id": "sodium-nvidia-threaded-optimizations",
+      "when": {
+        "flags": [
+          "sodium-workaround:NVIDIA_THREADED_OPTIMIZATIONS_BROKEN"
+        ]
+      },
+      "kind": "info",
+      "impact": "medium",
+      "title": "NVIDIA Threaded Optimization detected",
+      "text": "Your NVIDIA driver applies a Threaded Optimization feature that Sodium reports causes stutter and crashes with Minecraft, and Sodium is working around it. If you still get stutter or crashes, try a launcher the driver doesn't recognise, such as Prism Launcher."
+    },
+    {
+      "id": "sodium-amd-game-optimization",
+      "when": {
+        "flags": [
+          "sodium-workaround:AMD_GAME_OPTIMIZATION_BROKEN"
+        ]
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "AMD driver issue handled by Sodium",
+      "text": "Your AMD driver applies a Minecraft-specific tweak that can make terrain invisible. Sodium hides the game from that driver check automatically, so you don't need to do anything."
+    },
+    {
+      "id": "sodium-intel-blit-crash",
+      "when": {
+        "flags": [
+          "sodium-workaround:INTEL_FRAMEBUFFER_BLIT_CRASH_WHEN_UNFOCUSED"
+        ]
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "Intel driver issue handled by Sodium",
+      "text": "Your Intel graphics driver can crash when the game window loses focus. Sodium works around this, and installing the newest driver from Intel's website can help too."
+    },
+    {
+      "id": "sodium-intel-depth-buffer",
+      "when": {
+        "flags": [
+          "sodium-workaround:INTEL_DEPTH_BUFFER_COMPARISON_UNRELIABLE"
+        ]
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "Intel depth-buffer issue handled by Sodium",
+      "text": "Your Intel graphics has a depth-buffer bug that can make surfaces flicker. Sodium works around it automatically."
+    },
+    {
+      "id": "sodium-no-error-context",
+      "when": {
+        "flags": [
+          "sodium-workaround:NO_ERROR_CONTEXT_UNSUPPORTED"
+        ]
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "OpenGL setting adjusted by Sodium",
+      "text": "Your system doesn't support one of OpenGL's faster error-checking modes (common on Linux with Wayland), so Sodium turned it off to avoid a crash at start-up. You don't need to do anything."
+    }
+  ],
+  "availability": {
+    "26.3": [
+      "asynclogger",
+      "badoptimizations",
+      "better-block-entities",
+      "c2me-fabric",
+      "dynamic-fps",
+      "entityculling",
+      "fastquit",
+      "ferrite-core",
+      "immediatelyfast",
+      "ixeris",
+      "lithium",
+      "modernfix-mvus",
+      "moreculling",
+      "nvidium",
+      "renderscale",
+      "scalablelux",
+      "sodium",
+      "sodium-extra",
+      "structure-layout-optimizer",
+      "zfastnoise",
+      "zmaterial-rule-compiler"
+    ],
+    "26.2": [
+      "asynclogger",
+      "badoptimizations",
+      "better-block-entities",
+      "c2me-fabric",
+      "debugify",
+      "dynamic-fps",
+      "entityculling",
+      "fastquit",
+      "ferrite-core",
+      "immediatelyfast",
+      "ixeris",
+      "krypton",
+      "lithium",
+      "modernfix-mvus",
+      "moonrise-opt",
+      "moreculling",
+      "nvidium",
+      "particle-core",
+      "renderscale",
+      "scalablelux",
+      "sodium",
+      "sodium-extra",
+      "structure-layout-optimizer",
+      "zfastnoise",
+      "zmaterial-rule-compiler"
+    ],
+    "26.1.2": [
+      "asynclogger",
+      "badoptimizations",
+      "better-block-entities",
+      "c2me-fabric",
+      "debugify",
+      "dynamic-fps",
+      "entityculling",
+      "fastquit",
+      "ferrite-core",
+      "immediatelyfast",
+      "ixeris",
+      "krypton",
+      "lithium",
+      "modernfix-mvus",
+      "moonrise-opt",
+      "moreculling",
+      "nvidium",
+      "particle-core",
+      "renderscale",
+      "scalablelux",
+      "sodium",
+      "sodium-extra",
+      "structure-layout-optimizer",
+      "vulkanmod",
+      "zfastnoise"
+    ]
+  },
+  "upstream": {
+    "fabulouslyOptimized": {
+      "mcVersion": "26.3",
+      "slugs": [
+        "animaticarefabricated",
+        "better-block-entities",
+        "better-mount-hud",
+        "bettergrassify",
+        "cape-provider",
+        "cloth-config",
+        "configmanager",
+        "continuity",
+        "crash-assistant",
+        "dynamic-fps",
+        "e4mc",
+        "entity-model-features",
+        "entityculling",
+        "entitytexturefeatures",
+        "fabric-api",
+        "fabric-language-kotlin",
+        "fastquit",
+        "ferrite-core",
+        "forge-config-api-port",
+        "immediatelyfast",
+        "iris",
+        "ixeris",
+        "lambdynamiclights",
+        "lithium",
+        "main-menu-credits",
+        "mixintrace-reborn",
+        "modernfix-mvus",
+        "modmenu",
+        "morechathistory",
+        "moreculling",
+        "optigui",
+        "placeholder-api",
+        "reeses-sodium-options",
+        "renice-shot",
+        "rrls",
+        "sodium",
+        "sodium-extra",
+        "sodium-shadowy-path-blocks"
+      ]
+    },
+    "additive": {
+      "mcVersion": "26.3",
+      "slugs": [
+        "animaticarefabricated",
+        "asynclogger",
+        "better-block-entities",
+        "c2me-fabric",
+        "calcmod",
+        "cape-provider",
+        "cloth-config",
+        "configmanager",
+        "continuity",
+        "controlify",
+        "crash-assistant",
+        "cull-fewer-leaves",
+        "dynamic-fps",
+        "e4mc",
+        "ears",
+        "entity-model-features",
+        "entityculling",
+        "entitytexturefeatures",
+        "esf",
+        "fabric-api",
+        "fabric-language-kotlin",
+        "fastquit",
+        "fastserverpings",
+        "ferrite-core",
+        "fzzy-config",
+        "immediatelyfast",
+        "iris",
+        "ixeris",
+        "lambdabettergrass",
+        "lambdynamiclights",
+        "lithium",
+        "main-menu-credits",
+        "modernfix-mvus",
+        "modmenu",
+        "optigui",
+        "particle-core",
+        "quick-pack",
+        "renderscale",
+        "resourceful-config",
+        "scalablelux",
+        "servercore",
+        "skyboxify",
+        "sodium",
+        "sodium-extra",
+        "structure-layout-optimizer",
+        "vmp-fabric",
+        "yacl",
+        "zconfig",
+        "zfastnoise",
+        "zmaterial-rule-compiler"
+      ]
+    }
+  }
+}

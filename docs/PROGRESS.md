@@ -7,40 +7,47 @@ A Fabric mod for MC 26.2 (Java 25) that:
 - detects hardware
 - scans installed mods
 - recommends mods to add, update, or remove, plus mod and vanilla settings, based on hardware
-- auto-benchmarks to tune render distance and quality toward a target FPS
+- auto-benchmarks to tune render distance toward a target FPS
 - applies changes
-- stays up to date through remote rules and a live Modrinth API
+- stays up to date through remote rules (auto-updated weekly by CI) and a live Modrinth API
 
-The user gave full autonomy (2026-09-24). Publishing (GitHub repo, Modrinth listing) is outward-facing, so ask the user before doing it.
+The user gave full autonomy on 2026-09-24 and also approved creating and fully setting up a GitHub repo. Publishing to Modrinth was NOT asked for; offer it at the end.
 
 ## Environment
-- Repo: C:\Dev\Minecraft Setting Optimisation Mod. Nested git repo, branch `feat/rigtune-mvp`; main is unborn.
-- JDK: portable Temurin 25 in C:\Dev\Tools\jdk\ (no system Java).
-- User's instance: %APPDATA%\ModrinthApp\profiles\Fabric 26.2. READ-ONLY; never modify it.
-- MC 26.2 jar: %APPDATA%\ModrinthApp\meta\versions\26.2-0.19.5\26.2-0.19.5.jar
-- gh is logged in as chaotix345. Nothing published.
+- Repo: C:/Dev/Minecraft Setting Optimisation Mod. Nested git repo; work branch `feat/rigtune-mvp`. Never commit to main.
+- GitHub: https://github.com/chaotix345/rigtune (public).
+  - Remote `main` = scaffold commit d8485a8, pushed as a base so PRs work.
+  - Actions can create PRs.
+- JDK: C:/Dev/Tools/jdk/jdk-25.0.4.1+1. Use `export JAVA_HOME=...` before `./gradlew`.
+- User's instance: %APPDATA%/ModrinthApp/profiles/Fabric 26.2. READ-ONLY; never modify it.
+- The harness's `isolation: worktree` fails (it resolves the empty C:/Dev repo). Create worktrees manually under C:/Dev/Worktrees/.
 
 ## Status
-- [x] Feasibility research (see memory: minecraft-optimiser-mod-research)
-- [x] Research: toolchain -> docs/research/toolchain.md
-- [ ] Research: MC 26.2 and Sodium API surface -> docs/research/mc-api.md (agent running)
-- [x] Research: tuning knowledge and rules sources -> docs/research/knowledge.md
-- [x] Design doc -> docs/DESIGN.md; rules contract -> docs/RULES_SCHEMA.md; shared records in core/model
-- [x] Scaffold builds (`./gradlew build` OK with Loom 1.17-SNAPSHOT, MC 26.2, Fabric API 0.161.0+26.2, Mod Menu 20.0.2 compileOnly, Sodium localRuntime)
-- [ ] Phase 1, parallel (manual worktrees; the harness's `isolation: worktree` fails because it resolves the empty C:\Dev repo):
-  - [ ] A1 brain: core.hardware, core.rules, core.recommend, rules/source/knowledge.json. Worktree C:\Dev\Worktrees\rigtune-brain, branch feat/core-brain
-  - [ ] A2 apply: core.modrinth, core.apply, core.benchmark. Worktree C:\Dev\Worktrees\rigtune-apply, branch feat/core-apply
-  - [ ] A3 updater: tools/update_rules.py and tests, .github workflows. Worktree C:\Dev\Worktrees\rigtune-updater, branch feat/core-updater
-- [ ] Merge phase 1 into feat/rigtune-mvp; run the updater for real to generate rules-v1.json
-- [ ] Phase 2, A4 client integration (needs mc-api.md): probe, screens, benchmark controller, entrypoints, helper launch at exit, Mod Menu, client gametest
-- [ ] Verification: unit tests, runClientGameTest with screenshots, a dev client run with the user's mod set copied into run/mods
-- [ ] Code review (opus), fixes, README, icon
-- [ ] GitHub: create public repo chaotix345/rigtune (user approved 2026-09-24), push, CI green, PR → main, merge, tag v0.1.0 release
-- [ ] Final report to user
+- [x] Research: toolchain.md, knowledge.md, mc-api.md in docs/research/
+- [x] docs/DESIGN.md, docs/RULES_SCHEMA.md (the contract), core/model records
+- [x] Scaffold builds: Loom 1.17-SNAPSHOT, MC 26.2, Fabric API 0.161.0+26.2, Mod Menu 20.0.2, Sodium localRuntime
+- [x] A3 updater: MERGED. 39 Python tests. tools/update_rules.py and the build/update-rules/release workflows. Live smoke: FO 38 / Additive 50 mods at 26.3.
+- [x] A2 apply: MERGED. 45 tests. core.modrinth, core.apply, core.benchmark.
+- [x] A1 brain: MERGED. 60 tests, 21 mods, 6 obsolete. I fixed $refreshRateCap to snap to vanilla's multiples of 10.
+- [x] Live updater run: rules revision 2 committed and pushed. CI green on GitHub.
+- [ ] A4 client: RUNNING. Worktree C:/Dev/Worktrees/rigtune-client, branch feat/client. Told to `git merge feat/rigtune-mvp` for Phase B, with notes: real mod ids, not provides (ScalableLux provides starlight); AddMod goes through DependencyResolver; vanilla setting rows show the OptionInstance caption; pass modVersion.
+- [x] Rules triage: MERGED (rules revision 3; +renderscale, structure-layout-optimizer, zfastnoise, zmaterial-rule-compiler, asynclogger; reviewIgnore; beta/alpha update filter). Java 107 / Python 46 green.
+  - Lesson: ALWAYS rerun `./gradlew test` after regenerating rules. The scenario tests read the bundled rules, and b291ef4 broke CI this way.
+- Note: I added `"timeout": 5` to the user's global pwsh Stop hook, with their approval. It hung waiting on stdin.
+- [ ] After A4: merge feat/client; full build + runClientGameTest; view the screenshots.
+- [ ] Dev run with the user's mod set copied (not moved) into run/mods to sanity-check recommendations against the real setup.
+- [ ] Code review (opus code-reviewer) and fixes; README with screenshots; icon.
+- [ ] CI green on GitHub; PR feat/rigtune-mvp → main; merge; tag v0.1.0 so release.yml publishes the jar.
+- [ ] Final report to the user (and offer Modrinth publishing and a 26.3 port).
+
+## Follow-ups noted
+- Modrinth updates: don't offer beta/alpha updates over a release install (send version_types or filter by the current version's type).
+- 26.3 port: SDL replaced GLFW in 26.3, per toolchain.md §6.
 
 ## Decisions
-- Name: RigTune, mod id `rigtune` (no Modrinth collision as of 2026-09-24).
-- Target MC 26.2 + Fabric first; 26.3 is a stretch goal.
+- Name: RigTune, mod id `rigtune`, package io.github.chaotix345.rigtune, MIT license.
+- Target MC 26.2 + Fabric first.
+- Mod file changes are applied by a post-exit helper JVM (Windows file locks, and duplicate mod ids crash).
 
 ## Log
-- 2026-09-24: repo initialised; research agents launched.
+- 2026-09-24: research done; scaffold; A1–A4 launched; A2 and A3 merged; GitHub repo created and branch pushed.

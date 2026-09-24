@@ -85,6 +85,17 @@ public final class OnlineDataFetcher {
 		return next != null
 				&& !next.id().equals(cur.id())
 				&& next.primaryFile() != null
-				&& !next.datePublished().isBefore(cur.datePublished());
+				&& !next.datePublished().isBefore(cur.datePublished())
+				&& stabilityRank(next.versionType()) >= stabilityRank(cur.versionType());
+	}
+
+	// release > beta > alpha; an unrecognized/missing type is treated as the least stable.
+	private static int stabilityRank(String versionType) {
+		return switch (versionType == null ? "" : versionType) {
+			case "release" -> 2;
+			case "beta" -> 1;
+			case "alpha" -> 0;
+			default -> 0;
+		};
 	}
 }
