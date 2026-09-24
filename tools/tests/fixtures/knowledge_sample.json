@@ -1,0 +1,58 @@
+{
+  "gpuTiers": [
+    { "pattern": "(?i)rtx\\s*40[6-9]0", "vendor": "nvidia", "tier": 5, "integrated": false }
+  ],
+  "gpuVendorFallback": { "nvidia": 3, "amd": 3, "intel": 2 },
+  "cpuTiers": [],
+  "heapTiers": [
+    { "atLeastMb": 6144, "tier": 5 }
+  ],
+  "mods": [
+    {
+      "slug": "sodium",
+      "projectId": "AANobbMI",
+      "title": "Sodium",
+      "modIds": ["sodium"],
+      "category": "rendering",
+      "impact": "high",
+      "stability": "stable",
+      "reason": "Rewrites the chunk renderer; the single biggest FPS gain.",
+      "recommendWhen": { "always": true },
+      "conflictsWith": ["optifabric"],
+      "defaultSelected": true
+    },
+    {
+      "slug": "lithium",
+      "projectId": "gvQqBUqZ",
+      "title": "Lithium",
+      "modIds": ["lithium"],
+      "category": "logic",
+      "impact": "medium",
+      "stability": "stable",
+      "reason": "General game-logic optimizations.",
+      "recommendWhen": { "always": true },
+      "defaultSelected": true
+    },
+    {
+      "slug": "moreculling",
+      "projectId": "51shyZVL",
+      "title": "MoreCulling",
+      "modIds": ["moreculling"],
+      "category": "rendering",
+      "impact": "medium",
+      "stability": "stable",
+      "reason": "Extends culling to more categories.",
+      "recommendWhen": { "always": true },
+      "defaultSelected": true
+    }
+  ],
+  "obsolete": [
+    { "modIds": ["indium"], "title": "Indium", "reason": "Merged into Sodium since 0.6.", "replacement": "sodium" }
+  ],
+  "settings": [
+    { "key": "vanilla.renderDistance", "value": 12, "when": { "tierAtLeast": 4 }, "reason": "Higher tiers can afford more chunks.", "impact": "medium", "defaultSelected": true }
+  ],
+  "advice": [
+    { "id": "ram-low", "when": { "heapMbAtMost": 2048 }, "impact": "high", "title": "Allocate more RAM", "text": "Give the JVM more heap.", "kind": "warning" }
+  ]
+}
