@@ -114,6 +114,18 @@ class RecommenderTest {
 	}
 
 	@Test
+	void aFailingSectionDoesNotKillTheReport() {
+		RulesDocument rules = rules("""
+				"settings":[
+				 {"key":"vanilla.renderDistance","max":1e400,"reason":"Broken."}
+				],
+				"advice":[{"id":"still-here","title":"Still here","text":"x","when":{"always":true}}]""");
+		Map<String, Recommendation> recs = byId(run(rules, Fixtures.userRig(), List.of(), Map.of("vanilla.renderDistance", "12"), OnlineData.offline()));
+		assertFalse(recs.containsKey("set:vanilla.renderDistance"));
+		assertTrue(recs.containsKey("advice:still-here"));
+	}
+
+	@Test
 	void everyBundledSettingKeyIsAllowlisted() {
 		for (RulesDocument.SettingRule rule : RulesLoader.loadBundled().settings) {
 			assertTrue(SettingKeys.changeable(rule.key), rule.key);
@@ -289,5 +301,12 @@ class RecommenderTest {
 		assertFalse(byId(current).containsKey("advice:update-rigtune"));
 		assertTrue(Recommender.compareVersions("0.10.0", "0.9.9") > 0);
 		assertEquals(0, Recommender.compareVersions("1.0", "1.0.0"));
+		assertTrue(Recommender.compareVersions("0.1.0", "0.12345678901234567890123") < 0);
+		assertTrue(Recommender.compareVersions("99999999999999999999.1", "99999999999999999999.0") > 0);
+		assertEquals(0, Recommender.compareVersions("1.007", "1.7"));
+
+		Report huge = Recommender.recommend(rules("\"minModVersion\":\"0.12345678901234567890123\""), Fixtures.userRig().build(), List.of(),
+				new SettingsSnapshot(Map.of()), null, Goal.BALANCED, "0.1.0");
+		assertTrue(byId(huge).containsKey("advice:update-rigtune"));
 	}
 }

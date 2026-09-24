@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.core.recommend;
 
+import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.core.hardware.CpuClassifier;
 import io.github.chaotix345.rigtune.core.hardware.GpuClassifier;
 import io.github.chaotix345.rigtune.core.hardware.TierCalculator;
@@ -27,6 +28,7 @@ import io.github.chaotix345.rigtune.core.rules.RulesDocument.ObsoleteRule;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument.SettingRule;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -69,14 +71,14 @@ public final class Recommender {
 		EvalContext ctx = new EvalContext(hardware, gpuClass, tier, goal, loaded);
 
 		Session session = new Session(rules, ctx, installed, settings == null ? new SettingsSnapshot(Map.of()) : settings, data);
-		session.obsolete();
-		session.avoided();
-		session.conflicts();
-		session.additions();
-		session.updates();
-		session.settings();
-		session.advice();
-		session.rigtuneVersion(modVersion);
+		section("obsolete", session::obsolete);
+		section("avoided", session::avoided);
+		section("conflicts", session::conflicts);
+		section("additions", session::additions);
+		section("updates", session::updates);
+		section("settings", session::settings);
+		section("advice", session::advice);
+		section("rigtune version", () -> session.rigtuneVersion(modVersion));
 
 		List<Recommendation> sorted = new ArrayList<>(session.recs.values());
 		sorted.sort(ORDER);
@@ -84,14 +86,23 @@ public final class Recommender {
 		return new Report(hardware, gpuClass, tier, goal, List.copyOf(sorted), rules.revision, source, data.online(), Instant.now());
 	}
 
+	private static void section(String name, Runnable body) {
+		try {
+			body.run();
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.warn("Skipping the {} recommendations after an error", name, e);
+		}
+	}
+
 	static int compareVersions(String a, String b) {
 		String[] pa = a.split("[^0-9]+");
 		String[] pb = b.split("[^0-9]+");
 		for (int i = 0; i < Math.max(pa.length, pb.length); i++) {
-			long va = i < pa.length && !pa[i].isEmpty() ? Long.parseLong(pa[i]) : 0;
-			long vb = i < pb.length && !pb[i].isEmpty() ? Long.parseLong(pb[i]) : 0;
-			if (va != vb) {
-				return Long.compare(va, vb);
+			BigInteger va = i < pa.length && !pa[i].isEmpty() ? new BigInteger(pa[i]) : BigInteger.ZERO;
+			BigInteger vb = i < pb.length && !pb[i].isEmpty() ? new BigInteger(pb[i]) : BigInteger.ZERO;
+			int order = va.compareTo(vb);
+			if (order != 0) {
+				return order;
 			}
 		}
 		return 0;
