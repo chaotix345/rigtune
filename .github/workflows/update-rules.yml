@@ -1,0 +1,71 @@
+name: update-rules
+
+on:
+  schedule:
+    - cron: '0 3 * * 1' # Monday 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  update-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - name: Run the rules updater
+        run: python tools/update_rules.py
+
+      - name: Check for changes
+        id: changes
+        run: |
+          set -eu
+          for f in rules/rules-v1.json src/main/resources/rigtune/rules-v1.json rules/REVIEW.md; do
+            [ -f "$f" ] && git add "$f"
+          done
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update the rules-update PR
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          set -eu
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          date_stamp=$(date -u +%Y-%m-%d)
+          branch="bot/rules-update-${date_stamp}"
+
+          git checkout -B "$branch"
+          git commit -m "chore(rules): weekly rules update ${date_stamp}"
+          git push --force origin "$branch"
+
+          existing_pr=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing_pr" ]; then
+            gh pr edit "$existing_pr" --body-file rules/REVIEW.md
+          else
+            gh pr create \
+              --title "Rules update ${date_stamp}" \
+              --body-file rules/REVIEW.md \
+              --head "$branch" \
+              --base main
+          fi
+
+          # A PR/push made with the default GITHUB_TOKEN does not itself trigger other
+          # workflows' `push`/`pull_request` events (GitHub suppresses that to avoid
+          # accidental recursive workflow loops). build.yml would otherwise never run
+          # against this branch, so kick it off explicitly via workflow_dispatch.
+          gh workflow run build.yml --ref "$branch"

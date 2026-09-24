@@ -1,0 +1,65 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: gradle/actions/wrapper-validation@v6
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25'
+
+      - name: Build
+        run: ./gradlew build
+
+      - name: Create GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          tag="${GITHUB_REF_NAME}"
+          main_jar=$(ls build/libs/*.jar | grep -v -- '-sources.jar' | head -n1)
+          sources_jar=$(ls build/libs/*-sources.jar 2>/dev/null || true)
+          gh release create "$tag" \
+            --title "RigTune $tag" \
+            --generate-notes \
+            "$main_jar" \
+            ${sources_jar:+"$sources_jar"}
+
+      # --- Modrinth publishing (disabled until the RigTune Modrinth project exists) ---
+      #
+      # Modrinth's own publishing tool, Minotaur (github.com/modrinth/minotaur), is a
+      # Gradle plugin, not a GitHub Action: it must first be added to build.gradle, e.g.
+      #
+      #   plugins {
+      #     id 'com.modrinth.minotaur' version '2.+'
+      #   }
+      #   modrinth {
+      #     token = System.getenv('MODRINTH_TOKEN')
+      #     projectId = 'rigtune'
+      #     versionNumber = version
+      #     versionType = 'release'
+      #     uploadFile = remapJar
+      #     gameVersions = ['26.2']
+      #     loaders = ['fabric']
+      #   }
+      #
+      # Once that's in place, add a MODRINTH_TOKEN repo secret (a Modrinth personal access
+      # token scoped to "Create versions" on the rigtune project) and uncomment:
+      #
+      # - name: Publish to Modrinth
+      #   env:
+      #     MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+      #   run: ./gradlew modrinth

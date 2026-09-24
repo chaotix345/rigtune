@@ -56,8 +56,17 @@ dependencies {
 	testImplementation "net.fabricmc:fabric-loader-junit:${project.loader_version}"
 }
 
+sourceSets {
+	test {
+		compileClasspath += sourceSets.client.compileClasspath + sourceSets.client.output
+		runtimeClasspath += sourceSets.client.runtimeClasspath + sourceSets.client.output
+	}
+}
+
 test {
 	useJUnitPlatform()
+	workingDir = layout.buildDirectory.dir("junit-run").get().asFile
+	doFirst { workingDir.mkdirs() }
 }
 
 processResources {
@@ -88,4 +97,71 @@ jar {
 	from("LICENSE") {
 		rename { "${it}_$projectName" }
 	}
+}
+
+// A production client with a player's own mods, driven by the client game test in smoke mode (see ProductionSmoke):
+// ./gradlew runProductionSmoke -PextraModsDir=<dir of mod jars> [-PuserOptions=<options.txt>] [-PuserConfigDir=<config dir>]
+// The jars are mirrored into run/mods, where RigTune treats them as the instance's own mods, as in a launcher instance.
+configurations {
+	productionSmokeMods {
+		canBeConsumed = false
+		transitive = false
+	}
+}
+
+dependencies {
+	// The fabric-api fat jar doesn't nest the client game test module.
+	productionSmokeMods fabricApi.module("fabric-client-gametest-api-v1", project.fabric_api_version)
+}
+
+def gametestJar = tasks.register("gametestJar", Jar) {
+	from sourceSets.gametest.output
+	archiveClassifier = "gametest"
+}
+
+interface InjectedFs {
+	@javax.inject.Inject
+	FileSystemOperations getFs()
+}
+
+def smokeRunDir = layout.projectDirectory.dir("run")
+def extraModsDir = providers.gradleProperty("extraModsDir").map { layout.projectDirectory.dir(it).asFile }
+def userOptions = providers.gradleProperty("userOptions").map { layout.projectDirectory.file(it).asFile }
+def userConfigDir = providers.gradleProperty("userConfigDir").map { layout.projectDirectory.dir(it).asFile }
+
+def prepareProductionSmoke = tasks.register("prepareProductionSmoke") {
+	def fs = objects.newInstance(InjectedFs).fs
+	outputs.upToDateWhen { false }
+	doLast {
+		if (!extraModsDir.present) {
+			throw new GradleException("Pass -PextraModsDir=<dir>: it has to provide fabric-api and the player's mods")
+		}
+		fs.sync {
+			from(extraModsDir.get()) { include "*.jar" }
+			into smokeRunDir.dir("mods")
+		}
+		if (userOptions.present) {
+			// Exclusive fullscreen would take over the monitor, and the game test framebuffer has a fixed size anyway.
+			fs.copy {
+				from(userOptions.get()) { rename { "options.txt" } }
+				into smokeRunDir
+				filter { String line -> line.startsWith("fullscreen:") ? "fullscreen:false" : line }
+			}
+		}
+		if (userConfigDir.present) {
+			fs.copy {
+				from userConfigDir.get()
+				into smokeRunDir.dir("config")
+			}
+		}
+	}
+}
+
+tasks.register("runProductionSmoke", net.fabricmc.loom.task.prod.ClientProductionRunTask) {
+	dependsOn prepareProductionSmoke
+	runDir = smokeRunDir
+	mods.from(gametestJar)
+	mods.from(configurations.productionSmokeMods)
+	jvmArgs.addAll("-Dfabric.client.gametest", "-Drigtune.smoke=true")
+	jvmArgs.addAll(userOptions.map { ["-Drigtune.smoke.userOptions=" + it.absolutePath] }.orElse([]))
 }
