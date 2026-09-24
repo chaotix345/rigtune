@@ -9,6 +9,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 import tomllib
@@ -16,6 +17,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 USER_AGENT = "chaotix345/rigtune-updater/1.0 (github.com/chaotix345/rigtune)"
@@ -24,11 +26,14 @@ GITHUB_API = "https://api.github.com"
 RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
 # Modrinth's own API cap is 300 req/min; 0.25s between calls keeps us at 240/min.
 MODRINTH_MIN_INTERVAL = 0.25
+# Gson (the client's JSON lib) reads revision into a Java int; stay clear of overflow.
+MAX_SAFE_REVISION = 2**31 - 2
 
 FO_OWNER_REPO = "Fabulously-Optimized/fabulously-optimized"
 ADDITIVE_OWNER_REPO = "skywardmc/additive"
 # Statuses Modrinth treats as "still a working, reachable project" per docs.modrinth.com.
 OK_PROJECT_STATUSES = {"approved", "unlisted"}
+MENTION_RE = re.compile(r"@(?=\w)")
 
 
 class UpdateRulesError(Exception):
@@ -102,6 +107,26 @@ def fixture_opener(fixtures_dir):
     return opener
 
 
+def parse_retry_after(value):
+    """Parse a Retry-After header value, per RFC 9110: either a number of
+    seconds, or an HTTP-date. Returns None if it's neither (caller should
+    fall back to its own backoff)."""
+    if not value:
+        return None
+    value = value.strip()
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError, IndexError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return max(0.0, (when - datetime.now(timezone.utc)).total_seconds())
+
+
 def http_get(url, *, headers=None, opener=default_opener, sleeper=time.sleep, max_attempts=6):
     delay = 1.0
     for attempt in range(1, max_attempts + 1):
@@ -118,9 +143,9 @@ def http_get(url, *, headers=None, opener=default_opener, sleeper=time.sleep, ma
             return body
         github_rate_limited = status == 403 and resp_headers.get("x-ratelimit-remaining") == "0"
         if (status in RETRYABLE_STATUSES or github_rate_limited) and attempt < max_attempts:
-            retry_after = resp_headers.get("retry-after")
-            if retry_after:
-                wait = float(retry_after)
+            retry_after = parse_retry_after(resp_headers.get("retry-after"))
+            if retry_after is not None:
+                wait = retry_after
             elif github_rate_limited and resp_headers.get("x-ratelimit-reset"):
                 wait = max(0.0, float(resp_headers["x-ratelimit-reset"]) - time.time())
             else:
@@ -190,7 +215,11 @@ def collect_project_ids(client, raw_url_fn, mc_version, filenames):
     ids = set()
     for name in filenames:
         text = client.raw_text(raw_url_fn(mc_version, name))
-        data = tomllib.loads(text)
+        try:
+            data = tomllib.loads(text)
+        except tomllib.TOMLDecodeError as e:
+            print(f"warning: skipping unparsable {name} ({mc_version}): {e}", file=sys.stderr)
+            continue
         mod_id = data.get("update", {}).get("modrinth", {}).get("mod-id")
         if mod_id:
             ids.add(mod_id)
@@ -241,13 +270,35 @@ def mods_with_upstream(rule_mods, fo_slugs, additive_slugs):
     return merged
 
 
-def compute_availability(rule_mods, projects_by_id, mc_versions):
+def modrinth_version_list_url(project_id, mc_version):
+    loaders = urllib.parse.quote(json.dumps(["fabric"]), safe="")
+    game_versions = urllib.parse.quote(json.dumps([mc_version]), safe="")
+    return f"{MODRINTH_API}/project/{project_id}/version?loaders={loaders}&game_versions={game_versions}"
+
+
+def is_version_available(client, project_id, mc_version):
+    versions = client.modrinth_json(modrinth_version_list_url(project_id, mc_version))
+    return bool(versions)
+
+
+def compute_availability(client, rule_mods, projects_by_id, mc_versions):
+    """Availability must be version-level: a project's `game_versions`/`loaders`
+    fields are unions across every version it has ever published, so a mod with
+    Fabric only for one target and NeoForge for another would otherwise look
+    available for both. The project-level fields are still used as a cheap
+    pre-filter -- they can only produce false positives, never false negatives,
+    so when they already rule a (mod, version) pair out there's no need to spend
+    a request confirming it."""
     availability = {}
     for v in mc_versions:
         slugs = []
         for m in rule_mods:
             project = projects_by_id.get(m["projectId"])
-            if project and v in project.get("game_versions", []) and "fabric" in project.get("loaders", []):
+            if not project:
+                continue
+            if v not in project.get("game_versions", []) or "fabric" not in project.get("loaders", []):
+                continue
+            if is_version_available(client, m["projectId"], v):
                 slugs.append(m["slug"])
         availability[v] = sorted(slugs)
     return availability
@@ -322,6 +373,17 @@ def build_review(rule_mods, mc_versions, newest_version, fo_slugs, additive_slug
     return markdown, counts
 
 
+def sanitize_cell(value):
+    """Modrinth titles/slugs (and the status string they carry) are untrusted
+    text that ends up in a markdown table inside a PR body. Escape pipes so
+    they can't break the table, collapse newlines so they can't inject extra
+    rows, and defang @mentions so a crafted title can't ping someone."""
+    text = str(value).replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
+    text = text.replace("|", "\\|")
+    text = MENTION_RE.sub("@" + chr(0x200D), text)
+    return text
+
+
 def render_review_markdown(mc_versions, newest_version, new_upstream, status_issues, removed_issues, missing_fabric, no_history):
     lines = ["# RigTune rules update review", ""]
     lines.append(f"Target MC versions: {', '.join(mc_versions)}. Newest: {newest_version or 'unknown'}.")
@@ -337,7 +399,7 @@ def render_review_markdown(mc_versions, newest_version, new_upstream, status_iss
         lines.append("| slug | title | pack(s) | optimization category |")
         lines.append("|---|---|---|---|")
         for item in new_upstream:
-            lines.append(f"| {item['slug']} | {item['title']} | {', '.join(item['packs'])} | {'yes' if item['optimization'] else 'no'} |")
+            lines.append(f"| {sanitize_cell(item['slug'])} | {sanitize_cell(item['title'])} | {', '.join(item['packs'])} | {'yes' if item['optimization'] else 'no'} |")
     else:
         lines.append("None found.")
     lines.append("")
@@ -351,7 +413,7 @@ def render_review_markdown(mc_versions, newest_version, new_upstream, status_iss
         lines.append("| slug | title | reason |")
         lines.append("|---|---|---|")
         for slug, title, reason in combined:
-            lines.append(f"| {slug} | {title} | {reason} |")
+            lines.append(f"| {sanitize_cell(slug)} | {sanitize_cell(title)} | {sanitize_cell(reason)} |")
     else:
         lines.append("None found.")
     lines.append("")
@@ -361,7 +423,7 @@ def render_review_markdown(mc_versions, newest_version, new_upstream, status_iss
         lines.append("| slug | title |")
         lines.append("|---|---|")
         for slug, title in missing_fabric:
-            lines.append(f"| {slug} | {title} |")
+            lines.append(f"| {sanitize_cell(slug)} | {sanitize_cell(title)} |")
     else:
         lines.append("None found.")
     lines.append("")
@@ -426,7 +488,13 @@ def finalize_document(content, old_doc):
     changed = old_doc is None or not deep_equal(strip_meta(old_doc), content)
     if not changed:
         return None
-    final = {"schemaVersion": content["schemaVersion"], "revision": old_revision + 1, "generatedAt": now_iso()}
+    new_revision = old_revision + 1
+    if new_revision >= MAX_SAFE_REVISION:
+        raise UpdateRulesError(
+            f"revision {new_revision} would be at or above {MAX_SAFE_REVISION} (2**31-2); "
+            "refusing to write a rules-v1.json the client can't parse"
+        )
+    final = {"schemaVersion": content["schemaVersion"], "revision": new_revision, "generatedAt": now_iso()}
     for key, value in content.items():
         if key != "schemaVersion":
             final[key] = value
@@ -471,7 +539,7 @@ def run_pipeline(knowledge, client, mc_versions_override, old_doc):
     additive_slugs = slugs_for_version(ids_by_version["additive"], newest_by_pack["additive"], projects_by_id)
 
     mods = mods_with_upstream(rule_mods, fo_slugs, additive_slugs)
-    availability = compute_availability(rule_mods, projects_by_id, mc_versions)
+    availability = compute_availability(client, rule_mods, projects_by_id, mc_versions)
     upstream = top_level_upstream(newest_by_pack["fabulouslyOptimized"], fo_slugs, newest_by_pack["additive"], additive_slugs)
 
     content = assemble_content(knowledge, mods, availability, upstream)
@@ -522,11 +590,10 @@ def main(argv=None):
         content, review_md, review_counts, mc_versions, newest_by_pack, fo_slugs, additive_slugs = run_pipeline(
             knowledge, client, args.mc_versions, old_doc,
         )
+        final_doc = finalize_document(content, old_doc)
     except UpdateRulesError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-
-    final_doc = finalize_document(content, old_doc)
 
     print(f"target MC versions: {', '.join(mc_versions)}")
     print(f"Fabulously Optimized: newest available = {newest_by_pack['fabulouslyOptimized']}, {len(fo_slugs)} mods")

@@ -27,8 +27,12 @@ It requires only the Python 3.11+ standard library (no `pip install` needed).
    which rule mods are "upstream" there (`mods[].upstream.fabulouslyOptimized` /
    `.additive`), and records the same pack's full slug list under the top-level
    `upstream` object.
-5. Builds `availability[mcVersion]` per rule mod: available if the project's
-   `game_versions` includes that version and `loaders` includes `fabric`.
+5. Builds `availability[mcVersion]` per rule mod. A project's `game_versions`/
+   `loaders` fields are unions across every version it has ever published, so
+   they're used only as a cheap pre-filter (a mod that fails them is unavailable,
+   no request needed). Anything that passes is confirmed with a per-version
+   Modrinth query (`GET /project/{id}/version?loaders=["fabric"]&game_versions=["<mc>"]`);
+   available means that query returns at least one version.
 6. Diffs the newly assembled content against the existing `rules/rules-v1.json`,
    **ignoring `revision` and `generatedAt`**. If nothing changed, the file is left
    untouched. If it changed (or there's no existing file), `revision` becomes
