@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -59,6 +60,89 @@ class SodiumConfigPatcherTest {
 		assertEquals(json(SODIUM).get("notifications"), out.get("notifications"));
 		assertEquals(json(SODIUM).get("workarounds"), out.get("workarounds"));
 		assertEquals(json(SODIUM), root);
+	}
+
+	@Test
+	void booleanFieldsAcceptTrueOrFalseInAnyCase() {
+		JsonObject out = SodiumConfigPatcher.patch(json(SODIUM), Map.of("performance.use_fog_occlusion", "FALSE", "quality.enable_vignette", "True"));
+
+		assertFalse(out.getAsJsonObject("performance").get("use_fog_occlusion").getAsBoolean());
+		assertTrue(out.getAsJsonObject("performance").get("use_fog_occlusion").getAsJsonPrimitive().isBoolean());
+		assertTrue(out.getAsJsonObject("quality").get("enable_vignette").getAsBoolean());
+	}
+
+	@Test
+	void booleanFieldsRejectEverythingElse() {
+		for (String value : new String[]{"1", "0", "yes", "", "fast", " true"}) {
+			IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+					() -> SodiumConfigPatcher.patch(json(SODIUM), Map.of("performance.use_fog_occlusion", value)), value);
+			assertTrue(e.getMessage().contains("performance.use_fog_occlusion") && e.getMessage().contains("true or false"), e.getMessage());
+		}
+	}
+
+	@Test
+	void numberFieldsKeepTheirKindOfNumber() {
+		JsonObject root = json("{\"a\":{\"threads\":0,\"scale\":0.5,\"big\":1}}");
+
+		JsonObject out = SodiumConfigPatcher.patch(root, Map.of("a.threads", "-3", "a.scale", "0.75", "a.big", "99999999999999999999"));
+
+		assertEquals(-3, out.getAsJsonObject("a").get("threads").getAsInt());
+		assertEquals(0.75, out.getAsJsonObject("a").get("scale").getAsDouble());
+		assertEquals("99999999999999999999", out.getAsJsonObject("a").get("big").getAsString());
+		assertEquals(1.0, SodiumConfigPatcher.patch(root, Map.of("a.scale", "1")).getAsJsonObject("a").get("scale").getAsDouble());
+		for (String value : new String[]{"fast", "true", "4.5", "1e3", ""}) {
+			IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+					() -> SodiumConfigPatcher.patch(root, Map.of("a.threads", value)), value);
+			assertTrue(e.getMessage().contains("a.threads"), e.getMessage());
+		}
+		assertThrows(IllegalArgumentException.class, () -> SodiumConfigPatcher.patch(root, Map.of("a.scale", "half")));
+	}
+
+	@Test
+	void stringFieldsStayStrings() {
+		JsonObject out = SodiumConfigPatcher.patch(json(SODIUM), Map.of("quality.weather_quality", "true", "version", "3"));
+
+		assertTrue(out.getAsJsonObject("quality").get("weather_quality").getAsJsonPrimitive().isString());
+		assertEquals("true", out.getAsJsonObject("quality").get("weather_quality").getAsString());
+		assertTrue(out.get("version").getAsJsonPrimitive().isString());
+	}
+
+	@Test
+	void newFieldsGetAnInferredType() {
+		JsonObject out = SodiumConfigPatcher.patch(json("{\"a\":{\"gone\":null}}"),
+				Map.of("a.flag", "TRUE", "a.count", "12", "a.ratio", "1.5", "a.mode", "FANCY", "a.gone", "false"));
+
+		JsonObject a = out.getAsJsonObject("a");
+		assertTrue(a.get("flag").getAsJsonPrimitive().isBoolean() && a.get("flag").getAsBoolean());
+		assertTrue(a.get("count").getAsJsonPrimitive().isNumber());
+		assertEquals(1.5, a.get("ratio").getAsDouble());
+		assertTrue(a.get("mode").getAsJsonPrimitive().isString());
+		assertTrue(a.get("gone").getAsJsonPrimitive().isBoolean());
+	}
+
+	@Test
+	void refusesToReplaceObjectsOrListsWithValues() {
+		assertThrows(IllegalArgumentException.class, () -> SodiumConfigPatcher.patch(json(SODIUM), Map.of("quality", "1")));
+		assertThrows(IllegalArgumentException.class, () -> SodiumConfigPatcher.patch(json(SODIUM), Map.of("workarounds", "x")));
+	}
+
+	@Test
+	void aBadValueFailsTheWholePatchOpAndLeavesTheFileAlone(@TempDir Path dir) throws IOException {
+		Path mods = Files.createDirectories(dir.resolve("mods"));
+		Path config = Files.createDirectories(dir.resolve("config"));
+		Path file = Files.writeString(config.resolve("sodium-options.json"), SODIUM);
+		Path pending = PendingActions.defaultPath(config);
+		Map<String, String> patches = new LinkedHashMap<>();
+		patches.put("performance.chunk_builder_threads", "4");
+		patches.put("performance.use_fog_occlusion", "1");
+		PendingActions plan = PendingActions.create(1, mods, config, List.of(PendingActions.Op.patchJson(file, patches)));
+		plan.save(pending);
+
+		ApplyResult result = new ApplyExecutor(2, 1).run(plan, pending);
+
+		assertEquals(ApplyResult.Status.FAILED, result.results().getFirst().status());
+		assertTrue(result.results().getFirst().message().contains("expects true or false"), result.results().getFirst().message());
+		assertEquals(SODIUM, Files.readString(file));
 	}
 
 	@Test

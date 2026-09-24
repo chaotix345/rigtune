@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.client;
 
+import io.github.chaotix345.rigtune.core.apply.ModJars;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -23,12 +24,12 @@ class RealControllerTest {
 			zip.write("{\"schemaVersion\":1,\"id\":\"cloth-config\",\"version\":\"1\"}".getBytes(StandardCharsets.UTF_8));
 			zip.closeEntry();
 		}
-		assertEquals("cloth-config", RealController.modIdOf(jar));
+		assertEquals("cloth-config", ModJars.modIdOf(jar));
 	}
 
 	@Test
 	void missingMetadataGivesNull(@TempDir Path dir) throws IOException {
 		Path notJar = Files.writeString(dir.resolve("broken.jar"), "nope");
-		assertNull(RealController.modIdOf(notJar));
+		assertNull(ModJars.modIdOf(notJar));
 	}
 }

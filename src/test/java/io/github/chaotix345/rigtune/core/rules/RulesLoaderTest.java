@@ -52,6 +52,15 @@ class RulesLoaderTest {
 	}
 
 	@Test
+	void ignoresAnOversizedCache(@TempDir Path dir) throws IOException {
+		Path cache = dir.resolve("rules-cache.json");
+		Files.writeString(cache, "{\"schemaVersion\":1,\"revision\":9}" + " ".repeat((int) RulesLoader.MAX_RULES_BYTES));
+		assertFalse(RulesLoader.loadCache(cache).isPresent());
+		Files.writeString(cache, "{\"schemaVersion\":1,\"revision\":9}");
+		assertEquals(9, RulesLoader.loadCache(cache).orElseThrow().revision);
+	}
+
+	@Test
 	void pickNewestTakesHighestRevisionAndRecordsSource() {
 		RulesDocument bundled = doc(1);
 		RulesDocument cache = doc(3);

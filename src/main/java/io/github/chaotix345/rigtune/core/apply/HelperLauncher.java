@@ -8,9 +8,12 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.CodeSource;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public final class HelperLauncher {
 	private HelperLauncher() {
@@ -22,8 +25,14 @@ public final class HelperLauncher {
 	}
 
 	public static Process launch(Path configDir, Path pendingJson) throws IOException {
-		List<Path> classpath = List.of(codeSourceOf(ApplyHelper.class), codeSourceOf(Gson.class));
-		List<String> command = buildCommand(currentJava(), classpath, ProcessHandle.current().pid(), pendingJson);
+		return launch(configDir, pendingJson, List.of(codeSourceOf(ApplyHelper.class), codeSourceOf(Gson.class)), ProcessHandle.current().pid());
+	}
+
+	// The helper runs from copies in config/rigtune/helper/, never from mods/: a JVM keeps its classpath jars open,
+	// and on Windows an open jar can't be renamed, so running from mods/ would block RigTune's own update.
+	static Process launch(Path configDir, Path pendingJson, List<Path> sources, long gamePid) throws IOException {
+		List<Path> classpath = helperClasspath(helperDir(configDir), sources);
+		List<String> command = buildCommand(currentJava(), classpath, gamePid, pendingJson);
 		Path log = helperLog(configDir);
 		Files.createDirectories(log.getParent());
 		return new ProcessBuilder(command)
@@ -34,6 +43,68 @@ public final class HelperLauncher {
 
 	public static Path helperLog(Path configDir) {
 		return configDir.resolve("rigtune").resolve("helper.log");
+	}
+
+	public static Path helperDir(Path configDir) {
+		return configDir.resolve("rigtune").resolve("helper");
+	}
+
+	// True when RigTune runs from a jar, which launch() copies, so the helper can rename RigTune's own jar.
+	public static boolean selfUpdateSupported() {
+		try {
+			return Files.isRegularFile(codeSourceOf(ApplyHelper.class));
+		} catch (RuntimeException e) {
+			return false;
+		}
+	}
+
+	// Copies each jar into helperDir (reusing an identical copy) and keeps directories as they are: class
+	// directories only occur in development, where nothing runs from mods/. Other files in helperDir are removed.
+	static List<Path> helperClasspath(Path helperDir, List<Path> sources) throws IOException {
+		Files.createDirectories(helperDir);
+		List<Path> distinct = sources.stream().distinct().toList();
+		List<Path> out = new ArrayList<>();
+		for (int i = 0; i < distinct.size(); i++) {
+			Path source = distinct.get(i);
+			if (!Files.isRegularFile(source)) {
+				out.add(source);
+				continue;
+			}
+			Path target = helperDir.resolve(i + "-" + source.getFileName());
+			if (!Files.isRegularFile(target) || Files.mismatch(source, target) != -1) {
+				target = copy(source, target, helperDir, i);
+			}
+			out.add(target);
+		}
+		try (Stream<Path> files = Files.list(helperDir)) {
+			for (Path file : files.toList()) {
+				if (!out.contains(file)) {
+					try {
+						Files.deleteIfExists(file);
+					} catch (IOException ignored) {
+					}
+				}
+			}
+		}
+		return List.copyOf(out);
+	}
+
+	private static Path copy(Path source, Path target, Path helperDir, int index) throws IOException {
+		Path tmp = Files.createTempFile(helperDir, "copy-", ".tmp");
+		try {
+			Files.copy(source, tmp, StandardCopyOption.REPLACE_EXISTING);
+			try {
+				Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+				return target;
+			} catch (IOException e) {
+				// An older helper may still be running from `target`.
+				Path fresh = helperDir.resolve(index + "-" + System.nanoTime() + "-" + source.getFileName());
+				Files.move(tmp, fresh);
+				return fresh;
+			}
+		} finally {
+			Files.deleteIfExists(tmp);
+		}
 	}
 
 	public static Path currentJava() {

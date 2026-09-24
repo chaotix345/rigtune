@@ -9,6 +9,7 @@ import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
+import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.model.Action;
@@ -34,6 +35,7 @@ import net.minecraft.network.chat.contents.TranslatableContents;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -173,7 +175,16 @@ public class RigTuneClientGameTest implements FabricClientGameTest {
 		} catch (IOException e) {
 			throw new AssertionError(e);
 		}
-		new RigTunePreLaunch().onPreLaunch();
+		// A helper still holding the apply lock: preLaunch waits for it, then warns instead of racing it.
+		try (ApplyLock helper = ApplyLock.acquire(ApplyLock.defaultPath(configDir), Duration.ZERO)) {
+			check(helper != null, "took the apply lock");
+			long start = System.nanoTime();
+			new RigTunePreLaunch().onPreLaunch();
+			long waited = Duration.ofNanos(System.nanoTime() - start).toMillis();
+			check(waited >= 4500, "preLaunch waited for the running helper: " + waited + " ms");
+		} catch (IOException e) {
+			throw new AssertionError(e);
+		}
 		context.runOnClient(RigTuneClient::showNotices);
 		context.waitTicks(15);
 		context.takeScreenshot("notices");

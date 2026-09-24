@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 import static io.github.chaotix345.rigtune.core.modrinth.FakeModrinthClient.version;
@@ -34,6 +35,7 @@ class OnlineDataFetcherTest {
 		client.projects.add(new ModrinthProject("P1", "ferrite-core", "FerriteCore", "approved", List.of("26.1", "26.2"), List.of("fabric"), "optional"));
 		client.projects.add(new ModrinthProject("P2", "old-mod", "Old", "approved", List.of("1.20.1"), List.of("fabric"), "optional"));
 		client.projects.add(new ModrinthProject("P3", "forge-only", "Forge", "approved", List.of("26.2"), List.of("neoforge"), "optional"));
+		client.latestByProject.put("P1", version("fc1", "P1", "7.0", NEW));
 
 		OnlineDataFetcher.Result result = new OnlineDataFetcher(client).fetchAll(
 				List.of(mod("sodium", "aaa"), mod("lithium", "bbb"), mod("builtin", null)),
@@ -58,7 +60,92 @@ class OnlineDataFetcherTest {
 
 		assertEquals("AANobbMI", result.projectIdsByModId().get("sodium"));
 		assertEquals("gvQqBUqZ", result.projectIdsByModId().get("lithium"));
-		assertEquals(List.of("versionsByHashes", "latestVersionsByHashes", "projects"), client.calls);
+		assertEquals(List.of("versionsByHashes", "latestVersionsByHashes", "projects", "latestVersion:P1"), client.calls);
+	}
+
+	private static ModrinthProject project(String id, String slug, List<String> gameVersions, List<String> loaders) {
+		return new ModrinthProject(id, slug, slug, "approved", gameVersions, loaders, "optional");
+	}
+
+	@Test
+	void projectLevelUnionsAloneNeverSayAvailable() {
+		FakeModrinthClient client = new FakeModrinthClient();
+		// Fabric only up to 26.1 and NeoForge for 26.2: the project lists both, but no Fabric 26.2 version exists.
+		client.projects.add(project("P1", "split", List.of("26.1", "26.2"), List.of("fabric", "neoforge")));
+		client.projects.add(project("P2", "real", List.of("26.2"), List.of("fabric")));
+		client.latestByProject.put("P2", version("r1", "P2", "1.0", NEW));
+
+		OnlineData data = new OnlineDataFetcher(client).fetch(List.of(), List.of("split", "real"), "26.2");
+
+		assertEquals(false, data.availableBySlug().get("split"));
+		assertEquals(true, data.availableBySlug().get("real"));
+		assertTrue(client.calls.containsAll(List.of("latestVersion:P1", "latestVersion:P2")));
+	}
+
+	@Test
+	void projectLevelMissNeedsNoVersionCheck() {
+		FakeModrinthClient client = new FakeModrinthClient();
+		client.projects.add(project("P1", "old", List.of("1.20.1"), List.of("fabric")));
+		client.projects.add(project("P2", "forge", List.of("26.2"), List.of("neoforge")));
+
+		OnlineData data = new OnlineDataFetcher(client).fetch(List.of(), List.of("old", "forge", "unknown"), "26.2");
+
+		assertEquals(false, data.availableBySlug().get("old"));
+		assertEquals(false, data.availableBySlug().get("forge"));
+		assertFalse(data.availableBySlug().containsKey("unknown"));
+		assertEquals(List.of("projects"), client.calls);
+	}
+
+	@Test
+	void versionChecksRunAtMostFourAtATime() {
+		FakeModrinthClient client = new FakeModrinthClient();
+		client.versionDelayMillis = 100;
+		List<String> slugs = new ArrayList<>();
+		for (int i = 0; i < 12; i++) {
+			slugs.add("mod" + i);
+			client.projects.add(project("P" + i, "mod" + i, List.of("26.2"), List.of("fabric")));
+			client.latestByProject.put("P" + i, version("v" + i, "P" + i, "1", NEW));
+		}
+
+		OnlineData data = new OnlineDataFetcher(client).fetch(List.of(), slugs, "26.2");
+
+		assertEquals(12, data.availableBySlug().size());
+		assertTrue(data.availableBySlug().values().stream().allMatch(Boolean::booleanValue));
+		assertTrue(client.maxInFlight.get() <= OnlineDataFetcher.VERSION_CHECK_PARALLELISM, "max in flight " + client.maxInFlight.get());
+		assertTrue(client.maxInFlight.get() > 1, "checks run in parallel");
+	}
+
+	@Test
+	void aFailedVersionCheckLeavesThatCandidateUnknown() {
+		FakeModrinthClient client = new FakeModrinthClient();
+		client.projects.add(project("P1", "a", List.of("26.2"), List.of("fabric")));
+		client.projects.add(project("P2", "b", List.of("26.2"), List.of("fabric")));
+		client.latestByProject.put("P1", version("a1", "P1", "1", NEW));
+		client.versionFailures.put("P2", new IOException("connection reset"));
+
+		OnlineData data = new OnlineDataFetcher(client).fetch(List.of(), List.of("a", "b"), "26.2");
+
+		assertTrue(data.online());
+		assertEquals(true, data.availableBySlug().get("a"));
+		assertFalse(data.availableBySlug().containsKey("b"));
+	}
+
+	@Test
+	void rateLimitStopsTheRemainingVersionChecks() {
+		FakeModrinthClient client = new FakeModrinthClient();
+		List<String> slugs = new ArrayList<>();
+		for (int i = 0; i < 20; i++) {
+			slugs.add("mod" + i);
+			client.projects.add(project("P" + i, "mod" + i, List.of("26.2"), List.of("fabric")));
+			client.versionFailures.put("P" + i, new ModrinthException(429, "slow down"));
+		}
+
+		OnlineData data = new OnlineDataFetcher(client).fetch(List.of(), slugs, "26.2");
+
+		assertTrue(data.online());
+		assertTrue(data.availableBySlug().isEmpty());
+		long versionCalls = client.calls.stream().filter(c -> c.startsWith("latestVersion:")).count();
+		assertTrue(versionCalls <= OnlineDataFetcher.VERSION_CHECK_PARALLELISM, versionCalls + " calls");
 	}
 
 	@Test

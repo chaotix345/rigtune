@@ -21,6 +21,7 @@ public final class RulesLoader {
 	public static final String SOURCE_BUNDLED = "bundled";
 	public static final String SOURCE_CACHE = "cache";
 	public static final String SOURCE_REMOTE = "remote";
+	public static final long MAX_RULES_BYTES = 2L << 20;
 
 	private static final Gson GSON = new Gson();
 
@@ -36,6 +37,8 @@ public final class RulesLoader {
 			doc = GSON.fromJson(json, RulesDocument.class);
 		} catch (JsonParseException | IllegalStateException e) {
 			throw new IllegalArgumentException("Rules file is not valid JSON: " + e.getMessage(), e);
+		} catch (OutOfMemoryError e) {
+			throw new IllegalArgumentException("Rules file is too large to parse", e);
 		}
 		if (doc == null) {
 			throw new IllegalArgumentException("Rules file is empty");
@@ -67,6 +70,9 @@ public final class RulesLoader {
 			return Optional.empty();
 		}
 		try {
+			if (Files.size(file) > MAX_RULES_BYTES) {
+				throw new IllegalArgumentException("larger than " + MAX_RULES_BYTES + " bytes");
+			}
 			RulesDocument doc = parse(Files.readString(file, StandardCharsets.UTF_8));
 			doc.setSource(SOURCE_CACHE);
 			return Optional.of(doc);
@@ -111,7 +117,7 @@ public final class RulesLoader {
 		if (rule.compiled() != null) {
 			return false;
 		}
-		RigTune.LOGGER.warn("Skipping {} rule with invalid regex: {}", section, rule.pattern);
+		RigTune.LOGGER.warn("Skipping {} rule with an invalid or overlong regex: {}", section, rule.pattern);
 		return true;
 	}
 }

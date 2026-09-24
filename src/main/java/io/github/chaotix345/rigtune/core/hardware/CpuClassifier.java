@@ -5,7 +5,6 @@ import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument.CpuTierRule;
 
 import java.util.List;
-import java.util.regex.Pattern;
 
 public final class CpuClassifier {
 	public static final int UNKNOWN_CORES_TIER = 3;
@@ -26,8 +25,7 @@ public final class CpuClassifier {
 		}
 		if (cpu.name() != null) {
 			for (CpuTierRule rule : rules) {
-				Pattern pattern = rule.compiled();
-				if (pattern != null && pattern.matcher(cpu.name()).find()) {
+				if (rule.find(cpu.name())) {
 					return clamp(rule.tier);
 				}
 			}

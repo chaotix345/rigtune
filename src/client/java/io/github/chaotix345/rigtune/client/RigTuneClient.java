@@ -173,6 +173,11 @@ public final class RigTuneClient implements ClientModInitializer {
 			state.lastShownApply = result.finishedAt();
 			state.save(configDir);
 		}
+		if (RigTunePreLaunch.takeHelperBusy()) {
+			SystemToast.add(minecraft.gui.toastManager(), new SystemToast.SystemToastId(12000L),
+					Component.translatable("rigtune.toast.busy.title"),
+					Component.translatable("rigtune.toast.busy.body"));
+		}
 		int leftover = RigTunePreLaunch.takeLeftoverOps();
 		if (leftover > 0) {
 			SystemToast.add(minecraft.gui.toastManager(), new SystemToast.SystemToastId(10000L),

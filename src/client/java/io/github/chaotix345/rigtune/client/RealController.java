@@ -1,7 +1,5 @@
 package io.github.chaotix345.rigtune.client;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
@@ -9,8 +7,12 @@ import io.github.chaotix345.rigtune.client.probe.ModScanner;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
+import io.github.chaotix345.rigtune.core.apply.ApplyLock;
+import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
+import io.github.chaotix345.rigtune.core.apply.ModJars;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
+import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
@@ -34,12 +36,11 @@ import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -47,12 +48,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 public final class RealController implements RigTuneController {
 	private static final String VANILLA = SettingsBridge.VANILLA_PREFIX;
 	private static final String SODIUM = SettingsBridge.SODIUM_PREFIX;
+	private static final Duration STAGE_LOCK_WAIT = Duration.ofSeconds(2);
 
 	private Minecraft minecraft;
 	private final Path configDir;
@@ -64,6 +64,7 @@ public final class RealController implements RigTuneController {
 	private final ClientState state;
 	private final Set<String> staged = new HashSet<>();
 	private final int carriedOverOps;
+	private final boolean selfFileActions = HelperLauncher.selfUpdateSupported();
 
 	private volatile @Nullable RulesDocument rules;
 	private volatile @Nullable HardwareProfile hardware;
@@ -73,7 +74,7 @@ public final class RealController implements RigTuneController {
 	private volatile @Nullable Component status;
 	private volatile Goal goal;
 	private int generation;
-	private boolean downloading;
+	private volatile boolean downloading;
 
 	public RealController() {
 		FabricLoader loader = FabricLoader.getInstance();
@@ -198,12 +199,24 @@ public final class RealController implements RigTuneController {
 	}
 
 	private Report withoutStaged(Report built) {
-		if (staged.isEmpty()) {
+		List<Recommendation> kept = built.recommendations().stream()
+				.filter(r -> !staged.contains(r.id()))
+				.filter(r -> selfFileActions || !touchesRigTune(r))
+				.toList();
+		if (kept.size() == built.recommendations().size()) {
 			return built;
 		}
-		List<Recommendation> kept = built.recommendations().stream().filter(r -> !staged.contains(r.id())).toList();
 		return new Report(built.hardware(), built.gpuClass(), built.tier(), built.goal(), kept, built.rulesRevision(),
 				built.rulesSource(), built.online(), built.createdAt());
+	}
+
+	// Renaming RigTune's own jar is only safe when the helper runs from copies (see HelperLauncher.launch).
+	private static boolean touchesRigTune(Recommendation r) {
+		return switch (r.action()) {
+			case Action.UpdateMod update -> RigTune.MOD_ID.equals(update.modId());
+			case Action.DisableMod disable -> RigTune.MOD_ID.equals(disable.modId());
+			default -> false;
+		};
 	}
 
 	@Override
@@ -224,7 +237,7 @@ public final class RealController implements RigTuneController {
 					sodium.put(set.key().substring(SODIUM.length()), set.newValue());
 					sodiumIds.add(r.id());
 				}
-				case Action.DisableMod disable when disable.file() != null -> {
+				case Action.DisableMod disable when SafeFileNames.isDirectChild(modsDir, disable.file()) -> {
 					immediateOps.add(Op.disableFile(disable.file()));
 					immediateIds.add(r.id());
 				}
@@ -291,31 +304,50 @@ public final class RealController implements RigTuneController {
 
 	private void startDownloads(List<Recommendation> downloads) {
 		downloading = true;
-		Set<String> installedProjects = new HashSet<>(online.projectIdsByModId().values());
-		HardwareProfile hw = hardware;
-		String mcVersion = hw == null ? "26.2" : hw.mcVersion();
-		CompletableFuture.supplyAsync(() -> download(downloads, installedProjects, mcVersion), Probes.EXECUTOR)
-				.whenComplete((result, error) -> minecraft.execute(() -> {
-					downloading = false;
-					if (error != null) {
-						RigTune.LOGGER.error("RigTune downloads failed", error);
-						status = Component.translatable("rigtune.status.download_failed", error.getMessage());
-						return;
-					}
-					boolean ok = result.ops().isEmpty() || stage(result.ops(), result.ids());
-					List<Component> parts = new ArrayList<>();
-					if (!result.errors().isEmpty()) {
-						parts.add(Component.translatable("rigtune.status.download_failed", String.join("; ", result.errors())));
-					}
-					if (!ok) {
-						parts.add(Component.translatable("rigtune.status.some_failed", result.ids().size()));
-					}
-					if (pendingChanges() > 0) {
-						parts.add(Component.translatable("rigtune.status.restart", pendingChanges()));
-					}
-					status = join(parts);
-					rebuild();
-				}));
+		try {
+			Set<String> installedProjects = new HashSet<>(online.projectIdsByModId().values());
+			HardwareProfile hw = hardware;
+			String mcVersion = hw == null ? "26.2" : hw.mcVersion();
+			CompletableFuture.supplyAsync(() -> download(downloads, installedProjects, mcVersion), Probes.EXECUTOR)
+					.whenComplete((result, error) -> {
+						try {
+							minecraft.execute(() -> {
+								try {
+									finishDownloads(result, error);
+								} finally {
+									downloading = false;
+								}
+							});
+						} catch (RuntimeException e) {
+							downloading = false;
+							RigTune.LOGGER.error("Could not hand the RigTune downloads back to the game", e);
+						}
+					});
+		} catch (RuntimeException e) {
+			downloading = false;
+			throw e;
+		}
+	}
+
+	private void finishDownloads(@Nullable DownloadResult result, @Nullable Throwable error) {
+		if (error != null || result == null) {
+			RigTune.LOGGER.error("RigTune downloads failed", error);
+			status = Component.translatable("rigtune.status.download_failed", error == null ? "?" : error.getMessage());
+			return;
+		}
+		boolean ok = result.ops().isEmpty() || stage(result.ops(), result.ids());
+		List<Component> parts = new ArrayList<>();
+		if (!result.errors().isEmpty()) {
+			parts.add(Component.translatable("rigtune.status.download_failed", String.join("; ", result.errors())));
+		}
+		if (!ok) {
+			parts.add(Component.translatable("rigtune.status.some_failed", result.ids().size()));
+		}
+		if (pendingChanges() > 0) {
+			parts.add(Component.translatable("rigtune.status.restart", pendingChanges()));
+		}
+		status = join(parts);
+		rebuild();
 	}
 
 	private record DownloadResult(List<Op> ops, List<String> ids, List<String> errors) {
@@ -328,6 +360,7 @@ public final class RealController implements RigTuneController {
 		if (scanned != null) {
 			scanned.forEach(m -> loadedIds.add(m.modId()));
 		}
+		Map<String, String> stagedJars = stagedJarsByModId();
 		List<Op> ops = new ArrayList<>();
 		List<String> ids = new ArrayList<>();
 		List<String> errors = new ArrayList<>();
@@ -342,20 +375,23 @@ public final class RealController implements RigTuneController {
 							if (file == null) {
 								throw new IOException("No file for " + version.versionNumber());
 							}
-							Path target = modsDir.resolve(file.filename());
+							Path target = SafeFileNames.resolveJar(modsDir, file.filename());
 							installedProjects.add(version.projectId());
 							if (Files.exists(target)) {
 								continue;
 							}
 							Path pending = fetch(file);
 							// A second jar with an already-loaded mod id would stop Fabric from starting, so drop it.
-							String jarModId = modIdOf(pending);
+							String jarModId = ModJars.modIdOf(pending);
 							if (jarModId != null && !loadedIds.add(jarModId)) {
 								RigTune.LOGGER.info("Skipping {}: mod {} is already present", file.filename(), jarModId);
-								Files.deleteIfExists(pending);
+								if (!stagedJars.containsValue(pending.toString())) {
+									Files.deleteIfExists(pending);
+								}
 								continue;
 							}
-							recOps.add(Op.enableFile(pending, target));
+							noteReplaced(stagedJars, jarModId, pending);
+							recOps.add(Op.enableFile(pending, target).withModId(jarModId));
 						}
 					}
 					case Action.UpdateMod update -> {
@@ -363,14 +399,21 @@ public final class RealController implements RigTuneController {
 						if (file == null) {
 							throw new IOException("No file for " + update.update().newVersionNumber());
 						}
+						if (!SafeFileNames.isDirectChild(modsDir, update.currentFile())) {
+							throw new IOException("it isn't in this instance's mods folder; update it in your launcher");
+						}
+						Path target = SafeFileNames.resolveJar(modsDir, file.filename());
 						Path pending = fetch(file);
+						String jarModId = Objects.requireNonNullElse(ModJars.modIdOf(pending), update.modId());
+						noteReplaced(stagedJars, jarModId, pending);
 						recOps.add(Op.disableFile(update.currentFile()));
-						recOps.add(Op.enableFile(pending, modsDir.resolve(file.filename())));
+						recOps.add(Op.enableFile(pending, target).withModId(jarModId));
 					}
 					default -> {
 					}
 				}
-				ops.addAll(recOps);
+				// A recommendation's ops (an update's disable + enable, or a mod + its dependencies) apply all-or-nothing.
+				ops.addAll(PendingActions.group(recOps));
 				ids.add(rec.id());
 			} catch (IOException | RuntimeException e) {
 				RigTune.LOGGER.warn("Could not prepare {}", rec.id(), e);
@@ -380,30 +423,43 @@ public final class RealController implements RigTuneController {
 		return new DownloadResult(ops, ids, errors);
 	}
 
-	static @Nullable String modIdOf(Path jar) {
-		try (ZipFile zip = new ZipFile(jar.toFile())) {
-			ZipEntry entry = zip.getEntry("fabric.mod.json");
-			if (entry == null) {
-				return null;
+	// Mod ids that already have a staged ENABLE_FILE, with that op's pending jar. A newer download for the same id
+	// replaces the staged one when it is merged (see PendingActions.merge).
+	private Map<String, String> stagedJarsByModId() {
+		Map<String, String> out = new HashMap<>();
+		if (Files.exists(pendingFile)) {
+			try {
+				for (Op op : PendingActions.load(pendingFile).ops()) {
+					if (op.type() == PendingActions.Type.ENABLE_FILE && op.modId() != null && op.from() != null) {
+						out.put(op.modId(), op.from());
+					}
+				}
+			} catch (IOException e) {
+				RigTune.LOGGER.warn("Could not read {}", pendingFile, e);
 			}
-			try (Reader reader = new InputStreamReader(zip.getInputStream(entry), StandardCharsets.UTF_8)) {
-				JsonElement root = JsonParser.parseReader(reader);
-				return root.isJsonObject() && root.getAsJsonObject().has("id") ? root.getAsJsonObject().get("id").getAsString() : null;
-			}
-		} catch (IOException | RuntimeException e) {
-			RigTune.LOGGER.warn("Could not read the mod id of {}", jar, e);
-			return null;
+		}
+		return out;
+	}
+
+	private static void noteReplaced(Map<String, String> stagedJars, @Nullable String modId, Path pending) {
+		String old = modId == null ? null : stagedJars.get(modId);
+		if (old != null && !old.equals(pending.toString())) {
+			RigTune.LOGGER.info("{} replaces the staged {} for mod {}", pending.getFileName(), Path.of(old).getFileName(), modId);
 		}
 	}
 
 	private Path fetch(ModFile file) throws IOException {
-		Path pending = modsDir.resolve(file.filename() + PendingActions.PENDING_SUFFIX);
+		Path pending = SafeFileNames.resolveJar(modsDir, file.filename(), PendingActions.PENDING_SUFFIX);
 		modrinth.download(file, pending);
 		return pending;
 	}
 
 	private boolean stage(List<Op> ops, List<String> ids) {
-		try {
+		try (ApplyLock lock = ApplyLock.acquire(ApplyLock.defaultPath(configDir), STAGE_LOCK_WAIT)) {
+			if (lock == null) {
+				RigTune.LOGGER.error("Could not stage RigTune changes: the apply helper still holds {}", ApplyLock.defaultPath(configDir));
+				return false;
+			}
 			PendingActions plan = null;
 			if (Files.exists(pendingFile)) {
 				try {
@@ -412,16 +468,22 @@ public final class RealController implements RigTuneController {
 					RigTune.LOGGER.warn("Replacing unreadable {}", pendingFile, e);
 				}
 			}
-			List<Op> merged = new ArrayList<>(plan == null ? List.of() : plan.ops());
-			for (Op op : ops) {
-				if (!merged.contains(op)) {
-					merged.add(op);
+			PendingActions base = plan != null ? plan : PendingActions.create(ProcessHandle.current().pid(), modsDir, configDir, List.of());
+			PendingActions.Merged merged = base.merge(ops);
+			merged.plan().save(pendingFile);
+			for (Path old : merged.superseded()) {
+				if (!SafeFileNames.isDirectChild(modsDir, old)) {
+					continue;
+				}
+				try {
+					Path retired = PendingActions.retire(old);
+					if (retired != null) {
+						RigTune.LOGGER.info("Replaced staged {}; kept it as {}", old.getFileName(), retired.getFileName());
+					}
+				} catch (IOException e) {
+					RigTune.LOGGER.warn("Could not retire replaced {}; it stays inert", old, e);
 				}
 			}
-			PendingActions out = plan == null
-					? PendingActions.create(ProcessHandle.current().pid(), modsDir, configDir, merged)
-					: plan.withOps(merged);
-			out.save(pendingFile);
 			staged.addAll(ids);
 			return true;
 		} catch (IOException | RuntimeException e) {

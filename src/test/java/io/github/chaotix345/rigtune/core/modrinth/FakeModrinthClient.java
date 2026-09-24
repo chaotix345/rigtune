@@ -8,18 +8,24 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 class FakeModrinthClient implements ModrinthClient {
 	final Map<String, ModrinthVersion> current = new HashMap<>();
 	final Map<String, ModrinthVersion> latest = new HashMap<>();
 	final List<ModrinthProject> projects = new ArrayList<>();
 	final Map<String, ModrinthVersion> latestByProject = new HashMap<>();
-	final List<String> calls = new ArrayList<>();
+	final List<String> calls = Collections.synchronizedList(new ArrayList<>());
+	final Map<String, IOException> versionFailures = new HashMap<>();
+	final AtomicInteger inFlight = new AtomicInteger();
+	final AtomicInteger maxInFlight = new AtomicInteger();
+	long versionDelayMillis;
 	IOException failWith;
 
 	static ModrinthVersion version(String id, String projectId, String number, Instant published, Dependency... deps) {
@@ -64,7 +70,22 @@ class FakeModrinthClient implements ModrinthClient {
 	@Override
 	public Optional<ModrinthVersion> latestVersion(String idOrSlug, String loader, String gameVersion) throws IOException {
 		call("latestVersion:" + idOrSlug);
-		return Optional.ofNullable(latestByProject.get(idOrSlug));
+		maxInFlight.accumulateAndGet(inFlight.incrementAndGet(), Math::max);
+		try {
+			if (versionDelayMillis > 0) {
+				Thread.sleep(versionDelayMillis);
+			}
+			IOException failure = versionFailures.get(idOrSlug);
+			if (failure != null) {
+				throw failure;
+			}
+			return Optional.ofNullable(latestByProject.get(idOrSlug));
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			throw new IOException(e);
+		} finally {
+			inFlight.decrementAndGet();
+		}
 	}
 
 	@Override

@@ -43,6 +43,7 @@ import java.util.stream.Collectors;
 public final class Recommender {
 	public static final String AVAILABILITY_UNKNOWN_NOTE = "(availability not confirmed)";
 	public static final String ALPHA_NOTE = "(alpha build)";
+	static final String OUTSIDE_MODS_FOLDER = "It isn't in this instance's mods folder, so";
 
 	private static final Comparator<Recommendation> ORDER = Comparator
 			.comparing(Recommendation::category)
@@ -216,13 +217,18 @@ public final class Recommender {
 				String modId = entry.getKey();
 				UpdateInfo update = entry.getValue();
 				InstalledMod mod = installed.stream().filter(m -> m.modId().equals(modId)).findFirst().orElse(null);
-				if (mod == null || update == null || mod.file() == null || recs.containsKey("disable:" + modId)) {
+				if (mod == null || update == null || (mod.file() == null && mod.sha1() == null) || recs.containsKey("disable:" + modId)) {
 					continue;
 				}
 				String current = update.currentVersion() != null ? update.currentVersion() : mod.version();
+				String reason = "Version " + update.newVersionNumber() + " is available (you have " + current + ").";
+				if (mod.file() == null) {
+					put(new Recommendation("update:" + modId, Category.UPDATE_MOD, Impact.LOW, "Update " + name(mod),
+							reason + " " + OUTSIDE_MODS_FOLDER + " update it in your launcher.", new Action.None(), false));
+					continue;
+				}
 				put(new Recommendation("update:" + modId, Category.UPDATE_MOD, Impact.LOW, "Update " + name(mod),
-						"Version " + update.newVersionNumber() + " is available (you have " + current + ").",
-						new Action.UpdateMod(modId, mod.file(), update), true));
+						reason, new Action.UpdateMod(modId, mod.file(), update), true));
 			}
 		}
 
@@ -312,8 +318,10 @@ public final class Recommender {
 				return;
 			}
 			if (mod.file() == null) {
-				put(new Recommendation(id, Category.REMOVE_MOD, impact, title,
-						reason + " It is bundled inside another mod, so it has to be removed together with that mod.", new Action.None(), false));
+				String how = mod.sha1() != null
+						? " " + OUTSIDE_MODS_FOLDER + " remove it in your launcher."
+						: " It is bundled inside another mod, so it has to be removed together with that mod.";
+				put(new Recommendation(id, Category.REMOVE_MOD, impact, title, reason + how, new Action.None(), false));
 				return;
 			}
 			put(new Recommendation(id, Category.REMOVE_MOD, impact, title, reason, new Action.DisableMod(mod.modId(), mod.file()), true));

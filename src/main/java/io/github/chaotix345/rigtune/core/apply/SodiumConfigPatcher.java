@@ -45,16 +45,55 @@ public final class SodiumConfigPatcher {
 			}
 		}
 		String leaf = parts[parts.length - 1];
-		node.add(leaf, convert(node.get(leaf), value));
+		node.add(leaf, convert(dottedPath, node.get(leaf), value));
 	}
 
-	private static JsonPrimitive convert(JsonElement existing, String value) {
-		if (existing != null && existing.isJsonPrimitive() && existing.getAsJsonPrimitive().isString()) {
-			return new JsonPrimitive(value);
+	// An existing field keeps its JSON type: Sodium rejects the whole file (and falls back to defaults) when a
+	// field has the wrong type. A value that doesn't fit fails the patch. New fields get an inferred type.
+	private static JsonPrimitive convert(String dottedPath, JsonElement existing, String value) {
+		if (value == null) {
+			throw new IllegalArgumentException("Cannot set " + dottedPath + ": no value");
 		}
-		if (value.equals("true") || value.equals("false")) {
-			return new JsonPrimitive(Boolean.parseBoolean(value));
+		if (existing == null || existing.isJsonNull()) {
+			Boolean bool = parseBoolean(value);
+			if (bool != null) {
+				return new JsonPrimitive(bool);
+			}
+			JsonPrimitive number = parseNumber(value);
+			return number != null ? number : new JsonPrimitive(value);
 		}
+		if (!existing.isJsonPrimitive()) {
+			throw new IllegalArgumentException("Cannot set " + dottedPath + ": it holds " + (existing.isJsonObject() ? "an object" : "a list"));
+		}
+		JsonPrimitive current = existing.getAsJsonPrimitive();
+		if (current.isBoolean()) {
+			Boolean bool = parseBoolean(value);
+			if (bool == null) {
+				throw new IllegalArgumentException("Cannot set " + dottedPath + " to \"" + value + "\": it expects true or false");
+			}
+			return new JsonPrimitive(bool);
+		}
+		if (current.isNumber()) {
+			JsonPrimitive number = parseNumber(value);
+			if (number == null) {
+				throw new IllegalArgumentException("Cannot set " + dottedPath + " to \"" + value + "\": it expects a number");
+			}
+			if (integral(current) && !integral(number)) {
+				throw new IllegalArgumentException("Cannot set " + dottedPath + " to \"" + value + "\": it expects a whole number");
+			}
+			return number;
+		}
+		return new JsonPrimitive(value);
+	}
+
+	private static Boolean parseBoolean(String value) {
+		if (value.equalsIgnoreCase("true")) {
+			return true;
+		}
+		return value.equalsIgnoreCase("false") ? false : null;
+	}
+
+	private static JsonPrimitive parseNumber(String value) {
 		if (INTEGER.matcher(value).matches()) {
 			try {
 				return new JsonPrimitive(Long.parseLong(value));
@@ -62,10 +101,12 @@ public final class SodiumConfigPatcher {
 				return new JsonPrimitive(new BigDecimal(value));
 			}
 		}
-		if (DECIMAL.matcher(value).matches()) {
-			return new JsonPrimitive(new BigDecimal(value));
-		}
-		return new JsonPrimitive(value);
+		return DECIMAL.matcher(value).matches() ? new JsonPrimitive(new BigDecimal(value)) : null;
+	}
+
+	private static boolean integral(JsonPrimitive number) {
+		String text = number.getAsString();
+		return text.indexOf('.') < 0 && text.indexOf('e') < 0 && text.indexOf('E') < 0;
 	}
 
 	// A missing file is created from an empty object; Sodium fills in defaults for absent fields.

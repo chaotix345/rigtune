@@ -244,6 +244,30 @@ class RecommenderTest {
 	}
 
 	@Test
+	void jarsOutsideTheModsFolderGetAdviceOnly() {
+		UpdateInfo update = new UpdateInfo("lithium", "gvQqBUqZ", "0.25.2", "v2", "0.25.3", new ModFile("https://cdn", "lithium.jar", "abc", 10));
+		InstalledMod elsewhere = new InstalledMod("lithium", "Lithium", "0.25.2", null, "aaaa");
+		InstalledMod nested = new InstalledMod("nestedlib", "Nested", "1", null, null);
+		OnlineData online = new OnlineData(true, Map.of(), Map.of("lithium", update, "nestedlib", update));
+
+		Map<String, Recommendation> recs = byId(run(rules(""), Fixtures.userRig(), List.of(elsewhere, nested), Map.of(), online));
+
+		Recommendation rec = recs.get("update:lithium");
+		assertInstanceOf(Action.None.class, rec.action());
+		assertFalse(rec.selectedByDefault());
+		assertEquals(Category.UPDATE_MOD, rec.category());
+		assertTrue(rec.reason().contains("0.25.3") && rec.reason().contains("update it in your launcher"), rec.reason());
+		assertFalse(recs.containsKey("update:nestedlib"));
+
+		RulesDocument obsolete = rules("""
+				"obsolete":[{"modIds":["lithium","nestedlib"],"reason":"Old."}]""");
+		Map<String, Recommendation> disables = byId(run(obsolete, Fixtures.userRig(), List.of(elsewhere, nested), Map.of(), OnlineData.offline()));
+		assertInstanceOf(Action.None.class, disables.get("disable:lithium").action());
+		assertTrue(disables.get("disable:lithium").reason().contains("remove it in your launcher"));
+		assertTrue(disables.get("disable:nestedlib").reason().contains("bundled inside another mod"));
+	}
+
+	@Test
 	void obsoleteModsSkipUpdates() {
 		UpdateInfo update = new UpdateInfo("indium", "x", "1", "v", "2", new ModFile("u", "f", "h", 1));
 		RulesDocument rules = rules("""

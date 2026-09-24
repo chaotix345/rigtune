@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.core.apply;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
@@ -12,6 +13,7 @@ import java.util.concurrent.TimeoutException;
 public final class ApplyHelper {
 	static final long WAIT_TIMEOUT_MINUTES = 15;
 	static final long SETTLE_MILLIS = 1000;
+	static final Duration LOCK_WAIT = Duration.ofSeconds(60);
 
 	private ApplyHelper() {
 	}
@@ -34,6 +36,20 @@ public final class ApplyHelper {
 		}
 		Path pending = Path.of(args[1]);
 
+		// Held from before the game exits until the plan is rewritten, so the next launch and staging can't race us.
+		try (ApplyLock lock = ApplyLock.acquire(ApplyLock.besidePlan(pending), LOCK_WAIT)) {
+			if (lock == null) {
+				log("Another RigTune apply still holds " + ApplyLock.besidePlan(pending) + "; leaving " + pending + " for the next exit");
+				return 3;
+			}
+			return runLocked(pid, pending);
+		} catch (IOException e) {
+			log("Could not take the apply lock: " + e);
+			return 3;
+		}
+	}
+
+	private static int runLocked(long pid, Path pending) {
 		Optional<ProcessHandle> game = ProcessHandle.of(pid);
 		if (game.isPresent()) {
 			log("Waiting for game process " + pid + " to exit");
