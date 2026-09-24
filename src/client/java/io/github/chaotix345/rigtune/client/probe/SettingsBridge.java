@@ -8,12 +8,14 @@ import com.mojang.serialization.DataResult;
 import com.mojang.serialization.JsonOps;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
+import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.OptionInstance;
 import net.minecraft.client.Options;
 import net.minecraft.util.LenientJsonParser;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -125,11 +127,16 @@ public final class SettingsBridge {
 	public static Map<String, Result> applyVanilla(Options options, Map<String, String> values, boolean save) {
 		Map<String, String> first = new LinkedHashMap<>();
 		Map<String, String> rest = new LinkedHashMap<>();
+		Map<String, Result> byBareKey = new LinkedHashMap<>();
 		values.forEach((k, v) -> {
 			String bare = bare(k);
+			String rejection = rejection(bare, v);
+			if (rejection != null) {
+				byBareKey.put(bare, new Result(bare, false, null, null, rejection));
+				return;
+			}
 			(bare.equals(PRESET_KEY) ? first : rest).put(bare, v);
 		});
-		Map<String, Result> byBareKey = new LinkedHashMap<>();
 		boolean changed = false;
 		for (Map<String, String> batch : List.of(first, rest)) {
 			if (!batch.isEmpty()) {
@@ -147,6 +154,16 @@ public final class SettingsBridge {
 					: new Result(original, r.ok(), r.oldValue(), r.newValue(), r.message()));
 		}
 		return out;
+	}
+
+	static @Nullable String rejection(String bareKey, String value) {
+		if (!SettingKeys.changeable(VANILLA_PREFIX + bareKey)) {
+			return "RigTune doesn't change " + bareKey;
+		}
+		if (!SettingKeys.safeValue(value)) {
+			return "Value contains control characters";
+		}
+		return null;
 	}
 
 	private static String bare(String key) {

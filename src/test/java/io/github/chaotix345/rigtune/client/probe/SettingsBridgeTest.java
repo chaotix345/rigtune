@@ -14,6 +14,8 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -26,6 +28,18 @@ class SettingsBridgeTest {
 	private static OptionInstance<CloudStatus> clouds() {
 		return new OptionInstance<>("options.renderClouds", OptionInstance.noTooltip(), (caption, value) -> caption,
 				new OptionInstance.Enum<>(List.of(CloudStatus.values()), CloudStatus.CODEC), CloudStatus.FANCY, OptionInstance.NO_ACTION);
+	}
+
+	@Test
+	void rejectsKeysOutsideTheAllowlistAndControlCharacters() {
+		assertNull(SettingsBridge.rejection("renderDistance", "8"));
+		assertNull(SettingsBridge.rejection("graphicsPreset", "fancy"));
+		assertNotNull(SettingsBridge.rejection("lang", "en_us"));
+		assertNotNull(SettingsBridge.rejection("key_key.attack", "key.keyboard.q"));
+		assertNotNull(SettingsBridge.rejection("resourcePacks", "[]"));
+		assertNotNull(SettingsBridge.rejection("renderDistance", "8\nkey_key.attack:key.keyboard.q"));
+		assertNotNull(SettingsBridge.rejection("renderDistance", "8\r"));
+		assertNotNull(SettingsBridge.rejection("renderDistance", "8\u0000"));
 	}
 
 	@Test

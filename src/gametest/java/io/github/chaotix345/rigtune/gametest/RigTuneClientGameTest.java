@@ -191,12 +191,17 @@ public class RigTuneClientGameTest implements FabricClientGameTest {
 		changes.put("vanilla.graphicsPreset", "fancy");
 		changes.put("vanilla.noSuchOption", "1");
 		changes.put("vanilla.maxFps", "not-a-number");
+		changes.put("vanilla.lang", "de_de");
+		changes.put("vanilla.simulationDistance.x", "1");
 		Map<String, SettingsBridge.Result> results = context.computeOnClient(mc -> SettingsBridge.applyVanilla(changes));
 		check(results.get("vanilla.renderDistance").ok(), "renderDistance applied: " + results);
 		check(results.get("vanilla.simulationDistance").ok(), "simulationDistance applied: " + results);
 		check(results.get("vanilla.graphicsPreset").ok(), "graphicsPreset applied: " + results);
 		check(!results.get("vanilla.noSuchOption").ok(), "unknown key reported: " + results);
 		check(!results.get("vanilla.maxFps").ok(), "bad value reported: " + results);
+		check(!results.get("vanilla.lang").ok(), "non-video key refused: " + results);
+		check(!results.get("vanilla.simulationDistance.x").ok(), "unlisted key refused: " + results);
+		check(context.computeOnClient(mc -> mc.options.languageCode).equals("en_us"), "language untouched");
 		check(context.computeOnClient(mc -> mc.options.renderDistance().get()) == newRd, "renderDistance changed");
 		check(context.computeOnClient(mc -> mc.options.simulationDistance().get()) == newSim, "simulationDistance changed");
 		check(context.computeOnClient(mc -> SettingsBridge.read(mc).get("vanilla.renderDistance")).equals(Integer.toString(newRd)), "snapshot reflects change");

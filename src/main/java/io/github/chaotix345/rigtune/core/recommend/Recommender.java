@@ -13,6 +13,7 @@ import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.model.TierResult;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
@@ -254,7 +255,7 @@ public final class Recommender {
 			for (Map.Entry<String, Resolved> entry : resolved.entrySet()) {
 				String key = entry.getKey();
 				Resolved target = entry.getValue();
-				if (!snapshot.has(key)) {
+				if (!snapshot.has(key) || !SettingKeys.changeable(key) || !SettingKeys.safeValue(target.value())) {
 					continue;
 				}
 				String current = snapshot.get(key);

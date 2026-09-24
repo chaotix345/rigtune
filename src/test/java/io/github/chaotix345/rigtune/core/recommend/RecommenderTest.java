@@ -11,6 +11,7 @@ import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
@@ -81,19 +82,19 @@ class RecommenderTest {
 		RulesDocument rules = rules("""
 				"settings":[
 				 {"key":"vanilla.maxFps","value":"$refreshRateCap","reason":"Cap."},
-				 {"key":"vanilla.other","value":"$refreshRate","reason":"Rate."}
+				 {"key":"sodium.other","value":"$refreshRate","reason":"Rate."}
 				]""");
-		Map<String, String> settings = Map.of("vanilla.maxFps", "260", "vanilla.other", "1");
+		Map<String, String> settings = Map.of("vanilla.maxFps", "260", "sodium.other", "1");
 		Fixtures.Hw hw = Fixtures.userRig();
 		hw.display = new DisplayInfo(1920, 1080, 144, true);
 		Map<String, Recommendation> recs = byId(run(rules, hw, List.of(), settings, OnlineData.offline()));
 		assertEquals("140", ((Action.SetSetting) recs.get("set:vanilla.maxFps").action()).newValue());
-		assertEquals("140", ((Action.SetSetting) recs.get("set:vanilla.other").action()).newValue());
+		assertEquals("140", ((Action.SetSetting) recs.get("set:sodium.other").action()).newValue());
 
 		hw.display = new DisplayInfo(1920, 1080, -1, true);
 		recs = byId(run(rules, hw, List.of(), settings, OnlineData.offline()));
 		assertEquals("60", ((Action.SetSetting) recs.get("set:vanilla.maxFps").action()).newValue());
-		assertEquals("60", ((Action.SetSetting) recs.get("set:vanilla.other").action()).newValue());
+		assertEquals("60", ((Action.SetSetting) recs.get("set:sodium.other").action()).newValue());
 
 		hw.display = new DisplayInfo(1920, 1080, 24, true);
 		recs = byId(run(rules, hw, List.of(), settings, OnlineData.offline()));
@@ -110,6 +111,33 @@ class RecommenderTest {
 		assertEquals(60, SettingValues.refreshRateCap(0));
 		assertEquals(30, SettingValues.refreshRateCap(24));
 		assertEquals(250, SettingValues.refreshRateCap(360));
+	}
+
+	@Test
+	void everyBundledSettingKeyIsAllowlisted() {
+		for (RulesDocument.SettingRule rule : RulesLoader.loadBundled().settings) {
+			assertTrue(SettingKeys.changeable(rule.key), rule.key);
+		}
+	}
+
+	@Test
+	void onlyAllowlistedKeysWithSafeValuesAreRecommended() {
+		RulesDocument rules = rules("""
+				"settings":[
+				 {"key":"vanilla.lang","value":"de_de","reason":"x"},
+				 {"key":"vanilla.renderDistance","value":"8\\nkey_key.attack:key.keyboard.q","reason":"x"},
+				 {"key":"vanilla.simulationDistance","value":6,"reason":"x"},
+				 {"key":"sodium.performance.use_fog_occlusion","value":false,"reason":"x"},
+				 {"key":"sodium.performance.chunk_build_defer_mode","value":"ALWAYS\\r","reason":"x"}
+				]""");
+		Map<String, String> settings = Map.of("vanilla.lang", "en_us", "vanilla.renderDistance", "12", "vanilla.simulationDistance", "12",
+				"sodium.performance.use_fog_occlusion", "true", "sodium.performance.chunk_build_defer_mode", "NEVER");
+		Map<String, Recommendation> recs = byId(run(rules, Fixtures.userRig(), List.of(), settings, OnlineData.offline()));
+		assertFalse(recs.containsKey("set:vanilla.lang"));
+		assertFalse(recs.containsKey("set:vanilla.renderDistance"));
+		assertFalse(recs.containsKey("set:sodium.performance.chunk_build_defer_mode"));
+		assertTrue(recs.containsKey("set:vanilla.simulationDistance"));
+		assertTrue(recs.containsKey("set:sodium.performance.use_fog_occlusion"));
 	}
 
 	@Test
