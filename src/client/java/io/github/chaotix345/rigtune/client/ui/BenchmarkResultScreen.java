@@ -47,13 +47,15 @@ public class BenchmarkResultScreen extends Screen {
 		tableWidth = Math.min(width - 32, 360);
 		left = (width - tableWidth) / 2;
 		tableTop = 70;
-		int best = outcome.result().suggestedRd();
+		PlannerResult result = outcome.result();
+		int best = result.suggestedRd();
 		int buttonWidth = Math.min(150, (tableWidth - 4) / 2);
 		int y = height - 28;
-		addRenderableWidget(Button.builder(Component.translatable("rigtune.benchmark.use", best), b -> {
+		Button use = addRenderableWidget(Button.builder(Component.translatable(result.targetMet() ? "rigtune.benchmark.use" : "rigtune.benchmark.use_best", best), b -> {
 			SettingsBridge.applyVanilla(Map.of("vanilla.renderDistance", Integer.toString(best)));
 			onClose();
 		}).bounds(width / 2 - buttonWidth - 2, y, buttonWidth, 20).build());
+		use.active = !result.measurements().isEmpty();
 		addRenderableWidget(Button.builder(Component.translatable("rigtune.benchmark.keep", outcome.originalRd()), b -> onClose())
 				.bounds(width / 2 + 2, y, buttonWidth, 20).build());
 	}

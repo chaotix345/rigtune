@@ -32,6 +32,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -124,6 +125,8 @@ public class RigTuneClientGameTest implements FabricClientGameTest {
 			check(context.computeOnClient(mc -> BenchmarkController.start(mc, new BenchmarkController.Config(2, 1.5, 1.0, 20.0))), "benchmark started for Esc");
 			context.waitTicks(5);
 			check(context.computeOnClient(FrameSettings::of).equals(FrameSettings.UNCAPPED), "uncapped while measuring");
+			check(savedOption("maxFps").equals(Integer.toString(framesBefore.limit())), "test frame limit not written to options.txt");
+			check(savedOption("renderDistance").equals(Integer.toString(rdBefore)), "test render distance not written to options.txt");
 			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
 			context.waitFor(mc -> !BenchmarkController.running(), 100);
 			BenchmarkController.Outcome escaped = context.computeOnClient(mc -> BenchmarkController.lastOutcome());
@@ -219,6 +222,18 @@ public class RigTuneClientGameTest implements FabricClientGameTest {
 			throw new AssertionError("pending.json missing", e);
 		}
 		context.runOnClient(mc -> mc.options.entityShadows().set(shadows));
+	}
+
+	private static String savedOption(String key) {
+		try {
+			return Files.readAllLines(FabricLoader.getInstance().getGameDir().resolve("options.txt")).stream()
+					.filter(line -> line.startsWith(key + ":"))
+					.map(line -> line.substring(key.length() + 1))
+					.findFirst()
+					.orElseThrow(() -> new AssertionError("options.txt has no " + key));
+		} catch (IOException e) {
+			throw new AssertionError(e);
+		}
 	}
 
 	private static void screenshotAt(ClientGameTestContext context, int width, int height, int guiScale, String name) {

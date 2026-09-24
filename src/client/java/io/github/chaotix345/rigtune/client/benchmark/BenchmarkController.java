@@ -121,7 +121,7 @@ public final class BenchmarkController {
 	}
 
 	private void begin(int firstRd) {
-		applySettings(UNCAPPED, "uncap");
+		applySettings(UNCAPPED, "uncap", false);
 		minecraft.gui.setScreen(null);
 		minecraft.mouseHandler.releaseMouse();
 		if (!hudWasHidden) {
@@ -129,7 +129,6 @@ public final class BenchmarkController {
 		}
 		if (player.getAbilities().mayfly && !player.getAbilities().flying) {
 			player.getAbilities().flying = true;
-			player.onUpdateAbilities();
 		}
 		lastYaw = yaw;
 		lastPitch = 0;
@@ -176,7 +175,7 @@ public final class BenchmarkController {
 	private void beginStep(int nextRd) {
 		rd = nextRd;
 		step++;
-		applySettings(Map.of(RENDER_DISTANCE, Integer.toString(rd)), "render distance");
+		applySettings(Map.of(RENDER_DISTANCE, Integer.toString(rd)), "render distance", false);
 		phase = Phase.SETTLE;
 		phaseStart = System.nanoTime();
 		readyTicks = 0;
@@ -208,7 +207,7 @@ public final class BenchmarkController {
 			}
 			case SWEEP_LEVEL, SWEEP_DOWN -> {
 				double progress = Math.min(1.0, elapsed / config.sweepSeconds());
-				float sweepPitch = phase == Phase.SWEEP_LEVEL ? 0f : -25f;
+				float sweepPitch = phase == Phase.SWEEP_LEVEL ? 0f : 25f;
 				hold(player, yaw + (float) (360.0 * progress), sweepPitch);
 				if (progress >= 1.0) {
 					if (phase == Phase.SWEEP_LEVEL) {
@@ -247,8 +246,8 @@ public final class BenchmarkController {
 		return minecraft.player == player && minecraft.level == level;
 	}
 
-	private void applySettings(Map<String, String> values, String what) {
-		SettingsBridge.applyVanilla(minecraft.options, values).values().stream()
+	private void applySettings(Map<String, String> values, String what, boolean save) {
+		SettingsBridge.applyVanilla(minecraft.options, values, save).values().stream()
 				.filter(r -> !r.ok())
 				.forEach(r -> RigTune.LOGGER.warn("Benchmark {}: could not set {} to {}: {}", what, r.key(), values.get(r.key()), r.message()));
 	}
@@ -258,7 +257,7 @@ public final class BenchmarkController {
 			return;
 		}
 		settingsRestored = true;
-		applySettings(originalSettings, "restore");
+		applySettings(originalSettings, "restore", true);
 	}
 
 	private void finish(boolean cancelled) {
@@ -276,10 +275,7 @@ public final class BenchmarkController {
 		if (sameWorld()) {
 			player.snapTo(position.x, position.y, position.z, yaw, pitch);
 			player.setDeltaMovement(Vec3.ZERO);
-			if (player.getAbilities().flying != wasFlying) {
-				player.getAbilities().flying = wasFlying;
-				player.onUpdateAbilities();
-			}
+			player.getAbilities().flying = wasFlying;
 		}
 		PlannerResult result = planner.result();
 		lastOutcome = new Outcome(result, originalRd, targetFps, cancelled);

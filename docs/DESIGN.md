@@ -97,8 +97,8 @@ A condition is a declarative object. All fields are optional and they are ANDed 
 
 ## Benchmark
 Requires the player to be in a world, ideally singleplayer.
-1. Save the current settings and hide the GUI. Lift the frame-rate limit to unlimited (260), turn vsync off and set the inactivity limit to `minimized` so the AFK throttle (30 FPS after 60 s without input) can't kick in.
-2. For each candidate render distance: set it, wait until the chunk sections have compiled (or a 20 s timeout), then do a 360° camera sweep at two pitches for about 6 s while recording frame times.
+1. Remember the current settings and hide the GUI. Test values are set in memory only; options.txt is written once, with the original values, when they're restored. Creative flight is toggled client-side only, so the server never stores it. Lift the frame-rate limit to unlimited (260), turn vsync off and set the inactivity limit to `minimized` so the AFK throttle (30 FPS after 60 s without input) can't kick in.
+2. For each candidate render distance: set it, wait until the chunk sections have compiled (or a 20 s timeout), then do a 360° camera sweep at two pitches (level, then 25° down) for about 6 s while recording frame times.
 3. `RenderDistancePlanner` searches between the minimum and the cap:
    - it raises the render distance while the 1% low stays at or above the target FPS
    - otherwise it lowers it

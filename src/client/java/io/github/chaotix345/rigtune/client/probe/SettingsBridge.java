@@ -117,8 +117,12 @@ public final class SettingsBridge {
 		return applyVanilla(Minecraft.getInstance().options, values);
 	}
 
-	// graphicsPreset rewrites a dozen other options when set, so it goes first and the explicit values win.
 	public static Map<String, Result> applyVanilla(Options options, Map<String, String> values) {
+		return applyVanilla(options, values, true);
+	}
+
+	// graphicsPreset rewrites a dozen other options when set, so it goes first and the explicit values win.
+	public static Map<String, Result> applyVanilla(Options options, Map<String, String> values, boolean save) {
 		Map<String, String> first = new LinkedHashMap<>();
 		Map<String, String> rest = new LinkedHashMap<>();
 		values.forEach((k, v) -> {
@@ -132,7 +136,7 @@ public final class SettingsBridge {
 				changed |= applyBatch(options, batch, byBareKey);
 			}
 		}
-		if (changed) {
+		if (changed && save) {
 			options.save();
 		}
 		Map<String, Result> out = new LinkedHashMap<>();

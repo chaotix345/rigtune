@@ -67,6 +67,7 @@
 	"rigtune.benchmark.col.p99": "P99 ms",
 	"rigtune.benchmark.col.ok": "Target",
 	"rigtune.benchmark.use": "Use render distance %s",
+	"rigtune.benchmark.use_best": "Use best tested (%s)",
 	"rigtune.benchmark.keep": "Keep current (%s)",
 	"rigtune.benchmark.none": "No measurements were taken."
 }
