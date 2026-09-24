@@ -16,7 +16,10 @@ class RenderDistancePlannerTest {
 	private static final int MAX = 32;
 
 	private static FrameStats simulated(int rd) {
-		double fps = 600.0 / rd;
+		return low(600.0 / rd);
+	}
+
+	private static FrameStats low(double fps) {
 		return new FrameStats(100, fps, fps, 1000 / fps, 1000 / fps);
 	}
 
@@ -65,7 +68,47 @@ class RenderDistancePlannerTest {
 		PlannerResult result = planner.result();
 		assertEquals(MIN, result.bestRd());
 		assertFalse(result.targetMet());
+		assertEquals(MIN, result.bestEffortRd());
+		assertEquals(MIN, result.suggestedRd());
 		assertTrue(result.reason().contains("minimum"), result.reason());
+	}
+
+	@Test
+	void missedTargetSuggestsHighestOnePercentLowNotMinimum() {
+		RenderDistancePlanner planner = new RenderDistancePlanner(MIN, MAX, 12, 200, 3);
+		assertEquals(OptionalInt.of(12), planner.next());
+		planner.record(12, low(110));
+		assertEquals(OptionalInt.of(6), planner.next());
+		planner.record(6, low(150));
+		assertEquals(OptionalInt.of(3), planner.next());
+		planner.record(3, low(140));
+		assertTrue(planner.done());
+
+		PlannerResult result = planner.result();
+		assertFalse(result.targetMet());
+		assertEquals(MIN, result.bestRd());
+		assertEquals(6, result.bestEffortRd());
+		assertEquals(6, result.suggestedRd());
+	}
+
+	@Test
+	void bestEffortTieGoesToLargerDistance() {
+		RenderDistancePlanner planner = new RenderDistancePlanner(MIN, MAX, 12, 200, 2);
+		planner.record(12, low(119));
+		planner.record(6, low(119));
+
+		assertEquals(12, planner.result().bestEffortRd());
+	}
+
+	@Test
+	void metTargetSuggestsBestPass() {
+		RenderDistancePlanner planner = new RenderDistancePlanner(MIN, MAX, 12, 60, 10);
+		run(planner);
+
+		PlannerResult result = planner.result();
+		assertTrue(result.targetMet());
+		assertEquals(10, result.suggestedRd());
+		assertEquals(6, result.bestEffortRd());
 	}
 
 	@Test
@@ -120,6 +163,7 @@ class RenderDistancePlannerTest {
 		assertFalse(planner.done());
 		assertEquals(MIN, planner.result().bestRd());
 		assertFalse(planner.result().targetMet());
+		assertEquals(MIN, planner.result().suggestedRd());
 		assertThrows(IllegalArgumentException.class, () -> new RenderDistancePlanner(10, 5, 6, 60, 6));
 		assertThrows(IllegalArgumentException.class, () -> new RenderDistancePlanner(2, 32, 6, 60, 0));
 	}

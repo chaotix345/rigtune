@@ -22,6 +22,7 @@ public class BenchmarkResultScreen extends Screen {
 	private static final int COLOR_LABEL = 0xFFA8A8A8;
 	private static final int COLOR_PASS = 0xFF7FE07F;
 	private static final int COLOR_FAIL = 0xFFFF7A6B;
+	private static final int COLOR_WARN = 0xFFFFD166;
 
 	private final @Nullable Screen parent;
 	private final BenchmarkController.Outcome outcome;
@@ -45,8 +46,8 @@ public class BenchmarkResultScreen extends Screen {
 	protected void init() {
 		tableWidth = Math.min(width - 32, 360);
 		left = (width - tableWidth) / 2;
-		tableTop = 58;
-		int best = outcome.result().bestRd();
+		tableTop = 70;
+		int best = outcome.result().suggestedRd();
 		int buttonWidth = Math.min(150, (tableWidth - 4) / 2);
 		int y = height - 28;
 		addRenderableWidget(Button.builder(Component.translatable("rigtune.benchmark.use", best), b -> {
@@ -62,11 +63,12 @@ public class BenchmarkResultScreen extends Screen {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		PlannerResult result = outcome.result();
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 12, 0xFFFFFFFF);
+		int suggested = result.suggestedRd();
 		Component summary = Component.translatable(result.targetMet() ? "rigtune.benchmark.met" : "rigtune.benchmark.missed",
-				Component.literal(Integer.toString(result.bestRd())).withStyle(ChatFormatting.BOLD),
-				Math.round(outcome.targetFps()));
-		graphics.centeredText(font, clip(summary), width / 2, 28, result.targetMet() ? COLOR_PASS : 0xFFFFD166);
-		graphics.centeredText(font, clip(Component.literal(result.reason())), width / 2, 40, COLOR_LABEL);
+				Component.literal(Integer.toString(suggested)).withStyle(ChatFormatting.BOLD));
+		graphics.centeredText(font, clip(summary), width / 2, 28, result.targetMet() ? COLOR_PASS : COLOR_WARN);
+		graphics.centeredText(font, clip(Component.translatable("rigtune.benchmark.target", Math.round(outcome.targetFps()))), width / 2, 40, 0xFFFFFFFF);
+		graphics.centeredText(font, clip(Component.literal(result.reason())), width / 2, 52, COLOR_LABEL);
 
 		int[] columns = {0, tableWidth * 22 / 100, tableWidth * 44 / 100, tableWidth * 66 / 100, tableWidth * 88 / 100};
 		String[] headers = {"rigtune.benchmark.col.rd", "rigtune.benchmark.col.avg", "rigtune.benchmark.col.low", "rigtune.benchmark.col.p99", "rigtune.benchmark.col.ok"};
@@ -78,9 +80,9 @@ public class BenchmarkResultScreen extends Screen {
 		y += ROW + 2;
 		int maxRows = Math.max(0, (height - 36 - y) / ROW);
 		for (PlannerResult.Measurement m : rows.subList(0, Math.min(rows.size(), maxRows))) {
-			boolean best = m.rd() == result.bestRd() && result.targetMet();
+			boolean best = m.rd() == suggested;
 			if (best) {
-				graphics.fill(left - 4, y - 2, left + tableWidth + 4, y + ROW - 3, 0x3000FF00);
+				graphics.fill(left - 4, y - 2, left + tableWidth + 4, y + ROW - 3, result.targetMet() ? 0x3000FF00 : 0x30FFD166);
 			}
 			int color = best ? 0xFFFFFFFF : 0xFFDDDDDD;
 			graphics.text(font, Integer.toString(m.rd()), left + columns[0], y, color, false);

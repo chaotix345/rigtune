@@ -70,12 +70,24 @@ public final class RenderDistancePlanner {
 
 	public PlannerResult result() {
 		if (measurements.isEmpty()) {
-			return new PlannerResult(minRd, false, measurements, "No measurements yet");
+			return new PlannerResult(minRd, false, minRd, measurements, "No measurements yet");
 		}
 		int fail = lowestFail();
 		int pass = highestPassBelow(fail);
 		boolean met = pass >= minRd;
-		return new PlannerResult(met ? pass : minRd, met, measurements, reason(met, pass, fail));
+		return new PlannerResult(met ? pass : minRd, met, bestEffort(), measurements, reason(met, pass, fail));
+	}
+
+	private int bestEffort() {
+		Measurement best = measurements.getFirst();
+		for (Measurement m : measurements) {
+			double low = m.stats().onePercentLowFps();
+			double bestLow = best.stats().onePercentLowFps();
+			if (low > bestLow || (low == bestLow && m.rd() > best.rd())) {
+				best = m;
+			}
+		}
+		return best.rd();
 	}
 
 	private String reason(boolean met, int pass, int fail) {

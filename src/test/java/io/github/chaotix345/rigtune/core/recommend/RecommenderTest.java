@@ -101,6 +101,18 @@ class RecommenderTest {
 	}
 
 	@Test
+	void refreshRateCapIsTheMultipleOfTenBelowTheRefreshRate() {
+		assertEquals(170, SettingValues.refreshRateCap(180));
+		assertEquals(140, SettingValues.refreshRateCap(144));
+		assertEquals(160, SettingValues.refreshRateCap(165));
+		assertEquals(60, SettingValues.refreshRateCap(60));
+		assertEquals(60, SettingValues.refreshRateCap(-1));
+		assertEquals(60, SettingValues.refreshRateCap(0));
+		assertEquals(30, SettingValues.refreshRateCap(24));
+		assertEquals(250, SettingValues.refreshRateCap(360));
+	}
+
+	@Test
 	void equalValuesAfterNormalisationAndUnknownKeysAreSkipped() {
 		RulesDocument rules = rules("""
 				"settings":[

@@ -11,7 +11,7 @@ A client-side Fabric mod for Minecraft Java 26.2. It works out which mods and se
    - remove obsolete or conflicting mods (Indium, Starlight, OptiFabric, both C2ME and Moonrise, etc.)
    - Sodium settings and vanilla video settings, by hardware tier and the player's goal (performance / balanced / quality)
    - advice outside the game: RAM allocation (which the launcher controls) and GPU driver workarounds that Sodium applied
-4. **Benchmark**: an in-game test that measures real frame times and searches render distance to hit a target FPS (default: the monitor's refresh rate, measured on 1% lows). Specs only give the starting point; the measurement decides.
+4. **Benchmark**: an in-game test that measures real frame times and searches render distance to hit a target FPS (the recommended FPS cap: the multiple of 10 below the refresh rate, e.g. 180 Hz → 170, at most 240; measured uncapped on 1% lows). Specs only give the starting point; the measurement decides.
 5. **Apply**: vanilla settings take effect immediately. Mod file changes and Sodium config changes are staged, then applied safely after the game exits (see "Apply pipeline").
 6. **Stay current**:
    - **Live**: the Modrinth API reports mod availability and updates for the running MC version at runtime.
@@ -97,15 +97,15 @@ A condition is a declarative object. All fields are optional and they are ANDed 
 
 ## Benchmark
 Requires the player to be in a world, ideally singleplayer.
-1. Save the current settings and hide the GUI.
+1. Save the current settings and hide the GUI. Lift the frame-rate limit to unlimited (260), turn vsync off and set the inactivity limit to `minimized` so the AFK throttle (30 FPS after 60 s without input) can't kick in.
 2. For each candidate render distance: set it, wait until the chunk sections have compiled (or a 20 s timeout), then do a 360° camera sweep at two pitches for about 6 s while recording frame times.
 3. `RenderDistancePlanner` searches between the minimum and the cap:
    - it raises the render distance while the 1% low stays at or above the target FPS
    - otherwise it lowers it
    - it stops after 6 steps or when the search converges
-4. Restore the camera, GUI and original settings, then show the result. Keep the result, or revert?
+4. Restore the camera, GUI and original settings, then show the result. Keep the result, or revert? If nothing met the target, the suggestion is the tested distance with the highest 1% low.
 
-Esc cancels at any point and restores everything.
+Esc cancels at any point and restores everything, as do a disconnect, a world or player change, an exception in the benchmark, and the client stopping.
 
 ## Staying current: updater (tools/update_rules.py + .github/workflows/update-rules.yml)
 - A Python script using only the standard library:
@@ -140,5 +140,7 @@ All MC-touching code lives in `client/`, and it uses Fabric API events rather th
 - **Entry buttons**: on the title screen the button sits left of Options; on vanilla video settings right of Done. Sodium replaces the video screen and its page list swallows clicks, so there the button goes bottom-left and claims its clicks through `ScreenMouseEvents.allowMouseClick`.
 - **Keybind** (F8, unused by vanilla) works in game only, like every vanilla key mapping; menus use the buttons.
 - **Benchmark HUD** is attached after `VanillaHudElements.SLEEP`, the one layer vanilla still draws while the GUI is hidden.
+- **Benchmark render distance cap**: the server's view distance only caps the search on a remote server. In singleplayer `IntegratedServer` copies the client's render distance into the view distance every tick, so it would otherwise pin the search to the starting distance.
+- **Benchmark in client game tests**: the harness syncs with the test thread on every frame that runs a tick, so those frames (about 1% of frames at ~2000 FPS) are slow and the 1% low reads far below the average (e.g. avg 1914, 1% low 234 on an RX 7800 XT). The numbers are uncapped but not representative of normal play.
 - **AddMod** downloads are checked for a `fabric.mod.json` id that is already loaded and dropped if so, since a second top-level jar with the same id stops Fabric from starting.
 - **Client game tests** need no extra build config: the `fabric-api` POM pulls `fabric-client-gametest-api-v1` in transitively even though the fat jar doesn't nest it. `runClientGameTest` starts from a fresh run directory each time.

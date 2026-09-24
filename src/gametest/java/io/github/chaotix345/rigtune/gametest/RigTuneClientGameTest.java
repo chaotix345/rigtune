@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.gametest;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.client.ClientState;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.RigTunePreLaunch;
@@ -20,6 +21,9 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.InactivityFpsLimit;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.Options;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -35,6 +39,14 @@ import java.util.List;
 import java.util.Map;
 
 public class RigTuneClientGameTest implements FabricClientGameTest {
+	private record FrameSettings(int limit, boolean vsync, InactivityFpsLimit inactivity) {
+		static final FrameSettings UNCAPPED = new FrameSettings(Options.UNLIMITED_FRAMERATE_CUTOFF, false, InactivityFpsLimit.MINIMIZED);
+
+		static FrameSettings of(Minecraft mc) {
+			return new FrameSettings(mc.options.framerateLimit().get(), mc.options.enableVsync().get(), mc.options.inactivityFpsLimit().get());
+		}
+	}
+
 	@Override
 	public void runTest(ClientGameTestContext context) {
 		context.waitForScreen(TitleScreen.class);
@@ -106,8 +118,25 @@ public class RigTuneClientGameTest implements FabricClientGameTest {
 			int rdBefore = context.computeOnClient(mc -> mc.options.renderDistance().get());
 			boolean hudBefore = context.computeOnClient(mc -> mc.gui.hud.isHidden());
 			float yawBefore = context.computeOnClient(mc -> mc.player.getYRot());
+			FrameSettings framesBefore = context.computeOnClient(FrameSettings::of);
+			check(!framesBefore.equals(FrameSettings.UNCAPPED), "test starts from capped settings: " + framesBefore);
+
+			check(context.computeOnClient(mc -> BenchmarkController.start(mc, new BenchmarkController.Config(2, 1.5, 1.0, 20.0))), "benchmark started for Esc");
+			context.waitTicks(5);
+			check(context.computeOnClient(FrameSettings::of).equals(FrameSettings.UNCAPPED), "uncapped while measuring");
+			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
+			context.waitFor(mc -> !BenchmarkController.running(), 100);
+			BenchmarkController.Outcome escaped = context.computeOnClient(mc -> BenchmarkController.lastOutcome());
+			check(escaped != null && escaped.cancelled(), "Esc cancels: " + escaped);
+			check(context.computeOnClient(FrameSettings::of).equals(framesBefore), "frame settings restored after Esc");
+			check(context.computeOnClient(mc -> mc.options.renderDistance().get()) == rdBefore, "render distance restored after Esc");
+			check(context.computeOnClient(mc -> mc.gui.hud.isHidden()) == hudBefore, "HUD visibility restored after Esc");
+			context.runOnClient(mc -> mc.gui.setScreen(null));
+			context.waitTicks(5);
+
 			check(context.computeOnClient(mc -> BenchmarkController.start(mc, new BenchmarkController.Config(2, 1.5, 1.0, 20.0))), "benchmark started");
 			context.waitTicks(30);
+			check(context.computeOnClient(FrameSettings::of).equals(FrameSettings.UNCAPPED), "uncapped while measuring");
 			context.takeScreenshot("benchmark-running");
 			context.waitFor(mc -> !BenchmarkController.running(), 1400);
 			BenchmarkController.Outcome outcome = context.computeOnClient(mc -> BenchmarkController.lastOutcome());
@@ -115,6 +144,7 @@ public class RigTuneClientGameTest implements FabricClientGameTest {
 			check(!outcome.result().measurements().isEmpty(), "benchmark measured something: " + outcome);
 			check(outcome.result().measurements().stream().allMatch(m -> m.stats().frames() > 0), "frames recorded: " + outcome);
 			check(context.computeOnClient(mc -> mc.options.renderDistance().get()) == rdBefore, "render distance restored");
+			check(context.computeOnClient(FrameSettings::of).equals(framesBefore), "frame limit, vsync and inactivity limit restored");
 			check(context.computeOnClient(mc -> mc.gui.hud.isHidden()) == hudBefore, "HUD visibility restored");
 			check(Math.abs(context.computeOnClient(mc -> mc.player.getYRot()) - yawBefore) < 0.01f, "camera rotation restored");
 			context.waitForScreen(BenchmarkResultScreen.class);

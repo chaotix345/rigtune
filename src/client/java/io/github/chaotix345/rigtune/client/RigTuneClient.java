@@ -66,7 +66,10 @@ public final class RigTuneClient implements ClientModInitializer {
 		openKey = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.rigtune.open", InputConstants.Type.KEYSYM, InputConstants.KEY_F8, category));
 
 		ClientLifecycleEvents.CLIENT_STARTED.register(real::start);
-		ClientLifecycleEvents.CLIENT_STOPPING.register(minecraft -> launchHelperIfPending());
+		ClientLifecycleEvents.CLIENT_STOPPING.register(minecraft -> {
+			BenchmarkController.cancel();
+			launchHelperIfPending();
+		});
 		ClientTickEvents.END_CLIENT_TICK.register(RigTuneClient::onTick);
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> addEntryButton(screen, width, height));
 		// The sleep overlay is the one vanilla HUD layer drawn while the GUI is hidden, which the benchmark does.
