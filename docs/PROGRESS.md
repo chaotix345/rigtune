@@ -1,65 +1,58 @@
 # RigTune — coordinator progress log
 
-Source of truth for resuming after context compaction. Update after every milestone.
+Source of truth for resuming after context compaction. Update and commit after every milestone. After a compaction, reread this file before acting.
 
-## Goal
-A Fabric mod for MC 26.2 (Java 25) that:
-- detects hardware
-- scans installed mods
-- recommends mods to add, update, or remove, plus mod and vanilla settings, based on hardware
-- auto-benchmarks to tune render distance toward a target FPS
-- applies changes
-- stays up to date through remote rules (auto-updated weekly by CI) and a live Modrinth API
+## v0.2.0 (started 2026-09-25)
 
-The user gave full autonomy on 2026-09-24 and also approved creating and fully setting up a GitHub repo. Publishing to Modrinth was NOT asked for; offer it at the end.
+Brief: the user's v0.2.0 prompt (full autonomy: research → release, including GitHub merges, tags and releases, and Modrinth publishing once a token exists). Scope: P0 1–5, P1 6–10, P2 11–13 (see docs/v0.2/SPEC.md once written).
 
-## Environment
-- Repo: C:/Dev/Minecraft Setting Optimisation Mod. Nested git repo; work branch `feat/rigtune-mvp`. Never commit to main.
-- GitHub: https://github.com/chaotix345/rigtune (public).
-  - Remote `main` = scaffold commit d8485a8, pushed as a base so PRs work.
-  - Actions can create PRs.
-- JDK: C:/Dev/Tools/jdk/jdk-25.0.4.1+1. Use `export JAVA_HOME=...` before `./gradlew`.
-- User's instance: %APPDATA%/ModrinthApp/profiles/Fabric 26.2. READ-ONLY; never modify it.
-- The harness's `isolation: worktree` fails (it resolves the empty C:/Dev repo). Create worktrees manually under C:/Dev/Worktrees/.
+### Environment (verified 2026-09-25)
+- Integration branch: `feat/v0.2.0` (from main @ 2cf4317, tag v0.1.0). Feature branches merge into it; one final PR to main.
+- Baseline on main: `./gradlew build` OK, 238 Java tests, 61 Python tests.
+- `gh` is authenticated as chaotix345 (repo scope). Actions may create PRs (can_approve_pull_request_reviews=true). main isn't branch-protected: merge only with green CI anyway.
+- Modrinth: the user created two PATs (2026-09-25), stored as Windows USER env vars (read via pwsh [Environment]::GetEnvironmentVariable(name,"User"); never print them): MODRINTH_TOKEN = setup token (project and version create/read/write), MODRINTH_CI_TOKEN = CI token (read projects, create and read versions, expires 2050). The CI token is set as the GitHub repo secret MODRINTH_TOKEN. A PreToolUse hook blocks curl with Authorization headers, so do not bypass it. The user approved on 2026-09-25: (1) a committed tools/modrinth_project.py that reads MODRINTH_TOKEN from the user env itself, so the token never goes on a command line, and talks only to api.modrinth.com; (2) uploading the identical v0.1.0 jar to Modrinth as an older version.
+- MC versions (Modrinth tag API, 2026-09-25): 26.3 release 2026-09-15; 26.4 is only `26.4-snapshot-1` (2026-09-22), so it's out of scope.
+- 2026-09-25: with the user's explicit approval, I copied the released rigtune-0.1.0.jar (sha256 8294d04a…) into the real instance's mods/. That was the ONLY write there; the instance stays read-only otherwise. Once they have played, read (never write) `logs/latest.log` and `config/rigtune/*` there.
 
-## Status
-- [x] Research: toolchain.md, knowledge.md, mc-api.md in docs/research/
-- [x] docs/DESIGN.md, docs/RULES_SCHEMA.md (the contract), core/model records
-- [x] Scaffold builds: Loom 1.17-SNAPSHOT, MC 26.2, Fabric API 0.161.0+26.2, Mod Menu 20.0.2, Sodium localRuntime
-- [x] A3 updater: MERGED. 39 Python tests. tools/update_rules.py and the build/update-rules/release workflows. Live smoke: FO 38 / Additive 50 mods at 26.3.
-- [x] A2 apply: MERGED. 45 tests. core.modrinth, core.apply, core.benchmark.
-- [x] A1 brain: MERGED. 60 tests, 21 mods, 6 obsolete. I fixed $refreshRateCap to snap to vanilla's multiples of 10.
-- [x] Live updater run: rules revision 2 committed and pushed. CI green on GitHub.
-- [x] A4 client: MERGED (58c6d6a, fast-forward). Build + runClientGameTest green. The UI screenshots look good.
-- [ ] Review round 1: 18 findings in docs/reviews/review-1.md (1 critical, 3 high, 8 medium, 6 low). Fixes running in parallel:
-  - F1: MERGED (5 commits). Findings #7, #8, #9, #14, #15, #16 plus the FPS-cap fix; the singleplayer RD cap bug is also fixed.
-  - F2: MERGED (11 commits). Findings #1-#6, #10, #12 (Java), #13, #17. 208 unit tests green after the merge (291b561).
-  - F3: MERGED. Findings #11, #12 (Python), #18. 61 Python tests.
-  - All three merged. runClientGameTest on merged mvp PASSED (benchmark uncapped: RD 8, 1% low 582 vs target 170). README screenshots updated.
-  - Re-review DONE (docs/reviews/review-2.md): all 18 FIXED; 7 new (N1, N2 medium; N3 low-medium; N4-N7 low).
-- [x] Review round 2 fixes: MERGED (1aa6687). N1-N7 fixed, 238 tests. Rules revision 4: Distant Horizons caps vanilla RD at 12; tier 4/5 RD raises are medium and unticked.
-- [x] Production smoke MERGED: 43 user mods in production OK; docs/smoke/. Two mods deadlock the TEST HARNESS only (Xaero World Map, DH).
-- [x] Final verification on merged mvp: build OK, 238 unit tests, runClientGameTest exit 0, 18 screenshots, no leftover clients.
-- [ ] NEXT: PR feat/rigtune-mvp -> main (body in scratchpad/pr-body.md), CI green, merge, tag v0.1.0 (release.yml publishes the jar), check the remote rules URL returns 200.
-- [ ] Production smoke: RUNNING in C:/Dev/Worktrees/rigtune-prod, branch test/production-smoke. It adds a runProductionSmoke task with the user's 43 mods (copied to scratchpad/usermods) and writes docs/smoke/ with screenshots and a report dump.
-- [x] Rules triage: MERGED (rules revision 3; +renderscale, structure-layout-optimizer, zfastnoise, zmaterial-rule-compiler, asynclogger; reviewIgnore; beta/alpha update filter). Java 107 / Python 46 green.
-  - Lesson: ALWAYS rerun `./gradlew test` after regenerating rules. The scenario tests read the bundled rules, and b291ef4 broke CI this way.
-- Note: I added `"timeout": 5` to the user's global pwsh Stop hook, with their approval. It hung waiting on stdin.
-- [ ] After A4: merge feat/client; full build + runClientGameTest; view the screenshots.
-- [ ] Dev run with the user's mod set copied (not moved) into run/mods to sanity-check recommendations against the real setup.
-- [ ] Code review (opus code-reviewer) and fixes; README with screenshots; icon.
-- [ ] CI green on GitHub; PR feat/rigtune-mvp → main; merge; tag v0.1.0 so release.yml publishes the jar.
-- [ ] Final report to the user (and offer Modrinth publishing and a 26.3 port).
+### Status
+- [x] Phase 0: orient. Docs read; baseline green.
+- [ ] Phase 1: research (docs/research/v0.2/, one owner each, running in the main checkout, no game launches):
+  - r-multiversion → multi-version.md (opus; prototype in scratchpad/r-multiversion/proto)
+  - r-apidiff → api-diff.md
+  - r-modrinth → modrinth.md
+  - r-dhiris → dh-iris.md
+  - r-benchmark → benchmark.md
+  - r-triage → triage.md
+- [ ] Phase 2: SPEC.md, DESIGN/RULES_SCHEMA updates, PLAN.md, independent plan review
+- [ ] Phase 3: multi-version build restructure, alone; merge into feat/v0.2.0; CI green for every version
+- [ ] Phase 4: features in manual worktrees (C:/Dev/Worktrees/rigtune-<name>); one game-test runner at a time
+- [ ] Phase 5: verification (unit + game tests per version, production smoke 26.2 with a copy of the user's mods, 26.3 representative set, self-update E2E)
+- [ ] Phase 6: two review rounds → docs/reviews/review-3.md, review-4.md
+- [ ] Phase 7: PR to main, CI green, merge, bump, CHANGELOG, tag v0.2.0, release assets, Modrinth, rules v1+v2 live, update-rules run
+- [ ] Phase 8: README, PROGRESS, memory, cleanup, final report
 
-## Follow-ups noted
-- Modrinth updates: don't offer beta/alpha updates over a release install (send version_types or filter by the current version's type).
-- 26.3 port: SDL replaced GLFW in 26.3, per toolchain.md §6.
+### Agents
+| name | branch | worktree | status |
+|---|---|---|---|
+| (research agents write in the main checkout; no branches) | | | |
+
+## Lessons (carried over from v0.1.0; don't relearn)
+- The Bash tool is Git Bash. Use absolute paths; `cd` inside a command changes the session's working directory.
+- Don't use Python string literals with Windows backslashes (they mangled this file once).
+- JDK: `export JAVA_HOME="C:/Dev/Tools/jdk/jdk-25.0.4.1+1"` before every `./gradlew`. MC 26.x is unobfuscated: plugin `net.fabricmc.fabric-loom`, no mappings, `localRuntime`, Mojang names.
+- The Agent tool's `isolation: worktree` fails here (it resolves the stray C:/Dev repo). Create worktrees manually: `git worktree add C:/Dev/Worktrees/rigtune-<name> -b <branch>`.
+- Commit docs and research before creating worktrees. Give each research file exactly one owner, and forbid forks that write the same file.
+- ONE Minecraft client at a time across all agents. Before a launch, check for `fabric.client.gametest` java processes. Kill only your own orphans (command line contains your worktree path). Never touch other java processes (e.g. the user's fabric-server-launcher).
+- Always rerun `./gradlew test` after regenerating rules (scenario tests read the bundled rules; skipping this broke CI once).
+- Fabric client game-test harness: it resets render distance to 5; its tick sync makes 1% lows unrepresentative; it deadlocks on world exit with Xaero's World Map or Distant Horizons loaded (harness issue); `runClientGameTest` wipes its run dir.
+- 26.2 API renames are in docs/research/mc-api.md. OSHI reports a fake "System Battery" on desktops; the probe filters it out.
+- The user's `fabric-26.2.jar` in their instance is Distant Horizons 3.3.0.
 
 ## Decisions
-- Name: RigTune, mod id `rigtune`, package io.github.chaotix345.rigtune, MIT license.
-- Target MC 26.2 + Fabric first.
-- Mod file changes are applied by a post-exit helper JVM (Windows file locks, and duplicate mod ids crash).
+- Name RigTune, mod id `rigtune`, package io.github.chaotix345.rigtune, MIT.
+- Mod file changes are applied by a post-exit helper JVM (Windows file locks; duplicate mod ids crash Fabric).
+- v0.2.0: 26.2 + 26.3 only (26.4 not stable).
 
 ## Log
-- 2026-09-24: research done; scaffold; A1–A4 launched; A2 and A3 merged; GitHub repo created and branch pushed.
-- Game tests: run only ONE Minecraft client at a time (the user saw a Not Responding window when two agents ran them in parallel).
+- 2026-09-24: v0.1.0 built, reviewed twice, merged (#1, 2cf4317), tagged and released.
+- 2026-09-25: v0.2.0 started; integration branch feat/v0.2.0; Phase 1 research launched (6 agents).
