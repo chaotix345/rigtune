@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 
 import java.io.IOException;
@@ -120,6 +121,7 @@ public final class HttpModrinthClient implements ModrinthClient {
 
 	@Override
 	public void download(ModFile file, Path target) throws IOException {
+		SafeFileNames.requireJarName(file.filename());
 		if (file.sha512() == null || file.sha512().isBlank()) {
 			throw new IOException("Refusing to download " + file.filename() + " without a SHA-512");
 		}

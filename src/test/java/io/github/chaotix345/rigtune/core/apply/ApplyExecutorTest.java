@@ -108,6 +108,60 @@ class ApplyExecutorTest {
 	}
 
 	@Test
+	void refusesOpsOutsideTheModsAndConfigFolders() throws IOException {
+		Path outside = Files.createDirectories(dir.resolve("outside"));
+		Path payload = Files.writeString(mods.resolve("evil.jar.rigtune-pending"), "payload");
+		Path victim = Files.writeString(outside.resolve("victim.jar"), "victim");
+		Files.writeString(mods.resolve("keep.jar"), "keep");
+		PendingActions plan = plan(
+				Op.enableFile(payload, mods.resolve("..").resolve("outside").resolve("evil.jar")),
+				Op.enableFile(payload, outside.resolve("evil.jar")),
+				Op.enableFile(payload, mods.resolve("run.bat")),
+				Op.enableFile(payload, mods.resolve("NUL.jar")),
+				Op.enableFile(payload, mods.resolve("sub").resolve("evil.jar")),
+				Op.enableFile(victim, mods.resolve("victim.jar")),
+				Op.disableFile(victim),
+				Op.disableFile(mods.resolve("..").resolve("outside").resolve("victim.jar")),
+				Op.disableFile(mods),
+				Op.patchJson(outside.resolve("x.json"), Map.of("a", "1")),
+				Op.patchJson(config.resolve("..").resolve("outside").resolve("x.json"), Map.of("a", "1")),
+				Op.patchJson(config, Map.of("a", "1")),
+				new Op(PendingActions.Type.ENABLE_FILE, null, mods.resolve("a.jar").toString(), null, null),
+				new Op(PendingActions.Type.DISABLE_FILE, null, null, null, null),
+				new Op(PendingActions.Type.DISABLE_FILE, null, null, "bad\u0000path", null));
+
+		ApplyResult result = executor.run(plan, pending);
+
+		for (ApplyResult.OpResult r : result.results()) {
+			assertEquals(Status.FAILED, r.status(), r.toString());
+			assertTrue(r.message().startsWith("Refused") || r.message().contains("Invalid"), r.message());
+		}
+		assertEquals("payload", Files.readString(payload));
+		assertEquals("victim", Files.readString(victim));
+		assertEquals("keep", Files.readString(mods.resolve("keep.jar")));
+		try (var files = Files.list(outside)) {
+			assertEquals(List.of(victim), files.toList());
+		}
+		try (var files = Files.list(mods)) {
+			assertEquals(2, files.count());
+		}
+		assertEquals(plan.ops().size(), PendingActions.load(pending).ops().size());
+	}
+
+	@Test
+	void planWithoutFoldersRefusesFileOps() throws IOException {
+		Path jar = Files.writeString(mods.resolve("a.jar"), "a");
+		PendingActions plan = new PendingActions("2026-09-24T00:00:00Z", 1, null, null, List.of(Op.disableFile(jar),
+				Op.patchJson(config.resolve("sodium-options.json"), Map.of("a", "1"))));
+
+		ApplyResult result = executor.run(plan, pending);
+
+		assertEquals(List.of(Status.FAILED, Status.FAILED), statuses(result));
+		assertTrue(Files.exists(jar));
+		assertFalse(Files.exists(config.resolve("sodium-options.json")));
+	}
+
+	@Test
 	void malformedJsonFailsWithoutTouchingFile() throws IOException {
 		Path sodium = config.resolve("sodium-options.json");
 		Files.writeString(sodium, "{ broken");

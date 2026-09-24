@@ -6,6 +6,7 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -30,8 +31,10 @@ public final class ApplyExecutor {
 
 	public ApplyResult run(PendingActions plan, Path pendingFile) throws IOException {
 		List<OpResult> results = new ArrayList<>();
+		Path modsDir = dir(plan.modsDir());
+		Path configDir = dir(plan.configDir());
 		for (Op op : plan.ops()) {
-			results.add(execute(op));
+			results.add(execute(op, modsDir, configDir));
 		}
 		ApplyResult result = new ApplyResult(Instant.now().toString(), results);
 		if (result.allSucceeded()) {
@@ -46,14 +49,54 @@ public final class ApplyExecutor {
 		return result;
 	}
 
-	OpResult execute(Op op) {
+	private static Path dir(String value) {
+		try {
+			return value == null ? null : Path.of(value);
+		} catch (InvalidPathException e) {
+			return null;
+		}
+	}
+
+	OpResult execute(Op op, Path modsDir, Path configDir) {
 		if (op == null || op.type() == null) {
 			return new OpResult(op, Status.FAILED, "Unknown operation");
+		}
+		String problem;
+		try {
+			problem = containmentProblem(op, modsDir, configDir);
+		} catch (InvalidPathException e) {
+			problem = "Invalid path: " + e.getMessage();
+		}
+		if (problem != null) {
+			return new OpResult(op, Status.FAILED, "Refused: " + problem);
 		}
 		return switch (op.type()) {
 			case ENABLE_FILE -> retrying(op, () -> enable(op));
 			case DISABLE_FILE -> retrying(op, () -> disable(op));
 			case PATCH_JSON -> retrying(op, () -> patchJson(op));
+		};
+	}
+
+	// Mod files must sit directly in the plan's mods folder and config patches inside its config folder.
+	static String containmentProblem(Op op, Path modsDir, Path configDir) {
+		return switch (op.type()) {
+			case ENABLE_FILE -> {
+				if (op.from() == null || op.to() == null) {
+					yield "missing from/to";
+				}
+				Path from = Path.of(op.from());
+				Path to = Path.of(op.to());
+				if (!SafeFileNames.isDirectChild(modsDir, from) || !SafeFileNames.isDirectChild(modsDir, to)) {
+					yield op.from() + " -> " + op.to() + " is not directly inside the mods folder " + modsDir;
+				}
+				yield SafeFileNames.isSafeJarName(to.getFileName().toString()) ? null : to.getFileName() + " is not a safe .jar name";
+			}
+			case DISABLE_FILE -> op.path() == null ? "missing path"
+					: SafeFileNames.isDirectChild(modsDir, Path.of(op.path())) ? null
+					: op.path() + " is not directly inside the mods folder " + modsDir;
+			case PATCH_JSON -> op.path() == null ? "missing path"
+					: SafeFileNames.isInside(configDir, Path.of(op.path())) ? null
+					: op.path() + " is not inside the config folder " + configDir;
 		};
 	}
 

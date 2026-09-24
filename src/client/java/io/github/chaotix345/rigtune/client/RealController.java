@@ -11,6 +11,7 @@ import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
+import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
@@ -224,7 +225,7 @@ public final class RealController implements RigTuneController {
 					sodium.put(set.key().substring(SODIUM.length()), set.newValue());
 					sodiumIds.add(r.id());
 				}
-				case Action.DisableMod disable when disable.file() != null -> {
+				case Action.DisableMod disable when SafeFileNames.isDirectChild(modsDir, disable.file()) -> {
 					immediateOps.add(Op.disableFile(disable.file()));
 					immediateIds.add(r.id());
 				}
@@ -342,7 +343,7 @@ public final class RealController implements RigTuneController {
 							if (file == null) {
 								throw new IOException("No file for " + version.versionNumber());
 							}
-							Path target = modsDir.resolve(file.filename());
+							Path target = SafeFileNames.resolveJar(modsDir, file.filename());
 							installedProjects.add(version.projectId());
 							if (Files.exists(target)) {
 								continue;
@@ -363,9 +364,13 @@ public final class RealController implements RigTuneController {
 						if (file == null) {
 							throw new IOException("No file for " + update.update().newVersionNumber());
 						}
+						if (!SafeFileNames.isDirectChild(modsDir, update.currentFile())) {
+							throw new IOException(update.currentFile() + " is not in this instance's mods folder");
+						}
+						Path target = SafeFileNames.resolveJar(modsDir, file.filename());
 						Path pending = fetch(file);
 						recOps.add(Op.disableFile(update.currentFile()));
-						recOps.add(Op.enableFile(pending, modsDir.resolve(file.filename())));
+						recOps.add(Op.enableFile(pending, target));
 					}
 					default -> {
 					}
@@ -397,7 +402,7 @@ public final class RealController implements RigTuneController {
 	}
 
 	private Path fetch(ModFile file) throws IOException {
-		Path pending = modsDir.resolve(file.filename() + PendingActions.PENDING_SUFFIX);
+		Path pending = SafeFileNames.resolveJar(modsDir, file.filename(), PendingActions.PENDING_SUFFIX);
 		modrinth.download(file, pending);
 		return pending;
 	}

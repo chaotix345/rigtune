@@ -204,6 +204,18 @@ class HttpModrinthClientTest {
 	}
 
 	@Test
+	void downloadRefusesUnsafeFileNamesBeforeRequesting(@TempDir Path dir) {
+		responses.put("/cdn/mod.jar", new Response(200, "x".getBytes(StandardCharsets.UTF_8)));
+		Path target = dir.resolve("mod.jar.rigtune-pending");
+		for (String name : List.of("../../evil.jar", "C:\\evil.jar", "evil.bat", "NUL.jar", "a\u0000.jar")) {
+			IOException e = assertThrows(IOException.class, () -> client.download(new ModFile(url("/cdn/mod.jar"), name, "00ff", 1), target));
+			assertTrue(e.getMessage().startsWith("Unsafe file name"), e.getMessage());
+		}
+		assertTrue(requests.isEmpty());
+		assertFalse(Files.exists(target));
+	}
+
+	@Test
 	void downloadRejectsHashMismatchAndLeavesNothingBehind(@TempDir Path dir) throws Exception {
 		responses.put("/cdn/mod.jar", new Response(200, "tampered".getBytes(StandardCharsets.UTF_8)));
 		Path target = dir.resolve("mod.jar.rigtune-pending");
