@@ -33,9 +33,9 @@ The user gave full autonomy on 2026-09-24 and also approved creating and fully s
 - [x] A4 client: MERGED (58c6d6a, fast-forward). Build + runClientGameTest green. The UI screenshots look good.
 - [ ] Review round 1: 18 findings in docs/reviews/review-1.md (1 critical, 3 high, 8 medium, 6 low). Fixes running in parallel:
   - F1: MERGED (5 commits). Findings #7, #8, #9, #14, #15, #16 plus the FPS-cap fix; the singleplayer RD cap bug is also fixed.
-  - F2: fix/apply-hardening @ C:/Dev/Worktrees/rigtune-fix2. Findings #1-#6, #10, #12 (Java), #13, #17.
+  - F2: MERGED (11 commits). Findings #1-#6, #10, #12 (Java), #13, #17. 208 unit tests green after the merge (291b561).
   - F3: MERGED. Findings #11, #12 (Python), #18. 61 Python tests.
-  - After all three: merge (expect RealController/Recommender overlaps), full build + runClientGameTest, then a re-review of the diff.
+  - All three merged. NEXT: runClientGameTest on merged mvp (running), then re-review the fix diff (58c6d6a..HEAD), then production verification with the user's mods.
 - [ ] Production verification: Loom ClientProductionRunTask (runProductionClientGameTest) with a COPY of the user's 44 mods, to screenshot the real report for their setup.
 - [x] Rules triage: MERGED (rules revision 3; +renderscale, structure-layout-optimizer, zfastnoise, zmaterial-rule-compiler, asynclogger; reviewIgnore; beta/alpha update filter). Java 107 / Python 46 green.
   - Lesson: ALWAYS rerun `./gradlew test` after regenerating rules. The scenario tests read the bundled rules, and b291ef4 broke CI this way.
