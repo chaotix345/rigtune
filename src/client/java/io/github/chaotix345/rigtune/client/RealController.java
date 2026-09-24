@@ -8,6 +8,7 @@ import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
+import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
 import io.github.chaotix345.rigtune.core.apply.ModJars;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
@@ -63,6 +64,7 @@ public final class RealController implements RigTuneController {
 	private final ClientState state;
 	private final Set<String> staged = new HashSet<>();
 	private final int carriedOverOps;
+	private final boolean selfFileActions = HelperLauncher.selfUpdateSupported();
 
 	private volatile @Nullable RulesDocument rules;
 	private volatile @Nullable HardwareProfile hardware;
@@ -197,12 +199,24 @@ public final class RealController implements RigTuneController {
 	}
 
 	private Report withoutStaged(Report built) {
-		if (staged.isEmpty()) {
+		List<Recommendation> kept = built.recommendations().stream()
+				.filter(r -> !staged.contains(r.id()))
+				.filter(r -> selfFileActions || !touchesRigTune(r))
+				.toList();
+		if (kept.size() == built.recommendations().size()) {
 			return built;
 		}
-		List<Recommendation> kept = built.recommendations().stream().filter(r -> !staged.contains(r.id())).toList();
 		return new Report(built.hardware(), built.gpuClass(), built.tier(), built.goal(), kept, built.rulesRevision(),
 				built.rulesSource(), built.online(), built.createdAt());
+	}
+
+	// Renaming RigTune's own jar is only safe when the helper runs from copies (see HelperLauncher.launch).
+	private static boolean touchesRigTune(Recommendation r) {
+		return switch (r.action()) {
+			case Action.UpdateMod update -> RigTune.MOD_ID.equals(update.modId());
+			case Action.DisableMod disable -> RigTune.MOD_ID.equals(disable.modId());
+			default -> false;
+		};
 	}
 
 	@Override
