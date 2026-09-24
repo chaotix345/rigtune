@@ -66,7 +66,11 @@ three sections a maintainer should work through before merging:
   that aren't in `knowledge.json` yet. For each: consider whether it's worth adding as
   a `ModRule` (the "optimization category" column is a hint, not a verdict — plenty of
   cosmetic/QoL mods are also worth recommending, and not everything tagged
-  "optimization" fits RigTune's scope).
+  "optimization" fits RigTune's scope). If you decide **not** to add one, record that
+  decision in `knowledge.json`'s top-level `reviewIgnore` array (`{"slug": "...",
+  "reason": "..."}`) so it stops showing up in this section every week. `reviewIgnore`
+  is maintainer bookkeeping only — the updater strips it out of section (a) but never
+  writes it into `rules-v1.json`.
 - **(b) Rule mods needing a status check** — a tracked mod's Modrinth project isn't
   `approved`/`unlisted` (e.g. archived, rejected, taken down), or it used to be shipped
   by Fabulously Optimized or Additive and no longer is by either. Investigate whether

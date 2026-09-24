@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": 2,
-  "generatedAt": "2026-09-24T04:45:08Z",
+  "revision": 3,
+  "generatedAt": "2026-09-24T05:02:00Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -594,11 +594,104 @@
       "recommendWhen": {
         "always": true
       },
-      "conflictsWith": [],
+      "conflictsWith": [
+        "zfastnoise",
+        "zmaterial-rule-compiler"
+      ],
       "defaultSelected": false,
       "upstream": {
         "fabulouslyOptimized": false,
         "additive": false
+      }
+    },
+    {
+      "slug": "structure-layout-optimizer",
+      "projectId": "ayPU0OHc",
+      "title": "Structure Layout Optimizer",
+      "modIds": [
+        "structure_layout_optimizer"
+      ],
+      "category": "worldgen",
+      "impact": "low",
+      "stability": "stable",
+      "reason": "Speeds up how jigsaw structures like villages, bastions and ancient cities generate, which cuts stutter from worldgen on your singleplayer world's built-in server.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [],
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": true
+      }
+    },
+    {
+      "slug": "zfastnoise",
+      "projectId": "OnlVIpq5",
+      "title": "Fast Noise",
+      "modIds": [
+        "zfastnoise"
+      ],
+      "category": "worldgen",
+      "impact": "low",
+      "stability": "beta",
+      "reason": "Speeds up vanilla's terrain noise generation, which cuts stutter from worldgen on your singleplayer world's built-in server. Its own issue tracker reports a rare chunk-generation crash when Lithium and C2ME are both installed, so it's off by default when C2ME is present.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [
+        "moonrise-opt",
+        "krypton",
+        "c2me-fabric"
+      ],
+      "defaultSelected": false,
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": true
+      }
+    },
+    {
+      "slug": "zmaterial-rule-compiler",
+      "projectId": "vnpqfrJN",
+      "title": "Material Rule Compiler",
+      "modIds": [
+        "zmatcomp"
+      ],
+      "category": "worldgen",
+      "impact": "low",
+      "stability": "beta",
+      "reason": "Compiles vanilla's surface-generation material rules into faster code, which cuts stutter from worldgen on your singleplayer world's built-in server. From the same project as Fast Noise, with the same rare chunk-generation crash risk when C2ME is installed.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [
+        "moonrise-opt",
+        "krypton",
+        "c2me-fabric"
+      ],
+      "defaultSelected": false,
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": true
+      }
+    },
+    {
+      "slug": "asynclogger",
+      "projectId": "zvNzKfGF",
+      "title": "Async Logger",
+      "modIds": [
+        "asynclogger"
+      ],
+      "category": "utility",
+      "impact": "low",
+      "stability": "stable",
+      "reason": "Moves Minecraft's log writing off the main thread and filters noisy log spam, which avoids small stutters from disk I/O.",
+      "recommendWhen": {
+        "always": true
+      },
+      "conflictsWith": [],
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": true
       }
     },
     {
@@ -689,6 +782,43 @@
       "upstream": {
         "fabulouslyOptimized": false,
         "additive": false
+      }
+    },
+    {
+      "slug": "renderscale",
+      "projectId": "Va8PJBFX",
+      "title": "RenderScale",
+      "modIds": [
+        "renderscale"
+      ],
+      "category": "rendering",
+      "impact": "medium",
+      "stability": "beta",
+      "reason": "Renders the game at a lower internal resolution and upscales it, which cuts GPU work on weak or integrated graphics at the cost of some sharpness.",
+      "recommendWhen": {
+        "anyOf": [
+          {
+            "gpuTierAtMost": 2
+          },
+          {
+            "gpuIntegrated": true
+          }
+        ]
+      },
+      "avoidWhen": {
+        "modPresent": [
+          "distanthorizons"
+        ],
+        "flags": [
+          "shaders-enabled"
+        ]
+      },
+      "avoidReason": "Players have reported Distant Horizons terrain rendering in front of everything else when RenderScale runs together with Iris shaders.",
+      "conflictsWith": [],
+      "defaultSelected": false,
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": true
       }
     },
     {
@@ -1420,6 +1550,7 @@
   ],
   "availability": {
     "26.3": [
+      "asynclogger",
       "badoptimizations",
       "better-block-entities",
       "c2me-fabric",
@@ -1433,54 +1564,67 @@
       "modernfix-mvus",
       "moreculling",
       "nvidium",
-      "scalablelux",
-      "sodium",
-      "sodium-extra"
-    ],
-    "26.2": [
-      "badoptimizations",
-      "better-block-entities",
-      "c2me-fabric",
-      "debugify",
-      "dynamic-fps",
-      "entityculling",
-      "fastquit",
-      "ferrite-core",
-      "immediatelyfast",
-      "ixeris",
-      "krypton",
-      "lithium",
-      "modernfix-mvus",
-      "moonrise-opt",
-      "moreculling",
-      "nvidium",
-      "particle-core",
-      "scalablelux",
-      "sodium",
-      "sodium-extra"
-    ],
-    "26.1.2": [
-      "badoptimizations",
-      "better-block-entities",
-      "c2me-fabric",
-      "debugify",
-      "dynamic-fps",
-      "entityculling",
-      "fastquit",
-      "ferrite-core",
-      "immediatelyfast",
-      "ixeris",
-      "krypton",
-      "lithium",
-      "modernfix-mvus",
-      "moonrise-opt",
-      "moreculling",
-      "nvidium",
-      "particle-core",
+      "renderscale",
       "scalablelux",
       "sodium",
       "sodium-extra",
-      "vulkanmod"
+      "structure-layout-optimizer",
+      "zfastnoise",
+      "zmaterial-rule-compiler"
+    ],
+    "26.2": [
+      "asynclogger",
+      "badoptimizations",
+      "better-block-entities",
+      "c2me-fabric",
+      "debugify",
+      "dynamic-fps",
+      "entityculling",
+      "fastquit",
+      "ferrite-core",
+      "immediatelyfast",
+      "ixeris",
+      "krypton",
+      "lithium",
+      "modernfix-mvus",
+      "moonrise-opt",
+      "moreculling",
+      "nvidium",
+      "particle-core",
+      "renderscale",
+      "scalablelux",
+      "sodium",
+      "sodium-extra",
+      "structure-layout-optimizer",
+      "zfastnoise",
+      "zmaterial-rule-compiler"
+    ],
+    "26.1.2": [
+      "asynclogger",
+      "badoptimizations",
+      "better-block-entities",
+      "c2me-fabric",
+      "debugify",
+      "dynamic-fps",
+      "entityculling",
+      "fastquit",
+      "ferrite-core",
+      "immediatelyfast",
+      "ixeris",
+      "krypton",
+      "lithium",
+      "modernfix-mvus",
+      "moonrise-opt",
+      "moreculling",
+      "nvidium",
+      "particle-core",
+      "renderscale",
+      "scalablelux",
+      "sodium",
+      "sodium-extra",
+      "structure-layout-optimizer",
+      "vulkanmod",
+      "zfastnoise"
     ]
   },
   "upstream": {

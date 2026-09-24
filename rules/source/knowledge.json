@@ -240,8 +240,58 @@
 			"stability": "stable",
 			"reason": "Optimises Minecraft's networking code. The gain on your side is small and mostly shows on busy multiplayer servers.",
 			"recommendWhen": { "always": true },
-			"conflictsWith": [],
+			"conflictsWith": ["zfastnoise", "zmaterial-rule-compiler"],
 			"defaultSelected": false
+		},
+		{
+			"slug": "structure-layout-optimizer",
+			"projectId": "ayPU0OHc",
+			"title": "Structure Layout Optimizer",
+			"modIds": ["structure_layout_optimizer"],
+			"category": "worldgen",
+			"impact": "low",
+			"stability": "stable",
+			"reason": "Speeds up how jigsaw structures like villages, bastions and ancient cities generate, which cuts stutter from worldgen on your singleplayer world's built-in server.",
+			"recommendWhen": { "always": true },
+			"conflictsWith": []
+		},
+		{
+			"slug": "zfastnoise",
+			"projectId": "OnlVIpq5",
+			"title": "Fast Noise",
+			"modIds": ["zfastnoise"],
+			"category": "worldgen",
+			"impact": "low",
+			"stability": "beta",
+			"reason": "Speeds up vanilla's terrain noise generation, which cuts stutter from worldgen on your singleplayer world's built-in server. Its own issue tracker reports a rare chunk-generation crash when Lithium and C2ME are both installed, so it's off by default when C2ME is present.",
+			"recommendWhen": { "always": true },
+			"conflictsWith": ["moonrise-opt", "krypton", "c2me-fabric"],
+			"defaultSelected": false
+		},
+		{
+			"slug": "zmaterial-rule-compiler",
+			"projectId": "vnpqfrJN",
+			"title": "Material Rule Compiler",
+			"modIds": ["zmatcomp"],
+			"category": "worldgen",
+			"impact": "low",
+			"stability": "beta",
+			"reason": "Compiles vanilla's surface-generation material rules into faster code, which cuts stutter from worldgen on your singleplayer world's built-in server. From the same project as Fast Noise, with the same rare chunk-generation crash risk when C2ME is installed.",
+			"recommendWhen": { "always": true },
+			"conflictsWith": ["moonrise-opt", "krypton", "c2me-fabric"],
+			"defaultSelected": false
+		},
+		{
+			"slug": "asynclogger",
+			"projectId": "zvNzKfGF",
+			"title": "Async Logger",
+			"modIds": ["asynclogger"],
+			"category": "utility",
+			"impact": "low",
+			"stability": "stable",
+			"reason": "Moves Minecraft's log writing off the main thread and filters noisy log spam, which avoids small stutters from disk I/O.",
+			"recommendWhen": { "always": true },
+			"conflictsWith": []
 		},
 		{
 			"slug": "dynamic-fps",
@@ -281,6 +331,21 @@
 			"avoidWhen": { "anyOf": [ { "not": { "gpuVendor": ["nvidia"] } }, { "gpuTierAtMost": 2 }, { "flags": ["shaders-enabled"] } ] },
 			"avoidReason": "Nvidium needs an NVIDIA GTX 16-series or RTX graphics card and switches itself off while a shader pack is on, so it can't help on this setup.",
 			"conflictsWith": []
+		},
+		{
+			"slug": "renderscale",
+			"projectId": "Va8PJBFX",
+			"title": "RenderScale",
+			"modIds": ["renderscale"],
+			"category": "rendering",
+			"impact": "medium",
+			"stability": "beta",
+			"reason": "Renders the game at a lower internal resolution and upscales it, which cuts GPU work on weak or integrated graphics at the cost of some sharpness.",
+			"recommendWhen": { "anyOf": [ { "gpuTierAtMost": 2 }, { "gpuIntegrated": true } ] },
+			"avoidWhen": { "modPresent": ["distanthorizons"], "flags": ["shaders-enabled"] },
+			"avoidReason": "Players have reported Distant Horizons terrain rendering in front of everything else when RenderScale runs together with Iris shaders.",
+			"conflictsWith": [],
+			"defaultSelected": false
 		},
 		{
 			"slug": "vulkanmod",
@@ -556,5 +621,15 @@
 			"title": "OpenGL setting adjusted by Sodium",
 			"text": "Your system doesn't support one of OpenGL's faster error-checking modes (common on Linux with Wayland), so Sodium turned it off to avoid a crash at start-up. You don't need to do anything."
 		}
+	],
+	"reviewIgnore": [
+		{ "slug": "servercore", "reason": "server-only; optimizes dedicated servers, no benefit to a singleplayer or LAN client" },
+		{ "slug": "vmp-fabric", "reason": "server-only, high-playercount scaling mod; effectively superseded by Moonrise, already in the rules" },
+		{ "slug": "fastserverpings", "reason": "only speeds up the multiplayer server-list ping, not gameplay performance" },
+		{ "slug": "bettergrassify", "reason": "cosmetic grass-rendering style (OptiFine's Fancy/Fast grass), not a performance mod" },
+		{ "slug": "iris", "reason": "shader-pack loader; a visual feature that costs FPS, not a performance optimization" },
+		{ "slug": "cull-fewer-leaves", "reason": "hard-conflicts with MoreCulling, which RigTune already always recommends, so it could never be safely offered alongside it" },
+		{ "slug": "quick-pack", "reason": "only speeds up datapack/resourcepack zip loading; too narrow a win for RigTune's mod list" },
+		{ "slug": "rrls", "reason": "alpha/beta resource-pack reload rework that touches the same pipeline as Iris and Continuity; not worth the risk for a loading-screen tweak" }
 	]
 }

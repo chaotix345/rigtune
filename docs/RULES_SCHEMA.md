@@ -3,7 +3,7 @@
 The rules file is `rules/rules-v1.json`, served from `https://raw.githubusercontent.com/chaotix345/rigtune/main/rules/rules-v1.json`, and a copy is bundled in the mod at `src/main/resources/rigtune/rules-v1.json`.
 
 **Where it comes from.** `tools/update_rules.py` generates it from two inputs:
-- the hand-maintained source `rules/source/knowledge.json`, which has the same shape minus the generated fields
+- the hand-maintained source `rules/source/knowledge.json`, which has the same shape minus the generated fields, plus one maintainer-only field (`reviewIgnore`, below)
 - upstream data (Modrinth, Fabulously Optimized, Additive)
 
 **How the mod picks a copy.** It loads the bundled copy, the cached copy (`config/rigtune/rules-cache.json`) and the remote copy. It uses the valid one with the highest `revision`. A document is valid if its `schemaVersion` is 1 and it parses.
@@ -78,6 +78,16 @@ A mod is **installed** when any of its `modIds` is loaded. It is **recommended t
 - `avoidWhen` doesn't match
 - no conflicting mod is installed
 - it's available for the running MC version: online per Modrinth, or offline per `availability`. Unknown counts as available, with the note "availability not confirmed".
+
+## reviewIgnore (source-only, not in rules-v1.json)
+`{ "slug": "servercore", "reason": "server-only" }`
+
+A top-level array in `rules/source/knowledge.json` only. Each entry is an upstream mod a
+maintainer has already triaged in `REVIEW.md` section (a) and decided not to add, with a
+one-line `reason`. `tools/update_rules.py` excludes these slugs from section (a) of the
+next `REVIEW.md` so they don't keep coming back up for review, but it never copies
+`reviewIgnore` into the generated `rules-v1.json` — it has no effect on what the mod
+recommends.
 
 ## ObsoleteRule
 `{ "modIds": ["indium"], "title": "Indium", "reason": "Merged into Sodium since 0.6; the standalone mod conflicts with current Sodium.", "replacement": "sodium" }`

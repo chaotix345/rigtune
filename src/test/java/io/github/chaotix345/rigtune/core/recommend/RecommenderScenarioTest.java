@@ -119,6 +119,7 @@ class RecommenderScenarioTest {
 		}
 		assertFalse(recs.containsKey("add:moonrise-opt"));
 		assertFalse(recs.containsKey("add:vulkanmod"));
+		assertFalse(recs.containsKey("add:renderscale"), "high-end dedicated GPU shouldn't get RenderScale");
 
 		assertFalse(setting(report, "vanilla.maxFps").isPresent(), "170 is already the 10-step cap for 180 Hz");
 		assertFalse(setting(report, "vanilla.enableVsync").isPresent());
@@ -132,7 +133,9 @@ class RecommenderScenarioTest {
 
 	@Test
 	void lowEndLaptopOnBattery() {
-		Report report = Recommender.recommend(RulesLoader.loadBundled(), Fixtures.lowEndLaptop().build(), Fixtures.mods("fabric-api"),
+		RulesDocument rules = RulesLoader.loadBundled();
+		rules.availability.remove("26.2");
+		Report report = Recommender.recommend(rules, Fixtures.lowEndLaptop().build(), Fixtures.mods("fabric-api"),
 				new SettingsSnapshot(LAPTOP_SETTINGS), OnlineData.offline(), Goal.BALANCED);
 		Map<String, Recommendation> recs = byId(report);
 
@@ -151,6 +154,7 @@ class RecommenderScenarioTest {
 		assertFalse(recs.containsKey("add:better-block-entities"));
 		assertFalse(recs.containsKey("add:sodium-extra"));
 		assertFalse(recs.containsKey("add:nvidium"));
+		assertTrue(recs.containsKey("add:renderscale"), "weak integrated GPU should get RenderScale");
 
 		int renderDistance = Integer.parseInt(setting(report, "vanilla.renderDistance").orElseThrow().newValue());
 		assertTrue(renderDistance <= 8, "render distance " + renderDistance);
@@ -233,7 +237,9 @@ class RecommenderScenarioTest {
 		List<InstalledMod> mods = Fixtures.mods("fabric-api");
 		SettingsSnapshot settings = new SettingsSnapshot(Map.of());
 
-		Map<String, Recommendation> unknown = byId(Recommender.recommend(RulesLoader.loadBundled(), hw.build(), mods, settings, OnlineData.offline(), Goal.BALANCED));
+		RulesDocument unknownRules = RulesLoader.loadBundled();
+		unknownRules.availability.remove("26.2");
+		Map<String, Recommendation> unknown = byId(Recommender.recommend(unknownRules, hw.build(), mods, settings, OnlineData.offline(), Goal.BALANCED));
 		assertTrue(unknown.get("add:sodium").reason().contains(Recommender.AVAILABILITY_UNKNOWN_NOTE));
 
 		RulesDocument offlineRules = RulesLoader.loadBundled();
