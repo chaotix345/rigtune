@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": 3,
-  "generatedAt": "2026-09-24T05:02:00Z",
+  "revision": 4,
+  "generatedAt": "2026-09-24T07:56:27Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -991,7 +991,8 @@
         "tierAtLeast": 4,
         "tierAtMost": 4
       },
-      "impact": "high",
+      "impact": "medium",
+      "defaultSelected": false,
       "reason": "Your hardware can handle 12 chunks smoothly; the benchmark can fine-tune it."
     },
     {
@@ -1000,7 +1001,8 @@
       "when": {
         "tierAtLeast": 5
       },
-      "impact": "high",
+      "impact": "medium",
+      "defaultSelected": false,
       "reason": "Your hardware is strong enough for 16 chunks as a starting point; the benchmark can push it further."
     },
     {
@@ -1026,6 +1028,16 @@
         "heapMbAtMost": 4200
       },
       "reason": "With 4 GB or less of memory for Minecraft, going past 16 chunks causes memory stutter."
+    },
+    {
+      "key": "vanilla.renderDistance",
+      "max": 12,
+      "when": {
+        "modPresent": [
+          "distanthorizons"
+        ]
+      },
+      "reason": "Distant Horizons already draws the far terrain cheaply, so vanilla chunks beyond 12 cost frame rate without adding much view distance."
     },
     {
       "key": "vanilla.simulationDistance",

@@ -124,7 +124,21 @@ class RecommenderScenarioTest {
 		assertFalse(setting(report, "vanilla.maxFps").isPresent(), "170 is already the 10-step cap for 180 Hz");
 		assertFalse(setting(report, "vanilla.enableVsync").isPresent());
 		assertFalse(setting(report, "vanilla.simulationDistance").isPresent());
+		assertFalse(setting(report, "vanilla.renderDistance").isPresent(), "Distant Horizons caps vanilla render distance at 12");
 		assertFalse(report.recommendations().stream().anyMatch(r -> r.id().startsWith("set:sodium.")));
+
+		Map<String, String> farSettings = new java.util.HashMap<>(USER_SETTINGS);
+		farSettings.put("vanilla.renderDistance", "20");
+		Report far = Recommender.recommend(rules, Fixtures.userRig().build(), Fixtures.mods(USER_MODS.toArray(String[]::new)),
+				new SettingsSnapshot(farSettings), OnlineData.offline(), Goal.BALANCED);
+		assertEquals("12", setting(far, "vanilla.renderDistance").orElseThrow().newValue());
+
+		List<String> withoutDh = USER_MODS.stream().filter(id -> !id.equals("distanthorizons")).toList();
+		Report noDh = Recommender.recommend(rules, Fixtures.userRig().build(), Fixtures.mods(withoutDh.toArray(String[]::new)),
+				new SettingsSnapshot(USER_SETTINGS), OnlineData.offline(), Goal.BALANCED);
+		Recommendation raise = byId(noDh).get("set:vanilla.renderDistance");
+		assertEquals("16", ((Action.SetSetting) raise.action()).newValue());
+		assertFalse(raise.selectedByDefault(), "raising render distance is an opt-in quality change");
 
 		assertTrue(report.recommendations().stream().noneMatch(r -> criticalAdviceIds(rules).contains(r.id())));
 		assertTrue(report.recommendations().stream().noneMatch(r -> r.category() == Category.WARNING && r.impact() == Impact.HIGH));
