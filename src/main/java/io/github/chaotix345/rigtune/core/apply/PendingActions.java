@@ -105,6 +105,13 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 		return new PendingActions(createdAt, gamePid, modsDir, configDir, newOps);
 	}
 
+	// The plan as seen from this instance's folders (derived from where pending.json is): they are recorded afresh, for
+	// information only, and ops outside them are dropped, since they belong to the instance this one was copied from.
+	public PendingActions relocated(Path newModsDir, Path newConfigDir) {
+		List<Op> kept = ops.stream().filter(op -> ApplyExecutor.problem(op, newModsDir, newConfigDir) == null).toList();
+		return new PendingActions(createdAt, gamePid, newModsDir.toString(), newConfigDir.toString(), kept);
+	}
+
 	public record Merged(PendingActions plan, List<Path> superseded) {
 	}
 

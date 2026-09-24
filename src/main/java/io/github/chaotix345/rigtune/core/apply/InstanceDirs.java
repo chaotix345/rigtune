@@ -27,4 +27,18 @@ public final class InstanceDirs {
 		}
 		return dir.toAbsolutePath().normalize();
 	}
+
+	// pending.json is <configDir>/rigtune/pending.json, and Fabric's configDir is gameDir/config (FabricLoaderImpl.setGameDir),
+	// so where the plan is says which instance it belongs to, even after the instance was copied or moved.
+	public static Path configDirOf(Path pendingJson) {
+		Path rigtuneDir = pendingJson.toAbsolutePath().normalize().getParent();
+		if (rigtuneDir == null || rigtuneDir.getParent() == null || rigtuneDir.getParent().getParent() == null) {
+			throw new IllegalArgumentException(pendingJson + " is not in <game>/config/rigtune");
+		}
+		return rigtuneDir.getParent();
+	}
+
+	public static Path modsDirOf(Path pendingJson) {
+		return modsDir(configDirOf(pendingJson).getParent());
+	}
 }

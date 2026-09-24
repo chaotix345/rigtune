@@ -469,11 +469,18 @@ public final class RealController implements RigTuneController {
 					RigTune.LOGGER.warn("Replacing unreadable {}", pendingFile, e);
 				}
 			}
-			PendingActions base = plan != null ? plan : PendingActions.create(ProcessHandle.current().pid(), modsDir, configDir, List.of());
+			// The folders come from where pending.json is, not from what an existing plan records (the instance may be a copy).
+			Path planMods = InstanceDirs.modsDirOf(pendingFile);
+			Path planConfig = InstanceDirs.configDirOf(pendingFile);
+			PendingActions base = plan != null ? plan.relocated(planMods, planConfig)
+					: PendingActions.create(ProcessHandle.current().pid(), planMods, planConfig, List.of());
+			if (plan != null && base.ops().size() < plan.ops().size()) {
+				RigTune.LOGGER.warn("Dropped {} staged change(s) for another instance's folders ({})", plan.ops().size() - base.ops().size(), plan.modsDir());
+			}
 			PendingActions.Merged merged = base.merge(ops);
 			merged.plan().save(pendingFile);
 			for (Path old : merged.superseded()) {
-				if (!SafeFileNames.isDirectChild(modsDir, old)) {
+				if (!SafeFileNames.isDirectChild(planMods, old)) {
 					continue;
 				}
 				try {

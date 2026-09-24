@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -25,6 +26,15 @@ class InstanceDirsTest {
 		assertEquals(shared.toRealPath(), InstanceDirs.modsDir(dir.resolve("instance"), shared.toString()));
 		// Fabric takes a relative value as given (Paths.get), so it is relative to the working directory, not gameDir.
 		assertEquals(Path.of("custom-mods").toAbsolutePath().normalize(), InstanceDirs.modsDir(dir.resolve("instance"), "custom-mods"));
+	}
+
+	@Test
+	void findsTheInstanceFromWhereThePlanIs(@TempDir Path dir) {
+		Path pending = PendingActions.defaultPath(dir.resolve("config"));
+
+		assertEquals(dir.resolve("config").toAbsolutePath().normalize(), InstanceDirs.configDirOf(pending));
+		assertEquals(InstanceDirs.modsDir(dir, null), InstanceDirs.modsDirOf(pending));
+		assertThrows(IllegalArgumentException.class, () -> InstanceDirs.configDirOf(dir.getRoot().resolve("pending.json")));
 	}
 
 	@Test

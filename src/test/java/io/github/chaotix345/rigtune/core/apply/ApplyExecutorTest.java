@@ -10,8 +10,10 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -149,16 +151,76 @@ class ApplyExecutorTest {
 	}
 
 	@Test
-	void planWithoutFoldersRefusesFileOps() throws IOException {
+	void foldersComeFromWhereThePlanIsNotFromWhatItRecords() throws IOException {
 		Path jar = Files.writeString(mods.resolve("a.jar"), "a");
-		PendingActions plan = new PendingActions("2026-09-24T00:00:00Z", 1, null, null, List.of(Op.disableFile(jar),
+		Path elsewhere = Files.createDirectories(dir.resolve("elsewhere"));
+		PendingActions plan = new PendingActions("2026-09-24T00:00:00Z", 1, elsewhere.toString(), null, List.of(Op.disableFile(jar),
 				Op.patchJson(config.resolve("sodium-options.json"), Map.of("a", "1"))));
 
 		ApplyResult result = executor.run(plan, pending);
 
-		assertEquals(List.of(Status.FAILED, Status.FAILED), statuses(result));
-		assertTrue(Files.exists(jar));
-		assertFalse(Files.exists(config.resolve("sodium-options.json")));
+		assertEquals(List.of(Status.OK, Status.OK), statuses(result));
+		assertTrue(Files.exists(mods.resolve("a.jar.disabled")));
+		assertTrue(Files.exists(config.resolve("sodium-options.json")));
+	}
+
+	private static void copyTree(Path from, Path to) throws IOException {
+		try (Stream<Path> files = Files.walk(from)) {
+			for (Path file : files.toList()) {
+				Path target = to.resolve(from.relativize(file).toString());
+				if (Files.isDirectory(file)) {
+					Files.createDirectories(target);
+				} else {
+					Files.copy(file, target);
+				}
+			}
+		}
+	}
+
+	// Prism's "Copy instance" (or a moved folder) copies pending.json, which still names the original's folders.
+	@Test
+	void aCopiedInstanceAppliesOnlyItsOwnChangesAndLeavesTheOriginalAlone() throws IOException {
+		Path original = dir.resolve("original");
+		Path origMods = Files.createDirectories(original.resolve("mods"));
+		Path origConfig = Files.createDirectories(original.resolve("config"));
+		Files.writeString(origMods.resolve("sodium-0.7.0.jar"), "old");
+		Files.writeString(origMods.resolve("sodium-0.7.1.jar.rigtune-pending"), "new");
+		PendingActions.create(1, origMods, origConfig, PendingActions.group(Op.disableFile(origMods.resolve("sodium-0.7.0.jar")),
+				Op.enableFile(origMods.resolve("sodium-0.7.1.jar.rigtune-pending"), origMods.resolve("sodium-0.7.1.jar")).withModId("sodium")))
+				.save(PendingActions.defaultPath(origConfig));
+		Path copy = dir.resolve("copy");
+		copyTree(original, copy);
+		Path copyMods = copy.resolve("mods");
+		Path copyPending = PendingActions.defaultPath(copy.resolve("config"));
+		Path indium = Files.writeString(copyMods.resolve("indium.jar"), "indium");
+		PendingActions copied = PendingActions.load(copyPending);
+		assertEquals(origMods.toString(), copied.modsDir());
+
+		// Staging in the copy drops the original's ops and records the copy's folders.
+		PendingActions relocated = copied.relocated(InstanceDirs.modsDirOf(copyPending), InstanceDirs.configDirOf(copyPending));
+		assertEquals(List.of(), relocated.ops());
+		assertEquals(InstanceDirs.modsDirOf(copyPending).toString(), relocated.modsDir());
+
+		// The helper, given the copied plan as it is, refuses the original's ops and applies the copy's own.
+		Op own = Op.disableFile(indium);
+		List<Op> ops = new ArrayList<>(copied.ops());
+		ops.add(own);
+		copied.withOps(ops).save(copyPending);
+
+		ApplyResult result = executor.run(PendingActions.load(copyPending), copyPending);
+
+		assertEquals(List.of(Status.FAILED, Status.FAILED, Status.OK), statuses(result));
+		assertTrue(result.results().stream().limit(2).allMatch(r -> r.message().contains("refused") || r.message().startsWith("Refused")),
+				result.toString());
+		assertTrue(Files.exists(copyMods.resolve("indium.jar.disabled")));
+		for (Path instanceMods : List.of(origMods, copyMods)) {
+			assertTrue(Files.exists(instanceMods.resolve("sodium-0.7.0.jar")), instanceMods.toString());
+			assertTrue(Files.exists(instanceMods.resolve("sodium-0.7.1.jar.rigtune-pending")), instanceMods.toString());
+			assertFalse(Files.exists(instanceMods.resolve("sodium-0.7.1.jar")), instanceMods.toString());
+		}
+		assertTrue(Files.exists(ApplyResult.defaultPath(copy.resolve("config"))));
+		assertFalse(Files.exists(ApplyResult.defaultPath(origConfig)));
+		assertEquals(2, PendingActions.load(PendingActions.defaultPath(origConfig)).ops().size());
 	}
 
 	@Test

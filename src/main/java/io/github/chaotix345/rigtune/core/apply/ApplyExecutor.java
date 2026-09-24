@@ -43,14 +43,13 @@ public final class ApplyExecutor {
 	}
 
 	// Callers hold the apply lock. pendingFile is re-read before it is rewritten, and only the ops run here
-	// that succeeded are removed from it, so ops staged after `plan` was read survive.
+	// that succeeded are removed from it, so ops staged after `plan` was read survive. The mods and config folders
+	// come from where pendingFile is; the ones the plan records are informational only.
 	public ApplyResult run(PendingActions plan, Path pendingFile) throws IOException {
-		ApplyResult result = new ApplyResult(Instant.now().toString(), execute(plan));
+		Path configDir = InstanceDirs.configDirOf(pendingFile);
+		ApplyResult result = new ApplyResult(Instant.now().toString(), execute(plan, InstanceDirs.modsDirOf(pendingFile), configDir));
 		writeRemaining(plan, pendingFile, result);
-		Path resultFile = plan.configDir() != null
-				? ApplyResult.defaultPath(Path.of(plan.configDir()))
-				: pendingFile.resolveSibling("last-apply.json");
-		result.save(resultFile);
+		result.save(ApplyResult.defaultPath(configDir));
 		return result;
 	}
 
@@ -72,9 +71,7 @@ public final class ApplyExecutor {
 		}
 	}
 
-	List<OpResult> execute(PendingActions plan) {
-		Path modsDir = dir(plan.modsDir());
-		Path configDir = dir(plan.configDir());
+	List<OpResult> execute(PendingActions plan, Path modsDir, Path configDir) {
 		List<Op> ops = plan.ops();
 		Map<String, List<Integer>> groups = new LinkedHashMap<>();
 		for (int i = 0; i < ops.size(); i++) {
@@ -87,14 +84,6 @@ public final class ApplyExecutor {
 			runGroup(ops, members, modsDir, configDir, out);
 		}
 		return Arrays.asList(out);
-	}
-
-	private static Path dir(String value) {
-		try {
-			return value == null ? null : Path.of(value);
-		} catch (InvalidPathException e) {
-			return null;
-		}
 	}
 
 	private record Undo(int index, Path moved, Path back) {
@@ -202,7 +191,7 @@ public final class ApplyExecutor {
 		}
 	}
 
-	// Mod files must sit directly in the plan's mods folder and config patches inside its config folder.
+	// Mod files must sit directly in the instance's mods folder and config patches inside its config folder.
 	static String containmentProblem(Op op, Path modsDir, Path configDir) {
 		return switch (op.type()) {
 			case ENABLE_FILE -> {
