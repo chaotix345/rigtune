@@ -156,6 +156,29 @@ class HelperLauncherTest {
 		}
 	}
 
+	// The helper has only RigTune and Gson on its classpath (no logger), so the duplicate check (review 2, N1) must read
+	// mod ids, including from a broken jar, without logging.
+	@Test
+	void helperChecksForDuplicatesWithOnlyRigTuneAndGson(@TempDir Path dir) throws Exception {
+		Path mods = Files.createDirectories(dir.resolve("mods"));
+		Path config = Files.createDirectories(dir.resolve("config"));
+		Path ours = jarOf(HelperLauncher.codeSourceOf(ApplyHelper.class), dir.resolve("rigtune.jar"));
+		TestJars.modJar(mods.resolve("sodium-0.7.2.jar"), "sodium");
+		Files.writeString(mods.resolve("broken.jar"), "not a zip");
+		Path staged = TestJars.modJar(mods.resolve("sodium-0.7.1.jar" + PendingActions.PENDING_SUFFIX), "sodium");
+		Path pending = PendingActions.defaultPath(config);
+		PendingActions.create(1, mods, config, List.of(Op.enableFile(staged, mods.resolve("sodium-0.7.1.jar")).withModId("sodium"))).save(pending);
+
+		Process helper = HelperLauncher.launch(config, pending, List.of(ours, HelperLauncher.codeSourceOf(Gson.class)), ApplyLockTest.deadPid());
+
+		String output = awaitHelper(helper, HelperLauncher.helperLog(config));
+		assertEquals(1, helper.exitValue(), output);
+		assertTrue(output.contains("ABANDONED ENABLE_FILE: Dropped: mod sodium is already installed as sodium-0.7.2.jar"), output);
+		assertTrue(Files.exists(mods.resolve("sodium-0.7.1.jar" + PendingActions.SUPERSEDED_SUFFIX)), output);
+		assertFalse(Files.exists(mods.resolve("sodium-0.7.1.jar")), output);
+		assertFalse(Files.exists(pending), output);
+	}
+
 	// Without the copies, Windows keeps mods/rigtune-1.0.jar open in the helper JVM, so the disable fails. The group
 	// then skips the enable, so there is still exactly one RigTune jar, and the update stays pending.
 	@Test
