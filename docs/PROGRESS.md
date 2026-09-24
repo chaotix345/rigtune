@@ -30,7 +30,11 @@ The user gave full autonomy on 2026-09-24 and also approved creating and fully s
 - [x] A2 apply: MERGED. 45 tests. core.modrinth, core.apply, core.benchmark.
 - [x] A1 brain: MERGED. 60 tests, 21 mods, 6 obsolete. I fixed $refreshRateCap to snap to vanilla's multiples of 10.
 - [x] Live updater run: rules revision 2 committed and pushed. CI green on GitHub.
-- [ ] A4 client: RUNNING. Worktree C:/Dev/Worktrees/rigtune-client, branch feat/client. Told to `git merge feat/rigtune-mvp` for Phase B, with notes: real mod ids, not provides (ScalableLux provides starlight); AddMod goes through DependencyResolver; vanilla setting rows show the OptionInstance caption; pass modVersion.
+- [x] A4 client: MERGED (58c6d6a, fast-forward). Build + runClientGameTest green. The UI screenshots look good.
+- [ ] Review round 1:
+  - The code-reviewer agent (read-only) writes to scratchpad/review-1.md.
+  - The fixer agent works in C:/Dev/Worktrees/rigtune-fix on branch fix/review-round-1. It is fixing the benchmark measuring under the user's FPS cap (target should be $refreshRateCap, measured uncapped). Next, send it the review findings.
+- [ ] Production verification: Loom ClientProductionRunTask (runProductionClientGameTest) with a COPY of the user's 44 mods, to screenshot the real report for their setup.
 - [x] Rules triage: MERGED (rules revision 3; +renderscale, structure-layout-optimizer, zfastnoise, zmaterial-rule-compiler, asynclogger; reviewIgnore; beta/alpha update filter). Java 107 / Python 46 green.
   - Lesson: ALWAYS rerun `./gradlew test` after regenerating rules. The scenario tests read the bundled rules, and b291ef4 broke CI this way.
 - Note: I added `"timeout": 5` to the user's global pwsh Stop hook, with their approval. It hung waiting on stdin.
