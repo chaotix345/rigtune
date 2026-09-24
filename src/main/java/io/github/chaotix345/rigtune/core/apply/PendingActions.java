@@ -80,7 +80,6 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 		return group(List.of(ops));
 	}
 
-	// Puts the ops in one new all-or-nothing group, in the given order.
 	public static List<Op> group(List<Op> ops) {
 		String group = newId();
 		List<Op> out = new ArrayList<>(ops.size());

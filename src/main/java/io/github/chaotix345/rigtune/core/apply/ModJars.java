@@ -16,7 +16,6 @@ public final class ModJars {
 	private ModJars() {
 	}
 
-	// The fabric.mod.json id of a jar, or null when it has none or can't be read.
 	public static String modIdOf(Path jar) {
 		try (ZipFile zip = new ZipFile(jar.toFile())) {
 			ZipEntry entry = zip.getEntry("fabric.mod.json");
