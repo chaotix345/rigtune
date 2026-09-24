@@ -1,0 +1,39 @@
+{
+	"schemaVersion": 1,
+	"id": "rigtune",
+	"version": "${version}",
+	"name": "RigTune",
+	"description": "Reads your hardware and recommends the performance mods, mod settings and video settings that suit it, with an in-game benchmark to fine-tune. Recommendations stay current through live rules and the Modrinth API.",
+	"authors": [
+		"chaotix345"
+	],
+	"contact": {
+		"homepage": "https://github.com/chaotix345/rigtune",
+		"sources": "https://github.com/chaotix345/rigtune",
+		"issues": "https://github.com/chaotix345/rigtune/issues"
+	},
+	"license": "MIT",
+	"icon": "assets/rigtune/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"preLaunch": [
+			"io.github.chaotix345.rigtune.client.RigTunePreLaunch"
+		],
+		"client": [
+			"io.github.chaotix345.rigtune.client.RigTuneClient"
+		],
+		"modmenu": [
+			"io.github.chaotix345.rigtune.client.compat.ModMenuIntegration"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"modmenu": "*",
+		"sodium": "*"
+	}
+}
