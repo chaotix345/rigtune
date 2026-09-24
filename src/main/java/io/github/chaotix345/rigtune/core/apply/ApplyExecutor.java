@@ -12,9 +12,14 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Stream;
 
 public final class ApplyExecutor {
 	public static final int DEFAULT_ATTEMPTS = 10;
@@ -47,14 +52,16 @@ public final class ApplyExecutor {
 	// come from where pendingFile is; the ones the plan records are informational only.
 	public ApplyResult run(PendingActions plan, Path pendingFile) throws IOException {
 		Path configDir = InstanceDirs.configDirOf(pendingFile);
-		ApplyResult result = new ApplyResult(Instant.now().toString(), execute(plan, InstanceDirs.modsDirOf(pendingFile), configDir));
-		writeRemaining(plan, pendingFile, result);
+		Path modsDir = InstanceDirs.modsDirOf(pendingFile);
+		ApplyResult result = new ApplyResult(Instant.now().toString(), execute(plan, modsDir, configDir));
+		writeRemaining(plan, pendingFile, result, modsDir);
 		result.save(ApplyResult.defaultPath(configDir));
 		return result;
 	}
 
-	private static void writeRemaining(PendingActions plan, Path pendingFile, ApplyResult result) throws IOException {
-		List<Op> done = result.results().stream().filter(r -> r.status() != Status.FAILED).map(OpResult::op).toList();
+	// Ops that are done or abandoned leave the plan. An abandoned enable's download is renamed to .rigtune-superseded.
+	private static void writeRemaining(PendingActions plan, Path pendingFile, ApplyResult result, Path modsDir) throws IOException {
+		List<Op> leaving = result.results().stream().filter(r -> r.status() != Status.FAILED).map(OpResult::op).toList();
 		PendingActions base = plan;
 		if (Files.exists(pendingFile)) {
 			try {
@@ -63,11 +70,29 @@ public final class ApplyExecutor {
 				base = plan;
 			}
 		}
-		List<Op> remaining = base.ops().stream().filter(op -> done.stream().noneMatch(d -> d != null && d.sameOp(op))).toList();
+		List<Op> remaining = base.ops().stream().filter(op -> leaving.stream().noneMatch(d -> d != null && d.sameOp(op))).toList();
 		if (remaining.isEmpty()) {
 			Files.deleteIfExists(pendingFile);
 		} else {
 			base.withOps(remaining).save(pendingFile);
+		}
+		for (Op op : result.abandonedOps()) {
+			retireDownload(op, remaining, modsDir);
+		}
+	}
+
+	private static void retireDownload(Op op, List<Op> remaining, Path modsDir) {
+		if (op == null || op.type() != PendingActions.Type.ENABLE_FILE || op.from() == null || !op.from().endsWith(PendingActions.PENDING_SUFFIX)
+				|| remaining.stream().anyMatch(o -> op.from().equals(o.from()))) {
+			return;
+		}
+		try {
+			Path from = Path.of(op.from());
+			if (SafeFileNames.isDirectChild(modsDir, from)) {
+				PendingActions.retire(from);
+			}
+		} catch (IOException | InvalidPathException ignored) {
+			// It stays a .rigtune-pending file, which Fabric ignores.
 		}
 	}
 
@@ -80,10 +105,84 @@ public final class ApplyExecutor {
 			groups.computeIfAbsent(key, k -> new ArrayList<>()).add(i);
 		}
 		OpResult[] out = new OpResult[ops.size()];
+		InstalledJars installed = new InstalledJars(modsDir);
 		for (List<Integer> members : groups.values()) {
-			runGroup(ops, members, modsDir, configDir, out);
+			runGroup(ops, members, modsDir, configDir, installed, out);
+			members.forEach(i -> installed.forget(ops.get(i)));
 		}
 		return Arrays.asList(out);
+	}
+
+	// The mod ids of the jars in the mods folder, each read once; forget() drops the names a group may have renamed.
+	private static final class InstalledJars {
+		private final Path modsDir;
+		private final Map<String, String> idsByName = new HashMap<>();
+
+		InstalledJars(Path modsDir) {
+			this.modsDir = modsDir;
+		}
+
+		// The first *.jar (other than `ignored`) whose fabric.mod.json id is modId, or null.
+		String withModId(String modId, Set<String> ignored) {
+			List<Path> jars;
+			try (Stream<Path> files = Files.list(modsDir)) {
+				jars = files.filter(f -> f.getFileName().toString().endsWith(".jar") && Files.isRegularFile(f)).sorted().toList();
+			} catch (IOException e) {
+				return null;
+			}
+			for (Path jar : jars) {
+				String name = jar.getFileName().toString();
+				if (!ignored.contains(name) && modId.equals(idsByName.computeIfAbsent(name, n -> idOf(jar)))) {
+					return name;
+				}
+			}
+			return null;
+		}
+
+		private static String idOf(Path jar) {
+			try {
+				return Objects.requireNonNullElse(ModJars.readModId(jar), "");
+			} catch (IOException e) {
+				return "";
+			}
+		}
+
+		void forget(Op op) {
+			if (op == null) {
+				return;
+			}
+			for (String path : Arrays.asList(op.from(), op.to(), op.path())) {
+				try {
+					if (path != null) {
+						idsByName.remove(fileName(path));
+					}
+				} catch (InvalidPathException ignored) {
+				}
+			}
+		}
+	}
+
+	// An enable whose mod is already installed another way (the launcher updated it meanwhile, or it was added by
+	// hand) would load the mod twice, and Fabric then refuses to start. Jars this group disables don't count.
+	private static String duplicateProblem(List<Op> ops, List<Integer> order, InstalledJars installed) {
+		Set<String> disabled = new HashSet<>();
+		for (int i : order) {
+			if (ops.get(i).type() == PendingActions.Type.DISABLE_FILE) {
+				disabled.add(fileName(ops.get(i).path()));
+			}
+		}
+		for (int i : order) {
+			Op op = ops.get(i);
+			if (op.type() != PendingActions.Type.ENABLE_FILE || op.modId() == null || !Files.exists(Path.of(op.from()))) {
+				continue;
+			}
+			String existing = installed.withModId(op.modId(), disabled);
+			if (existing != null) {
+				return "mod " + op.modId() + " is already installed as " + existing + ", so enabling " + fileName(op.to())
+						+ " would load it twice; its download is renamed to " + PendingActions.SUPERSEDED_SUFFIX;
+			}
+		}
+		return null;
 	}
 
 	private record Undo(int index, Path moved, Path back) {
@@ -94,7 +193,7 @@ public final class ApplyExecutor {
 
 	// A group is all-or-nothing: disables run first, and an enable runs only once every disable in the group is
 	// OK or already done. When an op fails, the rest are skipped and the earlier renames are undone.
-	private void runGroup(List<Op> ops, List<Integer> members, Path modsDir, Path configDir, OpResult[] out) {
+	private void runGroup(List<Op> ops, List<Integer> members, Path modsDir, Path configDir, InstalledJars installed, OpResult[] out) {
 		List<Integer> order = new ArrayList<>(members);
 		order.sort(Comparator.comparingInt(i -> rank(ops.get(i))));
 
@@ -108,6 +207,13 @@ public final class ApplyExecutor {
 			for (int i : order) {
 				out[i] = new OpResult(ops.get(i), Status.FAILED,
 						problems[i] != null ? "Refused: " + problems[i] : "Not applied: another change in its group was refused");
+			}
+			return;
+		}
+		String duplicate = duplicateProblem(ops, order, installed);
+		if (duplicate != null) {
+			for (int i : order) {
+				out[i] = new OpResult(ops.get(i), Status.ABANDONED, "Dropped: " + duplicate);
 			}
 			return;
 		}

@@ -10,7 +10,9 @@ import java.util.List;
 
 public record ApplyResult(String finishedAt, List<OpResult> results) {
 	public enum Status {
-		OK, SKIPPED_ALREADY_DONE, FAILED
+		OK, SKIPPED_ALREADY_DONE, FAILED,
+		// Not applied, and dropped from pending.json because it can never apply (see ApplyExecutor).
+		ABANDONED
 	}
 
 	public record OpResult(PendingActions.Op op, Status status, String message) {
@@ -21,11 +23,16 @@ public record ApplyResult(String finishedAt, List<OpResult> results) {
 	}
 
 	public boolean allSucceeded() {
-		return results.stream().allMatch(r -> r.status() != Status.FAILED);
+		return results.stream().allMatch(r -> r.status() == Status.OK || r.status() == Status.SKIPPED_ALREADY_DONE);
 	}
 
+	// Every op that wasn't applied, abandoned ones included.
 	public List<PendingActions.Op> failedOps() {
-		return results.stream().filter(r -> r.status() == Status.FAILED).map(OpResult::op).toList();
+		return results.stream().filter(r -> r.status() == Status.FAILED || r.status() == Status.ABANDONED).map(OpResult::op).toList();
+	}
+
+	public List<PendingActions.Op> abandonedOps() {
+		return results.stream().filter(r -> r.status() == Status.ABANDONED).map(OpResult::op).toList();
 	}
 
 	public static Path defaultPath(Path configDir) {

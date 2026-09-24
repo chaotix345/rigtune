@@ -17,6 +17,16 @@ public final class ModJars {
 	}
 
 	public static String modIdOf(Path jar) {
+		try {
+			return readModId(jar);
+		} catch (IOException e) {
+			RigTune.LOGGER.warn("Could not read the mod id of {}", jar, e);
+			return null;
+		}
+	}
+
+	// Null when the jar has no fabric.mod.json id. Doesn't log: the apply helper runs without a logger on its classpath.
+	static String readModId(Path jar) throws IOException {
 		try (ZipFile zip = new ZipFile(jar.toFile())) {
 			ZipEntry entry = zip.getEntry("fabric.mod.json");
 			if (entry == null) {
@@ -30,9 +40,8 @@ public final class ModJars {
 				JsonElement id = root.getAsJsonObject().get("id");
 				return id.isJsonPrimitive() ? id.getAsString() : null;
 			}
-		} catch (IOException | RuntimeException e) {
-			RigTune.LOGGER.warn("Could not read the mod id of {}", jar, e);
-			return null;
+		} catch (RuntimeException e) {
+			throw new IOException("Unreadable fabric.mod.json in " + jar, e);
 		}
 	}
 }

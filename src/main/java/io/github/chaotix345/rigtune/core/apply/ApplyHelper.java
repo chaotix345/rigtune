@@ -94,7 +94,8 @@ public final class ApplyHelper {
 			for (ApplyResult.OpResult r : result.results()) {
 				log(r.status() + " " + (r.op() == null ? "?" : r.op().type()) + ": " + r.message());
 			}
-			log(result.allSucceeded() ? "All operations done" : "Some operations failed; they remain in " + pending);
+			log(result.allSucceeded() ? "All operations done"
+					: "Some operations were not applied; failed ones remain in " + pending + ", abandoned ones were dropped");
 			return result.allSucceeded() ? 0 : 1;
 		} catch (IOException | RuntimeException e) {
 			log("Apply failed: " + e);
