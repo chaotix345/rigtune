@@ -11,6 +11,7 @@ import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
+import io.github.chaotix345.rigtune.core.model.UpdateInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -60,8 +61,39 @@ class DownloadPlannerTest {
 		if (failing.contains(file.filename()) || failOnce.remove(file.filename())) {
 			throw new IOException("stalled: " + file.filename());
 		}
-		String id = file.filename().substring(0, file.filename().length() - "V.jar".length()).toLowerCase(Locale.ROOT);
+		String base = file.filename().substring(0, file.filename().length() - ".jar".length());
+		String id = (base.endsWith("V") ? base.substring(0, base.length() - 1) : base).toLowerCase(Locale.ROOT);
 		return TestJars.modJar(SafeFileNames.resolveJar(mods, file.filename(), PendingActions.PENDING_SUFFIX), id);
+	}
+
+	private Recommendation update(String current, String next) {
+		UpdateInfo info = new UpdateInfo("m", "M", "1", "v2", "2", new ModFile("https://cdn/" + next, next, "sha512", 10));
+		return new Recommendation("update-m", Category.UPDATE_MOD, Impact.MEDIUM, "Update m", "", new Action.UpdateMod("m", mods.resolve(current), info), true);
+	}
+
+	// Review 2, N3: an update whose file name is already taken would fail at every exit, so it isn't staged.
+	@Test
+	void anUpdateWhoseTargetIsTakenIsRefusedBeforeDownloading() throws IOException {
+		Files.writeString(mods.resolve("m-1.jar"), "installed");
+		Files.writeString(mods.resolve("m-2.jar"), "left over");
+
+		DownloadPlanner.Result result = plan(Set.of(), update("m-1.jar", "m-2.jar"));
+
+		assertEquals(List.of(), result.ops());
+		assertEquals(List.of(), result.ids());
+		assertTrue(result.errors().getFirst().contains("m-2.jar is already in the mods folder"), result.errors().toString());
+		assertEquals(List.of(), fetched);
+	}
+
+	@Test
+	void anUpdateKeepingTheSameFileNameIsStaged() throws IOException {
+		Files.writeString(mods.resolve("m.jar"), "installed");
+
+		DownloadPlanner.Result result = plan(Set.of(), update("m.jar", "m.jar"));
+
+		assertEquals(List.of("update-m"), result.ids());
+		assertEquals(List.of(PendingActions.Type.DISABLE_FILE, PendingActions.Type.ENABLE_FILE), result.ops().stream().map(Op::type).toList());
+		assertEquals(1, groups(result.ops()));
 	}
 
 	private DownloadPlanner.Result plan(Set<String> installedProjects, Recommendation... recs) {

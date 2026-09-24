@@ -13,6 +13,7 @@ import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
+import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
@@ -226,7 +227,7 @@ public final class RealController implements RigTuneController {
 		}
 		Map<String, String> vanilla = new LinkedHashMap<>();
 		Map<String, String> sodium = new LinkedHashMap<>();
-		List<String> sodiumIds = new ArrayList<>();
+		Map<String, String> sodiumIds = new HashMap<>();
 		List<Op> immediateOps = new ArrayList<>();
 		List<String> immediateIds = new ArrayList<>();
 		List<Recommendation> downloads = new ArrayList<>();
@@ -235,7 +236,7 @@ public final class RealController implements RigTuneController {
 				case Action.SetSetting set when set.key().startsWith(VANILLA) -> vanilla.put(set.key(), set.newValue());
 				case Action.SetSetting set when set.key().startsWith(SODIUM) -> {
 					sodium.put(set.key().substring(SODIUM.length()), set.newValue());
-					sodiumIds.add(r.id());
+					sodiumIds.put(set.key().substring(SODIUM.length()), r.id());
 				}
 				case Action.DisableMod disable when SafeFileNames.isDirectChild(modsDir, disable.file()) -> {
 					immediateOps.add(Op.disableFile(disable.file()));
@@ -260,8 +261,11 @@ public final class RealController implements RigTuneController {
 			}
 		}
 		if (!sodium.isEmpty()) {
-			immediateOps.addFirst(Op.patchJson(SettingsBridge.sodiumConfig(), sodium));
-			immediateIds.addAll(sodiumIds);
+			SodiumConfigPatcher.Staged patches = SodiumConfigPatcher.stage(SettingsBridge.sodiumConfig(), sodium);
+			patches.refused().forEach((key, problem) -> RigTune.LOGGER.warn("Not staging Sodium setting {}: {}", key, problem));
+			settingsFailed += patches.refused().size();
+			immediateOps.addAll(0, patches.ops());
+			patches.ops().forEach(op -> immediateIds.add(sodiumIds.get(op.patches().keySet().iterator().next())));
 		}
 		boolean stageFailed = !immediateOps.isEmpty() && !stage(immediateOps, immediateIds);
 		if (!downloads.isEmpty()) {

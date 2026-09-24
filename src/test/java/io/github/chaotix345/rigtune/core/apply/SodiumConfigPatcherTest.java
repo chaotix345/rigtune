@@ -145,6 +145,49 @@ class SodiumConfigPatcherTest {
 		assertEquals(SODIUM, Files.readString(file));
 	}
 
+	// Review 2, N3: a value that doesn't fit is refused at staging, and the others are staged one op per key.
+	@Test
+	void stagingChecksEachValueAndStagesOneOpPerKey(@TempDir Path dir) throws IOException {
+		Path mods = Files.createDirectories(dir.resolve("mods"));
+		Path config = Files.createDirectories(dir.resolve("config"));
+		Path file = Files.writeString(config.resolve("sodium-options.json"), SODIUM);
+		Map<String, String> patches = new LinkedHashMap<>();
+		patches.put("performance.chunk_builder_threads", "auto");
+		patches.put("performance.use_fog_occlusion", "false");
+		patches.put("quality.weather_quality", "FAST");
+		patches.put("quality.enable_vignette", "maybe");
+
+		SodiumConfigPatcher.Staged staged = SodiumConfigPatcher.stage(file, patches);
+
+		assertEquals(List.of("performance.chunk_builder_threads", "quality.enable_vignette"), List.copyOf(staged.refused().keySet()));
+		assertTrue(staged.refused().get("performance.chunk_builder_threads").contains("expects a number"), staged.refused().toString());
+		assertEquals(List.of(Map.of("performance.use_fog_occlusion", "false"), Map.of("quality.weather_quality", "FAST")),
+				staged.ops().stream().map(PendingActions.Op::patches).toList());
+		assertEquals(2, staged.ops().stream().map(PendingActions.Op::id).distinct().count());
+
+		Path pending = PendingActions.defaultPath(config);
+		PendingActions plan = PendingActions.create(1, mods, config, staged.ops());
+		plan.save(pending);
+		ApplyResult result = new ApplyExecutor(2, 1).run(plan, pending);
+
+		assertTrue(result.allSucceeded(), result.toString());
+		Map<String, String> flat = SodiumConfigPatcher.flatten(json(Files.readString(file)), "");
+		assertEquals("false", flat.get("performance.use_fog_occlusion"));
+		assertEquals("FAST", flat.get("quality.weather_quality"));
+		assertEquals("0", flat.get("performance.chunk_builder_threads"));
+	}
+
+	@Test
+	void stagingAcceptsAnythingForAMissingFileAndNothingForABrokenOne(@TempDir Path dir) throws IOException {
+		Map<String, String> patches = Map.of("performance.chunk_builder_threads", "auto");
+
+		assertEquals(1, SodiumConfigPatcher.stage(dir.resolve("sodium-options.json"), patches).ops().size());
+		Path broken = Files.writeString(dir.resolve("broken.json"), "{ broken");
+		SodiumConfigPatcher.Staged staged = SodiumConfigPatcher.stage(broken, patches);
+		assertEquals(List.of(), staged.ops());
+		assertEquals(patches.keySet(), staged.refused().keySet());
+	}
+
 	@Test
 	void refusesToReplaceNonObjectWithObject() {
 		assertThrows(IllegalArgumentException.class,

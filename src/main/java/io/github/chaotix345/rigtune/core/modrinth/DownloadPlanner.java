@@ -125,6 +125,10 @@ public final class DownloadPlanner {
 			throw new IOException("it isn't in this instance's mods folder; update it in your launcher");
 		}
 		Path target = SafeFileNames.resolveJar(modsDir, file.filename());
+		// As for an added mod: the enable never overwrites, so a target taken by another file would fail at every exit.
+		if (Files.exists(target) && !(Files.exists(update.currentFile()) && Files.isSameFile(target, update.currentFile()))) {
+			throw new IOException(target.getFileName() + " is already in the mods folder");
+		}
 		Path pending = fetcher.fetch(file);
 		String jarModId = Objects.requireNonNullElse(modIdOf.apply(pending), update.modId());
 		attempt.batch.noteReplaced(jarModId, pending);

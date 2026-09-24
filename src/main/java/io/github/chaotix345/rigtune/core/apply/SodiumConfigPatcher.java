@@ -10,7 +10,10 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -120,6 +123,35 @@ public final class SodiumConfigPatcher {
 		}
 		AtomicFiles.writeString(file, PendingActions.GSON.toJson(patched));
 		return true;
+	}
+
+	public record Staged(List<PendingActions.Op> ops, Map<String, String> refused) {
+	}
+
+	// One PATCH_JSON op per key, so a value that stops fitting later fails alone. Each value is first checked against
+	// the file as it is now, with the rules patchFile uses; one that doesn't fit is refused (key -> reason) instead of
+	// failing at every exit. A missing file accepts anything, since new fields get an inferred type.
+	public static Staged stage(Path file, Map<String, String> patches) {
+		JsonObject root;
+		try {
+			root = Files.exists(file) ? JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8)).getAsJsonObject() : new JsonObject();
+		} catch (IOException | RuntimeException e) {
+			Map<String, String> refused = new LinkedHashMap<>();
+			patches.keySet().forEach(key -> refused.put(key, "can't read " + file.getFileName() + ": " + e.getMessage()));
+			return new Staged(List.of(), refused);
+		}
+		List<PendingActions.Op> ops = new ArrayList<>();
+		Map<String, String> refused = new LinkedHashMap<>();
+		for (Map.Entry<String, String> entry : patches.entrySet()) {
+			Map<String, String> single = Collections.singletonMap(entry.getKey(), entry.getValue());
+			try {
+				patch(root, single);
+				ops.add(PendingActions.Op.patchJson(file, single));
+			} catch (IllegalArgumentException e) {
+				refused.put(entry.getKey(), e.getMessage());
+			}
+		}
+		return new Staged(List.copyOf(ops), refused);
 	}
 
 	public static Map<String, String> flatten(JsonObject obj, String prefix) {
