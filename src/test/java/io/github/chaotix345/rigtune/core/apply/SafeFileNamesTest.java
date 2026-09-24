@@ -50,6 +50,16 @@ class SafeFileNamesTest {
 	}
 
 	@Test
+	void rejectsShortNameAliases() {
+		for (String name : List.of("SODIUM~1.jar", "sodium~1.jar", "FABRIC~12.jar", "a~1b.jar", "ab~123456.x.jar")) {
+			assertFalse(SafeFileNames.isSafeJarName(name), name);
+		}
+		for (String name : List.of("a~b.jar", "mod~.jar", "mod-1.0~1.jar", "~mod.jar")) {
+			assertTrue(SafeFileNames.isSafeJarName(name), name);
+		}
+	}
+
+	@Test
 	void requiresJarExtension() {
 		for (String name : List.of("x.bat", "x.exe", "x.cmd", "x.JAR", "x.jar.rigtune-pending", "x.jar.disabled", "x", "xjar")) {
 			assertFalse(SafeFileNames.isSafeJarName(name), name);

@@ -5,6 +5,7 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public final class SafeFileNames {
 	public static final int MAX_LENGTH = 255;
@@ -12,6 +13,7 @@ public final class SafeFileNames {
 	private static final Set<String> RESERVED = Set.of("CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$",
 			"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "COM¹", "COM²", "COM³",
 			"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "LPT¹", "LPT²", "LPT³");
+	private static final Pattern SHORT_NAME = Pattern.compile("~\\d");
 
 	private SafeFileNames() {
 	}
@@ -93,6 +95,10 @@ public final class SafeFileNames {
 		String stem = (dot < 0 ? name : name.substring(0, dot)).stripTrailing().toUpperCase(Locale.ROOT);
 		if (RESERVED.contains(stem)) {
 			return "reserved device name";
+		}
+		// On NTFS "SODIUM~1.jar" can be the short alias of an existing long-named jar, so Files.exists would find it.
+		if (SHORT_NAME.matcher(stem).find()) {
+			return "looks like an 8.3 short name";
 		}
 		try {
 			Path path = Path.of(name);
