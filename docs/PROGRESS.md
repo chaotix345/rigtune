@@ -31,7 +31,9 @@ The user gave full autonomy on 2026-09-24 and also approved creating and fully s
 - [x] A1 brain: MERGED. 60 tests, 21 mods, 6 obsolete. I fixed $refreshRateCap to snap to vanilla's multiples of 10.
 - [x] Live updater run: rules revision 2 committed and pushed. CI green on GitHub.
 - [ ] A4 client: RUNNING. Worktree C:/Dev/Worktrees/rigtune-client, branch feat/client. Told to `git merge feat/rigtune-mvp` for Phase B, with notes: real mod ids, not provides (ScalableLux provides starlight); AddMod goes through DependencyResolver; vanilla setting rows show the OptionInstance caption; pass modVersion.
-- [ ] Rules triage agent: RUNNING. Worktree C:/Dev/Worktrees/rigtune-rules, branch feat/rules-triage. Adds renderscale and the world-gen mods, reviewIgnore support in the updater, and the beta/alpha update filter in OnlineDataFetcher.
+- [x] Rules triage: MERGED (rules revision 3; +renderscale, structure-layout-optimizer, zfastnoise, zmaterial-rule-compiler, asynclogger; reviewIgnore; beta/alpha update filter). Java 107 / Python 46 green.
+  - Lesson: ALWAYS rerun `./gradlew test` after regenerating rules. The scenario tests read the bundled rules, and b291ef4 broke CI this way.
+- Note: I added `"timeout": 5` to the user's global pwsh Stop hook, with their approval. It hung waiting on stdin.
 - [ ] After A4: merge feat/client; full build + runClientGameTest; view the screenshots.
 - [ ] Dev run with the user's mod set copied (not moved) into run/mods to sanity-check recommendations against the real setup.
 - [ ] Code review (opus code-reviewer) and fixes; README with screenshots; icon.
