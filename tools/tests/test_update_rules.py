@@ -274,6 +274,82 @@ class ReviewMarkdownTests(unittest.TestCase):
         self.assertEqual(md.count("None found."), 3)
 
 
+class ReviewIgnoreTests(unittest.TestCase):
+    def setUp(self):
+        self.rule_mods = load_fixture("knowledge_sample.json")["mods"]
+        self.projects_by_id = {
+            "AANobbMI": {"id": "AANobbMI", "slug": "sodium", "title": "Sodium", "status": "approved", "categories": ["optimization"]},
+            "gvQqBUqZ": {"id": "gvQqBUqZ", "slug": "lithium", "title": "Lithium", "status": "approved", "categories": ["optimization"]},
+            "51shyZVL": {"id": "51shyZVL", "slug": "moreculling", "title": "MoreCulling", "status": "approved", "categories": ["optimization"]},
+            "newid001": {"id": "newid001", "slug": "nvidium", "title": "Nvidium", "status": "approved", "categories": ["optimization"]},
+            "newid002": {"id": "newid002", "slug": "servercore", "title": "ServerCore", "status": "approved", "categories": ["optimization"]},
+        }
+        self.availability = {"26.2": ["sodium", "moreculling"]}
+
+    def test_build_review_excludes_reviewignore_slugs_from_new_upstream(self):
+        md, counts = ur.build_review(
+            self.rule_mods, ["26.2"], "26.2",
+            fo_slugs={"sodium", "lithium", "moreculling", "nvidium", "servercore"},
+            additive_slugs={"sodium", "nvidium", "servercore"},
+            projects_by_id=self.projects_by_id,
+            availability=self.availability,
+            old_mods_by_slug=None,
+            review_ignore_slugs={"servercore"},
+        )
+        self.assertEqual(counts["new_upstream"], 1)
+        self.assertIn("nvidium", md)
+        self.assertNotIn("servercore", md)
+
+    def test_build_review_default_review_ignore_is_empty(self):
+        md, counts = ur.build_review(
+            self.rule_mods, ["26.2"], "26.2",
+            fo_slugs={"sodium", "lithium", "moreculling", "nvidium", "servercore"},
+            additive_slugs={"sodium", "nvidium", "servercore"},
+            projects_by_id=self.projects_by_id,
+            availability=self.availability,
+            old_mods_by_slug=None,
+        )
+        self.assertEqual(counts["new_upstream"], 2)
+        self.assertIn("servercore", md)
+
+
+class ReviewIgnoreKnowledgeLoadingTests(unittest.TestCase):
+    def test_load_knowledge_accepts_reviewignore(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "knowledge.json"
+            data = load_fixture("knowledge_sample.json")
+            data["reviewIgnore"] = [{"slug": "servercore", "reason": "server-only"}]
+            path.write_text(json.dumps(data), encoding="utf-8")
+            loaded = ur.load_knowledge(path)
+            self.assertEqual(loaded["reviewIgnore"], [{"slug": "servercore", "reason": "server-only"}])
+
+    def test_load_knowledge_rejects_reviewignore_not_a_list(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "knowledge.json"
+            data = load_fixture("knowledge_sample.json")
+            data["reviewIgnore"] = {"slug": "servercore", "reason": "server-only"}
+            path.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaises(ur.KnowledgeError):
+                ur.load_knowledge(path)
+
+    def test_load_knowledge_rejects_reviewignore_entry_missing_reason(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "knowledge.json"
+            data = load_fixture("knowledge_sample.json")
+            data["reviewIgnore"] = [{"slug": "servercore"}]
+            path.write_text(json.dumps(data), encoding="utf-8")
+            with self.assertRaises(ur.KnowledgeError):
+                ur.load_knowledge(path)
+
+
+class ReviewIgnoreNotCopiedToOutputTests(unittest.TestCase):
+    def test_assemble_content_excludes_reviewignore(self):
+        knowledge = load_fixture("knowledge_sample.json")
+        knowledge["reviewIgnore"] = [{"slug": "servercore", "reason": "server-only"}]
+        content = ur.assemble_content(knowledge, knowledge["mods"], {}, {})
+        self.assertNotIn("reviewIgnore", content)
+
+
 class RevisionBumpTests(unittest.TestCase):
     def test_first_run_has_no_old_doc_gets_revision_1(self):
         content = {"schemaVersion": 1, "mods": []}
@@ -459,6 +535,45 @@ class EndToEndPipelineTests(unittest.TestCase):
         self.assertEqual(content["upstream"]["fabulouslyOptimized"]["slugs"], ["lithium", "sodium"])
         self.assertEqual(counts["missing_fabric"], 1)
         self.assertIn("moreculling", review_md)
+
+    def test_run_pipeline_honors_review_ignore(self):
+        knowledge = load_fixture("knowledge_sample.json")
+        knowledge["reviewIgnore"] = [{"slug": "servercore", "reason": "server-only"}]
+
+        fo_entries = [{"type": "file", "name": "sodium.pw.toml"}, {"type": "file", "name": "servercore.pw.toml"}]
+        additive_entries = [{"type": "file", "name": "sodium.pw.toml"}]
+
+        def pw(mod_id):
+            return f'name = "x"\n[update]\n[update.modrinth]\nmod-id = "{mod_id}"\n'.encode()
+
+        responses = {
+            ur.fo_contents_url("26.2"): [(200, json_body(fo_entries), {})],
+            ur.fo_raw_url("26.2", "sodium.pw.toml"): [(200, pw("AANobbMI"), {})],
+            ur.fo_raw_url("26.2", "servercore.pw.toml"): [(200, pw("newid002"), {})],
+            ur.additive_contents_url("26.2"): [(200, json_body(additive_entries), {})],
+            ur.additive_raw_url("26.2", "sodium.pw.toml"): [(200, pw("AANobbMI"), {})],
+        }
+        projects = [
+            {"id": "AANobbMI", "slug": "sodium", "title": "Sodium", "status": "approved", "categories": ["optimization"], "game_versions": ["26.2"], "loaders": ["fabric"]},
+            {"id": "gvQqBUqZ", "slug": "lithium", "title": "Lithium", "status": "approved", "categories": ["optimization"], "game_versions": ["26.2"], "loaders": ["fabric"]},
+            {"id": "51shyZVL", "slug": "moreculling", "title": "MoreCulling", "status": "approved", "categories": ["optimization"], "game_versions": [], "loaders": []},
+            {"id": "newid002", "slug": "servercore", "title": "ServerCore", "status": "approved", "categories": ["optimization"], "game_versions": ["26.2"], "loaders": ["fabric"]},
+        ]
+        import urllib.parse as up
+        ids = sorted({"AANobbMI", "gvQqBUqZ", "51shyZVL", "newid002"})
+        batch_url = f"{ur.MODRINTH_API}/projects?ids={up.quote(json.dumps(ids), safe='')}"
+        responses[batch_url] = [(200, json_body(projects), {})]
+
+        opener = ScriptedOpener(responses)
+        client = ur.Client(opener=opener, sleeper=RecordingSleeper())
+
+        content, review_md, counts, mc_versions, newest_by_pack, fo_slugs, additive_slugs = ur.run_pipeline(
+            knowledge, client, "26.2", old_doc=None,
+        )
+
+        self.assertNotIn("servercore", review_md)
+        self.assertEqual(counts["new_upstream"], 0)
+        self.assertNotIn("reviewIgnore", content)
 
 
 if __name__ == "__main__":

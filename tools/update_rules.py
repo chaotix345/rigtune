@@ -261,13 +261,13 @@ def top_level_upstream(fo_version, fo_slugs, additive_version, additive_slugs):
 
 
 def build_review(rule_mods, mc_versions, newest_version, fo_slugs, additive_slugs,
-                  projects_by_id, availability, old_mods_by_slug):
+                  projects_by_id, availability, old_mods_by_slug, review_ignore_slugs=frozenset()):
     known_slugs = {m["slug"] for m in rule_mods}
     slug_to_project = {p["slug"]: p for p in projects_by_id.values() if "slug" in p}
 
     new_upstream = []
     for slug in sorted(fo_slugs | additive_slugs):
-        if slug in known_slugs:
+        if slug in known_slugs or slug in review_ignore_slugs:
             continue
         project = slug_to_project.get(slug)
         packs = []
@@ -383,6 +383,12 @@ def load_knowledge(path):
     for mod in data["mods"]:
         if "slug" not in mod or "projectId" not in mod:
             raise KnowledgeError(f"knowledge file at {path}: every mod needs 'slug' and 'projectId'")
+    if "reviewIgnore" in data:
+        if not isinstance(data["reviewIgnore"], list):
+            raise KnowledgeError(f"knowledge file at {path}: 'reviewIgnore' must be an array")
+        for entry in data["reviewIgnore"]:
+            if "slug" not in entry or "reason" not in entry:
+                raise KnowledgeError(f"knowledge file at {path}: every reviewIgnore entry needs 'slug' and 'reason'")
     return data
 
 
@@ -473,9 +479,10 @@ def run_pipeline(knowledge, client, mc_versions_override, old_doc):
     old_mods_by_slug = None
     if old_doc is not None:
         old_mods_by_slug = {m["slug"]: m.get("upstream", {}) for m in old_doc.get("mods", [])}
+    review_ignore_slugs = {entry["slug"] for entry in knowledge.get("reviewIgnore", [])}
     review_md, review_counts = build_review(
         rule_mods, mc_versions, newest_version, fo_slugs, additive_slugs,
-        projects_by_id, availability, old_mods_by_slug,
+        projects_by_id, availability, old_mods_by_slug, review_ignore_slugs,
     )
 
     return content, review_md, review_counts, mc_versions, newest_by_pack, fo_slugs, additive_slugs

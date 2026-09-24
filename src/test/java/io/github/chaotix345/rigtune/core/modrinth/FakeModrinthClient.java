@@ -23,8 +23,12 @@ class FakeModrinthClient implements ModrinthClient {
 	IOException failWith;
 
 	static ModrinthVersion version(String id, String projectId, String number, Instant published, Dependency... deps) {
+		return version(id, projectId, number, "release", published, deps);
+	}
+
+	static ModrinthVersion version(String id, String projectId, String number, String versionType, Instant published, Dependency... deps) {
 		ModrinthFile file = new ModrinthFile("https://cdn/" + id + ".jar", id + ".jar", "sha1-" + id, "sha512-" + id, 10, true);
-		return new ModrinthVersion(id, projectId, number, "release", List.of("26.2"), List.of("fabric"), published,
+		return new ModrinthVersion(id, projectId, number, versionType, List.of("26.2"), List.of("fabric"), published,
 				List.of(file), Arrays.asList(deps));
 	}
 
