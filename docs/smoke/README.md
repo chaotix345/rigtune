@@ -6,6 +6,8 @@ A read-only run of RigTune in a production Fabric client with the player's own m
 ./gradlew runProductionSmoke -PextraModsDir=<mod jars> -PuserOptions=<options.txt> -PuserConfigDir=<config dir>
 ```
 
+Since v0.2 the build is multi-version: run `./gradlew :<mc>:runProductionSmoke ...` (for example `:26.3:`) with mod jars built for that version. The paths stay relative to the repository root, and `run/` below is `versions/<mc>/run/`.
+
 `runProductionSmoke` is a Loom `ClientProductionRunTask`, so it uses Knot, the real client jar and Fabric Loader 0.19.5 with no dev classpath. It loads the built `rigtune` jar, the game test jar and `fabric-client-gametest-api-v1`, which the fabric-api fat jar doesn't include. The player's jars are mirrored into `run/mods`, so RigTune treats them as the instance's own mods and offers updates it can apply. The player's `options.txt` goes into `run/`, with `fullscreen` forced off, and `sodium-options.json` goes into `run/config/`. The dev-only Sodium and Mod Menu aren't loaded; the player's copies are.
 
 The game test framework resets the render distance to 5 after `options.txt` loads. Smoke mode puts back the player's values for the settings RigTune reads, in memory only (here 5 → 12), then rescans.

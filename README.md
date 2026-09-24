@@ -74,12 +74,21 @@ The format is documented in [docs/RULES_SCHEMA.md](docs/RULES_SCHEMA.md). See [t
 
 ## Build from source
 
-You need JDK 25.
+You need JDK 25. One source tree builds every supported Minecraft version with [Stonecutter](https://stonecutter.kikugie.dev/); each version has a Gradle project named after it (`:26.2`, `:26.3`).
 
 ```sh
-./gradlew build              # jar in build/libs, runs the unit tests
-./gradlew runClientGameTest  # in-game tests (opens a game window)
+./gradlew build                     # every version: jars in versions/<mc>/build/libs, unit tests, game tests compiled
+./gradlew :26.3:build               # one version only
+./gradlew :26.2:runClientGameTest   # in-game tests for one version (opens a game window); run versions one at a time
+./gradlew :26.3:runClientGameTest
 python -m unittest discover -s tools/tests
+```
+
+The few lines that differ between versions are marked with `//? if >=26.3 {` comments. `src/` is always in the state of one active version, which is what your IDE compiles; the others are generated under `versions/<mc>/build/generated/stonecutter/`. To work on another version, switch the active one, and switch back before committing (CI fails if the sources are committed in a switched state):
+
+```sh
+./gradlew "Set active project to 26.3"   # rewrites the version comments in src/ for 26.3
+./gradlew "Reset active project"          # back to 26.2, the committed version; git diff should then show only your own edits
 ```
 
 ## Credits
