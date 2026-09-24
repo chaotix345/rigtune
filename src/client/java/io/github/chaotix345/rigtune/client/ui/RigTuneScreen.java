@@ -408,7 +408,7 @@ public class RigTuneScreen extends Screen {
 
 			CategoryEntry(Category category, int count) {
 				this.label = Component.translatable("rigtune.category." + category.name().toLowerCase(Locale.ROOT))
-						.append(Component.literal("  " + count).withStyle(ChatFormatting.DARK_GRAY))
+						.append(Component.literal("  " + count).withStyle(ChatFormatting.GRAY))
 						.withStyle(ChatFormatting.BOLD);
 				this.color = category == Category.WARNING ? COLOR_WARNING : category == Category.ADVICE ? COLOR_ADVICE : 0xFFFFD166;
 			}
