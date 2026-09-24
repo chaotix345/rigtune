@@ -58,14 +58,16 @@
 	"rigtune.benchmark.loading": "loading chunks",
 	"rigtune.benchmark.measuring": "measuring",
 	"rigtune.benchmark.cancelled": "RigTune benchmark cancelled; settings restored.",
-	"rigtune.benchmark.met": "Render distance %s keeps 1%% lows above %s FPS",
-	"rigtune.benchmark.missed": "No tested render distance held %2$s FPS; the lightest was %1$s",
+	"rigtune.benchmark.met": "Render distance %s keeps 1%% lows at or above the target",
+	"rigtune.benchmark.missed": "No tested render distance met the target; %s had the best 1%% lows",
+	"rigtune.benchmark.target": "Target: %s FPS (1%% lows, uncapped)",
 	"rigtune.benchmark.col.rd": "Distance",
 	"rigtune.benchmark.col.avg": "Avg FPS",
 	"rigtune.benchmark.col.low": "1%% low",
 	"rigtune.benchmark.col.p99": "P99 ms",
 	"rigtune.benchmark.col.ok": "Target",
 	"rigtune.benchmark.use": "Use render distance %s",
+	"rigtune.benchmark.use_best": "Use best tested (%s)",
 	"rigtune.benchmark.keep": "Keep current (%s)",
 	"rigtune.benchmark.none": "No measurements were taken."
 }

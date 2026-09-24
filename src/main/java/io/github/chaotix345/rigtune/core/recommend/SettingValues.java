@@ -6,7 +6,7 @@ import io.github.chaotix345.rigtune.core.model.DisplayInfo;
 import java.math.BigDecimal;
 import java.util.Locale;
 
-final class SettingValues {
+public final class SettingValues {
 	static final String REFRESH_RATE = "$refreshRate";
 	static final String REFRESH_RATE_CAP = "$refreshRateCap";
 
@@ -28,13 +28,18 @@ final class SettingValues {
 			return Integer.toString(Math.clamp(Math.round(hz / 10.0) * 10, 30, 260));
 		}
 		if (trimmed.equals(REFRESH_RATE_CAP)) {
-			int cap = hz / 10 * 10;
-			if (cap == hz && hz >= 100) {
-				cap -= 10;
-			}
-			return Integer.toString(Math.clamp(cap, 30, 250));
+			return Integer.toString(refreshRateCap(hz));
 		}
 		return value;
+	}
+
+	public static int refreshRateCap(int refreshRate) {
+		int hz = refreshRate > 0 ? refreshRate : 60;
+		int cap = hz / 10 * 10;
+		if (cap == hz && hz >= 100) {
+			cap -= 10;
+		}
+		return Math.clamp(cap, 30, 250);
 	}
 
 	static boolean same(String a, String b) {

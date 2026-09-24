@@ -83,7 +83,7 @@ public final class RealController implements RigTuneController {
 		this.rulesCache = configDir.resolve("rigtune").resolve("rules-cache.json");
 		this.modVersion = loader.getModContainer(RigTune.MOD_ID).map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("0.0.0");
 		this.modrinth = new HttpModrinthClient(modVersion);
-		this.state = ClientState.load(configDir);
+		this.state = ClientState.shared(configDir);
 		this.goal = state.goalOrDefault();
 		this.carriedOverOps = pendingOpCount();
 	}

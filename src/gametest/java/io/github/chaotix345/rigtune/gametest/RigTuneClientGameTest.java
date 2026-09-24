@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.gametest;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.client.ClientState;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.RigTunePreLaunch;
@@ -20,6 +21,9 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.InactivityFpsLimit;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.Options;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -28,6 +32,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -35,6 +40,14 @@ import java.util.List;
 import java.util.Map;
 
 public class RigTuneClientGameTest implements FabricClientGameTest {
+	private record FrameSettings(int limit, boolean vsync, InactivityFpsLimit inactivity) {
+		static final FrameSettings UNCAPPED = new FrameSettings(Options.UNLIMITED_FRAMERATE_CUTOFF, false, InactivityFpsLimit.MINIMIZED);
+
+		static FrameSettings of(Minecraft mc) {
+			return new FrameSettings(mc.options.framerateLimit().get(), mc.options.enableVsync().get(), mc.options.inactivityFpsLimit().get());
+		}
+	}
+
 	@Override
 	public void runTest(ClientGameTestContext context) {
 		context.waitForScreen(TitleScreen.class);
@@ -106,8 +119,27 @@ public class RigTuneClientGameTest implements FabricClientGameTest {
 			int rdBefore = context.computeOnClient(mc -> mc.options.renderDistance().get());
 			boolean hudBefore = context.computeOnClient(mc -> mc.gui.hud.isHidden());
 			float yawBefore = context.computeOnClient(mc -> mc.player.getYRot());
+			FrameSettings framesBefore = context.computeOnClient(FrameSettings::of);
+			check(!framesBefore.equals(FrameSettings.UNCAPPED), "test starts from capped settings: " + framesBefore);
+
+			check(context.computeOnClient(mc -> BenchmarkController.start(mc, new BenchmarkController.Config(2, 1.5, 1.0, 20.0))), "benchmark started for Esc");
+			context.waitTicks(5);
+			check(context.computeOnClient(FrameSettings::of).equals(FrameSettings.UNCAPPED), "uncapped while measuring");
+			check(savedOption("maxFps").equals(Integer.toString(framesBefore.limit())), "test frame limit not written to options.txt");
+			check(savedOption("renderDistance").equals(Integer.toString(rdBefore)), "test render distance not written to options.txt");
+			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
+			context.waitFor(mc -> !BenchmarkController.running(), 100);
+			BenchmarkController.Outcome escaped = context.computeOnClient(mc -> BenchmarkController.lastOutcome());
+			check(escaped != null && escaped.cancelled(), "Esc cancels: " + escaped);
+			check(context.computeOnClient(FrameSettings::of).equals(framesBefore), "frame settings restored after Esc");
+			check(context.computeOnClient(mc -> mc.options.renderDistance().get()) == rdBefore, "render distance restored after Esc");
+			check(context.computeOnClient(mc -> mc.gui.hud.isHidden()) == hudBefore, "HUD visibility restored after Esc");
+			context.runOnClient(mc -> mc.gui.setScreen(null));
+			context.waitTicks(5);
+
 			check(context.computeOnClient(mc -> BenchmarkController.start(mc, new BenchmarkController.Config(2, 1.5, 1.0, 20.0))), "benchmark started");
 			context.waitTicks(30);
+			check(context.computeOnClient(FrameSettings::of).equals(FrameSettings.UNCAPPED), "uncapped while measuring");
 			context.takeScreenshot("benchmark-running");
 			context.waitFor(mc -> !BenchmarkController.running(), 1400);
 			BenchmarkController.Outcome outcome = context.computeOnClient(mc -> BenchmarkController.lastOutcome());
@@ -115,6 +147,7 @@ public class RigTuneClientGameTest implements FabricClientGameTest {
 			check(!outcome.result().measurements().isEmpty(), "benchmark measured something: " + outcome);
 			check(outcome.result().measurements().stream().allMatch(m -> m.stats().frames() > 0), "frames recorded: " + outcome);
 			check(context.computeOnClient(mc -> mc.options.renderDistance().get()) == rdBefore, "render distance restored");
+			check(context.computeOnClient(FrameSettings::of).equals(framesBefore), "frame limit, vsync and inactivity limit restored");
 			check(context.computeOnClient(mc -> mc.gui.hud.isHidden()) == hudBefore, "HUD visibility restored");
 			check(Math.abs(context.computeOnClient(mc -> mc.player.getYRot()) - yawBefore) < 0.01f, "camera rotation restored");
 			context.waitForScreen(BenchmarkResultScreen.class);
@@ -158,12 +191,17 @@ public class RigTuneClientGameTest implements FabricClientGameTest {
 		changes.put("vanilla.graphicsPreset", "fancy");
 		changes.put("vanilla.noSuchOption", "1");
 		changes.put("vanilla.maxFps", "not-a-number");
+		changes.put("vanilla.lang", "de_de");
+		changes.put("vanilla.simulationDistance.x", "1");
 		Map<String, SettingsBridge.Result> results = context.computeOnClient(mc -> SettingsBridge.applyVanilla(changes));
 		check(results.get("vanilla.renderDistance").ok(), "renderDistance applied: " + results);
 		check(results.get("vanilla.simulationDistance").ok(), "simulationDistance applied: " + results);
 		check(results.get("vanilla.graphicsPreset").ok(), "graphicsPreset applied: " + results);
 		check(!results.get("vanilla.noSuchOption").ok(), "unknown key reported: " + results);
 		check(!results.get("vanilla.maxFps").ok(), "bad value reported: " + results);
+		check(!results.get("vanilla.lang").ok(), "non-video key refused: " + results);
+		check(!results.get("vanilla.simulationDistance.x").ok(), "unlisted key refused: " + results);
+		check(context.computeOnClient(mc -> mc.options.languageCode).equals("en_us"), "language untouched");
 		check(context.computeOnClient(mc -> mc.options.renderDistance().get()) == newRd, "renderDistance changed");
 		check(context.computeOnClient(mc -> mc.options.simulationDistance().get()) == newSim, "simulationDistance changed");
 		check(context.computeOnClient(mc -> SettingsBridge.read(mc).get("vanilla.renderDistance")).equals(Integer.toString(newRd)), "snapshot reflects change");
@@ -189,6 +227,18 @@ public class RigTuneClientGameTest implements FabricClientGameTest {
 			throw new AssertionError("pending.json missing", e);
 		}
 		context.runOnClient(mc -> mc.options.entityShadows().set(shadows));
+	}
+
+	private static String savedOption(String key) {
+		try {
+			return Files.readAllLines(FabricLoader.getInstance().getGameDir().resolve("options.txt")).stream()
+					.filter(line -> line.startsWith(key + ":"))
+					.map(line -> line.substring(key.length() + 1))
+					.findFirst()
+					.orElseThrow(() -> new AssertionError("options.txt has no " + key));
+		} catch (IOException e) {
+			throw new AssertionError(e);
+		}
 	}
 
 	private static void screenshotAt(ClientGameTestContext context, int width, int height, int guiScale, String name) {
