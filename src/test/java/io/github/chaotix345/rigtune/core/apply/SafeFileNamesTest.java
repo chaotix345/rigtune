@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -109,5 +110,17 @@ class SafeFileNamesTest {
 		assertFalse(SafeFileNames.isInside(config, config.resolve("..").resolve("options.txt")));
 		assertFalse(SafeFileNames.isInside(config, dir.resolve("config-evil").resolve("x.json")));
 		assertFalse(SafeFileNames.isInside(null, config.resolve("x.json")));
+	}
+
+	@Test
+	void existingFoldersCompareByRealPath(@TempDir Path dir) throws IOException {
+		Path mods = Files.createDirectories(dir.resolve("mods"));
+		Files.createDirectories(dir.resolve("config"));
+		assertTrue(SafeFileNames.isDirectChild(mods.toRealPath(), dir.resolve("x").resolve("..").resolve("mods").resolve("new.jar")));
+		assertTrue(SafeFileNames.isInside(dir.resolve("config").toRealPath(), dir.resolve("config").resolve("rigtune").resolve("pending.json")));
+		if (System.getProperty("os.name").startsWith("Windows")) {
+			assertTrue(SafeFileNames.isDirectChild(dir.resolve("MODS"), mods.resolve("a.jar")));
+			assertFalse(SafeFileNames.isDirectChild(dir.resolve("MODS2"), mods.resolve("a.jar")));
+		}
 	}
 }

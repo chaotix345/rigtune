@@ -9,6 +9,7 @@ import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
+import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
 import io.github.chaotix345.rigtune.core.apply.ModJars;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
@@ -79,7 +80,7 @@ public final class RealController implements RigTuneController {
 	public RealController() {
 		FabricLoader loader = FabricLoader.getInstance();
 		this.configDir = loader.getConfigDir();
-		this.modsDir = loader.getGameDir().resolve("mods");
+		this.modsDir = InstanceDirs.modsDir(loader.getGameDir());
 		this.pendingFile = PendingActions.defaultPath(configDir);
 		this.rulesCache = configDir.resolve("rigtune").resolve("rules-cache.json");
 		this.modVersion = loader.getModContainer(RigTune.MOD_ID).map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("0.0.0");

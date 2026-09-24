@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.core.apply;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.Locale;
@@ -48,21 +49,39 @@ public final class SafeFileNames {
 		if (dir == null || file == null) {
 			return false;
 		}
-		Path parent = normalize(file).getParent();
-		return parent != null && parent.equals(normalize(dir));
+		Path parent = file.toAbsolutePath().normalize().getParent();
+		return parent != null && canonical(parent).equals(canonical(dir));
 	}
 
 	public static boolean isInside(Path dir, Path file) {
 		if (dir == null || file == null) {
 			return false;
 		}
-		Path d = normalize(dir);
-		Path f = normalize(file);
+		Path d = canonical(dir);
+		Path f = file.toAbsolutePath().normalize();
+		if (f.getParent() == null) {
+			return false;
+		}
+		f = canonical(f.getParent()).resolve(f.getFileName());
 		return !f.equals(d) && f.startsWith(d);
 	}
 
-	private static Path normalize(Path path) {
-		return path.toAbsolutePath().normalize();
+	// Fabric reports mod paths under the real path of the mods folder, so folders are compared by real path (symlinks,
+	// letter case and short names resolved) as far as they exist. The file itself is left alone.
+	static Path canonical(Path path) {
+		Path abs = path.toAbsolutePath().normalize();
+		Path existing = abs;
+		while (existing != null && !Files.exists(existing)) {
+			existing = existing.getParent();
+		}
+		if (existing == null) {
+			return abs;
+		}
+		try {
+			return existing.toRealPath().resolve(existing.relativize(abs));
+		} catch (IOException e) {
+			return abs;
+		}
 	}
 
 	static String problem(String name) {

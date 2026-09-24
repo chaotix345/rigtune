@@ -20,19 +20,37 @@ public final class HelperLauncher {
 	}
 
 	public static List<String> buildCommand(Path javaExecutable, List<Path> classpath, long gamePid, Path pendingJson) {
+		return buildCommand(javaExecutable, classpath, gamePid, pendingJson, null);
+	}
+
+	// modsFolder: the game's resolved -Dfabric.modsFolder (null when unset), handed on so the helper sees the same folder.
+	public static List<String> buildCommand(Path javaExecutable, List<Path> classpath, long gamePid, Path pendingJson, Path modsFolder) {
 		String cp = classpath.stream().map(Path::toString).distinct().collect(Collectors.joining(File.pathSeparator));
-		return List.of(javaExecutable.toString(), "-cp", cp, ApplyHelper.class.getName(), Long.toString(gamePid), pendingJson.toString());
+		List<String> command = new ArrayList<>();
+		command.add(javaExecutable.toString());
+		if (modsFolder != null) {
+			command.add("-D" + InstanceDirs.MODS_FOLDER_PROPERTY + "=" + modsFolder);
+		}
+		command.addAll(List.of("-cp", cp, ApplyHelper.class.getName(), Long.toString(gamePid), pendingJson.toString()));
+		return List.copyOf(command);
 	}
 
 	public static Process launch(Path configDir, Path pendingJson) throws IOException {
-		return launch(configDir, pendingJson, List.of(codeSourceOf(ApplyHelper.class), codeSourceOf(Gson.class)), ProcessHandle.current().pid());
+		Path modsFolder = System.getProperty(InstanceDirs.MODS_FOLDER_PROPERTY) == null ? null
+				: InstanceDirs.modsDir(configDir.toAbsolutePath().getParent());
+		return launch(configDir, pendingJson, List.of(codeSourceOf(ApplyHelper.class), codeSourceOf(Gson.class)), ProcessHandle.current().pid(),
+				modsFolder);
+	}
+
+	static Process launch(Path configDir, Path pendingJson, List<Path> sources, long gamePid) throws IOException {
+		return launch(configDir, pendingJson, sources, gamePid, null);
 	}
 
 	// The helper runs from copies in config/rigtune/helper/, never from mods/: a JVM keeps its classpath jars open,
 	// and on Windows an open jar can't be renamed, so running from mods/ would block RigTune's own update.
-	static Process launch(Path configDir, Path pendingJson, List<Path> sources, long gamePid) throws IOException {
+	static Process launch(Path configDir, Path pendingJson, List<Path> sources, long gamePid, Path modsFolder) throws IOException {
 		List<Path> classpath = helperClasspath(helperDir(configDir), sources);
-		List<String> command = buildCommand(currentJava(), classpath, gamePid, pendingJson);
+		List<String> command = buildCommand(currentJava(), classpath, gamePid, pendingJson, modsFolder);
 		Path log = helperLog(configDir);
 		Files.createDirectories(log.getParent());
 		return new ProcessBuilder(command)

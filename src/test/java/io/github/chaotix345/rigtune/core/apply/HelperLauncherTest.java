@@ -40,6 +40,16 @@ class HelperLauncherTest {
 	}
 
 	@Test
+	void passesTheGamesModsFolderOn() {
+		Path mods = Path.of("shared", "mods").toAbsolutePath();
+
+		List<String> command = HelperLauncher.buildCommand(Path.of("java"), List.of(Path.of("rigtune.jar")), 7, Path.of("pending.json"), mods);
+
+		assertEquals(List.of("java", "-Dfabric.modsFolder=" + mods, "-cp", "rigtune.jar",
+				"io.github.chaotix345.rigtune.core.apply.ApplyHelper", "7", "pending.json"), command);
+	}
+
+	@Test
 	void locatesCodeSourcesAndJava() {
 		assertTrue(Files.exists(HelperLauncher.codeSourceOf(Gson.class)));
 		assertTrue(Files.exists(HelperLauncher.codeSourceOf(ApplyHelper.class)));
