@@ -36,7 +36,8 @@ The user gave full autonomy on 2026-09-24 and also approved creating and fully s
   - F2: MERGED (11 commits). Findings #1-#6, #10, #12 (Java), #13, #17. 208 unit tests green after the merge (291b561).
   - F3: MERGED. Findings #11, #12 (Python), #18. 61 Python tests.
   - All three merged. runClientGameTest on merged mvp PASSED (benchmark uncapped: RD 8, 1% low 582 vs target 170). README screenshots updated.
-  - Re-review (read-only) running -> scratchpad/review-2.md.
+  - Re-review DONE (docs/reviews/review-2.md): all 18 FIXED; 7 new (N1, N2 medium; N3 low-medium; N4-N7 low).
+- [ ] Review round 2 fixes: RUNNING in C:/Dev/Worktrees/rigtune-fix4, branch fix/review-round-2 (unit tests only; no game launch). After it: merge, runClientGameTest, final quick review.
 - [ ] Production smoke: RUNNING in C:/Dev/Worktrees/rigtune-prod, branch test/production-smoke. It adds a runProductionSmoke task with the user's 43 mods (copied to scratchpad/usermods) and writes docs/smoke/ with screenshots and a report dump.
 - [x] Rules triage: MERGED (rules revision 3; +renderscale, structure-layout-optimizer, zfastnoise, zmaterial-rule-compiler, asynclogger; reviewIgnore; beta/alpha update filter). Java 107 / Python 46 green.
   - Lesson: ALWAYS rerun `./gradlew test` after regenerating rules. The scenario tests read the bundled rules, and b291ef4 broke CI this way.
