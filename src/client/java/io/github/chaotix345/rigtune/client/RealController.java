@@ -9,6 +9,7 @@ import io.github.chaotix345.rigtune.client.probe.ModScanner;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
+import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
@@ -40,6 +41,7 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -54,6 +56,7 @@ import java.util.zip.ZipFile;
 public final class RealController implements RigTuneController {
 	private static final String VANILLA = SettingsBridge.VANILLA_PREFIX;
 	private static final String SODIUM = SettingsBridge.SODIUM_PREFIX;
+	private static final Duration STAGE_LOCK_WAIT = Duration.ofSeconds(2);
 
 	private Minecraft minecraft;
 	private final Path configDir;
@@ -375,7 +378,8 @@ public final class RealController implements RigTuneController {
 					default -> {
 					}
 				}
-				ops.addAll(recOps);
+				// A recommendation's ops (an update's disable + enable, or a mod + its dependencies) apply all-or-nothing.
+				ops.addAll(PendingActions.group(recOps));
 				ids.add(rec.id());
 			} catch (IOException | RuntimeException e) {
 				RigTune.LOGGER.warn("Could not prepare {}", rec.id(), e);
@@ -408,7 +412,11 @@ public final class RealController implements RigTuneController {
 	}
 
 	private boolean stage(List<Op> ops, List<String> ids) {
-		try {
+		try (ApplyLock lock = ApplyLock.acquire(ApplyLock.defaultPath(configDir), STAGE_LOCK_WAIT)) {
+			if (lock == null) {
+				RigTune.LOGGER.error("Could not stage RigTune changes: the apply helper still holds {}", ApplyLock.defaultPath(configDir));
+				return false;
+			}
 			PendingActions plan = null;
 			if (Files.exists(pendingFile)) {
 				try {

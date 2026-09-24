@@ -10,6 +10,9 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -17,36 +20,73 @@ public final class ApplyExecutor {
 	public static final int DEFAULT_ATTEMPTS = 10;
 	public static final long DEFAULT_RETRY_DELAY_MILLIS = 300;
 
+	interface Mover {
+		void move(Path from, Path to) throws IOException;
+	}
+
 	private final int attempts;
 	private final long retryDelayMillis;
+	private final Mover mover;
 
 	public ApplyExecutor() {
 		this(DEFAULT_ATTEMPTS, DEFAULT_RETRY_DELAY_MILLIS);
 	}
 
 	public ApplyExecutor(int attempts, long retryDelayMillis) {
-		this.attempts = Math.max(1, attempts);
-		this.retryDelayMillis = retryDelayMillis;
+		this(attempts, retryDelayMillis, (from, to) -> Files.move(from, to));
 	}
 
+	ApplyExecutor(int attempts, long retryDelayMillis, Mover mover) {
+		this.attempts = Math.max(1, attempts);
+		this.retryDelayMillis = retryDelayMillis;
+		this.mover = mover;
+	}
+
+	// Callers hold the apply lock. pendingFile is re-read before it is rewritten, and only the ops run here
+	// that succeeded are removed from it, so ops staged after `plan` was read survive.
 	public ApplyResult run(PendingActions plan, Path pendingFile) throws IOException {
-		List<OpResult> results = new ArrayList<>();
-		Path modsDir = dir(plan.modsDir());
-		Path configDir = dir(plan.configDir());
-		for (Op op : plan.ops()) {
-			results.add(execute(op, modsDir, configDir));
-		}
-		ApplyResult result = new ApplyResult(Instant.now().toString(), results);
-		if (result.allSucceeded()) {
-			Files.deleteIfExists(pendingFile);
-		} else {
-			plan.withOps(result.failedOps()).save(pendingFile);
-		}
+		ApplyResult result = new ApplyResult(Instant.now().toString(), execute(plan));
+		writeRemaining(plan, pendingFile, result);
 		Path resultFile = plan.configDir() != null
 				? ApplyResult.defaultPath(Path.of(plan.configDir()))
 				: pendingFile.resolveSibling("last-apply.json");
 		result.save(resultFile);
 		return result;
+	}
+
+	private static void writeRemaining(PendingActions plan, Path pendingFile, ApplyResult result) throws IOException {
+		List<Op> done = result.results().stream().filter(r -> r.status() != Status.FAILED).map(OpResult::op).toList();
+		PendingActions base = plan;
+		if (Files.exists(pendingFile)) {
+			try {
+				base = PendingActions.load(pendingFile);
+			} catch (IOException e) {
+				base = plan;
+			}
+		}
+		List<Op> remaining = base.ops().stream().filter(op -> done.stream().noneMatch(d -> d != null && d.sameOp(op))).toList();
+		if (remaining.isEmpty()) {
+			Files.deleteIfExists(pendingFile);
+		} else {
+			base.withOps(remaining).save(pendingFile);
+		}
+	}
+
+	List<OpResult> execute(PendingActions plan) {
+		Path modsDir = dir(plan.modsDir());
+		Path configDir = dir(plan.configDir());
+		List<Op> ops = plan.ops();
+		Map<String, List<Integer>> groups = new LinkedHashMap<>();
+		for (int i = 0; i < ops.size(); i++) {
+			Op op = ops.get(i);
+			String key = op != null && op.group() != null ? "group:" + op.group() : "op:" + i;
+			groups.computeIfAbsent(key, k -> new ArrayList<>()).add(i);
+		}
+		OpResult[] out = new OpResult[ops.size()];
+		for (List<Integer> members : groups.values()) {
+			runGroup(ops, members, modsDir, configDir, out);
+		}
+		return Arrays.asList(out);
 	}
 
 	private static Path dir(String value) {
@@ -57,24 +97,109 @@ public final class ApplyExecutor {
 		}
 	}
 
-	OpResult execute(Op op, Path modsDir, Path configDir) {
+	private record Undo(int index, Path moved, Path back) {
+	}
+
+	private record Applied(OpResult result, Undo undo) {
+	}
+
+	// A group is all-or-nothing: disables run first, and an enable runs only once every disable in the group is
+	// OK or already done. When an op fails, the rest are skipped and the earlier renames are undone.
+	private void runGroup(List<Op> ops, List<Integer> members, Path modsDir, Path configDir, OpResult[] out) {
+		List<Integer> order = new ArrayList<>(members);
+		order.sort(Comparator.comparingInt(i -> rank(ops.get(i))));
+
+		String[] problems = new String[ops.size()];
+		boolean refused = false;
+		for (int i : order) {
+			problems[i] = problem(ops.get(i), modsDir, configDir);
+			refused |= problems[i] != null;
+		}
+		if (refused) {
+			for (int i : order) {
+				out[i] = new OpResult(ops.get(i), Status.FAILED,
+						problems[i] != null ? "Refused: " + problems[i] : "Not applied: another change in its group was refused");
+			}
+			return;
+		}
+
+		List<Undo> undos = new ArrayList<>();
+		for (int k = 0; k < order.size(); k++) {
+			int i = order.get(k);
+			Op op = ops.get(i);
+			Applied applied = apply(op, i);
+			out[i] = applied.result();
+			if (applied.result().status() != Status.FAILED) {
+				if (applied.undo() != null) {
+					undos.add(applied.undo());
+				}
+				continue;
+			}
+			String reason = describe(op) + " failed";
+			for (int rest : order.subList(k + 1, order.size())) {
+				out[rest] = new OpResult(ops.get(rest), Status.FAILED, "Not applied because " + reason);
+			}
+			for (int u = undos.size() - 1; u >= 0; u--) {
+				Undo undo = undos.get(u);
+				out[undo.index()] = rollback(ops.get(undo.index()), undo, reason);
+			}
+			return;
+		}
+	}
+
+	private static int rank(Op op) {
 		if (op == null || op.type() == null) {
-			return new OpResult(op, Status.FAILED, "Unknown operation");
-		}
-		String problem;
-		try {
-			problem = containmentProblem(op, modsDir, configDir);
-		} catch (InvalidPathException e) {
-			problem = "Invalid path: " + e.getMessage();
-		}
-		if (problem != null) {
-			return new OpResult(op, Status.FAILED, "Refused: " + problem);
+			return 3;
 		}
 		return switch (op.type()) {
-			case ENABLE_FILE -> retrying(op, () -> enable(op));
-			case DISABLE_FILE -> retrying(op, () -> disable(op));
-			case PATCH_JSON -> retrying(op, () -> patchJson(op));
+			case DISABLE_FILE -> 0;
+			case ENABLE_FILE -> 1;
+			case PATCH_JSON -> 2;
 		};
+	}
+
+	private static String describe(Op op) {
+		return switch (op.type()) {
+			case ENABLE_FILE -> "enabling " + fileName(op.to());
+			case DISABLE_FILE -> "disabling " + fileName(op.path());
+			case PATCH_JSON -> "patching " + fileName(op.path());
+		};
+	}
+
+	private static String fileName(String path) {
+		Path name = Path.of(path).getFileName();
+		return name == null ? path : name.toString();
+	}
+
+	private OpResult rollback(Op op, Undo undo, String reason) {
+		IOException last = null;
+		for (int attempt = 1; attempt <= attempts; attempt++) {
+			try {
+				if (Files.exists(undo.back()) || !Files.exists(undo.moved())) {
+					break;
+				}
+				mover.move(undo.moved(), undo.back());
+				return new OpResult(op, Status.FAILED, "Rolled back because " + reason);
+			} catch (IOException e) {
+				last = e;
+			}
+			if (attempt < attempts && !sleep()) {
+				break;
+			}
+		}
+		return new OpResult(op, Status.FAILED, "Rollback failed (" + (last == null ? "the original name is taken" : last)
+				+ "); " + undo.moved().getFileName() + " was left as it is after " + reason);
+	}
+
+	static String problem(Op op, Path modsDir, Path configDir) {
+		if (op == null || op.type() == null) {
+			return "unknown operation";
+		}
+		try {
+			return containmentProblem(op, modsDir, configDir);
+		} catch (InvalidPathException e) {
+			return "invalid path: " + e.getMessage();
+		}
 	}
 
 	// Mod files must sit directly in the plan's mods folder and config patches inside its config folder.
@@ -101,10 +226,18 @@ public final class ApplyExecutor {
 	}
 
 	private interface Step {
-		OpResult run() throws IOException;
+		Applied run() throws IOException;
 	}
 
-	private OpResult retrying(Op op, Step step) {
+	private Applied apply(Op op, int index) {
+		return switch (op.type()) {
+			case ENABLE_FILE -> retrying(op, () -> enable(op, index));
+			case DISABLE_FILE -> retrying(op, () -> disable(op, index));
+			case PATCH_JSON -> retrying(op, () -> new Applied(patchJson(op), null));
+		};
+	}
+
+	private Applied retrying(Op op, Step step) {
 		IOException last = null;
 		for (int attempt = 1; attempt <= attempts; attempt++) {
 			try {
@@ -112,43 +245,49 @@ public final class ApplyExecutor {
 			} catch (IOException e) {
 				last = e;
 			} catch (RuntimeException e) {
-				return new OpResult(op, Status.FAILED, e.toString());
+				return new Applied(new OpResult(op, Status.FAILED, e.toString()), null);
 			}
-			if (attempt < attempts) {
-				try {
-					Thread.sleep(retryDelayMillis);
-				} catch (InterruptedException e) {
-					Thread.currentThread().interrupt();
-					break;
-				}
+			if (attempt < attempts && !sleep()) {
+				break;
 			}
 		}
-		return new OpResult(op, Status.FAILED, "Gave up after " + attempts + " attempt(s): " + last);
+		return new Applied(new OpResult(op, Status.FAILED, "Gave up after " + attempts + " attempt(s): " + last), null);
 	}
 
-	private static OpResult enable(Op op) throws IOException {
+	private boolean sleep() {
+		try {
+			Thread.sleep(retryDelayMillis);
+			return true;
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return false;
+		}
+	}
+
+	private Applied enable(Op op, int index) throws IOException {
 		Path from = Path.of(op.from());
 		Path to = Path.of(op.to());
 		if (!Files.exists(from)) {
-			return Files.exists(to)
+			return new Applied(Files.exists(to)
 					? new OpResult(op, Status.SKIPPED_ALREADY_DONE, to.getFileName() + " is already enabled")
-					: new OpResult(op, Status.FAILED, "Missing " + from);
+					: new OpResult(op, Status.FAILED, "Missing " + from), null);
 		}
 		if (Files.exists(to)) {
-			return new OpResult(op, Status.FAILED, to + " already exists; not overwriting it");
+			return new Applied(new OpResult(op, Status.FAILED, to + " already exists; not overwriting it"), null);
 		}
-		Files.move(from, to);
-		return new OpResult(op, Status.OK, "Enabled " + to.getFileName());
+		mover.move(from, to);
+		return new Applied(new OpResult(op, Status.OK, "Enabled " + to.getFileName()), new Undo(index, to, from));
 	}
 
-	private static OpResult disable(Op op) throws IOException {
+	private Applied disable(Op op, int index) throws IOException {
 		Path path = Path.of(op.path());
 		if (!Files.exists(path)) {
-			return new OpResult(op, Status.SKIPPED_ALREADY_DONE, path.getFileName() + " is already gone");
+			return new Applied(new OpResult(op, Status.SKIPPED_ALREADY_DONE, path.getFileName() + " is already gone"), null);
 		}
 		Path target = disabledTarget(path);
-		Files.move(path, target);
-		return new OpResult(op, Status.OK, "Disabled " + path.getFileName() + " -> " + target.getFileName());
+		mover.move(path, target);
+		return new Applied(new OpResult(op, Status.OK, "Disabled " + path.getFileName() + " -> " + target.getFileName()),
+				new Undo(index, target, path));
 	}
 
 	static Path disabledTarget(Path path) {

@@ -1,23 +1,58 @@
 package io.github.chaotix345.rigtune.client;
 
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
 import org.jspecify.annotations.Nullable;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.Objects;
 
 public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 	private static volatile @Nullable ApplyResult unseenResult;
 	private static volatile int leftoverOps;
+	private static volatile boolean helperBusy;
+	static final Duration HELPER_WAIT = Duration.ofSeconds(5);
 
 	@Override
 	public void onPreLaunch() {
 		Path configDir = FabricLoader.getInstance().getConfigDir();
+		Path lockFile = ApplyLock.defaultPath(configDir);
+		ApplyLock lock = null;
+		boolean busy = false;
+		try {
+			lock = ApplyLock.acquire(lockFile, Duration.ZERO);
+			if (lock == null) {
+				// Fabric has already picked the mod jars by now, so whatever the helper still renames loads next time.
+				busy = true;
+				RigTune.LOGGER.warn("RigTune's apply helper from the last session is still running; waiting up to {} s", HELPER_WAIT.toSeconds());
+				lock = ApplyLock.acquire(lockFile, HELPER_WAIT);
+			}
+		} catch (IOException e) {
+			RigTune.LOGGER.warn("Could not check {}", lockFile, e);
+		}
+		try {
+			readState(configDir, busy && lock == null);
+		} finally {
+			if (lock != null) {
+				lock.close();
+			}
+		}
+		if (busy) {
+			helperBusy = true;
+			RigTune.LOGGER.warn(lock == null
+					? "RigTune's apply helper is still running; its changes take effect after the next restart"
+					: "RigTune's apply helper finished while the game was starting; mod file changes take effect after the next restart");
+		}
+	}
+
+	private static void readState(Path configDir, boolean stillRunning) {
 		try {
 			Path last = ApplyResult.defaultPath(configDir);
 			if (Files.isRegularFile(last)) {
@@ -31,7 +66,7 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 		}
 		try {
 			Path pending = PendingActions.defaultPath(configDir);
-			if (Files.isRegularFile(pending)) {
+			if (!stillRunning && Files.isRegularFile(pending)) {
 				leftoverOps = PendingActions.load(pending).ops().size();
 				RigTune.LOGGER.warn("{} staged RigTune change(s) were not applied; they will be retried at the next exit", leftoverOps);
 			}
@@ -44,6 +79,12 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 		ApplyResult result = unseenResult;
 		unseenResult = null;
 		return result;
+	}
+
+	public static boolean takeHelperBusy() {
+		boolean busy = helperBusy;
+		helperBusy = false;
+		return busy;
 	}
 
 	public static int takeLeftoverOps() {

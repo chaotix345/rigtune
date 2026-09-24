@@ -16,7 +16,11 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PendingActionsTest {
 	@Test
@@ -52,6 +56,45 @@ class PendingActionsTest {
 		assertFalse(op.has("from"));
 		assertFalse(op.has("patches"));
 		assertEquals(1, root.get("gamePid").getAsLong());
+	}
+
+	@Test
+	void opsCarryIdsGroupsAndModIdsThroughJson(@TempDir Path dir) throws IOException {
+		Path mods = dir.resolve("mods");
+		List<Op> update = PendingActions.group(Op.disableFile(mods.resolve("old.jar")),
+				Op.enableFile(mods.resolve("new.jar.rigtune-pending"), mods.resolve("new.jar")).withModId("sodium"));
+		Op alone = Op.disableFile(mods.resolve("x.jar"));
+
+		assertNotNull(update.get(0).id());
+		assertNotEquals(update.get(0).id(), update.get(1).id());
+		assertNotNull(update.get(0).group());
+		assertEquals(update.get(0).group(), update.get(1).group());
+		assertNotEquals(update.get(0).group(), PendingActions.group(alone).getFirst().group());
+		assertNull(alone.group());
+		assertEquals("sodium", update.get(1).modId());
+
+		Path file = dir.resolve("pending.json");
+		PendingActions.create(1, mods, dir, update).save(file);
+		assertEquals(update, PendingActions.load(file).ops());
+		JsonObject enable = JsonParser.parseString(Files.readString(file)).getAsJsonObject().getAsJsonArray("ops").get(1).getAsJsonObject();
+		assertEquals("sodium", enable.get("modId").getAsString());
+		assertEquals(update.get(1).group(), enable.get("group").getAsString());
+	}
+
+	@Test
+	void sameChangeIgnoresIdentityButSameOpDoesNot() {
+		Path jar = Path.of("mods", "a.jar");
+		Op a = Op.disableFile(jar);
+		Op b = Op.disableFile(jar);
+
+		assertTrue(a.sameChange(b));
+		assertTrue(a.sameChange(b.inGroup("g").withModId("m")));
+		assertFalse(a.sameOp(b));
+		assertTrue(a.sameOp(a.inGroup("g")));
+		assertFalse(a.sameChange(Op.disableFile(Path.of("mods", "b.jar"))));
+		Op legacy = new Op(Type.DISABLE_FILE, null, null, jar.toString(), null);
+		assertTrue(legacy.sameOp(new Op(Type.DISABLE_FILE, null, null, jar.toString(), null)));
+		assertFalse(legacy.sameOp(a));
 	}
 
 	@Test

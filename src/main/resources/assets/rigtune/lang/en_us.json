@@ -53,6 +53,8 @@
 	"rigtune.toast.failed.body": "See config/rigtune/helper.log for details.",
 	"rigtune.toast.leftover.title": "RigTune: %s change(s) not applied",
 	"rigtune.toast.leftover.body": "The apply helper didn't run. They'll be retried when you exit.",
+	"rigtune.toast.busy.title": "RigTune was still applying changes",
+	"rigtune.toast.busy.body": "The game started before RigTune's helper finished. Restart Minecraft so every change takes effect.",
 	"rigtune.benchmark.title": "Benchmark results",
 	"rigtune.benchmark.progress": "RigTune benchmark · step %s/%s · render distance %s · %s · Esc cancels",
 	"rigtune.benchmark.loading": "loading chunks",
