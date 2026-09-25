@@ -43,13 +43,9 @@ Released jars (GitHub release assets; the harness checks `--old-sha256`): `rigtu
   format ("RigTune could not apply a change at the last exit (attempt 2 of 3; ...): DISABLE_FILE fabric-26.2.jar: ...")
   passes (`-wsb`).
 - **B-M3 in the undo scenario.** AC4.2's single evidence folder holds both: after M14's three starts, the same instance
-  gets two Applies (`e2e-first`, then `e2e-second`), Undo this on the older, a restart, and a check start. Until WS-B
-  merges, the driver finds the per-entry plan by shape (a public `(String) -> UndoPlan` method on RigTuneController or
-  the controller) and UndoScreen's entry constructor `(Screen, RigTuneController, String)` by reflection; without the
-  constructor it calls `undo(plan)` (still the post-exit helper path B-M3 is about). It prefers WS-B's name
-  `undoPlanFor` and refuses an ambiguous shape match. Once WS-B is merged into feat/v0.3.0, switch to the direct calls
-  (`controller.undoPlanFor(id)`, `new UndoScreen(parent, controller, id)`) so CI's `compileE2eUndoJava` guards them. With
-  WS-B's branch merged locally the reflection found both and the whole scenario passed (43/43).
+  gets two Applies (`e2e-first`, then `e2e-second`), Undo this on the older, a restart, and a check start. Before WS-B
+  merged, the driver found the per-entry API by reflection; now it calls `controller.undoPlanFor(id)` and
+  `new UndoScreen(parent, controller, id)` directly, so CI's `compileE2eUndoJava` guards them.
 - **Lock.** owner.txt now carries PLAN's `agent:`/`worktree:`/`started:` lines (plus `run:`); release is `owner.txt`
   then `rmdir`, only for this run's lock. The dry runs were started through a wrapper that also releases a lock left
   by a killed script, only if owner.txt names this worktree.
