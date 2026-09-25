@@ -239,6 +239,13 @@ class ValidationTests(unittest.TestCase):
                 ur.validate_knowledge(self.knowledge(advice=[advice_rule(when=when)]))
         ur.validate_knowledge(self.knowledge(advice=[advice_rule(when={"flags": ["sodium-workaround:ANYTHING"], "os": ["win"]})]))
 
+    def test_out_of_range_integer_is_a_knowledge_error(self):
+        for when in ({"tierAtLeast": 2 ** 31}, {"refreshRateAtLeast": -(2 ** 31) - 1}, {"ramMbAtLeast": 2 ** 63},
+                     {"always": 1}, {"tierAtMost": 3.5}):
+            with self.assertRaises(ur.KnowledgeError, msg=str(when)):
+                ur.validate_knowledge(self.knowledge(advice=[advice_rule(when=when)]))
+        ur.validate_knowledge(self.knowledge(advice=[advice_rule(when={"tierAtLeast": 2 ** 31 - 1, "ramMbAtLeast": 2 ** 63 - 1})]))
+
     def test_overlong_regex_is_a_knowledge_error(self):
         with self.assertRaises(ur.KnowledgeError):
             ur.validate_knowledge(self.knowledge(advice=[advice_rule(when={"gpuModelMatches": "a" * 201})]))

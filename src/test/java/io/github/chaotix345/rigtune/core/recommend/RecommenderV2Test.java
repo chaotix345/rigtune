@@ -128,6 +128,17 @@ class RecommenderV2Test {
 	}
 
 	@Test
+	void nullConditionsFireNothing() {
+		Map<String, Recommendation> recs = run("""
+				"mods":[{"slug":"addme","projectId":"p","modIds":["addme"],"reason":"r","recommendWhen":null},
+				 {"slug":"avoidme","projectId":"p2","modIds":["avoidme"],"reason":"r","recommendWhen":{"always":false},"avoidWhen":null}],
+				"settings":[{"key":"vanilla.renderDistance","value":20,"reason":"v","when":null}],
+				"advice":[{"id":"tip","title":"Tip","text":"t","when":null}]""", "avoidme");
+		assertTrue(recs.keySet().stream().noneMatch(id -> id.equals("add:addme") || id.equals("disable:avoidme")
+				|| id.equals("set:vanilla.renderDistance") || id.equals("advice:tip")), recs.keySet().toString());
+	}
+
+	@Test
 	void poisonedSettingEntriesAreSkipped() {
 		Map<String, Recommendation> recs = run("""
 				"settings":[

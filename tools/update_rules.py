@@ -71,6 +71,9 @@ V2_CONDITION_KEYS = V1_CONDITION_KEYS | {
 BOOLEAN_CONDITION_KEYS = frozenset({"always", "gpuIntegrated", "hasBattery", "onBattery"})
 LIST_CONDITION_KEYS = frozenset({"gpuVendor", "backend", "os", "goal", "mcVersion", "modPresent", "modAbsent", "flags"})
 STRING_CONDITION_KEYS = frozenset({"gpuModelMatches", "mcVersionRange"})
+# Java Integer fields; every other numeric key is a Java Long.
+INT32_CONDITION_KEYS = frozenset({"tierAtLeast", "tierAtMost", "rawTierAtLeast", "rawTierAtMost", "gpuTierAtLeast",
+                                  "gpuTierAtMost", "cpuTierAtLeast", "cpuTierAtMost", "refreshRateAtLeast"})
 MAX_PATTERN_LENGTH = 200
 
 # Enumerated condition values (the Java client's ConditionEvaluator vocabularies). 0.2 adds none to 0.1.0's.
@@ -164,7 +167,13 @@ def condition_problems(cond, allowed_keys=V2_CONDITION_KEYS, path="condition"):
                 problems.append(f"{where} must map mod ids to version predicates")
         elif not is_integer(value):
             problems.append(f"{where} must be an integer")
+        elif not -(2 ** bits(key) - 1) - 1 <= value <= 2 ** bits(key) - 1:
+            problems.append(f"{where} is outside the range of a {bits(key) + 1}-bit integer")
     return problems
+
+
+def bits(key):
+    return 31 if key in INT32_CONDITION_KEYS else 63
 
 
 def is_v1_condition(cond):
