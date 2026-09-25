@@ -24,6 +24,9 @@ for each release becomes that release's Modrinth changelog (`build.gradle`'s
 - Ixeris keeps its "always recommend" rule on both versions; its reason notes that its raw-input batching gain isn't ported to 26.3 yet.
 
 ### Fixed
+- RigTune no longer offers to update Distant Horizons while DH's own auto-updater is on (the two updaters raced to replace the same jar at exit, which made a real update fail). It shows an info note instead.
+- Distant Horizons render-distance caps now apply only while DH rendering is on, and DH thread caps only when Chunky isn't installed.
+- A benchmark measured in a throttled or unfocused window (e.g. with Dynamic FPS) is stopped and not saved.
 - **The post-exit helper retries a locked file for much longer.** Real-world feedback: a large mod jar (e.g. Distant Horizons) still open a few seconds after Minecraft exits (the Modrinth App re-scanning the instance, or an antivirus scan) made the helper give up after its old ~3 s of retries and leave the change pending. It now backs off exponentially (300 ms, doubling, capped at 5 s) over a ~30 s budget for this kind of sharing violation, and waits 2 s (was 1 s) after the game process exits before it even tries.
 - **A startup race that could leave RigTune "Offline".** If the hardware/mod scan finished before the local rules were loaded (or a remote rules fetch tied the local revision), RigTune could skip its Modrinth lookups entirely until the player pressed Rescan. Lookups are now triggered by whichever of the scan and the rules load finishes last.
 - A null/unreadable mod id on a staged mod-enable operation no longer bypasses the duplicate-mod-id safety check; such a file is rejected instead of being installed unvalidated.
@@ -37,11 +40,9 @@ for each release becomes that release's Modrinth changelog (`build.gradle`'s
 - `config/rigtune/settings.json` is a new, separate file, so a downgrade back to 0.1.x (which only knows `rigtune.json`) can't reset the new network switches on a later re-upgrade.
 
 ### Known issues
-- **Pending**: RigTune can offer to update Distant Horizons even while DH's own auto-updater is enabled, which is what caused a real-world apply failure (both updaters racing to replace the same jar at exit). A fix (skip RigTune's DH update offer while DH's auto-updater is on) is in progress and will be confirmed before this release goes out.
-- RigTune's "Distant Horizons already draws the far terrain cheaply, so render distance can be lower" clamp and reason don't yet check whether DH's own rendering is switched on; they can fire even when DH is disabled in its own settings.
-- The benchmark doesn't detect an unfocused window or a mod (e.g. Dynamic FPS) throttling the frame rate during a run, which can produce a misleadingly low result.
-- A few settings-screen UX rough edges: the first-launch network notice can cover the RigTune screen's tier text while shown; the "Modrinth is off" row doesn't name the specific switch to flip; Undo screens show a raw Sodium setting key instead of its friendly name; and an Undo-everything skip reason can say "you changed it since" for a setting that's already back at its original value.
-
+- On some Windows machines vanilla Minecraft 26.3 crashes natively while starting its sound system (OpenAL), with or without RigTune. Relaunching usually works.
+- A GitHub-installed 0.1.0 is offered the 0.2.0 self-update only once the Modrinth listing is approved (RigTune finds its own update through Modrinth).
+- If you downgrade to 0.1.x with Distant Horizons or Iris setting changes still staged, the 0.1.x helper can't apply them and drops them after 3 exits; 0.1.x also ignores the new network switches.
 ## [0.1.0] - 2026-09-24
 
 ### Added
