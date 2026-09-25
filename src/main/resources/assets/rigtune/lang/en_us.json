@@ -174,6 +174,8 @@
 	"rigtune.benchmark.sd.kept": "Simulation distance stays at %s",
 	"rigtune.benchmark.sd.lowered": "Simulation distance %s (was %s) gives better 1%% lows",
 	"rigtune.benchmark.sd.world": "Simulation distance isn't tuned in the benchmark world (nothing ticks there)",
+	"rigtune.benchmark.shader_advice": "Your shader pack costs about %s%% of your 1%% lows.",
+	"rigtune.benchmark.shader_advice.hint": "A lighter profile in the pack's settings may reach your target.",
 	"rigtune.benchmark.step.baseline": "baseline for the cost checks",
 	"rigtune.benchmark.step.dh_off": "Distant Horizons off",
 	"rigtune.benchmark.step.measure": "measuring your settings",
