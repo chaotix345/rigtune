@@ -56,6 +56,7 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 	private static final int SECOND = 20;
 	private static final int REPORT_TIMEOUT = 180 * SECOND;
 	private static final int STAGE_TIMEOUT = 120 * SECOND;
+	private static final int RESCAN_AFTER = 20 * SECOND;
 	private static final int WATCHDOG = 360 * SECOND;
 
 	private enum Step {
@@ -70,6 +71,7 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 	private int ticks;
 	private int stepTicks;
 	private Recommendation update;
+	private boolean rescanned;
 
 	@Override
 	public void onInitializeClient() {
@@ -128,6 +130,9 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 				Recommendation found = report == null ? null : report.recommendations().stream()
 						.filter(r -> r.id().equals(UPDATE_ID) && r.action() instanceof Action.UpdateMod)
 						.findFirst().orElse(null);
+				if (found == null) {
+					rescanIfStillOffline(controller, report);
+				}
 				if (found != null) {
 					update = found;
 					Action.UpdateMod action = (Action.UpdateMod) found.action();
@@ -224,6 +229,9 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 				}
 				Report report = controller.report();
 				boolean online = report != null && report.online();
+				if (!online) {
+					rescanIfStillOffline(controller, report);
+				}
 				if (online || stepTicks > REPORT_TIMEOUT) {
 					result.put("goal", controller.goal().name());
 					result.put("reportOnline", online);
@@ -250,6 +258,19 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 			default -> {
 			}
 		}
+	}
+
+	// RigTune (0.1.0 and 0.2 so far) skips its Modrinth lookups on a launch where the hardware/mod scan finishes before the
+	// rules are loaded and the remote rules aren't newer (docs/v0.2/design/ws-g.md), and stays offline until Rescan. Press
+	// Rescan once, as a player would, and record it.
+	private void rescanIfStillOffline(RigTuneController controller, Report report) {
+		if (rescanned || stepTicks < RESCAN_AFTER || report != null && report.online()) {
+			return;
+		}
+		rescanned = true;
+		result.put("rescanned", true);
+		event("report still " + (report == null ? "missing" : "offline") + " after " + RESCAN_AFTER / SECOND + " s: pressing Rescan");
+		controller.rescan();
 	}
 
 	// The title screen, once the startup loading overlay has faded.

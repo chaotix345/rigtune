@@ -389,6 +389,9 @@ class Run:
                  "- Old: `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["old"]),
                  "- New (served by the fake Modrinth): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"]),
                  "- Client time: update phase {} s, verify phase {} s".format(self.facts.get("updateSeconds"), self.facts.get("verifySeconds")),
+                 "- Rescan pressed because the report stayed offline (the startup lookup race, docs/v0.2/design/ws-g.md): "
+                 "update phase {}, verify phase {}".format(*("yes" if (self.driver(p) or {}).get("rescanned") else "no"
+                                                             for p in ("update", "verify"))),
                  ""]
         for phase, title in (("update", "After the old version applied the update and quit (helper done)"),
                              ("verify", "After the new version started on the same instance")):
