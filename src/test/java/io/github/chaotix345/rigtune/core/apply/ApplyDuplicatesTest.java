@@ -156,6 +156,55 @@ class ApplyDuplicatesTest {
 		assertEquals(List.of("broken.jar.rigtune-pending", "lib-1.0.jar.rigtune-pending"), modsListing());
 	}
 
+	// Review 4, apply-safety-1: an enable staged with a mod id is checked against its jar too, so an update whose jar
+	// isn't a Fabric mod fails with its group and the jar it would replace stays enabled.
+	@Test
+	void anUpdateWhoseJarIsNotAFabricModFailsWithItsGroup() throws IOException {
+		modJar(mods.resolve("modx-1.0.jar"), "modx");
+		Path broken = Files.writeString(mods.resolve("modx-2.0.jar" + PendingActions.PENDING_SUFFIX), "not a zip");
+
+		ApplyResult result = run(PendingActions.group(Op.disableFile(mods.resolve("modx-1.0.jar")), enable(broken, "modx")));
+
+		assertEquals(List.of(Status.FAILED, Status.FAILED), statuses(result));
+		assertTrue(result.results().get(1).message().contains("modx-2.0.jar.rigtune-pending is not a Fabric mod jar"), result.toString());
+		assertEquals(List.of("modx-1.0.jar", "modx-2.0.jar.rigtune-pending"), modsListing());
+	}
+
+	@Test
+	void anEnableWhoseJarDeclaresAnotherModIdFailsWithItsGroup() throws IOException {
+		modJar(mods.resolve("sodium-0.7.0.jar"), "sodium");
+		Path other = pendingJar("sodium-0.7.1.jar", "lithium");
+
+		ApplyResult result = run(PendingActions.group(Op.disableFile(mods.resolve("sodium-0.7.0.jar")), enable(other, "sodium")));
+
+		assertEquals(List.of(Status.FAILED, Status.FAILED), statuses(result));
+		assertTrue(result.results().get(1).message().contains("declares mod id lithium, not sodium"), result.toString());
+		assertEquals(List.of("sodium-0.7.0.jar", "sodium-0.7.1.jar.rigtune-pending"), modsListing());
+	}
+
+	// Review 4, security-1: an Error while reading a jar's id (a huge or deeply nested fabric.mod.json) only makes that
+	// jar unreadable. An unrelated jar in mods/ doesn't stop an enable, and an enabled one fails as not a mod.
+	@Test
+	void anErrorReadingAJarsIdOnlyMakesThatJarUnreadable() throws IOException {
+		modJar(mods.resolve("bomb.jar"), "bomb");
+		Path lithium = pendingJar("lithium.jar", "lithium");
+		Path bomb = pendingJar("bomb-2.jar", "bomb");
+		ApplyExecutor.ModIdReader throwing = jar -> {
+			if (jar.getFileName().toString().startsWith("bomb")) {
+				throw new StackOverflowError("nested too deep");
+			}
+			return ModJars.readModId(jar);
+		};
+		PendingActions plan = PendingActions.create(1, mods, config, List.of(enable(lithium, "lithium"), enable(bomb, "bomb")));
+		plan.save(pending);
+
+		ApplyResult result = new ApplyExecutor(2, 1, (from, to) -> Files.move(from, to), millis -> true, throwing).run(plan, pending);
+
+		assertEquals(List.of(Status.OK, Status.FAILED), statuses(result));
+		assertTrue(result.results().get(1).message().contains("bomb-2.jar.rigtune-pending is not a Fabric mod jar"), result.toString());
+		assertEquals(List.of("bomb-2.jar.rigtune-pending", "bomb.jar", "lithium.jar"), modsListing());
+	}
+
 	@Test
 	void anEnableWhoseJarHasNoFabricModJsonFails() throws IOException {
 		Path plain = TestJars.plainJar(mods.resolve("pack.jar" + PendingActions.PENDING_SUFFIX));

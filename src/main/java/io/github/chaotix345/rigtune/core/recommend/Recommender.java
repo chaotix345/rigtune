@@ -65,6 +65,12 @@ public final class Recommender {
 
 	public static Report recommend(RulesDocument rules, HardwareProfile hardware, List<InstalledMod> mods,
 			SettingsSnapshot settings, OnlineData online, Goal goal, String modVersion) {
+		return recommend(rules, hardware, mods, settings, online, goal, modVersion, Set.of());
+	}
+
+	// queuedUpdates: the mod ids with an update of their own waiting in mods/update/ (ModJars.queuedUpdates).
+	public static Report recommend(RulesDocument rules, HardwareProfile hardware, List<InstalledMod> mods,
+			SettingsSnapshot settings, OnlineData online, Goal goal, String modVersion, Set<String> queuedUpdates) {
 		OnlineData data = online == null ? OnlineData.offline() : online;
 		GpuClass gpuClass = GpuClassifier.from(rules).classify(hardware.gpu());
 		int cpuTier = CpuClassifier.from(rules).classify(hardware.cpu());
@@ -82,7 +88,7 @@ public final class Recommender {
 		SettingsSnapshot snapshot = settings == null ? new SettingsSnapshot(Map.of()) : settings;
 		EvalContext ctx = new EvalContext(hardware, gpuClass, tier, goal, loaded, Map.copyOf(versions), snapshot);
 
-		Session session = new Session(rules, ctx, installed, snapshot, data);
+		Session session = new Session(rules, ctx, installed, snapshot, data, queuedUpdates == null ? Set.of() : queuedUpdates);
 		section("obsolete", session::obsolete);
 		section("avoided", session::avoided);
 		section("conflicts", session::conflicts);
@@ -141,15 +147,18 @@ public final class Recommender {
 		final List<InstalledMod> installed;
 		final SettingsSnapshot snapshot;
 		final OnlineData online;
+		final Set<String> queuedUpdates;
 		final Map<String, ModRule> bySlug = new LinkedHashMap<>();
 		final Map<String, Recommendation> recs = new LinkedHashMap<>();
 
-		Session(RulesDocument rules, EvalContext ctx, List<InstalledMod> installed, SettingsSnapshot snapshot, OnlineData online) {
+		Session(RulesDocument rules, EvalContext ctx, List<InstalledMod> installed, SettingsSnapshot snapshot, OnlineData online,
+				Set<String> queuedUpdates) {
 			this.rules = rules;
 			this.ctx = ctx;
 			this.installed = installed;
 			this.snapshot = snapshot;
 			this.online = online;
+			this.queuedUpdates = queuedUpdates;
 			this.mods = rules.mods.stream().filter(r -> supported(r.requires)).toList();
 			this.obsolete = rules.obsolete.stream().filter(r -> supported(r.requires)).toList();
 			this.settings = rules.settings.stream().filter(r -> supported(r.requires)).toList();
@@ -210,6 +219,7 @@ public final class Recommender {
 
 		void additions() {
 			String mc = ctx.hardware().mcVersion();
+			Map<ModRule, Availability> offered = new LinkedHashMap<>();
 			for (ModRule rule : mods) {
 				// Fail closed: an avoidWhen this client can't decide blocks the addition too.
 				if (isInstalled(rule) || !matches(rule.recommendWhen)
@@ -218,10 +228,33 @@ public final class Recommender {
 					continue;
 				}
 				Availability availability = availability(rule.slug, mc);
-				if (availability == Availability.UNAVAILABLE) {
-					continue;
+				if (availability != Availability.UNAVAILABLE) {
+					offered.put(rule, availability);
 				}
+			}
+			// Two mods that conflict are never offered together (review 4, rules-accuracy-2): the one earlier in the
+			// rules stays and names the ones it keeps out.
+			ModConflicts conflicts = ModConflicts.of(rules);
+			Map<ModRule, List<String>> keptOut = new LinkedHashMap<>();
+			for (ModRule rule : offered.keySet()) {
+				ModRule kept = keptOut.keySet().stream().filter(k -> conflicts.between(k.slug, rule.slug)).findFirst().orElse(null);
+				if (kept != null) {
+					keptOut.get(kept).add(rule.displayTitle());
+				} else {
+					keptOut.put(rule, new ArrayList<>());
+				}
+			}
+			for (Map.Entry<ModRule, List<String>> entry : keptOut.entrySet()) {
+				ModRule rule = entry.getKey();
+				Availability availability = offered.get(rule);
 				String reason = rule.reason == null ? "" : rule.reason;
+				if (!entry.getValue().isEmpty()) {
+					List<String> titles = entry.getValue();
+					String names = titles.size() == 1 ? titles.getFirst()
+							: String.join(", ", titles.subList(0, titles.size() - 1)) + " or " + titles.getLast();
+					reason = (reason + " RigTune doesn't also offer " + names + ", which " + (titles.size() == 1 ? "conflicts" : "conflict")
+							+ " with it.").trim();
+				}
 				if (rule.alpha()) {
 					reason = (reason + " " + ALPHA_NOTE).trim();
 				}
@@ -245,6 +278,14 @@ public final class Recommender {
 				UpdateInfo update = entry.getValue();
 				InstalledMod mod = installed.stream().filter(m -> m.modId().equals(modId)).findFirst().orElse(null);
 				if (mod == null || update == null || (mod.file() == null && mod.sha1() == null) || recs.containsKey("disable:" + modId)) {
+					continue;
+				}
+				// Its own updater already has the next build waiting, whatever the rules say (review 4, rules-accuracy-1):
+				// RigTune updating it too races that updater for the jar at exit.
+				if (queuedUpdates.contains(modId)) {
+					put(new Recommendation("advice:update-queued:" + modId, Category.ADVICE, Impact.LOW,
+							name(mod) + " has an update of its own waiting", "It's in mods/update, so RigTune leaves it alone.",
+							new Action.None(), false));
 					continue;
 				}
 				ModRule selfUpdating = mods.stream()

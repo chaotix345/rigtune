@@ -208,6 +208,48 @@ class RecommenderTest {
 		assertFalse(recs.get("add:optout").selectedByDefault());
 	}
 
+	// Review 4, rules-accuracy-2: two mods that conflict are never offered together. The one earlier in the rules stays
+	// and names the ones it keeps out; either side declaring the conflict, by slug or mod id, is enough.
+	private static final String CONFLICTING_ADDITIONS = """
+			"mods":[
+			 {"slug":"net","projectId":"P1","title":"Net","modIds":["net"],"reason":"Faster net.","recommendWhen":{"always":true},"conflictsWith":["noise_mod"]},
+			 {"slug":"noise","projectId":"P2","title":"Noise","modIds":["noise_mod"],"reason":"Faster noise.","recommendWhen":{"always":true}},
+			 {"slug":"surface","projectId":"P3","title":"Surface","modIds":["surface"],"reason":"Faster surface.","recommendWhen":{"always":true},"conflictsWith":["net"]},
+			 {"slug":"other","projectId":"P4","title":"Other","modIds":["other"],"reason":"Unrelated.","recommendWhen":{"always":true},"conflictsWith":["noise"]}
+			]""";
+
+	@Test
+	void conflictingAdditionsAreNotOfferedTogether() {
+		Map<String, Recommendation> recs = byId(run(rules(CONFLICTING_ADDITIONS), Fixtures.userRig(), List.of(), Map.of(), OnlineData.offline()));
+
+		assertEquals(List.of("add:net", "add:other"), recs.keySet().stream().sorted().toList());
+		assertEquals("Faster net. RigTune doesn't also offer Noise or Surface, which conflict with it. " + Recommender.AVAILABILITY_UNKNOWN_NOTE,
+				recs.get("add:net").reason());
+		assertEquals("Unrelated. " + Recommender.AVAILABILITY_UNKNOWN_NOTE, recs.get("add:other").reason());
+	}
+
+	@Test
+	void modConflictsResolveEitherSideBySlugOrModId() {
+		ModConflicts conflicts = ModConflicts.of(rules(CONFLICTING_ADDITIONS));
+		assertTrue(conflicts.between("net", "noise"));
+		assertTrue(conflicts.between("noise", "net"));
+		assertTrue(conflicts.between("net", "surface"));
+		assertTrue(conflicts.between("noise", "other"));
+		assertFalse(conflicts.between("net", "other"));
+		assertFalse(conflicts.between("noise", "surface"));
+		assertFalse(conflicts.between("net", null));
+	}
+
+	@Test
+	void aConflictingAdditionIsOfferedWhenTheEarlierOneIsNot() {
+		OnlineData online = new OnlineData(true, Map.of("net", false, "noise", true, "surface", true, "other", true), Map.of());
+		Map<String, Recommendation> recs = byId(run(rules(CONFLICTING_ADDITIONS), Fixtures.userRig(), List.of(), Map.of(), online));
+
+		assertEquals(List.of("add:noise", "add:surface"), recs.keySet().stream().sorted().toList());
+		assertEquals("Faster noise. RigTune doesn't also offer Other, which conflicts with it.", recs.get("add:noise").reason());
+		assertEquals("Faster surface.", recs.get("add:surface").reason());
+	}
+
 	@Test
 	void avoidWhenDisablesInstalledMod() {
 		RulesDocument rules = rules("""

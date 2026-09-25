@@ -400,6 +400,32 @@ class KnowledgeV2ScenarioTest {
 				.containsKey("set:" + THREADS));
 	}
 
+	// Review 4, rules-accuracy-2: Fast Noise and Material Rule Compiler conflict with C2ME and Krypton (both earlier in the
+	// rules), so they're never offered alongside either; the first of those offered names them.
+	private static final String WORLDGEN_KEPT_OUT = "RigTune doesn't also offer Fast Noise or Material Rule Compiler, which conflict with it.";
+
+	@Test
+	void conflictingModsAreNotOfferedTogether() {
+		Map<String, Recommendation> desktop = run(Fixtures.userRig(), "sodium", "lithium");
+		assertFalse(desktop.containsKey("add:zfastnoise"), desktop.keySet().toString());
+		assertFalse(desktop.containsKey("add:zmaterial-rule-compiler"), desktop.keySet().toString());
+		assertTrue(desktop.get("add:c2me-fabric").reason().contains(WORLDGEN_KEPT_OUT), desktop.get("add:c2me-fabric").reason());
+		assertFalse(desktop.get("add:krypton").reason().contains("RigTune doesn't also offer"), desktop.get("add:krypton").reason());
+
+		// C2ME needs CPU tier 3.
+		Fixtures.Hw celeron = Fixtures.lowEndLaptop();
+		celeron.cpu = new CpuInfo("Intel(R) Celeron(R) N4020 CPU @ 1.10GHz", 2, 2, -1);
+		Map<String, Recommendation> laptop = run(celeron, "sodium", "lithium");
+		assertFalse(laptop.containsKey("add:c2me-fabric"), laptop.keySet().toString());
+		assertFalse(laptop.containsKey("add:zfastnoise"), laptop.keySet().toString());
+		assertTrue(laptop.get("add:krypton").reason().contains(WORLDGEN_KEPT_OUT), laptop.get("add:krypton").reason());
+
+		// Krypton has no 26.3 build, so there the two are offered when C2ME isn't.
+		celeron.mcVersion = "26.3";
+		Map<String, Recommendation> later = run(celeron, "sodium", "lithium");
+		assertTrue(later.containsKey("add:zfastnoise") && later.containsKey("add:zmaterial-rule-compiler"), later.keySet().toString());
+	}
+
 	// Phase 5 finding 3.
 	@Test
 	void modernFixReasonFitsEveryVersion() {

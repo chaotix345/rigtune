@@ -26,7 +26,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiPredicate;
 
+import static io.github.chaotix345.rigtune.core.modrinth.FakeModrinthClient.incompatible;
 import static io.github.chaotix345.rigtune.core.modrinth.FakeModrinthClient.required;
 import static io.github.chaotix345.rigtune.core.modrinth.FakeModrinthClient.version;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -45,6 +47,7 @@ class DownloadPlannerTest {
 	final Set<String> failing = new HashSet<>();
 	final Set<String> failOnce = new HashSet<>();
 	final Set<String> notMods = new HashSet<>();
+	BiPredicate<String, String> conflicts = (a, b) -> false;
 
 	@BeforeEach
 	void setUp() throws IOException {
@@ -90,6 +93,23 @@ class DownloadPlannerTest {
 		assertEquals(List.of(), fetched);
 	}
 
+	// Review 4, apply-safety-1: an update's download with no readable mod id is refused like an added mod's, and the
+	// installed jar is left alone.
+	@Test
+	void anUpdateWhoseDownloadIsNotAFabricModIsDroppedWithAnError() throws IOException {
+		Files.writeString(mods.resolve("m-1.jar"), "installed");
+		notMods.add("m-2.jar");
+
+		DownloadPlanner.Result result = plan(Set.of(), update("m-1.jar", "m-2.jar"));
+
+		assertEquals(List.of(), result.ops());
+		assertEquals(List.of(), result.ids());
+		assertEquals(1, result.errors().size(), result.errors().toString());
+		assertTrue(result.errors().getFirst().startsWith("Update m: m-2.jar is not a Fabric mod jar"), result.errors().getFirst());
+		assertFalse(Files.exists(mods.resolve("m-2.jar" + PendingActions.PENDING_SUFFIX)));
+		assertEquals("installed", Files.readString(mods.resolve("m-1.jar")));
+	}
+
 	@Test
 	void anUpdateKeepingTheSameFileNameIsStaged() throws IOException {
 		Files.writeString(mods.resolve("m.jar"), "installed");
@@ -102,8 +122,54 @@ class DownloadPlannerTest {
 	}
 
 	private DownloadPlanner.Result plan(Set<String> installedProjects, Recommendation... recs) {
-		DownloadPlanner planner = new DownloadPlanner(new DependencyResolver(client, "fabric", "26.2"), mods, this::fetch);
+		DownloadPlanner planner = new DownloadPlanner(new DependencyResolver(client, "fabric", "26.2"), mods, this::fetch, conflicts);
 		return planner.plan(List.of(recs), installedProjects, Set.of(), Map.of());
+	}
+
+	// Review 4, rules-accuracy-2: a batch never stages both sides of a rules conflict; the later one fails before its
+	// download.
+	@Test
+	void theLaterOfTwoConflictingAdditionsFails() {
+		put("krypton", version("kryptonV", "KRYPTON", "1", T));
+		put("b", version("bV", "B", "1", T));
+		put("noise", version("noiseV", "NOISE", "1", T));
+		conflicts = (a, b) -> Set.of("krypton", "noise").equals(Set.of(a, b));
+
+		DownloadPlanner.Result result = plan(Set.of(), add("krypton", "KRYPTON"), add("b", "B"), add("noise", "NOISE"));
+
+		assertEquals(List.of("add-krypton", "add-b"), result.ids());
+		assertEquals(List.of("kryptonV.jar", "bV.jar"), targets(result.ops()));
+		assertEquals(List.of("Add noise: it conflicts with krypton, which is being installed too"), result.errors());
+		assertFalse(fetched.contains("noiseV.jar"));
+	}
+
+	@Test
+	void aConflictWithAnAdditionThatFailedDoesNotCount() {
+		put("krypton", version("kryptonV", "KRYPTON", "1", T));
+		put("noise", version("noiseV", "NOISE", "1", T));
+		conflicts = (a, b) -> Set.of("krypton", "noise").equals(Set.of(a, b));
+		failing.add("kryptonV.jar");
+
+		DownloadPlanner.Result result = plan(Set.of(), add("krypton", "KRYPTON"), add("noise", "NOISE"));
+
+		assertEquals(List.of("add-noise"), result.ids());
+		assertEquals(List.of("noiseV.jar"), targets(result.ops()));
+		assertEquals(1, result.errors().size(), result.errors().toString());
+	}
+
+	// Review 4, rules-accuracy-2: a Modrinth "incompatible" dependency between two additions of one batch fails the later.
+	@Test
+	void aModrinthIncompatibilityWithinTheBatchFailsTheLaterAddition() {
+		put("a", version("aV", "A", "1", T, incompatible("B")));
+		put("c", version("cV", "C", "1", T));
+		put("b", version("bV", "B", "1", T));
+
+		DownloadPlanner.Result result = plan(Set.of(), add("a", "A"), add("c", "C"), add("b", "B"));
+
+		assertEquals(List.of("add-a", "add-c"), result.ids());
+		assertEquals(List.of("aV.jar", "cV.jar"), targets(result.ops()));
+		assertEquals(List.of("Add b: Modrinth marks A and B as incompatible, and both would be installed"), result.errors());
+		assertFalse(fetched.contains("bV.jar"));
 	}
 
 	private static Recommendation add(String slug, String projectId) {
