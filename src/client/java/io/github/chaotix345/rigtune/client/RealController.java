@@ -288,7 +288,7 @@ public final class RealController implements RigTuneController {
 	// unstaged (re-check of review 4). A busy lock leaves it for the next rebuild.
 	private List<Op> dropQueuedUpdates(Set<String> queued) {
 		try {
-			List<Op> dropped = staging.dropQueuedUpdates(queued);
+			List<Op> dropped = staging.dropQueuedUpdates(queued, ModScanner.loadedIds());
 			if (dropped == null || dropped.isEmpty()) {
 				return List.of();
 			}
@@ -516,7 +516,7 @@ public final class RealController implements RigTuneController {
 
 	// Staging and its journal records live in Staging (lock, merge, record after the merge: review H5).
 	private boolean stage(List<Op> ops, List<String> ids, String entryId) {
-		if (!staging.stage(ops, entryId)) {
+		if (staging.stage(ops, entryId) == null) {
 			return false;
 		}
 		staged.addAll(ids);
