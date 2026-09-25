@@ -18,15 +18,17 @@
   - updates for mods you already have
   - vanilla, Sodium, Distant Horizons and Iris settings for your hardware tier and goal (Performance / Balanced / Quality)
   - advice on things outside the game, such as RAM allocation, running on battery, GPU driver workarounds and heavy shaders
-- **Benchmarks in game**: it measures real frame times (average and 1% lows, with the FPS cap lifted) and tunes render distance, and simulation distance in singleplayer, to your monitor's refresh rate. A dedicated benchmark world gives repeatable results without needing your own save. Distant Horizons and shaders get a cost report (what they're costing you), rather than being auto-tuned. A **Measure before / after** mode reports the real gain from any change you make, with a small chart of your recent runs.
-- **Undo RigTune**: every change RigTune makes — settings, mod installs, mod disables — is logged, and you can undo the last apply or everything RigTune has done, one confirmation screen at a time. Reverts that need a restart are applied the same safe way as Apply.
+- **Knows your launcher**: it recognises the Modrinth App, Prism Launcher, ATLauncher, the CurseForge app and the official Minecraft Launcher, and gives its click steps for changing Minecraft's memory under every memory advice. Other launchers get the general advice.
+- **Benchmarks in game**: it measures real frame times (average and 1% lows, with the FPS cap lifted) and tunes render distance, and simulation distance in singleplayer, to your monitor's refresh rate. Each render distance is measured on its own terrain: the benchmark waits for the chunks to load, and a step whose chunks didn't arrive in time doesn't count. A dedicated benchmark world gives repeatable results without needing your own save. Distant Horizons and shaders get a cost report (what they're costing you), rather than being auto-tuned, and if your shader pack is what keeps you below your target, it suggests a lighter profile. A **Measure before / after** mode reports the real gain from any change you make, with a small chart of your recent runs.
+- **History and Undo**: every change RigTune makes (settings, mod installs, updates and disables, config changes) is logged. The History screen lists them newest first, with the status of each change and, if one failed at the restart, why. Undo one entry, the last apply or everything, one confirmation screen at a time. Reverts that need a restart are applied the same safe way as Apply.
 - **Applies safely**:
+  - **Preview** shows exactly what Apply would change, file by file, before you press it
   - video settings take effect immediately
   - mod installs, updates, disables and config changes (Sodium, Distant Horizons, Iris) are staged, then applied by a small helper after Minecraft closes (Windows keeps loaded mods locked)
   - nothing is ever deleted: disabled mods become `.jar.disabled`, so you can re-enable them in your launcher
   - every download is checked against Modrinth's SHA-512 hash
 - **Lets you control what leaves your PC**: a settings screen (also reachable from Mod Menu) with separate switches for remote rules, Modrinth lookups/downloads and the startup toast. Turn any of them off and RigTune falls back to on-device advice with no network request.
-- **Copy report**: puts a short Markdown summary of your hardware, recommendations and latest benchmark on your clipboard, ready to paste into Discord or an issue. No file paths or user names.
+- **Copy report**: puts a short Markdown summary of your hardware, recommendations and latest benchmark on your clipboard, ready to paste into Discord or an issue. No file paths or user names. **Report a problem** opens a new GitHub issue with your versions and as much of that report as fits filled in (the full report goes on your clipboard), after you confirm the link; nothing is posted until you submit it.
 - **Stays up to date without mod updates**: the recommendations come from a rules file in this repo that the mod fetches at startup. A weekly GitHub Action rebuilds it from live Modrinth data and the mod lists of [Fabulously Optimized](https://github.com/Fabulously-Optimized/fabulously-optimized) and [Additive](https://github.com/skywardmc/additive), and opens a PR for a maintainer to review.
 
 ## Screenshots
@@ -34,6 +36,8 @@
 ![RigTune report](docs/images/report.png)
 
 ![Benchmark results](docs/images/benchmark.png)
+
+![History: what RigTune changed](docs/images/history.jpg)
 
 ![Undo RigTune](docs/images/undo.jpg)
 
@@ -53,7 +57,7 @@ Open RigTune from any of these:
 - **F8** while in a world
 - Mod Menu
 
-Review the list, untick anything you don't want, and press **Apply**. If mods or config changed, restart Minecraft; the next launch tells you what was applied. Made a mistake? Open **Undo last apply** or **Undo everything** from the RigTune screen to revert it, immediately or after a restart.
+Review the list, untick anything you don't want, and press **Apply** (or **Preview** first, to see exactly what it would change). If mods or config changed, restart Minecraft; the next launch tells you what was applied. Made a mistake? Open **History…** on the RigTune screen: **Undo this** reverts the selected entry, **Undo last** the last apply and **Undo all** everything RigTune has done, immediately or after a restart. Something wrong? **Report a problem** starts a GitHub issue with your report (see the [FAQ](#what-does-report-a-problem-send)).
 
 To run the benchmark, press **Benchmark…** on the RigTune screen. Pick a scene — your current world, or the dedicated benchmark world (no save needed, reachable from the title screen) — and **Tune** or **Measure**. It takes about a minute. Press Esc to cancel; your settings are always restored. In your own world, Tune tests at most 8 render distances above your current one: every distance it tests makes the game load, generate and save that much more of the world.
 
@@ -65,12 +69,16 @@ RigTune has no telemetry. Your hardware details never leave your PC unless you c
 |---|---|---|
 | **Network access** (master) | Everything below | No network request of any kind. The RigTune screen says "Offline (network off in settings)". |
 | **Rules updates (GitHub)** | A plain download of the rules file from this repository (`rules-v2.json`, or `rules-v1.json` if that fails, from `raw.githubusercontent.com`). | RigTune uses the newer of the rules bundled in the jar and the last downloaded copy. |
-| **Modrinth** | To the Modrinth API (`api.modrinth.com`): the SHA-1 hashes of your installed mod jars (to find updates, including RigTune's own), the ids of the mods RigTune might suggest (to check they exist for your version), and your Minecraft version with the loader name `fabric`. From Modrinth's CDN it downloads only the files you choose to install or update, and checks their SHA-512 hashes. | No Modrinth request at all: no lookups, no update checks, no downloads. Mod installs and updates are still listed, as advice to do in your launcher. |
+| **Modrinth** | To the Modrinth API (`api.modrinth.com`): the SHA-1 hashes of your installed mod jars (to find updates, including RigTune's own), the ids of the mods RigTune might suggest (to check they exist for your version), and your Minecraft version with the loader name `fabric`. When you press Apply or Preview, it also looks up the versions and dependencies of the mods you ticked. From Modrinth's CDN it downloads only the files you choose to install or update, and checks their SHA-512 hashes. | No Modrinth request at all: no lookups, no update checks, no downloads. Mod installs and updates are still listed, as advice to do in your launcher. |
 | **Startup suggestions toast** | Nothing (it isn't a network switch) | The "RigTune: N suggestions" toast on the title screen isn't shown. Apply results and warnings still are. |
 
-Every request identifies itself as RigTune and its version (the User-Agent). The switches are stored in `config/rigtune/settings.json`; the first time RigTune 0.2 starts, a one-time toast points at them. With the network off, or when a request fails, RigTune uses the newer of the bundled rules and the last downloaded copy.
+Every request identifies itself as RigTune and its version (the User-Agent). The switches are stored in `config/rigtune/settings.json`; the first time RigTune 0.2 or newer starts, a one-time toast points at them. With the network off, or when a request fails, RigTune uses the newer of the bundled rules and the last downloaded copy. **Preview** sends nothing beyond the Modrinth lookups above and downloads nothing.
 
-**Copy report** on the RigTune screen puts a Markdown summary on your clipboard for you to paste into Discord or an issue: the versions, your hardware, tier and goal, the rules revision, the suggestions' titles and your latest benchmark. It leaves out file paths, user names and world names, and RigTune never sends it anywhere itself. **Report a problem** opens a pre-filled GitHub issue in your browser, only after you confirm the link (see the [FAQ](#faq)).
+**Copy report** on the RigTune screen puts a Markdown summary on your clipboard for you to paste into Discord or an issue: the versions, your hardware, tier and goal, your launcher's name (if RigTune recognised it), the rules revision, the suggestions' titles and your latest benchmark. It leaves out file paths, user names and world names, and RigTune never sends it anywhere itself. **Report a problem** opens a pre-filled GitHub issue in your browser, only after you confirm the link, and nothing is posted until you submit it (see the [FAQ](#faq)).
+
+**Launcher detection** happens on your PC only. To name your launcher in the memory advice, RigTune reads these system properties and environment variables and no others: `org.prismlauncher.instance.name`, `multimc.instance.title`, `minecraft.launcher.brand`, `INST_ID` and `INST_NAME`. It also looks in the game folder and the folder above it for two small launcher files, reading Prism's `instance.cfg` (only to check it's a Prism instance, next to an `mmc-pack.json`) and CurseForge's `minecraftinstance.json` (only its `isMemoryOverride` value). Nothing about your launcher is sent anywhere; only its name appears in the report, when you copy or share it.
+
+**spark**: if you have the spark profiler installed, RigTune shows how to capture a profile with it. RigTune doesn't run spark or send it anything, but note what spark itself does: `/sparkc profiler stop` uploads the profile, with your player name and UUID, mod list, system details and Java launch arguments, to spark.lucko.me behind a link that anyone who has it can open.
 
 ## How the recommendations stay current
 
@@ -112,6 +120,8 @@ You need JDK 25. One source tree builds every supported Minecraft version with [
 python -m unittest discover -s tools/tests
 ```
 
+CI (`.github/workflows/build.yml`) runs the build and unit tests for every version, the Python tests and the rules checks on every push and pull request. It also runs the client game tests on Linux, one job per version and graphics backend: OpenGL for every folder in `versions/`, plus Vulkan from 26.3 on (so 26.2 OpenGL, 26.3 OpenGL and 26.3 Vulkan today), on Mesa's software renderers under Xvfb. Those jobs use `./gradlew :<mc>:runProductionClientGameTest`, which runs the same tests against the built jar in a production client rather than the development classpath, and keep each job's screenshots, logs and crash reports as artifacts.
+
 The few lines that differ between versions are marked with `//? if >=26.3 {` comments. `src/` is always in the state of one active version, which is what your IDE compiles; the others are generated under `versions/<mc>/build/generated/stonecutter/`. To work on another version, switch the active one, and switch back before committing (CI fails if the sources are committed in a switched state):
 
 ```sh
@@ -119,7 +129,7 @@ The few lines that differ between versions are marked with `//? if >=26.3 {` com
 ./gradlew "Reset active project"          # back to 26.2, the committed version; git diff should then show only your own edits
 ```
 
-See [docs/DESIGN.md](docs/DESIGN.md) "Porting to new MC versions" for how to add a future version.
+See [docs/DESIGN.md](docs/DESIGN.md) "Porting to new MC versions" for how to add a future version, and [tools/MC_VERSIONS.md](tools/MC_VERSIONS.md) for the two tools that do most of it (`tools/add_mc_version.py` adds the version, `tools/mc_apidiff.py` checks RigTune's code against its API).
 
 ## Translating RigTune
 
