@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static io.github.chaotix345.rigtune.core.preview.PreviewFixtures.rec;
@@ -25,6 +26,7 @@ class PreviewPlannerTest {
 	@TempDir
 	Path dir;
 	PreviewFixtures instance;
+	Map<String, String> problems = Map.of();
 
 	@BeforeEach
 	void setUp() throws IOException {
@@ -32,7 +34,7 @@ class PreviewPlannerTest {
 	}
 
 	private ApplyPreview preview(Recommendation... selected) {
-		return new PreviewPlanner(instance.options, PreviewFixtures.vanillaNow(), instance.configFiles(), instance.mods, PreviewFixtures.offline()).preview(List.of(selected));
+		return new PreviewPlanner(instance.options, PreviewFixtures.vanillaNow(), problems, instance.configFiles(), instance.mods, PreviewFixtures.offline()).preview(List.of(selected));
 	}
 
 	@Test
@@ -62,6 +64,18 @@ class PreviewPlannerTest {
 
 		assertEquals(List.of(new ApplyPreview.Skipped("setting:vanilla.simulationDistance", "Title of setting:vanilla.simulationDistance",
 				ApplyPreview.Reason.UNKNOWN_SETTING, null)), preview.skipped());
+	}
+
+	// What SettingsBridge.problems finds (the game's own parse and range checks) is skipped with its message.
+	@Test
+	void aValueTheGameWouldRefuseIsSkippedWithItsReason() {
+		problems = Map.of("renderDistance", "Value out of range: 99");
+
+		ApplyPreview preview = preview(setting("vanilla.renderDistance", "12", "99"), setting("vanilla.particles", "all", "decreased"));
+
+		assertEquals(List.of(new ApplyPreview.Setting("setting:vanilla.particles", instance.options, "particles", "all", "decreased")), preview.now());
+		assertEquals(List.of(new ApplyPreview.Skipped("setting:vanilla.renderDistance", "Title of setting:vanilla.renderDistance", ApplyPreview.Reason.REFUSED,
+				"Value out of range: 99")), preview.skipped());
 	}
 
 	@Test

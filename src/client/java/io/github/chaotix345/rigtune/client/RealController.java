@@ -702,8 +702,15 @@ public final class RealController implements RigTuneController {
 
 	@Override
 	public ApplyPreview preview(List<Recommendation> selected) {
-		Map<String, String> vanillaNow = minecraft.isSameThread() ? SettingsBridge.readVanilla(minecraft.options)
-				: minecraft.submit(() -> SettingsBridge.readVanilla(minecraft.options)).join();
+		Map<String, String> vanilla = new LinkedHashMap<>();
+		for (Recommendation r : selected) {
+			if (r.action() instanceof Action.SetSetting set && set.key().startsWith(VANILLA)) {
+				vanilla.put(set.key(), set.newValue());
+			}
+		}
+		// The game's options are read on the render thread, and only when a vanilla setting is ticked.
+		GameOptions game = vanilla.isEmpty() ? new GameOptions(Map.of(), Map.of())
+				: minecraft.isSameThread() ? gameOptions(vanilla) : minecraft.submit(() -> gameOptions(vanilla)).join();
 		OnlineDataFetcher.Result data = online;
 		HardwareProfile hw = hardware;
 		List<InstalledMod> scanned = mods;
@@ -718,6 +725,14 @@ public final class RealController implements RigTuneController {
 				doc == null ? (a, b) -> false : ModConflicts.of(doc)::between);
 		List<PreviewPlanner.ConfigFile> files = ConfigTargets.all(configDir).stream()
 				.map(t -> new PreviewPlanner.ConfigFile(t.prefix(), t.file(), t.stager()::stage, t.reader()::read)).toList();
-		return new PreviewPlanner(FabricLoader.getInstance().getGameDir().resolve("options.txt"), vanillaNow, files, modsDir, downloads).preview(selected);
+		return new PreviewPlanner(FabricLoader.getInstance().getGameDir().resolve("options.txt"), game.now(), game.problems(), files, modsDir, downloads)
+				.preview(selected);
+	}
+
+	private record GameOptions(Map<String, String> now, Map<String, String> problems) {
+	}
+
+	private GameOptions gameOptions(Map<String, String> vanilla) {
+		return new GameOptions(SettingsBridge.readVanilla(minecraft.options), SettingsBridge.problems(minecraft.options, vanilla));
 	}
 }

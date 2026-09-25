@@ -32,14 +32,18 @@ public final class PreviewPlanner {
 
 	private final Path optionsFile;
 	private final Map<String, String> vanillaNow;
+	private final Map<String, String> vanillaProblems;
 	private final List<ConfigFile> configFiles;
 	private final Path modsDir;
 	private final DownloadInputs downloads;
 
-	// vanillaNow: the game's options as they are now, keyed without "vanilla.".
-	public PreviewPlanner(Path optionsFile, Map<String, String> vanillaNow, List<ConfigFile> configFiles, Path modsDir, DownloadInputs downloads) {
+	// vanillaNow: the game's options as they are now, keyed without "vanilla."; vanillaProblems: the values the game would
+	// refuse (SettingsBridge.problems), same keys.
+	public PreviewPlanner(Path optionsFile, Map<String, String> vanillaNow, Map<String, String> vanillaProblems, List<ConfigFile> configFiles,
+			Path modsDir, DownloadInputs downloads) {
 		this.optionsFile = optionsFile;
 		this.vanillaNow = Map.copyOf(vanillaNow);
+		this.vanillaProblems = Map.copyOf(vanillaProblems);
 		this.configFiles = List.copyOf(configFiles);
 		this.modsDir = modsDir;
 		this.downloads = Objects.requireNonNull(downloads);
@@ -82,7 +86,7 @@ public final class PreviewPlanner {
 		return null;
 	}
 
-	// SettingsBridge.applyVanilla's checks, then only a value that differs is written.
+	// SettingsBridge.applyVanilla's checks in its order, then only a value that differs is written.
 	private void vanilla(Recommendation r, Action.SetSetting set, Out out) {
 		String key = set.key().substring(VANILLA.length());
 		if (!SettingKeys.changeable(set.key())) {
@@ -91,6 +95,8 @@ public final class PreviewPlanner {
 			out.skip(r, ApplyPreview.Reason.REFUSED, "Value contains control characters");
 		} else if (!vanillaNow.containsKey(key)) {
 			out.skip(r, ApplyPreview.Reason.UNKNOWN_SETTING, null);
+		} else if (vanillaProblems.containsKey(key)) {
+			out.skip(r, ApplyPreview.Reason.REFUSED, vanillaProblems.get(key));
 		} else if (Objects.equals(vanillaNow.get(key), set.newValue())) {
 			out.skip(r, ApplyPreview.Reason.UNCHANGED, null);
 		} else {

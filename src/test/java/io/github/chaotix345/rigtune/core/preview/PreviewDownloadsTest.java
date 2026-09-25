@@ -47,7 +47,7 @@ class PreviewDownloadsTest {
 	private ApplyPreview preview(Recommendation... selected) {
 		DownloadInputs inputs = new DownloadInputs(modrinth, lookups, "fabric", "26.2", Map.of(), updateVersions, installedProjects, Set.of("sodium"),
 				Map.of(), conflicts);
-		return new PreviewPlanner(instance.options, PreviewFixtures.vanillaNow(), instance.configFiles(), instance.mods, inputs).preview(List.of(selected));
+		return new PreviewPlanner(instance.options, PreviewFixtures.vanillaNow(), Map.of(), instance.configFiles(), instance.mods, inputs).preview(List.of(selected));
 	}
 
 	private Recommendation update() throws IOException {

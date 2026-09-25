@@ -96,7 +96,7 @@ class PreviewDifferentialTest {
 				.map(t -> new PreviewPlanner.ConfigFile(t.prefix(), t.file(), t.stager()::stage, t.reader()::read)).toList();
 		DownloadInputs inputs = new DownloadInputs(modrinth, true, "fabric", "26.2", Map.of(), updateVersions, installedProjects, loadedIds, Map.of(),
 				NO_CONFLICTS);
-		return new PreviewPlanner(instance.options, PreviewFixtures.vanillaNow(), files, instance.mods, inputs).preview(selected);
+		return new PreviewPlanner(instance.options, PreviewFixtures.vanillaNow(), Map.of(), files, instance.mods, inputs).preview(selected);
 	}
 
 	// RealController.apply's staging, step by step with the same classes (its vanilla write needs the game's Options:
