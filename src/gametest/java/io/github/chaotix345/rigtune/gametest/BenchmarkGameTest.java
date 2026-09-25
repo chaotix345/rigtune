@@ -16,7 +16,12 @@ import io.github.chaotix345.rigtune.client.ui.BenchmarkMenuScreen;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
+import io.github.chaotix345.rigtune.core.benchmark.FrameStats;
+import io.github.chaotix345.rigtune.core.benchmark.Knobs;
+import io.github.chaotix345.rigtune.core.benchmark.PlannerResult;
 import io.github.chaotix345.rigtune.core.benchmark.SceneVariety;
+import io.github.chaotix345.rigtune.core.benchmark.SessionResult;
+import io.github.chaotix345.rigtune.core.benchmark.ShaderAdvice;
 import io.github.chaotix345.rigtune.core.benchmark.Step;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
@@ -49,6 +54,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -100,6 +106,7 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 			benchmarkWorldCancel(context);
 			String tuneId = currentWorldTune(context);
 			checkHistoryFile(pair, tuneId, chunkTuneId);
+			shaderAdviceScreen(context);
 		} finally {
 			context.runOnClient(mc -> {
 				BenchmarkController.setDefaultConfig(BenchmarkController.Config.DEFAULT);
@@ -282,6 +289,27 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		});
 		context.waitFor(mc -> result.isDone(), 20 * 60);
 		return result.join();
+	}
+
+	// docs/v0.3/SPEC.md 8a: how the result screen shows the shader advice (the rule itself is ShaderAdviceTest's). A made-up
+	// Tune whose shaders take the 1% lows from 200 to 120 against a 170 FPS target; nothing is stored or changed.
+	private static void shaderAdviceScreen(ClientGameTestContext context) {
+		Knobs knobs = new Knobs(12, 10, false, true);
+		FrameStats stats = new FrameStats(1000, 300, 120, 8.3, 12.0);
+		SessionResult.Cost shaders = new SessionResult.Cost(120, 300, 200, 900);
+		check(ShaderAdvice.costPercent(shaders, 170).isPresent(), "the made-up run qualifies for the advice");
+		SessionResult session = new SessionResult(BenchmarkRequest.Mode.TUNE, knobs, knobs, 170,
+				new PlannerResult(12, false, 12, List.of(new PlannerResult.Measurement(12, stats, false)), "Step limit reached"),
+				List.of(new SessionResult.Measured(new Step(Step.Kind.RENDER_DISTANCE, knobs, BenchmarkController.Config.DEFAULT.timing().full()), stats)),
+				null, null, shaders, Map.of(), false);
+		BenchmarkController.Outcome outcome = new BenchmarkController.Outcome(new BenchmarkRequest(BenchmarkRequest.Mode.TUNE,
+				BenchmarkRequest.Scene.CURRENT, null), session, false, null, null, true, false, List.of());
+		context.runOnClient(mc -> mc.gui.setScreen(new BenchmarkResultScreen(mc.gui.screen(), outcome)));
+		context.waitForScreen(BenchmarkResultScreen.class);
+		context.waitTicks(3);
+		context.takeScreenshot("bench-shader-advice");
+		context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
+		context.waitForScreen(TitleScreen.class);
 	}
 
 	// Esc during a benchmark-world run: everything restored, back on the title screen, nothing stored.
