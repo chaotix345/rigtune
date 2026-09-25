@@ -1,0 +1,18 @@
+{
+  "finishedAt": "2026-09-25T20:32:53.044920100Z",
+  "results": [
+    {
+      "op": {
+        "type": "PATCH_TOML",
+        "path": "C:\\Dev\\Worktrees\\rigtune-p5\\versions\\26.2\\run\\config\\DistantHorizons.toml",
+        "patches": {
+          "client.advanced.graphics.quality.lodChunkRenderDistanceRadius": "256"
+        },
+        "id": "9856d893-7f07-4f24-af48-f744f722af73",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Patched 1 value(s) in DistantHorizons.toml"
+    }
+  ]
+}

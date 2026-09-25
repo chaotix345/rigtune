@@ -1,0 +1,22 @@
+[06:50:05] [Render thread/INFO]: Using shaderpack: ComplementaryReimagined_r5.9.3.zip
+[06:50:20] [Test thread/INFO]: Smoke: RigTune screen buttons [Settings, Apply (1), History…, Benchmark…, Rescan, Copy report, Report a problem, Done]
+[06:50:55] [Render thread/WARN]: Benchmark: target 500.0 FPS from -Drigtune.dev.targetFps (development only)
+[06:50:55] [Render thread/INFO]: Benchmark started: TUNE in CURRENT, target 500.0 FPS (uncapped), start Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=true]
+[06:50:56] [Render thread/INFO]: Benchmark settle RENDER_DISTANCE Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=true]: 3001 of 3001 chunks within 31 present, client holds 3725, 1.0 s
+[06:51:01] [Render thread/INFO]: Benchmark RENDER_DISTANCE Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=true]: 2144 frames, avg 536 FPS, 1% low 324 FPS, client chunks 3725 (frame limit 260, NONE)
+[06:51:03] [Render thread/INFO]: Benchmark settle RENDER_DISTANCE Knobs[renderDistance=17, simulationDistance=12, dhRendering=false, shaders=true]: 797 of 797 chunks within 16 present, client holds 1169, 1.0 s
+[06:51:08] [Render thread/INFO]: Benchmark RENDER_DISTANCE Knobs[renderDistance=17, simulationDistance=12, dhRendering=false, shaders=true]: 2697 frames, avg 658 FPS, 1% low 515 FPS, client chunks 1169 (frame limit 260, NONE)
+[06:51:09] [Render thread/INFO]: Benchmark settle RENDER_DISTANCE Knobs[renderDistance=24, simulationDistance=12, dhRendering=false, shaders=true]: 1653 of 1653 chunks within 23 present, client holds 2181, 1.0 s
+[06:51:14] [Render thread/INFO]: Benchmark RENDER_DISTANCE Knobs[renderDistance=24, simulationDistance=12, dhRendering=false, shaders=true]: 2507 frames, avg 627 FPS, 1% low 493 FPS, client chunks 2181 (frame limit 260, NONE)
+[06:51:15] [Render thread/INFO]: Benchmark settle SIMULATION_DISTANCE Knobs[renderDistance=17, simulationDistance=12, dhRendering=false, shaders=true]: 797 of 797 chunks within 16 present, client holds 1169, 1.0 s
+[06:51:18] [Render thread/INFO]: Benchmark SIMULATION_DISTANCE Knobs[renderDistance=17, simulationDistance=12, dhRendering=false, shaders=true]: 1384 frames, avg 675 FPS, 1% low 520 FPS, client chunks 1169 (frame limit 260, NONE)
+[06:51:19] [Render thread/INFO]: Benchmark settle REPEAT Knobs[renderDistance=17, simulationDistance=12, dhRendering=false, shaders=true]: 797 of 797 chunks within 16 present, client holds 1169, 1.0 s
+[06:51:24] [Render thread/INFO]: Benchmark REPEAT Knobs[renderDistance=17, simulationDistance=12, dhRendering=false, shaders=true]: 2665 frames, avg 658 FPS, 1% low 479 FPS, client chunks 1169 (frame limit 260, NONE)
+[06:51:24] [Render thread/INFO]: Shaders are disabled because enableShaders is set to false in iris.properties
+[06:51:25] [Render thread/INFO]: Benchmark settle SHADERS_OFF Knobs[renderDistance=17, simulationDistance=12, dhRendering=false, shaders=false]: 797 of 797 chunks within 16 present, client holds 1169, 1.0 s
+[06:51:28] [Render thread/INFO]: Benchmark SHADERS_OFF Knobs[renderDistance=17, simulationDistance=12, dhRendering=false, shaders=false]: 6391 frames, avg 3118 FPS, 1% low 702 FPS, client chunks 1169 (frame limit 260, NONE)
+[06:51:29] [Render thread/INFO]: Using shaderpack: ComplementaryReimagined_r5.9.3.zip
+[06:51:30] [Render thread/INFO]: Benchmark settle REPEAT Knobs[renderDistance=17, simulationDistance=12, dhRendering=false, shaders=true]: 797 of 797 chunks within 16 present, client holds 1169, 1.0 s
+[06:51:35] [Render thread/INFO]: Benchmark REPEAT Knobs[renderDistance=17, simulationDistance=12, dhRendering=false, shaders=true]: 2725 frames, avg 673 FPS, 1% low 507 FPS, client chunks 1169 (frame limit 260, NONE)
+[06:51:35] [Render thread/INFO]: Benchmark finished: chosen Knobs[renderDistance=17, simulationDistance=12, dhRendering=false, shaders=true], target 500.0 FPS met true, result Aggregate[avgFps=665.4589587573714, onePercentLowFps=493.21428941955514, p99FrameMs=1.9438, repeats=2, cv=0.039362867949671754], deadline hit false
+[06:51:40] [Test thread/INFO]: Smoke benchmark: at 2026-09-25T20:50:55.879325100Z | Distant Horizons loaded false, rendering before false, API override before n/a | Iris loaded true, shaders in use before true | Iris files before {config/iris.properties=062259c3c0bc68e3/values 9d1b518f58f9564f, shaderpacks/ComplementaryReimagined_r5.9.3.zip.txt=955a4c26bc7dc7ae/values 9e9a1c7bab615e2c, shaderpacks

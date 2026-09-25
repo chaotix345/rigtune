@@ -1,0 +1,40 @@
+== try 1
+last game log lines:
+[06:27:06] [Render thread/INFO]: Resizing Dynamic Transforms UBO, capacity limit of 2 reached during a single frame. New capacity will be 4.
+[06:27:07] [Test thread/INFO]: Smoke: wrote <repo>\versions\26.3\run\rigtune-smoke-report.txt
+[06:27:07] [Test thread/INFO]: Smoke: RigTune screen buttons [Settings, Apply (6), History…, Benchmark…, Rescan, Copy report, Report a problem, Done]
+> Process 'command '<jdk>\bin\java.exe'' finished with non-zero exit value -1073740940 (NTSTATUS 0xC0000374)
+
+== try 2
+last game log lines:
+[06:29:08] [Render thread/INFO]: Cached all modded block culling states
+[06:29:08] [RigTune worker/INFO]: RigTune: launcher not recognised (generic memory advice)
+[06:29:09] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Tech
+> Process 'command '<jdk>\bin\java.exe'' finished with non-zero exit value -1073741819 (NTSTATUS 0xC0000005)
+
+== try 3
+last game log lines:
+[06:30:05] [Render thread/INFO]: Cached all modded block culling states
+[06:30:05] [RigTune worker/INFO]: RigTune: launcher not recognised (generic memory advice)
+[06:30:05] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Tech
+> Process 'command '<jdk>\bin\java.exe'' finished with non-zero exit value -1073741819 (NTSTATUS 0xC0000005)
+
+== try 4
+last game log lines:
+[06:30:35] [Render thread/INFO]: Cached all modded block culling states
+[06:30:35] [RigTune worker/INFO]: RigTune: launcher not recognised (generic memory advice)
+[06:30:35] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Tech
+> Process 'command '<jdk>\bin\java.exe'' finished with non-zero exit value -1073741819 (NTSTATUS 0xC0000005)
+
+== try 5
+last game log lines:
+[06:31:06] [Render thread/INFO]: Cached all modded block culling states
+[06:31:06] [RigTune worker/INFO]: RigTune: launcher not recognised (generic memory advice)
+[06:31:06] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Tech
+> Process 'command '<jdk>\bin\java.exe'' finished with non-zero exit value -1073741819 (NTSTATUS 0xC0000005)
+== try 7 (ALSOFT_DRIVERS=null, JAVA_TOOL_OPTIONS=-Dminecraft.launcher.brand=theseus -Xmx2G)
+last game log lines:
+[07:02:32] [Render thread/INFO]: Cached all modded block culling states
+[07:02:33] [RigTune worker/INFO]: RigTune: launcher Modrinth App
+[07:02:33] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Tech
+> Process 'command 'C:\Dev\Tools\jdk\jdk-25.0.4.1+1\bin\java.exe'' finished with non-zero exit value -1073741819 (NTSTATUS 0xC0000005)
