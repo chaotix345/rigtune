@@ -58,7 +58,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -85,7 +84,7 @@ public final class RealController implements RigTuneController {
 	private final ModrinthClient modrinth;
 	private final ClientSettings settings;
 	private final ClientState state;
-	private final Set<String> staged = new HashSet<>();
+	private final StagedRecommendations staged = new StagedRecommendations();
 	private int carriedOverOps;
 	private final boolean selfFileActions = HelperLauncher.selfUpdateSupported();
 	private final Staging staging;
@@ -114,7 +113,7 @@ public final class RealController implements RigTuneController {
 		this.modrinth = new GatedModrinthClient(new HttpModrinthClient(modVersion), settings::modrinthAllowed);
 		this.state = ClientState.shared(configDir);
 		this.goal = state.goalOrDefault();
-		this.carriedOverOps = pendingOpCount();
+		this.carriedOverOps = pendingOps().size();
 		this.staging = new Staging(configDir, pendingFile, ConfigTargets.all(configDir), ClientJournal.get());
 		// The Undo screen plans off the render thread; the options are still read on it.
 		this.undoService = new UndoService(staging, ClientJournal.get(),
@@ -257,7 +256,7 @@ public final class RealController implements RigTuneController {
 			CompletableFuture.supplyAsync(() -> {
 						Set<String> queued = ModScanner.queuedUpdates();
 						List<Op> dropped = dropQueuedUpdates(queued);
-						return new Rebuilt(Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion, queued), dropped);
+						return new Rebuilt(Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion, queued), dropped, queued);
 					}, Probes.EXECUTOR)
 					.whenComplete((rebuilt, error) -> minecraft.execute(() -> {
 						if (error != null) {
@@ -266,7 +265,7 @@ public final class RealController implements RigTuneController {
 							return;
 						}
 						if (!rebuilt.dropped().isEmpty()) {
-							droppedQueuedUpdates(rebuilt.dropped(), scanned);
+							droppedQueuedUpdates(rebuilt.dropped(), rebuilt.queued(), scanned);
 						}
 						if (gen == generation) {
 							report = this.settings.modrinthAllowed() ? withoutStaged(rebuilt.report())
@@ -276,7 +275,7 @@ public final class RealController implements RigTuneController {
 		});
 	}
 
-	private record Rebuilt(Report report, List<Op> dropped) {
+	private record Rebuilt(Report report, List<Op> dropped, Set<String> queued) {
 	}
 
 	// Also at exit: an updater can have queued its build since the last rebuild.
@@ -284,8 +283,8 @@ public final class RealController implements RigTuneController {
 		dropQueuedUpdates(ModScanner.queuedUpdates());
 	}
 
-	// A staged update of a mod whose own updater has a build waiting in mods/update/ would race it at exit, so it is
-	// unstaged (re-check of review 4). A busy lock leaves it for the next rebuild.
+	// A staged update (or undo re-enable) of a loaded mod whose own updater has a build waiting in mods/update/ would race
+	// it at exit, so it is unstaged (re-check of review 4, SPEC 3a). A busy lock leaves it for the next rebuild.
 	private List<Op> dropQueuedUpdates(Set<String> queued) {
 		try {
 			List<Op> dropped = staging.dropQueuedUpdates(queued, ModScanner.loadedIds());
@@ -300,20 +299,17 @@ public final class RealController implements RigTuneController {
 		}
 	}
 
-	private void droppedQueuedUpdates(List<Op> dropped, List<InstalledMod> scanned) {
-		Set<String> modIds = new LinkedHashSet<>();
-		dropped.stream().filter(op -> op.type() == PendingActions.Type.ENABLE_FILE && op.modId() != null).forEach(op -> modIds.add(op.modId()));
-		boolean stagedNow = false;
-		for (String modId : modIds) {
-			stagedNow |= staged.remove("update:" + modId);
-		}
-		if (!stagedNow) {
-			carriedOverOps = Math.max(0, carriedOverOps - dropped.size());
-		}
-		List<String> names = modIds.stream()
-				.map(id -> scanned.stream().filter(m -> m.modId().equals(id) && m.name() != null).map(InstalledMod::name).findFirst().orElse(id))
-				.toList();
-		status = Component.translatable("rigtune.status.queued_update_dropped", String.join(", ", names));
+	private void droppedQueuedUpdates(List<Op> dropped, Set<String> queued, List<InstalledMod> scanned) {
+		recountStaged();
+		status = Component.translatable("rigtune.status.queued_update_dropped", String.join(", ", StagedRecommendations.droppedModNames(dropped, queued, scanned)));
+	}
+
+	// After a drop, an undo or a discard: a recommendation stays staged only while one of its ops is still in
+	// pending.json, and the staged ops none of them owns were carried over from another session (plan review A-M1).
+	private void recountStaged() {
+		List<Op> ops = pendingOps();
+		staged.retainPending(ops);
+		carriedOverOps = staged.unowned(ops);
 	}
 
 	private Report withoutStaged(Report built) {
@@ -349,7 +345,7 @@ public final class RealController implements RigTuneController {
 		Map<ConfigTargets.Target, Map<String, String>> configPatches = new LinkedHashMap<>();
 		Map<String, String> configIds = new HashMap<>();
 		List<Op> immediateOps = new ArrayList<>();
-		List<String> immediateIds = new ArrayList<>();
+		Map<String, List<String>> immediateOpIds = new LinkedHashMap<>();
 		List<Recommendation> downloads = new ArrayList<>();
 		for (Recommendation r : selected) {
 			switch (r.action()) {
@@ -360,8 +356,9 @@ public final class RealController implements RigTuneController {
 					configIds.put(set.key(), r.id());
 				}
 				case Action.DisableMod disable when SafeFileNames.isDirectChild(modsDir, disable.file()) -> {
-					immediateOps.add(Op.disableFile(disable.file()));
-					immediateIds.add(r.id());
+					Op op = Op.disableFile(disable.file());
+					immediateOps.add(op);
+					immediateOpIds.computeIfAbsent(r.id(), k -> new ArrayList<>()).add(op.id());
 				}
 				case Action.AddMod ignored -> downloads.add(r);
 				case Action.UpdateMod ignored -> downloads.add(r);
@@ -387,9 +384,16 @@ public final class RealController implements RigTuneController {
 			patches.refused().forEach((key, problem) -> RigTune.LOGGER.warn("Not staging setting {}{}: {}", target.prefix(), key, problem));
 			settingsFailed += patches.refused().size();
 			immediateOps.addAll(0, patches.ops());
-			patches.ops().forEach(op -> immediateIds.add(configIds.get(target.prefix() + op.patches().keySet().iterator().next())));
+			for (Op op : patches.ops()) {
+				for (String key : op.patches().keySet()) {
+					String id = configIds.get(target.prefix() + key);
+					if (id != null) {
+						immediateOpIds.computeIfAbsent(id, k -> new ArrayList<>()).add(op.id());
+					}
+				}
+			}
 		}
-		boolean stageFailed = !immediateOps.isEmpty() && !stage(immediateOps, immediateIds, entryId);
+		boolean stageFailed = !immediateOps.isEmpty() && !stage(immediateOps, immediateOpIds, entryId);
 		if (!downloads.isEmpty()) {
 			startDownloads(downloads, entryId);
 		}
@@ -400,7 +404,7 @@ public final class RealController implements RigTuneController {
 			parts.add(Component.translatable("rigtune.status.settings_applied", settingsOk));
 		}
 		if (settingsFailed > 0 || stageFailed) {
-			parts.add(Component.translatable("rigtune.status.some_failed", settingsFailed + (stageFailed ? immediateIds.size() : 0)));
+			parts.add(Component.translatable("rigtune.status.some_failed", settingsFailed + (stageFailed ? immediateOps.size() : 0)));
 		}
 		if (!downloads.isEmpty()) {
 			parts.add(Component.translatable("rigtune.status.downloading", downloads.size()));
@@ -461,7 +465,7 @@ public final class RealController implements RigTuneController {
 			status = Component.translatable("rigtune.status.download_failed", error == null ? "?" : error.getMessage());
 			return;
 		}
-		boolean ok = result.ops().isEmpty() || stage(result.ops(), result.ids(), entryId);
+		boolean ok = result.ops().isEmpty() || stage(result.ops(), result.opIds(), entryId);
 		List<Component> parts = new ArrayList<>();
 		if (!result.errors().isEmpty()) {
 			parts.add(Component.translatable("rigtune.status.download_failed", String.join("; ", result.errors())));
@@ -514,23 +518,25 @@ public final class RealController implements RigTuneController {
 		return pending;
 	}
 
-	// Staging and its journal records live in Staging (lock, merge, record after the merge: review H5).
-	private boolean stage(List<Op> ops, List<String> ids, String entryId) {
-		if (staging.stage(ops, entryId) == null) {
+	// Staging and its journal records live in Staging (lock, merge, record after the merge: review H5). Each
+	// recommendation is recorded with the ids its ops have in pending.json after the merge (plan review A-M1).
+	private boolean stage(List<Op> ops, Map<String, List<String>> opIdsByRecommendation, String entryId) {
+		Staging.Merge merge = staging.stage(ops, entryId);
+		if (merge == null) {
 			return false;
 		}
-		staged.addAll(ids);
+		staged.add(opIdsByRecommendation, merge.merged().survivingIds());
 		return true;
 	}
 
-	private int pendingOpCount() {
+	private List<Op> pendingOps() {
 		if (!Files.exists(pendingFile)) {
-			return 0;
+			return List.of();
 		}
 		try {
-			return PendingActions.load(pendingFile).ops().size();
+			return PendingActions.load(pendingFile).ops();
 		} catch (IOException e) {
-			return 0;
+			return List.of();
 		}
 	}
 
@@ -583,8 +589,7 @@ public final class RealController implements RigTuneController {
 			if (dropped == null) {
 				return Component.translatable("rigtune.status.discard_busy");
 			}
-			staged.clear();
-			carriedOverOps = 0;
+			recountStaged();
 			rebuild();
 			return Component.translatable("rigtune.status.discarded", dropped.size());
 		} catch (IOException | RuntimeException e) {
@@ -618,8 +623,7 @@ public final class RealController implements RigTuneController {
 			if (outcome.busy()) {
 				return Component.translatable("rigtune.undo.status.busy");
 			}
-			staged.clear();
-			carriedOverOps = pendingOpCount();
+			recountStaged();
 			rebuild();
 			return Component.translatable("rigtune.undo.status.done", outcome.now(), outcome.afterRestart(), outcome.cancelled(), outcome.skipped());
 		} catch (IOException | RuntimeException e) {
