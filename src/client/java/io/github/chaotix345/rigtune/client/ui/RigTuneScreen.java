@@ -2,6 +2,8 @@ package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
+import io.github.chaotix345.rigtune.core.launcher.LauncherAdvice;
+import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Goal;
@@ -49,6 +51,7 @@ public class RigTuneScreen extends Screen {
 	private static final int COLOR_ADVICE = 0xFF7EC8FF;
 	private static final int COLOR_NEUTRAL = 0xFF8A8A8A;
 	private static final int COLOR_OK = 0xFF7FE07F;
+	private static final int COLOR_LAUNCHER = 0xFFA8E0B0;
 
 	private final @Nullable Screen parent;
 	private final RigTuneController controller;
@@ -69,6 +72,8 @@ public class RigTuneScreen extends Screen {
 	private @Nullable Button applyButton;
 	private @Nullable Map<String, String> captions;
 	private @Nullable Component seenControllerStatus;
+	private LauncherInfo shownLauncher = LauncherInfo.UNKNOWN;
+	private final List<Component> launcherAdvice = new ArrayList<>();
 
 	public RigTuneScreen(@Nullable Screen parent, RigTuneController controller) {
 		super(Component.translatable("rigtune.screen.title"));
@@ -87,6 +92,8 @@ public class RigTuneScreen extends Screen {
 			captions = SettingsBridge.captions(minecraft.options);
 		}
 		shown = controller.report();
+		shownLauncher = controller.launcher();
+		launcherAdvice.clear();
 		syncSelection(shown);
 
 		int titleWidth = font.width(title.copy().withStyle(ChatFormatting.BOLD));
@@ -190,12 +197,7 @@ public class RigTuneScreen extends Screen {
 
 	private List<Component> header(Report report, @Nullable Component badge) {
 		HardwareProfile hw = report.hardware();
-		List<Component> lines = new ArrayList<>();
-		lines.add(Component.translatable("rigtune.header.cpu",
-				value(cpuName(hw.cpu().name())),
-				value(Integer.toString(hw.cpu().logicalCores())),
-				value(gb(hw.totalRamMb())),
-				value(gb(hw.maxHeapMb()))).withStyle(s -> s.withColor(COLOR_LABEL)));
+		List<Component> lines = new ArrayList<>(cpuAndMemory(hw));
 		String vram = hw.gpu().vramMb() > 0 ? gb(hw.gpu().vramMb()) : "?";
 		lines.add(Component.translatable("rigtune.header.gpu",
 				value(hw.gpu().renderer()),
@@ -228,6 +230,39 @@ public class RigTuneScreen extends Screen {
 
 	public List<Component> headerLines() {
 		return List.copyOf(headerLines);
+	}
+
+	// v0.3 (WS-C): with a known launcher the memory gets its own line naming it ("Memory 6.0 GB of 32 GB, set in the
+	// Modrinth App"); otherwise the CPU line is as before.
+	private List<Component> cpuAndMemory(HardwareProfile hw) {
+		Component cpu = value(cpuName(hw.cpu().name()));
+		Component threads = value(Integer.toString(hw.cpu().logicalCores()));
+		String launcherName = shownLauncher.nameKey();
+		if (launcherName == null) {
+			return List.of(Component.translatable("rigtune.header.cpu", cpu, threads, value(gb(hw.totalRamMb())), value(gb(hw.maxHeapMb())))
+					.withStyle(s -> s.withColor(COLOR_LABEL)));
+		}
+		return List.of(
+				Component.translatable("rigtune.launcher.header.cpu", cpu, threads).withStyle(s -> s.withColor(COLOR_LABEL)),
+				Component.translatable("rigtune.launcher.header.memory", value(gb(hw.maxHeapMb())), value(gb(hw.totalRamMb())),
+						Component.translatable(launcherName).withStyle(ChatFormatting.WHITE)).withStyle(s -> s.withColor(COLOR_LABEL)));
+	}
+
+	// v0.3 (WS-C): "In <launcher>: <steps>" under every ram-* advice, when the launcher is known.
+	private @Nullable Component launcherLine(Recommendation recommendation) {
+		String steps = LauncherAdvice.stepsKey(recommendation, shownLauncher);
+		String launcherName = shownLauncher.nameKey();
+		if (steps == null || launcherName == null) {
+			return null;
+		}
+		Component line = Component.translatable("rigtune.launcher.advice", Component.translatable(launcherName), Component.translatable(steps));
+		launcherAdvice.add(line);
+		return line;
+	}
+
+	/** The launcher lines shown under the ram-* advice, in list order (for the game tests). */
+	public List<Component> launcherLines() {
+		return List.copyOf(launcherAdvice);
 	}
 
 	private void copyReport() {
@@ -320,7 +355,7 @@ public class RigTuneScreen extends Screen {
 			seenControllerStatus = latest;
 			status = latest;
 		}
-		if (controller.report() != shown) {
+		if (controller.report() != shown || !controller.launcher().equals(shownLauncher)) {
 			rebuildWidgets();
 		}
 	}
@@ -471,6 +506,7 @@ public class RigTuneScreen extends Screen {
 			private final Component impact;
 			private final List<FormattedCharSequence> titleLines;
 			private final List<FormattedCharSequence> reasonLines;
+			private final List<FormattedCharSequence> launcherLines;
 			private final int textIndent;
 
 			RecommendationEntry(Recommendation recommendation, int width) {
@@ -485,6 +521,8 @@ public class RigTuneScreen extends Screen {
 				this.titleLines = split.size() > 2 ? List.of(split.get(0), ComponentRenderUtils.clipText(title, font, titleWidth)) : split;
 				this.reasonLines = recommendation.reason() == null || recommendation.reason().isBlank()
 						? List.of() : font.split(Component.literal(recommendation.reason()), reasonWidth);
+				Component launcherLine = launcherLine(recommendation);
+				this.launcherLines = launcherLine == null ? List.of() : font.split(launcherLine, reasonWidth);
 				if (recommendation.appliable()) {
 					this.checkbox = Checkbox.builder(Component.empty(), font)
 							.selected(selected.contains(recommendation.id()))
@@ -507,7 +545,7 @@ public class RigTuneScreen extends Screen {
 
 			int preferredHeight() {
 				int titleHeight = Math.max(BOX, titleLines.size() * 9 + 4);
-				return 4 + titleHeight + reasonLines.size() * 9 + 5;
+				return 4 + titleHeight + (reasonLines.size() + launcherLines.size()) * 9 + 5;
 			}
 
 			@Override
@@ -537,6 +575,10 @@ public class RigTuneScreen extends Screen {
 				int reasonY = y + Math.max(BOX, titleLines.size() * 9 + 4) + 1;
 				for (FormattedCharSequence line : reasonLines) {
 					graphics.text(font, line, textX, reasonY, informational && recommendation.category() == Category.WARNING ? 0xFFE8B0A8 : COLOR_REASON, false);
+					reasonY += 9;
+				}
+				for (FormattedCharSequence line : launcherLines) {
+					graphics.text(font, line, textX, reasonY, COLOR_LAUNCHER, false);
 					reasonY += 9;
 				}
 			}
