@@ -422,7 +422,7 @@ def incomplete(analysis):
     return [f"UNRESOLVED {_member(r)}: {r['reason']}" for r in analysis.refs if r["status"] == "UNRESOLVED"]
 
 
-HEADER_NAME = re.compile(r"\b(?:class|interface) ([\w.$]+)")
+HEADER_NAME = re.compile(r"\b(?:class|interface) ([\w.$-]+)")
 
 
 def split_javap(text):
@@ -444,6 +444,15 @@ def split_javap(text):
                 blocks[current] = "\n".join(lines)
                 current = None
     return blocks
+
+
+def class_statuses(names, old_blocks, new_blocks):
+    """SAME/DIFF per class from the two javap dumps; NO DUMP when javap printed nothing for it on either side."""
+    statuses = {}
+    for name in names:
+        old, new = old_blocks.get(name), new_blocks.get(name)
+        statuses[name] = "NO DUMP" if old is None or new is None else "SAME" if old == new else "DIFF"
+    return statuses
 
 
 def normalize_bytecode(text):
@@ -661,8 +670,10 @@ def bytecode_diffs(javap, old_dirs, new_dirs):
                 compared += 1
                 name = rel[:-len(".class")]
                 a, b = dumps[0].get(name), dumps[1].get(name)
-                if a != b:
-                    diffs[f"{label}/{rel}"] = list(difflib.unified_diff(a or [], b or [], "old", "new", n=1, lineterm=""))
+                if a is None or b is None:
+                    diffs[f"{label}/{rel}"] = ["javap printed nothing for this class"]
+                elif a != b:
+                    diffs[f"{label}/{rel}"] = list(difflib.unified_diff(a, b, "old", "new", n=1, lineterm=""))
     return {"compared": compared, "diffs": diffs, "only_old": only_old, "only_new": only_new}
 
 
@@ -699,8 +710,9 @@ def render_summary(prev, mc, raw, analysis, classpaths, class_status, bytecode, 
                      + ", ".join(f"{k} {v}" for k, v in sorted(a.scope.not_checked.items())))
     same = sorted(n for n, s in class_status.items() if s == "SAME")
     diff = sorted(n for n, s in class_status.items() if s == "DIFF")
+    no_dump = sorted(n for n, s in class_status.items() if s == "NO DUMP")
     lines.append(f"Referenced classes: {len(a.scope.types)}: SAME {len(same)}, DIFF {len(diff)}, "
-                 f"MISSING {len(a.missing_classes)}")
+                 f"MISSING {len(a.missing_classes)}" + (f", NO DUMP {len(no_dump)}" if no_dump else ""))
     for name in diff:
         lines.append(f"  DIFF {name}")
     for name in a.missing_classes:
@@ -730,10 +742,10 @@ def render_summary(prev, mc, raw, analysis, classpaths, class_status, bytecode, 
         for name in list(bytecode["diffs"]) + bytecode["only_old"] + bytecode["only_new"]:
             lines.append(f"  {name}")
     problems = breaking(a)
-    gaps = incomplete(a)
+    gaps = incomplete(a) + [f"NO DUMP {n}: javap printed nothing for it, compare it by hand" for n in no_dump]
     lines.append("")
     if problems or gaps:
-        lines.append(f"RESULT: {len(problems)} breaking change(s), {len(gaps)} unresolved reference(s):")
+        lines.append(f"RESULT: {len(problems)} breaking change(s), {len(gaps)} gap(s) in the check:")
         lines += [f"  {p}" for p in problems + gaps]
     else:
         review = f"; review the {len(diff)} changed class(es) above" if diff else ""
@@ -826,7 +838,7 @@ def main(argv=None, *, root=None, out=None, err=None):
             for version, blocks in ((args.prev, old_blocks), (args.mc, new_blocks)):
                 text = "\n".join(blocks[n] for n in sorted(blocks)) + "\n"
                 (target / f"dump-{version}.txt").write_text(text, encoding="utf-8", newline="\n")
-    problems = breaking(analysis) + incomplete(analysis)
+    problems = breaking(analysis) + incomplete(analysis) + [n for n, s in class_status.items() if s == "NO DUMP"]
     return 1 if problems or (bytecode and (bytecode["diffs"] or bytecode["only_old"] or bytecode["only_new"])) else 0
 
 

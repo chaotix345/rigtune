@@ -1,3 +1,4 @@
+import io
 import json
 import struct
 import sys
@@ -364,6 +365,14 @@ class JavapTest(unittest.TestCase):
                          ["public class net.minecraft.client.Options {", "  public int renderDistance;",
                           "    descriptor: I", "}"])
 
+    def test_split_javap_reads_package_info(self):
+        blocks = mad.split_javap("interface io.github.x.package-info {\n}\n")
+        self.assertEqual(list(blocks), ["io/github/x/package-info"])
+
+    def test_class_statuses_flag_missing_dumps(self):
+        statuses = mad.class_statuses(["a/A", "a/B", "a/C"], {"a/A": "x", "a/B": "y"}, {"a/A": "x", "a/B": "z"})
+        self.assertEqual(statuses, {"a/A": "SAME", "a/B": "DIFF", "a/C": "NO DUMP"})
+
     def test_normalize_bytecode_strips_pool_indices(self):
         a = "  3: invokevirtual #12                 // Method net/minecraft/A.tick:()V\n  6: bipush        65"
         b = "  3: invokevirtual #40                 // Method net/minecraft/A.tick:()V\n  6: bipush        65"
@@ -462,6 +471,106 @@ class ClasspathTest(unittest.TestCase):
             mad.node_props(root, "26.4-snapshot-1")
         props = mad.node_props(root, "26.4-snapshot-1", fabric_api="0.161.1+26.4", modmenu="22.0.0-alpha.1")
         self.assertEqual(props, {"fabric_api_version": "0.161.1+26.4", "modmenu_version": "22.0.0-alpha.1"})
+
+
+def jar_with(path, writers):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as jar:
+        for w in writers:
+            jar.writestr(f"{w.name}.class", w.bytes())
+    return path
+
+
+def fake_javap(javap, args):
+    """javap -p -s -constants -cp <jar> <names>: one block per class, its text taken from the jar's class members."""
+    jar = args[args.index("-cp") + 1]
+    index = mad.ClassIndex([jar])
+    out = []
+    for dotted in args[args.index("-cp") + 2:]:
+        info = index.get(dotted.replace(".", "/"))
+        members = sorted(f"  {n}{d};" for n, d in list(info.fields) + list(info.methods))
+        out.append("\n".join([f"public class {dotted} {{"] + members + ["}"]))
+    index.close()
+    return "\n".join(out) + "\n"
+
+
+class MainTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name) / "repo"
+        self.gradle = Path(tmp.name) / "gradle"
+        (self.root / "versions" / "26.8").mkdir(parents=True)
+        (self.root / "gradle.properties").write_text("loader_version=0.19.5\n", encoding="utf-8")
+        (self.root / "versions" / "26.8" / "gradle.properties").write_text(
+            "fabric_api_version=0.1.0+26.8\nmodmenu_version=30.0.0\n", encoding="utf-8")
+        probe = ClassWriter("io/github/chaotix345/rigtune/client/Probe")
+        probe.ref("method", "net/minecraft/A", "tick", "()V")
+        probe.ref("field", "net/minecraft/client/Options", "renderDistance", "I")
+        probe.string("serverRenderDistance")
+        target = self.root / "versions" / "26.8" / "build" / "classes" / "java" / "client" / "io" / "github" / "chaotix345" / "rigtune" / "client"
+        target.mkdir(parents=True)
+        (target / "Probe.class").write_bytes(probe.bytes())
+        for name, value in (("java_tool", lambda name, java_home: name), ("run_javap", fake_javap),
+                            ("JdkClasses", lambda *args: jdk_index())):
+            original = getattr(mad, name)
+            setattr(mad, name, value)
+            self.addCleanup(setattr, mad, name, original)
+
+    def cache(self, mc, classes):
+        modules = self.gradle / "caches" / "modules-2" / "files-2.1"
+        mc_maven = self.gradle / "caches" / "fabric-loom" / "minecraftMaven" / "net" / "minecraft"
+        jar_with(mc_maven / "minecraft-clientonly-deobf" / mc / f"minecraft-clientonly-deobf-{mc}.jar", classes)
+        empty_jar(mc_maven / "minecraft-common-deobf" / mc / f"minecraft-common-deobf-{mc}.jar")
+        (self.gradle / "caches" / "fabric-loom" / mc).mkdir(parents=True, exist_ok=True)
+        (self.gradle / "caches" / "fabric-loom" / mc / "mojang_minecraft_info.json").write_text('{"libraries": []}', encoding="utf-8")
+        pom = modules / "net.fabricmc.fabric-api" / "fabric-api" / f"0.1.0+{mc}" / "p" / f"fabric-api-0.1.0+{mc}.pom"
+        pom.parent.mkdir(parents=True, exist_ok=True)
+        pom.write_text('<project xmlns="http://maven.apache.org/POM/4.0.0"><dependencies/></project>', encoding="utf-8")
+        empty_jar(modules / "com.terraformersmc" / "modmenu" / "30.0.0" / "h" / "modmenu-30.0.0.jar")
+        empty_jar(modules / "net.fabricmc" / "fabric-loader" / "0.19.5" / "h" / "fabric-loader-0.19.5.jar")
+
+    def run_main(self, *extra):
+        out, err = io.StringIO(), io.StringIO()
+        code = mad.main(["26.8", "26.9", "--fabric-api", "0.1.0+26.9", "--modmenu", "30.0.0",
+                         "--gradle-home", str(self.gradle), *extra], root=self.root, out=out, err=err)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_same_api_exits_0_and_writes_the_report(self):
+        for mc in ("26.8", "26.9"):
+            self.cache(mc, [ClassWriter("net/minecraft/A").method("tick", "()V"), options()])
+        out_dir = self.root / "out"
+        code, out, err = self.run_main("--out", str(out_dir))
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("OK 2, MISSING 0, CHANGED 0, UNRESOLVED 0", out)
+        self.assertIn("RESULT: no breaking change found", out)
+        self.assertIn("not compiled, so not checked: main, gametest, e2e, e2eUndo", out)
+        report = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
+        self.assertEqual(report["breaking"], [])
+        self.assertEqual((out_dir / "summary.txt").read_text(encoding="utf-8").splitlines(), out.splitlines())
+
+    def test_missing_member_exits_1_and_diffs_the_class(self):
+        self.cache("26.8", [ClassWriter("net/minecraft/A").method("tick", "()V"), options()])
+        self.cache("26.9", [ClassWriter("net/minecraft/A").method("tick", "(F)V"), options(fields=("renderDistance",))])
+        out_dir = self.root / "out"
+        code, out, err = self.run_main("--out", str(out_dir))
+        self.assertEqual(code, 1, out + err)
+        self.assertIn("MISSING method net/minecraft/A.tick()V: not found on the new version", out)
+        self.assertIn("MISSING name net/minecraft/client/Options.serverRenderDistance (a string RigTune uses)", out)
+        self.assertIn("  DIFF net/minecraft/A", out)
+        self.assertIn("-  tick()V;", (out_dir / "diff-net.minecraft.A.txt").read_text(encoding="utf-8"))
+
+    def test_missing_jar_exits_2_with_how_to(self):
+        self.cache("26.8", [ClassWriter("net/minecraft/A").method("tick", "()V"), options()])
+        code, out, err = self.run_main()
+        self.assertEqual(code, 2)
+        self.assertIn("minecraft-clientonly-deobf-26.9.jar", err)
+        self.assertIn("git worktree add", err)
+
+    def test_no_compiled_classes_exits_2(self):
+        code, out, err = self.run_main("--sets", "gametest")
+        self.assertEqual(code, 2)
+        self.assertIn(":26.8:classes", err)
 
 
 if __name__ == "__main__":
