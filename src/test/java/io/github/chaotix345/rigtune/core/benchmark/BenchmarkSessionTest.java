@@ -212,7 +212,7 @@ class BenchmarkSessionTest {
 		FakeRig rig = new FakeRig();
 		BenchmarkSession session = tune(ORIGINAL, new TuneLimits(4, 32, 100, false, 5));
 		int[] repeat = {0};
-		rig.drive(session, step -> step.kind() != Kind.REPEAT ? model(step) : stats(300, repeat[0]++ == 0 ? 100 : 110));
+		rig.drive(session, step -> step.kind() != Kind.REPEAT ? model(step) : stats(300, repeat[0]++ == 0 ? 100 : 110), s -> 1);
 		List<Step> repeats = rig.steps.stream().filter(s -> s.kind() == Kind.REPEAT).toList();
 		assertEquals(2, repeats.size());
 		assertTrue(repeats.stream().allMatch(s -> s.knobs().equals(session.result().chosen()) && s.protocol().equals(Timing.DEFAULT.full())));
@@ -347,8 +347,9 @@ class BenchmarkSessionTest {
 		BenchmarkSession session = BenchmarkSession.tune(new Knobs(12, 12, true, false), LIMITS, tight, 0);
 		rig.drive(session, BenchmarkSessionTest::model);
 		assertTrue(session.result().deadlineHit());
-		assertEquals(3, rig.steps.stream().filter(s -> s.kind() == Kind.RENDER_DISTANCE).count());
-		assertTrue(rig.elapsedSeconds() <= 120);
+		// 120 s minus the 10 s slack: two 37.5 s steps fit, a third would end at 112.5 s.
+		assertEquals(2, rig.steps.stream().filter(s -> s.kind() == Kind.RENDER_DISTANCE).count());
+		assertTrue(rig.elapsedSeconds() <= 120 - BenchmarkSession.SLACK_SECONDS);
 		assertTrue(session.done());
 		assertNotNull(session.result().result());
 	}
@@ -360,7 +361,8 @@ class BenchmarkSessionTest {
 			Timing timing = new Timing(6, 8.0, 2.0, 20.0, 1.5, 6.0, 2.0, 2, deadline);
 			BenchmarkSession session = BenchmarkSession.tune(new Knobs(12, 12, true, true), LIMITS, timing, 0);
 			rig.drive(session, BenchmarkSessionTest::model);
-			assertTrue(rig.maxStepEnd <= deadline * FakeRig.NANOS, "deadline " + deadline);
+			// The slack leaves room for knob changes and tick granularity, which the worst cases don't count.
+			assertTrue(rig.maxStepEnd <= Math.max(0, deadline - BenchmarkSession.SLACK_SECONDS) * FakeRig.NANOS, "deadline " + deadline);
 			assertTrue(session.done());
 		}
 	}
@@ -386,6 +388,66 @@ class BenchmarkSessionTest {
 		rig.drive(session, source, s -> s.protocol().settleMinSeconds() + 1 + s.protocol().warmupSeconds() + s.protocol().measuredSeconds());
 		assertFalse(session.result().deadlineHit());
 		assertTrue(rig.kinds().contains(Kind.SHADERS_OFF));
+	}
+
+	@Test
+	void reportCutByTheDeadlineSaysSo() {
+		Timing tight = new Timing(6, 8.0, 2.0, 20.0, 1.5, 6.0, 2.0, 2, 5);
+		BenchmarkSession session = BenchmarkSession.tune(new Knobs(12, 12, true, false), LIMITS, tight, 0);
+		new FakeRig().drive(session, BenchmarkSessionTest::model);
+		assertEquals(SessionResult.NOT_MEASURED_DEADLINE, session.result().notMeasured().get(BenchmarkRecord.DISTANT_HORIZONS));
+		assertFalse(session.result().notMeasured().containsKey(BenchmarkRecord.SHADERS), "shaders weren't on");
+	}
+
+	@Test
+	void worstCaseRdAndSdFitTheBudgetWithSlack() {
+		assertTrue(6 * Timing.DEFAULT.full().worstCaseSeconds() + Timing.DEFAULT.quickSettled().worstCaseSeconds()
+				+ 2 * Timing.DEFAULT.quick().worstCaseSeconds() <= Timing.DEFAULT.deadlineSeconds() - BenchmarkSession.SLACK_SECONDS);
+	}
+
+	@Test
+	void failedReportIsSkippedWithItsReason() {
+		BenchmarkSession session = tune(new Knobs(12, 12, true, true), new TuneLimits(4, 32, 20, false, 5));
+		FakeRig rig = new FakeRig();
+		java.util.Optional<Step> next;
+		while ((next = session.next(rig.now)).isPresent()) {
+			Step step = next.get();
+			rig.steps.add(step);
+			if (step.kind() == Kind.DH_OFF) {
+				session.skipFailed(step, "failed: DH refused");
+				continue;
+			}
+			session.record(step, model(step));
+		}
+		SessionResult r = session.result();
+		assertNull(r.dhCost());
+		assertNotNull(r.shaderCost(), "the other report still runs");
+		assertEquals("failed: DH refused", r.notMeasured().get(BenchmarkRecord.DISTANT_HORIZONS));
+		assertFalse(r.notMeasured().containsKey(BenchmarkRecord.SHADERS));
+		assertEquals(2, rig.steps.stream().filter(s -> s.kind() == Kind.REPEAT).count());
+	}
+
+	@Test
+	void failedBaselineSkipsBothReports() {
+		BenchmarkSession session = tune(new Knobs(12, 12, true, true), new TuneLimits(4, 32, 20, false, 5));
+		java.util.Optional<Step> next;
+		while ((next = session.next(0)).isPresent()) {
+			Step step = next.get();
+			if (step.kind() == Kind.BASELINE) {
+				session.skipFailed(step, "failed: x");
+				continue;
+			}
+			session.record(step, model(step));
+		}
+		assertEquals("failed: x", session.result().notMeasured().get(BenchmarkRecord.DISTANT_HORIZONS));
+		assertEquals("failed: x", session.result().notMeasured().get(BenchmarkRecord.SHADERS));
+	}
+
+	@Test
+	void onlyReportStepsCanBeSkipped() {
+		BenchmarkSession session = tune(ORIGINAL, LIMITS);
+		Step first = session.next(0).orElseThrow();
+		assertThrows(IllegalStateException.class, () -> session.skipFailed(first, "failed"));
 	}
 
 	@Test

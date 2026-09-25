@@ -112,6 +112,24 @@ class BenchmarkRecordsTest {
 	}
 
 	@Test
+	void notMeasuredReportsRecorded() {
+		BenchmarkSession session = BenchmarkSession.tune(ORIGINAL, new TuneLimits(4, 32, 100, false, 5), Timing.DEFAULT, 0);
+		java.util.Optional<Step> next;
+		while ((next = session.next(0)).isPresent()) {
+			Step step = next.get();
+			if (step.kind() == Step.Kind.DH_OFF) {
+				session.skipFailed(step, "failed: DH refused");
+				continue;
+			}
+			session.record(step, low(100));
+		}
+		BenchmarkRecord rec = of(session.result(), BenchmarkRequest.DEFAULT, BenchmarkRecord.SINGLE);
+		assertEquals(java.util.Map.of(BenchmarkRecord.DISTANT_HORIZONS, "failed: DH refused"), rec.notMeasured());
+		assertNull(rec.costs().get(BenchmarkRecord.DISTANT_HORIZONS));
+		assertNotNull(rec.costs().get(BenchmarkRecord.SHADERS));
+	}
+
+	@Test
 	void summaryUsesResultAndChosenRd() {
 		SessionResult r = tuned();
 		BenchmarkRecord rec = of(r, BenchmarkRequest.DEFAULT, BenchmarkRecord.SINGLE);
@@ -143,7 +161,7 @@ class BenchmarkRecordsTest {
 	@Test
 	void gainNeedsBothResults() {
 		BenchmarkRecord noResult = new BenchmarkRecord("e", "t", "v", "26.2", "MEASURE", "CURRENT", BenchmarkRecord.AFTER, "p", 60, false,
-				java.util.Map.of(), null, java.util.Map.of(), null, false);
+				java.util.Map.of(), null, java.util.Map.of(), java.util.Map.of(), null, false);
 		BenchmarkRecord before = of(measured(100), new BenchmarkRequest(Mode.MEASURE, Scene.CURRENT, "p"), BenchmarkRecord.BEFORE);
 		assertNull(BenchmarkRecords.gain(before, noResult));
 	}

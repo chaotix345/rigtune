@@ -36,7 +36,8 @@ import java.util.Locale;
 // The dedicated benchmark scene (docs/v0.2/SPEC.md item 6): a creative singleplayer save with a fixed seed, opened
 // through the production WorldOpenFlows API, with time, weather and mob spawning frozen and the camera at a fixed spot.
 // It is recreated when missing or made by another Minecraft version, since the terrain for a seed differs between
-// versions. Nothing here touches a world unless it is provably this save (its folder and level name).
+// versions. The decisions are WorldFlow's (unit-tested): nothing here touches, or leaves, a world that isn't provably
+// this save (singleplayer, save folder rigtune-benchmark, level name RigTune Benchmark).
 public final class BenchmarkWorld {
 	public static final String LEVEL_ID = "rigtune-benchmark";
 	public static final String LEVEL_NAME = "RigTune Benchmark";
@@ -45,8 +46,6 @@ public final class BenchmarkWorld {
 	public static final int CAMERA_Z = 192;
 	private static final int CAMERA_ABOVE_SURFACE = 10;
 	private static final String MARKER = "rigtune-benchmark.json";
-	private static final int TIMEOUT_TICKS = 20 * 90;
-	private static final int FAILED_OPEN_GRACE_TICKS = 20;
 	private static final Gson GSON = new Gson();
 	// In a client game test, leaving a world from inside a client tick deadlocks the harness's tick phaser (the render
 	// thread waits in IntegratedServer.halt for the server thread, which waits in the phaser for the render thread).
@@ -79,6 +78,20 @@ public final class BenchmarkWorld {
 		return state;
 	}
 
+	private static void setState(State next, String why) {
+		if (next == state) {
+			return;
+		}
+		String line = "Benchmark world: " + state + " -> " + next + " (" + why + ")";
+		if (DevAutorun.enabled()) {
+			RigTune.LOGGER.info(line);
+		} else {
+			RigTune.LOGGER.debug(line);
+		}
+		state = next;
+		ticks = 0;
+	}
+
 	/** Where the camera is held; null until the world is set up. */
 	public static @Nullable Vec3 cameraPosition() {
 		return target;
@@ -105,7 +118,7 @@ public final class BenchmarkWorld {
 		return LEVEL_ID.equals(folderName) && LEVEL_NAME.equals(levelName);
 	}
 
-	/** True when the loaded singleplayer world is the benchmark save. */
+	/** True when the loaded world is the singleplayer benchmark save (by its save folder, the level id, and level name). */
 	public static boolean inBenchmarkWorld(Minecraft minecraft) {
 		IntegratedServer server = minecraft.getSingleplayerServer();
 		if (server == null || minecraft.level == null) {
@@ -123,7 +136,6 @@ public final class BenchmarkWorld {
 		LevelStorageSource source = minecraft.getLevelSource();
 		String mcVersion = HardwareProbe.minecraftVersion();
 		target = null;
-		ticks = 0;
 		afterExit = null;
 		openedFrom = parent;
 		try {
@@ -133,11 +145,9 @@ public final class BenchmarkWorld {
 			switch (action) {
 				case OPEN -> {
 					created = false;
-					state = State.OPENING;
-					RigTune.LOGGER.info("Benchmark world: opening the existing {}", LEVEL_ID);
+					setState(State.OPENING, "opening the existing save");
 					minecraft.createWorldOpenFlows().openWorld(LEVEL_ID, () -> {
-						RigTune.LOGGER.warn("Benchmark world: opening {} was cancelled", LEVEL_ID);
-						state = State.FAILED;
+						setState(State.FAILED, "opening was cancelled");
 						minecraft.gui.setScreen(parent);
 					});
 					return true;
@@ -157,7 +167,7 @@ public final class BenchmarkWorld {
 				}
 			}
 			created = true;
-			state = State.OPENING;
+			setState(State.OPENING, "creating the save");
 			LevelSettings settings = new LevelSettings(LEVEL_NAME, GameType.CREATIVE,
 					new LevelSettings.DifficultySettings(Difficulty.PEACEFUL, false, false), true, WorldDataConfiguration.DEFAULT);
 			minecraft.createWorldOpenFlows().createFreshLevel(LEVEL_ID, settings, new WorldOptions(SEED, true, false),
@@ -169,92 +179,69 @@ public final class BenchmarkWorld {
 			return true;
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.error("Benchmark world: could not open {}", LEVEL_ID, e);
-			state = State.FAILED;
+			setState(State.FAILED, "could not open: " + e);
 			return false;
 		}
 	}
 
+	private static WorldFlow.Observation observe(Minecraft minecraft) {
+		IntegratedServer server = minecraft.getSingleplayerServer();
+		boolean worldLoaded = minecraft.level != null;
+		boolean singleplayerReady = worldLoaded && server != null && server.isReady() && minecraft.player != null;
+		boolean benchmarkSave = singleplayerReady && inBenchmarkWorld(minecraft);
+		boolean backOnMenu = !worldLoaded && server == null && minecraft.gui.screen() == openedFrom;
+		Vec3 at = target;
+		LocalPlayer player = minecraft.player;
+		boolean atCamera = at != null && player != null && minecraft.gui.screen() == null && player.position().distanceTo(at) < 1.0;
+		return new WorldFlow.Observation(worldLoaded, worldLoaded && server == null, server != null, singleplayerReady, benchmarkSave,
+				backOnMenu, atCamera);
+	}
+
 	public static void tick(Minecraft minecraft) {
-		switch (state) {
-			case OPENING -> {
-				ticks++;
-				IntegratedServer server = minecraft.getSingleplayerServer();
-				if (minecraft.level == null || server == null || !server.isReady()) {
-					// WorldOpenFlows can give up without a callback: it goes back to the screen it was opened from.
-					boolean backOnMenu = minecraft.level == null && server == null && minecraft.gui.screen() == openedFrom;
-					if (ticks > TIMEOUT_TICKS || ticks > FAILED_OPEN_GRACE_TICKS && backOnMenu) {
-						RigTune.LOGGER.error("Benchmark world: {} did not load", LEVEL_ID);
-						state = State.FAILED;
-					}
-					return;
-				}
-				if (!inBenchmarkWorld(minecraft)) {
-					RigTune.LOGGER.warn("Benchmark world: another world was loaded; leaving it alone");
-					state = State.FAILED;
-					return;
-				}
-				if (minecraft.player == null) {
-					return;
-				}
+		if (state == State.IDLE || state == State.AWAITING_EXIT) {
+			return;
+		}
+		ticks++;
+		WorldFlow.Observation seen = observe(minecraft);
+		WorldFlow.Step step = WorldFlow.next(state, ticks, seen);
+		setState(step.state(), step.action() + " " + seen);
+		switch (step.action()) {
+			case SET_UP -> {
 				if (created) {
 					writeMarker(minecraft.getLevelSource().getLevelPath(LEVEL_ID));
 				}
-				state = State.SETTING_UP;
-				ticks = 0;
+				IntegratedServer server = minecraft.getSingleplayerServer();
 				server.execute(() -> setUp(server));
 			}
-			case SETTING_UP -> {
-				if (!inBenchmarkWorld(minecraft)) {
-					state = State.FAILED;
-					return;
-				}
-				if (++ticks > TIMEOUT_TICKS) {
-					RigTune.LOGGER.error("Benchmark world: the camera position was not reached");
-					leave(minecraft, null);
-					return;
-				}
-				Vec3 at = target;
-				LocalPlayer player = minecraft.player;
-				if (at == null || player == null) {
-					return;
-				}
-				// Creative flight, client side only (as the benchmark does), so the player stays at the camera position.
-				player.getAbilities().flying = true;
-				if (minecraft.gui.screen() == null && player.position().distanceTo(at) < 1.0) {
-					state = State.READY;
-					minecraft.gui.toastManager().clear();
-					RigTune.LOGGER.info("Benchmark world: ready at {}", at);
-				}
-			}
 			case READY -> {
-				if (!inBenchmarkWorld(minecraft)) {
-					state = State.IDLE;
-				}
+				minecraft.gui.toastManager().clear();
+				RigTune.LOGGER.info("Benchmark world: ready at {}", target);
 			}
-			case LEAVING -> {
-				if (minecraft.level != null || minecraft.getSingleplayerServer() != null) {
-					return;
-				}
+			case LEAVE -> leave(minecraft, null);
+			case FINISH_EXIT -> {
 				// A disconnect deferred by the game-test harness ends on its "Saving world" screen.
 				if (minecraft.gui.screen() == null || minecraft.gui.screen() instanceof GenericMessageScreen) {
 					minecraft.gui.setScreen(new TitleScreen());
 				}
-				state = State.IDLE;
 				Runnable then = afterExit;
 				afterExit = null;
 				if (then != null) {
 					then.run();
 				}
 			}
-			default -> {
+			case NONE -> {
 			}
+		}
+		// Creative flight, client side only (as the benchmark does), so the player stays at the camera position.
+		if (state == State.SETTING_UP && seen.benchmarkSave() && minecraft.player != null) {
+			minecraft.player.getAbilities().flying = true;
 		}
 	}
 
 	/** Leaves the benchmark world (saving it), then runs `then` on the title screen. Any other world is left alone. */
 	public static void leave(Minecraft minecraft, @Nullable Runnable then) {
 		if (!inBenchmarkWorld(minecraft)) {
-			state = State.IDLE;
+			setState(State.IDLE, "not in the benchmark world; nothing to leave");
 			if (then != null && minecraft.level == null) {
 				then.run();
 			}
@@ -262,7 +249,7 @@ public final class BenchmarkWorld {
 		}
 		afterExit = then;
 		if (HARNESS) {
-			state = State.AWAITING_EXIT;
+			setState(State.AWAITING_EXIT, "the game test leaves from its thread");
 		} else {
 			exitNow(minecraft);
 		}
@@ -272,12 +259,15 @@ public final class BenchmarkWorld {
 		return state == State.AWAITING_EXIT;
 	}
 
-	// Save and Quit, as on the pause screen. afterExit runs on a later tick, once the world is gone.
+	// Save and Quit, as on the pause screen, and only for the benchmark world. afterExit runs on a later tick, once the
+	// world is gone.
 	public static void exitNow(Minecraft minecraft) {
-		state = State.LEAVING;
-		if (minecraft.level != null) {
-			minecraft.disconnectFromWorld(Component.translatable("menu.savingLevel"));
+		if (!inBenchmarkWorld(minecraft)) {
+			setState(State.IDLE, "not in the benchmark world; nothing to leave");
+			return;
 		}
+		setState(State.LEAVING, "save and quit");
+		minecraft.disconnectFromWorld(Component.translatable("menu.savingLevel"));
 	}
 
 	// Server thread.
