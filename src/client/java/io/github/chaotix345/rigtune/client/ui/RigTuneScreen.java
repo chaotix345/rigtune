@@ -11,6 +11,7 @@ import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.report.IssueLink;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
@@ -23,6 +24,7 @@ import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
+import net.minecraft.client.gui.screens.ConfirmLinkScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.CommonComponents;
@@ -145,6 +147,7 @@ public class RigTuneScreen extends Screen {
 				.tooltip(Tooltip.create(Component.translatable("rigtune.screen.copy_report.tooltip"))).build();
 		copy.active = shown != null;
 		buttons.add(copy);
+		buttons.add(reportButton());
 		buttons.add(Button.builder(Component.translatable("gui.done"), b -> onClose()).build());
 
 		// As many buttons of at least MIN_BUTTON per row as fit, then the rows balanced.
@@ -245,6 +248,26 @@ public class RigTuneScreen extends Screen {
 		}
 		minecraft.keyboardHandler.setClipboard(text);
 		status = Component.translatable("rigtune.share.copied", text.length());
+	}
+
+	private Button reportButton() {
+		Button button = Button.builder(Component.translatable("rigtune.report.button"), b -> reportProblem())
+				.tooltip(Tooltip.create(Component.translatable("rigtune.report.button.tooltip"))).build();
+		button.active = shown != null;
+		return button;
+	}
+
+	// The full report goes to the clipboard; the link carries the title and a short report (IssueLink). Vanilla's
+	// confirm screen shows the link, and nothing is opened unless the player chooses Open in Browser.
+	private void reportProblem() {
+		String text = controller.shareReport();
+		if (text.isEmpty()) {
+			status = Component.translatable("rigtune.share.unavailable");
+			return;
+		}
+		minecraft.keyboardHandler.setClipboard(text);
+		status = Component.translatable("rigtune.report.copied", text.length());
+		ConfirmLinkScreen.confirmLinkNow(this, IssueLink.uri(controller.reportVersions(), text));
 	}
 
 	static String cpuName(String raw) {
