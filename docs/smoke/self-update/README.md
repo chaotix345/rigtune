@@ -17,7 +17,7 @@ before any Wave A workstream merged (so 3a, 3e and per-entry undo are the v0.2 c
 | [dev-v020-to-030](dev-v020-to-030/RESULT.md) | the released `rigtune-0.2.0+mc26.2.jar` (sha256 `67275e23…7de9`, the v0.2.0 GitHub release asset) → 0.3.0-dev; `--expect-history own-update` | PASS (20/20) | 2026-09-26 |
 | [dev-v010-to-030](dev-v010-to-030/RESULT.md) | the released `rigtune-0.1.0.jar` (sha256 `8294d04a…b950`) → 0.3.0-dev; `--legacy-disable --expect-history` | PASS (21/21) | 2026-09-26 |
 | [dev-v010-seeded-to-030](dev-v010-seeded-to-030/RESULT.md) | plan review H-M2: as dev-v010-to-030, seeded from the user's real 0.1.0 `pending.json`/`last-apply.json` (templated) with fake DH jars (`--seed tools/e2e/seeds/v010-dh`) | FAIL (25/26): only the 3e WARN line per failed op is missing (WS-B, not merged) | 2026-09-26 |
-| [dev-undo-after-restart-030](dev-undo-after-restart-030/RESULT.md) | M14 on 0.3.0-dev, then plan review B-M3 on the same instance (two Applies, Undo this on the older) | FAIL (30/34): M14 22/22 and entry-apply 6/6 pass; entry-undo 2/6 ("no per-entry undo API": WS-B, not merged); entry-check not run | 2026-09-26 |
+| [dev-undo-after-restart-030](dev-undo-after-restart-030/RESULT.md) | M14 on 0.3.0-dev, then plan review B-M3 on the same instance (two Applies, Undo this on the older) | FAIL (31/35): M14 22/22 and entry-apply 6/6 pass; entry-undo 3/7 ("no per-entry undo API": WS-B, not merged); entry-check not run | 2026-09-26 |
 
 What the seeded run shows: the 0.1.0 helper retried the user's DH group while the fake DH jar was held open (as DH's own
 updater held the real one) and failed it again (attempts 2), while the self-update itself applied. On the first

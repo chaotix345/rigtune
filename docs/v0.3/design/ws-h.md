@@ -9,7 +9,7 @@ Plan: docs/v0.3/plans/ws-h.md. Harness: tools/e2e (README "v0.3 runs"). Evidence
 | 0.2.0 → new | `--old-jar rigtune-0.2.0+mc26.2.jar --expect-history own-update` | PASS 20/20 | final-v020-to-030 |
 | 0.1.0 → new | `--old-jar rigtune-0.1.0.jar --legacy-disable --expect-history` | PASS 21/21 | final-v010-to-030 |
 | seeded 0.1.0 → new (H-M2) | `... --seed tools/e2e/seeds/v010-dh --expect-history` | 25/26 (3e WARN missing) | final-v010-seeded-to-030 |
-| undo after restart + per entry (M14, B-M3) | `--scenario undo` | 30/34 (M14 22/22, entry-apply 6/6, entry-undo needs WS-B) | undo-after-restart-030 |
+| undo after restart + per entry (M14, B-M3) | `--scenario undo` | 31/35 (M14 22/22, entry-apply 6/6, entry-undo 3/7 needs WS-B) | undo-after-restart-030 |
 
 Released jars (GitHub release assets; the harness checks `--old-sha256`): `rigtune-0.1.0.jar`
 `8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950`; `rigtune-0.2.0+mc26.2.jar`
