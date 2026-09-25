@@ -38,7 +38,7 @@ class ApplyGroupsTest {
 		config = Files.createDirectories(dir.resolve("config"));
 		pending = PendingActions.defaultPath(config);
 		oldJar = Files.writeString(mods.resolve("sodium-0.7.0.jar"), "old");
-		newPending = Files.writeString(mods.resolve("sodium-0.7.1.jar" + PendingActions.PENDING_SUFFIX), "new");
+		newPending = TestJars.modJar(mods.resolve("sodium-0.7.1.jar" + PendingActions.PENDING_SUFFIX), "sodium");
 		newJar = mods.resolve("sodium-0.7.1.jar");
 	}
 
@@ -101,7 +101,7 @@ class ApplyGroupsTest {
 		assertTrue(result.results().get(1).message().startsWith("Not applied because disabling sodium-0.7.0.jar failed"),
 				result.results().get(1).message());
 		assertEquals(List.of("sodium-0.7.0.jar"), enabledJars());
-		assertEquals("new", Files.readString(newPending));
+		assertEquals("sodium", ModJars.readModId(newPending));
 		assertFalse(moves.stream().anyMatch(m -> m.startsWith(newPending.getFileName().toString())), moves.toString());
 		assertEquals(failedOnce(ops), PendingActions.load(pending).ops());
 	}
@@ -118,7 +118,7 @@ class ApplyGroupsTest {
 				result.results().get(0).message());
 		assertEquals("old", Files.readString(oldJar));
 		assertEquals("someone else's copy", Files.readString(newJar));
-		assertEquals("new", Files.readString(newPending));
+		assertEquals("sodium", ModJars.readModId(newPending));
 		assertFalse(Files.exists(mods.resolve("sodium-0.7.0.jar.disabled")));
 		assertEquals(failedOnce(ops), PendingActions.load(pending).ops());
 	}
@@ -147,7 +147,7 @@ class ApplyGroupsTest {
 		assertEquals(List.of("sodium-0.7.0.jar.disabled"), modsListing());
 		assertEquals(failedOnce(ops), PendingActions.load(pending).ops());
 
-		Files.writeString(newPending, "new");
+		TestJars.modJar(newPending, "sodium");
 		ApplyResult retry = executor((a, b) -> false).run(PendingActions.load(pending), pending);
 
 		assertEquals(List.of(Status.SKIPPED_ALREADY_DONE, Status.OK), statuses(retry));
@@ -168,20 +168,20 @@ class ApplyGroupsTest {
 	@Test
 	void disablesRunFirstWhateverTheListedOrder() throws IOException {
 		Path sameName = Files.writeString(mods.resolve("lithium.jar"), "old lithium");
-		Path lithiumPending = Files.writeString(mods.resolve("lithium.jar" + PendingActions.PENDING_SUFFIX), "new lithium");
+		Path lithiumPending = TestJars.modJar(mods.resolve("lithium.jar" + PendingActions.PENDING_SUFFIX), "lithium");
 
 		ApplyResult result = run(executor((a, b) -> false),
 				PendingActions.group(Op.enableFile(lithiumPending, sameName), Op.disableFile(sameName)));
 
 		assertEquals(List.of(Status.OK, Status.OK), statuses(result));
-		assertEquals("new lithium", Files.readString(sameName));
+		assertEquals("lithium", ModJars.readModId(sameName));
 		assertEquals("old lithium", Files.readString(mods.resolve("lithium.jar.disabled")));
 		assertEquals("lithium.jar -> lithium.jar.disabled", moves.getFirst());
 	}
 
 	@Test
 	void laterFailureUndoesEveryEarlierRenameInTheGroup() throws IOException {
-		Path depPending = Files.writeString(mods.resolve("lib.jar" + PendingActions.PENDING_SUFFIX), "lib");
+		Path depPending = TestJars.modJar(mods.resolve("lib.jar" + PendingActions.PENDING_SUFFIX), "lib");
 		Path depJar = mods.resolve("lib.jar");
 		Path sodiumOptions = Files.writeString(config.resolve("sodium-options.json"), "{ broken");
 
@@ -255,7 +255,7 @@ class ApplyGroupsTest {
 	@Test
 	void aGroupThatKeepsFailingIsAbandonedOnItsThirdRun() throws IOException {
 		Files.writeString(newJar, "someone else's copy");
-		Path libPending = Files.writeString(mods.resolve("lib.jar" + PendingActions.PENDING_SUFFIX), "lib");
+		Path libPending = TestJars.modJar(mods.resolve("lib.jar" + PendingActions.PENDING_SUFFIX), "lib");
 		Path lithium = Files.writeString(mods.resolve("lithium.jar"), "l");
 		List<Op> group = PendingActions.group(Op.disableFile(oldJar), Op.enableFile(newPending, newJar), Op.enableFile(libPending, mods.resolve("lib.jar")));
 

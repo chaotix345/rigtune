@@ -1,0 +1,12 @@
+java.version=25.0.4.1
+jdk.net.hosts.file=<run>\hosts.txt
+javax.net.ssl.trustStore=<run>\tls\truststore.p12
+javax.net.ssl.trustStoreType=PKCS12
+javax.net.ssl.trustStorePassword set
+getLocalHost: DESKTOP-LE889KR/127.0.0.1
+localhost: [localhost/127.0.0.1]
+unresolved as expected: example.com
+https://api.modrinth.com/v2/project/rigtune/version -> [api.modrinth.com/127.0.0.1] | TLSv1.3 CN=api.modrinth.com | HTTP 200 | 1567 bytes | sha256 f8a1d72d66f515fe38efb40c9e451ce1d0eed5d2bb0ac44425145b436d24c3c9
+https://cdn.modrinth.com/data/E2ERigTn/versions/E2Enew01/rigtune-0.2.0-dev%2Bmc26.2.jar -> [cdn.modrinth.com/127.0.0.1] | TLSv1.3 CN=api.modrinth.com | HTTP 200 | 366861 bytes | sha256 793e85787d5c705ac7e101f2e0296a1d6e02d7200832b498be2c6163fd09e551
+https://raw.githubusercontent.com/chaotix345/rigtune/main/rules/rules-v1.json -> [raw.githubusercontent.com/127.0.0.1] | TLSv1.3 CN=api.modrinth.com | HTTP 200 | 48210 bytes | sha256 6c3f464674bfdc02fbd89d60262137f2ee834c1c59db0efd75f1917c9c084a4f
+PROBE OK

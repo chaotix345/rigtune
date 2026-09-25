@@ -55,6 +55,7 @@ class RecommenderScenarioTest {
 			Map.entry("vanilla.mipmapLevels", "4"),
 			Map.entry("vanilla.graphicsPreset", "custom"),
 			Map.entry("vanilla.preferredGraphicsBackend", "default"),
+			Map.entry("dh.client.advanced.debugging.rendererMode", "DEFAULT"),
 			Map.entry("sodium.quality.hidden_fluid_culling", "true"),
 			Map.entry("sodium.performance.chunk_builder_threads", "0"),
 			Map.entry("sodium.performance.chunk_build_defer_mode", "ALWAYS"),

@@ -26,12 +26,14 @@ import io.github.chaotix345.rigtune.core.rules.RulesDocument.AdviceRule;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument.ModRule;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument.ObsoleteRule;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument.SettingRule;
+import io.github.chaotix345.rigtune.core.rules.Truth;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -43,6 +45,8 @@ import java.util.stream.Collectors;
 public final class Recommender {
 	public static final String AVAILABILITY_UNKNOWN_NOTE = "(availability not confirmed)";
 	public static final String ALPHA_NOTE = "(alpha build)";
+	// Client features a rule's `requires` may name. 0.2.0 knows none, so any rule with a non-empty `requires` is skipped.
+	public static final Set<String> SUPPORTED_FEATURES = Set.of();
 	static final String OUTSIDE_MODS_FOLDER = "It isn't in this instance's mods folder, so";
 
 	private static final Comparator<Recommendation> ORDER = Comparator
@@ -61,6 +65,12 @@ public final class Recommender {
 
 	public static Report recommend(RulesDocument rules, HardwareProfile hardware, List<InstalledMod> mods,
 			SettingsSnapshot settings, OnlineData online, Goal goal, String modVersion) {
+		return recommend(rules, hardware, mods, settings, online, goal, modVersion, Set.of());
+	}
+
+	// queuedUpdates: the mod ids with an update of their own waiting in mods/update/ (ModJars.queuedUpdates).
+	public static Report recommend(RulesDocument rules, HardwareProfile hardware, List<InstalledMod> mods,
+			SettingsSnapshot settings, OnlineData online, Goal goal, String modVersion, Set<String> queuedUpdates) {
 		OnlineData data = online == null ? OnlineData.offline() : online;
 		GpuClass gpuClass = GpuClassifier.from(rules).classify(hardware.gpu());
 		int cpuTier = CpuClassifier.from(rules).classify(hardware.cpu());
@@ -69,9 +79,16 @@ public final class Recommender {
 
 		List<InstalledMod> installed = mods == null ? List.of() : mods.stream().filter(m -> m.modId() != null).toList();
 		Set<String> loaded = installed.stream().map(InstalledMod::modId).collect(Collectors.toUnmodifiableSet());
-		EvalContext ctx = new EvalContext(hardware, gpuClass, tier, goal, loaded);
+		Map<String, String> versions = new HashMap<>();
+		for (InstalledMod mod : installed) {
+			if (mod.version() != null) {
+				versions.putIfAbsent(mod.modId(), mod.version());
+			}
+		}
+		SettingsSnapshot snapshot = settings == null ? new SettingsSnapshot(Map.of()) : settings;
+		EvalContext ctx = new EvalContext(hardware, gpuClass, tier, goal, loaded, Map.copyOf(versions), snapshot);
 
-		Session session = new Session(rules, ctx, installed, settings == null ? new SettingsSnapshot(Map.of()) : settings, data);
+		Session session = new Session(rules, ctx, installed, snapshot, data, queuedUpdates == null ? Set.of() : queuedUpdates);
 		section("obsolete", session::obsolete);
 		section("avoided", session::avoided);
 		section("conflicts", session::conflicts);
@@ -95,6 +112,10 @@ public final class Recommender {
 		}
 	}
 
+	static boolean supported(List<String> requires) {
+		return requires == null || requires.stream().allMatch(feature -> feature != null && SUPPORTED_FEATURES.contains(feature));
+	}
+
 	static int compareVersions(String a, String b) {
 		String[] pa = a.split("[^0-9]+");
 		String[] pb = b.split("[^0-9]+");
@@ -116,53 +137,67 @@ public final class Recommender {
 
 	private static final class Session {
 		final RulesDocument rules;
+		// The rules this client understands: a rule whose `requires` names an unknown feature doesn't fire. Mod identity
+		// (conflictsWith references by slug) still resolves through every ModRule.
+		final List<ModRule> mods;
+		final List<ObsoleteRule> obsolete;
+		final List<SettingRule> settings;
+		final List<AdviceRule> advice;
 		final EvalContext ctx;
 		final List<InstalledMod> installed;
 		final SettingsSnapshot snapshot;
 		final OnlineData online;
+		final Set<String> queuedUpdates;
 		final Map<String, ModRule> bySlug = new LinkedHashMap<>();
 		final Map<String, Recommendation> recs = new LinkedHashMap<>();
 
-		Session(RulesDocument rules, EvalContext ctx, List<InstalledMod> installed, SettingsSnapshot snapshot, OnlineData online) {
+		Session(RulesDocument rules, EvalContext ctx, List<InstalledMod> installed, SettingsSnapshot snapshot, OnlineData online,
+				Set<String> queuedUpdates) {
 			this.rules = rules;
 			this.ctx = ctx;
 			this.installed = installed;
 			this.snapshot = snapshot;
 			this.online = online;
+			this.queuedUpdates = queuedUpdates;
+			this.mods = rules.mods.stream().filter(r -> supported(r.requires)).toList();
+			this.obsolete = rules.obsolete.stream().filter(r -> supported(r.requires)).toList();
+			this.settings = rules.settings.stream().filter(r -> supported(r.requires)).toList();
+			this.advice = rules.advice.stream().filter(r -> supported(r.requires)).toList();
 			for (ModRule mod : rules.mods) {
 				bySlug.putIfAbsent(mod.slug, mod);
 			}
 		}
 
 		void obsolete() {
-			for (ObsoleteRule rule : rules.obsolete) {
+			for (ObsoleteRule rule : obsolete) {
 				for (InstalledMod mod : installed) {
 					if (!rule.modIds.contains(mod.modId())) {
 						continue;
 					}
 					String title = "Disable " + (rule.title != null ? rule.title : name(mod));
 					String reason = rule.reason != null ? rule.reason : name(mod) + " is obsolete on this Minecraft version.";
-					disable(mod, Impact.HIGH, title, reason);
+					disable(mod, Impact.HIGH, title, reason, true);
 				}
 			}
 		}
 
 		void avoided() {
-			for (ModRule rule : rules.mods) {
+			for (ModRule rule : mods) {
 				if (rule.avoidWhen == null || !isInstalled(rule) || !matches(rule.avoidWhen)) {
 					continue;
 				}
 				for (InstalledMod mod : installed) {
 					if (rule.modIds.contains(mod.modId())) {
 						String reason = rule.avoidReason != null ? rule.avoidReason : rule.displayTitle() + " doesn't suit this hardware.";
-						disable(mod, RulesDocument.impactOf(rule.impact, Impact.MEDIUM), "Disable " + rule.displayTitle(), reason);
+						disable(mod, RulesDocument.impactOf(rule.impact, Impact.MEDIUM), "Disable " + rule.displayTitle(), reason,
+								rule.avoidSelected == null || rule.avoidSelected);
 					}
 				}
 			}
 		}
 
 		void conflicts() {
-			for (ModRule rule : rules.mods) {
+			for (ModRule rule : mods) {
 				if (!isInstalled(rule)) {
 					continue;
 				}
@@ -184,17 +219,42 @@ public final class Recommender {
 
 		void additions() {
 			String mc = ctx.hardware().mcVersion();
-			for (ModRule rule : rules.mods) {
+			Map<ModRule, Availability> offered = new LinkedHashMap<>();
+			for (ModRule rule : mods) {
+				// Fail closed: an avoidWhen this client can't decide blocks the addition too.
 				if (isInstalled(rule) || !matches(rule.recommendWhen)
-						|| (rule.avoidWhen != null && matches(rule.avoidWhen))
+						|| (rule.avoidWhen != null && ConditionEvaluator.evaluate(rule.avoidWhen, ctx) != Truth.FALSE)
 						|| rule.conflictsWith.stream().anyMatch(this::refInstalled)) {
 					continue;
 				}
 				Availability availability = availability(rule.slug, mc);
-				if (availability == Availability.UNAVAILABLE) {
-					continue;
+				if (availability != Availability.UNAVAILABLE) {
+					offered.put(rule, availability);
 				}
+			}
+			// Two mods that conflict are never offered together (review 4, rules-accuracy-2): the one earlier in the
+			// rules stays and names the ones it keeps out.
+			ModConflicts conflicts = ModConflicts.of(rules);
+			Map<ModRule, List<String>> keptOut = new LinkedHashMap<>();
+			for (ModRule rule : offered.keySet()) {
+				ModRule kept = keptOut.keySet().stream().filter(k -> conflicts.between(k.slug, rule.slug)).findFirst().orElse(null);
+				if (kept != null) {
+					keptOut.get(kept).add(rule.displayTitle());
+				} else {
+					keptOut.put(rule, new ArrayList<>());
+				}
+			}
+			for (Map.Entry<ModRule, List<String>> entry : keptOut.entrySet()) {
+				ModRule rule = entry.getKey();
+				Availability availability = offered.get(rule);
 				String reason = rule.reason == null ? "" : rule.reason;
+				if (!entry.getValue().isEmpty()) {
+					List<String> titles = entry.getValue();
+					String names = titles.size() == 1 ? titles.getFirst()
+							: String.join(", ", titles.subList(0, titles.size() - 1)) + " or " + titles.getLast();
+					reason = (reason + " RigTune doesn't also offer " + names + ", which " + (titles.size() == 1 ? "conflicts" : "conflict")
+							+ " with it.").trim();
+				}
 				if (rule.alpha()) {
 					reason = (reason + " " + ALPHA_NOTE).trim();
 				}
@@ -220,6 +280,22 @@ public final class Recommender {
 				if (mod == null || update == null || (mod.file() == null && mod.sha1() == null) || recs.containsKey("disable:" + modId)) {
 					continue;
 				}
+				// Its own updater already has the next build waiting, whatever the rules say (review 4, rules-accuracy-1):
+				// RigTune updating it too races that updater for the jar at exit.
+				if (queuedUpdates.contains(modId)) {
+					put(new Recommendation("advice:update-queued:" + modId, Category.ADVICE, Impact.LOW,
+							name(mod) + " has an update of its own waiting", "It's in mods/update, so RigTune leaves it alone.",
+							new Action.None(), false));
+					continue;
+				}
+				ModRule selfUpdating = mods.stream()
+						.filter(r -> r.skipUpdateWhen != null && r.modIds.contains(modId) && matches(r.skipUpdateWhen)).findFirst().orElse(null);
+				if (selfUpdating != null) {
+					put(new Recommendation("advice:updates-itself:" + modId, Category.ADVICE, Impact.LOW,
+							selfUpdating.displayTitle() + " updates itself", "Its own auto-updater is on, so RigTune leaves its updates to it.",
+							new Action.None(), false));
+					continue;
+				}
 				String current = update.currentVersion() != null ? update.currentVersion() : mod.version();
 				String reason = "Version " + update.newVersionNumber() + " is available (you have " + current + ").";
 				if (mod.file() == null) {
@@ -234,7 +310,7 @@ public final class Recommender {
 
 		void settings() {
 			Map<String, Resolved> resolved = new LinkedHashMap<>();
-			for (SettingRule rule : rules.settings) {
+			for (SettingRule rule : settings) {
 				if (!rule.isValueEntry() || !matches(rule.when)) {
 					continue;
 				}
@@ -243,9 +319,12 @@ public final class Recommender {
 					continue;
 				}
 				value = SettingValues.resolveTokens(value, ctx.hardware().display());
+				if (SettingValues.unresolvedToken(value)) {
+					continue;
+				}
 				resolved.put(rule.key, new Resolved(value, text(rule.reason), RulesDocument.impactOf(rule.impact, Impact.LOW), selected(rule.defaultSelected)));
 			}
-			for (SettingRule rule : rules.settings) {
+			for (SettingRule rule : settings) {
 				if (!rule.isClampEntry() || !matches(rule.when)) {
 					continue;
 				}
@@ -280,13 +359,13 @@ public final class Recommender {
 					continue;
 				}
 				put(new Recommendation("set:" + key, Category.SETTING, target.impact(),
-						SettingValues.label(key) + ": " + current + " → " + target.value(), target.reason(),
+						SettingValues.describe(rules.settingLabels.get(key), key, current, target.value()), target.reason(),
 						new Action.SetSetting(key, current, target.value()), target.selected()));
 			}
 		}
 
 		void advice() {
-			for (AdviceRule rule : rules.advice) {
+			for (AdviceRule rule : advice) {
 				if (!matches(rule.when)) {
 					continue;
 				}
@@ -312,7 +391,7 @@ public final class Recommender {
 					new Action.None(), false));
 		}
 
-		private void disable(InstalledMod mod, Impact impact, String title, String reason) {
+		private void disable(InstalledMod mod, Impact impact, String title, String reason, boolean selected) {
 			String id = "disable:" + mod.modId();
 			if (recs.containsKey(id)) {
 				return;
@@ -324,7 +403,7 @@ public final class Recommender {
 				put(new Recommendation(id, Category.REMOVE_MOD, impact, title, reason + how, new Action.None(), false));
 				return;
 			}
-			put(new Recommendation(id, Category.REMOVE_MOD, impact, title, reason, new Action.DisableMod(mod.modId(), mod.file()), true));
+			put(new Recommendation(id, Category.REMOVE_MOD, impact, title, reason, new Action.DisableMod(mod.modId(), mod.file()), selected));
 		}
 
 		private void put(Recommendation recommendation) {

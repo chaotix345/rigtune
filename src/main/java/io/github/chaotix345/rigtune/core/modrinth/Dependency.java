@@ -13,4 +13,8 @@ public record Dependency(String projectId, String versionId, String dependencyTy
 	public boolean required() {
 		return "required".equals(dependencyType);
 	}
+
+	public boolean incompatible() {
+		return "incompatible".equals(dependencyType);
+	}
 }

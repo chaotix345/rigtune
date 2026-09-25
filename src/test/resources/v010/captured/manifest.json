@@ -1,0 +1,24 @@
+{
+ "capturedFrom": {
+  "file": "rigtune-0.1.0.jar",
+  "version": "0.1.0",
+  "sha256": "8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950"
+ },
+ "updateTo": {
+  "file": "rigtune-0.2.0-dev+mc26.2.jar",
+  "version": "0.2.0-dev+mc26.2",
+  "sha256": "793e85787d5c705ac7e101f2e0296a1d6e02d7200832b498be2c6163fd09e551"
+ },
+ "minecraft": "26.2",
+ "run": "v010-to-dev-20260925T020701Z-ff2366",
+ "verdict": "PASS",
+ "failedChecks": [],
+ "token": "${INSTANCE}",
+ "files": {
+  "pending.json": "f8507d11db025b121f7e5d1f27dc2af322940242fb4e696d5427be7b811c222e",
+  "last-apply.json": "dcd6ff634ad981d9e3491524601dee8848a15dece15a36518de857f62e7ebec8",
+  "rigtune.json": "5baf0ce4b281468f72b4b9ccda3af72e5d99cf9953ca2e396f8963a07e363e44",
+  "rules-cache.json": "6c3f464674bfdc02fbd89d60262137f2ee834c1c59db0efd75f1917c9c084a4f",
+  "helper.log": "ef90962d55a9126e110b8df45483282744d891923328ad977a20277213248bfa"
+ }
+}

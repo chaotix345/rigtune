@@ -1,8 +1,11 @@
 plugins {
-	id 'net.fabricmc.fabric-loom' version "${loom_version}"
+	id 'net.fabricmc.fabric-loom'
+	id 'com.modrinth.minotaur' version '2.10.0'
 }
 
-version = project.mod_version
+// This script runs once per Minecraft version (versions/<mc>/), with that version's gradle.properties.
+def mcVersion = stonecutter.current.version
+version = "${project.mod_version}+mc${mcVersion}"
 group = project.maven_group
 
 base {
@@ -45,7 +48,7 @@ fabricApi {
 }
 
 dependencies {
-	minecraft "com.mojang:minecraft:${project.minecraft_version}"
+	minecraft "com.mojang:minecraft:${mcVersion}"
 	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
@@ -54,6 +57,39 @@ dependencies {
 	localRuntime "maven.modrinth:sodium:${project.sodium_version}"
 
 	testImplementation "net.fabricmc:fabric-loader-junit:${project.loader_version}"
+}
+
+// Development only: a plain client (no game-test harness) that runs the benchmark-world flow by itself and quits
+// (client/benchmark/DevAutorun). ./gradlew :<mc>:runBenchmarkAutorun [-PrigtuneAutorun=benchmark-world-cancel]
+loom {
+	runs {
+		benchmarkAutorun {
+			client()
+			configName = "Benchmark autorun"
+			runDir = "build/run-autorun"
+			vmArg "-Drigtune.dev.autorun=${project.findProperty('rigtuneAutorun') ?: 'benchmark-world'}"
+			ideConfigGenerated = false
+		}
+	}
+}
+
+// DevAutorun only starts from the title screen, and a fresh run dir would stop at the accessibility onboarding screen.
+tasks.matching { it.name == "runBenchmarkAutorun" }.configureEach {
+	def options = file("build/run-autorun/options.txt")
+	doFirst {
+		options.parentFile.mkdirs()
+		def lines = options.exists() ? options.readLines("UTF-8").findAll { !it.startsWith("onboardAccessibility:") } : []
+		options.setText((lines + "onboardAccessibility:false").join("\n") + "\n", "UTF-8")
+	}
+}
+
+// Distant Horizons and Iris are optional at runtime: only client/compat/DhCompat and IrisCompat use their APIs, and
+// only after FabricLoader says the mod is loaded (the benchmark's cost reports).
+dependencies {
+	compileOnly "maven.modrinth:distanthorizonsapi:${project.dh_api_version}"
+	compileOnly("maven.modrinth:iris:${project.iris_version}") {
+		transitive = false
+	}
 }
 
 sourceSets {
@@ -69,12 +105,17 @@ test {
 	doFirst { workingDir.mkdirs() }
 }
 
+// The game tests only run on demand (runClientGameTest), but every version's must at least compile.
+tasks.named("check") {
+	dependsOn tasks.named("gametestClasses")
+}
+
 processResources {
-	def version = project.version
-	inputs.property "version", version
+	def props = ["version": project.version, "minecraft_dependency": project.minecraft_dependency]
+	inputs.properties props
 
 	filesMatching("fabric.mod.json") {
-		expand "version": version
+		expand props
 	}
 }
 
@@ -91,17 +132,65 @@ java {
 }
 
 jar {
-	def projectName = project.name
+	def projectName = rootProject.name
 	inputs.property "projectName", projectName
 
-	from("LICENSE") {
+	from(rootProject.file("LICENSE")) {
 		rename { "${it}_$projectName" }
 	}
 }
 
+// --- Modrinth publishing (SPEC.md item 4) ---
+// One Modrinth version per Minecraft version: `./gradlew :<mc>:modrinth` runs this directly;
+// release.yml runs it once per version, after building, as an independent step per version.
+// `uploadFile = jar` (not remapJar: 26.x is unobfuscated, there is no remapJar task).
+// Verify locally without a token via `./gradlew :26.2:modrinth -PmodrinthDryRun`.
+def changelogForVersion(String modVersion) {
+	def file = rootProject.file('CHANGELOG.md')
+	if (!file.exists()) return ''
+	def lines = file.readLines()
+	// Accept the exact mod_version heading, or its release form with any "-dev"/pre-release
+	// suffix stripped, so a "0.2.0-dev" dev build still finds a "## [0.2.0]" section.
+	def candidates = [modVersion, modVersion.replaceAll(/-.*/, '')].unique()
+	def start = lines.findIndexOf { line -> line.startsWith('## ') && candidates.any { line.contains("[$it]") } }
+	if (start < 0) return ''
+	def end = lines.size()
+	for (int i = start + 1; i < lines.size(); i++) {
+		if (lines[i].startsWith('## ')) {
+			end = i
+			break
+		}
+	}
+	return lines.subList(start + 1, end).join('\n').trim()
+}
+
+// -PmodrinthDryRun (any value, or none) verifies the config/payload without a token or a real
+// upload: debugMode makes Minotaur log what it would send instead of calling the API, but it
+// still requires *a* token value, so a placeholder is used when MODRINTH_TOKEN isn't set. CI
+// only ever sets MODRINTH_TOKEN (and never this property), for a real, non-debug publish.
+def modrinthDryRun = providers.gradleProperty('modrinthDryRun').present
+def modrinthToken = System.getenv('MODRINTH_TOKEN') ?: (modrinthDryRun ? 'dry-run-placeholder-token' : null)
+
+modrinth {
+	token = modrinthToken
+	projectId = 'rigtune'
+	versionNumber = project.version.toString()
+	versionName = "RigTune ${project.mod_version} (MC ${mcVersion})"
+	versionType = 'release'
+	uploadFile = jar
+	gameVersions = [mcVersion]
+	loaders = ['fabric']
+	changelog = changelogForVersion(project.mod_version.toString())
+	debugMode = modrinthDryRun
+	dependencies {
+		required.project 'fabric-api'
+	}
+}
+
 // A production client with a player's own mods, driven by the client game test in smoke mode (see ProductionSmoke):
-// ./gradlew runProductionSmoke -PextraModsDir=<dir of mod jars> [-PuserOptions=<options.txt>] [-PuserConfigDir=<config dir>]
-// The jars are mirrored into run/mods, where RigTune treats them as the instance's own mods, as in a launcher instance.
+// ./gradlew :<mc>:runProductionSmoke -PextraModsDir=<dir of mod jars> [-PuserOptions=<options.txt>] [-PuserConfigDir=<config dir>]
+// The paths are relative to the repository root. The jars (built for that <mc>) are mirrored into versions/<mc>/run/mods,
+// where RigTune treats them as the instance's own mods, as in a launcher instance.
 configurations {
 	productionSmokeMods {
 		canBeConsumed = false
@@ -125,9 +214,9 @@ interface InjectedFs {
 }
 
 def smokeRunDir = layout.projectDirectory.dir("run")
-def extraModsDir = providers.gradleProperty("extraModsDir").map { layout.projectDirectory.dir(it).asFile }
-def userOptions = providers.gradleProperty("userOptions").map { layout.projectDirectory.file(it).asFile }
-def userConfigDir = providers.gradleProperty("userConfigDir").map { layout.projectDirectory.dir(it).asFile }
+def extraModsDir = providers.gradleProperty("extraModsDir").map { rootProject.layout.projectDirectory.dir(it).asFile }
+def userOptions = providers.gradleProperty("userOptions").map { rootProject.layout.projectDirectory.file(it).asFile }
+def userConfigDir = providers.gradleProperty("userConfigDir").map { rootProject.layout.projectDirectory.dir(it).asFile }
 
 def prepareProductionSmoke = tasks.register("prepareProductionSmoke") {
 	def fs = objects.newInstance(InjectedFs).fs
@@ -164,4 +253,69 @@ tasks.register("runProductionSmoke", net.fabricmc.loom.task.prod.ClientProductio
 	mods.from(configurations.productionSmokeMods)
 	jvmArgs.addAll("-Dfabric.client.gametest", "-Drigtune.smoke=true")
 	jvmArgs.addAll(userOptions.map { ["-Drigtune.smoke.userOptions=" + it.absolutePath] }.orElse([]))
+	// -PsmokeBenchmark: also run a short benchmark in the smoke world and check the DH/Iris restore (BenchmarkSmoke).
+	jvmArgs.addAll(providers.gradleProperty("smokeBenchmark").map { ["-Drigtune.smoke.benchmark=true"] }.orElse([]))
+	// -PsmokeDh=stage|check: AC7.3 from the title screen only, no world (DhConfigSmoke).
+	jvmArgs.addAll(providers.gradleProperty("smokeDh").map { ["-Drigtune.smoke.dh=" + it] }.orElse([]))
+}
+
+// Self-update end-to-end harness (tools/e2e/README.md), never part of the shipped jar or of `build`. The fake Modrinth
+// server is a JDK-only tool run as `java FakeModrinth.java`; the unit tests compile it from tools/e2e/java.
+sourceSets.test.java.srcDir(rootProject.file("tools/e2e/java"))
+
+// The driver mod (src/e2e) compiles against the released v0.1.0 jar (-Pe2e.oldJar=<path>), not these sources, so it
+// only uses API that 0.1.0 has.
+def e2eOldJar = providers.gradleProperty("e2e.oldJar")
+sourceSets {
+	e2e {
+		// Empty without the property, so an IDE sync still resolves every source set; compiling then fails below.
+		compileClasspath += sourceSets.client.compileClasspath - sourceSets.main.output + files({
+			e2eOldJar.present ? rootProject.file(e2eOldJar.get()) : []
+		})
+	}
+}
+
+tasks.named("compileE2eJava") {
+	doFirst {
+		if (!e2eOldJar.present) {
+			throw new GradleException("Pass -Pe2e.oldJar=<path to the released rigtune-0.1.0.jar>")
+		}
+	}
+}
+
+def e2eDriverJar = tasks.register("e2eDriverJar", Jar) {
+	from sourceSets.e2e.output
+	archiveBaseName = "rigtune-e2e-driver"
+	archiveVersion = ""
+}
+
+// The undo driver (src/e2eUndo, plan review M14) uses 0.2's API, so it compiles against these sources.
+sourceSets {
+	e2eUndo {
+		compileClasspath += sourceSets.client.compileClasspath + sourceSets.client.output
+	}
+}
+
+def e2eUndoDriverJar = tasks.register("e2eUndoDriverJar", Jar) {
+	from sourceSets.e2eUndo.output
+	archiveBaseName = "rigtune-e2e-undo-driver"
+	archiveVersion = ""
+}
+
+// One launch of a production client on a scratch instance (-Pe2e.instance=<dir>), with JVM arguments from
+// -Pe2e.jvmArgsFile (one per line). Unlike runProductionSmoke, `mods` is only the driver: Loom would otherwise add this
+// project's jar through -Dfabric.addMods, and RigTune must load only from the instance's mods folder (plan review M10).
+tasks.register("e2eClient", net.fabricmc.loom.task.prod.ClientProductionRunTask) {
+	def instance = providers.gradleProperty("e2e.instance")
+	def jvmArgsFile = providers.gradleProperty("e2e.jvmArgsFile")
+	runDir = layout.dir(instance.map { new File(it) })
+	// -Pe2e.driver=undo picks the undo driver; the default is the self-update driver.
+	mods.setFrom(providers.gradleProperty("e2e.driver").getOrElse("") == "undo" ? e2eUndoDriverJar : e2eDriverJar)
+	jvmArgs.addAll(jvmArgsFile.map { new File(it).readLines("UTF-8").findAll { !it.isBlank() } }.orElse([]))
+	programArgs.addAll("--width", "1280", "--height", "720")
+	doFirst {
+		if (!instance.present) {
+			throw new GradleException("Pass -Pe2e.instance=<scratch instance dir>; see tools/e2e/README.md")
+		}
+	}
 }

@@ -1,0 +1,11 @@
+at 2026-09-25T06:11:30.085530500Z
+Distant Horizons loaded true, rendering before true, API override before none
+Iris loaded true, shaders in use before false
+benchmark started true
+outcome cancelled false, steps [RENDER_DISTANCE, RENDER_DISTANCE, SIMULATION_DISTANCE, SIMULATION_DISTANCE, SIMULATION_DISTANCE, REPEAT, DH_OFF, REPEAT]
+DH off seen during the run true, restore marker seen true
+DH cost Cost[baselineLow=0.9990207598511939, baselineAvg=0.9994565455033825, offLow=0.9992139184103865, offAvg=0.9992396286046132], shader cost null
+Distant Horizons rendering after true, API override after none, shaders in use after false
+benchmark-restore.json gone true
+DistantHorizons.toml rendererMode = "DEFAULT"
+AC6.4 PASSED

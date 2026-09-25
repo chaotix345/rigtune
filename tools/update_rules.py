@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Regenerates rules/rules-v1.json from rules/source/knowledge.json plus live
-data from the Fabulously Optimized / Additive packwiz repos and the Modrinth
-API. See docs/RULES_SCHEMA.md for the output contract and docs/DESIGN.md's
-"Staying current" section for the pipeline this implements.
+"""Regenerates rules/rules-v2.json (plus its bundled copy) and its v1 projection
+rules/rules-v1.json from rules/source/knowledge.json plus live data from the
+Fabulously Optimized / Additive packwiz repos and the Modrinth API. See
+docs/RULES_SCHEMA.md for the output contract and tools/README.md for the
+pipeline and the v1 projection rules.
 """
 
 import argparse
+import copy
 import hashlib
 import json
 import os
@@ -44,11 +46,333 @@ class KnowledgeError(UpdateRulesError):
     pass
 
 
+class ProjectionError(KnowledgeError):
+    pass
+
+
 class HttpStatusError(UpdateRulesError):
     def __init__(self, status, url):
         super().__init__(f"HTTP {status} for {url}")
         self.status = status
         self.url = url
+
+
+# --- Schema: what 0.1.x (schemaVersion 1) and 0.2 (schemaVersion 2) understand -------------------------------
+
+V1_CONDITION_KEYS = frozenset({
+    "always", "tierAtLeast", "tierAtMost", "rawTierAtLeast", "rawTierAtMost", "gpuVendor", "gpuIntegrated",
+    "gpuTierAtLeast", "gpuTierAtMost", "cpuTierAtLeast", "cpuTierAtMost", "hasBattery", "onBattery",
+    "heapMbAtLeast", "heapMbAtMost", "ramMbAtLeast", "ramMbAtMost", "vramMbAtLeast", "vramMbAtMost",
+    "refreshRateAtLeast", "backend", "os", "goal", "mcVersion", "modPresent", "modAbsent", "flags", "anyOf", "not",
+})
+V2_CONDITION_KEYS = V1_CONDITION_KEYS | {
+    "gpuModelMatches", "displayPixelsAtLeast", "displayPixelsAtMost", "modVersion", "mcVersionRange", "settingIs",
+}
+BOOLEAN_CONDITION_KEYS = frozenset({"always", "gpuIntegrated", "hasBattery", "onBattery"})
+LIST_CONDITION_KEYS = frozenset({"gpuVendor", "backend", "os", "goal", "mcVersion", "modPresent", "modAbsent", "flags"})
+STRING_CONDITION_KEYS = frozenset({"gpuModelMatches", "mcVersionRange"})
+# Java Integer fields; every other numeric key is a Java Long.
+INT32_CONDITION_KEYS = frozenset({"tierAtLeast", "tierAtMost", "rawTierAtLeast", "rawTierAtMost", "gpuTierAtLeast",
+                                  "gpuTierAtMost", "cpuTierAtLeast", "cpuTierAtMost", "refreshRateAtLeast"})
+MAX_PATTERN_LENGTH = 200
+
+# Enumerated condition values. V1 is what 0.1.0 understands and is frozen: 0.1.x evaluates two-valued, so a value it
+# can't detect would turn TRUE under `not` there. V2 is what 0.2's ConditionEvaluator knows (SchemaConsistencyTest
+# checks both against the Java code). A value only V2 knows makes a condition v2-only, like a v2 key.
+V1_VOCABULARIES = {
+    "gpuVendor": frozenset({"nvidia", "amd", "intel", "apple", "qualcomm", "software", "other", "unknown"}),
+    "backend": frozenset({"opengl", "vulkan"}),
+    "os": ("windows", "macos", "linux"),
+    "goal": frozenset({"performance", "balanced", "quality"}),
+    "flags": frozenset({"backend-vulkan", "shaders-enabled"}),
+}
+V2_VOCABULARIES = {
+    "gpuVendor": frozenset({"nvidia", "amd", "intel", "apple", "qualcomm", "software", "other", "unknown"}),
+    "backend": frozenset({"opengl", "vulkan"}),
+    "os": ("windows", "macos", "linux"),
+    "goal": frozenset({"performance", "balanced", "quality"}),
+    "flags": frozenset({"backend-vulkan", "shaders-enabled"}),
+}
+SODIUM_WORKAROUND_FLAG = "sodium-workaround:"
+KNOWLEDGE_TOP_LEVEL = frozenset({
+    "minModVersion", "gpuTiers", "gpuVendorFallback", "cpuTiers", "heapTiers", "mods", "obsolete", "settings", "advice",
+    "settingLabels", "reviewIgnore",
+})
+
+RULE_KINDS = ("mods", "obsolete", "settings", "advice")
+TIER_KINDS = ("gpuTiers", "cpuTiers", "heapTiers")
+V1_RULE_FIELDS = {
+    "mods": frozenset({"slug", "projectId", "title", "modIds", "category", "impact", "stability", "reason",
+                       "recommendWhen", "avoidWhen", "avoidReason", "conflictsWith", "defaultSelected", "upstream"}),
+    "obsolete": frozenset({"modIds", "title", "reason", "replacement"}),
+    "settings": frozenset({"key", "value", "min", "max", "when", "reason", "impact", "defaultSelected"}),
+    "advice": frozenset({"id", "when", "impact", "title", "text", "kind"}),
+    "gpuTiers": frozenset({"pattern", "vendor", "integrated", "tier"}),
+    "cpuTiers": frozenset({"pattern", "tier"}),
+    "heapTiers": frozenset({"atLeastMb", "tier"}),
+}
+V2_ONLY_RULE_FIELDS = {
+    "mods": frozenset({"requires", "avoidSelected", "skipUpdateWhen"}),
+    "obsolete": frozenset({"requires"}),
+    "settings": frozenset({"requires"}),
+    "advice": frozenset({"requires"}),
+}
+CONDITION_FIELDS = {"mods": ("recommendWhen", "avoidWhen", "skipUpdateWhen"), "obsolete": (), "settings": ("when",), "advice": ("when",)}
+V1_SETTING_PREFIXES = ("vanilla.", "sodium.")
+# Computed setting values both 0.1.0 and 0.2 resolve. A new token needs a new client, so it must come with `requires`.
+VALUE_TOKENS = frozenset({"$refreshRate", "$refreshRateCap"})
+NEVER = {"always": False}
+MISSING = object()
+
+
+def known_value(field, value, vocabularies=None):
+    vocabularies = V2_VOCABULARIES if vocabularies is None else vocabularies
+    if not isinstance(value, str):
+        return False
+    if field not in vocabularies:
+        return True
+    lower = value.lower()
+    if field == "os":
+        return lower != "" and any(family.startswith(lower) for family in vocabularies["os"])
+    if field == "flags":
+        return value in vocabularies["flags"] or (value.startswith(SODIUM_WORKAROUND_FLAG) and len(value) > len(SODIUM_WORKAROUND_FLAG))
+    return lower in vocabularies[field]
+
+
+def is_integer(value):
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
+def condition_problems(cond, allowed_keys=V2_CONDITION_KEYS, path="condition", vocabularies=None):
+    """Everything wrong with a condition for a client that knows allowed_keys and vocabularies (default: 0.2's):
+    unknown keys, nulls, wrong types and values outside the vocabularies, recursively through not/anyOf."""
+    if not isinstance(cond, dict):
+        return [f"{path} must be an object"]
+    problems = []
+    for key, value in cond.items():
+        where = f"{path}.{key}"
+        if key not in allowed_keys:
+            problems.append(f"{where}: unknown condition key")
+        elif value is None:
+            problems.append(f"{where}: null")
+        elif key == "not":
+            problems += condition_problems(value, allowed_keys, where, vocabularies)
+        elif key == "anyOf":
+            if not isinstance(value, list):
+                problems.append(f"{where} must be an array")
+            else:
+                for i, sub in enumerate(value):
+                    problems += condition_problems(sub, allowed_keys, f"{where}[{i}]", vocabularies)
+        elif key in BOOLEAN_CONDITION_KEYS:
+            if not isinstance(value, bool):
+                problems.append(f"{where} must be true or false")
+        elif key in LIST_CONDITION_KEYS:
+            if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+                problems.append(f"{where} must be an array of strings")
+            else:
+                problems += [f"{where}: {v!r} is outside the known values" for v in value if not known_value(key, v, vocabularies)]
+        elif key in STRING_CONDITION_KEYS:
+            if not isinstance(value, str) or not value.strip():
+                problems.append(f"{where} must be a non-empty string")
+            elif key == "gpuModelMatches" and len(value) > MAX_PATTERN_LENGTH:
+                problems.append(f"{where} is longer than {MAX_PATTERN_LENGTH} characters")
+        elif key == "modVersion":
+            if not isinstance(value, dict) or not all(isinstance(v, str) and v.strip() for v in value.values()):
+                problems.append(f"{where} must map mod ids to version predicates")
+        elif key == "settingIs":
+            if not isinstance(value, dict) or not all(isinstance(k, str) and k.strip() for k in value)                     or not all(isinstance(v, (str, bool, int, float)) for v in value.values()):
+                problems.append(f"{where} must map settings keys to strings, numbers or booleans")
+        elif not is_integer(value):
+            problems.append(f"{where} must be an integer")
+        elif not -(2 ** bits(key) - 1) - 1 <= value <= 2 ** bits(key) - 1:
+            problems.append(f"{where} is outside the range of a {bits(key) + 1}-bit integer")
+    return problems
+
+
+def bits(key):
+    return 31 if key in INT32_CONDITION_KEYS else 63
+
+
+def is_v1_condition(cond):
+    return not condition_problems(cond, V1_CONDITION_KEYS, vocabularies=V1_VOCABULARIES)
+
+
+def contains_null(value):
+    if value is None:
+        return True
+    if isinstance(value, dict):
+        return any(contains_null(v) for v in value.values())
+    if isinstance(value, list):
+        return any(contains_null(v) for v in value)
+    return False
+
+
+def rule_label(kind, rule, index=None):
+    if kind == "mods":
+        return f"mods[{rule.get('slug')}]"
+    if kind == "advice":
+        return f"advice[{rule.get('id')}]"
+    if kind == "obsolete":
+        return f"obsolete[{rule.get('title') or ','.join(rule.get('modIds', []))}]"
+    position = "" if index is None else str(index)
+    if kind == "settings":
+        return f"settings[{position}] {rule.get('key')}"
+    return f"{kind}[{position}]"
+
+
+def unknown_token(value):
+    return isinstance(value, str) and value.strip().startswith("$") and value.strip() not in VALUE_TOKENS
+
+
+def droppable(field, value, merged):
+    """Whether leaving a v2-only field out of the v1 output is exactly as safe as keeping it."""
+    if field == "requires":
+        return value == []
+    if field == "avoidSelected":
+        return value is True or "avoidWhen" not in merged
+    # 0.1.x offers every available update whatever its rules say; this field only ever takes one away.
+    if field == "skipUpdateWhen":
+        return True
+    return False
+
+
+def project_rule(kind, rule, index=None):
+    """The v1 form of one knowledge rule (None = omitted from rules-v1.json) and notes for REVIEW.md (d).
+    Raises ProjectionError when the rule can't be projected safely without a maintainer's decision."""
+    label = rule_label(kind, rule, index)
+
+    def fail(message):
+        raise ProjectionError(f"{label}: {message}")
+
+    override = rule.get("v1", MISSING)
+    if override is False:
+        return None, ['omitted ("v1": false)']
+    if override is not MISSING and not isinstance(override, dict):
+        fail('"v1" must be false or an object of v1 fields')
+    explicit = isinstance(override, dict)
+    merged = {k: copy.deepcopy(v) for k, v in rule.items() if k != "v1"}
+    notes = []
+    if explicit:
+        if contains_null(override):
+            fail('null in the "v1" override (0.1.x reads a null condition as "always")')
+        not_v1 = sorted(set(override) - V1_RULE_FIELDS[kind])
+        if not_v1:
+            fail(f'the "v1" override may only set fields 0.1.x understands, not {", ".join(not_v1)}')
+        for field in CONDITION_FIELDS[kind]:
+            if field in override and not is_v1_condition(override[field]):
+                fail(f'the "v1" override\'s {field} uses fields or values 0.1.x doesn\'t know')
+        merged.update(copy.deepcopy(override))
+        notes.append(f"v1 override: {', '.join(sorted(override))}")
+
+    if kind == "settings":
+        key = merged.get("key")
+        if not isinstance(key, str) or not key.startswith(V1_SETTING_PREFIXES):
+            fail('the key is outside vanilla./sodium., which 0.1.x can\'t apply; add "v1": false')
+        if "when" in merged and not is_v1_condition(merged["when"]):
+            fail('"when" uses v2 condition features; add "v1": false or a "v1" override with a v1 "when"')
+        if unknown_token(merged.get("value")):
+            fail(f"the value {merged['value']!r} is a token 0.1.x doesn't know; add \"v1\": false")
+    elif kind == "advice":
+        if "when" in merged and not is_v1_condition(merged["when"]):
+            if str(merged.get("kind", "info")).lower() in ("warning", "critical"):
+                fail('a warning whose "when" uses v2 condition features would silently disappear for 0.1.x; add "v1": false '
+                     'or a "v1" override with a v1 "when"')
+            merged["when"] = dict(NEVER)
+            notes.append("when uses v2 condition features: never shown to 0.1.x")
+    elif kind == "mods":
+        if "recommendWhen" in merged and not is_v1_condition(merged["recommendWhen"]):
+            merged["recommendWhen"] = dict(NEVER)
+            notes.append("recommendWhen uses v2 condition features: never recommended to 0.1.x")
+        if "avoidWhen" in merged and not is_v1_condition(merged["avoidWhen"]):
+            if merged.get("recommendWhen") != NEVER:
+                fail("avoidWhen uses v2 condition features and would be dropped for 0.1.x while recommendWhen can "
+                     "still fire, so 0.1.x would offer the mod where 0.2 avoids it; add a v1 avoidWhen override "
+                     '(or a v1 recommendWhen of {"always": false})')
+            del merged["avoidWhen"]
+            merged.pop("avoidReason", None)
+            notes.append("avoidWhen uses v2 condition features: dropped (0.1.x gets no disable suggestion)")
+
+    for field in sorted(set(merged) - V1_RULE_FIELDS[kind]):
+        if field not in V2_ONLY_RULE_FIELDS.get(kind, ()):
+            fail(f"unknown field {field!r}")
+        if not explicit:
+            fail(f'{field!r} isn\'t understood by 0.1.x; add "v1": false or a "v1" override')
+        if not droppable(field, merged[field], merged):
+            fail(f'{field!r} can\'t be left out of rules-v1.json safely; use "v1": false')
+        del merged[field]
+        notes.append(f"{field} left out")
+    return merged, notes
+
+
+def setting_label_problems(labels):
+    """settingLabels must be {key: {"name": str, "values": {str: str}}} (both optional), or Gson rejects rules-v2.json."""
+    if not isinstance(labels, dict):
+        return ["settingLabels must be an object"]
+    problems = []
+    for key, label in labels.items():
+        where = f"settingLabels[{key}]"
+        if not isinstance(label, dict):
+            problems.append(f'{where} must be an object like {{"name": ..., "values": {{...}}}}')
+            continue
+        unknown = sorted(set(label) - {"name", "values"})
+        if unknown:
+            problems.append(f"{where}: unknown field(s) {', '.join(unknown)}")
+        if "name" in label and not isinstance(label["name"], str):
+            problems.append(f"{where}.name must be a string")
+        values = label.get("values", {})
+        if not isinstance(values, dict) or not all(isinstance(v, str) for v in values.values()):
+            problems.append(f"{where}.values must map setting values to strings")
+    return problems
+
+
+def validate_knowledge(knowledge):
+    """Rejects knowledge the updater can't turn into safe v2 and v1 outputs (typos, unknown condition keys, nulls,
+    values outside the vocabularies, rules that need a v1 decision). Raises KnowledgeError listing every problem."""
+    problems = []
+    for kind in TIER_KINDS:
+        for i, rule in enumerate(knowledge.get(kind, [])):
+            if not isinstance(rule, dict):
+                problems.append(f"{kind}[{i}] must be an object")
+                continue
+            unknown = sorted(set(rule) - V1_RULE_FIELDS[kind])
+            if unknown:
+                problems.append(f"{kind}[{i}]: unknown field(s) {', '.join(unknown)} (tier-rule changes need a new schemaVersion)")
+    for kind in RULE_KINDS:
+        rules = knowledge.get(kind, [])
+        if not isinstance(rules, list):
+            problems.append(f"'{kind}' must be an array")
+            continue
+        for i, rule in enumerate(rules):
+            if not isinstance(rule, dict):
+                problems.append(f"{kind}[{i}] must be an object")
+                continue
+            label = rule_label(kind, rule, i)
+            unknown = sorted(set(rule) - V1_RULE_FIELDS[kind] - V2_ONLY_RULE_FIELDS[kind] - {"v1"})
+            if unknown:
+                problems.append(f"{label}: unknown field(s) {', '.join(unknown)}")
+            if any(contains_null(v) for k, v in rule.items() if k != "v1"):
+                problems.append(f"{label}: null isn't allowed in a rule")
+            for field in CONDITION_FIELDS[kind]:
+                if field in rule:
+                    problems += [f"{label}: {p}" for p in condition_problems(rule[field], V2_CONDITION_KEYS, field)]
+            if "requires" in rule and (not isinstance(rule["requires"], list) or not all(isinstance(r, str) for r in rule["requires"])):
+                problems.append(f"{label}: requires must be an array of strings")
+            if kind == "settings" and unknown_token(rule.get("value")) and not rule.get("requires"):
+                problems.append(f"{label}: the value {rule['value']!r} isn't a known token ({', '.join(sorted(VALUE_TOKENS))}); "
+                                "a new token needs \"requires\" naming the client feature that resolves it")
+            if "avoidSelected" in rule and not isinstance(rule["avoidSelected"], bool):
+                problems.append(f"{label}: avoidSelected must be true or false")
+            if not unknown:
+                try:
+                    project_rule(kind, rule, i)
+                except ProjectionError as e:
+                    problems.append(str(e))
+    unknown_top = sorted(set(knowledge) - KNOWLEDGE_TOP_LEVEL)
+    if unknown_top:
+        problems.append(f"unknown top-level field(s) {', '.join(unknown_top)}")
+    problems += setting_label_problems(knowledge.get("settingLabels", {}))
+    if problems:
+        raise KnowledgeError("invalid knowledge:\n  " + "\n  ".join(problems))
 
 
 def fo_contents_url(mc_version):
@@ -312,7 +636,7 @@ def top_level_upstream(fo_version, fo_slugs, additive_version, additive_slugs):
 
 
 def build_review(rule_mods, mc_versions, newest_version, fo_slugs, additive_slugs,
-                  projects_by_id, availability, old_mods_by_slug, review_ignore_slugs=frozenset()):
+                  projects_by_id, availability, old_mods_by_slug, review_ignore_slugs=frozenset(), projection_notes=()):
     known_slugs = {m["slug"] for m in rule_mods}
     slug_to_project = {p["slug"]: p for p in projects_by_id.values() if "slug" in p}
 
@@ -363,12 +687,13 @@ def build_review(rule_mods, mc_versions, newest_version, fo_slugs, additive_slug
 
     markdown = render_review_markdown(
         mc_versions, newest_version, new_upstream, status_issues, removed_issues,
-        missing_fabric, old_mods_by_slug is None,
+        missing_fabric, old_mods_by_slug is None, projection_notes=projection_notes,
     )
     counts = {
         "new_upstream": len(new_upstream),
         "status_or_removed": len(status_issues) + len(removed_issues),
         "missing_fabric": len(missing_fabric),
+        "v1_projection": len(projection_notes),
     }
     return markdown, counts
 
@@ -384,7 +709,8 @@ def sanitize_cell(value):
     return text
 
 
-def render_review_markdown(mc_versions, newest_version, new_upstream, status_issues, removed_issues, missing_fabric, no_history):
+def render_review_markdown(mc_versions, newest_version, new_upstream, status_issues, removed_issues, missing_fabric, no_history,
+                           projection_notes=()):
     lines = ["# RigTune rules update review", ""]
     lines.append(f"Target MC versions: {', '.join(mc_versions)}. Newest: {newest_version or 'unknown'}.")
     lines.append("")
@@ -392,6 +718,7 @@ def render_review_markdown(mc_versions, newest_version, new_upstream, status_iss
     lines.append(f"- New upstream mods to triage: {len(new_upstream)}")
     lines.append(f"- Rule mods with a status or removal concern: {len(status_issues) + len(removed_issues)}")
     lines.append(f"- Rule mods missing a Fabric build for {newest_version or 'the newest target version'}: {len(missing_fabric)}")
+    lines.append(f"- Rules changed or omitted in rules-v1.json: {len(projection_notes)}")
     lines.append("")
 
     lines.append("## (a) Upstream mods not yet tracked in knowledge.json")
@@ -428,6 +755,19 @@ def render_review_markdown(mc_versions, newest_version, new_upstream, status_iss
         lines.append("None found.")
     lines.append("")
 
+    lines.append("## (d) Omitted from rules-v1.json")
+    lines.append("0.1.x clients read rules-v1.json, the v1 projection of these rules. Check that nothing below makes 0.1.x "
+                 "less safe, in particular that an omitted setting entry doesn't change which entry wins for a key.")
+    lines.append("")
+    if projection_notes:
+        lines.append("| rule | change |")
+        lines.append("|---|---|")
+        for label, note in projection_notes:
+            lines.append(f"| {sanitize_cell(label)} | {sanitize_cell(note)} |")
+    else:
+        lines.append("None.")
+    lines.append("")
+
     return "\n".join(lines)
 
 
@@ -451,11 +791,14 @@ def load_knowledge(path):
         for entry in data["reviewIgnore"]:
             if "slug" not in entry or "reason" not in entry:
                 raise KnowledgeError(f"knowledge file at {path}: every reviewIgnore entry needs 'slug' and 'reason'")
+    validate_knowledge(data)
     return data
 
 
 def assemble_content(knowledge, mods, availability, upstream):
-    content = {"schemaVersion": 1}
+    """The full rules content: schemaVersion 2, with each rule's "v1" override still inside (see v2_content and
+    v1_projection for the two outputs)."""
+    content = {"schemaVersion": 2}
     if "minModVersion" in knowledge:
         content["minModVersion"] = knowledge["minModVersion"]
     content["gpuTiers"] = knowledge.get("gpuTiers", [])
@@ -466,9 +809,66 @@ def assemble_content(knowledge, mods, availability, upstream):
     content["obsolete"] = knowledge.get("obsolete", [])
     content["settings"] = knowledge.get("settings", [])
     content["advice"] = knowledge.get("advice", [])
+    if "settingLabels" in knowledge:
+        content["settingLabels"] = knowledge["settingLabels"]
     content["availability"] = availability
     content["upstream"] = upstream
     return content
+
+
+def v2_content(content):
+    """rules-v2.json: the content without the source-only "v1" overrides."""
+    out = copy.deepcopy(content)
+    for kind in RULE_KINDS:
+        out[kind] = [{k: v for k, v in rule.items() if k != "v1"} for rule in out.get(kind, [])]
+    return out
+
+
+def v1_projection(content):
+    """rules-v1.json: what 0.1.x understands, never less safe. Returns (document, [(rule label, note)])."""
+    out = {"schemaVersion": 1}
+    notes = []
+    omitted_mods = {}
+    for key, value in content.items():
+        if key in ("schemaVersion", "settingLabels"):
+            continue
+        if key in RULE_KINDS:
+            projected = []
+            for i, rule in enumerate(value):
+                rule_v1, rule_notes = project_rule(key, rule, i)
+                notes += [(rule_label(key, rule, i), note) for note in rule_notes]
+                if rule_v1 is not None:
+                    projected.append(rule_v1)
+                elif key == "mods":
+                    omitted_mods[rule["slug"]] = list(rule.get("modIds", []))
+            out[key] = projected
+        else:
+            out[key] = copy.deepcopy(value)
+    if omitted_mods:
+        notes += rewrite_conflict_references(out.get("mods", []), omitted_mods)
+    return out, notes
+
+
+def rewrite_conflict_references(mods, omitted_mods):
+    """0.1.x resolves a conflictsWith slug only through a rule it has. When a rule is left out of rules-v1.json, the
+    other rules' references to its slug would stop matching the installed mod (slugs often differ from mod ids:
+    moonrise-opt vs moonrise), so 0.1.x could offer a mod that conflicts with one already installed. Such references
+    become the omitted rule's mod ids, which 0.1.x matches directly."""
+    notes = []
+    for mod in mods:
+        refs = mod.get("conflictsWith")
+        if not refs or not any(ref in omitted_mods for ref in refs):
+            continue
+        rewritten = []
+        for ref in refs:
+            for replacement in omitted_mods.get(ref, [ref]):
+                if replacement not in rewritten:
+                    rewritten.append(replacement)
+            if ref in omitted_mods:
+                notes.append((f"mods[{mod.get('slug')}]", f"conflictsWith: {ref} (left out of rules-v1.json) -> its mod ids "
+                              f"{', '.join(omitted_mods[ref])}"))
+        mod["conflictsWith"] = rewritten
+    return notes
 
 
 def deep_equal(a, b):
@@ -483,22 +883,32 @@ def now_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def finalize_document(content, old_doc):
-    old_revision = old_doc.get("revision", 0) if old_doc else 0
-    changed = old_doc is None or not deep_equal(strip_meta(old_doc), content)
+def finalize_documents(pairs):
+    """pairs: [(content, old_doc)]. If any content differs from its old document (ignoring revision and
+    generatedAt), every document gets revision max(old revisions) + 1 and one generatedAt; otherwise None."""
+    changed = any(old is None or not deep_equal(strip_meta(old), content) for content, old in pairs)
     if not changed:
         return None
-    new_revision = old_revision + 1
+    new_revision = max((old.get("revision", 0) if old else 0) for _, old in pairs) + 1
     if new_revision >= MAX_SAFE_REVISION:
         raise UpdateRulesError(
             f"revision {new_revision} would be at or above {MAX_SAFE_REVISION} (2**31-2); "
-            "refusing to write a rules-v1.json the client can't parse"
+            "refusing to write rules the client can't parse"
         )
-    final = {"schemaVersion": content["schemaVersion"], "revision": new_revision, "generatedAt": now_iso()}
-    for key, value in content.items():
-        if key != "schemaVersion":
-            final[key] = value
-    return final
+    stamp = now_iso()
+    finals = []
+    for content, _ in pairs:
+        final = {"schemaVersion": content["schemaVersion"], "revision": new_revision, "generatedAt": stamp}
+        for key, value in content.items():
+            if key != "schemaVersion":
+                final[key] = value
+        finals.append(final)
+    return finals
+
+
+def finalize_document(content, old_doc):
+    finals = finalize_documents([(content, old_doc)])
+    return None if finals is None else finals[0]
 
 
 def load_json_if_exists(path):
@@ -548,9 +958,10 @@ def run_pipeline(knowledge, client, mc_versions_override, old_doc):
     if old_doc is not None:
         old_mods_by_slug = {m["slug"]: m.get("upstream", {}) for m in old_doc.get("mods", [])}
     review_ignore_slugs = {entry["slug"] for entry in knowledge.get("reviewIgnore", [])}
+    _, projection_notes = v1_projection(content)
     review_md, review_counts = build_review(
         rule_mods, mc_versions, newest_version, fo_slugs, additive_slugs,
-        projects_by_id, availability, old_mods_by_slug, review_ignore_slugs,
+        projects_by_id, availability, old_mods_by_slug, review_ignore_slugs, projection_notes,
     )
 
     return content, review_md, review_counts, mc_versions, newest_by_pack, fo_slugs, additive_slugs
@@ -578,10 +989,13 @@ def main(argv=None):
         print(f"error: {e}", file=sys.stderr)
         return 2
 
-    rules_path = out_root / "rules" / "rules-v1.json"
-    bundled_path = out_root / "src" / "main" / "resources" / "rigtune" / "rules-v1.json"
+    v2_path = out_root / "rules" / "rules-v2.json"
+    bundled_v2_path = out_root / "src" / "main" / "resources" / "rigtune" / "rules-v2.json"
+    v1_path = out_root / "rules" / "rules-v1.json"
     review_path = out_root / "rules" / "REVIEW.md"
-    old_doc = load_json_if_exists(rules_path)
+    old_v2 = load_json_if_exists(v2_path)
+    old_v1 = load_json_if_exists(v1_path)
+    old_doc = old_v2 if old_v2 is not None else old_v1
 
     opener = fixture_opener(args.offline_fixtures) if args.offline_fixtures else default_opener
     client = Client(opener=opener, sleeper=time.sleep, github_token=os.environ.get("GITHUB_TOKEN"))
@@ -590,7 +1004,8 @@ def main(argv=None):
         content, review_md, review_counts, mc_versions, newest_by_pack, fo_slugs, additive_slugs = run_pipeline(
             knowledge, client, args.mc_versions, old_doc,
         )
-        final_doc = finalize_document(content, old_doc)
+        v1_content, _ = v1_projection(content)
+        finals = finalize_documents([(v2_content(content), old_v2), (v1_content, old_v1)])
     except UpdateRulesError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
@@ -599,18 +1014,20 @@ def main(argv=None):
     print(f"Fabulously Optimized: newest available = {newest_by_pack['fabulouslyOptimized']}, {len(fo_slugs)} mods")
     print(f"Additive: newest available = {newest_by_pack['additive']}, {len(additive_slugs)} mods")
     print(f"REVIEW.md: {review_counts}")
-    if final_doc is None:
+    if finals is None:
         print(f"no content change; keeping revision {old_doc.get('revision') if old_doc else 'n/a'}")
     else:
-        print(f"revision {old_doc.get('revision', 0) if old_doc else 0} -> {final_doc['revision']}")
+        print(f"revision {old_doc.get('revision', 0) if old_doc else 0} -> {finals[0]['revision']}")
 
     if args.dry_run:
         print("dry run: no files written")
         return 0
 
-    if final_doc is not None:
-        write_json(rules_path, final_doc)
-        write_json(bundled_path, final_doc)
+    if finals is not None:
+        final_v2, final_v1 = finals
+        write_json(v2_path, final_v2)
+        write_json(bundled_v2_path, final_v2)
+        write_json(v1_path, final_v1)
     write_text(review_path, review_md)
     return 0
 

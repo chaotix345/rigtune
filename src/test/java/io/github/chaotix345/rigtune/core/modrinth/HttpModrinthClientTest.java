@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.net.URLDecoder;
 import java.net.http.HttpHeaders;
 import java.nio.charset.StandardCharsets;
@@ -39,6 +40,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -443,5 +445,122 @@ class HttpModrinthClientTest {
 			assertEquals(List.of(), files.toList());
 		}
 		assertThrows(ModrinthException.class, () -> client.download(new ModFile(url("/cdn/none.jar"), "none.jar", "00ff", 1), target));
+	}
+
+	@Test
+	void allowedDownloadIsTheModrinthCdnOverHttpsOnly() {
+		String base = HttpModrinthClient.DEFAULT_BASE_URL;
+		assertTrue(HttpModrinthClient.allowedDownload(URI.create("https://cdn.modrinth.com/data/AANobbMI/versions/x/x.jar"), base));
+		assertTrue(HttpModrinthClient.allowedDownload(URI.create("https://CDN.modrinth.com:443/x.jar"), base));
+		for (String refused : List.of("http://cdn.modrinth.com/x.jar", "https://cdn.modrinth.com:8443/x.jar",
+				"https://cdn.modrinth.com.evil.example/x.jar", "https://cdn.modrinth.com@evil.example/x.jar",
+				"https://api.modrinth.com/x.jar", "ftp://cdn.modrinth.com/x.jar", "cdn.modrinth.com/x.jar")) {
+			assertFalse(HttpModrinthClient.allowedDownload(URI.create(refused), base), refused);
+		}
+	}
+
+	@Test
+	void aTestBaseUrlAlsoAllowsItsOwnOrigin() {
+		String base = "http://127.0.0.1:1234/";
+		assertTrue(HttpModrinthClient.allowedDownload(URI.create("http://127.0.0.1:1234/cdn/x.jar"), base));
+		assertTrue(HttpModrinthClient.allowedDownload(URI.create("https://cdn.modrinth.com/x.jar"), base));
+		assertFalse(HttpModrinthClient.allowedDownload(URI.create("http://127.0.0.1:9999/cdn/x.jar"), base));
+		assertFalse(HttpModrinthClient.allowedDownload(URI.create("https://127.0.0.1:1234/cdn/x.jar"), base));
+		assertTrue(HttpModrinthClient.allowedDownload(URI.create("https://localhost/x.jar"), "https://LOCALHOST:443"));
+		assertTrue(HttpModrinthClient.allowedDownload(URI.create("https://mirror.example/data/x.jar"), "https://mirror.example"));
+	}
+
+	@Test
+	void aPlainHttpBaseUrlOffThisMachineAllowsNothingExtra() {
+		assertFalse(HttpModrinthClient.allowedDownload(URI.create("http://mirror.example:8080/x.jar"), "http://mirror.example:8080"));
+		assertFalse(HttpModrinthClient.allowedDownload(URI.create("http://10.0.0.5/x.jar"), "http://10.0.0.5"));
+		assertTrue(HttpModrinthClient.allowedDownload(URI.create("http://localhost:8080/x.jar"), "http://localhost:8080"));
+		assertTrue(HttpModrinthClient.allowedDownload(URI.create("https://cdn.modrinth.com/x.jar"), "http://mirror.example:8080"));
+	}
+
+	@Test
+	void defaultClientRefusesADownloadOutsideTheCdnBeforeRequesting(@TempDir Path dir) throws Exception {
+		byte[] jar = "jar-bytes".getBytes(StandardCharsets.UTF_8);
+		responses.put("/cdn/mod.jar", new Response(200, jar));
+		HttpModrinthClient defaults = new HttpModrinthClient("1.2.3");
+
+		IOException e = assertThrows(IOException.class,
+				() -> defaults.download(new ModFile(url("/cdn/mod.jar"), "mod.jar", sha512(jar), jar.length), dir.resolve("mod.jar.rigtune-pending")));
+
+		assertTrue(e.getMessage().contains("https://cdn.modrinth.com/"), e.getMessage());
+		assertEquals(0, hits("/cdn/mod.jar"));
+		assertEquals(List.of(), listing(dir));
+	}
+
+	@Test
+	void baseUrlPropertyRedirectsRequestsAndDownloads(@TempDir Path dir) throws Exception {
+		respond("/v2/version_files", 200, "{\"62a7\":" + VERSION_JSON + "}");
+		byte[] jar = "jar-bytes".getBytes(StandardCharsets.UTF_8);
+		responses.put("/cdn/mod.jar", new Response(200, jar));
+		Path target = dir.resolve("mod.jar.rigtune-pending");
+		System.setProperty(HttpModrinthClient.BASE_URL_PROPERTY, url("/"));
+		try {
+			HttpModrinthClient viaProperty = new HttpModrinthClient("1.2.3");
+			assertEquals(1, viaProperty.versionsByHashes(List.of("62a7")).size());
+			viaProperty.download(new ModFile(url("/cdn/mod.jar"), "mod.jar", sha512(jar), jar.length), target);
+		} finally {
+			System.clearProperty(HttpModrinthClient.BASE_URL_PROPERTY);
+		}
+		assertEquals(1, hits("/v2/version_files"));
+		assertArrayEquals(jar, Files.readAllBytes(target));
+	}
+
+	@Test
+	void downloadRedirectedToAnotherOriginIsRefusedBeforeRequestingIt(@TempDir Path dir) throws Exception {
+		byte[] jar = "jar-bytes".getBytes(StandardCharsets.UTF_8);
+		AtomicInteger otherHits = new AtomicInteger();
+		HttpServer other = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
+		other.createContext("/", exchange -> {
+			otherHits.incrementAndGet();
+			exchange.sendResponseHeaders(200, jar.length);
+			try (OutputStream out = exchange.getResponseBody()) {
+				out.write(jar);
+			}
+		});
+		other.start();
+		try {
+			responses.put("/cdn/moved.jar", new Response(302, new byte[0],
+					Map.of("Location", "http://127.0.0.1:" + other.getAddress().getPort() + "/elsewhere.jar"), false));
+			Path target = dir.resolve("moved.jar.rigtune-pending");
+
+			IOException e = assertThrows(IOException.class,
+					() -> client.download(new ModFile(url("/cdn/moved.jar"), "moved.jar", sha512(jar), jar.length), target));
+
+			assertTrue(e.getMessage().contains("elsewhere.jar"), e.getMessage());
+			assertEquals(0, otherHits.get());
+			assertEquals(List.of(), listing(dir));
+		} finally {
+			other.stop(0);
+		}
+	}
+
+	@Test
+	void downloadFollowsARedirectWithinTheAllowedOrigin(@TempDir Path dir) throws Exception {
+		byte[] jar = "jar-bytes".getBytes(StandardCharsets.UTF_8);
+		responses.put("/cdn/moved.jar", new Response(302, new byte[0], Map.of("Location", "/cdn/mod.jar"), false));
+		responses.put("/cdn/mod.jar", new Response(200, jar));
+		Path target = dir.resolve("moved.jar.rigtune-pending");
+
+		client.download(new ModFile(url("/cdn/moved.jar"), "moved.jar", sha512(jar), jar.length), target);
+
+		assertArrayEquals(jar, Files.readAllBytes(target));
+		assertEquals(1, hits("/cdn/mod.jar"));
+	}
+
+	@Test
+	void aRedirectLoopGivesUp(@TempDir Path dir) throws Exception {
+		responses.put("/cdn/loop.jar", new Response(307, new byte[0], Map.of("Location", url("/cdn/loop.jar")), false));
+
+		IOException e = assertThrows(IOException.class,
+				() -> client.download(new ModFile(url("/cdn/loop.jar"), "loop.jar", "00ff", 1), dir.resolve("loop.jar.rigtune-pending")));
+
+		assertTrue(e.getMessage().contains("redirects"), e.getMessage());
+		assertEquals(HttpModrinthClient.MAX_DOWNLOAD_REDIRECTS + 1, hits("/cdn/loop.jar"));
+		assertEquals(List.of(), listing(dir));
 	}
 }

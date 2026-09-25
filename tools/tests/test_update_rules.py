@@ -401,7 +401,7 @@ class ReviewMarkdownTests(unittest.TestCase):
             availability=availability,
             old_mods_by_slug={},
         )
-        self.assertEqual(counts, {"new_upstream": 0, "status_or_removed": 0, "missing_fabric": 0})
+        self.assertEqual(counts, {"new_upstream": 0, "status_or_removed": 0, "missing_fabric": 0, "v1_projection": 0})
         self.assertEqual(md.count("None found."), 3)
 
 

@@ -42,6 +42,10 @@ class FakeModrinthClient implements ModrinthClient {
 		return new Dependency(projectId, null, "required");
 	}
 
+	static Dependency incompatible(String projectId) {
+		return new Dependency(projectId, null, "incompatible");
+	}
+
 	private void call(String name) throws IOException {
 		calls.add(name);
 		if (failWith != null) {

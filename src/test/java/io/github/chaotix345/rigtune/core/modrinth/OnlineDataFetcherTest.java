@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static io.github.chaotix345.rigtune.core.modrinth.FakeModrinthClient.version;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -60,6 +61,7 @@ class OnlineDataFetcherTest {
 
 		assertEquals("AANobbMI", result.projectIdsByModId().get("sodium"));
 		assertEquals("gvQqBUqZ", result.projectIdsByModId().get("lithium"));
+		assertEquals(Map.of("sodium", "sod1", "lithium", "lit1"), result.versionIdsByModId());
 		assertEquals(List.of("versionsByHashes", "latestVersionsByHashes", "projects", "latestVersion:P1"), client.calls);
 	}
 

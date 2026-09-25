@@ -1,0 +1,18 @@
+{
+	"schemaVersion": 1,
+	"id": "rigtune-e2e-driver",
+	"version": "1.0.0",
+	"name": "RigTune self-update E2E driver",
+	"description": "Test-only driver for tools/e2e/self_update_e2e.py; inert without -Drigtune.e2e.phase. Never shipped.",
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"io.github.chaotix345.rigtune.e2e.driver.SelfUpdateDriver"
+		]
+	},
+	"depends": {
+		"rigtune": "*",
+		"fabric-api": "*"
+	}
+}

@@ -1,0 +1,29 @@
+{
+  "finishedAt": "2026-09-25T02:07:33.180641400Z",
+  "results": [
+    {
+      "op": {
+        "type": "DISABLE_FILE",
+        "path": "${INSTANCE}/mods/rigtune-0.1.0.jar",
+        "id": "8d22dcd3-7eaa-4800-a93c-476887d5a839",
+        "group": "511b9a75-82c0-4a2d-9a3d-151b3b2d1f52",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Disabled rigtune-0.1.0.jar -> rigtune-0.1.0.jar.disabled"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "${INSTANCE}/mods/rigtune-0.2.0-dev+mc26.2.jar.rigtune-pending",
+        "to": "${INSTANCE}/mods/rigtune-0.2.0-dev+mc26.2.jar",
+        "id": "0f6351f6-3ccd-4985-aeb0-86741466774c",
+        "group": "511b9a75-82c0-4a2d-9a3d-151b3b2d1f52",
+        "modId": "rigtune",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled rigtune-0.2.0-dev+mc26.2.jar"
+    }
+  ]
+}

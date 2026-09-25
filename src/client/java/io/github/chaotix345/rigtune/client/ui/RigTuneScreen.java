@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.client.ui;
 
+import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
@@ -9,6 +10,7 @@ import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -40,6 +42,7 @@ public class RigTuneScreen extends Screen {
 	private static final int MARGIN = 8;
 	private static final int GAP = 4;
 	private static final int LINE = 10;
+	private static final int MIN_BUTTON = 88;
 	private static final int COLOR_LABEL = 0xFFA8A8A8;
 	private static final int COLOR_REASON = 0xFFB8B8B8;
 	private static final int COLOR_WARNING = 0xFFFF6E5E;
@@ -49,6 +52,7 @@ public class RigTuneScreen extends Screen {
 
 	private final @Nullable Screen parent;
 	private final RigTuneController controller;
+	private final ClientSettings settings = ClientSettings.shared(FabricLoader.getInstance().getConfigDir());
 	private final Set<String> selected = new HashSet<>();
 	private final Set<String> known = new HashSet<>();
 	private @Nullable Report shown;
@@ -58,6 +62,7 @@ public class RigTuneScreen extends Screen {
 	private int headerTop;
 	private int left;
 	private int right;
+	private int badgeRight;
 	private int headerBottom;
 	private int statusY;
 	private @Nullable RecommendationList list;
@@ -88,14 +93,19 @@ public class RigTuneScreen extends Screen {
 		int column = columnWidth(width);
 		left = (width - column) / 2;
 		right = left + column;
-		int goalWidth = Math.min(130, column - titleWidth - MARGIN);
+		Component settingsLabel = Component.translatable("rigtune.screen.settings");
+		int settingsWidth = font.width(settingsLabel) + 12;
+		addRenderableWidget(Button.builder(settingsLabel, b -> minecraft.gui.setScreen(new RigTuneSettingsScreen(this, controller)))
+				.bounds(right - settingsWidth, 5, settingsWidth, 20).build());
+		badgeRight = right - settingsWidth - MARGIN;
+		int goalWidth = Math.min(130, column - titleWidth - MARGIN - settingsWidth - GAP);
 		addRenderableWidget(CycleButton.builder((Goal g) -> Component.translatable("rigtune.goal." + g.name().toLowerCase(Locale.ROOT)), controller.goal())
 				.withValues(Goal.values())
 				.withTooltip(g -> Tooltip.create(Component.translatable("rigtune.goal." + g.name().toLowerCase(Locale.ROOT) + ".tooltip")))
 				.create(left + titleWidth + MARGIN, 5, goalWidth, 20, Component.translatable("rigtune.screen.goal"), (button, goal) -> controller.setGoal(goal)));
 
 		tierBadge = shown == null ? null : tierBadge(shown);
-		int badgeRoom = right - (left + titleWidth + goalWidth + 2 * MARGIN);
+		int badgeRoom = badgeRight - (left + titleWidth + goalWidth + 2 * MARGIN);
 		boolean badgeInTitleRow = tierBadge != null && font.width(tierBadge) <= badgeRoom;
 		headerLines = shown == null ? List.of() : header(shown, badgeInTitleRow ? null : tierBadge);
 		if (!badgeInTitleRow) {
@@ -105,36 +115,14 @@ public class RigTuneScreen extends Screen {
 		headerBottom = headerTop + Math.max(1, headerLines.size()) * LINE + 2;
 		int listTop = headerBottom + 4;
 
-		boolean pending = controller.hasPendingChanges();
-		int buttonCount = pending ? 5 : 4;
-		int available = column;
-		boolean twoRows = (available - GAP * (buttonCount - 1)) / buttonCount < 80;
-		int perRow = twoRows ? (buttonCount + 1) / 2 : buttonCount;
-		int buttonWidth = Math.min(twoRows ? 150 : 120, (available - GAP * (perRow - 1)) / perRow);
-		int rows = twoRows ? 2 : 1;
-		int footerTop = height - MARGIN / 2 - rows * 20 - (rows - 1) * GAP;
-		statusY = footerTop - LINE - 2;
-		int listBottom = statusY - 4;
-
-		list = new RecommendationList(listTop, Math.max(20, listBottom - listTop));
-		populate(list);
-		addRenderableWidget(list);
-
 		List<Button> buttons = new ArrayList<>();
 		applyButton = Button.builder(Component.translatable("rigtune.screen.apply"), b -> applySelected()).build();
 		buttons.add(applyButton);
-		Button benchmark = Button.builder(Component.translatable("rigtune.screen.benchmark"), b -> controller.startBenchmark()).build();
-		benchmark.active = minecraft.level != null && shown != null;
-		if (minecraft.level == null) {
-			benchmark.setTooltip(Tooltip.create(Component.translatable("rigtune.screen.benchmark.needs_world")));
-		}
-		buttons.add(benchmark);
-		buttons.add(Button.builder(Component.translatable("rigtune.screen.rescan"), b -> {
-			status = null;
-			controller.rescan();
-			rebuildWidgets();
-		}).build());
-		if (pending) {
+		buttons.add(Button.builder(Component.translatable("rigtune.screen.undo_last"), b -> minecraft.gui.setScreen(new UndoScreen(this, controller, false)))
+				.tooltip(Tooltip.create(Component.translatable("rigtune.screen.undo_last.tooltip"))).build());
+		buttons.add(Button.builder(Component.translatable("rigtune.screen.undo_all"), b -> minecraft.gui.setScreen(new UndoScreen(this, controller, true)))
+				.tooltip(Tooltip.create(Component.translatable("rigtune.screen.undo_all.tooltip"))).build());
+		if (controller.hasPendingChanges()) {
 			Button discard = Button.builder(Component.translatable("rigtune.screen.discard"), b -> {
 				status = controller.discardPending();
 				rebuildWidgets();
@@ -142,7 +130,30 @@ public class RigTuneScreen extends Screen {
 			discard.setTooltip(Tooltip.create(Component.translatable("rigtune.screen.discard.tooltip")));
 			buttons.add(discard);
 		}
+		buttons.add(Button.builder(Component.translatable("rigtune.screen.benchmark_menu"), b -> minecraft.gui.setScreen(new BenchmarkMenuScreen(this, controller))).build());
+		buttons.add(Button.builder(Component.translatable("rigtune.screen.rescan"), b -> {
+			status = null;
+			controller.rescan();
+			rebuildWidgets();
+		}).build());
+		Button copy = Button.builder(Component.translatable("rigtune.screen.copy_report"), b -> copyReport())
+				.tooltip(Tooltip.create(Component.translatable("rigtune.screen.copy_report.tooltip"))).build();
+		copy.active = shown != null;
+		buttons.add(copy);
 		buttons.add(Button.builder(Component.translatable("gui.done"), b -> onClose()).build());
+
+		// As many buttons of at least MIN_BUTTON per row as fit, then the rows balanced.
+		int perRow = Math.clamp((column + GAP) / (MIN_BUTTON + GAP), 1, buttons.size());
+		int rows = (buttons.size() + perRow - 1) / perRow;
+		perRow = (buttons.size() + rows - 1) / rows;
+		int buttonWidth = Math.min(120, (column - GAP * (perRow - 1)) / perRow);
+		int footerTop = height - MARGIN / 2 - rows * 20 - (rows - 1) * GAP;
+		statusY = footerTop - LINE - 2;
+		int listBottom = statusY - 4;
+
+		list = new RecommendationList(listTop, Math.max(20, listBottom - listTop));
+		populate(list);
+		addRenderableWidget(list);
 
 		for (int i = 0; i < buttons.size(); i++) {
 			int row = i / perRow;
@@ -207,7 +218,26 @@ public class RigTuneScreen extends Screen {
 				value(report.rulesSource()),
 				online).withStyle(s -> s.withColor(COLOR_LABEL)));
 		lines.add(last);
+		if (!settings.networkEnabled) {
+			lines.add(Component.translatable("rigtune.screen.header.network_off").withStyle(ChatFormatting.GOLD));
+		} else if (!settings.modrinth) {
+			lines.add(Component.translatable("rigtune.screen.header.modrinth_off").withStyle(ChatFormatting.GOLD));
+		}
 		return lines;
+	}
+
+	public List<Component> headerLines() {
+		return List.copyOf(headerLines);
+	}
+
+	private void copyReport() {
+		String text = controller.shareReport();
+		if (text.isEmpty()) {
+			status = Component.translatable("rigtune.share.unavailable");
+			return;
+		}
+		minecraft.keyboardHandler.setClipboard(text);
+		status = Component.translatable("rigtune.share.copied", text.length());
 	}
 
 	static String cpuName(String raw) {
@@ -323,7 +353,7 @@ public class RigTuneScreen extends Screen {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.text(font, title.copy().withStyle(ChatFormatting.BOLD), left, 11, 0xFFFFFFFF, true);
 		if (tierBadge != null) {
-			graphics.text(font, tierBadge, right - font.width(tierBadge), 11, 0xFFFFFFFF, true);
+			graphics.text(font, tierBadge, badgeRight - font.width(tierBadge), 11, 0xFFFFFFFF, true);
 		}
 		int textWidth = right - left;
 		if (shown == null) {

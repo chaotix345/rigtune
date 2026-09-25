@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.client.probe;
 
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
+import io.github.chaotix345.rigtune.core.apply.ModJars;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import net.fabricmc.loader.api.FabricLoader;
@@ -52,6 +53,11 @@ public final class ModScanner {
 		}
 		out.sort(Comparator.comparing(InstalledMod::modId));
 		return List.copyOf(out);
+	}
+
+	// The mod ids with an update of their own waiting in mods/update/ (review 4, rules-accuracy-1).
+	public static Set<String> queuedUpdates() {
+		return ModJars.queuedUpdates(InstanceDirs.modsDir(FabricLoader.getInstance().getGameDir()));
 	}
 
 	// Nested jar-in-jar mods stay in the list (their ids matter to the rules) but get no file or hash.

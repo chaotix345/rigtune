@@ -1,0 +1,23 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "070f697d-89b3-475e-9798-e08c0e5e4dc0",
+      "at": "2026-09-25T05:45:23.693556500Z",
+      "kind": "legacy-import",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "f4783b8a-d08a-44de-96ee-374edcf8baa0",
+          "type": "file",
+          "action": "disable",
+          "modId": "e2e-legacy",
+          "file": "e2e-legacy-1.0.0.jar",
+          "resultFile": "e2e-legacy-1.0.0.jar.disabled",
+          "status": "APPLIED",
+          "opId": "916be759-bc79-4d54-99a2-832b051a4c5a"
+        }
+      ]
+    }
+  ]
+}

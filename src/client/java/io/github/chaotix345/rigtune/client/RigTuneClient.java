@@ -3,11 +3,14 @@ package io.github.chaotix345.rigtune.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
+import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
+import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
+import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Impact;
@@ -49,6 +52,8 @@ public final class RigTuneClient implements ClientModInitializer {
 	private static final int BUTTON_WIDTH = 60;
 
 	private static final SystemToast.SystemToastId NOTICE_ID = new SystemToast.SystemToastId(8000L);
+	private static final SystemToast.SystemToastId PRIVACY_ID = new SystemToast.SystemToastId(10000L);
+	private static final StartupNotices.PrivacyToast PRIVACY_TOAST = new StartupNotices.PrivacyToast();
 	private static final Identifier HUD_ID = Identifier.fromNamespaceAndPath(RigTune.MOD_ID, "benchmark");
 
 	private static RigTuneController controller;
@@ -60,14 +65,20 @@ public final class RigTuneClient implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
+		ChangeRecorder.install(ClientJournal.get());
 		RealController real = new RealController();
 		controller = real;
 		KeyMapping.Category category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(RigTune.MOD_ID, "rigtune"));
-		openKey = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.rigtune.open", InputConstants.Type.KEYSYM, InputConstants.KEY_F8, category));
+		//? if >=26.3 {
+		/*InputConstants.Type keyboard = InputConstants.Type.KEYBOARD;
+		*///?} else
+		InputConstants.Type keyboard = InputConstants.Type.KEYSYM;
+		openKey = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.rigtune.open", keyboard, InputConstants.KEY_F8, category));
 
 		ClientLifecycleEvents.CLIENT_STARTED.register(real::start);
 		ClientLifecycleEvents.CLIENT_STOPPING.register(minecraft -> {
 			BenchmarkController.cancel();
+			real.unstageQueuedUpdates();
 			launchHelperIfPending();
 		});
 		ClientTickEvents.END_CLIENT_TICK.register(RigTuneClient::onTick);
@@ -133,19 +144,30 @@ public final class RigTuneClient implements ClientModInitializer {
 				open(minecraft.gui.screen());
 			}
 		}
+		if (minecraft.gui.screen() instanceof RigTuneScreen
+				&& PRIVACY_TOAST.onRigTuneScreen(minecraft.gui.toastManager().getToast(SystemToast.class, PRIVACY_ID) != null)) {
+			SystemToast.forceHide(minecraft.gui.toastManager(), PRIVACY_ID);
+		}
 		if (!titleSeen || !(minecraft.gui.screen() instanceof TitleScreen)) {
 			return;
 		}
+		Path configDir = FabricLoader.getInstance().getConfigDir();
+		ClientSettings settings = ClientSettings.shared(configDir);
 		if (!noticesShown) {
 			noticesShown = true;
 			showNotices(minecraft);
+			PRIVACY_TOAST.take(StartupNotices.takePrivacyNotice(settings, configDir, Probes.EXECUTOR));
+		}
+		if (PRIVACY_TOAST.onTitleScreen()) {
+			SystemToast.add(minecraft.gui.toastManager(), PRIVACY_ID, Component.translatable("rigtune.settings.privacy_toast.title"),
+					Component.translatable("rigtune.settings.privacy_toast.body"));
 		}
 		if (!toastShown) {
 			Report report = controller.report();
 			if (report != null) {
 				toastShown = true;
 				long important = report.recommendations().stream().filter(RigTuneClient::important).count();
-				if (important > 0) {
+				if (StartupNotices.showSuggestionsToast(settings, important)) {
 					SystemToast.add(minecraft.gui.toastManager(), TOAST_ID,
 							Component.translatable("rigtune.toast.title", report.recommendations().size()),
 							Component.translatable("rigtune.toast.body", openKey.getTranslatedKeyMessage()));

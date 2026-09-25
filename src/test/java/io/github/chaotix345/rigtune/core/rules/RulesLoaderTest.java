@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.core.rules;
 
+import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -31,8 +32,20 @@ class RulesLoaderTest {
 	}
 
 	@Test
+	void acceptsSchemaVersions1And2() {
+		assertEquals(1, RulesLoader.parse("{\"schemaVersion\":1,\"revision\":9}").schemaVersion);
+		assertEquals(2, RulesLoader.parse("{\"schemaVersion\":2,\"revision\":9}").schemaVersion);
+	}
+
+	@Test
+	void rejectsOtherSchemaVersions() {
+		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse("{\"schemaVersion\":0,\"revision\":9}"));
+		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse("{\"schemaVersion\":3,\"revision\":9}"));
+		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse("{\"revision\":9}"));
+	}
+
+	@Test
 	void rejectsInvalidDocuments() {
-		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse("{\"schemaVersion\":2,\"revision\":9}"));
 		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse("{\"revision\":9}"));
 		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse("not json at all {"));
 		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse(""));
@@ -73,17 +86,64 @@ class RulesLoaderTest {
 		assertEquals("cache", cache.source());
 	}
 
+	private static RulesDocument doc(int schemaVersion, int revision) {
+		return RulesLoader.parse("{\"schemaVersion\":" + schemaVersion + ",\"revision\":" + revision + "}");
+	}
+
+	private static RulesLoader.Candidate candidate(String source, RulesDocument doc) {
+		return new RulesLoader.Candidate(source, doc);
+	}
+
 	@Test
-	void pickNewestKeepsFirstOnTiesAndSkipsMissing() {
+	void pickNewestPrefersRemoteThenCacheThenBundledOnFullTiesAndSkipsMissing() {
 		RulesDocument bundled = doc(2);
+		RulesDocument cache = doc(2);
 		RulesDocument remote = doc(2);
-		RulesDocument picked = RulesLoader.pickNewest(List.of(
-				new RulesLoader.Candidate(RulesLoader.SOURCE_BUNDLED, bundled),
-				new RulesLoader.Candidate(RulesLoader.SOURCE_CACHE, null),
-				new RulesLoader.Candidate(RulesLoader.SOURCE_REMOTE, remote))).orElseThrow();
-		assertSame(bundled, picked);
-		assertEquals("bundled", picked.source());
+		for (List<RulesLoader.Candidate> order : List.of(
+				List.of(candidate(RulesLoader.SOURCE_BUNDLED, bundled), candidate(RulesLoader.SOURCE_CACHE, cache), candidate(RulesLoader.SOURCE_REMOTE, remote)),
+				List.of(candidate(RulesLoader.SOURCE_REMOTE, remote), candidate(RulesLoader.SOURCE_BUNDLED, bundled), candidate(RulesLoader.SOURCE_CACHE, cache)))) {
+			assertSame(remote, RulesLoader.pickNewest(order).orElseThrow());
+		}
+		RulesDocument picked = RulesLoader.pickNewest(List.of(candidate(RulesLoader.SOURCE_CACHE, cache),
+				candidate(RulesLoader.SOURCE_BUNDLED, bundled), candidate(RulesLoader.SOURCE_REMOTE, null))).orElseThrow();
+		assertSame(cache, picked);
+		assertEquals("cache", picked.source());
 		assertFalse(RulesLoader.pickNewest(List.of()).isPresent());
+	}
+
+	@Test
+	void pickNewestToleratesANullSource() {
+		RulesDocument unnamed = doc(2, 5);
+		RulesDocument bundled = doc(2, 5);
+		assertSame(bundled, RulesLoader.pickNewest(List.of(candidate(null, unnamed), candidate(RulesLoader.SOURCE_BUNDLED, bundled))).orElseThrow());
+		assertSame(unnamed, RulesLoader.pickNewest(List.of(candidate(null, unnamed))).orElseThrow());
+	}
+
+	@Test
+	void newerComparesRevisionThenSchemaVersionOnly() {
+		assertTrue(RulesLoader.newer(doc(1, 6), doc(2, 5)));
+		assertTrue(RulesLoader.newer(doc(2, 5), doc(1, 5)));
+		assertFalse(RulesLoader.newer(doc(2, 5), doc(2, 5)));
+		assertFalse(RulesLoader.newer(doc(1, 5), doc(2, 5)));
+		assertTrue(RulesLoader.newer(doc(1, 1), null));
+	}
+
+	@Test
+	void pickNewestPrefersV2OnARevisionTie() {
+		RulesDocument remoteV1 = doc(1, 5);
+		RulesDocument bundledV2 = doc(2, 5);
+		RulesDocument picked = RulesLoader.pickNewest(List.of(candidate(RulesLoader.SOURCE_REMOTE, remoteV1),
+				candidate(RulesLoader.SOURCE_BUNDLED, bundledV2))).orElseThrow();
+		assertSame(bundledV2, picked);
+		assertEquals("bundled", picked.source());
+	}
+
+	@Test
+	void pickNewestStillTakesTheHighestRevision() {
+		RulesDocument remoteV1 = doc(1, 6);
+		RulesDocument picked = RulesLoader.pickNewest(List.of(candidate(RulesLoader.SOURCE_BUNDLED, doc(2, 5)),
+				candidate(RulesLoader.SOURCE_REMOTE, remoteV1))).orElseThrow();
+		assertSame(remoteV1, picked);
 	}
 
 	@Test
@@ -111,7 +171,7 @@ class RulesLoaderTest {
 	@Test
 	void bundledRulesAreComplete() {
 		RulesDocument doc = RulesLoader.loadBundled();
-		assertEquals(1, doc.schemaVersion);
+		assertEquals(2, doc.schemaVersion);
 		assertTrue(doc.revision >= 1);
 		assertEquals("bundled", doc.source());
 		assertNotNull(doc.generatedAt);
@@ -128,7 +188,7 @@ class RulesLoaderTest {
 			assertNotNull(RulesDocument.impactOf(mod.impact, null), mod.slug);
 		}
 		for (RulesDocument.SettingRule setting : doc.settings) {
-			assertTrue(setting.key.startsWith("vanilla.") || setting.key.startsWith("sodium."), setting.key);
+			assertTrue(SettingKeys.changeable(setting.key), setting.key);
 			assertTrue(setting.isValueEntry() ^ setting.isClampEntry(), setting.key);
 			assertNotNull(setting.reason, setting.key);
 		}
@@ -136,16 +196,6 @@ class RulesLoaderTest {
 			assertTrue(List.of("info", "warning", "critical").contains(advice.kind), advice.id);
 			assertNotNull(advice.title, advice.id);
 			assertNotNull(advice.text, advice.id);
-		}
-	}
-
-	@Test
-	void bundledCopiesMatchRepositoryRules() throws IOException {
-		Path repoRules = Path.of("rules", "rules-v1.json");
-		if (Files.exists(repoRules)) {
-			String repo = Files.readString(repoRules);
-			String bundled = new String(RulesLoader.class.getResourceAsStream(RulesLoader.BUNDLED_RESOURCE).readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-			assertEquals(repo.replace("\r\n", "\n"), bundled.replace("\r\n", "\n"));
 		}
 	}
 }

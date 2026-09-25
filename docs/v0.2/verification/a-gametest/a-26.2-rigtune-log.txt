@@ -1,0 +1,46 @@
+[15:38:53] [RigTune worker/INFO] (RigTune) Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Technologies Inc., renderer=AMD Radeon RX 7800 XT, driverVersion=3.3.0 Core Profile Context 26.8.1.260810, backend=OPENGL, vramMb=16368], totalRamMb=31849, maxHeapMb=7964, display=DisplayInfo[width=2560, height=1440, refreshRate=180, fullscreen=false], hasBattery=false, onBattery=false, osName=Windows 11 10.0, mcVersion=26.2, flags=[sodium-workaround:AMD_GAME_OPTIMIZATION_BROKEN]]
+[15:38:54] [RigTune rules/WARN] (RigTune) Remote rules request returned HTTP 404
+[15:39:13] [Render thread/INFO] (RigTune) Benchmark started: TUNE in CURRENT, target 170.0 FPS (uncapped), start Knobs[renderDistance=6, simulationDistance=7, dhRendering=false, shaders=false]
+[15:39:13] [Render thread/INFO] (RigTune) Benchmark cancelled: chosen Knobs[renderDistance=6, simulationDistance=7, dhRendering=false, shaders=false], target 170.0 FPS met false, result null, deadline hit false
+[15:39:13] [Render thread/INFO] (RigTune) Benchmark started: TUNE in CURRENT, target 170.0 FPS (uncapped), start Knobs[renderDistance=6, simulationDistance=7, dhRendering=false, shaders=false]
+[15:39:18] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=6, simulationDistance=7, dhRendering=false, shaders=false]: 10172 frames, avg 3282 FPS, 1% low 523 FPS (frame limit 260, NONE)
+[15:39:23] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=8, simulationDistance=7, dhRendering=false, shaders=false]: 10174 frames, avg 3335 FPS, 1% low 565 FPS (frame limit 260, NONE)
+[15:39:26] [Render thread/INFO] (RigTune) Benchmark SIMULATION_DISTANCE Knobs[renderDistance=8, simulationDistance=7, dhRendering=false, shaders=false]: 5262 frames, avg 3395 FPS, 1% low 564 FPS (frame limit 260, NONE)
+[15:39:31] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=8, simulationDistance=7, dhRendering=false, shaders=false]: 10224 frames, avg 3408 FPS, 1% low 571 FPS (frame limit 260, NONE)
+[15:39:36] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=8, simulationDistance=7, dhRendering=false, shaders=false]: 9389 frames, avg 3078 FPS, 1% low 541 FPS (frame limit 260, NONE)
+[15:39:36] [Render thread/INFO] (RigTune) Benchmark finished: chosen Knobs[renderDistance=8, simulationDistance=7, dhRendering=false, shaders=false], target 170.0 FPS met true, result Aggregate[avgFps=3243.0572523796527, onePercentLowFps=556.0131204151871, p99FrameMs=1.61165, repeats=2, cv=0.03831392360962339], deadline hit false
+[15:39:36] [Test thread/WARN] (RigTune) RigTune's apply helper from the last session is still running; waiting up to 5 s
+[15:39:41] [Test thread/WARN] (RigTune) RigTune's apply helper is still running; its changes take effect after the next restart
+[15:40:17] [Render thread/INFO] (RigTune) Benchmark world: ready at (0.5, 127.0, 192.5)
+[15:40:17] [Render thread/INFO] (RigTune) Benchmark started: MEASURE in BENCHMARK_WORLD, target 170.0 FPS (uncapped), start Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]
+[15:40:20] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 5866 frames, avg 2859 FPS, 1% low 432 FPS (frame limit 260, NONE)
+[15:40:23] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 5966 frames, avg 2910 FPS, 1% low 542 FPS (frame limit 260, NONE)
+[15:40:23] [Render thread/INFO] (RigTune) Benchmark finished: chosen Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false], target 170.0 FPS met true, result Aggregate[avgFps=2884.8394770306163, onePercentLowFps=486.8831975425269, p99FrameMs=1.68765, repeats=2, cv=0.15941553968490724], deadline hit false
+[15:40:26] [Render thread/INFO] (RigTune) Benchmark world: ready at (0.5, 127.0, 192.5)
+[15:40:26] [Render thread/INFO] (RigTune) Benchmark started: MEASURE in BENCHMARK_WORLD, target 170.0 FPS (uncapped), start Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]
+[15:40:29] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 41 frames, avg 20 FPS, 1% low 19 FPS (frame limit 260, NONE)
+[15:40:32] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 42 frames, avg 20 FPS, 1% low 19 FPS (frame limit 260, NONE)
+[15:40:32] [Render thread/INFO] (RigTune) Benchmark finished: chosen Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false], target 170.0 FPS met false, result Aggregate[avgFps=20.004515788451183, onePercentLowFps=19.400976476066532, p99FrameMs=51.5447, repeats=2, cv=0.005918084020352717], deadline hit false
+[15:40:34] [Render thread/INFO] (RigTune) Benchmark world: ready at (0.5, 127.0, 192.5)
+[15:40:34] [Render thread/INFO] (RigTune) Benchmark started: TUNE in BENCHMARK_WORLD, target 170.0 FPS (uncapped), start Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]
+[15:40:34] [Render thread/INFO] (RigTune) Benchmark cancelled: chosen Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false], target 170.0 FPS met false, result null, deadline hit false
+[15:40:37] [Render thread/INFO] (RigTune) Benchmark started: TUNE in CURRENT, target 170.0 FPS (uncapped), start Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]
+[15:40:40] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 2892 frames, avg 1414 FPS, 1% low 35 FPS (frame limit 260, NONE)
+[15:40:43] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=4, simulationDistance=12, dhRendering=false, shaders=false]: 2665 frames, avg 1332 FPS, 1% low 35 FPS (frame limit 260, NONE)
+[15:40:45] [Render thread/INFO] (RigTune) Benchmark SIMULATION_DISTANCE Knobs[renderDistance=4, simulationDistance=12, dhRendering=false, shaders=false]: 1576 frames, avg 1501 FPS, 1% low 36 FPS (frame limit 260, NONE)
+[15:40:47] [Render thread/INFO] (RigTune) Benchmark SIMULATION_DISTANCE Knobs[renderDistance=4, simulationDistance=10, dhRendering=false, shaders=false]: 1575 frames, avg 1500 FPS, 1% low 36 FPS (frame limit 260, NONE)
+[15:40:49] [Render thread/INFO] (RigTune) Benchmark SIMULATION_DISTANCE Knobs[renderDistance=4, simulationDistance=8, dhRendering=false, shaders=false]: 1424 frames, avg 1424 FPS, 1% low 36 FPS (frame limit 260, NONE)
+[15:40:52] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=4, simulationDistance=12, dhRendering=false, shaders=false]: 2952 frames, avg 1440 FPS, 1% low 36 FPS (frame limit 260, NONE)
+[15:40:55] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=4, simulationDistance=12, dhRendering=false, shaders=false]: 3089 frames, avg 1507 FPS, 1% low 36 FPS (frame limit 260, NONE)
+[15:40:55] [Render thread/INFO] (RigTune) Benchmark finished: chosen Knobs[renderDistance=4, simulationDistance=12, dhRendering=false, shaders=false], target 170.0 FPS met false, result Aggregate[avgFps=1473.2091531927908, onePercentLowFps=35.925037813458914, p99FrameMs=27.30905, repeats=2, cv=0.003973109714608772], deadline hit false
+[15:40:56] [Test thread/INFO] (RigTune) Benchmark game test: benchmarks.json has 4 runs
+[15:40:59] [Test thread/INFO] (RigTune) UiGameTest: copied report, 1467 characters (CRLF from the clipboard: false):
+[15:41:02] [Test thread/INFO] (RigTune) UiGameTest: networkEnabled=false saved to settings.json
+[15:41:05] [RigTune rules/WARN] (RigTune) Remote rules request returned HTTP 404
+[15:41:05] [RigTune rules/WARN] (RigTune) Remote rules request returned HTTP 404
+[15:41:05] [RigTune worker/WARN] (RigTune) Modrinth lookups failed; using offline data: io.github.chaotix345.rigtune.core.modrinth.ModrinthException: Modrinth is off in RigTune's settings
+[15:41:05] [RigTune worker/WARN] (RigTune) Modrinth lookups failed; using offline data: io.github.chaotix345.rigtune.core.modrinth.ModrinthException: Modrinth is off in RigTune's settings
+[15:41:05] [Test thread/INFO] (RigTune) UiGameTest: network on, Modrinth off saved
+[15:41:07] [RigTune rules/WARN] (RigTune) Remote rules request returned HTTP 404
+[15:41:10] [Test thread/INFO] (RigTune) UiGameTest: Modrinth on, startup toast off and the benchmark world saved
+[15:41:10] [RigTune rules/WARN] (RigTune) Remote rules request returned HTTP 404

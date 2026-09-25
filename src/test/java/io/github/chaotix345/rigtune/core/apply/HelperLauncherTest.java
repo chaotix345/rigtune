@@ -2,6 +2,9 @@ package io.github.chaotix345.rigtune.core.apply;
 
 import com.google.gson.Gson;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
+import io.github.chaotix345.rigtune.core.history.Journal;
+import io.github.chaotix345.rigtune.core.history.JournalChange;
+import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -9,6 +12,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -82,6 +86,27 @@ class HelperLauncherTest {
 		assertEquals("ours, updated", Files.readString(HelperLauncher.helperClasspath(helperDir, List.of(ours, gson)).get(0)));
 	}
 
+	// AC3.3: 0.1.0 left its own helper copies in config/rigtune/helper/; 0.2 replaces them.
+	@Test
+	void theV010HelperCopiesAreReplaced(@TempDir Path dir) throws Exception {
+		Path helperDir = Files.createDirectories(HelperLauncher.helperDir(dir.resolve("config")));
+		for (String name : List.of("0-rigtune-0.1.0.jar", "1-gson-2.13.2.jar")) {
+			try (var in = HelperLauncherTest.class.getResourceAsStream("/v010/helper/" + name)) {
+				Files.copy(in, helperDir.resolve(name));
+			}
+		}
+		Path ours = Files.writeString(dir.resolve("rigtune-0.2.0+mc26.2.jar"), "0.2");
+		Path gson = HelperLauncher.codeSourceOf(Gson.class);
+
+		List<Path> classpath = HelperLauncher.helperClasspath(helperDir, List.of(ours, gson));
+
+		assertEquals("0.2", Files.readString(classpath.get(0)));
+		assertEquals(-1, Files.mismatch(gson, classpath.get(1)));
+		try (Stream<Path> files = Files.list(helperDir)) {
+			assertEquals(List.of("0-rigtune-0.2.0+mc26.2.jar", "1-" + gson.getFileName()), files.map(p -> p.getFileName().toString()).sorted().toList());
+		}
+	}
+
 	@Test
 	void copyInUseByARunningHelperGetsAFreshName(@TempDir Path dir) throws Exception {
 		Path ours = Files.writeString(dir.resolve("rigtune.jar"), "v1");
@@ -96,6 +121,7 @@ class HelperLauncherTest {
 		}
 	}
 
+	// The classes plus a fabric.mod.json with RigTune's mod id, as the real jar has (the helper checks every enabled jar's id).
 	private static Path jarOf(Path classesDir, Path jar) throws IOException {
 		try (OutputStream out = Files.newOutputStream(jar); ZipOutputStream zip = new ZipOutputStream(out);
 				Stream<Path> files = Files.walk(classesDir)) {
@@ -104,6 +130,9 @@ class HelperLauncherTest {
 				Files.copy(file, zip);
 				zip.closeEntry();
 			}
+			zip.putNextEntry(new ZipEntry("fabric.mod.json"));
+			zip.write("{\"schemaVersion\":1,\"id\":\"rigtune\",\"version\":\"1\"}".getBytes(StandardCharsets.UTF_8));
+			zip.closeEntry();
 		}
 		return jar;
 	}
@@ -156,6 +185,55 @@ class HelperLauncherTest {
 		}
 	}
 
+	// Review M5: the journal update runs in the helper, whose classpath is our jar and Gson only (no logger, no Fabric).
+	// A plan with every op type; each journal change must end up with the status its op's result maps to.
+	@Test
+	void helperWithOnlyRigTuneAndGsonUpdatesTheJournal(@TempDir Path dir) throws Exception {
+		Path mods = Files.createDirectories(dir.resolve("mods"));
+		Path config = Files.createDirectories(dir.resolve("config"));
+		Path ours = jarOf(HelperLauncher.codeSourceOf(ApplyHelper.class), dir.resolve("rigtune.jar"));
+		Files.writeString(mods.resolve("indium.jar"), "indium");
+		Path lithium = TestJars.modJar(mods.resolve("lithium.jar" + PendingActions.PENDING_SUFFIX), "lithium");
+		TestJars.modJar(mods.resolve("sodium-0.7.2.jar"), "sodium");
+		Path duplicate = TestJars.modJar(mods.resolve("sodium-0.7.1.jar" + PendingActions.PENDING_SUFFIX), "sodium");
+		Path sodium = Files.writeString(config.resolve("sodium-options.json"), "{\"performance\":{\"chunk_builder_threads\":0}}");
+		Path dh = Files.writeString(config.resolve("DistantHorizons.toml"), "[client]\n\tlodDistance = 64\n");
+		Path iris = Files.writeString(config.resolve("iris.properties"), "maxShadowRenderDistance=32\n");
+		List<Op> ops = List.of(
+				Op.disableFile(mods.resolve("indium.jar")),
+				Op.enableFile(lithium, mods.resolve("lithium.jar")).withModId("lithium"),
+				Op.enableFile(duplicate, mods.resolve("sodium-0.7.1.jar")).withModId("sodium"),
+				Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4")),
+				Op.patchToml(dh, Map.of("client.lodDistance", "96")),
+				Op.patchProperties(iris, Map.of("maxShadowRenderDistance", "16")));
+		Path pending = PendingActions.defaultPath(config);
+		PendingActions.create(1, mods, config, ops).save(pending);
+		List<JournalChange> staged = ops.stream()
+				.map(op -> JournalChange.setting("key-" + op.type(), "0", "1", JournalChange.STAGED, op.id()))
+				.toList();
+		Journal journal = new Journal(config, "0.2.0", "26.2", (message, error) -> {
+			throw new AssertionError(message, error);
+		});
+		journal.record("e1", JournalEntry.APPLY, staged);
+
+		Process helper = HelperLauncher.launch(config, pending, List.of(ours, HelperLauncher.codeSourceOf(Gson.class)), ApplyLockTest.deadPid());
+
+		String output = awaitHelper(helper, HelperLauncher.helperLog(config));
+		assertFalse(output.contains("NoClassDefFoundError") || output.contains("history.json"), output);
+		ApplyResult result = ApplyResult.load(ApplyResult.defaultPath(config));
+		assertEquals(ApplyResult.Status.OK, result.results().getFirst().status(), output);
+		assertEquals(ApplyResult.Status.ABANDONED, result.results().get(2).status(), output);
+		List<JournalChange> changes = journal.entries().getFirst().changes();
+		for (int i = 0; i < ops.size(); i++) {
+			String expected = switch (result.results().get(i).status()) {
+				case OK, SKIPPED_ALREADY_DONE -> JournalChange.APPLIED;
+				case ABANDONED -> JournalChange.ABANDONED;
+				case FAILED -> JournalChange.STAGED;
+			};
+			assertEquals(expected, changes.get(i).status(), ops.get(i).type() + ": " + output);
+		}
+	}
+
 	// The helper has only RigTune and Gson on its classpath (no logger), so the duplicate check (review 2, N1) must read
 	// mod ids, including from a broken jar, without logging.
 	@Test
@@ -205,7 +283,7 @@ class HelperLauncherTest {
 	void helperRunsInChildJvmAfterGameExits(@TempDir Path dir) throws Exception {
 		Path mods = Files.createDirectories(dir.resolve("mods"));
 		Path config = Files.createDirectories(dir.resolve("config"));
-		Files.writeString(mods.resolve("new.jar" + PendingActions.PENDING_SUFFIX), "new");
+		TestJars.modJar(mods.resolve("new.jar" + PendingActions.PENDING_SUFFIX), "new");
 		Files.writeString(mods.resolve("old.jar"), "old");
 		Files.writeString(mods.resolve("old.jar.disabled"), "older");
 		Path sodium = config.resolve("sodium-options.json");
@@ -243,7 +321,7 @@ class HelperLauncherTest {
 		assertTrue(exited, output);
 		assertEquals(0, helper.exitValue(), output);
 		assertTrue(output.contains("not found; proceeding") || output.contains("Waiting for game process"), output);
-		assertEquals("new", Files.readString(mods.resolve("new.jar")));
+		assertEquals("new", ModJars.readModId(mods.resolve("new.jar")));
 		assertEquals("old", Files.readString(mods.resolve("old.jar.disabled.1")));
 		assertEquals("older", Files.readString(mods.resolve("old.jar.disabled")));
 		assertFalse(Files.exists(mods.resolve("old.jar")));
