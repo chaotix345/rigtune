@@ -5,6 +5,7 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
+import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.modrinth.DependencyResolver;
 import io.github.chaotix345.rigtune.core.modrinth.DownloadPlanner;
 import io.github.chaotix345.rigtune.core.modrinth.DryRunPlanner;
@@ -39,7 +40,7 @@ final class PreviewDownloads {
 		}
 		for (Recommendation r : recs) {
 			if (!in.lookups() && r.action() instanceof Action.AddMod) {
-				out.downloads.add(new ApplyPreview.Download(r.id(), r.title(), null, null, false));
+				out.downloads.add(new ApplyPreview.Download(r.id(), r.title(), null, null, false, r.titleText()));
 			}
 		}
 		return in.lookups();
@@ -71,33 +72,38 @@ final class PreviewDownloads {
 				case ENABLE_FILE -> {
 					Path target = Path.of(op.to());
 					String name = target.getFileName().toString();
-					out.downloads.add(new ApplyPreview.Download(r.id(), r.title(), name, target, !name.equals(ownFile(r, client))));
+					out.downloads.add(new ApplyPreview.Download(r.id(), r.title(), name, target, !name.equals(ownFile(r, client)), r.titleText()));
 					withFiles.add(r.id());
 				}
 				case DISABLE_FILE -> {
 					Path file = Path.of(op.path());
-					out.disables.add(new ApplyPreview.Disable(r.id(), r.title(), file, ApplyExecutor.disabledTarget(file)));
+					out.disables.add(new ApplyPreview.Disable(r.id(), r.title(), file, ApplyExecutor.disabledTarget(file), r.titleText()));
 				}
 				default -> {
 				}
 			}
 		}
-		// The planner reports one error per refused recommendation, in its order.
+		// The planner reports one error per refused recommendation, in its order, and each as a Text (errorTexts).
 		List<String> errors = result.errors();
 		int next = 0;
 		for (Recommendation r : ordered) {
 			if (!result.ids().contains(r.id())) {
-				out.skip(r, ApplyPreview.Reason.DOWNLOAD_FAILED, next < errors.size() ? reason(r, errors.get(next++)) : null);
+				int at = next++;
+				out.skipText(r, ApplyPreview.Reason.DOWNLOAD_FAILED, at < errors.size() ? reason(r, errors.get(at), result.errorTexts().get(at)) : null);
 			} else if (!withFiles.contains(r.id())) {
 				out.skip(r, ApplyPreview.Reason.NO_NEW_FILES, null);
 			}
 		}
 	}
 
-	// The planner reports "<title>: <reason>".
-	private static String reason(Recommendation r, String error) {
+	// The planner reports "<title>: <reason>" (rigtune.download.error with the reason as its second argument).
+	private static Text reason(Recommendation r, String error, Text shown) {
 		String prefix = r.title() + ": ";
-		return error.startsWith(prefix) ? error.substring(prefix.length()) : error;
+		if (shown instanceof Text.Translatable t && t.key().equals("rigtune.download.error") && t.args().size() == 2 && t.args().get(1) instanceof Text cause
+				&& error.equals(prefix + cause.english())) {
+			return cause;
+		}
+		return Text.literal(error.startsWith(prefix) ? error.substring(prefix.length()) : error);
 	}
 
 	private static @Nullable String ownFile(Recommendation r, LookupOnlyClient client) {

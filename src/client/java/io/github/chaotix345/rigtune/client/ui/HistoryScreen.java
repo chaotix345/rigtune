@@ -317,7 +317,7 @@ public class HistoryScreen extends Screen {
 		return value == null ? Component.translatable("rigtune.history.change.none") : Component.literal(value);
 	}
 
-	// "Last attempt failed: <reason> (attempt n of 3)" for a staged change, "Not applied: <reason>" for an abandoned one.
+	// "Last attempt failed: <reason> (try n of 3 at restart)" for a staged change, "Not applied: <reason>" for an abandoned one.
 	public static @Nullable Component failureText(HistoryModel.Change change) {
 		ApplyFailures.Failure f = change.failure();
 		if (f == null) {

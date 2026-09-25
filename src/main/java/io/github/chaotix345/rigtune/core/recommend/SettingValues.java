@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.core.recommend;
 import com.google.gson.JsonElement;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
 import io.github.chaotix345.rigtune.core.model.SettingKeys;
+import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument.SettingLabel;
 
 import java.math.BigDecimal;
@@ -103,8 +104,8 @@ public final class SettingValues {
 	}
 
 	// "<name>: <current> → <target>", with the rules' settingLabels where they exist and the caption from the key otherwise.
-	static String describe(SettingLabel label, String key, String current, String target) {
-		return name(label, key) + ": " + valueLabel(label, current) + " → " + valueLabel(label, target);
+	static Text describe(SettingLabel label, String key, String current, String target) {
+		return Text.of("rigtune.rec.setting.title", "%s: %s → %s", name(label, key), valueLabel(label, current), valueLabel(label, target));
 	}
 
 	// The label's name (after the mod's name for a mod's key), else the caption from the key.

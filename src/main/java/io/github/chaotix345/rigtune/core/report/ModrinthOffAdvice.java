@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.core.report;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.Text;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,9 +28,11 @@ public final class ModrinthOffAdvice {
 		boolean changed = false;
 		List<Recommendation> out = new ArrayList<>(report.recommendations().size());
 		for (Recommendation r : report.recommendations()) {
-			String note = switch (r.action()) {
-				case Action.AddMod ignored -> networkOff ? NETWORK_ADD_NOTE : ADD_NOTE;
-				case Action.UpdateMod ignored -> networkOff ? NETWORK_UPDATE_NOTE : UPDATE_NOTE;
+			Text note = switch (r.action()) {
+				case Action.AddMod ignored -> networkOff ? Text.of("rigtune.rec.network_off.install", NETWORK_ADD_NOTE)
+						: Text.of("rigtune.rec.modrinth_off.install", ADD_NOTE);
+				case Action.UpdateMod ignored -> networkOff ? Text.of("rigtune.rec.network_off.update", NETWORK_UPDATE_NOTE)
+						: Text.of("rigtune.rec.modrinth_off.update", UPDATE_NOTE);
 				default -> null;
 			};
 			if (note == null) {
@@ -37,8 +40,8 @@ public final class ModrinthOffAdvice {
 				continue;
 			}
 			changed = true;
-			String reason = r.reason() == null || r.reason().isBlank() ? note : r.reason() + " " + note;
-			out.add(new Recommendation(r.id(), r.category(), r.impact(), r.title(), reason, new Action.None(), false));
+			Text reason = Text.sentences(r.reasonText(), note);
+			out.add(new Recommendation(r.id(), r.category(), r.impact(), r.title(), reason.english(), new Action.None(), false, r.titleText(), reason));
 		}
 		if (!changed) {
 			return report;

@@ -1,5 +1,8 @@
 package io.github.chaotix345.rigtune.core.modrinth;
 
+import io.github.chaotix345.rigtune.core.model.Text;
+import io.github.chaotix345.rigtune.core.model.TextException;
+
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayDeque;
@@ -17,6 +20,8 @@ import java.util.Set;
 public final class DependencyResolver {
 	public static final int DEFAULT_MAX_DEPTH = 5;
 	static final String ANOTHER_MOD = "another mod";
+	// The refusals are shown in the UI (docs/v0.3/SPEC.md item 9): rigtune.download.* keys, project names as arguments.
+	private static final Text ANOTHER = Text.of("rigtune.download.another_mod", ANOTHER_MOD);
 
 	// updatesNeeded: the installed projects whose update in this batch the resolution relies on, because something in it
 	// is incompatible with the version installed now (plan review A-H1: the planner joins those updates' groups).
@@ -97,7 +102,7 @@ public final class DependencyResolver {
 			}
 			Optional<ModrinthVersion> found = client.latestVersion(next.idOrSlug(), loader, gameVersion);
 			if (found.isEmpty()) {
-				throw new IOException("No " + loader + " version of " + next.idOrSlug() + " for Minecraft " + gameVersion);
+				throw new TextException(Text.of("rigtune.download.no_version", "No %s version of %s for Minecraft %s", loader, next.idOrSlug(), gameVersion));
 			}
 			ModrinthVersion version = found.get();
 			boolean fresh = !seen.contains(version.projectId());
@@ -176,7 +181,8 @@ public final class DependencyResolver {
 			if (mine.projectId() != null && updated.contains(mine.projectId())) {
 				needed.add(mine.projectId());
 			} else {
-				throw new IOException("Modrinth marks " + name(mine.projectId()) + ", which is installed, as incompatible with " + name(version.projectId()));
+				throw new TextException(Text.of("rigtune.download.incompatible_installed", "Modrinth marks %s, which is installed, as incompatible with %s",
+						name(mine.projectId()), name(version.projectId())));
 			}
 		}
 	}
@@ -197,17 +203,19 @@ public final class DependencyResolver {
 		return dep.versionId() != null ? dep.versionId().equals(version.id()) : dep.projectId() != null && dep.projectId().equals(version.projectId());
 	}
 
-	private IOException installedIncompatible(ModrinthVersion version, String installedName) {
-		return new IOException("Modrinth marks " + name(version.projectId()) + " as incompatible with " + installedName + ", which is installed");
+	private IOException installedIncompatible(ModrinthVersion version, Object installedName) {
+		return new TextException(Text.of("rigtune.download.incompatible", "Modrinth marks %s as incompatible with %s, which is installed",
+				name(version.projectId()), installedName));
 	}
 
 	private IOException bothInstalled(String a, String b) {
-		return new IOException("Modrinth marks " + name(a) + " and " + name(b) + " as incompatible, and both would be installed");
+		return new TextException(Text.of("rigtune.download.incompatible_both", "Modrinth marks %s and %s as incompatible, and both would be installed",
+				name(a), name(b)));
 	}
 
 	// The project a version-only dependency points at, from local data only (SPEC 3c, plan review A-M2: no new Modrinth
 	// call): the installed versions, then what goes in together. Never the version id.
-	private String versionName(String versionId, List<ModrinthVersion> together) {
+	private Object versionName(String versionId, List<ModrinthVersion> together) {
 		String project = null;
 		ModrinthVersion mine = installed.get(versionId);
 		if (mine != null) {
@@ -218,24 +226,30 @@ public final class DependencyResolver {
 				project = other.projectId();
 			}
 		}
-		return project == null ? ANOTHER_MOD : title(project, ANOTHER_MOD);
+		String title = project == null ? null : title(project);
+		return title != null ? title : ANOTHER;
 	}
 
 	// The project's title (or slug) for a message; its id when Modrinth can't say.
-	private String name(String projectId) {
-		return projectId == null ? ANOTHER_MOD : title(projectId, projectId);
+	private Object name(String projectId) {
+		if (projectId == null) {
+			return ANOTHER;
+		}
+		String title = title(projectId);
+		return title != null ? title : projectId;
 	}
 
-	private String title(String projectId, String fallback) {
+	// Null when Modrinth can't say.
+	private String title(String projectId) {
 		try {
 			for (ModrinthProject project : client.projects(List.of(projectId))) {
 				if (projectId.equals(project.id())) {
-					return project.title() != null ? project.title() : project.slug() != null ? project.slug() : fallback;
+					return project.title() != null ? project.title() : project.slug();
 				}
 			}
 		} catch (IOException | RuntimeException e) {
 			// The fallback will do.
 		}
-		return fallback;
+		return null;
 	}
 }

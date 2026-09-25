@@ -43,7 +43,7 @@ public final class BenchmarkRun {
 				guard.set(step.knobs());
 			} catch (Exception e) {
 				if (BenchmarkSession.isReport(step.kind())) {
-					session.skipFailed(step, "failed: " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
+					session.skipFailed(step, SessionResult.NOT_MEASURED_FAILED + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
 					continue;
 				}
 				fail(e);

@@ -16,6 +16,8 @@ public record SessionResult(BenchmarkRequest.Mode mode, Knobs original, Knobs ch
 		PlannerResult renderDistance, List<Measured> measurements, BenchmarkMath.@Nullable Aggregate result,
 		@Nullable Cost dhCost, @Nullable Cost shaderCost, Map<String, String> notMeasured, boolean deadlineHit) {
 	public static final String NOT_MEASURED_DEADLINE = "deadline";
+	// Followed by the failure's message (benchmarks.json keeps it as it is).
+	public static final String NOT_MEASURED_FAILED = "failed: ";
 
 	public record Measured(Step step, FrameStats stats) {
 	}

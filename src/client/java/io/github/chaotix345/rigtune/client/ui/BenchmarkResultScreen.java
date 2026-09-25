@@ -283,10 +283,13 @@ public class BenchmarkResultScreen extends Screen {
 		}
 	}
 
+	// The failure's own message is shown as it is (an exception's detail, kept in benchmarks.json).
 	private static Component reason(String notMeasured) {
-		return SessionResult.NOT_MEASURED_DEADLINE.equals(notMeasured)
-				? Component.translatable("rigtune.benchmark.not_measured.deadline")
-				: Component.literal(notMeasured.startsWith("failed: ") ? notMeasured.substring("failed: ".length()) : notMeasured);
+		if (SessionResult.NOT_MEASURED_DEADLINE.equals(notMeasured)) {
+			return Component.translatable("rigtune.benchmark.not_measured.deadline");
+		}
+		String failed = SessionResult.NOT_MEASURED_FAILED;
+		return Component.literal(notMeasured.startsWith(failed) ? notMeasured.substring(failed.length()) : notMeasured);
 	}
 
 	private static String date(BenchmarkRecord run) {

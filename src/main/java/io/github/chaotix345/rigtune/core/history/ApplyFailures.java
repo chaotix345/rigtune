@@ -60,12 +60,13 @@ public final class ApplyFailures {
 	}
 
 	// One line for latest.log (English, like the rest of the log). finishedAt: when that helper run finished (the first
-	// 0.3 start may log a run 0.1.x or 0.2.x left long ago).
+	// 0.3 start may log a run 0.1.x or 0.2.x left long ago). "restart attempt n of 3" counts helper runs, so it isn't
+	// mistaken for the helper's own retries inside a run ("Gave up after 10 attempt(s)").
 	public static String warnLine(Failure f, String finishedAt) {
 		String what = f.type() + " " + (f.modId() != null ? f.modId() + " (" + f.file() + ")" : f.file());
 		return f.abandoned()
 				? "RigTune's helper dropped a change (run finished " + finishedAt + "): " + what + ": " + f.reason()
-				: "RigTune's helper couldn't apply a change (run finished " + finishedAt + ", attempt " + f.attempt() + " of " + MAX_ATTEMPTS
+				: "RigTune's helper couldn't apply a change (run finished " + finishedAt + ", restart attempt " + f.attempt() + " of " + MAX_ATTEMPTS
 						+ "; it's retried at the next exit): " + what + ": " + f.reason();
 	}
 

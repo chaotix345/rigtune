@@ -4,6 +4,8 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.history.UndoPlan.Action;
 import io.github.chaotix345.rigtune.core.history.UndoPlanner.Result;
+import io.github.chaotix345.rigtune.core.TextChecks;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
@@ -78,6 +80,28 @@ class UndoPlannerTest {
 	final FakeState state = new FakeState();
 	final List<JournalEntry> entries = new ArrayList<>();
 	final List<Op> pending = new ArrayList<>();
+	final List<Result> planned = new ArrayList<>();
+
+	private Result checked(Result result) {
+		planned.add(result);
+		return result;
+	}
+
+	// docs/v0.3/SPEC.md item 9 (AC9.3, G-M2): every plan these tests make shows only en_us.json text, with file names, mod
+	// ids, labels and values as arguments; the Strings are the Texts' English (the e2e driver and the game tests read them).
+	@AfterEach
+	void everyItemIsTranslatable() {
+		for (Result result : planned) {
+			for (UndoPlan.Item item : result.plan().items()) {
+				assertEquals(item.description(), item.descriptionText().english(), item.toString());
+				assertEquals(item.reason(), item.reasonText() == null ? null : item.reasonText().english(), item.toString());
+				TextChecks.assertPseudoLocalised(item.descriptionText(), Set.copyOf(item.changeIds()), item.toString());
+				if (item.reasonText() != null) {
+					TextChecks.assertPseudoLocalised(item.reasonText(), Set.of(), item.toString());
+				}
+			}
+		}
+	}
 
 	private void entry(String id, JournalChange... changes) {
 		entries.add(new JournalEntry(id, "2026-09-25T10:00:00Z", JournalEntry.APPLY, "0.2.0", "26.2", null, List.of(changes)));
@@ -100,11 +124,11 @@ class UndoPlannerTest {
 	}
 
 	private Result last() {
-		return UndoPlanner.plan(entries, pending, state, false);
+		return checked(UndoPlanner.plan(entries, pending, state, false));
 	}
 
 	private Result all() {
-		return UndoPlanner.plan(entries, pending, state, true);
+		return checked(UndoPlanner.plan(entries, pending, state, true));
 	}
 
 	private static List<UndoPlan.Item> items(Result result, Action action) {
@@ -436,7 +460,7 @@ class UndoPlannerTest {
 		UndoPlan shown = last().plan();
 		assertEquals(2, items(last(), Action.DISCARD_STAGED).size());
 
-		Result result = UndoPlanner.recheck(shown, entries, pending, state);
+		Result result = checked(UndoPlanner.recheck(shown, entries, pending, state));
 
 		assertEquals(Set.copyOf(group.stream().map(Op::id).toList()), result.script().discardOpIds());
 		assertTrue(items(result, Action.SKIP).isEmpty(), result.plan().toString());
@@ -663,7 +687,7 @@ class UndoPlannerTest {
 		UndoPlan shown = last().plan();
 		state.settings.put("vanilla.renderDistance", "8");
 
-		Result result = UndoPlanner.recheck(shown, entries, pending, state);
+		Result result = checked(UndoPlanner.recheck(shown, entries, pending, state));
 
 		assertEquals(Action.SKIP, only(result, Action.SKIP).action());
 		assertTrue(result.script().immediate().isEmpty());
@@ -678,7 +702,7 @@ class UndoPlannerTest {
 		UndoPlan shown = last().plan();
 		state.settings.put("vanilla.simulationDistance", "6");
 
-		Result result = UndoPlanner.recheck(shown, entries, pending, state);
+		Result result = checked(UndoPlanner.recheck(shown, entries, pending, state));
 
 		assertEquals(Map.of("vanilla.renderDistance", "12"), result.script().immediate());
 	}
@@ -691,7 +715,7 @@ class UndoPlannerTest {
 		UndoPlan shown = last().plan();
 		pending.add(Op.disableFile(MODS.resolve("y.jar")).inGroup(group.getFirst().group()));
 
-		Result result = UndoPlanner.recheck(shown, entries, pending, state);
+		Result result = checked(UndoPlanner.recheck(shown, entries, pending, state));
 
 		assertTrue(result.script().discardOpIds().isEmpty());
 		assertTrue(only(result, Action.SKIP).reason().contains("changed"), only(result, Action.SKIP).reason());
@@ -705,7 +729,7 @@ class UndoPlannerTest {
 		UndoPlan shown = last().plan();
 		List<JournalEntry> later = HistoryUpdates.revert(entries, Set.of(rd.id()));
 
-		Result result = UndoPlanner.recheck(shown, later, pending, state);
+		Result result = checked(UndoPlanner.recheck(shown, later, pending, state));
 
 		assertEquals(List.of(rd.id()), only(result, Action.SKIP).changeIds());
 		assertTrue(result.script().immediate().isEmpty());
@@ -726,7 +750,7 @@ class UndoPlannerTest {
 		counting.jar("indium.jar.disabled", "indium").jar("old-fabric-api.jar.disabled", "fabric-api").jar("lithium.jar", "lithium");
 		entry("e1", disabled("indium", "indium.jar", "indium.jar.disabled", null));
 
-		assertEquals(1, items(UndoPlanner.plan(entries, pending, counting, true), Action.REVERT).size());
+		assertEquals(1, items(checked(UndoPlanner.plan(entries, pending, counting, true)), Action.REVERT).size());
 		assertTrue(!read.contains("old-fabric-api.jar.disabled"), read.toString());
 	}
 
@@ -767,7 +791,7 @@ class UndoPlannerTest {
 		entry("e2", applied("vanilla.renderDistance", "12", "16"));
 		state.settings.put("vanilla.renderDistance", "16");
 
-		Result result = UndoPlanner.plan(entries, pending, labelled, true);
+		Result result = checked(UndoPlanner.plan(entries, pending, labelled, true));
 
 		assertEquals("Render Distance: 16 chunks → 12 chunks", only(result, Action.REVERT).description());
 		assertEquals("Render Distance: 8 chunks → 10 chunks", only(result, Action.SKIP).description());
@@ -783,7 +807,7 @@ class UndoPlannerTest {
 	// --- one entry ("Undo this", docs/v0.3/SPEC.md item 6, AC6.1) and the superseded rule (review B-H1)
 
 	private Result entryOf(String id) {
-		return UndoPlanner.planEntry(entries, pending, state, id);
+		return checked(UndoPlanner.planEntry(entries, pending, state, id));
 	}
 
 	@Test
@@ -999,7 +1023,7 @@ class UndoPlannerTest {
 				JournalChange.file(JournalChange.DISABLE, "a", "a.jar", JournalChange.STAGED, group.get(0).id(), group.get(0).group()),
 				JournalChange.file(JournalChange.ENABLE, "a", "a2.jar", JournalChange.STAGED, group.get(1).id(), group.get(1).group()))));
 
-		Result result = UndoPlanner.recheck(shown, entries, pending, state);
+		Result result = checked(UndoPlanner.recheck(shown, entries, pending, state));
 
 		assertEquals(UndoPlanner.SUPERSEDED, only(result, Action.SKIP).reason());
 		assertTrue(result.script().fileOps().isEmpty());
@@ -1060,7 +1084,7 @@ class UndoPlannerTest {
 		state.settings.put("vanilla.particles", "minimal");
 		UndoPlan shown = last().plan();
 
-		Result result = UndoPlanner.recheck(shown, entries, pending, state);
+		Result result = checked(UndoPlanner.recheck(shown, entries, pending, state));
 
 		assertEquals(Map.of("vanilla.graphicsPreset", "fast", "vanilla.particles", "minimal"), result.script().immediate());
 	}
@@ -1108,7 +1132,7 @@ class UndoPlannerTest {
 		UndoPlan shown = all().plan();
 		assertEquals(2, items(all(), Action.REVERT).size(), shown.toString());
 
-		Result result = UndoPlanner.recheck(shown, entries, pending, state);
+		Result result = checked(UndoPlanner.recheck(shown, entries, pending, state));
 
 		assertEquals(Set.of(disable1.id(), enable1.id()),
 				Set.copyOf(items(result, Action.REVERT).stream().flatMap(i -> i.changeIds().stream()).toList()));
