@@ -24,6 +24,28 @@ import java.util.zip.ZipInputStream;
 // `provides` plus the ids (and provides) of the jars nested in it; depends: the mod ids in its `depends`.
 public record JarInfo(String id, Set<String> provides, Set<String> depends) {
 	private static final int MAX_NESTING = 3;
+	private static final long MAX_NESTED_BYTES = 32L << 20;
+	private static final int MAX_NESTED_JARS = 512;
+
+	// How much of a jar's nesting is read: a nested jar bigger than maxBytes is skipped, and so is every nested jar
+	// after the first maxJars.
+	private static final class Budget {
+		final long maxBytes;
+		int jarsLeft;
+
+		Budget(long maxBytes, int maxJars) {
+			this.maxBytes = maxBytes;
+			this.jarsLeft = maxJars;
+		}
+
+		boolean take(long size) {
+			if (jarsLeft <= 0 || size > maxBytes) {
+				return false;
+			}
+			jarsLeft--;
+			return true;
+		}
+	}
 
 	public JarInfo {
 		provides = provides == null ? Set.of() : Set.copyOf(provides);
@@ -32,6 +54,11 @@ public record JarInfo(String id, Set<String> provides, Set<String> depends) {
 
 	// Null when the file isn't a readable Fabric mod jar.
 	public static JarInfo read(Path jar) {
+		return read(jar, MAX_NESTED_BYTES, MAX_NESTED_JARS);
+	}
+
+	static JarInfo read(Path jar, long maxNestedBytes, int maxNestedJars) {
+		Budget budget = new Budget(maxNestedBytes, maxNestedJars);
 		try (ZipFile zip = new ZipFile(jar.toFile())) {
 			ZipEntry entry = zip.getEntry("fabric.mod.json");
 			if (entry == null) {
@@ -52,9 +79,12 @@ public record JarInfo(String id, Set<String> provides, Set<String> depends) {
 			Set<String> provides = new HashSet<>(strings(root.get("provides")));
 			for (String nested : nestedJars(root)) {
 				ZipEntry nestedEntry = zip.getEntry(nested);
-				if (nestedEntry != null) {
+				if (nestedEntry != null && budget.take(nestedEntry.getSize() < 0 ? 0 : nestedEntry.getSize())) {
 					try (InputStream in = zip.getInputStream(nestedEntry)) {
-						nestedIds(in.readAllBytes(), 1, provides);
+						byte[] bytes = in.readNBytes((int) Math.min(Integer.MAX_VALUE - 8, budget.maxBytes + 1));
+						if (bytes.length <= budget.maxBytes) {
+							nestedIds(bytes, 1, provides, budget);
+						}
 					}
 				}
 			}
@@ -64,12 +94,15 @@ public record JarInfo(String id, Set<String> provides, Set<String> depends) {
 		}
 	}
 
-	private static void nestedIds(byte[] jar, int depth, Set<String> out) throws IOException {
+	private static void nestedIds(byte[] jar, int depth, Set<String> out, Budget budget) throws IOException {
 		Map<String, byte[]> entries = new HashMap<>();
 		try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(jar))) {
 			for (ZipEntry e = zip.getNextEntry(); e != null; e = zip.getNextEntry()) {
 				if (e.getName().equals("fabric.mod.json") || e.getName().endsWith(".jar") && depth < MAX_NESTING) {
-					entries.put(e.getName(), zip.readAllBytes());
+					byte[] bytes = zip.readNBytes((int) Math.min(Integer.MAX_VALUE - 8, budget.maxBytes + 1));
+					if (bytes.length <= budget.maxBytes) {
+						entries.put(e.getName(), bytes);
+					}
 				}
 			}
 		}
@@ -90,7 +123,9 @@ public record JarInfo(String id, Set<String> provides, Set<String> depends) {
 		for (String nested : nestedJars(root)) {
 			byte[] inner = entries.get(nested);
 			if (inner != null) {
-				nestedIds(inner, depth + 1, out);
+				if (budget.take(inner.length)) {
+					nestedIds(inner, depth + 1, out, budget);
+				}
 			}
 		}
 	}

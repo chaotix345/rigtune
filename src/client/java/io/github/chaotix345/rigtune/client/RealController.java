@@ -107,7 +107,10 @@ public final class RealController implements RigTuneController {
 		this.goal = state.goalOrDefault();
 		this.carriedOverOps = pendingOpCount();
 		this.staging = new Staging(configDir, pendingFile, ConfigTargets.all(configDir), ClientJournal.get());
-		this.undoService = new UndoService(staging, ClientJournal.get(), () -> new GameState(minecraft.options, staging.targets(), modsDir),
+		// The Undo screen plans off the render thread; the options are still read on it.
+		this.undoService = new UndoService(staging, ClientJournal.get(),
+				() -> minecraft.isSameThread() ? new GameState(minecraft.options, staging.targets(), modsDir)
+						: minecraft.submit(() -> new GameState(minecraft.options, staging.targets(), modsDir)).join(),
 				values -> {
 					Map<String, Boolean> written = new LinkedHashMap<>();
 					SettingsBridge.applyVanilla(minecraft.options, values).forEach((key, result) -> written.put(key, result.ok()));
@@ -505,11 +508,16 @@ public final class RealController implements RigTuneController {
 
 	@Override
 	public @Nullable UndoPlan undoPlan(boolean all) {
+		// Downloads that finish later add to their apply's entry, so undo waits for them.
+		if (downloading) {
+			return UndoPlan.unavailable(all, "rigtune.undo.busy");
+		}
 		try {
-			return undoService.plan(all);
+			UndoPlan plan = undoService.plan(all);
+			return plan != null ? plan : UndoPlan.unavailable(all, "rigtune.undo.unavailable");
 		} catch (RuntimeException e) {
 			RigTune.LOGGER.error("Could not work out what to undo", e);
-			return null;
+			return UndoPlan.unavailable(all, "rigtune.undo.error");
 		}
 	}
 

@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.client.ui;
 
+import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -10,14 +11,21 @@ import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.util.FormattedCharSequence;
 import org.jspecify.annotations.Nullable;
 
+import java.time.DateTimeException;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 
 // Confirms an undo (docs/v0.2/SPEC.md item 3): lists exactly what will be undone now, after a restart, what staged
 // changes are cancelled, and what is skipped and why. Confirm carries out that plan (re-checked by the controller).
+// The plan is worked out off the render thread (it may read mod jars).
 public class UndoScreen extends Screen {
 	private static final int LINE = 9;
 	private static final int COLOR_LABEL = 0xFFA8A8A8;
@@ -25,6 +33,8 @@ public class UndoScreen extends Screen {
 	private static final int COLOR_NOW = 0xFF7FE07F;
 	private static final int COLOR_RESTART = 0xFFFFD166;
 	private static final int COLOR_DISCARD = 0xFF7EC8FF;
+	private static final int COLOR_FAIL = 0xFFFF7A6B;
+	private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
 	private record Section(String key, int color, Predicate<UndoPlan.Item> matches) {
 	}
@@ -40,6 +50,7 @@ public class UndoScreen extends Screen {
 	private final boolean all;
 	private @Nullable UndoPlan plan;
 	private boolean planned;
+	private boolean loading;
 	private boolean done;
 	private @Nullable Component status;
 	private @Nullable UndoList list;
@@ -52,19 +63,22 @@ public class UndoScreen extends Screen {
 		this.all = all;
 	}
 
+	// Null until the plan has been worked out.
 	public @Nullable UndoPlan plan() {
 		return plan;
-	}
-
-	public @Nullable Component status() {
-		return status;
 	}
 
 	@Override
 	protected void init() {
 		if (!planned) {
 			planned = true;
-			plan = controller.undoPlan(all);
+			loading = true;
+			CompletableFuture.supplyAsync(() -> controller.undoPlan(all), Probes.EXECUTOR).whenComplete((result, error) -> minecraft.execute(() -> {
+				plan = error != null ? UndoPlan.unavailable(all, "rigtune.undo.error")
+						: result != null ? result : UndoPlan.unavailable(all, "rigtune.undo.unavailable");
+				loading = false;
+				rebuildWidgets();
+			}));
 		}
 		int column = Math.min(width - 32, 480);
 		int buttonWidth = Math.min(150, (column - 4) / 2);
@@ -114,8 +128,10 @@ public class UndoScreen extends Screen {
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
-		graphics.centeredText(font, Component.translatable(all ? "rigtune.undo.subtitle.all" : "rigtune.undo.subtitle.last"), width / 2, 20, COLOR_LABEL);
-		Component empty = plan == null ? Component.translatable("rigtune.undo.unavailable")
+		graphics.centeredText(font, clip(subtitle()), width / 2, 20, COLOR_LABEL);
+		Component empty = loading ? Component.translatable("rigtune.undo.loading")
+				: plan == null ? null
+				: plan.problem() != null ? Component.translatable(plan.problem())
 				: plan.items().isEmpty() ? Component.translatable("rigtune.undo.nothing") : null;
 		if (empty != null && list != null) {
 			graphics.centeredText(font, clip(empty), width / 2, list.getY() + list.getHeight() / 2 - 4, COLOR_LABEL);
@@ -123,8 +139,29 @@ public class UndoScreen extends Screen {
 		Component line = status != null ? status
 				: plan != null && !plan.items().isEmpty() && plan.isEmpty() ? Component.translatable("rigtune.undo.nothing_possible") : null;
 		if (line != null) {
-			graphics.centeredText(font, clip(line), width / 2, statusY, status != null ? COLOR_NOW : COLOR_LABEL);
+			graphics.centeredText(font, clip(line), width / 2, statusY, status == null ? COLOR_LABEL : succeeded(status) ? COLOR_NOW : COLOR_FAIL);
 		}
+	}
+
+	private Component subtitle() {
+		if (all) {
+			return Component.translatable("rigtune.undo.subtitle.all");
+		}
+		return plan == null || plan.at() == null ? Component.translatable("rigtune.undo.subtitle.last")
+				: Component.translatable("rigtune.undo.subtitle.last_at", when(plan.at(), ZoneId.systemDefault()));
+	}
+
+	// When an apply was, in local time; the recorded text if it can't be read.
+	static String when(String at, ZoneId zone) {
+		try {
+			return WHEN.withZone(zone).format(Instant.parse(at));
+		} catch (DateTimeException e) {
+			return at;
+		}
+	}
+
+	private static boolean succeeded(Component status) {
+		return status.getContents() instanceof TranslatableContents t && t.getKey().equals("rigtune.undo.status.done");
 	}
 
 	private FormattedCharSequence clip(Component text) {

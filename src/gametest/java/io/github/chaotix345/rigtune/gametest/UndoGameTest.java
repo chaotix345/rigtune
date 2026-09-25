@@ -126,10 +126,12 @@ public class UndoGameTest implements FabricClientGameTest {
 	private UndoPlan openUndo(ClientGameTestContext context, RigTuneController controller, boolean all, String screenshot) {
 		context.runOnClient(mc -> mc.gui.setScreen(new UndoScreen(new TitleScreen(), controller, all)));
 		context.waitForScreen(UndoScreen.class);
+		// The plan is worked out off the render thread.
+		context.waitFor(mc -> mc.gui.screen() instanceof UndoScreen screen && screen.plan() != null, 200);
 		context.waitTicks(3);
 		context.takeScreenshot(screenshot);
 		UndoPlan plan = context.computeOnClient(mc -> ((UndoScreen) mc.gui.screen()).plan());
-		check(plan != null, "undo plan available");
+		check(plan.problem() == null, "undo plan available: " + plan);
 		return plan;
 	}
 

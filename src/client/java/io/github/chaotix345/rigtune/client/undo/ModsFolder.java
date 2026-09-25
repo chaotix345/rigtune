@@ -12,24 +12,58 @@ import net.fabricmc.loader.api.metadata.ModOrigin;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 // The mods folder as the undo planner sees it. Jars the game loaded use Fabric's metadata (their nested mods count as
-// provided by them); any other file (a .disabled jar, one added since launch) is read when asked. Mods that aren't
+// provided by them); any other file (a .disabled jar, one added since launch) is read when asked, and kept until the
+// file changes, so the re-check when an undo is confirmed doesn't read it again on the render thread. Mods that aren't
 // jars in this folder (built-in ones, -Dfabric.addMods) are provided elsewhere.
 public final class ModsFolder implements UndoPlanner.Folder {
+	private static final JarCache JARS = new JarCache(JarInfo::read);
+
 	private final Path dir;
 	private final Set<String> files;
 	private final Map<String, JarInfo> loaded;
 	private final Set<String> elsewhere;
-	private final Map<String, Optional<JarInfo>> read = new HashMap<>();
+
+	// A jar's metadata by path, read again only when its size or modification time changed.
+	static final class JarCache {
+		private record Cached(long size, long modified, JarInfo info) {
+		}
+
+		private final Function<Path, JarInfo> reader;
+		private final Map<Path, Cached> cached = new ConcurrentHashMap<>();
+
+		JarCache(Function<Path, JarInfo> reader) {
+			this.reader = reader;
+		}
+
+		JarInfo get(Path file) {
+			try {
+				BasicFileAttributes attributes = Files.readAttributes(file, BasicFileAttributes.class);
+				long size = attributes.size();
+				long modified = attributes.lastModifiedTime().toMillis();
+				Cached hit = cached.get(file);
+				if (hit != null && hit.size() == size && hit.modified() == modified) {
+					return hit.info();
+				}
+				JarInfo info = reader.apply(file);
+				cached.put(file, new Cached(size, modified, info));
+				return info;
+			} catch (IOException e) {
+				return null;
+			}
+		}
+	}
 
 	ModsFolder(Path dir, Map<String, JarInfo> loaded, Set<String> elsewhere) {
 		this.dir = dir;
@@ -104,8 +138,7 @@ public final class ModsFolder implements UndoPlanner.Folder {
 		if (loaded.containsKey(fileName)) {
 			return loaded.get(fileName);
 		}
-		return read.computeIfAbsent(fileName, n -> files.contains(n) ? Optional.ofNullable(JarInfo.read(dir.resolve(n))) : Optional.empty())
-				.orElse(null);
+		return files.contains(fileName) ? JARS.get(dir.resolve(fileName)) : null;
 	}
 
 	@Override
