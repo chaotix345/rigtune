@@ -8,16 +8,31 @@ import org.jspecify.annotations.Nullable;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Supplier;
 
 // Decides when RealController looks the installed mods up on Modrinth. It's asked after every scan and every rules
 // publish; a lookup is due once the scan, the hardware and the rules are all known, and again only for a new scan or a
 // changed set of rule slugs. So whichever of the scan and the rules arrives last triggers it, exactly once per launch.
+// gameVersion: the version Modrinth is asked about; hardware.mcVersion() (normalized) stays for the rules' conditions.
 final class OnlineLookupGate {
-	record Lookup(List<InstalledMod> mods, List<String> slugs, HardwareProfile hardware) {
+	record Lookup(List<InstalledMod> mods, List<String> slugs, HardwareProfile hardware, String gameVersion) {
 	}
 
+	private final Supplier<@Nullable String> rawGameVersion;
 	private @Nullable List<InstalledMod> lastMods;
 	private @Nullable Set<String> lastSlugs;
+
+	// rawGameVersion: Loader's raw game version (FabricLoader.getRawGameVersion() in the game).
+	OnlineLookupGate(Supplier<@Nullable String> rawGameVersion) {
+		this.rawGameVersion = rawGameVersion;
+	}
+
+	// The Minecraft version to ask Modrinth about: the raw one (26.4-snapshot-1), since a snapshot's normalized version
+	// (26.4-alpha.1) isn't a Modrinth game version; the normalized one only when the raw one is missing (SPEC item 1).
+	String modrinthGameVersion(String normalized) {
+		String raw = rawGameVersion.get();
+		return raw == null || raw.isBlank() ? normalized : raw;
+	}
 
 	synchronized @Nullable Lookup next(@Nullable List<InstalledMod> mods, @Nullable RulesDocument rules, @Nullable HardwareProfile hardware) {
 		if (mods == null || rules == null || hardware == null) {
@@ -31,6 +46,6 @@ final class OnlineLookupGate {
 		}
 		lastMods = mods;
 		lastSlugs = slugSet;
-		return new Lookup(mods, slugs, hardware);
+		return new Lookup(mods, slugs, hardware, modrinthGameVersion(hardware.mcVersion()));
 	}
 }

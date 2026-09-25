@@ -6,6 +6,7 @@ import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.report.ShareReport;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
@@ -70,5 +71,12 @@ public interface RigTuneController {
 	/** The report as Markdown for the clipboard (item 10). */
 	default String shareReport() {
 		return "";
+	}
+
+	// v0.3 (WS-F)
+
+	/** The versions for the "Report a problem" issue title (v0.3 item 10); null while the report is being built. */
+	default ShareReport.@Nullable Versions reportVersions() {
+		return null;
 	}
 }

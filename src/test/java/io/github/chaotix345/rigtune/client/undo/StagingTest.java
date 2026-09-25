@@ -81,7 +81,7 @@ class StagingTest {
 		List<Op> ops = new ArrayList<>(update("sodium-0.7.0.jar", "sodium-0.7.1.jar", "sodium"));
 		ops.add(Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4")));
 
-		assertTrue(staging.stage(ops, "e1"));
+		assertNotNull(staging.stage(ops, "e1"));
 
 		List<Op> staged = PendingActions.load(pending).ops();
 		List<JournalChange> changes = changesOf("e1");
@@ -98,11 +98,11 @@ class StagingTest {
 	@Test
 	void stagingTheSameChangeAgainRecordsNothingNew() throws IOException {
 		List<Op> first = update("x-1.jar", "x-2.jar", "x");
-		assertTrue(staging.stage(first, "e1"));
+		assertNotNull(staging.stage(first, "e1"));
 		List<Op> again = PendingActions.group(Op.disableFile(mods.resolve("x-1.jar")),
 				Op.enableFile(mods.resolve("x-2.jar" + PendingActions.PENDING_SUFFIX), mods.resolve("x-2.jar")).withModId("x"));
 
-		assertTrue(staging.stage(again, "e2"));
+		assertNotNull(staging.stage(again, "e2"));
 
 		assertEquals(List.of("e1"), journal.entries().stream().map(JournalEntry::id).toList());
 		assertEquals(2, PendingActions.load(pending).ops().size());
@@ -110,19 +110,19 @@ class StagingTest {
 
 	@Test
 	void aSecondConfigChangeRecordsTheStagedValueAsBefore() {
-		assertTrue(staging.stage(List.of(Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4"))), "e1"));
-		assertTrue(staging.stage(List.of(Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "6"))), "e2"));
+		assertNotNull(staging.stage(List.of(Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4"))), "e1"));
+		assertNotNull(staging.stage(List.of(Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "6"))), "e2"));
 
 		assertEquals("4", changesOf("e2").getFirst().before());
 	}
 
 	@Test
 	void aNewerUpdateDiscardsTheReplacedEnable() throws IOException {
-		assertTrue(staging.stage(update("sodium-0.7.0.jar", "sodium-0.7.1.jar", "sodium"), "e1"));
+		assertNotNull(staging.stage(update("sodium-0.7.0.jar", "sodium-0.7.1.jar", "sodium"), "e1"));
 		List<Op> newer = PendingActions.group(Op.disableFile(mods.resolve("sodium-0.7.0.jar")),
 				Op.enableFile(pendingJar("sodium-0.7.2.jar", "sodium"), mods.resolve("sodium-0.7.2.jar")).withModId("sodium"));
 
-		assertTrue(staging.stage(newer, "e2"));
+		assertNotNull(staging.stage(newer, "e2"));
 
 		assertEquals(List.of(JournalChange.STAGED, JournalChange.DISCARDED), changesOf("e1").stream().map(JournalChange::status).toList());
 		assertEquals(List.of("sodium-0.7.2.jar"), changesOf("e2").stream().map(JournalChange::file).toList());
@@ -134,9 +134,9 @@ class StagingTest {
 	@Test
 	void onlyDownloadsAreRetiredWhenAnEnableIsReplaced() throws IOException {
 		Path disabled = TestJars.modJar(mods.resolve("x-1.jar.disabled"), "x");
-		assertTrue(staging.stage(List.of(Op.enableFile(disabled, mods.resolve("x-1.jar")).withModId("x")), "u1"));
+		assertNotNull(staging.stage(List.of(Op.enableFile(disabled, mods.resolve("x-1.jar")).withModId("x")), "u1"));
 
-		assertTrue(staging.stage(List.of(Op.enableFile(pendingJar("x-2.jar", "x"), mods.resolve("x-2.jar")).withModId("x")), "e2"));
+		assertNotNull(staging.stage(List.of(Op.enableFile(pendingJar("x-2.jar", "x"), mods.resolve("x-2.jar")).withModId("x")), "e2"));
 
 		assertTrue(Files.exists(disabled));
 		assertFalse(Files.exists(mods.resolve("x-1.jar.disabled" + PendingActions.SUPERSEDED_SUFFIX)));
@@ -145,7 +145,7 @@ class StagingTest {
 	@Test
 	void stagingWhileTheHelperHoldsTheLockChangesNothing() throws Exception {
 		try (HeldLock helper = HeldLock.hold(ApplyLock.defaultPath(config))) {
-			assertFalse(staging.stage(List.of(Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4"))), "e1"));
+			assertNull(staging.stage(List.of(Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4"))), "e1"));
 		}
 		assertFalse(Files.exists(pending));
 		assertFalse(journal.exists());
@@ -153,7 +153,7 @@ class StagingTest {
 
 	@Test
 	void discardMarksTheStagedChangesDiscarded() throws IOException {
-		assertTrue(staging.stage(update("x-1.jar", "x-2.jar", "x"), "e1"));
+		assertNotNull(staging.stage(update("x-1.jar", "x-2.jar", "x"), "e1"));
 
 		List<Op> dropped = staging.discard();
 
@@ -164,7 +164,7 @@ class StagingTest {
 
 	@Test
 	void discardWhileTheHelperHoldsTheLockReturnsNull() throws Exception {
-		assertTrue(staging.stage(update("x-1.jar", "x-2.jar", "x"), "e1"));
+		assertNotNull(staging.stage(update("x-1.jar", "x-2.jar", "x"), "e1"));
 		try (HeldLock helper = HeldLock.hold(ApplyLock.defaultPath(config))) {
 			assertNull(staging.discard());
 		}
@@ -177,7 +177,7 @@ class StagingTest {
 		Op other = Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4"));
 		List<Op> ops = new ArrayList<>(update);
 		ops.add(other);
-		assertTrue(staging.stage(ops, "e1"));
+		assertNotNull(staging.stage(ops, "e1"));
 
 		List<Op> removed;
 		try (ApplyLock lock = staging.lock()) {
@@ -200,9 +200,9 @@ class StagingTest {
 		List<Op> other = update("y-1.jar", "y-2.jar", "y");
 		List<Op> ops = new ArrayList<>(dh);
 		ops.addAll(other);
-		assertTrue(staging.stage(ops, "e1"));
+		assertNotNull(staging.stage(ops, "e1"));
 
-		List<Op> dropped = staging.dropQueuedUpdates(Set.of("distanthorizons", "unrelated"));
+		List<Op> dropped = staging.dropQueuedUpdates(Set.of("distanthorizons", "unrelated"), Set.of("distanthorizons", "y", "unrelated"));
 
 		assertEquals(dh.stream().map(Op::id).toList(), dropped.stream().map(Op::id).toList());
 		assertEquals(other.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
@@ -216,23 +216,95 @@ class StagingTest {
 	@Test
 	void nothingIsUnstagedWithoutAQueuedUpdateOfAStagedMod() throws Exception {
 		List<Op> x = update("x-1.jar", "x-2.jar", "x");
-		assertTrue(staging.stage(x, "e1"));
+		assertNotNull(staging.stage(x, "e1"));
 		String before = Files.readString(pending);
 
-		assertEquals(List.of(), staging.dropQueuedUpdates(Set.of()));
-		assertEquals(List.of(), staging.dropQueuedUpdates(Set.of("y")));
+		assertEquals(List.of(), staging.dropQueuedUpdates(Set.of(), Set.of("x")));
+		assertEquals(List.of(), staging.dropQueuedUpdates(Set.of("y"), Set.of("x", "y")));
 		try (HeldLock helper = HeldLock.hold(ApplyLock.defaultPath(config))) {
-			assertNull(staging.dropQueuedUpdates(Set.of("x")));
+			assertNull(staging.dropQueuedUpdates(Set.of("x"), Set.of("x")));
 		}
 
 		assertEquals(before, Files.readString(pending));
 		assertTrue(changesOf("e1").stream().allMatch(c -> JournalChange.STAGED.equals(c.status())));
 	}
 
+	// SPEC 3a: only RigTune's change to a LOADED mod whose own update is queued in mods/update/ is dropped; a stale jar
+	// there must not cancel an addition or an undo's re-enable of a mod that isn't loaded, on every rebuild.
+	@Test
+	void anAdditionOfAnUnloadedModWithAStaleQueuedJarStaysStaged() throws IOException {
+		assertNotNull(staging.stage(PendingActions.group(Op.enableFile(pendingJar("x-1.jar", "x"), mods.resolve("x-1.jar")).withModId("x")), "e1"));
+		String before = Files.readString(pending);
+
+		assertEquals(List.of(), staging.dropQueuedUpdates(Set.of("x"), Set.of("sodium")));
+
+		assertEquals(before, Files.readString(pending));
+		assertTrue(Files.exists(mods.resolve("x-1.jar" + PendingActions.PENDING_SUFFIX)));
+		assertTrue(changesOf("e1").stream().allMatch(c -> JournalChange.STAGED.equals(c.status())));
+	}
+
+	@Test
+	void anUndoReEnableOfAnUnloadedModStaysStaged() throws IOException {
+		Path disabled = TestJars.modJar(mods.resolve("x-1.jar.disabled"), "x");
+		assertNotNull(staging.stage(List.of(Op.enableFile(disabled, mods.resolve("x-1.jar")).withModId("x")), "u1"));
+
+		assertEquals(List.of(), staging.dropQueuedUpdates(Set.of("x"), Set.of()));
+
+		assertEquals(1, PendingActions.load(pending).ops().size());
+		assertTrue(Files.exists(disabled));
+	}
+
+	// Plan review A-L1: an undo that re-enables a loaded mod with a queued update would race it too, so it goes (the notice
+	// says "change", not "update").
+	@Test
+	void anUndoReEnableOfALoadedModWithAQueuedUpdateIsDropped() throws IOException {
+		TestJars.modJar(mods.resolve("x-2.jar"), "x");
+		Path disabled = TestJars.modJar(mods.resolve("x-1.jar.disabled"), "x");
+		List<Op> undo = PendingActions.group(Op.disableFile(mods.resolve("x-2.jar")), Op.enableFile(disabled, mods.resolve("x-1.jar")).withModId("x"));
+		assertNotNull(staging.stage(undo, "u1"));
+
+		List<Op> dropped = staging.dropQueuedUpdates(Set.of("x"), Set.of("x"));
+
+		assertEquals(undo.stream().map(Op::id).toList(), dropped.stream().map(Op::id).toList());
+		assertFalse(Files.exists(pending));
+		assertTrue(Files.exists(disabled), "only downloads are retired");
+	}
+
+	// Plan review A-H1: an addition that relies on an update is in the update's group, so it goes with it.
+	@Test
+	void anAdditionJoinedToADroppedUpdateIsDroppedWithIt() throws IOException {
+		List<Op> update = update("a-1.jar", "a-2.jar", "a");
+		Op addition = Op.enableFile(pendingJar("b-1.jar", "b"), mods.resolve("b-1.jar")).withModId("b").inGroup(update.getFirst().group());
+		List<Op> ops = new ArrayList<>(update);
+		ops.add(addition);
+		assertNotNull(staging.stage(ops, "e1"));
+
+		List<Op> dropped = staging.dropQueuedUpdates(Set.of("a"), Set.of("a"));
+
+		assertEquals(ops.stream().map(Op::id).toList(), dropped.stream().map(Op::id).toList());
+		assertTrue(Files.exists(mods.resolve("b-1.jar" + PendingActions.SUPERSEDED_SUFFIX)));
+	}
+
+	// Plan review A-M1: the client records, per recommendation, the ids its ops have in pending.json after the merge.
+	@Test
+	void stagingReturnsTheMergeWithTheSurvivingOpIds() throws IOException {
+		List<Op> first = update("x-1.jar", "x-2.jar", "x");
+		Staging.Merge merge = staging.stage(first, "e1");
+		assertNotNull(merge);
+		assertEquals(Map.of(first.get(0).id(), first.get(0).id(), first.get(1).id(), first.get(1).id()), merge.merged().survivingIds());
+
+		List<Op> again = PendingActions.group(Op.disableFile(mods.resolve("x-1.jar")),
+				Op.enableFile(mods.resolve("x-2.jar" + PendingActions.PENDING_SUFFIX), mods.resolve("x-2.jar")).withModId("x"));
+		Staging.Merge repeat = staging.stage(again, "e2");
+
+		assertNotNull(repeat);
+		assertEquals(Map.of(again.get(0).id(), first.get(0).id(), again.get(1).id(), first.get(1).id()), repeat.merged().survivingIds());
+	}
+
 	@Test
 	void unstagingTheLastOpsDeletesPendingJson() throws IOException {
 		List<Op> update = update("x-1.jar", "x-2.jar", "x");
-		assertTrue(staging.stage(update, "e1"));
+		assertNotNull(staging.stage(update, "e1"));
 
 		try (ApplyLock lock = staging.lock()) {
 			staging.unstageLocked(List.of(update.get(0).id()));
@@ -248,7 +320,7 @@ class StagingTest {
 		PendingActions.create(1, mods, config, List.of(foreign)).save(pending);
 		journal.record("e0", JournalEntry.APPLY, List.of(JournalChange.file(JournalChange.DISABLE, "y", "y.jar", JournalChange.STAGED, foreign.id(), null)));
 
-		assertTrue(staging.stage(List.of(Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4"))), "e1"));
+		assertNotNull(staging.stage(List.of(Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4"))), "e1"));
 
 		assertEquals(JournalChange.DISCARDED, changesOf("e0").getFirst().status());
 	}

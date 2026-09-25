@@ -22,10 +22,27 @@ public final class OnlineDataFetcher {
 	public static final String LOADER = "fabric";
 	static final int VERSION_CHECK_PARALLELISM = 4;
 
-	// versionIdsByModId: the Modrinth version each loaded mod is (by its hash).
-	public record Result(OnlineData data, Map<String, String> projectIdsByModId, Map<String, String> versionIdsByModId) {
+	// versionIdsByModId: the Modrinth version each loaded mod is (by its hash). installedVersions and updateVersions: the
+	// loaded mods' versions and their updates' versions, by version id, dependencies included (plan review A-H1).
+	public record Result(OnlineData data, Map<String, String> projectIdsByModId, Map<String, String> versionIdsByModId,
+			Map<String, ModrinthVersion> installedVersions, Map<String, ModrinthVersion> updateVersions) {
+		public Result(OnlineData data, Map<String, String> projectIdsByModId, Map<String, String> versionIdsByModId) {
+			this(data, projectIdsByModId, versionIdsByModId, Map.of(), Map.of());
+		}
+
 		public static Result offline() {
 			return new Result(OnlineData.offline(), Map.of(), Map.of());
+		}
+
+		// Each loaded mod's Modrinth version id -> its project id.
+		public Map<String, String> projectIdsByVersionId() {
+			Map<String, String> out = new LinkedHashMap<>();
+			installedVersions.forEach((id, version) -> {
+				if (version.projectId() != null) {
+					out.put(id, version.projectId());
+				}
+			});
+			return out;
 		}
 	}
 
@@ -51,6 +68,8 @@ public final class OnlineDataFetcher {
 			Map<String, String> projectIds = new LinkedHashMap<>();
 			Map<String, String> versionIds = new LinkedHashMap<>();
 			Map<String, UpdateInfo> updates = new LinkedHashMap<>();
+			Map<String, ModrinthVersion> installedVersions = new LinkedHashMap<>();
+			Map<String, ModrinthVersion> updateVersions = new LinkedHashMap<>();
 			if (!modsBySha1.isEmpty()) {
 				Map<String, ModrinthVersion> current = client.versionsByHashes(modsBySha1.keySet());
 				Map<String, ModrinthVersion> latest = client.latestVersionsByHashes(modsBySha1.keySet(), LOADER, mcVersion);
@@ -64,11 +83,13 @@ public final class OnlineDataFetcher {
 						projectIds.put(mod.modId(), cur.projectId());
 						if (cur.id() != null) {
 							versionIds.put(mod.modId(), cur.id());
+							installedVersions.put(cur.id(), cur);
 						}
 						if (isUpdate(cur, next)) {
 							ModFile file = next.primaryFile();
 							updates.put(mod.modId(), new UpdateInfo(mod.modId(), next.projectId(), cur.versionNumber(),
 									next.id(), next.versionNumber(), file));
+							updateVersions.put(next.id(), next);
 						}
 					}
 				}
@@ -95,7 +116,8 @@ public final class OnlineDataFetcher {
 			}
 			available.putAll(checkVersions(maybe, mcVersion));
 
-			return new Result(new OnlineData(true, Map.copyOf(available), Map.copyOf(updates)), Map.copyOf(projectIds), Map.copyOf(versionIds));
+			return new Result(new OnlineData(true, Map.copyOf(available), Map.copyOf(updates)), Map.copyOf(projectIds), Map.copyOf(versionIds),
+					Map.copyOf(installedVersions), Map.copyOf(updateVersions));
 		} catch (Exception e) {
 			if (e instanceof InterruptedException) {
 				Thread.currentThread().interrupt();
