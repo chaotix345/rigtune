@@ -17,6 +17,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Set;
@@ -58,6 +59,13 @@ public final class ModScanner {
 	// The mod ids with an update of their own waiting in mods/update/ (review 4, rules-accuracy-1).
 	public static Set<String> queuedUpdates() {
 		return ModJars.queuedUpdates(InstanceDirs.modsDir(FabricLoader.getInstance().getGameDir()));
+	}
+
+	// The ids of every mod Fabric loaded (nested ones and built-ins included).
+	public static Set<String> loadedIds() {
+		Set<String> out = new HashSet<>();
+		FabricLoader.getInstance().getAllMods().forEach(mod -> out.add(mod.getMetadata().getId()));
+		return out;
 	}
 
 	// Nested jar-in-jar mods stay in the list (their ids matter to the rules) but get no file or hash.
