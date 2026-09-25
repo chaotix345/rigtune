@@ -73,6 +73,16 @@ loom {
 	}
 }
 
+// DevAutorun only starts from the title screen, and a fresh run dir would stop at the accessibility onboarding screen.
+tasks.matching { it.name == "runBenchmarkAutorun" }.configureEach {
+	def options = file("build/run-autorun/options.txt")
+	doFirst {
+		options.parentFile.mkdirs()
+		def lines = options.exists() ? options.readLines("UTF-8").findAll { !it.startsWith("onboardAccessibility:") } : []
+		options.setText((lines + "onboardAccessibility:false").join("\n") + "\n", "UTF-8")
+	}
+}
+
 // Distant Horizons and Iris are optional at runtime: only client/compat/DhCompat and IrisCompat use their APIs, and
 // only after FabricLoader says the mod is loaded (the benchmark's cost reports).
 dependencies {
