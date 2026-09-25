@@ -47,9 +47,6 @@ public class UiGameTest implements FabricClientGameTest {
 		if (Boolean.getBoolean("rigtune.smoke")) {
 			return;
 		}
-		if (true) {
-			throw new AssertionError("CI failure probe (WS-0 AC2.2, reverted next commit)");
-		}
 		Path configDir = FabricLoader.getInstance().getConfigDir();
 		context.waitForScreen(TitleScreen.class);
 		context.waitFor(mc -> RigTuneClient.controller().report() != null, 1200);
