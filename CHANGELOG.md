@@ -25,9 +25,9 @@ for each release becomes that release's Modrinth changelog (`build.gradle`'s
 
 ### Fixed
 - A mod update whose downloaded jar isn't a readable Fabric mod is refused (the installed jar stays), and at apply time every jar RigTune enables is re-checked to be the mod it claims to be.
-- A malformed or oversized `fabric.mod.json` in any jar in `mods/` can no longer crash the post-exit helper; it only fails that jar's own check.
-- RigTune no longer offers its own update for a mod that already has an update of its own waiting in `mods/update/` (e.g. Distant Horizons' self-updater); it shows a note instead.
-- Two mods that conflict with each other are never offered or installed together, and Modrinth's "incompatible" dependencies are honoured.
+- A malformed or oversized `fabric.mod.json` in any jar in `mods/` can no longer crash the post-exit helper (it only fails that jar's own check), and a crafted jar can no longer exhaust the game's memory when the Undo screen reads it.
+- RigTune no longer offers its own update for a mod that already has an update of its own waiting in `mods/update/` (e.g. Distant Horizons' self-updater); it shows a note instead, and cancels an update of that mod it had already staged.
+- Two mods that conflict with each other are never offered or installed together, and Modrinth's "incompatible" dependencies are honoured (one naming a specific version only for that version).
 - RigTune no longer offers to update Distant Horizons while DH's own auto-updater is on (the two updaters raced to replace the same jar at exit, which made a real update fail). It shows an info note instead.
 - Distant Horizons render-distance caps now apply only while DH rendering is on, and DH thread caps only when Chunky isn't installed.
 - A benchmark measured in a throttled or unfocused window (e.g. with Dynamic FPS) is stopped and not saved.
