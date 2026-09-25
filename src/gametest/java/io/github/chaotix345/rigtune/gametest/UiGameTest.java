@@ -49,6 +49,7 @@ public class UiGameTest implements FabricClientGameTest {
 		context.waitFor(mc -> ClientSettings.load(configDir).privacyNoticeShown, 200);
 
 		RigTuneController real = RigTuneClient.controller();
+		context.getInput().setCursorPos(1, 1);
 		context.runOnClient(mc -> RigTuneClient.open(mc.gui.screen()));
 		context.waitForScreen(RigTuneScreen.class);
 		context.waitTicks(3);
@@ -222,8 +223,10 @@ public class UiGameTest implements FabricClientGameTest {
 		}
 	}
 
+	// The cursor goes to a corner so no tooltip or hover highlight covers the screenshots.
 	private static void resize(ClientGameTestContext context, int width, int height, int guiScale) {
 		context.getInput().resizeWindow(width, height);
+		context.getInput().setCursorPos(1, 1);
 		context.runOnClient(mc -> {
 			mc.options.guiScale().set(guiScale);
 			mc.resizeGui();
