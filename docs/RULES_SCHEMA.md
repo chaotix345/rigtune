@@ -24,7 +24,7 @@ Both files come from one run and share `revision` and `generatedAt`. See tools/R
 - A remote v2 document is saved to the v2 cache. A remote v1 document is only used in memory, so the v2 cache always holds a v2 document.
 - The mod uses the valid candidate with the highest `revision`. On a tie it prefers `schemaVersion` 2, then remote over cache over bundled.
 - A document is valid if it parses and its `schemaVersion` is 1 or 2. A future v3 will live in its own file.
-- No request is made when the network or remote rules are switched off in RigTune's settings.
+- No request is made when the network or remote rules are switched off in RigTune's settings. The switch is checked again before the v1 fallback request, and a load that a newer one (after a settings change) has replaced makes no further requests.
 - `-Drigtune.rules.baseUrl=<folder URL>` replaces `https://raw.githubusercontent.com/chaotix345/rigtune/main/rules/` (for tests).
 
 0.1.x reads only `rules-v1.json` (schemaVersion 1) and its own `rules-cache.json`.
@@ -147,7 +147,7 @@ Human-readable names for recommendation titles (and the share report). `name` re
 A top-level array in `rules/source/knowledge.json` only. Each entry is an upstream mod a maintainer has already triaged in `REVIEW.md` section (a) and decided not to add, with a one-line `reason`. `tools/update_rules.py` excludes these slugs from section (a) of the next `REVIEW.md` so they don't keep coming back up for review, but it never copies `reviewIgnore` into either output — it has no effect on what the mod recommends.
 
 ## Condition
-This is a JSON object. Every field is optional, all present fields must hold (AND), and an empty object `{}` is true. A missing condition (e.g. no `recommendWhen`) is also true. Fields marked v2 exist only in rules-v2.json.
+This is a JSON object. Every field is optional, all present fields must hold (AND), and an empty object `{}` is true. A missing condition (e.g. no `recommendWhen`) is also true, but a condition written as `null` (e.g. `"when": null`) is UNKNOWN in 0.2 (0.1.x reads it as true; the updater rejects nulls). Fields marked v2 exist only in rules-v2.json. Integer fields must be JSON integers in range (32-bit for the tier and refresh-rate fields, 64-bit for the MB and pixel fields) and boolean fields JSON booleans; anything else counts as an unknown key.
 
 | field | type | meaning | UNKNOWN when |
 |---|---|---|---|
@@ -166,8 +166,8 @@ This is a JSON object. Every field is optional, all present fields must hold (AN
 | backend | string[] | opengl, vulkan | backend unknown; a value outside the list |
 | os | string[] | windows, macos, linux (lowercase prefix match on the OS family, so `win` works) | blank OS name; a value that isn't a prefix of those |
 | goal | string[] | performance, balanced, quality | a value outside the list |
-| mcVersion | string[] | exact match on the running MC version | |
-| modPresent / modAbsent | string[] | mod ids. modPresent: all loaded; modAbsent: none loaded | |
+| mcVersion | string[] | exact match on the running MC version | MC version unknown |
+| modPresent / modAbsent | string[] | mod ids. modPresent: all loaded; modAbsent: none loaded | a `null` entry |
 | flags | string[] | all present in HardwareProfile.flags: `shaders-enabled`, `backend-vulkan`, `sodium-workaround:<NAME>` | a flag outside that list that isn't present |
 | gpuModelMatches (v2) | string | Java regex *found* in the GPU subject string (the same one `gpuTiers` see), at most 200 characters, with the same read budget | no GPU info; invalid or overlong regex; budget exhausted |
 | displayPixelsAtLeast / displayPixelsAtMost (v2) | int | display width × height | width or height unknown (≤ 0) |
@@ -179,14 +179,15 @@ This is a JSON object. Every field is optional, all present fields must hold (AN
 ### Evaluation: TRUE, FALSE or UNKNOWN (fail closed)
 A condition evaluates to TRUE, FALSE or UNKNOWN. Only a top-level TRUE fires; UNKNOWN counts as false for every rule kind: no addition, no disable, no setting, no advice. In an addition's `avoidWhen`, only FALSE lets the addition through.
 
-- **Unknown keys poison the whole condition.** While parsing, every condition object records the keys this client doesn't know, and keys whose value is `null`. If any node of the tree (including inside `not` and `anyOf`) has one, the whole top-level condition is UNKNOWN. A newer field's meaning can't be guessed, and treating it as false inside `not` would flip it to true.
+- **Unknown keys poison the whole condition.** While parsing, every condition object records the keys this client doesn't know, keys whose value is `null`, and values it can't read exactly (a non-integer or out-of-range number, a non-boolean for a boolean field). If any node of the tree (including inside `not` and `anyOf`) has one, the whole top-level condition is UNKNOWN. A newer field's meaning can't be guessed, and treating it as false inside `not` would flip it to true.
 - **Undecidable values are UNKNOWN where they occur** (the last column above) and combine with Kleene logic:
   - `not UNKNOWN` = UNKNOWN;
   - `anyOf` is TRUE if any branch is TRUE, else UNKNOWN if any branch is UNKNOWN, else FALSE;
   - the fields of one object (AND) are FALSE if any is FALSE, else UNKNOWN if any is UNKNOWN, else TRUE.
 
   So `{"tierAtLeast": 5, "ramMbAtLeast": 8000}` is FALSE on a tier-3 machine even when RAM is unknown, and `not {"gpuModelMatches": "…"}` on a machine without GPU info is UNKNOWN, never TRUE.
-- For a list of enumerated values (gpuVendor, backend, os, goal), a known value that matches makes the field TRUE; otherwise a value outside the vocabulary makes it UNKNOWN (a newer client might match it); otherwise it's FALSE.
+- For a list of enumerated values (gpuVendor, backend, os, goal), a known value that matches makes the field TRUE; otherwise a value outside the vocabulary (or a `null` entry) makes it UNKNOWN (a newer client might match it); otherwise it's FALSE.
+- The vocabularies above are also 0.1.0's. They may grow in a later 0.2.x, but 0.1.0's never do: the updater keeps the v1 set frozen, and a value only a newer client knows makes a condition v2-only.
 
 v1 (0.1.x) evaluates the same fields two-valued: unknown RAM/VRAM/refresh are false, and unknown keys are ignored. That's why rules-v1.json may only contain v1 keys and v1 values (below).
 
@@ -203,15 +204,15 @@ v1 (0.1.x) evaluates the same fields two-valued: unknown RAM/VRAM/refresh are fa
   - `"v1": { … }` is shallow-merged over the rule for v1 only (e.g. a conservative v1 `recommendWhen`). It may only set fields 0.1.x knows, its conditions must be v1-only, and a `null` anywhere in it is an error (0.1.x reads a null condition as "always").
 - **Automatic, per field** (after the override):
   - a `recommendWhen` that uses a v2 condition key, or a value outside the v0.1.0 vocabularies, becomes `{"always": false}`; `modIds`, `conflictsWith` and the other v1 fields stay, so 0.1.x keeps the conflict warning;
-  - an advice `when` like that becomes `{"always": false}`;
+  - an `info` advice `when` like that becomes `{"always": false}` (a `warning` or `critical` one is an error instead, so a warning never disappears for 0.1.x without a decision);
   - an `avoidWhen` like that is dropped (with `avoidReason`), but only when the v1 `recommendWhen` is `{"always": false}`. Otherwise it's an error: dropping it would let 0.1.x offer the mod where 0.2 avoids it. Give a v1 `avoidWhen` override.
 - **Errors** (the updater stops):
   - a setting entry whose `when` uses v2 features, or whose key is outside `vanilla.`/`sodium.`, without an explicit `v1`. Omitting a setting entry can change which entry wins for 0.1.x, so it's always a maintainer decision;
   - a rule field outside the v1 whitelist (`requires`, `avoidSelected`) without an explicit `v1`. With an override the field is left out only if that is exactly as safe: `requires` only when empty, `avoidSelected` only when true or when the v1 rule has no `avoidWhen`. Otherwise use `"v1": false`;
-  - unknown fields, unknown condition keys, nulls, values outside the vocabularies, and regexes over 200 characters anywhere in knowledge.json.
+  - unknown fields (including unknown top-level fields), unknown condition keys, nulls, values outside the vocabularies, out-of-range integers, regexes over 200 characters and malformed `settingLabels` anywhere in knowledge.json.
 - `settingLabels` is left out of rules-v1.json. Tier rules are copied as they are.
 - Every omission and field change is listed in `rules/REVIEW.md` section (d).
-- `tools/check_rules_v1.py` (CI job `rules-v1-compat`) checks the result, and the pinned-v0.1.0 differential test (`RulesV1DifferentialTest`) checks that rules-v1.json gives 0.1.x no ticked action the previous one didn't.
+- `tools/check_rules_v1.py` (CI job `rules-v1-compat`) checks the result. The pinned-v0.1.0 differential test (`RulesV1DifferentialTest`) checks that rules-v1.json gives 0.1.x no ticked action that the baseline `src/test/resources/v010/rules-v1-baseline.json` (the rules 0.1.0 shipped) didn't. `SchemaConsistencyTest` checks the updater's field lists and vocabularies against the Java code and the pinned v0.1.0 copy.
 
 ## Rules for maintainers
 - **Never add a v2-only or future field to an existing restrictive rule** (a clamp, a lower value, an `avoidWhen`, a warning). Clients that don't know the field poison the whole rule, so they'd *lose* the restriction they have today. Add a new rule next to the old one instead (or gate the new one with `requires`).

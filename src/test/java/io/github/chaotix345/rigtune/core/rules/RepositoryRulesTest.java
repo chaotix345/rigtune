@@ -42,10 +42,12 @@ class RepositoryRulesTest {
 
 	@Test
 	void everySettingKeyIsAllowlisted() throws IOException {
-		for (RulesDocument doc : List.of(v1(), v2())) {
-			for (RulesDocument.SettingRule rule : doc.settings) {
-				assertTrue(SettingKeys.changeable(rule.key), rule.key);
-			}
+		for (RulesDocument.SettingRule rule : v2().settings) {
+			assertTrue(SettingKeys.changeable(rule.key), rule.key);
+		}
+		// rules-v1.json is applied by 0.1.x, so its keys must pass 0.1.0's own allowlist.
+		for (RulesDocument.SettingRule rule : v1().settings) {
+			assertTrue(io.github.chaotix345.rigtune.v010.core.model.SettingKeys.changeable(rule.key), rule.key);
 		}
 	}
 

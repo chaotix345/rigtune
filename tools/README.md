@@ -62,7 +62,7 @@ for each rule in `knowledge.json`:
   condition keys and values, and no `null` anywhere (0.1.x would read a null condition
   as "always").
 - Without a `v1` key:
-  - a v2-only `recommendWhen` or advice `when` becomes `{"always": false}`;
+  - a v2-only `recommendWhen` or `info` advice `when` becomes `{"always": false}`;
   - a v2-only `avoidWhen` is dropped, but only if 0.1.x never recommends the mod;
   - everything else that 0.1.x doesn't understand is an error (below).
 - `v1` is never written to either output, and `settingLabels` never reaches `rules-v1.json`.
@@ -76,9 +76,13 @@ a value outside the v0.1.0 vocabularies.
 The script stops (exit code 2, nothing written) and lists every problem when
 `knowledge.json` has:
 
-- an unknown field on a rule (a typo) or on a tier rule (tier-rule changes need a new
-  schemaVersion), an unknown condition key, a `null`, a value outside the vocabularies
-  (`gpuVendor`, `backend`, `os`, `goal`, `flags`), or a `gpuModelMatches` over 200 characters;
+- an unknown field on a rule (a typo), at the top level, or on a tier rule (tier-rule changes
+  need a new schemaVersion), an unknown condition key, a `null`, a value outside the
+  vocabularies (`gpuVendor`, `backend`, `os`, `goal`, `flags`), an integer outside its field's
+  32/64-bit range, a `gpuModelMatches` over 200 characters, or a `settingLabels` entry that
+  isn't `{"name": "...", "values": {"<value>": "..."}}`;
+- a `warning`/`critical` advice whose `when` is v2-only, with no `v1` (a warning must not
+  quietly disappear for 0.1.x);
 - a setting entry that uses a v2 condition, or a key outside `vanilla.`/`sodium.`, with no
   `v1` (omitting a setting entry can change which entry wins for 0.1.x, so it's always your call);
 - a rule with `requires` or `avoidSelected` and no `v1` (use `"v1": false` unless the field
@@ -121,6 +125,10 @@ directly (see `tools/tests/test_update_rules.py`).
   (so it also fails when `knowledge.json` was edited without regenerating).
 - CI job `rules-consistency`: `rules/rules-v2.json` equals the bundled copy, and no bundled
   `rules-v1.json` exists.
+- `SchemaConsistencyTest` (JUnit; runs Python, required in CI): the updater's condition keys,
+  rule fields and vocabularies equal the Java classes (v2) and the pinned v0.1.0 copy (v1).
+  `V1_VOCABULARIES` in `update_rules.py` are frozen at 0.1.0; extend only `V2_VOCABULARIES`
+  (together with `ConditionEvaluator`).
 - `RulesV1DifferentialTest` (JUnit, part of `./gradlew build`): a pinned copy of the
   v0.1.0 recommender (`src/test/java/io/github/chaotix345/rigtune/v010/`, copied from the
   tag with only the package renamed) evaluates the baseline
