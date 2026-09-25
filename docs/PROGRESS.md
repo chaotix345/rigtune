@@ -19,9 +19,9 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 - [x] Phase 1: research DONE (docs/research/v0.3/: mc-versions, ci-gametests, launcher-ram, hardware-tiers, benchmark, misc). Headlines: no MC newer than 26.3 (26.4-snapshot-1 compiles and passes 848/848 unchanged); CI game tests green on Linux (branch research/ci-gametest, kept for WS-0); a real P0 bug: benchmark RD changes aren't broadcast to the server (SPEC 3f).
 - [x] Phase 2: SPEC.md + PLAN.md + plan review (docs/v0.3/plan-review.md) with amendments folded in (0681c4c).
 - [x] Phase 3: foundation MERGED (1700ecc). Wave A started in parallel before it (no build-file overlap) and was told to merge origin/feat/v0.3.0.
-- [ ] Phase 4: features. Wave A ALL MERGED (6321696: 1047 unit tests per version, 284 Python). fix/ram-advice-text MERGED (c41bf48, rules r12). ws-p MERGED; ws-g RUNNING. Pending lows after ws-g: chart dates UTC->local, legacy-import stack traces.
-- [ ] Phase 5: verification
-- [ ] Phase 6: reviews (2 rounds)
+- [x] Phase 4: features DONE (e16e146): Wave A (A, B, C, D, E, F, V, H) + fix/ram-advice-text + Wave B (G, P) merged; 1121 unit tests per version; CI green. Pending lows for the round-1 fix branch: chart dates in UTC (BenchmarkResultScreen date()), legacy import stack traces for missing files (ModJars.modIdOf).
+- [ ] Phase 5: verification: early run on the Wave A tree DONE (all pass; see p5 row). Final runs (game tests, smokes, E2E final-* incl. seeded + undo-after-restart-030) on the RC after the review fixes.
+- [ ] Phase 6: review round 1 RUNNING (Workflow, 5 dimensions + adversarial verify, v0.2.0..e16e146; script scratchpad/review-v03-round.js) -> docs/reviews/review-5.md
 - [ ] Phase 7: release
 - [ ] Phase 8: wrap-up
 
@@ -40,7 +40,7 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 | plan-review | - | - | DONE: docs/v0.3/plan-review.md (4 H, 25 M, 11 L), folded into SPEC "Amendments" + PLAN (0681c4c) |
 | r-ci (research, done) | research/ci-gametest | removed | remote branch deleted; the LOCAL branch stays (unmerged; a hook blocks `branch -D`). |
 
-| ws-g (l10n, SPEC 9, Wave B) | feat/l10n | C:/Dev/Worktrees/rigtune-l10n | RUNNING (owns DownloadPlanner/DependencyResolver/Recommender/UndoPlanner/ShareReport text conversion) |
+| ws-g (l10n, SPEC 9, Wave B) | feat/l10n (deleted) | removed | MERGED e16e146 (CI 36193968564; 1121 tests per version). AC9.1-9.4, AC6.4 verified (LangCheckTest a-e with self-tests; pseudo-locale; pixel diff docs/v0.3/verification/ws-g/). Also fixed the Phase 5 attempt-count wording and the apply toast. Still English by design: rule text, mod/file names, Modrinth network errors, helper-path refusals, share report, logs. |
 | ws-p (dry-run preview, P2, Wave B) | feat/preview (deleted) | removed | MERGED 3689947 (CI 36190494810; 1078 tests per version). AC13.1 (differential vs the real staging + in-game check on 3 legs), AC13.2 verified. |
 | p5 (early Phase 5, Wave A tree) | test/p5-v03 (deleted) | removed | MERGED 2b091ad (CI 36190442154). All runs PASS: game tests local 26.2+26.3 (7 classes, 79 screenshots each), 26.2 smoke with the user's 48 mods (+ theseus brand run), 26.3 smoke (6th try; 26.3 native crash 6/7 launches, control without RigTune crashes too), DH round trip, shader advice (Complementary, 76%), AC3.5 in game. Findings: M AC8.7 wording (Iris rewrites #date; SPEC amended to values-identical), L attempt-count wording + L apply toast wording (sent to ws-g), L chart dates in UTC (BenchmarkResultScreen:292), L legacy import logs stack traces for missing files (ModJars:31) -> fix after ws-g. Re-run on the RC after Wave B. Evidence docs/v0.3/verification/README.md. |
 
