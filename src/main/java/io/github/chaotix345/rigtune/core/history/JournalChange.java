@@ -34,6 +34,26 @@ public record JournalChange(String id, String type, String key, String before, S
 		return new JournalChange(id, type, key, before, after, action, modId, file, resultFile, status, opId, group, changeId);
 	}
 
+	public JournalChange withGroup(String newGroup) {
+		return new JournalChange(id, type, key, before, after, action, modId, file, resultFile, status, opId, newGroup, reverts);
+	}
+
+	public JournalChange withResultFile(String newResultFile) {
+		return new JournalChange(id, type, key, before, after, action, modId, file, newResultFile, status, opId, group, reverts);
+	}
+
+	public JournalChange withOpId(String newOpId) {
+		return new JournalChange(id, type, key, before, after, action, modId, file, resultFile, status, newOpId, group, reverts);
+	}
+
+	public boolean isSetting() {
+		return SETTING.equals(type);
+	}
+
+	public boolean isFile() {
+		return FILE.equals(type);
+	}
+
 	static String newId() {
 		return java.util.UUID.randomUUID().toString();
 	}
