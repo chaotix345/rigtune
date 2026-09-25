@@ -371,8 +371,9 @@ class Run:
                 (dest / "latest-{}.filtered.log".format(phase)).write_text(self.scrub(filtered_log(source)), encoding="utf-8")
         for shot in sorted((self.instance / "screenshots").glob("e2e-*.png")):
             shutil.copyfile(shot, dest / shot.name)
-        (dest / "checks.json").write_text(self.scrub(json.dumps({phase: [c.__dict__ for c in checks]
-                                                                 for phase, checks in self.checks.items()}, indent=1)), encoding="utf-8")
+        # Scrubbed before serialising: a detail holding a Python repr of paths would be escaped twice by json.dumps.
+        (dest / "checks.json").write_text(json.dumps({phase: [dict(c.__dict__, detail=self.scrub(c.detail)) for c in checks]
+                                                      for phase, checks in self.checks.items()}, indent=1), encoding="utf-8")
         (dest / "RESULT.md").write_text(self.result_markdown(verdict, sorted(p.name for p in dest.iterdir())), encoding="utf-8")
         self.log("evidence in " + str(dest))
 
