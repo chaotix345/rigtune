@@ -146,7 +146,10 @@ public class HistoryScreen extends Screen {
 			if (view != null && view.entries().stream().noneMatch(e -> e.id().equals(selected))) {
 				selected = view.entries().isEmpty() ? null : view.entries().getFirst().id();
 			}
-			rebuildWidgets();
+			// Behind an Undo screen opened meanwhile, init() runs (and reloads) when this screen comes back.
+			if (minecraft.gui.screen() == this) {
+				rebuildWidgets();
+			}
 		}));
 	}
 
