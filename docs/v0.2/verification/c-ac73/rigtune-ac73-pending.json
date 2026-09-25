@@ -1,0 +1,17 @@
+{
+  "createdAt": "2026-09-25T06:01:47.378825600Z",
+  "gamePid": 56196,
+  "modsDir": "<run>\\mods",
+  "configDir": "<run>\\config",
+  "ops": [
+    {
+      "type": "PATCH_TOML",
+      "path": "<run>\\config\\DistantHorizons.toml",
+      "patches": {
+        "client.advanced.graphics.quality.lodChunkRenderDistanceRadius": "256"
+      },
+      "id": "de4d02c5-61dc-4f5e-9a04-06566d82d4d7",
+      "attempts": 0
+    }
+  ]
+}

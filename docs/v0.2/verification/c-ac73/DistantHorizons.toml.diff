@@ -1,0 +1,4 @@
+875c875
+< 				lodChunkRenderDistanceRadius = 512
+---
+> 				lodChunkRenderDistanceRadius = 256

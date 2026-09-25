@@ -1,0 +1,26 @@
+[16:01:28] [Render thread/INFO]: [FastQuit] Initialized
+[16:01:37] [Render thread/INFO]: Attempting to auto update Distant Horizons
+[16:01:42] [Test thread/INFO]: Smoke: restored the player's options after the game test reset: [vanilla.renderDistance: 5 -> 32]
+[16:01:47] [Test thread/INFO]: Smoke: wrote <run>\rigtune-smoke-report.txt
+[16:01:47] [Test thread/INFO]: Smoke: AC7.3 stage at 2026-09-25T06:01:47.393047900Z, Distant Horizons 3.3.0 | apply status: Restart Minecraft to finish applying 1 change(s). | dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius: 512 -> 256 (staged 256) | pending.json: 1 op(s): [PATCH_TOML {client.advanced.graphics.quality.lodChunkRenderDistanceRadius=256}] | AC7.3 stage PASSED
+[16:01:47] [Render thread/INFO]: Stopping [0] Placement Manager Daemon threads
+[16:01:47] [Render thread/INFO]: Stopping [1] Worker Daemon threads
+[16:01:47] [Render thread/INFO]: Stopping!
+[16:01:49] [Render thread/INFO]: Started the RigTune apply helper for <run>\config\rigtune\pending.json
+[16:01:49] [Render thread/INFO]: [FastQuit] Exiting FastQuit.
+[16:01:49] [Render thread/WARN]: Failed to move updated fire from [<run>\mods\update\DistantHorizons-3.3.2 - 26.2 neo\fabric-26.2.jar] to [<run>\mods], please move it manually
+[16:01:49] [Render thread/INFO]: DeleteOnUnlock process started...
+[16:01:49] [Render thread/INFO]: DeleteOnUnlock running, old jar file at [<run>\mods\fabric-26.2.jar] should be deleted after Minecraft's JVM shutdown has completed.
+[16:02:05] [Client shutdown watchdog #1/WARN]: COM exception: Invalid Query: SELECT PERCENTUSAGE FROM Win32_PerfRawData_PerfOS_PagingFile
+[16:02:05] [Client shutdown watchdog #1/ERROR]: Error reading performance data from registry for Process.
+[16:02:05] [Client shutdown watchdog #1/WARN]: COM exception: Invalid Query: SELECT NAME,PRIORITYBASE,ELAPSEDTIME,IDPROCESS,CREATINGPROCESSID,IOREADBYTESPERSEC,IOWRITEBYTESPERSEC,PRIVATEBYTES,PAGEFAULTSPERSEC FROM Win32_PerfRawData_PerfProc_Process WHERE NOT Name LIKE "%_Total"
+[16:02:05] [Client shutdown watchdog #1/WARN]: Failed to get system info for Process Loads
+	at knot//net.minecraft.server.dedicated.ServerWatchdog.createWatchdogCrashReport(ServerWatchdog.java:94)
+	at knot//com.mojang.blaze3d.platform.ClientShutdownWatchdog.lambda$startShutdownWatchdog$0(ClientShutdownWatchdog.java:44)
+[16:02:05] [Client shutdown watchdog #1/WARN]: Failed to get system info for Process Virtual Size (MiB)
+	at knot//net.minecraft.server.dedicated.ServerWatchdog.createWatchdogCrashReport(ServerWatchdog.java:94)
+	at knot//com.mojang.blaze3d.platform.ClientShutdownWatchdog.lambda$startShutdownWatchdog$0(ClientShutdownWatchdog.java:44)
+[16:02:05] [Client shutdown watchdog #1/WARN]: Failed to get system info for Process Resident Size (MiB)
+	at knot//net.minecraft.server.dedicated.ServerWatchdog.createWatchdogCrashReport(ServerWatchdog.java:94)
+	at knot//com.mojang.blaze3d.platform.ClientShutdownWatchdog.lambda$startShutdownWatchdog$0(ClientShutdownWatchdog.java:44)
+[16:02:05] [Client shutdown watchdog #1/ERROR]: Negative index in crash report handler (3/10)

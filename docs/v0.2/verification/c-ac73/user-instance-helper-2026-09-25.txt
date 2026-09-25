@@ -1,0 +1,6 @@
+[2026-09-24T23:08:58.444110300Z] [RigTune apply] Waiting for game process 12228 to exit
+[2026-09-24T23:09:01.528709Z] [RigTune apply] Applying 17 operation(s) from <user instance>\config\rigtune\pending.json
+[2026-09-24T23:09:04.375175700Z] [RigTune apply] OK ENABLE_FILE: Enabled moreculling-fabric-26.2-1.8.1.jar
+[2026-09-24T23:09:04.376181300Z] [RigTune apply] FAILED DISABLE_FILE: Gave up after 10 attempt(s): java.nio.file.FileSystemException: <user instance>\mods\fabric-26.2.jar -> <user instance>\mods\fabric-26.2.jar.disabled: The process cannot access the file because it is being used by another process
+[2026-09-24T23:09:04.376181300Z] [RigTune apply] FAILED ENABLE_FILE: Not applied because disabling fabric-26.2.jar failed
+[2026-09-24T23:09:04.376181300Z] [RigTune apply] Some operations were not applied; failed ones remain in <user instance>\config\rigtune\pending.json, abandoned ones were dropped
