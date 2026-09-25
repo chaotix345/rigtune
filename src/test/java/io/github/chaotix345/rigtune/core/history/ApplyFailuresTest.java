@@ -56,12 +56,12 @@ class ApplyFailuresTest {
 		assertEquals(1, enable.attempt());
 		assertEquals("Not applied because disabling fabric-26.2.jar failed", enable.reason());
 
-		List<String> lines = failures.stream().map(ApplyFailures::warnLine).toList();
-		assertEquals("RigTune could not apply a change at the last exit (attempt 1 of 3; it's retried at the next exit): "
-				+ "DISABLE_FILE fabric-26.2.jar: " + disable.reason(), lines.get(0));
-		assertEquals("RigTune could not apply a change at the last exit (attempt 1 of 3; it's retried at the next exit): "
-				+ "ENABLE_FILE distanthorizons (DistantHorizons-3.3.2-26.2-fabric-neoforge.jar): Not applied because disabling fabric-26.2.jar failed",
-				lines.get(1));
+		List<String> lines = failures.stream().map(f -> ApplyFailures.warnLine(f, "2026-09-24T23:09:01.530708800Z")).toList();
+		assertEquals("RigTune's helper couldn't apply a change (run finished 2026-09-24T23:09:01.530708800Z, attempt 1 of 3; it's retried at the "
+				+ "next exit): DISABLE_FILE fabric-26.2.jar: " + disable.reason(), lines.get(0));
+		assertEquals("RigTune's helper couldn't apply a change (run finished 2026-09-24T23:09:01.530708800Z, attempt 1 of 3; it's retried at the "
+				+ "next exit): ENABLE_FILE distanthorizons (DistantHorizons-3.3.2-26.2-fabric-neoforge.jar): Not applied because disabling "
+				+ "fabric-26.2.jar failed", lines.get(1));
 		lines.forEach(line -> assertFalse(line.contains(game.toString()), line));
 	}
 
@@ -93,8 +93,8 @@ class ApplyFailuresTest {
 		assertEquals(2, byOp.size());
 		assertEquals(2, byOp.get(retried.id()).attempt());
 		assertEquals(Status.ABANDONED, byOp.get(dropped.id()).status());
-		assertEquals("RigTune dropped a change at the last exit: ENABLE_FILE b (b.jar): Gave up after 3 failed attempts: busy",
-				ApplyFailures.warnLine(byOp.get(dropped.id())));
+		assertEquals("RigTune's helper dropped a change (run finished 2026-09-26T10:00:00Z): ENABLE_FILE b (b.jar): Gave up after 3 failed attempts: busy",
+				ApplyFailures.warnLine(byOp.get(dropped.id()), result.finishedAt()));
 	}
 
 	@Test

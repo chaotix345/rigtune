@@ -45,7 +45,8 @@ class RigTunePreLaunchTest {
 		List<String> first = warnOnce();
 
 		assertEquals(2, first.size(), first.toString());
-		assertTrue(first.get(0).contains("DISABLE_FILE fabric-26.2.jar") && first.get(0).contains("attempt 1 of 3"), first.get(0));
+		assertTrue(first.get(0).contains("DISABLE_FILE fabric-26.2.jar") && first.get(0).contains("attempt 1 of 3")
+				&& first.get(0).contains("2026-09-24T23:09:01.530708800Z"), first.get(0));
 		assertTrue(first.get(1).contains("ENABLE_FILE distanthorizons") && first.get(1).contains("attempt 1 of 3"), first.get(1));
 		assertEquals("2026-09-24T23:09:01.530708800Z", ClientState.load(config()).lastWarnedApply);
 		assertTrue(warnOnce().isEmpty(), "the same run isn't logged again");

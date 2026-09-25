@@ -335,6 +335,32 @@ class UndoServiceTest {
 		assertFalse(service.history(null, List.of()).entries().stream().filter(e -> e.id().equals("e1")).findFirst().orElseThrow().undoable());
 	}
 
+	// B-M3 at unit level: Undo this on the older of two applies that each added a mod; the helper disables only that mod.
+	@Test
+	void undoThisOnAnOlderAddedModIsStagedAndTheHelperFinishesIt() throws IOException {
+		TestJars.modJar(mods.resolve("a.jar"), "a");
+		TestJars.modJar(mods.resolve("b.jar"), "b");
+		JournalChange a = JournalChange.file(JournalChange.ENABLE, "a", "a.jar", JournalChange.APPLIED, "op1", "g1");
+		JournalChange b = JournalChange.file(JournalChange.ENABLE, "b", "b.jar", JournalChange.APPLIED, "op2", "g2");
+		journal.record("e1", JournalEntry.APPLY, List.of(a));
+		journal.record("e2", JournalEntry.APPLY, List.of(b));
+
+		UndoService.Outcome outcome = service.undo(service.planEntry("e1"));
+
+		assertEquals(1, outcome.afterRestart());
+		assertEquals(List.of(PendingActions.Type.DISABLE_FILE), PendingActions.load(pending).ops().stream().map(Op::type).toList());
+		assertEquals("e1", undoEntry().undoOf());
+
+		runHelper();
+
+		assertTrue(Files.exists(mods.resolve("a.jar.disabled")));
+		assertFalse(Files.exists(mods.resolve("a.jar")));
+		assertTrue(Files.exists(mods.resolve("b.jar")));
+		assertEquals(List.of(JournalChange.REVERTED), changesOf("e1").stream().map(JournalChange::status).toList());
+		assertEquals(List.of(JournalChange.APPLIED), changesOf("e2").stream().map(JournalChange::status).toList());
+		assertTrue(undoEntry().changes().stream().allMatch(c -> JournalChange.APPLIED.equals(c.status()) && a.id().equals(c.reverts())));
+	}
+
 	// docs/v0.3/SPEC.md 3e: the History screen gets the reason a staged change's op failed at the last exit.
 	@Test
 	void historyHasTheStateTheEntriesAndTheLastFailures() throws IOException {

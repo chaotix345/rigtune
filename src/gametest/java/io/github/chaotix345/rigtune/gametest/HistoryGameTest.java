@@ -153,6 +153,10 @@ public class HistoryGameTest implements FabricClientGameTest {
 		RigTune.LOGGER.info("HistoryGameTest: failed change shows: {}", reason);
 		check(reason.startsWith("Last attempt failed: Gave up after 10 attempt(s)") && reason.endsWith("(attempt 2 of 3)"), "failure text: " + reason);
 		check(reason.contains("fake-mod-1.0.jar -> fake-mod-1.0.jar.disabled") && !reason.contains(modsDir.toString()), "paths shown as names: " + reason);
+		List<String> rows = context.computeOnClient(mc -> ((HistoryScreen) mc.gui.screen()).changeRowText()).stream()
+				.map(row -> row.replaceAll("\\s+", " ")).toList();
+		check(rows.size() == 2 && rows.get(0).equals("Updated fakemod: fake-mod-1.0.jar → fake-mod-1.1.jar")
+				&& rows.get(1).startsWith("Last attempt failed: ") && rows.get(1).endsWith("(attempt 2 of 3)"), "the open entry's rows as drawn: " + rows);
 		for (int[] size : SIZES) {
 			resize(context, size[0], size[1], size[2]);
 			checkLayout(context, "history " + size[0] + "x" + size[1] + "@" + size[2]);

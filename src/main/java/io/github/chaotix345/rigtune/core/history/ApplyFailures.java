@@ -59,12 +59,13 @@ public final class ApplyFailures {
 		return out;
 	}
 
-	// One line for latest.log (English, like the rest of the log).
-	public static String warnLine(Failure f) {
+	// One line for latest.log (English, like the rest of the log). finishedAt: when that helper run finished (the first
+	// 0.3 start may log a run 0.1.x or 0.2.x left long ago).
+	public static String warnLine(Failure f, String finishedAt) {
 		String what = f.type() + " " + (f.modId() != null ? f.modId() + " (" + f.file() + ")" : f.file());
 		return f.abandoned()
-				? "RigTune dropped a change at the last exit: " + what + ": " + f.reason()
-				: "RigTune could not apply a change at the last exit (attempt " + f.attempt() + " of " + MAX_ATTEMPTS
+				? "RigTune's helper dropped a change (run finished " + finishedAt + "): " + what + ": " + f.reason()
+				: "RigTune's helper couldn't apply a change (run finished " + finishedAt + ", attempt " + f.attempt() + " of " + MAX_ATTEMPTS
 						+ "; it's retried at the next exit): " + what + ": " + f.reason();
 	}
 

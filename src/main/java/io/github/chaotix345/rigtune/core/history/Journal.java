@@ -146,7 +146,10 @@ public final class Journal implements ChangeRecorder {
 					return false;
 				}
 				case CORRUPT -> Files.move(file, backupName());
-				case OK, UNREADABLE -> {
+				case UNREADABLE -> {
+					return false;
+				}
+				case OK -> {
 				}
 			}
 			List<JournalEntry> next = cap(change.apply(List.copyOf(base)));

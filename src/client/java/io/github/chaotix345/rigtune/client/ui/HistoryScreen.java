@@ -86,6 +86,37 @@ public class HistoryScreen extends Screen {
 				.map(HistoryList.Row::getRectangle).orElse(null);
 	}
 
+	// The text of the change rows the list shows now, as drawn (description, then any failure line), for the game test.
+	public List<String> changeRowText() {
+		if (list == null) {
+			return List.of();
+		}
+		List<String> out = new ArrayList<>();
+		for (HistoryList.Row row : list.children()) {
+			if (row instanceof ChangeRow c) {
+				out.add(text(c.lines));
+				if (!c.failure.isEmpty()) {
+					out.add(text(c.failure));
+				}
+			}
+		}
+		return out;
+	}
+
+	private static String text(List<FormattedCharSequence> lines) {
+		StringBuilder out = new StringBuilder();
+		for (FormattedCharSequence line : lines) {
+			if (!out.isEmpty()) {
+				out.append(' ');
+			}
+			line.accept((index, style, codePoint) -> {
+				out.appendCodePoint(codePoint);
+				return true;
+			});
+		}
+		return out.toString();
+	}
+
 	@Override
 	protected void init() {
 		if (stale) {

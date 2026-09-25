@@ -1019,6 +1019,103 @@ class UndoPlannerTest {
 		assertEquals(Map.of("vanilla.renderDistance", "12"), result.script().immediate());
 	}
 
+	// B-H1's Undo last case: the newest update can't be undone (its jar is unreadable), so Undo last falls through to the
+	// older one, which the newer one changed again: nothing is undone rather than disabling the newer jar.
+	@Test
+	void undoLastDoesNotFallThroughToAnUpdateALaterOneReplaced() {
+		state.jar("mod.jar", "m").jar("mod.jar.disabled", "m");
+		state.files.put("mod.jar.disabled.1", null);
+		entry("e1", disabled("m", "mod.jar", "mod.jar.disabled", "g1"), enabled("m", "mod.jar", "g1"));
+		entry("e2", disabled("m", "mod.jar", "mod.jar.disabled.1", "g2"), enabled("m", "mod.jar", "g2"));
+
+		Result result = last();
+
+		assertTrue(result.plan().isEmpty(), result.plan().toString());
+		assertTrue(result.script().fileOps().isEmpty());
+	}
+
+	// Review of WS-B, H1: restoring an older entry's graphics preset rewrites its options; the ones a later entry set,
+	// and the ones the list shows as skipped, are written back as they are.
+	@Test
+	void undoThisRestoringThePresetKeepsWhatLaterEntriesSet() {
+		entry("e1", applied("vanilla.graphicsPreset", "fancy", "custom"), applied("vanilla.particles", "all", "decreased"));
+		entry("e2", applied("vanilla.particles", "decreased", "minimal"), applied("vanilla.entityShadows", "true", "false"));
+		state.settings.put("vanilla.graphicsPreset", "custom");
+		state.settings.put("vanilla.particles", "minimal");
+		state.settings.put("vanilla.entityShadows", "false");
+
+		Result result = entryOf("e1");
+
+		assertEquals(UndoPlanner.SUPERSEDED, only(result, Action.SKIP).reason());
+		assertEquals(Map.of("vanilla.graphicsPreset", "fancy", "vanilla.particles", "minimal", "vanilla.entityShadows", "false"),
+				result.script().immediate());
+		assertEquals(1, result.script().reverts().size());
+	}
+
+	// The confirm-time re-plan selects only what the list reverts; an option it listed as skipped keeps its value too.
+	@Test
+	void recheckRestoringThePresetKeepsWhatTheListSkipped() {
+		entry("e1", applied("vanilla.graphicsPreset", "fast", "fancy"), applied("vanilla.particles", "decreased", "all"));
+		state.settings.put("vanilla.graphicsPreset", "fancy");
+		state.settings.put("vanilla.particles", "minimal");
+		UndoPlan shown = last().plan();
+
+		Result result = UndoPlanner.recheck(shown, entries, pending, state);
+
+		assertEquals(Map.of("vanilla.graphicsPreset", "fast", "vanilla.particles", "minimal"), result.script().immediate());
+	}
+
+	// Review of WS-B, H2: a later entry's staged mod isn't in the folder yet, but runs before the undo at the next exit.
+	@Test
+	void undoThisKeepsAJarALaterStagedModNeeds() {
+		state.jar("modA.jar", "a", "fabric").jar("fabric-api.jar", "fabric").jar("modB.jar.rigtune-pending", "b", "fabric");
+		entry("e1", enabled("a", "modA.jar", "g1"), enabled("fabric", "fabric-api.jar", "g1"));
+		Op stagedB = Op.enableFile(MODS.resolve("modB.jar.rigtune-pending"), MODS.resolve("modB.jar")).withModId("b").inGroup("g2");
+		pending.add(stagedB);
+		entry("e2", JournalChange.file(JournalChange.ENABLE, "b", "modB.jar", JournalChange.STAGED, stagedB.id(), "g2"));
+
+		Result result = entryOf("e1");
+
+		assertTrue(items(result, Action.REVERT).isEmpty(), result.plan().toString());
+		items(result, Action.SKIP).forEach(i -> assertTrue(i.reason().contains("b would be missing fabric"), i.reason()));
+		assertTrue(result.script().fileOps().isEmpty());
+	}
+
+	@Test
+	void aStagedModThisUndoCancelsDoesNotBlockIt() {
+		state.jar("modA.jar", "a").jar("fabric-api.jar", "fabric").jar("modB.jar.rigtune-pending", "b", "fabric");
+		Op stagedB = Op.enableFile(MODS.resolve("modB.jar.rigtune-pending"), MODS.resolve("modB.jar")).withModId("b").inGroup("g2");
+		pending.add(stagedB);
+		entry("e1", enabled("a", "modA.jar", "g1"), enabled("fabric", "fabric-api.jar", "g1"),
+				JournalChange.file(JournalChange.ENABLE, "b", "modB.jar", JournalChange.STAGED, stagedB.id(), "g2"));
+
+		Result result = entryOf("e1");
+
+		assertEquals(Set.of(stagedB.id()), result.script().discardOpIds());
+		assertEquals(2, items(result, Action.REVERT).size(), result.plan().toString());
+	}
+
+	// Review of WS-B, M1: what Undo everything showed as reverted is still reverted when it's confirmed, even where a later
+	// change it listed as skipped touches the same file.
+	@Test
+	void recheckOfUndoEverythingMatchesTheShownPlan() {
+		state.jar("mod.jar", "m").jar("mod.jar.disabled", "m");
+		state.files.put("mod.jar.disabled.1", null);
+		JournalChange disable1 = disabled("m", "mod.jar", "mod.jar.disabled", "g1");
+		JournalChange enable1 = enabled("m", "mod.jar", "g1");
+		entry("e1", disable1, enable1);
+		entry("e2", disabled("m", "mod.jar", "mod.jar.disabled.1", "g2"), enabled("m", "mod.jar", "g2"));
+		UndoPlan shown = all().plan();
+		assertEquals(2, items(all(), Action.REVERT).size(), shown.toString());
+
+		Result result = UndoPlanner.recheck(shown, entries, pending, state);
+
+		assertEquals(Set.of(disable1.id(), enable1.id()),
+				Set.copyOf(items(result, Action.REVERT).stream().flatMap(i -> i.changeIds().stream()).toList()));
+		assertEquals(all().script().fileOps().stream().map(UndoPlannerTest::describe).toList(),
+				result.script().fileOps().stream().map(UndoPlannerTest::describe).toList());
+	}
+
 	// B-L1: "fully undone" = nothing left that can be undone; undo entries are never undoable.
 	@Test
 	void undoableListsTheEntriesWithSomethingLeftToUndo() {

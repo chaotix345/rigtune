@@ -93,7 +93,7 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 		if (failures.isEmpty()) {
 			return;
 		}
-		failures.forEach(f -> log.accept(ApplyFailures.warnLine(f)));
+		failures.forEach(f -> log.accept(ApplyFailures.warnLine(f, result.finishedAt())));
 		state.lastWarnedApply = result.finishedAt();
 		state.save(configDir);
 	}
