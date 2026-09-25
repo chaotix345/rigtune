@@ -7,6 +7,7 @@ import com.google.gson.JsonPrimitive;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.JsonOps;
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.client.ConfigTargets;
 import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
 import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
@@ -24,11 +25,13 @@ import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 public final class SettingsBridge {
@@ -55,12 +58,64 @@ public final class SettingsBridge {
 		} catch (RuntimeException e) {
 			RigTune.LOGGER.error("Could not read vanilla options", e);
 		}
-		values.putAll(readSodium(sodiumConfig()));
+		values.putAll(readTargets(ConfigTargets.all(FabricLoader.getInstance().getConfigDir())));
 		return new SettingsSnapshot(Map.copyOf(values));
 	}
 
 	public static Path sodiumConfig() {
 		return FabricLoader.getInstance().getConfigDir().resolve("sodium-options.json");
+	}
+
+	private static final Map<Path, CachedRead> CONFIG_CACHE = new ConcurrentHashMap<>();
+
+	private record CachedRead(FileTime mtime, Map<String, String> values) {
+	}
+
+	// Every ConfigTargets namespace's current values, prefixed. Each file's parsed content is cached by its
+	// last-modified time, so re-reading it on every rebuild() (the render thread) only re-parses when the file
+	// actually changed -- DH's TOML alone can run past 1000 lines (docs/v0.2/plan-review.md L11).
+	public static Map<String, String> readTargets(List<ConfigTargets.Target> targets) {
+		Map<String, String> out = new LinkedHashMap<>();
+		for (ConfigTargets.Target target : targets) {
+			readCached(target).forEach((k, v) -> out.put(target.prefix() + k, v));
+		}
+		return out;
+	}
+
+	private static Map<String, String> readCached(ConfigTargets.Target target) {
+		Path file = target.file();
+		FileTime before;
+		try {
+			before = Files.getLastModifiedTime(file);
+		} catch (IOException e) {
+			CONFIG_CACHE.remove(file);
+			return Map.of();
+		}
+		CachedRead cached = CONFIG_CACHE.get(file);
+		if (cached != null && cached.mtime().equals(before)) {
+			return cached.values();
+		}
+		Map<String, String> values = target.reader().read(file);
+		if (values.isEmpty()) {
+			// Every reader here returns an empty map for a parse failure too, which could be a concurrent write
+			// racing this read; don't let that poison the cache under a mtime that would otherwise be trusted.
+			CONFIG_CACHE.remove(file);
+			return values;
+		}
+		Map<String, String> copy = Map.copyOf(values);
+		try {
+			FileTime after = Files.getLastModifiedTime(file);
+			if (after.equals(before)) {
+				CONFIG_CACHE.put(file, new CachedRead(after, copy));
+			} else {
+				// The file changed while we were reading it; this read may be torn, so don't cache it under
+				// either timestamp -- the next call re-reads.
+				CONFIG_CACHE.remove(file);
+			}
+		} catch (IOException e) {
+			CONFIG_CACHE.remove(file);
+		}
+		return copy;
 	}
 
 	public static Map<String, String> readVanilla(Options options) {
