@@ -1,17 +1,17 @@
 mc_apidiff 26.2 -> 26.3
 
-RigTune classes (versions/26.2/build/classes/java): client 89, e2e 2, e2eUndo 2, gametest 13, main 200 (306 files)
+RigTune classes (versions/26.2/build/classes/java): client 90, e2e 2, e2eUndo 2, gametest 14, main 202 (310 files)
 Classpath 26.2: Minecraft 26.2 (2 jars), 53 Mojang libraries, Fabric API 0.161.0+26.2 (46 modules), Mod Menu 20.0.2, Fabric Loader 0.19.5
   libraries not in the cache (not needed unless a reference points there): ca.weblite:java-objc-bridge:1.1
 Classpath 26.3: Minecraft 26.3 (2 jars), 53 Mojang libraries, Fabric API 0.161.0+26.3 (46 modules), Mod Menu 21.0.0, Fabric Loader 0.19.5
   libraries not in the cache (not needed unless a reference points there): ca.weblite:java-objc-bridge:1.1
 
-Member references: 472 (Minecraft 284, Mojang 24, Fabric 62, Mod Menu 1, LWJGL 0, other Minecraft libraries 101; 371 without the other libraries; 56 through a RigTune subclass; 109 interface methods, lambdas included)
-  OK 463, MISSING 9, CHANGED 0, UNRESOLVED 0
+Member references: 479 (Minecraft 290, Mojang 24, Fabric 63, Mod Menu 1, LWJGL 0, other Minecraft libraries 101; 378 without the other libraries; 56 through a RigTune subclass; 110 interface methods, lambdas included)
+  OK 470, MISSING 9, CHANGED 0, UNRESOLVED 0
   not checked (not on the classpath, compile-only mod APIs): com/seibel 12, net/irisshaders 4
-Overridden or implemented methods: 41 (OK 41, MISSING 0, CHANGED 0)
+Overridden or implemented methods: 42 (OK 42, MISSING 0, CHANGED 0)
 Abstract methods newly left unimplemented: 0
-Referenced classes: 169: SAME 134, DIFF 33, MISSING 2
+Referenced classes: 171: SAME 135, DIFF 34, MISSING 2
   DIFF com/mojang/blaze3d/pipeline/RenderTarget
   DIFF com/mojang/blaze3d/platform/InputConstants
   DIFF com/mojang/blaze3d/platform/InputConstants$Type
@@ -30,6 +30,7 @@ Referenced classes: 169: SAME 134, DIFF 33, MISSING 2
   DIFF net/minecraft/client/gui/components/AbstractSelectionList
   DIFF net/minecraft/client/gui/components/DebugScreenOverlay
   DIFF net/minecraft/client/gui/components/events/GuiEventListener
+  DIFF net/minecraft/client/gui/screens/ConfirmLinkScreen
   DIFF net/minecraft/client/gui/screens/Screen
   DIFF net/minecraft/client/gui/screens/options/VideoSettingsScreen
   DIFF net/minecraft/client/input/InputWithModifiers
@@ -49,8 +50,8 @@ Referenced classes: 169: SAME 134, DIFF 33, MISSING 2
   MISSING com/mojang/blaze3d/systems/GpuDevice
 Reflection targets by class name: net/minecraft/client/Options$FieldAccess
   outside the checked classpath (check by hand): net.caffeinemc.mods.sodium.client.compatibility.workarounds.Workarounds, net.caffeinemc.mods.sodium.client.compatibility.workarounds.Workarounds$Reference, net.caffeinemc.mods.sodium.client.gui.VideoSettingsScreen, net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer, net.irisshaders.iris.api.v0.IrisApi
-Member names in strings: 8 from annotations or reflecting classes: Window.minimized, FabricLoader.getInstance, Minecraft.getInstance, Options.graphicsPreset, Options.minecraft, Options.processOptions, Options.serverRenderDistance, DebugScreenOverlay.logFrameDuration
-  8 more that may be coincidences (review only): JsonObject.size, Options.renderDistance, Gui.update, Hud.title, Screen.title, GameRenderer.update, FailableFunction.apply, Logger.error
+Member names in strings: 9 from annotations or reflecting classes: Window.minimized, FabricLoader.getInstance, Minecraft.getInstance, Options.graphicsPreset, Options.minecraft, Options.processOptions, Options.serverRenderDistance, DebugScreenOverlay.logFrameDuration, Logger.error
+  8 more that may be coincidences (review only): JsonObject.size, Options.renderDistance, Gui.update, Hud.title, Screen.title, GameRenderer.update, TranslatableContents.key, FailableFunction.apply
 String constants changed in referenced classes: 19
   com/mojang/blaze3d/pipeline/RenderTarget: -0 +2
       + "Trying to copy color texture from a RenderTarget without a color texture"
@@ -186,7 +187,7 @@ String constants changed in referenced classes: 19
       - ... 3 more in report.json
       + "System chat: {}"
 
-RigTune bytecode (26.2 build vs 26.3 build): 306 classes compared, 4 differ, 0 only in 26.2, 0 only in 26.3
+RigTune bytecode (26.2 build vs 26.3 build): 310 classes compared, 4 differ, 0 only in 26.2, 0 only in 26.3
   client/io/github/chaotix345/rigtune/client/RigTuneClient.class
   client/io/github/chaotix345/rigtune/client/probe/HardwareProbe.class
   gametest/io/github/chaotix345/rigtune/gametest/BenchmarkGameTest.class

@@ -192,10 +192,10 @@ cd - && git worktree remove --force ../rigtune-apidiff-tmp
 
 Results so far (`docs/v0.3/verification/mc-tooling/`):
 
-- `26.3 -> 26.4-snapshot-1`: no breaking change. 472 references resolve (371 into Minecraft,
+- `26.3 -> 26.4-snapshot-1`: no breaking change. 479 references resolve (378 into Minecraft,
   Mojang, Fabric and Mod Menu, 101 into other Minecraft libraries such as Gson; 56 of them are
-  inherited members called through a RigTune subclass, 110 are interface methods, lambdas included);
-  41 overrides still override; 13 of 169 referenced classes changed, none in a way RigTune uses; the
+  inherited members called through a RigTune subclass, 111 are interface methods, lambdas included);
+  42 overrides still override; 13 of 171 referenced classes changed, none in a way RigTune uses; the
   reflection and mixin names are still there. (The research trial counted only the constant-pool
   references to those classes: 308 with its source sets, `main,client,gametest,test`.)
 - `26.2 -> 26.3` (a positive control): it finds the breaks the `//? if` blocks handle (`GpuDevice`

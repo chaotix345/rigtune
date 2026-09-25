@@ -57,7 +57,7 @@ versions".
   per run with `jimage` into a temp directory (about 4 s). `CHANGED` covers what breaks linkage without a
   missing member: static/instance flips, narrowed access, an owner switching between class and interface.
 - **What the constant pool doesn't show** (finding H2): every non-private, non-static RigTune method that
-  overrides or implements a foreign method must still override one, not final or static (41 on 26.3, e.g.
+  overrides or implements a foreign method must still override one, not final or static (42 on 26.3, e.g.
   `Screen.init`, `onInitializeClient`, Gson `TypeAdapter.read`/`write`); a concrete RigTune class mustn't gain an
   unimplemented abstract method from a foreign supertype; and each `LambdaMetafactory` call site adds its
   interface method as a reference (`ScreenEvents$AfterInit.afterInit`, `ClientTickEvents$EndTick.onEndTick`).
@@ -74,7 +74,7 @@ versions".
   so the number isn't comparable any more. e2e compiles against the released 0.1.0 jar (`-Pe2e.oldJar`).
 - **Referenced classes** are all types in RigTune's constant pools, descriptors, annotation values (the mixin
   target), class-name strings (reflection) and the declaring classes of inherited members, when they're on the
-  old classpath: 169 for 26.3 (the trial's 144 had no library classes). A class javap prints nothing for is
+  old classpath: 171 for 26.3 (the trial's 144 had no library classes). A class javap prints nothing for is
   `NO DUMP` (a gap, exit 1), never `SAME`.
 - **Heuristics.**
   - "Names in strings": a string in a RigTune class that names a member of a class referenced by the same
@@ -109,13 +109,14 @@ connection that never comes back). Each fix has a test; the live runs were redon
   WS-0): `'26.2', '26.3', '26.4-snapshot-1'`, `~26.4-`, Fabric API `0.161.1+26.4` (beta), Mod Menu
   `22.0.0-alpha.1`, no `sodium_version`, 26.3's Iris id kept, no Fabric blog post for 26.4 yet. The values match
   the research trial's hand-made node. `git status` was clean afterwards.
-- AC1.6: `docs/v0.3/verification/mc-tooling/apidiff-26.3-26.4-snapshot-1/` (exit 0): 472/472 references OK (56
-  through RigTune subclasses, 110 interface methods including lambdas), 41/41 overrides OK, no new abstract
+- AC1.6: `docs/v0.3/verification/mc-tooling/apidiff-26.3-26.4-snapshot-1/` (exit 0): 479/479 references OK (56
+  through RigTune subclasses, 111 interface methods including lambdas), 42/42 overrides OK, no new abstract
   method, 0 missing classes, the same 13 changed classes as research §5.3, the reflection/mixin names still
   declared with the same descriptors; `Options` lost only the private `GRAPHICS_API_TOOLTIP_VULKAN` and its
   string, `Minecraft` lost the two "forcing preferred graphics API" log strings (the Vulkan-default change,
   research §5.4). The snapshot's jars were already in the Loom/Gradle caches from the trial, so no node was
-  added. `...-trial-sets-summary.txt`: the same with the trial's source sets (482 references, 39 overrides).
+  added. `...-trial-sets-summary.txt`: the same with the trial's source sets (491 references, 40 overrides). All three outputs were regenerated
+  after merging origin/feat/v0.3.0 (WS-A, WS-D, WS-H), from freshly compiled 26.2 and 26.3 classes.
 - Positive control: `apidiff-26.2-26.3-summary.txt` (exit 1) finds the known v0.2 API changes the `//? if` blocks
   exist for (`GpuDevice`/`DeviceInfo` moved to another package, `InputConstants$Type.KEYSYM` gone (26.3 uses
   `KEYBOARD`), `Window`/`VideoMode.getRefreshRate` gone) and the 4 RigTune classes whose bytecode differs between

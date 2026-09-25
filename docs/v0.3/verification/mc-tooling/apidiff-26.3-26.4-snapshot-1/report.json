@@ -2,11 +2,11 @@
  "prev": "26.3",
  "mc": "26.4-snapshot-1",
  "class_count": {
-  "client": 89,
+  "client": 90,
   "e2e": 2,
   "e2eUndo": 2,
-  "gametest": 13,
-  "main": 200
+  "gametest": 14,
+  "main": 202
  },
  "missing_sets": [],
  "classpath": {
@@ -1471,6 +1471,18 @@
    "owner": "net/fabricmc/loader/api/FabricLoader",
    "name": "getModContainer",
    "desc": "(Ljava/lang/String;)Ljava/util/Optional;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/fabricmc/loader/api/FabricLoader",
+   "new": "net/fabricmc/loader/api/FabricLoader",
+   "old_access": 1025,
+   "new_access": 1025
+  },
+  {
+   "kind": "imethod",
+   "owner": "net/fabricmc/loader/api/FabricLoader",
+   "name": "getRawGameVersion",
+   "desc": "()Ljava/lang/String;",
    "status": "OK",
    "reason": "",
    "old": "net/fabricmc/loader/api/FabricLoader",
@@ -4481,12 +4493,48 @@
   {
    "kind": "method",
    "owner": "net/minecraft/client/gui/components/Button",
+   "name": "getBottom",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/AbstractWidget",
+   "new": "net/minecraft/client/gui/components/AbstractWidget",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "method",
+   "owner": "net/minecraft/client/gui/components/Button",
    "name": "getMessage",
    "desc": "()Lnet/minecraft/network/chat/Component;",
    "status": "OK",
    "reason": "",
    "old": "net/minecraft/client/gui/components/AbstractWidget$WithInactiveMessage",
    "new": "net/minecraft/client/gui/components/AbstractWidget$WithInactiveMessage",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "method",
+   "owner": "net/minecraft/client/gui/components/Button",
+   "name": "getRight",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/AbstractWidget",
+   "new": "net/minecraft/client/gui/components/AbstractWidget",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "method",
+   "owner": "net/minecraft/client/gui/components/Button",
+   "name": "getWidth",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/AbstractWidget",
+   "new": "net/minecraft/client/gui/components/AbstractWidget",
    "old_access": 1,
    "new_access": 1
   },
@@ -4876,6 +4924,30 @@
   },
   {
    "kind": "method",
+   "owner": "net/minecraft/client/gui/components/MultiLineTextWidget",
+   "name": "getHeight",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/MultiLineTextWidget",
+   "new": "net/minecraft/client/gui/components/MultiLineTextWidget",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "method",
+   "owner": "net/minecraft/client/gui/components/MultiLineTextWidget",
+   "name": "getMessage",
+   "desc": "()Lnet/minecraft/network/chat/Component;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/AbstractWidget",
+   "new": "net/minecraft/client/gui/components/AbstractWidget",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "method",
    "owner": "net/minecraft/client/gui/components/Tooltip",
    "name": "create",
    "desc": "(Lnet/minecraft/network/chat/Component;)Lnet/minecraft/client/gui/components/Tooltip;",
@@ -4957,6 +5029,18 @@
    "new": "net/minecraft/client/gui/components/toasts/ToastManager",
    "old_access": 1,
    "new_access": 1
+  },
+  {
+   "kind": "method",
+   "owner": "net/minecraft/client/gui/screens/ConfirmLinkScreen",
+   "name": "confirmLinkNow",
+   "desc": "(Lnet/minecraft/client/gui/screens/Screen;Ljava/net/URI;)V",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/ConfirmLinkScreen",
+   "new": "net/minecraft/client/gui/screens/ConfirmLinkScreen",
+   "old_access": 9,
+   "new_access": 9
   },
   {
    "kind": "method",
@@ -6023,6 +6107,15 @@
    "reason": ""
   },
   {
+   "class": "io/github/chaotix345/rigtune/gametest/ReportGameTest",
+   "name": "runTest",
+   "desc": "(Lnet/fabricmc/fabric/api/client/gametest/v1/context/ClientGameTestContext;)V",
+   "old": "net/fabricmc/fabric/api/client/gametest/v1/FabricClientGameTest",
+   "new": "net/fabricmc/fabric/api/client/gametest/v1/FabricClientGameTest",
+   "status": "OK",
+   "reason": ""
+  },
+  {
    "class": "io/github/chaotix345/rigtune/gametest/RigTuneClientGameTest",
    "name": "runTest",
    "desc": "(Lnet/fabricmc/fabric/api/client/gametest/v1/context/ClientGameTestContext;)V",
@@ -6151,6 +6244,7 @@
   "net/minecraft/client/gui/components/CycleButton$Builder": "SAME",
   "net/minecraft/client/gui/components/CycleButton$OnValueChange": "SAME",
   "net/minecraft/client/gui/components/DebugScreenOverlay": "SAME",
+  "net/minecraft/client/gui/components/MultiLineTextWidget": "SAME",
   "net/minecraft/client/gui/components/Tooltip": "SAME",
   "net/minecraft/client/gui/components/events/GuiEventListener": "SAME",
   "net/minecraft/client/gui/components/toasts/SystemToast": "SAME",
@@ -6159,6 +6253,7 @@
   "net/minecraft/client/gui/components/toasts/ToastManager": "SAME",
   "net/minecraft/client/gui/layouts/LayoutElement": "SAME",
   "net/minecraft/client/gui/narration/NarratableEntry": "SAME",
+  "net/minecraft/client/gui/screens/ConfirmLinkScreen": "SAME",
   "net/minecraft/client/gui/screens/GenericMessageScreen": "SAME",
   "net/minecraft/client/gui/screens/Overlay": "SAME",
   "net/minecraft/client/gui/screens/Screen": "SAME",
@@ -6413,6 +6508,19 @@
    ]
   },
   {
+   "class": "net/minecraft/network/chat/contents/TranslatableContents",
+   "name": "key",
+   "status": "OK",
+   "reason": "",
+   "strong": false,
+   "old_descs": [
+    "Ljava/lang/String;"
+   ],
+   "new_descs": [
+    "Ljava/lang/String;"
+   ]
+  },
+  {
    "class": "org/apache/commons/lang3/function/FailableFunction",
    "name": "apply",
    "status": "OK",
@@ -6430,7 +6538,7 @@
    "name": "error",
    "status": "OK",
    "reason": "",
-   "strong": false,
+   "strong": true,
    "old_descs": [
     "(Ljava/lang/String;)V",
     "(Ljava/lang/String;Ljava/lang/Object;)V",
