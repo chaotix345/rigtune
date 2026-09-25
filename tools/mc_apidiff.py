@@ -816,7 +816,7 @@ def main(argv=None, *, root=None, out=None, err=None):
         (target / "report.json").write_text(json.dumps(report, indent=1) + "\n", encoding="utf-8", newline="\n")
         for name in (n for n, s in class_status.items() if s == "DIFF"):
             diff = difflib.unified_diff(old_blocks[name].splitlines(), new_blocks[name].splitlines(), args.prev, args.mc,
-                                        n=0, lineterm="")
+                                        n=1, lineterm="")
             text = "\n".join(diff) + "\n"
             change = analysis.string_changes.get(name)
             if change:
