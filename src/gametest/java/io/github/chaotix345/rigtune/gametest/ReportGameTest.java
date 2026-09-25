@@ -49,52 +49,32 @@ public class ReportGameTest implements FabricClientGameTest {
 			});
 			context.waitForScreen(RigTuneScreen.class);
 			context.waitTicks(3);
-			context.runOnClient(mc -> {
-				Button button = findButton(mc.gui.screen(), "rigtune.report.button");
-				check(button != null && button.active, "Report a problem is there and active");
-				check(mc.font.width(button.getMessage()) <= button.getWidth() - 4, "label fits: " + describe(button));
-				Screen screen = mc.gui.screen();
-				check(button.getX() >= 0 && button.getRight() <= screen.width && button.getBottom() <= screen.height, "inside the screen: " + describe(button));
-			});
-			context.takeScreenshot("report-button-640x480-scale2");
-
-			checkWorstCase(context);
-
-			// Press, then read the clipboard and build the expected link in the same client task.
-			String[] result = context.computeOnClient(mc -> {
-				Button button = findButton(mc.gui.screen(), "rigtune.report.button");
-				button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(0, 0)));
-				String report = controller.shareReport();
-				return new String[]{mc.keyboardHandler.getClipboard(), report, IssueLink.uri(controller.reportVersions(), report).toString()};
-			});
-			String copied = result[0].replace("\r\n", "\n");
-			String report = result[1];
-			String expected = result[2];
-			check(!report.isEmpty() && copied.equals(report), "the clipboard holds the full report (" + copied.length() + "/" + report.length() + ")");
-			context.waitForScreen(ConfirmLinkScreen.class);
-			context.waitTicks(2);
-			String shown = context.computeOnClient(mc -> message(mc.gui.screen()).getMessage().getString());
-			RigTune.LOGGER.info("ReportGameTest: {}-character link for a {}-character report: {}", shown.length(), report.length(), shown);
-			check(shown.equals(expected), "the confirm screen shows the issue link: " + shown + " vs " + expected);
-			check(shown.startsWith(IssueLink.NEW_ISSUE + "?template=" + IssueLink.TEMPLATE + "&title="), shown);
-			check(shown.length() <= IssueLink.MAX_URL, "at most " + IssueLink.MAX_URL + " characters: " + shown.length());
-			check(!shown.contains("labels=") && !shown.contains("assignees="), shown);
-			check(URI.create(shown).getRawQuery().contains("&" + IssueLink.REPORT_FIELD + "="), "carries a report: " + shown);
-
+			Screen rigtune = context.computeOnClient(mc -> mc.gui.screen());
+			// The confirm screen wraps the link once, when it opens (a resize only re-centres it), so it's opened at
+			// every size, as a player would.
 			for (int[] size : SIZES) {
 				resize(context, size[0], size[1], size[2]);
 				String name = size[0] + "x" + size[1] + "-scale" + size[2];
 				context.runOnClient(mc -> {
-					checkFullyShown(mc, "link at " + name);
-					checkLayout(mc, "confirm screen at " + name);
+					Button button = findButton(mc.gui.screen(), "rigtune.report.button");
+					check(button != null && button.active, "Report a problem is there and active at " + name);
+					check(mc.font.width(button.getMessage()) <= button.getWidth() - 4, "label fits at " + name + ": " + describe(button));
+					Screen screen = mc.gui.screen();
+					check(button.getX() >= 0 && button.getRight() <= screen.width && button.getBottom() <= screen.height,
+							"inside the screen at " + name + ": " + describe(button));
 				});
+				if (size == SIZES[0]) {
+					context.takeScreenshot("report-button-" + name);
+					checkWorstCase(context);
+				}
+				pressAndCheck(context, controller, name);
 				context.takeScreenshot("report-confirm-" + name);
+				pressByKey(context, "gui.cancel");
+				context.waitForScreen(RigTuneScreen.class);
+				check(context.computeOnClient(mc -> mc.gui.screen() == rigtune), "Cancel returns to the same RigTune screen");
 			}
-
-			pressByKey(context, "gui.cancel");
-			context.waitForScreen(RigTuneScreen.class);
 			context.waitTicks(2);
-			RigTune.LOGGER.info("ReportGameTest: cancelled; back on the RigTune screen, Open in Browser never pressed");
+			RigTune.LOGGER.info("ReportGameTest: cancelled at every size; Open in Browser was never pressed");
 			context.takeScreenshot("report-cancelled");
 			context.runOnClient(mc -> mc.gui.screen().onClose());
 			context.waitForScreen(TitleScreen.class);
@@ -102,6 +82,33 @@ public class ReportGameTest implements FabricClientGameTest {
 			context.runOnClient(mc -> mc.keyboardHandler.setClipboard(before));
 			resize(context, 854, 480, 0);
 		}
+	}
+
+	// Press, then read the clipboard and build the expected link in the same client task.
+	private static void pressAndCheck(ClientGameTestContext context, RigTuneController controller, String name) {
+		String[] result = context.computeOnClient(mc -> {
+			Button button = findButton(mc.gui.screen(), "rigtune.report.button");
+			button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(0, 0)));
+			String report = controller.shareReport();
+			return new String[]{mc.keyboardHandler.getClipboard(), report, IssueLink.uri(controller.reportVersions(), report).toString()};
+		});
+		String copied = result[0].replace("\r\n", "\n");
+		String report = result[1];
+		String expected = result[2];
+		check(!report.isEmpty() && copied.equals(report), "the clipboard holds the full report (" + copied.length() + "/" + report.length() + ")");
+		context.waitForScreen(ConfirmLinkScreen.class);
+		context.waitTicks(2);
+		String shown = context.computeOnClient(mc -> message(mc.gui.screen()).getMessage().getString());
+		RigTune.LOGGER.info("ReportGameTest: {}: {}-character link for a {}-character report: {}", name, shown.length(), report.length(), shown);
+		check(shown.equals(expected), "the confirm screen shows the issue link: " + shown + " vs " + expected);
+		check(shown.startsWith(IssueLink.NEW_ISSUE + "?template=" + IssueLink.TEMPLATE + "&title="), shown);
+		check(shown.length() <= IssueLink.MAX_URL, "at most " + IssueLink.MAX_URL + " characters: " + shown.length());
+		check(!shown.contains("labels=") && !shown.contains("assignees="), shown);
+		check(URI.create(shown).getRawQuery().contains("&" + IssueLink.REPORT_FIELD + "="), "carries a report: " + shown);
+		context.runOnClient(mc -> {
+			checkFullyShown(mc, "link at " + name);
+			checkLayout(mc, "confirm screen at " + name);
+		});
 	}
 
 	// The spike's worst case (F-M1): MAX_URL characters of the widest glyph a link can contain, fully readable at the
