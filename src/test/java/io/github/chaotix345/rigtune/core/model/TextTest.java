@@ -40,6 +40,7 @@ class TextTest {
 		assertEquals("%s and %s", Text.of("k", "%s and %s", "one").english());
 		assertEquals("%3$s", Text.of("k", "%3$s", "a").english());
 		assertEquals("trailing %", Text.of("k", "trailing %").english());
+		assertEquals("%99999999999$s", Text.of("k", "%99999999999$s", "a").english());
 	}
 
 	@Test
@@ -73,10 +74,11 @@ class TextTest {
 	}
 
 	@Test
-	void joinDropsBlankPartsAndStripsLikeTheOldTrim() {
+	void joinDropsBlankPartsAndKeepsTheRest() {
 		Text joined = Text.sentences(Text.literal(""), Text.of("k", "(alpha build)"));
 		assertEquals("(alpha build)", joined.english());
-		assertEquals("a  b", Text.sentences(Text.literal(" a "), Text.literal("b")).english());
+		assertEquals(" a  b", Text.sentences(Text.literal(" a "), Text.literal("b")).english());
+		assertEquals(" It is bundled.", new Text.Joined(" ", List.of(Text.literal(""), Text.literal("It is bundled."))).english());
 		assertEquals("x; y", Text.join("; ", List.of(Text.literal("x"), Text.literal("y"))).english());
 		assertTrue(Text.sentences(Text.literal(""), Text.literal(" ")).isBlank());
 		Text only = Text.sentences(Text.literal("Faster."));

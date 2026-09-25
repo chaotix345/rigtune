@@ -27,7 +27,7 @@ public sealed interface Text {
 		}
 	}
 
-	// Blank parts are dropped when it's made; the English is trimmed, as the `(a + " " + b).trim()` it replaces.
+	// The parts with the separator between them. join() and sentences() leave out blank parts; the constructor keeps them.
 	record Joined(String separator, List<Text> parts) implements Text {
 		public Joined {
 			parts = List.copyOf(parts);
@@ -72,7 +72,7 @@ public sealed interface Text {
 				String template = templates.apply(t.key());
 				yield Format.format(template != null ? template : t.fallback(), t.args(), templates);
 			}
-			case Joined joined -> String.join(joined.separator(), joined.parts().stream().map(part -> part.render(templates)).toList()).trim();
+			case Joined joined -> String.join(joined.separator(), joined.parts().stream().map(part -> part.render(templates)).toList());
 		};
 	}
 
@@ -107,7 +107,12 @@ public sealed interface Text {
 				if ("%".equals(type) && "%%".equals(matcher.group())) {
 					out.append('%');
 				} else if ("s".equals(type)) {
-					int index = matcher.group(1) != null ? Integer.parseInt(matcher.group(1)) - 1 : next++;
+					int index;
+					try {
+						index = matcher.group(1) != null ? Integer.parseInt(matcher.group(1)) - 1 : next++;
+					} catch (NumberFormatException e) {
+						return template;
+					}
 					if (index < 0 || index >= args.size()) {
 						return template;
 					}

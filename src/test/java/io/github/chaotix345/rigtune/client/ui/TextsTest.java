@@ -31,7 +31,10 @@ class TextsTest {
 			Text.of("k", "%s and %s", "one"),
 			Text.of("outer", "RigTune doesn't also offer %s, which conflict with it.", Text.of("inner", "%s or %s", "A, B", "C")),
 			Text.sentences(Text.literal("Faster."), Text.of("k", "RigTune doesn't also offer %s.", "X"), Text.of("n", "(alpha build)")),
-			Text.join("; ", Text.literal("a would be missing b"), Text.of("t", "mod %s would be loaded twice (%s)", "c", "c-1.jar, c-2.jar")));
+			Text.join("; ", Text.literal("a would be missing b"), Text.of("t", "mod %s would be loaded twice (%s)", "c", "c-1.jar, c-2.jar")),
+			Text.sentences(Text.literal(" Edges kept "), Text.of("n", "(alpha build)")),
+			new Text.Joined(" ", List.of(Text.literal(""), Text.of("b", "It is bundled inside another mod."))),
+			Text.of("k", "%99999999999$s", "a"));
 
 	@Test
 	void withoutATranslationTheClientShowsCoresEnglish() {

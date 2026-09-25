@@ -54,7 +54,8 @@ public final class Recommender {
 	private static final Text AVAILABILITY_UNKNOWN = Text.of("rigtune.rec.availability_unknown", AVAILABILITY_UNKNOWN_NOTE);
 	private static final Text OUTSIDE_REMOVE = Text.of("rigtune.rec.outside_mods_folder.remove", OUTSIDE_MODS_FOLDER + " remove it in your launcher.");
 	private static final Text OUTSIDE_UPDATE = Text.of("rigtune.rec.outside_mods_folder.update", OUTSIDE_MODS_FOLDER + " update it in your launcher.");
-	private static final Text BUNDLED = Text.of("rigtune.rec.bundled", "It is bundled inside another mod, so it has to be removed together with that mod.");
+	private static final Text BUNDLED = Text.of("rigtune.rec.bundled",
+			"It is bundled inside another mod, so it has to be removed together with that mod.");
 
 	private static final Comparator<Recommendation> ORDER = Comparator
 			.comparing(Recommendation::category)
@@ -257,26 +258,25 @@ public final class Recommender {
 			for (Map.Entry<ModRule, List<String>> entry : keptOut.entrySet()) {
 				ModRule rule = entry.getKey();
 				Availability availability = offered.get(rule);
-				List<Text> reason = new ArrayList<>();
-				reason.add(Text.literal(rule.reason));
+				List<Text> notes = new ArrayList<>();
 				if (!entry.getValue().isEmpty()) {
 					List<String> titles = entry.getValue();
 					Object names = titles.size() == 1 ? titles.getFirst()
 							: Text.of("rigtune.rec.list.or", "%s or %s", String.join(", ", titles.subList(0, titles.size() - 1)), titles.getLast());
-					reason.add(titles.size() == 1
+					notes.add(titles.size() == 1
 							? Text.of("rigtune.rec.install.keeps_out", "RigTune doesn't also offer %s, which conflicts with it.", names)
 							: Text.of("rigtune.rec.install.keeps_out.plural", "RigTune doesn't also offer %s, which conflict with it.", names));
 				}
 				if (rule.alpha()) {
-					reason.add(ALPHA);
+					notes.add(ALPHA);
 				}
 				if (availability == Availability.UNKNOWN) {
-					reason.add(AVAILABILITY_UNKNOWN);
+					notes.add(AVAILABILITY_UNKNOWN);
 				}
 				boolean selected = !rule.alpha() && (rule.defaultSelected == null || rule.defaultSelected);
 				String title = rule.displayTitle();
 				put(Recommendation.of("add:" + rule.slug, Category.ADD_MOD, RulesDocument.impactOf(rule.impact, Impact.MEDIUM),
-						Text.of("rigtune.rec.install.title", "Install %s", title), Text.join(" ", reason),
+						Text.of("rigtune.rec.install.title", "Install %s", title), withNotes(rule.reason, notes),
 						new Action.AddMod(rule.slug, rule.projectId, title), selected));
 			}
 		}
@@ -413,11 +413,31 @@ public final class Recommender {
 				return;
 			}
 			if (mod.file() == null) {
-				put(Recommendation.of(id, Category.REMOVE_MOD, impact, title, Text.sentences(reason, mod.sha1() != null ? OUTSIDE_REMOVE : BUNDLED),
-						new Action.None(), false));
+				// reason + " " + note, as before (a blank reason keeps its space).
+				Text how = new Text.Joined(" ", List.of(reason, mod.sha1() != null ? OUTSIDE_REMOVE : BUNDLED));
+				put(Recommendation.of(id, Category.REMOVE_MOD, impact, title, how, new Action.None(), false));
 				return;
 			}
 			put(Recommendation.of(id, Category.REMOVE_MOD, impact, title, reason, new Action.DisableMod(mod.modId(), mod.file()), selected));
+		}
+
+		// The rule's reason, then RigTune's notes: the rule's text as it is without notes, else what the old
+		// `(reason + " " + note).trim()` made (the reason's leading whitespace dropped, and the reason when that's all it is).
+		private static Text withNotes(String reason, List<Text> notes) {
+			String text = reason == null ? "" : reason;
+			if (notes.isEmpty()) {
+				return Text.literal(text);
+			}
+			List<Text> parts = new ArrayList<>();
+			int start = 0;
+			while (start < text.length() && text.charAt(start) <= ' ') {
+				start++;
+			}
+			if (start < text.length()) {
+				parts.add(Text.literal(text.substring(start)));
+			}
+			parts.addAll(notes);
+			return new Text.Joined(" ", parts);
 		}
 
 		private static Text disableTitle(String name) {

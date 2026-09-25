@@ -1,12 +1,19 @@
 package io.github.chaotix345.rigtune.core.recommend;
 
+import io.github.chaotix345.rigtune.core.Fixtures;
 import io.github.chaotix345.rigtune.core.L10nFixtures;
+import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
+import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.Impact;
+import io.github.chaotix345.rigtune.core.model.InstalledMod;
+import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.report.ModrinthOffAdvice;
+import io.github.chaotix345.rigtune.core.rules.RulesLoader;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -106,19 +113,55 @@ class RecommenderTextTest {
 			assertEquals("rigtune.rec.update.title", key(recs.get("update:lithium").titleText()));
 		}
 		Recommendation blank = Recommendation.of("add:x", Category.ADD_MOD, Impact.LOW, Text.literal("Install X"), Text.literal(""),
-				new io.github.chaotix345.rigtune.core.model.Action.AddMod("x", "X", "X"), true);
+				new Action.AddMod("x", "X", "X"), true);
 		Recommendation off = ModrinthOffAdvice.apply(new Report(null, null, null, null, List.of(blank), 1, "t", false, null)).recommendations().getFirst();
 		assertEquals(ModrinthOffAdvice.ADD_NOTE, off.reason());
 		assertEquals("rigtune.rec.modrinth_off.install", key(off.reasonText()));
 	}
 
+	// G-M1: the Strings are byte for byte what 0.2 built, also for rule text with spaces at its edges or no text at all.
+	@Test
+	void ruleTextWithSpacesOrNoTextReadsAsBefore() {
+		String rules = """
+				{"schemaVersion":2,"revision":1,"gpuVendorFallback":{"amd":5},"cpuTiers":[{"pattern":"(?i)ryzen","tier":5}],
+				 "heapTiers":[{"atLeastMb":0,"tier":5}],"availability":{"26.2":["plain","noted","blank"]},
+				 "mods":[
+				  {"slug":"plain","projectId":"P1","title":"Plain","modIds":["plain"],"reason":" Plain. ","recommendWhen":{"always":true}},
+				  {"slug":"noted","projectId":"P2","title":"Noted","modIds":["noted"],"reason":"  Noted.  ","stability":"alpha","recommendWhen":{"always":true}},
+				  {"slug":"blank","projectId":"P3","title":"Blank","modIds":["blank"],"reason":"   ","stability":"alpha","recommendWhen":{"always":true}}
+				 ],
+				 "obsolete":[{"modIds":["gone"],"reason":""},{"modIds":["spaced"],"reason":" Old. "}]}
+				""";
+		List<InstalledMod> mods = List.of(
+				new InstalledMod("gone", "Gone", "1", null, "aaaa"),
+				new InstalledMod("spaced", "Spaced", "1", null, null));
+		Report report = Recommender.recommend(RulesLoader.parse(rules), Fixtures.userRig().build(),
+				mods, new SettingsSnapshot(Map.of()), OnlineData.offline(),
+				Goal.BALANCED);
+		Map<String, Recommendation> recs = byId(report);
+		assertEquals(" Plain. ", recs.get("add:plain").reason());
+		assertEquals(("  Noted.  " + " " + Recommender.ALPHA_NOTE).trim(), recs.get("add:noted").reason());
+		assertEquals(("   " + " " + Recommender.ALPHA_NOTE).trim(), recs.get("add:blank").reason());
+		assertEquals("" + " " + Recommender.OUTSIDE_MODS_FOLDER + " remove it in your launcher.", recs.get("disable:gone").reason());
+		assertEquals(" Old. " + " It is bundled inside another mod, so it has to be removed together with that mod.", recs.get("disable:spaced").reason());
+		Recommendation spaced = new Recommendation("add:x", Category.ADD_MOD, Impact.LOW, "Install X", "Fast. ",
+				new Action.AddMod("x", "X", "X"), true);
+		Report one = new Report(null, null, null, null, List.of(spaced), 1, "t", false, null);
+		assertEquals("Fast. " + " " + ModrinthOffAdvice.ADD_NOTE, ModrinthOffAdvice.apply(one).recommendations().getFirst().reason());
+		for (Report r : List.of(report, ModrinthOffAdvice.apply(one))) {
+			for (Recommendation rec : r.recommendations()) {
+				assertEquals(rec.reason(), rec.reasonText().english(), rec.id());
+			}
+		}
+	}
+
 	@Test
 	void theOldConstructorKeepsWorkingWithLiterals() {
 		Recommendation r = new Recommendation("add:x", Category.ADD_MOD, Impact.LOW, "Install X", "E2E test mod",
-				new io.github.chaotix345.rigtune.core.model.Action.None(), false);
+				new Action.None(), false);
 		assertEquals(Text.literal("Install X"), r.titleText());
 		assertEquals(Text.literal("E2E test mod"), r.reasonText());
-		Recommendation nulls = new Recommendation("a", Category.ADVICE, Impact.LOW, null, null, new io.github.chaotix345.rigtune.core.model.Action.None(), false);
+		Recommendation nulls = new Recommendation("a", Category.ADVICE, Impact.LOW, null, null, new Action.None(), false);
 		assertNotNull(nulls.titleText());
 		assertTrue(nulls.reasonText().isBlank());
 	}

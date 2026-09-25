@@ -43,7 +43,7 @@ public final class DownloadPlanner {
 	// the UI shows them (docs/v0.3/SPEC.md item 9); errors stay their English.
 	public record Result(List<Op> ops, List<String> ids, List<String> errors, Map<String, List<String>> opIds, List<Text> errorTexts) {
 		public Result {
-			errorTexts = errorTexts != null ? List.copyOf(errorTexts) : errors.stream().map(Text::literal).toList();
+			errorTexts = errorTexts != null ? List.copyOf(errorTexts) : errors == null ? List.of() : errors.stream().map(Text::literal).toList();
 		}
 
 		public Result(List<Op> ops, List<String> ids, List<String> errors, Map<String, List<String>> opIds) {

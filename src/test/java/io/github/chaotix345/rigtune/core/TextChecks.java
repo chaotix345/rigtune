@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -100,18 +99,23 @@ public final class TextChecks {
 		}
 	}
 
-	// AC9.3: through the uppercasing translator nothing but argument values (and rule data) is lower case.
+	// AC9.3: through the uppercasing translator nothing but argument values (and rule data) is lower case. The arguments
+	// and data are rendered as a placeholder, so only the text around them is checked.
 	public static void assertPseudoLocalised(Text text, Set<String> data, String context) {
-		List<String> removable = new ArrayList<>(assertTranslated(text, data, context));
-		removable.addAll(data);
-		removable.sort(Comparator.comparingInt(String::length).reversed());
-		String out = pseudo(text);
-		for (String value : removable) {
-			if (!value.isEmpty()) {
-				out = out.replace(value, "");
-			}
-		}
-		String rest = out;
-		assertTrue(rest.chars().noneMatch(Character::isLowerCase), context + ": untranslated text reaches the UI: \"" + pseudo(text) + "\" (left: \"" + rest + "\")");
+		assertTranslated(text, data, context);
+		String rest = pseudo(masked(text, false, data));
+		assertTrue(rest.chars().noneMatch(Character::isLowerCase), context + ": untranslated text reaches the UI: \"" + pseudo(text) + "\" (without its arguments: \""
+				+ rest.replace(HOLE, "_") + "\")");
+	}
+
+	private static final String HOLE = "\u0000";
+
+	private static Text masked(Text text, boolean argument, Set<String> data) {
+		return switch (text) {
+			case Text.Literal literal -> argument || data.contains(literal.value()) ? Text.literal(HOLE) : literal;
+			case Text.Translatable t -> Text.of(t.key(), t.fallback(),
+					t.args().stream().map(arg -> arg instanceof Text inner ? masked(inner, true, data) : HOLE).toArray());
+			case Text.Joined joined -> new Text.Joined(joined.separator(), joined.parts().stream().map(part -> masked(part, argument, data)).toList());
+		};
 	}
 }

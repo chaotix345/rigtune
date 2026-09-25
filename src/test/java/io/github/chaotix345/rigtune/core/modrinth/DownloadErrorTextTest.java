@@ -94,5 +94,6 @@ class DownloadErrorTextTest {
 	void theOldConstructorsKeepTheErrorsAsLiterals() {
 		DownloadPlanner.Result result = new DownloadPlanner.Result(List.of(), List.of(), List.of("x: y"));
 		assertEquals(List.of(Text.literal("x: y")), result.errorTexts());
+		assertEquals(List.of(), new DownloadPlanner.Result(List.of(), List.of(), null).errorTexts());
 	}
 }

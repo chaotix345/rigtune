@@ -34,33 +34,46 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.3/SPEC.md item 9 (AC9.1, AC6.4; amendment G-M2): a source scan (no bytecode) that keeps every word the
 // client shows in the lang files.
-// (a) No hard-coded words in client code: a string literal with a letter inside literal(...), and in client/ui one with
-//     two or more letters inside text(...) / centeredText(...) or next to + / +=. Translation keys and key prefixes are
-//     exempt; anything else needs an ALLOWED entry with its reason.
+// (a) No hard-coded words in client code: a string literal with a letter inside literal(...) anywhere in client code,
+//     and in client/ui any string literal with two or more letters (inside text(...), centeredText(...), next to +, in a
+//     constant, ...). Exempt: translation keys and key prefixes/suffixes, dotted identifiers (setting keys), and the
+//     arguments of LOGGER calls, regex and date-pattern calls; anything else needs an ALLOWED entry with its reason.
 // (b) Every translation key written out in client or core code (Component.translatable, Text.of, LauncherInfo's
 //     tables, HistoryModel, UndoPlan problems, ...) is in en_us.json.
 // (c) Every en_us.json key is used: written out in client or core code, or one of the dynamic families below, whose
 //     suffixes come from the code (enums, the history model, the tier calculator) and whose prefixes the code writes.
-//     A family key missing from en_us.json fails too, and every Text.of("key", "English"...) in core has the
-//     en_us.json value as its English.
+//     A family key missing from en_us.json fails too.
+// (e) Every Text.of(...) in client or core code writes its key out, and its English (string literals and this file's
+//     String constants joined with +) is en_us.json's value for that key.
 // (d) Every other <locale>.json is a flat object of strings with a subset of en_us.json's keys, each with the same
-//     arguments (%s, %n$s) as en_us.json, and every template (en_us.json's too) is one Minecraft can format.
+//     arguments (%s, %n$s) as en_us.json, and every template (en_us.json's too) is one Minecraft can format. Minecraft
+//     reads %d / %.1f in a lang file as %s; en_us.json may not use them, since the code's English fallback isn't rewritten.
 class LangCheckTest {
 	static final String LANG_DIR = "src/main/resources/assets/rigtune/lang";
 
-	// (a) exceptions: "<path>|<literal>" -> why the words aren't translated. None needed today.
-	static final Map<String, String> ALLOWED = Map.of();
+	// (a) exceptions: "<path>|<literal>" -> why the words aren't translated.
+	private static final String SCREEN = "src/client/java/io/github/chaotix345/rigtune/client/ui/RigTuneScreen.java|";
+	static final Map<String, String> ALLOWED = Map.of(
+			SCREEN + "OpenGL", "the graphics API's name, shown as it is (like the GPU's own name)",
+			SCREEN + "Vulkan", "the graphics API's name, shown as it is (like the GPU's own name)",
+			SCREEN + "true", "an option value compared with, not shown (shown as the game's On)",
+			SCREEN + "false", "an option value compared with, not shown (shown as the game's Off)");
 
 	// (b) literals shaped like keys that aren't translation keys.
 	static final Map<String, String> NOT_KEYS = Map.of(
 			"rigtune.json", "the file RigTune keeps its state in (ClientState)",
 			"rigtune.dev.autorun", "a system property of the dev-only autorun (DevAutorun)");
 
-	private static final Pattern KEY_SHAPED = Pattern.compile("\\.?[a-z0-9_]+(\\.[a-z0-9_]+)*\\.?");
+	// A key, a key prefix ("rigtune.goal."), a dotted identifier ("vanilla.renderDistance") or a key suffix (".tooltip").
+	private static final Pattern KEY_SHAPED = Pattern.compile("\\.?[a-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+\\.?|\\.[a-z][a-z0-9_]*");
 	private static final Pattern KEY = Pattern.compile("(rigtune|key\\.rigtune)(\\.[a-z0-9_]+)+");
 	private static final Pattern CALL = Pattern.compile("(?<![A-Za-z0-9_$])(literal|text|centeredText)\\s*\\(");
-	private static final Pattern TEXT_OF = Pattern.compile("Text\\.of\\(\\s*$");
+	// Calls whose string arguments are never shown: log lines, regular expressions, date patterns.
+	private static final Pattern NOT_SHOWN = Pattern.compile("(?<![A-Za-z0-9_$])(LOGGER\\.[a-z]+|replaceAll|replaceFirst|matches|split|compile|ofPattern)\\s*\\(");
+	private static final Pattern TEXT_OF_CALL = Pattern.compile("(?<![A-Za-z0-9_$.])(Text\\.of)\\(");
 	private static final Pattern FORMAT = Pattern.compile("%(?:(\\d+)\\$)?([A-Za-z%]|$)");
+	// net.minecraft.locale.Language.loadFromJson's rewrite (26.2 and 26.3, javap).
+	private static final Pattern LANG_NUMBER = Pattern.compile("%(\\d+\\$)?[\\d.]*[df]");
 
 	// A string literal in a source file: where it is and its value.
 	record Literal(int start, int end, String value) {
@@ -154,7 +167,7 @@ class LangCheckTest {
 	}
 
 	private static boolean keyShaped(String s) {
-		return s.contains(".") && KEY_SHAPED.matcher(s).matches();
+		return KEY_SHAPED.matcher(s).matches();
 	}
 
 	private static int closing(String masked, int open) {
@@ -194,6 +207,29 @@ class LangCheckTest {
 		return k >= masked.length() ? 0 : masked.charAt(k);
 	}
 
+	// The ranges (open paren, close paren) of the calls `pattern` finds.
+	private static List<int[]> calls(String masked, Pattern pattern) {
+		List<int[]> out = new ArrayList<>();
+		Matcher m = pattern.matcher(masked);
+		while (m.find()) {
+			int open = m.end() - 1;
+			out.add(new int[]{open, closing(masked, open), m.start(1)});
+		}
+		return out;
+	}
+
+	// The name of the innermost call of `found` around the literal, or null.
+	private static String inside(Scanned scanned, List<int[]> found, Literal literal) {
+		// found: {open paren, close paren, start of the call's name}
+		int[] best = null;
+		for (int[] call : found) {
+			if (call[0] < literal.start() && literal.end() <= call[1] && (best == null || call[0] > best[0])) {
+				best = call;
+			}
+		}
+		return best == null ? null : scanned.masked().substring(best[2], best[0]).trim();
+	}
+
 	// (a) sources: path (with /, from the repository root) -> text; only src/client/java is scanned.
 	static List<String> hardCodedText(Map<String, String> sources, Map<String, String> allowed) {
 		List<String> out = new ArrayList<>();
@@ -203,37 +239,30 @@ class LangCheckTest {
 			}
 			boolean ui = path.contains("/client/ui/");
 			Scanned scanned = Scanned.of(src);
-			Set<Literal> flagged = new LinkedHashSet<>();
-			Map<Literal, String> why = new LinkedHashMap<>();
-			Matcher call = CALL.matcher(scanned.masked());
-			while (call.find()) {
-				String name = call.group(1);
-				if (!ui && !name.equals("literal")) {
+			String masked = scanned.masked();
+			List<int[]> shown = calls(masked, CALL);
+			List<int[]> notShown = calls(masked, NOT_SHOWN);
+			for (Literal literal : scanned.literals()) {
+				int letters = letters(literal.value());
+				if (letters == 0 || keyShaped(literal.value()) || inside(scanned, notShown, literal) != null) {
 					continue;
 				}
-				int open = call.end() - 1;
-				int close = closing(scanned.masked(), open);
-				int min = name.equals("literal") ? 1 : 2;
-				for (Literal literal : scanned.literals()) {
-					if (literal.start() > open && literal.end() <= close && letters(literal.value()) >= min && !keyShaped(literal.value()) && flagged.add(literal)) {
-						why.put(literal, "in " + name + "(...)");
-					}
+				String call = inside(scanned, shown, literal);
+				String why;
+				if ("literal".equals(call)) {
+					why = "in literal(...)";
+				} else if (!ui || letters < 2) {
+					continue;
+				} else if (call != null) {
+					why = "in " + call + "(...)";
+				} else if (before(masked, literal.start()) == '+' && !beforeTwo(masked, literal.start()).equals("++")
+						|| beforeTwo(masked, literal.start()).equals("+=") || after(masked, literal.end()) == '+') {
+					why = "joined with +";
+				} else {
+					why = "in client/ui code";
 				}
-			}
-			if (ui) {
-				for (Literal literal : scanned.literals()) {
-					String masked = scanned.masked();
-					boolean plusBefore = before(masked, literal.start()) == '+' && !beforeTwo(masked, literal.start()).equals("++")
-							|| beforeTwo(masked, literal.start()).equals("+=");
-					boolean plusAfter = after(masked, literal.end()) == '+';
-					if ((plusBefore || plusAfter) && letters(literal.value()) >= 2 && !keyShaped(literal.value()) && flagged.add(literal)) {
-						why.put(literal, "joined with +");
-					}
-				}
-			}
-			for (Literal literal : flagged) {
 				if (!allowed.containsKey(path + "|" + literal.value())) {
-					out.add(path + ":" + scanned.line(literal.start()) + ": \"" + literal.value() + "\" " + why.get(literal));
+					out.add(path + ":" + scanned.line(literal.start()) + ": \"" + literal.value() + "\" " + why);
 				}
 			}
 		});
@@ -292,17 +321,92 @@ class LangCheckTest {
 				out.add(key + " is in en_us.json but nothing uses it");
 			}
 		}
-		// Text.of("key", "English"...) in core: the English is en_us.json's.
+		return out;
+	}
+
+	// The top-level arguments of the call whose parenthesis opens at `open`, as ranges.
+	private static List<int[]> arguments(String masked, int open, int close) {
+		List<int[]> out = new ArrayList<>();
+		int depth = 0;
+		int from = open + 1;
+		for (int k = open + 1; k < close; k++) {
+			char c = masked.charAt(k);
+			if (c == '(' || c == '[' || c == '{') {
+				depth++;
+			} else if (c == ')' || c == ']' || c == '}') {
+				depth--;
+			} else if (c == ',' && depth == 0) {
+				out.add(new int[]{from, k});
+				from = k + 1;
+			}
+		}
+		out.add(new int[]{from, close});
+		return out;
+	}
+
+	// The string an expression of literals and this file's `static final String` constants joined with + stands for,
+	// or null when it's anything else.
+	private static String constant(Scanned scanned, int from, int to, int depth) {
+		if (depth > 5) {
+			return null;
+		}
+		StringBuilder out = new StringBuilder();
+		String masked = scanned.masked();
+		int at = from;
+		while (at < to) {
+			int plus = at;
+			while (plus < to && masked.charAt(plus) != '+') {
+				plus++;
+			}
+			int start = at;
+			int end = plus;
+			while (start < end && Character.isWhitespace(masked.charAt(start))) {
+				start++;
+			}
+			while (end > start && Character.isWhitespace(masked.charAt(end - 1))) {
+				end--;
+			}
+			String piece = null;
+			for (Literal literal : scanned.literals()) {
+				if (literal.start() == start && literal.end() == end) {
+					piece = literal.value();
+				}
+			}
+			String name = masked.substring(start, end);
+			if (piece == null && name.matches("[A-Za-z_][A-Za-z0-9_]*")) {
+				Matcher definition = Pattern.compile("static\\s+final\\s+String\\s+" + name + "\\s*=").matcher(masked);
+				if (definition.find()) {
+					piece = constant(scanned, definition.end(), masked.indexOf(';', definition.end()), depth + 1);
+				}
+			}
+			if (piece == null) {
+				return null;
+			}
+			out.append(piece);
+			at = plus + 1;
+		}
+		return out.toString();
+	}
+
+	// (e)
+	static List<String> textOfEnglish(Map<String, String> sources, Map<String, String> lang) {
+		List<String> out = new ArrayList<>();
 		sources.forEach((path, src) -> {
 			Scanned scanned = Scanned.of(src);
-			List<Literal> literals = scanned.literals();
-			for (int k = 0; k + 1 < literals.size(); k++) {
-				Literal key = literals.get(k);
-				Literal english = literals.get(k + 1);
-				if (TEXT_OF.matcher(scanned.masked().substring(Math.max(0, key.start() - 40), key.start())).find()
-						&& scanned.masked().substring(key.end(), english.start()).trim().equals(",")
-						&& lang.containsKey(key.value()) && !lang.get(key.value()).equals(english.value())) {
-					out.add(path + ":" + scanned.line(key.start()) + ": the English of " + key.value() + " isn't en_us.json's: \"" + english.value() + "\"");
+			String masked = scanned.masked();
+			for (int[] call : calls(masked, TEXT_OF_CALL)) {
+				String where = path + ":" + scanned.line(call[0]);
+				List<int[]> args = arguments(masked, call[0], call[1]);
+				String key = args.isEmpty() ? null : constant(scanned, args.get(0)[0], args.get(0)[1], 5);
+				if (key == null || args.size() < 2) {
+					out.add(where + ": Text.of needs its key written out and its English next to it");
+					continue;
+				}
+				String english = constant(scanned, args.get(1)[0], args.get(1)[1], 0);
+				if (english == null) {
+					out.add(where + ": can't work out the English of " + key + " (use literals and String constants)");
+				} else if (lang.containsKey(key) && !lang.get(key).equals(english)) {
+					out.add(where + ": the English of " + key + " isn't en_us.json's: \"" + english + "\"");
 				}
 			}
 		});
@@ -311,6 +415,14 @@ class LangCheckTest {
 
 	// The arguments a template uses (%s in order, %n$s by position), or null when Minecraft can't format it.
 	static Set<Integer> arguments(String template) {
+		return arguments(template, false);
+	}
+
+	// langFile: read as Minecraft reads a lang file, which turns %d, %.1f, %2$d into %s / %2$s first.
+	static Set<Integer> arguments(String template, boolean langFile) {
+		if (langFile) {
+			template = LANG_NUMBER.matcher(template).replaceAll("%$1s");
+		}
 		Set<Integer> out = new TreeSet<>();
 		Matcher m = FORMAT.matcher(template);
 		int next = 0;
@@ -326,7 +438,11 @@ class LangCheckTest {
 			if (!"s".equals(m.group(2))) {
 				return null;
 			}
-			out.add(m.group(1) != null ? Integer.parseInt(m.group(1)) - 1 : next++);
+			try {
+				out.add(m.group(1) != null ? Integer.parseInt(m.group(1)) - 1 : next++);
+			} catch (NumberFormatException e) {
+				return null;
+			}
 			at = m.end();
 		}
 		return template.substring(at).indexOf('%') >= 0 ? null : out;
@@ -338,22 +454,22 @@ class LangCheckTest {
 		Map<String, String> english = strings("en_us.json", files.get("en_us.json"), out);
 		english.forEach((key, template) -> {
 			if (arguments(template) == null) {
-				out.add("en_us.json: " + key + ": Minecraft can't format \"" + template + "\"");
+				out.add("en_us.json: " + key + ": use %s for every argument (the code's English can't format \"" + template + "\")");
 			}
 		});
 		files.forEach((file, json) -> {
 			if (file.equals("en_us.json")) {
 				return;
 			}
-			if (!file.matches("[a-z]{2,3}_[a-z0-9]{2,3}\\.json")) {
-				out.add(file + ": not a <language>_<region>.json locale file");
+			if (!file.matches("[a-z]{2,4}(_[a-z0-9]{2,4})?\\.json")) {
+				out.add(file + ": not a Minecraft language code (<language>_<region>.json)");
 			}
 			strings(file, json, out).forEach((key, template) -> {
 				if (!english.containsKey(key)) {
 					out.add(file + ": " + key + " isn't in en_us.json");
 					return;
 				}
-				Set<Integer> args = arguments(template);
+				Set<Integer> args = arguments(template, true);
 				if (args == null) {
 					out.add(file + ": " + key + ": Minecraft can't format \"" + template + "\"");
 				} else if (!args.equals(arguments(english.get(key)))) {
@@ -447,7 +563,8 @@ class LangCheckTest {
 			}
 		}
 		out.add(new Family("rigtune.limit.", List.of(), keys("rigtune.limit.", limits.stream())));
-		out.add(new Family("rigtune.benchmark.scene.", List.of(), keys("rigtune.benchmark.scene.", Stream.of(BenchmarkRequest.Scene.values()).map(LangCheckTest::lower))));
+		out.add(new Family("rigtune.benchmark.scene.", List.of(),
+				keys("rigtune.benchmark.scene.", Stream.of(BenchmarkRequest.Scene.values()).map(LangCheckTest::lower))));
 		out.add(new Family("rigtune.benchmark.menu.scene.", List.of(".hint"),
 				keys("rigtune.benchmark.menu.scene.", Stream.of(BenchmarkRequest.Scene.values()).map(s -> lower(s) + ".hint"))));
 		// HistoryModel.kindKey/statusKey build rigtune.history.kind.* / .status.* from its PREFIX.
@@ -492,6 +609,11 @@ class LangCheckTest {
 	}
 
 	@Test
+	void everyTextOfHasEnUsEnglish() throws IOException {
+		assertEquals(List.of(), textOfEnglish(sources(), english()));
+	}
+
+	@Test
 	void everyLocaleFileMatchesEnUs() throws IOException {
 		assertEquals(List.of(), localeProblems(langFiles()));
 	}
@@ -512,18 +634,43 @@ class LangCheckTest {
 					void e() { Component.literal(" · " + count); graphics.text(font, Component.translatable("rigtune.x"), 0, 0, 0); }
 					void f() { Component.translatable("rigtune.goal." + goal + ".tooltip"); String x = "a" + "b"; }
 					void g() { graphics.centeredText(font, value == null ? "?" : "Unknown", 0, 0, 0); }
+					static final String LABEL = "Words in a constant";
+					void h() { RigTune.LOGGER.warn("Could not do {}", x); s.replaceAll("(?i)Core Processor", ""); DateTimeFormatter.ofPattern("yyyy-MM-dd"); }
+					void i() { set("vanilla.renderDistance"); graphics.text(font, "OK", 0, 0, 0); }
 				}
 				""";
-		List<String> found = hardCodedText(Map.of(UI, src), Map.of());
-		assertEquals(List.of(UI + ":3: \"Hello\" in literal(...)", UI + ":4: \"Hi there\" in text(...)", UI + ":9: \"Unknown\" in centeredText(...)",
-				UI + ":5: \" Hz\" joined with +", UI + ":6: \"GB\" joined with +"), found);
-		assertEquals(List.of(UI + ":4: \"Hi there\" in text(...)", UI + ":9: \"Unknown\" in centeredText(...)", UI + ":5: \" Hz\" joined with +",
-				UI + ":6: \"GB\" joined with +"), hardCodedText(Map.of(UI, src), Map.of(UI + "|Hello", "a test")));
+		List<String> all = List.of(UI + ":3: \"Hello\" in literal(...)", UI + ":4: \"Hi there\" in text(...)", UI + ":5: \" Hz\" joined with +",
+				UI + ":6: \"GB\" joined with +", UI + ":9: \"Unknown\" in centeredText(...)", UI + ":10: \"Words in a constant\" in client/ui code",
+				UI + ":12: \"OK\" in text(...)");
+		assertEquals(all, hardCodedText(Map.of(UI, src), Map.of()));
+		assertEquals(all.subList(1, all.size()), hardCodedText(Map.of(UI, src), Map.of(UI + "|Hello", "a test")));
 		// Outside client/ui only literal(...) counts; core isn't scanned.
 		String probe = "src/client/java/io/github/chaotix345/rigtune/client/probe/P.java";
 		assertEquals(List.of(probe + ":1: \"X\" in literal(...)"),
 				hardCodedText(Map.of(probe, "class P { void a() { Component.literal(\"X\"); log(\"words \" + x); } }"), Map.of()));
 		assertEquals(List.of(), hardCodedText(Map.of("src/main/java/Core.java", "class C { String s = Component.literal(\"Words\"); }"), Map.of()));
+	}
+
+	@Test
+	void aPlantedTextOfProblemFails() {
+		String core = "src/main/java/io/github/chaotix345/rigtune/core/Planted.java";
+		Map<String, String> src = Map.of(core, """
+				class Planted {
+					static final String NOTE = "(alpha build)";
+					static final String OUTSIDE = "It isn't here, so";
+					static final Text A = Text.of("rigtune.a", NOTE);
+					static final Text B = Text.of("rigtune.b", OUTSIDE + " remove it.");
+					static final Text C = Text.of("rigtune.c", "Wrong %s", x);
+					static final Text D = Text.of(key, "Anything");
+					static final Text E = Text.of("rigtune.e", english());
+					static final Text F = Text.of("rigtune.f", "Right, %s", Text.of("rigtune.a", NOTE));
+				}
+				""");
+		Map<String, String> lang = Map.of("rigtune.a", "(alpha build)", "rigtune.b", "It isn't here, so remove it.", "rigtune.c", "Right %s",
+				"rigtune.e", "E", "rigtune.f", "Right, %s");
+		assertEquals(List.of(core + ":6: the English of rigtune.c isn't en_us.json's: \"Wrong %s\"",
+				core + ":7: Text.of needs its key written out and its English next to it",
+				core + ":8: can't work out the English of rigtune.e (use literals and String constants)"), textOfEnglish(src, lang));
 	}
 
 	@Test
@@ -543,7 +690,7 @@ class LangCheckTest {
 		Map<String, String> src = Map.of(UI, """
 				class Planted {
 					void a() { Component.translatable("rigtune.a"); Component.translatable("rigtune.impact." + i); }
-					static final Text T = Text.of("rigtune.b", "Bee %s", x);
+					static final Text T = Text.of("rigtune.b", "B %s", x);
 				}
 				""");
 		Map<String, String> lang = new LinkedHashMap<>();
@@ -554,28 +701,26 @@ class LangCheckTest {
 		List<Family> families = List.of(new Family("rigtune.impact.", List.of(), Set.of("rigtune.impact.low", "rigtune.impact.high")),
 				new Family("rigtune.goal.", List.of(), Set.of()));
 		assertEquals(List.of("rigtune.impact.high (family rigtune.impact.*) isn't in en_us.json", "family rigtune.goal.*: the code doesn't write \"rigtune.goal.\"",
-				"rigtune.dead is in en_us.json but nothing uses it", UI + ":3: the English of rigtune.b isn't en_us.json's: \"Bee %s\""),
-				unusedKeys(src, lang, families).stream().sorted((x, y) -> order(x) - order(y)).toList());
-	}
-
-	private static int order(String problem) {
-		return problem.startsWith("rigtune.impact") ? 0 : problem.startsWith("family") ? 1 : problem.startsWith("rigtune.dead") ? 2 : 3;
+				"rigtune.dead is in en_us.json but nothing uses it"), unusedKeys(src, lang, families));
 	}
 
 	@Test
 	void aPlantedLocaleProblemFails() {
 		Map<String, String> files = new TreeMap<>();
-		files.put("en_us.json", "{\"a\": \"%s and %s\", \"b\": \"1%% low\", \"c\": \"C\", \"d\": \"%2$s %1$s\"}");
-		files.put("de_de.json", "{\"a\": \"%2$s und %1$s\", \"b\": \"1%% Tief\", \"d\": \"%s %s\"}");
+		files.put("en_us.json", "{\"a\": \"%s and %s\", \"b\": \"1%% low\", \"c\": \"C %s\", \"d\": \"%2$s %1$s\"}");
+		files.put("de_de.json", "{\"a\": \"%2$s und %1$s\", \"b\": \"1%% Tief\", \"c\": \"C %.1f\", \"d\": \"%s %s\"}");
+		files.put("lzh.json", "{\"b\": \"low\"}");
+		files.put("zlm_arab.json", "{}");
 		assertEquals(List.of(), localeProblems(files));
 		files.put("fr_fr.json", "{\"a\": \"%s\", \"b\": \"50% bas\", \"extra\": \"x\", \"c\": 3, \"d\": \"%3$s\"}");
 		files.put("notes.json", "{}");
 		assertEquals(List.of("fr_fr.json: c isn't a string", "fr_fr.json: a: arguments [0] but en_us.json has [0, 1]",
 				"fr_fr.json: b: Minecraft can't format \"50% bas\"", "fr_fr.json: extra isn't in en_us.json", "fr_fr.json: d: arguments [2] but en_us.json has [0, 1]",
-				"notes.json: not a <language>_<region>.json locale file"), localeProblems(files));
+				"notes.json: not a Minecraft language code (<language>_<region>.json)"), localeProblems(files));
 		files.clear();
-		files.put("en_us.json", "{\"a\": \"%d items\"}");
-		assertEquals(List.of("en_us.json: a: Minecraft can't format \"%d items\""), localeProblems(files));
+		files.put("en_us.json", "{\"a\": \"%d items\", \"b\": \"%99999999999$s\"}");
+		assertEquals(List.of("en_us.json: a: use %s for every argument (the code's English can't format \"%d items\")",
+				"en_us.json: b: use %s for every argument (the code's English can't format \"%99999999999$s\")"), localeProblems(files));
 	}
 
 	@Test
