@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": 9,
-  "generatedAt": "2026-09-25T06:37:53Z",
+  "revision": 10,
+  "generatedAt": "2026-09-25T07:10:27Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -378,7 +378,7 @@
       "category": "startup",
       "impact": "medium",
       "stability": "stable",
-      "reason": "Makes the game start faster and use less memory. This is the community build for Minecraft 26.2, because the original ModernFix has no 26.2 release.",
+      "reason": "Makes the game start faster and use less memory. This is the community build for current Minecraft versions, because the original ModernFix has no release for them.",
       "recommendWhen": {
         "always": true
       },
@@ -941,6 +941,31 @@
         "fabulouslyOptimized": true,
         "additive": true
       }
+    },
+    {
+      "slug": "distanthorizons",
+      "projectId": "uCdwusMi",
+      "title": "Distant Horizons",
+      "modIds": [
+        "distanthorizons"
+      ],
+      "category": "rendering",
+      "impact": "low",
+      "stability": "stable",
+      "reason": "Draws far-away terrain as simplified chunks beyond the vanilla render distance. RigTune doesn't suggest adding it; this rule tells RigTune how to treat it when it's installed.",
+      "recommendWhen": {
+        "always": false
+      },
+      "skipUpdateWhen": {
+        "settingIs": {
+          "dh.client.advanced.autoUpdater.enableAutoUpdater": true
+        }
+      },
+      "conflictsWith": [],
+      "upstream": {
+        "fabulouslyOptimized": false,
+        "additive": false
+      }
     }
   ],
   "obsolete": [
@@ -1071,7 +1096,12 @@
       "when": {
         "modPresent": [
           "distanthorizons"
-        ]
+        ],
+        "not": {
+          "settingIs": {
+            "dh.client.advanced.debugging.rendererMode": "DISABLED"
+          }
+        }
       },
       "reason": "Distant Horizons already draws the far terrain cheaply, so vanilla chunks beyond 12 cost frame rate without adding much view distance."
     },
@@ -1082,7 +1112,12 @@
         "modPresent": [
           "distanthorizons"
         ],
-        "tierAtMost": 2
+        "tierAtMost": 2,
+        "not": {
+          "settingIs": {
+            "dh.client.advanced.debugging.rendererMode": "DISABLED"
+          }
+        }
       },
       "reason": "On entry-level hardware, stay at the low end of the 8 to 12 vanilla chunks Distant Horizons' FAQ recommends; Distant Horizons draws the terrain beyond that."
     },
@@ -1496,7 +1531,10 @@
         "modPresent": [
           "distanthorizons"
         ],
-        "cpuTierAtMost": 1
+        "cpuTierAtMost": 1,
+        "modAbsent": [
+          "chunky"
+        ]
       },
       "impact": "low",
       "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this small, more than 1 Distant Horizons thread competes with Minecraft itself and can cause stutter while far terrain loads."
@@ -1509,7 +1547,10 @@
           "distanthorizons"
         ],
         "cpuTierAtLeast": 2,
-        "cpuTierAtMost": 2
+        "cpuTierAtMost": 2,
+        "modAbsent": [
+          "chunky"
+        ]
       },
       "impact": "low",
       "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 2 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads."
@@ -1522,7 +1563,10 @@
           "distanthorizons"
         ],
         "cpuTierAtLeast": 3,
-        "cpuTierAtMost": 3
+        "cpuTierAtMost": 3,
+        "modAbsent": [
+          "chunky"
+        ]
       },
       "impact": "low",
       "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 4 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads."
@@ -1535,7 +1579,10 @@
           "distanthorizons"
         ],
         "cpuTierAtLeast": 4,
-        "cpuTierAtMost": 4
+        "cpuTierAtMost": 4,
+        "modAbsent": [
+          "chunky"
+        ]
       },
       "impact": "low",
       "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 6 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads."
@@ -2087,6 +2134,7 @@
       "better-block-entities",
       "c2me-fabric",
       "debugify",
+      "distanthorizons",
       "dynamic-fps",
       "entityculling",
       "fastquit",
@@ -2112,6 +2160,7 @@
       "better-block-entities",
       "c2me-fabric",
       "debugify",
+      "distanthorizons",
       "dynamic-fps",
       "entityculling",
       "fastquit",
@@ -2140,6 +2189,7 @@
       "better-block-entities",
       "c2me-fabric",
       "debugify",
+      "distanthorizons",
       "dynamic-fps",
       "entityculling",
       "fastquit",

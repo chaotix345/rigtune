@@ -117,7 +117,7 @@
 			"category": "startup",
 			"impact": "medium",
 			"stability": "stable",
-			"reason": "Makes the game start faster and use less memory. This is the community build for Minecraft 26.2, because the original ModernFix has no 26.2 release.",
+			"reason": "Makes the game start faster and use less memory. This is the community build for current Minecraft versions, because the original ModernFix has no release for them.",
 			"recommendWhen": { "always": true },
 			"conflictsWith": []
 		},
@@ -422,6 +422,20 @@
 			"conflictsWith": ["sodiumdynamiclights", "ryoamiclights", "optifabric"],
 			"defaultSelected": false,
 			"v1": false
+		},
+		{
+			"slug": "distanthorizons",
+			"projectId": "uCdwusMi",
+			"title": "Distant Horizons",
+			"modIds": ["distanthorizons"],
+			"category": "rendering",
+			"impact": "low",
+			"stability": "stable",
+			"reason": "Draws far-away terrain as simplified chunks beyond the vanilla render distance. RigTune doesn't suggest adding it; this rule tells RigTune how to treat it when it's installed.",
+			"recommendWhen": { "always": false },
+			"skipUpdateWhen": { "settingIs": { "dh.client.advanced.autoUpdater.enableAutoUpdater": true } },
+			"conflictsWith": [],
+			"v1": false
 		}
 	],
 	"obsolete": [
@@ -467,8 +481,8 @@
 		{ "key": "vanilla.renderDistance", "max": 8, "when": { "heapMbAtMost": 2100 }, "reason": "With 2 GB or less of memory for Minecraft, more chunks won't fit in memory and cause stutter." },
 		{ "key": "vanilla.renderDistance", "max": 12, "when": { "heapMbAtMost": 3100 }, "reason": "With 3 GB or less of memory for Minecraft, going past 12 chunks causes memory stutter." },
 		{ "key": "vanilla.renderDistance", "max": 16, "when": { "heapMbAtMost": 4200 }, "reason": "With 4 GB or less of memory for Minecraft, going past 16 chunks causes memory stutter." },
-		{ "key": "vanilla.renderDistance", "max": 12, "when": { "modPresent": ["distanthorizons"] }, "reason": "Distant Horizons already draws the far terrain cheaply, so vanilla chunks beyond 12 cost frame rate without adding much view distance." },
-		{ "key": "vanilla.renderDistance", "max": 8, "when": { "modPresent": ["distanthorizons"], "tierAtMost": 2 }, "reason": "On entry-level hardware, stay at the low end of the 8 to 12 vanilla chunks Distant Horizons' FAQ recommends; Distant Horizons draws the terrain beyond that." },
+		{ "key": "vanilla.renderDistance", "max": 12, "when": { "modPresent": ["distanthorizons"], "not": { "settingIs": { "dh.client.advanced.debugging.rendererMode": "DISABLED" } } }, "reason": "Distant Horizons already draws the far terrain cheaply, so vanilla chunks beyond 12 cost frame rate without adding much view distance.", "v1": { "when": { "modPresent": ["distanthorizons"] } } },
+		{ "key": "vanilla.renderDistance", "max": 8, "when": { "modPresent": ["distanthorizons"], "tierAtMost": 2, "not": { "settingIs": { "dh.client.advanced.debugging.rendererMode": "DISABLED" } } }, "reason": "On entry-level hardware, stay at the low end of the 8 to 12 vanilla chunks Distant Horizons' FAQ recommends; Distant Horizons draws the terrain beyond that.", "v1": { "when": { "modPresent": ["distanthorizons"], "tierAtMost": 2 } } },
 
 		{ "key": "vanilla.simulationDistance", "max": 5, "when": { "tierAtMost": 1 }, "impact": "medium", "reason": "A short simulation distance means fewer mobs, crops and redstone for your CPU to update each tick." },
 		{ "key": "vanilla.simulationDistance", "max": 6, "when": { "tierAtLeast": 2, "tierAtMost": 2 }, "impact": "medium", "reason": "Simulating up to 6 chunks keeps nearby farms working without overloading an entry-level CPU." },
@@ -515,10 +529,10 @@
 		{ "key": "dh.client.advanced.graphics.quality.horizontalQuality", "value": "LOW", "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 2, "tierAtMost": 2 }, "impact": "low", "reason": "The LOD dropoff distance sets how soon far terrain loses detail. Low is what Distant Horizons' own Low quality preset uses (its default is Medium), and its description says higher settings use more memory and GPU time.", "v1": false },
 		{ "key": "dh.client.advanced.graphics.quality.maxHorizontalResolution", "value": "TWO_BLOCKS", "when": { "modPresent": ["distanthorizons"], "tierAtMost": 2 }, "impact": "medium", "reason": "2 blocks is the maximum far-terrain resolution Distant Horizons' own Minimum quality preset uses; every other preset uses Block, its default, which its description says costs more memory and GPU time.", "v1": false },
 
-		{ "key": "dh.common.multiThreading.numberOfThreads", "max": 1, "when": { "modPresent": ["distanthorizons"], "cpuTierAtMost": 1 }, "impact": "low", "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this small, more than 1 Distant Horizons thread competes with Minecraft itself and can cause stutter while far terrain loads.", "v1": false },
-		{ "key": "dh.common.multiThreading.numberOfThreads", "max": 2, "when": { "modPresent": ["distanthorizons"], "cpuTierAtLeast": 2, "cpuTierAtMost": 2 }, "impact": "low", "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 2 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads.", "v1": false },
-		{ "key": "dh.common.multiThreading.numberOfThreads", "max": 4, "when": { "modPresent": ["distanthorizons"], "cpuTierAtLeast": 3, "cpuTierAtMost": 3 }, "impact": "low", "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 4 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads.", "v1": false },
-		{ "key": "dh.common.multiThreading.numberOfThreads", "max": 6, "when": { "modPresent": ["distanthorizons"], "cpuTierAtLeast": 4, "cpuTierAtMost": 4 }, "impact": "low", "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 6 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads.", "v1": false },
+		{ "key": "dh.common.multiThreading.numberOfThreads", "max": 1, "when": { "modPresent": ["distanthorizons"], "cpuTierAtMost": 1, "modAbsent": ["chunky"] }, "impact": "low", "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this small, more than 1 Distant Horizons thread competes with Minecraft itself and can cause stutter while far terrain loads.", "v1": false },
+		{ "key": "dh.common.multiThreading.numberOfThreads", "max": 2, "when": { "modPresent": ["distanthorizons"], "cpuTierAtLeast": 2, "cpuTierAtMost": 2, "modAbsent": ["chunky"] }, "impact": "low", "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 2 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads.", "v1": false },
+		{ "key": "dh.common.multiThreading.numberOfThreads", "max": 4, "when": { "modPresent": ["distanthorizons"], "cpuTierAtLeast": 3, "cpuTierAtMost": 3, "modAbsent": ["chunky"] }, "impact": "low", "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 4 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads.", "v1": false },
+		{ "key": "dh.common.multiThreading.numberOfThreads", "max": 6, "when": { "modPresent": ["distanthorizons"], "cpuTierAtLeast": 4, "cpuTierAtMost": 4, "modAbsent": ["chunky"] }, "impact": "low", "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 6 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads.", "v1": false },
 
 		{ "key": "iris.maxShadowRenderDistance", "max": 4, "when": { "modPresent": ["iris"], "flags": ["shaders-enabled"], "tierAtMost": 1 }, "impact": "medium", "reason": "Iris's own description says lowering the shadow distance can significantly increase performance, since less terrain is drawn a second time for shadows. 4 chunks keeps shadows around you on low-end hardware. Shader packs that set their own shadow distance ignore this.", "v1": false },
 		{ "key": "iris.maxShadowRenderDistance", "max": 6, "when": { "modPresent": ["iris"], "flags": ["shaders-enabled"], "tierAtLeast": 2, "tierAtMost": 2 }, "impact": "medium", "reason": "Iris's own description says lowering the shadow distance can significantly increase performance, since less terrain is drawn a second time for shadows. 6 chunks keeps shadows around you on entry-level hardware. Shader packs that set their own shadow distance ignore this.", "v1": false },
