@@ -14,7 +14,7 @@
      "id": "E2Eold01",
      "version_number": "0.2.0+mc26.2",
      "version_type": "release",
-     "date_published": "2026-09-24T18:19:50Z",
+     "date_published": "2026-09-24T19:28:00Z",
      "game_versions": [
       "26.2"
      ],
@@ -35,14 +35,14 @@
      "id": "E2Enew01",
      "version_number": "0.3.0-dev+mc26.2",
      "version_type": "release",
-     "date_published": "2026-09-25T18:19:50Z",
+     "date_published": "2026-09-25T19:28:00Z",
      "game_versions": [
       "26.2"
      ],
      "loaders": [
       "fabric"
      ],
-     "file": "~/AppData/Local/Temp/claude/C--Dev-Minecraft-Setting-Optimisation-Mod/4bf644a6-501a-4093-a81e-9e29a6010059/scratchpad/ws-h/jars/new/rigtune-0.3.0-dev+mc26.2.jar",
+     "file": "~/AppData/Local/Temp/claude/C--Dev-Minecraft-Setting-Optimisation-Mod/4bf644a6-501a-4093-a81e-9e29a6010059/scratchpad/ws-h/jars/wsa/rigtune-0.3.0-dev+mc26.2.jar",
      "dependencies": [
       {
        "project_id": "P7dR8mSH",

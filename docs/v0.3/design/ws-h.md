@@ -65,9 +65,9 @@ Released jars (GitHub release assets; the harness checks `--old-sha256`): `rigtu
 
 - On test/e2e-v03 (without WS-B) the seeded run's 3e check and the undo run's entry-undo/entry-check fail; both pass
   on a local merge with origin/feat/history 39eca5b (`-wsb` evidence; that merge isn't pushed).
-- 3a (WS-A): the carried-over group is dropped by v0.2's broader rule today; re-run the seeded variant after WS-A
-  merges to confirm the narrowed rule (update of a loaded mod with a queued jar) still drops it (DH is loaded in the
-  harness; WS-A keeps the key `rigtune.status.queued_update_dropped`).
+- 3a (WS-A, merged at c250b7a): re-run on test/e2e-v03 @ ee7f8ea; the narrowed rule (RigTune's update of a loaded mod
+  with its own update queued) still drops the carried-over DH group, with the notice "Cancelled RigTune's pending change
+  to Distant Horizons: ..." (key `rigtune.status.queued_update_dropped`); all four runs gave the same counts as before.
 
 ## Phase 5
 

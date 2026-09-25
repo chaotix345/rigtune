@@ -80,7 +80,7 @@
   {
    "name": "the apply result was shown (rigtune.json lastShownApply)",
    "ok": true,
-   "detail": "lastShownApply 2026-09-25T18:21:54.464200500Z vs last-apply.json finishedAt 2026-09-25T18:21:54.464200500Z"
+   "detail": "lastShownApply 2026-09-25T19:29:41.368644100Z vs last-apply.json finishedAt 2026-09-25T19:29:41.368644100Z"
   },
   {
    "name": "no further RigTune update is offered",
@@ -105,7 +105,7 @@
   {
    "name": "history.json: one legacy import, without RigTune's own jars",
    "ok": true,
-   "detail": "history.json entries: 1; legacy-import entries: 1; RigTune changes: []; expected disables missing: []; imported changes: [[{'id': '626345a3-017c-4709-935a-631a2988d4a8', 'type': 'file', 'action': 'disable', 'modId': 'e2e-legacy', 'file': 'e2e-legacy-1.0.0.jar', 'resultFile': 'e2e-legacy-1.0.0.jar.disabled', 'status': 'APPLIED', 'opId': 'ee5290b0-ed64-4753-87c4-e82299b9185e'}]]"
+   "detail": "history.json entries: 1; legacy-import entries: 1; RigTune changes: []; expected disables missing: []; imported changes: [[{'id': '99d7113e-f8a0-44e0-8975-d84921d49f42', 'type': 'file', 'action': 'disable', 'modId': 'e2e-legacy', 'file': 'e2e-legacy-1.0.0.jar', 'resultFile': 'e2e-legacy-1.0.0.jar.disabled', 'status': 'APPLIED', 'opId': '0c19af42-6d3a-4709-b24e-6d5ef459d168'}]]"
   }
  ]
 }

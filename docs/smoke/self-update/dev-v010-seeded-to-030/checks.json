@@ -75,7 +75,7 @@
   {
    "name": "the apply result was shown (rigtune.json lastShownApply)",
    "ok": true,
-   "detail": "lastShownApply 2026-09-25T18:32:12.187449100Z vs last-apply.json finishedAt 2026-09-25T18:32:12.187449100Z"
+   "detail": "lastShownApply 2026-09-25T19:27:30.267048Z vs last-apply.json finishedAt 2026-09-25T19:27:30.267048Z"
   },
   {
    "name": "no further RigTune update is offered",
@@ -95,7 +95,7 @@
   {
    "name": "history.json: one legacy import, without RigTune's own jars",
    "ok": true,
-   "detail": "history.json entries: 1; legacy-import entries: 1; RigTune changes: []; expected disables missing: []; imported changes: [[{'id': '402cca13-52a8-4be2-9d34-08de7d5df506', 'type': 'file', 'action': 'disable', 'modId': 'distanthorizons', 'file': 'fabric-26.2.jar', 'status': 'DISCARDED', 'opId': '041919d9-18c9-4b04-89c4-f15e4e4a80c5', 'group': '7b8043de-f5c3-4881-8309-27265240f39e'}, {'id': '0a9575c4-d95d-40ef-b93c-9cf08d7ddc48', 'type': 'file', 'action': 'enable', 'modId': 'distanthorizons', 'file': 'DistantHorizons-3.3.2-26.2-fabric-neoforge.jar', 'status': 'DISCARDED', 'opId': 'db7f487d-6371-43c5-944e-c053428ad70d', 'group': '7b8043de-f5c3-4881-8309-27265240f39e'}]]"
+   "detail": "history.json entries: 1; legacy-import entries: 1; RigTune changes: []; expected disables missing: []; imported changes: [[{'id': '4f53d0e0-52c7-4c03-a64b-db1f95328839', 'type': 'file', 'action': 'disable', 'modId': 'distanthorizons', 'file': 'fabric-26.2.jar', 'status': 'DISCARDED', 'opId': '041919d9-18c9-4b04-89c4-f15e4e4a80c5', 'group': '7b8043de-f5c3-4881-8309-27265240f39e'}, {'id': 'ed7bf29d-14de-4593-ba65-de4721445ee7', 'type': 'file', 'action': 'enable', 'modId': 'distanthorizons', 'file': 'DistantHorizons-3.3.2-26.2-fabric-neoforge.jar', 'status': 'DISCARDED', 'opId': 'db7f487d-6371-43c5-944e-c053428ad70d', 'group': '7b8043de-f5c3-4881-8309-27265240f39e'}]]"
   },
   {
    "name": "the carried-over group is dropped",
@@ -105,17 +105,17 @@
   {
    "name": "the drop is announced (status notice)",
    "ok": true,
-   "detail": "statuses seen: [('rigtune.status.queued_update_dropped', 'rigtune.status.queued_update_dropped'), ('rigtune.status.queued_update_dropped', \"Cancelled RigTune's pending update of Distant Horizons: it has an update of its own waiting in mods/update.\")]"
+   "detail": "statuses seen: [('rigtune.status.queued_update_dropped', 'rigtune.status.queued_update_dropped'), ('rigtune.status.queued_update_dropped', \"Cancelled RigTune's pending change to Distant Horizons: it has an update of its own waiting in mods/update.\")]"
   },
   {
    "name": "history.json: the carried-over changes are DISCARDED",
    "ok": true,
-   "detail": "status by op id: {'041919d9-18c9-4b04-89c4-f15e4e4a80c5': 'DISCARDED', 'db7f487d-6371-43c5-944e-c053428ad70d': 'DISCARDED'}"
+   "detail": "statuses by op id: {'041919d9-18c9-4b04-89c4-f15e4e4a80c5': ['DISCARDED'], 'db7f487d-6371-43c5-944e-c053428ad70d': ['DISCARDED']}"
   },
   {
    "name": "latest.log: a WARN line per failed op, with its attempt (3e)",
    "ok": false,
-   "detail": "WARN lines: []; failed ops without one: [('DISABLE_FILE', ['fabric-26.2.jar']), ('ENABLE_FILE', ['distanthorizons', 'DistantHorizons-3.3.2-26.2-fabric-neoforge.jar'])]"
+   "detail": "ops with a line of their own: 0 of 2; failed ops: [('DISABLE_FILE', ['fabric-26.2.jar']), ('ENABLE_FILE', ['DistantHorizons-3.3.2-26.2-fabric-neoforge.jar', 'DistantHorizons-3.3.2-26.2-fabric-neoforge.jar.rigtune-pending'])]; WARN lines with an attempt: []"
   },
   {
    "name": "nothing in mods/ changes at exit",

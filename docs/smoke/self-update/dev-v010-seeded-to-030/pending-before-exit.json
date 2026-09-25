@@ -23,16 +23,16 @@
     {
       "type": "DISABLE_FILE",
       "path": "<instance>\\mods\\rigtune-0.1.0.jar",
-      "id": "c96a8a03-b791-4250-8938-62d9a33c3ff0",
-      "group": "7aee522f-29e0-43d8-9b05-dce970a3bb66",
+      "id": "f58c8251-aa16-4579-8ade-61584156a3b7",
+      "group": "c8d9a633-d7f9-4ee5-87a2-fd19b200535a",
       "attempts": 0
     },
     {
       "type": "ENABLE_FILE",
       "from": "<instance>\\mods\\rigtune-0.3.0-dev+mc26.2.jar.rigtune-pending",
       "to": "<instance>\\mods\\rigtune-0.3.0-dev+mc26.2.jar",
-      "id": "a13d5197-d08a-4d98-83d1-6fa748ac8204",
-      "group": "7aee522f-29e0-43d8-9b05-dce970a3bb66",
+      "id": "9d8c2149-cabb-4a4f-9d16-98472d47fa66",
+      "group": "c8d9a633-d7f9-4ee5-87a2-fd19b200535a",
       "modId": "rigtune",
       "attempts": 0
     }

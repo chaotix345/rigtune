@@ -1,11 +1,11 @@
 # Undo after restart E2E: dev-undo-after-restart-030
 
 - Verdict: **FAIL**
-- Run: 20260925T184312Z UTC, MC 26.2, rigtune-0.3.0-dev+mc26.2.jar + fabric-api-0.161.0+26.2.jar + e2e-disable-me-1.0.0.jar in a fresh scratch instance
-- RigTune: `rigtune-0.3.0-dev+mc26.2.jar` version 0.3.0-dev+mc26.2, sha256 `b9a781aecf81159fd7ae628ea1ece62754362880df143591cc2b2dae3e3671f0`
+- Run: 20260925T193011Z UTC, MC 26.2, rigtune-0.3.0-dev+mc26.2.jar + fabric-api-0.161.0+26.2.jar + e2e-disable-me-1.0.0.jar in a fresh scratch instance
+- RigTune: `rigtune-0.3.0-dev+mc26.2.jar` version 0.3.0-dev+mc26.2, sha256 `9015bd10095acfb71232d656a0f427df167f9dd5f0abb17dbda3231685d48c19`
 - Added from the fake Modrinth: `e2e-added-1.0.0.jar` (project E2EAddMd); disabled: `e2e-disable-me-1.0.0.jar`
-- B-M3, same instance: one Apply adds `e2e-first-1.0.0.jar` (project E2EFrst1), a second Apply adds `e2e-second-1.0.0.jar` (E2EScnd1); Undo this on the older one (entry 66d79a80-afbd-4b42-818e-e058d765d23c; through the undo screen: None; controller method: None)
-- Client time: mod-apply 32 s, mod-undo 28 s, mod-check 21 s, entry-apply 23 s, entry-undo 27 s, entry-check None s
+- B-M3, same instance: one Apply adds `e2e-first-1.0.0.jar` (project E2EFrst1), a second Apply adds `e2e-second-1.0.0.jar` (E2EScnd1); Undo this on the older one (entry fd1b07b6-7f39-424f-80cd-59ab07c7c319; through the undo screen: None; controller method: None)
+- Client time: mod-apply 22 s, mod-undo 29 s, mod-check 20 s, entry-apply 24 s, entry-undo 16 s, entry-check None s
 
 ## After 0.2 applied {add e2e-added from Modrinth, disable e2e-disable-me} and quit (helper done)
 
@@ -24,12 +24,12 @@
 | check | result | detail |
 |---|---|---|
 | the client exited normally and the helper finished | PASS | gradle exit 0, helper finished: True |
-| the driver undid the last apply (two reverts after a restart) | PASS | error: None; undoOf: 8d86afcb-f28c-4084-8027-4274dd098732; plan: [{'description': 'Disable e2e-added-1.0.0.jar', 'action': 'REVERT', 'reason': None, 'needsRestart': True, 'changeIds': ['3fb04b59-7648-4a90-9891-6f252c5128d1'], 'opIds': []}, {'description': 'Re-enable e2e-disable-me-1.0.0.jar', 'action': 'REVERT', 'reason': None, 'needsRestart': True, 'changeIds': ['83f8002f-c2d9-4a33-a8d0-0eedd6524a55'], 'opIds': []}] |
+| the driver undid the last apply (two reverts after a restart) | PASS | error: None; undoOf: 9476bde2-170a-4541-a11c-efa1be2fd1db; plan: [{'description': 'Disable e2e-added-1.0.0.jar', 'action': 'REVERT', 'reason': None, 'needsRestart': True, 'changeIds': ['f452a0fc-19ac-43e2-8e2c-ed49ffc477c1'], 'opIds': []}, {'description': 'Re-enable e2e-disable-me-1.0.0.jar', 'action': 'REVERT', 'reason': None, 'needsRestart': True, 'changeIds': ['39616038-9952-4117-b188-04de3035804a'], 'opIds': []}] |
 | the added mod is disabled again | PASS | e2e-added-1.0.0.jar.disabled exists: True |
 | the other mod is back | PASS | e2e-disable-me-1.0.0.jar exists: True |
 | no pending.json, no leftover downloads | PASS | pending.json exists: False; *.rigtune-pending: [] |
 | last-apply.json: both reversal ops OK | PASS | results: [('DISABLE_FILE', 'e2e-added-1.0.0.jar', 'OK'), ('ENABLE_FILE', 'e2e-disable-me-1.0.0.jar', 'OK')] |
-| history.json: the undo APPLIED, the apply's changes REVERTED | PASS | apply changes: {'83f8002f-c2d9-4a33-a8d0-0eedd6524a55': 'REVERTED', '3fb04b59-7648-4a90-9891-6f252c5128d1': 'REVERTED'}; undo entries: ['8d86afcb-f28c-4084-8027-4274dd098732']; undo changes: [('disable', 'e2e-added-1.0.0.jar', 'APPLIED', '3fb04b59-7648-4a90-9891-6f252c5128d1'), ('enable', 'e2e-disable-me-1.0.0.jar', 'APPLIED', '83f8002f-c2d9-4a33-a8d0-0eedd6524a55')] |
+| history.json: the undo APPLIED, the apply's changes REVERTED | PASS | apply changes: {'39616038-9952-4117-b188-04de3035804a': 'REVERTED', 'f452a0fc-19ac-43e2-8e2c-ed49ffc477c1': 'REVERTED'}; undo entries: ['9476bde2-170a-4541-a11c-efa1be2fd1db']; undo changes: [('disable', 'e2e-added-1.0.0.jar', 'APPLIED', 'f452a0fc-19ac-43e2-8e2c-ed49ffc477c1'), ('enable', 'e2e-disable-me-1.0.0.jar', 'APPLIED', '39616038-9952-4117-b188-04de3035804a')] |
 
 ## After the next start
 
@@ -53,19 +53,19 @@
 | both added mods are in mods (the served bytes) | PASS | served bytes in mods: {'e2e-first-1.0.0.jar': True, 'e2e-second-1.0.0.jar': True} |
 | no pending.json, no leftover downloads | PASS | pending.json exists: False; *.rigtune-pending: [] |
 | last-apply.json: both enables OK | PASS | results: [('ENABLE_FILE', 'e2e-first-1.0.0.jar', 'OK'), ('ENABLE_FILE', 'e2e-second-1.0.0.jar', 'OK')] |
-| history.json: two new apply entries, the older adding e2e-first, both APPLIED | PASS | new entries: [('apply', '2026-09-25T18:45:16.904059500Z', [('file', 'enable', 'e2e-first-1.0.0.jar', 'APPLIED')]), ('apply', '2026-09-25T18:45:18.376389500Z', [('file', 'enable', 'e2e-second-1.0.0.jar', 'APPLIED')])] |
+| history.json: two new apply entries, the older adding e2e-first, both APPLIED | PASS | new entries: [('apply', '2026-09-25T19:31:51.253879300Z', [('file', 'enable', 'e2e-first-1.0.0.jar', 'APPLIED')]), ('apply', '2026-09-25T19:31:52.743495400Z', [('file', 'enable', 'e2e-second-1.0.0.jar', 'APPLIED')])] |
 
 ## B-M3: after Undo this on the older Apply (e2e-first) and a restart (helper done)
 
 | check | result | detail |
 |---|---|---|
 | the client exited normally and the helper finished | PASS | gradle exit 0, helper finished: True |
-| the driver undid the older Apply only (one revert after a restart) | **FAIL** | error: no per-entry undo API: no public (String) -> UndoPlan method on io.github.chaotix345.rigtune.client.RealController (WS-B's Undo this); undoOf: None (older 66d79a80-afbd-4b42-818e-e058d765d23c); via the undo screen: None; plan: None |
+| the driver undid the older Apply only (one revert after a restart) | **FAIL** | error: no per-entry undo API: no public (String) -> UndoPlan method on io.github.chaotix345.rigtune.client.RealController (WS-B's Undo this); undoOf: None (older fd1b07b6-7f39-424f-80cd-59ab07c7c319); via the undo screen: None; plan: None |
 | the older Apply's mod is disabled | **FAIL** | e2e-first-1.0.0.jar.disabled exists: False; e2e-first-1.0.0.jar exists: True |
 | the newer Apply's mod is still enabled | PASS | e2e-second-1.0.0.jar exists: True |
 | no pending.json, no leftover downloads | PASS | pending.json exists: False; *.rigtune-pending: [] |
 | last-apply.json: the reversal op OK | **FAIL** | results: [('ENABLE_FILE', 'e2e-first-1.0.0.jar', 'OK'), ('ENABLE_FILE', 'e2e-second-1.0.0.jar', 'OK')] |
-| history.json: one undo of the older Apply, its change REVERTED, the newer APPLIED | **FAIL** | undo entries of these applies: []; undo changes: []; older: {'3d3a21d8-f7ba-4e5d-8de2-0a1473870f70': 'APPLIED'}; newer: {'708e9ba6-d1f1-45f9-b0d4-92c82e0612c2': 'APPLIED'} |
+| history.json: one undo of the older Apply, its change REVERTED, the newer APPLIED | **FAIL** | undo entries of these applies: []; undo changes: []; older: {'8048961a-688f-47bd-b7bc-f6bcb9bfbc92': 'APPLIED'}; newer: {'ceb22b23-ef3b-4c5c-a301-9b8a65712802': 'APPLIED'} |
 
 ## B-M3: after the next start
 

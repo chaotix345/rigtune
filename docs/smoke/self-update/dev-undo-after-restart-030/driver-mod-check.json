@@ -4,11 +4,11 @@
   "error": null,
   "events": [
     "t+0.0s undo driver loaded, phase mod-check, output <run>\\out",
-    "t+3.9s title screen",
-    "t+4.9s report ready (online=true)",
-    "t+5.0s undoPlanAfter: 0 item(s), undoOf null, problem null",
-    "t+7.0s screenshot e2e-mod-check-1-undo.png: Saved screenshot as e2e-mod-check-1-undo.png",
-    "t+8.0s quitting"
+    "t+3.7s title screen",
+    "t+4.7s report ready (online=true)",
+    "t+4.8s undoPlanAfter: 0 item(s), undoOf null, problem null",
+    "t+6.8s screenshot e2e-mod-check-1-undo.png: Saved screenshot as e2e-mod-check-1-undo.png",
+    "t+7.8s quitting"
   ],
   "rigtuneVersion": "0.3.0-dev+mc26.2",
   "loadedMods": [

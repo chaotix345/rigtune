@@ -1,5 +1,5 @@
-[2026-09-25T18:43:57.045074600Z] [RigTune apply] Waiting for game process 60664 to exit
-[2026-09-25T18:43:59.278699200Z] [RigTune apply] Applying 2 operation(s) from <instance>\config\rigtune\pending.json
-[2026-09-25T18:43:59.367217700Z] [RigTune apply] OK DISABLE_FILE: Disabled e2e-disable-me-1.0.0.jar -> e2e-disable-me-1.0.0.jar.disabled
-[2026-09-25T18:43:59.367217700Z] [RigTune apply] OK ENABLE_FILE: Enabled e2e-added-1.0.0.jar
-[2026-09-25T18:43:59.368217500Z] [RigTune apply] All operations done
+[2026-09-25T19:30:40.095297400Z] [RigTune apply] Waiting for game process 23892 to exit
+[2026-09-25T19:30:42.498697300Z] [RigTune apply] Applying 2 operation(s) from <instance>\config\rigtune\pending.json
+[2026-09-25T19:30:42.556997900Z] [RigTune apply] OK DISABLE_FILE: Disabled e2e-disable-me-1.0.0.jar -> e2e-disable-me-1.0.0.jar.disabled
+[2026-09-25T19:30:42.556997900Z] [RigTune apply] OK ENABLE_FILE: Enabled e2e-added-1.0.0.jar
+[2026-09-25T19:30:42.556997900Z] [RigTune apply] All operations done

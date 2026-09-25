@@ -1,12 +1,12 @@
 # Self-update E2E: dev-v010-to-030
 
 - Verdict: **PASS**
-- Run: 20260925T182110Z UTC, MC 26.2, rigtune-0.1.0.jar + fabric-api-0.161.0+26.2.jar + e2e-legacy-1.0.0.jar in a fresh scratch instance
+- Run: 20260925T192910Z UTC, MC 26.2, rigtune-0.1.0.jar + fabric-api-0.161.0+26.2.jar + e2e-legacy-1.0.0.jar in a fresh scratch instance
 - Old: `rigtune-0.1.0.jar` version 0.1.0, sha256 `8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950`
-- New (served by the fake Modrinth): `rigtune-0.3.0-dev+mc26.2.jar` version 0.3.0-dev+mc26.2, sha256 `b9a781aecf81159fd7ae628ea1ece62754362880df143591cc2b2dae3e3671f0`
+- New (served by the fake Modrinth): `rigtune-0.3.0-dev+mc26.2.jar` version 0.3.0-dev+mc26.2, sha256 `9015bd10095acfb71232d656a0f427df167f9dd5f0abb17dbda3231685d48c19`
 - 0.1.0 also disabled `e2e-legacy-1.0.0.jar` in the same apply (so the 0.2 legacy import has a change that isn't RigTune's)
 - Rescan pressed because the report stayed offline (the startup lookup race, docs/v0.2/design/ws-g.md): update phase no, verify phase no
-- Client time: update 28 s, verify 21 s
+- Client time: update 23 s, verify 22 s
 
 ## After the old version applied the update and quit (helper done)
 
@@ -32,12 +32,12 @@
 | the driver verified | PASS | error: None |
 | the new RigTune is loaded from mods/ | PASS | loaded 0.3.0-dev+mc26.2 from ['<instance>\\mods\\rigtune-0.3.0-dev+mc26.2.jar'] |
 | the goal is kept | PASS | goal: QUALITY |
-| the apply result was shown (rigtune.json lastShownApply) | PASS | lastShownApply 2026-09-25T18:21:54.464200500Z vs last-apply.json finishedAt 2026-09-25T18:21:54.464200500Z |
+| the apply result was shown (rigtune.json lastShownApply) | PASS | lastShownApply 2026-09-25T19:29:41.368644100Z vs last-apply.json finishedAt 2026-09-25T19:29:41.368644100Z |
 | no further RigTune update is offered | PASS | online=True updateOffered=False |
 | no crash report | PASS | crash-reports: [] |
 | mods unchanged by the relaunch | PASS | unchanged |
 | no new pending.json | PASS |  |
-| history.json: one legacy import, without RigTune's own jars | PASS | history.json entries: 1; legacy-import entries: 1; RigTune changes: []; expected disables missing: []; imported changes: [[{'id': '626345a3-017c-4709-935a-631a2988d4a8', 'type': 'file', 'action': 'disable', 'modId': 'e2e-legacy', 'file': 'e2e-legacy-1.0.0.jar', 'resultFile': 'e2e-legacy-1.0.0.jar.disabled', 'status': 'APPLIED', 'opId': 'ee5290b0-ed64-4753-87c4-e82299b9185e'}]] |
+| history.json: one legacy import, without RigTune's own jars | PASS | history.json entries: 1; legacy-import entries: 1; RigTune changes: []; expected disables missing: []; imported changes: [[{'id': '99d7113e-f8a0-44e0-8975-d84921d49f42', 'type': 'file', 'action': 'disable', 'modId': 'e2e-legacy', 'file': 'e2e-legacy-1.0.0.jar', 'resultFile': 'e2e-legacy-1.0.0.jar.disabled', 'status': 'APPLIED', 'opId': '0c19af42-6d3a-4709-b24e-6d5ef459d168'}]] |
 
 ## Files
 

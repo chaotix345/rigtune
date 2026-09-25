@@ -2,32 +2,32 @@
   "formatVersion": 1,
   "entries": [
     {
-      "id": "d286d7bb-9e8f-4367-97e1-bba913615e0d",
-      "at": "2026-09-25T18:20:24.978067100Z",
+      "id": "342ba8eb-091f-4902-9b4b-317cc947642d",
+      "at": "2026-09-25T19:28:26.624834700Z",
       "kind": "apply",
       "rigtuneVersion": "0.2.0+mc26.2",
       "mcVersion": "26.2",
       "changes": [
         {
-          "id": "d5d7e7a3-d829-47dd-90a1-9aea5f2cac51",
+          "id": "f953365c-d27f-4e45-9357-3afcf8ffde56",
           "type": "file",
           "action": "disable",
           "modId": "rigtune",
           "file": "rigtune-0.2.0+mc26.2.jar",
           "resultFile": "rigtune-0.2.0+mc26.2.jar.disabled",
           "status": "APPLIED",
-          "opId": "7828a9f7-8270-41b8-8289-ea3290358d10",
-          "group": "db732fef-e9d6-416b-9491-2a05f9b954eb"
+          "opId": "07461acb-be25-4d51-84f7-b93a8b44cdc0",
+          "group": "6b0661b6-ae6a-4ce5-be3e-e75f0e87d17f"
         },
         {
-          "id": "c6d45c18-da09-4fb4-8c16-ee4d1de32610",
+          "id": "400f9bc6-7424-4c66-8467-1f96c9a00ad8",
           "type": "file",
           "action": "enable",
           "modId": "rigtune",
           "file": "rigtune-0.3.0-dev+mc26.2.jar",
           "status": "APPLIED",
-          "opId": "5936a515-9a7d-4189-bb86-1feb7ef00c24",
-          "group": "db732fef-e9d6-416b-9491-2a05f9b954eb"
+          "opId": "1efe9bba-fdbd-47f6-a5a4-304939fb1de4",
+          "group": "6b0661b6-ae6a-4ce5-be3e-e75f0e87d17f"
         }
       ]
     }

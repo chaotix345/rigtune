@@ -1,39 +1,39 @@
-[04:21:10] run folder <run>
-[04:21:10] old rigtune-0.1.0.jar 0.1.0 sha256 8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950
-[04:21:10] new rigtune-0.3.0-dev+mc26.2.jar 0.3.0-dev+mc26.2 sha256 b9a781aecf81159fd7ae628ea1ece62754362880df143591cc2b2dae3e3671f0
-[04:21:10] instance mods: e2e-legacy-1.0.0.jar, fabric-api-0.161.0+26.2.jar, rigtune-0.1.0.jar
-[04:21:11] gradle :26.2:e2eDriverJar -Pe2e.oldJar=~\AppData\Local\Temp\claude\C--Dev-Minecraft-Setting-Optimisation-Mod\4bf644a6-501a-4093-a81e-9e29a6010059\scratchpad\ws-h\jars\rigtune-0.1.0.jar
-[04:21:16] took the game-test lock C:\Dev\Worktrees\.gametest-lock
-[04:21:19] FakeModrinth listening on https://127.0.0.1:443
-[04:21:25] redirect probe: OK
-[04:21:25] launching the client, phase update
-[04:21:25] gradle :26.2:e2eClient -Pe2e.oldJar=~\AppData\Local\Temp\claude\C--Dev-Minecraft-Setting-Optimisation-Mod\4bf644a6-501a-4093-a81e-9e29a6010059\scratchpad\ws-h\jars\rigtune-0.1.0.jar -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-update.txt
-[04:21:53] client exited (gradle exit 0) after 28 s
-[04:21:55] helper finished: [2026-09-25T18:21:54.513727700Z] [RigTune apply] All operations done
-[04:21:55] helper command line(s) seen: 1
-[04:21:55] launching the client, phase verify
-[04:21:55] gradle :26.2:e2eClient -Pe2e.oldJar=~\AppData\Local\Temp\claude\C--Dev-Minecraft-Setting-Optimisation-Mod\4bf644a6-501a-4093-a81e-9e29a6010059\scratchpad\ws-h\jars\rigtune-0.1.0.jar -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-verify.txt
-[04:22:17] client exited (gradle exit 0) after 21 s
-[04:22:20] released the game-test lock
-[04:22:20] update [PASS] the client exited normally and the helper finished: gradle exit 0, helper finished: True
-[04:22:20] update [PASS] the driver applied the offered update: driver: ok=True error=None offered=rigtune-0.3.0-dev+mc26.2.jar
-[04:22:20] update [PASS] exactly one RigTune jar, the new one: rigtune*.jar in mods: ['rigtune-0.3.0-dev+mc26.2.jar']; bytes identical to the served jar: True
-[04:22:20] update [PASS] the old jar is disabled: rigtune-0.1.0.jar.disabled exists: True
-[04:22:20] update [PASS] the other mod 0.1.0 changed is disabled: (.disabled exists, jar exists): {'e2e-legacy-1.0.0.jar': (True, False)}
-[04:22:20] update [PASS] no pending.json: pending.json exists: False
-[04:22:20] update [PASS] no leftover downloads: *.rigtune-pending: []
-[04:22:20] update [PASS] last-apply.json: the update's two ops, all OK: results: [('DISABLE_FILE', 'e2e-legacy-1.0.0.jar', 'OK'), ('DISABLE_FILE', 'rigtune-0.1.0.jar', 'OK'), ('ENABLE_FILE', 'rigtune-0.3.0-dev+mc26.2.jar', 'OK')]
-[04:22:20] update [PASS] the helper ran from config/rigtune/helper copies: helper classpaths seen: [['<instance>\\config\\rigtune\\helper\\0-rigtune-0.1.0.jar', '<instance>\\config\\rigtune\\helper\\1-gson-2.14.0.jar']]
-[04:22:20] update [PASS] the old RigTune downloaded the jar from cdn.modrinth.com: download requests: [('cdn.modrinth.com', 200, 'chaotix345/rigtune/0.1.0 (github.com/chaotix345/rigtune)')]
-[04:22:20] update [PASS] the update's depends and breaks are no stricter (M12): same or fewer entries: depends {'fabricloader': '>=0.19.5', 'minecraft': '~26.2', 'java': '>=25', 'fabric-api': '*'} breaks {}
-[04:22:20] verify [PASS] the relaunched client exited normally: gradle exit 0
-[04:22:20] verify [PASS] the driver verified: error: None
-[04:22:20] verify [PASS] the new RigTune is loaded from mods/: loaded 0.3.0-dev+mc26.2 from ['<instance>\\mods\\rigtune-0.3.0-dev+mc26.2.jar']
-[04:22:20] verify [PASS] the goal is kept: goal: QUALITY
-[04:22:20] verify [PASS] the apply result was shown (rigtune.json lastShownApply): lastShownApply 2026-09-25T18:21:54.464200500Z vs last-apply.json finishedAt 2026-09-25T18:21:54.464200500Z
-[04:22:20] verify [PASS] no further RigTune update is offered: online=True updateOffered=False
-[04:22:20] verify [PASS] no crash report: crash-reports: []
-[04:22:20] verify [PASS] mods unchanged by the relaunch: unchanged
-[04:22:20] verify [PASS] no new pending.json: 
-[04:22:20] verify [PASS] history.json: one legacy import, without RigTune's own jars: history.json entries: 1; legacy-import entries: 1; RigTune changes: []; expected disables missing: []; imported changes: [[{'id': '626345a3-017c-4709-935a-631a2988d4a8', 'type': 'file', 'action': 'disable', 'modId': 'e2e-legacy', 'file': 'e2e-legacy-1.0.0.jar', 'resultFile': 'e2e-legacy-1.0.0.jar.disabled', 'status': 'APPLIED', 'opId': 'ee5290b0-ed64-4753-87c4-e82299b9185e'}]]
-[04:22:20] VERDICT PASS
+[05:29:10] run folder <run>
+[05:29:10] old rigtune-0.1.0.jar 0.1.0 sha256 8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950
+[05:29:10] new rigtune-0.3.0-dev+mc26.2.jar 0.3.0-dev+mc26.2 sha256 9015bd10095acfb71232d656a0f427df167f9dd5f0abb17dbda3231685d48c19
+[05:29:10] instance mods: e2e-legacy-1.0.0.jar, fabric-api-0.161.0+26.2.jar, rigtune-0.1.0.jar
+[05:29:10] gradle :26.2:e2eDriverJar -Pe2e.oldJar=~\AppData\Local\Temp\claude\C--Dev-Minecraft-Setting-Optimisation-Mod\4bf644a6-501a-4093-a81e-9e29a6010059\scratchpad\ws-h\jars\rigtune-0.1.0.jar
+[05:29:15] took the game-test lock C:\Dev\Worktrees\.gametest-lock
+[05:29:16] FakeModrinth listening on https://127.0.0.1:443
+[05:29:17] redirect probe: OK
+[05:29:17] launching the client, phase update
+[05:29:17] gradle :26.2:e2eClient -Pe2e.oldJar=~\AppData\Local\Temp\claude\C--Dev-Minecraft-Setting-Optimisation-Mod\4bf644a6-501a-4093-a81e-9e29a6010059\scratchpad\ws-h\jars\rigtune-0.1.0.jar -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-update.txt
+[05:29:40] client exited (gradle exit 0) after 23 s
+[05:29:42] helper finished: [2026-09-25T19:29:41.414715400Z] [RigTune apply] All operations done
+[05:29:42] helper command line(s) seen: 1
+[05:29:42] launching the client, phase verify
+[05:29:42] gradle :26.2:e2eClient -Pe2e.oldJar=~\AppData\Local\Temp\claude\C--Dev-Minecraft-Setting-Optimisation-Mod\4bf644a6-501a-4093-a81e-9e29a6010059\scratchpad\ws-h\jars\rigtune-0.1.0.jar -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-verify.txt
+[05:30:05] client exited (gradle exit 0) after 22 s
+[05:30:08] released the game-test lock
+[05:30:08] update [PASS] the client exited normally and the helper finished: gradle exit 0, helper finished: True
+[05:30:08] update [PASS] the driver applied the offered update: driver: ok=True error=None offered=rigtune-0.3.0-dev+mc26.2.jar
+[05:30:08] update [PASS] exactly one RigTune jar, the new one: rigtune*.jar in mods: ['rigtune-0.3.0-dev+mc26.2.jar']; bytes identical to the served jar: True
+[05:30:08] update [PASS] the old jar is disabled: rigtune-0.1.0.jar.disabled exists: True
+[05:30:08] update [PASS] the other mod 0.1.0 changed is disabled: (.disabled exists, jar exists): {'e2e-legacy-1.0.0.jar': (True, False)}
+[05:30:08] update [PASS] no pending.json: pending.json exists: False
+[05:30:08] update [PASS] no leftover downloads: *.rigtune-pending: []
+[05:30:08] update [PASS] last-apply.json: the update's two ops, all OK: results: [('DISABLE_FILE', 'e2e-legacy-1.0.0.jar', 'OK'), ('DISABLE_FILE', 'rigtune-0.1.0.jar', 'OK'), ('ENABLE_FILE', 'rigtune-0.3.0-dev+mc26.2.jar', 'OK')]
+[05:30:08] update [PASS] the helper ran from config/rigtune/helper copies: helper classpaths seen: [['<instance>\\config\\rigtune\\helper\\0-rigtune-0.1.0.jar', '<instance>\\config\\rigtune\\helper\\1-gson-2.14.0.jar']]
+[05:30:08] update [PASS] the old RigTune downloaded the jar from cdn.modrinth.com: download requests: [('cdn.modrinth.com', 200, 'chaotix345/rigtune/0.1.0 (github.com/chaotix345/rigtune)')]
+[05:30:08] update [PASS] the update's depends and breaks are no stricter (M12): same or fewer entries: depends {'fabricloader': '>=0.19.5', 'minecraft': '~26.2', 'java': '>=25', 'fabric-api': '*'} breaks {}
+[05:30:08] verify [PASS] the relaunched client exited normally: gradle exit 0
+[05:30:08] verify [PASS] the driver verified: error: None
+[05:30:08] verify [PASS] the new RigTune is loaded from mods/: loaded 0.3.0-dev+mc26.2 from ['<instance>\\mods\\rigtune-0.3.0-dev+mc26.2.jar']
+[05:30:08] verify [PASS] the goal is kept: goal: QUALITY
+[05:30:08] verify [PASS] the apply result was shown (rigtune.json lastShownApply): lastShownApply 2026-09-25T19:29:41.368644100Z vs last-apply.json finishedAt 2026-09-25T19:29:41.368644100Z
+[05:30:08] verify [PASS] no further RigTune update is offered: online=True updateOffered=False
+[05:30:08] verify [PASS] no crash report: crash-reports: []
+[05:30:08] verify [PASS] mods unchanged by the relaunch: unchanged
+[05:30:08] verify [PASS] no new pending.json: 
+[05:30:08] verify [PASS] history.json: one legacy import, without RigTune's own jars: history.json entries: 1; legacy-import entries: 1; RigTune changes: []; expected disables missing: []; imported changes: [[{'id': '99d7113e-f8a0-44e0-8975-d84921d49f42', 'type': 'file', 'action': 'disable', 'modId': 'e2e-legacy', 'file': 'e2e-legacy-1.0.0.jar', 'resultFile': 'e2e-legacy-1.0.0.jar.disabled', 'status': 'APPLIED', 'opId': '0c19af42-6d3a-4709-b24e-6d5ef459d168'}]]
+[05:30:08] VERDICT PASS

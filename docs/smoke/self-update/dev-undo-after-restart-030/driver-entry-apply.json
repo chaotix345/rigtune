@@ -4,14 +4,14 @@
   "error": null,
   "events": [
     "t+0.0s undo driver loaded, phase entry-apply, output <run>\\out",
-    "t+3.8s title screen",
-    "t+4.8s report ready (online=true)",
-    "t+5.8s apply 1 (add e2e-first): Downloading 1 mod change(s)…",
-    "t+6.3s apply 1 staged",
-    "t+7.3s apply 2 (add e2e-second): Downloading 1 mod change(s)…",
-    "t+7.8s staged: 2 op(s) in pending.json",
-    "t+9.0s screenshot e2e-entry-apply-2-after.png: Saved screenshot as e2e-entry-apply-2-after.png",
-    "t+10.9s quitting"
+    "t+3.7s title screen",
+    "t+4.7s report ready (online=true)",
+    "t+5.7s apply 1 (add e2e-first): Downloading 1 mod change(s)…",
+    "t+6.2s apply 1 staged",
+    "t+7.2s apply 2 (add e2e-second): Downloading 1 mod change(s)…",
+    "t+7.7s staged: 2 op(s) in pending.json",
+    "t+8.8s screenshot e2e-entry-apply-2-after.png: Saved screenshot as e2e-entry-apply-2-after.png",
+    "t+10.8s quitting"
   ],
   "rigtuneVersion": "0.3.0-dev+mc26.2",
   "loadedMods": [
@@ -79,8 +79,8 @@
       "to": "<instance>\\mods\\e2e-first-1.0.0.jar",
       "path": null,
       "modId": "e2e-first",
-      "group": "ee390f31-a4e0-44bf-9113-be2db6242f32",
-      "id": "809f1edb-a0b8-4ef7-8223-df1fecd301b1"
+      "group": "dde79866-d3ff-4e3b-abb8-5143e808d9e6",
+      "id": "dc51479d-5782-496b-ac6c-2788f05f99df"
     },
     {
       "type": "ENABLE_FILE",
@@ -88,8 +88,8 @@
       "to": "<instance>\\mods\\e2e-second-1.0.0.jar",
       "path": null,
       "modId": "e2e-second",
-      "group": "dc6c4405-403e-46a7-8e60-0f20eec76eaa",
-      "id": "8c331710-3f99-4342-92cc-f9f1328b8a1b"
+      "group": "37dc86a9-770a-4bc8-bdb7-6e010908db8e",
+      "id": "38f6de34-5f4c-49ce-a5d5-2847abb740c1"
     }
   ],
   "status": "Restart Minecraft to finish applying 2 change(s)."

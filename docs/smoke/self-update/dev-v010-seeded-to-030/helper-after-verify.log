@@ -1,7 +1,7 @@
-[2026-09-25T18:32:10.897664700Z] [RigTune apply] Waiting for game process 11576 to exit
-[2026-09-25T18:32:12.185448900Z] [RigTune apply] Applying 4 operation(s) from <instance>\config\rigtune\pending.json
-[2026-09-25T18:32:14.963634100Z] [RigTune apply] FAILED DISABLE_FILE: Gave up after 10 attempt(s): java.nio.file.FileSystemException: <instance>\mods\fabric-26.2.jar -> <instance>\mods\fabric-26.2.jar.disabled: The process cannot access the file because it is being used by another process
-[2026-09-25T18:32:14.963634100Z] [RigTune apply] FAILED ENABLE_FILE: Not applied because disabling fabric-26.2.jar failed
-[2026-09-25T18:32:14.963634100Z] [RigTune apply] OK DISABLE_FILE: Disabled rigtune-0.1.0.jar -> rigtune-0.1.0.jar.disabled
-[2026-09-25T18:32:14.963634100Z] [RigTune apply] OK ENABLE_FILE: Enabled rigtune-0.3.0-dev+mc26.2.jar
-[2026-09-25T18:32:14.964633600Z] [RigTune apply] Some operations were not applied; failed ones remain in <instance>\config\rigtune\pending.json, abandoned ones were dropped
+[2026-09-25T19:27:29.193648600Z] [RigTune apply] Process 53176 not found; proceeding
+[2026-09-25T19:27:30.264047900Z] [RigTune apply] Applying 4 operation(s) from <instance>\config\rigtune\pending.json
+[2026-09-25T19:27:33.039227500Z] [RigTune apply] FAILED DISABLE_FILE: Gave up after 10 attempt(s): java.nio.file.FileSystemException: <instance>\mods\fabric-26.2.jar -> <instance>\mods\fabric-26.2.jar.disabled: The process cannot access the file because it is being used by another process
+[2026-09-25T19:27:33.040226800Z] [RigTune apply] FAILED ENABLE_FILE: Not applied because disabling fabric-26.2.jar failed
+[2026-09-25T19:27:33.040226800Z] [RigTune apply] OK DISABLE_FILE: Disabled rigtune-0.1.0.jar -> rigtune-0.1.0.jar.disabled
+[2026-09-25T19:27:33.040226800Z] [RigTune apply] OK ENABLE_FILE: Enabled rigtune-0.3.0-dev+mc26.2.jar
+[2026-09-25T19:27:33.040226800Z] [RigTune apply] Some operations were not applied; failed ones remain in <instance>\config\rigtune\pending.json, abandoned ones were dropped

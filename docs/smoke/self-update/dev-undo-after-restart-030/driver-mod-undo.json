@@ -4,14 +4,14 @@
   "error": null,
   "events": [
     "t+0.0s undo driver loaded, phase mod-undo, output <run>\\out",
-    "t+4.1s title screen",
-    "t+5.1s report ready (online=true)",
-    "t+5.1s undoPlan: 2 item(s), undoOf 8d86afcb-f28c-4084-8027-4274dd098732, problem null",
-    "t+7.2s screenshot e2e-mod-undo-1-plan.png: Saved screenshot as e2e-mod-undo-1-plan.png",
-    "t+8.1s pressed Undo (2)",
-    "t+8.6s staged: 2 op(s) in pending.json",
-    "t+9.7s screenshot e2e-mod-undo-2-after.png: Saved screenshot as e2e-mod-undo-2-after.png",
-    "t+11.6s quitting"
+    "t+3.6s title screen",
+    "t+4.6s report ready (online=true)",
+    "t+4.7s undoPlan: 2 item(s), undoOf 9476bde2-170a-4541-a11c-efa1be2fd1db, problem null",
+    "t+6.7s screenshot e2e-mod-undo-1-plan.png: Saved screenshot as e2e-mod-undo-1-plan.png",
+    "t+7.6s pressed Undo (2)",
+    "t+8.1s staged: 2 op(s) in pending.json",
+    "t+9.2s screenshot e2e-mod-undo-2-after.png: Saved screenshot as e2e-mod-undo-2-after.png",
+    "t+11.2s quitting"
   ],
   "rigtuneVersion": "0.3.0-dev+mc26.2",
   "loadedMods": [
@@ -69,8 +69,8 @@
     "rigtune-e2e-undo-driver"
   ],
   "undoPlanMeta": {
-    "undoOf": "8d86afcb-f28c-4084-8027-4274dd098732",
-    "at": "2026-09-25T18:43:51.487037700Z",
+    "undoOf": "9476bde2-170a-4541-a11c-efa1be2fd1db",
+    "at": "2026-09-25T19:30:36.426890600Z",
     "problem": null
   },
   "undoPlan": [
@@ -80,7 +80,7 @@
       "reason": null,
       "needsRestart": true,
       "changeIds": [
-        "3fb04b59-7648-4a90-9891-6f252c5128d1"
+        "f452a0fc-19ac-43e2-8e2c-ed49ffc477c1"
       ],
       "opIds": []
     },
@@ -90,12 +90,12 @@
       "reason": null,
       "needsRestart": true,
       "changeIds": [
-        "83f8002f-c2d9-4a33-a8d0-0eedd6524a55"
+        "39616038-9952-4117-b188-04de3035804a"
       ],
       "opIds": []
     }
   ],
-  "undoOf": "8d86afcb-f28c-4084-8027-4274dd098732",
+  "undoOf": "9476bde2-170a-4541-a11c-efa1be2fd1db",
   "undoButton": "Undo (2)",
   "pendingOps": [
     {
@@ -104,8 +104,8 @@
       "to": null,
       "path": "<instance>\\mods\\e2e-added-1.0.0.jar",
       "modId": null,
-      "group": "eb3a5d3d-ba8e-4dc2-811a-14f8ced01c0d",
-      "id": "90bb62b4-e0d0-48db-8b33-c4d5c7a09c5b"
+      "group": "a0337611-478b-4074-a58c-c84fc9bbd7ce",
+      "id": "e467291c-f192-45ab-baa3-54d47197fc39"
     },
     {
       "type": "ENABLE_FILE",
@@ -113,8 +113,8 @@
       "to": "<instance>\\mods\\e2e-disable-me-1.0.0.jar",
       "path": null,
       "modId": "e2e-disable-me",
-      "group": "80456c6a-9df8-491e-a44b-411fcf64c753",
-      "id": "9d9d24d0-309e-471a-8d73-277b16e60dea"
+      "group": "f21ea103-3b60-4ab7-b366-a20f2bc989ee",
+      "id": "4139de19-3aa0-48db-96b9-88597095e031"
     }
   ],
   "status": null

@@ -1,5 +1,5 @@
-[2026-09-25T18:20:29.590178Z] [RigTune apply] Waiting for game process 45780 to exit
-[2026-09-25T18:20:31.973887Z] [RigTune apply] Applying 2 operation(s) from <instance>\config\rigtune\pending.json
-[2026-09-25T18:20:32.030412300Z] [RigTune apply] OK DISABLE_FILE: Disabled rigtune-0.2.0+mc26.2.jar -> rigtune-0.2.0+mc26.2.jar.disabled
-[2026-09-25T18:20:32.030412300Z] [RigTune apply] OK ENABLE_FILE: Enabled rigtune-0.3.0-dev+mc26.2.jar
-[2026-09-25T18:20:32.030412300Z] [RigTune apply] All operations done
+[2026-09-25T19:28:32.487740200Z] [RigTune apply] Waiting for game process 23560 to exit
+[2026-09-25T19:28:34.836902Z] [RigTune apply] Applying 2 operation(s) from <instance>\config\rigtune\pending.json
+[2026-09-25T19:28:34.894498200Z] [RigTune apply] OK DISABLE_FILE: Disabled rigtune-0.2.0+mc26.2.jar -> rigtune-0.2.0+mc26.2.jar.disabled
+[2026-09-25T19:28:34.894498200Z] [RigTune apply] OK ENABLE_FILE: Enabled rigtune-0.3.0-dev+mc26.2.jar
+[2026-09-25T19:28:34.894498200Z] [RigTune apply] All operations done

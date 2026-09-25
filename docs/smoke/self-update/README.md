@@ -8,9 +8,9 @@ the new version starts on the same instance. Each folder's `RESULT.md` has every
 
 ## v0.3 (WS-H dry runs; Phase 5 repeats them on the release candidate as `final-*` and `undo-after-restart-030`)
 
-New jar: `rigtune-0.3.0-dev+mc26.2.jar` (sha256 `b9a781ae…71f0`) built from test/e2e-v03 with `-Pmod_version=0.3.0-dev`,
-before any Wave A workstream merged (so 3a, 3e and per-entry undo are the v0.2 code). Commands: tools/e2e/README.md
-"v0.3 runs".
+New jar: `rigtune-0.3.0-dev+mc26.2.jar` (sha256 `9015bd10…8c19`) built from test/e2e-v03 @ ee7f8ea, which has
+feat/v0.3.0 @ c250b7a merged (WS-0, WS-A's 3a/3b/3c, WS-F), but not WS-B (3e, per-entry undo). A first round on a build
+without WS-A (sha256 `b9a781ae…71f0`) gave the same counts. Commands: tools/e2e/README.md "v0.3 runs".
 
 | run | installed → update | result | date |
 |---|---|---|---|
@@ -23,8 +23,9 @@ before any Wave A workstream merged (so 3a, 3e and per-entry undo are the v0.2 c
 
 What the seeded run shows: the 0.1.0 helper retried the user's DH group while the fake DH jar was held open (as DH's own
 updater held the real one) and failed it again (attempts 2), while the self-update itself applied. On the first
-0.3.0-dev start the group was dropped with "Cancelled RigTune's pending update of Distant Horizons: it has an update of
-its own waiting in mods/update.", the legacy import journaled both changes and marked them `DISCARDED`, no helper ran
+0.3.0-dev start WS-A's narrowed 3a (RigTune's update of a loaded mod with its own update queued) dropped the group with
+"Cancelled RigTune's pending change to Distant Horizons: it has an update of its own waiting in mods/update.", the legacy
+import journaled both changes and marked them `DISCARDED`, no helper ran
 at exit, `mods/` didn't change at exit, and during the session the only change was RigTune's DH download becoming
 `.rigtune-superseded`. The one failing check waits for WS-B's per-op WARN lines (SPEC 3e); v0.2 logs only "2 staged
 RigTune change(s) were not applied; they will be retried at the next exit". With WS-B merged locally (`-wsb`), latest.log

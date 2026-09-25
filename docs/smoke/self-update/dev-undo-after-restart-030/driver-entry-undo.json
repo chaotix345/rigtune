@@ -4,10 +4,10 @@
   "error": "no per-entry undo API: no public (String) -> UndoPlan method on io.github.chaotix345.rigtune.client.RealController (WS-B's Undo this)",
   "events": [
     "t+0.0s undo driver loaded, phase entry-undo, output <run>\\out",
-    "t+3.9s title screen",
-    "t+4.9s report ready (online=true)",
-    "t+4.9s FAILED: no per-entry undo API: no public (String) -> UndoPlan method on io.github.chaotix345.rigtune.client.RealController (WS-B's Undo this)",
-    "t+4.9s quitting"
+    "t+3.8s title screen",
+    "t+4.8s report ready (online=true)",
+    "t+4.8s FAILED: no per-entry undo API: no public (String) -> UndoPlan method on io.github.chaotix345.rigtune.client.RealController (WS-B's Undo this)",
+    "t+4.8s quitting"
   ],
   "rigtuneVersion": "0.3.0-dev+mc26.2",
   "loadedMods": [
@@ -67,5 +67,6 @@
     "rigtune-e2e-undo-driver"
   ],
   "entryPlanMethod": null,
+  "entryPlanCandidates": [],
   "entryPlan": null
 }
