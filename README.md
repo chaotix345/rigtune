@@ -66,7 +66,8 @@ rules/source/knowledge.json   hand-written knowledge (conditions, reasons, setti
         │  tools/update_rules.py  (weekly GitHub Action, or run by hand)
         ▼  + Modrinth: project status and which MC versions each mod supports
         ▼  + Fabulously Optimized and Additive: current mod lists
-rules/rules-v1.json           what the mod downloads (bundled copy in src/main/resources)
+rules/rules-v2.json           what the mod downloads (bundled copy in src/main/resources)
+rules/rules-v1.json           the same rules as RigTune 0.1.x understands them
 rules/REVIEW.md               new upstream mods and problems for a maintainer to triage
 ```
 
