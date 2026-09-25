@@ -118,6 +118,14 @@ class LauncherDetectorTest {
 	}
 
 	@Test
+	void instanceCfgWithAByteOrderMark() throws IOException {
+		Path gameDir = prismInstance("multimc");
+		Path cfg = gameDir.getParent().resolve("instance.cfg");
+		Files.writeString(cfg, "\uFEFF" + resource("multimc/instance.cfg"));
+		assertEquals(Launcher.PRISM, detectDir(gameDir).launcher());
+	}
+	
+	@Test
 	void prismNeedsBothFiles() throws IOException {
 		Path gameDir = prismInstance("prism");
 		Files.delete(gameDir.getParent().resolve("mmc-pack.json"));
@@ -128,8 +136,11 @@ class LauncherDetectorTest {
 	void curseForgeReadsTheMemoryOverride() throws IOException {
 		String real = resource("curseforge/minecraftinstance.json");
 		assertEquals(new LauncherInfo(Launcher.CURSEFORGE, false), detectDir(curseForgeInstance(real)));
+		// C-M2: a pack that doesn't override memory gets the app's global steps, one that does (or unknown) its own.
+		assertEquals("rigtune.launcher.steps.curseforge.global", detectDir(curseForgeInstance(real)).stepsKey());
 		String overridden = real.replace("\"isMemoryOverride\": false", "\"isMemoryOverride\": true");
 		assertEquals(new LauncherInfo(Launcher.CURSEFORGE, true), detectDir(curseForgeInstance(overridden)));
+		assertEquals("rigtune.launcher.steps.curseforge.pack", detectDir(curseForgeInstance(overridden)).stepsKey());
 		String without = real.replace("\"isMemoryOverride\": false,", "");
 		assertEquals(new LauncherInfo(Launcher.CURSEFORGE, null), detectDir(curseForgeInstance(without)));
 	}
@@ -299,6 +310,12 @@ class LauncherDetectorTest {
 		Files.writeString(file, "{\"installedAddons\": \"" + "x".repeat(2048) + "\", \"isMemoryOverride\": true}");
 		assertNull(InstanceFiles.memoryOverride(file, 1024));
 		assertEquals(Boolean.TRUE, InstanceFiles.memoryOverride(file, 4096));
+		// A file that ends exactly at the cap is read to its end.
+		Path exact = temp.resolve("exact.json");
+		Files.writeString(exact, "{\"a\": 1, \"isMemoryOverride\": false}");
+		assertEquals(Boolean.FALSE, InstanceFiles.memoryOverride(exact, Files.size(exact)));
+		Files.writeString(exact, "{\"isMemoryOverride\": 1}");
+		assertNull(InstanceFiles.memoryOverride(exact, Files.size(exact)));
 	}
 
 	@Test

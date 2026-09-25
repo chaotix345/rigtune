@@ -2,7 +2,6 @@ package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
-import io.github.chaotix345.rigtune.core.launcher.LauncherAdvice;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
@@ -38,6 +37,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 public class RigTuneScreen extends Screen {
@@ -73,7 +73,6 @@ public class RigTuneScreen extends Screen {
 	private @Nullable Map<String, String> captions;
 	private @Nullable Component seenControllerStatus;
 	private LauncherInfo shownLauncher = LauncherInfo.UNKNOWN;
-	private final List<Component> launcherAdvice = new ArrayList<>();
 
 	public RigTuneScreen(@Nullable Screen parent, RigTuneController controller) {
 		super(Component.translatable("rigtune.screen.title"));
@@ -93,7 +92,6 @@ public class RigTuneScreen extends Screen {
 		}
 		shown = controller.report();
 		shownLauncher = controller.launcher();
-		launcherAdvice.clear();
 		syncSelection(shown);
 
 		int titleWidth = font.width(title.copy().withStyle(ChatFormatting.BOLD));
@@ -197,7 +195,8 @@ public class RigTuneScreen extends Screen {
 
 	private List<Component> header(Report report, @Nullable Component badge) {
 		HardwareProfile hw = report.hardware();
-		List<Component> lines = new ArrayList<>(cpuAndMemory(hw));
+		List<Component> lines = new ArrayList<>(LauncherLines.cpuAndMemory(shownLauncher, value(cpuName(hw.cpu().name())),
+				value(Integer.toString(hw.cpu().logicalCores())), value(gb(hw.totalRamMb())), value(gb(hw.maxHeapMb())), COLOR_LABEL));
 		String vram = hw.gpu().vramMb() > 0 ? gb(hw.gpu().vramMb()) : "?";
 		lines.add(Component.translatable("rigtune.header.gpu",
 				value(hw.gpu().renderer()),
@@ -232,37 +231,10 @@ public class RigTuneScreen extends Screen {
 		return List.copyOf(headerLines);
 	}
 
-	// v0.3 (WS-C): with a known launcher the memory gets its own line naming it ("Memory 6.0 GB of 32 GB, set in the
-	// Modrinth App"); otherwise the CPU line is as before.
-	private List<Component> cpuAndMemory(HardwareProfile hw) {
-		Component cpu = value(cpuName(hw.cpu().name()));
-		Component threads = value(Integer.toString(hw.cpu().logicalCores()));
-		String launcherName = shownLauncher.nameKey();
-		if (launcherName == null) {
-			return List.of(Component.translatable("rigtune.header.cpu", cpu, threads, value(gb(hw.totalRamMb())), value(gb(hw.maxHeapMb())))
-					.withStyle(s -> s.withColor(COLOR_LABEL)));
-		}
-		return List.of(
-				Component.translatable("rigtune.launcher.header.cpu", cpu, threads).withStyle(s -> s.withColor(COLOR_LABEL)),
-				Component.translatable("rigtune.launcher.header.memory", value(gb(hw.maxHeapMb())), value(gb(hw.totalRamMb())),
-						Component.translatable(launcherName).withStyle(ChatFormatting.WHITE)).withStyle(s -> s.withColor(COLOR_LABEL)));
-	}
-
-	// v0.3 (WS-C): "In <launcher>: <steps>" under every ram-* advice, when the launcher is known.
-	private @Nullable Component launcherLine(Recommendation recommendation) {
-		String steps = LauncherAdvice.stepsKey(recommendation, shownLauncher);
-		String launcherName = shownLauncher.nameKey();
-		if (steps == null || launcherName == null) {
-			return null;
-		}
-		Component line = Component.translatable("rigtune.launcher.advice", Component.translatable(launcherName), Component.translatable(steps));
-		launcherAdvice.add(line);
-		return line;
-	}
-
-	/** The launcher lines shown under the ram-* advice, in list order (for the game tests). */
+	/** v0.3 (WS-C): the launcher lines shown under the ram-* advice (for the game tests). */
 	public List<Component> launcherLines() {
-		return List.copyOf(launcherAdvice);
+		return shown == null ? List.of()
+				: shown.recommendations().stream().map(r -> LauncherLines.adviceLine(r, shownLauncher)).filter(Objects::nonNull).toList();
 	}
 
 	private void copyReport() {
@@ -521,7 +493,7 @@ public class RigTuneScreen extends Screen {
 				this.titleLines = split.size() > 2 ? List.of(split.get(0), ComponentRenderUtils.clipText(title, font, titleWidth)) : split;
 				this.reasonLines = recommendation.reason() == null || recommendation.reason().isBlank()
 						? List.of() : font.split(Component.literal(recommendation.reason()), reasonWidth);
-				Component launcherLine = launcherLine(recommendation);
+				Component launcherLine = LauncherLines.adviceLine(recommendation, shownLauncher);
 				this.launcherLines = launcherLine == null ? List.of() : font.split(launcherLine, reasonWidth);
 				if (recommendation.appliable()) {
 					this.checkbox = Checkbox.builder(Component.empty(), font)

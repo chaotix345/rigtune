@@ -8,6 +8,7 @@ import io.github.chaotix345.rigtune.core.model.GpuInfo;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -46,11 +47,11 @@ public final class ShareReport {
 	}
 
 	// v0.3 (WS-C): launcher is the detected launcher's name, or null when it isn't known (then there's no line).
-	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, String launcher) {
+	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, @Nullable String launcher) {
 		return format(report, versions, benchmark, DISCORD_LIMIT, launcher);
 	}
 
-	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, int maxChars, String launcher) {
+	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, int maxChars, @Nullable String launcher) {
 		StringBuilder fixed = new StringBuilder();
 		fixed.append("**RigTune ").append(field(versions.rigtune())).append("** · Minecraft ").append(field(versions.minecraft()))
 				.append(" · Fabric Loader ").append(field(versions.loader())).append('\n');
@@ -73,7 +74,7 @@ public final class ShareReport {
 		return hardCut(text, maxChars);
 	}
 
-	private static void hardware(StringBuilder out, Report report, String launcher) {
+	private static void hardware(StringBuilder out, Report report, @Nullable String launcher) {
 		HardwareProfile hw = report.hardware();
 		CpuInfo cpu = hw.cpu();
 		out.append("**Hardware**\n");

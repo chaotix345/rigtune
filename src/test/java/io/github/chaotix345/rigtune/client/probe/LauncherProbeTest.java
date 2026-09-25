@@ -16,6 +16,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 
 // C-M1: the probe runs off the render thread with a timeout, and any failure is Unknown; only the named signals are read.
 class LauncherProbeTest {
@@ -55,6 +56,48 @@ class LauncherProbeTest {
 		}
 	}
 
+	// Review finding 1: a detection that outlives one caller's timeout is still used by the next one, and a finished
+	// detection answers at once (it isn't queued behind other work again).
+	@Test
+	void aLateDetectionIsKeptForTheNextProbe() throws Exception {
+		ExecutorService executor = Executors.newSingleThreadExecutor();
+		CountDownLatch release = new CountDownLatch(1);
+		try {
+			java.util.concurrent.CompletableFuture<LauncherInfo> detection = LauncherProbe.start(() -> {
+				try {
+					release.await();
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+				}
+				return LauncherInfo.of(Launcher.PRISM);
+			}, executor);
+			assertEquals(LauncherInfo.UNKNOWN, await(LauncherProbe.withTimeout(detection, 100)));
+			release.countDown();
+			assertEquals(LauncherInfo.of(Launcher.PRISM), detection.get(5, TimeUnit.SECONDS));
+			assertEquals(LauncherInfo.of(Launcher.PRISM), await(LauncherProbe.withTimeout(detection, 1)));
+		} finally {
+			release.countDown();
+			executor.shutdownNow();
+		}
+	}
+	
+	@Test
+	void theGameProbeDetectsOncePerSession() throws Exception {
+		LauncherProbe.reset();
+		try {
+			Path gameDir = Path.of("game");
+			java.util.concurrent.CompletableFuture<LauncherInfo> first = LauncherProbe.probeAsync(gameDir);
+			await(first);
+			assertEquals(LauncherProbe.detection(), LauncherProbe.detection(), "memoized");
+			java.util.concurrent.CompletableFuture<LauncherInfo> before = LauncherProbe.detection();
+			LauncherProbe.reset();
+			await(LauncherProbe.probeAsync(gameDir));
+			assertNotSame(before, LauncherProbe.detection(), "reset detects again");
+		} finally {
+			LauncherProbe.reset();
+		}
+	}
+	
 	@Test
 	void anyFailureIsUnknown() throws Exception {
 		ExecutorService executor = Executors.newSingleThreadExecutor();

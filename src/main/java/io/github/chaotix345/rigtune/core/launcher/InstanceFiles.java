@@ -8,7 +8,6 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.PushbackReader;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -24,6 +23,7 @@ final class InstanceFiles {
 	static final String CURSEFORGE_INSTANCE = "minecraftinstance.json";
 	static final int INSTANCE_CFG_MAX = 64 * 1024;
 	static final long CURSEFORGE_MAX = 32L * 1024 * 1024;
+	private static final char BOM = '﻿';
 
 	record CurseForge(@Nullable Boolean memoryOverride) {
 	}
@@ -48,7 +48,11 @@ final class InstanceFiles {
 			}
 			try (InputStream in = Files.newInputStream(file)) {
 				byte[] bytes = in.readNBytes(max + 1);
-				return bytes.length > max ? null : new String(bytes, StandardCharsets.UTF_8);
+				if (bytes.length > max) {
+					return null;
+				}
+				String text = new String(bytes, StandardCharsets.UTF_8);
+				return !text.isEmpty() && text.charAt(0) == BOM ? text.substring(1) : text;
 			}
 		} catch (IOException | RuntimeException e) {
 			return null;
@@ -75,8 +79,9 @@ final class InstanceFiles {
 		return Optional.of(new CurseForge(memoryOverride(file, CURSEFORGE_MAX)));
 	}
 
+	// Gson's JsonReader skips a leading byte order mark itself.
 	static @Nullable Boolean memoryOverride(Path file, long maxBytes) {
-		try (Reader reader = withoutBom(new InputStreamReader(new Capped(Files.newInputStream(file), maxBytes), StandardCharsets.UTF_8));
+		try (Reader reader = new InputStreamReader(new Capped(Files.newInputStream(file), maxBytes), StandardCharsets.UTF_8);
 				JsonReader json = new JsonReader(reader)) {
 			if (json.peek() != JsonToken.BEGIN_OBJECT) {
 				return null;
@@ -95,16 +100,7 @@ final class InstanceFiles {
 		}
 	}
 
-	private static Reader withoutBom(Reader reader) throws IOException {
-		PushbackReader in = new PushbackReader(reader, 1);
-		int first = in.read();
-		if (first >= 0 && first != '﻿') {
-			in.unread(first);
-		}
-		return in;
-	}
-
-	// Fails the read once more than max bytes would be read.
+	// Reads at most max bytes; one more byte than that fails the read (the end of the file right at max is fine).
 	private static final class Capped extends FilterInputStream {
 		private long remaining;
 
@@ -116,7 +112,7 @@ final class InstanceFiles {
 		@Override
 		public int read() throws IOException {
 			if (remaining <= 0) {
-				throw new IOException("read limit reached");
+				return overCap();
 			}
 			int b = super.read();
 			if (b >= 0) {
@@ -131,13 +127,20 @@ final class InstanceFiles {
 				return 0;
 			}
 			if (remaining <= 0) {
-				throw new IOException("read limit reached");
+				return overCap();
 			}
 			int n = super.read(buffer, offset, (int) Math.min(length, remaining));
 			if (n > 0) {
 				remaining -= n;
 			}
 			return n;
+		}
+
+		private int overCap() throws IOException {
+			if (super.read() < 0) {
+				return -1;
+			}
+			throw new IOException("read limit reached");
 		}
 
 		@Override

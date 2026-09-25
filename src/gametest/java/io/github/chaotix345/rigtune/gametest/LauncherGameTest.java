@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.gametest;
 
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
+import io.github.chaotix345.rigtune.client.probe.LauncherProbe;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.core.launcher.Launcher;
@@ -24,6 +25,7 @@ import io.github.chaotix345.rigtune.core.rules.RulesLoader;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
+import net.minecraft.client.gui.components.AbstractSelectionList;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -39,7 +41,8 @@ import java.util.Set;
 // WS-C (docs/v0.3/SPEC.md item 5, AC5.3 with C-L1): the header's memory line and the launcher line under the ram-*
 // advice, screenshotted at the three reference sizes without a launcher brand (as the test run starts the game; the
 // start-up values are logged so the CI latest.log shows it) and with minecraft.launcher.brand=theseus, which goes
-// through the real probe (the property is set, then the real controller rescans).
+// through the real probe (the property is set, the probe's once-per-session detection is reset, and the real controller
+// rescans).
 public class LauncherGameTest implements FabricClientGameTest {
 	private static final int[][] SIZES = {{854, 480, 2}, {1280, 720, 3}, {1280, 720, 2}};
 
@@ -56,25 +59,32 @@ public class LauncherGameTest implements FabricClientGameTest {
 				LauncherSignals.BRAND, startBrand, LauncherSignals.PRISM_INSTANCE, System.getProperty(LauncherSignals.PRISM_INSTANCE) != null,
 				LauncherSignals.MULTIMC_INSTANCE, System.getProperty(LauncherSignals.MULTIMC_INSTANCE) != null,
 				System.getenv(LauncherSignals.INST_ID) != null, System.getenv(LauncherSignals.INST_NAME) != null, real.launcher());
-		check(!real.launcher().known(), "the test run has no launcher signal: " + real.launcher() + " (brand " + startBrand + ")");
+		// In CI this confirms the production run passes no brand (C-L1); a developer's own environment may carry one.
+		boolean noLauncher = !real.launcher().known();
+		check(noLauncher || System.getenv("CI") == null, "the CI run has no launcher signal: " + real.launcher() + " (brand " + startBrand + ")");
 
 		Report report = ramAdviceReport();
 		long ramAdvice = report.recommendations().stream().filter(LauncherAdvice::isRamAdvice).count();
 		check(ramAdvice >= 2, "the fixture report has ram-* advice: " + report.recommendations().stream().map(Recommendation::id).toList());
 		RigTuneController stub = new RamAdviceController(real, report);
 
-		open(context, stub);
-		atEverySize(context, "launcher-none");
-		context.runOnClient(mc -> {
-			RigTuneScreen screen = (RigTuneScreen) mc.gui.screen();
-			check(screen.launcherLines().isEmpty(), "no launcher line without a launcher: " + screen.launcherLines());
-			check(headerHas(screen, "rigtune.header.cpu") && !headerHas(screen, "rigtune.launcher.header.memory"), "the header as before");
-		});
-		check(!real.shareReport().contains("Launcher:"), "no launcher in the share report");
+		if (noLauncher) {
+			open(context, stub);
+			atEverySize(context, "launcher-none");
+			context.runOnClient(mc -> {
+				RigTuneScreen screen = (RigTuneScreen) mc.gui.screen();
+				check(screen.launcherLines().isEmpty(), "no launcher line without a launcher: " + screen.launcherLines());
+				check(headerHas(screen, "rigtune.header.cpu") && !headerHas(screen, "rigtune.launcher.header.memory"), "the header as before");
+			});
+			check(!context.computeOnClient(mc -> real.shareReport()).contains("Launcher:"), "no launcher in the share report");
+		} else {
+			RigTune.LOGGER.warn("LauncherGameTest: this run already has a launcher signal ({}); the no-launcher screenshots are skipped", real.launcher());
+		}
 
+		Throwable failure = null;
 		try {
 			System.setProperty(LauncherSignals.BRAND, "theseus");
-			context.runOnClient(mc -> real.rescan());
+			redetect(context, real);
 			context.waitFor(mc -> real.launcher().launcher() == Launcher.MODRINTH_APP && real.report() != null, 1200);
 			RigTune.LOGGER.info("LauncherGameTest: with {}=theseus detected {}", LauncherSignals.BRAND, real.launcher());
 
@@ -95,14 +105,27 @@ public class LauncherGameTest implements FabricClientGameTest {
 			});
 			String shared = context.computeOnClient(mc -> real.shareReport());
 			check(shared.contains("\n- Launcher: Modrinth App\n"), "the share report names the launcher: " + shared);
+		} catch (RuntimeException | Error e) {
+			failure = e;
+			throw e;
 		} finally {
-			if (startBrand == null) {
-				System.clearProperty(LauncherSignals.BRAND);
-			} else {
-				System.setProperty(LauncherSignals.BRAND, startBrand);
+			// Later game-test classes get the start-up launcher back; a failure here doesn't hide the one above.
+			try {
+				if (startBrand == null) {
+					System.clearProperty(LauncherSignals.BRAND);
+				} else {
+					System.setProperty(LauncherSignals.BRAND, startBrand);
+				}
+				redetect(context, real);
+				context.waitFor(mc -> real.launcher().known() != noLauncher && real.report() != null, 1200);
+				context.waitTicks(40);
+				context.waitFor(mc -> real.report() != null, 1200);
+			} catch (RuntimeException | AssertionError e) {
+				if (failure == null) {
+					throw e;
+				}
+				failure.addSuppressed(e);
 			}
-			context.runOnClient(mc -> real.rescan());
-			context.waitFor(mc -> !real.launcher().known() && real.report() != null, 1200);
 		}
 
 		resize(context, 854, 480, 0);
@@ -122,6 +145,13 @@ public class LauncherGameTest implements FabricClientGameTest {
 
 	private static InstalledMod mod(String id) {
 		return new InstalledMod(id, id, "1.0.0", Path.of("mods", id + ".jar"), null);
+	}
+
+	private static void redetect(ClientGameTestContext context, RigTuneController real) {
+		context.runOnClient(mc -> {
+			LauncherProbe.reset();
+			real.rescan();
+		});
 	}
 
 	private static String key(Object arg) {
@@ -165,6 +195,10 @@ public class LauncherGameTest implements FabricClientGameTest {
 				if (w.visible) {
 					check(w.getX() >= 0 && w.getY() >= 0 && w.getRight() <= screen.width && w.getBottom() <= screen.height,
 							name + ": " + w.getMessage().getString() + " outside " + screen.width + "x" + screen.height);
+				}
+				// The extra header line still leaves room for a ram-* advice with its launcher line.
+				if (w instanceof AbstractSelectionList<?> list) {
+					check(list.getHeight() >= 60, name + ": the list is only " + list.getHeight() + " high");
 				}
 			}
 		});
