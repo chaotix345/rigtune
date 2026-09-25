@@ -1,88 +1,118 @@
 package io.github.chaotix345.rigtune.core.rules;
 
+import io.github.chaotix345.rigtune.core.hardware.GpuClassifier;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
+import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.GpuInfo;
+import io.github.chaotix345.rigtune.core.model.GpuVendor;
+import io.github.chaotix345.rigtune.core.model.GraphicsBackend;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.TierResult;
+import net.fabricmc.loader.api.SemanticVersion;
+import net.fabricmc.loader.api.Version;
+import net.fabricmc.loader.api.metadata.version.VersionPredicate;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+import java.util.stream.Collectors;
 
+import static io.github.chaotix345.rigtune.core.rules.Truth.FALSE;
+import static io.github.chaotix345.rigtune.core.rules.Truth.TRUE;
+import static io.github.chaotix345.rigtune.core.rules.Truth.UNKNOWN;
+
+// Evaluates rule conditions to TRUE, FALSE or UNKNOWN (docs/RULES_SCHEMA.md "Evaluation"). Only TRUE makes a rule fire.
+// An unknown or null key anywhere in a condition tree makes the whole condition UNKNOWN; undecidable values (no GPU
+// info, a bad regex, unknown RAM, a value outside a field's vocabulary, ...) are UNKNOWN where they occur and combine
+// with Kleene logic, so a `not` can never turn "can't tell" into "yes".
 public final class ConditionEvaluator {
+	public static final Set<String> GPU_VENDORS = Arrays.stream(GpuVendor.values())
+			.map(v -> v.name().toLowerCase(Locale.ROOT)).collect(Collectors.toUnmodifiableSet());
+	public static final Set<String> BACKENDS = Set.of("opengl", "vulkan");
+	public static final List<String> OS_FAMILIES = List.of("windows", "macos", "linux");
+	public static final Set<String> GOALS = Arrays.stream(Goal.values())
+			.map(g -> g.name().toLowerCase(Locale.ROOT)).collect(Collectors.toUnmodifiableSet());
+	public static final Set<String> FLAGS = Set.of("backend-vulkan", "shaders-enabled");
+	public static final String SODIUM_WORKAROUND_FLAG = "sodium-workaround:";
+
 	private ConditionEvaluator() {
 	}
 
 	public static boolean matches(Condition c, EvalContext ctx) {
+		return evaluate(c, ctx) == TRUE;
+	}
+
+	// A missing condition is TRUE, as in v1.
+	public static Truth evaluate(Condition c, EvalContext ctx) {
 		if (c == null) {
+			return TRUE;
+		}
+		return poisoned(c) ? UNKNOWN : node(c, ctx);
+	}
+
+	static boolean poisoned(Condition c) {
+		if (c.unknownFields != null && !c.unknownFields.isEmpty()) {
 			return true;
 		}
-		if (c.always != null && !c.always) {
-			return false;
+		if (c.not != null && poisoned(c.not)) {
+			return true;
 		}
+		return c.anyOf != null && c.anyOf.stream().anyMatch(sub -> sub == null || poisoned(sub));
+	}
+
+	private static Truth node(Condition c, EvalContext ctx) {
 		HardwareProfile hw = ctx.hardware();
 		TierResult tier = ctx.tier();
-		if (!inRange(tier.effectiveTier(), c.tierAtLeast, c.tierAtMost)
-				|| !inRange(tier.rawTier(), c.rawTierAtLeast, c.rawTierAtMost)
-				|| !inRange(ctx.gpu().tier(), c.gpuTierAtLeast, c.gpuTierAtMost)
-				|| !inRange(tier.cpuTier(), c.cpuTierAtLeast, c.cpuTierAtMost)) {
-			return false;
-		}
-		if (c.gpuVendor != null && !containsIgnoreCase(c.gpuVendor, ctx.gpu().vendor().name())) {
-			return false;
-		}
-		if (c.gpuIntegrated != null && c.gpuIntegrated != ctx.gpu().integrated()) {
-			return false;
-		}
-		if (c.hasBattery != null && c.hasBattery != hw.hasBattery()) {
-			return false;
-		}
-		if (c.onBattery != null && c.onBattery != hw.onBattery()) {
-			return false;
-		}
-		if (!inRange(hw.maxHeapMb(), c.heapMbAtLeast, c.heapMbAtMost)) {
-			return false;
-		}
-		if (!knownInRange(hw.totalRamMb(), c.ramMbAtLeast, c.ramMbAtMost)) {
-			return false;
-		}
 		GpuInfo gpu = hw.gpu();
-		if (!knownInRange(gpu == null ? -1 : gpu.vramMb(), c.vramMbAtLeast, c.vramMbAtMost)) {
-			return false;
-		}
-		if (c.refreshRateAtLeast != null) {
-			DisplayInfo display = hw.display();
-			int hz = display == null ? -1 : display.refreshRate();
-			if (hz <= 0 || hz < c.refreshRateAtLeast) {
-				return false;
+		Truth t = c.always == null ? TRUE : Truth.of(c.always);
+		t = and(t, () -> range(tier.effectiveTier(), c.tierAtLeast, c.tierAtMost));
+		t = and(t, () -> range(tier.rawTier(), c.rawTierAtLeast, c.rawTierAtMost));
+		t = and(t, () -> range(ctx.gpu().tier(), c.gpuTierAtLeast, c.gpuTierAtMost));
+		t = and(t, () -> range(tier.cpuTier(), c.cpuTierAtLeast, c.cpuTierAtMost));
+		t = and(t, () -> c.gpuVendor == null ? TRUE : gpuVendor(c.gpuVendor, ctx.gpu().vendor()));
+		t = and(t, () -> c.gpuIntegrated == null ? TRUE
+				: ctx.gpu().vendor() == GpuVendor.UNKNOWN ? UNKNOWN : Truth.of(c.gpuIntegrated == ctx.gpu().integrated()));
+		t = and(t, () -> c.hasBattery == null ? TRUE : Truth.of(c.hasBattery == hw.hasBattery()));
+		t = and(t, () -> c.onBattery == null ? TRUE : Truth.of(c.onBattery == hw.onBattery()));
+		t = and(t, () -> knownRange(hw.maxHeapMb(), c.heapMbAtLeast, c.heapMbAtMost));
+		t = and(t, () -> knownRange(hw.totalRamMb(), c.ramMbAtLeast, c.ramMbAtMost));
+		t = and(t, () -> knownRange(gpu == null ? -1 : gpu.vramMb(), c.vramMbAtLeast, c.vramMbAtMost));
+		t = and(t, () -> c.refreshRateAtLeast == null ? TRUE : refreshRate(hw.display(), c.refreshRateAtLeast));
+		t = and(t, () -> c.displayPixelsAtLeast == null && c.displayPixelsAtMost == null ? TRUE
+				: displayPixels(hw.display(), c.displayPixelsAtLeast, c.displayPixelsAtMost));
+		t = and(t, () -> c.backend == null ? TRUE : backend(c.backend, gpu));
+		t = and(t, () -> c.os == null ? TRUE : os(c.os, hw.osName()));
+		t = and(t, () -> c.goal == null ? TRUE : goal(c.goal, ctx.goal()));
+		t = and(t, () -> c.mcVersion == null ? TRUE : hw.mcVersion() == null ? UNKNOWN : Truth.of(c.mcVersion.contains(hw.mcVersion())));
+		t = and(t, () -> c.modPresent == null ? TRUE : allEntries(c.modPresent, id -> ctx.loadedModIds().contains(id)));
+		t = and(t, () -> c.modAbsent == null ? TRUE : allEntries(c.modAbsent, id -> !ctx.loadedModIds().contains(id)));
+		t = and(t, () -> c.flags == null ? TRUE : flags(c.flags, hw.flags()));
+		t = and(t, () -> c.gpuModelMatches == null ? TRUE : gpuModelMatches(c.gpuModelMatches, gpu));
+		t = and(t, () -> c.modVersion == null ? TRUE : modVersions(c.modVersion, ctx));
+		t = and(t, () -> c.mcVersionRange == null ? TRUE : mcVersionRange(c.mcVersionRange, hw.mcVersion()));
+		t = and(t, () -> c.anyOf == null ? TRUE : anyOf(c.anyOf, ctx));
+		return and(t, () -> c.not == null ? TRUE : node(c.not, ctx).not());
+	}
+
+	private static Truth and(Truth sofar, Supplier<Truth> next) {
+		return sofar == FALSE ? FALSE : sofar.and(next.get());
+	}
+
+	private static Truth anyOf(List<Condition> branches, EvalContext ctx) {
+		Truth any = FALSE;
+		for (Condition branch : branches) {
+			any = any.or(node(branch, ctx));
+			if (any == TRUE) {
+				return TRUE;
 			}
 		}
-		if (c.backend != null && (gpu == null || gpu.backend() == null || !containsIgnoreCase(c.backend, gpu.backend().name()))) {
-			return false;
-		}
-		if (c.os != null && !osMatches(c.os, hw.osName())) {
-			return false;
-		}
-		if (c.goal != null && !containsIgnoreCase(c.goal, ctx.goal().name())) {
-			return false;
-		}
-		if (c.mcVersion != null && !c.mcVersion.contains(hw.mcVersion())) {
-			return false;
-		}
-		Set<String> loaded = ctx.loadedModIds();
-		if (c.modPresent != null && !loaded.containsAll(c.modPresent)) {
-			return false;
-		}
-		if (c.modAbsent != null && c.modAbsent.stream().anyMatch(loaded::contains)) {
-			return false;
-		}
-		if (c.flags != null && (hw.flags() == null || !hw.flags().containsAll(c.flags))) {
-			return false;
-		}
-		if (c.anyOf != null && c.anyOf.stream().noneMatch(sub -> matches(sub, ctx))) {
-			return false;
-		}
-		return c.not == null || !matches(c.not, ctx);
+		return any;
 	}
 
 	public static String osFamily(String osName) {
@@ -99,23 +129,170 @@ public final class ConditionEvaluator {
 		return name;
 	}
 
-	private static boolean osMatches(List<String> wanted, String osName) {
-		String family = osFamily(osName);
-		return wanted.stream().anyMatch(w -> family.startsWith(w.toLowerCase(Locale.ROOT)));
+	// `os` entries match by prefix, so "win" is a known entry.
+	public static boolean knownOsEntry(String entry) {
+		String lower = entry.toLowerCase(Locale.ROOT);
+		return !lower.isEmpty() && OS_FAMILIES.stream().anyMatch(family -> family.startsWith(lower));
 	}
 
-	private static boolean containsIgnoreCase(List<String> list, String value) {
-		return list.stream().anyMatch(v -> v.equalsIgnoreCase(value));
+	public static boolean knownFlag(String flag) {
+		return FLAGS.contains(flag) || flag.startsWith(SODIUM_WORKAROUND_FLAG) && flag.length() > SODIUM_WORKAROUND_FLAG.length();
 	}
 
-	private static boolean inRange(long value, Number atLeast, Number atMost) {
-		return (atLeast == null || value >= atLeast.longValue()) && (atMost == null || value <= atMost.longValue());
-	}
-
-	private static boolean knownInRange(long value, Long atLeast, Long atMost) {
-		if (atLeast == null && atMost == null) {
-			return true;
+	// An OR over the listed values: TRUE if a known value matches; otherwise UNKNOWN if the subject is unknown or a value
+	// is outside the vocabulary (a newer client might match it); otherwise FALSE. Values are compared in lower case.
+	private static Truth anyEntry(List<String> wanted, Predicate<String> known, Predicate<String> matches, boolean subjectKnown) {
+		boolean undecided = !subjectKnown;
+		for (String entry : wanted) {
+			String value = entry == null ? null : entry.toLowerCase(Locale.ROOT);
+			if (value == null || !known.test(value)) {
+				undecided = true;
+			} else if (subjectKnown && matches.test(value)) {
+				return TRUE;
+			}
 		}
-		return value > 0 && inRange(value, atLeast, atMost);
+		return undecided ? UNKNOWN : FALSE;
+	}
+
+	private static Truth allEntries(List<String> wanted, Predicate<String> holds) {
+		Truth t = TRUE;
+		for (String entry : wanted) {
+			t = t.and(entry == null ? UNKNOWN : Truth.of(holds.test(entry)));
+		}
+		return t;
+	}
+
+	private static Truth gpuVendor(List<String> wanted, GpuVendor vendor) {
+		String name = vendor.name().toLowerCase(Locale.ROOT);
+		if (vendor == GpuVendor.UNKNOWN && wanted.stream().anyMatch(name::equalsIgnoreCase)) {
+			return TRUE;
+		}
+		return anyEntry(wanted, GPU_VENDORS::contains, name::equals, vendor != GpuVendor.UNKNOWN);
+	}
+
+	private static Truth backend(List<String> wanted, GpuInfo gpu) {
+		GraphicsBackend backend = gpu == null ? null : gpu.backend();
+		boolean known = backend != null && backend != GraphicsBackend.UNKNOWN;
+		String name = known ? backend.name().toLowerCase(Locale.ROOT) : "";
+		return anyEntry(wanted, BACKENDS::contains, name::equals, known);
+	}
+
+	private static Truth os(List<String> wanted, String osName) {
+		String family = osFamily(osName);
+		return anyEntry(wanted, ConditionEvaluator::knownOsEntry, family::startsWith, osName != null && !osName.isBlank());
+	}
+
+	private static Truth goal(List<String> wanted, Goal goal) {
+		String name = goal == null ? "" : goal.name().toLowerCase(Locale.ROOT);
+		return anyEntry(wanted, GOALS::contains, name::equals, goal != null);
+	}
+
+	// Every listed flag must be present. A missing flag this client can detect is FALSE; one it can't is UNKNOWN.
+	private static Truth flags(List<String> wanted, Set<String> present) {
+		Set<String> flags = present == null ? Set.of() : present;
+		Truth t = TRUE;
+		for (String flag : wanted) {
+			if (flag == null || !flags.contains(flag)) {
+				t = t.and(flag != null && knownFlag(flag) ? FALSE : UNKNOWN);
+			}
+		}
+		return t;
+	}
+
+	private static Truth range(long value, Number atLeast, Number atMost) {
+		return Truth.of((atLeast == null || value >= atLeast.longValue()) && (atMost == null || value <= atMost.longValue()));
+	}
+
+	private static Truth knownRange(long value, Number atLeast, Number atMost) {
+		if (atLeast == null && atMost == null) {
+			return TRUE;
+		}
+		return value > 0 ? range(value, atLeast, atMost) : UNKNOWN;
+	}
+
+	private static Truth refreshRate(DisplayInfo display, int atLeast) {
+		int hz = display == null ? -1 : display.refreshRate();
+		return hz > 0 ? Truth.of(hz >= atLeast) : UNKNOWN;
+	}
+
+	private static Truth displayPixels(DisplayInfo display, Long atLeast, Long atMost) {
+		if (display == null || display.width() <= 0 || display.height() <= 0) {
+			return UNKNOWN;
+		}
+		return range((long) display.width() * display.height(), atLeast, atMost);
+	}
+
+	// Found in the same subject string the gpuTiers patterns see, with the same length limit and read budget.
+	private static Truth gpuModelMatches(String regex, GpuInfo gpu) {
+		String subject = GpuClassifier.subject(gpu);
+		if (subject.isBlank() || regex.length() > RulesDocument.PatternRule.MAX_PATTERN_LENGTH) {
+			return UNKNOWN;
+		}
+		Pattern pattern;
+		try {
+			pattern = Pattern.compile(regex);
+		} catch (PatternSyntaxException e) {
+			return UNKNOWN;
+		}
+		Boolean found = BudgetedChars.find(pattern, subject, BudgetedChars.DEFAULT_BUDGET);
+		return found == null ? UNKNOWN : Truth.of(found);
+	}
+
+	private static Truth modVersions(Map<String, String> wanted, EvalContext ctx) {
+		Truth t = TRUE;
+		for (Map.Entry<String, String> entry : wanted.entrySet()) {
+			t = and(t, () -> modVersion(entry.getKey(), entry.getValue(), ctx));
+		}
+		return t;
+	}
+
+	private static Truth modVersion(String modId, String predicateText, EvalContext ctx) {
+		VersionPredicate predicate = predicate(predicateText);
+		if (modId == null || predicate == null) {
+			return UNKNOWN;
+		}
+		if (!ctx.loadedModIds().contains(modId)) {
+			return FALSE;
+		}
+		SemanticVersion version = semantic(ctx.modVersions() == null ? null : ctx.modVersions().get(modId));
+		return version == null ? UNKNOWN : Truth.of(predicate.test(version));
+	}
+
+	private static Truth mcVersionRange(String predicateText, String mcVersion) {
+		VersionPredicate predicate = predicate(predicateText);
+		SemanticVersion version = semantic(mcVersion);
+		return predicate == null || version == null ? UNKNOWN : Truth.of(predicate.test(version));
+	}
+
+	// Fabric Loader's predicate syntax, as in fabric.mod.json (">=0.6.0 <0.8.0", "~0.9", "*"). Fabric turns any term it
+	// can't read as a semantic version into an exact string match (">=>=" becomes "= >="), which would quietly be FALSE,
+	// so such a predicate counts as unparseable.
+	private static VersionPredicate predicate(String text) {
+		if (text == null || text.isBlank()) {
+			return null;
+		}
+		try {
+			VersionPredicate predicate = VersionPredicate.parse(text);
+			for (VersionPredicate.PredicateTerm term : predicate.getTerms()) {
+				if (!(term.getReferenceVersion() instanceof SemanticVersion)) {
+					return null;
+				}
+			}
+			return predicate;
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
+	// Only semantic versions can be ordered; anything else (e.g. "mc26.2-0.9.2-fabric") is undecidable.
+	private static SemanticVersion semantic(String text) {
+		if (text == null || text.isBlank()) {
+			return null;
+		}
+		try {
+			return Version.parse(text) instanceof SemanticVersion semantic ? semantic : null;
+		} catch (Exception e) {
+			return null;
+		}
 	}
 }
