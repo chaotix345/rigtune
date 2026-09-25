@@ -4,8 +4,9 @@ import java.util.List;
 
 // What an undo would do, for the confirmation screen, and what RigTuneController.undo(plan) then carries out. Execution
 // re-checks each item and skips (with a reason) any whose state changed since the plan was made.
-// undoOf: the undone entry's id, "all", or null when there is nothing to undo.
-public record UndoPlan(boolean all, String undoOf, List<Item> items) {
+// undoOf: the undone entry's id, "all", or null when there is nothing to undo. at: when the undone apply was (Undo
+// last). problem: a translation key saying why no plan could be made (null normally).
+public record UndoPlan(boolean all, String undoOf, List<Item> items, String at, String problem) {
 	public enum Action {
 		// Put a setting or a mod file back (settings now; mod files and config files after a restart).
 		REVERT,
@@ -32,8 +33,17 @@ public record UndoPlan(boolean all, String undoOf, List<Item> items) {
 		items = items == null ? List.of() : List.copyOf(items);
 	}
 
+	public UndoPlan(boolean all, String undoOf, List<Item> items) {
+		this(all, undoOf, items, null, null);
+	}
+
 	public UndoPlan(boolean all, List<Item> items) {
 		this(all, all ? UndoPlanner.ALL : null, items);
+	}
+
+	// No plan: problem says why (a translation key).
+	public static UndoPlan unavailable(boolean all, String problem) {
+		return new UndoPlan(all, null, List.of(), null, problem);
 	}
 
 	public boolean isEmpty() {

@@ -7,6 +7,7 @@ import io.github.chaotix345.rigtune.core.history.UndoPlan.Item;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -33,12 +34,15 @@ public final class UndoPlanner {
 	static final String RIGTUNE = "rigtune";
 	static final Set<String> ALWAYS_PROVIDED = Set.of("minecraft", "java", "fabricloader");
 	private static final String VANILLA_PREFIX = "vanilla.";
+	private static final String PRESET_KEY = "vanilla.graphicsPreset";
 	private static final String DISABLED_SUFFIX = ".disabled";
 
 	static final String CHANGED_SINCE = "You changed it since (it's now %s)";
 	static final String CHANGED_BETWEEN = "You changed it after this apply, so this older value isn't restored";
 	static final String ABSENT_BEFORE = "It didn't exist before, and RigTune can't remove a setting";
 	static final String NOT_CHANGEABLE = "RigTune doesn't change this option itself; set it in the game's options";
+	static final String PRESET_MAY_CHANGE = "RigTune can't set this option itself; restoring the graphics preset may change it";
+	static final String UPDATE_STAGED = "Another change of %s is staged; cancel it first (Discard pending)";
 	static final String NOT_STAGED = "It's no longer waiting for a restart";
 	static final String RIGTUNE_JAR = "RigTune never undoes its own update";
 	static final String RIGTUNE_STAGED = "RigTune's own update stays staged; use Discard pending to cancel it";
@@ -111,7 +115,7 @@ public final class UndoPlanner {
 	public static Result plan(List<JournalEntry> entries, List<Op> pending, State state, boolean all) {
 		Context ctx = new Context(entries);
 		if (all) {
-			return build(ctx, ctx.candidates(l -> true), pending, state, null, true, ALL);
+			return build(ctx, ctx.candidates(l -> true), pending, state, null, true, ALL, null);
 		}
 		for (int i = entries.size() - 1; i >= 0; i--) {
 			JournalEntry entry = entries.get(i);
@@ -123,7 +127,7 @@ public final class UndoPlanner {
 			if (selected.isEmpty()) {
 				continue;
 			}
-			Result result = build(ctx, selected, pending, state, null, false, entry.id());
+			Result result = build(ctx, selected, pending, state, null, false, entry.id(), entry.at());
 			if (!result.plan().isEmpty()) {
 				return result;
 			}
@@ -146,17 +150,19 @@ public final class UndoPlanner {
 			}
 		}
 		List<Located> selected = ctx.candidates(l -> wanted.contains(l.change().id()));
-		Result result = build(ctx, selected, pending, state, shownOps, shown.all(), shown.undoOf());
+		Result result = build(ctx, selected, pending, state, shownOps, shown.all(), shown.undoOf(), shown.at());
 		Set<String> found = new HashSet<>();
 		selected.forEach(l -> found.add(l.change().id()));
 		List<Item> items = new ArrayList<>(result.plan().items());
 		for (String id : wanted) {
-			if (!found.contains(id)) {
-				Located l = ctx.byId.get(id);
+			Located l = ctx.byId.get(id);
+			// A group mate an earlier undo staged isn't a candidate, but it goes with its group.
+			boolean dropped = l != null && l.change().opId() != null && result.script().discardOpIds().contains(l.change().opId());
+			if (!found.contains(id) && !dropped) {
 				items.add(new Item(l == null ? id : describe(l.change(), state), Action.SKIP, GONE, false, List.of(id), List.of()));
 			}
 		}
-		return new Result(new UndoPlan(shown.all(), shown.undoOf(), items), result.script());
+		return new Result(new UndoPlan(shown.all(), shown.undoOf(), items, shown.at(), null), result.script());
 	}
 
 	private record Located(int entry, int index, JournalEntry owner, JournalChange change) {
@@ -184,6 +190,12 @@ public final class UndoPlanner {
 			for (int i = 0; i < entries.size(); i++) {
 				JournalEntry entry = entries.get(i);
 				if (!JournalEntry.UNDO.equals(entry.kind())) {
+					continue;
+				}
+				// An undo whose reversals were all dropped or abandoned (or that did nothing) didn't undo its target.
+				boolean undid = entry.changes().stream()
+						.anyMatch(c -> !JournalChange.DISCARDED.equals(c.status()) && !JournalChange.ABANDONED.equals(c.status()));
+				if (!undid) {
 					continue;
 				}
 				if (ALL.equals(entry.undoOf())) {
@@ -240,18 +252,18 @@ public final class UndoPlanner {
 	}
 
 	private static Result build(Context ctx, List<Located> selected, List<Op> pending, State state, Set<String> shownOps, boolean all,
-			String undoOf) {
+			String undoOf, String at) {
 		Builder b = new Builder(state);
 		Folder folder = state.folder();
 		planStaged(ctx, selected, pending, folder, shownOps, b);
 		planSettings(selected, state, b);
-		planFiles(selected, folder, b);
+		planFiles(selected, folder, pending, b);
 		List<Item> items = new ArrayList<>(b.discards);
 		items.addAll(b.reverts);
 		items.addAll(b.skips);
 		Script script = new Script(Map.copyOf(b.immediate), Map.copyOf(b.staged), List.copyOf(b.fileOps), Set.copyOf(b.discardOpIds),
 				List.copyOf(b.revertList));
-		return new Result(new UndoPlan(all, undoOf, items), script);
+		return new Result(new UndoPlan(all, undoOf, items, at, null), script);
 	}
 
 	// --- staged changes: drop their whole group from pending.json
@@ -328,21 +340,30 @@ public final class UndoPlanner {
 				byKey.computeIfAbsent(l.change().key(), k -> new ArrayList<>()).add(l);
 			}
 		}
+		List<Located> unwritable = new ArrayList<>();
+		Map<String, String> skippedNow = new LinkedHashMap<>();
 		for (Map.Entry<String, List<Located>> keyed : byKey.entrySet()) {
 			String key = keyed.getKey();
 			List<Located> changes = keyed.getValue().stream().sorted(NEWEST_FIRST).toList();
 			String current = state.setting(key);
+			if (state.immediate(key) && current != null) {
+				skippedNow.put(key, current);
+			}
 			if (!Objects.equals(current, changes.getFirst().change().after())) {
 				changes.forEach(l -> b.skip(l, CHANGED_SINCE.formatted(show(state, key, current))));
 				continue;
 			}
+			// Newest to oldest while each older change ends where the newer one started; after the first mismatch
+			// (the user changed it in between) every older change stays as it is.
 			List<Located> chain = new ArrayList<>();
 			String target = null;
+			boolean broken = false;
 			for (Located l : changes) {
-				if (chain.isEmpty() || Objects.equals(l.change().after(), target)) {
+				if (!broken && (chain.isEmpty() || Objects.equals(l.change().after(), target))) {
 					chain.add(l);
 					target = l.change().before();
 				} else {
+					broken = true;
 					b.skip(l, CHANGED_BETWEEN);
 				}
 			}
@@ -351,9 +372,10 @@ public final class UndoPlanner {
 				continue;
 			}
 			if (!state.changeable(key)) {
-				chain.forEach(l -> b.skip(l, NOT_CHANGEABLE));
+				unwritable.addAll(chain);
 				continue;
 			}
+			skippedNow.remove(key);
 			boolean now = state.immediate(key);
 			b.reverts.add(new Item(state.label(key) + ": " + show(state, key, current) + " → " + show(state, key, target), Action.REVERT, null, !now,
 					chain.stream().map(l -> l.change().id()).toList(), List.of()));
@@ -362,6 +384,17 @@ public final class UndoPlanner {
 				JournalChange c = l.change();
 				b.revertList.add(new Revert(c.id(), JournalChange.setting(key, c.after(), c.before(), null, null).reverting(c.id()), null));
 			}
+		}
+		// Restoring graphicsPreset rewrites its options (review M7): the ones left alone are written back as they are now
+		// (after the preset, which SettingsBridge applies first), so the screen's "skipped" holds.
+		boolean preset = b.immediate.containsKey(PRESET_KEY);
+		unwritable.forEach(l -> b.skip(l, preset ? PRESET_MAY_CHANGE : NOT_CHANGEABLE));
+		if (preset) {
+			skippedNow.forEach((key, current) -> {
+				if (state.changeable(key)) {
+					b.immediate.putIfAbsent(key, current);
+				}
+			});
 		}
 	}
 
@@ -391,7 +424,7 @@ public final class UndoPlanner {
 	private record Accepted(List<Located> changes, Map<Located, Content> moved) {
 	}
 
-	private static void planFiles(List<Located> selected, Folder folder, Builder b) {
+	private static void planFiles(List<Located> selected, Folder folder, List<Op> pending, Builder b) {
 		Map<String, List<Located>> byGroup = new LinkedHashMap<>();
 		for (Located l : selected.stream().sorted(NEWEST_FIRST).toList()) {
 			JournalChange c = l.change();
@@ -427,6 +460,9 @@ public final class UndoPlanner {
 				if (failure != null) {
 					break;
 				}
+			}
+			if (failure == null) {
+				failure = stagedElsewhere(moved.values(), trial, pending, b.discardOpIds);
 			}
 			if (failure == null) {
 				Set<String> added = new TreeSet<>(violations(trial, folder));
@@ -474,6 +510,25 @@ public final class UndoPlanner {
 		Content content = sim.remove(disabled);
 		sim.put(file, content);
 		moved.put(l, content);
+		return null;
+	}
+
+	// A jar this group re-enables would replace a staged enable of the same mod when merged (PendingActions.merge), and
+	// that one belongs to a change this undo doesn't cancel.
+	private static String stagedElsewhere(Collection<Content> moved, Map<String, Content> sim, List<Op> pending, Set<String> discarded) {
+		for (Map.Entry<String, Content> e : sim.entrySet()) {
+			Content content = e.getValue();
+			boolean reEnabled = e.getKey().endsWith(".jar") && !content.origin.endsWith(".jar");
+			if (!reEnabled || !moved.contains(content) || content.info() == null) {
+				continue;
+			}
+			String modId = content.info().id();
+			boolean staged = pending.stream().anyMatch(op -> op != null && op.type() == PendingActions.Type.ENABLE_FILE
+					&& modId.equals(op.modId()) && (op.id() == null || !discarded.contains(op.id())));
+			if (staged) {
+				return UPDATE_STAGED.formatted(modId);
+			}
+		}
 		return null;
 	}
 
@@ -531,7 +586,10 @@ public final class UndoPlanner {
 		return out;
 	}
 
-	// One op per file whose place changed, grouped by the sets of original groups that touched the same files.
+	// One op per file whose place changed, grouped by the sets of original groups that touched the same files. Staging
+	// each original group's reversal on its own doesn't work: two reversals of an update chain that kept one file name
+	// (disable mod.jar twice) would be merged into one broken group by PendingActions.merge's dedupe. So the net renames
+	// are staged, and original groups that moved the same file are joined (union-find) so they stay all-or-nothing.
 	private static void netOps(List<Content> contents, Map<String, Content> sim, List<Accepted> accepted, Path dir, Builder b) {
 		Map<Content, String> finalName = new HashMap<>();
 		sim.forEach((name, content) -> finalName.put(content, name));
@@ -619,6 +677,9 @@ public final class UndoPlanner {
 	}
 
 	private static String describe(Op op) {
+		if (op.type() == null) {
+			return "Unknown change" + (op.path() == null ? "" : " to " + HistoryUpdates.fileName(op.path()));
+		}
 		return switch (op.type()) {
 			case ENABLE_FILE -> "Enable " + HistoryUpdates.fileName(op.to());
 			case DISABLE_FILE -> "Disable " + HistoryUpdates.fileName(op.path());

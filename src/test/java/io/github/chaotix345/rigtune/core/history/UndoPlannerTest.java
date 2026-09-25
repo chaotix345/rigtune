@@ -161,22 +161,28 @@ class UndoPlannerTest {
 		assertEquals("e1", last().plan().undoOf());
 	}
 
+	// Review M8: an apply that was undone (even if some of its changes were skipped then) isn't "last" again.
 	@Test
 	void lastPassesOverAnEntryThatWasAlreadyUndone() {
+		JournalChange sd = applied("vanilla.simulationDistance", "8", "6");
 		entry("e1", applied("vanilla.renderDistance", "12", "16"));
-		entry("e2", applied("vanilla.simulationDistance", "8", "6"));
-		undoEntry("u1", "e2");
+		entry("e2", sd, JournalChange.setting("sodium.threads", "0", "4", JournalChange.APPLIED, "op1"));
+		undoEntry("u1", "e2", applied("vanilla.simulationDistance", "6", "8").reverting(sd.id()));
 		state.settings.put("vanilla.renderDistance", "16");
-		state.settings.put("vanilla.simulationDistance", "6");
+		state.settings.put("vanilla.simulationDistance", "8");
+		state.settings.put("sodium.threads", "4");
 
 		assertEquals("e1", last().plan().undoOf());
 	}
 
 	@Test
 	void anUndoOfEverythingCoversEveryEarlierEntry() {
+		JournalChange sd = applied("vanilla.simulationDistance", "8", "6");
+		entry("e0", sd);
 		entry("e1", applied("vanilla.renderDistance", "12", "16"));
-		undoEntry("u1", UndoPlanner.ALL);
+		undoEntry("u1", UndoPlanner.ALL, applied("vanilla.simulationDistance", "6", "8").reverting(sd.id()));
 		state.settings.put("vanilla.renderDistance", "16");
+		state.settings.put("vanilla.simulationDistance", "8");
 
 		assertTrue(last().plan().items().isEmpty());
 		assertTrue(last().plan().isEmpty());
@@ -246,7 +252,77 @@ class UndoPlannerTest {
 		Result result = last();
 
 		assertEquals(Map.of("vanilla.graphicsPreset", "custom"), result.script().immediate());
-		assertTrue(only(result, Action.SKIP).reason().contains("doesn't change"), only(result, Action.SKIP).reason());
+		assertTrue(only(result, Action.SKIP).reason().contains("preset"), only(result, Action.SKIP).reason());
+	}
+
+	@Test
+	void anOptionRigTuneCantWriteIsSkippedWithoutAPresetRevert() {
+		entry("e1", applied("vanilla.ao", "true", "false"));
+		state.settings.put("vanilla.ao", "false");
+		state.notChangeable.add("vanilla.ao");
+
+		assertTrue(only(all(), Action.SKIP).reason().contains("doesn't change"), only(all(), Action.SKIP).reason());
+	}
+
+	// Review M8: 4 -> 6, the user sets 2, 2 -> 8, the user sets 6, 6 -> 10. Undo everything gives 6: once the chain
+	// breaks, an older change whose value happens to match again stays skipped.
+	@Test
+	void undoingEverythingStopsForGoodAtTheFirstUserEdit() {
+		JournalChange first = applied("vanilla.renderDistance", "4", "6");
+		JournalChange second = applied("vanilla.renderDistance", "2", "8");
+		JournalChange third = applied("vanilla.renderDistance", "6", "10");
+		entry("e1", first);
+		entry("e2", second);
+		entry("e3", third);
+		state.settings.put("vanilla.renderDistance", "10");
+
+		Result result = all();
+
+		assertEquals(List.of(third.id()), only(result, Action.REVERT).changeIds());
+		assertEquals(Map.of("vanilla.renderDistance", "6"), result.script().immediate());
+		assertEquals(Set.of(first.id(), second.id()), Set.copyOf(items(result, Action.SKIP).stream().flatMap(i -> i.changeIds().stream()).toList()));
+	}
+
+	// Review: an undo whose reversals were all dropped (Discard pending) or abandoned didn't undo anything.
+	@Test
+	void anUndoThatWasCancelledDoesNotCountAsDone() {
+		JournalChange older = JournalChange.setting("sodium.a", "0", "1", JournalChange.APPLIED, "op0");
+		JournalChange threads = JournalChange.setting("sodium.threads", "0", "4", JournalChange.APPLIED, "op1");
+		entry("b", older);
+		entry("a", threads);
+		undoEntry("u1", "a", JournalChange.setting("sodium.threads", "4", "0", JournalChange.DISCARDED, "op2").reverting(threads.id()));
+		state.settings.put("sodium.a", "1");
+		state.settings.put("sodium.threads", "4");
+
+		assertEquals("a", last().plan().undoOf());
+	}
+
+	@Test
+	void theLastPlanSaysWhenTheApplyWas() {
+		entry("e1", applied("vanilla.renderDistance", "12", "16"));
+		state.settings.put("vanilla.renderDistance", "16");
+
+		assertEquals("2026-09-25T10:00:00Z", last().plan().at());
+		assertNull(all().plan().at());
+	}
+
+	// Review M7: restoring the preset rewrites its options; one the screen says it leaves alone keeps its value.
+	@Test
+	void revertingThePresetKeepsTheOptionsItSkips() {
+		entry("e1", applied("vanilla.graphicsPreset", "fast", "fancy"), applied("vanilla.particles", "decreased", "all"),
+				applied("vanilla.ao", "false", "true"));
+		state.settings.put("vanilla.graphicsPreset", "fancy");
+		state.settings.put("vanilla.particles", "minimal");
+		state.settings.put("vanilla.ao", "true");
+		state.notChangeable.add("vanilla.ao");
+
+		Result result = last();
+
+		assertEquals(Map.of("vanilla.graphicsPreset", "fast", "vanilla.particles", "minimal"), result.script().immediate());
+		assertEquals(1, items(result, Action.REVERT).size());
+		UndoPlan.Item ao = items(result, Action.SKIP).stream().filter(i -> i.description().startsWith("ao")).findFirst().orElseThrow();
+		assertTrue(ao.reason().contains("preset"), ao.reason());
+		assertEquals(1, result.script().reverts().size());
 	}
 
 	@Test
@@ -319,6 +395,34 @@ class UndoPlannerTest {
 
 		assertEquals(2, items(result, Action.SKIP).size());
 		assertTrue(result.script().discardOpIds().isEmpty());
+	}
+
+	@Test
+	void anOpWithAnUnknownTypeIsStillListed() {
+		Op known = Op.disableFile(MODS.resolve("x.jar")).inGroup("g");
+		Op unknown = new Op(null, null, null, MODS.resolve("y.toml").toString(), null, "op-null", "g", null, 0);
+		pending.add(known);
+		pending.add(unknown);
+		entry("e1", JournalChange.file(JournalChange.DISABLE, "x", "x.jar", JournalChange.STAGED, known.id(), "g"));
+
+		assertEquals(2, items(last(), Action.DISCARD_STAGED).size());
+	}
+
+	// Review: a mate staged by an earlier undo is dropped with the group; the re-check mustn't call it gone.
+	@Test
+	void recheckDoesNotCountAGroupMateFromAnUndoAsGone() {
+		List<Op> group = PendingActions.group(Op.disableFile(MODS.resolve("x.jar")), Op.disableFile(MODS.resolve("y.jar")));
+		pending.addAll(group);
+		entry("e1", JournalChange.file(JournalChange.DISABLE, "x", "x.jar", JournalChange.STAGED, group.get(0).id(), group.get(0).group()));
+		undoEntry("u0", "e0", JournalChange.file(JournalChange.DISABLE, "y", "y.jar", JournalChange.STAGED, group.get(1).id(), group.get(1).group())
+				.reverting("elsewhere"));
+		UndoPlan shown = last().plan();
+		assertEquals(2, items(last(), Action.DISCARD_STAGED).size());
+
+		Result result = UndoPlanner.recheck(shown, entries, pending, state);
+
+		assertEquals(Set.copyOf(group.stream().map(Op::id).toList()), result.script().discardOpIds());
+		assertTrue(items(result, Action.SKIP).isEmpty(), result.plan().toString());
 	}
 
 	@Test
@@ -472,6 +576,33 @@ class UndoPlannerTest {
 		entry("e1", disabled("x", "x-old.jar", "x-old.jar.disabled", null));
 
 		assertTrue(only(all(), Action.SKIP).reason().contains("x"), only(all(), Action.SKIP).reason());
+	}
+
+	// Review: merging a re-enable for mod x would silently replace another apply's staged update of x.
+	@Test
+	void aReEnableIsSkippedWhileAnotherUpdateOfTheModIsStaged() {
+		state.jar("x-1.jar.disabled", "x");
+		pending.add(Op.enableFile(MODS.resolve("x-3.jar.rigtune-pending"), MODS.resolve("x-3.jar")).withModId("x"));
+		entry("e1", disabled("x", "x-1.jar", "x-1.jar.disabled", null));
+
+		UndoPlan.Item item = only(all(), Action.SKIP);
+
+		assertTrue(item.reason().contains(" x "), item.reason());
+		assertTrue(all().script().fileOps().isEmpty());
+	}
+
+	@Test
+	void aReEnableIsFineWhenTheStagedUpdateIsCancelledByTheSameUndo() {
+		state.jar("x-1.jar.disabled", "x");
+		Op update = Op.enableFile(MODS.resolve("x-3.jar.rigtune-pending"), MODS.resolve("x-3.jar")).withModId("x");
+		pending.add(update);
+		entry("e1", disabled("x", "x-1.jar", "x-1.jar.disabled", null));
+		entry("e2", JournalChange.file(JournalChange.ENABLE, "x", "x-3.jar", JournalChange.STAGED, update.id(), null));
+
+		Result result = all();
+
+		assertEquals(1, items(result, Action.REVERT).size());
+		assertEquals(Set.of(update.id()), result.script().discardOpIds());
 	}
 
 	@Test
