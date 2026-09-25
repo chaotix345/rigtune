@@ -19,7 +19,7 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 - [x] Phase 1: research DONE (docs/research/v0.3/: mc-versions, ci-gametests, launcher-ram, hardware-tiers, benchmark, misc). Headlines: no MC newer than 26.3 (26.4-snapshot-1 compiles and passes 848/848 unchanged); CI game tests green on Linux (branch research/ci-gametest, kept for WS-0); a real P0 bug: benchmark RD changes aren't broadcast to the server (SPEC 3f).
 - [x] Phase 2: SPEC.md + PLAN.md + plan review (docs/v0.3/plan-review.md) with amendments folded in (0681c4c).
 - [x] Phase 3: foundation MERGED (1700ecc). Wave A started in parallel before it (no build-file overlap) and was told to merge origin/feat/v0.3.0.
-- [ ] Phase 4: features. Wave A ALL MERGED (6321696: 1047 unit tests per version, 284 Python). Coordinator fix branch fix/ram-advice-text (ram-low: at least 4 GB, 6 with DH/shaders; rules r12) awaiting CI. Next: Wave B (ws-g l10n, ws-p preview).
+- [ ] Phase 4: features. Wave A ALL MERGED (6321696: 1047 unit tests per version, 284 Python). fix/ram-advice-text MERGED (c41bf48, rules r12). Wave B RUNNING (ws-g, ws-p).
 - [ ] Phase 5: verification
 - [ ] Phase 6: reviews (2 rounds)
 - [ ] Phase 7: release
@@ -40,7 +40,10 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 | plan-review | - | - | DONE: docs/v0.3/plan-review.md (4 H, 25 M, 11 L), folded into SPEC "Amendments" + PLAN (0681c4c) |
 | r-ci (research, done) | research/ci-gametest | removed | remote branch deleted; the LOCAL branch stays (unmerged; a hook blocks `branch -D`). |
 
-Wave B after Wave A: ws-g (l10n, SPEC 9) and ws-p (preview, P2, only after ws-g or cut).
+| ws-g (l10n, SPEC 9, Wave B) | feat/l10n | C:/Dev/Worktrees/rigtune-l10n | RUNNING (owns DownloadPlanner/DependencyResolver/Recommender/UndoPlanner/ShareReport text conversion) |
+| ws-p (dry-run preview, P2, Wave B) | feat/preview | C:/Dev/Worktrees/rigtune-preview | RUNNING in parallel with ws-g (new classes only; calls but never edits ws-g's files) |
+
+Integration: feat/v0.3.0 @ c41bf48 = all Wave A + fix/ram-advice-text (rules r12); CI 36182135247 green on all 8 jobs.
 Notes: the permission classifier refused `gh workflow disable update-rules.yml` (CI bypass), so the weekly bot PRs are triaged by re-running the updater on feat/v0.3.0, and Phase 7 re-runs it after merging main (SPEC D-M1).
 
 Watchdog: the current command is in scratchpad/watchdog-cmd.txt (agents + branches in scratchpad/agents.txt; `name=<worktree>;<scratch>@<branch>`, a running CI run on the branch counts as busy; --stall-min 20 --lock-min 8). Lock release: `rm -f .../owner.txt; rmdir .../.gametest-lock` (a hook blocks rm -rf on it).
