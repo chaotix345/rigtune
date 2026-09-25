@@ -164,7 +164,8 @@ public final class Journal implements ChangeRecorder {
 		}
 	}
 
-	private List<JournalEntry> withChanges(List<JournalEntry> entries, String entryId, String kind, List<JournalChange> changes) {
+	// entries with the changes added to the entry with this id, or a new entry (now, this version) at the end.
+	public List<JournalEntry> withChanges(List<JournalEntry> entries, String entryId, String kind, List<JournalChange> changes) {
 		List<JournalEntry> out = new ArrayList<>(entries);
 		for (int i = 0; i < out.size(); i++) {
 			JournalEntry e = out.get(i);
