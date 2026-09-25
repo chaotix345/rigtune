@@ -103,7 +103,7 @@ public final class ApplyHelper {
 		}
 	}
 
-	private static void log(String message) {
+	static void log(String message) {
 		System.out.println("[" + Instant.now() + "] [RigTune apply] " + message);
 		System.out.flush();
 	}

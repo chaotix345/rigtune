@@ -5,9 +5,11 @@ import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
+import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
+import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Impact;
@@ -60,6 +62,7 @@ public final class RigTuneClient implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
+		ChangeRecorder.install(ClientJournal.get());
 		RealController real = new RealController();
 		controller = real;
 		KeyMapping.Category category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(RigTune.MOD_ID, "rigtune"));
