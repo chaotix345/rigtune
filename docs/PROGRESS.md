@@ -41,7 +41,7 @@ Brief: the user's v0.2.0 prompt (full autonomy: research → release, including 
 ## Real-world feedback (the user's instance, read-only, 2026-09-25)
 - The user ran 0.1.0 and applied 17 ops (09:08). 15 were OK: added bbe, moreculling, asynclogger, fastquit, Ixeris, structure_layout_optimizer (+ ResourcefulConfig as a dependency); updated entityculling, modmenu, YACL, zoomify.
 - FAILED: the DH update group (disable fabric-26.2.jar = DH 3.3.0, enable DistantHorizons-3.3.2): "The process cannot access the file because it is being used by another process", 3 s after the game exited (10 × 300 ms retries). Only the 27 MB DH jar was affected. Likely the Modrinth App re-scanning the instance or AV. The group stays pending (attempts 1/3) and retries at the next exit; DH 3.3.0 stays active; nothing is broken.
-- 0.2 TODO (Phase 5/6, owner: a fix agent): in ApplyExecutor, retry sharing violations with backoff for up to ~30 s total (not 3 s), plus a short settle delay (~2 s) in ApplyHelper after the game exits. Test with a mover that fails N times.
+- FIXED for 0.2 (fix/helper-file-lock-retry c5c1d36 -> 9722170): sharing violations back off exponentially (300 ms doubling, 5 s cap, ~30 s budget, rollback too); ApplyHelper settles 2 s after the game exits. 693 tests per version.
 
 ## Lessons (carried over from v0.1.0; don't relearn)
 - The Bash tool is Git Bash. Use absolute paths; `cd` inside a command changes the session's working directory.
