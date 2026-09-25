@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiPredicate;
 
 // The DownloadPlanner Apply uses, run without downloading (the preview, docs/v0.3/SPEC.md item 13). Its fetcher checks
@@ -24,9 +25,11 @@ public final class DryRunPlanner {
 			Set<String> loadedIds, Map<String, String> stagedJars) {
 		String never = PendingActions.PENDING_SUFFIX + ".preview-" + UUID.randomUUID();
 		Map<Path, String> modIds = new HashMap<>();
+		AtomicInteger next = new AtomicInteger();
+		// The same file fetched again (after an item that failed) is the same jar, so it keeps its id.
 		DownloadPlanner.Fetcher fetcher = file -> {
 			Path path = SafeFileNames.resolveJar(modsDir, file.filename(), never);
-			modIds.put(path, modIdsByFile.getOrDefault(file.filename(), "rigtune-preview-" + (modIds.size() + 1) + never));
+			modIds.computeIfAbsent(path, p -> modIdsByFile.getOrDefault(file.filename(), "rigtune-preview-" + next.incrementAndGet() + never));
 			return path;
 		};
 		return new DownloadPlanner(resolver, modsDir, fetcher, conflicts, updateVersions, modIds::get).plan(recs, installedProjects, loadedIds, stagedJars);

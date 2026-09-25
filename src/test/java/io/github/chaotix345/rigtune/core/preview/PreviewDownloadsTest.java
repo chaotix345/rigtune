@@ -153,6 +153,25 @@ class PreviewDownloadsTest {
 		assertTrue(refused.detail().startsWith("it conflicts with Lithium"), refused.detail());
 	}
 
+	// Review WS-P #3: a file fetched again after a failed item keeps its stand-in mod id, so a later new file isn't taken for
+	// a mod that's already there.
+	@Test
+	void aFileFetchedAgainAfterAFailedItemKeepsLaterFilesApart() throws IOException {
+		modrinth.put("fabric-api", version("fapiV", "FAPI", "fabric-api-1.0.jar"), "fabric-api");
+		modrinth.put("cloth", version("clothV", "CLOTH", "cloth-1.0.jar"), "cloth");
+		ModrinthVersion noFile = new ModrinthVersion("brokenV", "BROKEN", "0.1", "release", List.of("26.2"), List.of("fabric"), PreviewFakeModrinth.T,
+				List.of(), List.of());
+		modrinth.latest.put("BROKEN", noFile);
+		modrinth.put("x", version("xV", "X", "x-1.0.jar", required("FAPI"), required("BROKEN")), "x");
+		modrinth.put("y", version("yV", "Y", "y-1.0.jar", required("FAPI"), required("CLOTH")), "y");
+		Files.writeString(instance.mods.resolve("y-1.0.jar"), "installed by hand");
+
+		ApplyPreview preview = preview(add("x", "X", "X"), add("y", "Y", "Y"));
+
+		assertEquals(List.of("add:x"), preview.skipped().stream().map(ApplyPreview.Skipped::recommendationId).toList());
+		assertEquals(List.of("fabric-api-1.0.jar", "cloth-1.0.jar"), preview.downloads().stream().map(ApplyPreview.Download::fileName).toList());
+	}
+
 	@Test
 	void anAdditionModrinthCantResolveIsSkipped() {
 		ApplyPreview preview = preview(add("nothing", "NOTHING", "Nothing"));
