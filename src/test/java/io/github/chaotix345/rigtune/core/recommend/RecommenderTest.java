@@ -333,4 +333,53 @@ class RecommenderTest {
 				new SettingsSnapshot(Map.of()), null, Goal.BALANCED, "0.1.0");
 		assertTrue(byId(huge).containsKey("advice:update-rigtune"));
 	}
+
+	@Test
+	void dhSettingKeyIsRecommendedWhenPresentInTheSnapshot() {
+		RulesDocument rules = rules("""
+				"settings":[
+				 {"key":"dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius","value":128,
+				  "when":{"modPresent":["distanthorizons"]},"reason":"Match the tier's LOD budget."}
+				]""");
+		Map<String, String> settings = Map.of("dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "256");
+
+		Report withDh = run(rules, Fixtures.userRig(), Fixtures.mods("distanthorizons"), settings, OnlineData.offline());
+		Recommendation rec = byId(withDh).get("set:dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius");
+		assertEquals(new Action.SetSetting("dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "256", "128"),
+				rec.action());
+		assertEquals(Category.SETTING, rec.category());
+
+		Report withoutDh = run(rules, Fixtures.userRig(), List.of(), settings, OnlineData.offline());
+		assertFalse(byId(withoutDh).containsKey("set:dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius"),
+				"modPresent gates the rule off when Distant Horizons isn't installed");
+	}
+
+	@Test
+	void irisSettingKeyIsRecommendedWhenPresentInTheSnapshot() {
+		RulesDocument rules = rules("""
+				"settings":[
+				 {"key":"iris.maxShadowRenderDistance","max":24,"when":{"modPresent":["iris"],"tierAtMost":2},
+				  "reason":"Shadows cost more at low tiers."}
+				]""");
+		Map<String, String> settings = Map.of("iris.maxShadowRenderDistance", "32");
+
+		Report report = run(rules, Fixtures.lowEndLaptop(), Fixtures.mods("iris"), settings, OnlineData.offline());
+		Recommendation rec = byId(report).get("set:iris.maxShadowRenderDistance");
+		assertEquals("24", ((Action.SetSetting) rec.action()).newValue());
+	}
+
+	@Test
+	void dhAndIrisKeysMissingFromTheSnapshotProduceNoRecommendation() {
+		// snapshot.has(key) gates every settings key uniformly (Recommender.settings()); a dh./iris. key the
+		// snapshot doesn't have (mod not installed, so SettingsBridge never populated it) never fires, the same way
+		// a vanilla or sodium key would not.
+		RulesDocument rules = rules("""
+				"settings":[
+				 {"key":"dh.client.advanced.graphics.quality.verticalQuality","value":"HIGH","reason":"x"},
+				 {"key":"iris.maxShadowRenderDistance","value":16,"reason":"y"}
+				]""");
+		Report report = run(rules, Fixtures.userRig(), List.of(), Map.of(), OnlineData.offline());
+		assertFalse(byId(report).containsKey("set:dh.client.advanced.graphics.quality.verticalQuality"));
+		assertFalse(byId(report).containsKey("set:iris.maxShadowRenderDistance"));
+	}
 }
