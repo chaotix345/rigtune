@@ -37,7 +37,7 @@ RigTune reads your PC's hardware and recommends the performance mods, mod settin
   - nothing is ever deleted: disabled mods become `.jar.disabled`
   - every download is checked against Modrinth's hash
 - **Lets you control what leaves your PC**: a settings screen with separate switches for the remote rules file, Modrinth lookups/downloads and the startup toast; turn any of them off and RigTune falls back to on-device advice with no network request.
-- **Share a report**: copy a short, plain-text summary of your hardware and recommendations to paste elsewhere — no paths or usernames included.
+- **Share a report**: copy a short Markdown summary of your hardware, recommendations and latest benchmark to paste into Discord or a support thread. It includes no file paths or user names.
 - **Stays up to date without mod updates**: the recommendations come from a rules file in the [GitHub repo](https://github.com/chaotix345/rigtune) that the mod fetches at startup, rebuilt from live Modrinth data by a scheduled GitHub Action.
 
 ## Requirements
