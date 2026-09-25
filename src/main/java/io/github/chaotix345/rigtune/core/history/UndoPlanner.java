@@ -38,6 +38,7 @@ public final class UndoPlanner {
 	private static final String DISABLED_SUFFIX = ".disabled";
 
 	static final String CHANGED_SINCE = "You changed it since (it's now %s)";
+	static final String ALREADY_ORIGINAL = "It's already back at its original value (%s)";
 	static final String CHANGED_BETWEEN = "You changed it after this apply, so this older value isn't restored";
 	static final String ABSENT_BEFORE = "It didn't exist before, and RigTune can't remove a setting";
 	static final String NOT_CHANGEABLE = "RigTune doesn't change this option itself; set it in the game's options";
@@ -346,7 +347,10 @@ public final class UndoPlanner {
 				skippedNow.put(key, current);
 			}
 			if (!Objects.equals(current, changes.getFirst().change().after())) {
-				changes.forEach(l -> b.skip(l, CHANGED_SINCE.formatted(show(state, key, current))));
+				// Back where it was before the oldest of these changes (another apply and its undo can do that).
+				boolean original = current != null && current.equals(changes.getLast().change().before());
+				String reason = (original ? ALREADY_ORIGINAL : CHANGED_SINCE).formatted(show(state, key, current));
+				changes.forEach(l -> b.skip(l, reason));
 				continue;
 			}
 			// Newest to oldest while each older change ends where the newer one started; after the first mismatch
