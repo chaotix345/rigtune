@@ -14,6 +14,8 @@
 	"rigtune.screen.rescan": "Rescan",
 	"rigtune.screen.analysing": "Analysing your system…",
 	"rigtune.screen.nothing": "Everything looks good: no suggestions.",
+	"rigtune.settings.privacy_toast.body": "Only for rules and Modrinth, no telemetry. Turn it off in RigTune's Settings.",
+	"rigtune.settings.privacy_toast.title": "RigTune uses the network",
 	"rigtune.header.cpu": "CPU %s · %s threads · RAM %s · Heap %s",
 	"rigtune.header.gpu": "GPU %s · %s VRAM · %s · GPU tier %s",
 	"rigtune.header.tier": "Tier %s/5 · limited by %s",
