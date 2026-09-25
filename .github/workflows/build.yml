@@ -68,14 +68,20 @@ jobs:
       - name: Compare generated rules files
         run: |
           set -eu
-          a=rules/rules-v1.json
-          b=src/main/resources/rigtune/rules-v1.json
-          if [ ! -f "$a" ] && [ ! -f "$b" ]; then
-            echo "Neither $a nor $b exists yet (rules updater hasn't run); nothing to compare."
-            exit 0
-          fi
-          if [ ! -f "$a" ] || [ ! -f "$b" ]; then
-            echo "Only one of $a / $b exists; they must be generated together."
+          # 0.2 bundles only rules-v2.json; rules/rules-v1.json is served to 0.1.x clients and never bundled.
+          cmp rules/rules-v2.json src/main/resources/rigtune/rules-v2.json
+          if [ -e src/main/resources/rigtune/rules-v1.json ]; then
+            echo "src/main/resources/rigtune/rules-v1.json must not exist: 0.2 bundles rules-v2.json only."
             exit 1
           fi
-          cmp "$a" "$b"
+
+  # rules-v1.json is what 0.1.x clients download: it must stay the safe v1 projection of the v2 rules.
+  rules-v1-compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Check rules-v1.json
+        run: python tools/check_rules_v1.py

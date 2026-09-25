@@ -13,7 +13,6 @@ import java.time.Duration;
 import java.util.Optional;
 
 public final class RemoteRulesFetcher {
-	public static final URI DEFAULT_URI = URI.create("https://raw.githubusercontent.com/chaotix345/rigtune/main/rules/rules-v1.json");
 	private static final Duration STALL = Duration.ofSeconds(15);
 	private static final Duration DEADLINE = Duration.ofSeconds(30);
 	private static final long ERROR_BODY_BYTES = 64 * 1024;
@@ -23,10 +22,7 @@ public final class RemoteRulesFetcher {
 	private final String userAgent;
 	private final Path cacheFile;
 
-	public RemoteRulesFetcher(String modVersion, Path cacheFile) {
-		this(DEFAULT_URI, modVersion, cacheFile);
-	}
-
+	// cacheFile (may be null) receives the downloaded text, but only for a document of this client's schemaVersion.
 	public RemoteRulesFetcher(URI uri, String modVersion, Path cacheFile) {
 		this.client = HttpClient.newBuilder()
 				.connectTimeout(Duration.ofSeconds(5))
@@ -59,7 +55,7 @@ public final class RemoteRulesFetcher {
 			String body = new String(response.body(), StandardCharsets.UTF_8);
 			RulesDocument doc = RulesLoader.parse(body);
 			doc.setSource(RulesLoader.SOURCE_REMOTE);
-			if (cacheFile != null) {
+			if (cacheFile != null && doc.schemaVersion == RulesLoader.SCHEMA_VERSION) {
 				try {
 					RulesLoader.saveCache(cacheFile, body);
 				} catch (Exception e) {

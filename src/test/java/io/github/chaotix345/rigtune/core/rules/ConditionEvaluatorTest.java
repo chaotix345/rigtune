@@ -1,6 +1,5 @@
 package io.github.chaotix345.rigtune.core.rules;
 
-import com.google.gson.Gson;
 import io.github.chaotix345.rigtune.core.Fixtures;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
 import io.github.chaotix345.rigtune.core.model.Goal;
@@ -18,8 +17,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConditionEvaluatorTest {
-	private static final Gson GSON = new Gson();
-
 	private final Fixtures.Hw hw = Fixtures.userRig();
 	private GpuClass gpu = new GpuClass(GpuVendor.AMD, false, 5, null);
 	private TierResult tier = new TierResult(4, 3, 5, 4, 5, "cpu");
@@ -27,7 +24,7 @@ class ConditionEvaluatorTest {
 	private Set<String> mods = Set.of("sodium", "lithium");
 
 	private boolean eval(String json) {
-		return ConditionEvaluator.matches(GSON.fromJson(json, Condition.class), new EvalContext(hw.build(), gpu, tier, goal, mods));
+		return ConditionEvaluator.matches(RulesLoader.condition(json), new EvalContext(hw.build(), gpu, tier, goal, mods));
 	}
 
 	@Test

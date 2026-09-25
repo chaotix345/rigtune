@@ -37,10 +37,17 @@ public final class GpuClassifier {
 		return new GpuClassifier(rules.gpuTiers, rules.gpuVendorFallback);
 	}
 
+	// The string the gpuTiers patterns (and the gpuModelMatches condition) are matched against.
+	public static String subject(GpuInfo gpu) {
+		String renderer = gpu == null || gpu.renderer() == null ? "" : gpu.renderer();
+		String vendorString = gpu == null || gpu.vendorString() == null ? "" : gpu.vendorString();
+		return renderer.isBlank() ? vendorString : renderer;
+	}
+
 	public GpuClass classify(GpuInfo gpu) {
 		String renderer = gpu == null || gpu.renderer() == null ? "" : gpu.renderer();
 		String vendorString = gpu == null || gpu.vendorString() == null ? "" : gpu.vendorString();
-		String subject = renderer.isBlank() ? vendorString : renderer;
+		String subject = subject(gpu);
 		GpuVendor vendor = detectVendor(vendorString, renderer);
 
 		for (GpuTierRule rule : rules) {
