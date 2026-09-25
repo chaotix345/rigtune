@@ -7,9 +7,9 @@ Branch `feat/rules-v03`. Items: SPEC 7 (hardware tiers), 12 (spark), item 1's `v
 | AC | status | evidence |
 |---|---|---|
 | AC7.1 | verified | GpuClassifierTest: 29 new CASES (research §4), `newModelsMatchTheirOwnRows`, `newRowsDoNotCatchOtherModels` (5050 Ti, plain `Intel(R) Graphics`, Arc Pro A60, 5050 Laptop, 9070 XT, Arc B390). CpuClassifierTest: `newPartsUseTheExistingRows`, `lunarLakeIsNotAKSeriesPart`. |
-| AC7.2 | verified | RulesV1DifferentialTest: `rtx-5070`, `rx-9070-gre`, `arc-pro-b60`, `ryzen-9800x3d` (tier-5 CPU, heap 6-8 GB) pass `repoRulesV1AddsNoTickedActionAndLosesNoWarning` with no difference; `newHardwareKeepsItsV010Classification` (pinned v0.1.0 classifier, baseline vs new rules-v1.json, 13 GPU + 4 CPU strings); `theDifferentialCatchesTheNewTierRowsInV1` shows the GRE and Arc Pro entries fail if the rows reach v1. |
+| AC7.2 | verified | RulesV1DifferentialTest: `rtx-5070`, `rx-9070-gre`, `arc-pro-b60`, `ryzen-9800x3d` (tier-5 CPU, heap 6-8 GB) pass `repoRulesV1AddsNoTickedActionAndLosesNoWarning` with no difference; `newHardwareKeepsItsV010Classification` (pinned v0.1.0 classifier, baseline vs new rules-v1.json, 13 GPU + 4 CPU strings); `theDifferentialCatchesTheNewTierRowsInV1` shows the GRE and Arc Pro entries fail if the rows reach v1; `tierTablesStayAtV010` (review M1) fails if rules-v1.json's tier tables or vendor fallback ever differ from 0.1.0's. |
 | AC7.3 | verified | tools/tests/test_projection.py `TierV1Tests` (8), test_check_rules_v1.py (4 new), SchemaConsistencyTest `sourceOnlyTierFieldsAreNoClientField`. |
-| AC7.4 | verified | one live run, revision 10 → 11 (log below); `check_rules_v1.py` OK; `cmp` rules-v2.json = bundled copy; `./gradlew build` green on 26.2 and 26.3 (858 tests each, 0 skipped). |
+| AC7.4 | verified | one live run from feat/v0.3.0's revision 10 → 11 (log below; re-derived once after the review's spark wording fix, again from revision 10); `check_rules_v1.py` OK; `cmp` rules-v2.json = bundled copy; `./gradlew build` green on 26.2 and 26.3 (858 tests each, 0 skipped). |
 | AC12.1 | verified | KnowledgeV2ScenarioTest `sparkAdviceOnlyWithSpark`. |
 | AC1.4 | verified | test_update_rules.py `TargetVersionTests` (fake tag list with 26.4, 26.4.1, 26.3.x hotfixes, an rc, `26.20`), `StonecutterNodesTests`, `MainTargetTests`; the live run printed `target MC versions: 26.3, 26.2`. |
 | AC1.7 | verified | KnowledgeV2ScenarioTest `vulkanBackendAdviceOnlyBefore264` (Vulkan on 26.2/26.3/26.3.1 shown; 26.4-alpha.1, 26.4-rc.1, 26.4, 26.4.1 not; OpenGL never); RulesV1DifferentialTest `vulkanBackendAdviceKeepsItsV010Condition`. |
@@ -42,13 +42,13 @@ Branch `feat/rules-v03`. Items: SPEC 7 (hardware tiers), 12 (spark), item 1's `v
 - No 26.4 replacement advice ("try OpenGL if you have problems") was added: 26.4 isn't a node, and its wording should be written against the real 26.4 release.
 
 ### spark hint (item 12, D-L1)
-- `spark-profiler`: `when {"modPresent": ["spark"]}`, info, impact low, `"v1": false`, 317 characters (the longest existing advice text is 333).
-- Text: "Run /sparkc profiler start, play through the lag, then /sparkc profiler stop and open the link it prints: the widest bars under the Render thread cost the most frame time. Stopping uploads the profile to spark.lucko.me with your player name, mod list and system and Java details, and anyone with the link can open it."
+- `spark-profiler`: `when {"modPresent": ["spark"]}`, info, impact low, `"v1": false`, 334 characters (the longest existing advice text is 333; the scenario test caps it at 340).
+- Text: "Run /sparkc profiler start, play through the lag, then /sparkc profiler stop and open the link it prints: under Render thread, the highest percentages cost the most time. Stopping uploads the profile to spark.lucko.me with your player name and UUID, mod list, system details and Java launch arguments; anyone with the link can see it." (Review L4: the viewer opens in the call-tree view with percentages, not the flame view's bar widths; the JVM launch arguments usually carry paths with the OS account name, so they're named explicitly.)
 - Sources (read 2026-09-26 with the gstack headless browser):
   - spark.lucko.me/docs/Command-Usage: `/sparkc` replaces `/spark` on Fabric/Forge clients; `profiler stop` stops and shows the results; `profiler cancel` stops "without uploading the results"; `stop --save-to-file` saves instead of uploading; `--timeout`, `--thread *`.
   - spark.lucko.me/docs/Using-the-viewer: "your profile will be automatically uploaded to the viewer, and you will be presented with a link. You can freely share this link".
-  - lucko/spark `spark-common/src/main/proto/spark/spark_sampler.proto` `SamplerMetadata`: `creator` (CommandSenderMetadata: name, unique_id), `platform_metadata` (incl. minecraft_version), `system_statistics`, `sources` (plugin/mod metadata), `server_configurations`; `spark.proto` `SystemStatistics`: cpu (threads, model_name), memory, disk, os (arch, name, version), java (vendor, version, vm_args), jvm, net interfaces. Hence "player name, mod list and system and Java details".
-- The five reading tips were cut to one (the Render thread, widest bars) for length (D-L1). `--timeout 60` and `profiler cancel` were left out for the same reason.
+  - lucko/spark `spark-common/src/main/proto/spark/spark_sampler.proto` `SamplerMetadata`: `creator` (CommandSenderMetadata: name, unique_id), `platform_metadata` (incl. minecraft_version), `system_statistics`, `sources` (plugin/mod metadata), `server_configurations`; `spark.proto` `SystemStatistics`: cpu (threads, model_name), memory, disk, os (arch, name, version), java (vendor, version, vm_args), jvm, net interfaces. Hence "player name and UUID, mod list, system details and Java launch arguments".
+- The five reading tips were cut to one (percentages under Render thread) for length (D-L1). `--timeout 60` and `profiler cancel` were left out for the same reason.
 - Title-screen toast: in 0.2+ the toast is shown only when a warning or a high-impact recommendation exists (`RigTuneClient.important`); the spark hint can't trigger it, but adds 1 to the count the toast shows when it appears. 0.1.x never sees the hint.
 
 ### Change C: MC targets
@@ -63,7 +63,7 @@ Branch `feat/rules-v03`. Items: SPEC 7 (hardware tiers), 12 (spark), item 1's `v
 -  "revision": 10,
 -  "generatedAt": "2026-09-25T07:10:27Z",
 +  "revision": 11,
-+  "generatedAt": "2026-09-25T18:29:50Z",
++  "generatedAt": "2026-09-25T19:14:14Z",
 @@ availability
 -    ],
 -    "26.1.2": [
@@ -89,16 +89,32 @@ Branch `feat/rules-v03`. Items: SPEC 7 (hardware tiers), 12 (spark), item 1's `v
 - 2026-09-26: `gh pr list --state all` shows only #1-#3 (merged, not bot PRs); update-rules ran on main 2026-09-24 and 2026-09-25 (workflow_dispatch, success) without opening a PR. No `bot/rules-update-*` PR appeared while WS-D worked.
 - The next cron is Monday 2026-09-28 03:00 UTC, on main (still the top-3 target logic until v0.3.0 merges). If it opens a PR it will be at revision 11 on main, colliding with this branch's 11: per D-M1 the coordinator triages it by re-running the updater on feat/v0.3.0 (not merging the PR), and Phase 7 re-runs the updater after merging origin/main so the release revision is above main's.
 
+## Self-review (code-reviewer subagent on `git diff feat/v0.3.0...HEAD`)
+0 High, 1 Medium, 9 Low. The reviewer also re-checked `<26.4-` with Loader 0.19.5's `VersionPredicate` (TRUE for 26.2, 26.3, 26.3.1, 26.3.1-rc.1; FALSE for 26.4-alpha.1, 26.4-beta.1, 26.4-rc.1, 26.4, 26.4.1) and simulated the classifier over about 27 strings (no row catches anything unintended).
+
+| finding | disposition |
+|---|---|
+| M1 D-H1 only enforced for the listed strings | fixed: `tierTablesStayAtV010` (rules-v1.json tier tables and vendor fallback = 0.1.0's) |
+| L1 settings.gradle comments / several lists | fixed: Groovy comments stripped (strings kept), the list must start a line, exactly one list; tests |
+| L2 pre-release ids sorted as strings | fixed: snapshot < pre < rc, numeric parts as numbers; test |
+| L3 hotfix targets grow | documented in tools/README.md (each hotfix is a version a player can run; the list shrinks when a node is dropped) |
+| L4 spark wording (call-tree view; UUID and JVM args) | fixed: new text, test asserts "UUID" and "launch arguments"; revision 11 re-derived from revision 10 in one run |
+| L5 tier sections not type-checked | fixed: "'<kind>' must be an array"; test |
+| L6 doc section under HeapTierRule | fixed: own `##` heading (anchor unchanged) |
+| L7 SPEC item 7's Arc Pro claim | not changed (SPEC.md is the coordinator's): the correction is above, under "New GPU rows" |
+| L8 settings.gradle read from the script's repo | documented in tools/README.md |
+| L9 heapTiers `v1` message | fixed: dedicated message; test |
+
 ## Other notes
-- REVIEW.md (d) prints tier rows as raw regexes; GitHub markdown drops a backslash before punctuation, so `\(TM\)` renders as `(TM)`. Cosmetic (the table is for triage); wrapping the pattern in a code span would fix it. Not changed, to keep this to one regeneration run.
+- REVIEW.md (d) prints tier rows as raw regexes; GitHub markdown drops a backslash before punctuation, so `\(TM\)` renders as `(TM)`. Cosmetic (the table is for triage); wrapping the pattern in a code span would fix it.
 - Shell quirk (for later agents): the Bash tool collapsed `\\` in a heredoc, which broke a scripted JSON edit; edit knowledge.json with the Edit tool.
 
 ## UNVERIFIED
 - The literal renderer strings for RTX 50, RX 9070 GRE and Arc Pro B-series cards (research: from the naming convention, no log found). A different string would fall back exactly as before.
-- `<26.4-` on a real 26.4 client (only unit-tested through Fabric Loader's `VersionPredicate` with the normalized ids).
-- The spark commands weren't run in-game; "player name" in the upload is from spark's schema (the command sender), not observed on a client profile.
+- `<26.4-` on a real 26.4 client (only checked through Fabric Loader's `VersionPredicate` with the normalized ids).
+- The spark commands weren't run in-game; the upload's player name/UUID and JVM arguments are from spark's schema (the command sender, `SystemStatistics.java.vm_args`), not observed in a client profile. The viewer's default view (call tree with percentages) is per the reviewer, not checked in a live viewer.
 
-## Regeneration log (revision 11)
+## Regeneration log (revision 11; the second run, from revision 10 again, printed the same)
 ```
 target MC versions: 26.3, 26.2
 Fabulously Optimized: newest available = 26.3, 38 mods

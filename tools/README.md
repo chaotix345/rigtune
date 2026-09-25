@@ -25,7 +25,10 @@ It requires only the Python 3.11+ standard library (no `pip install` needed).
    (`versions '26.2', '26.3'`) plus each node's hotfix releases on Modrinth
    (`release`-type game versions `<node>.<n>`, e.g. `26.3.1`), newest first. A newer
    Minecraft version (say 26.4) becomes a target only once it's a node, and its hotfixes
-   never push out an older node. `--mc-versions 26.2,26.3` overrides the whole list.
+   never push out an older node. Every hotfix stays a target while its node does (a player
+   can be on any of them), so the list grows by one per hotfix until the node is dropped.
+   `settings.gradle` is always read from this repository (the parent of `tools/`), also
+   with `--out-dir`. `--mc-versions 26.2,26.3` overrides the whole list.
 3. For each target version, lists `Packwiz/{version}/mods/*.pw.toml` in
    `Fabulously-Optimized/fabulously-optimized` and
    `versions/fabric/{version}/mods/*.pw.toml` in `skywardmc/additive`, and reads each
@@ -146,7 +149,9 @@ directly (see `tools/tests/test_update_rules.py`).
   appliable recommendation (add, disable, setting value) that the new file gives and the
   baseline doesn't (`added`, ticked or not), any the baseline gave unticked and the new
   file ticks (`ticked`), and any conflict, advice or `disable:` (an avoided or obsolete mod)
-  the new file no longer gives (`lost`). Removing other actions is fine. If a change for 0.1.x is intended (for example a new mod rule
+  the new file no longer gives (`lost`). Removing other actions is fine. It also fails when
+  rules-v1.json's `gpuTiers`, `gpuVendorFallback`, `cpuTiers` or `heapTiers` differ from the
+  baseline's (a new tier row needs `"v1": false`). If a change for 0.1.x is intended (for example a new mod rule
   that 0.1.x should see), review the listed changes and copy `rules/rules-v1.json` over
   the baseline in the same commit.
 

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "revision": 11,
-  "generatedAt": "2026-09-25T18:29:50Z",
+  "generatedAt": "2026-09-25T19:14:14Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -1970,7 +1970,7 @@
       "kind": "info",
       "impact": "low",
       "title": "Find what causes lag with spark",
-      "text": "Run /sparkc profiler start, play through the lag, then /sparkc profiler stop and open the link it prints: the widest bars under the Render thread cost the most frame time. Stopping uploads the profile to spark.lucko.me with your player name, mod list and system and Java details, and anyone with the link can open it."
+      "text": "Run /sparkc profiler start, play through the lag, then /sparkc profiler stop and open the link it prints: under Render thread, the highest percentages cost the most time. Stopping uploads the profile to spark.lucko.me with your player name and UUID, mod list, system details and Java launch arguments; anyone with the link can see it."
     }
   ],
   "settingLabels": {

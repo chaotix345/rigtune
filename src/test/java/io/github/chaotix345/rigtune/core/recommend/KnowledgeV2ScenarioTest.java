@@ -463,7 +463,8 @@ class KnowledgeV2ScenarioTest {
 		assertEquals(Category.ADVICE, rec.category());
 		assertEquals(Impact.LOW, rec.impact());
 		assertTrue(rec.reason().contains("/sparkc profiler start") && rec.reason().contains("/sparkc profiler stop"), rec.reason());
-		assertTrue(rec.reason().contains("spark.lucko.me"), rec.reason());
+		assertTrue(rec.reason().contains("spark.lucko.me") && rec.reason().contains("UUID") && rec.reason().contains("launch arguments"),
+				rec.reason());
 		assertTrue(rec.reason().length() <= 340, rec.reason());
 		assertFalse(advice(run(Fixtures.userRig(), "sodium")).contains("spark-profiler"));
 		assertFalse(advice(run(Fixtures.lowEndLaptop(), "fabric-api")).contains("spark-profiler"));

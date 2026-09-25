@@ -65,12 +65,12 @@ When no rule matches, the formula is: logical cores <= 2 → 1; <= 4 → 2; <= 8
 
 Tier rules have no `requires` and no fail-closed handling: a client ignores fields it doesn't know in them. So **any schema change to a tier rule needs a new schemaVersion** (and its own file). The updater rejects unknown fields in tier rules.
 
-### v1 on tier rows (source-only)
+## v1 on tier rows (source-only)
 `{ "pattern": "(?i)RX\\s*9070\\s*GRE\\b", "vendor": "amd", "integrated": false, "tier": 4, "v1": false }`
 
 In `rules/source/knowledge.json` only, a `gpuTiers` or `cpuTiers` row may carry `"v1": false`. The updater leaves the row out of rules-v1.json and lists it in REVIEW.md section (d); the key itself is never written to either output, so no client ever sees it (it isn't a schema change). Any other `v1` value, and `v1` on a `heapTiers` row, is a knowledge error.
 
-0.1.x then classifies that hardware exactly as before: the rows that follow still apply in order, and a string no row matches falls back to `gpuVendorFallback` or the CPU formula. **Every new tier row gets `"v1": false`.** A different tier for 0.1.x isn't "more conservative" in either direction: a lower tier changes setting values and can newly trigger `tierAtMost` rules, which RulesV1DifferentialTest counts as new recommendations. Leave a row out of v1 only if it's new; leaving out an existing row changes what 0.1.x already does for that hardware.
+0.1.x then classifies that hardware exactly as before: the rows that follow still apply in order, and a string no row matches falls back to `gpuVendorFallback` or the CPU formula. **Every new tier row gets `"v1": false`.** A different tier for 0.1.x isn't "more conservative" in either direction: a lower tier changes setting values and can newly trigger `tierAtMost` rules, which RulesV1DifferentialTest counts as new recommendations. Leave a row out of v1 only if it's new; leaving out an existing row changes what 0.1.x already does for that hardware. RulesV1DifferentialTest enforces this: it fails when rules-v1.json's `gpuTiers`, `gpuVendorFallback`, `cpuTiers` or `heapTiers` differ from the rules 0.1.0 shipped.
 
 ## Tiers
 - `tier = min(gpuTier, cpuTier, memTier)`. The limiting factor is whichever of the three is lowest (ties go to gpu, then cpu, then mem).
