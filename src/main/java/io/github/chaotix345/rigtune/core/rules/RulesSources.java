@@ -82,18 +82,17 @@ public final class RulesSources {
 	}
 
 	// Hands the best local rules to the listener, then fetches the remote rules while remoteAllowed says so, and hands
-	// them over too if they win. With remoteAllowed false no request is made at all.
+	// them over too only if they are strictly newer (revision, then schemaVersion): the same rules again would only
+	// cost a rebuild and a second Modrinth lookup. With remoteAllowed false no request is made at all.
 	public void load(BooleanSupplier remoteAllowed, Listener listener) {
-		List<RulesLoader.Candidate> candidates = local();
-		RulesDocument local = RulesLoader.pickNewest(candidates).orElse(null);
+		RulesDocument local = RulesLoader.pickNewest(local()).orElse(null);
 		if (local != null) {
 			listener.loaded(local, false);
 		}
 		remote(remoteAllowed).ifPresent(remote -> {
-			candidates.add(remote);
-			RulesDocument best = RulesLoader.pickNewest(candidates).orElse(null);
-			if (best != null && best != local) {
-				listener.loaded(best, true);
+			if (RulesLoader.newer(remote.document(), local)) {
+				remote.document().setSource(remote.source());
+				listener.loaded(remote.document(), true);
 			}
 		});
 	}

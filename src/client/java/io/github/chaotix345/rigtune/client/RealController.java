@@ -46,7 +46,6 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -83,6 +82,7 @@ public final class RealController implements RigTuneController {
 	private volatile Goal goal;
 	private int generation;
 	private final Object rulesLock = new Object();
+	private final OnlineLookupGate onlineLookups = new OnlineLookupGate();
 	private int rulesGeneration;
 	private volatile boolean downloading;
 
@@ -126,8 +126,8 @@ public final class RealController implements RigTuneController {
 				rules = doc;
 			}
 			rebuild();
-			// Also for the local rules: if the scan finished first, its own fetchOnline() found no rules yet and returned
-			// (docs/v0.2/design/ws-g.md, the offline race). It's a no-op until the scan is done.
+			// Also for the local rules: if the scan finished first, its own fetchOnline() found no rules yet (the offline
+			// race in docs/v0.2/design/ws-g.md). The gate makes the lookup happen once, whichever comes last.
 			fetchOnline();
 		});
 	}
@@ -188,14 +188,12 @@ public final class RealController implements RigTuneController {
 	}
 
 	private void fetchOnline() {
-		List<InstalledMod> scanned = mods;
-		RulesDocument doc = rules;
-		HardwareProfile hw = hardware;
-		if (scanned == null || doc == null || hw == null) {
+		OnlineLookupGate.Lookup lookup = onlineLookups.next(mods, rules, hardware);
+		if (lookup == null) {
 			return;
 		}
-		List<String> slugs = doc.mods.stream().map(m -> m.slug).filter(Objects::nonNull).distinct().toList();
-		CompletableFuture.supplyAsync(() -> new OnlineDataFetcher(modrinth).fetchAll(scanned, slugs, hw.mcVersion()), Probes.EXECUTOR)
+		CompletableFuture.supplyAsync(() -> new OnlineDataFetcher(modrinth).fetchAll(lookup.mods(), lookup.slugs(), lookup.hardware().mcVersion()),
+						Probes.EXECUTOR)
 				.thenAccept(result -> {
 					online = result;
 					rebuild();

@@ -127,7 +127,18 @@ public final class RulesLoader {
 		return Optional.of(best.document());
 	}
 
+	// Whether a is strictly newer than b by revision, then schemaVersion (the source doesn't count).
+	static boolean newer(RulesDocument a, RulesDocument b) {
+		if (b == null) {
+			return true;
+		}
+		return a.revision != b.revision ? a.revision > b.revision : a.schemaVersion > b.schemaVersion;
+	}
+
 	private static int sourceRank(String source) {
+		if (source == null) {
+			return 0;
+		}
 		return switch (source) {
 			case SOURCE_REMOTE -> 3;
 			case SOURCE_CACHE -> 2;

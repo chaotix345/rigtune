@@ -111,6 +111,23 @@ class RulesLoaderTest {
 	}
 
 	@Test
+	void pickNewestToleratesANullSource() {
+		RulesDocument unnamed = doc(2, 5);
+		RulesDocument bundled = doc(2, 5);
+		assertSame(bundled, RulesLoader.pickNewest(List.of(candidate(null, unnamed), candidate(RulesLoader.SOURCE_BUNDLED, bundled))).orElseThrow());
+		assertSame(unnamed, RulesLoader.pickNewest(List.of(candidate(null, unnamed))).orElseThrow());
+	}
+
+	@Test
+	void newerComparesRevisionThenSchemaVersionOnly() {
+		assertTrue(RulesLoader.newer(doc(1, 6), doc(2, 5)));
+		assertTrue(RulesLoader.newer(doc(2, 5), doc(1, 5)));
+		assertFalse(RulesLoader.newer(doc(2, 5), doc(2, 5)));
+		assertFalse(RulesLoader.newer(doc(1, 5), doc(2, 5)));
+		assertTrue(RulesLoader.newer(doc(1, 1), null));
+	}
+
+	@Test
 	void pickNewestPrefersV2OnARevisionTie() {
 		RulesDocument remoteV1 = doc(1, 5);
 		RulesDocument bundledV2 = doc(2, 5);

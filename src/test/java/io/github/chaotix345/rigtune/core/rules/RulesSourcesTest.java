@@ -207,6 +207,25 @@ class RulesSourcesTest {
 	}
 
 	@Test
+	void anEqualRemoteIsNotRepublished() throws IOException {
+		Files.createDirectories(cacheDir());
+		Files.writeString(cacheDir().resolve(RulesSources.V2_CACHE), doc(2, BUNDLED + 2));
+		serve("rules-v2.json", 200, doc(2, BUNDLED + 2));
+		load(true);
+		assertEquals(List.of(new Published(BUNDLED + 2, 2, "cache", false)), published);
+		assertEquals(1, requestsFor("rules-v2.json"));
+	}
+
+	@Test
+	void anEqualRemoteV1IsNotRepublishedOverTheLegacyCache() throws IOException {
+		Files.createDirectories(cacheDir());
+		Files.writeString(cacheDir().resolve(RulesSources.LEGACY_CACHE), doc(1, BUNDLED + 2));
+		serve("rules-v1.json", 200, doc(1, BUNDLED + 2));
+		load(true);
+		assertEquals(List.of(new Published(BUNDLED + 2, 1, "cache", false)), published);
+	}
+
+	@Test
 	void listenerIsNotCalledAgainWhenRemoteIsNotNewer() {
 		serve("rules-v2.json", 200, doc(2, BUNDLED - 1));
 		load(true);
