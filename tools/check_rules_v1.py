@@ -33,7 +33,7 @@ def shape_problems(v1):
                 problems.append(f"{label}: field(s) 0.1.x doesn't know: {', '.join(extra)}")
             for field in ur.CONDITION_FIELDS.get(kind, ()):
                 if field in rule:
-                    problems += [f"{label}: {p}" for p in ur.condition_problems(rule[field], ur.V1_CONDITION_KEYS, field)]
+                    problems += [f"{label}: {p}" for p in ur.condition_problems(rule[field], ur.V1_CONDITION_KEYS, field, ur.V1_VOCABULARIES)]
             if kind == "settings" and not str(rule.get("key")).startswith(ur.V1_SETTING_PREFIXES):
                 problems.append(f"{label}: settings key outside vanilla./sodium.")
     return problems

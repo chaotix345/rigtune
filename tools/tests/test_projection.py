@@ -3,6 +3,7 @@ import json
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -160,6 +161,44 @@ class AutomaticProjectionTests(unittest.TestCase):
         self.assertTrue(ur.is_v1_condition({"anyOf": [{"not": {"tierAtLeast": 2}}]}))
 
 
+class VocabularyTests(unittest.TestCase):
+    def test_v1_vocabularies_are_frozen_at_v010(self):
+        self.assertEqual(ur.V1_VOCABULARIES, {
+            "gpuVendor": frozenset({"nvidia", "amd", "intel", "apple", "qualcomm", "software", "other", "unknown"}),
+            "backend": frozenset({"opengl", "vulkan"}),
+            "os": ("windows", "macos", "linux"),
+            "goal": frozenset({"performance", "balanced", "quality"}),
+            "flags": frozenset({"backend-vulkan", "shaders-enabled"}),
+        })
+
+    def test_a_value_only_v2_knows_is_projected_out_of_v1(self):
+        extended = dict(ur.V2_VOCABULARIES, gpuVendor=ur.V2_VOCABULARIES["gpuVendor"] | {"newvendor"})
+        with mock.patch.dict(ur.V2_VOCABULARIES, extended):
+            advice = advice_rule(when={"not": {"gpuVendor": ["newvendor"]}})
+            self.assertEqual(ur.condition_problems(advice["when"]), [])
+            self.assertFalse(ur.is_v1_condition(advice["when"]))
+            projected, _ = ur.project_rule("advice", advice)
+            self.assertEqual(projected["when"], {"always": False})
+
+
+class WarningAdviceTests(unittest.TestCase):
+    def test_warning_advice_with_v2_when_needs_explicit_v1(self):
+        for kind in ("warning", "critical"):
+            rule = advice_rule(kind=kind, when={"displayPixelsAtLeast": 3686400})
+            with self.assertRaises(ur.KnowledgeError, msg=kind):
+                ur.project_rule("advice", rule)
+            with self.assertRaises(ur.KnowledgeError, msg=kind):
+                ur.project_rule("advice", dict(rule, v1={"title": "Other"}))
+            projected, _ = ur.project_rule("advice", dict(rule, v1=False))
+            self.assertIsNone(projected)
+            projected, _ = ur.project_rule("advice", dict(rule, v1={"when": {"heapMbAtMost": 2048}}))
+            self.assertEqual(projected["when"], {"heapMbAtMost": 2048})
+
+    def test_info_advice_with_v2_when_is_projected_automatically(self):
+        projected, _ = ur.project_rule("advice", advice_rule(kind="info", when={"displayPixelsAtLeast": 3686400}))
+        self.assertEqual(projected["when"], {"always": False})
+
+
 class SettingTests(unittest.TestCase):
     def test_setting_with_v2_when_needs_explicit_v1(self):
         with self.assertRaises(ur.KnowledgeError):
@@ -249,6 +288,18 @@ class ValidationTests(unittest.TestCase):
     def test_overlong_regex_is_a_knowledge_error(self):
         with self.assertRaises(ur.KnowledgeError):
             ur.validate_knowledge(self.knowledge(advice=[advice_rule(when={"gpuModelMatches": "a" * 201})]))
+
+    def test_setting_labels_shape_is_validated(self):
+        for labels in ({"vanilla.renderDistance": {"values": ["Auto"]}}, {"vanilla.renderDistance": {"name": 5}},
+                       {"vanilla.renderDistance": {"values": {"0": 1}}}, {"vanilla.renderDistance": {"nmae": "x"}},
+                       {"vanilla.renderDistance": "Render distance"}):
+            with self.assertRaises(ur.KnowledgeError, msg=str(labels)):
+                ur.validate_knowledge(self.knowledge(settingLabels=labels))
+        ur.validate_knowledge(self.knowledge(settingLabels={"vanilla.renderDistance": {"name": "Render distance", "values": {"2": "Tiny"}}}))
+
+    def test_unknown_top_level_key_is_an_error(self):
+        with self.assertRaises(ur.KnowledgeError):
+            ur.validate_knowledge(self.knowledge(settingLabel={}))
 
     def test_tier_rule_unknown_field_is_an_error(self):
         with self.assertRaises(ur.KnowledgeError):

@@ -76,13 +76,28 @@ INT32_CONDITION_KEYS = frozenset({"tierAtLeast", "tierAtMost", "rawTierAtLeast",
                                   "gpuTierAtMost", "cpuTierAtLeast", "cpuTierAtMost", "refreshRateAtLeast"})
 MAX_PATTERN_LENGTH = 200
 
-# Enumerated condition values (the Java client's ConditionEvaluator vocabularies). 0.2 adds none to 0.1.0's.
-GPU_VENDORS = frozenset({"nvidia", "amd", "intel", "apple", "qualcomm", "software", "other", "unknown"})
-BACKENDS = frozenset({"opengl", "vulkan"})
-OS_FAMILIES = ("windows", "macos", "linux")
-GOALS = frozenset({"performance", "balanced", "quality"})
-FLAGS = frozenset({"backend-vulkan", "shaders-enabled"})
+# Enumerated condition values. V1 is what 0.1.0 understands and is frozen: 0.1.x evaluates two-valued, so a value it
+# can't detect would turn TRUE under `not` there. V2 is what 0.2's ConditionEvaluator knows (SchemaConsistencyTest
+# checks both against the Java code). A value only V2 knows makes a condition v2-only, like a v2 key.
+V1_VOCABULARIES = {
+    "gpuVendor": frozenset({"nvidia", "amd", "intel", "apple", "qualcomm", "software", "other", "unknown"}),
+    "backend": frozenset({"opengl", "vulkan"}),
+    "os": ("windows", "macos", "linux"),
+    "goal": frozenset({"performance", "balanced", "quality"}),
+    "flags": frozenset({"backend-vulkan", "shaders-enabled"}),
+}
+V2_VOCABULARIES = {
+    "gpuVendor": frozenset({"nvidia", "amd", "intel", "apple", "qualcomm", "software", "other", "unknown"}),
+    "backend": frozenset({"opengl", "vulkan"}),
+    "os": ("windows", "macos", "linux"),
+    "goal": frozenset({"performance", "balanced", "quality"}),
+    "flags": frozenset({"backend-vulkan", "shaders-enabled"}),
+}
 SODIUM_WORKAROUND_FLAG = "sodium-workaround:"
+KNOWLEDGE_TOP_LEVEL = frozenset({
+    "minModVersion", "gpuTiers", "gpuVendorFallback", "cpuTiers", "heapTiers", "mods", "obsolete", "settings", "advice",
+    "settingLabels", "reviewIgnore",
+})
 
 RULE_KINDS = ("mods", "obsolete", "settings", "advice")
 TIER_KINDS = ("gpuTiers", "cpuTiers", "heapTiers")
@@ -108,30 +123,27 @@ NEVER = {"always": False}
 MISSING = object()
 
 
-def known_value(field, value):
+def known_value(field, value, vocabularies=None):
+    vocabularies = V2_VOCABULARIES if vocabularies is None else vocabularies
     if not isinstance(value, str):
         return False
+    if field not in vocabularies:
+        return True
     lower = value.lower()
-    if field == "gpuVendor":
-        return lower in GPU_VENDORS
-    if field == "backend":
-        return lower in BACKENDS
     if field == "os":
-        return lower != "" and any(family.startswith(lower) for family in OS_FAMILIES)
-    if field == "goal":
-        return lower in GOALS
+        return lower != "" and any(family.startswith(lower) for family in vocabularies["os"])
     if field == "flags":
-        return value in FLAGS or (value.startswith(SODIUM_WORKAROUND_FLAG) and len(value) > len(SODIUM_WORKAROUND_FLAG))
-    return True
+        return value in vocabularies["flags"] or (value.startswith(SODIUM_WORKAROUND_FLAG) and len(value) > len(SODIUM_WORKAROUND_FLAG))
+    return lower in vocabularies[field]
 
 
 def is_integer(value):
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def condition_problems(cond, allowed_keys=V2_CONDITION_KEYS, path="condition"):
-    """Everything wrong with a condition for a client that knows allowed_keys: unknown keys, nulls, wrong types
-    and values outside the vocabularies, recursively through not/anyOf."""
+def condition_problems(cond, allowed_keys=V2_CONDITION_KEYS, path="condition", vocabularies=None):
+    """Everything wrong with a condition for a client that knows allowed_keys and vocabularies (default: 0.2's):
+    unknown keys, nulls, wrong types and values outside the vocabularies, recursively through not/anyOf."""
     if not isinstance(cond, dict):
         return [f"{path} must be an object"]
     problems = []
@@ -142,13 +154,13 @@ def condition_problems(cond, allowed_keys=V2_CONDITION_KEYS, path="condition"):
         elif value is None:
             problems.append(f"{where}: null")
         elif key == "not":
-            problems += condition_problems(value, allowed_keys, where)
+            problems += condition_problems(value, allowed_keys, where, vocabularies)
         elif key == "anyOf":
             if not isinstance(value, list):
                 problems.append(f"{where} must be an array")
             else:
                 for i, sub in enumerate(value):
-                    problems += condition_problems(sub, allowed_keys, f"{where}[{i}]")
+                    problems += condition_problems(sub, allowed_keys, f"{where}[{i}]", vocabularies)
         elif key in BOOLEAN_CONDITION_KEYS:
             if not isinstance(value, bool):
                 problems.append(f"{where} must be true or false")
@@ -156,7 +168,7 @@ def condition_problems(cond, allowed_keys=V2_CONDITION_KEYS, path="condition"):
             if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
                 problems.append(f"{where} must be an array of strings")
             else:
-                problems += [f"{where}: {v!r} is outside the known values" for v in value if not known_value(key, v)]
+                problems += [f"{where}: {v!r} is outside the known values" for v in value if not known_value(key, v, vocabularies)]
         elif key in STRING_CONDITION_KEYS:
             if not isinstance(value, str) or not value.strip():
                 problems.append(f"{where} must be a non-empty string")
@@ -177,7 +189,7 @@ def bits(key):
 
 
 def is_v1_condition(cond):
-    return not condition_problems(cond, V1_CONDITION_KEYS)
+    return not condition_problems(cond, V1_CONDITION_KEYS, vocabularies=V1_VOCABULARIES)
 
 
 def contains_null(value):
@@ -248,6 +260,9 @@ def project_rule(kind, rule, index=None):
             fail('"when" uses v2 condition features; add "v1": false or a "v1" override with a v1 "when"')
     elif kind == "advice":
         if "when" in merged and not is_v1_condition(merged["when"]):
+            if str(merged.get("kind", "info")).lower() in ("warning", "critical"):
+                fail('a warning whose "when" uses v2 condition features would silently disappear for 0.1.x; add "v1": false '
+                     'or a "v1" override with a v1 "when"')
             merged["when"] = dict(NEVER)
             notes.append("when uses v2 condition features: never shown to 0.1.x")
     elif kind == "mods":
@@ -273,6 +288,27 @@ def project_rule(kind, rule, index=None):
         del merged[field]
         notes.append(f"{field} left out")
     return merged, notes
+
+
+def setting_label_problems(labels):
+    """settingLabels must be {key: {"name": str, "values": {str: str}}} (both optional), or Gson rejects rules-v2.json."""
+    if not isinstance(labels, dict):
+        return ["settingLabels must be an object"]
+    problems = []
+    for key, label in labels.items():
+        where = f"settingLabels[{key}]"
+        if not isinstance(label, dict):
+            problems.append(f'{where} must be an object like {{"name": ..., "values": {{...}}}}')
+            continue
+        unknown = sorted(set(label) - {"name", "values"})
+        if unknown:
+            problems.append(f"{where}: unknown field(s) {', '.join(unknown)}")
+        if "name" in label and not isinstance(label["name"], str):
+            problems.append(f"{where}.name must be a string")
+        values = label.get("values", {})
+        if not isinstance(values, dict) or not all(isinstance(v, str) for v in values.values()):
+            problems.append(f"{where}.values must map setting values to strings")
+    return problems
 
 
 def validate_knowledge(knowledge):
@@ -314,9 +350,10 @@ def validate_knowledge(knowledge):
                     project_rule(kind, rule, i)
                 except ProjectionError as e:
                     problems.append(str(e))
-    labels = knowledge.get("settingLabels", {})
-    if not isinstance(labels, dict) or any(not isinstance(v, dict) for v in labels.values()):
-        problems.append('settingLabels must map settings keys to {"name": ..., "values": {...}} objects')
+    unknown_top = sorted(set(knowledge) - KNOWLEDGE_TOP_LEVEL)
+    if unknown_top:
+        problems.append(f"unknown top-level field(s) {', '.join(unknown_top)}")
+    problems += setting_label_problems(knowledge.get("settingLabels", {}))
     if problems:
         raise KnowledgeError("invalid knowledge:\n  " + "\n  ".join(problems))
 
