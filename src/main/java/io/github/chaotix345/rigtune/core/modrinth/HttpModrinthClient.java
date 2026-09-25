@@ -35,11 +35,15 @@ import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
 public final class HttpModrinthClient implements ModrinthClient {
 	public static final String DEFAULT_BASE_URL = "https://api.modrinth.com";
+	// For tests against a local server (tools/e2e); downloads are then also allowed from that server's origin.
+	public static final String BASE_URL_PROPERTY = "rigtune.modrinth.baseUrl";
+	private static final URI CDN = URI.create("https://cdn.modrinth.com/");
 	private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
 	private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(20);
 	private static final long DOWNLOAD_SLACK_BYTES = 1024;
@@ -58,7 +62,11 @@ public final class HttpModrinthClient implements ModrinthClient {
 	private final Limits limits;
 
 	public HttpModrinthClient(String modVersion) {
-		this(modVersion, DEFAULT_BASE_URL);
+		this(modVersion, baseUrlOrDefault(System.getProperty(BASE_URL_PROPERTY)));
+	}
+
+	private static String baseUrlOrDefault(String configured) {
+		return configured == null || configured.isBlank() ? DEFAULT_BASE_URL : configured.trim();
 	}
 
 	public HttpModrinthClient(String modVersion, String baseUrl) {
@@ -145,10 +153,12 @@ public final class HttpModrinthClient implements ModrinthClient {
 		if (file.sha512() == null || file.sha512().isBlank()) {
 			throw new IOException("Refusing to download " + file.filename() + " without a SHA-512");
 		}
+		URI uri = URI.create(file.url());
+		requireAllowedDownload(file, uri);
 		Path dir = target.toAbsolutePath().getParent();
 		Files.createDirectories(dir);
 		long cap = file.size() > 0 ? Math.min(file.size() + DOWNLOAD_SLACK_BYTES, limits.maxDownloadBytes()) : limits.maxDownloadBytes();
-		HttpRequest request = request(URI.create(file.url())).GET().build();
+		HttpRequest request = request(uri).GET().build();
 		Path tmp = Files.createTempFile(dir, target.getFileName() + ".", ".tmp");
 		try {
 			MessageDigest digest = sha512();
@@ -164,6 +174,8 @@ public final class HttpModrinthClient implements ModrinthClient {
 						: BoundedHttp.capped(ERROR_BODY_BYTES, true, progress, buffer -> buffer.position(buffer.limit())),
 						limits.downloadStall(), limits.downloadDeadline());
 			}
+			// A redirect is followed, so check where the bytes came from too.
+			requireAllowedDownload(file, response.uri());
 			if (response.statusCode() / 100 != 2) {
 				throw error(request, response.statusCode(), "");
 			}
@@ -176,6 +188,45 @@ public final class HttpModrinthClient implements ModrinthClient {
 			Files.deleteIfExists(tmp);
 			throw e;
 		}
+	}
+
+	private void requireAllowedDownload(ModFile file, URI uri) throws IOException {
+		if (!allowedDownload(uri, baseUrl)) {
+			throw new IOException("Refusing to download " + file.filename() + " from " + uri + ": only " + CDN + " is allowed");
+		}
+	}
+
+	// Downloads come only from Modrinth's CDN over HTTPS, as the README promises, plus the origin of a non-default base
+	// URL (a test server).
+	static boolean allowedDownload(URI uri, String baseUrl) {
+		if (sameOrigin(uri, CDN)) {
+			return true;
+		}
+		try {
+			URI base = URI.create(baseUrl);
+			return !sameOrigin(base, URI.create(DEFAULT_BASE_URL)) && sameOrigin(uri, base);
+		} catch (IllegalArgumentException e) {
+			return false;
+		}
+	}
+
+	private static boolean sameOrigin(URI a, URI b) {
+		return a.getScheme() != null && b.getScheme() != null && a.getHost() != null && b.getHost() != null
+				&& a.getRawUserInfo() == null
+				&& a.getScheme().equalsIgnoreCase(b.getScheme())
+				&& a.getHost().equalsIgnoreCase(b.getHost())
+				&& port(a) == port(b);
+	}
+
+	private static int port(URI uri) {
+		if (uri.getPort() != -1) {
+			return uri.getPort();
+		}
+		return switch (uri.getScheme().toLowerCase(Locale.ROOT)) {
+			case "https" -> 443;
+			case "http" -> 80;
+			default -> -1;
+		};
 	}
 
 	private static void moveAtomically(Path from, Path to) throws IOException {
