@@ -35,6 +35,10 @@ public final class ApplyHelper {
 	}
 
 	static int run(String[] args, Sleeper sleeper) {
+		return run(args, sleeper, new ApplyExecutor());
+	}
+
+	static int run(String[] args, Sleeper sleeper, ApplyExecutor executor) {
 		if (args.length != 2) {
 			log("Usage: ApplyHelper <gamePid> <pendingJsonPath>");
 			return 2;
@@ -59,7 +63,7 @@ public final class ApplyHelper {
 				log("Another RigTune apply still holds " + ApplyLock.besidePlan(pending) + "; leaving " + pending + " for the next exit");
 				return 3;
 			}
-			return applyLocked(pending);
+			return applyLocked(pending, executor);
 		} catch (IOException e) {
 			log("Could not take the apply lock: " + e);
 			return 3;
@@ -98,7 +102,7 @@ public final class ApplyHelper {
 		}
 	}
 
-	private static int applyLocked(Path pending) {
+	private static int applyLocked(Path pending, ApplyExecutor executor) {
 		if (!Files.exists(pending)) {
 			log("Nothing to apply: " + pending + " does not exist");
 			return 0;
@@ -106,15 +110,16 @@ public final class ApplyHelper {
 		try {
 			PendingActions plan = PendingActions.load(pending);
 			log("Applying " + plan.ops().size() + " operation(s) from " + pending);
-			ApplyResult result = new ApplyExecutor().run(plan, pending);
+			ApplyResult result = executor.run(plan, pending);
 			for (ApplyResult.OpResult r : result.results()) {
 				log(r.status() + " " + (r.op() == null ? "?" : r.op().type()) + ": " + r.message());
 			}
 			log(result.allSucceeded() ? "All operations done"
 					: "Some operations were not applied; failed ones remain in " + pending + ", abandoned ones were dropped");
 			return result.allSucceeded() ? 0 : 1;
-		} catch (IOException | RuntimeException e) {
-			log("Apply failed: " + e);
+		} catch (Throwable t) {
+			// An Error too (review 4, security-1): logged, and pending.json stays for the next exit.
+			log("Apply failed: " + t);
 			return 1;
 		}
 	}

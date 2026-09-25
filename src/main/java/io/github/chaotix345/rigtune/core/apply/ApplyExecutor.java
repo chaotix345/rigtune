@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 public final class ApplyExecutor {
@@ -49,10 +50,16 @@ public final class ApplyExecutor {
 		boolean sleep(long millis);
 	}
 
+	// Injectable so tests can make reading a jar's mod id throw.
+	interface ModIdReader {
+		String read(Path jar) throws IOException;
+	}
+
 	private final int attempts;
 	private final long retryDelayMillis;
 	private final Mover mover;
 	private final Sleeper sleeper;
+	private final ModIdReader modIds;
 
 	public ApplyExecutor() {
 		this(DEFAULT_ATTEMPTS, DEFAULT_RETRY_DELAY_MILLIS);
@@ -67,10 +74,15 @@ public final class ApplyExecutor {
 	}
 
 	ApplyExecutor(int attempts, long retryDelayMillis, Mover mover, Sleeper sleeper) {
+		this(attempts, retryDelayMillis, mover, sleeper, ModJars::readModId);
+	}
+
+	ApplyExecutor(int attempts, long retryDelayMillis, Mover mover, Sleeper sleeper, ModIdReader modIds) {
 		this.attempts = Math.max(1, attempts);
 		this.retryDelayMillis = retryDelayMillis;
 		this.mover = mover;
 		this.sleeper = sleeper;
+		this.modIds = modIds;
 	}
 
 	private static boolean realSleep(long millis) {
@@ -222,7 +234,7 @@ public final class ApplyExecutor {
 			groups.computeIfAbsent(key, k -> new ArrayList<>()).add(i);
 		}
 		OpResult[] out = new OpResult[ops.size()];
-		InstalledJars installed = new InstalledJars(modsDir);
+		InstalledJars installed = new InstalledJars(modsDir, this::jarModId);
 		for (List<Integer> members : groups.values()) {
 			runGroup(ops, members, modsDir, configDir, installed, out);
 			members.forEach(i -> installed.forget(ops.get(i)));
@@ -233,10 +245,12 @@ public final class ApplyExecutor {
 	// The mod ids of the jars in the mods folder, each read once; forget() drops the names a group may have renamed.
 	private static final class InstalledJars {
 		private final Path modsDir;
+		private final Function<Path, String> idOf;
 		private final Map<String, String> idsByName = new HashMap<>();
 
-		InstalledJars(Path modsDir) {
+		InstalledJars(Path modsDir, Function<Path, String> idOf) {
 			this.modsDir = modsDir;
+			this.idOf = idOf;
 		}
 
 		// The first *.jar (other than `ignored`) whose fabric.mod.json id is modId, or null.
@@ -249,19 +263,11 @@ public final class ApplyExecutor {
 			}
 			for (Path jar : jars) {
 				String name = jar.getFileName().toString();
-				if (!ignored.contains(name) && modId.equals(idsByName.computeIfAbsent(name, n -> idOf(jar)))) {
+				if (!ignored.contains(name) && modId.equals(idsByName.computeIfAbsent(name, n -> Objects.requireNonNullElse(idOf.apply(jar), "")))) {
 					return name;
 				}
 			}
 			return null;
-		}
-
-		private static String idOf(Path jar) {
-			try {
-				return Objects.requireNonNullElse(ModJars.readModId(jar), "");
-			} catch (IOException e) {
-				return "";
-			}
 		}
 
 		void forget(Op op) {
@@ -304,11 +310,11 @@ public final class ApplyExecutor {
 
 	// Every enable is checked with the id its jar declares: one staged without a mod id (by 0.1.0, or an Undo of a jar it
 	// couldn't read; review 3, apply-safety-1) and one staged with an id alike (review 4, apply-safety-1). Null when
-	// there is none.
-	private static String jarModId(Path jar) {
+	// there is none, also after an Error (review 4, security-1): one bad jar must fail only its own check, never the helper.
+	private String jarModId(Path jar) {
 		try {
-			return ModJars.readModId(jar);
-		} catch (IOException e) {
+			return modIds.read(jar);
+		} catch (Throwable t) {
 			return null;
 		}
 	}
