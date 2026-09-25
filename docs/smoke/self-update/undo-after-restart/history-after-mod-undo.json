@@ -1,0 +1,67 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "c450f64c-1bf3-4061-addb-3ec34f718467",
+      "at": "2026-09-25T05:54:48.329968300Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.2.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "49906f41-23c4-42b3-8b51-ec4ce7095cbc",
+          "type": "file",
+          "action": "disable",
+          "modId": "e2e-disable-me",
+          "file": "e2e-disable-me-1.0.0.jar",
+          "resultFile": "e2e-disable-me-1.0.0.jar.disabled",
+          "status": "REVERTED",
+          "opId": "87b337cd-0966-4cc1-a654-6a1d7cd94a8c"
+        },
+        {
+          "id": "08fd19ad-4ec2-4a9e-94cd-7ad69145945f",
+          "type": "file",
+          "action": "enable",
+          "modId": "e2e-added",
+          "file": "e2e-added-1.0.0.jar",
+          "status": "REVERTED",
+          "opId": "0d5215c3-963d-414d-94e5-235d31feffb2",
+          "group": "267f68d9-6624-42c3-8560-a708581c67a7"
+        }
+      ]
+    },
+    {
+      "id": "eeb8906b-99a8-448d-866b-ffb32bdf7115",
+      "at": "2026-09-25T05:55:14.087803900Z",
+      "kind": "undo",
+      "rigtuneVersion": "0.2.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "undoOf": "c450f64c-1bf3-4061-addb-3ec34f718467",
+      "changes": [
+        {
+          "id": "37546ec0-f984-44bc-bbde-ad0a19168674",
+          "type": "file",
+          "action": "disable",
+          "modId": "e2e-added",
+          "file": "e2e-added-1.0.0.jar",
+          "resultFile": "e2e-added-1.0.0.jar.disabled",
+          "status": "APPLIED",
+          "opId": "3508eae7-59bb-45af-b2f2-634591d6cb59",
+          "group": "c9ce503b-a937-442a-a8dd-8b2871cf0d66",
+          "reverts": "08fd19ad-4ec2-4a9e-94cd-7ad69145945f"
+        },
+        {
+          "id": "328297bf-0bc7-4e05-9ad3-c1094c5f8017",
+          "type": "file",
+          "action": "enable",
+          "modId": "e2e-disable-me",
+          "file": "e2e-disable-me-1.0.0.jar",
+          "status": "APPLIED",
+          "opId": "9e74ab30-93bf-4850-89fd-c3b3ca561c94",
+          "group": "bd609796-2bc1-475d-9673-35c120a75cea",
+          "reverts": "49906f41-23c4-42b3-8b51-ec4ce7095cbc"
+        }
+      ]
+    }
+  ]
+}

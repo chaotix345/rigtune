@@ -8,6 +8,8 @@ the new version starts on the same instance. Each folder's `RESULT.md` has every
 
 | run | installed → update | result | date |
 |---|---|---|---|
+| [final-v010-to-020](final-v010-to-020/RESULT.md) | the released `rigtune-0.1.0.jar` (sha256 `8294d04a…`, unmodified) → the merged integration build (feat/v0.2.0 @ 5f57eee, `rigtune-0.2.0-dev+mc26.2.jar`); 0.1.0 also disabled a test mod in the same apply; `--expect-history` | PASS (21/21 checks) | 2026-09-25 (Phase 5, final) |
+| [undo-after-restart](undo-after-restart/RESULT.md) | plan review M14 on the same integration build: one Apply adds a mod from the fake Modrinth and disables another → quit → helper → Undo last apply (the confirmation screen's button) → quit → helper → next start | PASS (22/22 checks) | 2026-09-25 (Phase 5) |
 | [v010-to-dev](v010-to-dev/RESULT.md) | the released `rigtune-0.1.0.jar` (sha256 `8294d04a…`, unmodified) → `rigtune-0.2.0-dev+mc26.2.jar` built from `feat/self-update-e2e` | PASS (19/19 checks) | 2026-09-25 (Wave A) |
 | [dev-to-dev](dev-to-dev/RESULT.md) | `rigtune-0.2.0-dev.1+mc26.2.jar` → `rigtune-0.2.0-dev.2+mc26.2.jar`, same sources (plan review M12: the 0.2 helper applies its own successor) | PASS (19/19 checks) | 2026-09-25 (Wave A) |
 | [v010-offline-race](v010-offline-race/RESULT.md) | as v010-to-dev, an earlier run without the driver's Rescan fallback | FAIL: 0.1.0 made no Modrinth lookups (see below) | 2026-09-25 |
@@ -36,6 +38,26 @@ What the v0.1.0 run shows (SPEC item 5, AC5.1, AC5.2):
 - 0.2 then started from `mods/`, kept the goal QUALITY that 0.1.0 had saved, showed the apply toast ("RigTune applied 2
   change(s)", `e2e-verify-1-title.png`) and recorded it in `rigtune.json`, and offered no further update.
 
-Not covered yet (Phase 5, against the merged integration build): the `history.json` legacy import (`--expect-history`,
-needs WS-B) and the end-to-end undo after a restart (plan review M14). Both runs used `0.2.0-dev` builds of this branch,
-not the final integration jar.
+## Phase 5, on the merged integration build (feat/v0.2.0 @ 5f57eee)
+
+`final-v010-to-020` repeats the v0.1.0 run against the integration jar. The 0.1.0 driver also disabled a test mod
+(`e2e-legacy`) in the same apply as the update. 0.2's legacy import only records changes that aren't RigTune's own, so
+a plain self-update leaves no `legacy-import` entry at all. 0.2 then wrote `history.json` with exactly one
+`legacy-import` entry, holding that disable as `APPLIED` (with `resultFile` `e2e-legacy-1.0.0.jar.disabled` and
+`modId` read from the jar), and nothing of RigTune's own jars (`history-after-verify.json`). The toast said "RigTune
+applied 3 change(s)".
+
+`undo-after-restart` (plan review M14), three real starts of 0.2 on one instance:
+- Start 1: one Apply adds `e2e-added` (downloaded from the fake `cdn.modrinth.com` through DependencyResolver,
+  DownloadPlanner and the SHA-512 check) and disables `e2e-disable-me`. The helper applies both, and `history.json` has
+  one `apply` entry with both file changes `APPLIED`.
+- Start 2: "Undo last apply". The plan has two reverts that need a restart; `e2e-mod-undo-1-plan.png` is the
+  confirmation screen. The driver presses the screen's Undo button, which reports "Undone: 0 now, 2 after a restart, 0
+  cancelled, 0 skipped" (`e2e-mod-undo-2-after.png`). The helper disables `e2e-added` and re-enables `e2e-disable-me`.
+  `history.json` has one `undo` entry whose two changes are `APPLIED`, each `reverts` an apply change, and the apply's
+  changes are `REVERTED`.
+- Start 3: `e2e-disable-me` is loaded again and `e2e-added` isn't. The undo screen says "Nothing to undo."
+  (`e2e-mod-check-1-undo.png`). The mods folder and the history statuses are unchanged.
+
+The Add and Disable rows come from the driver rather than from the report: M14 is about the journal and the post-exit
+undo pipeline across real restarts, not about which mods the rules suggest.

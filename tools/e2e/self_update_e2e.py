@@ -38,6 +38,8 @@ HELPER_DONE = ("All operations done", "Some operations were not applied", "Nothi
 # A fresh instance: no accessibility onboarding (it would sit in front of the title screen), windowed, muted.
 OPTIONS = "onboardAccessibility:false\nfullscreen:false\nskipMultiplayerWarning:true\ntutorialStep:none\n" \
           "joinedFirstServer:true\nsoundCategory_master:0.0\n"
+# Evidence and fixtures are written with LF, as the repository stores text (.gitattributes).
+LF = chr(10)
 CAPTURED = ("pending.json", "last-apply.json", "rigtune.json", "rules-cache.json", "helper.log")
 UNDO_PHASES = ("mod-apply", "mod-undo", "mod-check")
 ADDED_ID = "e2e-added"
@@ -457,17 +459,18 @@ class Run:
         for source in texts:
             if source.is_file():
                 name = ("captured-" + source.name) if source.parent.name == "captured-raw" else source.name
-                (dest / name).write_text(self.scrub(source.read_text(encoding="utf-8", errors="replace")), encoding="utf-8")
+                (dest / name).write_text(self.scrub(source.read_text(encoding="utf-8", errors="replace")), encoding="utf-8", newline=LF)
         for phase in self.checks:
             source = self.out / "latest-{}.log".format(phase)
             if source.is_file():
-                (dest / "latest-{}.filtered.log".format(phase)).write_text(self.scrub(filtered_log(source)), encoding="utf-8")
+                (dest / "latest-{}.filtered.log".format(phase)).write_text(self.scrub(filtered_log(source)), encoding="utf-8", newline=LF)
         for shot in sorted((self.instance / "screenshots").glob("e2e-*.png")):
             shutil.copyfile(shot, dest / shot.name)
         # Scrubbed before serialising: a detail holding a Python repr of paths would be escaped twice by json.dumps.
         (dest / "checks.json").write_text(json.dumps({phase: [dict(c.__dict__, detail=self.scrub(c.detail)) for c in checks]
-                                                      for phase, checks in self.checks.items()}, indent=1), encoding="utf-8")
-        (dest / "RESULT.md").write_text(self.result_markdown(verdict, sorted(p.name for p in dest.iterdir())), encoding="utf-8")
+                                                      for phase, checks in self.checks.items()}, indent=1), encoding="utf-8",
+                                          newline=LF)
+        (dest / "RESULT.md").write_text(self.result_markdown(verdict, sorted(p.name for p in dest.iterdir())), encoding="utf-8", newline=LF)
         self.log("evidence in " + str(dest))
 
     def result_markdown(self, verdict, files):
@@ -510,7 +513,7 @@ class Run:
         manifest = {"capturedFrom": self.facts["old"], "updateTo": self.facts["new"], "minecraft": self.mc,
                     "run": self.run_dir.name, "verdict": verdict, "failedChecks": failed, "token": fixtures.TOKEN,
                     "files": {p.name: e2e_checks.digest(p, "sha256") for p in written}}
-        (dest / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
+        (dest / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8", newline=LF)
         self.log("fixtures: " + ", ".join(p.name for p in written))
 
     # --- main -----------------------------------------------------------------------------------------------------

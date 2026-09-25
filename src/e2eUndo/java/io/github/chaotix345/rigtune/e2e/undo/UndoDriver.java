@@ -19,8 +19,12 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +45,7 @@ import java.util.Map;
  * <ul>
  * <li>{@code mod-apply}: applies, in one Apply, "add" of the Modrinth project -Drigtune.e2e.addProject (slug
  * -Drigtune.e2e.addSlug) and "disable" of the loaded mod -Drigtune.e2e.disable; waits until both are staged; quits.</li>
- * <li>{@code mod-undo}: Undo last apply: records the plan, screenshots the confirmation screen, carries the plan out,
+ * <li>{@code mod-undo}: Undo last apply: records the plan, screenshots the confirmation screen, presses its Undo button,
  * waits until the reversals are staged, quits.</li>
  * <li>{@code mod-check}: records the loaded mods and what is left to undo, screenshots the undo screen, quits.</li>
  * </ul>
@@ -71,8 +75,6 @@ public final class UndoDriver implements ClientModInitializer {
 	private int stepTicks;
 	// mod-apply: the jar being disabled.
 	private String disableFile;
-	// mod-undo: the plan shown, then carried out.
-	private UndoPlan pendingPlan;
 
 	@Override
 	public void onInitializeClient() {
@@ -191,14 +193,21 @@ public final class UndoDriver implements ClientModInitializer {
 					}
 					result.put("undoOf", plan.undoOf());
 					minecraft.gui.setScreen(new UndoScreen(minecraft.gui.screen(), controller, false));
-					pendingPlan = plan;
 				} else if (stepTicks == 2 * SECOND) {
 					screenshot(minecraft, "e2e-mod-undo-1-plan.png");
 				} else if (stepTicks == 3 * SECOND) {
-					// What the undo screen's confirm button does, with the plan it shows.
-					Component message = controller.undo(pendingPlan);
-					result.put("undoMessage", message.getString());
-					event("undo: " + message.getString());
+					// Press the confirmation screen's Undo button, as a player would; it carries out the plan it shows.
+					Button confirm = minecraft.gui.screen() == null ? null : minecraft.gui.screen().children().stream()
+							.filter(Button.class::isInstance).map(Button.class::cast)
+							.filter(b -> b.getMessage().getContents() instanceof TranslatableContents t && t.getKey().equals("rigtune.undo.confirm"))
+							.findFirst().orElse(null);
+					if (confirm == null || !confirm.active) {
+						fail(minecraft, "no active Undo button on " + minecraft.gui.screen());
+						return;
+					}
+					result.put("undoButton", confirm.getMessage().getString());
+					confirm.onPress(new MouseButtonEvent(confirm.getX() + 1, confirm.getY() + 1, new MouseButtonInfo(0, 0)));
+					event("pressed " + confirm.getMessage().getString());
 					next(Step.WAIT_STAGED);
 				}
 			}
