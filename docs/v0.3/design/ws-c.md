@@ -72,3 +72,18 @@ The line reads "In <name>: <steps>". Open-source launchers: labels copied from t
 ## Notes for other workstreams
 - WS-G (LangCheckTest): the `rigtune.launcher.name.*` and `rigtune.launcher.steps.*` keys appear as string literals in `core/launcher/LauncherInfo.java` (a switch), and the client passes them to `Component.translatable(variable)`. A scan of client code alone won't see them used; include core or treat `LauncherInfo` as their source.
 - WS-B/WS-F (RigTuneScreen): WS-C's changes are the `cpuAndMemory`/`launcherLine` helpers, two fields, one line in `init()`, the `tick()` condition and the entry's extra lines; nothing in the button row.
+
+## Evidence
+- Unit tests: `./gradlew build` green on 26.2 and 26.3, 894 tests each (1 skipped: the FIFO test on Windows; it runs on the Linux CI).
+- CI run https://github.com/chaotix345/rigtune/actions/runs/36176467280 (head 96f09df, after merging WS-0): every job green, including client game tests on 26.2 OpenGL, 26.3 OpenGL and 26.3 Vulkan.
+- AC5.3: each leg's artifacts have `launcher-none-*` and `launcher-modrinth-*` at 854x480@2, 1280x720@3 and 1280x720@2 (reviewed: the header reads "Memory 2.0 GB of 16 GB, set in the Modrinth App" and the ram-low advice ends with "In the Modrinth App: this instance → Instance settings (gear) → Sync overrides → turn on Custom memory allocation → set the slider."; without a brand the screen is as in 0.2). The "without" case is confirmed in each leg's latest.log: `LauncherGameTest: at start minecraft.launcher.brand=null; ... INST_ID set: false; INST_NAME set: false; detected: LauncherInfo[launcher=UNKNOWN, ...]`, and Loom's production run task sets no brand (source above). The job log prints no JVM arguments, so that line is the evidence.
+- Local `runClientGameTest` on 26.2 under the lock (2026-09-26): BUILD SUCCESSFUL, same log lines and screenshots.
+
+## Review (code-reviewer subagent on the branch diff)
+Verdict "approve after fixing 1". Fixed: (1, medium) a queued or timed-out probe could replace a known launcher with Unknown: detection is now once per session with per-caller timeouts on a copy; (2) the raw U+FEFF in source: removed, Gson's JsonReader skips a BOM itself (test kept); (3) instance.cfg with a BOM: stripped; (4) the stream cap now ends normally at exactly the cap; (5) the game test's cleanup no longer hides the first failure and waits for the rescan to settle; (6) shareReport read on the client thread; (7) the start-up "no launcher" check fails only in CI; (8) the screen logic moved to `LauncherLines`, `launcherLines()` computed on demand; (9) the list keeps ≥ 60 px at every size (asserted); (10) official steps no longer assume -Xmx2G, "three-dot menu" for both launchers; (11) `@Nullable` on the new ShareReport parameter; plus an end-to-end test of CurseForge `isMemoryOverride: false` → global steps.
+
+## Deviations and open items
+- Precedence: the official launcher's brand is checked after the instance files (see Detection), because CurseForge sends the same brand.
+- C-M3: the official launcher's literal is verified, so it's detected (not deferred). Its click steps, and CurseForge's, are from third-party/blog sources (not the apps' own UI strings): marked above.
+- Prism's `instance.cfg` must contain `InstanceType`: Prism accepts a file without it but writes `InstanceType=OneSix` whenever it loads an instance (`MinecraftInstance.cpp:247-249` at 11.1.0), so a launched instance always has it; without the key only the properties/env detect Prism (they're always set by Prism's launch wrapper).
+- GDLauncher and other launchers stay Unknown (no verified literal).
