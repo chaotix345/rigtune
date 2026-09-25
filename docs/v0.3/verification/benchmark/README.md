@@ -15,7 +15,7 @@ Per render distance step: the chunks within RD − 1 of the camera present on th
 | 32 | 3,001 | 2,999 | 3,468 | 20.0 s (timeout) | 3,001 | 3,550 | 12.3 s |
 
 - The chunk counts grow with every step on both versions. Before the fix, the research probe saw the client stuck at 162 (26.2) and 167 (26.3) chunks after RD 5 → 12, for 120 s (docs/research/v0.3/benchmark.md §1.2): the up-steps measured the starting chunk set.
-- 26.2's RD 32 step hit the 20 s timeout with 2 of 3,001 chunks missing (0.07%). That's within the 2% allowed (E-M1), so the step still counted; its log line says so. Everything was present by the repeats (3,001 of 3,001, client 3,725).
+- 26.2's RD 32 step hit the 20 s timeout with 2 of 3,001 chunks missing (0.07%). That's within the 2% allowed (E-M1), so the step still counted. (Its log line in this run reads "timed out waiting for the sections"; since 4813ac1 it says "timed out with 2 missing (within the 2% allowed)".) Everything was present by the repeats (3,001 of 3,001, client 3,725).
 - Both chose RD 32 (the maximum): every step met 170 FPS in 1% lows on this machine (26.2: 594, 592, 392, 426, 250; 26.3: 602, 646, 559, 525, 290). The 1% lows now fall overall as the terrain grows (594 at RD 8 to 250 at RD 32 on 26.2), which is the cost the up-steps are meant to measure.
 
 ## Game tests (CI, every leg)
