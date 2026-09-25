@@ -97,6 +97,45 @@ class JournalTest {
 		assertEquals(List.of("staged", "applied-6"), ids.subList(0, 2));
 	}
 
+	// Review: an earlier .bad backup is never overwritten.
+	@Test
+	void corruptFilesAreKeptAsNumberedBackups() throws Exception {
+		Files.createDirectories(Journal.file(config).getParent());
+		Files.writeString(Journal.file(config), "first");
+		journal().record("e1", JournalEntry.APPLY, List.of(vanilla("vanilla.a", "1", "2")));
+		Files.writeString(Journal.file(config), "second");
+		journal().record("e2", JournalEntry.APPLY, List.of(vanilla("vanilla.a", "1", "2")));
+
+		assertEquals("first", Files.readString(Journal.file(config).resolveSibling("history.json.bad")));
+		assertEquals("second", Files.readString(Journal.file(config).resolveSibling("history.json.bad.1")));
+		assertEquals(List.of("e2"), journal().entries().stream().map(JournalEntry::id).toList());
+	}
+
+	// Review: bytes that aren't UTF-8 make the file corrupt; otherwise every later update would fail.
+	@Test
+	void invalidUtf8IsCorrupt() throws Exception {
+		Files.createDirectories(Journal.file(config).getParent());
+		Files.write(Journal.file(config), new byte[]{'{', (byte) 0xC3, (byte) 0x28, '}'});
+
+		assertEquals(List.of(), journal().entries());
+		journal().record("e1", JournalEntry.APPLY, List.of(vanilla("vanilla.a", "1", "2")));
+
+		assertTrue(Files.exists(Journal.file(config).resolveSibling("history.json.bad")));
+		assertEquals(List.of("e1"), journal().entries().stream().map(JournalEntry::id).toList());
+		assertTrue(warnings.isEmpty(), warnings.toString());
+	}
+
+	@Test
+	void entriesWithoutAnIdAreDropped() throws Exception {
+		Files.createDirectories(Journal.file(config).getParent());
+		Files.writeString(Journal.file(config), "{\"formatVersion\": 1, \"entries\": [{\"kind\": \"apply\", \"changes\": []}]}");
+
+		assertEquals(List.of(), journal().entries());
+		journal().record("e1", JournalEntry.APPLY, List.of(vanilla("vanilla.a", "1", "2")));
+
+		assertEquals(List.of("e1"), journal().entries().stream().map(JournalEntry::id).toList());
+	}
+
 	@Test
 	void aCorruptFileIsKeptAsBadAndTheJournalStartsFresh() throws Exception {
 		Files.createDirectories(Journal.file(config).getParent());

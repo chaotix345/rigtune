@@ -9,10 +9,10 @@ import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.AtomicFiles;
 
 import java.io.IOException;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -134,7 +134,7 @@ public final class Journal implements ChangeRecorder {
 				case NEWER -> {
 					return false;
 				}
-				case CORRUPT -> Files.move(file, file.resolveSibling(file.getFileName() + ".bad"), StandardCopyOption.REPLACE_EXISTING);
+				case CORRUPT -> Files.move(file, backupName());
 				case OK -> {
 				}
 			}
@@ -145,6 +145,15 @@ public final class Journal implements ChangeRecorder {
 			AtomicFiles.writeString(file, GSON.toJson(new HistoryFile(FORMAT_VERSION, next)));
 			return true;
 		}
+	}
+
+	// history.json.bad, or .bad.1, .bad.2... so an earlier backup is never overwritten.
+	private Path backupName() {
+		Path candidate = file.resolveSibling(file.getFileName() + ".bad");
+		for (int i = 1; Files.exists(candidate); i++) {
+			candidate = file.resolveSibling(file.getFileName() + ".bad." + i);
+		}
+		return candidate;
 	}
 
 	private List<JournalEntry> first() {
@@ -164,7 +173,12 @@ public final class Journal implements ChangeRecorder {
 		if (!Files.exists(file)) {
 			return new Read(State.MISSING, List.of());
 		}
-		String json = Files.readString(file, StandardCharsets.UTF_8);
+		String json;
+		try {
+			json = Files.readString(file, StandardCharsets.UTF_8);
+		} catch (CharacterCodingException e) {
+			return new Read(State.CORRUPT, List.of());
+		}
 		try {
 			JsonElement root = JsonParser.parseString(json);
 			if (!root.isJsonObject() || !root.getAsJsonObject().has("formatVersion")) {
@@ -175,7 +189,7 @@ public final class Journal implements ChangeRecorder {
 			}
 			HistoryFile history = GSON.fromJson(root, HistoryFile.class);
 			List<JournalEntry> entries = history.entries() == null ? List.of()
-					: history.entries().stream().filter(Objects::nonNull).toList();
+					: history.entries().stream().filter(e -> e != null && e.id() != null).toList();
 			return new Read(State.OK, entries);
 		} catch (JsonParseException | IllegalStateException | NumberFormatException | UnsupportedOperationException e) {
 			return new Read(State.CORRUPT, List.of());
@@ -208,7 +222,7 @@ public final class Journal implements ChangeRecorder {
 		List<JournalEntry> out = new ArrayList<>(entries);
 		for (int i = 0; i < out.size(); i++) {
 			JournalEntry e = out.get(i);
-			if (e.id().equals(entryId)) {
+			if (Objects.equals(e.id(), entryId)) {
 				List<JournalChange> all = new ArrayList<>(e.changes());
 				all.addAll(changes);
 				out.set(i, new JournalEntry(e.id(), e.at(), e.kind(), e.rigtuneVersion(), e.mcVersion(), e.undoOf(), all));
