@@ -36,6 +36,7 @@ class KnowledgeV2ScenarioTest {
 	private static final String THREADS = "dh.common.multiThreading.numberOfThreads";
 	private static final String SHADOW = "iris.maxShadowRenderDistance";
 	private static final String SHADERS = "shaders-enabled";
+	private static final List<String> DH_MODS = List.of("sodium", "distanthorizons");
 
 	// Distant Horizons 3.3.2's defaults (numberOfThreads is half the logical cores; 4 on the 8-thread laptop).
 	private static final Map<String, String> DH_DEFAULTS = Map.of(LOD, "256", VERTICAL, "MEDIUM", HORIZONTAL, "MEDIUM",
@@ -71,6 +72,25 @@ class KnowledgeV2ScenarioTest {
 		return hw;
 	}
 
+	// Heap tier 1 (under 1792 MB) makes the laptop effective tier 1.
+	private static Fixtures.Hw tier1Laptop() {
+		Fixtures.Hw hw = Fixtures.lowEndLaptop();
+		hw.heapMb = 1024;
+		return hw;
+	}
+
+	// A GPU-tier-3 card with the tier-5 CPU and heap of the user's rig: effective tier 3.
+	private static Fixtures.Hw tier3Rig() {
+		return gpu("AMD Radeon RX 5700 XT");
+	}
+
+	// Heap tier 4 (3840..5631 MB) on the user's rig: effective tier 4.
+	private static Fixtures.Hw tier4Rig() {
+		Fixtures.Hw hw = Fixtures.userRig();
+		hw.heapMb = 4096;
+		return hw;
+	}
+
 	private static Map<String, String> with(Map<String, String> base, String... keyValues) {
 		Map<String, String> out = new HashMap<>(base);
 		for (int i = 0; i < keyValues.length; i += 2) {
@@ -82,6 +102,10 @@ class KnowledgeV2ScenarioTest {
 	private static String target(Map<String, Recommendation> recs, String key) {
 		Recommendation rec = recs.get("set:" + key);
 		return rec == null ? null : ((Action.SetSetting) rec.action()).newValue();
+	}
+
+	private static Set<String> dhKeys(Map<String, Recommendation> recs) {
+		return recs.keySet().stream().filter(id -> id.startsWith("set:dh.")).map(id -> id.substring("set:".length())).collect(Collectors.toSet());
 	}
 
 	private static Set<String> advice(Map<String, Recommendation> recs) {
@@ -104,21 +128,34 @@ class KnowledgeV2ScenarioTest {
 		for (String renderer : OTHER_GPUS) {
 			assertFalse(run(gpu(renderer), "sodium").containsKey("add:nvidium"), renderer);
 		}
+		assertFalse(run(gpu("NVIDIA GeForce RTX 2060 Laptop GPU"), "sodium").containsKey("add:nvidium"), "GPU tier 2");
 		assertFalse(run(gpu("NVIDIA GeForce RTX 2060")).containsKey("add:nvidium"), "needs Sodium");
 		assertFalse(run(withFlags(gpu("NVIDIA GeForce RTX 2060"), SHADERS), "sodium").containsKey("add:nvidium"), "off with shaders");
 	}
 
 	@Test
-	void nvidiumInstalledOnPascalIsDisabled() {
-		for (String pascalOrOlder : List.of("NVIDIA GeForce GTX 1080", "NVIDIA GeForce GTX 1050 Ti", "NVIDIA GeForce GTX 980 Ti",
-				"NVIDIA GeForce GT 1030", "NVIDIA GeForce MX150", "NVIDIA TITAN Xp", "Quadro P4000")) {
-			assertTrue(run(gpu(pascalOrOlder), "sodium", "nvidium").containsKey("disable:nvidium"), pascalOrOlder);
+	void nvidiumInstalledOnPreTuringIsDisabled() {
+		for (String preTuring : List.of("NVIDIA GeForce GTX 1080", "NVIDIA GeForce GTX 1050 Ti", "NVIDIA GeForce GTX 980 Ti",
+				"NVIDIA GeForce GT 1030", "NVIDIA GeForce MX150", "NVIDIA TITAN Xp", "Quadro P4000", "NVIDIA GeForce GTX 980M",
+				"NVIDIA GeForce 940MX", "NVIDIA GeForce 920M", "NVIDIA GeForce MX250", "Quadro M1200")) {
+			Recommendation rec = run(gpu(preTuring), "sodium", "nvidium").get("disable:nvidium");
+			assertNotNull(rec, preTuring);
+			assertTrue(rec.selectedByDefault(), preTuring);
 		}
 		assertTrue(run(Fixtures.userRig(), "sodium", "nvidium").containsKey("disable:nvidium"), "AMD");
-		// Not in the recommend list, but not known to lack mesh shaders either: a working Nvidium must not be flagged.
-		for (String renderer : List.of("NVIDIA GeForce RTX 2060", "NVIDIA GeForce RTX 2050", "NVIDIA GeForce GTX 1630", "NVIDIA TITAN RTX",
-				"NVIDIA RTX PRO 6000 Blackwell Workstation Edition", "NVIDIA GeForce MX450")) {
+		// Not offered on these, but not known to lack mesh shaders either: a working Nvidium must not be flagged.
+		for (String renderer : List.of("NVIDIA GeForce RTX 2060", "NVIDIA GeForce RTX 2060 Laptop GPU", "NVIDIA GeForce RTX 2050",
+				"NVIDIA GeForce GTX 1630", "NVIDIA TITAN RTX", "NVIDIA RTX PRO 6000 Blackwell Workstation Edition", "NVIDIA GeForce MX450")) {
 			assertFalse(run(gpu(renderer), "sodium", "nvidium").containsKey("disable:nvidium"), renderer);
+		}
+	}
+
+	@Test
+	void nvidiumFailsClosedWithoutGpuInfo() {
+		// No renderer and no vendor: the vendor and the model are UNKNOWN. An NVIDIA vendor string alone names no model.
+		for (Fixtures.Hw hw : List.of(Fixtures.userRig().gpu("", ""), Fixtures.userRig().gpu("NVIDIA Corporation", ""))) {
+			assertFalse(run(hw, "sodium", "nvidium").containsKey("disable:nvidium"));
+			assertFalse(run(hw, "sodium").containsKey("add:nvidium"));
 		}
 	}
 
@@ -138,36 +175,71 @@ class KnowledgeV2ScenarioTest {
 	}
 
 	@Test
+	void dhTier1Settings() {
+		Map<String, Recommendation> recs = run(tier1Laptop(), DH_MODS, DH_DEFAULTS);
+		assertEquals("48", target(recs, LOD));
+		assertEquals("LOW", target(recs, VERTICAL));
+		assertEquals("LOWEST", target(recs, HORIZONTAL));
+		assertEquals("TWO_BLOCKS", target(recs, RESOLUTION));
+		for (String key : List.of(LOD, VERTICAL, HORIZONTAL, RESOLUTION)) {
+			assertTrue(recs.get("set:" + key).selectedByDefault(), key);
+		}
+	}
+
+	@Test
 	void dhTier2Settings() {
-		Map<String, Recommendation> recs = run(Fixtures.lowEndLaptop(), List.of("sodium", "distanthorizons"), DH_DEFAULTS);
+		Map<String, Recommendation> recs = run(Fixtures.lowEndLaptop(), DH_MODS, DH_DEFAULTS);
 		assertEquals("64", target(recs, LOD));
 		assertEquals("LOW", target(recs, VERTICAL));
 		assertEquals("LOW", target(recs, HORIZONTAL));
-		assertEquals("HALF_CHUNK", target(recs, RESOLUTION));
+		assertEquals("TWO_BLOCKS", target(recs, RESOLUTION));
 		assertFalse(recs.containsKey("set:" + THREADS), "8 threads: DH's default of 4 is within the CPU-tier cap");
 		for (String key : List.of(LOD, VERTICAL, HORIZONTAL, RESOLUTION)) {
 			assertTrue(recs.get("set:" + key).selectedByDefault(), key);
 		}
 		assertEquals("Distant Horizons: LOD Chunk Render Distance Radius: 256 → 64", recs.get("set:" + LOD).title());
-		assertEquals("Distant Horizons: Max Horizontal Resolution: Block → Half a chunk", recs.get("set:" + RESOLUTION).title());
+		assertEquals("Distant Horizons: Max Horizontal Resolution: Block → 2 blocks", recs.get("set:" + RESOLUTION).title());
 
 		Map<String, Recommendation> withoutDh = run(Fixtures.lowEndLaptop(), List.of("sodium"), DH_DEFAULTS);
-		assertTrue(withoutDh.keySet().stream().noneMatch(id -> id.startsWith("set:dh.")), "gated on Distant Horizons");
+		assertTrue(dhKeys(withoutDh).isEmpty(), "gated on Distant Horizons");
 	}
 
 	@Test
-	void dhTier2NeverRaisesWhatThePlayerLowered() {
-		Map<String, Recommendation> recs = run(Fixtures.lowEndLaptop(), List.of("sodium", "distanthorizons"), with(DH_DEFAULTS, LOD, "32"));
-		assertFalse(recs.containsKey("set:" + LOD));
+	void dhLodCapNeverRaisesWhatThePlayerLowered() {
+		assertFalse(run(Fixtures.lowEndLaptop(), DH_MODS, with(DH_DEFAULTS, LOD, "32")).containsKey("set:" + LOD), "tier 2");
+		assertFalse(run(tier3Rig(), DH_MODS, with(DH_DEFAULTS, LOD, "64", THREADS, "8")).containsKey("set:" + LOD), "tier 3");
+	}
+
+	@Test
+	void dhEnumValuesCanRaiseASettingBelowThem() {
+		// Enums can't be capped: a value entry also raises a setting the player put lower. Known and accepted for tier <= 2.
+		Map<String, Recommendation> recs = run(Fixtures.lowEndLaptop(), DH_MODS, with(DH_DEFAULTS, VERTICAL, "HEIGHT_MAP", RESOLUTION, "CHUNK"));
+		assertEquals("LOW", target(recs, VERTICAL));
+		assertEquals("TWO_BLOCKS", target(recs, RESOLUTION));
+	}
+
+	@Test
+	void dhTier3CapsOnlyTheLodDistance() {
+		Map<String, Recommendation> recs = run(tier3Rig(), DH_MODS, with(DH_DEFAULTS, THREADS, "8"));
+		assertEquals(Set.of(LOD), dhKeys(recs));
+		assertEquals("96", target(recs, LOD));
+		assertTrue(recs.get("set:" + LOD).selectedByDefault());
+	}
+
+	@Test
+	void dhTier4OffersAShorterLodDistanceUnticked() {
+		Map<String, Recommendation> recs = run(tier4Rig(), DH_MODS, with(DH_DEFAULTS, THREADS, "8"));
+		assertEquals(Set.of(LOD), dhKeys(recs));
+		assertEquals("160", target(recs, LOD));
+		assertFalse(recs.get("set:" + LOD).selectedByDefault());
 	}
 
 	@Test
 	void dhTier5KeepsDefaults() {
 		Map<String, String> defaults = with(DH_DEFAULTS, THREADS, "8");
-		Map<String, Recommendation> recs = run(Fixtures.userRig(), List.of("sodium", "distanthorizons"), defaults);
-		assertTrue(recs.keySet().stream().noneMatch(id -> id.startsWith("set:dh.")), recs.keySet().toString());
+		assertTrue(dhKeys(run(Fixtures.userRig(), DH_MODS, defaults)).isEmpty());
 
-		Recommendation far = run(Fixtures.userRig(), List.of("sodium", "distanthorizons"), with(defaults, LOD, "512")).get("set:" + LOD);
+		Recommendation far = run(Fixtures.userRig(), DH_MODS, with(defaults, LOD, "512")).get("set:" + LOD);
 		assertEquals("256", ((Action.SetSetting) far.action()).newValue());
 		assertFalse(far.selectedByDefault());
 	}
@@ -176,23 +248,35 @@ class KnowledgeV2ScenarioTest {
 	void dhThreadsClampedByCpuTier() {
 		Fixtures.Hw fourThreads = Fixtures.userRig();
 		fourThreads.cpu = new CpuInfo("Intel(R) Core(TM) i3-7100 CPU @ 3.90GHz", 2, 4, -1);
-		Map<String, Recommendation> recs = run(fourThreads, List.of("sodium", "distanthorizons"), with(DH_DEFAULTS, THREADS, "8"));
-		assertEquals("2", target(recs, THREADS));
+		assertEquals("2", target(run(fourThreads, DH_MODS, with(DH_DEFAULTS, THREADS, "8")), THREADS));
+		assertFalse(run(fourThreads, DH_MODS, with(DH_DEFAULTS, THREADS, "1")).containsKey("set:" + THREADS), "never raises");
 	}
 
 	@Test
 	void irisShadowDistanceWithShadersOnly() {
 		Map<String, String> iris = Map.of(SHADOW, "32");
-		Recommendation rec = run(withFlags(Fixtures.lowEndLaptop(), SHADERS), List.of("sodium", "iris"), iris).get("set:" + SHADOW);
-		assertEquals("6", ((Action.SetSetting) rec.action()).newValue());
-		assertTrue(rec.selectedByDefault());
-		assertEquals("Iris: Max Shadow Distance: 32 → 6", rec.title());
-		assertFalse(run(Fixtures.lowEndLaptop(), List.of("sodium", "iris"), iris).containsKey("set:" + SHADOW));
+		List<String> mods = List.of("sodium", "iris");
+
+		Recommendation tier1 = run(withFlags(tier1Laptop(), SHADERS), mods, iris).get("set:" + SHADOW);
+		assertEquals("4", ((Action.SetSetting) tier1.action()).newValue());
+		assertTrue(tier1.selectedByDefault());
+
+		Recommendation tier2 = run(withFlags(Fixtures.lowEndLaptop(), SHADERS), mods, iris).get("set:" + SHADOW);
+		assertEquals("6", ((Action.SetSetting) tier2.action()).newValue());
+		assertTrue(tier2.selectedByDefault());
+		assertEquals("Iris: Max Shadow Distance: 32 → 6", tier2.title());
+
+		Recommendation tier3 = run(withFlags(tier3Rig(), SHADERS), mods, iris).get("set:" + SHADOW);
+		assertEquals("8", ((Action.SetSetting) tier3.action()).newValue());
+		assertFalse(tier3.selectedByDefault());
+
+		assertFalse(run(withFlags(Fixtures.userRig(), SHADERS), mods, iris).containsKey("set:" + SHADOW), "tier 5");
+		assertFalse(run(Fixtures.lowEndLaptop(), mods, iris).containsKey("set:" + SHADOW), "shaders off");
 	}
 
 	@Test
 	void renderScaleForMidTierGpuAt1440p() {
-		Fixtures.Hw midTier = gpu("AMD Radeon RX 5700 XT");
+		Fixtures.Hw midTier = tier3Rig();
 		assertTrue(run(midTier, "sodium").containsKey("add:renderscale"), "2560x1440");
 		midTier.display = new DisplayInfo(1920, 1080, 144, true);
 		assertFalse(run(midTier, "sodium").containsKey("add:renderscale"), "1920x1080");
@@ -230,9 +314,16 @@ class KnowledgeV2ScenarioTest {
 		assertTrue(laptop.contains("shaders-entry-level"));
 		assertFalse(laptop.contains("heavy-shaders"));
 
-		Set<String> midTier = advice(run(withFlags(gpu("AMD Radeon RX 5700 XT"), SHADERS), "sodium", "iris"));
+		Set<String> midTier = advice(run(withFlags(tier3Rig(), SHADERS), "sodium", "iris"));
 		assertTrue(midTier.contains("heavy-shaders"));
 		assertFalse(midTier.contains("shaders-entry-level"));
+
+		// Tier 1 because of the heap, with a strong GPU: the GPU isn't what's short, so neither shader warning.
+		Fixtures.Hw strongGpu = withFlags(Fixtures.userRig(), SHADERS);
+		strongGpu.heapMb = 1024;
+		Set<String> heapLimited = advice(run(strongGpu, "sodium", "iris"));
+		assertFalse(heapLimited.contains("shaders-entry-level"));
+		assertFalse(heapLimited.contains("heavy-shaders"));
 	}
 
 	@Test
@@ -244,16 +335,16 @@ class KnowledgeV2ScenarioTest {
 	}
 
 	@Test
-	void ixerisReasonDependsOnMcVersion() {
-		Recommendation on262 = run(Fixtures.userRig(), "sodium").get("add:ixeris");
-		assertTrue(on262.selectedByDefault());
-		assertFalse(on262.reason().contains("26.3"), on262.reason());
-
-		Fixtures.Hw mc263 = Fixtures.userRig();
-		mc263.mcVersion = "26.3";
-		Recommendation on263 = run(mc263, "sodium").get("add:ixeris");
-		assertTrue(on263.selectedByDefault());
-		assertTrue(on263.reason().contains("26.3") && on263.reason().contains("SDL"), on263.reason());
+	void ixerisIsTickedOnBothVersions() {
+		for (String mc : List.of("26.2", "26.3")) {
+			Fixtures.Hw hw = Fixtures.userRig();
+			hw.mcVersion = mc;
+			Recommendation rec = run(hw, "sodium").get("add:ixeris");
+			assertNotNull(rec, mc);
+			assertTrue(rec.selectedByDefault(), mc);
+			assertTrue(rec.reason().contains("26.3") && rec.reason().contains("SDL"), rec.reason());
+		}
+		assertEquals(1, RulesLoader.loadBundled().mods.stream().filter(m -> m.slug.equals("ixeris")).count());
 	}
 
 	@Test

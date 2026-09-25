@@ -177,23 +177,9 @@
 			"category": "utility",
 			"impact": "low",
 			"stability": "stable",
-			"reason": "Handles window and input events on a separate thread, and on Windows reads raw mouse input in batches, which can smooth out frame times, especially with a high-polling-rate mouse.",
-			"recommendWhen": { "mcVersionRange": "<26.3" },
-			"conflictsWith": [],
-			"v1": { "recommendWhen": { "always": true } }
-		},
-		{
-			"slug": "ixeris",
-			"projectId": "p8RJPJIC",
-			"title": "Ixeris",
-			"modIds": ["ixeris"],
-			"category": "utility",
-			"impact": "low",
-			"stability": "stable",
-			"reason": "Handles window and input events on a separate thread, which can smooth out frame times. Per its changelog, its batched raw mouse input for Windows isn't ported to Minecraft 26.3's new SDL window system yet, so the gain with a high-polling-rate mouse is smaller than on 26.2.",
-			"recommendWhen": { "mcVersionRange": ">=26.3" },
-			"conflictsWith": [],
-			"v1": false
+			"reason": "Handles window and input events on a separate thread, which can smooth out frame times. On Windows it also reads raw mouse input in batches, which helps most with a high-polling-rate mouse; per its changelog, that part isn't ported to Minecraft 26.3's new SDL window system yet, so the gain there is smaller.",
+			"recommendWhen": { "always": true },
+			"conflictsWith": []
 		},
 		{
 			"slug": "badoptimizations",
@@ -341,13 +327,13 @@
 			"impact": "high",
 			"stability": "beta",
 			"reason": "Replaces Sodium's terrain renderer with one built on NVIDIA mesh shaders, which can greatly raise FPS at high render distances.",
-			"recommendWhen": { "gpuVendor": ["nvidia"], "gpuIntegrated": false, "gpuModelMatches": "(?i)GTX\\s*16[56]0\\b|RTX\\s*(?:20[6-8]0|30[5-9]0|40[5-9]0|50[5-9]0)\\b|Quadro\\s*RTX\\s*\\d{4}\\b|RTX\\s*A\\d{3,4}\\b|RTX\\s*\\d{4}\\s*Ada\\b", "modPresent": ["sodium"] },
-			"avoidWhen": { "anyOf": [ { "not": { "gpuVendor": ["nvidia"] } }, { "gpuModelMatches": "(?i)GTX\\s*(?:[4-9]\\d0|10[5-8]0)\\b|GeForce\\s*(?:GT|GTS)\\s*\\d{3,4}\\b|\\bMX\\s*[1-3]\\d0\\b|TITAN\\s*(?:X|Xp|V|Black|Z)\\b|GTX\\s*TITAN|Quadro\\s*(?:[KMP]\\d{3,4}|GP100|GV100)\\b" }, { "flags": ["shaders-enabled"] } ] },
+			"recommendWhen": { "gpuVendor": ["nvidia"], "gpuIntegrated": false, "gpuTierAtLeast": 3, "gpuModelMatches": "(?i)GTX\\s*16[56]0\\b|RTX\\s*(?:20[6-8]0|30[5-9]0|40[5-9]0|50[5-9]0)\\b|Quadro\\s*RTX\\s*\\d{4}\\b|RTX\\s*A\\d{3,4}\\b|RTX\\s*\\d{4}\\s*Ada\\b", "modPresent": ["sodium"] },
+			"avoidWhen": { "anyOf": [ { "not": { "gpuVendor": ["nvidia"] } }, { "gpuModelMatches": "(?i)GTX\\s*(?:[4-9]\\d0|10[5-8]0)M?\\b|GeForce\\s*(?:GTS?\\s*)?\\d{3,4}(?:M|MX)?\\b|\\bMX\\s*[1-3]\\d0\\b|TITAN\\s*(?:X|Xp|V|Black|Z)\\b|GTX\\s*TITAN|Quadro\\s*(?:[KMP]\\d{3,4}M?|G[PV]100)\\b" }, { "flags": ["shaders-enabled"] } ] },
 			"avoidReason": "Nvidium needs an NVIDIA GTX 16-series or RTX graphics card (Turing or newer, for mesh shaders) and switches itself off while a shader pack is on, so it can't help on this setup.",
 			"conflictsWith": [],
 			"v1": {
 				"recommendWhen": { "gpuVendor": ["nvidia"], "gpuIntegrated": false, "gpuTierAtLeast": 4, "modPresent": ["sodium"] },
-				"avoidWhen": { "anyOf": [ { "not": { "gpuVendor": ["nvidia"] } }, { "gpuTierAtMost": 2 }, { "flags": ["shaders-enabled"] } ] }
+				"avoidWhen": { "anyOf": [ { "not": { "gpuVendor": ["nvidia"] } }, { "flags": ["shaders-enabled"] } ] }
 			}
 		},
 		{
@@ -517,19 +503,16 @@
 		{ "key": "sodium.performance.chunk_build_defer_mode", "value": "ONE_FRAME", "when": { "tierAtLeast": 4, "goal": ["quality"] }, "impact": "low", "reason": "Your hardware has headroom, so Sodium can show block changes within one frame at a small FPS cost." },
 		{ "key": "sodium.performance.quad_splitting_mode", "value": "OFF", "when": { "tierAtMost": 1 }, "impact": "low", "reason": "Skipping Sodium's extra work for overlapping see-through blocks (like waterlogged glass panes) helps very weak GPUs; those blocks may look slightly wrong." },
 
-		{ "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "max": 48, "when": { "modPresent": ["distanthorizons"], "tierAtMost": 1 }, "impact": "high", "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). Community Distant Horizons guides suggest a short distance on weak PCs, so RigTune caps it at 48 chunks on low-end hardware.", "v1": false },
-		{ "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "max": 64, "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 2, "tierAtMost": 2 }, "impact": "high", "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). Community Distant Horizons guides suggest about 64 to 96 chunks for entry-level PCs; RigTune caps it at 64.", "v1": false },
-		{ "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "max": 96, "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 3, "tierAtMost": 3 }, "impact": "medium", "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). Community Distant Horizons guides suggest about 96 to 128 chunks for mid-range PCs; RigTune caps it at 96.", "v1": false },
+		{ "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "max": 48, "when": { "modPresent": ["distanthorizons"], "tierAtMost": 1 }, "impact": "high", "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 64 to 96 chunks for entry-level PCs; on low-end hardware RigTune caps it lower, at 48.", "v1": false },
+		{ "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "max": 64, "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 2, "tierAtMost": 2 }, "impact": "high", "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 64 to 96 chunks for entry-level PCs; RigTune caps it at 64.", "v1": false },
+		{ "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "max": 96, "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 3, "tierAtMost": 3 }, "impact": "medium", "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 96 to 128 chunks for mid-range PCs; RigTune caps it at 96.", "v1": false },
 		{ "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "value": 160, "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 4, "tierAtMost": 4 }, "impact": "medium", "defaultSelected": false, "reason": "Your hardware has headroom, but Distant Horizons' default of 256 chunks is a lot of far terrain to keep in memory; 160 chunks is a lighter starting point. This is RigTune's own estimate, so it starts unticked.", "v1": false },
 		{ "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "value": 256, "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 5 }, "impact": "low", "defaultSelected": false, "reason": "256 chunks is Distant Horizons' default and a good starting point for hardware this strong; going further costs more memory and GPU time.", "v1": false },
 
-		{ "key": "dh.client.advanced.graphics.quality.verticalQuality", "value": "LOW", "when": { "modPresent": ["distanthorizons"], "tierAtMost": 2 }, "impact": "medium", "reason": "Distant Horizons' own description says higher vertical quality uses more memory and GPU time. Low keeps far terrain light on this hardware; distant overhangs and caves look simpler.", "v1": false },
-		{ "key": "dh.client.advanced.graphics.quality.horizontalQuality", "value": "LOWEST", "when": { "modPresent": ["distanthorizons"], "tierAtMost": 1 }, "impact": "low", "reason": "The LOD dropoff distance sets how soon far terrain loses detail; Distant Horizons' own description says higher settings use more memory and GPU time. Lowest suits low-end hardware.", "v1": false },
-		{ "key": "dh.client.advanced.graphics.quality.horizontalQuality", "value": "LOW", "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 2, "tierAtMost": 2 }, "impact": "low", "reason": "The LOD dropoff distance sets how soon far terrain loses detail; Distant Horizons' own description says higher settings use more memory and GPU time. Low suits entry-level hardware.", "v1": false },
-		{ "key": "dh.client.advanced.graphics.quality.maxHorizontalResolution", "value": "CHUNK", "when": { "modPresent": ["distanthorizons"], "tierAtMost": 1 }, "impact": "medium", "reason": "Distant Horizons lists Chunk as the fastest and Block (its default) as the fanciest maximum resolution for far terrain. Chunk suits low-end hardware; distant terrain looks blockier.", "v1": false },
-		{ "key": "dh.client.advanced.graphics.quality.maxHorizontalResolution", "value": "HALF_CHUNK", "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 2, "tierAtMost": 2 }, "impact": "medium", "reason": "Distant Horizons lists Chunk as the fastest and Block (its default) as the fanciest maximum resolution for far terrain. Half a chunk keeps it light on entry-level hardware; distant terrain looks blockier.", "v1": false },
-		{ "key": "dh.client.advanced.graphics.quality.maxHorizontalResolution", "value": "FOUR_BLOCKS", "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 3, "tierAtMost": 3 }, "impact": "medium", "reason": "Distant Horizons lists Chunk as the fastest and Block (its default) as the fanciest maximum resolution for far terrain. 4 blocks keeps distant terrain detailed while using less memory and GPU time on mid-range hardware.", "v1": false },
-		{ "key": "dh.client.advanced.graphics.quality.maxHorizontalResolution", "value": "TWO_BLOCKS", "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 4, "tierAtMost": 4 }, "impact": "low", "defaultSelected": false, "reason": "Distant Horizons lists Block (its default) as the fanciest maximum resolution for far terrain. 2 blocks looks almost the same at a distance and uses less memory and GPU time. This is RigTune's own estimate, so it starts unticked.", "v1": false },
+		{ "key": "dh.client.advanced.graphics.quality.verticalQuality", "value": "LOW", "when": { "modPresent": ["distanthorizons"], "tierAtMost": 2 }, "impact": "medium", "reason": "Low is the vertical quality Distant Horizons' own Low quality preset uses (its default is Medium), and its description says higher settings use more memory and GPU time. Distant overhangs and caves look simpler.", "v1": false },
+		{ "key": "dh.client.advanced.graphics.quality.horizontalQuality", "value": "LOWEST", "when": { "modPresent": ["distanthorizons"], "tierAtMost": 1 }, "impact": "low", "reason": "The LOD dropoff distance sets how soon far terrain loses detail. Lowest is what Distant Horizons' own Minimum quality preset uses (its default is Medium), and its description says higher settings use more memory and GPU time.", "v1": false },
+		{ "key": "dh.client.advanced.graphics.quality.horizontalQuality", "value": "LOW", "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 2, "tierAtMost": 2 }, "impact": "low", "reason": "The LOD dropoff distance sets how soon far terrain loses detail. Low is what Distant Horizons' own Low quality preset uses (its default is Medium), and its description says higher settings use more memory and GPU time.", "v1": false },
+		{ "key": "dh.client.advanced.graphics.quality.maxHorizontalResolution", "value": "TWO_BLOCKS", "when": { "modPresent": ["distanthorizons"], "tierAtMost": 2 }, "impact": "medium", "reason": "2 blocks is the maximum far-terrain resolution Distant Horizons' own Minimum quality preset uses; every other preset uses Block, its default, which its description says costs more memory and GPU time.", "v1": false },
 
 		{ "key": "dh.common.multiThreading.numberOfThreads", "max": 1, "when": { "modPresent": ["distanthorizons"], "cpuTierAtMost": 1 }, "impact": "low", "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this small, more than 1 Distant Horizons thread competes with Minecraft itself and can cause stutter while far terrain loads.", "v1": false },
 		{ "key": "dh.common.multiThreading.numberOfThreads", "max": 2, "when": { "modPresent": ["distanthorizons"], "cpuTierAtLeast": 2, "cpuTierAtMost": 2 }, "impact": "low", "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 2 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads.", "v1": false },
@@ -622,7 +605,7 @@
 			"kind": "info",
 			"impact": "medium",
 			"title": "Distant Horizons on a PC with little RAM",
-			"text": "Per its FAQ, Distant Horizons needs roughly 2 to 4 GB more memory than vanilla, and this PC has less than 12 GB of RAM, so there's little room to give Minecraft more. Keep Distant Horizons' render distance short and close other apps while you play."
+			"text": "Per its FAQ, Distant Horizons needs roughly 2 to 4 GB more memory than vanilla, but this PC has less than 12 GB of RAM, so give Minecraft about 4 GB at most. Keep Distant Horizons' render distance short instead, and close other apps while you play."
 		},
 		{
 			"id": "battery",
@@ -667,7 +650,7 @@
 		},
 		{
 			"id": "shaders-entry-level",
-			"when": { "flags": ["shaders-enabled"], "tierAtMost": 2 },
+			"when": { "flags": ["shaders-enabled"], "tierAtMost": 2, "gpuTierAtMost": 3 },
 			"kind": "warning",
 			"impact": "high",
 			"title": "Shaders are heavy for this PC",
@@ -752,9 +735,9 @@
 		"dh.client.advanced.graphics.quality.verticalQuality": { "name": "Vertical Quality", "values": { "HEIGHT_MAP": "Height Map", "LOW": "Low", "MEDIUM": "Medium", "HIGH": "High", "VERY_HIGH": "Very High", "EXTREME": "Extreme", "PIXEL_ART": "Pixel Art" } },
 		"dh.client.advanced.graphics.quality.horizontalQuality": { "name": "LOD Dropoff Distance", "values": { "LOWEST": "Lowest", "LOW": "Low", "MEDIUM": "Medium", "HIGH": "High", "EXTREME": "Extreme" } },
 		"dh.client.advanced.graphics.quality.maxHorizontalResolution": { "name": "Max Horizontal Resolution", "values": { "CHUNK": "Chunk", "HALF_CHUNK": "Half a chunk", "FOUR_BLOCKS": "4 blocks", "TWO_BLOCKS": "2 blocks", "BLOCK": "Block" } },
-		"dh.common.multiThreading.numberOfThreads": { "name": "Number of Threads" },
+		"dh.common.multiThreading.numberOfThreads": { "name": "NO. of threads" },
 
-		"iris.maxShadowRenderDistance": { "name": "Max Shadow Distance", "values": { "0": "Off" } }
+		"iris.maxShadowRenderDistance": { "name": "Max Shadow Distance" }
 	},
 	"reviewIgnore": [
 		{ "slug": "servercore", "reason": "server-only; optimizes dedicated servers, no benefit to a singleplayer or LAN client" },

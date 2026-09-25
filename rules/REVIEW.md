@@ -6,7 +6,7 @@ Target MC versions: 26.3, 26.2, 26.1.2. Newest: 26.3.
 - New upstream mods to triage: 0
 - Rule mods with a status or removal concern: 0
 - Rule mods missing a Fabric build for 26.3: 4
-- Rules changed or omitted in rules-v1.json: 29
+- Rules changed or omitted in rules-v1.json: 24
 
 ## (a) Upstream mods not yet tracked in knowledge.json
 None found.
@@ -27,8 +27,6 @@ None found.
 
 | rule | change |
 |---|---|
-| mods[ixeris] | v1 override: recommendWhen |
-| mods[ixeris] | omitted ("v1": false) |
 | mods[nvidium] | v1 override: avoidWhen, recommendWhen |
 | mods[renderscale] | v1 override: reason, recommendWhen |
 | mods[lambdynamiclights] | omitted ("v1": false) |
@@ -41,16 +39,13 @@ None found.
 | settings[46] dh.client.advanced.graphics.quality.horizontalQuality | omitted ("v1": false) |
 | settings[47] dh.client.advanced.graphics.quality.horizontalQuality | omitted ("v1": false) |
 | settings[48] dh.client.advanced.graphics.quality.maxHorizontalResolution | omitted ("v1": false) |
-| settings[49] dh.client.advanced.graphics.quality.maxHorizontalResolution | omitted ("v1": false) |
-| settings[50] dh.client.advanced.graphics.quality.maxHorizontalResolution | omitted ("v1": false) |
-| settings[51] dh.client.advanced.graphics.quality.maxHorizontalResolution | omitted ("v1": false) |
+| settings[49] dh.common.multiThreading.numberOfThreads | omitted ("v1": false) |
+| settings[50] dh.common.multiThreading.numberOfThreads | omitted ("v1": false) |
+| settings[51] dh.common.multiThreading.numberOfThreads | omitted ("v1": false) |
 | settings[52] dh.common.multiThreading.numberOfThreads | omitted ("v1": false) |
-| settings[53] dh.common.multiThreading.numberOfThreads | omitted ("v1": false) |
-| settings[54] dh.common.multiThreading.numberOfThreads | omitted ("v1": false) |
-| settings[55] dh.common.multiThreading.numberOfThreads | omitted ("v1": false) |
-| settings[56] iris.maxShadowRenderDistance | omitted ("v1": false) |
-| settings[57] iris.maxShadowRenderDistance | omitted ("v1": false) |
-| settings[58] iris.maxShadowRenderDistance | omitted ("v1": false) |
+| settings[53] iris.maxShadowRenderDistance | omitted ("v1": false) |
+| settings[54] iris.maxShadowRenderDistance | omitted ("v1": false) |
+| settings[55] iris.maxShadowRenderDistance | omitted ("v1": false) |
 | advice[ram-distant-horizons] | v1 override: when |
 | advice[ram-shaders] | v1 override: when |
 | advice[ram-distant-horizons-shaders-limited] | omitted ("v1": false) |

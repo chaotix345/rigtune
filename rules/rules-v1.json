@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": 6,
-  "generatedAt": "2026-09-25T03:17:22Z",
+  "revision": 7,
+  "generatedAt": "2026-09-25T03:48:55Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -482,7 +482,7 @@
       "category": "utility",
       "impact": "low",
       "stability": "stable",
-      "reason": "Handles window and input events on a separate thread, and on Windows reads raw mouse input in batches, which can smooth out frame times, especially with a high-polling-rate mouse.",
+      "reason": "Handles window and input events on a separate thread, which can smooth out frame times. On Windows it also reads raw mouse input in batches, which helps most with a high-polling-rate mouse; per its changelog, that part isn't ported to Minecraft 26.3's new SDL window system yet, so the gain there is smaller.",
       "recommendWhen": {
         "always": true
       },
@@ -766,9 +766,6 @@
                 "nvidia"
               ]
             }
-          },
-          {
-            "gpuTierAtMost": 2
           },
           {
             "flags": [
@@ -1452,7 +1449,7 @@
       "kind": "info",
       "impact": "medium",
       "title": "Distant Horizons on a PC with little RAM",
-      "text": "Per its FAQ, Distant Horizons needs roughly 2 to 4 GB more memory than vanilla, and this PC has less than 12 GB of RAM, so there's little room to give Minecraft more. Keep Distant Horizons' render distance short and close other apps while you play."
+      "text": "Per its FAQ, Distant Horizons needs roughly 2 to 4 GB more memory than vanilla, but this PC has less than 12 GB of RAM, so give Minecraft about 4 GB at most. Keep Distant Horizons' render distance short instead, and close other apps while you play."
     },
     {
       "id": "battery",
@@ -1612,7 +1609,6 @@
       "ferrite-core",
       "immediatelyfast",
       "ixeris",
-      "ixeris",
       "lambdynamiclights",
       "lithium",
       "modernfix-mvus",
@@ -1637,7 +1633,6 @@
       "fastquit",
       "ferrite-core",
       "immediatelyfast",
-      "ixeris",
       "ixeris",
       "krypton",
       "lambdynamiclights",
@@ -1666,7 +1661,6 @@
       "fastquit",
       "ferrite-core",
       "immediatelyfast",
-      "ixeris",
       "ixeris",
       "krypton",
       "lambdynamiclights",
