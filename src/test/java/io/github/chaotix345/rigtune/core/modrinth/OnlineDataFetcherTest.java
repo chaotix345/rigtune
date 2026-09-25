@@ -65,6 +65,27 @@ class OnlineDataFetcherTest {
 		assertEquals(List.of("versionsByHashes", "latestVersionsByHashes", "projects", "latestVersion:P1"), client.calls);
 	}
 
+	// Plan review A-H1/A-M2: the resolver judges updates by their own dependencies and names installed versions by
+	// their project, so the result keeps the Modrinth versions (dependencies included); UpdateInfo stays as it was.
+	@Test
+	void keepsTheInstalledAndUpdateVersionsWithTheirDependencies() {
+		FakeModrinthClient client = new FakeModrinthClient();
+		client.current.put("aaa", version("sod1", "AANobbMI", "0.9.1", OLD, FakeModrinthClient.incompatible("K")));
+		client.latest.put("aaa", version("sod2", "AANobbMI", "0.9.2", NEW, new Dependency(null, "k1", "incompatible")));
+		client.current.put("bbb", version("lit1", "gvQqBUqZ", "0.15", NEW));
+		client.latest.put("bbb", version("lit1", "gvQqBUqZ", "0.15", NEW));
+
+		OnlineDataFetcher.Result result = new OnlineDataFetcher(client).fetchAll(List.of(mod("sodium", "aaa"), mod("lithium", "bbb")), List.of(), "26.2");
+
+		assertEquals(List.of(FakeModrinthClient.incompatible("K")), result.installedVersions().get("sod1").dependencies());
+		assertEquals(List.of(new Dependency(null, "k1", "incompatible")), result.updateVersions().get("sod2").dependencies());
+		assertEquals(java.util.Set.of("sod2"), result.updateVersions().keySet());
+		assertEquals(Map.of("sod1", "AANobbMI", "lit1", "gvQqBUqZ"), result.projectIdsByVersionId());
+		assertEquals("sod2", result.data().updatesByModId().get("sodium").newVersionId());
+		assertTrue(OnlineDataFetcher.Result.offline().installedVersions().isEmpty());
+		assertTrue(OnlineDataFetcher.Result.offline().updateVersions().isEmpty());
+	}
+
 	private static ModrinthProject project(String id, String slug, List<String> gameVersions, List<String> loaders) {
 		return new ModrinthProject(id, slug, slug, "approved", gameVersions, loaders, "optional");
 	}

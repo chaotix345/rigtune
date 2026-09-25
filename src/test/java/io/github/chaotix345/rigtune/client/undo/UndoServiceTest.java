@@ -140,7 +140,7 @@ class UndoServiceTest {
 	void undoLastPutsVanillaBackNowAndCancelsTheStagedChange() throws IOException {
 		JournalChange rd = JournalChange.setting("vanilla.renderDistance", "12", "16", JournalChange.APPLIED, null);
 		journal.record("e1", JournalEntry.APPLY, List.of(rd));
-		assertTrue(staging.stage(List.of(Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4"))), "e1"));
+		assertNotNull(staging.stage(List.of(Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4"))), "e1"));
 		vanilla.put("vanilla.renderDistance", "16");
 
 		UndoPlan plan = service.plan(false);

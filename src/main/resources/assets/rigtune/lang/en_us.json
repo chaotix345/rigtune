@@ -83,7 +83,7 @@
 	"rigtune.status.discarded": "Discarded %s pending change(s).",
 	"rigtune.status.discard_busy": "RigTune's apply helper is busy; try again in a moment.",
 	"rigtune.status.discard_failed": "Could not discard the pending changes; see the log.",
-	"rigtune.status.queued_update_dropped": "Cancelled RigTune's pending update of %s: it has an update of its own waiting in mods/update.",
+	"rigtune.status.queued_update_dropped": "Cancelled RigTune's pending change to %s: it has an update of its own waiting in mods/update.",
 	"rigtune.toast.abandoned.title": "RigTune dropped %s change(s)",
 	"rigtune.toast.abandoned.body": "They failed 3 times or the mod was installed another way. See config/rigtune/last-apply.json.",
 	"rigtune.toast.applied.title": "RigTune applied %s change(s)",
