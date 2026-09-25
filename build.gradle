@@ -1,5 +1,6 @@
 plugins {
 	id 'net.fabricmc.fabric-loom'
+	id 'com.modrinth.minotaur' version '2.10.0'
 }
 
 // This script runs once per Minecraft version (versions/<mc>/), with that version's gradle.properties.
@@ -103,6 +104,53 @@ jar {
 
 	from(rootProject.file("LICENSE")) {
 		rename { "${it}_$projectName" }
+	}
+}
+
+// --- Modrinth publishing (SPEC.md item 4) ---
+// One Modrinth version per Minecraft version: `./gradlew :<mc>:modrinth` runs this directly;
+// release.yml runs it once per version, after building, as an independent step per version.
+// `uploadFile = jar` (not remapJar: 26.x is unobfuscated, there is no remapJar task).
+// Verify locally without a token via `./gradlew :26.2:modrinth -PmodrinthDryRun`.
+def changelogForVersion(String modVersion) {
+	def file = rootProject.file('CHANGELOG.md')
+	if (!file.exists()) return ''
+	def lines = file.readLines()
+	// Accept the exact mod_version heading, or its release form with any "-dev"/pre-release
+	// suffix stripped, so a "0.2.0-dev" dev build still finds a "## [0.2.0]" section.
+	def candidates = [modVersion, modVersion.replaceAll(/-.*/, '')].unique()
+	def start = lines.findIndexOf { line -> line.startsWith('## ') && candidates.any { line.contains("[$it]") } }
+	if (start < 0) return ''
+	def end = lines.size()
+	for (int i = start + 1; i < lines.size(); i++) {
+		if (lines[i].startsWith('## ')) {
+			end = i
+			break
+		}
+	}
+	return lines.subList(start + 1, end).join('\n').trim()
+}
+
+// -PmodrinthDryRun (any value, or none) verifies the config/payload without a token or a real
+// upload: debugMode makes Minotaur log what it would send instead of calling the API, but it
+// still requires *a* token value, so a placeholder is used when MODRINTH_TOKEN isn't set. CI
+// only ever sets MODRINTH_TOKEN (and never this property), for a real, non-debug publish.
+def modrinthDryRun = providers.gradleProperty('modrinthDryRun').present
+def modrinthToken = System.getenv('MODRINTH_TOKEN') ?: (modrinthDryRun ? 'dry-run-placeholder-token' : null)
+
+modrinth {
+	token = modrinthToken
+	projectId = 'rigtune'
+	versionNumber = project.version.toString()
+	versionName = "RigTune ${project.mod_version} (MC ${mcVersion})"
+	versionType = 'release'
+	uploadFile = jar
+	gameVersions = [mcVersion]
+	loaders = ['fabric']
+	changelog = changelogForVersion(project.mod_version.toString())
+	debugMode = modrinthDryRun
+	dependencies {
+		required.project 'fabric-api'
 	}
 }
 
