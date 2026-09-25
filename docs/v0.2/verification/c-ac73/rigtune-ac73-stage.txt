@@ -1,0 +1,5 @@
+AC7.3 stage at 2026-09-25T06:01:47.393047900Z, Distant Horizons 3.3.0
+apply status: Restart Minecraft to finish applying 1 change(s).
+dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius: 512 -> 256 (staged 256)
+pending.json: 1 op(s): [PATCH_TOML {client.advanced.graphics.quality.lodChunkRenderDistanceRadius=256}]
+AC7.3 stage PASSED

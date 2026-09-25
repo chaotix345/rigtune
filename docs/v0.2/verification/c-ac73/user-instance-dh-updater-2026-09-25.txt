@@ -1,0 +1,5 @@
+[09:03:53] [Render thread/INFO]: Attempting to auto update Distant Horizons
+[09:08:58] [Render thread/WARN]: Failed to move updated fire from [<user instance>\mods\update\DistantHorizons-3.3.2 - 26.2 neo\fabric-26.2.jar] to [<user instance>\mods], please move it manually
+	at knot//com.seibel.distanthorizons.core.jar.updater.SelfUpdater.onClose(SelfUpdater.java:482)
+[09:08:59] [Render thread/INFO]: DeleteOnUnlock process started...
+[09:08:59] [Render thread/INFO]: DeleteOnUnlock running, old jar file at [<user instance>\mods\fabric-26.2.jar] should be deleted after Minecraft's JVM shutdown has completed.

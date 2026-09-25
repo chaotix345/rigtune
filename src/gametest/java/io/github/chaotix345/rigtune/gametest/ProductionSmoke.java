@@ -32,7 +32,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-// runProductionSmoke: read-only, so it never applies anything. It starts the benchmark only with -PsmokeBenchmark (BenchmarkSmoke).
+// runProductionSmoke: read-only, so it never applies anything, except -PsmokeDh=stage (DhConfigSmoke, AC7.3). It starts
+// the benchmark only with -PsmokeBenchmark (BenchmarkSmoke).
 final class ProductionSmoke {
 	private static final int REPORT_TIMEOUT_TICKS = 1200;
 	private static final int MAX_PAGES = 40;
@@ -75,6 +76,11 @@ final class ProductionSmoke {
 		writeReport(shown == null ? report : shown, restored, pages);
 		context.runOnClient(mc -> mc.gui.screen().onClose());
 		context.waitForScreen(TitleScreen.class);
+		String dh = System.getProperty("rigtune.smoke.dh");
+		if (dh != null) {
+			DhConfigSmoke.run(context, dh, shown == null ? report : shown);
+			return;
+		}
 
 		try (TestSingleplayerContext singleplayer = context.worldBuilder().create()) {
 			// At render distance 12 the harness's chunk download check never passes in production, even with fabric-api

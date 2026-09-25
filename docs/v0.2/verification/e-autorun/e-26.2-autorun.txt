@@ -1,0 +1,11 @@
+[15:56:05] [Render thread/INFO] (RigTune) Benchmark world: IDLE -> OPENING (creating the save)
+[15:56:08] [Render thread/INFO] (RigTune) Dev autorun: mode benchmark-world: start from the title screen -> started
+[15:56:10] [Render thread/INFO] (RigTune) Benchmark world: OPENING -> SETTING_UP (SET_UP Observation[worldLoaded=true, multiplayer=false, serverRunning=true, singleplayerReady=true, benchmarkSave=true, backOnMenu=false, atCamera=false])
+[15:56:12] [Render thread/INFO] (RigTune) Benchmark world: SETTING_UP -> READY (READY Observation[worldLoaded=true, multiplayer=false, serverRunning=true, singleplayerReady=true, benchmarkSave=true, backOnMenu=false, atCamera=true])
+[15:56:12] [Render thread/INFO] (RigTune) Benchmark world: ready at (0.5, 127.0, 192.5)
+[15:56:12] [Render thread/INFO] (RigTune) Benchmark started: TUNE in BENCHMARK_WORLD, target 170.0 FPS (uncapped), start Knobs[renderDistance=16, simulationDistance=12, dhRendering=false, shaders=false]
+[15:56:44] [Render thread/INFO] (RigTune) Benchmark finished: chosen Knobs[renderDistance=12, simulationDistance=12, dhRendering=false, shaders=false], target 170.0 FPS met true, result Aggregate[avgFps=2358.4016817058173, onePercentLowFps=545.9535476950423, p99FrameMs=1.5993, repeats=2, cv=0.022785414385190373], deadline hit false
+[15:56:44] [Render thread/INFO] (RigTune) Benchmark world: READY -> LEAVING (save and quit)
+[15:56:45] [Render thread/INFO] (RigTune) Benchmark world: LEAVING -> IDLE (FINISH_EXIT Observation[worldLoaded=false, multiplayer=false, serverRunning=false, singleplayerReady=false, benchmarkSave=false, backOnMenu=false, atCamera=false])
+[15:56:45] [Render thread/INFO] (RigTune) Dev autorun: back from the benchmark world: world state IDLE, screen BenchmarkResultScreen, outcome finished, record 2026-09-25T05:56:44Z-9685
+[15:56:48] [Render thread/INFO] (RigTune) Dev autorun: screen now BenchmarkResultScreen; PASSED; stopping the client

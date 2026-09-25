@@ -1,0 +1,12 @@
+AC7.3 check at 2026-09-25T06:08:30.980854300Z, Distant Horizons 3.3.0
+file dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius = 256 (staged 256) ok
+live dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius = 256, file 256, DH default 256 (staged)
+live dh.client.advanced.graphics.quality.verticalQuality = HIGH, file HIGH, DH default MEDIUM
+live dh.client.advanced.graphics.quality.horizontalQuality = HIGH, file HIGH, DH default MEDIUM
+live dh.client.advanced.graphics.quality.maxHorizontalResolution = BLOCK, file BLOCK, DH default BLOCK
+live values that differ from DH's defaults and match the file: 2
+last-apply.json (2026-09-25T06:02:08.078959300Z): [{client.advanced.graphics.quality.lodChunkRenderDistanceRadius=256} OK]
+pending.json gone true
+history.json: [dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius 512 -> 256 APPLIED]
+still recommended: []
+AC7.3 PASSED

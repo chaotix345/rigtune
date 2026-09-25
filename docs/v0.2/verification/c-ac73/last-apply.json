@@ -1,0 +1,18 @@
+{
+  "finishedAt": "2026-09-25T06:02:08.078959300Z",
+  "results": [
+    {
+      "op": {
+        "type": "PATCH_TOML",
+        "path": "<run>\\config\\DistantHorizons.toml",
+        "patches": {
+          "client.advanced.graphics.quality.lodChunkRenderDistanceRadius": "256"
+        },
+        "id": "de4d02c5-61dc-4f5e-9a04-06566d82d4d7",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Patched 1 value(s) in DistantHorizons.toml"
+    }
+  ]
+}
