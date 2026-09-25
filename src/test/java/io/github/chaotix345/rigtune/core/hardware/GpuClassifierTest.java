@@ -50,7 +50,67 @@ class GpuClassifierTest {
 			new Case("Qualcomm", "Qualcomm(R) Adreno(TM) X1-85 GPU", GpuVendor.QUALCOMM, true, 2, 2),
 			new Case("Mesa", "llvmpipe (LLVM 15.0.7, 256 bits)", GpuVendor.SOFTWARE, false, 0, 0),
 			new Case("Microsoft Corporation", "Microsoft Basic Render Driver", GpuVendor.SOFTWARE, false, 0, 0),
-			new Case("Microsoft Corporation", "GDI Generic", GpuVendor.SOFTWARE, false, 0, 0));
+			new Case("Microsoft Corporation", "GDI Generic", GpuVendor.SOFTWARE, false, 0, 0),
+			// v0.3 hardware refresh (docs/research/v0.3/hardware-tiers.md §4)
+			new Case("NVIDIA Corporation", "NVIDIA GeForce RTX 5090/PCIe/SSE2", GpuVendor.NVIDIA, false, 5, 5),
+			new Case("NVIDIA Corporation", "NVIDIA GeForce RTX 5070 Ti/PCIe/SSE2", GpuVendor.NVIDIA, false, 5, 5),
+			new Case("NVIDIA Corporation", "NVIDIA GeForce RTX 5070/PCIe/SSE2", GpuVendor.NVIDIA, false, 5, 5),
+			new Case("NVIDIA Corporation", "NVIDIA GeForce RTX 5060 Ti/PCIe/SSE2", GpuVendor.NVIDIA, false, 4, 4),
+			new Case("NVIDIA Corporation", "NVIDIA GeForce RTX 5050/PCIe/SSE2", GpuVendor.NVIDIA, false, 3, 3),
+			new Case("NVIDIA Corporation", "NVIDIA GeForce RTX 5090 Laptop GPU/PCIe/SSE2", GpuVendor.NVIDIA, false, 4, 4),
+			new Case("NVIDIA Corporation", "NVIDIA GeForce RTX 5070 Ti Laptop GPU/PCIe/SSE2", GpuVendor.NVIDIA, false, 3, 3),
+			new Case("NVIDIA Corporation", "NVIDIA GeForce RTX 5050 Laptop GPU/PCIe/SSE2", GpuVendor.NVIDIA, false, 2, 2),
+			new Case("ATI Technologies Inc.", "AMD Radeon RX 9070 XT", GpuVendor.AMD, false, 5, 5),
+			new Case("AMD", "AMD Radeon RX 9070 XT (radeonsi, gfx1201, LLVM 20.1.8, DRM 3.64, 6.16.0)", GpuVendor.AMD, false, 5, 5),
+			new Case("ATI Technologies Inc.", "AMD Radeon RX 9070", GpuVendor.AMD, false, 5, 5),
+			new Case("ATI Technologies Inc.", "AMD Radeon RX 9070 GRE", GpuVendor.AMD, false, 4, 4),
+			new Case("ATI Technologies Inc.", "AMD Radeon RX 9060 XT", GpuVendor.AMD, false, 4, 4),
+			new Case("ATI Technologies Inc.", "AMD Radeon RX 9060", GpuVendor.AMD, false, 4, 4),
+			new Case("Intel", "Intel(R) Arc(TM) B580 Graphics", GpuVendor.INTEL, false, 4, 4),
+			new Case("Intel", "Intel(R) Arc(TM) B570 Graphics", GpuVendor.INTEL, false, 4, 4),
+			new Case("Intel", "Intel(R) Arc(TM) Pro B50 Graphics", GpuVendor.INTEL, false, 3, 3),
+			new Case("Intel", "Intel(R) Arc(TM) Pro B60 Graphics", GpuVendor.INTEL, false, 4, 4),
+			new Case("Intel", "Intel(R) Arc(TM) Pro B65 Graphics", GpuVendor.INTEL, false, 4, 4),
+			new Case("Intel", "Intel(R) Arc(TM) Pro B70 Graphics", GpuVendor.INTEL, false, 4, 4),
+			new Case("Intel", "Mesa Intel(R) Arc(TM) Pro B60 Graphics (BMG G21)", GpuVendor.INTEL, false, 4, 4),
+			new Case("Intel", "Intel(R) Arc(TM) B390 Graphics", GpuVendor.INTEL, true, 3, 3),
+			new Case("Intel", "Intel(R) Arc(TM) 140V GPU (16GB)", GpuVendor.INTEL, true, 3, 3),
+			new Case("ATI Technologies Inc.", "AMD Radeon(TM) 8060S Graphics", GpuVendor.AMD, true, 4, 4),
+			new Case("ATI Technologies Inc.", "AMD Radeon(TM) 890M Graphics", GpuVendor.AMD, true, 3, 3),
+			new Case("Apple", "Apple M5", GpuVendor.APPLE, true, 3, 3),
+			new Case("Apple", "Apple M5 Pro", GpuVendor.APPLE, true, 4, 4),
+			new Case("Apple", "Apple M5 Max", GpuVendor.APPLE, true, 4, 4),
+			new Case("Apple", "Apple M5 Ultra", GpuVendor.APPLE, true, 5, 5));
+
+	private static GpuClass bundled(String vendor, String renderer) {
+		return GpuClassifier.from(RulesLoader.loadBundled()).classify(new GpuInfo(vendor, renderer, "1", GraphicsBackend.OPENGL, -1));
+	}
+
+	@Test
+	void newModelsMatchTheirOwnRows() {
+		assertTrue(bundled("ATI Technologies Inc.", "AMD Radeon RX 9070 GRE").matchedPattern().contains("GRE"));
+		assertTrue(bundled("Intel", "Intel(R) Arc(TM) Pro B50 Graphics").matchedPattern().contains("Pro\\s*B50"));
+		assertTrue(bundled("Intel", "Intel(R) Arc(TM) Pro B60 Graphics").matchedPattern().contains("Pro\\s*B[67]"));
+		assertTrue(bundled("NVIDIA Corporation", "NVIDIA GeForce RTX 5050/PCIe/SSE2").matchedPattern().contains("5050"));
+	}
+
+	@Test
+	void newRowsDoNotCatchOtherModels() {
+		GpuClass ti = bundled("NVIDIA Corporation", "NVIDIA GeForce RTX 5050 Ti/PCIe/SSE2");
+		assertNull(ti.matchedPattern(), "a future 5050 Ti falls through to the vendor fallback");
+		assertEquals(3, ti.tier());
+
+		GpuClass plainIntel = bundled("Intel", "Intel(R) Graphics");
+		assertEquals(new GpuClass(GpuVendor.INTEL, true, 2, null), plainIntel);
+
+		GpuClass alchemistPro = bundled("Intel", "Intel(R) Arc(TM) Pro A60 Graphics");
+		assertNull(alchemistPro.matchedPattern(), "Arc Pro A-series isn't a Battlemage Pro row");
+		assertFalse(alchemistPro.integrated());
+
+		assertFalse(bundled("NVIDIA Corporation", "NVIDIA GeForce RTX 5050 Laptop GPU/PCIe/SSE2").matchedPattern().contains("5050"));
+		assertFalse(bundled("ATI Technologies Inc.", "AMD Radeon RX 9070 XT").matchedPattern().contains("GRE"));
+		assertTrue(bundled("Intel", "Intel(R) Arc(TM) B390 Graphics").matchedPattern().contains("B3\\d0"));
+	}
 
 	@Test
 	void classifiesRealRendererStringsWithBundledRules() {
