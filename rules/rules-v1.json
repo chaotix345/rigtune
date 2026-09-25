@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": 7,
-  "generatedAt": "2026-09-25T03:48:55Z",
+  "revision": 8,
+  "generatedAt": "2026-09-25T06:31:52Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -766,6 +766,9 @@
                 "nvidia"
               ]
             }
+          },
+          {
+            "gpuTierAtMost": 2
           },
           {
             "flags": [

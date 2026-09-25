@@ -138,8 +138,8 @@ directly (see `tools/tests/test_update_rules.py`).
   `rules/rules-v1.json` over a hardware × mods × settings × goal matrix. It fails on any
   appliable recommendation (add, disable, setting value) that the new file gives and the
   baseline doesn't (`added`, ticked or not), any the baseline gave unticked and the new
-  file ticks (`ticked`), and any conflict or advice the new file no longer gives (`lost`).
-  Removing actions is fine. If a change for 0.1.x is intended (for example a new mod rule
+  file ticks (`ticked`), and any conflict, advice or `disable:` (an avoided or obsolete mod)
+  the new file no longer gives (`lost`). Removing other actions is fine. If a change for 0.1.x is intended (for example a new mod rule
   that 0.1.x should see), review the listed changes and copy `rules/rules-v1.json` over
   the baseline in the same commit.
 

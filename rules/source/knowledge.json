@@ -333,7 +333,7 @@
 			"conflictsWith": [],
 			"v1": {
 				"recommendWhen": { "gpuVendor": ["nvidia"], "gpuIntegrated": false, "gpuTierAtLeast": 4, "modPresent": ["sodium"] },
-				"avoidWhen": { "anyOf": [ { "not": { "gpuVendor": ["nvidia"] } }, { "flags": ["shaders-enabled"] } ] }
+				"avoidWhen": { "anyOf": [ { "not": { "gpuVendor": ["nvidia"] } }, { "gpuTierAtMost": 2 }, { "flags": ["shaders-enabled"] } ] }
 			}
 		},
 		{
