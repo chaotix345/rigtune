@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.client;
 
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
+import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.ModScanner;
 import io.github.chaotix345.rigtune.client.probe.Probes;
@@ -14,7 +15,10 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
+import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecords;
+import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.model.Action;
+import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.InstalledMod;
@@ -448,9 +452,20 @@ public final class RealController implements RigTuneController {
 
 	@Override
 	public void startBenchmark() {
-		if (!BenchmarkController.start(minecraft, BenchmarkController.Config.DEFAULT)) {
-			status = Component.translatable("rigtune.status.benchmark_unavailable");
+		startBenchmark(BenchmarkRequest.DEFAULT);
+	}
+
+	@Override
+	public void startBenchmark(BenchmarkRequest request) {
+		String refusal = BenchmarkController.tryStart(minecraft, request, BenchmarkController.defaultConfig());
+		if (refusal != null) {
+			status = Component.translatable(refusal);
 		}
+	}
+
+	@Override
+	public @Nullable BenchmarkSummary latestBenchmark() {
+		return BenchmarkStore.history().latest().map(BenchmarkRecords::summary).orElse(null);
 	}
 
 	@Override

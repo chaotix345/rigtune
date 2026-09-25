@@ -32,7 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-// runProductionSmoke: read-only, so it never applies anything and never starts the benchmark.
+// runProductionSmoke: read-only, so it never applies anything. It starts the benchmark only with -PsmokeBenchmark (BenchmarkSmoke).
 final class ProductionSmoke {
 	private static final int REPORT_TIMEOUT_TICKS = 1200;
 	private static final int MAX_PAGES = 40;
@@ -91,6 +91,9 @@ final class ProductionSmoke {
 			context.takeScreenshot("smoke-world");
 			context.runOnClient(mc -> mc.gui.setScreen(null));
 			context.waitTicks(5);
+			if (Boolean.getBoolean("rigtune.smoke.benchmark")) {
+				BenchmarkSmoke.run(context);
+			}
 		}
 	}
 
