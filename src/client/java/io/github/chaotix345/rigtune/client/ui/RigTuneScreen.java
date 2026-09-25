@@ -72,6 +72,7 @@ public class RigTuneScreen extends Screen {
 	private int statusY;
 	private @Nullable RecommendationList list;
 	private @Nullable Button applyButton;
+	private @Nullable Button previewButton;
 	private @Nullable Map<String, String> captions;
 	private @Nullable Component seenControllerStatus;
 	private LauncherInfo shownLauncher = LauncherInfo.UNKNOWN;
@@ -125,6 +126,7 @@ public class RigTuneScreen extends Screen {
 		List<Button> buttons = new ArrayList<>();
 		applyButton = Button.builder(Component.translatable("rigtune.screen.apply"), b -> applySelected()).build();
 		buttons.add(applyButton);
+		buttons.add(previewButton());
 		// v0.3 (review X-M2): Undo last and Undo all live in the History screen.
 		buttons.add(Button.builder(Component.translatable("rigtune.history.open"), b -> minecraft.gui.setScreen(new HistoryScreen(this, controller)))
 				.tooltip(Tooltip.create(Component.translatable("rigtune.history.open.tooltip"))).build());
@@ -321,7 +323,7 @@ public class RigTuneScreen extends Screen {
 		if (shown == null) {
 			return;
 		}
-		List<Recommendation> chosen = shown.recommendations().stream().filter(r -> r.appliable() && selected.contains(r.id())).toList();
+		List<Recommendation> chosen = ticked();
 		if (chosen.isEmpty()) {
 			return;
 		}
@@ -335,7 +337,21 @@ public class RigTuneScreen extends Screen {
 		}
 		long count = shown == null ? 0 : shown.recommendations().stream().filter(r -> r.appliable() && selected.contains(r.id())).count();
 		applyButton.active = count > 0;
+		if (previewButton != null) {
+			previewButton.active = count > 0;
+		}
 		applyButton.setMessage(count > 0 ? Component.translatable("rigtune.screen.apply.count", count) : Component.translatable("rigtune.screen.apply"));
+	}
+
+	// v0.3 (WS-P): what Apply would do for exactly the items Apply takes (docs/v0.3/SPEC.md item 13).
+	private Button previewButton() {
+		previewButton = Button.builder(Component.translatable("rigtune.preview.button"), b -> minecraft.gui.setScreen(new PreviewScreen(this, controller, ticked())))
+				.tooltip(Tooltip.create(Component.translatable("rigtune.preview.button.tooltip"))).build();
+		return previewButton;
+	}
+
+	private List<Recommendation> ticked() {
+		return shown == null ? List.of() : shown.recommendations().stream().filter(r -> r.appliable() && selected.contains(r.id())).toList();
 	}
 
 	public Set<String> selectedIds() {
