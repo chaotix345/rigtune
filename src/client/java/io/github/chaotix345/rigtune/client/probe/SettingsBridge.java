@@ -84,20 +84,38 @@ public final class SettingsBridge {
 
 	private static Map<String, String> readCached(ConfigTargets.Target target) {
 		Path file = target.file();
-		FileTime mtime;
+		FileTime before;
 		try {
-			mtime = Files.getLastModifiedTime(file);
+			before = Files.getLastModifiedTime(file);
 		} catch (IOException e) {
 			CONFIG_CACHE.remove(file);
 			return Map.of();
 		}
 		CachedRead cached = CONFIG_CACHE.get(file);
-		if (cached != null && cached.mtime().equals(mtime)) {
+		if (cached != null && cached.mtime().equals(before)) {
 			return cached.values();
 		}
 		Map<String, String> values = target.reader().read(file);
-		CONFIG_CACHE.put(file, new CachedRead(mtime, values));
-		return values;
+		if (values.isEmpty()) {
+			// Every reader here returns an empty map for a parse failure too, which could be a concurrent write
+			// racing this read; don't let that poison the cache under a mtime that would otherwise be trusted.
+			CONFIG_CACHE.remove(file);
+			return values;
+		}
+		Map<String, String> copy = Map.copyOf(values);
+		try {
+			FileTime after = Files.getLastModifiedTime(file);
+			if (after.equals(before)) {
+				CONFIG_CACHE.put(file, new CachedRead(after, copy));
+			} else {
+				// The file changed while we were reading it; this read may be torn, so don't cache it under
+				// either timestamp -- the next call re-reads.
+				CONFIG_CACHE.remove(file);
+			}
+		} catch (IOException e) {
+			CONFIG_CACHE.remove(file);
+		}
+		return copy;
 	}
 
 	public static Map<String, String> readVanilla(Options options) {
