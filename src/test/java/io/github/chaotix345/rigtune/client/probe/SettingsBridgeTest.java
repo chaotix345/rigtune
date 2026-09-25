@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.client.probe;
 
 import com.google.gson.JsonParser;
+import io.github.chaotix345.rigtune.client.ConfigTargets;
 import net.minecraft.client.CloudStatus;
 import net.minecraft.client.OptionInstance;
 import org.junit.jupiter.api.Test;
@@ -9,8 +10,10 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -102,5 +105,39 @@ class SettingsBridgeTest {
 		Path broken = dir.resolve("broken.json");
 		Files.writeString(broken, "{not json");
 		assertTrue(SettingsBridge.readSodium(broken).isEmpty());
+	}
+
+	@Test
+	void readTargetsPrefixesKeysFromEachTargetsReader(@TempDir Path dir) throws IOException {
+		Path file = Files.writeString(dir.resolve("thing.toml"), "x");
+		ConfigTargets.Target target = new ConfigTargets.Target("dh.", file, (f, p) -> null, f -> Map.of("a.b", "1"));
+
+		assertEquals(Map.of("dh.a.b", "1"), SettingsBridge.readTargets(List.of(target)));
+	}
+
+	@Test
+	void readTargetsIsEmptyForAMissingFile(@TempDir Path dir) {
+		ConfigTargets.Target target = new ConfigTargets.Target("dh.", dir.resolve("absent.toml"), (f, p) -> null, f -> Map.of("x", "1"));
+
+		assertTrue(SettingsBridge.readTargets(List.of(target)).isEmpty());
+	}
+
+	@Test
+	void readTargetsCachesByLastModifiedTimeAndRereadsWhenItChanges(@TempDir Path dir) throws IOException {
+		Path file = Files.writeString(dir.resolve("thing.properties"), "a=1");
+		AtomicInteger calls = new AtomicInteger();
+		ConfigTargets.Target target = new ConfigTargets.Target("iris.", file, (f, p) -> null, f -> {
+			calls.incrementAndGet();
+			return Map.of("a", "1");
+		});
+
+		SettingsBridge.readTargets(List.of(target));
+		SettingsBridge.readTargets(List.of(target));
+		assertEquals(1, calls.get(), "an unchanged mtime should reuse the cached read");
+
+		FileTime original = Files.getLastModifiedTime(file);
+		Files.setLastModifiedTime(file, FileTime.from(original.toInstant().plusSeconds(5)));
+		SettingsBridge.readTargets(List.of(target));
+		assertEquals(2, calls.get(), "a changed mtime should re-read");
 	}
 }
