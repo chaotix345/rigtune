@@ -251,6 +251,14 @@ class AddVersionTest(RepoCase):
         self.assertNotIn(b"\r", (root / "settings.gradle").read_bytes())
         self.assertEqual(err, "")
 
+    def test_added_node_gets_ci_game_test_legs(self):
+        import gametest_matrix
+        root = self.make_repo()
+        code, out, err, _ = self.run_tool(root, ["26.4-snapshot-1", "--prerelease-ok"])
+        self.assertEqual(code, 0, err)
+        self.assertIn({"mc": "26.4-snapshot-1", "backend": "Vulkan"}, gametest_matrix.legs(root))
+        self.assertEqual(gametest_matrix.nodes(root), amv.read_settings_versions((root / "settings.gradle").read_text(encoding="utf-8")))
+
     def test_snapshot_refused_without_prerelease_ok(self):
         root = self.make_repo()
         before = self.snapshot(root)

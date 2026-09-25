@@ -20,6 +20,8 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import NamedTuple
 
+import gametest_matrix
+
 ROOT = Path(__file__).resolve().parent.parent
 USER_AGENT = "chaotix345/rigtune-add-mc-version/1.0 (github.com/chaotix345/rigtune)"
 JAVA_MAJOR = 25
@@ -49,7 +51,6 @@ class McId(NamedTuple):
 
 
 MC_ID = re.compile(r"(\d+)\.(\d+)(?:\.(\d+))?(?:-(snapshot|pre|rc)-(\d+))?")
-KIND_RANK = {"snapshot": 0, "pre": 1, "rc": 2, "release": 3}
 
 
 def parse_mc_id(mc):
@@ -62,11 +63,9 @@ def parse_mc_id(mc):
 
 
 def version_key(mc):
-    m = MC_ID.fullmatch(mc)
-    if not m:
-        raise Refusal(f"{mc!r} isn't a Minecraft version id this tool understands")
-    return (int(m.group(1)), int(m.group(2)), int(m.group(3) or 0), KIND_RANK[m.group(4) or "release"],
-            int(m.group(5) or 0))
+    """The node order CI uses (tools/gametest_matrix.py), for the ids this tool accepts."""
+    parse_mc_id(mc)
+    return gametest_matrix._sort_key(mc)
 
 
 def minecraft_dependency(mc):
