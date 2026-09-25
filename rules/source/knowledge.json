@@ -644,7 +644,8 @@
 		},
 		{
 			"id": "vulkan-backend",
-			"when": { "backend": ["vulkan"] },
+			"when": { "backend": ["vulkan"], "mcVersionRange": "<26.4-" },
+			"v1": { "when": { "backend": ["vulkan"] } },
 			"kind": "info",
 			"impact": "medium",
 			"title": "Experimental Vulkan renderer",
@@ -723,6 +724,15 @@
 			"impact": "low",
 			"title": "OpenGL setting adjusted by Sodium",
 			"text": "Your system doesn't support one of OpenGL's faster error-checking modes (common on Linux with Wayland), so Sodium turned it off to avoid a crash at start-up. You don't need to do anything."
+		},
+		{
+			"id": "spark-profiler",
+			"when": { "modPresent": ["spark"] },
+			"v1": false,
+			"kind": "info",
+			"impact": "low",
+			"title": "Find what causes lag with spark",
+			"text": "Run /sparkc profiler start, play through the lag, then /sparkc profiler stop and open the link it prints: the widest bars under the Render thread cost the most frame time. Stopping uploads the profile to spark.lucko.me with your player name, mod list and system and Java details, and anyone with the link can open it."
 		}
 	],
 	"settingLabels": {

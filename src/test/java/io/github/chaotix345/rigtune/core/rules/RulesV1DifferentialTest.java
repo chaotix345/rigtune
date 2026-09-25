@@ -5,6 +5,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.core.RepoFiles;
+import io.github.chaotix345.rigtune.v010.core.hardware.CpuClassifier;
+import io.github.chaotix345.rigtune.v010.core.hardware.GpuClassifier;
 import io.github.chaotix345.rigtune.v010.core.model.Action;
 import io.github.chaotix345.rigtune.v010.core.model.CpuInfo;
 import io.github.chaotix345.rigtune.v010.core.model.DisplayInfo;
@@ -74,6 +76,61 @@ class RulesV1DifferentialTest {
 	void v010ParserRejectsRulesV2() throws IOException {
 		String v2 = repoJson("rules-v2.json");
 		assertThrows(IllegalArgumentException.class, () -> v010(v2));
+	}
+
+	private static final List<GpuInfo> NEW_GPUS = Stream.of(
+					"NVIDIA Corporation|NVIDIA GeForce RTX 5050/PCIe/SSE2", "NVIDIA Corporation|NVIDIA GeForce RTX 5050 Laptop GPU/PCIe/SSE2",
+					"NVIDIA Corporation|NVIDIA GeForce RTX 5070/PCIe/SSE2", "NVIDIA Corporation|NVIDIA GeForce RTX 5090/PCIe/SSE2",
+					"ATI Technologies Inc.|AMD Radeon RX 9070 GRE", "ATI Technologies Inc.|AMD Radeon RX 9070 XT",
+					"ATI Technologies Inc.|AMD Radeon RX 9060 XT", "Intel|Intel(R) Arc(TM) Pro B50 Graphics",
+					"Intel|Intel(R) Arc(TM) Pro B60 Graphics", "Intel|Intel(R) Arc(TM) Pro B70 Graphics", "Intel|Intel(R) Arc(TM) B580 Graphics",
+					"ATI Technologies Inc.|AMD Radeon(TM) 8060S Graphics", "Apple|Apple M5 Pro")
+			.map(s -> s.split("\\|", 2))
+			.map(s -> new GpuInfo(s[0], s[1], "1.0", GraphicsBackend.OPENGL, -1))
+			.toList();
+	private static final List<CpuInfo> NEW_CPUS = List.of(new CpuInfo("AMD Ryzen 7 9800X3D 8-Core Processor", 8, 16, 5200),
+			new CpuInfo("AMD Ryzen 9 9950X3D 16-Core Processor", 16, 32, 5700), new CpuInfo("Intel(R) Core(TM) Ultra 9 285K", 24, 24, 5700),
+			new CpuInfo("Intel(R) Core(TM) Ultra 7 258V", 8, 8, 4800));
+
+	// SPEC D-H1: every new tier row is "v1": false, so the pinned v0.1.0 classifier gives the new hardware the same vendor,
+	// integrated flag and tier with the new rules-v1.json as with the rules 0.1.0 shipped.
+	@Test
+	void newHardwareKeepsItsV010Classification() throws IOException {
+		io.github.chaotix345.rigtune.v010.core.rules.RulesDocument before = v010(baselineJson());
+		io.github.chaotix345.rigtune.v010.core.rules.RulesDocument after = v010(repoJson("rules-v1.json"));
+		for (GpuInfo gpu : NEW_GPUS) {
+			assertEquals(GpuClassifier.from(before).classify(gpu), GpuClassifier.from(after).classify(gpu), gpu.renderer());
+		}
+		for (CpuInfo cpu : NEW_CPUS) {
+			assertEquals(CpuClassifier.from(before).classify(cpu), CpuClassifier.from(after).classify(cpu), cpu.name());
+		}
+	}
+
+	// The new matrix entries have teeth: had the new rows reached rules-v1.json, the differential would fail on them.
+	@Test
+	void theDifferentialCatchesTheNewTierRowsInV1() throws IOException {
+		JsonObject doc = JsonParser.parseString(baselineJson()).getAsJsonObject();
+		doc.add("gpuTiers", JsonParser.parseString(repoJson("rules-v2.json")).getAsJsonObject().get("gpuTiers"));
+		List<String> changes = differences(baselineJson(), doc.toString());
+		for (String entry : List.of("rx-9070-gre", "arc-pro-b60")) {
+			assertTrue(changes.stream().anyMatch(c -> c.startsWith("added ") && c.contains(" on " + entry + " / ")), entry);
+		}
+	}
+
+	// SPEC D-M2: 0.1.x keeps the vulkan-backend advice exactly as 0.1.0 shipped it (a v1 override replaces the v2 range).
+	@Test
+	void vulkanBackendAdviceKeepsItsV010Condition() throws IOException {
+		assertEquals(adviceWhen(baselineJson(), "vulkan-backend"), adviceWhen(repoJson("rules-v1.json"), "vulkan-backend"));
+		assertEquals(JsonParser.parseString("{\"backend\":[\"vulkan\"]}"), adviceWhen(repoJson("rules-v1.json"), "vulkan-backend"));
+	}
+
+	private static JsonElement adviceWhen(String json, String id) {
+		for (JsonElement advice : JsonParser.parseString(json).getAsJsonObject().getAsJsonArray("advice")) {
+			if (advice.getAsJsonObject().get("id").getAsString().equals(id)) {
+				return advice.getAsJsonObject().get("when");
+			}
+		}
+		throw new AssertionError("no advice " + id);
 	}
 
 	@Test
@@ -297,6 +354,16 @@ class RulesV1DifferentialTest {
 		out.put("rtx-3070-shaders-vulkan", hw("AMD Ryzen 7 5800X 8-Core Processor", 8, 16, 4700, "NVIDIA Corporation",
 				"NVIDIA GeForce RTX 3070", GraphicsBackend.VULKAN, 8192, 32768, 8192, new DisplayInfo(2560, 1440, 165, true), false, false,
 				"Windows 11", "26.3", Set.of("shaders-enabled", "backend-vulkan", "sodium-workaround:NVIDIA_THREADED_OPTIMIZATIONS_BROKEN")));
+		// v0.3 hardware (SPEC D-H1): a tier-5 CPU and a heap of at least 6 GB, so the GPU row decides the tier (for the 9800X3D,
+		// a tier-5 GPU, so the CPU row does).
+		out.put("rtx-5070", hw("Intel(R) Core(TM) i7-14700K", 20, 28, 5600, "NVIDIA Corporation", "NVIDIA GeForce RTX 5070/PCIe/SSE2", gl,
+				12288, 32768, 8192, new DisplayInfo(2560, 1440, 165, true), false, false, "Windows 11", "26.3", Set.of()));
+		out.put("rx-9070-gre", hw("AMD Ryzen 7 7800X3D 8-Core Processor", 8, 16, 5050, "ATI Technologies Inc.", "AMD Radeon RX 9070 GRE", gl,
+				12288, 32768, 6144, new DisplayInfo(2560, 1440, 144, true), false, false, "Windows 11", "26.2", Set.of()));
+		out.put("arc-pro-b60", hw("Intel(R) Core(TM) Ultra 9 285K", 24, 24, 5700, "Intel", "Intel(R) Arc(TM) Pro B60 Graphics", gl,
+				24576, 65536, 8192, new DisplayInfo(3840, 2160, 60, true), false, false, "Windows 11", "26.3", Set.of()));
+		out.put("ryzen-9800x3d", hw("AMD Ryzen 7 9800X3D 8-Core Processor", 8, 16, 5200, "ATI Technologies Inc.", "AMD Radeon RX 9070 XT", gl,
+				16384, 32768, 8192, new DisplayInfo(2560, 1440, 240, true), false, false, "Windows 11", "26.2", Set.of()));
 		return out;
 	}
 
