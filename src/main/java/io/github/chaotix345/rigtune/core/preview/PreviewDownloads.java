@@ -27,7 +27,8 @@ final class PreviewDownloads {
 	private PreviewDownloads() {
 	}
 
-	// Returns whether every addition was resolved.
+	// Returns false when Modrinth is off: then nothing can be downloaded (Apply's client refuses it too), and additions
+	// are left unresolved.
 	static boolean add(List<Recommendation> recs, DownloadInputs in, Path modsDir, PreviewPlanner.Out out) {
 		// The planner's own order: every update before any addition.
 		List<Recommendation> ordered = new ArrayList<>();
@@ -36,14 +37,12 @@ final class PreviewDownloads {
 		if (!ordered.isEmpty()) {
 			plan(ordered, in, modsDir, out);
 		}
-		boolean resolved = true;
 		for (Recommendation r : recs) {
 			if (!in.lookups() && r.action() instanceof Action.AddMod) {
 				out.downloads.add(new ApplyPreview.Download(r.id(), r.title(), null, null, false));
-				resolved = false;
 			}
 		}
-		return resolved;
+		return in.lookups();
 	}
 
 	private static void plan(List<Recommendation> ordered, DownloadInputs in, Path modsDir, PreviewPlanner.Out out) {

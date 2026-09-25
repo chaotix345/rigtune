@@ -1,7 +1,6 @@
 package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import net.fabricmc.loader.api.FabricLoader;
@@ -23,10 +22,19 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 // Preview (docs/v0.3/SPEC.md item 13): what Apply would do for the ticked items, file by file. The controller works it
 // out off the render thread; nothing is written or downloaded.
 public class PreviewScreen extends Screen {
+	// One preview at a time, and never on Probes.EXECUTOR: its Modrinth lookups can't hold up a report rebuild or Apply's
+	// downloads (review WS-P #7).
+	private static final ExecutorService PREVIEWS = Executors.newSingleThreadExecutor(runnable -> {
+		Thread thread = new Thread(runnable, "RigTune preview");
+		thread.setDaemon(true);
+		return thread;
+	});
 	private static final int MARGIN = 8;
 	private static final int LINE = 9;
 	private static final int INDENT = 12;
@@ -44,6 +52,7 @@ public class PreviewScreen extends Screen {
 	private boolean started;
 	private boolean loading;
 	private boolean failed;
+	private volatile boolean closed;
 	private double scroll;
 	private @Nullable PreviewList list;
 
@@ -107,7 +116,11 @@ public class PreviewScreen extends Screen {
 
 	private void load() {
 		loading = true;
-		CompletableFuture.supplyAsync(() -> controller.preview(selected), Probes.EXECUTOR).whenComplete((result, error) -> minecraft.execute(() -> {
+		// A preview still queued when the screen closes is skipped.
+		CompletableFuture.supplyAsync(() -> closed ? null : controller.preview(selected), PREVIEWS).whenComplete((result, error) -> minecraft.execute(() -> {
+			if (closed) {
+				return;
+			}
 			if (error != null) {
 				RigTune.LOGGER.error("Could not work out the RigTune preview", error);
 			}
@@ -243,6 +256,12 @@ public class PreviewScreen extends Screen {
 	@Override
 	public void onClose() {
 		minecraft.gui.setScreen(parent);
+	}
+
+	@Override
+	public void removed() {
+		closed = true;
+		super.removed();
 	}
 
 	public final class PreviewList extends ContainerObjectSelectionList<PreviewList.Row> {

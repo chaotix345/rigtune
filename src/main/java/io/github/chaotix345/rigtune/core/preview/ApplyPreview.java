@@ -7,8 +7,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-// What Apply would do for the ticked items (docs/v0.3/SPEC.md item 13). resolved: false when Modrinth lookups are off,
-// so an addition's files aren't known (Download.fileName null).
+// What Apply would do for the ticked items (docs/v0.3/SPEC.md item 13). resolved: false when mods are to be downloaded
+// while Modrinth is off in the settings: an addition's files aren't known (Download.fileName null), and Apply can't
+// download anything until Modrinth is on again.
 public record ApplyPreview(List<Setting> now, List<Setting> atRestart, List<Download> downloads, List<Disable> disables, List<Skipped> skipped,
 		boolean resolved) {
 	public static final ApplyPreview EMPTY = new ApplyPreview(List.of(), List.of(), List.of(), List.of(), List.of(), true);

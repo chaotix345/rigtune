@@ -195,6 +195,25 @@ class PreviewDownloadsTest {
 		assertEquals(List.of(), modrinth.calls);
 	}
 
+	// Review WS-P #6: Apply can't download anything while Modrinth is off, so even an update alone carries the note.
+	@Test
+	void withLookupsOffAnUpdateIsListedButNotResolved() throws IOException {
+		lookups = false;
+
+		ApplyPreview preview = preview(update());
+
+		assertEquals(List.of("sodium-0.6.jar"), preview.downloads().stream().map(ApplyPreview.Download::fileName).toList());
+		assertFalse(preview.resolved());
+		assertEquals(List.of(), modrinth.calls);
+	}
+
+	@Test
+	void settingsAloneAreResolved() {
+		lookups = false;
+
+		assertTrue(preview(PreviewFixtures.setting("vanilla.renderDistance", "12", "8")).resolved());
+	}
+
 	@Test
 	void downloadsWriteNothing() throws IOException {
 		lithiumWithFabricApi();

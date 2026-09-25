@@ -136,7 +136,7 @@
 	"rigtune.preview.error": "Couldn't work out what Apply would do (see the log).",
 	"rigtune.preview.loading": "Working out what Apply would do…",
 	"rigtune.preview.note.downloads": "Each download is checked again when it arrives: a file that isn't a Fabric mod, or a mod you already have, is left out.",
-	"rigtune.preview.note.unresolved": "Modrinth is off in RigTune's settings, so the exact files aren't known.",
+	"rigtune.preview.note.unresolved": "Modrinth is off in RigTune's settings: Apply can't download these until it's on again, and the exact files aren't known.",
 	"rigtune.preview.section.disables": "Renamed to .disabled at the next restart",
 	"rigtune.preview.section.downloads": "Downloaded now, added at the next restart",
 	"rigtune.preview.section.now": "Written now",
