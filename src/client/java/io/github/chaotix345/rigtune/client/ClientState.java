@@ -20,6 +20,8 @@ public final class ClientState {
 
 	public volatile String goal = Goal.BALANCED.name();
 	public volatile String lastShownApply;
+	// v0.3: the helper run (last-apply.json's finishedAt) whose failures were logged at startup (docs/v0.3/SPEC.md 3e).
+	public volatile String lastWarnedApply;
 
 	public static synchronized ClientState shared(Path configDir) {
 		if (shared == null) {
