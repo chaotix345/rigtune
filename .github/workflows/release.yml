@@ -105,19 +105,28 @@ jobs:
             fi
             sha1_local=$(sha1sum "$scratch/$asset" | cut -d' ' -f1)
             sha512_local=$(sha512sum "$scratch/$asset" | cut -d' ' -f1)
-            response=$(curl -sf \
-              -H "User-Agent: chaotix345/rigtune/release (github.com/chaotix345/rigtune)" \
-              "https://api.modrinth.com/v2/version_file/${sha1_local}?algorithm=sha1") || {
-                echo "::error::no Modrinth version file matches $asset's sha1 ($sha1_local) — upload may be missing or corrupted"
-                status=1
-                continue
-              }
-            sha512_remote=$(echo "$response" | jq -r '.files[] | select(.primary) | .hashes.sha512')
+            # The project's version list, fetched with the token: the public hash lookup
+            # (/v2/version_file) hides versions of a project that's still in moderation.
+            versions_json="$scratch/versions.json"
+            if [ ! -s "$versions_json" ] && ! curl -sf \
+                -H "User-Agent: chaotix345/rigtune/release (github.com/chaotix345/rigtune)" \
+                -H "Authorization: ${MODRINTH_TOKEN}" \
+                "https://api.modrinth.com/v2/project/rigtune/version" -o "$versions_json"; then
+              echo "::error::could not list the Modrinth project's versions"
+              status=1
+              continue
+            fi
+            sha512_remote=$(jq -r --arg s "$sha1_local" '[.[].files[] | select(.hashes.sha1 == $s) | .hashes.sha512][0] // empty' "$versions_json")
+            if [ -z "$sha512_remote" ]; then
+              echo "::error::no Modrinth version file matches $asset's sha1 ($sha1_local): upload missing or corrupted"
+              status=1
+              continue
+            fi
             if [ "$sha512_local" != "$sha512_remote" ]; then
               echo "::error::sha512 mismatch for $asset: GitHub=$sha512_local Modrinth=$sha512_remote"
               status=1
               continue
             fi
-            echo "verified: $asset sha512 matches Modrinth version $(echo "$response" | jq -r '.id')"
+            echo "verified: $asset sha512 matches its Modrinth upload"
           done
           exit "$status"

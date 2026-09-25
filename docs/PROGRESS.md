@@ -2,7 +2,17 @@
 
 Source of truth for resuming after context compaction. Update and commit after every milestone. After a compaction, reread this file before acting.
 
-## v0.2.0 (started 2026-09-25)
+## v0.2.0: RELEASED 2026-09-25
+- PR #2 merged to main (5b3219d); tag v0.2.0; GitHub release with rigtune-0.2.0+mc26.2.jar / +mc26.3.jar (+ sources): https://github.com/chaotix345/rigtune/releases/tag/v0.2.0
+- Modrinth project oBN6pcGa (https://modrinth.com/mod/rigtune): versions 0.1.0 (7kgaKg8I), 0.2.0+mc26.2 (IcGMI8us), 0.2.0+mc26.3 (s8lEG7d9). Byte-identical to the GitHub assets (checked through the authenticated API). The 0.2 body and 6 gallery images are live. Status: processing (in moderator review; the user saved the content disclosures: AI-generated code/assets/text + external system interactions).
+- Rules live on main: rules-v1.json r10 (schema 1, for 0.1.x) and rules-v2.json r10 (schema 2): both HTTP 200. The update-rules workflow ran green (nothing to change).
+- The release job's last step ("Verify Modrinth files match") false-failed: the public /version_file lookup hides versions of a project in review. Fixed in PR #3 (authenticated version list).
+- Final numbers: 848 unit tests per MC version, Python 156 + 55 (e2e); client game tests (4 classes, 52 screenshots) pass on 26.2 and 26.3; self-update E2E v0.1.0 -> 0.2.0 21/21; undo across restarts 22/22; Phase 5 production smokes pass (user's 48 mods on 26.2, a Modrinth set on 26.3, the DH config round trip, the DH cost report on 26.3, the shader cost report).
+- Reviews: plan review (5 HIGH, fixed), round 1 (review-3.md), round 2 (review-4.md), re-check, and a final confirmation (no medium or higher left).
+- Deferred to v0.3.0: P2 items 11 (CI game tests via xvfb), 12 (launcher-aware RAM advice), 13 (a translator guide); the low items listed at the end of review-4.md; the user's instance still has 0.1.0's pending DH 3.3.2 group, which 0.2.0 drops automatically once DH's own queued update is in mods/update.
+- Next steps (v0.3.0 ideas): the xvfb game tests in CI; launcher-aware RAM steps (Modrinth App / Prism / official); the review-4 lows; an in-game "what changed" view of history.json; GPU tier table refresh for new GPUs; watch Modrinth moderation and answer any moderator messages.
+
+## v0.2.0 working log (started 2026-09-25)
 
 Brief: the user's v0.2.0 prompt (full autonomy: research → release, including GitHub merges, tags and releases, and Modrinth publishing once a token exists). Scope: P0 1–5, P1 6–10, P2 11–13 (see docs/v0.2/SPEC.md once written).
 
@@ -23,14 +33,14 @@ Brief: the user's v0.2.0 prompt (full autonomy: research → release, including 
 - [x] Phase 4 DONE: all 8 workstreams + 2 fix branches MERGED (last: WS-E d03a59c). 784 unit tests per MC version, 152 Python; CI green. (Was: Wave A running (all 7 agents, launched 2026-09-25 from b6da08b).) Merge each after CI is green (verify its evidence first); later ones rebase. Wave B = WS-H knowledge (launch after WS-A merges; prefer after WS-D too). Game-test mutex: C:/Dev/Worktrees/.gametest-lock (if it's stale, check owner.txt and processes before clearing).
 - [x] Phase 5 DONE (9fed563): every run passed (evidence in docs/v0.2/verification/README.md, docs/smoke/self-update/). Findings being fixed by fix-p5 (branch fix/p5-findings, worktree rigtune-fixp5): HIGH DH's own auto-updater conflicts with RigTune's DH update (the real cause of the user's failed DH update), which needs a v2 settingIs condition + skipUpdateWhen; MEDIUM the DH render-distance rules fire when DH rendering is disabled; several LOW. fix/review-3 is merged and fix-p5 has been told it may edit knowledge.json. (Was: RUNNING. p5-verify (prep, then runs per scratchpad/p5/PLAN.md, serial under the lock) + ws-g-e2e (final E2E on the merged jar with --expect-history, plus the M14 undo-after-restart).
 - [x] Phase 6 DONE (final: re-check fixes MERGED 18ca2f3 -> 598a069, 848 tests per version; the final confirmation review found NO MEDIUM+; 2 low + 1 nit deferred to v0.3.0, listed in review-4.md). Round 2 DONE -> review-4.md; its fixes MERGED (b1ff248 -> 728691f, 841 tests per version). The focused re-check found 1 MEDIUM regression (a version-specific Modrinth incompatible dependency was treated as whole-project) + 2 LOW; fixing in fix-recheck (branch fix/recheck-4, worktree rigtune-fix5). After it merges and CI is green -> Phase 7. mod_version is already 0.2.0 (5354242); the PR body is in scratchpad/pr-body-v020.md. Final game tests on dea0a20 PASSED on both versions (all 4 classes, 52 screenshots each). Round 1 DONE -> docs/reviews/review-3.md (8 findings, 2 refuted; 0 critical/high; 3 medium, 3 low). Fixes MERGED (f68a28e -> 496cee3; rules r9; 795 tests per version). Round 2 after the fixes and Phase 5. (Round 1 was: Workflow run wf_b2c42b8c-55d (5 dimensions + an adversarial verify each) on 5f57eee. Script: ~/.claude/projects/C--Dev-Minecraft-Setting-Optimisation-Mod/097c9765-.../workflows/scripts/rigtune-v02-review-round-1-wf_b2c42b8c-55d.js (resume with resumeFromRunId). Then write docs/reviews/review-3.md, fix, and run round 2 -> review-4.md.)
-- [ ] Phase 7 IN PROGRESS: PR #2 https://github.com/chaotix345/rigtune/pull/2 (feat/v0.2.0 -> main) is open. Merge once CI is green AND final-recheck says NO MEDIUM+. Steps:
+- [x] Phase 7 DONE (see the top). Was: IN PROGRESS: PR #2 https://github.com/chaotix345/rigtune/pull/2 (feat/v0.2.0 -> main) is open. Merge once CI is green AND final-recheck says NO MEDIUM+. Steps:
   1. On feat/v0.2.0: bump gradle.properties mod_version 0.2.0-dev -> 0.2.0 (CHANGELOG [0.2.0] is already written); build both versions; push; CI green.
   2. `gh pr create --base main --head feat/v0.2.0` with a full description (scratchpad/pr-body-v020.md); CI green on the PR; merge with a merge commit (no squash); never force-push.
   3. Tag v0.2.0 on the main merge commit and push the tag, so release.yml builds, creates the GitHub release with one jar + one sources jar per version, and publishes to Modrinth via Minotaur (CI token), with the SHA-512 identity check.
   4. Locally, with the setup token: `python tools/modrinth_project.py submit` (sets the environment on the new versions; the project is in review) and sync the body to docs/modrinth/body-0.2.md (sync-body); then `status`.
   5. Verify: the GitHub release assets; Modrinth versions 0.2.0+mc26.2/26.3; curl -s -o /dev/null -w %{http_code} for raw rules-v1.json and rules-v2.json on main = 200.
   6. `gh workflow run update-rules.yml`, then confirm it succeeds (it may open a PR).
-- [ ] Phase 8: README, fold docs/v0.2/design/*.md into DESIGN.md, PROGRESS, memory, cleanup, final report
+- [x] Phase 8 DONE: README/DESIGN/CHANGELOG (docs-release), PROGRESS, memory, all worktrees removed, merged and stale branches deleted (local + remote), final report.
 
 ### Agents
 | name | branch | worktree | status |
