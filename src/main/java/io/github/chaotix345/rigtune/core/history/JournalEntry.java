@@ -12,6 +12,6 @@ public record JournalEntry(String id, String at, String kind, String rigtuneVers
 	public static final String LEGACY_IMPORT = "legacy-import";
 
 	public JournalEntry {
-		changes = changes == null ? List.of() : List.copyOf(changes);
+		changes = changes == null ? List.of() : changes.stream().filter(java.util.Objects::nonNull).toList();
 	}
 }

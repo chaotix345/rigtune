@@ -207,17 +207,17 @@ Source: docs/research/v0.2/dh-iris.md.
 - AC7.1 Unit tests for the TOML reader/patcher (quoted floats stay quoted, bare ints stay bare, section scoping, missing key refused, CRLF, comments) and the properties patcher. AC7.2 Recommender scenario tests for DH/Iris profiles. AC7.3 The production smoke run with the user's DH (a copy) shows the DH recommendations, and a staged DH patch applied by the helper leaves a TOML that DH loads (checked in the next launch's log: no DH config error, and the value is in effect).
 
 ## 8. Settings screen (P1)
-- Stored in `config/rigtune/rigtune.json` (ClientState) as new fields with defaults:
+- Stored in `config/rigtune/settings.json` (`ClientSettings`, its own file, so a 0.1.x downgrade that rewrites rigtune.json can't drop them) with defaults:
   - `networkEnabled` (true): master switch. Off → no request of any kind: no remote rules, no Modrinth lookups, no downloads. Add/Update recommendations become advice ("install it from your launcher") and the header says "Offline (network off in settings)".
-  - `remoteRules` (true), `updateChecks` (true): finer switches under the master.
+  - `remoteRules` (true), `modrinth` (true: lookups, update checks AND downloads): finer switches under the master.
   - `startupToast` (true): the title-screen "RigTune: N suggestions" toast. Apply results and warnings are still shown.
   - `goal` (existing): the default goal.
-  - `benchmarkScene`: `"current"` (default) or `"benchmark-world"` (item 6).
+  - `benchmarkScene`: `"CURRENT"` (default) or `"BENCHMARK_WORLD"` (the BenchmarkRequest.Scene names, used everywhere).
 - A `RigTuneSettingsScreen` opened from a Settings button on the RigTune screen and from Mod Menu's config button (Mod Menu opens the settings screen; the settings screen has a button to the main screen).
 - Changes save immediately and trigger a rescan where relevant.
 - Privacy-first: the README Privacy section lists exactly what each switch controls and what is sent (GitHub raw for rules; Modrinth: SHA-1 hashes of installed jars, candidate project ids, downloads of files the player chose). No telemetry. The first launch of 0.2 shows a one-time toast pointing at the network settings.
 - AC8.1 Each switch demonstrably gates its requests (unit tests with a fake HTTP layer / fetcher; a game test toggles network off and checks the header).
-- AC8.2 0.1.0's rigtune.json loads with defaults for the new fields.
+- AC8.2 A missing settings.json gives the defaults; 0.1.0's rigtune.json still loads (goal, lastShownApply).
 
 ## 9. Knowledge triage (P1)
 Source: docs/research/v0.2/triage.md.
@@ -240,3 +240,79 @@ Detect the Modrinth App, Prism, or the official launcher from the game dir/launc
 
 ## 13. Localisation scaffolding (P2)
 All UI strings are already translatable (`assets/rigtune/lang/en_us.json`). Scaffolding = no hard-coded UI strings in new screens, a translators' note in the README. Stretch.
+
+---
+
+## Amendments from the plan review (docs/v0.2/plan-review.md; these override the text above where they differ)
+Contract changes already committed on feat/v0.2.0:
+- ChangeRecorder.record(entryId, kind, changes) and newEntryId()
+- JournalChange.resultFile
+- UndoPlan.Item.action (REVERT / DISCARD_STAGED / SKIP)
+- RigTuneController.undo(UndoPlan)
+- ClientSettings (settings.json)
+- ConfigTargets (generic config-namespace routing in apply(); readValues on the patchers)
+- AtomicFiles.writeString is public
+
+Item 2 (rules):
+- H1: three-valued condition evaluation: TRUE / FALSE / UNKNOWN.
+  - UNKNOWN comes from:
+    - an unknown key
+    - an invalid or undecidable input: no GPU info, a bad regex, an exhausted budget, an unknown display size, an unparseable version or predicate, or unknown RAM/VRAM/refresh
+    - a value outside a field's known vocabulary (`flags`, `gpuVendor`, `backend`, `os`, `goal`)
+  - Combining: `not UNKNOWN` = UNKNOWN. `anyOf` is TRUE if any branch is TRUE, else UNKNOWN if any is UNKNOWN. AND is FALSE if any part is FALSE, else UNKNOWN if any is UNKNOWN.
+  - A top-level UNKNOWN is treated as false for every rule kind: no recommendation, no disable, no setting, no advice.
+  - The known vocabularies go in RULES_SCHEMA.md; check_rules_v1.py rejects values outside the v0.1.0 vocabularies.
+- H2: project per field, not per rule.
+  - A v2-only `recommendWhen` or advice `when` becomes `{"always": false}`. A v2-only `avoidWhen` is dropped. `conflictsWith`, `modIds` and the other v1-safe fields stay.
+  - A `null` anywhere in a `v1` override is an updater error.
+  - Each rule type has a whitelist of v1 fields. Any other field needs an explicit `v1` override or `"v1": false`, otherwise the updater errors.
+  - A setting entry that uses a v2 feature needs an explicit `v1` (error otherwise).
+  - Differential test (WS-A builds it; WS-H runs it after content changes): a pinned copy of the v0.1.0 Recommender/ConditionEvaluator (from tag v0.1.0, under src/test, in a renamed package) evaluates the previous and the new rules-v1.json over a hardware × mods × goal matrix. It fails on any new ticked recommendation that isn't more conservative.
+- H3: new ModRule field `avoidSelected` (default true, v2-only), honoured by `Recommender.avoided()`. LambDynamicLights uses `avoidSelected: false` and `"v1": false`.
+- M1/L1: RULES_SCHEMA.md rules for maintainers:
+  - Never add a v2-only or future field to an existing restrictive rule; it would lift the restriction for clients that don't know the field. Add a new rule instead.
+  - Tier-rule (`gpuTiers`/`cpuTiers`/`heapTiers`) schema changes need a new schemaVersion.
+- M14:
+  - `EvalContext` gains installed mod versions (for `modVersion`).
+  - WS-A exposes a re-runnable `reloadRules()` in RealController for the settings screen.
+
+Item 3 (undo):
+- H4: one entry per Apply. RealController creates the entry id in apply() and passes it to the downloads; the benchmark "Keep" and undo each use their own id.
+- H5: record inside stage(), under the lock, after the merge.
+  - `PendingActions.Merged` gains `Map<incomingId, survivingId>` and the replaced op ids (→ DISCARDED).
+  - `discard` returns the dropped ids.
+  - A config key's `before` is the value after any already-staged ops for that key.
+  - Startup reconciliation (preLaunch, under the lock): a STAGED change whose op is neither in pending.json nor in last-apply.json becomes ABANDONED ("lost").
+- M4: ApplyLock becomes reentrant within one JVM (a hold count), so the journal can take it while preLaunch or stage() holds it.
+- M5: the helper's classpath is our jar + Gson only.
+  - Journal code reachable from ApplyExecutor/ApplyHelper must not touch RigTune.LOGGER, Fabric or MC classes.
+  - Journal updates in the helper are best-effort (catch Throwable, log to helper.log) and can never fail an apply.
+  - A test runs the helper with only our classes + Gson on the classpath.
+- M6: the executor reports the actual disabled name. OpResult gains `resultPath` (an additive field, so 0.1.0 readers ignore it); the helper stores it in JournalChange.resultFile, and undo re-enables that file.
+- M7: graphicsPreset changes a dozen options, so vanilla recording diffs the whole vanilla snapshot before/after the write and records every changed key.
+- M8: undo(plan) executes the plan that was shown, re-checking each item; an item whose state changed becomes a skip with a reason.
+- M9: before staging reversals, UndoPlanner checks the simulated result. After it:
+  - no two active jars may share a mod id;
+  - no active jar may lose a `depends` mod id (excluding minecraft, java, fabricloader and anything a loaded jar provides).
+  Items that would break this become skips.
+- L2/L3: details in plan-review.md (legacy import; never discard a staged self-update of RigTune).
+
+Item 4 (Modrinth):
+- M15: the user explicitly approved (2026-09-25) three things: creating the project through the API, uploading the identical v0.1.0 jar, and submitting for review.
+  - The v0.1.0 upload must come before any 0.2.0 upload, because update ordering uses date_published.
+  - L7: until 0.2.0 is uploaded, the listing describes only 0.1.0's behaviour.
+- M11: the release uploads byte-identical jars to GitHub and Modrinth. They are built once, in one job, and the workflow compares SHA-256s before publishing.
+
+Item 5 (self-update E2E):
+- M10: don't use Loom's production run task as is. It adds the dev jar via -Dfabric.addMods, which would load two copies of RigTune. Launch the client so that only the instance's mods/ is used.
+- M12: also run the harness for 0.2.0 → a newer 0.2.0 build, to prove the 0.2 helper can apply its own successor.
+- L5: 0.2 only downloads from `https://cdn.modrinth.com/`. The base-URL test property widens that only when it's set.
+- M14: Phase 5 adds an end-to-end undo after a restart: 0.2.0 applies a mod change → quit → helper → Undo last → quit → helper → assert.
+
+Item 6 (benchmark):
+- M16: the tuned knobs are render distance and simulation distance only.
+  - Simulation distance uses the research's cheaper secondary protocol: settle ≤2 s, then one 6 s phase per point.
+  - DH and shaders become cost reports: one measurement with DH rendering off (`renderingEnabled`, API-only, not persisted) and one with shaders off, each compared with the tuned result and always restored.
+  - Hard deadline 5 min. AC6.1 checks that RD + SD finish within it on the fake measurer.
+- M-risk: with DH loaded, the harness deadlocks on world exit. So AC6.4 and AC7.3 are checked from the title screen (stage there and quit there), or with a non-harness production launch.
+- Cut order if time runs short: benchmark-world, then the shader cost report, then the DH cost report, then the chart (keep the gain line).

@@ -20,12 +20,6 @@ public final class ClientState {
 
 	public volatile String goal = Goal.BALANCED.name();
 	public volatile String lastShownApply;
-	// v0.2 settings (docs/v0.2/SPEC.md item 8). A 0.1.0 rigtune.json has none of these, so they keep these defaults.
-	public volatile boolean networkEnabled = true;
-	public volatile boolean remoteRules = true;
-	public volatile boolean updateChecks = true;
-	public volatile boolean startupToast = true;
-	public volatile String benchmarkScene = "CURRENT";
 
 	public static synchronized ClientState shared(Path configDir) {
 		if (shared == null) {
@@ -71,15 +65,6 @@ public final class ClientState {
 		} catch (IOException e) {
 			RigTune.LOGGER.warn("Could not write {}", file, e);
 		}
-	}
-
-	public boolean remoteRulesAllowed() {
-		return networkEnabled && remoteRules;
-	}
-
-	// Modrinth lookups (installed-jar hashes, availability, updates) and downloads.
-	public boolean modrinthAllowed() {
-		return networkEnabled && updateChecks;
 	}
 
 	public Goal goalOrDefault() {

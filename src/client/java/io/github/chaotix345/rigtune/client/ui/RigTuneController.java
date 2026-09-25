@@ -57,9 +57,14 @@ public interface RigTuneController {
 		return null;
 	}
 
-	/** Carries out the undo that undoPlan(all) described; returns a status message (item 3). */
-	default Component undo(boolean all) {
+	/** Carries out exactly this plan (from undoPlan), re-checking each item; returns a status message (item 3). */
+	default Component undo(UndoPlan plan) {
 		return Component.translatable("rigtune.status.nothing");
+	}
+
+	/** Settings changed (item 8): reload the rules if needed and rescan. WS-A implements the rules reload. */
+	default void settingsChanged() {
+		rescan();
 	}
 
 	/** The report as Markdown for the clipboard (item 10). */

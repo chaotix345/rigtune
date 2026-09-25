@@ -134,3 +134,50 @@ Unit + game tests on 26.2 and 26.3 (screenshots reviewed by the coordinator); ru
 ## Self-review against the SPEC
 - Item 1 → Phase 3 (in progress). Item 2 → WS-A (+ WS-H content). Item 3 → WS-B (+ WS-G fixtures). Item 4 → WS-F (+ the release in Phase 7). Item 5 → WS-G (+ Phase 5). Item 6 → WS-C. Item 7 → WS-D (code) + WS-H (knowledge) + WS-C (knobs). Item 8 → WS-E. Item 9 → WS-H. Item 10 → WS-E. Items 11–13 (P2) → after Phase 5 if time allows: CI game tests (xvfb), launcher-aware RAM advice, localisation notes.
 - Contract names used above match the committed contract files (cae06b8).
+
+---
+
+## Plan-review fixes by workstream (MANDATORY, part of each workstream's tasks)
+Read docs/v0.2/plan-review.md for the evidence behind each ID, and the "Amendments from the plan review" section at the end of SPEC.md. Updated contracts: `ChangeRecorder.record(entryId, kind, changes)`, `JournalChange.resultFile`, `UndoPlan.Item.action`, `RigTuneController.undo(UndoPlan)` and `settingsChanged()`, `ClientSettings` (config/rigtune/settings.json; ClientState keeps only goal and lastShownApply), and `ConfigTargets` (apply() already routes `sodium.`/`dh.`/`iris.` keys generically).
+
+- **WS-A:**
+  - H1: three-valued evaluation and the value vocabularies.
+  - H2: per-field projection, per-type v1 whitelists, updater errors for nulls and unhandled fields, and the pinned v0.1.0 differential test.
+  - H3: `avoidSelected`, honoured in `Recommender.avoided()`.
+  - M14: mod versions in EvalContext, and `settingsChanged()` in RealController (reload the rules, then rescan).
+  - M1/L1: document both rules in RULES_SCHEMA.md.
+- **WS-B:**
+  - H4: one entry id per Apply, passed through to the downloads.
+  - H5: record in stage() after the merge (`Merged` id mapping and replaced ids; `discard` returns the dropped ids; `before` accounts for already-staged ops); startup reconciliation in preLaunch.
+  - M4: ApplyLock reentrant within the JVM.
+  - M5: journal code in the helper is helper-classpath-safe and best-effort, plus a helper-classpath test.
+  - M6: `OpResult.resultPath`, stored in `resultFile`.
+  - M7: diff the whole vanilla snapshot.
+  - M8: `undo(plan)` re-checks each item.
+  - M9: the dependency and duplicate check in UndoPlanner.
+  - L2, L3.
+  - WS-B also owns recording for every ConfigTargets namespace: `before` comes from `Target.reader()`. WS-D does no recording.
+- **WS-C:**
+  - M16: tune RD and SD only (SD with the cheap protocol); DH (`renderingEnabled` off) and shaders-off as cost reports that are always restored; a 5 min deadline.
+  - M-risk: DH checks run from the title screen or a non-harness launch.
+  - Cut order: benchmark-world first.
+- **WS-D:**
+  - Don't edit RealController. apply() already routes through ConfigTargets.
+  - Implement `TomlConfigPatcher`/`PropertiesConfigPatcher` `readValues`, `stage` and `patchFile`, the SettingKeys allowlist, and SettingsBridge snapshot reading through `ConfigTargets.all(configDir)` readers.
+  - L11: don't parse the TOML/properties on every render-thread `read()`. Cache the readings by file modification time.
+- **WS-E:**
+  - Use ClientSettings, not ClientState. The switches are `networkEnabled`, `remoteRules`, `modrinth` (lookups, update checks AND downloads) and `startupToast`; `benchmarkScene` holds the Scene enum names.
+  - The settings screen calls `controller.settingsChanged()` after a change.
+- **WS-F:**
+  - M15: the user approved creating the project, uploading v0.1.0 and submitting for review. Upload v0.1.0 before anything 0.2.0.
+  - L7: until 0.2.0 is uploaded, the body describes only 0.1.0's behaviour. Keep the 0.2 body in docs/modrinth/body-0.2.md for the release.
+  - M11: the release job builds once and uploads byte-identical jars to GitHub and Modrinth (compare SHA-256s in the workflow).
+- **WS-G:**
+  - M10: don't use Loom's production run task as it is; only the instance's mods/ may load RigTune.
+  - M12: also run 0.2.0-dev → a newer 0.2.0-dev build.
+  - L5: 0.2 downloads only from `https://cdn.modrinth.com/`, unless the test base-URL property is set.
+  - L4: the details in the review.
+  - Phase 5 adds the end-to-end undo after a restart (M14).
+- **Hotspots, additions:**
+  - README.md: Phase 3 (Build from source), WS-E (Privacy), WS-F (reads it for the body only).
+  - build.gradle / settings.gradle: WS-G's driver source set or subproject, as its own block.

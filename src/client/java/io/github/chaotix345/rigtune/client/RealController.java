@@ -52,7 +52,6 @@ import java.util.concurrent.CompletableFuture;
 
 public final class RealController implements RigTuneController {
 	private static final String VANILLA = SettingsBridge.VANILLA_PREFIX;
-	private static final String SODIUM = SettingsBridge.SODIUM_PREFIX;
 	private static final Duration STAGE_LOCK_WAIT = Duration.ofSeconds(2);
 
 	private Minecraft minecraft;
@@ -226,17 +225,19 @@ public final class RealController implements RigTuneController {
 			return Component.translatable("rigtune.status.busy");
 		}
 		Map<String, String> vanilla = new LinkedHashMap<>();
-		Map<String, String> sodium = new LinkedHashMap<>();
-		Map<String, String> sodiumIds = new HashMap<>();
+		List<ConfigTargets.Target> targets = ConfigTargets.all(configDir);
+		Map<ConfigTargets.Target, Map<String, String>> configPatches = new LinkedHashMap<>();
+		Map<String, String> configIds = new HashMap<>();
 		List<Op> immediateOps = new ArrayList<>();
 		List<String> immediateIds = new ArrayList<>();
 		List<Recommendation> downloads = new ArrayList<>();
 		for (Recommendation r : selected) {
 			switch (r.action()) {
 				case Action.SetSetting set when set.key().startsWith(VANILLA) -> vanilla.put(set.key(), set.newValue());
-				case Action.SetSetting set when set.key().startsWith(SODIUM) -> {
-					sodium.put(set.key().substring(SODIUM.length()), set.newValue());
-					sodiumIds.put(set.key().substring(SODIUM.length()), r.id());
+				case Action.SetSetting set when ConfigTargets.forKey(targets, set.key()) != null -> {
+					ConfigTargets.Target target = ConfigTargets.forKey(targets, set.key());
+					configPatches.computeIfAbsent(target, t -> new LinkedHashMap<>()).put(set.key().substring(target.prefix().length()), set.newValue());
+					configIds.put(set.key(), r.id());
 				}
 				case Action.DisableMod disable when SafeFileNames.isDirectChild(modsDir, disable.file()) -> {
 					immediateOps.add(Op.disableFile(disable.file()));
@@ -260,12 +261,13 @@ public final class RealController implements RigTuneController {
 				}
 			}
 		}
-		if (!sodium.isEmpty()) {
-			SodiumConfigPatcher.Staged patches = SodiumConfigPatcher.stage(SettingsBridge.sodiumConfig(), sodium);
-			patches.refused().forEach((key, problem) -> RigTune.LOGGER.warn("Not staging Sodium setting {}: {}", key, problem));
+		for (Map.Entry<ConfigTargets.Target, Map<String, String>> entry : configPatches.entrySet()) {
+			ConfigTargets.Target target = entry.getKey();
+			SodiumConfigPatcher.Staged patches = target.stager().stage(target.file(), entry.getValue());
+			patches.refused().forEach((key, problem) -> RigTune.LOGGER.warn("Not staging setting {}{}: {}", target.prefix(), key, problem));
 			settingsFailed += patches.refused().size();
 			immediateOps.addAll(0, patches.ops());
-			patches.ops().forEach(op -> immediateIds.add(sodiumIds.get(op.patches().keySet().iterator().next())));
+			patches.ops().forEach(op -> immediateIds.add(configIds.get(target.prefix() + op.patches().keySet().iterator().next())));
 		}
 		boolean stageFailed = !immediateOps.isEmpty() && !stage(immediateOps, immediateIds);
 		if (!downloads.isEmpty()) {

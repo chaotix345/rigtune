@@ -16,6 +16,12 @@ public final class TomlConfigPatcher {
 		throw new IOException("Toml config patching is not implemented yet");
 	}
 
+	// The file's current values as flat keys (the same keys patches use); empty if the file is missing or unreadable.
+	// Used for journal before-values and the settings snapshot.
+	public static Map<String, String> readValues(Path file) {
+		return Map.of();
+	}
+
 	// One op per key; a value that doesn't fit the file as it is now is refused (key -> reason).
 	public static SodiumConfigPatcher.Staged stage(Path file, Map<String, String> patches) {
 		return new SodiumConfigPatcher.Staged(List.of(), Map.copyOf(patches.keySet().stream()

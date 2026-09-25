@@ -8,7 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
-final class AtomicFiles {
+public final class AtomicFiles {
 	static final int MOVE_ATTEMPTS = 10;
 	static final long MOVE_RETRY_MILLIS = 100;
 
@@ -19,7 +19,7 @@ final class AtomicFiles {
 	private AtomicFiles() {
 	}
 
-	static void writeString(Path target, String content) throws IOException {
+	public static void writeString(Path target, String content) throws IOException {
 		writeString(target, content, AtomicFiles::replace, MOVE_ATTEMPTS, MOVE_RETRY_MILLIS);
 	}
 
