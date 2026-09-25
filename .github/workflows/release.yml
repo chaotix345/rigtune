@@ -11,6 +11,10 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      # A job-level env var so `if:` conditions below can test it (an `if:` can't reference
+      # `secrets.*` directly). Empty when the MODRINTH_TOKEN repo secret isn't set.
+      MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 
@@ -21,11 +25,16 @@ jobs:
           distribution: microsoft
           java-version: '25'
 
+      # Built once. The GitHub release below and the Modrinth publish steps further down both
+      # upload these exact files (Minotaur's uploadFile = jar reads the same `jar` task output
+      # that ends up in versions/<mc>/build/libs), so they can't drift apart from being built
+      # twice; "Verify Modrinth files match" re-downloads and hashes both sides anyway (M11).
       - name: Build
         run: ./gradlew build
 
       # Exactly one rigtune-<ver>+mc<mc>.jar and one -sources.jar per Minecraft version in versions/.
       - name: Create GitHub release
+        id: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -48,28 +57,67 @@ jobs:
             --generate-notes \
             "${files[@]}"
 
-      # --- Modrinth publishing (disabled until the RigTune Modrinth project exists) ---
-      #
-      # Modrinth's own publishing tool, Minotaur (github.com/modrinth/minotaur), is a
-      # Gradle plugin, not a GitHub Action: it must first be added to build.gradle, e.g.
-      #
-      #   plugins {
-      #     id 'com.modrinth.minotaur' version '2.+'
-      #   }
-      #   modrinth {
-      #     token = System.getenv('MODRINTH_TOKEN')
-      #     projectId = 'rigtune'
-      #     versionNumber = version
-      #     versionType = 'release'
-      #     uploadFile = remapJar
-      #     gameVersions = ['26.2']
-      #     loaders = ['fabric']
-      #   }
-      #
-      # Once that's in place, add a MODRINTH_TOKEN repo secret (a Modrinth personal access
-      # token scoped to "Create versions" on the rigtune project) and uncomment:
-      #
-      # - name: Publish to Modrinth
-      #   env:
-      #     MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
-      #   run: ./gradlew modrinth
+      # --- Modrinth publishing ---
+      # One Modrinth version per Minecraft version (build.gradle's `modrinth {}` block), each its
+      # own step so a re-run after a partial failure still publishes the one that's missing:
+      # Minotaur fails (not duplicates) a version_number that already exists, so re-running a step
+      # whose upload already succeeded is a harmless no-op-turned-failure, and `if: !cancelled()`
+      # (rather than the default `if: success()`) means the 26.3 step still runs even if 26.2's
+      # step just failed, and vice versa on a retry.
+      - name: Publish to Modrinth (26.2)
+        if: ${{ !cancelled() && steps.release.outcome == 'success' && env.MODRINTH_TOKEN != '' }}
+        run: ./gradlew :26.2:modrinth
+
+      - name: Publish to Modrinth (26.3)
+        if: ${{ !cancelled() && steps.release.outcome == 'success' && env.MODRINTH_TOKEN != '' }}
+        run: ./gradlew :26.3:modrinth
+
+      - name: Notice if Modrinth publishing was skipped
+        if: ${{ env.MODRINTH_TOKEN == '' }}
+        run: echo "::notice::MODRINTH_TOKEN repo secret is not set; skipped publishing to Modrinth. GitHub release only."
+
+      # M11: prove the file Modrinth is now serving is byte-identical to the one just attached to
+      # the GitHub release, rather than assuming it because they came from the same build. Looks
+      # up each re-downloaded GitHub asset by its own sha1 (GET /v2/version_file/{sha1}, verified
+      # live against docs.modrinth.com during WS-F) and compares the returned file's sha512.
+      - name: Verify Modrinth files match the GitHub release
+        if: ${{ !cancelled() && steps.release.outcome == 'success' && env.MODRINTH_TOKEN != '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          tag="${GITHUB_REF_NAME}"
+          scratch=$(mktemp -d)
+          status=0
+          for dir in versions/*/; do
+            mc=$(basename "$dir")
+            mapfile -t found < <(find "${dir}build/libs" -maxdepth 1 -name "rigtune-*+mc${mc}.jar" 2>/dev/null)
+            if [ "${#found[@]}" -ne 1 ]; then
+              echo "::error::expected exactly one rigtune-*+mc${mc}.jar locally, found: ${found[*]:-none}"
+              status=1
+              continue
+            fi
+            asset=$(basename "${found[0]}")
+            if ! gh release download "$tag" --repo "${GITHUB_REPOSITORY}" -p "$asset" -D "$scratch" --clobber; then
+              echo "::error::could not download GitHub release asset $asset to verify"
+              status=1
+              continue
+            fi
+            sha1_local=$(sha1sum "$scratch/$asset" | cut -d' ' -f1)
+            sha512_local=$(sha512sum "$scratch/$asset" | cut -d' ' -f1)
+            response=$(curl -sf \
+              -H "User-Agent: chaotix345/rigtune/release (github.com/chaotix345/rigtune)" \
+              "https://api.modrinth.com/v2/version_file/${sha1_local}?algorithm=sha1") || {
+                echo "::error::no Modrinth version file matches $asset's sha1 ($sha1_local) — upload may be missing or corrupted"
+                status=1
+                continue
+              }
+            sha512_remote=$(echo "$response" | jq -r '.files[] | select(.primary) | .hashes.sha512')
+            if [ "$sha512_local" != "$sha512_remote" ]; then
+              echo "::error::sha512 mismatch for $asset: GitHub=$sha512_local Modrinth=$sha512_remote"
+              status=1
+              continue
+            fi
+            echo "verified: $asset sha512 matches Modrinth version $(echo "$response" | jq -r '.id')"
+          done
+          exit "$status"
