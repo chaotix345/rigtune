@@ -4,7 +4,8 @@ import java.util.List;
 
 // What an undo would do, for the confirmation screen, and what RigTuneController.undo(plan) then carries out. Execution
 // re-checks each item and skips (with a reason) any whose state changed since the plan was made.
-public record UndoPlan(boolean all, List<Item> items) {
+// undoOf: the undone entry's id, "all", or null when there is nothing to undo.
+public record UndoPlan(boolean all, String undoOf, List<Item> items) {
 	public enum Action {
 		// Put a setting or a mod file back (settings now; mod files and config files after a restart).
 		REVERT,
@@ -14,11 +15,25 @@ public record UndoPlan(boolean all, List<Item> items) {
 		SKIP
 	}
 
-	public record Item(String description, Action action, String reason, boolean needsRestart) {
+	// changeIds: the journal changes this item covers; opIds: for DISCARD_STAGED, every pending op its group removal
+	// drops. Execution re-plans exactly these changes (review M8).
+	public record Item(String description, Action action, String reason, boolean needsRestart, List<String> changeIds, List<String> opIds) {
+		public Item {
+			changeIds = changeIds == null ? List.of() : List.copyOf(changeIds);
+			opIds = opIds == null ? List.of() : List.copyOf(opIds);
+		}
+
+		public Item(String description, Action action, String reason, boolean needsRestart) {
+			this(description, action, reason, needsRestart, List.of(), List.of());
+		}
 	}
 
 	public UndoPlan {
 		items = items == null ? List.of() : List.copyOf(items);
+	}
+
+	public UndoPlan(boolean all, List<Item> items) {
+		this(all, all ? UndoPlanner.ALL : null, items);
 	}
 
 	public boolean isEmpty() {
