@@ -60,7 +60,7 @@ class ShareReportTest {
 		assertTrue(text.contains("- RAM 32 GB · heap 6.0 GB · display 2560×1440 @ 180 Hz\n"), text);
 		assertTrue(text.contains("- Tier 4/5 · limited by CPU · goal Balanced\n"), text);
 		assertTrue(text.contains("- Rules r7 (remote) · online\n"), text);
-		assertTrue(text.contains("**Recommendations** (5; [x] = ticked)\n"), text);
+		assertTrue(text.contains("**Recommendations** (5; [x] = suggested)\n"), text);
 
 		int warnings = text.indexOf("__Warnings__\n- Only 2 GB of RAM allocated (high)\n");
 		int remove = text.indexOf("__Remove mods__\n- [x] Disable Indium (high)\n");
@@ -184,11 +184,101 @@ class ShareReportTest {
 		hw.cpu = new io.github.chaotix345.rigtune.core.model.CpuInfo("CPU at D:\\Games\\bob\\cpu.txt", 8, 16, -1);
 		String text = ShareReport.format(report(hw.build(), recs), VERSIONS, null);
 
-		for (String leak : List.of("alice", "bob", ".minecraft", "\\", "AppData", "indium.jar", "sodium.jar", "Games")) {
+		for (String leak : List.of("alice", "bob", ".minecraft", "AppData", "indium.jar", "sodium.jar", "Games")) {
 			assertFalse(text.contains(leak), "leaked " + leak + ": " + text);
 		}
+		assertFalse(Pattern.compile("(?<![A-Za-z])[A-Za-z]:[\\\\/]").matcher(text).find(), text);
 		assertTrue(text.contains("See https://modrinth.com/mod/sodium for 1/2 of it"), text);
-		assertTrue(text.contains("<path>"), text);
+		assertTrue(text.contains("(path)"), text);
+	}
+
+	private static String withTitle(String title) {
+		return ShareReport.format(report(Fixtures.userRig().build(),
+				List.of(rec("advice:t", Category.ADVICE, Impact.LOW, title, new Action.None(), false))), VERSIONS, null);
+	}
+
+	@Test
+	void pathsWithSpacesLeakNoNames() {
+		String text = withTitle("Check /Users/John Smith/mods/x.jar now, C:/Users/Jane Doe/AppData/x.jar and C:\\Users\\Ann Lee\\x.jar too");
+
+		for (String leak : List.of("John", "Smith", "Jane", "Doe", "Ann", "Lee", "AppData")) {
+			assertFalse(text.contains(leak), "leaked " + leak + ": " + text);
+		}
+		assertTrue(text.contains("Check (path) now,"), text);
+		assertTrue(text.contains(" too (low)"), text);
+	}
+
+	@Test
+	void slashesInOrdinaryTextSurvive() {
+		String text = withTitle("Chunks a / b / c and 1/2 and 3/4");
+
+		assertTrue(text.contains("Chunks a / b / c and 1/2 and 3/4 (low)"), text);
+	}
+
+	@Test
+	void markdownAndMentionsAreDefused() {
+		String text = withTitle("Install *Fast* _Mod_ `x` ~y~ |z| [a](b) <@123> @everyone");
+
+		assertTrue(text.contains("Install \\*Fast\\* \\_Mod\\_ \\`x\\` \\~y\\~ \\|z\\| \\[a\\](b) \\<@\u200B123> @\u200Beveryone (low)"), text);
+	}
+
+	@Test
+	void emptyRecommendations() {
+		String text = ShareReport.format(report(Fixtures.userRig().build(), List.of()), VERSIONS, null);
+
+		assertTrue(text.endsWith("\n**Recommendations** none"), text);
+		assertFalse(text.contains("more)"), text);
+	}
+
+	@Test
+	void aMoreLineThatDoesNotFitIsDroppedNotCut() {
+		String full = ShareReport.format(report(Fixtures.userRig().build(), sample()), VERSIONS, null);
+		int fixed = full.indexOf("__Warnings__");
+		String text = ShareReport.format(report(Fixtures.userRig().build(), sample()), VERSIONS, null, fixed + 3);
+
+		assertTrue(text.endsWith("**Recommendations** (5; [x] = suggested)"), text);
+		assertTrue(text.length() <= fixed + 3, "length " + text.length());
+	}
+
+	@Test
+	void hardCutEndsAtALineBreakAndNoRoomGivesNothing() {
+		String text = ShareReport.format(report(Fixtures.userRig().build(), sample()), VERSIONS, null, 120);
+
+		assertTrue(text.startsWith("**RigTune 0.2.0-dev+mc26.2** · Minecraft 26.2 · Fabric Loader 0.19.5\n"), text);
+		assertFalse(text.endsWith("\n"), text);
+		assertEquals("", ShareReport.format(report(Fixtures.userRig().build(), sample()), VERSIONS, null, 0));
+		assertEquals("", ShareReport.format(report(Fixtures.userRig().build(), sample()), VERSIONS, null, -5));
+	}
+
+	@Test
+	void surrogatePairsAreNeverSplit() {
+		String emoji = new String(Character.toChars(0x1F600));
+		Fixtures.Hw hw = Fixtures.userRig();
+		hw.gpu = new GpuInfo("X", "G".repeat(118) + emoji + "tail", "1", GraphicsBackend.VULKAN, 8192);
+		String clipped = ShareReport.format(report(hw.build(), sample()), VERSIONS, null);
+		assertWellFormed(clipped);
+		assertTrue(clipped.contains("G".repeat(118) + "…"), clipped);
+
+		Fixtures.Hw emojiCpu = Fixtures.userRig();
+		emojiCpu.cpu = new io.github.chaotix345.rigtune.core.model.CpuInfo(emoji.repeat(40), 8, 16, -1);
+		int length = ShareReport.format(report(emojiCpu.build(), sample()), VERSIONS, null).length();
+		for (int max = 1; max <= length; max++) {
+			String text = ShareReport.format(report(emojiCpu.build(), sample()), VERSIONS, null, max);
+			assertTrue(text.length() <= max, max + ": " + text.length());
+			assertWellFormed(text);
+		}
+	}
+
+	private static void assertWellFormed(String text) {
+		for (int i = 0; i < text.length(); i++) {
+			char c = text.charAt(i);
+			if (Character.isHighSurrogate(c)) {
+				assertTrue(i + 1 < text.length() && Character.isLowSurrogate(text.charAt(i + 1)), "split pair at " + i + ": " + text);
+				i++;
+			} else {
+				assertFalse(Character.isLowSurrogate(c), "lone low surrogate at " + i + ": " + text);
+			}
+		}
 	}
 
 	@Test

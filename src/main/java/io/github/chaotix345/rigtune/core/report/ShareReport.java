@@ -21,12 +21,15 @@ import java.util.regex.Pattern;
 public final class ShareReport {
 	public static final int DISCORD_LIMIT = 2000;
 	private static final int FIELD_LIMIT = 120;
-	private static final String PATH = "<path>";
+	private static final String PATH = "(path)";
+	// A drive, home or root start, then folders that may contain spaces (each ends at a separator), then a last
+	// segment without spaces. Finally any word with a backslash (relative Windows paths, UNC paths).
 	private static final List<Pattern> PATHS = List.of(
-			Pattern.compile("\\S*\\\\\\S*"),
-			Pattern.compile("(?i)(?<!\\w)[a-z]:/\\S*"),
-			Pattern.compile("~/\\S*"),
-			Pattern.compile("(?<![\\w:/.])/(?:[^\\s/]+/)+[^\\s/]*"));
+			Pattern.compile("(?i)(?<!\\w)[a-z]:[\\\\/](?:[^\\\\/\\r\\n]*[\\\\/])*[^\\s\\\\/]*"),
+			Pattern.compile("~[\\\\/](?:[^\\\\/\\r\\n]*[\\\\/])*[^\\s\\\\/]*"),
+			Pattern.compile("(?<![\\w:/.])/[^\\s/][^/\\r\\n]*/(?:[^/\\r\\n]*/)*[^\\s/]*"),
+			Pattern.compile("\\S*\\\\\\S*"));
+	private static final String MARKDOWN = "\\*_~`|[]<";
 
 	public record Versions(String rigtune, String minecraft, String loader) {
 	}
@@ -49,7 +52,7 @@ public final class ShareReport {
 		if (items.isEmpty()) {
 			fixed.append("**Recommendations** none\n");
 		} else {
-			fixed.append("**Recommendations** (").append(items.size()).append("; [x] = ticked)\n");
+			fixed.append("**Recommendations** (").append(items.size()).append("; [x] = suggested)\n");
 		}
 
 		StringBuilder all = new StringBuilder(fixed);
@@ -144,14 +147,19 @@ public final class ShareReport {
 		return items;
 	}
 
+	// As many items as fit together with the "(N more)" line. When not even that line fits, it's left out (the
+	// Recommendations line already gives the count).
 	private static String truncated(String fixed, List<String> items, int maxChars) {
-		int best = 0;
+		int best = fixed.length() + more(items.size()).length() <= maxChars ? 0 : -1;
 		int length = fixed.length();
 		for (int k = 1; k <= items.size(); k++) {
 			length += items.get(k - 1).length();
 			if (length + more(items.size() - k).length() <= maxChars) {
 				best = k;
 			}
+		}
+		if (best < 0) {
+			return stripTrailingNewline(new StringBuilder(fixed));
 		}
 		StringBuilder out = new StringBuilder(fixed);
 		for (int k = 0; k < best; k++) {
@@ -164,11 +172,27 @@ public final class ShareReport {
 		return "(" + count + " more)";
 	}
 
+	// Only when the fixed part alone is too long: whole lines if at least one fits, else a character cut.
 	private static String hardCut(String text, int maxChars) {
+		if (maxChars <= 0) {
+			return "";
+		}
 		if (text.length() <= maxChars) {
 			return text;
 		}
-		int end = Math.max(0, maxChars - 1);
+		int lineEnd = text.lastIndexOf('\n', maxChars);
+		if (lineEnd > 0) {
+			return text.substring(0, lineEnd);
+		}
+		return clip(text, maxChars);
+	}
+
+	// At most max characters, ending in "…", never splitting a surrogate pair.
+	private static String clip(String text, int max) {
+		if (text.length() <= max) {
+			return text;
+		}
+		int end = max - 1;
 		if (end > 0 && Character.isHighSurrogate(text.charAt(end - 1))) {
 			end--;
 		}
@@ -192,12 +216,28 @@ public final class ShareReport {
 		return out;
 	}
 
+	// Text from outside RigTune (hardware names, mod titles): no paths, bounded, and inert as Markdown, so a mod
+	// called "*@everyone*" can't format the message or ping anyone.
 	private static String field(String value) {
 		if (blank(value)) {
 			return "?";
 		}
-		String clean = scrub(value.strip().replaceAll("\\s+", " "));
-		return clean.length() > FIELD_LIMIT ? clean.substring(0, FIELD_LIMIT - 1) + "…" : clean;
+		return escape(clip(scrub(value.strip().replaceAll("\\s+", " ")), FIELD_LIMIT));
+	}
+
+	private static String escape(String text) {
+		StringBuilder out = new StringBuilder(text.length() + 8);
+		for (int i = 0; i < text.length(); i++) {
+			char c = text.charAt(i);
+			if (MARKDOWN.indexOf(c) >= 0) {
+				out.append('\\');
+			}
+			out.append(c);
+			if (c == '@') {
+				out.append('​');
+			}
+		}
+		return out.toString();
 	}
 
 	private static boolean blank(String value) {
