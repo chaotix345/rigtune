@@ -58,6 +58,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -253,18 +254,66 @@ public final class RealController implements RigTuneController {
 			Goal g = goal;
 			var data = this.settings.modrinthAllowed() ? online.data() : OnlineData.offline();
 			int gen = ++generation;
-			CompletableFuture.supplyAsync(() -> Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion, ModScanner.queuedUpdates()),
-							Probes.EXECUTOR)
-					.whenComplete((built, error) -> minecraft.execute(() -> {
+			CompletableFuture.supplyAsync(() -> {
+						Set<String> queued = ModScanner.queuedUpdates();
+						List<Op> dropped = dropQueuedUpdates(queued);
+						return new Rebuilt(Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion, queued), dropped);
+					}, Probes.EXECUTOR)
+					.whenComplete((rebuilt, error) -> minecraft.execute(() -> {
 						if (error != null) {
 							RigTune.LOGGER.error("Could not build the RigTune report", error);
 							status = Component.translatable("rigtune.status.scan_failed");
-						} else if (gen == generation) {
-							report = this.settings.modrinthAllowed() ? withoutStaged(built)
-									: ModrinthOffAdvice.apply(withoutStaged(built), !this.settings.networkEnabled);
+							return;
+						}
+						if (!rebuilt.dropped().isEmpty()) {
+							droppedQueuedUpdates(rebuilt.dropped(), scanned);
+						}
+						if (gen == generation) {
+							report = this.settings.modrinthAllowed() ? withoutStaged(rebuilt.report())
+									: ModrinthOffAdvice.apply(withoutStaged(rebuilt.report()), !this.settings.networkEnabled);
 						}
 					}));
 		});
+	}
+
+	private record Rebuilt(Report report, List<Op> dropped) {
+	}
+
+	// Also at exit: an updater can have queued its build since the last rebuild.
+	public void unstageQueuedUpdates() {
+		dropQueuedUpdates(ModScanner.queuedUpdates());
+	}
+
+	// A staged update of a mod whose own updater has a build waiting in mods/update/ would race it at exit, so it is
+	// unstaged (re-check of review 4). A busy lock leaves it for the next rebuild.
+	private List<Op> dropQueuedUpdates(Set<String> queued) {
+		try {
+			List<Op> dropped = staging.dropQueuedUpdates(queued);
+			if (dropped == null || dropped.isEmpty()) {
+				return List.of();
+			}
+			RigTune.LOGGER.info("Unstaged {} RigTune change(s) for {}: an update of its own is waiting in mods/update", dropped.size(), queued);
+			return dropped;
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.warn("Could not unstage the RigTune updates of {}", queued, e);
+			return List.of();
+		}
+	}
+
+	private void droppedQueuedUpdates(List<Op> dropped, List<InstalledMod> scanned) {
+		Set<String> modIds = new LinkedHashSet<>();
+		dropped.stream().filter(op -> op.type() == PendingActions.Type.ENABLE_FILE && op.modId() != null).forEach(op -> modIds.add(op.modId()));
+		boolean stagedNow = false;
+		for (String modId : modIds) {
+			stagedNow |= staged.remove("update:" + modId);
+		}
+		if (!stagedNow) {
+			carriedOverOps = Math.max(0, carriedOverOps - dropped.size());
+		}
+		List<String> names = modIds.stream()
+				.map(id -> scanned.stream().filter(m -> m.modId().equals(id) && m.name() != null).map(InstalledMod::name).findFirst().orElse(id))
+				.toList();
+		status = Component.translatable("rigtune.status.queued_update_dropped", String.join(", ", names));
 	}
 
 	private Report withoutStaged(Report built) {
@@ -383,9 +432,10 @@ public final class RealController implements RigTuneController {
 		downloading = true;
 		try {
 			Set<String> installedProjects = new HashSet<>(online.projectIdsByModId().values());
+			Set<String> installedVersions = new HashSet<>(online.versionIdsByModId().values());
 			HardwareProfile hw = hardware;
 			String mcVersion = hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion();
-			CompletableFuture.supplyAsync(() -> download(downloads, installedProjects, mcVersion), Probes.EXECUTOR)
+			CompletableFuture.supplyAsync(() -> download(downloads, installedProjects, installedVersions, mcVersion), Probes.EXECUTOR)
 					.whenComplete((result, error) -> {
 						try {
 							minecraft.execute(() -> {
@@ -427,8 +477,8 @@ public final class RealController implements RigTuneController {
 		rebuild();
 	}
 
-	private DownloadPlanner.Result download(List<Recommendation> recs, Set<String> installedProjects, String mcVersion) {
-		DependencyResolver resolver = new DependencyResolver(modrinth, OnlineDataFetcher.LOADER, mcVersion);
+	private DownloadPlanner.Result download(List<Recommendation> recs, Set<String> installedProjects, Set<String> installedVersions, String mcVersion) {
+		DependencyResolver resolver = new DependencyResolver(modrinth, OnlineDataFetcher.LOADER, mcVersion, installedVersions);
 		List<InstalledMod> scanned = mods;
 		Set<String> loadedIds = new HashSet<>();
 		if (scanned != null) {

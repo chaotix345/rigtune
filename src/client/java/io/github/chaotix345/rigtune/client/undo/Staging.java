@@ -189,6 +189,28 @@ public final class Staging {
 		return removed.removed();
 	}
 
+	// Unstages (as unstageLocked) every staged enable of a mod that has an update of its own waiting in mods/update/
+	// (ModJars.queuedUpdates), with its group: at exit it would race that mod's own updater for the jar (re-check of
+	// review 4). Null when the lock is busy.
+	public List<Op> dropQueuedUpdates(Set<String> queuedModIds) throws IOException {
+		if (queuedModIds.isEmpty() || !Files.exists(pendingFile)) {
+			return List.of();
+		}
+		try (ApplyLock lock = lock()) {
+			if (lock == null) {
+				return null;
+			}
+			if (!Files.exists(pendingFile)) {
+				return List.of();
+			}
+			List<String> ids = PendingActions.load(pendingFile).ops().stream()
+					.filter(op -> op != null && op.type() == PendingActions.Type.ENABLE_FILE && op.id() != null && op.modId() != null
+							&& queuedModIds.contains(op.modId()))
+					.map(Op::id).toList();
+			return unstageLocked(ids);
+		}
+	}
+
 	// Cancels everything staged (the RigTune screen's Discard pending). Null when the lock is busy.
 	public List<Op> discard() throws IOException {
 		try (ApplyLock lock = lock()) {
