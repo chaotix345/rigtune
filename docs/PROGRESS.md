@@ -18,7 +18,7 @@ Brief: the user's v0.2.0 prompt (full autonomy: research → release, including 
 - [x] Phase 0: orient. Docs read; baseline green.
 - [x] Phase 1: research DONE and committed (docs/research/v0.2/: multi-version, api-diff, modrinth, dh-iris, benchmark, triage).
 - [x] Phase 2 (mostly): docs/v0.2/SPEC.md (all 13 items, ACs), contracts commit cae06b8 on feat/v0.2.0, docs/v0.2/PLAN.md (553b58e: workstreams WS-A..H, ownership, hotspots, game-test lock `C:/Dev/Worktrees/.gametest-lock`).
-  - [ ] Independent plan review RUNNING (agent plan-review -> scratchpad/plan-review.md). Apply fixes to SPEC/PLAN, then launch Wave A.
+  - [x] Plan review DONE (docs/v0.2/plan-review.md: 5 HIGH, 16 MEDIUM, 11 LOW). Contract fixes in 5418fc3; SPEC "Amendments" and PLAN "Plan-review fixes by workstream" sections added.
 - [ ] Phase 3: RUNNING. Agent p3-multiversion, branch feat/multi-version, worktree C:/Dev/Worktrees/rigtune-mv (Stonecutter 0.9.8, from the prototype patch). It's the only game-test runner right now. When done: review, CI green, merge into feat/v0.2.0.
 - [ ] Phase 4: Wave A = WS-A rules-v2, WS-B undo, WS-C benchmark-v2, WS-D dh-iris, WS-E settings-ui, WS-F modrinth, WS-G self-update-e2e (after the Phase 3 merge); Wave B = WS-H knowledge (after WS-A).
 - [ ] Phase 5: verification (unit + game tests per version, production smoke 26.2 with a copy of the user's mods, 26.3 representative set, self-update E2E)
@@ -30,7 +30,7 @@ Brief: the user's v0.2.0 prompt (full autonomy: research → release, including 
 | name | branch | worktree | status |
 |---|---|---|---|
 | p3-multiversion | feat/multi-version | C:/Dev/Worktrees/rigtune-mv | running |
-| plan-review | (read-only) | - | running |
+| ws-f-modrinth | feat/modrinth | C:/Dev/Worktrees/rigtune-modrinth | running (tasks 1, 2, 4 now; task 3 build/release files only after the Phase 3 merge: message it) |
 
 ## Lessons (carried over from v0.1.0; don't relearn)
 - The Bash tool is Git Bash. Use absolute paths; `cd` inside a command changes the session's working directory.
