@@ -8,6 +8,15 @@ on:
   # update-rules.yml calls `gh workflow run build.yml` explicitly. See the comment there.
   workflow_dispatch:
 
+# No job here writes to the repository; checkout persists this token next to the game and its mods.
+permissions:
+  contents: read
+
+# A newer push to the same branch (or PR) cancels the older run; other refs keep their own runs.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   java:
     runs-on: ubuntu-latest
@@ -32,6 +41,25 @@ jobs:
       # Builds and unit-tests every Minecraft version (versions/<mc>/); check also compiles each version's game tests.
       - name: Build and test
         run: ./gradlew build
+      # The self-update E2E drivers (tools/e2e) aren't part of `build`: compile them here so an API change that breaks
+      # them shows up on the push, not in Phase 5. The undo driver compiles against these sources; the self-update driver
+      # against each released jar it drives on the E2E's version, 26.2 (downloaded from the GitHub release, sha256-pinned).
+      - name: Compile the E2E drivers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          old=build/e2e-old
+          mkdir -p "$old"
+          gh release download v0.1.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.1.0.jar' -D "$old" --clobber
+          gh release download v0.2.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.2.0+mc26.2.jar' -D "$old" --clobber
+          sha256sum -c - <<EOF
+          8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950  $old/rigtune-0.1.0.jar
+          67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9  $old/rigtune-0.2.0+mc26.2.jar
+          EOF
+          ./gradlew compileE2eUndoJava
+          ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.1.0.jar"
+          ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.2.0+mc26.2.jar"
       - name: Upload jars
         if: always()
         uses: actions/upload-artifact@v7
