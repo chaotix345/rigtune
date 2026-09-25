@@ -1,0 +1,12 @@
+{
+ "description": "The user's 0.1.0 instance on 2026-09-26 (plan review H-M2): RigTune's Distant Horizons update group (disable fabric-26.2.jar = DH 3.3.0, enable its downloaded 3.3.2) failed once because DH's own updater held the jar, and DH's own 3.3.2 build waits in mods/update/. pending.json and last-apply.json are templated read-only copies (source.json); the jars are minimal fakes with the fabric.mod.json id distanthorizons.",
+ "modId": "distanthorizons",
+ "modName": "Distant Horizons",
+ "jars": [
+  {"path": "mods/fabric-26.2.jar", "id": "distanthorizons", "name": "Distant Horizons", "version": "3.3.0"},
+  {"path": "mods/DistantHorizons-3.3.2-26.2-fabric-neoforge.jar.rigtune-pending", "id": "distanthorizons", "name": "Distant Horizons", "version": "3.3.2"},
+  {"path": "mods/update/DistantHorizons-3.3.2 - 26.2 neo/fabric-26.2.jar", "id": "distanthorizons", "name": "Distant Horizons", "version": "3.3.2"}
+ ],
+ "holdOpenAtOldExit": ["mods/fabric-26.2.jar"],
+ "holdOpenWhy": "In the real failure a second process (DH's own updater) had fabric-26.2.jar open when the 0.1.0 helper tried to rename it. The harness keeps the fake jar open (Windows: no FILE_SHARE_DELETE, so the rename fails the same way) from the old version's launch until its helper is done, so the retry fails again and the group reaches the new version, as H-M2 requires."
+}

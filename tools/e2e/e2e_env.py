@@ -83,12 +83,12 @@ def _utc(moment):
     return moment.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def test_mod_jar(path, mod_id, version="1.0.0"):
+def test_mod_jar(path, mod_id, version="1.0.0", name=None):
     """A minimal Fabric mod: a fabric.mod.json and nothing else, which Fabric Loader loads like any other mod."""
     path = Path(path)
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("fabric.mod.json", json.dumps({
-            "schemaVersion": 1, "id": mod_id, "version": version, "name": "RigTune E2E test mod " + mod_id,
+            "schemaVersion": 1, "id": mod_id, "version": version, "name": name or "RigTune E2E test mod " + mod_id,
             "description": "Test-only mod for tools/e2e; it does nothing.", "license": "MIT", "environment": "*",
             "depends": {"fabricloader": ">=0.19.5"}}, indent=2))
     return path
