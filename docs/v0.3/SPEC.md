@@ -94,7 +94,7 @@ Sources: docs/research/v0.3/launcher-ram.md.
 Sources: docs/research/v0.3/hardware-tiers.md.
 - The existing patterns already cover RTX 50 desktop/laptop, RX 9070 XT/9070/9060 (XT), Arc B580/B570, Radeon 890M/880M/8060S, Arc 140V/B370/B390, Apple M-series and Ryzen 9000/X3D, Core Ultra 200S K. Changes (inserted before the rows noted in the research):
   - `RX 9070 GRE` → tier 4 (was wrongly tier 5 via the generic 9070 row). More conservative, so also in v1.
-  - `Arc Pro B50` → tier 3, `Arc Pro B6x/B7x` → tier 4, `integrated: false` (were caught by the integrated tier-3 catch-all). This raises them, so these rows carry `"v1": false`: 0.1.x keeps today's classification.
+  - `Arc Pro B50` → tier 3, `Arc Pro B6x/B7x` → tier 4, `integrated: false`. (Correction found by WS-D's tests: they didn't hit the integrated catch-all as the research thought; they got the Intel vendor fallback, tier 2, discrete.) This raises them, so these rows carry `"v1": false`: 0.1.x keeps today's classification.
   - `RTX 5050` (not `5050 Ti`) → tier 3 (same as today's vendor fallback; explicit now). Also in v1.
 - Tooling: `tools/update_rules.py` and `tools/check_rules_v1.py` accept the maintainer-only `"v1": false` on `gpuTiers`/`cpuTiers` rows (omitted from rules-v1.json, the key never written to either output); REVIEW.md section (d) lists them; RULES_SCHEMA.md documents it.
 - No new CPU rows (every current family matches an existing generation-agnostic pattern or lands sensibly on the formula without a verified OSHI string).
