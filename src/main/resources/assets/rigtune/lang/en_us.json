@@ -154,6 +154,7 @@
 	"rigtune.benchmark.menu.scene": "Scene",
 	"rigtune.benchmark.menu.scene.benchmark_world.hint": "A fixed RigTune world, the same every time. Opens from the title screen.",
 	"rigtune.benchmark.menu.scene.current.hint": "Runs where you stand, in your current world.",
+	"rigtune.benchmark.menu.scene.current.saves": "Higher render distances load and save more of this world.",
 	"rigtune.benchmark.menu.tune": "Tune settings",
 	"rigtune.benchmark.noisy": "Results were noisy (%s spread): close background apps and retry.",
 	"rigtune.benchmark.not_measured.deadline": "the 5-minute limit",
