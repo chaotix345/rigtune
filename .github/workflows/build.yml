@@ -122,7 +122,7 @@ jobs:
       # If the game finds no graphics backend it opens a blocking error dialog, so a hang means a timeout here.
       - name: Client game tests
         timeout-minutes: 20
-        run: ./gradlew :${{ matrix.mc }}:runProductionClientGameTest --stacktrace
+        run: ./gradlew ":${{ matrix.mc }}:runProductionClientGameTest" --stacktrace
       # A leg whose backend fails falls back to the other one and would still pass: fail it instead.
       - name: Check the game used ${{ matrix.backend }}
         run: |

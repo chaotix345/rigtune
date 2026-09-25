@@ -19,7 +19,7 @@ _STAGES = {"snapshot": 0, "pre": 1, "rc": 2}
 
 
 def _core(mc):
-    m = _VERSION.match(mc)
+    m = _VERSION.fullmatch(mc)
     if not m:
         sys.exit(f"versions/{mc}: not a Minecraft version id")
     return int(m.group(1)), int(m.group(2)), int(m.group(3) or 0), m.group(4) or ""
