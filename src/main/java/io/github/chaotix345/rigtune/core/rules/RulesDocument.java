@@ -145,6 +145,8 @@ public final class RulesDocument {
 		public Condition recommendWhen;
 		public Condition avoidWhen;
 		public String avoidReason;
+		// v2: whether the "disable" suggestion from avoidWhen starts ticked (default true).
+		public Boolean avoidSelected;
 		public List<String> conflictsWith = new ArrayList<>();
 		public Boolean defaultSelected;
 		public Map<String, Boolean> upstream;

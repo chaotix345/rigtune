@@ -2,9 +2,11 @@ package io.github.chaotix345.rigtune.core.recommend;
 
 import com.google.gson.JsonElement;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
+import io.github.chaotix345.rigtune.core.rules.RulesDocument.SettingLabel;
 
 import java.math.BigDecimal;
 import java.util.Locale;
+import java.util.Map;
 
 public final class SettingValues {
 	static final String REFRESH_RATE = "$refreshRate";
@@ -77,6 +79,28 @@ public final class SettingValues {
 		String words = field.replace('_', ' ').replaceAll("([a-z0-9])([A-Z])", "$1 $2").toLowerCase(Locale.ROOT);
 		String text = key.startsWith("sodium.") ? "Sodium " + words : words;
 		return Character.toUpperCase(text.charAt(0)) + text.substring(1);
+	}
+
+	// "<name>: <current> → <target>", with the rules' settingLabels where they exist and the caption from the key otherwise.
+	static String describe(SettingLabel label, String key, String current, String target) {
+		String name = label != null && label.name != null && !label.name.isBlank() ? label.name : label(key);
+		return name + ": " + valueLabel(label, current) + " → " + valueLabel(label, target);
+	}
+
+	private static String valueLabel(SettingLabel label, String value) {
+		if (label == null || label.values == null || value == null) {
+			return value;
+		}
+		String exact = label.values.get(value);
+		if (exact != null) {
+			return exact;
+		}
+		for (Map.Entry<String, String> entry : label.values.entrySet()) {
+			if (entry.getValue() != null && same(entry.getKey(), value)) {
+				return entry.getValue();
+			}
+		}
+		return value;
 	}
 
 	private static String normalise(String value) {
