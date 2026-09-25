@@ -38,6 +38,11 @@ Brief: the user's v0.2.0 prompt (full autonomy: research → release, including 
 | ws-e-ui | feat/settings-ui | C:/Dev/Worktrees/rigtune-ui | running |
 | ws-g-e2e | feat/self-update-e2e | C:/Dev/Worktrees/rigtune-e2e | MERGED (fec2c36, then follow-up f04cc12 -> 458eeb0; 315 tests per version). The unmodified v0.1.0 updated to 0.2.0-dev: 19/19 PASS (docs/smoke/self-update/v010-to-dev/RESULT.md); 0.2 to a newer 0.2: 19/19 PASS. 311 tests per version. Phase 5 TODO: a final run against the merged integration jar, the --expect-history check against real WS-B output, and the M14 undo-after-restart driver. Redirect hops are now checked one by one (fixed). Open: the Modrinth-lookup startup race (reproduced 1 time in 5; fix sent to WS-A; evidence in docs/smoke/self-update/v010-offline-race/); the apply toast says "Mod files and Sodium settings were updated" after a mod-only update (UX nit). |
 
+## Real-world feedback (the user's instance, read-only, 2026-09-25)
+- The user ran 0.1.0 and applied 17 ops (09:08). 15 were OK: added bbe, moreculling, asynclogger, fastquit, Ixeris, structure_layout_optimizer (+ ResourcefulConfig as a dependency); updated entityculling, modmenu, YACL, zoomify.
+- FAILED: the DH update group (disable fabric-26.2.jar = DH 3.3.0, enable DistantHorizons-3.3.2): "The process cannot access the file because it is being used by another process", 3 s after the game exited (10 × 300 ms retries). Only the 27 MB DH jar was affected. Likely the Modrinth App re-scanning the instance or AV. The group stays pending (attempts 1/3) and retries at the next exit; DH 3.3.0 stays active; nothing is broken.
+- 0.2 TODO (Phase 5/6, owner: a fix agent): in ApplyExecutor, retry sharing violations with backoff for up to ~30 s total (not 3 s), plus a short settle delay (~2 s) in ApplyHelper after the game exits. Test with a mover that fails N times.
+
 ## Lessons (carried over from v0.1.0; don't relearn)
 - The Bash tool is Git Bash. Use absolute paths; `cd` inside a command changes the session's working directory.
 - Don't use Python string literals with Windows backslashes (they mangled this file once).
