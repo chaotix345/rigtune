@@ -56,7 +56,7 @@ public final class SettingValues {
 		return Math.clamp(cap, 30, 250);
 	}
 
-	static boolean same(String a, String b) {
+	public static boolean same(String a, String b) {
 		if (a == null || b == null) {
 			return a == b;
 		}
@@ -104,11 +104,15 @@ public final class SettingValues {
 
 	// "<name>: <current> → <target>", with the rules' settingLabels where they exist and the caption from the key otherwise.
 	static String describe(SettingLabel label, String key, String current, String target) {
-		String name = label != null && label.name != null && !label.name.isBlank() ? withMod(key, label.name) : label(key);
-		return name + ": " + valueLabel(label, current) + " → " + valueLabel(label, target);
+		return name(label, key) + ": " + valueLabel(label, current) + " → " + valueLabel(label, target);
 	}
 
-	private static String valueLabel(SettingLabel label, String value) {
+	// The label's name (after the mod's name for a mod's key), else the caption from the key.
+	public static String name(SettingLabel label, String key) {
+		return label != null && label.name != null && !label.name.isBlank() ? withMod(key, label.name) : label(key);
+	}
+
+	public static String valueLabel(SettingLabel label, String value) {
 		if (label == null || label.values == null || value == null) {
 			return value;
 		}

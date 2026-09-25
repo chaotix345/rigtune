@@ -10,6 +10,7 @@ import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
+import io.github.chaotix345.rigtune.core.model.UpdateInfo;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument.SettingLabel;
 import io.github.chaotix345.rigtune.core.rules.RulesLoader;
@@ -34,6 +35,7 @@ class KnowledgeV2ScenarioTest {
 	private static final String HORIZONTAL = "dh.client.advanced.graphics.quality.horizontalQuality";
 	private static final String RESOLUTION = "dh.client.advanced.graphics.quality.maxHorizontalResolution";
 	private static final String THREADS = "dh.common.multiThreading.numberOfThreads";
+	private static final String RENDERER = "dh.client.advanced.debugging.rendererMode";
 	private static final String SHADOW = "iris.maxShadowRenderDistance";
 	private static final String SHADERS = "shaders-enabled";
 	private static final List<String> DH_MODS = List.of("sodium", "distanthorizons");
@@ -358,6 +360,54 @@ class KnowledgeV2ScenarioTest {
 		for (RulesDocument.SettingRule rule : rules.settings) {
 			SettingLabel label = rules.settingLabels.get(rule.key);
 			assertTrue(label != null && label.name != null && !label.name.isBlank(), rule.key);
+		}
+	}
+
+	// Phase 5 finding 1: Distant Horizons' own auto-updater replaces its jar at exit, which collides with RigTune's update.
+	@Test
+	void dhUpdatesItselfWhileItsAutoUpdaterIsOn() {
+		String autoUpdater = "dh.client.advanced.autoUpdater.enableAutoUpdater";
+		UpdateInfo update = new UpdateInfo("distanthorizons", "uCdwusMi", "3.3.0", "v", "3.3.2", null);
+		OnlineData online = new OnlineData(true, Map.of(), Map.of("distanthorizons", update));
+		for (String on : List.of("true", "false")) {
+			Map<String, Recommendation> recs = Recommender.recommend(RulesLoader.loadBundled(), Fixtures.userRig().build(),
+							Fixtures.mods("sodium", "distanthorizons"), new SettingsSnapshot(with(DH_DEFAULTS, autoUpdater, on)), online, Goal.BALANCED)
+					.recommendations().stream().collect(Collectors.toMap(Recommendation::id, r -> r));
+			boolean selfUpdating = on.equals("true");
+			assertEquals(!selfUpdating, recs.containsKey("update:distanthorizons"), on);
+			assertEquals(selfUpdating, recs.containsKey("advice:updates-itself:distanthorizons"), on);
+		}
+	}
+
+	// Phase 5 finding 2: the vanilla render-distance clamps are about Distant Horizons drawing the far terrain.
+	@Test
+	void dhRenderDistanceClampOnlyWhileDhRenders() {
+		Map<String, String> far = with(DH_DEFAULTS, "vanilla.renderDistance", "32", THREADS, "8");
+		assertEquals("12", target(run(Fixtures.userRig(), DH_MODS, with(far, RENDERER, "DEFAULT")), "vanilla.renderDistance"));
+		assertEquals("8", target(run(Fixtures.lowEndLaptop(), DH_MODS, with(far, RENDERER, "DEFAULT")), "vanilla.renderDistance"));
+		for (Map<String, String> settings : List.of(with(far, RENDERER, "DISABLED"), far)) {
+			Recommendation rec = run(Fixtures.userRig(), DH_MODS, settings).get("set:vanilla.renderDistance");
+			assertTrue(rec == null || !rec.reason().contains("Distant Horizons"), String.valueOf(rec));
+		}
+	}
+
+	// Phase 5 finding 10: with Chunky, Distant Horizons wants at least as many threads as C2ME and warns about too few.
+	@Test
+	void dhThreadsAreNotCappedWithChunky() {
+		Fixtures.Hw fourThreads = Fixtures.userRig();
+		fourThreads.cpu = new CpuInfo("Intel(R) Core(TM) i3-7100 CPU @ 3.90GHz", 2, 4, -1);
+		assertFalse(run(fourThreads, List.of("sodium", "distanthorizons", "chunky", "c2me"), with(DH_DEFAULTS, THREADS, "8"))
+				.containsKey("set:" + THREADS));
+	}
+
+	// Phase 5 finding 3.
+	@Test
+	void modernFixReasonFitsEveryVersion() {
+		for (String mc : List.of("26.2", "26.3")) {
+			Fixtures.Hw hw = Fixtures.userRig();
+			hw.mcVersion = mc;
+			String reason = run(hw, "sodium").get("add:modernfix-mvus").reason();
+			assertFalse(reason.contains("26."), reason);
 		}
 	}
 }

@@ -115,13 +115,18 @@ public final class RealController implements RigTuneController {
 		this.staging = new Staging(configDir, pendingFile, ConfigTargets.all(configDir), ClientJournal.get());
 		// The Undo screen plans off the render thread; the options are still read on it.
 		this.undoService = new UndoService(staging, ClientJournal.get(),
-				() -> minecraft.isSameThread() ? new GameState(minecraft.options, staging.targets(), modsDir)
-						: minecraft.submit(() -> new GameState(minecraft.options, staging.targets(), modsDir)).join(),
+				() -> minecraft.isSameThread() ? new GameState(minecraft.options, staging.targets(), modsDir, settingLabels())
+						: minecraft.submit(() -> new GameState(minecraft.options, staging.targets(), modsDir, settingLabels())).join(),
 				values -> {
 					Map<String, Boolean> written = new LinkedHashMap<>();
 					SettingsBridge.applyVanilla(minecraft.options, values).forEach((key, result) -> written.put(key, result.ok()));
 					return written;
 				});
+	}
+
+	private Map<String, RulesDocument.SettingLabel> settingLabels() {
+		RulesDocument doc = rules;
+		return doc == null ? Map.of() : doc.settingLabels;
 	}
 
 	public void start(Minecraft minecraft) {
@@ -252,7 +257,8 @@ public final class RealController implements RigTuneController {
 							RigTune.LOGGER.error("Could not build the RigTune report", error);
 							status = Component.translatable("rigtune.status.scan_failed");
 						} else if (gen == generation) {
-							report = this.settings.modrinthAllowed() ? withoutStaged(built) : ModrinthOffAdvice.apply(withoutStaged(built));
+							report = this.settings.modrinthAllowed() ? withoutStaged(built)
+									: ModrinthOffAdvice.apply(withoutStaged(built), !this.settings.networkEnabled);
 						}
 					}));
 		});

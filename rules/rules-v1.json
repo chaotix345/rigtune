@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": 9,
-  "generatedAt": "2026-09-25T06:37:53Z",
+  "revision": 10,
+  "generatedAt": "2026-09-25T07:10:27Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -378,7 +378,7 @@
       "category": "startup",
       "impact": "medium",
       "stability": "stable",
-      "reason": "Makes the game start faster and use less memory. This is the community build for Minecraft 26.2, because the original ModernFix has no 26.2 release.",
+      "reason": "Makes the game start faster and use less memory. This is the community build for current Minecraft versions, because the original ModernFix has no release for them.",
       "recommendWhen": {
         "always": true
       },
@@ -1607,6 +1607,7 @@
       "better-block-entities",
       "c2me-fabric",
       "debugify",
+      "distanthorizons",
       "dynamic-fps",
       "entityculling",
       "fastquit",
@@ -1632,6 +1633,7 @@
       "better-block-entities",
       "c2me-fabric",
       "debugify",
+      "distanthorizons",
       "dynamic-fps",
       "entityculling",
       "fastquit",
@@ -1660,6 +1662,7 @@
       "better-block-entities",
       "c2me-fabric",
       "debugify",
+      "distanthorizons",
       "dynamic-fps",
       "entityculling",
       "fastquit",

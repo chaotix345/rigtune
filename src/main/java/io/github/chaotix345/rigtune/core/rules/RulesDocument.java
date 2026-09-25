@@ -147,6 +147,8 @@ public final class RulesDocument {
 		public String avoidReason;
 		// v2: whether the "disable" suggestion from avoidWhen starts ticked (default true).
 		public Boolean avoidSelected;
+		// v2: when TRUE for an installed mod, its update is left to the mod itself (its own auto-updater is on).
+		public Condition skipUpdateWhen;
 		public List<String> conflictsWith = new ArrayList<>();
 		public Boolean defaultSelected;
 		public Map<String, Boolean> upstream;

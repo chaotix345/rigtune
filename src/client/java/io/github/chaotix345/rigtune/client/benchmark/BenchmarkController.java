@@ -19,6 +19,7 @@ import io.github.chaotix345.rigtune.core.benchmark.PlannerResult;
 import io.github.chaotix345.rigtune.core.benchmark.Protocol;
 import io.github.chaotix345.rigtune.core.benchmark.SessionResult;
 import io.github.chaotix345.rigtune.core.benchmark.Step;
+import io.github.chaotix345.rigtune.core.benchmark.Throttle;
 import io.github.chaotix345.rigtune.core.benchmark.Timing;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import net.fabricmc.loader.api.FabricLoader;
@@ -62,6 +63,8 @@ public final class BenchmarkController {
 			VSYNC, "false",
 			INACTIVITY_LIMIT, "minimized");
 	private static final SystemToast.SystemToastId TOAST_ID = new SystemToast.SystemToastId(8000L);
+	// Dynamic FPS slows the game down while its window isn't focused.
+	private static final String DYNAMIC_FPS = "dynamic_fps";
 
 	// maxSteps: render distance steps. The rest of the timing is derived: the defaults are docs/v0.2/SPEC.md's, and
 	// shorter sweeps (game tests) shorten the warm-up and the quick protocol with them.
@@ -77,9 +80,10 @@ public final class BenchmarkController {
 	}
 
 	// record: the stored run (null when cancelled); before: the "before" of a Measure pair when this is its "after".
-	// restoreOk: every changed setting was put back.
+	// restoreOk: every changed setting was put back. throttled: the run was stopped because a step was measured while
+	// the game was throttled (it counts as cancelled, so nothing is stored).
 	public record Outcome(BenchmarkRequest request, SessionResult session, boolean cancelled, @Nullable BenchmarkRecord record,
-			@Nullable BenchmarkRecord before, boolean restoreOk) {
+			@Nullable BenchmarkRecord before, boolean restoreOk, boolean throttled) {
 		public PlannerResult result() {
 			return session.renderDistance();
 		}
@@ -128,6 +132,8 @@ public final class BenchmarkController {
 	private float lastYaw;
 	private float lastPitch;
 	private boolean environmentRestored = true;
+	private final Throttle throttle = new Throttle();
+	private boolean throttled;
 
 	private BenchmarkController(Minecraft minecraft, LocalPlayer player, ClientLevel level, BenchmarkRequest request, Config config) {
 		this.minecraft = minecraft;
@@ -383,11 +389,13 @@ public final class BenchmarkController {
 				hold(yaw - (float) (360.0 * (1 - progress) * warmup / first.seconds()), first.pitch());
 				if (elapsed >= warmup) {
 					FrameTimes.start();
+					throttle.reset();
 					sweep = 0;
 					enter(Phase.SWEEP);
 				}
 			}
 			case SWEEP -> {
+				throttle.sample(minecraft.isWindowActive(), minecraft.getFramerateLimitTracker().getFramerateLimit());
 				Protocol.Sweep current = protocol.sweeps().get(sweep);
 				double progress = Math.min(1.0, elapsed / current.seconds());
 				hold(yaw + (float) (360.0 * progress), current.pitch());
@@ -401,6 +409,14 @@ public final class BenchmarkController {
 						RigTune.LOGGER.info("Benchmark {} {}: {} frames, avg {} FPS, 1% low {} FPS (frame limit {}, {})", step.kind(), step.knobs(),
 								stats.frames(), Math.round(stats.avgFps()), Math.round(stats.onePercentLowFps()),
 								minecraft.getFramerateLimitTracker().getFramerateLimit(), minecraft.getFramerateLimitTracker().getThrottleReason());
+						if (throttle.throttled(Options.UNLIMITED_FRAMERATE_CUTOFF, FabricLoader.getInstance().isModLoaded(DYNAMIC_FPS))) {
+							RigTune.LOGGER.warn("Benchmark stopped: {} was measured while the game was throttled (window active {}, frame limit {}); "
+									+ "nothing is saved", step.kind(), minecraft.isWindowActive(), minecraft.getFramerateLimitTracker().getFramerateLimit());
+							throttled = true;
+							run.cancel();
+							finish();
+							return;
+						}
 						run.record(stats);
 						nextStep();
 					}
@@ -494,8 +510,8 @@ public final class BenchmarkController {
 		}
 		if (outcome.cancelled()) {
 			if (minecraft.player != null) {
-				minecraft.player.sendOverlayMessage(Component.translatable(outcome.restoreOk()
-						? "rigtune.benchmark.cancelled" : "rigtune.benchmark.cancelled.restore_failed"));
+				minecraft.player.sendOverlayMessage(Component.translatable(!outcome.restoreOk() ? "rigtune.benchmark.cancelled.restore_failed"
+						: outcome.throttled() ? "rigtune.benchmark.throttled" : "rigtune.benchmark.cancelled"));
 			}
 			return;
 		}
@@ -519,8 +535,9 @@ public final class BenchmarkController {
 		}
 		if (outcome.cancelled()) {
 			if (outcome.restoreOk()) {
-				SystemToast.add(minecraft.gui.toastManager(), TOAST_ID, Component.translatable("rigtune.benchmark.cancelled.title"),
-						Component.translatable("rigtune.benchmark.cancelled.body"));
+				String key = outcome.throttled() ? "rigtune.benchmark.throttled" : "rigtune.benchmark.cancelled";
+				SystemToast.add(minecraft.gui.toastManager(), TOAST_ID, Component.translatable(key + ".title"),
+						Component.translatable(key + ".body"));
 			}
 			return;
 		}
@@ -531,7 +548,7 @@ public final class BenchmarkController {
 		SessionResult result = run.result();
 		boolean restoreOk = run.restoreOk() && environmentRestored;
 		if (run.cancelled()) {
-			return new Outcome(request, result, true, null, null, restoreOk);
+			return new Outcome(request, result, true, null, null, restoreOk, throttled);
 		}
 		BenchmarkHistory history = BenchmarkStore.history();
 		String phase = BenchmarkRecords.phase(request, history);
@@ -542,7 +559,7 @@ public final class BenchmarkController {
 				? new BenchmarkRecord.World(BenchmarkWorld.LEVEL_ID, BenchmarkWorld.SEED) : null;
 		BenchmarkRecord record = BenchmarkRecords.of(result, request, phase, id, createdAt, rigtuneVersion(), HardwareProbe.minecraftVersion(), world);
 		BenchmarkStore.add(record);
-		return new Outcome(request, result, false, record, before, restoreOk);
+		return new Outcome(request, result, false, record, before, restoreOk, false);
 	}
 
 	private static String rigtuneVersion() {

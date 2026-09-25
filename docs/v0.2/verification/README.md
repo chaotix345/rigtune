@@ -93,7 +93,7 @@ The user's DH config already matches the tier-5 rules, so the copied TOML had on
 - The harness then hung at `Closing all [3] databases...` (the documented DH world-exit deadlock) and the client was killed. Nothing was left changed.
 - The frame rates of this run are invalid; see finding 4.
 
-## Findings (product; not fixed here)
+## Findings (product; fixed on `fix/p5-findings`, see Fixes)
 
 1. **HIGH (real world): Distant Horizons' own self-updater fights RigTune's DH update.** This, not the Modrinth App or antivirus, is what failed the user's 0.1.0 apply.
    - **What DH does**: the user's DH config has `enableAutoUpdater = true` and `enableSilentUpdates = true`. DH downloads 3.3.2 into `mods/update/DistantHorizons-3.3.2 - 26.2 neo/fabric-26.2.jar` during the session. At exit it can't move it ("Failed to move updated file"), so it starts a `DeleteOnUnlock` JVM with `-cp mods/fabric-26.2.jar`, which keeps the old jar open itself.
@@ -119,6 +119,25 @@ The user's DH config already matches the tier-5 rules, so the copied TOML had on
 8. **LOW (UX): Undo everything shows "You changed it since (it's now ON)"** for a setting that is already back at its pre-RigTune value (a later RigTune apply and undo moved it). The end state is right; the reason is misleading. "Already at its original value" would be clearer.
 9. **Dev tooling: `runBenchmarkAutorun` on a fresh run dir waits forever on the accessibility onboarding screen.** `build/run-autorun/options.txt` gets `onboardAccessibility:true`, and DevAutorun only starts from the title screen (it gives up after 10 min). WS-C set the option by hand. Write it in the task, or let DevAutorun continue from the onboarding screen.
 10. **Knowledge note**: DH logs "Found [7] C2ME threads. DH needs to use at least the same number of threads as C2ME". The DH thread caps (1/2/4/6 for CPU tiers ≤ 4) may conflict when C2ME is installed.
+
+## Fixes (branch `fix/p5-findings`)
+
+| finding | fix | commit |
+|---|---|---|
+| 1. DH's own auto-updater | New v2 condition `settingIs` and ModRule field `skipUpdateWhen` (docs/RULES_SCHEMA.md). A Distant Horizons rule with `skipUpdateWhen: {"settingIs": {"dh.client.advanced.autoUpdater.enableAutoUpdater": true}}` (the key in the user's `DistantHorizons.toml`) replaces "Update Distant Horizons" with the info advice "Distant Horizons updates itself". An absent key is UNKNOWN, so the update is still offered. | 0a17e11, 2204d61 |
+| 2. RD clamp while DH doesn't render | Both vanilla render-distance clamps for Distant Horizons also need `not {"settingIs": {"dh.client.advanced.debugging.rendererMode": "DISABLED"}}`. A config without the key is UNKNOWN and the clamp doesn't fire. 0.1.x keeps the old gate through a `v1` override. | 2204d61 |
+| 3. mVUS reason says 26.2 | Version-neutral: "the community build for current Minecraft versions, because the original ModernFix has no release for them". | 2204d61 |
+| 4. Throttled benchmark runs | Each step's sweeps sample window focus and the frame limit every tick (core `Throttle`). A limit below uncapped, or an inactive window with Dynamic FPS loaded, stops the run: nothing stored, settings restored, "results were throttled: keep the game window focused". | 44b1ca1 |
+| 5. Privacy toast over the RigTune screen | Shown over the title screen only; hidden when the RigTune screen opens over it, and shown again on the next title screen. | 8f4343f |
+| 6. Network off blames Modrinth | The Add/Update notes name the switch that is off ("Network access is off in RigTune's settings: ..."). | 6ed0edf |
+| 7. Raw Sodium key on the Undo screen | Mod keys use the rules' `settingLabels`, else the caption from the key, as in the report ("Sodium: Use Fog Occlusion: Off → On"). | ea79ec8 |
+| 8. Misleading Undo skip reason | A setting back at the value before the oldest of its changes: "It's already back at its original value (On)". | 938bf91 |
+| 9. Autorun stuck on onboarding | `runBenchmarkAutorun` writes `onboardAccessibility:false` into the run dir's `options.txt` before launch. | 42c8883 |
+| 10. DH threads vs C2ME | DH 3.3.2 (`AbstractModInitializer`): only with Chunky installed does it set its thread count to C2ME's, and with Chunky alone it warns that too few DH threads leave holes. The DH thread caps now also need `modAbsent: ["chunky"]`. Without Chunky the message is only logged. | 2204d61 |
+
+Checked after the fixes: `./gradlew build` on both versions, the Python tests, `check_rules_v1.py`, `:26.2:runClientGameTest` (the Undo screens show "Sodium: Use Fog Occlusion" and "It's already back at its original value (On)"; the RigTune screen right after the title screen has no toast), and `:26.2:runBenchmarkAutorun` on a fresh run dir (it starts from the title screen and PASSED).
+
+Not re-run: the production smokes. A rerun of (d2) as it was (Dynamic FPS, a window the harness doesn't focus) now stops at the first step as throttled, so `BenchmarkSmoke` would report AC6.4 as failed; drop Dynamic FPS from that set or keep the window focused.
 
 ## Reproduce
 

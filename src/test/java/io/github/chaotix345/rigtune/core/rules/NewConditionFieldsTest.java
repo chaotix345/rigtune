@@ -161,4 +161,42 @@ class NewConditionFieldsTest {
 		f.hw.mcVersion = "unknown";
 		assertEquals(UNKNOWN, f.truth("{\"not\":{\"mcVersionRange\":\">=26.3\"}}"));
 	}
+
+	private static final String AUTO_UPDATER = "dh.client.advanced.autoUpdater.enableAutoUpdater";
+	private static final String RENDERER = "dh.client.advanced.debugging.rendererMode";
+
+	private static String settingIs(String entries) {
+		return "{\"settingIs\":{" + entries + "}}";
+	}
+
+	@Test
+	void settingIsComparesTheCurrentValueAfterNormalisation() {
+		f.settings.put(AUTO_UPDATER, "true");
+		f.settings.put(RENDERER, "DISABLED");
+		f.settings.put("vanilla.renderDistance", "12.0");
+		assertEquals(TRUE, f.truth(settingIs("\"" + AUTO_UPDATER + "\":true")));
+		assertEquals(TRUE, f.truth(settingIs("\"" + RENDERER + "\":\"disabled\",\"vanilla.renderDistance\":12")));
+		assertEquals(FALSE, f.truth(settingIs("\"" + AUTO_UPDATER + "\":false")));
+		assertEquals(FALSE, f.truth(settingIs("\"" + RENDERER + "\":\"DISABLED\",\"vanilla.renderDistance\":16")));
+		assertEquals(FALSE, f.truth("{\"not\":" + settingIs("\"" + RENDERER + "\":\"DISABLED\"") + "}"));
+		assertEquals(TRUE, f.truth(settingIs("")));
+	}
+
+	@Test
+	void settingIsWithAnAbsentKeyIsUnknown() {
+		assertEquals(UNKNOWN, f.truth(settingIs("\"" + AUTO_UPDATER + "\":true")));
+		assertEquals(UNKNOWN, f.truth("{\"not\":" + settingIs("\"" + RENDERER + "\":\"DISABLED\"") + "}"));
+		f.settings.put(RENDERER, "DEFAULT");
+		assertEquals(TRUE, f.truth("{\"not\":" + settingIs("\"" + RENDERER + "\":\"DISABLED\"") + "}"));
+		assertEquals(FALSE, f.truth(settingIs("\"" + RENDERER + "\":\"DISABLED\",\"" + AUTO_UPDATER + "\":true")));
+		assertEquals(UNKNOWN, f.truth(settingIs("\"" + RENDERER + "\":\"DEFAULT\",\"" + AUTO_UPDATER + "\":true")));
+	}
+
+	@Test
+	void settingIsWithoutSettingsInTheContextIsUnknown() {
+		f.settings.put(AUTO_UPDATER, "true");
+		EvalContext old = f.context();
+		EvalContext ctx = new EvalContext(old.hardware(), old.gpu(), old.tier(), old.goal(), old.loadedModIds(), old.modVersions());
+		assertEquals(UNKNOWN, ConditionEvaluator.evaluate(RulesLoader.condition(settingIs("\"" + AUTO_UPDATER + "\":true")), ctx));
+	}
 }

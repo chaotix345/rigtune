@@ -210,6 +210,23 @@ class UndoPlannerTest {
 		assertTrue(all().script().immediate().isEmpty());
 	}
 
+	// Phase 5 finding 8: back at the value it had before RigTune changed it, "you changed it since" misleads.
+	@Test
+	void aSettingAlreadyBackAtItsOriginalValueSaysSo() {
+		entry("e1", applied("vanilla.entityShadows", "true", "false"));
+		entry("e2", applied("vanilla.renderDistance", "12", "16"), applied("vanilla.entityShadows", "false", "true"));
+		entry("e3", applied("vanilla.entityShadows", "true", "false"));
+		state.settings.put("vanilla.entityShadows", "true");
+		state.settings.put("vanilla.renderDistance", "16");
+
+		Result result = all();
+
+		List<UndoPlan.Item> skips = items(result, Action.SKIP);
+		assertEquals(3, skips.size(), result.plan().toString());
+		skips.forEach(item -> assertEquals("It's already back at its original value (true)", item.reason()));
+		assertEquals(Map.of("vanilla.renderDistance", "12"), result.script().immediate());
+	}
+
 	// Review M8: 12 -> 16, the user sets 10, 10 -> 20. Undo everything gives 10, not 12.
 	@Test
 	void undoingEverythingStopsTheChainAtAUserEdit() {

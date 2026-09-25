@@ -2,11 +2,13 @@ package io.github.chaotix345.rigtune.core.recommend;
 
 import io.github.chaotix345.rigtune.core.Fixtures;
 import io.github.chaotix345.rigtune.core.model.Action;
+import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
+import io.github.chaotix345.rigtune.core.model.UpdateInfo;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.rules.RulesLoader;
 import org.junit.jupiter.api.Test;
@@ -222,5 +224,46 @@ class RecommenderV2Test {
 		assertTrue(run(rules, Fixtures.userRig(), List.of(mod("sodium", "0.9.2"))).containsKey("advice:new-sodium"));
 		assertFalse(run(rules, Fixtures.userRig(), List.of(mod("sodium", "0.8.0"))).containsKey("advice:new-sodium"));
 		assertFalse(run(rules, Fixtures.userRig(), List.of(mod("sodium", null))).containsKey("advice:new-sodium"));
+	}
+
+	private static final String AUTO_UPDATER = "dh.client.advanced.autoUpdater.enableAutoUpdater";
+	private static final String SELF_UPDATING = """
+			"mods":[{"slug":"distanthorizons","projectId":"uCdwusMi","title":"Distant Horizons","modIds":["distanthorizons"],
+			 "reason":"r","recommendWhen":{"always":false},"skipUpdateWhen":{"settingIs":{"%s":true}}}]""".formatted(AUTO_UPDATER);
+
+	private static Map<String, Recommendation> withDhUpdate(String body, Map<String, String> settings) {
+		UpdateInfo update = new UpdateInfo("distanthorizons", "uCdwusMi", "3.3.0", "v", "3.3.2", null);
+		return Recommender.recommend(rules(body), Fixtures.userRig().build(), List.of(mod("distanthorizons", "3.3.0")),
+				new SettingsSnapshot(settings), new OnlineData(true, Map.of(), Map.of("distanthorizons", update)), Goal.BALANCED)
+				.recommendations().stream().collect(Collectors.toMap(Recommendation::id, r -> r));
+	}
+
+	@Test
+	void skipUpdateWhenTrueLeavesTheUpdateToTheModItself() {
+		Map<String, Recommendation> recs = withDhUpdate(SELF_UPDATING, Map.of(AUTO_UPDATER, "true"));
+		assertFalse(recs.containsKey("update:distanthorizons"), recs.keySet().toString());
+		Recommendation advice = recs.get("advice:updates-itself:distanthorizons");
+		assertEquals(Category.ADVICE, advice.category());
+		assertEquals("Distant Horizons updates itself", advice.title());
+		assertEquals("Its own auto-updater is on, so RigTune leaves its updates to it.", advice.reason());
+		assertEquals(new Action.None(), advice.action());
+		assertFalse(advice.selectedByDefault());
+	}
+
+	@Test
+	void skipUpdateWhenFalseOrUnknownOffersTheUpdate() {
+		for (Map<String, String> settings : List.of(Map.of(AUTO_UPDATER, "false"), Map.<String, String>of())) {
+			Map<String, Recommendation> recs = withDhUpdate(SELF_UPDATING, settings);
+			assertTrue(recs.get("update:distanthorizons").action() instanceof Action.UpdateMod, settings.toString());
+			assertFalse(recs.containsKey("advice:updates-itself:distanthorizons"), settings.toString());
+		}
+	}
+
+	@Test
+	void noUpdateNoSelfUpdateAdvice() {
+		Map<String, Recommendation> recs = Recommender.recommend(rules(SELF_UPDATING), Fixtures.userRig().build(),
+				List.of(mod("distanthorizons", "3.3.2")), new SettingsSnapshot(Map.of(AUTO_UPDATER, "true")), OnlineData.offline(), Goal.BALANCED)
+				.recommendations().stream().collect(Collectors.toMap(Recommendation::id, r -> r));
+		assertFalse(recs.containsKey("advice:updates-itself:distanthorizons"), recs.keySet().toString());
 	}
 }

@@ -79,9 +79,10 @@ public final class Recommender {
 				versions.putIfAbsent(mod.modId(), mod.version());
 			}
 		}
-		EvalContext ctx = new EvalContext(hardware, gpuClass, tier, goal, loaded, Map.copyOf(versions));
+		SettingsSnapshot snapshot = settings == null ? new SettingsSnapshot(Map.of()) : settings;
+		EvalContext ctx = new EvalContext(hardware, gpuClass, tier, goal, loaded, Map.copyOf(versions), snapshot);
 
-		Session session = new Session(rules, ctx, installed, settings == null ? new SettingsSnapshot(Map.of()) : settings, data);
+		Session session = new Session(rules, ctx, installed, snapshot, data);
 		section("obsolete", session::obsolete);
 		section("avoided", session::avoided);
 		section("conflicts", session::conflicts);
@@ -244,6 +245,14 @@ public final class Recommender {
 				UpdateInfo update = entry.getValue();
 				InstalledMod mod = installed.stream().filter(m -> m.modId().equals(modId)).findFirst().orElse(null);
 				if (mod == null || update == null || (mod.file() == null && mod.sha1() == null) || recs.containsKey("disable:" + modId)) {
+					continue;
+				}
+				ModRule selfUpdating = mods.stream()
+						.filter(r -> r.skipUpdateWhen != null && r.modIds.contains(modId) && matches(r.skipUpdateWhen)).findFirst().orElse(null);
+				if (selfUpdating != null) {
+					put(new Recommendation("advice:updates-itself:" + modId, Category.ADVICE, Impact.LOW,
+							selfUpdating.displayTitle() + " updates itself", "Its own auto-updater is on, so RigTune leaves its updates to it.",
+							new Action.None(), false));
 					continue;
 				}
 				String current = update.currentVersion() != null ? update.currentVersion() : mod.version();

@@ -66,7 +66,7 @@ V1_CONDITION_KEYS = frozenset({
     "refreshRateAtLeast", "backend", "os", "goal", "mcVersion", "modPresent", "modAbsent", "flags", "anyOf", "not",
 })
 V2_CONDITION_KEYS = V1_CONDITION_KEYS | {
-    "gpuModelMatches", "displayPixelsAtLeast", "displayPixelsAtMost", "modVersion", "mcVersionRange",
+    "gpuModelMatches", "displayPixelsAtLeast", "displayPixelsAtMost", "modVersion", "mcVersionRange", "settingIs",
 }
 BOOLEAN_CONDITION_KEYS = frozenset({"always", "gpuIntegrated", "hasBattery", "onBattery"})
 LIST_CONDITION_KEYS = frozenset({"gpuVendor", "backend", "os", "goal", "mcVersion", "modPresent", "modAbsent", "flags"})
@@ -112,12 +112,12 @@ V1_RULE_FIELDS = {
     "heapTiers": frozenset({"atLeastMb", "tier"}),
 }
 V2_ONLY_RULE_FIELDS = {
-    "mods": frozenset({"requires", "avoidSelected"}),
+    "mods": frozenset({"requires", "avoidSelected", "skipUpdateWhen"}),
     "obsolete": frozenset({"requires"}),
     "settings": frozenset({"requires"}),
     "advice": frozenset({"requires"}),
 }
-CONDITION_FIELDS = {"mods": ("recommendWhen", "avoidWhen"), "obsolete": (), "settings": ("when",), "advice": ("when",)}
+CONDITION_FIELDS = {"mods": ("recommendWhen", "avoidWhen", "skipUpdateWhen"), "obsolete": (), "settings": ("when",), "advice": ("when",)}
 V1_SETTING_PREFIXES = ("vanilla.", "sodium.")
 # Computed setting values both 0.1.0 and 0.2 resolve. A new token needs a new client, so it must come with `requires`.
 VALUE_TOKENS = frozenset({"$refreshRate", "$refreshRateCap"})
@@ -179,6 +179,9 @@ def condition_problems(cond, allowed_keys=V2_CONDITION_KEYS, path="condition", v
         elif key == "modVersion":
             if not isinstance(value, dict) or not all(isinstance(v, str) and v.strip() for v in value.values()):
                 problems.append(f"{where} must map mod ids to version predicates")
+        elif key == "settingIs":
+            if not isinstance(value, dict) or not all(isinstance(k, str) and k.strip() for k in value)                     or not all(isinstance(v, (str, bool, int, float)) for v in value.values()):
+                problems.append(f"{where} must map settings keys to strings, numbers or booleans")
         elif not is_integer(value):
             problems.append(f"{where} must be an integer")
         elif not -(2 ** bits(key) - 1) - 1 <= value <= 2 ** bits(key) - 1:
@@ -227,6 +230,9 @@ def droppable(field, value, merged):
         return value == []
     if field == "avoidSelected":
         return value is True or "avoidWhen" not in merged
+    # 0.1.x offers every available update whatever its rules say; this field only ever takes one away.
+    if field == "skipUpdateWhen":
+        return True
     return False
 
 

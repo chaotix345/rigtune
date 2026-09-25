@@ -6,7 +6,7 @@ Target MC versions: 26.3, 26.2, 26.1.2. Newest: 26.3.
 - New upstream mods to triage: 0
 - Rule mods with a status or removal concern: 0
 - Rule mods missing a Fabric build for 26.3: 4
-- Rules changed or omitted in rules-v1.json: 24
+- Rules changed or omitted in rules-v1.json: 27
 
 ## (a) Upstream mods not yet tracked in knowledge.json
 None found.
@@ -30,6 +30,9 @@ None found.
 | mods[nvidium] | v1 override: avoidWhen, recommendWhen |
 | mods[renderscale] | v1 override: reason, recommendWhen |
 | mods[lambdynamiclights] | omitted ("v1": false) |
+| mods[distanthorizons] | omitted ("v1": false) |
+| settings[8] vanilla.renderDistance | v1 override: when |
+| settings[9] vanilla.renderDistance | v1 override: when |
 | settings[40] dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius | omitted ("v1": false) |
 | settings[41] dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius | omitted ("v1": false) |
 | settings[42] dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius | omitted ("v1": false) |
