@@ -154,6 +154,7 @@ public final class BenchmarkController {
 	}
 
 	public static void tick(Minecraft minecraft) {
+		MarkerRestore.tick(minecraft);
 		BenchmarkWorld.tick(minecraft);
 		BenchmarkController c = active;
 		if (c == null) {
