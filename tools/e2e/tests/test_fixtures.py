@@ -69,5 +69,49 @@ class TemplateTest(unittest.TestCase):
         self.assertEqual("from ${INSTANCE}/config/pending.json done", fixtures.portable_paths(log))
 
 
+class SeedTemplateTest(unittest.TestCase):
+    """H-M2: the user's real 0.1.0 files, templated. Unlike template_json, paths inside messages are templated too."""
+
+    ROOT = BS.join(["C:", "Users", "Admin", "AppData", "Roaming", "ModrinthApp", "profiles", "Fabric 26.2"])
+
+    def real_last_apply(self):
+        mods = self.ROOT + BS + "mods" + BS
+        return json.dumps({"finishedAt": "2026-09-24T23:09:01.530708800Z", "results": [{
+            "op": {"type": "DISABLE_FILE", "path": mods + "fabric-26.2.jar", "id": "0419", "group": "7b80", "attempts": 0},
+            "status": "FAILED",
+            "message": "Gave up after 10 attempt(s): java.nio.file.FileSystemException: " + mods + "fabric-26.2.jar -> "
+                       + mods + "fabric-26.2.jar.disabled: The process cannot access the file"}]}, indent=2) + NL
+
+    def test_every_spelling_of_the_root_becomes_the_token_with_forward_slashes(self):
+        text = fixtures.template_seed_json(self.real_last_apply(), self.ROOT)
+        result = json.loads(text)["results"][0]
+
+        self.assertEqual("${INSTANCE}/mods/fabric-26.2.jar", result["op"]["path"])
+        self.assertEqual("Gave up after 10 attempt(s): java.nio.file.FileSystemException: ${INSTANCE}/mods/fabric-26.2.jar -> "
+                         "${INSTANCE}/mods/fabric-26.2.jar.disabled: The process cannot access the file", result["message"])
+        self.assertEqual(0, result["op"]["attempts"])
+        self.assertNotIn("Admin", text)
+        self.assertTrue(text.endswith("}" + NL))
+
+    def test_instantiate_puts_the_instance_back_with_native_separators(self):
+        instance = Path(tempfile.mkdtemp()) / "instance"
+        text = fixtures.instantiate_json(fixtures.template_seed_json(self.real_last_apply(), self.ROOT), instance)
+        result = json.loads(text)["results"][0]
+
+        self.assertEqual(str(instance / "mods" / "fabric-26.2.jar"), result["op"]["path"])
+        self.assertIn(str(instance / "mods" / "fabric-26.2.jar.disabled") + ":", result["message"])
+        self.assertNotIn(fixtures.TOKEN, text)
+
+    def test_instantiate_a_whole_path_value_with_spaces(self):
+        instance = Path(tempfile.mkdtemp()) / "instance"
+        text = json.dumps({"path": "${INSTANCE}/mods/update/DistantHorizons-3.3.2 - 26.2 neo/fabric-26.2.jar"})
+        self.assertEqual(str(instance / "mods" / "update" / "DistantHorizons-3.3.2 - 26.2 neo" / "fabric-26.2.jar"),
+                         json.loads(fixtures.instantiate_json(text, instance))["path"])
+
+    def test_instantiate_leaves_other_values_alone(self):
+        text = json.dumps({"gamePid": 12228, "note": "no path", "ops": [{"attempts": 1, "path": None}]})
+        self.assertEqual(json.loads(text), json.loads(fixtures.instantiate_json(text, Path("x"))))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -10,7 +10,7 @@
 They're served from `https://raw.githubusercontent.com/chaotix345/rigtune/main/rules/rules-v2.json` and `.../rules-v1.json`.
 
 **Where they come from.** `tools/update_rules.py` generates both from:
-- the hand-maintained source `rules/source/knowledge.json`, which has the same shape minus the generated fields, plus two maintainer-only fields (`reviewIgnore` and `v1`, below)
+- the hand-maintained source `rules/source/knowledge.json`, which has the same shape minus the generated fields, plus two maintainer-only fields (`reviewIgnore` and `v1` on rules and on `gpuTiers`/`cpuTiers` rows, below)
 - upstream data (Modrinth, Fabulously Optimized, Additive)
 
 Both files come from one run and share `revision` and `generatedAt`. See tools/README.md for the pipeline.
@@ -64,6 +64,13 @@ When no rule matches, the formula is: logical cores <= 2 → 1; <= 4 → 2; <= 8
 `{ "atLeastMb": 6144, "tier": 5 }`
 
 Tier rules have no `requires` and no fail-closed handling: a client ignores fields it doesn't know in them. So **any schema change to a tier rule needs a new schemaVersion** (and its own file). The updater rejects unknown fields in tier rules.
+
+## v1 on tier rows (source-only)
+`{ "pattern": "(?i)RX\\s*9070\\s*GRE\\b", "vendor": "amd", "integrated": false, "tier": 4, "v1": false }`
+
+In `rules/source/knowledge.json` only, a `gpuTiers` or `cpuTiers` row may carry `"v1": false`. The updater leaves the row out of rules-v1.json and lists it in REVIEW.md section (d); the key itself is never written to either output, so no client ever sees it (it isn't a schema change). Any other `v1` value, and `v1` on a `heapTiers` row, is a knowledge error.
+
+0.1.x then classifies that hardware exactly as before: the rows that follow still apply in order, and a string no row matches falls back to `gpuVendorFallback` or the CPU formula. **Every new tier row gets `"v1": false`.** A different tier for 0.1.x isn't "more conservative" in either direction: a lower tier changes setting values and can newly trigger `tierAtMost` rules, which RulesV1DifferentialTest counts as new recommendations. Leave a row out of v1 only if it's new; leaving out an existing row changes what 0.1.x already does for that hardware. RulesV1DifferentialTest enforces this: it fails when rules-v1.json's `gpuTiers`, `gpuVendorFallback`, `cpuTiers` or `heapTiers` differ from the rules 0.1.0 shipped.
 
 ## Tiers
 - `tier = min(gpuTier, cpuTier, memTier)`. The limiting factor is whichever of the three is lowest (ties go to gpu, then cpu, then mem).
@@ -135,6 +142,8 @@ If it's installed, recommend disabling it (impact high). May carry `requires`.
 
 `kind` is one of info, warning or critical. Advice is informational only: it has no action. May carry `requires`.
 
+**The `ram-` id prefix** marks advice whose fix is changing the memory (heap) allocation: RigTune 0.3+ shows the detected launcher's steps for that ("In the Modrinth App: …") under every advice whose id starts with `ram-`. Use the prefix only for such advice, and give every such advice the prefix. Older clients ignore it (it's only an id).
+
 ## SettingLabel (v2)
 `"settingLabels": { "sodium.performance.chunk_builder_threads": { "name": "Chunk builder threads", "values": { "0": "Auto" } } }`
 
@@ -179,6 +188,8 @@ This is a JSON object. Every field is optional, all present fields must hold (AN
 | anyOf | Condition[] | at least one holds (an empty list is FALSE) | see below |
 | not | Condition | negation | see below |
 
+`mcVersionRange` is matched against Loader's normalized MC version, which for a snapshot or pre-release is a semantic pre-release: 26.4-snapshot-1 is `26.4-alpha.1`, 26.4-rc-1 is `26.4-rc.1`. So `<26.4` is still TRUE on 26.4's snapshots and pre-releases; end the bound with `-` to exclude them too: `<26.4-` is TRUE on 26.3.x and FALSE from the first 26.4 snapshot on (`vulkan-backend` uses it, since 26.4 makes Vulkan the default renderer). Use `mcVersion` only for exact versions. It's a v2 key: an `info` advice that uses it is never shown to 0.1.x unless a `v1` override gives it a v1 `when`.
+
 Flags come from detection: `backend-vulkan` from the graphics backend, `shaders-enabled` from Iris's API and `sodium-workaround:<NAME>` from Sodium's workaround list. If Iris's or Sodium's API can't be read, their flags read as absent (FALSE), so don't rely on the absence of those flags for anything restrictive.
 
 ### Evaluation: TRUE, FALSE or UNKNOWN (fail closed)
@@ -217,7 +228,7 @@ v1 (0.1.x) evaluates the same fields two-valued: unknown RAM/VRAM/refresh are fa
   - a rule field outside the v1 whitelist (`requires`, `avoidSelected`, `skipUpdateWhen`) without an explicit `v1`. With an override the field is left out only if that is exactly as safe: `requires` only when empty, `avoidSelected` only when true or when the v1 rule has no `avoidWhen`, `skipUpdateWhen` always (0.1.x offers every available update whatever its rules say, and the field only ever takes one away). Otherwise use `"v1": false`;
   - unknown fields (including unknown top-level fields), unknown condition keys, nulls, values outside the vocabularies, out-of-range integers, regexes over 200 characters and malformed `settingLabels` anywhere in knowledge.json.
 - When a ModRule is left out, the other rules' `conflictsWith` references to its slug become its `modIds` (0.1.x resolves a slug only through a rule it has, but matches a mod id directly), so 0.1.x still sees the conflict. REVIEW.md (d) lists each rewrite.
-- `settingLabels` is left out of rules-v1.json. Tier rules are copied as they are.
+- `settingLabels` is left out of rules-v1.json. Tier rules are copied as they are, except `gpuTiers`/`cpuTiers` rows with `"v1": false`, which are left out ([v1 on tier rows](#v1-on-tier-rows-source-only)).
 - Every omission and field change is listed in `rules/REVIEW.md` section (d).
 - `tools/check_rules_v1.py` (CI job `rules-v1-compat`) checks the result. The pinned-v0.1.0 differential test (`RulesV1DifferentialTest`) checks that, compared with the baseline `src/test/resources/v010/rules-v1-baseline.json` (the rules 0.1.0 shipped), rules-v1.json gives 0.1.x no new appliable recommendation (ticked or not), ticks none that was unticked, and loses no conflict or advice. `SchemaConsistencyTest` checks the updater's field lists and vocabularies against the Java code and the pinned v0.1.0 copy.
 
@@ -225,4 +236,5 @@ v1 (0.1.x) evaluates the same fields two-valued: unknown RAM/VRAM/refresh are fa
 - **UNKNOWN switches restrictions off.** A condition that is UNKNOWN doesn't fire, so a clamp, a lower value, an `avoidWhen` or a warning gated on something a client may not know (RAM, VRAM, refresh rate, display size, GPU model, mod versions, the backend, a mod's config value) silently doesn't apply where it's unknown. For example `{"key": "vanilla.renderDistance", "max": 8, "when": {"not": {"vramMbAtLeast": 4096}}}` does nothing on a machine that doesn't report VRAM. Gate restrictions on always-known facts (heap, tiers, goal, installed mods), or add a second rule that covers the unknown case with one of those.
 - **Never add a v2-only or future field to an existing restrictive rule** (a clamp, a lower value, an `avoidWhen`, a warning). Clients that don't know the field poison the whole rule, so they'd *lose* the restriction they have today. Add a new rule next to the old one instead (or gate the new one with `requires`).
 - **Tier-rule schema changes (`gpuTiers`, `cpuTiers`, `heapTiers`) need a new schemaVersion**: tier rules have no fail-closed handling.
+- **A new `gpuTiers`/`cpuTiers` row gets `"v1": false`**, so 0.1.x keeps classifying that hardware as 0.1.0 did. Insert it before the broader row that matches the same strings today (the first match wins), and add the strings to GpuClassifierTest/CpuClassifierTest, including one the new row must not catch.
 - A setting rule that *restricts* for a v2-only condition needs a deliberate `v1` decision (override or `false`), and REVIEW.md (d) shows it.

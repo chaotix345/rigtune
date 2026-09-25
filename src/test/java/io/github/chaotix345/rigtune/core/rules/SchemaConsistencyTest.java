@@ -48,6 +48,7 @@ class SchemaConsistencyTest {
 			    "v1RuleFields": u.V1_RULE_FIELDS, "v2OnlyRuleFields": u.V2_ONLY_RULE_FIELDS,
 			    "v1Vocabularies": u.V1_VOCABULARIES, "v2Vocabularies": u.V2_VOCABULARIES,
 			    "sodiumWorkaroundFlag": u.SODIUM_WORKAROUND_FLAG, "maxPatternLength": u.MAX_PATTERN_LENGTH,
+			    "sourceOnlyTierFields": u.SOURCE_ONLY_TIER_FIELDS,
 			})))
 			""";
 	private static final Map<String, Class<?>> V1_RULES = Map.of(
@@ -158,6 +159,19 @@ class SchemaConsistencyTest {
 				expected.addAll(strings(v2Only.get(kind.getKey())));
 			}
 			assertEquals(fields(kind.getValue()), expected, kind.getKey());
+		}
+	}
+
+	@Test
+	void sourceOnlyTierFieldsAreNoClientField() {
+		JsonObject sourceOnly = python.getAsJsonObject("sourceOnlyTierFields");
+		assertEquals(Set.of("gpuTiers", "cpuTiers"), sourceOnly.keySet());
+		for (String kind : sourceOnly.keySet()) {
+			for (Class<?> type : List.of(V1_RULES.get(kind), V2_RULES.get(kind))) {
+				Set<String> overlap = new TreeSet<>(fields(type));
+				overlap.retainAll(strings(sourceOnly.get(kind)));
+				assertEquals(Set.of(), overlap, type.getName());
+			}
 		}
 	}
 

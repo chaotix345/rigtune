@@ -1,0 +1,23 @@
+{
+  "createdAt": "2026-09-25T19:14:47.802830100Z",
+  "gamePid": 2420,
+  "modsDir": "<instance>\\mods",
+  "configDir": "<instance>\\config",
+  "ops": [
+    {
+      "type": "DISABLE_FILE",
+      "path": "<instance>\\mods\\e2e-disable-me-1.0.0.jar",
+      "id": "1aac27b0-7e66-4f75-8f78-4108b41999d6",
+      "attempts": 0
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\e2e-added-1.0.0.jar.rigtune-pending",
+      "to": "<instance>\\mods\\e2e-added-1.0.0.jar",
+      "id": "0d4a3f29-01df-4e5c-9ad2-2f8599260fd1",
+      "group": "3b562c2c-d644-4ca7-ac84-ecb57ad41519",
+      "modId": "e2e-added",
+      "attempts": 0
+    }
+  ]
+}

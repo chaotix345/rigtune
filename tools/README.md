@@ -11,7 +11,8 @@ Its inputs:
 - `rules/source/knowledge.json` — the hand-maintained tuning knowledge (GPU/CPU/heap
   tiers, mod rules, obsolete mods, settings, advice, setting labels). Same shape as the
   schema in `docs/RULES_SCHEMA.md`, minus the fields the script generates, plus the
-  maintainer-only `reviewIgnore` and per-rule `v1` fields.
+  maintainer-only `reviewIgnore` and `v1` fields (per rule, and `"v1": false` on a
+  `gpuTiers`/`cpuTiers` row).
 - Live data: the Fabulously Optimized and Additive packwiz repos on GitHub, and the
   Modrinth API.
 
@@ -20,8 +21,14 @@ It requires only the Python 3.11+ standard library (no `pip install` needed).
 ## What it does
 
 1. Loads and validates `knowledge.json` before any request (see "Knowledge errors").
-2. Picks the target Minecraft versions: the newest 3 Modrinth `release`-type game
-   versions, or whatever `--mc-versions 26.2,26.3` overrides it to.
+2. Picks the target Minecraft versions: every Stonecutter node in `settings.gradle`
+   (`versions '26.2', '26.3'`) plus each node's hotfix releases on Modrinth
+   (`release`-type game versions `<node>.<n>`, e.g. `26.3.1`), newest first. A newer
+   Minecraft version (say 26.4) becomes a target only once it's a node, and its hotfixes
+   never push out an older node. Every hotfix stays a target while its node does (a player
+   can be on any of them), so the list grows by one per hotfix until the node is dropped.
+   `settings.gradle` is always read from this repository (the parent of `tools/`), also
+   with `--out-dir`. `--mc-versions 26.2,26.3` overrides the whole list.
 3. For each target version, lists `Packwiz/{version}/mods/*.pw.toml` in
    `Fabulously-Optimized/fabulously-optimized` and
    `versions/fabric/{version}/mods/*.pw.toml` in `skywardmc/additive`, and reads each
@@ -65,6 +72,9 @@ for each rule in `knowledge.json`:
   - a v2-only `recommendWhen` or `info` advice `when` becomes `{"always": false}`;
   - a v2-only `avoidWhen` is dropped, but only if 0.1.x never recommends the mod;
   - everything else that 0.1.x doesn't understand is an error (below).
+- Tier rows are copied as they are, except a `gpuTiers`/`cpuTiers` row with `"v1": false`,
+  which is left out, so 0.1.x keeps classifying that hardware as before. Give every new
+  tier row `"v1": false` (docs/RULES_SCHEMA.md, "v1 on tier rows").
 - `v1` is never written to either output, and `settingLabels` never reaches `rules-v1.json`.
 
 "v2-only" means a condition key 0.1.x doesn't know (`gpuModelMatches`,
@@ -77,7 +87,7 @@ The script stops (exit code 2, nothing written) and lists every problem when
 `knowledge.json` has:
 
 - an unknown field on a rule (a typo), at the top level, or on a tier rule (tier-rule changes
-  need a new schemaVersion), an unknown condition key, a `null`, a value outside the
+  need a new schemaVersion; `v1` on a `gpuTiers`/`cpuTiers` row may only be `false`), an unknown condition key, a `null`, a value outside the
   vocabularies (`gpuVendor`, `backend`, `os`, `goal`, `flags`), an integer outside its field's
   32/64-bit range, a `gpuModelMatches` over 200 characters, or a `settingLabels` entry that
   isn't `{"name": "...", "values": {"<value>": "..."}}`;
@@ -139,7 +149,9 @@ directly (see `tools/tests/test_update_rules.py`).
   appliable recommendation (add, disable, setting value) that the new file gives and the
   baseline doesn't (`added`, ticked or not), any the baseline gave unticked and the new
   file ticks (`ticked`), and any conflict, advice or `disable:` (an avoided or obsolete mod)
-  the new file no longer gives (`lost`). Removing other actions is fine. If a change for 0.1.x is intended (for example a new mod rule
+  the new file no longer gives (`lost`). Removing other actions is fine. It also fails when
+  rules-v1.json's `gpuTiers`, `gpuVendorFallback`, `cpuTiers` or `heapTiers` differ from the
+  baseline's (a new tier row needs `"v1": false`). If a change for 0.1.x is intended (for example a new mod rule
   that 0.1.x should see), review the listed changes and copy `rules/rules-v1.json` over
   the baseline in the same commit.
 
@@ -165,7 +177,7 @@ four sections a maintainer should work through before merging:
 - **(c) Rule mods with no Fabric release for the newest target version** — a tracked
   mod hasn't published a build for the newest MC version RigTune targets yet. Usually
   means "wait for upstream," sometimes means "the project is dead, reconsider it."
-- **(d) Omitted from rules-v1.json** — every rule the v1 projection leaves out or
+- **(d) Omitted from rules-v1.json** — every rule or tier row the v1 projection leaves out or
   changes (a `v1` override, `"v1": false`, a condition turned into `{"always": false}`,
   a dropped `avoidWhen`, a left-out field, a `conflictsWith` slug of a left-out rule
   replaced by its mod ids), with the reason. Check that none of it makes

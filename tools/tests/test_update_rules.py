@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -610,24 +611,114 @@ class OfflineFixtureOpenerTests(unittest.TestCase):
                 opener(request)
 
 
-class VersionSortTests(unittest.TestCase):
-    def test_resolve_target_versions_with_override(self):
-        client = ur.Client(opener=lambda r: (_ for _ in ()).throw(AssertionError("should not fetch")))
-        result = ur.resolve_target_versions(client, "26.2,26.3,26.1")
-        self.assertEqual(result, ["26.3", "26.2", "26.1"])
+class TargetVersionTests(unittest.TestCase):
+    TAGS = [{"version": v, "version_type": t} for v, t in (
+        ("26.4.1", "release"), ("26.4", "release"), ("26.4-snapshot-1", "snapshot"), ("26.3.2", "release"),
+        ("26.3.1", "release"), ("26.3.1-rc-1", "snapshot"), ("26.3", "release"), ("26.20", "release"),
+        ("26.2", "release"), ("26.1.2", "release"), ("26.1", "release"), ("26.2.x", "release"))]
 
-    def test_resolve_target_versions_auto_detects_top_3_releases(self):
-        tags = [
-            {"version": "26.3", "version_type": "release"},
-            {"version": "26.3-rc1", "version_type": "snapshot"},
-            {"version": "26.2", "version_type": "release"},
-            {"version": "26.1", "version_type": "release"},
-            {"version": "26.0", "version_type": "release"},
-        ]
-        opener = ScriptedOpener({f"{ur.MODRINTH_API}/tag/game_version": [(200, json_body(tags), {})]})
-        client = ur.Client(opener=opener, sleeper=RecordingSleeper())
-        result = ur.resolve_target_versions(client, None)
-        self.assertEqual(result, ["26.3", "26.2", "26.1"])
+    def client(self):
+        opener = ScriptedOpener({f"{ur.MODRINTH_API}/tag/game_version": [(200, json_body(self.TAGS), {})]})
+        return ur.Client(opener=opener, sleeper=RecordingSleeper())
+
+    def test_override_wins_without_a_request(self):
+        client = ur.Client(opener=lambda r: (_ for _ in ()).throw(AssertionError("should not fetch")))
+        self.assertEqual(ur.resolve_target_versions(client, "26.2,26.3,26.1", ["26.2"]), ["26.3", "26.2", "26.1"])
+
+    def test_targets_are_the_nodes_plus_their_hotfix_releases(self):
+        self.assertEqual(ur.resolve_target_versions(self.client(), None, ["26.2", "26.3"]), ["26.3.2", "26.3.1", "26.3", "26.2"])
+
+    def test_a_newer_release_and_its_hotfix_do_not_push_out_a_node(self):
+        targets = ur.resolve_target_versions(self.client(), None, ["26.2", "26.3"])
+        self.assertNotIn("26.4.1", targets)
+        self.assertNotIn("26.4", targets)
+        self.assertIn("26.2", targets)
+
+    def test_a_node_modrinth_does_not_list_is_still_a_target(self):
+        self.assertEqual(ur.resolve_target_versions(self.client(), None, ["26.3", "26.5"]), ["26.5", "26.3.2", "26.3.1", "26.3"])
+
+    def test_a_prerelease_node_sorts_below_its_release(self):
+        self.assertEqual(ur.resolve_target_versions(self.client(), None, ["26.3", "26.4-snapshot-1"]),
+                         ["26.4-snapshot-1", "26.3.2", "26.3.1", "26.3"])
+        self.assertEqual(sorted(["26.4", "26.4-snapshot-1", "26.3.2", "26.10", "26.4.1"], key=ur.version_sort_key),
+                         ["26.3.2", "26.4-snapshot-1", "26.4", "26.4.1", "26.10"])
+
+    def test_prereleases_sort_snapshot_pre_rc_then_by_number(self):
+        ids = ["26.4-rc-10", "26.4", "26.4-pre-1", "26.4-rc-2", "26.4-snapshot-2", "26.4-rc-1", "26.3.1", "26.4-snapshot-10"]
+        self.assertEqual(sorted(ids, key=ur.version_sort_key),
+                         ["26.3.1", "26.4-snapshot-2", "26.4-snapshot-10", "26.4-pre-1", "26.4-rc-1", "26.4-rc-2", "26.4-rc-10", "26.4"])
+
+    def test_no_nodes_and_no_override_is_an_error(self):
+        with self.assertRaises(ur.UpdateRulesError):
+            ur.resolve_target_versions(self.client(), None, [])
+
+
+class StonecutterNodesTests(unittest.TestCase):
+    REPO = Path(__file__).resolve().parent.parent.parent
+
+    def nodes(self, text):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "settings.gradle"
+            path.write_text(text, encoding="utf-8")
+            return ur.stonecutter_nodes(path)
+
+    def test_repo_settings_list_every_versions_folder(self):
+        folders = sorted(d.name for d in (self.REPO / "versions").iterdir() if d.is_dir())
+        self.assertEqual(sorted(ur.stonecutter_nodes(self.REPO / "settings.gradle")), folders)
+
+    def test_quote_and_call_styles(self):
+        block = "plugins {{ id 'dev.kikugie.stonecutter' version '0.9.8' }}\nstonecutter {{ create(getRootProject()) {{\n{}\nvcsVersion = '26.2' }} }}"
+        for line in ("versions '26.2', '26.3'", 'versions "26.2", "26.3"', "versions('26.2', '26.3')", "versions '26.2',\n\t\t\t'26.3'"):
+            self.assertEqual(self.nodes(block.format(line)), ["26.2", "26.3"], line)
+
+    def test_no_versions_list_is_an_error(self):
+        with self.assertRaises(ur.UpdateRulesError):
+            self.nodes("stonecutter { create(getRootProject()) { vcsVersion = '26.2' } }")
+
+    def test_comments_are_ignored(self):
+        for text in ("// versions '26.1', '26.2'\n\t\tversions '26.2', // old\n\t\t\t'26.3' /* next: '26.4' */\n",
+                     "/* versions '26.0'\n versions '26.1' */\nversions '26.2', /* '26.2.5', */ '26.3'\n",
+                     "url = 'https://maven.fabricmc.net/'\nid 'x' version '1.0'\n\tversions '26.2', '26.3'\n\tvcsVersion = '26.2'\n"):
+            self.assertEqual(self.nodes(text), ["26.2", "26.3"], text)
+
+    def test_two_versions_lists_are_an_error(self):
+        with self.assertRaises(ur.UpdateRulesError):
+            self.nodes("versions '26.2'\nversions '26.3'\n")
+
+    def test_missing_file_is_an_error(self):
+        with self.assertRaises(ur.UpdateRulesError):
+            ur.stonecutter_nodes(Path(tempfile.gettempdir()) / "no-such-dir-rigtune" / "settings.gradle")
+
+
+class MainTargetTests(unittest.TestCase):
+    def run_main(self, argv, nodes=None):
+        seen = {}
+
+        def fake_pipeline(knowledge, client, override, old_doc, nodes=None):
+            seen["override"], seen["nodes"] = override, nodes
+            raise ur.UpdateRulesError("stop here")
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(ur, "run_pipeline", fake_pipeline):
+            code = ur.main(["--knowledge", str(FIXTURES / "knowledge_sample.json"), "--out-dir", tmp] + argv)
+        return code, seen
+
+    def test_main_takes_the_nodes_from_the_repo_settings(self):
+        repo = Path(ur.__file__).resolve().parent.parent
+        with mock.patch.object(ur, "stonecutter_nodes", wraps=ur.stonecutter_nodes) as nodes:
+            code, seen = self.run_main([])
+        nodes.assert_called_once_with(repo / "settings.gradle")
+        self.assertEqual(code, 1)
+        self.assertEqual(seen, {"override": None, "nodes": ur.stonecutter_nodes(repo / "settings.gradle")})
+
+    def test_mc_versions_override_skips_the_settings(self):
+        with mock.patch.object(ur, "stonecutter_nodes", side_effect=AssertionError("read settings.gradle")):
+            code, seen = self.run_main(["--mc-versions", "26.3"])
+        self.assertEqual(seen, {"override": "26.3", "nodes": None})
+
+    def test_unreadable_settings_exit_1(self):
+        with mock.patch.object(ur, "stonecutter_nodes", side_effect=ur.UpdateRulesError("no list")):
+            code, seen = self.run_main([])
+        self.assertEqual((code, seen), (1, {}))
 
 
 class EndToEndPipelineTests(unittest.TestCase):

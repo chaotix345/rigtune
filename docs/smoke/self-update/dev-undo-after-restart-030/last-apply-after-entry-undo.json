@@ -1,0 +1,33 @@
+{
+  "finishedAt": "2026-09-25T19:32:00.161988700Z",
+  "results": [
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "<instance>\\mods\\e2e-first-1.0.0.jar.rigtune-pending",
+        "to": "<instance>\\mods\\e2e-first-1.0.0.jar",
+        "id": "dc51479d-5782-496b-ac6c-2788f05f99df",
+        "group": "dde79866-d3ff-4e3b-abb8-5143e808d9e6",
+        "modId": "e2e-first",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled e2e-first-1.0.0.jar",
+      "resultPath": "<instance>\\mods\\e2e-first-1.0.0.jar"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "<instance>\\mods\\e2e-second-1.0.0.jar.rigtune-pending",
+        "to": "<instance>\\mods\\e2e-second-1.0.0.jar",
+        "id": "38f6de34-5f4c-49ce-a5d5-2847abb740c1",
+        "group": "37dc86a9-770a-4bc8-bdb7-6e010908db8e",
+        "modId": "e2e-second",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled e2e-second-1.0.0.jar",
+      "resultPath": "<instance>\\mods\\e2e-second-1.0.0.jar"
+    }
+  ]
+}
