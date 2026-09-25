@@ -35,6 +35,12 @@ public final class SettingValues {
 		return value;
 	}
 
+	// A "$token" this client doesn't know (resolveTokens left it as it is). The entry is skipped rather than applying the
+	// token text as a value.
+	static boolean unresolvedToken(String value) {
+		return value.trim().startsWith("$");
+	}
+
 	public static int refreshRateCap(int refreshRate) {
 		int hz = refreshRate > 0 ? refreshRate : 60;
 		int cap = hz / 10 * 10;

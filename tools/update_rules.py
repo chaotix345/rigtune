@@ -119,6 +119,8 @@ V2_ONLY_RULE_FIELDS = {
 }
 CONDITION_FIELDS = {"mods": ("recommendWhen", "avoidWhen"), "obsolete": (), "settings": ("when",), "advice": ("when",)}
 V1_SETTING_PREFIXES = ("vanilla.", "sodium.")
+# Computed setting values both 0.1.0 and 0.2 resolve. A new token needs a new client, so it must come with `requires`.
+VALUE_TOKENS = frozenset({"$refreshRate", "$refreshRateCap"})
 NEVER = {"always": False}
 MISSING = object()
 
@@ -215,6 +217,10 @@ def rule_label(kind, rule, index=None):
     return f"{kind}[{position}]"
 
 
+def unknown_token(value):
+    return isinstance(value, str) and value.strip().startswith("$") and value.strip() not in VALUE_TOKENS
+
+
 def droppable(field, value, merged):
     """Whether leaving a v2-only field out of the v1 output is exactly as safe as keeping it."""
     if field == "requires":
@@ -258,6 +264,8 @@ def project_rule(kind, rule, index=None):
             fail('the key is outside vanilla./sodium., which 0.1.x can\'t apply; add "v1": false')
         if "when" in merged and not is_v1_condition(merged["when"]):
             fail('"when" uses v2 condition features; add "v1": false or a "v1" override with a v1 "when"')
+        if unknown_token(merged.get("value")):
+            fail(f"the value {merged['value']!r} is a token 0.1.x doesn't know; add \"v1\": false")
     elif kind == "advice":
         if "when" in merged and not is_v1_condition(merged["when"]):
             if str(merged.get("kind", "info")).lower() in ("warning", "critical"):
@@ -343,6 +351,9 @@ def validate_knowledge(knowledge):
                     problems += [f"{label}: {p}" for p in condition_problems(rule[field], V2_CONDITION_KEYS, field)]
             if "requires" in rule and (not isinstance(rule["requires"], list) or not all(isinstance(r, str) for r in rule["requires"])):
                 problems.append(f"{label}: requires must be an array of strings")
+            if kind == "settings" and unknown_token(rule.get("value")) and not rule.get("requires"):
+                problems.append(f"{label}: the value {rule['value']!r} isn't a known token ({', '.join(sorted(VALUE_TOKENS))}); "
+                                "a new token needs \"requires\" naming the client feature that resolves it")
             if "avoidSelected" in rule and not isinstance(rule["avoidSelected"], bool):
                 problems.append(f"{label}: avoidSelected must be true or false")
             if not unknown:

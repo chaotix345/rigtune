@@ -289,6 +289,15 @@ class ValidationTests(unittest.TestCase):
         with self.assertRaises(ur.KnowledgeError):
             ur.validate_knowledge(self.knowledge(advice=[advice_rule(when={"gpuModelMatches": "a" * 201})]))
 
+    def test_unknown_value_token_is_an_error(self):
+        with self.assertRaises(ur.KnowledgeError):
+            ur.validate_knowledge(self.knowledge(settings=[setting_rule(value="$monitorHz")]))
+        with self.assertRaises(ur.KnowledgeError):
+            ur.validate_knowledge(self.knowledge(settings=[setting_rule(value="$monitorHz", v1={"value": 60})]))
+        ur.validate_knowledge(self.knowledge(settings=[setting_rule(value="$monitorHz", requires=["value-tokens-2"], v1=False)]))
+        ur.validate_knowledge(self.knowledge(settings=[setting_rule(key="vanilla.maxFps", value="$refreshRateCap"),
+                                                       setting_rule(key="vanilla.maxFps", value="$refreshRate")]))
+
     def test_setting_labels_shape_is_validated(self):
         for labels in ({"vanilla.renderDistance": {"values": ["Auto"]}}, {"vanilla.renderDistance": {"name": 5}},
                        {"vanilla.renderDistance": {"values": {"0": 1}}}, {"vanilla.renderDistance": {"nmae": "x"}},

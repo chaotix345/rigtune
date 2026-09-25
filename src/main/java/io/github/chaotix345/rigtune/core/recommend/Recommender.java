@@ -269,6 +269,9 @@ public final class Recommender {
 					continue;
 				}
 				value = SettingValues.resolveTokens(value, ctx.hardware().display());
+				if (SettingValues.unresolvedToken(value)) {
+					continue;
+				}
 				resolved.put(rule.key, new Resolved(value, text(rule.reason), RulesDocument.impactOf(rule.impact, Impact.LOW), selected(rule.defaultSelected)));
 			}
 			for (SettingRule rule : settings) {

@@ -167,6 +167,16 @@ class RecommenderV2Test {
 	}
 
 	@Test
+	void anUnknownValueTokenIsSkipped() {
+		Map<String, Recommendation> recs = run("""
+				"settings":[
+				 {"key":"vanilla.renderDistance","value":10,"reason":"base"},
+				 {"key":"vanilla.renderDistance","value":"$monitorHz","reason":"future token"}
+				]""");
+		assertEquals(new Action.SetSetting("vanilla.renderDistance", "12", "10"), recs.get("set:vanilla.renderDistance").action());
+	}
+
+	@Test
 	void labelsAreUsedInSettingTitles() {
 		Recommendation rec = run("""
 				"settings":[{"key":"sodium.performance.chunk_builder_threads","value":4,"reason":"threads"}],
