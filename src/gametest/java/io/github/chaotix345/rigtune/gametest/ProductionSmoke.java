@@ -4,6 +4,7 @@ import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
+import io.github.chaotix345.rigtune.client.ui.HistoryScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
@@ -18,6 +19,8 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractSelectionList;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.ConfirmLinkScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import org.jspecify.annotations.Nullable;
 
@@ -74,6 +77,7 @@ final class ProductionSmoke {
 			RigTune.LOGGER.warn("Smoke: the report changed while paging; the text dump has the newer one");
 		}
 		writeReport(shown == null ? report : shown, restored, pages);
+		v03Screens(context);
 		context.runOnClient(mc -> mc.gui.screen().onClose());
 		context.waitForScreen(TitleScreen.class);
 		String dh = System.getProperty("rigtune.smoke.dh");
@@ -101,6 +105,28 @@ final class ProductionSmoke {
 				BenchmarkSmoke.run(context);
 			}
 		}
+	}
+
+	// v0.3 Phase 5: the footer buttons, the History screen, and Report a problem's confirm screen (Cancel only).
+	private static void v03Screens(ClientGameTestContext context) {
+		List<String> buttons = context.computeOnClient(mc -> mc.gui.screen().children().stream()
+				.filter(Button.class::isInstance).map(b -> ((Button) b).getMessage().getString()).toList());
+		RigTune.LOGGER.info("Smoke: RigTune screen buttons {}", buttons);
+		context.clickScreenButton("rigtune.history.open");
+		context.waitForScreen(HistoryScreen.class);
+		context.waitFor(mc -> mc.gui.screen() instanceof HistoryScreen history && !history.loading(), 400);
+		context.waitTicks(3);
+		context.takeScreenshot("smoke-history");
+		context.runOnClient(mc -> mc.gui.screen().onClose());
+		context.waitForScreen(RigTuneScreen.class);
+		String clipboard = context.computeOnClient(mc -> mc.keyboardHandler.getClipboard());
+		context.clickScreenButton("rigtune.report.button");
+		context.waitForScreen(ConfirmLinkScreen.class);
+		context.waitTicks(3);
+		context.takeScreenshot("smoke-report-confirm");
+		context.clickScreenButton("gui.cancel");
+		context.waitForScreen(RigTuneScreen.class);
+		context.runOnClient(mc -> mc.keyboardHandler.setClipboard(clipboard));
 	}
 
 	// The game test framework resets some options (render distance 5, clouds off) after options.txt loads.
