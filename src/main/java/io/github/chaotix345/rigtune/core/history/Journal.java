@@ -71,6 +71,10 @@ public final class Journal implements ChangeRecorder {
 		return Files.exists(file);
 	}
 
+	public String mcVersion() {
+		return mcVersion;
+	}
+
 	// Empty when the file is missing, corrupt or from a newer RigTune.
 	public List<JournalEntry> entries() {
 		try {
@@ -121,6 +125,9 @@ public final class Journal implements ChangeRecorder {
 				}
 			}
 			List<JournalEntry> next = cap(change.apply(List.copyOf(read.entries())));
+			if (read.state() == State.OK && next.equals(read.entries())) {
+				return true;
+			}
 			AtomicFiles.writeString(file, GSON.toJson(new HistoryFile(FORMAT_VERSION, next)));
 			return true;
 		}

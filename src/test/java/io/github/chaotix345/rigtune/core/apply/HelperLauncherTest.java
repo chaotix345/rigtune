@@ -85,6 +85,27 @@ class HelperLauncherTest {
 		assertEquals("ours, updated", Files.readString(HelperLauncher.helperClasspath(helperDir, List.of(ours, gson)).get(0)));
 	}
 
+	// AC3.3: 0.1.0 left its own helper copies in config/rigtune/helper/; 0.2 replaces them.
+	@Test
+	void theV010HelperCopiesAreReplaced(@TempDir Path dir) throws Exception {
+		Path helperDir = Files.createDirectories(HelperLauncher.helperDir(dir.resolve("config")));
+		for (String name : List.of("0-rigtune-0.1.0.jar", "1-gson-2.13.2.jar")) {
+			try (var in = HelperLauncherTest.class.getResourceAsStream("/v010/helper/" + name)) {
+				Files.copy(in, helperDir.resolve(name));
+			}
+		}
+		Path ours = Files.writeString(dir.resolve("rigtune-0.2.0+mc26.2.jar"), "0.2");
+		Path gson = HelperLauncher.codeSourceOf(Gson.class);
+
+		List<Path> classpath = HelperLauncher.helperClasspath(helperDir, List.of(ours, gson));
+
+		assertEquals("0.2", Files.readString(classpath.get(0)));
+		assertEquals(-1, Files.mismatch(gson, classpath.get(1)));
+		try (Stream<Path> files = Files.list(helperDir)) {
+			assertEquals(List.of("0-rigtune-0.2.0+mc26.2.jar", "1-" + gson.getFileName()), files.map(p -> p.getFileName().toString()).sorted().toList());
+		}
+	}
+
 	@Test
 	void copyInUseByARunningHelperGetsAFreshName(@TempDir Path dir) throws Exception {
 		Path ours = Files.writeString(dir.resolve("rigtune.jar"), "v1");

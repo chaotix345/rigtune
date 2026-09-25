@@ -1,0 +1,78 @@
+{
+  "finishedAt": "2026-09-24T18:05:00.000000Z",
+  "results": [
+    {
+      "op": {
+        "type": "DISABLE_FILE",
+        "path": "${MODS}/rigtune-0.1.0.jar",
+        "id": "c0ffee00-0000-4000-8000-000000000001",
+        "group": "c0ffee00-0000-4000-8000-0000000000aa",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Disabled rigtune-0.1.0.jar -> rigtune-0.1.0.jar.disabled"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "${MODS}/rigtune-0.2.0+mc26.2.jar.rigtune-pending",
+        "to": "${MODS}/rigtune-0.2.0+mc26.2.jar",
+        "id": "c0ffee00-0000-4000-8000-000000000002",
+        "group": "c0ffee00-0000-4000-8000-0000000000aa",
+        "modId": "rigtune",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled rigtune-0.2.0+mc26.2.jar"
+    },
+    {
+      "op": {
+        "type": "DISABLE_FILE",
+        "path": "${MODS}/indium-1.0.36.jar",
+        "id": "c0ffee00-0000-4000-8000-000000000003",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Disabled indium-1.0.36.jar -> indium-1.0.36.jar.disabled.1"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "${MODS}/lithium-0.25.4.jar.rigtune-pending",
+        "to": "${MODS}/lithium-0.25.4.jar",
+        "id": "c0ffee00-0000-4000-8000-000000000004",
+        "group": "c0ffee00-0000-4000-8000-0000000000bb",
+        "modId": "lithium",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled lithium-0.25.4.jar"
+    },
+    {
+      "op": {
+        "type": "PATCH_JSON",
+        "path": "${CONFIG}/sodium-options.json",
+        "patches": {
+          "performance.use_entity_culling": "true"
+        },
+        "id": "c0ffee00-0000-4000-8000-000000000005",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Patched 1 value(s) in sodium-options.json"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "${MODS}/ferritecore-8.0.0.jar.rigtune-pending",
+        "to": "${MODS}/ferritecore-8.0.0.jar",
+        "id": "c0ffee00-0000-4000-8000-000000000006",
+        "group": "c0ffee00-0000-4000-8000-0000000000cc",
+        "modId": "ferritecore",
+        "attempts": 0
+      },
+      "status": "FAILED",
+      "message": "${MODS}/ferritecore-8.0.0.jar already exists; not overwriting it"
+    }
+  ]
+}

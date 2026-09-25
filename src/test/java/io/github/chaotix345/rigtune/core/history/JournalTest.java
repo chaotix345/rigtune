@@ -160,6 +160,18 @@ class JournalTest {
 		assertEquals(1, journal().entries().size());
 	}
 
+	// preLaunch reconciles at every start; an update that changes nothing leaves the file alone.
+	@Test
+	void anUpdateThatChangesNothingDoesNotRewriteTheFile() throws Exception {
+		Files.createDirectories(Journal.file(config).getParent());
+		String compact = "{\"formatVersion\":1,\"entries\":[{\"id\":\"e1\",\"kind\":\"apply\",\"changes\":[]}]}";
+		Files.writeString(Journal.file(config), compact);
+
+		assertTrue(journal().update(entries -> entries));
+
+		assertEquals(compact, Files.readString(Journal.file(config)));
+	}
+
 	@Test
 	void updateExistingNeverCreatesTheFile() throws Exception {
 		assertFalse(journal().updateExisting(entries -> List.of(entry("e1"))));
