@@ -78,6 +78,7 @@ class DownloadPlannerTest {
 	}
 
 	private Recommendation update(String current, String next) {
+		updateVersions.put("v2", version("v2", "M", "2", T));
 		UpdateInfo info = new UpdateInfo("m", "M", "1", "v2", "2", new ModFile("https://cdn/" + next, next, "sha512", 10));
 		return new Recommendation("update-m", Category.UPDATE_MOD, Impact.MEDIUM, "Update m", "", new Action.UpdateMod("m", mods.resolve(current), info), true);
 	}
@@ -178,12 +179,51 @@ class DownloadPlannerTest {
 
 	// Mod a is installed as a-1.jar (Modrinth version a1 of project A); its update is version aV (file aV.jar).
 	private Recommendation updateA(Dependency... deps) throws IOException {
-		Files.writeString(mods.resolve("a-1.jar"), "installed");
-		installedVersions.put("a1", version("a1", "A", "1", T));
-		ModrinthVersion next = version("aV", "A", "2", T, deps);
-		updateVersions.put("aV", next);
-		UpdateInfo info = new UpdateInfo("a", "A", "1", "aV", "2", next.primaryFile());
-		return new Recommendation("update-a", Category.UPDATE_MOD, Impact.MEDIUM, "Update a", "", new Action.UpdateMod("a", mods.resolve("a-1.jar"), info), true);
+		return updateOf("a", "A", deps);
+	}
+
+	// Mod <mod> is installed as <mod>-1.jar (version <mod>1 of <project>); its update is version <mod>V (file <mod>V.jar).
+	private Recommendation updateOf(String mod, String project, Dependency... deps) throws IOException {
+		Files.writeString(mods.resolve(mod + "-1.jar"), "installed");
+		installedVersions.put(mod + "1", version(mod + "1", project, "1", T));
+		ModrinthVersion next = version(mod + "V", project, "2", T, deps);
+		updateVersions.put(mod + "V", next);
+		UpdateInfo info = new UpdateInfo(mod, project, "1", mod + "V", "2", next.primaryFile());
+		return new Recommendation("update-" + mod, Category.UPDATE_MOD, Impact.MEDIUM, "Update " + mod, "",
+				new Action.UpdateMod(mod, mods.resolve(mod + "-1.jar"), info), true);
+	}
+
+	// Review of WS-A, finding 1: once an addition folds two updates' groups into one, a later addition relying on the
+	// second update must join the folded group, not the second update's old (now empty) group.
+	@Test
+	void anAdditionRelyingOnAnUpdateWhoseGroupWasFoldedJoinsTheFoldedGroup() throws IOException {
+		Recommendation updateA = updateA();
+		Recommendation updateK = updateOf("k", "K");
+		put("x", version("xV", "X", "1", T, new Dependency("A", "a1", "incompatible"), new Dependency("K", "k1", "incompatible")));
+		put("c", version("cV", "C", "1", T, new Dependency("K", "k1", "incompatible")));
+
+		DownloadPlanner.Result result = plan(Set.of("A", "K"), add("x", "X"), add("c", "C"), updateA, updateK);
+
+		assertEquals(List.of(), result.errors());
+		assertEquals(List.of("update-a", "update-k", "add-x", "add-c"), result.ids());
+		assertEquals(1, groups(result.ops()), result.ops().toString());
+		Map<String, String> groupByFile = new HashMap<>();
+		result.ops().forEach(op -> groupByFile.put(files(List.of(op)).getFirst(), op.group()));
+		assertEquals(groupByFile.get("k-1.jar"), groupByFile.get("cV.jar"));
+	}
+
+	// Review of WS-A, finding 8: without the update's own Modrinth version, its incompatibilities can't be checked.
+	@Test
+	void anUpdateWhoseModrinthVersionIsUnknownIsRefused() throws IOException {
+		Files.writeString(mods.resolve("m-1.jar"), "installed");
+		Recommendation update = update("m-1.jar", "m-2.jar");
+		updateVersions.clear();
+
+		DownloadPlanner.Result result = plan(Set.of(), update);
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of("Update m: its Modrinth data changed since the list was made; try again"), result.errors());
+		assertEquals(List.of(), fetched);
 	}
 
 	private void titles() {

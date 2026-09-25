@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -121,13 +122,14 @@ public final class DependencyResolver {
 		for (ModrinthVersion version : out) {
 			refuseIncompatible(version, null, installedProjectIds, batch, together, updatedProjects, needed);
 		}
-		return new Resolution(List.copyOf(out), Set.copyOf(needed));
+		return new Resolution(List.copyOf(out), Collections.unmodifiableSet(needed));
 	}
 
 	// An update's own version (SPEC 3b, plan review A-H1): refused when Modrinth marks it incompatible with an installed
 	// project or version, or with anything in the batch, either side declaring it. Its own project's installed version
 	// is the one it replaces; every other installed version counts, even one this batch also updates (the update is
-	// offered again once that one is installed).
+	// offered again once that one is installed). An installed mod's declaration that the version being replaced matches
+	// too (a whole-project entry) is a conflict that already exists, which refusing the update wouldn't remove.
 	public void checkUpdate(ModrinthVersion update, Set<String> installedProjectIds, List<ModrinthVersion> batch) throws IOException {
 		List<ModrinthVersion> together = new ArrayList<>(batch);
 		together.add(update);
@@ -168,7 +170,7 @@ public final class DependencyResolver {
 		// The installed mods' own declarations (the review's known gap): one this batch updates counts through its new
 		// version, which is in the batch.
 		for (ModrinthVersion mine : installed.values()) {
-			if (same(mine.projectId(), replacing) || !declaresIncompatible(mine, version)) {
+			if (same(mine.projectId(), replacing) || !declaresIncompatible(mine, version) || declaresIncompatibleWithReplaced(mine, replacing)) {
 				continue;
 			}
 			if (mine.projectId() != null && updated.contains(mine.projectId())) {
@@ -177,6 +179,10 @@ public final class DependencyResolver {
 				throw new IOException("Modrinth marks " + name(mine.projectId()) + ", which is installed, as incompatible with " + name(version.projectId()));
 			}
 		}
+	}
+
+	private boolean declaresIncompatibleWithReplaced(ModrinthVersion declaring, String replacing) {
+		return replacing != null && installed.values().stream().anyMatch(old -> same(old.projectId(), replacing) && declaresIncompatible(declaring, old));
 	}
 
 	private static boolean same(String projectId, String other) {

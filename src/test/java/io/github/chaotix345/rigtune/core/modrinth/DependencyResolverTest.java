@@ -256,6 +256,17 @@ class DependencyResolverTest {
 		assertDoesNotThrow(() -> resolver.checkUpdate(a2, Set.of("A"), List.of(version("c2", "C", "2", T, incompatibleVersion("A", "a1")))));
 	}
 
+	// Review of WS-A, finding 2: an installed mod declaring the updated mod's whole project incompatible already runs next
+	// to it; refusing the update removes no risk.
+	@Test
+	void anUpdateIsNotRefusedForAnInstalledConflictThatAlreadyExists() {
+		FakeModrinthClient client = new FakeModrinthClient();
+		DependencyResolver resolver = new DependencyResolver(client, "fabric", "26.2",
+				Map.of("k1", version("k1", "K", "1", T, incompatible("A")), "a1", version("a1", "A", "1", T)));
+
+		assertDoesNotThrow(() -> resolver.checkUpdate(version("a2", "A", "2", T), Set.of("A", "K"), List.of()));
+	}
+
 	// The review's known gap, covered: an installed mod's own "incompatible" entries count too (both directions).
 	@Test
 	void anInstalledModsOwnIncompatibilityCounts() throws IOException {

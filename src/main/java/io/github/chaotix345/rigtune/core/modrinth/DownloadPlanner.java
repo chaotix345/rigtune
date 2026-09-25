@@ -61,7 +61,8 @@ public final class DownloadPlanner {
 	}
 
 	// updateVersions: the updates' Modrinth versions by version id, dependencies included
-	// (OnlineDataFetcher.Result.updateVersions()); an update missing from it counts with no dependencies.
+	// (OnlineDataFetcher.Result.updateVersions()); an update missing from it is refused, since its own incompatibilities
+	// can't be checked.
 	public DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher, BiPredicate<String, String> conflicts,
 			Map<String, ModrinthVersion> updateVersions) {
 		this(resolver, modsDir, fetcher, conflicts, updateVersions, ModJars::modIdOf);
@@ -184,7 +185,7 @@ public final class DownloadPlanner {
 		UpdateInfo info = update.update();
 		ModrinthVersion next = updateVersions.get(info.newVersionId());
 		if (next == null) {
-			next = DependencyResolver.known(info.newVersionId(), info.projectId());
+			throw new IOException("its Modrinth data changed since the list was made; try again");
 		}
 		resolver.checkUpdate(next, attempt.projects, attempt.batch.versions);
 		Path pending = fetcher.fetch(file);

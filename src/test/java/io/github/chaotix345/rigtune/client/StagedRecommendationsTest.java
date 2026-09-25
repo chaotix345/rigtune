@@ -74,7 +74,7 @@ class StagedRecommendationsTest {
 	private void stage(List<Op> ops, Map<String, List<String>> byRecommendation) {
 		Staging.Merge merge = staging.stage(ops, "e" + ++entries);
 		assertNotNull(merge);
-		staged.add(byRecommendation, merge.merged().survivingIds());
+		staged.add(ops, byRecommendation, merge.merged().survivingIds());
 	}
 
 	// AC3.1 (as amended by A-M1): after a drop, every staged id still has one of its recorded ops in pending.json, and no
@@ -134,6 +134,38 @@ class StagedRecommendationsTest {
 		assertEquals(1, staged.unowned(pendingOps()));
 	}
 
+	// Review of WS-A, finding 6: an undo's re-enable replaces the update's enable and takes its disable into the undo's
+	// group; the update is no longer staged even though one of its ops is still there.
+	@Test
+	void anUpdateWhoseEnableAnUndoReplacedIsNoLongerStaged() throws IOException {
+		List<Op> update = update("x-1.jar", "x-2.jar", "x");
+		stage(update, Map.of("update:x", ids(update)));
+		Path disabled = TestJars.modJar(mods.resolve("x-0.jar.disabled"), "x");
+		try (ApplyLock lock = staging.lock()) {
+			assertNotNull(lock);
+			staging.mergeLocked(List.of(Op.enableFile(disabled, mods.resolve("x-0.jar")).withModId("x")));
+		}
+		assertTrue(pendingOps().stream().anyMatch(op -> op.id().equals(update.getFirst().id())), "the disable is still staged");
+
+		assertEquals(Set.of("update:x"), staged.retainPending(pendingOps()));
+	}
+
+	// Review of WS-A, finding 5: an unreadable pending.json changes nothing (a missing one means nothing is staged).
+	@Test
+	void recountChangesNothingWhenPendingJsonCantBeRead() throws IOException {
+		List<Op> x = update("x-1.jar", "x-2.jar", "x");
+		stage(x, Map.of("update:x", ids(x)));
+		assertEquals(0, staged.recount(pending));
+
+		Files.writeString(pending, "{ not json");
+		assertEquals(-1, staged.recount(pending));
+		assertEquals(Set.of("update:x"), staged.ids());
+
+		Files.delete(pending);
+		assertEquals(0, staged.recount(pending));
+		assertEquals(Set.of(), staged.ids());
+	}
+
 	@Test
 	void carriedOverOpsAreTheOnesNoStagedRecommendationOwns() throws IOException {
 		PendingActions.create(1, mods, config, update("y-1.jar", "y-2.jar", "y")).save(pending);
@@ -161,8 +193,13 @@ class StagedRecommendationsTest {
 		List<InstalledMod> scanned = List.of(new InstalledMod("a", "A Mod", "1", mods.resolve("a-1.jar"), "aaa"),
 				new InstalledMod("c", "C Mod", "1", mods.resolve("c.jar"), "ccc"));
 
-		assertEquals(List.of("A Mod"), StagedRecommendations.droppedModNames(dropped, Set.of("a", "b"), scanned));
-		assertEquals(List.of("a"), StagedRecommendations.droppedModNames(dropped, Set.of("a"), List.of()));
+		assertEquals(List.of("A Mod"), StagedRecommendations.droppedModNames(dropped, Set.of("a", "b"), Set.of("a"), scanned));
+		// Review of WS-A, finding 7: every loaded queued mod is named (its id when the scan lacks it), never a mod that
+		// isn't loaded.
+		List<Op> three = new ArrayList<>(dropped);
+		three.add(Op.enableFile(mods.resolve("d-2.jar.rigtune-pending"), mods.resolve("d-2.jar")).withModId("d"));
+		assertEquals(List.of("A Mod", "d"), StagedRecommendations.droppedModNames(three, Set.of("a", "b", "d"), Set.of("a", "d"), scanned));
+		assertEquals(List.of("a"), StagedRecommendations.droppedModNames(dropped, Set.of("a", "b"), Set.of("a"), List.of()));
 
 		String notice;
 		try (InputStream in = StagedRecommendationsTest.class.getResourceAsStream("/assets/rigtune/lang/en_us.json")) {

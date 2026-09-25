@@ -113,7 +113,7 @@ public final class RealController implements RigTuneController {
 		this.modrinth = new GatedModrinthClient(new HttpModrinthClient(modVersion), settings::modrinthAllowed);
 		this.state = ClientState.shared(configDir);
 		this.goal = state.goalOrDefault();
-		this.carriedOverOps = pendingOps().size();
+		this.carriedOverOps = Math.max(0, staged.recount(pendingFile));
 		this.staging = new Staging(configDir, pendingFile, ConfigTargets.all(configDir), ClientJournal.get());
 		// The Undo screen plans off the render thread; the options are still read on it.
 		this.undoService = new UndoService(staging, ClientJournal.get(),
@@ -255,8 +255,9 @@ public final class RealController implements RigTuneController {
 			int gen = ++generation;
 			CompletableFuture.supplyAsync(() -> {
 						Set<String> queued = ModScanner.queuedUpdates();
-						List<Op> dropped = dropQueuedUpdates(queued);
-						return new Rebuilt(Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion, queued), dropped, queued);
+						Set<String> loaded = ModScanner.loadedIds();
+						List<Op> dropped = dropQueuedUpdates(queued, loaded);
+						return new Rebuilt(Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion, queued), dropped, queued, loaded);
 					}, Probes.EXECUTOR)
 					.whenComplete((rebuilt, error) -> minecraft.execute(() -> {
 						if (error != null) {
@@ -265,7 +266,7 @@ public final class RealController implements RigTuneController {
 							return;
 						}
 						if (!rebuilt.dropped().isEmpty()) {
-							droppedQueuedUpdates(rebuilt.dropped(), rebuilt.queued(), scanned);
+							droppedQueuedUpdates(rebuilt.dropped(), rebuilt.queued(), rebuilt.loaded(), scanned);
 						}
 						if (gen == generation) {
 							report = this.settings.modrinthAllowed() ? withoutStaged(rebuilt.report())
@@ -275,19 +276,19 @@ public final class RealController implements RigTuneController {
 		});
 	}
 
-	private record Rebuilt(Report report, List<Op> dropped, Set<String> queued) {
+	private record Rebuilt(Report report, List<Op> dropped, Set<String> queued, Set<String> loaded) {
 	}
 
 	// Also at exit: an updater can have queued its build since the last rebuild.
 	public void unstageQueuedUpdates() {
-		dropQueuedUpdates(ModScanner.queuedUpdates());
+		dropQueuedUpdates(ModScanner.queuedUpdates(), ModScanner.loadedIds());
 	}
 
 	// A staged update (or undo re-enable) of a loaded mod whose own updater has a build waiting in mods/update/ would race
 	// it at exit, so it is unstaged (re-check of review 4, SPEC 3a). A busy lock leaves it for the next rebuild.
-	private List<Op> dropQueuedUpdates(Set<String> queued) {
+	private List<Op> dropQueuedUpdates(Set<String> queued, Set<String> loaded) {
 		try {
-			List<Op> dropped = staging.dropQueuedUpdates(queued, ModScanner.loadedIds());
+			List<Op> dropped = staging.dropQueuedUpdates(queued, loaded);
 			if (dropped == null || dropped.isEmpty()) {
 				return List.of();
 			}
@@ -299,17 +300,20 @@ public final class RealController implements RigTuneController {
 		}
 	}
 
-	private void droppedQueuedUpdates(List<Op> dropped, Set<String> queued, List<InstalledMod> scanned) {
+	private void droppedQueuedUpdates(List<Op> dropped, Set<String> queued, Set<String> loaded, List<InstalledMod> scanned) {
 		recountStaged();
-		status = Component.translatable("rigtune.status.queued_update_dropped", String.join(", ", StagedRecommendations.droppedModNames(dropped, queued, scanned)));
+		status = Component.translatable("rigtune.status.queued_update_dropped",
+				String.join(", ", StagedRecommendations.droppedModNames(dropped, queued, loaded, scanned)));
 	}
 
-	// After a drop, an undo or a discard: a recommendation stays staged only while one of its ops is still in
-	// pending.json, and the staged ops none of them owns were carried over from another session (plan review A-M1).
+	// After a drop, an undo or a discard: a recommendation stays staged only while its ops are still in pending.json,
+	// and the staged ops none of them owns were carried over from another session (plan review A-M1). An unreadable
+	// pending.json changes nothing.
 	private void recountStaged() {
-		List<Op> ops = pendingOps();
-		staged.retainPending(ops);
-		carriedOverOps = staged.unowned(ops);
+		int carried = staged.recount(pendingFile);
+		if (carried >= 0) {
+			carriedOverOps = carried;
+		}
 	}
 
 	private Report withoutStaged(Report built) {
@@ -525,19 +529,8 @@ public final class RealController implements RigTuneController {
 		if (merge == null) {
 			return false;
 		}
-		staged.add(opIdsByRecommendation, merge.merged().survivingIds());
+		staged.add(ops, opIdsByRecommendation, merge.merged().survivingIds());
 		return true;
-	}
-
-	private List<Op> pendingOps() {
-		if (!Files.exists(pendingFile)) {
-			return List.of();
-		}
-		try {
-			return PendingActions.load(pendingFile).ops();
-		} catch (IOException e) {
-			return List.of();
-		}
 	}
 
 	@Override
