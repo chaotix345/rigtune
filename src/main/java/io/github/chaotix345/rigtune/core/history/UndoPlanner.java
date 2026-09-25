@@ -63,6 +63,15 @@ public final class UndoPlanner {
 		boolean changeable(String key);
 
 		Folder folder();
+
+		// How a settings key and its values are shown on the Undo screen.
+		default String label(String key) {
+			return UndoPlanner.label(key);
+		}
+
+		default String value(String key, String value) {
+			return value;
+		}
 	}
 
 	public interface Folder {
@@ -144,7 +153,7 @@ public final class UndoPlanner {
 		for (String id : wanted) {
 			if (!found.contains(id)) {
 				Located l = ctx.byId.get(id);
-				items.add(new Item(l == null ? id : describe(l.change()), Action.SKIP, GONE, false, List.of(id), List.of()));
+				items.add(new Item(l == null ? id : describe(l.change(), state), Action.SKIP, GONE, false, List.of(id), List.of()));
 			}
 		}
 		return new Result(new UndoPlan(shown.all(), shown.undoOf(), items), result.script());
@@ -219,14 +228,20 @@ public final class UndoPlanner {
 		final Set<String> discardOpIds = new LinkedHashSet<>();
 		final List<Revert> revertList = new ArrayList<>();
 
+		final State state;
+
+		Builder(State state) {
+			this.state = state;
+		}
+
 		void skip(Located l, String reason) {
-			skips.add(new Item(describe(l.change()), Action.SKIP, reason, false, List.of(l.change().id()), List.of()));
+			skips.add(new Item(describe(l.change(), state), Action.SKIP, reason, false, List.of(l.change().id()), List.of()));
 		}
 	}
 
 	private static Result build(Context ctx, List<Located> selected, List<Op> pending, State state, Set<String> shownOps, boolean all,
 			String undoOf) {
-		Builder b = new Builder();
+		Builder b = new Builder(state);
 		Folder folder = state.folder();
 		planStaged(ctx, selected, pending, folder, shownOps, b);
 		planSettings(selected, state, b);
@@ -274,7 +289,7 @@ public final class UndoPlanner {
 			Set<String> covered = new HashSet<>();
 			for (Located l : group.getValue()) {
 				covered.add(l.change().id());
-				b.discards.add(new Item(describe(l.change()), Action.DISCARD_STAGED, null, false, List.of(l.change().id()), opIds));
+				b.discards.add(new Item(describe(l.change(), b.state), Action.DISCARD_STAGED, null, false, List.of(l.change().id()), opIds));
 			}
 			for (Op op : ops) {
 				List<Located> mates = ctx.stagedWithOp(op.id());
@@ -283,7 +298,7 @@ public final class UndoPlanner {
 				}
 				for (Located mate : mates) {
 					if (covered.add(mate.change().id())) {
-						b.discards.add(new Item(describe(mate.change()), Action.DISCARD_STAGED, STAGED_TOGETHER, false, List.of(mate.change().id()), opIds));
+						b.discards.add(new Item(describe(mate.change(), b.state), Action.DISCARD_STAGED, STAGED_TOGETHER, false, List.of(mate.change().id()), opIds));
 					}
 				}
 			}
@@ -318,7 +333,7 @@ public final class UndoPlanner {
 			List<Located> changes = keyed.getValue().stream().sorted(NEWEST_FIRST).toList();
 			String current = state.setting(key);
 			if (!Objects.equals(current, changes.getFirst().change().after())) {
-				changes.forEach(l -> b.skip(l, CHANGED_SINCE.formatted(show(current))));
+				changes.forEach(l -> b.skip(l, CHANGED_SINCE.formatted(show(state, key, current))));
 				continue;
 			}
 			List<Located> chain = new ArrayList<>();
@@ -340,7 +355,7 @@ public final class UndoPlanner {
 				continue;
 			}
 			boolean now = state.immediate(key);
-			b.reverts.add(new Item(label(key) + ": " + show(current) + " → " + show(target), Action.REVERT, null, !now,
+			b.reverts.add(new Item(state.label(key) + ": " + show(state, key, current) + " → " + show(state, key, target), Action.REVERT, null, !now,
 					chain.stream().map(l -> l.change().id()).toList(), List.of()));
 			(now ? b.immediate : b.staged).put(key, target);
 			for (Located l : chain) {
@@ -579,13 +594,13 @@ public final class UndoPlanner {
 		return key != null && key.startsWith(VANILLA_PREFIX) ? key.substring(VANILLA_PREFIX.length()) : key;
 	}
 
-	private static String show(String value) {
-		return value == null ? "(none)" : value;
+	private static String show(State state, String key, String value) {
+		return value == null ? "(none)" : state.value(key, value);
 	}
 
-	static String describe(JournalChange c) {
+	static String describe(JournalChange c, State state) {
 		if (c.isSetting()) {
-			return label(c.key()) + ": " + show(c.before()) + " → " + show(c.after());
+			return state.label(c.key()) + ": " + show(state, c.key(), c.before()) + " → " + show(state, c.key(), c.after());
 		}
 		return (JournalChange.ENABLE.equals(c.action()) ? "Enable " : "Disable ") + c.file();
 	}

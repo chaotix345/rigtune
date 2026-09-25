@@ -540,6 +540,49 @@ class UndoPlannerTest {
 	}
 
 	@Test
+	void settingsAreDescribedWithTheStatesLabels() {
+		UndoPlanner.State labelled = new UndoPlanner.State() {
+			@Override
+			public String setting(String key) {
+				return state.setting(key);
+			}
+
+			@Override
+			public boolean immediate(String key) {
+				return state.immediate(key);
+			}
+
+			@Override
+			public boolean changeable(String key) {
+				return true;
+			}
+
+			@Override
+			public UndoPlanner.Folder folder() {
+				return state;
+			}
+
+			@Override
+			public String label(String key) {
+				return "Render Distance";
+			}
+
+			@Override
+			public String value(String key, String value) {
+				return value + " chunks";
+			}
+		};
+		entry("e1", applied("vanilla.renderDistance", "8", "10"));
+		entry("e2", applied("vanilla.renderDistance", "12", "16"));
+		state.settings.put("vanilla.renderDistance", "16");
+
+		Result result = UndoPlanner.plan(entries, pending, labelled, true);
+
+		assertEquals("Render Distance: 16 chunks → 12 chunks", only(result, Action.REVERT).description());
+		assertEquals("Render Distance: 8 chunks → 10 chunks", only(result, Action.SKIP).description());
+	}
+
+	@Test
 	void anEmptyHistoryGivesAnEmptyPlan() {
 		assertTrue(last().plan().isEmpty());
 		assertNull(last().plan().undoOf());
