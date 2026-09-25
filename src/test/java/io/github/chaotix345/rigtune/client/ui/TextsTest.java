@@ -3,7 +3,9 @@ package io.github.chaotix345.rigtune.client.ui;
 import io.github.chaotix345.rigtune.core.RepoFiles;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
 import io.github.chaotix345.rigtune.core.model.Text;
+import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import net.minecraft.locale.Language;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.util.FormattedCharSequence;
 import org.junit.jupiter.api.Test;
@@ -87,6 +89,25 @@ class TextsTest {
 				String old = d.width() > 0 ? d.width() + "×" + d.height() + (d.refreshRate() > 0 ? " @ " + d.refreshRate() + " Hz" : "") : "?";
 				assertEquals(old, RigTuneScreen.display(d).getString(), d.toString());
 			}
+		} finally {
+			Language.inject(previous);
+		}
+	}
+
+	// The Preview's "Not changed" lines show the title and the planner's reason from their Texts; in English as before.
+	@Test
+	void previewLinesReadAsBefore() throws IOException {
+		Language previous = Language.getInstance();
+		Language.inject(rigtuneEnglish(previous));
+		try {
+			Text title = Text.of("rigtune.rec.update.title", "Update %s", "Sodium");
+			Text detail = Text.of("rigtune.download.target_exists", "%s is already in the mods folder", "sodium-0.6.jar");
+			ApplyPreview.Skipped refused = new ApplyPreview.Skipped("update:sodium", title.english(), ApplyPreview.Reason.DOWNLOAD_FAILED, detail.english(),
+					title, detail);
+			assertEquals(Component.translatable("rigtune.preview.skipped.detail", refused.title(), refused.detail()).getString(),
+					PreviewScreen.skipped(refused).getString());
+			ApplyPreview.Skipped unchanged = new ApplyPreview.Skipped("set:x", "Render distance: 12 → 8", ApplyPreview.Reason.UNCHANGED, null);
+			assertEquals("Render distance: 12 → 8: already set", PreviewScreen.skipped(unchanged).getString());
 		} finally {
 			Language.inject(previous);
 		}

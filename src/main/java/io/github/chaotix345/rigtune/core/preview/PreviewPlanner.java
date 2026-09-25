@@ -6,6 +6,7 @@ import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
+import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import org.jspecify.annotations.Nullable;
 
@@ -64,7 +65,8 @@ public final class PreviewPlanner {
 					configRecs.put(set.key(), r);
 				}
 				case Action.DisableMod disable when SafeFileNames.isDirectChild(modsDir, disable.file()) ->
-						out.disables.add(new ApplyPreview.Disable(r.id(), r.title(), disable.file(), ApplyExecutor.disabledTarget(disable.file())));
+						out.disables.add(new ApplyPreview.Disable(r.id(), r.title(), disable.file(), ApplyExecutor.disabledTarget(disable.file()),
+								r.titleText()));
 				case Action.DisableMod ignored -> out.skip(r, ApplyPreview.Reason.OUTSIDE_MODS, null);
 				case Action.AddMod ignored -> downloadRecs.add(r);
 				case Action.UpdateMod ignored -> downloadRecs.add(r);
@@ -92,7 +94,7 @@ public final class PreviewPlanner {
 		if (!SettingKeys.changeable(set.key())) {
 			out.skip(r, ApplyPreview.Reason.NOT_CHANGEABLE, null);
 		} else if (!SettingKeys.safeValue(set.newValue())) {
-			out.skip(r, ApplyPreview.Reason.REFUSED, "Value contains control characters");
+			out.skipText(r, ApplyPreview.Reason.REFUSED, Text.of("rigtune.preview.detail.control_characters", "Value contains control characters"));
 		} else if (!vanillaNow.containsKey(key)) {
 			out.skip(r, ApplyPreview.Reason.UNKNOWN_SETTING, null);
 		} else if (vanillaProblems.containsKey(key)) {
@@ -127,8 +129,13 @@ public final class PreviewPlanner {
 		final List<ApplyPreview.Disable> disables = new ArrayList<>();
 		final List<ApplyPreview.Skipped> skipped = new ArrayList<>();
 
+		// detail: the game's or the config patcher's own message, shown as it is.
 		void skip(Recommendation r, ApplyPreview.Reason reason, @Nullable String detail) {
-			skipped.add(new ApplyPreview.Skipped(r.id(), r.title(), reason, detail));
+			skipText(r, reason, detail == null ? null : Text.literal(detail));
+		}
+
+		void skipText(Recommendation r, ApplyPreview.Reason reason, @Nullable Text detail) {
+			skipped.add(new ApplyPreview.Skipped(r.id(), r.title(), reason, detail == null ? null : detail.english(), r.titleText(), detail));
 		}
 	}
 }

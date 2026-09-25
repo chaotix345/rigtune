@@ -171,7 +171,7 @@ public class PreviewScreen extends Screen {
 			target.heading("rigtune.preview.section.disables", width);
 			for (ApplyPreview.Disable disable : shown.disables()) {
 				target.row(Component.translatable("rigtune.preview.disable", relative(disable.file()), String.valueOf(disable.disabledAs().getFileName()),
-						disable.title()), COLOR_TEXT, INDENT, width);
+						Texts.component(disable.titleText())), COLOR_TEXT, INDENT, width);
 			}
 		}
 		if (!shown.skipped().isEmpty()) {
@@ -200,22 +200,24 @@ public class PreviewScreen extends Screen {
 
 	private Component download(ApplyPreview.Download d) {
 		if (d.fileName() == null) {
-			return Component.translatable("rigtune.preview.download.unresolved", d.title());
+			return Component.translatable("rigtune.preview.download.unresolved", Texts.component(d.titleText()));
 		}
 		String file = d.target() == null ? d.fileName() : relative(d.target());
-		return Component.translatable(d.dependency() ? "rigtune.preview.download.dependency" : "rigtune.preview.download", file, d.title());
+		return Component.translatable(d.dependency() ? "rigtune.preview.download.dependency" : "rigtune.preview.download", file,
+				Texts.component(d.titleText()));
 	}
 
 	static Component skipped(ApplyPreview.Skipped s) {
+		Component title = Texts.component(s.titleText());
 		return switch (s.reason()) {
-			case NOTHING_TO_APPLY -> Component.translatable("rigtune.preview.skipped.nothing_to_apply", s.title());
-			case NOT_CHANGEABLE -> Component.translatable("rigtune.preview.skipped.not_changeable", s.title());
-			case UNKNOWN_SETTING -> Component.translatable("rigtune.preview.skipped.unknown_setting", s.title());
-			case UNCHANGED -> Component.translatable("rigtune.preview.skipped.unchanged", s.title());
-			case OUTSIDE_MODS -> Component.translatable("rigtune.preview.skipped.outside_mods", s.title());
-			case NO_NEW_FILES -> Component.translatable("rigtune.preview.skipped.no_new_files", s.title());
-			case REFUSED, DOWNLOAD_FAILED -> s.detail() == null ? Component.translatable("rigtune.preview.skipped.failed", s.title())
-					: Component.translatable("rigtune.preview.skipped.detail", s.title(), s.detail());
+			case NOTHING_TO_APPLY -> Component.translatable("rigtune.preview.skipped.nothing_to_apply", title);
+			case NOT_CHANGEABLE -> Component.translatable("rigtune.preview.skipped.not_changeable", title);
+			case UNKNOWN_SETTING -> Component.translatable("rigtune.preview.skipped.unknown_setting", title);
+			case UNCHANGED -> Component.translatable("rigtune.preview.skipped.unchanged", title);
+			case OUTSIDE_MODS -> Component.translatable("rigtune.preview.skipped.outside_mods", title);
+			case NO_NEW_FILES -> Component.translatable("rigtune.preview.skipped.no_new_files", title);
+			case REFUSED, DOWNLOAD_FAILED -> s.detailText() == null ? Component.translatable("rigtune.preview.skipped.failed", title)
+					: Component.translatable("rigtune.preview.skipped.detail", title, Texts.component(s.detailText()));
 		};
 	}
 

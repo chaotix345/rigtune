@@ -167,6 +167,7 @@
 	"rigtune.history.versions.mc": "Minecraft %s",
 	"rigtune.preview.button": "Preview",
 	"rigtune.preview.button.tooltip": "See exactly what Apply would change for the ticked items, file by file. Nothing is changed or downloaded.",
+	"rigtune.preview.detail.control_characters": "Value contains control characters",
 	"rigtune.preview.disable": "%s → %s (%s)",
 	"rigtune.preview.download": "%s (%s)",
 	"rigtune.preview.download.dependency": "%s (needed by %s)",

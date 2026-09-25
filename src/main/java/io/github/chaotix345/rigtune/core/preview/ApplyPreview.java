@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.core.preview;
 
+import io.github.chaotix345.rigtune.core.model.Text;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
@@ -17,17 +18,42 @@ public record ApplyPreview(List<Setting> now, List<Setting> atRestart, List<Down
 	public record Setting(String recommendationId, Path file, String key, @Nullable String oldValue, String newValue) {
 	}
 
-	public record Download(String recommendationId, String title, @Nullable String fileName, @Nullable Path target, boolean dependency) {
+	// titleText, detailText (docs/v0.3/SPEC.md item 9): what the screen shows, translated where the language has the key;
+	// title and detail are their English.
+	public record Download(String recommendationId, String title, @Nullable String fileName, @Nullable Path target, boolean dependency,
+			Text titleText) {
+		public Download {
+			titleText = titleText != null ? titleText : Text.literal(title);
+		}
+
+		public Download(String recommendationId, String title, @Nullable String fileName, @Nullable Path target, boolean dependency) {
+			this(recommendationId, title, fileName, target, dependency, null);
+		}
 	}
 
-	public record Disable(String recommendationId, String title, Path file, Path disabledAs) {
+	public record Disable(String recommendationId, String title, Path file, Path disabledAs, Text titleText) {
+		public Disable {
+			titleText = titleText != null ? titleText : Text.literal(title);
+		}
+
+		public Disable(String recommendationId, String title, Path file, Path disabledAs) {
+			this(recommendationId, title, file, disabledAs, null);
+		}
 	}
 
 	public enum Reason {
 		NOTHING_TO_APPLY, NOT_CHANGEABLE, UNKNOWN_SETTING, UNCHANGED, REFUSED, OUTSIDE_MODS, DOWNLOAD_FAILED, NO_NEW_FILES
 	}
 
-	public record Skipped(String recommendationId, String title, Reason reason, @Nullable String detail) {
+	public record Skipped(String recommendationId, String title, Reason reason, @Nullable String detail, Text titleText, @Nullable Text detailText) {
+		public Skipped {
+			titleText = titleText != null ? titleText : Text.literal(title);
+			detailText = detailText != null || detail == null ? detailText : Text.literal(detail);
+		}
+
+		public Skipped(String recommendationId, String title, Reason reason, @Nullable String detail) {
+			this(recommendationId, title, reason, detail, null, null);
+		}
 	}
 
 	public ApplyPreview {

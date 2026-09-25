@@ -6,6 +6,7 @@ import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
+import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
 import io.github.chaotix345.rigtune.core.modrinth.ModrinthVersion;
 import org.junit.jupiter.api.BeforeEach;
@@ -135,7 +136,8 @@ class PreviewDownloadsTest {
 		assertEquals(List.of(), preview.downloads());
 		assertEquals(List.of(), preview.disables());
 		assertEquals(List.of(new ApplyPreview.Skipped("update:sodium", "Update Sodium", ApplyPreview.Reason.DOWNLOAD_FAILED,
-				"sodium-0.6.jar is already in the mods folder")), preview.skipped());
+				"sodium-0.6.jar is already in the mods folder", update.titleText(),
+				Text.of("rigtune.download.target_exists", "%s is already in the mods folder", "sodium-0.6.jar"))), preview.skipped());
 	}
 
 	@Test
