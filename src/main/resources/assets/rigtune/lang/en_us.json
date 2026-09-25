@@ -15,7 +15,7 @@
 	"rigtune.screen.analysing": "Analysing your system…",
 	"rigtune.screen.nothing": "Everything looks good: no suggestions.",
 	"rigtune.report.button": "Report a problem",
-	"rigtune.report.button.tooltip": "Opens a new GitHub issue in your browser, after you confirm the link, with your versions and hardware filled in. The full report is copied to your clipboard to paste into it. Nothing is sent until you submit the issue on GitHub.",
+	"rigtune.report.button.tooltip": "Opens a new GitHub issue in your browser, after you confirm the link, with your versions and hardware filled in. The full report is copied to your clipboard to paste into it. Nothing is posted until you submit the issue on GitHub.",
 	"rigtune.report.copied": "Copied the full report (%s characters): paste it into the GitHub issue.",
 	"rigtune.screen.benchmark_menu": "Benchmark…",
 	"rigtune.screen.copy_report": "Copy report",

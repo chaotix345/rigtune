@@ -59,7 +59,7 @@ To run the benchmark, press **Benchmark…** on the RigTune screen. Pick a scene
 
 ## Privacy
 
-RigTune has no telemetry. Your hardware details never leave your PC. It makes two kinds of network request, and you can switch each one off in **RigTune → Settings** (or with Mod Menu's config button):
+RigTune has no telemetry. Your hardware details never leave your PC unless you choose to share a report (**Copy report**, **Report a problem**). It makes two kinds of network request, and you can switch each one off in **RigTune → Settings** (or with Mod Menu's config button):
 
 | Switch | What it sends when on | When it's off |
 |---|---|---|
@@ -70,7 +70,7 @@ RigTune has no telemetry. Your hardware details never leave your PC. It makes tw
 
 Every request identifies itself as RigTune and its version (the User-Agent). The switches are stored in `config/rigtune/settings.json`; the first time RigTune 0.2 starts, a one-time toast points at them. With the network off, or when a request fails, RigTune uses the newer of the bundled rules and the last downloaded copy.
 
-**Copy report** on the RigTune screen puts a Markdown summary on your clipboard for you to paste into Discord or an issue: the versions, your hardware, tier and goal, the rules revision, the suggestions' titles and your latest benchmark. It leaves out file paths, user names and world names, and RigTune never sends it anywhere itself. **Report a problem** only opens a GitHub issue in your browser after you confirm the link (see the [FAQ](#faq)).
+**Copy report** on the RigTune screen puts a Markdown summary on your clipboard for you to paste into Discord or an issue: the versions, your hardware, tier and goal, the rules revision, the suggestions' titles and your latest benchmark. It leaves out file paths, user names and world names, and RigTune never sends it anywhere itself. **Report a problem** opens a pre-filled GitHub issue in your browser, only after you confirm the link (see the [FAQ](#faq)).
 
 ## How the recommendations stay current
 
@@ -94,11 +94,11 @@ Not officially, and it isn't tested there. Quilt Loader lists Minecraft 26.2 and
 
 ### What does "Report a problem" send?
 
-Nothing, by itself. The button on the RigTune screen:
+RigTune itself sends nothing and makes no network request for it. The button on the RigTune screen:
 1. copies the full report (the same text as **Copy report**) to your clipboard;
-2. shows Minecraft's own "open this link?" screen with a link to a new issue on this repository. The link fills in the title (your RigTune and Minecraft versions) and a short version of the report (versions and hardware), and it's short enough to read in full on that screen. **Cancel** closes it and nothing is opened.
+2. shows Minecraft's own "open this link?" screen with a link to a new issue on this repository. The link fills in the title (your RigTune and Minecraft versions) and as much of the report as fits (always the versions line, usually your hardware, the whole report when it's short), and it's short enough to read in full on that screen. **Cancel** closes it and nothing is opened.
 
-If you choose **Open in Browser**, GitHub shows the issue form with those fields filled in. Paste the full report from your clipboard, say what happened, and review everything; nothing reaches GitHub until you submit the issue, which needs a GitHub account. RigTune itself makes no network request for any of this. (Minecraft's **Copy to Clipboard** button on the link screen puts the link on your clipboard instead of the report: press **Copy report** again to get the report back.)
+If you choose **Open in Browser**, your browser opens that link, so GitHub receives what's in it (the title and the report text in the link), and shows the issue form with those fields filled in. Paste the full report from your clipboard, say what happened, and review everything: nothing is posted until you submit the issue, which needs a GitHub account. (Minecraft's **Copy to Clipboard** button on the link screen puts the link on your clipboard instead of the report: press **Copy report** again to get the report back.)
 
 ## Build from source
 

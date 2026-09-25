@@ -62,6 +62,9 @@ public class ReportGameTest implements FabricClientGameTest {
 					Screen screen = mc.gui.screen();
 					check(button.getX() >= 0 && button.getRight() <= screen.width && button.getBottom() <= screen.height,
 							"inside the screen at " + name + ": " + describe(button));
+					for (AbstractWidget w : Screens.getWidgets(screen)) {
+						check(w == button || !w.visible || !overlaps(w, button), describe(w) + " overlaps " + describe(button) + " at " + name);
+					}
 				});
 				if (size == SIZES[0]) {
 					context.takeScreenshot("report-button-" + name);
@@ -69,22 +72,29 @@ public class ReportGameTest implements FabricClientGameTest {
 				}
 				pressAndCheck(context, controller, name);
 				context.takeScreenshot("report-confirm-" + name);
-				pressByKey(context, "gui.cancel");
+				context.clickScreenButton("gui.cancel");
 				context.waitForScreen(RigTuneScreen.class);
 				check(context.computeOnClient(mc -> mc.gui.screen() == rigtune), "Cancel returns to the same RigTune screen");
 			}
+			context.getInput().setCursorPos(1, 1);
 			context.waitTicks(2);
 			RigTune.LOGGER.info("ReportGameTest: cancelled at every size; Open in Browser was never pressed");
 			context.takeScreenshot("report-cancelled");
 			context.runOnClient(mc -> mc.gui.screen().onClose());
 			context.waitForScreen(TitleScreen.class);
 		} finally {
-			context.runOnClient(mc -> mc.keyboardHandler.setClipboard(before));
+			// Later classes expect the title screen even after a failure. setClipboard ignores an empty string, so when
+			// the clipboard started empty (usual in CI) the report stays on it.
+			context.runOnClient(mc -> {
+				mc.gui.setScreen(new TitleScreen());
+				mc.keyboardHandler.setClipboard(before);
+			});
 			resize(context, 854, 480, 0);
 		}
 	}
 
-	// Press, then read the clipboard and build the expected link in the same client task.
+	// Press, then read the clipboard and build the expected link in the same client task, so a report rebuilt in between
+	// (the online fetch) can't make them differ; the button's hit area is checked separately (nothing overlaps it).
 	private static void pressAndCheck(ClientGameTestContext context, RigTuneController controller, String name) {
 		String[] result = context.computeOnClient(mc -> {
 			Button button = findButton(mc.gui.screen(), "rigtune.report.button");
@@ -131,9 +141,12 @@ public class ReportGameTest implements FabricClientGameTest {
 		context.runOnClient(mc -> ConfirmLinkScreen.confirmLinkNow(mc.gui.screen(), worst));
 		context.waitForScreen(ConfirmLinkScreen.class);
 		context.waitTicks(2);
-		context.runOnClient(mc -> checkFullyShown(mc, "worst-case " + IssueLink.MAX_URL + "-character link at 640x480@2"));
+		context.runOnClient(mc -> {
+			checkFullyShown(mc, "worst-case " + IssueLink.MAX_URL + "-character link at 640x480@2");
+			checkLayout(mc, "worst case at 640x480@2");
+		});
 		context.takeScreenshot("report-confirm-worst-case-640x480-scale2");
-		pressByKey(context, "gui.cancel");
+		context.clickScreenButton("gui.cancel");
 		context.waitForScreen(RigTuneScreen.class);
 	}
 
@@ -166,10 +179,13 @@ public class ReportGameTest implements FabricClientGameTest {
 			for (int j = i + 1; j < widgets.size(); j++) {
 				AbstractWidget a = widgets.get(i);
 				AbstractWidget b = widgets.get(j);
-				check(!(a.getX() < b.getRight() && b.getX() < a.getRight() && a.getY() < b.getBottom() && b.getY() < a.getBottom()),
-						name + ": " + describe(a) + " overlaps " + describe(b));
+				check(!overlaps(a, b), name + ": " + describe(a) + " overlaps " + describe(b));
 			}
 		}
+	}
+
+	private static boolean overlaps(AbstractWidget a, AbstractWidget b) {
+		return a.getX() < b.getRight() && b.getX() < a.getRight() && a.getY() < b.getBottom() && b.getY() < a.getBottom();
 	}
 
 	private static String describe(AbstractWidget w) {
@@ -192,15 +208,6 @@ public class ReportGameTest implements FabricClientGameTest {
 				.map(Button.class::cast)
 				.findFirst()
 				.orElse(null);
-	}
-
-	private static void pressByKey(ClientGameTestContext context, String key) {
-		context.runOnClient(mc -> {
-			Button button = findButton(mc.gui.screen(), key);
-			check(button != null, "No button " + key + " on " + mc.gui.screen());
-			button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(0, 0)));
-		});
-		context.waitTicks(2);
 	}
 
 	private static void check(boolean condition, String message) {

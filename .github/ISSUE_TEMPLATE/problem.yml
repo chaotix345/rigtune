@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting! If you came here from RigTune's **Report a problem** button, RigTune has filled in a short report at the bottom and copied the full report to your clipboard. Nothing has been sent anywhere: the issue is only created when you submit it.
+        Thanks for reporting! If you came here from RigTune's **Report a problem** button, RigTune has filled in part of its report at the bottom and copied the full report to your clipboard. Nothing is posted until you submit this issue.
   - type: textarea
     id: what-happened
     attributes:
