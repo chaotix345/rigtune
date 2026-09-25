@@ -643,6 +643,11 @@ class TargetVersionTests(unittest.TestCase):
         self.assertEqual(sorted(["26.4", "26.4-snapshot-1", "26.3.2", "26.10", "26.4.1"], key=ur.version_sort_key),
                          ["26.3.2", "26.4-snapshot-1", "26.4", "26.4.1", "26.10"])
 
+    def test_prereleases_sort_snapshot_pre_rc_then_by_number(self):
+        ids = ["26.4-rc-10", "26.4", "26.4-pre-1", "26.4-rc-2", "26.4-snapshot-2", "26.4-rc-1", "26.3.1", "26.4-snapshot-10"]
+        self.assertEqual(sorted(ids, key=ur.version_sort_key),
+                         ["26.3.1", "26.4-snapshot-2", "26.4-snapshot-10", "26.4-pre-1", "26.4-rc-1", "26.4-rc-2", "26.4-rc-10", "26.4"])
+
     def test_no_nodes_and_no_override_is_an_error(self):
         with self.assertRaises(ur.UpdateRulesError):
             ur.resolve_target_versions(self.client(), None, [])
@@ -669,6 +674,16 @@ class StonecutterNodesTests(unittest.TestCase):
     def test_no_versions_list_is_an_error(self):
         with self.assertRaises(ur.UpdateRulesError):
             self.nodes("stonecutter { create(getRootProject()) { vcsVersion = '26.2' } }")
+
+    def test_comments_are_ignored(self):
+        for text in ("// versions '26.1', '26.2'\n\t\tversions '26.2', // old\n\t\t\t'26.3' /* next: '26.4' */\n",
+                     "/* versions '26.0'\n versions '26.1' */\nversions '26.2', /* '26.2.5', */ '26.3'\n",
+                     "url = 'https://maven.fabricmc.net/'\nid 'x' version '1.0'\n\tversions '26.2', '26.3'\n\tvcsVersion = '26.2'\n"):
+            self.assertEqual(self.nodes(text), ["26.2", "26.3"], text)
+
+    def test_two_versions_lists_are_an_error(self):
+        with self.assertRaises(ur.UpdateRulesError):
+            self.nodes("versions '26.2'\nversions '26.3'\n")
 
     def test_missing_file_is_an_error(self):
         with self.assertRaises(ur.UpdateRulesError):

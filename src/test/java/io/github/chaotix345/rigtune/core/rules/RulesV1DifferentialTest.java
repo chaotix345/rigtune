@@ -117,6 +117,17 @@ class RulesV1DifferentialTest {
 		}
 	}
 
+	// SPEC D-H1 for every row, not only the hardware strings above: 0.1.x classifies hardware exactly as 0.1.0 did, so a tier
+	// row added without "v1": false (or a fallback edit) fails here. An intended change means replacing the baseline.
+	@Test
+	void tierTablesStayAtV010() throws IOException {
+		JsonObject baseline = JsonParser.parseString(baselineJson()).getAsJsonObject();
+		JsonObject repo = JsonParser.parseString(repoJson("rules-v1.json")).getAsJsonObject();
+		for (String table : List.of("gpuTiers", "gpuVendorFallback", "cpuTiers", "heapTiers")) {
+			assertEquals(baseline.get(table), repo.get(table), table + " in rules-v1.json differs from 0.1.0's; give a new row \"v1\": false");
+		}
+	}
+
 	// SPEC D-M2: 0.1.x keeps the vulkan-backend advice exactly as 0.1.0 shipped it (a v1 override replaces the v2 range).
 	@Test
 	void vulkanBackendAdviceKeepsItsV010Condition() throws IOException {

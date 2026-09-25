@@ -331,14 +331,20 @@ def validate_knowledge(knowledge):
     values outside the vocabularies, rules that need a v1 decision). Raises KnowledgeError listing every problem."""
     problems = []
     for kind in TIER_KINDS:
-        for i, rule in enumerate(knowledge.get(kind, [])):
+        rows = knowledge.get(kind, [])
+        if not isinstance(rows, list):
+            problems.append(f"'{kind}' must be an array")
+            continue
+        for i, rule in enumerate(rows):
             if not isinstance(rule, dict):
                 problems.append(f"{kind}[{i}] must be an object")
                 continue
-            unknown = sorted(set(rule) - V1_RULE_FIELDS[kind] - SOURCE_ONLY_TIER_FIELDS.get(kind, frozenset()))
+            unknown = sorted(set(rule) - V1_RULE_FIELDS[kind] - SOURCE_ONLY_TIER_FIELDS.get(kind, frozenset()) - {"v1"})
             if unknown:
                 problems.append(f"{kind}[{i}]: unknown field(s) {', '.join(unknown)} (tier-rule changes need a new schemaVersion)")
-            if "v1" in rule and rule["v1"] is not False:
+            if "v1" in rule and kind not in SOURCE_ONLY_TIER_FIELDS:
+                problems.append(f'{kind}[{i}]: "v1" is only allowed on gpuTiers and cpuTiers rows')
+            elif "v1" in rule and rule["v1"] is not False:
                 problems.append(f'{kind}[{i}]: "v1" on a tier row may only be false (the row is left out of rules-v1.json)')
     for kind in RULE_KINDS:
         rules = knowledge.get(kind, [])
@@ -400,13 +406,19 @@ PACKS = {
 }
 
 
+PRERELEASE_RANK = {"snapshot": 0, "pre": 1, "rc": 2}
+
+
 def version_sort_key(version):
     core, _, prerelease = version.partition("-")
     parts = tuple((int(p), "") if p.isdigit() else (-1, p) for p in core.split("."))
-    return parts, prerelease == "", prerelease
+    pre = tuple((0, int(p), "") if p.isdigit() else (1, PRERELEASE_RANK.get(p, len(PRERELEASE_RANK)), p)
+                for p in re.split(r"[-.]", prerelease)) if prerelease else ()
+    return parts, prerelease == "", pre
 
 
-STONECUTTER_VERSIONS_RE = re.compile(r"""\bversions\s*\(?\s*((?:["'][^"'\n]+["']\s*,?\s*)+)""")
+GROOVY_COMMENT_RE = re.compile(r"""("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|//[^\n]*|/\*.*?\*/""", re.S)
+STONECUTTER_VERSIONS_RE = re.compile(r"""^[ \t]*versions\s*\(?\s*((?:["'][^"'\n]+["']\s*,?\s*)+)""", re.M)
 
 
 def stonecutter_nodes(settings_path):
@@ -414,10 +426,12 @@ def stonecutter_nodes(settings_path):
         text = Path(settings_path).read_text(encoding="utf-8")
     except OSError as e:
         raise UpdateRulesError(f"can't read the Stonecutter version list from {settings_path}: {e}")
-    match = STONECUTTER_VERSIONS_RE.search(text)
-    if not match:
-        raise UpdateRulesError(f"no Stonecutter `versions` list in {settings_path}; pass --mc-versions")
-    return re.findall(r"""["']([^"']+)["']""", match.group(1))
+    code = GROOVY_COMMENT_RE.sub(lambda m: m.group(1) or "\n" * m.group(0).count("\n"), text)
+    lists = STONECUTTER_VERSIONS_RE.findall(code)
+    if len(lists) != 1:
+        found = "no" if not lists else f"{len(lists)}"
+        raise UpdateRulesError(f"{found} Stonecutter `versions` lists in {settings_path} (expected one); pass --mc-versions")
+    return re.findall(r"""["']([^"']+)["']""", lists[0])
 
 
 def default_opener(request):

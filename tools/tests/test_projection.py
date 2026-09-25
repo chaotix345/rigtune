@@ -474,8 +474,17 @@ class TierV1Tests(unittest.TestCase):
                 ur.validate_knowledge(self.knowledge(cpuTiers=[dict(self.CPU, v1=value)]))
 
     def test_heap_tiers_take_no_v1(self):
-        with self.assertRaises(ur.KnowledgeError):
+        with self.assertRaises(ur.KnowledgeError) as ctx:
             ur.validate_knowledge(self.knowledge(heapTiers=[{"atLeastMb": 0, "tier": 1, "v1": False}]))
+        self.assertIn('"v1" is only allowed on gpuTiers and cpuTiers rows', str(ctx.exception))
+        self.assertNotIn("unknown field", str(ctx.exception))
+
+    def test_tier_sections_must_be_arrays(self):
+        for kind in ur.TIER_KINDS:
+            for value in (None, {}, "rows"):
+                with self.assertRaises(ur.KnowledgeError, msg=f"{kind}={value!r}") as ctx:
+                    ur.validate_knowledge(self.knowledge(**{kind: value}))
+                self.assertIn(f"'{kind}' must be an array", str(ctx.exception))
 
     def test_v2_keeps_the_row_without_the_key(self):
         v2 = ur.v2_content(content_with(gpuTiers=[self.NEW, self.OLD], cpuTiers=[self.CPU]))
