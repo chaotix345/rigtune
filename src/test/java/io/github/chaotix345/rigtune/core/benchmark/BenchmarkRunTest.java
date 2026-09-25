@@ -12,6 +12,7 @@ import static io.github.chaotix345.rigtune.core.benchmark.FakeRig.low;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -25,6 +26,7 @@ class BenchmarkRunTest {
 		Knobs live = ORIGINAL;
 		boolean failOnDhOff;
 		boolean failOnRestore;
+		int failOnRenderDistance = -1;
 
 		@Override
 		public void apply(Knobs from, Knobs to) throws IOException {
@@ -33,6 +35,9 @@ class BenchmarkRunTest {
 			}
 			if (failOnRestore && to.equals(ORIGINAL)) {
 				throw new IOException("restore refused");
+			}
+			if (to.renderDistance() == failOnRenderDistance) {
+				throw new IOException("render distance refused");
 			}
 			applied.add(to);
 			live = to;
@@ -104,16 +109,32 @@ class BenchmarkRunTest {
 		assertEquals(ORIGINAL, applier.live);
 	}
 
+	// A cost report that can't switch its feature off is skipped; the run carries on and finishes.
 	@Test
-	void applyExceptionFailsAndRestores() {
+	void reportApplyFailureSkipsOnlyThatReport() {
 		applier.failOnDhOff = true;
+		BenchmarkRun run = run();
+		runToEnd(run);
+		assertTrue(run.finished());
+		assertFalse(run.cancelled());
+		assertNull(run.error());
+		assertEquals(ORIGINAL, applier.live);
+		assertTrue(run.restoreOk());
+		SessionResult r = run.result();
+		assertNull(r.dhCost());
+		assertTrue(r.notMeasured().get(BenchmarkRecord.DISTANT_HORIZONS).contains("DH refused"), r.notMeasured().toString());
+		assertNotNull(r.shaderCost());
+	}
+
+	@Test
+	void tunedKnobApplyFailureFailsTheRun() {
+		applier.failOnRenderDistance = 14;
 		BenchmarkRun run = run();
 		runToEnd(run);
 		assertTrue(run.finished());
 		assertTrue(run.cancelled());
 		assertInstanceOf(IOException.class, run.error());
 		assertEquals(ORIGINAL, applier.live);
-		assertTrue(run.restoreOk());
 	}
 
 	@Test

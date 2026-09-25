@@ -1,0 +1,24 @@
+{
+  "createdAt": "2026-09-20T12:00:00.000000Z",
+  "gamePid": 1717,
+  "modsDir": "${MODS}",
+  "configDir": "${CONFIG}",
+  "ops": [
+    {
+      "type": "DISABLE_FILE",
+      "path": "${MODS}/starlight-1.1.3.jar"
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "${MODS}/lithium-0.25.4.jar.rigtune-pending",
+      "to": "${MODS}/lithium-0.25.4.jar"
+    },
+    {
+      "type": "PATCH_JSON",
+      "path": "${CONFIG}/sodium-options.json",
+      "patches": {
+        "performance.use_fog_occlusion": "false"
+      }
+    }
+  ]
+}

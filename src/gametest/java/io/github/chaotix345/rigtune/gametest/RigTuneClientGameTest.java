@@ -40,6 +40,8 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public class RigTuneClientGameTest implements FabricClientGameTest {
 	private record FrameSettings(int limit, boolean vsync, InactivityFpsLimit inactivity) {
@@ -147,7 +149,8 @@ public class RigTuneClientGameTest implements FabricClientGameTest {
 			context.waitTicks(30);
 			check(context.computeOnClient(FrameSettings::of).equals(FrameSettings.UNCAPPED), "uncapped while measuring");
 			context.takeScreenshot("benchmark-running");
-			context.waitFor(mc -> !BenchmarkController.running(), 1400);
+			// v0.2 also tunes simulation distance and repeats the result, so allow up to 4 minutes.
+			context.waitFor(mc -> !BenchmarkController.running(), 20 * 240);
 			BenchmarkController.Outcome outcome = context.computeOnClient(mc -> BenchmarkController.lastOutcome());
 			check(outcome != null && !outcome.cancelled(), "benchmark finished: " + outcome);
 			check(!outcome.result().measurements().isEmpty(), "benchmark measured something: " + outcome);
@@ -179,14 +182,29 @@ public class RigTuneClientGameTest implements FabricClientGameTest {
 		} catch (IOException e) {
 			throw new AssertionError(e);
 		}
-		// A helper still holding the apply lock: preLaunch waits for it, then warns instead of racing it.
-		try (ApplyLock helper = ApplyLock.acquire(ApplyLock.defaultPath(configDir), Duration.ZERO)) {
-			check(helper != null, "took the apply lock");
+		// A helper still holding the apply lock: preLaunch waits for it, then warns instead of racing it. The lock is
+		// reentrant per thread, so the fake helper holds it on a thread of its own.
+		CountDownLatch held = new CountDownLatch(1);
+		CountDownLatch release = new CountDownLatch(1);
+		Thread helper = new Thread(() -> {
+			try (ApplyLock lock = ApplyLock.acquire(ApplyLock.defaultPath(configDir), Duration.ZERO)) {
+				check(lock != null, "took the apply lock");
+				held.countDown();
+				release.await();
+			} catch (IOException | InterruptedException e) {
+				throw new AssertionError(e);
+			}
+		}, "fake-apply-helper");
+		helper.start();
+		try {
+			check(held.await(30, TimeUnit.SECONDS), "fake helper holds the apply lock");
 			long start = System.nanoTime();
 			new RigTunePreLaunch().onPreLaunch();
 			long waited = Duration.ofNanos(System.nanoTime() - start).toMillis();
 			check(waited >= 4500, "preLaunch waited for the running helper: " + waited + " ms");
-		} catch (IOException e) {
+			release.countDown();
+			helper.join(30_000);
+		} catch (InterruptedException e) {
 			throw new AssertionError(e);
 		}
 		context.runOnClient(RigTuneClient::showNotices);

@@ -1,0 +1,33 @@
+{
+  "createdAt": "2026-09-24T18:30:00.000000Z",
+  "gamePid": 4242,
+  "modsDir": "${MODS}",
+  "configDir": "${CONFIG}",
+  "ops": [
+    {
+      "type": "DISABLE_FILE",
+      "path": "${MODS}/sodium-0.7.0.jar",
+      "id": "b1f0c0de-0000-4000-8000-000000000001",
+      "group": "b1f0c0de-0000-4000-8000-0000000000aa",
+      "attempts": 1
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "${MODS}/sodium-0.7.1.jar.rigtune-pending",
+      "to": "${MODS}/sodium-0.7.1.jar",
+      "id": "b1f0c0de-0000-4000-8000-000000000002",
+      "group": "b1f0c0de-0000-4000-8000-0000000000aa",
+      "modId": "sodium",
+      "attempts": 1
+    },
+    {
+      "type": "PATCH_JSON",
+      "path": "${CONFIG}/sodium-options.json",
+      "patches": {
+        "performance.chunk_builder_threads": "4"
+      },
+      "id": "b1f0c0de-0000-4000-8000-000000000003",
+      "attempts": 0
+    }
+  ]
+}

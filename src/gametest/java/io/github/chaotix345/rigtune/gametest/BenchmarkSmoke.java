@@ -19,8 +19,8 @@ import java.util.List;
 
 // AC6.4 in a production smoke run with the player's mods (-PsmokeBenchmark): a short Tune in the smoke world, then
 // Distant Horizons' renderingEnabled and Iris' shaders must be back to their original values and
-// benchmark-restore.json gone. The harness deadlocks leaving a world while Distant Horizons is loaded
-// (docs/smoke/README.md), so with DH the evidence is written to run/rigtune-benchmark-smoke.txt and the JVM halts.
+// benchmark-restore.json gone. The evidence goes to run/rigtune-benchmark-smoke.txt first, because the harness
+// deadlocks leaving a world while Distant Horizons is loaded (docs/smoke/README.md): the client then has to be killed.
 final class BenchmarkSmoke {
 	private static final BenchmarkController.Config SHORT = new BenchmarkController.Config(3, 2.0, 1.0, 20.0);
 	private static final int TIMEOUT_TICKS = 20 * 360;
@@ -92,8 +92,8 @@ final class BenchmarkSmoke {
 		}
 		RigTune.LOGGER.info("Smoke benchmark: {}", String.join(" | ", evidence));
 		if (dhLoaded) {
-			RigTune.LOGGER.info("Smoke benchmark: halting instead of leaving the world (the harness deadlocks there with Distant Horizons)");
-			Runtime.getRuntime().halt(passed ? 0 : 1);
+			RigTune.LOGGER.warn("Smoke benchmark: with Distant Horizons loaded the harness deadlocks when it leaves the world;"
+					+ " the evidence is in {}, so kill the client if it hangs", out);
 		}
 		if (!passed) {
 			throw new AssertionError("Smoke benchmark failed: " + evidence);

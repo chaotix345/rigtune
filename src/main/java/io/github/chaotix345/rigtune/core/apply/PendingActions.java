@@ -12,11 +12,14 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 public record PendingActions(String createdAt, long gamePid, String modsDir, String configDir, List<Op> ops) {
@@ -129,7 +132,9 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 		return new PendingActions(createdAt, gamePid, newModsDir.toString(), newConfigDir.toString(), kept);
 	}
 
-	public record Merged(PendingActions plan, List<Path> superseded) {
+	// survivingIds: each incoming op id -> the id its change has in the merged plan (its own, or the staged op it
+	// repeats); absent when it didn't survive. replaced: staged ops a newer enable replaced.
+	public record Merged(PendingActions plan, List<Path> superseded, Map<String, String> survivingIds, List<Op> replaced) {
 	}
 
 	// Adds staged ops. An op that repeats a staged change is dropped and the two groups are joined. An ENABLE_FILE
@@ -138,11 +143,16 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 	public Merged merge(List<Op> incoming) {
 		List<Op> merged = new ArrayList<>(ops);
 		List<Path> superseded = new ArrayList<>();
+		List<Op> replaced = new ArrayList<>();
+		Map<String, String> target = new LinkedHashMap<>();
 		for (Op op : incoming) {
 			Op same = merged.stream().filter(existing -> existing.sameChange(op)).findFirst().orElse(null);
 			if (same != null) {
 				if (op.group() != null && !op.group().equals(same.group())) {
 					regroup(merged, same, op.group());
+				}
+				if (op.id() != null && same.id() != null) {
+					target.put(op.id(), same.id());
 				}
 				continue;
 			}
@@ -153,6 +163,7 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 						continue;
 					}
 					merged.remove(old);
+					replaced.add(old);
 					if (old.group() != null) {
 						if (next.group() == null) {
 							next = next.inGroup(old.group());
@@ -166,12 +177,49 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 				}
 			}
 			merged.add(next);
+			if (op.id() != null) {
+				target.put(op.id(), op.id());
+			}
 		}
 		List<Path> retire = superseded.stream()
 				.filter(p -> merged.stream().noneMatch(o -> p.toString().equals(o.from())))
 				.distinct()
 				.toList();
-		return new Merged(withOps(merged), retire);
+		Set<String> present = new HashSet<>();
+		merged.forEach(op -> {
+			if (op != null && op.id() != null) {
+				present.add(op.id());
+			}
+		});
+		Map<String, String> surviving = new LinkedHashMap<>();
+		target.forEach((from, to) -> {
+			if (present.contains(to)) {
+				surviving.put(from, to);
+			}
+		});
+		return new Merged(withOps(merged), retire, surviving, List.copyOf(replaced));
+	}
+
+	public record Removed(PendingActions plan, List<Op> removed) {
+	}
+
+	// Drops the given ops together with every op that shares a group with one of them (a group is applied
+	// all-or-nothing, so a dependency can't be dropped while a dependent stays).
+	public Removed remove(Collection<String> opIds) {
+		Set<String> ids = new HashSet<>(opIds);
+		Set<String> groups = new HashSet<>();
+		for (Op op : ops) {
+			if (op != null && op.id() != null && ids.contains(op.id()) && op.group() != null) {
+				groups.add(op.group());
+			}
+		}
+		List<Op> kept = new ArrayList<>();
+		List<Op> removed = new ArrayList<>();
+		for (Op op : ops) {
+			boolean drop = op != null && (op.id() != null && ids.contains(op.id()) || op.group() != null && groups.contains(op.group()));
+			(drop ? removed : kept).add(op);
+		}
+		return new Removed(withOps(kept), List.copyOf(removed));
 	}
 
 	private static void regroup(List<Op> ops, Op member, String group) {
@@ -199,7 +247,7 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 	}
 
 	// Retires the download of a dropped ENABLE_FILE op: only a .rigtune-pending file directly in modsDir.
-	static void retireDownload(Op op, Path modsDir) {
+	public static void retireDownload(Op op, Path modsDir) {
 		if (op == null || op.type() != Type.ENABLE_FILE || op.from() == null || !op.from().endsWith(PENDING_SUFFIX)) {
 			return;
 		}
@@ -214,14 +262,15 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 	}
 
 	// Cancels every staged change under the apply lock: the downloads of staged enables become .rigtune-superseded
-	// (never deleted) and pending.json is deleted. Returns how many ops were dropped, or -1 if the lock is busy.
-	public static int discard(Path pendingFile, Duration lockWait) throws IOException {
+	// (never deleted) and pending.json is deleted. Returns the dropped ops (so their journal changes can be marked
+	// DISCARDED), or null if the lock is busy.
+	public static List<Op> discard(Path pendingFile, Duration lockWait) throws IOException {
 		try (ApplyLock lock = ApplyLock.acquire(ApplyLock.besidePlan(pendingFile), lockWait)) {
 			if (lock == null) {
-				return -1;
+				return null;
 			}
 			if (!Files.exists(pendingFile)) {
-				return 0;
+				return List.of();
 			}
 			List<Op> ops;
 			try {
@@ -232,7 +281,7 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 			Path modsDir = InstanceDirs.modsDirOf(pendingFile);
 			ops.forEach(op -> retireDownload(op, modsDir));
 			Files.deleteIfExists(pendingFile);
-			return ops.size();
+			return ops;
 		}
 	}
 

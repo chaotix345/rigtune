@@ -16,10 +16,13 @@ import java.util.OptionalInt;
 // TUNE: render distance (RenderDistancePlanner, full protocol), then simulation distance at the chosen render distance
 // (quick protocol, singleplayer only), then the repeats of the chosen settings, then the Distant Horizons and shader
 // cost reports (quick protocol, only for features that are on). MEASURE: the repeats of the current settings.
-// A step only starts when its worst case still ends before the deadline; otherwise its stage ends and the next one
-// is tried, so a slow machine loses the tail of the run, not all of it.
+// A step only starts when its worst case still ends SLACK_SECONDS before the deadline (the slack covers knob changes,
+// such as an Iris reload, and tick granularity, which the worst cases don't count); otherwise its stage ends and the
+// next one is tried, so a slow machine loses the tail of the run, not all of it. A cost report whose feature can't be
+// switched off is skipped with its reason (skipFailed).
 public final class BenchmarkSession {
 	public static final double SD_MIN_IMPROVEMENT = 0.05;
+	public static final double SLACK_SECONDS = 10;
 	private static final int SD_STEP = 2;
 	private static final int SD_POINTS = 3;
 
@@ -38,6 +41,7 @@ public final class BenchmarkSession {
 	private final Map<Integer, FrameStats> sdStats = new LinkedHashMap<>();
 	private final List<FrameStats> repeats = new ArrayList<>();
 	private final List<Measured> measurements = new ArrayList<>();
+	private final Map<String, String> notMeasured = new LinkedHashMap<>();
 	private Stage stage;
 	private Knobs chosen;
 	private Knobs applied;
@@ -109,7 +113,7 @@ public final class BenchmarkSession {
 				continue;
 			}
 			double needed = step.protocol().worstCaseSeconds() + (step.kind() == Kind.BASELINE ? timing.quickSettled().worstCaseSeconds() : 0);
-			if ((nowNanos - startNanos) / 1e9 + needed > timing.deadlineSeconds()) {
+			if ((nowNanos - startNanos) / 1e9 + needed > timing.deadlineSeconds() - SLACK_SECONDS) {
 				deadlineHit = true;
 				skip(step);
 				continue;
@@ -194,7 +198,48 @@ public final class BenchmarkSession {
 		return new Step(kind, knobs, rebuild ? timing.quickSettled() : timing.quick());
 	}
 
+	public static boolean isReport(Kind kind) {
+		return kind == Kind.BASELINE || kind == Kind.DH_OFF || kind == Kind.SHADERS_OFF;
+	}
+
+	/** The pending cost-report step couldn't be set up (its feature refused to switch off): skip it with this reason. */
+	public void skipFailed(Step step, String reason) {
+		if (pending == null || !pending.equals(step) || !isReport(step.kind())) {
+			throw new IllegalStateException("Not a pending cost report: " + step);
+		}
+		pending = null;
+		notMeasured(step.kind(), reason);
+	}
+
+	// The reports a skipped step takes with it: a baseline both, the others their own.
+	private void notMeasured(Kind kind, String reason) {
+		switch (kind) {
+			case BASELINE -> {
+				baselineSkipped = true;
+				if (original.dhRendering() && dhOff == null) {
+					notMeasured.putIfAbsent(BenchmarkRecord.DISTANT_HORIZONS, reason);
+				}
+				if (original.shaders() && shadersOff == null) {
+					notMeasured.putIfAbsent(BenchmarkRecord.SHADERS, reason);
+				}
+			}
+			case DH_OFF -> {
+				dhSkipped = true;
+				notMeasured.putIfAbsent(BenchmarkRecord.DISTANT_HORIZONS, reason);
+			}
+			case SHADERS_OFF -> {
+				shadersSkipped = true;
+				notMeasured.putIfAbsent(BenchmarkRecord.SHADERS, reason);
+			}
+			default -> throw new IllegalArgumentException(kind.name());
+		}
+	}
+
 	private void skip(Step step) {
+		if (isReport(step.kind())) {
+			notMeasured(step.kind(), SessionResult.NOT_MEASURED_DEADLINE);
+			return;
+		}
 		switch (step.kind()) {
 			case RENDER_DISTANCE, SIMULATION_DISTANCE -> endStage();
 			// Both repeat stages end: a repeat that doesn't fit now won't fit after the cost reports either.
@@ -205,9 +250,8 @@ public final class BenchmarkSession {
 					stage = Stage.DONE;
 				}
 			}
-			case BASELINE -> baselineSkipped = true;
-			case DH_OFF -> dhSkipped = true;
-			case SHADERS_OFF -> shadersSkipped = true;
+			default -> {
+			}
 		}
 	}
 
@@ -285,7 +329,7 @@ public final class BenchmarkSession {
 			aggregate = fallback == null ? null : BenchmarkMath.aggregate(List.of(fallback));
 		}
 		return new SessionResult(mode, original, picked, targetFps, rd, measurements, aggregate,
-				cost(baseline, dhOff), cost(baseline, shadersOff), deadlineHit);
+				cost(baseline, dhOff), cost(baseline, shadersOff), notMeasured, deadlineHit);
 	}
 
 	// The last full-protocol measurement of these knobs, else the last quick one.

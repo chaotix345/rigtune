@@ -3,10 +3,16 @@ package io.github.chaotix345.rigtune.core.apply;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.OpResult;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.Status;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
+import io.github.chaotix345.rigtune.core.history.HistoryUpdates;
+import io.github.chaotix345.rigtune.core.history.Journal;
 
 import java.io.IOException;
+import java.nio.file.DirectoryNotEmptyException;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -26,13 +32,27 @@ public final class ApplyExecutor {
 	public static final long DEFAULT_RETRY_DELAY_MILLIS = 300;
 	public static final int MAX_FAILED_RUNS = 3;
 
+	// A sharing violation (Windows denying a rename because an AV scanner, indexer or the Modrinth App briefly has
+	// the jar open) gets its own, longer-lived retry policy instead of the fast fixed-delay one: real-world evidence
+	// (a 27 MB jar disable that lost the race after 3 s) showed the fast policy gives up well before typical
+	// contention like this clears.
+	static final long SHARING_RETRY_INITIAL_MILLIS = 300;
+	static final long SHARING_RETRY_MAX_MILLIS = 5000;
+	static final long SHARING_RETRY_BUDGET_MILLIS = 30_000;
+
 	interface Mover {
 		void move(Path from, Path to) throws IOException;
+	}
+
+	// Injectable so tests can drive the retry loops without sleeping for real.
+	interface Sleeper {
+		boolean sleep(long millis);
 	}
 
 	private final int attempts;
 	private final long retryDelayMillis;
 	private final Mover mover;
+	private final Sleeper sleeper;
 
 	public ApplyExecutor() {
 		this(DEFAULT_ATTEMPTS, DEFAULT_RETRY_DELAY_MILLIS);
@@ -43,9 +63,69 @@ public final class ApplyExecutor {
 	}
 
 	ApplyExecutor(int attempts, long retryDelayMillis, Mover mover) {
+		this(attempts, retryDelayMillis, mover, ApplyExecutor::realSleep);
+	}
+
+	ApplyExecutor(int attempts, long retryDelayMillis, Mover mover, Sleeper sleeper) {
 		this.attempts = Math.max(1, attempts);
 		this.retryDelayMillis = retryDelayMillis;
 		this.mover = mover;
+		this.sleeper = sleeper;
+	}
+
+	private static boolean realSleep(long millis) {
+		try {
+			Thread.sleep(millis);
+			return true;
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return false;
+		}
+	}
+
+	// A FileSystemException other than these three is treated as a sharing violation: on Windows, a plain
+	// FileSystemException (or an AccessDeniedException, its subclass) is what Files.move throws when something else
+	// has the file open, whatever the exact, locale-specific reason text says. NoSuchFile/FileAlreadyExists/
+	// DirectoryNotEmpty describe a state a retry can't fix, so they keep the fast fixed-delay policy instead.
+	private static boolean isSharingViolation(IOException e) {
+		if (!(e instanceof FileSystemException)) {
+			return false;
+		}
+		return !(e instanceof NoSuchFileException || e instanceof FileAlreadyExistsException || e instanceof DirectoryNotEmptyException);
+	}
+
+	// Tracks one op's (or rollback's) progress through a retry loop: fixed-delay up to `attempts` tries for an
+	// ordinary IOException, or exponential backoff up to a ~30 s total budget for a sharing violation. Never mixes
+	// the two budgets for one op: whichever kind the first failure was decides the policy for the rest of it.
+	private final class RetryState {
+		private int attempt;
+		private long elapsedBackoffMillis;
+		private long backoffMillis = SHARING_RETRY_INITIAL_MILLIS;
+		private Boolean sharing;
+
+		// Called after a failed attempt. Returns whether the caller should try again (having slept if so).
+		boolean onFailure(IOException e) {
+			attempt++;
+			if (sharing == null) {
+				sharing = isSharingViolation(e);
+			}
+			if (sharing) {
+				if (elapsedBackoffMillis + backoffMillis > SHARING_RETRY_BUDGET_MILLIS) {
+					return false;
+				}
+				if (!sleeper.sleep(backoffMillis)) {
+					return false;
+				}
+				elapsedBackoffMillis += backoffMillis;
+				backoffMillis = Math.min(backoffMillis * 2, SHARING_RETRY_MAX_MILLIS);
+				return true;
+			}
+			return attempt < attempts && sleeper.sleep(retryDelayMillis);
+		}
+
+		int attempt() {
+			return attempt;
+		}
 	}
 
 	// Callers hold the apply lock. pendingFile is re-read before it is rewritten, and only the ops run here
@@ -57,7 +137,24 @@ public final class ApplyExecutor {
 		ApplyResult result = new ApplyResult(Instant.now().toString(), giveUpOnRepeatFailures(execute(plan, modsDir, configDir)));
 		writeRemaining(plan, pendingFile, result, modsDir);
 		result.save(ApplyResult.defaultPath(configDir));
+		updateJournal(configDir, result);
 		return result;
+	}
+
+	// Best effort and last (review M5): the renames and pending.json/last-apply.json are already done, and a journal
+	// problem (even a missing class on the helper's classpath) must never fail them. preLaunch reconciles from
+	// last-apply.json if this didn't happen.
+	private static void updateJournal(Path configDir, ApplyResult result) {
+		try {
+			new Journal(configDir, null, null, ApplyExecutor::journalWarning)
+					.updateExisting(entries -> HistoryUpdates.applyResults(entries, result.results()));
+		} catch (Throwable t) {
+			journalWarning("Could not update history.json", t);
+		}
+	}
+
+	private static void journalWarning(String message, Throwable error) {
+		ApplyHelper.log(message + (error == null ? "" : ": " + error));
 	}
 
 	// A group with an op that has now failed in MAX_FAILED_RUNS helper runs is abandoned as a whole, so a change that
@@ -287,19 +384,20 @@ public final class ApplyExecutor {
 	}
 
 	private OpResult rollback(Op op, Undo undo, String reason) {
+		RetryState state = new RetryState();
 		IOException last = null;
-		for (int attempt = 1; attempt <= attempts; attempt++) {
+		while (true) {
+			if (Files.exists(undo.back()) || !Files.exists(undo.moved())) {
+				break;
+			}
 			try {
-				if (Files.exists(undo.back()) || !Files.exists(undo.moved())) {
-					break;
-				}
 				mover.move(undo.moved(), undo.back());
 				return new OpResult(op, Status.FAILED, "Rolled back because " + reason);
 			} catch (IOException e) {
 				last = e;
-			}
-			if (attempt < attempts && !sleep()) {
-				break;
+				if (!state.onFailure(e)) {
+					break;
+				}
 			}
 		}
 		return new OpResult(op, Status.FAILED, "Rollback failed (" + (last == null ? "the original name is taken" : last)
@@ -355,30 +453,21 @@ public final class ApplyExecutor {
 	}
 
 	private Applied retrying(Op op, Step step) {
+		RetryState state = new RetryState();
 		IOException last = null;
-		for (int attempt = 1; attempt <= attempts; attempt++) {
+		while (true) {
 			try {
 				return step.run();
 			} catch (IOException e) {
 				last = e;
+				if (!state.onFailure(e)) {
+					break;
+				}
 			} catch (RuntimeException e) {
 				return new Applied(new OpResult(op, Status.FAILED, e.toString()), null);
 			}
-			if (attempt < attempts && !sleep()) {
-				break;
-			}
 		}
-		return new Applied(new OpResult(op, Status.FAILED, "Gave up after " + attempts + " attempt(s): " + last), null);
-	}
-
-	private boolean sleep() {
-		try {
-			Thread.sleep(retryDelayMillis);
-			return true;
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-			return false;
-		}
+		return new Applied(new OpResult(op, Status.FAILED, "Gave up after " + state.attempt() + " attempt(s): " + last), null);
 	}
 
 	private Applied enable(Op op, int index) throws IOException {
@@ -393,7 +482,7 @@ public final class ApplyExecutor {
 			return new Applied(new OpResult(op, Status.FAILED, to + " already exists; not overwriting it"), null);
 		}
 		mover.move(from, to);
-		return new Applied(new OpResult(op, Status.OK, "Enabled " + to.getFileName()), new Undo(index, to, from));
+		return new Applied(new OpResult(op, Status.OK, "Enabled " + to.getFileName(), to.toString()), new Undo(index, to, from));
 	}
 
 	private Applied disable(Op op, int index) throws IOException {
@@ -403,7 +492,7 @@ public final class ApplyExecutor {
 		}
 		Path target = disabledTarget(path);
 		mover.move(path, target);
-		return new Applied(new OpResult(op, Status.OK, "Disabled " + path.getFileName() + " -> " + target.getFileName()),
+		return new Applied(new OpResult(op, Status.OK, "Disabled " + path.getFileName() + " -> " + target.getFileName(), target.toString()),
 				new Undo(index, target, path));
 	}
 

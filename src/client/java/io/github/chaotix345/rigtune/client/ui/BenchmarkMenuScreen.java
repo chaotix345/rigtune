@@ -104,10 +104,13 @@ public class BenchmarkMenuScreen extends Screen {
 		addRenderableWidget(button);
 	}
 
+	// Only a status this press produced is shown, never an older one the controller still holds.
 	private void start(BenchmarkRequest request) {
+		Component before = controller.status();
 		controller.startBenchmark(request);
 		if (minecraft.gui.screen() == this) {
-			status = BenchmarkController.running() ? null : controller.status();
+			Component after = controller.status();
+			status = BenchmarkController.running() || after == before ? null : after;
 			rebuildWidgets();
 		}
 	}
