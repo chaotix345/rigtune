@@ -11,10 +11,12 @@ import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkWorld;
 import io.github.chaotix345.rigtune.client.benchmark.MarkerRestore;
+import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkMenuScreen;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
+import io.github.chaotix345.rigtune.core.benchmark.SceneVariety;
 import io.github.chaotix345.rigtune.core.benchmark.Step;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
@@ -31,7 +33,12 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
+import net.minecraft.client.server.IntegratedServer;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.contents.TranslatableContents;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.phys.Vec3;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -41,14 +48,33 @@ import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Function;
 
-// Benchmark v2 (docs/v0.2/SPEC.md AC6.2, AC6.3). Numbers aren't asserted: the harness's tick sync makes 1% lows
-// unrepresentative. What is asserted: the runs complete, everything is restored, and the pair and history are stored.
+// Benchmark v2 (docs/v0.2/SPEC.md AC6.2, AC6.3) and its v0.3 follow-ups (docs/v0.3/SPEC.md 3f, 8). Numbers aren't
+// asserted: the harness's tick sync makes 1% lows unrepresentative. What is asserted: the runs complete, everything is
+// restored, the pair and history are stored, each step measures the terrain of its render distance, the server is told
+// the restored render distance, and the benchmark world's scene and camera are as designed.
 public class BenchmarkGameTest implements FabricClientGameTest {
 	private static final int WORLD_TIMEOUT_TICKS = 20 * 150;
 	private static final int RUN_TIMEOUT_TICKS = 20 * 240;
+	private static final int CHUNK_RUN_TIMEOUT_TICKS = 20 * 600;
 	private static final BenchmarkController.Config SHORT = new BenchmarkController.Config(3, 1.0, 0.5, 10.0);
+	// 3f (AC3.6, E-M3): every step passes (target 1 FPS) and the search stops at 12, so a Tune from the harness's RD 5
+	// steps 5, 7, 11, 12; each step may wait 60 s for its terrain on a slow CI runner.
+	private static final int CHUNK_RD = 12;
+	private static final BenchmarkController.Config CHUNKS = new BenchmarkController.Config(4, 1.0, 0.5, 60.0, 1.0, CHUNK_RD);
+
+	// The chunks missing within rd - 1 of the camera when a render distance step recorded its first frame.
+	private record FirstFrame(int rd, int inRange, int missing) {
+	}
+
+	// The benchmark world as the server sees it: the scene check, the camera spot and its terrain floor.
+	private record WorldCheck(SceneVariety.Report scene, int floor, int cameraY, boolean cameraClear) {
+	}
 
 	private record Settings(int rd, int sd, int maxFps, boolean vsync, InactivityFpsLimit inactivity, boolean hudHidden) {
 		static Settings of(Minecraft mc) {
@@ -70,12 +96,14 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		String savedScene = context.computeOnClient(mc -> ClientSettings.shared(FabricLoader.getInstance().getConfigDir()).benchmarkScene);
 		try {
 			String[] pair = benchmarkWorldPair(context);
+			String chunkTuneId = benchmarkWorldChunks(context);
 			benchmarkWorldCancel(context);
 			String tuneId = currentWorldTune(context);
-			checkHistoryFile(pair, tuneId);
+			checkHistoryFile(pair, tuneId, chunkTuneId);
 		} finally {
 			context.runOnClient(mc -> {
 				BenchmarkController.setDefaultConfig(BenchmarkController.Config.DEFAULT);
+				BenchmarkController.setSweepListener(null);
 				ClientSettings.shared(FabricLoader.getInstance().getConfigDir()).benchmarkScene = savedScene;
 			});
 		}
@@ -111,6 +139,151 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		return new String[]{before.id(), after.id()};
 	}
 
+	// docs/v0.3/SPEC.md 3f (AC3.6, AC8.2, AC8.3) in the benchmark world, plus the scene guard and the camera (AC8.5,
+	// AC8.6): a Tune from the harness's RD 5 up to 12. At the RD 12 step's first frame every chunk within 11 of the camera
+	// must be on the client, and its settle must not have timed out; afterwards the server must have been told the
+	// restored render distance.
+	private static String benchmarkWorldChunks(ClientGameTestContext context) {
+		setScene(context, BenchmarkRequest.Scene.BENCHMARK_WORLD);
+		Settings settings = context.computeOnClient(Settings::of);
+		check(settings.rd() < CHUNK_RD - 2, "the harness starts at a low render distance: " + settings.rd());
+		List<FirstFrame> firstFrames = new CopyOnWriteArrayList<>();
+		context.runOnClient(mc -> {
+			BenchmarkController.setDefaultConfig(CHUNKS);
+			BenchmarkController.setSweepListener(step -> {
+				if (step.kind() == Step.Kind.RENDER_DISTANCE) {
+					firstFrames.add(firstFrame(Minecraft.getInstance(), step.knobs().renderDistance()));
+				}
+			});
+		});
+		try {
+			openMenu(context);
+			pressByKey(context, "rigtune.benchmark.menu.tune");
+			context.waitFor(mc -> BenchmarkWorld.awaitingExit(), CHUNK_RUN_TIMEOUT_TICKS);
+			BenchmarkController.Outcome outcome = context.computeOnClient(mc -> BenchmarkController.lastOutcome());
+			check(outcome != null && !outcome.cancelled() && outcome.record() != null, "chunk tune finished: " + outcome);
+			for (BenchmarkController.Settled s : outcome.settles()) {
+				RigTune.LOGGER.info("Benchmark game test: settle {} RD {}: {} of {} chunks within {} present, client holds {}, {} s{}",
+						s.step().kind(), s.step().knobs().renderDistance(), s.settle().inRange() - s.settle().missing(), s.settle().inRange(),
+						s.settle().radius(), s.loadedChunks(), String.format(Locale.ROOT, "%.1f", s.settle().seconds()),
+						s.settle().timedOut() ? " (timed out)" : "");
+			}
+			RigTune.LOGGER.info("Benchmark game test: first frames {}", firstFrames);
+			BenchmarkController.Settled atTwelve = outcome.settles().stream()
+					.filter(s -> s.step().kind() == Step.Kind.RENDER_DISTANCE && s.step().knobs().renderDistance() == CHUNK_RD)
+					.findFirst().orElseThrow(() -> new AssertionError("no RD " + CHUNK_RD + " step: " + outcome.result()));
+			check(!atTwelve.settle().timedOut(), "the RD " + CHUNK_RD + " step settled before the timeout: " + atTwelve);
+			RigTune.LOGGER.info("Benchmark game test: RD {} settled in {} s (MC {})", CHUNK_RD,
+					String.format(Locale.ROOT, "%.1f", atTwelve.settle().seconds()), HardwareProbe.minecraftVersion());
+			FirstFrame frame = firstFrames.stream().filter(f -> f.rd() == CHUNK_RD).findFirst()
+					.orElseThrow(() -> new AssertionError("no first frame at RD " + CHUNK_RD + ": " + firstFrames));
+			check(frame.inRange() == 377 && frame.missing() == 0, "every chunk within 11 is loaded at the RD 12 step's first frame: " + frame);
+
+			int restoredRd = context.computeOnClient(mc -> mc.options.renderDistance().get());
+			check(restoredRd == settings.rd(), "render distance restored: " + restoredRd);
+			checkRequestedViewDistance(context, restoredRd, "after the finished Tune");
+
+			WorldCheck world = onServer(context, server -> worldCheck(server));
+			RigTune.LOGGER.info("Benchmark game test: scene fingerprint (MC {}): {}", HardwareProbe.minecraftVersion(), world.scene().fingerprint());
+			check(world.scene().accepted(), "the benchmark scene passes SceneVariety: " + world.scene().rejection() + " " + world.scene().fingerprint());
+			RigTune.LOGGER.info("Benchmark game test: camera y {} = terrain floor {} + {}, camera block and the one above air {}",
+					world.cameraY(), world.floor(), BenchmarkWorld.CAMERA_ABOVE_FLOOR, world.cameraClear());
+			check(world.cameraY() == world.floor() + BenchmarkWorld.CAMERA_ABOVE_FLOOR, "camera 16 above the terrain floor: " + world);
+			check(world.cameraClear(), "the camera block and the one above are air: " + world);
+
+			context.runOnClient(BenchmarkWorld::exitNow);
+			context.waitForScreen(BenchmarkResultScreen.class);
+			context.waitTicks(3);
+			context.takeScreenshot("bench-world-tune-result");
+			pressByKey(context, "rigtune.benchmark.keep");
+			context.waitForScreen(TitleScreen.class);
+			check(context.computeOnClient(Settings::of).equals(settings), "settings restored after the chunk tune");
+			return outcome.record().id();
+		} finally {
+			context.runOnClient(mc -> {
+				BenchmarkController.setDefaultConfig(SHORT);
+				BenchmarkController.setSweepListener(null);
+			});
+		}
+	}
+
+	// Counted here, independently of SettleCheck: the circle dx^2 + dz^2 <= (rd - 1)^2 around the camera's chunk.
+	private static FirstFrame firstFrame(Minecraft mc, int rd) {
+		Vec3 camera = mc.player.position();
+		int cx = ((int) Math.floor(camera.x)) >> 4;
+		int cz = ((int) Math.floor(camera.z)) >> 4;
+		int r = rd - 1;
+		int inRange = 0;
+		int missing = 0;
+		for (int dx = -r; dx <= r; dx++) {
+			for (int dz = -r; dz <= r; dz++) {
+				if (dx * dx + dz * dz <= r * r) {
+					inRange++;
+					if (!mc.level.getChunkSource().hasChunk(cx + dx, cz + dz)) {
+						missing++;
+					}
+				}
+			}
+		}
+		return new FirstFrame(rd, inRange, missing);
+	}
+
+	// Server thread: the terrain noise around the camera (SceneVariety), and the camera spot.
+	private static WorldCheck worldCheck(IntegratedServer server) {
+		ServerLevel level = server.overworld();
+		List<SceneVariety.Sample> samples = new ArrayList<>();
+		for (int[] o : SceneVariety.offsets()) {
+			int x = BenchmarkWorld.CAMERA_X + o[0];
+			int z = BenchmarkWorld.CAMERA_Z + o[1];
+			int floor = BenchmarkWorld.terrainFloor(level, x, z);
+			samples.add(new SceneVariety.Sample(o[0], o[1], floor, level.getUncachedNoiseBiome(x >> 2, floor >> 2, z >> 2).getRegisteredName()));
+		}
+		SceneVariety.Report scene = SceneVariety.check(samples, level.getChunkSource().getGenerator().getSeaLevel());
+		Vec3 camera = BenchmarkWorld.cameraPosition();
+		BlockPos spot = BlockPos.containing(camera.x, camera.y, camera.z);
+		boolean clear = level.getBlockState(spot).isAir() && level.getBlockState(spot.above()).isAir();
+		return new WorldCheck(scene, BenchmarkWorld.terrainFloor(level, BenchmarkWorld.CAMERA_X, BenchmarkWorld.CAMERA_Z), spot.getY(), clear);
+	}
+
+	// docs/v0.3/SPEC.md AC8.3: the integrated server's requested view distance (what it sends chunks for) equals the
+	// restored render distance. The packet is handled on a server tick, so this polls.
+	private static void checkRequestedViewDistance(ClientGameTestContext context, int expected, String when) {
+		int requested = -1;
+		for (int i = 0; i < 40 && requested != expected; i++) {
+			if (i > 0) {
+				context.waitTicks(5);
+			}
+			requested = onServer(context, server -> {
+				List<ServerPlayer> players = server.getPlayerList().getPlayers();
+				return players.isEmpty() ? -1 : players.getFirst().requestedViewDistance();
+			});
+		}
+		RigTune.LOGGER.info("Benchmark game test: server's requested view distance {} {} (render distance {})", requested, when, expected);
+		check(requested == expected, "the server was told the restored render distance " + when + ": " + requested + " vs " + expected);
+	}
+
+	// Runs a task on the integrated server's thread. The harness keeps the game threads in step with this thread, so it
+	// never blocks on the result: it waits in ticks until the task has run.
+	private static <T> T onServer(ClientGameTestContext context, Function<IntegratedServer, T> task) {
+		CompletableFuture<T> result = new CompletableFuture<>();
+		context.runOnClient(mc -> {
+			IntegratedServer server = mc.getSingleplayerServer();
+			if (server == null) {
+				result.completeExceptionally(new AssertionError("no integrated server"));
+				return;
+			}
+			server.execute(() -> {
+				try {
+					result.complete(task.apply(server));
+				} catch (Throwable t) {
+					result.completeExceptionally(t);
+				}
+			});
+		});
+		context.waitFor(mc -> result.isDone(), 20 * 60);
+		return result.join();
+	}
+
 	// Esc during a benchmark-world run: everything restored, back on the title screen, nothing stored.
 	private static void benchmarkWorldCancel(ClientGameTestContext context) {
 		setScene(context, BenchmarkRequest.Scene.BENCHMARK_WORLD);
@@ -118,12 +291,14 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		Settings settings = context.computeOnClient(Settings::of);
 		int runs = context.computeOnClient(mc -> BenchmarkStore.history().runs().size());
 		pressByKey(context, "rigtune.benchmark.menu.tune");
-		context.waitFor(mc -> BenchmarkController.progress() != null, WORLD_TIMEOUT_TICKS);
+		// Esc once a step at another render distance than the start is running, so the restore has something to tell the server.
+		context.waitFor(mc -> BenchmarkController.progress() != null && mc.options.renderDistance().get() != settings.rd(), WORLD_TIMEOUT_TICKS);
 		context.waitTicks(10);
 		context.getInput().pressKey(InputConstants.KEY_ESCAPE);
 		context.waitFor(mc -> BenchmarkWorld.awaitingExit(), RUN_TIMEOUT_TICKS);
 		BenchmarkController.Outcome outcome = context.computeOnClient(mc -> BenchmarkController.lastOutcome());
 		check(outcome != null && outcome.cancelled() && outcome.record() == null, "Esc cancels the world run: " + outcome);
+		checkRequestedViewDistance(context, settings.rd(), "after the cancelled Tune");
 		context.runOnClient(BenchmarkWorld::exitNow);
 		context.waitForScreen(TitleScreen.class);
 		context.waitFor(mc -> BenchmarkWorld.state() == BenchmarkWorld.State.IDLE, WORLD_TIMEOUT_TICKS);
@@ -178,6 +353,8 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 					"simulation distance measured in singleplayer");
 			Settings restored = context.computeOnClient(Settings::of);
 			check(restored.equals(settings), "settings restored after the tune: " + restored + " vs " + settings);
+			check(outcome.result().measurements().stream().allMatch(m -> m.rd() <= settings.rd() + 8), "never above the start + 8 in your own world");
+			checkRequestedViewDistance(context, settings.rd(), "after the Tune in the current world");
 			check(!Files.exists(MarkerRestore.file()), "no restore marker without DH or Iris");
 			BenchmarkSummary summary = context.computeOnClient(mc -> RigTuneClient.controller().latestBenchmark());
 			check(summary != null && "TUNE".equals(summary.mode()) && "CURRENT".equals(summary.scene()), "latestBenchmark: " + summary);
@@ -214,7 +391,7 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		}
 	}
 
-	private static void checkHistoryFile(String[] pair, String tuneId) {
+	private static void checkHistoryFile(String[] pair, String tuneId, String chunkTuneId) {
 		Path file = BenchmarkStore.file();
 		try {
 			JsonObject json = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8)).getAsJsonObject();
@@ -222,7 +399,15 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 			JsonArray runs = json.getAsJsonArray("runs");
 			Set<String> ids = new HashSet<>();
 			runs.forEach(r -> ids.add(r.getAsJsonObject().get("id").getAsString()));
-			check(ids.contains(pair[0]) && ids.contains(pair[1]) && ids.contains(tuneId), "benchmarks.json has the three runs: " + ids);
+			check(ids.contains(pair[0]) && ids.contains(pair[1]) && ids.contains(tuneId) && ids.contains(chunkTuneId),
+					"benchmarks.json has the four runs: " + ids);
+			// docs/v0.3/SPEC.md AC8.8: every new run records its context.
+			runs.forEach(r -> {
+				JsonObject run = r.getAsJsonObject();
+				JsonObject c = run.getAsJsonObject("context");
+				check(c != null && c.get("protocol").getAsInt() == 1 && c.get("width").getAsInt() > 0 && c.get("height").getAsInt() > 0
+						&& c.has("dhRendering") && c.has("shaders") && c.has("fullscreen"), "context recorded: " + run);
+			});
 			RigTune.LOGGER.info("Benchmark game test: benchmarks.json has {} runs", runs.size());
 		} catch (IOException | RuntimeException e) {
 			throw new AssertionError("benchmarks.json unreadable: " + file, e);
