@@ -117,6 +117,7 @@ V2_ONLY_RULE_FIELDS = {
     "settings": frozenset({"requires"}),
     "advice": frozenset({"requires"}),
 }
+SOURCE_ONLY_TIER_FIELDS = {"gpuTiers": frozenset({"v1"}), "cpuTiers": frozenset({"v1"})}
 CONDITION_FIELDS = {"mods": ("recommendWhen", "avoidWhen", "skipUpdateWhen"), "obsolete": (), "settings": ("when",), "advice": ("when",)}
 V1_SETTING_PREFIXES = ("vanilla.", "sodium.")
 # Computed setting values both 0.1.0 and 0.2 resolve. A new token needs a new client, so it must come with `requires`.
@@ -334,9 +335,11 @@ def validate_knowledge(knowledge):
             if not isinstance(rule, dict):
                 problems.append(f"{kind}[{i}] must be an object")
                 continue
-            unknown = sorted(set(rule) - V1_RULE_FIELDS[kind])
+            unknown = sorted(set(rule) - V1_RULE_FIELDS[kind] - SOURCE_ONLY_TIER_FIELDS.get(kind, frozenset()))
             if unknown:
                 problems.append(f"{kind}[{i}]: unknown field(s) {', '.join(unknown)} (tier-rule changes need a new schemaVersion)")
+            if "v1" in rule and rule["v1"] is not False:
+                problems.append(f'{kind}[{i}]: "v1" on a tier row may only be false (the row is left out of rules-v1.json)')
     for kind in RULE_KINDS:
         rules = knowledge.get(kind, [])
         if not isinstance(rules, list):
@@ -821,6 +824,9 @@ def v2_content(content):
     out = copy.deepcopy(content)
     for kind in RULE_KINDS:
         out[kind] = [{k: v for k, v in rule.items() if k != "v1"} for rule in out.get(kind, [])]
+    for kind, source_only in SOURCE_ONLY_TIER_FIELDS.items():
+        if kind in out:
+            out[kind] = [{k: v for k, v in row.items() if k not in source_only} for row in out[kind]]
     return out
 
 
@@ -842,6 +848,14 @@ def v1_projection(content):
                 elif key == "mods":
                     omitted_mods[rule["slug"]] = list(rule.get("modIds", []))
             out[key] = projected
+        elif key in SOURCE_ONLY_TIER_FIELDS:
+            rows = []
+            for i, row in enumerate(value):
+                if row.get("v1") is False:
+                    notes.append((f"{key}[{i}] {row.get('pattern')}", 'omitted ("v1": false)'))
+                else:
+                    rows.append({k: copy.deepcopy(v) for k, v in row.items() if k not in SOURCE_ONLY_TIER_FIELDS[key]})
+            out[key] = rows
         else:
             out[key] = copy.deepcopy(value)
     if omitted_mods:
