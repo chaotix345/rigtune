@@ -1,7 +1,6 @@
 package io.github.chaotix345.rigtune.core.history;
 
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.OpResult;
-import io.github.chaotix345.rigtune.core.apply.ApplyResult.Status;
 
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;

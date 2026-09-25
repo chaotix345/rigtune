@@ -103,10 +103,6 @@ public final class UndoPlanner {
 		static Script empty() {
 			return new Script(Map.of(), Map.of(), List.of(), Set.of(), List.of());
 		}
-
-		public boolean isEmpty() {
-			return immediate.isEmpty() && staged.isEmpty() && fileOps.isEmpty() && discardOpIds.isEmpty() && reverts.isEmpty();
-		}
 	}
 
 	public record Result(UndoPlan plan, Script script) {

@@ -45,9 +45,9 @@ public final class StagedChanges {
 			Op staged = merged.plan().ops().stream().filter(o -> o != null && id.equals(o.id())).findFirst().orElse(op);
 			switch (op.type()) {
 				case ENABLE_FILE -> changes.add(JournalChange.file(JournalChange.ENABLE, Objects.requireNonNullElse(staged.modId(), op.modId()),
-						fileName(op.to()), JournalChange.STAGED, id, staged.group()));
+						HistoryUpdates.fileName(op.to()), JournalChange.STAGED, id, staged.group()));
 				case DISABLE_FILE -> changes.add(JournalChange.file(JournalChange.DISABLE, modIdOf.apply(Path.of(op.path())),
-						fileName(op.path()), JournalChange.STAGED, id, staged.group()));
+						HistoryUpdates.fileName(op.path()), JournalChange.STAGED, id, staged.group()));
 				case PATCH_JSON, PATCH_TOML, PATCH_PROPERTIES -> {
 					if (op.patches() == null) {
 						continue;
@@ -82,9 +82,5 @@ public final class StagedChanges {
 			}
 		}
 		return value;
-	}
-
-	static String fileName(String path) {
-		return HistoryUpdates.fileName(path);
 	}
 }
