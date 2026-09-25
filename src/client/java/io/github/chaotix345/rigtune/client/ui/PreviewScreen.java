@@ -289,13 +289,13 @@ public class PreviewScreen extends Screen {
 				return top + lines.size() * LINE + 1;
 			}
 
-			// Where the text ends on screen (for the game test's layout checks).
-			public int textRight() {
+			// Whether every line ends inside the row (for the game test's layout checks).
+			public boolean textFits() {
 				int widest = 0;
 				for (FormattedCharSequence line : lines) {
 					widest = Math.max(widest, font.width(line));
 				}
-				return getContentX() + indent + widest;
+				return indent + widest <= getContentWidth();
 			}
 
 			@Override
