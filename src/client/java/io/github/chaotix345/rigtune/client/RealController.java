@@ -100,7 +100,7 @@ public final class RealController implements RigTuneController {
 	private volatile Goal goal;
 	private int generation;
 	private final Object rulesLock = new Object();
-	private final OnlineLookupGate onlineLookups = new OnlineLookupGate();
+	private final OnlineLookupGate onlineLookups = new OnlineLookupGate(() -> FabricLoader.getInstance().getRawGameVersion());
 	private int rulesGeneration;
 	private volatile boolean downloading;
 
@@ -234,7 +234,7 @@ public final class RealController implements RigTuneController {
 		if (lookup == null) {
 			return;
 		}
-		CompletableFuture.supplyAsync(() -> new OnlineDataFetcher(modrinth).fetchAll(lookup.mods(), lookup.slugs(), lookup.hardware().mcVersion()),
+		CompletableFuture.supplyAsync(() -> new OnlineDataFetcher(modrinth).fetchAll(lookup.mods(), lookup.slugs(), lookup.gameVersion()),
 						Probes.EXECUTOR)
 				.thenAccept(result -> {
 					online = result;
@@ -434,7 +434,7 @@ public final class RealController implements RigTuneController {
 			Set<String> installedProjects = new HashSet<>(online.projectIdsByModId().values());
 			Set<String> installedVersions = new HashSet<>(online.versionIdsByModId().values());
 			HardwareProfile hw = hardware;
-			String mcVersion = hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion();
+			String mcVersion = onlineLookups.modrinthGameVersion(hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion());
 			CompletableFuture.supplyAsync(() -> download(downloads, installedProjects, installedVersions, mcVersion), Probes.EXECUTOR)
 					.whenComplete((result, error) -> {
 						try {
