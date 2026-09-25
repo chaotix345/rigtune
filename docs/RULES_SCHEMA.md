@@ -23,6 +23,7 @@ Both files come from one run and share `revision` and `generatedAt`. See tools/R
   - remote `rules-v2.json`; if that fails (network error, non-200, larger than 2 MiB, invalid), remote `rules-v1.json`
 - A remote v2 document is saved to the v2 cache. A remote v1 document is only used in memory, so the v2 cache always holds a v2 document.
 - The mod uses the valid candidate with the highest `revision`. On a tie it prefers `schemaVersion` 2, then remote over cache over bundled.
+- The local candidates are used right away; the remote document replaces them only if it is strictly newer (a higher `revision`, or the same revision with `schemaVersion` 2 over 1). The same rules again aren't re-applied.
 - A document is valid if it parses and its `schemaVersion` is 1 or 2. A future v3 will live in its own file.
 - No request is made when the network or remote rules are switched off in RigTune's settings. The switch is checked again before the v1 fallback request, and a load that a newer one (after a settings change) has replaced makes no further requests.
 - `-Drigtune.rules.baseUrl=<folder URL>` replaces `https://raw.githubusercontent.com/chaotix345/rigtune/main/rules/` (for tests).
@@ -121,11 +122,11 @@ If it's installed, recommend disabling it (impact high). May carry `requires`.
 - An entry has **either** `value` **or** `min`/`max`.
 - **Value entries** are evaluated in file order, and the last matching entry for a key wins.
 - **Clamp entries** (`min`/`max`) are applied after that, in file order. If a clamp changes the value, its reason is appended. When no value entry matched, a clamp applies to the current value, so a clamp alone means "at most" / "at least" and never moves a setting the other way.
-- **Computed values**:
+- **Computed values** (the only `$` tokens; 0.2 skips an entry with any other `$…` value, and the updater rejects one unless the rule has `requires`, since a new token needs a new client):
   - `"$refreshRate"` means the display refresh rate, or 60 if it's unknown.
   - `"$refreshRateCap"` is a VRR-friendly cap just under the refresh rate. Vanilla only accepts multiples of 10, so it is floor(hz/10)*10, minus 10 more when that equals hz and hz >= 100, clamped to 30..250 (180 Hz → 170, 144 Hz → 140, 60 Hz → 60). `"$refreshRate"` rounds to the nearest multiple of 10 (30..260).
 - A recommendation is emitted only when the resolved value differs from the current value, after normalisation (case-insensitive; `1.0` equals `1`). It is also emitted only when the key is present in the current `SettingsSnapshot`: unknown keys are skipped, so rules for Sodium keys do nothing when Sodium is absent.
-- The recommendation title is `<name>: <current> → <target>`, using `settingLabels` where they exist.
+- The recommendation title is `<name>: <current> → <target>`, using `settingLabels` where they exist. For a mod's key the name starts with the mod: `Sodium: …`, `Distant Horizons: …`, `Iris: …`.
 - May carry `requires`.
 
 ## AdviceRule
@@ -136,7 +137,7 @@ If it's installed, recommend disabling it (impact high). May carry `requires`.
 ## SettingLabel (v2)
 `"settingLabels": { "sodium.performance.chunk_builder_threads": { "name": "Chunk builder threads", "values": { "0": "Auto" } } }`
 
-Human-readable names for recommendation titles (and the share report). `name` replaces the caption made from the key; `values` maps a setting value (compared after normalisation, so `"0"` also matches `0.0`) to a label. A missing label falls back to the key's caption and the raw value. Labels never change what is applied.
+Human-readable names for recommendation titles (and the share report). `name` replaces the caption made from the key (the mod prefix, e.g. `Sodium: `, stays); `values` maps a setting value (compared after normalisation, so `"0"` also matches `0.0`) to a label. A missing label falls back to the key's caption and the raw value. Labels never change what is applied.
 
 ## requires (v2)
 `"requires": ["some-client-feature"]` on a ModRule, ObsoleteRule, SettingRule or AdviceRule. A rule whose `requires` names any feature this client doesn't know is **skipped entirely** (no addition, disable, conflict warning, setting or advice). RigTune 0.2.0 knows no features, so today any non-empty `requires` hides the rule from every client. It is the escape hatch for future rule-level fields that must not fail open: a rule that depends on such a field lists the feature that implements it.
@@ -168,13 +169,15 @@ This is a JSON object. Every field is optional, all present fields must hold (AN
 | goal | string[] | performance, balanced, quality | a value outside the list |
 | mcVersion | string[] | exact match on the running MC version | MC version unknown |
 | modPresent / modAbsent | string[] | mod ids. modPresent: all loaded; modAbsent: none loaded | a `null` entry |
-| flags | string[] | all present in HardwareProfile.flags: `shaders-enabled`, `backend-vulkan`, `sodium-workaround:<NAME>` | a flag outside that list that isn't present |
+| flags | string[] | all present in HardwareProfile.flags: `shaders-enabled`, `backend-vulkan`, `sodium-workaround:<NAME>` | a flag outside that list that isn't present; `backend-vulkan` absent while the backend is unknown |
 | gpuModelMatches (v2) | string | Java regex *found* in the GPU subject string (the same one `gpuTiers` see), at most 200 characters, with the same read budget | no GPU info; invalid or overlong regex; budget exhausted |
 | displayPixelsAtLeast / displayPixelsAtMost (v2) | int | display width × height | width or height unknown (≤ 0) |
 | modVersion (v2) | object: mod id → Fabric version predicate | every listed mod is loaded and its version satisfies the predicate (Fabric Loader's `VersionPredicate`, as in fabric.mod.json: `">=0.6.0 <0.8.0"`, `"~0.9"`, `"*"`). A listed mod that isn't loaded is FALSE | unparseable predicate (any term that isn't a semantic version, e.g. `">=>="` or `\|\|`); the installed version is missing or not a semantic version |
 | mcVersionRange (v2) | string: Fabric version predicate | the running MC version satisfies it | unparseable predicate or MC version |
 | anyOf | Condition[] | at least one holds (an empty list is FALSE) | see below |
 | not | Condition | negation | see below |
+
+Flags come from detection: `backend-vulkan` from the graphics backend, `shaders-enabled` from Iris's API and `sodium-workaround:<NAME>` from Sodium's workaround list. If Iris's or Sodium's API can't be read, their flags read as absent (FALSE), so don't rely on the absence of those flags for anything restrictive.
 
 ### Evaluation: TRUE, FALSE or UNKNOWN (fail closed)
 A condition evaluates to TRUE, FALSE or UNKNOWN. Only a top-level TRUE fires; UNKNOWN counts as false for every rule kind: no addition, no disable, no setting, no advice. In an addition's `avoidWhen`, only FALSE lets the addition through.
@@ -210,11 +213,13 @@ v1 (0.1.x) evaluates the same fields two-valued: unknown RAM/VRAM/refresh are fa
   - a setting entry whose `when` uses v2 features, or whose key is outside `vanilla.`/`sodium.`, without an explicit `v1`. Omitting a setting entry can change which entry wins for 0.1.x, so it's always a maintainer decision;
   - a rule field outside the v1 whitelist (`requires`, `avoidSelected`) without an explicit `v1`. With an override the field is left out only if that is exactly as safe: `requires` only when empty, `avoidSelected` only when true or when the v1 rule has no `avoidWhen`. Otherwise use `"v1": false`;
   - unknown fields (including unknown top-level fields), unknown condition keys, nulls, values outside the vocabularies, out-of-range integers, regexes over 200 characters and malformed `settingLabels` anywhere in knowledge.json.
+- When a ModRule is left out, the other rules' `conflictsWith` references to its slug become its `modIds` (0.1.x resolves a slug only through a rule it has, but matches a mod id directly), so 0.1.x still sees the conflict. REVIEW.md (d) lists each rewrite.
 - `settingLabels` is left out of rules-v1.json. Tier rules are copied as they are.
 - Every omission and field change is listed in `rules/REVIEW.md` section (d).
-- `tools/check_rules_v1.py` (CI job `rules-v1-compat`) checks the result. The pinned-v0.1.0 differential test (`RulesV1DifferentialTest`) checks that rules-v1.json gives 0.1.x no ticked action that the baseline `src/test/resources/v010/rules-v1-baseline.json` (the rules 0.1.0 shipped) didn't. `SchemaConsistencyTest` checks the updater's field lists and vocabularies against the Java code and the pinned v0.1.0 copy.
+- `tools/check_rules_v1.py` (CI job `rules-v1-compat`) checks the result. The pinned-v0.1.0 differential test (`RulesV1DifferentialTest`) checks that, compared with the baseline `src/test/resources/v010/rules-v1-baseline.json` (the rules 0.1.0 shipped), rules-v1.json gives 0.1.x no new appliable recommendation (ticked or not), ticks none that was unticked, and loses no conflict or advice. `SchemaConsistencyTest` checks the updater's field lists and vocabularies against the Java code and the pinned v0.1.0 copy.
 
 ## Rules for maintainers
+- **UNKNOWN switches restrictions off.** A condition that is UNKNOWN doesn't fire, so a clamp, a lower value, an `avoidWhen` or a warning gated on something a client may not know (RAM, VRAM, refresh rate, display size, GPU model, mod versions, the backend) silently doesn't apply where it's unknown. For example `{"key": "vanilla.renderDistance", "max": 8, "when": {"not": {"vramMbAtLeast": 4096}}}` does nothing on a machine that doesn't report VRAM. Gate restrictions on always-known facts (heap, tiers, goal, installed mods), or add a second rule that covers the unknown case with one of those.
 - **Never add a v2-only or future field to an existing restrictive rule** (a clamp, a lower value, an `avoidWhen`, a warning). Clients that don't know the field poison the whole rule, so they'd *lose* the restriction they have today. Add a new rule next to the old one instead (or gate the new one with `requires`).
 - **Tier-rule schema changes (`gpuTiers`, `cpuTiers`, `heapTiers`) need a new schemaVersion**: tier rules have no fail-closed handling.
 - A setting rule that *restricts* for a v2-only condition needs a deliberate `v1` decision (override or `false`), and REVIEW.md (d) shows it.

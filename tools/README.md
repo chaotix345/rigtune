@@ -83,6 +83,8 @@ The script stops (exit code 2, nothing written) and lists every problem when
   isn't `{"name": "...", "values": {"<value>": "..."}}`;
 - a `warning`/`critical` advice whose `when` is v2-only, with no `v1` (a warning must not
   quietly disappear for 0.1.x);
+- a setting value that starts with `$` but isn't `$refreshRate` or `$refreshRateCap`, unless
+  the rule has `requires` (a new token needs a new client);
 - a setting entry that uses a v2 condition, or a key outside `vanilla.`/`sodium.`, with no
   `v1` (omitting a setting entry can change which entry wins for 0.1.x, so it's always your call);
 - a rule with `requires` or `avoidSelected` and no `v1` (use `"v1": false` unless the field
@@ -134,10 +136,12 @@ directly (see `tools/tests/test_update_rules.py`).
   tag with only the package renamed) evaluates the baseline
   `src/test/resources/v010/rules-v1-baseline.json` (the rules 0.1.0 shipped) and the new
   `rules/rules-v1.json` over a hardware × mods × settings × goal matrix. It fails on any
-  ticked action (add, disable, setting value) that the new file gives and the baseline
-  doesn't. Removing actions is fine. If a new ticked action for 0.1.x is intended (for
-  example a new mod rule that 0.1.x should see), review the listed actions and copy
-  `rules/rules-v1.json` over the baseline in the same commit.
+  appliable recommendation (add, disable, setting value) that the new file gives and the
+  baseline doesn't (`added`, ticked or not), any the baseline gave unticked and the new
+  file ticks (`ticked`), and any conflict or advice the new file no longer gives (`lost`).
+  Removing actions is fine. If a change for 0.1.x is intended (for example a new mod rule
+  that 0.1.x should see), review the listed changes and copy `rules/rules-v1.json` over
+  the baseline in the same commit.
 
 ## Triaging `rules/REVIEW.md`
 
@@ -163,7 +167,8 @@ four sections a maintainer should work through before merging:
   means "wait for upstream," sometimes means "the project is dead, reconsider it."
 - **(d) Omitted from rules-v1.json** — every rule the v1 projection leaves out or
   changes (a `v1` override, `"v1": false`, a condition turned into `{"always": false}`,
-  a dropped `avoidWhen`, a left-out field), with the reason. Check that none of it makes
+  a dropped `avoidWhen`, a left-out field, a `conflictsWith` slug of a left-out rule
+  replaced by its mod ids), with the reason. Check that none of it makes
   0.1.x less safe; in particular, when a setting entry is left out, check which entry
   now wins for that key in 0.1.x.
 
