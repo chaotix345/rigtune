@@ -1,10 +1,12 @@
 package io.github.chaotix345.rigtune.core.apply;
 
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -87,6 +89,76 @@ class ApplyLockTest {
 			assertNull(onOtherThread(file, Duration.ZERO));
 		}
 		assertNotNull(onOtherThread(file, Duration.ZERO));
+	}
+
+	// Review: a close on the wrong thread must not mark the handle closed and leak the lock for the session.
+	@Test
+	void closingOnAnotherThreadIsRefusedAndTheOwnerCanStillRelease(@TempDir Path dir) throws Exception {
+		Path file = ApplyLock.defaultPath(dir);
+		ApplyLock lock = ApplyLock.acquire(file, Duration.ZERO);
+		assertNotNull(lock);
+		Throwable[] thrown = new Throwable[1];
+		Thread other = new Thread(() -> {
+			try {
+				lock.close();
+			} catch (Throwable t) {
+				thrown[0] = t;
+			}
+		});
+		other.start();
+		other.join();
+
+		assertTrue(thrown[0] instanceof IllegalStateException, String.valueOf(thrown[0]));
+		assertNull(onOtherThread(file, Duration.ZERO));
+		lock.close();
+		assertNotNull(onOtherThread(file, Duration.ZERO));
+	}
+
+	// Review: an interrupted thread that already holds the lock still re-enters (the journal inside stage()).
+	@Test
+	void anInterruptedHolderStillReenters(@TempDir Path dir) throws Exception {
+		Path file = ApplyLock.defaultPath(dir);
+		try (ApplyLock outer = ApplyLock.acquire(file, Duration.ZERO)) {
+			assertNotNull(outer);
+			Thread.currentThread().interrupt();
+			try (ApplyLock inner = ApplyLock.acquire(file, Duration.ofSeconds(1))) {
+				assertNotNull(inner);
+			} finally {
+				assertTrue(Thread.interrupted(), "the interrupt is kept");
+			}
+		}
+	}
+
+	// Review: the same folder reached another way (a different letter case on Windows, a symlink) is the same lock, so a
+	// nested acquire through it re-enters instead of waiting for itself.
+	@Test
+	void theSameFolderSpelledDifferentlyIsTheSameLock(@TempDir Path dir) throws Exception {
+		Assumptions.assumeTrue(System.getProperty("os.name").startsWith("Windows"), "case-insensitive file names");
+		Path config = Files.createDirectories(dir.resolve("Config"));
+		try (ApplyLock lock = ApplyLock.acquire(ApplyLock.defaultPath(config), Duration.ZERO)) {
+			assertNotNull(lock);
+			try (ApplyLock nested = ApplyLock.acquire(ApplyLock.defaultPath(dir.resolve("CONFIG")), Duration.ofMillis(200))) {
+				assertNotNull(nested);
+			}
+			assertNull(onOtherThread(ApplyLock.defaultPath(config), Duration.ZERO));
+		}
+	}
+
+	@Test
+	void aSymlinkedFolderIsTheSameLock(@TempDir Path dir) throws Exception {
+		Path real = Files.createDirectories(dir.resolve("real"));
+		Path link = dir.resolve("link");
+		try {
+			Files.createSymbolicLink(link, real);
+		} catch (IOException | UnsupportedOperationException e) {
+			Assumptions.abort("symbolic links aren't available here: " + e);
+		}
+		try (ApplyLock lock = ApplyLock.acquire(ApplyLock.defaultPath(real), Duration.ZERO)) {
+			assertNotNull(lock);
+			try (ApplyLock nested = ApplyLock.acquire(ApplyLock.defaultPath(link), Duration.ofMillis(200))) {
+				assertNotNull(nested);
+			}
+		}
 	}
 
 	// A separate JVM that tries the OS lock once: true if it got it.

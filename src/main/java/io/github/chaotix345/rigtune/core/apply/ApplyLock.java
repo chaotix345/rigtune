@@ -46,9 +46,16 @@ public final class ApplyLock implements AutoCloseable {
 
 	// Null when someone else (another process, or another thread in this JVM) still has it after `wait`.
 	public static ApplyLock acquire(Path file, Duration wait) throws IOException {
-		Path key = file.toAbsolutePath().normalize();
-		Files.createDirectories(key.getParent());
+		Path absolute = file.toAbsolutePath().normalize();
+		Files.createDirectories(absolute.getParent());
+		// By real path, so the same folder reached through a symlink (or another spelling) is the same lock.
+		Path key = absolute.getParent().toRealPath().resolve(absolute.getFileName());
 		Shared shared = SHARED.computeIfAbsent(key, k -> new Shared());
+		if (shared.jvm.isHeldByCurrentThread()) {
+			// Re-entering never waits, so an interrupted holder gets it too.
+			shared.jvm.lock();
+			return new ApplyLock(shared);
+		}
 		long waitNanos = Math.max(0, wait.toNanos());
 		long deadline = System.nanoTime() + waitNanos;
 		try {
@@ -58,9 +65,6 @@ public final class ApplyLock implements AutoCloseable {
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			return null;
-		}
-		if (shared.jvm.getHoldCount() > 1) {
-			return new ApplyLock(shared);
 		}
 		boolean locked = false;
 		try {
@@ -101,11 +105,15 @@ public final class ApplyLock implements AutoCloseable {
 		}
 	}
 
-	// Must be called on the thread that acquired it (try-with-resources).
+	// Must be called on the thread that acquired it (try-with-resources). Another thread is refused before anything
+	// changes, so the owner can still release it.
 	@Override
 	public void close() {
 		if (closed) {
 			return;
+		}
+		if (!shared.jvm.isHeldByCurrentThread()) {
+			throw new IllegalStateException("The apply lock can only be released by the thread that took it");
 		}
 		closed = true;
 		try {
