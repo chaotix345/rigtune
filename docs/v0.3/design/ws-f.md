@@ -1,0 +1,48 @@
+# WS-F design notes: Report a problem (SPEC 10) and Quilt (SPEC 11)
+
+Branch `feat/report-problem`. Plan: docs/v0.3/plans/ws-f.md. The coordinator folds these notes into DESIGN.md.
+
+## What ships
+- **Report a problem** button in the RigTune footer, right after Copy report (one line in `RigTuneScreen.init`; WS-B owns the footer layout). Pressing it:
+  1. copies the **full** share report (`controller.shareReport()`, the same text as Copy report) to the clipboard, and the status line says so (`rigtune.report.copied`);
+  2. calls `ConfirmLinkScreen.confirmLinkNow(this, uri)`, vanilla's "open this link?" screen, with a new-issue link built by `core/report/IssueLink`.
+  RigTune makes no request: the link is only opened (by Minecraft, in the browser) if the player chooses Open in Browser, and GitHub only creates the issue when the player submits the form. With no report yet the button is inactive; an empty report shows `rigtune.share.unavailable`.
+- `IssueLink` (pure core): `NEW_ISSUE?template=problem.yml&title=<…>&report=<…>`, form-encoded with `URLEncoder` (space → `+`, `+` → `%2B`: every RigTune version has a `+`). The title is `[RigTune <ver>] MC <mc>: `. The report is the whole share report when the link fits in `MAX_URL` (675), else the longest prefix of whole lines followed by `(shortened; the full report is on your clipboard)`, else only that note, else no report field; the title is left out rather than overflowing. Never `labels`/`assignees`/`projects`/`milestone` (a value the visitor can't set 404s the whole link).
+- `.github/ISSUE_TEMPLATE/problem.yml`: an issue form with `what-happened` (required), `expected`, and `report` (the prefilled field; its description asks the reporter to paste the full report from the clipboard in place of the short one, or press Copy report again). `labels: ["bug"]` (the label exists in the repository).
+- `RigTuneController.reportVersions()` (default null; RealController builds it from the mod version, the report's MC version and the Loader version).
+- README: a FAQ section (Quilt; what Report a problem sends) and one sentence in Privacy.
+
+## F-M1 spike: how long can the link be?
+Method: a throwaway client game test (26.2, local, under the lock; not committed) opened `confirmLinkNow` with prefixes of a real encoded report link, 300 to 2,000 characters, at three sizes, logging the message widget's rows and screenshotting 500/650/800/2,000. javap on both versions' jars: the confirm screen's message is a `MultiLineTextWidget` with `setMaxWidth(width - 50)` and `setMaxRows(15)` (identical in 26.2 and 26.3).
+
+| GUI size | text width | fully readable up to | at 2,000 chars |
+|---|---|---|---|
+| 640x480 @ scale 2 (320x240) | 270 px | about 700 chars (15 rows) | 15 of 42 rows, ending in "…" |
+| 854x480 @ scale 2 (427x240) | 377 px | about 1,000 chars | 15 of 30 rows |
+| 1280x720 @ scale 2 (640x360) | 590 px | about 1,550 chars | 15 of 20 rows |
+
+- The buttons are never pushed off-screen (at 640x480@2 they sit at y 198-218 of 240 for any length): the row cap protects them. The problem with a 2,000-character link is only that most of it can't be read.
+- `confirmLinkNow(Screen, URI)` passes `trusted = true`: title "Do you want to open this link or copy it to your clipboard?", buttons Open in Browser / Copy to Clipboard / Cancel, no "never open links from people you don't trust" line. Cancel calls the callback with `false`, which only sets the parent screen back (no `openUri`; javap of `lambda$confirmLinkNow` on both versions). **Copy to Clipboard replaces the clipboard with the link** (it overwrites the full report): the form's `report` description and the README say to press Copy report again in that case.
+- **Decision: `MAX_URL = 675`** (not the 800 of the amendment's default): 15 rows × 45 characters, since the widest character the encoder can emit is 6 px and 270 / 6 = 45. So any link RigTune builds is readable in full on the confirm screen at the smallest reference size, which is also the smallest GUI width Minecraft lays out (320). It stays well under the 2,048-character cross-browser line and GitHub's 414 limit. What fits in practice: on the dev machine the link is 641 characters with the versions line, the whole hardware block (CPU, GPU with a long OpenGL driver string, RAM/heap/display, tier, rules) and the note, i.e. exactly F-M1's "versions + hardware lines". A machine with longer hardware names loses the last lines (rules, then tier), never the versions line.
+- ReportGameTest turns this into a check on every MC version: a 675-character link of the widest glyph (it measures every character the link can contain) must be fully shown at 640x480@2, and the real link must be fully shown at all three sizes.
+
+## Game test (AC10.2)
+`ReportGameTest` (registered after UiGameTest; skipped in smoke mode): opens RigTune with the real controller; at 640x480@2, 854x480@2 and 1280x720@2 it checks the button (active, label fits, inside the screen), presses it, checks the clipboard equals `shareReport()`, that the confirm screen shows exactly `IssueLink.uri(reportVersions(), report)` (≤ 675, template/title prefix, a report field, no labels), that the link is fully shown and no widget is off-screen or overlapping; screenshots `report-confirm-<size>`; presses Cancel and checks it's back on the same RigTune screen. At 640x480@2 it also screenshots the footer (`report-button-640x480-scale2`) and runs the worst-case link (`report-confirm-worst-case-640x480-scale2`). The clipboard and GUI scale are restored in `finally`.
+- Found while running it: `Screen.resize` only calls `repositionElements()` (javap, both versions), so an open confirm screen keeps the wrap width it had when it opened; the test therefore opens it anew at each size, as a player would.
+
+## Deviations and notes for the coordinator
+- URL budget 675 instead of 800 (above); AC10.1's "≤ 800" holds a fortiori.
+- `rigtune.share.unavailable` is reused for "no report yet" instead of a new `rigtune.report.*` key (same message).
+- `RealController.shareReport()` is untouched (WS-C changes it for the launcher line), so `reportVersions()` repeats its two-line Loader-version lookup. After WS-C merges, `shareReport()` could build its versions through `reportVersions()`.
+- Lang keys: `rigtune.report.button`, `.button.tooltip`, `.copied`, inserted before `rigtune.screen.benchmark_menu` (the start of the file's alphabetical run), not at the end.
+- The main footer at 640x480@2 today has 8 buttons in 3 rows (93 px wide); "Report a problem" is 87 px, so it fits (checked in the game test). If WS-B's layout makes buttons narrower than 91 px, the label won't fit: the game test catches it.
+- F-L1: problem.yml must be on **main** before the v0.3.0 release is published: GitHub reads issue templates from the default branch, so until then the link can't show the form (what GitHub shows instead wasn't checked). It reaches main with the release PR.
+
+## Quilt (SPEC 11)
+README FAQ: Quilt Loader lists 26.2/26.3, but QSL and Quilted Fabric API were retired at 26.1 (QuiltMC blog, 2026-02-03), RigTune needs Fabric API, and whether Quilt Loader loads Fabric API itself on 26.x is unconfirmed (misc.md §B, UNVERIFIED there), so no Quilt support is declared. No code.
+
+## Verification
+- Unit tests: IssueLinkTest, 13 tests (AC10.1: encoding of spaces, `+`, `%`, `&`, `#`, newlines, non-ASCII and emoji with a decode round trip; the title; whole vs cut-at-a-line-boundary report; a worst-case report with 50 recommendations, 120-character hardware names and 200-character titles stays ≤ 675 and parses as a URI; CRLF; edge cases; the field names read from problem.yml; no network client in IssueLink's imports or source, shown to fail on a planted `java.net.http` import). `./gradlew build`: 861 unit tests per MC version.
+- Game tests, local (2026-09-26, dev `runClientGameTest` under the lock, with only UiGameTest and ReportGameTest registered for the run): pass on 26.2 and 26.3 (26.3 on the first attempt). Both: widest link glyph 'A' (6 px); the worst-case 675-character link 15 of 15 rows shown at 640x480@2; the real link 641 characters (1,297/1,229-character reports) shown in full at 14/10/7 rows; Cancel back on the same RigTune screen, status line "Copied the full report (N characters): paste it into the GitHub issue."; UiGameTest still passes with the extra footer button. Screenshots reviewed.
+- Game tests, CI: the Linux legs run once WS-0's client-gametest job is merged into this branch (run URL in the final report).
+- UNVERIFIED: the live GitHub form with the prefilled `report` field (needs problem.yml on main; check the link once the release PR has merged, before the tag). problem.yml was checked with PyYAML and against GitHub's documented form schema, not by GitHub itself.
