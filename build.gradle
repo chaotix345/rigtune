@@ -54,7 +54,10 @@ dependencies {
 
 	compileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
 	localRuntime "com.terraformersmc:modmenu:${project.modmenu_version}"
-	localRuntime "maven.modrinth:sodium:${project.sodium_version}"
+	// Optional: a new Minecraft version can build and run its unit tests before Sodium supports it.
+	if (project.hasProperty("sodium_version")) {
+		localRuntime "maven.modrinth:sodium:${project.sodium_version}"
+	}
 
 	testImplementation "net.fabricmc:fabric-loader-junit:${project.loader_version}"
 }
@@ -142,7 +145,7 @@ jar {
 
 // --- Modrinth publishing (SPEC.md item 4) ---
 // One Modrinth version per Minecraft version: `./gradlew :<mc>:modrinth` runs this directly;
-// release.yml runs it once per version, after building, as an independent step per version.
+// release.yml runs it for every versions/*/ node in a loop, after building; one node's failure doesn't stop the others.
 // `uploadFile = jar` (not remapJar: 26.x is unobfuscated, there is no remapJar task).
 // Verify locally without a token via `./gradlew :26.2:modrinth -PmodrinthDryRun`.
 def changelogForVersion(String modVersion) {
@@ -176,7 +179,8 @@ modrinth {
 	projectId = 'rigtune'
 	versionNumber = project.version.toString()
 	versionName = "RigTune ${project.mod_version} (MC ${mcVersion})"
-	versionType = 'release'
+	// A snapshot, pre-release or release-candidate node is published as an alpha.
+	versionType = ['-snapshot-', '-pre-', '-rc-'].any { mcVersion.contains(it) } ? 'alpha' : 'release'
 	uploadFile = jar
 	gameVersions = [mcVersion]
 	loaders = ['fabric']
@@ -257,6 +261,37 @@ tasks.register("runProductionSmoke", net.fabricmc.loom.task.prod.ClientProductio
 	jvmArgs.addAll(providers.gradleProperty("smokeBenchmark").map { ["-Drigtune.smoke.benchmark=true"] }.orElse([]))
 	// -PsmokeDh=stage|check: AC7.3 from the title screen only, no world (DhConfigSmoke).
 	jvmArgs.addAll(providers.gradleProperty("smokeDh").map { ["-Drigtune.smoke.dh=" + it] }.orElse([]))
+}
+
+// CI (build.yml, client-gametest): the client game tests against the built jar in a production client, with
+// fabric-api, Sodium and ModMenu as real mod jars (the dev run has them on localRuntime). Its own run dir, wiped first.
+configurations {
+	productionGameTestMods {
+		canBeConsumed = false
+		transitive = false
+	}
+}
+
+dependencies {
+	productionGameTestMods "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+	productionGameTestMods fabricApi.module("fabric-client-gametest-api-v1", project.fabric_api_version)
+	productionGameTestMods "com.terraformersmc:modmenu:${project.modmenu_version}"
+	if (project.hasProperty("sodium_version")) {
+		productionGameTestMods "maven.modrinth:sodium:${project.sodium_version}"
+	}
+}
+
+def productionGameTestRunDir = layout.buildDirectory.dir("run/productionClientGameTest")
+
+tasks.register("runProductionClientGameTest", net.fabricmc.loom.task.prod.ClientProductionRunTask) {
+	def fs = objects.newInstance(InjectedFs).fs
+	runDir = productionGameTestRunDir
+	mods.from(gametestJar)
+	mods.from(configurations.productionGameTestMods)
+	jvmArgs.add("-Dfabric.client.gametest")
+	doFirst {
+		fs.delete { delete productionGameTestRunDir }
+	}
 }
 
 // Self-update end-to-end harness (tools/e2e/README.md), never part of the shipped jar or of `build`. The fake Modrinth
