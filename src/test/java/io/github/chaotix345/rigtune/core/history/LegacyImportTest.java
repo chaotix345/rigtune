@@ -6,6 +6,7 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -111,7 +112,7 @@ class LegacyImportTest {
 		Op untracked = new Op(PendingActions.Type.DISABLE_FILE, null, null, MODS.resolve("starlight-1.jar").toString(), null);
 		List<Op> selfUpdate = PendingActions.group(Op.disableFile(MODS.resolve("rigtune-0.1.0.jar")),
 				Op.enableFile(MODS.resolve("rigtune-0.2.0.jar.rigtune-pending"), MODS.resolve("rigtune-0.2.0.jar")).withModId("rigtune"));
-		List<Op> ops = new java.util.ArrayList<>(update);
+		List<Op> ops = new ArrayList<>(update);
 		ops.add(patch);
 		ops.add(untracked);
 		ops.addAll(selfUpdate);

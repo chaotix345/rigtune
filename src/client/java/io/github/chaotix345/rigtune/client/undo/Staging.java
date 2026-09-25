@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -104,7 +105,7 @@ public final class Staging {
 		List<String> ids = new ArrayList<>();
 		merge.merged().replaced().forEach(op -> ids.add(op.id()));
 		merge.relocatedAway().forEach(op -> ids.add(op == null ? null : op.id()));
-		ids.removeIf(java.util.Objects::isNull);
+		ids.removeIf(Objects::isNull);
 		return ids;
 	}
 
@@ -202,7 +203,7 @@ public final class Staging {
 	}
 
 	private void markDiscarded(List<Op> ops) {
-		List<String> ids = ops.stream().filter(java.util.Objects::nonNull).map(Op::id).filter(java.util.Objects::nonNull).toList();
+		List<String> ids = ops.stream().filter(Objects::nonNull).map(Op::id).filter(Objects::nonNull).toList();
 		if (ids.isEmpty() || !journal.exists()) {
 			return;
 		}

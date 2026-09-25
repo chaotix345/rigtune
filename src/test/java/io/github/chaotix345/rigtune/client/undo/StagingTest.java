@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -76,7 +77,7 @@ class StagingTest {
 
 	@Test
 	void stagingRecordsTheOpsAsTheyAreInPendingJson() throws IOException {
-		List<Op> ops = new java.util.ArrayList<>(update("sodium-0.7.0.jar", "sodium-0.7.1.jar", "sodium"));
+		List<Op> ops = new ArrayList<>(update("sodium-0.7.0.jar", "sodium-0.7.1.jar", "sodium"));
 		ops.add(Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4")));
 
 		assertTrue(staging.stage(ops, "e1"));
@@ -160,7 +161,7 @@ class StagingTest {
 	void unstagingRemovesTheWholeGroupAndRetiresItsDownloads() throws IOException {
 		List<Op> update = update("x-1.jar", "x-2.jar", "x");
 		Op other = Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4"));
-		List<Op> ops = new java.util.ArrayList<>(update);
+		List<Op> ops = new ArrayList<>(update);
 		ops.add(other);
 		assertTrue(staging.stage(ops, "e1"));
 
