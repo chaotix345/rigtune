@@ -48,6 +48,7 @@ public class UndoScreen extends Screen {
 	private final @Nullable Screen parent;
 	protected final RigTuneController controller;
 	private final boolean all;
+	private final @Nullable String entryId;
 	private @Nullable UndoPlan plan;
 	private boolean planned;
 	private boolean loading;
@@ -57,10 +58,25 @@ public class UndoScreen extends Screen {
 	private int statusY;
 
 	public UndoScreen(@Nullable Screen parent, RigTuneController controller, boolean all) {
+		this(parent, controller, all, null);
+	}
+
+	// "Undo this" on one history entry (docs/v0.3/SPEC.md item 6).
+	public UndoScreen(@Nullable Screen parent, RigTuneController controller, String entryId) {
+		this(parent, controller, false, entryId);
+	}
+
+	private UndoScreen(@Nullable Screen parent, RigTuneController controller, boolean all, @Nullable String entryId) {
 		super(Component.translatable("rigtune.undo.title"));
 		this.parent = parent;
 		this.controller = controller;
 		this.all = all;
+		this.entryId = entryId;
+	}
+
+	// The history entry this screen undoes, or null for Undo last / Undo everything.
+	public @Nullable String entryId() {
+		return entryId;
 	}
 
 	// Null until the plan has been worked out.
@@ -73,7 +89,7 @@ public class UndoScreen extends Screen {
 		if (!planned) {
 			planned = true;
 			loading = true;
-			CompletableFuture.supplyAsync(() -> controller.undoPlan(all), Probes.EXECUTOR).whenComplete((result, error) -> minecraft.execute(() -> {
+			CompletableFuture.supplyAsync(() -> entryId != null ? controller.undoPlanFor(entryId) : controller.undoPlan(all), Probes.EXECUTOR).whenComplete((result, error) -> minecraft.execute(() -> {
 				plan = error != null ? UndoPlan.unavailable(all, "rigtune.undo.error")
 						: result != null ? result : UndoPlan.unavailable(all, "rigtune.undo.unavailable");
 				loading = false;
@@ -146,6 +162,10 @@ public class UndoScreen extends Screen {
 	private Component subtitle() {
 		if (all) {
 			return Component.translatable("rigtune.undo.subtitle.all");
+		}
+		if (entryId != null) {
+			return plan == null || plan.at() == null ? Component.translatable("rigtune.history.undo.subtitle")
+					: Component.translatable("rigtune.history.undo.subtitle_at", when(plan.at(), ZoneId.systemDefault()));
 		}
 		return plan == null || plan.at() == null ? Component.translatable("rigtune.undo.subtitle.last")
 				: Component.translatable("rigtune.undo.subtitle.last_at", when(plan.at(), ZoneId.systemDefault()));

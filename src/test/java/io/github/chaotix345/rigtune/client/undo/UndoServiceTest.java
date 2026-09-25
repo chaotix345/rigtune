@@ -2,10 +2,12 @@ package io.github.chaotix345.rigtune.client.undo;
 
 import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
+import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.HeldLock;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.TestJars;
+import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.JarInfo;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
@@ -309,5 +311,54 @@ class UndoServiceTest {
 		assertTrue(writes.isEmpty());
 		assertEquals(1, outcome.skipped());
 		assertNotNull(undoEntry());
+	}
+
+	// docs/v0.3/SPEC.md item 6: Undo this on an older entry undoes only that entry, and is journaled as its undo.
+	@Test
+	void undoThisUndoesOnlyThatEntry() throws IOException {
+		JournalChange rd = JournalChange.setting("vanilla.renderDistance", "12", "16", JournalChange.APPLIED, null);
+		journal.record("e1", JournalEntry.APPLY, List.of(rd));
+		journal.record("e2", JournalEntry.APPLY, List.of(JournalChange.setting("vanilla.simulationDistance", "8", "6", JournalChange.APPLIED, null)));
+		vanilla.put("vanilla.renderDistance", "16");
+		vanilla.put("vanilla.simulationDistance", "6");
+
+		UndoPlan plan = service.planEntry("e1");
+		UndoService.Outcome outcome = service.undo(plan);
+
+		assertEquals("e1", plan.undoOf());
+		assertEquals(List.of(Map.of("vanilla.renderDistance", "12")), writes);
+		assertEquals(List.of(JournalChange.REVERTED), changesOf("e1").stream().map(JournalChange::status).toList());
+		assertEquals(List.of(JournalChange.APPLIED), changesOf("e2").stream().map(JournalChange::status).toList());
+		assertEquals("e1", undoEntry().undoOf());
+		assertEquals(rd.id(), undoEntry().changes().getFirst().reverts());
+		assertEquals(new UndoService.Outcome(false, 1, 0, 0, 0), outcome);
+		assertFalse(service.history(null, List.of()).entries().stream().filter(e -> e.id().equals("e1")).findFirst().orElseThrow().undoable());
+	}
+
+	// docs/v0.3/SPEC.md 3e: the History screen gets the reason a staged change's op failed at the last exit.
+	@Test
+	void historyHasTheStateTheEntriesAndTheLastFailures() throws IOException {
+		assertEquals(Journal.State.MISSING, service.history(null, List.of()).state());
+		Op op = Op.enableFile(mods.resolve("dh.jar.rigtune-pending"), mods.resolve("dh.jar")).withModId("dh");
+		journal.record("e1", JournalEntry.APPLY, List.of(JournalChange.file(JournalChange.ENABLE, "dh", "dh.jar", JournalChange.STAGED, op.id(), null)));
+		ApplyResult last = new ApplyResult("2026-09-26T10:00:00Z", List.of(new ApplyResult.OpResult(op, ApplyResult.Status.FAILED,
+				mods.resolve("dh.jar") + " is in use")));
+
+		HistoryModel.View view = service.history(last, List.of(mods, config));
+
+		assertEquals(Journal.State.OK, view.state());
+		HistoryModel.Change change = view.entries().getFirst().changes().getFirst();
+		assertEquals(1, change.failure().attempt());
+		assertEquals("dh.jar is in use", change.failure().reason());
+	}
+
+	@Test
+	void aNewerHistoryIsShownAsSuchAndHasNoEntryPlan() throws IOException {
+		Files.createDirectories(Journal.file(config).getParent());
+		Files.writeString(Journal.file(config), "{\"formatVersion\":2,\"entries\":[{\"id\":\"e1\"}]}");
+
+		assertEquals(null, service.planEntry("e1"));
+		assertEquals(Journal.State.NEWER, service.history(null, List.of()).state());
+		assertTrue(service.history(null, List.of()).entries().isEmpty());
 	}
 }

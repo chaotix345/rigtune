@@ -3,9 +3,12 @@ package io.github.chaotix345.rigtune.client.undo;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ConfigTargets;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
+import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
+import io.github.chaotix345.rigtune.core.history.ApplyFailures;
+import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.HistoryUpdates;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
@@ -15,6 +18,7 @@ import io.github.chaotix345.rigtune.core.history.UndoPlanner;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -58,6 +62,22 @@ public final class UndoService {
 			return null;
 		}
 		return UndoPlanner.plan(journal.entries(), pendingOps(), state.get(), all).plan();
+	}
+
+	// "Undo this" on one history entry (docs/v0.3/SPEC.md item 6); carried out by undo() like the others. Null as plan().
+	public UndoPlan planEntry(String entryId) {
+		if (journal.readOnly()) {
+			return null;
+		}
+		return UndoPlanner.planEntry(journal.entries(), pendingOps(), state.get(), entryId).plan();
+	}
+
+	// The History screen's model: history.json, with the reasons of the ops lastApply (last-apply.json, or null) says
+	// weren't applied, paths in them under dirs shown as bare names.
+	public HistoryModel.View history(ApplyResult lastApply, List<Path> dirs) {
+		Journal.State journalState = journal.state();
+		List<JournalEntry> entries = journalState == Journal.State.OK ? journal.entries() : List.of();
+		return HistoryModel.build(journalState, entries, ApplyFailures.byOpId(lastApply, dirs), HistoryModel.Labels.of(state.get()));
 	}
 
 	public Outcome undo(UndoPlan shown) throws IOException {
