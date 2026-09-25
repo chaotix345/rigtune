@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.core.modrinth;
 
+import io.github.chaotix345.rigtune.core.TextChecks;
 import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
@@ -11,7 +12,9 @@ import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
+import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -34,6 +37,7 @@ import static io.github.chaotix345.rigtune.core.modrinth.FakeModrinthClient.requ
 import static io.github.chaotix345.rigtune.core.modrinth.FakeModrinthClient.version;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // Review 2, N2: dependency bookkeeping in one download batch.
@@ -51,10 +55,31 @@ class DownloadPlannerTest {
 	BiPredicate<String, String> conflicts = (a, b) -> false;
 	final Map<String, ModrinthVersion> installedVersions = new HashMap<>();
 	final Map<String, ModrinthVersion> updateVersions = new HashMap<>();
+	final List<DownloadPlanner.Result> planned = new ArrayList<>();
 
 	@BeforeEach
 	void setUp() throws IOException {
 		mods = Files.createDirectories(dir.resolve("mods"));
+	}
+
+	// docs/v0.3/SPEC.md item 9 (AC9.3): each error the UI shows is "<title>: <cause>" from en_us.json, the cause a
+	// planner or resolver refusal in en_us.json too; only a download's own failure (the fake's "stalled: <file>") is
+	// shown as it is. The Strings stay the English.
+	@AfterEach
+	void everyErrorIsTranslatable() {
+		for (DownloadPlanner.Result result : planned) {
+			assertEquals(result.errors(), result.errorTexts().stream().map(Text::english).toList());
+			for (Text error : result.errorTexts()) {
+				Text.Translatable shown = assertInstanceOf(Text.Translatable.class, error);
+				assertEquals("rigtune.download.error", shown.key());
+				Object cause = shown.args().get(1);
+				if (cause instanceof Text.Literal literal) {
+					assertTrue(literal.value().startsWith("stalled: "), "an untranslated refusal: " + error.english());
+				} else {
+					TextChecks.assertPseudoLocalised((Text) cause, Set.of(), error.english());
+				}
+			}
+		}
 	}
 
 	private void put(String slug, ModrinthVersion v) {
@@ -128,7 +153,9 @@ class DownloadPlannerTest {
 	private DownloadPlanner.Result plan(Set<String> installedProjects, Recommendation... recs) {
 		DownloadPlanner planner = new DownloadPlanner(new DependencyResolver(client, "fabric", "26.2", installedVersions), mods, this::fetch, conflicts,
 				updateVersions);
-		return planner.plan(List.of(recs), installedProjects, Set.of(), Map.of());
+		DownloadPlanner.Result result = planner.plan(List.of(recs), installedProjects, Set.of(), Map.of());
+		planned.add(result);
+		return result;
 	}
 
 	// Review 4, rules-accuracy-2: a batch never stages both sides of a rules conflict; the later one fails before its

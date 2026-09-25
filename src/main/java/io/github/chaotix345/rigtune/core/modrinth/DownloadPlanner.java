@@ -8,6 +8,8 @@ import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
+import io.github.chaotix345.rigtune.core.model.Text;
+import io.github.chaotix345.rigtune.core.model.TextException;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
 
 import java.io.IOException;
@@ -37,8 +39,17 @@ public final class DownloadPlanner {
 	}
 
 	// opIds: each staged recommendation id -> its ops' ids (its own ops, or the ops of the group it joined when it brought
-	// none), so the client can tell which recommendations are still staged (plan review A-M1).
-	public record Result(List<Op> ops, List<String> ids, List<String> errors, Map<String, List<String>> opIds) {
+	// none), so the client can tell which recommendations are still staged (plan review A-M1). errorTexts: the errors as
+	// the UI shows them (docs/v0.3/SPEC.md item 9); errors stay their English.
+	public record Result(List<Op> ops, List<String> ids, List<String> errors, Map<String, List<String>> opIds, List<Text> errorTexts) {
+		public Result {
+			errorTexts = errorTexts != null ? List.copyOf(errorTexts) : errors.stream().map(Text::literal).toList();
+		}
+
+		public Result(List<Op> ops, List<String> ids, List<String> errors, Map<String, List<String>> opIds) {
+			this(ops, ids, errors, opIds, null);
+		}
+
 		public Result(List<Op> ops, List<String> ids, List<String> errors) {
 			this(ops, ids, errors, Map.of());
 		}
@@ -84,6 +95,7 @@ public final class DownloadPlanner {
 		Batch batch = new Batch(installedProjects, loadedIds, stagedJars);
 		List<String> ids = new ArrayList<>();
 		List<String> errors = new ArrayList<>();
+		List<Text> errorTexts = new ArrayList<>();
 		Map<String, List<String>> opIds = new LinkedHashMap<>();
 		// Every update before any addition, so the outcome doesn't depend on the order they were ticked in (A-H1).
 		List<Recommendation> ordered = new ArrayList<>();
@@ -101,6 +113,9 @@ public final class DownloadPlanner {
 			} catch (IOException | RuntimeException e) {
 				RigTune.LOGGER.warn("Could not prepare {}", rec.id(), e);
 				errors.add(rec.title() + ": " + e.getMessage());
+				// A refusal of the planner or the resolver is translated; a network or file error's detail stays as it is.
+				errorTexts.add(Text.of("rigtune.download.error", "%s: %s", rec.titleText(),
+						e instanceof TextException text ? text.text() : Text.literal(String.valueOf(e.getMessage()))));
 				continue;
 			}
 			String group = batch.commit(attempt);
@@ -112,14 +127,14 @@ public final class DownloadPlanner {
 					? batch.ops.stream().filter(op -> group.equals(op.group())).toList() : attempt.ops;
 			opIds.put(rec.id(), own.stream().map(Op::id).toList());
 		}
-		return new Result(List.copyOf(batch.ops), ids, errors, Map.copyOf(opIds));
+		return new Result(List.copyOf(batch.ops), ids, errors, Map.copyOf(opIds), errorTexts);
 	}
 
 	private void addMod(Action.AddMod add, Attempt attempt) throws IOException {
 		// The batch never stages both sides of a conflict: the later one fails (review 4, rules-accuracy-2).
 		for (Action.AddMod earlier : attempt.batch.added) {
 			if (conflicts.test(earlier.slug(), add.slug())) {
-				throw new IOException("it conflicts with " + earlier.title() + ", which is being installed too");
+				throw new TextException(Text.of("rigtune.download.conflicts", "it conflicts with %s, which is being installed too", earlier.title()));
 			}
 		}
 		String ref = add.projectId() != null ? add.projectId() : add.slug();
@@ -135,7 +150,7 @@ public final class DownloadPlanner {
 			}
 			ModFile file = version.primaryFile();
 			if (file == null) {
-				throw new IOException("No file for " + version.versionNumber());
+				throw new TextException(Text.of("rigtune.download.no_file", "No file for %s", version.versionNumber()));
 			}
 			Path target = SafeFileNames.resolveJar(modsDir, file.filename());
 			if (Files.exists(target)) {
@@ -147,7 +162,7 @@ public final class DownloadPlanner {
 			// Without a mod id nothing can check it isn't a second copy of an installed mod (review 3, apply-safety-1).
 			if (jarModId == null) {
 				attempt.batch.dropDuplicate(pending);
-				throw new IOException(file.filename() + " is not a Fabric mod jar (no readable fabric.mod.json id)");
+				throw notAMod(file);
 			}
 			String sameMod = attempt.batch.groupOfMod.get(jarModId);
 			if (sameMod != null) {
@@ -171,21 +186,21 @@ public final class DownloadPlanner {
 	private void updateMod(Action.UpdateMod update, Attempt attempt) throws IOException {
 		ModFile file = update.update().file();
 		if (file == null) {
-			throw new IOException("No file for " + update.update().newVersionNumber());
+			throw new TextException(Text.of("rigtune.download.no_file", "No file for %s", update.update().newVersionNumber()));
 		}
 		if (!SafeFileNames.isDirectChild(modsDir, update.currentFile())) {
-			throw new IOException("it isn't in this instance's mods folder; update it in your launcher");
+			throw new TextException(Text.of("rigtune.download.outside_mods_folder", "it isn't in this instance's mods folder; update it in your launcher"));
 		}
 		Path target = SafeFileNames.resolveJar(modsDir, file.filename());
 		// As for an added mod: the enable never overwrites, so a target taken by another file would fail at every exit.
 		if (Files.exists(target) && !(Files.exists(update.currentFile()) && Files.isSameFile(target, update.currentFile()))) {
-			throw new IOException(target.getFileName() + " is already in the mods folder");
+			throw new TextException(Text.of("rigtune.download.target_exists", "%s is already in the mods folder", target.getFileName().toString()));
 		}
 		// The update's own version is judged like an addition's, against the installed mods and the batch (A-H1).
 		UpdateInfo info = update.update();
 		ModrinthVersion next = updateVersions.get(info.newVersionId());
 		if (next == null) {
-			throw new IOException("its Modrinth data changed since the list was made; try again");
+			throw new TextException(Text.of("rigtune.download.stale", "its Modrinth data changed since the list was made; try again"));
 		}
 		resolver.checkUpdate(next, attempt.projects, attempt.batch.versions);
 		Path pending = fetcher.fetch(file);
@@ -193,13 +208,17 @@ public final class DownloadPlanner {
 		// As for an added mod (review 4, apply-safety-1): the installed jar is only replaced by a jar with a readable id.
 		if (jarModId == null) {
 			attempt.batch.dropDuplicate(pending);
-			throw new IOException(file.filename() + " is not a Fabric mod jar (no readable fabric.mod.json id)");
+			throw notAMod(file);
 		}
 		attempt.batch.noteReplaced(jarModId, pending);
 		attempt.ops.add(Op.disableFile(update.currentFile()));
 		attempt.ops.add(Op.enableFile(pending, target).withModId(jarModId));
 		attempt.versions.add(next);
 		attempt.updatedProject = info.projectId();
+	}
+
+	private static TextException notAMod(ModFile file) {
+		return new TextException(Text.of("rigtune.download.not_a_mod", "%s is not a Fabric mod jar (no readable fabric.mod.json id)", file.filename()));
 	}
 
 	// What the batch has committed so far. projects and modIds are what is installed (loaded, or already in mods/);
