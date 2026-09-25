@@ -130,7 +130,7 @@ public class RigTuneScreen extends Screen {
 			discard.setTooltip(Tooltip.create(Component.translatable("rigtune.screen.discard.tooltip")));
 			buttons.add(discard);
 		}
-		buttons.add(Button.builder(Component.translatable("rigtune.screen.benchmark"), b -> minecraft.gui.setScreen(new BenchmarkMenuScreen(this, controller))).build());
+		buttons.add(Button.builder(Component.translatable("rigtune.screen.benchmark_menu"), b -> minecraft.gui.setScreen(new BenchmarkMenuScreen(this, controller))).build());
 		buttons.add(Button.builder(Component.translatable("rigtune.screen.rescan"), b -> {
 			status = null;
 			controller.rescan();

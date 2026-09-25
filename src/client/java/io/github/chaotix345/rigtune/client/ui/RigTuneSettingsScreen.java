@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.client.ClientSettings;
+import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import net.fabricmc.loader.api.FabricLoader;
@@ -14,6 +15,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 
 // The v0.2 settings (docs/v0.2/SPEC.md item 8). Every change is saved at once; the network switches also make the
 // controller reload and rescan, so the report reflects them.
@@ -33,15 +35,11 @@ public class RigTuneSettingsScreen extends Screen {
 	private int noteY;
 
 	public RigTuneSettingsScreen(@Nullable Screen parent, RigTuneController controller) {
-		this(parent, controller, ClientSettings.shared(FabricLoader.getInstance().getConfigDir()), FabricLoader.getInstance().getConfigDir());
-	}
-
-	RigTuneSettingsScreen(@Nullable Screen parent, RigTuneController controller, ClientSettings settings, Path configDir) {
 		super(Component.translatable("rigtune.settings.title"));
 		this.parent = parent;
 		this.controller = controller;
-		this.settings = settings;
-		this.configDir = configDir;
+		this.configDir = FabricLoader.getInstance().getConfigDir();
+		this.settings = ClientSettings.shared(configDir);
 	}
 
 	@Override
@@ -75,7 +73,7 @@ public class RigTuneSettingsScreen extends Screen {
 				.withTooltip(v -> Tooltip.create(Component.translatable("rigtune.settings.startup_toast.tooltip")))
 				.create(x, y, column, ROW, Component.translatable("rigtune.settings.startup_toast"), (b, v) -> {
 					settings.startupToast = v;
-					settings.save(configDir);
+					save();
 				}));
 		y += ROW + GAP;
 		addRenderableWidget(CycleButton.builder((Goal g) -> Component.translatable("rigtune.goal." + g.name().toLowerCase(Locale.ROOT)), controller.goal())
@@ -89,7 +87,7 @@ public class RigTuneSettingsScreen extends Screen {
 				.withTooltip(s -> Tooltip.create(Component.translatable("rigtune.settings.scene.tooltip")))
 				.create(x, y, column, ROW, Component.translatable("rigtune.settings.scene"), (b, s) -> {
 					settings.benchmarkScene = s.name();
-					settings.save(configDir);
+					save();
 				}));
 		y += ROW + GAP;
 		noteY = y + 2;
@@ -109,8 +107,13 @@ public class RigTuneSettingsScreen extends Screen {
 		}
 	}
 
+	// Written on a worker thread; each save writes the current values, so the last one always wins.
+	private void save() {
+		CompletableFuture.runAsync(() -> settings.save(configDir), Probes.EXECUTOR);
+	}
+
 	private void networkChanged() {
-		settings.save(configDir);
+		save();
 		updateActive();
 		controller.settingsChanged();
 	}

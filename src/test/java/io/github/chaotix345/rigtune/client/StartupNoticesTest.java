@@ -3,7 +3,10 @@ package io.github.chaotix345.rigtune.client;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -13,9 +16,21 @@ class StartupNoticesTest {
 	void thePrivacyNoticeIsShownOnce(@TempDir Path configDir) {
 		ClientSettings settings = ClientSettings.load(configDir);
 
-		assertTrue(StartupNotices.takePrivacyNotice(settings, configDir));
-		assertFalse(StartupNotices.takePrivacyNotice(settings, configDir));
-		assertFalse(StartupNotices.takePrivacyNotice(ClientSettings.load(configDir), configDir), "remembered in settings.json");
+		assertTrue(StartupNotices.takePrivacyNotice(settings, configDir, Runnable::run));
+		assertFalse(StartupNotices.takePrivacyNotice(settings, configDir, Runnable::run));
+		assertFalse(StartupNotices.takePrivacyNotice(ClientSettings.load(configDir), configDir, Runnable::run), "remembered in settings.json");
+	}
+
+	@Test
+	void theNoticeIsTakenAtOnceAndSavedOnTheGivenExecutor(@TempDir Path configDir) {
+		ClientSettings settings = ClientSettings.load(configDir);
+		List<Runnable> queued = new ArrayList<>();
+
+		assertTrue(StartupNotices.takePrivacyNotice(settings, configDir, queued::add));
+		assertFalse(StartupNotices.takePrivacyNotice(settings, configDir, queued::add));
+		assertFalse(Files.exists(ClientSettings.file(configDir)), "nothing written on the calling thread");
+		queued.forEach(Runnable::run);
+		assertTrue(ClientSettings.load(configDir).privacyNoticeShown);
 	}
 
 	@Test

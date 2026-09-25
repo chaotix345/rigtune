@@ -147,6 +147,8 @@ public final class RealController implements RigTuneController {
 	@Override
 	public void rescan() {
 		report = null;
+		// A report still being built from before the rescan (say, before a settings change) must not be published.
+		minecraft.execute(() -> generation++);
 		CompletableFuture<HardwareProfile> probe;
 		try {
 			probe = HardwareProbe.probe(minecraft);
