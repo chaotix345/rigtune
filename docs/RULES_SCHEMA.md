@@ -197,6 +197,7 @@ v1 (0.1.x) evaluates the same fields two-valued: unknown RAM/VRAM/refresh are fa
 ## Settings keys
 - `vanilla.<options.txt key>`, e.g. `vanilla.renderDistance`, `vanilla.simulationDistance`, `vanilla.maxFps`, `vanilla.enableVsync`, `vanilla.particles`, `vanilla.biomeBlendRadius`. Values are strings as they appear in options.txt, **without surrounding quotes**.
 - `sodium.<section>.<field>` is a path inside `config/sodium-options.json`, e.g. `sodium.performance.chunk_builder_threads`.
+- After `sodium.` (and the v2 `dh.`/`iris.` prefixes) a key is dot-separated segments of letters, digits and `_`; RigTune never changes a key with anything else in it.
 - Other namespaces (e.g. Distant Horizons, Iris) are v2 only; rules-v1.json contains only `vanilla.` and `sodium.` keys.
 
 ## The v1 projection (rules-v1.json)
