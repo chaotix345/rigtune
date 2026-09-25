@@ -59,6 +59,15 @@ dependencies {
 	testImplementation "net.fabricmc:fabric-loader-junit:${project.loader_version}"
 }
 
+// Distant Horizons and Iris are optional at runtime: only client/compat/DhCompat and IrisCompat use their APIs, and
+// only after FabricLoader says the mod is loaded (the benchmark's cost reports).
+dependencies {
+	compileOnly "maven.modrinth:distanthorizonsapi:${project.dh_api_version}"
+	compileOnly("maven.modrinth:iris:${project.iris_version}") {
+		transitive = false
+	}
+}
+
 sourceSets {
 	test {
 		compileClasspath += sourceSets.client.compileClasspath + sourceSets.client.output
@@ -220,6 +229,8 @@ tasks.register("runProductionSmoke", net.fabricmc.loom.task.prod.ClientProductio
 	mods.from(configurations.productionSmokeMods)
 	jvmArgs.addAll("-Dfabric.client.gametest", "-Drigtune.smoke=true")
 	jvmArgs.addAll(userOptions.map { ["-Drigtune.smoke.userOptions=" + it.absolutePath] }.orElse([]))
+	// -PsmokeBenchmark: also run a short benchmark in the smoke world and check the DH/Iris restore (BenchmarkSmoke).
+	jvmArgs.addAll(providers.gradleProperty("smokeBenchmark").map { ["-Drigtune.smoke.benchmark=true"] }.orElse([]))
 }
 
 // Self-update end-to-end harness (tools/e2e/README.md), never part of the shipped jar or of `build`. The fake Modrinth
