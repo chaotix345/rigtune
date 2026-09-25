@@ -62,8 +62,16 @@ where it deviates from, or interprets, the SPEC and PLAN.
   A blank predicate is UNKNOWN too (Fabric would read it as `*`). Checked against Fabric Loader
   0.19.5 with a scratch program.
 - `heapMb*` became "UNKNOWN when ≤ 0" like RAM (the JVM always reports a heap, so no behaviour change).
-- `gpuModelMatches` compiles its regex on every evaluation (no cache on Condition): a handful of
-  conditions per report, and it avoids unsafe publication across the Probes threads.
+- `gpuModelMatches` is compiled once per condition and cached in volatile transient fields on the
+  Condition (a benign race: both writers store the same result).
+- `backend-vulkan` is derived from the backend, so while the backend is unknown a missing flag is
+  UNKNOWN, not FALSE. The other flags (`shaders-enabled`, `sodium-workaround:*`) read as absent when
+  Iris's or Sodium's API can't be read; RULES_SCHEMA.md says not to rely on their absence.
+- Setting values: only `$refreshRate` and `$refreshRateCap` are tokens. 0.2 skips an entry whose
+  `$…` value it couldn't resolve; the updater rejects an unknown token unless the rule has `requires`.
+- Setting titles name the mod: `Sodium: …`, `Distant Horizons: …`, `Iris: …`, for a label's name and
+  for the caption made from the key. (Sodium's caption changed from "Sodium chunk build defer mode" to
+  "Sodium: Chunk build defer mode" to match.)
 
 ## v1 projection (H2, H3)
 - Per field, as H2 says: `v1: false` omits, a `v1` object is shallow-merged (only v1 fields, v1
@@ -92,7 +100,11 @@ where it deviates from, or interprets, the SPEC and PLAN.
   tier rules (L1). The updater exits 2 and lists every problem.
 - One revision for both files: `max(old v1, old v2) + 1`, bumped when either changes; same
   `generatedAt`.
-- REVIEW.md gets section (d) with every omission and field change.
+- When a ModRule is left out of v1, other rules' `conflictsWith` references to its slug are rewritten
+  to its `modIds`. 0.1.0 resolves a slug only through a rule it has but matches a mod id directly;
+  without the rewrite, leaving `moonrise-opt` out would let 0.1.x offer C2ME next to Moonrise
+  (coordinator review, item 1; RulesV1DifferentialTest reproduces it with and without the rewrite).
+- REVIEW.md gets section (d) with every omission and field change, including those rewrites.
 
 ## Differential test (H2)
 `RulesV1DifferentialTest` runs the pinned v0.1.0 Recommender (tag v0.1.0, package renamed to
@@ -100,17 +112,22 @@ where it deviates from, or interprets, the SPEC and PLAN.
 `src/test/resources/v010/rules-v1-baseline.json` (= rules-v1.json at v0.1.0) and the repository's
 `rules/rules-v1.json`. Matrix: 12 hardware profiles (incl. no GPU info, llvmpipe, Apple, Intel Arc,
 laptops on battery, shaders + Vulkan flags; MC 26.2 and 26.3) × 12 mod sets (incl. every tracked mod
-id) × 3 settings snapshots × 3 goals. "More conservative" = the set of ticked, appliable actions
-(add, disable, set with its target value) is a subset of the baseline's at every matrix point.
-Availability is neutralised (every slug available) so live availability changes don't fail it. A
-deliberate new ticked action for 0.1.x means replacing the baseline after review
-(src/test/resources/v010/README.md). Self-tests prove it catches an injected action and reaches
-add, disable and set actions.
+id, and moonrise, c2me and zmatcomp alone: rules whose slug isn't their mod id) × 3 settings
+snapshots × 3 goals. "More conservative" at every matrix point: no appliable recommendation (add,
+disable, set with its target value) the baseline didn't give, ticked or not (`added`); none the
+baseline gave unticked is ticked now (`ticked`); no conflict or advice the baseline gave is gone
+(`lost`). Availability is neutralised (every slug available) so live availability changes don't fail
+it. A deliberate change for 0.1.x means replacing the baseline after review
+(src/test/resources/v010/README.md). Self-tests prove it catches each kind of change and reaches add,
+disable and set actions.
 
 ## Loading (SPEC "Client loading", M14)
 - Candidates: bundled v2, `rules-v2-cache.json`, 0.1.0's `rules-cache.json` (read-only), remote v2,
   then remote v1 when remote v2 fails. `pickNewest`: revision, then schemaVersion, then
-  remote > cache > bundled (order-independent).
+  remote > cache > bundled (order-independent; a null source ranks last).
+- The local pick is published first; the remote document is published only when it is strictly newer
+  (revision, then schemaVersion). Before, an equal remote won the source tie-break and every launch
+  rebuilt the report and looked mods up on Modrinth twice (coordinator review, item 2).
 - The remote step is skipped entirely when `ClientSettings.shared(configDir).remoteRulesAllowed()`
   is false (test: zero requests).
 - `-Drigtune.rules.baseUrl` must be an http(s) URL with a host; a trailing slash is added; anything
@@ -122,18 +139,27 @@ add, disable and set actions.
   v1 fallback request of a load already in flight (review M1). Rules loads run on their own single
   thread, not on the two-thread pool the report builds use (a load can wait up to a minute on the
   network).
-- After any rules publish (local too, not only a newer remote one) RealController calls
-  `fetchOnline()`, which is a no-op until the scan is done. This fixes the offline race WS-G found
-  (design/ws-g.md): a scan that finished before the local rules were set never fetched the Modrinth
-  data until Rescan.
+- `OnlineLookupGate` (client, unit-tested) decides when RealController looks mods up on Modrinth. It
+  is asked after every scan and every rules publish; a lookup is due once scan, hardware and rules are
+  all known, and again only for a new scan (a new list) or a changed slug set. So whichever of the
+  scan and the rules comes last triggers exactly one lookup per launch, in either order. This fixes the
+  offline race WS-G found (design/ws-g.md): a scan that finished before the local rules were set used
+  to skip the lookup until Rescan. A newer remote with a new slug looks up once more, since the slugs
+  it asks about changed.
 - Conflict references (`conflictsWith` slugs) resolve through every ModRule, including ones skipped
   by `requires`; only firing is filtered (review M2).
 
-## Self-review
-A code-reviewer subagent reviewed the branch: no critical findings; one important (I1, fixed) and
-nine minor ones. Fixed: I1, M1, M2, M3, M4, M5, M6 (docs), M7 (v1 keys checked against 0.1.0's
-allowlist), M8 (this file committed), M9. Its scratch Gson check stays in the session scratchpad
-(outside the repo).
+## Reviews
+- Self-review (code-reviewer subagent): no critical findings; one important (I1, fixed) and nine
+  minor ones, all fixed: I1, M1, M2, M3, M4, M5, M6 (docs), M7 (v1 keys checked against 0.1.0's
+  allowlist), M8 (this file committed), M9. Its scratch Gson check stays in the session scratchpad
+  (outside the repo).
+- Coordinator review: items 1 (conflict references to left-out rules, in Java and the updater),
+  2 (republish only strictly newer rules), 3 (a request can't go out after remote rules are switched
+  off), 4 (generation check and write under one lock), 5 (own rules executor), 6 (UNKNOWN and
+  restrictions, documented), 7 (backend-vulkan), 8 (nulls, defence in depth), 9 (lost warnings in the
+  differential test), 10 (value tokens), 11 (docs, regex cache), 12 (null source), the startup race
+  and the mod-named titles are all done, each with tests.
 
 ## Not done here / for others
 - AC2.3 content (Nvidium's `gpuModelMatches` gate, RenderScale via `displayPixelsAtLeast`) is WS-H's
