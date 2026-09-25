@@ -9,7 +9,9 @@ import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
+import io.github.chaotix345.rigtune.client.undo.GameState;
 import io.github.chaotix345.rigtune.client.undo.Staging;
+import io.github.chaotix345.rigtune.client.undo.UndoService;
 import io.github.chaotix345.rigtune.client.undo.VanillaChanges;
 import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
@@ -20,6 +22,7 @@ import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecords;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
+import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
 import io.github.chaotix345.rigtune.core.model.Goal;
@@ -78,6 +81,7 @@ public final class RealController implements RigTuneController {
 	private int carriedOverOps;
 	private final boolean selfFileActions = HelperLauncher.selfUpdateSupported();
 	private final Staging staging;
+	private final UndoService undoService;
 
 	private volatile @Nullable RulesDocument rules;
 	private volatile @Nullable HardwareProfile hardware;
@@ -103,6 +107,12 @@ public final class RealController implements RigTuneController {
 		this.goal = state.goalOrDefault();
 		this.carriedOverOps = pendingOpCount();
 		this.staging = new Staging(configDir, pendingFile, ConfigTargets.all(configDir), ClientJournal.get());
+		this.undoService = new UndoService(staging, ClientJournal.get(), () -> new GameState(minecraft.options, staging.targets(), modsDir),
+				values -> {
+					Map<String, Boolean> written = new LinkedHashMap<>();
+					SettingsBridge.applyVanilla(minecraft.options, values).forEach((key, result) -> written.put(key, result.ok()));
+					return written;
+				});
 	}
 
 	public void start(Minecraft minecraft) {
@@ -490,6 +500,36 @@ public final class RealController implements RigTuneController {
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.error("Could not discard {}", pendingFile, e);
 			return Component.translatable("rigtune.status.discard_failed");
+		}
+	}
+
+	@Override
+	public @Nullable UndoPlan undoPlan(boolean all) {
+		try {
+			return undoService.plan(all);
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.error("Could not work out what to undo", e);
+			return null;
+		}
+	}
+
+	@Override
+	public Component undo(UndoPlan plan) {
+		if (downloading) {
+			return Component.translatable("rigtune.status.busy");
+		}
+		try {
+			UndoService.Outcome outcome = undoService.undo(plan);
+			if (outcome.busy()) {
+				return Component.translatable("rigtune.undo.status.busy");
+			}
+			staged.clear();
+			carriedOverOps = pendingOpCount();
+			rebuild();
+			return Component.translatable("rigtune.undo.status.done", outcome.now(), outcome.afterRestart(), outcome.cancelled(), outcome.skipped());
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.error("Could not undo", e);
+			return Component.translatable("rigtune.undo.status.failed");
 		}
 	}
 }

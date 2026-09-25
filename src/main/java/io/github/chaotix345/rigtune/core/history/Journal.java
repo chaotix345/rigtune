@@ -164,6 +164,11 @@ public final class Journal implements ChangeRecorder {
 		}
 	}
 
+	// A new entry made now by this RigTune (e.g. an undo, with the undone entry's id or "all").
+	public JournalEntry newEntry(String kind, String undoOf, List<JournalChange> changes) {
+		return new JournalEntry(ChangeRecorder.newEntryId(), Instant.now().toString(), kind, rigtuneVersion, mcVersion, undoOf, changes);
+	}
+
 	// entries with the changes added to the entry with this id, or a new entry (now, this version) at the end.
 	public List<JournalEntry> withChanges(List<JournalEntry> entries, String entryId, String kind, List<JournalChange> changes) {
 		List<JournalEntry> out = new ArrayList<>(entries);
