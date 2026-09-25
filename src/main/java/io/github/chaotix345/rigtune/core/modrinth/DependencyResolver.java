@@ -1,43 +1,71 @@
 package io.github.chaotix345.rigtune.core.modrinth;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 public final class DependencyResolver {
 	public static final int DEFAULT_MAX_DEPTH = 5;
+	static final String ANOTHER_MOD = "another mod";
+
+	// updatesNeeded: the installed projects whose update in this batch the resolution relies on, because something in it
+	// is incompatible with the version installed now (plan review A-H1: the planner joins those updates' groups).
+	public record Resolution(List<ModrinthVersion> versions, Set<String> updatesNeeded) {
+	}
 
 	private final ModrinthClient client;
 	private final String loader;
 	private final String gameVersion;
 	private final int maxDepth;
-	private final Set<String> installedVersionIds;
+	// The loaded mods' Modrinth versions by id, with their projects and dependencies where known.
+	private final Map<String, ModrinthVersion> installed;
 
 	public DependencyResolver(ModrinthClient client, String loader, String gameVersion) {
-		this(client, loader, gameVersion, DEFAULT_MAX_DEPTH, Set.of());
+		this(client, loader, gameVersion, DEFAULT_MAX_DEPTH, Map.of());
 	}
 
 	// installedVersionIds: the Modrinth versions of the loaded mods, where known (a version-specific incompatibility
 	// with an installed mod only counts when its version is known to be that one).
 	public DependencyResolver(ModrinthClient client, String loader, String gameVersion, Set<String> installedVersionIds) {
-		this(client, loader, gameVersion, DEFAULT_MAX_DEPTH, installedVersionIds);
+		this(client, loader, gameVersion, DEFAULT_MAX_DEPTH, bare(installedVersionIds));
+	}
+
+	// installedVersions: the loaded mods' Modrinth versions by version id (OnlineDataFetcher.Result.installedVersions()).
+	public DependencyResolver(ModrinthClient client, String loader, String gameVersion, Map<String, ModrinthVersion> installedVersions) {
+		this(client, loader, gameVersion, DEFAULT_MAX_DEPTH, installedVersions);
 	}
 
 	public DependencyResolver(ModrinthClient client, String loader, String gameVersion, int maxDepth) {
-		this(client, loader, gameVersion, maxDepth, Set.of());
+		this(client, loader, gameVersion, maxDepth, Map.of());
 	}
 
-	private DependencyResolver(ModrinthClient client, String loader, String gameVersion, int maxDepth, Set<String> installedVersionIds) {
+	private DependencyResolver(ModrinthClient client, String loader, String gameVersion, int maxDepth, Map<String, ModrinthVersion> installed) {
 		this.client = client;
 		this.loader = loader;
 		this.gameVersion = gameVersion;
 		this.maxDepth = maxDepth;
-		this.installedVersionIds = Set.copyOf(installedVersionIds);
+		this.installed = Map.copyOf(installed);
+	}
+
+	// A version known only by its id and project (no dependencies).
+	static ModrinthVersion known(String id, String projectId) {
+		return new ModrinthVersion(id, projectId, null, null, List.of(), List.of(), Instant.EPOCH, List.of(), List.of());
+	}
+
+	private static Map<String, ModrinthVersion> bare(Set<String> versionIds) {
+		Map<String, ModrinthVersion> out = new LinkedHashMap<>();
+		versionIds.forEach(id -> out.put(id, known(id, null)));
+		return out;
 	}
 
 	private record Pending(String idOrSlug, int depth) {
@@ -51,6 +79,13 @@ public final class DependencyResolver {
 	// marks incompatible with an installed project, or with anything going in with it, refuses the whole resolution
 	// (review 4, rules-accuracy-2).
 	public List<ModrinthVersion> resolve(String slug, Set<String> installedProjectIds, List<ModrinthVersion> batch) throws IOException {
+		return resolve(slug, installedProjectIds, batch, Set.of()).versions();
+	}
+
+	// updatedProjects: installed projects whose update this batch has staged (their new versions are in batch). The
+	// resolution is judged against the installed mods with those updates applied (SPEC 3b, plan review A-H1); what only
+	// passes because an update replaces the installed version comes back in updatesNeeded.
+	public Resolution resolve(String slug, Set<String> installedProjectIds, List<ModrinthVersion> batch, Set<String> updatedProjects) throws IOException {
 		List<ModrinthVersion> out = new ArrayList<>();
 		Set<String> seen = new HashSet<>(installedProjectIds);
 		Deque<Pending> queue = new ArrayDeque<>();
@@ -81,59 +116,126 @@ public final class DependencyResolver {
 				}
 			}
 		}
-		refuseIncompatible(out, installedProjectIds, batch);
-		return out;
+		List<ModrinthVersion> together = new ArrayList<>(batch);
+		together.addAll(out);
+		Set<String> needed = new LinkedHashSet<>();
+		for (ModrinthVersion version : out) {
+			refuseIncompatible(version, null, installedProjectIds, batch, together, updatedProjects, needed);
+		}
+		return new Resolution(List.copyOf(out), Collections.unmodifiableSet(needed));
+	}
+
+	// An update's own version (SPEC 3b, plan review A-H1): refused when Modrinth marks it incompatible with an installed
+	// project or version, or with anything in the batch, either side declaring it. Its own project's installed version
+	// is the one it replaces; every other installed version counts, even one this batch also updates (the update is
+	// offered again once that one is installed). An installed mod's declaration that the version being replaced matches
+	// too (a whole-project entry) is a conflict that already exists, which refusing the update wouldn't remove.
+	public void checkUpdate(ModrinthVersion update, Set<String> installedProjectIds, List<ModrinthVersion> batch) throws IOException {
+		List<ModrinthVersion> together = new ArrayList<>(batch);
+		together.add(update);
+		refuseIncompatible(update, update.projectId(), installedProjectIds, batch, together, Set.of(), new HashSet<>());
 	}
 
 	// A dependency naming a version (version_id) is incompatible with that version only, not its whole project
-	// (re-check of review 4).
-	private void refuseIncompatible(List<ModrinthVersion> found, Set<String> installed, List<ModrinthVersion> batch) throws IOException {
-		List<ModrinthVersion> together = new ArrayList<>(batch);
-		together.addAll(found);
-		for (ModrinthVersion version : found) {
-			for (Dependency dep : version.dependencies()) {
-				if (!dep.incompatible()) {
-					continue;
-				}
-				boolean installedHit = dep.versionId() != null ? installedVersionIds.contains(dep.versionId())
-						: dep.projectId() != null && installed.contains(dep.projectId());
-				if (installedHit) {
-					throw new IOException("Modrinth marks " + name(version.projectId()) + " as incompatible with "
-							+ name(dep.projectId() != null ? dep.projectId() : dep.versionId()) + ", which is installed");
-				}
-				for (ModrinthVersion other : together) {
-					if (matches(dep, other)) {
-						throw bothInstalled(version.projectId(), other.projectId());
+	// (re-check of review 4). replacing: the project whose installed version this one replaces (an update's), or null.
+	private void refuseIncompatible(ModrinthVersion version, String replacing, Set<String> installedProjects, List<ModrinthVersion> batch,
+			List<ModrinthVersion> together, Set<String> updated, Set<String> needed) throws IOException {
+		for (Dependency dep : version.dependencies()) {
+			if (!dep.incompatible()) {
+				continue;
+			}
+			if (dep.versionId() != null) {
+				ModrinthVersion hit = installed.get(dep.versionId());
+				if (hit != null && !same(hit.projectId(), replacing)) {
+					if (hit.projectId() != null && updated.contains(hit.projectId())) {
+						needed.add(hit.projectId());
+					} else {
+						throw installedIncompatible(version, dep.projectId() != null ? name(dep.projectId()) : versionName(dep.versionId(), together));
 					}
 				}
+			} else if (dep.projectId() != null && installedProjects.contains(dep.projectId()) && !dep.projectId().equals(replacing)) {
+				throw installedIncompatible(version, name(dep.projectId()));
 			}
-			for (ModrinthVersion other : batch) {
-				if (other.dependencies().stream().anyMatch(dep -> dep.incompatible() && matches(dep, version))) {
-					throw bothInstalled(other.projectId(), version.projectId());
+			for (ModrinthVersion other : together) {
+				if (other != version && matches(dep, other)) {
+					throw bothInstalled(version.projectId(), other.projectId());
 				}
 			}
 		}
+		for (ModrinthVersion other : batch) {
+			if (declaresIncompatible(other, version)) {
+				throw bothInstalled(other.projectId(), version.projectId());
+			}
+		}
+		// The installed mods' own declarations (the review's known gap): one this batch updates counts through its new
+		// version, which is in the batch.
+		for (ModrinthVersion mine : installed.values()) {
+			if (same(mine.projectId(), replacing) || !declaresIncompatible(mine, version) || declaresIncompatibleWithReplaced(mine, replacing)) {
+				continue;
+			}
+			if (mine.projectId() != null && updated.contains(mine.projectId())) {
+				needed.add(mine.projectId());
+			} else {
+				throw new IOException("Modrinth marks " + name(mine.projectId()) + ", which is installed, as incompatible with " + name(version.projectId()));
+			}
+		}
+	}
+
+	private boolean declaresIncompatibleWithReplaced(ModrinthVersion declaring, String replacing) {
+		return replacing != null && installed.values().stream().anyMatch(old -> same(old.projectId(), replacing) && declaresIncompatible(declaring, old));
+	}
+
+	private static boolean same(String projectId, String other) {
+		return projectId != null && projectId.equals(other);
+	}
+
+	private static boolean declaresIncompatible(ModrinthVersion declaring, ModrinthVersion target) {
+		return declaring != target && declaring.dependencies().stream().anyMatch(dep -> dep.incompatible() && matches(dep, target));
 	}
 
 	private static boolean matches(Dependency dep, ModrinthVersion version) {
 		return dep.versionId() != null ? dep.versionId().equals(version.id()) : dep.projectId() != null && dep.projectId().equals(version.projectId());
 	}
 
+	private IOException installedIncompatible(ModrinthVersion version, String installedName) {
+		return new IOException("Modrinth marks " + name(version.projectId()) + " as incompatible with " + installedName + ", which is installed");
+	}
+
 	private IOException bothInstalled(String a, String b) {
 		return new IOException("Modrinth marks " + name(a) + " and " + name(b) + " as incompatible, and both would be installed");
 	}
 
+	// The project a version-only dependency points at, from local data only (SPEC 3c, plan review A-M2: no new Modrinth
+	// call): the installed versions, then what goes in together. Never the version id.
+	private String versionName(String versionId, List<ModrinthVersion> together) {
+		String project = null;
+		ModrinthVersion mine = installed.get(versionId);
+		if (mine != null) {
+			project = mine.projectId();
+		}
+		for (ModrinthVersion other : together) {
+			if (project == null && versionId.equals(other.id())) {
+				project = other.projectId();
+			}
+		}
+		return project == null ? ANOTHER_MOD : title(project, ANOTHER_MOD);
+	}
+
 	// The project's title (or slug) for a message; its id when Modrinth can't say.
 	private String name(String projectId) {
+		return projectId == null ? ANOTHER_MOD : title(projectId, projectId);
+	}
+
+	private String title(String projectId, String fallback) {
 		try {
 			for (ModrinthProject project : client.projects(List.of(projectId))) {
 				if (projectId.equals(project.id())) {
-					return project.title() != null ? project.title() : project.slug() != null ? project.slug() : projectId;
+					return project.title() != null ? project.title() : project.slug() != null ? project.slug() : fallback;
 				}
 			}
 		} catch (IOException | RuntimeException e) {
-			// The id will do.
+			// The fallback will do.
 		}
-		return projectId;
+		return fallback;
 	}
 }
