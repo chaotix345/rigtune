@@ -20,6 +20,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Stream;
 
@@ -64,6 +65,11 @@ public final class PreviewFixtures {
 
 	public static Map<String, String> vanillaNow() {
 		return Map.of("renderDistance", "12", "particles", "all", "maxFps", "120");
+	}
+
+	// Modrinth lookups off, nothing installed or staged.
+	public static DownloadInputs offline() {
+		return new DownloadInputs(new PreviewFakeModrinth(), false, "fabric", "26.2", Map.of(), Map.of(), Set.of(), Set.of(), Map.of(), (a, b) -> false);
 	}
 
 	public static Recommendation rec(String id, Action action) {

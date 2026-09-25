@@ -32,7 +32,7 @@ class PreviewPlannerTest {
 	}
 
 	private ApplyPreview preview(Recommendation... selected) {
-		return new PreviewPlanner(instance.options, PreviewFixtures.vanillaNow(), instance.configFiles(), instance.mods, null).preview(List.of(selected));
+		return new PreviewPlanner(instance.options, PreviewFixtures.vanillaNow(), instance.configFiles(), instance.mods, PreviewFixtures.offline()).preview(List.of(selected));
 	}
 
 	@Test

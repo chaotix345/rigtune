@@ -34,17 +34,15 @@ public final class PreviewPlanner {
 	private final Map<String, String> vanillaNow;
 	private final List<ConfigFile> configFiles;
 	private final Path modsDir;
-	private final @Nullable DownloadInputs downloads;
+	private final DownloadInputs downloads;
 
-	// vanillaNow: the game's options as they are now, keyed without "vanilla.". downloads: null when nothing can be
-	// planned (additions are then unresolved and updates are shown from their Modrinth data).
-	public PreviewPlanner(Path optionsFile, Map<String, String> vanillaNow, List<ConfigFile> configFiles, Path modsDir,
-			@Nullable DownloadInputs downloads) {
+	// vanillaNow: the game's options as they are now, keyed without "vanilla.".
+	public PreviewPlanner(Path optionsFile, Map<String, String> vanillaNow, List<ConfigFile> configFiles, Path modsDir, DownloadInputs downloads) {
 		this.optionsFile = optionsFile;
 		this.vanillaNow = Map.copyOf(vanillaNow);
 		this.configFiles = List.copyOf(configFiles);
 		this.modsDir = modsDir;
-		this.downloads = downloads;
+		this.downloads = Objects.requireNonNull(downloads);
 	}
 
 	public ApplyPreview preview(List<Recommendation> selected) {
