@@ -29,7 +29,7 @@ Brief: the user's v0.2.0 prompt (full autonomy: research → release, including 
 ### Agents
 | name | branch | worktree | status |
 |---|---|---|---|
-| ws-f-modrinth | feat/modrinth | C:/Dev/Worktrees/rigtune-modrinth | MERGED (a6be5aa). The real Modrinth create/gallery/upload-version(0.1.0)/submit was denied by the auto-mode classifier for the subagent, so it needs the user directly: they reply "run the Modrinth commands" or run the block themselves (commands in docs/v0.2/design/F.md; changelog at scratchpad/v010/changelog-0.1.0.md) |
+| ws-f-modrinth | feat/modrinth | C:/Dev/Worktrees/rigtune-modrinth | MERGED (a6be5aa). LIVE on 2026-09-25 (the user told me directly to run it): project oBN6pcGa (slug rigtune) created, 4 gallery images, v0.1.0 = version 7kgaKg8I (the exact release jar), SUBMITTED for review (status processing). Tool fixes in 733e1d7. At the release: after the workflow, run `python tools/modrinth_project.py submit` with the setup token to set each version's environment (see design/F.md). |
 | ws-a-rules | feat/rules-v2 | C:/Dev/Worktrees/rigtune-rules | running |
 | ws-b-undo | feat/undo | C:/Dev/Worktrees/rigtune-undo | running |
 | ws-c-bench | feat/benchmark-v2 | C:/Dev/Worktrees/rigtune-bench | running |
