@@ -1,0 +1,11 @@
+[09:20:05] [RigTune worker/INFO]: RigTune: launcher not recognised (generic memory advice)
+[09:20:05] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Technologies Inc., renderer=AMD Radeon RX 7800 XT, driverVersion=3.3.0 Core Profile Context 26.8.1.260810, backend=OPENGL, vramMb=16368], totalRamMb=31849, maxHeapMb=7964, display=DisplayInfo[width=2560, height=1440, refreshRate=180, fullscreen=false], hasBattery=false, onBattery=false, osName=Windows 11 10.0, mcVersion=26.2, flags=[sodium-workaround:AMD_GAME_OPTIMIZATION_BROKEN]]
+[09:20:09] [Test thread/INFO]: Smoke: restored the player's options after the game test reset: [vanilla.renderDistance: 5 -> 32]
+[09:20:14] [Test thread/INFO]: Smoke: wrote <repo>\versions\26.2\run\rigtune-smoke-report.txt
+[09:20:14] [Test thread/INFO]: Smoke: RigTune screen buttons [Settings, Apply (1), Preview, History…, Benchmark…, Rescan, Copy report, Report a problem, Done]
+[09:20:15] [Test thread/INFO]: Smoke: Preview of the default ticks: 5 rows:
+[09:20:16] [Test thread/INFO]: Smoke: Preview of every appliable item: 12 rows:
+[09:20:16] [Test thread/INFO]: Smoke: Preview wrote nothing: true (106 files hashed, changed [])
+[09:20:50] [Test thread/WARN]: Smoke: chunks not all downloaded and rendered after 30 s; taking the in-world screenshot anyway
+	at knot//io.github.chaotix345.rigtune.gametest.ProductionSmoke.run(ProductionSmoke.java:100)
+	at knot//io.github.chaotix345.rigtune.gametest.RigTuneClientGameTest.runTest(RigTuneClientGameTest.java:58)

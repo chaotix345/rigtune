@@ -2,6 +2,8 @@
 
 The integration build `feat/v0.3.0` @ c41bf48 (all of Wave A merged; e26314d adds only a PROGRESS line), run from the verifier's worktree on branch `test/p5-v03`. Product code (`src/main`, `src/client`) is unchanged on this branch. Wave B (the localisation conversion, the Preview screen) isn't in this build; a short re-run follows once it merges.
 
+The final runs on the release candidate f77af1a are at the end, in [Final runs (release candidate f77af1a)](#final-runs-release-candidate-f77af1a).
+
 Test-only changes on this branch (commit 2bcb10a; gametest source set, not in the shipped jar), made after run (a):
 - `ProductionSmoke.v03Screens`: in every production smoke, logs the RigTune footer buttons, opens History (screenshot `smoke-history`), presses Report a problem (screenshot `smoke-report-confirm`), presses Cancel, and puts the clipboard back.
 - `BenchmarkSmoke` (`-PsmokeBenchmark`): a screenshot of the result screen (`smoke-benchmark-result`); the target FPS and `ShaderAdvice.costPercent` in the evidence file; the sha256 of `config/iris.properties` and every `shaderpacks/*.txt` right before and right after the run, of the bytes and of the lines without `#` comments ("values").
@@ -147,3 +149,95 @@ JAVA_TOOL_OPTIONS=-Drigtune.dev.targetFps=450 ./gradlew :26.2:runProductionSmoke
 ```
 
 `userconfig-26.2-ac35/rigtune/`: `src/test/resources/v010/real-instance/last-apply.json` and `tools/e2e/seeds/v010-dh/pending.json` with `${INSTANCE}` replaced by `<repo>/versions/26.2/run` (forward slashes).
+
+## Final runs (release candidate f77af1a)
+
+2026-09-26, 09:00-09:28 AEST. `feat/v0.3.0` @ f77af1a (every v0.3 workstream, the review round 1 fixes and the Phase 5 lows), run from the verifier's worktree on branch `test/p5-final`. Product code is unchanged on this branch. The one test-only change is `ProductionSmoke.preview` (gametest source set, not in the shipped jar). Every production smoke now also checks the Preview button: it presses Preview with the default ticks, then opens a Preview of every appliable item. For each it logs the rows and takes a screenshot. It hashes options.txt, `mods/` and `config/` (RigTune's own caches aside; `pending.json`, `history.json` and `last-apply.json` included) by SHA-256 right before and right after, then writes `rigtune-smoke-preview.txt`. The hashes are taken in game because the game writes options.txt at start and Iris re-saves `iris.properties` at every start (finding 1). A comparison of the files before launch and after exit can't isolate Preview.
+
+- Build: `./gradlew build` (both versions) passed: 1125 tests per version, 0 failures, 1 skipped (the Linux-only FIFO test), 1m48s. Jars: `rigtune-0.3.0-dev+mc26.2.jar` sha256 `17cfe5b84fc59479a1c241a8e70ffb0f8fad1ffd51215754ceae0835fd910b5f`, `rigtune-0.3.0-dev+mc26.3.jar` `b0877c1e85a11a07556a2b28950fc5bae1702eafd6ed855a795a2021fc6e29ce`.
+- Released jars were downloaded again with `gh release download`: `rigtune-0.1.0.jar` sha256 `8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950`, `rigtune-0.2.0+mc26.2.jar` `67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9`. Both match the published values.
+- Mod sets and configs are the early run's scratch copies (above). The 50 user jars were sha256-checked again against the copy, and the user's Modrinth App profile still has the same 50 file names (read only).
+- The lock: every launch took `C:/Dev/Worktrees/.gametest-lock` (atomic mkdir, owner.txt `agent: p5-final`, `worktree:`, `started:`) and released it in the same command. The E2E harness takes and releases it itself (`--agent p5-final`). The lock was never busy, and no orphaned client was left after the crashes.
+
+| run | what | result | attempts | duration | evidence |
+|---|---|---|---|---|---|
+| E1 (AC4.1) | `final-v020-to-030`: released 0.2.0 → this build, `--expect-history own-update` | **PASS 20/20** | 1 | 67 s | [final-v020-to-030](../../smoke/self-update/final-v020-to-030/RESULT.md) |
+| E2 (AC4.1) | `final-v010-to-030`: released 0.1.0 → this build, `--legacy-disable --expect-history` | **PASS 21/21** | 1 | 61 s | [final-v010-to-030](../../smoke/self-update/final-v010-to-030/RESULT.md) |
+| E3 (AC4.1, H-M2) | `final-v010-seeded-to-030`: as E2, seeded from the user's 0.1.0 DH group (`--seed tools/e2e/seeds/v010-dh`) | **PASS 26/26** | 1 | 69 s | [final-v010-seeded-to-030](../../smoke/self-update/final-v010-seeded-to-030/RESULT.md) |
+| E4 (AC4.2, M14 + B-M3) | `undo-after-restart-030`: Undo last after a restart, then Undo this on the older of two Applies | **PASS 43/43** | 1 | 2m34s | [undo-after-restart-030](../../smoke/self-update/undo-after-restart-030/RESULT.md) |
+| G1 (AC2.4) | `:26.2:runClientGameTest`, all 8 classes | **PASS**, 87 screenshots | 1 | 3m13s | [final/a-gametest/](final/a-gametest/) |
+| G2 (AC2.4) | `:26.3:runClientGameTest`, all 8 classes | **PASS**, 87 screenshots | 1 | 2m44s | [final/a-gametest/](final/a-gametest/) |
+| S1 | `:26.2:runProductionSmoke`, user set noexit, the user's options and config, no launcher brand, + Preview | **PASS**; Preview wrote nothing (106 files) | 1 | 1m18s | [final/b-26.2/](final/b-26.2/) |
+| S2 | as S1 with `JAVA_TOOL_OPTIONS=-Dminecraft.launcher.brand=theseus -Xmx2G` | **PASS**; Preview wrote nothing (106 files) | 1 | 1m07s | [final/b-26.2/](final/b-26.2/) |
+| S3 | `:26.3:runProductionSmoke`, 26.3 set noexit (16 jars), the user's options, + Preview | **PASS on the 3rd launch**. Launches 1 and 2 crashed natively (`0xC0000005`, finding 6). Launch 3 used `ALSOFT_DRIVERS=null`. Preview wrote nothing (35 files) | 3 | 1m32s (the crashes took about 20 s each) | [final/c-26.3/](final/c-26.3/) |
+
+Commands are the ones in Reproduce above and in tools/e2e/README.md "v0.3 runs", with `--work <p5final>/runs --agent p5-final`. `--new-jar` was the 26.2 jar above.
+
+### Self-update E2E (AC4.1, AC4.2)
+
+All four passed on the first run with the unmodified released jars. Rescan wasn't needed in any phase. The kept evidence is the harness's own folder for each run (RESULT.md, checks.json, screenshots, filtered logs).
+- **0.2.0 → 0.3.0**: 0.2.0 journaled its own update as one `apply` entry (disable the 0.2.0 jar, enable the new one), and its helper marked it `APPLIED`. 0.3.0 read that journal unchanged: no legacy import, and no status changed by the relaunch. The apply toast reads "RigTune applied 2 change(s)".
+- **0.1.0 → 0.3.0**: exactly one `legacy-import` entry, holding the `e2e-legacy` disable as `APPLIED` and nothing of RigTune's own jars.
+- **Seeded (H-M2)**: after the 0.1.0 helper, `last-apply.json` has the update's two ops `OK` and the carried-over DH ops `FAILED`. On the first 0.3.0 start:
+  - The group is dropped with "Cancelled RigTune's pending change to Distant Horizons: it has an update of its own waiting in mods/update.", and the legacy import marks it `DISCARDED`.
+  - latest.log has the reworded 3e line once per failed op: "RigTune's helper couldn't apply a change (run finished …, restart attempt 2 of 3; it's retried at the next exit): DISABLE_FILE fabric-26.2.jar: …".
+  - No helper runs at exit, and `mods/` doesn't change at exit. The only change during the session is the DH download becoming `.rigtune-superseded`.
+- **Undo**: M14 22/22, then B-M3 on the same instance. The plan for Undo this on the older Apply is one revert needing a restart ("Undone when you restart Minecraft: Disable e2e-first-1.0.0.jar", `e2e-entry-undo-1-plan.png`). After the restart only `e2e-first` is disabled, the journal has one `undo` of that entry, and the newer entry's change stays `APPLIED`.
+
+### Client game tests (AC2.4)
+
+All 8 classes ran on both versions, each on the first try, with no native crash on 26.3: RigTuneClientGameTest, BenchmarkGameTest, LauncherGameTest, UndoGameTest, UiGameTest, ReportGameTest, HistoryGameTest and PreviewGameTest. I opened 10 of the 174 screenshots, 5 from each version:
+- **Preview** (26.2 at 1280x720@2, 26.3 at 640x480@2): the canned preview's sections "Written now" (options.txt), "Changed at the next restart" (Sodium/DH/Iris files and keys), "Downloaded now, added at the next restart" and "Renamed to .disabled at the next restart", under "Nothing has been changed or downloaded yet.". Long DH keys wrap inside the column at 640x480. On 26.3 at 640x480@2 the footer is `Apply (7) | Preview | History… / Benchmark… | Rescan | Copy report / Report a problem | Done`, with Preview right after Apply. `preview-real` (the real controller, 26.2) lists the ticked downloads from live Modrinth, and the test checked that it wrote nothing.
+- **History**: the seeded list at 1280x720@2 (26.2) and 640x480@2 (26.3). The failed change now reads "Last attempt failed: Gave up after 10 attempt(s): … (try 2 of 3 at restart)" (finding 2's suffix, reworded).
+- **Launcher line** (26.3, 854x480@2): the header "Memory 2.0 GB of 16 GB, set in the Modrinth App". Under "Give Minecraft more memory" is the round-1 wording ("Your launcher lets Minecraft use about 2 GB of memory or less … Set it to at least 4 GB …"), then the green Modrinth App steps.
+- **Report a problem** (26.2, 640x480@2): the whole link is readable and ends with the URL-encoded "(shortened; the full report is on your clipboard)".
+- **Benchmark**: the benchmark-world result on 26.3 (RD 12; the log has the 377-of-377-chunk settle, floor 117 `minecraft:forest` and camera y 133), and the shader advice on 26.2 ("Your shader pack costs about 40% of your 1% lows."). The chart's date labels now read 09-26 at 09:1x AEST, when the UTC date was still 09-25, which confirms finding 3's fix.
+
+| | |
+|---|---|
+| ![Preview 26.2](final/img/a262-preview-1280x720-scale2.jpg) | ![Preview 26.3 640x480](final/img/a263-preview-640x480-scale2.jpg) |
+| ![Footer 26.3 640x480](final/img/a263-preview-footer-640x480-scale2.jpg) | ![History 26.3 640x480](final/img/a263-history-640x480-scale2.jpg) |
+| ![Launcher line 26.3](final/img/a263-launcher-modrinth-854x480-scale2.jpg) | ![Report confirm 26.2](final/img/a262-report-confirm-640x480-scale2.jpg) |
+| ![Benchmark world 26.3](final/img/a263-bench-world-tune-result.jpg) | ![Shader advice 26.2](final/img/a262-bench-shader-advice.jpg) |
+
+### Production smokes with Preview
+
+- **S1 (26.2, user set)**: rules r13 (bundled), online, `launcher not recognised`, and 7 recommendations as in the early run (the ModernFix update is the only ticked one).
+  - The footer is `Settings, Apply (1), Preview, History…, Benchmark…, Rescan, Copy report, Report a problem, Done`.
+  - Preview with the default ticks shows 5 rows: download `modernfix-5.27.19-build.2.jar`, then rename `build.1` → `.disabled`.
+  - Preview of every appliable item shows 12 rows: `renderDistance: 32 → 16` written now, 5 downloads and the rename.
+  - All 106 files hashed (options.txt, 48 jars, config/) were identical after both previews, and no `.rigtune-pending` file appeared.
+  - History reads "RigTune hasn't changed anything yet.", and Report a problem shows the confirm screen. F8 works in the world.
+  - RigTune logged no WARN or ERROR.
+- **S2 (26.2, `theseus`, 2 GB)**: `RigTune: launcher Modrinth App`, the header "Memory 2.0 GB of 31 GB, set in the Modrinth App", and the round-1 ram-low wording with the Modrinth App steps. The tier is 2/5, limited by memory, with `Apply (10)`. The default-ticks Preview (16 rows) shows 9 options.txt settings written now, plus the ModernFix download and rename. All 106 files were unchanged.
+- **S3 (26.3, 16 jars)**: MC 26.3, rules r13, online, and 12 recommendations (10 mods, RD 32 → 16, the AMD advice) with `Apply (6)`. The default-ticks Preview (9 rows) shows 7 downloads, including `ResourcefulConfig-6.0.1.jar` "needed by Install Structure Layout Optimizer". Preview of every appliable item (16 rows) adds `renderDistance: 32 → 16` and 11 downloads. All 35 files were unchanged. History, Report a problem, F8 in the world and RigTune's log were all as on 26.2.
+  - Two of the offered files carry older MC tags in their names: `fastquit-3.1.5+mc26.2.jar` and `asynclogger-2.2.2+26.1.2-fabric.jar`. Both are tagged 26.3 on Modrinth (checked through the API), so this is correct.
+
+| | | |
+|---|---|---|
+| ![S1 RigTune](final/img/b1-rigtune-p1.jpg) | ![S1 Preview, default ticks](final/img/b1-preview.jpg) | ![S1 Preview, every item](final/img/b1-preview-all.jpg) |
+| ![S2 Modrinth App](final/img/b2-theseus-rigtune-p1.jpg) | ![S2 Preview](final/img/b2-theseus-preview.jpg) | ![S3 RigTune 26.3](final/img/c263-rigtune-p1.jpg) |
+| ![S3 Preview 26.3](final/img/c263-preview.jpg) | ![S3 History 26.3](final/img/c263-history.jpg) | ![S3 F8 in world 26.3](final/img/c263-world.jpg) |
+
+### Findings (final runs)
+
+No new HIGH or MEDIUM findings, and no product bug that blocks the release.
+
+The early run's findings, as the release candidate stands:
+
+| early finding | status on f77af1a |
+|---|---|
+| 1. AC8.7 byte-identical (MEDIUM) | Not re-run (not in this run's scope). Unchanged. |
+| 2. Two attempt counts in one line (LOW) | The suffix now reads "(try 2 of 3 at restart)" in History and "restart attempt 2 of 3" in latest.log. The helper's "Gave up after 10 attempt(s): " prefix is still there. |
+| 3. Chart dates in UTC (LOW) | Fixed: the chart uses the local date (G1). |
+| 5. Legacy-import stack traces (LOW) | Not exercised. E3's legacy import reads the `last-apply.json` the 0.1.0 helper had just written, and every file it names exists. |
+| 6. 26.3 native crash (environment) | Still happens: 2 of 3 production launches crashed at the same point, and the passing launch used `ALSOFT_DRIVERS=null`. The game tests on 26.3 didn't crash. |
+
+New in the final runs:
+- **LOW (UX): History's "Undo last" and "Undo all" stay active with nothing to undo.** With an empty history ("RigTune hasn't changed anything yet.", S1 and S3), "Undo this" is greyed out but the other two buttons stay active. Pressing one opens the undo screen, which says "Nothing to undo."
+  - Screenshot: `final/img/c263-history.jpg`.
+  - Cause: `client/ui/HistoryScreen.java:138-141` builds both buttons without an `active` condition, while `undoThis.active` (line 136) checks the entry.
+  - Suggested fix: grey them out when the journal has nothing undoable, or accept as is (0.2's main-screen buttons behaved the same way).
+- **LOW (UX, as specified): Preview shows options.txt's raw keys and values.** For example it shows `particles: 0 → 1`, `textureFiltering: 1 → 0` and `biomeBlendRadius: 2 → 1` (S2), while the main list shows "Particles: All → Decreased", "Texture Filtering: RGSS → None" and "Biome Blend: 5x5 → 3x3".
+  - This matches SPEC 13 ("file and key, old → new"), but numeric enum values mean little to a player.
+  - Possible follow-up: add the friendly label after the raw value.

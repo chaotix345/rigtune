@@ -1,0 +1,78 @@
+[09:06:39] run folder <run>
+[09:06:39] new rigtune-0.3.0-dev+mc26.2.jar 0.3.0-dev+mc26.2 sha256 17cfe5b84fc59479a1c241a8e70ffb0f8fad1ffd51215754ceae0835fd910b5f
+[09:06:39] instance mods: e2e-disable-me-1.0.0.jar, fabric-api-0.161.0+26.2.jar, rigtune-0.3.0-dev+mc26.2.jar
+[09:06:40] gradle :26.2:e2eUndoDriverJar -Pe2e.driver=undo
+[09:06:43] took the game-test lock C:\Dev\Worktrees\.gametest-lock
+[09:06:45] FakeModrinth listening on https://127.0.0.1:443
+[09:06:47] redirect probe: OK
+[09:06:47] launching the client, phase mod-apply
+[09:06:47] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-mod-apply.txt
+[09:07:11] client exited (gradle exit 0) after 24 s
+[09:07:13] helper finished: [2026-09-25T23:07:13.551061800Z] [RigTune apply] All operations done
+[09:07:13] helper command line(s) seen: 1
+[09:07:13] launching the client, phase mod-undo
+[09:07:13] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-mod-undo.txt
+[09:07:36] client exited (gradle exit 0) after 23 s
+[09:07:38] helper finished: [2026-09-25T23:07:38.565300400Z] [RigTune apply] All operations done
+[09:07:38] helper command line(s) seen: 1
+[09:07:38] launching the client, phase mod-check
+[09:07:38] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-mod-check.txt
+[09:07:57] client exited (gradle exit 0) after 19 s
+[09:07:57] launching the client, phase entry-apply
+[09:07:57] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-entry-apply.txt
+[09:08:19] client exited (gradle exit 0) after 22 s
+[09:08:21] helper finished: [2026-09-25T23:08:21.698595400Z] [RigTune apply] All operations done
+[09:08:21] helper command line(s) seen: 1
+[09:08:21] launching the client, phase entry-undo
+[09:08:21] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-entry-undo.txt
+[09:08:44] client exited (gradle exit 0) after 22 s
+[09:08:46] helper finished: [2026-09-25T23:08:46.180656100Z] [RigTune apply] All operations done
+[09:08:46] helper command line(s) seen: 1
+[09:08:46] launching the client, phase entry-check
+[09:08:46] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-entry-check.txt
+[09:09:10] client exited (gradle exit 0) after 24 s
+[09:09:13] released the game-test lock
+[09:09:13] mod-apply [PASS] the client exited normally and the helper finished: gradle exit 0, helper finished: True
+[09:09:13] mod-apply [PASS] the driver applied the mod changes: error: None
+[09:09:13] mod-apply [PASS] the added mod is in mods (the served bytes): e2e-added-1.0.0.jar exists: True
+[09:09:13] mod-apply [PASS] the other mod is disabled: e2e-disable-me-1.0.0.jar.disabled exists: True
+[09:09:13] mod-apply [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[09:09:13] mod-apply [PASS] last-apply.json: both ops OK: results: [('DISABLE_FILE', 'e2e-disable-me-1.0.0.jar', 'OK'), ('ENABLE_FILE', 'e2e-added-1.0.0.jar', 'OK')]
+[09:09:13] mod-apply [PASS] history.json: one apply entry, both changes APPLIED: apply entries: 1; changes: [('file', 'disable', 'e2e-disable-me-1.0.0.jar', 'APPLIED'), ('file', 'enable', 'e2e-added-1.0.0.jar', 'APPLIED')]
+[09:09:13] mod-undo [PASS] the client exited normally and the helper finished: gradle exit 0, helper finished: True
+[09:09:13] mod-undo [PASS] the driver undid the last apply (two reverts after a restart): error: None; undoOf: b05c5122-7196-46bb-b1be-5f73452675bf; plan: [{'description': 'Disable e2e-added-1.0.0.jar', 'action': 'REVERT', 'reason': None, 'needsRestart': True, 'changeIds': ['a472268a-cc79-4878-823f-3e652d7744cc'], 'opIds': []}, {'description': 'Re-enable e2e-disable-me-1.0.0.jar', 'action': 'REVERT', 'reason': None, 'needsRestart': True, 'changeIds': ['685d05e9-756c-4312-a8ea-727fbcecf8b7'], 'opIds': []}]
+[09:09:13] mod-undo [PASS] the added mod is disabled again: e2e-added-1.0.0.jar.disabled exists: True
+[09:09:13] mod-undo [PASS] the other mod is back: e2e-disable-me-1.0.0.jar exists: True
+[09:09:13] mod-undo [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[09:09:13] mod-undo [PASS] last-apply.json: both reversal ops OK: results: [('DISABLE_FILE', 'e2e-added-1.0.0.jar', 'OK'), ('ENABLE_FILE', 'e2e-disable-me-1.0.0.jar', 'OK')]
+[09:09:13] mod-undo [PASS] history.json: the undo APPLIED, the apply's changes REVERTED: apply changes: {'685d05e9-756c-4312-a8ea-727fbcecf8b7': 'REVERTED', 'a472268a-cc79-4878-823f-3e652d7744cc': 'REVERTED'}; undo entries: ['b05c5122-7196-46bb-b1be-5f73452675bf']; undo changes: [('disable', 'e2e-added-1.0.0.jar', 'APPLIED', 'a472268a-cc79-4878-823f-3e652d7744cc'), ('enable', 'e2e-disable-me-1.0.0.jar', 'APPLIED', '685d05e9-756c-4312-a8ea-727fbcecf8b7')]
+[09:09:13] mod-check [PASS] the client exited normally: gradle exit 0
+[09:09:13] mod-check [PASS] the driver checked: error: None
+[09:09:13] mod-check [PASS] the undone mods are as before the apply: e2e-disable-me loaded: True; e2e-added loaded: False
+[09:09:13] mod-check [PASS] nothing left to undo: undoable items: 0
+[09:09:13] mod-check [PASS] no crash report: crash-reports: []
+[09:09:13] mod-check [PASS] mods unchanged by the relaunch: unchanged
+[09:09:13] mod-check [PASS] history.json statuses unchanged: unchanged
+[09:09:13] mod-check [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[09:09:13] entry-apply [PASS] the client exited normally and the helper finished: gradle exit 0, helper finished: True
+[09:09:13] entry-apply [PASS] the driver applied twice, one mod each: error: None; apply messages: ['Downloading 1 mod change(s)…', 'Downloading 1 mod change(s)…']
+[09:09:13] entry-apply [PASS] both added mods are in mods (the served bytes): served bytes in mods: {'e2e-first-1.0.0.jar': True, 'e2e-second-1.0.0.jar': True}
+[09:09:13] entry-apply [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[09:09:13] entry-apply [PASS] last-apply.json: both enables OK: results: [('ENABLE_FILE', 'e2e-first-1.0.0.jar', 'OK'), ('ENABLE_FILE', 'e2e-second-1.0.0.jar', 'OK')]
+[09:09:13] entry-apply [PASS] history.json: two new apply entries, the older adding e2e-first, both APPLIED: new entries: [('apply', '2026-09-25T23:08:13.738157Z', [('file', 'enable', 'e2e-first-1.0.0.jar', 'APPLIED')]), ('apply', '2026-09-25T23:08:15.226829100Z', [('file', 'enable', 'e2e-second-1.0.0.jar', 'APPLIED')])]
+[09:09:13] entry-undo [PASS] the client exited normally and the helper finished: gradle exit 0, helper finished: True
+[09:09:13] entry-undo [PASS] the driver undid the older Apply only (one revert after a restart): error: None; undoOf: 5617e4a7-eea2-4ffd-86cb-5d7e9cf51d17 (older 5617e4a7-eea2-4ffd-86cb-5d7e9cf51d17); via the undo screen: True; plan: [{'description': 'Disable e2e-first-1.0.0.jar', 'action': 'REVERT', 'reason': None, 'needsRestart': True, 'changeIds': ['c8c69b25-3a84-465c-a8d1-4b282c4a87ac'], 'opIds': []}]
+[09:09:13] entry-undo [PASS] the older Apply's mod is disabled: e2e-first-1.0.0.jar.disabled exists: True; e2e-first-1.0.0.jar exists: False
+[09:09:13] entry-undo [PASS] the newer Apply's mod is still enabled: e2e-second-1.0.0.jar exists: True
+[09:09:13] entry-undo [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[09:09:13] entry-undo [PASS] last-apply.json: the reversal op OK: results: [('DISABLE_FILE', 'e2e-first-1.0.0.jar', 'OK')]
+[09:09:13] entry-undo [PASS] history.json: one undo of the older Apply, its change REVERTED, the newer APPLIED: undo entries of these applies: ['5617e4a7-eea2-4ffd-86cb-5d7e9cf51d17']; undo changes: [('disable', 'e2e-first-1.0.0.jar', 'APPLIED', 'c8c69b25-3a84-465c-a8d1-4b282c4a87ac')]; older: {'c8c69b25-3a84-465c-a8d1-4b282c4a87ac': 'REVERTED'}; newer: {'365ba102-9427-4021-b74a-8273d9040404': 'APPLIED'}
+[09:09:13] entry-check [PASS] the client exited normally: gradle exit 0
+[09:09:13] entry-check [PASS] the driver checked: error: None
+[09:09:13] entry-check [PASS] only the older Apply's mod is off: loaded: e2e-first False, e2e-second True, e2e-disable-me True
+[09:09:13] entry-check [PASS] nothing left to undo on the older Apply: undoable items: 0; plan problem: None; method: RigTuneController.undoPlanFor
+[09:09:13] entry-check [PASS] no crash report: crash-reports: []
+[09:09:13] entry-check [PASS] mods unchanged by the relaunch: unchanged
+[09:09:13] entry-check [PASS] history.json statuses unchanged: unchanged
+[09:09:13] entry-check [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[09:09:13] VERDICT PASS
