@@ -19,6 +19,23 @@ class CpuClassifierTest {
 		assertEquals(4, bundled.classify(new CpuInfo("Apple M2", 8, 8, -1)));
 	}
 
+	// docs/research/v0.3/hardware-tiers.md §4: the generation-agnostic rows cover the 2025/2026 parts.
+	@Test
+	void newPartsUseTheExistingRows() {
+		assertEquals(5, bundled.classify(new CpuInfo("AMD Ryzen 9 9950X3D 16-Core Processor", 16, 32, 5700)));
+		assertEquals(5, bundled.classify(new CpuInfo("AMD Ryzen 9 9900X3D 12-Core Processor", 12, 24, 5500)));
+		assertEquals(5, bundled.classify(new CpuInfo("AMD Ryzen 7 9800X3D 8-Core Processor", 8, 16, 5200)));
+		assertEquals(5, bundled.classify(new CpuInfo("AMD Ryzen 7 9800X3D 8-Core Processor", 8, 8, -1)), "the X3D row, not the formula");
+		assertEquals(5, bundled.classify(new CpuInfo("Intel(R) Core(TM) Ultra 9 285K", 24, 24, 5700)));
+		assertEquals(5, bundled.classify(new CpuInfo("Intel(R) Core(TM) Ultra 5 245K", 14, 14, -1)));
+	}
+
+	@Test
+	void lunarLakeIsNotAKSeriesPart() {
+		assertEquals(CpuClassifier.formula(8, 4800), bundled.classify(new CpuInfo("Intel(R) Core(TM) Ultra 7 258V", 8, 8, 4800)));
+		assertEquals(3, bundled.classify(new CpuInfo("Intel(R) Core(TM) Ultra 7 258V", 8, 8, 4800)));
+	}
+
 	@Test
 	void unknownPartsUseFormula() {
 		assertEquals(2, bundled.classify(new CpuInfo("Intel(R) Core(TM) i5-8250U CPU @ 1.60GHz", 4, 8, 1800)));

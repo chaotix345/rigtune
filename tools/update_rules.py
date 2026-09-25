@@ -117,6 +117,7 @@ V2_ONLY_RULE_FIELDS = {
     "settings": frozenset({"requires"}),
     "advice": frozenset({"requires"}),
 }
+SOURCE_ONLY_TIER_FIELDS = {"gpuTiers": frozenset({"v1"}), "cpuTiers": frozenset({"v1"})}
 CONDITION_FIELDS = {"mods": ("recommendWhen", "avoidWhen", "skipUpdateWhen"), "obsolete": (), "settings": ("when",), "advice": ("when",)}
 V1_SETTING_PREFIXES = ("vanilla.", "sodium.")
 # Computed setting values both 0.1.0 and 0.2 resolve. A new token needs a new client, so it must come with `requires`.
@@ -330,13 +331,21 @@ def validate_knowledge(knowledge):
     values outside the vocabularies, rules that need a v1 decision). Raises KnowledgeError listing every problem."""
     problems = []
     for kind in TIER_KINDS:
-        for i, rule in enumerate(knowledge.get(kind, [])):
+        rows = knowledge.get(kind, [])
+        if not isinstance(rows, list):
+            problems.append(f"'{kind}' must be an array")
+            continue
+        for i, rule in enumerate(rows):
             if not isinstance(rule, dict):
                 problems.append(f"{kind}[{i}] must be an object")
                 continue
-            unknown = sorted(set(rule) - V1_RULE_FIELDS[kind])
+            unknown = sorted(set(rule) - V1_RULE_FIELDS[kind] - SOURCE_ONLY_TIER_FIELDS.get(kind, frozenset()) - {"v1"})
             if unknown:
                 problems.append(f"{kind}[{i}]: unknown field(s) {', '.join(unknown)} (tier-rule changes need a new schemaVersion)")
+            if "v1" in rule and kind not in SOURCE_ONLY_TIER_FIELDS:
+                problems.append(f'{kind}[{i}]: "v1" is only allowed on gpuTiers and cpuTiers rows')
+            elif "v1" in rule and rule["v1"] is not False:
+                problems.append(f'{kind}[{i}]: "v1" on a tier row may only be false (the row is left out of rules-v1.json)')
     for kind in RULE_KINDS:
         rules = knowledge.get(kind, [])
         if not isinstance(rules, list):
@@ -397,8 +406,32 @@ PACKS = {
 }
 
 
+PRERELEASE_RANK = {"snapshot": 0, "pre": 1, "rc": 2}
+
+
 def version_sort_key(version):
-    return tuple(int(p) if p.isdigit() else p for p in version.split("."))
+    core, _, prerelease = version.partition("-")
+    parts = tuple((int(p), "") if p.isdigit() else (-1, p) for p in core.split("."))
+    pre = tuple((0, int(p), "") if p.isdigit() else (1, PRERELEASE_RANK.get(p, len(PRERELEASE_RANK)), p)
+                for p in re.split(r"[-.]", prerelease)) if prerelease else ()
+    return parts, prerelease == "", pre
+
+
+GROOVY_COMMENT_RE = re.compile(r"""("(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*')|//[^\n]*|/\*.*?\*/""", re.S)
+STONECUTTER_VERSIONS_RE = re.compile(r"""^[ \t]*versions\s*\(?\s*((?:["'][^"'\n]+["']\s*,?\s*)+)""", re.M)
+
+
+def stonecutter_nodes(settings_path):
+    try:
+        text = Path(settings_path).read_text(encoding="utf-8")
+    except OSError as e:
+        raise UpdateRulesError(f"can't read the Stonecutter version list from {settings_path}: {e}")
+    code = GROOVY_COMMENT_RE.sub(lambda m: m.group(1) or "\n" * m.group(0).count("\n"), text)
+    lists = STONECUTTER_VERSIONS_RE.findall(code)
+    if len(lists) != 1:
+        found = "no" if not lists else f"{len(lists)}"
+        raise UpdateRulesError(f"{found} Stonecutter `versions` lists in {settings_path} (expected one); pass --mc-versions")
+    return re.findall(r"""["']([^"']+)["']""", lists[0])
 
 
 def default_opener(request):
@@ -511,15 +544,19 @@ class Client:
         return http_get(url, headers=headers, opener=self.opener, sleeper=self.sleeper).decode("utf-8")
 
 
-def resolve_target_versions(client, override):
+def resolve_target_versions(client, override, nodes=None):
     if override:
         versions = [v.strip() for v in override.split(",") if v.strip()]
     else:
+        if not nodes:
+            raise UpdateRulesError("no target MC versions: the Stonecutter version list is empty and --mc-versions isn't set")
         tags = client.modrinth_json(f"{MODRINTH_API}/tag/game_version")
-        releases = [t["version"] for t in tags if t.get("version_type") == "release"]
-        releases.sort(key=version_sort_key, reverse=True)
-        versions = releases[:3]
-    return sorted(versions, key=version_sort_key, reverse=True)
+        releases = [t["version"] for t in tags if t.get("version_type") == "release" and isinstance(t.get("version"), str)]
+        versions = list(nodes)
+        for node in nodes:
+            hotfix = re.compile(re.escape(node) + r"\.\d+")
+            versions += [v for v in releases if hotfix.fullmatch(v)]
+    return sorted(set(versions), key=version_sort_key, reverse=True)
 
 
 def list_pw_toml_filenames(client, contents_url_fn, mc_version):
@@ -821,6 +858,9 @@ def v2_content(content):
     out = copy.deepcopy(content)
     for kind in RULE_KINDS:
         out[kind] = [{k: v for k, v in rule.items() if k != "v1"} for rule in out.get(kind, [])]
+    for kind, source_only in SOURCE_ONLY_TIER_FIELDS.items():
+        if kind in out:
+            out[kind] = [{k: v for k, v in row.items() if k not in source_only} for row in out[kind]]
     return out
 
 
@@ -842,6 +882,14 @@ def v1_projection(content):
                 elif key == "mods":
                     omitted_mods[rule["slug"]] = list(rule.get("modIds", []))
             out[key] = projected
+        elif key in SOURCE_ONLY_TIER_FIELDS:
+            rows = []
+            for i, row in enumerate(value):
+                if row.get("v1") is False:
+                    notes.append((f"{key}[{i}] {row.get('pattern')}", 'omitted ("v1": false)'))
+                else:
+                    rows.append({k: copy.deepcopy(v) for k, v in row.items() if k not in SOURCE_ONLY_TIER_FIELDS[key]})
+            out[key] = rows
         else:
             out[key] = copy.deepcopy(value)
     if omitted_mods:
@@ -927,8 +975,8 @@ def write_text(path, text):
     path.write_bytes(text.encode("utf-8"))
 
 
-def run_pipeline(knowledge, client, mc_versions_override, old_doc):
-    mc_versions = resolve_target_versions(client, mc_versions_override)
+def run_pipeline(knowledge, client, mc_versions_override, old_doc, nodes=None):
+    mc_versions = resolve_target_versions(client, mc_versions_override, nodes)
     newest_version = mc_versions[0]
 
     ids_by_version = {name: pack_ids_by_version(client, pack, mc_versions) for name, pack in PACKS.items()}
@@ -971,7 +1019,7 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--knowledge", help="Path to knowledge.json (default: rules/source/knowledge.json)")
     parser.add_argument("--out-dir", help="Root directory under which rules/ and src/main/resources/rigtune/ are written (default: repo root)")
-    parser.add_argument("--mc-versions", help="Comma-separated MC versions, overriding Modrinth auto-detection")
+    parser.add_argument("--mc-versions", help="Comma-separated MC versions, overriding the Stonecutter nodes and their hotfix releases")
     parser.add_argument("--dry-run", action="store_true", help="Compute everything and print a summary, without writing files")
     parser.add_argument("--offline-fixtures", help="Directory of canned HTTP responses keyed by sha256(url).json, for offline runs")
     return parser.parse_args(argv)
@@ -988,6 +1036,13 @@ def main(argv=None):
     except KnowledgeError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
+    nodes = None
+    if not args.mc_versions:
+        try:
+            nodes = stonecutter_nodes(repo_root / "settings.gradle")
+        except UpdateRulesError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
 
     v2_path = out_root / "rules" / "rules-v2.json"
     bundled_v2_path = out_root / "src" / "main" / "resources" / "rigtune" / "rules-v2.json"
@@ -1002,7 +1057,7 @@ def main(argv=None):
 
     try:
         content, review_md, review_counts, mc_versions, newest_by_pack, fo_slugs, additive_slugs = run_pipeline(
-            knowledge, client, args.mc_versions, old_doc,
+            knowledge, client, args.mc_versions, old_doc, nodes=nodes,
         )
         v1_content, _ = v1_projection(content)
         finals = finalize_documents([(v2_content(content), old_v2), (v1_content, old_v1)])

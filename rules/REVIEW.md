@@ -1,12 +1,12 @@
 # RigTune rules update review
 
-Target MC versions: 26.3, 26.2, 26.1.2. Newest: 26.3.
+Target MC versions: 26.3, 26.2. Newest: 26.3.
 
 ## Summary
 - New upstream mods to triage: 0
 - Rule mods with a status or removal concern: 0
 - Rule mods missing a Fabric build for 26.3: 4
-- Rules changed or omitted in rules-v1.json: 27
+- Rules changed or omitted in rules-v1.json: 33
 
 ## (a) Upstream mods not yet tracked in knowledge.json
 None found.
@@ -27,6 +27,10 @@ None found.
 
 | rule | change |
 |---|---|
+| gpuTiers[6] (?i)RTX\s*5050\b(?!\s*Ti) | omitted ("v1": false) |
+| gpuTiers[18] (?i)RX\s*9070\s*GRE\b | omitted ("v1": false) |
+| gpuTiers[29] (?i)Arc(?:\s*\(TM\))?\s*Pro\s*B50\b | omitted ("v1": false) |
+| gpuTiers[30] (?i)Arc(?:\s*\(TM\))?\s*Pro\s*B[67]\d\b | omitted ("v1": false) |
 | mods[nvidium] | v1 override: avoidWhen, recommendWhen |
 | mods[renderscale] | v1 override: reason, recommendWhen |
 | mods[lambdynamiclights] | omitted ("v1": false) |
@@ -52,5 +56,7 @@ None found.
 | advice[ram-distant-horizons] | v1 override: when |
 | advice[ram-shaders] | v1 override: when |
 | advice[ram-distant-horizons-shaders-limited] | omitted ("v1": false) |
+| advice[vulkan-backend] | v1 override: when |
 | advice[heavy-shaders] | v1 override: when |
 | advice[shaders-entry-level] | omitted ("v1": false) |
+| advice[spark-profiler] | omitted ("v1": false) |

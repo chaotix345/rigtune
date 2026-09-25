@@ -6,6 +6,8 @@ import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.CpuInfo;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
 import io.github.chaotix345.rigtune.core.model.Goal;
+import io.github.chaotix345.rigtune.core.model.GpuInfo;
+import io.github.chaotix345.rigtune.core.model.GraphicsBackend;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
@@ -435,5 +437,36 @@ class KnowledgeV2ScenarioTest {
 			String reason = run(hw, "sodium").get("add:modernfix-mvus").reason();
 			assertFalse(reason.contains("26."), reason);
 		}
+	}
+
+	// SPEC AC1.7 (D-M2): 26.4 makes Vulkan the default renderer, so the "experimental Vulkan renderer" advice stops there,
+	// snapshots and pre-releases included (Loader normalizes 26.4-snapshot-1 to 26.4-alpha.1).
+	@Test
+	void vulkanBackendAdviceOnlyBefore264() {
+		for (String mc : List.of("26.2", "26.3", "26.3.1", "26.4-alpha.1", "26.4-rc.1", "26.4", "26.4.1")) {
+			Fixtures.Hw vulkan = withFlags(Fixtures.userRig(), "backend-vulkan");
+			vulkan.gpu = new GpuInfo("ATI Technologies Inc.", "AMD Radeon RX 7800 XT", "25.9.1", GraphicsBackend.VULKAN, 16384);
+			vulkan.mcVersion = mc;
+			assertEquals(!mc.startsWith("26.4"), advice(run(vulkan, "sodium")).contains("vulkan-backend"), mc);
+
+			Fixtures.Hw openGl = Fixtures.userRig();
+			openGl.mcVersion = mc;
+			assertFalse(advice(run(openGl, "sodium")).contains("vulkan-backend"), mc + " on OpenGL");
+		}
+	}
+
+	// SPEC AC12.1 (D-L1): a short, low-impact hint that names what the upload contains.
+	@Test
+	void sparkAdviceOnlyWithSpark() {
+		Recommendation rec = run(Fixtures.userRig(), "sodium", "spark").get("advice:spark-profiler");
+		assertNotNull(rec);
+		assertEquals(Category.ADVICE, rec.category());
+		assertEquals(Impact.LOW, rec.impact());
+		assertTrue(rec.reason().contains("/sparkc profiler start") && rec.reason().contains("/sparkc profiler stop"), rec.reason());
+		assertTrue(rec.reason().contains("spark.lucko.me") && rec.reason().contains("UUID") && rec.reason().contains("launch arguments"),
+				rec.reason());
+		assertTrue(rec.reason().length() <= 340, rec.reason());
+		assertFalse(advice(run(Fixtures.userRig(), "sodium")).contains("spark-profiler"));
+		assertFalse(advice(run(Fixtures.lowEndLaptop(), "fabric-api")).contains("spark-profiler"));
 	}
 }
