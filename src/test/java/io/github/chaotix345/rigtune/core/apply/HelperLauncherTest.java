@@ -2,6 +2,9 @@ package io.github.chaotix345.rigtune.core.apply;
 
 import com.google.gson.Gson;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
+import io.github.chaotix345.rigtune.core.history.Journal;
+import io.github.chaotix345.rigtune.core.history.JournalChange;
+import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -153,6 +156,55 @@ class HelperLauncherTest {
 		assertFalse(Files.exists(update.pending()), output);
 		try (Stream<Path> copies = Files.list(HelperLauncher.helperDir(update.config()))) {
 			assertEquals(List.of("0-rigtune-1.0.jar", "1-" + gson.getFileName()), copies.map(p -> p.getFileName().toString()).sorted().toList());
+		}
+	}
+
+	// Review M5: the journal update runs in the helper, whose classpath is our jar and Gson only (no logger, no Fabric).
+	// A plan with every op type; each journal change must end up with the status its op's result maps to.
+	@Test
+	void helperWithOnlyRigTuneAndGsonUpdatesTheJournal(@TempDir Path dir) throws Exception {
+		Path mods = Files.createDirectories(dir.resolve("mods"));
+		Path config = Files.createDirectories(dir.resolve("config"));
+		Path ours = jarOf(HelperLauncher.codeSourceOf(ApplyHelper.class), dir.resolve("rigtune.jar"));
+		Files.writeString(mods.resolve("indium.jar"), "indium");
+		Path lithium = TestJars.modJar(mods.resolve("lithium.jar" + PendingActions.PENDING_SUFFIX), "lithium");
+		TestJars.modJar(mods.resolve("sodium-0.7.2.jar"), "sodium");
+		Path duplicate = TestJars.modJar(mods.resolve("sodium-0.7.1.jar" + PendingActions.PENDING_SUFFIX), "sodium");
+		Path sodium = Files.writeString(config.resolve("sodium-options.json"), "{\"performance\":{\"chunk_builder_threads\":0}}");
+		Path dh = Files.writeString(config.resolve("DistantHorizons.toml"), "[client]\n\tlodDistance = 64\n");
+		Path iris = Files.writeString(config.resolve("iris.properties"), "maxShadowRenderDistance=32\n");
+		List<Op> ops = List.of(
+				Op.disableFile(mods.resolve("indium.jar")),
+				Op.enableFile(lithium, mods.resolve("lithium.jar")).withModId("lithium"),
+				Op.enableFile(duplicate, mods.resolve("sodium-0.7.1.jar")).withModId("sodium"),
+				Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4")),
+				Op.patchToml(dh, Map.of("client.lodDistance", "96")),
+				Op.patchProperties(iris, Map.of("maxShadowRenderDistance", "16")));
+		Path pending = PendingActions.defaultPath(config);
+		PendingActions.create(1, mods, config, ops).save(pending);
+		List<JournalChange> staged = ops.stream()
+				.map(op -> JournalChange.setting("key-" + op.type(), "0", "1", JournalChange.STAGED, op.id()))
+				.toList();
+		Journal journal = new Journal(config, "0.2.0", "26.2", (message, error) -> {
+			throw new AssertionError(message, error);
+		});
+		journal.record("e1", JournalEntry.APPLY, staged);
+
+		Process helper = HelperLauncher.launch(config, pending, List.of(ours, HelperLauncher.codeSourceOf(Gson.class)), ApplyLockTest.deadPid());
+
+		String output = awaitHelper(helper, HelperLauncher.helperLog(config));
+		assertFalse(output.contains("NoClassDefFoundError") || output.contains("history.json"), output);
+		ApplyResult result = ApplyResult.load(ApplyResult.defaultPath(config));
+		assertEquals(ApplyResult.Status.OK, result.results().getFirst().status(), output);
+		assertEquals(ApplyResult.Status.ABANDONED, result.results().get(2).status(), output);
+		List<JournalChange> changes = journal.entries().getFirst().changes();
+		for (int i = 0; i < ops.size(); i++) {
+			String expected = switch (result.results().get(i).status()) {
+				case OK, SKIPPED_ALREADY_DONE -> JournalChange.APPLIED;
+				case ABANDONED -> JournalChange.ABANDONED;
+				case FAILED -> JournalChange.STAGED;
+			};
+			assertEquals(expected, changes.get(i).status(), ops.get(i).type() + ": " + output);
 		}
 	}
 

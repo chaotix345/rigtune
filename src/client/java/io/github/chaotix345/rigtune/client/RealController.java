@@ -510,14 +510,14 @@ public final class RealController implements RigTuneController {
 			return Component.translatable("rigtune.status.busy");
 		}
 		try {
-			int dropped = PendingActions.discard(pendingFile, STAGE_LOCK_WAIT);
-			if (dropped < 0) {
+			List<Op> dropped = PendingActions.discard(pendingFile, STAGE_LOCK_WAIT);
+			if (dropped == null) {
 				return Component.translatable("rigtune.status.discard_busy");
 			}
 			staged.clear();
 			carriedOverOps = 0;
 			rebuild();
-			return Component.translatable("rigtune.status.discarded", dropped);
+			return Component.translatable("rigtune.status.discarded", dropped.size());
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.error("Could not discard {}", pendingFile, e);
 			return Component.translatable("rigtune.status.discard_failed");
