@@ -4,12 +4,11 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import io.github.chaotix345.rigtune.core.apply.ModJars;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -27,23 +26,33 @@ public record JarInfo(String id, Set<String> provides, Set<String> depends) {
 	private static final long MAX_NESTED_BYTES = 32L << 20;
 	private static final int MAX_NESTED_JARS = 512;
 
-	// How much of a jar's nesting is read: a nested jar bigger than maxBytes is skipped, and so is every nested jar
-	// after the first maxJars.
+	// How much of a jar's nesting is read: maxBytes in all, counting every byte buffered from a nested jar (an entry
+	// that doesn't fit in what is left is skipped, and what it inflated to still counts), and the first maxJars nested
+	// jars (re-check of review 4: a crafted jar can't make the game buffer more).
 	private static final class Budget {
-		final long maxBytes;
+		long bytesLeft;
 		int jarsLeft;
 
 		Budget(long maxBytes, int maxJars) {
-			this.maxBytes = maxBytes;
+			this.bytesLeft = maxBytes;
 			this.jarsLeft = maxJars;
 		}
 
+		// A nested jar, whose declared size must fit in the bytes left.
 		boolean take(long size) {
-			if (jarsLeft <= 0 || size > maxBytes) {
+			if (jarsLeft <= 0 || size > bytesLeft) {
 				return false;
 			}
 			jarsLeft--;
 			return true;
+		}
+
+		// Null when the entry is over max or over the bytes left.
+		byte[] read(InputStream in, long max) throws IOException {
+			long limit = Math.min(max, bytesLeft);
+			byte[] bytes = in.readNBytes((int) Math.min(Integer.MAX_VALUE - 8, limit + 1));
+			bytesLeft -= Math.min(bytes.length, bytesLeft);
+			return bytes.length > limit ? null : bytes;
 		}
 	}
 
@@ -64,14 +73,18 @@ public record JarInfo(String id, Set<String> provides, Set<String> depends) {
 			if (entry == null) {
 				return null;
 			}
-			JsonObject root;
-			try (Reader reader = new InputStreamReader(zip.getInputStream(entry), StandardCharsets.UTF_8)) {
-				JsonElement parsed = JsonParser.parseReader(reader);
-				if (!parsed.isJsonObject()) {
-					return null;
-				}
-				root = parsed.getAsJsonObject();
+			byte[] json;
+			try (InputStream in = zip.getInputStream(entry)) {
+				json = ModJars.readFabricModJson(in, entry.getSize());
 			}
+			if (json == null) {
+				return null;
+			}
+			JsonElement parsed = JsonParser.parseString(new String(json, StandardCharsets.UTF_8));
+			if (!parsed.isJsonObject()) {
+				return null;
+			}
+			JsonObject root = parsed.getAsJsonObject();
 			String id = string(root.get("id"));
 			if (id == null) {
 				return null;
@@ -81,8 +94,8 @@ public record JarInfo(String id, Set<String> provides, Set<String> depends) {
 				ZipEntry nestedEntry = zip.getEntry(nested);
 				if (nestedEntry != null && budget.take(nestedEntry.getSize() < 0 ? 0 : nestedEntry.getSize())) {
 					try (InputStream in = zip.getInputStream(nestedEntry)) {
-						byte[] bytes = in.readNBytes((int) Math.min(Integer.MAX_VALUE - 8, budget.maxBytes + 1));
-						if (bytes.length <= budget.maxBytes) {
+						byte[] bytes = budget.read(in, Long.MAX_VALUE);
+						if (bytes != null) {
 							nestedIds(bytes, 1, provides, budget);
 						}
 					}
@@ -98,9 +111,10 @@ public record JarInfo(String id, Set<String> provides, Set<String> depends) {
 		Map<String, byte[]> entries = new HashMap<>();
 		try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(jar))) {
 			for (ZipEntry e = zip.getNextEntry(); e != null; e = zip.getNextEntry()) {
-				if (e.getName().equals("fabric.mod.json") || e.getName().endsWith(".jar") && depth < MAX_NESTING) {
-					byte[] bytes = zip.readNBytes((int) Math.min(Integer.MAX_VALUE - 8, budget.maxBytes + 1));
-					if (bytes.length <= budget.maxBytes) {
+				boolean json = e.getName().equals("fabric.mod.json");
+				if (json || e.getName().endsWith(".jar") && depth < MAX_NESTING) {
+					byte[] bytes = budget.read(zip, json ? ModJars.MAX_FABRIC_MOD_JSON_BYTES : Long.MAX_VALUE);
+					if (bytes != null) {
 						entries.put(e.getName(), bytes);
 					}
 				}
@@ -122,10 +136,9 @@ public record JarInfo(String id, Set<String> provides, Set<String> depends) {
 		out.addAll(strings(root.get("provides")));
 		for (String nested : nestedJars(root)) {
 			byte[] inner = entries.get(nested);
-			if (inner != null) {
-				if (budget.take(inner.length)) {
-					nestedIds(inner, depth + 1, out, budget);
-				}
+			// Its bytes were counted when it was buffered.
+			if (inner != null && budget.take(0)) {
+				nestedIds(inner, depth + 1, out, budget);
 			}
 		}
 	}

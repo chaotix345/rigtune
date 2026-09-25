@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.core.history;
 
+import io.github.chaotix345.rigtune.core.apply.ModJars;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -95,5 +96,37 @@ class JarInfoTest {
 
 		assertEquals(2, JarInfo.read(jar, 1 << 20, 2).provides().size());
 		assertEquals("outer", JarInfo.read(jar, 1 << 20, 2).id());
+	}
+
+	// Re-check of review 4: the fabric.mod.json read is capped as in ModJars, and every byte buffered from nested jars
+	// (also entries no fabric.mod.json names) counts against one budget per jar, so a crafted jar can't exhaust the heap.
+	@Test
+	void anOversizedFabricModJsonGivesNull(@TempDir Path dir) throws IOException {
+		String big = "{\"id\":\"big\",\"pad\":\"" + "a".repeat(ModJars.MAX_FABRIC_MOD_JSON_BYTES) + "\"}";
+
+		assertNull(JarInfo.read(Files.write(dir.resolve("big.jar"), zip(Map.of("fabric.mod.json", utf8(big))))));
+	}
+
+	@Test
+	void nestedJarsShareOneByteBudget(@TempDir Path dir) throws IOException {
+		Path jar = withNested(dir, 3, 4096);
+
+		assertEquals(2, JarInfo.read(jar, 10_000, 16).provides().size());
+		assertEquals(3, JarInfo.read(jar, 1 << 20, 16).provides().size());
+	}
+
+	@Test
+	void entriesOfANestedJarThatNothingNamesCountAgainstTheBudget(@TempDir Path dir) throws IOException {
+		Map<String, byte[]> inner = new LinkedHashMap<>();
+		inner.put("junk.jar", new byte[4 << 20]);
+		inner.put("fabric.mod.json", utf8("{\"id\":\"inner\",\"jars\":[{\"file\":\"deep.jar\"}]}"));
+		inner.put("deep.jar", zip(Map.of("fabric.mod.json", utf8("{\"id\":\"deep\"}"))));
+		Map<String, byte[]> outer = new LinkedHashMap<>();
+		outer.put("fabric.mod.json", utf8("{\"id\":\"outer\",\"jars\":[{\"file\":\"inner.jar\"}]}"));
+		outer.put("inner.jar", zip(inner));
+		Path jar = Files.write(dir.resolve("outer.jar"), zip(outer));
+
+		assertEquals(Set.of(), JarInfo.read(jar, 1 << 20, 16).provides());
+		assertEquals(Set.of("inner", "deep"), JarInfo.read(jar, 8 << 20, 16).provides());
 	}
 }

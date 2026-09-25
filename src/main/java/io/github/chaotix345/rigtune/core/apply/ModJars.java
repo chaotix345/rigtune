@@ -19,7 +19,7 @@ import java.util.zip.ZipFile;
 
 public final class ModJars {
 	// No real fabric.mod.json comes near this; a bigger (or decompression-bomb) entry isn't read (review 4, security-1).
-	static final int MAX_FABRIC_MOD_JSON_BYTES = 1 << 20;
+	public static final int MAX_FABRIC_MOD_JSON_BYTES = 1 << 20;
 
 	private ModJars() {
 	}
@@ -58,20 +58,29 @@ public final class ModJars {
 		return Set.copyOf(out);
 	}
 
+	// The bytes of a fabric.mod.json entry; null when it declares or inflates to more than the cap. Bounded whatever
+	// size the entry declares: an entry can inflate to far more.
+	public static byte[] readFabricModJson(InputStream in, long declaredSize) throws IOException {
+		if (declaredSize > MAX_FABRIC_MOD_JSON_BYTES) {
+			return null;
+		}
+		byte[] json = in.readNBytes(MAX_FABRIC_MOD_JSON_BYTES + 1);
+		return json.length > MAX_FABRIC_MOD_JSON_BYTES ? null : json;
+	}
+
 	// Null when the jar has no fabric.mod.json id, or its fabric.mod.json is over the cap or isn't JSON. Doesn't log:
 	// the apply helper runs without a logger on its classpath.
 	static String readModId(Path jar) throws IOException {
 		try (ZipFile zip = new ZipFile(jar.toFile())) {
 			ZipEntry entry = zip.getEntry("fabric.mod.json");
-			if (entry == null || entry.getSize() > MAX_FABRIC_MOD_JSON_BYTES) {
+			if (entry == null) {
 				return null;
 			}
-			// Bounded whatever size the entry declares: an entry can inflate to far more.
 			byte[] json;
 			try (InputStream in = zip.getInputStream(entry)) {
-				json = in.readNBytes(MAX_FABRIC_MOD_JSON_BYTES + 1);
+				json = readFabricModJson(in, entry.getSize());
 			}
-			if (json.length > MAX_FABRIC_MOD_JSON_BYTES) {
+			if (json == null) {
 				return null;
 			}
 			try {
