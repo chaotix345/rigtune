@@ -14,6 +14,7 @@ import io.github.chaotix345.rigtune.client.undo.GameState;
 import io.github.chaotix345.rigtune.client.undo.Staging;
 import io.github.chaotix345.rigtune.client.undo.UndoService;
 import io.github.chaotix345.rigtune.client.undo.VanillaChanges;
+import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
@@ -23,6 +24,7 @@ import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecords;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
+import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.Action;
@@ -657,6 +659,39 @@ public final class RealController implements RigTuneController {
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.error("Could not undo", e);
 			return Component.translatable("rigtune.undo.status.failed");
+		}
+	}
+
+	// v0.3 (WS-B): the History screen and "Undo this" (docs/v0.3/SPEC.md item 6, 3e).
+
+	@Override
+	public @Nullable UndoPlan undoPlanFor(String entryId) {
+		if (downloading) {
+			return UndoPlan.unavailable(false, "rigtune.undo.busy");
+		}
+		try {
+			UndoPlan plan = undoService.planEntry(entryId);
+			return plan != null ? plan : UndoPlan.unavailable(false, "rigtune.undo.unavailable");
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.error("Could not work out what to undo", e);
+			return UndoPlan.unavailable(false, "rigtune.undo.error");
+		}
+	}
+
+	@Override
+	public HistoryModel.@Nullable View history() {
+		Path last = ApplyResult.defaultPath(configDir);
+		ApplyResult lastApply = null;
+		try {
+			lastApply = Files.isRegularFile(last) ? ApplyResult.load(last) : null;
+		} catch (IOException e) {
+			RigTune.LOGGER.warn("Could not read {}", last, e);
+		}
+		try {
+			return undoService.history(lastApply, List.of(modsDir, configDir));
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.error("Could not read RigTune's history", e);
+			return null;
 		}
 	}
 }

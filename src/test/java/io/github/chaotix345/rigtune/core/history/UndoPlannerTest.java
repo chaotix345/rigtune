@@ -779,4 +779,355 @@ class UndoPlannerTest {
 		assertNull(last().plan().undoOf());
 		assertTrue(all().plan().isEmpty());
 	}
+
+	// --- one entry ("Undo this", docs/v0.3/SPEC.md item 6, AC6.1) and the superseded rule (review B-H1)
+
+	private Result entryOf(String id) {
+		return UndoPlanner.planEntry(entries, pending, state, id);
+	}
+
+	@Test
+	void planEntryOfTheNewestEqualsUndoLast() {
+		state.jar("a.jar", "a").jar("b.jar.disabled", "b");
+		entry("e1", applied("vanilla.renderDistance", "12", "16"));
+		entry("e2", applied("vanilla.simulationDistance", "8", "6"), enabled("a", "a.jar", "g1"), disabled("b", "b.jar", "b.jar.disabled", "g2"));
+		state.settings.put("vanilla.renderDistance", "16");
+		state.settings.put("vanilla.simulationDistance", "6");
+
+		Result last = last();
+		Result entry = entryOf("e2");
+
+		assertEquals(3, items(entry, Action.REVERT).size(), entry.plan().toString());
+		assertEquals(last.plan(), entry.plan());
+		assertEquals(last.script().immediate(), entry.script().immediate());
+		assertEquals(last.script().staged(), entry.script().staged());
+		assertEquals(last.script().discardOpIds(), entry.script().discardOpIds());
+		assertEquals(last.script().fileOps().stream().map(UndoPlannerTest::describe).toList(),
+				entry.script().fileOps().stream().map(UndoPlannerTest::describe).toList());
+		assertEquals(last.script().reverts().stream().map(UndoPlanner.Revert::changeId).toList(),
+				entry.script().reverts().stream().map(UndoPlanner.Revert::changeId).toList());
+	}
+
+	@Test
+	void planEntrySkipsASettingALaterApplyChangedAgain() {
+		JournalChange older = applied("vanilla.renderDistance", "12", "16");
+		JournalChange shadows = applied("vanilla.entityShadows", "true", "false");
+		entry("e1", older, shadows);
+		entry("e2", applied("vanilla.renderDistance", "16", "20"));
+		state.settings.put("vanilla.renderDistance", "20");
+		state.settings.put("vanilla.entityShadows", "false");
+
+		Result result = entryOf("e1");
+
+		assertEquals("e1", result.plan().undoOf());
+		assertEquals("2026-09-25T10:00:00Z", result.plan().at());
+		UndoPlan.Item skip = only(result, Action.SKIP);
+		assertEquals(List.of(older.id()), skip.changeIds());
+		assertEquals(UndoPlanner.SUPERSEDED, skip.reason());
+		assertEquals(List.of(shadows.id()), only(result, Action.REVERT).changeIds());
+		assertEquals(Map.of("vanilla.entityShadows", "true"), result.script().immediate());
+	}
+
+	@Test
+	void planEntryRevertsAnOlderAdditionThatIsStillThere() {
+		state.jar("a.jar", "a").jar("b.jar", "b");
+		JournalChange a = enabled("a", "a.jar", "g1");
+		entry("e1", a);
+		entry("e2", enabled("b", "b.jar", "g2"));
+
+		Result result = entryOf("e1");
+
+		assertEquals(List.of(a.id()), only(result, Action.REVERT).changeIds());
+		assertEquals(List.of("disable a.jar"), result.script().fileOps().stream().map(UndoPlannerTest::describe).toList());
+	}
+
+	@Test
+	void planEntryOfAnEntryAlreadyUndoneHasNothingToDo() {
+		JournalChange rd = applied("vanilla.renderDistance", "12", "16");
+		entry("e1", rd);
+		undoEntry("u1", "e1", applied("vanilla.renderDistance", "16", "12").reverting(rd.id()));
+		state.settings.put("vanilla.renderDistance", "12");
+
+		Result result = entryOf("e1");
+
+		assertTrue(result.plan().items().isEmpty());
+		assertNull(result.plan().undoOf());
+	}
+
+	@Test
+	void planEntryOfAStagedOnlyEntryCancelsItsGroup() {
+		List<Op> group = PendingActions.group(Op.enableFile(MODS.resolve("x.jar.rigtune-pending"), MODS.resolve("x.jar")).withModId("x"));
+		pending.addAll(group);
+		JournalChange x = JournalChange.file(JournalChange.ENABLE, "x", "x.jar", JournalChange.STAGED, group.getFirst().id(), group.getFirst().group());
+		entry("e1", x);
+		entry("e2", applied("vanilla.renderDistance", "12", "16"));
+		state.settings.put("vanilla.renderDistance", "16");
+
+		Result result = entryOf("e1");
+
+		assertEquals(List.of(x.id()), only(result, Action.DISCARD_STAGED).changeIds());
+		assertEquals(Set.of(group.getFirst().id()), result.script().discardOpIds());
+	}
+
+	@Test
+	void planEntryOfAnUnknownIdOrAnUndoIsEmpty() {
+		JournalChange rd = applied("vanilla.renderDistance", "12", "16");
+		entry("e1", rd);
+		undoEntry("u1", "e1", applied("vanilla.renderDistance", "16", "12").reverting(rd.id()));
+
+		for (String id : new String[]{"nope", "u1", null}) {
+			Result result = entryOf(id);
+			assertTrue(result.plan().items().isEmpty(), id);
+			assertNull(result.plan().undoOf(), id);
+			assertTrue(result.script().reverts().isEmpty(), id);
+		}
+	}
+
+	// B-H1: Apply 1 v1 -> v2, Apply 2 v2 -> v3, all named mod.jar. Undoing Apply 1 must not disable v3.
+	@Test
+	void planEntrySkipsASameNameUpdateChain() {
+		state.jar("mod.jar", "m").jar("mod.jar.disabled", "m").jar("mod.jar.disabled.1", "m");
+		JournalChange disable1 = disabled("m", "mod.jar", "mod.jar.disabled", "g1");
+		JournalChange enable1 = enabled("m", "mod.jar", "g1");
+		entry("e1", disable1, enable1);
+		entry("e2", disabled("m", "mod.jar", "mod.jar.disabled.1", "g2"), enabled("m", "mod.jar", "g2"));
+
+		Result result = entryOf("e1");
+
+		assertTrue(items(result, Action.REVERT).isEmpty(), result.plan().toString());
+		assertEquals(Set.of(disable1.id(), enable1.id()), Set.copyOf(items(result, Action.SKIP).stream().flatMap(i -> i.changeIds().stream()).toList()));
+		assertTrue(result.script().fileOps().isEmpty());
+	}
+
+	// B-H1: Apply 1's Sodium value is applied, Apply 2 stages another one; undoing Apply 1 would end at the old value.
+	@Test
+	void planEntrySkipsAnAppliedPatchALaterOneIsStagedFor() {
+		Op op = Op.patchJson(Path.of("config", "sodium-options.json"), Map.of("threads", "8"));
+		pending.add(op);
+		entry("e1", JournalChange.setting("sodium.threads", "0", "4", JournalChange.APPLIED, "op-1"));
+		entry("e2", JournalChange.setting("sodium.threads", "4", "8", JournalChange.STAGED, op.id()));
+		state.settings.put("sodium.threads", "4");
+
+		Result result = entryOf("e1");
+
+		assertEquals(UndoPlanner.SUPERSEDED, only(result, Action.SKIP).reason());
+		assertTrue(result.script().staged().isEmpty());
+		assertTrue(result.script().discardOpIds().isEmpty());
+	}
+
+	// B-H1: once the later change was undone itself, the older one can be undone.
+	@Test
+	void planEntryUndoesAnOlderChangeOnceTheLaterOneWasUndone() {
+		JournalChange first = applied("vanilla.renderDistance", "12", "16");
+		JournalChange second = applied("vanilla.renderDistance", "16", "20").withStatus(JournalChange.REVERTED);
+		entry("e1", first);
+		entry("e2", second);
+		undoEntry("u1", "e2", applied("vanilla.renderDistance", "20", "16").reverting(second.id()));
+		state.settings.put("vanilla.renderDistance", "16");
+
+		Result result = entryOf("e1");
+
+		assertEquals(List.of(first.id()), only(result, Action.REVERT).changeIds());
+		assertEquals(Map.of("vanilla.renderDistance", "12"), result.script().immediate());
+	}
+
+	// B-H1: ... also while the later change's undo is only staged.
+	@Test
+	void aLaterChangeWhoseUndoIsStagedDoesNotSupersede() {
+		JournalChange first = JournalChange.setting("sodium.threads", "0", "4", JournalChange.APPLIED, "op-1");
+		JournalChange second = JournalChange.setting("sodium.threads", "4", "8", JournalChange.APPLIED, "op-2");
+		entry("e1", first);
+		entry("e2", second);
+		undoEntry("u1", "e2", JournalChange.setting("sodium.threads", "8", "4", JournalChange.STAGED, "op-3").reverting(second.id()));
+		state.settings.put("sodium.threads", "4");
+
+		assertEquals(List.of(first.id()), only(entryOf("e1"), Action.REVERT).changeIds());
+	}
+
+	@Test
+	void aGroupMateOfASupersededChangeIsSkippedWithIt() {
+		state.jar("a.jar", "a").jar("b.jar.disabled", "b").jar("b2.jar", "b");
+		JournalChange a = enabled("a", "a.jar", "g1");
+		JournalChange b = enabled("b", "b.jar", "g1");
+		entry("e1", a, b);
+		entry("e2", disabled("b", "b.jar", "b.jar.disabled", "g2"), enabled("b", "b2.jar", "g2"));
+
+		Result result = entryOf("e1");
+
+		assertTrue(items(result, Action.REVERT).isEmpty(), result.plan().toString());
+		Map<String, String> reasons = new HashMap<>();
+		items(result, Action.SKIP).forEach(i -> reasons.put(i.changeIds().getFirst(), i.reason()));
+		assertEquals(Map.of(b.id(), UndoPlanner.SUPERSEDED, a.id(), UndoPlanner.SUPERSEDED_GROUP), reasons);
+	}
+
+	@Test
+	void aLaterEnableOfTheSameModSupersedesADisable() {
+		state.jar("x.jar.disabled", "x").jar("x2.jar", "x");
+		entry("e1", disabled("x", "x.jar", "x.jar.disabled", null));
+		entry("e2", enabled("x", "x2.jar", "g2"));
+
+		assertEquals(UndoPlanner.SUPERSEDED, only(entryOf("e1"), Action.SKIP).reason());
+	}
+
+	@Test
+	void discardedAndAbandonedLaterChangesDoNotSupersede() {
+		JournalChange first = applied("vanilla.renderDistance", "12", "16");
+		entry("e1", first);
+		entry("e2", JournalChange.setting("vanilla.renderDistance", "16", "20", JournalChange.DISCARDED, "op-2"),
+				JournalChange.setting("vanilla.renderDistance", "16", "18", JournalChange.ABANDONED, "op-3"));
+		state.settings.put("vanilla.renderDistance", "16");
+
+		assertEquals(List.of(first.id()), only(entryOf("e1"), Action.REVERT).changeIds());
+	}
+
+	// Review M8: the rule also holds at confirm time (a later apply's download was staged in between).
+	@Test
+	void recheckSkipsAChangeALaterApplyChangedSinceItWasShown() {
+		state.jar("a.jar", "a");
+		JournalChange a = enabled("a", "a.jar", "g1");
+		JournalChange rd = applied("vanilla.renderDistance", "12", "16");
+		entry("e1", a);
+		entry("e2", rd);
+		state.settings.put("vanilla.renderDistance", "16");
+		UndoPlan shown = entryOf("e1").plan();
+		assertEquals(List.of(a.id()), only(entryOf("e1"), Action.REVERT).changeIds());
+
+		List<Op> group = PendingActions.group(Op.disableFile(MODS.resolve("a.jar")),
+				Op.enableFile(MODS.resolve("a2.jar.rigtune-pending"), MODS.resolve("a2.jar")).withModId("a"));
+		pending.addAll(group);
+		entries.set(1, new JournalEntry("e2", "2026-09-25T10:00:00Z", JournalEntry.APPLY, "0.2.0", "26.2", null, List.of(rd,
+				JournalChange.file(JournalChange.DISABLE, "a", "a.jar", JournalChange.STAGED, group.get(0).id(), group.get(0).group()),
+				JournalChange.file(JournalChange.ENABLE, "a", "a2.jar", JournalChange.STAGED, group.get(1).id(), group.get(1).group()))));
+
+		Result result = UndoPlanner.recheck(shown, entries, pending, state);
+
+		assertEquals(UndoPlanner.SUPERSEDED, only(result, Action.SKIP).reason());
+		assertTrue(result.script().fileOps().isEmpty());
+		assertEquals("e1", result.plan().undoOf());
+	}
+
+	// Changes of one plan never supersede each other: Undo everything still unwinds a chain.
+	@Test
+	void undoEverythingIsNotAffectedBySuperseding() {
+		entry("e1", applied("vanilla.renderDistance", "12", "16"));
+		entry("e2", applied("vanilla.renderDistance", "16", "20"));
+		state.settings.put("vanilla.renderDistance", "20");
+
+		Result result = all();
+
+		assertTrue(items(result, Action.SKIP).isEmpty(), result.plan().toString());
+		assertEquals(Map.of("vanilla.renderDistance", "12"), result.script().immediate());
+	}
+
+	// B-H1's Undo last case: the newest update can't be undone (its jar is unreadable), so Undo last falls through to the
+	// older one, which the newer one changed again: nothing is undone rather than disabling the newer jar.
+	@Test
+	void undoLastDoesNotFallThroughToAnUpdateALaterOneReplaced() {
+		state.jar("mod.jar", "m").jar("mod.jar.disabled", "m");
+		state.files.put("mod.jar.disabled.1", null);
+		entry("e1", disabled("m", "mod.jar", "mod.jar.disabled", "g1"), enabled("m", "mod.jar", "g1"));
+		entry("e2", disabled("m", "mod.jar", "mod.jar.disabled.1", "g2"), enabled("m", "mod.jar", "g2"));
+
+		Result result = last();
+
+		assertTrue(result.plan().isEmpty(), result.plan().toString());
+		assertTrue(result.script().fileOps().isEmpty());
+	}
+
+	// Review of WS-B, H1: restoring an older entry's graphics preset rewrites its options; the ones a later entry set,
+	// and the ones the list shows as skipped, are written back as they are.
+	@Test
+	void undoThisRestoringThePresetKeepsWhatLaterEntriesSet() {
+		entry("e1", applied("vanilla.graphicsPreset", "fancy", "custom"), applied("vanilla.particles", "all", "decreased"));
+		entry("e2", applied("vanilla.particles", "decreased", "minimal"), applied("vanilla.entityShadows", "true", "false"));
+		state.settings.put("vanilla.graphicsPreset", "custom");
+		state.settings.put("vanilla.particles", "minimal");
+		state.settings.put("vanilla.entityShadows", "false");
+
+		Result result = entryOf("e1");
+
+		assertEquals(UndoPlanner.SUPERSEDED, only(result, Action.SKIP).reason());
+		assertEquals(Map.of("vanilla.graphicsPreset", "fancy", "vanilla.particles", "minimal", "vanilla.entityShadows", "false"),
+				result.script().immediate());
+		assertEquals(1, result.script().reverts().size());
+	}
+
+	// The confirm-time re-plan selects only what the list reverts; an option it listed as skipped keeps its value too.
+	@Test
+	void recheckRestoringThePresetKeepsWhatTheListSkipped() {
+		entry("e1", applied("vanilla.graphicsPreset", "fast", "fancy"), applied("vanilla.particles", "decreased", "all"));
+		state.settings.put("vanilla.graphicsPreset", "fancy");
+		state.settings.put("vanilla.particles", "minimal");
+		UndoPlan shown = last().plan();
+
+		Result result = UndoPlanner.recheck(shown, entries, pending, state);
+
+		assertEquals(Map.of("vanilla.graphicsPreset", "fast", "vanilla.particles", "minimal"), result.script().immediate());
+	}
+
+	// Review of WS-B, H2: a later entry's staged mod isn't in the folder yet, but runs before the undo at the next exit.
+	@Test
+	void undoThisKeepsAJarALaterStagedModNeeds() {
+		state.jar("modA.jar", "a", "fabric").jar("fabric-api.jar", "fabric").jar("modB.jar.rigtune-pending", "b", "fabric");
+		entry("e1", enabled("a", "modA.jar", "g1"), enabled("fabric", "fabric-api.jar", "g1"));
+		Op stagedB = Op.enableFile(MODS.resolve("modB.jar.rigtune-pending"), MODS.resolve("modB.jar")).withModId("b").inGroup("g2");
+		pending.add(stagedB);
+		entry("e2", JournalChange.file(JournalChange.ENABLE, "b", "modB.jar", JournalChange.STAGED, stagedB.id(), "g2"));
+
+		Result result = entryOf("e1");
+
+		assertTrue(items(result, Action.REVERT).isEmpty(), result.plan().toString());
+		items(result, Action.SKIP).forEach(i -> assertTrue(i.reason().contains("b would be missing fabric"), i.reason()));
+		assertTrue(result.script().fileOps().isEmpty());
+	}
+
+	@Test
+	void aStagedModThisUndoCancelsDoesNotBlockIt() {
+		state.jar("modA.jar", "a").jar("fabric-api.jar", "fabric").jar("modB.jar.rigtune-pending", "b", "fabric");
+		Op stagedB = Op.enableFile(MODS.resolve("modB.jar.rigtune-pending"), MODS.resolve("modB.jar")).withModId("b").inGroup("g2");
+		pending.add(stagedB);
+		entry("e1", enabled("a", "modA.jar", "g1"), enabled("fabric", "fabric-api.jar", "g1"),
+				JournalChange.file(JournalChange.ENABLE, "b", "modB.jar", JournalChange.STAGED, stagedB.id(), "g2"));
+
+		Result result = entryOf("e1");
+
+		assertEquals(Set.of(stagedB.id()), result.script().discardOpIds());
+		assertEquals(2, items(result, Action.REVERT).size(), result.plan().toString());
+	}
+
+	// Review of WS-B, M1: what Undo everything showed as reverted is still reverted when it's confirmed, even where a later
+	// change it listed as skipped touches the same file.
+	@Test
+	void recheckOfUndoEverythingMatchesTheShownPlan() {
+		state.jar("mod.jar", "m").jar("mod.jar.disabled", "m");
+		state.files.put("mod.jar.disabled.1", null);
+		JournalChange disable1 = disabled("m", "mod.jar", "mod.jar.disabled", "g1");
+		JournalChange enable1 = enabled("m", "mod.jar", "g1");
+		entry("e1", disable1, enable1);
+		entry("e2", disabled("m", "mod.jar", "mod.jar.disabled.1", "g2"), enabled("m", "mod.jar", "g2"));
+		UndoPlan shown = all().plan();
+		assertEquals(2, items(all(), Action.REVERT).size(), shown.toString());
+
+		Result result = UndoPlanner.recheck(shown, entries, pending, state);
+
+		assertEquals(Set.of(disable1.id(), enable1.id()),
+				Set.copyOf(items(result, Action.REVERT).stream().flatMap(i -> i.changeIds().stream()).toList()));
+		assertEquals(all().script().fileOps().stream().map(UndoPlannerTest::describe).toList(),
+				result.script().fileOps().stream().map(UndoPlannerTest::describe).toList());
+	}
+
+	// B-L1: "fully undone" = nothing left that can be undone; undo entries are never undoable.
+	@Test
+	void undoableListsTheEntriesWithSomethingLeftToUndo() {
+		JournalChange rd = applied("vanilla.renderDistance", "12", "16");
+		entry("done", rd);
+		undoEntry("u1", "done", applied("vanilla.renderDistance", "16", "12").reverting(rd.id()));
+		entry("partly", applied("vanilla.ao", "true", "false"), applied("vanilla.simulationDistance", "8", "6").withStatus(JournalChange.REVERTED));
+		entry("discarded", JournalChange.setting("sodium.threads", "0", "4", JournalChange.DISCARDED, "op"));
+		entry("staged", JournalChange.setting("sodium.threads", "0", "4", JournalChange.STAGED, "op2"));
+		entries.add(new JournalEntry("legacy", "2026-09-24T10:00:00Z", JournalEntry.LEGACY_IMPORT, null, "26.2", null,
+				List.of(enabled("x", "x.jar", "g"))));
+
+		assertEquals(Set.of("partly", "staged", "legacy"), UndoPlanner.undoable(entries));
+	}
 }

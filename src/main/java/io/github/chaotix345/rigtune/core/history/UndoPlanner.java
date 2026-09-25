@@ -54,6 +54,8 @@ public final class UndoPlanner {
 	static final String FILE_EXISTS = "%s already exists";
 	static final String BREAKS = "Undoing it would stop the game from starting: %s";
 	static final String GONE = "It was undone or changed since this list was made";
+	static final String SUPERSEDED = "Changed again by a later apply";
+	static final String SUPERSEDED_GROUP = "Goes with a change a later apply changed again";
 
 	private UndoPlanner() {
 	}
@@ -113,7 +115,7 @@ public final class UndoPlanner {
 	public static Result plan(List<JournalEntry> entries, List<Op> pending, State state, boolean all) {
 		Context ctx = new Context(entries);
 		if (all) {
-			return build(ctx, ctx.candidates(l -> true), pending, state, null, true, ALL, null);
+			return build(ctx, ctx.candidates(l -> true), pending, state, null, null, true, ALL, null);
 		}
 		for (int i = entries.size() - 1; i >= 0; i--) {
 			JournalEntry entry = entries.get(i);
@@ -125,12 +127,39 @@ public final class UndoPlanner {
 			if (selected.isEmpty()) {
 				continue;
 			}
-			Result result = build(ctx, selected, pending, state, null, false, entry.id(), entry.at());
+			Result result = build(ctx, selected, pending, state, null, null, false, entry.id(), entry.at());
 			if (!result.plan().isEmpty()) {
 				return result;
 			}
 		}
 		return new Result(new UndoPlan(false, null, List.of()), Script.empty());
+	}
+
+	// "Undo this" on one history entry (docs/v0.3/SPEC.md item 6): what's left of it to undo, planned like Undo last.
+	// An unknown id, an undo entry or an entry with nothing left gives an empty plan (undoOf null).
+	public static Result planEntry(List<JournalEntry> entries, List<Op> pending, State state, String entryId) {
+		Context ctx = new Context(entries);
+		for (int i = 0; i < entries.size(); i++) {
+			JournalEntry entry = entries.get(i);
+			if (entryId == null || !entryId.equals(entry.id()) || JournalEntry.UNDO.equals(entry.kind())) {
+				continue;
+			}
+			int index = i;
+			List<Located> selected = ctx.candidates(l -> l.entry() == index);
+			if (!selected.isEmpty()) {
+				return build(ctx, selected, pending, state, null, null, false, entry.id(), entry.at());
+			}
+		}
+		return new Result(new UndoPlan(false, null, List.of()), Script.empty());
+	}
+
+	// The entries with something left to undo (review B-L1): not undo entries, with a change that is staged, or applied
+	// and not being reverted.
+	public static Set<String> undoable(List<JournalEntry> entries) {
+		Context ctx = new Context(entries);
+		Set<String> out = new LinkedHashSet<>();
+		ctx.candidates(l -> true).forEach(l -> out.add(l.owner().id()));
+		return out;
 	}
 
 	// The plan the player confirmed, re-planned against the current state (review M8): only the changes it would
@@ -139,7 +168,9 @@ public final class UndoPlanner {
 		Context ctx = new Context(entries);
 		Set<String> wanted = new LinkedHashSet<>();
 		Set<String> shownOps = new HashSet<>();
+		Set<String> shownIds = new HashSet<>();
 		for (Item item : shown.items()) {
+			shownIds.addAll(item.changeIds());
 			if (item.action() != Action.SKIP) {
 				wanted.addAll(item.changeIds());
 			}
@@ -148,7 +179,9 @@ public final class UndoPlanner {
 			}
 		}
 		List<Located> selected = ctx.candidates(l -> wanted.contains(l.change().id()));
-		Result result = build(ctx, selected, pending, state, shownOps, shown.all(), shown.undoOf(), shown.at());
+		// Changes the list showed as skipped still count as part of it for the superseded rule, so the confirmed plan
+		// matches the shown one (Undo everything shows no change as superseded by another it lists).
+		Result result = build(ctx, selected, pending, state, shownOps, shownIds, shown.all(), shown.undoOf(), shown.at());
 		Set<String> found = new HashSet<>();
 		selected.forEach(l -> found.add(l.change().id()));
 		List<Item> items = new ArrayList<>(result.plan().items());
@@ -249,19 +282,82 @@ public final class UndoPlanner {
 		}
 	}
 
-	private static Result build(Context ctx, List<Located> selected, List<Op> pending, State state, Set<String> shownOps, boolean all,
-			String undoOf, String at) {
+	// planIds: the changes that count as part of this plan for the superseded rule; null for the selected ones.
+	private static Result build(Context ctx, List<Located> selected, List<Op> pending, State state, Set<String> shownOps, Set<String> planIds,
+			boolean all, String undoOf, String at) {
 		Builder b = new Builder(state);
 		Folder folder = state.folder();
-		planStaged(ctx, selected, pending, folder, shownOps, b);
-		planSettings(selected, state, b);
-		planFiles(selected, folder, pending, b);
+		List<Located> kept = withoutSuperseded(ctx, selected, pending, planIds, b);
+		planStaged(ctx, kept, pending, folder, shownOps, b);
+		planSettings(kept, state, trackedKeys(ctx), b);
+		planFiles(kept, folder, pending, b);
 		List<Item> items = new ArrayList<>(b.discards);
 		items.addAll(b.reverts);
 		items.addAll(b.skips);
 		Script script = new Script(Map.copyOf(b.immediate), Map.copyOf(b.staged), List.copyOf(b.fileOps), Set.copyOf(b.discardOpIds),
 				List.copyOf(b.revertList));
 		return new Result(new UndoPlan(all, undoOf, items, at, null), script);
+	}
+
+	// --- changes a later entry changed again (review B-H1)
+
+	// A selected change is skipped when a later non-undo entry has a change, not part of this plan, that is staged, or
+	// applied and not being reverted, on the same settings key, the same file name (file or resultFile, either way) or
+	// that enables the same mod id: undoing the older one would undo or break the later one. Its group goes with it.
+	// Changes of one plan never supersede each other, so Undo everything is unaffected.
+	private static List<Located> withoutSuperseded(Context ctx, List<Located> selected, List<Op> pending, Set<String> planIds, Builder b) {
+		Set<String> inPlan = new HashSet<>(planIds == null ? Set.of() : planIds);
+		selected.forEach(l -> inPlan.add(l.change().id()));
+		List<Located> later = ctx.candidates(l -> !inPlan.contains(l.change().id()));
+		Set<Located> superseded = new LinkedHashSet<>();
+		for (Located l : selected) {
+			if (later.stream().anyMatch(m -> m.entry() > l.entry() && touchesSame(l.change(), m.change()))) {
+				superseded.add(l);
+			}
+		}
+		if (superseded.isEmpty()) {
+			return selected;
+		}
+		Set<String> groups = new HashSet<>();
+		superseded.forEach(l -> groups.addAll(groupsOf(l.change(), pending)));
+		List<Located> kept = new ArrayList<>();
+		for (Located l : selected) {
+			if (superseded.contains(l)) {
+				b.skip(l, SUPERSEDED);
+			} else if (groupsOf(l.change(), pending).stream().anyMatch(groups::contains)) {
+				b.skip(l, SUPERSEDED_GROUP);
+			} else {
+				kept.add(l);
+			}
+		}
+		return kept;
+	}
+
+	private static boolean touchesSame(JournalChange older, JournalChange newer) {
+		if (older.isSetting() || newer.isSetting()) {
+			return older.isSetting() && newer.isSetting() && older.key() != null && older.key().equals(newer.key());
+		}
+		Set<String> names = new HashSet<>();
+		if (older.file() != null) {
+			names.add(older.file());
+		}
+		if (older.resultFile() != null) {
+			names.add(older.resultFile());
+		}
+		return names.contains(newer.file()) || names.contains(newer.resultFile())
+				|| JournalChange.ENABLE.equals(newer.action()) && newer.modId() != null && newer.modId().equals(older.modId());
+	}
+
+	// The groups a change goes with: its own, and for a staged change the group of its op in pending.json.
+	private static Set<String> groupsOf(JournalChange c, List<Op> pending) {
+		Set<String> out = new HashSet<>();
+		if (c.group() != null) {
+			out.add(c.group());
+		}
+		if (JournalChange.STAGED.equals(c.status()) && c.opId() != null) {
+			pending.stream().filter(op -> op != null && c.opId().equals(op.id()) && op.group() != null).forEach(op -> out.add(op.group()));
+		}
+		return out;
 	}
 
 	// --- staged changes: drop their whole group from pending.json
@@ -331,7 +427,14 @@ public final class UndoPlanner {
 
 	private static final Comparator<Located> NEWEST_FIRST = Comparator.comparingInt(Located::entry).thenComparingInt(Located::index).reversed();
 
-	private static void planSettings(List<Located> selected, State state, Builder b) {
+	// The settings keys whose latest RigTune change is still in effect (staged, or applied and not being reverted).
+	private static Set<String> trackedKeys(Context ctx) {
+		Set<String> out = new LinkedHashSet<>();
+		ctx.candidates(l -> l.change().isSetting() && l.change().key() != null).forEach(l -> out.add(l.change().key()));
+		return out;
+	}
+
+	private static void planSettings(List<Located> selected, State state, Set<String> tracked, Builder b) {
 		Map<String, List<Located>> byKey = new LinkedHashMap<>();
 		for (Located l : selected) {
 			if (JournalChange.APPLIED.equals(l.change().status()) && l.change().isSetting() && l.change().key() != null) {
@@ -387,7 +490,9 @@ public final class UndoPlanner {
 			}
 		}
 		// Restoring graphicsPreset rewrites its options (review M7): the ones left alone are written back as they are now
-		// (after the preset, which SettingsBridge applies first), so the screen's "skipped" holds.
+		// (after the preset, which SettingsBridge applies first), so the screen's "skipped" holds. That covers every option
+		// a RigTune change still in effect set, too: a later entry's (Undo this on an older one) and one the list showed
+		// as skipped (which the confirm-time re-plan doesn't select).
 		boolean preset = b.immediate.containsKey(PRESET_KEY);
 		unwritable.forEach(l -> b.skip(l, preset ? PRESET_MAY_CHANGE : NOT_CHANGEABLE));
 		if (preset) {
@@ -396,6 +501,12 @@ public final class UndoPlanner {
 					b.immediate.putIfAbsent(key, current);
 				}
 			});
+			for (String key : tracked) {
+				String current = state.immediate(key) && state.changeable(key) ? state.setting(key) : null;
+				if (current != null) {
+					b.immediate.putIfAbsent(key, current);
+				}
+			}
 		}
 	}
 
@@ -444,7 +555,8 @@ public final class UndoPlanner {
 			sim.put(name, content);
 		}
 		List<Accepted> accepted = new ArrayList<>();
-		Set<String> problems = violations(sim, folder);
+		Staged staged = staged(pending, b.discardOpIds, folder);
+		Set<String> problems = violations(sim, folder, staged);
 		for (List<Located> group : byGroup.values()) {
 			// Reversal disables first, as the executor runs a group: that frees the name an update chain reuses.
 			List<Located> ordered = new ArrayList<>(group.stream().filter(l -> JournalChange.ENABLE.equals(l.change().action())).toList());
@@ -466,7 +578,7 @@ public final class UndoPlanner {
 				failure = stagedElsewhere(moved.values(), trial, pending, b.discardOpIds);
 			}
 			if (failure == null) {
-				Set<String> added = new TreeSet<>(violations(trial, folder));
+				Set<String> added = new TreeSet<>(violations(trial, folder, staged));
 				added.removeAll(problems);
 				if (!added.isEmpty()) {
 					failure = BREAKS.formatted(String.join("; ", added));
@@ -479,7 +591,7 @@ public final class UndoPlanner {
 			}
 			sim.clear();
 			sim.putAll(trial);
-			problems = violations(sim, folder);
+			problems = violations(sim, folder, staged);
 			accepted.add(new Accepted(ordered, moved));
 			for (Located l : ordered) {
 				JournalChange c = l.change();
@@ -556,8 +668,33 @@ public final class UndoPlanner {
 		return content != null && content.info() != null && RIGTUNE.equals(content.info().id());
 	}
 
+	// The staged ops this undo leaves in pending.json. They run at the next exit before the undo's own group, so the
+	// dependency check sees the folder as they leave it: an undo of an older entry can't disable a jar that a later
+	// entry's staged mod needs.
+	private record Staged(Set<String> disabled, Map<String, Content> enabled) {
+	}
+
+	private static Staged staged(List<Op> pending, Set<String> discarded, Folder folder) {
+		Set<String> disabled = new HashSet<>();
+		Map<String, Content> enabled = new LinkedHashMap<>();
+		for (Op op : pending) {
+			if (op == null || op.type() == null || op.id() != null && discarded.contains(op.id())) {
+				continue;
+			}
+			if (op.type() == PendingActions.Type.DISABLE_FILE && op.path() != null) {
+				disabled.add(HistoryUpdates.fileName(op.path()));
+			} else if (op.type() == PendingActions.Type.ENABLE_FILE && op.from() != null && op.to() != null) {
+				enabled.put(HistoryUpdates.fileName(op.to()), new Content(HistoryUpdates.fileName(op.from()), folder));
+			}
+		}
+		return new Staged(disabled, enabled);
+	}
+
 	// Reasons the folder wouldn't start: a mod id on two active jars, or an active jar without a mod it depends on.
-	private static Set<String> violations(Map<String, Content> sim, Folder folder) {
+	private static Set<String> violations(Map<String, Content> folderNow, Folder folder, Staged staged) {
+		Map<String, Content> sim = new LinkedHashMap<>(folderNow);
+		staged.disabled().forEach(sim::remove);
+		sim.putAll(staged.enabled());
 		Set<String> provided = new HashSet<>(ALWAYS_PROVIDED);
 		provided.addAll(folder.providedElsewhere());
 		Map<String, List<String>> namesById = new HashMap<>();

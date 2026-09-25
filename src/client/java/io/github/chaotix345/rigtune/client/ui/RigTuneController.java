@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
+import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
@@ -79,6 +80,18 @@ public interface RigTuneController {
 	/** The launcher that started the game (docs/v0.3/SPEC.md item 5); UNKNOWN when it isn't recognised. */
 	default LauncherInfo launcher() {
 		return LauncherInfo.UNKNOWN;
+	}
+
+	// v0.3 (WS-B): docs/v0.3/SPEC.md item 6 and 3e.
+
+	/** What "Undo this" on one history entry would do; carried out with {@link #undo(UndoPlan)}. Off the render thread. */
+	default @Nullable UndoPlan undoPlanFor(String entryId) {
+		return null;
+	}
+
+	/** The History screen's model, or null when there is none. Off the render thread. */
+	default HistoryModel.@Nullable View history() {
+		return null;
 	}
 
 	// v0.3 (WS-F)

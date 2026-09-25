@@ -125,10 +125,9 @@ public class RigTuneScreen extends Screen {
 		List<Button> buttons = new ArrayList<>();
 		applyButton = Button.builder(Component.translatable("rigtune.screen.apply"), b -> applySelected()).build();
 		buttons.add(applyButton);
-		buttons.add(Button.builder(Component.translatable("rigtune.screen.undo_last"), b -> minecraft.gui.setScreen(new UndoScreen(this, controller, false)))
-				.tooltip(Tooltip.create(Component.translatable("rigtune.screen.undo_last.tooltip"))).build());
-		buttons.add(Button.builder(Component.translatable("rigtune.screen.undo_all"), b -> minecraft.gui.setScreen(new UndoScreen(this, controller, true)))
-				.tooltip(Tooltip.create(Component.translatable("rigtune.screen.undo_all.tooltip"))).build());
+		// v0.3 (review X-M2): Undo last and Undo all live in the History screen.
+		buttons.add(Button.builder(Component.translatable("rigtune.history.open"), b -> minecraft.gui.setScreen(new HistoryScreen(this, controller)))
+				.tooltip(Tooltip.create(Component.translatable("rigtune.history.open.tooltip"))).build());
 		if (controller.hasPendingChanges()) {
 			Button discard = Button.builder(Component.translatable("rigtune.screen.discard"), b -> {
 				status = controller.discardPending();

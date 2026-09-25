@@ -12,10 +12,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 // The 0.1.0 files under src/test/resources/v010/ (hand-written) and v010/captured/ (captured from the released jar by
-// the self-update E2E run). Paths in them are templated: ${MODS}, ${CONFIG} (hand-written) and ${INSTANCE}, the game
-// folder holding mods/ and config/ (captured), each optionally followed by /-separated names.
+// the self-update E2E run) and v010/real-instance/ (the user's real instance). Paths in them are templated: ${MODS},
+// ${CONFIG} (hand-written) and ${INSTANCE}, the game folder holding mods/ and config/ (captured, real), each optionally
+// followed by /-separated names. A name ends at a `:` (a path inside a message: "x.jar.disabled: The process...").
 public final class V010Fixtures {
-	private static final Pattern TOKEN = Pattern.compile("\\$\\{(MODS|CONFIG|INSTANCE)}((?:/[^\"/\\s]+)*)");
+	private static final Pattern TOKEN = Pattern.compile("\\$\\{(MODS|CONFIG|INSTANCE)}((?:/[^\"/\\s:]+)*)");
 
 	private V010Fixtures() {
 	}
