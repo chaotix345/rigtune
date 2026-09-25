@@ -55,7 +55,7 @@ Open RigTune from any of these:
 
 Review the list, untick anything you don't want, and press **Apply**. If mods or config changed, restart Minecraft; the next launch tells you what was applied. Made a mistake? Open **Undo last apply** or **Undo everything** from the RigTune screen to revert it, immediately or after a restart.
 
-To run the benchmark, press **Benchmark…** on the RigTune screen. Pick a scene — your current world, or the dedicated benchmark world (no save needed, reachable from the title screen) — and **Tune** or **Measure**. It takes about a minute. Press Esc to cancel; your settings are always restored.
+To run the benchmark, press **Benchmark…** on the RigTune screen. Pick a scene — your current world, or the dedicated benchmark world (no save needed, reachable from the title screen) — and **Tune** or **Measure**. It takes about a minute. Press Esc to cancel; your settings are always restored. In your own world, Tune tests at most 8 render distances above your current one: every distance it tests makes the game load, generate and save that much more of the world.
 
 ## Privacy
 
