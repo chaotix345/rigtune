@@ -38,6 +38,25 @@ class SettingKeysTest {
 	}
 
 	@Test
+	void sodiumAcceptsItsRealOptionKeys() {
+		for (String key : new String[] {"sodium.performance.chunk_builder_threads", "sodium.performance.chunk_build_defer_mode",
+				"sodium.performance.use_no_error_g_l_context", "sodium.quality.weather_quality", "sodium.quality.hidden_fluid_culling",
+				"sodium.advanced.cpu_render_ahead_limit", "sodium.notifications.has_shown_donation_prompt"}) {
+			assertTrue(SettingKeys.changeable(key), key);
+		}
+	}
+
+	// Review 3, security-2: the sodium. suffix gets the same safe-key rules as dh./iris.
+	@Test
+	void sodiumRejectsPathTraversalSlashesEmptySegmentsAndControlCharacters() {
+		for (String key : new String[] {"sodium.../../etc/passwd", "sodium.performance..threads", "sodium..performance",
+				"sodium.performance.", "sodium.performance/threads", "sodium.performance\\threads", "sodium.performance threads",
+				"sodium.performance.threads\u0000", "sodium.performance.\nthreads", "sodium.\"performance\"", "sodium.a:b", "sodium.."}) {
+			assertFalse(SettingKeys.changeable(key), key);
+		}
+	}
+
+	@Test
 	void unrelatedNamespacesAndNullStayRejected() {
 		assertFalse(SettingKeys.changeable("distanthorizons.foo"));
 		assertFalse(SettingKeys.changeable(null));

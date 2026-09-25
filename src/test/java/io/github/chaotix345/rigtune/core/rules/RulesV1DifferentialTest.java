@@ -41,8 +41,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Runs a pinned copy of the v0.1.0 Recommender (package io.github.chaotix345.rigtune.v010, copied from tag v0.1.0)
  * over the baseline rules-v1.json (the one 0.1.0 shipped) and the repository's rules-v1.json, on a hardware × mods ×
  * goal × settings matrix. rules-v1.json may only take actions away from a 0.1.x user: no new appliable recommendation
- * (ticked or not), no recommendation newly ticked (plan review H2), and no lost warning (a conflict: or advice:
- * recommendation). If a change is intended, review
+ * (ticked or not), no recommendation newly ticked (plan review H2), no lost warning (a conflict: or advice:
+ * recommendation), and no lost disable: (an avoided or obsolete mod; review 3, compat-1). If a change is intended, review
  * it and replace src/test/resources/v010/rules-v1-baseline.json with rules/rules-v1.json (tools/README.md).
  */
 class RulesV1DifferentialTest {
@@ -117,7 +117,25 @@ class RulesV1DifferentialTest {
 		for (String change : differences(baselineJson(), doc.toString())) {
 			kinds.add(change.substring(0, change.indexOf(':')));
 		}
-		assertEquals(Set.of("lost advice", "lost conflict"), kinds);
+		assertEquals(Set.of("lost advice", "lost conflict", "lost disable"), kinds);
+	}
+
+	// Review 3, compat-1: Nvidium's v1 avoidWhen lost its gpuTierAtMost 2 branch, and 0.1.x stopped suggesting to
+	// disable it on a tier-2 NVIDIA GPU without the test noticing.
+	@Test
+	void theDifferentialCatchesALostDisable() throws IOException {
+		JsonObject doc = JsonParser.parseString(baselineJson()).getAsJsonObject();
+		for (JsonElement mod : doc.getAsJsonArray("mods")) {
+			if (mod.getAsJsonObject().get("slug").getAsString().equals("nvidium")) {
+				JsonArray anyOf = mod.getAsJsonObject().getAsJsonObject("avoidWhen").getAsJsonArray("anyOf");
+				assertTrue(anyOf.remove(JsonParser.parseString("{\"gpuTierAtMost\":2}")));
+			}
+		}
+		List<String> changes = differences(baselineJson(), doc.toString());
+		assertFalse(changes.isEmpty());
+		assertTrue(changes.stream().allMatch(c -> c.startsWith("lost disable:nvidium on ")), changes.getFirst());
+		assertTrue(changes.stream().anyMatch(c -> c.startsWith("lost disable:nvidium on gtx-1050-ti / mods sodium+nvidium /")), changes.toString());
+		assertTrue(changes.stream().anyMatch(c -> c.startsWith("lost disable:nvidium on rtx-2060-laptop / mods sodium+nvidium /")), changes.toString());
 	}
 
 	// Why the updater rewrites conflictsWith references to a rule it leaves out: 0.1.0 resolves a slug only through a rule
@@ -159,15 +177,17 @@ class RulesV1DifferentialTest {
 	}
 
 	@Test
-	void removedActionsAreAllowed() throws IOException {
+	void removedAddsAndSettingsAreAllowed() throws IOException {
 		JsonObject doc = JsonParser.parseString(baselineJson()).getAsJsonObject();
 		doc.add("settings", new JsonArray());
-		doc.add("obsolete", new JsonArray());
+		for (JsonElement mod : doc.getAsJsonArray("mods")) {
+			mod.getAsJsonObject().add("recommendWhen", JsonParser.parseString("{\"always\":false}"));
+		}
 		assertEquals(List.of(), differences(baselineJson(), doc.toString()));
 	}
 
 	// For each matrix point: "added <action>" for an appliable recommendation the old rules didn't give, "ticked <action>"
-	// for one they gave unticked, and "lost <id>" for a conflict or advice the new rules no longer give.
+	// for one they gave unticked, and "lost <id>" for a conflict, advice or disable the new rules no longer give.
 	static List<String> differences(String oldJson, String newJson) {
 		io.github.chaotix345.rigtune.v010.core.rules.RulesDocument oldRules = v010(oldJson);
 		io.github.chaotix345.rigtune.v010.core.rules.RulesDocument newRules = v010(newJson);
@@ -201,6 +221,8 @@ class RulesV1DifferentialTest {
 						after.ticked().stream().filter(a -> before.actions().contains(a) && !before.ticked().contains(a))
 								.forEach(a -> changes.add("ticked " + a + at));
 						before.warnings().stream().filter(w -> !after.warnings().contains(w)).forEach(w -> changes.add("lost " + w + at));
+						before.actions().stream().filter(a -> a.startsWith("disable:") && !after.actions().contains(a))
+								.forEach(a -> changes.add("lost " + a + at));
 					}
 				}
 			}
@@ -256,6 +278,12 @@ class RulesV1DifferentialTest {
 		out.put("gtx-1660-laptop", hw("Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz", 6, 12, 4500, "NVIDIA Corporation",
 				"NVIDIA GeForce GTX 1660 Ti with Max-Q Design/PCIe/SSE2", gl, 6144, 16384, 3072, new DisplayInfo(1920, 1080, 144, true),
 				true, false, "Windows 11", "26.3", Set.of()));
+		// NVIDIA at GPU tier 2, where 0.1.0's rules disable an installed Nvidium (review 3, compat-1).
+		out.put("gtx-1050-ti", hw("Intel(R) Core(TM) i5-7400 CPU @ 3.00GHz", 4, 4, 3500, "NVIDIA Corporation", "NVIDIA GeForce GTX 1050 Ti/PCIe/SSE2", gl,
+				4096, 16384, 4096, new DisplayInfo(1920, 1080, 60, true), false, false, "Windows 10", "26.2", Set.of()));
+		out.put("rtx-2060-laptop", hw("Intel(R) Core(TM) i7-10750H CPU @ 2.60GHz", 6, 12, 5000, "NVIDIA Corporation",
+				"NVIDIA GeForce RTX 2060 Laptop GPU/PCIe/SSE2", gl, 6144, 16384, 4096, new DisplayInfo(1920, 1080, 144, true), true, false,
+				"Windows 11", "26.3", Set.of()));
 		out.put("no-gpu-info", hw("unknown", -1, 4, -1, "", "", GraphicsBackend.UNKNOWN, -1, -1, 2048, new DisplayInfo(-1, -1, -1, false),
 				false, false, "Linux", "26.2", Set.of()));
 		out.put("apple-m1", hw("Apple M1", 8, 8, -1, "Apple", "Apple M1", gl, -1, 16384, 4096, new DisplayInfo(2560, 1600, 60, true),

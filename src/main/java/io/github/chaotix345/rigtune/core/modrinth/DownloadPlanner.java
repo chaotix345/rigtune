@@ -98,14 +98,19 @@ public final class DownloadPlanner {
 			}
 			Path pending = fetcher.fetch(file);
 			String jarModId = modIdOf.apply(pending);
-			String sameMod = jarModId == null ? null : attempt.batch.groupOfMod.get(jarModId);
+			// Without a mod id nothing can check it isn't a second copy of an installed mod (review 3, apply-safety-1).
+			if (jarModId == null) {
+				attempt.batch.dropDuplicate(pending);
+				throw new IOException(file.filename() + " is not a Fabric mod jar (no readable fabric.mod.json id)");
+			}
+			String sameMod = attempt.batch.groupOfMod.get(jarModId);
 			if (sameMod != null) {
 				attempt.joins.add(sameMod);
 				attempt.batch.dropDuplicate(pending);
 				continue;
 			}
 			// A second jar with an already-loaded mod id would stop Fabric from starting, so drop it.
-			if (jarModId != null && !attempt.modIds.add(jarModId)) {
+			if (!attempt.modIds.add(jarModId)) {
 				RigTune.LOGGER.info("Skipping {}: mod {} is already present", file.filename(), jarModId);
 				attempt.batch.dropDuplicate(pending);
 				continue;

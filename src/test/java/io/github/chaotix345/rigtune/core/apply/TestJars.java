@@ -22,4 +22,15 @@ public final class TestJars {
 		}
 		return jar;
 	}
+
+	// A valid jar that isn't a Fabric mod: no fabric.mod.json.
+	public static Path plainJar(Path jar) throws IOException {
+		Files.createDirectories(jar.toAbsolutePath().getParent());
+		try (OutputStream out = Files.newOutputStream(jar); ZipOutputStream zip = new ZipOutputStream(out)) {
+			zip.putNextEntry(new ZipEntry("pack.mcmeta"));
+			zip.write("{}".getBytes(StandardCharsets.UTF_8));
+			zip.closeEntry();
+		}
+		return jar;
+	}
 }
