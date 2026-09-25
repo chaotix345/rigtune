@@ -1,0 +1,6 @@
+[2026-09-25T05:45:22.260447Z] [RigTune apply] Waiting for game process 40836 to exit
+[2026-09-25T05:45:23.690555800Z] [RigTune apply] Applying 3 operation(s) from <instance>\config\rigtune\pending.json
+[2026-09-25T05:45:23.739067800Z] [RigTune apply] OK DISABLE_FILE: Disabled e2e-legacy-1.0.0.jar -> e2e-legacy-1.0.0.jar.disabled
+[2026-09-25T05:45:23.740067600Z] [RigTune apply] OK DISABLE_FILE: Disabled rigtune-0.1.0.jar -> rigtune-0.1.0.jar.disabled
+[2026-09-25T05:45:23.740067600Z] [RigTune apply] OK ENABLE_FILE: Enabled rigtune-0.2.0-dev+mc26.2.jar
+[2026-09-25T05:45:23.740067600Z] [RigTune apply] All operations done

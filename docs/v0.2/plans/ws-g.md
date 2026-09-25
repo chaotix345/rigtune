@@ -159,3 +159,9 @@
 
 ## Phase 5 (later, coordinator message)
 Rerun Task 6 with the merged integration jar and `--expect-history`; rerun Task 7; add M14 (0.2 applies a mod change → quit → helper → Undo last → quit → helper → assert) as a third driver phase once WS-B's `undoPlan`/`undo` exist.
+
+## Phase 5 tasks (done 2026-09-25)
+- [x] Merge origin/feat/v0.2.0 (5f57eee), build both versions (784 tests each).
+- [x] `--legacy-disable`: the 0.1.0 driver also disables a test mod in the update's apply; `--expect-history` requires one `legacy-import` entry holding that disable as APPLIED and nothing of RigTune's. Tests: tools/e2e/tests/test_e2e_checks_phase5.py.
+- [x] `--scenario undo` (M14) with a driver compiled against 0.2 (`src/e2eUndo`, `-Pe2e.driver=undo`): apply {add, disable} → helper → Undo last (the confirmation screen's button) → helper → next start. Checks `after_mod_apply`, `after_mod_undo`, `after_mod_check`.
+- [x] Runs: docs/smoke/self-update/final-v010-to-020 and undo-after-restart.

@@ -1,0 +1,30 @@
+{
+  "finishedAt": "2026-09-25T05:54:54.427457800Z",
+  "results": [
+    {
+      "op": {
+        "type": "DISABLE_FILE",
+        "path": "<instance>\\mods\\e2e-disable-me-1.0.0.jar",
+        "id": "87b337cd-0966-4cc1-a654-6a1d7cd94a8c",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Disabled e2e-disable-me-1.0.0.jar -> e2e-disable-me-1.0.0.jar.disabled",
+      "resultPath": "<instance>\\mods\\e2e-disable-me-1.0.0.jar.disabled"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "<instance>\\mods\\e2e-added-1.0.0.jar.rigtune-pending",
+        "to": "<instance>\\mods\\e2e-added-1.0.0.jar",
+        "id": "0d5215c3-963d-414d-94e5-235d31feffb2",
+        "group": "267f68d9-6624-42c3-8560-a708581c67a7",
+        "modId": "e2e-added",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled e2e-added-1.0.0.jar",
+      "resultPath": "<instance>\\mods\\e2e-added-1.0.0.jar"
+    }
+  ]
+}

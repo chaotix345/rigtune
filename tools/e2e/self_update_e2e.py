@@ -38,7 +38,20 @@ HELPER_DONE = ("All operations done", "Some operations were not applied", "Nothi
 # A fresh instance: no accessibility onboarding (it would sit in front of the title screen), windowed, muted.
 OPTIONS = "onboardAccessibility:false\nfullscreen:false\nskipMultiplayerWarning:true\ntutorialStep:none\n" \
           "joinedFirstServer:true\nsoundCategory_master:0.0\n"
+# Evidence and fixtures are written with LF, as the repository stores text (.gitattributes).
+LF = chr(10)
 CAPTURED = ("pending.json", "last-apply.json", "rigtune.json", "rules-cache.json", "helper.log")
+UNDO_PHASES = ("mod-apply", "mod-undo", "mod-check")
+ADDED_ID = "e2e-added"
+ADDED_PROJECT = "E2EAddMd"
+OTHER_ID = "e2e-disable-me"
+PHASE_TITLES = {
+    "update": "After the old version applied the update and quit (helper done)",
+    "verify": "After the new version started on the same instance",
+    "mod-apply": "After 0.2 applied {add " + ADDED_ID + " from Modrinth, disable " + OTHER_ID + "} and quit (helper done)",
+    "mod-undo": "After Undo last apply and a restart (helper done)",
+    "mod-check": "After the next start",
+}
 
 
 class LockBusy(Exception):
@@ -59,14 +72,22 @@ class Run:
         self.out = self.run_dir / "out"
         self.mods = self.instance / "mods"
         self.rigtune_dir = self.instance / "config" / "rigtune"
-        self.old_jar = Path(args.old_jar).resolve()
+        self.undo = args.scenario == "undo"
+        # self-update: old_jar is installed and new_jar served as its update. undo: new_jar is installed, nothing to update.
+        self.old_jar = Path(args.old_jar).resolve() if args.old_jar else None
         self.new_jar = Path(args.new_jar).resolve()
-        self.api_jar = Path(args.driver_api_jar or args.old_jar).resolve()
+        self.api_jar = Path(args.driver_api_jar or args.old_jar).resolve() if (args.driver_api_jar or args.old_jar) else None
         self.lock = None if args.lock == "none" else Path(args.lock)
         self.server = None
         self.watcher = None
-        self.checks = {"update": [], "verify": []}
+        self.checks = {p: [] for p in (UNDO_PHASES if self.undo else ("update", "verify"))}
         self.facts = {}
+        self.jars = self.run_dir / "jars"
+        # Test mods: disabled by 0.1.0 with its update (so the legacy import has a non-RigTune change), and for the undo
+        # scenario one served by the fake Modrinth to add and one in mods/ to disable.
+        self.legacy_jar = self.jars / "e2e-legacy-1.0.0.jar" if args.legacy_disable and not self.undo else None
+        self.added_jar = self.jars / "{}-1.0.0.jar".format(ADDED_ID)
+        self.other_jar = self.jars / "{}-1.0.0.jar".format(OTHER_ID)
 
     # --- plumbing -------------------------------------------------------------------------------------------------
 
@@ -162,25 +183,37 @@ class Run:
         self.run_dir.mkdir(parents=True)
         self.out.mkdir()
         self.log("run folder " + str(self.run_dir))
-        for jar in (self.old_jar, self.new_jar, self.api_jar):
+        installed = self.new_jar if self.undo else self.old_jar
+        if installed is None or not self.undo and self.api_jar is None:
+            raise SystemExit("--old-jar is required for the self-update scenario")
+        for jar in [j for j in (self.old_jar, self.new_jar, self.api_jar) if j is not None]:
             if e2e_env.mod_json(jar).get("id") != "rigtune":
                 raise SystemExit("{} isn't a RigTune jar".format(jar))
-        old_sha256 = e2e_checks.digest(self.old_jar, "sha256")
-        if self.args.old_sha256 and old_sha256 != self.args.old_sha256.lower():
-            raise SystemExit("{} has sha256 {}, expected {}".format(self.old_jar, old_sha256, self.args.old_sha256))
-        self.facts.update({
-            "old": {"file": self.old_jar.name, "version": e2e_env.mod_json(self.old_jar)["version"], "sha256": old_sha256},
-            "new": {"file": self.new_jar.name, "version": e2e_env.mod_json(self.new_jar)["version"],
-                    "sha256": e2e_checks.digest(self.new_jar, "sha256")},
-        })
-        self.log("old {file} {version} sha256 {sha256}".format(**self.facts["old"]))
+        if self.old_jar is not None:
+            old_sha256 = e2e_checks.digest(self.old_jar, "sha256")
+            if self.args.old_sha256 and old_sha256 != self.args.old_sha256.lower():
+                raise SystemExit("{} has sha256 {}, expected {}".format(self.old_jar, old_sha256, self.args.old_sha256))
+            self.facts["old"] = {"file": self.old_jar.name, "version": e2e_env.mod_json(self.old_jar)["version"], "sha256": old_sha256}
+            self.log("old {file} {version} sha256 {sha256}".format(**self.facts["old"]))
+        self.facts["new"] = {"file": self.new_jar.name, "version": e2e_env.mod_json(self.new_jar)["version"],
+                             "sha256": e2e_checks.digest(self.new_jar, "sha256")}
         self.log("new {file} {version} sha256 {sha256}".format(**self.facts["new"]))
 
+        self.jars.mkdir()
         self.mods.mkdir(parents=True)
         self.rigtune_dir.parent.mkdir(parents=True)
-        shutil.copyfile(self.old_jar, self.mods / self.old_jar.name)
+        shutil.copyfile(installed, self.mods / installed.name)
         api = self.fabric_api()
         shutil.copyfile(api, self.mods / api.name)
+        extra_projects = []
+        if self.legacy_jar is not None:
+            e2e_env.test_mod_jar(self.legacy_jar, "e2e-legacy")
+            shutil.copyfile(self.legacy_jar, self.mods / self.legacy_jar.name)
+        if self.undo:
+            e2e_env.test_mod_jar(self.added_jar, ADDED_ID)
+            e2e_env.test_mod_jar(self.other_jar, OTHER_ID)
+            shutil.copyfile(self.other_jar, self.mods / self.other_jar.name)
+            extra_projects.append((ADDED_PROJECT, ADDED_ID, self.added_jar))
         (self.instance / "options.txt").write_text(OPTIONS, encoding="utf-8")
         self.facts["fabricApi"] = api.name
         self.log("instance mods: " + ", ".join(sorted(p.name for p in self.mods.iterdir())))
@@ -190,15 +223,24 @@ class Run:
         self.hosts.write_text(e2e_env.hosts_file_text(socket.gethostname()), encoding="utf-8")
         rules = sorted((REPO / "rules").glob("rules-v*.json"))
         self.catalog = self.run_dir / "catalog.json"
-        self.catalog.write_text(json.dumps(e2e_env.catalog(self.old_jar, self.new_jar, self.mc, rules), indent=1), encoding="utf-8")
+        self.catalog.write_text(json.dumps(e2e_env.catalog(self.old_jar, self.new_jar, self.mc, rules, extra_projects=extra_projects),
+                                           indent=1), encoding="utf-8")
         common = e2e_env.jvm_args(self.hosts, self.tls) + list(self.args.jvm_arg or [])
-        for phase in ("update", "verify"):
+        for phase in self.checks:
             lines = common + ["-Drigtune.e2e.phase=" + phase, "-Drigtune.e2e.out=" + str(self.out)]
+            if phase == "update" and self.legacy_jar is not None:
+                lines.append("-Drigtune.e2e.alsoDisable=e2e-legacy")
+            if self.undo:
+                lines += ["-Drigtune.e2e.addSlug=" + ADDED_ID, "-Drigtune.e2e.addProject=" + ADDED_PROJECT, "-Drigtune.e2e.disable=" + OTHER_ID]
             (self.run_dir / "jvm-{}.txt".format(phase)).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-        code = self.gradle("gradle-driver.log", ":{}:e2eDriverJar".format(self.mc), "-Pe2e.oldJar=" + str(self.api_jar))
+        code = self.gradle("gradle-driver.log", *self.driver_args(":{}:{}".format(self.mc, "e2eUndoDriverJar" if self.undo else "e2eDriverJar")))
         if code != 0:
             raise SystemExit("building the driver failed; see " + str(self.run_dir / "gradle-driver.log"))
+
+    def driver_args(self, task):
+        """The Gradle task plus the properties that pick and build this scenario's driver."""
+        return [task, "-Pe2e.driver=undo"] if self.undo else [task, "-Pe2e.oldJar=" + str(self.api_jar)]
 
     def start_server(self):
         requests = self.run_dir / "requests.jsonl"
@@ -240,11 +282,12 @@ class Run:
         if result.returncode != 0:
             raise SystemExit("the redirect probe failed:\n" + result.stdout + result.stderr)
 
-    def start_watcher(self):
+    def start_watcher(self, phase):
         """Records the command line of every ApplyHelper JVM of this run while it lives (it lives a few seconds)."""
         if os.name != "nt":
             return
-        target = str(self.run_dir / "helper-cmdlines.txt").replace("\\", "/")
+        self.watched = self.run_dir / "helper-cmdlines-{}.txt".format(phase)
+        target = str(self.watched).replace("\\", "/")
         script = ("$out = '" + target + "'; while ($true) { Get-CimInstance Win32_Process -Filter \"Name='java.exe' OR Name='javaw.exe'\" | "
                   "Where-Object { $_.CommandLine -like '*ApplyHelper*' -and $_.CommandLine -like '*" + self.run_dir.name + "*' } | "
                   "ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" } | Add-Content -Encoding utf8 -Path $out; "
@@ -258,8 +301,8 @@ class Run:
             self.watcher = None
 
     def helper_cmdlines(self):
-        path = self.run_dir / "helper-cmdlines.txt"
-        if not path.is_file():
+        path = getattr(self, "watched", None)
+        if path is None or not path.is_file():
             return []
         seen = {}
         for line in path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
@@ -287,7 +330,7 @@ class Run:
     def launch(self, phase):
         self.log("launching the client, phase " + phase)
         started = time.time()
-        code = self.gradle("gradle-{}.log".format(phase), ":{}:e2eClient".format(self.mc), "-Pe2e.oldJar=" + str(self.api_jar),
+        code = self.gradle("gradle-{}.log".format(phase), *self.driver_args(":{}:e2eClient".format(self.mc)),
                            "-Pe2e.instance=" + str(self.instance), "-Pe2e.jvmArgsFile=" + str(self.run_dir / "jvm-{}.txt".format(phase)))
         self.facts["{}Seconds".format(phase)] = round(time.time() - started)
         self.log("client exited (gradle exit {}) after {} s".format(code, self.facts["{}Seconds".format(phase)]))
@@ -297,25 +340,38 @@ class Run:
             self.log("client still running after gradle returned: {}".format([pid for pid, _ in left]))
         return code
 
-    def run_update(self):
-        self.start_watcher()
+    def launch_and_apply(self, phase):
+        """One launch that stages changes, then the helper after the game exits. Returns (gradle exit, helper done,
+        helper command lines), and keeps the phase's files for the evidence."""
+        self.start_watcher(phase)
         try:
-            code = self.launch("update")
+            code = self.launch(phase)
             helper_ok = self.wait_for_helper()
         finally:
             self.stop_watcher()
         cmdlines = self.helper_cmdlines()
-        (self.out / "helper-cmdlines.txt").write_text("\n".join(cmdlines) + "\n", encoding="utf-8")
+        (self.out / "helper-cmdlines-{}.txt".format(phase)).write_text("\n".join(cmdlines) + "\n", encoding="utf-8")
         self.log("helper command line(s) seen: {}".format(len(cmdlines)))
+        self.snapshot(phase)
+        return code, helper_ok, cmdlines
+
+    def snapshot(self, phase):
+        for name in ("history.json", "last-apply.json", "helper.log"):
+            fixtures.copy_evidence(self.rigtune_dir / name, self.out / "{}-after-{}{}".format(Path(name).stem, phase, Path(name).suffix))
+        (self.out / "mods-after-{}.json".format(phase)).write_text(json.dumps(e2e_checks.listing(self.mods), indent=1), encoding="utf-8")
+
+    def run_update(self):
+        code, helper_ok, cmdlines = self.launch_and_apply("update")
         raw = self.run_dir / "captured-raw"
         raw.mkdir()
         fixtures.copy_evidence(self.out / "pending-before-exit.json", raw / "pending.json")
         for name in CAPTURED[1:]:
             fixtures.copy_evidence(self.rigtune_dir / name, raw / name)
         (self.out / "helper-dir.txt").write_text(json.dumps(e2e_checks.listing(self.rigtune_dir / "helper"), indent=1), encoding="utf-8")
-        (self.out / "mods-after-update.json").write_text(json.dumps(e2e_checks.listing(self.mods), indent=1), encoding="utf-8")
         driver = self.driver("update")
-        checks = e2e_checks.after_update(self.instance, self.old_jar, self.new_jar, driver, self.server_log(), cmdlines)
+        extra = [self.legacy_jar.name] if self.legacy_jar is not None else []
+        checks = e2e_checks.after_update(self.instance, self.old_jar, self.new_jar, driver, self.server_log(), cmdlines,
+                                         extra_disables=extra)
         checks.insert(0, e2e_checks.Check("the client exited normally and the helper finished", code == 0 and helper_ok,
                                           "gradle exit {}, helper finished: {}".format(code, helper_ok)))
         self.checks["update"] = checks
@@ -325,11 +381,44 @@ class Run:
         mods_before = e2e_checks.listing(self.mods)
         last_apply = e2e_checks._load(self.rigtune_dir / "last-apply.json") or {}
         code = self.launch("verify")
-        (self.out / "mods-after-verify.json").write_text(json.dumps(e2e_checks.listing(self.mods), indent=1), encoding="utf-8")
+        self.snapshot("verify")
+        legacy = [self.legacy_jar.name] if self.legacy_jar is not None else []
         checks = e2e_checks.after_verify(self.instance, self.new_jar, self.driver("verify"), last_apply.get("finishedAt"),
-                                         mods_before, self.args.expect_history)
+                                         mods_before, self.args.expect_history, legacy_disables=legacy)
         checks.insert(0, e2e_checks.Check("the relaunched client exited normally", code == 0, "gradle exit {}".format(code)))
         self.checks["verify"] = checks
+        return all(c.ok for c in checks)
+
+    def run_undo_scenario(self):
+        """Plan review M14: 0.2 applies a mod change, the helper applies it, Undo last after a restart, the helper
+        reverts it, and the next start has the mods as they were."""
+        def exited(code, helper_ok):
+            return e2e_checks.Check("the client exited normally and the helper finished", code == 0 and helper_ok,
+                                    "gradle exit {}, helper finished: {}".format(code, helper_ok))
+
+        code, helper_ok, _ = self.launch_and_apply("mod-apply")
+        checks = [exited(code, helper_ok)] + e2e_checks.after_mod_apply(self.instance, self.added_jar, self.other_jar.name,
+                                                                         self.driver("mod-apply"))
+        self.checks["mod-apply"] = checks
+        applies = [e for e in e2e_checks.history_entries(self.instance) or [] if e.get("kind") == "apply"]
+        if not all(c.ok for c in checks) or len(applies) != 1:
+            return False
+        self.facts["applyEntry"] = applies[0].get("id")
+
+        code, helper_ok, _ = self.launch_and_apply("mod-undo")
+        checks = [exited(code, helper_ok)] + e2e_checks.after_mod_undo(self.instance, self.added_jar.name, self.other_jar.name,
+                                                                        self.driver("mod-undo"), self.facts["applyEntry"])
+        self.checks["mod-undo"] = checks
+        if not all(c.ok for c in checks):
+            return False
+
+        mods_before = e2e_checks.listing(self.mods)
+        statuses_before = e2e_checks.history_statuses(self.instance)
+        code = self.launch("mod-check")
+        self.snapshot("mod-check")
+        checks = e2e_checks.after_mod_check(self.instance, ADDED_ID, OTHER_ID, self.driver("mod-check"), mods_before, statuses_before)
+        checks.insert(0, e2e_checks.Check("the client exited normally", code == 0, "gradle exit {}".format(code)))
+        self.checks["mod-check"] = checks
         return all(c.ok for c in checks)
 
     def driver(self, phase):
@@ -360,41 +449,53 @@ class Run:
             else:
                 shutil.rmtree(dest)
         dest.mkdir(parents=True)
-        texts = [self.out / n for n in ("driver-update.json", "driver-verify.json", "report-update.txt", "report-verify.txt",
-                                        "redirect-probe.txt", "helper-cmdlines.txt", "helper-dir.txt", "mods-after-update.json",
-                                        "mods-after-verify.json")]
+        texts = [self.out / n for n in ("redirect-probe.txt", "helper-dir.txt", "pending-before-exit.json")]
+        for phase in self.checks:
+            texts += [self.out / n.format(phase) for n in ("driver-{}.json", "report-{}.txt", "helper-cmdlines-{}.txt",
+                                                            "mods-after-{}.json", "history-after-{}.json", "last-apply-after-{}.json",
+                                                            "helper-after-{}.log", "pending-{}.json")]
         texts += [self.run_dir / n for n in ("requests.jsonl", "e2e.log", "catalog.json")]
         texts += [self.run_dir / "captured-raw" / n for n in CAPTURED]
         for source in texts:
             if source.is_file():
                 name = ("captured-" + source.name) if source.parent.name == "captured-raw" else source.name
-                (dest / name).write_text(self.scrub(source.read_text(encoding="utf-8", errors="replace")), encoding="utf-8")
-        for phase in ("update", "verify"):
+                (dest / name).write_text(self.scrub(source.read_text(encoding="utf-8", errors="replace")), encoding="utf-8", newline=LF)
+        for phase in self.checks:
             source = self.out / "latest-{}.log".format(phase)
             if source.is_file():
-                (dest / "latest-{}.filtered.log".format(phase)).write_text(self.scrub(filtered_log(source)), encoding="utf-8")
+                (dest / "latest-{}.filtered.log".format(phase)).write_text(self.scrub(filtered_log(source)), encoding="utf-8", newline=LF)
         for shot in sorted((self.instance / "screenshots").glob("e2e-*.png")):
             shutil.copyfile(shot, dest / shot.name)
         # Scrubbed before serialising: a detail holding a Python repr of paths would be escaped twice by json.dumps.
         (dest / "checks.json").write_text(json.dumps({phase: [dict(c.__dict__, detail=self.scrub(c.detail)) for c in checks]
-                                                      for phase, checks in self.checks.items()}, indent=1), encoding="utf-8")
-        (dest / "RESULT.md").write_text(self.result_markdown(verdict, sorted(p.name for p in dest.iterdir())), encoding="utf-8")
+                                                      for phase, checks in self.checks.items()}, indent=1), encoding="utf-8",
+                                          newline=LF)
+        (dest / "RESULT.md").write_text(self.result_markdown(verdict, sorted(p.name for p in dest.iterdir())), encoding="utf-8", newline=LF)
         self.log("evidence in " + str(dest))
 
     def result_markdown(self, verdict, files):
-        lines = ["# Self-update E2E: {}".format(self.name), "",
+        installed = self.facts["new"] if self.undo else self.facts["old"]
+        lines = ["# {} E2E: {}".format("Undo after restart" if self.undo else "Self-update", self.name), "",
                  "- Verdict: **{}**".format(verdict),
-                 "- Run: {} UTC, MC {}, {} + {} in a fresh scratch instance".format(
-                     self.run_dir.name.rsplit("-", 2)[-2], self.mc, self.facts.get("old", {}).get("file"), self.facts.get("fabricApi")),
-                 "- Old: `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["old"]),
-                 "- New (served by the fake Modrinth): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"]),
-                 "- Client time: update phase {} s, verify phase {} s".format(self.facts.get("updateSeconds"), self.facts.get("verifySeconds")),
-                 "- Rescan pressed because the report stayed offline (the startup lookup race, docs/v0.2/design/ws-g.md): "
-                 "update phase {}, verify phase {}".format(*("yes" if (self.driver(p) or {}).get("rescanned") else "no"
-                                                             for p in ("update", "verify"))),
-                 ""]
-        for phase, title in (("update", "After the old version applied the update and quit (helper done)"),
-                             ("verify", "After the new version started on the same instance")):
+                 "- Run: {} UTC, MC {}, {} + {}{} in a fresh scratch instance".format(
+                     self.run_dir.name.rsplit("-", 2)[-2], self.mc, installed["file"], self.facts.get("fabricApi"),
+                     " + " + self.other_jar.name if self.undo else " + " + self.legacy_jar.name if self.legacy_jar else "")]
+        if self.undo:
+            lines += ["- RigTune: `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"]),
+                      "- Added from the fake Modrinth: `{}` (project {}); disabled: `{}`".format(self.added_jar.name, ADDED_PROJECT,
+                                                                                                  self.other_jar.name)]
+        else:
+            lines += ["- Old: `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["old"]),
+                      "- New (served by the fake Modrinth): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"])]
+            if self.legacy_jar is not None:
+                lines.append("- 0.1.0 also disabled `{}` in the same apply (so the 0.2 legacy import has a change that isn't "
+                             "RigTune's)".format(self.legacy_jar.name))
+            lines.append("- Rescan pressed because the report stayed offline (the startup lookup race, docs/v0.2/design/ws-g.md): "
+                         "update phase {}, verify phase {}".format(*("yes" if (self.driver(p) or {}).get("rescanned") else "no"
+                                                                     for p in ("update", "verify"))))
+        lines.append("- Client time: " + ", ".join("{} {} s".format(p, self.facts.get("{}Seconds".format(p))) for p in self.checks))
+        lines.append("")
+        for phase, title in ((p, PHASE_TITLES[p]) for p in self.checks):
             lines += ["## " + title, "", "| check | result | detail |", "|---|---|---|"]
             if not self.checks[phase]:
                 lines.append("| (not run) | | |")
@@ -412,7 +513,7 @@ class Run:
         manifest = {"capturedFrom": self.facts["old"], "updateTo": self.facts["new"], "minecraft": self.mc,
                     "run": self.run_dir.name, "verdict": verdict, "failedChecks": failed, "token": fixtures.TOKEN,
                     "files": {p.name: e2e_checks.digest(p, "sha256") for p in written}}
-        (dest / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
+        (dest / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8", newline=LF)
         self.log("fixtures: " + ", ".join(p.name for p in written))
 
     # --- main -----------------------------------------------------------------------------------------------------
@@ -438,7 +539,10 @@ class Run:
         try:
             self.start_server()
             self.probe()
-            if self.run_update():
+            if self.undo:
+                if self.run_undo_scenario():
+                    verdict = "PASS"
+            elif self.run_update():
                 if self.run_verify():
                     verdict = "PASS"
             else:
@@ -453,7 +557,7 @@ class Run:
                     self.log("{} [{}] {}: {}".format(phase, "PASS" if c.ok else "FAIL", c.name, c.detail))
             self.log("VERDICT " + verdict)
             self.evidence(verdict)
-        if self.args.capture_fixtures and (verdict == "PASS" or self.args.capture_anyway and self.checks["update"]):
+        if self.args.capture_fixtures and not self.undo and (verdict == "PASS" or self.args.capture_anyway and self.checks["update"]):
             self.capture_fixtures(verdict)
         elif self.args.capture_fixtures:
             self.log("fixtures not captured: the run didn't pass (--capture-anyway overrides)")
@@ -482,9 +586,13 @@ def filtered_log(path):
 def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--name", required=True, help="scenario name, e.g. v010-to-dev")
-    parser.add_argument("--old-jar", required=True, help="the installed RigTune jar (e.g. the released v0.1.0)")
+    parser.add_argument("--scenario", choices=("self-update", "undo"), default="self-update",
+                        help="self-update (default), or undo: 0.2 applies a mod change and undoes it after a restart (M14)")
+    parser.add_argument("--old-jar", help="self-update: the installed RigTune jar (e.g. the released v0.1.0)")
     parser.add_argument("--old-sha256", help="expected sha256 of --old-jar")
-    parser.add_argument("--new-jar", required=True, help="the update the fake Modrinth serves")
+    parser.add_argument("--new-jar", required=True, help="self-update: the update the fake Modrinth serves; undo: the installed 0.2 jar")
+    parser.add_argument("--legacy-disable", action="store_true",
+                        help="self-update: 0.1.0 also disables a test mod, so the 0.2 legacy import has a change that isn't RigTune's")
     parser.add_argument("--driver-api-jar", help="the released v0.1.0 jar the driver compiles against (default --old-jar)")
     parser.add_argument("--work", required=True, help="scratch folder for the run (a fresh instance is made inside)")
     parser.add_argument("--mc", default="26.2")
