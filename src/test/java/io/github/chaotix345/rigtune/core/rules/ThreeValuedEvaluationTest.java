@@ -89,6 +89,17 @@ class ThreeValuedEvaluationTest {
 	}
 
 	@Test
+	void backendFlagIsUnknownWhenTheBackendIs() {
+		f.noGpuInfo();
+		assertEquals(UNKNOWN, f.truth("{\"flags\":[\"backend-vulkan\"]}"));
+		assertEquals(UNKNOWN, f.truth("{\"not\":{\"flags\":[\"backend-vulkan\"]}}"));
+		f.hw.gpu = null;
+		assertEquals(UNKNOWN, f.truth("{\"not\":{\"flags\":[\"backend-vulkan\"]}}"));
+		f.hw.flags = Set.of("backend-vulkan");
+		assertEquals(TRUE, f.truth("{\"flags\":[\"backend-vulkan\"]}"));
+	}
+
+	@Test
 	void anyOfIsTrueIfABranchIsTrueDespiteUnknownValues() {
 		f.hw.ramMb = -1;
 		assertEquals(TRUE, f.truth("{\"anyOf\":[{\"ramMbAtLeast\":1},{\"tierAtLeast\":3}]}"));

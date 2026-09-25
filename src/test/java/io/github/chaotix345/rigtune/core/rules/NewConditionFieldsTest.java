@@ -67,6 +67,21 @@ class NewConditionFieldsTest {
 	}
 
 	@Test
+	void gpuModelMatchesIsCompiledOnce() {
+		Condition c = RulesLoader.condition(NVIDIUM_CONDITION);
+		f.renderer("NVIDIA Corporation", "NVIDIA GeForce RTX 2060", GpuVendor.NVIDIA);
+		assertEquals(TRUE, ConditionEvaluator.evaluate(c, f.context()));
+		java.util.regex.Pattern first = c.modelPattern;
+		assertEquals(TRUE, ConditionEvaluator.evaluate(c, f.context()));
+		org.junit.jupiter.api.Assertions.assertNotNull(first);
+		org.junit.jupiter.api.Assertions.assertSame(first, c.modelPattern);
+		Condition bad = RulesLoader.condition("{\"gpuModelMatches\":\"(?i)[unclosed\"}");
+		assertEquals(UNKNOWN, ConditionEvaluator.evaluate(bad, f.context()));
+		org.junit.jupiter.api.Assertions.assertTrue(bad.modelPatternInvalid);
+		assertEquals(UNKNOWN, ConditionEvaluator.evaluate(bad, f.context()));
+	}
+
+	@Test
 	void gpuModelMatchesOutOfBudgetIsUnknown() {
 		f.renderer("", "a".repeat(40), GpuVendor.OTHER);
 		assertTimeoutPreemptively(Duration.ofSeconds(10),

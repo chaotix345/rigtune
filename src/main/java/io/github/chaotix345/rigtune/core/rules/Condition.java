@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.core.rules;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 public final class Condition {
 	public Boolean always;
@@ -45,4 +46,8 @@ public final class Condition {
 	// Keys of this object that this client doesn't know, filled in while parsing. Any unknown key anywhere in a
 	// condition tree makes the whole top-level condition false (fail closed).
 	public transient Set<String> unknownFields;
+
+	// gpuModelMatches compiled once by ConditionEvaluator (benign race: both writers store the same result).
+	transient volatile Pattern modelPattern;
+	transient volatile boolean modelPatternInvalid;
 }

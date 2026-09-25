@@ -38,7 +38,8 @@ public final class ConditionEvaluator {
 	public static final List<String> OS_FAMILIES = List.of("windows", "macos", "linux");
 	public static final Set<String> GOALS = Arrays.stream(Goal.values())
 			.map(g -> g.name().toLowerCase(Locale.ROOT)).collect(Collectors.toUnmodifiableSet());
-	public static final Set<String> FLAGS = Set.of("backend-vulkan", "shaders-enabled");
+	public static final String BACKEND_VULKAN_FLAG = "backend-vulkan";
+	public static final Set<String> FLAGS = Set.of(BACKEND_VULKAN_FLAG, "shaders-enabled");
 	public static final String SODIUM_WORKAROUND_FLAG = "sodium-workaround:";
 
 	private ConditionEvaluator() {
@@ -92,8 +93,8 @@ public final class ConditionEvaluator {
 		t = and(t, () -> c.mcVersion == null ? TRUE : hw.mcVersion() == null ? UNKNOWN : Truth.of(c.mcVersion.contains(hw.mcVersion())));
 		t = and(t, () -> c.modPresent == null ? TRUE : allEntries(c.modPresent, id -> ctx.loadedModIds().contains(id)));
 		t = and(t, () -> c.modAbsent == null ? TRUE : allEntries(c.modAbsent, id -> !ctx.loadedModIds().contains(id)));
-		t = and(t, () -> c.flags == null ? TRUE : flags(c.flags, hw.flags()));
-		t = and(t, () -> c.gpuModelMatches == null ? TRUE : gpuModelMatches(c.gpuModelMatches, gpu));
+		t = and(t, () -> c.flags == null ? TRUE : flags(c.flags, hw.flags(), gpu));
+		t = and(t, () -> c.gpuModelMatches == null ? TRUE : gpuModelMatches(c, gpu));
 		t = and(t, () -> c.modVersion == null ? TRUE : modVersions(c.modVersion, ctx));
 		t = and(t, () -> c.mcVersionRange == null ? TRUE : mcVersionRange(c.mcVersionRange, hw.mcVersion()));
 		t = and(t, () -> c.anyOf == null ? TRUE : anyOf(c.anyOf, ctx));
@@ -187,13 +188,16 @@ public final class ConditionEvaluator {
 		return anyEntry(wanted, GOALS::contains, name::equals, goal != null);
 	}
 
-	// Every listed flag must be present. A missing flag this client can detect is FALSE; one it can't is UNKNOWN.
-	private static Truth flags(List<String> wanted, Set<String> present) {
+	// Every listed flag must be present. A missing flag this client can detect is FALSE; one it can't is UNKNOWN, and so
+	// is backend-vulkan while the backend itself is unknown (the flag is derived from it).
+	private static Truth flags(List<String> wanted, Set<String> present, GpuInfo gpu) {
 		Set<String> flags = present == null ? Set.of() : present;
+		boolean backendKnown = gpu != null && gpu.backend() != null && gpu.backend() != GraphicsBackend.UNKNOWN;
 		Truth t = TRUE;
 		for (String flag : wanted) {
 			if (flag == null || !flags.contains(flag)) {
-				t = t.and(flag != null && knownFlag(flag) ? FALSE : UNKNOWN);
+				boolean decidable = flag != null && knownFlag(flag) && (backendKnown || !flag.equals(BACKEND_VULKAN_FLAG));
+				t = t.and(decidable ? FALSE : UNKNOWN);
 			}
 		}
 		return t;
@@ -223,19 +227,28 @@ public final class ConditionEvaluator {
 	}
 
 	// Found in the same subject string the gpuTiers patterns see, with the same length limit and read budget.
-	private static Truth gpuModelMatches(String regex, GpuInfo gpu) {
+	private static Truth gpuModelMatches(Condition c, GpuInfo gpu) {
 		String subject = GpuClassifier.subject(gpu);
-		if (subject.isBlank() || regex.length() > RulesDocument.PatternRule.MAX_PATTERN_LENGTH) {
-			return UNKNOWN;
-		}
-		Pattern pattern;
-		try {
-			pattern = Pattern.compile(regex);
-		} catch (PatternSyntaxException e) {
+		Pattern pattern = modelPattern(c);
+		if (subject.isBlank() || pattern == null) {
 			return UNKNOWN;
 		}
 		Boolean found = BudgetedChars.find(pattern, subject, BudgetedChars.DEFAULT_BUDGET);
 		return found == null ? UNKNOWN : Truth.of(found);
+	}
+
+	private static Pattern modelPattern(Condition c) {
+		if (c.modelPattern == null && !c.modelPatternInvalid) {
+			try {
+				if (c.gpuModelMatches.length() > RulesDocument.PatternRule.MAX_PATTERN_LENGTH) {
+					throw new PatternSyntaxException("longer than " + RulesDocument.PatternRule.MAX_PATTERN_LENGTH + " characters", c.gpuModelMatches, -1);
+				}
+				c.modelPattern = Pattern.compile(c.gpuModelMatches);
+			} catch (PatternSyntaxException e) {
+				c.modelPatternInvalid = true;
+			}
+		}
+		return c.modelPattern;
 	}
 
 	private static Truth modVersions(Map<String, String> wanted, EvalContext ctx) {
