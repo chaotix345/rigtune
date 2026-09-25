@@ -11,11 +11,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -299,5 +301,102 @@ class ApplyExecutorTest {
 		executor.run(plan(Op.disableFile(mods.resolve("indium.jar"))), pending);
 
 		assertFalse(Files.exists(Journal.file(config)));
+	}
+
+	// A sharing violation (Windows denying the rename because an AV scanner or the Modrinth App briefly has the jar
+	// open) gets exponential backoff instead of the fast fixed-delay policy, so a few extra seconds of contention
+	// right after the game exits doesn't fail the op.
+	@Test
+	void sharingViolationBacksOffExponentiallyAndSucceedsWithinTheBudget() throws IOException {
+		Files.writeString(mods.resolve("dh.jar"), "big");
+		AtomicInteger calls = new AtomicInteger();
+		List<Long> slept = new ArrayList<>();
+		ApplyExecutor.Mover mover = (from, to) -> {
+			if (calls.incrementAndGet() <= 3) {
+				throw new FileSystemException(to.toString(), null, "The process cannot access the file because it is being used by another process");
+			}
+			Files.move(from, to);
+		};
+		ApplyExecutor executor = new ApplyExecutor(2, 1, mover, millis -> {
+			slept.add(millis);
+			return true;
+		});
+
+		ApplyResult result = executor.run(plan(Op.disableFile(mods.resolve("dh.jar"))), pending);
+
+		assertEquals(List.of(Status.OK), statuses(result));
+		assertEquals(4, calls.get());
+		assertEquals(List.of(300L, 600L, 1200L), slept);
+	}
+
+	@Test
+	void sharingViolationGivesUpAfterTheBudgetWithTheGaveUpMessage() throws IOException {
+		List<Long> slept = new ArrayList<>();
+		ApplyExecutor.Mover mover = (from, to) -> {
+			throw new FileSystemException(to.toString(), null, "The process cannot access the file because it is being used by another process");
+		};
+		ApplyExecutor executor = new ApplyExecutor(2, 1, mover, millis -> {
+			slept.add(millis);
+			return true;
+		});
+		Files.writeString(mods.resolve("dh.jar"), "big");
+
+		ApplyResult result = executor.run(plan(Op.disableFile(mods.resolve("dh.jar"))), pending);
+
+		assertEquals(List.of(Status.FAILED), statuses(result));
+		assertTrue(result.results().get(0).message().startsWith("Gave up after 10 attempt(s): "), result.results().get(0).message());
+		assertEquals(List.of(300L, 600L, 1200L, 2400L, 4800L, 5000L, 5000L, 5000L, 5000L), slept);
+	}
+
+	// A plain (non-FileSystemException) IOException, or one of the exclusions that a retry can't fix, keeps failing
+	// fast with the executor's configured attempts/delay, unchanged from before.
+	@Test
+	void ordinaryIOExceptionKeepsTheOldFastPolicy() throws IOException {
+		AtomicInteger calls = new AtomicInteger();
+		List<Long> slept = new ArrayList<>();
+		ApplyExecutor.Mover mover = (from, to) -> {
+			calls.incrementAndGet();
+			throw new IOException("disk full");
+		};
+		ApplyExecutor executor = new ApplyExecutor(2, 1, mover, millis -> {
+			slept.add(millis);
+			return true;
+		});
+		Files.writeString(mods.resolve("a.jar"), "a");
+
+		ApplyResult result = executor.run(plan(Op.disableFile(mods.resolve("a.jar"))), pending);
+
+		assertEquals(List.of(Status.FAILED), statuses(result));
+		assertEquals("Gave up after 2 attempt(s): java.io.IOException: disk full", result.results().get(0).message());
+		assertEquals(2, calls.get());
+		assertEquals(List.of(1L), slept);
+	}
+
+	// Rollback (undoing an earlier op in the group after a later one fails) hits the same policy: the undo move here
+	// is briefly denied and then succeeds, instead of leaving the file stuck under the "won't fit" name forever.
+	@Test
+	void rollbackRetriesASharingViolationWithBackoff() throws IOException {
+		Files.writeString(mods.resolve("a.jar.rigtune-pending"), "new a");
+		Op enable = Op.enableFile(mods.resolve("a.jar.rigtune-pending"), mods.resolve("a.jar"));
+		Op missing = Op.enableFile(mods.resolve("gone.jar.rigtune-pending"), mods.resolve("gone.jar"));
+		AtomicInteger undoCalls = new AtomicInteger();
+		List<Long> slept = new ArrayList<>();
+		ApplyExecutor.Mover mover = (from, to) -> {
+			if (from.equals(mods.resolve("a.jar")) && to.equals(mods.resolve("a.jar.rigtune-pending")) && undoCalls.incrementAndGet() <= 2) {
+				throw new FileSystemException(from.toString(), null, "being used by another process");
+			}
+			Files.move(from, to);
+		};
+		ApplyExecutor executor = new ApplyExecutor(2, 1, mover, millis -> {
+			slept.add(millis);
+			return true;
+		});
+
+		ApplyResult result = executor.run(plan(PendingActions.group(enable, missing).toArray(new Op[0])), pending);
+
+		assertEquals(List.of(Status.FAILED, Status.FAILED), statuses(result));
+		assertEquals("Rolled back because enabling gone.jar failed", result.results().get(0).message());
+		assertEquals(List.of(300L, 600L), slept);
+		assertTrue(Files.exists(mods.resolve("a.jar.rigtune-pending")));
 	}
 }
