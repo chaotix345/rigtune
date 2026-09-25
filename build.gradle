@@ -229,6 +229,8 @@ tasks.register("runProductionSmoke", net.fabricmc.loom.task.prod.ClientProductio
 	mods.from(configurations.productionSmokeMods)
 	jvmArgs.addAll("-Dfabric.client.gametest", "-Drigtune.smoke=true")
 	jvmArgs.addAll(userOptions.map { ["-Drigtune.smoke.userOptions=" + it.absolutePath] }.orElse([]))
+	// -PsmokeBenchmark: also run a short benchmark in the smoke world and check the DH/Iris restore (BenchmarkSmoke).
+	jvmArgs.addAll(providers.gradleProperty("smokeBenchmark").map { ["-Drigtune.smoke.benchmark=true"] }.orElse([]))
 }
 
 // Self-update end-to-end harness (tools/e2e/README.md), never part of the shipped jar or of `build`. The fake Modrinth
