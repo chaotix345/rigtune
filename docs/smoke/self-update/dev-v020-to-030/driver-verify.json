@@ -1,0 +1,20 @@
+{
+  "phase": "verify",
+  "ok": true,
+  "error": null,
+  "events": [
+    "t+0.0s driver loaded, phase verify, output <run>\\out",
+    "t+3.9s title screen",
+    "t+6.0s screenshot e2e-verify-1-title.png: Saved screenshot as e2e-verify-1-title.png",
+    "t+6.9s report: 20 recommendations, online=true, goal QUALITY",
+    "t+7.9s screenshot e2e-verify-2-report.png: Saved screenshot as e2e-verify-2-report.png",
+    "t+9.9s quitting"
+  ],
+  "rigtuneVersion": "0.3.0-dev+mc26.2",
+  "rigtuneOrigin": [
+    "<instance>\\mods\\rigtune-0.3.0-dev+mc26.2.jar"
+  ],
+  "goal": "QUALITY",
+  "reportOnline": true,
+  "updateOffered": false
+}

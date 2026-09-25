@@ -1,0 +1,53 @@
+{
+  "phase": "update",
+  "ok": true,
+  "error": null,
+  "events": [
+    "t+0.0s driver loaded, phase update, output <run>\\out",
+    "t+4.1s title screen; goal set to QUALITY",
+    "t+5.1s offered: Update RigTune -> rigtune-0.3.0-dev+mc26.2.jar",
+    "t+6.2s screenshot e2e-update-1-report.png: Saved screenshot as e2e-update-1-report.png",
+    "t+7.1s apply [update:rigtune]: Downloading 1 mod change(s)…",
+    "t+7.6s staged: 2 op(s) in pending.json",
+    "t+9.7s screenshot e2e-update-2-staged.png: Saved screenshot as e2e-update-2-staged.png",
+    "t+11.7s quitting"
+  ],
+  "rigtuneVersion": "0.2.0+mc26.2",
+  "rigtuneOrigin": [
+    "<instance>\\mods\\rigtune-0.2.0+mc26.2.jar"
+  ],
+  "update": {
+    "title": "Update RigTune",
+    "reason": "Version 0.3.0-dev+mc26.2 is available (you have 0.2.0+mc26.2).",
+    "selectedByDefault": true,
+    "currentFile": "<instance>\\mods\\rigtune-0.2.0+mc26.2.jar",
+    "currentVersion": "0.2.0+mc26.2",
+    "newVersion": "0.3.0-dev+mc26.2",
+    "url": "https://cdn.modrinth.com/data/E2ERigTn/versions/E2Enew01/rigtune-0.3.0-dev%2Bmc26.2.jar",
+    "filename": "rigtune-0.3.0-dev+mc26.2.jar",
+    "sha512": "b3a735f4bf23b71e88701a6695aca04cbb1cd33e0fbc5f62207bfb67fb76c4e400f48e30e9287c96f6512c546cfae07b53863015f394606944c841708dc313c6"
+  },
+  "updateOffered": true,
+  "applyMessage": "Downloading 1 mod change(s)…",
+  "pendingOps": [
+    {
+      "type": "DISABLE_FILE",
+      "from": null,
+      "to": null,
+      "path": "<instance>\\mods\\rigtune-0.2.0+mc26.2.jar",
+      "modId": null,
+      "group": "db732fef-e9d6-416b-9491-2a05f9b954eb",
+      "id": "7828a9f7-8270-41b8-8289-ea3290358d10"
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\rigtune-0.3.0-dev+mc26.2.jar.rigtune-pending",
+      "to": "<instance>\\mods\\rigtune-0.3.0-dev+mc26.2.jar",
+      "path": null,
+      "modId": "rigtune",
+      "group": "db732fef-e9d6-416b-9491-2a05f9b954eb",
+      "id": "5936a515-9a7d-4189-bb86-1feb7ef00c24"
+    }
+  ],
+  "status": "Restart Minecraft to finish applying 1 change(s)."
+}

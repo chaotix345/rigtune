@@ -1,0 +1,35 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "d286d7bb-9e8f-4367-97e1-bba913615e0d",
+      "at": "2026-09-25T18:20:24.978067100Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.2.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "d5d7e7a3-d829-47dd-90a1-9aea5f2cac51",
+          "type": "file",
+          "action": "disable",
+          "modId": "rigtune",
+          "file": "rigtune-0.2.0+mc26.2.jar",
+          "resultFile": "rigtune-0.2.0+mc26.2.jar.disabled",
+          "status": "APPLIED",
+          "opId": "7828a9f7-8270-41b8-8289-ea3290358d10",
+          "group": "db732fef-e9d6-416b-9491-2a05f9b954eb"
+        },
+        {
+          "id": "c6d45c18-da09-4fb4-8c16-ee4d1de32610",
+          "type": "file",
+          "action": "enable",
+          "modId": "rigtune",
+          "file": "rigtune-0.3.0-dev+mc26.2.jar",
+          "status": "APPLIED",
+          "opId": "5936a515-9a7d-4189-bb86-1feb7ef00c24",
+          "group": "db732fef-e9d6-416b-9491-2a05f9b954eb"
+        }
+      ]
+    }
+  ]
+}
