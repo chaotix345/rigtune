@@ -1,15 +1,15 @@
 # WS-H: self-update E2E for 0.3 (design notes)
 
-Plan: docs/v0.3/plans/ws-h.md. Harness: tools/e2e (README "v0.3 runs"). Evidence: docs/smoke/self-update/dev-*-030.
+Plan: docs/v0.3/plans/ws-h.md. Harness: tools/e2e (README "v0.3 runs"). Evidence: docs/smoke/self-update/dev-*-030-merged (current) and dev-*-030 (before WS-B).
 
 ## What runs
 
 | scenario | command core | dry run on 0.3.0-dev | Phase 5 name |
 |---|---|---|---|
-| 0.2.0 → new | `--old-jar rigtune-0.2.0+mc26.2.jar --expect-history own-update` | PASS 20/20 | final-v020-to-030 |
-| 0.1.0 → new | `--old-jar rigtune-0.1.0.jar --legacy-disable --expect-history` | PASS 21/21 | final-v010-to-030 |
-| seeded 0.1.0 → new (H-M2) | `... --seed tools/e2e/seeds/v010-dh --expect-history` | 25/26 (3e WARN missing); PASS 26/26 with WS-B merged locally (`-wsb`) | final-v010-seeded-to-030 |
-| undo after restart + per entry (M14, B-M3) | `--scenario undo` | 31/35 (M14 22/22, entry-apply 6/6, entry-undo 3/7 needs WS-B); PASS 43/43 with WS-B merged locally (`-wsb`) | undo-after-restart-030 |
+| 0.2.0 → new | `--old-jar rigtune-0.2.0+mc26.2.jar --expect-history own-update` | PASS 20/20 (`-merged`) | final-v020-to-030 |
+| 0.1.0 → new | `--old-jar rigtune-0.1.0.jar --legacy-disable --expect-history` | PASS 21/21 (`-merged`) | final-v010-to-030 |
+| seeded 0.1.0 → new (H-M2) | `... --seed tools/e2e/seeds/v010-dh --expect-history` | PASS 26/26 (`-merged`; 25/26 before WS-B: no 3e WARN line) | final-v010-seeded-to-030 |
+| undo after restart + per entry (M14, B-M3) | `--scenario undo` | PASS 43/43 (`-merged`; 31/35 before WS-B: no per-entry API) | undo-after-restart-030 |
 
 Released jars (GitHub release assets; the harness checks `--old-sha256`): `rigtune-0.1.0.jar`
 `8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950`; `rigtune-0.2.0+mc26.2.jar`
@@ -41,7 +41,7 @@ Released jars (GitHub release assets; the harness checks `--old-sha256`): `rigtu
   (bipartite matching; identical lines count once) with `attempt N of 3`, the op type and one of the op's own file
   names. A mod id alone doesn't count: one group's ops share it, and the enable's reason names the disable's file. WS-B's
   format ("RigTune could not apply a change at the last exit (attempt 2 of 3; ...): DISABLE_FILE fabric-26.2.jar: ...")
-  passes (`-wsb`).
+  passes (`-merged`).
 - **B-M3 in the undo scenario.** AC4.2's single evidence folder holds both: after M14's three starts, the same instance
   gets two Applies (`e2e-first`, then `e2e-second`), Undo this on the older, a restart, and a check start. Before WS-B
   merged, the driver found the per-entry API by reflection; now it calls `controller.undoPlanFor(id)` and
@@ -57,13 +57,13 @@ Released jars (GitHub release assets; the harness checks `--old-sha256`): `rigtu
   carried op, whole-value paths with spaces, a lock holding other files is left whole, `--seed` only for self-update,
   entry-check needs the method and no plan problem, `undoPlanFor` preferred).
 
-## Blocked / waiting
+## Status
 
-- On test/e2e-v03 (without WS-B) the seeded run's 3e check and the undo run's entry-undo/entry-check fail; both pass
-  on a local merge with origin/feat/history 39eca5b (`-wsb` evidence; that merge isn't pushed).
-- 3a (WS-A, merged at c250b7a): re-run on test/e2e-v03 @ ee7f8ea; the narrowed rule (RigTune's update of a loaded mod
-  with its own update queued) still drops the carried-over DH group, with the notice "Cancelled RigTune's pending change
-  to Distant Horizons: ..." (key `rigtune.status.queued_update_dropped`); all four runs gave the same counts as before.
+- The `-merged` runs (test/e2e-v03 @ 4520cc9 = feat/v0.3.0 @ 6321696 plus the direct-call undo driver; jar sha256
+  `dbb7467471025e214d057b5f573ecaf4dc93d38359cf0ba7d745631146705ff2`) pass all four: 20/20, 21/21, 26/26, 43/43.
+- WS-A's narrowed 3a (RigTune's update of a loaded mod with its own update queued) drops the carried-over DH group with
+  the notice "Cancelled RigTune's pending change to Distant Horizons: ..." (key `rigtune.status.queued_update_dropped`).
+- Nothing is blocked; AC4.1/AC4.2 need the Phase 5 runs on the release candidate.
 
 ## Phase 5
 
