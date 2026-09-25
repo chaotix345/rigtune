@@ -1,0 +1,34 @@
+--- 26.3
++++ 26.4-snapshot-1
+@@ -433,2 +433,4 @@
+     descriptor: ()Z
++  public boolean enableLegacyStatus();
++    descriptor: ()Z
+   public boolean hidesOnlinePlayers();
+@@ -459,2 +461,4 @@
+     descriptor: ()Z
++  public java.lang.String statusContactDetails();
++    descriptor: ()Ljava/lang/String;
+   public long getNextTickTime();
+@@ -627,2 +631,4 @@
+     descriptor: ()Z
++  public boolean acceptsConnection(net.minecraft.network.Connection, net.minecraft.network.ServerConnectionDetails);
++    descriptor: (Lnet/minecraft/network/Connection;Lnet/minecraft/network/ServerConnectionDetails;)Z
+   private void storeChunkIoError(net.minecraft.CrashReport, net.minecraft.world.level.ChunkPos, net.minecraft.world.level.chunk.storage.RegionStorageInfo);
+@@ -679,2 +685,4 @@
+     descriptor: (Ljava/util/Collection;)Lcom/google/common/collect/ImmutableList;
++  private java.lang.Object lambda$fillSystemReport$8() throws java.lang.Exception;
++    descriptor: ()Ljava/lang/Object;
+   private java.lang.Object lambda$fillSystemReport$7() throws java.lang.Exception;
+@@ -689,6 +697,6 @@
+     descriptor: ()Ljava/lang/Object;
+-  private java.lang.Object lambda$fillSystemReport$2() throws java.lang.Exception;
+-    descriptor: ()Ljava/lang/Object;
+   private java.lang.Object lambda$fillSystemReport$1() throws java.lang.Exception;
+     descriptor: ()Ljava/lang/Object;
++  private static java.lang.String lambda$fillSystemReport$2(net.minecraft.server.level.ServerPlayer);
++    descriptor: (Lnet/minecraft/server/level/ServerPlayer;)Ljava/lang/String;
+   private java.lang.Object lambda$fillSystemReport$0() throws java.lang.Exception;
+
+String constants removed: ['Player Count']
+String constants added: ['All players']

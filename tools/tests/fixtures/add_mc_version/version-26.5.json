@@ -1,0 +1,9 @@
+{
+ "id": "26.5",
+ "type": "release",
+ "javaVersion": {
+  "component": "java-runtime-zeta",
+  "majorVersion": 26
+ },
+ "releaseTime": "2027-06-01T00:00:00+00:00"
+}

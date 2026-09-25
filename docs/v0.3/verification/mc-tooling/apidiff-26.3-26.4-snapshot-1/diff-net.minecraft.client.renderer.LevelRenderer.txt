@@ -1,0 +1,16 @@
+--- 26.3
++++ 26.4-snapshot-1
+@@ -1,7 +1,5 @@
+ public class net.minecraft.client.renderer.LevelRenderer implements java.lang.AutoCloseable {
+-  public static final int OIT_WAVELET_RANK = 2;
+-    descriptor: I
+-  public static final int OIT_COEFFICIENT_COUNT;
+-    descriptor: I
+-  public static final int OIT_TRANSMITTANCE_TARGET_COUNT;
++  public static final int OIT_NUMBER_OF_DEPTH_BINS = 8;
++    descriptor: I
++  public static final int OIT_TRANSMITTANCE_TARGET_COUNT = 2;
+     descriptor: I
+
+String constants removed: ['Coeff\x01']
+String constants added: ['Bins\x01']

@@ -1,0 +1,11 @@
+--- 26.3
++++ 26.4-snapshot-1
+@@ -23,4 +23,6 @@
+     descriptor: ()Z
+-  public abstract java.util.concurrent.CompletableFuture<com.mojang.renderpearl.api.pipeline.CompiledRenderPipeline$Pending> compilePipeline(com.mojang.renderpearl.api.pipeline.RenderPipeline, com.mojang.renderpearl.api.pipeline.ShaderSource, java.util.concurrent.Executor);
+-    descriptor: (Lcom/mojang/renderpearl/api/pipeline/RenderPipeline;Lcom/mojang/renderpearl/api/pipeline/ShaderSource;Ljava/util/concurrent/Executor;)Ljava/util/concurrent/CompletableFuture;
++  public abstract com.mojang.renderpearl.api.pipeline.SpvModule createSpvModule(java.lang.String, java.nio.ByteBuffer, com.mojang.renderpearl.api.pipeline.ShaderType, java.lang.String);
++    descriptor: (Ljava/lang/String;Ljava/nio/ByteBuffer;Lcom/mojang/renderpearl/api/pipeline/ShaderType;Ljava/lang/String;)Lcom/mojang/renderpearl/api/pipeline/SpvModule;
++  public abstract com.mojang.renderpearl.api.pipeline.CompiledRenderPipeline$Pending compilePipeline(com.mojang.renderpearl.api.pipeline.CompiledRenderPipeline$CreateInfo);
++    descriptor: (Lcom/mojang/renderpearl/api/pipeline/CompiledRenderPipeline$CreateInfo;)Lcom/mojang/renderpearl/api/pipeline/CompiledRenderPipeline$Pending;
+   public abstract void close();

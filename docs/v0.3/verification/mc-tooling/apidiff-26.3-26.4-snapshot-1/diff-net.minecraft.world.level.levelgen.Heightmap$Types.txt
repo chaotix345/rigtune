@@ -1,0 +1,12 @@
+--- 26.3
++++ 26.4-snapshot-1
+@@ -15,4 +15,2 @@
+     descriptor: Lcom/mojang/serialization/Codec;
+-  private static final java.util.function.IntFunction<net.minecraft.world.level.levelgen.Heightmap$Types> BY_ID;
+-    descriptor: Ljava/util/function/IntFunction;
+   public static final net.minecraft.network.codec.StreamCodec<io.netty.buffer.ByteBuf, net.minecraft.world.level.levelgen.Heightmap$Types> STREAM_CODEC;
+@@ -47,4 +45,2 @@
+     descriptor: ()[Lnet/minecraft/world/level/levelgen/Heightmap$Types;
+-  private static int lambda$static$3(net.minecraft.world.level.levelgen.Heightmap$Types);
+-    descriptor: (Lnet/minecraft/world/level/levelgen/Heightmap$Types;)I
+   private static int lambda$static$2(net.minecraft.world.level.levelgen.Heightmap$Types);

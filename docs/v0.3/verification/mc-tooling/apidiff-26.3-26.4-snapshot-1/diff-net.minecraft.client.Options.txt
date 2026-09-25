@@ -1,0 +1,10 @@
+--- 26.3
++++ 26.4-snapshot-1
+@@ -50,4 +50,2 @@
+   private static final net.minecraft.network.chat.Component GRAPHICS_API_TOOLTIP;
+-    descriptor: Lnet/minecraft/network/chat/Component;
+-  private static final net.minecraft.network.chat.Component GRAPHICS_API_TOOLTIP_VULKAN;
+     descriptor: Lnet/minecraft/network/chat/Component;
+
+String constants removed: ['options.graphicsApi.tooltip.vulkan']
+String constants added: []

@@ -1,0 +1,9 @@
+{
+ "id": "26.3",
+ "type": "release",
+ "javaVersion": {
+  "component": "java-runtime-epsilon",
+  "majorVersion": 25
+ },
+ "releaseTime": "2026-09-15T11:23:02+00:00"
+}

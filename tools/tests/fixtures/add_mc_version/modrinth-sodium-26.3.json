@@ -1,0 +1,28 @@
+[
+ {
+  "id": "v4PSXean",
+  "project_id": "AANobbMI",
+  "version_number": "mc26.3-0.9.3-alpha.1-fabric",
+  "version_type": "alpha",
+  "date_published": "2026-09-20T21:27:07.494280Z",
+  "game_versions": [
+   "26.3"
+  ],
+  "loaders": [
+   "fabric"
+  ]
+ },
+ {
+  "id": "bAZQdGpg",
+  "project_id": "AANobbMI",
+  "version_number": "mc26.3-0.9.2-fabric",
+  "version_type": "release",
+  "date_published": "2026-09-15T15:57:23.369305Z",
+  "game_versions": [
+   "26.3"
+  ],
+  "loaders": [
+   "fabric"
+  ]
+ }
+]

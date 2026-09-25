@@ -1,0 +1,12 @@
+--- 26.3
++++ 26.4-snapshot-1
+@@ -111,2 +111,4 @@
+     descriptor: Z
++  private int ridingSoundId;
++    descriptor: I
+   public net.minecraft.client.player.LocalPlayer(net.minecraft.client.Minecraft, net.minecraft.client.multiplayer.ClientLevel, net.minecraft.client.multiplayer.ClientPacketListener, net.minecraft.stats.StatsCounter, net.minecraft.client.ClientRecipeBook, net.minecraft.world.entity.player.Input, boolean, net.minecraft.client.multiplayer.chat.ChatAbilities, net.minecraft.client.player.ItemActivation);
+@@ -117,2 +119,4 @@
+     descriptor: (Lnet/minecraft/world/entity/Entity;ZZ)Z
++  public int getRidingSoundId();
++    descriptor: ()I
+   public void removeVehicle();
