@@ -367,14 +367,24 @@ public final class UndoPlanner {
 
 	// --- mod files, against a simulated mods folder
 
-	// A file's content, identified by the name it has in the real folder now.
+	// A file's content, identified by the name it has in the real folder now. Its metadata is read only when needed.
 	private static final class Content {
 		final String origin;
-		final JarInfo info;
+		private final Folder folder;
+		private JarInfo info;
+		private boolean read;
 
-		Content(String origin, JarInfo info) {
+		Content(String origin, Folder folder) {
 			this.origin = origin;
-			this.info = info;
+			this.folder = folder;
+		}
+
+		JarInfo info() {
+			if (!read) {
+				read = true;
+				info = folder.jar(origin);
+			}
+			return info;
 		}
 	}
 
@@ -395,7 +405,7 @@ public final class UndoPlanner {
 		List<Content> contents = new ArrayList<>();
 		Map<String, Content> sim = new LinkedHashMap<>();
 		for (String name : new TreeSet<>(folder.files())) {
-			Content content = new Content(name, folder.jar(name));
+			Content content = new Content(name, folder);
 			contents.add(content);
 			sim.put(name, content);
 		}
@@ -483,7 +493,7 @@ public final class UndoPlanner {
 		}
 		String name = JournalChange.ENABLE.equals(c.action()) ? c.file() : c.resultFile() != null ? c.resultFile() : c.file() + DISABLED_SUFFIX;
 		Content content = sim.get(name);
-		return content != null && content.info != null && RIGTUNE.equals(content.info.id());
+		return content != null && content.info() != null && RIGTUNE.equals(content.info().id());
 	}
 
 	// Reasons the folder wouldn't start: a mod id on two active jars, or an active jar without a mod it depends on.
@@ -493,8 +503,11 @@ public final class UndoPlanner {
 		Map<String, List<String>> namesById = new HashMap<>();
 		List<JarInfo> active = new ArrayList<>();
 		for (Map.Entry<String, Content> e : sim.entrySet()) {
-			JarInfo info = e.getValue().info;
-			if (!e.getKey().endsWith(".jar") || info == null) {
+			if (!e.getKey().endsWith(".jar")) {
+				continue;
+			}
+			JarInfo info = e.getValue().info();
+			if (info == null) {
 				continue;
 			}
 			active.add(info);
@@ -550,7 +563,7 @@ public final class UndoPlanner {
 			if (wasActive && !isActive) {
 				op = Op.disableFile(dir.resolve(content.origin));
 			} else if (!wasActive && isActive) {
-				op = Op.enableFile(dir.resolve(content.origin), dir.resolve(now)).withModId(content.info == null ? null : content.info.id());
+				op = Op.enableFile(dir.resolve(content.origin), dir.resolve(now)).withModId(content.info() == null ? null : content.info().id());
 			}
 			if (op != null) {
 				op = op.inGroup(groupIds.computeIfAbsent(find(parent, by), k -> PendingActions.newId()));

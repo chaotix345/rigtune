@@ -23,7 +23,7 @@ class UndoPlannerTest {
 	private static final Path MODS = Path.of("game", "mods").toAbsolutePath();
 
 	// Settings and a mods folder: file name -> jar metadata (null for a file that isn't a mod jar).
-	static final class FakeState implements UndoPlanner.State, UndoPlanner.Folder {
+	static class FakeState implements UndoPlanner.State, UndoPlanner.Folder {
 		final Map<String, String> settings = new HashMap<>();
 		final Set<String> notChangeable = new HashSet<>();
 		final Map<String, JarInfo> files = new LinkedHashMap<>();
@@ -537,6 +537,25 @@ class UndoPlannerTest {
 
 		assertEquals(List.of(rd.id()), only(result, Action.SKIP).changeIds());
 		assertTrue(result.script().immediate().isEmpty());
+	}
+
+	// Reading a jar (and its nested jars) is slow and happens on the render thread: only jars that are active or that
+	// an undo moves are read.
+	@Test
+	void untouchedDisabledJarsAreNeverRead() {
+		Set<String> read = new HashSet<>();
+		FakeState counting = new FakeState() {
+			@Override
+			public JarInfo jar(String fileName) {
+				read.add(fileName);
+				return super.jar(fileName);
+			}
+		};
+		counting.jar("indium.jar.disabled", "indium").jar("old-fabric-api.jar.disabled", "fabric-api").jar("lithium.jar", "lithium");
+		entry("e1", disabled("indium", "indium.jar", "indium.jar.disabled", null));
+
+		assertEquals(1, items(UndoPlanner.plan(entries, pending, counting, true), Action.REVERT).size());
+		assertTrue(!read.contains("old-fabric-api.jar.disabled"), read.toString());
 	}
 
 	@Test
