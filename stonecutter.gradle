@@ -9,4 +9,5 @@ stonecutter.active '26.2'
 stonecutter.tasks {
 	order 'runClientGameTest'
 	order 'runProductionSmoke'
+	order 'runProductionClientGameTest'
 }

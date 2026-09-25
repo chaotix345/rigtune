@@ -18,7 +18,7 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 - [x] Phase 0: orient. Real instance (read-only): still 0.1.0, last played 2026-09-25 09:08, no benchmarks/history; the DH group still pending; mods/update holds DH 3.3.2 (a multi-loader jar with fabric id distanthorizons, so 0.2+ detects it). Heap 6144 MB of 31849 (Modrinth App global setting).
 - [x] Phase 1: research DONE (docs/research/v0.3/: mc-versions, ci-gametests, launcher-ram, hardware-tiers, benchmark, misc). Headlines: no MC newer than 26.3 (26.4-snapshot-1 compiles and passes 848/848 unchanged); CI game tests green on Linux (branch research/ci-gametest, kept for WS-0); a real P0 bug: benchmark RD changes aren't broadcast to the server (SPEC 3f).
 - [x] Phase 2: SPEC.md + PLAN.md + plan review (docs/v0.3/plan-review.md) with amendments folded in (0681c4c).
-- [ ] Phase 3: foundation RUNNING (ws-0). Wave A started in parallel (no build-file overlap).
+- [x] Phase 3: foundation MERGED (1700ecc). Wave A started in parallel before it (no build-file overlap) and was told to merge origin/feat/v0.3.0.
 - [ ] Phase 4: features
 - [ ] Phase 5: verification
 - [ ] Phase 6: reviews (2 rounds)
@@ -28,7 +28,7 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 ### Agents (v0.3)
 | name | branch | worktree | status |
 |---|---|---|---|
-| ws-0 (foundation) | feat/v03-foundation | C:/Dev/Worktrees/rigtune-found | RUNNING: CI game-test job, Sodium optional, release loop + re-runnable byte-identical publish, e2e driver compiles, concurrency, 0.3.0-dev |
+| ws-0 (foundation) | feat/v03-foundation (deleted) | removed | MERGED 1700ecc (CI 36174138879 green, 8 jobs; legs 26.2 GL 5m01, 26.3 GL 4m20, 26.3 Vulkan 4m55; 848 tests per node; Python 169). AC2.2 probe 36167437975 red + artifacts; no-Sodium probe 36172689580 green; release uploads the exact GitHub files, tag==mod_version guard, recovery runbook in design/ws-0.md. |
 | ws-a (3a-3c, raw MC version) | fix/v03-deferred | C:/Dev/Worktrees/rigtune-fixes | RUNNING (Wave A started early; merges origin/feat/v0.3.0 after WS-0 lands) |
 | ws-b (History + per-entry undo, 3e) | feat/history | C:/Dev/Worktrees/rigtune-history | RUNNING |
 | ws-c (launcher RAM advice) | feat/launcher-ram | C:/Dev/Worktrees/rigtune-launcher | RUNNING |
@@ -38,7 +38,7 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 | ws-v (add_mc_version.py, mc_apidiff.py, Porting) | feat/mc-tooling | C:/Dev/Worktrees/rigtune-mctool | RUNNING |
 | ws-h (self-update E2E 0.1/0.2 -> 0.3, seeded, per-entry undo) | test/e2e-v03 | C:/Dev/Worktrees/rigtune-e2e3 | RUNNING (uses the lock) |
 | plan-review | - | - | DONE: docs/v0.3/plan-review.md (4 H, 25 M, 11 L), folded into SPEC "Amendments" + PLAN (0681c4c) |
-| r-ci (research, done) | research/ci-gametest | C:/Dev/Worktrees/rigtune-r-ci | kept until WS-0 merges; then remove worktree + delete branch (local + remote) |
+| r-ci (research, done) | research/ci-gametest | removed | remote branch deleted; the LOCAL branch stays (unmerged; a hook blocks `branch -D`). |
 
 Wave B after Wave A: ws-g (l10n, SPEC 9) and ws-p (preview, P2, only after ws-g or cut).
 Notes: the permission classifier refused `gh workflow disable update-rules.yml` (CI bypass), so the weekly bot PRs are triaged by re-running the updater on feat/v0.3.0, and Phase 7 re-runs it after merging main (SPEC D-M1).
