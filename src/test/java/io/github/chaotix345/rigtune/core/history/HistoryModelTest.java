@@ -153,6 +153,22 @@ class HistoryModelTest {
 		assertNull(rows.get(2).failure());
 	}
 
+	// The user's real 0.1.0 failure: the disable of an update hit a sharing violation, so its enable wasn't applied.
+	@Test
+	void anUpdateShowsTheReasonOfItsDisable() {
+		JournalChange off = file(JournalChange.DISABLE, "dh", "dh-1.jar", JournalChange.STAGED, "g1");
+		JournalChange on = file(JournalChange.ENABLE, "dh", "dh-2.jar", JournalChange.STAGED, "g1");
+		add("e1", JournalEntry.APPLY, null, off, on);
+		Failure busy = new Failure(off.opId(), Status.FAILED, PendingActions.Type.DISABLE_FILE, null, "dh-1.jar", "in use", 1);
+		Failure because = new Failure(on.opId(), Status.FAILED, PendingActions.Type.ENABLE_FILE, "dh", "dh-2.jar", "Not applied because disabling dh-1.jar failed", 1);
+
+		Change row = view(Map.of(busy.opId(), busy, because.opId(), because)).entries().getFirst().changes().getFirst();
+
+		assertEquals(Row.UPDATED, row.row());
+		assertSame(busy, row.failure());
+		assertSame(because, view(Map.of(because.opId(), because)).entries().getFirst().changes().getFirst().failure());
+	}
+
 	// Review B-L1: Undo this is offered while something is left to undo, never on an undo entry.
 	@Test
 	void undoableFollowsThePlanner() {

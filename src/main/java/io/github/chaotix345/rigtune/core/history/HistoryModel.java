@@ -137,9 +137,10 @@ public final class HistoryModel {
 				paired.add(partner);
 				JournalChange off = JournalChange.DISABLE.equals(c.action()) ? c : partner;
 				JournalChange on = off == c ? partner : c;
-				Failure failure = failure(on, failures);
+				// The disable runs first, so its reason is the cause ("Not applied because disabling x failed" for the enable).
+				Failure failure = failure(off, failures);
 				out.add(new Change(Row.UPDATED, List.of(off.id(), on.id()), c.status(), null, null, null, off.file(), on.file(), on.modId(),
-						failure != null ? failure : failure(off, failures)));
+						failure != null ? failure : failure(on, failures)));
 				continue;
 			}
 			Row row = JournalChange.DISABLE.equals(c.action()) ? Row.DISABLED : c.reverts() != null ? Row.REENABLED : Row.ADDED;

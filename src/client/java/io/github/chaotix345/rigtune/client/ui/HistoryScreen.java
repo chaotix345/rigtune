@@ -14,6 +14,7 @@ import net.minecraft.client.gui.components.ContainerObjectSelectionList;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
@@ -74,6 +75,15 @@ public class HistoryScreen extends Screen {
 	public void select(@Nullable String entryId) {
 		selected = entryId;
 		rebuildWidgets();
+	}
+
+	// Where an entry's row is on screen (for the game test's click), or null.
+	public @Nullable ScreenRectangle entryRow(String entryId) {
+		if (list == null) {
+			return null;
+		}
+		return list.children().stream().filter(row -> row instanceof EntryRow r && r.entry.id().equals(entryId)).findFirst()
+				.map(HistoryList.Row::getRectangle).orElse(null);
 	}
 
 	@Override
