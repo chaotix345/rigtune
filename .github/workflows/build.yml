@@ -8,6 +8,15 @@ on:
   # update-rules.yml calls `gh workflow run build.yml` explicitly. See the comment there.
   workflow_dispatch:
 
+# No job here writes to the repository; checkout persists this token next to the game and its mods.
+permissions:
+  contents: read
+
+# A newer push to the same branch (or PR) cancels the older run; other refs keep their own runs.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   java:
     runs-on: ubuntu-latest
@@ -32,6 +41,25 @@ jobs:
       # Builds and unit-tests every Minecraft version (versions/<mc>/); check also compiles each version's game tests.
       - name: Build and test
         run: ./gradlew build
+      # The self-update E2E drivers (tools/e2e) aren't part of `build`: compile them here so an API change that breaks
+      # them shows up on the push, not in Phase 5. The undo driver compiles against these sources; the self-update driver
+      # against each released jar it drives on the E2E's version, 26.2 (downloaded from the GitHub release, sha256-pinned).
+      - name: Compile the E2E drivers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          old=build/e2e-old
+          mkdir -p "$old"
+          gh release download v0.1.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.1.0.jar' -D "$old" --clobber
+          gh release download v0.2.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.2.0+mc26.2.jar' -D "$old" --clobber
+          sha256sum -c - <<EOF
+          8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950  $old/rigtune-0.1.0.jar
+          67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9  $old/rigtune-0.2.0+mc26.2.jar
+          EOF
+          ./gradlew compileE2eUndoJava
+          ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.1.0.jar"
+          ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.2.0+mc26.2.jar"
       - name: Upload jars
         if: always()
         uses: actions/upload-artifact@v7
@@ -47,6 +75,76 @@ jobs:
           path: |
             versions/*/build/reports/tests/**
             versions/*/build/test-results/**
+          if-no-files-found: ignore
+
+  # The client-gametest legs, one per Minecraft node in versions/*/: OpenGL for every node, plus Vulkan from 26.3 on.
+  # A new node gets its legs without editing this file (tools/gametest_matrix.py, tested in tools/tests).
+  gametest-matrix:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: matrix
+        name: List the game-test legs
+        run: |
+          matrix=$(python3 tools/gametest_matrix.py)
+          echo "$matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  # The client game tests (src/gametest) against the built jar in a production client, under Xvfb with Mesa llvmpipe
+  # (lavapipe for Vulkan). Loom's ClientProductionRunTask wraps the game in xvfb-run by itself when CI is set on Linux.
+  # No automatic retry: a flake is re-run by hand ("Re-run failed jobs"), so an intermittent regression isn't hidden.
+  client-gametest:
+    name: client game tests (${{ matrix.mc }}, ${{ matrix.backend }})
+    needs: gametest-matrix
+    # Pinned: ubuntu-latest moves to 26.04 (another Mesa and Xvfb) in November 2026.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.gametest-matrix.outputs.matrix) }}
+    env:
+      # 26.3 creates its window with SDL3, which asks GLX for an sRGB-capable visual that Xvfb doesn't have; "skip"
+      # leaves that attribute out. Left empty (unset for SDL) on the Vulkan leg: OpenGL then fails and 26.3 falls back
+      # to Vulkan on lavapipe. 26.2 (GLFW) ignores it.
+      SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER: ${{ matrix.backend == 'OpenGL' && 'skip' || '' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Install the Mesa Vulkan driver (lavapipe)
+        if: matrix.backend == 'Vulkan'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers
+      # If the game finds no graphics backend it opens a blocking error dialog, so a hang means a timeout here.
+      - name: Client game tests
+        timeout-minutes: 20
+        run: ./gradlew :${{ matrix.mc }}:runProductionClientGameTest --stacktrace
+      # A leg whose backend fails falls back to the other one and would still pass: fail it instead.
+      - name: Check the game used ${{ matrix.backend }}
+        run: |
+          grep -F "Using graphics backend ${{ matrix.backend }}" \
+            "versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs/latest.log" \
+            || { echo "::error::latest.log doesn't name the ${{ matrix.backend }} backend"; exit 1; }
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gametest-screenshots-${{ matrix.mc }}-${{ matrix.backend }}
+          path: versions/${{ matrix.mc }}/build/run/productionClientGameTest/screenshots/
+          if-no-files-found: ignore
+      - name: Upload logs and crash reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gametest-logs-${{ matrix.mc }}-${{ matrix.backend }}
+          path: |
+            versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs/
+            versions/${{ matrix.mc }}/build/run/productionClientGameTest/crash-reports/
+            versions/${{ matrix.mc }}/build/run/productionClientGameTest/hs_err_pid*.log
           if-no-files-found: ignore
 
   python:
