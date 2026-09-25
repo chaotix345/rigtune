@@ -221,3 +221,7 @@ tasks.register("runProductionSmoke", net.fabricmc.loom.task.prod.ClientProductio
 	jvmArgs.addAll("-Dfabric.client.gametest", "-Drigtune.smoke=true")
 	jvmArgs.addAll(userOptions.map { ["-Drigtune.smoke.userOptions=" + it.absolutePath] }.orElse([]))
 }
+
+// Self-update end-to-end harness (tools/e2e/README.md), never part of the shipped jar. The fake Modrinth server is a
+// JDK-only tool run as `java FakeModrinth.java`; the unit tests compile it from tools/e2e/java.
+sourceSets.test.java.srcDir(rootProject.file("tools/e2e/java"))
