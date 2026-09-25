@@ -27,7 +27,8 @@ class RemoteRulesFetcherTest {
 	@BeforeEach
 	void start() throws IOException {
 		server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-		serve("/good", 200, "{\"schemaVersion\":1,\"revision\":42}");
+		serve("/good", 200, "{\"schemaVersion\":2,\"revision\":42}");
+		serve("/v1", 200, "{\"schemaVersion\":1,\"revision\":43}");
 		serve("/missing", 404, "not found");
 		serve("/bad", 200, "{\"schemaVersion\":7}");
 		serve("/huge", 200, "{\"schemaVersion\":1,\"revision\":50}" + " ".repeat((int) RulesLoader.MAX_RULES_BYTES));
@@ -63,6 +64,13 @@ class RemoteRulesFetcherTest {
 		assertEquals("remote", doc.source());
 		assertEquals("chaotix345/rigtune/0.1.0 (github.com/chaotix345/rigtune)", userAgent.get());
 		assertTrue(Files.readString(cache).contains("\"revision\":42"));
+	}
+
+	@Test
+	void schemaVersion1IsUsedButNotCached(@TempDir Path dir) {
+		Path cache = dir.resolve("rules-v2-cache.json");
+		assertEquals(43, new RemoteRulesFetcher(uri("/v1"), "0.2.0", cache).fetch().orElseThrow().revision);
+		assertFalse(Files.exists(cache));
 	}
 
 	@Test

@@ -36,15 +36,15 @@ import io.github.chaotix345.rigtune.core.modrinth.OnlineDataFetcher;
 import io.github.chaotix345.rigtune.core.recommend.Recommender;
 import io.github.chaotix345.rigtune.core.report.ModrinthOffAdvice;
 import io.github.chaotix345.rigtune.core.report.ShareReport;
-import io.github.chaotix345.rigtune.core.rules.RemoteRulesFetcher;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
-import io.github.chaotix345.rigtune.core.rules.RulesLoader;
+import io.github.chaotix345.rigtune.core.rules.RulesSources;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -54,19 +54,26 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class RealController implements RigTuneController {
 	private static final String VANILLA = SettingsBridge.VANILLA_PREFIX;
 	private static final Duration STAGE_LOCK_WAIT = Duration.ofSeconds(2);
+	// Rules loads can wait up to a minute on the network; one thread keeps them off the report builders' pool and
+	// runs them in order, so a superseded load gives up before its next request.
+	private static final ExecutorService RULES_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
+		Thread thread = new Thread(runnable, "RigTune rules");
+		thread.setDaemon(true);
+		return thread;
+	});
 
 	private Minecraft minecraft;
 	private final Path configDir;
 	private final Path modsDir;
 	private final Path pendingFile;
-	private final Path rulesCache;
 	private final String modVersion;
 	private final ModrinthClient modrinth;
 	private final ClientSettings settings;
@@ -83,6 +90,9 @@ public final class RealController implements RigTuneController {
 	private volatile @Nullable Component status;
 	private volatile Goal goal;
 	private int generation;
+	private final Object rulesLock = new Object();
+	private final OnlineLookupGate onlineLookups = new OnlineLookupGate();
+	private int rulesGeneration;
 	private volatile boolean downloading;
 
 	public RealController() {
@@ -90,7 +100,6 @@ public final class RealController implements RigTuneController {
 		this.configDir = loader.getConfigDir();
 		this.modsDir = InstanceDirs.modsDir(loader.getGameDir());
 		this.pendingFile = PendingActions.defaultPath(configDir);
-		this.rulesCache = configDir.resolve("rigtune").resolve("rules-cache.json");
 		this.modVersion = loader.getModContainer(RigTune.MOD_ID).map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("0.0.0");
 		this.settings = ClientSettings.shared(configDir);
 		this.modrinth = new GatedModrinthClient(new HttpModrinthClient(modVersion), settings::modrinthAllowed);
@@ -101,28 +110,35 @@ public final class RealController implements RigTuneController {
 
 	public void start(Minecraft minecraft) {
 		this.minecraft = minecraft;
-		CompletableFuture.runAsync(this::loadRules, Probes.EXECUTOR);
+		reloadRules();
 		rescan();
 	}
 
-	private void loadRules() {
-		List<RulesLoader.Candidate> candidates = new ArrayList<>();
-		try {
-			candidates.add(new RulesLoader.Candidate(RulesLoader.SOURCE_BUNDLED, RulesLoader.loadBundled()));
-		} catch (RuntimeException e) {
-			RigTune.LOGGER.error("Bundled rules are unusable", e);
+	// Re-runnable: a newer load (settingsChanged) makes an older one stale, whether it is still queued or fetching.
+	private void reloadRules() {
+		int gen;
+		synchronized (rulesLock) {
+			gen = ++rulesGeneration;
 		}
-		RulesLoader.loadCache(rulesCache).ifPresent(doc -> candidates.add(new RulesLoader.Candidate(RulesLoader.SOURCE_CACHE, doc)));
-		rules = RulesLoader.pickNewest(candidates).orElse(null);
-		rebuild();
-		new RemoteRulesFetcher(modVersion, rulesCache).fetch().ifPresent(remote -> {
-			candidates.add(new RulesLoader.Candidate(RulesLoader.SOURCE_REMOTE, remote));
-			RulesDocument best = RulesLoader.pickNewest(candidates).orElse(null);
-			if (best != null && best != rules) {
-				rules = best;
-				rebuild();
-				fetchOnline();
+		CompletableFuture.runAsync(() -> loadRules(gen), RULES_EXECUTOR);
+	}
+
+	private void loadRules(int gen) {
+		if (!currentRules(gen)) {
+			return;
+		}
+		URI baseUrl = RulesSources.baseUrl(System.getProperty(RulesSources.BASE_URL_PROPERTY));
+		new RulesSources(configDir, baseUrl, modVersion).load(() -> currentRules(gen) && ClientSettings.shared(configDir).remoteRulesAllowed(), (doc, remote) -> {
+			synchronized (rulesLock) {
+				if (gen != rulesGeneration) {
+					return;
+				}
+				rules = doc;
 			}
+			rebuild();
+			// Also for the local rules: if the scan finished first, its own fetchOnline() found no rules yet (the offline
+			// race in docs/v0.2/design/ws-g.md). The gate makes the lookup happen once, whichever comes last.
+			fetchOnline();
 		});
 	}
 
@@ -142,6 +158,18 @@ public final class RealController implements RigTuneController {
 		state.goal = goal.name();
 		CompletableFuture.runAsync(() -> state.save(configDir), Probes.EXECUTOR);
 		rebuild();
+	}
+
+	private boolean currentRules(int gen) {
+		synchronized (rulesLock) {
+			return gen == rulesGeneration;
+		}
+	}
+
+	@Override
+	public void settingsChanged() {
+		reloadRules();
+		rescan();
 	}
 
 	@Override
@@ -172,19 +200,18 @@ public final class RealController implements RigTuneController {
 	}
 
 	private void fetchOnline() {
-		List<InstalledMod> scanned = mods;
-		RulesDocument doc = rules;
-		HardwareProfile hw = hardware;
-		if (scanned == null || doc == null || hw == null) {
-			return;
-		}
+		// Before the lookup gate, so the lookup isn't used up while Modrinth is off; turning it back on goes through
+		// settingsChanged(), whose rescan makes a lookup due again. rebuild() already ignores online data while off.
 		if (!settings.modrinthAllowed()) {
 			online = OnlineDataFetcher.Result.offline();
-			rebuild();
 			return;
 		}
-		List<String> slugs = doc.mods.stream().map(m -> m.slug).filter(Objects::nonNull).distinct().toList();
-		CompletableFuture.supplyAsync(() -> new OnlineDataFetcher(modrinth).fetchAll(scanned, slugs, hw.mcVersion()), Probes.EXECUTOR)
+		OnlineLookupGate.Lookup lookup = onlineLookups.next(mods, rules, hardware);
+		if (lookup == null) {
+			return;
+		}
+		CompletableFuture.supplyAsync(() -> new OnlineDataFetcher(modrinth).fetchAll(lookup.mods(), lookup.slugs(), lookup.hardware().mcVersion()),
+						Probes.EXECUTOR)
 				.thenAccept(result -> {
 					online = result;
 					rebuild();
