@@ -3,6 +3,7 @@ substitutes with its own folder (JSON-escaped in JSON files). Otherwise the 0.2 
 its folders (ApplyExecutor.containmentProblem) and the game would drop them (PendingActions.relocated)."""
 
 import json
+import os
 import re
 import shutil
 from pathlib import Path
@@ -44,6 +45,31 @@ def template_json(text, instance_root):
 
     out = json.dumps(rewrite(json.loads(text)), indent=2, ensure_ascii=False)
     return out + "\n" if text.endswith("\n") else out
+
+
+def _map_strings(text, rewrite):
+    def walk(value):
+        if isinstance(value, dict):
+            return {key: walk(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [walk(item) for item in value]
+        return rewrite(value) if isinstance(value, str) else value
+
+    out = json.dumps(walk(json.loads(text)), indent=2, ensure_ascii=False)
+    return out + "\n" if text.endswith("\n") else out
+
+
+def template_seed_json(text, instance_root):
+    """A seed for the harness from a real instance's JSON file (H-M2): in every string value, every spelling of the
+    instance root becomes the token with '/' after it, so paths inside messages lose the user's folder too."""
+    return _map_strings(text, lambda value: portable_paths(template(value, instance_root)))
+
+
+def instantiate_json(text, instance):
+    """The reverse, for a scratch instance: the token and the path after it become that instance's native path."""
+    root = str(Path(instance))
+    return _map_strings(text, lambda value: re.sub(re.escape(TOKEN) + r"(\S*)",
+                                                    lambda m: root + m.group(1).replace("/", os.sep), value))
 
 
 def capture(files, instance_root, dest):

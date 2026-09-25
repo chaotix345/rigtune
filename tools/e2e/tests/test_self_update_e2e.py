@@ -36,6 +36,12 @@ class ArgsTest(unittest.TestCase):
         self.assertEqual(("26.2", 443, self_update_e2e.DEFAULT_LOCK, None), (args.mc, args.port, args.lock, args.driver_api_jar))
         self.assertFalse(args.expect_history)
 
+    def test_expect_history_values(self):
+        base = ["--name", "n", "--old-jar", "a.jar", "--new-jar", "b.jar", "--work", "w", "--java-home", "jdk"]
+        self.assertEqual("legacy-import", self_update_e2e.parse_args(base + ["--expect-history"]).expect_history)
+        self.assertEqual("own-update", self_update_e2e.parse_args(base + ["--expect-history", "own-update"]).expect_history)
+        self.assertIsNone(self_update_e2e.parse_args(base).expect_history)
+
 
 def make_run(tmp, *extra):
     args = self_update_e2e.parse_args(["--name", "n", "--old-jar", "a.jar", "--new-jar", "b.jar", "--work", str(tmp),

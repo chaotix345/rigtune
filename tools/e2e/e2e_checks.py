@@ -134,9 +134,12 @@ def depends_not_stricter(old_jar, new_jar):
                      new_json.get("depends") or {}, new_json.get("breaks") or {}))
 
 
-def after_verify(instance, new_jar, driver, last_apply_finished_at, mods_before, expect_history, legacy_disables=()):
-    """SPEC 5.6: the new version, relaunched on the same instance, reads the old version's state. legacy_disables: jar
-    names the legacy import must hold as APPLIED disables."""
+def after_verify(instance, new_jar, driver, last_apply_finished_at, mods_before, expect_history, legacy_disables=(),
+                 old_jar=None, statuses_before=None):
+    """SPEC 5.6: the new version, relaunched on the same instance, reads the old version's state. expect_history:
+    None, "legacy-import" (a 0.1.x old side; True means the same) or "own-update" (a 0.2.x old side: old_jar and the
+    history statuses before the relaunch are needed). legacy_disables: jar names the legacy import must hold as APPLIED
+    disables."""
     instance, new_jar = Path(instance), Path(new_jar)
     mods = instance / "mods"
     rigtune_dir = instance / "config" / "rigtune"
@@ -166,7 +169,9 @@ def after_verify(instance, new_jar, driver, last_apply_finished_at, mods_before,
                         "before {} after {}".format(sorted(mods_before), sorted(after)) if after != mods_before else "unchanged"))
     checks.append(Check("no new pending.json", not (rigtune_dir / "pending.json").exists(), ""))
 
-    if expect_history:
+    if expect_history == "own-update":
+        checks.append(own_update_history(instance, old_jar, new_jar, statuses_before))
+    elif expect_history:
         # SPEC item 3: the first 0.2 run imports 0.1.0's last-apply.json once, as one legacy-import entry, without
         # RigTune's own jars. A file of another shape fails rather than passing with nothing checked.
         history = _load(rigtune_dir / "history.json")
@@ -184,6 +189,22 @@ def after_verify(instance, new_jar, driver, last_apply_finished_at, mods_before,
                                                                        len(imports), own, missing,
                                                                        [e.get("changes") for e in imports])))
     return checks
+
+
+def own_update_history(instance, old_jar, new_jar, statuses_before):
+    """A 0.2.x old side journals its own update as one apply entry (disable the old jar, enable the new one), which its
+    helper marks APPLIED. The new version must read that journal as it is: no legacy import, no status changed by the
+    relaunch (SPEC compatibility promise: every file 0.2.0 wrote keeps working)."""
+    entries = history_entries(instance)
+    got = sorted((c.get("type"), c.get("action"), c.get("file"), c.get("status"))
+                 for e in entries or [] for c in e.get("changes", []))
+    wanted = sorted([("file", "disable", Path(old_jar).name, "APPLIED"), ("file", "enable", Path(new_jar).name, "APPLIED")])
+    kinds = [e.get("kind") for e in entries or []]
+    statuses = history_statuses(instance)
+    ok = entries is not None and kinds == ["apply"] and got == wanted and statuses == statuses_before
+    return Check("history.json: the old version's own update, both changes APPLIED", ok,
+                 "entries: {}; changes: {}; statuses unchanged by the relaunch: {}".format(
+                     kinds if entries is not None else "missing", got, statuses == statuses_before))
 
 
 # --- The end-to-end undo after a restart (plan review M14) ------------------------------------------------------------

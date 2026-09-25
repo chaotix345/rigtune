@@ -392,12 +392,14 @@ class Run:
 
     def run_verify(self):
         mods_before = e2e_checks.listing(self.mods)
+        statuses_before = e2e_checks.history_statuses(self.instance)
         last_apply = e2e_checks._load(self.rigtune_dir / "last-apply.json") or {}
         code = self.launch("verify")
         self.snapshot("verify")
         legacy = [self.legacy_jar.name] if self.legacy_jar is not None else []
         checks = e2e_checks.after_verify(self.instance, self.new_jar, self.driver("verify"), last_apply.get("finishedAt"),
-                                         mods_before, self.args.expect_history, legacy_disables=legacy)
+                                         mods_before, self.args.expect_history, legacy_disables=legacy,
+                                         old_jar=self.old_jar, statuses_before=statuses_before)
         checks.insert(0, e2e_checks.Check("the relaunched client exited normally", code == 0, "gradle exit {}".format(code)))
         self.checks["verify"] = checks
         return all(c.ok for c in checks)
@@ -633,7 +635,10 @@ def parse_args(argv):
     parser.add_argument("--evidence", help="copy the evidence here (replaces an earlier evidence folder only)")
     parser.add_argument("--capture-fixtures", help="write the old version's files here, templated (${INSTANCE}); passing runs only")
     parser.add_argument("--capture-anyway", action="store_true", help="capture fixtures from a failed run too (see manifest.json verdict)")
-    parser.add_argument("--expect-history", action="store_true", help="require the 0.2 history.json legacy import")
+    parser.add_argument("--expect-history", nargs="?", const="legacy-import", choices=("legacy-import", "own-update"),
+                        help="legacy-import (the default value; a 0.1.x old side): the new version imports 0.1.x's "
+                             "last apply once; own-update (a 0.2.x old side): the old version's journal of its own "
+                             "update is read as it is")
     parser.add_argument("--port", type=int, default=443)
     parser.add_argument("--lock", default=DEFAULT_LOCK, help="game-test lock folder, or 'none'")
     parser.add_argument("--agent", default="ws-h", help="the agent named in the lock's owner.txt")
