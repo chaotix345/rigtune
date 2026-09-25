@@ -85,5 +85,5 @@ Verdict "approve after fixing 1". Fixed: (1, medium) a queued or timed-out probe
 ## Deviations and open items
 - Precedence: the official launcher's brand is checked after the instance files (see Detection), because CurseForge sends the same brand.
 - C-M3: the official launcher's literal is verified, so it's detected (not deferred). Its click steps, and CurseForge's, are from third-party/blog sources (not the apps' own UI strings): marked above.
-- Prism's `instance.cfg` must contain `InstanceType`: Prism accepts a file without it but writes `InstanceType=OneSix` whenever it loads an instance (`MinecraftInstance.cpp:247-249` at 11.1.0), so a launched instance always has it; without the key only the properties/env detect Prism (they're always set by Prism's launch wrapper).
+- Prism's `instance.cfg` must contain `InstanceType`: Prism accepts a file without it but writes `InstanceType=OneSix` whenever it loads an instance (`launcher/minecraft/MinecraftInstance.cpp:241-242` at 11.1.0), so a launched instance always has it; without the key only the properties/env detect Prism (they're always set by Prism's launch wrapper).
 - GDLauncher and other launchers stay Unknown (no verified literal).
