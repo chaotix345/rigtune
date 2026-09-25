@@ -362,7 +362,7 @@ def build_plan(root, mc, http, prerelease_ok):
     for key in copied:
         notes.append(f"{key} was copied unchanged from versions/{prev}/gradle.properties: check it for {mc}.")
     if parsed.kind != "release":
-        notes.append(f"{mc} is a pre-release node: don't ship it (docs/research/v0.3/mc-versions.md §5.4). Once "
+        notes.append(f"{mc} is a pre-release node: don't ship it (docs/research/v0.3/mc-versions.md, section 5.4). Once "
                      f"{parsed.base} is released, remove this node and add {parsed.base}.")
     else:
         same_minor = [n for n in nodes if MC_ID.fullmatch(n) and version_key(n)[:2] == version_key(mc)[:2]
