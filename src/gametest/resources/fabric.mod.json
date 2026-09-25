@@ -8,7 +8,8 @@
 		"fabric-client-gametest": [
 			"io.github.chaotix345.rigtune.gametest.RigTuneClientGameTest",
 			"io.github.chaotix345.rigtune.gametest.BenchmarkGameTest",
-			"io.github.chaotix345.rigtune.gametest.UndoGameTest"
+			"io.github.chaotix345.rigtune.gametest.UndoGameTest",
+			"io.github.chaotix345.rigtune.gametest.UiGameTest"
 		]
 	},
 	"depends": {

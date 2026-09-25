@@ -5,6 +5,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.core.apply.AtomicFiles;
+import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -72,5 +73,13 @@ public final class ClientSettings {
 
 	public boolean modrinthAllowed() {
 		return networkEnabled && modrinth;
+	}
+
+	public BenchmarkRequest.Scene benchmarkSceneOrDefault() {
+		try {
+			return benchmarkScene == null ? BenchmarkRequest.Scene.CURRENT : BenchmarkRequest.Scene.valueOf(benchmarkScene);
+		} catch (IllegalArgumentException e) {
+			return BenchmarkRequest.Scene.CURRENT;
+		}
 	}
 }

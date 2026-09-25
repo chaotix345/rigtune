@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
+import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
@@ -143,16 +144,23 @@ public final class RigTuneClient implements ClientModInitializer {
 		if (!titleSeen || !(minecraft.gui.screen() instanceof TitleScreen)) {
 			return;
 		}
+		Path configDir = FabricLoader.getInstance().getConfigDir();
+		ClientSettings settings = ClientSettings.shared(configDir);
 		if (!noticesShown) {
 			noticesShown = true;
 			showNotices(minecraft);
+			if (StartupNotices.takePrivacyNotice(settings, configDir, Probes.EXECUTOR)) {
+				SystemToast.add(minecraft.gui.toastManager(), new SystemToast.SystemToastId(10000L),
+						Component.translatable("rigtune.settings.privacy_toast.title"),
+						Component.translatable("rigtune.settings.privacy_toast.body"));
+			}
 		}
 		if (!toastShown) {
 			Report report = controller.report();
 			if (report != null) {
 				toastShown = true;
 				long important = report.recommendations().stream().filter(RigTuneClient::important).count();
-				if (important > 0) {
+				if (StartupNotices.showSuggestionsToast(settings, important)) {
 					SystemToast.add(minecraft.gui.toastManager(), TOAST_ID,
 							Component.translatable("rigtune.toast.title", report.recommendations().size()),
 							Component.translatable("rigtune.toast.body", openKey.getTranslatedKeyMessage()));

@@ -29,15 +29,19 @@ import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.ModFile;
+import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.modrinth.DependencyResolver;
 import io.github.chaotix345.rigtune.core.modrinth.DownloadPlanner;
+import io.github.chaotix345.rigtune.core.modrinth.GatedModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.HttpModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.ModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.OnlineDataFetcher;
 import io.github.chaotix345.rigtune.core.recommend.Recommender;
+import io.github.chaotix345.rigtune.core.report.ModrinthOffAdvice;
+import io.github.chaotix345.rigtune.core.report.ShareReport;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.rules.RulesSources;
 import net.fabricmc.loader.api.FabricLoader;
@@ -76,6 +80,7 @@ public final class RealController implements RigTuneController {
 	private final Path pendingFile;
 	private final String modVersion;
 	private final ModrinthClient modrinth;
+	private final ClientSettings settings;
 	private final ClientState state;
 	private final Set<String> staged = new HashSet<>();
 	private int carriedOverOps;
@@ -102,7 +107,8 @@ public final class RealController implements RigTuneController {
 		this.modsDir = InstanceDirs.modsDir(loader.getGameDir());
 		this.pendingFile = PendingActions.defaultPath(configDir);
 		this.modVersion = loader.getModContainer(RigTune.MOD_ID).map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("0.0.0");
-		this.modrinth = new HttpModrinthClient(modVersion);
+		this.settings = ClientSettings.shared(configDir);
+		this.modrinth = new GatedModrinthClient(new HttpModrinthClient(modVersion), settings::modrinthAllowed);
 		this.state = ClientState.shared(configDir);
 		this.goal = state.goalOrDefault();
 		this.carriedOverOps = pendingOpCount();
@@ -185,6 +191,8 @@ public final class RealController implements RigTuneController {
 	@Override
 	public void rescan() {
 		report = null;
+		// A report still being built from before the rescan (say, before a settings change) must not be published.
+		minecraft.execute(() -> generation++);
 		CompletableFuture<HardwareProfile> probe;
 		try {
 			probe = HardwareProbe.probe(minecraft);
@@ -208,6 +216,12 @@ public final class RealController implements RigTuneController {
 	}
 
 	private void fetchOnline() {
+		// Before the lookup gate, so the lookup isn't used up while Modrinth is off; turning it back on goes through
+		// settingsChanged(), whose rescan makes a lookup due again. rebuild() already ignores online data while off.
+		if (!settings.modrinthAllowed()) {
+			online = OnlineDataFetcher.Result.offline();
+			return;
+		}
 		OnlineLookupGate.Lookup lookup = onlineLookups.next(mods, rules, hardware);
 		if (lookup == null) {
 			return;
@@ -230,7 +244,7 @@ public final class RealController implements RigTuneController {
 			}
 			SettingsSnapshot settings = SettingsBridge.read(minecraft);
 			Goal g = goal;
-			var data = online.data();
+			var data = this.settings.modrinthAllowed() ? online.data() : OnlineData.offline();
 			int gen = ++generation;
 			CompletableFuture.supplyAsync(() -> Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion), Probes.EXECUTOR)
 					.whenComplete((built, error) -> minecraft.execute(() -> {
@@ -238,7 +252,7 @@ public final class RealController implements RigTuneController {
 							RigTune.LOGGER.error("Could not build the RigTune report", error);
 							status = Component.translatable("rigtune.status.scan_failed");
 						} else if (gen == generation) {
-							report = withoutStaged(built);
+							report = this.settings.modrinthAllowed() ? withoutStaged(built) : ModrinthOffAdvice.apply(withoutStaged(built));
 						}
 					}));
 		});
@@ -479,6 +493,17 @@ public final class RealController implements RigTuneController {
 	@Override
 	public @Nullable Component status() {
 		return status;
+	}
+
+	@Override
+	public String shareReport() {
+		Report shown = report;
+		if (shown == null) {
+			return "";
+		}
+		String loaderVersion = FabricLoader.getInstance().getModContainer("fabricloader")
+				.map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("?");
+		return ShareReport.format(shown, new ShareReport.Versions(modVersion, shown.hardware().mcVersion(), loaderVersion), latestBenchmark());
 	}
 
 	@Override
