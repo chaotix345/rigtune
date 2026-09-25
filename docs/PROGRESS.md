@@ -28,6 +28,11 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 ### Agents (v0.3)
 | name | branch | worktree | status |
 |---|---|---|---|
+| ws-0 (foundation) | feat/v03-foundation | C:/Dev/Worktrees/rigtune-found | RUNNING (CI game-test job, Sodium optional, release loop, 0.3.0-dev) |
+| plan-review | - | - | RUNNING -> docs/v0.3/plan-review.md |
+| r-ci (research, done) | research/ci-gametest | C:/Dev/Worktrees/rigtune-r-ci | kept until WS-0 merges; then remove worktree + delete branch (local + remote) |
+
+Watchdog: `python <scratchpad>/watchdog.py ws-0=C:/Dev/Worktrees/rigtune-found;<scratchpad>/ws-0 --stall-min 25 --lock-min 8` (the current command is in scratchpad/watchdog-cmd.txt). Lock release: `rm -f .../owner.txt; rmdir .../.gametest-lock` (a hook blocks rm -rf on it).
 
 ## v0.2.0: RELEASED 2026-09-25
 - PR #2 merged to main (5b3219d); tag v0.2.0; GitHub release with rigtune-0.2.0+mc26.2.jar / +mc26.3.jar (+ sources): https://github.com/chaotix345/rigtune/releases/tag/v0.2.0

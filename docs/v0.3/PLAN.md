@@ -34,7 +34,8 @@
 1. Read SPEC.md (the top plus your items), this plan (Global Constraints, your section, Hotspots), your research doc(s), and the code you'll touch.
 2. Write your detailed task plan with superpowers:writing-plans to `docs/v0.3/plans/<ws>.md` in your worktree (tasks, files, test names, steps). Commit it.
 3. Execute task by task with TDD, committing after each task. Push often (CI runs unit tests + game tests on every push).
-4. Game tests: add or extend YOUR game-test class. CI must be green on both versions; do one final local run per version under the lock and look at the screenshots.
+4. Game tests: add or extend YOUR game-test class. CI must be green on every leg; download your leg artifacts (`gh run download <id>`) and look at your screenshots. A final local run under the lock is optional for Wave A (SPEC X-M1): the lock is reserved for WS-E's autorun, WS-H's E2E runs and Phase 5; if it's busy, don't wait.
+4b. Read the "Amendments from the plan review" at the end of SPEC.md: they override the item text.
 5. Self-review (above), fix high/medium findings.
 6. Finish: merge `origin/feat/v0.3.0` into your branch (keep both sides' intent in hotspots), `./gradlew build`, push, CI green on every job, write `docs/v0.3/design/<ws>.md`. Return at most 15 lines: branch head, unit test counts per version, game-test result (CI run URL + local), AC status per item (verified / not, with evidence), anything UNVERIFIED.
 
@@ -49,6 +50,13 @@
 | core/report/ShareReport.java | C (launcher name line) | F only reads it |
 | README.md | F (Quilt FAQ), G (translator guide) | separate sections |
 | tools/update_rules.py | D only (V must not touch it) | |
+| client/OnlineLookupGate.java, core/modrinth/OnlineDataFetcher.java (Result), DownloadPlanner.java | A (Wave A); G, P (Wave B) | RealController reads Result |
+| core/history/Journal.java | B only: one read-only helper-safe `state()` accessor | HelperLauncherTest must pass |
+| client/ui/UndoScreen.java | B | keep the `UndoScreen(Screen, RigTuneController, boolean)` constructor (the e2eUndo driver uses it) |
+| RigTuneScreen footer buttons | B owns the layout: "History…" replaces "Undo last"/"Undo all" (moved into History); F adds "Report a problem" right after "Copy report" | |
+| tools/README.md | D (+ one link line to tools/MC_VERSIONS.md, added by the coordinator) | V documents in tools/MC_VERSIONS.md |
+| KnowledgeV2ScenarioTest | D | C's launcher scenario tests live in C's own class |
+| RealController | also F (one method for the versions in the issue title) | |
 | build.gradle, stonecutter.gradle, settings.gradle, .github/workflows/* | Phase 3 only; afterwards only D (update-rules.yml) and V (none unless agreed) | |
 
 ---
@@ -57,7 +65,7 @@
 
 ### WS-0: CI game tests + build changes (SPEC item 2; item 1 changes A and B). Branch `feat/v03-foundation`, worktree `rigtune-found`.
 **Owns:** .github/workflows/build.yml (+ any new workflow), release.yml, build.gradle, stonecutter.gradle, gradle.properties (`mod_version=0.3.0-dev`), gametest harness setup code needed for Linux.
-**Tasks:** port the green prototype from `research/ci-gametest` (docs/research/v0.3/ci-gametests.md) into the real build workflow: a game-test job per MC version on ubuntu with Xvfb, screenshots + logs uploaded as artifacts on success and failure, retries only for known native flakes; Sodium on `localRuntime` only when `sodium_version` is set (change A); release.yml publishes every `versions/*/` node in a loop with per-node failure accounting and `versionType` alpha for pre-release nodes (change B); `mod_version=0.3.0-dev`. CI green on every job for both versions; the coordinator reviews the screenshot artifacts.
+**Tasks:** implement SPEC item 2 exactly (AC2.1-AC2.5) from the green prototype on `research/ci-gametest` (docs/research/v0.3/ci-gametests.md): the matrix generated from `versions/*/`, the extra Vulkan leg for 26.3+, the `latest.log` backend check, `SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER=skip`, ubuntu-24.04 pinned, a 20-minute step timeout, artifacts on success and failure, no automatic retries; plus the SPEC amendments W0-M1, W0-M3, W0-L1, H-M1/H-M3; Sodium on `localRuntime` only when `sodium_version` is set (change A); release.yml publishes every `versions/*/` node in a loop with per-node failure accounting and `versionType` alpha for pre-release nodes (change B); `mod_version=0.3.0-dev`. CI green on every job for both versions; the coordinator reviews the screenshot artifacts.
 
 ---
 
