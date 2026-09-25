@@ -128,6 +128,19 @@ class StagingTest {
 		assertTrue(Files.exists(mods.resolve("sodium-0.7.1.jar" + PendingActions.SUPERSEDED_SUFFIX)));
 	}
 
+	// Review: a staged re-enable (an undo's) of x.jar.disabled replaced by a newer enable must not rename the user's
+	// disabled jar; only downloads (.rigtune-pending) are ever retired.
+	@Test
+	void onlyDownloadsAreRetiredWhenAnEnableIsReplaced() throws IOException {
+		Path disabled = TestJars.modJar(mods.resolve("x-1.jar.disabled"), "x");
+		assertTrue(staging.stage(List.of(Op.enableFile(disabled, mods.resolve("x-1.jar")).withModId("x")), "u1"));
+
+		assertTrue(staging.stage(List.of(Op.enableFile(pendingJar("x-2.jar", "x"), mods.resolve("x-2.jar")).withModId("x")), "e2"));
+
+		assertTrue(Files.exists(disabled));
+		assertFalse(Files.exists(mods.resolve("x-1.jar.disabled" + PendingActions.SUPERSEDED_SUFFIX)));
+	}
+
 	@Test
 	void stagingWhileTheHelperHoldsTheLockChangesNothing() throws Exception {
 		try (HeldLock helper = HeldLock.hold(ApplyLock.defaultPath(config))) {

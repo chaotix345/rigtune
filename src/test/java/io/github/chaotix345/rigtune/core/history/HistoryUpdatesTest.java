@@ -79,6 +79,20 @@ class HistoryUpdatesTest {
 		assertEquals("merged-group", out.group());
 	}
 
+	// An undo change whose file didn't move follows its group's first op, which may disable another file.
+	@Test
+	void aChangeFollowingAnotherFilesOpDoesNotTakeItsResultFile() {
+		List<JournalEntry> entries = List.of(entry("u1", JournalEntry.UNDO,
+				JournalChange.file(JournalChange.DISABLE, "m", "b.jar", JournalChange.STAGED, "anchor", "g")));
+		List<OpResult> results = List.of(new OpResult(withId(Op.disableFile(MODS.resolve("c.jar")), "anchor", "g"), Status.OK,
+				"Disabled c.jar -> c.jar.disabled", MODS.resolve("c.jar.disabled").toString()));
+
+		JournalChange out = change(HistoryUpdates.applyResults(entries, results), 0, 0);
+
+		assertEquals(JournalChange.APPLIED, out.status());
+		assertNull(out.resultFile());
+	}
+
 	@Test
 	void anAlreadyDoneDisableHasNoResultFile() {
 		List<JournalEntry> entries = List.of(entry("e1", JournalEntry.APPLY,

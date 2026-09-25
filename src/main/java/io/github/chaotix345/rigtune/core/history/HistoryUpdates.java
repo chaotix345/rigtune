@@ -43,7 +43,9 @@ public final class HistoryUpdates {
 					JournalChange applied = c.withStatus(JournalChange.APPLIED);
 					if (c.isFile()) {
 						applied = applied.withGroup(r.op().group());
-						if (JournalChange.DISABLE.equals(c.action()) && r.resultPath() != null) {
+						// Only from an op on this change's file: an undo change can follow its group's first op instead.
+						if (JournalChange.DISABLE.equals(c.action()) && r.resultPath() != null && r.op().path() != null
+								&& fileName(r.op().path()).equals(c.file())) {
 							applied = applied.withResultFile(fileName(r.resultPath()));
 						}
 					}

@@ -148,7 +148,8 @@ public final class Staging {
 		PendingActions.Merged merged = base.merge(ops);
 		merged.plan().save(pendingFile);
 		for (Path old : merged.superseded()) {
-			if (!SafeFileNames.isDirectChild(planMods, old)) {
+			// Only downloads: a replaced enable of a user's x.jar.disabled (an undo's re-enable) leaves that jar alone.
+			if (!SafeFileNames.isDirectChild(planMods, old) || !old.getFileName().toString().endsWith(PendingActions.PENDING_SUFFIX)) {
 				continue;
 			}
 			try {
