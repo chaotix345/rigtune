@@ -22,10 +22,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import org.jspecify.annotations.Nullable;
 
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -307,7 +307,7 @@ public class BenchmarkResultScreen extends Screen {
 		}
 		try {
 			return Instant.parse(createdAt).atZone(zone).format(DateTimeFormatter.ofPattern("MM-dd"));
-		} catch (DateTimeParseException e) {
+		} catch (DateTimeException e) { // also an instant outside the zone's range (a hand-edited benchmarks.json)
 			return createdAt.length() >= 10 ? createdAt.substring(5, 10) : "?";
 		}
 	}

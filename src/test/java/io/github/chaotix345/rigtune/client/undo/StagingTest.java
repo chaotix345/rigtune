@@ -226,6 +226,9 @@ class StagingTest {
 
 		assertEquals(dh.stream().map(Op::id).toList(), dropped.stream().map(Op::id).toList());
 		assertFalse(Files.exists(pending));
+		// The notice names the mod from the dropped ops (re-check of review 6): the enable carries the id read from its jar.
+		assertEquals("distanthorizons", dropped.stream().filter(op -> op.type() == PendingActions.Type.ENABLE_FILE)
+				.findFirst().orElseThrow().modId());
 	}
 
 	@Test
