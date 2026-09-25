@@ -36,6 +36,9 @@ Review: a code-reviewer subagent's findings, decided by the coordinator, are all
 ### Nvidium
 - `recommendWhen`: `gpuVendor nvidia`, not integrated, **`gpuTierAtLeast 3`** (a beta mod pinned to an exact
   Sodium build), Sodium present, and `gpuModelMatches` with the exact triage §5 regex (AC2.3).
+  - Review 3 (rules-accuracy-1/-3) reversed the tier floor: the generic laptop tier rule puts RTX 20-series, RTX 3050
+    and GTX 16-series Laptop GPUs at tier 2, so it blocked exactly the cards the model regex was added for. The regex
+    is the whitelist now, and the caution moved to `defaultSelected: false` (opt-in).
 - `avoidWhen`: **deviation from triage.md.** It doesn't use `not gpuModelMatches(<that list>)`. A card missing from
   the list would then get a *ticked* suggestion to disable a working Nvidium (RTX 2050, GTX 1630, TITAN RTX,
   Quadro T-series, any future "RTX PRO" card). A missing recommendation costs nothing, because Nvidium switches
@@ -49,6 +52,8 @@ Review: a code-reviewer subagent's findings, decided by the coordinator, are all
   string without a renderer names no model: no add, no disable.
 - v1 override: the old tier-gated `recommendWhen`, and the old `avoidWhen` **without its `gpuTierAtMost 2`
   branch**. That's only fewer disable suggestions; additions are unaffected, since v1 recommends only at GPU tier ≥ 4.
+  - Review 3 (compat-1) reversed this: a lost disable suggestion is a lost safety net for 0.1.x, so the v1 `avoidWhen`
+    is v0.1.0's exactly again, and `RulesV1DifferentialTest` now flags a lost `disable:`.
 
 ### Mod rules
 - **RenderScale.** A third `anyOf` branch: GPU tier 3 and `displayPixelsAtLeast` 3686400 (2560×1440; covers
