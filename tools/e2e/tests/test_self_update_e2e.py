@@ -107,6 +107,19 @@ class LockTest(unittest.TestCase):
         self.assertFalse(self_update_e2e.owns_lock(text, Path("C:/tmp/run-1")))
 
 
+class UndoScenarioTest(unittest.TestCase):
+    def test_the_undo_scenario_ends_with_the_per_entry_phases(self):
+        run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo")
+        self.assertEqual(["mod-apply", "mod-undo", "mod-check", "entry-apply", "entry-undo", "entry-check"], list(run.checks))
+
+    def test_entry_id_is_added_to_a_phase_after_the_earlier_launch(self):
+        run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo")
+        (run.run_dir / "jvm-entry-undo.txt").write_text("-Drigtune.e2e.phase=entry-undo\n", encoding="utf-8")
+        run.add_jvm_args("entry-undo", ["-Drigtune.e2e.entryId=a1", "-Drigtune.e2e.entryMod=e2e-first"])
+        self.assertEqual(["-Drigtune.e2e.phase=entry-undo", "-Drigtune.e2e.entryId=a1", "-Drigtune.e2e.entryMod=e2e-first"],
+                         (run.run_dir / "jvm-entry-undo.txt").read_text(encoding="utf-8").splitlines())
+
+
 class HelperLogTest(unittest.TestCase):
     def test_only_text_after_the_offset_counts(self):
         log = Path(tempfile.mkdtemp()) / "helper.log"

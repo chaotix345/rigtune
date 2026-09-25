@@ -2,6 +2,8 @@
 per-entry undo."""
 
 import json
+import shutil
+import tempfile
 import sys
 import unittest
 from pathlib import Path
@@ -242,6 +244,156 @@ class ListingTest(unittest.TestCase):
         self.assertIn(DH_QUEUED, listing)
         self.assertIn(DH_OLD, listing)
         self.assertNotIn(DH_QUEUED, e2e_checks.listing(sx.mods))
+
+
+FIRST = "e2e-first-1.0.0.jar"
+SECOND = "e2e-second-1.0.0.jar"
+
+
+class EntryFixture:
+    """B-M3, after the M14 part: two more Applies, each adding a mod (the older adds e2e-first), applied by the helper."""
+
+    def __init__(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.first_jar = e2e_env.test_mod_jar(self.root / FIRST, "e2e-first")
+        self.second_jar = e2e_env.test_mod_jar(self.root / SECOND, "e2e-second")
+        self.instance = self.root / "instance"
+        self.mods = self.instance / "mods"
+        self.config = self.instance / "config" / "rigtune"
+        self.mods.mkdir(parents=True)
+        self.config.mkdir(parents=True)
+        shutil.copy(self.first_jar, self.mods / FIRST)
+        shutil.copy(self.second_jar, self.mods / SECOND)
+        self.last_apply([("ENABLE_FILE", FIRST), ("ENABLE_FILE", SECOND)])
+        self.m14 = [{"id": "m1", "kind": "apply", "changes": [{"id": "x1", "status": "REVERTED"}]},
+                    {"id": "m2", "kind": "undo", "undoOf": "m1", "changes": [{"id": "x2", "status": "APPLIED", "reverts": "x1"}]}]
+        self.older = {"id": "a1", "kind": "apply", "at": "2026-09-26T01:00:00Z", "changes": [
+            {"id": "c1", "type": "file", "action": "enable", "modId": "e2e-first", "file": FIRST, "status": "APPLIED", "opId": "o1"}]}
+        self.newer = {"id": "a2", "kind": "apply", "at": "2026-09-26T01:00:05Z", "changes": [
+            {"id": "c2", "type": "file", "action": "enable", "modId": "e2e-second", "file": SECOND, "status": "APPLIED", "opId": "o2"}]}
+        self.entries = self.m14 + [self.older, self.newer]
+        self.write_history()
+        self.known = ["m1", "m2"]
+        self.driver = {"ok": True, "applyMessages": ["Applied", "Applied"]}
+
+    def last_apply(self, ops):
+        results = []
+        for kind, name in ops:
+            op = {"type": kind, "path": str(self.mods / name)} if kind == "DISABLE_FILE" else \
+                {"type": kind, "from": str(self.mods / (name + ".x")), "to": str(self.mods / name)}
+            results.append({"op": op, "status": "OK", "message": ""})
+        (self.config / "last-apply.json").write_text(json.dumps({"finishedAt": "t", "results": results}))
+
+    def write_history(self):
+        (self.config / "history.json").write_text(json.dumps({"formatVersion": 1, "entries": self.entries}))
+
+    def undone(self):
+        """As the instance is after Undo this on the older Apply, a restart and the helper."""
+        (self.mods / FIRST).rename(self.mods / (FIRST + ".disabled"))
+        self.last_apply([("DISABLE_FILE", FIRST)])
+        self.older["changes"][0]["status"] = "REVERTED"
+        self.undo = {"id": "u1", "kind": "undo", "undoOf": "a1", "changes": [
+            {"id": "u1c", "type": "file", "action": "disable", "file": FIRST, "status": "APPLIED", "reverts": "c1"}]}
+        self.entries.append(self.undo)
+        self.write_history()
+        self.driver = {"ok": True, "undoOf": "a1", "viaScreen": True, "entryPlan": [
+            {"action": "REVERT", "needsRestart": True, "changeIds": ["c1"], "description": "Disable " + FIRST}]}
+
+
+class EntryApplyTest(unittest.TestCase):
+    def setUp(self):
+        self.fx = EntryFixture()
+
+    def failing(self):
+        return names(e2e_checks.after_entry_apply(self.fx.instance, self.fx.first_jar, self.fx.second_jar, self.fx.driver,
+                                                  self.fx.known))
+
+    def test_passes(self):
+        self.assertEqual([], self.failing())
+
+    def test_one_apply_for_both(self):
+        self.fx.older["changes"].append(self.fx.newer["changes"][0])
+        self.fx.entries.remove(self.fx.newer)
+        self.fx.write_history()
+        self.fx.driver["applyMessages"] = ["Applied"]
+        self.assertEqual(["history.json: two new apply entries, the older adding e2e-first, both APPLIED",
+                          "the driver applied twice, one mod each"], self.failing())
+
+    def test_order_swapped(self):
+        self.fx.entries[2:] = [self.fx.newer, self.fx.older]
+        self.fx.older["at"], self.fx.newer["at"] = self.fx.newer["at"], self.fx.older["at"]
+        self.fx.write_history()
+        self.assertEqual(["history.json: two new apply entries, the older adding e2e-first, both APPLIED"], self.failing())
+
+    def test_second_mod_missing(self):
+        (self.fx.mods / SECOND).unlink()
+        self.assertEqual(["both added mods are in mods (the served bytes)"], self.failing())
+
+
+class EntryUndoTest(unittest.TestCase):
+    def setUp(self):
+        self.fx = EntryFixture()
+        self.fx.undone()
+
+    def failing(self):
+        return names(e2e_checks.after_entry_undo(self.fx.instance, FIRST, SECOND, self.fx.driver, "a1", "a2"))
+
+    def test_passes(self):
+        self.assertEqual([], self.failing())
+
+    def test_plan_also_touching_the_newer_entry(self):
+        self.fx.driver["entryPlan"].append({"action": "REVERT", "needsRestart": True, "changeIds": ["c2"]})
+        self.assertEqual(["the driver undid the older Apply only (one revert after a restart)"], self.failing())
+
+    def test_no_per_entry_api(self):
+        self.fx.driver = {"ok": False, "error": "no per-entry undo API"}
+        self.assertIn("the driver undid the older Apply only (one revert after a restart)", self.failing())
+
+    def test_newer_mod_disabled_too(self):
+        (self.fx.mods / SECOND).rename(self.fx.mods / (SECOND + ".disabled"))
+        self.assertEqual(["the newer Apply's mod is still enabled"], self.failing())
+
+    def test_newer_change_reverted_in_the_journal(self):
+        self.fx.newer["changes"][0]["status"] = "REVERTED"
+        self.fx.write_history()
+        self.assertEqual(["history.json: one undo of the older Apply, its change REVERTED, the newer APPLIED"], self.failing())
+
+    def test_undo_recorded_against_the_newer_entry(self):
+        self.fx.undo["undoOf"] = "a2"
+        self.fx.write_history()
+        self.assertEqual(["history.json: one undo of the older Apply, its change REVERTED, the newer APPLIED"], self.failing())
+
+    def test_older_mod_still_enabled(self):
+        (self.fx.mods / (FIRST + ".disabled")).rename(self.fx.mods / FIRST)
+        self.assertEqual(["the older Apply's mod is disabled"], self.failing())
+
+
+class EntryCheckTest(unittest.TestCase):
+    def setUp(self):
+        self.fx = EntryFixture()
+        self.fx.undone()
+        self.before = e2e_checks.listing(self.fx.mods)
+        self.statuses = e2e_checks.history_statuses(self.fx.instance)
+        self.driver = {"ok": True, "loadedMods": ["e2e-disable-me", "e2e-second", "rigtune"], "entryUndoableAfter": 0}
+
+    def failing(self):
+        return names(e2e_checks.after_entry_check(self.fx.instance, "e2e-first", "e2e-second", "e2e-disable-me", self.driver,
+                                                  self.before, self.statuses))
+
+    def test_passes(self):
+        self.assertEqual([], self.failing())
+
+    def test_first_still_loaded(self):
+        self.driver["loadedMods"].append("e2e-first")
+        self.assertEqual(["only the older Apply's mod is off"], self.failing())
+
+    def test_second_not_loaded(self):
+        self.driver["loadedMods"].remove("e2e-second")
+        self.assertEqual(["only the older Apply's mod is off"], self.failing())
+
+    def test_older_entry_still_undoable(self):
+        self.driver["entryUndoableAfter"] = 1
+        self.assertEqual(["nothing left to undo on the older Apply"], self.failing())
 
 
 if __name__ == "__main__":

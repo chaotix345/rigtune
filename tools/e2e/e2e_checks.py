@@ -408,3 +408,92 @@ def after_mod_check(instance, added_id, other_id, driver, mods_before, statuses_
                         "unchanged" if statuses == statuses_before else "before {} after {}".format(statuses_before, statuses)))
     checks.append(_clean(instance))
     return checks
+
+
+# --- Undo this on an older Apply, after a restart (plan review B-M3) ---------------------------------------------------
+
+def _file_changes(entry):
+    return [(c.get("type"), c.get("action"), c.get("file"), c.get("status")) for c in (entry or {}).get("changes", [])]
+
+
+def after_entry_apply(instance, first_jar, second_jar, driver, known_entry_ids):
+    """Two Applies in one start, each adding a mod from Modrinth (first_jar, then second_jar), and the helper ran."""
+    instance, first_jar, second_jar = Path(instance), Path(first_jar), Path(second_jar)
+    mods = instance / "mods"
+    driver = driver or {}
+    checks = [Check("the driver applied twice, one mod each", driver.get("ok") is True and len(driver.get("applyMessages") or []) == 2,
+                    "error: {}; apply messages: {}".format(driver.get("error"), driver.get("applyMessages")))]
+    same = {jar.name: (mods / jar.name).is_file() and digest(mods / jar.name, "sha512") == digest(jar, "sha512")
+            for jar in (first_jar, second_jar)}
+    checks.append(Check("both added mods are in mods (the served bytes)", all(same.values()), "served bytes in mods: {}".format(same)))
+    checks.append(_clean(instance))
+    ops = _ops(instance)
+    checks.append(Check("last-apply.json: both enables OK",
+                        ops == sorted([("ENABLE_FILE", first_jar.name, "OK"), ("ENABLE_FILE", second_jar.name, "OK")]),
+                        "results: {}".format(ops)))
+    new = [e for e in history_entries(instance) or [] if e.get("id") not in set(known_entry_ids)]
+    changes = [_file_changes(e) for e in new]
+    ok = ([e.get("kind") for e in new] == ["apply", "apply"]
+          and changes == [[("file", "enable", first_jar.name, "APPLIED")], [("file", "enable", second_jar.name, "APPLIED")]]
+          and (new[0].get("at") or "") <= (new[1].get("at") or ""))
+    checks.append(Check("history.json: two new apply entries, the older adding {}, both APPLIED".format(first_jar.stem.rsplit("-", 1)[0]),
+                        ok, "new entries: {}".format([(e.get("kind"), e.get("at"), _file_changes(e)) for e in new])))
+    return checks
+
+
+def after_entry_undo(instance, first_name, second_name, driver, older_id, newer_id):
+    """Undo this on the older Apply (not the last one), a restart and the helper: only its mod is disabled."""
+    instance = Path(instance)
+    mods = instance / "mods"
+    driver = driver or {}
+    entries = {e.get("id"): e for e in history_entries(instance) or []}
+    older_changes = [c.get("id") for c in (entries.get(older_id) or {}).get("changes", [])]
+    items = [i for i in driver.get("entryPlan") or [] if i.get("action") != "SKIP"]
+    checks = [Check("the driver undid the older Apply only (one revert after a restart)",
+                    driver.get("ok") is True and driver.get("undoOf") == older_id and len(items) == 1
+                    and items[0].get("action") == "REVERT" and items[0].get("needsRestart") is True
+                    and items[0].get("changeIds") == older_changes and bool(older_changes),
+                    "error: {}; undoOf: {} (older {}); via the undo screen: {}; plan: {}".format(
+                        driver.get("error"), driver.get("undoOf"), older_id, driver.get("viaScreen"), driver.get("entryPlan")))]
+    checks.append(Check("the older Apply's mod is disabled", (mods / (first_name + ".disabled")).is_file() and not (mods / first_name).exists(),
+                        "{}.disabled exists: {}; {} exists: {}".format(first_name, (mods / (first_name + ".disabled")).is_file(),
+                                                                       first_name, (mods / first_name).exists())))
+    checks.append(Check("the newer Apply's mod is still enabled", (mods / second_name).is_file() and not (mods / (second_name + ".disabled")).exists(),
+                        "{} exists: {}".format(second_name, (mods / second_name).is_file())))
+    checks.append(_clean(instance))
+    ops = _ops(instance)
+    checks.append(Check("last-apply.json: the reversal op OK", ops == [("DISABLE_FILE", first_name, "OK")], "results: {}".format(ops)))
+    undos = [e for e in entries.values() if e.get("kind") == "undo" and e.get("undoOf") in (older_id, newer_id)]
+    undo_changes = [c for e in undos for c in e.get("changes", [])]
+    older = {c.get("id"): c.get("status") for c in (entries.get(older_id) or {}).get("changes", [])}
+    newer = {c.get("id"): c.get("status") for c in (entries.get(newer_id) or {}).get("changes", [])}
+    ok = ([e.get("undoOf") for e in undos] == [older_id] and len(undo_changes) == 1
+          and undo_changes[0].get("status") == "APPLIED" and undo_changes[0].get("reverts") in older
+          and set(older.values()) == {"REVERTED"} and set(newer.values()) == {"APPLIED"})
+    checks.append(Check("history.json: one undo of the older Apply, its change REVERTED, the newer APPLIED", ok,
+                        "undo entries of these applies: {}; undo changes: {}; older: {}; newer: {}".format(
+                            [e.get("undoOf") for e in undos],
+                            [(c.get("action"), c.get("file"), c.get("status"), c.get("reverts")) for c in undo_changes], older, newer)))
+    return checks
+
+
+def after_entry_check(instance, first_id, second_id, other_id, driver, mods_before, statuses_before):
+    """The next start: the older Apply's mod is off, the newer's and the M14 part's are on, the older has nothing left."""
+    instance = Path(instance)
+    driver = driver or {}
+    loaded = driver.get("loadedMods") or []
+    checks = [Check("the driver checked", driver.get("ok") is True, "error: {}".format(driver.get("error")))]
+    checks.append(Check("only the older Apply's mod is off", first_id not in loaded and second_id in loaded and other_id in loaded,
+                        "loaded: {} {}, {} {}, {} {}".format(first_id, first_id in loaded, second_id, second_id in loaded,
+                                                             other_id, other_id in loaded)))
+    checks.append(Check("nothing left to undo on the older Apply", driver.get("entryUndoableAfter") == 0,
+                        "undoable items: {}".format(driver.get("entryUndoableAfter"))))
+    crashes = sorted(p.name for p in (instance / "crash-reports").glob("*")) if (instance / "crash-reports").is_dir() else []
+    checks.append(Check("no crash report", not crashes, "crash-reports: {}".format(crashes)))
+    after = listing(instance / "mods")
+    checks.append(Check("mods unchanged by the relaunch", after == mods_before, "unchanged" if after == mods_before else _diff(mods_before, after)))
+    statuses = history_statuses(instance)
+    checks.append(Check("history.json statuses unchanged", statuses == statuses_before,
+                        "unchanged" if statuses == statuses_before else "before {} after {}".format(statuses_before, statuses)))
+    checks.append(_clean(instance))
+    return checks

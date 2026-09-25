@@ -43,15 +43,22 @@ LF = chr(10)
 CAPTURED = ("pending.json", "last-apply.json", "rigtune.json", "rules-cache.json", "helper.log")
 SEEDED = ("pending.json", "last-apply.json")
 UNDO_PHASES = ("mod-apply", "mod-undo", "mod-check")
+# Plan review B-M3, on the same instance after UNDO_PHASES: Undo this on an older Apply.
+ENTRY_PHASES = ("entry-apply", "entry-undo", "entry-check")
 ADDED_ID = "e2e-added"
 ADDED_PROJECT = "E2EAddMd"
 OTHER_ID = "e2e-disable-me"
+FIRST_ID, FIRST_PROJECT = "e2e-first", "E2EFrst1"
+SECOND_ID, SECOND_PROJECT = "e2e-second", "E2EScnd1"
 PHASE_TITLES = {
     "update": "After the old version applied the update and quit (helper done)",
     "verify": "After the new version started on the same instance",
     "mod-apply": "After 0.2 applied {add " + ADDED_ID + " from Modrinth, disable " + OTHER_ID + "} and quit (helper done)",
     "mod-undo": "After Undo last apply and a restart (helper done)",
     "mod-check": "After the next start",
+    "entry-apply": "B-M3: after two Applies in one start, each adding a mod (" + FIRST_ID + ", then " + SECOND_ID + "), and quit (helper done)",
+    "entry-undo": "B-M3: after Undo this on the older Apply (" + FIRST_ID + ") and a restart (helper done)",
+    "entry-check": "B-M3: after the next start",
 }
 
 
@@ -81,7 +88,7 @@ class Run:
         self.lock = None if args.lock == "none" else Path(args.lock)
         self.server = None
         self.watcher = None
-        self.checks = {p: [] for p in (UNDO_PHASES if self.undo else ("update", "verify"))}
+        self.checks = {p: [] for p in (UNDO_PHASES + ENTRY_PHASES if self.undo else ("update", "verify"))}
         self.facts = {}
         self.jars = self.run_dir / "jars"
         # Test mods: disabled by 0.1.0 with its update (so the legacy import has a non-RigTune change), and for the undo
@@ -92,6 +99,8 @@ class Run:
         self.carried = []
         self.added_jar = self.jars / "{}-1.0.0.jar".format(ADDED_ID)
         self.other_jar = self.jars / "{}-1.0.0.jar".format(OTHER_ID)
+        self.first_jar = self.jars / "{}-1.0.0.jar".format(FIRST_ID)
+        self.second_jar = self.jars / "{}-1.0.0.jar".format(SECOND_ID)
 
     # --- plumbing -------------------------------------------------------------------------------------------------
 
@@ -225,6 +234,9 @@ class Run:
             e2e_env.test_mod_jar(self.other_jar, OTHER_ID)
             shutil.copyfile(self.other_jar, self.mods / self.other_jar.name)
             extra_projects.append((ADDED_PROJECT, ADDED_ID, self.added_jar))
+            for jar, mod_id, project in ((self.first_jar, FIRST_ID, FIRST_PROJECT), (self.second_jar, SECOND_ID, SECOND_PROJECT)):
+                e2e_env.test_mod_jar(jar, mod_id)
+                extra_projects.append((project, mod_id, jar))
         if self.seed is not None:
             self.seed_instance()
         (self.instance / "options.txt").write_text(OPTIONS, encoding="utf-8")
@@ -244,12 +256,18 @@ class Run:
             if phase == "update" and self.legacy_jar is not None:
                 lines.append("-Drigtune.e2e.alsoDisable=e2e-legacy")
             if self.undo:
-                lines += ["-Drigtune.e2e.addSlug=" + ADDED_ID, "-Drigtune.e2e.addProject=" + ADDED_PROJECT, "-Drigtune.e2e.disable=" + OTHER_ID]
+                lines += ["-Drigtune.e2e.addSlug=" + ADDED_ID, "-Drigtune.e2e.addProject=" + ADDED_PROJECT, "-Drigtune.e2e.disable=" + OTHER_ID,
+                          "-Drigtune.e2e.entryMods={}:{},{}:{}".format(FIRST_ID, FIRST_PROJECT, SECOND_ID, SECOND_PROJECT)]
             (self.run_dir / "jvm-{}.txt".format(phase)).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
         code = self.gradle("gradle-driver.log", *self.driver_args(":{}:{}".format(self.mc, "e2eUndoDriverJar" if self.undo else "e2eDriverJar")))
         if code != 0:
             raise SystemExit("building the driver failed; see " + str(self.run_dir / "gradle-driver.log"))
+
+    def add_jvm_args(self, phase, lines):
+        """For values known only after an earlier launch (the entry id of B-M3's older Apply)."""
+        with open(self.run_dir / "jvm-{}.txt".format(phase), "a", encoding="utf-8") as out:
+            out.write("\n".join(lines) + "\n")
 
     def seed_instance(self):
         """The seed's fake jars, and its templated files with this instance's folder put in."""
@@ -477,6 +495,39 @@ class Run:
         checks = e2e_checks.after_mod_check(self.instance, ADDED_ID, OTHER_ID, self.driver("mod-check"), mods_before, statuses_before)
         checks.insert(0, e2e_checks.Check("the client exited normally", code == 0, "gradle exit {}".format(code)))
         self.checks["mod-check"] = checks
+        return all(c.ok for c in checks) and self.run_entry_undo(exited)
+
+    def run_entry_undo(self, exited):
+        """Plan review B-M3, on the same instance: two Applies each adding a mod, Undo this on the older one, a restart
+        and the helper; only the older Apply's mod is off and both entries say so."""
+        known = [e.get("id") for e in e2e_checks.history_entries(self.instance) or []]
+        code, helper_ok, _ = self.launch_and_apply("entry-apply")
+        checks = [exited(code, helper_ok)] + e2e_checks.after_entry_apply(self.instance, self.first_jar, self.second_jar,
+                                                                           self.driver("entry-apply"), known)
+        self.checks["entry-apply"] = checks
+        new = [e for e in e2e_checks.history_entries(self.instance) or [] if e.get("id") not in known]
+        if not all(c.ok for c in checks):
+            return False
+        self.facts["olderEntry"], self.facts["newerEntry"] = new[0].get("id"), new[1].get("id")
+        for phase in ENTRY_PHASES[1:]:
+            self.add_jvm_args(phase, ["-Drigtune.e2e.entryId=" + self.facts["olderEntry"], "-Drigtune.e2e.entryMod=" + FIRST_ID])
+
+        code, helper_ok, _ = self.launch_and_apply("entry-undo")
+        checks = [exited(code, helper_ok)] + e2e_checks.after_entry_undo(self.instance, self.first_jar.name, self.second_jar.name,
+                                                                          self.driver("entry-undo"), self.facts["olderEntry"],
+                                                                          self.facts["newerEntry"])
+        self.checks["entry-undo"] = checks
+        if not all(c.ok for c in checks):
+            return False
+
+        mods_before = e2e_checks.listing(self.mods)
+        statuses_before = e2e_checks.history_statuses(self.instance)
+        code = self.launch("entry-check")
+        self.snapshot("entry-check")
+        checks = e2e_checks.after_entry_check(self.instance, FIRST_ID, SECOND_ID, OTHER_ID, self.driver("entry-check"),
+                                              mods_before, statuses_before)
+        checks.insert(0, e2e_checks.Check("the client exited normally", code == 0, "gradle exit {}".format(code)))
+        self.checks["entry-check"] = checks
         return all(c.ok for c in checks)
 
     def driver(self, phase):
@@ -542,7 +593,11 @@ class Run:
         if self.undo:
             lines += ["- RigTune: `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"]),
                       "- Added from the fake Modrinth: `{}` (project {}); disabled: `{}`".format(self.added_jar.name, ADDED_PROJECT,
-                                                                                                  self.other_jar.name)]
+                                                                                                  self.other_jar.name),
+                      "- B-M3, same instance: one Apply adds `{}` (project {}), a second Apply adds `{}` ({}); Undo this on the "
+                      "older one (entry {}; through the undo screen: {}; controller method: {})".format(
+                          self.first_jar.name, FIRST_PROJECT, self.second_jar.name, SECOND_PROJECT, self.facts.get("olderEntry"),
+                          (self.driver("entry-undo") or {}).get("viaScreen"), (self.driver("entry-undo") or {}).get("entryPlanMethod"))]
         else:
             lines += ["- Old: `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["old"]),
                       "- New (served by the fake Modrinth): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"])]
