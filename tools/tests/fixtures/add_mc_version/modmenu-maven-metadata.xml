@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata>
+  <groupId>com.terraformersmc</groupId>
+  <artifactId>modmenu</artifactId>
+  <versioning>
+    <versions>
+      <version>20.0.1</version>
+      <version>20.0.0</version>
+      <version>20.0.0-alpha.1</version>
+      <version>20.0.0-beta.4</version>
+      <version>20.0.0-beta.3</version>
+      <version>20.0.0-beta.2</version>
+      <version>20.0.0-beta.1</version>
+      <version>20.0.2</version>
+      <version>21.0.0-beta.1</version>
+      <version>21.0.0</version>
+      <version>20.0.3</version>
+      <version>22.0.0-alpha.1</version>
+    </versions>
+  </versioning>
+</metadata>

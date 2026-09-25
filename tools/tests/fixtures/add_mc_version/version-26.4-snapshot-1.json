@@ -1,0 +1,9 @@
+{
+ "id": "26.4-snapshot-1",
+ "type": "snapshot",
+ "javaVersion": {
+  "component": "java-runtime-epsilon",
+  "majorVersion": 25
+ },
+ "releaseTime": "2026-09-22T13:38:53+00:00"
+}
