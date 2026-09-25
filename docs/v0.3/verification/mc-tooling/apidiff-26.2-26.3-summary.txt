@@ -189,7 +189,7 @@ RigTune bytecode (26.2 build vs 26.3 build): 306 classes compared, 4 differ, 0 o
   gametest/io/github/chaotix345/rigtune/gametest/BenchmarkGameTest.class
   gametest/io/github/chaotix345/rigtune/gametest/RigTuneClientGameTest.class
 
-RESULT: 12 breaking change(s), 0 unresolved reference(s):
+RESULT: 12 breaking change(s), 0 gap(s) in the check:
   MISSING field com/mojang/blaze3d/platform/InputConstants$Type.KEYSYM:Lcom/mojang/blaze3d/platform/InputConstants$Type;: not found on the new version
   MISSING method com/mojang/blaze3d/platform/VideoMode.getRefreshRate()I: not found on the new version
   MISSING method com/mojang/blaze3d/platform/Window.getRefreshRate()I: not found on the new version
