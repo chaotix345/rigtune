@@ -191,4 +191,14 @@ class BenchmarkRunTest {
 		run.cancel();
 		assertEquals(1, run.result().measurements().size());
 	}
+
+	@Test
+	void recordPassesCompletenessToTheSearch() {
+		BenchmarkRun run = run();
+		Step first = run.advance().orElseThrow();
+		assertEquals(Step.Kind.RENDER_DISTANCE, first.kind());
+		run.record(low(500), false);
+		assertFalse(run.result().renderDistance().measurements().getFirst().passed());
+		assertFalse(run.result().renderDistance().measurements().getFirst().complete());
+	}
 }

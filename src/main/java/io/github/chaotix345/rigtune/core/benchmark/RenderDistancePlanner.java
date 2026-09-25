@@ -54,7 +54,13 @@ public final class RenderDistancePlanner {
 	}
 
 	public void record(int rd, FrameStats stats) {
-		Measurement m = new Measurement(rd, stats, stats.onePercentLowFps() >= targetFps);
+		record(rd, stats, true);
+	}
+
+	// complete = false: the step was measured before its terrain arrived, so it can't count as a pass (it would
+	// overstate what the machine sustains at this render distance).
+	public void record(int rd, FrameStats stats, boolean complete) {
+		Measurement m = new Measurement(rd, stats, complete && stats.onePercentLowFps() >= targetFps, complete);
 		for (int i = 0; i < measurements.size(); i++) {
 			if (measurements.get(i).rd() == rd) {
 				measurements.set(i, m);
@@ -78,9 +84,14 @@ public final class RenderDistancePlanner {
 		return new PlannerResult(met ? pass : minRd, met, bestEffort(), measurements, reason(met, pass, fail));
 	}
 
+	// The best 1% low among the complete steps (all steps when none is complete).
 	private int bestEffort() {
-		Measurement best = measurements.getFirst();
-		for (Measurement m : measurements) {
+		List<Measurement> candidates = measurements.stream().filter(Measurement::complete).toList();
+		if (candidates.isEmpty()) {
+			candidates = measurements;
+		}
+		Measurement best = candidates.getFirst();
+		for (Measurement m : candidates) {
 			double low = m.stats().onePercentLowFps();
 			double bestLow = best.stats().onePercentLowFps();
 			if (low > bestLow || (low == bestLow && m.rd() > best.rd())) {

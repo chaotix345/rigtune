@@ -126,13 +126,18 @@ public final class BenchmarkSession {
 	}
 
 	public void record(Step step, FrameStats stats) {
+		record(step, stats, true);
+	}
+
+	// complete: the step's terrain had arrived (SettleCheck). Only the render distance search uses it.
+	public void record(Step step, FrameStats stats, boolean complete) {
 		if (pending == null || !pending.equals(step)) {
 			throw new IllegalStateException("Not the pending step: " + step);
 		}
 		pending = null;
 		measurements.add(new Measured(step, stats));
 		switch (step.kind()) {
-			case RENDER_DISTANCE -> planner().record(step.knobs().renderDistance(), stats);
+			case RENDER_DISTANCE -> planner().record(step.knobs().renderDistance(), stats, complete);
 			case SIMULATION_DISTANCE -> {
 				int sd = step.knobs().simulationDistance();
 				sdStats.put(sd, stats);

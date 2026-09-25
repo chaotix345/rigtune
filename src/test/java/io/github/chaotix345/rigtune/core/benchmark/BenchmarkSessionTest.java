@@ -466,4 +466,15 @@ class BenchmarkSessionTest {
 		Step other = new Step(Kind.REPEAT, first.knobs(), first.protocol());
 		assertThrows(IllegalStateException.class, () -> session.record(other, low(10)));
 	}
+
+	@Test
+	void anIncompleteRenderDistanceStepDoesNotMeetTheTarget() {
+		BenchmarkSession session = tune(ORIGINAL.withRenderDistance(8), new TuneLimits(4, 32, 100, false, 5));
+		Step first = session.next(0).orElseThrow();
+		session.record(first, low(500), false);
+		Step second = session.next(40 * FakeRig.NANOS).orElseThrow();
+		assertEquals(Kind.RENDER_DISTANCE, second.kind());
+		assertTrue(second.knobs().renderDistance() < 8, "went down after an incomplete start: " + second);
+		assertFalse(session.result().renderDistance().measurements().getFirst().passed());
+	}
 }
