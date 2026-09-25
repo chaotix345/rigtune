@@ -58,19 +58,29 @@ jobs:
             "${files[@]}"
 
       # --- Modrinth publishing ---
-      # One Modrinth version per Minecraft version (build.gradle's `modrinth {}` block), each its
-      # own step so a re-run after a partial failure still publishes the one that's missing:
-      # Minotaur fails (not duplicates) a version_number that already exists, so re-running a step
-      # whose upload already succeeded is a harmless no-op-turned-failure, and `if: !cancelled()`
-      # (rather than the default `if: success()`) means the 26.3 step still runs even if 26.2's
-      # step just failed, and vice versa on a retry.
-      - name: Publish to Modrinth (26.2)
+      # One Modrinth version per Minecraft version (build.gradle's `modrinth {}` block, versionType
+      # alpha for a -snapshot-/-pre-/-rc- node), for every versions/*/ node, so a new node needs no
+      # edit here. Each node is published on its own: a failure is recorded as an error and the
+      # loop carries on with the others, and the step fails at the end if any node failed. A re-run
+      # after a partial failure still publishes the one that's missing: Minotaur fails (not
+      # duplicates) a version_number that already exists, so a node whose upload already succeeded
+      # is a harmless no-op-turned-failure. `if: !cancelled()` (rather than the default
+      # `if: success()`) lets the verify step below run even when this one failed.
+      - name: Publish to Modrinth (every Minecraft version)
         if: ${{ !cancelled() && steps.release.outcome == 'success' && env.MODRINTH_TOKEN != '' }}
-        run: ./gradlew :26.2:modrinth
-
-      - name: Publish to Modrinth (26.3)
-        if: ${{ !cancelled() && steps.release.outcome == 'success' && env.MODRINTH_TOKEN != '' }}
-        run: ./gradlew :26.3:modrinth
+        run: |
+          set -u
+          status=0
+          for dir in versions/*/; do
+            mc=$(basename "$dir")
+            if ./gradlew ":$mc:modrinth"; then
+              echo "published: $mc"
+            else
+              echo "::error::Modrinth publish failed for $mc"
+              status=1
+            fi
+          done
+          exit "$status"
 
       - name: Notice if Modrinth publishing was skipped
         if: ${{ env.MODRINTH_TOKEN == '' }}
