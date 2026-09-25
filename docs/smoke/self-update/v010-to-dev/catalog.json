@@ -1,0 +1,66 @@
+{
+ "hosts": {
+  "api": "api.modrinth.com",
+  "cdn": "cdn.modrinth.com"
+ },
+ "cdnBase": "https://cdn.modrinth.com",
+ "projects": [
+  {
+   "id": "E2ERigTn",
+   "slug": "rigtune",
+   "title": "RigTune",
+   "versions": [
+    {
+     "id": "E2Eold01",
+     "version_number": "0.1.0",
+     "version_type": "release",
+     "date_published": "2026-09-24T01:41:31Z",
+     "game_versions": [
+      "26.2"
+     ],
+     "loaders": [
+      "fabric"
+     ],
+     "file": "~/AppData/Local/Temp/claude/C--Dev-Minecraft-Setting-Optimisation-Mod/097c9765-76fe-415d-a5ae-7debe28cb5de/scratchpad/v010/rigtune-0.1.0.jar",
+     "dependencies": [
+      {
+       "project_id": "P7dR8mSH",
+       "version_id": null,
+       "file_name": null,
+       "dependency_type": "required"
+      }
+     ]
+    },
+    {
+     "id": "E2Enew01",
+     "version_number": "0.2.0-dev+mc26.2",
+     "version_type": "release",
+     "date_published": "2026-09-25T01:41:31Z",
+     "game_versions": [
+      "26.2"
+     ],
+     "loaders": [
+      "fabric"
+     ],
+     "file": "<repo>/versions/26.2/build/libs/rigtune-0.2.0-dev+mc26.2.jar",
+     "dependencies": [
+      {
+       "project_id": "P7dR8mSH",
+       "version_id": null,
+       "file_name": null,
+       "dependency_type": "required"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "static": [
+  {
+   "host": "raw.githubusercontent.com",
+   "path": "/chaotix345/rigtune/main/rules/rules-v1.json",
+   "file": "<repo>/rules/rules-v1.json",
+   "contentType": "text/plain; charset=utf-8"
+  }
+ ]
+}

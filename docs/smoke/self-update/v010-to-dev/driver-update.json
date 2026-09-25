@@ -1,0 +1,53 @@
+{
+  "phase": "update",
+  "ok": true,
+  "error": null,
+  "events": [
+    "t+0.0s driver loaded, phase update, output <run>\\out",
+    "t+3.7s title screen; goal set to QUALITY",
+    "t+4.7s offered: Update RigTune -> rigtune-0.2.0-dev+mc26.2.jar",
+    "t+5.7s screenshot e2e-update-1-report.png: Saved screenshot as e2e-update-1-report.png",
+    "t+6.7s apply: Downloading 1 mod change(s)…",
+    "t+7.2s staged: 2 op(s) in pending.json",
+    "t+9.2s screenshot e2e-update-2-staged.png: Saved screenshot as e2e-update-2-staged.png",
+    "t+11.2s quitting"
+  ],
+  "rigtuneVersion": "0.1.0",
+  "rigtuneOrigin": [
+    "<instance>\\mods\\rigtune-0.1.0.jar"
+  ],
+  "update": {
+    "title": "Update RigTune",
+    "reason": "Version 0.2.0-dev+mc26.2 is available (you have 0.1.0).",
+    "selectedByDefault": true,
+    "currentFile": "<instance>\\mods\\rigtune-0.1.0.jar",
+    "currentVersion": "0.1.0",
+    "newVersion": "0.2.0-dev+mc26.2",
+    "url": "https://cdn.modrinth.com/data/E2ERigTn/versions/E2Enew01/rigtune-0.2.0-dev%2Bmc26.2.jar",
+    "filename": "rigtune-0.2.0-dev+mc26.2.jar",
+    "sha512": "c91965398b62d562f4fc3683ffa955ec4fed88e41eaeaa40057fa2a2724638da3ed8c2c1a92d6e92210bf5f5783a9770f2ff9b69966d73eb41f0bd1310252ead"
+  },
+  "updateOffered": true,
+  "applyMessage": "Downloading 1 mod change(s)…",
+  "pendingOps": [
+    {
+      "type": "DISABLE_FILE",
+      "from": null,
+      "to": null,
+      "path": "<instance>\\mods\\rigtune-0.1.0.jar",
+      "modId": null,
+      "group": "3d27b292-88e6-4470-bcf3-015e5571d141",
+      "id": "3f585b58-b65f-4e85-9401-e583516917b0"
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\rigtune-0.2.0-dev+mc26.2.jar.rigtune-pending",
+      "to": "<instance>\\mods\\rigtune-0.2.0-dev+mc26.2.jar",
+      "path": null,
+      "modId": "rigtune",
+      "group": "3d27b292-88e6-4470-bcf3-015e5571d141",
+      "id": "04fc4264-6bee-4192-a7e3-2358062d614e"
+    }
+  ],
+  "status": "Restart Minecraft to finish applying 1 change(s)."
+}
