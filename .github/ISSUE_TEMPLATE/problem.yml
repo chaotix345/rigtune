@@ -1,0 +1,31 @@
+name: Report a problem
+description: Something in RigTune went wrong, or a suggestion looks wrong for your PC.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! If you came here from RigTune's **Report a problem** button, RigTune has filled in part of its report at the bottom and copied the full report to your clipboard. Nothing is posted until you submit this issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, and what went wrong. Screenshots or the relevant part of `logs/latest.log` help.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: false
+  - type: textarea
+    id: report
+    attributes:
+      label: RigTune report
+      description: >-
+        Paste the full report from your clipboard here (Ctrl+V), in place of the short one.
+        If your clipboard no longer has it, press Copy report on the RigTune screen and paste again.
+        Without RigTune, tell us your RigTune, Minecraft and Fabric Loader versions.
+    validations:
+      required: false
