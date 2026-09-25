@@ -73,6 +73,16 @@ class RecommenderV2Test {
 	}
 
 	@Test
+	void conflictReferencesStillResolveRulesThatRequiresSkipped() {
+		Map<String, Recommendation> recs = run("""
+				"mods":[
+				 {"slug":"c2me-fabric","projectId":"p1","title":"C2ME","modIds":["c2me"],"reason":"r","recommendWhen":{"always":false},"requires":["future"]},
+				 {"slug":"other","projectId":"p2","title":"Other","modIds":["other"],"reason":"r","recommendWhen":{"always":true},"conflictsWith":["c2me-fabric"]}
+				]""", "c2me");
+		assertFalse(recs.containsKey("add:other"), recs.keySet().toString());
+	}
+
+	@Test
 	void emptyRequiresIsAllowed() {
 		Map<String, Recommendation> recs = run(EVERY_KIND.replace("REQ", ",\"requires\":[]"), "avoidme", "clash", "sodium", "oldmod");
 		assertTrue(recs.keySet().containsAll(EVERY_KIND_IDS), recs.keySet().toString());

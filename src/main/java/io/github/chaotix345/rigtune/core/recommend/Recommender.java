@@ -130,7 +130,8 @@ public final class Recommender {
 
 	private static final class Session {
 		final RulesDocument rules;
-		// The rules this client understands: a rule whose `requires` names an unknown feature is skipped entirely.
+		// The rules this client understands: a rule whose `requires` names an unknown feature doesn't fire. Mod identity
+		// (conflictsWith references by slug) still resolves through every ModRule.
 		final List<ModRule> mods;
 		final List<ObsoleteRule> obsolete;
 		final List<SettingRule> settings;
@@ -152,7 +153,7 @@ public final class Recommender {
 			this.obsolete = rules.obsolete.stream().filter(r -> supported(r.requires)).toList();
 			this.settings = rules.settings.stream().filter(r -> supported(r.requires)).toList();
 			this.advice = rules.advice.stream().filter(r -> supported(r.requires)).toList();
-			for (ModRule mod : mods) {
+			for (ModRule mod : rules.mods) {
 				bySlug.putIfAbsent(mod.slug, mod);
 			}
 		}
@@ -390,7 +391,7 @@ public final class Recommender {
 			if (bySlug.containsKey(ref)) {
 				return ref;
 			}
-			return mods.stream().filter(m -> m.modIds.contains(ref)).map(m -> m.slug).findFirst().orElse(ref);
+			return rules.mods.stream().filter(m -> m.modIds.contains(ref)).map(m -> m.slug).findFirst().orElse(ref);
 		}
 
 		private String refTitle(String ref) {
