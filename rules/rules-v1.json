@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": 11,
-  "generatedAt": "2026-09-25T19:14:14Z",
+  "revision": 12,
+  "generatedAt": "2026-09-25T19:44:45Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -1363,7 +1363,7 @@
       "kind": "warning",
       "impact": "high",
       "title": "Give Minecraft more memory",
-      "text": "Your launcher lets Minecraft use about 2 GB of memory or less, which causes stutter as the game keeps freeing memory. Set it to 4 GB in your launcher's Java or memory settings."
+      "text": "Your launcher lets Minecraft use about 2 GB of memory or less, which causes stutter as the game keeps freeing memory. Set it to at least 4 GB (6 GB with Distant Horizons or shaders) in your launcher's Java or memory settings."
     },
     {
       "id": "ram-low-system",
