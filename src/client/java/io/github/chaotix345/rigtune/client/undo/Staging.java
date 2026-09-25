@@ -207,15 +207,23 @@ public final class Staging {
 				return List.of();
 			}
 			List<String> ids = new ArrayList<>();
+			Map<String, String> readIds = new HashMap<>();
 			for (Op op : PendingActions.load(pendingFile).ops()) {
 				if (op != null && op.type() == PendingActions.Type.ENABLE_FILE && op.id() != null) {
 					String modId = modIdOf(op);
 					if (modId != null && queuedModIds.contains(modId) && loadedModIds.contains(modId)) {
 						ids.add(op.id());
+						if (op.modId() == null) {
+							readIds.put(op.id(), modId);
+						}
 					}
 				}
 			}
-			return unstageLocked(ids);
+			List<Op> dropped = unstageLocked(ids);
+			// An enable matched by its jar's id carries that id, so the notice can name the mod.
+			return dropped == null ? null : dropped.stream()
+					.map(op -> op != null && op.modId() == null && readIds.containsKey(op.id()) ? op.withModId(readIds.get(op.id())) : op)
+					.toList();
 		}
 	}
 

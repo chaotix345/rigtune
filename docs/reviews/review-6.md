@@ -31,3 +31,13 @@ Branch fix/review-6.
 | id | commit | fix |
 |---|---|---|
 | security-1 | afd71d3 | release.yml: job env MODRINTH_TOKEN_SET only; MODRINTH_TOKEN as step env on the publish and verify steps; the verify step's stale comment corrected (authenticated version list, since PR #3). |
+
+## Re-check of the last fixes (round 1: 3449630, 48dc4a4; round 2: afd71d3)
+An independent adversarial re-check, read-only. Verdict: **no medium or higher.** Every fix is correct for its finding: the ram-low text (rules-v1.json's diff from e16e146 is exactly the revision, generatedAt and that text; both rules-v2 copies identical; check_rules_v1.py passes), the matrix fullmatch (26.2, 26.3, 26.4-snapshot-1, 26.4-rc-1, 26.4-pre-2 and 26.3.1 accepted; "26.4\n" and "26.4 " refused; the quoted task path is safe for every id the regex allows), ModJars' debug log, the dropQueuedUpdates jar-id fallback (same queued+loaded test; whole groups; no new render-thread work), and the release token scoping (`${{ secrets.X != '' }}` renders 'true'/'false'; nothing else reads the token; the publish step's Gradle run still sees it because Gradle 9.5.1 copies the client environment into a reused daemon on every build).
+
+Two new lows, both fixed on fix/review-6:
+
+| finding | fix |
+|---|---|
+| low: a group dropped only through the jar-id fallback produced an empty mod name in the notice (StagedRecommendations.droppedModNames skips ops without a mod id) | Staging.dropQueuedUpdates returns such an enable with the id read from its jar (StagingTest asserts it). |
+| low: BenchmarkResultScreen.chartDate caught only DateTimeParseException; an instant that parses but has no date in the zone (e.g. +1000000000-01-01T00:00:00Z in a hand-edited benchmarks.json) threw while drawing | catch DateTimeException (BenchmarkResultScreenTest.anInstantOutsideTheZonesRangeDoesntThrow). |
