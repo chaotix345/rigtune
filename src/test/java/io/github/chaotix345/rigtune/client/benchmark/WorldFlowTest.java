@@ -106,8 +106,18 @@ class WorldFlowTest {
 	}
 
 	@Test
-	void idleAndAwaitingExitDoNothing() {
+	void idleDoesNothing() {
 		assertStep(State.IDLE, Action.NONE, next(State.IDLE, 40, BENCHMARK_SAVE));
+	}
+
+	@Test
+	void awaitingExitWaitsForTheTestThreadUnlessTheWorldIsGone() {
 		assertStep(State.AWAITING_EXIT, Action.NONE, next(State.AWAITING_EXIT, 40, BENCHMARK_SAVE));
+		assertStep(State.IDLE, Action.NONE, next(State.AWAITING_EXIT, 40, GONE));
+	}
+
+	@Test
+	void leavingThatNeverHappensEndsWithoutLeavingAgain() {
+		assertStep(State.IDLE, Action.NONE, next(State.LEAVING, WorldFlow.TIMEOUT_TICKS + 1, BENCHMARK_SAVE));
 	}
 }

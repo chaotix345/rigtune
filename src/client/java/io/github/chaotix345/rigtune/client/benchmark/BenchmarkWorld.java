@@ -198,7 +198,7 @@ public final class BenchmarkWorld {
 	}
 
 	public static void tick(Minecraft minecraft) {
-		if (state == State.IDLE || state == State.AWAITING_EXIT) {
+		if (state == State.IDLE) {
 			return;
 		}
 		ticks++;

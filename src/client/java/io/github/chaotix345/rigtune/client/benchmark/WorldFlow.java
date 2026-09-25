@@ -53,9 +53,16 @@ final class WorldFlow {
 				yield ticksInState > TIMEOUT_TICKS ? new Step(state, Action.LEAVE) : stay;
 			}
 			case READY -> o.benchmarkSave() ? stay : new Step(State.IDLE, Action.NONE);
-			case LEAVING -> !o.worldLoaded() && !o.serverRunning() ? new Step(State.IDLE, Action.FINISH_EXIT) : stay;
+			case LEAVING -> {
+				if (!o.worldLoaded() && !o.serverRunning()) {
+					yield new Step(State.IDLE, Action.FINISH_EXIT);
+				}
+				// A disconnect that never happens mustn't block every later run.
+				yield ticksInState > TIMEOUT_TICKS ? new Step(State.IDLE, Action.NONE) : stay;
+			}
+			case AWAITING_EXIT -> !o.worldLoaded() && !o.serverRunning() ? new Step(State.IDLE, Action.NONE) : stay;
 			case FAILED -> o.benchmarkSave() && ticksInState <= LATE_LOAD_TICKS ? new Step(state, Action.LEAVE) : stay;
-			case IDLE, AWAITING_EXIT -> stay;
+			case IDLE -> stay;
 		};
 	}
 }
