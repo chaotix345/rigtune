@@ -1,0 +1,33 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "b35f201f-79ae-401d-aa57-1ab5bd6a5aae",
+      "at": "2026-09-25T18:32:12.187449100Z",
+      "kind": "legacy-import",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "402cca13-52a8-4be2-9d34-08de7d5df506",
+          "type": "file",
+          "action": "disable",
+          "modId": "distanthorizons",
+          "file": "fabric-26.2.jar",
+          "status": "DISCARDED",
+          "opId": "041919d9-18c9-4b04-89c4-f15e4e4a80c5",
+          "group": "7b8043de-f5c3-4881-8309-27265240f39e"
+        },
+        {
+          "id": "0a9575c4-d95d-40ef-b93c-9cf08d7ddc48",
+          "type": "file",
+          "action": "enable",
+          "modId": "distanthorizons",
+          "file": "DistantHorizons-3.3.2-26.2-fabric-neoforge.jar",
+          "status": "DISCARDED",
+          "opId": "db7f487d-6371-43c5-944e-c053428ad70d",
+          "group": "7b8043de-f5c3-4881-8309-27265240f39e"
+        }
+      ]
+    }
+  ]
+}

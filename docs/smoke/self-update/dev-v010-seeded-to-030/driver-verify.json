@@ -1,0 +1,42 @@
+{
+  "phase": "verify",
+  "ok": true,
+  "error": null,
+  "events": [
+    "t+0.0s driver loaded, phase verify, output <run>\\out",
+    "t+1.1s status: rigtune.status.queued_update_dropped",
+    "t+1.6s status: Cancelled RigTune's pending update of Distant Horizons: it has an update of its own waiting in mods/update.",
+    "t+4.1s title screen",
+    "t+6.2s screenshot e2e-verify-1-title.png: Saved screenshot as e2e-verify-1-title.png",
+    "t+7.1s report: 20 recommendations, online=true, goal QUALITY",
+    "t+8.2s screenshot e2e-verify-2-report.png: Saved screenshot as e2e-verify-2-report.png",
+    "t+10.2s quitting"
+  ],
+  "statuses": [
+    {
+      "t": "1.1",
+      "key": "rigtune.status.queued_update_dropped",
+      "text": "rigtune.status.queued_update_dropped"
+    },
+    {
+      "t": "1.6",
+      "key": "rigtune.status.queued_update_dropped",
+      "text": "Cancelled RigTune's pending update of Distant Horizons: it has an update of its own waiting in mods/update."
+    }
+  ],
+  "rigtuneVersion": "0.3.0-dev+mc26.2",
+  "rigtuneOrigin": [
+    "<instance>\\mods\\rigtune-0.3.0-dev+mc26.2.jar"
+  ],
+  "goal": "QUALITY",
+  "reportOnline": true,
+  "updateOffered": false,
+  "modsAtQuit": {
+    "DistantHorizons-3.3.2-26.2-fabric-neoforge.jar.rigtune-superseded": "4c8557cf1c2e65cd006af026e5a450496beda7579af64d06f9f8f3eea0abd1f0",
+    "fabric-26.2.jar": "0505c3ff39e1a7b31377d0eefaef91a04b8044e31d1c88c389c187345d7b0b04",
+    "fabric-api-0.161.0+26.2.jar": "e5b858ceb13290c274e31cb888ff5a1a40cb91067e7ffab0b5b775aec51e216a",
+    "rigtune-0.1.0.jar.disabled": "8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950",
+    "rigtune-0.3.0-dev+mc26.2.jar": "b9a781aecf81159fd7ae628ea1ece62754362880df143591cc2b2dae3e3671f0",
+    "update/DistantHorizons-3.3.2 - 26.2 neo/fabric-26.2.jar": "4c8557cf1c2e65cd006af026e5a450496beda7579af64d06f9f8f3eea0abd1f0"
+  }
+}
