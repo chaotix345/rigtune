@@ -1,0 +1,26 @@
+--- 26.3
++++ 26.4-snapshot-1
+@@ -15,2 +15,4 @@
+     descriptor: Lcom/mojang/renderpearl/api/device/GpuBackend;
++  private static com.mojang.blaze3d.pipeline.PipelineBuilder PIPELINE_BUILDER;
++    descriptor: Lcom/mojang/blaze3d/pipeline/PipelineBuilder;
+   private static final com.mojang.blaze3d.systems.RenderSystem$AutoStorageIndexBuffer sharedSequential;
+@@ -63,6 +65,6 @@
+     descriptor: (Lcom/mojang/blaze3d/pipeline/PipelineCache;)Lcom/mojang/blaze3d/pipeline/PipelineCache;
+-  public static com.mojang.renderpearl.api.pipeline.CompiledRenderPipeline getCompiledPipelineNullable(com.mojang.renderpearl.api.pipeline.RenderPipeline);
+-    descriptor: (Lcom/mojang/renderpearl/api/pipeline/RenderPipeline;)Lcom/mojang/renderpearl/api/pipeline/CompiledRenderPipeline;
+-  public static com.mojang.renderpearl.api.pipeline.CompiledRenderPipeline getCompiledPipeline(com.mojang.renderpearl.api.pipeline.RenderPipeline);
+-    descriptor: (Lcom/mojang/renderpearl/api/pipeline/RenderPipeline;)Lcom/mojang/renderpearl/api/pipeline/CompiledRenderPipeline;
++  public static com.mojang.renderpearl.api.pipeline.CompiledRenderPipeline getCompiledPipelineNullable(com.mojang.blaze3d.pipeline.RenderPipeline);
++    descriptor: (Lcom/mojang/blaze3d/pipeline/RenderPipeline;)Lcom/mojang/renderpearl/api/pipeline/CompiledRenderPipeline;
++  public static com.mojang.renderpearl.api.pipeline.CompiledRenderPipeline getCompiledPipeline(com.mojang.blaze3d.pipeline.RenderPipeline);
++    descriptor: (Lcom/mojang/blaze3d/pipeline/RenderPipeline;)Lcom/mojang/renderpearl/api/pipeline/CompiledRenderPipeline;
+   public static void initRenderThread();
+@@ -137,2 +139,4 @@
+     descriptor: ()Lcom/mojang/renderpearl/api/device/GpuDevice;
++  public static com.mojang.blaze3d.pipeline.PipelineBuilder getPipelineBuilder();
++    descriptor: ()Lcom/mojang/blaze3d/pipeline/PipelineBuilder;
+   public static boolean isWireframeAvailable();
+
+String constants removed: []
+String constants added: ["Can't getPipelineBuilder() before it was initialized"]

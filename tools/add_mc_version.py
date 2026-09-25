@@ -391,8 +391,9 @@ def checklist(mc, prev):
         "rules for every supported version: python tools/update_rules.py, then check rules/REVIEW.md.",
         "Update the README, DESIGN, Modrinth body and CHANGELOG version lines (and KnowledgeV2ScenarioTest's "
         "version list).",
-        "./gradlew \"Reset active project\", check git diff, commit on a feature branch; CI builds every node.",
-        "Release: tag it; release.yml builds and publishes every versions/*/ node.",
+        "./gradlew \"Reset active project\", check git diff, commit on a feature branch and push: CI builds every node "
+        "and runs its game-test legs (tools/gametest_matrix.py reads versions/*/, so no workflow edit).",
+        "Release: tag it; release.yml publishes every versions/*/ node (versionType alpha for a pre-release id).",
         f"For each later hotfix of {base}: bytecode-compare, then PATCH the Modrinth versions' game_versions "
         "(tools/MC_VERSIONS.md, Hotfixes).",
     ]

@@ -1,5 +1,5 @@
 $ python tools/add_mc_version.py 26.4-snapshot-1 --prerelease-ok --dry-run
-# run 2026-09-26 04:17 +1000 against the live APIs, on feat/mc-tooling (before WS-0's one-time changes A and B)
+# run 2026-09-26 04:50 +1000 against the live APIs, on feat/mc-tooling after merging WS-0 (one-time changes A and B are in)
 
 Adding Minecraft 26.4-snapshot-1 (after 26.3)
   Mojang: 26.4-snapshot-1 is a snapshot, released 2026-09-22
@@ -29,9 +29,7 @@ versions/26.4-snapshot-1/gradle.properties (new):
 
 Notes:
   - No Sodium build for 26.4-snapshot-1 yet: sodium_version is left out, so dev runs and game tests run without Sodium. Add it when Sodium ships for this version.
-  - WARNING: build.gradle puts Sodium on localRuntime unconditionally (one-time change A is missing), so this node won't build without sodium_version.
   - 26.4-snapshot-1 is a pre-release node: don't ship it (docs/research/v0.3/mc-versions.md, section 5.4). Once 26.4 is released, remove this node and add 26.4.
-  - release.yml still has per-version publish steps: add one for 26.4-snapshot-1 (or land one-time change B).
 
 Dry run: nothing was written.
 
@@ -42,7 +40,7 @@ Next steps (tools/MC_VERSIONS.md):
   4. ./gradlew :26.4-snapshot-1:runClientGameTest (opens a game window) and a production smoke test with 26.4-snapshot-1's mods.
   5. Review the version-specific rules (vulkan-backend, ixeris, vulkanmod, mixintrace-reborn) and regenerate the rules for every supported version: python tools/update_rules.py, then check rules/REVIEW.md.
   6. Update the README, DESIGN, Modrinth body and CHANGELOG version lines (and KnowledgeV2ScenarioTest's version list).
-  7. ./gradlew "Reset active project", check git diff, commit on a feature branch; CI builds every node.
-  8. Release: tag it; release.yml builds and publishes every versions/*/ node.
+  7. ./gradlew "Reset active project", check git diff, commit on a feature branch and push: CI builds every node and runs its game-test legs (tools/gametest_matrix.py reads versions/*/, so no workflow edit).
+  8. Release: tag it; release.yml publishes every versions/*/ node (versionType alpha for a pre-release id).
   9. For each later hotfix of 26.4: bytecode-compare, then PATCH the Modrinth versions' game_versions (tools/MC_VERSIONS.md, Hotfixes).
 # exit 0

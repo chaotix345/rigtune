@@ -1,0 +1,14 @@
+--- 26.3
++++ 26.4-snapshot-1
+@@ -83,4 +83,4 @@
+     descriptor: (Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;II)Z
+-  public net.minecraft.client.multiplayer.ClientLevel(net.minecraft.client.multiplayer.ClientPacketListener, net.minecraft.client.multiplayer.ClientLevel$ClientLevelData, net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level>, net.minecraft.core.Holder<net.minecraft.world.level.dimension.DimensionType>, int, int, net.minecraft.client.renderer.extract.LevelExtractor, boolean, long, int);
+-    descriptor: (Lnet/minecraft/client/multiplayer/ClientPacketListener;Lnet/minecraft/client/multiplayer/ClientLevel$ClientLevelData;Lnet/minecraft/resources/ResourceKey;Lnet/minecraft/core/Holder;IILnet/minecraft/client/renderer/extract/LevelExtractor;ZJI)V
++  public net.minecraft.client.multiplayer.ClientLevel(net.minecraft.client.multiplayer.ClientPacketListener, net.minecraft.client.multiplayer.ClientLevel$ClientLevelData, net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level>, net.minecraft.core.Holder<net.minecraft.world.level.dimension.DimensionType>, int, int, net.minecraft.client.renderer.extract.LevelExtractor, boolean, int);
++    descriptor: (Lnet/minecraft/client/multiplayer/ClientPacketListener;Lnet/minecraft/client/multiplayer/ClientLevel$ClientLevelData;Lnet/minecraft/resources/ResourceKey;Lnet/minecraft/core/Holder;IILnet/minecraft/client/renderer/extract/LevelExtractor;ZI)V
+   private net.minecraft.world.attribute.EnvironmentAttributeSystem$Builder addEnvironmentAttributeLayers(net.minecraft.world.attribute.EnvironmentAttributeSystem$Builder);
+@@ -227,3 +227,3 @@
+     descriptor: ()Ljava/util/List;
+-  public net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> getUncachedNoiseBiome(int, int, int);
++  public net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> getUncachedBiome(int, int, int);
+     descriptor: (III)Lnet/minecraft/core/Holder;

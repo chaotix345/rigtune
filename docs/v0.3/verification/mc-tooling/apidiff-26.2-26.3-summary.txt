@@ -1,0 +1,205 @@
+mc_apidiff 26.2 -> 26.3
+
+RigTune classes (versions/26.2/build/classes/java): client 89, e2e 2, e2eUndo 2, gametest 13, main 200 (306 files)
+Classpath 26.2: Minecraft 26.2 (2 jars), 53 Mojang libraries, Fabric API 0.161.0+26.2 (46 modules), Mod Menu 20.0.2, Fabric Loader 0.19.5
+  libraries not in the cache (not needed unless a reference points there): ca.weblite:java-objc-bridge:1.1
+Classpath 26.3: Minecraft 26.3 (2 jars), 53 Mojang libraries, Fabric API 0.161.0+26.3 (46 modules), Mod Menu 21.0.0, Fabric Loader 0.19.5
+  libraries not in the cache (not needed unless a reference points there): ca.weblite:java-objc-bridge:1.1
+
+Member references: 404 (Minecraft 224, Mojang 24, Fabric 57, Mod Menu 1, LWJGL 0, other Minecraft libraries 98; 306 without the other libraries)
+  OK 395, MISSING 9, CHANGED 0, UNRESOLVED 0
+  not checked (not on the classpath, compile-only mod APIs): com/seibel 12, net/irisshaders 4
+Referenced classes: 169: SAME 134, DIFF 33, MISSING 2
+  DIFF com/mojang/blaze3d/pipeline/RenderTarget
+  DIFF com/mojang/blaze3d/platform/InputConstants
+  DIFF com/mojang/blaze3d/platform/InputConstants$Type
+  DIFF com/mojang/blaze3d/platform/Monitor
+  DIFF com/mojang/blaze3d/platform/VideoMode
+  DIFF com/mojang/blaze3d/platform/Window
+  DIFF com/mojang/blaze3d/systems/RenderSystem
+  DIFF net/minecraft/client/KeyboardHandler
+  DIFF net/minecraft/client/Minecraft
+  DIFF net/minecraft/client/MouseHandler
+  DIFF net/minecraft/client/Options
+  DIFF net/minecraft/client/Screenshot
+  DIFF net/minecraft/client/gui/Font
+  DIFF net/minecraft/client/gui/Gui
+  DIFF net/minecraft/client/gui/GuiGraphicsExtractor
+  DIFF net/minecraft/client/gui/components/AbstractSelectionList
+  DIFF net/minecraft/client/gui/components/DebugScreenOverlay
+  DIFF net/minecraft/client/gui/components/events/GuiEventListener
+  DIFF net/minecraft/client/gui/screens/Screen
+  DIFF net/minecraft/client/gui/screens/options/VideoSettingsScreen
+  DIFF net/minecraft/client/input/InputWithModifiers
+  DIFF net/minecraft/client/multiplayer/ClientLevel
+  DIFF net/minecraft/client/player/LocalPlayer
+  DIFF net/minecraft/client/renderer/GameRenderer
+  DIFF net/minecraft/client/renderer/LevelRenderer
+  DIFF net/minecraft/client/server/IntegratedServer
+  DIFF net/minecraft/commands/CommandSourceStack
+  DIFF net/minecraft/server/MinecraftServer
+  DIFF net/minecraft/server/level/ServerLevel
+  DIFF net/minecraft/world/level/GameType
+  DIFF net/minecraft/world/level/chunk/LevelChunk
+  DIFF net/minecraft/world/level/levelgen/Heightmap
+  DIFF net/minecraft/world/phys/Vec3
+  MISSING com/mojang/blaze3d/systems/DeviceInfo
+  MISSING com/mojang/blaze3d/systems/GpuDevice
+Reflection targets by class name: net/minecraft/client/Options$FieldAccess
+  outside the checked classpath (check by hand): net.caffeinemc.mods.sodium.client.compatibility.workarounds.Workarounds, net.caffeinemc.mods.sodium.client.compatibility.workarounds.Workarounds$Reference, net.caffeinemc.mods.sodium.client.gui.VideoSettingsScreen, net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer, net.irisshaders.iris.api.v0.IrisApi
+Strings naming a member of a referenced class: 16 (15 still there): JsonObject.size, FabricLoader.getInstance, Minecraft.getInstance, Options.graphicsPreset, Options.minecraft, Options.processOptions, Options.renderDistance, Options.serverRenderDistance, Gui.update, Hud.title, DebugScreenOverlay.logFrameDuration, Screen.title, GameRenderer.update, FailableFunction.apply, Logger.error
+String constants changed in referenced classes: 19
+  com/mojang/blaze3d/pipeline/RenderTarget: -0 +2
+      + "Trying to copy color texture from a RenderTarget without a color texture"
+      + "Trying to copy color texture to a RenderTarget without a color texture"
+  com/mojang/blaze3d/platform/InputConstants: -0 +2
+      + "Failed to disable relative mouse mode: {}"
+      + "Failed to enable relative mouse mode: {}"
+  com/mojang/blaze3d/platform/InputConstants$Type: -4 +128
+      - "KEYSYM"
+      - "SCANCODE"
+      - "key.keyboard.f25"
+      - "scancode"
+      + "KEYBOARD"
+      + "key.keyboard.ac.back"
+      + "key.keyboard.ac.bookmarks"
+      + "key.keyboard.ac.close"
+      + "key.keyboard.ac.exit"
+      + ... 123 more in report.json
+  com/mojang/blaze3d/platform/Monitor: -4 +4
+      - "Failed to query current video mode of monitor {}"
+      - "Failed to query video modes of monitor {}"
+      - "GLFW error collected during monitor 0x{} query: {}"
+      - "monitorName;monitor;videoModes;currentMode;x;y"
+      + "Failed to query current desktop video mode of monitor {}: {}"
+      + "Failed to query monitor bounds of {}: {}"
+      + "Failed to query video modes of monitor {}: {}"
+      + "name;id;videoModes;currentMode;x;y;w;h"
+  com/mojang/blaze3d/platform/VideoMode: -2 +9
+      - "%sx%s@%s:%s"
+      - "(\\d+)x(\\d+)(?:@(\\d+)(?::(\\d+))?)?"
+      + "%.2f"
+      + "Failed to parse video mode '{}'"
+      + "Failed to parse video mode '{}': {}"
+      + "blue_bits"
+      + "green_bits"
+      + ... 4 more in report.json
+  com/mojang/blaze3d/platform/Window: -18 +28
+      - ""
+      - "\u0001.\n\nPlease make sure you have up-to-date drivers (see aka.ms/mcdriver for instructions)."
+      - "########## GL ERROR ##########"
+      - "<error>"
+      - "@ {}"
+      - ... 13 more in report.json
+      + "0"
+      + "1"
+      + "<no error>"
+      + "Couldn't {} fullscreen: {}"
+      + "Created window using SDL video driver: {}"
+      + ... 23 more in report.json
+  com/mojang/blaze3d/systems/RenderSystem: -0 +26
+      + "0"
+      + "1"
+      + "Copyright Mojang AB."
+      + "Failed to find or load pipeline \u0001"
+      + "Fallback pipeline cache already set"
+      + ... 21 more in report.json
+  net/minecraft/client/KeyboardHandler: -0 +5
+      + "Keycode"
+      + "MultiDrawIndirect: "
+      + "Unable to enable WireFrame"
+      + "debug.improvedTransparency.off"
+      + "debug.improvedTransparency.on"
+  net/minecraft/client/Minecraft: -6 +17
+      - "Couldn't acquire next surface texture with config {}: {}"
+      - "Couldn't configure surface to {}: {}"
+      - "GFLW Platform"
+      - "Post startup"
+      - "Startup"
+      - ... 1 more in report.json
+      + "\n\n"
+      + "Couldn't acquire next surface texture with config {}"
+      + "Couldn't configure surface to {}"
+      + "Error section"
+      + "Failed to recover from resource pack error"
+      + ... 12 more in report.json
+  net/minecraft/client/Options: -3 +15
+      - "options.improvedTransparency.tooltip"
+      - "options.rawMouseInput"
+      - "rawMouseInput"
+      + "Invalid keyMapping {} = {}, unbinding"
+      + "ctrlClickEmulatesRightClick"
+      + "debugGuiScale"
+      + "key.debug.improvedTransparency"
+      + "macFullscreenMenuVisibility"
+      + ... 10 more in report.json
+  net/minecraft/client/gui/Gui: -1 +1
+      - "Ticking screen"
+      + "Current Screen"
+  net/minecraft/client/gui/components/DebugScreenOverlay: -2 +2
+      - "FPS"
+      - "FPS + TPS"
+      + "fps"
+      + "fps + tps"
+  net/minecraft/client/gui/screens/Screen: -2 +0
+      - "Affected screen"
+      - "Screen name"
+  net/minecraft/client/gui/screens/options/VideoSettingsScreen: -1 +2
+      - "options.fullscreen.resolution"
+      + "options.fullscreen.exclusive.mode"
+      + "options.fullscreen.exclusive.mode.tooltip"
+  net/minecraft/client/gui/screens/worldselection/WorldOpenFlows: -0 +2
+      + "File fixing was aborted"
+      + "upgradeWorld.aborted.file_already_exists"
+  net/minecraft/client/renderer/GameRenderer: -1 +8
+      - "Coudln't preload {} shader {}: {}"
+      + "Failed to apply post effect {}"
+      + "Failed to load post effect {}"
+      + "InSampler"
+      + "Integrate 3d hud depth"
+      + "Item in hand"
+      + ... 3 more in report.json
+  net/minecraft/client/renderer/LevelRenderer: -7 +21
+      - "always_on_top"
+      - "clouds"
+      - "item_entity"
+      - "particles"
+      - "translucent"
+      - ... 2 more in report.json
+      + "Always on top features"
+      + "Coeff\u0001"
+      + "DepthBoundsSampler"
+      + "Features, World Border, Weather"
+      + "InSampler"
+      + ... 16 more in report.json
+  net/minecraft/commands/Commands: -1 +0
+      - ""
+  net/minecraft/server/MinecraftServer: -8 +1
+      - "DIM-1"
+      - "DIM1"
+      - "ThreadedAnvilChunkStorage ({}): All chunks are saved"
+      - "ThreadedAnvilChunkStorage: All dimensions are saved"
+      - "overworld"
+      - ... 3 more in report.json
+      + "System chat: {}"
+
+RigTune bytecode (26.2 build vs 26.3 build): 306 classes compared, 4 differ, 0 only in 26.2, 0 only in 26.3
+  client/io/github/chaotix345/rigtune/client/RigTuneClient.class
+  client/io/github/chaotix345/rigtune/client/probe/HardwareProbe.class
+  gametest/io/github/chaotix345/rigtune/gametest/BenchmarkGameTest.class
+  gametest/io/github/chaotix345/rigtune/gametest/RigTuneClientGameTest.class
+
+RESULT: 12 breaking change(s), 0 unresolved reference(s):
+  MISSING field com/mojang/blaze3d/platform/InputConstants$Type.KEYSYM:Lcom/mojang/blaze3d/platform/InputConstants$Type;: not found on the new version
+  MISSING method com/mojang/blaze3d/platform/VideoMode.getRefreshRate()I: not found on the new version
+  MISSING method com/mojang/blaze3d/platform/Window.getRefreshRate()I: not found on the new version
+  MISSING method com/mojang/blaze3d/systems/DeviceInfo.backendName()Ljava/lang/String;: not found on the new version
+  MISSING method com/mojang/blaze3d/systems/DeviceInfo.driverInfo()Ljava/lang/String;: not found on the new version
+  MISSING method com/mojang/blaze3d/systems/DeviceInfo.name()Ljava/lang/String;: not found on the new version
+  MISSING method com/mojang/blaze3d/systems/DeviceInfo.vendorName()Ljava/lang/String;: not found on the new version
+  MISSING method com/mojang/blaze3d/systems/GpuDevice.getDeviceInfo()Lcom/mojang/blaze3d/systems/DeviceInfo;: not found on the new version
+  MISSING method com/mojang/blaze3d/systems/RenderSystem.tryGetDevice()Lcom/mojang/blaze3d/systems/GpuDevice;: not found on the new version
+  MISSING class com/mojang/blaze3d/systems/DeviceInfo
+  MISSING class com/mojang/blaze3d/systems/GpuDevice
+  MISSING name com/mojang/blaze3d/platform/Window.minimized (a string RigTune uses)
+RESULT: RigTune's own bytecode differs between the two builds: review the classes listed above

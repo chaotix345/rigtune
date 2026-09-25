@@ -1,0 +1,11 @@
+--- 26.3
++++ 26.4-snapshot-1
+@@ -13,6 +13,4 @@
+     descriptor: Lnet/minecraft/util/StringRepresentable$EnumCodec;
+-  private static final java.util.function.IntFunction<net.minecraft.world.level.GameType> BY_ID;
+-    descriptor: Ljava/util/function/IntFunction;
+-  public static final net.minecraft.network.codec.StreamCodec<io.netty.buffer.ByteBuf, net.minecraft.world.level.GameType> STREAM_CODEC;
+-    descriptor: Lnet/minecraft/network/codec/StreamCodec;
++  public static final net.minecraft.network.codec.EnumStreamCodec<net.minecraft.world.level.GameType> STREAM_CODEC;
++    descriptor: Lnet/minecraft/network/codec/EnumStreamCodec;
+   public static final net.minecraft.network.codec.StreamCodec<io.netty.buffer.ByteBuf, java.util.Optional<net.minecraft.world.level.GameType>> OPTIONAL_STREAM_CODEC;
