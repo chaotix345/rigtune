@@ -19,8 +19,8 @@ Brief: the user's v0.2.0 prompt (full autonomy: research → release, including 
 - [x] Phase 1: research DONE and committed (docs/research/v0.2/: multi-version, api-diff, modrinth, dh-iris, benchmark, triage).
 - [x] Phase 2 (mostly): docs/v0.2/SPEC.md (all 13 items, ACs), contracts commit cae06b8 on feat/v0.2.0, docs/v0.2/PLAN.md (553b58e: workstreams WS-A..H, ownership, hotspots, game-test lock `C:/Dev/Worktrees/.gametest-lock`).
   - [x] Plan review DONE (docs/v0.2/plan-review.md: 5 HIGH, 16 MEDIUM, 11 LOW). Contract fixes in 5418fc3; SPEC "Amendments" and PLAN "Plan-review fixes by workstream" sections added.
-- [ ] Phase 3: RUNNING. Agent p3-multiversion, branch feat/multi-version, worktree C:/Dev/Worktrees/rigtune-mv (Stonecutter 0.9.8, from the prototype patch). It's the only game-test runner right now. When done: review, CI green, merge into feat/v0.2.0.
-- [ ] Phase 4: Wave A = WS-A rules-v2, WS-B undo, WS-C benchmark-v2, WS-D dh-iris, WS-E settings-ui, WS-F modrinth, WS-G self-update-e2e (after the Phase 3 merge); Wave B = WS-H knowledge (after WS-A).
+- [x] Phase 3: MERGED (b6da08b; CI run 36075216779 green). 238/238 unit tests on 26.2 and 26.3; runClientGameTest passed on both; 26.3 header shows 2560x1440 @ 180 Hz. mod_version 0.2.0-dev. Known: vanilla 26.3 crashes natively at OpenAL sound startup on ~13 of 20 production launches on this machine (not RigTune), so retry 26.3 launches. Leftover: worktree rigtune-mv has untracked versions/*/run-vanilla/ dirs; remove it in Phase 8 (a hook blocks `worktree remove --force`; delete the dirs first, then run plain `git worktree remove`).
+- [ ] Phase 4: Wave A RUNNING (all 7 agents, launched 2026-09-25 from b6da08b). Merge each after CI is green (verify its evidence first); later ones rebase. Wave B = WS-H knowledge (launch after WS-A merges; prefer after WS-D too). Game-test mutex: C:/Dev/Worktrees/.gametest-lock (if it's stale, check owner.txt and processes before clearing).
 - [ ] Phase 5: verification (unit + game tests per version, production smoke 26.2 with a copy of the user's mods, 26.3 representative set, self-update E2E)
 - [ ] Phase 6: two review rounds -> docs/reviews/review-3.md, review-4.md
 - [ ] Phase 7: PR to main, CI green, merge, bump 0.2.0-dev -> 0.2.0, CHANGELOG, tag v0.2.0, release assets, Modrinth versions, rules v1+v2 live, update-rules run
@@ -29,8 +29,13 @@ Brief: the user's v0.2.0 prompt (full autonomy: research → release, including 
 ### Agents
 | name | branch | worktree | status |
 |---|---|---|---|
-| p3-multiversion | feat/multi-version | C:/Dev/Worktrees/rigtune-mv | running |
-| ws-f-modrinth | feat/modrinth | C:/Dev/Worktrees/rigtune-modrinth | running (tasks 1, 2, 4 now; task 3 build/release files only after the Phase 3 merge: message it) |
+| ws-f-modrinth | feat/modrinth | C:/Dev/Worktrees/rigtune-modrinth | running; told that Phase 3 merged (it may now do build.gradle/release.yml) |
+| ws-a-rules | feat/rules-v2 | C:/Dev/Worktrees/rigtune-rules | running |
+| ws-b-undo | feat/undo | C:/Dev/Worktrees/rigtune-undo | running |
+| ws-c-bench | feat/benchmark-v2 | C:/Dev/Worktrees/rigtune-bench | running |
+| ws-d-dhiris | feat/dh-iris | C:/Dev/Worktrees/rigtune-dhiris | running |
+| ws-e-ui | feat/settings-ui | C:/Dev/Worktrees/rigtune-ui | running |
+| ws-g-e2e | feat/self-update-e2e | C:/Dev/Worktrees/rigtune-e2e | running (final E2E run in Phase 5: message it) |
 
 ## Lessons (carried over from v0.1.0; don't relearn)
 - The Bash tool is Git Bash. Use absolute paths; `cd` inside a command changes the session's working directory.
