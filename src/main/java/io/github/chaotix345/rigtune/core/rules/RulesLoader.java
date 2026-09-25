@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.core.rules;
 
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
 import io.github.chaotix345.rigtune.RigTune;
 
@@ -16,14 +17,16 @@ import java.util.List;
 import java.util.Optional;
 
 public final class RulesLoader {
-	public static final int SCHEMA_VERSION = 1;
+	// This client reads schemaVersion 1 (rules-v1.json, a subset of v2) and 2. A future v3 lives in its own file.
+	public static final int MIN_SCHEMA_VERSION = 1;
+	public static final int SCHEMA_VERSION = 2;
 	public static final String BUNDLED_RESOURCE = "/rigtune/rules-v1.json";
 	public static final String SOURCE_BUNDLED = "bundled";
 	public static final String SOURCE_CACHE = "cache";
 	public static final String SOURCE_REMOTE = "remote";
 	public static final long MAX_RULES_BYTES = 2L << 20;
 
-	private static final Gson GSON = new Gson();
+	private static final Gson GSON = new GsonBuilder().registerTypeAdapterFactory(new ConditionAdapterFactory()).create();
 
 	public record Candidate(String source, RulesDocument document) {
 	}
@@ -43,13 +46,17 @@ public final class RulesLoader {
 		if (doc == null) {
 			throw new IllegalArgumentException("Rules file is empty");
 		}
-		if (doc.schemaVersion != SCHEMA_VERSION) {
+		if (doc.schemaVersion < MIN_SCHEMA_VERSION || doc.schemaVersion > SCHEMA_VERSION) {
 			throw new IllegalArgumentException("Unsupported rules schemaVersion " + doc.schemaVersion);
 		}
 		doc.fillDefaults();
 		doc.gpuTiers.removeIf(rule -> invalidPattern("gpuTiers", rule));
 		doc.cpuTiers.removeIf(rule -> invalidPattern("cpuTiers", rule));
 		return doc;
+	}
+
+	static Condition condition(String json) {
+		return GSON.fromJson(json, Condition.class);
 	}
 
 	public static RulesDocument loadBundled() {

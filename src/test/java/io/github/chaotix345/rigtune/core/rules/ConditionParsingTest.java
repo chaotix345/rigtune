@@ -1,0 +1,63 @@
+package io.github.chaotix345.rigtune.core.rules;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.Map;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class ConditionParsingTest {
+	@Test
+	void unknownTopLevelKeyIsRecorded() {
+		Condition c = RulesLoader.condition("{\"tierAtLeast\":3,\"meshShaders\":true}");
+		assertEquals(Set.of("meshShaders"), c.unknownFields);
+		assertEquals(3, c.tierAtLeast);
+	}
+
+	@Test
+	void unknownKeyInsideNotIsRecordedOnTheNestedNode() {
+		Condition c = RulesLoader.condition("{\"not\":{\"futureKey\":1}}");
+		assertTrue(c.unknownFields.isEmpty());
+		assertEquals(Set.of("futureKey"), c.not.unknownFields);
+	}
+
+	@Test
+	void unknownKeyInsideAnyOfIsRecorded() {
+		Condition c = RulesLoader.condition("{\"anyOf\":[{\"always\":true},{\"x\":1}]}");
+		assertTrue(c.anyOf.get(0).unknownFields.isEmpty());
+		assertEquals(Set.of("x"), c.anyOf.get(1).unknownFields);
+	}
+
+	@Test
+	void explicitNullValueCountsAsUnknown() {
+		Condition c = RulesLoader.condition("{\"gpuModelMatches\":null,\"tierAtMost\":2}");
+		assertEquals(Set.of("gpuModelMatches"), c.unknownFields);
+	}
+
+	@Test
+	void v2FieldsParse() {
+		Condition c = RulesLoader.condition("""
+				{"gpuModelMatches":"(?i)rtx","displayPixelsAtLeast":3686400,"displayPixelsAtMost":8294400,
+				 "modVersion":{"sodium":">=0.6.0 <0.8.0"},"mcVersionRange":">=26.3"}""");
+		assertTrue(c.unknownFields.isEmpty());
+		assertEquals("(?i)rtx", c.gpuModelMatches);
+		assertEquals(3686400L, c.displayPixelsAtLeast);
+		assertEquals(8294400L, c.displayPixelsAtMost);
+		assertEquals(Map.of("sodium", ">=0.6.0 <0.8.0"), c.modVersion);
+		assertEquals(">=26.3", c.mcVersionRange);
+	}
+
+	@Test
+	void ruleConditionsInADocumentAreTracked() {
+		RulesDocument doc = RulesLoader.parse("""
+				{"schemaVersion":2,"revision":1,
+				 "mods":[{"slug":"x","modIds":["x"],"avoidWhen":{"anyOf":[{"not":{"soon":true}}]}}],
+				 "settings":[{"key":"vanilla.renderDistance","value":8,"when":{"later":1}}],
+				 "advice":[{"id":"a","when":{"tierAtMost":2}}]}""");
+		assertEquals(Set.of("soon"), doc.mods.getFirst().avoidWhen.anyOf.getFirst().not.unknownFields);
+		assertEquals(Set.of("later"), doc.settings.getFirst().when.unknownFields);
+		assertTrue(doc.advice.getFirst().when.unknownFields.isEmpty());
+	}
+}

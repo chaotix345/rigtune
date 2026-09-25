@@ -31,8 +31,20 @@ class RulesLoaderTest {
 	}
 
 	@Test
+	void acceptsSchemaVersions1And2() {
+		assertEquals(1, RulesLoader.parse("{\"schemaVersion\":1,\"revision\":9}").schemaVersion);
+		assertEquals(2, RulesLoader.parse("{\"schemaVersion\":2,\"revision\":9}").schemaVersion);
+	}
+
+	@Test
+	void rejectsOtherSchemaVersions() {
+		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse("{\"schemaVersion\":0,\"revision\":9}"));
+		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse("{\"schemaVersion\":3,\"revision\":9}"));
+		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse("{\"revision\":9}"));
+	}
+
+	@Test
 	void rejectsInvalidDocuments() {
-		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse("{\"schemaVersion\":2,\"revision\":9}"));
 		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse("{\"revision\":9}"));
 		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse("not json at all {"));
 		assertThrows(IllegalArgumentException.class, () -> RulesLoader.parse(""));
