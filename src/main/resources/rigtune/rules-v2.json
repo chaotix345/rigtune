@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": 10,
-  "generatedAt": "2026-09-25T07:10:27Z",
+  "revision": 11,
+  "generatedAt": "2026-09-25T18:29:50Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -38,6 +38,12 @@
       "vendor": "nvidia",
       "integrated": false,
       "tier": 4
+    },
+    {
+      "pattern": "(?i)RTX\\s*5050\\b(?!\\s*Ti)",
+      "vendor": "nvidia",
+      "integrated": false,
+      "tier": 3
     },
     {
       "pattern": "(?i)RTX\\s*(?:20[5-8]0|3050)\\b|GTX\\s*(?:10[6-8]0|16[56]0)\\b",
@@ -106,6 +112,12 @@
       "tier": 3
     },
     {
+      "pattern": "(?i)RX\\s*9070\\s*GRE\\b",
+      "vendor": "amd",
+      "integrated": false,
+      "tier": 4
+    },
+    {
       "pattern": "(?i)RX\\s*(?:6[89][05]0|7[89]00|90[7-9]0)\\b",
       "vendor": "amd",
       "integrated": false,
@@ -164,6 +176,18 @@
       "vendor": "intel",
       "integrated": false,
       "tier": 2
+    },
+    {
+      "pattern": "(?i)Arc(?:\\s*\\(TM\\))?\\s*Pro\\s*B50\\b",
+      "vendor": "intel",
+      "integrated": false,
+      "tier": 3
+    },
+    {
+      "pattern": "(?i)Arc(?:\\s*\\(TM\\))?\\s*Pro\\s*B[67]\\d\\b",
+      "vendor": "intel",
+      "integrated": false,
+      "tier": 4
     },
     {
       "pattern": "(?i)Arc(?:\\s*\\(TM\\))?\\s*(?:\\d{3}V|B3\\d0|Graphics)",
@@ -1808,7 +1832,8 @@
       "when": {
         "backend": [
           "vulkan"
-        ]
+        ],
+        "mcVersionRange": "<26.4-"
       },
       "kind": "info",
       "impact": "medium",
@@ -1934,6 +1959,18 @@
       "impact": "low",
       "title": "OpenGL setting adjusted by Sodium",
       "text": "Your system doesn't support one of OpenGL's faster error-checking modes (common on Linux with Wayland), so Sodium turned it off to avoid a crash at start-up. You don't need to do anything."
+    },
+    {
+      "id": "spark-profiler",
+      "when": {
+        "modPresent": [
+          "spark"
+        ]
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "Find what causes lag with spark",
+      "text": "Run /sparkc profiler start, play through the lag, then /sparkc profiler stop and open the link it prints: the widest bars under the Render thread cost the most frame time. Stopping uploads the profile to spark.lucko.me with your player name, mod list and system and Java details, and anyone with the link can open it."
     }
   ],
   "settingLabels": {
@@ -2182,35 +2219,6 @@
       "structure-layout-optimizer",
       "zfastnoise",
       "zmaterial-rule-compiler"
-    ],
-    "26.1.2": [
-      "asynclogger",
-      "badoptimizations",
-      "better-block-entities",
-      "c2me-fabric",
-      "debugify",
-      "distanthorizons",
-      "dynamic-fps",
-      "entityculling",
-      "fastquit",
-      "ferrite-core",
-      "immediatelyfast",
-      "ixeris",
-      "krypton",
-      "lambdynamiclights",
-      "lithium",
-      "modernfix-mvus",
-      "moonrise-opt",
-      "moreculling",
-      "nvidium",
-      "particle-core",
-      "renderscale",
-      "scalablelux",
-      "sodium",
-      "sodium-extra",
-      "structure-layout-optimizer",
-      "vulkanmod",
-      "zfastnoise"
     ]
   },
   "upstream": {

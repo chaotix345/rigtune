@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": 10,
-  "generatedAt": "2026-09-25T07:10:27Z",
+  "revision": 11,
+  "generatedAt": "2026-09-25T18:29:50Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -1655,35 +1655,6 @@
       "structure-layout-optimizer",
       "zfastnoise",
       "zmaterial-rule-compiler"
-    ],
-    "26.1.2": [
-      "asynclogger",
-      "badoptimizations",
-      "better-block-entities",
-      "c2me-fabric",
-      "debugify",
-      "distanthorizons",
-      "dynamic-fps",
-      "entityculling",
-      "fastquit",
-      "ferrite-core",
-      "immediatelyfast",
-      "ixeris",
-      "krypton",
-      "lambdynamiclights",
-      "lithium",
-      "modernfix-mvus",
-      "moonrise-opt",
-      "moreculling",
-      "nvidium",
-      "particle-core",
-      "renderscale",
-      "scalablelux",
-      "sodium",
-      "sodium-extra",
-      "structure-layout-optimizer",
-      "vulkanmod",
-      "zfastnoise"
     ]
   },
   "upstream": {
