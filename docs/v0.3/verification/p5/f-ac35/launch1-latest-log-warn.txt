@@ -1,0 +1,9 @@
+[06:35:52] [main/WARN]: 2 staged RigTune change(s) were not applied; they will be retried at the next exit
+[06:35:52] [main/WARN]: Could not read the mod id of <repo>\versions\26.2\run\mods\entityculling-fabric-1.11.1-mc26.2.jar.disabled
+[06:35:52] [main/WARN]: Could not read the mod id of <repo>\versions\26.2\run\mods\modmenu-20.0.2.jar.disabled
+[06:35:52] [main/WARN]: Could not read the mod id of <repo>\versions\26.2\run\mods\yet_another_config_lib_v3-3.9.6+26.2-fabric.jar.disabled
+[06:35:52] [main/WARN]: Could not read the mod id of <repo>\versions\26.2\run\mods\zoomify-2.16.1+26.2.jar.disabled
+[06:35:52] [main/WARN]: Could not read the mod id of <repo>\versions\26.2\run\mods\fabric-26.2.jar
+[06:35:52] [main/WARN]: RigTune's helper couldn't apply a change (run finished 2026-09-24T23:09:01.530708800Z, attempt 1 of 3; it's retried at the next exit): DISABLE_FILE fabric-26.2.jar: Gave up after 10 attempt(s): java.nio.file.FileSystemException: fabric-26.2.jar -> fabric-26.2.jar.disabled: The process cannot access the file because it is being used by another process
+[06:35:52] [main/WARN]: RigTune's helper couldn't apply a change (run finished 2026-09-24T23:09:01.530708800Z, attempt 1 of 3; it's retried at the next exit): ENABLE_FILE distanthorizons (DistantHorizons-3.3.2-26.2-fabric-neoforge.jar): Not applied because disabling fabric-26.2.jar failed
+[06:36:53] [Render thread/INFO]: Started the RigTune apply helper for <repo>\versions\26.2\run\config\rigtune\pending.json
