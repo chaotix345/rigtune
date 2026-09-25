@@ -77,8 +77,9 @@ public final class BenchmarkController {
 	}
 
 	// record: the stored run (null when cancelled); before: the "before" of a Measure pair when this is its "after".
+	// restoreOk: every changed setting was put back.
 	public record Outcome(BenchmarkRequest request, SessionResult session, boolean cancelled, @Nullable BenchmarkRecord record,
-			@Nullable BenchmarkRecord before) {
+			@Nullable BenchmarkRecord before, boolean restoreOk) {
 		public PlannerResult result() {
 			return session.renderDistance();
 		}
@@ -126,6 +127,7 @@ public final class BenchmarkController {
 	private int stepCount;
 	private float lastYaw;
 	private float lastPitch;
+	private boolean environmentRestored = true;
 
 	private BenchmarkController(Minecraft minecraft, LocalPlayer player, ClientLevel level, BenchmarkRequest request, Config config) {
 		this.minecraft = minecraft;
@@ -149,7 +151,7 @@ public final class BenchmarkController {
 				? BenchmarkSession.measure(original, targetFps, timing, now)
 				: BenchmarkSession.tune(original, new BenchmarkSession.TuneLimits(MIN_RD,
 						Math.max(MIN_RD, Math.min(MAX_RD, maxRenderDistance(options, minecraft.hasSingleplayerServer()))), targetFps,
-						minecraft.hasSingleplayerServer(), minSimulationDistance(options)), timing, now);
+						simulationTunable(minecraft, request), minSimulationDistance(options)), timing, now);
 		this.run = new BenchmarkRun(session, new KnobGuard(original, new ClientKnobs(minecraft, original, MarkerRestore.file())), System::nanoTime);
 		this.hudWasHidden = minecraft.gui.hud.isHidden();
 		// In the benchmark world the camera goes exactly to the fixed spot, not just within a block of it.
@@ -219,7 +221,13 @@ public final class BenchmarkController {
 		if (player == null || level == null) {
 			return "rigtune.status.benchmark_unavailable";
 		}
-		BenchmarkController controller = new BenchmarkController(minecraft, player, level, request, config);
+		BenchmarkController controller;
+		try {
+			controller = new BenchmarkController(minecraft, player, level, request, config);
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.error("Benchmark could not start", e);
+			return "rigtune.benchmark.refused.failed";
+		}
 		active = controller;
 		try {
 			controller.prepare();
@@ -283,21 +291,28 @@ public final class BenchmarkController {
 	}
 
 	public static void tick(Minecraft minecraft) {
+		DevAutorun.tick(minecraft);
 		MarkerRestore.tick(minecraft);
 		BenchmarkWorld.tick(minecraft);
 		Pending pending = pendingWorld;
 		if (pending != null && active == null) {
-			if (BenchmarkWorld.state() == BenchmarkWorld.State.READY) {
-				pendingWorld = null;
-				String refusal = begin(minecraft, pending.request(), pending.config());
-				if (refusal != null) {
-					RigTune.LOGGER.warn("Benchmark world: could not start the benchmark ({})", refusal);
-					BenchmarkWorld.leave(minecraft, null);
+			try {
+				if (BenchmarkWorld.state() == BenchmarkWorld.State.READY) {
+					pendingWorld = null;
+					String refusal = begin(minecraft, pending.request(), pending.config());
+					if (refusal != null) {
+						RigTune.LOGGER.warn("Benchmark world: could not start the benchmark ({})", refusal);
+						BenchmarkWorld.leave(minecraft, null);
+					}
+				} else if (!BenchmarkWorld.busy()) {
+					pendingWorld = null;
+					SystemToast.add(minecraft.gui.toastManager(), TOAST_ID, Component.translatable("rigtune.benchmark.world.failed"),
+							Component.translatable("rigtune.benchmark.world.failed.body"));
 				}
-			} else if (!BenchmarkWorld.busy()) {
+			} catch (RuntimeException e) {
+				RigTune.LOGGER.error("Benchmark world: could not start the benchmark", e);
 				pendingWorld = null;
-				SystemToast.add(minecraft.gui.toastManager(), TOAST_ID, Component.translatable("rigtune.benchmark.world.failed"),
-						Component.translatable("rigtune.benchmark.world.failed.body"));
+				BenchmarkWorld.leave(minecraft, null);
 			}
 		}
 		BenchmarkController c = active;
@@ -409,10 +424,15 @@ public final class BenchmarkController {
 		return minecraft.player == player && minecraft.level == level;
 	}
 
-	private void applySettings(Map<String, String> values, String what, boolean save) {
-		SettingsBridge.applyVanilla(minecraft.options, values, save).values().stream()
-				.filter(r -> !r.ok())
-				.forEach(r -> RigTune.LOGGER.warn("Benchmark {}: could not set {} to {}: {}", what, r.key(), values.get(r.key()), r.message()));
+	private boolean applySettings(Map<String, String> values, String what, boolean save) {
+		boolean ok = true;
+		for (SettingsBridge.Result r : SettingsBridge.applyVanilla(minecraft.options, values, save).values()) {
+			if (!r.ok()) {
+				ok = false;
+				RigTune.LOGGER.warn("Benchmark {}: could not set {} to {}: {}", what, r.key(), values.get(r.key()), r.message());
+			}
+		}
+		return ok;
 	}
 
 	private void finish() {
@@ -420,23 +440,36 @@ public final class BenchmarkController {
 			return;
 		}
 		active = null;
-		if (!run.finished()) {
-			run.cancel();
-		}
+		// Each step runs even if an earlier one throws, so one failure can't leave the rest of the game changed.
+		safely("restore the benchmark knobs", () -> {
+			if (!run.finished()) {
+				run.cancel();
+			}
+		});
 		// The knobs are back in memory (BenchmarkRun); this also writes options.txt once, with the original values.
-		applySettings(originalSettings, "restore", true);
-		if (FrameTimes.recording()) {
-			FrameTimes.stop();
-		}
-		if (minecraft.gui.hud.isHidden() != hudWasHidden) {
-			minecraft.gui.hud.toggle();
-		}
-		if (sameWorld()) {
-			player.snapTo(position.x, position.y, position.z, yaw, pitch);
-			player.setDeltaMovement(Vec3.ZERO);
-			player.getAbilities().flying = wasFlying;
-		}
-		if (!run.restoreOk()) {
+		safely("restore the frame rate settings", () -> {
+			if (!applySettings(originalSettings, "restore", true)) {
+				environmentRestored = false;
+			}
+		});
+		safely("stop recording frames", () -> {
+			if (FrameTimes.recording()) {
+				FrameTimes.stop();
+			}
+		});
+		safely("show the HUD", () -> {
+			if (minecraft.gui.hud.isHidden() != hudWasHidden) {
+				minecraft.gui.hud.toggle();
+			}
+		});
+		safely("put the player back", () -> {
+			if (sameWorld()) {
+				player.snapTo(position.x, position.y, position.z, yaw, pitch);
+				player.setDeltaMovement(Vec3.ZERO);
+				player.getAbilities().flying = wasFlying;
+			}
+		});
+		if (!run.restoreOk() || !environmentRestored) {
 			RigTune.LOGGER.error("Benchmark: could not restore every setting; see the errors above");
 			MarkerRestore.retryLater();
 		}
@@ -461,17 +494,34 @@ public final class BenchmarkController {
 		}
 		if (outcome.cancelled()) {
 			if (minecraft.player != null) {
-				minecraft.player.sendOverlayMessage(Component.translatable("rigtune.benchmark.cancelled"));
+				minecraft.player.sendOverlayMessage(Component.translatable(outcome.restoreOk()
+						? "rigtune.benchmark.cancelled" : "rigtune.benchmark.cancelled.restore_failed"));
 			}
 			return;
 		}
 		show(minecraft, outcome, null);
 	}
 
+	private void safely(String what, Runnable step) {
+		try {
+			step.run();
+		} catch (RuntimeException e) {
+			environmentRestored = false;
+			RigTune.LOGGER.error("Benchmark: could not {}", what, e);
+		}
+	}
+
+	// "Restored" is only said when it's true.
 	private static void show(Minecraft minecraft, Outcome outcome, @Nullable Screen parent) {
+		if (!outcome.restoreOk()) {
+			SystemToast.add(minecraft.gui.toastManager(), TOAST_ID, Component.translatable("rigtune.benchmark.restore_failed.title"),
+					Component.translatable("rigtune.benchmark.restore_failed"));
+		}
 		if (outcome.cancelled()) {
-			SystemToast.add(minecraft.gui.toastManager(), TOAST_ID, Component.translatable("rigtune.benchmark.cancelled.title"),
-					Component.translatable("rigtune.benchmark.cancelled.body"));
+			if (outcome.restoreOk()) {
+				SystemToast.add(minecraft.gui.toastManager(), TOAST_ID, Component.translatable("rigtune.benchmark.cancelled.title"),
+						Component.translatable("rigtune.benchmark.cancelled.body"));
+			}
 			return;
 		}
 		minecraft.gui.setScreen(new BenchmarkResultScreen(parent, outcome));
@@ -479,8 +529,9 @@ public final class BenchmarkController {
 
 	private Outcome outcome() {
 		SessionResult result = run.result();
+		boolean restoreOk = run.restoreOk() && environmentRestored;
 		if (run.cancelled()) {
-			return new Outcome(request, result, true, null, null);
+			return new Outcome(request, result, true, null, null, restoreOk);
 		}
 		BenchmarkHistory history = BenchmarkStore.history();
 		String phase = BenchmarkRecords.phase(request, history);
@@ -491,12 +542,18 @@ public final class BenchmarkController {
 				? new BenchmarkRecord.World(BenchmarkWorld.LEVEL_ID, BenchmarkWorld.SEED) : null;
 		BenchmarkRecord record = BenchmarkRecords.of(result, request, phase, id, createdAt, rigtuneVersion(), HardwareProbe.minecraftVersion(), world);
 		BenchmarkStore.add(record);
-		return new Outcome(request, result, false, record, before);
+		return new Outcome(request, result, false, record, before, restoreOk);
 	}
 
 	private static String rigtuneVersion() {
 		return FabricLoader.getInstance().getModContainer(RigTune.MOD_ID)
 				.map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("?");
+	}
+
+	// Simulation distance only changes client frame rates in singleplayer (the integrated server ticks those chunks), and
+	// not in the benchmark world, where mobs and random ticks are frozen.
+	static boolean simulationTunable(Minecraft minecraft, BenchmarkRequest request) {
+		return minecraft.hasSingleplayerServer() && request.scene() == BenchmarkRequest.Scene.CURRENT;
 	}
 
 	private static int minSimulationDistance(Options options) {

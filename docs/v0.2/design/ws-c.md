@@ -36,7 +36,7 @@ SPEC item 6 as amended by the plan review (M16, M-risk, L6, L10). Plan: docs/v0.
 ## The session (M16)
 - **TUNE**:
   1. RD with the unchanged `RenderDistancePlanner` (full protocol);
-  2. SD (quick, singleplayer only);
+  2. SD (quick; singleplayer only, and not in the benchmark world, where nothing ticks);
   3. the first repeat of the chosen settings (full);
   4. the DH and shader cost reports (quick);
   5. the remaining repeat.
@@ -44,10 +44,12 @@ SPEC item 6 as amended by the plan review (M16, M-risk, L6, L10). Plan: docs/v0.
   The cost reports run before the last repeat, so a slow machine loses the CV before it loses the reports (a code review suggestion). **MEASURE** is just the repeats of the current settings.
 - **SD candidates**: current, −2, −4, never below the option's minimum (5); skipped with fewer than 2 candidates. They're measured high to low, stopping at the first that meets the target. If none meets it, the best one is chosen only when it beats the current value's 1% low by ≥ 5% (`SD_MIN_IMPROVEMENT`). SD is also a gameplay setting, so noise alone never lowers it.
 - **Full settle for quick steps after a rebuild**: a quick step that follows a render-distance change (the chosen RD is usually not the last one measured) or a shader toggle (an Iris reload) waits the full settle. Otherwise the SD choice and the cost baselines were measured while chunks were still compiling (code review).
-- **Cost reports**: a quick baseline of the chosen settings (reused from the SD step when that exact configuration was measured), then the same with DH `renderingEnabled` off, then with shaders off. They're reports only: the chosen knobs keep the original DH/shader state, and both are restored.
-- **Deadline (300 s)**: a step starts only if its worst case (settle timeout + warm-up + sweeps) still ends before the deadline. A step that doesn't fit ends its stage, and the next stage is still tried.
-  - Worst case, RD + SD = 6 × 37.5 + 27.5 (the first SD step settles fully) + 2 × 9.5 = 271.5 s ≤ 300 s (AC6.1 test `worstCaseRdAndSdFinishWithinDeadline`); the repeats are then cut and the result falls back to the RD measurement.
-  - Not counted: the time inside a knob change (an Iris reload) and about one tick per phase change. The overshoot is a few seconds at most.
+- **Cost reports**: a quick baseline of the chosen settings (reused from the SD step when that exact configuration was measured), then the same with DH `renderingEnabled` off, then with shaders off (DH back on, so each cost is isolated). They're reports only: the chosen knobs keep the original DH/shader state, and both are restored.
+  - A report whose feature refuses to switch off is skipped, with the reason as "not measured: <reason>"; the run carries on. Only a failing RD/SD change fails the run.
+  - A report cut by the deadline is "not measured" too, and both are shown on the result screen and stored (`notMeasured`).
+- **Deadline (300 s)**: a step starts only if its worst case (settle timeout + warm-up + sweeps) still ends 10 s before the deadline, i.e. within 290 s (`SLACK_SECONDS`). A step that doesn't fit ends its stage, and the next stage is still tried.
+  - Worst case, RD + SD = 6 × 37.5 + 27.5 (the first SD step settles fully) + 2 × 9.5 = 271.5 s ≤ 290 s (AC6.1 tests `worstCaseRdAndSdFinishWithinDeadline`, `worstCaseRdAndSdFitTheBudgetWithSlack`); the repeats are then cut and the result falls back to the RD measurement.
+  - The worst cases don't count the time inside a knob change (an Iris reload) or the up to one tick per phase change; the 10 s slack is for those. So the deadline is a budget the run keeps in practice, not a proven bound.
 - **Result**: the repeats' aggregate; without repeats, the last full-protocol measurement of the chosen settings, with no CV.
 
 ## Deviations and decisions
@@ -61,20 +63,22 @@ SPEC item 6 as amended by the plan review (M16, M-risk, L6, L10). Plan: docs/v0.
   - `knobs`: renderDistance/simulationDistance, each with value, original, and the stats measured at the value (RD stats are matched on RD alone, since the RD steps ran at the original SD);
   - `result`: avg, 1% low, p99, repeats, cv;
   - `costs`: distantHorizons/shaders, each with baseline and off, avg and 1% low;
+  - `notMeasured`: for a report that applied but has no numbers, why (`deadline` or `failed: <message>`), by the same keys;
   - `world` (levelId, seed) and `deadlineHit`.
 
-  Only finished runs are stored. File handling:
-  - A corrupt file (bad JSON or bad UTF-8) is moved to `benchmarks.json.bad`.
-  - A newer schema is left untouched until the next finished run replaces it.
-  - A file that can't be read or moved aside is never overwritten; the store loads it again next time.
+  Only finished runs are stored. Nothing is ever destroyed silently:
+  - A corrupt file (bad JSON or bad UTF-8) is moved to `benchmarks.json.bad`, then `.bad.1`, `.bad.2`...
+  - A newer schema is left untouched, then copied to `benchmarks.json.newer` (numbered the same way) just before the next finished run replaces it.
+  - A file that can't be read (a transient lock, say) or moved aside is never overwritten; the store loads it again next time.
 - **Pairing**: "Measure before" makes a new pairId; "Measure after" is offered for the newest unpaired before of the same scene and MC version. The gain line says "1% lows +X% (avg +Y%)", or "no significant change" when |gain| < 2 × max(CV before, CV after).
 - **Distant Horizons' `renderingEnabled` IS persisted** (found by AC6.4). This contradicts dh-iris.md and M16's "API-only, not persisted". With DH 3.3.2, `setValue(false)` also writes `rendererMode = "DISABLED"` to `DistantHorizons.toml`: a restore by `clearValue()` alone left DH disabled on disk, even though no API override remained.
   - `DhCompat` remembers the value and API value from before RigTune's first change, writes the original value back with `setValue(original)`, then `clearValue()`s if there was no override before.
   - The crash-marker restore does the same.
   - Only `setValue(T)` is used: `setValue(T, String)` is API 7.2 (DH 3.3.2), and the user's DH 3.3.0 may not have it.
-- **Restore marker**: written only when a run is about to change DH or Iris, holding only the fields that were on; deleted when both are back. A marker present at client start, or left by a restore that failed during the session, is retried each second from the title screen on, once each mod is ready: a mod that is no longer loaded drops its field, one that isn't ready keeps it (for up to 10 min). A benchmark refuses to start while an old marker can't be restored yet, since its changed values would otherwise be taken as the originals.
+- **Restore marker** (`ModToggles` in core, unit-tested): written only when a run is about to change DH or Iris, holding only the fields that were on. If it can't be written, nothing is touched. It's deleted when both are back, and kept when a restore fails. A marker present at client start, or left by a restore that failed during the session, is retried each second from the title screen on, once each mod is ready: a mod that is no longer loaded drops its field, one that isn't ready keeps it (for up to 10 min). A benchmark refuses to start while an old marker can't be restored yet, since its changed values would otherwise be taken as the originals.
 - **L10 (downgrade note)**: Iris saves `enableShaders` to iris.properties at once, and DH saves `rendererMode`. If the game dies during a cost report and the player then downgrades to 0.1.x (no marker support), shaders or DH stay off until they're turned back on in their menus. 0.2.x restores them at the next start.
-- **v0.1 API kept** for RigTuneClientGameTest, which passes unchanged:
+- **Messages**: "settings restored" is only said when every change was put back (`Outcome.restoreOk`). Otherwise a toast says some settings could not be restored. Each restore step in `finish()` runs even if an earlier one throws.
+- **v0.1 API kept** for RigTuneClientGameTest (its only change: it waits up to 4 min for the longer v2 run):
   - `start(Minecraft, Config)` (now TUNE in CURRENT, including SD and repeats);
   - `Config(4 args)`, with the rest of the timing derived: warm-up min(1.5, sweep/2), quick min(6, sweep), quick settle min(2, timeout);
   - `Outcome.result()/cancelled()`, `running()`, `cancel()`, `lastOutcome()`, and the `rigtune.benchmark.keep` button.
@@ -93,10 +97,12 @@ SPEC item 6 as amended by the plan review (M16, M-risk, L6, L10). Plan: docs/v0.
   The client holds creative flight and clears toasts. The controller holds the camera exactly at that spot.
 - **Camera spot** (0, 192): picked from a logged height grid (forest hills with birch, a valley, the sea to the east); the screenshots are identical across reuse. **26.2 and 26.3 generate different terrain for the same seed** (surface 117 vs 123), which confirms the research's warning.
 - **Folder handling**: `saves/rigtune-benchmark/rigtune-benchmark.json` records the MC version and seed, and is written as soon as the folder exists. A folder with RigTune's marker is deleted and recreated when the version or seed differs. A folder of that name without the marker may be the player's, so it's moved aside (`rigtune-benchmark-old-<time>`), never deleted (`folderAction`, unit-tested).
-- **Only the benchmark save is touched** (code review, Critical): every state checks that the loaded world is this save (its folder and level name, `inBenchmarkWorld`). So:
-  - a creation that fails silently (WorldOpenFlows returns to the menu without a callback) is noticed;
-  - another world the player loads is left alone;
-  - only the benchmark world is ever left.
+- **Only the benchmark save is touched** (code review, Critical). `WorldFlow` is the state machine without Minecraft, with a unit test per rule (`WorldFlowTest`). Every tick, `BenchmarkWorld` turns the game into an observation. The benchmark save is identified by: singleplayer, the integrated server's save folder (its level storage id) `rigtune-benchmark` (`getWorldPath(LevelResource.ROOT)`, since the storage access field is protected), and the level name "RigTune Benchmark". Then:
+  - only that save is ever set up (gamerules, time, weather, teleport) or left;
+  - a multiplayer connection ends the flow at once, and the player is never disconnected from a server they joined;
+  - another save, or a return to the menu (WorldOpenFlows gives up without a callback), ends it without touching anything;
+  - if the benchmark world still loads within 60 s after a timeout, it's left again;
+  - state transitions are logged (at INFO under the dev autorun).
 - **Leaving**: `Minecraft.disconnectFromWorld` (Save and Quit), then the result screen over the title screen, or a toast if the run was cancelled. It's done in a `finally`, so a failure while storing the run still leaves; not while the client is stopping.
 - **Harness findings** (game tests only):
   1. Leaving a world from inside a client tick deadlocks the game-test phaser: the render thread is in `IntegratedServer.halt` → `executeBlocking` while the server thread waits in `ThreadingImpl.enterPhase` (thread dump in the spike).
@@ -109,26 +115,68 @@ SPEC item 6 as amended by the plan review (M16, M-risk, L6, L10). Plan: docs/v0.
 In some harness sessions, on both versions and usually after a benchmark world is reopened, every frame lasts exactly one game tick (20 FPS). The frame limit is 260 and the throttle reason NONE in those same log lines, so RigTune's uncapping is in effect: it's the harness pacing frames to ticks (or the hidden window), not RigTune. Numbers aren't asserted in game tests (SPEC AC6.2). The gain line honestly reports such a run as a large loss.
 
 ## AC6.4 (production run with Distant Horizons)
-`./gradlew :26.2:runProductionSmoke -PextraModsDir=<fabric-api 0.161.0+26.2 + Distant Horizons 3.3.2 for 26.2> -PsmokeBenchmark` is a Loom production client with jars from the research downloads, not the player's instance. `BenchmarkSmoke` ran a short Tune in the smoke world:
-- steps: RD ×3, SD, repeat, DH_OFF, repeat;
-- DH rendering was seen off during the run, and the marker was seen;
-- DH cost: 1% low 287 → 385, avg 1409 → 2789 with DH off (harness numbers);
-- afterwards: DH rendering true, API override "none" as before, `DistantHorizons.toml` `rendererMode = "DEFAULT"` after a 5 s wait, and `benchmark-restore.json` gone. "AC6.4 PASSED".
+`./gradlew :26.2:runProductionSmoke -PextraModsDir=<fabric-api 0.161.0+26.2 + Distant Horizons 3.3.2 for 26.2> -PsmokeBenchmark` is a Loom production client with jars from the research downloads, not the player's instance. `BenchmarkSmoke` runs a short Tune in the smoke world and writes `run/rigtune-benchmark-smoke.txt`. The last run, on the final code, 2026-09-25 13:26:
+```
+Distant Horizons loaded true, rendering before true, API override before none
+outcome cancelled false, steps [RENDER_DISTANCE, RENDER_DISTANCE, RENDER_DISTANCE, SIMULATION_DISTANCE, REPEAT, DH_OFF, REPEAT]
+DH off seen during the run true, restore marker seen true
+DH cost Cost[baselineLow=226.18655842835628, baselineAvg=1212.3503027899767, offLow=388.1646553608603, offAvg=2828.206870991524], shader cost null
+Distant Horizons rendering after true, API override after none, shaders in use after false
+benchmark-restore.json gone true
+DistantHorizons.toml rendererMode = "DEFAULT"
+AC6.4 PASSED
+```
+Then, as expected, the harness hung leaving the world with DH loaded ("Closing all [3] databases..."), and the client was killed. `rendererMode = "DEFAULT"` was still on disk afterwards, and no marker was left.
 
-The previous build's run had failed exactly here (`rendererMode = "DISABLED"` left on disk), which is how the persistence above was found. With DH loaded the harness deadlocks when leaving a world, so the check halts the JVM after writing its evidence to `run/rigtune-benchmark-smoke.txt` (M-risk: "check in-test, then kill the client").
+An earlier build's run had failed exactly here (`rendererMode = "DISABLED"` left on disk), which is how the persistence described above was found.
+
+## The real benchmark-world exit (dev autorun, no harness)
+`./gradlew :<mc>:runBenchmarkAutorun [-PrigtuneAutorun=benchmark-world-cancel]` starts a plain dev client (no `-Dfabric.client.gametest`) with `-Drigtune.dev.autorun`. `DevAutorun` then:
+- starts a short Tune in the benchmark world from the title screen, through `BenchmarkController.tryStart`, as the menu does;
+- in cancel mode, opens the pause screen mid-run, as Esc does;
+- waits for the flow to end, logs every step, and quits.
+
+It only exists when that property is set; the run dir is `versions/<mc>/build/run-autorun`, with `onboardAccessibility:false` so the title screen comes up. Each mode was run once per MC version, all passing on the first attempt (2026-09-25). Log excerpts from 26.2 (trimmed: timestamps dropped, long lines cut with "...", numbers rounded):
+```
+Benchmark world: IDLE -> OPENING (creating the save)
+Dev autorun: mode benchmark-world: start from the title screen -> started
+Benchmark world: OPENING -> SETTING_UP (SET_UP Observation[worldLoaded=true, multiplayer=false, serverRunning=true, singleplayerReady=true, benchmarkSave=true, ...])
+Benchmark world: SETTING_UP -> READY (READY ... atCamera=true])
+Benchmark started: TUNE in BENCHMARK_WORLD, target 170.0 FPS (uncapped), start Knobs[renderDistance=12, simulationDistance=12, ...]
+Benchmark finished: chosen Knobs[renderDistance=9, simulationDistance=12, ...], target 170.0 FPS met true, result Aggregate[avgFps=2943.3, onePercentLowFps=584.4, ...]
+Benchmark world: READY -> LEAVING (save and quit)
+Benchmark world: LEAVING -> IDLE (FINISH_EXIT Observation[worldLoaded=false, ..., serverRunning=false, ...])
+Dev autorun: back from the benchmark world: world state IDLE, screen BenchmarkResultScreen, outcome finished, record 2026-09-25T03:18:04Z-9b19
+Dev autorun: screen now BenchmarkResultScreen; PASSED; stopping the client
+```
+```
+Benchmark world: IDLE -> OPENING (opening the existing save)
+Benchmark started: TUNE in BENCHMARK_WORLD, ...
+Dev autorun: pressing pause (Esc) mid-run, progress: RigTune benchmark · step 1 · render distance 12 · loading chunks · Esc cancels
+Benchmark cancelled: chosen Knobs[renderDistance=12, simulationDistance=12, ...], ..., result null
+Benchmark world: READY -> LEAVING (save and quit)
+Benchmark world: LEAVING -> IDLE (FINISH_EXIT ...)
+Dev autorun: back from the benchmark world: world state IDLE, screen TitleScreen, outcome cancelled, record none
+Dev autorun: screen now TitleScreen; PASSED; stopping the client
+```
+26.3 gave the same sequences: camera at y = 133; the Tune chose RD 9 (avg 3085 FPS, 1% low above the 170 target, "met true"), with the result screen after leaving; the cancel ended on the title screen. So the in-tick Save and Quit (`disconnectFromWorld` from END_CLIENT_TICK) works in a real client on both versions. Outside the harness, runs are at ~3000 FPS; the harness-only 20 FPS pacing (above) doesn't happen.
 
 ## Verification
-- Unit tests: 421 per MC version (26.2 and 26.3), all passing (`./gradlew build`). WS-C's classes: ProtocolTest, BenchmarkMathTest, BenchmarkSessionTest, BenchmarkRunTest, RestoreMarkerTest, BenchmarkHistoryTest, BenchmarkRecordsTest, BenchmarkWorldTest and BenchmarkControllerConfigTest.
-- Game tests (`runClientGameTest`, RigTuneClientGameTest + BenchmarkGameTest) pass on 26.2 and 26.3:
+- Unit tests: 454 per MC version (26.2 and 26.3), all passing (`./gradlew build`, 2026-09-25). WS-C's classes: ProtocolTest, BenchmarkMathTest, BenchmarkSessionTest, BenchmarkRunTest, ModTogglesTest, RestoreMarkerTest, BenchmarkHistoryTest, BenchmarkRecordsTest, BenchmarkWorldTest, WorldFlowTest and BenchmarkControllerConfigTest.
+- Game tests (`runClientGameTest`: RigTuneClientGameTest + BenchmarkGameTest) pass on 26.2 and 26.3 on the final code:
   - the benchmark-world Measure before/after from the title screen, with the world reused;
   - Esc inside the benchmark world: restored, back on the title screen, nothing stored;
   - a Tune in a harness world with SD, then Use journaled as one `benchmark` entry;
-  - settings restored after every run, and `benchmarks.json` has schemaVersion 1 and the runs;
-  - screenshots reviewed: menu (title/world), running HUD, before/after results with chart, the tune result with table and chart, the cancel toast.
-- AC6.1: verified (unit tests above). AC6.2 and AC6.3: verified in game tests (coordinator: see `bench-world-*` screenshots). AC6.4: verified with DH 3.3.2 in a production run.
+  - settings restored after every run, and `benchmarks.json` has schemaVersion 1 and the runs.
+- Screenshots reviewed: the menus, the running HUD, before/after results with the chart, the tune result with table and chart, the cancel toast.
+- The dev autorun (real exit and Esc in the benchmark world) passes on 26.2 and 26.3 (above).
+- AC6.1: **verified** (unit tests).
+- AC6.2: **verified** (game tests, both versions).
+- AC6.3: **verified** (game tests plus the non-harness autorun, both versions; coordinator: see the `bench-world-*` screenshots).
+- AC6.4: **verified** with Distant Horizons 3.3.2 in a production run on 26.2 (above). Not run with 26.3 + DH.
 
 ## UNVERIFIED
-- Leaving the benchmark world from a client tick in a real (non-harness) client. It's the same `disconnectFromWorld` path as Save and Quit, but the harness can't run it (finding 1), so no automated run went down it. Suggested for Phase 5: from the title screen, RigTune → Benchmark → scene "Benchmark world" → Tune, then check that it returns to the title screen with the result.
-- The shader cost report: Iris without a shader pack was not in any run, so `SHADERS_OFF` and the Iris restore are only unit-tested through fakes.
-- DH 3.3.0 (the user's version) with API 7.1: `getApiValue`/`clearValue`/`setValue(T)` are assumed present (they are in 7.2). Any `LinkageError` counts as "DH not available", so the worst case is no DH report.
+- The shader cost report: Iris without a shader pack wasn't in any run, so `SHADERS_OFF` and the Iris restore are unit-tested through fakes only.
+- DH 3.3.0 (the user's version) with API 7.1: `getApiValue`/`clearValue`/`setValue(T)` are assumed present (they are in 7.2). A `LinkageError` counts as "DH not available", so the worst case is no DH report.
 - The DH part of the crash-marker restore (`restoreAfterCrash`) never ran against a real crash.
+- AC6.4 with 26.3 + DH (only 26.2 was run).

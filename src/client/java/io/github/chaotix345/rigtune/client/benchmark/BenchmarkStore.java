@@ -37,7 +37,7 @@ public final class BenchmarkStore {
 			return;
 		}
 		try {
-			history.save(file());
+			history = history.save(file());
 		} catch (IOException e) {
 			RigTune.LOGGER.warn("Could not save {}", file(), e);
 		}

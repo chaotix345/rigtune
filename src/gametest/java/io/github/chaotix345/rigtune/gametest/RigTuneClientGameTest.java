@@ -149,7 +149,8 @@ public class RigTuneClientGameTest implements FabricClientGameTest {
 			context.waitTicks(30);
 			check(context.computeOnClient(FrameSettings::of).equals(FrameSettings.UNCAPPED), "uncapped while measuring");
 			context.takeScreenshot("benchmark-running");
-			context.waitFor(mc -> !BenchmarkController.running(), 1400);
+			// v0.2 also tunes simulation distance and repeats the result, so allow up to 4 minutes.
+			context.waitFor(mc -> !BenchmarkController.running(), 20 * 240);
 			BenchmarkController.Outcome outcome = context.computeOnClient(mc -> BenchmarkController.lastOutcome());
 			check(outcome != null && !outcome.cancelled(), "benchmark finished: " + outcome);
 			check(!outcome.result().measurements().isEmpty(), "benchmark measured something: " + outcome);

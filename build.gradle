@@ -59,6 +59,20 @@ dependencies {
 	testImplementation "net.fabricmc:fabric-loader-junit:${project.loader_version}"
 }
 
+// Development only: a plain client (no game-test harness) that runs the benchmark-world flow by itself and quits
+// (client/benchmark/DevAutorun). ./gradlew :<mc>:runBenchmarkAutorun [-PrigtuneAutorun=benchmark-world-cancel]
+loom {
+	runs {
+		benchmarkAutorun {
+			client()
+			configName = "Benchmark autorun"
+			runDir = "build/run-autorun"
+			vmArg "-Drigtune.dev.autorun=${project.findProperty('rigtuneAutorun') ?: 'benchmark-world'}"
+			ideConfigGenerated = false
+		}
+	}
+}
+
 // Distant Horizons and Iris are optional at runtime: only client/compat/DhCompat and IrisCompat use their APIs, and
 // only after FabricLoader says the mod is loaded (the benchmark's cost reports).
 dependencies {
