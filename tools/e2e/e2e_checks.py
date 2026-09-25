@@ -57,8 +57,9 @@ def _load(path):
     return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
 
 
-def after_update(instance, old_jar, new_jar, driver, server_log, helper_cmdlines, separator=";"):
-    """SPEC 5.5 and AC5.2, after the old version applied the update and the post-exit helper finished."""
+def after_update(instance, old_jar, new_jar, driver, server_log, helper_cmdlines, separator=";", extra_disables=()):
+    """SPEC 5.5 and AC5.2, after the old version applied the update and the post-exit helper finished. extra_disables:
+    jar names the old version disabled in the same apply (so the 0.2 legacy import has something that is not RigTune's)."""
     instance, old_jar, new_jar = Path(instance), Path(old_jar), Path(new_jar)
     mods = instance / "mods"
     rigtune_dir = instance / "config" / "rigtune"
@@ -80,6 +81,10 @@ def after_update(instance, old_jar, new_jar, driver, server_log, helper_cmdlines
     checks.append(Check("the old jar is disabled",
                         disabled.is_file() and digest(disabled, "sha256") == digest(old_jar, "sha256"),
                         "{} exists: {}".format(disabled.name, disabled.is_file())))
+    if extra_disables:
+        state = {name: ((mods / (name + ".disabled")).is_file(), (mods / name).exists()) for name in extra_disables}
+        checks.append(Check("the other mod 0.1.0 changed is disabled", all(off and not on for off, on in state.values()),
+                            "(.disabled exists, jar exists): {}".format(state)))
 
     pending = rigtune_dir / "pending.json"
     checks.append(Check("no pending.json", not pending.exists(), "pending.json exists: {}".format(pending.exists())))
@@ -90,7 +95,8 @@ def after_update(instance, old_jar, new_jar, driver, server_log, helper_cmdlines
     results = last.get("results") or []
     summary = [(r.get("op", {}).get("type"), Path(r.get("op", {}).get("path") or r.get("op", {}).get("to") or "").name,
                 r.get("status")) for r in results]
-    expected = sorted([("DISABLE_FILE", old_jar.name, "OK"), ("ENABLE_FILE", new_jar.name, "OK")])
+    expected = sorted([("DISABLE_FILE", old_jar.name, "OK"), ("ENABLE_FILE", new_jar.name, "OK")]
+                      + [("DISABLE_FILE", name, "OK") for name in extra_disables])
     checks.append(Check("last-apply.json: the update's two ops, all OK", sorted(summary) == expected,
                         "results: {}".format(summary)))
 
@@ -128,8 +134,9 @@ def depends_not_stricter(old_jar, new_jar):
                      new_json.get("depends") or {}, new_json.get("breaks") or {}))
 
 
-def after_verify(instance, new_jar, driver, last_apply_finished_at, mods_before, expect_history):
-    """SPEC 5.6: the new version, relaunched on the same instance, reads the old version's state."""
+def after_verify(instance, new_jar, driver, last_apply_finished_at, mods_before, expect_history, legacy_disables=()):
+    """SPEC 5.6: the new version, relaunched on the same instance, reads the old version's state. legacy_disables: jar
+    names the legacy import must hold as APPLIED disables."""
     instance, new_jar = Path(instance), Path(new_jar)
     mods = instance / "mods"
     rigtune_dir = instance / "config" / "rigtune"
@@ -167,8 +174,122 @@ def after_verify(instance, new_jar, driver, last_apply_finished_at, mods_before,
         imports = [e for e in entries if e.get("kind") == "legacy-import"] if isinstance(entries, list) else []
         own = [c for e in imports for c in e.get("changes", [])
                if c.get("modId") == "rigtune" or str(c.get("file") or "").lower().startswith("rigtune")]
+        imported = {c.get("file") for e in imports for c in e.get("changes", [])
+                    if c.get("type") == "file" and c.get("action") == "disable" and c.get("status") == "APPLIED"}
+        missing = [name for name in legacy_disables if name not in imported]
         checks.append(Check("history.json: one legacy import, without RigTune's own jars",
-                            isinstance(entries, list) and len(imports) == 1 and not own,
-                            "history.json entries: {}; legacy-import entries: {}; RigTune changes: {}".format(
-                                "missing" if not isinstance(entries, list) else len(entries), len(imports), own)))
+                            isinstance(entries, list) and len(imports) == 1 and not own and not missing,
+                            "history.json entries: {}; legacy-import entries: {}; RigTune changes: {}; expected disables "
+                            "missing: {}; imported changes: {}".format("missing" if not isinstance(entries, list) else len(entries),
+                                                                       len(imports), own, missing,
+                                                                       [e.get("changes") for e in imports])))
+    return checks
+
+
+# --- The end-to-end undo after a restart (plan review M14) ------------------------------------------------------------
+
+def history_entries(instance):
+    history = _load(Path(instance) / "config" / "rigtune" / "history.json")
+    entries = history.get("entries") if isinstance(history, dict) else None
+    return entries if isinstance(entries, list) else None
+
+
+def history_statuses(instance):
+    """Change id -> status, over every entry."""
+    return {c.get("id"): c.get("status") for e in history_entries(instance) or [] for c in e.get("changes", [])}
+
+
+def _ops(instance):
+    last = _load(Path(instance) / "config" / "rigtune" / "last-apply.json") or {}
+    return sorted((r.get("op", {}).get("type"), Path(r.get("op", {}).get("path") or r.get("op", {}).get("to") or "").name,
+                   r.get("status")) for r in last.get("results") or [])
+
+
+def _clean(instance):
+    mods = Path(instance) / "mods"
+    pending = Path(instance) / "config" / "rigtune" / "pending.json"
+    leftovers = sorted(p.name for p in mods.iterdir() if p.name.endswith(".rigtune-pending"))
+    return Check("no pending.json, no leftover downloads", not pending.exists() and not leftovers,
+                 "pending.json exists: {}; *.rigtune-pending: {}".format(pending.exists(), leftovers))
+
+
+def after_mod_apply(instance, added_jar, other_name, driver):
+    """0.2 applied {add a mod from Modrinth, disable another} and the helper ran."""
+    instance, added_jar = Path(instance), Path(added_jar)
+    mods = instance / "mods"
+    driver = driver or {}
+    checks = [Check("the driver applied the mod changes", driver.get("ok") is True, "error: {}".format(driver.get("error")))]
+    added = mods / added_jar.name
+    checks.append(Check("the added mod is in mods (the served bytes)",
+                        added.is_file() and digest(added, "sha512") == digest(added_jar, "sha512"),
+                        "{} exists: {}".format(added.name, added.is_file())))
+    checks.append(Check("the other mod is disabled", (mods / (other_name + ".disabled")).is_file() and not (mods / other_name).exists(),
+                        "{}.disabled exists: {}".format(other_name, (mods / (other_name + ".disabled")).is_file())))
+    checks.append(_clean(instance))
+    ops = _ops(instance)
+    checks.append(Check("last-apply.json: both ops OK",
+                        ops == sorted([("DISABLE_FILE", other_name, "OK"), ("ENABLE_FILE", added_jar.name, "OK")]),
+                        "results: {}".format(ops)))
+    entries = history_entries(instance) or []
+    applies = [e for e in entries if e.get("kind") == "apply"]
+    changes = {(c.get("type"), c.get("action"), c.get("file"), c.get("status")) for e in applies for c in e.get("changes", [])}
+    wanted = {("file", "enable", added_jar.name, "APPLIED"), ("file", "disable", other_name, "APPLIED")}
+    checks.append(Check("history.json: one apply entry, both changes APPLIED", len(applies) == 1 and changes == wanted,
+                        "apply entries: {}; changes: {}".format(len(applies), sorted(changes, key=str))))
+    return checks
+
+
+def after_mod_undo(instance, added_name, other_name, driver, apply_entry_id):
+    """0.2 undid the last apply (both changes staged as reversals) and the helper ran after the restart."""
+    instance = Path(instance)
+    mods = instance / "mods"
+    driver = driver or {}
+    items = driver.get("undoPlan") or []
+    reverts = [i for i in items if i.get("action") == "REVERT" and i.get("needsRestart") is True]
+    checks = [Check("the driver undid the last apply (two reverts after a restart)",
+                    driver.get("ok") is True and len(items) == 2 and len(reverts) == 2 and driver.get("undoOf") == apply_entry_id,
+                    "error: {}; undoOf: {}; plan: {}".format(driver.get("error"), driver.get("undoOf"), items))]
+    checks.append(Check("the added mod is disabled again", (mods / (added_name + ".disabled")).is_file() and not (mods / added_name).exists(),
+                        "{}.disabled exists: {}".format(added_name, (mods / (added_name + ".disabled")).is_file())))
+    checks.append(Check("the other mod is back", (mods / other_name).is_file() and not (mods / (other_name + ".disabled")).exists(),
+                        "{} exists: {}".format(other_name, (mods / other_name).is_file())))
+    checks.append(_clean(instance))
+    ops = _ops(instance)
+    checks.append(Check("last-apply.json: both reversal ops OK",
+                        ops == sorted([("DISABLE_FILE", added_name, "OK"), ("ENABLE_FILE", other_name, "OK")]),
+                        "results: {}".format(ops)))
+    entries = history_entries(instance) or []
+    applied = [e for e in entries if e.get("id") == apply_entry_id]
+    undos = [e for e in entries if e.get("kind") == "undo"]
+    original = {c.get("id"): c.get("status") for e in applied for c in e.get("changes", [])}
+    undo_changes = [c for e in undos for c in e.get("changes", [])]
+    ok = (len(undos) == 1 and undos[0].get("undoOf") == apply_entry_id and len(original) == 2
+          and set(original.values()) == {"REVERTED"} and len(undo_changes) == 2
+          and all(c.get("status") == "APPLIED" for c in undo_changes)
+          and {c.get("reverts") for c in undo_changes} == set(original))
+    checks.append(Check("history.json: the undo APPLIED, the apply's changes REVERTED", ok,
+                        "apply changes: {}; undo entries: {}; undo changes: {}".format(
+                            original, [e.get("undoOf") for e in undos],
+                            [(c.get("action"), c.get("file"), c.get("status"), c.get("reverts")) for c in undo_changes])))
+    return checks
+
+
+def after_mod_check(instance, added_id, other_id, driver, mods_before, statuses_before):
+    """The next start: the mods are as before the apply, and there is nothing left to undo."""
+    instance = Path(instance)
+    driver = driver or {}
+    loaded = driver.get("loadedMods") or []
+    checks = [Check("the driver checked", driver.get("ok") is True, "error: {}".format(driver.get("error")))]
+    checks.append(Check("the undone mods are as before the apply", other_id in loaded and added_id not in loaded,
+                        "{} loaded: {}; {} loaded: {}".format(other_id, other_id in loaded, added_id, added_id in loaded)))
+    checks.append(Check("nothing left to undo", driver.get("undoableItems") == 0, "undoable items: {}".format(driver.get("undoableItems"))))
+    crashes = sorted(p.name for p in (instance / "crash-reports").glob("*")) if (instance / "crash-reports").is_dir() else []
+    checks.append(Check("no crash report", not crashes, "crash-reports: {}".format(crashes)))
+    after = listing(instance / "mods")
+    checks.append(Check("mods unchanged by the relaunch", after == mods_before, "unchanged" if after == mods_before else
+                        "before {} after {}".format(sorted(mods_before), sorted(after))))
+    statuses = history_statuses(instance)
+    checks.append(Check("history.json statuses unchanged", statuses == statuses_before,
+                        "unchanged" if statuses == statuses_before else "before {} after {}".format(statuses_before, statuses)))
+    checks.append(_clean(instance))
     return checks

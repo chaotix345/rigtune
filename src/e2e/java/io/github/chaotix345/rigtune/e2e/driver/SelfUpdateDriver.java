@@ -10,6 +10,7 @@ import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Goal;
+import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
 import net.fabricmc.api.ClientModInitializer;
@@ -72,6 +73,8 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 	private int stepTicks;
 	private Recommendation update;
 	private boolean rescanned;
+	// A test mod to disable in the same apply as the update (phase update).
+	private final String alsoDisable = System.getProperty("rigtune.e2e.alsoDisable");
 
 	@Override
 	public void onInitializeClient() {
@@ -166,9 +169,20 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 				} else if (stepTicks == SECOND) {
 					screenshot(minecraft, "e2e-update-1-report.png");
 				} else if (stepTicks == 2 * SECOND) {
-					Component message = controller.apply(List.of(update));
+					List<Recommendation> chosen = new ArrayList<>(List.of(update));
+					Path other = alsoDisable == null ? null : modJar(alsoDisable);
+					if (alsoDisable != null) {
+						if (other == null) {
+							fail(minecraft, "mod " + alsoDisable + " (-Drigtune.e2e.alsoDisable) isn't loaded from a jar");
+							return;
+						}
+						// As if the player also ticked a "Disable" row: the 0.2 legacy import needs a change that isn't RigTune's.
+						chosen.add(new Recommendation("disable:" + alsoDisable, Category.REMOVE_MOD, Impact.LOW, "Disable " + alsoDisable,
+								"E2E test mod", new Action.DisableMod(alsoDisable, other), true));
+					}
+					Component message = controller.apply(chosen);
 					result.put("applyMessage", message.getString());
-					event("apply: " + message.getString());
+					event("apply " + chosen.stream().map(Recommendation::id).toList() + ": " + message.getString());
 					next(Step.WAIT_STAGED);
 				}
 			}
@@ -179,8 +193,11 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 				String filename = ((Action.UpdateMod) update.action()).update().file().filename();
 				Path pending = FabricLoader.getInstance().getConfigDir().resolve("rigtune").resolve("pending.json");
 				List<Map<String, Object>> ops = Files.isRegularFile(pending) ? ops(pending) : List.of();
+				Path other = alsoDisable == null ? null : modJar(alsoDisable);
 				boolean staged = ops.stream().anyMatch(op -> "ENABLE_FILE".equals(op.get("type"))
-						&& op.get("to") instanceof String to && Path.of(to).getFileName().toString().equals(filename));
+						&& op.get("to") instanceof String to && Path.of(to).getFileName().toString().equals(filename))
+						&& (other == null || ops.stream().anyMatch(op -> "DISABLE_FILE".equals(op.get("type"))
+						&& op.get("path") instanceof String path && Path.of(path).getFileName().equals(other.getFileName())));
 				if (staged) {
 					Files.createDirectories(out);
 					Files.copy(pending, out.resolve("pending-before-exit.json"), StandardCopyOption.REPLACE_EXISTING);
@@ -317,6 +334,12 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 		String line = String.format(Locale.ROOT, "t+%.1fs %s", ticks / (double) SECOND, message);
 		events.add(line);
 		LOGGER.info("[E2E] {}", line);
+	}
+
+	private static Path modJar(String modId) {
+		ModContainer mod = FabricLoader.getInstance().getModContainer(modId).orElse(null);
+		List<Path> paths = mod == null ? List.of() : mod.getOrigin().getPaths();
+		return paths.size() == 1 && paths.getFirst().getFileName().toString().endsWith(".jar") ? paths.getFirst() : null;
 	}
 
 	private void recordRigTune() {

@@ -277,6 +277,19 @@ def e2eDriverJar = tasks.register("e2eDriverJar", Jar) {
 	archiveVersion = ""
 }
 
+// The undo driver (src/e2eUndo, plan review M14) uses 0.2's API, so it compiles against these sources.
+sourceSets {
+	e2eUndo {
+		compileClasspath += sourceSets.client.compileClasspath + sourceSets.client.output
+	}
+}
+
+def e2eUndoDriverJar = tasks.register("e2eUndoDriverJar", Jar) {
+	from sourceSets.e2eUndo.output
+	archiveBaseName = "rigtune-e2e-undo-driver"
+	archiveVersion = ""
+}
+
 // One launch of a production client on a scratch instance (-Pe2e.instance=<dir>), with JVM arguments from
 // -Pe2e.jvmArgsFile (one per line). Unlike runProductionSmoke, `mods` is only the driver: Loom would otherwise add this
 // project's jar through -Dfabric.addMods, and RigTune must load only from the instance's mods folder (plan review M10).
@@ -284,7 +297,8 @@ tasks.register("e2eClient", net.fabricmc.loom.task.prod.ClientProductionRunTask)
 	def instance = providers.gradleProperty("e2e.instance")
 	def jvmArgsFile = providers.gradleProperty("e2e.jvmArgsFile")
 	runDir = layout.dir(instance.map { new File(it) })
-	mods.setFrom(e2eDriverJar)
+	// -Pe2e.driver=undo picks the undo driver; the default is the self-update driver.
+	mods.setFrom(providers.gradleProperty("e2e.driver").getOrElse("") == "undo" ? e2eUndoDriverJar : e2eDriverJar)
 	jvmArgs.addAll(jvmArgsFile.map { new File(it).readLines("UTF-8").findAll { !it.isBlank() } }.orElse([]))
 	programArgs.addAll("--width", "1280", "--height", "720")
 	doFirst {

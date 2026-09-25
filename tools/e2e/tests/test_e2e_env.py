@@ -86,6 +86,27 @@ class CatalogTest(unittest.TestCase):
                          (static["host"], static["path"]))
         json.dumps(catalog)
 
+    def test_without_an_old_jar_rigtune_has_only_the_installed_version_and_extra_projects_are_listed(self):
+        added = e2e_env.test_mod_jar(self.dir / "e2e-added-1.0.0.jar", "e2e-added")
+
+        catalog = e2e_env.catalog(None, self.new, "26.2", [], extra_projects=[("E2EAddMd", "e2e-added", added)])
+
+        rigtune, extra = catalog["projects"]
+        self.assertEqual(["0.2.0+mc26.2"], [v["version_number"] for v in rigtune["versions"]])
+        self.assertEqual(("E2EAddMd", "e2e-added"), (extra["id"], extra["slug"]))
+        (version,) = extra["versions"]
+        self.assertEqual(("1.0.0", [], ["26.2"], ["fabric"]),
+                         (version["version_number"], version["dependencies"], version["game_versions"], version["loaders"]))
+        self.assertTrue(Path(version["file"]).is_file())
+
+    def test_test_mod_jar_is_a_minimal_fabric_mod(self):
+        jar = e2e_env.test_mod_jar(self.dir / "e2e-x-1.0.0.jar", "e2e-x", "1.2.3")
+        mod = e2e_env.mod_json(jar)
+        self.assertEqual((1, "e2e-x", "1.2.3", {"fabricloader": ">=0.19.5"}),
+                         (mod["schemaVersion"], mod["id"], mod["version"], mod["depends"]))
+        with zipfile.ZipFile(jar) as archive:
+            self.assertEqual(["fabric.mod.json"], archive.namelist())
+
 
 if __name__ == "__main__":
     unittest.main()
