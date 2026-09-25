@@ -222,6 +222,43 @@ tasks.register("runProductionSmoke", net.fabricmc.loom.task.prod.ClientProductio
 	jvmArgs.addAll(userOptions.map { ["-Drigtune.smoke.userOptions=" + it.absolutePath] }.orElse([]))
 }
 
-// Self-update end-to-end harness (tools/e2e/README.md), never part of the shipped jar. The fake Modrinth server is a
-// JDK-only tool run as `java FakeModrinth.java`; the unit tests compile it from tools/e2e/java.
+// Self-update end-to-end harness (tools/e2e/README.md), never part of the shipped jar or of `build`. The fake Modrinth
+// server is a JDK-only tool run as `java FakeModrinth.java`; the unit tests compile it from tools/e2e/java.
 sourceSets.test.java.srcDir(rootProject.file("tools/e2e/java"))
+
+// The driver mod (src/e2e) compiles against the released v0.1.0 jar (-Pe2e.oldJar=<path>), not these sources, so it
+// only uses API that 0.1.0 has.
+def e2eOldJar = providers.gradleProperty("e2e.oldJar")
+sourceSets {
+	e2e {
+		compileClasspath += sourceSets.client.compileClasspath - sourceSets.main.output + files({
+			if (!e2eOldJar.present) {
+				throw new GradleException("Pass -Pe2e.oldJar=<path to the released rigtune-0.1.0.jar>")
+			}
+			rootProject.file(e2eOldJar.get())
+		})
+	}
+}
+
+def e2eDriverJar = tasks.register("e2eDriverJar", Jar) {
+	from sourceSets.e2e.output
+	archiveBaseName = "rigtune-e2e-driver"
+	archiveVersion = ""
+}
+
+// One launch of a production client on a scratch instance (-Pe2e.instance=<dir>), with JVM arguments from
+// -Pe2e.jvmArgsFile (one per line). Unlike runProductionSmoke, `mods` is only the driver: Loom would otherwise add this
+// project's jar through -Dfabric.addMods, and RigTune must load only from the instance's mods folder (plan review M10).
+tasks.register("e2eClient", net.fabricmc.loom.task.prod.ClientProductionRunTask) {
+	def instance = providers.gradleProperty("e2e.instance")
+	def jvmArgsFile = providers.gradleProperty("e2e.jvmArgsFile")
+	runDir = layout.dir(instance.map { new File(it) })
+	mods.setFrom(e2eDriverJar)
+	jvmArgs.addAll(jvmArgsFile.map { new File(it).readLines("UTF-8").findAll { !it.isBlank() } }.orElse([]))
+	programArgs.addAll("--width", "1280", "--height", "720")
+	doFirst {
+		if (!instance.present) {
+			throw new GradleException("Pass -Pe2e.instance=<scratch instance dir>; see tools/e2e/README.md")
+		}
+	}
+}
