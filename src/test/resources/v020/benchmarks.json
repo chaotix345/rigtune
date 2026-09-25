@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "runs": [
+    {
+      "id": "2026-09-20T18:02:11Z-3fa1",
+      "createdAt": "2026-09-20T18:02:11Z",
+      "rigtuneVersion": "0.2.0+mc26.2",
+      "mcVersion": "26.2",
+      "mode": "TUNE",
+      "scene": "CURRENT",
+      "phase": "single",
+      "targetFps": 170,
+      "targetMet": true,
+      "knobs": {
+        "renderDistance": {
+          "value": 14,
+          "original": 12,
+          "avgFps": 912.4,
+          "onePercentLowFps": 301.7,
+          "p99FrameMs": 4.1
+        },
+        "simulationDistance": {
+          "value": 8,
+          "original": 10,
+          "avgFps": 930.2,
+          "onePercentLowFps": 305.1,
+          "p99FrameMs": 4.0
+        }
+      },
+      "result": {
+        "avgFps": 905.5,
+        "onePercentLowFps": 298.25,
+        "p99FrameMs": 4.2,
+        "repeats": 2,
+        "cv": 0.031
+      },
+      "costs": {
+        "distantHorizons": {
+          "baselineAvgFps": 676.0,
+          "baselineOnePercentLowFps": 502.0,
+          "offAvgFps": 2372.0,
+          "offOnePercentLowFps": 601.0
+        }
+      },
+      "notMeasured": {
+        "shaders": "deadline"
+      },
+      "deadlineHit": true
+    },
+    {
+      "id": "2026-09-21T09:15:40Z-0b7c",
+      "createdAt": "2026-09-21T09:15:40Z",
+      "rigtuneVersion": "0.2.0+mc26.3",
+      "mcVersion": "26.3",
+      "mode": "MEASURE",
+      "scene": "BENCHMARK_WORLD",
+      "phase": "before",
+      "pairId": "5d0c1e8e-2f5b-4c62-9d7a-1b2e3f4a5b6c",
+      "targetFps": 144,
+      "targetMet": false,
+      "knobs": {
+        "renderDistance": {
+          "value": 12,
+          "original": 12
+        },
+        "simulationDistance": {
+          "value": 10,
+          "original": 10
+        }
+      },
+      "result": {
+        "avgFps": 1210.0,
+        "onePercentLowFps": 131.5,
+        "p99FrameMs": 8.9,
+        "repeats": 2,
+        "cv": 0.012
+      },
+      "costs": {},
+      "notMeasured": {},
+      "world": {
+        "levelId": "rigtune-benchmark",
+        "seed": 8675309
+      },
+      "deadlineHit": false
+    },
+    {
+      "id": "2026-09-21T09:31:02Z-77e0",
+      "createdAt": "2026-09-21T09:31:02Z",
+      "rigtuneVersion": "0.2.0+mc26.3",
+      "mcVersion": "26.3",
+      "mode": "MEASURE",
+      "scene": "BENCHMARK_WORLD",
+      "phase": "after",
+      "pairId": "5d0c1e8e-2f5b-4c62-9d7a-1b2e3f4a5b6c",
+      "targetFps": 144,
+      "targetMet": true,
+      "knobs": {
+        "renderDistance": {
+          "value": 12,
+          "original": 12
+        },
+        "simulationDistance": {
+          "value": 10,
+          "original": 10
+        }
+      },
+      "result": {
+        "avgFps": 1402.25,
+        "onePercentLowFps": 150.75,
+        "p99FrameMs": 7.6,
+        "repeats": 2
+      },
+      "costs": {},
+      "notMeasured": {},
+      "world": {
+        "levelId": "rigtune-benchmark",
+        "seed": 8675309
+      },
+      "deadlineHit": false
+    }
+  ]
+}

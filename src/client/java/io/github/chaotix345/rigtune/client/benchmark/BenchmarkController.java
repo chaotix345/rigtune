@@ -5,6 +5,7 @@ import io.github.chaotix345.rigtune.client.compat.OptionalMods;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen;
+import io.github.chaotix345.rigtune.core.apply.PropertiesConfigPatcher;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkHistory;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkMath;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
@@ -147,6 +148,7 @@ public final class BenchmarkController {
 	private final int cameraChunkX;
 	private final int cameraChunkZ;
 	private final List<Settled> settles = new ArrayList<>();
+	private final BenchmarkRecord.Context context;
 	private Step step;
 	private Phase phase = Phase.SETTLE;
 	private int sweep;
@@ -195,6 +197,25 @@ public final class BenchmarkController {
 		this.yaw = player.getYRot();
 		this.pitch = player.getXRot();
 		this.wasFlying = player.getAbilities().flying;
+		this.context = context(minecraft, original);
+	}
+
+	// What else shapes the numbers, as the run starts (docs/v0.3/SPEC.md 8, the `context` of a benchmarks.json run).
+	private static BenchmarkRecord.Context context(Minecraft minecraft, Knobs original) {
+		return new BenchmarkRecord.Context(original.dhRendering(), original.shaders(), original.shaders() ? shaderPack() : null,
+				minecraft.getWindow().getWidth(), minecraft.getWindow().getHeight(), minecraft.options.fullscreen().get(),
+				BenchmarkRecord.Context.PROTOCOL);
+	}
+
+	// The pack's file name from Iris' own settings file; null when unknown.
+	private static @Nullable String shaderPack() {
+		try {
+			String pack = PropertiesConfigPatcher.readValues(FabricLoader.getInstance().getConfigDir().resolve("iris.properties")).get("shaderPack");
+			return pack == null || pack.isBlank() ? null : pack;
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.debug("Shader pack name unavailable", e);
+			return null;
+		}
 	}
 
 	private static double targetFps(Minecraft minecraft, Config config) {
@@ -639,7 +660,8 @@ public final class BenchmarkController {
 		String id = createdAt + "-" + HexFormat.of().toHexDigits((short) ThreadLocalRandom.current().nextInt());
 		BenchmarkRecord.World world = request.scene() == BenchmarkRequest.Scene.BENCHMARK_WORLD
 				? new BenchmarkRecord.World(BenchmarkWorld.LEVEL_ID, BenchmarkWorld.SEED) : null;
-		BenchmarkRecord record = BenchmarkRecords.of(result, request, phase, id, createdAt, rigtuneVersion(), HardwareProbe.minecraftVersion(), world);
+		BenchmarkRecord record = BenchmarkRecords.of(result, request, phase, id, createdAt, rigtuneVersion(), HardwareProbe.minecraftVersion(), world,
+				context);
 		BenchmarkStore.add(record);
 		return new Outcome(request, result, false, record, before, restoreOk, false, List.copyOf(settles));
 	}
