@@ -525,7 +525,8 @@ public final class BenchmarkController {
 		}
 		RigTune.LOGGER.info("Benchmark settle {} {}: {} of {} chunks within {} present, client holds {}, {} s{}", step.kind(), step.knobs(),
 				result.inRange() - result.missing(), result.inRange(), result.radius(), loaded, seconds,
-				result.timedOut() ? ", timed out waiting for the sections" : "");
+				!result.timedOut() ? "" : result.missing() > 0 ? ", timed out with " + result.missing() + " missing (within the 2% allowed)"
+						: ", timed out waiting for the sections");
 	}
 
 	// Setting the previous rotation keeps the per-frame camera interpolation smooth between ticks.
