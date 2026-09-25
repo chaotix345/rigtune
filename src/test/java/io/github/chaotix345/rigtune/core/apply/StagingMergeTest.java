@@ -178,7 +178,7 @@ class StagingMergeTest {
 
 	// Review 2, N3: the RigTune screen's "Discard pending" button.
 	@Test
-	void discardRetiresTheDownloadsAndDeletesThePlanUnderTheLock() throws IOException {
+	void discardRetiresTheDownloadsAndDeletesThePlanUnderTheLock() throws Exception {
 		Path pending = PendingActions.defaultPath(config);
 		Path a = Files.writeString(pendingJar("a.jar"), "a");
 		Path b = Files.writeString(pendingJar("b.jar"), "b");
@@ -190,8 +190,7 @@ class StagingMergeTest {
 		ops.add(Op.patchJson(config.resolve("sodium-options.json"), Map.of("a", "1")));
 		plan(ops).save(pending);
 
-		try (ApplyLock helper = ApplyLock.acquire(ApplyLock.besidePlan(pending), Duration.ZERO)) {
-			assertNotNull(helper);
+		try (HeldLock helper = HeldLock.hold(ApplyLock.besidePlan(pending))) {
 			assertEquals(-1, PendingActions.discard(pending, Duration.ofMillis(100)));
 			assertTrue(Files.exists(pending));
 			assertTrue(Files.exists(a));

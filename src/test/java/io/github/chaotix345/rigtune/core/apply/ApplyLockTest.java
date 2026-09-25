@@ -20,19 +20,95 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ApplyLockTest {
+	// Acquires on another thread, like a second holder in this JVM that isn't nested in the first.
+	private static ApplyLock onOtherThread(Path file, Duration wait) throws Exception {
+		ApplyLock[] out = new ApplyLock[1];
+		Thread thread = new Thread(() -> {
+			try {
+				out[0] = ApplyLock.acquire(file, wait);
+				if (out[0] != null) {
+					out[0].close();
+				}
+			} catch (Exception e) {
+				throw new AssertionError(e);
+			}
+		});
+		thread.start();
+		thread.join();
+		return out[0];
+	}
+
 	@Test
-	void secondHolderWaitsThenGivesUp(@TempDir Path dir) throws Exception {
+	void otherThreadWaitsThenGivesUp(@TempDir Path dir) throws Exception {
 		Path file = ApplyLock.defaultPath(dir);
 		try (ApplyLock first = ApplyLock.acquire(file, Duration.ZERO)) {
 			assertNotNull(first);
 			long start = System.nanoTime();
-			assertNull(ApplyLock.acquire(file, Duration.ofMillis(200)));
+			assertNull(onOtherThread(file, Duration.ofMillis(200)));
 			assertTrue(System.nanoTime() - start >= Duration.ofMillis(200).toNanos());
 		}
-		try (ApplyLock again = ApplyLock.acquire(file, Duration.ZERO)) {
-			assertNotNull(again);
-		}
+		assertNotNull(onOtherThread(file, Duration.ZERO));
 		assertEquals(ApplyLock.defaultPath(dir), ApplyLock.besidePlan(PendingActions.defaultPath(dir)));
+	}
+
+	// Review M4: the journal takes the lock while stage(), preLaunch or an undo already hold it.
+	@Test
+	void sameThreadReentersAndKeepsTheLockUntilTheOuterHolderCloses(@TempDir Path dir) throws Exception {
+		Path file = ApplyLock.defaultPath(dir);
+		try (ApplyLock outer = ApplyLock.acquire(file, Duration.ZERO)) {
+			assertNotNull(outer);
+			try (ApplyLock inner = ApplyLock.acquire(ApplyLock.besidePlan(PendingActions.defaultPath(dir)), Duration.ZERO)) {
+				assertNotNull(inner);
+			}
+			assertNull(onOtherThread(file, Duration.ZERO), "closing the nested holder must not release the lock");
+			assertFalse(childCanLock(file), "another process must still be locked out");
+		}
+		assertNotNull(onOtherThread(file, Duration.ZERO));
+		assertTrue(childCanLock(file));
+	}
+
+	@Test
+	void differentFilesAreIndependent(@TempDir Path dir) throws Exception {
+		try (ApplyLock a = ApplyLock.acquire(ApplyLock.defaultPath(dir.resolve("a")), Duration.ZERO)) {
+			assertNotNull(a);
+			assertNotNull(onOtherThread(ApplyLock.defaultPath(dir.resolve("b")), Duration.ZERO));
+		}
+	}
+
+	@Test
+	void closingTwiceIsHarmless(@TempDir Path dir) throws Exception {
+		Path file = ApplyLock.defaultPath(dir);
+		try (ApplyLock outer = ApplyLock.acquire(file, Duration.ZERO)) {
+			assertNotNull(outer);
+			ApplyLock inner = ApplyLock.acquire(file, Duration.ZERO);
+			assertNotNull(inner);
+			inner.close();
+			inner.close();
+			assertNull(onOtherThread(file, Duration.ZERO));
+		}
+		assertNotNull(onOtherThread(file, Duration.ZERO));
+	}
+
+	// A separate JVM that tries the OS lock once: true if it got it.
+	private static boolean childCanLock(Path file) throws Exception {
+		Path source = Files.writeString(file.resolveSibling("TryLock.java"), """
+				import java.nio.channels.FileChannel;
+				import java.nio.file.Path;
+				import java.nio.file.StandardOpenOption;
+				public class TryLock {
+					public static void main(String[] args) throws Exception {
+						try (FileChannel channel = FileChannel.open(Path.of(args[0]), StandardOpenOption.CREATE, StandardOpenOption.WRITE)) {
+							System.exit(channel.tryLock() != null ? 0 : 1);
+						}
+					}
+				}
+				""");
+		Process child = new ProcessBuilder(HelperLauncher.currentJava().toString(), source.toString(), file.toString())
+				.redirectErrorStream(true)
+				.redirectOutput(ProcessBuilder.Redirect.DISCARD)
+				.start();
+		assertTrue(child.waitFor(60, TimeUnit.SECONDS));
+		return child.exitValue() == 0;
 	}
 
 	private static Process helper(long gamePid, Path pending, Path log) throws Exception {
