@@ -318,19 +318,26 @@ public final class UndoDriver implements ClientModInitializer {
 		return entryMods.isBlank() ? List.of() : List.of(entryMods.split(",")).stream().map(pair -> pair.split(":", 2)).toList();
 	}
 
-	// WS-B's per-entry plan (SPEC item 6, Undo this), found by its shape: a public (String entryId) -> UndoPlan method of
-	// the controller. Null when there is none.
+	// WS-B's per-entry plan (SPEC item 6, Undo this): RigTuneController.undoPlanFor(String entryId) (docs/v0.3/design/ws-b.md),
+	// else the one public (String) -> UndoPlan method of the controller. Null when there is none or more than one.
 	private UndoPlan entryPlan(RigTuneController controller) throws ReflectiveOperationException {
+		List<Method> found = new ArrayList<>();
 		for (Class<?> type : List.of(RigTuneController.class, controller.getClass())) {
 			for (Method method : type.getMethods()) {
-				if (method.getReturnType() == UndoPlan.class && method.getParameterCount() == 1 && method.getParameterTypes()[0] == String.class) {
-					result.put("entryPlanMethod", type.getSimpleName() + "." + method.getName());
-					return (UndoPlan) method.invoke(controller, entryId);
+				if (method.getReturnType() == UndoPlan.class && method.getParameterCount() == 1 && method.getParameterTypes()[0] == String.class
+						&& found.stream().noneMatch(m -> m.getName().equals(method.getName()))) {
+					found.add(method);
 				}
 			}
 		}
-		result.put("entryPlanMethod", null);
-		return null;
+		Method method = found.stream().filter(m -> m.getName().equals("undoPlanFor")).findFirst()
+				.orElse(found.size() == 1 ? found.getFirst() : null);
+		result.put("entryPlanMethod", method == null ? null : method.getDeclaringClass().getSimpleName() + "." + method.getName());
+		if (method == null) {
+			result.put("entryPlanCandidates", found.stream().map(Method::getName).toList());
+			return null;
+		}
+		return (UndoPlan) method.invoke(controller, entryId);
 	}
 
 	// UndoScreen for one entry, when it has a (Screen, RigTuneController, String entryId) constructor. Null otherwise.

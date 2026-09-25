@@ -57,6 +57,13 @@ class MakeSeedTest(unittest.TestCase):
         make_seed.make_seed(self.config, self.instance, self.dest, "x")
         self.assertEqual(self.before, {f.name: (f.read_bytes(), f.stat().st_mtime_ns) for f in self.config.iterdir()})
 
+    def test_refuses_a_destination_inside_the_source(self):
+        for dest in (self.config, self.instance, self.instance / "seed", self.config / "seed"):
+            with self.assertRaises(SystemExit):
+                make_seed.make_seed(self.config, self.instance, dest, "x")
+        self.assertEqual(self.before, {f.name: (f.read_bytes(), f.stat().st_mtime_ns) for f in self.config.iterdir()})
+        self.assertFalse((self.instance / "seed").exists())
+
 
 class CommittedSeedTest(unittest.TestCase):
     """tools/e2e/seeds/v010-dh: the user's real 0.1.0 files, templated (H-M2)."""

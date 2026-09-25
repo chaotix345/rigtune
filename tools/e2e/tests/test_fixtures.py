@@ -102,6 +102,12 @@ class SeedTemplateTest(unittest.TestCase):
         self.assertIn(str(instance / "mods" / "fabric-26.2.jar.disabled") + ":", result["message"])
         self.assertNotIn(fixtures.TOKEN, text)
 
+    def test_instantiate_a_whole_path_value_with_spaces(self):
+        instance = Path(tempfile.mkdtemp()) / "instance"
+        text = json.dumps({"path": "${INSTANCE}/mods/update/DistantHorizons-3.3.2 - 26.2 neo/fabric-26.2.jar"})
+        self.assertEqual(str(instance / "mods" / "update" / "DistantHorizons-3.3.2 - 26.2 neo" / "fabric-26.2.jar"),
+                         json.loads(fixtures.instantiate_json(text, instance))["path"])
+
     def test_instantiate_leaves_other_values_alone(self):
         text = json.dumps({"gamePid": 12228, "note": "no path", "ops": [{"attempts": 1, "path": None}]})
         self.assertEqual(json.loads(text), json.loads(fixtures.instantiate_json(text, Path("x"))))

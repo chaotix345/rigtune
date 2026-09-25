@@ -1,3 +1,4 @@
+import os
 import sys
 import tempfile
 import unittest
@@ -100,6 +101,12 @@ class LockTest(unittest.TestCase):
         (self.lock / "note.txt").write_text("someone else's", encoding="utf-8")
         self.run.release_lock()
         self.assertTrue((self.lock / "note.txt").is_file())
+        self.assertTrue(self_update_e2e.owns_lock((self.lock / "owner.txt").read_text(encoding="utf-8"), self.run.run_dir))
+
+    def test_seed_needs_the_self_update_scenario(self):
+        with self.assertRaises(SystemExit):
+            self_update_e2e.parse_args(["--name", "n", "--scenario", "undo", "--new-jar", "b.jar", "--work", "w",
+                                        "--java-home", "jdk", "--seed", "s"])
 
     def test_owns_lock_matches_the_whole_run_line(self):
         text = self_update_e2e.owner_text("ws-h", Path("C:/r"), Path("C:/tmp/run-10"), "now")
@@ -121,15 +128,21 @@ class UndoScenarioTest(unittest.TestCase):
 
 
 class HelperLogTest(unittest.TestCase):
-    def test_only_text_after_the_offset_counts(self):
+    def test_only_a_log_rewritten_since_the_launch_counts(self):
         log = Path(tempfile.mkdtemp()) / "helper.log"
-        self.assertEqual("", self_update_e2e.helper_log_tail(log, 0))
-        log.write_bytes(b"[a] All operations done\n")
-        offset = log.stat().st_size
-        self.assertEqual("", self_update_e2e.helper_log_tail(log, offset))
-        with open(log, "a", encoding="utf-8", newline="") as out:
-            out.write("[b] Nothing to apply\n")
-        self.assertEqual("[b] Nothing to apply\n", self_update_e2e.helper_log_tail(log, offset))
+        self.assertEqual("", self_update_e2e.helper_log_since(log, None))
+        log.write_bytes(b"[a] Applying 2 operation(s)\n[a] All operations done\n")
+        before = self_update_e2e.helper_log_state(log)
+        self.assertEqual("", self_update_e2e.helper_log_since(log, before))
+        # The next helper run truncates and rewrites it (ProcessBuilder.Redirect.to), here with a shorter log.
+        log.write_bytes(b"[b] Nothing to apply\n")
+        os.utime(log, ns=(before[0] + 10 ** 9, before[0] + 10 ** 9))
+        self.assertEqual("[b] Nothing to apply\n", self_update_e2e.helper_log_since(log, before))
+
+    def test_a_log_created_by_the_launch_counts(self):
+        log = Path(tempfile.mkdtemp()) / "helper.log"
+        log.write_bytes(b"[b] Some operations were not applied\n")
+        self.assertEqual("[b] Some operations were not applied\n", self_update_e2e.helper_log_since(log, None))
 
 
 if __name__ == "__main__":

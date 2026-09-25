@@ -68,8 +68,14 @@ def template_seed_json(text, instance_root):
 def instantiate_json(text, instance):
     """The reverse, for a scratch instance: the token and the path after it become that instance's native path."""
     root = str(Path(instance))
-    return _map_strings(text, lambda value: re.sub(re.escape(TOKEN) + r"(\S*)",
-                                                    lambda m: root + m.group(1).replace("/", os.sep), value))
+
+    def put(value):
+        if value.startswith(TOKEN):
+            # A whole value is one path, which may contain spaces (mods/update/<folder with spaces>/...).
+            return root + value[len(TOKEN):].replace("/", os.sep)
+        return re.sub(re.escape(TOKEN) + r"(\S*)", lambda m: root + m.group(1).replace("/", os.sep), value)
+
+    return _map_strings(text, put)
 
 
 def capture(files, instance_root, dest):

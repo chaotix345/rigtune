@@ -11,6 +11,9 @@ from urllib.parse import unquote
 
 import e2e_env
 
+# 3a's notice (RealController.droppedQueuedUpdates), when a staged update of a mod with its own update queued is dropped.
+QUEUED_UPDATE_DROPPED = "rigtune.status.queued_update_dropped"
+
 
 @dataclass(frozen=True)
 class Check:
@@ -231,26 +234,32 @@ def after_seeded_verify(instance, carried, mod_names, driver, log_text, failed_o
 
     statuses = driver.get("statuses") or []
     wanted = [n.lower() for n in mod_names]
-    notices = [s for s in statuses if "queued" in (s.get("key") or "") and any(n in (s.get("text") or "").lower() for n in wanted)]
+    notices = [s for s in statuses if s.get("key") == QUEUED_UPDATE_DROPPED and any(n in (s.get("text") or "").lower() for n in wanted)]
     checks.append(Check("the drop is announced (status notice)", bool(notices),
                         "statuses seen: {}".format([(s.get("key"), s.get("text")) for s in statuses])))
 
-    journaled = {c.get("opId"): c.get("status") for e in history_entries(instance) or [] for c in e.get("changes", [])
-                 if c.get("opId") in ids}
+    journaled = {}
+    for c in (c for e in history_entries(instance) or [] for c in e.get("changes", []) if c.get("opId") in ids):
+        journaled.setdefault(c.get("opId"), []).append(c.get("status"))
     checks.append(Check("history.json: the carried-over changes are DISCARDED",
-                        set(journaled) == ids and set(journaled.values()) == {"DISCARDED"},
-                        "status by op id: {}".format(journaled)))
+                        set(journaled) == ids and all(s == "DISCARDED" for statuses in journaled.values() for s in statuses),
+                        "statuses by op id: {}".format(journaled)))
 
-    warns = [line for line in log_text.splitlines() if "/WARN]" in line and re.search(r"attempt \d+ of 3", line, re.IGNORECASE)]
+    # SPEC 3e: op, file, reason, attempt. Identical lines count once.
+    warns = list(dict.fromkeys(line for line in log_text.splitlines()
+                               if "/WARN]" in line and re.search(r"attempt \d+ of 3", line, re.IGNORECASE)))
 
-    def keys(op):
-        return [k for k in (op.get("modId"), _name(op.get("path")), _name(op.get("to"))) if k]
+    def files(op):
+        """The op's own file names only: one group's ops share a mod id, and a reason can name another op's file."""
+        return [k for k in (_name(op.get("path")), _name(op.get("to")), _name(op.get("from"))) if k]
 
-    unmatched = [(op.get("type"), keys(op)) for op in failed_ops if not any(k in line for k in keys(op) for line in warns)]
-    relevant = [line for line in warns if any(k in line for op in failed_ops for k in keys(op))]
+    candidates = [[i for i, line in enumerate(warns) if (op.get("type") or "") in line and any(f in line for f in files(op))]
+                  for op in failed_ops]
+    matched = _distinct_matches(candidates)
     checks.append(Check("latest.log: a WARN line per failed op, with its attempt (3e)",
-                        bool(failed_ops) and not unmatched and len(relevant) >= len(failed_ops),
-                        "WARN lines: {}; failed ops without one: {}".format(relevant, unmatched)))
+                        bool(failed_ops) and matched == len(failed_ops),
+                        "ops with a line of their own: {} of {}; failed ops: {}; WARN lines with an attempt: {}".format(
+                            matched, len(failed_ops), [(op.get("type"), files(op)) for op in failed_ops], warns)))
 
     at_quit = driver.get("modsAtQuit")
     after = listing(mods, recursive=True)
@@ -278,6 +287,22 @@ def after_seeded_verify(instance, carried, mod_names, driver, log_text, failed_o
                         and all(any(k == r or k.startswith(r + ".") for r in retired) for k in added),
                         _diff(mods_before, at_quit) if at_quit else "no modsAtQuit from the driver"))
     return checks
+
+
+def _distinct_matches(candidates):
+    """candidates[i]: the line numbers op i may use. How many ops get a line of their own (bipartite matching)."""
+    owner = {}
+
+    def assign(op, seen):
+        for line in candidates[op]:
+            if line not in seen:
+                seen.add(line)
+                if line not in owner or assign(owner[line], seen):
+                    owner[line] = op
+                    return True
+        return False
+
+    return sum(assign(op, set()) for op in range(len(candidates)))
 
 
 def _diff(before, after):
@@ -486,8 +511,11 @@ def after_entry_check(instance, first_id, second_id, other_id, driver, mods_befo
     checks.append(Check("only the older Apply's mod is off", first_id not in loaded and second_id in loaded and other_id in loaded,
                         "loaded: {} {}, {} {}, {} {}".format(first_id, first_id in loaded, second_id, second_id in loaded,
                                                              other_id, other_id in loaded)))
-    checks.append(Check("nothing left to undo on the older Apply", driver.get("entryUndoableAfter") == 0,
-                        "undoable items: {}".format(driver.get("entryUndoableAfter"))))
+    problem = (driver.get("entryPlanAfterMeta") or {}).get("problem")
+    checks.append(Check("nothing left to undo on the older Apply",
+                        driver.get("entryUndoableAfter") == 0 and bool(driver.get("entryPlanMethod")) and problem is None,
+                        "undoable items: {}; plan problem: {}; method: {}".format(driver.get("entryUndoableAfter"), problem,
+                                                                                 driver.get("entryPlanMethod"))))
     crashes = sorted(p.name for p in (instance / "crash-reports").glob("*")) if (instance / "crash-reports").is_dir() else []
     checks.append(Check("no crash report", not crashes, "crash-reports: {}".format(crashes)))
     after = listing(instance / "mods")

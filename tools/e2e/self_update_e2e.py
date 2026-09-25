@@ -95,7 +95,7 @@ class Run:
         # scenario one served by the fake Modrinth to add and one in mods/ to disable.
         self.legacy_jar = self.jars / "e2e-legacy-1.0.0.jar" if args.legacy_disable and not self.undo else None
         # H-M2: a real 0.1.0 instance's state (tools/e2e/seeds/<name>); its pending ops are expected to be carried over.
-        self.seed = load_seed(args.seed) if args.seed and not self.undo else None
+        self.seed = load_seed(args.seed) if args.seed else None
         self.carried = []
         self.added_jar = self.jars / "{}-1.0.0.jar".format(ADDED_ID)
         self.other_jar = self.jars / "{}-1.0.0.jar".format(OTHER_ID)
@@ -178,6 +178,11 @@ class Run:
         """PLAN's protocol: owner.txt, then the empty folder (never a recursive delete), and only this run's lock."""
         owner = None if self.lock is None else self.lock / "owner.txt"
         if owner is None or not owner.is_file() or not owns_lock(owner.read_text(encoding="utf-8"), self.run_dir):
+            return
+        others = sorted(p.name for p in self.lock.iterdir() if p.name != "owner.txt")
+        if others:
+            # Left whole, owner.txt included, so whoever looks can still see whose it is.
+            self.log("WARNING: not releasing {}: it also holds {}".format(self.lock, others))
             return
         owner.unlink()
         try:
@@ -359,18 +364,15 @@ class Run:
                 seen.setdefault(pid, command_line.strip())
         return list(seen.values())
 
-    def helper_log_size(self):
-        helper_log = self.rigtune_dir / "helper.log"
-        return helper_log.stat().st_size if helper_log.is_file() else 0
-
-    def wait_for_helper(self, since=0):
-        """since: helper.log's size before the launch; earlier runs' lines in a reused instance don't count."""
+    def wait_for_helper(self, before=None):
+        """before: helper.log's state before the launch (helper_log_state); a helper run rewrites the file, so an
+        unchanged file is an earlier run's log in a reused instance and doesn't count."""
         pending = self.rigtune_dir / "pending.json"
         helper_log = self.rigtune_dir / "helper.log"
         deadline = time.time() + HELPER_TIMEOUT
         while time.time() < deadline:
             running = self.own(lambda cl: "ApplyHelper" in cl)
-            text = helper_log_tail(helper_log, since)
+            text = helper_log_since(helper_log, before)
             if not running and (any(done in text for done in HELPER_DONE) or not pending.exists()):
                 self.log("helper finished: " + (text.strip().splitlines()[-1] if text.strip() else "(no helper.log)"))
                 return True
@@ -397,10 +399,10 @@ class Run:
         """One launch that stages changes, then the helper after the game exits. Returns (gradle exit, helper done,
         helper command lines), and keeps the phase's files for the evidence."""
         self.start_watcher(phase)
-        since = self.helper_log_size()
+        before = helper_log_state(self.rigtune_dir / "helper.log")
         try:
             code = self.launch(phase)
-            helper_ok = self.wait_for_helper(since)
+            helper_ok = self.wait_for_helper(before)
         finally:
             self.stop_watcher()
         cmdlines = self.helper_cmdlines()
@@ -701,14 +703,21 @@ def owns_lock(text, run_dir):
     return "run: {}".format(run_dir) in text.splitlines()
 
 
-def helper_log_tail(path, offset):
-    """helper.log from byte offset on; empty when the file is missing."""
+def helper_log_state(path):
     path = Path(path)
     if not path.is_file():
+        return None
+    stat = path.stat()
+    return stat.st_mtime_ns, stat.st_size
+
+
+def helper_log_since(path, before):
+    """helper.log if it changed since `before` (helper_log_state), else empty. HelperLauncher redirects the helper's
+    output to the file, which empties it at every helper start, so a changed file holds only the new run's lines."""
+    path = Path(path)
+    if not path.is_file() or helper_log_state(path) == before:
         return ""
-    with open(path, "rb") as log:
-        log.seek(offset)
-        return log.read().decode("utf-8", errors="replace")
+    return path.read_bytes().decode("utf-8", errors="replace")
 
 
 def filtered_log(path):
@@ -760,6 +769,8 @@ def parse_args(argv):
     args = parser.parse_args(argv)
     if not args.java_home:
         parser.error("set JAVA_HOME or pass --java-home")
+    if args.seed and args.scenario != "self-update":
+        parser.error("--seed is for the self-update scenario")
     return args
 
 

@@ -24,6 +24,9 @@ NAMES = ("pending.json", "last-apply.json")
 
 def make_seed(config_dir, instance_root, dest, location, names=NAMES):
     config_dir, dest = Path(config_dir), Path(dest)
+    for source in (config_dir, Path(instance_root)):
+        if dest.resolve() == source.resolve() or source.resolve() in dest.resolve().parents:
+            raise SystemExit("refusing to write the seed into {}: the source instance is read only".format(source))
     dest.mkdir(parents=True, exist_ok=True)
     source = {"location": location, "readAt": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
               "token": fixtures.TOKEN, "files": {}}

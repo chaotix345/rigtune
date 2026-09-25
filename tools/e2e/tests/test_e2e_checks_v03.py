@@ -134,10 +134,12 @@ class SeededFixture:
             {"key": NOTICE, "text": "Cancelled RigTune's pending change of Distant Horizons: it has an update of its own "
                                    "waiting in mods/update."}],
             "modsAtQuit": e2e_checks.listing(self.mods, recursive=True)}
-        self.log = "\n".join([
-            "[10:00:01] [Render thread/INFO] (RigTune) Loaded rules r11",
-            "[10:00:01] [main/WARN] (RigTune) The last apply failed: DISABLE_FILE fabric-26.2.jar: busy (attempt 2 of 3)",
-            "[10:00:01] [main/WARN] (RigTune) The last apply failed: ENABLE_FILE distanthorizons: busy (attempt 2 of 3)"])
+        # WS-B's format (docs/v0.3/design/ws-b.md); the enable's reason names the disable's file.
+        self.warn_disable = ("[10:00:01] [main/WARN]: RigTune could not apply a change at the last exit (attempt 2 of 3; it's "
+                             "retried at the next exit): DISABLE_FILE fabric-26.2.jar: Gave up after 10 attempt(s)")
+        self.warn_enable = ("[10:00:01] [main/WARN]: RigTune could not apply a change at the last exit (attempt 2 of 3; it's "
+                            "retried at the next exit): ENABLE_FILE " + DH_NEW + ": Not applied because disabling fabric-26.2.jar failed")
+        self.log = "\n".join(["[10:00:01] [Render thread/INFO]: Loaded rules r11", self.warn_disable, self.warn_enable])
 
     def write_history(self):
         (self.config / "history.json").write_text(json.dumps(self.history))
@@ -210,6 +212,30 @@ class SeededVerifyTest(unittest.TestCase):
     def test_warn_line_missing_for_one_op(self):
         self.sx.log = self.sx.log.rsplit("\n", 1)[0]
         self.assertEqual(["latest.log: a WARN line per failed op, with its attempt (3e)"], self.failing())
+
+    def test_one_line_twice_is_not_a_line_per_op(self):
+        self.sx.log = "\n".join([self.sx.warn_disable, self.sx.warn_disable])
+        self.assertEqual(["latest.log: a WARN line per failed op, with its attempt (3e)"], self.failing())
+        self.sx.log = "\n".join([self.sx.warn_enable, self.sx.warn_enable])
+        self.assertEqual(["latest.log: a WARN line per failed op, with its attempt (3e)"], self.failing())
+
+    def test_the_enable_line_first_still_matches_each_op(self):
+        self.sx.log = "\n".join([self.sx.warn_enable, self.sx.warn_disable])
+        self.assertEqual([], self.failing())
+
+    def test_mod_id_alone_does_not_name_an_op(self):
+        self.sx.log = "\n".join([self.sx.warn_disable, self.sx.warn_enable.replace(DH_NEW, "distanthorizons")])
+        self.assertEqual(["latest.log: a WARN line per failed op, with its attempt (3e)"], self.failing())
+
+    def test_another_status_naming_the_mod_is_not_the_notice(self):
+        self.sx.driver["statuses"][1]["key"] = "rigtune.status.update_queued"
+        self.assertEqual(["the drop is announced (status notice)"], self.failing())
+
+    def test_a_second_journal_record_of_an_op_must_be_discarded_too(self):
+        self.sx.history["entries"].append({"id": "e2", "kind": "apply", "changes": [
+            {"id": "c3", "type": "file", "action": "disable", "file": DH_OLD, "status": "STAGED", "opId": "d1"}]})
+        self.sx.write_history()
+        self.assertEqual(["history.json: the carried-over changes are DISCARDED"], self.failing())
 
     def test_info_line_does_not_count(self):
         self.sx.log = self.sx.log.replace("[main/WARN]", "[main/INFO]")
@@ -374,7 +400,9 @@ class EntryCheckTest(unittest.TestCase):
         self.fx.undone()
         self.before = e2e_checks.listing(self.fx.mods)
         self.statuses = e2e_checks.history_statuses(self.fx.instance)
-        self.driver = {"ok": True, "loadedMods": ["e2e-disable-me", "e2e-second", "rigtune"], "entryUndoableAfter": 0}
+        self.driver = {"ok": True, "loadedMods": ["e2e-disable-me", "e2e-second", "rigtune"], "entryUndoableAfter": 0,
+                       "entryPlanMethod": "RigTuneController.undoPlanFor",
+                       "entryPlanAfterMeta": {"undoOf": None, "at": None, "problem": None}}
 
     def failing(self):
         return names(e2e_checks.after_entry_check(self.fx.instance, "e2e-first", "e2e-second", "e2e-disable-me", self.driver,
@@ -393,6 +421,13 @@ class EntryCheckTest(unittest.TestCase):
 
     def test_older_entry_still_undoable(self):
         self.driver["entryUndoableAfter"] = 1
+        self.assertEqual(["nothing left to undo on the older Apply"], self.failing())
+
+    def test_an_unavailable_plan_is_not_nothing_to_undo(self):
+        self.driver["entryPlanAfterMeta"]["problem"] = "rigtune.undo.busy"
+        self.assertEqual(["nothing left to undo on the older Apply"], self.failing())
+        self.driver["entryPlanAfterMeta"]["problem"] = None
+        self.driver["entryPlanMethod"] = None
         self.assertEqual(["nothing left to undo on the older Apply"], self.failing())
 
 
