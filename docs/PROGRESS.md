@@ -19,7 +19,7 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 - [x] Phase 1: research DONE (docs/research/v0.3/: mc-versions, ci-gametests, launcher-ram, hardware-tiers, benchmark, misc). Headlines: no MC newer than 26.3 (26.4-snapshot-1 compiles and passes 848/848 unchanged); CI game tests green on Linux (branch research/ci-gametest, kept for WS-0); a real P0 bug: benchmark RD changes aren't broadcast to the server (SPEC 3f).
 - [x] Phase 2: SPEC.md + PLAN.md + plan review (docs/v0.3/plan-review.md) with amendments folded in (0681c4c).
 - [x] Phase 3: foundation MERGED (1700ecc). Wave A started in parallel before it (no build-file overlap) and was told to merge origin/feat/v0.3.0.
-- [ ] Phase 4: features. Wave A ALL MERGED (6321696: 1047 unit tests per version, 284 Python). Coordinator fix branch fix/ram-advice-text (ram-low: at least 4 GB, 6 with DH/shaders; rules r12) awaiting CI. Next: Wave B (ws-g l10n, ws-p preview).
+- [ ] Phase 4: features. Wave A ALL MERGED (6321696: 1047 unit tests per version, 284 Python). fix/ram-advice-text MERGED (c41bf48, rules r12). Wave B RUNNING (ws-g, ws-p).
 - [ ] Phase 5: verification
 - [ ] Phase 6: reviews (2 rounds)
 - [ ] Phase 7: release
@@ -36,11 +36,14 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 | ws-e (3f + benchmark item 8) | feat/benchmark-v03 (deleted) | removed | MERGED a336090 (CI 36180098024; 939 tests on the branch). AC3.6, 3.7 (real Tune: chunks 267->3,468 on 26.2, 271->3,550 on 26.3; docs/v0.3/verification/benchmark/), 8.1-8.6, 8.8 verified. AC8.7's shader-pack smoke is Phase 5 (JAVA_TOOL_OPTIONS=-Drigtune.dev.targetFps=<fps> forces the advice). |
 | ws-f (Report a problem, Quilt FAQ) | feat/report-problem (deleted) | removed | MERGED 8dab3ad (CI 36177323925 green; 861 tests per version; URL budget 675 chars so the whole link is readable on the confirm screen at 640x480@2; UNVERIFIED until the release PR is on main: the live GitHub form prefill and pressing Open in Browser, check by hand before tagging) |
 | ws-v (add_mc_version.py, mc_apidiff.py, Porting) | feat/mc-tooling (deleted) | removed | MERGED 05c990a (CI 36180844145; 284 Python tests). AC1.2, 1.3, 1.6 verified (docs/v0.3/verification/mc-tooling/); 26.2->26.3 self-check finds the known changes. Known false positive: Window.minimized in 26.2->26.3. |
-| ws-h (self-update E2E 0.1/0.2 -> 0.3, seeded, per-entry undo) | test/e2e-v03 | C:/Dev/Worktrees/rigtune-e2e3 (kept) | RESUMED for the follow-up (direct calls + re-runs on the merged tree). Earlier: MERGED 54e4ce6 (CI 36179753501). Dry runs on 0.3.0-dev: 0.2.0->dev 20/20, 0.1.0->dev 21/21, seeded 25/26 (the 3e WARN line is WS-B's), undo 31/35 (per-entry needs WS-B); with WS-B locally: seeded 26/26, undo 43/43. FOLLOW-UP after WS-B merges: switch the undo driver's reflection lookup to direct calls, re-run. Final runs in Phase 5 (commands in tools/e2e/README.md "v0.3 runs"). |
+| ws-h (self-update E2E 0.1/0.2 -> 0.3, seeded, per-entry undo) | test/e2e-v03 | C:/Dev/Worktrees/rigtune-e2e3 (kept for the Phase 5 final runs) | MERGED 2428eee (follow-up CI 36183103077). Dry runs on the merged tree (jar sha256 dbb74674...): 0.2.0->dev 20/20, 0.1.0->dev 21/21, seeded 26/26 (incl. the 3e WARN lines), undo incl. per-entry 43/43 (docs/smoke/self-update/dev-*-merged). Final runs on the RC in Phase 5 (tools/e2e/README.md "v0.3 runs"). |
 | plan-review | - | - | DONE: docs/v0.3/plan-review.md (4 H, 25 M, 11 L), folded into SPEC "Amendments" + PLAN (0681c4c) |
 | r-ci (research, done) | research/ci-gametest | removed | remote branch deleted; the LOCAL branch stays (unmerged; a hook blocks `branch -D`). |
 
-Wave B after Wave A: ws-g (l10n, SPEC 9) and ws-p (preview, P2, only after ws-g or cut).
+| ws-g (l10n, SPEC 9, Wave B) | feat/l10n | C:/Dev/Worktrees/rigtune-l10n | RUNNING (owns DownloadPlanner/DependencyResolver/Recommender/UndoPlanner/ShareReport text conversion) |
+| ws-p (dry-run preview, P2, Wave B) | feat/preview | C:/Dev/Worktrees/rigtune-preview | RUNNING in parallel with ws-g (new classes only; calls but never edits ws-g's files) |
+
+Integration: feat/v0.3.0 @ c41bf48 = all Wave A + fix/ram-advice-text (rules r12); CI 36182135247 green on all 8 jobs.
 Notes: the permission classifier refused `gh workflow disable update-rules.yml` (CI bypass), so the weekly bot PRs are triaged by re-running the updater on feat/v0.3.0, and Phase 7 re-runs it after merging main (SPEC D-M1).
 
 Watchdog: the current command is in scratchpad/watchdog-cmd.txt (agents + branches in scratchpad/agents.txt; `name=<worktree>;<scratch>@<branch>`, a running CI run on the branch counts as busy; --stall-min 20 --lock-min 8). Lock release: `rm -f .../owner.txt; rmdir .../.gametest-lock` (a hook blocks rm -rf on it).

@@ -20,7 +20,6 @@ import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
@@ -30,8 +29,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,7 +40,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Drives RigTune 0.2 for the end-to-end undo after a restart (plan review M14; tools/e2e/README.md). Compiled against
+ * Drives RigTune (0.2 and later) for the end-to-end undo after a restart (plan review M14; tools/e2e/README.md). Compiled against
  * this repository's sources, unlike the self-update driver. Inert unless -Drigtune.e2e.phase is one of:
  * <ul>
  * <li>{@code mod-apply}: applies, in one Apply, "add" of the Modrinth project -Drigtune.e2e.addProject (slug
@@ -53,9 +50,9 @@ import java.util.Map;
  * <li>{@code mod-check}: records the loaded mods and what is left to undo, screenshots the undo screen, quits.</li>
  * <li>{@code entry-apply} (plan review B-M3): one Apply per slug:project pair of -Drigtune.e2e.entryMods, each staged
  * before the next; quits.</li>
- * <li>{@code entry-undo}: Undo this on the entry -Drigtune.e2e.entryId (the older Apply): its plan, through UndoScreen
- * when it takes an entry id (else the controller's undo of that plan); waits until the disable of
- * -Drigtune.e2e.entryMod is staged; quits.</li>
+ * <li>{@code entry-undo}: Undo this on the entry -Drigtune.e2e.entryId (the older Apply): records undoPlanFor's plan,
+ * screenshots UndoScreen for that entry, presses its Undo button, waits until the disable of -Drigtune.e2e.entryMod is
+ * staged; quits.</li>
  * <li>{@code entry-check}: records the loaded mods and what is left to undo on that entry, quits.</li>
  * </ul>
  * Results go to -Drigtune.e2e.out as driver-&lt;phase&gt;.json; screenshots to the instance's screenshots folder.
@@ -82,8 +79,6 @@ public final class UndoDriver implements ClientModInitializer {
 	private final String entryMod = System.getProperty("rigtune.e2e.entryMod");
 	private final List<String> applyMessages = new ArrayList<>();
 	private int applied;
-	private UndoPlan entryUndo;
-	private boolean viaScreen;
 	private final Map<String, Object> result = new LinkedHashMap<>();
 	private final List<String> events = new ArrayList<>();
 	private Path out;
@@ -177,7 +172,7 @@ public final class UndoDriver implements ClientModInitializer {
 		}
 	}
 
-	private void act(Minecraft minecraft, RigTuneController controller) throws ReflectiveOperationException {
+	private void act(Minecraft minecraft, RigTuneController controller) {
 		switch (phase) {
 			case "mod-apply" -> {
 				if (stepTicks == 1) {
@@ -235,33 +230,19 @@ public final class UndoDriver implements ClientModInitializer {
 			}
 			case "entry-undo" -> {
 				if (stepTicks == 1) {
-					entryUndo = entryPlan(controller);
-					recordPlan("entryPlan", entryUndo);
-					if (entryUndo == null || entryUndo.problem() != null || entryUndo.isEmpty()) {
-						fail(minecraft, entryUndo == null ? "no per-entry undo API: no public (String) -> UndoPlan method on "
-								+ controller.getClass().getName() + " (WS-B's Undo this)" : "no plan for entry " + entryId + ": " + entryUndo.problem());
+					// Undo this (SPEC item 6): the History screen's button opens this screen for the entry.
+					UndoPlan plan = entryPlan(controller);
+					recordPlan("entryPlan", plan);
+					if (plan == null || plan.problem() != null || plan.isEmpty()) {
+						fail(minecraft, "no plan for entry " + entryId + ": " + (plan == null ? "null" : plan.problem()));
 						return;
 					}
-					result.put("undoOf", entryUndo.undoOf());
-					Screen screen = entryScreen(minecraft.gui.screen(), controller);
-					viaScreen = screen != null;
-					result.put("viaScreen", viaScreen);
-					if (viaScreen) {
-						minecraft.gui.setScreen(screen);
-					}
+					result.put("undoOf", plan.undoOf());
+					result.put("viaScreen", true);
+					minecraft.gui.setScreen(new UndoScreen(minecraft.gui.screen(), controller, entryId));
 				} else if (stepTicks == 2 * SECOND) {
 					screenshot(minecraft, "e2e-entry-undo-1-plan.png");
-				} else if (stepTicks == 3 * SECOND) {
-					if (viaScreen) {
-						if (!pressConfirm(minecraft)) {
-							return;
-						}
-					} else {
-						// No entry constructor on UndoScreen: carry out the same plan the way its Undo button does.
-						Component message = controller.undo(entryUndo);
-						result.put("undoMessage", message.getString());
-						event("undo(entry plan): " + message.getString());
-					}
+				} else if (stepTicks == 3 * SECOND && pressConfirm(minecraft)) {
 					next(Step.WAIT_STAGED);
 				}
 			}
@@ -271,10 +252,7 @@ public final class UndoDriver implements ClientModInitializer {
 					recordPlan("entryPlanAfter", plan);
 					result.put("entryUndoableAfter", plan == null ? -1
 							: (int) plan.items().stream().filter(i -> i.action() != UndoPlan.Action.SKIP).count());
-					Screen screen = entryScreen(minecraft.gui.screen(), controller);
-					if (screen != null) {
-						minecraft.gui.setScreen(screen);
-					}
+					minecraft.gui.setScreen(new UndoScreen(minecraft.gui.screen(), controller, entryId));
 				} else if (stepTicks == 2 * SECOND) {
 					screenshot(minecraft, "e2e-entry-check-1-undo.png");
 				} else if (stepTicks == 3 * SECOND) {
@@ -318,37 +296,10 @@ public final class UndoDriver implements ClientModInitializer {
 		return entryMods.isBlank() ? List.of() : List.of(entryMods.split(",")).stream().map(pair -> pair.split(":", 2)).toList();
 	}
 
-	// WS-B's per-entry plan (SPEC item 6, Undo this): RigTuneController.undoPlanFor(String entryId) (docs/v0.3/design/ws-b.md),
-	// else the one public (String) -> UndoPlan method of the controller. Null when there is none or more than one.
-	private UndoPlan entryPlan(RigTuneController controller) throws ReflectiveOperationException {
-		List<Method> found = new ArrayList<>();
-		for (Class<?> type : List.of(RigTuneController.class, controller.getClass())) {
-			for (Method method : type.getMethods()) {
-				if (method.getReturnType() == UndoPlan.class && method.getParameterCount() == 1 && method.getParameterTypes()[0] == String.class
-						&& found.stream().noneMatch(m -> m.getName().equals(method.getName()))) {
-					found.add(method);
-				}
-			}
-		}
-		Method method = found.stream().filter(m -> m.getName().equals("undoPlanFor")).findFirst()
-				.orElse(found.size() == 1 ? found.getFirst() : null);
-		result.put("entryPlanMethod", method == null ? null : method.getDeclaringClass().getSimpleName() + "." + method.getName());
-		if (method == null) {
-			result.put("entryPlanCandidates", found.stream().map(Method::getName).toList());
-			return null;
-		}
-		return (UndoPlan) method.invoke(controller, entryId);
-	}
-
-	// UndoScreen for one entry, when it has a (Screen, RigTuneController, String entryId) constructor. Null otherwise.
-	private Screen entryScreen(Screen parent, RigTuneController controller) throws ReflectiveOperationException {
-		for (Constructor<?> constructor : UndoScreen.class.getConstructors()) {
-			Class<?>[] types = constructor.getParameterTypes();
-			if (types.length == 3 && types[0] == Screen.class && types[1] == RigTuneController.class && types[2] == String.class) {
-				return (Screen) constructor.newInstance(parent, controller, entryId);
-			}
-		}
-		return null;
+	// The per-entry plan behind Undo this (docs/v0.3/design/ws-b.md, "API for WS-H").
+	private UndoPlan entryPlan(RigTuneController controller) {
+		result.put("entryPlanMethod", "RigTuneController.undoPlanFor");
+		return controller.undoPlanFor(entryId);
 	}
 
 	private boolean staged(List<Map<String, Object>> ops) {

@@ -1,0 +1,5 @@
+[2026-09-25T19:56:51.625736400Z] [RigTune apply] Waiting for game process 63956 to exit
+[2026-09-25T19:56:53.944504500Z] [RigTune apply] Applying 2 operation(s) from <instance>\config\rigtune\pending.json
+[2026-09-25T19:56:54.005123600Z] [RigTune apply] OK ENABLE_FILE: Enabled e2e-first-1.0.0.jar
+[2026-09-25T19:56:54.006121300Z] [RigTune apply] OK ENABLE_FILE: Enabled e2e-second-1.0.0.jar
+[2026-09-25T19:56:54.006121300Z] [RigTune apply] All operations done
