@@ -67,13 +67,17 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		}
 		context.waitForScreen(TitleScreen.class);
 		context.runOnClient(mc -> BenchmarkController.setDefaultConfig(SHORT));
+		String savedScene = context.computeOnClient(mc -> ClientSettings.shared(FabricLoader.getInstance().getConfigDir()).benchmarkScene);
 		try {
 			String[] pair = benchmarkWorldPair(context);
 			benchmarkWorldCancel(context);
 			String tuneId = currentWorldTune(context);
 			checkHistoryFile(pair, tuneId);
 		} finally {
-			context.runOnClient(mc -> BenchmarkController.setDefaultConfig(BenchmarkController.Config.DEFAULT));
+			context.runOnClient(mc -> {
+				BenchmarkController.setDefaultConfig(BenchmarkController.Config.DEFAULT);
+				ClientSettings.shared(FabricLoader.getInstance().getConfigDir()).benchmarkScene = savedScene;
+			});
 		}
 	}
 

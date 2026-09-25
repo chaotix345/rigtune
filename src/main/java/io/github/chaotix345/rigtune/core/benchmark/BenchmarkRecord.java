@@ -10,10 +10,11 @@ import java.util.Map;
 // scene). mode and scene are the BenchmarkRequest enum names. phase: "before"/"after" for a Measure pair (pairId
 // links them), otherwise "single". knobs: the value the run chose (or measured) and the original, with the stats
 // measured at the chosen value. result: the headline numbers (the repeats of the chosen settings). costs: the
-// quick-protocol baseline against the same settings with Distant Horizons rendering or shaders off.
+// quick-protocol baseline against the same settings with Distant Horizons rendering or shaders off. notMeasured: why a
+// cost report that applied has no numbers ("deadline" or "failed: <message>"), by the same keys as costs.
 public record BenchmarkRecord(String id, String createdAt, String rigtuneVersion, String mcVersion, String mode, String scene,
 		String phase, @Nullable String pairId, int targetFps, boolean targetMet, Map<String, KnobResult> knobs,
-		@Nullable Result result, Map<String, Cost> costs, @Nullable World world, boolean deadlineHit) {
+		@Nullable Result result, Map<String, Cost> costs, Map<String, String> notMeasured, @Nullable World world, boolean deadlineHit) {
 	public static final String BEFORE = "before";
 	public static final String AFTER = "after";
 	public static final String SINGLE = "single";
@@ -46,5 +47,6 @@ public record BenchmarkRecord(String id, String createdAt, String rigtuneVersion
 	public BenchmarkRecord {
 		knobs = knobs == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(knobs));
 		costs = costs == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(costs));
+		notMeasured = notMeasured == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(notMeasured));
 	}
 }

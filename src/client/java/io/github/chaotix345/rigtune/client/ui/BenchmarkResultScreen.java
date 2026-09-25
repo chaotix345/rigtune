@@ -112,15 +112,20 @@ public class BenchmarkResultScreen extends Screen {
 		}
 		out.add(new Line(Component.translatable("rigtune.benchmark.target", Math.round(outcome.targetFps())), 0xFFFFFFFF));
 		if (result != null) {
-			out.add(new Line(Component.translatable("rigtune.benchmark.result", fps(result.avgFps()), fps(result.onePercentLowFps()),
-					String.format(Locale.ROOT, "%.1f", result.p99FrameMs()), result.repeats()), COLOR_LABEL));
+			String p99 = String.format(Locale.ROOT, "%.1f", result.p99FrameMs());
+			// Measure's headline already has the averages.
+			out.add(new Line(tune()
+					? Component.translatable("rigtune.benchmark.result", fps(result.avgFps()), fps(result.onePercentLowFps()), p99, result.repeats())
+					: Component.translatable("rigtune.benchmark.result.detail", p99, result.repeats()), COLOR_LABEL));
 			if (BenchmarkMath.noisy(result.cv())) {
 				out.add(new Line(Component.translatable("rigtune.benchmark.noisy",
 						String.format(Locale.ROOT, "%.0f%%", result.cv() * 100)), COLOR_WARN));
 			}
 		}
 		boolean sdMeasured = session.measurements().stream().anyMatch(m -> m.step().kind() == Step.Kind.SIMULATION_DISTANCE);
-		if (tune() && sdMeasured) {
+		if (tune() && outcome.request().scene() == BenchmarkRequest.Scene.BENCHMARK_WORLD) {
+			out.add(new Line(Component.translatable("rigtune.benchmark.sd.world"), COLOR_LABEL));
+		} else if (tune() && sdMeasured) {
 			int chosen = session.chosen().simulationDistance();
 			int original = session.original().simulationDistance();
 			out.add(chosen < original
@@ -139,10 +144,16 @@ public class BenchmarkResultScreen extends Screen {
 		if (session.dhCost() != null) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.cost.dh", BenchmarkMath.percent(session.dhCost().lowGainPercent()),
 					BenchmarkMath.percent(session.dhCost().avgGainPercent())), COLOR_LABEL));
+		} else if (session.notMeasured().containsKey(BenchmarkRecord.DISTANT_HORIZONS)) {
+			out.add(new Line(Component.translatable("rigtune.benchmark.cost.dh.not_measured",
+					reason(session.notMeasured().get(BenchmarkRecord.DISTANT_HORIZONS))), COLOR_WARN));
 		}
 		if (session.shaderCost() != null) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.cost.shaders", BenchmarkMath.percent(session.shaderCost().lowGainPercent()),
 					BenchmarkMath.percent(session.shaderCost().avgGainPercent())), COLOR_LABEL));
+		} else if (session.notMeasured().containsKey(BenchmarkRecord.SHADERS)) {
+			out.add(new Line(Component.translatable("rigtune.benchmark.cost.shaders.not_measured",
+					reason(session.notMeasured().get(BenchmarkRecord.SHADERS))), COLOR_WARN));
 		}
 		if (session.deadlineHit()) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.deadline"), COLOR_WARN));
@@ -168,6 +179,8 @@ public class BenchmarkResultScreen extends Screen {
 			drawChart(graphics, left + half + 12, half);
 		} else if (table) {
 			drawTable(graphics, left, area);
+		} else if (tune()) {
+			graphics.centeredText(font, Component.translatable("rigtune.benchmark.none"), width / 2, contentTop, COLOR_LABEL);
 		} else {
 			drawChart(graphics, left + area / 6, area * 2 / 3);
 		}
@@ -255,6 +268,12 @@ public class BenchmarkResultScreen extends Screen {
 			int lastX = Math.max(left + font.width(first) + 6, left + chartRuns.size() * slot - font.width(last));
 			graphics.text(font, last, lastX, baseline + 2, COLOR_LABEL, false);
 		}
+	}
+
+	private static Component reason(String notMeasured) {
+		return SessionResult.NOT_MEASURED_DEADLINE.equals(notMeasured)
+				? Component.translatable("rigtune.benchmark.not_measured.deadline")
+				: Component.literal(notMeasured.startsWith("failed: ") ? notMeasured.substring("failed: ".length()) : notMeasured);
 	}
 
 	private static String date(BenchmarkRecord run) {

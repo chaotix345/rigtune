@@ -23,25 +23,35 @@ public final class BenchmarkRun {
 		this.nanoClock = nanoClock;
 	}
 
-	/** The next step, with its knobs applied. Empty once the run has ended (the knobs are then restored). */
+	/**
+	 * The next step, with its knobs applied. Empty once the run has ended (the knobs are then restored). A cost report
+	 * whose knobs can't be set is skipped; any other step that can't be set fails the run.
+	 */
 	public Optional<Step> advance() {
 		if (finished) {
 			return Optional.empty();
 		}
 		current = null;
-		Optional<Step> next = session.next(nanoClock.getAsLong());
-		if (next.isEmpty()) {
-			end();
+		while (true) {
+			Optional<Step> next = session.next(nanoClock.getAsLong());
+			if (next.isEmpty()) {
+				end();
+				return next;
+			}
+			Step step = next.get();
+			try {
+				guard.set(step.knobs());
+			} catch (Exception e) {
+				if (BenchmarkSession.isReport(step.kind())) {
+					session.skipFailed(step, "failed: " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
+					continue;
+				}
+				fail(e);
+				return Optional.empty();
+			}
+			current = step;
 			return next;
 		}
-		try {
-			guard.set(next.get().knobs());
-		} catch (Exception e) {
-			fail(e);
-			return Optional.empty();
-		}
-		current = next.get();
-		return next;
 	}
 
 	public void record(FrameStats stats) {

@@ -12,8 +12,16 @@ import java.util.concurrent.TimeoutException;
 
 public final class ApplyHelper {
 	static final long WAIT_TIMEOUT_MINUTES = 15;
-	static final long SETTLE_MILLIS = 1000;
+	// The game process has exited, but something else (the Modrinth App re-scanning the instance, an AV scanner)
+	// can still briefly hold a mod jar open right after exit; this settle delay gives that a moment before the
+	// apply even starts trying, on top of ApplyExecutor's own retries for whatever contention is still there.
+	static final long SETTLE_MILLIS = 2000;
 	static final Duration LOCK_WAIT = Duration.ofSeconds(60);
+
+	// Injectable so tests can drive the settle delay without sleeping for real.
+	interface Sleeper {
+		boolean sleep(long millis);
+	}
 
 	private ApplyHelper() {
 	}
@@ -23,6 +31,10 @@ public final class ApplyHelper {
 	}
 
 	static int run(String[] args) {
+		return run(args, ApplyHelper::realSleep);
+	}
+
+	static int run(String[] args, Sleeper sleeper) {
 		if (args.length != 2) {
 			log("Usage: ApplyHelper <gamePid> <pendingJsonPath>");
 			return 2;
@@ -35,7 +47,7 @@ public final class ApplyHelper {
 			return 2;
 		}
 		Path pending = Path.of(args[1]);
-		int waited = waitForGame(pid, pending);
+		int waited = waitForGame(pid, pending, sleeper);
 		if (waited != 0) {
 			return waited;
 		}
@@ -54,7 +66,7 @@ public final class ApplyHelper {
 		}
 	}
 
-	private static int waitForGame(long pid, Path pending) {
+	private static int waitForGame(long pid, Path pending, Sleeper sleeper) {
 		Optional<ProcessHandle> game = ProcessHandle.of(pid);
 		if (game.isPresent()) {
 			log("Waiting for game process " + pid + " to exit");
@@ -73,13 +85,17 @@ public final class ApplyHelper {
 			log("Process " + pid + " not found; proceeding");
 		}
 
+		return sleeper.sleep(SETTLE_MILLIS) ? 0 : 3;
+	}
+
+	private static boolean realSleep(long millis) {
 		try {
-			Thread.sleep(SETTLE_MILLIS);
+			Thread.sleep(millis);
+			return true;
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
-			return 3;
+			return false;
 		}
-		return 0;
 	}
 
 	private static int applyLocked(Path pending) {

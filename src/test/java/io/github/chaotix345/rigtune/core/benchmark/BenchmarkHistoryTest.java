@@ -34,7 +34,7 @@ class BenchmarkHistoryTest {
 		Map<String, BenchmarkRecord.Cost> costs = new LinkedHashMap<>();
 		costs.put(BenchmarkRecord.DISTANT_HORIZONS, new BenchmarkRecord.Cost(150, 90, 170, 101));
 		return new BenchmarkRecord(id, "2026-09-25T10:00:00Z", "0.2.0+mc" + mc, mc, mode, scene, phase, pairId, 170, true, knobs,
-				new BenchmarkRecord.Result(210.5, 121.25, 9.25, 2, 0.02), costs,
+				new BenchmarkRecord.Result(210.5, 121.25, 9.25, 2, 0.02), costs, Map.of(BenchmarkRecord.SHADERS, "failed: x"),
 				scene.equals("BENCHMARK_WORLD") ? new BenchmarkRecord.World("rigtune-benchmark", 8675309L) : null, false);
 	}
 
@@ -91,12 +91,35 @@ class BenchmarkHistoryTest {
 	}
 
 	@Test
+	void corruptFilesAreNumberedNotOverwritten() throws IOException {
+		Files.createDirectories(file().getParent());
+		Files.writeString(file(), "{first");
+		BenchmarkHistory.load(file());
+		Files.writeString(file(), "{second");
+		BenchmarkHistory.load(file());
+		assertEquals("{first", Files.readString(file().resolveSibling("benchmarks.json.bad")));
+		assertEquals("{second", Files.readString(file().resolveSibling("benchmarks.json.bad.1")));
+	}
+
+	@Test
+	void newerSchemaIsBackedUpBeforeTheFirstOverwrite() throws IOException {
+		Files.createDirectories(file().getParent());
+		String newer = "{\"schemaVersion\": 2, \"runs\": [{\"id\": \"future\"}]}";
+		Files.writeString(file(), newer);
+		BenchmarkHistory saved = BenchmarkHistory.load(file()).with(single("a")).save(file());
+		assertEquals(newer, Files.readString(file().resolveSibling("benchmarks.json.newer")));
+		assertEquals(List.of(single("a")), BenchmarkHistory.load(file()).runs());
+		saved.with(single("b")).save(file());
+		assertFalse(Files.exists(file().resolveSibling("benchmarks.json.newer.1")), "our own file isn't backed up again");
+	}
+
+	@Test
 	void corruptFileThatCantBeMovedAsideIsNeverOverwritten() throws IOException {
-		Path bad = file().resolveSibling("benchmarks.json.bad");
-		Files.createDirectories(bad);
-		Files.writeString(bad.resolve("in-the-way.txt"), "x");
+		Files.createDirectories(file().getParent());
 		Files.writeString(file(), "{broken");
-		BenchmarkHistory history = BenchmarkHistory.load(file());
+		BenchmarkHistory history = BenchmarkHistory.load(file(), (from, to) -> {
+			throw new IOException("in use");
+		});
 		assertTrue(history.runs().isEmpty());
 		assertTrue(history.unreadable());
 		assertThrows(IOException.class, () -> history.with(single("a")).save(file()));
@@ -193,7 +216,7 @@ class BenchmarkHistoryTest {
 	@Test
 	void chartSkipsRunsWithoutAResult() {
 		BenchmarkRecord empty = new BenchmarkRecord("e", "t", "v", "26.2", "TUNE", "CURRENT", BenchmarkRecord.SINGLE, null, 60, false,
-				Map.of(), null, Map.of(), null, true);
+				Map.of(), null, Map.of(), Map.of(), null, true);
 		BenchmarkHistory history = BenchmarkHistory.empty().with(single("a")).with(empty);
 		assertEquals(List.of(single("a")), history.chart("CURRENT", "26.2", 10));
 	}
