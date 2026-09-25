@@ -56,6 +56,12 @@ class TomlConfigPatcherTest {
 	}
 
 	@Test
+	void readValuesExcludesTheUnderscorePrefixedSchemaVersionKey(@TempDir Path dir) throws IOException {
+		Path file = Files.writeString(dir.resolve("DistantHorizons.toml"), fixture());
+		assertFalse(TomlConfigPatcher.readValues(file).containsKey("_version"));
+	}
+
+	@Test
 	void quotedFloatStaysQuotedAndBareIntStaysBare() {
 		String patched = TomlConfigPatcher.patch(fixtureUnchecked(), Map.of(
 				"common.multiThreading.threadRunTimeRatio", "0.5",
@@ -97,19 +103,67 @@ class TomlConfigPatcherTest {
 	}
 
 	@Test
+	void theSchemaVersionKeyIsRefusedLikeAnyOtherMissingKey() {
+		assertThrows(IllegalArgumentException.class, () -> TomlConfigPatcher.patch(fixtureUnchecked(), Map.of("_version", "5")));
+	}
+
+	// A bare value must stay the same kind (boolean or whole number) the file already used for that key, so a
+	// remote-rules typo can't silently reset a field to something DH can't parse, or parses as something else
+	// entirely (docs/v0.2/plan-review.md self-review: Critical 1).
+	@Test
+	void aBareIntegerKeyRefusesAWordOrADecimal() {
+		for (String bad : new String[]{"HIGH", "1.5", "{}", "1,2", "'x'", ""}) {
+			IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+					() -> TomlConfigPatcher.patch(fixtureUnchecked(), Map.of("common.multiThreading.numberOfThreads", bad)), bad);
+			assertTrue(e.getMessage().contains("whole number"), e.getMessage());
+		}
+	}
+
+	@Test
+	void aBareBooleanKeyRefusesAnythingButTrueOrFalse() {
+		for (String bad : new String[]{"1", "0", "yes", "TRUE", ""}) {
+			IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+					() -> TomlConfigPatcher.patch(fixtureUnchecked(), Map.of("client.advanced.graphics.culling.disableShadowPassFrustumCulling", bad)),
+					bad);
+			assertTrue(e.getMessage().contains("true or false"), e.getMessage());
+		}
+	}
+
+	@Test
+	void aQuotedKeyRefusesABackslashOrAnEmbeddedQuote() {
+		IllegalArgumentException backslash = assertThrows(IllegalArgumentException.class,
+				() -> TomlConfigPatcher.patch(fixtureUnchecked(), Map.of("client.advanced.debugging.rendererMode", "C:\\x")));
+		assertTrue(backslash.getMessage().contains("backslash"), backslash.getMessage());
+
+		IllegalArgumentException quote = assertThrows(IllegalArgumentException.class,
+				() -> TomlConfigPatcher.patch(fixtureUnchecked(), Map.of("client.advanced.debugging.rendererMode", "a\"b")));
+		assertTrue(quote.getMessage().contains("quote"), quote.getMessage());
+	}
+
+	@Test
 	void everythingElseInTheFileIsUntouched() {
 		String original = fixtureUnchecked();
 		String patched = TomlConfigPatcher.patch(original, Map.of("client.advanced.graphics.quality.verticalQuality", "LOW"));
-		List<String> patchedLines = TomlDocument.lines(patched);
-		List<String> originalLines = TomlDocument.lines(original);
-		assertEquals(originalLines.size(), patchedLines.size());
-		int changedLine = TomlDocument.parse(original).get("client.advanced.graphics.quality.verticalQuality").line();
-		for (int i = 0; i < originalLines.size(); i++) {
-			if (i == changedLine) {
-				continue;
-			}
-			assertEquals(originalLines.get(i), patchedLines.get(i), "line " + i);
-		}
+
+		TomlDocument.Value changed = TomlDocument.parse(original).get("client.advanced.graphics.quality.verticalQuality");
+		// Everything before and after the touched span is byte-for-byte identical to the original, whatever the
+		// replacement's own length turns out to be.
+		assertEquals(original.substring(0, changed.start()), patched.substring(0, changed.start()));
+		assertEquals(original.substring(changed.end()), patched.substring(patched.length() - (original.length() - changed.end())));
+	}
+
+	// Review finding (Important 4): a batch with one missing key must leave the file exactly as it was -- nothing
+	// from the valid keys in the same batch gets written either.
+	@Test
+	void patchFileLeavesTheFileByteIdenticalWhenOneKeyInABatchIsMissing(@TempDir Path dir) throws IOException {
+		Path file = Files.writeString(dir.resolve("DistantHorizons.toml"), fixture());
+		String before = Files.readString(file, StandardCharsets.UTF_8);
+		Map<String, String> patches = new LinkedHashMap<>();
+		patches.put("common.multiThreading.numberOfThreads", "4");
+		patches.put("client.advanced.graphics.quality.noSuchKey", "1");
+
+		assertThrows(IllegalArgumentException.class, () -> TomlConfigPatcher.patchFile(file, patches));
+		assertEquals(before, Files.readString(file, StandardCharsets.UTF_8));
 	}
 
 	@Test
@@ -118,6 +172,13 @@ class TomlConfigPatcherTest {
 		String patched = TomlConfigPatcher.patch(crlf, Map.of("a.b", "y"));
 		assertTrue(patched.contains("\r\n"));
 		assertEquals("y", TomlDocument.parse(patched).get("a.b").raw());
+	}
+
+	@Test
+	void mixedLineEndingsAreEachPreservedIndividually() {
+		String mixed = "[a]\r\n\tb = 1\n\tc = 2\r\n";
+		String patched = TomlConfigPatcher.patch(mixed, Map.of("a.b", "9"));
+		assertEquals("[a]\r\n\tb = 9\n\tc = 2\r\n", patched);
 	}
 
 	@Test
@@ -149,6 +210,15 @@ class TomlConfigPatcherTest {
 
 		assertEquals(1, staged.ops().size());
 		assertEquals(List.of("client.advanced.graphics.quality.noSuchKey"), List.copyOf(staged.refused().keySet()));
+	}
+
+	@Test
+	void stagingRefusesABareValueOfTheWrongKind(@TempDir Path dir) throws IOException {
+		Path file = Files.writeString(dir.resolve("DistantHorizons.toml"), fixture());
+		SodiumConfigPatcher.Staged staged = TomlConfigPatcher.stage(file, Map.of("common.multiThreading.numberOfThreads", "HIGH"));
+
+		assertTrue(staged.ops().isEmpty());
+		assertTrue(staged.refused().get("common.multiThreading.numberOfThreads").contains("whole number"));
 	}
 
 	@Test

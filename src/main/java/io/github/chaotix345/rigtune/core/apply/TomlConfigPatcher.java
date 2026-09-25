@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,12 +15,12 @@ import java.util.regex.Pattern;
 // Patches config/DistantHorizons.toml: replaces only the value token of an existing key in its section, keeping
 // whatever quoting the file already used for it (DH quotes every double/float and enum, but writes ints and bools
 // bare -- docs/research/v0.2/dh-iris.md §8.1). Never adds, removes or reorders a key or section; a key not already
-// present in its section is refused. This reader never throws on malformed content (see TomlDocument); it simply
-// doesn't find the key, which the "missing key" refusal already covers.
+// present in its section is refused. Everything outside the touched value spans -- indentation, comments, blank
+// lines, each line's own line ending -- is left byte-for-byte untouched, since a patch splices the new token
+// directly into the original text rather than rebuilding lines. TomlDocument never reports a value it isn't sure
+// it understands, so "the key doesn't fit" and "the key is missing" both surface the same way here: refused.
 public final class TomlConfigPatcher {
-	// A bare (unquoted) token can't contain whitespace, '#', '"', '[' or ']' without corrupting the line; a quoted
-	// token can't contain a '"' since this reader doesn't unescape one.
-	private static final Pattern UNSAFE_BARE = Pattern.compile("[\\s#\"\\[\\]]");
+	private static final Pattern BARE_INTEGER = Pattern.compile("-?\\d+");
 
 	private TomlConfigPatcher() {
 	}
@@ -39,23 +40,34 @@ public final class TomlConfigPatcher {
 	}
 
 	// Applies every patch to `text`, or throws IllegalArgumentException naming the first key that doesn't fit
-	// (missing, or a value that can't be written in this key's quoting style).
+	// (missing, or a value that can't be written in this key's quoting style) -- nothing in `text` changes in that
+	// case, since every edit is validated before any of them are spliced in.
 	public static String patch(String text, Map<String, String> patches) {
 		Map<String, TomlDocument.Value> parsed = TomlDocument.parse(text);
-		List<String> lines = new ArrayList<>(TomlDocument.lines(text));
+		List<Edit> edits = new ArrayList<>();
 		for (Map.Entry<String, String> entry : patches.entrySet()) {
 			String key = entry.getKey();
 			TomlDocument.Value existing = parsed.get(key);
 			if (existing == null) {
 				throw new IllegalArgumentException("No such key: " + key);
 			}
-			String problem = unsafe(entry.getValue(), existing.quoted());
+			String problem = unsafe(existing.raw(), existing.quoted(), entry.getValue());
 			if (problem != null) {
 				throw new IllegalArgumentException("Cannot set " + key + " to \"" + entry.getValue() + "\": " + problem);
 			}
-			lines.set(existing.line(), withValue(lines.get(existing.line()), existing.quoted(), entry.getValue()));
+			String rendered = existing.quoted() ? "\"" + entry.getValue() + "\"" : entry.getValue();
+			edits.add(new Edit(existing.start(), existing.end(), rendered));
 		}
-		return String.join(text.contains("\r\n") ? "\r\n" : "\n", lines);
+		// Apply from the end of the text backwards, so an earlier edit's offsets are never shifted by a later one.
+		edits.sort(Comparator.comparingInt(Edit::start).reversed());
+		StringBuilder out = new StringBuilder(text);
+		for (Edit edit : edits) {
+			out.replace(edit.start(), edit.end(), edit.replacement());
+		}
+		return out.toString();
+	}
+
+	private record Edit(int start, int end, String replacement) {
 	}
 
 	// Returns true when the file changed, false when it already had these values.
@@ -99,7 +111,14 @@ public final class TomlConfigPatcher {
 		return new SodiumConfigPatcher.Staged(List.copyOf(ops), refused);
 	}
 
-	private static String unsafe(String value, boolean quoted) {
+	// A quoted value can't add a quote or a backslash (this reader doesn't decode escapes, so a backslash could
+	// produce an invalid or a silently different escape sequence). A bare value must stay the same kind the file
+	// already used for it -- DH's own writer only ever puts a plain boolean or a whole number bare (§8.1), so
+	// writing anything else there (an enum string, a decimal, stray text) wouldn't just look different, it would
+	// change what DH reads the field as, or fail to parse at all. TomlDocument guarantees `existingRaw` is always
+	// one of those two kinds when `quoted` is false, so the final branch here is a defensive fallback, not a case
+	// this codebase can currently reach.
+	private static String unsafe(String existingRaw, boolean quoted, String value) {
 		if (value == null) {
 			return "no value";
 		}
@@ -107,20 +126,25 @@ public final class TomlConfigPatcher {
 			return "can't contain a line break";
 		}
 		if (quoted) {
-			return value.indexOf('"') >= 0 ? "can't contain a quote" : null;
+			if (value.indexOf('"') >= 0) {
+				return "can't contain a quote";
+			}
+			return value.indexOf('\\') >= 0 ? "can't contain a backslash" : null;
 		}
-		return UNSAFE_BARE.matcher(value).find() ? "needs quoting, and the file writes this key unquoted" : null;
+		if (isBareBoolean(existingRaw)) {
+			return isBareBoolean(value) ? null : "expects true or false, like the file's existing value";
+		}
+		if (isBareInteger(existingRaw)) {
+			return isBareInteger(value) ? null : "expects a whole number, like the file's existing value";
+		}
+		return "the file's existing bare value isn't a recognised boolean or integer, so a new value can't be written safely";
 	}
 
-	// Rewrites only the value token on `originalLine` (found between '=' and the end of line, trimmed), keeping the
-	// key, the surrounding whitespace and the quote style exactly as they were.
-	private static String withValue(String originalLine, boolean quoted, String newValue) {
-		int eq = originalLine.indexOf('=');
-		String before = originalLine.substring(0, eq + 1);
-		String after = originalLine.substring(eq + 1);
-		int leading = after.length() - after.stripLeading().length();
-		int trailing = after.length() - after.stripTrailing().length();
-		String rendered = quoted ? "\"" + newValue + "\"" : newValue;
-		return before + after.substring(0, leading) + rendered + after.substring(after.length() - trailing);
+	private static boolean isBareBoolean(String s) {
+		return "true".equals(s) || "false".equals(s);
+	}
+
+	private static boolean isBareInteger(String s) {
+		return BARE_INTEGER.matcher(s).matches();
 	}
 }
