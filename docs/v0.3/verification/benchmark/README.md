@@ -20,7 +20,7 @@ Per render distance step: the chunks within RD − 1 of the camera present on th
 
 ## Game tests (CI, every leg)
 
-Run 36175800883 (all jobs green; legs 26.2 OpenGL, 26.3 OpenGL, 26.3 Vulkan on 4-vCPU ubuntu-24.04 runners). From each leg's latest.log (`Benchmark game test:` lines):
+Runs 36175800883 and 36179168015 (all jobs green; the table is from the first; legs 26.2 OpenGL, 26.3 OpenGL, 26.3 Vulkan on 4-vCPU ubuntu-24.04 runners). From each leg's latest.log (`Benchmark game test:` lines):
 
 | | 26.2 OpenGL | 26.3 OpenGL | 26.3 Vulkan |
 |---|---|---|---|
@@ -33,3 +33,5 @@ Run 36175800883 (all jobs green; legs 26.2 OpenGL, 26.3 OpenGL, 26.3 Vulkan on 4
 | camera | y 133 = floor 117 + 16, both blocks air | same | same |
 
 Screenshots reviewed: `bench-menu-world` (the CURRENT-scene note under the scene hint), `bench-world-tune-result` (the 5/7/11/12 table), `bench-world-running` (the new camera spot above the canopy).
+
+In run 36179168015 the cancelled Tune's check first waited until the server had been told the step's render distance (4 on every leg), then saw 5 after Esc; RD 12 settled in 2.6 s (26.2 OpenGL), 0.6 s (26.3 OpenGL) and 1.7 s (26.3 Vulkan).
