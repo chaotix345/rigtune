@@ -219,6 +219,7 @@ public final class Recommender {
 
 		void additions() {
 			String mc = ctx.hardware().mcVersion();
+			Map<ModRule, Availability> offered = new LinkedHashMap<>();
 			for (ModRule rule : mods) {
 				// Fail closed: an avoidWhen this client can't decide blocks the addition too.
 				if (isInstalled(rule) || !matches(rule.recommendWhen)
@@ -227,10 +228,33 @@ public final class Recommender {
 					continue;
 				}
 				Availability availability = availability(rule.slug, mc);
-				if (availability == Availability.UNAVAILABLE) {
-					continue;
+				if (availability != Availability.UNAVAILABLE) {
+					offered.put(rule, availability);
 				}
+			}
+			// Two mods that conflict are never offered together (review 4, rules-accuracy-2): the one earlier in the
+			// rules stays and names the ones it keeps out.
+			ModConflicts conflicts = ModConflicts.of(rules);
+			Map<ModRule, List<String>> keptOut = new LinkedHashMap<>();
+			for (ModRule rule : offered.keySet()) {
+				ModRule kept = keptOut.keySet().stream().filter(k -> conflicts.between(k.slug, rule.slug)).findFirst().orElse(null);
+				if (kept != null) {
+					keptOut.get(kept).add(rule.displayTitle());
+				} else {
+					keptOut.put(rule, new ArrayList<>());
+				}
+			}
+			for (Map.Entry<ModRule, List<String>> entry : keptOut.entrySet()) {
+				ModRule rule = entry.getKey();
+				Availability availability = offered.get(rule);
 				String reason = rule.reason == null ? "" : rule.reason;
+				if (!entry.getValue().isEmpty()) {
+					List<String> titles = entry.getValue();
+					String names = titles.size() == 1 ? titles.getFirst()
+							: String.join(", ", titles.subList(0, titles.size() - 1)) + " or " + titles.getLast();
+					reason = (reason + " RigTune doesn't also offer " + names + ", which " + (titles.size() == 1 ? "conflicts" : "conflict")
+							+ " with it.").trim();
+				}
 				if (rule.alpha()) {
 					reason = (reason + " " + ALPHA_NOTE).trim();
 				}

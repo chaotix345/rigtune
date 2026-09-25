@@ -19,6 +19,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiPredicate;
 import java.util.function.Function;
 
 // Turns a batch of Add/Update recommendations into staged ops: one all-or-nothing group per recommendation.
@@ -38,16 +39,23 @@ public final class DownloadPlanner {
 	private final DependencyResolver resolver;
 	private final Path modsDir;
 	private final Fetcher fetcher;
+	private final BiPredicate<String, String> conflicts;
 	private final Function<Path, String> modIdOf;
 
 	public DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher) {
-		this(resolver, modsDir, fetcher, ModJars::modIdOf);
+		this(resolver, modsDir, fetcher, (a, b) -> false);
 	}
 
-	DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher, Function<Path, String> modIdOf) {
+	// conflicts: whether the mods of two AddMod slugs can't be installed together (the rules' ModConflicts).
+	public DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher, BiPredicate<String, String> conflicts) {
+		this(resolver, modsDir, fetcher, conflicts, ModJars::modIdOf);
+	}
+
+	DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher, BiPredicate<String, String> conflicts, Function<Path, String> modIdOf) {
 		this.resolver = resolver;
 		this.modsDir = modsDir;
 		this.fetcher = fetcher;
+		this.conflicts = conflicts;
 		this.modIdOf = modIdOf;
 	}
 
@@ -72,15 +80,24 @@ public final class DownloadPlanner {
 				continue;
 			}
 			batch.commit(attempt);
+			if (rec.action() instanceof Action.AddMod add) {
+				batch.added.add(add);
+			}
 			ids.add(rec.id());
 		}
 		return new Result(List.copyOf(batch.ops), ids, errors);
 	}
 
 	private void addMod(Action.AddMod add, Attempt attempt) throws IOException {
+		// The batch never stages both sides of a conflict: the later one fails (review 4, rules-accuracy-2).
+		for (Action.AddMod earlier : attempt.batch.added) {
+			if (conflicts.test(earlier.slug(), add.slug())) {
+				throw new IOException("it conflicts with " + earlier.title() + ", which is being installed too");
+			}
+		}
 		String ref = add.projectId() != null ? add.projectId() : add.slug();
 		// Projects staged earlier in this batch aren't in attempt.projects, so they come back from the resolver and are joined.
-		for (ModrinthVersion version : resolver.resolve(ref, attempt.projects)) {
+		for (ModrinthVersion version : resolver.resolve(ref, attempt.projects, attempt.batch.versions)) {
 			String stagedBy = attempt.batch.groupOfProject.get(version.projectId());
 			if (stagedBy != null) {
 				attempt.joins.add(stagedBy);
@@ -116,6 +133,7 @@ public final class DownloadPlanner {
 			}
 			attempt.batch.noteReplaced(jarModId, pending);
 			attempt.newProjects.add(version.projectId());
+			attempt.versions.add(version);
 			attempt.ops.add(Op.enableFile(pending, target).withModId(jarModId));
 		}
 	}
@@ -146,7 +164,7 @@ public final class DownloadPlanner {
 	}
 
 	// What the batch has committed so far. projects and modIds are what is installed (loaded, or already in mods/);
-	// what the batch staged is in groupOfProject and groupOfMod, with the group it went into.
+	// what the batch staged is in groupOfProject and groupOfMod, with the group it went into, and in versions and added.
 	private static final class Batch {
 		final Set<String> projects;
 		final Set<String> modIds;
@@ -154,6 +172,8 @@ public final class DownloadPlanner {
 		final Map<String, String> groupOfProject = new HashMap<>();
 		final Map<String, String> groupOfMod = new HashMap<>();
 		final List<Op> ops = new ArrayList<>();
+		final List<ModrinthVersion> versions = new ArrayList<>();
+		final List<Action.AddMod> added = new ArrayList<>();
 
 		Batch(Set<String> installedProjects, Set<String> loadedIds, Map<String, String> stagedJars) {
 			this.projects = new HashSet<>(installedProjects);
@@ -177,6 +197,7 @@ public final class DownloadPlanner {
 				}
 			}
 			attempt.newProjects.forEach(project -> groupOfProject.put(project, group));
+			versions.addAll(attempt.versions);
 			projects.addAll(attempt.projects);
 			modIds.addAll(attempt.modIds);
 		}
@@ -204,6 +225,7 @@ public final class DownloadPlanner {
 		final Set<String> modIds;
 		final Set<String> joins = new LinkedHashSet<>();
 		final List<String> newProjects = new ArrayList<>();
+		final List<ModrinthVersion> versions = new ArrayList<>();
 		final List<Op> ops = new ArrayList<>();
 
 		Attempt(Batch batch) {

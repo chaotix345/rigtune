@@ -39,6 +39,7 @@ import io.github.chaotix345.rigtune.core.modrinth.GatedModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.HttpModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.ModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.OnlineDataFetcher;
+import io.github.chaotix345.rigtune.core.recommend.ModConflicts;
 import io.github.chaotix345.rigtune.core.recommend.Recommender;
 import io.github.chaotix345.rigtune.core.report.ModrinthOffAdvice;
 import io.github.chaotix345.rigtune.core.report.ShareReport;
@@ -63,6 +64,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.BiPredicate;
 
 public final class RealController implements RigTuneController {
 	private static final String VANILLA = SettingsBridge.VANILLA_PREFIX;
@@ -432,7 +434,9 @@ public final class RealController implements RigTuneController {
 		if (scanned != null) {
 			scanned.forEach(m -> loadedIds.add(m.modId()));
 		}
-		return new DownloadPlanner(resolver, modsDir, this::fetch).plan(recs, installedProjects, loadedIds, stagedJarsByModId());
+		RulesDocument doc = rules;
+		BiPredicate<String, String> conflicts = doc == null ? (a, b) -> false : ModConflicts.of(doc)::between;
+		return new DownloadPlanner(resolver, modsDir, this::fetch, conflicts).plan(recs, installedProjects, loadedIds, stagedJarsByModId());
 	}
 
 	// Mod ids that already have a staged ENABLE_FILE, with that op's pending jar. A newer download for the same id
