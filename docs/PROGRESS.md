@@ -15,9 +15,9 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 - Watchdog: scratchpad/watchdog.py + javaprocs.ps1 (copied from the v0.2 session, paths updated). Run: `python <scratchpad>/watchdog.py name=<worktree>;<agent scratch> ... --stall-min 15 --lock-min 8` in the background.
 
 ### Status
-- [ ] Phase 0: orient (in progress: docs brief, code map, real-instance agents running; outputs in scratchpad/orient/)
-- [ ] Phase 1: research
-- [ ] Phase 2: spec + plan + plan review
+- [x] Phase 0: orient. Real instance (read-only): still 0.1.0, last played 2026-09-25 09:08, no benchmarks/history; the DH group still pending; mods/update holds DH 3.3.2 (a multi-loader jar with fabric id distanthorizons, so 0.2+ detects it). Heap 6144 MB of 31849 (Modrinth App global setting).
+- [x] Phase 1: research DONE (docs/research/v0.3/: mc-versions, ci-gametests, launcher-ram, hardware-tiers, benchmark, misc). Headlines: no MC newer than 26.3 (26.4-snapshot-1 compiles and passes 848/848 unchanged); CI game tests green on Linux (branch research/ci-gametest, kept for WS-0); a real P0 bug: benchmark RD changes aren't broadcast to the server (SPEC 3f).
+- [ ] Phase 2: spec + plan (drafts committed: docs/v0.3/SPEC.md, PLAN.md); plan review next
 - [ ] Phase 3: foundation
 - [ ] Phase 4: features
 - [ ] Phase 5: verification
