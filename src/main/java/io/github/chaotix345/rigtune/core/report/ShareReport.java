@@ -8,6 +8,7 @@ import io.github.chaotix345.rigtune.core.model.GpuInfo;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -42,10 +43,19 @@ public final class ShareReport {
 	}
 
 	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, int maxChars) {
+		return format(report, versions, benchmark, maxChars, null);
+	}
+
+	// v0.3 (WS-C): launcher is the detected launcher's name, or null when it isn't known (then there's no line).
+	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, @Nullable String launcher) {
+		return format(report, versions, benchmark, DISCORD_LIMIT, launcher);
+	}
+
+	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, int maxChars, @Nullable String launcher) {
 		StringBuilder fixed = new StringBuilder();
 		fixed.append("**RigTune ").append(field(versions.rigtune())).append("** · Minecraft ").append(field(versions.minecraft()))
 				.append(" · Fabric Loader ").append(field(versions.loader())).append('\n');
-		hardware(fixed, report);
+		hardware(fixed, report, launcher);
 		benchmark(fixed, benchmark);
 
 		List<String> items = items(report.recommendations());
@@ -64,7 +74,7 @@ public final class ShareReport {
 		return hardCut(text, maxChars);
 	}
 
-	private static void hardware(StringBuilder out, Report report) {
+	private static void hardware(StringBuilder out, Report report, @Nullable String launcher) {
 		HardwareProfile hw = report.hardware();
 		CpuInfo cpu = hw.cpu();
 		out.append("**Hardware**\n");
@@ -100,6 +110,9 @@ public final class ShareReport {
 			out.append('?');
 		}
 		out.append('\n');
+		if (!blank(launcher)) {
+			out.append("- Launcher: ").append(field(launcher)).append('\n');
+		}
 
 		out.append("- Tier ").append(report.tier().rawTier()).append("/5 · limited by ").append(limit(report.tier().limitingFactor()))
 				.append(" · goal ").append(capitalised(report.goal().name())).append('\n');

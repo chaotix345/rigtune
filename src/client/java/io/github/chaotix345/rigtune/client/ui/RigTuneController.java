@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
+import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
@@ -71,6 +72,13 @@ public interface RigTuneController {
 	/** The report as Markdown for the clipboard (item 10). */
 	default String shareReport() {
 		return "";
+	}
+
+	// v0.3 (WS-C)
+
+	/** The launcher that started the game (docs/v0.3/SPEC.md item 5); UNKNOWN when it isn't recognised. */
+	default LauncherInfo launcher() {
+		return LauncherInfo.UNKNOWN;
 	}
 
 	// v0.3 (WS-F)

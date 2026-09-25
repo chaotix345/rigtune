@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
+import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Goal;
@@ -38,6 +39,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 public class RigTuneScreen extends Screen {
@@ -51,6 +53,7 @@ public class RigTuneScreen extends Screen {
 	private static final int COLOR_ADVICE = 0xFF7EC8FF;
 	private static final int COLOR_NEUTRAL = 0xFF8A8A8A;
 	private static final int COLOR_OK = 0xFF7FE07F;
+	private static final int COLOR_LAUNCHER = 0xFFA8E0B0;
 
 	private final @Nullable Screen parent;
 	private final RigTuneController controller;
@@ -71,6 +74,7 @@ public class RigTuneScreen extends Screen {
 	private @Nullable Button applyButton;
 	private @Nullable Map<String, String> captions;
 	private @Nullable Component seenControllerStatus;
+	private LauncherInfo shownLauncher = LauncherInfo.UNKNOWN;
 
 	public RigTuneScreen(@Nullable Screen parent, RigTuneController controller) {
 		super(Component.translatable("rigtune.screen.title"));
@@ -89,6 +93,7 @@ public class RigTuneScreen extends Screen {
 			captions = SettingsBridge.captions(minecraft.options);
 		}
 		shown = controller.report();
+		shownLauncher = controller.launcher();
 		syncSelection(shown);
 
 		int titleWidth = font.width(title.copy().withStyle(ChatFormatting.BOLD));
@@ -193,12 +198,8 @@ public class RigTuneScreen extends Screen {
 
 	private List<Component> header(Report report, @Nullable Component badge) {
 		HardwareProfile hw = report.hardware();
-		List<Component> lines = new ArrayList<>();
-		lines.add(Component.translatable("rigtune.header.cpu",
-				value(cpuName(hw.cpu().name())),
-				value(Integer.toString(hw.cpu().logicalCores())),
-				value(gb(hw.totalRamMb())),
-				value(gb(hw.maxHeapMb()))).withStyle(s -> s.withColor(COLOR_LABEL)));
+		List<Component> lines = new ArrayList<>(LauncherLines.cpuAndMemory(shownLauncher, value(cpuName(hw.cpu().name())),
+				value(Integer.toString(hw.cpu().logicalCores())), value(gb(hw.totalRamMb())), value(gb(hw.maxHeapMb())), COLOR_LABEL));
 		String vram = hw.gpu().vramMb() > 0 ? gb(hw.gpu().vramMb()) : "?";
 		lines.add(Component.translatable("rigtune.header.gpu",
 				value(hw.gpu().renderer()),
@@ -231,6 +232,12 @@ public class RigTuneScreen extends Screen {
 
 	public List<Component> headerLines() {
 		return List.copyOf(headerLines);
+	}
+
+	/** v0.3 (WS-C): the launcher lines shown under the ram-* advice (for the game tests). */
+	public List<Component> launcherLines() {
+		return shown == null ? List.of()
+				: shown.recommendations().stream().map(r -> LauncherLines.adviceLine(r, shownLauncher)).filter(Objects::nonNull).toList();
 	}
 
 	private void copyReport() {
@@ -343,7 +350,7 @@ public class RigTuneScreen extends Screen {
 			seenControllerStatus = latest;
 			status = latest;
 		}
-		if (controller.report() != shown) {
+		if (controller.report() != shown || !controller.launcher().equals(shownLauncher)) {
 			rebuildWidgets();
 		}
 	}
@@ -494,6 +501,7 @@ public class RigTuneScreen extends Screen {
 			private final Component impact;
 			private final List<FormattedCharSequence> titleLines;
 			private final List<FormattedCharSequence> reasonLines;
+			private final List<FormattedCharSequence> launcherLines;
 			private final int textIndent;
 
 			RecommendationEntry(Recommendation recommendation, int width) {
@@ -508,6 +516,8 @@ public class RigTuneScreen extends Screen {
 				this.titleLines = split.size() > 2 ? List.of(split.get(0), ComponentRenderUtils.clipText(title, font, titleWidth)) : split;
 				this.reasonLines = recommendation.reason() == null || recommendation.reason().isBlank()
 						? List.of() : font.split(Component.literal(recommendation.reason()), reasonWidth);
+				Component launcherLine = LauncherLines.adviceLine(recommendation, shownLauncher);
+				this.launcherLines = launcherLine == null ? List.of() : font.split(launcherLine, reasonWidth);
 				if (recommendation.appliable()) {
 					this.checkbox = Checkbox.builder(Component.empty(), font)
 							.selected(selected.contains(recommendation.id()))
@@ -530,7 +540,7 @@ public class RigTuneScreen extends Screen {
 
 			int preferredHeight() {
 				int titleHeight = Math.max(BOX, titleLines.size() * 9 + 4);
-				return 4 + titleHeight + reasonLines.size() * 9 + 5;
+				return 4 + titleHeight + (reasonLines.size() + launcherLines.size()) * 9 + 5;
 			}
 
 			@Override
@@ -560,6 +570,10 @@ public class RigTuneScreen extends Screen {
 				int reasonY = y + Math.max(BOX, titleLines.size() * 9 + 4) + 1;
 				for (FormattedCharSequence line : reasonLines) {
 					graphics.text(font, line, textX, reasonY, informational && recommendation.category() == Category.WARNING ? 0xFFE8B0A8 : COLOR_REASON, false);
+					reasonY += 9;
+				}
+				for (FormattedCharSequence line : launcherLines) {
+					graphics.text(font, line, textX, reasonY, COLOR_LAUNCHER, false);
 					reasonY += 9;
 				}
 			}
