@@ -49,7 +49,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public final class RealController implements RigTuneController {
 	private static final String VANILLA = SettingsBridge.VANILLA_PREFIX;
@@ -74,7 +73,8 @@ public final class RealController implements RigTuneController {
 	private volatile @Nullable Component status;
 	private volatile Goal goal;
 	private int generation;
-	private final AtomicInteger rulesGeneration = new AtomicInteger();
+	private final Object rulesLock = new Object();
+	private int rulesGeneration;
 	private volatile boolean downloading;
 
 	public RealController() {
@@ -97,13 +97,18 @@ public final class RealController implements RigTuneController {
 
 	// Re-runnable: a newer load (settingsChanged) makes the results of an older one that is still fetching stale.
 	private void loadRules() {
-		int gen = rulesGeneration.incrementAndGet();
+		int gen;
+		synchronized (rulesLock) {
+			gen = ++rulesGeneration;
+		}
 		URI baseUrl = RulesSources.baseUrl(System.getProperty(RulesSources.BASE_URL_PROPERTY));
 		new RulesSources(configDir, baseUrl, modVersion).load(ClientSettings.shared(configDir).remoteRulesAllowed(), (doc, remote) -> {
-			if (gen != rulesGeneration.get()) {
-				return;
+			synchronized (rulesLock) {
+				if (gen != rulesGeneration) {
+					return;
+				}
+				rules = doc;
 			}
-			rules = doc;
 			rebuild();
 			if (remote) {
 				fetchOnline();
