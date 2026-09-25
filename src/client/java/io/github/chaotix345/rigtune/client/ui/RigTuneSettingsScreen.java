@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.client.ClientSettings;
+import io.github.chaotix345.rigtune.client.benchmark.BenchmarkWorld;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.model.Goal;
@@ -81,9 +82,11 @@ public class RigTuneSettingsScreen extends Screen {
 				.withTooltip(g -> Tooltip.create(Component.translatable("rigtune.goal." + g.name().toLowerCase(Locale.ROOT) + ".tooltip")))
 				.create(x, y, column, ROW, Component.translatable("rigtune.settings.goal"), (b, g) -> controller.setGoal(g)));
 		y += ROW + GAP;
-		addRenderableWidget(CycleButton.builder((BenchmarkRequest.Scene s) -> Component.translatable("rigtune.settings.scene." + s.name().toLowerCase(Locale.ROOT)),
-						settings.benchmarkSceneOrDefault())
-				.withValues(BenchmarkRequest.Scene.values())
+		// The same labels and availability as the benchmark menu, which reads this setting.
+		BenchmarkRequest.Scene[] scenes = BenchmarkWorld.supported() ? BenchmarkRequest.Scene.values() : new BenchmarkRequest.Scene[]{BenchmarkRequest.Scene.CURRENT};
+		BenchmarkRequest.Scene scene = BenchmarkWorld.supported() ? settings.benchmarkSceneOrDefault() : BenchmarkRequest.Scene.CURRENT;
+		addRenderableWidget(CycleButton.builder((BenchmarkRequest.Scene s) -> Component.translatable("rigtune.benchmark.scene." + s.name().toLowerCase(Locale.ROOT)), scene)
+				.withValues(scenes)
 				.withTooltip(s -> Tooltip.create(Component.translatable("rigtune.settings.scene.tooltip")))
 				.create(x, y, column, ROW, Component.translatable("rigtune.settings.scene"), (b, s) -> {
 					settings.benchmarkScene = s.name();

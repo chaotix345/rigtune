@@ -138,6 +138,8 @@ public class UiGameTest implements FabricClientGameTest {
 
 		pressByKey(context, "rigtune.screen.benchmark_menu");
 		context.waitForScreen(BenchmarkMenuScreen.class);
+		context.waitTicks(2);
+		context.takeScreenshot("ui-benchmark-menu-from-button");
 		context.runOnClient(mc -> mc.gui.screen().onClose());
 		context.waitForScreen(RigTuneScreen.class);
 	}

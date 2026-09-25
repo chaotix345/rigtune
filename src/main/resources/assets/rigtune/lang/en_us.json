@@ -36,8 +36,6 @@
 	"rigtune.settings.remote_rules": "Rules updates (GitHub)",
 	"rigtune.settings.remote_rules.tooltip": "Downloads the latest recommendation rules from RigTune's GitHub repository. Nothing about you is sent. Off: the rules in the jar (or the last download) are used.",
 	"rigtune.settings.scene": "Benchmark scene",
-	"rigtune.settings.scene.benchmark_world": "Benchmark world",
-	"rigtune.settings.scene.current": "Where you are",
 	"rigtune.settings.scene.tooltip": "Where the benchmark runs: your current position, or RigTune's own benchmark world (the same scene every time).",
 	"rigtune.settings.startup_toast": "Startup suggestions toast",
 	"rigtune.settings.startup_toast.tooltip": "The \"RigTune: N suggestions\" toast on the title screen. Apply results and warnings are always shown.",
