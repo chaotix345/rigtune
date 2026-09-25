@@ -1,0 +1,4 @@
+{"time":"2026-09-25T01:59:16.086548500Z","method":"GET","host":"api.modrinth.com","path":"/v2/project/rigtune/version","query":null,"status":200,"bytes":1567,"userAgent":"Java-http-client/25.0.4.1"}
+{"time":"2026-09-25T01:59:16.132064200Z","method":"GET","host":"cdn.modrinth.com","path":"/data/E2ERigTn/versions/E2Enew01/rigtune-0.2.0-dev+mc26.2.jar","query":null,"status":200,"bytes":366861,"userAgent":"Java-http-client/25.0.4.1"}
+{"time":"2026-09-25T01:59:16.163448300Z","method":"GET","host":"raw.githubusercontent.com","path":"/chaotix345/rigtune/main/rules/rules-v1.json","query":null,"status":200,"bytes":48210,"userAgent":"Java-http-client/25.0.4.1"}
+{"time":"2026-09-25T01:59:34.230778800Z","method":"GET","host":"raw.githubusercontent.com","path":"/chaotix345/rigtune/main/rules/rules-v1.json","query":null,"status":200,"bytes":48210,"userAgent":"chaotix345/rigtune/0.1.0 (github.com/chaotix345/rigtune)"}

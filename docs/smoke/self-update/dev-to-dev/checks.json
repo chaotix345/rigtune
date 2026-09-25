@@ -75,7 +75,7 @@
   {
    "name": "the apply result was shown (rigtune.json lastShownApply)",
    "ok": true,
-   "detail": "lastShownApply 2026-09-25T01:43:09.367181300Z vs last-apply.json finishedAt 2026-09-25T01:43:09.367181300Z"
+   "detail": "lastShownApply 2026-09-25T02:08:31.931301400Z vs last-apply.json finishedAt 2026-09-25T02:08:31.931301400Z"
   },
   {
    "name": "no further RigTune update is offered",

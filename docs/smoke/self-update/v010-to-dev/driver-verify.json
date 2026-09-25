@@ -4,9 +4,9 @@
   "error": null,
   "events": [
     "t+0.0s driver loaded, phase verify, output <run>\\out",
-    "t+3.6s title screen",
-    "t+5.7s screenshot e2e-verify-1-title.png: Saved screenshot as e2e-verify-1-title.png",
-    "t+6.6s report: 22 recommendations, online=true, goal QUALITY",
+    "t+3.7s title screen",
+    "t+5.8s screenshot e2e-verify-1-title.png: Saved screenshot as e2e-verify-1-title.png",
+    "t+6.7s report: 22 recommendations, online=true, goal QUALITY",
     "t+7.7s screenshot e2e-verify-2-report.png: Saved screenshot as e2e-verify-2-report.png",
     "t+9.7s quitting"
   ],

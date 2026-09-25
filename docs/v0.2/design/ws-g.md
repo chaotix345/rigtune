@@ -83,11 +83,26 @@ Everything else is test tooling, outside the shipped jar and outside `./gradlew 
 - Port 443 on 127.0.0.1 was free and bindable without admin rights.
 - The certificate has SANs for all three hosts (plus localhost / 127.0.0.1).
 
+## Finding: RigTune sometimes skips its Modrinth lookups at startup
+One v0.1.0 run in five stayed "Offline" for 180 s. The fake server got the rules fetch but never `/v2/version_files`,
+and there was no lookup warning (`docs/smoke/self-update/v010-offline-race/`). `RealController.fetchOnline()` returns
+early while `rules` is null. It is called when the scan completes and, in `loadRules`, only when the remote document
+beats the local one. `RulesLoader.pickNewest` keeps the first candidate on a revision tie. So when the scan finishes
+before the bundled/cached rules are set and the remote rules have the same revision, nothing calls it until Rescan.
+The timing matched: in passing runs the scan and the rules load landed in the same second, in the failing one the scan
+finished about 1 s earlier. The same code is in 0.2 today (RealController `loadRules` / `rescan`), so this is reported
+to the coordinator for WS-A. The fix: call `fetchOnline()` right after the local rules are set; it's a no-op until the
+scan is done. For 0.1.0 users, a published rules-v1.json with a higher revision than the bundled r4 triggers the lookups
+on the first launch that fetches it. The driver presses Rescan once after 20 s offline (a player's action) and
+`RESULT.md` records whether it did.
+
 ## Deviations from the plan
 - The fake server lives in `tools/e2e/java` (not a Python `http.server`), see above.
 - `NoDefaultCurrentDirectoryInExePath` is set in this environment, so the orchestrator calls `gradlew.bat` by its
   absolute path.
 - No separate Gradle subproject: the `e2e` source set and two tasks sit in build.gradle's WS-G block.
+- After the first push, `origin/feat/v0.2.0` is merged into the branch rather than rebased onto it: a hook blocks
+  force-pushes without the user's confirmation.
 
 ## Phase 5 (to do when the coordinator asks)
 1. Build the merged integration jar (`./gradlew :26.2:jar` on feat/v0.2.0) and rerun

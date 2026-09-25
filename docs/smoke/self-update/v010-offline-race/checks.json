@@ -1,0 +1,55 @@
+{
+ "update": [
+  {
+   "name": "the client exited normally and the helper finished",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver applied the offered update",
+   "ok": false,
+   "detail": "driver: ok=False error=no update:rigtune recommendation within 180 s (report online=false) offered=None"
+  },
+  {
+   "name": "exactly one RigTune jar, the new one",
+   "ok": false,
+   "detail": "rigtune*.jar in mods: ['rigtune-0.1.0.jar']; bytes identical to the served jar: False"
+  },
+  {
+   "name": "the old jar is disabled",
+   "ok": false,
+   "detail": "rigtune-0.1.0.jar.disabled exists: False"
+  },
+  {
+   "name": "no pending.json",
+   "ok": true,
+   "detail": "pending.json exists: False"
+  },
+  {
+   "name": "no leftover downloads",
+   "ok": true,
+   "detail": "*.rigtune-pending: []"
+  },
+  {
+   "name": "last-apply.json: the update's two ops, all OK",
+   "ok": false,
+   "detail": "results: []"
+  },
+  {
+   "name": "the helper ran from config/rigtune/helper copies",
+   "ok": false,
+   "detail": "helper classpaths seen: none"
+  },
+  {
+   "name": "the old RigTune downloaded the jar from cdn.modrinth.com",
+   "ok": false,
+   "detail": "download requests: []"
+  },
+  {
+   "name": "the update's depends and breaks are no stricter (M12)",
+   "ok": true,
+   "detail": "same or fewer entries: depends {'fabricloader': '>=0.19.5', 'minecraft': '~26.2', 'java': '>=25', 'fabric-api': '*'} breaks {}"
+  }
+ ],
+ "verify": []
+}
