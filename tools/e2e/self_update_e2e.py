@@ -41,6 +41,7 @@ OPTIONS = "onboardAccessibility:false\nfullscreen:false\nskipMultiplayerWarning:
 # Evidence and fixtures are written with LF, as the repository stores text (.gitattributes).
 LF = chr(10)
 CAPTURED = ("pending.json", "last-apply.json", "rigtune.json", "rules-cache.json", "helper.log")
+SEEDED = ("pending.json", "last-apply.json")
 UNDO_PHASES = ("mod-apply", "mod-undo", "mod-check")
 ADDED_ID = "e2e-added"
 ADDED_PROJECT = "E2EAddMd"
@@ -86,6 +87,9 @@ class Run:
         # Test mods: disabled by 0.1.0 with its update (so the legacy import has a non-RigTune change), and for the undo
         # scenario one served by the fake Modrinth to add and one in mods/ to disable.
         self.legacy_jar = self.jars / "e2e-legacy-1.0.0.jar" if args.legacy_disable and not self.undo else None
+        # H-M2: a real 0.1.0 instance's state (tools/e2e/seeds/<name>); its pending ops are expected to be carried over.
+        self.seed = load_seed(args.seed) if args.seed and not self.undo else None
+        self.carried = []
         self.added_jar = self.jars / "{}-1.0.0.jar".format(ADDED_ID)
         self.other_jar = self.jars / "{}-1.0.0.jar".format(OTHER_ID)
 
@@ -221,6 +225,8 @@ class Run:
             e2e_env.test_mod_jar(self.other_jar, OTHER_ID)
             shutil.copyfile(self.other_jar, self.mods / self.other_jar.name)
             extra_projects.append((ADDED_PROJECT, ADDED_ID, self.added_jar))
+        if self.seed is not None:
+            self.seed_instance()
         (self.instance / "options.txt").write_text(OPTIONS, encoding="utf-8")
         self.facts["fabricApi"] = api.name
         self.log("instance mods: " + ", ".join(sorted(p.name for p in self.mods.iterdir())))
@@ -244,6 +250,23 @@ class Run:
         code = self.gradle("gradle-driver.log", *self.driver_args(":{}:{}".format(self.mc, "e2eUndoDriverJar" if self.undo else "e2eDriverJar")))
         if code != 0:
             raise SystemExit("building the driver failed; see " + str(self.run_dir / "gradle-driver.log"))
+
+    def seed_instance(self):
+        """The seed's fake jars, and its templated files with this instance's folder put in."""
+        for jar in self.seed["jars"]:
+            target = self.instance / jar["path"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            e2e_env.test_mod_jar(target, jar["id"], jar["version"], name=jar.get("name"))
+        self.rigtune_dir.mkdir(parents=True, exist_ok=True)
+        for name in SEEDED:
+            source = self.seed["dir"] / name
+            if source.is_file():
+                text = fixtures.instantiate_json(source.read_text(encoding="utf-8"), self.instance)
+                (self.rigtune_dir / name).write_text(text, encoding="utf-8", newline=LF)
+                (self.out / ("seeded-" + name)).write_text(text, encoding="utf-8", newline=LF)
+        self.carried = (e2e_checks._load(self.rigtune_dir / "pending.json") or {}).get("ops") or []
+        self.log("seeded from {}: {} carried-over op(s), jars {}".format(self.seed["dir"], len(self.carried),
+                                                                         [j["path"] for j in self.seed["jars"]]))
 
     def driver_args(self, task):
         """The Gradle task plus the properties that pick and build this scenario's driver."""
@@ -374,7 +397,15 @@ class Run:
         (self.out / "mods-after-{}.json".format(phase)).write_text(json.dumps(e2e_checks.listing(self.mods), indent=1), encoding="utf-8")
 
     def run_update(self):
-        code, helper_ok, cmdlines = self.launch_and_apply("update")
+        # The seed's held-open files stay open from the launch until the helper is done (seed.json holdOpenWhy).
+        held = [open(self.instance / p, "rb") for p in (self.seed or {}).get("holdOpenAtOldExit", [])]
+        if held:
+            self.log("holding open during the old version's exit: {}".format([Path(h.name).name for h in held]))
+        try:
+            code, helper_ok, cmdlines = self.launch_and_apply("update")
+        finally:
+            for handle in held:
+                handle.close()
         raw = self.run_dir / "captured-raw"
         raw.mkdir()
         fixtures.copy_evidence(self.out / "pending-before-exit.json", raw / "pending.json")
@@ -384,7 +415,7 @@ class Run:
         driver = self.driver("update")
         extra = [self.legacy_jar.name] if self.legacy_jar is not None else []
         checks = e2e_checks.after_update(self.instance, self.old_jar, self.new_jar, driver, self.server_log(), cmdlines,
-                                         extra_disables=extra)
+                                         extra_disables=extra, carried=self.carried)
         checks.insert(0, e2e_checks.Check("the client exited normally and the helper finished", code == 0 and helper_ok,
                                           "gradle exit {}, helper finished: {}".format(code, helper_ok)))
         self.checks["update"] = checks
@@ -394,12 +425,24 @@ class Run:
         mods_before = e2e_checks.listing(self.mods)
         statuses_before = e2e_checks.history_statuses(self.instance)
         last_apply = e2e_checks._load(self.rigtune_dir / "last-apply.json") or {}
-        code = self.launch("verify")
-        self.snapshot("verify")
+        if self.seed is not None:
+            # Watched like a staging launch: the check is that no helper runs at exit and mods/ stays as it was.
+            tree_before = e2e_checks.listing(self.mods, recursive=True)
+            code, _, cmdlines = self.launch_and_apply("verify")
+        else:
+            code = self.launch("verify")
+            self.snapshot("verify")
         legacy = [self.legacy_jar.name] if self.legacy_jar is not None else []
         checks = e2e_checks.after_verify(self.instance, self.new_jar, self.driver("verify"), last_apply.get("finishedAt"),
-                                         mods_before, self.args.expect_history, legacy_disables=legacy,
-                                         old_jar=self.old_jar, statuses_before=statuses_before)
+                                         None if self.seed else mods_before, self.args.expect_history,
+                                         legacy_disables=legacy, old_jar=self.old_jar, statuses_before=statuses_before)
+        if self.seed is not None:
+            log = self.out / "latest-verify.log"
+            failed = [r.get("op") or {} for r in last_apply.get("results") or [] if r.get("status") == "FAILED"]
+            checks += e2e_checks.after_seeded_verify(self.instance, self.carried, (self.seed["modId"], self.seed["modName"]),
+                                                     self.driver("verify"),
+                                                     log.read_text(encoding="utf-8", errors="replace") if log.is_file() else "",
+                                                     failed, cmdlines, tree_before)
         checks.insert(0, e2e_checks.Check("the relaunched client exited normally", code == 0, "gradle exit {}".format(code)))
         self.checks["verify"] = checks
         return all(c.ok for c in checks)
@@ -465,6 +508,7 @@ class Run:
                 shutil.rmtree(dest)
         dest.mkdir(parents=True)
         texts = [self.out / n for n in ("redirect-probe.txt", "helper-dir.txt", "pending-before-exit.json")]
+        texts += [self.out / ("seeded-" + n) for n in SEEDED]
         for phase in self.checks:
             texts += [self.out / n.format(phase) for n in ("driver-{}.json", "report-{}.txt", "helper-cmdlines-{}.txt",
                                                             "mods-after-{}.json", "history-after-{}.json", "last-apply-after-{}.json",
@@ -505,6 +549,11 @@ class Run:
             if self.legacy_jar is not None:
                 lines.append("- 0.1.0 also disabled `{}` in the same apply (so the 0.2 legacy import has a change that isn't "
                              "RigTune's)".format(self.legacy_jar.name))
+            if self.seed is not None:
+                lines += ["- Seeded (plan review H-M2) from `{}`: {}".format(self.scrub(str(self.seed["dir"])), self.seed.get("description", "")),
+                          "- Fake jars: " + ", ".join("`{path}` ({id} {version})".format(**j) for j in self.seed["jars"]),
+                          "- Held open during the old version's exit: {}. {}".format(
+                              ", ".join("`{}`".format(p) for p in self.seed.get("holdOpenAtOldExit", [])), self.seed.get("holdOpenWhy", ""))]
             lines.append("- Rescan pressed because the report stayed offline (the startup lookup race, docs/v0.2/design/ws-g.md): "
                          "update phase {}, verify phase {}".format(*("yes" if (self.driver(p) or {}).get("rescanned") else "no"
                                                                      for p in ("update", "verify"))))
@@ -579,6 +628,14 @@ class Run:
         return 0 if verdict == "PASS" else 1
 
 
+def load_seed(folder):
+    """A seed folder (tools/e2e/seeds/<name>): seed.json, plus the templated files it seeds (SEEDED)."""
+    folder = Path(folder).resolve()
+    seed = json.loads((folder / "seed.json").read_text(encoding="utf-8"))
+    seed["dir"] = folder
+    return seed
+
+
 def owner_text(agent, repo, run_dir, started):
     """The lock's owner.txt as PLAN's lock protocol asks (agent, worktree, started), plus the run folder that proves
     ownership on release."""
@@ -626,6 +683,7 @@ def parse_args(argv):
     parser.add_argument("--old-jar", help="self-update: the installed RigTune jar (e.g. the released v0.1.0)")
     parser.add_argument("--old-sha256", help="expected sha256 of --old-jar")
     parser.add_argument("--new-jar", required=True, help="self-update: the update the fake Modrinth serves; undo: the installed 0.2 jar")
+    parser.add_argument("--seed", help="self-update: seed the instance from a folder like tools/e2e/seeds/v010-dh (H-M2)")
     parser.add_argument("--legacy-disable", action="store_true",
                         help="self-update: 0.1.0 also disables a test mod, so the 0.2 legacy import has a change that isn't RigTune's")
     parser.add_argument("--driver-api-jar", help="the released v0.1.0 jar the driver compiles against (default --old-jar)")

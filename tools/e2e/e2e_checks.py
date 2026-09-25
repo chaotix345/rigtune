@@ -23,12 +23,18 @@ def digest(path, algorithm):
     return hashlib.new(algorithm, Path(path).read_bytes()).hexdigest()
 
 
-def listing(directory):
-    """File name -> sha256 of every file in a directory (not recursive)."""
+def listing(directory, recursive=False):
+    """File name -> sha256 of every file in a directory; recursive: the path relative to it, with '/'."""
     directory = Path(directory)
     if not directory.is_dir():
         return {}
+    if recursive:
+        return {p.relative_to(directory).as_posix(): digest(p, "sha256") for p in sorted(directory.rglob("*")) if p.is_file()}
     return {p.name: digest(p, "sha256") for p in sorted(directory.iterdir()) if p.is_file()}
+
+
+def _name(path):
+    return ntpath.basename(str(path)) if path else None
 
 
 def rigtune_jars(mods):
@@ -57,9 +63,11 @@ def _load(path):
     return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
 
 
-def after_update(instance, old_jar, new_jar, driver, server_log, helper_cmdlines, separator=";", extra_disables=()):
+def after_update(instance, old_jar, new_jar, driver, server_log, helper_cmdlines, separator=";", extra_disables=(),
+                 carried=()):
     """SPEC 5.5 and AC5.2, after the old version applied the update and the post-exit helper finished. extra_disables:
-    jar names the old version disabled in the same apply (so the 0.2 legacy import has something that is not RigTune's)."""
+    jar names the old version disabled in the same apply (so the 0.2 legacy import has something that is not RigTune's).
+    carried: the seeded pending.json's ops (H-M2), which the helper retried and failed again, so they stay pending."""
     instance, old_jar, new_jar = Path(instance), Path(old_jar), Path(new_jar)
     mods = instance / "mods"
     rigtune_dir = instance / "config" / "rigtune"
@@ -87,17 +95,29 @@ def after_update(instance, old_jar, new_jar, driver, server_log, helper_cmdlines
                             "(.disabled exists, jar exists): {}".format(state)))
 
     pending = rigtune_dir / "pending.json"
-    checks.append(Check("no pending.json", not pending.exists(), "pending.json exists: {}".format(pending.exists())))
     leftovers = sorted(p.name for p in mods.iterdir() if p.name.endswith(".rigtune-pending"))
-    checks.append(Check("no leftover downloads", not leftovers, "*.rigtune-pending: {}".format(leftovers)))
+    if carried:
+        ops = (_load(pending) or {}).get("ops") or []
+        got = sorted((op.get("id"), op.get("attempts")) for op in ops)
+        want = sorted((op.get("id"), (op.get("attempts") or 0) + 1) for op in carried)
+        checks.append(Check("pending.json holds only the carried-over group, one attempt more", got == want,
+                            "ops (id, attempts): {}; expected {}".format(got, want)))
+        downloads = sorted(_name(op.get("from")) for op in carried if op.get("type") == "ENABLE_FILE" and op.get("from"))
+        checks.append(Check("no leftover downloads but the carried-over group's", leftovers == downloads,
+                            "*.rigtune-pending: {}; expected {}".format(leftovers, downloads)))
+    else:
+        checks.append(Check("no pending.json", not pending.exists(), "pending.json exists: {}".format(pending.exists())))
+        checks.append(Check("no leftover downloads", not leftovers, "*.rigtune-pending: {}".format(leftovers)))
 
     last = _load(rigtune_dir / "last-apply.json") or {}
     results = last.get("results") or []
-    summary = [(r.get("op", {}).get("type"), Path(r.get("op", {}).get("path") or r.get("op", {}).get("to") or "").name,
+    summary = [(r.get("op", {}).get("type"), _name(r.get("op", {}).get("path") or r.get("op", {}).get("to") or ""),
                 r.get("status")) for r in results]
     expected = sorted([("DISABLE_FILE", old_jar.name, "OK"), ("ENABLE_FILE", new_jar.name, "OK")]
-                      + [("DISABLE_FILE", name, "OK") for name in extra_disables])
-    checks.append(Check("last-apply.json: the update's two ops, all OK", sorted(summary) == expected,
+                      + [("DISABLE_FILE", name, "OK") for name in extra_disables]
+                      + [(op.get("type"), _name(op.get("path") or op.get("to")), "FAILED") for op in carried])
+    checks.append(Check("last-apply.json: the update's two ops OK, the carried-over ops FAILED" if carried
+                        else "last-apply.json: the update's two ops, all OK", sorted(summary) == expected,
                         "results: {}".format(summary)))
 
     helper_dir = rigtune_dir / "helper"
@@ -164,9 +184,10 @@ def after_verify(instance, new_jar, driver, last_apply_finished_at, mods_before,
 
     crashes = sorted(p.name for p in (instance / "crash-reports").glob("*")) if (instance / "crash-reports").is_dir() else []
     checks.append(Check("no crash report", not crashes, "crash-reports: {}".format(crashes)))
-    after = listing(mods)
-    checks.append(Check("mods unchanged by the relaunch", after == mods_before,
-                        "before {} after {}".format(sorted(mods_before), sorted(after)) if after != mods_before else "unchanged"))
+    if mods_before is not None:
+        after = listing(mods)
+        checks.append(Check("mods unchanged by the relaunch", after == mods_before,
+                            "before {} after {}".format(sorted(mods_before), sorted(after)) if after != mods_before else "unchanged"))
     checks.append(Check("no new pending.json", not (rigtune_dir / "pending.json").exists(), ""))
 
     if expect_history == "own-update":
@@ -189,6 +210,79 @@ def after_verify(instance, new_jar, driver, last_apply_finished_at, mods_before,
                                                                        len(imports), own, missing,
                                                                        [e.get("changes") for e in imports])))
     return checks
+
+
+def after_seeded_verify(instance, carried, mod_names, driver, log_text, failed_ops, helper_cmdlines, mods_before):
+    """H-M2, the first start of the new version on the seeded 0.1.0 instance: RigTune's update of a loaded mod whose own
+    update waits in mods/update/ (3a) is dropped with its group and the notice, the journal marks it DISCARDED, each
+    failed op of the last apply gets a WARN line in latest.log (3e), and nothing in mods/ changes at exit.
+    carried: the seeded group's ops; mod_names: the mod's id and name; failed_ops: the FAILED ops of the last-apply.json
+    the new version read; helper_cmdlines: helpers seen during the launch; mods_before: listing(mods, recursive=True)
+    before it. The driver records the statuses it saw and the mods folder when it quit (modsAtQuit)."""
+    instance = Path(instance)
+    mods = instance / "mods"
+    driver = driver or {}
+    ids = {op.get("id") for op in carried}
+
+    plan = _load(instance / "config" / "rigtune" / "pending.json")
+    left = sorted(op.get("id") for op in (plan or {}).get("ops") or [] if op.get("id") in ids)
+    checks = [Check("the carried-over group is dropped", not left,
+                    "pending.json {}; carried-over ops still in it: {}".format("present" if plan is not None else "absent", left))]
+
+    statuses = driver.get("statuses") or []
+    wanted = [n.lower() for n in mod_names]
+    notices = [s for s in statuses if "queued" in (s.get("key") or "") and any(n in (s.get("text") or "").lower() for n in wanted)]
+    checks.append(Check("the drop is announced (status notice)", bool(notices),
+                        "statuses seen: {}".format([(s.get("key"), s.get("text")) for s in statuses])))
+
+    journaled = {c.get("opId"): c.get("status") for e in history_entries(instance) or [] for c in e.get("changes", [])
+                 if c.get("opId") in ids}
+    checks.append(Check("history.json: the carried-over changes are DISCARDED",
+                        set(journaled) == ids and set(journaled.values()) == {"DISCARDED"},
+                        "status by op id: {}".format(journaled)))
+
+    warns = [line for line in log_text.splitlines() if "/WARN]" in line and re.search(r"attempt \d+ of 3", line, re.IGNORECASE)]
+
+    def keys(op):
+        return [k for k in (op.get("modId"), _name(op.get("path")), _name(op.get("to"))) if k]
+
+    unmatched = [(op.get("type"), keys(op)) for op in failed_ops if not any(k in line for k in keys(op) for line in warns)]
+    relevant = [line for line in warns if any(k in line for op in failed_ops for k in keys(op))]
+    checks.append(Check("latest.log: a WARN line per failed op, with its attempt (3e)",
+                        bool(failed_ops) and not unmatched and len(relevant) >= len(failed_ops),
+                        "WARN lines: {}; failed ops without one: {}".format(relevant, unmatched)))
+
+    at_quit = driver.get("modsAtQuit")
+    after = listing(mods, recursive=True)
+    checks.append(Check("nothing in mods/ changes at exit", not helper_cmdlines and at_quit == after,
+                        "helper runs at exit: {}; mods/ at quit -> after exit: {}".format(
+                            len(helper_cmdlines), "unchanged" if at_quit == after else _diff(at_quit or {}, after))))
+
+    installed = [_name(op.get("path")) for op in carried if op.get("type") == "DISABLE_FILE"]
+    queued = [k for k in mods_before if k.startswith("update/")]
+    targets = [_name(op.get("to")) for op in carried if op.get("type") == "ENABLE_FILE"]
+    kept = {k: (mods_before.get(k) is not None and after.get(k) == mods_before.get(k)) for k in installed + queued}
+    enabled = [t for t in targets if (mods / t).exists()]
+    checks.append(Check("the installed and queued jars are untouched, RigTune's build not enabled",
+                        bool(kept) and all(kept.values()) and not enabled,
+                        "unchanged: {}; RigTune's build enabled: {}".format(kept, enabled)))
+
+    downloads = {_name(op.get("from")) for op in carried if op.get("type") == "ENABLE_FILE" and op.get("from")}
+    retired = {d[:-len(".rigtune-pending")] + ".rigtune-superseded" for d in downloads if d.endswith(".rigtune-pending")}
+    at_quit = at_quit or {}
+    removed = set(mods_before) - set(at_quit)
+    added = set(at_quit) - set(mods_before)
+    changed = {k for k in set(mods_before) & set(at_quit) if mods_before[k] != at_quit[k]}
+    checks.append(Check("during the session mods/ changed only by retiring the dropped download",
+                        bool(at_quit) and not changed and removed <= downloads
+                        and all(any(k == r or k.startswith(r + ".") for r in retired) for k in added),
+                        _diff(mods_before, at_quit) if at_quit else "no modsAtQuit from the driver"))
+    return checks
+
+
+def _diff(before, after):
+    return "removed {}, added {}, changed {}".format(sorted(set(before) - set(after)), sorted(set(after) - set(before)),
+                                                     sorted(k for k in set(before) & set(after) if before[k] != after[k]))
 
 
 def own_update_history(instance, old_jar, new_jar, statuses_before):
