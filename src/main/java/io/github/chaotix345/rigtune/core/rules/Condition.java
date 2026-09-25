@@ -42,6 +42,8 @@ public final class Condition {
 	public Long displayPixelsAtMost;
 	public Map<String, String> modVersion;
 	public String mcVersionRange;
+	// settings key -> expected value, compared with the SettingsSnapshot after SettingValues normalisation.
+	public Map<String, String> settingIs;
 
 	// Keys of this object that this client doesn't know, filled in while parsing. Any unknown key anywhere in a
 	// condition tree makes the whole top-level condition false (fail closed).

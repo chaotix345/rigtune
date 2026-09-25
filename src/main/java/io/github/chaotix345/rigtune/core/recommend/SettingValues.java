@@ -56,7 +56,7 @@ public final class SettingValues {
 		return Math.clamp(cap, 30, 250);
 	}
 
-	static boolean same(String a, String b) {
+	public static boolean same(String a, String b) {
 		if (a == null || b == null) {
 			return a == b;
 		}

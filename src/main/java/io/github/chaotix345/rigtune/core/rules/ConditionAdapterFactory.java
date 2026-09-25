@@ -26,7 +26,9 @@ import java.util.stream.Collectors;
 // reading them the v1 way would fail open:
 // - a key with an explicit JSON null (read as an absent field);
 // - a number that isn't an integer in the field's range (Gson's tree reader truncates 3.5 to 3 and wraps 2^32+1 to 1);
-// - a boolean field whose value isn't a JSON boolean ("yes" would read as false).
+// - a boolean field whose value isn't a JSON boolean ("yes" would read as false);
+// - a map field (modVersion, settingIs) that isn't an object of strings, numbers or booleans (Gson would reject the
+//   whole document).
 // A condition that is itself JSON null (e.g. "recommendWhen": null) becomes a poisoned condition, not "always".
 final class ConditionAdapterFactory implements TypeAdapterFactory {
 	static final Map<String, Class<?>> KNOWN_KEYS = Arrays.stream(Condition.class.getFields())
@@ -92,6 +94,9 @@ final class ConditionAdapterFactory implements TypeAdapterFactory {
 		}
 		if (fieldType == Long.class) {
 			return integral(value, LONG_MIN, LONG_MAX);
+		}
+		if (fieldType == Map.class) {
+			return value.isJsonObject() && value.getAsJsonObject().entrySet().stream().allMatch(e -> e.getValue().isJsonPrimitive());
 		}
 		return true;
 	}

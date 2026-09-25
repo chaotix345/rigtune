@@ -68,7 +68,7 @@ for each rule in `knowledge.json`:
 - `v1` is never written to either output, and `settingLabels` never reaches `rules-v1.json`.
 
 "v2-only" means a condition key 0.1.x doesn't know (`gpuModelMatches`,
-`displayPixelsAtLeast`/`AtMost`, `modVersion`, `mcVersionRange`) anywhere in the tree, or
+`displayPixelsAtLeast`/`AtMost`, `modVersion`, `mcVersionRange`, `settingIs`) anywhere in the tree, or
 a value outside the v0.1.0 vocabularies.
 
 ### Knowledge errors
@@ -87,9 +87,9 @@ The script stops (exit code 2, nothing written) and lists every problem when
   the rule has `requires` (a new token needs a new client);
 - a setting entry that uses a v2 condition, or a key outside `vanilla.`/`sodium.`, with no
   `v1` (omitting a setting entry can change which entry wins for 0.1.x, so it's always your call);
-- a rule with `requires` or `avoidSelected` and no `v1` (use `"v1": false` unless the field
-  can be left out exactly as safely: an empty `requires`, `avoidSelected: true`, or no
-  `avoidWhen` in the v1 rule);
+- a rule with `requires`, `avoidSelected` or `skipUpdateWhen` and no `v1` (use `"v1": false`
+  unless the field can be left out exactly as safely: an empty `requires`, `avoidSelected: true`,
+  or no `avoidWhen` in the v1 rule; `skipUpdateWhen` always can, since 0.1.x offers every update);
 - a v2-only `avoidWhen` on a mod 0.1.x can still be offered (add a v1 `avoidWhen` override);
 - a bad `v1` override (a `null`, a non-v1 field or condition).
 
@@ -121,7 +121,7 @@ directly (see `tools/tests/test_update_rules.py`).
 
 - `tools/check_rules_v1.py` (CI job `rules-v1-compat`): `rules-v1.json` has
   schemaVersion 1; only the fields, condition keys and values 0.1.0 understands; only
-  `vanilla.`/`sodium.` settings keys; no `requires`, `avoidSelected`, `settingLabels` or
+  `vanilla.`/`sodium.` settings keys; no `requires`, `avoidSelected`, `skipUpdateWhen`, `settingLabels` or
   `v1`; the same revision and `generatedAt` as `rules-v2.json`; and it equals the
   projection rebuilt offline from `knowledge.json` and `rules-v2.json`'s generated data
   (so it also fails when `knowledge.json` was edited without regenerating).

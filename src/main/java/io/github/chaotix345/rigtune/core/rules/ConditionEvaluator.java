@@ -7,7 +7,9 @@ import io.github.chaotix345.rigtune.core.model.GpuInfo;
 import io.github.chaotix345.rigtune.core.model.GpuVendor;
 import io.github.chaotix345.rigtune.core.model.GraphicsBackend;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
+import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.model.TierResult;
+import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import net.fabricmc.loader.api.SemanticVersion;
 import net.fabricmc.loader.api.Version;
 import net.fabricmc.loader.api.metadata.version.VersionPredicate;
@@ -97,6 +99,7 @@ public final class ConditionEvaluator {
 		t = and(t, () -> c.gpuModelMatches == null ? TRUE : gpuModelMatches(c, gpu));
 		t = and(t, () -> c.modVersion == null ? TRUE : modVersions(c.modVersion, ctx));
 		t = and(t, () -> c.mcVersionRange == null ? TRUE : mcVersionRange(c.mcVersionRange, hw.mcVersion()));
+		t = and(t, () -> c.settingIs == null ? TRUE : settingIs(c.settingIs, ctx.settings()));
 		t = and(t, () -> c.anyOf == null ? TRUE : anyOf(c.anyOf, ctx));
 		return and(t, () -> c.not == null ? TRUE : node(c.not, ctx).not());
 	}
@@ -269,6 +272,17 @@ public final class ConditionEvaluator {
 		}
 		SemanticVersion version = semantic(ctx.modVersions() == null ? null : ctx.modVersions().get(modId));
 		return version == null ? UNKNOWN : Truth.of(predicate.test(version));
+	}
+
+	// Every listed key must be in the current settings and equal the expected value; a key that isn't there is UNKNOWN
+	// (the mod's config may be missing, unreadable or older).
+	private static Truth settingIs(Map<String, String> wanted, SettingsSnapshot settings) {
+		Truth t = TRUE;
+		for (Map.Entry<String, String> entry : wanted.entrySet()) {
+			t = and(t, () -> entry.getKey() == null || entry.getValue() == null || settings == null || !settings.has(entry.getKey()) ? UNKNOWN
+					: Truth.of(SettingValues.same(settings.get(entry.getKey()), entry.getValue())));
+		}
+		return t;
 	}
 
 	private static Truth mcVersionRange(String predicateText, String mcVersion) {

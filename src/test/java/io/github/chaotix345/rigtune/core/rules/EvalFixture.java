@@ -6,6 +6,7 @@ import io.github.chaotix345.rigtune.core.model.GpuClass;
 import io.github.chaotix345.rigtune.core.model.GpuInfo;
 import io.github.chaotix345.rigtune.core.model.GpuVendor;
 import io.github.chaotix345.rigtune.core.model.GraphicsBackend;
+import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.model.TierResult;
 
 import java.util.HashMap;
@@ -20,9 +21,10 @@ final class EvalFixture {
 	Goal goal = Goal.PERFORMANCE;
 	Set<String> mods = Set.of("sodium", "lithium");
 	final Map<String, String> versions = new HashMap<>(Map.of("sodium", "0.9.2", "lithium", "0.25.4"));
+	final Map<String, String> settings = new HashMap<>();
 
 	EvalContext context() {
-		return new EvalContext(hw.build(), gpu, tier, goal, mods, versions);
+		return new EvalContext(hw.build(), gpu, tier, goal, mods, versions, new SettingsSnapshot(Map.copyOf(settings)));
 	}
 
 	Truth truth(String json) {

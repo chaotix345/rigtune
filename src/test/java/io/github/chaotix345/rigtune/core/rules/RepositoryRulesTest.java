@@ -82,6 +82,7 @@ class RepositoryRulesTest {
 		v1.mods.forEach(r -> {
 			assertNull(r.requires, r.slug);
 			assertNull(r.avoidSelected, r.slug);
+			assertNull(r.skipUpdateWhen, r.slug);
 		});
 		v1.obsolete.forEach(r -> assertNull(r.requires, r.title));
 		v1.settings.forEach(r -> assertNull(r.requires, r.key));
@@ -93,7 +94,7 @@ class RepositoryRulesTest {
 
 	private static boolean v2FieldsAbsent(Condition c) {
 		if (c.gpuModelMatches != null || c.displayPixelsAtLeast != null || c.displayPixelsAtMost != null
-				|| c.modVersion != null || c.mcVersionRange != null) {
+				|| c.modVersion != null || c.mcVersionRange != null || c.settingIs != null) {
 			return false;
 		}
 		return (c.not == null || v2FieldsAbsent(c.not)) && (c.anyOf == null || c.anyOf.stream().allMatch(RepositoryRulesTest::v2FieldsAbsent));
@@ -104,6 +105,7 @@ class RepositoryRulesTest {
 		doc.mods.forEach(r -> {
 			out.add(r.recommendWhen);
 			out.add(r.avoidWhen);
+			out.add(r.skipUpdateWhen);
 		});
 		doc.settings.forEach(r -> out.add(r.when));
 		doc.advice.forEach(r -> out.add(r.when));

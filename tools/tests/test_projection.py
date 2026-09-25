@@ -276,6 +276,34 @@ class RuleFieldTests(unittest.TestCase):
         self.assertEqual(projected["avoidWhen"], {"tierAtMost": 2})
 
 
+    def test_skip_update_when_is_left_out_of_v1(self):
+        dh = mod_rule(slug="distanthorizons", modIds=["distanthorizons"], recommendWhen={"always": False},
+                      skipUpdateWhen={"settingIs": {"dh.client.advanced.autoUpdater.enableAutoUpdater": True}})
+        with self.assertRaises(ur.KnowledgeError):
+            ur.project_rule("mods", dh)
+        projected, notes = ur.project_rule("mods", dict(dh, v1={"impact": "low"}))
+        self.assertNotIn("skipUpdateWhen", projected)
+        self.assertTrue(any("skipUpdateWhen" in n for n in notes))
+        projected, _ = ur.project_rule("mods", dict(dh, v1=False))
+        self.assertIsNone(projected)
+
+
+class SettingIsTests(unittest.TestCase):
+    def test_setting_is_is_a_v2_condition(self):
+        when = {"not": {"settingIs": {"dh.client.advanced.debugging.rendererMode": "DISABLED"}}}
+        self.assertFalse(ur.is_v1_condition(when))
+        self.assertEqual(ur.condition_problems(when), [])
+        with self.assertRaises(ur.KnowledgeError):
+            ur.project_rule("settings", setting_rule(when=when))
+        projected, _ = ur.project_rule("settings", setting_rule(when=when, v1={"when": {"tierAtLeast": 4}}))
+        self.assertEqual(projected["when"], {"tierAtLeast": 4})
+
+    def test_setting_is_values_must_be_plain(self):
+        for value in ("x", [], {"": True}, {"k": [1]}, {"k": {}}, {"k": None}):
+            self.assertNotEqual(ur.condition_problems({"settingIs": value}), [], value)
+        self.assertEqual(ur.condition_problems({"settingIs": {"a.b": True, "c": 12, "d": "X", "e": 1.5}}), [])
+
+
 class ValidationTests(unittest.TestCase):
     def knowledge(self, **sections):
         knowledge = load_fixture("knowledge_sample.json")
@@ -312,6 +340,12 @@ class ValidationTests(unittest.TestCase):
             with self.assertRaises(ur.KnowledgeError, msg=str(when)):
                 ur.validate_knowledge(self.knowledge(advice=[advice_rule(when=when)]))
         ur.validate_knowledge(self.knowledge(advice=[advice_rule(when={"tierAtLeast": 2 ** 31 - 1, "ramMbAtLeast": 2 ** 63 - 1})]))
+
+    def test_skip_update_when_is_validated(self):
+        dh = mod_rule(slug="distanthorizons", modIds=["distanthorizons"], recommendWhen={"always": False}, v1=False)
+        ur.validate_knowledge(self.knowledge(mods=[dict(dh, skipUpdateWhen={"settingIs": {"dh.a": True}})]))
+        with self.assertRaises(ur.KnowledgeError):
+            ur.validate_knowledge(self.knowledge(mods=[dict(dh, skipUpdateWhen={"settingIz": {"dh.a": True}})]))
 
     def test_overlong_regex_is_a_knowledge_error(self):
         with self.assertRaises(ur.KnowledgeError):

@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.core.rules;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -90,5 +91,19 @@ class ConditionParsingTest {
 		assertEquals(Set.of("soon"), doc.mods.getFirst().avoidWhen.anyOf.getFirst().not.unknownFields);
 		assertEquals(Set.of("later"), doc.settings.getFirst().when.unknownFields);
 		assertTrue(doc.advice.getFirst().when.unknownFields.isEmpty());
+	}
+
+	@Test
+	void settingIsReadsStringsNumbersAndBooleans() {
+		Condition c = RulesLoader.condition("{\"settingIs\":{\"dh.a.enabled\":true,\"vanilla.renderDistance\":12,\"dh.b.mode\":\"DISABLED\"}}");
+		assertTrue(c.unknownFields.isEmpty());
+		assertEquals(Map.of("dh.a.enabled", "true", "vanilla.renderDistance", "12", "dh.b.mode", "DISABLED"), c.settingIs);
+	}
+
+	@Test
+	void settingIsThatIsNotAMapOfPlainValuesPoisons() {
+		for (String bad : List.of("\"x\"", "[]", "3", "{\"a\":null}", "{\"a\":{}}", "{\"a\":[1]}")) {
+			assertEquals(Set.of("settingIs"), RulesLoader.condition("{\"settingIs\":" + bad + ",\"always\":true}").unknownFields, bad);
+		}
 	}
 }
