@@ -18,10 +18,11 @@ class GametestMatrixTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.root)
         (self.root / "versions").mkdir()
 
-    def add_node(self, mc):
+    def add_node(self, mc, sodium=True):
         node = self.root / "versions" / mc
         node.mkdir()
-        (node / "gradle.properties").write_text(f"minecraft_dependency=~{mc}\n", encoding="utf-8", newline="\n")
+        props = f"minecraft_dependency=~{mc}\n" + (f"sodium_version=mc{mc}-0.9.2-fabric\n" if sodium else "")
+        (node / "gradle.properties").write_text(props, encoding="utf-8", newline="\n")
 
     def test_current_nodes_give_three_legs(self):
         self.add_node("26.2")
@@ -59,11 +60,25 @@ class GametestMatrixTests(unittest.TestCase):
             {"mc": "26.2", "backend": "OpenGL"},
         ])
 
+    def test_node_without_sodium_gets_its_legs(self):
+        self.add_node("26.3")
+        self.add_node("26.4", sodium=False)
+        self.assertEqual(gm.legs(self.root)[2:], [
+            {"mc": "26.4", "backend": "OpenGL"},
+            {"mc": "26.4", "backend": "Vulkan"},
+        ])
+
     def test_numeric_sort(self):
         self.add_node("26.10")
         self.add_node("26.3")
         self.add_node("26.2")
         self.assertEqual(gm.nodes(self.root), ["26.2", "26.3", "26.10"])
+
+    def test_prerelease_stages_sort_before_the_release(self):
+        for mc in ["26.4.1", "26.4", "26.4-rc-1", "26.4-pre-1", "26.4-snapshot-10", "26.4-snapshot-2"]:
+            self.add_node(mc)
+        self.assertEqual(gm.nodes(self.root),
+                         ["26.4-snapshot-2", "26.4-snapshot-10", "26.4-pre-1", "26.4-rc-1", "26.4", "26.4.1"])
 
     def test_hidden_dirs_and_files_are_ignored(self):
         self.add_node("26.2")
@@ -79,6 +94,15 @@ class GametestMatrixTests(unittest.TestCase):
         self.add_node("latest")
         with self.assertRaises(SystemExit):
             gm.nodes(self.root)
+
+    def test_shell_metacharacters_are_refused(self):
+        for mc in ["26.4-$(id)", "26.4-x;ls", "26.4-a b", "26.4-`id`", "26.4-a'b"]:
+            with self.subTest(mc=mc):
+                node = self.root / "versions" / mc
+                node.mkdir()
+                with self.assertRaises(SystemExit):
+                    gm.nodes(self.root)
+                node.rmdir()
 
     def test_cli_prints_one_line_of_matrix_json(self):
         self.add_node("26.2")
