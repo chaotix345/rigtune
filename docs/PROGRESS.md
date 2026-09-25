@@ -2,6 +2,33 @@
 
 Source of truth for resuming after context compaction. Update and commit after every milestone. After a compaction, reread this file before acting.
 
+## v0.3.0 working log (started 2026-09-26)
+
+Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub + Modrinth). Scope: P0 1-4, P1 5-10, P2 11-13 (docs/v0.3/SPEC.md once written).
+
+### Environment (verified 2026-09-26)
+- Integration branch `feat/v0.3.0` from main @ 3228fce. Baseline `./gradlew build` on main OK (both versions).
+- MC versions (Mojang manifest + Fabric meta, 2026-09-26): latest release 26.3 (2026-09-15); 26.4 is only `26.4-snapshot-1` (2026-09-22). No newer stable -> P0.1 = record + one-step add-version procedure.
+- Modrinth (`tools/modrinth_project.py status`, 2026-09-26): status processing (requested approved), 3 versions listed (0.1.0, 0.2.0+mc26.2, 0.2.0+mc26.3). Still in review, so the 0.1.0 -> 0.2.0 update can't be offered in the wild yet (public version_file lookup hides in-review versions).
+- No open PRs (no weekly update-rules PR yet; last update-rules run 2026-09-25 green).
+- gh: chaotix345, scopes gist/project/read:org/repo (git pushes go through the credential manager, which pushed workflow edits in v0.2).
+- Watchdog: scratchpad/watchdog.py + javaprocs.ps1 (copied from the v0.2 session, paths updated). Run: `python <scratchpad>/watchdog.py name=<worktree>;<agent scratch> ... --stall-min 15 --lock-min 8` in the background.
+
+### Status
+- [ ] Phase 0: orient (in progress: docs brief, code map, real-instance agents running; outputs in scratchpad/orient/)
+- [ ] Phase 1: research
+- [ ] Phase 2: spec + plan + plan review
+- [ ] Phase 3: foundation
+- [ ] Phase 4: features
+- [ ] Phase 5: verification
+- [ ] Phase 6: reviews (2 rounds)
+- [ ] Phase 7: release
+- [ ] Phase 8: wrap-up
+
+### Agents (v0.3)
+| name | branch | worktree | status |
+|---|---|---|---|
+
 ## v0.2.0: RELEASED 2026-09-25
 - PR #2 merged to main (5b3219d); tag v0.2.0; GitHub release with rigtune-0.2.0+mc26.2.jar / +mc26.3.jar (+ sources): https://github.com/chaotix345/rigtune/releases/tag/v0.2.0
 - Modrinth project oBN6pcGa (https://modrinth.com/mod/rigtune): versions 0.1.0 (7kgaKg8I), 0.2.0+mc26.2 (IcGMI8us), 0.2.0+mc26.3 (s8lEG7d9). Byte-identical to the GitHub assets (checked through the authenticated API). The 0.2 body and 6 gallery images are live. Status: processing (in moderator review; the user saved the content disclosures: AI-generated code/assets/text + external system interactions).
