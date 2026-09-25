@@ -41,7 +41,7 @@ class ShaderAdviceTest {
 			// The row's numbers really have the row's properties.
 			assertEquals(r.below(), r.on() < TARGET, r.toString());
 			assertEquals(r.reaches(), r.off() >= TARGET, r.toString());
-			assertEquals(r.gap(), c.lowGainPercent() >= 10, r.toString());
+			assertEquals(r.gap(), (r.off() - r.on()) / r.off() * 100 >= 10, r.toString());
 			boolean expected = r.measured() && r.below() && r.reaches() && r.gap();
 			assertEquals(expected, ShaderAdvice.costPercent(r.measured() ? c : null, TARGET).isPresent(), r.toString());
 		}
@@ -56,7 +56,7 @@ class ShaderAdviceTest {
 		for (double on : ons) {
 			for (double off : offs) {
 				OptionalInt advice = ShaderAdvice.costPercent(cost(on, off), TARGET);
-				boolean expected = on < TARGET && off >= TARGET && (off - on) / on * 100 >= 10;
+				boolean expected = on < TARGET && off >= TARGET && (off - on) / off * 100 >= 10;
 				assertEquals(expected, advice.isPresent(), "on " + on + ", off " + off);
 				if (expected) {
 					shown++;
@@ -79,10 +79,10 @@ class ShaderAdviceTest {
 		assertEquals(OptionalInt.empty(), ShaderAdvice.costPercent(cost(100, 130), TARGET));
 		// Exactly the target without shaders: reaches it.
 		assertEquals(OptionalInt.of(17), ShaderAdvice.costPercent(cost(83, 100), TARGET));
-		// A gap of exactly 10%.
-		assertEquals(OptionalInt.of(9), ShaderAdvice.costPercent(cost(100, 110), 105));
-		// Just under 10%.
-		assertEquals(OptionalInt.empty(), ShaderAdvice.costPercent(cost(100, 109.9), 105));
+		// A cost of exactly 10% of the shaders-off 1% low.
+		assertEquals(OptionalInt.of(10), ShaderAdvice.costPercent(cost(90, 100), 95));
+		// Just under 10% (though shaders off is 10% higher).
+		assertEquals(OptionalInt.empty(), ShaderAdvice.costPercent(cost(100, 110), 105));
 		assertEquals(OptionalInt.empty(), ShaderAdvice.costPercent(null, TARGET));
 		assertEquals(OptionalInt.empty(), ShaderAdvice.costPercent(cost(0, 120), TARGET));
 	}

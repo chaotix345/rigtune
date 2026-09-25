@@ -181,8 +181,7 @@ public final class BenchmarkController {
 		Timing timing = config.timing();
 		long now = System.nanoTime();
 		this.chunkLimit = maxRenderDistance(options, minecraft.hasSingleplayerServer());
-		int maxRd = Math.max(MIN_RD, BenchmarkSession.maxRenderDistance(request.scene(), original.renderDistance(),
-				Math.min(config.maxRenderDistance(), chunkLimit)));
+		int maxRd = tuneMaxRenderDistance(request.scene(), original.renderDistance(), config.maxRenderDistance(), chunkLimit);
 		BenchmarkSession session = request.mode() == BenchmarkRequest.Mode.MEASURE
 				? BenchmarkSession.measure(original, targetFps, timing, now)
 				: BenchmarkSession.tune(original, new BenchmarkSession.TuneLimits(MIN_RD, maxRd, targetFps,
@@ -228,6 +227,12 @@ public final class BenchmarkController {
 			return dev;
 		}
 		return Math.min(SettingValues.refreshRateCap(HardwareProbe.refreshRate(minecraft.getWindow())), MAX_TARGET_FPS);
+	}
+
+	// The highest render distance a Tune tests: the server's or options' limit, the config's cap, and in the player's own
+	// world the start + 8 (docs/v0.3/SPEC.md E-M2); never below MIN_RD.
+	static int tuneMaxRenderDistance(BenchmarkRequest.Scene scene, int startRd, int configMax, int chunkLimit) {
+		return Math.max(MIN_RD, BenchmarkSession.maxRenderDistance(scene, startRd, Math.min(configMax, chunkLimit)));
 	}
 
 	static @Nullable Double parseTargetFps(@Nullable String value) {

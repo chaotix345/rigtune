@@ -163,6 +163,10 @@ public class BenchmarkResultScreen extends Screen {
 			out.add(new Line(Component.translatable("rigtune.benchmark.cost.shaders.not_measured",
 					reason(session.notMeasured().get(BenchmarkRecord.SHADERS))), COLOR_WARN));
 		}
+		// docs/v0.3/SPEC.md E-M1: a step measured before its terrain had loaded doesn't count, whatever its FPS.
+		if (tune() && rows.stream().anyMatch(m -> !m.complete())) {
+			out.add(new Line(Component.translatable("rigtune.benchmark.incomplete"), COLOR_WARN));
+		}
 		if (session.deadlineHit()) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.deadline"), COLOR_WARN));
 		}
@@ -223,7 +227,8 @@ public class BenchmarkResultScreen extends Screen {
 			if (p99) {
 				graphics.text(font, String.format(Locale.ROOT, "%.1f", m.stats().p99FrameMs()), left + columns[3], y, color, false);
 			}
-			graphics.text(font, m.passed() ? "✔" : "✘", left + columns[columns.length - 1], y, m.passed() ? COLOR_PASS : COLOR_FAIL, false);
+			graphics.text(font, m.passed() ? "✔" : m.complete() ? "✘" : "✘*", left + columns[columns.length - 1], y,
+					m.passed() ? COLOR_PASS : COLOR_FAIL, false);
 			y += ROW;
 		}
 	}

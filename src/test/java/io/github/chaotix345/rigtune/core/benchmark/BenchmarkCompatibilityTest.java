@@ -62,6 +62,9 @@ class BenchmarkCompatibilityTest {
 			assertEquals(GSON.toJsonTree(old.runs().get(i)), GSON.toJsonTree(now.runs().get(i)), "run " + i);
 		}
 		assertTrue(now.before(PAIR).isPresent());
+		// The fixture is what 0.2.0's own save writes for these runs.
+		old.save(dir.resolve("written-by-020.json"));
+		assertEquals(fixture(), Files.readString(dir.resolve("written-by-020.json"), StandardCharsets.UTF_8));
 		// Saved again by 0.3.0, the runs 0.2.0 wrote come out byte for byte the same.
 		now.save(file());
 		assertEquals(fixture(), Files.readString(file(), StandardCharsets.UTF_8));

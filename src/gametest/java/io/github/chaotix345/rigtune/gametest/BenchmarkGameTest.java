@@ -59,6 +59,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
+import java.util.function.IntPredicate;
 
 // Benchmark v2 (docs/v0.2/SPEC.md AC6.2, AC6.3) and its v0.3 follow-ups (docs/v0.3/SPEC.md 3f, 8). Numbers aren't
 // asserted: the harness's tick sync makes 1% lows unrepresentative. What is asserted: the runs complete, everything is
@@ -255,18 +256,27 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 	// docs/v0.3/SPEC.md AC8.3: the integrated server's requested view distance (what it sends chunks for) equals the
 	// restored render distance. The packet is handled on a server tick, so this polls.
 	private static void checkRequestedViewDistance(ClientGameTestContext context, int expected, String when) {
+		int requested = awaitRequestedViewDistance(context, rd -> rd == expected, when);
+		RigTune.LOGGER.info("Benchmark game test: server's requested view distance {} {} (render distance {})", requested, when, expected);
+	}
+
+	// Polls the integrated server's requested view distance of the player until it matches (the packet is handled on a
+	// server tick), for up to about 200 ticks; fails otherwise.
+	private static int awaitRequestedViewDistance(ClientGameTestContext context, IntPredicate wanted, String when) {
 		int requested = -1;
-		for (int i = 0; i < 40 && requested != expected; i++) {
+		for (int i = 0; i < 100; i++) {
 			if (i > 0) {
-				context.waitTicks(5);
+				context.waitTicks(1);
 			}
 			requested = onServer(context, server -> {
 				List<ServerPlayer> players = server.getPlayerList().getPlayers();
 				return players.isEmpty() ? -1 : players.getFirst().requestedViewDistance();
 			});
+			if (wanted.test(requested)) {
+				return requested;
+			}
 		}
-		RigTune.LOGGER.info("Benchmark game test: server's requested view distance {} {} (render distance {})", requested, when, expected);
-		check(requested == expected, "the server was told the restored render distance " + when + ": " + requested + " vs " + expected);
+		throw new AssertionError("Check failed: the server's requested view distance " + when + " is " + requested);
 	}
 
 	// Runs a task on the integrated server's thread. The harness keeps the game threads in step with this thread, so it
@@ -319,9 +329,10 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		Settings settings = context.computeOnClient(Settings::of);
 		int runs = context.computeOnClient(mc -> BenchmarkStore.history().runs().size());
 		pressByKey(context, "rigtune.benchmark.menu.tune");
-		// Esc once a step at another render distance than the start is running, so the restore has something to tell the server.
+		// Esc once the server has been told a step's other render distance, so the restore has something to tell it.
 		context.waitFor(mc -> BenchmarkController.progress() != null && mc.options.renderDistance().get() != settings.rd(), WORLD_TIMEOUT_TICKS);
-		context.waitTicks(10);
+		int stepRd = awaitRequestedViewDistance(context, rd -> rd != settings.rd(), "during a step at another render distance");
+		RigTune.LOGGER.info("Benchmark game test: server's requested view distance {} during the step (start {})", stepRd, settings.rd());
 		context.getInput().pressKey(InputConstants.KEY_ESCAPE);
 		context.waitFor(mc -> BenchmarkWorld.awaitingExit(), RUN_TIMEOUT_TICKS);
 		BenchmarkController.Outcome outcome = context.computeOnClient(mc -> BenchmarkController.lastOutcome());

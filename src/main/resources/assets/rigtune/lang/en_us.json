@@ -144,6 +144,7 @@
 	"rigtune.benchmark.deadline": "Stopped at the 5-minute limit; the remaining checks were skipped.",
 	"rigtune.benchmark.gain": "Compared with before: 1%% lows %s (avg %s)",
 	"rigtune.benchmark.gain.none": "Compared with before: no significant change",
+	"rigtune.benchmark.incomplete": "✘* Some of the terrain hadn't loaded in time, so that distance doesn't count.",
 	"rigtune.benchmark.measured": "Current settings: %s FPS average, %s FPS 1%% low",
 	"rigtune.benchmark.menu.duration": "Tune takes up to 5 minutes, Measure about a minute. Esc cancels.",
 	"rigtune.benchmark.menu.intro": "Tune finds the highest render distance (and, in singleplayer, simulation distance) that keeps your 1%% lows at the target. Measure records your current settings to compare before and after a change.",
