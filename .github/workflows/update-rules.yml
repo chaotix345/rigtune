@@ -30,7 +30,7 @@ jobs:
         id: changes
         run: |
           set -eu
-          for f in rules/rules-v1.json src/main/resources/rigtune/rules-v1.json rules/REVIEW.md; do
+          for f in rules/rules-v2.json src/main/resources/rigtune/rules-v2.json rules/rules-v1.json rules/REVIEW.md; do
             [ -f "$f" ] && git add "$f"
           done
           if git diff --cached --quiet; then
