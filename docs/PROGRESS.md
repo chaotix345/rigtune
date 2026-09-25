@@ -34,7 +34,7 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 | ws-c (launcher RAM advice) | feat/launcher-ram | C:/Dev/Worktrees/rigtune-launcher | RUNNING |
 | ws-d (rules: tiers, spark, vulkan, change C) | feat/rules-v03 | C:/Dev/Worktrees/rigtune-rules3 | RUNNING |
 | ws-e (3f + benchmark item 8) | feat/benchmark-v03 | C:/Dev/Worktrees/rigtune-bench3 | RUNNING (uses the lock for the AC3.7 autorun) |
-| ws-f (Report a problem, Quilt FAQ) | feat/report-problem | C:/Dev/Worktrees/rigtune-report | RUNNING |
+| ws-f (Report a problem, Quilt FAQ) | feat/report-problem (deleted) | removed | MERGED 8dab3ad (CI 36177323925 green; 861 tests per version; URL budget 675 chars so the whole link is readable on the confirm screen at 640x480@2; UNVERIFIED until the release PR is on main: the live GitHub form prefill and pressing Open in Browser, check by hand before tagging) |
 | ws-v (add_mc_version.py, mc_apidiff.py, Porting) | feat/mc-tooling | C:/Dev/Worktrees/rigtune-mctool | RUNNING |
 | ws-h (self-update E2E 0.1/0.2 -> 0.3, seeded, per-entry undo) | test/e2e-v03 | C:/Dev/Worktrees/rigtune-e2e3 | RUNNING (uses the lock) |
 | plan-review | - | - | DONE: docs/v0.3/plan-review.md (4 H, 25 M, 11 L), folded into SPEC "Amendments" + PLAN (0681c4c) |
