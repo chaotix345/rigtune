@@ -52,12 +52,18 @@ To run the benchmark, stand somewhere typical in your world (singleplayer works 
 
 ## Privacy
 
-- RigTune has no telemetry. Your hardware details never leave your PC.
-- It makes two kinds of network request:
-  - **GitHub**: it downloads the rules file from this repository.
-  - **Modrinth API**: it sends the SHA-1 hashes of your installed mod jars (to find updates) and the project ids it might suggest, and it downloads the mod files you choose to install.
+RigTune has no telemetry. Your hardware details never leave your PC. It makes two kinds of network request, and you can switch each one off in **RigTune → Settings** (or with Mod Menu's config button):
 
-If you're offline, RigTune falls back to the rules bundled in the jar.
+| Switch | What it sends when on | When it's off |
+|---|---|---|
+| **Network access** (master) | Everything below | No network request of any kind. The RigTune screen says "Offline (network off in settings)". |
+| **Rules updates (GitHub)** | A plain download of the rules file from this repository (`raw.githubusercontent.com`). | The rules bundled in the jar, or the last downloaded copy, are used. |
+| **Modrinth** | To the Modrinth API (`api.modrinth.com`): the SHA-1 hashes of your installed mod jars (to find updates, including RigTune's own), the ids of the mods RigTune might suggest (to check they exist for your version), and your Minecraft version with the loader name `fabric`. From Modrinth's CDN it downloads only the files you choose to install or update, and checks their SHA-512 hashes. | No Modrinth request at all: no lookups, no update checks, no downloads. Mod installs and updates are still listed, as advice to do in your launcher. |
+| **Startup suggestions toast** | Nothing (it isn't a network switch) | The "RigTune: N suggestions" toast on the title screen isn't shown. Apply results and warnings still are. |
+
+Every request identifies itself as RigTune and its version (the User-Agent). The switches are stored in `config/rigtune/settings.json`; the first time RigTune 0.2 starts, a one-time toast points at them. With the network off, or when a request fails, RigTune falls back to the rules bundled in the jar.
+
+**Copy report** on the RigTune screen puts a Markdown summary on your clipboard for you to paste into Discord or an issue: the versions, your hardware, tier and goal, the rules revision, the suggestions' titles and your latest benchmark. It leaves out file paths, user names and world names, and RigTune never sends it anywhere itself.
 
 ## How the recommendations stay current
 
