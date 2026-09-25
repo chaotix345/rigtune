@@ -76,12 +76,12 @@ class HistoryScreenTest {
 		return lang().get(t.getKey()).getAsString().formatted(args.toArray());
 	}
 
-	// AC3.5 (screen half, unit level): "Last attempt failed: ..." with attempt n of 3.
+	// AC3.5 (screen half, unit level): "Last attempt failed: ..." with try n of 3 at restart.
 	@Test
 	void aStagedChangeWhoseOpFailedSaysSo() throws IOException {
 		Failure busy = new Failure("op", Status.FAILED, PendingActions.Type.ENABLE_FILE, "dh", "dh.jar", "dh.jar is in use", 2);
 
-		assertEquals("Last attempt failed: dh.jar is in use (attempt 2 of 3)", english(HistoryScreen.failureText(change(JournalChange.STAGED, busy))));
+		assertEquals("Last attempt failed: dh.jar is in use (try 2 of 3 at restart)", english(HistoryScreen.failureText(change(JournalChange.STAGED, busy))));
 		assertNull(HistoryScreen.failureText(change(JournalChange.STAGED, null)));
 	}
 

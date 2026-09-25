@@ -57,9 +57,9 @@ class ApplyFailuresTest {
 		assertEquals("Not applied because disabling fabric-26.2.jar failed", enable.reason());
 
 		List<String> lines = failures.stream().map(f -> ApplyFailures.warnLine(f, "2026-09-24T23:09:01.530708800Z")).toList();
-		assertEquals("RigTune's helper couldn't apply a change (run finished 2026-09-24T23:09:01.530708800Z, attempt 1 of 3; it's retried at the "
+		assertEquals("RigTune's helper couldn't apply a change (run finished 2026-09-24T23:09:01.530708800Z, restart attempt 1 of 3; it's retried at the "
 				+ "next exit): DISABLE_FILE fabric-26.2.jar: " + disable.reason(), lines.get(0));
-		assertEquals("RigTune's helper couldn't apply a change (run finished 2026-09-24T23:09:01.530708800Z, attempt 1 of 3; it's retried at the "
+		assertEquals("RigTune's helper couldn't apply a change (run finished 2026-09-24T23:09:01.530708800Z, restart attempt 1 of 3; it's retried at the "
 				+ "next exit): ENABLE_FILE distanthorizons (DistantHorizons-3.3.2-26.2-fabric-neoforge.jar): Not applied because disabling "
 				+ "fabric-26.2.jar failed", lines.get(1));
 		lines.forEach(line -> assertFalse(line.contains(game.toString()), line));
