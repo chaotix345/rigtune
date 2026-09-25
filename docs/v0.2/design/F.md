@@ -50,3 +50,18 @@ python tools/modrinth_project.py status
 ## Next step
 
 Tasks 1, 2, 3 and 4 (tool + listing copy + Minotaur/release.yml) are all done and committed on `feat/modrinth`, rebased onto `origin/feat/v0.2.0` post-Phase-3. Only the real Modrinth run (create/gallery/upload-version/submit/status) remains, blocked on a permission grant — not on missing work.
+
+## Live run (2026-09-25, run by the coordinator on the user's direct instruction)
+- Project created: id `oBN6pcGa`, slug `rigtune`, https://modrinth.com/mod/rigtune (draft until approved).
+- Gallery: 4 images uploaded.
+- Version `0.1.0` (id `7kgaKg8I`): the exact released jar (sha256 8294d04a…), game_versions ["26.2"], loaders ["fabric"], fabric-api required.
+- Submitted for review: status `processing`, requested_status `approved`.
+- Three fixes the live API needed (the docs were out of date):
+  1. `POST /v2/project` still requires `initial_versions` (an empty list), even though it's documented as deprecated.
+  2. Version dependencies need the base62 project id (fabric-api = `P7dR8mSH`), not the slug. The tool resolves it at runtime.
+  3. Submitting takes three steps:
+     - PATCH `client_side`/`server_side`, which sets the v3 `environment` on every version (labrinth `routes/v2/projects.rs`). Without this, review refuses with the `select_environment` nag.
+     - Set `requested_status: approved`.
+     - Move the draft to `status: processing`.
+  Review also raised a `check_disclosures` suggestion (not required).
+- Follow-up for the release: versions that Minotaur uploads through v2 may have no `environment`. The CI token can't edit projects, so after the release workflow run `python tools/modrinth_project.py submit` (it re-applies the sides and is otherwise a no-op on a non-draft) with the setup token, then check `status`.

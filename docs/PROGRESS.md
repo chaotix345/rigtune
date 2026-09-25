@@ -29,13 +29,13 @@ Brief: the user's v0.2.0 prompt (full autonomy: research → release, including 
 ### Agents
 | name | branch | worktree | status |
 |---|---|---|---|
-| ws-f-modrinth | feat/modrinth | C:/Dev/Worktrees/rigtune-modrinth | MERGED (a6be5aa). The real Modrinth create/gallery/upload-version(0.1.0)/submit was denied by the auto-mode classifier for the subagent, so it needs the user directly: they reply "run the Modrinth commands" or run the block themselves (commands in docs/v0.2/design/F.md; changelog at scratchpad/v010/changelog-0.1.0.md) |
+| ws-f-modrinth | feat/modrinth | C:/Dev/Worktrees/rigtune-modrinth | MERGED (a6be5aa). LIVE on 2026-09-25 (the user told me directly to run it): project oBN6pcGa (slug rigtune) created, 4 gallery images, v0.1.0 = version 7kgaKg8I (the exact release jar), SUBMITTED for review (status processing). Tool fixes in 733e1d7. At the release: after the workflow, run `python tools/modrinth_project.py submit` with the setup token to set each version's environment (see design/F.md). |
 | ws-a-rules | feat/rules-v2 | C:/Dev/Worktrees/rigtune-rules | running |
 | ws-b-undo | feat/undo | C:/Dev/Worktrees/rigtune-undo | running |
 | ws-c-bench | feat/benchmark-v2 | C:/Dev/Worktrees/rigtune-bench | running |
 | ws-d-dhiris | feat/dh-iris | C:/Dev/Worktrees/rigtune-dhiris | MERGED (bac92b2); 296/296 tests on both versions; CI 36080692710 green |
 | ws-e-ui | feat/settings-ui | C:/Dev/Worktrees/rigtune-ui | running |
-| ws-g-e2e | feat/self-update-e2e | C:/Dev/Worktrees/rigtune-e2e | running (final E2E run in Phase 5: message it) |
+| ws-g-e2e | feat/self-update-e2e | C:/Dev/Worktrees/rigtune-e2e | MERGED (fec2c36 into feat/v0.2.0). The unmodified v0.1.0 updated to 0.2.0-dev: 19/19 PASS (docs/smoke/self-update/v010-to-dev/RESULT.md); 0.2 to a newer 0.2: 19/19 PASS. 311 tests per version. Phase 5 TODO: a final run against the merged integration jar, the --expect-history check against real WS-B output, and the M14 undo-after-restart driver. Follow-ups: redirect hops aren't checked host-by-host (SHA-512 still protects; LOW); the apply toast says "Mod files and Sodium settings were updated" after a mod-only update (UX nit). |
 
 ## Lessons (carried over from v0.1.0; don't relearn)
 - The Bash tool is Git Bash. Use absolute paths; `cd` inside a command changes the session's working directory.

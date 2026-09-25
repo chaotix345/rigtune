@@ -263,6 +263,8 @@ def project_payload(body_text):
         "source_url": f"https://github.com/{REPO_SLUG}",
         "issues_url": f"https://github.com/{REPO_SLUG}/issues",
         "is_draft": True,
+        # Documented as deprecated, but the live API rejects a create without it (HTTP 400, 2026-09-25).
+        "initial_versions": [],
     }
 
 
@@ -365,6 +367,11 @@ def cmd_upload_version(client, args):
             print(f"project {PROJECT_SLUG!r} does not exist; run `create` first")
             return 1
         payload["project_id"] = project["id"]
+        # The API wants base62 project ids in dependencies, not slugs (HTTP 400 otherwise, 2026-09-25).
+        fabric_api = client.get_project("fabric-api")
+        if fabric_api is None:
+            raise ModrinthError("could not resolve the fabric-api project id")
+        payload["dependencies"][0]["project_id"] = fabric_api["id"]
         for existing in client.list_versions(project["id"]):
             if existing.get("version_number") == args.version_number:
                 print(f"version {args.version_number} already exists: id={existing['id']}")
@@ -386,7 +393,14 @@ def cmd_submit(client, args):
     if project is None:
         print(f"project {PROJECT_SLUG!r} does not exist; run `create` first")
         return 1
+    # Re-applying the sides sets the v3 "environment" field on every version (labrinth routes/v2/projects.rs); a version
+    # uploaded through v2 after the project was created has none, and review refuses a missing environment.
+    client.patch_project(project["id"], {"client_side": "required", "server_side": "unsupported"})
     client.patch_project(project["id"], {"requested_status": "approved"})
+    # requested_status alone leaves a draft as a draft (checked live 2026-09-25); moving a draft to "processing" is
+    # what the web UI's "Submit for review" does.
+    if project.get("status") == "draft":
+        client.patch_project(project["id"], {"status": "processing"})
     print(f"submitted for review: id={project['id']} requested_status=approved")
     return 0
 

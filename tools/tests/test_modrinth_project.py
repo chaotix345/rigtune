@@ -313,6 +313,7 @@ class UploadVersionTests(unittest.TestCase):
         jar = _tmp_file(b"jar-bytes")
         opener = ScriptedOpener({
             ("GET", f"{mp.API}/project/rigtune"): [json_response({"id": "abc"})],
+            ("GET", f"{mp.API}/project/fabric-api"): [json_response({"id": "P7dR8mSH"})],
             ("GET", f"{mp.API}/project/abc/version"): [json_response([{"id": "v1", "version_number": "0.1.0"}])],
         })
         client = mp.Client(token="t", opener=opener)
@@ -327,6 +328,7 @@ class UploadVersionTests(unittest.TestCase):
         jar = _tmp_file(b"jar-bytes")
         opener = ScriptedOpener({
             ("GET", f"{mp.API}/project/rigtune"): [json_response({"id": "abc"})],
+            ("GET", f"{mp.API}/project/fabric-api"): [json_response({"id": "P7dR8mSH"})],
             ("GET", f"{mp.API}/project/abc/version"): [json_response([])],
             ("POST", f"{mp.API}/version"): [json_response({"id": "verid", "version_number": "0.1.0"})],
         })
@@ -341,7 +343,8 @@ class UploadVersionTests(unittest.TestCase):
         self.assertEqual(payload["project_id"], "abc")
         self.assertEqual(payload["game_versions"], ["26.2"])
         self.assertEqual(payload["loaders"], ["fabric"])
-        self.assertEqual(payload["dependencies"][0]["project_id"], "fabric-api")
+        # Modrinth wants the base62 project id, not the slug.
+        self.assertEqual(payload["dependencies"][0]["project_id"], "P7dR8mSH")
         self.assertEqual(payload["dependencies"][0]["dependency_type"], "required")
 
     def test_dry_run_no_network(self):
@@ -360,16 +363,29 @@ class SubmitTests(unittest.TestCase):
     def test_patches_requested_status_approved(self):
         opener = ScriptedOpener({
             ("GET", f"{mp.API}/project/rigtune"): [json_response({"id": "abc"})],
-            ("PATCH", f"{mp.API}/project/abc"): [(204, b"", {})],
+            ("PATCH", f"{mp.API}/project/abc"): [(204, b"", {}), (204, b"", {})],
         })
         client = mp.Client(token="t", opener=opener)
         buf = io.StringIO()
         with redirect_stdout(buf):
             rc = mp.cmd_submit(client, _ns(dry_run=False))
         self.assertEqual(rc, 0)
-        patch_call = next(c for c in opener.calls if c["method"] == "PATCH")
-        self.assertEqual(json.loads(patch_call["data"]), {"requested_status": "approved"})
+        patches = [json.loads(c["data"]) for c in opener.calls if c["method"] == "PATCH"]
+        self.assertEqual(patches, [{"client_side": "required", "server_side": "unsupported"}, {"requested_status": "approved"}])
         self.assertIn("submitted for review", buf.getvalue())
+
+    def test_moves_a_draft_to_processing(self):
+        opener = ScriptedOpener({
+            ("GET", f"{mp.API}/project/rigtune"): [json_response({"id": "abc", "status": "draft"})],
+            ("PATCH", f"{mp.API}/project/abc"): [(204, b"", {}), (204, b"", {}), (204, b"", {})],
+        })
+        client = mp.Client(token="t", opener=opener)
+        with redirect_stdout(io.StringIO()):
+            rc = mp.cmd_submit(client, _ns(dry_run=False))
+        self.assertEqual(rc, 0)
+        patches = [json.loads(c["data"]) for c in opener.calls if c["method"] == "PATCH"]
+        self.assertEqual(patches, [{"client_side": "required", "server_side": "unsupported"},
+                                   {"requested_status": "approved"}, {"status": "processing"}])
 
 
 class StatusTests(unittest.TestCase):
