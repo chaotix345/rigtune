@@ -4,6 +4,7 @@ import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
+import io.github.chaotix345.rigtune.client.probe.LauncherProbe;
 import io.github.chaotix345.rigtune.client.probe.ModScanner;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
@@ -23,6 +24,7 @@ import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecords;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
+import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
 import io.github.chaotix345.rigtune.core.model.Goal;
@@ -103,6 +105,7 @@ public final class RealController implements RigTuneController {
 	private final OnlineLookupGate onlineLookups = new OnlineLookupGate();
 	private int rulesGeneration;
 	private volatile boolean downloading;
+	private volatile @Nullable LauncherInfo launcher;
 
 	public RealController() {
 		FabricLoader loader = FabricLoader.getInstance();
@@ -207,9 +210,14 @@ public final class RealController implements RigTuneController {
 		} catch (RuntimeException e) {
 			probe = CompletableFuture.failedFuture(e);
 		}
+		// Before the report is built, so the screen shows the report and its launcher together; never fails.
+		CompletableFuture<LauncherInfo> launcherProbe = LauncherProbe.probeAsync(FabricLoader.getInstance().getGameDir());
 		probe.thenCombine(ModScanner.scanAsync(), (hw, scanned) -> {
 			hardware = hw;
 			mods = scanned;
+			return scanned;
+		}).thenCombine(launcherProbe, (scanned, detected) -> {
+			launcherDetected(detected);
 			return scanned;
 		}).whenComplete((ignored, error) -> {
 			if (error != null) {
@@ -221,6 +229,20 @@ public final class RealController implements RigTuneController {
 			rebuild();
 			fetchOnline();
 		});
+	}
+
+	// Only the launcher's name is logged: no instance name, path or property value.
+	private void launcherDetected(LauncherInfo detected) {
+		if (!detected.equals(launcher)) {
+			RigTune.LOGGER.info("RigTune: launcher {}", detected.known() ? detected.launcher().displayName() : "not recognised (generic memory advice)");
+		}
+		launcher = detected;
+	}
+
+	@Override
+	public LauncherInfo launcher() {
+		LauncherInfo detected = launcher;
+		return detected == null ? LauncherInfo.UNKNOWN : detected;
 	}
 
 	private void fetchOnline() {
@@ -564,7 +586,9 @@ public final class RealController implements RigTuneController {
 		}
 		String loaderVersion = FabricLoader.getInstance().getModContainer("fabricloader")
 				.map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("?");
-		return ShareReport.format(shown, new ShareReport.Versions(modVersion, shown.hardware().mcVersion(), loaderVersion), latestBenchmark());
+		LauncherInfo detected = launcher();
+		return ShareReport.format(shown, new ShareReport.Versions(modVersion, shown.hardware().mcVersion(), loaderVersion), latestBenchmark(),
+				detected.known() ? detected.launcher().displayName() : null);
 	}
 
 	@Override
