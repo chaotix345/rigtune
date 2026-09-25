@@ -1,3 +1,4 @@
+import json
 import struct
 import sys
 import tempfile
@@ -250,6 +251,217 @@ class CompareTest(unittest.TestCase):
         old = ClassWriter("net/minecraft/B")
         new = ClassWriter("net/minecraft/B")
         self.assertEqual(self.compare(old, new)["tick"]["status"], "UNRESOLVED")
+
+
+def rigtune_probe():
+    w = ClassWriter("io/github/chaotix345/rigtune/client/Probe")
+    w.ref("method", "net/minecraft/A", "tick", "()V")
+    w.ref("field", "net/minecraft/client/Options", "renderDistance", "I")
+    w.string("renderDistance")
+    w.string("serverRenderDistance")
+    w.annotate("Lorg/spongepowered/asm/mixin/injection/Inject;", {"method": ["logFrameDuration"]})
+    w.annotate("Lorg/spongepowered/asm/mixin/Mixin;", {"value": [("class", "Lnet/minecraft/client/gui/Overlay;")]})
+    return mad.collect_rigtune([("client", w.bytes())])
+
+
+def options(*strings, fields=("renderDistance", "serverRenderDistance")):
+    w = ClassWriter("net/minecraft/client/Options")
+    for name in fields:
+        w.field(name, "I")
+    for s in strings:
+        w.string(s)
+    return w
+
+
+def overlay(method="logFrameDuration"):
+    return ClassWriter("net/minecraft/client/gui/Overlay").method(method, "(J)V")
+
+
+class AnalyseTest(unittest.TestCase):
+    def test_no_change_is_clean(self):
+        a = ClassWriter("net/minecraft/A").method("tick", "()V")
+        result = mad.analyse(rigtune_probe(), index_of(a, options("renderDistance"), overlay()),
+                             index_of(a, options("renderDistance"), overlay()))
+        self.assertEqual(mad.breaking(result), [])
+        self.assertEqual([(m["class"], m["name"], m["status"]) for m in result.named_members], [
+            ("net/minecraft/client/Options", "renderDistance", "OK"),
+            ("net/minecraft/client/Options", "serverRenderDistance", "OK"),
+            ("net/minecraft/client/gui/Overlay", "logFrameDuration", "OK"),
+        ])
+
+    def test_trivial_removed_strings_are_not_flagged(self):
+        probe = ClassWriter("io/github/chaotix345/rigtune/client/Probe")
+        probe.ref("field", "net/minecraft/client/Options", "renderDistance", "I")
+        for s in ("", "null", ": ", "renderDistance"):
+            probe.string(s)
+        raw = mad.collect_rigtune([("client", probe.bytes())])
+        result = mad.analyse(raw, index_of(options("", "null", ": ", "renderDistance")), index_of(options()))
+        self.assertEqual(result.string_changes["net/minecraft/client/Options"]["removed_used"], ["renderDistance"])
+
+    def test_named_members_need_the_string_and_the_class_in_one_rigtune_class(self):
+        probe = ClassWriter("io/github/chaotix345/rigtune/client/Probe")
+        probe.ref("field", "net/minecraft/client/Options", "renderDistance", "I")
+        probe.string("serverRenderDistance")
+        probe.string("toString")
+        elsewhere = ClassWriter("io/github/chaotix345/rigtune/core/Json")
+        elsewhere.string("minecraft")
+        raw = mad.collect_rigtune([("client", probe.bytes()), ("main", elsewhere.bytes())])
+        opts = options(fields=("renderDistance", "serverRenderDistance", "minecraft")).method("toString", "()Ljava/lang/String;")
+        result = mad.analyse(raw, index_of(opts), index_of(opts))
+        self.assertEqual([(m["class"], m["name"]) for m in result.named_members],
+                         [("net/minecraft/client/Options", "serverRenderDistance")])
+
+    def test_missing_member_and_class_are_breaking(self):
+        old = index_of(ClassWriter("net/minecraft/A").method("tick", "()V"), options(), overlay())
+        new = index_of(ClassWriter("net/minecraft/A"), options())
+        result = mad.analyse(rigtune_probe(), old, new)
+        lines = mad.breaking(result)
+        self.assertIn("MISSING method net/minecraft/A.tick()V: not found on the new version", lines)
+        self.assertIn("MISSING class net/minecraft/client/gui/Overlay", lines)
+
+    def test_named_member_missing_is_flagged(self):
+        a = ClassWriter("net/minecraft/A").method("tick", "()V")
+        result = mad.analyse(rigtune_probe(), index_of(a, options(), overlay()),
+                             index_of(a, options(fields=("renderDistance",)), overlay("logFrameTime")))
+        self.assertIn("MISSING name net/minecraft/client/Options.serverRenderDistance (a string RigTune uses)",
+                      mad.breaking(result))
+        self.assertIn("MISSING name net/minecraft/client/gui/Overlay.logFrameDuration (a string RigTune uses)",
+                      mad.breaking(result))
+
+    def test_string_removed_is_flagged(self):
+        a = ClassWriter("net/minecraft/A").method("tick", "()V")
+        result = mad.analyse(rigtune_probe(), index_of(a, options("renderDistance", "old"), overlay()),
+                             index_of(a, options("new"), overlay()))
+        self.assertEqual(result.string_changes["net/minecraft/client/Options"],
+                         {"removed": ["old", "renderDistance"], "added": ["new"], "removed_used": ["renderDistance"]})
+        self.assertIn('REMOVED string "renderDistance" from net/minecraft/client/Options (RigTune uses it)',
+                      mad.breaking(result))
+
+
+JAVAP_SAMPLE = """Compiled from "Options.java"
+public class net.minecraft.client.Options {
+  public int renderDistance;
+    descriptor: I
+}
+public interface net.minecraft.client.Options$FieldAccess {
+  public abstract void process(java.lang.String, int);
+    descriptor: (Ljava/lang/String;I)V
+}
+Compiled from "Difficulty.java"
+public final class net.minecraft.world.Difficulty extends java.lang.Enum<net.minecraft.world.Difficulty> {
+  public static final net.minecraft.world.Difficulty PEACEFUL;
+    descriptor: Lnet/minecraft/world/Difficulty;
+}
+"""
+
+
+class JavapTest(unittest.TestCase):
+    def test_split_javap_output(self):
+        blocks = mad.split_javap(JAVAP_SAMPLE)
+        self.assertEqual(sorted(blocks), ["net/minecraft/client/Options", "net/minecraft/client/Options$FieldAccess",
+                                          "net/minecraft/world/Difficulty"])
+        self.assertEqual(blocks["net/minecraft/client/Options"].splitlines(),
+                         ["public class net.minecraft.client.Options {", "  public int renderDistance;",
+                          "    descriptor: I", "}"])
+
+    def test_normalize_bytecode_strips_pool_indices(self):
+        a = "  3: invokevirtual #12                 // Method net/minecraft/A.tick:()V\n  6: bipush        65"
+        b = "  3: invokevirtual #40                 // Method net/minecraft/A.tick:()V\n  6: bipush        65"
+        self.assertEqual(mad.normalize_bytecode(a), mad.normalize_bytecode(b))
+        self.assertNotEqual(mad.normalize_bytecode(a), mad.normalize_bytecode(a.replace("65", "297")))
+
+
+def empty_jar(path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    zipfile.ZipFile(path, "w").close()
+    return path
+
+
+FABRIC_API_POM = """<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <dependencies>
+    <dependency><groupId>net.fabricmc.fabric-api</groupId><artifactId>fabric-api-base</artifactId><version>1.0.0</version></dependency>
+    <dependency><groupId>net.fabricmc.fabric-api</groupId><artifactId>fabric-screen-api-v1</artifactId><version>2.0.0</version></dependency>
+    <dependency><groupId>net.fabricmc.fabric-api</groupId><artifactId>fabric-api-deprecated</artifactId><version>0.1.0+26.9</version></dependency>
+  </dependencies>
+</project>
+"""
+
+
+DEPRECATED_POM = """<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <packaging>pom</packaging>
+  <dependencies>
+    <dependency><groupId>net.fabricmc.fabric-api</groupId><artifactId>fabric-resource-loader-v0</artifactId><version>3.0.0</version></dependency>
+    <dependency><groupId>net.fabricmc.fabric-api</groupId><artifactId>fabric-api-base</artifactId><version>1.0.0</version></dependency>
+  </dependencies>
+</project>
+"""
+
+
+class ClasspathTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.gradle = Path(tmp.name)
+        self.modules = self.gradle / "caches" / "modules-2" / "files-2.1"
+        self.loom = self.gradle / "caches" / "fabric-loom"
+
+    def populate(self):
+        mc_maven = self.loom / "minecraftMaven" / "net" / "minecraft"
+        jars = [empty_jar(mc_maven / f"minecraft-{side}-deobf" / "26.9" / f"minecraft-{side}-deobf-26.9.jar")
+                for side in ("clientonly", "common")]
+        info = {"libraries": [
+            {"name": "com.mojang:brigadier:1.3.11",
+             "downloads": {"artifact": {"path": "com/mojang/brigadier/1.3.11/brigadier-1.3.11.jar", "sha1": "abc"}}},
+            {"name": "org.lwjgl:lwjgl:3.4.3:natives-windows",
+             "downloads": {"artifact": {"path": "org/lwjgl/lwjgl/3.4.3/lwjgl-3.4.3-natives-windows.jar", "sha1": "def"}}},
+            {"name": "com.example:absent:1.0",
+             "downloads": {"artifact": {"path": "com/example/absent/1.0/absent-1.0.jar", "sha1": "fff"}}},
+        ]}
+        (self.loom / "26.9").mkdir(parents=True)
+        (self.loom / "26.9" / "mojang_minecraft_info.json").write_text(json.dumps(info), encoding="utf-8")
+        jars.append(empty_jar(self.modules / "com.mojang" / "brigadier" / "1.3.11" / "abc" / "brigadier-1.3.11.jar"))
+        pom = self.modules / "net.fabricmc.fabric-api" / "fabric-api" / "0.1.0+26.9" / "p" / "fabric-api-0.1.0+26.9.pom"
+        pom.parent.mkdir(parents=True)
+        pom.write_text(FABRIC_API_POM, encoding="utf-8")
+        deprecated = self.modules / "net.fabricmc.fabric-api" / "fabric-api-deprecated" / "0.1.0+26.9" / "p"
+        deprecated.mkdir(parents=True)
+        (deprecated / "fabric-api-deprecated-0.1.0+26.9.pom").write_text(DEPRECATED_POM, encoding="utf-8")
+        for artifact, version in (("fabric-api-base", "1.0.0"), ("fabric-screen-api-v1", "2.0.0"), ("fabric-resource-loader-v0", "3.0.0")):
+            jars.append(empty_jar(self.modules / "net.fabricmc.fabric-api" / artifact / version / "h" / f"{artifact}-{version}.jar"))
+        jars.append(empty_jar(self.modules / "com.terraformersmc" / "modmenu" / "30.0.0" / "h" / "modmenu-30.0.0.jar"))
+        jars.append(empty_jar(self.modules / "net.fabricmc" / "fabric-loader" / "0.19.5" / "h" / "fabric-loader-0.19.5.jar"))
+        return jars
+
+    def props(self):
+        return {"fabric_api_version": "0.1.0+26.9", "modmenu_version": "30.0.0"}
+
+    def test_find_classpath_from_caches(self):
+        expected = self.populate()
+        cp = mad.find_classpath("26.9", self.props(), "0.19.5", self.gradle)
+        self.assertEqual(sorted(cp.jars), sorted(expected))
+        self.assertEqual(cp.missing_libraries, ["com.example:absent:1.0"])
+
+    def test_setup_error_names_missing_jars(self):
+        with self.assertRaises(mad.SetupError) as caught:
+            mad.find_classpath("26.9", self.props(), "0.19.5", self.gradle)
+        message = str(caught.exception)
+        self.assertIn("minecraft-clientonly-deobf-26.9.jar", message)
+        self.assertIn("fabric-api-0.1.0+26.9.pom", message)
+        self.assertIn("modmenu-30.0.0", message)
+        self.assertIn("add_mc_version.py 26.9", message)
+
+    def test_node_props_override(self):
+        root = self.gradle / "repo"
+        (root / "versions" / "26.3").mkdir(parents=True)
+        (root / "versions" / "26.3" / "gradle.properties").write_text(
+            "fabric_api_version=0.161.0+26.3\nmodmenu_version=21.0.0\n", encoding="utf-8")
+        self.assertEqual(mad.node_props(root, "26.3")["modmenu_version"], "21.0.0")
+        with self.assertRaises(mad.SetupError):
+            mad.node_props(root, "26.4-snapshot-1")
+        props = mad.node_props(root, "26.4-snapshot-1", fabric_api="0.161.1+26.4", modmenu="22.0.0-alpha.1")
+        self.assertEqual(props, {"fabric_api_version": "0.161.1+26.4", "modmenu_version": "22.0.0-alpha.1"})
 
 
 if __name__ == "__main__":
