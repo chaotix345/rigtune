@@ -55,7 +55,7 @@ dependencies {
 	compileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
 	localRuntime "com.terraformersmc:modmenu:${project.modmenu_version}"
 	// Optional: a new Minecraft version can build and run its unit tests before Sodium supports it.
-	if (project.hasProperty("sodium_version")) {
+	if (project.findProperty("sodium_version")) {
 		localRuntime "maven.modrinth:sodium:${project.sodium_version}"
 	}
 
@@ -173,15 +173,18 @@ def changelogForVersion(String modVersion) {
 // only ever sets MODRINTH_TOKEN (and never this property), for a real, non-debug publish.
 def modrinthDryRun = providers.gradleProperty('modrinthDryRun').present
 def modrinthToken = System.getenv('MODRINTH_TOKEN') ?: (modrinthDryRun ? 'dry-run-placeholder-token' : null)
+// -PmodrinthFile=<path>: upload that exact file instead of this build's jar output. release.yml passes its copy of the file
+// it attached to the GitHub release, so both carry the same bytes by construction.
+def modrinthFile = providers.gradleProperty('modrinthFile')
 
 modrinth {
 	token = modrinthToken
 	projectId = 'rigtune'
 	versionNumber = project.version.toString()
 	versionName = "RigTune ${project.mod_version} (MC ${mcVersion})"
-	// A snapshot, pre-release or release-candidate node is published as an alpha.
-	versionType = ['-snapshot-', '-pre-', '-rc-'].any { mcVersion.contains(it) } ? 'alpha' : 'release'
-	uploadFile = jar
+	// Only a plain release id (26.3, 26.3.1) publishes as a release; anything else (snapshot, pre, rc) as an alpha.
+	versionType = mcVersion ==~ /\d+\.\d+(\.\d+)?/ ? 'release' : 'alpha'
+	uploadFile = modrinthFile.present ? rootProject.file(modrinthFile.get()) : jar
 	gameVersions = [mcVersion]
 	loaders = ['fabric']
 	changelog = changelogForVersion(project.mod_version.toString())
@@ -276,7 +279,7 @@ dependencies {
 	productionGameTestMods "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 	productionGameTestMods fabricApi.module("fabric-client-gametest-api-v1", project.fabric_api_version)
 	productionGameTestMods "com.terraformersmc:modmenu:${project.modmenu_version}"
-	if (project.hasProperty("sodium_version")) {
+	if (project.findProperty("sodium_version")) {
 		productionGameTestMods "maven.modrinth:sodium:${project.sodium_version}"
 	}
 }
