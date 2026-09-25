@@ -22,6 +22,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -189,6 +190,43 @@ class StagingTest {
 		assertTrue(Files.exists(mods.resolve("x-2.jar" + PendingActions.SUPERSEDED_SUFFIX)));
 		assertEquals(List.of(JournalChange.DISCARDED, JournalChange.DISCARDED, JournalChange.STAGED),
 				changesOf("e1").stream().map(JournalChange::status).toList());
+	}
+
+	// Re-check of review 4: a staged update of a mod that now has an update of its own waiting in mods/update/ would race
+	// that mod's updater at exit, so it is unstaged (whole group, download retired, journal DISCARDED).
+	@Test
+	void aStagedUpdateOfAModWithAQueuedUpdateOfItsOwnIsUnstaged() throws IOException {
+		List<Op> dh = update("dh-1.jar", "dh-2.jar", "distanthorizons");
+		List<Op> other = update("y-1.jar", "y-2.jar", "y");
+		List<Op> ops = new ArrayList<>(dh);
+		ops.addAll(other);
+		assertTrue(staging.stage(ops, "e1"));
+
+		List<Op> dropped = staging.dropQueuedUpdates(Set.of("distanthorizons", "unrelated"));
+
+		assertEquals(dh.stream().map(Op::id).toList(), dropped.stream().map(Op::id).toList());
+		assertEquals(other.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+		assertTrue(Files.exists(mods.resolve("dh-2.jar" + PendingActions.SUPERSEDED_SUFFIX)));
+		assertFalse(Files.exists(mods.resolve("dh-2.jar" + PendingActions.PENDING_SUFFIX)));
+		assertTrue(Files.exists(mods.resolve("dh-1.jar")));
+		assertEquals(List.of(JournalChange.DISCARDED, JournalChange.DISCARDED, JournalChange.STAGED, JournalChange.STAGED),
+				changesOf("e1").stream().map(JournalChange::status).toList());
+	}
+
+	@Test
+	void nothingIsUnstagedWithoutAQueuedUpdateOfAStagedMod() throws Exception {
+		List<Op> x = update("x-1.jar", "x-2.jar", "x");
+		assertTrue(staging.stage(x, "e1"));
+		String before = Files.readString(pending);
+
+		assertEquals(List.of(), staging.dropQueuedUpdates(Set.of()));
+		assertEquals(List.of(), staging.dropQueuedUpdates(Set.of("y")));
+		try (HeldLock helper = HeldLock.hold(ApplyLock.defaultPath(config))) {
+			assertNull(staging.dropQueuedUpdates(Set.of("x")));
+		}
+
+		assertEquals(before, Files.readString(pending));
+		assertTrue(changesOf("e1").stream().allMatch(c -> JournalChange.STAGED.equals(c.status())));
 	}
 
 	@Test
