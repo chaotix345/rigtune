@@ -12,9 +12,11 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      # A job-level env var so `if:` conditions below can test it (an `if:` can't reference
-      # `secrets.*` directly). Empty when the MODRINTH_TOKEN repo secret isn't set.
-      MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+      # Only whether the secret is set ('true'/'false'), so `if:` conditions below can test it (an
+      # `if:` can't reference `secrets.*` directly). The token itself is set only on the two steps
+      # that use it, so the build (Gradle, its plugins, dependencies and tests) never sees it
+      # (review 6, security-1).
+      MODRINTH_TOKEN_SET: ${{ secrets.MODRINTH_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v7
 
@@ -94,7 +96,9 @@ jobs:
       # authenticated version list (GET /v2/project/rigtune/version) the file with the GitHub
       # asset's sha1 must have the asset's sha512.
       - name: Publish to Modrinth (every Minecraft version)
-        if: ${{ !cancelled() && steps.release.outcome == 'success' && env.MODRINTH_TOKEN != '' }}
+        if: ${{ !cancelled() && steps.release.outcome == 'success' && env.MODRINTH_TOKEN_SET == 'true' }}
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
         run: |
           set -u
           staged="$RUNNER_TEMP/release-files"
@@ -117,17 +121,19 @@ jobs:
           exit "$status"
 
       - name: Notice if Modrinth publishing was skipped
-        if: ${{ env.MODRINTH_TOKEN == '' }}
+        if: ${{ env.MODRINTH_TOKEN_SET != 'true' }}
         run: echo "::notice::MODRINTH_TOKEN repo secret is not set; skipped publishing to Modrinth. GitHub release only."
 
       # M11: prove the file Modrinth is now serving is byte-identical to the one just attached to
-      # the GitHub release, rather than assuming it because they came from the same build. Looks
-      # up each re-downloaded GitHub asset by its own sha1 (GET /v2/version_file/{sha1}, verified
-      # live against docs.modrinth.com during WS-F) and compares the returned file's sha512.
+      # the GitHub release, rather than assuming it because they came from the same build. Finds
+      # each re-downloaded GitHub asset's sha1 in the project's authenticated version list (the
+      # public /v2/version_file lookup hides versions of a project in moderation) and compares
+      # that file's sha512.
       - name: Verify Modrinth files match the GitHub release
-        if: ${{ !cancelled() && steps.release.outcome == 'success' && env.MODRINTH_TOKEN != '' }}
+        if: ${{ !cancelled() && steps.release.outcome == 'success' && env.MODRINTH_TOKEN_SET == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
         run: |
           set -eu
           tag="${GITHUB_REF_NAME}"
