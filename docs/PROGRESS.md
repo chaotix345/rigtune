@@ -21,7 +21,7 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 - [x] Phase 3: foundation MERGED (1700ecc). Wave A started in parallel before it (no build-file overlap) and was told to merge origin/feat/v0.3.0.
 - [x] Phase 4: features DONE (e16e146): Wave A (A, B, C, D, E, F, V, H) + fix/ram-advice-text + Wave B (G, P) merged; 1121 unit tests per version; CI green. Pending lows for the round-1 fix branch: chart dates in UTC (BenchmarkResultScreen date()), legacy import stack traces for missing files (ModJars.modIdOf).
 - [ ] Phase 5: verification: early run on the Wave A tree DONE (all pass; see p5 row). Final runs (game tests, smokes, E2E final-* incl. seeded + undo-after-restart-030) on the RC after the review fixes.
-- [ ] Phase 6: round 1 DONE (docs/reviews/review-5.md; fixes MERGED f77af1a, rules r13). Round 2 RUNNING (Workflow wf_041f9c05-a08 on f77af1a) -> review-6.md.
+- [ ] Phase 6: round 1 DONE (review-5.md; fixes merged f77af1a, rules r13). Round 2 DONE -> review-6.md (on fix/review-6): 1 medium (release.yml job-level MODRINTH_TOKEN visible to ./gradlew build), fixed in afd71d3 (MODRINTH_TOKEN_SET at job level, token as step env on publish + verify; actionlint clean). Focused re-check of the last fixes RUNNING; then merge fix/review-6.
 - Phase 5 FINAL runs RUNNING on f77af1a (agent p5final, worktree rigtune-p5final, branch test/p5-final): E2E final-v020-to-030 / final-v010-to-030 / final-v010-seeded-to-030 / undo-after-restart-030, local game tests, quick smokes.
 - Release docs RUNNING (agent docs3, worktree rigtune-docs3, branch docs/v0.3-release): CHANGELOG [0.3.0], README, DESIGN fold-ins, docs/modrinth/body-0.3.md.
 - [ ] Phase 7: release
