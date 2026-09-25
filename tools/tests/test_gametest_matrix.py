@@ -95,6 +95,11 @@ class GametestMatrixTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             gm.nodes(self.root)
 
+    def test_a_trailing_newline_is_refused(self):
+        # $ also matches before one trailing newline; the id must match in full (review 5, security-1).
+        with self.assertRaises(SystemExit):
+            gm._core("26.4\n")
+
     def test_shell_metacharacters_are_refused(self):
         for mc in ["26.4-$(id)", "26.4-x;ls", "26.4-a b", "26.4-`id`", "26.4-a'b"]:
             with self.subTest(mc=mc):

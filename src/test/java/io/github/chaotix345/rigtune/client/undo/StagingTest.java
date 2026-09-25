@@ -213,6 +213,21 @@ class StagingTest {
 				changesOf("e1").stream().map(JournalChange::status).toList());
 	}
 
+	// An enable staged without a mod id (by 0.1.0, or an undo of a jar it couldn't read): the id comes from the jar itself,
+	// as ApplyExecutor reads it at apply time (review 5, apply-safety-1, defensive).
+	@Test
+	void anEnableStagedWithoutAModIdIsMatchedByItsJar() throws IOException {
+		TestJars.modJar(mods.resolve("dh-1.jar"), "distanthorizons");
+		List<Op> dh = PendingActions.group(Op.disableFile(mods.resolve("dh-1.jar")),
+				Op.enableFile(pendingJar("dh-2.jar", "distanthorizons"), mods.resolve("dh-2.jar")));
+		assertNotNull(staging.stage(dh, "e1"));
+
+		List<Op> dropped = staging.dropQueuedUpdates(Set.of("distanthorizons"), Set.of("distanthorizons"));
+
+		assertEquals(dh.stream().map(Op::id).toList(), dropped.stream().map(Op::id).toList());
+		assertFalse(Files.exists(pending));
+	}
+
 	@Test
 	void nothingIsUnstagedWithoutAQueuedUpdateOfAStagedMod() throws Exception {
 		List<Op> x = update("x-1.jar", "x-2.jar", "x");

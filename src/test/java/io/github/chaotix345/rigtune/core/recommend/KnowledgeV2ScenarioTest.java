@@ -313,6 +313,21 @@ class KnowledgeV2ScenarioTest {
 		assertTrue(advice(run(Fixtures.lowEndLaptop(), "fabric-api", "distanthorizons")).contains("ram-distant-horizons-low-system"));
 	}
 
+	// ram-low fires next to the DH/shader memory advice; its value must be a floor none of them contradicts, including
+	// "about 4 GB at most" for DH on a PC with under 12 GB (review 5, rules-accuracy-1).
+	@Test
+	void ramLowNeverContradictsTheDhOrShaderMemoryAdvice() {
+		Fixtures.Hw laptop = Fixtures.lowEndLaptop();
+		laptop.heapMb = 2048;
+		Map<String, Recommendation> recs = run(laptop, "fabric-api", "distanthorizons");
+		assertTrue(recs.containsKey("advice:ram-low"));
+		assertTrue(recs.containsKey("advice:ram-distant-horizons-low-system"));
+		String low = recs.get("advice:ram-low").reason();
+		assertTrue(low.contains("at least 4 GB"), low);
+		assertFalse(low.contains("6 GB"), low);
+		assertTrue(recs.get("advice:ram-distant-horizons-low-system").reason().contains("4 GB at most"));
+	}
+
 	private static Set<String> intersect(Set<String> a, Set<String> b) {
 		return a.stream().filter(b::contains).collect(Collectors.toSet());
 	}

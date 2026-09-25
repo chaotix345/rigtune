@@ -206,11 +206,29 @@ public final class Staging {
 			if (!Files.exists(pendingFile)) {
 				return List.of();
 			}
-			List<String> ids = PendingActions.load(pendingFile).ops().stream()
-					.filter(op -> op != null && op.type() == PendingActions.Type.ENABLE_FILE && op.id() != null && op.modId() != null
-							&& queuedModIds.contains(op.modId()) && loadedModIds.contains(op.modId()))
-					.map(Op::id).toList();
+			List<String> ids = new ArrayList<>();
+			for (Op op : PendingActions.load(pendingFile).ops()) {
+				if (op != null && op.type() == PendingActions.Type.ENABLE_FILE && op.id() != null) {
+					String modId = modIdOf(op);
+					if (modId != null && queuedModIds.contains(modId) && loadedModIds.contains(modId)) {
+						ids.add(op.id());
+					}
+				}
+			}
 			return unstageLocked(ids);
+		}
+	}
+
+	// The staged mod id, or, for an enable staged without one (by 0.1.0, or an undo of a jar it couldn't read), the id
+	// in the jar itself, as ApplyExecutor reads it at apply time (review 5, apply-safety-1).
+	private static @Nullable String modIdOf(Op op) {
+		if (op.modId() != null) {
+			return op.modId();
+		}
+		try {
+			return op.from() == null ? null : ModJars.modIdOf(Path.of(op.from()));
+		} catch (InvalidPathException e) {
+			return null;
 		}
 	}
 
