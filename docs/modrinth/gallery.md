@@ -2,7 +2,7 @@
 
 Images to upload to the Modrinth gallery, in display order, via `python tools/modrinth_project.py gallery`. `featured: true` marks the one used as the project's spotlight image. `description` is used as the image's alt text (Modrinth requires alt text for gallery images).
 
-Updated for the v0.2.0 release: two new images (Undo, Settings) show v0.2.0-only screens. `report.png`/`benchmark.png` are unchanged file paths and still current (the report and benchmark screens' overall shape didn't change enough to need a reshoot); a maintainer who wants fresher captures can swap their content for a Phase 5 verification screenshot (docs/v0.2/verification/img/) of the same name before running `gallery` at release time. This list isn't yet synced to the live gallery (four 0.1.0-era images, uploaded at the 0.1.0 submission on 2026-09-25); re-running `gallery` after 0.2.0 ships adds the two new images (uploads are by title, additive).
+Updated for the v0.3.0 release: one new image, `history.jpg` (the History screen, new in 0.3.0; a copy of the Phase 5 game-test screenshot docs/v0.3/verification/p5/img/a263-history-after-undo.jpg, whose entries are the test's seeded history). The other six images went live with the 0.2.0 release; re-running `gallery` at release time adds only the new one (uploads are by title, additive). `report.png` is still a 0.1-era capture: its footer predates 0.3's History…, Preview and Report a problem buttons, and replacing the live image takes a new title or an edit on Modrinth, since `gallery` skips a title that's already there.
 
 ## docs/images/report.png
 - title: RigTune report
@@ -12,6 +12,11 @@ Updated for the v0.2.0 release: two new images (Undo, Settings) show v0.2.0-only
 ## docs/images/benchmark.png
 - title: Benchmark results
 - description: The benchmark results screen, comparing measured average FPS, 1% lows and frame time at two render distances against the player's monitor refresh rate target.
+- featured: false
+
+## docs/images/history.jpg
+- title: What RigTune changed
+- description: The History screen, listing every Apply, benchmark result and Undo newest first with its date, versions and a count of changes, and the selected Undo entry opened to show its change and status, above the Undo this, Undo last, Undo all and Done buttons.
 - featured: false
 
 ## docs/images/undo.jpg
