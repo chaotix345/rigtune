@@ -36,8 +36,8 @@ import java.util.Locale;
 
 // The dedicated benchmark scene (docs/v0.2/SPEC.md item 6): a creative singleplayer save with a fixed seed, opened
 // through the production WorldOpenFlows API, with time, weather and mob spawning frozen and the camera at a fixed spot.
-// It is recreated when missing or made by another Minecraft version, since the terrain for a seed differs between
-// versions. The decisions are WorldFlow's (unit-tested): nothing here touches, or leaves, a world that isn't provably
+// It is recreated when missing or made by another Minecraft version: the terrain noise for this seed is the same on 26.2
+// and 26.3, but features such as trees are placed differently (docs/research/v0.3/benchmark.md §2.5). The decisions are WorldFlow's (unit-tested): nothing here touches, or leaves, a world that isn't provably
 // this save (singleplayer, save folder rigtune-benchmark, level name RigTune Benchmark).
 public final class BenchmarkWorld {
 	public static final String LEVEL_ID = "rigtune-benchmark";
