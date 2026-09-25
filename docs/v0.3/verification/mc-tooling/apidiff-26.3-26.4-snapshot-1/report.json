@@ -40,6 +40,318 @@
   },
   {
    "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/BenchmarkMenuScreen",
+   "name": "font",
+   "desc": "Lnet/minecraft/client/gui/Font;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 20,
+   "new_access": 20
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/BenchmarkMenuScreen",
+   "name": "height",
+   "desc": "I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/BenchmarkMenuScreen",
+   "name": "minecraft",
+   "desc": "Lnet/minecraft/client/Minecraft;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 20,
+   "new_access": 20
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/BenchmarkMenuScreen",
+   "name": "title",
+   "desc": "Lnet/minecraft/network/chat/Component;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 20,
+   "new_access": 20
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/BenchmarkMenuScreen",
+   "name": "width",
+   "desc": "I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/BenchmarkResultScreen",
+   "name": "font",
+   "desc": "Lnet/minecraft/client/gui/Font;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 20,
+   "new_access": 20
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/BenchmarkResultScreen",
+   "name": "height",
+   "desc": "I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/BenchmarkResultScreen",
+   "name": "minecraft",
+   "desc": "Lnet/minecraft/client/Minecraft;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 20,
+   "new_access": 20
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/BenchmarkResultScreen",
+   "name": "title",
+   "desc": "Lnet/minecraft/network/chat/Component;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 20,
+   "new_access": 20
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/BenchmarkResultScreen",
+   "name": "width",
+   "desc": "I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen",
+   "name": "font",
+   "desc": "Lnet/minecraft/client/gui/Font;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 20,
+   "new_access": 20
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen",
+   "name": "height",
+   "desc": "I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen",
+   "name": "minecraft",
+   "desc": "Lnet/minecraft/client/Minecraft;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 20,
+   "new_access": 20
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen",
+   "name": "title",
+   "desc": "Lnet/minecraft/network/chat/Component;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 20,
+   "new_access": 20
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen",
+   "name": "width",
+   "desc": "I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList",
+   "name": "width",
+   "desc": "I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/AbstractWidget",
+   "new": "net/minecraft/client/gui/components/AbstractWidget",
+   "old_access": 4,
+   "new_access": 4
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneSettingsScreen",
+   "name": "font",
+   "desc": "Lnet/minecraft/client/gui/Font;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 20,
+   "new_access": 20
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneSettingsScreen",
+   "name": "height",
+   "desc": "I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneSettingsScreen",
+   "name": "minecraft",
+   "desc": "Lnet/minecraft/client/Minecraft;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 20,
+   "new_access": 20
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneSettingsScreen",
+   "name": "title",
+   "desc": "Lnet/minecraft/network/chat/Component;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 20,
+   "new_access": 20
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneSettingsScreen",
+   "name": "width",
+   "desc": "I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/UndoScreen",
+   "name": "font",
+   "desc": "Lnet/minecraft/client/gui/Font;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 20,
+   "new_access": 20
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/UndoScreen",
+   "name": "height",
+   "desc": "I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/UndoScreen",
+   "name": "minecraft",
+   "desc": "Lnet/minecraft/client/Minecraft;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 20,
+   "new_access": 20
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/UndoScreen",
+   "name": "title",
+   "desc": "Lnet/minecraft/network/chat/Component;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 20,
+   "new_access": 20
+  },
+  {
+   "kind": "field",
+   "owner": "io/github/chaotix345/rigtune/client/ui/UndoScreen",
+   "name": "width",
+   "desc": "I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "field",
    "owner": "net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientLifecycleEvents",
    "name": "CLIENT_STARTED",
    "desc": "Lnet/fabricmc/fabric/api/event/Event;",
@@ -784,6 +1096,42 @@
   },
   {
    "kind": "imethod",
+   "owner": "net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientLifecycleEvents$ClientStarted",
+   "name": "onClientStarted",
+   "desc": "(Lnet/minecraft/client/Minecraft;)V",
+   "status": "OK",
+   "reason": "",
+   "old": "net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientLifecycleEvents$ClientStarted",
+   "new": "net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientLifecycleEvents$ClientStarted",
+   "old_access": 1025,
+   "new_access": 1025
+  },
+  {
+   "kind": "imethod",
+   "owner": "net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientLifecycleEvents$ClientStopping",
+   "name": "onClientStopping",
+   "desc": "(Lnet/minecraft/client/Minecraft;)V",
+   "status": "OK",
+   "reason": "",
+   "old": "net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientLifecycleEvents$ClientStopping",
+   "new": "net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientLifecycleEvents$ClientStopping",
+   "old_access": 1025,
+   "new_access": 1025
+  },
+  {
+   "kind": "imethod",
+   "owner": "net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientTickEvents$EndTick",
+   "name": "onEndTick",
+   "desc": "(Lnet/minecraft/client/Minecraft;)V",
+   "status": "OK",
+   "reason": "",
+   "old": "net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientTickEvents$EndTick",
+   "new": "net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientTickEvents$EndTick",
+   "old_access": 1025,
+   "new_access": 1025
+  },
+  {
+   "kind": "imethod",
    "owner": "net/fabricmc/fabric/api/client/gametest/v1/TestInput",
    "name": "pressKey",
    "desc": "(I)V",
@@ -1024,6 +1372,18 @@
   },
   {
    "kind": "imethod",
+   "owner": "net/fabricmc/fabric/api/client/rendering/v1/hud/HudElement",
+   "name": "extractRenderState",
+   "desc": "(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V",
+   "status": "OK",
+   "reason": "",
+   "old": "net/fabricmc/fabric/api/client/rendering/v1/hud/HudElement",
+   "new": "net/fabricmc/fabric/api/client/rendering/v1/hud/HudElement",
+   "old_access": 1025,
+   "new_access": 1025
+  },
+  {
+   "kind": "imethod",
    "owner": "net/fabricmc/fabric/api/client/rendering/v1/hud/HudElementRegistry",
    "name": "attachElementAfter",
    "desc": "(Lnet/minecraft/resources/Identifier;Lnet/minecraft/resources/Identifier;Lnet/fabricmc/fabric/api/client/rendering/v1/hud/HudElement;)V",
@@ -1033,6 +1393,30 @@
    "new": "net/fabricmc/fabric/api/client/rendering/v1/hud/HudElementRegistry",
    "old_access": 9,
    "new_access": 9
+  },
+  {
+   "kind": "imethod",
+   "owner": "net/fabricmc/fabric/api/client/screen/v1/ScreenEvents$AfterInit",
+   "name": "afterInit",
+   "desc": "(Lnet/minecraft/client/Minecraft;Lnet/minecraft/client/gui/screens/Screen;II)V",
+   "status": "OK",
+   "reason": "",
+   "old": "net/fabricmc/fabric/api/client/screen/v1/ScreenEvents$AfterInit",
+   "new": "net/fabricmc/fabric/api/client/screen/v1/ScreenEvents$AfterInit",
+   "old_access": 1025,
+   "new_access": 1025
+  },
+  {
+   "kind": "imethod",
+   "owner": "net/fabricmc/fabric/api/client/screen/v1/ScreenMouseEvents$AllowMouseClick",
+   "name": "allowMouseClick",
+   "desc": "(Lnet/minecraft/client/gui/screens/Screen;Lnet/minecraft/client/input/MouseButtonEvent;)Z",
+   "status": "OK",
+   "reason": "",
+   "old": "net/fabricmc/fabric/api/client/screen/v1/ScreenMouseEvents$AllowMouseClick",
+   "new": "net/fabricmc/fabric/api/client/screen/v1/ScreenMouseEvents$AllowMouseClick",
+   "old_access": 1025,
+   "new_access": 1025
   },
   {
    "kind": "imethod",
@@ -1348,6 +1732,18 @@
   },
   {
    "kind": "imethod",
+   "owner": "net/minecraft/client/OptionInstance$TooltipSupplier",
+   "name": "apply",
+   "desc": "(Ljava/lang/Object;)Lnet/minecraft/client/gui/components/Tooltip;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/OptionInstance$TooltipSupplier",
+   "new": "net/minecraft/client/OptionInstance$TooltipSupplier",
+   "old_access": 1025,
+   "new_access": 1025
+  },
+  {
+   "kind": "imethod",
    "owner": "net/minecraft/client/OptionInstance$ValueSet",
    "name": "validateValue",
    "desc": "(Ljava/lang/Object;)Ljava/util/Optional;",
@@ -1355,6 +1751,42 @@
    "reason": "",
    "old": "net/minecraft/client/OptionInstance$ValueSet",
    "new": "net/minecraft/client/OptionInstance$ValueSet",
+   "old_access": 1025,
+   "new_access": 1025
+  },
+  {
+   "kind": "imethod",
+   "owner": "net/minecraft/client/gui/components/Button$OnPress",
+   "name": "onPress",
+   "desc": "(Lnet/minecraft/client/gui/components/Button;)V",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/Button$OnPress",
+   "new": "net/minecraft/client/gui/components/Button$OnPress",
+   "old_access": 1025,
+   "new_access": 1025
+  },
+  {
+   "kind": "imethod",
+   "owner": "net/minecraft/client/gui/components/Checkbox$OnValueChange",
+   "name": "onValueChange",
+   "desc": "(Lnet/minecraft/client/gui/components/Checkbox;Z)V",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/Checkbox$OnValueChange",
+   "new": "net/minecraft/client/gui/components/Checkbox$OnValueChange",
+   "old_access": 1025,
+   "new_access": 1025
+  },
+  {
+   "kind": "imethod",
+   "owner": "net/minecraft/client/gui/components/CycleButton$OnValueChange",
+   "name": "onValueChange",
+   "desc": "(Lnet/minecraft/client/gui/components/CycleButton;Ljava/lang/Object;)V",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/CycleButton$OnValueChange",
+   "new": "net/minecraft/client/gui/components/CycleButton$OnValueChange",
    "old_access": 1025,
    "new_access": 1025
   },
@@ -1475,6 +1907,30 @@
    "reason": "",
    "old": "net/minecraft/world/level/storage/WorldData",
    "new": "net/minecraft/world/level/storage/WorldData",
+   "old_access": 1025,
+   "new_access": 1025
+  },
+  {
+   "kind": "imethod",
+   "owner": "org/apache/commons/lang3/function/FailableConsumer",
+   "name": "accept",
+   "desc": "(Ljava/lang/Object;)V",
+   "status": "OK",
+   "reason": "",
+   "old": "org/apache/commons/lang3/function/FailableConsumer",
+   "new": "org/apache/commons/lang3/function/FailableConsumer",
+   "old_access": 1025,
+   "new_access": 1025
+  },
+  {
+   "kind": "imethod",
+   "owner": "org/apache/commons/lang3/function/FailableFunction",
+   "name": "apply",
+   "desc": "(Ljava/lang/Object;)Ljava/lang/Object;",
+   "status": "OK",
+   "reason": "",
+   "old": "org/apache/commons/lang3/function/FailableFunction",
+   "new": "org/apache/commons/lang3/function/FailableFunction",
    "old_access": 1025,
    "new_access": 1025
   },
@@ -2785,6 +3241,366 @@
    "new": "com/mojang/serialization/DataResult$Error",
    "old_access": 1,
    "new_access": 1
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/BenchmarkMenuScreen",
+   "name": "addRenderableWidget",
+   "desc": "(Lnet/minecraft/client/gui/components/events/GuiEventListener;)Lnet/minecraft/client/gui/components/events/GuiEventListener;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 4,
+   "new_access": 4
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/BenchmarkMenuScreen",
+   "name": "rebuildWidgets",
+   "desc": "()V",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 4,
+   "new_access": 4
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/BenchmarkResultScreen",
+   "name": "addRenderableWidget",
+   "desc": "(Lnet/minecraft/client/gui/components/events/GuiEventListener;)Lnet/minecraft/client/gui/components/events/GuiEventListener;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 4,
+   "new_access": 4
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen",
+   "name": "addRenderableWidget",
+   "desc": "(Lnet/minecraft/client/gui/components/events/GuiEventListener;)Lnet/minecraft/client/gui/components/events/GuiEventListener;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 4,
+   "new_access": 4
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen",
+   "name": "rebuildWidgets",
+   "desc": "()V",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 4,
+   "new_access": 4
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList",
+   "name": "addEntry",
+   "desc": "(Lnet/minecraft/client/gui/components/AbstractSelectionList$Entry;I)I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/AbstractSelectionList",
+   "new": "net/minecraft/client/gui/components/AbstractSelectionList",
+   "old_access": 4,
+   "new_access": 4
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList",
+   "name": "getHeight",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/AbstractWidget",
+   "new": "net/minecraft/client/gui/components/AbstractWidget",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList",
+   "name": "getY",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/AbstractWidget",
+   "new": "net/minecraft/client/gui/components/AbstractWidget",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$CategoryEntry",
+   "name": "getContentBottom",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "old_access": 4161,
+   "new_access": 4161
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$CategoryEntry",
+   "name": "getContentRight",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "old_access": 4161,
+   "new_access": 4161
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$CategoryEntry",
+   "name": "getContentX",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "old_access": 4161,
+   "new_access": 4161
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$Entry",
+   "name": "mouseClicked",
+   "desc": "(Lnet/minecraft/client/input/MouseButtonEvent;Z)Z",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$RecommendationEntry",
+   "name": "getContentRight",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "old_access": 4161,
+   "new_access": 4161
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$RecommendationEntry",
+   "name": "getContentX",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "old_access": 4161,
+   "new_access": 4161
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$RecommendationEntry",
+   "name": "getContentY",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "old_access": 4161,
+   "new_access": 4161
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$RecommendationEntry",
+   "name": "getHeight",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "old_access": 4161,
+   "new_access": 4161
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$RecommendationEntry",
+   "name": "getWidth",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "old_access": 4161,
+   "new_access": 4161
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$RecommendationEntry",
+   "name": "getX",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "old_access": 4161,
+   "new_access": 4161
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$RecommendationEntry",
+   "name": "getY",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "old_access": 4161,
+   "new_access": 4161
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/RigTuneSettingsScreen",
+   "name": "addRenderableWidget",
+   "desc": "(Lnet/minecraft/client/gui/components/events/GuiEventListener;)Lnet/minecraft/client/gui/components/events/GuiEventListener;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 4,
+   "new_access": 4
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/UndoScreen",
+   "name": "addRenderableWidget",
+   "desc": "(Lnet/minecraft/client/gui/components/events/GuiEventListener;)Lnet/minecraft/client/gui/components/events/GuiEventListener;",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 4,
+   "new_access": 4
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/UndoScreen",
+   "name": "rebuildWidgets",
+   "desc": "()V",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "old_access": 4,
+   "new_access": 4
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/UndoScreen$UndoList",
+   "name": "addEntry",
+   "desc": "(Lnet/minecraft/client/gui/components/AbstractSelectionList$Entry;I)I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/AbstractSelectionList",
+   "new": "net/minecraft/client/gui/components/AbstractSelectionList",
+   "old_access": 4,
+   "new_access": 4
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/UndoScreen$UndoList",
+   "name": "getHeight",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/AbstractWidget",
+   "new": "net/minecraft/client/gui/components/AbstractWidget",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/UndoScreen$UndoList",
+   "name": "getY",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/AbstractWidget",
+   "new": "net/minecraft/client/gui/components/AbstractWidget",
+   "old_access": 1,
+   "new_access": 1
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/UndoScreen$UndoList$ItemEntry",
+   "name": "getContentX",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "old_access": 4161,
+   "new_access": 4161
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/UndoScreen$UndoList$ItemEntry",
+   "name": "getContentY",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "old_access": 4161,
+   "new_access": 4161
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/UndoScreen$UndoList$SectionEntry",
+   "name": "getContentBottom",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "old_access": 4161,
+   "new_access": 4161
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/UndoScreen$UndoList$SectionEntry",
+   "name": "getContentRight",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "old_access": 4161,
+   "new_access": 4161
+  },
+  {
+   "kind": "method",
+   "owner": "io/github/chaotix345/rigtune/client/ui/UndoScreen$UndoList$SectionEntry",
+   "name": "getContentX",
+   "desc": "()I",
+   "status": "OK",
+   "reason": "",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "old_access": 4161,
+   "new_access": 4161
   },
   {
    "kind": "method",
@@ -4863,6 +5679,378 @@
    "new_access": 1
   }
  ],
+ "overrides": [
+  {
+   "class": "io/github/chaotix345/rigtune/client/RigTuneClient",
+   "name": "onInitializeClient",
+   "desc": "()V",
+   "old": "net/fabricmc/api/ClientModInitializer",
+   "new": "net/fabricmc/api/ClientModInitializer",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/RigTunePreLaunch",
+   "name": "onPreLaunch",
+   "desc": "()V",
+   "old": "net/fabricmc/loader/api/entrypoint/PreLaunchEntrypoint",
+   "new": "net/fabricmc/loader/api/entrypoint/PreLaunchEntrypoint",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/compat/ModMenuIntegration",
+   "name": "getModConfigScreenFactory",
+   "desc": "()Lcom/terraformersmc/modmenu/api/ConfigScreenFactory;",
+   "old": "com/terraformersmc/modmenu/api/ModMenuApi",
+   "new": "com/terraformersmc/modmenu/api/ModMenuApi",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/BenchmarkMenuScreen",
+   "name": "extractRenderState",
+   "desc": "(Lnet/minecraft/client/gui/GuiGraphicsExtractor;IIF)V",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/BenchmarkMenuScreen",
+   "name": "init",
+   "desc": "()V",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/BenchmarkMenuScreen",
+   "name": "onClose",
+   "desc": "()V",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/BenchmarkResultScreen",
+   "name": "extractRenderState",
+   "desc": "(Lnet/minecraft/client/gui/GuiGraphicsExtractor;IIF)V",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/BenchmarkResultScreen",
+   "name": "init",
+   "desc": "()V",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/BenchmarkResultScreen",
+   "name": "onClose",
+   "desc": "()V",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen",
+   "name": "extractRenderState",
+   "desc": "(Lnet/minecraft/client/gui/GuiGraphicsExtractor;IIF)V",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen",
+   "name": "init",
+   "desc": "()V",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen",
+   "name": "onClose",
+   "desc": "()V",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen",
+   "name": "tick",
+   "desc": "()V",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList",
+   "name": "getRowWidth",
+   "desc": "()I",
+   "old": "net/minecraft/client/gui/components/AbstractSelectionList",
+   "new": "net/minecraft/client/gui/components/AbstractSelectionList",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$CategoryEntry",
+   "name": "children",
+   "desc": "()Ljava/util/List;",
+   "old": "net/minecraft/client/gui/components/events/ContainerEventHandler",
+   "new": "net/minecraft/client/gui/components/events/ContainerEventHandler",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$CategoryEntry",
+   "name": "extractContent",
+   "desc": "(Lnet/minecraft/client/gui/GuiGraphicsExtractor;IIZF)V",
+   "old": "net/minecraft/client/gui/components/AbstractSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/AbstractSelectionList$Entry",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$CategoryEntry",
+   "name": "narratables",
+   "desc": "()Ljava/util/List;",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$RecommendationEntry",
+   "name": "children",
+   "desc": "()Ljava/util/List;",
+   "old": "net/minecraft/client/gui/components/events/ContainerEventHandler",
+   "new": "net/minecraft/client/gui/components/events/ContainerEventHandler",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$RecommendationEntry",
+   "name": "extractContent",
+   "desc": "(Lnet/minecraft/client/gui/GuiGraphicsExtractor;IIZF)V",
+   "old": "net/minecraft/client/gui/components/AbstractSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/AbstractSelectionList$Entry",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$RecommendationEntry",
+   "name": "mouseClicked",
+   "desc": "(Lnet/minecraft/client/input/MouseButtonEvent;Z)Z",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/RigTuneScreen$RecommendationList$RecommendationEntry",
+   "name": "narratables",
+   "desc": "()Ljava/util/List;",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/RigTuneSettingsScreen",
+   "name": "extractRenderState",
+   "desc": "(Lnet/minecraft/client/gui/GuiGraphicsExtractor;IIF)V",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/RigTuneSettingsScreen",
+   "name": "init",
+   "desc": "()V",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/RigTuneSettingsScreen",
+   "name": "onClose",
+   "desc": "()V",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/UndoScreen",
+   "name": "extractRenderState",
+   "desc": "(Lnet/minecraft/client/gui/GuiGraphicsExtractor;IIF)V",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/UndoScreen",
+   "name": "init",
+   "desc": "()V",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/UndoScreen",
+   "name": "onClose",
+   "desc": "()V",
+   "old": "net/minecraft/client/gui/screens/Screen",
+   "new": "net/minecraft/client/gui/screens/Screen",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/UndoScreen$UndoList",
+   "name": "getRowWidth",
+   "desc": "()I",
+   "old": "net/minecraft/client/gui/components/AbstractSelectionList",
+   "new": "net/minecraft/client/gui/components/AbstractSelectionList",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/UndoScreen$UndoList$Entry",
+   "name": "children",
+   "desc": "()Ljava/util/List;",
+   "old": "net/minecraft/client/gui/components/events/ContainerEventHandler",
+   "new": "net/minecraft/client/gui/components/events/ContainerEventHandler",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/UndoScreen$UndoList$Entry",
+   "name": "narratables",
+   "desc": "()Ljava/util/List;",
+   "old": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/ContainerObjectSelectionList$Entry",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/UndoScreen$UndoList$ItemEntry",
+   "name": "extractContent",
+   "desc": "(Lnet/minecraft/client/gui/GuiGraphicsExtractor;IIZF)V",
+   "old": "net/minecraft/client/gui/components/AbstractSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/AbstractSelectionList$Entry",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/client/ui/UndoScreen$UndoList$SectionEntry",
+   "name": "extractContent",
+   "desc": "(Lnet/minecraft/client/gui/GuiGraphicsExtractor;IIZF)V",
+   "old": "net/minecraft/client/gui/components/AbstractSelectionList$Entry",
+   "new": "net/minecraft/client/gui/components/AbstractSelectionList$Entry",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/core/rules/ConditionAdapterFactory",
+   "name": "create",
+   "desc": "(Lcom/google/gson/Gson;Lcom/google/gson/reflect/TypeToken;)Lcom/google/gson/TypeAdapter;",
+   "old": "com/google/gson/TypeAdapterFactory",
+   "new": "com/google/gson/TypeAdapterFactory",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/core/rules/ConditionAdapterFactory$1",
+   "name": "read",
+   "desc": "(Lcom/google/gson/stream/JsonReader;)Ljava/lang/Object;",
+   "old": "com/google/gson/TypeAdapter",
+   "new": "com/google/gson/TypeAdapter",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/core/rules/ConditionAdapterFactory$1",
+   "name": "write",
+   "desc": "(Lcom/google/gson/stream/JsonWriter;Ljava/lang/Object;)V",
+   "old": "com/google/gson/TypeAdapter",
+   "new": "com/google/gson/TypeAdapter",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/e2e/driver/SelfUpdateDriver",
+   "name": "onInitializeClient",
+   "desc": "()V",
+   "old": "net/fabricmc/api/ClientModInitializer",
+   "new": "net/fabricmc/api/ClientModInitializer",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/e2e/undo/UndoDriver",
+   "name": "onInitializeClient",
+   "desc": "()V",
+   "old": "net/fabricmc/api/ClientModInitializer",
+   "new": "net/fabricmc/api/ClientModInitializer",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/gametest/BenchmarkGameTest",
+   "name": "runTest",
+   "desc": "(Lnet/fabricmc/fabric/api/client/gametest/v1/context/ClientGameTestContext;)V",
+   "old": "net/fabricmc/fabric/api/client/gametest/v1/FabricClientGameTest",
+   "new": "net/fabricmc/fabric/api/client/gametest/v1/FabricClientGameTest",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/gametest/RigTuneClientGameTest",
+   "name": "runTest",
+   "desc": "(Lnet/fabricmc/fabric/api/client/gametest/v1/context/ClientGameTestContext;)V",
+   "old": "net/fabricmc/fabric/api/client/gametest/v1/FabricClientGameTest",
+   "new": "net/fabricmc/fabric/api/client/gametest/v1/FabricClientGameTest",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/gametest/UiGameTest",
+   "name": "runTest",
+   "desc": "(Lnet/fabricmc/fabric/api/client/gametest/v1/context/ClientGameTestContext;)V",
+   "old": "net/fabricmc/fabric/api/client/gametest/v1/FabricClientGameTest",
+   "new": "net/fabricmc/fabric/api/client/gametest/v1/FabricClientGameTest",
+   "status": "OK",
+   "reason": ""
+  },
+  {
+   "class": "io/github/chaotix345/rigtune/gametest/UndoGameTest",
+   "name": "runTest",
+   "desc": "(Lnet/fabricmc/fabric/api/client/gametest/v1/context/ClientGameTestContext;)V",
+   "old": "net/fabricmc/fabric/api/client/gametest/v1/FabricClientGameTest",
+   "new": "net/fabricmc/fabric/api/client/gametest/v1/FabricClientGameTest",
+   "status": "OK",
+   "reason": ""
+  }
+ ],
+ "abstract": [],
  "classes": {
   "com/google/gson/Gson": "SAME",
   "com/google/gson/GsonBuilder": "SAME",
@@ -5035,6 +6223,7 @@
   "oshi/hardware/PowerSource": "SAME"
  },
  "missing_classes": [],
+ "unresolved_types": [],
  "reflection_types": [
   "net/minecraft/client/Options$FieldAccess"
  ],
@@ -5053,77 +6242,219 @@
   {
    "class": "com/google/gson/JsonObject",
    "name": "size",
-   "status": "OK"
+   "status": "OK",
+   "reason": "",
+   "strong": false,
+   "old_descs": [
+    "()I"
+   ],
+   "new_descs": [
+    "()I"
+   ]
   },
   {
    "class": "net/fabricmc/loader/api/FabricLoader",
    "name": "getInstance",
-   "status": "OK"
+   "status": "OK",
+   "reason": "",
+   "strong": true,
+   "old_descs": [
+    "()Lnet/fabricmc/loader/api/FabricLoader;"
+   ],
+   "new_descs": [
+    "()Lnet/fabricmc/loader/api/FabricLoader;"
+   ]
   },
   {
    "class": "net/minecraft/client/Minecraft",
    "name": "getInstance",
-   "status": "OK"
+   "status": "OK",
+   "reason": "",
+   "strong": true,
+   "old_descs": [
+    "()Lnet/minecraft/client/Minecraft;"
+   ],
+   "new_descs": [
+    "()Lnet/minecraft/client/Minecraft;"
+   ]
   },
   {
    "class": "net/minecraft/client/Options",
    "name": "graphicsPreset",
-   "status": "OK"
+   "status": "OK",
+   "reason": "",
+   "strong": true,
+   "old_descs": [
+    "()Lnet/minecraft/client/OptionInstance;",
+    "Lnet/minecraft/client/OptionInstance;"
+   ],
+   "new_descs": [
+    "()Lnet/minecraft/client/OptionInstance;",
+    "Lnet/minecraft/client/OptionInstance;"
+   ]
   },
   {
    "class": "net/minecraft/client/Options",
    "name": "minecraft",
-   "status": "OK"
+   "status": "OK",
+   "reason": "",
+   "strong": true,
+   "old_descs": [
+    "Lnet/minecraft/client/Minecraft;"
+   ],
+   "new_descs": [
+    "Lnet/minecraft/client/Minecraft;"
+   ]
   },
   {
    "class": "net/minecraft/client/Options",
    "name": "processOptions",
-   "status": "OK"
+   "status": "OK",
+   "reason": "",
+   "strong": true,
+   "old_descs": [
+    "(Lnet/minecraft/client/Options$FieldAccess;)V"
+   ],
+   "new_descs": [
+    "(Lnet/minecraft/client/Options$FieldAccess;)V"
+   ]
   },
   {
    "class": "net/minecraft/client/Options",
    "name": "renderDistance",
-   "status": "OK"
+   "status": "OK",
+   "reason": "",
+   "strong": false,
+   "old_descs": [
+    "()Lnet/minecraft/client/OptionInstance;",
+    "Lnet/minecraft/client/OptionInstance;"
+   ],
+   "new_descs": [
+    "()Lnet/minecraft/client/OptionInstance;",
+    "Lnet/minecraft/client/OptionInstance;"
+   ]
   },
   {
    "class": "net/minecraft/client/Options",
    "name": "serverRenderDistance",
-   "status": "OK"
+   "status": "OK",
+   "reason": "",
+   "strong": true,
+   "old_descs": [
+    "I"
+   ],
+   "new_descs": [
+    "I"
+   ]
   },
   {
    "class": "net/minecraft/client/gui/Gui",
    "name": "update",
-   "status": "OK"
+   "status": "OK",
+   "reason": "",
+   "strong": false,
+   "old_descs": [
+    "()V"
+   ],
+   "new_descs": [
+    "()V"
+   ]
   },
   {
    "class": "net/minecraft/client/gui/Hud",
    "name": "title",
-   "status": "OK"
+   "status": "OK",
+   "reason": "",
+   "strong": false,
+   "old_descs": [
+    "Lnet/minecraft/network/chat/Component;"
+   ],
+   "new_descs": [
+    "Lnet/minecraft/network/chat/Component;"
+   ]
   },
   {
    "class": "net/minecraft/client/gui/components/DebugScreenOverlay",
    "name": "logFrameDuration",
-   "status": "OK"
+   "status": "OK",
+   "reason": "",
+   "strong": true,
+   "old_descs": [
+    "(J)V"
+   ],
+   "new_descs": [
+    "(J)V"
+   ]
   },
   {
    "class": "net/minecraft/client/gui/screens/Screen",
    "name": "title",
-   "status": "OK"
+   "status": "OK",
+   "reason": "",
+   "strong": false,
+   "old_descs": [
+    "Lnet/minecraft/network/chat/Component;"
+   ],
+   "new_descs": [
+    "Lnet/minecraft/network/chat/Component;"
+   ]
   },
   {
    "class": "net/minecraft/client/renderer/GameRenderer",
    "name": "update",
-   "status": "OK"
+   "status": "OK",
+   "reason": "",
+   "strong": false,
+   "old_descs": [
+    "(Lnet/minecraft/client/DeltaTracker;)V"
+   ],
+   "new_descs": [
+    "(Lnet/minecraft/client/DeltaTracker;)V"
+   ]
   },
   {
    "class": "org/apache/commons/lang3/function/FailableFunction",
    "name": "apply",
-   "status": "OK"
+   "status": "OK",
+   "reason": "",
+   "strong": false,
+   "old_descs": [
+    "(Ljava/lang/Object;)Ljava/lang/Object;"
+   ],
+   "new_descs": [
+    "(Ljava/lang/Object;)Ljava/lang/Object;"
+   ]
   },
   {
    "class": "org/slf4j/Logger",
    "name": "error",
-   "status": "OK"
+   "status": "OK",
+   "reason": "",
+   "strong": false,
+   "old_descs": [
+    "(Ljava/lang/String;)V",
+    "(Ljava/lang/String;Ljava/lang/Object;)V",
+    "(Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V",
+    "(Ljava/lang/String;Ljava/lang/Throwable;)V",
+    "(Ljava/lang/String;[Ljava/lang/Object;)V",
+    "(Lorg/slf4j/Marker;Ljava/lang/String;)V",
+    "(Lorg/slf4j/Marker;Ljava/lang/String;Ljava/lang/Object;)V",
+    "(Lorg/slf4j/Marker;Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V",
+    "(Lorg/slf4j/Marker;Ljava/lang/String;Ljava/lang/Throwable;)V",
+    "(Lorg/slf4j/Marker;Ljava/lang/String;[Ljava/lang/Object;)V"
+   ],
+   "new_descs": [
+    "(Ljava/lang/String;)V",
+    "(Ljava/lang/String;Ljava/lang/Object;)V",
+    "(Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V",
+    "(Ljava/lang/String;Ljava/lang/Throwable;)V",
+    "(Ljava/lang/String;[Ljava/lang/Object;)V",
+    "(Lorg/slf4j/Marker;Ljava/lang/String;)V",
+    "(Lorg/slf4j/Marker;Ljava/lang/String;Ljava/lang/Object;)V",
+    "(Lorg/slf4j/Marker;Ljava/lang/String;Ljava/lang/Object;Ljava/lang/Object;)V",
+    "(Lorg/slf4j/Marker;Ljava/lang/String;Ljava/lang/Throwable;)V",
+    "(Lorg/slf4j/Marker;Ljava/lang/String;[Ljava/lang/Object;)V"
+   ]
   }
  ],
  "string_changes": {
@@ -5132,7 +6463,8 @@
    "added": [
     "Can't getPipelineBuilder() before it was initialized"
    ],
-   "removed_used": []
+   "removed_used": [],
+   "removed_used_strong": []
   },
   "net/minecraft/client/Minecraft": {
    "removed": [
@@ -5140,14 +6472,16 @@
     "Detected unexpected shutdown during last game startup: resetting preferred graphics API to Default"
    ],
    "added": [],
-   "removed_used": []
+   "removed_used": [],
+   "removed_used_strong": []
   },
   "net/minecraft/client/Options": {
    "removed": [
     "options.graphicsApi.tooltip.vulkan"
    ],
    "added": [],
-   "removed_used": []
+   "removed_used": [],
+   "removed_used_strong": []
   },
   "net/minecraft/client/renderer/LevelRenderer": {
    "removed": [
@@ -5156,7 +6490,8 @@
    "added": [
     "Bins\u0001"
    ],
-   "removed_used": []
+   "removed_used": [],
+   "removed_used_strong": []
   },
   "net/minecraft/server/MinecraftServer": {
    "removed": [
@@ -5165,10 +6500,12 @@
    "added": [
     "All players"
    ],
-   "removed_used": []
+   "removed_used": [],
+   "removed_used_strong": []
   }
  },
  "bytecode": null,
  "breaking": [],
- "unresolved": []
+ "unresolved": [],
+ "review": []
 }

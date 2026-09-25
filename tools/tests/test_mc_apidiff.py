@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import mc_apidiff as mad
 
-PUBLIC, PRIVATE, PROTECTED, STATIC, INTERFACE, ABSTRACT, ENUM = 0x1, 0x2, 0x4, 0x8, 0x200, 0x400, 0x4000
+PUBLIC, PRIVATE, PROTECTED, STATIC, FINAL, INTERFACE, ABSTRACT, ENUM = 0x1, 0x2, 0x4, 0x8, 0x10, 0x200, 0x400, 0x4000
 
 
 class ClassWriter:
@@ -21,7 +21,7 @@ class ClassWriter:
         self.entries = [None]
         self.index = {}
         self.name, self.super_name, self.interfaces, self.access = name, super_name, list(interfaces), access
-        self.fields, self.methods, self.attributes = [], [], []
+        self.fields, self.methods, self.attributes, self.bootstraps = [], [], [], []
 
     def _add(self, key, payload, slots=1):
         if key in self.index:
@@ -45,6 +45,36 @@ class ClassWriter:
     def long(self, value):
         return self._add(("long", value), struct.pack(">Bq", 5, value), slots=2)
 
+    def int_float_double(self, i, f, d):
+        self._add(("int", i), struct.pack(">Bi", 3, i))
+        self._add(("float", f), struct.pack(">Bf", 4, f))
+        self._add(("double", d), struct.pack(">Bd", 6, d), slots=2)
+        return self
+
+    def method_handle(self, kind, ref_index):
+        return self._add(("handle", kind, ref_index), struct.pack(">BBH", 15, kind, ref_index))
+
+    def method_type(self, desc):
+        return self._add(("mtype", desc), struct.pack(">BH", 16, self.utf8(desc)))
+
+    def indy(self, bootstrap, name, desc):
+        return self._add(("indy", bootstrap, name, desc), struct.pack(">BHH", 18, bootstrap, self.nat(name, desc)))
+
+    def lambda_to(self, interface, sam, erased_desc, captured="()"):
+        """An invokedynamic like javac's for a lambda implementing interface.sam."""
+        factory = self.ref("method", "java/lang/invoke/LambdaMetafactory", "metafactory",
+                           "(Ljava/lang/invoke/MethodHandles$Lookup;Ljava/lang/String;Ljava/lang/invoke/MethodType;"
+                           "Ljava/lang/invoke/MethodType;Ljava/lang/invoke/MethodHandle;Ljava/lang/invoke/MethodType;)"
+                           "Ljava/lang/invoke/CallSite;")
+        self.bootstraps.append((self.method_handle(6, factory), [self.method_type(erased_desc)]))
+        return self.indy(len(self.bootstraps) - 1, sam, f"{captured}L{interface};")
+
+    def concat(self):
+        """An invokedynamic of StringConcatFactory, which isn't a lambda."""
+        factory = self.ref("method", "java/lang/invoke/StringConcatFactory", "makeConcatWithConstants", "()V")
+        self.bootstraps.append((self.method_handle(6, factory), [self.string("recipe: \u0001!")]))
+        return self.indy(len(self.bootstraps) - 1, "makeConcatWithConstants", "(I)Ljava/lang/String;")
+
     def nat(self, name, desc):
         return self._add(("nat", name, desc), struct.pack(">BHH", 12, self.utf8(name), self.utf8(desc)))
 
@@ -53,11 +83,12 @@ class ClassWriter:
         return self._add((kind, owner, name, desc), struct.pack(">BHH", tag, self.cls(owner), self.nat(name, desc)))
 
     def field(self, name, desc, access=PUBLIC):
-        self.fields.append((access, self.utf8(name), self.utf8(desc)))
+        self.fields.append((access, self.utf8(name), self.utf8(desc), []))
         return self
 
-    def method(self, name, desc, access=PUBLIC):
-        self.methods.append((access, self.utf8(name), self.utf8(desc)))
+    def method(self, name, desc, access=PUBLIC, annotations=()):
+        attributes = [self._annotations_attribute(type_desc, values) for type_desc, values in annotations]
+        self.methods.append((access, self.utf8(name), self.utf8(desc), attributes))
         return self
 
     def _element(self, value):
@@ -77,22 +108,31 @@ class ClassWriter:
             out += struct.pack(">H", self.utf8(key)) + self._element(value)
         return out
 
-    def annotate(self, type_desc, values):
+    def _annotations_attribute(self, type_desc, values):
         body = struct.pack(">H", 1) + self._annotation(type_desc, values)
-        self.attributes.append(struct.pack(">HI", self.utf8("RuntimeInvisibleAnnotations"), len(body)) + body)
+        return struct.pack(">HI", self.utf8("RuntimeInvisibleAnnotations"), len(body)) + body
+
+    def annotate(self, type_desc, values):
+        self.attributes.append(self._annotations_attribute(type_desc, values))
         return self
 
     def bytes(self):
         this, sup = self.cls(self.name), self.cls(self.super_name) if self.super_name else 0
         interfaces = [self.cls(i) for i in self.interfaces]
+        attributes = list(self.attributes)
+        if self.bootstraps:
+            body = struct.pack(">H", len(self.bootstraps)) + b"".join(
+                struct.pack(">HH", handle, len(args)) + b"".join(struct.pack(">H", a) for a in args)
+                for handle, args in self.bootstraps)
+            attributes.append(struct.pack(">HI", self.utf8("BootstrapMethods"), len(body)) + body)
         pool = b"".join(e for e in self.entries[1:] if e is not None)
         out = struct.pack(">IHHH", 0xCAFEBABE, 0, 69, len(self.entries)) + pool
         out += struct.pack(">HHHH", self.access, this, sup, len(interfaces))
         out += b"".join(struct.pack(">H", i) for i in interfaces)
         for members in (self.fields, self.methods):
             out += struct.pack(">H", len(members))
-            out += b"".join(struct.pack(">HHHH", a, n, d, 0) for a, n, d in members)
-        out += struct.pack(">H", len(self.attributes)) + b"".join(self.attributes)
+            out += b"".join(struct.pack(">HHHH", a, n, d, len(attrs)) + b"".join(attrs) for a, n, d, attrs in members)
+        out += struct.pack(">H", len(attributes)) + b"".join(attributes)
         return out
 
 
@@ -151,6 +191,29 @@ class ReaderTest(unittest.TestCase):
         self.assertEqual(info.annotation_strings, {"logFrameDuration", "HEAD"})
         self.assertIn("net/minecraft/client/gui/components/DebugScreenOverlay", info.descriptor_types)
 
+    def test_method_level_annotations_like_a_mixin_inject(self):
+        w = ClassWriter("io/github/x/mixin/DebugScreenOverlayMixin")
+        w.annotate("Lorg/spongepowered/asm/mixin/Mixin;",
+                   {"value": [("class", "Lnet/minecraft/client/gui/components/DebugScreenOverlay;")]})
+        w.method("rigtune$recordFrame", "(JLorg/spongepowered/asm/mixin/injection/callback/CallbackInfo;)V", PRIVATE,
+                 annotations=[("Lorg/spongepowered/asm/mixin/injection/Inject;",
+                               {"method": ["logFrameDuration"],
+                                "at": [("@", "Lorg/spongepowered/asm/mixin/injection/At;", {"value": "HEAD"})]})])
+        w.field("marker", "I")
+        info = mad.parse_class(w.bytes())
+        self.assertEqual(info.annotation_strings, {"logFrameDuration", "HEAD"})
+        self.assertIn(("rigtune$recordFrame", "(JLorg/spongepowered/asm/mixin/injection/callback/CallbackInfo;)V"),
+                      info.methods)
+        self.assertEqual(info.fields, {("marker", "I"): PUBLIC})
+
+    def test_int_float_double_constants_are_skipped(self):
+        w = ClassWriter("a/B").int_float_double(7, 1.5, 2.5)
+        w.string("after")
+        w.ref("field", "net/minecraft/A", "f", "D")
+        info = mad.parse_class(w.bytes())
+        self.assertEqual(info.strings, {"after"})
+        self.assertEqual(info.refs, {("field", "net/minecraft/A", "f", "D")})
+
     def test_rejects_non_class_data(self):
         with self.assertRaises(ValueError):
             mad.parse_class(b"PK\x03\x04")
@@ -193,6 +256,13 @@ class ResolveTest(unittest.TestCase):
         self.assertEqual(mad.resolve(index, "method", "net/minecraft/Child", "rate", "()I"),
                          ("net/minecraft/Ticker", PUBLIC | ABSTRACT))
         self.assertIsNone(mad.resolve(index, "method", "net/minecraft/Child", "tick", "(I)V"))
+
+    def test_field_lookup_checks_superinterfaces_before_the_superclass(self):
+        iface = ClassWriter("net/minecraft/I", access=PUBLIC | INTERFACE | ABSTRACT).field("f", "I", PUBLIC | STATIC)
+        sup = ClassWriter("net/minecraft/S").field("f", "I")
+        child = ClassWriter("net/minecraft/C", super_name="net/minecraft/S", interfaces=["net/minecraft/I"])
+        self.assertEqual(mad.resolve(index_of(iface, sup, child), "field", "net/minecraft/C", "f", "I"),
+                         ("net/minecraft/I", PUBLIC | STATIC))
 
     def test_jdk_inherited_member_resolves(self):
         enum = ClassWriter("net/minecraft/world/Difficulty", super_name="java/lang/Enum", access=PUBLIC | ENUM)
@@ -254,8 +324,13 @@ class CompareTest(unittest.TestCase):
         self.assertEqual(self.compare(old, new)["tick"]["status"], "UNRESOLVED")
 
 
-def rigtune_probe():
+GET_DECLARED_FIELD = ("method", "java/lang/Class", "getDeclaredField", "(Ljava/lang/String;)Ljava/lang/reflect/Field;")
+
+
+def rigtune_probe(reflective=True):
     w = ClassWriter("io/github/chaotix345/rigtune/client/Probe")
+    if reflective:
+        w.ref(*GET_DECLARED_FIELD)
     w.ref("method", "net/minecraft/A", "tick", "()V")
     w.ref("field", "net/minecraft/client/Options", "renderDistance", "I")
     w.string("renderDistance")
@@ -334,8 +409,108 @@ class AnalyseTest(unittest.TestCase):
         result = mad.analyse(rigtune_probe(), index_of(a, options("renderDistance", "old"), overlay()),
                              index_of(a, options("new"), overlay()))
         self.assertEqual(result.string_changes["net/minecraft/client/Options"],
-                         {"removed": ["old", "renderDistance"], "added": ["new"], "removed_used": ["renderDistance"]})
+                         {"removed": ["old", "renderDistance"], "added": ["new"], "removed_used": ["renderDistance"],
+                          "removed_used_strong": ["renderDistance"]})
         self.assertIn('REMOVED string "renderDistance" from net/minecraft/client/Options (RigTune uses it)',
+                      mad.breaking(result))
+
+    def test_coincidental_names_and_strings_are_review_only(self):
+        a = ClassWriter("net/minecraft/A").method("tick", "()V")
+        result = mad.analyse(rigtune_probe(reflective=False),
+                             index_of(a, options("renderDistance"), overlay()),
+                             index_of(a, options(fields=("renderDistance",)), overlay()))
+        self.assertEqual(mad.breaking(result), [])
+        self.assertEqual(mad.review(result), [
+            "MISSING name net/minecraft/client/Options.serverRenderDistance (a string RigTune uses)",
+            'REMOVED string "renderDistance" from net/minecraft/client/Options (RigTune has the same string)',
+        ])
+
+    def test_annotation_names_stay_strong_without_reflection(self):
+        a = ClassWriter("net/minecraft/A").method("tick", "()V")
+        result = mad.analyse(rigtune_probe(reflective=False), index_of(a, options(), overlay()),
+                             index_of(a, options(), overlay("logFrameTime")))
+        self.assertIn("MISSING name net/minecraft/client/gui/Overlay.logFrameDuration (a string RigTune uses)",
+                      mad.breaking(result))
+
+    def test_named_member_with_a_changed_descriptor_is_breaking(self):
+        a = ClassWriter("net/minecraft/A").method("tick", "()V")
+        changed = ClassWriter("net/minecraft/client/gui/Overlay").method("logFrameDuration", "(JI)V")
+        result = mad.analyse(rigtune_probe(), index_of(a, options(), overlay()), index_of(a, options(), changed))
+        self.assertIn("CHANGED name net/minecraft/client/gui/Overlay.logFrameDuration (a string RigTune uses): "
+                      "descriptor(s) gone: (J)V", mad.breaking(result))
+
+    def test_minecraft_owner_missing_from_the_old_classpath_is_a_gap(self):
+        w = ClassWriter("io/github/chaotix345/rigtune/client/Probe")
+        w.ref("method", "net/minecraft/Gone", "x", "()V")
+        w.ref("method", "net/irisshaders/iris/api/v0/IrisApi", "getInstance", "()Lnet/irisshaders/iris/api/v0/IrisApi;")
+        result = mad.analyse(mad.collect_rigtune([("client", w.bytes())]), index_of(), index_of())
+        self.assertEqual(result.scope.not_checked, {"net/irisshaders": 1})
+        self.assertIn("UNRESOLVED net/minecraft/Gone.x()V: not found on either version (incomplete classpath?)",
+                      mad.incomplete(result))
+        self.assertIn("UNRESOLVED class net/minecraft/Gone: not on the old classpath", mad.incomplete(result))
+
+
+SCREEN = "net/minecraft/client/gui/screens/Screen"
+MY_SCREEN = "io/github/chaotix345/rigtune/client/ui/MyScreen"
+
+
+class InheritanceTest(unittest.TestCase):
+    def test_inherited_members_called_through_a_rigtune_subclass_are_checked(self):
+        own = ClassWriter(MY_SCREEN, super_name=SCREEN)
+        own.method("helper", "()V")
+        own.ref("method", MY_SCREEN, "addRenderableWidget", "(I)V")
+        own.ref("field", MY_SCREEN, "width", "I")
+        own.ref("method", MY_SCREEN, "helper", "()V")
+        raw = mad.collect_rigtune([("client", own.bytes())])
+        old = ClassWriter(SCREEN).method("addRenderableWidget", "(I)V").field("width", "I")
+        new = ClassWriter(SCREEN).field("width", "I")
+        result = mad.analyse(raw, index_of(old, jdk=jdk_index()), index_of(new, jdk=jdk_index()))
+        self.assertEqual({(r["name"], r["status"]) for r in result.refs}, {("addRenderableWidget", "MISSING"), ("width", "OK")})
+        self.assertIn(f"MISSING method {MY_SCREEN}.addRenderableWidget(I)V: not found on the new version "
+                      f"(declared in {SCREEN} on the old version)", mad.breaking(result))
+        self.assertIn(SCREEN, result.scope.types)
+
+    def test_overrides_must_still_override(self):
+        own = ClassWriter(MY_SCREEN, super_name=SCREEN)
+        own.method("init", "()V", PROTECTED).method("tick", "()V").method("mine", "()V").method("secret", "()V", PRIVATE)
+        raw = mad.collect_rigtune([("client", own.bytes())])
+        old = ClassWriter(SCREEN).method("init", "()V", PROTECTED).method("tick", "()V")
+        new = ClassWriter(SCREEN).method("tick", "()V", PUBLIC | FINAL)
+        result = mad.analyse(raw, index_of(old, jdk=jdk_index()), index_of(new, jdk=jdk_index()))
+        self.assertEqual({(o["name"], o["status"]) for o in result.overrides}, {("init", "MISSING"), ("tick", "CHANGED")})
+        lines = mad.breaking(result)
+        self.assertIn(f"MISSING override {MY_SCREEN}.init()V: overrides {SCREEN} on the old version; nothing to "
+                      "override on the new one", lines)
+        self.assertIn(f"CHANGED override {MY_SCREEN}.tick()V: {SCREEN}.tick is final on the new version", lines)
+
+    def test_interface_implementations_and_new_abstract_methods(self):
+        api = "net/fabricmc/api/ClientModInitializer"
+        own = ClassWriter("io/github/chaotix345/rigtune/client/Init", interfaces=[api])
+        own.method("onInitializeClient", "()V")
+        raw = mad.collect_rigtune([("client", own.bytes())])
+        old = ClassWriter(api, access=PUBLIC | INTERFACE | ABSTRACT).method("onInitializeClient", "()V", PUBLIC | ABSTRACT)
+        new = ClassWriter(api, access=PUBLIC | INTERFACE | ABSTRACT).method("onInitializeClient", "()V", PUBLIC | ABSTRACT)
+        new.method("onReload", "()V", PUBLIC | ABSTRACT).method("withDefault", "()V", PUBLIC)
+        result = mad.analyse(raw, index_of(old, jdk=jdk_index()), index_of(new, jdk=jdk_index()))
+        self.assertEqual([(o["name"], o["status"]) for o in result.overrides], [("onInitializeClient", "OK")])
+        self.assertEqual(mad.breaking(result), [
+            f"ABSTRACT io/github/chaotix345/rigtune/client/Init doesn't implement {api}.onReload()V (new on this version)"])
+
+    def test_lambda_interfaces_are_checked(self):
+        event = "net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientTickEvents$EndTick"
+        own = ClassWriter("io/github/chaotix345/rigtune/client/Ticks")
+        own.lambda_to(event, "onEndTick", "(Lnet/minecraft/client/Minecraft;)V")
+        own.concat()
+        info = mad.parse_class(own.bytes())
+        self.assertIn(("imethod", event, "onEndTick", "(Lnet/minecraft/client/Minecraft;)V"), info.refs)
+        self.assertFalse(any(r[2] == "makeConcatWithConstants" and r[0] == "imethod" for r in info.refs))
+        raw = mad.collect_rigtune([("client", own.bytes())])
+        old = ClassWriter(event, access=PUBLIC | INTERFACE | ABSTRACT)
+        old.method("onEndTick", "(Lnet/minecraft/client/Minecraft;)V", PUBLIC | ABSTRACT)
+        new = ClassWriter(event, access=PUBLIC | INTERFACE | ABSTRACT)
+        new.method("onEndTick", "(Lnet/minecraft/client/Minecraft;F)V", PUBLIC | ABSTRACT)
+        result = mad.analyse(raw, index_of(old, jdk=jdk_index()), index_of(new, jdk=jdk_index()))
+        self.assertIn(f"MISSING method {event}.onEndTick(Lnet/minecraft/client/Minecraft;)V: not found on the new version",
                       mad.breaking(result))
 
 
@@ -505,12 +680,14 @@ class MainTest(unittest.TestCase):
         (self.root / "versions" / "26.8" / "gradle.properties").write_text(
             "fabric_api_version=0.1.0+26.8\nmodmenu_version=30.0.0\n", encoding="utf-8")
         probe = ClassWriter("io/github/chaotix345/rigtune/client/Probe")
+        probe.ref(*GET_DECLARED_FIELD)
         probe.ref("method", "net/minecraft/A", "tick", "()V")
         probe.ref("field", "net/minecraft/client/Options", "renderDistance", "I")
         probe.string("serverRenderDistance")
         target = self.root / "versions" / "26.8" / "build" / "classes" / "java" / "client" / "io" / "github" / "chaotix345" / "rigtune" / "client"
         target.mkdir(parents=True)
-        (target / "Probe.class").write_bytes(probe.bytes())
+        self.probe_file = target / "Probe.class"
+        self.probe_file.write_bytes(probe.bytes())
         for name, value in (("java_tool", lambda name, java_home: name), ("run_javap", fake_javap),
                             ("JdkClasses", lambda *args: jdk_index())):
             original = getattr(mad, name)
@@ -566,6 +743,14 @@ class MainTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("minecraft-clientonly-deobf-26.9.jar", err)
         self.assertIn("git worktree add", err)
+
+    def test_unexpected_error_exits_2_with_one_line(self):
+        for mc in ("26.8", "26.9"):
+            self.cache(mc, [ClassWriter("net/minecraft/A").method("tick", "()V"), options()])
+        self.probe_file.write_bytes(b"not a class file")
+        code, out, err = self.run_main()
+        self.assertEqual(code, 2)
+        self.assertEqual(err, "mc_apidiff: unexpected error: ValueError: not a class file\n")
 
     def test_no_compiled_classes_exits_2(self):
         code, out, err = self.run_main("--sets", "gametest")

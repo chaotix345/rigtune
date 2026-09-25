@@ -411,6 +411,69 @@ class AddVersionTest(RepoCase):
         self.assertEqual(code, 1)
         self.assertIn("HTTP 404", err)
 
+    def test_write_failure_leaves_the_repo_as_it_was(self):
+        root = self.make_repo()
+        before = self.snapshot(root)
+        original = amv.write_text_atomic
+
+        def failing(path, text):
+            if path.name == "settings.gradle":
+                raise OSError("disk full")
+            original(path, text)
+
+        amv.write_text_atomic = failing
+        self.addCleanup(setattr, amv, "write_text_atomic", original)
+        code, out, err, _ = self.run_tool(root, ["26.4-snapshot-1", "--prerelease-ok"])
+        self.assertEqual(code, 1)
+        self.assertEqual(err, "add_mc_version: couldn't write the new node (disk full); nothing was changed\n")
+        self.assertEqual(self.snapshot(root), before)
+        self.assertFalse((root / "versions" / "26.4-snapshot-1").exists())
+
+    def test_connection_errors_exhaust_the_retries(self):
+        root = self.make_repo()
+
+        class Offline(FakeWorld):
+            def opener(self, request):
+                self.requests.append((request.full_url, {}, self.now))
+                raise OSError("connection refused")
+
+        world = Offline()
+        code, out, err, _ = self.run_tool(root, ["26.4-snapshot-1", "--prerelease-ok"], world)
+        self.assertEqual(code, 1)
+        self.assertEqual(err, f"add_mc_version: {amv.MANIFEST_URL}: connection refused\n")
+        self.assertEqual(len(world.requests), amv.MAX_ATTEMPTS)
+        self.assertEqual(world.sleeps, [2.0, 4.0])
+
+    def test_unreadable_json_and_xml_are_network_errors(self):
+        for url, body, message in ((amv.MANIFEST_URL, b"{not json", "unreadable JSON"),
+                                   (amv.FABRIC_API_METADATA_URL, b"<metadata>", "unreadable XML")):
+            with self.subTest(url=url):
+                root = self.make_repo()
+                code, out, err, _ = self.run_tool(root, ["26.4-snapshot-1", "--prerelease-ok"], FakeWorld({url: (200, body)}))
+                self.assertEqual(code, 1)
+                self.assertIn(message, err)
+
+    def test_unexpected_response_shape_is_one_line(self):
+        root = self.make_repo()
+        code, out, err, _ = self.run_tool(root, ["26.4-snapshot-1", "--prerelease-ok"],
+                                          FakeWorld({amv.MANIFEST_URL: (200, b"[]")}))
+        self.assertEqual(code, 1)
+        self.assertTrue(err.startswith("add_mc_version: unexpected error: AttributeError"), err)
+        self.assertEqual(err.count("\n"), 1)
+
+    def test_blog_links_resolve_against_the_feed_and_stay_on_fabricmc(self):
+        feed = fixture("fabric-feed.xml")
+        relative = feed.replace(b"https://fabricmc.net/2026/09/15/263.html", b"/2026/09/15/263.html")
+        root = self.make_repo(versions=("26.2",))
+        code, out, err, _ = self.run_tool(root, ["26.3", "--dry-run"], FakeWorld({amv.FABRIC_FEED_URL: (200, relative)}))
+        self.assertEqual(code, 0, err)
+        self.assertIn("Developers should use Loom 1.17", out)
+        elsewhere = feed.replace(b"https://fabricmc.net/2026/09/15/263.html", b"https://example.invalid/263.html")
+        root = self.make_repo(versions=("26.2",))
+        code, out, err, _ = self.run_tool(root, ["26.3", "--dry-run"], FakeWorld({amv.FABRIC_FEED_URL: (200, elsewhere)}))
+        self.assertEqual(code, 0, err)
+        self.assertIn("outside https://fabricmc.net/", out)
+
     def test_checklist_printed(self):
         root = self.make_repo()
         code, out, err, _ = self.run_tool(root, ["26.4-snapshot-1", "--prerelease-ok", "--dry-run"])

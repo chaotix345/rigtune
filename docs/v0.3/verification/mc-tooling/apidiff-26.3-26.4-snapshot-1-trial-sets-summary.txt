@@ -6,9 +6,11 @@ Classpath 26.3: Minecraft 26.3 (2 jars), 53 Mojang libraries, Fabric API 0.161.0
 Classpath 26.4-snapshot-1: Minecraft 26.4-snapshot-1 (2 jars), 53 Mojang libraries, Fabric API 0.161.1+26.4 (46 modules), Mod Menu 22.0.0-alpha.1, Fabric Loader 0.19.5
   libraries not in the cache (not needed unless a reference points there): ca.weblite:java-objc-bridge:1.1
 
-Member references: 413 (Minecraft 225, Mojang 25, Fabric 57, Mod Menu 1, LWJGL 0, other Minecraft libraries 105; 308 without the other libraries)
-  OK 413, MISSING 0, CHANGED 0, UNRESOLVED 0
-  not checked (not on the classpath, compile-only mod APIs): com/seibel 12, net/irisshaders 4, org/junit 31
+Member references: 482 (Minecraft 286, Mojang 25, Fabric 62, Mod Menu 1, LWJGL 0, other Minecraft libraries 108; 374 without the other libraries; 56 through a RigTune subclass; 111 interface methods, lambdas included)
+  OK 482, MISSING 0, CHANGED 0, UNRESOLVED 0
+  not checked (not on the classpath, compile-only mod APIs): com/seibel 12, net/irisshaders 4, org/junit 32
+Overridden or implemented methods: 39 (OK 39, MISSING 0, CHANGED 0)
+Abstract methods newly left unimplemented: 0
 Referenced classes: 169: SAME 156, DIFF 13, MISSING 0
   DIFF com/mojang/blaze3d/systems/RenderSystem
   DIFF com/mojang/renderpearl/api/device/GpuDevice
@@ -25,7 +27,8 @@ Referenced classes: 169: SAME 156, DIFF 13, MISSING 0
   DIFF net/minecraft/world/level/levelgen/Heightmap$Types
 Reflection targets by class name: net/minecraft/client/Options$FieldAccess
   outside the checked classpath (check by hand): net.caffeinemc.mods.sodium.client.compatibility.workarounds.Workarounds, net.caffeinemc.mods.sodium.client.compatibility.workarounds.Workarounds$Reference, net.caffeinemc.mods.sodium.client.gui.VideoSettingsScreen, net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer, net.irisshaders.iris.api.v0.IrisApi
-Strings naming a member of a referenced class: 14 (14 still there): JsonArray.size, JsonObject.size, JsonPrimitive.value, FabricLoader.getInstance, Minecraft.getInstance, Options.graphicsPreset, Options.minecraft, Options.processOptions, Options.renderDistance, Options.serverRenderDistance, Hud.title, DebugScreenOverlay.logFrameDuration, Screen.title, FailableFunction.apply
+Member names in strings: 7 from annotations or reflecting classes: FabricLoader.getInstance, Minecraft.getInstance, Options.graphicsPreset, Options.minecraft, Options.processOptions, Options.serverRenderDistance, DebugScreenOverlay.logFrameDuration
+  7 more that may be coincidences (review only): JsonArray.size, JsonObject.size, JsonPrimitive.value, Options.renderDistance, Hud.title, Screen.title, FailableFunction.apply
 String constants changed in referenced classes: 5
   com/mojang/blaze3d/systems/RenderSystem: -0 +1
       + "Can't getPipelineBuilder() before it was initialized"

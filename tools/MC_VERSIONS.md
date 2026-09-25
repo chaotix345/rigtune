@@ -28,7 +28,10 @@ Background and the evidence behind the policy: docs/research/v0.3/mc-versions.md
   26.3.2, 26.3.1-rc-1) and rejects the next drop (every 26.4 build). This was checked with Fabric
   Loader 0.19.5's own `VersionPredicate`.
 - A pre-release node uses `~<base>-` (for example `~26.4-` for `26.4-snapshot-1`). Don't ship one:
-  on a snapshot, Loader's normalized version (`26.4-alpha.1`) isn't a Modrinth game version.
+  on a snapshot, Loader's normalized version (`26.4-alpha.1`) isn't a Modrinth game version. When
+  the release is out, remove the pre-release node (its `settings.gradle` entry and `versions/<id>/`)
+  and add the release with `add_mc_version.py <base>`; a `//? if >=<id>` block written for the
+  pre-release still matches the release, but rewrite it as `>=<base>`.
 - Never an open-ended `>=`: every drop so far has changed bytecode RigTune depends on.
 - A hotfix that changes an API RigTune uses gets its own node (`26.3.1` with `~26.3.1`), and the old
   node is narrowed to `>=26.3 <26.3.1-` so the two jars never accept the same version.
@@ -60,7 +63,7 @@ python tools/add_mc_version.py 26.4 [--dry-run]
 python tools/add_mc_version.py 26.4-snapshot-1 --prerelease-ok [--dry-run]
 ```
 
-It refuses (exit 1, nothing written) unless every check passes, in this order:
+It refuses (exit 1, one line on stderr, nothing written) unless every check passes, in this order:
 
 1. `<mc>` isn't already a node (`settings.gradle`) and `versions/<mc>/` doesn't exist.
 2. The id is a release (`26.4`, `26.3.1`) or a pre-release (`26.4-snapshot-1`, `26.4-pre-1`,
@@ -81,7 +84,8 @@ within each): Fabric API and Mod Menu (`version_number`), Sodium (`version_numbe
 as in the existing files; when there is none, the previous node's id is kept with a comment, since
 Iris is compile-only and only its API is used).
 
-It writes, as UTF-8 with LF line endings:
+It writes, as UTF-8 with LF line endings, each file through a temp file and a rename (if a write
+fails, the new `versions/<mc>/` is removed again and it exits 1):
 
 - `settings.gradle`: `<mc>` inserted into the `versions` call in version order (the order
   `tools/gametest_matrix.py` uses: snapshot < pre < rc < release < hotfix);
@@ -98,7 +102,9 @@ exists. `--dry-run` prints all of it and writes nothing.
 
 Network: every request sends `User-Agent: chaotix345/rigtune-add-mc-version/1.0
 (github.com/chaotix345/rigtune)`; Modrinth requests are at least 1 s apart; a connection error or a
-429, 500, 502, 503 or 504 response is retried twice (honouring `Retry-After`, capped at 30 s).
+429, 500, 502, 503 or 504 response is retried twice (honouring `Retry-After`, capped at 30 s); an
+unreadable JSON or XML answer is an error. The blog post link from Fabric's feed is only followed
+when it stays on `https://fabricmc.net/`.
 
 Tests: `tools/tests/test_add_mc_version.py`, offline, with trimmed copies of the live responses of
 2026-09-26 under `tools/tests/fixtures/add_mc_version/`. The live dry run for `26.4-snapshot-1` is in
@@ -121,37 +127,53 @@ for a version that isn't a node, pass `--fabric-api` and `--modmenu` (the ones
 
 What it checks:
 
-1. **Member references.** Every field and method reference in RigTune's class files whose owner is
-   on the version's classpath (Minecraft, its Mojang libraries, Fabric Loader, Fabric API, Mod
-   Menu) is resolved on both versions the way the JVM does it (the class, its superclasses, then
-   its superinterfaces; members inherited from the JDK are read from the JDK's own
-   `lib/modules` with `jimage`). A reference is `MISSING` when it doesn't resolve on `<mc>`,
-   `CHANGED` when it became static or non-static, lost visibility, or its owner switched between
-   class and interface, and `UNRESOLVED` when it doesn't resolve on `<prev>` (a classpath gap).
-   References to compile-only mod APIs (Iris, Distant Horizons) aren't on that classpath and are
-   counted as not checked.
-2. **Referenced classes.** Every class RigTune references, including types that only appear in
+1. **Member references.** Every field and method reference in RigTune's class files into the
+   version's classpath (Minecraft, its Mojang libraries, Fabric Loader, Fabric API, Mod Menu) is
+   resolved on both versions the way the JVM does it (a field: the class, its superinterfaces, then
+   its superclass; a method: the class and its superclasses, then its superinterfaces; members
+   inherited from the JDK are read from the JDK's own `lib/modules` with `jimage`). That includes a
+   call to an inherited member through a RigTune subclass (`this.addRenderableWidget(...)` in a
+   `Screen` subclass names the subclass as the owner) and the interface method each lambda or method
+   reference implements (`ClientTickEvents.EndTick.onEndTick`). A reference is `MISSING` when it
+   doesn't resolve on `<mc>`, `CHANGED` when it became static or non-static, lost visibility, or its
+   owner switched between class and interface, and `UNRESOLVED` when it doesn't resolve on `<prev>`
+   (a gap in the check; an owner under `net/minecraft`, `com/mojang`, `net/fabricmc`,
+   `com/terraformersmc` or `org/lwjgl` that isn't on the classpath is one too). References to
+   compile-only mod APIs (Iris, Distant Horizons) aren't on that classpath and are counted as not
+   checked.
+2. **Overrides.** Every RigTune method that overrides or implements a method of those classes
+   (`Screen.init`, `onInitializeClient`, a Gson `TypeAdapter.read`) must still override one on
+   `<mc>`, and that method mustn't have become final or static; otherwise the game silently stops
+   calling RigTune's code. A concrete RigTune class that would leave a new abstract method of a
+   Minecraft or Fabric supertype unimplemented is flagged too.
+3. **Referenced classes.** Every class RigTune references, including types that only appear in
    descriptors, annotation values (the mixin target) and class names in strings (reflection), is
-   dumped with `javap -p -s -constants` on both versions: `SAME`, `DIFF` (a diff is written) or
-   `MISSING` on `<mc>`.
-3. **Names in strings.** A string RigTune uses next to a reference to a class (for example
+   dumped with `javap -p -s -constants` on both versions: `SAME`, `DIFF` (a diff is written),
+   `MISSING` on `<mc>`, or `NO DUMP` when javap printed nothing (a gap).
+4. **Names in strings.** A string RigTune uses next to a reference to a class (for example
    `getDeclaredField("serverRenderDistance")` on `Options`, or `@Inject(method = "logFrameDuration")`
-   on `DebugScreenOverlay`) that names a member of that class must still name one on `<mc>`.
-4. **String constants.** Strings a referenced class lost or gained, method bodies included (javap
-   `-p` doesn't show them): option keys, translation keys, log messages. A lost string that RigTune
-   also uses is flagged.
-5. **RigTune's own bytecode**, only when `<mc>` is a built node too: `javap -c -p -constants` of both
+   on `DebugScreenOverlay`) that names a member of that class must still name one on `<mc>`, with the
+   same descriptors.
+5. **String constants.** Strings a referenced class lost or gained, method bodies included (javap
+   `-p` doesn't show them): option keys, translation keys, log messages. A lost key-like string that
+   RigTune also uses is flagged.
+6. **RigTune's own bytecode**, only when `<mc>` is a built node too: `javap -c -p -constants` of both
    builds with constant-pool indices stripped. This catches what still compiles but changed, like
    javac-inlined constants (F8 is 297 on 26.2 and 65 on 26.3).
 
-Classes named in strings that aren't on the classpath (Sodium, Iris) are listed to check by hand.
+Checks 4 and 5 are heuristics. A match counts (exit 1) when the string is an annotation value or
+the RigTune class that has it uses reflection (`Class.getDeclaredField`, `forName`, ...); any other
+match may be a coincidence (`BenchmarkController`'s `"minimized"` reason string and `Window.minimized`)
+and is only listed under `REVIEW`. Classes named in strings that aren't on the classpath (Sodium,
+Iris) are listed to check by hand.
 
 Output: a summary on stdout; with `--out DIR`, also `summary.txt`, `report.json` (every reference,
-class and string result) and `diff-<class>.txt` per changed class (`--dumps` adds both versions'
-full javap dumps, about 800 KB each). Exit code 0: no breaking change (the changed classes still
-need a human review); 1: something is `MISSING`/`CHANGED`/`UNRESOLVED`, a used name or string is
-gone, or RigTune's own bytecode differs; 2: a setup error (no compiled classes, a jar missing from
-the caches, no JDK).
+override, class and string result) and `diff-<class>.txt` per changed class (`--dumps` adds both
+versions' full javap dumps, about 800 KB each). Exit code 0: no breaking change (the changed classes
+and the `REVIEW` list still need a human); 1: something is `MISSING`/`CHANGED`/`UNRESOLVED`/
+`NO DUMP`, an override or a name/string check failed, or RigTune's own bytecode differs; 2: a setup
+error (no compiled classes, a jar missing from the caches, no JDK) or an unexpected error, as one
+line on stderr.
 
 Where the jars come from (per user, shared by every worktree): `~/.gradle/caches/fabric-loom/
 minecraftMaven/net/minecraft/minecraft-{clientonly,common}-deobf/<mc>/`, the Mojang libraries listed
@@ -170,14 +192,16 @@ cd - && git worktree remove --force ../rigtune-apidiff-tmp
 
 Results so far (`docs/v0.3/verification/mc-tooling/`):
 
-- `26.3 -> 26.4-snapshot-1`: no breaking change. 404 references resolve (306 into Minecraft,
-  Mojang, Fabric and Mod Menu; 98 into other Minecraft libraries such as Gson); 13 of 169
-  referenced classes changed, none in a way RigTune uses; the reflection and mixin names are still
-  there. With the research trial's source sets (`--sets main,client,gametest,test`) the core count
-  is the trial's 308.
+- `26.3 -> 26.4-snapshot-1`: no breaking change. 472 references resolve (371 into Minecraft,
+  Mojang, Fabric and Mod Menu, 101 into other Minecraft libraries such as Gson; 56 of them are
+  inherited members called through a RigTune subclass, 110 are interface methods, lambdas included);
+  41 overrides still override; 13 of 169 referenced classes changed, none in a way RigTune uses; the
+  reflection and mixin names are still there. (The research trial counted only the constant-pool
+  references to those classes: 308 with its source sets, `main,client,gametest,test`.)
 - `26.2 -> 26.3` (a positive control): it finds the breaks the `//? if` blocks handle (`GpuDevice`
   and `DeviceInfo` moved, `InputConstants$Type.KEYSYM`, `getRefreshRate`) and the 4 classes whose
-  bytecode differs between the two builds.
+  bytecode differs between the two builds; it also flags `Window.minimized`, a coincidence (see
+  above).
 
 Tests: `tools/tests/test_mc_apidiff.py` (synthesized class files, a fake Gradle cache; no JDK needed).
 

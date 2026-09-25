@@ -10,6 +10,7 @@ import argparse
 import difflib
 import html
 import json
+import os
 import re
 import sys
 import time
@@ -199,10 +200,16 @@ class Http:
 
     def json(self, url, *, allow_missing=False):
         body = self.get(url, allow_missing=allow_missing)
-        return None if body is None else json.loads(body.decode("utf-8"))
+        try:
+            return None if body is None else json.loads(body.decode("utf-8"))
+        except ValueError as e:
+            raise NetworkError(f"unreadable JSON from {url}: {e}") from e
 
     def text(self, url):
-        return self.get(url).decode("utf-8")
+        try:
+            return self.get(url).decode("utf-8")
+        except UnicodeDecodeError as e:
+            raise NetworkError(f"unreadable text from {url}: {e}") from e
 
 
 VERSION_RANK = {"release": 0, "beta": 1, "alpha": 2}
@@ -214,8 +221,14 @@ def rank_modrinth(versions):
     return sorted(newest_first, key=lambda v: VERSION_RANK.get(v.get("version_type"), 3))
 
 
-def maven_versions(xml_text):
-    return {e.text.strip() for e in ET.fromstring(xml_text).iter("version") if e.text}
+def maven_versions(http, url):
+    try:
+        return {e.text.strip() for e in ET.fromstring(http.text(url)).iter("version") if e.text}
+    except ET.ParseError as e:
+        raise NetworkError(f"unreadable XML from {url}: {e}") from e
+
+
+FABRIC_SITE = "https://fabricmc.net/"
 
 
 def blog_lines(http, base):
@@ -233,8 +246,11 @@ def blog_lines(http, base):
         if not link:
             return [f'No "{title}" post on the Fabric blog yet: check https://fabricmc.net/blog/ for the Loom and '
                     "Gradle versions it needs before building."]
+        link = urllib.parse.urljoin(FABRIC_FEED_URL, link)
+        if not link.startswith(FABRIC_SITE):
+            return [f"The Fabric feed links \"{title}\" outside {FABRIC_SITE} ({link}): not followed; read it yourself."]
         page = http.text(link)
-    except (NetworkError, ET.ParseError, UnicodeDecodeError) as e:
+    except (NetworkError, ET.ParseError, ValueError) as e:
         return [f"Couldn't read the Fabric blog ({e}): check https://fabricmc.net/blog/ yourself."]
     page = re.sub(r"(?is)<(script|style)\b.*?</\1>", "", page)
     lines = []
@@ -273,7 +289,7 @@ def previous_node(nodes, mc):
 
 
 def pick_on_maven(project, mc, http, metadata_url, host, label):
-    on_maven = maven_versions(http.text(metadata_url))
+    on_maven = maven_versions(http, metadata_url)
     candidates = rank_modrinth(http.json(modrinth_versions_url(project, mc)))
     chosen = next((v for v in candidates if v["version_number"] in on_maven), None)
     if chosen is None:
@@ -418,6 +434,32 @@ def print_plan(result, dry_run, out):
     print("", file=out)
 
 
+def write_text_atomic(path, text):
+    """Writes a sibling temp file and renames it over path, so path is either the old or the new content."""
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8", newline="\n")
+        os.replace(tmp, path)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+
+
+def write_node(root, result):
+    """versions/<mc>/gradle.properties first, settings.gradle last; on a failure the new directory is removed, so
+    the repo is left as it was."""
+    node = root / "versions" / result.mc
+    node.mkdir(parents=True)
+    try:
+        write_text_atomic(node / "gradle.properties", result.properties)
+        write_text_atomic(root / "settings.gradle", result.settings_after)
+    except OSError:
+        for leftover in node.iterdir():
+            leftover.unlink()
+        node.rmdir()
+        raise
+
+
 def main(argv=None, *, root=None, http=None, out=None, err=None):
     root = Path(root) if root else ROOT
     out = out or sys.stdout
@@ -434,15 +476,19 @@ def main(argv=None, *, root=None, http=None, out=None, err=None):
     except (Refusal, NetworkError) as e:
         print(f"add_mc_version: {e}", file=err)
         return 1
+    except Exception as e:  # noqa: BLE001 - e.g. an API answer in an unexpected shape: one line, nothing written
+        print(f"add_mc_version: unexpected error: {type(e).__name__}: {e}", file=err)
+        return 1
 
     print_plan(result, args.dry_run, out)
     if args.dry_run:
         print("Dry run: nothing was written.", file=out)
     else:
-        node = root / "versions" / result.mc
-        node.mkdir(parents=True)
-        (node / "gradle.properties").write_text(result.properties, encoding="utf-8", newline="\n")
-        (root / "settings.gradle").write_text(result.settings_after, encoding="utf-8", newline="\n")
+        try:
+            write_node(root, result)
+        except OSError as e:
+            print(f"add_mc_version: couldn't write the new node ({e}); nothing was changed", file=err)
+            return 1
         print(f"Wrote settings.gradle and versions/{result.mc}/gradle.properties.", file=out)
     print("\nNext steps (tools/MC_VERSIONS.md):", file=out)
     for i, step in enumerate(checklist(result.mc, result.prev), 1):
