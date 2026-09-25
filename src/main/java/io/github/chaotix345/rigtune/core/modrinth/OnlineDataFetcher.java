@@ -22,9 +22,10 @@ public final class OnlineDataFetcher {
 	public static final String LOADER = "fabric";
 	static final int VERSION_CHECK_PARALLELISM = 4;
 
-	public record Result(OnlineData data, Map<String, String> projectIdsByModId) {
+	// versionIdsByModId: the Modrinth version each loaded mod is (by its hash).
+	public record Result(OnlineData data, Map<String, String> projectIdsByModId, Map<String, String> versionIdsByModId) {
 		public static Result offline() {
-			return new Result(OnlineData.offline(), Map.of());
+			return new Result(OnlineData.offline(), Map.of(), Map.of());
 		}
 	}
 
@@ -48,6 +49,7 @@ public final class OnlineDataFetcher {
 			}
 
 			Map<String, String> projectIds = new LinkedHashMap<>();
+			Map<String, String> versionIds = new LinkedHashMap<>();
 			Map<String, UpdateInfo> updates = new LinkedHashMap<>();
 			if (!modsBySha1.isEmpty()) {
 				Map<String, ModrinthVersion> current = client.versionsByHashes(modsBySha1.keySet());
@@ -60,6 +62,9 @@ public final class OnlineDataFetcher {
 					ModrinthVersion next = latest.get(entry.getKey());
 					for (InstalledMod mod : entry.getValue()) {
 						projectIds.put(mod.modId(), cur.projectId());
+						if (cur.id() != null) {
+							versionIds.put(mod.modId(), cur.id());
+						}
 						if (isUpdate(cur, next)) {
 							ModFile file = next.primaryFile();
 							updates.put(mod.modId(), new UpdateInfo(mod.modId(), next.projectId(), cur.versionNumber(),
@@ -90,7 +95,7 @@ public final class OnlineDataFetcher {
 			}
 			available.putAll(checkVersions(maybe, mcVersion));
 
-			return new Result(new OnlineData(true, Map.copyOf(available), Map.copyOf(updates)), Map.copyOf(projectIds));
+			return new Result(new OnlineData(true, Map.copyOf(available), Map.copyOf(updates)), Map.copyOf(projectIds), Map.copyOf(versionIds));
 		} catch (Exception e) {
 			if (e instanceof InterruptedException) {
 				Thread.currentThread().interrupt();

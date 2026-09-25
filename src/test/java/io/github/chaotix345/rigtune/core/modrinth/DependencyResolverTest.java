@@ -104,6 +104,43 @@ class DependencyResolverTest {
 		assertEquals(List.of("aV"), ids(resolver.resolve("a", Set.of(), List.of(c))));
 	}
 
+	// Re-check of review 4: an incompatibility naming a version (version_id) is with that version only, not with any
+	// install of its project; the message names the projects by title.
+	@Test
+	void aVersionSpecificIncompatibilityWithAnInstalledModOnlyCountsForThatVersion() throws IOException {
+		FakeModrinthClient client = new FakeModrinthClient();
+		put(client, "a", version("aV", "A", "1", T, new Dependency("API", "apiOld", "incompatible")));
+		client.projects.add(new ModrinthProject("A", "a-mod", "A Mod", "approved", List.of("26.2"), List.of("fabric"), "optional"));
+		client.projects.add(new ModrinthProject("API", "fabric-api", "Fabric API", "approved", List.of("26.2"), List.of("fabric"), "optional"));
+
+		assertEquals(List.of("aV"), ids(new DependencyResolver(client, "fabric", "26.2").resolve("a", Set.of("API"))));
+		assertEquals(List.of("aV"), ids(new DependencyResolver(client, "fabric", "26.2", Set.of("apiNew")).resolve("a", Set.of("API"))));
+		IOException refused = assertThrows(IOException.class,
+				() -> new DependencyResolver(client, "fabric", "26.2", Set.of("apiOld")).resolve("a", Set.of("API")));
+		assertEquals("Modrinth marks A Mod as incompatible with Fabric API, which is installed", refused.getMessage());
+	}
+
+	@Test
+	void aVersionSpecificIncompatibilityWithinWhatGoesInTogetherOnlyCountsForThatVersion() throws IOException {
+		FakeModrinthClient client = new FakeModrinthClient();
+		ModrinthVersion apiOld = version("apiOld", "API", "1", T);
+		ModrinthVersion apiNew = version("apiNew", "API", "2", T);
+		put(client, "a", version("aV", "A", "1", T, new Dependency("API", "apiOld", "incompatible")));
+		put(client, "b", version("bV", "B", "1", T));
+		ModrinthVersion wantsOtherB = version("cV", "C", "1", T, new Dependency("B", "bOld", "incompatible"));
+		ModrinthVersion wantsThisB = version("dV", "D", "1", T, new Dependency(null, "bV", "incompatible"));
+		client.projects.add(new ModrinthProject("B", "b-mod", "B Mod", "approved", List.of("26.2"), List.of("fabric"), "optional"));
+		client.projects.add(new ModrinthProject("D", "d-mod", "D Mod", "approved", List.of("26.2"), List.of("fabric"), "optional"));
+		DependencyResolver resolver = new DependencyResolver(client, "fabric", "26.2");
+
+		assertEquals(List.of("aV"), ids(resolver.resolve("a", Set.of(), List.of(apiNew))));
+		assertEquals("Modrinth marks A and API as incompatible, and both would be installed",
+				assertThrows(IOException.class, () -> resolver.resolve("a", Set.of(), List.of(apiOld))).getMessage());
+		assertEquals(List.of("bV"), ids(resolver.resolve("b", Set.of(), List.of(wantsOtherB))));
+		assertEquals("Modrinth marks D Mod and B Mod as incompatible, and both would be installed",
+				assertThrows(IOException.class, () -> resolver.resolve("b", Set.of(), List.of(wantsThisB))).getMessage());
+	}
+
 	@Test
 	void failsWhenRequiredDependencyIsUnavailable() {
 		FakeModrinthClient client = new FakeModrinthClient();

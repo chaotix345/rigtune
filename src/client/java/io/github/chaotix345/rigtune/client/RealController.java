@@ -383,9 +383,10 @@ public final class RealController implements RigTuneController {
 		downloading = true;
 		try {
 			Set<String> installedProjects = new HashSet<>(online.projectIdsByModId().values());
+			Set<String> installedVersions = new HashSet<>(online.versionIdsByModId().values());
 			HardwareProfile hw = hardware;
 			String mcVersion = hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion();
-			CompletableFuture.supplyAsync(() -> download(downloads, installedProjects, mcVersion), Probes.EXECUTOR)
+			CompletableFuture.supplyAsync(() -> download(downloads, installedProjects, installedVersions, mcVersion), Probes.EXECUTOR)
 					.whenComplete((result, error) -> {
 						try {
 							minecraft.execute(() -> {
@@ -427,8 +428,8 @@ public final class RealController implements RigTuneController {
 		rebuild();
 	}
 
-	private DownloadPlanner.Result download(List<Recommendation> recs, Set<String> installedProjects, String mcVersion) {
-		DependencyResolver resolver = new DependencyResolver(modrinth, OnlineDataFetcher.LOADER, mcVersion);
+	private DownloadPlanner.Result download(List<Recommendation> recs, Set<String> installedProjects, Set<String> installedVersions, String mcVersion) {
+		DependencyResolver resolver = new DependencyResolver(modrinth, OnlineDataFetcher.LOADER, mcVersion, installedVersions);
 		List<InstalledMod> scanned = mods;
 		Set<String> loadedIds = new HashSet<>();
 		if (scanned != null) {
