@@ -68,7 +68,9 @@ public final class UndoService {
 			UndoPlanner.State now = state.get();
 			UndoPlanner.Result result = UndoPlanner.recheck(shown, journal.entries(), pendingOps(), now);
 			UndoPlanner.Script script = result.script();
-			int skipped = (int) result.plan().items().stream().filter(i -> i.action() == UndoPlan.Action.SKIP).count();
+			// Items the screen already listed as skipped, plus the ones that became skips since.
+			int skipped = (int) (shown.items().stream().filter(i -> i.action() == UndoPlan.Action.SKIP).count()
+					+ result.plan().items().stream().filter(i -> i.action() == UndoPlan.Action.SKIP).count());
 
 			List<Op> dropped = staging.unstageLocked(script.discardOpIds());
 			Map<String, Boolean> written = script.immediate().isEmpty() ? Map.of() : vanilla.write(script.immediate());

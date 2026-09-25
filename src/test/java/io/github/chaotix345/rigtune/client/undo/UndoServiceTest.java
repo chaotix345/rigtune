@@ -247,6 +247,18 @@ class UndoServiceTest {
 		assertEquals(1, outcome.skipped());
 	}
 
+	@Test
+	void itemsShownAsSkippedAreCountedAsSkipped() throws IOException {
+		journal.record("e1", JournalEntry.APPLY, List.of(JournalChange.setting("vanilla.renderDistance", "12", "16", JournalChange.APPLIED, null),
+				JournalChange.setting("vanilla.simulationDistance", "8", "6", JournalChange.APPLIED, null)));
+		vanilla.put("vanilla.renderDistance", "16");
+		vanilla.put("vanilla.simulationDistance", "10");
+
+		UndoService.Outcome outcome = service.undo(service.plan(false));
+
+		assertEquals(new UndoService.Outcome(false, 1, 0, 0, 1), outcome);
+	}
+
 	// Review M8: what was shown is re-checked when it's confirmed.
 	@Test
 	void aChangeTheUserMadeAfterTheListWasShownIsSkipped() throws IOException {
