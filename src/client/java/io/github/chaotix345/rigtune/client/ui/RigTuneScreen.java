@@ -5,6 +5,7 @@ import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
+import io.github.chaotix345.rigtune.core.model.DisplayInfo;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.GraphicsBackend;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
@@ -199,15 +200,11 @@ public class RigTuneScreen extends Screen {
 		HardwareProfile hw = report.hardware();
 		List<Component> lines = new ArrayList<>(LauncherLines.cpuAndMemory(shownLauncher, value(cpuName(hw.cpu().name())),
 				value(Integer.toString(hw.cpu().logicalCores())), value(gb(hw.totalRamMb())), value(gb(hw.maxHeapMb())), COLOR_LABEL));
-		String vram = hw.gpu().vramMb() > 0 ? gb(hw.gpu().vramMb()) : "?";
 		lines.add(Component.translatable("rigtune.header.gpu",
 				value(hw.gpu().renderer()),
-				value(vram),
+				value(gb(hw.gpu().vramMb())),
 				value(backendName(hw.gpu().backend())),
 				value(Integer.toString(report.tier().gpuTier()))).withStyle(s -> s.withColor(COLOR_LABEL)));
-		String display = hw.display().width() > 0
-				? hw.display().width() + "×" + hw.display().height() + (hw.display().refreshRate() > 0 ? " @ " + hw.display().refreshRate() + " Hz" : "")
-				: "?";
 		MutableComponent online = report.online()
 				? Component.translatable("rigtune.header.online").withStyle(s -> s.withColor(COLOR_OK))
 				: Component.translatable("rigtune.header.offline").withStyle(ChatFormatting.GOLD);
@@ -216,7 +213,7 @@ public class RigTuneScreen extends Screen {
 			last.append(badge).append(Component.literal(" · ").withStyle(s -> s.withColor(COLOR_LABEL)));
 		}
 		last.append(Component.translatable("rigtune.header.display_rules",
-				value(display),
+				value(display(hw.display())),
 				value(Integer.toString(report.rulesRevision())),
 				value(report.rulesSource()),
 				online).withStyle(s -> s.withColor(COLOR_LABEL)));
@@ -293,12 +290,27 @@ public class RigTuneScreen extends Screen {
 		return Component.literal(text == null ? "?" : text).withStyle(ChatFormatting.WHITE);
 	}
 
-	private static String gb(long mb) {
+	private static Component value(Component text) {
+		return text.copy().withStyle(ChatFormatting.WHITE);
+	}
+
+	// "2.0 GB", "16 GB"; "?" when unknown.
+	static Component gb(long mb) {
 		if (mb <= 0) {
-			return "?";
+			return Component.literal("?");
 		}
 		double gb = mb / 1024.0;
-		return gb >= 10 ? Math.round(gb) + " GB" : String.format(Locale.ROOT, "%.1f GB", gb);
+		return Component.translatable("rigtune.unit.gb", gb >= 10 ? Long.toString(Math.round(gb)) : String.format(Locale.ROOT, "%.1f", gb));
+	}
+
+	// "2560×1440 @ 180 Hz", "2560×1440"; "?" when unknown.
+	static Component display(DisplayInfo display) {
+		if (display.width() <= 0) {
+			return Component.literal("?");
+		}
+		return display.refreshRate() > 0
+				? Component.translatable("rigtune.header.display_size_hz", display.width(), display.height(), display.refreshRate())
+				: Component.translatable("rigtune.header.display_size", display.width(), display.height());
 	}
 
 	private void populate(RecommendationList target) {
@@ -354,14 +366,14 @@ public class RigTuneScreen extends Screen {
 		}
 	}
 
-	private String displayTitle(Recommendation r) {
+	private Component displayTitle(Recommendation r) {
 		if (r.action() instanceof Action.SetSetting set && set.key().startsWith(SettingsBridge.VANILLA_PREFIX) && captions != null) {
 			String caption = captions.get(set.key().substring(SettingsBridge.VANILLA_PREFIX.length()));
 			if (caption != null && !caption.isBlank()) {
-				return caption + ": " + prettyValue(set.currentValue()) + " → " + prettyValue(set.newValue());
+				return Component.translatable("rigtune.rec.setting.title", caption, prettyValue(set.currentValue()), prettyValue(set.newValue()));
 			}
 		}
-		return r.title();
+		return Texts.component(r.titleText());
 	}
 
 	private static String prettyValue(String value) {
@@ -510,11 +522,11 @@ public class RigTuneScreen extends Screen {
 				int impactWidth = font.width(impact) + 8;
 				int titleWidth = Math.max(40, width - textIndent - impactWidth);
 				int reasonWidth = Math.max(40, width - textIndent);
-				Component title = Component.literal(displayTitle(recommendation));
+				Component title = displayTitle(recommendation);
 				List<FormattedCharSequence> split = font.split(title, titleWidth);
 				this.titleLines = split.size() > 2 ? List.of(split.get(0), ComponentRenderUtils.clipText(title, font, titleWidth)) : split;
 				this.reasonLines = recommendation.reason() == null || recommendation.reason().isBlank()
-						? List.of() : font.split(Component.literal(recommendation.reason()), reasonWidth);
+						? List.of() : font.split(Texts.component(recommendation.reasonText()), reasonWidth);
 				Component launcherLine = LauncherLines.adviceLine(recommendation, shownLauncher);
 				this.launcherLines = launcherLine == null ? List.of() : font.split(launcherLine, reasonWidth);
 				if (recommendation.appliable()) {

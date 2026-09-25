@@ -9,6 +9,7 @@ import io.github.chaotix345.rigtune.client.probe.ModScanner;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
+import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.client.undo.GameState;
 import io.github.chaotix345.rigtune.client.undo.Staging;
@@ -37,6 +38,7 @@ import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
+import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.modrinth.DependencyResolver;
 import io.github.chaotix345.rigtune.core.modrinth.DownloadPlanner;
 import io.github.chaotix345.rigtune.core.modrinth.GatedModrinthClient;
@@ -496,7 +498,7 @@ public final class RealController implements RigTuneController {
 		boolean ok = result.ops().isEmpty() || stage(result.ops(), result.opIds(), entryId);
 		List<Component> parts = new ArrayList<>();
 		if (!result.errors().isEmpty()) {
-			parts.add(Component.translatable("rigtune.status.download_failed", String.join("; ", result.errors())));
+			parts.add(Component.translatable("rigtune.status.download_failed", Texts.component(Text.join("; ", result.errorTexts()))));
 		}
 		if (!ok) {
 			parts.add(Component.translatable("rigtune.status.some_failed", result.ids().size()));

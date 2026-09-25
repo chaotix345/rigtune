@@ -253,9 +253,9 @@ public class UndoScreen extends Screen {
 			private final boolean skipped;
 
 			ItemEntry(UndoPlan.Item item, int width) {
-				this.lines = font.split(Component.literal(item.description()), Math.max(40, width));
+				this.lines = font.split(Texts.component(item.descriptionText()), Math.max(40, width));
 				this.reason = item.reason() == null || item.reason().isBlank() ? List.of()
-						: font.split(Component.literal(item.reason()), Math.max(40, width - 8));
+						: font.split(Texts.component(item.reasonText()), Math.max(40, width - 8));
 				this.skipped = item.action() == UndoPlan.Action.SKIP;
 			}
 
