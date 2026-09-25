@@ -467,6 +467,15 @@ class HttpModrinthClientTest {
 		assertFalse(HttpModrinthClient.allowedDownload(URI.create("http://127.0.0.1:9999/cdn/x.jar"), base));
 		assertFalse(HttpModrinthClient.allowedDownload(URI.create("https://127.0.0.1:1234/cdn/x.jar"), base));
 		assertTrue(HttpModrinthClient.allowedDownload(URI.create("https://localhost/x.jar"), "https://LOCALHOST:443"));
+		assertTrue(HttpModrinthClient.allowedDownload(URI.create("https://mirror.example/data/x.jar"), "https://mirror.example"));
+	}
+
+	@Test
+	void aPlainHttpBaseUrlOffThisMachineAllowsNothingExtra() {
+		assertFalse(HttpModrinthClient.allowedDownload(URI.create("http://mirror.example:8080/x.jar"), "http://mirror.example:8080"));
+		assertFalse(HttpModrinthClient.allowedDownload(URI.create("http://10.0.0.5/x.jar"), "http://10.0.0.5"));
+		assertTrue(HttpModrinthClient.allowedDownload(URI.create("http://localhost:8080/x.jar"), "http://localhost:8080"));
+		assertTrue(HttpModrinthClient.allowedDownload(URI.create("https://cdn.modrinth.com/x.jar"), "http://mirror.example:8080"));
 	}
 
 	@Test
@@ -502,10 +511,12 @@ class HttpModrinthClientTest {
 	}
 
 	@Test
-	void downloadRedirectedToAnotherOriginIsRefused(@TempDir Path dir) throws Exception {
+	void downloadRedirectedToAnotherOriginIsRefusedBeforeRequestingIt(@TempDir Path dir) throws Exception {
 		byte[] jar = "jar-bytes".getBytes(StandardCharsets.UTF_8);
+		AtomicInteger otherHits = new AtomicInteger();
 		HttpServer other = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
 		other.createContext("/", exchange -> {
+			otherHits.incrementAndGet();
 			exchange.sendResponseHeaders(200, jar.length);
 			try (OutputStream out = exchange.getResponseBody()) {
 				out.write(jar);
@@ -521,9 +532,35 @@ class HttpModrinthClientTest {
 					() -> client.download(new ModFile(url("/cdn/moved.jar"), "moved.jar", sha512(jar), jar.length), target));
 
 			assertTrue(e.getMessage().contains("elsewhere.jar"), e.getMessage());
+			assertEquals(0, otherHits.get());
 			assertEquals(List.of(), listing(dir));
 		} finally {
 			other.stop(0);
 		}
+	}
+
+	@Test
+	void downloadFollowsARedirectWithinTheAllowedOrigin(@TempDir Path dir) throws Exception {
+		byte[] jar = "jar-bytes".getBytes(StandardCharsets.UTF_8);
+		responses.put("/cdn/moved.jar", new Response(302, new byte[0], Map.of("Location", "/cdn/mod.jar"), false));
+		responses.put("/cdn/mod.jar", new Response(200, jar));
+		Path target = dir.resolve("moved.jar.rigtune-pending");
+
+		client.download(new ModFile(url("/cdn/moved.jar"), "moved.jar", sha512(jar), jar.length), target);
+
+		assertArrayEquals(jar, Files.readAllBytes(target));
+		assertEquals(1, hits("/cdn/mod.jar"));
+	}
+
+	@Test
+	void aRedirectLoopGivesUp(@TempDir Path dir) throws Exception {
+		responses.put("/cdn/loop.jar", new Response(307, new byte[0], Map.of("Location", url("/cdn/loop.jar")), false));
+
+		IOException e = assertThrows(IOException.class,
+				() -> client.download(new ModFile(url("/cdn/loop.jar"), "loop.jar", "00ff", 1), dir.resolve("loop.jar.rigtune-pending")));
+
+		assertTrue(e.getMessage().contains("redirects"), e.getMessage());
+		assertEquals(HttpModrinthClient.MAX_DOWNLOAD_REDIRECTS + 1, hits("/cdn/loop.jar"));
+		assertEquals(List.of(), listing(dir));
 	}
 }

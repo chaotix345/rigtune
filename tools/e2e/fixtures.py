@@ -11,6 +11,7 @@ TOKEN = "${INSTANCE}"
 
 
 def template(text, instance_root):
+    """Every spelling of the instance root (as is, with '/', JSON-escaped; any case) becomes the token. For evidence."""
     root = str(Path(instance_root))
     spellings = {root, root.replace("\\", "/"), json.dumps(root)[1:-1]}
     for spelling in sorted(spellings, key=len, reverse=True):
@@ -20,8 +21,29 @@ def template(text, instance_root):
 
 def portable_paths(text):
     """Forward slashes after the token, so a test on Linux (CI) can substitute its own folder too. Java on Windows accepts
-    them as well. A path ends at a quote or whitespace (none of these paths has a space after the instance root)."""
-    return re.sub(r"\$\{INSTANCE\}[^\"\s]*", lambda m: m.group(0).replace("\\\\", "/").replace("\\", "/"), text)
+    them as well. In plain text a path ends at whitespace (none of these paths has a space after the instance root)."""
+    return re.sub(r"\$\{INSTANCE\}\S*", lambda m: m.group(0).replace("\\", "/"), text)
+
+
+def template_json(text, instance_root):
+    """JSON: only string values that start with the instance root change (the token, then '/' separators), so no escape
+    sequence is touched. Written back with Gson's pretty-printing layout (two-space indent)."""
+    root = str(Path(instance_root))
+    prefixes = sorted({root, root.replace("\\", "/")}, key=len, reverse=True)
+
+    def rewrite(value):
+        if isinstance(value, dict):
+            return {key: rewrite(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [rewrite(item) for item in value]
+        if isinstance(value, str):
+            for prefix in prefixes:
+                if value.lower().startswith(prefix.lower()):
+                    return TOKEN + value[len(prefix):].replace("\\", "/")
+        return value
+
+    out = json.dumps(rewrite(json.loads(text)), indent=2, ensure_ascii=False)
+    return out + "\n" if text.endswith("\n") else out
 
 
 def capture(files, instance_root, dest):
@@ -33,8 +55,10 @@ def capture(files, instance_root, dest):
         source = Path(source)
         if not source.is_file():
             continue
+        text = source.read_text(encoding="utf-8")
+        text = template_json(text, instance_root) if name.endswith(".json") else portable_paths(template(text, instance_root))
         target = dest / name
-        target.write_bytes(portable_paths(template(source.read_text(encoding="utf-8"), instance_root)).encode("utf-8"))
+        target.write_bytes(text.encode("utf-8"))
         written.append(target)
     return written
 

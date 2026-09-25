@@ -18,7 +18,8 @@ python tools/e2e/self_update_e2e.py --name v010-to-dev \
 python -m unittest discover -s tools/e2e/tests
 ```
 
-It opens a game window twice (about two minutes each) and needs port 443 free on 127.0.0.1. Exit code 0 means every
+Windows only (process checks use PowerShell 7, `pwsh`). It opens a game window twice (well under a minute each) and
+needs port 443 free on 127.0.0.1. Exit code 0 means every
 check passed, 1 a failed check, 3 that the game-test lock is held. For a 0.2 → newer 0.2 run (plan review M12), build
 two jars with `-Pmod_version=...`, pass them as `--old-jar`/`--new-jar`, and pass the v0.1.0 jar as
 `--driver-api-jar`.
@@ -32,7 +33,7 @@ two jars with `-Pmod_version=...`, pass them as `--old-jar`/`--new-jar`, and pas
 | `e2e_env.py` | keytool certificate (SANs for the three hosts) and PKCS12 truststore, the `jdk.net.hosts.file`, the JVM arguments, the catalog. |
 | `src/e2e/` (Gradle source set `e2e`) | The driver mod, compiled against the released v0.1.0 jar (`-Pe2e.oldJar`), never against the current sources. Phase `update`: title screen → goal QUALITY → wait for "Update RigTune" → apply only it → wait until it's in pending.json (copied out: the helper deletes it) → quit through `Minecraft.stop()`, like the Quit button. Phase `verify`: screenshots of the title screen (apply toast) and the RigTune screen, the loaded version, the goal, whether an update is still offered → quit. |
 | `:<mc>:e2eClient` (build.gradle) | Loom `ClientProductionRunTask` with `runDir` = the scratch instance and `mods` = the driver jar only. Loom's default would add this project's jar via `-Dfabric.addMods` (two RigTunes, and one outside mods/ that can't be updated); here RigTune loads only from the instance's `mods/`. |
-| `self_update_e2e.py` | Makes a fresh instance (`mods/` = the old jar + fabric-api from the Gradle cache, a minimal `options.txt`), starts the server, runs the probe, takes the game-test lock, launches phase `update`, records the helper's command line while it runs, waits for it, checks, launches phase `verify`, checks, releases the lock, writes the evidence. |
+| `self_update_e2e.py` | Checks it can run (Windows, `pwsh`, the lock's folder), makes a fresh instance (`mods/` = the old jar + fabric-api from the Gradle cache, a minimal `options.txt`) and the TLS material, hosts file and catalog, builds the driver, then takes the game-test lock, starts the server, runs the probe, launches phase `update`, records the helper's command line while it runs, waits for it, checks, launches phase `verify`, checks, stops the server, makes sure none of its clients remain, releases the lock, and writes the evidence (and the fixtures, if the run passed). |
 | `e2e_checks.py` | The assertions (below). |
 | `fixtures.py` | Replaces the instance path with `${INSTANCE}` in captured files. |
 
@@ -52,7 +53,7 @@ After the old version applied the update and the helper finished:
 - no `pending.json`, no `*.rigtune-pending`;
 - `last-apply.json` holds exactly the update's DISABLE_FILE and ENABLE_FILE, both `OK`;
 - every classpath entry of the helper JVM is under `config/rigtune/helper/` (AC5.2);
-- the jar was downloaded from host `cdn.modrinth.com`;
+- the old RigTune (its User-Agent) downloaded the jar from host `cdn.modrinth.com`;
 - the new jar's `depends` and `breaks` add or change nothing relative to the old one's (plan review M12).
 
 After the new version started on the same instance:
@@ -61,21 +62,28 @@ After the new version started on the same instance:
 - `rigtune.json` `lastShownApply` equals `last-apply.json` `finishedAt` (the apply toast was shown; see the screenshot);
 - the report is online and offers no further RigTune update;
 - no crash report, mods unchanged, no new pending.json;
-- with `--expect-history` (0.2 builds with the journal): `history.json` exists and its legacy import has no change for
-  RigTune's own jars.
+- with `--expect-history` (0.2 builds with the journal): `history.json` has an `entries` list with exactly one
+  `legacy-import` entry, and that entry has no change for RigTune's own jars.
 
 ## Evidence and fixtures
 
 `--evidence <dir>` gets `RESULT.md`, `checks.json`, the driver outputs and report dumps, the screenshots, the
 request log, the helper log and command line, the redirect probe, filtered client logs and the captured files.
-Absolute paths are replaced by `<instance>` and `<run>`.
+Absolute paths are replaced by `<instance>`, `<run>`, `<repo>` and `~`. An existing folder is replaced only if it is
+empty or holds an earlier `RESULT.md`; otherwise the evidence stays in the run folder.
 
 `--capture-fixtures <dir>` writes the old version's files (`pending.json` as staged before quitting, `last-apply.json`,
 `rigtune.json`, `rules-cache.json`, `helper.log`) with the instance path replaced by `${INSTANCE}`, plus
-`manifest.json`. Tests substitute their own folder for the token (JSON-escaped in JSON files).
+`manifest.json` (with the run's verdict and any failed checks). Only a passing run writes them, unless
+`--capture-anyway`. In JSON files only string values that start with the instance path change (the token, then `/`
+separators); in `helper.log`, the paths after the token use `/` too. Tests substitute their own folder for the token
+(JSON-escaped in JSON files).
 
 ## Game-test lock
 
 Only one Minecraft client may run on this machine at a time. The script takes `C:/Dev/Worktrees/.gametest-lock`
 (atomic `mkdir`, `owner.txt` inside) for the launches, fails fast if it's held (exit 3), kills only processes whose
-command line contains its own run folder, and removes the lock when done. `--lock none` skips it elsewhere.
+command line contains its own run folder (a timestamp and a random suffix), one process at a time and never a process
+tree (a Gradle daemon can be a child of the wrapper and serves other builds), waits until none of its clients or Gradle
+wrappers remain, and only then removes the lock, and only if `owner.txt` names its run. `--lock none` skips it
+elsewhere.
