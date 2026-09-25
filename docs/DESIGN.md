@@ -38,7 +38,7 @@ io.github.chaotix345.rigtune
 └── client/                Minecraft/Fabric integration
     ├── RigTuneClient      ClientModInitializer: keybind, title/options-screen button, startup scan, notifications
     ├── RigTunePreLaunch   PreLaunchEntrypoint: finishes any leftover staged operations that are safe before mods init
-    ├── probe/             HardwareProbe (OSHI + Blaze3D device + GLFW window), ModScanner (FabricLoader), SettingsReader/Writer (Options)
+    ├── probe/             HardwareProbe (OSHI + Blaze3D device + window), ModScanner (FabricLoader), SettingsReader/Writer (Options)
     ├── ui/                RigTuneScreen (overview + recommendation list + actions), BenchmarkResultScreen
     └── benchmark/         BenchmarkController (tick-driven state machine, frame sampling, camera sweep)
 ```
@@ -136,10 +136,32 @@ Esc cancels at any point and restores everything, as do a disconnect, a world or
   - queries Modrinth for each rule mod's project status and the MC versions it supports
 - It writes `rules/rules-v1.json`: bumps the revision, sets `upstream` flags and `availability`, and lists mods that are new upstream in `rules/REVIEW.md` for a maintainer to triage.
 - The GitHub Action runs it weekly and on demand, and opens a PR when something changed.
-- CI (`.github/workflows/build.yml`) runs the Gradle build and unit tests and the Python updater tests on every push and PR.
+- CI (`.github/workflows/build.yml`) runs the Gradle build and unit tests for every MC version and the Python updater tests on every push and PR.
 
 ## Porting to new MC versions
 All MC-touching code lives in `client/`, and it uses Fabric API events rather than mixins wherever possible. The recommendations themselves don't need a port; they arrive through the rules file.
+
+One jar can't serve two MC versions: `InputConstants` key codes are compile-time constants that javac inlines (F8 is 297 on 26.2, 65 on 26.3), and classes move between packages. So each version is compiled separately from one source tree with [Stonecutter](https://stonecutter.kikugie.dev/) 0.9.8:
+
+```
+settings.gradle                  Stonecutter plugin; versions '26.2', '26.3'; vcsVersion (the committed state, 26.2)
+stonecutter.gradle               root script: the active version, Loom declared once, run tasks ordered by version
+build.gradle                     per-version script, run once for each versions/<mc>/ (stonecutter.current.version is <mc>)
+gradle.properties                shared properties (loader, Loom, mod_version)
+versions/<mc>/gradle.properties  minecraft_dependency (the fabric.mod.json range), fabric_api/modmenu/sodium versions
+src/                             shared by every version, in the active version's state
+versions/<mc>/build/             rigtune-<mod_version>+mc<mc>.jar, generated sources for the non-active versions, test reports
+```
+
+Version-specific code is a comment conditional at the call site: `//? if >=26.3 {` … `//?} else {` … `//?}`, with the inactive branch commented out (a braceless `else` covers one line). Predicates are semver, so `>=26.3` also matches 26.3.1. Prefer an API that exists on every version over a conditional; there are three today (the key type in `RigTuneClient`, the GPU device imports and the refresh rate in `HardwareProbe`).
+
+Adding a version, e.g. 26.4 once it's stable:
+1. Check Fabric's announcement for the Loom and Gradle it needs, and upgrade those on their own first if required (Loom 1.18 needs Gradle ≥ 9.7).
+2. Add `'26.4'` to `versions` in `settings.gradle`, and create `versions/26.4/gradle.properties` (copy the newest one and update every value).
+3. `./gradlew "Set active project to 26.4"`, build, and fix each compile error with a `//? if >=26.4 {` block. Also javap-diff the MC jars for changes that still compile, such as inlined constants. Run `:26.4:runClientGameTest`.
+4. `./gradlew "Reset active project"` before committing. To move the committed state to a newer version, change `vcsVersion` and the version checked in `.github/workflows/build.yml` together.
+
+Dropping a version: remove it from `versions`, delete `versions/<mc>/`, and delete the conditional branches only it used (Stonecutter doesn't prune them).
 
 ## Safety
 - The mod never touches files without an explicit Apply. Everything is reversible (`.disabled`, never deleted). Downloads are hash-verified. Modrinth requests carry a descriptive User-Agent, a byte cap, a stall timeout and an overall deadline, and results are cached.

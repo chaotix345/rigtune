@@ -24,19 +24,29 @@ jobs:
       - name: Build
         run: ./gradlew build
 
+      # Exactly one rigtune-<ver>+mc<mc>.jar and one -sources.jar per Minecraft version in versions/.
       - name: Create GitHub release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
           tag="${GITHUB_REF_NAME}"
-          main_jar=$(ls build/libs/*.jar | grep -v -- '-sources.jar' | head -n1)
-          sources_jar=$(ls build/libs/*-sources.jar 2>/dev/null || true)
+          files=()
+          for dir in versions/*/; do
+            mc=$(basename "$dir")
+            for suffix in "" "-sources"; do
+              mapfile -t found < <(find "${dir}build/libs" -maxdepth 1 -name "rigtune-*+mc${mc}${suffix}.jar" 2>/dev/null)
+              if [ "${#found[@]}" -ne 1 ]; then
+                echo "Expected exactly one rigtune-*+mc${mc}${suffix}.jar, found: ${found[*]:-none}"
+                exit 1
+              fi
+              files+=("${found[0]}")
+            done
+          done
           gh release create "$tag" \
             --title "RigTune $tag" \
             --generate-notes \
-            "$main_jar" \
-            ${sources_jar:+"$sources_jar"}
+            "${files[@]}"
 
       # --- Modrinth publishing (disabled until the RigTune Modrinth project exists) ---
       #

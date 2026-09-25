@@ -3,9 +3,14 @@ package io.github.chaotix345.rigtune.client.probe;
 import com.mojang.blaze3d.platform.Monitor;
 import com.mojang.blaze3d.platform.VideoMode;
 import com.mojang.blaze3d.platform.Window;
+import com.mojang.blaze3d.systems.RenderSystem;
+//? if >=26.3 {
+/*import com.mojang.renderpearl.api.device.DeviceInfo;
+import com.mojang.renderpearl.api.device.GpuDevice;
+*///?} else {
 import com.mojang.blaze3d.systems.DeviceInfo;
 import com.mojang.blaze3d.systems.GpuDevice;
-import com.mojang.blaze3d.systems.RenderSystem;
+//?}
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.core.model.CpuInfo;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
@@ -58,11 +63,22 @@ public final class HardwareProbe {
 	public static HardwareProfile combine(FastPart fast, SlowPart slow) {
 		long vram = matchVram(fast.gpuName(), slow.cards());
 		GpuInfo gpu = new GpuInfo(fast.gpuVendor(), fast.gpuName(), fast.driver(), fast.backend(), vram);
-		String mcVersion = FabricLoader.getInstance().getModContainer("minecraft")
-				.map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("unknown");
 		String os = System.getProperty("os.name", "unknown") + " " + System.getProperty("os.version", "");
 		return new HardwareProfile(slow.cpu(), gpu, slow.totalRamMb(), Runtime.getRuntime().maxMemory() / MIB, fast.display(),
-				slow.hasBattery(), slow.onBattery(), os.trim(), mcVersion, fast.flags());
+				slow.hasBattery(), slow.onBattery(), os.trim(), minecraftVersion(), fast.flags());
+	}
+
+	public static String minecraftVersion() {
+		return FabricLoader.getInstance().getModContainer("minecraft")
+				.map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("unknown");
+	}
+
+	public static int refreshRate(Window window) {
+		//? if >=26.3 {
+		/*VideoMode mode = window.getActiveVideoMode();
+		return mode != null ? Math.round(mode.getRefreshRate()) : -1;
+		*///?} else
+		return window.getRefreshRate();
 	}
 
 	public static FastPart probeFast(Minecraft minecraft) {
@@ -87,15 +103,15 @@ public final class HardwareProbe {
 			Window window = minecraft.getWindow();
 			int width = window.getWidth();
 			int height = window.getHeight();
-			int refresh = window.getRefreshRate();
+			int refresh = refreshRate(window);
 			Monitor monitor = window.findBestMonitor();
 			if (monitor != null) {
 				VideoMode mode = monitor.currentMode();
 				width = mode.getWidth();
 				height = mode.getHeight();
-				refresh = refresh > 0 ? refresh : mode.getRefreshRate();
+				refresh = refresh > 0 ? refresh : Math.round(mode.getRefreshRate());
 			}
-			display = new DisplayInfo(width, height, refresh > 0 ? refresh : -1, window.isFullscreen());
+			display = new DisplayInfo(width, height, refresh > 0 ? refresh : -1, minecraft.options.fullscreen().get());
 		} catch (RuntimeException e) {
 			RigTune.LOGGER.warn("Could not read display info", e);
 		}

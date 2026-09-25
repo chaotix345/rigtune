@@ -313,7 +313,7 @@ public final class RealController implements RigTuneController {
 		try {
 			Set<String> installedProjects = new HashSet<>(online.projectIdsByModId().values());
 			HardwareProfile hw = hardware;
-			String mcVersion = hw == null ? "26.2" : hw.mcVersion();
+			String mcVersion = hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion();
 			CompletableFuture.supplyAsync(() -> download(downloads, installedProjects, mcVersion), Probes.EXECUTOR)
 					.whenComplete((result, error) -> {
 						try {
