@@ -98,10 +98,14 @@ def after_update(instance, old_jar, new_jar, driver, server_log, helper_cmdlines
     checks.append(Check("the helper ran from config/rigtune/helper copies", from_copies,
                         "helper classpaths seen: {}".format(entries or "none")))
 
-    downloads = [r for r in server_log if r.get("method") == "GET" and unquote(r.get("path", "")).endswith("/" + new_jar.name)]
-    from_cdn = bool(downloads) and all(r.get("host") == e2e_env.CDN_HOST and r.get("status") == 200 for r in downloads)
-    checks.append(Check("the jar was downloaded from cdn.modrinth.com", from_cdn,
-                        "download requests: {}".format([(r.get("host"), r.get("status")) for r in downloads])))
+    # RigTune's own requests carry its User-Agent (the redirect probe's don't count).
+    agent = "chaotix345/rigtune/{} ".format(e2e_env.mod_json(old_jar)["version"])
+    downloads = [r for r in server_log if r.get("method") == "GET" and unquote(r.get("path", "")).endswith("/" + new_jar.name)
+                 and "chaotix345/rigtune/" in (r.get("userAgent") or "")]
+    from_cdn = bool(downloads) and all(r.get("host") == e2e_env.CDN_HOST and r.get("status") == 200
+                                       and (r.get("userAgent") or "").startswith(agent) for r in downloads)
+    checks.append(Check("the old RigTune downloaded the jar from cdn.modrinth.com", from_cdn,
+                        "download requests: {}".format([(r.get("host"), r.get("status"), r.get("userAgent")) for r in downloads])))
 
     checks.append(depends_not_stricter(old_jar, new_jar))
     return checks

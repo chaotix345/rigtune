@@ -42,7 +42,14 @@ class TemplateTest(unittest.TestCase):
 
         self.assertEqual(["last-apply.json"], [p.name for p in written])
         captured = json.loads((dest / "last-apply.json").read_text())
-        self.assertTrue(captured["path"].startswith("${INSTANCE}"), captured)
+        self.assertEqual("${INSTANCE}/mods/x.jar", captured["path"])
+
+    def test_portable_paths_use_forward_slashes_after_the_token(self):
+        pending = json.dumps({"to": "${INSTANCE}" + BS + "mods" + BS + "a+b.jar", "other": "C:" + BS + "x"})
+        log = "from ${INSTANCE}" + BS + "config" + BS + "pending.json done"
+
+        self.assertEqual({"to": "${INSTANCE}/mods/a+b.jar", "other": "C:" + BS + "x"}, json.loads(fixtures.portable_paths(pending)))
+        self.assertEqual("from ${INSTANCE}/config/pending.json done", fixtures.portable_paths(log))
 
 
 if __name__ == "__main__":

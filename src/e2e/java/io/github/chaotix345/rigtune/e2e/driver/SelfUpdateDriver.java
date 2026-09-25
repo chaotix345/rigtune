@@ -8,6 +8,7 @@ import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.core.model.Action;
+import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
@@ -17,6 +18,8 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import net.minecraft.client.gui.components.AbstractSelectionList;
+import net.minecraft.client.gui.layouts.LayoutElement;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 import org.slf4j.Logger;
@@ -110,7 +113,7 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 		RigTuneController controller = RigTuneClient.controller();
 		switch (step) {
 			case WAIT_TITLE -> {
-				if (minecraft.gui.screen() instanceof TitleScreen) {
+				if (onTitleScreen(minecraft)) {
 					recordRigTune();
 					controller.setGoal(Goal.QUALITY);
 					event("title screen; goal set to QUALITY");
@@ -153,7 +156,9 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 				}
 			}
 			case SHOT_REPORT -> {
-				if (stepTicks == SECOND) {
+				if (stepTicks == SECOND / 2) {
+					scrollTo(minecraft, controller.report(), UPDATE_ID);
+				} else if (stepTicks == SECOND) {
 					screenshot(minecraft, "e2e-update-1-report.png");
 				} else if (stepTicks == 2 * SECOND) {
 					Component message = controller.apply(List.of(update));
@@ -200,7 +205,7 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 		RigTuneController controller = RigTuneClient.controller();
 		switch (step) {
 			case WAIT_TITLE -> {
-				if (minecraft.gui.screen() instanceof TitleScreen) {
+				if (onTitleScreen(minecraft)) {
 					recordRigTune();
 					event("title screen");
 					next(Step.SHOT_TITLE);
@@ -245,6 +250,41 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 			default -> {
 			}
 		}
+	}
+
+	// The title screen, once the startup loading overlay has faded.
+	private static boolean onTitleScreen(Minecraft minecraft) {
+		return minecraft.gui.screen() instanceof TitleScreen && minecraft.gui.overlay() == null;
+	}
+
+	// Scrolls the RigTune screen's list so the recommendation's row shows. The list has a header entry per category, then
+	// that category's rows, in Category order (RigTuneScreen.populate). Only for the screenshot, so a miss is harmless.
+	private void scrollTo(Minecraft minecraft, Report report, String id) {
+		AbstractSelectionList<?> list = minecraft.gui.screen() == null || report == null ? null : minecraft.gui.screen().children().stream()
+				.filter(AbstractSelectionList.class::isInstance)
+				.map(c -> (AbstractSelectionList<?>) c)
+				.findFirst().orElse(null);
+		if (list == null) {
+			return;
+		}
+		int index = 0;
+		for (Category category : Category.values()) {
+			List<Recommendation> rows = report.recommendations().stream().filter(r -> r.category() == category).toList();
+			if (rows.isEmpty()) {
+				continue;
+			}
+			index++;
+			for (Recommendation r : rows) {
+				if (r.id().equals(id) && index < list.children().size()) {
+					// Start the view at the entry above the row (its category header for the first row).
+					Object above = list.children().get(index - 1);
+					list.setScrollAmount(list.scrollAmount() + ((LayoutElement) above).getY() - list.getY());
+					return;
+				}
+				index++;
+			}
+		}
+		event("could not find " + id + " in the list");
 	}
 
 	private void next(Step nextStep) {

@@ -18,6 +18,12 @@ def template(text, instance_root):
     return text
 
 
+def portable_paths(text):
+    """Forward slashes after the token, so a test on Linux (CI) can substitute its own folder too. Java on Windows accepts
+    them as well. A path ends at a quote or whitespace (none of these paths has a space after the instance root)."""
+    return re.sub(r"\$\{INSTANCE\}[^\"\s]*", lambda m: m.group(0).replace("\\\\", "/").replace("\\", "/"), text)
+
+
 def capture(files, instance_root, dest):
     """files: fixture name -> source path. Missing sources are skipped. Returns the written paths."""
     dest = Path(dest)
@@ -28,7 +34,7 @@ def capture(files, instance_root, dest):
         if not source.is_file():
             continue
         target = dest / name
-        target.write_bytes(template(source.read_text(encoding="utf-8"), instance_root).encode("utf-8"))
+        target.write_bytes(portable_paths(template(source.read_text(encoding="utf-8"), instance_root)).encode("utf-8"))
         written.append(target)
     return written
 

@@ -75,7 +75,7 @@ class Run:
             out.write(line + "\n")
 
     def gradle(self, log_name, *arguments):
-        command = (["cmd", "/c", "gradlew.bat"] if os.name == "nt" else ["./gradlew"]) + list(arguments)
+        command = (["cmd", "/c", str(REPO / "gradlew.bat")] if os.name == "nt" else [str(REPO / "gradlew")]) + list(arguments)
         self.log("gradle " + " ".join(arguments))
         env = dict(os.environ, JAVA_HOME=str(self.java_home))
         with open(self.run_dir / log_name, "w", encoding="utf-8") as out:
@@ -325,9 +325,11 @@ class Run:
     # --- evidence -------------------------------------------------------------------------------------------------
 
     def scrub(self, text):
-        """Evidence names the scratch folders <instance> and <run> rather than their absolute paths."""
-        text = fixtures.template(text, self.instance).replace(fixtures.TOKEN, "<instance>")
-        return fixtures.template(text, self.run_dir).replace(fixtures.TOKEN, "<run>")
+        """Evidence names the scratch folders <instance> and <run>, the repository <repo> and the home folder ~ rather
+        than their absolute paths."""
+        for folder, name in ((self.instance, "<instance>"), (self.run_dir, "<run>"), (REPO, "<repo>"), (Path.home(), "~")):
+            text = fixtures.template(text, folder).replace(fixtures.TOKEN, name)
+        return text
 
     def evidence(self, verdict):
         dest = Path(self.args.evidence).resolve() if self.args.evidence else self.run_dir / "evidence"
@@ -349,8 +351,8 @@ class Run:
                 (dest / "latest-{}.filtered.log".format(phase)).write_text(self.scrub(filtered_log(source)), encoding="utf-8")
         for shot in sorted((self.instance / "screenshots").glob("e2e-*.png")):
             shutil.copyfile(shot, dest / shot.name)
-        (dest / "checks.json").write_text(json.dumps({phase: [c.__dict__ for c in checks] for phase, checks in self.checks.items()},
-                                                     indent=1), encoding="utf-8")
+        (dest / "checks.json").write_text(self.scrub(json.dumps({phase: [c.__dict__ for c in checks]
+                                                                 for phase, checks in self.checks.items()}, indent=1)), encoding="utf-8")
         (dest / "RESULT.md").write_text(self.result_markdown(verdict, sorted(p.name for p in dest.iterdir())), encoding="utf-8")
         self.log("evidence in " + str(dest))
 

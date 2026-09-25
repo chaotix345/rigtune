@@ -58,6 +58,8 @@ jobs:
           python-version: '3.11'
       - name: Run rules updater tests
         run: python -m unittest discover -s tools/tests -v
+      - name: Run self-update E2E harness tests
+        run: python -m unittest discover -s tools/e2e/tests -v
 
   rules-consistency:
     runs-on: ubuntu-latest

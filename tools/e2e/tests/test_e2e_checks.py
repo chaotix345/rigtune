@@ -103,7 +103,13 @@ class AfterUpdateTest(unittest.TestCase):
 
     def test_download_from_elsewhere(self):
         self.fx.server_log[1]["host"] = "api.modrinth.com"
-        self.assertEqual(["the jar was downloaded from cdn.modrinth.com"], self.failing())
+        self.assertEqual(["the old RigTune downloaded the jar from cdn.modrinth.com"], self.failing())
+
+    def test_only_the_probe_or_another_version_downloaded(self):
+        self.fx.server_log[1]["userAgent"] = "Java-http-client/25"
+        self.assertEqual(["the old RigTune downloaded the jar from cdn.modrinth.com"], self.failing())
+        self.fx.server_log[1]["userAgent"] = "chaotix345/rigtune/0.2.0 (github.com/chaotix345/rigtune)"
+        self.assertEqual(["the old RigTune downloaded the jar from cdn.modrinth.com"], self.failing())
 
     def test_driver_failure(self):
         self.fx.driver = {"ok": False, "error": "no update:rigtune recommendation"}
