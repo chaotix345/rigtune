@@ -154,18 +154,26 @@ settings.gradle                  Stonecutter plugin; versions '26.2', '26.3'; vc
 stonecutter.gradle               root script: the active version, Loom declared once, run tasks ordered by version
 build.gradle                     per-version script, run once for each versions/<mc>/ (stonecutter.current.version is <mc>)
 gradle.properties                shared properties (loader, Loom, mod_version)
-versions/<mc>/gradle.properties  minecraft_dependency (the fabric.mod.json range), fabric_api/modmenu/sodium versions
+versions/<mc>/gradle.properties  minecraft_dependency (the fabric.mod.json range), fabric_api/modmenu/iris versions, optional sodium_version
 src/                             shared by every version, in the active version's state
 versions/<mc>/build/             rigtune-<mod_version>+mc<mc>.jar, generated sources for the non-active versions, test reports
 ```
 
 Version-specific code is a comment conditional at the call site: `//? if >=26.3 {` … `//?} else {` … `//?}`, with the inactive branch commented out (a braceless `else` covers one line). Predicates are semver, so `>=26.3` also matches 26.3.1. Prefer an API that exists on every version over a conditional; there are three today (the key type in `RigTuneClient`, the GPU device imports and the refresh rate in `HardwareProbe`).
 
-Adding a version, e.g. 26.4 once it's stable:
-1. Check Fabric's announcement for the Loom and Gradle it needs, and upgrade those on their own first if required (Loom 1.18 needs Gradle ≥ 9.7).
-2. Add `'26.4'` to `versions` in `settings.gradle`, and create `versions/26.4/gradle.properties` (copy the newest one and update every value).
-3. `./gradlew "Set active project to 26.4"`, build, and fix each compile error with a `//? if >=26.4 {` block. Also javap-diff the MC jars for changes that still compile, such as inlined constants. Run `:26.4:runClientGameTest`.
-4. `./gradlew "Reset active project"` before committing. To move the committed state to a newer version, change `vcsVersion` and the version checked in `.github/workflows/build.yml` together.
+A node's `minecraft_dependency` is `~<mc>` for a release (it accepts that version's hotfixes and rejects the next drop) and `~<base>-` for a pre-release node, which isn't shipped; never an open-ended `>=`. `sodium_version` is optional: without it the node builds and runs its tests without Sodium. CI's game-test legs (`tools/gametest_matrix.py`) and the release's Modrinth uploads loop over `versions/*/`, so a new node needs no workflow edit.
+
+Adding a version (details, the tools' checks and the hotfix steps: `tools/MC_VERSIONS.md`):
+1. When Fabric announces the version, read its blog post. Upgrade Loom and Gradle on their own first if it asks.
+2. Run `python tools/add_mc_version.py <mc>` (it checks the Mojang manifest, Java 25, Fabric meta, Fabric API, Mod Menu, Sodium and Iris, adds the node to `settings.gradle` and writes `versions/<mc>/gradle.properties`), then `./gradlew :<mc>:build`.
+3. Fix compile errors with `//? if >=<mc> {`. Run `python tools/mc_apidiff.py <prev> <mc>` and review every changed class, including reflection targets, the mixin target, `Options` keys and runtime defaults.
+4. Run `:<mc>:runClientGameTest` and a production smoke test.
+5. Review version-specific rules. Regenerate the rules for all supported versions.
+6. Update docs and the changelog. Run `./gradlew "Reset active project"` and commit on a feature branch.
+7. Tag a release. CI builds and publishes every node.
+8. For each later hotfix: bytecode-compare (`mc_apidiff.py` with both nodes built), then `PATCH` `game_versions` on Modrinth.
+
+To move the committed state to a newer version, change `vcsVersion`, `stonecutter.active` and the version checked in `.github/workflows/build.yml` together.
 
 Dropping a version: remove it from `versions`, delete `versions/<mc>/`, and delete the conditional branches only it used (Stonecutter doesn't prune them).
 
