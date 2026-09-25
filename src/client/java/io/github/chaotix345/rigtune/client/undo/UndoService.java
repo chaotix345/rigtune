@@ -72,12 +72,19 @@ public final class UndoService {
 			int skipped = (int) (shown.items().stream().filter(i -> i.action() == UndoPlan.Action.SKIP).count()
 					+ result.plan().items().stream().filter(i -> i.action() == UndoPlan.Action.SKIP).count());
 
+			// Staging first (it journals the dropped ops itself; if it fails, nothing else has changed), then the vanilla
+			// settings; from there on a failure is contained so that what was done is journaled.
 			List<Op> dropped = staging.unstageLocked(script.discardOpIds());
-			Map<String, Boolean> written = script.immediate().isEmpty() ? Map.of() : vanilla.write(script.immediate());
 			Map<String, Op> configOps = stageConfig(script.staged());
 			List<Op> toStage = new ArrayList<>(configOps.values());
 			toStage.addAll(script.fileOps());
 			Staging.Merge merge = toStage.isEmpty() ? null : staging.mergeLocked(toStage);
+			Map<String, Boolean> written = Map.of();
+			try {
+				written = script.immediate().isEmpty() ? Map.of() : vanilla.write(script.immediate());
+			} catch (RuntimeException e) {
+				RigTune.LOGGER.error("Could not put the vanilla settings back", e);
+			}
 
 			List<JournalChange> undoChanges = new ArrayList<>();
 			Set<String> revertedNow = new HashSet<>();
@@ -113,12 +120,16 @@ public final class UndoService {
 
 			if (shown.undoOf() != null) {
 				Staging.Merge merged = merge;
-				if (!journal.update(entries -> {
-					List<JournalEntry> out = merged == null ? entries : HistoryUpdates.discard(entries, Staging.droppedIds(merged));
-					out = HistoryUpdates.revert(out, revertedNow);
-					return HistoryUpdates.append(out, journal.newEntry(JournalEntry.UNDO, shown.undoOf(), undoChanges));
-				})) {
-					RigTune.LOGGER.warn("Could not record the undo in {}", Journal.file(staging.pendingFile().getParent().getParent()));
+				try {
+					if (!journal.update(entries -> {
+						List<JournalEntry> out = merged == null ? entries : HistoryUpdates.discard(entries, Staging.droppedIds(merged));
+						out = HistoryUpdates.revert(out, revertedNow);
+						return HistoryUpdates.append(out, journal.newEntry(JournalEntry.UNDO, shown.undoOf(), undoChanges));
+					})) {
+						RigTune.LOGGER.warn("Could not record the undo in history.json");
+					}
+				} catch (IOException | RuntimeException e) {
+					RigTune.LOGGER.warn("Could not record the undo in history.json", e);
 				}
 			}
 			int afterRestart = (int) undoChanges.stream().filter(c -> JournalChange.STAGED.equals(c.status())).map(JournalChange::opId).distinct().count();

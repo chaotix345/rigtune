@@ -31,6 +31,7 @@ import java.util.stream.Stream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class UndoServiceTest {
@@ -245,6 +246,42 @@ class UndoServiceTest {
 		assertTrue(undoEntry().changes().isEmpty());
 		assertEquals(0, outcome.now());
 		assertEquals(1, outcome.skipped());
+	}
+
+	// Review: if part of an undo fails, what was done is still journaled.
+	@Test
+	void aVanillaWriteThatThrowsStillJournalsTheStagedReversal() throws IOException {
+		Files.writeString(sodium, "{\"performance\":{\"chunk_builder_threads\":4}}");
+		JournalChange rd = JournalChange.setting("vanilla.renderDistance", "12", "16", JournalChange.APPLIED, null);
+		JournalChange threads = JournalChange.setting("sodium.performance.chunk_builder_threads", "0", "4", JournalChange.APPLIED, "op1");
+		journal.record("e1", JournalEntry.APPLY, List.of(rd, threads));
+		vanilla.put("vanilla.renderDistance", "16");
+		UndoService throwing = new UndoService(staging, journal, this::state, values -> {
+			throw new IllegalStateException("options are busy");
+		});
+
+		UndoService.Outcome outcome = throwing.undo(throwing.plan(false));
+
+		assertEquals(1, outcome.afterRestart());
+		assertEquals(JournalChange.STAGED, undoEntry().changes().getFirst().status());
+		assertEquals(threads.id(), undoEntry().changes().getFirst().reverts());
+		assertEquals(JournalChange.APPLIED, changesOf("e1").getFirst().status());
+	}
+
+	@Test
+	void aStagingFailureLeavesTheVanillaSettingsAlone() throws IOException {
+		Files.writeString(sodium, "{\"performance\":{\"chunk_builder_threads\":4}}");
+		journal.record("e1", JournalEntry.APPLY, List.of(JournalChange.setting("vanilla.renderDistance", "12", "16", JournalChange.APPLIED, null),
+				JournalChange.setting("sodium.performance.chunk_builder_threads", "0", "4", JournalChange.APPLIED, "op1")));
+		vanilla.put("vanilla.renderDistance", "16");
+		UndoPlan plan = service.plan(false);
+		Files.createDirectories(pending);
+		Files.writeString(pending.resolve("blocker"), "x");
+
+		assertThrows(IOException.class, () -> service.undo(plan));
+
+		assertTrue(writes.isEmpty());
+		assertTrue(journal.entries().stream().noneMatch(e -> JournalEntry.UNDO.equals(e.kind())));
 	}
 
 	@Test
