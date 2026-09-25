@@ -12,7 +12,8 @@
 			"io.github.chaotix345.rigtune.gametest.UndoGameTest",
 			"io.github.chaotix345.rigtune.gametest.UiGameTest",
 			"io.github.chaotix345.rigtune.gametest.ReportGameTest",
-			"io.github.chaotix345.rigtune.gametest.HistoryGameTest"
+			"io.github.chaotix345.rigtune.gametest.HistoryGameTest",
+			"io.github.chaotix345.rigtune.gametest.PreviewGameTest"
 		]
 	},
 	"depends": {

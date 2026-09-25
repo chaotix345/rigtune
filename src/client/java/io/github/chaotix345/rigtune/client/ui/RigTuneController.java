@@ -8,6 +8,7 @@ import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.report.ShareReport;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
@@ -99,5 +100,12 @@ public interface RigTuneController {
 	/** The versions for the "Report a problem" issue title (v0.3 item 10); null while the report is being built. */
 	default ShareReport.@Nullable Versions reportVersions() {
 		return null;
+	}
+
+	// v0.3 (WS-P)
+
+	/** What Apply would do for these recommendations, writing and downloading nothing (docs/v0.3/SPEC.md item 13). Off the render thread: it may look files up on Modrinth. */
+	default ApplyPreview preview(List<Recommendation> selected) {
+		return ApplyPreview.EMPTY;
 	}
 }
