@@ -24,6 +24,16 @@ check passed, 1 a failed check, 3 that the game-test lock is held. For a 0.2 →
 two jars with `-Pmod_version=...`, pass them as `--old-jar`/`--new-jar`, and pass the v0.1.0 jar as
 `--driver-api-jar`.
 
+Two more modes (Phase 5):
+- `--legacy-disable` (self-update): 0.1.0 also disables a test mod (`e2e-legacy`) in the same apply as its update, as
+  a player who ticks another row would. 0.2's legacy import only records changes that aren't RigTune's own, so without
+  one there is no `legacy-import` entry to check. Use it with `--expect-history`.
+- `--scenario undo --new-jar <0.2 jar>` (plan review M14): a fresh instance with the 0.2 jar, fabric-api and a test mod
+  `e2e-disable-me`; the fake Modrinth also serves a test mod `e2e-added`. Three launches with the undo driver:
+  `mod-apply` (one Apply: add `e2e-added`, disable `e2e-disable-me`; quit; the helper applies both), `mod-undo` (Undo
+  last apply: the plan, a screenshot of the confirmation screen, `undo(plan)`; quit; the helper reverts both),
+  `mod-check` (the mods as before, nothing left to undo).
+
 ## How it works
 
 | piece | what it does |
@@ -32,7 +42,8 @@ two jars with `-Pmod_version=...`, pass them as `--old-jar`/`--new-jar`, and pas
 | `java/.../RedirectProbe.java` | Run before the game with the game's JVM properties: every URL must resolve to 127.0.0.1 and answer over trusted TLS, and an unlisted host must not resolve. |
 | `e2e_env.py` | keytool certificate (SANs for the three hosts) and PKCS12 truststore, the `jdk.net.hosts.file`, the JVM arguments, the catalog. |
 | `src/e2e/` (Gradle source set `e2e`) | The driver mod, compiled against the released v0.1.0 jar (`-Pe2e.oldJar`), never against the current sources. Phase `update`: title screen → goal QUALITY → wait for "Update RigTune" → apply only it → wait until it's in pending.json (copied out: the helper deletes it) → quit through `Minecraft.stop()`, like the Quit button. Phase `verify`: screenshots of the title screen (apply toast) and the RigTune screen, the loaded version, the goal, whether an update is still offered → quit. |
-| `:<mc>:e2eClient` (build.gradle) | Loom `ClientProductionRunTask` with `runDir` = the scratch instance and `mods` = the driver jar only. Loom's default would add this project's jar via `-Dfabric.addMods` (two RigTunes, and one outside mods/ that can't be updated); here RigTune loads only from the instance's `mods/`. |
+| `src/e2eUndo/` (Gradle source set `e2eUndo`) | The undo driver, compiled against this repository's sources (0.2's `undoPlan`/`undo(plan)` and `UndoScreen`). The test mods are minimal Fabric mods (a `fabric.mod.json` only) made by `e2e_env.test_mod_jar`. |
+| `:<mc>:e2eClient` (build.gradle) | Loom `ClientProductionRunTask` with `runDir` = the scratch instance and `mods` = the driver jar only (`-Pe2e.driver=undo` picks the undo driver). Loom's default would add this project's jar via `-Dfabric.addMods` (two RigTunes, and one outside mods/ that can't be updated); here RigTune loads only from the instance's `mods/`. |
 | `self_update_e2e.py` | Checks it can run (Windows, `pwsh`, the lock's folder), makes a fresh instance (`mods/` = the old jar + fabric-api from the Gradle cache, a minimal `options.txt`) and the TLS material, hosts file and catalog, builds the driver, then takes the game-test lock, starts the server, runs the probe, launches phase `update`, records the helper's command line while it runs, waits for it, checks, launches phase `verify`, checks, stops the server, makes sure none of its clients remain, releases the lock, and writes the evidence (and the fixtures, if the run passed). |
 | `e2e_checks.py` | The assertions (below). |
 | `fixtures.py` | Replaces the instance path with `${INSTANCE}` in captured files. |
@@ -63,7 +74,17 @@ After the new version started on the same instance:
 - the report is online and offers no further RigTune update;
 - no crash report, mods unchanged, no new pending.json;
 - with `--expect-history` (0.2 builds with the journal): `history.json` has an `entries` list with exactly one
-  `legacy-import` entry, and that entry has no change for RigTune's own jars.
+  `legacy-import` entry, and that entry has no change for RigTune's own jars (with `--legacy-disable`, it holds the
+  test mod's disable as `APPLIED`).
+
+Undo scenario, after each launch and helper run:
+- `mod-apply`: the added mod is in mods (the served bytes), the other is `.disabled`, no pending.json,
+  `last-apply.json` has both ops `OK`, `history.json` has one `apply` entry with both file changes `APPLIED`;
+- `mod-undo`: the plan had two reverts needing a restart for that entry, the added mod is `.disabled` again, the other
+  is back, `last-apply.json` has both reversal ops `OK`, `history.json` has one `undo` entry (its changes `APPLIED`,
+  each `reverts` one of the apply's changes) and the apply's changes are `REVERTED`;
+- `mod-check`: the other mod is loaded and the added one isn't, nothing is left to undo, no crash, mods and history
+  statuses unchanged, no pending.json.
 
 ## Evidence and fixtures
 

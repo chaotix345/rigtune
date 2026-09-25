@@ -1,0 +1,62 @@
+{
+  "phase": "update",
+  "ok": true,
+  "error": null,
+  "events": [
+    "t+0.0s driver loaded, phase update, output <run>\\out",
+    "t+3.8s title screen; goal set to QUALITY",
+    "t+4.8s offered: Update RigTune -> rigtune-0.2.0-dev+mc26.2.jar",
+    "t+5.9s screenshot e2e-update-1-report.png: Saved screenshot as e2e-update-1-report.png",
+    "t+6.8s apply [update:rigtune, disable:e2e-legacy]: Downloading 1 mod change(s)…",
+    "t+7.3s staged: 3 op(s) in pending.json",
+    "t+9.4s screenshot e2e-update-2-staged.png: Saved screenshot as e2e-update-2-staged.png",
+    "t+11.4s quitting"
+  ],
+  "rigtuneVersion": "0.1.0",
+  "rigtuneOrigin": [
+    "<instance>\\mods\\rigtune-0.1.0.jar"
+  ],
+  "update": {
+    "title": "Update RigTune",
+    "reason": "Version 0.2.0-dev+mc26.2 is available (you have 0.1.0).",
+    "selectedByDefault": true,
+    "currentFile": "<instance>\\mods\\rigtune-0.1.0.jar",
+    "currentVersion": "0.1.0",
+    "newVersion": "0.2.0-dev+mc26.2",
+    "url": "https://cdn.modrinth.com/data/E2ERigTn/versions/E2Enew01/rigtune-0.2.0-dev%2Bmc26.2.jar",
+    "filename": "rigtune-0.2.0-dev+mc26.2.jar",
+    "sha512": "ca3ed154150c0c15750d64af1df3f63b94adba1bd3c145997610806d0fcf400c3aa8aeef42c60df36826a12853aaef7d3639ae61e05538b2b1fa40ded4cd58e0"
+  },
+  "updateOffered": true,
+  "applyMessage": "Downloading 1 mod change(s)…",
+  "pendingOps": [
+    {
+      "type": "DISABLE_FILE",
+      "from": null,
+      "to": null,
+      "path": "<instance>\\mods\\e2e-legacy-1.0.0.jar",
+      "modId": null,
+      "group": null,
+      "id": "916be759-bc79-4d54-99a2-832b051a4c5a"
+    },
+    {
+      "type": "DISABLE_FILE",
+      "from": null,
+      "to": null,
+      "path": "<instance>\\mods\\rigtune-0.1.0.jar",
+      "modId": null,
+      "group": "08cb55ad-6396-4392-b37f-1d8189fe9c34",
+      "id": "245d9cda-fd42-4e90-ad3c-b4a9441ba6a1"
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\rigtune-0.2.0-dev+mc26.2.jar.rigtune-pending",
+      "to": "<instance>\\mods\\rigtune-0.2.0-dev+mc26.2.jar",
+      "path": null,
+      "modId": "rigtune",
+      "group": "08cb55ad-6396-4392-b37f-1d8189fe9c34",
+      "id": "02372779-78af-4e44-a05b-05aea309433b"
+    }
+  ],
+  "status": "Restart Minecraft to finish applying 2 change(s)."
+}

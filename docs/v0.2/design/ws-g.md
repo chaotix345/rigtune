@@ -104,14 +104,20 @@ on the first launch that fetches it. The driver presses Rescan once after 20 s o
 - After the first push, `origin/feat/v0.2.0` is merged into the branch rather than rebased onto it: a hook blocks
   force-pushes without the user's confirmation.
 
-## Phase 5 (to do when the coordinator asks)
-1. Build the merged integration jar (`./gradlew :26.2:jar` on feat/v0.2.0) and rerun
-   `self_update_e2e.py --name v010-to-integration ... --expect-history` (history.json legacy import must not list
-   RigTune's jars; SPEC 5.6), and the M12 pair from the integration branch.
-2. M14 (end-to-end undo after a restart): add a driver phase `undo` once WS-B's `undoPlan`/`undo(plan)` exist: 0.2
-   applies a mod change (e.g. an Add from the fake catalog: add a second project with a small jar) → quit → helper →
-   phase `undo` opens Undo last and confirms → quit → helper → assert the mods folder and history statuses. The driver
-   is compiled against v0.1.0, so the undo phase will need its own small driver class compiled against the 0.2 API (a
-   second source set or reflection); decide then.
-3. The Modrinth listing itself (M11) is outside this harness; the harness proves only that a byte-identical hosted
-   jar is matched by hash.
+## Phase 5
+Runs on the merged integration build (feat/v0.2.0 @ 5f57eee, `rigtune-0.2.0-dev+mc26.2.jar`); results in
+docs/smoke/self-update/README.md.
+- **Final v0.1.0 → 0.2.0** (`final-v010-to-020/`): `--legacy-disable --expect-history`. `LegacyImport.entry` returns
+  null when 0.1.0's last helper run only touched RigTune's own jars (both are excluded), so a plain self-update leaves
+  no `legacy-import` entry at all. With `--legacy-disable`, the 0.1.0 driver also passes a "Disable e2e-legacy" row to
+  the same `apply()` (the row is built by the driver; 0.1.0's rules wouldn't recommend disabling a test mod), and the
+  check requires exactly one `legacy-import` entry that holds that disable as `APPLIED` and nothing of RigTune's.
+- **M14, undo after a restart** (`undo-after-restart/`): `--scenario undo`, a second driver (`src/e2eUndo`) compiled
+  against 0.2's API. One Apply adds `e2e-added` from the fake Modrinth (the real download path: DependencyResolver,
+  DownloadPlanner, the CDN allowlist, SHA-512) and disables `e2e-disable-me`; the helper applies both; the next start
+  runs Undo last apply through `undoPlan(false)` and `undo(plan)` (what UndoScreen's confirm does, with the screen open
+  for the screenshot); the helper reverts both; the third start checks the mods and that nothing is left to undo. The
+  rows are built by the driver, not taken from the report: M14 is about the journal and undo pipeline after real
+  restarts, not about which mods the rules suggest.
+- The Modrinth listing itself (M11) is outside this harness; the harness proves only that a byte-identical hosted jar
+  is matched by hash.
