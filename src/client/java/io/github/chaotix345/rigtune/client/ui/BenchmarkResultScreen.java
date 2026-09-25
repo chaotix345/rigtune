@@ -22,6 +22,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import org.jspecify.annotations.Nullable;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -293,8 +297,19 @@ public class BenchmarkResultScreen extends Screen {
 	}
 
 	private static String date(BenchmarkRecord run) {
-		String at = run.createdAt();
-		return at != null && at.length() >= 10 ? at.substring(5, 10) : "?";
+		return chartDate(run.createdAt(), ZoneId.systemDefault());
+	}
+
+	// createdAt is UTC (Instant.toString); the chart shows the player's local day.
+	static String chartDate(@Nullable String createdAt, ZoneId zone) {
+		if (createdAt == null) {
+			return "?";
+		}
+		try {
+			return Instant.parse(createdAt).atZone(zone).format(DateTimeFormatter.ofPattern("MM-dd"));
+		} catch (DateTimeParseException e) {
+			return createdAt.length() >= 10 ? createdAt.substring(5, 10) : "?";
+		}
 	}
 
 	private FormattedCharSequence clip(Component text) {

@@ -10,6 +10,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.HashSet;
 import java.util.Set;
@@ -27,6 +28,10 @@ public final class ModJars {
 	public static String modIdOf(Path jar) {
 		try {
 			return readModId(jar);
+		} catch (NoSuchFileException e) {
+			// Normal for the 0.1.x history import: jars 0.1.x disabled or replaced are often gone by now.
+			RigTune.LOGGER.debug("No mod id for {}: the file is gone", jar);
+			return null;
 		} catch (IOException e) {
 			RigTune.LOGGER.warn("Could not read the mod id of {}", jar, e);
 			return null;
