@@ -32,5 +32,11 @@ SPEC items 8 and 10 (P1). Plan: docs/v0.2/plans/ws-e.md.
 - Unit: ShareReportTest (20), ModrinthOffAdviceTest (5), GatedModrinthClientTest (4), ClientSettingsTest (7), StartupNoticesTest (3).
 - Game test `UiGameTest` (both versions): RigTune screen at 854×480@2, 1280×720@3 and @2 with an automatic layout check (every widget on screen, no overlaps, every label fits without scrolling), also with pending changes (8 footer buttons); Copy report pressed, read and compared with `shareReport()` in one client task (CRLF-tolerant), ≤ 2000 chars, no paths (the previous clipboard is restored); Undo last/all and Benchmark open their screens; settings at the three sizes; network off → settings.json, greyed switches, header line, offline report with installs as advice; Modrinth off → its header line; the other switches save; the defaults are restored in `finally`; Mod Menu → settings → Open RigTune.
 
+## Findings from the game-test runs
+- 26.3 (SDL) on Windows: text put on the clipboard with `
+` reads back with `
+` (logged by UiGameTest: "CRLF from the clipboard: true"; 26.2/GLFW: false). Pasting is unaffected; the test compares after normalising line endings.
+- 26.3: `setCursorPos(1, 1)` before a screenshot isn't honoured the way it is on 26.2, so some 26.3 settings screenshots show a hover tooltip. Cosmetic only; the automatic layout check passes on both versions.
+
 ## For the coordinator
 - docs/modrinth/body-0.2.md (WS-F) calls the share report "plain-text"; it's Markdown.
