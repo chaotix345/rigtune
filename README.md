@@ -31,9 +31,9 @@
 
 ## Screenshots
 
-![RigTune report](docs/images/report.jpg)
+![RigTune report](docs/images/report.png)
 
-![Benchmark v2 result, with chart](docs/images/benchmark.jpg)
+![Benchmark results](docs/images/benchmark.png)
 
 ![Undo RigTune](docs/images/undo.jpg)
 
