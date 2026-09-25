@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.BooleanSupplier;
 
 // Where a 0.2 client gets its rules (docs/RULES_SCHEMA.md "How the mod picks a copy"): the bundled rules-v2.json, the
 // v2 cache, 0.1.0's cache (read only), then remote rules-v2.json, falling back to remote rules-v1.json.
@@ -67,25 +68,28 @@ public final class RulesSources {
 	}
 
 	// Remote rules-v2.json (cached when it is a v2 document), or remote rules-v1.json when that fails (kept in memory
-	// only, so the v2 cache always holds a v2 document).
-	public Optional<RulesLoader.Candidate> remote() {
-		Optional<RulesDocument> v2 = new RemoteRulesFetcher(baseUrl.resolve(V2_FILE), modVersion, dir.resolve(V2_CACHE)).fetch();
-		Optional<RulesDocument> doc = v2.isPresent() ? v2 : new RemoteRulesFetcher(baseUrl.resolve(V1_FILE), modVersion, null).fetch();
+	// only, so the v2 cache always holds a v2 document). remoteAllowed is asked again before each request, so a
+	// switch turned off (or a newer load) stops the fallback request.
+	public Optional<RulesLoader.Candidate> remote(BooleanSupplier remoteAllowed) {
+		if (!remoteAllowed.getAsBoolean()) {
+			return Optional.empty();
+		}
+		Optional<RulesDocument> doc = new RemoteRulesFetcher(baseUrl.resolve(V2_FILE), modVersion, dir.resolve(V2_CACHE)).fetch();
+		if (doc.isEmpty() && remoteAllowed.getAsBoolean()) {
+			doc = new RemoteRulesFetcher(baseUrl.resolve(V1_FILE), modVersion, null).fetch();
+		}
 		return doc.map(d -> new RulesLoader.Candidate(RulesLoader.SOURCE_REMOTE, d));
 	}
 
-	// Hands the best local rules to the listener, then, only if remoteAllowed, fetches the remote rules and hands them
-	// over too if they win. With remoteAllowed false no request is made at all.
-	public void load(boolean remoteAllowed, Listener listener) {
+	// Hands the best local rules to the listener, then fetches the remote rules while remoteAllowed says so, and hands
+	// them over too if they win. With remoteAllowed false no request is made at all.
+	public void load(BooleanSupplier remoteAllowed, Listener listener) {
 		List<RulesLoader.Candidate> candidates = local();
 		RulesDocument local = RulesLoader.pickNewest(candidates).orElse(null);
 		if (local != null) {
 			listener.loaded(local, false);
 		}
-		if (!remoteAllowed) {
-			return;
-		}
-		remote().ifPresent(remote -> {
+		remote(remoteAllowed).ifPresent(remote -> {
 			candidates.add(remote);
 			RulesDocument best = RulesLoader.pickNewest(candidates).orElse(null);
 			if (best != null && best != local) {

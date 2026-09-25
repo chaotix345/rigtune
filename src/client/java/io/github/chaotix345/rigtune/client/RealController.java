@@ -49,10 +49,19 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class RealController implements RigTuneController {
 	private static final String VANILLA = SettingsBridge.VANILLA_PREFIX;
 	private static final Duration STAGE_LOCK_WAIT = Duration.ofSeconds(2);
+	// Rules loads can wait up to a minute on the network; one thread keeps them off the report builders' pool and
+	// runs them in order, so a superseded load gives up before its next request.
+	private static final ExecutorService RULES_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
+		Thread thread = new Thread(runnable, "RigTune rules");
+		thread.setDaemon(true);
+		return thread;
+	});
 
 	private Minecraft minecraft;
 	private final Path configDir;
@@ -91,18 +100,25 @@ public final class RealController implements RigTuneController {
 
 	public void start(Minecraft minecraft) {
 		this.minecraft = minecraft;
-		CompletableFuture.runAsync(this::loadRules, Probes.EXECUTOR);
+		reloadRules();
 		rescan();
 	}
 
-	// Re-runnable: a newer load (settingsChanged) makes the results of an older one that is still fetching stale.
-	private void loadRules() {
+	// Re-runnable: a newer load (settingsChanged) makes an older one stale, whether it is still queued or fetching.
+	private void reloadRules() {
 		int gen;
 		synchronized (rulesLock) {
 			gen = ++rulesGeneration;
 		}
+		CompletableFuture.runAsync(() -> loadRules(gen), RULES_EXECUTOR);
+	}
+
+	private void loadRules(int gen) {
+		if (!currentRules(gen)) {
+			return;
+		}
 		URI baseUrl = RulesSources.baseUrl(System.getProperty(RulesSources.BASE_URL_PROPERTY));
-		new RulesSources(configDir, baseUrl, modVersion).load(ClientSettings.shared(configDir).remoteRulesAllowed(), (doc, remote) -> {
+		new RulesSources(configDir, baseUrl, modVersion).load(() -> currentRules(gen) && ClientSettings.shared(configDir).remoteRulesAllowed(), (doc, remote) -> {
 			synchronized (rulesLock) {
 				if (gen != rulesGeneration) {
 					return;
@@ -134,9 +150,15 @@ public final class RealController implements RigTuneController {
 		rebuild();
 	}
 
+	private boolean currentRules(int gen) {
+		synchronized (rulesLock) {
+			return gen == rulesGeneration;
+		}
+	}
+
 	@Override
 	public void settingsChanged() {
-		CompletableFuture.runAsync(this::loadRules, Probes.EXECUTOR);
+		reloadRules();
 		rescan();
 	}
 

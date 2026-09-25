@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -81,6 +82,10 @@ class RulesSourcesTest {
 	}
 
 	private void load(boolean remoteAllowed) {
+		load(() -> remoteAllowed);
+	}
+
+	private void load(BooleanSupplier remoteAllowed) {
 		sources().load(remoteAllowed, (rules, remote) -> published.add(new Published(rules.revision, rules.schemaVersion, rules.source(), remote)));
 	}
 
@@ -138,6 +143,26 @@ class RulesSourcesTest {
 		load(false);
 		assertEquals(List.of(new Published(BUNDLED, 2, "bundled", false)), published);
 		assertTrue(requests.isEmpty(), requests.toString());
+	}
+
+	@Test
+	void noFallbackRequestOnceRemoteIsSwitchedOff() {
+		AtomicInteger asked = new AtomicInteger();
+		serve("rules-v1.json", 200, doc(1, BUNDLED + 5));
+		load(() -> asked.incrementAndGet() == 1);
+		assertEquals(1, requestsFor("rules-v2.json"));
+		assertEquals(0, requestsFor("rules-v1.json"));
+		assertEquals(List.of(new Published(BUNDLED, 2, "bundled", false)), published);
+	}
+
+	@Test
+	void remoteIsAskedOnlyAfterTheLocalRulesArePublished() {
+		serve("rules-v2.json", 200, doc(2, BUNDLED + 10));
+		load(() -> {
+			assertEquals(1, published.size());
+			return false;
+		});
+		assertTrue(requests.isEmpty());
 	}
 
 	@Test
