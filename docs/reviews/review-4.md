@@ -70,3 +70,14 @@ Branch fix/recheck-4. An adversarial re-check of the fixes above found one regre
 | medium, regression: the new Modrinth `incompatible` check ignored `version_id`, so a version-specific entry blocked the whole project (e.g. any Fabric API install refused the add) | 11da6df | DependencyResolver: a dependency naming a version blocks only when that exact version is installed or going in together (by version id, also for a version-only dependency); one naming just a project keeps blocking any version of it. An installed mod whose Modrinth version isn't known never counts for a version-specific entry (OnlineDataFetcher.Result now carries each loaded mod's version id, by hash). The messages name the projects by Modrinth title (slug, then id, as fallback). |
 | low: an update already in pending.json for a mod that later got its own update queued in mods/update/ still ran at exit and raced that build | 4edbb38 | Staging.dropQueuedUpdates unstages, under the apply lock, every staged ENABLE_FILE of a queued mod id with its group, through the existing unstage path (download retired to .rigtune-superseded, journal DISCARDED). The client runs it on every rebuild (same queued ids as the Recommender) with a status notice ("Cancelled RigTune's pending update of X: it has an update of its own waiting in mods/update."), and again at exit before the helper starts. |
 | low: JarInfo (Undo's view of a jar) parsed fabric.mod.json uncapped and buffered nested entries up to 32 MiB each before consulting its budget, so a crafted jar could exhaust the game's heap | 06d5001 | ModJars.readFabricModJson (the 1 MiB cap, by declared and inflated size) is shared by ModJars.readModId and JarInfo, top level and nested. JarInfo's budget is one 32 MiB byte budget per jar that every buffered nested entry is charged to, including entries no fabric.mod.json names; an entry that doesn't fit is skipped and what it inflated to still counts. |
+
+## Final confirmation review (728691f..598a069)
+Verdict: **no medium or higher.** All three re-check fixes were verified correct:
+- DependencyResolver: project-level incompatibilities still block.
+- dropQueuedUpdates: holds the apply lock, releases it before the helper launch, and drops only the matching group.
+- JarInfo: the budget is bounded at about 33 MiB per jar; the largest real jar in the user's profile is charged 15.45 MiB.
+
+Deferred to v0.3.0 (low):
+- `Staging.dropQueuedUpdates` drops any staged ENABLE whose mod id has a jar in mods/update, even when that mod isn't loaded. A stale jar there can then cancel an addition or an undo re-enable on every rebuild, and `staged` bookkeeping only clears `update:<id>`. Only drop when the mod is loaded.
+- DependencyResolver judges version-specific incompatibilities against the pre-update snapshot and doesn't add batched updates to the batch set.
+- Nit: a version-only dependency's message shows the raw version id.
