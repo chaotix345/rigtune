@@ -44,6 +44,9 @@ Brief: the user's v0.2.0 prompt (full autonomy: research → release, including 
 - FIXED for 0.2 (fix/helper-file-lock-retry c5c1d36 -> 9722170): sharing violations back off exponentially (300 ms doubling, 5 s cap, ~30 s budget, rollback too); ApplyHelper settles 2 s after the game exits. 693 tests per version.
 
 ## Lessons (carried over from v0.1.0; don't relearn)
+- NO STALLS (the user was explicit, after WS-E sat idle for 2 h waiting on a notification that never came):
+  - Always keep the watchdog running while agents work: `python <scratchpad>/watchdog.py name=dir ... --stall-min 15 --lock-min 8` in the background. It exits and wakes me on a stalled agent or a stale lock. Nudge the agent, then restart the watchdog with the current agent list.
+  - Tell every agent: never wait on background notifications. Poll `gh run list` and the processes yourself, and chain the lock release into the same command as the game run.
 - The Bash tool is Git Bash. Use absolute paths; `cd` inside a command changes the session's working directory.
 - Don't use Python string literals with Windows backslashes (they mangled this file once).
 - JDK: `export JAVA_HOME="C:/Dev/Tools/jdk/jdk-25.0.4.1+1"` before every `./gradlew`. MC 26.x is unobfuscated: plugin `net.fabricmc.fabric-loom`, no mappings, `localRuntime`, Mojang names.
