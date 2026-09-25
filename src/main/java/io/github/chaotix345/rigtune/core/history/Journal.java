@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
 // config/rigtune/history.json (docs/v0.2/SPEC.md item 3): every read-modify-write holds the apply lock and replaces
@@ -49,18 +50,29 @@ public final class Journal implements ChangeRecorder {
 	private final String mcVersion;
 	private final Log log;
 	private final Duration lockWait;
+	private final Supplier<JournalEntry> firstEntry;
 
 	public Journal(Path configDir, String rigtuneVersion, String mcVersion, Log log) {
-		this(configDir, rigtuneVersion, mcVersion, log, LOCK_WAIT);
+		this(configDir, rigtuneVersion, mcVersion, log, LOCK_WAIT, null);
+	}
+
+	// firstEntry: made under the lock when history.json is first created (the 0.1.x legacy import); null for none.
+	public Journal(Path configDir, String rigtuneVersion, String mcVersion, Log log, Supplier<JournalEntry> firstEntry) {
+		this(configDir, rigtuneVersion, mcVersion, log, LOCK_WAIT, firstEntry);
 	}
 
 	Journal(Path configDir, String rigtuneVersion, String mcVersion, Log log, Duration lockWait) {
+		this(configDir, rigtuneVersion, mcVersion, log, lockWait, null);
+	}
+
+	private Journal(Path configDir, String rigtuneVersion, String mcVersion, Log log, Duration lockWait, Supplier<JournalEntry> firstEntry) {
 		this.configDir = configDir;
 		this.file = file(configDir);
 		this.rigtuneVersion = rigtuneVersion;
 		this.mcVersion = mcVersion;
 		this.log = log;
 		this.lockWait = lockWait;
+		this.firstEntry = firstEntry;
 	}
 
 	public static Path file(Path configDir) {
@@ -111,11 +123,13 @@ public final class Journal implements ChangeRecorder {
 				return false;
 			}
 			Read read = read();
+			List<JournalEntry> base = read.entries();
 			switch (read.state()) {
 				case MISSING -> {
 					if (!create) {
 						return false;
 					}
+					base = first();
 				}
 				case NEWER -> {
 					return false;
@@ -124,12 +138,25 @@ public final class Journal implements ChangeRecorder {
 				case OK -> {
 				}
 			}
-			List<JournalEntry> next = cap(change.apply(List.copyOf(read.entries())));
+			List<JournalEntry> next = cap(change.apply(List.copyOf(base)));
 			if (read.state() == State.OK && next.equals(read.entries())) {
 				return true;
 			}
 			AtomicFiles.writeString(file, GSON.toJson(new HistoryFile(FORMAT_VERSION, next)));
 			return true;
+		}
+	}
+
+	private List<JournalEntry> first() {
+		if (firstEntry == null) {
+			return List.of();
+		}
+		try {
+			JournalEntry entry = firstEntry.get();
+			return entry == null ? List.of() : List.of(entry);
+		} catch (RuntimeException e) {
+			log.warn("Could not make the first entry of " + file, e);
+			return List.of();
 		}
 	}
 

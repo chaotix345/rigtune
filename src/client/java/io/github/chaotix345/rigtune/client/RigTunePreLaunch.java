@@ -41,8 +41,13 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 		}
 		try {
 			readState(configDir, busy && lock == null);
-			// The journal's legacy import and reconciliation need the lock the helper held (reentrant: review M4).
-			HistoryStartup.run(configDir, ClientJournal.get(), lock != null);
+			// The journal's legacy import and reconciliation need the lock the helper held (reentrant: review M4). The
+			// journal must never stop the game from starting.
+			try {
+				HistoryStartup.run(configDir, ClientJournal.get(), lock != null);
+			} catch (Throwable t) {
+				RigTune.LOGGER.warn("Could not update RigTune's change history", t);
+			}
 		} finally {
 			if (lock != null) {
 				lock.close();

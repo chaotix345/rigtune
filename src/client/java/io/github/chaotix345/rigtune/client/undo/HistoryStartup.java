@@ -15,7 +15,6 @@ import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.LegacyImport;
 import io.github.chaotix345.rigtune.core.history.StagedChanges;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -26,64 +25,72 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-// preLaunch, while it holds the apply lock (docs/v0.2/SPEC.md item 3): the first 0.2 run creates history.json with a
-// legacy-import entry of what 0.1.x did; later runs reconcile the journal with the helper's last result and with
-// pending.json (review H5). Runs before the game's classes load, so it touches only core classes and files.
+// The journal at startup (docs/v0.2/SPEC.md item 3). history.json is created with a legacy-import entry of what 0.1.x
+// did: the game's Journal makes it whenever the file is first created, under the lock, so an import preLaunch couldn't
+// do (the 0.1.x helper still held the lock) happens at the first record instead. Later starts reconcile the journal
+// with the helper's last result and pending.json (review H5). Runs from preLaunch, before the game's classes load, so
+// it touches only core classes and files, and nothing here may stop the game from starting.
 public final class HistoryStartup {
 	private HistoryStartup() {
 	}
 
-	// lockHeld false: the helper may still be running and last-apply.json may be stale, so nothing is done now.
+	// preLaunch, holding the apply lock. lockHeld false: the helper may still be running and last-apply.json may be
+	// stale, so nothing is done now.
 	public static void run(Path configDir, Journal journal, boolean lockHeld) {
 		if (!lockHeld) {
 			return;
 		}
-		Path pendingFile = PendingActions.defaultPath(configDir);
-		ApplyResult lastApply = null;
-		try {
-			Path last = ApplyResult.defaultPath(configDir);
-			if (Files.isRegularFile(last)) {
-				lastApply = ApplyResult.load(last);
-			}
-		} catch (IOException e) {
-			RigTune.LOGGER.warn("Could not read the last RigTune apply result for the history", e);
-		}
-		PendingActions plan = null;
-		boolean planReadable = true;
-		try {
-			if (Files.isRegularFile(pendingFile)) {
-				plan = PendingActions.load(pendingFile);
-			}
-		} catch (IOException e) {
-			planReadable = false;
-			RigTune.LOGGER.warn("Could not read {} for the history", pendingFile, e);
-		}
 		try {
 			if (!journal.exists()) {
-				PendingActions leftover = plan == null ? null : plan.relocated(InstanceDirs.modsDirOf(pendingFile), InstanceDirs.configDirOf(pendingFile));
-				JournalEntry imported = LegacyImport.entry(lastApply, leftover, ModJars::modIdOf, sodiumKeys(configDir), journal.mcVersion());
-				journal.update(entries -> imported == null ? entries : HistoryUpdates.append(entries, imported));
+				journal.update(entries -> entries);
 				return;
 			}
-			if (!planReadable) {
-				return;
-			}
+			// An unreadable pending.json throws here and isn't reconciled: which ops it holds is unknown.
+			Path pendingFile = PendingActions.defaultPath(configDir);
+			PendingActions plan = Files.isRegularFile(pendingFile) ? PendingActions.load(pendingFile) : null;
+			ApplyResult lastApply = lastApply(configDir);
 			Set<String> pendingIds = new HashSet<>();
 			if (plan != null) {
 				plan.ops().stream().filter(Objects::nonNull).map(Op::id).filter(Objects::nonNull).forEach(pendingIds::add);
 			}
 			List<ApplyResult.OpResult> results = lastApply == null ? List.of() : lastApply.results();
 			journal.updateExisting(entries -> HistoryUpdates.reconcile(entries, pendingIds, results));
-		} catch (IOException | RuntimeException e) {
+		} catch (Exception e) {
 			RigTune.LOGGER.warn("Could not update {}", Journal.file(configDir), e);
+		}
+	}
+
+	// The legacy-import entry for 0.1.x's last run and leftover staged ops, or null. The game's journal calls this under
+	// the apply lock when it first creates history.json.
+	public static JournalEntry legacyEntry(Path configDir, String mcVersion) {
+		PendingActions leftover = null;
+		Path pendingFile = PendingActions.defaultPath(configDir);
+		try {
+			if (Files.isRegularFile(pendingFile)) {
+				leftover = PendingActions.load(pendingFile).relocated(InstanceDirs.modsDirOf(pendingFile), InstanceDirs.configDirOf(pendingFile));
+			}
+		} catch (Exception e) {
+			RigTune.LOGGER.warn("Could not read {} for the history", pendingFile, e);
+		}
+		return LegacyImport.entry(lastApply(configDir), leftover, ModJars::modIdOf, sodiumKeys(configDir), mcVersion);
+	}
+
+	private static ApplyResult lastApply(Path configDir) {
+		Path last = ApplyResult.defaultPath(configDir);
+		try {
+			return Files.isRegularFile(last) ? ApplyResult.load(last) : null;
+		} catch (Exception e) {
+			RigTune.LOGGER.warn("Could not read {} for the history", last, e);
+			return null;
 		}
 	}
 
 	// 0.1.x only ever patched sodium-options.json. Read with core classes only: this runs before the game loads.
 	static StagedChanges.ConfigKeys sodiumKeys(Path configDir) {
 		Path file = configDir.resolve("sodium-options.json").toAbsolutePath().normalize();
-		Map<String, String>[] values = new Map[1];
 		return new StagedChanges.ConfigKeys() {
+			private Map<String, String> values;
+
 			@Override
 			public String key(Op op, String keyInFile) {
 				return isSodium(op) ? "sodium." + keyInFile : null;
@@ -94,10 +101,10 @@ public final class HistoryStartup {
 				if (!isSodium(op)) {
 					return null;
 				}
-				if (values[0] == null) {
-					values[0] = read(file);
+				if (values == null) {
+					values = read(file);
 				}
-				return values[0].get(keyInFile);
+				return values.get(keyInFile);
 			}
 
 			private boolean isSodium(Op op) {
@@ -117,7 +124,7 @@ public final class HistoryStartup {
 			}
 			JsonElement root = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8));
 			return root.isJsonObject() ? SodiumConfigPatcher.flatten(root.getAsJsonObject(), "") : Map.of();
-		} catch (IOException | RuntimeException e) {
+		} catch (Exception e) {
 			return Map.of();
 		}
 	}

@@ -45,9 +45,41 @@ class MigrationV010Test {
 		config = Files.createDirectories(game.resolve("config"));
 		pending = PendingActions.defaultPath(config);
 		lastApply = ApplyResult.defaultPath(config);
+		// As the game's journal (ClientJournal): creating history.json runs the legacy import first.
 		journal = new Journal(config, "0.2.0+mc26.2", "26.2", (message, error) -> {
 			throw new AssertionError(message, error);
-		});
+		}, () -> HistoryStartup.legacyEntry(config, "26.2"));
+	}
+
+	// Review: a malformed 0.1.x file (e.g. a null element) must never stop the game from starting.
+	@Test
+	void brokenFilesNeverStopTheStartup() throws IOException {
+		Files.createDirectories(pending.getParent());
+		Files.writeString(lastApply, "{\"finishedAt\":\"x\",\"results\":[null]}");
+		Files.writeString(pending, "{\"ops\":[null]}");
+
+		HistoryStartup.run(config, journal, true);
+		journal.record("e1", JournalEntry.APPLY, List.of(JournalChange.setting("vanilla.a", "1", "2", JournalChange.APPLIED, null)));
+		HistoryStartup.run(config, journal, true);
+		RigTunePreLaunch.readState(config, false, null);
+		RigTunePreLaunch.takeUnseenResult();
+		RigTunePreLaunch.takeLeftoverOps();
+
+		assertEquals(List.of("e1"), journal.entries().stream().map(JournalEntry::id).toList());
+	}
+
+	// Review: when preLaunch couldn't get the lock (the 0.1.x helper was still running), the import must still happen
+	// when something first creates history.json later in the session.
+	@Test
+	void theImportIsNotLostWhenTheFirstStartCouldNotLock() throws IOException {
+		v010Instance();
+		install("last-apply.json", lastApply);
+
+		HistoryStartup.run(config, journal, false);
+		assertFalse(journal.exists());
+		journal.record("e1", JournalEntry.APPLY, List.of(JournalChange.setting("vanilla.a", "1", "2", JournalChange.APPLIED, null)));
+
+		assertEquals(List.of(JournalEntry.LEGACY_IMPORT, JournalEntry.APPLY), journal.entries().stream().map(JournalEntry::kind).toList());
 	}
 
 	private void install(String fixture, Path target) throws IOException {
@@ -240,7 +272,7 @@ class MigrationV010Test {
 		HistoryStartup.run(config, journal, true);
 
 		assertEquals(List.of(JournalChange.STAGED, JournalChange.APPLIED, JournalChange.ABANDONED),
-				journal.entries().getFirst().changes().stream().map(JournalChange::status).toList());
+				journal.entries().stream().filter(e -> e.id().equals("e1")).findFirst().orElseThrow().changes().stream().map(JournalChange::status).toList());
 	}
 
 	@Test
