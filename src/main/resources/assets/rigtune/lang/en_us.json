@@ -21,8 +21,6 @@
 	"rigtune.goal.quality.tooltip": "Favour visuals: settings are picked as if your hardware were one tier higher.",
 	"rigtune.screen.apply": "Apply selected",
 	"rigtune.screen.apply.count": "Apply (%s)",
-	"rigtune.screen.benchmark": "Run benchmark",
-	"rigtune.screen.benchmark.needs_world": "Join a world (ideally singleplayer) to run the benchmark.",
 	"rigtune.screen.rescan": "Rescan",
 	"rigtune.screen.analysing": "Analysing your system…",
 	"rigtune.screen.nothing": "Everything looks good: no suggestions.",

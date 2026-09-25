@@ -197,8 +197,8 @@ public final class UndoPlanner {
 			// A group mate an earlier undo staged isn't a candidate, but it goes with its group.
 			boolean dropped = l != null && l.change().opId() != null && result.script().discardOpIds().contains(l.change().opId());
 			if (!found.contains(id) && !dropped) {
-				items.add(Item.of(l == null ? Text.literal(id) : describe(l.change(), state), Action.SKIP, reason("gone", GONE), false, List.of(id),
-						List.of()));
+				Text description = l == null ? Text.literal(id) : describe(l.change(), state);
+				items.add(Item.of(description, Action.SKIP, Text.of("rigtune.undo.reason.gone", GONE), false, List.of(id), List.of()));
 			}
 		}
 		return new Result(new UndoPlan(shown.all(), shown.undoOf(), items, shown.at(), null), result.script());
@@ -331,9 +331,9 @@ public final class UndoPlanner {
 		List<Located> kept = new ArrayList<>();
 		for (Located l : selected) {
 			if (superseded.contains(l)) {
-				b.skip(l, reason("superseded", SUPERSEDED));
+				b.skip(l, Text.of("rigtune.undo.reason.superseded", SUPERSEDED));
 			} else if (groupsOf(l.change(), pending).stream().anyMatch(groups::contains)) {
-				b.skip(l, reason("superseded_group", SUPERSEDED_GROUP));
+				b.skip(l, Text.of("rigtune.undo.reason.superseded_group", SUPERSEDED_GROUP));
 			} else {
 				kept.add(l);
 			}
@@ -379,7 +379,7 @@ public final class UndoPlanner {
 			}
 			Op op = pending.stream().filter(o -> o != null && o.id() != null && o.id().equals(l.change().opId())).findFirst().orElse(null);
 			if (op == null) {
-				b.skip(l, reason("not_staged", NOT_STAGED));
+				b.skip(l, Text.of("rigtune.undo.reason.not_staged", NOT_STAGED));
 				continue;
 			}
 			String key = op.group() != null ? "g:" + op.group() : "o:" + op.id();
@@ -393,11 +393,11 @@ public final class UndoPlanner {
 			boolean rigtune = ops.stream().anyMatch(op -> touchesRigTune(op, folder))
 					|| group.getValue().stream().anyMatch(l -> RIGTUNE.equals(l.change().modId()));
 			if (rigtune) {
-				group.getValue().forEach(l -> b.skip(l, reason("rigtune_staged", RIGTUNE_STAGED)));
+				group.getValue().forEach(l -> b.skip(l, Text.of("rigtune.undo.reason.rigtune_staged", RIGTUNE_STAGED)));
 				continue;
 			}
 			if (shownOps != null && !shownOps.containsAll(opIds)) {
-				group.getValue().forEach(l -> b.skip(l, reason("group_changed", GROUP_CHANGED)));
+				group.getValue().forEach(l -> b.skip(l, Text.of("rigtune.undo.reason.group_changed", GROUP_CHANGED)));
 				continue;
 			}
 			Set<String> covered = new HashSet<>();
@@ -405,15 +405,15 @@ public final class UndoPlanner {
 				covered.add(l.change().id());
 				b.discards.add(Item.of(describe(l.change(), b.state), Action.DISCARD_STAGED, null, false, List.of(l.change().id()), opIds));
 			}
+			Text together = Text.of("rigtune.undo.reason.staged_together", STAGED_TOGETHER);
 			for (Op op : ops) {
 				List<Located> mates = ctx.stagedWithOp(op.id());
 				if (mates.isEmpty()) {
-					b.discards.add(Item.of(describe(op), Action.DISCARD_STAGED, reason("staged_together", STAGED_TOGETHER), false, List.of(), opIds));
+					b.discards.add(Item.of(describe(op), Action.DISCARD_STAGED, together, false, List.of(), opIds));
 				}
 				for (Located mate : mates) {
 					if (covered.add(mate.change().id())) {
-						b.discards.add(Item.of(describe(mate.change(), b.state), Action.DISCARD_STAGED, reason("staged_together", STAGED_TOGETHER), false,
-								List.of(mate.change().id()), opIds));
+						b.discards.add(Item.of(describe(mate.change(), b.state), Action.DISCARD_STAGED, together, false, List.of(mate.change().id()), opIds));
 					}
 				}
 			}
@@ -462,8 +462,8 @@ public final class UndoPlanner {
 			if (!Objects.equals(current, changes.getFirst().change().after())) {
 				// Back where it was before the oldest of these changes (another apply and its undo can do that).
 				boolean original = current != null && current.equals(changes.getLast().change().before());
-				Text reason = original ? reason("already_original", ALREADY_ORIGINAL, show(state, key, current))
-						: reason("changed_since", CHANGED_SINCE, show(state, key, current));
+				Text reason = original ? Text.of("rigtune.undo.reason.already_original", ALREADY_ORIGINAL, show(state, key, current))
+						: Text.of("rigtune.undo.reason.changed_since", CHANGED_SINCE, show(state, key, current));
 				changes.forEach(l -> b.skip(l, reason));
 				continue;
 			}
@@ -478,11 +478,11 @@ public final class UndoPlanner {
 					target = l.change().before();
 				} else {
 					broken = true;
-					b.skip(l, reason("changed_between", CHANGED_BETWEEN));
+					b.skip(l, Text.of("rigtune.undo.reason.changed_between", CHANGED_BETWEEN));
 				}
 			}
 			if (target == null) {
-				chain.forEach(l -> b.skip(l, reason("absent_before", ABSENT_BEFORE)));
+				chain.forEach(l -> b.skip(l, Text.of("rigtune.undo.reason.absent_before", ABSENT_BEFORE)));
 				continue;
 			}
 			if (!state.changeable(key)) {
@@ -504,7 +504,8 @@ public final class UndoPlanner {
 		// a RigTune change still in effect set, too: a later entry's (Undo this on an older one) and one the list showed
 		// as skipped (which the confirm-time re-plan doesn't select).
 		boolean preset = b.immediate.containsKey(PRESET_KEY);
-		Text unwritableReason = preset ? reason("preset_may_change", PRESET_MAY_CHANGE) : reason("not_changeable", NOT_CHANGEABLE);
+		Text unwritableReason = preset ? Text.of("rigtune.undo.reason.preset_may_change", PRESET_MAY_CHANGE)
+				: Text.of("rigtune.undo.reason.not_changeable", NOT_CHANGEABLE);
 		unwritable.forEach(l -> b.skip(l, unwritableReason));
 		if (preset) {
 			skippedNow.forEach((key, current) -> {
@@ -573,7 +574,7 @@ public final class UndoPlanner {
 			List<Located> ordered = new ArrayList<>(group.stream().filter(l -> JournalChange.ENABLE.equals(l.change().action())).toList());
 			ordered.addAll(group.stream().filter(l -> !JournalChange.ENABLE.equals(l.change().action())).toList());
 			if (ordered.stream().anyMatch(l -> isRigTune(l.change(), sim))) {
-				ordered.forEach(l -> b.skip(l, reason("rigtune_jar", RIGTUNE_JAR)));
+				ordered.forEach(l -> b.skip(l, Text.of("rigtune.undo.reason.rigtune_jar", RIGTUNE_JAR)));
 				continue;
 			}
 			Map<String, Content> trial = new LinkedHashMap<>(sim);
@@ -592,7 +593,7 @@ public final class UndoPlanner {
 				Map<String, Text> added = new TreeMap<>(violations(trial, folder, staged));
 				added.keySet().removeAll(problems.keySet());
 				if (!added.isEmpty()) {
-					failure = reason("breaks", BREAKS, Text.join("; ", List.copyOf(added.values())));
+					failure = Text.of("rigtune.undo.reason.breaks", BREAKS, Text.join("; ", List.copyOf(added.values())));
 				}
 			}
 			if (failure != null) {
@@ -619,7 +620,7 @@ public final class UndoPlanner {
 		if (JournalChange.ENABLE.equals(c.action())) {
 			Content content = sim.remove(file);
 			if (content == null) {
-				return reason("file_gone", FILE_GONE, file);
+				return Text.of("rigtune.undo.reason.file_gone", FILE_GONE, file);
 			}
 			sim.put(disabledName(file, sim), content);
 			moved.put(l, content);
@@ -627,14 +628,14 @@ public final class UndoPlanner {
 		}
 		String disabled = c.resultFile() != null ? c.resultFile() : file + DISABLED_SUFFIX;
 		if (!sim.containsKey(disabled)) {
-			return reason("file_gone", FILE_GONE, disabled);
+			return Text.of("rigtune.undo.reason.file_gone", FILE_GONE, disabled);
 		}
 		if (sim.containsKey(file)) {
-			return reason("file_exists", FILE_EXISTS, file);
+			return Text.of("rigtune.undo.reason.file_exists", FILE_EXISTS, file);
 		}
 		// Without a mod id neither this plan nor the executor could tell it isn't a second copy of a mod (review 3).
 		if (sim.get(disabled).info() == null) {
-			return reason("not_a_mod", NOT_A_MOD, disabled);
+			return Text.of("rigtune.undo.reason.not_a_mod", NOT_A_MOD, disabled);
 		}
 		Content content = sim.remove(disabled);
 		sim.put(file, content);
@@ -655,7 +656,7 @@ public final class UndoPlanner {
 			boolean staged = pending.stream().anyMatch(op -> op != null && op.type() == PendingActions.Type.ENABLE_FILE
 					&& modId.equals(op.modId()) && (op.id() == null || !discarded.contains(op.id())));
 			if (staged) {
-				return reason("update_staged", UPDATE_STAGED, modId);
+				return Text.of("rigtune.undo.reason.update_staged", UPDATE_STAGED, modId);
 			}
 		}
 		return null;
@@ -728,14 +729,14 @@ public final class UndoPlanner {
 		Map<String, Text> out = new TreeMap<>();
 		namesById.forEach((id, names) -> {
 			if (names.size() > 1) {
-				Text twice = reason("breaks.twice", LOADED_TWICE, id, String.join(", ", new TreeSet<>(names)));
+				Text twice = Text.of("rigtune.undo.reason.breaks.twice", LOADED_TWICE, id, String.join(", ", new TreeSet<>(names)));
 				out.put(twice.english(), twice);
 			}
 		});
 		for (JarInfo info : active) {
 			for (String dep : info.depends()) {
 				if (!provided.contains(dep)) {
-					Text missing = reason("breaks.missing", MISSING, info.id(), dep);
+					Text missing = Text.of("rigtune.undo.reason.breaks.missing", MISSING, info.id(), dep);
 					out.put(missing.english(), missing);
 				}
 			}
@@ -820,10 +821,6 @@ public final class UndoPlanner {
 
 	static String label(String key) {
 		return key != null && key.startsWith(VANILLA_PREFIX) ? key.substring(VANILLA_PREFIX.length()) : key;
-	}
-
-	private static Text reason(String name, String english, Object... args) {
-		return Text.of("rigtune.undo.reason." + name, english, args);
 	}
 
 	private static Object show(State state, String key, String value) {
