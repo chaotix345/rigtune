@@ -8,21 +8,28 @@ import java.util.ArrayList;
 import java.util.List;
 
 // With Modrinth (or the network) off in the settings RigTune can't download anything, so mod installs and updates stay
-// in the report as advice for the launcher instead (docs/v0.2/SPEC.md item 8). Local changes are untouched.
+// in the report as advice for the launcher instead (docs/v0.2/SPEC.md item 8). Local changes are untouched. The note
+// names the switch that is off: with the network off the Modrinth switch itself still reads on.
 public final class ModrinthOffAdvice {
 	public static final String ADD_NOTE = "Modrinth is off in RigTune's settings: install it from your launcher.";
 	public static final String UPDATE_NOTE = "Modrinth is off in RigTune's settings: update it in your launcher.";
+	public static final String NETWORK_ADD_NOTE = "Network access is off in RigTune's settings: install it from your launcher.";
+	public static final String NETWORK_UPDATE_NOTE = "Network access is off in RigTune's settings: update it in your launcher.";
 
 	private ModrinthOffAdvice() {
 	}
 
 	public static Report apply(Report report) {
+		return apply(report, false);
+	}
+
+	public static Report apply(Report report, boolean networkOff) {
 		boolean changed = false;
 		List<Recommendation> out = new ArrayList<>(report.recommendations().size());
 		for (Recommendation r : report.recommendations()) {
 			String note = switch (r.action()) {
-				case Action.AddMod ignored -> ADD_NOTE;
-				case Action.UpdateMod ignored -> UPDATE_NOTE;
+				case Action.AddMod ignored -> networkOff ? NETWORK_ADD_NOTE : ADD_NOTE;
+				case Action.UpdateMod ignored -> networkOff ? NETWORK_UPDATE_NOTE : UPDATE_NOTE;
 				default -> null;
 			};
 			if (note == null) {

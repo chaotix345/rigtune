@@ -100,4 +100,14 @@ class ModrinthOffAdviceTest {
 
 		assertSame(in, ModrinthOffAdvice.apply(in));
 	}
+
+	@Test
+	void withTheNetworkOffTheNotesNameTheNetworkSwitch() {
+		List<Recommendation> recs = ModrinthOffAdvice.apply(report(List.of(ADD, UPDATE)), true).recommendations();
+
+		assertEquals("Optimises game logic. " + ModrinthOffAdvice.NETWORK_ADD_NOTE, recs.get(0).reason());
+		assertEquals("Version 0.9.2 is available (you have 0.9.1). " + ModrinthOffAdvice.NETWORK_UPDATE_NOTE, recs.get(1).reason());
+		assertTrue(ModrinthOffAdvice.NETWORK_ADD_NOTE.startsWith("Network access is off in RigTune's settings"));
+		assertFalse(recs.get(0).appliable());
+	}
 }

@@ -252,7 +252,8 @@ public final class RealController implements RigTuneController {
 							RigTune.LOGGER.error("Could not build the RigTune report", error);
 							status = Component.translatable("rigtune.status.scan_failed");
 						} else if (gen == generation) {
-							report = this.settings.modrinthAllowed() ? withoutStaged(built) : ModrinthOffAdvice.apply(withoutStaged(built));
+							report = this.settings.modrinthAllowed() ? withoutStaged(built)
+									: ModrinthOffAdvice.apply(withoutStaged(built), !this.settings.networkEnabled);
 						}
 					}));
 		});

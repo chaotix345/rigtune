@@ -169,7 +169,7 @@ public class UiGameTest implements FabricClientGameTest {
 			context.waitForScreen(RigTuneScreen.class);
 			waitForSettledReport(context, controller);
 			checkHeader(context, "rigtune.screen.header.network_off");
-			checkModrinthOff(context, controller);
+			checkModrinthOff(context, controller, ModrinthOffAdvice.NETWORK_ADD_NOTE);
 			context.takeScreenshot("ui-main-network-off");
 
 			// Network on, Modrinth off.
@@ -182,7 +182,7 @@ public class UiGameTest implements FabricClientGameTest {
 			context.waitForScreen(RigTuneScreen.class);
 			waitForSettledReport(context, controller);
 			checkHeader(context, "rigtune.screen.header.modrinth_off");
-			checkModrinthOff(context, controller);
+			checkModrinthOff(context, controller, ModrinthOffAdvice.ADD_NOTE);
 			context.takeScreenshot("ui-main-modrinth-off");
 
 			// The other settings save too.
@@ -264,14 +264,14 @@ public class UiGameTest implements FabricClientGameTest {
 				.anyMatch(line -> line.getContents() instanceof TranslatableContents t && t.getKey().equals(key));
 	}
 
-	private static void checkModrinthOff(ClientGameTestContext context, RigTuneController controller) {
+	private static void checkModrinthOff(ClientGameTestContext context, RigTuneController controller, String note) {
 		Report report = context.computeOnClient(mc -> controller.report());
 		check(!report.online(), "report is offline");
 		List<Recommendation> adds = report.recommendations().stream().filter(r -> r.category() == Category.ADD_MOD).toList();
 		if (adds.isEmpty()) {
 			RigTune.LOGGER.info("UiGameTest: no install suggestions for this instance; the advice text isn't checked");
 		}
-		check(adds.stream().allMatch(r -> !r.appliable() && r.reason().endsWith(ModrinthOffAdvice.ADD_NOTE)), "installs became advice: " + adds);
+		check(adds.stream().allMatch(r -> !r.appliable() && r.reason().endsWith(note)), "installs became advice: " + adds);
 		check(report.recommendations().stream().noneMatch(r -> r.action() instanceof Action.AddMod || r.action() instanceof Action.UpdateMod),
 				"nothing left to download: " + report.recommendations());
 	}
