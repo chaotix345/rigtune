@@ -152,7 +152,9 @@ public final class BenchmarkController {
 						minecraft.hasSingleplayerServer(), minSimulationDistance(options)), timing, now);
 		this.run = new BenchmarkRun(session, new KnobGuard(original, new ClientKnobs(minecraft, original, MarkerRestore.file())), System::nanoTime);
 		this.hudWasHidden = minecraft.gui.hud.isHidden();
-		this.position = player.position();
+		// In the benchmark world the camera goes exactly to the fixed spot, not just within a block of it.
+		Vec3 camera = request.scene() == BenchmarkRequest.Scene.BENCHMARK_WORLD ? BenchmarkWorld.cameraPosition() : null;
+		this.position = camera != null ? camera : player.position();
 		this.yaw = player.getYRot();
 		this.pitch = player.getXRot();
 		this.wasFlying = player.getAbilities().flying;
@@ -228,6 +230,7 @@ public final class BenchmarkController {
 			RigTune.LOGGER.error("Benchmark could not start; restoring settings", e);
 			controller.run.fail(e);
 			controller.finish();
+			return "rigtune.benchmark.refused.failed";
 		}
 		return null;
 	}
@@ -434,16 +437,25 @@ public final class BenchmarkController {
 		}
 		if (!run.restoreOk()) {
 			RigTune.LOGGER.error("Benchmark: could not restore every setting; see the errors above");
+			MarkerRestore.retryLater();
 		}
-		Outcome outcome = outcome();
-		lastOutcome = outcome;
-		SessionResult result = outcome.session();
-		RigTune.LOGGER.info("Benchmark {}: chosen {}, target {} FPS met {}, result {}, deadline hit {}",
-				outcome.cancelled() ? "cancelled" : "finished", result.chosen(), targetFps, result.targetMet(), result.result(), result.deadlineHit());
-		if (request.scene() == BenchmarkRequest.Scene.BENCHMARK_WORLD) {
-			if (minecraft.isRunning()) {
-				BenchmarkWorld.leave(minecraft, () -> show(minecraft, outcome, minecraft.gui.screen()));
+		if (run.error() != null) {
+			RigTune.LOGGER.error("Benchmark failed", run.error());
+		}
+		Outcome outcome = null;
+		try {
+			outcome = outcome();
+			lastOutcome = outcome;
+			SessionResult result = outcome.session();
+			RigTune.LOGGER.info("Benchmark {}: chosen {}, target {} FPS met {}, result {}, deadline hit {}",
+					outcome.cancelled() ? "cancelled" : "finished", result.chosen(), targetFps, result.targetMet(), result.result(), result.deadlineHit());
+		} finally {
+			if (request.scene() == BenchmarkRequest.Scene.BENCHMARK_WORLD && minecraft.isRunning()) {
+				Outcome shown = outcome;
+				BenchmarkWorld.leave(minecraft, shown == null ? null : () -> show(minecraft, shown, minecraft.gui.screen()));
 			}
+		}
+		if (request.scene() == BenchmarkRequest.Scene.BENCHMARK_WORLD) {
 			return;
 		}
 		if (outcome.cancelled()) {

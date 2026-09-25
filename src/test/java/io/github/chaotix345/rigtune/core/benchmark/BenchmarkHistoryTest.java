@@ -16,6 +16,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BenchmarkHistoryTest {
@@ -77,6 +78,35 @@ class BenchmarkHistoryTest {
 		assertTrue(BenchmarkHistory.load(file()).runs().isEmpty());
 		assertFalse(Files.exists(file()));
 		assertTrue(Files.exists(file().resolveSibling("benchmarks.json.bad")));
+	}
+
+	@Test
+	void invalidUtf8CountsAsCorrupt() throws IOException {
+		Files.createDirectories(file().getParent());
+		Files.write(file(), new byte[]{(byte) 0xFF, (byte) 0xFE, (byte) 0xC3});
+		BenchmarkHistory history = BenchmarkHistory.load(file());
+		assertTrue(history.runs().isEmpty());
+		assertFalse(history.unreadable());
+		assertTrue(Files.exists(file().resolveSibling("benchmarks.json.bad")));
+	}
+
+	@Test
+	void corruptFileThatCantBeMovedAsideIsNeverOverwritten() throws IOException {
+		Path bad = file().resolveSibling("benchmarks.json.bad");
+		Files.createDirectories(bad);
+		Files.writeString(bad.resolve("in-the-way.txt"), "x");
+		Files.writeString(file(), "{broken");
+		BenchmarkHistory history = BenchmarkHistory.load(file());
+		assertTrue(history.runs().isEmpty());
+		assertTrue(history.unreadable());
+		assertThrows(IOException.class, () -> history.with(single("a")).save(file()));
+		assertEquals("{broken", Files.readString(file()));
+	}
+
+	@Test
+	void readableHistoryIsNotFlagged() throws IOException {
+		BenchmarkHistory.empty().with(single("a")).save(file());
+		assertFalse(BenchmarkHistory.load(file()).unreadable());
 	}
 
 	@Test
@@ -152,10 +182,12 @@ class BenchmarkHistoryTest {
 			history = history.with(record("c" + i, "TUNE", "CURRENT", BenchmarkRecord.SINGLE, null, "26.2"));
 			history = history.with(record("w" + i, "TUNE", "BENCHMARK_WORLD", BenchmarkRecord.SINGLE, null, "26.2"));
 		}
-		List<BenchmarkRecord> chart = history.chart("CURRENT", 10);
+		history = history.with(record("other", "TUNE", "CURRENT", BenchmarkRecord.SINGLE, null, "26.3"));
+		List<BenchmarkRecord> chart = history.chart("CURRENT", "26.2", 10);
 		assertEquals(10, chart.size());
 		assertEquals("c4", chart.getFirst().id());
 		assertEquals("c13", chart.getLast().id());
+		assertEquals(List.of("other"), history.chart("CURRENT", "26.3", 10).stream().map(BenchmarkRecord::id).toList());
 	}
 
 	@Test
@@ -163,6 +195,6 @@ class BenchmarkHistoryTest {
 		BenchmarkRecord empty = new BenchmarkRecord("e", "t", "v", "26.2", "TUNE", "CURRENT", BenchmarkRecord.SINGLE, null, 60, false,
 				Map.of(), null, Map.of(), null, true);
 		BenchmarkHistory history = BenchmarkHistory.empty().with(single("a")).with(empty);
-		assertEquals(List.of(single("a")), history.chart("CURRENT", 10));
+		assertEquals(List.of(single("a")), history.chart("CURRENT", "26.2", 10));
 	}
 }

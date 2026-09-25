@@ -72,6 +72,19 @@ class BenchmarkRecordsTest {
 		assertEquals(r.targetMet(), rec.targetMet());
 	}
 
+	// The RD steps ran at the original simulation distance, so a lowered SD must not hide their stats.
+	@Test
+	void rdStatsKeptWhenSdWasLowered() {
+		BenchmarkSession session = BenchmarkSession.tune(ORIGINAL, new TuneLimits(4, 32, 100, true, 5), Timing.DEFAULT, 0);
+		new FakeRig().drive(session, step -> step.kind() != Step.Kind.SIMULATION_DISTANCE ? low(2000.0 / step.knobs().renderDistance())
+				: low(step.knobs().simulationDistance() == 12 ? 50 : 100), s -> 1);
+		SessionResult r = session.result();
+		assertTrue(r.chosen().simulationDistance() < 12, "SD lowered: " + r.chosen());
+		BenchmarkRecord rec = of(r, BenchmarkRequest.DEFAULT, BenchmarkRecord.SINGLE);
+		assertEquals(2000.0 / r.chosen().renderDistance(), rec.knobs().get(BenchmarkRecord.RENDER_DISTANCE).onePercentLowFps(), 1e-9);
+		assertEquals(100, rec.knobs().get(BenchmarkRecord.SIMULATION_DISTANCE).onePercentLowFps(), 1e-9);
+	}
+
 	@Test
 	void measureRecordHasResultAndCv() {
 		SessionResult r = measured(100);

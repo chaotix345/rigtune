@@ -22,6 +22,7 @@ import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.WorldOptions;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
+import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
@@ -34,16 +35,18 @@ import java.util.Locale;
 
 // The dedicated benchmark scene (docs/v0.2/SPEC.md item 6): a creative singleplayer save with a fixed seed, opened
 // through the production WorldOpenFlows API, with time, weather and mob spawning frozen and the camera at a fixed spot.
-// It is recreated when missing or made by another Minecraft version, since the terrain for a seed can change between
-// versions.
+// It is recreated when missing or made by another Minecraft version, since the terrain for a seed differs between
+// versions. Nothing here touches a world unless it is provably this save (its folder and level name).
 public final class BenchmarkWorld {
 	public static final String LEVEL_ID = "rigtune-benchmark";
+	public static final String LEVEL_NAME = "RigTune Benchmark";
 	public static final long SEED = 8675309L;
 	public static final int CAMERA_X = 0;
 	public static final int CAMERA_Z = 192;
 	private static final int CAMERA_ABOVE_SURFACE = 10;
 	private static final String MARKER = "rigtune-benchmark.json";
 	private static final int TIMEOUT_TICKS = 20 * 90;
+	private static final int FAILED_OPEN_GRACE_TICKS = 20;
 	private static final Gson GSON = new Gson();
 	// In a client game test, leaving a world from inside a client tick deadlocks the harness's tick phaser (the render
 	// thread waits in IntegratedServer.halt for the server thread, which waits in the phaser for the render thread).
@@ -52,12 +55,16 @@ public final class BenchmarkWorld {
 
 	public enum State { IDLE, OPENING, SETTING_UP, READY, AWAITING_EXIT, LEAVING, FAILED }
 
+	// What to do with the saves folder before opening.
+	enum FolderAction { OPEN, CREATE, RECREATE, MOVE_ASIDE_AND_CREATE }
+
 	private record Marker(String mcVersion, long seed) {
 	}
 
 	private static State state = State.IDLE;
 	private static boolean created;
 	private static int ticks;
+	private static @Nullable Screen openedFrom;
 	private static volatile @Nullable Vec3 target;
 	private static @Nullable Runnable afterExit;
 
@@ -72,6 +79,7 @@ public final class BenchmarkWorld {
 		return state;
 	}
 
+	/** Where the camera is held; null until the world is set up. */
 	public static @Nullable Vec3 cameraPosition() {
 		return target;
 	}
@@ -81,8 +89,30 @@ public final class BenchmarkWorld {
 				|| state == State.LEAVING;
 	}
 
-	static boolean needsRecreate(@Nullable String recordedMcVersion, String runningMcVersion) {
-		return recordedMcVersion == null || !recordedMcVersion.equals(runningMcVersion);
+	// A save RigTune made (its marker file is inside) is replaced when it is for another MC version or seed; a folder
+	// with that name but without the marker may be the player's, so it is kept under another name.
+	static FolderAction folderAction(boolean exists, boolean hasMarker, @Nullable String recordedMcVersion, String runningMcVersion) {
+		if (!exists) {
+			return FolderAction.CREATE;
+		}
+		if (!hasMarker) {
+			return FolderAction.MOVE_ASIDE_AND_CREATE;
+		}
+		return recordedMcVersion != null && recordedMcVersion.equals(runningMcVersion) ? FolderAction.OPEN : FolderAction.RECREATE;
+	}
+
+	static boolean isBenchmarkSave(@Nullable String folderName, @Nullable String levelName) {
+		return LEVEL_ID.equals(folderName) && LEVEL_NAME.equals(levelName);
+	}
+
+	/** True when the loaded singleplayer world is the benchmark save. */
+	public static boolean inBenchmarkWorld(Minecraft minecraft) {
+		IntegratedServer server = minecraft.getSingleplayerServer();
+		if (server == null || minecraft.level == null) {
+			return false;
+		}
+		Path folder = server.getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().getFileName();
+		return isBenchmarkSave(folder == null ? null : folder.toString(), server.getWorldData().getLevelName());
 	}
 
 	/** Opens the benchmark world from a screen with no world loaded, creating or recreating it first when needed. */
@@ -95,30 +125,47 @@ public final class BenchmarkWorld {
 		target = null;
 		ticks = 0;
 		afterExit = null;
+		openedFrom = parent;
 		try {
-			if (source.levelExists(LEVEL_ID) && !needsRecreate(recordedVersion(source), mcVersion)) {
-				created = false;
-				state = State.OPENING;
-				RigTune.LOGGER.info("Benchmark world: opening the existing {}", LEVEL_ID);
-				minecraft.createWorldOpenFlows().openWorld(LEVEL_ID, () -> {
-					RigTune.LOGGER.warn("Benchmark world: opening {} was cancelled", LEVEL_ID);
-					state = State.FAILED;
-					minecraft.gui.setScreen(parent);
-				});
-				return true;
-			}
-			if (source.levelExists(LEVEL_ID)) {
-				RigTune.LOGGER.info("Benchmark world: recreating {} for Minecraft {}", LEVEL_ID, mcVersion);
-				try (LevelStorageSource.LevelStorageAccess access = source.createAccess(LEVEL_ID)) {
-					access.deleteLevel();
+			Path folder = source.getLevelPath(LEVEL_ID);
+			boolean hasMarker = Files.isRegularFile(folder.resolve(MARKER));
+			FolderAction action = folderAction(source.levelExists(LEVEL_ID), hasMarker, hasMarker ? recordedVersion(folder) : null, mcVersion);
+			switch (action) {
+				case OPEN -> {
+					created = false;
+					state = State.OPENING;
+					RigTune.LOGGER.info("Benchmark world: opening the existing {}", LEVEL_ID);
+					minecraft.createWorldOpenFlows().openWorld(LEVEL_ID, () -> {
+						RigTune.LOGGER.warn("Benchmark world: opening {} was cancelled", LEVEL_ID);
+						state = State.FAILED;
+						minecraft.gui.setScreen(parent);
+					});
+					return true;
+				}
+				case RECREATE -> {
+					RigTune.LOGGER.info("Benchmark world: recreating {} for Minecraft {}", LEVEL_ID, mcVersion);
+					try (LevelStorageSource.LevelStorageAccess access = source.createAccess(LEVEL_ID)) {
+						access.deleteLevel();
+					}
+				}
+				case MOVE_ASIDE_AND_CREATE -> {
+					Path aside = folder.resolveSibling(LEVEL_ID + "-old-" + System.currentTimeMillis());
+					RigTune.LOGGER.warn("Benchmark world: {} has no RigTune marker; moving it to {}", folder, aside.getFileName());
+					Files.move(folder, aside);
+				}
+				case CREATE -> {
 				}
 			}
 			created = true;
 			state = State.OPENING;
-			LevelSettings settings = new LevelSettings("RigTune Benchmark", GameType.CREATIVE,
+			LevelSettings settings = new LevelSettings(LEVEL_NAME, GameType.CREATIVE,
 					new LevelSettings.DifficultySettings(Difficulty.PEACEFUL, false, false), true, WorldDataConfiguration.DEFAULT);
 			minecraft.createWorldOpenFlows().createFreshLevel(LEVEL_ID, settings, new WorldOptions(SEED, true, false),
 					WorldPresets::createNormalWorldDimensions, parent);
+			// Mark the folder as RigTune's at once, so a creation that fails halfway is replaced, not moved aside, next time.
+			if (Files.isDirectory(folder)) {
+				writeMarker(folder);
+			}
 			return true;
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.error("Benchmark world: could not open {}", LEVEL_ID, e);
@@ -130,24 +177,40 @@ public final class BenchmarkWorld {
 	public static void tick(Minecraft minecraft) {
 		switch (state) {
 			case OPENING -> {
-				if (++ticks > TIMEOUT_TICKS) {
-					fail(minecraft, "the world did not load");
+				ticks++;
+				IntegratedServer server = minecraft.getSingleplayerServer();
+				if (minecraft.level == null || server == null || !server.isReady()) {
+					// WorldOpenFlows can give up without a callback: it goes back to the screen it was opened from.
+					boolean backOnMenu = minecraft.level == null && server == null && minecraft.gui.screen() == openedFrom;
+					if (ticks > TIMEOUT_TICKS || ticks > FAILED_OPEN_GRACE_TICKS && backOnMenu) {
+						RigTune.LOGGER.error("Benchmark world: {} did not load", LEVEL_ID);
+						state = State.FAILED;
+					}
 					return;
 				}
-				IntegratedServer server = minecraft.getSingleplayerServer();
-				if (minecraft.level == null || minecraft.player == null || server == null || !server.isReady()) {
+				if (!inBenchmarkWorld(minecraft)) {
+					RigTune.LOGGER.warn("Benchmark world: another world was loaded; leaving it alone");
+					state = State.FAILED;
+					return;
+				}
+				if (minecraft.player == null) {
 					return;
 				}
 				if (created) {
-					writeMarker(minecraft.getLevelSource());
+					writeMarker(minecraft.getLevelSource().getLevelPath(LEVEL_ID));
 				}
 				state = State.SETTING_UP;
 				ticks = 0;
 				server.execute(() -> setUp(server));
 			}
 			case SETTING_UP -> {
+				if (!inBenchmarkWorld(minecraft)) {
+					state = State.FAILED;
+					return;
+				}
 				if (++ticks > TIMEOUT_TICKS) {
-					fail(minecraft, "the camera position was not reached");
+					RigTune.LOGGER.error("Benchmark world: the camera position was not reached");
+					leave(minecraft, null);
 					return;
 				}
 				Vec3 at = target;
@@ -164,7 +227,7 @@ public final class BenchmarkWorld {
 				}
 			}
 			case READY -> {
-				if (minecraft.level == null) {
+				if (!inBenchmarkWorld(minecraft)) {
 					state = State.IDLE;
 				}
 			}
@@ -188,8 +251,15 @@ public final class BenchmarkWorld {
 		}
 	}
 
-	/** Leaves the world (saving it), then runs afterExit on the title screen. */
+	/** Leaves the benchmark world (saving it), then runs `then` on the title screen. Any other world is left alone. */
 	public static void leave(Minecraft minecraft, @Nullable Runnable then) {
+		if (!inBenchmarkWorld(minecraft)) {
+			state = State.IDLE;
+			if (then != null && minecraft.level == null) {
+				then.run();
+			}
+			return;
+		}
 		afterExit = then;
 		if (HARNESS) {
 			state = State.AWAITING_EXIT;
@@ -210,15 +280,6 @@ public final class BenchmarkWorld {
 		}
 	}
 
-	private static void fail(Minecraft minecraft, String why) {
-		RigTune.LOGGER.error("Benchmark world: {}", why);
-		if (minecraft.level != null) {
-			leave(minecraft, null);
-		} else {
-			state = State.FAILED;
-		}
-	}
-
 	// Server thread.
 	private static void setUp(IntegratedServer server) {
 		try {
@@ -233,38 +294,19 @@ public final class BenchmarkWorld {
 			server.getCommands().performPrefixedCommand(source, "time set noon");
 			server.getCommands().performPrefixedCommand(source, "weather clear");
 			ServerLevel overworld = server.overworld();
-			logTerrain(overworld);
-			Vec3 at = new Vec3(CAMERA_X + 0.5, surface(overworld, CAMERA_X, CAMERA_Z) + CAMERA_ABOVE_SURFACE, CAMERA_Z + 0.5);
-			server.getCommands().performPrefixedCommand(source,
-					String.format(Locale.ROOT, "tp @a %.1f %.1f %.1f 0 0", at.x, at.y, at.z));
+			// getHeight reads the heightmap of whatever chunk is loaded, so generate the chunk first.
+			overworld.getChunk(CAMERA_X >> 4, CAMERA_Z >> 4);
+			int surface = overworld.getHeight(Heightmap.Types.MOTION_BLOCKING, CAMERA_X, CAMERA_Z);
+			Vec3 at = new Vec3(CAMERA_X + 0.5, surface + CAMERA_ABOVE_SURFACE, CAMERA_Z + 0.5);
+			server.getCommands().performPrefixedCommand(source, String.format(Locale.ROOT, "tp @a %.1f %.1f %.1f 0 0", at.x, at.y, at.z));
 			target = at;
 		} catch (RuntimeException e) {
 			RigTune.LOGGER.error("Benchmark world: set-up failed", e);
 		}
 	}
 
-	// getHeight reads the heightmap of whatever chunk is loaded, so generate the chunk first.
-	private static int surface(ServerLevel level, int x, int z) {
-		level.getChunk(x >> 4, z >> 4);
-		return level.getHeight(Heightmap.Types.MOTION_BLOCKING, x, z);
-	}
-
-	private static void logTerrain(ServerLevel level) {
-		StringBuilder heights = new StringBuilder();
-		for (int dz = -64; dz <= 64; dz += 64) {
-			for (int dx = -64; dx <= 64; dx += 64) {
-				heights.append(surface(level, CAMERA_X + dx, CAMERA_Z + dz)).append(' ');
-			}
-			heights.append("| ");
-		}
-		RigTune.LOGGER.info("Benchmark world: surface heights around ({}, {}) every 64 blocks, rows north to south: {}", CAMERA_X, CAMERA_Z, heights);
-	}
-
-	private static @Nullable String recordedVersion(LevelStorageSource source) {
-		Path marker = source.getLevelPath(LEVEL_ID).resolve(MARKER);
-		if (!Files.isRegularFile(marker)) {
-			return null;
-		}
+	private static @Nullable String recordedVersion(Path folder) {
+		Path marker = folder.resolve(MARKER);
 		try {
 			Marker m = GSON.fromJson(Files.readString(marker, StandardCharsets.UTF_8), Marker.class);
 			return m == null || m.seed() != SEED ? null : m.mcVersion();
@@ -274,8 +316,8 @@ public final class BenchmarkWorld {
 		}
 	}
 
-	private static void writeMarker(LevelStorageSource source) {
-		Path marker = source.getLevelPath(LEVEL_ID).resolve(MARKER);
+	private static void writeMarker(Path folder) {
+		Path marker = folder.resolve(MARKER);
 		try {
 			AtomicFiles.writeString(marker, GSON.toJson(new Marker(HardwareProbe.minecraftVersion(), SEED)));
 		} catch (IOException e) {

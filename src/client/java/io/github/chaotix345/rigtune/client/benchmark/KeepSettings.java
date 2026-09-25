@@ -31,7 +31,11 @@ public final class KeepSettings {
 			}
 		});
 		if (!changes.isEmpty()) {
-			ChangeRecorder.current().record(ChangeRecorder.newEntryId(), JournalEntry.BENCHMARK, changes);
+			try {
+				ChangeRecorder.current().record(ChangeRecorder.newEntryId(), JournalEntry.BENCHMARK, changes);
+			} catch (RuntimeException e) {
+				RigTune.LOGGER.warn("Could not journal the benchmark settings", e);
+			}
 		}
 		return changes;
 	}

@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.gametest;
 
 import com.google.gson.JsonArray;
+import com.mojang.blaze3d.platform.InputConstants;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.RigTune;
@@ -68,6 +69,7 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		context.runOnClient(mc -> BenchmarkController.setDefaultConfig(SHORT));
 		try {
 			String[] pair = benchmarkWorldPair(context);
+			benchmarkWorldCancel(context);
 			String tuneId = currentWorldTune(context);
 			checkHistoryFile(pair, tuneId);
 		} finally {
@@ -103,6 +105,28 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		pressByKey(context, "gui.done");
 		context.waitForScreen(TitleScreen.class);
 		return new String[]{before.id(), after.id()};
+	}
+
+	// Esc during a benchmark-world run: everything restored, back on the title screen, nothing stored.
+	private static void benchmarkWorldCancel(ClientGameTestContext context) {
+		setScene(context, BenchmarkRequest.Scene.BENCHMARK_WORLD);
+		openMenu(context);
+		Settings settings = context.computeOnClient(Settings::of);
+		int runs = context.computeOnClient(mc -> BenchmarkStore.history().runs().size());
+		pressByKey(context, "rigtune.benchmark.menu.tune");
+		context.waitFor(mc -> BenchmarkController.progress() != null, WORLD_TIMEOUT_TICKS);
+		context.waitTicks(10);
+		context.getInput().pressKey(InputConstants.KEY_ESCAPE);
+		context.waitFor(mc -> BenchmarkWorld.awaitingExit(), RUN_TIMEOUT_TICKS);
+		BenchmarkController.Outcome outcome = context.computeOnClient(mc -> BenchmarkController.lastOutcome());
+		check(outcome != null && outcome.cancelled() && outcome.record() == null, "Esc cancels the world run: " + outcome);
+		context.runOnClient(BenchmarkWorld::exitNow);
+		context.waitForScreen(TitleScreen.class);
+		context.waitFor(mc -> BenchmarkWorld.state() == BenchmarkWorld.State.IDLE, WORLD_TIMEOUT_TICKS);
+		check(context.computeOnClient(Settings::of).equals(settings), "settings restored after the cancelled world run");
+		check(context.computeOnClient(mc -> BenchmarkStore.history().runs().size()) == runs, "a cancelled run isn't stored");
+		context.waitTicks(10);
+		context.takeScreenshot("bench-world-cancelled");
 	}
 
 	private static BenchmarkRecord runInBenchmarkWorld(ClientGameTestContext context, String runningShot, String resultShot) {

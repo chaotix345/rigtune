@@ -56,7 +56,11 @@ final class ClientKnobs implements KnobGuard.Applier {
 			}
 			if (from.dhRendering() != to.dhRendering()) {
 				try {
-					OptionalMods.setDhRendering(to.dhRendering());
+					if (to.dhRendering() == original.dhRendering()) {
+						OptionalMods.restoreDhRendering();
+					} else {
+						OptionalMods.setDhRendering(to.dhRendering());
+					}
 				} catch (RuntimeException | LinkageError e) {
 					failures.add("Distant Horizons rendering: " + e);
 				}

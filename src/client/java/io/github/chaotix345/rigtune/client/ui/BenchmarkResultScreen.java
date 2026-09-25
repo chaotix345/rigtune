@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client.ui;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
 import io.github.chaotix345.rigtune.client.benchmark.KeepSettings;
+import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkMath;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
@@ -26,6 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 public class BenchmarkResultScreen extends Screen {
 	private static final int ROW = 12;
@@ -54,7 +56,7 @@ public class BenchmarkResultScreen extends Screen {
 		this.parent = parent;
 		this.outcome = outcome;
 		this.rows = outcome.result().measurements().stream().sorted(Comparator.comparingInt(PlannerResult.Measurement::rd)).toList();
-		this.chartRuns = BenchmarkStore.history().chart(outcome.request().scene().name(), CHART_RUNS);
+		this.chartRuns = BenchmarkStore.history().chart(outcome.request().scene().name(), HardwareProbe.minecraftVersion(), CHART_RUNS);
 	}
 
 	public BenchmarkController.Outcome outcome() {
@@ -237,7 +239,7 @@ public class BenchmarkResultScreen extends Screen {
 		for (int i = 0; i < chartRuns.size(); i++) {
 			BenchmarkRecord run = chartRuns.get(i);
 			int x = left + i * slot;
-			if (run.id().equals(currentId)) {
+			if (Objects.equals(run.id(), currentId)) {
 				graphics.fill(x - 1, barsTop - 1, x + slot - 1, baseline, 0x30FFFFFF);
 			}
 			int avgHeight = (int) Math.round(barsHeight * run.result().avgFps() / max);

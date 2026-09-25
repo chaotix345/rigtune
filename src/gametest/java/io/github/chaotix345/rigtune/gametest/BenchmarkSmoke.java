@@ -32,9 +32,10 @@ final class BenchmarkSmoke {
 		boolean dhBefore = context.computeOnClient(mc -> OptionalMods.dhRendering());
 		boolean shadersBefore = context.computeOnClient(mc -> OptionalMods.shadersInUse());
 		boolean dhLoaded = OptionalMods.dhLoaded();
+		String overrideBefore = context.computeOnClient(mc -> OptionalMods.dhRenderingOverride());
 		List<String> evidence = new ArrayList<>();
 		evidence.add("at " + Instant.now());
-		evidence.add("Distant Horizons loaded " + dhLoaded + ", rendering before " + dhBefore);
+		evidence.add("Distant Horizons loaded " + dhLoaded + ", rendering before " + dhBefore + ", API override before " + overrideBefore);
 		evidence.add("Iris loaded " + OptionalMods.irisLoaded() + ", shaders in use before " + shadersBefore);
 		boolean passed;
 		try {
@@ -55,14 +56,16 @@ final class BenchmarkSmoke {
 			boolean dhAfter = context.computeOnClient(mc -> OptionalMods.dhRendering());
 			boolean shadersAfter = context.computeOnClient(mc -> OptionalMods.shadersInUse());
 			boolean markerGone = !Files.exists(MarkerRestore.file());
+			String overrideAfter = context.computeOnClient(mc -> OptionalMods.dhRenderingOverride());
 			evidence.add("outcome cancelled " + (outcome == null || outcome.cancelled()) + ", steps "
 					+ (session == null ? "?" : session.measurements().stream().map(m -> m.step().kind()).toList()));
 			evidence.add("DH off seen during the run " + sawDhOff[0] + ", restore marker seen " + sawMarker[0]);
 			evidence.add("DH cost " + (session == null ? null : session.dhCost()) + ", shader cost " + (session == null ? null : session.shaderCost()));
-			evidence.add("Distant Horizons rendering after " + dhAfter + ", shaders in use after " + shadersAfter);
+			evidence.add("Distant Horizons rendering after " + dhAfter + ", API override after " + overrideAfter + ", shaders in use after " + shadersAfter);
 			evidence.add("benchmark-restore.json gone " + markerGone);
 			boolean dhMeasured = session != null && session.measurements().stream().anyMatch(m -> m.step().kind() == Step.Kind.DH_OFF);
 			passed = started && outcome != null && !outcome.cancelled() && dhAfter == dhBefore && shadersAfter == shadersBefore && markerGone
+					&& overrideAfter.equals(overrideBefore)
 					&& (!dhBefore || dhMeasured && sawDhOff[0]);
 		} catch (RuntimeException | AssertionError e) {
 			evidence.add("error " + e);

@@ -38,6 +38,15 @@ class ProtocolTest {
 	}
 
 	@Test
+	void quickSettledWaitsLikeTheFullProtocol() {
+		Protocol settled = Timing.DEFAULT.quickSettled();
+		assertEquals(2.0, settled.settleMinSeconds());
+		assertEquals(20.0, settled.settleTimeoutSeconds());
+		assertEquals(Timing.DEFAULT.quick().sweeps(), settled.sweeps());
+		assertEquals(27.5, settled.worstCaseSeconds(), 1e-9);
+	}
+
+	@Test
 	void defaultDeadlineAndRepeats() {
 		assertEquals(300.0, Timing.DEFAULT.deadlineSeconds());
 		assertEquals(2, Timing.DEFAULT.repeats());

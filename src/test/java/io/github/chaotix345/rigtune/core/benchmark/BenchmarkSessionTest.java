@@ -50,13 +50,26 @@ class BenchmarkSessionTest {
 	}
 
 	@Test
-	void rdComesFirstThenSdThenRepeatsThenCosts() {
+	void rdComesFirstThenSdThenARepeatThenCostsThenTheLastRepeat() {
+		FakeRig rig = new FakeRig();
+		BenchmarkSession session = tune(new Knobs(12, 12, true, true), new TuneLimits(4, 32, 20, true, 5));
+		rig.drive(session, BenchmarkSessionTest::model, s -> 1);
+		assertEquals(List.of(Kind.RENDER_DISTANCE, Kind.SIMULATION_DISTANCE, Kind.REPEAT, Kind.DH_OFF, Kind.SHADERS_OFF, Kind.REPEAT),
+				distinctKinds(rig.kinds()));
+		assertTrue(session.done());
+	}
+
+	// With worst-case steps the second repeat is what gets cut, not the cost reports.
+	@Test
+	void worstCaseKeepsTheCostReports() {
 		FakeRig rig = new FakeRig();
 		BenchmarkSession session = tune(new Knobs(12, 12, true, true), new TuneLimits(4, 32, 20, true, 5));
 		rig.drive(session, BenchmarkSessionTest::model);
 		assertEquals(List.of(Kind.RENDER_DISTANCE, Kind.SIMULATION_DISTANCE, Kind.REPEAT, Kind.DH_OFF, Kind.SHADERS_OFF),
 				distinctKinds(rig.kinds()));
-		assertTrue(session.done());
+		assertTrue(session.result().deadlineHit());
+		assertNotNull(session.result().dhCost());
+		assertNotNull(session.result().shaderCost());
 	}
 
 	@Test
@@ -103,7 +116,7 @@ class BenchmarkSessionTest {
 		List<Step> sd = rig.steps.stream().filter(s -> s.kind() == Kind.SIMULATION_DISTANCE).toList();
 		assertEquals(1, sd.size());
 		assertEquals(12, sd.getFirst().knobs().simulationDistance());
-		assertEquals(Timing.DEFAULT.quick(), sd.getFirst().protocol());
+		assertEquals(Timing.DEFAULT.quick().sweeps(), sd.getFirst().protocol().sweeps());
 		assertEquals(12, session.result().chosen().simulationDistance());
 	}
 
@@ -151,6 +164,38 @@ class BenchmarkSessionTest {
 		rig.drive(tune(new Knobs(12, 8, false, false), LIMITS), step -> step.kind() == Kind.SIMULATION_DISTANCE ? low(10) : model(step));
 		assertEquals(List.of(8, 6), rig.steps.stream().filter(s -> s.kind() == Kind.SIMULATION_DISTANCE)
 				.map(s -> s.knobs().simulationDistance()).toList());
+	}
+
+	// The chosen render distance usually isn't the last one measured, so its chunk sections have to rebuild first.
+	@Test
+	void sdStepAfterAnRdChangeSettlesFully() {
+		FakeRig rig = new FakeRig();
+		rig.drive(tune(ORIGINAL, LIMITS), step -> step.kind() == Kind.SIMULATION_DISTANCE ? low(10) : model(step));
+		List<Step> rd = rig.steps.stream().filter(s -> s.kind() == Kind.RENDER_DISTANCE).toList();
+		List<Step> sd = rig.steps.stream().filter(s -> s.kind() == Kind.SIMULATION_DISTANCE).toList();
+		assertTrue(rd.getLast().knobs().renderDistance() != sd.getFirst().knobs().renderDistance());
+		assertEquals(Timing.DEFAULT.quickSettled(), sd.getFirst().protocol());
+		assertTrue(sd.subList(1, sd.size()).stream().allMatch(s -> s.protocol().equals(Timing.DEFAULT.quick())), "only the render distance change needs it");
+	}
+
+	@Test
+	void sdStepAtTheSameRenderDistanceUsesTheQuickSettle() {
+		FakeRig rig = new FakeRig();
+		// Everything passes at the cap, so the search ends on the render distance it chooses.
+		rig.drive(tune(new Knobs(32, 12, false, false), new TuneLimits(4, 32, 1, true, 5)), step -> step.kind() == Kind.SIMULATION_DISTANCE ? low(0.5) : low(100));
+		List<Step> sd = rig.steps.stream().filter(s -> s.kind() == Kind.SIMULATION_DISTANCE).toList();
+		assertEquals(32, sd.getFirst().knobs().renderDistance());
+		assertTrue(sd.stream().allMatch(s -> s.protocol().equals(Timing.DEFAULT.quick())));
+	}
+
+	@Test
+	void shadersOffSettlesFullyAndDhOffDoesNot() {
+		FakeRig rig = new FakeRig();
+		rig.drive(tune(new Knobs(12, 12, true, true), new TuneLimits(4, 32, 20, false, 5)), BenchmarkSessionTest::model);
+		Step dh = rig.steps.stream().filter(s -> s.kind() == Kind.DH_OFF).findFirst().orElseThrow();
+		Step shaders = rig.steps.stream().filter(s -> s.kind() == Kind.SHADERS_OFF).findFirst().orElseThrow();
+		assertEquals(Timing.DEFAULT.quick(), dh.protocol());
+		assertEquals(Timing.DEFAULT.quickSettled(), shaders.protocol());
 	}
 
 	@Test
@@ -218,8 +263,9 @@ class BenchmarkSessionTest {
 		FakeRig rig = new FakeRig();
 		BenchmarkSession session = tune(new Knobs(12, 12, true, false), new TuneLimits(4, 32, 100, false, 5));
 		rig.drive(session, BenchmarkSessionTest::model);
-		assertEquals(List.of(Kind.BASELINE, Kind.DH_OFF), rig.kinds().subList(rig.kinds().size() - 2, rig.kinds().size()));
-		Step baseline = rig.steps.get(rig.steps.size() - 2);
+		int at = rig.kinds().indexOf(Kind.BASELINE);
+		assertEquals(List.of(Kind.REPEAT, Kind.BASELINE, Kind.DH_OFF, Kind.REPEAT), rig.kinds().subList(at - 1, at + 3));
+		Step baseline = rig.steps.get(at);
 		assertEquals(session.result().chosen(), baseline.knobs());
 		assertEquals(Timing.DEFAULT.quick(), baseline.protocol());
 	}
@@ -285,11 +331,13 @@ class BenchmarkSessionTest {
 		assertEquals(3, rig.steps.stream().filter(s -> s.kind() == Kind.SIMULATION_DISTANCE).count());
 		double rdAndSd = rig.steps.stream().filter(s -> s.kind() == Kind.RENDER_DISTANCE || s.kind() == Kind.SIMULATION_DISTANCE)
 				.mapToDouble(s -> s.protocol().worstCaseSeconds()).sum();
-		assertEquals(6 * 37.5 + 3 * 9.5, rdAndSd, 1e-9);
+		// The first SD step follows a render distance change, so it gets the full settle.
+		assertEquals(6 * 37.5 + 27.5 + 2 * 9.5, rdAndSd, 1e-9);
 		assertTrue(rdAndSd <= 300);
 		assertTrue(rig.elapsedSeconds() <= 300, "elapsed " + rig.elapsedSeconds());
-		assertTrue(session.result().deadlineHit(), "the second worst-case repeat does not fit");
-		assertEquals(1, rig.steps.stream().filter(s -> s.kind() == Kind.REPEAT).count());
+		assertTrue(session.result().deadlineHit(), "a worst-case repeat no longer fits");
+		assertEquals(0, rig.steps.stream().filter(s -> s.kind() == Kind.REPEAT).count());
+		assertNotNull(session.result().result(), "the result falls back to the RD measurement");
 	}
 
 	@Test

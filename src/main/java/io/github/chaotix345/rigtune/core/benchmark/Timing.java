@@ -18,4 +18,9 @@ public record Timing(int maxRdSteps, double sweepSeconds, double settleSeconds, 
 	public Protocol quick() {
 		return new Protocol(0, quickSettleTimeoutSeconds, warmupSeconds, List.of(new Protocol.Sweep(quickSeconds, 0f)));
 	}
+
+	// The quick sweep after a change that makes the chunk sections rebuild (another render distance, shaders toggled).
+	public Protocol quickSettled() {
+		return new Protocol(settleSeconds, settleTimeoutSeconds, warmupSeconds, List.of(new Protocol.Sweep(quickSeconds, 0f)));
+	}
 }

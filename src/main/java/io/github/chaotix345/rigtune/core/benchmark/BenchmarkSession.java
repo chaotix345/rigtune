@@ -26,7 +26,7 @@ public final class BenchmarkSession {
 	public record TuneLimits(int minRd, int maxRd, double targetFps, boolean simulationTunable, int minSd) {
 	}
 
-	private enum Stage { RENDER_DISTANCE, SIMULATION_DISTANCE, REPEAT, COSTS, DONE }
+	private enum Stage { RENDER_DISTANCE, SIMULATION_DISTANCE, REPEAT, COSTS, MORE_REPEATS, DONE }
 
 	private final BenchmarkRequest.Mode mode;
 	private final Knobs original;
@@ -40,6 +40,7 @@ public final class BenchmarkSession {
 	private final List<Measured> measurements = new ArrayList<>();
 	private Stage stage;
 	private Knobs chosen;
+	private Knobs applied;
 	private @Nullable Integer sdMet;
 	private @Nullable FrameStats baseline;
 	private @Nullable FrameStats dhOff;
@@ -61,6 +62,7 @@ public final class BenchmarkSession {
 		this.sdCandidates = List.copyOf(sdCandidates);
 		this.stage = stage;
 		this.chosen = original;
+		this.applied = original;
 	}
 
 	public static BenchmarkSession tune(Knobs original, TuneLimits limits, Timing timing, long startNanos) {
@@ -106,13 +108,14 @@ public final class BenchmarkSession {
 				endStage();
 				continue;
 			}
-			double needed = step.protocol().worstCaseSeconds() + (step.kind() == Kind.BASELINE ? timing.quick().worstCaseSeconds() : 0);
+			double needed = step.protocol().worstCaseSeconds() + (step.kind() == Kind.BASELINE ? timing.quickSettled().worstCaseSeconds() : 0);
 			if ((nowNanos - startNanos) / 1e9 + needed > timing.deadlineSeconds()) {
 				deadlineHit = true;
 				skip(step);
 				continue;
 			}
 			pending = step;
+			applied = step.knobs();
 			return Optional.of(step);
 		}
 		return Optional.empty();
@@ -153,13 +156,17 @@ public final class BenchmarkSession {
 				Step next = null;
 				for (int sd : sdCandidates) {
 					if (!sdStats.containsKey(sd)) {
-						next = new Step(Kind.SIMULATION_DISTANCE, chosen.withSimulationDistance(sd), timing.quick());
+						next = quick(Kind.SIMULATION_DISTANCE, chosen.withSimulationDistance(sd));
 						break;
 					}
 				}
 				yield next;
 			}
-			case REPEAT -> repeats.size() < timing.repeats() ? new Step(Kind.REPEAT, chosen, timing.full()) : null;
+			// TUNE measures the cost reports after the first repeat, so a slow machine loses the second repeat (the CV)
+			// before it loses the reports.
+			case REPEAT -> repeats.size() < (mode == BenchmarkRequest.Mode.TUNE ? Math.min(1, timing.repeats()) : timing.repeats())
+					? new Step(Kind.REPEAT, chosen, timing.full()) : null;
+			case MORE_REPEATS -> repeats.size() < timing.repeats() ? new Step(Kind.REPEAT, chosen, timing.full()) : null;
 			case COSTS -> costCandidate();
 			case DONE -> null;
 		};
@@ -172,17 +179,32 @@ public final class BenchmarkSession {
 			return null;
 		}
 		if (baseline == null) {
-			return baselineSkipped ? null : new Step(Kind.BASELINE, chosen, timing.quick());
+			return baselineSkipped ? null : quick(Kind.BASELINE, chosen);
 		}
 		if (wantDh) {
-			return new Step(Kind.DH_OFF, chosen.withDhRendering(false), timing.quick());
+			return quick(Kind.DH_OFF, chosen.withDhRendering(false));
 		}
-		return new Step(Kind.SHADERS_OFF, chosen.withShaders(false), timing.quick());
+		return quick(Kind.SHADERS_OFF, chosen.withShaders(false));
+	}
+
+	// A quick step waits the full settle when the chunk sections rebuild first: another render distance than the one
+	// in effect, or shaders toggled (an Iris reload).
+	private Step quick(Kind kind, Knobs knobs) {
+		boolean rebuild = knobs.renderDistance() != applied.renderDistance() || knobs.shaders() != applied.shaders();
+		return new Step(kind, knobs, rebuild ? timing.quickSettled() : timing.quick());
 	}
 
 	private void skip(Step step) {
 		switch (step.kind()) {
-			case RENDER_DISTANCE, SIMULATION_DISTANCE, REPEAT -> endStage();
+			case RENDER_DISTANCE, SIMULATION_DISTANCE -> endStage();
+			// Both repeat stages end: a repeat that doesn't fit now won't fit after the cost reports either.
+			case REPEAT -> {
+				if (stage == Stage.REPEAT) {
+					endStage();
+				} else {
+					stage = Stage.DONE;
+				}
+			}
 			case BASELINE -> baselineSkipped = true;
 			case DH_OFF -> dhSkipped = true;
 			case SHADERS_OFF -> shadersSkipped = true;
@@ -204,7 +226,8 @@ public final class BenchmarkSession {
 				baseline = sdStats.get(chosen.simulationDistance());
 				stage = mode == BenchmarkRequest.Mode.TUNE ? Stage.COSTS : Stage.DONE;
 			}
-			case COSTS, DONE -> stage = Stage.DONE;
+			case COSTS -> stage = Stage.MORE_REPEATS;
+			case MORE_REPEATS, DONE -> stage = Stage.DONE;
 		}
 	}
 

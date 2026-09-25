@@ -28,7 +28,14 @@ public final class BenchmarkStore {
 	}
 
 	static synchronized void add(BenchmarkRecord run) {
+		if (history().unreadable()) {
+			history = BenchmarkHistory.load(file());
+		}
 		history = history().with(run);
+		if (history.unreadable()) {
+			RigTune.LOGGER.warn("Not saving this run: {} couldn't be read, and overwriting it would lose it", file());
+			return;
+		}
 		try {
 			history.save(file());
 		} catch (IOException e) {

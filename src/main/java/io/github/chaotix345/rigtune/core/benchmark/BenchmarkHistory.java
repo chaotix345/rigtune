@@ -10,6 +10,7 @@ import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.core.apply.AtomicFiles;
 
 import java.io.IOException;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,9 +20,10 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-// config/rigtune/benchmarks.json: the last 50 finished runs, oldest first. An unreadable file is kept aside as
+// config/rigtune/benchmarks.json: the last 50 finished runs, oldest first. A corrupt file is kept aside as
 // benchmarks.json.bad; a file from a newer RigTune (higher schemaVersion) is left alone and only replaced when the next
-// run is saved.
+// run is saved. A file that couldn't be read (a lock held by a virus scanner, say) or moved aside is "unreadable": it
+// must not be overwritten, so the caller loads again later.
 public final class BenchmarkHistory {
 	public static final int SCHEMA_VERSION = 1;
 	public static final int MAX_RUNS = 50;
@@ -31,9 +33,15 @@ public final class BenchmarkHistory {
 	}
 
 	private final List<BenchmarkRecord> runs;
+	private final boolean unreadable;
 
 	private BenchmarkHistory(List<BenchmarkRecord> runs) {
+		this(runs, false);
+	}
+
+	private BenchmarkHistory(List<BenchmarkRecord> runs, boolean unreadable) {
 		this.runs = List.copyOf(runs);
+		this.unreadable = unreadable;
 	}
 
 	public static Path defaultPath(Path configDir) {
@@ -48,8 +56,17 @@ public final class BenchmarkHistory {
 		if (!Files.isRegularFile(file)) {
 			return empty();
 		}
+		String text;
 		try {
-			JsonObject json = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8)).getAsJsonObject();
+			text = Files.readString(file, StandardCharsets.UTF_8);
+		} catch (CharacterCodingException e) {
+			return movedAside(file, e);
+		} catch (IOException e) {
+			RigTune.LOGGER.warn("Could not read {}; will try again", file, e);
+			return new BenchmarkHistory(List.of(), true);
+		}
+		try {
+			JsonObject json = JsonParser.parseString(text).getAsJsonObject();
 			JsonElement schema = json.get("schemaVersion");
 			int version = schema == null ? -1 : schema.getAsInt();
 			if (version > SCHEMA_VERSION) {
@@ -62,19 +79,32 @@ public final class BenchmarkHistory {
 			FileFormat format = GSON.fromJson(json, FileFormat.class);
 			List<BenchmarkRecord> runs = format.runs() == null ? List.of() : format.runs().stream().filter(Objects::nonNull).toList();
 			return new BenchmarkHistory(runs.subList(Math.max(0, runs.size() - MAX_RUNS), runs.size()));
-		} catch (IOException | RuntimeException e) {
-			Path bad = file.resolveSibling(file.getFileName() + ".bad");
-			RigTune.LOGGER.warn("Unreadable {}; keeping it as {} and starting a new history", file, bad.getFileName(), e);
-			try {
-				Files.move(file, bad, StandardCopyOption.REPLACE_EXISTING);
-			} catch (IOException moveError) {
-				RigTune.LOGGER.warn("Could not move {} aside", file, moveError);
-			}
-			return empty();
+		} catch (RuntimeException e) {
+			return movedAside(file, e);
 		}
 	}
 
+	private static BenchmarkHistory movedAside(Path file, Exception why) {
+		Path bad = file.resolveSibling(file.getFileName() + ".bad");
+		RigTune.LOGGER.warn("Corrupt {}; keeping it as {} and starting a new history", file, bad.getFileName(), why);
+		try {
+			Files.move(file, bad, StandardCopyOption.REPLACE_EXISTING);
+			return empty();
+		} catch (IOException moveError) {
+			RigTune.LOGGER.warn("Could not move {} aside", file, moveError);
+			return new BenchmarkHistory(List.of(), true);
+		}
+	}
+
+	/** The file exists but couldn't be read or moved aside, so it must not be overwritten yet. */
+	public boolean unreadable() {
+		return unreadable;
+	}
+
 	public void save(Path file) throws IOException {
+		if (unreadable) {
+			throw new IOException(file + " couldn't be read, so it is not overwritten");
+		}
 		AtomicFiles.writeString(file, GSON.toJson(new FileFormat(SCHEMA_VERSION, runs)));
 	}
 
@@ -85,7 +115,7 @@ public final class BenchmarkHistory {
 	public BenchmarkHistory with(BenchmarkRecord run) {
 		List<BenchmarkRecord> out = new ArrayList<>(runs);
 		out.add(run);
-		return new BenchmarkHistory(out.subList(Math.max(0, out.size() - MAX_RUNS), out.size()));
+		return new BenchmarkHistory(out.subList(Math.max(0, out.size() - MAX_RUNS), out.size()), unreadable);
 	}
 
 	public Optional<BenchmarkRecord> latest() {
@@ -111,9 +141,10 @@ public final class BenchmarkHistory {
 		return runs.stream().anyMatch(r -> BenchmarkRecord.AFTER.equals(r.phase()) && pairId.equals(r.pairId()));
 	}
 
-	/** The newest `max` runs of this scene that have a result, oldest first. */
-	public List<BenchmarkRecord> chart(String scene, int max) {
-		List<BenchmarkRecord> matching = runs.stream().filter(r -> scene.equals(r.scene()) && r.result() != null).toList();
+	/** The newest `max` runs of this scene and MC version (the benchmark world differs per version) with a result, oldest first. */
+	public List<BenchmarkRecord> chart(String scene, String mcVersion, int max) {
+		List<BenchmarkRecord> matching = runs.stream()
+				.filter(r -> scene.equals(r.scene()) && mcVersion.equals(r.mcVersion()) && r.result() != null).toList();
 		return matching.subList(Math.max(0, matching.size() - max), matching.size());
 	}
 }

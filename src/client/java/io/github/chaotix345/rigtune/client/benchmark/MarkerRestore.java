@@ -27,7 +27,8 @@ public final class MarkerRestore {
 		return RestoreMarker.defaultPath(FabricLoader.getInstance().getConfigDir());
 	}
 
-	// Only the marker that exists at start is restored this way; later ones belong to a running benchmark.
+	// Only a marker that exists at start (or one a failed restore left behind) is restored this way; the others belong to a
+	// running benchmark.
 	static void tick(Minecraft minecraft) {
 		if (!checked) {
 			checked = true;
@@ -44,6 +45,13 @@ public final class MarkerRestore {
 		if (ticks % INTERVAL_TICKS == 0) {
 			settle();
 		}
+	}
+
+	/** A restore failed during this session: keep trying from the next ticks. */
+	static void retryLater() {
+		checked = true;
+		pending = true;
+		ticks = 0;
 	}
 
 	/** Tries the restore now; true when nothing from an earlier benchmark is left to restore. */

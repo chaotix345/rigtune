@@ -6,6 +6,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.Predicate;
 
 // Turns a finished session into a benchmarks.json run, and a run into what the rest of RigTune shows.
 public final class BenchmarkRecords {
@@ -25,10 +26,11 @@ public final class BenchmarkRecords {
 		Knobs chosen = r.chosen();
 		Knobs original = r.original();
 		Map<String, BenchmarkRecord.KnobResult> knobs = new LinkedHashMap<>();
+		// The RD steps ran at the original simulation distance, so they are matched on render distance only.
 		knobs.put(BenchmarkRecord.RENDER_DISTANCE, knob(chosen.renderDistance(), original.renderDistance(),
-				measuredAt(r, Step.Kind.RENDER_DISTANCE, chosen)));
+				measuredAt(r, Step.Kind.RENDER_DISTANCE, k -> k.renderDistance() == chosen.renderDistance())));
 		knobs.put(BenchmarkRecord.SIMULATION_DISTANCE, knob(chosen.simulationDistance(), original.simulationDistance(),
-				measuredAt(r, Step.Kind.SIMULATION_DISTANCE, chosen)));
+				measuredAt(r, Step.Kind.SIMULATION_DISTANCE, chosen::equals)));
 		Map<String, BenchmarkRecord.Cost> costs = new LinkedHashMap<>();
 		if (r.dhCost() != null) {
 			costs.put(BenchmarkRecord.DISTANT_HORIZONS, cost(r.dhCost()));
@@ -44,10 +46,10 @@ public final class BenchmarkRecords {
 				pairId, (int) Math.round(r.targetFps()), r.targetMet(), knobs, result, costs, world, r.deadlineHit());
 	}
 
-	private static @Nullable FrameStats measuredAt(SessionResult r, Step.Kind kind, Knobs knobs) {
+	private static @Nullable FrameStats measuredAt(SessionResult r, Step.Kind kind, Predicate<Knobs> knobs) {
 		FrameStats found = null;
 		for (Measured m : r.measurements()) {
-			if (m.step().kind() == kind && m.step().knobs().equals(knobs)) {
+			if (m.step().kind() == kind && knobs.test(m.step().knobs())) {
 				found = m.stats();
 			}
 		}

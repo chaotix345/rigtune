@@ -21,9 +21,13 @@ public final class OptionalMods {
 			return dhReady();
 		}
 
+		// The marker only ever holds "on"; clearing RigTune's override brings back the player's own setting.
 		@Override
 		public void set(boolean value) {
-			setDhRendering(value);
+			if (!dhLoaded()) {
+				throw new IllegalStateException("Distant Horizons is not loaded");
+			}
+			DhCompat.clearOverride();
 		}
 	};
 
@@ -83,6 +87,19 @@ public final class OptionalMods {
 		}
 	}
 
+	/** The API override on DH's renderingEnabled ("none" when the player's own setting applies), for diagnostics. */
+	public static String dhRenderingOverride() {
+		try {
+			if (!dhReady()) {
+				return "n/a";
+			}
+			Boolean value = DhCompat.apiValue();
+			return value == null ? "none" : value.toString();
+		} catch (RuntimeException | LinkageError e) {
+			return "? (" + e + ")";
+		}
+	}
+
 	/** An Iris shader pack is loaded and in use. */
 	public static boolean shadersInUse() {
 		try {
@@ -98,6 +115,14 @@ public final class OptionalMods {
 			throw new IllegalStateException("Distant Horizons is not loaded");
 		}
 		DhCompat.setRenderingEnabled(on);
+	}
+
+	/** Puts back the API value from before RigTune's first setDhRendering (normally none). */
+	public static void restoreDhRendering() {
+		if (!dhLoaded()) {
+			throw new IllegalStateException("Distant Horizons is not loaded");
+		}
+		DhCompat.restoreRenderingEnabled();
 	}
 
 	public static void setShaders(boolean on) {
