@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -286,34 +285,103 @@ class MigrationV010Test {
 		assertEquals(JournalChange.STAGED, journal.entries().getFirst().changes().getFirst().status());
 	}
 
-	// Files captured from the released v0.1.0 jar by the self-update E2E run (WS-G), when present.
-	@Test
-	void capturedV010FilesAreReadToo() throws IOException {
+	// --- the files the released v0.1.0 jar wrote in the self-update E2E run (WS-G, src/test/resources/v010/captured):
+	// the goal set to QUALITY, then its own update {disable rigtune-0.1.0.jar, enable rigtune-0.2.0-dev+mc26.2.jar}.
+
+	private static final String OLD_JAR = "rigtune-0.1.0.jar";
+	private static final String NEW_JAR = "rigtune-0.2.0-dev+mc26.2.jar";
+
+	private void installCaptured(String name, Path target) throws IOException {
 		Path captured = V010Fixtures.capturedDir();
-		if (captured == null) {
-			return;
-		}
-		for (String name : List.of("pending.json", "last-apply.json", "rigtune.json")) {
-			Path source = captured.resolve(name);
-			if (!Files.isRegularFile(source)) {
-				continue;
-			}
-			Path target = name.equals("rigtune.json") ? ClientState.file(config) : config.resolve("rigtune").resolve(name);
-			Files.createDirectories(target.getParent());
-			Files.writeString(target, V010Fixtures.template(Files.readString(source), mods, config));
-		}
-		if (Files.exists(pending)) {
-			PendingActions.load(pending);
-		}
-		if (Files.exists(lastApply)) {
-			ApplyResult.load(lastApply);
-		}
-		ClientState.load(config);
+		assertNotNull(captured, "src/test/resources/v010/captured");
+		Files.createDirectories(target.getParent());
+		Files.writeString(target, V010Fixtures.template(Files.readString(captured.resolve(name)), mods, config));
+	}
+
+	@Test
+	void theCapturedPlanIsRead() throws IOException {
+		installCaptured("pending.json", pending);
+
+		List<Op> ops = PendingActions.load(pending).ops();
+
+		assertEquals(List.of(PendingActions.Type.DISABLE_FILE, PendingActions.Type.ENABLE_FILE), ops.stream().map(Op::type).toList());
+		assertEquals(mods.resolve(OLD_JAR).toString(), ops.get(0).path());
+		assertEquals(mods.resolve(NEW_JAR + PendingActions.PENDING_SUFFIX).toString(), ops.get(1).from());
+		assertEquals(mods.resolve(NEW_JAR).toString(), ops.get(1).to());
+		assertEquals("rigtune", ops.get(1).modId());
+		assertEquals(ops.get(0).group(), ops.get(1).group());
+		assertEquals(List.of("8d22dcd3-7eaa-4800-a93c-476887d5a839", "0f6351f6-3ccd-4985-aeb0-86741466774c"), ops.stream().map(Op::id).toList());
+	}
+
+	@Test
+	void theCapturedResultStateAndRulesCacheAreRead() throws IOException {
+		installCaptured("last-apply.json", lastApply);
+		installCaptured("rigtune.json", ClientState.file(config));
+		Path cache = config.resolve("rigtune").resolve("rules-cache.json");
+		installCaptured("rules-cache.json", cache);
+
+		ApplyResult result = ApplyResult.load(lastApply);
+		assertEquals(List.of(ApplyResult.Status.OK, ApplyResult.Status.OK), result.results().stream().map(ApplyResult.OpResult::status).toList());
+		assertEquals("Disabled " + OLD_JAR + " -> " + OLD_JAR + ".disabled", result.results().getFirst().message());
+		assertTrue(result.allSucceeded());
+
+		ClientState state = ClientState.load(config);
+		assertEquals(Goal.QUALITY, state.goalOrDefault());
+		assertNull(state.lastShownApply);
+
+		RulesDocument rules = RulesLoader.loadCache(cache).orElseThrow();
+		assertEquals(1, rules.schemaVersion);
+		assertEquals(4, rules.revision);
+	}
+
+	@Test
+	void preLaunchReportsTheCapturedResultAndPlan() throws IOException {
+		installCaptured("last-apply.json", lastApply);
+		installCaptured("pending.json", pending);
+
+		RigTunePreLaunch.readState(config, false, null);
+
+		assertEquals("2026-09-25T02:07:33.180641400Z", RigTunePreLaunch.takeUnseenResult().finishedAt());
+		assertEquals(2, RigTunePreLaunch.takeLeftoverOps());
+	}
+
+	@Test
+	void theV02HelperExecutesTheCapturedPlan() throws IOException {
+		TestJars.modJar(mods.resolve(OLD_JAR), "rigtune");
+		TestJars.modJar(mods.resolve(NEW_JAR + PendingActions.PENDING_SUFFIX), "rigtune");
+		installCaptured("pending.json", pending);
+
+		ApplyResult result = new ApplyExecutor(2, 1).run(PendingActions.load(pending), pending);
+
+		assertTrue(result.allSucceeded(), result.toString());
+		assertTrue(Files.exists(mods.resolve(OLD_JAR + ".disabled")));
+		assertTrue(Files.exists(mods.resolve(NEW_JAR)));
+		assertFalse(Files.exists(pending));
+	}
+
+	// The captured run is RigTune's own update, which the legacy import leaves out, so history.json starts empty. The
+	// same files with another mod's update are imported, disabled name and all.
+	@Test
+	void theLegacyImportOfTheCapturedRunLeavesOutRigTunesOwnUpdate() throws IOException {
+		TestJars.modJar(mods.resolve(OLD_JAR + ".disabled"), "rigtune");
+		TestJars.modJar(mods.resolve(NEW_JAR), "rigtune");
+		installCaptured("last-apply.json", lastApply);
 
 		HistoryStartup.run(config, journal, true);
 
-		try (Stream<JournalChange> changes = journal.entries().stream().flatMap(e -> e.changes().stream())) {
-			assertTrue(changes.noneMatch(c -> "rigtune".equals(c.modId()) || c.file() != null && c.file().startsWith("rigtune")));
-		}
+		assertTrue(journal.exists());
+		assertEquals(List.of(), journal.entries());
+
+		Files.delete(Journal.file(config));
+		Files.writeString(lastApply, Files.readString(lastApply).replace("rigtune-", "lithium-").replace("\"rigtune\"", "\"lithium\""));
+		TestJars.modJar(mods.resolve("lithium-0.1.0.jar.disabled"), "lithium");
+
+		HistoryStartup.run(config, journal, true);
+
+		List<JournalChange> changes = importedChanges();
+		assertEquals(List.of("lithium-0.1.0.jar", "lithium-0.2.0-dev+mc26.2.jar"), changes.stream().map(JournalChange::file).toList());
+		assertEquals("lithium-0.1.0.jar.disabled", changes.getFirst().resultFile());
+		assertEquals("lithium", changes.getFirst().modId());
+		assertTrue(changes.stream().allMatch(c -> JournalChange.APPLIED.equals(c.status())));
 	}
 }

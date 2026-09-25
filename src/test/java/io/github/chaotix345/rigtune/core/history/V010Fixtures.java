@@ -12,9 +12,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 // The 0.1.0 files under src/test/resources/v010/ (hand-written) and v010/captured/ (captured from the released jar by
-// the self-update E2E run). Paths in them are templated: "${MODS}/name", "${CONFIG}/name", "${MODS}", "${CONFIG}".
+// the self-update E2E run). Paths in them are templated: ${MODS}, ${CONFIG} (hand-written) and ${INSTANCE}, the game
+// folder holding mods/ and config/ (captured), each optionally followed by /-separated names.
 public final class V010Fixtures {
-	private static final Pattern IN_DIR = Pattern.compile("\\$\\{(MODS|CONFIG)}/([^\"]+)");
+	private static final Pattern TOKEN = Pattern.compile("\\$\\{(MODS|CONFIG|INSTANCE)}((?:/[^\"/\\s]+)*)");
 
 	private V010Fixtures() {
 	}
@@ -30,15 +31,25 @@ public final class V010Fixtures {
 		}
 	}
 
+	// mods and config are <game>/mods and <game>/config; paths are written JSON-escaped.
 	public static String template(String json, Path mods, Path config) {
-		Matcher m = IN_DIR.matcher(json);
+		Matcher m = TOKEN.matcher(json);
 		StringBuilder out = new StringBuilder();
 		while (m.find()) {
-			Path dir = m.group(1).equals("MODS") ? mods : config;
-			m.appendReplacement(out, Matcher.quoteReplacement(escape(dir.resolve(m.group(2)))));
+			Path path = switch (m.group(1)) {
+				case "MODS" -> mods;
+				case "CONFIG" -> config;
+				default -> config.getParent();
+			};
+			for (String name : m.group(2).split("/")) {
+				if (!name.isEmpty()) {
+					path = path.resolve(name);
+				}
+			}
+			m.appendReplacement(out, Matcher.quoteReplacement(escape(path)));
 		}
 		m.appendTail(out);
-		return out.toString().replace("${MODS}", escape(mods)).replace("${CONFIG}", escape(config));
+		return out.toString();
 	}
 
 	private static String escape(Path path) {
