@@ -251,7 +251,8 @@ public final class RealController implements RigTuneController {
 			Goal g = goal;
 			var data = this.settings.modrinthAllowed() ? online.data() : OnlineData.offline();
 			int gen = ++generation;
-			CompletableFuture.supplyAsync(() -> Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion), Probes.EXECUTOR)
+			CompletableFuture.supplyAsync(() -> Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion, ModScanner.queuedUpdates()),
+							Probes.EXECUTOR)
 					.whenComplete((built, error) -> minecraft.execute(() -> {
 						if (error != null) {
 							RigTune.LOGGER.error("Could not build the RigTune report", error);

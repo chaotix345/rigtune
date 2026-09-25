@@ -7,8 +7,13 @@ import io.github.chaotix345.rigtune.RigTune;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -26,6 +31,31 @@ public final class ModJars {
 			RigTune.LOGGER.warn("Could not read the mod id of {}", jar, e);
 			return null;
 		}
+	}
+
+	// The mod ids of the jars a mod's own updater left in <mods>/update/, directly or in a folder of their own (Distant
+	// Horizons: update/<build>/<file>.jar). Unreadable jars don't count.
+	public static Set<String> queuedUpdates(Path modsDir) {
+		Path update = modsDir.resolve("update");
+		if (!Files.isDirectory(update)) {
+			return Set.of();
+		}
+		Set<String> out = new HashSet<>();
+		try (Stream<Path> files = Files.walk(update, 2)) {
+			for (Path jar : files.filter(f -> f.getFileName().toString().endsWith(".jar") && Files.isRegularFile(f)).toList()) {
+				try {
+					String id = readModId(jar);
+					if (id != null) {
+						out.add(id);
+					}
+				} catch (IOException e) {
+					// Not a readable jar: nothing is queued by it.
+				}
+			}
+		} catch (IOException | UncheckedIOException e) {
+			RigTune.LOGGER.warn("Could not list {}", update, e);
+		}
+		return Set.copyOf(out);
 	}
 
 	// Null when the jar has no fabric.mod.json id, or its fabric.mod.json is over the cap or isn't JSON. Doesn't log:

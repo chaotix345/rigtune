@@ -10,6 +10,7 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -71,5 +72,27 @@ class ModJarsTest {
 	@Test
 	void anUnparseableFabricModJsonHasNoId() throws IOException {
 		assertNull(ModJars.readModId(jarWith("broken.jar", "{\"id\": \"broken\", ")));
+	}
+
+	// Review 4, rules-accuracy-1: a mod's own updater leaves its next build in mods/update/, directly or in a folder of
+	// its own (Distant Horizons: update/DistantHorizons-3.3.2 - 26.2 neo/fabric-26.2.jar).
+	@Test
+	void queuedUpdatesAreTheModIdsOfTheJarsInModsUpdate() throws IOException {
+		Path mods = Files.createDirectories(dir.resolve("mods"));
+		Path update = Files.createDirectories(mods.resolve("update"));
+		TestJars.modJar(update.resolve("DistantHorizons-3.3.2 - 26.2 neo").resolve("fabric-26.2.jar"), "distanthorizons");
+		TestJars.modJar(update.resolve("other-2.jar"), "other");
+		Files.writeString(update.resolve("broken.jar"), "not a zip");
+		Files.writeString(update.resolve("notes.txt"), "not a jar");
+		TestJars.modJar(update.resolve("a").resolve("b").resolve("deep.jar"), "deep");
+		TestJars.modJar(mods.resolve("sodium.jar"), "sodium");
+
+		assertEquals(Set.of("distanthorizons", "other"), ModJars.queuedUpdates(mods));
+	}
+
+	@Test
+	void noUpdateFolderNoQueuedUpdates() throws IOException {
+		assertEquals(Set.of(), ModJars.queuedUpdates(Files.createDirectories(dir.resolve("mods"))));
+		assertEquals(Set.of(), ModJars.queuedUpdates(dir.resolve("missing")));
 	}
 }

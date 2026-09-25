@@ -259,6 +259,38 @@ class RecommenderV2Test {
 		}
 	}
 
+	private static Map<String, Recommendation> withQueuedUpdate(String body, Map<String, String> settings, Set<String> queued) {
+		UpdateInfo dh = new UpdateInfo("distanthorizons", "uCdwusMi", "3.3.0", "v", "3.3.2", null);
+		UpdateInfo sodium = new UpdateInfo("sodium", "AANobbMI", "0.9.1", "s", "0.9.2", null);
+		return Recommender.recommend(rules(body), Fixtures.userRig().build(), List.of(mod("distanthorizons", "3.3.0"), mod("sodium", "0.9.1")),
+				new SettingsSnapshot(settings), new OnlineData(true, Map.of(), Map.of("distanthorizons", dh, "sodium", sodium)), Goal.BALANCED,
+				null, queued).recommendations().stream().collect(Collectors.toMap(Recommendation::id, r -> r));
+	}
+
+	// Review 4, rules-accuracy-1: a mod whose own updater has a build waiting in mods/update/ isn't offered RigTune's
+	// update, whatever the rules say (here the auto-updater is off and no rule names the mod).
+	@Test
+	void aQueuedSelfUpdateReplacesTheUpdateWithAdvice() {
+		for (String body : List.of(SELF_UPDATING, "\"mods\":[]")) {
+			Map<String, Recommendation> recs = withQueuedUpdate(body, Map.of(AUTO_UPDATER, "false"), Set.of("distanthorizons"));
+			assertFalse(recs.containsKey("update:distanthorizons"), recs.keySet().toString());
+			Recommendation advice = recs.get("advice:update-queued:distanthorizons");
+			assertEquals(Category.ADVICE, advice.category());
+			assertEquals("distanthorizons has an update of its own waiting", advice.title());
+			assertEquals("It's in mods/update, so RigTune leaves it alone.", advice.reason());
+			assertEquals(new Action.None(), advice.action());
+			assertFalse(advice.selectedByDefault());
+			assertTrue(recs.get("update:sodium").action() instanceof Action.UpdateMod, recs.keySet().toString());
+		}
+	}
+
+	@Test
+	void noQueuedSelfUpdateOffersTheUpdate() {
+		Map<String, Recommendation> recs = withQueuedUpdate(SELF_UPDATING, Map.of(AUTO_UPDATER, "false"), Set.of());
+		assertTrue(recs.get("update:distanthorizons").action() instanceof Action.UpdateMod, recs.keySet().toString());
+		assertFalse(recs.containsKey("advice:update-queued:distanthorizons"), recs.keySet().toString());
+	}
+
 	@Test
 	void noUpdateNoSelfUpdateAdvice() {
 		Map<String, Recommendation> recs = Recommender.recommend(rules(SELF_UPDATING), Fixtures.userRig().build(),
