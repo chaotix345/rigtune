@@ -26,4 +26,22 @@ class BenchmarkControllerConfigTest {
 	void quickSettleNeverExceedsTheTimeout() {
 		assertEquals(1.0, new BenchmarkController.Config(3, 1.0, 0.5, 1.0).timing().quickSettleTimeoutSeconds());
 	}
+
+	@Test
+	void theShortConstructorKeepsTheDerivedTargetAndTheFullRange() {
+		BenchmarkController.Config config = new BenchmarkController.Config(3, 1.0, 0.5, 60.0);
+		assertEquals(null, config.targetFps());
+		assertEquals(BenchmarkController.MAX_RD, config.maxRenderDistance());
+		assertEquals(60.0, config.timing().settleTimeoutSeconds());
+		assertEquals(null, BenchmarkController.Config.DEFAULT.targetFps());
+	}
+
+	@Test
+	void devTargetFpsIsReadOnlyWhenValid() {
+		assertEquals(null, BenchmarkController.parseTargetFps(null));
+		assertEquals(null, BenchmarkController.parseTargetFps("fast"));
+		assertEquals(null, BenchmarkController.parseTargetFps("0"));
+		assertEquals(null, BenchmarkController.parseTargetFps("-5"));
+		assertEquals(300.0, BenchmarkController.parseTargetFps(" 300 "));
+	}
 }

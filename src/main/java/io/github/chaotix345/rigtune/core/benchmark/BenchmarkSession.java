@@ -23,6 +23,7 @@ import java.util.OptionalInt;
 public final class BenchmarkSession {
 	public static final double SD_MIN_IMPROVEMENT = 0.05;
 	public static final double SLACK_SECONDS = 10;
+	public static final int CURRENT_SCENE_HEADROOM = 8;
 	private static final int SD_STEP = 2;
 	private static final int SD_POINTS = 3;
 
@@ -75,6 +76,13 @@ public final class BenchmarkSession {
 		List<Integer> sd = limits.simulationTunable() ? sdCandidates(original.simulationDistance(), limits.minSd()) : List.of();
 		return new BenchmarkSession(BenchmarkRequest.Mode.TUNE, original, limits.targetFps(), timing, startNanos, planner,
 				sd.size() >= 2 ? sd : List.of(), Stage.RENDER_DISTANCE);
+	}
+
+	// docs/v0.3/SPEC.md E-M2: every render distance Tune tests makes the server load its chunks, and in the player's own
+	// world generate and save the ones that don't exist yet, so there it tests at most CURRENT_SCENE_HEADROOM above the
+	// distance it starts from (the one the world was already loaded at).
+	public static int maxRenderDistance(BenchmarkRequest.Scene scene, int startRd, int limit) {
+		return scene == BenchmarkRequest.Scene.CURRENT ? Math.min(limit, startRd + CURRENT_SCENE_HEADROOM) : limit;
 	}
 
 	public static BenchmarkSession measure(Knobs original, double targetFps, Timing timing, long startNanos) {
