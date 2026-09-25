@@ -178,7 +178,7 @@ class StagingMergeTest {
 
 	// Review 2, N3: the RigTune screen's "Discard pending" button.
 	@Test
-	void discardRetiresTheDownloadsAndDeletesThePlanUnderTheLock() throws IOException {
+	void discardRetiresTheDownloadsAndDeletesThePlanUnderTheLock() throws Exception {
 		Path pending = PendingActions.defaultPath(config);
 		Path a = Files.writeString(pendingJar("a.jar"), "a");
 		Path b = Files.writeString(pendingJar("b.jar"), "b");
@@ -190,14 +190,14 @@ class StagingMergeTest {
 		ops.add(Op.patchJson(config.resolve("sodium-options.json"), Map.of("a", "1")));
 		plan(ops).save(pending);
 
-		try (ApplyLock helper = ApplyLock.acquire(ApplyLock.besidePlan(pending), Duration.ZERO)) {
-			assertNotNull(helper);
-			assertEquals(-1, PendingActions.discard(pending, Duration.ofMillis(100)));
+		try (HeldLock helper = HeldLock.hold(ApplyLock.besidePlan(pending))) {
+			assertNull(PendingActions.discard(pending, Duration.ofMillis(100)));
 			assertTrue(Files.exists(pending));
 			assertTrue(Files.exists(a));
 		}
 
-		assertEquals(5, PendingActions.discard(pending, Duration.ZERO));
+		// Review H5: the dropped ops come back, so their journal changes can be marked DISCARDED.
+		assertEquals(ops.stream().map(Op::id).toList(), PendingActions.discard(pending, Duration.ZERO).stream().map(Op::id).toList());
 
 		assertFalse(Files.exists(pending));
 		try (Stream<Path> files = Files.list(mods)) {
@@ -205,6 +205,68 @@ class StagingMergeTest {
 					files.map(p -> p.getFileName().toString()).sorted().toList());
 		}
 		assertTrue(Files.exists(outside));
-		assertEquals(0, PendingActions.discard(pending, Duration.ZERO));
+		assertEquals(List.of(), PendingActions.discard(pending, Duration.ZERO));
+	}
+
+	// Review H5: the journal records the ids the ops have in pending.json after the merge.
+	@Test
+	void aRepeatedOpMapsToTheStagedOne() {
+		List<Op> first = update("x-1.jar", "x-2.jar", "x");
+		List<Op> again = update("x-1.jar", "x-2.jar", "x");
+
+		PendingActions.Merged merged = plan(first).merge(again);
+
+		assertEquals(first.get(0).id(), merged.survivingIds().get(again.get(0).id()));
+		assertEquals(first.get(1).id(), merged.survivingIds().get(again.get(1).id()));
+		assertTrue(merged.replaced().isEmpty());
+	}
+
+	@Test
+	void newOpsMapToThemselvesAndAReplacedEnableIsReported() {
+		List<Op> first = update("sodium-0.7.0.jar", "sodium-0.7.1.jar", "sodium");
+		List<Op> second = update("sodium-0.7.0.jar", "sodium-0.7.2.jar", "sodium");
+
+		PendingActions.Merged merged = plan(first).merge(second);
+
+		assertEquals(first.get(0).id(), merged.survivingIds().get(second.get(0).id()), "the repeated disable keeps its staged id");
+		assertEquals(second.get(1).id(), merged.survivingIds().get(second.get(1).id()));
+		assertEquals(List.of(first.get(1).id()), merged.replaced().stream().map(Op::id).toList());
+	}
+
+	@Test
+	void anIncomingOpReplacedLaterInTheSameBatchHasNoSurvivor() {
+		Op a = Op.enableFile(pendingJar("m-1.jar"), mods.resolve("m-1.jar")).withModId("m");
+		Op b = Op.enableFile(pendingJar("m-2.jar"), mods.resolve("m-2.jar")).withModId("m");
+
+		PendingActions.Merged merged = plan(List.of()).merge(List.of(a, b));
+
+		assertNull(merged.survivingIds().get(a.id()));
+		assertEquals(b.id(), merged.survivingIds().get(b.id()));
+	}
+
+	@Test
+	void removeTakesTheWholeGroupOfEachOp() {
+		List<Op> updateX = update("x-1.jar", "x-2.jar", "x");
+		List<Op> updateY = update("y-1.jar", "y-2.jar", "y");
+		Op loose = Op.disableFile(mods.resolve("z.jar"));
+		List<Op> all = new ArrayList<>(updateX);
+		all.addAll(updateY);
+		all.add(loose);
+
+		PendingActions.Removed removed = plan(all).remove(List.of(updateX.get(1).id(), loose.id(), "unknown"));
+
+		assertEquals(List.of(updateX.get(0), updateX.get(1), loose), removed.removed());
+		assertEquals(updateY, removed.plan().ops());
+	}
+
+	@Test
+	void removeWithoutAGroupTakesOnlyThatOp() {
+		Op a = Op.patchJson(config.resolve("sodium-options.json"), Map.of("a", "1"));
+		Op b = Op.patchJson(config.resolve("sodium-options.json"), Map.of("b", "1"));
+
+		PendingActions.Removed removed = plan(List.of(a, b)).remove(List.of(a.id()));
+
+		assertEquals(List.of(a), removed.removed());
+		assertEquals(List.of(b), removed.plan().ops());
 	}
 }

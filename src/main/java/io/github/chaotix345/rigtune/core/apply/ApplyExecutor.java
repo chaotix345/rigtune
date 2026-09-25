@@ -3,6 +3,8 @@ package io.github.chaotix345.rigtune.core.apply;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.OpResult;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.Status;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
+import io.github.chaotix345.rigtune.core.history.HistoryUpdates;
+import io.github.chaotix345.rigtune.core.history.Journal;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -57,7 +59,24 @@ public final class ApplyExecutor {
 		ApplyResult result = new ApplyResult(Instant.now().toString(), giveUpOnRepeatFailures(execute(plan, modsDir, configDir)));
 		writeRemaining(plan, pendingFile, result, modsDir);
 		result.save(ApplyResult.defaultPath(configDir));
+		updateJournal(configDir, result);
 		return result;
+	}
+
+	// Best effort and last (review M5): the renames and pending.json/last-apply.json are already done, and a journal
+	// problem (even a missing class on the helper's classpath) must never fail them. preLaunch reconciles from
+	// last-apply.json if this didn't happen.
+	private static void updateJournal(Path configDir, ApplyResult result) {
+		try {
+			new Journal(configDir, null, null, ApplyExecutor::journalWarning)
+					.updateExisting(entries -> HistoryUpdates.applyResults(entries, result.results()));
+		} catch (Throwable t) {
+			journalWarning("Could not update history.json", t);
+		}
+	}
+
+	private static void journalWarning(String message, Throwable error) {
+		ApplyHelper.log(message + (error == null ? "" : ": " + error));
 	}
 
 	// A group with an op that has now failed in MAX_FAILED_RUNS helper runs is abandoned as a whole, so a change that
@@ -393,7 +412,7 @@ public final class ApplyExecutor {
 			return new Applied(new OpResult(op, Status.FAILED, to + " already exists; not overwriting it"), null);
 		}
 		mover.move(from, to);
-		return new Applied(new OpResult(op, Status.OK, "Enabled " + to.getFileName()), new Undo(index, to, from));
+		return new Applied(new OpResult(op, Status.OK, "Enabled " + to.getFileName(), to.toString()), new Undo(index, to, from));
 	}
 
 	private Applied disable(Op op, int index) throws IOException {
@@ -403,7 +422,7 @@ public final class ApplyExecutor {
 		}
 		Path target = disabledTarget(path);
 		mover.move(path, target);
-		return new Applied(new OpResult(op, Status.OK, "Disabled " + path.getFileName() + " -> " + target.getFileName()),
+		return new Applied(new OpResult(op, Status.OK, "Disabled " + path.getFileName() + " -> " + target.getFileName(), target.toString()),
 				new Undo(index, target, path));
 	}
 

@@ -15,7 +15,11 @@ public record ApplyResult(String finishedAt, List<OpResult> results) {
 		ABANDONED
 	}
 
-	public record OpResult(PendingActions.Op op, Status status, String message) {
+	// resultPath (0.2): where the file ended up (the actual .disabled name of a disable). 0.1.x readers ignore it.
+	public record OpResult(PendingActions.Op op, Status status, String message, String resultPath) {
+		public OpResult(PendingActions.Op op, Status status, String message) {
+			this(op, status, message, null);
+		}
 	}
 
 	public ApplyResult {

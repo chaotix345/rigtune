@@ -126,20 +126,25 @@ public class UiGameTest implements FabricClientGameTest {
 	}
 
 	private static void checkSubScreens(ClientGameTestContext context) {
-		pressByKey(context, "rigtune.screen.undo_last");
-		context.waitForScreen(UndoScreen.class);
-		context.runOnClient(mc -> mc.gui.screen().onClose());
-		context.waitForScreen(RigTuneScreen.class);
-
-		pressByKey(context, "rigtune.screen.undo_all");
-		context.waitForScreen(UndoScreen.class);
-		context.runOnClient(mc -> mc.gui.screen().onClose());
-		context.waitForScreen(RigTuneScreen.class);
+		checkUndoButton(context, "rigtune.screen.undo_last", false, "ui-undo-last-from-button");
+		checkUndoButton(context, "rigtune.screen.undo_all", true, "ui-undo-all-from-button");
 
 		pressByKey(context, "rigtune.screen.benchmark_menu");
 		context.waitForScreen(BenchmarkMenuScreen.class);
 		context.waitTicks(2);
 		context.takeScreenshot("ui-benchmark-menu-from-button");
+		context.runOnClient(mc -> mc.gui.screen().onClose());
+		context.waitForScreen(RigTuneScreen.class);
+	}
+
+	// The button opens WS-B's confirmation screen for the right scope; nothing is undone here (Cancel/close only).
+	private static void checkUndoButton(ClientGameTestContext context, String key, boolean all, String screenshot) {
+		pressByKey(context, key);
+		context.waitForScreen(UndoScreen.class);
+		context.waitFor(mc -> mc.gui.screen() instanceof UndoScreen undo && undo.plan() != null, 400);
+		check(context.computeOnClient(mc -> ((UndoScreen) mc.gui.screen()).plan().all()) == all, key + " opens the undo screen with all=" + all);
+		context.waitTicks(2);
+		context.takeScreenshot(screenshot);
 		context.runOnClient(mc -> mc.gui.screen().onClose());
 		context.waitForScreen(RigTuneScreen.class);
 	}

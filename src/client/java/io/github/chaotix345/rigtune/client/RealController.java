@@ -8,7 +8,11 @@ import io.github.chaotix345.rigtune.client.probe.ModScanner;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
-import io.github.chaotix345.rigtune.core.apply.ApplyLock;
+import io.github.chaotix345.rigtune.client.undo.ClientJournal;
+import io.github.chaotix345.rigtune.client.undo.GameState;
+import io.github.chaotix345.rigtune.client.undo.Staging;
+import io.github.chaotix345.rigtune.client.undo.UndoService;
+import io.github.chaotix345.rigtune.client.undo.VanillaChanges;
 import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
@@ -17,6 +21,8 @@ import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecords;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
+import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
+import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
 import io.github.chaotix345.rigtune.core.model.Goal;
@@ -47,7 +53,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -61,7 +66,6 @@ import java.util.concurrent.Executors;
 
 public final class RealController implements RigTuneController {
 	private static final String VANILLA = SettingsBridge.VANILLA_PREFIX;
-	private static final Duration STAGE_LOCK_WAIT = Duration.ofSeconds(2);
 	// Rules loads can wait up to a minute on the network; one thread keeps them off the report builders' pool and
 	// runs them in order, so a superseded load gives up before its next request.
 	private static final ExecutorService RULES_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
@@ -81,6 +85,8 @@ public final class RealController implements RigTuneController {
 	private final Set<String> staged = new HashSet<>();
 	private int carriedOverOps;
 	private final boolean selfFileActions = HelperLauncher.selfUpdateSupported();
+	private final Staging staging;
+	private final UndoService undoService;
 
 	private volatile @Nullable RulesDocument rules;
 	private volatile @Nullable HardwareProfile hardware;
@@ -106,6 +112,16 @@ public final class RealController implements RigTuneController {
 		this.state = ClientState.shared(configDir);
 		this.goal = state.goalOrDefault();
 		this.carriedOverOps = pendingOpCount();
+		this.staging = new Staging(configDir, pendingFile, ConfigTargets.all(configDir), ClientJournal.get());
+		// The Undo screen plans off the render thread; the options are still read on it.
+		this.undoService = new UndoService(staging, ClientJournal.get(),
+				() -> minecraft.isSameThread() ? new GameState(minecraft.options, staging.targets(), modsDir)
+						: minecraft.submit(() -> new GameState(minecraft.options, staging.targets(), modsDir)).join(),
+				values -> {
+					Map<String, Boolean> written = new LinkedHashMap<>();
+					SettingsBridge.applyVanilla(minecraft.options, values).forEach((key, result) -> written.put(key, result.ok()));
+					return written;
+				});
 	}
 
 	public void start(Minecraft minecraft) {
@@ -268,6 +284,8 @@ public final class RealController implements RigTuneController {
 		if (downloading) {
 			return Component.translatable("rigtune.status.busy");
 		}
+		// One journal entry per Apply, downloads that finish later included (review H4).
+		String entryId = ChangeRecorder.newEntryId();
 		Map<String, String> vanilla = new LinkedHashMap<>();
 		List<ConfigTargets.Target> targets = ConfigTargets.all(configDir);
 		Map<ConfigTargets.Target, Map<String, String>> configPatches = new LinkedHashMap<>();
@@ -296,7 +314,7 @@ public final class RealController implements RigTuneController {
 		int settingsOk = 0;
 		int settingsFailed = 0;
 		if (!vanilla.isEmpty()) {
-			for (SettingsBridge.Result result : SettingsBridge.applyVanilla(vanilla).values()) {
+			for (SettingsBridge.Result result : VanillaChanges.apply(entryId, vanilla).values()) {
 				if (result.ok()) {
 					settingsOk++;
 				} else {
@@ -313,9 +331,9 @@ public final class RealController implements RigTuneController {
 			immediateOps.addAll(0, patches.ops());
 			patches.ops().forEach(op -> immediateIds.add(configIds.get(target.prefix() + op.patches().keySet().iterator().next())));
 		}
-		boolean stageFailed = !immediateOps.isEmpty() && !stage(immediateOps, immediateIds);
+		boolean stageFailed = !immediateOps.isEmpty() && !stage(immediateOps, immediateIds, entryId);
 		if (!downloads.isEmpty()) {
-			startDownloads(downloads);
+			startDownloads(downloads, entryId);
 		}
 		rebuild();
 
@@ -352,7 +370,7 @@ public final class RealController implements RigTuneController {
 		return staged.size() + carriedOverOps;
 	}
 
-	private void startDownloads(List<Recommendation> downloads) {
+	private void startDownloads(List<Recommendation> downloads, String entryId) {
 		downloading = true;
 		try {
 			Set<String> installedProjects = new HashSet<>(online.projectIdsByModId().values());
@@ -363,7 +381,7 @@ public final class RealController implements RigTuneController {
 						try {
 							minecraft.execute(() -> {
 								try {
-									finishDownloads(result, error);
+									finishDownloads(result, error, entryId);
 								} finally {
 									downloading = false;
 								}
@@ -379,13 +397,13 @@ public final class RealController implements RigTuneController {
 		}
 	}
 
-	private void finishDownloads(DownloadPlanner.@Nullable Result result, @Nullable Throwable error) {
+	private void finishDownloads(DownloadPlanner.@Nullable Result result, @Nullable Throwable error, String entryId) {
 		if (error != null || result == null) {
 			RigTune.LOGGER.error("RigTune downloads failed", error);
 			status = Component.translatable("rigtune.status.download_failed", error == null ? "?" : error.getMessage());
 			return;
 		}
-		boolean ok = result.ops().isEmpty() || stage(result.ops(), result.ids());
+		boolean ok = result.ops().isEmpty() || stage(result.ops(), result.ids(), entryId);
 		List<Component> parts = new ArrayList<>();
 		if (!result.errors().isEmpty()) {
 			parts.add(Component.translatable("rigtune.status.download_failed", String.join("; ", result.errors())));
@@ -434,49 +452,13 @@ public final class RealController implements RigTuneController {
 		return pending;
 	}
 
-	private boolean stage(List<Op> ops, List<String> ids) {
-		try (ApplyLock lock = ApplyLock.acquire(ApplyLock.defaultPath(configDir), STAGE_LOCK_WAIT)) {
-			if (lock == null) {
-				RigTune.LOGGER.error("Could not stage RigTune changes: the apply helper still holds {}", ApplyLock.defaultPath(configDir));
-				return false;
-			}
-			PendingActions plan = null;
-			if (Files.exists(pendingFile)) {
-				try {
-					plan = PendingActions.load(pendingFile);
-				} catch (IOException e) {
-					RigTune.LOGGER.warn("Replacing unreadable {}", pendingFile, e);
-				}
-			}
-			// The folders come from where pending.json is, not from what an existing plan records (the instance may be a copy).
-			Path planMods = InstanceDirs.modsDirOf(pendingFile);
-			Path planConfig = InstanceDirs.configDirOf(pendingFile);
-			PendingActions base = plan != null ? plan.relocated(planMods, planConfig)
-					: PendingActions.create(ProcessHandle.current().pid(), planMods, planConfig, List.of());
-			if (plan != null && base.ops().size() < plan.ops().size()) {
-				RigTune.LOGGER.warn("Dropped {} staged change(s) for another instance's folders ({})", plan.ops().size() - base.ops().size(), plan.modsDir());
-			}
-			PendingActions.Merged merged = base.merge(ops);
-			merged.plan().save(pendingFile);
-			for (Path old : merged.superseded()) {
-				if (!SafeFileNames.isDirectChild(planMods, old)) {
-					continue;
-				}
-				try {
-					Path retired = PendingActions.retire(old);
-					if (retired != null) {
-						RigTune.LOGGER.info("Replaced staged {}; kept it as {}", old.getFileName(), retired.getFileName());
-					}
-				} catch (IOException e) {
-					RigTune.LOGGER.warn("Could not retire replaced {}; it stays inert", old, e);
-				}
-			}
-			staged.addAll(ids);
-			return true;
-		} catch (IOException | RuntimeException e) {
-			RigTune.LOGGER.error("Could not write {}", pendingFile, e);
+	// Staging and its journal records live in Staging (lock, merge, record after the merge: review H5).
+	private boolean stage(List<Op> ops, List<String> ids, String entryId) {
+		if (!staging.stage(ops, entryId)) {
 			return false;
 		}
+		staged.addAll(ids);
+		return true;
 	}
 
 	private int pendingOpCount() {
@@ -535,17 +517,52 @@ public final class RealController implements RigTuneController {
 			return Component.translatable("rigtune.status.busy");
 		}
 		try {
-			int dropped = PendingActions.discard(pendingFile, STAGE_LOCK_WAIT);
-			if (dropped < 0) {
+			List<Op> dropped = staging.discard();
+			if (dropped == null) {
 				return Component.translatable("rigtune.status.discard_busy");
 			}
 			staged.clear();
 			carriedOverOps = 0;
 			rebuild();
-			return Component.translatable("rigtune.status.discarded", dropped);
+			return Component.translatable("rigtune.status.discarded", dropped.size());
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.error("Could not discard {}", pendingFile, e);
 			return Component.translatable("rigtune.status.discard_failed");
+		}
+	}
+
+	@Override
+	public @Nullable UndoPlan undoPlan(boolean all) {
+		// Downloads that finish later add to their apply's entry, so undo waits for them.
+		if (downloading) {
+			return UndoPlan.unavailable(all, "rigtune.undo.busy");
+		}
+		try {
+			UndoPlan plan = undoService.plan(all);
+			return plan != null ? plan : UndoPlan.unavailable(all, "rigtune.undo.unavailable");
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.error("Could not work out what to undo", e);
+			return UndoPlan.unavailable(all, "rigtune.undo.error");
+		}
+	}
+
+	@Override
+	public Component undo(UndoPlan plan) {
+		if (downloading) {
+			return Component.translatable("rigtune.status.busy");
+		}
+		try {
+			UndoService.Outcome outcome = undoService.undo(plan);
+			if (outcome.busy()) {
+				return Component.translatable("rigtune.undo.status.busy");
+			}
+			staged.clear();
+			carriedOverOps = pendingOpCount();
+			rebuild();
+			return Component.translatable("rigtune.undo.status.done", outcome.now(), outcome.afterRestart(), outcome.cancelled(), outcome.skipped());
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.error("Could not undo", e);
+			return Component.translatable("rigtune.undo.status.failed");
 		}
 	}
 }

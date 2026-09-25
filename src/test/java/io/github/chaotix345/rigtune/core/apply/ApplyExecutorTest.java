@@ -3,6 +3,9 @@ package io.github.chaotix345.rigtune.core.apply;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.Status;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
+import io.github.chaotix345.rigtune.core.history.Journal;
+import io.github.chaotix345.rigtune.core.history.JournalChange;
+import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -233,5 +236,68 @@ class ApplyExecutorTest {
 		assertEquals(List.of(Status.FAILED), statuses(result));
 		assertEquals("{ broken", Files.readString(sodium));
 		assertTrue(Files.exists(pending));
+	}
+
+	// Review M6: undo must re-enable the file the disable actually produced.
+	@Test
+	void resultsSayWhereTheFileEndedUp() throws IOException {
+		Files.writeString(mods.resolve("indium.jar"), "new");
+		Files.writeString(mods.resolve("indium.jar.disabled"), "old");
+		Files.writeString(mods.resolve("a.jar.rigtune-pending"), "a");
+
+		ApplyResult result = executor.run(plan(Op.disableFile(mods.resolve("indium.jar")),
+				Op.enableFile(mods.resolve("a.jar.rigtune-pending"), mods.resolve("a.jar"))), pending);
+
+		assertEquals(mods.resolve("indium.jar.disabled.1").toString(), result.results().get(0).resultPath());
+		assertEquals(mods.resolve("a.jar").toString(), result.results().get(1).resultPath());
+		assertEquals(mods.resolve("indium.jar.disabled.1").toString(), ApplyResult.load(ApplyResult.defaultPath(config)).results().get(0).resultPath());
+	}
+
+	private Journal journal() {
+		return new Journal(config, "0.2.0", "26.2", (message, error) -> {
+			throw new AssertionError(message, error);
+		});
+	}
+
+	// SPEC item 3: the helper updates the journal by op id after a run.
+	@Test
+	void aRunUpdatesTheJournal() throws IOException {
+		Files.writeString(mods.resolve("indium.jar"), "i");
+		Files.writeString(mods.resolve("indium.jar.disabled"), "older");
+		Op disable = Op.disableFile(mods.resolve("indium.jar"));
+		Op missing = Op.enableFile(mods.resolve("gone.jar.rigtune-pending"), mods.resolve("gone.jar"));
+		JournalChange disabled = JournalChange.file(JournalChange.DISABLE, "indium", "indium.jar", JournalChange.STAGED, disable.id(), null);
+		JournalChange failed = JournalChange.file(JournalChange.ENABLE, "gone", "gone.jar", JournalChange.STAGED, missing.id(), null);
+		journal().record("e1", JournalEntry.APPLY, List.of(disabled, failed));
+
+		executor.run(plan(disable, missing), pending);
+
+		List<JournalChange> changes = journal().entries().getFirst().changes();
+		assertEquals(JournalChange.APPLIED, changes.get(0).status());
+		assertEquals("indium.jar.disabled.1", changes.get(0).resultFile());
+		assertEquals(JournalChange.STAGED, changes.get(1).status());
+	}
+
+	// Review M5: a journal problem must never fail or undo an apply.
+	@Test
+	void aBrokenJournalNeverFailsTheApply() throws IOException {
+		Files.createDirectories(Journal.file(config));
+		Files.writeString(mods.resolve("indium.jar"), "i");
+
+		ApplyResult result = executor.run(plan(Op.disableFile(mods.resolve("indium.jar"))), pending);
+
+		assertEquals(List.of(Status.OK), statuses(result));
+		assertFalse(Files.exists(pending));
+		assertTrue(Files.exists(ApplyResult.defaultPath(config)));
+		assertTrue(Files.isDirectory(Journal.file(config)));
+	}
+
+	@Test
+	void noJournalFileMeansNothingIsCreated() throws IOException {
+		Files.writeString(mods.resolve("indium.jar"), "i");
+
+		executor.run(plan(Op.disableFile(mods.resolve("indium.jar"))), pending);
+
+		assertFalse(Files.exists(Journal.file(config)));
 	}
 }

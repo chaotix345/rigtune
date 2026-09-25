@@ -1,6 +1,8 @@
 package io.github.chaotix345.rigtune.client;
 
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.client.undo.ClientJournal;
+import io.github.chaotix345.rigtune.client.undo.HistoryStartup;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
@@ -39,6 +41,13 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 		}
 		try {
 			readState(configDir, busy && lock == null);
+			// The journal's legacy import and reconciliation need the lock the helper held (reentrant: review M4). The
+			// journal must never stop the game from starting.
+			try {
+				HistoryStartup.run(configDir, ClientJournal.get(), lock != null);
+			} catch (Throwable t) {
+				RigTune.LOGGER.warn("Could not update RigTune's change history", t);
+			}
 		} finally {
 			if (lock != null) {
 				lock.close();
@@ -53,11 +62,15 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 	}
 
 	private static void readState(Path configDir, boolean stillRunning) {
+		readState(configDir, stillRunning, ClientState.shared(configDir).lastShownApply);
+	}
+
+	static void readState(Path configDir, boolean stillRunning, @Nullable String lastShownApply) {
 		try {
 			Path last = ApplyResult.defaultPath(configDir);
 			if (Files.isRegularFile(last)) {
 				ApplyResult result = ApplyResult.load(last);
-				if (!Objects.equals(result.finishedAt(), ClientState.shared(configDir).lastShownApply)) {
+				if (!Objects.equals(result.finishedAt(), lastShownApply)) {
 					unseenResult = result;
 				}
 			}
