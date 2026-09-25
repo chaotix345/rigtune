@@ -52,6 +52,8 @@ public final class RigTuneClient implements ClientModInitializer {
 	private static final int BUTTON_WIDTH = 60;
 
 	private static final SystemToast.SystemToastId NOTICE_ID = new SystemToast.SystemToastId(8000L);
+	private static final SystemToast.SystemToastId PRIVACY_ID = new SystemToast.SystemToastId(10000L);
+	private static final StartupNotices.PrivacyToast PRIVACY_TOAST = new StartupNotices.PrivacyToast();
 	private static final Identifier HUD_ID = Identifier.fromNamespaceAndPath(RigTune.MOD_ID, "benchmark");
 
 	private static RigTuneController controller;
@@ -141,6 +143,10 @@ public final class RigTuneClient implements ClientModInitializer {
 				open(minecraft.gui.screen());
 			}
 		}
+		if (minecraft.gui.screen() instanceof RigTuneScreen
+				&& PRIVACY_TOAST.onRigTuneScreen(minecraft.gui.toastManager().getToast(SystemToast.class, PRIVACY_ID) != null)) {
+			SystemToast.forceHide(minecraft.gui.toastManager(), PRIVACY_ID);
+		}
 		if (!titleSeen || !(minecraft.gui.screen() instanceof TitleScreen)) {
 			return;
 		}
@@ -149,11 +155,11 @@ public final class RigTuneClient implements ClientModInitializer {
 		if (!noticesShown) {
 			noticesShown = true;
 			showNotices(minecraft);
-			if (StartupNotices.takePrivacyNotice(settings, configDir, Probes.EXECUTOR)) {
-				SystemToast.add(minecraft.gui.toastManager(), new SystemToast.SystemToastId(10000L),
-						Component.translatable("rigtune.settings.privacy_toast.title"),
-						Component.translatable("rigtune.settings.privacy_toast.body"));
-			}
+			PRIVACY_TOAST.take(StartupNotices.takePrivacyNotice(settings, configDir, Probes.EXECUTOR));
+		}
+		if (PRIVACY_TOAST.onTitleScreen()) {
+			SystemToast.add(minecraft.gui.toastManager(), PRIVACY_ID, Component.translatable("rigtune.settings.privacy_toast.title"),
+					Component.translatable("rigtune.settings.privacy_toast.body"));
 		}
 		if (!toastShown) {
 			Report report = controller.report();
