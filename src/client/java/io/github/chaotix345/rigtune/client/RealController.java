@@ -431,11 +431,10 @@ public final class RealController implements RigTuneController {
 	private void startDownloads(List<Recommendation> downloads, String entryId) {
 		downloading = true;
 		try {
-			Set<String> installedProjects = new HashSet<>(online.projectIdsByModId().values());
-			Set<String> installedVersions = new HashSet<>(online.versionIdsByModId().values());
+			OnlineDataFetcher.Result data = online;
 			HardwareProfile hw = hardware;
 			String mcVersion = onlineLookups.modrinthGameVersion(hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion());
-			CompletableFuture.supplyAsync(() -> download(downloads, installedProjects, installedVersions, mcVersion), Probes.EXECUTOR)
+			CompletableFuture.supplyAsync(() -> download(downloads, data, mcVersion), Probes.EXECUTOR)
 					.whenComplete((result, error) -> {
 						try {
 							minecraft.execute(() -> {
@@ -477,8 +476,10 @@ public final class RealController implements RigTuneController {
 		rebuild();
 	}
 
-	private DownloadPlanner.Result download(List<Recommendation> recs, Set<String> installedProjects, Set<String> installedVersions, String mcVersion) {
-		DependencyResolver resolver = new DependencyResolver(modrinth, OnlineDataFetcher.LOADER, mcVersion, installedVersions);
+	// Judged against the installed mods' Modrinth versions and the updates' own versions (SPEC 3b, plan review A-H1).
+	private DownloadPlanner.Result download(List<Recommendation> recs, OnlineDataFetcher.Result data, String mcVersion) {
+		DependencyResolver resolver = new DependencyResolver(modrinth, OnlineDataFetcher.LOADER, mcVersion, data.installedVersions());
+		Set<String> installedProjects = new HashSet<>(data.projectIdsByModId().values());
 		List<InstalledMod> scanned = mods;
 		Set<String> loadedIds = new HashSet<>();
 		if (scanned != null) {
@@ -486,7 +487,7 @@ public final class RealController implements RigTuneController {
 		}
 		RulesDocument doc = rules;
 		BiPredicate<String, String> conflicts = doc == null ? (a, b) -> false : ModConflicts.of(doc)::between;
-		return new DownloadPlanner(resolver, modsDir, this::fetch, conflicts).plan(recs, installedProjects, loadedIds, stagedJarsByModId());
+		return new DownloadPlanner(resolver, modsDir, this::fetch, conflicts, data.updateVersions()).plan(recs, installedProjects, loadedIds, stagedJarsByModId());
 	}
 
 	// Mod ids that already have a staged ENABLE_FILE, with that op's pending jar. A newer download for the same id

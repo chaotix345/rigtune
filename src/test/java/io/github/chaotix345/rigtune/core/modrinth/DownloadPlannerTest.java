@@ -21,6 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -48,6 +49,8 @@ class DownloadPlannerTest {
 	final Set<String> failOnce = new HashSet<>();
 	final Set<String> notMods = new HashSet<>();
 	BiPredicate<String, String> conflicts = (a, b) -> false;
+	final Map<String, ModrinthVersion> installedVersions = new HashMap<>();
+	final Map<String, ModrinthVersion> updateVersions = new HashMap<>();
 
 	@BeforeEach
 	void setUp() throws IOException {
@@ -122,7 +125,8 @@ class DownloadPlannerTest {
 	}
 
 	private DownloadPlanner.Result plan(Set<String> installedProjects, Recommendation... recs) {
-		DownloadPlanner planner = new DownloadPlanner(new DependencyResolver(client, "fabric", "26.2"), mods, this::fetch, conflicts);
+		DownloadPlanner planner = new DownloadPlanner(new DependencyResolver(client, "fabric", "26.2", installedVersions), mods, this::fetch, conflicts,
+				updateVersions);
 		return planner.plan(List.of(recs), installedProjects, Set.of(), Map.of());
 	}
 
@@ -170,6 +174,153 @@ class DownloadPlannerTest {
 		assertEquals(List.of("aV.jar", "cV.jar"), targets(result.ops()));
 		assertEquals(List.of("Add b: Modrinth marks A and B as incompatible, and both would be installed"), result.errors());
 		assertFalse(fetched.contains("bV.jar"));
+	}
+
+	// Mod a is installed as a-1.jar (Modrinth version a1 of project A); its update is version aV (file aV.jar).
+	private Recommendation updateA(Dependency... deps) throws IOException {
+		Files.writeString(mods.resolve("a-1.jar"), "installed");
+		installedVersions.put("a1", version("a1", "A", "1", T));
+		ModrinthVersion next = version("aV", "A", "2", T, deps);
+		updateVersions.put("aV", next);
+		UpdateInfo info = new UpdateInfo("a", "A", "1", "aV", "2", next.primaryFile());
+		return new Recommendation("update-a", Category.UPDATE_MOD, Impact.MEDIUM, "Update a", "", new Action.UpdateMod("a", mods.resolve("a-1.jar"), info), true);
+	}
+
+	private void titles() {
+		client.projects.add(new ModrinthProject("A", "a", "A Mod", "approved", List.of("26.2"), List.of("fabric"), "optional"));
+		client.projects.add(new ModrinthProject("B", "b", "B Mod", "approved", List.of("26.2"), List.of("fabric"), "optional"));
+		client.projects.add(new ModrinthProject("K", "k", "K Mod", "approved", List.of("26.2"), List.of("fabric"), "optional"));
+	}
+
+	// The file each op touches: an enable's target, a disable's jar.
+	private static List<String> files(List<Op> ops) {
+		return ops.stream().map(op -> Path.of(op.to() != null ? op.to() : op.path()).getFileName().toString()).toList();
+	}
+
+	// SPEC 3b as amended (A-H1), AC3.2 (i): B is incompatible with the A version installed now, not with the one A's
+	// update installs, so it goes in only with that update: both in one all-or-nothing group.
+	@Test
+	void anAdditionIncompatibleOnlyWithTheOldVersionJoinsTheUpdatesGroup() throws IOException {
+		titles();
+		Recommendation update = updateA();
+		put("b", version("bV", "B", "1", T, new Dependency("A", "a1", "incompatible")));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update, add("b", "B"));
+
+		assertEquals(List.of(), result.errors());
+		assertEquals(List.of("update-a", "add-b"), result.ids());
+		assertEquals(List.of("a-1.jar", "aV.jar", "bV.jar"), files(result.ops()));
+		assertEquals(1, groups(result.ops()), result.ops().toString());
+	}
+
+	// AC3.2 (ii): B is incompatible with the version A's update installs.
+	@Test
+	void anAdditionIncompatibleWithTheVersionBeingInstalledIsRefused() throws IOException {
+		titles();
+		Recommendation update = updateA();
+		put("b", version("bV", "B", "1", T, new Dependency("A", "aV", "incompatible")));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update, add("b", "B"));
+
+		assertEquals(List.of("update-a"), result.ids());
+		assertEquals(List.of("a-1.jar", "aV.jar"), files(result.ops()));
+		assertEquals(List.of("Add b: Modrinth marks B Mod and A Mod as incompatible, and both would be installed"), result.errors());
+		assertFalse(fetched.contains("bV.jar"));
+	}
+
+	// AC3.2 (iii): the update's own version declares an installed project incompatible; refused before its download.
+	@Test
+	void anUpdateWhoseVersionDeclaresAnInstalledProjectIncompatibleIsRefused() throws IOException {
+		titles();
+		Recommendation update = updateA(incompatible("K"));
+
+		DownloadPlanner.Result result = plan(Set.of("A", "K"), update);
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of(), result.ops());
+		assertEquals(List.of("Update a: Modrinth marks A Mod as incompatible with K Mod, which is installed"), result.errors());
+		assertEquals(List.of(), fetched);
+		assertEquals("installed", Files.readString(mods.resolve("a-1.jar")));
+	}
+
+	// A staged update's version is in the batch: a later update declaring it incompatible is refused.
+	@Test
+	void aStagedUpdateIsPartOfTheBatchForTheNextUpdate() throws IOException {
+		titles();
+		Recommendation update = updateA();
+		Files.writeString(mods.resolve("k-1.jar"), "installed");
+		installedVersions.put("k1", version("k1", "K", "1", T));
+		ModrinthVersion k2 = version("kV", "K", "2", T, new Dependency(null, "aV", "incompatible"));
+		updateVersions.put("kV", k2);
+		Recommendation updateK = new Recommendation("update-k", Category.UPDATE_MOD, Impact.MEDIUM, "Update k", "",
+				new Action.UpdateMod("k", mods.resolve("k-1.jar"), new UpdateInfo("k", "K", "1", "kV", "2", k2.primaryFile())), true);
+
+		DownloadPlanner.Result result = plan(Set.of("A", "K"), update, updateK);
+
+		assertEquals(List.of("update-a"), result.ids());
+		assertEquals(List.of("Update k: Modrinth marks K Mod and A Mod as incompatible, and both would be installed"), result.errors());
+	}
+
+	// AC3.2 (iv): updates are planned before additions, so the order they were ticked in doesn't matter.
+	@Test
+	void theSelectionOrderDoesNotChangeTheOutcome() throws IOException {
+		titles();
+		Recommendation update = updateA();
+		Recommendation addB = add("b", "B");
+		put("b", version("bV", "B", "1", T, new Dependency("A", "a1", "incompatible")));
+
+		DownloadPlanner.Result updateFirst = plan(Set.of("A"), update, addB);
+		DownloadPlanner.Result addFirst = plan(Set.of("A"), addB, update);
+
+		assertEquals(List.of("update-a", "add-b"), addFirst.ids());
+		assertEquals(updateFirst.ids(), addFirst.ids());
+		assertEquals(files(updateFirst.ops()), files(addFirst.ops()));
+		assertEquals(List.of(), addFirst.errors());
+		assertEquals(1, groups(addFirst.ops()));
+	}
+
+	// AC3.2 (v): without A's update, B would go in next to the A version it is incompatible with.
+	@Test
+	void aFailedUpdateDownloadRefusesTheAdditionThatReliedOnIt() throws IOException {
+		titles();
+		Recommendation update = updateA();
+		put("b", version("bV", "B", "1", T, new Dependency("A", "a1", "incompatible")));
+		failing.add("aV.jar");
+
+		DownloadPlanner.Result result = plan(Set.of("A"), add("b", "B"), update);
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of(), result.ops());
+		assertEquals(List.of("Update a: stalled: aV.jar", "Add b: Modrinth marks B Mod as incompatible with A Mod, which is installed"), result.errors());
+	}
+
+	// Plan review A-M1: the client keeps each recommendation's op ids, so it can tell which are still staged.
+	@Test
+	void eachRecommendationRecordsItsOpIds() throws IOException {
+		Recommendation update = updateA();
+		put("b", version("bV", "B", "1", T));
+		put("c", version("cV", "C", "1", T));
+
+		DownloadPlanner.Result result = plan(Set.of("A", "C"), add("b", "B"), add("c", "C"), update);
+
+		Map<String, String> idByFile = new HashMap<>();
+		result.ops().forEach(op -> idByFile.put(files(List.of(op)).getFirst(), op.id()));
+		assertEquals(List.of("update-a", "add-b", "add-c"), result.ids());
+		assertEquals(List.of(idByFile.get("a-1.jar"), idByFile.get("aV.jar")), result.opIds().get("update-a"));
+		assertEquals(List.of(idByFile.get("bV.jar")), result.opIds().get("add-b"));
+		// C is installed already, so its recommendation brought nothing.
+		assertEquals(List.of(), result.opIds().get("add-c"));
+	}
+
+	@Test
+	void aRecommendationWithNoOpsOfItsOwnRecordsTheGroupItJoined() {
+		libraryUsers();
+
+		DownloadPlanner.Result result = plan(Set.of(), add("a", "A"), add("lib", "LIB"));
+
+		assertEquals(List.of("add-a", "add-lib"), result.ids());
+		assertEquals(result.ops().stream().map(Op::id).toList(), result.opIds().get("add-lib"));
+		assertEquals(result.opIds().get("add-a"), result.opIds().get("add-lib"));
 	}
 
 	private static Recommendation add(String slug, String projectId) {

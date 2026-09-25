@@ -8,6 +8,7 @@ import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
+import io.github.chaotix345.rigtune.core.model.UpdateInfo;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -15,6 +16,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -26,20 +28,27 @@ import java.util.function.Function;
 // Each recommendation works on its own copies of the installed projects and mod ids, committed only when it succeeds,
 // so a failed one can't make a later one skip a dependency it never delivered. A recommendation that needs a
 // dependency an earlier one in the batch staged joins that one's group, so the dependency can't be applied or rolled
-// back without it.
+// back without it. Updates are planned before additions and join the batch: an addition is judged against the installed
+// mods with those updates applied, and one that relies on an update joins its group (plan review A-H1).
 public final class DownloadPlanner {
 	public interface Fetcher {
 		// Downloads the file (hash-checked) to <mods>/<name>.jar.rigtune-pending and returns that path.
 		Path fetch(ModFile file) throws IOException;
 	}
 
-	public record Result(List<Op> ops, List<String> ids, List<String> errors) {
+	// opIds: each staged recommendation id -> its ops' ids (its own ops, or the ops of the group it joined when it brought
+	// none), so the client can tell which recommendations are still staged (plan review A-M1).
+	public record Result(List<Op> ops, List<String> ids, List<String> errors, Map<String, List<String>> opIds) {
+		public Result(List<Op> ops, List<String> ids, List<String> errors) {
+			this(ops, ids, errors, Map.of());
+		}
 	}
 
 	private final DependencyResolver resolver;
 	private final Path modsDir;
 	private final Fetcher fetcher;
 	private final BiPredicate<String, String> conflicts;
+	private final Map<String, ModrinthVersion> updateVersions;
 	private final Function<Path, String> modIdOf;
 
 	public DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher) {
@@ -48,14 +57,23 @@ public final class DownloadPlanner {
 
 	// conflicts: whether the mods of two AddMod slugs can't be installed together (the rules' ModConflicts).
 	public DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher, BiPredicate<String, String> conflicts) {
-		this(resolver, modsDir, fetcher, conflicts, ModJars::modIdOf);
+		this(resolver, modsDir, fetcher, conflicts, Map.of());
 	}
 
-	DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher, BiPredicate<String, String> conflicts, Function<Path, String> modIdOf) {
+	// updateVersions: the updates' Modrinth versions by version id, dependencies included
+	// (OnlineDataFetcher.Result.updateVersions()); an update missing from it counts with no dependencies.
+	public DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher, BiPredicate<String, String> conflicts,
+			Map<String, ModrinthVersion> updateVersions) {
+		this(resolver, modsDir, fetcher, conflicts, updateVersions, ModJars::modIdOf);
+	}
+
+	DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher, BiPredicate<String, String> conflicts,
+			Map<String, ModrinthVersion> updateVersions, Function<Path, String> modIdOf) {
 		this.resolver = resolver;
 		this.modsDir = modsDir;
 		this.fetcher = fetcher;
 		this.conflicts = conflicts;
+		this.updateVersions = Map.copyOf(updateVersions);
 		this.modIdOf = modIdOf;
 	}
 
@@ -65,7 +83,12 @@ public final class DownloadPlanner {
 		Batch batch = new Batch(installedProjects, loadedIds, stagedJars);
 		List<String> ids = new ArrayList<>();
 		List<String> errors = new ArrayList<>();
-		for (Recommendation rec : recs) {
+		Map<String, List<String>> opIds = new LinkedHashMap<>();
+		// Every update before any addition, so the outcome doesn't depend on the order they were ticked in (A-H1).
+		List<Recommendation> ordered = new ArrayList<>();
+		recs.stream().filter(r -> r.action() instanceof Action.UpdateMod).forEach(ordered::add);
+		recs.stream().filter(r -> !(r.action() instanceof Action.UpdateMod)).forEach(ordered::add);
+		for (Recommendation rec : ordered) {
 			Attempt attempt = new Attempt(batch);
 			try {
 				switch (rec.action()) {
@@ -79,13 +102,16 @@ public final class DownloadPlanner {
 				errors.add(rec.title() + ": " + e.getMessage());
 				continue;
 			}
-			batch.commit(attempt);
+			String group = batch.commit(attempt);
 			if (rec.action() instanceof Action.AddMod add) {
 				batch.added.add(add);
 			}
 			ids.add(rec.id());
+			List<Op> own = attempt.ops.isEmpty() && !attempt.joins.isEmpty()
+					? batch.ops.stream().filter(op -> group.equals(op.group())).toList() : attempt.ops;
+			opIds.put(rec.id(), own.stream().map(Op::id).toList());
 		}
-		return new Result(List.copyOf(batch.ops), ids, errors);
+		return new Result(List.copyOf(batch.ops), ids, errors, Map.copyOf(opIds));
 	}
 
 	private void addMod(Action.AddMod add, Attempt attempt) throws IOException {
@@ -96,8 +122,11 @@ public final class DownloadPlanner {
 			}
 		}
 		String ref = add.projectId() != null ? add.projectId() : add.slug();
+		DependencyResolver.Resolution resolution = resolver.resolve(ref, attempt.projects, attempt.batch.versions, attempt.batch.groupOfUpdate.keySet());
+		// Allowed only because an update replaces the installed version: it goes in with that update or not at all.
+		resolution.updatesNeeded().forEach(project -> attempt.joins.add(attempt.batch.groupOfUpdate.get(project)));
 		// Projects staged earlier in this batch aren't in attempt.projects, so they come back from the resolver and are joined.
-		for (ModrinthVersion version : resolver.resolve(ref, attempt.projects, attempt.batch.versions)) {
+		for (ModrinthVersion version : resolution.versions()) {
 			String stagedBy = attempt.batch.groupOfProject.get(version.projectId());
 			if (stagedBy != null) {
 				attempt.joins.add(stagedBy);
@@ -151,6 +180,13 @@ public final class DownloadPlanner {
 		if (Files.exists(target) && !(Files.exists(update.currentFile()) && Files.isSameFile(target, update.currentFile()))) {
 			throw new IOException(target.getFileName() + " is already in the mods folder");
 		}
+		// The update's own version is judged like an addition's, against the installed mods and the batch (A-H1).
+		UpdateInfo info = update.update();
+		ModrinthVersion next = updateVersions.get(info.newVersionId());
+		if (next == null) {
+			next = DependencyResolver.known(info.newVersionId(), info.projectId());
+		}
+		resolver.checkUpdate(next, attempt.projects, attempt.batch.versions);
 		Path pending = fetcher.fetch(file);
 		String jarModId = modIdOf.apply(pending);
 		// As for an added mod (review 4, apply-safety-1): the installed jar is only replaced by a jar with a readable id.
@@ -161,16 +197,20 @@ public final class DownloadPlanner {
 		attempt.batch.noteReplaced(jarModId, pending);
 		attempt.ops.add(Op.disableFile(update.currentFile()));
 		attempt.ops.add(Op.enableFile(pending, target).withModId(jarModId));
+		attempt.versions.add(next);
+		attempt.updatedProject = info.projectId();
 	}
 
 	// What the batch has committed so far. projects and modIds are what is installed (loaded, or already in mods/);
 	// what the batch staged is in groupOfProject and groupOfMod, with the group it went into, and in versions and added.
+	// groupOfUpdate: installed project -> the group of its staged update.
 	private static final class Batch {
 		final Set<String> projects;
 		final Set<String> modIds;
 		final Map<String, String> stagedJars;
 		final Map<String, String> groupOfProject = new HashMap<>();
 		final Map<String, String> groupOfMod = new HashMap<>();
+		final Map<String, String> groupOfUpdate = new LinkedHashMap<>();
 		final List<Op> ops = new ArrayList<>();
 		final List<ModrinthVersion> versions = new ArrayList<>();
 		final List<Action.AddMod> added = new ArrayList<>();
@@ -181,7 +221,7 @@ public final class DownloadPlanner {
 			this.stagedJars = stagedJars;
 		}
 
-		void commit(Attempt attempt) {
+		String commit(Attempt attempt) {
 			String group = attempt.joins.isEmpty() ? PendingActions.newId() : attempt.joins.iterator().next();
 			for (int i = 0; i < ops.size(); i++) {
 				if (attempt.joins.contains(ops.get(i).group())) {
@@ -190,6 +230,7 @@ public final class DownloadPlanner {
 			}
 			groupOfProject.replaceAll((project, g) -> attempt.joins.contains(g) ? group : g);
 			groupOfMod.replaceAll((mod, g) -> attempt.joins.contains(g) ? group : g);
+			groupOfUpdate.replaceAll((project, g) -> attempt.joins.contains(g) ? group : g);
 			for (Op op : attempt.ops) {
 				ops.add(op.inGroup(group));
 				if (op.type() == PendingActions.Type.ENABLE_FILE && op.modId() != null) {
@@ -197,9 +238,13 @@ public final class DownloadPlanner {
 				}
 			}
 			attempt.newProjects.forEach(project -> groupOfProject.put(project, group));
+			if (attempt.updatedProject != null) {
+				groupOfUpdate.put(attempt.updatedProject, group);
+			}
 			versions.addAll(attempt.versions);
 			projects.addAll(attempt.projects);
 			modIds.addAll(attempt.modIds);
+			return group;
 		}
 
 		// Deletes a just-downloaded jar that no op uses (the one exception to never deleting).
@@ -227,6 +272,7 @@ public final class DownloadPlanner {
 		final List<String> newProjects = new ArrayList<>();
 		final List<ModrinthVersion> versions = new ArrayList<>();
 		final List<Op> ops = new ArrayList<>();
+		String updatedProject;
 
 		Attempt(Batch batch) {
 			this.batch = batch;
