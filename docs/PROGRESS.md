@@ -37,7 +37,7 @@ Brief: the user's v0.2.0 prompt (full autonomy: research → release, including 
 | ws-d-dhiris | feat/dh-iris | C:/Dev/Worktrees/rigtune-dhiris | MERGED (bac92b2); 296/296 tests on both versions; CI 36080692710 green |
 | p5-verify | test/p5-verification | C:/Dev/Worktrees/rigtune-p5 | DONE, MERGED (9ea235d -> 9fed563) |
 | fix-p5 | fix/p5-findings | C:/Dev/Worktrees/rigtune-fixp5 | running (code first; knowledge after fix/review-3 merges) |
-| docs-release | docs/v0.2-release | C:/Dev/Worktrees/rigtune-docs | running: README, CHANGELOG [0.2.0], DESIGN.md consolidation, Modrinth body-0.2 |
+| docs-release | docs/v0.2-release | C:/Dev/Worktrees/rigtune-docs | MERGED (e8b8e18 -> e9877fe). TODO at release: move the CHANGELOG's DH auto-updater entry from Known issues to Fixed once fix-p5 merges. |
 | ws-e-ui | feat/settings-ui-2 (feat/settings-ui is stale) | C:/Dev/Worktrees/rigtune-ui | MERGED (61d4951 -> d03a59c); 784 tests per version; UiGameTest passed on both. Unverified: no HTTP request with the network off, checked in game (unit gates only); the startup-toast switch in game. |
 | ws-g-e2e | feat/self-update-e2e | C:/Dev/Worktrees/rigtune-e2e | DONE. Phase 5 merged (9d915fb -> ea15129): final v0.1.0 -> 0.2.0 = 21/21 PASS (docs/smoke/self-update/final-v010-to-020/), M14 undo after a real restart = 22/22 PASS (docs/smoke/self-update/undo-after-restart/). |
 
