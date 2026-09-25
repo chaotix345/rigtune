@@ -243,4 +243,18 @@ class RulesSourcesTest {
 		assertEquals(URI.create("https://raw.githubusercontent.com/chaotix345/rigtune/main/rules/rules-v2.json"),
 				RulesSources.DEFAULT_BASE_URL.resolve(RulesSources.V2_FILE));
 	}
+
+	// Review 3, security-3: plain http only on this machine, as for -Drigtune.modrinth.baseUrl.
+	@Test
+	void baseUrlOverrideAllowsPlainHttpOnlyOnThisMachine() {
+		for (String local : List.of("http://localhost:8080/rules/", "http://LOCALHOST/rules/", "http://127.0.0.1/rules/",
+				"http://127.1.2.3:9000/rules/", "http://[::1]:8080/rules/")) {
+			assertEquals(URI.create(local), RulesSources.baseUrl(local), local);
+		}
+		for (String remote : List.of("http://example.com/rules/", "http://192.168.1.10/rules/", "http://localhost.example.com/rules/",
+				"http://127.0.0.1.example.com/rules/", "http://10.0.0.1:8080/rules/")) {
+			assertEquals(RulesSources.DEFAULT_BASE_URL, RulesSources.baseUrl(remote), remote);
+		}
+		assertEquals(URI.create("https://192.168.1.10/rules/"), RulesSources.baseUrl("https://192.168.1.10/rules/"));
+	}
 }

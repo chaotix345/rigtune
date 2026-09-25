@@ -7,6 +7,7 @@ import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.function.BooleanSupplier;
 
@@ -36,6 +37,7 @@ public final class RulesSources {
 	}
 
 	// The value of -Drigtune.rules.baseUrl (a folder URL that holds rules-v2.json and rules-v1.json), or the default.
+	// It must be https, or plain http on this machine (a local test server), as for -Drigtune.modrinth.baseUrl.
 	public static URI baseUrl(String override) {
 		if (override == null || override.isBlank()) {
 			return DEFAULT_BASE_URL;
@@ -44,14 +46,19 @@ public final class RulesSources {
 		try {
 			URI uri = new URI(text.endsWith("/") ? text : text + "/");
 			String scheme = uri.getScheme();
-			if (uri.getHost() != null && ("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme))) {
+			if (uri.getHost() != null && ("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme) && loopback(uri.getHost()))) {
 				return uri;
 			}
 		} catch (URISyntaxException e) {
 			// Falls through to the warning.
 		}
-		RigTune.LOGGER.warn("Ignoring -D{}={}: not an http(s) URL", BASE_URL_PROPERTY, override);
+		RigTune.LOGGER.warn("Ignoring -D{}={}: not an https URL (or http on localhost)", BASE_URL_PROPERTY, override);
 		return DEFAULT_BASE_URL;
+	}
+
+	private static boolean loopback(String host) {
+		String h = host.toLowerCase(Locale.ROOT);
+		return h.equals("localhost") || h.equals("[::1]") || h.matches("127\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}");
 	}
 
 	public List<RulesLoader.Candidate> local() {

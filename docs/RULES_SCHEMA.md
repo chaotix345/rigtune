@@ -26,7 +26,7 @@ Both files come from one run and share `revision` and `generatedAt`. See tools/R
 - The local candidates are used right away; the remote document replaces them only if it is strictly newer (a higher `revision`, or the same revision with `schemaVersion` 2 over 1). The same rules again aren't re-applied.
 - A document is valid if it parses and its `schemaVersion` is 1 or 2. A future v3 will live in its own file.
 - No request is made when the network or remote rules are switched off in RigTune's settings. The switch is checked again before the v1 fallback request, and a load that a newer one (after a settings change) has replaced makes no further requests.
-- `-Drigtune.rules.baseUrl=<folder URL>` replaces `https://raw.githubusercontent.com/chaotix345/rigtune/main/rules/` (for tests).
+- `-Drigtune.rules.baseUrl=<folder URL>` replaces `https://raw.githubusercontent.com/chaotix345/rigtune/main/rules/` (for tests). It must be https; plain http is accepted only for localhost, 127.x.x.x and [::1].
 
 0.1.x reads only `rules-v1.json` (schemaVersion 1) and its own `rules-cache.json`.
 
