@@ -18,6 +18,8 @@ before any Wave A workstream merged (so 3a, 3e and per-entry undo are the v0.2 c
 | [dev-v010-to-030](dev-v010-to-030/RESULT.md) | the released `rigtune-0.1.0.jar` (sha256 `8294d04a…b950`) → 0.3.0-dev; `--legacy-disable --expect-history` | PASS (21/21) | 2026-09-26 |
 | [dev-v010-seeded-to-030](dev-v010-seeded-to-030/RESULT.md) | plan review H-M2: as dev-v010-to-030, seeded from the user's real 0.1.0 `pending.json`/`last-apply.json` (templated) with fake DH jars (`--seed tools/e2e/seeds/v010-dh`) | FAIL (25/26): only the 3e WARN line per failed op is missing (WS-B, not merged) | 2026-09-26 |
 | [dev-undo-after-restart-030](dev-undo-after-restart-030/RESULT.md) | M14 on 0.3.0-dev, then plan review B-M3 on the same instance (two Applies, Undo this on the older) | FAIL (31/35): M14 22/22 and entry-apply 6/6 pass; entry-undo 3/7 ("no per-entry undo API": WS-B, not merged); entry-check not run | 2026-09-26 |
+| [dev-v010-seeded-to-030-wsb](dev-v010-seeded-to-030-wsb/RESULT.md) | the seeded run on a local, unpushed merge of test/e2e-v03 @ 852d73a and origin/feat/history @ 39eca5b (WS-B), jar sha256 `d5b50dbc…8f68` | PASS (26/26): WS-B's WARN line for each of the two failed DH ops, "attempt 2 of 3" | 2026-09-26 |
+| [dev-undo-after-restart-030-wsb](dev-undo-after-restart-030-wsb/RESULT.md) | the undo scenario on the same local merge: Undo this through `UndoScreen(Screen, RigTuneController, entryId)` and `RigTuneController.undoPlanFor` | PASS (43/43) | 2026-09-26 |
 
 What the seeded run shows: the 0.1.0 helper retried the user's DH group while the fake DH jar was held open (as DH's own
 updater held the real one) and failed it again (attempts 2), while the self-update itself applied. On the first
@@ -25,7 +27,15 @@ updater held the real one) and failed it again (attempts 2), while the self-upda
 its own waiting in mods/update.", the legacy import journaled both changes and marked them `DISCARDED`, no helper ran
 at exit, `mods/` didn't change at exit, and during the session the only change was RigTune's DH download becoming
 `.rigtune-superseded`. The one failing check waits for WS-B's per-op WARN lines (SPEC 3e); v0.2 logs only "2 staged
-RigTune change(s) were not applied; they will be retried at the next exit".
+RigTune change(s) were not applied; they will be retried at the next exit". With WS-B merged locally (`-wsb`), latest.log
+has one line per failed op ("RigTune could not apply a change at the last exit (attempt 2 of 3; it's retried at the
+next exit): DISABLE_FILE fabric-26.2.jar: ..." and "... ENABLE_FILE distanthorizons
+(DistantHorizons-3.3.2-26.2-fabric-neoforge.jar): Not applied because disabling fabric-26.2.jar failed") and every
+check passes. The `-wsb` undo run's per-entry part: two Applies journaled as two `apply` entries; Undo this on the
+older through the entry Undo screen (button "Undo (1)"), a plan of one revert needing a restart; after the restart only
+`e2e-first` is disabled, the journal has one `undo` of the older entry (its change `REVERTED`), the newer entry's change
+stays `APPLIED`, and `undoPlanFor` on the older entry then has nothing left. Neither `-wsb` folder counts for AC4.1/4.2:
+Phase 5 reruns both on the release candidate.
 
 ## v0.2
 

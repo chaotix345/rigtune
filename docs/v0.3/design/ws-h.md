@@ -8,8 +8,8 @@ Plan: docs/v0.3/plans/ws-h.md. Harness: tools/e2e (README "v0.3 runs"). Evidence
 |---|---|---|---|
 | 0.2.0 → new | `--old-jar rigtune-0.2.0+mc26.2.jar --expect-history own-update` | PASS 20/20 | final-v020-to-030 |
 | 0.1.0 → new | `--old-jar rigtune-0.1.0.jar --legacy-disable --expect-history` | PASS 21/21 | final-v010-to-030 |
-| seeded 0.1.0 → new (H-M2) | `... --seed tools/e2e/seeds/v010-dh --expect-history` | 25/26 (3e WARN missing) | final-v010-seeded-to-030 |
-| undo after restart + per entry (M14, B-M3) | `--scenario undo` | 31/35 (M14 22/22, entry-apply 6/6, entry-undo 3/7 needs WS-B) | undo-after-restart-030 |
+| seeded 0.1.0 → new (H-M2) | `... --seed tools/e2e/seeds/v010-dh --expect-history` | 25/26 (3e WARN missing); PASS 26/26 with WS-B merged locally (`-wsb`) | final-v010-seeded-to-030 |
+| undo after restart + per entry (M14, B-M3) | `--scenario undo` | 31/35 (M14 22/22, entry-apply 6/6, entry-undo 3/7 needs WS-B); PASS 43/43 with WS-B merged locally (`-wsb`) | undo-after-restart-030 |
 
 Released jars (GitHub release assets; the harness checks `--old-sha256`): `rigtune-0.1.0.jar`
 `8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950`; `rigtune-0.2.0+mc26.2.jar`
@@ -37,27 +37,37 @@ Released jars (GitHub release assets; the harness checks `--old-sha256`): `rigtu
   recursive `mods/` listing after exit equals the driver's listing when it quit (before RigTune's stop hooks). The
   drop's retiring of RigTune's DH download (`.rigtune-pending` → `.rigtune-superseded`) happens during the session and
   is checked separately as the only change.
-- **3e WARN check** (not strict on wording): a `/WARN]` line with `attempt N of 3` naming each failed op's file or mod
-  id, at least one line per failed op. Adjust if WS-B's format differs.
+- **3e WARN check.** Each FAILED op of the last-apply.json the new version read needs a `/WARN]` line of its own
+  (bipartite matching; identical lines count once) with `attempt N of 3`, the op type and one of the op's own file
+  names. A mod id alone doesn't count: one group's ops share it, and the enable's reason names the disable's file. WS-B's
+  format ("RigTune could not apply a change at the last exit (attempt 2 of 3; ...): DISABLE_FILE fabric-26.2.jar: ...")
+  passes (`-wsb`).
 - **B-M3 in the undo scenario.** AC4.2's single evidence folder holds both: after M14's three starts, the same instance
   gets two Applies (`e2e-first`, then `e2e-second`), Undo this on the older, a restart, and a check start. Until WS-B
   merges, the driver finds the per-entry plan by shape (a public `(String) -> UndoPlan` method on RigTuneController or
   the controller) and UndoScreen's entry constructor `(Screen, RigTuneController, String)` by reflection; without the
-  constructor it calls `undo(plan)` (still the post-exit helper path B-M3 is about). Once WS-B is merged, switch to the
-  direct call so CI's `compileE2eUndoJava` guards it.
+  constructor it calls `undo(plan)` (still the post-exit helper path B-M3 is about). It prefers WS-B's name
+  `undoPlanFor` and refuses an ambiguous shape match. Once WS-B is merged into feat/v0.3.0, switch to the direct calls
+  (`controller.undoPlanFor(id)`, `new UndoScreen(parent, controller, id)`) so CI's `compileE2eUndoJava` guards them. With
+  WS-B's branch merged locally the reflection found both and the whole scenario passed (43/43).
 - **Lock.** owner.txt now carries PLAN's `agent:`/`worktree:`/`started:` lines (plus `run:`); release is `owner.txt`
   then `rmdir`, only for this run's lock. The dry runs were started through a wrapper that also releases a lock left
   by a killed script, only if owner.txt names this worktree.
-- **helper.log per launch.** The helper wait reads only the lines written after each launch (six launches share the
-  undo instance).
+- **helper.log per launch.** HelperLauncher's `Redirect.to` empties helper.log at every helper start, so the wait
+  compares the file's (mtime, size) with its state before the launch and only reads it when it changed (six launches
+  share the undo instance).
+- **Self-review** (code-reviewer subagent, 0 high, 3 medium, 6 low): all fixed in 852d73a (helper.log truncation, the
+  WARN matching, make_seed refusing a destination inside the source, exact notice key, every journal record of a
+  carried op, whole-value paths with spaces, a lock holding other files is left whole, `--seed` only for self-update,
+  entry-check needs the method and no plan problem, `undoPlanFor` preferred).
 
 ## Blocked / waiting
 
-- Seeded run: "latest.log: a WARN line per failed op, with its attempt (3e)" fails until WS-B's startup WARN lines
-  merge. 3a (WS-A): the carried-over group is already dropped by v0.2's broader rule; re-run after WS-A to confirm the
-  narrowed rule (update of a loaded mod with a queued jar) still drops it (DH is loaded in the harness).
-- Undo scenario: entry-undo and entry-check wait for WS-B's per-entry controller method (and, if WS-B adds it, the
-  UndoScreen entry constructor).
+- On test/e2e-v03 (without WS-B) the seeded run's 3e check and the undo run's entry-undo/entry-check fail; both pass
+  on a local merge with origin/feat/history 39eca5b (`-wsb` evidence; that merge isn't pushed).
+- 3a (WS-A): the carried-over group is dropped by v0.2's broader rule today; re-run the seeded variant after WS-A
+  merges to confirm the narrowed rule (update of a loaded mod with a queued jar) still drops it (DH is loaded in the
+  harness; WS-A keeps the key `rigtune.status.queued_update_dropped`).
 
 ## Phase 5
 
