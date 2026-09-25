@@ -131,8 +131,12 @@ class Run:
         except FileExistsError:
             owner = self.lock / "owner.txt"
             raise LockBusy(owner.read_text(encoding="utf-8") if owner.is_file() else "(no owner.txt)")
-        (self.lock / "owner.txt").write_text("ws-g self-update E2E ({})\nworktree {}\nrun {}\nsince {}\n".format(
-            self.name, REPO, self.run_dir, datetime.datetime.now(datetime.timezone.utc).isoformat()), encoding="utf-8")
+        try:
+            (self.lock / "owner.txt").write_text("ws-g self-update E2E ({})\nworktree {}\nrun {}\nsince {}\n".format(
+                self.name, REPO, self.run_dir, datetime.datetime.now(datetime.timezone.utc).isoformat()), encoding="utf-8")
+        except OSError:
+            self.lock.rmdir()  # still empty: we just made it
+            raise
         self.log("took the game-test lock " + str(self.lock))
 
     def release_lock(self):
@@ -385,6 +389,9 @@ class Run:
                  "- Old: `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["old"]),
                  "- New (served by the fake Modrinth): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"]),
                  "- Client time: update phase {} s, verify phase {} s".format(self.facts.get("updateSeconds"), self.facts.get("verifySeconds")),
+                 "- Rescan pressed because the report stayed offline (the startup lookup race, docs/v0.2/design/ws-g.md): "
+                 "update phase {}, verify phase {}".format(*("yes" if (self.driver(p) or {}).get("rescanned") else "no"
+                                                             for p in ("update", "verify"))),
                  ""]
         for phase, title in (("update", "After the old version applied the update and quit (helper done)"),
                              ("verify", "After the new version started on the same instance")):
@@ -397,19 +404,30 @@ class Run:
         lines += ["## Files", ""] + ["- `{}`".format(f) for f in files if f != "RESULT.md"] + [""]
         return "\n".join(lines)
 
-    def capture_fixtures(self):
+    def capture_fixtures(self, verdict):
         dest = Path(self.args.capture_fixtures).resolve()
         raw = self.run_dir / "captured-raw"
         written = fixtures.capture({name: raw / name for name in CAPTURED}, self.instance, dest)
+        failed = ["{}: {}".format(phase, c.name) for phase, checks in self.checks.items() for c in checks if not c.ok]
         manifest = {"capturedFrom": self.facts["old"], "updateTo": self.facts["new"], "minecraft": self.mc,
-                    "run": self.run_dir.name, "token": fixtures.TOKEN,
+                    "run": self.run_dir.name, "verdict": verdict, "failedChecks": failed, "token": fixtures.TOKEN,
                     "files": {p.name: e2e_checks.digest(p, "sha256") for p in written}}
         (dest / "manifest.json").write_text(json.dumps(manifest, indent=1) + "\n", encoding="utf-8")
         self.log("fixtures: " + ", ".join(p.name for p in written))
 
     # --- main -----------------------------------------------------------------------------------------------------
 
+    def preflight(self):
+        """Fail before touching anything: the process watching and cleanup need Windows and PowerShell 7."""
+        if os.name != "nt":
+            raise SystemExit("the harness runs on Windows only (process checks use Win32_Process)")
+        if shutil.which("pwsh") is None:
+            raise SystemExit("pwsh (PowerShell 7) isn't on PATH")
+        if self.lock is not None and not self.lock.parent.is_dir():
+            raise SystemExit("the lock's folder {} doesn't exist; pass --lock <path> or --lock none".format(self.lock.parent))
+
     def main(self):
+        self.preflight()
         self.prepare()
         verdict = "FAIL"
         try:
@@ -435,8 +453,10 @@ class Run:
                     self.log("{} [{}] {}: {}".format(phase, "PASS" if c.ok else "FAIL", c.name, c.detail))
             self.log("VERDICT " + verdict)
             self.evidence(verdict)
-        if self.args.capture_fixtures and self.checks["update"]:
-            self.capture_fixtures()
+        if self.args.capture_fixtures and (verdict == "PASS" or self.args.capture_anyway and self.checks["update"]):
+            self.capture_fixtures(verdict)
+        elif self.args.capture_fixtures:
+            self.log("fixtures not captured: the run didn't pass (--capture-anyway overrides)")
         return 0 if verdict == "PASS" else 1
 
 
@@ -469,8 +489,9 @@ def parse_args(argv):
     parser.add_argument("--work", required=True, help="scratch folder for the run (a fresh instance is made inside)")
     parser.add_argument("--mc", default="26.2")
     parser.add_argument("--fabric-api", help="fabric-api jar (default: from the Gradle cache)")
-    parser.add_argument("--evidence", help="copy the evidence here (replaced)")
-    parser.add_argument("--capture-fixtures", help="write the old version's files here, templated (${INSTANCE})")
+    parser.add_argument("--evidence", help="copy the evidence here (replaces an earlier evidence folder only)")
+    parser.add_argument("--capture-fixtures", help="write the old version's files here, templated (${INSTANCE}); passing runs only")
+    parser.add_argument("--capture-anyway", action="store_true", help="capture fixtures from a failed run too (see manifest.json verdict)")
     parser.add_argument("--expect-history", action="store_true", help="require the 0.2 history.json legacy import")
     parser.add_argument("--port", type=int, default=443)
     parser.add_argument("--lock", default=DEFAULT_LOCK, help="game-test lock folder, or 'none'")

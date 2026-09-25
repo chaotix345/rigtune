@@ -37,6 +37,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * A stand-in for api.modrinth.com and cdn.modrinth.com (plus static files, e.g. the rules on raw.githubusercontent.com)
@@ -93,6 +94,11 @@ public final class FakeModrinth implements AutoCloseable {
 	public void close() {
 		server.stop(0);
 		executor.shutdownNow();
+		try {
+			executor.awaitTermination(5, TimeUnit.SECONDS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
 	}
 
 	public static SSLContext tls(Path keystore, char[] password) throws IOException {
@@ -163,13 +169,18 @@ public final class FakeModrinth implements AutoCloseable {
 		} catch (RuntimeException e) {
 			response = new Response(400, "application/json; charset=utf-8",
 					Json.write(Map.of("error", "invalid_input", "description", String.valueOf(e))).getBytes(StandardCharsets.UTF_8));
+		} catch (IOException e) {
+			System.err.println("FakeModrinth: " + method + " " + host + path + " failed: " + e);
+			response = new Response(500, "application/json; charset=utf-8",
+					Json.write(Map.of("error", "internal", "description", String.valueOf(e))).getBytes(StandardCharsets.UTF_8));
 		}
+		// Logged before answering, so the line is written by the time the client has the response.
+		log(method, host, path, query, response.status(), exchange.getRequestHeaders().getFirst("User-Agent"), response.body().length);
 		exchange.getResponseHeaders().set("Content-Type", response.contentType());
 		exchange.sendResponseHeaders(response.status(), response.body().length == 0 ? -1 : response.body().length);
 		try (OutputStream out = exchange.getResponseBody()) {
 			out.write(response.body());
 		}
-		log(method, host, path, query, response.status(), exchange.getRequestHeaders().getFirst("User-Agent"), response.body().length);
 	}
 
 	private static String hostOf(String header) {

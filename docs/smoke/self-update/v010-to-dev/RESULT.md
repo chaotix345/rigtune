@@ -1,10 +1,11 @@
 # Self-update E2E: v010-to-dev
 
 - Verdict: **PASS**
-- Run: 20260925T014130Z UTC, MC 26.2, rigtune-0.1.0.jar + fabric-api-0.161.0+26.2.jar in a fresh scratch instance
+- Run: 20260925T020701Z UTC, MC 26.2, rigtune-0.1.0.jar + fabric-api-0.161.0+26.2.jar in a fresh scratch instance
 - Old: `rigtune-0.1.0.jar` version 0.1.0, sha256 `8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950`
-- New (served by the fake Modrinth): `rigtune-0.2.0-dev+mc26.2.jar` version 0.2.0-dev+mc26.2, sha256 `9264a8e13a5699937648492a5b32f18420bc47baf1873c483d921a502b825011`
-- Client time: update phase 30 s, verify phase 20 s
+- New (served by the fake Modrinth): `rigtune-0.2.0-dev+mc26.2.jar` version 0.2.0-dev+mc26.2, sha256 `793e85787d5c705ac7e101f2e0296a1d6e02d7200832b498be2c6163fd09e551`
+- Client time: update phase 22 s, verify phase 20 s
+- Rescan pressed because the report stayed offline (the startup lookup race, docs/v0.2/design/ws-g.md): update phase no, verify phase no
 
 ## After the old version applied the update and quit (helper done)
 
@@ -29,7 +30,7 @@
 | the driver verified | PASS | error: None |
 | the new RigTune is loaded from mods/ | PASS | loaded 0.2.0-dev+mc26.2 from ['<instance>\\mods\\rigtune-0.2.0-dev+mc26.2.jar'] |
 | the goal is kept | PASS | goal: QUALITY |
-| the apply result was shown (rigtune.json lastShownApply) | PASS | lastShownApply 2026-09-25T01:42:08.657984Z vs last-apply.json finishedAt 2026-09-25T01:42:08.657984Z |
+| the apply result was shown (rigtune.json lastShownApply) | PASS | lastShownApply 2026-09-25T02:07:33.180641400Z vs last-apply.json finishedAt 2026-09-25T02:07:33.180641400Z |
 | no further RigTune update is offered | PASS | online=True updateOffered=False |
 | no crash report | PASS | crash-reports: [] |
 | mods unchanged by the relaunch | PASS | unchanged |

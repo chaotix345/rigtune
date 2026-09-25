@@ -237,6 +237,16 @@ class FakeModrinthTest {
 	}
 
 	@Test
+	void anUnreadableFileIsAServerErrorAndIsLogged() throws Exception {
+		start(false);
+		Files.delete(dir.resolve("rules-v1.json"));
+
+		assertEquals(500, rawGet("raw.githubusercontent.com", RULES_PATH).status());
+		List<String> lines = Files.readAllLines(dir.resolve("requests.jsonl"));
+		assertEquals(500, JsonParser.parseString(lines.getLast()).getAsJsonObject().get("status").getAsInt());
+	}
+
+	@Test
 	void requestsAreLogged() throws Exception {
 		start(false);
 		get("/v2/projects?ids=" + query("[]"));

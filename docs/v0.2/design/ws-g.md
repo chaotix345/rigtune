@@ -8,12 +8,14 @@ Only `core/modrinth/HttpModrinthClient.java` changed in the mod:
 - `-Drigtune.modrinth.baseUrl=<url>` (`BASE_URL_PROPERTY`) replaces `https://api.modrinth.com` for every Modrinth call
   (blank means the default). For tests only; not documented for players.
 - L5 download allowlist: a download must be `https://cdn.modrinth.com/` (port 443), or the origin (scheme, host, port)
-  of a non-default base URL. The check runs before the request (no temp file, no request) and again on the response's
-  final URI, since the client follows redirects. Userinfo tricks (`https://cdn.modrinth.com@evil/`), look-alike hosts
-  and non-ASCII/percent-encoded hosts (no parsed host) fail the origin compare. Known limits (review LOW): intermediate
-  redirect hops aren't checked, only the final URI (the bytes are SHA-512-verified either way; a manual redirect loop
-  in shipped code wasn't worth it for a path Modrinth doesn't use), and a real Modrinth redirect off the CDN would now
-  fail the download (none was observed).
+  of a non-default base URL that is https, or plain http on this machine (localhost, 127.x, [::1]; the local test
+  servers). Downloads use their own HttpClient with `Redirect.NEVER`: RigTune follows a redirect itself (at most 5
+  hops, relative `Location`s resolved) and checks every hop against the allowlist before requesting it, so no request
+  goes off the allowlist. Only a 2xx body is written and hashed. Userinfo tricks (`https://cdn.modrinth.com@evil/`),
+  look-alike hosts and non-ASCII/percent-encoded hosts (no parsed host) fail the origin compare. A real Modrinth
+  redirect off the CDN would now fail the download; checked 2026-09-25: an unauthenticated `curl -sI` of
+  `https://cdn.modrinth.com/data/P7dR8mSH/versions/ewUK83HI/fabric-api-0.161.0%2B26.2.jar` answers `200 OK`
+  (application/java-archive, 2566123 bytes) with no redirect.
 
 Everything else is test tooling, outside the shipped jar and outside `./gradlew build`:
 - `tools/e2e/java/.../FakeModrinth.java`, `RedirectProbe.java`: JDK-only, run with `java <file>.java`. The test source
@@ -56,9 +58,11 @@ Everything else is test tooling, outside the shipped jar and outside `./gradlew 
 - **M12.** Two parts: the run 0.2.0-dev.1 → 0.2.0-dev.2 (the 0.2 helper applies its own successor), and a check in
   every run that the new jar's `depends` and `breaks` add or change nothing relative to the old jar's (a stricter one
   swapped in post-exit could leave the game unable to start with no RigTune to undo it). Nested jars aren't compared.
-- **Fixtures (for WS-B, AC3.3)** are the real files from the v0.1.0 run, with the instance path replaced by
-  `${INSTANCE}` and the separators after it made `/` (so tests can substitute a Linux path on CI).
-  `src/test/resources/v010/captured/README.md` explains them; `manifest.json` records the run and hashes.
+- **Fixtures (for WS-B, AC3.3)** are the real files from a passing v0.1.0 run, with the instance path replaced by
+  `${INSTANCE}` and the separators after it made `/` (so tests can substitute a Linux path on CI). In the JSON files
+  only string values that start with the instance path are rewritten (parsed and re-serialised in Gson's layout), so no
+  escape sequence can be damaged. `src/test/resources/v010/captured/README.md` explains them; `manifest.json` records
+  the run, its verdict, any failed checks and the hashes.
 - **Evidence** replaces absolute paths by `<instance>`, `<run>`, `<repo>` and `~`; client logs are filtered to RigTune,
   the driver, warnings, errors and the mod list. The errors in them (OSHI performance counters, authlib/Yggdrasil
   `UnknownHostException`) come from Minecraft running with Mojang's hosts unresolvable, not from RigTune.
@@ -79,11 +83,26 @@ Everything else is test tooling, outside the shipped jar and outside `./gradlew 
 - Port 443 on 127.0.0.1 was free and bindable without admin rights.
 - The certificate has SANs for all three hosts (plus localhost / 127.0.0.1).
 
+## Finding: RigTune sometimes skips its Modrinth lookups at startup
+One v0.1.0 run in five stayed "Offline" for 180 s. The fake server got the rules fetch but never `/v2/version_files`,
+and there was no lookup warning (`docs/smoke/self-update/v010-offline-race/`). `RealController.fetchOnline()` returns
+early while `rules` is null. It is called when the scan completes and, in `loadRules`, only when the remote document
+beats the local one. `RulesLoader.pickNewest` keeps the first candidate on a revision tie. So when the scan finishes
+before the bundled/cached rules are set and the remote rules have the same revision, nothing calls it until Rescan.
+The timing matched: in passing runs the scan and the rules load landed in the same second, in the failing one the scan
+finished about 1 s earlier. The same code is in 0.2 today (RealController `loadRules` / `rescan`), so this is reported
+to the coordinator for WS-A. The fix: call `fetchOnline()` right after the local rules are set; it's a no-op until the
+scan is done. For 0.1.0 users, a published rules-v1.json with a higher revision than the bundled r4 triggers the lookups
+on the first launch that fetches it. The driver presses Rescan once after 20 s offline (a player's action) and
+`RESULT.md` records whether it did.
+
 ## Deviations from the plan
 - The fake server lives in `tools/e2e/java` (not a Python `http.server`), see above.
 - `NoDefaultCurrentDirectoryInExePath` is set in this environment, so the orchestrator calls `gradlew.bat` by its
   absolute path.
 - No separate Gradle subproject: the `e2e` source set and two tasks sit in build.gradle's WS-G block.
+- After the first push, `origin/feat/v0.2.0` is merged into the branch rather than rebased onto it: a hook blocks
+  force-pushes without the user's confirmation.
 
 ## Phase 5 (to do when the coordinator asks)
 1. Build the merged integration jar (`./gradlew :26.2:jar` on feat/v0.2.0) and rerun

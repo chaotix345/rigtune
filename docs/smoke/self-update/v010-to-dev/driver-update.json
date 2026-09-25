@@ -4,11 +4,11 @@
   "error": null,
   "events": [
     "t+0.0s driver loaded, phase update, output <run>\\out",
-    "t+3.7s title screen; goal set to QUALITY",
-    "t+4.7s offered: Update RigTune -> rigtune-0.2.0-dev+mc26.2.jar",
+    "t+3.6s title screen; goal set to QUALITY",
+    "t+4.6s offered: Update RigTune -> rigtune-0.2.0-dev+mc26.2.jar",
     "t+5.7s screenshot e2e-update-1-report.png: Saved screenshot as e2e-update-1-report.png",
-    "t+6.7s apply: Downloading 1 mod change(s)…",
-    "t+7.2s staged: 2 op(s) in pending.json",
+    "t+6.6s apply: Downloading 1 mod change(s)…",
+    "t+7.1s staged: 2 op(s) in pending.json",
     "t+9.2s screenshot e2e-update-2-staged.png: Saved screenshot as e2e-update-2-staged.png",
     "t+11.2s quitting"
   ],
@@ -25,7 +25,7 @@
     "newVersion": "0.2.0-dev+mc26.2",
     "url": "https://cdn.modrinth.com/data/E2ERigTn/versions/E2Enew01/rigtune-0.2.0-dev%2Bmc26.2.jar",
     "filename": "rigtune-0.2.0-dev+mc26.2.jar",
-    "sha512": "c91965398b62d562f4fc3683ffa955ec4fed88e41eaeaa40057fa2a2724638da3ed8c2c1a92d6e92210bf5f5783a9770f2ff9b69966d73eb41f0bd1310252ead"
+    "sha512": "f986e3441db915fa3a7d058c85b1f3627e26bc4bff617af1618ab51d90c7b81dfb0282d5de76fd72db38c10b815a30c9c8b2bf345c96957e327498da75b1304e"
   },
   "updateOffered": true,
   "applyMessage": "Downloading 1 mod change(s)…",
@@ -36,8 +36,8 @@
       "to": null,
       "path": "<instance>\\mods\\rigtune-0.1.0.jar",
       "modId": null,
-      "group": "3d27b292-88e6-4470-bcf3-015e5571d141",
-      "id": "3f585b58-b65f-4e85-9401-e583516917b0"
+      "group": "511b9a75-82c0-4a2d-9a3d-151b3b2d1f52",
+      "id": "8d22dcd3-7eaa-4800-a93c-476887d5a839"
     },
     {
       "type": "ENABLE_FILE",
@@ -45,8 +45,8 @@
       "to": "<instance>\\mods\\rigtune-0.2.0-dev+mc26.2.jar",
       "path": null,
       "modId": "rigtune",
-      "group": "3d27b292-88e6-4470-bcf3-015e5571d141",
-      "id": "04fc4264-6bee-4192-a7e3-2358062d614e"
+      "group": "511b9a75-82c0-4a2d-9a3d-151b3b2d1f52",
+      "id": "0f6351f6-3ccd-4985-aeb0-86741466774c"
     }
   ],
   "status": "Restart Minecraft to finish applying 1 change(s)."

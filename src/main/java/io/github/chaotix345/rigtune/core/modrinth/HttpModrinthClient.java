@@ -44,6 +44,7 @@ public final class HttpModrinthClient implements ModrinthClient {
 	// For tests against a local server (tools/e2e); downloads are then also allowed from that server's origin.
 	public static final String BASE_URL_PROPERTY = "rigtune.modrinth.baseUrl";
 	private static final URI CDN = URI.create("https://cdn.modrinth.com/");
+	static final int MAX_DOWNLOAD_REDIRECTS = 5;
 	private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
 	private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(20);
 	private static final long DOWNLOAD_SLACK_BYTES = 1024;
@@ -57,6 +58,8 @@ public final class HttpModrinthClient implements ModrinthClient {
 	}
 
 	private final HttpClient http;
+	// Downloads follow redirects by hand, so every hop is checked against the allowlist before it is requested.
+	private final HttpClient downloads;
 	private final String baseUrl;
 	private final String userAgent;
 	private final Limits limits;
@@ -80,6 +83,10 @@ public final class HttpModrinthClient implements ModrinthClient {
 		this.http = HttpClient.newBuilder()
 				.connectTimeout(CONNECT_TIMEOUT)
 				.followRedirects(HttpClient.Redirect.NORMAL)
+				.build();
+		this.downloads = HttpClient.newBuilder()
+				.connectTimeout(CONNECT_TIMEOUT)
+				.followRedirects(HttpClient.Redirect.NEVER)
 				.build();
 	}
 
@@ -158,24 +165,35 @@ public final class HttpModrinthClient implements ModrinthClient {
 		Path dir = target.toAbsolutePath().getParent();
 		Files.createDirectories(dir);
 		long cap = file.size() > 0 ? Math.min(file.size() + DOWNLOAD_SLACK_BYTES, limits.maxDownloadBytes()) : limits.maxDownloadBytes();
-		HttpRequest request = request(uri).GET().build();
 		Path tmp = Files.createTempFile(dir, target.getFileName() + ".", ".tmp");
 		try {
 			MessageDigest digest = sha512();
+			HttpRequest request;
 			HttpResponse<Void> response;
 			try (FileChannel out = FileChannel.open(tmp, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
-				response = exchange(request, (info, progress) -> info.statusCode() / 100 == 2
-						? BoundedHttp.capped(cap, false, progress, buffer -> {
-							digest.update(buffer.duplicate());
-							while (buffer.hasRemaining()) {
-								out.write(buffer);
-							}
-						})
-						: BoundedHttp.capped(ERROR_BODY_BYTES, true, progress, buffer -> buffer.position(buffer.limit())),
-						limits.downloadStall(), limits.downloadDeadline());
+				// Only a 2xx body is written; a redirect's body is discarded.
+				for (int hop = 0; ; hop++) {
+					request = request(uri).GET().build();
+					response = exchange(downloads, request, (info, progress) -> info.statusCode() / 100 == 2
+							? BoundedHttp.capped(cap, false, progress, buffer -> {
+								digest.update(buffer.duplicate());
+								while (buffer.hasRemaining()) {
+									out.write(buffer);
+								}
+							})
+							: BoundedHttp.capped(ERROR_BODY_BYTES, true, progress, buffer -> buffer.position(buffer.limit())),
+							limits.downloadStall(), limits.downloadDeadline());
+					Optional<String> location = response.headers().firstValue("Location");
+					if (!isRedirect(response.statusCode()) || location.isEmpty()) {
+						break;
+					}
+					if (hop == MAX_DOWNLOAD_REDIRECTS) {
+						throw new IOException("Too many redirects downloading " + file.filename());
+					}
+					uri = uri.resolve(location.get());
+					requireAllowedDownload(file, uri);
+				}
 			}
-			// A redirect is followed, so check where the bytes came from too.
-			requireAllowedDownload(file, response.uri());
 			if (response.statusCode() / 100 != 2) {
 				throw error(request, response.statusCode(), "");
 			}
@@ -190,24 +208,38 @@ public final class HttpModrinthClient implements ModrinthClient {
 		}
 	}
 
+	private static boolean isRedirect(int status) {
+		return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
+	}
+
 	private void requireAllowedDownload(ModFile file, URI uri) throws IOException {
 		if (!allowedDownload(uri, baseUrl)) {
+			URI base = extraDownloadOrigin(baseUrl);
 			throw new IOException("Refusing to download " + file.filename() + " from " + uri + ": only "
-					+ (DEFAULT_BASE_URL.equals(baseUrl) ? CDN + " is" : CDN + " and the origin of " + baseUrl + " are") + " allowed");
+					+ (base == null ? CDN + " is" : CDN + " and " + base.getScheme() + "://" + base.getRawAuthority() + " are") + " allowed");
 		}
 	}
 
 	// Downloads come only from Modrinth's CDN over HTTPS, as the README promises, plus the origin of a non-default base
 	// URL (a test server).
 	static boolean allowedDownload(URI uri, String baseUrl) {
-		if (sameOrigin(uri, CDN)) {
-			return true;
-		}
+		URI base = extraDownloadOrigin(baseUrl);
+		return sameOrigin(uri, CDN) || base != null && sameOrigin(uri, base);
+	}
+
+	// A non-default base URL's origin, if it is https, or plain http on this machine (a local test server).
+	private static URI extraDownloadOrigin(String baseUrl) {
 		try {
 			URI base = URI.create(baseUrl);
-			return !sameOrigin(base, URI.create(DEFAULT_BASE_URL)) && sameOrigin(uri, base);
+			if (base.getScheme() == null || base.getHost() == null || sameOrigin(base, URI.create(DEFAULT_BASE_URL))) {
+				return null;
+			}
+			String scheme = base.getScheme().toLowerCase(Locale.ROOT);
+			String host = base.getHost().toLowerCase(Locale.ROOT);
+			boolean loopback = host.equals("localhost") || host.equals("[::1]") || host.matches("127\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}");
+			return scheme.equals("https") || scheme.equals("http") && loopback ? base : null;
 		} catch (IllegalArgumentException e) {
-			return false;
+			return null;
 		}
 	}
 
@@ -262,7 +294,7 @@ public final class HttpModrinthClient implements ModrinthClient {
 	}
 
 	private String sendForString(HttpRequest request) throws IOException {
-		HttpResponse<byte[]> response = exchange(request, (info, progress) -> info.statusCode() / 100 == 2
+		HttpResponse<byte[]> response = exchange(http, request, (info, progress) -> info.statusCode() / 100 == 2
 				? BoundedHttp.bytes(limits.maxJsonBytes(), false, progress)
 				: BoundedHttp.bytes(ERROR_BODY_BYTES, true, progress), limits.jsonStall(), limits.jsonDeadline());
 		String body = new String(response.body(), StandardCharsets.UTF_8);
@@ -277,10 +309,11 @@ public final class HttpModrinthClient implements ModrinthClient {
 	}
 
 	// A 429 is retried once, after its Retry-After (capped at limits.maxRetryWait()).
-	private <T> HttpResponse<T> exchange(HttpRequest request, Handler<T> handler, Duration stall, Duration deadline) throws IOException {
+	private <T> HttpResponse<T> exchange(HttpClient client, HttpRequest request, Handler<T> handler, Duration stall, Duration deadline)
+			throws IOException {
 		for (int attempt = 1; ; attempt++) {
 			BoundedHttp.Progress progress = new BoundedHttp.Progress();
-			HttpResponse<T> response = BoundedHttp.send(http, request, info -> handler.apply(info, progress), progress, stall, deadline);
+			HttpResponse<T> response = BoundedHttp.send(client, request, info -> handler.apply(info, progress), progress, stall, deadline);
 			if (response.statusCode() != 429 || attempt > 1) {
 				return response;
 			}

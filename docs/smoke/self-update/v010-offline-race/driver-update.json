@@ -1,0 +1,15 @@
+{
+  "phase": "update",
+  "ok": false,
+  "error": "no update:rigtune recommendation within 180 s (report online=false)",
+  "events": [
+    "t+0.0s driver loaded, phase update, output <run>\\out",
+    "t+3.8s title screen; goal set to QUALITY",
+    "t+184.8s FAILED: no update:rigtune recommendation within 180 s (report online=false)",
+    "t+184.8s quitting"
+  ],
+  "rigtuneVersion": "0.1.0",
+  "rigtuneOrigin": [
+    "<instance>\\mods\\rigtune-0.1.0.jar"
+  ]
+}
