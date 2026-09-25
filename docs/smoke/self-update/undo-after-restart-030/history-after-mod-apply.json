@@ -1,0 +1,34 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "b05c5122-7196-46bb-b1be-5f73452675bf",
+      "at": "2026-09-25T23:07:07.100450500Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.3.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "685d05e9-756c-4312-a8ea-727fbcecf8b7",
+          "type": "file",
+          "action": "disable",
+          "modId": "e2e-disable-me",
+          "file": "e2e-disable-me-1.0.0.jar",
+          "resultFile": "e2e-disable-me-1.0.0.jar.disabled",
+          "status": "APPLIED",
+          "opId": "9c81a9cb-c8d0-4c14-ad58-9079b88e9a0e"
+        },
+        {
+          "id": "a472268a-cc79-4878-823f-3e652d7744cc",
+          "type": "file",
+          "action": "enable",
+          "modId": "e2e-added",
+          "file": "e2e-added-1.0.0.jar",
+          "status": "APPLIED",
+          "opId": "0a1c63c9-866b-4742-8057-6f4e6176eb74",
+          "group": "d01e9b47-4d41-4c71-88c4-352a6b888e65"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+== c263-try1
+last game log lines:
+[09:22:06] [Render thread/INFO]: Cached all modded block culling states
+[09:22:06] [RigTune worker/INFO]: RigTune: launcher not recognised (generic memory advice)
+[09:22:06] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Tech
+> Process 'command '<jdk>\bin\java.exe'' finished with non-zero exit value -1073741819 (NTSTATUS 0xC0000005)
+
+== c263-try2
+last game log lines:
+[09:23:15] [Render thread/INFO]: Cached all modded block culling states
+[09:23:15] [RigTune worker/INFO]: RigTune: launcher not recognised (generic memory advice)
+[09:23:15] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Tech
+> Process 'command '<jdk>\bin\java.exe'' finished with non-zero exit value -1073741819 (NTSTATUS 0xC0000005)

@@ -8,6 +8,16 @@ the new version starts on the same instance. Each folder's `RESULT.md` has every
 
 ## v0.3 (WS-H dry runs; Phase 5 repeats them on the release candidate as `final-*` and `undo-after-restart-030`)
 
+Phase 5 final, on the release candidate `feat/v0.3.0` @ f77af1a (`rigtune-0.3.0-dev+mc26.2.jar`, sha256 `17cfe5b8…0b5f`), 2026-09-26, each passing on its first run (docs/v0.3/verification/README.md "Final runs"):
+
+| run | installed → update | result |
+|---|---|---|
+| [final-v020-to-030](final-v020-to-030/RESULT.md) | released 0.2.0 (`67275e23…7de9`) → RC, `--expect-history own-update` | PASS (20/20) |
+| [final-v010-to-030](final-v010-to-030/RESULT.md) | released 0.1.0 (`8294d04a…b950`) → RC, `--legacy-disable --expect-history` | PASS (21/21) |
+| [final-v010-seeded-to-030](final-v010-seeded-to-030/RESULT.md) | H-M2 seeded 0.1.0 → RC | PASS (26/26) |
+| [undo-after-restart-030](undo-after-restart-030/RESULT.md) | M14 + B-M3 on the RC | PASS (43/43) |
+
+
 Commands: tools/e2e/README.md "v0.3 runs". The `-merged` runs are the current ones: `rigtune-0.3.0-dev+mc26.2.jar`
 (sha256 `dbb74674…05ff2`) built from test/e2e-v03 @ 4520cc9, which has feat/v0.3.0 @ 6321696 merged (WS-0, WS-A,
 WS-B, WS-C, WS-D, WS-E, WS-F, WS-V), with the undo driver calling `undoPlanFor` and the entry `UndoScreen` directly. The
