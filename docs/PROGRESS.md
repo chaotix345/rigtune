@@ -33,7 +33,7 @@ Brief: the user's v0.2.0 prompt (full autonomy: research → release, including 
 | ws-a-rules | feat/rules-v2 | C:/Dev/Worktrees/rigtune-rules | running |
 | ws-b-undo | feat/undo | C:/Dev/Worktrees/rigtune-undo | running |
 | ws-c-bench | feat/benchmark-v2 | C:/Dev/Worktrees/rigtune-bench | running |
-| ws-d-dhiris | feat/dh-iris | C:/Dev/Worktrees/rigtune-dhiris | running |
+| ws-d-dhiris | feat/dh-iris | C:/Dev/Worktrees/rigtune-dhiris | MERGED (bac92b2); 296/296 tests on both versions; CI 36080692710 green |
 | ws-e-ui | feat/settings-ui | C:/Dev/Worktrees/rigtune-ui | running |
 | ws-g-e2e | feat/self-update-e2e | C:/Dev/Worktrees/rigtune-e2e | running (final E2E run in Phase 5: message it) |
 

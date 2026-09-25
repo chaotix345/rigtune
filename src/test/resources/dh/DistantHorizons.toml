@@ -1,0 +1,48 @@
+_version = 4
+
+[common.multiThreading]
+	#
+	# How many threads should be used by Distant Horizons?
+	numberOfThreads = 8
+	#
+	# A value between 1.0 and 0.0 for the percentage of time each thread can run before going idle.
+	threadRunTimeRatio = "1.0"
+
+[client.advanced.debugging]
+	#
+	# What renderer is active?
+	# DEFAULT: Default lod renderer
+	# DEBUG_TRIANGLE: Debug testing renderer
+	# DISABLED: Disable rendering
+	rendererMode = "DISABLED"
+
+[client.advanced.graphics.culling]
+	#
+	# Determines how far from the camera Distant Horizons will start rendering.
+	# -1 = auto, overdraw will change based on the vanilla render distance.
+	overdrawPrevention = "-1.0"
+	disableShadowPassFrustumCulling = false
+
+[client.advanced.graphics.quality]
+	#
+	# What is the maximum detail LODs can render at?
+	# Fastest: CHUNK
+	# Fanciest: BLOCK
+	maxHorizontalResolution = "BLOCK"
+	#
+	# How well LODs will represent overhangs, caves, floating islands, etc.
+	verticalQuality = "HIGH"
+	#
+	# The radius of the mod's render distance. (measured in chunks)
+	lodChunkRenderDistanceRadius = 256
+	#
+	# This indicates how far apart drops in LOD quality are.
+	horizontalQuality = "HIGH"
+	#
+	# How should LOD transparency be handled.
+	# COMPLETE: LODs will render transparent.
+	# DISABLED: LODs will be opaque.
+	transparency = "COMPLETE"
+	#
+	# The same as vanilla Biome Blending settings for the LOD area.
+	lodBiomeBlending = 3
