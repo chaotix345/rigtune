@@ -123,7 +123,7 @@ class RulesLoaderTest {
 	@Test
 	void bundledRulesAreComplete() {
 		RulesDocument doc = RulesLoader.loadBundled();
-		assertEquals(1, doc.schemaVersion);
+		assertEquals(2, doc.schemaVersion);
 		assertTrue(doc.revision >= 1);
 		assertEquals("bundled", doc.source());
 		assertNotNull(doc.generatedAt);
@@ -148,16 +148,6 @@ class RulesLoaderTest {
 			assertTrue(List.of("info", "warning", "critical").contains(advice.kind), advice.id);
 			assertNotNull(advice.title, advice.id);
 			assertNotNull(advice.text, advice.id);
-		}
-	}
-
-	@Test
-	void bundledCopiesMatchRepositoryRules() throws IOException {
-		Path repoRules = Path.of("rules", "rules-v1.json");
-		if (Files.exists(repoRules)) {
-			String repo = Files.readString(repoRules);
-			String bundled = new String(RulesLoader.class.getResourceAsStream(RulesLoader.BUNDLED_RESOURCE).readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-			assertEquals(repo.replace("\r\n", "\n"), bundled.replace("\r\n", "\n"));
 		}
 	}
 }

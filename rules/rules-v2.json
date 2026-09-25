@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 1,
-  "revision": 4,
-  "generatedAt": "2026-09-24T07:56:27Z",
+  "schemaVersion": 2,
+  "revision": 5,
+  "generatedAt": "2026-09-25T00:55:50Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -1566,6 +1566,7 @@
       "badoptimizations",
       "better-block-entities",
       "c2me-fabric",
+      "debugify",
       "dynamic-fps",
       "entityculling",
       "fastquit",

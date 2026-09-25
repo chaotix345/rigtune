@@ -20,7 +20,7 @@ public final class RulesLoader {
 	// This client reads schemaVersion 1 (rules-v1.json, a subset of v2) and 2. A future v3 lives in its own file.
 	public static final int MIN_SCHEMA_VERSION = 1;
 	public static final int SCHEMA_VERSION = 2;
-	public static final String BUNDLED_RESOURCE = "/rigtune/rules-v1.json";
+	public static final String BUNDLED_RESOURCE = "/rigtune/rules-v2.json";
 	public static final String SOURCE_BUNDLED = "bundled";
 	public static final String SOURCE_CACHE = "cache";
 	public static final String SOURCE_REMOTE = "remote";

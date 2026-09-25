@@ -5,7 +5,8 @@ Target MC versions: 26.3, 26.2, 26.1.2. Newest: 26.3.
 ## Summary
 - New upstream mods to triage: 33
 - Rule mods with a status or removal concern: 0
-- Rule mods missing a Fabric build for 26.3: 5
+- Rule mods missing a Fabric build for 26.3: 4
+- Rules changed or omitted in rules-v1.json: 0
 
 ## (a) Upstream mods not yet tracked in knowledge.json
 | slug | title | pack(s) | optimization category |
@@ -53,5 +54,9 @@ None found.
 | moonrise-opt | Moonrise |
 | krypton | Krypton |
 | vulkanmod | VulkanMod |
-| debugify | Debugify |
 | particle-core | Particle Core |
+
+## (d) Omitted from rules-v1.json
+0.1.x clients read rules-v1.json, the v1 projection of these rules. Check that nothing below makes 0.1.x less safe, in particular that an omitted setting entry doesn't change which entry wins for a key.
+
+None.
