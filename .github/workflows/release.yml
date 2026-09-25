@@ -20,15 +20,23 @@ jobs:
 
       - uses: gradle/actions/wrapper-validation@v6
 
+      # The tag names the release: it must be v<mod_version> exactly (a v0.3.0 tag on a commit that
+      # still says 0.3.0-dev would publish 0.3.0-dev+mc<mc> as a release).
+      - name: Check the tag matches mod_version
+        run: |
+          grep -qxF "mod_version=${GITHUB_REF_NAME#v}" gradle.properties \
+            || { echo "::error::tag ${GITHUB_REF_NAME} doesn't match mod_version in gradle.properties"; exit 1; }
+
       - uses: actions/setup-java@v6
         with:
           distribution: microsoft
           java-version: '25'
 
-      # Built once. The GitHub release below and the Modrinth publish steps further down both
-      # upload these exact files (Minotaur's uploadFile = jar reads the same `jar` task output
-      # that ends up in versions/<mc>/build/libs), so they can't drift apart from being built
-      # twice; "Verify Modrinth files match" re-downloads and hashes both sides anyway (M11).
+      # Built once. The release step copies the jars out of the build (to $RUNNER_TEMP/release-files),
+      # and both the GitHub release and the Modrinth publish upload those copies, so the two carry
+      # the same bytes by construction even if a later Gradle task touched versions/<mc>/build/libs
+      # (Minotaur's `modrinth` depends on `assemble`); "Verify Modrinth files match" re-downloads and
+      # hashes both sides anyway (M11).
       - name: Build
         run: ./gradlew build
 
@@ -40,6 +48,8 @@ jobs:
         run: |
           set -eu
           tag="${GITHUB_REF_NAME}"
+          staged="$RUNNER_TEMP/release-files"
+          mkdir -p "$staged"
           files=()
           for dir in versions/*/; do
             mc=$(basename "$dir")
@@ -49,7 +59,8 @@ jobs:
                 echo "Expected exactly one rigtune-*+mc${mc}${suffix}.jar, found: ${found[*]:-none}"
                 exit 1
               fi
-              files+=("${found[0]}")
+              cp "${found[0]}" "$staged/"
+              files+=("$staged/$(basename "${found[0]}")")
             done
           done
           gh release create "$tag" \
@@ -58,23 +69,46 @@ jobs:
             "${files[@]}"
 
       # --- Modrinth publishing ---
-      # One Modrinth version per Minecraft version (build.gradle's `modrinth {}` block, versionType
-      # alpha for a -snapshot-/-pre-/-rc- node), for every versions/*/ node, so a new node needs no
-      # edit here. Each node is published on its own: a failure is recorded as an error and the
-      # loop carries on with the others, and the step fails at the end if any node failed. A re-run
-      # after a partial failure still publishes the one that's missing: Minotaur fails (not
-      # duplicates) a version_number that already exists, so a node whose upload already succeeded
-      # is a harmless no-op-turned-failure. `if: !cancelled()` (rather than the default
-      # `if: success()`) lets the verify step below run even when this one failed.
+      # One Modrinth version per Minecraft version (build.gradle's `modrinth {}` block; versionType
+      # release only for a plain release id), for every versions/*/ node, so a new node needs no
+      # edit here. Each node uploads the exact file the release step attached (its copy in
+      # $RUNNER_TEMP/release-files, passed as -PmodrinthFile). A failure is recorded as an error and
+      # the loop carries on with the others; the step fails at the end if any node failed.
+      # `if: !cancelled()` (rather than the default `if: success()`) lets the verify step below run
+      # even when this one failed.
+      #
+      # Recovery when a node's publish failed. Don't re-run the job: "Create GitHub release" fails
+      # because the release exists, and everything after it is skipped. Never rebuild either: upload
+      # the file the GitHub release already has. From a checkout of the tag, per failed node (Git
+      # Bash; the token comes from MODRINTH_TOKEN in the user environment; the tool refuses a sha256
+      # mismatch and does nothing if the version_number already exists; --dry-run shows the payload):
+      #   tag=v0.3.0 mc=26.3; ver=${tag#v}; jar="rigtune-$ver+mc$mc.jar"
+      #   gh release download "$tag" -p "$jar" -D recovery
+      #   digest=$(gh release view "$tag" --json assets -q ".assets[] | select(.name == \"$jar\") | .digest")
+      #   awk -v h="[$ver]" '/^## /{p = index($0, h) > 0; next} p' CHANGELOG.md > recovery/changelog.md
+      #   python tools/modrinth_project.py upload-version --file "recovery/$jar" \
+      #     --version-number "$ver+mc$mc" --name "RigTune $ver (MC $mc)" --game-versions "$mc" \
+      #     --version-type release --changelog-file recovery/changelog.md --sha256 "${digest#sha256:}"
+      # (--version-type alpha for a node whose id isn't a plain release.) Then check it the way the
+      # verify step does: `python tools/modrinth_project.py status` lists the version, and in the
+      # authenticated version list (GET /v2/project/rigtune/version) the file with the GitHub
+      # asset's sha1 must have the asset's sha512.
       - name: Publish to Modrinth (every Minecraft version)
         if: ${{ !cancelled() && steps.release.outcome == 'success' && env.MODRINTH_TOKEN != '' }}
         run: |
           set -u
+          staged="$RUNNER_TEMP/release-files"
           status=0
           for dir in versions/*/; do
             mc=$(basename "$dir")
-            if ./gradlew ":$mc:modrinth"; then
-              echo "published: $mc"
+            mapfile -t found < <(find "$staged" -maxdepth 1 -name "rigtune-*+mc${mc}.jar" 2>/dev/null)
+            if [ "${#found[@]}" -ne 1 ]; then
+              echo "::error::expected exactly one rigtune-*+mc${mc}.jar to publish, found: ${found[*]:-none}"
+              status=1
+              continue
+            fi
+            if ./gradlew ":$mc:modrinth" "-PmodrinthFile=${found[0]}"; then
+              echo "published: $mc (${found[0]})"
             else
               echo "::error::Modrinth publish failed for $mc"
               status=1
