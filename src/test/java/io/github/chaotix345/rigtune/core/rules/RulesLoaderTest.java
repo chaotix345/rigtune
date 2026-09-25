@@ -85,17 +85,47 @@ class RulesLoaderTest {
 		assertEquals("cache", cache.source());
 	}
 
+	private static RulesDocument doc(int schemaVersion, int revision) {
+		return RulesLoader.parse("{\"schemaVersion\":" + schemaVersion + ",\"revision\":" + revision + "}");
+	}
+
+	private static RulesLoader.Candidate candidate(String source, RulesDocument doc) {
+		return new RulesLoader.Candidate(source, doc);
+	}
+
 	@Test
-	void pickNewestKeepsFirstOnTiesAndSkipsMissing() {
+	void pickNewestPrefersRemoteThenCacheThenBundledOnFullTiesAndSkipsMissing() {
 		RulesDocument bundled = doc(2);
+		RulesDocument cache = doc(2);
 		RulesDocument remote = doc(2);
-		RulesDocument picked = RulesLoader.pickNewest(List.of(
-				new RulesLoader.Candidate(RulesLoader.SOURCE_BUNDLED, bundled),
-				new RulesLoader.Candidate(RulesLoader.SOURCE_CACHE, null),
-				new RulesLoader.Candidate(RulesLoader.SOURCE_REMOTE, remote))).orElseThrow();
-		assertSame(bundled, picked);
-		assertEquals("bundled", picked.source());
+		for (List<RulesLoader.Candidate> order : List.of(
+				List.of(candidate(RulesLoader.SOURCE_BUNDLED, bundled), candidate(RulesLoader.SOURCE_CACHE, cache), candidate(RulesLoader.SOURCE_REMOTE, remote)),
+				List.of(candidate(RulesLoader.SOURCE_REMOTE, remote), candidate(RulesLoader.SOURCE_BUNDLED, bundled), candidate(RulesLoader.SOURCE_CACHE, cache)))) {
+			assertSame(remote, RulesLoader.pickNewest(order).orElseThrow());
+		}
+		RulesDocument picked = RulesLoader.pickNewest(List.of(candidate(RulesLoader.SOURCE_CACHE, cache),
+				candidate(RulesLoader.SOURCE_BUNDLED, bundled), candidate(RulesLoader.SOURCE_REMOTE, null))).orElseThrow();
+		assertSame(cache, picked);
+		assertEquals("cache", picked.source());
 		assertFalse(RulesLoader.pickNewest(List.of()).isPresent());
+	}
+
+	@Test
+	void pickNewestPrefersV2OnARevisionTie() {
+		RulesDocument remoteV1 = doc(1, 5);
+		RulesDocument bundledV2 = doc(2, 5);
+		RulesDocument picked = RulesLoader.pickNewest(List.of(candidate(RulesLoader.SOURCE_REMOTE, remoteV1),
+				candidate(RulesLoader.SOURCE_BUNDLED, bundledV2))).orElseThrow();
+		assertSame(bundledV2, picked);
+		assertEquals("bundled", picked.source());
+	}
+
+	@Test
+	void pickNewestStillTakesTheHighestRevision() {
+		RulesDocument remoteV1 = doc(1, 6);
+		RulesDocument picked = RulesLoader.pickNewest(List.of(candidate(RulesLoader.SOURCE_BUNDLED, doc(2, 5)),
+				candidate(RulesLoader.SOURCE_REMOTE, remoteV1))).orElseThrow();
+		assertSame(remoteV1, picked);
 	}
 
 	@Test

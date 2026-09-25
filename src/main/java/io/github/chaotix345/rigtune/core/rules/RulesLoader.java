@@ -13,6 +13,7 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,6 +26,12 @@ public final class RulesLoader {
 	public static final String SOURCE_CACHE = "cache";
 	public static final String SOURCE_REMOTE = "remote";
 	public static final long MAX_RULES_BYTES = 2L << 20;
+
+	// Highest revision; on a tie the newer schema, then remote > cache > bundled.
+	private static final Comparator<Candidate> NEWEST = Comparator
+			.comparingInt((Candidate c) -> c.document().revision)
+			.thenComparingInt(c -> c.document().schemaVersion)
+			.thenComparingInt(c -> sourceRank(c.source()));
 
 	private static final Gson GSON = new GsonBuilder().registerTypeAdapterFactory(new ConditionAdapterFactory()).create();
 
@@ -109,7 +116,7 @@ public final class RulesLoader {
 			if (candidate == null || candidate.document() == null) {
 				continue;
 			}
-			if (best == null || candidate.document().revision > best.document().revision) {
+			if (best == null || NEWEST.compare(candidate, best) > 0) {
 				best = candidate;
 			}
 		}
@@ -118,6 +125,15 @@ public final class RulesLoader {
 		}
 		best.document().setSource(best.source());
 		return Optional.of(best.document());
+	}
+
+	private static int sourceRank(String source) {
+		return switch (source) {
+			case SOURCE_REMOTE -> 3;
+			case SOURCE_CACHE -> 2;
+			case SOURCE_BUNDLED -> 1;
+			default -> 0;
+		};
 	}
 
 	private static boolean invalidPattern(String section, RulesDocument.PatternRule rule) {

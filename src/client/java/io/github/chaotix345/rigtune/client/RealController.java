@@ -28,15 +28,15 @@ import io.github.chaotix345.rigtune.core.modrinth.HttpModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.ModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.OnlineDataFetcher;
 import io.github.chaotix345.rigtune.core.recommend.Recommender;
-import io.github.chaotix345.rigtune.core.rules.RemoteRulesFetcher;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
-import io.github.chaotix345.rigtune.core.rules.RulesLoader;
+import io.github.chaotix345.rigtune.core.rules.RulesSources;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -49,6 +49,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public final class RealController implements RigTuneController {
 	private static final String VANILLA = SettingsBridge.VANILLA_PREFIX;
@@ -58,7 +59,6 @@ public final class RealController implements RigTuneController {
 	private final Path configDir;
 	private final Path modsDir;
 	private final Path pendingFile;
-	private final Path rulesCache;
 	private final String modVersion;
 	private final ModrinthClient modrinth;
 	private final ClientState state;
@@ -74,6 +74,7 @@ public final class RealController implements RigTuneController {
 	private volatile @Nullable Component status;
 	private volatile Goal goal;
 	private int generation;
+	private final AtomicInteger rulesGeneration = new AtomicInteger();
 	private volatile boolean downloading;
 
 	public RealController() {
@@ -81,7 +82,6 @@ public final class RealController implements RigTuneController {
 		this.configDir = loader.getConfigDir();
 		this.modsDir = InstanceDirs.modsDir(loader.getGameDir());
 		this.pendingFile = PendingActions.defaultPath(configDir);
-		this.rulesCache = configDir.resolve("rigtune").resolve("rules-cache.json");
 		this.modVersion = loader.getModContainer(RigTune.MOD_ID).map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("0.0.0");
 		this.modrinth = new HttpModrinthClient(modVersion);
 		this.state = ClientState.shared(configDir);
@@ -95,22 +95,17 @@ public final class RealController implements RigTuneController {
 		rescan();
 	}
 
+	// Re-runnable: a newer load (settingsChanged) makes the results of an older one that is still fetching stale.
 	private void loadRules() {
-		List<RulesLoader.Candidate> candidates = new ArrayList<>();
-		try {
-			candidates.add(new RulesLoader.Candidate(RulesLoader.SOURCE_BUNDLED, RulesLoader.loadBundled()));
-		} catch (RuntimeException e) {
-			RigTune.LOGGER.error("Bundled rules are unusable", e);
-		}
-		RulesLoader.loadCache(rulesCache).ifPresent(doc -> candidates.add(new RulesLoader.Candidate(RulesLoader.SOURCE_CACHE, doc)));
-		rules = RulesLoader.pickNewest(candidates).orElse(null);
-		rebuild();
-		new RemoteRulesFetcher(modVersion, rulesCache).fetch().ifPresent(remote -> {
-			candidates.add(new RulesLoader.Candidate(RulesLoader.SOURCE_REMOTE, remote));
-			RulesDocument best = RulesLoader.pickNewest(candidates).orElse(null);
-			if (best != null && best != rules) {
-				rules = best;
-				rebuild();
+		int gen = rulesGeneration.incrementAndGet();
+		URI baseUrl = RulesSources.baseUrl(System.getProperty(RulesSources.BASE_URL_PROPERTY));
+		new RulesSources(configDir, baseUrl, modVersion).load(ClientSettings.shared(configDir).remoteRulesAllowed(), (doc, remote) -> {
+			if (gen != rulesGeneration.get()) {
+				return;
+			}
+			rules = doc;
+			rebuild();
+			if (remote) {
 				fetchOnline();
 			}
 		});
@@ -132,6 +127,12 @@ public final class RealController implements RigTuneController {
 		state.goal = goal.name();
 		CompletableFuture.runAsync(() -> state.save(configDir), Probes.EXECUTOR);
 		rebuild();
+	}
+
+	@Override
+	public void settingsChanged() {
+		CompletableFuture.runAsync(this::loadRules, Probes.EXECUTOR);
+		rescan();
 	}
 
 	@Override
