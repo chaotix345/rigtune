@@ -1,0 +1,127 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "40c50064-313e-4f5c-b10e-c0a7bf2b3cc9",
+      "at": "2026-09-25T19:55:41.446276400Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.3.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "a40534f0-dfbc-44eb-a253-0adda320ad45",
+          "type": "file",
+          "action": "disable",
+          "modId": "e2e-disable-me",
+          "file": "e2e-disable-me-1.0.0.jar",
+          "resultFile": "e2e-disable-me-1.0.0.jar.disabled",
+          "status": "REVERTED",
+          "opId": "d8a14b94-6922-40ee-84ae-90ea5b1298c7"
+        },
+        {
+          "id": "20ac2e1f-de71-4670-9c00-c9485b638b58",
+          "type": "file",
+          "action": "enable",
+          "modId": "e2e-added",
+          "file": "e2e-added-1.0.0.jar",
+          "status": "REVERTED",
+          "opId": "7bee6ea6-612a-4f00-a20c-64749120ea81",
+          "group": "298d2221-6f01-4405-b3d3-c8c11d29a324"
+        }
+      ]
+    },
+    {
+      "id": "bda0acb7-c857-4bba-8b57-3e7e91ae97dc",
+      "at": "2026-09-25T19:56:05.587484100Z",
+      "kind": "undo",
+      "rigtuneVersion": "0.3.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "undoOf": "40c50064-313e-4f5c-b10e-c0a7bf2b3cc9",
+      "changes": [
+        {
+          "id": "bce6f395-0c0e-4d32-a775-2beac8f48cee",
+          "type": "file",
+          "action": "disable",
+          "modId": "e2e-added",
+          "file": "e2e-added-1.0.0.jar",
+          "resultFile": "e2e-added-1.0.0.jar.disabled",
+          "status": "APPLIED",
+          "opId": "b8fbe16a-1472-4b8a-ba10-65341c660f53",
+          "group": "257ebab4-07dd-4b51-ac1a-ce1ac985b083",
+          "reverts": "20ac2e1f-de71-4670-9c00-c9485b638b58"
+        },
+        {
+          "id": "766e4ef9-eafa-4bc7-8b8e-4a37b49a8368",
+          "type": "file",
+          "action": "enable",
+          "modId": "e2e-disable-me",
+          "file": "e2e-disable-me-1.0.0.jar",
+          "status": "APPLIED",
+          "opId": "a0f128be-9a16-4ee2-80c2-c3b5639a8720",
+          "group": "6fd8cdc4-aea7-4be2-89be-3be1d108138a",
+          "reverts": "a40534f0-dfbc-44eb-a253-0adda320ad45"
+        }
+      ]
+    },
+    {
+      "id": "86059cb4-f513-479d-ac41-0b05eda2f2fa",
+      "at": "2026-09-25T19:56:46.102544800Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.3.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "236fb019-786d-4b40-80c9-e2735d271a7b",
+          "type": "file",
+          "action": "enable",
+          "modId": "e2e-first",
+          "file": "e2e-first-1.0.0.jar",
+          "status": "REVERTED",
+          "opId": "96e4516f-f32a-43e0-ac2f-e5cb8c3aec3c",
+          "group": "c9cf2841-3ced-4af6-b77e-d0064b43fbb9"
+        }
+      ]
+    },
+    {
+      "id": "8e37c0a3-8d7d-4447-8f3e-37fa4076a0bb",
+      "at": "2026-09-25T19:56:47.592986700Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.3.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "fe1c142d-781e-4a91-9d15-e7c4f620ec81",
+          "type": "file",
+          "action": "enable",
+          "modId": "e2e-second",
+          "file": "e2e-second-1.0.0.jar",
+          "status": "APPLIED",
+          "opId": "3971cd59-d70a-4101-b1f8-e9abcbdb09c9",
+          "group": "367dc311-d5e2-4aa1-b9e4-ce52a231f099"
+        }
+      ]
+    },
+    {
+      "id": "6cbe7498-6923-4953-bfa4-373748ddbd46",
+      "at": "2026-09-25T19:57:11.711797Z",
+      "kind": "undo",
+      "rigtuneVersion": "0.3.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "undoOf": "86059cb4-f513-479d-ac41-0b05eda2f2fa",
+      "changes": [
+        {
+          "id": "77733786-df87-4797-b8ed-28e5c2ad842a",
+          "type": "file",
+          "action": "disable",
+          "modId": "e2e-first",
+          "file": "e2e-first-1.0.0.jar",
+          "resultFile": "e2e-first-1.0.0.jar.disabled",
+          "status": "APPLIED",
+          "opId": "8ba0e8e6-81cf-46b5-a177-46dd8e3a12db",
+          "group": "34f8344b-e788-4ae8-abf1-07deedf830ad",
+          "reverts": "236fb019-786d-4b40-80c9-e2735d271a7b"
+        }
+      ]
+    }
+  ]
+}

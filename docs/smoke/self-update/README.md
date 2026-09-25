@@ -8,35 +8,36 @@ the new version starts on the same instance. Each folder's `RESULT.md` has every
 
 ## v0.3 (WS-H dry runs; Phase 5 repeats them on the release candidate as `final-*` and `undo-after-restart-030`)
 
-New jar: `rigtune-0.3.0-dev+mc26.2.jar` (sha256 `9015bd10…8c19`) built from test/e2e-v03 @ ee7f8ea, which has
-feat/v0.3.0 @ c250b7a merged (WS-0, WS-A's 3a/3b/3c, WS-F), but not WS-B (3e, per-entry undo). A first round on a build
-without WS-A (sha256 `b9a781ae…71f0`) gave the same counts. Commands: tools/e2e/README.md "v0.3 runs".
+Commands: tools/e2e/README.md "v0.3 runs". The `-merged` runs are the current ones: `rigtune-0.3.0-dev+mc26.2.jar`
+(sha256 `dbb74674…05ff2`) built from test/e2e-v03 @ 4520cc9, which has feat/v0.3.0 @ 6321696 merged (WS-0, WS-A,
+WS-B, WS-C, WS-D, WS-E, WS-F, WS-V), with the undo driver calling `undoPlanFor` and the entry `UndoScreen` directly. The
+runs without a suffix are the earlier round on test/e2e-v03 @ ee7f8ea (WS-0, WS-A and WS-F only; jar `9015bd10…8c19`),
+kept to show the state before WS-B.
 
 | run | installed → update | result | date |
 |---|---|---|---|
-| [dev-v020-to-030](dev-v020-to-030/RESULT.md) | the released `rigtune-0.2.0+mc26.2.jar` (sha256 `67275e23…7de9`, the v0.2.0 GitHub release asset) → 0.3.0-dev; `--expect-history own-update` | PASS (20/20) | 2026-09-26 |
-| [dev-v010-to-030](dev-v010-to-030/RESULT.md) | the released `rigtune-0.1.0.jar` (sha256 `8294d04a…b950`) → 0.3.0-dev; `--legacy-disable --expect-history` | PASS (21/21) | 2026-09-26 |
-| [dev-v010-seeded-to-030](dev-v010-seeded-to-030/RESULT.md) | plan review H-M2: as dev-v010-to-030, seeded from the user's real 0.1.0 `pending.json`/`last-apply.json` (templated) with fake DH jars (`--seed tools/e2e/seeds/v010-dh`) | FAIL (25/26): only the 3e WARN line per failed op is missing (WS-B, not merged) | 2026-09-26 |
-| [dev-undo-after-restart-030](dev-undo-after-restart-030/RESULT.md) | M14 on 0.3.0-dev, then plan review B-M3 on the same instance (two Applies, Undo this on the older) | FAIL (31/35): M14 22/22 and entry-apply 6/6 pass; entry-undo 3/7 ("no per-entry undo API": WS-B, not merged); entry-check not run | 2026-09-26 |
-| [dev-v010-seeded-to-030-wsb](dev-v010-seeded-to-030-wsb/RESULT.md) | the seeded run on a local, unpushed merge of test/e2e-v03 @ 852d73a and origin/feat/history @ 39eca5b (WS-B), jar sha256 `d5b50dbc…8f68` | PASS (26/26): WS-B's WARN line for each of the two failed DH ops, "attempt 2 of 3" | 2026-09-26 |
-| [dev-undo-after-restart-030-wsb](dev-undo-after-restart-030-wsb/RESULT.md) | the undo scenario on the same local merge: Undo this through `UndoScreen(Screen, RigTuneController, entryId)` and `RigTuneController.undoPlanFor` | PASS (43/43) | 2026-09-26 |
+| [dev-v020-to-030-merged](dev-v020-to-030-merged/RESULT.md) | the released `rigtune-0.2.0+mc26.2.jar` (sha256 `67275e23…7de9`, the v0.2.0 GitHub release asset) → 0.3.0-dev; `--expect-history own-update` | PASS (20/20) | 2026-09-26 |
+| [dev-v010-to-030-merged](dev-v010-to-030-merged/RESULT.md) | the released `rigtune-0.1.0.jar` (sha256 `8294d04a…b950`) → 0.3.0-dev; `--legacy-disable --expect-history` | PASS (21/21) | 2026-09-26 |
+| [dev-v010-seeded-to-030-merged](dev-v010-seeded-to-030-merged/RESULT.md) | plan review H-M2: as above, seeded from the user's real 0.1.0 `pending.json`/`last-apply.json` (templated) with fake DH jars (`--seed tools/e2e/seeds/v010-dh`) | PASS (26/26) | 2026-09-26 |
+| [dev-undo-after-restart-030-merged](dev-undo-after-restart-030-merged/RESULT.md) | M14 (Undo last after a restart), then plan review B-M3 on the same instance (two Applies, Undo this on the older, restart) | PASS (43/43) | 2026-09-26 |
+| [dev-v020-to-030](dev-v020-to-030/RESULT.md) | earlier round, 0.2.0 → dev | PASS (20/20) | 2026-09-26 |
+| [dev-v010-to-030](dev-v010-to-030/RESULT.md) | earlier round, 0.1.0 → dev | PASS (21/21) | 2026-09-26 |
+| [dev-v010-seeded-to-030](dev-v010-seeded-to-030/RESULT.md) | earlier round, seeded | FAIL (25/26): no 3e WARN line (WS-B wasn't merged) | 2026-09-26 |
+| [dev-undo-after-restart-030](dev-undo-after-restart-030/RESULT.md) | earlier round, undo | FAIL (31/35): M14 22/22, entry-apply 6/6; entry-undo 3/7 (no per-entry API before WS-B) | 2026-09-26 |
 
 What the seeded run shows: the 0.1.0 helper retried the user's DH group while the fake DH jar was held open (as DH's own
 updater held the real one) and failed it again (attempts 2), while the self-update itself applied. On the first
-0.3.0-dev start WS-A's narrowed 3a (RigTune's update of a loaded mod with its own update queued) dropped the group with
-"Cancelled RigTune's pending change to Distant Horizons: it has an update of its own waiting in mods/update.", the legacy
-import journaled both changes and marked them `DISCARDED`, no helper ran
-at exit, `mods/` didn't change at exit, and during the session the only change was RigTune's DH download becoming
-`.rigtune-superseded`. The one failing check waits for WS-B's per-op WARN lines (SPEC 3e); v0.2 logs only "2 staged
-RigTune change(s) were not applied; they will be retried at the next exit". With WS-B merged locally (`-wsb`), latest.log
-has one line per failed op ("RigTune could not apply a change at the last exit (attempt 2 of 3; it's retried at the
-next exit): DISABLE_FILE fabric-26.2.jar: ..." and "... ENABLE_FILE distanthorizons
-(DistantHorizons-3.3.2-26.2-fabric-neoforge.jar): Not applied because disabling fabric-26.2.jar failed") and every
-check passes. The `-wsb` undo run's per-entry part: two Applies journaled as two `apply` entries; Undo this on the
-older through the entry Undo screen (button "Undo (1)"), a plan of one revert needing a restart; after the restart only
-`e2e-first` is disabled, the journal has one `undo` of the older entry (its change `REVERTED`), the newer entry's change
-stays `APPLIED`, and `undoPlanFor` on the older entry then has nothing left. Neither `-wsb` folder counts for AC4.1/4.2:
-Phase 5 reruns both on the release candidate.
+0.3.0-dev start WS-A's 3a (RigTune's update of a loaded mod with its own update queued) dropped the group with
+"Cancelled RigTune's pending change to Distant Horizons: it has an update of its own waiting in mods/update.", the
+legacy import journaled both changes and marked them `DISCARDED`, latest.log has WS-B's line for each failed op ("RigTune
+could not apply a change at the last exit (attempt 2 of 3; it's retried at the next exit): DISABLE_FILE fabric-26.2.jar:
+..." and the ENABLE_FILE of DistantHorizons-3.3.2), no helper ran at exit, `mods/` didn't change at exit, and during the
+session the only change was RigTune's DH download becoming `.rigtune-superseded`.
+
+What the undo run's per-entry part shows (B-M3): two Applies in one start are journaled as two `apply` entries; Undo
+this on the older goes through `undoPlanFor` and the entry Undo screen's button, a plan of one revert needing a restart;
+after the restart only `e2e-first` is disabled, the journal has one `undo` of the older entry (its change `REVERTED`),
+the newer entry's change stays `APPLIED`, and `undoPlanFor` on the older entry then has nothing left.
 
 ## v0.2
 

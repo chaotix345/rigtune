@@ -66,13 +66,12 @@ old jar is passed (`compileE2eJava -Pe2e.oldJar=<jar>` works for both), so no `-
   during the session `mods/` changed only by retiring RigTune's dropped download (`.rigtune-superseded`).
 - `--scenario undo` now continues on the same instance with plan review B-M3's per-entry case: `entry-apply` (two
   Applies in one start, adding `e2e-first` then `e2e-second` from the fake Modrinth), `entry-undo` (Undo this on the
-  older Apply: its plan from the controller, the confirmation screen's Undo button when `UndoScreen` takes an entry id,
-  else `undo(plan)`; quit; the helper disables `e2e-first`), `entry-check` (only `e2e-first` is off, nothing left to
-  undo on that entry). Checks: the plan is one revert needing a restart for the older entry's change only; the newer
-  mod stays enabled; the journal has one `undo` of the older entry, its change `REVERTED`, the newer entry's change still
-  `APPLIED`. Until WS-B's per-entry API is merged the driver finds it by reflection (a public `(String) -> UndoPlan`
-  controller method; an `UndoScreen(Screen, RigTuneController, String)` constructor) and fails `entry-undo` with "no
-  per-entry undo API" when there is none.
+  older Apply: `RigTuneController.undoPlanFor(entryId)`, then `UndoScreen(Screen, RigTuneController, entryId)` and its
+  Undo button, as the History screen's Undo this does; quit; the helper disables `e2e-first`), `entry-check` (only
+  `e2e-first` is off, nothing left to undo on that entry). Checks: the plan is one revert needing a restart for the
+  older entry's change only; the newer mod stays enabled; the journal has one `undo` of the older entry, its change
+  `REVERTED`, the newer entry's change still `APPLIED`. The driver calls that API directly, so CI's
+  `compileE2eUndoJava` breaks if it changes.
 - The driver records every RigTune status line it sees (`statuses`: key and text) and every file under `mods/` with its
   sha256 when it quits (`modsAtQuit`).
 

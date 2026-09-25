@@ -1,0 +1,17 @@
+{
+  "finishedAt": "2026-09-25T19:57:18.051416400Z",
+  "results": [
+    {
+      "op": {
+        "type": "DISABLE_FILE",
+        "path": "<instance>\\mods\\e2e-first-1.0.0.jar",
+        "id": "8ba0e8e6-81cf-46b5-a177-46dd8e3a12db",
+        "group": "34f8344b-e788-4ae8-abf1-07deedf830ad",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Disabled e2e-first-1.0.0.jar -> e2e-first-1.0.0.jar.disabled",
+      "resultPath": "<instance>\\mods\\e2e-first-1.0.0.jar.disabled"
+    }
+  ]
+}

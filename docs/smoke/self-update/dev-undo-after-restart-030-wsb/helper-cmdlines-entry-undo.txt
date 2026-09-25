@@ -1,1 +1,0 @@
-C:\Dev\Tools\jdk\jdk-25.0.4.1+1\bin\java.exe -cp <instance>\config\rigtune\helper\0-rigtune-0.3.0-dev+mc26.2.jar;<instance>\config\rigtune\helper\1-gson-2.14.0.jar io.github.chaotix345.rigtune.core.apply.ApplyHelper 42952 <instance>\config\rigtune\pending.json
