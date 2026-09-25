@@ -7,6 +7,7 @@ public enum Launcher {
 	MODRINTH_APP("Modrinth App"),
 	ATLAUNCHER("ATLauncher"),
 	CURSEFORGE("CurseForge"),
+	OFFICIAL("Minecraft Launcher"),
 	UNKNOWN("");
 
 	private final String displayName;

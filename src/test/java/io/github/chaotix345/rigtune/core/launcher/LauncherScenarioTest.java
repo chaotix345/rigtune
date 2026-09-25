@@ -71,6 +71,7 @@ class LauncherScenarioTest {
 		expected.put(LauncherInfo.of(Launcher.PRISM), "rigtune.launcher.steps.prism");
 		expected.put(LauncherInfo.of(Launcher.MODRINTH_APP), "rigtune.launcher.steps.modrinth_app");
 		expected.put(LauncherInfo.of(Launcher.ATLAUNCHER), "rigtune.launcher.steps.atlauncher");
+		expected.put(LauncherInfo.of(Launcher.OFFICIAL), "rigtune.launcher.steps.official");
 		expected.put(new LauncherInfo(Launcher.CURSEFORGE, true), "rigtune.launcher.steps.curseforge.pack");
 		expected.put(new LauncherInfo(Launcher.CURSEFORGE, null), "rigtune.launcher.steps.curseforge.pack");
 		expected.put(new LauncherInfo(Launcher.CURSEFORGE, false), "rigtune.launcher.steps.curseforge.global");

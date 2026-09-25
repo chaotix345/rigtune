@@ -8,11 +8,13 @@ import java.util.Map;
 import java.util.Optional;
 
 // Which launcher started the game (docs/v0.3/SPEC.md item 5 with C-M1): the Prism/MultiMC properties and environment,
-// then the brand literals verified from the launchers' sources, then the instance files in the game dir and its parent.
+// then the brand literals verified from the launchers' sources, then the instance files in the game dir and its parent,
+// and last the official launcher's brand (CurseForge starts the game through the official launcher and sends it too).
 // Every signal is optional; anything unexpected, including any Throwable, means Unknown.
 public final class LauncherDetector {
 	public static final String MODRINTH_BRAND = "theseus";
 	public static final String ATLAUNCHER_BRAND = "ATLauncher";
+	public static final String OFFICIAL_BRAND = "minecraft-launcher";
 
 	private LauncherDetector() {
 	}
@@ -47,6 +49,9 @@ public final class LauncherDetector {
 			if (curseForge.isPresent()) {
 				return new LauncherInfo(Launcher.CURSEFORGE, curseForge.get().memoryOverride());
 			}
+		}
+		if (OFFICIAL_BRAND.equals(brand)) {
+			return LauncherInfo.of(Launcher.OFFICIAL);
 		}
 		return LauncherInfo.UNKNOWN;
 	}

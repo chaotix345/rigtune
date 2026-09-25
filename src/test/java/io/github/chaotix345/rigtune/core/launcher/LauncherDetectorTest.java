@@ -99,8 +99,10 @@ class LauncherDetectorTest {
 	void brands() {
 		assertEquals(Launcher.MODRINTH_APP, detect(Map.of(BRAND, "theseus"), Map.of()).launcher());
 		assertEquals(Launcher.ATLAUNCHER, detect(Map.of(BRAND, "ATLauncher"), Map.of()).launcher());
+		assertEquals(Launcher.OFFICIAL, detect(Map.of(BRAND, "minecraft-launcher"), Map.of()).launcher());
 		// Only the verified literals; anything else (other launchers, a different case) is not guessed at.
-		for (String other : new String[]{"PrismLauncher", "gdlauncher", "Theseus", "atlauncher", "java-launcher", "fabric-loom"}) {
+		for (String other : new String[]{"PrismLauncher", "gdlauncher", "Theseus", "atlauncher", "java-launcher", "fabric-loom",
+				"Minecraft-Launcher", "minecraft-launcher ", "minecraft-launcher-beta"}) {
 			assertEquals(LauncherInfo.UNKNOWN, detect(Map.of(BRAND, other), Map.of()), other);
 		}
 	}
@@ -154,6 +156,17 @@ class LauncherDetectorTest {
 	void brandBeatsInstanceFiles() throws IOException {
 		Path gameDir = curseForgeInstance(resource("curseforge/minecraftinstance.json"));
 		assertEquals(Launcher.MODRINTH_APP, LauncherDetector.detect(signals(Map.of(BRAND, "theseus"), Map.of(), gameDir)).launcher());
+	}
+
+	// CurseForge starts the game through the official launcher, so its brand is minecraft-launcher too (a public
+	// crash report from a curseforge/minecraft/Instances game dir, docs/v0.3/design/ws-c.md): its file decides.
+	@Test
+	void curseForgeBeatsTheOfficialBrand() throws IOException {
+		Path gameDir = curseForgeInstance(resource("curseforge/minecraftinstance.json"));
+		LauncherInfo info = LauncherDetector.detect(signals(Map.of(BRAND, "minecraft-launcher"), Map.of(), gameDir));
+		assertEquals(new LauncherInfo(Launcher.CURSEFORGE, false), info);
+		Path prism = prismInstance("prism");
+		assertEquals(Launcher.PRISM, LauncherDetector.detect(signals(Map.of(BRAND, "minecraft-launcher"), Map.of(), prism)).launcher());
 	}
 
 	@Test
