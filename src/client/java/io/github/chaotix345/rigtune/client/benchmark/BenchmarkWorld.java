@@ -12,6 +12,7 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
@@ -44,6 +45,7 @@ public final class BenchmarkWorld {
 	public static final long SEED = 8675309L;
 	public static final int CAMERA_X = 0;
 	public static final int CAMERA_Z = 192;
+	public static final int CAMERA_ABOVE_FLOOR = 16;
 	private static final int CAMERA_ABOVE_SURFACE = 10;
 	private static final String MARKER = "rigtune-benchmark.json";
 	private static final Gson GSON = new Gson();
@@ -112,6 +114,15 @@ public final class BenchmarkWorld {
 			return FolderAction.MOVE_ASIDE_AND_CREATE;
 		}
 		return recordedMcVersion != null && recordedMcVersion.equals(runningMcVersion) ? FolderAction.OPEN : FolderAction.RECREATE;
+	}
+
+	// docs/v0.3/SPEC.md 8c: the camera is 16 above the terrain floor from the noise (117 + 16 = 133 on 26.2 and 26.3),
+	// so the spot no longer depends on a tree growing on the camera column (one did on 26.3 only). When the camera block
+	// or the one above isn't air (a very tall tree on a future version), it goes 10 above the highest motion-blocking
+	// block instead (the v0.2 rule), never lower.
+	static int cameraY(int floor, boolean clear, int surface) {
+		int y = floor + CAMERA_ABOVE_FLOOR;
+		return clear ? y : Math.max(y, surface + CAMERA_ABOVE_SURFACE);
 	}
 
 	static boolean isBenchmarkSave(@Nullable String folderName, @Nullable String levelName) {
@@ -284,20 +295,32 @@ public final class BenchmarkWorld {
 			server.getCommands().performPrefixedCommand(source, "time set noon");
 			server.getCommands().performPrefixedCommand(source, "weather clear");
 			ServerLevel overworld = server.overworld();
-			// getHeight reads the heightmap of whatever is generated, and trees from the neighbouring chunks are only placed
-			// once those are generated too, so generate the 3x3 chunks around the camera first.
+			// The blocks and heightmap below are those of whatever is generated, and trees from the neighbouring chunks are
+			// only placed once those are generated too, so generate the 3x3 chunks around the camera first.
 			for (int dx = -1; dx <= 1; dx++) {
 				for (int dz = -1; dz <= 1; dz++) {
 					overworld.getChunk((CAMERA_X >> 4) + dx, (CAMERA_Z >> 4) + dz);
 				}
 			}
+			int floor = terrainFloor(overworld, CAMERA_X, CAMERA_Z);
+			BlockPos spot = new BlockPos(CAMERA_X, floor + CAMERA_ABOVE_FLOOR, CAMERA_Z);
+			boolean clear = overworld.getBlockState(spot).isAir() && overworld.getBlockState(spot.above()).isAir();
 			int surface = overworld.getHeight(Heightmap.Types.MOTION_BLOCKING, CAMERA_X, CAMERA_Z);
-			Vec3 at = new Vec3(CAMERA_X + 0.5, surface + CAMERA_ABOVE_SURFACE, CAMERA_Z + 0.5);
+			int y = cameraY(floor, clear, surface);
+			if (!clear) {
+				RigTune.LOGGER.warn("Benchmark world: the camera spot {} isn't clear; using y {} instead", spot, y);
+			}
+			Vec3 at = new Vec3(CAMERA_X + 0.5, y, CAMERA_Z + 0.5);
 			server.getCommands().performPrefixedCommand(source, String.format(Locale.ROOT, "tp @a %.1f %.1f %.1f 0 0", at.x, at.y, at.z));
 			target = at;
 		} catch (RuntimeException e) {
 			RigTune.LOGGER.error("Benchmark world: set-up failed", e);
 		}
+	}
+
+	/** The terrain height at a column from the world's noise (no trees, no chunk needed). Server thread. */
+	public static int terrainFloor(ServerLevel level, int x, int z) {
+		return level.getChunkSource().getGenerator().getBaseHeight(x, z, Heightmap.Types.OCEAN_FLOOR_WG, level, level.getChunkSource().randomState());
 	}
 
 	private static @Nullable String recordedVersion(Path folder) {
