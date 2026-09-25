@@ -32,6 +32,7 @@ import net.minecraft.network.chat.contents.TranslatableContents;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -207,6 +208,25 @@ public class HistoryGameTest implements FabricClientGameTest {
 		context.waitTicks(2);
 		checkLayout(context, "history after undo 854x480@2");
 		context.takeScreenshot("history-after-undo");
+
+		// Corrupt, newer and missing history.json each get a read-only message (SPEC item 6, review B-M2).
+		boolean backup = Files.exists(historyFile.resolveSibling("history.json.bad"));
+		showState(context, "{not json", Journal.State.CORRUPT, "history-corrupt");
+		showState(context, "{\"formatVersion\":99,\"entries\":[]}", Journal.State.NEWER, "history-newer");
+		showState(context, null, Journal.State.MISSING, "history-empty");
+		check(Files.exists(historyFile.resolveSibling("history.json.bad")) == backup, "reading a corrupt history.json made no backup");
+	}
+
+	private void showState(ClientGameTestContext context, @Nullable String json, Journal.State expected, String screenshot) {
+		context.runOnClient(mc -> mc.gui.screen().onClose());
+		context.waitForScreen(RigTuneScreen.class);
+		restore(historyFile, json == null ? null : json.getBytes(StandardCharsets.UTF_8));
+		pressByKey(context, "rigtune.history.open");
+		HistoryModel.View view = waitForHistory(context);
+		check(view.state() == expected && view.entries().isEmpty(), screenshot + ": " + view);
+		check(context.computeOnClient(mc -> ((HistoryScreen) mc.gui.screen()).selected()) == null, screenshot + ": nothing selected");
+		checkLayout(context, screenshot);
+		context.takeScreenshot(screenshot);
 	}
 
 	private static HistoryModel.View waitForHistory(ClientGameTestContext context) {
