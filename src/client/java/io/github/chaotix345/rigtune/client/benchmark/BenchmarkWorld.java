@@ -294,8 +294,13 @@ public final class BenchmarkWorld {
 			server.getCommands().performPrefixedCommand(source, "time set noon");
 			server.getCommands().performPrefixedCommand(source, "weather clear");
 			ServerLevel overworld = server.overworld();
-			// getHeight reads the heightmap of whatever chunk is loaded, so generate the chunk first.
-			overworld.getChunk(CAMERA_X >> 4, CAMERA_Z >> 4);
+			// getHeight reads the heightmap of whatever is generated, and trees from the neighbouring chunks are only placed
+			// once those are generated too, so generate the 3x3 chunks around the camera first.
+			for (int dx = -1; dx <= 1; dx++) {
+				for (int dz = -1; dz <= 1; dz++) {
+					overworld.getChunk((CAMERA_X >> 4) + dx, (CAMERA_Z >> 4) + dz);
+				}
+			}
 			int surface = overworld.getHeight(Heightmap.Types.MOTION_BLOCKING, CAMERA_X, CAMERA_Z);
 			Vec3 at = new Vec3(CAMERA_X + 0.5, surface + CAMERA_ABOVE_SURFACE, CAMERA_Z + 0.5);
 			server.getCommands().performPrefixedCommand(source, String.format(Locale.ROOT, "tp @a %.1f %.1f %.1f 0 0", at.x, at.y, at.z));

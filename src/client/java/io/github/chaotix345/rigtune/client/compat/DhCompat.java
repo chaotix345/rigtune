@@ -7,10 +7,11 @@ import org.jspecify.annotations.Nullable;
 
 // The only class that touches the Distant Horizons API (docs/research/v0.2/dh-iris.md §3). Only call it through
 // OptionalMods, which checks that DH is loaded first. Render thread.
-// An API value overrides the player's own setting (the "true value") until it is cleared, so RigTune remembers the API
-// value from before its first change and puts exactly that back: normally none, which clearValue() restores.
+// setValue on renderingEnabled also changes DH's saved setting (rendererMode in DistantHorizons.toml; seen with DH 3.3.2),
+// so a restore writes the original value back and then drops the API override if there was none before.
 final class DhCompat {
 	private static boolean changed;
+	private static boolean valueBefore;
 	private static @Nullable Boolean apiValueBefore;
 
 	private DhCompat() {
@@ -35,6 +36,7 @@ final class DhCompat {
 	static void setRenderingEnabled(boolean on) {
 		IDhApiConfigValue<Boolean> value = rendering();
 		if (!changed) {
+			valueBefore = renderingEnabled();
 			apiValueBefore = value.getApiValue();
 			changed = true;
 		}
@@ -47,19 +49,24 @@ final class DhCompat {
 		if (!changed) {
 			return;
 		}
-		IDhApiConfigValue<Boolean> value = rendering();
-		boolean ok = apiValueBefore == null ? value.clearValue() : value.setValue(apiValueBefore);
-		if (!ok) {
-			throw new IllegalStateException("Distant Horizons refused to restore renderingEnabled");
-		}
+		put(apiValueBefore != null ? apiValueBefore : valueBefore, apiValueBefore == null);
 		changed = false;
 		apiValueBefore = null;
 	}
 
-	// After a crash: an API value is kept apart from the player's saved setting, so clearing RigTune's leftover override
-	// brings that setting back.
-	static void clearOverride() {
-		rendering().clearValue();
+	// After a crash mid-benchmark: DH saved the value RigTune set, so write the original back and drop the override.
+	static void restoreAfterCrash(boolean on) {
+		put(on, true);
+	}
+
+	private static void put(boolean on, boolean clearOverride) {
+		IDhApiConfigValue<Boolean> value = rendering();
+		if (!value.setValue(on)) {
+			throw new IllegalStateException("Distant Horizons refused to restore renderingEnabled = " + on);
+		}
+		if (clearOverride) {
+			value.clearValue();
+		}
 	}
 
 	private static IDhApiConfigValue<Boolean> rendering() {

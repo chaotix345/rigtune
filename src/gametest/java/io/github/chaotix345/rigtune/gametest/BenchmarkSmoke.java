@@ -28,6 +28,15 @@ final class BenchmarkSmoke {
 	private BenchmarkSmoke() {
 	}
 
+	private static String rendererMode() {
+		Path toml = FabricLoader.getInstance().getConfigDir().resolve("DistantHorizons.toml");
+		try {
+			return Files.readAllLines(toml).stream().map(String::strip).filter(l -> l.startsWith("rendererMode")).findFirst().orElse("(no rendererMode)");
+		} catch (IOException e) {
+			return "(unreadable: " + e + ")";
+		}
+	}
+
 	static void run(ClientGameTestContext context) {
 		boolean dhBefore = context.computeOnClient(mc -> OptionalMods.dhRendering());
 		boolean shadersBefore = context.computeOnClient(mc -> OptionalMods.shadersInUse());
@@ -63,6 +72,9 @@ final class BenchmarkSmoke {
 			evidence.add("DH cost " + (session == null ? null : session.dhCost()) + ", shader cost " + (session == null ? null : session.shaderCost()));
 			evidence.add("Distant Horizons rendering after " + dhAfter + ", API override after " + overrideAfter + ", shaders in use after " + shadersAfter);
 			evidence.add("benchmark-restore.json gone " + markerGone);
+			// DH saves renderingEnabled as rendererMode in its TOML; give it time to write before reading the file.
+			context.waitTicks(100);
+			evidence.add("DistantHorizons.toml " + rendererMode());
 			boolean dhMeasured = session != null && session.measurements().stream().anyMatch(m -> m.step().kind() == Step.Kind.DH_OFF);
 			passed = started && outcome != null && !outcome.cancelled() && dhAfter == dhBefore && shadersAfter == shadersBefore && markerGone
 					&& overrideAfter.equals(overrideBefore)

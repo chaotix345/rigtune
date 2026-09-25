@@ -21,13 +21,12 @@ public final class OptionalMods {
 			return dhReady();
 		}
 
-		// The marker only ever holds "on"; clearing RigTune's override brings back the player's own setting.
 		@Override
 		public void set(boolean value) {
 			if (!dhLoaded()) {
 				throw new IllegalStateException("Distant Horizons is not loaded");
 			}
-			DhCompat.clearOverride();
+			DhCompat.restoreAfterCrash(value);
 		}
 	};
 

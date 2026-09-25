@@ -383,8 +383,9 @@ public final class BenchmarkController {
 						enter(Phase.SWEEP);
 					} else {
 						FrameStats stats = FrameTimes.stop();
-						RigTune.LOGGER.info("Benchmark {} {}: {} frames, avg {} FPS, 1% low {} FPS", step.kind(), step.knobs(), stats.frames(),
-								Math.round(stats.avgFps()), Math.round(stats.onePercentLowFps()));
+						RigTune.LOGGER.info("Benchmark {} {}: {} frames, avg {} FPS, 1% low {} FPS (frame limit {}, {})", step.kind(), step.knobs(),
+								stats.frames(), Math.round(stats.avgFps()), Math.round(stats.onePercentLowFps()),
+								minecraft.getFramerateLimitTracker().getFramerateLimit(), minecraft.getFramerateLimitTracker().getThrottleReason());
 						run.record(stats);
 						nextStep();
 					}
@@ -470,7 +471,7 @@ public final class BenchmarkController {
 	private static void show(Minecraft minecraft, Outcome outcome, @Nullable Screen parent) {
 		if (outcome.cancelled()) {
 			SystemToast.add(minecraft.gui.toastManager(), TOAST_ID, Component.translatable("rigtune.benchmark.cancelled.title"),
-					Component.translatable("rigtune.benchmark.cancelled"));
+					Component.translatable("rigtune.benchmark.cancelled.body"));
 			return;
 		}
 		minecraft.gui.setScreen(new BenchmarkResultScreen(parent, outcome));

@@ -81,6 +81,7 @@
 	"rigtune.benchmark.use_best": "Use best tested (%s)",
 	"rigtune.benchmark.keep": "Keep current (%s)",
 	"rigtune.benchmark.none": "No measurements were taken.",
+	"rigtune.benchmark.cancelled.body": "Your settings were restored.",
 	"rigtune.benchmark.cancelled.title": "RigTune benchmark cancelled",
 	"rigtune.benchmark.chart.avg": "avg",
 	"rigtune.benchmark.chart.low": "1%% low",
