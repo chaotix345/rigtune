@@ -27,7 +27,7 @@ public sealed interface Text {
 		}
 	}
 
-	// Blank parts are dropped when it's made; the English is stripped, as the `(a + " " + b).trim()` it replaces.
+	// Blank parts are dropped when it's made; the English is trimmed, as the `(a + " " + b).trim()` it replaces.
 	record Joined(String separator, List<Text> parts) implements Text {
 		public Joined {
 			parts = List.copyOf(parts);
@@ -72,7 +72,7 @@ public sealed interface Text {
 				String template = templates.apply(t.key());
 				yield Format.format(template != null ? template : t.fallback(), t.args(), templates);
 			}
-			case Joined joined -> String.join(joined.separator(), joined.parts().stream().map(part -> part.render(templates)).toList()).strip();
+			case Joined joined -> String.join(joined.separator(), joined.parts().stream().map(part -> part.render(templates)).toList()).trim();
 		};
 	}
 

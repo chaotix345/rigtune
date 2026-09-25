@@ -16,6 +16,7 @@ import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
+import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.model.TierResult;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
 import io.github.chaotix345.rigtune.core.rules.Condition;
@@ -48,6 +49,12 @@ public final class Recommender {
 	// Client features a rule's `requires` may name. 0.2.0 knows none, so any rule with a non-empty `requires` is skipped.
 	public static final Set<String> SUPPORTED_FEATURES = Set.of();
 	static final String OUTSIDE_MODS_FOLDER = "It isn't in this instance's mods folder, so";
+	// The Recommender's own text as translation keys with their English (docs/v0.3/SPEC.md item 9); rule text stays literal.
+	private static final Text ALPHA = Text.of("rigtune.rec.alpha", ALPHA_NOTE);
+	private static final Text AVAILABILITY_UNKNOWN = Text.of("rigtune.rec.availability_unknown", AVAILABILITY_UNKNOWN_NOTE);
+	private static final Text OUTSIDE_REMOVE = Text.of("rigtune.rec.outside_mods_folder.remove", OUTSIDE_MODS_FOLDER + " remove it in your launcher.");
+	private static final Text OUTSIDE_UPDATE = Text.of("rigtune.rec.outside_mods_folder.update", OUTSIDE_MODS_FOLDER + " update it in your launcher.");
+	private static final Text BUNDLED = Text.of("rigtune.rec.bundled", "It is bundled inside another mod, so it has to be removed together with that mod.");
 
 	private static final Comparator<Recommendation> ORDER = Comparator
 			.comparing(Recommendation::category)
@@ -174,8 +181,9 @@ public final class Recommender {
 					if (!rule.modIds.contains(mod.modId())) {
 						continue;
 					}
-					String title = "Disable " + (rule.title != null ? rule.title : name(mod));
-					String reason = rule.reason != null ? rule.reason : name(mod) + " is obsolete on this Minecraft version.";
+					Text title = disableTitle(rule.title != null ? rule.title : name(mod));
+					Text reason = rule.reason != null ? Text.literal(rule.reason)
+							: Text.of("rigtune.rec.obsolete.reason", "%s is obsolete on this Minecraft version.", name(mod));
 					disable(mod, Impact.HIGH, title, reason, true);
 				}
 			}
@@ -188,8 +196,9 @@ public final class Recommender {
 				}
 				for (InstalledMod mod : installed) {
 					if (rule.modIds.contains(mod.modId())) {
-						String reason = rule.avoidReason != null ? rule.avoidReason : rule.displayTitle() + " doesn't suit this hardware.";
-						disable(mod, RulesDocument.impactOf(rule.impact, Impact.MEDIUM), "Disable " + rule.displayTitle(), reason,
+						Text reason = rule.avoidReason != null ? Text.literal(rule.avoidReason)
+								: Text.of("rigtune.rec.unsuitable.reason", "%s doesn't suit this hardware.", rule.displayTitle());
+						disable(mod, RulesDocument.impactOf(rule.impact, Impact.MEDIUM), disableTitle(rule.displayTitle()), reason,
 								rule.avoidSelected == null || rule.avoidSelected);
 					}
 				}
@@ -210,8 +219,9 @@ public final class Recommender {
 					String id = "conflict:" + (ordered ? rule.slug + "+" + other : other + "+" + rule.slug);
 					String a = rule.displayTitle();
 					String b = refTitle(ref);
-					put(new Recommendation(id, Category.WARNING, Impact.HIGH, a + " conflicts with " + b,
-							a + " and " + b + " change the same parts of the game and shouldn't be installed together. Keep one and disable the other.",
+					put(Recommendation.of(id, Category.WARNING, Impact.HIGH, Text.of("rigtune.rec.conflict.title", "%s conflicts with %s", a, b),
+							Text.of("rigtune.rec.conflict.reason",
+									"%s and %s change the same parts of the game and shouldn't be installed together. Keep one and disable the other.", a, b),
 							new Action.None(), false));
 				}
 			}
@@ -247,24 +257,27 @@ public final class Recommender {
 			for (Map.Entry<ModRule, List<String>> entry : keptOut.entrySet()) {
 				ModRule rule = entry.getKey();
 				Availability availability = offered.get(rule);
-				String reason = rule.reason == null ? "" : rule.reason;
+				List<Text> reason = new ArrayList<>();
+				reason.add(Text.literal(rule.reason));
 				if (!entry.getValue().isEmpty()) {
 					List<String> titles = entry.getValue();
-					String names = titles.size() == 1 ? titles.getFirst()
-							: String.join(", ", titles.subList(0, titles.size() - 1)) + " or " + titles.getLast();
-					reason = (reason + " RigTune doesn't also offer " + names + ", which " + (titles.size() == 1 ? "conflicts" : "conflict")
-							+ " with it.").trim();
+					Object names = titles.size() == 1 ? titles.getFirst()
+							: Text.of("rigtune.rec.list.or", "%s or %s", String.join(", ", titles.subList(0, titles.size() - 1)), titles.getLast());
+					reason.add(titles.size() == 1
+							? Text.of("rigtune.rec.install.keeps_out", "RigTune doesn't also offer %s, which conflicts with it.", names)
+							: Text.of("rigtune.rec.install.keeps_out.plural", "RigTune doesn't also offer %s, which conflict with it.", names));
 				}
 				if (rule.alpha()) {
-					reason = (reason + " " + ALPHA_NOTE).trim();
+					reason.add(ALPHA);
 				}
 				if (availability == Availability.UNKNOWN) {
-					reason = (reason + " " + AVAILABILITY_UNKNOWN_NOTE).trim();
+					reason.add(AVAILABILITY_UNKNOWN);
 				}
 				boolean selected = !rule.alpha() && (rule.defaultSelected == null || rule.defaultSelected);
 				String title = rule.displayTitle();
-				put(new Recommendation("add:" + rule.slug, Category.ADD_MOD, RulesDocument.impactOf(rule.impact, Impact.MEDIUM),
-						"Install " + title, reason, new Action.AddMod(rule.slug, rule.projectId, title), selected));
+				put(Recommendation.of("add:" + rule.slug, Category.ADD_MOD, RulesDocument.impactOf(rule.impact, Impact.MEDIUM),
+						Text.of("rigtune.rec.install.title", "Install %s", title), Text.join(" ", reason),
+						new Action.AddMod(rule.slug, rule.projectId, title), selected));
 			}
 		}
 
@@ -283,28 +296,30 @@ public final class Recommender {
 				// Its own updater already has the next build waiting, whatever the rules say (review 4, rules-accuracy-1):
 				// RigTune updating it too races that updater for the jar at exit.
 				if (queuedUpdates.contains(modId)) {
-					put(new Recommendation("advice:update-queued:" + modId, Category.ADVICE, Impact.LOW,
-							name(mod) + " has an update of its own waiting", "It's in mods/update, so RigTune leaves it alone.",
-							new Action.None(), false));
+					put(Recommendation.of("advice:update-queued:" + modId, Category.ADVICE, Impact.LOW,
+							Text.of("rigtune.rec.update_queued.title", "%s has an update of its own waiting", name(mod)),
+							Text.of("rigtune.rec.update_queued.reason", "It's in mods/update, so RigTune leaves it alone."), new Action.None(), false));
 					continue;
 				}
 				ModRule selfUpdating = mods.stream()
 						.filter(r -> r.skipUpdateWhen != null && r.modIds.contains(modId) && matches(r.skipUpdateWhen)).findFirst().orElse(null);
 				if (selfUpdating != null) {
-					put(new Recommendation("advice:updates-itself:" + modId, Category.ADVICE, Impact.LOW,
-							selfUpdating.displayTitle() + " updates itself", "Its own auto-updater is on, so RigTune leaves its updates to it.",
+					put(Recommendation.of("advice:updates-itself:" + modId, Category.ADVICE, Impact.LOW,
+							Text.of("rigtune.rec.updates_itself.title", "%s updates itself", selfUpdating.displayTitle()),
+							Text.of("rigtune.rec.updates_itself.reason", "Its own auto-updater is on, so RigTune leaves its updates to it."),
 							new Action.None(), false));
 					continue;
 				}
 				String current = update.currentVersion() != null ? update.currentVersion() : mod.version();
-				String reason = "Version " + update.newVersionNumber() + " is available (you have " + current + ").";
+				Text reason = Text.of("rigtune.rec.update.reason", "Version %s is available (you have %s).", update.newVersionNumber(), current);
+				Text title = Text.of("rigtune.rec.update.title", "Update %s", name(mod));
 				if (mod.file() == null) {
-					put(new Recommendation("update:" + modId, Category.UPDATE_MOD, Impact.LOW, "Update " + name(mod),
-							reason + " " + OUTSIDE_MODS_FOLDER + " update it in your launcher.", new Action.None(), false));
+					put(Recommendation.of("update:" + modId, Category.UPDATE_MOD, Impact.LOW, title, Text.sentences(reason, OUTSIDE_UPDATE),
+							new Action.None(), false));
 					continue;
 				}
-				put(new Recommendation("update:" + modId, Category.UPDATE_MOD, Impact.LOW, "Update " + name(mod),
-						reason, new Action.UpdateMod(modId, mod.file(), update), true));
+				put(Recommendation.of("update:" + modId, Category.UPDATE_MOD, Impact.LOW, title, reason,
+						new Action.UpdateMod(modId, mod.file(), update), true));
 			}
 		}
 
@@ -358,8 +373,8 @@ public final class Recommender {
 				if (SettingValues.same(current, target.value())) {
 					continue;
 				}
-				put(new Recommendation("set:" + key, Category.SETTING, target.impact(),
-						SettingValues.describe(rules.settingLabels.get(key), key, current, target.value()), target.reason(),
+				put(Recommendation.of("set:" + key, Category.SETTING, target.impact(),
+						SettingValues.describe(rules.settingLabels.get(key), key, current, target.value()), Text.literal(target.reason()),
 						new Action.SetSetting(key, current, target.value()), target.selected()));
 			}
 		}
@@ -376,8 +391,8 @@ public final class Recommender {
 					case "warning" -> RulesDocument.impactOf(rule.impact, Impact.MEDIUM);
 					default -> RulesDocument.impactOf(rule.impact, Impact.LOW);
 				};
-				put(new Recommendation("advice:" + rule.id, category, impact, rule.title != null ? rule.title : rule.id,
-						text(rule.text), new Action.None(), false));
+				put(Recommendation.of("advice:" + rule.id, category, impact, Text.literal(rule.title != null ? rule.title : rule.id),
+						Text.literal(text(rule.text)), new Action.None(), false));
 			}
 		}
 
@@ -385,25 +400,28 @@ public final class Recommender {
 			if (modVersion == null || rules.minModVersion == null || compareVersions(modVersion, rules.minModVersion) >= 0) {
 				return;
 			}
-			put(new Recommendation("advice:update-rigtune", Category.ADVICE, Impact.MEDIUM, "Update RigTune",
-					"These recommendations are written for RigTune " + rules.minModVersion + " or newer and you have " + modVersion
-							+ ". Update RigTune so every suggestion is understood correctly.",
+			put(Recommendation.of("advice:update-rigtune", Category.ADVICE, Impact.MEDIUM, Text.of("rigtune.rec.update_rigtune.title", "Update RigTune"),
+					Text.of("rigtune.rec.update_rigtune.reason",
+							"These recommendations are written for RigTune %s or newer and you have %s. Update RigTune so every suggestion is understood correctly.",
+							rules.minModVersion, modVersion),
 					new Action.None(), false));
 		}
 
-		private void disable(InstalledMod mod, Impact impact, String title, String reason, boolean selected) {
+		private void disable(InstalledMod mod, Impact impact, Text title, Text reason, boolean selected) {
 			String id = "disable:" + mod.modId();
 			if (recs.containsKey(id)) {
 				return;
 			}
 			if (mod.file() == null) {
-				String how = mod.sha1() != null
-						? " " + OUTSIDE_MODS_FOLDER + " remove it in your launcher."
-						: " It is bundled inside another mod, so it has to be removed together with that mod.";
-				put(new Recommendation(id, Category.REMOVE_MOD, impact, title, reason + how, new Action.None(), false));
+				put(Recommendation.of(id, Category.REMOVE_MOD, impact, title, Text.sentences(reason, mod.sha1() != null ? OUTSIDE_REMOVE : BUNDLED),
+						new Action.None(), false));
 				return;
 			}
-			put(new Recommendation(id, Category.REMOVE_MOD, impact, title, reason, new Action.DisableMod(mod.modId(), mod.file()), selected));
+			put(Recommendation.of(id, Category.REMOVE_MOD, impact, title, reason, new Action.DisableMod(mod.modId(), mod.file()), selected));
+		}
+
+		private static Text disableTitle(String name) {
+			return Text.of("rigtune.rec.disable.title", "Disable %s", name);
 		}
 
 		private void put(Recommendation recommendation) {
