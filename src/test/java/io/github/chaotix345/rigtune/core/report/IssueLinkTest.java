@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.core.report;
 
 import io.github.chaotix345.rigtune.core.Fixtures;
+import io.github.chaotix345.rigtune.core.RepoFiles;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
 import io.github.chaotix345.rigtune.core.model.Category;
@@ -17,15 +18,19 @@ import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.TierResult;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -166,5 +171,60 @@ class IssueLinkTest {
 		String url = IssueLink.url(VERSIONS, "\n", IssueLink.MAX_URL);
 
 		assertEquals(List.of("template", "title"), List.copyOf(params(url).keySet()));
+	}
+
+	private record FormField(String type, boolean required) {
+	}
+
+	// The issue form's fields by id: each `id:` belongs to the `- type:` item above it.
+	private static Map<String, FormField> formFields(List<String> yaml) {
+		Map<String, FormField> fields = new LinkedHashMap<>();
+		String type = null;
+		String id = null;
+		for (String line : yaml) {
+			String trimmed = line.strip();
+			if (trimmed.startsWith("- type:")) {
+				type = trimmed.substring("- type:".length()).strip();
+				id = null;
+			} else if (trimmed.startsWith("id:") && type != null) {
+				id = trimmed.substring("id:".length()).strip();
+				fields.put(id, new FormField(type, false));
+			} else if (trimmed.equals("required: true") && id != null) {
+				fields.put(id, new FormField(type, true));
+			}
+		}
+		return fields;
+	}
+
+	@Test
+	void fieldNamesMatchTheIssueForm() throws IOException {
+		Path form = RepoFiles.resolve(".github/ISSUE_TEMPLATE/" + IssueLink.TEMPLATE);
+		List<String> yaml = Files.readAllLines(form, StandardCharsets.UTF_8);
+		Map<String, FormField> fields = formFields(yaml);
+
+		assertEquals(new FormField("textarea", false), fields.get(IssueLink.REPORT_FIELD), fields.toString());
+		assertEquals(new FormField("textarea", true), fields.get("what-happened"), fields.toString());
+		assertEquals(new FormField("textarea", false), fields.get("expected"), fields.toString());
+		assertTrue(yaml.stream().anyMatch(l -> l.startsWith("labels:")), "labels come from the form");
+
+		String url = IssueLink.url(VERSIONS, ShareReport.format(report(Fixtures.userRig().build(), 5, ""), VERSIONS, null), IssueLink.MAX_URL);
+		for (String name : params(url).keySet()) {
+			assertTrue(name.equals("template") || name.equals(IssueLink.TITLE_FIELD) || fields.containsKey(name), name + " is a form field");
+		}
+		for (String forbidden : List.of("labels=", "assignees=", "projects=", "milestone=")) {
+			assertFalse(url.contains(forbidden), url);
+		}
+	}
+
+	@Test
+	void noNetworkClient() throws IOException {
+		String source = Files.readString(RepoFiles.resolve("src/main/java/io/github/chaotix345/rigtune/core/report/IssueLink.java"), StandardCharsets.UTF_8);
+		Set<String> allowed = Set.of("org.jspecify.annotations.Nullable", "java.net.URI", "java.net.URLEncoder", "java.nio.charset.StandardCharsets",
+				"java.util.Arrays", "java.util.List");
+		source.lines().filter(l -> l.startsWith("import ")).forEach(l ->
+				assertTrue(allowed.contains(l.substring("import ".length(), l.length() - 1)), "unexpected import: " + l));
+		for (String network : List.of("openConnection", "openStream", "HttpClient", "HttpURLConnection", "Socket", "new URL(", "java.net.http")) {
+			assertFalse(source.contains(network), network);
+		}
 	}
 }
