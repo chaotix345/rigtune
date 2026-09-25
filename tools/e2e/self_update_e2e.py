@@ -153,18 +153,25 @@ class Run:
             owner = self.lock / "owner.txt"
             raise LockBusy(owner.read_text(encoding="utf-8") if owner.is_file() else "(no owner.txt)")
         try:
-            (self.lock / "owner.txt").write_text("ws-g self-update E2E ({})\nworktree {}\nrun {}\nsince {}\n".format(
-                self.name, REPO, self.run_dir, datetime.datetime.now(datetime.timezone.utc).isoformat()), encoding="utf-8")
+            (self.lock / "owner.txt").write_text(owner_text(self.args.agent, REPO, self.run_dir,
+                                                            datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")),
+                                                 encoding="utf-8", newline=LF)
         except OSError:
             self.lock.rmdir()  # still empty: we just made it
             raise
         self.log("took the game-test lock " + str(self.lock))
 
     def release_lock(self):
-        if self.lock is not None and (self.lock / "owner.txt").is_file() \
-                and str(self.run_dir) in (self.lock / "owner.txt").read_text(encoding="utf-8"):
-            shutil.rmtree(self.lock)
+        """PLAN's protocol: owner.txt, then the empty folder (never a recursive delete), and only this run's lock."""
+        owner = None if self.lock is None else self.lock / "owner.txt"
+        if owner is None or not owner.is_file() or not owns_lock(owner.read_text(encoding="utf-8"), self.run_dir):
+            return
+        owner.unlink()
+        try:
+            self.lock.rmdir()
             self.log("released the game-test lock")
+        except OSError as e:
+            self.log("WARNING: removed owner.txt but not the lock folder {}: {}".format(self.lock, e))
 
     # --- setup ----------------------------------------------------------------------------------------------------
 
@@ -311,13 +318,18 @@ class Run:
                 seen.setdefault(pid, command_line.strip())
         return list(seen.values())
 
-    def wait_for_helper(self):
+    def helper_log_size(self):
+        helper_log = self.rigtune_dir / "helper.log"
+        return helper_log.stat().st_size if helper_log.is_file() else 0
+
+    def wait_for_helper(self, since=0):
+        """since: helper.log's size before the launch; earlier runs' lines in a reused instance don't count."""
         pending = self.rigtune_dir / "pending.json"
         helper_log = self.rigtune_dir / "helper.log"
         deadline = time.time() + HELPER_TIMEOUT
         while time.time() < deadline:
             running = self.own(lambda cl: "ApplyHelper" in cl)
-            text = helper_log.read_text(errors="replace") if helper_log.is_file() else ""
+            text = helper_log_tail(helper_log, since)
             if not running and (any(done in text for done in HELPER_DONE) or not pending.exists()):
                 self.log("helper finished: " + (text.strip().splitlines()[-1] if text.strip() else "(no helper.log)"))
                 return True
@@ -344,9 +356,10 @@ class Run:
         """One launch that stages changes, then the helper after the game exits. Returns (gradle exit, helper done,
         helper command lines), and keeps the phase's files for the evidence."""
         self.start_watcher(phase)
+        since = self.helper_log_size()
         try:
             code = self.launch(phase)
-            helper_ok = self.wait_for_helper()
+            helper_ok = self.wait_for_helper(since)
         finally:
             self.stop_watcher()
         cmdlines = self.helper_cmdlines()
@@ -564,6 +577,26 @@ class Run:
         return 0 if verdict == "PASS" else 1
 
 
+def owner_text(agent, repo, run_dir, started):
+    """The lock's owner.txt as PLAN's lock protocol asks (agent, worktree, started), plus the run folder that proves
+    ownership on release."""
+    return "agent: {}\nworktree: {}\nstarted: {}\nrun: {}\n".format(agent, str(repo).replace(chr(92), "/"), started, run_dir)
+
+
+def owns_lock(text, run_dir):
+    return "run: {}".format(run_dir) in text.splitlines()
+
+
+def helper_log_tail(path, offset):
+    """helper.log from byte offset on; empty when the file is missing."""
+    path = Path(path)
+    if not path.is_file():
+        return ""
+    with open(path, "rb") as log:
+        log.seek(offset)
+        return log.read().decode("utf-8", errors="replace")
+
+
 def filtered_log(path):
     """The lines of a client log that matter here: RigTune, the driver, warnings and errors, and the mod list."""
     keep = re.compile(r"rigtune|e2e|error|warn|exception|loading \d+ mods", re.IGNORECASE)
@@ -603,6 +636,7 @@ def parse_args(argv):
     parser.add_argument("--expect-history", action="store_true", help="require the 0.2 history.json legacy import")
     parser.add_argument("--port", type=int, default=443)
     parser.add_argument("--lock", default=DEFAULT_LOCK, help="game-test lock folder, or 'none'")
+    parser.add_argument("--agent", default="ws-h", help="the agent named in the lock's owner.txt")
     parser.add_argument("--java-home", default=os.environ.get("JAVA_HOME"))
     parser.add_argument("--jvm-arg", action="append", help="extra JVM argument for both launches")
     args = parser.parse_args(argv)

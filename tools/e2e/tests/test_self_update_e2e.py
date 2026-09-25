@@ -37,5 +37,81 @@ class ArgsTest(unittest.TestCase):
         self.assertFalse(args.expect_history)
 
 
+def make_run(tmp, *extra):
+    args = self_update_e2e.parse_args(["--name", "n", "--old-jar", "a.jar", "--new-jar", "b.jar", "--work", str(tmp),
+                                       "--java-home", "jdk", "--lock", str(Path(tmp) / "lock")] + list(extra))
+    run = self_update_e2e.Run(args)
+    run.run_dir.mkdir(parents=True)
+    return run
+
+
+class LockTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.run = make_run(self.tmp)
+        self.lock = self.tmp / "lock"
+
+    def test_owner_txt_follows_the_plan_protocol(self):
+        text = self_update_e2e.owner_text("ws-h", Path("C:/Dev/Worktrees/rigtune-e2e3"), Path("C:/tmp/run-1"),
+                                          "2026-09-26T10:00:00+00:00")
+        lines = text.splitlines()
+        self.assertEqual("agent: ws-h", lines[0])
+        self.assertEqual("worktree: C:/Dev/Worktrees/rigtune-e2e3", lines[1])
+        self.assertEqual("started: 2026-09-26T10:00:00+00:00", lines[2])
+        self.assertEqual("run: " + str(Path("C:/tmp/run-1")), lines[3])
+
+    def test_take_writes_owner_txt_and_release_removes_the_lock(self):
+        self.run.take_lock()
+        owner = (self.lock / "owner.txt").read_text(encoding="utf-8")
+        self.assertIn("agent: ws-h", owner)
+        self.assertTrue(self_update_e2e.owns_lock(owner, self.run.run_dir))
+        self.run.release_lock()
+        self.assertFalse(self.lock.exists())
+
+    def test_agent_can_be_named(self):
+        run = make_run(self.tmp, "--agent", "p5-verify")
+        run.take_lock()
+        self.assertIn("agent: p5-verify", (self.lock / "owner.txt").read_text(encoding="utf-8"))
+        run.release_lock()
+
+    def test_busy_lock_raises_with_the_owner(self):
+        self.lock.mkdir()
+        (self.lock / "owner.txt").write_text("agent: ws-e\n", encoding="utf-8")
+        with self.assertRaises(self_update_e2e.LockBusy) as busy:
+            self.run.take_lock()
+        self.assertIn("ws-e", str(busy.exception))
+        self.assertTrue((self.lock / "owner.txt").is_file())
+
+    def test_release_leaves_another_runs_lock(self):
+        self.lock.mkdir()
+        other = self_update_e2e.owner_text("ws-e", Path("C:/x"), self.tmp / "other-run", "now")
+        (self.lock / "owner.txt").write_text(other, encoding="utf-8")
+        self.run.release_lock()
+        self.assertEqual(other, (self.lock / "owner.txt").read_text(encoding="utf-8"))
+
+    def test_release_never_deletes_other_files(self):
+        self.run.take_lock()
+        (self.lock / "note.txt").write_text("someone else's", encoding="utf-8")
+        self.run.release_lock()
+        self.assertTrue((self.lock / "note.txt").is_file())
+
+    def test_owns_lock_matches_the_whole_run_line(self):
+        text = self_update_e2e.owner_text("ws-h", Path("C:/r"), Path("C:/tmp/run-10"), "now")
+        self.assertTrue(self_update_e2e.owns_lock(text, Path("C:/tmp/run-10")))
+        self.assertFalse(self_update_e2e.owns_lock(text, Path("C:/tmp/run-1")))
+
+
+class HelperLogTest(unittest.TestCase):
+    def test_only_text_after_the_offset_counts(self):
+        log = Path(tempfile.mkdtemp()) / "helper.log"
+        self.assertEqual("", self_update_e2e.helper_log_tail(log, 0))
+        log.write_bytes(b"[a] All operations done\n")
+        offset = log.stat().st_size
+        self.assertEqual("", self_update_e2e.helper_log_tail(log, offset))
+        with open(log, "a", encoding="utf-8", newline="") as out:
+            out.write("[b] Nothing to apply\n")
+        self.assertEqual("[b] Nothing to apply\n", self_update_e2e.helper_log_tail(log, offset))
+
+
 if __name__ == "__main__":
     unittest.main()
