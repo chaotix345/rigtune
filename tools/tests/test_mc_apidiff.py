@@ -1,0 +1,256 @@
+import struct
+import sys
+import tempfile
+import unittest
+import zipfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import mc_apidiff as mad
+
+PUBLIC, PRIVATE, PROTECTED, STATIC, INTERFACE, ABSTRACT, ENUM = 0x1, 0x2, 0x4, 0x8, 0x200, 0x400, 0x4000
+
+
+class ClassWriter:
+    """Writes minimal (unverifiable, but well-formed) class files for the reader to parse."""
+
+    def __init__(self, name, super_name="java/lang/Object", interfaces=(), access=PUBLIC):
+        self.entries = [None]
+        self.index = {}
+        self.name, self.super_name, self.interfaces, self.access = name, super_name, list(interfaces), access
+        self.fields, self.methods, self.attributes = [], [], []
+
+    def _add(self, key, payload, slots=1):
+        if key in self.index:
+            return self.index[key]
+        at = len(self.entries)
+        self.entries.append(payload)
+        self.entries.extend([None] * (slots - 1))
+        self.index[key] = at
+        return at
+
+    def utf8(self, text):
+        data = text.encode("utf-8")
+        return self._add(("utf8", text), struct.pack(">BH", 1, len(data)) + data)
+
+    def cls(self, name):
+        return self._add(("class", name), struct.pack(">BH", 7, self.utf8(name)))
+
+    def string(self, text):
+        return self._add(("string", text), struct.pack(">BH", 8, self.utf8(text)))
+
+    def long(self, value):
+        return self._add(("long", value), struct.pack(">Bq", 5, value), slots=2)
+
+    def nat(self, name, desc):
+        return self._add(("nat", name, desc), struct.pack(">BHH", 12, self.utf8(name), self.utf8(desc)))
+
+    def ref(self, kind, owner, name, desc):
+        tag = {"field": 9, "method": 10, "imethod": 11}[kind]
+        return self._add((kind, owner, name, desc), struct.pack(">BHH", tag, self.cls(owner), self.nat(name, desc)))
+
+    def field(self, name, desc, access=PUBLIC):
+        self.fields.append((access, self.utf8(name), self.utf8(desc)))
+        return self
+
+    def method(self, name, desc, access=PUBLIC):
+        self.methods.append((access, self.utf8(name), self.utf8(desc)))
+        return self
+
+    def _element(self, value):
+        if isinstance(value, str):
+            return struct.pack(">BH", ord("s"), self.utf8(value))
+        if isinstance(value, tuple) and value[0] == "class":
+            return struct.pack(">BH", ord("c"), self.utf8(value[1]))
+        if isinstance(value, tuple) and value[0] == "@":
+            return b"@" + self._annotation(value[1], value[2])
+        if isinstance(value, list):
+            return struct.pack(">BH", ord("["), len(value)) + b"".join(self._element(v) for v in value)
+        raise TypeError(value)
+
+    def _annotation(self, type_desc, values):
+        out = struct.pack(">HH", self.utf8(type_desc), len(values))
+        for key, value in values.items():
+            out += struct.pack(">H", self.utf8(key)) + self._element(value)
+        return out
+
+    def annotate(self, type_desc, values):
+        body = struct.pack(">H", 1) + self._annotation(type_desc, values)
+        self.attributes.append(struct.pack(">HI", self.utf8("RuntimeInvisibleAnnotations"), len(body)) + body)
+        return self
+
+    def bytes(self):
+        this, sup = self.cls(self.name), self.cls(self.super_name) if self.super_name else 0
+        interfaces = [self.cls(i) for i in self.interfaces]
+        pool = b"".join(e for e in self.entries[1:] if e is not None)
+        out = struct.pack(">IHHH", 0xCAFEBABE, 0, 69, len(self.entries)) + pool
+        out += struct.pack(">HHHH", self.access, this, sup, len(interfaces))
+        out += b"".join(struct.pack(">H", i) for i in interfaces)
+        for members in (self.fields, self.methods):
+            out += struct.pack(">H", len(members))
+            out += b"".join(struct.pack(">HHHH", a, n, d, 0) for a, n, d in members)
+        out += struct.pack(">H", len(self.attributes)) + b"".join(self.attributes)
+        return out
+
+
+def index_of(*writers, jdk=None):
+    return mad.ClassIndex(classes={w.name: w.bytes() for w in writers}, fallback=jdk)
+
+
+def jdk_index():
+    obj = ClassWriter("java/lang/Object", super_name=None)
+    obj.method("hashCode", "()I").method("getClass", "()Ljava/lang/Class;").method("<init>", "()V")
+    enum = ClassWriter("java/lang/Enum", interfaces=["java/lang/Comparable"], access=PUBLIC | ABSTRACT)
+    enum.method("ordinal", "()I").method("name", "()Ljava/lang/String;")
+    comparable = ClassWriter("java/lang/Comparable", super_name="java/lang/Object", access=PUBLIC | INTERFACE | ABSTRACT)
+    comparable.method("compareTo", "(Ljava/lang/Object;)I", PUBLIC | ABSTRACT)
+    return index_of(obj, enum, comparable).get
+
+
+class ReaderTest(unittest.TestCase):
+    def test_parse_reads_members_and_refs(self):
+        w = ClassWriter("io/github/x/Probe", interfaces=["java/lang/Runnable"])
+        w.field("count", "I", PRIVATE | STATIC).method("run", "()V")
+        w.ref("method", "net/minecraft/client/Minecraft", "getInstance", "()Lnet/minecraft/client/Minecraft;")
+        w.ref("field", "net/minecraft/client/Options", "renderDistance", "Lnet/minecraft/client/OptionInstance;")
+        w.ref("imethod", "net/fabricmc/api/ClientModInitializer", "onInitializeClient", "()V")
+        w.string("serverRenderDistance")
+        info = mad.parse_class(w.bytes())
+        self.assertEqual(info.name, "io/github/x/Probe")
+        self.assertEqual(info.super_name, "java/lang/Object")
+        self.assertEqual(info.interfaces, ["java/lang/Runnable"])
+        self.assertEqual(info.fields, {("count", "I"): PRIVATE | STATIC})
+        self.assertEqual(info.methods, {("run", "()V"): PUBLIC})
+        self.assertEqual(info.refs, {
+            ("method", "net/minecraft/client/Minecraft", "getInstance", "()Lnet/minecraft/client/Minecraft;"),
+            ("field", "net/minecraft/client/Options", "renderDistance", "Lnet/minecraft/client/OptionInstance;"),
+            ("imethod", "net/fabricmc/api/ClientModInitializer", "onInitializeClient", "()V"),
+        })
+        self.assertEqual(info.strings, {"serverRenderDistance"})
+        self.assertIn("net/minecraft/client/OptionInstance", info.descriptor_types)
+
+    def test_parse_handles_long_constants_taking_two_slots(self):
+        w = ClassWriter("a/B")
+        w.long(1 << 40)
+        w.string("after-the-long")
+        w.ref("method", "net/minecraft/A", "b", "()V")
+        info = mad.parse_class(w.bytes())
+        self.assertEqual(info.strings, {"after-the-long"})
+        self.assertEqual(info.refs, {("method", "net/minecraft/A", "b", "()V")})
+
+    def test_annotation_strings_and_class_values(self):
+        w = ClassWriter("io/github/x/mixin/DebugScreenOverlayMixin")
+        w.annotate("Lorg/spongepowered/asm/mixin/Mixin;",
+                   {"value": [("class", "Lnet/minecraft/client/gui/components/DebugScreenOverlay;")]})
+        w.annotate("Lorg/spongepowered/asm/mixin/injection/Inject;",
+                   {"method": ["logFrameDuration"], "at": [("@", "Lorg/spongepowered/asm/mixin/injection/At;", {"value": "HEAD"})]})
+        info = mad.parse_class(w.bytes())
+        self.assertEqual(info.annotation_strings, {"logFrameDuration", "HEAD"})
+        self.assertIn("net/minecraft/client/gui/components/DebugScreenOverlay", info.descriptor_types)
+
+    def test_rejects_non_class_data(self):
+        with self.assertRaises(ValueError):
+            mad.parse_class(b"PK\x03\x04")
+
+
+class CollectTest(unittest.TestCase):
+    def test_collect_and_classify(self):
+        w = ClassWriter("io/github/chaotix345/rigtune/client/Probe")
+        w.ref("method", "net/minecraft/client/Minecraft", "getInstance", "()Lnet/minecraft/client/Minecraft;")
+        w.ref("method", "java/lang/String", "length", "()I")
+        w.ref("method", "io/github/chaotix345/rigtune/core/Report", "build", "()V")
+        w.ref("method", "[Lnet/minecraft/world/Difficulty;", "clone", "()Ljava/lang/Object;")
+        w.ref("method", "net/irisshaders/iris/api/v0/IrisApi", "getInstance", "()Lnet/irisshaders/iris/api/v0/IrisApi;")
+        w.string("net.minecraft.client.Options$FieldAccess")
+        w.string("net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer")
+        w.string("processOptions")
+        report = ClassWriter("io/github/chaotix345/rigtune/core/Report")
+        raw = mad.collect_rigtune([("client", w.bytes()), ("main", report.bytes())])
+        self.assertEqual(raw.class_count, {"client": 1, "main": 1})
+        self.assertIn("processOptions", raw.strings)
+
+        minecraft = ClassWriter("net/minecraft/client/Minecraft").method("getInstance", "()Lnet/minecraft/client/Minecraft;", PUBLIC | STATIC)
+        field_access = ClassWriter("net/minecraft/client/Options$FieldAccess", access=PUBLIC | INTERFACE | ABSTRACT)
+        scope = mad.classify(raw, index_of(minecraft, field_access, jdk=jdk_index()))
+        self.assertEqual(scope.refs, {("method", "net/minecraft/client/Minecraft", "getInstance", "()Lnet/minecraft/client/Minecraft;")})
+        self.assertEqual(scope.types, {"net/minecraft/client/Minecraft", "net/minecraft/client/Options$FieldAccess"})
+        self.assertEqual(scope.reflection_types, {"net/minecraft/client/Options$FieldAccess"})
+        self.assertEqual(scope.other_reflection, {"net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer"})
+        self.assertEqual(scope.not_checked, {"net/irisshaders": 1})
+
+
+class ResolveTest(unittest.TestCase):
+    def test_resolve_through_superclass_and_interface(self):
+        base = ClassWriter("net/minecraft/Base").method("tick", "()V").field("level", "I")
+        iface = ClassWriter("net/minecraft/Ticker", access=PUBLIC | INTERFACE | ABSTRACT).method("rate", "()I", PUBLIC | ABSTRACT)
+        child = ClassWriter("net/minecraft/Child", super_name="net/minecraft/Base", interfaces=["net/minecraft/Ticker"])
+        index = index_of(base, iface, child)
+        self.assertEqual(mad.resolve(index, "method", "net/minecraft/Child", "tick", "()V"), ("net/minecraft/Base", PUBLIC))
+        self.assertEqual(mad.resolve(index, "field", "net/minecraft/Child", "level", "I"), ("net/minecraft/Base", PUBLIC))
+        self.assertEqual(mad.resolve(index, "method", "net/minecraft/Child", "rate", "()I"),
+                         ("net/minecraft/Ticker", PUBLIC | ABSTRACT))
+        self.assertIsNone(mad.resolve(index, "method", "net/minecraft/Child", "tick", "(I)V"))
+
+    def test_jdk_inherited_member_resolves(self):
+        enum = ClassWriter("net/minecraft/world/Difficulty", super_name="java/lang/Enum", access=PUBLIC | ENUM)
+        index = index_of(enum, jdk=jdk_index())
+        self.assertEqual(mad.resolve(index, "method", "net/minecraft/world/Difficulty", "ordinal", "()I"),
+                         ("java/lang/Enum", PUBLIC))
+        self.assertEqual(mad.resolve(index, "method", "net/minecraft/world/Difficulty", "compareTo", "(Ljava/lang/Object;)I"),
+                         ("java/lang/Comparable", PUBLIC | ABSTRACT))
+        self.assertEqual(mad.resolve(index, "method", "net/minecraft/world/Difficulty", "hashCode", "()I"),
+                         ("java/lang/Object", PUBLIC))
+
+
+REF_TICK = ("method", "net/minecraft/A", "tick", "()V")
+
+
+class CompareTest(unittest.TestCase):
+    def compare(self, old, new, refs=(REF_TICK,)):
+        results = mad.compare_refs(set(refs), index_of(old), index_of(new))
+        return {r["name"]: r for r in results}
+
+    def test_same_member_is_ok(self):
+        old = ClassWriter("net/minecraft/A").method("tick", "()V")
+        new = ClassWriter("net/minecraft/A").method("tick", "()V")
+        self.assertEqual(self.compare(old, new)["tick"]["status"], "OK")
+
+    def test_missing_member_on_new_is_breaking(self):
+        old = ClassWriter("net/minecraft/A").method("tick", "()V")
+        new = ClassWriter("net/minecraft/A").method("tick", "(F)V")
+        result = self.compare(old, new)["tick"]
+        self.assertEqual(result["status"], "MISSING")
+        self.assertEqual(result["old"], "net/minecraft/A")
+        self.assertIsNone(result["new"])
+
+    def test_static_change_is_breaking(self):
+        old = ClassWriter("net/minecraft/A").method("tick", "()V", PUBLIC)
+        new = ClassWriter("net/minecraft/A").method("tick", "()V", PUBLIC | STATIC)
+        self.assertEqual(self.compare(old, new)["tick"]["status"], "CHANGED")
+
+    def test_access_narrowed_is_breaking(self):
+        old = ClassWriter("net/minecraft/A").method("tick", "()V", PUBLIC)
+        new = ClassWriter("net/minecraft/A").method("tick", "()V", PROTECTED)
+        self.assertEqual(self.compare(old, new)["tick"]["status"], "CHANGED")
+
+    def test_access_widened_is_ok(self):
+        old = ClassWriter("net/minecraft/A").method("tick", "()V", PROTECTED)
+        new = ClassWriter("net/minecraft/A").method("tick", "()V", PUBLIC)
+        self.assertEqual(self.compare(old, new)["tick"]["status"], "OK")
+
+    def test_member_moved_to_superclass_is_ok(self):
+        old = ClassWriter("net/minecraft/A").method("tick", "()V")
+        base = ClassWriter("net/minecraft/Base").method("tick", "()V")
+        new = ClassWriter("net/minecraft/A", super_name="net/minecraft/Base")
+        results = mad.compare_refs({REF_TICK}, index_of(old), index_of(new, base))
+        self.assertEqual([(r["status"], r["new"]) for r in results], [("OK", "net/minecraft/Base")])
+
+    def test_unresolved_on_both_sides_is_reported(self):
+        old = ClassWriter("net/minecraft/B")
+        new = ClassWriter("net/minecraft/B")
+        self.assertEqual(self.compare(old, new)["tick"]["status"], "UNRESOLVED")
+
+
+if __name__ == "__main__":
+    unittest.main()
