@@ -17,8 +17,8 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 ### Status
 - [x] Phase 0: orient. Real instance (read-only): still 0.1.0, last played 2026-09-25 09:08, no benchmarks/history; the DH group still pending; mods/update holds DH 3.3.2 (a multi-loader jar with fabric id distanthorizons, so 0.2+ detects it). Heap 6144 MB of 31849 (Modrinth App global setting).
 - [x] Phase 1: research DONE (docs/research/v0.3/: mc-versions, ci-gametests, launcher-ram, hardware-tiers, benchmark, misc). Headlines: no MC newer than 26.3 (26.4-snapshot-1 compiles and passes 848/848 unchanged); CI game tests green on Linux (branch research/ci-gametest, kept for WS-0); a real P0 bug: benchmark RD changes aren't broadcast to the server (SPEC 3f).
-- [ ] Phase 2: spec + plan (drafts committed: docs/v0.3/SPEC.md, PLAN.md); plan review next
-- [ ] Phase 3: foundation
+- [x] Phase 2: SPEC.md + PLAN.md + plan review (docs/v0.3/plan-review.md) with amendments folded in (0681c4c).
+- [ ] Phase 3: foundation RUNNING (ws-0). Wave A started in parallel (no build-file overlap).
 - [ ] Phase 4: features
 - [ ] Phase 5: verification
 - [ ] Phase 6: reviews (2 rounds)
@@ -28,11 +28,22 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 ### Agents (v0.3)
 | name | branch | worktree | status |
 |---|---|---|---|
-| ws-0 (foundation) | feat/v03-foundation | C:/Dev/Worktrees/rigtune-found | RUNNING (CI game-test job, Sodium optional, release loop, 0.3.0-dev) |
-| plan-review | - | - | RUNNING -> docs/v0.3/plan-review.md |
+| ws-0 (foundation) | feat/v03-foundation | C:/Dev/Worktrees/rigtune-found | RUNNING: CI game-test job, Sodium optional, release loop + re-runnable byte-identical publish, e2e driver compiles, concurrency, 0.3.0-dev |
+| ws-a (3a-3c, raw MC version) | fix/v03-deferred | C:/Dev/Worktrees/rigtune-fixes | RUNNING (Wave A started early; merges origin/feat/v0.3.0 after WS-0 lands) |
+| ws-b (History + per-entry undo, 3e) | feat/history | C:/Dev/Worktrees/rigtune-history | RUNNING |
+| ws-c (launcher RAM advice) | feat/launcher-ram | C:/Dev/Worktrees/rigtune-launcher | RUNNING |
+| ws-d (rules: tiers, spark, vulkan, change C) | feat/rules-v03 | C:/Dev/Worktrees/rigtune-rules3 | RUNNING |
+| ws-e (3f + benchmark item 8) | feat/benchmark-v03 | C:/Dev/Worktrees/rigtune-bench3 | RUNNING (uses the lock for the AC3.7 autorun) |
+| ws-f (Report a problem, Quilt FAQ) | feat/report-problem | C:/Dev/Worktrees/rigtune-report | RUNNING |
+| ws-v (add_mc_version.py, mc_apidiff.py, Porting) | feat/mc-tooling | C:/Dev/Worktrees/rigtune-mctool | RUNNING |
+| ws-h (self-update E2E 0.1/0.2 -> 0.3, seeded, per-entry undo) | test/e2e-v03 | C:/Dev/Worktrees/rigtune-e2e3 | RUNNING (uses the lock) |
+| plan-review | - | - | DONE: docs/v0.3/plan-review.md (4 H, 25 M, 11 L), folded into SPEC "Amendments" + PLAN (0681c4c) |
 | r-ci (research, done) | research/ci-gametest | C:/Dev/Worktrees/rigtune-r-ci | kept until WS-0 merges; then remove worktree + delete branch (local + remote) |
 
-Watchdog: `python <scratchpad>/watchdog.py ws-0=C:/Dev/Worktrees/rigtune-found;<scratchpad>/ws-0 --stall-min 25 --lock-min 8` (the current command is in scratchpad/watchdog-cmd.txt). Lock release: `rm -f .../owner.txt; rmdir .../.gametest-lock` (a hook blocks rm -rf on it).
+Wave B after Wave A: ws-g (l10n, SPEC 9) and ws-p (preview, P2, only after ws-g or cut).
+Notes: the permission classifier refused `gh workflow disable update-rules.yml` (CI bypass), so the weekly bot PRs are triaged by re-running the updater on feat/v0.3.0, and Phase 7 re-runs it after merging main (SPEC D-M1).
+
+Watchdog: the current command is in scratchpad/watchdog-cmd.txt (agents + branches in scratchpad/agents.txt; `name=<worktree>;<scratch>@<branch>`, a running CI run on the branch counts as busy; --stall-min 20 --lock-min 8). Lock release: `rm -f .../owner.txt; rmdir .../.gametest-lock` (a hook blocks rm -rf on it).
 
 ## v0.2.0: RELEASED 2026-09-25
 - PR #2 merged to main (5b3219d); tag v0.2.0; GitHub release with rigtune-0.2.0+mc26.2.jar / +mc26.3.jar (+ sources): https://github.com/chaotix345/rigtune/releases/tag/v0.2.0
