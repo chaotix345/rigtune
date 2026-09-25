@@ -37,7 +37,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // (a) No hard-coded words in client code: a string literal with a letter inside literal(...) anywhere in client code,
 //     and in client/ui any string literal with two or more letters (inside text(...), centeredText(...), next to +, in a
 //     constant, ...). Exempt: translation keys and key prefixes/suffixes, dotted identifiers (setting keys), and the
-//     arguments of LOGGER calls, regex and date-pattern calls; anything else needs an ALLOWED entry with its reason.
+//     arguments of LOGGER calls, regex and date-pattern calls and thread names; anything else needs an ALLOWED entry
+//     with its reason.
 // (b) Every translation key written out in client or core code (Component.translatable, Text.of, LauncherInfo's
 //     tables, HistoryModel, UndoPlan problems, ...) is in en_us.json.
 // (c) Every en_us.json key is used: written out in client or core code, or one of the dynamic families below, whose
@@ -68,8 +69,9 @@ class LangCheckTest {
 	private static final Pattern KEY_SHAPED = Pattern.compile("\\.?[a-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+\\.?|\\.[a-z][a-z0-9_]*");
 	private static final Pattern KEY = Pattern.compile("(rigtune|key\\.rigtune)(\\.[a-z0-9_]+)+");
 	private static final Pattern CALL = Pattern.compile("(?<![A-Za-z0-9_$])(literal|text|centeredText)\\s*\\(");
-	// Calls whose string arguments are never shown: log lines, regular expressions, date patterns.
-	private static final Pattern NOT_SHOWN = Pattern.compile("(?<![A-Za-z0-9_$])(LOGGER\\.[a-z]+|replaceAll|replaceFirst|matches|split|compile|ofPattern)\\s*\\(");
+	// Calls whose string arguments are never shown: log lines, regular expressions, date patterns, thread names.
+	private static final Pattern NOT_SHOWN = Pattern.compile(
+			"(?<![A-Za-z0-9_$])(LOGGER\\.[a-z]+|replaceAll|replaceFirst|matches|split|compile|ofPattern|Thread)\\s*\\(");
 	private static final Pattern TEXT_OF_CALL = Pattern.compile("(?<![A-Za-z0-9_$.])(Text\\.of)\\(");
 	private static final Pattern FORMAT = Pattern.compile("%(?:(\\d+)\\$)?([A-Za-z%]|$)");
 	// net.minecraft.locale.Language.loadFromJson's rewrite (26.2 and 26.3, javap).
@@ -635,7 +637,7 @@ class LangCheckTest {
 					void f() { Component.translatable("rigtune.goal." + goal + ".tooltip"); String x = "a" + "b"; }
 					void g() { graphics.centeredText(font, value == null ? "?" : "Unknown", 0, 0, 0); }
 					static final String LABEL = "Words in a constant";
-					void h() { RigTune.LOGGER.warn("Could not do {}", x); s.replaceAll("(?i)Core Processor", ""); DateTimeFormatter.ofPattern("yyyy-MM-dd"); }
+					void h() { RigTune.LOGGER.warn("Could not do {}", x); s.replaceAll("(?i)Core Processor", ""); new Thread(r, "RigTune worker"); }
 					void i() { set("vanilla.renderDistance"); graphics.text(font, "OK", 0, 0, 0); }
 				}
 				""";

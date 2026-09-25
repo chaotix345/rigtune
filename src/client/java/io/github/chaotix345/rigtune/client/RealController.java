@@ -45,6 +45,9 @@ import io.github.chaotix345.rigtune.core.modrinth.GatedModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.HttpModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.ModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.OnlineDataFetcher;
+import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
+import io.github.chaotix345.rigtune.core.preview.DownloadInputs;
+import io.github.chaotix345.rigtune.core.preview.PreviewPlanner;
 import io.github.chaotix345.rigtune.core.recommend.ModConflicts;
 import io.github.chaotix345.rigtune.core.recommend.Recommender;
 import io.github.chaotix345.rigtune.core.report.ModrinthOffAdvice;
@@ -695,5 +698,43 @@ public final class RealController implements RigTuneController {
 			RigTune.LOGGER.error("Could not read RigTune's history", e);
 			return null;
 		}
+	}
+
+	// v0.3 (WS-P): Preview (docs/v0.3/SPEC.md item 13), from apply()'s and download()'s own inputs.
+
+	@Override
+	public ApplyPreview preview(List<Recommendation> selected) {
+		Map<String, String> vanilla = new LinkedHashMap<>();
+		for (Recommendation r : selected) {
+			if (r.action() instanceof Action.SetSetting set && set.key().startsWith(VANILLA)) {
+				vanilla.put(set.key(), set.newValue());
+			}
+		}
+		// The game's options are read on the render thread, and only when a vanilla setting is ticked.
+		GameOptions game = vanilla.isEmpty() ? new GameOptions(Map.of(), Map.of())
+				: minecraft.isSameThread() ? gameOptions(vanilla) : minecraft.submit(() -> gameOptions(vanilla)).join();
+		OnlineDataFetcher.Result data = online;
+		HardwareProfile hw = hardware;
+		List<InstalledMod> scanned = mods;
+		Set<String> loadedIds = new HashSet<>();
+		if (scanned != null) {
+			scanned.forEach(m -> loadedIds.add(m.modId()));
+		}
+		RulesDocument doc = rules;
+		DownloadInputs downloads = new DownloadInputs(modrinth, settings.modrinthAllowed(), OnlineDataFetcher.LOADER,
+				onlineLookups.modrinthGameVersion(hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion()), data.installedVersions(),
+				data.updateVersions(), new HashSet<>(data.projectIdsByModId().values()), loadedIds, stagedJarsByModId(),
+				doc == null ? (a, b) -> false : ModConflicts.of(doc)::between);
+		List<PreviewPlanner.ConfigFile> files = ConfigTargets.all(configDir).stream()
+				.map(t -> new PreviewPlanner.ConfigFile(t.prefix(), t.file(), t.stager()::stage, t.reader()::read)).toList();
+		return new PreviewPlanner(FabricLoader.getInstance().getGameDir().resolve("options.txt"), game.now(), game.problems(), files, modsDir, downloads)
+				.preview(selected);
+	}
+
+	private record GameOptions(Map<String, String> now, Map<String, String> problems) {
+	}
+
+	private GameOptions gameOptions(Map<String, String> vanilla) {
+		return new GameOptions(SettingsBridge.readVanilla(minecraft.options), SettingsBridge.problems(minecraft.options, vanilla));
 	}
 }

@@ -1,0 +1,14 @@
+Control: the same 16-jar 26.3 set, production client, NO RigTune jar and NO game-test harness (Loom ClientProductionRunTask registered by control-init.gradle, mods.setFrom([])); 5 launches under the lock, 2026-09-26 07:07-07:10.
+Each launch: dies, or survives 15 s past 'Sound engine started' and is then stopped (Stop-Process on my own client).
+try 1: [07:07:50] [Download-1/ERROR]: Couldn't connect to realms
+  survived; exit -1 (0xFFFFFFFF) is my Stop-Process 15 s after "Sound engine started"
+try 2: [07:08:28] [Download-1/ERROR]: Couldn't connect to realms
+  survived; exit -1 (0xFFFFFFFF) is my Stop-Process 15 s after "Sound engine started"
+try 3: [07:08:59] [Render thread/INFO]: Cached all modded block culling states
+NTSTATUS 0xC0000005
+try 4: [07:09:16] [Render thread/INFO]: Cached all modded block culling states
+NTSTATUS 0xC0000005
+try 5: [07:09:31] [Render thread/INFO]: Cached all modded block culling states
+NTSTATUS 0xC0000005
+
+Result: 3 of 5 crashed with NTSTATUS 0xC0000005 at the same point as the RigTune runs (after 'Cached all modded block culling states', before 'OpenAL initialized'); 2 of 5 survived. 'rigtune' occurs 0 times in the control latest.log (122 mods loaded = MC + loader + the 16 jars and their nested mods).

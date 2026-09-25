@@ -1,0 +1,14 @@
+at 2026-09-25T20:54:14.019512600Z
+Distant Horizons loaded false, rendering before false, API override before n/a
+Iris loaded true, shaders in use before true
+Iris files before {config/iris.properties=7339519cd48ecec1/values 9d1b518f58f9564f, shaderpacks/ComplementaryReimagined_r5.9.3.zip.txt=137a435d9e33c626/values 6b32b7c6204e378d, shaderpacks/MakeUp-UltraFast-9.5e.zip.txt=5237e6e987962948/values 215ab774a6929f87}
+benchmark started true
+Iris files after {config/iris.properties=efbfa938fad69664/values 9d1b518f58f9564f, shaderpacks/ComplementaryReimagined_r5.9.3.zip.txt=d20b87729cf3c2aa/values 6b32b7c6204e378d, shaderpacks/MakeUp-UltraFast-9.5e.zip.txt=5237e6e987962948/values 215ab774a6929f87}
+outcome cancelled false, steps [RENDER_DISTANCE, RENDER_DISTANCE, RENDER_DISTANCE, SIMULATION_DISTANCE, SIMULATION_DISTANCE, SIMULATION_DISTANCE, REPEAT, SHADERS_OFF, REPEAT]
+DH off seen during the run false, restore marker seen true
+DH cost null, shader cost Cost[baselineLow=154.0895362932221, baselineAvg=169.9289696906693, offLow=637.0275705532536, offAvg=3208.425839368195]
+target 450.0 FPS, shader advice OptionalInt[76]
+Distant Horizons rendering after false, API override after n/a, shaders in use after true
+benchmark-restore.json gone true
+DistantHorizons.toml rendererMode = "DISABLED"
+AC6.4 PASSED

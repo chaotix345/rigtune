@@ -1,0 +1,6 @@
+DH lines of the check launch's latest.log: config load, and anything DH/TOML-related at WARN/ERROR or mentioning error/invalid/fail/corrupt/reset (none beyond the two config lines = no config problem):
+397:[06:33:09] [Render thread/INFO]: Initialising config for [DistantHorizons]
+398:[06:33:09] [Render thread/INFO]: [DistantHorizons] Config initialised
+386:[06:33:09] [Render thread/INFO]: Java.awt.headless set to true. Distant Horizons can correctly display error and info dialog windows.
+401:[06:33:09] [Render thread/WARN]: Changing Distant Horizons' rendering engine to [OPEN_GL] to allow for Iris rendering. This renderer will be unavailable once Minecraft moves to Vulkan and must be fixed on Iris' end.
+404:[06:33:09] [Render thread/WARN]: Distant Horizons: G1 Garbage collector detected.
