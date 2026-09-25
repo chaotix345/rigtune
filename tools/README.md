@@ -1,5 +1,7 @@
 # RigTune rules pipeline
 
+(Adding a Minecraft version, `tools/add_mc_version.py` and the API diff `tools/mc_apidiff.py`: see [MC_VERSIONS.md](MC_VERSIONS.md).)
+
 `tools/update_rules.py` regenerates, from one run:
 
 - `rules/rules-v2.json` and its bundled copy `src/main/resources/rigtune/rules-v2.json` (what RigTune 0.2+ reads);
