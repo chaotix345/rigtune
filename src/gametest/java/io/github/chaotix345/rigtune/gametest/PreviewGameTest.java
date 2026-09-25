@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.gametest;
 
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
+import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.PreviewScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
@@ -31,24 +32,30 @@ import net.minecraft.network.chat.contents.TranslatableContents;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 // docs/v0.3/SPEC.md item 13 (AC13.2): the Preview button sits right after Apply and the footer still fits at every
 // reference size, including 640x480 at GUI scale 2 (review X-M2); a preview of every kind of change renders inside
-// the screen at those sizes; the real controller's preview of the report's ticked items writes nothing; and the
-// vanilla half of AC13.1, which needs the game's Options: what the preview says Apply writes to options.txt is exactly
-// what Apply then writes.
+// the screen at those sizes; the real controller's preview of the report's ticked items writes nothing. And AC13.1
+// through the real RealController.apply: what the preview says Apply writes to options.txt is exactly what Apply then
+// writes, and the files a staged Sodium key and disable would touch are exactly the ones pending.json names.
 public class PreviewGameTest implements FabricClientGameTest {
 	private static final int[][] SIZES = {{640, 480, 2}, {854, 480, 2}, {1280, 720, 2}};
 	private static final int GAP = 4;
@@ -73,6 +80,7 @@ public class PreviewGameTest implements FabricClientGameTest {
 			canned(context, true);
 			realPreviewWritesNothing(context, real);
 			vanillaAsPreviewed(context, real);
+			stagedAsPreviewed(context, real);
 		} finally {
 			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
 			restore(history, historyBefore);
@@ -169,7 +177,8 @@ public class PreviewGameTest implements FabricClientGameTest {
 				mc.gui.setScreen(new PreviewScreen(mc.gui.screen(), real, report.recommendations().stream().filter(Recommendation::appliable).toList()));
 			});
 		}
-		PreviewScreen screen = waitForPreview(context, 1200);
+		// Five minutes: the ticked additions are looked up on the live Modrinth API, one after another.
+		PreviewScreen screen = waitForPreview(context, 6000);
 		ApplyPreview preview = context.computeOnClient(mc -> screen.preview());
 		check(preview != null, "the real preview finished");
 		List<String> rows = context.computeOnClient(mc -> screen.rowText());
@@ -239,7 +248,7 @@ public class PreviewGameTest implements FabricClientGameTest {
 			mc.options.save();
 			return mc.options.renderDistance().get();
 		});
-		String next = Integer.toString(renderDistance < 32 ? renderDistance + 1 : renderDistance - 1);
+		String next = Integer.toString(renderDistance > 2 ? renderDistance - 1 : renderDistance + 1);
 		Recommendation change = new Recommendation("preview-test:renderDistance", Category.SETTING, Impact.LOW, "Render distance", "",
 				new Action.SetSetting("vanilla.renderDistance", Integer.toString(renderDistance), next), true);
 		Map<String, String> before = optionsTxt(options);
@@ -249,6 +258,11 @@ public class PreviewGameTest implements FabricClientGameTest {
 					"the preview: " + preview);
 			check(preview.filesAtRestart().isEmpty() && preview.skipped().isEmpty(), "nothing else: " + preview);
 			check(before.equals(optionsTxt(options)), "the preview didn't write options.txt");
+			Recommendation outOfRange = new Recommendation("preview-test:renderDistance-99", Category.SETTING, Impact.LOW, "Render distance 99", "",
+					new Action.SetSetting("vanilla.renderDistance", Integer.toString(renderDistance), "99"), true);
+			ApplyPreview refused = context.computeOnClient(mc -> real.preview(List.of(outOfRange)));
+			check(refused.now().isEmpty() && refused.skipped().size() == 1 && refused.skipped().getFirst().reason() == ApplyPreview.Reason.REFUSED
+					&& refused.skipped().getFirst().detail().contains("99"), "a value the game refuses isn't listed as written: " + refused);
 
 			Component status = context.computeOnClient(mc -> real.apply(List.of(change)));
 			Map<String, String> after = optionsTxt(options);
@@ -265,6 +279,69 @@ public class PreviewGameTest implements FabricClientGameTest {
 				mc.options.renderDistance().set(renderDistance);
 				mc.options.save();
 			});
+		}
+	}
+
+	// AC13.1 through the real RealController.apply for staged changes: a disable of a throwaway jar and, when Sodium is
+	// loaded, a Sodium key flipped. pending.json then names exactly the preview's files (less the .disabled name the
+	// helper picks at restart), and everything staged is discarded again.
+	private void stagedAsPreviewed(ClientGameTestContext context, RigTuneController real) {
+		Path pendingFile = PendingActions.defaultPath(configDir);
+		Path probe = modsDir.resolve("rigtune-preview-probe.jar");
+		context.runOnClient(mc -> real.discardPending());
+		check(!Files.exists(pendingFile), "nothing staged to start with");
+		List<Recommendation> changes = new ArrayList<>();
+		try {
+			Files.createDirectories(modsDir);
+			modJar(probe, "rigtunepreviewprobe");
+			changes.add(new Recommendation("preview-test:disable", Category.REMOVE_MOD, Impact.LOW, "Disable the probe", "",
+					new Action.DisableMod("rigtunepreviewprobe", probe), true));
+			Path sodium = configDir.resolve("sodium-options.json");
+			Map.Entry<String, String> flag = FabricLoader.getInstance().isModLoaded("sodium") && Files.isRegularFile(sodium)
+					? SettingsBridge.readSodium(sodium).entrySet().stream().filter(e -> e.getValue().equals("true") || e.getValue().equals("false"))
+							.findFirst().orElse(null)
+					: null;
+			if (flag != null) {
+				changes.add(new Recommendation("preview-test:sodium", Category.SETTING, Impact.LOW, "A Sodium switch", "",
+						new Action.SetSetting(flag.getKey(), flag.getValue(), Boolean.toString(!Boolean.parseBoolean(flag.getValue()))), true));
+			} else {
+				RigTune.LOGGER.info("PreviewGameTest: Sodium isn't loaded or has no options file yet: the staged check covers the disable only");
+			}
+			byte[] sodiumBefore = read(sodium);
+			ApplyPreview preview = context.computeOnClient(mc -> real.preview(changes));
+			check(preview.skipped().isEmpty() && preview.now().isEmpty(), "everything is staged: " + preview);
+			Set<Path> expected = new TreeSet<>();
+			preview.filesAtRestart().forEach(p -> expected.add(p.toAbsolutePath().normalize()));
+			preview.disables().forEach(d -> expected.remove(d.disabledAs().toAbsolutePath().normalize()));
+			check(!Files.exists(pendingFile), "the preview staged nothing");
+
+			Component status = context.computeOnClient(mc -> real.apply(changes));
+			Set<Path> named = new TreeSet<>();
+			for (PendingActions.Op op : PendingActions.load(pendingFile).ops()) {
+				named.add(Path.of(op.type() == PendingActions.Type.ENABLE_FILE ? op.to() : op.path()).toAbsolutePath().normalize());
+			}
+			RigTune.LOGGER.info("PreviewGameTest: staged {} ({}); pending.json names {}", changes.stream().map(Recommendation::id).toList(), status.getString(),
+					named.stream().map(p -> gameDir.relativize(p).toString()).toList());
+			check(named.equals(expected), "pending.json names exactly the preview's files: " + named + " vs " + expected);
+			check(Files.exists(probe) && Arrays.equals(sodiumBefore, read(sodium)), "staged only: nothing changes before the restart");
+		} catch (IOException e) {
+			throw new AssertionError(e);
+		} finally {
+			context.runOnClient(mc -> real.discardPending());
+			try {
+				Files.deleteIfExists(probe);
+			} catch (IOException e) {
+				throw new AssertionError(e);
+			}
+		}
+		check(!Files.exists(pendingFile), "discarded again");
+	}
+
+	private static void modJar(Path jar, String modId) throws IOException {
+		try (OutputStream out = Files.newOutputStream(jar); ZipOutputStream zip = new ZipOutputStream(out)) {
+			zip.putNextEntry(new ZipEntry("fabric.mod.json"));
+			zip.write(("{\"schemaVersion\":1,\"id\":\"" + modId + "\",\"version\":\"1\"}").getBytes(StandardCharsets.UTF_8));
+			zip.closeEntry();
 		}
 	}
 
