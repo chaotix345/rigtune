@@ -1,0 +1,383 @@
+WS-G AC9.4/AC6.4: pixel diff of CI game-test screenshots (python: Pillow ImageChops; rows = pixel-row bands that differ, merged within 4 rows).
+Final WS-G run: 36192741980 (feat/l10n @ 74ee421).
+
+== A. vs 36191509381 (feat/v0.3.0 @ b84549d: everything but WS-G). 261 frames each; 100 identical, 161 differ:
+ 12  History details: the failed change's line "(try 2 of 3 at restart)" (deliberate Phase 5 wording)
+  6  History list: entry dates/times (seeded at run time)
+  9  Report a problem link screen: the link carries the hardware lines (CPU name)
+  9  Undo screen: subtitle "The last apply (<date time>)" only
+ 24  benchmark screens: measured FPS values, charts and dates (and the world behind)
+  6  main screen: header line 1 (CPU) + status "Copied ... (N characters)" (N follows the CPU name)
+ 75  main screen: header line 1 only (the CI runner's CPU name)
+  6  title screen: panorama, splash text, toast animation
+ 14  world rendering (terrain, sky, clouds, hand) behind the UI
+total differing frames: 161
+
+== B. vs 36182135247 (feat/v0.3.0 @ 81067aa, the baseline named for WS-G; before rules r12 and WS-P). 70 identical, 191 differ:
+ 12  History details: the failed change's line "(try 2 of 3 at restart)" (deliberate Phase 5 wording)
+  6  History list: entry dates/times (seeded at run time)
+  9  Report a problem link screen: the link carries the hardware lines (CPU name)
+  9  Undo screen: subtitle "The last apply (<date time>)" only
+ 24  WS-P preview frames (new since the older base)
+ 24  benchmark screens: measured FPS values, charts and dates (and the world behind)
+ 69  main screen: header CPU line, rules revision r11 -> r12 (fix/ram-advice-text), footer with the WS-P Preview button
+ 18  main screen: header CPU line, rules revision r11 -> r12 (fix/ram-advice-text), footer with the WS-P Preview button, ram-* advice text of rules r12
+  6  title screen: panorama, splash text, toast animation
+ 14  world rendering (terrain, sky, clouds, hand) behind the UI
+total differing frames: 191
+
+== Per-frame bands, A:
+26.2-OpenGL/0000_title-toasts.png 1125 112-127
+26.2-OpenGL/0001_title.png 11878 0-189
+26.2-OpenGL/0003_real-854x480.png 248 60-73
+26.2-OpenGL/0004_real-1280x720-scale3.png 558 90-110
+26.2-OpenGL/0005_real-1280x720-scale2.png 248 60-73
+26.2-OpenGL/0006_real-1280x720-scale2-end.png 248 60-73
+26.2-OpenGL/0007_real-854x480-restored.png 248 60-73
+26.2-OpenGL/0008_stub-854x480.png 248 60-73
+26.2-OpenGL/0009_stub-1280x720-scale3.png 558 90-110
+26.2-OpenGL/0010_stub-1280x720-scale2.png 248 60-73
+26.2-OpenGL/0011_stub-640x480-scale2.png 248 60-73
+26.2-OpenGL/0012_stub-854x480-restored.png 248 60-73
+26.2-OpenGL/0013_stub-applied.png 248 60-73
+26.2-OpenGL/0014_real-world.png 96503 0-479
+26.2-OpenGL/0015_benchmark-running.png 373273 0-479
+26.2-OpenGL/0016_benchmark-result.png 1563 0-128 133-133 184-203 214-227 272-283
+26.2-OpenGL/0017_notices.png 17808 12-12 19-22 28-31 39-39 45-45 52-52 61-63 69-69 78-83 88-105 116-131 137-137 147-147 338-479
+26.2-OpenGL/0020_bench-world-before.png 3716 44-59 88-103 110-125 184-197 284-293
+26.2-OpenGL/0021_bench-world-after.png 17424 44-59 88-103 110-127 132-153 162-177 184-315
+26.2-OpenGL/0022_bench-world-tune-result.png 54620 88-103 110-127 132-155 160-315 334-339 350-355
+26.2-OpenGL/0023_bench-world-cancelled.png 6271 0-61 76-187
+26.2-OpenGL/0024_bench-menu-world.png 19765 328-479
+26.2-OpenGL/0025_bench-tune-running.png 370958 0-479
+26.2-OpenGL/0026_bench-tune-result.png 46228 88-103 110-127 132-155 160-209 214-255 284-305 436-469
+26.2-OpenGL/0027_bench-shader-advice.png 308 188-197 246-247 256-259 296-305
+26.2-OpenGL/0034_undo-last.png 236 40-55
+26.2-OpenGL/0035_undo-last-done.png 236 40-55
+26.2-OpenGL/0036_undo-restart.png 236 40-55
+26.2-OpenGL/0043_ui-main-854x480-scale2.png 248 60-73
+26.2-OpenGL/0044_ui-main-1280x720-scale3.png 558 90-110
+26.2-OpenGL/0045_ui-main-1280x720-scale2.png 248 60-73
+26.2-OpenGL/0046_ui-main-copied.png 248 60-73
+26.2-OpenGL/0047_ui-history-from-button.png 1892 74-89 154-169 206-221 228-241 258-273 310-325 332-345 362-377 414-429
+26.2-OpenGL/0051_ui-stub-pending-854x480-scale2.png 248 60-73
+26.2-OpenGL/0052_ui-stub-pending-1280x720-scale3.png 558 90-110
+26.2-OpenGL/0053_ui-stub-pending-1280x720-scale2.png 248 60-73
+26.2-OpenGL/0058_ui-main-network-off.png 248 60-73
+26.2-OpenGL/0059_ui-main-modrinth-off.png 248 60-73
+26.2-OpenGL/0061_report-button-640x480-scale2.png 248 60-73
+26.2-OpenGL/0063_report-confirm-640x480-scale2.png 556 158-191
+26.2-OpenGL/0064_report-confirm-854x480-scale2.png 556 176-191
+26.2-OpenGL/0065_report-confirm-1280x720-scale2.png 556 306-321
+26.2-OpenGL/0066_report-cancelled.png 248 60-73
+26.2-OpenGL/0067_history-main-640x480-scale2.png 248 60-73
+26.2-OpenGL/0068_history-854x480-scale2.png 1084 214-229
+26.2-OpenGL/0069_history-1280x720-scale3.png 2439 321-344
+26.2-OpenGL/0070_history-1280x720-scale2.png 1084 178-193
+26.2-OpenGL/0071_history-640x480-scale2.png 1084 250-265
+26.2-OpenGL/0075_history-after-undo.png 216 74-89
+26.2-OpenGL/0079_preview-footer-640x480-scale2.png 248 60-73
+26.2-OpenGL/0081_preview-footer-854x480-scale2.png 248 60-73
+26.2-OpenGL/0083_preview-footer-1280x720-scale2.png 248 60-73
+26.2-OpenGL/0085_preview-footer-640x480-scale2-pending.png 248 60-73
+26.3-OpenGL/0000_title-toasts.png 607 112-127
+26.3-OpenGL/0001_title.png 14992 0-180
+26.3-OpenGL/0003_real-854x480.png 248 60-73
+26.3-OpenGL/0004_real-1280x720-scale3.png 558 90-110
+26.3-OpenGL/0005_real-1280x720-scale2.png 248 60-73
+26.3-OpenGL/0006_real-1280x720-scale2-end.png 248 60-73
+26.3-OpenGL/0007_real-854x480-restored.png 248 60-73
+26.3-OpenGL/0008_stub-854x480.png 248 60-73
+26.3-OpenGL/0009_stub-1280x720-scale3.png 558 90-110
+26.3-OpenGL/0010_stub-1280x720-scale2.png 248 60-73
+26.3-OpenGL/0011_stub-640x480-scale2.png 248 60-73
+26.3-OpenGL/0012_stub-854x480-restored.png 248 60-73
+26.3-OpenGL/0013_stub-applied.png 248 60-73
+26.3-OpenGL/0014_real-world.png 57144 0-479
+26.3-OpenGL/0015_benchmark-running.png 242978 0-479
+26.3-OpenGL/0016_benchmark-result.png 192147 0-388 393-398 406-408 413-425 435-451
+26.3-OpenGL/0017_notices.png 18259 0-151 338-479
+26.3-OpenGL/0019_bench-world-running.png 24726 295-479
+26.3-OpenGL/0020_bench-world-before.png 5472 44-61 88-103 110-125 188-197 290-317
+26.3-OpenGL/0021_bench-world-after.png 6724 44-59 88-103 110-125 132-149 184-197 246-251 282-289 310-333
+26.3-OpenGL/0022_bench-world-tune-result.png 1980 88-103 110-125 184-203 214-227 238-251 262-275 282-289 310-351
+26.3-OpenGL/0023_bench-world-cancelled.png 8932 0-61 69-185
+26.3-OpenGL/0024_bench-menu-world.png 20361 325-479
+26.3-OpenGL/0025_bench-tune-running.png 379968 0-479
+26.3-OpenGL/0026_bench-tune-result.png 216569 0-388 393-396 408-408 421-421 435-451
+26.3-OpenGL/0027_bench-shader-advice.png 2636 184-197 236-323
+26.3-OpenGL/0034_undo-last.png 256 40-55
+26.3-OpenGL/0035_undo-last-done.png 256 40-55
+26.3-OpenGL/0036_undo-restart.png 256 40-55
+26.3-OpenGL/0043_ui-main-854x480-scale2.png 248 60-73
+26.3-OpenGL/0044_ui-main-1280x720-scale3.png 558 90-110
+26.3-OpenGL/0045_ui-main-1280x720-scale2.png 248 60-73
+26.3-OpenGL/0046_ui-main-copied.png 264 60-73 608-613
+26.3-OpenGL/0047_ui-history-from-button.png 2028 74-89 154-169 206-221 228-241 258-273 310-325 332-345 362-377 414-429
+26.3-OpenGL/0051_ui-stub-pending-854x480-scale2.png 248 60-73
+26.3-OpenGL/0052_ui-stub-pending-1280x720-scale3.png 558 90-110
+26.3-OpenGL/0053_ui-stub-pending-1280x720-scale2.png 248 60-73
+26.3-OpenGL/0058_ui-main-network-off.png 248 60-73
+26.3-OpenGL/0059_ui-main-modrinth-off.png 248 60-73
+26.3-OpenGL/0061_report-button-640x480-scale2.png 248 60-73
+26.3-OpenGL/0063_report-confirm-640x480-scale2.png 556 158-191
+26.3-OpenGL/0064_report-confirm-854x480-scale2.png 556 176-191
+26.3-OpenGL/0065_report-confirm-1280x720-scale2.png 556 306-321
+26.3-OpenGL/0066_report-cancelled.png 264 60-73 608-613
+26.3-OpenGL/0067_history-main-640x480-scale2.png 248 60-73
+26.3-OpenGL/0068_history-854x480-scale2.png 1084 214-229
+26.3-OpenGL/0069_history-1280x720-scale3.png 2439 321-344
+26.3-OpenGL/0070_history-1280x720-scale2.png 1084 178-193
+26.3-OpenGL/0071_history-640x480-scale2.png 1084 250-265
+26.3-OpenGL/0075_history-after-undo.png 236 74-89
+26.3-OpenGL/0079_preview-footer-640x480-scale2.png 248 60-73
+26.3-OpenGL/0081_preview-footer-854x480-scale2.png 248 60-73
+26.3-OpenGL/0083_preview-footer-1280x720-scale2.png 248 60-73
+26.3-OpenGL/0085_preview-footer-640x480-scale2-pending.png 248 60-73
+26.3-Vulkan/0000_title-toasts.png 531 112-127
+26.3-Vulkan/0001_title.png 10919 0-182
+26.3-Vulkan/0003_real-854x480.png 3388 60-75
+26.3-Vulkan/0004_real-1280x720-scale3.png 7623 90-113
+26.3-Vulkan/0005_real-1280x720-scale2.png 3388 60-75
+26.3-Vulkan/0006_real-1280x720-scale2-end.png 3388 60-75
+26.3-Vulkan/0007_real-854x480-restored.png 3388 60-75
+26.3-Vulkan/0008_stub-854x480.png 3388 60-75
+26.3-Vulkan/0009_stub-1280x720-scale3.png 7623 90-113
+26.3-Vulkan/0010_stub-1280x720-scale2.png 3388 60-75
+26.3-Vulkan/0011_stub-640x480-scale2.png 2888 60-75
+26.3-Vulkan/0012_stub-854x480-restored.png 3388 60-75
+26.3-Vulkan/0013_stub-applied.png 3388 60-75
+26.3-Vulkan/0014_real-world.png 41201 0-479
+26.3-Vulkan/0015_benchmark-running.png 346488 0-479
+26.3-Vulkan/0016_benchmark-result.png 204022 0-379 384-388 393-398 406-408 413-425 435-451
+26.3-Vulkan/0017_notices.png 15131 0-151 348-479
+26.3-Vulkan/0019_bench-world-running.png 25902 282-479
+26.3-Vulkan/0020_bench-world-before.png 796 44-59 88-101 110-125 184-197 294-299
+26.3-Vulkan/0021_bench-world-after.png 15984 44-59 88-103 110-127 132-153 162-177 184-209 234-273 312-319
+26.3-Vulkan/0022_bench-world-tune-result.png 1348 88-103 110-125 184-203 214-227 238-255 272-273 330-333 342-345
+26.3-Vulkan/0023_bench-world-cancelled.png 4827 0-61 74-186
+26.3-Vulkan/0024_bench-menu-world.png 17235 334-479
+26.3-Vulkan/0025_bench-tune-running.png 262286 0-479
+26.3-Vulkan/0026_bench-tune-result.png 182808 0-379 384-386 393-396 408-408 421-421 435-451
+26.3-Vulkan/0027_bench-shader-advice.png 808 184-197 256-261 272-277 300-315
+26.3-Vulkan/0034_undo-last.png 256 40-55
+26.3-Vulkan/0035_undo-last-done.png 256 40-55
+26.3-Vulkan/0036_undo-restart.png 256 40-55
+26.3-Vulkan/0043_ui-main-854x480-scale2.png 3388 60-75
+26.3-Vulkan/0044_ui-main-1280x720-scale3.png 7623 90-113
+26.3-Vulkan/0045_ui-main-1280x720-scale2.png 3388 60-75
+26.3-Vulkan/0046_ui-main-copied.png 3468 60-75 600-613
+26.3-Vulkan/0047_ui-history-from-button.png 2032 74-89 154-169 206-221 228-241 258-273 310-325 332-345 362-377 414-429
+26.3-Vulkan/0051_ui-stub-pending-854x480-scale2.png 3388 60-75
+26.3-Vulkan/0052_ui-stub-pending-1280x720-scale3.png 7623 90-113
+26.3-Vulkan/0053_ui-stub-pending-1280x720-scale2.png 3388 60-75
+26.3-Vulkan/0058_ui-main-network-off.png 3388 60-75
+26.3-Vulkan/0059_ui-main-modrinth-off.png 3388 60-75
+26.3-Vulkan/0061_report-button-640x480-scale2.png 2888 60-75
+26.3-Vulkan/0063_report-confirm-640x480-scale2.png 48924 158-337
+26.3-Vulkan/0064_report-confirm-854x480-scale2.png 45508 176-301
+26.3-Vulkan/0065_report-confirm-1280x720-scale2.png 45652 306-395
+26.3-Vulkan/0066_report-cancelled.png 3468 60-75 600-613
+26.3-Vulkan/0067_history-main-640x480-scale2.png 2888 60-75
+26.3-Vulkan/0068_history-854x480-scale2.png 1084 214-229
+26.3-Vulkan/0069_history-1280x720-scale3.png 2439 321-344
+26.3-Vulkan/0070_history-1280x720-scale2.png 1084 178-193
+26.3-Vulkan/0071_history-640x480-scale2.png 1084 250-265
+26.3-Vulkan/0075_history-after-undo.png 224 74-89
+26.3-Vulkan/0079_preview-footer-640x480-scale2.png 2888 60-75
+26.3-Vulkan/0081_preview-footer-854x480-scale2.png 3388 60-75
+26.3-Vulkan/0083_preview-footer-1280x720-scale2.png 3388 60-75
+26.3-Vulkan/0085_preview-footer-640x480-scale2-pending.png 2888 60-75
+
+== Per-frame bands, B:
+26.2-OpenGL/0000_title-toasts.png 1066 112-127
+26.2-OpenGL/0001_title.png 15473 0-174
+26.2-OpenGL/0003_real-854x480.png 28692 60-73 100-111 396-413 432-471
+26.2-OpenGL/0004_real-1280x720-scale3.png 64557 90-110 150-167 594-620 648-707
+26.2-OpenGL/0005_real-1280x720-scale2.png 33612 60-73 100-111 636-653 672-711
+26.2-OpenGL/0006_real-1280x720-scale2-end.png 33612 60-73 100-111 636-653 672-711
+26.2-OpenGL/0007_real-854x480-restored.png 28692 60-73 100-111 396-413 432-471
+26.2-OpenGL/0008_stub-854x480.png 28636 60-73 396-413 432-471
+26.2-OpenGL/0009_stub-1280x720-scale3.png 64431 90-110 594-620 648-707
+26.2-OpenGL/0010_stub-1280x720-scale2.png 33556 60-73 636-653 672-711
+26.2-OpenGL/0011_stub-640x480-scale2.png 18468 60-73 348-365 396-413 432-471
+26.2-OpenGL/0012_stub-854x480-restored.png 28636 60-73 396-413 432-471
+26.2-OpenGL/0013_stub-applied.png 28636 60-73 396-413 432-471
+26.2-OpenGL/0014_real-world.png 196112 0-479
+26.2-OpenGL/0015_benchmark-running.png 271922 0-479
+26.2-OpenGL/0016_benchmark-result.png 3684 0-141 184-203 214-227 282-283
+26.2-OpenGL/0017_notices.png 18394 0-151 338-479
+26.2-OpenGL/0020_bench-world-before.png 3636 44-59 88-103 110-125 184-195 280-293
+26.2-OpenGL/0021_bench-world-after.png 16776 44-53 88-103 110-127 132-153 162-177 184-209 226-283 290-315
+26.2-OpenGL/0022_bench-world-tune-result.png 1344 88-103 110-125 190-203 238-253 262-283 300-315 332-339 354-355
+26.2-OpenGL/0023_bench-world-cancelled.png 7436 0-61 74-178
+26.2-OpenGL/0024_bench-menu-world.png 19765 328-479
+26.2-OpenGL/0025_bench-tune-running.png 371007 0-479
+26.2-OpenGL/0026_bench-tune-result.png 14096 88-103 110-127 132-149 184-203 214-227 238-255 436-451
+26.2-OpenGL/0027_bench-shader-advice.png 152 184-197 252-255
+26.2-OpenGL/0028_launcher-none-854x480-scale2.png 46188 100-111 226-279 284-351 396-413 432-471
+26.2-OpenGL/0029_launcher-none-1280x720-scale3.png 103923 150-167 339-419 426-527 594-620 648-707
+26.2-OpenGL/0030_launcher-none-1280x720-scale2.png 37460 100-111 226-259 636-653 672-711
+26.2-OpenGL/0031_launcher-modrinth-854x480-scale2.png 43016 120-131 246-335 340-351 396-413 432-471
+26.2-OpenGL/0032_launcher-modrinth-1280x720-scale3.png 96786 180-197 369-503 510-527 594-620 648-707
+26.2-OpenGL/0033_launcher-modrinth-1280x720-scale2.png 37460 120-131 246-279 636-653 672-711
+26.2-OpenGL/0034_undo-last.png 412 40-55
+26.2-OpenGL/0035_undo-last-done.png 412 40-55
+26.2-OpenGL/0036_undo-restart.png 412 40-55
+26.2-OpenGL/0043_ui-main-854x480-scale2.png 28692 60-73 100-111 396-413 432-471
+26.2-OpenGL/0044_ui-main-1280x720-scale3.png 64557 90-110 150-167 594-620 648-707
+26.2-OpenGL/0045_ui-main-1280x720-scale2.png 33612 60-73 100-111 636-653 672-711
+26.2-OpenGL/0046_ui-main-copied.png 33612 60-73 100-111 636-653 672-711
+26.2-OpenGL/0047_ui-history-from-button.png 3368 74-89 154-169 206-221 228-241 258-273 310-325 332-345 362-377 414-429
+26.2-OpenGL/0051_ui-stub-pending-854x480-scale2.png 106684 60-73 304-375 384-423 432-471
+26.2-OpenGL/0052_ui-stub-pending-1280x720-scale3.png 239961 90-110 456-563 576-635 648-707
+26.2-OpenGL/0053_ui-stub-pending-1280x720-scale2.png 55560 60-73 624-663 672-711
+26.2-OpenGL/0058_ui-main-network-off.png 33612 60-73 100-111 636-653 672-711
+26.2-OpenGL/0059_ui-main-modrinth-off.png 33612 60-73 100-111 636-653 672-711
+26.2-OpenGL/0061_report-button-640x480-scale2.png 18524 60-73 100-111 348-365 396-413 432-471
+26.2-OpenGL/0063_report-confirm-640x480-scale2.png 640 158-191 284-297
+26.2-OpenGL/0064_report-confirm-854x480-scale2.png 640 176-191 266-279
+26.2-OpenGL/0065_report-confirm-1280x720-scale2.png 640 306-321 360-373
+26.2-OpenGL/0066_report-cancelled.png 33612 60-73 100-111 636-653 672-711
+26.2-OpenGL/0067_history-main-640x480-scale2.png 18524 60-73 100-111 348-365 396-413 432-471
+26.2-OpenGL/0068_history-854x480-scale2.png 1084 214-229
+26.2-OpenGL/0069_history-1280x720-scale3.png 2439 321-344
+26.2-OpenGL/0070_history-1280x720-scale2.png 1084 178-193
+26.2-OpenGL/0071_history-640x480-scale2.png 1084 250-265
+26.2-OpenGL/0075_history-after-undo.png 460 74-89
+26.3-OpenGL/0000_title-toasts.png 1433 112-127
+26.3-OpenGL/0001_title.png 9474 0-176
+26.3-OpenGL/0003_real-854x480.png 28692 60-73 100-111 396-413 432-471
+26.3-OpenGL/0004_real-1280x720-scale3.png 64557 90-110 150-167 594-620 648-707
+26.3-OpenGL/0005_real-1280x720-scale2.png 33612 60-73 100-111 636-653 672-711
+26.3-OpenGL/0006_real-1280x720-scale2-end.png 33612 60-73 100-111 636-653 672-711
+26.3-OpenGL/0007_real-854x480-restored.png 28692 60-73 100-111 396-413 432-471
+26.3-OpenGL/0008_stub-854x480.png 28636 60-73 396-413 432-471
+26.3-OpenGL/0009_stub-1280x720-scale3.png 64431 90-110 594-620 648-707
+26.3-OpenGL/0010_stub-1280x720-scale2.png 33556 60-73 636-653 672-711
+26.3-OpenGL/0011_stub-640x480-scale2.png 18468 60-73 348-365 396-413 432-471
+26.3-OpenGL/0012_stub-854x480-restored.png 28636 60-73 396-413 432-471
+26.3-OpenGL/0013_stub-applied.png 28636 60-73 396-413 432-471
+26.3-OpenGL/0014_real-world.png 170077 0-479
+26.3-OpenGL/0015_benchmark-running.png 375669 0-479
+26.3-OpenGL/0016_benchmark-result.png 205867 0-388 393-398 406-408 413-425 435-451
+26.3-OpenGL/0017_notices.png 14368 12-31 39-42 50-52 61-63 69-69 78-83 88-105 116-131 137-137 147-147 348-479
+26.3-OpenGL/0019_bench-world-running.png 8410 314-479
+26.3-OpenGL/0020_bench-world-before.png 5508 44-61 88-103 110-125 184-197 292-317
+26.3-OpenGL/0021_bench-world-after.png 16116 44-53 88-103 110-127 132-153 162-177 184-209 260-281 314-333
+26.3-OpenGL/0022_bench-world-tune-result.png 1960 88-103 110-125 184-201 214-227 238-265 270-281 322-339 346-351
+26.3-OpenGL/0023_bench-world-cancelled.png 8937 0-61 72-185
+26.3-OpenGL/0024_bench-menu-world.png 16587 336-479
+26.3-OpenGL/0025_bench-tune-running.png 380856 0-479
+26.3-OpenGL/0026_bench-tune-result.png 204367 0-388 393-396 408-408 421-421 435-451
+26.3-OpenGL/0027_bench-shader-advice.png 1596 184-197 256-323
+26.3-OpenGL/0028_launcher-none-854x480-scale2.png 59884 100-111 226-351 396-413 432-471
+26.3-OpenGL/0029_launcher-none-1280x720-scale3.png 134739 150-167 339-527 594-620 648-707
+26.3-OpenGL/0030_launcher-none-1280x720-scale2.png 37460 100-111 226-259 636-653 672-711
+26.3-OpenGL/0031_launcher-modrinth-854x480-scale2.png 56164 120-131 246-351 396-413 432-471
+26.3-OpenGL/0032_launcher-modrinth-1280x720-scale3.png 126369 180-197 369-527 594-620 648-707
+26.3-OpenGL/0033_launcher-modrinth-1280x720-scale2.png 37460 120-131 246-279 636-653 672-711
+26.3-OpenGL/0034_undo-last.png 460 40-55
+26.3-OpenGL/0035_undo-last-done.png 460 40-55
+26.3-OpenGL/0036_undo-restart.png 460 40-55
+26.3-OpenGL/0043_ui-main-854x480-scale2.png 28692 60-73 100-111 396-413 432-471
+26.3-OpenGL/0044_ui-main-1280x720-scale3.png 64557 90-110 150-167 594-620 648-707
+26.3-OpenGL/0045_ui-main-1280x720-scale2.png 33612 60-73 100-111 636-653 672-711
+26.3-OpenGL/0046_ui-main-copied.png 33628 60-73 100-111 608-613 636-653 672-711
+26.3-OpenGL/0047_ui-history-from-button.png 3704 74-89 154-169 206-221 228-241 258-273 310-325 332-345 362-377 414-429
+26.3-OpenGL/0051_ui-stub-pending-854x480-scale2.png 106684 60-73 304-375 384-423 432-471
+26.3-OpenGL/0052_ui-stub-pending-1280x720-scale3.png 239961 90-110 456-563 576-635 648-707
+26.3-OpenGL/0053_ui-stub-pending-1280x720-scale2.png 55560 60-73 624-663 672-711
+26.3-OpenGL/0058_ui-main-network-off.png 33612 60-73 100-111 636-653 672-711
+26.3-OpenGL/0059_ui-main-modrinth-off.png 33612 60-73 100-111 636-653 672-711
+26.3-OpenGL/0061_report-button-640x480-scale2.png 18524 60-73 100-111 348-365 396-413 432-471
+26.3-OpenGL/0063_report-confirm-640x480-scale2.png 640 158-191 284-297
+26.3-OpenGL/0064_report-confirm-854x480-scale2.png 640 176-191 266-279
+26.3-OpenGL/0065_report-confirm-1280x720-scale2.png 640 306-321 360-373
+26.3-OpenGL/0066_report-cancelled.png 33628 60-73 100-111 608-613 636-653 672-711
+26.3-OpenGL/0067_history-main-640x480-scale2.png 18524 60-73 100-111 348-365 396-413 432-471
+26.3-OpenGL/0068_history-854x480-scale2.png 1084 214-229
+26.3-OpenGL/0069_history-1280x720-scale3.png 2439 321-344
+26.3-OpenGL/0070_history-1280x720-scale2.png 1084 178-193
+26.3-OpenGL/0071_history-640x480-scale2.png 1084 250-265
+26.3-OpenGL/0075_history-after-undo.png 428 74-89
+26.3-Vulkan/0000_title-toasts.png 634 112-127
+26.3-Vulkan/0001_title.png 16492 0-182
+26.3-Vulkan/0003_real-854x480.png 31832 60-75 100-111 396-413 432-471
+26.3-Vulkan/0004_real-1280x720-scale3.png 71622 90-113 150-167 594-620 648-707
+26.3-Vulkan/0005_real-1280x720-scale2.png 36752 60-75 100-111 636-653 672-711
+26.3-Vulkan/0006_real-1280x720-scale2-end.png 36752 60-75 100-111 636-653 672-711
+26.3-Vulkan/0007_real-854x480-restored.png 31832 60-75 100-111 396-413 432-471
+26.3-Vulkan/0008_stub-854x480.png 31776 60-75 396-413 432-471
+26.3-Vulkan/0009_stub-1280x720-scale3.png 71496 90-113 594-620 648-707
+26.3-Vulkan/0010_stub-1280x720-scale2.png 36696 60-75 636-653 672-711
+26.3-Vulkan/0011_stub-640x480-scale2.png 21108 60-75 348-365 396-413 432-471
+26.3-Vulkan/0012_stub-854x480-restored.png 31776 60-75 396-413 432-471
+26.3-Vulkan/0013_stub-applied.png 31776 60-75 396-413 432-471
+26.3-Vulkan/0014_real-world.png 194847 0-479
+26.3-Vulkan/0015_benchmark-running.png 364004 0-479
+26.3-Vulkan/0016_benchmark-result.png 187780 0-379 384-388 393-398 406-408 413-425 435-451
+26.3-Vulkan/0017_notices.png 18921 0-151 338-479
+26.3-Vulkan/0019_bench-world-running.png 25063 282-479
+26.3-Vulkan/0020_bench-world-before.png 908 44-59 88-103 110-125 286-299
+26.3-Vulkan/0021_bench-world-after.png 15616 44-59 88-103 110-127 132-153 162-177 184-209 234-261 312-313
+26.3-Vulkan/0022_bench-world-tune-result.png 1572 88-103 114-125 184-203 214-227 238-257 262-275 314-319 334-353
+26.3-Vulkan/0023_bench-world-cancelled.png 7484 0-61 73-185
+26.3-Vulkan/0024_bench-menu-world.png 20776 325-479
+26.3-Vulkan/0025_bench-tune-running.png 294231 0-479
+26.3-Vulkan/0026_bench-tune-result.png 43492 88-103 110-127 132-155 160-209 214-315
+26.3-Vulkan/0027_bench-shader-advice.png 1528 184-197 242-315
+26.3-Vulkan/0028_launcher-none-854x480-scale2.png 59884 100-111 226-351 396-413 432-471
+26.3-Vulkan/0029_launcher-none-1280x720-scale3.png 134739 150-167 339-527 594-620 648-707
+26.3-Vulkan/0030_launcher-none-1280x720-scale2.png 37460 100-111 226-259 636-653 672-711
+26.3-Vulkan/0031_launcher-modrinth-854x480-scale2.png 56164 120-131 246-351 396-413 432-471
+26.3-Vulkan/0032_launcher-modrinth-1280x720-scale3.png 126369 180-197 369-527 594-620 648-707
+26.3-Vulkan/0033_launcher-modrinth-1280x720-scale2.png 37460 120-131 246-279 636-653 672-711
+26.3-Vulkan/0034_undo-last.png 460 40-55
+26.3-Vulkan/0035_undo-last-done.png 460 40-55
+26.3-Vulkan/0036_undo-restart.png 460 40-55
+26.3-Vulkan/0043_ui-main-854x480-scale2.png 31832 60-75 100-111 396-413 432-471
+26.3-Vulkan/0044_ui-main-1280x720-scale3.png 71622 90-113 150-167 594-620 648-707
+26.3-Vulkan/0045_ui-main-1280x720-scale2.png 36752 60-75 100-111 636-653 672-711
+26.3-Vulkan/0046_ui-main-copied.png 36752 60-75 100-111 636-653 672-711
+26.3-Vulkan/0047_ui-history-from-button.png 3656 74-89 154-169 206-221 228-241 258-273 310-325 332-345 362-377 414-429
+26.3-Vulkan/0051_ui-stub-pending-854x480-scale2.png 109824 60-75 304-375 384-423 432-471
+26.3-Vulkan/0052_ui-stub-pending-1280x720-scale3.png 247026 90-113 456-563 576-635 648-707
+26.3-Vulkan/0053_ui-stub-pending-1280x720-scale2.png 58700 60-75 624-663 672-711
+26.3-Vulkan/0058_ui-main-network-off.png 36752 60-75 100-111 636-653 672-711
+26.3-Vulkan/0059_ui-main-modrinth-off.png 36752 60-75 100-111 636-653 672-711
+26.3-Vulkan/0061_report-button-640x480-scale2.png 21164 60-75 100-111 348-365 396-413 432-471
+26.3-Vulkan/0063_report-confirm-640x480-scale2.png 48868 158-337
+26.3-Vulkan/0064_report-confirm-854x480-scale2.png 45492 176-301
+26.3-Vulkan/0065_report-confirm-1280x720-scale2.png 45624 306-395
+26.3-Vulkan/0066_report-cancelled.png 36752 60-75 100-111 636-653 672-711
+26.3-Vulkan/0067_history-main-640x480-scale2.png 21164 60-75 100-111 348-365 396-413 432-471
+26.3-Vulkan/0068_history-854x480-scale2.png 1084 214-229
+26.3-Vulkan/0069_history-1280x720-scale3.png 2439 321-344
+26.3-Vulkan/0070_history-1280x720-scale2.png 1084 178-193
+26.3-Vulkan/0071_history-640x480-scale2.png 1084 250-265
+26.3-Vulkan/0075_history-after-undo.png 412 74-89
+26.2-OpenGL/0079_preview-footer-640x480-scale2.png ONLY IN new
+26.2-OpenGL/0080_preview-640x480-scale2.png ONLY IN new
+26.2-OpenGL/0081_preview-footer-854x480-scale2.png ONLY IN new
+26.2-OpenGL/0082_preview-854x480-scale2.png ONLY IN new
+26.2-OpenGL/0083_preview-footer-1280x720-scale2.png ONLY IN new
+26.2-OpenGL/0084_preview-1280x720-scale2.png ONLY IN new
+26.2-OpenGL/0085_preview-footer-640x480-scale2-pending.png ONLY IN new
+26.2-OpenGL/0086_preview-real.png ONLY IN new
+26.3-OpenGL/0079_preview-footer-640x480-scale2.png ONLY IN new
+26.3-OpenGL/0080_preview-640x480-scale2.png ONLY IN new
+26.3-OpenGL/0081_preview-footer-854x480-scale2.png ONLY IN new
+26.3-OpenGL/0082_preview-854x480-scale2.png ONLY IN new
+26.3-OpenGL/0083_preview-footer-1280x720-scale2.png ONLY IN new
+26.3-OpenGL/0084_preview-1280x720-scale2.png ONLY IN new
+26.3-OpenGL/0085_preview-footer-640x480-scale2-pending.png ONLY IN new
+26.3-OpenGL/0086_preview-real.png ONLY IN new
+26.3-Vulkan/0079_preview-footer-640x480-scale2.png ONLY IN new
+26.3-Vulkan/0080_preview-640x480-scale2.png ONLY IN new
+26.3-Vulkan/0081_preview-footer-854x480-scale2.png ONLY IN new
+26.3-Vulkan/0082_preview-854x480-scale2.png ONLY IN new
+26.3-Vulkan/0083_preview-footer-1280x720-scale2.png ONLY IN new
+26.3-Vulkan/0084_preview-1280x720-scale2.png ONLY IN new
+26.3-Vulkan/0085_preview-footer-640x480-scale2-pending.png ONLY IN new
+26.3-Vulkan/0086_preview-real.png ONLY IN new
