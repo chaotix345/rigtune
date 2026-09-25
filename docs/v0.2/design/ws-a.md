@@ -122,6 +122,10 @@ add, disable and set actions.
   v1 fallback request of a load already in flight (review M1). Rules loads run on their own single
   thread, not on the two-thread pool the report builds use (a load can wait up to a minute on the
   network).
+- After any rules publish (local too, not only a newer remote one) RealController calls
+  `fetchOnline()`, which is a no-op until the scan is done. This fixes the offline race WS-G found
+  (design/ws-g.md): a scan that finished before the local rules were set never fetched the Modrinth
+  data until Rescan.
 - Conflict references (`conflictsWith` slugs) resolve through every ModRule, including ones skipped
   by `requires`; only firing is filtered (review M2).
 

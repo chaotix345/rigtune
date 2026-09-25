@@ -126,9 +126,9 @@ public final class RealController implements RigTuneController {
 				rules = doc;
 			}
 			rebuild();
-			if (remote) {
-				fetchOnline();
-			}
+			// Also for the local rules: if the scan finished first, its own fetchOnline() found no rules yet and returned
+			// (docs/v0.2/design/ws-g.md, the offline race). It's a no-op until the scan is done.
+			fetchOnline();
 		});
 	}
 
