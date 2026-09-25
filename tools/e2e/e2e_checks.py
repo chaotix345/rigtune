@@ -3,6 +3,7 @@ Pure: no processes, no network."""
 
 import hashlib
 import json
+import ntpath
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -43,7 +44,8 @@ def classpath(command_line, separator):
 
 
 def _norm(path):
-    return str(path).replace("\\", "/").rstrip("/").lower()
+    """Case-insensitive, either separator, and `..` resolved (ntpath also accepts '/')."""
+    return ntpath.normpath(str(path)).replace("\\", "/").rstrip("/").lower()
 
 
 def _inside(path, directory):
@@ -112,14 +114,18 @@ def after_update(instance, old_jar, new_jar, driver, server_log, helper_cmdlines
 
 
 def depends_not_stricter(old_jar, new_jar):
-    """Plan review M12: a stricter `depends` in the update could leave the game unable to start after the post-exit
-    helper swaps the jars, with no RigTune left to undo it. Any added or changed entry needs a human look."""
-    old = e2e_env.mod_json(old_jar).get("depends") or {}
-    new = e2e_env.mod_json(new_jar).get("depends") or {}
-    changes = ["{}: {} -> {}".format(key, old.get(key, "(absent)"), value) for key, value in sorted(new.items())
-               if old.get(key) != value]
-    return Check("the update's depends are no stricter (M12)", not changes,
-                 "; ".join(changes) if changes else "same or fewer entries: {}".format(new))
+    """Plan review M12: a stricter `depends` (or a new `breaks`) in the update could leave the game unable to start after
+    the post-exit helper swaps the jars, with no RigTune left to undo it. Any added or changed entry needs a human look.
+    Nested jar-in-jar mods aren't compared."""
+    old_json, new_json = e2e_env.mod_json(old_jar), e2e_env.mod_json(new_jar)
+    changes = []
+    for field in ("depends", "breaks"):
+        old = old_json.get(field) or {}
+        changes += ["{}.{}: {} -> {}".format(field, key, old.get(key, "(absent)"), value)
+                    for key, value in sorted((new_json.get(field) or {}).items()) if old.get(key) != value]
+    return Check("the update's depends and breaks are no stricter (M12)", not changes,
+                 "; ".join(changes) if changes else "same or fewer entries: depends {} breaks {}".format(
+                     new_json.get("depends") or {}, new_json.get("breaks") or {}))
 
 
 def after_verify(instance, new_jar, driver, last_apply_finished_at, mods_before, expect_history):
@@ -154,11 +160,15 @@ def after_verify(instance, new_jar, driver, last_apply_finished_at, mods_before,
     checks.append(Check("no new pending.json", not (rigtune_dir / "pending.json").exists(), ""))
 
     if expect_history:
+        # SPEC item 3: the first 0.2 run imports 0.1.0's last-apply.json once, as one legacy-import entry, without
+        # RigTune's own jars. A file of another shape fails rather than passing with nothing checked.
         history = _load(rigtune_dir / "history.json")
-        imports = [e for e in (history or {}).get("entries", []) if e.get("kind") == "legacy-import"]
+        entries = history.get("entries") if isinstance(history, dict) else None
+        imports = [e for e in entries if e.get("kind") == "legacy-import"] if isinstance(entries, list) else []
         own = [c for e in imports for c in e.get("changes", [])
                if c.get("modId") == "rigtune" or str(c.get("file") or "").lower().startswith("rigtune")]
-        checks.append(Check("history.json: legacy import without RigTune's own jars", history is not None and not own,
-                            "history.json exists: {}; legacy-import entries: {}; RigTune changes: {}".format(
-                                history is not None, len(imports), own)))
+        checks.append(Check("history.json: one legacy import, without RigTune's own jars",
+                            isinstance(entries, list) and len(imports) == 1 and not own,
+                            "history.json entries: {}; legacy-import entries: {}; RigTune changes: {}".format(
+                                "missing" if not isinstance(entries, list) else len(entries), len(imports), own)))
     return checks

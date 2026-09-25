@@ -192,7 +192,8 @@ public final class HttpModrinthClient implements ModrinthClient {
 
 	private void requireAllowedDownload(ModFile file, URI uri) throws IOException {
 		if (!allowedDownload(uri, baseUrl)) {
-			throw new IOException("Refusing to download " + file.filename() + " from " + uri + ": only " + CDN + " is allowed");
+			throw new IOException("Refusing to download " + file.filename() + " from " + uri + ": only "
+					+ (DEFAULT_BASE_URL.equals(baseUrl) ? CDN + " is" : CDN + " and the origin of " + baseUrl + " are") + " allowed");
 		}
 	}
 

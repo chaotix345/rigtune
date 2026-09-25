@@ -53,7 +53,7 @@ After the old version applied the update and the helper finished:
 - `last-apply.json` holds exactly the update's DISABLE_FILE and ENABLE_FILE, both `OK`;
 - every classpath entry of the helper JVM is under `config/rigtune/helper/` (AC5.2);
 - the jar was downloaded from host `cdn.modrinth.com`;
-- the new jar's `depends` are no stricter than the old one's (plan review M12).
+- the new jar's `depends` and `breaks` add or change nothing relative to the old one's (plan review M12).
 
 After the new version started on the same instance:
 - it exited normally; it is the new version, loaded from `mods/`;

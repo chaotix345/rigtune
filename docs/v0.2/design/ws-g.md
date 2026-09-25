@@ -9,8 +9,11 @@ Only `core/modrinth/HttpModrinthClient.java` changed in the mod:
   (blank means the default). For tests only; not documented for players.
 - L5 download allowlist: a download must be `https://cdn.modrinth.com/` (port 443), or the origin (scheme, host, port)
   of a non-default base URL. The check runs before the request (no temp file, no request) and again on the response's
-  final URI, since the client follows redirects. Userinfo tricks (`https://cdn.modrinth.com@evil/`) and look-alike
-  hosts fail the origin compare. A real Modrinth redirect off the CDN would now fail the download; none was observed.
+  final URI, since the client follows redirects. Userinfo tricks (`https://cdn.modrinth.com@evil/`), look-alike hosts
+  and non-ASCII/percent-encoded hosts (no parsed host) fail the origin compare. Known limits (review LOW): intermediate
+  redirect hops aren't checked, only the final URI (the bytes are SHA-512-verified either way; a manual redirect loop
+  in shipped code wasn't worth it for a path Modrinth doesn't use), and a real Modrinth redirect off the CDN would now
+  fail the download (none was observed).
 
 Everything else is test tooling, outside the shipped jar and outside `./gradlew build`:
 - `tools/e2e/java/.../FakeModrinth.java`, `RedirectProbe.java`: JDK-only, run with `java <file>.java`. The test source
@@ -51,13 +54,19 @@ Everything else is test tooling, outside the shipped jar and outside `./gradlew 
   requires every `-cp` entry to be under `config/rigtune/helper/`. The v0.1.0 run shows
   `helper/0-rigtune-0.1.0.jar;helper/1-gson-2.14.0.jar`, and the rename of `rigtune-0.1.0.jar` succeeded on Windows.
 - **M12.** Two parts: the run 0.2.0-dev.1 → 0.2.0-dev.2 (the 0.2 helper applies its own successor), and a check in
-  every run that the new jar's `depends` add or change nothing relative to the old jar's (a stricter `depends` swapped in
-  post-exit could leave the game unable to start with no RigTune to undo it).
+  every run that the new jar's `depends` and `breaks` add or change nothing relative to the old jar's (a stricter one
+  swapped in post-exit could leave the game unable to start with no RigTune to undo it). Nested jars aren't compared.
 - **Fixtures (for WS-B, AC3.3)** are the real files from the v0.1.0 run, with the instance path replaced by
   `${INSTANCE}` and the separators after it made `/` (so tests can substitute a Linux path on CI).
   `src/test/resources/v010/captured/README.md` explains them; `manifest.json` records the run and hashes.
-- **Evidence** replaces absolute scratch paths by `<instance>` / `<run>`; client logs are filtered to RigTune, the
-  driver, warnings, errors and the mod list.
+- **Evidence** replaces absolute paths by `<instance>`, `<run>`, `<repo>` and `~`; client logs are filtered to RigTune,
+  the driver, warnings, errors and the mod list. The errors in them (OSHI performance counters, authlib/Yggdrasil
+  `UnknownHostException`) come from Minecraft running with Mojang's hosts unresolvable, not from RigTune.
+- **Process safety.** A process is this run's only if its command line contains the run folder's name (timestamp plus
+  a random suffix). The script kills only this run's KnotClient, ApplyHelper, FakeModrinth or Gradle wrapper JVMs, one
+  PID at a time (never `/T`: a Gradle daemon started by the wrapper is its child and serves other builds), and before
+  releasing the lock waits until none of its clients or wrappers remain. It removes the lock only if `owner.txt` names
+  its run folder.
 
 ## L4 items, now verified (docs/smoke/self-update/redirect-proof.txt)
 - `jdk.net.hosts.file`: listed hosts resolve to 127.0.0.1, unlisted ones fail (`example.com`,

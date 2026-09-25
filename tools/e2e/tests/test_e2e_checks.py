@@ -3,6 +3,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -97,6 +98,12 @@ class AfterUpdateTest(unittest.TestCase):
             self.fx.mods / "rigtune-0.1.0.jar")]
         self.assertEqual(["the helper ran from config/rigtune/helper copies"], self.failing())
 
+    def test_helper_classpath_escaping_the_helper_folder(self):
+        helper = self.fx.rigtune_config / "helper"
+        self.fx.helper_cmdlines = ["java -cp {0} io.github.chaotix345.rigtune.core.apply.ApplyHelper 1 x".format(
+            str(helper) + "/../../../mods/rigtune-0.1.0.jar")]
+        self.assertEqual(["the helper ran from config/rigtune/helper copies"], self.failing())
+
     def test_helper_never_seen(self):
         self.fx.helper_cmdlines = []
         self.assertEqual(["the helper ran from config/rigtune/helper copies"], self.failing())
@@ -132,6 +139,16 @@ class DependsTest(unittest.TestCase):
             check = e2e_checks.depends_not_stricter(self.old, jar)
             self.assertFalse(check.ok)
         self.assertIn("fabricloader", e2e_checks.depends_not_stricter(self.old, changed).detail)
+
+    def test_added_breaks_fail(self):
+        old = make_jar(self.dir / "old-breaks.jar", "rigtune", "0.1.0", DEPENDS)
+        new = self.dir / "new-breaks.jar"
+        with zipfile.ZipFile(new, "w") as archive:
+            archive.writestr("fabric.mod.json", json.dumps({"id": "rigtune", "version": "0.2.0", "depends": DEPENDS,
+                                                            "breaks": {"sodium": "<0.9"}}))
+        check = e2e_checks.depends_not_stricter(old, new)
+        self.assertFalse(check.ok)
+        self.assertIn("breaks.sodium", check.detail)
 
     def test_dropped_depends_pass(self):
         fewer = {k: v for k, v in DEPENDS.items() if k != "fabric-api"}
@@ -185,15 +202,28 @@ class AfterVerifyTest(unittest.TestCase):
         (self.fx.mods / "extra.jar").write_bytes(b"x")
         self.assertEqual(["mods unchanged by the relaunch", "no crash report"], self.failing())
 
+    def write_history(self, history):
+        (self.fx.rigtune_config / "history.json").write_text(json.dumps(history))
+
     def test_history_expected(self):
-        self.assertEqual(["history.json: legacy import without RigTune's own jars"], self.failing(expect_history=True))
+        name = "history.json: one legacy import, without RigTune's own jars"
+        self.assertEqual([name], self.failing(expect_history=True))
         history = {"formatVersion": 1, "entries": [{"kind": "legacy-import", "changes": [
             {"type": "file", "action": "disable", "modId": "indium", "file": "indium-1.0.jar"}]}]}
-        (self.fx.rigtune_config / "history.json").write_text(json.dumps(history))
+        self.write_history(history)
         self.assertEqual([], self.failing(expect_history=True))
         history["entries"][0]["changes"].append({"type": "file", "action": "disable", "modId": None, "file": "rigtune-0.1.0.jar"})
-        (self.fx.rigtune_config / "history.json").write_text(json.dumps(history))
-        self.assertEqual(["history.json: legacy import without RigTune's own jars"], self.failing(expect_history=True))
+        self.write_history(history)
+        self.assertEqual([name], self.failing(expect_history=True))
+
+    def test_history_of_another_shape_or_without_the_import_fails(self):
+        name = "history.json: one legacy import, without RigTune's own jars"
+        self.write_history({"formatVersion": 1, "journal": [{"kind": "legacy-import", "changes": []}]})
+        self.assertEqual([name], self.failing(expect_history=True))
+        self.write_history({"formatVersion": 1, "entries": [{"kind": "apply", "changes": []}]})
+        self.assertEqual([name], self.failing(expect_history=True))
+        self.write_history({"formatVersion": 1, "entries": [{"kind": "legacy-import", "changes": []}] * 2})
+        self.assertEqual([name], self.failing(expect_history=True))
 
 
 class HelperClasspathTest(unittest.TestCase):

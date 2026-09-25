@@ -18,6 +18,7 @@ import socket
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 from urllib.parse import quote
 
@@ -52,7 +53,8 @@ class Run:
         self.java_home = Path(args.java_home)
         self.java = self.java_home / "bin" / ("java.exe" if os.name == "nt" else "java")
         stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        self.run_dir = Path(args.work).resolve() / "{}-{}".format(self.name, stamp)
+        # Unique, because processes are recognised as this run's by the folder name in their command line.
+        self.run_dir = Path(args.work).resolve() / "{}-{}-{}".format(self.name, stamp, uuid.uuid4().hex[:6])
         self.instance = self.run_dir / "instance"
         self.out = self.run_dir / "out"
         self.mods = self.instance / "mods"
@@ -82,8 +84,10 @@ class Run:
             try:
                 return subprocess.run(command, cwd=REPO, env=env, stdout=out, stderr=subprocess.STDOUT, timeout=PHASE_TIMEOUT).returncode
             except subprocess.TimeoutExpired:
-                self.log("gradle timed out after {} s; killing this run's processes".format(PHASE_TIMEOUT))
-                self.kill_own(lambda p: True)
+                # Killing cmd.exe leaves this run's Gradle wrapper waiting on the build; kill it too, so the daemon
+                # cancels the build rather than starting a client later, after the lock is gone.
+                self.log("gradle timed out after {} s; killing this run's client, helper and Gradle wrapper".format(PHASE_TIMEOUT))
+                self.kill_own(lambda cl: "KnotClient" in cl or "ApplyHelper" in cl or "GradleWrapperMain" in cl)
                 return -1
 
     def java_processes(self):
@@ -103,10 +107,21 @@ class Run:
         """Only processes whose command line names this run's folder (unique per run) are ours."""
         return [(pid, cl) for pid, cl in self.java_processes() if self.run_dir.name in cl and predicate(cl)]
 
+    # Never a process tree: a Gradle daemon started by this run's wrapper is the wrapper's child and serves other builds.
     def kill_own(self, predicate):
         for pid, command_line in self.own(predicate):
             self.log("killing own process {}: {}".format(pid, command_line[:160]))
-            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+
+    def ensure_no_client(self):
+        """Before the lock goes: none of this run's clients may be running, or start shortly after (a cancelled build)."""
+        deadline = time.time() + 20
+        while time.time() < deadline:
+            self.kill_own(lambda cl: "KnotClient" in cl or "ApplyHelper" in cl or "FakeModrinth" in cl or "GradleWrapperMain" in cl)
+            time.sleep(2)
+            if not self.own(lambda cl: "KnotClient" in cl or "GradleWrapperMain" in cl):
+                return
+        self.log("WARNING: a client of this run may still be running")
 
     def take_lock(self):
         if self.lock is None:
@@ -334,7 +349,12 @@ class Run:
     def evidence(self, verdict):
         dest = Path(self.args.evidence).resolve() if self.args.evidence else self.run_dir / "evidence"
         if dest.exists():
-            shutil.rmtree(dest)
+            # Replace only a previous evidence folder, never e.g. the parent of several.
+            if any(dest.iterdir()) and not (dest / "RESULT.md").is_file():
+                self.log("not replacing {}: it isn't an evidence folder; evidence stays in {}".format(dest, self.run_dir))
+                dest = self.run_dir / "evidence"
+            else:
+                shutil.rmtree(dest)
         dest.mkdir(parents=True)
         texts = [self.out / n for n in ("driver-update.json", "driver-verify.json", "report-update.txt", "report-verify.txt",
                                         "redirect-probe.txt", "helper-cmdlines.txt", "helper-dir.txt", "mods-after-update.json",
@@ -360,7 +380,7 @@ class Run:
         lines = ["# Self-update E2E: {}".format(self.name), "",
                  "- Verdict: **{}**".format(verdict),
                  "- Run: {} UTC, MC {}, {} + {} in a fresh scratch instance".format(
-                     self.run_dir.name.rsplit("-", 1)[-1], self.mc, self.facts.get("old", {}).get("file"), self.facts.get("fabricApi")),
+                     self.run_dir.name.rsplit("-", 2)[-2], self.mc, self.facts.get("old", {}).get("file"), self.facts.get("fabricApi")),
                  "- Old: `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["old"]),
                  "- New (served by the fake Modrinth): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"]),
                  "- Client time: update phase {} s, verify phase {} s".format(self.facts.get("updateSeconds"), self.facts.get("verifySeconds")),
@@ -407,7 +427,7 @@ class Run:
         finally:
             self.stop_server()
             self.stop_watcher()
-            self.kill_own(lambda cl: "KnotClient" in cl or "ApplyHelper" in cl or "FakeModrinth" in cl)
+            self.ensure_no_client()
             self.release_lock()
             for phase, checks in self.checks.items():
                 for c in checks:

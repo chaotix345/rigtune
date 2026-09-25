@@ -231,12 +231,18 @@ sourceSets.test.java.srcDir(rootProject.file("tools/e2e/java"))
 def e2eOldJar = providers.gradleProperty("e2e.oldJar")
 sourceSets {
 	e2e {
+		// Empty without the property, so an IDE sync still resolves every source set; compiling then fails below.
 		compileClasspath += sourceSets.client.compileClasspath - sourceSets.main.output + files({
-			if (!e2eOldJar.present) {
-				throw new GradleException("Pass -Pe2e.oldJar=<path to the released rigtune-0.1.0.jar>")
-			}
-			rootProject.file(e2eOldJar.get())
+			e2eOldJar.present ? rootProject.file(e2eOldJar.get()) : []
 		})
+	}
+}
+
+tasks.named("compileE2eJava") {
+	doFirst {
+		if (!e2eOldJar.present) {
+			throw new GradleException("Pass -Pe2e.oldJar=<path to the released rigtune-0.1.0.jar>")
+		}
 	}
 }
 
