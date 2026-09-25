@@ -21,7 +21,7 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 - [x] Phase 3: foundation MERGED (1700ecc). Wave A started in parallel before it (no build-file overlap) and was told to merge origin/feat/v0.3.0.
 - [x] Phase 4: features DONE (e16e146): Wave A (A, B, C, D, E, F, V, H) + fix/ram-advice-text + Wave B (G, P) merged; 1121 unit tests per version; CI green. Pending lows for the round-1 fix branch: chart dates in UTC (BenchmarkResultScreen date()), legacy import stack traces for missing files (ModJars.modIdOf).
 - [ ] Phase 5: verification: early run on the Wave A tree DONE (all pass; see p5 row). Final runs (game tests, smokes, E2E final-* incl. seeded + undo-after-restart-030) on the RC after the review fixes.
-- [ ] Phase 6: review round 1 RUNNING (Workflow, 5 dimensions + adversarial verify, v0.2.0..e16e146; script scratchpad/review-v03-round.js) -> docs/reviews/review-5.md
+- [ ] Phase 6: round 1 DONE -> docs/reviews/review-5.md (on fix/review-5): 3 findings, 2 confirmed (H rules-accuracy-1: ram-low r12 wording contradicted DH low-system advice; M security-1: gametest_matrix trailing-newline), 1 refuted (defensive fix anyway). Fixes on fix/review-5 (3449630 Phase 5 lows, 48dc4a4 findings; rules r13), awaiting CI 36197946576, then merge. Next: round 2 (Workflow, scratchpad/review-v03-round.js, args head=<merge>, round text = round 2 incl. the fixes) in parallel with the Phase 5 final runs on the RC.
 - [ ] Phase 7: release
 - [ ] Phase 8: wrap-up
 
