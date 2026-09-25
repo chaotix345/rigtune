@@ -568,6 +568,17 @@ public final class RealController implements RigTuneController {
 	}
 
 	@Override
+	public ShareReport.@Nullable Versions reportVersions() {
+		Report shown = report;
+		if (shown == null) {
+			return null;
+		}
+		String loaderVersion = FabricLoader.getInstance().getModContainer("fabricloader")
+				.map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("?");
+		return new ShareReport.Versions(modVersion, shown.hardware().mcVersion(), loaderVersion);
+	}
+
+	@Override
 	public boolean hasPendingChanges() {
 		return Files.isRegularFile(pendingFile);
 	}
