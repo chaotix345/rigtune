@@ -822,6 +822,7 @@ def v1_projection(content):
     """rules-v1.json: what 0.1.x understands, never less safe. Returns (document, [(rule label, note)])."""
     out = {"schemaVersion": 1}
     notes = []
+    omitted_mods = {}
     for key, value in content.items():
         if key in ("schemaVersion", "settingLabels"):
             continue
@@ -832,10 +833,36 @@ def v1_projection(content):
                 notes += [(rule_label(key, rule, i), note) for note in rule_notes]
                 if rule_v1 is not None:
                     projected.append(rule_v1)
+                elif key == "mods":
+                    omitted_mods[rule["slug"]] = list(rule.get("modIds", []))
             out[key] = projected
         else:
             out[key] = copy.deepcopy(value)
+    if omitted_mods:
+        notes += rewrite_conflict_references(out.get("mods", []), omitted_mods)
     return out, notes
+
+
+def rewrite_conflict_references(mods, omitted_mods):
+    """0.1.x resolves a conflictsWith slug only through a rule it has. When a rule is left out of rules-v1.json, the
+    other rules' references to its slug would stop matching the installed mod (slugs often differ from mod ids:
+    moonrise-opt vs moonrise), so 0.1.x could offer a mod that conflicts with one already installed. Such references
+    become the omitted rule's mod ids, which 0.1.x matches directly."""
+    notes = []
+    for mod in mods:
+        refs = mod.get("conflictsWith")
+        if not refs or not any(ref in omitted_mods for ref in refs):
+            continue
+        rewritten = []
+        for ref in refs:
+            for replacement in omitted_mods.get(ref, [ref]):
+                if replacement not in rewritten:
+                    rewritten.append(replacement)
+            if ref in omitted_mods:
+                notes.append((f"mods[{mod.get('slug')}]", f"conflictsWith: {ref} (left out of rules-v1.json) -> its mod ids "
+                              f"{', '.join(omitted_mods[ref])}"))
+        mod["conflictsWith"] = rewritten
+    return notes
 
 
 def deep_equal(a, b):

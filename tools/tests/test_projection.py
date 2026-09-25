@@ -199,6 +199,34 @@ class WarningAdviceTests(unittest.TestCase):
         self.assertEqual(projected["when"], {"always": False})
 
 
+class ConflictReferenceTests(unittest.TestCase):
+    def test_references_to_an_omitted_rule_use_its_mod_ids(self):
+        moonrise = mod_rule(slug="moonrise-opt", modIds=["moonrise"], recommendWhen={"always": False},
+                            conflictsWith=["c2me-fabric"], v1=False)
+        c2me = mod_rule(slug="c2me-fabric", modIds=["c2me"], recommendWhen={"always": True},
+                        conflictsWith=["moonrise-opt", "optifabric"])
+        content = content_with(mods=[moonrise, c2me])
+        v1, notes = ur.v1_projection(content)
+        self.assertEqual([m["slug"] for m in v1["mods"]], ["c2me-fabric"])
+        self.assertEqual(v1["mods"][0]["conflictsWith"], ["moonrise", "optifabric"])
+        self.assertIn(("mods[c2me-fabric]", "conflictsWith: moonrise-opt (left out of rules-v1.json) -> its mod ids moonrise"), notes)
+        self.assertEqual(ur.v2_content(content)["mods"][1]["conflictsWith"], ["moonrise-opt", "optifabric"])
+
+    def test_mod_ids_already_listed_are_not_repeated(self):
+        dh = mod_rule(slug="distanthorizons", modIds=["distanthorizons", "dh-core"], recommendWhen={"always": False}, v1=False)
+        other = mod_rule(slug="other", modIds=["other"], recommendWhen={"always": True},
+                         conflictsWith=["dh-core", "distanthorizons"])
+        v1, _ = ur.v1_projection(content_with(mods=[dh, other]))
+        self.assertEqual(v1["mods"][0]["conflictsWith"], ["dh-core", "distanthorizons"])
+
+    def test_references_to_kept_rules_are_unchanged(self):
+        a = mod_rule(slug="c2me-fabric", modIds=["c2me"], recommendWhen={"always": True}, conflictsWith=["moonrise-opt"])
+        b = mod_rule(slug="moonrise-opt", modIds=["moonrise"], recommendWhen={"always": False}, conflictsWith=["c2me-fabric"])
+        v1, notes = ur.v1_projection(content_with(mods=[a, b]))
+        self.assertEqual(v1["mods"][0]["conflictsWith"], ["moonrise-opt"])
+        self.assertEqual(notes, [])
+
+
 class SettingTests(unittest.TestCase):
     def test_setting_with_v2_when_needs_explicit_v1(self):
         with self.assertRaises(ur.KnowledgeError):

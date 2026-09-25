@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.core.rules;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.core.RepoFiles;
@@ -39,9 +40,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Runs a pinned copy of the v0.1.0 Recommender (package io.github.chaotix345.rigtune.v010, copied from tag v0.1.0)
  * over the baseline rules-v1.json (the one 0.1.0 shipped) and the repository's rules-v1.json, on a hardware × mods ×
- * goal × settings matrix. rules-v1.json may only take ticked actions away from a 0.1.x user, never add one (plan
- * review H2). If a new ticked action is intended, review it and replace src/test/resources/v010/rules-v1-baseline.json
- * with rules/rules-v1.json (tools/README.md).
+ * goal × settings matrix. rules-v1.json may only take actions away from a 0.1.x user: no new appliable recommendation
+ * (ticked or not), no recommendation newly ticked (plan review H2), and no lost warning (a conflict: or advice:
+ * recommendation). If a change is intended, review
+ * it and replace src/test/resources/v010/rules-v1-baseline.json with rules/rules-v1.json (tools/README.md).
  */
 class RulesV1DifferentialTest {
 	private static final String BASELINE = "/v010/rules-v1-baseline.json";
@@ -75,9 +77,9 @@ class RulesV1DifferentialTest {
 	}
 
 	@Test
-	void repoRulesV1AddsNoTickedActionOverTheBaseline() throws IOException {
-		List<String> added = newTickedActions(baselineJson(), repoJson("rules-v1.json"));
-		assertTrue(added.isEmpty(), "rules-v1.json gives 0.1.x users ticked actions the baseline didn't:\n" + String.join("\n", added));
+	void repoRulesV1AddsNoTickedActionAndLosesNoWarning() throws IOException {
+		List<String> changes = differences(baselineJson(), repoJson("rules-v1.json"));
+		assertTrue(changes.isEmpty(), "rules-v1.json is less conservative for 0.1.x than the baseline:\n" + String.join("\n", changes));
 	}
 
 	@Test
@@ -88,9 +90,59 @@ class RulesV1DifferentialTest {
 		entry.addProperty("value", 3);
 		entry.addProperty("reason", "Injected by the test.");
 		doc.getAsJsonArray("settings").add(entry);
-		List<String> added = newTickedActions(baselineJson(), doc.toString());
+		List<String> added = differences(baselineJson(), doc.toString());
 		assertFalse(added.isEmpty());
-		assertTrue(added.getFirst().contains("set:vanilla.renderDistance=3"), added.getFirst());
+		assertTrue(added.getFirst().startsWith("added set:vanilla.renderDistance=3 "), added.getFirst());
+	}
+
+	@Test
+	void theDifferentialCatchesANewlyTickedAction() throws IOException {
+		JsonObject doc = JsonParser.parseString(baselineJson()).getAsJsonObject();
+		for (JsonElement mod : doc.getAsJsonArray("mods")) {
+			if (mod.getAsJsonObject().get("slug").getAsString().equals("c2me-fabric")) {
+				mod.getAsJsonObject().addProperty("stability", "stable");
+			}
+		}
+		List<String> changes = differences(baselineJson(), doc.toString());
+		assertFalse(changes.isEmpty());
+		assertTrue(changes.stream().allMatch(c -> c.startsWith("ticked add:c2me-fabric on")), changes.getFirst());
+	}
+
+	@Test
+	void theDifferentialCatchesLostWarnings() throws IOException {
+		JsonObject doc = JsonParser.parseString(baselineJson()).getAsJsonObject();
+		doc.add("mods", new JsonArray());
+		doc.add("advice", new JsonArray());
+		Set<String> kinds = new TreeSet<>();
+		for (String change : differences(baselineJson(), doc.toString())) {
+			kinds.add(change.substring(0, change.indexOf(':')));
+		}
+		assertEquals(Set.of("lost advice", "lost conflict"), kinds);
+	}
+
+	// Why the updater rewrites conflictsWith references to a rule it leaves out: 0.1.0 resolves a slug only through a rule
+	// it has, but matches a mod id directly.
+	@Test
+	void omittedRuleReferencesNeedTheModIds() throws IOException {
+		JsonObject doc = JsonParser.parseString(baselineJson()).getAsJsonObject();
+		JsonArray kept = new JsonArray();
+		for (JsonElement mod : doc.getAsJsonArray("mods")) {
+			if (!mod.getAsJsonObject().get("slug").getAsString().equals("moonrise-opt")) {
+				kept.add(mod);
+			}
+		}
+		doc.add("mods", kept);
+		assertTrue(differences(baselineJson(), doc.toString()).stream().anyMatch(c -> c.startsWith("added add:c2me-fabric on") && c.contains("/ mods moonrise /")));
+
+		for (JsonElement mod : kept) {
+			JsonArray refs = mod.getAsJsonObject().getAsJsonArray("conflictsWith");
+			for (int i = 0; refs != null && i < refs.size(); i++) {
+				if (refs.get(i).getAsString().equals("moonrise-opt")) {
+					refs.set(i, new com.google.gson.JsonPrimitive("moonrise"));
+				}
+			}
+		}
+		assertTrue(differences(baselineJson(), doc.toString()).stream().noneMatch(c -> c.startsWith("added ")));
 	}
 
 	@Test
@@ -100,22 +152,23 @@ class RulesV1DifferentialTest {
 			empty.add(section, new JsonArray());
 		}
 		Set<String> kinds = new TreeSet<>();
-		for (String action : newTickedActions(empty.toString(), baselineJson())) {
-			kinds.add(action.substring(0, action.indexOf(':')));
+		for (String change : differences(empty.toString(), baselineJson())) {
+			kinds.add(change.substring(0, change.indexOf(':')));
 		}
-		assertEquals(Set.of("add", "disable", "set"), kinds);
+		assertEquals(Set.of("added add", "added disable", "added set"), kinds);
 	}
 
 	@Test
 	void removedActionsAreAllowed() throws IOException {
 		JsonObject doc = JsonParser.parseString(baselineJson()).getAsJsonObject();
-		doc.add("mods", new JsonArray());
 		doc.add("settings", new JsonArray());
-		assertEquals(List.of(), newTickedActions(baselineJson(), doc.toString()));
+		doc.add("obsolete", new JsonArray());
+		assertEquals(List.of(), differences(baselineJson(), doc.toString()));
 	}
 
-	// Every ticked, appliable recommendation the new rules give that the old rules don't, with the matrix point.
-	static List<String> newTickedActions(String oldJson, String newJson) {
+	// For each matrix point: "added <action>" for an appliable recommendation the old rules didn't give, "ticked <action>"
+	// for one they gave unticked, and "lost <id>" for a conflict or advice the new rules no longer give.
+	static List<String> differences(String oldJson, String newJson) {
 		io.github.chaotix345.rigtune.v010.core.rules.RulesDocument oldRules = v010(oldJson);
 		io.github.chaotix345.rigtune.v010.core.rules.RulesDocument newRules = v010(newJson);
 		Set<String> slugs = new TreeSet<>();
@@ -133,7 +186,7 @@ class RulesV1DifferentialTest {
 		slugs.forEach(slug -> available.put(slug, true));
 		OnlineData online = new OnlineData(true, available, Map.of());
 
-		List<String> added = new ArrayList<>();
+		List<String> changes = new ArrayList<>();
 		Map<String, HardwareProfile> hardware = hardware();
 		for (Map.Entry<String, HardwareProfile> hw : hardware.entrySet()) {
 			for (Map.Entry<String, List<String>> mods : modSets(modIds).entrySet()) {
@@ -141,25 +194,36 @@ class RulesV1DifferentialTest {
 				boolean sodium = mods.getValue().contains("sodium");
 				for (Map.Entry<String, Map<String, String>> settings : snapshots(settingKeys, sodium).entrySet()) {
 					for (Goal goal : Goal.values()) {
-						Set<String> before = ticked(oldRules, hw.getValue(), installed, settings.getValue(), online, goal);
-						for (String action : ticked(newRules, hw.getValue(), installed, settings.getValue(), online, goal)) {
-							if (!before.contains(action)) {
-								added.add(action + " on " + hw.getKey() + " / mods " + mods.getKey() + " / settings " + settings.getKey() + " / " + goal);
-							}
-						}
+						Outcome before = outcome(oldRules, hw.getValue(), installed, settings.getValue(), online, goal);
+						Outcome after = outcome(newRules, hw.getValue(), installed, settings.getValue(), online, goal);
+						String at = " on " + hw.getKey() + " / mods " + mods.getKey() + " / settings " + settings.getKey() + " / " + goal;
+						after.actions().stream().filter(a -> !before.actions().contains(a)).forEach(a -> changes.add("added " + a + at));
+						after.ticked().stream().filter(a -> before.actions().contains(a) && !before.ticked().contains(a))
+								.forEach(a -> changes.add("ticked " + a + at));
+						before.warnings().stream().filter(w -> !after.warnings().contains(w)).forEach(w -> changes.add("lost " + w + at));
 					}
 				}
 			}
 		}
-		return added;
+		return changes;
 	}
 
-	private static Set<String> ticked(io.github.chaotix345.rigtune.v010.core.rules.RulesDocument rules, HardwareProfile hw,
+	private record Outcome(Set<String> actions, Set<String> ticked, Set<String> warnings) {
+	}
+
+	private static Outcome outcome(io.github.chaotix345.rigtune.v010.core.rules.RulesDocument rules, HardwareProfile hw,
 			List<InstalledMod> mods, Map<String, String> settings, OnlineData online, Goal goal) {
-		Set<String> out = new TreeSet<>();
+		Outcome out = new Outcome(new TreeSet<>(), new TreeSet<>(), new TreeSet<>());
 		for (Recommendation r : Recommender.recommend(rules, hw, mods, new SettingsSnapshot(settings), online, goal).recommendations()) {
-			if (r.selectedByDefault() && !(r.action() instanceof Action.None)) {
-				out.add(r.action() instanceof Action.SetSetting set ? r.id() + "=" + set.newValue() : r.id());
+			if (r.id().startsWith("conflict:") || r.id().startsWith("advice:")) {
+				out.warnings().add(r.id());
+			}
+			if (!(r.action() instanceof Action.None)) {
+				String action = r.action() instanceof Action.SetSetting set ? r.id() + "=" + set.newValue() : r.id();
+				out.actions().add(action);
+				if (r.selectedByDefault()) {
+					out.ticked().add(action);
+				}
 			}
 		}
 		return out;
@@ -221,6 +285,10 @@ class RulesV1DifferentialTest {
 		out.put("indium+sodium", List.of("indium", "sodium"));
 		out.put("distanthorizons+sodium+iris", List.of("distanthorizons", "sodium", "iris"));
 		out.put("lambdynlights+sodium", List.of("lambdynlights", "sodium"));
+		// Rules whose slug isn't their mod id, referenced by other rules' conflictsWith.
+		out.put("moonrise", List.of("moonrise"));
+		out.put("c2me", List.of("c2me"));
+		out.put("zmatcomp", List.of("zmatcomp"));
 		out.put("every tracked mod", List.copyOf(everyModId));
 		return out;
 	}
