@@ -38,9 +38,12 @@ public final class PropertiesConfigPatcher {
 
 	// Returns true when the file changed, false when it already had these values.
 	public static boolean patchFile(Path file, Map<String, String> patches) throws IOException {
+		if (!Files.isRegularFile(file)) {
+			throw new IOException("No such file: " + file);
+		}
 		Properties properties = load(file);
 		if (properties == null) {
-			throw new IOException("No such file: " + file);
+			throw new IOException("Could not parse " + file + " as properties");
 		}
 		if (!apply(properties, patches)) {
 			return false;
@@ -49,24 +52,33 @@ public final class PropertiesConfigPatcher {
 		return true;
 	}
 
-	// One op per key; a key not already in the file is refused (key -> reason).
+	// One op per key; a key not already in the file (or a null value) is refused (key -> reason).
 	public static SodiumConfigPatcher.Staged stage(Path file, Map<String, String> patches) {
+		if (!Files.isRegularFile(file)) {
+			return refuseAll(patches, "no such file: " + file.getFileName());
+		}
 		Properties properties = load(file);
 		if (properties == null) {
-			Map<String, String> refused = new LinkedHashMap<>();
-			patches.keySet().forEach(key -> refused.put(key, "can't read " + file.getFileName()));
-			return new SodiumConfigPatcher.Staged(List.of(), refused);
+			return refuseAll(patches, "can't parse " + file.getFileName());
 		}
 		List<PendingActions.Op> ops = new ArrayList<>();
 		Map<String, String> refused = new LinkedHashMap<>();
 		for (Map.Entry<String, String> entry : patches.entrySet()) {
 			if (!properties.containsKey(entry.getKey())) {
 				refused.put(entry.getKey(), "no such key in " + file.getFileName());
-				continue;
+			} else if (entry.getValue() == null) {
+				refused.put(entry.getKey(), "no value");
+			} else {
+				ops.add(PendingActions.Op.patchProperties(file, Collections.singletonMap(entry.getKey(), entry.getValue())));
 			}
-			ops.add(PendingActions.Op.patchProperties(file, Collections.singletonMap(entry.getKey(), entry.getValue())));
 		}
 		return new SodiumConfigPatcher.Staged(List.copyOf(ops), refused);
+	}
+
+	private static SodiumConfigPatcher.Staged refuseAll(Map<String, String> patches, String reason) {
+		Map<String, String> refused = new LinkedHashMap<>();
+		patches.keySet().forEach(key -> refused.put(key, reason));
+		return new SodiumConfigPatcher.Staged(List.of(), refused);
 	}
 
 	// null when the file is missing or its content can't be parsed as properties (e.g. a malformed unicode escape).
@@ -83,14 +95,20 @@ public final class PropertiesConfigPatcher {
 		}
 	}
 
-	// Sets only keys already present; throws for the first one that isn't. Returns whether any value actually
-	// changed, so a no-op patch doesn't rewrite the file.
-	private static boolean apply(Properties properties, Map<String, String> patches) throws IOException {
-		boolean changed = false;
+	// Sets only keys already present; throws IllegalArgumentException (not IOException -- this is a permanent
+	// failure, not a transient one ApplyExecutor should retry) for the first key that's missing or whose value is
+	// null. Returns whether any value actually changed, so a no-op patch doesn't rewrite the file.
+	private static boolean apply(Properties properties, Map<String, String> patches) {
 		for (Map.Entry<String, String> entry : patches.entrySet()) {
 			if (!properties.containsKey(entry.getKey())) {
-				throw new IOException("No such key: " + entry.getKey());
+				throw new IllegalArgumentException("No such key: " + entry.getKey());
 			}
+			if (entry.getValue() == null) {
+				throw new IllegalArgumentException("Cannot set " + entry.getKey() + ": no value");
+			}
+		}
+		boolean changed = false;
+		for (Map.Entry<String, String> entry : patches.entrySet()) {
 			if (!Objects.equals(properties.getProperty(entry.getKey()), entry.getValue())) {
 				properties.setProperty(entry.getKey(), entry.getValue());
 				changed = true;

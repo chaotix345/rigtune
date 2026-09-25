@@ -71,15 +71,41 @@ class PropertiesConfigPatcherTest {
 
 	@Test
 	void patchFileThrowsForAMissingFile(@TempDir Path dir) {
-		assertThrows(IOException.class, () -> PropertiesConfigPatcher.patchFile(dir.resolve("absent.properties"), Map.of("a", "1")));
+		IOException e = assertThrows(IOException.class, () -> PropertiesConfigPatcher.patchFile(dir.resolve("absent.properties"), Map.of("a", "1")));
+		assertTrue(e.getMessage().contains("No such file"), e.getMessage());
 	}
 
+	// Review finding (Minor 5): a malformed unicode escape is a parse failure, not a missing file -- the message
+	// should say so, so the reason doesn't mislead whoever reads the executor's log.
 	@Test
-	void patchFileThrowsForAMissingKeyAndLeavesTheFileAlone(@TempDir Path dir) throws IOException {
+	void patchFileThrowsAnAccurateMessageForAFileThatFailsToParse(@TempDir Path dir) throws IOException {
+		Path broken = Files.writeString(dir.resolve("broken.properties"), "maxShadowRenderDistance=\\u12");
+		IOException e = assertThrows(IOException.class, () -> PropertiesConfigPatcher.patchFile(broken, Map.of("maxShadowRenderDistance", "16")));
+		assertTrue(e.getMessage().contains("parse"), e.getMessage());
+	}
+
+	// Review finding (Minor 5): a missing key is a permanent failure, not a transient one -- it must not be an
+	// IOException, which ApplyExecutor retries up to 10 times (~3 s) before giving up on something that will never
+	// succeed.
+	@Test
+	void patchFileThrowsAnUncheckedExceptionForAMissingKeyAndLeavesTheFileAlone(@TempDir Path dir) throws IOException {
 		Path file = Files.writeString(dir.resolve("iris.properties"), fixture());
 		String before = Files.readString(file, StandardCharsets.UTF_8);
 
-		assertThrows(IOException.class, () -> PropertiesConfigPatcher.patchFile(file, Map.of("noSuchKey", "1")));
+		assertThrows(IllegalArgumentException.class, () -> PropertiesConfigPatcher.patchFile(file, Map.of("noSuchKey", "1")));
+		assertEquals(before, Files.readString(file, StandardCharsets.UTF_8));
+	}
+
+	// Review finding (Minor 6): java.util.Hashtable (which Properties extends) throws a bare NullPointerException
+	// for a null value; reject it with a clear message instead.
+	@Test
+	void patchFileRejectsANullValueAndLeavesTheFileAlone(@TempDir Path dir) throws IOException {
+		Path file = Files.writeString(dir.resolve("iris.properties"), fixture());
+		String before = Files.readString(file, StandardCharsets.UTF_8);
+		Map<String, String> patches = new LinkedHashMap<>();
+		patches.put("maxShadowRenderDistance", null);
+
+		assertThrows(IllegalArgumentException.class, () -> PropertiesConfigPatcher.patchFile(file, patches));
 		assertEquals(before, Files.readString(file, StandardCharsets.UTF_8));
 	}
 
@@ -97,15 +123,29 @@ class PropertiesConfigPatcherTest {
 	}
 
 	@Test
-	void stagingRefusesEverythingForAMissingOrBrokenFile(@TempDir Path dir) throws IOException {
+	void stagingRefusesANullValue(@TempDir Path dir) throws IOException {
+		Path file = Files.writeString(dir.resolve("iris.properties"), fixture());
+		Map<String, String> patches = new LinkedHashMap<>();
+		patches.put("maxShadowRenderDistance", null);
+
+		SodiumConfigPatcher.Staged staged = PropertiesConfigPatcher.stage(file, patches);
+
+		assertTrue(staged.ops().isEmpty());
+		assertEquals(List.of("maxShadowRenderDistance"), List.copyOf(staged.refused().keySet()));
+	}
+
+	@Test
+	void stagingRefusesEverythingForAMissingOrUnparseableFileWithDistinctReasons(@TempDir Path dir) throws IOException {
 		Map<String, String> patches = Map.of("maxShadowRenderDistance", "16");
 		SodiumConfigPatcher.Staged missing = PropertiesConfigPatcher.stage(dir.resolve("absent.properties"), patches);
 		assertTrue(missing.ops().isEmpty());
 		assertEquals(patches.keySet(), missing.refused().keySet());
+		assertTrue(missing.refused().get("maxShadowRenderDistance").contains("no such file"), missing.refused().toString());
 
 		Path broken = Files.writeString(dir.resolve("broken.properties"), "maxShadowRenderDistance=\\u12");
 		SodiumConfigPatcher.Staged brokenStaged = PropertiesConfigPatcher.stage(broken, patches);
 		assertTrue(brokenStaged.ops().isEmpty());
 		assertEquals(patches.keySet(), brokenStaged.refused().keySet());
+		assertTrue(brokenStaged.refused().get("maxShadowRenderDistance").contains("parse"), brokenStaged.refused().toString());
 	}
 }
