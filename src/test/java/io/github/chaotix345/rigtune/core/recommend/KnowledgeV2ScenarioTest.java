@@ -118,7 +118,8 @@ class KnowledgeV2ScenarioTest {
 		for (String renderer : List.of("NVIDIA GeForce RTX 2060", "NVIDIA GeForce GTX 1660 SUPER")) {
 			Recommendation rec = run(gpu(renderer), "sodium").get("add:nvidium");
 			assertNotNull(rec, renderer);
-			assertTrue(rec.selectedByDefault(), renderer);
+			// Review 3, rules-accuracy-3: opt-in, a beta renderer pinned to an exact Sodium build.
+			assertFalse(rec.selectedByDefault(), renderer);
 		}
 		assertFalse(run(gpu("NVIDIA GeForce GTX 1080"), "sodium").containsKey("add:nvidium"));
 		assertFalse(run(Fixtures.userRig(), "sodium").containsKey("add:nvidium"), "AMD");
@@ -128,7 +129,11 @@ class KnowledgeV2ScenarioTest {
 		for (String renderer : OTHER_GPUS) {
 			assertFalse(run(gpu(renderer), "sodium").containsKey("add:nvidium"), renderer);
 		}
-		assertFalse(run(gpu("NVIDIA GeForce RTX 2060 Laptop GPU"), "sodium").containsKey("add:nvidium"), "GPU tier 2");
+		// Review 3, rules-accuracy-1: the model whitelist decides, not the GPU tier (these laptop GPUs are tier 2).
+		for (String renderer : List.of("NVIDIA GeForce RTX 2060 Laptop GPU", "NVIDIA GeForce RTX 2070 Laptop GPU",
+				"NVIDIA GeForce RTX 3050 Ti Laptop GPU", "NVIDIA GeForce GTX 1650 Ti Laptop GPU")) {
+			assertTrue(run(gpu(renderer), "sodium").containsKey("add:nvidium"), renderer);
+		}
 		assertFalse(run(gpu("NVIDIA GeForce RTX 2060")).containsKey("add:nvidium"), "needs Sodium");
 		assertFalse(run(withFlags(gpu("NVIDIA GeForce RTX 2060"), SHADERS), "sodium").containsKey("add:nvidium"), "off with shaders");
 	}

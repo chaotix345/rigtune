@@ -51,7 +51,7 @@ class ApplyExecutorTest {
 
 	@Test
 	void appliesPlanAndIsIdempotent() throws IOException {
-		Files.writeString(mods.resolve("sodium-0.9.2.jar.rigtune-pending"), "new");
+		TestJars.modJar(mods.resolve("sodium-0.9.2.jar.rigtune-pending"), "sodium");
 		Files.writeString(mods.resolve("sodium-0.9.1.jar"), "old");
 		Path sodium = config.resolve("sodium-options.json");
 		Files.writeString(sodium, "{\"performance\":{\"chunk_builder_threads\":0,\"use_fog_occlusion\":true}}");
@@ -63,7 +63,7 @@ class ApplyExecutorTest {
 		ApplyResult first = executor.run(plan, pending);
 
 		assertEquals(List.of(Status.OK, Status.OK, Status.OK), statuses(first));
-		assertEquals("new", Files.readString(mods.resolve("sodium-0.9.2.jar")));
+		assertEquals("sodium", ModJars.readModId(mods.resolve("sodium-0.9.2.jar")));
 		assertEquals("old", Files.readString(mods.resolve("sodium-0.9.1.jar.disabled")));
 		assertFalse(Files.exists(mods.resolve("sodium-0.9.2.jar.rigtune-pending")));
 		assertFalse(Files.exists(mods.resolve("sodium-0.9.1.jar")));
@@ -97,7 +97,7 @@ class ApplyExecutorTest {
 
 	@Test
 	void failedOpsStayPendingAndNothingIsOverwritten() throws IOException {
-		Files.writeString(mods.resolve("a.jar.rigtune-pending"), "new a");
+		TestJars.modJar(mods.resolve("a.jar.rigtune-pending"), "a");
 		Files.writeString(mods.resolve("a.jar"), "existing a");
 		Files.writeString(mods.resolve("b.jar"), "b");
 		Op clash = Op.enableFile(mods.resolve("a.jar.rigtune-pending"), mods.resolve("a.jar"));
@@ -109,7 +109,7 @@ class ApplyExecutorTest {
 		assertEquals(List.of(Status.FAILED, Status.OK, Status.FAILED), statuses(result));
 		assertFalse(result.allSucceeded());
 		assertEquals("existing a", Files.readString(mods.resolve("a.jar")));
-		assertEquals("new a", Files.readString(mods.resolve("a.jar.rigtune-pending")));
+		assertEquals("a", ModJars.readModId(mods.resolve("a.jar.rigtune-pending")));
 		assertEquals(List.of(clash.withAttempts(1), missing.withAttempts(1)), PendingActions.load(pending).ops());
 		assertEquals(result, ApplyResult.load(ApplyResult.defaultPath(config)));
 	}
@@ -245,7 +245,7 @@ class ApplyExecutorTest {
 	void resultsSayWhereTheFileEndedUp() throws IOException {
 		Files.writeString(mods.resolve("indium.jar"), "new");
 		Files.writeString(mods.resolve("indium.jar.disabled"), "old");
-		Files.writeString(mods.resolve("a.jar.rigtune-pending"), "a");
+		TestJars.modJar(mods.resolve("a.jar.rigtune-pending"), "a");
 
 		ApplyResult result = executor.run(plan(Op.disableFile(mods.resolve("indium.jar")),
 				Op.enableFile(mods.resolve("a.jar.rigtune-pending"), mods.resolve("a.jar"))), pending);
@@ -376,7 +376,7 @@ class ApplyExecutorTest {
 	// is briefly denied and then succeeds, instead of leaving the file stuck under the "won't fit" name forever.
 	@Test
 	void rollbackRetriesASharingViolationWithBackoff() throws IOException {
-		Files.writeString(mods.resolve("a.jar.rigtune-pending"), "new a");
+		TestJars.modJar(mods.resolve("a.jar.rigtune-pending"), "a");
 		Op enable = Op.enableFile(mods.resolve("a.jar.rigtune-pending"), mods.resolve("a.jar"));
 		Op missing = Op.enableFile(mods.resolve("gone.jar.rigtune-pending"), mods.resolve("gone.jar"));
 		AtomicInteger undoCalls = new AtomicInteger();

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": 7,
-  "generatedAt": "2026-09-25T03:48:55Z",
+  "revision": 9,
+  "generatedAt": "2026-09-25T06:37:53Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -768,6 +768,9 @@
             }
           },
           {
+            "gpuTierAtMost": 2
+          },
+          {
             "flags": [
               "shaders-enabled"
             ]
@@ -776,6 +779,7 @@
       },
       "avoidReason": "Nvidium needs an NVIDIA GTX 16-series or RTX graphics card (Turing or newer, for mesh shaders) and switches itself off while a shader pack is on, so it can't help on this setup.",
       "conflictsWith": [],
+      "defaultSelected": false,
       "upstream": {
         "fabulouslyOptimized": false,
         "additive": false

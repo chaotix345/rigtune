@@ -613,6 +613,30 @@ class UndoPlannerTest {
 		assertEquals(1, items(all(), Action.REVERT).size());
 	}
 
+	// Review 3, apply-safety-1: a jar with no readable mod id can't be checked for duplicates, so it isn't re-enabled.
+	@Test
+	void reEnablingAFileThatIsNotAReadableModJarIsSkipped() {
+		state.files.put("indium.jar.disabled", null);
+		entry("e1", disabled("indium", "indium.jar", "indium.jar.disabled", null));
+
+		UndoPlan.Item item = only(all(), Action.SKIP);
+
+		assertTrue(item.reason().contains("indium.jar.disabled") && item.reason().contains("isn't a readable Fabric mod jar"), item.reason());
+		assertTrue(all().script().fileOps().isEmpty());
+	}
+
+	@Test
+	void aGroupThatWouldReEnableAnUnreadableJarIsSkippedAsAWhole() {
+		state.files.put("sodium-0.7.0.jar.disabled", null);
+		state.jar("sodium-0.7.1.jar", "sodium");
+		entry("e1", disabled("sodium", "sodium-0.7.0.jar", "sodium-0.7.0.jar.disabled", "g1"), enabled("sodium", "sodium-0.7.1.jar", "g1"));
+
+		Result result = all();
+
+		assertEquals(2, items(result, Action.SKIP).size());
+		assertTrue(result.script().fileOps().isEmpty());
+	}
+
 	// --- re-checking the plan that was shown (review M8)
 
 	@Test

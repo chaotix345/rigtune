@@ -130,8 +130,8 @@ disable and set actions.
   rebuilt the report and looked mods up on Modrinth twice (coordinator review, item 2).
 - The remote step is skipped entirely when `ClientSettings.shared(configDir).remoteRulesAllowed()`
   is false (test: zero requests).
-- `-Drigtune.rules.baseUrl` must be an http(s) URL with a host; a trailing slash is added; anything
-  else logs a warning and uses the default.
+- `-Drigtune.rules.baseUrl` must be an https URL with a host, or plain http on localhost/127.x.x.x/[::1]
+  (review 3, security-3); a trailing slash is added; anything else logs a warning and uses the default.
 - `settingsChanged()` schedules a new load and rescans. The generation is bumped when a load is
   scheduled; the check and the assignment of the rules share a lock, so an older load can't overwrite
   a newer one's rules. `RulesSources.load` takes a `BooleanSupplier` asked before each request

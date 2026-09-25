@@ -49,6 +49,7 @@ public final class UndoPlanner {
 	static final String GROUP_CHANGED = "What's staged with it changed since this list was made";
 	static final String STAGED_TOGETHER = "Staged together with a change above, so it's cancelled too";
 	static final String FILE_GONE = "%s is no longer in the mods folder";
+	static final String NOT_A_MOD = "%s isn't a readable Fabric mod jar, so RigTune can't check that re-enabling it is safe";
 	static final String FILE_EXISTS = "%s already exists";
 	static final String BREAKS = "Undoing it would stop the game from starting: %s";
 	static final String GONE = "It was undone or changed since this list was made";
@@ -502,6 +503,10 @@ public final class UndoPlanner {
 		}
 		if (sim.containsKey(file)) {
 			return FILE_EXISTS.formatted(file);
+		}
+		// Without a mod id neither this plan nor the executor could tell it isn't a second copy of a mod (review 3).
+		if (sim.get(disabled).info() == null) {
+			return NOT_A_MOD.formatted(disabled);
 		}
 		Content content = sim.remove(disabled);
 		sim.put(file, content);

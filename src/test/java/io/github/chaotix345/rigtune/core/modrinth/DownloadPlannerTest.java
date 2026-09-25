@@ -44,6 +44,7 @@ class DownloadPlannerTest {
 	final List<String> fetched = new ArrayList<>();
 	final Set<String> failing = new HashSet<>();
 	final Set<String> failOnce = new HashSet<>();
+	final Set<String> notMods = new HashSet<>();
 
 	@BeforeEach
 	void setUp() throws IOException {
@@ -55,11 +56,15 @@ class DownloadPlannerTest {
 		client.latestByProject.put(v.projectId(), v);
 	}
 
-	// Files are named <version id>.jar and hold a mod whose id is the version id minus its trailing "V", lower-cased.
+	// Files are named <version id>.jar and hold a mod whose id is the version id minus its trailing "V", lower-cased
+	// (the ones in notMods hold no mod).
 	private Path fetch(ModFile file) throws IOException {
 		fetched.add(file.filename());
 		if (failing.contains(file.filename()) || failOnce.remove(file.filename())) {
 			throw new IOException("stalled: " + file.filename());
+		}
+		if (notMods.contains(file.filename())) {
+			return Files.writeString(SafeFileNames.resolveJar(mods, file.filename(), PendingActions.PENDING_SUFFIX), "not a jar");
 		}
 		String base = file.filename().substring(0, file.filename().length() - ".jar".length());
 		String id = (base.endsWith("V") ? base.substring(0, base.length() - 1) : base).toLowerCase(Locale.ROOT);
@@ -200,6 +205,36 @@ class DownloadPlannerTest {
 		List<Op> joined = result.ops().stream().filter(op -> !op.to().endsWith("dV.jar")).toList();
 		assertEquals(1, groups(joined), result.ops().toString());
 		assertEquals(2, groups(result.ops()));
+	}
+
+	// Review 3, apply-safety-1: a download with no readable fabric.mod.json id can't be checked for duplicates, so it
+	// is deleted and its recommendation fails.
+	@Test
+	void aDownloadThatIsNotAFabricModIsDroppedWithAnError() {
+		put("a", version("aV", "A", "1", T));
+		put("b", version("bV", "B", "1", T));
+		notMods.add("aV.jar");
+
+		DownloadPlanner.Result result = plan(Set.of(), add("a", "A"), add("b", "B"));
+
+		assertEquals(List.of("add-b"), result.ids());
+		assertEquals(List.of("bV.jar"), targets(result.ops()));
+		assertEquals(1, result.errors().size(), result.errors().toString());
+		assertTrue(result.errors().getFirst().startsWith("Add a: aV.jar is not a Fabric mod jar"), result.errors().getFirst());
+		assertFalse(Files.exists(mods.resolve("aV.jar" + PendingActions.PENDING_SUFFIX)));
+	}
+
+	@Test
+	void aDependencyThatIsNotAFabricModFailsTheRecommendation() {
+		libraryUsers();
+		notMods.add("libV.jar");
+
+		DownloadPlanner.Result result = plan(Set.of(), add("a", "A"));
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of(), result.ops());
+		assertEquals(1, result.errors().size(), result.errors().toString());
+		assertFalse(Files.exists(mods.resolve("libV.jar" + PendingActions.PENDING_SUFFIX)));
 	}
 
 	@Test

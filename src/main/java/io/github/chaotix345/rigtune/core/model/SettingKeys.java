@@ -29,7 +29,7 @@ public final class SettingKeys {
 
 	// One or more dot-separated identifier segments: letters, digits, underscore only. No path traversal ("..", "/",
 	// "\"), no leading/trailing/empty segment, no whitespace, quotes or other characters that could break the TOML
-	// or properties syntax the DH/Iris patchers speak.
+	// or properties syntax the DH/Iris patchers speak, or the JSON path the Sodium patcher walks (review 3, security-2).
 	private static final Pattern SAFE_DOTTED_KEY = Pattern.compile("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)*");
 
 	private SettingKeys() {
@@ -37,7 +37,7 @@ public final class SettingKeys {
 
 	public static boolean changeable(String key) {
 		return key != null && (VANILLA_ALLOWED.contains(key)
-				|| key.startsWith(SODIUM_PREFIX) && key.length() > SODIUM_PREFIX.length()
+				|| safeNamespaced(key, SODIUM_PREFIX)
 				|| safeNamespaced(key, DH_PREFIX)
 				|| safeNamespaced(key, IRIS_PREFIX));
 	}

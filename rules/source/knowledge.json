@@ -327,13 +327,14 @@
 			"impact": "high",
 			"stability": "beta",
 			"reason": "Replaces Sodium's terrain renderer with one built on NVIDIA mesh shaders, which can greatly raise FPS at high render distances.",
-			"recommendWhen": { "gpuVendor": ["nvidia"], "gpuIntegrated": false, "gpuTierAtLeast": 3, "gpuModelMatches": "(?i)GTX\\s*16[56]0\\b|RTX\\s*(?:20[6-8]0|30[5-9]0|40[5-9]0|50[5-9]0)\\b|Quadro\\s*RTX\\s*\\d{4}\\b|RTX\\s*A\\d{3,4}\\b|RTX\\s*\\d{4}\\s*Ada\\b", "modPresent": ["sodium"] },
+			"recommendWhen": { "gpuVendor": ["nvidia"], "gpuIntegrated": false, "gpuModelMatches": "(?i)GTX\\s*16[56]0\\b|RTX\\s*(?:20[6-8]0|30[5-9]0|40[5-9]0|50[5-9]0)\\b|Quadro\\s*RTX\\s*\\d{4}\\b|RTX\\s*A\\d{3,4}\\b|RTX\\s*\\d{4}\\s*Ada\\b", "modPresent": ["sodium"] },
 			"avoidWhen": { "anyOf": [ { "not": { "gpuVendor": ["nvidia"] } }, { "gpuModelMatches": "(?i)GTX\\s*(?:[4-9]\\d0|10[5-8]0)M?\\b|GeForce\\s*(?:GTS?\\s*)?\\d{3,4}(?:M|MX)?\\b|\\bMX\\s*[1-3]\\d0\\b|TITAN\\s*(?:X|Xp|V|Black|Z)\\b|GTX\\s*TITAN|Quadro\\s*(?:[KMP]\\d{3,4}M?|G[PV]100)\\b" }, { "flags": ["shaders-enabled"] } ] },
 			"avoidReason": "Nvidium needs an NVIDIA GTX 16-series or RTX graphics card (Turing or newer, for mesh shaders) and switches itself off while a shader pack is on, so it can't help on this setup.",
 			"conflictsWith": [],
+			"defaultSelected": false,
 			"v1": {
 				"recommendWhen": { "gpuVendor": ["nvidia"], "gpuIntegrated": false, "gpuTierAtLeast": 4, "modPresent": ["sodium"] },
-				"avoidWhen": { "anyOf": [ { "not": { "gpuVendor": ["nvidia"] } }, { "flags": ["shaders-enabled"] } ] }
+				"avoidWhen": { "anyOf": [ { "not": { "gpuVendor": ["nvidia"] } }, { "gpuTierAtMost": 2 }, { "flags": ["shaders-enabled"] } ] }
 			}
 		},
 		{

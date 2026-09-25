@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": 7,
-  "generatedAt": "2026-09-25T03:48:55Z",
+  "revision": 9,
+  "generatedAt": "2026-09-25T06:37:53Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -753,7 +753,6 @@
           "nvidia"
         ],
         "gpuIntegrated": false,
-        "gpuTierAtLeast": 3,
         "gpuModelMatches": "(?i)GTX\\s*16[56]0\\b|RTX\\s*(?:20[6-8]0|30[5-9]0|40[5-9]0|50[5-9]0)\\b|Quadro\\s*RTX\\s*\\d{4}\\b|RTX\\s*A\\d{3,4}\\b|RTX\\s*\\d{4}\\s*Ada\\b",
         "modPresent": [
           "sodium"
@@ -780,6 +779,7 @@
       },
       "avoidReason": "Nvidium needs an NVIDIA GTX 16-series or RTX graphics card (Turing or newer, for mesh shaders) and switches itself off while a shader pack is on, so it can't help on this setup.",
       "conflictsWith": [],
+      "defaultSelected": false,
       "upstream": {
         "fabulouslyOptimized": false,
         "additive": false
