@@ -75,7 +75,7 @@ public class BenchmarkMenuScreen extends Screen {
 			y += 24;
 		}
 		hintY = y;
-		y += 2 * LINE + 4;
+		y += (scene == Scene.CURRENT ? 3 : 2) * LINE + 4;
 
 		String refusal = BenchmarkController.unavailable(minecraft, scene);
 		Optional<BenchmarkRecord> before = BenchmarkStore.history().openBefore(scene.name(), HardwareProbe.minecraftVersion());
@@ -140,7 +140,13 @@ public class BenchmarkMenuScreen extends Screen {
 		}
 		String hint = "rigtune.benchmark.menu.scene." + scene.name().toLowerCase(Locale.ROOT) + ".hint";
 		graphics.centeredText(font, Component.translatable(hint), width / 2, hintY, COLOR_LABEL);
-		graphics.centeredText(font, Component.translatable("rigtune.benchmark.menu.duration"), width / 2, hintY + LINE, COLOR_LABEL);
+		int durationY = hintY + LINE;
+		// docs/v0.3/SPEC.md E-M2: Tune's higher render distances make the server load, generate and save more of this world.
+		if (scene == Scene.CURRENT) {
+			graphics.centeredText(font, Component.translatable("rigtune.benchmark.menu.scene.current.saves"), width / 2, durationY, COLOR_LABEL);
+			durationY += LINE;
+		}
+		graphics.centeredText(font, Component.translatable("rigtune.benchmark.menu.duration"), width / 2, durationY, COLOR_LABEL);
 		if (status != null) {
 			graphics.centeredText(font, status, width / 2, statusY, COLOR_WARN);
 		}

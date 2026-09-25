@@ -1,0 +1,42 @@
+# ./gradlew :26.2:runBenchmarkAutorun -PrigtuneAutorun=benchmark-world-tune (options.txt renderDistance:8), 2026-09-26, commit 3b2b2d4; the RigTune lines of latest.log
+[04:58:12] [RigTune worker/INFO] (RigTune) Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Technologies Inc., renderer=AMD Radeon RX 7800 XT, driverVersion=3.3.0 Core Profile Context 26.8.1.260810, backend=OPENGL, vramMb=16368], totalRamMb=31849, maxHeapMb=7964, display=DisplayInfo[width=2560, height=1440, refreshRate=180, fullscreen=false], hasBattery=false, onBattery=false, osName=Windows 11 10.0, mcVersion=26.2, flags=[sodium-workaround:AMD_GAME_OPTIMIZATION_BROKEN]]
+[04:58:15] [Render thread/INFO] (RigTune) Benchmark world: IDLE -> OPENING (creating the save)
+[04:58:17] [Server thread/INFO] (Minecraft) Loading 0 persistent chunks...
+[04:58:17] [Render thread/INFO] (RigTune) Dev autorun: mode benchmark-world-tune: start from the title screen at render distance 8 -> started
+[04:58:18] [Server thread/INFO] (Minecraft) Loading 47 chunks for player spawn...
+[04:58:20] [Render thread/INFO] (RigTune) Benchmark world: OPENING -> SETTING_UP (SET_UP Observation[worldLoaded=true, multiplayer=false, serverRunning=true, singleplayerReady=true, benchmarkSave=true, backOnMenu=false, atCamera=false])
+[04:58:22] [Render thread/INFO] (RigTune) Benchmark world: SETTING_UP -> READY (READY Observation[worldLoaded=true, multiplayer=false, serverRunning=true, singleplayerReady=true, benchmarkSave=true, backOnMenu=false, atCamera=true])
+[04:58:22] [Render thread/INFO] (RigTune) Benchmark world: ready at (0.5, 133.0, 192.5)
+[04:58:22] [Render thread/INFO] (RigTune) Benchmark started: TUNE in BENCHMARK_WORLD, target 170.0 FPS (uncapped), start Knobs[renderDistance=8, simulationDistance=12, dhRendering=false, shaders=false]
+[04:58:26] [Render thread/INFO] (RigTune) Benchmark settle RENDER_DISTANCE Knobs[renderDistance=8, simulationDistance=12, dhRendering=false, shaders=false]: 149 of 149 chunks within 7 present, client holds 267, 4.4 s
+[04:58:44] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=8, simulationDistance=12, dhRendering=false, shaders=false]: 51482 frames, avg 3198 FPS, 1% low 594 FPS, client chunks 329 (frame limit 260, NONE)
+[04:58:46] [Render thread/INFO] (RigTune) Benchmark settle RENDER_DISTANCE Knobs[renderDistance=10, simulationDistance=12, dhRendering=false, shaders=false]: 253 of 253 chunks within 9 present, client holds 454, 2.0 s
+[04:59:03] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=10, simulationDistance=12, dhRendering=false, shaders=false]: 45536 frames, avg 2837 FPS, 1% low 592 FPS, client chunks 473 (frame limit 260, NONE)
+[04:59:07] [Render thread/INFO] (RigTune) Benchmark settle RENDER_DISTANCE Knobs[renderDistance=14, simulationDistance=12, dhRendering=false, shaders=false]: 529 of 529 chunks within 13 present, client holds 716, 3.5 s
+[04:59:24] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=14, simulationDistance=12, dhRendering=false, shaders=false]: 36889 frames, avg 2298 FPS, 1% low 392 FPS, client chunks 841 (frame limit 260, NONE)
+[04:59:35] [Render thread/INFO] (RigTune) Benchmark settle RENDER_DISTANCE Knobs[renderDistance=22, simulationDistance=12, dhRendering=false, shaders=false]: 1373 of 1373 chunks within 21 present, client holds 1694, 10.6 s
+[04:59:53] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=22, simulationDistance=12, dhRendering=false, shaders=false]: 27985 frames, avg 1744 FPS, 1% low 426 FPS, client chunks 1873 (frame limit 260, NONE)
+[05:00:13] [Render thread/INFO] (RigTune) Benchmark settle RENDER_DISTANCE Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=false]: 2999 of 3001 chunks within 31 present, client holds 3468, 20.0 s, timed out waiting for the sections
+[05:00:30] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=false]: 18243 frames, avg 1133 FPS, 1% low 250 FPS, client chunks 3725 (frame limit 260, NONE)
+[05:00:32] [Render thread/INFO] (RigTune) Benchmark settle REPEAT Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=false]: 3001 of 3001 chunks within 31 present, client holds 3725, 2.0 s
+[05:00:50] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=false]: 19192 frames, avg 1199 FPS, 1% low 543 FPS, client chunks 3725 (frame limit 260, NONE)
+[05:00:52] [Render thread/INFO] (RigTune) Benchmark settle REPEAT Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=false]: 3001 of 3001 chunks within 31 present, client holds 3725, 2.0 s
+[05:01:10] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=false]: 19069 frames, avg 1192 FPS, 1% low 538 FPS, client chunks 3725 (frame limit 260, NONE)
+[05:01:10] [Render thread/INFO] (RigTune) Benchmark finished: chosen Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=false], target 170.0 FPS met true, result Aggregate[avgFps=1195.6157771883263, onePercentLowFps=540.3079408388332, p99FrameMs=1.52135, repeats=2, cv=0.005762276883515238], deadline hit false
+[05:01:10] [Render thread/INFO] (RigTune) Benchmark world: READY -> LEAVING (save and quit)
+[05:01:12] [Render thread/INFO] (RigTune) Benchmark world: LEAVING -> IDLE (FINISH_EXIT Observation[worldLoaded=false, multiplayer=false, serverRunning=false, singleplayerReady=false, benchmarkSave=false, backOnMenu=false, atCamera=false])
+[05:01:12] [Render thread/INFO] (RigTune) Dev autorun: back from the benchmark world: world state IDLE, screen BenchmarkResultScreen, outcome finished, record 2026-09-25T19:01:10Z-87d9
+[05:01:12] [Render thread/INFO] (RigTune) Dev autorun: step 1 RENDER_DISTANCE RD 8: 149 of 149 chunks within 7 present, client holds 267, settle 4.4 s
+[05:01:12] [Render thread/INFO] (RigTune) Dev autorun: step 2 RENDER_DISTANCE RD 10: 253 of 253 chunks within 9 present, client holds 454, settle 2.0 s
+[05:01:12] [Render thread/INFO] (RigTune) Dev autorun: step 3 RENDER_DISTANCE RD 14: 529 of 529 chunks within 13 present, client holds 716, settle 3.5 s
+[05:01:12] [Render thread/INFO] (RigTune) Dev autorun: step 4 RENDER_DISTANCE RD 22: 1373 of 1373 chunks within 21 present, client holds 1694, settle 10.6 s
+[05:01:12] [Render thread/INFO] (RigTune) Dev autorun: step 5 RENDER_DISTANCE RD 32: 2999 of 3001 chunks within 31 present, client holds 3468, settle 20.0 s (timed out)
+[05:01:12] [Render thread/INFO] (RigTune) Dev autorun: step 6 REPEAT RD 32: 3001 of 3001 chunks within 31 present, client holds 3725, settle 2.0 s
+[05:01:12] [Render thread/INFO] (RigTune) Dev autorun: step 7 REPEAT RD 32: 3001 of 3001 chunks within 31 present, client holds 3725, settle 2.0 s
+[05:01:12] [Render thread/INFO] (RigTune) Dev autorun: render distance 8: avg 3198 FPS, 1% low 594 FPS, meets
+[05:01:12] [Render thread/INFO] (RigTune) Dev autorun: render distance 10: avg 2837 FPS, 1% low 592 FPS, meets
+[05:01:12] [Render thread/INFO] (RigTune) Dev autorun: render distance 14: avg 2298 FPS, 1% low 392 FPS, meets
+[05:01:12] [Render thread/INFO] (RigTune) Dev autorun: render distance 22: avg 1744 FPS, 1% low 426 FPS, meets
+[05:01:12] [Render thread/INFO] (RigTune) Dev autorun: render distance 32: avg 1133 FPS, 1% low 250 FPS, meets
+[05:01:12] [Render thread/INFO] (RigTune) Dev autorun: target 170 FPS, chosen Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=false], Target met at the maximum render distance (32)
+[05:01:14] [Render thread/INFO] (RigTune) Dev autorun: screen now BenchmarkResultScreen; PASSED; stopping the client

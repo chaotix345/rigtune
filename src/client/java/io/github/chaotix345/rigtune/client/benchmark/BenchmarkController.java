@@ -5,6 +5,7 @@ import io.github.chaotix345.rigtune.client.compat.OptionalMods;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen;
+import io.github.chaotix345.rigtune.core.apply.PropertiesConfigPatcher;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkHistory;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkMath;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
@@ -18,6 +19,7 @@ import io.github.chaotix345.rigtune.core.benchmark.Knobs;
 import io.github.chaotix345.rigtune.core.benchmark.PlannerResult;
 import io.github.chaotix345.rigtune.core.benchmark.Protocol;
 import io.github.chaotix345.rigtune.core.benchmark.SessionResult;
+import io.github.chaotix345.rigtune.core.benchmark.SettleCheck;
 import io.github.chaotix345.rigtune.core.benchmark.Step;
 import io.github.chaotix345.rigtune.core.benchmark.Throttle;
 import io.github.chaotix345.rigtune.core.benchmark.Timing;
@@ -38,14 +40,19 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.function.Consumer;
 
 // Runs a benchmark session from client ticks (docs/v0.2/SPEC.md item 6): for each core Step it sets the knobs, waits
-// for the chunk sections to compile, sweeps the camera for the warm-up, then records frame times over the protocol's
+// until the chunks within the render distance have arrived and their sections compiled (SettleCheck, docs/v0.3/SPEC.md
+// 3f), sweeps the camera for the warm-up, then records frame times over the protocol's
 // sweeps. While it runs the frame rate is uncapped, the GUI hidden and the player held in place; test values are in
 // memory only and options.txt is written once, with the original values, at the end. Every way a run ends (finish,
 // Esc or any screen, leaving the world, an exception, the client stopping) restores everything.
@@ -53,8 +60,9 @@ public final class BenchmarkController {
 	public static final int MIN_RD = 4;
 	public static final int MAX_RD = 32;
 	private static final int MIN_SD = 5;
-	private static final int READY_TICKS = 10;
 	private static final int MAX_TARGET_FPS = 240;
+	// Development only (docs/v0.3/SPEC.md E-L1): a fixed target FPS, e.g. to make the shader advice show in a smoke run.
+	static final String DEV_TARGET_FPS = "rigtune.dev.targetFps";
 	private static final String MAX_FPS = "vanilla.maxFps";
 	private static final String VSYNC = "vanilla.enableVsync";
 	private static final String INACTIVITY_LIMIT = "vanilla.inactivityFpsLimit";
@@ -67,9 +75,16 @@ public final class BenchmarkController {
 	private static final String DYNAMIC_FPS = "dynamic_fps";
 
 	// maxSteps: render distance steps. The rest of the timing is derived: the defaults are docs/v0.2/SPEC.md's, and
-	// shorter sweeps (game tests) shorten the warm-up and the quick protocol with them.
-	public record Config(int maxSteps, double sweepSeconds, double settleSeconds, double timeoutSeconds) {
+	// shorter sweeps (game tests) shorten the warm-up and the quick protocol with them. timeoutSeconds: the longest a
+	// step waits for its terrain (docs/v0.3/SPEC.md E-M3). targetFps: a fixed target instead of the refresh-rate cap, and
+	// maxRenderDistance: the highest render distance Tune may test (both for game tests).
+	public record Config(int maxSteps, double sweepSeconds, double settleSeconds, double timeoutSeconds, @Nullable Double targetFps,
+			int maxRenderDistance) {
 		public static final Config DEFAULT = new Config(6, 8.0, 2.0, 20.0);
+
+		public Config(int maxSteps, double sweepSeconds, double settleSeconds, double timeoutSeconds) {
+			this(maxSteps, sweepSeconds, settleSeconds, timeoutSeconds, null, MAX_RD);
+		}
 
 		public Timing timing() {
 			Timing d = Timing.DEFAULT;
@@ -79,11 +94,15 @@ public final class BenchmarkController {
 		}
 	}
 
+	// How a step's settle phase ended, and how many chunks the client held then.
+	public record Settled(Step step, SettleCheck.Result settle, int loadedChunks) {
+	}
+
 	// record: the stored run (null when cancelled); before: the "before" of a Measure pair when this is its "after".
 	// restoreOk: every changed setting was put back. throttled: the run was stopped because a step was measured while
-	// the game was throttled (it counts as cancelled, so nothing is stored).
+	// the game was throttled (it counts as cancelled, so nothing is stored). settles: each step's settle, in order.
 	public record Outcome(BenchmarkRequest request, SessionResult session, boolean cancelled, @Nullable BenchmarkRecord record,
-			@Nullable BenchmarkRecord before, boolean restoreOk, boolean throttled) {
+			@Nullable BenchmarkRecord before, boolean restoreOk, boolean throttled, List<Settled> settles) {
 		public PlannerResult result() {
 			return session.renderDistance();
 		}
@@ -110,6 +129,7 @@ public final class BenchmarkController {
 	private static @Nullable Outcome lastOutcome;
 	private static @Nullable Pending pendingWorld;
 	private static Config defaultConfig = Config.DEFAULT;
+	private static @Nullable Consumer<Step> sweepListener;
 
 	private final Minecraft minecraft;
 	private final BenchmarkRequest request;
@@ -123,11 +143,18 @@ public final class BenchmarkController {
 	private final float yaw;
 	private final float pitch;
 	private final boolean wasFlying;
+	// The server's (or the options') render distance limit: chunks beyond it never arrive.
+	private final int chunkLimit;
+	private final int cameraChunkX;
+	private final int cameraChunkZ;
+	private final List<Settled> settles = new ArrayList<>();
+	private final BenchmarkRecord.Context context;
 	private Step step;
 	private Phase phase = Phase.SETTLE;
 	private int sweep;
 	private long phaseStart;
-	private int readyTicks;
+	private @Nullable SettleCheck settle;
+	private SettleCheck.@Nullable Result lastSettle;
 	private int stepCount;
 	private float lastYaw;
 	private float lastPitch;
@@ -150,22 +177,74 @@ public final class BenchmarkController {
 		originals.put(VSYNC, SettingsBridge.encode(options.enableVsync()).orElseThrow());
 		originals.put(INACTIVITY_LIMIT, SettingsBridge.encode(options.inactivityFpsLimit()).orElseThrow());
 		this.originalSettings = originals;
-		this.targetFps = Math.min(SettingValues.refreshRateCap(HardwareProbe.refreshRate(minecraft.getWindow())), MAX_TARGET_FPS);
+		this.targetFps = targetFps(minecraft, config);
 		Timing timing = config.timing();
 		long now = System.nanoTime();
+		this.chunkLimit = maxRenderDistance(options, minecraft.hasSingleplayerServer());
+		int maxRd = tuneMaxRenderDistance(request.scene(), original.renderDistance(), config.maxRenderDistance(), chunkLimit);
 		BenchmarkSession session = request.mode() == BenchmarkRequest.Mode.MEASURE
 				? BenchmarkSession.measure(original, targetFps, timing, now)
-				: BenchmarkSession.tune(original, new BenchmarkSession.TuneLimits(MIN_RD,
-						Math.max(MIN_RD, Math.min(MAX_RD, maxRenderDistance(options, minecraft.hasSingleplayerServer()))), targetFps,
+				: BenchmarkSession.tune(original, new BenchmarkSession.TuneLimits(MIN_RD, maxRd, targetFps,
 						simulationTunable(minecraft, request), minSimulationDistance(options)), timing, now);
 		this.run = new BenchmarkRun(session, new KnobGuard(original, new ClientKnobs(minecraft, original, MarkerRestore.file())), System::nanoTime);
 		this.hudWasHidden = minecraft.gui.hud.isHidden();
 		// In the benchmark world the camera goes exactly to the fixed spot, not just within a block of it.
 		Vec3 camera = request.scene() == BenchmarkRequest.Scene.BENCHMARK_WORLD ? BenchmarkWorld.cameraPosition() : null;
 		this.position = camera != null ? camera : player.position();
+		this.cameraChunkX = ((int) Math.floor(position.x)) >> 4;
+		this.cameraChunkZ = ((int) Math.floor(position.z)) >> 4;
 		this.yaw = player.getYRot();
 		this.pitch = player.getXRot();
 		this.wasFlying = player.getAbilities().flying;
+		this.context = context(minecraft, original);
+	}
+
+	// What else shapes the numbers, as the run starts (docs/v0.3/SPEC.md 8, the `context` of a benchmarks.json run).
+	private static BenchmarkRecord.Context context(Minecraft minecraft, Knobs original) {
+		return new BenchmarkRecord.Context(original.dhRendering(), original.shaders(), original.shaders() ? shaderPack() : null,
+				minecraft.getWindow().getWidth(), minecraft.getWindow().getHeight(), minecraft.options.fullscreen().get(),
+				BenchmarkRecord.Context.PROTOCOL);
+	}
+
+	// The pack's file name from Iris' own settings file; null when unknown.
+	private static @Nullable String shaderPack() {
+		try {
+			String pack = PropertiesConfigPatcher.readValues(FabricLoader.getInstance().getConfigDir().resolve("iris.properties")).get("shaderPack");
+			return pack == null || pack.isBlank() ? null : pack;
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.debug("Shader pack name unavailable", e);
+			return null;
+		}
+	}
+
+	private static double targetFps(Minecraft minecraft, Config config) {
+		if (config.targetFps() != null) {
+			return config.targetFps();
+		}
+		Double dev = parseTargetFps(System.getProperty(DEV_TARGET_FPS));
+		if (dev != null) {
+			RigTune.LOGGER.warn("Benchmark: target {} FPS from -D{} (development only)", dev, DEV_TARGET_FPS);
+			return dev;
+		}
+		return Math.min(SettingValues.refreshRateCap(HardwareProbe.refreshRate(minecraft.getWindow())), MAX_TARGET_FPS);
+	}
+
+	// The highest render distance a Tune tests: the server's or options' limit, the config's cap, and in the player's own
+	// world the start + 8 (docs/v0.3/SPEC.md E-M2); never below MIN_RD.
+	static int tuneMaxRenderDistance(BenchmarkRequest.Scene scene, int startRd, int configMax, int chunkLimit) {
+		return Math.max(MIN_RD, BenchmarkSession.maxRenderDistance(scene, startRd, Math.min(configMax, chunkLimit)));
+	}
+
+	static @Nullable Double parseTargetFps(@Nullable String value) {
+		if (value == null) {
+			return null;
+		}
+		try {
+			double fps = Double.parseDouble(value.strip());
+			return fps > 0 && Double.isFinite(fps) ? fps : null;
+		} catch (NumberFormatException e) {
+			return null;
+		}
 	}
 
 	/** The v0.1 entry point: tune in the current world. */
@@ -219,6 +298,11 @@ public final class BenchmarkController {
 	/** Game tests use shorter runs. */
 	public static void setDefaultConfig(Config config) {
 		defaultConfig = config;
+	}
+
+	/** Game tests: called on the render thread just before a step records its first frame. */
+	public static void setSweepListener(@Nullable Consumer<Step> listener) {
+		sweepListener = listener;
 	}
 
 	private static @Nullable String begin(Minecraft minecraft, BenchmarkRequest request, Config config) {
@@ -352,7 +436,8 @@ public final class BenchmarkController {
 		step = next.get();
 		stepCount++;
 		enter(Phase.SETTLE);
-		readyTicks = 0;
+		settle = null;
+		lastSettle = null;
 		sweep = 0;
 	}
 
@@ -372,12 +457,15 @@ public final class BenchmarkController {
 		switch (phase) {
 			case SETTLE -> {
 				hold(yaw, 0);
-				readyTicks = sectionsReady() ? readyTicks + 1 : 0;
-				boolean settled = elapsed >= protocol.settleMinSeconds() && readyTicks >= READY_TICKS;
-				if (settled || elapsed >= protocol.settleTimeoutSeconds()) {
-					if (!settled) {
-						RigTune.LOGGER.info("Benchmark: {} did not finish compiling within {} s", step.knobs(), protocol.settleTimeoutSeconds());
-					}
+				if (settle == null) {
+					// Chunks beyond the server's limit never arrive, so the area stops there.
+					settle = new SettleCheck(protocol, Math.min(step.knobs().renderDistance(), chunkLimit) - 1);
+				}
+				SettleCheck.Count chunks = SettleCheck.count(settle.radius(), cameraChunkX, cameraChunkZ,
+						(x, z) -> level.getChunkSource().hasChunk(x, z));
+				Optional<SettleCheck.Result> done = settle.tick(elapsed, chunks, sectionsReady());
+				if (done.isPresent()) {
+					settled(done.get());
 					enter(Phase.WARMUP);
 				}
 			}
@@ -388,6 +476,10 @@ public final class BenchmarkController {
 				double progress = warmup <= 0 ? 1 : Math.min(1.0, elapsed / warmup);
 				hold(yaw - (float) (360.0 * (1 - progress) * warmup / first.seconds()), first.pitch());
 				if (elapsed >= warmup) {
+					Consumer<Step> listener = sweepListener;
+					if (listener != null) {
+						listener.accept(step);
+					}
 					FrameTimes.start();
 					throttle.reset();
 					sweep = 0;
@@ -406,9 +498,10 @@ public final class BenchmarkController {
 						enter(Phase.SWEEP);
 					} else {
 						FrameStats stats = FrameTimes.stop();
-						RigTune.LOGGER.info("Benchmark {} {}: {} frames, avg {} FPS, 1% low {} FPS (frame limit {}, {})", step.kind(), step.knobs(),
-								stats.frames(), Math.round(stats.avgFps()), Math.round(stats.onePercentLowFps()),
-								minecraft.getFramerateLimitTracker().getFramerateLimit(), minecraft.getFramerateLimitTracker().getThrottleReason());
+						RigTune.LOGGER.info("Benchmark {} {}: {} frames, avg {} FPS, 1% low {} FPS, client chunks {} (frame limit {}, {})",
+								step.kind(), step.knobs(), stats.frames(), Math.round(stats.avgFps()), Math.round(stats.onePercentLowFps()),
+								level.getChunkSource().getLoadedChunksCount(), minecraft.getFramerateLimitTracker().getFramerateLimit(),
+								minecraft.getFramerateLimitTracker().getThrottleReason());
 						if (throttle.throttled(Options.UNLIMITED_FRAMERATE_CUTOFF, FabricLoader.getInstance().isModLoaded(DYNAMIC_FPS))) {
 							RigTune.LOGGER.warn("Benchmark stopped: {} was measured while the game was throttled (window active {}, frame limit {}); "
 									+ "nothing is saved", step.kind(), minecraft.isWindowActive(), minecraft.getFramerateLimitTracker().getFramerateLimit());
@@ -417,12 +510,28 @@ public final class BenchmarkController {
 							finish();
 							return;
 						}
-						run.record(stats);
+						run.record(stats, lastSettle == null || lastSettle.complete());
 						nextStep();
 					}
 				}
 			}
 		}
+	}
+
+	private void settled(SettleCheck.Result result) {
+		lastSettle = result;
+		int loaded = level.getChunkSource().getLoadedChunksCount();
+		settles.add(new Settled(step, result, loaded));
+		String seconds = String.format(Locale.ROOT, "%.1f", result.seconds());
+		if (!result.complete()) {
+			RigTune.LOGGER.warn("Benchmark settle {} {}: timed out after {} s with {} of {} chunks within {} missing (client holds {}); "
+					+ "this step can't count as a pass", step.kind(), step.knobs(), seconds, result.missing(), result.inRange(), result.radius(), loaded);
+			return;
+		}
+		RigTune.LOGGER.info("Benchmark settle {} {}: {} of {} chunks within {} present, client holds {}, {} s{}", step.kind(), step.knobs(),
+				result.inRange() - result.missing(), result.inRange(), result.radius(), loaded, seconds,
+				!result.timedOut() ? "" : result.missing() > 0 ? ", timed out with " + result.missing() + " missing (within the 2% allowed)"
+						: ", timed out waiting for the sections");
 	}
 
 	// Setting the previous rotation keeps the per-frame camera interpolation smooth between ticks.
@@ -548,7 +657,7 @@ public final class BenchmarkController {
 		SessionResult result = run.result();
 		boolean restoreOk = run.restoreOk() && environmentRestored;
 		if (run.cancelled()) {
-			return new Outcome(request, result, true, null, null, restoreOk, throttled);
+			return new Outcome(request, result, true, null, null, restoreOk, throttled, List.copyOf(settles));
 		}
 		BenchmarkHistory history = BenchmarkStore.history();
 		String phase = BenchmarkRecords.phase(request, history);
@@ -557,9 +666,10 @@ public final class BenchmarkController {
 		String id = createdAt + "-" + HexFormat.of().toHexDigits((short) ThreadLocalRandom.current().nextInt());
 		BenchmarkRecord.World world = request.scene() == BenchmarkRequest.Scene.BENCHMARK_WORLD
 				? new BenchmarkRecord.World(BenchmarkWorld.LEVEL_ID, BenchmarkWorld.SEED) : null;
-		BenchmarkRecord record = BenchmarkRecords.of(result, request, phase, id, createdAt, rigtuneVersion(), HardwareProbe.minecraftVersion(), world);
+		BenchmarkRecord record = BenchmarkRecords.of(result, request, phase, id, createdAt, rigtuneVersion(), HardwareProbe.minecraftVersion(), world,
+				context);
 		BenchmarkStore.add(record);
-		return new Outcome(request, result, false, record, before, restoreOk, false);
+		return new Outcome(request, result, false, record, before, restoreOk, false, List.copyOf(settles));
 	}
 
 	private static String rigtuneVersion() {

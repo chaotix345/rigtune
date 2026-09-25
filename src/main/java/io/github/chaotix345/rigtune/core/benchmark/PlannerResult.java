@@ -3,7 +3,11 @@ package io.github.chaotix345.rigtune.core.benchmark;
 import java.util.List;
 
 public record PlannerResult(int bestRd, boolean targetMet, int bestEffortRd, List<Measurement> measurements, String reason) {
-	public record Measurement(int rd, FrameStats stats, boolean passed) {
+	// complete: the step's terrain had arrived (SettleCheck.Result.complete()); an incomplete step never passes.
+	public record Measurement(int rd, FrameStats stats, boolean passed, boolean complete) {
+		public Measurement(int rd, FrameStats stats, boolean passed) {
+			this(rd, stats, passed, true);
+		}
 	}
 
 	public PlannerResult {

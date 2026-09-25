@@ -167,4 +167,41 @@ class RenderDistancePlannerTest {
 		assertThrows(IllegalArgumentException.class, () -> new RenderDistancePlanner(10, 5, 6, 60, 6));
 		assertThrows(IllegalArgumentException.class, () -> new RenderDistancePlanner(2, 32, 6, 60, 0));
 	}
+
+	// docs/v0.3/SPEC.md E-M1: a step measured before its terrain arrived can't count as a pass, however fast it was.
+	@Test
+	void anIncompleteStepNeverPasses() {
+		RenderDistancePlanner planner = new RenderDistancePlanner(MIN, MAX, 8, 100, 6);
+		assertEquals(OptionalInt.of(8), planner.next());
+		planner.record(8, low(150));
+		assertEquals(OptionalInt.of(10), planner.next());
+		planner.record(10, low(120));
+		assertEquals(OptionalInt.of(14), planner.next());
+		planner.record(14, low(500), false);
+		assertEquals(OptionalInt.of(12), planner.next());
+		planner.record(12, low(110));
+		assertEquals(OptionalInt.of(13), planner.next());
+		planner.record(13, low(90));
+		assertTrue(planner.done());
+		PlannerResult result = planner.result();
+		assertEquals(12, result.bestRd());
+		PlannerResult.Measurement fourteen = result.measurements().stream().filter(m -> m.rd() == 14).findFirst().orElseThrow();
+		assertFalse(fourteen.passed());
+		assertFalse(fourteen.complete());
+		assertTrue(result.measurements().stream().filter(m -> m.rd() != 14).allMatch(PlannerResult.Measurement::complete));
+	}
+
+	@Test
+	void bestEffortPrefersCompleteSteps() {
+		RenderDistancePlanner planner = new RenderDistancePlanner(MIN, MAX, 16, 1000, 3);
+		planner.record(16, low(400), false);
+		planner.record(9, low(300));
+		planner.record(5, low(350));
+		assertFalse(planner.result().targetMet());
+		assertEquals(5, planner.result().bestEffortRd());
+
+		RenderDistancePlanner onlyIncomplete = new RenderDistancePlanner(MIN, MAX, 16, 1000, 1);
+		onlyIncomplete.record(16, low(400), false);
+		assertEquals(16, onlyIncomplete.result().bestEffortRd());
+	}
 }

@@ -55,10 +55,14 @@ public final class BenchmarkRun {
 	}
 
 	public void record(FrameStats stats) {
+		record(stats, true);
+	}
+
+	public void record(FrameStats stats, boolean complete) {
 		if (finished || current == null) {
 			throw new IllegalStateException("No step is being measured");
 		}
-		session.record(current, stats);
+		session.record(current, stats, complete);
 		current = null;
 	}
 

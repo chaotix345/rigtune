@@ -10,6 +10,7 @@ import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.benchmark.Knobs;
 import io.github.chaotix345.rigtune.core.benchmark.PlannerResult;
 import io.github.chaotix345.rigtune.core.benchmark.SessionResult;
+import io.github.chaotix345.rigtune.core.benchmark.ShaderAdvice;
 import io.github.chaotix345.rigtune.core.benchmark.Step;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalInt;
 
 public class BenchmarkResultScreen extends Screen {
 	private static final int ROW = 12;
@@ -151,9 +153,19 @@ public class BenchmarkResultScreen extends Screen {
 		if (session.shaderCost() != null) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.cost.shaders", BenchmarkMath.percent(session.shaderCost().lowGainPercent()),
 					BenchmarkMath.percent(session.shaderCost().avgGainPercent())), COLOR_LABEL));
+			// Advice only (docs/v0.3/SPEC.md 8a): nothing in iris.properties or the pack's settings is touched.
+			OptionalInt shaderCost = ShaderAdvice.costPercent(session.shaderCost(), session.targetFps());
+			if (shaderCost.isPresent()) {
+				out.add(new Line(Component.translatable("rigtune.benchmark.shader_advice", shaderCost.getAsInt()), COLOR_WARN));
+				out.add(new Line(Component.translatable("rigtune.benchmark.shader_advice.hint"), COLOR_WARN));
+			}
 		} else if (session.notMeasured().containsKey(BenchmarkRecord.SHADERS)) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.cost.shaders.not_measured",
 					reason(session.notMeasured().get(BenchmarkRecord.SHADERS))), COLOR_WARN));
+		}
+		// docs/v0.3/SPEC.md E-M1: a step measured before its terrain had loaded doesn't count, whatever its FPS.
+		if (tune() && rows.stream().anyMatch(m -> !m.complete())) {
+			out.add(new Line(Component.translatable("rigtune.benchmark.incomplete"), COLOR_WARN));
 		}
 		if (session.deadlineHit()) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.deadline"), COLOR_WARN));
@@ -215,7 +227,8 @@ public class BenchmarkResultScreen extends Screen {
 			if (p99) {
 				graphics.text(font, String.format(Locale.ROOT, "%.1f", m.stats().p99FrameMs()), left + columns[3], y, color, false);
 			}
-			graphics.text(font, m.passed() ? "✔" : "✘", left + columns[columns.length - 1], y, m.passed() ? COLOR_PASS : COLOR_FAIL, false);
+			graphics.text(font, m.passed() ? "✔" : m.complete() ? "✘" : "✘*", left + columns[columns.length - 1], y,
+					m.passed() ? COLOR_PASS : COLOR_FAIL, false);
 			y += ROW;
 		}
 	}

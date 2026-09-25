@@ -466,4 +466,30 @@ class BenchmarkSessionTest {
 		Step other = new Step(Kind.REPEAT, first.knobs(), first.protocol());
 		assertThrows(IllegalStateException.class, () -> session.record(other, low(10)));
 	}
+
+	@Test
+	void anIncompleteRenderDistanceStepDoesNotMeetTheTarget() {
+		BenchmarkSession session = tune(ORIGINAL.withRenderDistance(8), new TuneLimits(4, 32, 100, false, 5));
+		Step first = session.next(0).orElseThrow();
+		session.record(first, low(500), false);
+		Step second = session.next(40 * FakeRig.NANOS).orElseThrow();
+		assertEquals(Kind.RENDER_DISTANCE, second.kind());
+		assertTrue(second.knobs().renderDistance() < 8, "went down after an incomplete start: " + second);
+		assertFalse(session.result().renderDistance().measurements().getFirst().passed());
+	}
+
+	// docs/v0.3/SPEC.md E-M2: in the player's own world, Tune never tests more than 8 above where it started.
+	@Test
+	void currentSceneTuneIsCappedAtTheStartPlusEight() {
+		assertEquals(16, BenchmarkSession.maxRenderDistance(BenchmarkRequest.Scene.CURRENT, 8, 32));
+		assertEquals(32, BenchmarkSession.maxRenderDistance(BenchmarkRequest.Scene.BENCHMARK_WORLD, 8, 32));
+		assertEquals(20, BenchmarkSession.maxRenderDistance(BenchmarkRequest.Scene.CURRENT, 16, 20));
+		assertEquals(32, BenchmarkSession.maxRenderDistance(BenchmarkRequest.Scene.CURRENT, 30, 32));
+
+		int max = BenchmarkSession.maxRenderDistance(BenchmarkRequest.Scene.CURRENT, 8, 32);
+		BenchmarkSession session = tune(ORIGINAL.withRenderDistance(8), new TuneLimits(4, max, 1, false, 5));
+		List<Step> steps = new FakeRig().drive(session, s -> low(1000));
+		assertTrue(steps.stream().allMatch(s -> s.knobs().renderDistance() <= 16), "steps: " + steps);
+		assertEquals(16, session.result().chosen().renderDistance());
+	}
 }

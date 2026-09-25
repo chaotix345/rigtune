@@ -1,4 +1,4 @@
-package io.github.chaotix345.rigtune.core.benchmark;
+package io.github.chaotix345.rigtune.v020.core.benchmark;
 
 import org.jspecify.annotations.Nullable;
 
@@ -11,12 +11,10 @@ import java.util.Map;
 // links them), otherwise "single". knobs: the value the run chose (or measured) and the original, with the stats
 // measured at the chosen value. result: the headline numbers (the repeats of the chosen settings). costs: the
 // quick-protocol baseline against the same settings with Distant Horizons rendering or shaders off. notMeasured: why a
-// cost report that applied has no numbers ("deadline" or "failed: <message>"), by the same keys as costs. context: what
-// else shaped the numbers (0.3.0 on; absent from older runs, and dropped if 0.2.x rewrites the file, which ignores it).
+// cost report that applied has no numbers ("deadline" or "failed: <message>"), by the same keys as costs.
 public record BenchmarkRecord(String id, String createdAt, String rigtuneVersion, String mcVersion, String mode, String scene,
 		String phase, @Nullable String pairId, int targetFps, boolean targetMet, Map<String, KnobResult> knobs,
-		@Nullable Result result, Map<String, Cost> costs, Map<String, String> notMeasured, @Nullable World world, boolean deadlineHit,
-		@Nullable Context context) {
+		@Nullable Result result, Map<String, Cost> costs, Map<String, String> notMeasured, @Nullable World world, boolean deadlineHit) {
 	public static final String BEFORE = "before";
 	public static final String AFTER = "after";
 	public static final String SINGLE = "single";
@@ -43,21 +41,6 @@ public record BenchmarkRecord(String id, String createdAt, String rigtuneVersion
 	}
 
 	public record World(String levelId, long seed) {
-	}
-
-	// docs/v0.3/SPEC.md 8: whether Distant Horizons rendered and a shader pack was in use at the start, the pack's file
-	// name, the framebuffer size, fullscreen, and the benchmark protocol version. Runs are only comparable when these
-	// match; mods, drivers and other settings are left out on purpose (their effect is what a comparison looks for).
-	public record Context(boolean dhRendering, boolean shaders, @Nullable String shaderPack, int width, int height, boolean fullscreen,
-			int protocol) {
-		public static final int PROTOCOL = 1;
-	}
-
-	public BenchmarkRecord(String id, String createdAt, String rigtuneVersion, String mcVersion, String mode, String scene,
-			String phase, @Nullable String pairId, int targetFps, boolean targetMet, Map<String, KnobResult> knobs,
-			@Nullable Result result, Map<String, Cost> costs, Map<String, String> notMeasured, @Nullable World world, boolean deadlineHit) {
-		this(id, createdAt, rigtuneVersion, mcVersion, mode, scene, phase, pairId, targetFps, targetMet, knobs, result, costs, notMeasured, world,
-				deadlineHit, null);
 	}
 
 	// Gson leaves absent maps null.
