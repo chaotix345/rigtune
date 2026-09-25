@@ -278,7 +278,7 @@ class HelperLauncherTest {
 	void helperRunsInChildJvmAfterGameExits(@TempDir Path dir) throws Exception {
 		Path mods = Files.createDirectories(dir.resolve("mods"));
 		Path config = Files.createDirectories(dir.resolve("config"));
-		Files.writeString(mods.resolve("new.jar" + PendingActions.PENDING_SUFFIX), "new");
+		TestJars.modJar(mods.resolve("new.jar" + PendingActions.PENDING_SUFFIX), "new");
 		Files.writeString(mods.resolve("old.jar"), "old");
 		Files.writeString(mods.resolve("old.jar.disabled"), "older");
 		Path sodium = config.resolve("sodium-options.json");
@@ -316,7 +316,7 @@ class HelperLauncherTest {
 		assertTrue(exited, output);
 		assertEquals(0, helper.exitValue(), output);
 		assertTrue(output.contains("not found; proceeding") || output.contains("Waiting for game process"), output);
-		assertEquals("new", Files.readString(mods.resolve("new.jar")));
+		assertEquals("new", ModJars.readModId(mods.resolve("new.jar")));
 		assertEquals("old", Files.readString(mods.resolve("old.jar.disabled.1")));
 		assertEquals("older", Files.readString(mods.resolve("old.jar.disabled")));
 		assertFalse(Files.exists(mods.resolve("old.jar")));

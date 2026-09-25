@@ -121,13 +121,49 @@ class ApplyDuplicatesTest {
 		assertEquals(List.of("sodium-0.7.1.jar", "sodium-0.7.2.jar.rigtune-superseded"), modsListing());
 	}
 
+	// Review 3, apply-safety-1: an enable staged without a mod id is checked with the id its jar declares.
 	@Test
-	void enablesWithoutAModIdAreNotChecked() throws IOException {
+	void anEnableWithoutAModIdIsCheckedWithTheJarsOwnId() throws IOException {
 		modJar(mods.resolve("sodium-0.7.2.jar"), "sodium");
 		Path staged = pendingJar("sodium-0.7.1.jar", "sodium");
 
 		ApplyResult result = run(List.of(Op.enableFile(staged, mods.resolve("sodium-0.7.1.jar"))));
 
+		assertEquals(List.of(Status.ABANDONED), statuses(result));
+		assertTrue(result.results().getFirst().message().contains("already installed as sodium-0.7.2.jar"), result.toString());
+	}
+
+	@Test
+	void anEnableWithoutAModIdIsAppliedWhenItsModIsNotInstalled() throws IOException {
+		Path staged = pendingJar("sodium-0.7.1.jar", "sodium");
+
+		ApplyResult result = run(List.of(Op.enableFile(staged, mods.resolve("sodium-0.7.1.jar"))));
+
 		assertEquals(List.of(Status.OK), statuses(result));
+	}
+
+	// Review 3, apply-safety-1: a jar whose fabric.mod.json id can't be read is never enabled, nor is the rest of its group.
+	@Test
+	void anEnableWhoseFileIsNotAJarFailsWithItsGroup() throws IOException {
+		Path notAJar = mods.resolve("broken.jar" + PendingActions.PENDING_SUFFIX);
+		Files.writeString(notAJar, "not a zip");
+		Path lib = pendingJar("lib-1.0.jar", "lib");
+
+		ApplyResult result = run(PendingActions.group(Op.enableFile(notAJar, mods.resolve("broken.jar")), enable(lib, "lib")));
+
+		assertEquals(List.of(Status.FAILED, Status.FAILED), statuses(result));
+		assertTrue(result.results().getFirst().message().contains("not a Fabric mod jar"), result.toString());
+		assertEquals(List.of("broken.jar.rigtune-pending", "lib-1.0.jar.rigtune-pending"), modsListing());
+	}
+
+	@Test
+	void anEnableWhoseJarHasNoFabricModJsonFails() throws IOException {
+		Path plain = TestJars.plainJar(mods.resolve("pack.jar" + PendingActions.PENDING_SUFFIX));
+
+		ApplyResult result = run(List.of(Op.enableFile(plain, mods.resolve("pack.jar"))));
+
+		assertEquals(List.of(Status.FAILED), statuses(result));
+		assertTrue(result.results().getFirst().message().contains("not a Fabric mod jar"), result.toString());
+		assertEquals(List.of("pack.jar.rigtune-pending"), modsListing());
 	}
 }

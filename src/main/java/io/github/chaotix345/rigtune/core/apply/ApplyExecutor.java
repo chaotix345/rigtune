@@ -281,7 +281,8 @@ public final class ApplyExecutor {
 
 	// An enable whose mod is already installed another way (the launcher updated it meanwhile, or it was added by
 	// hand) would load the mod twice, and Fabric then refuses to start. Jars this group disables don't count.
-	private static String duplicateProblem(List<Op> ops, List<Integer> order, InstalledJars installed) {
+	// modIds: the mod id of each enable whose file is still there.
+	private static String duplicateProblem(List<Op> ops, List<Integer> order, String[] modIds, InstalledJars installed) {
 		Set<String> disabled = new HashSet<>();
 		for (int i : order) {
 			if (ops.get(i).type() == PendingActions.Type.DISABLE_FILE) {
@@ -289,17 +290,26 @@ public final class ApplyExecutor {
 			}
 		}
 		for (int i : order) {
-			Op op = ops.get(i);
-			if (op.type() != PendingActions.Type.ENABLE_FILE || op.modId() == null || !Files.exists(Path.of(op.from()))) {
+			if (modIds[i] == null) {
 				continue;
 			}
-			String existing = installed.withModId(op.modId(), disabled);
+			String existing = installed.withModId(modIds[i], disabled);
 			if (existing != null) {
-				return "mod " + op.modId() + " is already installed as " + existing + ", so enabling " + fileName(op.to())
+				return "mod " + modIds[i] + " is already installed as " + existing + ", so enabling " + fileName(ops.get(i).to())
 						+ " would load it twice; its download is renamed to " + PendingActions.SUPERSEDED_SUFFIX;
 			}
 		}
 		return null;
+	}
+
+	// An enable staged without a mod id (by 0.1.0, or an Undo of a jar it couldn't read) is checked with the id its jar
+	// declares (review 3, apply-safety-1). Null when there is none.
+	private static String jarModId(Path jar) {
+		try {
+			return ModJars.readModId(jar);
+		} catch (IOException e) {
+			return null;
+		}
 	}
 
 	private record Undo(int index, Path moved, Path back) {
@@ -315,9 +325,18 @@ public final class ApplyExecutor {
 		order.sort(Comparator.comparingInt(i -> rank(ops.get(i))));
 
 		String[] problems = new String[ops.size()];
+		String[] modIds = new String[ops.size()];
 		boolean refused = false;
 		for (int i : order) {
-			problems[i] = problem(ops.get(i), modsDir, configDir);
+			Op op = ops.get(i);
+			problems[i] = problem(op, modsDir, configDir);
+			// A jar with no readable mod id can't be checked against what's installed, so it's never enabled.
+			if (problems[i] == null && op.type() == PendingActions.Type.ENABLE_FILE && Files.exists(Path.of(op.from()))) {
+				modIds[i] = op.modId() != null ? op.modId() : jarModId(Path.of(op.from()));
+				if (modIds[i] == null) {
+					problems[i] = fileName(op.from()) + " is not a Fabric mod jar (no readable fabric.mod.json id)";
+				}
+			}
 			refused |= problems[i] != null;
 		}
 		if (refused) {
@@ -327,7 +346,7 @@ public final class ApplyExecutor {
 			}
 			return;
 		}
-		String duplicate = duplicateProblem(ops, order, installed);
+		String duplicate = duplicateProblem(ops, order, modIds, installed);
 		if (duplicate != null) {
 			for (int i : order) {
 				out[i] = new OpResult(ops.get(i), Status.ABANDONED, "Dropped: " + duplicate);
