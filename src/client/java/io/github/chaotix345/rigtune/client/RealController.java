@@ -23,6 +23,7 @@ import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.ModFile;
+import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
@@ -198,7 +199,7 @@ public final class RealController implements RigTuneController {
 			}
 			SettingsSnapshot settings = SettingsBridge.read(minecraft);
 			Goal g = goal;
-			var data = online.data();
+			var data = this.settings.modrinthAllowed() ? online.data() : OnlineData.offline();
 			int gen = ++generation;
 			CompletableFuture.supplyAsync(() -> Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion), Probes.EXECUTOR)
 					.whenComplete((built, error) -> minecraft.execute(() -> {
