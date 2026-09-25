@@ -12,6 +12,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -120,6 +121,7 @@ class HelperLauncherTest {
 		}
 	}
 
+	// The classes plus a fabric.mod.json with RigTune's mod id, as the real jar has (the helper checks every enabled jar's id).
 	private static Path jarOf(Path classesDir, Path jar) throws IOException {
 		try (OutputStream out = Files.newOutputStream(jar); ZipOutputStream zip = new ZipOutputStream(out);
 				Stream<Path> files = Files.walk(classesDir)) {
@@ -128,6 +130,9 @@ class HelperLauncherTest {
 				Files.copy(file, zip);
 				zip.closeEntry();
 			}
+			zip.putNextEntry(new ZipEntry("fabric.mod.json"));
+			zip.write("{\"schemaVersion\":1,\"id\":\"rigtune\",\"version\":\"1\"}".getBytes(StandardCharsets.UTF_8));
+			zip.closeEntry();
 		}
 		return jar;
 	}

@@ -302,8 +302,9 @@ public final class ApplyExecutor {
 		return null;
 	}
 
-	// An enable staged without a mod id (by 0.1.0, or an Undo of a jar it couldn't read) is checked with the id its jar
-	// declares (review 3, apply-safety-1). Null when there is none.
+	// Every enable is checked with the id its jar declares: one staged without a mod id (by 0.1.0, or an Undo of a jar it
+	// couldn't read; review 3, apply-safety-1) and one staged with an id alike (review 4, apply-safety-1). Null when
+	// there is none.
 	private static String jarModId(Path jar) {
 		try {
 			return ModJars.readModId(jar);
@@ -330,11 +331,14 @@ public final class ApplyExecutor {
 		for (int i : order) {
 			Op op = ops.get(i);
 			problems[i] = problem(op, modsDir, configDir);
-			// A jar with no readable mod id can't be checked against what's installed, so it's never enabled.
+			// A jar with no readable mod id can't be checked against what's installed, so it's never enabled; nor is one
+			// that isn't the mod it was staged as.
 			if (problems[i] == null && op.type() == PendingActions.Type.ENABLE_FILE && Files.exists(Path.of(op.from()))) {
-				modIds[i] = op.modId() != null ? op.modId() : jarModId(Path.of(op.from()));
+				modIds[i] = jarModId(Path.of(op.from()));
 				if (modIds[i] == null) {
 					problems[i] = fileName(op.from()) + " is not a Fabric mod jar (no readable fabric.mod.json id)";
+				} else if (op.modId() != null && !op.modId().equals(modIds[i])) {
+					problems[i] = fileName(op.from()) + " declares mod id " + modIds[i] + ", not " + op.modId() + " as staged";
 				}
 			}
 			refused |= problems[i] != null;

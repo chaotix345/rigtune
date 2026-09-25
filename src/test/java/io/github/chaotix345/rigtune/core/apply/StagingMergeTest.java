@@ -157,8 +157,8 @@ class StagingMergeTest {
 	@Test
 	void mergedPlanLeavesExactlyOneCopyOfTheMod() throws IOException {
 		Files.writeString(mods.resolve("sodium-0.7.0.jar"), "0.7.0");
-		Files.writeString(pendingJar("sodium-0.7.1.jar"), "0.7.1");
-		Files.writeString(pendingJar("sodium-0.7.2.jar"), "0.7.2");
+		TestJars.modJar(pendingJar("sodium-0.7.1.jar"), "sodium");
+		TestJars.modJar(pendingJar("sodium-0.7.2.jar"), "sodium");
 		Path pending = PendingActions.defaultPath(config);
 		PendingActions.Merged merged = plan(update("sodium-0.7.0.jar", "sodium-0.7.1.jar", "sodium"))
 				.merge(update("sodium-0.7.0.jar", "sodium-0.7.2.jar", "sodium"));

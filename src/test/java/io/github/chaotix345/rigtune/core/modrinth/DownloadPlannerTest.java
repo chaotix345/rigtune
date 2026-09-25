@@ -90,6 +90,23 @@ class DownloadPlannerTest {
 		assertEquals(List.of(), fetched);
 	}
 
+	// Review 4, apply-safety-1: an update's download with no readable mod id is refused like an added mod's, and the
+	// installed jar is left alone.
+	@Test
+	void anUpdateWhoseDownloadIsNotAFabricModIsDroppedWithAnError() throws IOException {
+		Files.writeString(mods.resolve("m-1.jar"), "installed");
+		notMods.add("m-2.jar");
+
+		DownloadPlanner.Result result = plan(Set.of(), update("m-1.jar", "m-2.jar"));
+
+		assertEquals(List.of(), result.ops());
+		assertEquals(List.of(), result.ids());
+		assertEquals(1, result.errors().size(), result.errors().toString());
+		assertTrue(result.errors().getFirst().startsWith("Update m: m-2.jar is not a Fabric mod jar"), result.errors().getFirst());
+		assertFalse(Files.exists(mods.resolve("m-2.jar" + PendingActions.PENDING_SUFFIX)));
+		assertEquals("installed", Files.readString(mods.resolve("m-1.jar")));
+	}
+
 	@Test
 	void anUpdateKeepingTheSameFileNameIsStaged() throws IOException {
 		Files.writeString(mods.resolve("m.jar"), "installed");

@@ -18,7 +18,6 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -135,7 +134,12 @@ public final class DownloadPlanner {
 			throw new IOException(target.getFileName() + " is already in the mods folder");
 		}
 		Path pending = fetcher.fetch(file);
-		String jarModId = Objects.requireNonNullElse(modIdOf.apply(pending), update.modId());
+		String jarModId = modIdOf.apply(pending);
+		// As for an added mod (review 4, apply-safety-1): the installed jar is only replaced by a jar with a readable id.
+		if (jarModId == null) {
+			attempt.batch.dropDuplicate(pending);
+			throw new IOException(file.filename() + " is not a Fabric mod jar (no readable fabric.mod.json id)");
+		}
 		attempt.batch.noteReplaced(jarModId, pending);
 		attempt.ops.add(Op.disableFile(update.currentFile()));
 		attempt.ops.add(Op.enableFile(pending, target).withModId(jarModId));

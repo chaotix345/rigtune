@@ -156,6 +156,32 @@ class ApplyDuplicatesTest {
 		assertEquals(List.of("broken.jar.rigtune-pending", "lib-1.0.jar.rigtune-pending"), modsListing());
 	}
 
+	// Review 4, apply-safety-1: an enable staged with a mod id is checked against its jar too, so an update whose jar
+	// isn't a Fabric mod fails with its group and the jar it would replace stays enabled.
+	@Test
+	void anUpdateWhoseJarIsNotAFabricModFailsWithItsGroup() throws IOException {
+		modJar(mods.resolve("modx-1.0.jar"), "modx");
+		Path broken = Files.writeString(mods.resolve("modx-2.0.jar" + PendingActions.PENDING_SUFFIX), "not a zip");
+
+		ApplyResult result = run(PendingActions.group(Op.disableFile(mods.resolve("modx-1.0.jar")), enable(broken, "modx")));
+
+		assertEquals(List.of(Status.FAILED, Status.FAILED), statuses(result));
+		assertTrue(result.results().get(1).message().contains("modx-2.0.jar.rigtune-pending is not a Fabric mod jar"), result.toString());
+		assertEquals(List.of("modx-1.0.jar", "modx-2.0.jar.rigtune-pending"), modsListing());
+	}
+
+	@Test
+	void anEnableWhoseJarDeclaresAnotherModIdFailsWithItsGroup() throws IOException {
+		modJar(mods.resolve("sodium-0.7.0.jar"), "sodium");
+		Path other = pendingJar("sodium-0.7.1.jar", "lithium");
+
+		ApplyResult result = run(PendingActions.group(Op.disableFile(mods.resolve("sodium-0.7.0.jar")), enable(other, "sodium")));
+
+		assertEquals(List.of(Status.FAILED, Status.FAILED), statuses(result));
+		assertTrue(result.results().get(1).message().contains("declares mod id lithium, not sodium"), result.toString());
+		assertEquals(List.of("sodium-0.7.0.jar", "sodium-0.7.1.jar.rigtune-pending"), modsListing());
+	}
+
 	@Test
 	void anEnableWhoseJarHasNoFabricModJsonFails() throws IOException {
 		Path plain = TestJars.plainJar(mods.resolve("pack.jar" + PendingActions.PENDING_SUFFIX));
