@@ -100,6 +100,35 @@ class CheckRulesV1Tests(unittest.TestCase):
         self.write_knowledge(knowledge)
         self.assert_problem("meshShaders")
 
+    def with_v2_only_tier_row(self):
+        knowledge = json.loads((self.tmp / "rules" / "source" / "knowledge.json").read_text(encoding="utf-8"))
+        knowledge["gpuTiers"].insert(0, {"pattern": "(?i)rtx\\s*5050\\b", "vendor": "nvidia", "integrated": False, "tier": 3, "v1": False})
+        self.write_knowledge(knowledge)
+        self.generate(knowledge)
+
+    def test_tier_row_left_out_of_v1_passes(self):
+        self.with_v2_only_tier_row()
+        v1 = json.loads((self.tmp / "rules" / "rules-v1.json").read_text(encoding="utf-8"))
+        v2 = json.loads((self.tmp / "rules" / "rules-v2.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(v2["gpuTiers"]), len(v1["gpuTiers"]) + 1)
+        self.assertNotIn("v1", v2["gpuTiers"][0])
+        self.assertEqual(check.check(self.tmp), [])
+
+    def test_tier_row_leaked_into_v1_fails(self):
+        self.with_v2_only_tier_row()
+        v2 = json.loads((self.tmp / "rules" / "rules-v2.json").read_text(encoding="utf-8"))
+        self.edit("rules-v1.json", lambda d: d["gpuTiers"].insert(0, v2["gpuTiers"][0]))
+        self.assert_problem("projection")
+
+    def test_v1_key_on_a_v1_tier_row_fails(self):
+        self.edit("rules-v1.json", lambda d: d["gpuTiers"][0].update({"v1": False}))
+        self.assert_problem("field(s) 0.1.x doesn't know: v1")
+
+    def test_v1_key_on_a_v2_tier_row_fails(self):
+        self.with_v2_only_tier_row()
+        self.edit("rules-v2.json", lambda d: d["gpuTiers"][0].update({"v1": False}))
+        self.assert_problem("rules-v2.json doesn't match")
+
     def test_missing_file_fails(self):
         (self.tmp / "rules" / "rules-v2.json").unlink()
         self.assert_problem("rules-v2.json")

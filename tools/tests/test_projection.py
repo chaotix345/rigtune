@@ -453,6 +453,74 @@ class ReviewSectionDTests(unittest.TestCase):
         self.assertEqual([label for label, _ in notes], ["advice[v2-only]"])
 
 
+class TierV1Tests(unittest.TestCase):
+    NEW = {"pattern": "(?i)RX\\s*9070\\s*GRE\\b", "vendor": "amd", "integrated": False, "tier": 4, "v1": False}
+    OLD = {"pattern": "(?i)RX\\s*90[7-9]0\\b", "vendor": "amd", "integrated": False, "tier": 5}
+    CPU = {"pattern": "(?i)Ryzen\\s*\\d\\s*\\d{4}X3D", "tier": 5, "v1": False}
+
+    def knowledge(self, **sections):
+        knowledge = load_fixture("knowledge_sample.json")
+        knowledge.update(sections)
+        return knowledge
+
+    def test_v1_false_tier_rows_are_valid(self):
+        ur.validate_knowledge(self.knowledge(gpuTiers=[self.NEW, self.OLD], cpuTiers=[self.CPU]))
+
+    def test_other_v1_values_on_tier_rows_are_errors(self):
+        for value in (True, {"tier": 3}, None, 0, "false"):
+            with self.assertRaises(ur.KnowledgeError, msg=repr(value)):
+                ur.validate_knowledge(self.knowledge(gpuTiers=[dict(self.OLD, v1=value)]))
+            with self.assertRaises(ur.KnowledgeError, msg=repr(value)):
+                ur.validate_knowledge(self.knowledge(cpuTiers=[dict(self.CPU, v1=value)]))
+
+    def test_heap_tiers_take_no_v1(self):
+        with self.assertRaises(ur.KnowledgeError) as ctx:
+            ur.validate_knowledge(self.knowledge(heapTiers=[{"atLeastMb": 0, "tier": 1, "v1": False}]))
+        self.assertIn('"v1" is only allowed on gpuTiers and cpuTiers rows', str(ctx.exception))
+        self.assertNotIn("unknown field", str(ctx.exception))
+
+    def test_tier_sections_must_be_arrays(self):
+        for kind in ur.TIER_KINDS:
+            for value in (None, {}, "rows"):
+                with self.assertRaises(ur.KnowledgeError, msg=f"{kind}={value!r}") as ctx:
+                    ur.validate_knowledge(self.knowledge(**{kind: value}))
+                self.assertIn(f"'{kind}' must be an array", str(ctx.exception))
+
+    def test_v2_keeps_the_row_without_the_key(self):
+        v2 = ur.v2_content(content_with(gpuTiers=[self.NEW, self.OLD], cpuTiers=[self.CPU]))
+        self.assertEqual(v2["gpuTiers"], [{k: v for k, v in self.NEW.items() if k != "v1"}, self.OLD])
+        self.assertEqual(v2["cpuTiers"], [{"pattern": self.CPU["pattern"], "tier": 5}])
+
+    def test_v1_omits_the_row_keeps_the_order_and_notes_it(self):
+        v1, notes = ur.v1_projection(content_with(gpuTiers=[self.OLD, self.NEW, dict(self.OLD, tier=3)], cpuTiers=[self.CPU]))
+        self.assertEqual(v1["gpuTiers"], [self.OLD, dict(self.OLD, tier=3)])
+        self.assertEqual(v1["cpuTiers"], [])
+        self.assertEqual([note for _, note in notes], ['omitted ("v1": false)'] * 2)
+        self.assertEqual(notes[0][0], "gpuTiers[1] " + self.NEW["pattern"])
+        self.assertEqual(notes[1][0], "cpuTiers[0] " + self.CPU["pattern"])
+
+    def test_the_key_never_reaches_either_output(self):
+        content = content_with(gpuTiers=[self.NEW, self.OLD], cpuTiers=[self.CPU])
+        v1, _ = ur.v1_projection(content)
+        for doc in (v1, ur.v2_content(content)):
+            for kind in ur.TIER_KINDS:
+                self.assertTrue(all("v1" not in row for row in doc[kind]), kind)
+
+    def test_input_is_not_mutated(self):
+        content = content_with(gpuTiers=[dict(self.NEW)], cpuTiers=[dict(self.CPU)])
+        before = copy.deepcopy(content)
+        ur.v1_projection(content)
+        ur.v2_content(content)
+        self.assertEqual(content, before)
+
+    def test_omitted_rows_reach_review_section_d(self):
+        knowledge = self.knowledge(gpuTiers=[self.NEW, self.OLD])
+        content = ur.assemble_content(knowledge, knowledge["mods"], {}, {})
+        _, notes = ur.v1_projection(content)
+        md = ur.render_review_markdown(["26.2"], "26.2", [], [], [], [], False, projection_notes=notes)
+        self.assertIn("| gpuTiers[0] " + self.NEW["pattern"] + ' | omitted ("v1": false) |', md)
+
+
 def write_fixture(fixtures_dir, url, body, status=200):
     (fixtures_dir / f"{ur.fixture_key(url)}.json").write_text(json.dumps({"status": status, "body": body}), encoding="utf-8")
 

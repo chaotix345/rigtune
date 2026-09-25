@@ -1,3 +1,4 @@
+import os
 import sys
 import tempfile
 import unittest
@@ -35,6 +36,113 @@ class ArgsTest(unittest.TestCase):
                                            "--java-home", "jdk"])
         self.assertEqual(("26.2", 443, self_update_e2e.DEFAULT_LOCK, None), (args.mc, args.port, args.lock, args.driver_api_jar))
         self.assertFalse(args.expect_history)
+
+    def test_expect_history_values(self):
+        base = ["--name", "n", "--old-jar", "a.jar", "--new-jar", "b.jar", "--work", "w", "--java-home", "jdk"]
+        self.assertEqual("legacy-import", self_update_e2e.parse_args(base + ["--expect-history"]).expect_history)
+        self.assertEqual("own-update", self_update_e2e.parse_args(base + ["--expect-history", "own-update"]).expect_history)
+        self.assertIsNone(self_update_e2e.parse_args(base).expect_history)
+
+
+def make_run(tmp, *extra):
+    args = self_update_e2e.parse_args(["--name", "n", "--old-jar", "a.jar", "--new-jar", "b.jar", "--work", str(tmp),
+                                       "--java-home", "jdk", "--lock", str(Path(tmp) / "lock")] + list(extra))
+    run = self_update_e2e.Run(args)
+    run.run_dir.mkdir(parents=True)
+    return run
+
+
+class LockTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.run = make_run(self.tmp)
+        self.lock = self.tmp / "lock"
+
+    def test_owner_txt_follows_the_plan_protocol(self):
+        text = self_update_e2e.owner_text("ws-h", Path("C:/Dev/Worktrees/rigtune-e2e3"), Path("C:/tmp/run-1"),
+                                          "2026-09-26T10:00:00+00:00")
+        lines = text.splitlines()
+        self.assertEqual("agent: ws-h", lines[0])
+        self.assertEqual("worktree: C:/Dev/Worktrees/rigtune-e2e3", lines[1])
+        self.assertEqual("started: 2026-09-26T10:00:00+00:00", lines[2])
+        self.assertEqual("run: " + str(Path("C:/tmp/run-1")), lines[3])
+
+    def test_take_writes_owner_txt_and_release_removes_the_lock(self):
+        self.run.take_lock()
+        owner = (self.lock / "owner.txt").read_text(encoding="utf-8")
+        self.assertIn("agent: ws-h", owner)
+        self.assertTrue(self_update_e2e.owns_lock(owner, self.run.run_dir))
+        self.run.release_lock()
+        self.assertFalse(self.lock.exists())
+
+    def test_agent_can_be_named(self):
+        run = make_run(self.tmp, "--agent", "p5-verify")
+        run.take_lock()
+        self.assertIn("agent: p5-verify", (self.lock / "owner.txt").read_text(encoding="utf-8"))
+        run.release_lock()
+
+    def test_busy_lock_raises_with_the_owner(self):
+        self.lock.mkdir()
+        (self.lock / "owner.txt").write_text("agent: ws-e\n", encoding="utf-8")
+        with self.assertRaises(self_update_e2e.LockBusy) as busy:
+            self.run.take_lock()
+        self.assertIn("ws-e", str(busy.exception))
+        self.assertTrue((self.lock / "owner.txt").is_file())
+
+    def test_release_leaves_another_runs_lock(self):
+        self.lock.mkdir()
+        other = self_update_e2e.owner_text("ws-e", Path("C:/x"), self.tmp / "other-run", "now")
+        (self.lock / "owner.txt").write_text(other, encoding="utf-8")
+        self.run.release_lock()
+        self.assertEqual(other, (self.lock / "owner.txt").read_text(encoding="utf-8"))
+
+    def test_release_never_deletes_other_files(self):
+        self.run.take_lock()
+        (self.lock / "note.txt").write_text("someone else's", encoding="utf-8")
+        self.run.release_lock()
+        self.assertTrue((self.lock / "note.txt").is_file())
+        self.assertTrue(self_update_e2e.owns_lock((self.lock / "owner.txt").read_text(encoding="utf-8"), self.run.run_dir))
+
+    def test_seed_needs_the_self_update_scenario(self):
+        with self.assertRaises(SystemExit):
+            self_update_e2e.parse_args(["--name", "n", "--scenario", "undo", "--new-jar", "b.jar", "--work", "w",
+                                        "--java-home", "jdk", "--seed", "s"])
+
+    def test_owns_lock_matches_the_whole_run_line(self):
+        text = self_update_e2e.owner_text("ws-h", Path("C:/r"), Path("C:/tmp/run-10"), "now")
+        self.assertTrue(self_update_e2e.owns_lock(text, Path("C:/tmp/run-10")))
+        self.assertFalse(self_update_e2e.owns_lock(text, Path("C:/tmp/run-1")))
+
+
+class UndoScenarioTest(unittest.TestCase):
+    def test_the_undo_scenario_ends_with_the_per_entry_phases(self):
+        run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo")
+        self.assertEqual(["mod-apply", "mod-undo", "mod-check", "entry-apply", "entry-undo", "entry-check"], list(run.checks))
+
+    def test_entry_id_is_added_to_a_phase_after_the_earlier_launch(self):
+        run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo")
+        (run.run_dir / "jvm-entry-undo.txt").write_text("-Drigtune.e2e.phase=entry-undo\n", encoding="utf-8")
+        run.add_jvm_args("entry-undo", ["-Drigtune.e2e.entryId=a1", "-Drigtune.e2e.entryMod=e2e-first"])
+        self.assertEqual(["-Drigtune.e2e.phase=entry-undo", "-Drigtune.e2e.entryId=a1", "-Drigtune.e2e.entryMod=e2e-first"],
+                         (run.run_dir / "jvm-entry-undo.txt").read_text(encoding="utf-8").splitlines())
+
+
+class HelperLogTest(unittest.TestCase):
+    def test_only_a_log_rewritten_since_the_launch_counts(self):
+        log = Path(tempfile.mkdtemp()) / "helper.log"
+        self.assertEqual("", self_update_e2e.helper_log_since(log, None))
+        log.write_bytes(b"[a] Applying 2 operation(s)\n[a] All operations done\n")
+        before = self_update_e2e.helper_log_state(log)
+        self.assertEqual("", self_update_e2e.helper_log_since(log, before))
+        # The next helper run truncates and rewrites it (ProcessBuilder.Redirect.to), here with a shorter log.
+        log.write_bytes(b"[b] Nothing to apply\n")
+        os.utime(log, ns=(before[0] + 10 ** 9, before[0] + 10 ** 9))
+        self.assertEqual("[b] Nothing to apply\n", self_update_e2e.helper_log_since(log, before))
+
+    def test_a_log_created_by_the_launch_counts(self):
+        log = Path(tempfile.mkdtemp()) / "helper.log"
+        log.write_bytes(b"[b] Some operations were not applied\n")
+        self.assertEqual("[b] Some operations were not applied\n", self_update_e2e.helper_log_since(log, None))
 
 
 if __name__ == "__main__":

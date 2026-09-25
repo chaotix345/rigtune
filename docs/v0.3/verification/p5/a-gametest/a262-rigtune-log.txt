@@ -1,0 +1,132 @@
+[06:07:23] [RigTune worker/INFO] (RigTune) RigTune: launcher not recognised (generic memory advice)
+[06:07:23] [RigTune worker/INFO] (RigTune) Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Technologies Inc., renderer=AMD Radeon RX 7800 XT, driverVersion=3.3.0 Core Profile Context 26.8.1.260810, backend=OPENGL, vramMb=16368], totalRamMb=31849, maxHeapMb=7964, display=DisplayInfo[width=2560, height=1440, refreshRate=180, fullscreen=false], hasBattery=false, onBattery=false, osName=Windows 11 10.0, mcVersion=26.2, flags=[sodium-workaround:AMD_GAME_OPTIMIZATION_BROKEN]]
+[06:07:43] [Render thread/INFO] (RigTune) Benchmark started: TUNE in CURRENT, target 170.0 FPS (uncapped), start Knobs[renderDistance=6, simulationDistance=7, dhRendering=false, shaders=false]
+[06:07:43] [Render thread/INFO] (RigTune) Benchmark cancelled: chosen Knobs[renderDistance=6, simulationDistance=7, dhRendering=false, shaders=false], target 170.0 FPS met false, result null, deadline hit false
+[06:07:43] [Render thread/INFO] (RigTune) Benchmark started: TUNE in CURRENT, target 170.0 FPS (uncapped), start Knobs[renderDistance=6, simulationDistance=7, dhRendering=false, shaders=false]
+[06:07:44] [Render thread/INFO] (RigTune) Benchmark settle RENDER_DISTANCE Knobs[renderDistance=6, simulationDistance=7, dhRendering=false, shaders=false]: 81 of 81 chunks within 5 present, client holds 213, 1.0 s
+[06:07:48] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=6, simulationDistance=7, dhRendering=false, shaders=false]: 10456 frames, avg 3373 FPS, 1% low 539 FPS, client chunks 213 (frame limit 260, NONE)
+[06:07:49] [Render thread/INFO] (RigTune) Benchmark settle RENDER_DISTANCE Knobs[renderDistance=8, simulationDistance=7, dhRendering=false, shaders=false]: 149 of 149 chunks within 7 present, client holds 271, 1.0 s
+[06:07:53] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=8, simulationDistance=7, dhRendering=false, shaders=false]: 10815 frames, avg 3489 FPS, 1% low 600 FPS, client chunks 329 (frame limit 260, NONE)
+[06:07:53] [Render thread/INFO] (RigTune) Benchmark settle SIMULATION_DISTANCE Knobs[renderDistance=8, simulationDistance=7, dhRendering=false, shaders=false]: 149 of 149 chunks within 7 present, client holds 329, 0.5 s
+[06:07:56] [Render thread/INFO] (RigTune) Benchmark SIMULATION_DISTANCE Knobs[renderDistance=8, simulationDistance=7, dhRendering=false, shaders=false]: 5267 frames, avg 3511 FPS, 1% low 596 FPS, client chunks 329 (frame limit 260, NONE)
+[06:07:57] [Render thread/INFO] (RigTune) Benchmark settle REPEAT Knobs[renderDistance=8, simulationDistance=7, dhRendering=false, shaders=false]: 149 of 149 chunks within 7 present, client holds 329, 1.0 s
+[06:08:01] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=8, simulationDistance=7, dhRendering=false, shaders=false]: 11032 frames, avg 3617 FPS, 1% low 588 FPS, client chunks 329 (frame limit 260, NONE)
+[06:08:02] [Render thread/INFO] (RigTune) Benchmark settle REPEAT Knobs[renderDistance=8, simulationDistance=7, dhRendering=false, shaders=false]: 149 of 149 chunks within 7 present, client holds 329, 1.0 s
+[06:08:06] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=8, simulationDistance=7, dhRendering=false, shaders=false]: 10861 frames, avg 3561 FPS, 1% low 600 FPS, client chunks 329 (frame limit 260, NONE)
+[06:08:06] [Render thread/INFO] (RigTune) Benchmark finished: chosen Knobs[renderDistance=8, simulationDistance=7, dhRendering=false, shaders=false], target 170.0 FPS met true, result Aggregate[avgFps=3589.0218797027073, onePercentLowFps=593.5554526051912, p99FrameMs=1.4821499999999999, repeats=2, cv=0.014382630110063136], deadline hit false
+[06:08:06] [Test thread/WARN] (RigTune) RigTune's apply helper from the last session is still running; waiting up to 5 s
+[06:08:11] [Test thread/WARN] (RigTune) RigTune's apply helper is still running; its changes take effect after the next restart
+[06:08:14] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:overworld
+[06:08:14] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_nether
+[06:08:14] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_end
+[06:08:46] [Render thread/INFO] (RigTune) Benchmark world: ready at (0.5, 133.0, 192.5)
+[06:08:46] [Render thread/INFO] (RigTune) Benchmark started: MEASURE in BENCHMARK_WORLD, target 170.0 FPS (uncapped), start Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]
+[06:08:49] [Render thread/INFO] (RigTune) Benchmark settle REPEAT Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 49 of 49 chunks within 4 present, client holds 122, 2.3 s
+[06:08:51] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 5854 frames, avg 2856 FPS, 1% low 383 FPS, client chunks 167 (frame limit 260, NONE)
+[06:08:52] [Render thread/INFO] (RigTune) Benchmark settle REPEAT Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 49 of 49 chunks within 4 present, client holds 167, 0.5 s
+[06:08:54] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 6181 frames, avg 3090 FPS, 1% low 474 FPS, client chunks 167 (frame limit 260, NONE)
+[06:08:54] [Render thread/INFO] (RigTune) Benchmark finished: chosen Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false], target 170.0 FPS met true, result Aggregate[avgFps=2972.985447544802, onePercentLowFps=428.7185686686149, p99FrameMs=1.6067, repeats=2, cv=0.1508399054630857], deadline hit false
+[06:08:55] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:overworld
+[06:08:56] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_nether
+[06:08:56] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_end
+[06:08:56] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:overworld
+[06:08:56] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_nether
+[06:08:56] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_end
+[06:08:57] [Render thread/INFO] (RigTune) Benchmark world: ready at (0.5, 133.0, 192.5)
+[06:08:57] [Render thread/INFO] (RigTune) Benchmark started: MEASURE in BENCHMARK_WORLD, target 170.0 FPS (uncapped), start Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]
+[06:08:58] [Render thread/INFO] (RigTune) Benchmark settle REPEAT Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 49 of 49 chunks within 4 present, client holds 157, 0.5 s
+[06:09:00] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 40 frames, avg 20 FPS, 1% low 20 FPS, client chunks 157 (frame limit 260, NONE)
+[06:09:01] [Render thread/INFO] (RigTune) Benchmark settle REPEAT Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 49 of 49 chunks within 4 present, client holds 157, 0.5 s
+[06:09:03] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 41 frames, avg 20 FPS, 1% low 19 FPS, client chunks 157 (frame limit 260, NONE)
+[06:09:03] [Render thread/INFO] (RigTune) Benchmark finished: chosen Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false], target 170.0 FPS met false, result Aggregate[avgFps=20.001406408998967, onePercentLowFps=19.499618315745476, p99FrameMs=51.2834, repeats=2, cv=0.003667666414388031], deadline hit false
+[06:09:03] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:overworld
+[06:09:04] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_nether
+[06:09:04] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_end
+[06:09:04] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:overworld
+[06:09:04] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_nether
+[06:09:04] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_end
+[06:09:05] [Render thread/INFO] (RigTune) Benchmark world: ready at (0.5, 133.0, 192.5)
+[06:09:05] [Render thread/INFO] (RigTune) Benchmark started: TUNE in BENCHMARK_WORLD, target 1.0 FPS (uncapped), start Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]
+[06:09:06] [Render thread/INFO] (RigTune) Benchmark settle RENDER_DISTANCE Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 49 of 49 chunks within 4 present, client holds 157, 0.5 s
+[06:09:08] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 6613 frames, avg 3226 FPS, 1% low 572 FPS, client chunks 157 (frame limit 260, NONE)
+[06:09:09] [Render thread/INFO] (RigTune) Benchmark settle RENDER_DISTANCE Knobs[renderDistance=7, simulationDistance=12, dhRendering=false, shaders=false]: 113 of 113 chunks within 6 present, client holds 174, 0.5 s
+[06:09:11] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=7, simulationDistance=12, dhRendering=false, shaders=false]: 5778 frames, avg 2828 FPS, 1% low 365 FPS, client chunks 265 (frame limit 260, NONE)
+[06:09:14] [Render thread/INFO] (RigTune) Benchmark settle RENDER_DISTANCE Knobs[renderDistance=11, simulationDistance=12, dhRendering=false, shaders=false]: 317 of 317 chunks within 10 present, client holds 451, 2.4 s
+[06:09:16] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=11, simulationDistance=12, dhRendering=false, shaders=false]: 4941 frames, avg 2353 FPS, 1% low 267 FPS, client chunks 557 (frame limit 260, NONE)
+[06:09:17] [Render thread/INFO] (RigTune) Benchmark settle RENDER_DISTANCE Knobs[renderDistance=12, simulationDistance=12, dhRendering=false, shaders=false]: 377 of 377 chunks within 11 present, client holds 603, 0.7 s
+[06:09:20] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=12, simulationDistance=12, dhRendering=false, shaders=false]: 5631 frames, avg 2682 FPS, 1% low 532 FPS, client chunks 637 (frame limit 260, NONE)
+[06:09:20] [Render thread/INFO] (RigTune) Benchmark settle REPEAT Knobs[renderDistance=12, simulationDistance=12, dhRendering=false, shaders=false]: 377 of 377 chunks within 11 present, client holds 637, 0.5 s
+[06:09:23] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=12, simulationDistance=12, dhRendering=false, shaders=false]: 5527 frames, avg 2763 FPS, 1% low 645 FPS, client chunks 637 (frame limit 260, NONE)
+[06:09:23] [Render thread/INFO] (RigTune) Benchmark settle REPEAT Knobs[renderDistance=12, simulationDistance=12, dhRendering=false, shaders=false]: 377 of 377 chunks within 11 present, client holds 637, 0.6 s
+[06:09:26] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=12, simulationDistance=12, dhRendering=false, shaders=false]: 5223 frames, avg 2611 FPS, 1% low 587 FPS, client chunks 637 (frame limit 260, NONE)
+[06:09:26] [Render thread/INFO] (RigTune) Benchmark finished: chosen Knobs[renderDistance=12, simulationDistance=12, dhRendering=false, shaders=false], target 1.0 FPS met true, result Aggregate[avgFps=2687.2447344892475, onePercentLowFps=615.8657657017243, p99FrameMs=1.43125, repeats=2, cv=0.06686656136181995], deadline hit false
+[06:09:26] [Test thread/INFO] (RigTune) Benchmark game test: settle RENDER_DISTANCE RD 5: 49 of 49 chunks within 4 present, client holds 157, 0.5 s
+[06:09:26] [Test thread/INFO] (RigTune) Benchmark game test: settle RENDER_DISTANCE RD 7: 113 of 113 chunks within 6 present, client holds 174, 0.5 s
+[06:09:26] [Test thread/INFO] (RigTune) Benchmark game test: settle RENDER_DISTANCE RD 11: 317 of 317 chunks within 10 present, client holds 451, 2.4 s
+[06:09:26] [Test thread/INFO] (RigTune) Benchmark game test: settle RENDER_DISTANCE RD 12: 377 of 377 chunks within 11 present, client holds 603, 0.7 s
+[06:09:26] [Test thread/INFO] (RigTune) Benchmark game test: settle REPEAT RD 12: 377 of 377 chunks within 11 present, client holds 637, 0.5 s
+[06:09:26] [Test thread/INFO] (RigTune) Benchmark game test: settle REPEAT RD 12: 377 of 377 chunks within 11 present, client holds 637, 0.6 s
+[06:09:26] [Test thread/INFO] (RigTune) Benchmark game test: first frames [FirstFrame[rd=5, inRange=49, missing=0], FirstFrame[rd=7, inRange=113, missing=0], FirstFrame[rd=11, inRange=317, missing=0], FirstFrame[rd=12, inRange=377, missing=0]]
+[06:09:26] [Test thread/INFO] (RigTune) Benchmark game test: RD 12 settled in 0.7 s (MC 26.2)
+[06:09:26] [Test thread/INFO] (RigTune) Benchmark game test: server's requested view distance 5 after the finished Tune (render distance 5)
+[06:09:27] [Test thread/INFO] (RigTune) Benchmark game test: scene fingerprint (MC 26.2): floor 117 minecraft:forest; within 128: water 0.0%, height sd 18.5, range 57; within 192: 4 biomes >= 5%, water 14.7%
+[06:09:27] [Test thread/INFO] (RigTune) Benchmark game test: camera y 133 = terrain floor 117 + 16, camera block and the one above air true
+[06:09:27] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:overworld
+[06:09:28] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_nether
+[06:09:28] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_end
+[06:09:29] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:overworld
+[06:09:29] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_nether
+[06:09:29] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_end
+[06:09:29] [Render thread/INFO] (RigTune) Benchmark world: ready at (0.5, 133.0, 192.5)
+[06:09:29] [Render thread/INFO] (RigTune) Benchmark started: TUNE in BENCHMARK_WORLD, target 170.0 FPS (uncapped), start Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]
+[06:09:30] [Render thread/INFO] (RigTune) Benchmark settle RENDER_DISTANCE Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 49 of 49 chunks within 4 present, client holds 157, 0.5 s
+[06:09:32] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 796 frames, avg 398 FPS, 1% low 22 FPS, client chunks 157 (frame limit 260, NONE)
+[06:09:32] [Test thread/INFO] (RigTune) Benchmark game test: server's requested view distance 4 during the step (start 5)
+[06:09:32] [Render thread/INFO] (RigTune) Benchmark cancelled: chosen Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false], target 170.0 FPS met false, result Aggregate[avgFps=397.92272340711435, onePercentLowFps=22.46923400134366, p99FrameMs=44.225099, repeats=1, cv=null], deadline hit false
+[06:09:32] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:overworld
+[06:09:32] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_nether
+[06:09:32] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_end
+[06:09:32] [Test thread/INFO] (RigTune) Benchmark game test: server's requested view distance 5 after the cancelled Tune (render distance 5)
+[06:09:32] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:overworld
+[06:09:32] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_nether
+[06:09:32] [Server thread/INFO] (Minecraft) Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_end
+[06:09:35] [Render thread/INFO] (RigTune) Benchmark started: TUNE in CURRENT, target 170.0 FPS (uncapped), start Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]
+[06:09:35] [Render thread/INFO] (RigTune) Benchmark settle RENDER_DISTANCE Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 49 of 49 chunks within 4 present, client holds 157, 0.5 s
+[06:09:38] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=5, simulationDistance=12, dhRendering=false, shaders=false]: 2938 frames, avg 1399 FPS, 1% low 34 FPS, client chunks 157 (frame limit 260, NONE)
+[06:09:39] [Render thread/INFO] (RigTune) Benchmark settle RENDER_DISTANCE Knobs[renderDistance=4, simulationDistance=12, dhRendering=false, shaders=false]: 29 of 29 chunks within 3 present, client holds 117, 0.6 s
+[06:09:41] [Render thread/INFO] (RigTune) Benchmark RENDER_DISTANCE Knobs[renderDistance=4, simulationDistance=12, dhRendering=false, shaders=false]: 2968 frames, avg 1448 FPS, 1% low 34 FPS, client chunks 117 (frame limit 260, NONE)
+[06:09:42] [Render thread/INFO] (RigTune) Benchmark settle SIMULATION_DISTANCE Knobs[renderDistance=4, simulationDistance=12, dhRendering=false, shaders=false]: 29 of 29 chunks within 3 present, client holds 117, 0.5 s
+[06:09:43] [Render thread/INFO] (RigTune) Benchmark SIMULATION_DISTANCE Knobs[renderDistance=4, simulationDistance=12, dhRendering=false, shaders=false]: 1520 frames, avg 1447 FPS, 1% low 34 FPS, client chunks 117 (frame limit 260, NONE)
+[06:09:44] [Render thread/INFO] (RigTune) Benchmark settle SIMULATION_DISTANCE Knobs[renderDistance=4, simulationDistance=10, dhRendering=false, shaders=false]: 29 of 29 chunks within 3 present, client holds 117, 0.5 s
+[06:09:45] [Render thread/INFO] (RigTune) Benchmark SIMULATION_DISTANCE Knobs[renderDistance=4, simulationDistance=10, dhRendering=false, shaders=false]: 1413 frames, avg 1413 FPS, 1% low 34 FPS, client chunks 117 (frame limit 260, NONE)
+[06:09:46] [Render thread/INFO] (RigTune) Benchmark settle SIMULATION_DISTANCE Knobs[renderDistance=4, simulationDistance=8, dhRendering=false, shaders=false]: 29 of 29 chunks within 3 present, client holds 117, 0.5 s
+[06:09:47] [Render thread/INFO] (RigTune) Benchmark SIMULATION_DISTANCE Knobs[renderDistance=4, simulationDistance=8, dhRendering=false, shaders=false]: 1442 frames, avg 1442 FPS, 1% low 34 FPS, client chunks 117 (frame limit 260, NONE)
+[06:09:48] [Render thread/INFO] (RigTune) Benchmark settle REPEAT Knobs[renderDistance=4, simulationDistance=12, dhRendering=false, shaders=false]: 29 of 29 chunks within 3 present, client holds 117, 0.5 s
+[06:09:50] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=4, simulationDistance=12, dhRendering=false, shaders=false]: 3005 frames, avg 1466 FPS, 1% low 34 FPS, client chunks 117 (frame limit 260, NONE)
+[06:09:51] [Render thread/INFO] (RigTune) Benchmark settle REPEAT Knobs[renderDistance=4, simulationDistance=12, dhRendering=false, shaders=false]: 29 of 29 chunks within 3 present, client holds 117, 0.6 s
+[06:09:54] [Render thread/INFO] (RigTune) Benchmark REPEAT Knobs[renderDistance=4, simulationDistance=12, dhRendering=false, shaders=false]: 2909 frames, avg 1419 FPS, 1% low 34 FPS, client chunks 117 (frame limit 260, NONE)
+[06:09:54] [Render thread/INFO] (RigTune) Benchmark finished: chosen Knobs[renderDistance=4, simulationDistance=12, dhRendering=false, shaders=false], target 170.0 FPS met false, result Aggregate[avgFps=1442.3950904198919, onePercentLowFps=33.95914317506417, p99FrameMs=28.84075, repeats=2, cv=0.0032489425128494954], deadline hit false
+[06:09:54] [Test thread/INFO] (RigTune) Benchmark game test: server's requested view distance 5 after the Tune in the current world (render distance 5)
+[06:09:55] [Test thread/INFO] (RigTune) Benchmark game test: benchmarks.json has 5 runs
+[06:09:55] [Test thread/INFO] (RigTune) LauncherGameTest: at start minecraft.launcher.brand=null; org.prismlauncher.instance.name set: false; multimc.instance.title set: false; INST_ID set: false; INST_NAME set: false; detected: LauncherInfo[launcher=UNKNOWN, memoryOverride=null]
+[06:09:56] [RigTune worker/INFO] (RigTune) RigTune: launcher Modrinth App
+[06:09:56] [Test thread/INFO] (RigTune) LauncherGameTest: with minecraft.launcher.brand=theseus detected LauncherInfo[launcher=MODRINTH_APP, memoryOverride=null]
+[06:09:56] [Render thread/INFO] (RigTune) LauncherGameTest: header [CPU AMD Ryzen 7 7800X3D · 16 threads, Memory 2.0 GB of 16 GB, set in the Modrinth App, GPU AMD Radeon RX 7800 XT · 16 GB VRAM · OpenGL · GPU tier 5, Display 2560×1440 @ 165 Hz · Rules r12 (bundled) · Offline]; line In the Modrinth App: this instance → Instance settings (gear) → Sync overrides → turn on Custom memory allocation → set the slider.
+[06:09:56] [RigTune worker/INFO] (RigTune) RigTune: launcher not recognised (generic memory advice)
+[06:10:04] [Test thread/INFO] (RigTune) UiGameTest: copied report, 1394 characters (CRLF from the clipboard: false):
+**RigTune 0.3.0-dev+mc26.2** · Minecraft 26.2 · Fabric Loader 0.19.5
+[06:10:06] [Test thread/INFO] (RigTune) UiGameTest: networkEnabled=false saved to settings.json
+[06:10:09] [RigTune worker/WARN] (RigTune) Modrinth lookups failed; using offline data: io.github.chaotix345.rigtune.core.modrinth.ModrinthException: Modrinth is off in RigTune's settings
+[06:10:09] [RigTune worker/WARN] (RigTune) Modrinth lookups failed; using offline data: io.github.chaotix345.rigtune.core.modrinth.ModrinthException: Modrinth is off in RigTune's settings
+[06:10:09] [Test thread/INFO] (RigTune) UiGameTest: network on, Modrinth off saved
+[06:10:13] [Test thread/INFO] (RigTune) UiGameTest: Modrinth on, startup toast off and the benchmark world saved
+[06:10:16] [Render thread/INFO] (RigTune) ReportGameTest: widest link glyph 'A' (6 px)
+[06:10:17] [Render thread/INFO] (RigTune) ReportGameTest: worst-case 675-character link at 640x480@2: 15 rows, 15 shown
+[06:10:17] [Test thread/INFO] (RigTune) ReportGameTest: 640x480-scale2: 651-character link for a 1394-character report: https://github.com/chaotix345/rigtune/issues/new?template=problem.yml&title=%5BRigTune+0.3.0-dev%2Bmc26.2%5D+MC+26.2%3A+&report=**RigTune+0.3.0-dev%2Bmc26.2**+%C2%B7+Minecraft+26.2+%C2%B7+Fabric+Loader+0.19.5%0A**Hardware**%0A-+CPU%3A+AMD+Ryzen+7+7800X3D+8-Core+Processor+%288+cores%2C+16+threads%29%0A-+GPU%3A+AMD+Radeon+RX+7800+XT+%C2%B7+driver+3.3.0+Core+Profile+Context+26.8.1.260810+%C2%B7+OpenGL+%C2%B7+16+GB+VRAM%0A-+RAM+31+GB+%C2%B7+heap+7.8+GB+%C2%B7+display+2560%C3%9714
+[06:10:17] [Render thread/INFO] (RigTune) ReportGameTest: link at 640x480-scale2: 14 rows, 14 shown
+[06:10:17] [Test thread/INFO] (RigTune) ReportGameTest: 854x480-scale2: 651-character link for a 1394-character report: https://github.com/chaotix345/rigtune/issues/new?template=problem.yml&title=%5BRigTune+0.3.0-dev%2Bmc26.2%5D+MC+26.2%3A+&report=**RigTune+0.3.0-dev%2Bmc26.2**+%C2%B7+Minecraft+26.2+%C2%B7+Fabric+Loader+0.19.5%0A**Hardware**%0A-+CPU%3A+AMD+Ryzen+7+7800X3D+8-Core+Processor+%288+cores%2C+16+threads%29%0A-+GPU%3A+AMD+Radeon+RX+7800+XT+%C2%B7+driver+3.3.0+Core+Profile+Context+26.8.1.260810+%C2%B7+OpenGL+%C2%B7+16+GB+VRAM%0A-+RAM+31+GB+%C2%B7+heap+7.8+GB+%C2%B7+display+2560%C3%9714
+[06:10:17] [Render thread/INFO] (RigTune) ReportGameTest: link at 854x480-scale2: 10 rows, 10 shown
+[06:10:17] [Test thread/INFO] (RigTune) ReportGameTest: 1280x720-scale2: 651-character link for a 1394-character report: https://github.com/chaotix345/rigtune/issues/new?template=problem.yml&title=%5BRigTune+0.3.0-dev%2Bmc26.2%5D+MC+26.2%3A+&report=**RigTune+0.3.0-dev%2Bmc26.2**+%C2%B7+Minecraft+26.2+%C2%B7+Fabric+Loader+0.19.5%0A**Hardware**%0A-+CPU%3A+AMD+Ryzen+7+7800X3D+8-Core+Processor+%288+cores%2C+16+threads%29%0A-+GPU%3A+AMD+Radeon+RX+7800+XT+%C2%B7+driver+3.3.0+Core+Profile+Context+26.8.1.260810+%C2%B7+OpenGL+%C2%B7+16+GB+VRAM%0A-+RAM+31+GB+%C2%B7+heap+7.8+GB+%C2%B7+display+2560%C3%971
+[06:10:17] [Render thread/INFO] (RigTune) ReportGameTest: link at 1280x720-scale2: 7 rows, 7 shown
+[06:10:17] [Test thread/INFO] (RigTune) ReportGameTest: cancelled at every size; Open in Browser was never pressed
+[06:10:18] [Test thread/INFO] (RigTune) HistoryGameTest: failed change shows: Last attempt failed: Gave up after 10 attempt(s): java.nio.file.FileSystemException: fake-mod-1.0.jar -> fake-mod-1.0.jar.disabled: The process cannot access the file because it is being used by another process (attempt 2 of 3)

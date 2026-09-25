@@ -1,0 +1,5 @@
+[2026-09-25T20:36:53.895083200Z] [RigTune apply] Waiting for game process 21696 to exit
+[2026-09-25T20:36:56.330734500Z] [RigTune apply] Applying 2 operation(s) from <repo>\versions\26.2\run\config\rigtune\pending.json
+[2026-09-25T20:36:56.387618300Z] [RigTune apply] SKIPPED_ALREADY_DONE DISABLE_FILE: fabric-26.2.jar is already gone
+[2026-09-25T20:36:56.387618300Z] [RigTune apply] FAILED ENABLE_FILE: Missing <repo>\versions\26.2\run\mods\DistantHorizons-3.3.2-26.2-fabric-neoforge.jar.rigtune-pending
+[2026-09-25T20:36:56.387618300Z] [RigTune apply] Some operations were not applied; failed ones remain in <repo>\versions\26.2\run\config\rigtune\pending.json, abandoned ones were dropped

@@ -2,14 +2,17 @@ package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
+import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
+import io.github.chaotix345.rigtune.core.model.DisplayInfo;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.GraphicsBackend;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.report.IssueLink;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.Font;
@@ -22,6 +25,7 @@ import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
+import net.minecraft.client.gui.screens.ConfirmLinkScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.CommonComponents;
@@ -36,6 +40,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 public class RigTuneScreen extends Screen {
@@ -49,6 +54,7 @@ public class RigTuneScreen extends Screen {
 	private static final int COLOR_ADVICE = 0xFF7EC8FF;
 	private static final int COLOR_NEUTRAL = 0xFF8A8A8A;
 	private static final int COLOR_OK = 0xFF7FE07F;
+	private static final int COLOR_LAUNCHER = 0xFFA8E0B0;
 
 	private final @Nullable Screen parent;
 	private final RigTuneController controller;
@@ -67,8 +73,10 @@ public class RigTuneScreen extends Screen {
 	private int statusY;
 	private @Nullable RecommendationList list;
 	private @Nullable Button applyButton;
+	private @Nullable Button previewButton;
 	private @Nullable Map<String, String> captions;
 	private @Nullable Component seenControllerStatus;
+	private LauncherInfo shownLauncher = LauncherInfo.UNKNOWN;
 
 	public RigTuneScreen(@Nullable Screen parent, RigTuneController controller) {
 		super(Component.translatable("rigtune.screen.title"));
@@ -87,6 +95,7 @@ public class RigTuneScreen extends Screen {
 			captions = SettingsBridge.captions(minecraft.options);
 		}
 		shown = controller.report();
+		shownLauncher = controller.launcher();
 		syncSelection(shown);
 
 		int titleWidth = font.width(title.copy().withStyle(ChatFormatting.BOLD));
@@ -118,10 +127,10 @@ public class RigTuneScreen extends Screen {
 		List<Button> buttons = new ArrayList<>();
 		applyButton = Button.builder(Component.translatable("rigtune.screen.apply"), b -> applySelected()).build();
 		buttons.add(applyButton);
-		buttons.add(Button.builder(Component.translatable("rigtune.screen.undo_last"), b -> minecraft.gui.setScreen(new UndoScreen(this, controller, false)))
-				.tooltip(Tooltip.create(Component.translatable("rigtune.screen.undo_last.tooltip"))).build());
-		buttons.add(Button.builder(Component.translatable("rigtune.screen.undo_all"), b -> minecraft.gui.setScreen(new UndoScreen(this, controller, true)))
-				.tooltip(Tooltip.create(Component.translatable("rigtune.screen.undo_all.tooltip"))).build());
+		buttons.add(previewButton());
+		// v0.3 (review X-M2): Undo last and Undo all live in the History screen.
+		buttons.add(Button.builder(Component.translatable("rigtune.history.open"), b -> minecraft.gui.setScreen(new HistoryScreen(this, controller)))
+				.tooltip(Tooltip.create(Component.translatable("rigtune.history.open.tooltip"))).build());
 		if (controller.hasPendingChanges()) {
 			Button discard = Button.builder(Component.translatable("rigtune.screen.discard"), b -> {
 				status = controller.discardPending();
@@ -140,6 +149,7 @@ public class RigTuneScreen extends Screen {
 				.tooltip(Tooltip.create(Component.translatable("rigtune.screen.copy_report.tooltip"))).build();
 		copy.active = shown != null;
 		buttons.add(copy);
+		buttons.add(reportButton());
 		buttons.add(Button.builder(Component.translatable("gui.done"), b -> onClose()).build());
 
 		// As many buttons of at least MIN_BUTTON per row as fit, then the rows balanced.
@@ -190,21 +200,13 @@ public class RigTuneScreen extends Screen {
 
 	private List<Component> header(Report report, @Nullable Component badge) {
 		HardwareProfile hw = report.hardware();
-		List<Component> lines = new ArrayList<>();
-		lines.add(Component.translatable("rigtune.header.cpu",
-				value(cpuName(hw.cpu().name())),
-				value(Integer.toString(hw.cpu().logicalCores())),
-				value(gb(hw.totalRamMb())),
-				value(gb(hw.maxHeapMb()))).withStyle(s -> s.withColor(COLOR_LABEL)));
-		String vram = hw.gpu().vramMb() > 0 ? gb(hw.gpu().vramMb()) : "?";
+		List<Component> lines = new ArrayList<>(LauncherLines.cpuAndMemory(shownLauncher, value(cpuName(hw.cpu().name())),
+				value(Integer.toString(hw.cpu().logicalCores())), value(gb(hw.totalRamMb())), value(gb(hw.maxHeapMb())), COLOR_LABEL));
 		lines.add(Component.translatable("rigtune.header.gpu",
 				value(hw.gpu().renderer()),
-				value(vram),
+				value(gb(hw.gpu().vramMb())),
 				value(backendName(hw.gpu().backend())),
 				value(Integer.toString(report.tier().gpuTier()))).withStyle(s -> s.withColor(COLOR_LABEL)));
-		String display = hw.display().width() > 0
-				? hw.display().width() + "×" + hw.display().height() + (hw.display().refreshRate() > 0 ? " @ " + hw.display().refreshRate() + " Hz" : "")
-				: "?";
 		MutableComponent online = report.online()
 				? Component.translatable("rigtune.header.online").withStyle(s -> s.withColor(COLOR_OK))
 				: Component.translatable("rigtune.header.offline").withStyle(ChatFormatting.GOLD);
@@ -213,7 +215,7 @@ public class RigTuneScreen extends Screen {
 			last.append(badge).append(Component.literal(" · ").withStyle(s -> s.withColor(COLOR_LABEL)));
 		}
 		last.append(Component.translatable("rigtune.header.display_rules",
-				value(display),
+				value(display(hw.display())),
 				value(Integer.toString(report.rulesRevision())),
 				value(report.rulesSource()),
 				online).withStyle(s -> s.withColor(COLOR_LABEL)));
@@ -230,6 +232,12 @@ public class RigTuneScreen extends Screen {
 		return List.copyOf(headerLines);
 	}
 
+	/** v0.3 (WS-C): the launcher lines shown under the ram-* advice (for the game tests). */
+	public List<Component> launcherLines() {
+		return shown == null ? List.of()
+				: shown.recommendations().stream().map(r -> LauncherLines.adviceLine(r, shownLauncher)).filter(Objects::nonNull).toList();
+	}
+
 	private void copyReport() {
 		String text = controller.shareReport();
 		if (text.isEmpty()) {
@@ -238,6 +246,26 @@ public class RigTuneScreen extends Screen {
 		}
 		minecraft.keyboardHandler.setClipboard(text);
 		status = Component.translatable("rigtune.share.copied", text.length());
+	}
+
+	private Button reportButton() {
+		Button button = Button.builder(Component.translatable("rigtune.report.button"), b -> reportProblem())
+				.tooltip(Tooltip.create(Component.translatable("rigtune.report.button.tooltip"))).build();
+		button.active = shown != null;
+		return button;
+	}
+
+	// The full report goes to the clipboard; the link carries the title and a short report (IssueLink). Vanilla's
+	// confirm screen shows the link, and nothing is opened unless the player chooses Open in Browser.
+	private void reportProblem() {
+		String text = controller.shareReport();
+		if (text.isEmpty()) {
+			status = Component.translatable("rigtune.share.unavailable");
+			return;
+		}
+		minecraft.keyboardHandler.setClipboard(text);
+		status = Component.translatable("rigtune.report.copied", text.length());
+		ConfirmLinkScreen.confirmLinkNow(this, IssueLink.uri(controller.reportVersions(), text));
 	}
 
 	static String cpuName(String raw) {
@@ -264,12 +292,27 @@ public class RigTuneScreen extends Screen {
 		return Component.literal(text == null ? "?" : text).withStyle(ChatFormatting.WHITE);
 	}
 
-	private static String gb(long mb) {
+	private static Component value(Component text) {
+		return text.copy().withStyle(ChatFormatting.WHITE);
+	}
+
+	// "2.0 GB", "16 GB"; "?" when unknown.
+	static Component gb(long mb) {
 		if (mb <= 0) {
-			return "?";
+			return Component.literal("?");
 		}
 		double gb = mb / 1024.0;
-		return gb >= 10 ? Math.round(gb) + " GB" : String.format(Locale.ROOT, "%.1f GB", gb);
+		return Component.translatable("rigtune.unit.gb", gb >= 10 ? Long.toString(Math.round(gb)) : String.format(Locale.ROOT, "%.1f", gb));
+	}
+
+	// "2560×1440 @ 180 Hz", "2560×1440"; "?" when unknown.
+	static Component display(DisplayInfo display) {
+		if (display.width() <= 0) {
+			return Component.literal("?");
+		}
+		return display.refreshRate() > 0
+				? Component.translatable("rigtune.header.display_size_hz", display.width(), display.height(), display.refreshRate())
+				: Component.translatable("rigtune.header.display_size", display.width(), display.height());
 	}
 
 	private void populate(RecommendationList target) {
@@ -292,7 +335,7 @@ public class RigTuneScreen extends Screen {
 		if (shown == null) {
 			return;
 		}
-		List<Recommendation> chosen = shown.recommendations().stream().filter(r -> r.appliable() && selected.contains(r.id())).toList();
+		List<Recommendation> chosen = ticked();
 		if (chosen.isEmpty()) {
 			return;
 		}
@@ -306,7 +349,21 @@ public class RigTuneScreen extends Screen {
 		}
 		long count = shown == null ? 0 : shown.recommendations().stream().filter(r -> r.appliable() && selected.contains(r.id())).count();
 		applyButton.active = count > 0;
+		if (previewButton != null) {
+			previewButton.active = count > 0;
+		}
 		applyButton.setMessage(count > 0 ? Component.translatable("rigtune.screen.apply.count", count) : Component.translatable("rigtune.screen.apply"));
+	}
+
+	// v0.3 (WS-P): what Apply would do for exactly the items Apply takes (docs/v0.3/SPEC.md item 13).
+	private Button previewButton() {
+		previewButton = Button.builder(Component.translatable("rigtune.preview.button"), b -> minecraft.gui.setScreen(new PreviewScreen(this, controller, ticked())))
+				.tooltip(Tooltip.create(Component.translatable("rigtune.preview.button.tooltip"))).build();
+		return previewButton;
+	}
+
+	private List<Recommendation> ticked() {
+		return shown == null ? List.of() : shown.recommendations().stream().filter(r -> r.appliable() && selected.contains(r.id())).toList();
 	}
 
 	public Set<String> selectedIds() {
@@ -320,19 +377,19 @@ public class RigTuneScreen extends Screen {
 			seenControllerStatus = latest;
 			status = latest;
 		}
-		if (controller.report() != shown) {
+		if (controller.report() != shown || !controller.launcher().equals(shownLauncher)) {
 			rebuildWidgets();
 		}
 	}
 
-	private String displayTitle(Recommendation r) {
+	private Component displayTitle(Recommendation r) {
 		if (r.action() instanceof Action.SetSetting set && set.key().startsWith(SettingsBridge.VANILLA_PREFIX) && captions != null) {
 			String caption = captions.get(set.key().substring(SettingsBridge.VANILLA_PREFIX.length()));
 			if (caption != null && !caption.isBlank()) {
-				return caption + ": " + prettyValue(set.currentValue()) + " → " + prettyValue(set.newValue());
+				return Component.translatable("rigtune.rec.setting.title", caption, prettyValue(set.currentValue()), prettyValue(set.newValue()));
 			}
 		}
-		return r.title();
+		return Texts.component(r.titleText());
 	}
 
 	private static String prettyValue(String value) {
@@ -471,6 +528,7 @@ public class RigTuneScreen extends Screen {
 			private final Component impact;
 			private final List<FormattedCharSequence> titleLines;
 			private final List<FormattedCharSequence> reasonLines;
+			private final List<FormattedCharSequence> launcherLines;
 			private final int textIndent;
 
 			RecommendationEntry(Recommendation recommendation, int width) {
@@ -480,11 +538,13 @@ public class RigTuneScreen extends Screen {
 				int impactWidth = font.width(impact) + 8;
 				int titleWidth = Math.max(40, width - textIndent - impactWidth);
 				int reasonWidth = Math.max(40, width - textIndent);
-				Component title = Component.literal(displayTitle(recommendation));
+				Component title = displayTitle(recommendation);
 				List<FormattedCharSequence> split = font.split(title, titleWidth);
 				this.titleLines = split.size() > 2 ? List.of(split.get(0), ComponentRenderUtils.clipText(title, font, titleWidth)) : split;
 				this.reasonLines = recommendation.reason() == null || recommendation.reason().isBlank()
-						? List.of() : font.split(Component.literal(recommendation.reason()), reasonWidth);
+						? List.of() : font.split(Texts.component(recommendation.reasonText()), reasonWidth);
+				Component launcherLine = LauncherLines.adviceLine(recommendation, shownLauncher);
+				this.launcherLines = launcherLine == null ? List.of() : font.split(launcherLine, reasonWidth);
 				if (recommendation.appliable()) {
 					this.checkbox = Checkbox.builder(Component.empty(), font)
 							.selected(selected.contains(recommendation.id()))
@@ -507,7 +567,7 @@ public class RigTuneScreen extends Screen {
 
 			int preferredHeight() {
 				int titleHeight = Math.max(BOX, titleLines.size() * 9 + 4);
-				return 4 + titleHeight + reasonLines.size() * 9 + 5;
+				return 4 + titleHeight + (reasonLines.size() + launcherLines.size()) * 9 + 5;
 			}
 
 			@Override
@@ -537,6 +597,10 @@ public class RigTuneScreen extends Screen {
 				int reasonY = y + Math.max(BOX, titleLines.size() * 9 + 4) + 1;
 				for (FormattedCharSequence line : reasonLines) {
 					graphics.text(font, line, textX, reasonY, informational && recommendation.category() == Category.WARNING ? 0xFFE8B0A8 : COLOR_REASON, false);
+					reasonY += 9;
+				}
+				for (FormattedCharSequence line : launcherLines) {
+					graphics.text(font, line, textX, reasonY, COLOR_LAUNCHER, false);
 					reasonY += 9;
 				}
 			}

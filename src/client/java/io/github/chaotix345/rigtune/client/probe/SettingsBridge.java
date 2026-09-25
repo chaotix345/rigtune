@@ -211,6 +211,49 @@ public final class SettingsBridge {
 		return out;
 	}
 
+	// v0.3 (WS-P): what applyVanilla would refuse, found without setting anything (the preview, docs/v0.3/SPEC.md item 13):
+	// bare key -> applyBatch's message for a value the option can't parse or that is out of its range.
+	public static Map<String, String> problems(Options options, Map<String, String> values) {
+		Map<String, String> wanted = new LinkedHashMap<>();
+		values.forEach((k, v) -> wanted.put(bare(k), v));
+		Map<String, String> out = new LinkedHashMap<>();
+		visit(options, new Visitor() {
+			@Override
+			public void option(String key, OptionInstance<?> option) {
+				String value = wanted.get(key);
+				String problem = value == null ? null : problem(option, value);
+				if (problem != null) {
+					out.put(key, problem);
+				}
+			}
+
+			@Override
+			public Object field(String key, Object current, Function<Object, String> serialize, Function<String, Object> parse) {
+				String value = wanted.get(key);
+				if (value != null) {
+					try {
+						if (parse.apply(value) == null) {
+							out.put(key, "Invalid value " + value);
+						}
+					} catch (RuntimeException e) {
+						out.put(key, "Invalid value " + value + ": " + e.getMessage());
+					}
+				}
+				return current;
+			}
+		});
+		return out;
+	}
+
+	private static <T> @Nullable String problem(OptionInstance<T> option, String value) {
+		DataResult<T> parsed = decode(option, value);
+		Optional<T> result = parsed.result();
+		if (result.isEmpty()) {
+			return "Invalid value " + value + ": " + parsed.error().map(DataResult.Error::message).orElse("?");
+		}
+		return option.values().validateValue(result.get()).isEmpty() ? "Value out of range: " + value : null;
+	}
+
 	static @Nullable String rejection(String bareKey, String value) {
 		if (!SettingKeys.changeable(VANILLA_PREFIX + bareKey)) {
 			return "RigTune doesn't change " + bareKey;

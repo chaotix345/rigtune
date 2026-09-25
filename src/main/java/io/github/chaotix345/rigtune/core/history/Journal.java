@@ -39,7 +39,8 @@ public final class Journal implements ChangeRecorder {
 	private record HistoryFile(int formatVersion, List<JournalEntry> entries) {
 	}
 
-	private enum State { MISSING, OK, CORRUPT, NEWER }
+	// What history.json holds (review B-M2). UNREADABLE: it exists but reading it failed (never a reason to replace it).
+	public enum State { MISSING, OK, CORRUPT, NEWER, UNREADABLE }
 
 	private record Read(State state, List<JournalEntry> entries) {
 	}
@@ -98,6 +99,16 @@ public final class Journal implements ChangeRecorder {
 		}
 	}
 
+	// Read-only, and safe on the helper's classpath: a corrupt file is only kept as .bad by the next update().
+	public State state() {
+		try {
+			return read().state();
+		} catch (IOException e) {
+			log.warn("Could not read " + file, e);
+			return State.UNREADABLE;
+		}
+	}
+
 	public boolean readOnly() {
 		try {
 			return read().state() == State.NEWER;
@@ -135,6 +146,9 @@ public final class Journal implements ChangeRecorder {
 					return false;
 				}
 				case CORRUPT -> Files.move(file, backupName());
+				case UNREADABLE -> {
+					return false;
+				}
 				case OK -> {
 				}
 			}

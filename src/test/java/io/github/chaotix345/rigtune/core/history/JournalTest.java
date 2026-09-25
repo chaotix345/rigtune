@@ -211,6 +211,26 @@ class JournalTest {
 		assertEquals(compact, Files.readString(Journal.file(config)));
 	}
 
+	// B-M2: the History screen tells these apart; reading never makes the .bad backup.
+	@Test
+	void stateTellsMissingOkCorruptNewerAndUnreadableApart() throws Exception {
+		Journal journal = journal();
+		assertEquals(Journal.State.MISSING, journal.state());
+		journal.record("e1", JournalEntry.APPLY, List.of(vanilla("vanilla.renderDistance", "12", "16")));
+		assertEquals(Journal.State.OK, journal.state());
+
+		Files.writeString(Journal.file(config), "{not json");
+		assertEquals(Journal.State.CORRUPT, journal.state());
+		assertFalse(Files.exists(Journal.file(config).resolveSibling("history.json.bad")));
+
+		Files.writeString(Journal.file(config), "{\"formatVersion\":2,\"entries\":[]}");
+		assertEquals(Journal.State.NEWER, journal.state());
+
+		Files.delete(Journal.file(config));
+		Files.createDirectories(Journal.file(config));
+		assertEquals(Journal.State.UNREADABLE, journal.state());
+	}
+
 	@Test
 	void updateExistingNeverCreatesTheFile() throws Exception {
 		assertFalse(journal().updateExisting(entries -> List.of(entry("e1"))));

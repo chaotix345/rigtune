@@ -13,6 +13,7 @@ import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.StagedChanges;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -72,12 +73,13 @@ public final class Staging {
 		return ApplyLock.acquire(ApplyLock.defaultPath(configDir), lockWait);
 	}
 
-	// Merges the ops into pending.json and records them in the journal entry `entryId` (kind apply).
-	public boolean stage(List<Op> ops, String entryId) {
+	// Merges the ops into pending.json and records them in the journal entry `entryId` (kind apply). Returns the merge
+	// (its survivingIds say which id each op has in pending.json: plan review A-M1), or null when nothing was staged.
+	public @Nullable Merge stage(List<Op> ops, String entryId) {
 		try (ApplyLock lock = lock()) {
 			if (lock == null) {
 				RigTune.LOGGER.error("Could not stage RigTune changes: the apply helper still holds {}", ApplyLock.defaultPath(configDir));
-				return false;
+				return null;
 			}
 			Merge merge = mergeLocked(ops);
 			try {
@@ -87,10 +89,10 @@ public final class Staging {
 			} catch (IOException | RuntimeException e) {
 				RigTune.LOGGER.warn("Could not record the staged RigTune changes in {}", Journal.file(configDir), e);
 			}
-			return true;
+			return merge;
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.error("Could not write {}", pendingFile, e);
-			return false;
+			return null;
 		}
 	}
 
@@ -189,10 +191,11 @@ public final class Staging {
 		return removed.removed();
 	}
 
-	// Unstages (as unstageLocked) every staged enable of a mod that has an update of its own waiting in mods/update/
-	// (ModJars.queuedUpdates), with its group: at exit it would race that mod's own updater for the jar (re-check of
-	// review 4). Null when the lock is busy.
-	public List<Op> dropQueuedUpdates(Set<String> queuedModIds) throws IOException {
+	// Unstages (as unstageLocked), with its group, every staged enable of a loaded mod that has an update of its own
+	// waiting in mods/update/ (ModJars.queuedUpdates): at exit it would race that mod's own updater for the jar (re-check
+	// of review 4). An enable of a mod that isn't loaded (an addition, an undo's re-enable) stays: a stale jar in
+	// mods/update/ must not cancel it (SPEC 3a). Null when the lock is busy.
+	public @Nullable List<Op> dropQueuedUpdates(Set<String> queuedModIds, Set<String> loadedModIds) throws IOException {
 		if (queuedModIds.isEmpty() || !Files.exists(pendingFile)) {
 			return List.of();
 		}
@@ -203,11 +206,37 @@ public final class Staging {
 			if (!Files.exists(pendingFile)) {
 				return List.of();
 			}
-			List<String> ids = PendingActions.load(pendingFile).ops().stream()
-					.filter(op -> op != null && op.type() == PendingActions.Type.ENABLE_FILE && op.id() != null && op.modId() != null
-							&& queuedModIds.contains(op.modId()))
-					.map(Op::id).toList();
-			return unstageLocked(ids);
+			List<String> ids = new ArrayList<>();
+			Map<String, String> readIds = new HashMap<>();
+			for (Op op : PendingActions.load(pendingFile).ops()) {
+				if (op != null && op.type() == PendingActions.Type.ENABLE_FILE && op.id() != null) {
+					String modId = modIdOf(op);
+					if (modId != null && queuedModIds.contains(modId) && loadedModIds.contains(modId)) {
+						ids.add(op.id());
+						if (op.modId() == null) {
+							readIds.put(op.id(), modId);
+						}
+					}
+				}
+			}
+			List<Op> dropped = unstageLocked(ids);
+			// An enable matched by its jar's id carries that id, so the notice can name the mod.
+			return dropped == null ? null : dropped.stream()
+					.map(op -> op != null && op.modId() == null && readIds.containsKey(op.id()) ? op.withModId(readIds.get(op.id())) : op)
+					.toList();
+		}
+	}
+
+	// The staged mod id, or, for an enable staged without one (by 0.1.0, or an undo of a jar it couldn't read), the id
+	// in the jar itself, as ApplyExecutor reads it at apply time (review 5, apply-safety-1).
+	private static @Nullable String modIdOf(Op op) {
+		if (op.modId() != null) {
+			return op.modId();
+		}
+		try {
+			return op.from() == null ? null : ModJars.modIdOf(Path.of(op.from()));
+		} catch (InvalidPathException e) {
+			return null;
 		}
 	}
 

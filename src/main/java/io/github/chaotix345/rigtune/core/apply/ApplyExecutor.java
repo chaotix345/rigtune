@@ -525,7 +525,7 @@ public final class ApplyExecutor {
 				new Undo(index, target, path));
 	}
 
-	static Path disabledTarget(Path path) {
+	public static Path disabledTarget(Path path) {
 		String base = path.getFileName() + ".disabled";
 		Path candidate = path.resolveSibling(base);
 		for (int i = 1; Files.exists(candidate); i++) {

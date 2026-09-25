@@ -1,0 +1,31 @@
+{
+  "finishedAt": "2026-09-25T19:56:11.956555600Z",
+  "results": [
+    {
+      "op": {
+        "type": "DISABLE_FILE",
+        "path": "<instance>\\mods\\e2e-added-1.0.0.jar",
+        "id": "b8fbe16a-1472-4b8a-ba10-65341c660f53",
+        "group": "257ebab4-07dd-4b51-ac1a-ce1ac985b083",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Disabled e2e-added-1.0.0.jar -> e2e-added-1.0.0.jar.disabled",
+      "resultPath": "<instance>\\mods\\e2e-added-1.0.0.jar.disabled"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "<instance>\\mods\\e2e-disable-me-1.0.0.jar.disabled",
+        "to": "<instance>\\mods\\e2e-disable-me-1.0.0.jar",
+        "id": "a0f128be-9a16-4ee2-80c2-c3b5639a8720",
+        "group": "6fd8cdc4-aea7-4be2-89be-3be1d108138a",
+        "modId": "e2e-disable-me",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled e2e-disable-me-1.0.0.jar",
+      "resultPath": "<instance>\\mods\\e2e-disable-me-1.0.0.jar"
+    }
+  ]
+}

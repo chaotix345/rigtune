@@ -5,6 +5,7 @@ import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.compat.ModMenuIntegration;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkMenuScreen;
+import io.github.chaotix345.rigtune.client.ui.HistoryScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneSettingsScreen;
@@ -126,8 +127,16 @@ public class UiGameTest implements FabricClientGameTest {
 	}
 
 	private static void checkSubScreens(ClientGameTestContext context) {
+		// v0.3 (review X-M2): Undo last and Undo all are in the History screen.
+		pressByKey(context, "rigtune.history.open");
+		context.waitForScreen(HistoryScreen.class);
+		context.waitFor(mc -> mc.gui.screen() instanceof HistoryScreen history && !history.loading(), 400);
+		context.waitTicks(2);
+		context.takeScreenshot("ui-history-from-button");
 		checkUndoButton(context, "rigtune.screen.undo_last", false, "ui-undo-last-from-button");
 		checkUndoButton(context, "rigtune.screen.undo_all", true, "ui-undo-all-from-button");
+		context.runOnClient(mc -> mc.gui.screen().onClose());
+		context.waitForScreen(RigTuneScreen.class);
 
 		pressByKey(context, "rigtune.screen.benchmark_menu");
 		context.waitForScreen(BenchmarkMenuScreen.class);
@@ -137,7 +146,8 @@ public class UiGameTest implements FabricClientGameTest {
 		context.waitForScreen(RigTuneScreen.class);
 	}
 
-	// The button opens WS-B's confirmation screen for the right scope; nothing is undone here (Cancel/close only).
+	// The History screen's button opens WS-B's confirmation screen for the right scope; nothing is undone here
+	// (Cancel/close only).
 	private static void checkUndoButton(ClientGameTestContext context, String key, boolean all, String screenshot) {
 		pressByKey(context, key);
 		context.waitForScreen(UndoScreen.class);
@@ -146,7 +156,8 @@ public class UiGameTest implements FabricClientGameTest {
 		context.waitTicks(2);
 		context.takeScreenshot(screenshot);
 		context.runOnClient(mc -> mc.gui.screen().onClose());
-		context.waitForScreen(RigTuneScreen.class);
+		context.waitForScreen(HistoryScreen.class);
+		context.waitFor(mc -> mc.gui.screen() instanceof HistoryScreen history && !history.loading(), 400);
 	}
 
 	private static void checkSettings(ClientGameTestContext context, Path configDir, RigTuneController controller) {

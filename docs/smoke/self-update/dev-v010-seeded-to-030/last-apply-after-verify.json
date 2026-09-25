@@ -1,0 +1,53 @@
+{
+  "finishedAt": "2026-09-25T19:27:30.267048Z",
+  "results": [
+    {
+      "op": {
+        "type": "DISABLE_FILE",
+        "path": "<instance>\\mods\\fabric-26.2.jar",
+        "id": "041919d9-18c9-4b04-89c4-f15e4e4a80c5",
+        "group": "7b8043de-f5c3-4881-8309-27265240f39e",
+        "attempts": 1
+      },
+      "status": "FAILED",
+      "message": "Gave up after 10 attempt(s): java.nio.file.FileSystemException: <instance>\\mods\\fabric-26.2.jar -> <instance>\\mods\\fabric-26.2.jar.disabled: The process cannot access the file because it is being used by another process"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "<instance>\\mods\\DistantHorizons-3.3.2-26.2-fabric-neoforge.jar.rigtune-pending",
+        "to": "<instance>\\mods\\DistantHorizons-3.3.2-26.2-fabric-neoforge.jar",
+        "id": "db7f487d-6371-43c5-944e-c053428ad70d",
+        "group": "7b8043de-f5c3-4881-8309-27265240f39e",
+        "modId": "distanthorizons",
+        "attempts": 1
+      },
+      "status": "FAILED",
+      "message": "Not applied because disabling fabric-26.2.jar failed"
+    },
+    {
+      "op": {
+        "type": "DISABLE_FILE",
+        "path": "<instance>\\mods\\rigtune-0.1.0.jar",
+        "id": "f58c8251-aa16-4579-8ade-61584156a3b7",
+        "group": "c8d9a633-d7f9-4ee5-87a2-fd19b200535a",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Disabled rigtune-0.1.0.jar -> rigtune-0.1.0.jar.disabled"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "<instance>\\mods\\rigtune-0.3.0-dev+mc26.2.jar.rigtune-pending",
+        "to": "<instance>\\mods\\rigtune-0.3.0-dev+mc26.2.jar",
+        "id": "9d8c2149-cabb-4a4f-9d16-98472d47fa66",
+        "group": "c8d9a633-d7f9-4ee5-87a2-fd19b200535a",
+        "modId": "rigtune",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled rigtune-0.3.0-dev+mc26.2.jar"
+    }
+  ]
+}

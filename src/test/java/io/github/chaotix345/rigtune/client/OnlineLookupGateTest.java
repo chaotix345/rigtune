@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 // RealController asks the gate on every scan completion and every rules publish; the lookup must run exactly once per
 // launch whichever finishes first (the offline race in docs/v0.2/design/ws-g.md).
 class OnlineLookupGateTest {
-	private final OnlineLookupGate gate = new OnlineLookupGate();
+	private final OnlineLookupGate gate = new OnlineLookupGate(() -> null);
 	private final HardwareProfile hw = Fixtures.userRig().build();
 	private final List<InstalledMod> mods = new ArrayList<>(Fixtures.mods("sodium", "lithium"));
 
@@ -78,5 +78,29 @@ class OnlineLookupGateTest {
 	@Test
 	void nothingWithoutHardware() {
 		assertNull(gate.next(mods, rules(5, "sodium"), null));
+	}
+
+	// SPEC item 1: Modrinth is asked for Loader's raw game version (a snapshot's normalized 26.4-alpha.1 isn't a
+	// Modrinth game version); the rules' conditions keep the normalized one.
+	@Test
+	void modrinthIsAskedForTheRawGameVersionAndConditionsKeepTheNormalizedOne() {
+		OnlineLookupGate snapshot = new OnlineLookupGate(() -> "26.4-snapshot-1");
+		Fixtures.Hw rig = Fixtures.userRig();
+		rig.mcVersion = "26.4-alpha.1";
+
+		OnlineLookupGate.Lookup lookup = snapshot.next(mods, rules(5, "sodium"), rig.build());
+
+		assertNotNull(lookup);
+		assertEquals("26.4-snapshot-1", lookup.gameVersion());
+		assertEquals("26.4-alpha.1", lookup.hardware().mcVersion());
+		assertEquals("26.4-snapshot-1", snapshot.modrinthGameVersion("26.4-alpha.1"));
+	}
+
+	@Test
+	void withoutARawGameVersionTheNormalizedOneIsUsed() {
+		assertEquals("26.2", new OnlineLookupGate(() -> null).modrinthGameVersion("26.2"));
+		OnlineLookupGate.Lookup lookup = new OnlineLookupGate(() -> " ").next(mods, rules(5, "sodium"), hw);
+		assertNotNull(lookup);
+		assertEquals("26.2", lookup.gameVersion());
 	}
 }

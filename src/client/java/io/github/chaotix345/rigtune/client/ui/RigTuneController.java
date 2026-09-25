@@ -1,11 +1,15 @@
 package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
+import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
+import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
+import io.github.chaotix345.rigtune.core.report.ShareReport;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
@@ -70,5 +74,38 @@ public interface RigTuneController {
 	/** The report as Markdown for the clipboard (item 10). */
 	default String shareReport() {
 		return "";
+	}
+
+	// v0.3 (WS-C)
+
+	/** The launcher that started the game (docs/v0.3/SPEC.md item 5); UNKNOWN when it isn't recognised. */
+	default LauncherInfo launcher() {
+		return LauncherInfo.UNKNOWN;
+	}
+
+	// v0.3 (WS-B): docs/v0.3/SPEC.md item 6 and 3e.
+
+	/** What "Undo this" on one history entry would do; carried out with {@link #undo(UndoPlan)}. Off the render thread. */
+	default @Nullable UndoPlan undoPlanFor(String entryId) {
+		return null;
+	}
+
+	/** The History screen's model, or null when there is none. Off the render thread. */
+	default HistoryModel.@Nullable View history() {
+		return null;
+	}
+
+	// v0.3 (WS-F)
+
+	/** The versions for the "Report a problem" issue title (v0.3 item 10); null while the report is being built. */
+	default ShareReport.@Nullable Versions reportVersions() {
+		return null;
+	}
+
+	// v0.3 (WS-P)
+
+	/** What Apply would do for these recommendations, writing and downloading nothing (docs/v0.3/SPEC.md item 13). Off the render thread: it may look files up on Modrinth. */
+	default ApplyPreview preview(List<Recommendation> selected) {
+		return ApplyPreview.EMPTY;
 	}
 }

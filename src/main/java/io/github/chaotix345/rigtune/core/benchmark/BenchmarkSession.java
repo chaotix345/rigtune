@@ -23,6 +23,7 @@ import java.util.OptionalInt;
 public final class BenchmarkSession {
 	public static final double SD_MIN_IMPROVEMENT = 0.05;
 	public static final double SLACK_SECONDS = 10;
+	public static final int CURRENT_SCENE_HEADROOM = 8;
 	private static final int SD_STEP = 2;
 	private static final int SD_POINTS = 3;
 
@@ -77,6 +78,13 @@ public final class BenchmarkSession {
 				sd.size() >= 2 ? sd : List.of(), Stage.RENDER_DISTANCE);
 	}
 
+	// docs/v0.3/SPEC.md E-M2: every render distance Tune tests makes the server load its chunks, and in the player's own
+	// world generate and save the ones that don't exist yet, so there it tests at most CURRENT_SCENE_HEADROOM above the
+	// distance it starts from (the one the world was already loaded at).
+	public static int maxRenderDistance(BenchmarkRequest.Scene scene, int startRd, int limit) {
+		return scene == BenchmarkRequest.Scene.CURRENT ? Math.min(limit, startRd + CURRENT_SCENE_HEADROOM) : limit;
+	}
+
 	public static BenchmarkSession measure(Knobs original, double targetFps, Timing timing, long startNanos) {
 		return new BenchmarkSession(BenchmarkRequest.Mode.MEASURE, original, targetFps, timing, startNanos, null, List.of(), Stage.REPEAT);
 	}
@@ -126,13 +134,18 @@ public final class BenchmarkSession {
 	}
 
 	public void record(Step step, FrameStats stats) {
+		record(step, stats, true);
+	}
+
+	// complete: the step's terrain had arrived (SettleCheck). Only the render distance search uses it.
+	public void record(Step step, FrameStats stats, boolean complete) {
 		if (pending == null || !pending.equals(step)) {
 			throw new IllegalStateException("Not the pending step: " + step);
 		}
 		pending = null;
 		measurements.add(new Measured(step, stats));
 		switch (step.kind()) {
-			case RENDER_DISTANCE -> planner().record(step.knobs().renderDistance(), stats);
+			case RENDER_DISTANCE -> planner().record(step.knobs().renderDistance(), stats, complete);
 			case SIMULATION_DISTANCE -> {
 				int sd = step.knobs().simulationDistance();
 				sdStats.put(sd, stats);

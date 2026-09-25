@@ -1,0 +1,4 @@
+[2026-09-25T20:32:50.593775200Z] [RigTune apply] Waiting for game process 12208 to exit
+[2026-09-25T20:32:53.043921500Z] [RigTune apply] Applying 1 operation(s) from <repo>\versions\26.2\run\config\rigtune\pending.json
+[2026-09-25T20:32:53.098913200Z] [RigTune apply] OK PATCH_TOML: Patched 1 value(s) in DistantHorizons.toml
+[2026-09-25T20:32:53.099913900Z] [RigTune apply] All operations done

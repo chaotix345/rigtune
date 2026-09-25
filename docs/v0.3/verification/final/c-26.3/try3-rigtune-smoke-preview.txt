@@ -1,0 +1,63 @@
+Preview of the default ticks (9 rows):
+  Downloaded now, added at the next restart
+  mods/bbe-fabric-1.3.9+mc26.3-mod.jar (Install Better Block Entities)
+  mods/modernfix-5.27.20-build.2.jar (Install ModernFix-mVUS)
+  mods/asynclogger-2.2.2+26.1.2-fabric.jar (Install Async Logger)
+  mods/fastquit-3.1.5+mc26.2.jar (Install FastQuit)
+  mods/Ixeris-4.6.8+26.3-fabric.jar (Install Ixeris)
+  mods/structure_layout_optimizer-1.1.4+26.3-fabric.jar (Install Structure Layout Optimizer)
+  mods/ResourcefulConfig-6.0.1.jar (needed by Install Structure Layout Optimizer)
+  Each download is checked again when it arrives: a file that isn't a Fabric mod, or a mod you already have, is left out.
+Preview of every appliable item (16 rows):
+  Written now
+  options.txt
+  renderDistance: 32 → 16
+  Downloaded now, added at the next restart
+  mods/bbe-fabric-1.3.9+mc26.3-mod.jar (Install Better Block Entities)
+  mods/modernfix-5.27.20-build.2.jar (Install ModernFix-mVUS)
+  mods/ScalableLux-fabric-mc26.3-0.3.0-alpha.0.6-all.jar (Install ScalableLux)
+  mods/asynclogger-2.2.2+26.1.2-fabric.jar (Install Async Logger)
+  mods/BadOptimizations-2.4.1-26.3-fabric.jar (Install BadOptimizations)
+  mods/debugify-26.3.0.0.jar (Install Debugify)
+  mods/fastquit-3.1.5+mc26.2.jar (Install FastQuit)
+  mods/Ixeris-4.6.8+26.3-fabric.jar (Install Ixeris)
+  mods/sodium-extra-fabric-0.9.4+mc26.3.jar (Install Sodium Extra)
+  mods/structure_layout_optimizer-1.1.4+26.3-fabric.jar (Install Structure Layout Optimizer)
+  mods/ResourcefulConfig-6.0.1.jar (needed by Install Structure Layout Optimizer)
+  Each download is checked again when it arrives: a file that isn't a Fabric mod, or a mod you already have, is left out.
+Files hashed before and after (options.txt, mods/, config/): 35 / 35, changed: []
+  bb1958133b8d1c36286fdb0bf070609367e8d0899c8559c8f885617d62521d69  config/c2me.toml
+  ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356  config/dynamic_fps.json
+  4a6d510b7e0157027b1cf2022184567fd5387aa09d08db108cb0369ba371ddbe  config/entityculling.json
+  71d5e19e278cb843d92f90a99b8a9772780c62e5611b7c8cc92097cd18399b08  config/ferritecore.mixin.properties
+  351554b5d847acfb0dcdd05a93b5b93f27035178bcbde4d5193b4dc5a5a2f11b  config/immediatelyfast.json
+  4d3264b58c502afaeca3f44e8d2db0843c54b8ba957afd21a2d450fe10dafefb  config/iris-excluded.json
+  0112ed11073fec9b897e7661db74e9a114e1b18c3b381d503512190e0a494830  config/iris.properties
+  6cf6f83720071fd1657c8e79b357caf68d40f410ae123e5f922483eb1d1d25be  config/lithium.properties
+  e8f1becee4d20e11702910e0d3eedbe35175922c6ba1a98b52efeb8c9ab3a11d  config/modmenu.json
+  976a76d9aeb5c7e9c2a2293dfd1b38a850c20948ffaf813221868089e2fa0953  config/moreculling.toml
+  1cafa61d73f05a19711e8746e1893e46a9bb7a51059d15383c8d45f241a7855e  config/rigtune/history.json
+  2215bb9b02e8a2365b47b9623d7f359dff7872d67844866ccc96ddb0fdb9f0ab  config/sodium-fingerprint.json
+  b627c4456e6fa0bc4b5f85e2f1cd949faedae3cb9afdaf2a5f52e6f3b6ae1f01  config/sodium-mixins.properties
+  a254b8f531a8cef6ade6f1b860e80ee4cfbf5fb5905d0963c24b121c4f6518a2  config/sodium-options.json
+  60420a41571a4658b91babfa2b47d6fefb7c1766eeea969f51ff98ab34c2431c  config/transition.json
+  0a282f3623f7f9443a1d10b5768865f69e58b74e000dcfb4f40399626b7a6124  config/trender.json
+  121b93764159be6fb7dab523b29a844e2bb78400ce8c48f52135a097e9b0006e  config/yacl.json5
+  82caee9b1f532332c798ee216c9a9ba5857c35e58afacba44946d9264fc05b36  config/zoomify.json
+  4b346661cd0811d98a6df8c9faeb8fafd9326ab88248430e8bec845ef1ff6dca  mods/ImmediatelyFast-Fabric-1.17.1+26.3.jar
+  7a69da03f01d370c873e39cf1ed720bcffb2adfc0ee6ecdf1a1b578e52be699c  mods/c2me-fabric-mc26.3-0.4.2-alpha.0.88.jar
+  1716b9964f90d2b885f9bd3887f8824b71b55c32a4123a5853486e722f7c2e4b  mods/cloth-config-fabric-26.3.159.jar
+  a186d7cdfa3738935cb8425026d118013916fdcfbc060e4397d22368d0bb6594  mods/dynamic-fps-3.11.10+minecraft-26.3.0-fabric.jar
+  3ff36c560bc35b5b3ebe09aa4520fae438dfa34c6cd8e5fdf481aac1181fade0  mods/entityculling-fabric-1.11.2-mc26.3.jar
+  86f16178a3cecc887a85a4cfe9a79d92fa7341d8f39b5951a4d6ad800ab657a6  mods/fabric-api-0.161.0+26.3.jar
+  620c2709be2a262b837cf976f6f85f6eda80a56af2ba4242e0bdc83a60fee7a5  mods/fabric-language-kotlin-1.14.1+kotlin.2.4.20.jar
+  213966c72ed967acc7392beb28a866fba301ff56b9976c2e7801c2db7de6bf22  mods/ferritecore-9.0.0-fabric.jar
+  0fcd6f8858db94ed1f28210005fcff9b9364beaa6eb2a8eccf9449a6f709f14d  mods/iris-fabric-1.11.6+mc26.3.jar
+  34e5e197c40da372f67500ed496bb2193d9147c12d50f988e04a513205d18015  mods/lithium-fabric-0.26.1+mc26.3.jar
+  837812c6c98d66141db7b5dcae668f27fb78d557e8f4c0c89912985fc26a5e6f  mods/modmenu-21.0.0.jar
+  c4de66e6af14421e43ea4fd73380bf085d4eae7396aad59e2fa168f2d86b68fb  mods/moreculling-fabric-26.3-1.9.0-beta.1.jar
+  d9a5351b42a8d79cfc2e7f2a471472f9e4dff3b13874c8d420dbb93600b91a85  mods/placeholder-api-3.2.0+26.3.jar
+  87a5bb39f7e6e41106e77f122f82fc93f9d3bc0b6ebcb746b314172a446a287a  mods/sodium-fabric-0.9.2+mc26.3.jar
+  c52d41d444522d9abba994cd4c4ee2e71a065d7c31010f92a9959b80ccb4b0f5  mods/yet_another_config_lib_v3-3.9.7+26.3-fabric.jar
+  72c79c6e77c3e403748792c8173462c533de61bc3fde165bc9ae4064cf04ccdf  mods/zoomify-2.16.3+26.3.jar
+  b7ff6ac1d9cf37c46e92166291f19a37baf55063844a51b608b0f80f18ce9573  options.txt

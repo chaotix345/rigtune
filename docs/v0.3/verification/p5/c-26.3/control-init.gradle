@@ -1,0 +1,15 @@
+// Phase 5 control (not committed): a production 26.3 client with only the instance's mods folder, no RigTune, no
+// game-test harness. -PvanillaRunDir=<dir>, -PvanillaWithRigtune=true adds this project's jar (Loom's default mods).
+allprojects { p ->
+	p.afterEvaluate {
+		if (p.path == ':26.3') {
+			def cls = p.plugins.findPlugin('net.fabricmc.fabric-loom').getClass().classLoader.loadClass('net.fabricmc.loom.task.prod.ClientProductionRunTask')
+			p.tasks.register('runControlProd', cls) { t ->
+				t.runDir = p.layout.dir(p.providers.gradleProperty('vanillaRunDir').map { new File(it) })
+				if (!p.providers.gradleProperty('vanillaWithRigtune').present) {
+					t.mods.setFrom([])
+				}
+			}
+		}
+	}
+}

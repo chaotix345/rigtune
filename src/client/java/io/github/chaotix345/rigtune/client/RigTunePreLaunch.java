@@ -5,7 +5,9 @@ import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.client.undo.HistoryStartup;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
+import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
+import io.github.chaotix345.rigtune.core.history.ApplyFailures;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
 import org.jspecify.annotations.Nullable;
@@ -14,7 +16,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 	private static volatile @Nullable ApplyResult unseenResult;
@@ -53,12 +57,45 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 				lock.close();
 			}
 		}
+		// A helper still running writes a newer result; its failures are logged at the next start.
+		if (!busy || lock != null) {
+			try {
+				warnOnce(configDir, InstanceDirs.modsDir(FabricLoader.getInstance().getGameDir()), ClientState.shared(configDir), RigTune.LOGGER::warn);
+			} catch (Throwable t) {
+				RigTune.LOGGER.warn("Could not check the last RigTune apply result for failures", t);
+			}
+		}
 		if (busy) {
 			helperBusy = true;
 			RigTune.LOGGER.warn(lock == null
 					? "RigTune's apply helper is still running; its changes take effect after the next restart"
 					: "RigTune's apply helper finished while the game was starting; mod file changes take effect after the next restart");
 		}
+	}
+
+	// docs/v0.3/SPEC.md 3e (review B-M1): one WARN line per op the last helper run didn't apply, so the reason is in
+	// latest.log and not only in helper.log; each run (finishedAt) is logged once.
+	static void warnOnce(Path configDir, Path modsDir, ClientState state, Consumer<String> log) {
+		Path last = ApplyResult.defaultPath(configDir);
+		ApplyResult result;
+		try {
+			if (!Files.isRegularFile(last)) {
+				return;
+			}
+			result = ApplyResult.load(last);
+		} catch (Exception e) {
+			return;
+		}
+		if (result.finishedAt() == null || result.finishedAt().equals(state.lastWarnedApply)) {
+			return;
+		}
+		List<ApplyFailures.Failure> failures = ApplyFailures.of(result, List.of(modsDir, configDir));
+		if (failures.isEmpty()) {
+			return;
+		}
+		failures.forEach(f -> log.accept(ApplyFailures.warnLine(f, result.finishedAt())));
+		state.lastWarnedApply = result.finishedAt();
+		state.save(configDir);
 	}
 
 	private static void readState(Path configDir, boolean stillRunning) {

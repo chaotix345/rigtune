@@ -40,4 +40,16 @@ class BenchmarkWorldTest {
 		assertFalse(BenchmarkWorld.isBenchmarkSave("New World", "RigTune Benchmark"));
 		assertFalse(BenchmarkWorld.isBenchmarkSave(null, null));
 	}
+	@Test
+	void theCameraIsSixteenAboveTheTerrainFloorWhenThatSpotIsClear() {
+		// Floor 117 on 26.2 and 26.3; 26.3's tree reaches 123 and no longer moves the camera.
+		assertEquals(133, BenchmarkWorld.cameraY(117, true, 123));
+		assertEquals(133, BenchmarkWorld.cameraY(117, true, 117));
+	}
+
+	@Test
+	void aBlockedSpotGoesTenAboveTheSurfaceNeverLower() {
+		assertEquals(150, BenchmarkWorld.cameraY(117, false, 140));
+		assertEquals(133, BenchmarkWorld.cameraY(117, false, 120));
+	}
 }

@@ -36,7 +36,7 @@ class BenchmarkRecordsTest {
 	}
 
 	private static BenchmarkRecord of(SessionResult r, BenchmarkRequest request, String phase) {
-		return BenchmarkRecords.of(r, request, phase, "id", "2026-09-25T10:00:00Z", "0.2.0+mc26.2", "26.2", null);
+		return BenchmarkRecords.of(r, request, phase, "id", "2026-09-25T10:00:00Z", "0.2.0+mc26.2", "26.2", null, null);
 	}
 
 	@Test
@@ -164,5 +164,13 @@ class BenchmarkRecordsTest {
 				java.util.Map.of(), null, java.util.Map.of(), java.util.Map.of(), null, false);
 		BenchmarkRecord before = of(measured(100), new BenchmarkRequest(Mode.MEASURE, Scene.CURRENT, "p"), BenchmarkRecord.BEFORE);
 		assertNull(BenchmarkRecords.gain(before, noResult));
+	}
+	@Test
+	void theContextIsKeptOnTheRecord() {
+		BenchmarkRecord.Context context = new BenchmarkRecord.Context(true, true, "Complementary.zip", 2560, 1440, true, BenchmarkRecord.Context.PROTOCOL);
+		BenchmarkRecord record = BenchmarkRecords.of(tuned(), new BenchmarkRequest(Mode.TUNE, Scene.CURRENT, null), BenchmarkRecord.SINGLE, "id",
+				"2026-09-25T10:00:00Z", "0.3.0+mc26.2", "26.2", null, context);
+		assertEquals(context, record.context());
+		assertNull(of(tuned(), new BenchmarkRequest(Mode.TUNE, Scene.CURRENT, null), BenchmarkRecord.SINGLE).context());
 	}
 }

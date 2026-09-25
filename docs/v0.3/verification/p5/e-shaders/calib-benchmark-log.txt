@@ -1,0 +1,16 @@
+[06:42:38] [Render thread/INFO]: Using shaderpack: MakeUp-UltraFast-9.5e.zip
+[06:42:50] [Test thread/INFO]: Smoke: RigTune screen buttons [Settings, Apply (1), History…, Benchmark…, Rescan, Copy report, Report a problem, Done]
+[06:43:25] [Render thread/INFO]: Benchmark started: TUNE in CURRENT, target 170.0 FPS (uncapped), start Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=true]
+[06:43:27] [Render thread/INFO]: Benchmark settle RENDER_DISTANCE Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=true]: 3001 of 3001 chunks within 31 present, client holds 3725, 1.0 s
+[06:43:32] [Render thread/INFO]: Benchmark RENDER_DISTANCE Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=true]: 2045 frames, avg 505 FPS, 1% low 285 FPS, client chunks 3725 (frame limit 260, NONE)
+[06:43:32] [Render thread/INFO]: Benchmark settle SIMULATION_DISTANCE Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=true]: 3001 of 3001 chunks within 31 present, client holds 3725, 0.5 s
+[06:43:35] [Render thread/INFO]: Benchmark SIMULATION_DISTANCE Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=true]: 1049 frames, avg 524 FPS, 1% low 410 FPS, client chunks 3725 (frame limit 260, NONE)
+[06:43:36] [Render thread/INFO]: Benchmark settle REPEAT Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=true]: 3001 of 3001 chunks within 31 present, client holds 3725, 1.0 s
+[06:43:41] [Render thread/INFO]: Benchmark REPEAT Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=true]: 2092 frames, avg 523 FPS, 1% low 364 FPS, client chunks 3725 (frame limit 260, NONE)
+[06:43:41] [Render thread/INFO]: Shaders are disabled because enableShaders is set to false in iris.properties
+[06:43:42] [Render thread/INFO]: Benchmark settle SHADERS_OFF Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=false]: 3001 of 3001 chunks within 31 present, client holds 3725, 1.0 s
+[06:43:45] [Render thread/INFO]: Benchmark SHADERS_OFF Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=false]: 5400 frames, avg 2700 FPS, 1% low 699 FPS, client chunks 3725 (frame limit 260, NONE)
+[06:43:46] [Render thread/INFO]: Using shaderpack: MakeUp-UltraFast-9.5e.zip
+[06:43:47] [Render thread/INFO]: Benchmark settle REPEAT Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=true]: 3001 of 3001 chunks within 31 present, client holds 3725, 1.0 s
+[06:43:52] [Render thread/INFO]: Benchmark REPEAT Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=true]: 2126 frames, avg 525 FPS, 1% low 337 FPS, client chunks 3725 (frame limit 260, NONE)
+[06:43:52] [Render thread/INFO]: Benchmark finished: chosen Knobs[renderDistance=32, simulationDistance=12, dhRendering=false, shaders=true], target 170.0 FPS met true, result Aggregate[avgFps=523.9314950143269, onePercentLowFps=350.4449003347173, p99FrameMs=2.415, repeats=2, cv=0.05295379736155333], deadline hit false

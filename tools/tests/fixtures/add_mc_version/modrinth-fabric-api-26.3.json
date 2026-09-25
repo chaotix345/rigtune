@@ -1,0 +1,54 @@
+[
+ {
+  "id": "bNnaTiuM",
+  "project_id": "P7dR8mSH",
+  "version_number": "0.161.0+26.3",
+  "version_type": "release",
+  "date_published": "2026-09-18T17:36:49.548962Z",
+  "game_versions": [
+   "26.3"
+  ],
+  "loaders": [
+   "fabric"
+  ]
+ },
+ {
+  "id": "hHj6EvFZ",
+  "project_id": "P7dR8mSH",
+  "version_number": "0.160.7+26.3",
+  "version_type": "release",
+  "date_published": "2026-09-17T08:10:48.700062Z",
+  "game_versions": [
+   "26.3"
+  ],
+  "loaders": [
+   "fabric"
+  ]
+ },
+ {
+  "id": "BQfN2OGk",
+  "project_id": "P7dR8mSH",
+  "version_number": "0.160.6+26.3",
+  "version_type": "release",
+  "date_published": "2026-09-16T11:46:07.476171Z",
+  "game_versions": [
+   "26.3"
+  ],
+  "loaders": [
+   "fabric"
+  ]
+ },
+ {
+  "id": "oCYG2H4L",
+  "project_id": "P7dR8mSH",
+  "version_number": "0.160.5+26.3",
+  "version_type": "release",
+  "date_published": "2026-09-14T20:06:49.529032Z",
+  "game_versions": [
+   "26.3"
+  ],
+  "loaders": [
+   "fabric"
+  ]
+ }
+]

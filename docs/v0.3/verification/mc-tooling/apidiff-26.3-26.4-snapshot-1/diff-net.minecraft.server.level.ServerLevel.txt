@@ -1,0 +1,24 @@
+--- 26.3
++++ 26.4-snapshot-1
+@@ -69,4 +69,4 @@
+     descriptor: Lit/unimi/dsi/fastutil/ints/Int2ObjectMap;
+-  private final net.minecraft.world.level.biome.BiomeResolver uncachedBiomeResolver;
+-    descriptor: Lnet/minecraft/world/level/biome/BiomeResolver;
++  private final net.minecraft.world.level.biome.BiomeManager uncachedBiomeResolver;
++    descriptor: Lnet/minecraft/world/level/biome/BiomeManager;
+   private final net.minecraft.world.level.StructureManager structureManager;
+@@ -79,4 +79,4 @@
+     descriptor: Lnet/minecraft/util/debug/LevelDebugSynchronizers;
+-  public net.minecraft.server.level.ServerLevel(net.minecraft.server.MinecraftServer, java.util.concurrent.Executor, net.minecraft.world.level.storage.LevelStorageSource$LevelStorageAccess, net.minecraft.world.level.storage.ServerLevelData, net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level>, net.minecraft.world.level.dimension.LevelStem, boolean, long, java.util.List<net.minecraft.world.level.CustomSpawner>, boolean);
+-    descriptor: (Lnet/minecraft/server/MinecraftServer;Ljava/util/concurrent/Executor;Lnet/minecraft/world/level/storage/LevelStorageSource$LevelStorageAccess;Lnet/minecraft/world/level/storage/ServerLevelData;Lnet/minecraft/resources/ResourceKey;Lnet/minecraft/world/level/dimension/LevelStem;ZJLjava/util/List;Z)V
++  public net.minecraft.server.level.ServerLevel(net.minecraft.server.MinecraftServer, java.util.concurrent.Executor, net.minecraft.world.level.storage.LevelStorageSource$LevelStorageAccess, net.minecraft.world.level.storage.ServerLevelData, net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level>, net.minecraft.world.level.dimension.LevelStem, boolean, java.util.List<net.minecraft.world.level.CustomSpawner>, boolean);
++    descriptor: (Lnet/minecraft/server/MinecraftServer;Ljava/util/concurrent/Executor;Lnet/minecraft/world/level/storage/LevelStorageSource$LevelStorageAccess;Lnet/minecraft/world/level/storage/ServerLevelData;Lnet/minecraft/resources/ResourceKey;Lnet/minecraft/world/level/dimension/LevelStem;ZLjava/util/List;Z)V
+   public int getNextEntityId();
+@@ -85,6 +85,4 @@
+     descriptor: (Lnet/minecraft/world/level/dimension/end/EnderDragonFight;)V
+-  public net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> getUncachedNoiseBiome(int, int, int);
++  public net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> getUncachedBiome(int, int, int);
+     descriptor: (III)Lnet/minecraft/core/Holder;
+-  public net.minecraft.world.level.biome.BiomeResolver uncachedBiomeResolver();
+-    descriptor: ()Lnet/minecraft/world/level/biome/BiomeResolver;
+   public net.minecraft.world.level.StructureManager structureManager();

@@ -40,7 +40,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Drives RigTune 0.2 for the end-to-end undo after a restart (plan review M14; tools/e2e/README.md). Compiled against
+ * Drives RigTune (0.2 and later) for the end-to-end undo after a restart (plan review M14; tools/e2e/README.md). Compiled against
  * this repository's sources, unlike the self-update driver. Inert unless -Drigtune.e2e.phase is one of:
  * <ul>
  * <li>{@code mod-apply}: applies, in one Apply, "add" of the Modrinth project -Drigtune.e2e.addProject (slug
@@ -48,6 +48,12 @@ import java.util.Map;
  * <li>{@code mod-undo}: Undo last apply: records the plan, screenshots the confirmation screen, presses its Undo button,
  * waits until the reversals are staged, quits.</li>
  * <li>{@code mod-check}: records the loaded mods and what is left to undo, screenshots the undo screen, quits.</li>
+ * <li>{@code entry-apply} (plan review B-M3): one Apply per slug:project pair of -Drigtune.e2e.entryMods, each staged
+ * before the next; quits.</li>
+ * <li>{@code entry-undo}: Undo this on the entry -Drigtune.e2e.entryId (the older Apply): records undoPlanFor's plan,
+ * screenshots UndoScreen for that entry, presses its Undo button, waits until the disable of -Drigtune.e2e.entryMod is
+ * staged; quits.</li>
+ * <li>{@code entry-check}: records the loaded mods and what is left to undo on that entry, quits.</li>
  * </ul>
  * Results go to -Drigtune.e2e.out as driver-&lt;phase&gt;.json; screenshots to the instance's screenshots folder.
  */
@@ -67,6 +73,12 @@ public final class UndoDriver implements ClientModInitializer {
 	private final String addSlug = System.getProperty("rigtune.e2e.addSlug");
 	private final String addProject = System.getProperty("rigtune.e2e.addProject");
 	private final String disable = System.getProperty("rigtune.e2e.disable");
+	// B-M3: slug:project pairs, one Apply each (entry-apply); the older Apply's entry id and mod (entry-undo, entry-check).
+	private final String entryMods = System.getProperty("rigtune.e2e.entryMods", "");
+	private final String entryId = System.getProperty("rigtune.e2e.entryId");
+	private final String entryMod = System.getProperty("rigtune.e2e.entryMod");
+	private final List<String> applyMessages = new ArrayList<>();
+	private int applied;
 	private final Map<String, Object> result = new LinkedHashMap<>();
 	private final List<String> events = new ArrayList<>();
 	private Path out;
@@ -78,7 +90,7 @@ public final class UndoDriver implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
-		if (phase == null || !List.of("mod-apply", "mod-undo", "mod-check").contains(phase)) {
+		if (phase == null || !List.of("mod-apply", "mod-undo", "mod-check", "entry-apply", "entry-undo", "entry-check").contains(phase)) {
 			return;
 		}
 		out = Path.of(System.getProperty("rigtune.e2e.out", "e2e-out")).toAbsolutePath();
@@ -127,7 +139,10 @@ public final class UndoDriver implements ClientModInitializer {
 						return;
 					}
 					List<Map<String, Object>> ops = pendingOps();
-					if (staged(ops)) {
+					if (staged(ops) && phase.equals("entry-apply") && applied < entryMods().size()) {
+						event("apply " + applied + " staged");
+						next(Step.ACT);
+					} else if (staged(ops)) {
 						Files.createDirectories(out);
 						Files.copy(pendingFile(), out.resolve("pending-" + phase + ".json"), StandardCopyOption.REPLACE_EXISTING);
 						result.put("pendingOps", ops);
@@ -195,20 +210,53 @@ public final class UndoDriver implements ClientModInitializer {
 					minecraft.gui.setScreen(new UndoScreen(minecraft.gui.screen(), controller, false));
 				} else if (stepTicks == 2 * SECOND) {
 					screenshot(minecraft, "e2e-mod-undo-1-plan.png");
-				} else if (stepTicks == 3 * SECOND) {
-					// Press the confirmation screen's Undo button, as a player would; it carries out the plan it shows.
-					Button confirm = minecraft.gui.screen() == null ? null : minecraft.gui.screen().children().stream()
-							.filter(Button.class::isInstance).map(Button.class::cast)
-							.filter(b -> b.getMessage().getContents() instanceof TranslatableContents t && t.getKey().equals("rigtune.undo.confirm"))
-							.findFirst().orElse(null);
-					if (confirm == null || !confirm.active) {
-						fail(minecraft, "no active Undo button on " + minecraft.gui.screen());
+				} else if (stepTicks == 3 * SECOND && pressConfirm(minecraft)) {
+					next(Step.WAIT_STAGED);
+				}
+			}
+			case "entry-apply" -> {
+				if (stepTicks == SECOND) {
+					// One Apply per mod, as a player who ticks one Install row, applies, then comes back for another.
+					String[] mod = entryMods().get(applied);
+					List<Recommendation> chosen = List.of(new Recommendation("add:" + mod[0], Category.ADD_MOD, Impact.LOW,
+							"Install " + mod[0], "E2E test mod", new Action.AddMod(mod[0], mod[1], mod[0]), true));
+					Component message = controller.apply(chosen);
+					applyMessages.add(message.getString());
+					result.put("applyMessages", applyMessages);
+					applied++;
+					event("apply " + applied + " (add " + mod[0] + "): " + message.getString());
+					next(Step.WAIT_STAGED);
+				}
+			}
+			case "entry-undo" -> {
+				if (stepTicks == 1) {
+					// Undo this (SPEC item 6): the History screen's button opens this screen for the entry.
+					UndoPlan plan = entryPlan(controller);
+					recordPlan("entryPlan", plan);
+					if (plan == null || plan.problem() != null || plan.isEmpty()) {
+						fail(minecraft, "no plan for entry " + entryId + ": " + (plan == null ? "null" : plan.problem()));
 						return;
 					}
-					result.put("undoButton", confirm.getMessage().getString());
-					confirm.onPress(new MouseButtonEvent(confirm.getX() + 1, confirm.getY() + 1, new MouseButtonInfo(0, 0)));
-					event("pressed " + confirm.getMessage().getString());
+					result.put("undoOf", plan.undoOf());
+					result.put("viaScreen", true);
+					minecraft.gui.setScreen(new UndoScreen(minecraft.gui.screen(), controller, entryId));
+				} else if (stepTicks == 2 * SECOND) {
+					screenshot(minecraft, "e2e-entry-undo-1-plan.png");
+				} else if (stepTicks == 3 * SECOND && pressConfirm(minecraft)) {
 					next(Step.WAIT_STAGED);
+				}
+			}
+			case "entry-check" -> {
+				if (stepTicks == 1) {
+					UndoPlan plan = entryPlan(controller);
+					recordPlan("entryPlanAfter", plan);
+					result.put("entryUndoableAfter", plan == null ? -1
+							: (int) plan.items().stream().filter(i -> i.action() != UndoPlan.Action.SKIP).count());
+					minecraft.gui.setScreen(new UndoScreen(minecraft.gui.screen(), controller, entryId));
+				} else if (stepTicks == 2 * SECOND) {
+					screenshot(minecraft, "e2e-entry-check-1-undo.png");
+				} else if (stepTicks == 3 * SECOND) {
+					next(Step.QUIT);
 				}
 			}
 			case "mod-check" -> {
@@ -228,7 +276,40 @@ public final class UndoDriver implements ClientModInitializer {
 		}
 	}
 
+	// Press the confirmation screen's Undo button, as a player would; it carries out the plan it shows.
+	private boolean pressConfirm(Minecraft minecraft) {
+		Button confirm = minecraft.gui.screen() == null ? null : minecraft.gui.screen().children().stream()
+				.filter(Button.class::isInstance).map(Button.class::cast)
+				.filter(b -> b.getMessage().getContents() instanceof TranslatableContents t && t.getKey().equals("rigtune.undo.confirm"))
+				.findFirst().orElse(null);
+		if (confirm == null || !confirm.active) {
+			fail(minecraft, "no active Undo button on " + minecraft.gui.screen());
+			return false;
+		}
+		result.put("undoButton", confirm.getMessage().getString());
+		confirm.onPress(new MouseButtonEvent(confirm.getX() + 1, confirm.getY() + 1, new MouseButtonInfo(0, 0)));
+		event("pressed " + confirm.getMessage().getString());
+		return true;
+	}
+
+	private List<String[]> entryMods() {
+		return entryMods.isBlank() ? List.of() : List.of(entryMods.split(",")).stream().map(pair -> pair.split(":", 2)).toList();
+	}
+
+	// The per-entry plan behind Undo this (docs/v0.3/design/ws-b.md, "API for WS-H").
+	private UndoPlan entryPlan(RigTuneController controller) {
+		result.put("entryPlanMethod", "RigTuneController.undoPlanFor");
+		return controller.undoPlanFor(entryId);
+	}
+
 	private boolean staged(List<Map<String, Object>> ops) {
+		if (phase.equals("entry-apply")) {
+			return entryMods().subList(0, applied).stream().allMatch(mod -> ops.stream()
+					.anyMatch(op -> "ENABLE_FILE".equals(op.get("type")) && mod[0].equals(op.get("modId"))));
+		}
+		if (phase.equals("entry-undo")) {
+			return ops.stream().anyMatch(op -> "DISABLE_FILE".equals(op.get("type")) && fileName(op.get("path")).startsWith(entryMod));
+		}
 		if (phase.equals("mod-apply")) {
 			return ops.stream().anyMatch(op -> "ENABLE_FILE".equals(op.get("type")) && addSlug.equals(op.get("modId")))
 					&& ops.stream().anyMatch(op -> "DISABLE_FILE".equals(op.get("type")) && fileName(op.get("path")).equals(disableFile));

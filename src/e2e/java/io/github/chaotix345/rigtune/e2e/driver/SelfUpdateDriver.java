@@ -23,6 +23,7 @@ import net.minecraft.client.gui.components.AbstractSelectionList;
 import net.minecraft.client.gui.layouts.LayoutElement;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,11 +32,16 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
+import java.util.stream.Stream;
 
 /**
  * Drives RigTune in a production client for the self-update end-to-end test (tools/e2e/README.md). It is compiled
@@ -67,6 +73,8 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 	private final String phase = System.getProperty("rigtune.e2e.phase");
 	private final Map<String, Object> result = new LinkedHashMap<>();
 	private final List<String> events = new ArrayList<>();
+	private final List<Map<String, Object>> statuses = new ArrayList<>();
+	private String lastStatus;
 	private Path out;
 	private Step step = Step.WAIT_TITLE;
 	private int ticks;
@@ -86,6 +94,7 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 		result.put("ok", false);
 		result.put("error", null);
 		result.put("events", events);
+		result.put("statuses", statuses);
 		event("driver loaded, phase " + phase + ", output " + out);
 		ClientTickEvents.END_CLIENT_TICK.register(this::tick);
 	}
@@ -97,6 +106,7 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 		ticks++;
 		stepTicks++;
 		try {
+			recordStatus(RigTuneClient.controller());
 			if (ticks > WATCHDOG) {
 				fail(minecraft, "watchdog: still in step " + step + " after " + WATCHDOG / SECOND + " s");
 				return;
@@ -290,6 +300,38 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 		controller.rescan();
 	}
 
+	// Every status line RigTune shows, as it changes (e.g. the notice when it cancels a staged update, plan review H-M2).
+	private void recordStatus(RigTuneController controller) {
+		Component status = controller == null ? null : controller.status();
+		String text = status == null ? null : status.getString();
+		if (text == null || text.equals(lastStatus)) {
+			return;
+		}
+		lastStatus = text;
+		Map<String, Object> seen = new LinkedHashMap<>();
+		seen.put("t", String.format(Locale.ROOT, "%.1f", ticks / (double) SECOND));
+		seen.put("key", status.getContents() instanceof TranslatableContents t ? t.getKey() : null);
+		seen.put("text", text);
+		statuses.add(seen);
+		event("status: " + text);
+	}
+
+	// Every file under mods/ (relative path with '/', sha256) just before quitting, so the harness can tell what changed
+	// at exit.
+	private static Map<String, String> modsListing() {
+		Path mods = FabricLoader.getInstance().getGameDir().resolve("mods");
+		Map<String, String> out = new TreeMap<>();
+		try (Stream<Path> files = Files.walk(mods)) {
+			for (Path file : files.filter(Files::isRegularFile).toList()) {
+				byte[] hash = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file));
+				out.put(mods.relativize(file).toString().replace('\\', '/'), HexFormat.of().formatHex(hash));
+			}
+		} catch (IOException | NoSuchAlgorithmException e) {
+			out.put("(error)", e.toString());
+		}
+		return out;
+	}
+
 	// The title screen, once the startup loading overlay has faded.
 	private static boolean onTitleScreen(Minecraft minecraft) {
 		return minecraft.gui.screen() instanceof TitleScreen && minecraft.gui.overlay() == null;
@@ -392,6 +434,7 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 		}
 		step = Step.DONE;
 		event("quitting");
+		result.put("modsAtQuit", modsListing());
 		try {
 			Files.createDirectories(out);
 			Files.writeString(out.resolve("driver-" + phase + ".json"), GSON.toJson(result), StandardCharsets.UTF_8);

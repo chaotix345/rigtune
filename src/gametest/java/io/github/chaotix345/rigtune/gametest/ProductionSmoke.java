@@ -4,6 +4,8 @@ import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
+import io.github.chaotix345.rigtune.client.ui.HistoryScreen;
+import io.github.chaotix345.rigtune.client.ui.PreviewScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
@@ -18,19 +20,27 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractSelectionList;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.ConfirmLinkScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
+import java.util.stream.Stream;
 
 // runProductionSmoke: read-only, so it never applies anything, except -PsmokeDh=stage (DhConfigSmoke, AC7.3). It starts
 // the benchmark only with -PsmokeBenchmark (BenchmarkSmoke).
@@ -74,6 +84,7 @@ final class ProductionSmoke {
 			RigTune.LOGGER.warn("Smoke: the report changed while paging; the text dump has the newer one");
 		}
 		writeReport(shown == null ? report : shown, restored, pages);
+		v03Screens(context);
 		context.runOnClient(mc -> mc.gui.screen().onClose());
 		context.waitForScreen(TitleScreen.class);
 		String dh = System.getProperty("rigtune.smoke.dh");
@@ -101,6 +112,109 @@ final class ProductionSmoke {
 				BenchmarkSmoke.run(context);
 			}
 		}
+	}
+
+	// v0.3 Phase 5: the footer buttons, the History screen, and Report a problem's confirm screen (Cancel only).
+	private static void v03Screens(ClientGameTestContext context) {
+		List<String> buttons = context.computeOnClient(mc -> mc.gui.screen().children().stream()
+				.filter(Button.class::isInstance).map(b -> ((Button) b).getMessage().getString()).toList());
+		RigTune.LOGGER.info("Smoke: RigTune screen buttons {}", buttons);
+		context.clickScreenButton("rigtune.history.open");
+		context.waitForScreen(HistoryScreen.class);
+		context.waitFor(mc -> mc.gui.screen() instanceof HistoryScreen history && !history.loading(), 400);
+		context.waitTicks(3);
+		context.takeScreenshot("smoke-history");
+		context.runOnClient(mc -> mc.gui.screen().onClose());
+		context.waitForScreen(RigTuneScreen.class);
+		String clipboard = context.computeOnClient(mc -> mc.keyboardHandler.getClipboard());
+		context.clickScreenButton("rigtune.report.button");
+		context.waitForScreen(ConfirmLinkScreen.class);
+		context.waitTicks(3);
+		context.takeScreenshot("smoke-report-confirm");
+		context.clickScreenButton("gui.cancel");
+		context.waitForScreen(RigTuneScreen.class);
+		context.runOnClient(mc -> mc.keyboardHandler.setClipboard(clipboard));
+		preview(context);
+	}
+
+	// v0.3 final run: Preview from the footer with the default ticks, then a preview of every appliable item; neither may
+	// write options.txt, mods/ or config/ (RigTune's own caches aside, its apply files included).
+	private static void preview(ClientGameTestContext context) {
+		Map<String, String> before = snapshot();
+		boolean active = context.computeOnClient(mc -> mc.gui.screen().children().stream()
+				.filter(c -> c instanceof Button b && b.getMessage().getContents() instanceof TranslatableContents t
+						&& t.getKey().equals("rigtune.preview.button"))
+				.map(c -> ((Button) c).active).findFirst().orElseThrow(() -> new AssertionError("Check failed: no Preview button")));
+		List<String> out = new ArrayList<>();
+		if (active) {
+			context.clickScreenButton("rigtune.preview.button");
+			previewRows(context, "smoke-preview", "the default ticks", out);
+		} else {
+			out.add("Preview button inactive (nothing ticked)");
+		}
+		context.runOnClient(mc -> mc.gui.setScreen(new PreviewScreen(mc.gui.screen(), RigTuneClient.controller(),
+				RigTuneClient.controller().report().recommendations().stream().filter(Recommendation::appliable).toList())));
+		previewRows(context, "smoke-preview-all", "every appliable item", out);
+		Map<String, String> after = snapshot();
+		List<String> changed = new ArrayList<>();
+		before.forEach((k, v) -> {
+			if (!v.equals(after.get(k))) {
+				changed.add(k);
+			}
+		});
+		after.keySet().stream().filter(k -> !before.containsKey(k)).forEach(changed::add);
+		out.add("Files hashed before and after (options.txt, mods/, config/): " + before.size() + " / " + after.size() + ", changed: " + changed);
+		before.forEach((k, v) -> out.add("  " + v + "  " + k));
+		RigTune.LOGGER.info("Smoke: Preview wrote nothing: {} ({} files hashed, changed {})", changed.isEmpty(), before.size(), changed);
+		Path file = FabricLoader.getInstance().getGameDir().resolve("rigtune-smoke-preview.txt");
+		try {
+			Files.writeString(file, String.join("\n", out) + "\n");
+		} catch (IOException e) {
+			throw new AssertionError("Could not write " + file, e);
+		}
+		check(changed.isEmpty(), "the preview wrote nothing: " + changed);
+	}
+
+	private static void previewRows(ClientGameTestContext context, String shot, String what, List<String> out) {
+		context.waitForScreen(PreviewScreen.class);
+		context.waitFor(mc -> mc.gui.screen() instanceof PreviewScreen screen && !screen.loading(), 6000);
+		context.waitTicks(3);
+		context.takeScreenshot(shot);
+		List<String> rows = context.computeOnClient(mc -> {
+			PreviewScreen screen = (PreviewScreen) mc.gui.screen();
+			check(screen.preview() != null, "the preview of " + what + " finished");
+			return screen.rowText();
+		});
+		RigTune.LOGGER.info("Smoke: Preview of {}: {} rows:\n{}", what, rows.size(), String.join("\n", rows));
+		out.add("Preview of " + what + " (" + rows.size() + " rows):");
+		rows.forEach(r -> out.add("  " + r));
+		context.clickScreenButton("gui.done");
+		context.waitForScreen(RigTuneScreen.class);
+	}
+
+	private static Map<String, String> snapshot() {
+		Path gameDir = FabricLoader.getInstance().getGameDir();
+		Map<String, String> out = new TreeMap<>();
+		try {
+			List<Path> files = new ArrayList<>(List.of(gameDir.resolve("options.txt")));
+			for (String root : List.of("mods", "config")) {
+				if (Files.isDirectory(gameDir.resolve(root))) {
+					try (Stream<Path> walk = Files.walk(gameDir.resolve(root))) {
+						files.addAll(walk.filter(Files::isRegularFile).toList());
+					}
+				}
+			}
+			for (Path file : files) {
+				String name = gameDir.relativize(file).toString().replace('\\', '/');
+				if (Files.isRegularFile(file) && (!name.startsWith("config/rigtune/") || name.endsWith("/pending.json")
+						|| name.endsWith("/history.json") || name.endsWith("/last-apply.json"))) {
+					out.put(name, HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file))));
+				}
+			}
+		} catch (IOException | NoSuchAlgorithmException e) {
+			throw new AssertionError(e);
+		}
+		return out;
 	}
 
 	// The game test framework resets some options (render distance 5, clouds off) after options.txt loads.

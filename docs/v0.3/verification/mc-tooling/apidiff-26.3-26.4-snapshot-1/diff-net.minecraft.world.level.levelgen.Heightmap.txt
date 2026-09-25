@@ -1,0 +1,7 @@
+--- 26.3
++++ 26.4-snapshot-1
+@@ -15,2 +15,4 @@
+     descriptor: (Lnet/minecraft/world/level/chunk/ChunkAccess;Lnet/minecraft/world/level/levelgen/Heightmap$Types;)V
++  public static void copyHeightmap(net.minecraft.world.level.chunk.ChunkAccess, net.minecraft.world.level.levelgen.Heightmap$Types, net.minecraft.world.level.levelgen.Heightmap$Types);
++    descriptor: (Lnet/minecraft/world/level/chunk/ChunkAccess;Lnet/minecraft/world/level/levelgen/Heightmap$Types;Lnet/minecraft/world/level/levelgen/Heightmap$Types;)V
+   public static void primeHeightmaps(net.minecraft.world.level.chunk.ChunkAccess, java.util.Set<net.minecraft.world.level.levelgen.Heightmap$Types>);

@@ -1,0 +1,26 @@
+{
+  "createdAt": "2026-09-25T23:08:13.733595400Z",
+  "gamePid": 25152,
+  "modsDir": "<instance>\\mods",
+  "configDir": "<instance>\\config",
+  "ops": [
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\e2e-first-1.0.0.jar.rigtune-pending",
+      "to": "<instance>\\mods\\e2e-first-1.0.0.jar",
+      "id": "26e024d6-89eb-4620-9c51-4c34260229cd",
+      "group": "4e0da2b1-bd96-4c30-a869-bbea386a691f",
+      "modId": "e2e-first",
+      "attempts": 0
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\e2e-second-1.0.0.jar.rigtune-pending",
+      "to": "<instance>\\mods\\e2e-second-1.0.0.jar",
+      "id": "d48436af-dfd8-463f-a76a-1a159bbc203e",
+      "group": "14d048ce-ebc1-42d1-acdf-2d125cab927a",
+      "modId": "e2e-second",
+      "attempts": 0
+    }
+  ]
+}

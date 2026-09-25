@@ -1,0 +1,11 @@
+--- 26.3
++++ 26.4-snapshot-1
+@@ -11,6 +11,4 @@
+     descriptor: Lnet/minecraft/util/StringRepresentable$EnumCodec;
+-  private static final java.util.function.IntFunction<net.minecraft.world.Difficulty> BY_ID;
+-    descriptor: Ljava/util/function/IntFunction;
+-  public static final net.minecraft.network.codec.StreamCodec<io.netty.buffer.ByteBuf, net.minecraft.world.Difficulty> STREAM_CODEC;
+-    descriptor: Lnet/minecraft/network/codec/StreamCodec;
++  public static final net.minecraft.network.codec.EnumStreamCodec<net.minecraft.world.Difficulty> STREAM_CODEC;
++    descriptor: Lnet/minecraft/network/codec/EnumStreamCodec;
+   private final int id;

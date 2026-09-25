@@ -1,0 +1,28 @@
+[
+ {
+  "id": "bAdKrpw8",
+  "project_id": "YL57xq9U",
+  "version_number": "1.11.6+26.3-fabric",
+  "version_type": "release",
+  "date_published": "2026-09-15T18:18:28.462406Z",
+  "game_versions": [
+   "26.3"
+  ],
+  "loaders": [
+   "fabric"
+  ]
+ },
+ {
+  "id": "2nyTWtzT",
+  "project_id": "YL57xq9U",
+  "version_number": "1.11.5+26.3-fabric",
+  "version_type": "release",
+  "date_published": "2026-09-15T16:20:05.133518Z",
+  "game_versions": [
+   "26.3"
+  ],
+  "loaders": [
+   "fabric"
+  ]
+ }
+]

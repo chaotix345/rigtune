@@ -1,0 +1,40 @@
+{
+  "createdAt": "2026-09-24T23:08:50.954378200Z",
+  "gamePid": 12228,
+  "modsDir": "<instance>\\mods",
+  "configDir": "<instance>\\config",
+  "ops": [
+    {
+      "type": "DISABLE_FILE",
+      "path": "<instance>\\mods\\fabric-26.2.jar",
+      "id": "041919d9-18c9-4b04-89c4-f15e4e4a80c5",
+      "group": "7b8043de-f5c3-4881-8309-27265240f39e",
+      "attempts": 1
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\DistantHorizons-3.3.2-26.2-fabric-neoforge.jar.rigtune-pending",
+      "to": "<instance>\\mods\\DistantHorizons-3.3.2-26.2-fabric-neoforge.jar",
+      "id": "db7f487d-6371-43c5-944e-c053428ad70d",
+      "group": "7b8043de-f5c3-4881-8309-27265240f39e",
+      "modId": "distanthorizons",
+      "attempts": 1
+    },
+    {
+      "type": "DISABLE_FILE",
+      "path": "<instance>\\mods\\rigtune-0.1.0.jar",
+      "id": "8ab68f03-67a7-4625-8a1f-9f89a5a3288e",
+      "group": "997836ec-b47a-41ab-88d3-ea521a38e101",
+      "attempts": 0
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\rigtune-0.3.0-dev+mc26.2.jar.rigtune-pending",
+      "to": "<instance>\\mods\\rigtune-0.3.0-dev+mc26.2.jar",
+      "id": "2aee04b9-a95e-4d5a-9383-e78b3cd29402",
+      "group": "997836ec-b47a-41ab-88d3-ea521a38e101",
+      "modId": "rigtune",
+      "attempts": 0
+    }
+  ]
+}

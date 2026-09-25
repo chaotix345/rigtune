@@ -1,0 +1,15 @@
+[
+ {
+  "id": "Z5cdv1Ks",
+  "project_id": "P7dR8mSH",
+  "version_number": "0.161.1+26.4",
+  "version_type": "beta",
+  "date_published": "2026-09-22T20:19:52.389874Z",
+  "game_versions": [
+   "26.4-snapshot-1"
+  ],
+  "loaders": [
+   "fabric"
+  ]
+ }
+]

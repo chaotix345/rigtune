@@ -43,7 +43,7 @@ public final class BenchmarkRun {
 				guard.set(step.knobs());
 			} catch (Exception e) {
 				if (BenchmarkSession.isReport(step.kind())) {
-					session.skipFailed(step, "failed: " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
+					session.skipFailed(step, SessionResult.NOT_MEASURED_FAILED + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
 					continue;
 				}
 				fail(e);
@@ -55,10 +55,14 @@ public final class BenchmarkRun {
 	}
 
 	public void record(FrameStats stats) {
+		record(stats, true);
+	}
+
+	public void record(FrameStats stats, boolean complete) {
 		if (finished || current == null) {
 			throw new IllegalStateException("No step is being measured");
 		}
-		session.record(current, stats);
+		session.record(current, stats, complete);
 		current = null;
 	}
 
