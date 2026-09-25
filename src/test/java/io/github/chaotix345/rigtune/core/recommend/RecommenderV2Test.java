@@ -43,7 +43,8 @@ class RecommenderV2Test {
 	private static final Set<String> EVERY_KIND_IDS = Set.of("add:addme", "disable:avoidme", "conflict:clash+sodium", "disable:oldmod",
 			"set:vanilla.renderDistance", "set:vanilla.simulationDistance", "advice:tip");
 	private static final Map<String, String> SETTINGS = Map.of("vanilla.renderDistance", "12", "vanilla.simulationDistance", "12",
-			"sodium.performance.chunk_builder_threads", "0");
+			"sodium.performance.chunk_builder_threads", "0", "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "128",
+			"iris.maxShadowRenderDistance", "32");
 
 	private static RulesDocument rules(String body) {
 		return RulesLoader.parse("{" + BASE + "," + body + "}");
@@ -182,8 +183,18 @@ class RecommenderV2Test {
 				"settings":[{"key":"sodium.performance.chunk_builder_threads","value":4,"reason":"threads"}],
 				"settingLabels":{"sodium.performance.chunk_builder_threads":{"name":"Chunk builder threads","values":{"0":"Auto"}}}""")
 				.get("set:sodium.performance.chunk_builder_threads");
-		assertEquals("Chunk builder threads: Auto → 4", rec.title());
+		assertEquals("Sodium: Chunk builder threads: Auto → 4", rec.title());
 		assertEquals(new Action.SetSetting("sodium.performance.chunk_builder_threads", "0", "4"), rec.action());
+	}
+
+	@Test
+	void modSettingTitlesNameTheMod() {
+		Map<String, Recommendation> recs = run("""
+				"settings":[{"key":"dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius","value":256,"reason":"r"},
+				 {"key":"iris.maxShadowRenderDistance","value":16,"reason":"r"}],
+				"settingLabels":{"dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius":{"name":"LOD distance"}}""");
+		assertEquals("Distant Horizons: LOD distance: 128 → 256", recs.get("set:dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius").title());
+		assertEquals("Iris: Max shadow render distance: 32 → 16", recs.get("set:iris.maxShadowRenderDistance").title());
 	}
 
 	@Test

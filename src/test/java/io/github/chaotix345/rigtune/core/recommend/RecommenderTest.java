@@ -175,7 +175,10 @@ class RecommenderTest {
 	@Test
 	void settingLabels() {
 		assertEquals("Render distance", SettingValues.label("vanilla.renderDistance"));
-		assertEquals("Sodium chunk build defer mode", SettingValues.label("sodium.performance.chunk_build_defer_mode"));
+		assertEquals("Sodium: Chunk build defer mode", SettingValues.label("sodium.performance.chunk_build_defer_mode"));
+		assertEquals("Distant Horizons: Lod chunk render distance radius",
+				SettingValues.label("dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius"));
+		assertEquals("Iris: Max shadow render distance", SettingValues.label("iris.maxShadowRenderDistance"));
 	}
 
 	@Test

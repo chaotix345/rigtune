@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.core.recommend;
 
 import com.google.gson.JsonElement;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
+import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument.SettingLabel;
 
 import java.math.BigDecimal;
@@ -11,6 +12,11 @@ import java.util.Map;
 public final class SettingValues {
 	static final String REFRESH_RATE = "$refreshRate";
 	static final String REFRESH_RATE_CAP = "$refreshRateCap";
+	// Setting titles for a mod's keys say which mod they belong to.
+	private static final Map<String, String> MOD_NAMES = Map.of(
+			SettingKeys.SODIUM_PREFIX, "Sodium",
+			SettingKeys.DH_PREFIX, "Distant Horizons",
+			SettingKeys.IRIS_PREFIX, "Iris");
 
 	private SettingValues() {
 	}
@@ -80,16 +86,25 @@ public final class SettingValues {
 		return stripped.scale() < 0 ? stripped.setScale(0).toPlainString() : stripped.toPlainString();
 	}
 
+	// A caption from the key's last segment, e.g. "Render distance", or "Sodium: Chunk builder threads" for a mod's key.
 	static String label(String key) {
 		String field = key.substring(key.lastIndexOf('.') + 1);
 		String words = field.replace('_', ' ').replaceAll("([a-z0-9])([A-Z])", "$1 $2").toLowerCase(Locale.ROOT);
-		String text = key.startsWith("sodium.") ? "Sodium " + words : words;
-		return Character.toUpperCase(text.charAt(0)) + text.substring(1);
+		return withMod(key, words.isEmpty() ? key : Character.toUpperCase(words.charAt(0)) + words.substring(1));
+	}
+
+	private static String withMod(String key, String name) {
+		for (Map.Entry<String, String> mod : MOD_NAMES.entrySet()) {
+			if (key.startsWith(mod.getKey())) {
+				return mod.getValue() + ": " + name;
+			}
+		}
+		return name;
 	}
 
 	// "<name>: <current> → <target>", with the rules' settingLabels where they exist and the caption from the key otherwise.
 	static String describe(SettingLabel label, String key, String current, String target) {
-		String name = label != null && label.name != null && !label.name.isBlank() ? label.name : label(key);
+		String name = label != null && label.name != null && !label.name.isBlank() ? withMod(key, label.name) : label(key);
 		return name + ": " + valueLabel(label, current) + " → " + valueLabel(label, target);
 	}
 
