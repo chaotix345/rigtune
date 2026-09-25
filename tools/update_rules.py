@@ -401,7 +401,23 @@ PACKS = {
 
 
 def version_sort_key(version):
-    return tuple(int(p) if p.isdigit() else p for p in version.split("."))
+    core, _, prerelease = version.partition("-")
+    parts = tuple((int(p), "") if p.isdigit() else (-1, p) for p in core.split("."))
+    return parts, prerelease == "", prerelease
+
+
+STONECUTTER_VERSIONS_RE = re.compile(r"""\bversions\s*\(?\s*((?:["'][^"'\n]+["']\s*,?\s*)+)""")
+
+
+def stonecutter_nodes(settings_path):
+    try:
+        text = Path(settings_path).read_text(encoding="utf-8")
+    except OSError as e:
+        raise UpdateRulesError(f"can't read the Stonecutter version list from {settings_path}: {e}")
+    match = STONECUTTER_VERSIONS_RE.search(text)
+    if not match:
+        raise UpdateRulesError(f"no Stonecutter `versions` list in {settings_path}; pass --mc-versions")
+    return re.findall(r"""["']([^"']+)["']""", match.group(1))
 
 
 def default_opener(request):
@@ -514,15 +530,19 @@ class Client:
         return http_get(url, headers=headers, opener=self.opener, sleeper=self.sleeper).decode("utf-8")
 
 
-def resolve_target_versions(client, override):
+def resolve_target_versions(client, override, nodes=None):
     if override:
         versions = [v.strip() for v in override.split(",") if v.strip()]
     else:
+        if not nodes:
+            raise UpdateRulesError("no target MC versions: the Stonecutter version list is empty and --mc-versions isn't set")
         tags = client.modrinth_json(f"{MODRINTH_API}/tag/game_version")
-        releases = [t["version"] for t in tags if t.get("version_type") == "release"]
-        releases.sort(key=version_sort_key, reverse=True)
-        versions = releases[:3]
-    return sorted(versions, key=version_sort_key, reverse=True)
+        releases = [t["version"] for t in tags if t.get("version_type") == "release" and isinstance(t.get("version"), str)]
+        versions = list(nodes)
+        for node in nodes:
+            hotfix = re.compile(re.escape(node) + r"\.\d+")
+            versions += [v for v in releases if hotfix.fullmatch(v)]
+    return sorted(set(versions), key=version_sort_key, reverse=True)
 
 
 def list_pw_toml_filenames(client, contents_url_fn, mc_version):
@@ -941,8 +961,8 @@ def write_text(path, text):
     path.write_bytes(text.encode("utf-8"))
 
 
-def run_pipeline(knowledge, client, mc_versions_override, old_doc):
-    mc_versions = resolve_target_versions(client, mc_versions_override)
+def run_pipeline(knowledge, client, mc_versions_override, old_doc, nodes=None):
+    mc_versions = resolve_target_versions(client, mc_versions_override, nodes)
     newest_version = mc_versions[0]
 
     ids_by_version = {name: pack_ids_by_version(client, pack, mc_versions) for name, pack in PACKS.items()}
@@ -985,7 +1005,7 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--knowledge", help="Path to knowledge.json (default: rules/source/knowledge.json)")
     parser.add_argument("--out-dir", help="Root directory under which rules/ and src/main/resources/rigtune/ are written (default: repo root)")
-    parser.add_argument("--mc-versions", help="Comma-separated MC versions, overriding Modrinth auto-detection")
+    parser.add_argument("--mc-versions", help="Comma-separated MC versions, overriding the Stonecutter nodes and their hotfix releases")
     parser.add_argument("--dry-run", action="store_true", help="Compute everything and print a summary, without writing files")
     parser.add_argument("--offline-fixtures", help="Directory of canned HTTP responses keyed by sha256(url).json, for offline runs")
     return parser.parse_args(argv)
@@ -1002,6 +1022,13 @@ def main(argv=None):
     except KnowledgeError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
+    nodes = None
+    if not args.mc_versions:
+        try:
+            nodes = stonecutter_nodes(repo_root / "settings.gradle")
+        except UpdateRulesError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
 
     v2_path = out_root / "rules" / "rules-v2.json"
     bundled_v2_path = out_root / "src" / "main" / "resources" / "rigtune" / "rules-v2.json"
@@ -1016,7 +1043,7 @@ def main(argv=None):
 
     try:
         content, review_md, review_counts, mc_versions, newest_by_pack, fo_slugs, additive_slugs = run_pipeline(
-            knowledge, client, args.mc_versions, old_doc,
+            knowledge, client, args.mc_versions, old_doc, nodes=nodes,
         )
         v1_content, _ = v1_projection(content)
         finals = finalize_documents([(v2_content(content), old_v2), (v1_content, old_v1)])
