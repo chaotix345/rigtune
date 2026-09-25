@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": 5,
-  "generatedAt": "2026-09-25T00:55:50Z",
+  "revision": 7,
+  "generatedAt": "2026-09-25T03:48:55Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -482,7 +482,7 @@
       "category": "utility",
       "impact": "low",
       "stability": "stable",
-      "reason": "Handles window and input events on a separate thread, which can smooth out frame times and slightly reduce input lag.",
+      "reason": "Handles window and input events on a separate thread, which can smooth out frame times. On Windows it also reads raw mouse input in batches, which helps most with a high-polling-rate mouse; per its changelog, that part isn't ported to Minecraft 26.3's new SDL window system yet, so the gain there is smaller.",
       "recommendWhen": {
         "always": true
       },
@@ -768,16 +768,13 @@
             }
           },
           {
-            "gpuTierAtMost": 2
-          },
-          {
             "flags": [
               "shaders-enabled"
             ]
           }
         ]
       },
-      "avoidReason": "Nvidium needs an NVIDIA GTX 16-series or RTX graphics card and switches itself off while a shader pack is on, so it can't help on this setup.",
+      "avoidReason": "Nvidium needs an NVIDIA GTX 16-series or RTX graphics card (Turing or newer, for mesh shaders) and switches itself off while a shader pack is on, so it can't help on this setup.",
       "conflictsWith": [],
       "upstream": {
         "fabulouslyOptimized": false,
@@ -1038,6 +1035,17 @@
         ]
       },
       "reason": "Distant Horizons already draws the far terrain cheaply, so vanilla chunks beyond 12 cost frame rate without adding much view distance."
+    },
+    {
+      "key": "vanilla.renderDistance",
+      "max": 8,
+      "when": {
+        "modPresent": [
+          "distanthorizons"
+        ],
+        "tierAtMost": 2
+      },
+      "reason": "On entry-level hardware, stay at the low end of the 8 to 12 vanilla chunks Distant Horizons' FAQ recommends; Distant Horizons draws the terrain beyond that."
     },
     {
       "key": "vanilla.simulationDistance",
@@ -1397,7 +1405,7 @@
       "kind": "warning",
       "impact": "medium",
       "title": "Distant Horizons needs more memory",
-      "text": "Distant Horizons keeps far-away terrain in memory and needs roughly 2 to 4 GB more than normal. Allocate at least 6 GB in your launcher."
+      "text": "Distant Horizons keeps far-away terrain in memory and, per its FAQ, needs roughly 2 to 4 GB more than vanilla. Allocate at least 6 GB in your launcher."
     },
     {
       "id": "ram-shaders",
@@ -1429,6 +1437,19 @@
       "impact": "medium",
       "title": "Distant Horizons with shaders needs more memory",
       "text": "Distant Horizons with a shader pack is one of the heaviest setups. You have plenty of RAM, so allocate about 8 GB to Minecraft in your launcher."
+    },
+    {
+      "id": "ram-distant-horizons-low-system",
+      "when": {
+        "modPresent": [
+          "distanthorizons"
+        ],
+        "ramMbAtMost": 11999
+      },
+      "kind": "info",
+      "impact": "medium",
+      "title": "Distant Horizons on a PC with little RAM",
+      "text": "Per its FAQ, Distant Horizons needs roughly 2 to 4 GB more memory than vanilla, but this PC has less than 12 GB of RAM, so give Minecraft about 4 GB at most. Keep Distant Horizons' render distance short instead, and close other apps while you play."
     },
     {
       "id": "battery",
@@ -1498,6 +1519,21 @@
       "impact": "high",
       "title": "Shaders are heavy for this GPU",
       "text": "A shader pack is on, and on this graphics card shaders usually cost more FPS than every other setting combined. Try a lighter pack or a lower shader quality preset, or turn shaders off in Video Settings > Shader Packs."
+    },
+    {
+      "id": "shaders-distant-horizons",
+      "when": {
+        "modPresent": [
+          "distanthorizons"
+        ],
+        "flags": [
+          "shaders-enabled"
+        ]
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "Shader packs that support Distant Horizons",
+      "text": "A shader pack needs built-in Distant Horizons support to draw Distant Horizons' far terrain properly. Two community compatibility lists agree that Complementary Reimagined, Complementary Unbound, BSL (8.2.0 or newer), Bliss and Photon support it; community guides rate Complementary Unbound and Photon as the heaviest of these."
     },
     {
       "id": "sodium-nvidia-threaded-optimizations",
@@ -1573,6 +1609,7 @@
       "ferrite-core",
       "immediatelyfast",
       "ixeris",
+      "lambdynamiclights",
       "lithium",
       "modernfix-mvus",
       "moreculling",
@@ -1598,6 +1635,7 @@
       "immediatelyfast",
       "ixeris",
       "krypton",
+      "lambdynamiclights",
       "lithium",
       "modernfix-mvus",
       "moonrise-opt",
@@ -1625,6 +1663,7 @@
       "immediatelyfast",
       "ixeris",
       "krypton",
+      "lambdynamiclights",
       "lithium",
       "modernfix-mvus",
       "moonrise-opt",

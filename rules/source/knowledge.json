@@ -177,7 +177,7 @@
 			"category": "utility",
 			"impact": "low",
 			"stability": "stable",
-			"reason": "Handles window and input events on a separate thread, which can smooth out frame times and slightly reduce input lag.",
+			"reason": "Handles window and input events on a separate thread, which can smooth out frame times. On Windows it also reads raw mouse input in batches, which helps most with a high-polling-rate mouse; per its changelog, that part isn't ported to Minecraft 26.3's new SDL window system yet, so the gain there is smaller.",
 			"recommendWhen": { "always": true },
 			"conflictsWith": []
 		},
@@ -327,10 +327,14 @@
 			"impact": "high",
 			"stability": "beta",
 			"reason": "Replaces Sodium's terrain renderer with one built on NVIDIA mesh shaders, which can greatly raise FPS at high render distances.",
-			"recommendWhen": { "gpuVendor": ["nvidia"], "gpuIntegrated": false, "gpuTierAtLeast": 4, "modPresent": ["sodium"] },
-			"avoidWhen": { "anyOf": [ { "not": { "gpuVendor": ["nvidia"] } }, { "gpuTierAtMost": 2 }, { "flags": ["shaders-enabled"] } ] },
-			"avoidReason": "Nvidium needs an NVIDIA GTX 16-series or RTX graphics card and switches itself off while a shader pack is on, so it can't help on this setup.",
-			"conflictsWith": []
+			"recommendWhen": { "gpuVendor": ["nvidia"], "gpuIntegrated": false, "gpuTierAtLeast": 3, "gpuModelMatches": "(?i)GTX\\s*16[56]0\\b|RTX\\s*(?:20[6-8]0|30[5-9]0|40[5-9]0|50[5-9]0)\\b|Quadro\\s*RTX\\s*\\d{4}\\b|RTX\\s*A\\d{3,4}\\b|RTX\\s*\\d{4}\\s*Ada\\b", "modPresent": ["sodium"] },
+			"avoidWhen": { "anyOf": [ { "not": { "gpuVendor": ["nvidia"] } }, { "gpuModelMatches": "(?i)GTX\\s*(?:[4-9]\\d0|10[5-8]0)M?\\b|GeForce\\s*(?:GTS?\\s*)?\\d{3,4}(?:M|MX)?\\b|\\bMX\\s*[1-3]\\d0\\b|TITAN\\s*(?:X|Xp|V|Black|Z)\\b|GTX\\s*TITAN|Quadro\\s*(?:[KMP]\\d{3,4}M?|G[PV]100)\\b" }, { "flags": ["shaders-enabled"] } ] },
+			"avoidReason": "Nvidium needs an NVIDIA GTX 16-series or RTX graphics card (Turing or newer, for mesh shaders) and switches itself off while a shader pack is on, so it can't help on this setup.",
+			"conflictsWith": [],
+			"v1": {
+				"recommendWhen": { "gpuVendor": ["nvidia"], "gpuIntegrated": false, "gpuTierAtLeast": 4, "modPresent": ["sodium"] },
+				"avoidWhen": { "anyOf": [ { "not": { "gpuVendor": ["nvidia"] } }, { "flags": ["shaders-enabled"] } ] }
+			}
 		},
 		{
 			"slug": "renderscale",
@@ -340,12 +344,16 @@
 			"category": "rendering",
 			"impact": "medium",
 			"stability": "beta",
-			"reason": "Renders the game at a lower internal resolution and upscales it, which cuts GPU work on weak or integrated graphics at the cost of some sharpness.",
-			"recommendWhen": { "anyOf": [ { "gpuTierAtMost": 2 }, { "gpuIntegrated": true } ] },
+			"reason": "Renders the game at a lower internal resolution and upscales it, which cuts GPU work on weak or integrated graphics, or on a mid-range graphics card driving a 1440p or larger screen, at the cost of some sharpness.",
+			"recommendWhen": { "anyOf": [ { "gpuTierAtMost": 2 }, { "gpuIntegrated": true }, { "gpuTierAtLeast": 3, "gpuTierAtMost": 3, "displayPixelsAtLeast": 3686400 } ] },
 			"avoidWhen": { "modPresent": ["distanthorizons"], "flags": ["shaders-enabled"] },
 			"avoidReason": "Players have reported Distant Horizons terrain rendering in front of everything else when RenderScale runs together with Iris shaders.",
 			"conflictsWith": [],
-			"defaultSelected": false
+			"defaultSelected": false,
+			"v1": {
+				"reason": "Renders the game at a lower internal resolution and upscales it, which cuts GPU work on weak or integrated graphics at the cost of some sharpness.",
+				"recommendWhen": { "anyOf": [ { "gpuTierAtMost": 2 }, { "gpuIntegrated": true } ] }
+			}
 		},
 		{
 			"slug": "vulkanmod",
@@ -396,6 +404,23 @@
 			"recommendWhen": { "tierAtMost": 3 },
 			"conflictsWith": [],
 			"defaultSelected": false
+		},
+		{
+			"slug": "lambdynamiclights",
+			"projectId": "yBW8D80W",
+			"title": "LambDynamicLights",
+			"modIds": ["lambdynlights"],
+			"category": "lighting",
+			"impact": "low",
+			"stability": "stable",
+			"reason": "Makes held, worn and dropped light sources such as torches and glowstone light up the area around them as they move. It's a visual feature rather than a performance one, so RigTune doesn't suggest adding it.",
+			"recommendWhen": { "always": false },
+			"avoidWhen": { "tierAtMost": 2 },
+			"avoidReason": "LambDynamicLights keeps relighting the area around moving light sources, which costs CPU time that entry-level hardware is short of. Disabling it can win back some frame rate; if you'd rather keep the effect, pick a less smooth dynamic lighting mode in its settings instead. It starts unticked because it's a visual choice.",
+			"avoidSelected": false,
+			"conflictsWith": ["sodiumdynamiclights", "ryoamiclights", "optifabric"],
+			"defaultSelected": false,
+			"v1": false
 		}
 	],
 	"obsolete": [
@@ -442,6 +467,7 @@
 		{ "key": "vanilla.renderDistance", "max": 12, "when": { "heapMbAtMost": 3100 }, "reason": "With 3 GB or less of memory for Minecraft, going past 12 chunks causes memory stutter." },
 		{ "key": "vanilla.renderDistance", "max": 16, "when": { "heapMbAtMost": 4200 }, "reason": "With 4 GB or less of memory for Minecraft, going past 16 chunks causes memory stutter." },
 		{ "key": "vanilla.renderDistance", "max": 12, "when": { "modPresent": ["distanthorizons"] }, "reason": "Distant Horizons already draws the far terrain cheaply, so vanilla chunks beyond 12 cost frame rate without adding much view distance." },
+		{ "key": "vanilla.renderDistance", "max": 8, "when": { "modPresent": ["distanthorizons"], "tierAtMost": 2 }, "reason": "On entry-level hardware, stay at the low end of the 8 to 12 vanilla chunks Distant Horizons' FAQ recommends; Distant Horizons draws the terrain beyond that." },
 
 		{ "key": "vanilla.simulationDistance", "max": 5, "when": { "tierAtMost": 1 }, "impact": "medium", "reason": "A short simulation distance means fewer mobs, crops and redstone for your CPU to update each tick." },
 		{ "key": "vanilla.simulationDistance", "max": 6, "when": { "tierAtLeast": 2, "tierAtMost": 2 }, "impact": "medium", "reason": "Simulating up to 6 chunks keeps nearby farms working without overloading an entry-level CPU." },
@@ -475,7 +501,27 @@
 		{ "key": "sodium.performance.chunk_builder_threads", "value": 0, "when": { "always": true }, "impact": "low", "defaultSelected": false, "reason": "Letting Sodium pick the number of chunk update threads (auto) is right for almost every PC." },
 		{ "key": "sodium.performance.chunk_build_defer_mode", "value": "ALWAYS", "when": { "tierAtMost": 3 }, "impact": "low", "reason": "Deferred chunk updates never make a frame wait for chunk building, which gives the highest FPS; blocks may take a moment to appear." },
 		{ "key": "sodium.performance.chunk_build_defer_mode", "value": "ONE_FRAME", "when": { "tierAtLeast": 4, "goal": ["quality"] }, "impact": "low", "reason": "Your hardware has headroom, so Sodium can show block changes within one frame at a small FPS cost." },
-		{ "key": "sodium.performance.quad_splitting_mode", "value": "OFF", "when": { "tierAtMost": 1 }, "impact": "low", "reason": "Skipping Sodium's extra work for overlapping see-through blocks (like waterlogged glass panes) helps very weak GPUs; those blocks may look slightly wrong." }
+		{ "key": "sodium.performance.quad_splitting_mode", "value": "OFF", "when": { "tierAtMost": 1 }, "impact": "low", "reason": "Skipping Sodium's extra work for overlapping see-through blocks (like waterlogged glass panes) helps very weak GPUs; those blocks may look slightly wrong." },
+
+		{ "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "max": 48, "when": { "modPresent": ["distanthorizons"], "tierAtMost": 1 }, "impact": "high", "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 64 to 96 chunks for entry-level PCs; on low-end hardware RigTune caps it lower, at 48.", "v1": false },
+		{ "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "max": 64, "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 2, "tierAtMost": 2 }, "impact": "high", "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 64 to 96 chunks for entry-level PCs; RigTune caps it at 64.", "v1": false },
+		{ "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "max": 96, "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 3, "tierAtMost": 3 }, "impact": "medium", "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 96 to 128 chunks for mid-range PCs; RigTune caps it at 96.", "v1": false },
+		{ "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "value": 160, "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 4, "tierAtMost": 4 }, "impact": "medium", "defaultSelected": false, "reason": "Your hardware has headroom, but Distant Horizons' default of 256 chunks is a lot of far terrain to keep in memory; 160 chunks is a lighter starting point. This is RigTune's own estimate, so it starts unticked.", "v1": false },
+		{ "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "value": 256, "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 5 }, "impact": "low", "defaultSelected": false, "reason": "256 chunks is Distant Horizons' default and a good starting point for hardware this strong; going further costs more memory and GPU time.", "v1": false },
+
+		{ "key": "dh.client.advanced.graphics.quality.verticalQuality", "value": "LOW", "when": { "modPresent": ["distanthorizons"], "tierAtMost": 2 }, "impact": "medium", "reason": "Low is the vertical quality Distant Horizons' own Low quality preset uses (its default is Medium), and its description says higher settings use more memory and GPU time. Distant overhangs and caves look simpler.", "v1": false },
+		{ "key": "dh.client.advanced.graphics.quality.horizontalQuality", "value": "LOWEST", "when": { "modPresent": ["distanthorizons"], "tierAtMost": 1 }, "impact": "low", "reason": "The LOD dropoff distance sets how soon far terrain loses detail. Lowest is what Distant Horizons' own Minimum quality preset uses (its default is Medium), and its description says higher settings use more memory and GPU time.", "v1": false },
+		{ "key": "dh.client.advanced.graphics.quality.horizontalQuality", "value": "LOW", "when": { "modPresent": ["distanthorizons"], "tierAtLeast": 2, "tierAtMost": 2 }, "impact": "low", "reason": "The LOD dropoff distance sets how soon far terrain loses detail. Low is what Distant Horizons' own Low quality preset uses (its default is Medium), and its description says higher settings use more memory and GPU time.", "v1": false },
+		{ "key": "dh.client.advanced.graphics.quality.maxHorizontalResolution", "value": "TWO_BLOCKS", "when": { "modPresent": ["distanthorizons"], "tierAtMost": 2 }, "impact": "medium", "reason": "2 blocks is the maximum far-terrain resolution Distant Horizons' own Minimum quality preset uses; every other preset uses Block, its default, which its description says costs more memory and GPU time.", "v1": false },
+
+		{ "key": "dh.common.multiThreading.numberOfThreads", "max": 1, "when": { "modPresent": ["distanthorizons"], "cpuTierAtMost": 1 }, "impact": "low", "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this small, more than 1 Distant Horizons thread competes with Minecraft itself and can cause stutter while far terrain loads.", "v1": false },
+		{ "key": "dh.common.multiThreading.numberOfThreads", "max": 2, "when": { "modPresent": ["distanthorizons"], "cpuTierAtLeast": 2, "cpuTierAtMost": 2 }, "impact": "low", "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 2 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads.", "v1": false },
+		{ "key": "dh.common.multiThreading.numberOfThreads", "max": 4, "when": { "modPresent": ["distanthorizons"], "cpuTierAtLeast": 3, "cpuTierAtMost": 3 }, "impact": "low", "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 4 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads.", "v1": false },
+		{ "key": "dh.common.multiThreading.numberOfThreads", "max": 6, "when": { "modPresent": ["distanthorizons"], "cpuTierAtLeast": 4, "cpuTierAtMost": 4 }, "impact": "low", "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 6 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads.", "v1": false },
+
+		{ "key": "iris.maxShadowRenderDistance", "max": 4, "when": { "modPresent": ["iris"], "flags": ["shaders-enabled"], "tierAtMost": 1 }, "impact": "medium", "reason": "Iris's own description says lowering the shadow distance can significantly increase performance, since less terrain is drawn a second time for shadows. 4 chunks keeps shadows around you on low-end hardware. Shader packs that set their own shadow distance ignore this.", "v1": false },
+		{ "key": "iris.maxShadowRenderDistance", "max": 6, "when": { "modPresent": ["iris"], "flags": ["shaders-enabled"], "tierAtLeast": 2, "tierAtMost": 2 }, "impact": "medium", "reason": "Iris's own description says lowering the shadow distance can significantly increase performance, since less terrain is drawn a second time for shadows. 6 chunks keeps shadows around you on entry-level hardware. Shader packs that set their own shadow distance ignore this.", "v1": false },
+		{ "key": "iris.maxShadowRenderDistance", "max": 8, "when": { "modPresent": ["iris"], "flags": ["shaders-enabled"], "tierAtLeast": 3, "tierAtMost": 3 }, "impact": "low", "defaultSelected": false, "reason": "Iris's own description says lowering the shadow distance can significantly increase performance, since less terrain is drawn a second time for shadows. 8 chunks, a little under the render distance, trims that cost on mid-range hardware. Shader packs that set their own shadow distance ignore this.", "v1": false }
 	],
 	"advice": [
 		{
@@ -520,19 +566,21 @@
 		},
 		{
 			"id": "ram-distant-horizons",
-			"when": { "modPresent": ["distanthorizons"], "heapMbAtMost": 5500, "ramMbAtLeast": 12000 },
+			"when": { "modPresent": ["distanthorizons"], "heapMbAtMost": 5500, "ramMbAtLeast": 12000, "not": { "flags": ["shaders-enabled"] } },
 			"kind": "warning",
 			"impact": "medium",
 			"title": "Distant Horizons needs more memory",
-			"text": "Distant Horizons keeps far-away terrain in memory and needs roughly 2 to 4 GB more than normal. Allocate at least 6 GB in your launcher."
+			"text": "Distant Horizons keeps far-away terrain in memory and, per its FAQ, needs roughly 2 to 4 GB more than vanilla. Allocate at least 6 GB in your launcher.",
+			"v1": { "when": { "modPresent": ["distanthorizons"], "heapMbAtMost": 5500, "ramMbAtLeast": 12000 } }
 		},
 		{
 			"id": "ram-shaders",
-			"when": { "flags": ["shaders-enabled"], "heapMbAtMost": 5500, "ramMbAtLeast": 12000 },
+			"when": { "flags": ["shaders-enabled"], "heapMbAtMost": 5500, "ramMbAtLeast": 12000, "modAbsent": ["distanthorizons"] },
 			"kind": "warning",
 			"impact": "medium",
 			"title": "Shaders need more memory",
-			"text": "Shader packs use extra memory, and with less than 6 GB for Minecraft you may get stutter. Allocate 6 GB in your launcher."
+			"text": "Shader packs use extra memory, and with less than 6 GB for Minecraft you may get stutter. Allocate 6 GB in your launcher.",
+			"v1": { "when": { "flags": ["shaders-enabled"], "heapMbAtMost": 5500, "ramMbAtLeast": 12000 } }
 		},
 		{
 			"id": "ram-distant-horizons-shaders",
@@ -541,6 +589,23 @@
 			"impact": "medium",
 			"title": "Distant Horizons with shaders needs more memory",
 			"text": "Distant Horizons with a shader pack is one of the heaviest setups. You have plenty of RAM, so allocate about 8 GB to Minecraft in your launcher."
+		},
+		{
+			"id": "ram-distant-horizons-shaders-limited",
+			"when": { "modPresent": ["distanthorizons"], "flags": ["shaders-enabled"], "heapMbAtMost": 5500, "ramMbAtLeast": 12000, "ramMbAtMost": 15999 },
+			"kind": "warning",
+			"impact": "medium",
+			"title": "Distant Horizons with shaders needs more memory",
+			"text": "Distant Horizons with a shader pack is one of the heaviest setups: per its FAQ, Distant Horizons alone needs roughly 2 to 4 GB more memory than vanilla, and the shader pack adds more. Allocate 6 GB in your launcher. This PC has less than 16 GB of RAM, so don't go much higher; keep Distant Horizons' render distance moderate instead.",
+			"v1": false
+		},
+		{
+			"id": "ram-distant-horizons-low-system",
+			"when": { "modPresent": ["distanthorizons"], "ramMbAtMost": 11999 },
+			"kind": "info",
+			"impact": "medium",
+			"title": "Distant Horizons on a PC with little RAM",
+			"text": "Per its FAQ, Distant Horizons needs roughly 2 to 4 GB more memory than vanilla, but this PC has less than 12 GB of RAM, so give Minecraft about 4 GB at most. Keep Distant Horizons' render distance short instead, and close other apps while you play."
 		},
 		{
 			"id": "battery",
@@ -576,11 +641,29 @@
 		},
 		{
 			"id": "heavy-shaders",
-			"when": { "flags": ["shaders-enabled"], "gpuTierAtMost": 3 },
+			"when": { "flags": ["shaders-enabled"], "gpuTierAtMost": 3, "tierAtLeast": 3 },
 			"kind": "warning",
 			"impact": "high",
 			"title": "Shaders are heavy for this GPU",
-			"text": "A shader pack is on, and on this graphics card shaders usually cost more FPS than every other setting combined. Try a lighter pack or a lower shader quality preset, or turn shaders off in Video Settings > Shader Packs."
+			"text": "A shader pack is on, and on this graphics card shaders usually cost more FPS than every other setting combined. Try a lighter pack or a lower shader quality preset, or turn shaders off in Video Settings > Shader Packs.",
+			"v1": { "when": { "flags": ["shaders-enabled"], "gpuTierAtMost": 3 } }
+		},
+		{
+			"id": "shaders-entry-level",
+			"when": { "flags": ["shaders-enabled"], "tierAtMost": 2, "gpuTierAtMost": 3 },
+			"kind": "warning",
+			"impact": "high",
+			"title": "Shaders are heavy for this PC",
+			"text": "A shader pack is on, and at this hardware level shaders usually cost more FPS than every other setting combined. Turn shaders off in Video Settings > Shader Packs, or switch to a pack made for low-end PCs, such as MakeUp - Ultra Fast.",
+			"v1": false
+		},
+		{
+			"id": "shaders-distant-horizons",
+			"when": { "modPresent": ["distanthorizons"], "flags": ["shaders-enabled"] },
+			"kind": "info",
+			"impact": "low",
+			"title": "Shader packs that support Distant Horizons",
+			"text": "A shader pack needs built-in Distant Horizons support to draw Distant Horizons' far terrain properly. Two community compatibility lists agree that Complementary Reimagined, Complementary Unbound, BSL (8.2.0 or newer), Bliss and Photon support it; community guides rate Complementary Unbound and Photon as the heaviest of these."
 		},
 		{
 			"id": "sodium-nvidia-threaded-optimizations",
@@ -623,6 +706,39 @@
 			"text": "Your system doesn't support one of OpenGL's faster error-checking modes (common on Linux with Wayland), so Sodium turned it off to avoid a crash at start-up. You don't need to do anything."
 		}
 	],
+	"settingLabels": {
+		"vanilla.renderDistance": { "name": "Render Distance" },
+		"vanilla.simulationDistance": { "name": "Simulation Distance" },
+		"vanilla.maxFps": { "name": "Max Framerate", "values": { "260": "Unlimited" } },
+		"vanilla.enableVsync": { "name": "VSync", "values": { "true": "On", "false": "Off" } },
+		"vanilla.inactivityFpsLimit": { "name": "Reduce FPS when", "values": { "afk": "AFK", "minimized": "Minimized" } },
+		"vanilla.particles": { "name": "Particles", "values": { "0": "All", "1": "Decreased", "2": "Minimal" } },
+		"vanilla.biomeBlendRadius": { "name": "Biome Blend", "values": { "0": "Off", "1": "3x3", "2": "5x5", "3": "7x7", "4": "9x9", "5": "11x11", "6": "13x13", "7": "15x15" } },
+		"vanilla.entityDistanceScaling": { "name": "Entity Distance" },
+		"vanilla.entityShadows": { "name": "Entity Shadows", "values": { "true": "On", "false": "Off" } },
+		"vanilla.renderClouds": { "name": "Clouds", "values": { "false": "Off", "fast": "Fast", "true": "Fancy" } },
+		"vanilla.cutoutLeaves": { "name": "See-Through Leaves", "values": { "true": "On", "false": "Off" } },
+		"vanilla.improvedTransparency": { "name": "Improved Transparency", "values": { "true": "On", "false": "Off" } },
+		"vanilla.textureFiltering": { "name": "Texture Filtering", "values": { "0": "None", "1": "RGSS", "2": "Anisotropic" } },
+		"vanilla.weatherRadius": { "name": "Weather Effect Radius" },
+		"vanilla.prioritizeChunkUpdates": { "name": "Chunk Builder", "values": { "0": "Threaded", "1": "Semi Blocking", "2": "Fully Blocking" } },
+
+		"sodium.performance.use_fog_occlusion": { "name": "Use Fog Occlusion", "values": { "true": "On", "false": "Off" } },
+		"sodium.performance.use_block_face_culling": { "name": "Use Block Face Culling", "values": { "true": "On", "false": "Off" } },
+		"sodium.performance.use_entity_culling": { "name": "Use Entity Culling", "values": { "true": "On", "false": "Off" } },
+		"sodium.performance.animate_only_visible_textures": { "name": "Animate Only Visible Textures", "values": { "true": "On", "false": "Off" } },
+		"sodium.performance.chunk_builder_threads": { "name": "Chunk Update Threads", "values": { "0": "Default" } },
+		"sodium.performance.chunk_build_defer_mode": { "name": "Chunk Updates", "values": { "ALWAYS": "Deferred", "ONE_FRAME": "Soon", "ZERO_FRAMES": "Immediate" } },
+		"sodium.performance.quad_splitting_mode": { "name": "Block Transparency Limits", "values": { "OFF": "Basic", "SAFE": "Safe", "UNLIMITED": "Unlimited" } },
+
+		"dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius": { "name": "LOD Chunk Render Distance Radius" },
+		"dh.client.advanced.graphics.quality.verticalQuality": { "name": "Vertical Quality", "values": { "HEIGHT_MAP": "Height Map", "LOW": "Low", "MEDIUM": "Medium", "HIGH": "High", "VERY_HIGH": "Very High", "EXTREME": "Extreme", "PIXEL_ART": "Pixel Art" } },
+		"dh.client.advanced.graphics.quality.horizontalQuality": { "name": "LOD Dropoff Distance", "values": { "LOWEST": "Lowest", "LOW": "Low", "MEDIUM": "Medium", "HIGH": "High", "EXTREME": "Extreme" } },
+		"dh.client.advanced.graphics.quality.maxHorizontalResolution": { "name": "Max Horizontal Resolution", "values": { "CHUNK": "Chunk", "HALF_CHUNK": "Half a chunk", "FOUR_BLOCKS": "4 blocks", "TWO_BLOCKS": "2 blocks", "BLOCK": "Block" } },
+		"dh.common.multiThreading.numberOfThreads": { "name": "NO. of threads" },
+
+		"iris.maxShadowRenderDistance": { "name": "Max Shadow Distance" }
+	},
 	"reviewIgnore": [
 		{ "slug": "servercore", "reason": "server-only; optimizes dedicated servers, no benefit to a singleplayer or LAN client" },
 		{ "slug": "vmp-fabric", "reason": "server-only, high-playercount scaling mod; effectively superseded by Moonrise, already in the rules" },
@@ -631,6 +747,38 @@
 		{ "slug": "iris", "reason": "shader-pack loader; a visual feature that costs FPS, not a performance optimization" },
 		{ "slug": "cull-fewer-leaves", "reason": "hard-conflicts with MoreCulling, which RigTune already always recommends, so it could never be safely offered alongside it" },
 		{ "slug": "quick-pack", "reason": "only speeds up datapack/resourcepack zip loading; too narrow a win for RigTune's mod list" },
-		{ "slug": "rrls", "reason": "alpha/beta resource-pack reload rework that touches the same pipeline as Iris and Continuity; not worth the risk for a loading-screen tweak" }
+		{ "slug": "rrls", "reason": "alpha/beta resource-pack reload rework that touches the same pipeline as Iris and Continuity; not worth the risk for a loading-screen tweak" },
+		{ "slug": "animaticarefabricated", "reason": "cosmetic support for OptiFine/MCPatcher animated-texture resource packs, with no performance component" },
+		{ "slug": "better-mount-hud", "reason": "cosmetic HUD change while riding a mount, not a performance mod" },
+		{ "slug": "calcmod", "reason": "an in-chat calculator; a QoL utility unrelated to performance" },
+		{ "slug": "cape-provider", "reason": "cosmetic cape skins, no performance relevance" },
+		{ "slug": "cloth-config", "reason": "config-screen library that mods needing it pull in as a dependency" },
+		{ "slug": "configmanager", "reason": "a server-side config distribution tool for modpack authors; its Modrinth listing marks it client-side unsupported, so it does nothing on RigTune's client-only target" },
+		{ "slug": "continuity", "reason": "cosmetic connected-textures support that does nothing without a resource pack defining connected textures, so any FPS cost belongs to the pack" },
+		{ "slug": "controlify", "reason": "adds controller/gamepad support; an accessibility and QoL feature, not a performance optimization" },
+		{ "slug": "crash-assistant", "reason": "shows and analyzes logs after a crash; a diagnostics aid, not a performance mod" },
+		{ "slug": "e4mc", "reason": "opens a LAN world to remote friends over a tunnel; a multiplayer convenience unrelated to local performance" },
+		{ "slug": "ears", "reason": "cosmetic skin customization (extra skin features), no performance relevance" },
+		{ "slug": "entity-model-features", "reason": "OptiFine-format custom entity models; does nothing without a matching resource pack, so any FPS cost belongs to the pack" },
+		{ "slug": "entitytexturefeatures", "reason": "OptiFine-format entity texture variation and emissive textures; does nothing without a matching resource pack, so any FPS cost belongs to the pack" },
+		{ "slug": "esf", "reason": "cosmetic entity sound variation from OptiFine-format resource packs, no performance relevance" },
+		{ "slug": "fabric-api", "reason": "the base Fabric modding API that nearly every mod pulls in as a dependency" },
+		{ "slug": "fabric-language-kotlin", "reason": "Kotlin language support that Kotlin-based mods pull in as a dependency" },
+		{ "slug": "forge-config-api-port", "reason": "config-system compatibility library that multiloader mods pull in as a dependency" },
+		{ "slug": "fzzy-config", "reason": "config library with generated settings screens that mods needing it pull in as a dependency" },
+		{ "slug": "lambdabettergrass", "reason": "cosmetic grass and snow blending style, no performance relevance" },
+		{ "slug": "main-menu-credits", "reason": "cosmetic title-screen text, no performance relevance" },
+		{ "slug": "mixintrace-reborn", "reason": "adds mixin names to crash reports for developers; unlisted on Modrinth with no Fabric build for 26.2 or 26.3, and not a performance mod" },
+		{ "slug": "modmenu", "reason": "the mod list and config-screen menu other mods hook into; useful, but not a performance optimization" },
+		{ "slug": "morechathistory", "reason": "raises the chat scrollback limit; QoL unrelated to performance" },
+		{ "slug": "optigui", "reason": "cosmetic GUI texture reskinning (OptiFine custom GUIs); the \"blazing fast\" in its description is about its own code, not game performance" },
+		{ "slug": "placeholder-api", "reason": "text placeholder and formatting library that mods needing it pull in as a dependency" },
+		{ "slug": "reeses-sodium-options", "reason": "an alternative menu for Sodium's existing video settings; it changes no performance behaviour itself" },
+		{ "slug": "renice-shot", "reason": "a high-resolution screenshot tool, no performance relevance" },
+		{ "slug": "resourceful-config", "reason": "cross-platform config library that mods needing it pull in as a dependency" },
+		{ "slug": "skyboxify", "reason": "cosmetic custom sky and skybox support, no performance relevance" },
+		{ "slug": "sodium-shadowy-path-blocks", "reason": "a cosmetic lighting fix for dirt-path blocks under Sodium, no performance angle" },
+		{ "slug": "yacl", "reason": "config-screen library (YetAnotherConfigLib) that mods needing it pull in as a dependency" },
+		{ "slug": "zconfig", "reason": "a mixin-config plugin for Fast Noise (already tracked as zfastnoise), pulled in as its dependency" }
 	]
 }

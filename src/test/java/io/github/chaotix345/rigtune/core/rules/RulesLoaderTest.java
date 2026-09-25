@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.core.rules;
 
+import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -187,7 +188,7 @@ class RulesLoaderTest {
 			assertNotNull(RulesDocument.impactOf(mod.impact, null), mod.slug);
 		}
 		for (RulesDocument.SettingRule setting : doc.settings) {
-			assertTrue(setting.key.startsWith("vanilla.") || setting.key.startsWith("sodium."), setting.key);
+			assertTrue(SettingKeys.changeable(setting.key), setting.key);
 			assertTrue(setting.isValueEntry() ^ setting.isClampEntry(), setting.key);
 			assertNotNull(setting.reason, setting.key);
 		}
