@@ -4,6 +4,7 @@ import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
+import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.profile.ProfileService;
 import io.github.chaotix345.rigtune.client.ui.HistoryScreen;
@@ -24,6 +25,8 @@ import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
+import io.github.chaotix345.rigtune.core.notice.Notice;
+import io.github.chaotix345.rigtune.core.notice.NoticePriority;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.profile.ProfileStore;
 import io.github.chaotix345.rigtune.core.profile.ProfileView;
@@ -61,8 +64,8 @@ import java.util.stream.Stream;
 // values now, stages the Sodium change in pending.json and adds one journal entry that History shows as "Profile: Battery";
 // Undo this restores them; Battery -> Max FPS -> restart -> Undo last x2 (and Undo all from the same start) puts every key
 // back; two switches of a staged key before a restart leave two ops that end on the second; importing a code opens Preview
-// with exactly the decoded keys and writes nothing until Apply; a malformed code shows its error; a switch during a
-// benchmark is refused. Screenshots at the 3 standard sizes.
+// with exactly the decoded keys and writes nothing until Apply; a malformed code shows its error; the battery offer is a
+// notice that never switches by itself; a switch during a benchmark is refused. Screenshots at the 3 standard sizes.
 public class ProfilesGameTest implements FabricClientGameTest {
 	private static final int[][] SIZES = {{1280, 720, 2}, {640, 480, 2}, {854, 480, 2}};
 	private static final String CULLING = "sodium.performance.use_block_face_culling";
@@ -116,6 +119,7 @@ public class ProfilesGameTest implements FabricClientGameTest {
 			twoSwitchesThenUndo(context, controller, true);
 			aToBToABeforeARestart(context, controller);
 			importAndMalformed(context, controller);
+			batteryOffer(context, controller);
 			refusedDuringABenchmark(context, controller);
 		} finally {
 			ProfileService.overrideBenchmarkCheck(null);
@@ -287,6 +291,65 @@ public class ProfilesGameTest implements FabricClientGameTest {
 		}
 		context.runOnClient(mc -> mc.gui.screen().onClose());
 		context.waitForScreen(ProfilesScreen.class);
+	}
+
+	// The laptop hook (SPEC 4, AC4.9's notice half): a debounced AC -> battery edge offers Battery as a notice and never
+	// switches; the offer's action switches; battery -> AC offers the previous profile; "Don't offer again" snoozes. The edge
+	// is fed to ProfileService as PowerWatcher would (CI has no battery).
+	private void batteryOffer(ClientGameTestContext context, RigTuneController controller) {
+		reset(context);
+		ProfileService service = ((RealController) controller).profileService();
+		boolean onBattery = context.computeOnClient(mc -> controller.report()).hardware().onBattery();
+		String mine = ProfileStore.shared(configDir).baseline().id();
+		// On My settings (nothing to change, so nothing journaled): the profile the reverse edge offers back.
+		context.runOnClient(mc -> controller.switchProfile(mine));
+		check(mine.equals(ProfileStore.shared(configDir).active()), "My settings is active");
+		try {
+			service.powerChanged(true);
+			context.waitTicks(3);
+			context.waitFor(mc -> controller.report() != null, 1200);
+			Notice offer = batteryNotice(context, controller);
+			check(offer != null && offer.key().startsWith(ProfileService.NOTICE_BATTERY)
+					&& offer.actions().stream().map(a -> a.id()).toList().equals(List.of(ProfileService.ACTION_SWITCH, ProfileService.ACTION_SNOOZE)),
+					"an AC -> battery edge offers Battery: " + offer);
+			check(mine.equals(ProfileStore.shared(configDir).active()), "the offer switches nothing by itself");
+			checkSeed(context, "an offer");
+			context.runOnClient(mc -> mc.gui.setScreen(new RigTuneScreen(new TitleScreen(), controller)));
+			context.waitForScreen(RigTuneScreen.class);
+			for (int[] size : SIZES) {
+				screenshotAt(context, size[0], size[1], size[2], "profiles-battery-offer-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			}
+			context.runOnClient(mc -> controller.noticeAction(offer.key(), ProfileService.ACTION_SWITCH));
+			context.waitTicks(2);
+			check(BATTERY.equals(ProfileStore.shared(configDir).active()), "the offer's action switched to Battery");
+			check("60".equals(context.computeOnClient(mc -> vanilla(mc.options)).get("vanilla.maxFps")), "Battery applied");
+			check(batteryNotice(context, controller) == null, "the offer is gone once taken");
+
+			service.powerChanged(false);
+			context.waitTicks(3);
+			context.waitFor(mc -> controller.report() != null, 1200);
+			Notice back = batteryNotice(context, controller);
+			check(back != null && back.key().startsWith(ProfileService.NOTICE_BACK), "battery -> AC offers the previous profile: " + back);
+			check(mine.equals(ProfileStore.shared(configDir).battery().previousProfile()), "the previous profile is My settings");
+			context.runOnClient(mc -> controller.noticeAction(back.key(), ProfileService.ACTION_SNOOZE));
+			check(ProfileStore.shared(configDir).battery().snoozed(), "Don't offer again is kept in profiles.json");
+			service.powerChanged(true);
+			context.waitTicks(3);
+			context.waitFor(mc -> controller.report() != null, 1200);
+			check(batteryNotice(context, controller) == null, "no offer once snoozed");
+		} finally {
+			HardwareProbe.setOnBattery(onBattery);
+			context.runOnClient(mc -> {
+				mc.gui.setScreen(new TitleScreen());
+				controller.rescan();
+			});
+			context.waitFor(mc -> controller.report() != null, 1200);
+		}
+	}
+
+	private static @Nullable Notice batteryNotice(ClientGameTestContext context, RigTuneController controller) {
+		return context.computeOnClient(mc -> controller.notices()).stream().filter(n -> n.priority() == NoticePriority.BATTERY_OFFER).findFirst()
+				.orElse(null);
 	}
 
 	private void refusedDuringABenchmark(ClientGameTestContext context, RigTuneController controller) {
