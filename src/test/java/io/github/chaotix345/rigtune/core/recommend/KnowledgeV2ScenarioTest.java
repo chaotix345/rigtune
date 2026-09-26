@@ -484,4 +484,79 @@ class KnowledgeV2ScenarioTest {
 		assertFalse(advice(run(Fixtures.userRig(), "sodium")).contains("spark-profiler"));
 		assertFalse(advice(run(Fixtures.lowEndLaptop(), "fabric-api")).contains("spark-profiler"));
 	}
+
+	// v0.4 SPEC 2k (external review §4): VSync off is optional (unticked) and neither reason claims variable refresh.
+	@Test
+	void vsyncOffIsOptionalAndHonest() {
+		Map<String, Recommendation> recs = run(Fixtures.userRig(), List.of("sodium"), Map.of("vanilla.maxFps", "120", "vanilla.enableVsync", "true"));
+		Recommendation vsync = recs.get("set:vanilla.enableVsync");
+		assertEquals(new Action.SetSetting("vanilla.enableVsync", "true", "false"), vsync.action());
+		assertFalse(vsync.selectedByDefault(), "VSync off starts unticked");
+		assertEquals("Optional: turning VSync off lowers input lag but can cause tearing; leave it on if you see tearing.", vsync.reason());
+		Recommendation cap = recs.get("set:vanilla.maxFps");
+		assertEquals("170", target(recs, "vanilla.maxFps"));
+		assertTrue(cap.selectedByDefault());
+		assertTrue(cap.reason().startsWith("Avoids rendering frames your monitor can't show; with FreeSync or G-Sync it also keeps the frame rate "
+				+ "inside the variable-refresh range."), cap.reason());
+		for (Recommendation rec : List.of(vsync, cap)) {
+			assertFalse(rec.reason().contains("keeps FreeSync"), rec.reason());
+		}
+	}
+
+	// v0.4: the rules content for keys whose evaluators other workstreams add (driverVersion: WS-W, the stutter keys: WS-S,
+	// the jvm- facts: WS-J) can't fire in the main list today. Each workstream replaces its part of this with scenario tests
+	// for its seeds once its evaluator lands.
+	@Test
+	void theV04ContentFiresNothingUntilItsEvaluatorsLand() {
+		RulesDocument rules = RulesLoader.loadBundled();
+		Set<String> jvm = rules.advice.stream().map(a -> a.id).filter(id -> id.startsWith("jvm-")).collect(Collectors.toSet());
+		Set<String> drivers = rules.advice.stream().map(a -> a.id).filter(id -> id.startsWith("driver-")).collect(Collectors.toSet());
+		Set<String> stutter = rules.stutterAdvice.stream().map(a -> a.id).collect(Collectors.toSet());
+		assertEquals(9, jvm.size(), jvm.toString());
+		assertEquals(Set.of("driver-nvidia-threaded-optimization", "driver-intel-gen7-old"), drivers);
+		assertEquals(5, stutter.size());
+
+		Fixtures.Hw oldNvidia = Fixtures.userRig();
+		oldNvidia.gpu = new GpuInfo("NVIDIA Corporation", "NVIDIA GeForce RTX 3060/PCIe/SSE2", "4.6.0 NVIDIA 531.18", GraphicsBackend.OPENGL, 12288);
+		Fixtures.Hw hd4000 = Fixtures.lowEndLaptop();
+		hd4000.gpu = new GpuInfo("Intel", "Intel(R) HD Graphics 4000", "4.0.0 - Build 10.18.10.4358", GraphicsBackend.OPENGL, -1);
+		for (Fixtures.Hw hw : List.of(Fixtures.userRig(), Fixtures.lowEndLaptop(), oldNvidia, hd4000, tier1Laptop())) {
+			for (List<String> mods : List.of(List.of("sodium"), DH_MODS, List.of("sodium", "iris", "distanthorizons"), List.of("fabric-api"))) {
+				Set<String> fired = advice(run(hw, mods, Map.of("sodium.performance.chunk_build_defer_mode", "ZERO_FRAMES")));
+				for (Set<String> ids : List.of(jvm, drivers, stutter)) {
+					assertTrue(fired.stream().noneMatch(ids::contains), hw.gpu.renderer() + " " + mods + ": " + fired);
+				}
+			}
+		}
+	}
+
+	// v0.4 SPEC 6: the main list evaluates the jvm-* advice (Recommender.SUPPORTED_FEATURES has "jvm-flags") once the JVM
+	// check has put its facts into HardwareProfile.flags; jvm-probed says the check ran (plan review J-M1).
+	@Test
+	void jvmAdviceIsEvaluatedOnceTheFactsExist() {
+		Recommendation noGc = run(withFlags(Fixtures.userRig(), "jvm-probed", "jvm-gc-epsilon", "jvm-gc-typed"), "sodium").get("advice:jvm-no-gc");
+		assertNotNull(noGc);
+		assertEquals(Category.WARNING, noGc.category());
+		assertEquals(Impact.HIGH, noGc.impact());
+		assertFalse(advice(run(withFlags(Fixtures.userRig(), "jvm-probed", "jvm-gc-g1"), "sodium")).stream().anyMatch(id -> id.startsWith("jvm-")));
+	}
+
+	// v0.4 SPEC 9: the Intel seed targets only the Gen7 (Ivy Bridge, ig7icd) HD Graphics that Sodium's check for issue #899
+	// covers, as the renderer strings name them.
+	@Test
+	void intelGen7DriverSeedTargetsIvyBridgeHdGraphicsOnly() {
+		RulesDocument.AdviceRule seed = RulesLoader.loadBundled().advice.stream().filter(a -> a.id.equals("driver-intel-gen7-old")).findFirst().orElseThrow();
+		java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(seed.when.gpuModelMatches);
+		for (String gen7 : List.of("Intel(R) HD Graphics 4000", "Intel(R) HD Graphics 2500", "Intel(R) HD Graphics P4000", "Intel HD Graphics 4000")) {
+			assertTrue(pattern.matcher(gen7).find(), gen7);
+		}
+		for (String other : List.of("Intel(R) HD Graphics 3000", "Intel(R) HD Graphics 2000", "Intel(R) HD Graphics 4400", "Intel(R) HD Graphics 4600",
+				"Intel(R) HD Graphics 5000", "Intel(R) Iris(R) Pro Graphics 5200", "Intel(R) HD Graphics 400", "Intel(R) HD Graphics 520",
+				"Intel(R) HD Graphics", "Intel(R) UHD Graphics 620", "Intel(R) Iris(R) Xe Graphics", "Intel(R) HD Graphics 40000")) {
+			assertFalse(pattern.matcher(other).find(), other);
+		}
+		assertEquals(Map.of("vendor", "intel", "atMost", "10.18.10.5160"), seed.when.driverVersion);
+		assertEquals(List.of("windows"), seed.when.os);
+		assertEquals(List.of("intel"), seed.when.gpuVendor);
+	}
 }
