@@ -61,8 +61,14 @@ class ProfileTemplatesTest {
 		return rigs;
 	}
 
-	private static Result compute(TemplateId id, Fixtures.Hw hw, List<String> mods, SettingsSnapshot snapshot) {
-		return ProfileTemplates.compute(id, ProfileFixtures.rules(), null, hw.build(), Fixtures.mods(mods.toArray(String[]::new)), snapshot,
+	// The rules the templates are computed over: here the pinned r13 copy (no section: the built-in definitions);
+	// ProfileTemplatesBundledTest runs every test again over the bundled rules and their own section.
+	protected RulesDocument rules() {
+		return ProfileFixtures.rules();
+	}
+
+	private Result compute(TemplateId id, Fixtures.Hw hw, List<String> mods, SettingsSnapshot snapshot) {
+		return ProfileTemplates.compute(id, rules(), null, hw.build(), Fixtures.mods(mods.toArray(String[]::new)), snapshot,
 				snapshot.values());
 	}
 
@@ -152,13 +158,13 @@ class ProfileTemplatesTest {
 				assertTrue(id != TemplateId.QUALITY || result.clamps().stream().anyMatch(c -> c.key().equals(RD)), id + " " + mods);
 			}
 		}
-		// Without the small heap, Quality's render distance is the rules' tier-5 value.
-		assertEquals("16", compute(TemplateId.QUALITY, Fixtures.userRig(), List.of(), ProfileFixtures.snapshot(List.of(), true)).values().get(RD));
+		// Without the small heap, Quality's render distance is the rules' own, above the cap.
+		assertTrue(Integer.parseInt(compute(TemplateId.QUALITY, Fixtures.userRig(), List.of(), ProfileFixtures.snapshot(List.of(), true)).values().get(RD)) > 8);
 	}
 
 	@Test
 	void balancedEqualsApplyingEveryCurrentSettingRecommendation() {
-		RulesDocument rules = ProfileFixtures.rules();
+		RulesDocument rules = rules();
 		for (Map.Entry<String, Fixtures.Hw> rig : rigs().entrySet()) {
 			for (List<String> mods : ProfileFixtures.MOD_SETS) {
 				for (boolean maxed : new boolean[] {false, true}) {
@@ -211,13 +217,13 @@ class ProfileTemplatesTest {
 		Fixtures.Hw hw = rigs().get("smallHeap");
 		Map<String, String> imported = Map.of(RD, "32", FPS, "260", "vanilla.simulationDistance", "32");
 		SettingsSnapshot snapshot = ProfileFixtures.snapshot(List.of(), false);
-		Result result = ProfileTemplates.clamp(imported, ProfileFixtures.rules(), hw.build(), List.of(), snapshot, Goal.BALANCED);
+		Result result = ProfileTemplates.clamp(imported, rules(), hw.build(), List.of(), snapshot, Goal.BALANCED);
 		assertEquals("8", result.values().get(RD));
 		assertEquals("260", result.values().get(FPS));
 		assertTrue(result.clamps().stream().anyMatch(c -> c.key().equals(RD) && c.from().equals("32") && c.to().equals("8")
 				&& c.reason().contains("2 GB")), result.clamps().toString());
 		// A key the profile doesn't hold is never added by a clamp.
-		assertFalse(ProfileTemplates.clamp(Map.of(FPS, "120"), ProfileFixtures.rules(), hw.build(), List.of(), snapshot, Goal.BALANCED).values()
+		assertFalse(ProfileTemplates.clamp(Map.of(FPS, "120"), rules(), hw.build(), List.of(), snapshot, Goal.BALANCED).values()
 				.containsKey(RD));
 	}
 
