@@ -185,6 +185,21 @@ class PreviewDownloadsTest {
 		assertEquals("No fabric version of NOTHING for Minecraft 26.2", preview.skipped().getFirst().detail());
 	}
 
+	// Review of WS-G1: an update that waits for the addition bringing its requirement (docs/v0.4/SPEC.md 2o, H1-A), which then
+	// fails: each skipped row still carries its own reason (the planner's errors keep their order).
+	@Test
+	void aWaitingUpdateAndTheFailedAdditionKeepTheirOwnReasons() throws IOException {
+		Recommendation update = update();
+		updateVersions.put("sodV6", version("sodV6", "SODIUM", "sodium-0.6.jar", required("LIB")));
+
+		ApplyPreview preview = preview(add("lib", "LIB", "Lib"), update);
+
+		Map<String, String> reasons = new HashMap<>();
+		preview.skipped().forEach(skip -> reasons.put(skip.recommendationId(), skip.detail()));
+		assertEquals(Map.of("update:sodium", "its new version needs LIB, which isn't installed",
+				"add:lib", "No fabric version of LIB for Minecraft 26.2"), reasons);
+	}
+
 	@Test
 	void withLookupsOffAnAdditionIsAFileFromModrinthAndNothingIsAskedOfModrinth() throws IOException {
 		lithiumWithFabricApi();

@@ -158,7 +158,7 @@ class FabricPinsTest {
 		VersionPins pins = pins(mod("iris", "Iris", null, null, dep(ModDependency.Kind.DEPENDS, "sodium", "*")));
 
 		assertNull(pins.problem("sodium", "anything-at-all"));
-		assertEquals("Iris, which is installed, needs sodium *, not ", pins.problem("sodium", "").english());
+		assertEquals("Iris, which is installed, needs sodium *, not ?", pins.problem("sodium", "").english());
 	}
 
 	// A new jar's own ranges are matched against the loaded versions with Fabric's predicates; a provided id is present

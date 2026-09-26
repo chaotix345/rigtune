@@ -193,8 +193,12 @@ public final class DependencyResolver {
 		return out;
 	}
 
+	// One an earlier Apply staged is in another all-or-nothing group, so the update waits for the restart.
 	TextException missingRequirement(String projectId) {
-		return new TextException(Text.of("rigtune.download.missing_dependency", "its new version needs %s, which isn't installed", name(projectId)));
+		return new TextException(staged.projects().contains(projectId)
+				? Text.of("rigtune.download.missing_dependency_staged", "its new version needs %s, which is waiting for a restart; update it after restarting",
+				name(projectId))
+				: Text.of("rigtune.download.missing_dependency", "its new version needs %s, which isn't installed", name(projectId)));
 	}
 
 	// A dependency naming a version (version_id) is incompatible with that version only, not its whole project

@@ -23,13 +23,13 @@ public final class DryRunPlanner {
 	public static DownloadPlanner.Result plan(DependencyResolver resolver, Path modsDir, BiPredicate<String, String> conflicts,
 			Map<String, ModrinthVersion> updateVersions, Map<String, String> modIdsByFile, List<Recommendation> recs, Set<String> installedProjects,
 			Set<String> loadedIds, Map<String, String> stagedJars) {
-		return plan(resolver, modsDir, conflicts, updateVersions, modIdsByFile, recs, installedProjects, loadedIds, stagedJars, true);
+		return plan(resolver, modsDir, conflicts, updateVersions, modIdsByFile, recs, installedProjects, loadedIds, stagedJars, false, true);
 	}
 
-	// lookedUp: DownloadPlanner.lookedUp (docs/v0.4/SPEC.md 2o, M4).
+	// lookups, online: DownloadPlanner.lookedUp (docs/v0.4/SPEC.md 2o, M4).
 	public static DownloadPlanner.Result plan(DependencyResolver resolver, Path modsDir, BiPredicate<String, String> conflicts,
 			Map<String, ModrinthVersion> updateVersions, Map<String, String> modIdsByFile, List<Recommendation> recs, Set<String> installedProjects,
-			Set<String> loadedIds, Map<String, String> stagedJars, boolean lookedUp) {
+			Set<String> loadedIds, Map<String, String> stagedJars, boolean lookups, boolean online) {
 		String never = PendingActions.PENDING_SUFFIX + ".preview-" + UUID.randomUUID();
 		Map<Path, String> modIds = new HashMap<>();
 		AtomicInteger next = new AtomicInteger();
@@ -39,7 +39,7 @@ public final class DryRunPlanner {
 			modIds.computeIfAbsent(path, p -> modIdsByFile.getOrDefault(file.filename(), "rigtune-preview-" + next.incrementAndGet() + never));
 			return path;
 		};
-		return new DownloadPlanner(resolver, modsDir, fetcher, conflicts, updateVersions, modIds::get).lookedUp(lookedUp)
+		return new DownloadPlanner(resolver, modsDir, fetcher, conflicts, updateVersions, modIds::get).lookedUp(lookups, online)
 				.plan(recs, installedProjects, loadedIds, stagedJars);
 	}
 }

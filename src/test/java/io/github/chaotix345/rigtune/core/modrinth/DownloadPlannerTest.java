@@ -606,6 +606,8 @@ class DownloadPlannerTest {
 		assertEquals(List.of(), result.ops());
 		assertEquals(1, result.errors().size(), result.errors().toString());
 		assertFalse(Files.exists(mods.resolve("libV.jar" + PendingActions.PENDING_SUFFIX)));
+		// The mod's own download, fetched before its dependency failed, isn't left behind either (review of WS-G1, L-2).
+		assertFalse(Files.exists(mods.resolve("aV.jar" + PendingActions.PENDING_SUFFIX)));
 	}
 
 	@Test
@@ -952,7 +954,7 @@ class DownloadPlannerTest {
 		Recommendation update = updateA();
 		put("b", version("bV", "B", "1", T, incompatible("K")));
 		DownloadPlanner planner = new DownloadPlanner(new DependencyResolver(client, "fabric", "26.2", installedVersions), mods, this::fetch, conflicts,
-				updateVersions, pins).lookedUp(false);
+				updateVersions, pins).lookedUp(true, false);
 
 		DownloadPlanner.Result result = planner.plan(List.of(add("b", "B"), update), Set.of(), Set.of(), Map.of());
 		planned.add(result);
@@ -1053,6 +1055,50 @@ class DownloadPlannerTest {
 			assertEquals(Set.of("a-1.jar", "aV.jar", "libV.jar"), Set.copyOf(files));
 			assertEquals(1, groups(result.ops()), result.ops().toString());
 		}
+	}
+
+	// Review of WS-G1, M-1: the addition that brings LIB is planned right after the update waits, then the update, so an
+	// addition that relies on the update (it's incompatible with the installed A) still joins it, as without the wait.
+	@Test
+	void theAdditionThatBringsARequirementIsPlannedBeforeTheOtherAdditions() throws IOException {
+		Recommendation update = updateA(required("LIB"));
+		put("x", version("xV", "X", "1", T, new Dependency("A", "a1", "incompatible")));
+		put("lib", version("libV", "LIB", "1", T));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update, add("x", "X"), add("lib", "LIB"));
+
+		assertEquals(List.of(), result.errors());
+		assertEquals(List.of("update-a", "add-x", "add-lib"), result.ids());
+		assertEquals(Set.of("a-1.jar", "aV.jar", "xV.jar", "libV.jar"), Set.copyOf(files(result.ops())));
+		assertEquals(1, groups(result.ops()), result.ops().toString());
+	}
+
+	// Review of WS-G1, M-2: a requirement an earlier Apply staged is in another all-or-nothing group, so the update waits
+	// for the restart, and says so.
+	@Test
+	void anUpdateWhoseRequirementIsOnlyStagedSaysSo() throws IOException {
+		client.projects.add(new ModrinthProject("LIB", "lib", "Lib Mod", "approved", List.of("26.2"), List.of("fabric"), "optional"));
+		put("lib", version("libV", "LIB", "1", T));
+		staged = stage(add("lib", "LIB"));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), updateA(required("LIB")));
+
+		assertEquals(List.of("Update a: its new version needs Lib Mod, which is waiting for a restart; update it after restarting"), result.errors());
+	}
+
+	// Review of WS-G1, M-3: text from a downloaded jar is shown without formatting codes or line breaks.
+	@Test
+	void textFromADownloadedJarIsSanitisedForTheUi() throws IOException {
+		Recommendation update = updateA();
+		jarIds.put("aV.jar", "evil\u00a7c\nmod");
+		jarVersions.put("sodiumV.jar", "0.10.0\u00a7r");
+		Recommendation sodium = updateOf("sodium", "SODIUM");
+		pins = new VersionPins(List.of(dependsOn("iris", "Iris", "sodium", "Sodium", "0.9.x")));
+
+		DownloadPlanner.Result result = plan(Set.of("A", "SODIUM"), update, sodium);
+
+		assertEquals(List.of("Update a: aV.jar is a different mod (evil mod, not a)",
+				"Update sodium: Iris, which is installed, needs Sodium 0.9.x, not 0.10.0"), result.errors());
 	}
 
 	// The addition that would have brought LIB fails: the update is refused too, and each error stays at its item's place

@@ -122,11 +122,11 @@ public final class DownloadPlanner {
 		return out;
 	}
 
-	// docs/v0.4/SPEC.md 2o, M4: false while the installed mods haven't been looked up on Modrinth (the lookup is still
-	// running, or it failed and waits for a Rescan). The checks against installed mods need that data, so plan() then
+	// docs/v0.4/SPEC.md 2o, M4: online false while the installed mods haven't been looked up on Modrinth (the lookup is
+	// still running, or it failed and waits for a Rescan). The checks against installed mods need that data, so plan() then
 	// refuses every recommendation, fetching and asking nothing. With Modrinth lookups off there is nothing to wait for.
-	public DownloadPlanner lookedUp(boolean installedLookedUp) {
-		this.lookedUp = installedLookedUp;
+	public DownloadPlanner lookedUp(boolean lookups, boolean online) {
+		this.lookedUp = online || !lookups;
 		return this;
 	}
 
@@ -171,10 +171,25 @@ public final class DownloadPlanner {
 				}
 			} catch (WaitForAdditions w) {
 				waited.add(at);
-				queue.add(at);
+				// The additions that bring what it needs go next, then the update, so the other additions are still judged with
+				// the update in the batch (A-H1). A project only an addition's dependency brings: it waits for all of them.
+				List<Integer> providers = new ArrayList<>();
+				for (int later : queue.subList(q + 1, queue.size())) {
+					if (ordered.get(later).action() instanceof Action.AddMod add && w.missing.contains(rootProject(add))) {
+						providers.add(later);
+					}
+				}
+				if (providers.isEmpty()) {
+					queue.add(at);
+				} else {
+					queue.subList(q + 1, queue.size()).removeAll(providers);
+					queue.addAll(q + 1, providers);
+					queue.add(q + 1 + providers.size(), at);
+				}
 				continue;
 			} catch (IOException | RuntimeException e) {
 				RigTune.LOGGER.warn("Could not prepare {}", rec.id(), e);
+				dropDownloads(attempt);
 				errorAt[at] = rec.title() + ": " + e.getMessage();
 				// A refusal of the planner or the resolver is translated; a network or file error's detail stays as it is.
 				errorTextAt[at] = Text.of("rigtune.download.error", "%s: %s", rec.titleText(),
@@ -200,6 +215,31 @@ public final class DownloadPlanner {
 			}
 		}
 		return new Result(List.copyOf(batch.ops), ids, errors, Map.copyOf(opIds), errorTexts);
+	}
+
+	// A failed recommendation's downloads that nothing else stages are deleted (review of WS-G1, L-2).
+	private static void dropDownloads(Attempt attempt) {
+		for (Op op : attempt.ops) {
+			if (op.type() == PendingActions.Type.ENABLE_FILE && op.from() != null) {
+				try {
+					attempt.batch.dropDuplicate(Path.of(op.from()));
+				} catch (IOException e) {
+					RigTune.LOGGER.warn("Could not delete {}", op.from(), e);
+				}
+			}
+		}
+	}
+
+	// The Modrinth project an addition installs, or null when Modrinth can't say.
+	private String rootProject(Action.AddMod add) {
+		if (add.projectId() != null) {
+			return add.projectId();
+		}
+		try {
+			return resolver.latest(add.slug()).map(ModrinthVersion::projectId).orElse(null);
+		} catch (IOException | RuntimeException e) {
+			return null;
+		}
 	}
 
 	private static Result notLookedUp(List<Recommendation> ordered) {
@@ -352,15 +392,20 @@ public final class DownloadPlanner {
 		// docs/v0.4/SPEC.md 2o, H1-A: a project the new version requires that isn't installed would stop the game from
 		// starting. One this batch's additions stage is joined (the update waits for them once); otherwise the update is
 		// refused: an update's own dependencies aren't resolved.
+		List<String> unmet = new ArrayList<>();
 		for (String project : resolver.missingRequirements(next, attempt.projects)) {
 			String stagedBy = attempt.batch.groupOfProject.get(project);
 			if (stagedBy != null) {
 				attempt.joins.add(stagedBy);
-			} else if (attempt.mayWait) {
-				throw new WaitForAdditions();
 			} else {
-				throw resolver.missingRequirement(project);
+				unmet.add(project);
 			}
+		}
+		if (!unmet.isEmpty()) {
+			if (attempt.mayWait) {
+				throw new WaitForAdditions(unmet);
+			}
+			throw resolver.missingRequirement(unmet.getFirst());
 		}
 		Path pending = fetcher.fetch(file);
 		String jarModId = modIdOf.apply(pending);
@@ -373,7 +418,8 @@ public final class DownloadPlanner {
 		// that depends on the old id without it, unless the new jar still provides that id (or nests a mod with it).
 		if (update.modId() != null && !update.modId().equals(jarModId) && !provides(pending, update.modId())) {
 			attempt.batch.dropDuplicate(pending);
-			throw new TextException(Text.of("rigtune.download.not_same_mod", "%s is a different mod (%s, not %s)", file.filename(), jarModId, update.modId()));
+			throw new TextException(Text.of("rigtune.download.not_same_mod", "%s is a different mod (%s, not %s)", file.filename(),
+					VersionPins.shown(jarModId), update.modId()));
 		}
 		attempt.batch.noteReplaced(jarModId, pending);
 		attempt.ops.add(Op.disableFile(update.currentFile()));
@@ -559,10 +605,13 @@ public final class DownloadPlanner {
 	private record NewJar(String opId, Path path, String modId, String replaces) {
 	}
 
-	// An update that needs a project an addition later in the batch may stage: planned again after the additions.
+	// An update that needs projects an addition later in the batch may stage: planned again after the additions.
 	private static final class WaitForAdditions extends RuntimeException {
-		WaitForAdditions() {
+		final List<String> missing;
+
+		WaitForAdditions(List<String> missing) {
 			super(null, null, false, false);
+			this.missing = missing;
 		}
 	}
 }

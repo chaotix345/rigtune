@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.core.modrinth;
 
+import io.github.chaotix345.rigtune.core.apply.ModJars;
 import io.github.chaotix345.rigtune.core.model.Text;
 
 import java.util.ArrayList;
@@ -114,10 +115,10 @@ public final class VersionPins {
 				}
 			} else if (!fine) {
 				String by = pin.byName() != null ? pin.byName() : pin.by();
-				String name = target.name() != null ? target.name() : pin.targetName() != null ? pin.targetName() : target.modId();
+				String name = target.name() != null ? target.name() : pin.targetName() != null ? pin.targetName() : shown(target.modId());
 				refused.putIfAbsent(t, pin.kind() == Kind.DEPENDS
-						? Text.of("rigtune.download.pinned", "%s, which is installed, needs %s %s, not %s", by, name, String.valueOf(pin.declared().get()), target.version())
-						: Text.of("rigtune.download.pinned_breaks", "%s, which is installed, doesn't work with %s %s", by, name, target.version()));
+						? Text.of("rigtune.download.pinned", "%s, which is installed, needs %s %s, not %s", by, name, shown(pin.declared().get()), shown(target.version()))
+						: Text.of("rigtune.download.pinned_breaks", "%s, which is installed, doesn't work with %s %s", by, name, shown(target.version())));
 			}
 		}
 		// The jars' own declarations, on what will be present: another jar of the batch, else the loaded mod (unless the
@@ -140,7 +141,7 @@ public final class VersionPins {
 		if (target.equals(jar.modId()) || ranges == null || ranges.isEmpty()) {
 			return;
 		}
-		String shown = String.join(SEPARATOR, ranges);
+		String shown = shown(String.join(SEPARATOR, ranges));
 		Integer t = jarOf.get(target);
 		if (t != null && t != i) {
 			Jar other = jars.get(t);
@@ -149,12 +150,12 @@ public final class VersionPins {
 			}
 			if (!fine(kind, ranges, other.version())) {
 				refused.putIfAbsent(i, kind == Kind.DEPENDS
-						? Text.of("rigtune.download.needs_version_ticked", "it needs %s %s, not the %s that's ticked too", name(other), shown, other.version())
-						: Text.of("rigtune.download.breaks_version_ticked", "it doesn't work with %s %s, which is ticked too", name(other), other.version()));
+						? Text.of("rigtune.download.needs_version_ticked", "it needs %s %s, not the %s that's ticked too", name(other), shown, shown(other.version()))
+						: Text.of("rigtune.download.breaks_version_ticked", "it doesn't work with %s %s, which is ticked too", name(other), shown(other.version())));
 				refused.putIfAbsent(t, kind == Kind.DEPENDS
-						? Text.of("rigtune.download.pinned_ticked", "%s, which is ticked too, needs %s %s, not %s", name(jar), name(other), shown, other.version())
+						? Text.of("rigtune.download.pinned_ticked", "%s, which is ticked too, needs %s %s, not %s", name(jar), name(other), shown, shown(other.version()))
 						: Text.of("rigtune.download.pinned_breaks_ticked", "%s, which is ticked too, doesn't work with %s %s", name(jar), name(other),
-						other.version()));
+						shown(other.version())));
 				return;
 			}
 			Loaded before = loaded.get(target);
@@ -171,8 +172,8 @@ public final class VersionPins {
 		if (!fine(kind, ranges, present.version())) {
 			String name = present.name() != null ? present.name() : target;
 			refused.putIfAbsent(i, kind == Kind.DEPENDS
-					? Text.of("rigtune.download.needs_version", "it needs %s %s, not the installed %s", name, shown, present.version())
-					: Text.of("rigtune.download.breaks_version", "it doesn't work with the installed %s %s", name, present.version()));
+					? Text.of("rigtune.download.needs_version", "it needs %s %s, not the installed %s", name, shown, shown(present.version()))
+					: Text.of("rigtune.download.breaks_version", "it doesn't work with the installed %s %s", name, shown(present.version())));
 		}
 	}
 
@@ -191,6 +192,13 @@ public final class VersionPins {
 	}
 
 	private static String name(Jar jar) {
-		return jar.name() != null ? jar.name() : jar.modId();
+		return jar.name() != null ? jar.name() : shown(jar.modId());
+	}
+
+	// Text from a jar's fabric.mod.json as the UI shows it (plan review P-L1: no formatting codes or control characters,
+	// bounded); "?" when nothing is left.
+	public static String shown(String raw) {
+		String out = ModJars.sanitizeName(raw);
+		return out != null ? out : "?";
 	}
 }

@@ -571,7 +571,7 @@ public final class RealController implements RigTuneController {
 		RulesDocument doc = rules;
 		BiPredicate<String, String> conflicts = doc == null ? (a, b) -> false : ModConflicts.of(doc)::between;
 		return new DownloadPlanner(resolver, modsDir, this::fetch, conflicts, data.updateVersions(), FabricPins.loaded())
-				.lookedUp(data.data().online() || !settings.modrinthAllowed()).plan(recs, installedProjects, loadedIds, stagedJarsByModId());
+				.lookedUp(settings.modrinthAllowed(), data.data().online()).plan(recs, installedProjects, loadedIds, stagedJarsByModId());
 	}
 
 	// Mod ids that already have a staged ENABLE_FILE, with that op's pending jar. A newer download for the same id

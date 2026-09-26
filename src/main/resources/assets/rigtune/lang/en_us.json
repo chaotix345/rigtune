@@ -177,6 +177,7 @@
 	"rigtune.download.incompatible_installed": "Modrinth marks %s, which is installed, as incompatible with %s",
 	"rigtune.download.incompatible_staged": "Modrinth marks %s as incompatible with %s, which is waiting for a restart",
 	"rigtune.download.missing_dependency": "its new version needs %s, which isn't installed",
+	"rigtune.download.missing_dependency_staged": "its new version needs %s, which is waiting for a restart; update it after restarting",
 	"rigtune.download.needs_version": "it needs %s %s, not the installed %s",
 	"rigtune.download.needs_version_ticked": "it needs %s %s, not the %s that's ticked too",
 	"rigtune.download.no_file": "No file for %s",

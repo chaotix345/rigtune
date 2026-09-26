@@ -56,7 +56,7 @@ final class PreviewDownloads {
 		}
 		DependencyResolver resolver = new DependencyResolver(client, in.loader(), in.gameVersion(), in.installedVersions()).withStaged(in.staged());
 		DownloadPlanner.Result result = DryRunPlanner.plan(resolver, modsDir, in.conflicts(), in.updateVersions(), modIdsByFile, ordered,
-				in.installedProjects(), in.loadedIds(), in.stagedJars(), in.lookedUp() || !in.lookups());
+				in.installedProjects(), in.loadedIds(), in.stagedJars(), in.lookups(), in.lookedUp());
 
 		Map<String, Recommendation> owner = new HashMap<>();
 		for (Recommendation r : ordered) {
