@@ -5,6 +5,7 @@ import io.github.chaotix345.rigtune.core.apply.ModJars;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
+import io.github.chaotix345.rigtune.core.history.JarInfo;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.ModFile;
@@ -342,6 +343,12 @@ public final class DownloadPlanner {
 			attempt.batch.dropDuplicate(pending);
 			throw notAMod(file);
 		}
+		// docs/v0.4/SPEC.md 2o, M7: another mod in its place (a secondary file installed, a renamed mod) would leave everything
+		// that depends on the old id without it, unless the new jar still provides that id (or nests a mod with it).
+		if (update.modId() != null && !update.modId().equals(jarModId) && !provides(pending, update.modId())) {
+			attempt.batch.dropDuplicate(pending);
+			throw new TextException(Text.of("rigtune.download.not_same_mod", "%s is a different mod (%s, not %s)", file.filename(), jarModId, update.modId()));
+		}
 		refusePinned(jarModId, pending, attempt);
 		attempt.batch.noteReplaced(jarModId, pending);
 		attempt.ops.add(Op.disableFile(update.currentFile()));
@@ -358,6 +365,11 @@ public final class DownloadPlanner {
 			attempt.batch.dropDuplicate(pending);
 			throw new TextException(problem);
 		}
+	}
+
+	private static boolean provides(Path jar, String modId) {
+		JarInfo info = JarInfo.read(jar);
+		return info != null && info.provides().contains(modId);
 	}
 
 	private static TextException notAMod(ModFile file) {

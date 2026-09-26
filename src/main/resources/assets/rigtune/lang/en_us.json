@@ -178,6 +178,7 @@
 	"rigtune.download.no_file": "No file for %s",
 	"rigtune.download.no_version": "No %s version of %s for Minecraft %s",
 	"rigtune.download.not_a_mod": "%s is not a Fabric mod jar (no readable fabric.mod.json id)",
+	"rigtune.download.not_same_mod": "%s is a different mod (%s, not %s)",
 	"rigtune.download.outside_mods_folder": "it isn't in this instance's mods folder; update it in your launcher",
 	"rigtune.download.pinned": "%s, which is installed, needs %s %s, not %s",
 	"rigtune.download.pinned_breaks": "%s, which is installed, doesn't work with %s %s",

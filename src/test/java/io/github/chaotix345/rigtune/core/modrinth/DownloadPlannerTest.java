@@ -816,6 +816,37 @@ class DownloadPlannerTest {
 		assertFalse(Files.exists(mods.resolve("libV.jar" + PendingActions.PENDING_SUFFIX)));
 	}
 
+	// --- docs/v0.4/SPEC.md 2o, M7: an update's jar is the same mod
+
+	// The latest version's primary file declares another mod id (a secondary file installed, or a renamed mod): putting
+	// it in place of mod a would leave everything that depends on a without it. Refused, the download deleted.
+	@Test
+	void anUpdateWhoseJarIsAnotherModIsRefused() throws IOException {
+		Recommendation update = updateA();
+		jarIds.put("aV.jar", "other");
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update);
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of(), result.ops());
+		assertEquals(List.of("Update a: aV.jar is a different mod (other, not a)"), result.errors());
+		assertFalse(Files.exists(mods.resolve("aV.jar" + PendingActions.PENDING_SUFFIX)));
+		assertEquals("installed", Files.readString(mods.resolve("a-1.jar")));
+	}
+
+	// A renamed mod that still provides its old id keeps its dependants working (Fabric resolves them to it).
+	@Test
+	void anUpdateWhoseJarProvidesTheOldIdIsStaged() throws IOException {
+		Recommendation update = updateA();
+		jarIds.put("aV.jar", "a-renamed");
+		jarProvides.put("aV.jar", List.of("a"));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update);
+
+		assertEquals(List.of("update-a"), result.ids(), result.errors().toString());
+		assertEquals(java.util.Arrays.asList(null, "a-renamed"), result.ops().stream().map(Op::modId).toList());
+	}
+
 	// --- docs/v0.4/SPEC.md 2o, H1-A: an update whose new version requires a project that isn't installed
 
 	// Updates are ticked by default: staged alone, A 2.0 would stop the game from starting without LIB. Refused before
