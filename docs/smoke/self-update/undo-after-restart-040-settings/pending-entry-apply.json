@@ -1,0 +1,30 @@
+{
+  "createdAt": "2026-09-26T16:06:58.037705200Z",
+  "gamePid": 5640,
+  "modsDir": "<instance>\\mods",
+  "configDir": "<instance>\\config",
+  "ops": [
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\e2e-first-1.0.0.jar.rigtune-pending",
+      "to": "<instance>\\mods\\e2e-first-1.0.0.jar",
+      "id": "4e4b99b2-51cd-4cf3-9ea3-784e1c6ca93b",
+      "group": "f7697e14-8a9b-41f2-b9a2-b0329583908c",
+      "modId": "e2e-first",
+      "attempts": 0,
+      "projectId": "E2EFrst1",
+      "versionId": "E2Eext01"
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\e2e-second-1.0.0.jar.rigtune-pending",
+      "to": "<instance>\\mods\\e2e-second-1.0.0.jar",
+      "id": "e584f67a-7225-4824-9655-213676cdb249",
+      "group": "2a4a9045-fc74-4bfa-8420-b15685e91f3f",
+      "modId": "e2e-second",
+      "attempts": 0,
+      "projectId": "E2EScnd1",
+      "versionId": "E2Eext02"
+    }
+  ]
+}
