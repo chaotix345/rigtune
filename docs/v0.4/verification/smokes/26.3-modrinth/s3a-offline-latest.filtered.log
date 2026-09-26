@@ -1,0 +1,30 @@
+[21:34:45] [main/INFO]: Loading Minecraft 26.3 with Fabric Loader 0.19.5
+[21:34:45] [main/INFO]: Loading 66 mods:
+[21:34:50] [main/ERROR]: Error reading performance data from registry for Process.
+[21:34:55] [Render thread/ERROR]: Illegal option value 0 for Anisotropic Filtering
+[21:35:07] [Download-2/ERROR]: Failed to fetch user properties
+[21:35:07] [Download-2/ERROR]: Failed to fetch Realms feature flags
+[21:35:08] [RigTune worker/INFO]: RigTune: Java 25.0.4.1 (Eclipse Adoptium), G1 (Java's choice), 0 argument notes []
+[21:35:08] [RigTune worker/INFO]: RigTune: launcher not recognised (generic memory advice)
+[21:35:08] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Technologies Inc., renderer=AMD Radeon RX 7800 XT, driverVersion=3.3.0 Core Profile Context 26.8.1.260810, backend=OPENGL, vramMb=16368], totalRamMb=31849, maxHeapMb=7964, display=DisplayInfo[width=2560, height=1440, refreshRate=180, fullscreen=false], hasBattery=false, onBattery=false, osName=Windows 11 10.0, mcVersion=26.3, flags=[jvm-probed, jvm-gc-g1, sodium-workaround:AMD_GAME_OPTIMIZATION_BROKEN]]
+[21:35:08] [RigTune worker/INFO]: Launch to title screen: 24989 ms (14 mods)
+[21:35:09] [Download-2/ERROR]: Couldn't connect to realms
+[21:35:11] [Test thread/INFO]: Smoke: restored the player's options after the game test reset: [vanilla.renderDistance: 5 -> 32]
+[21:35:13] [ForkJoinPool.commonPool-worker-2/INFO]: RigTune startup footprint: preLaunch + init 48.4 ms on the render thread (CPU 46.9 ms), client start 11.9 ms; RigTune threads used 171.9 ms of CPU in the first 5 s
+[21:35:18] [RigTune worker/WARN]: Modrinth lookups failed; using offline data: java.net.http.HttpConnectTimeoutException: HTTP connect timed out
+[21:35:19] [RigTune worker/WARN]: Modrinth lookups failed; using offline data: javax.net.ssl.SSLHandshakeException: Remote host terminated the handshake
+[21:36:13] [Test thread/WARN]: Smoke: no Modrinth data within 1200 ticks; the report is offline
+[21:36:14] [Test thread/INFO]: Smoke: wrote <repo>\versions\26.3\run\rigtune-smoke-report.txt
+[21:36:14] [Test thread/INFO]: Smoke: RigTune screen buttons [Settings, Apply (8), Preview, History…, Tools…, Rescan, Copy report, Report a problem, Done]
+[21:36:15] [Test thread/INFO]: Smoke: Preview of the default ticks: 9 rows:
+[21:36:15] [Test thread/INFO]: Smoke: Preview of every appliable item: 17 rows:
+[21:36:15] [Test thread/INFO]: Smoke: Preview wrote nothing: true (25 files hashed, changed [])
+[21:36:16] [Test thread/INFO]: Smoke: Tools screen buttons [Benchmark…, Profiles…, Stutter Doctor…, JVM & memory…, Benchmark history…, Done]
+[21:36:16] [Test thread/INFO]: Smoke: Tools startup line: Last launch 25.0 s
+[21:36:16] [Test thread/INFO]: Smoke: BenchmarkMenuScreen screen buttons [Tune settings (inactive), Measure before (inactive), Measure after (inactive), Back]
+[21:36:16] [Test thread/INFO]: Smoke: ProfilesScreen screen buttons [Switch (inactive), Preview (inactive), Copy code (inactive), Save current…, Rename… (inactive), Delete (inactive), Import code…, Done]
+[21:36:17] [Test thread/INFO]: Smoke: StutterScreen screen buttons [Start, Pause (inactive), Clear, Copy summary (inactive), Done]
+[21:36:17] [Test thread/INFO]: Smoke: JvmScreen screen buttons [Done]
+[21:36:17] [Test thread/INFO]: Smoke: BenchmarkHistoryScreen screen buttons [Done]
+[21:36:18] [Test thread/INFO]: Smoke: Tools tour opened 5 tool screens; files changed (options.txt, mods/, config/ minus RigTune's state): [] (25 files hashed)
+[21:36:51] [Test thread/WARN]: Smoke: chunks not all downloaded and rendered after 30 s; taking the in-world screenshot anyway

@@ -27,6 +27,7 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
+import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -86,10 +87,20 @@ public class ServerLimitsGameTest implements FabricClientGameTest {
 		context.waitFor(mc -> real.serverLimits() == null, 200);
 	}
 
+	private static int freePort() {
+		try (ServerSocket socket = new ServerSocket(0)) {
+			return socket.getLocalPort();
+		} catch (IOException e) {
+			throw new AssertionError("No free port for the test server", e);
+		}
+	}
+
 	private static void dedicatedServer(ClientGameTestContext context, RealController real) {
 		Properties properties = new Properties();
 		properties.setProperty("view-distance", "6");
 		properties.setProperty("simulation-distance", "5");
+		// A free port, not 25565: a local run must not collide with a server the player already runs (Phase 5, P5-B).
+		properties.setProperty("server-port", Integer.toString(freePort()));
 		// The test server starts in the game-test run directory (wiped per run), where vanilla's Eula reads eula.txt; the
 		// harness writes server.properties there the same way.
 		Path eula = Path.of("eula.txt");

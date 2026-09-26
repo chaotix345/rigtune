@@ -1,0 +1,10 @@
+1140:[20:44:46] [Server thread/INFO] (Minecraft) Starting minecraft server version 26.2
+1144:[20:44:46] [Server thread/INFO] (Minecraft) Starting Minecraft server on *:25565
+1145:[20:44:46] [Server thread/WARN] (Minecraft) **** FAILED TO BIND TO PORT!
+1146:[20:44:46] [Server thread/WARN] (Minecraft) The exception was: java.net.BindException: Address already in use: bind
+1147:[20:44:46] [Server thread/WARN] (Minecraft) Perhaps a server is already running on that port?
+1150:java.lang.IllegalStateException: Failed to initialize server
+1226:net.fabricmc.loader.impl.FormattedException: java.lang.Throwable: The server crashed
+1232:Caused by: java.lang.Throwable: The server crashed
+1241:> Task :26.2:runClientGameTest FAILED
+Port 25565 holder at the time (netstat -ano): PID 36592 = java.exe -Xms4G -Xmx6G -jar fabric-server-launcher.jar nogui (the user's own server; not touched)
