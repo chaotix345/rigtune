@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.gametest;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
@@ -326,7 +327,7 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 			CycleButton<?> selector = Screens.getWidgets(mc.gui.screen()).stream().filter(w -> w instanceof CycleButton<?>).map(w -> (CycleButton<?>) w)
 					.findFirst().orElseThrow(() -> new AssertionError("no context selector"));
 			check(selector.active, "the selector is active with two contexts");
-			selector.onPress(new MouseButtonEvent(selector.getX() + 1, selector.getY() + 1, new MouseButtonInfo(0, 0)));
+			selector.onPress(new MouseButtonEvent(selector.getX() + 1, selector.getY() + 1, new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0)));
 		});
 		context.waitTicks(3);
 	}

@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.client.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.core.history.ApplyFailures;
@@ -429,7 +430,7 @@ public class HistoryScreen extends Screen {
 
 		@Override
 		public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-			if (event.button() == 0) {
+			if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
 				clicked = entry.id();
 				return true;
 			}

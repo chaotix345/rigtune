@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.gametest;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
@@ -236,7 +237,7 @@ public class UndoGameTest implements FabricClientGameTest {
 					.findFirst()
 					.orElseThrow(() -> new AssertionError("No button " + key));
 			check(button.active, key + " is active");
-			button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(0, 0)));
+			button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0)));
 		});
 	}
 

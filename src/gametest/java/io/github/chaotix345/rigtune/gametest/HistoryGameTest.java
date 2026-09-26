@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.gametest;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
@@ -169,13 +170,14 @@ public class HistoryGameTest implements FabricClientGameTest {
 			context.takeScreenshot("history-" + size[0] + "x" + size[1] + "-scale" + size[2]);
 		}
 
-		// Select the older apply with a click on its row, then Undo this.
+		// Select the older apply with a left click on its row, then Undo this. The version's own left button (docs/v0.4/SPEC.md
+		// 2p): 0 on 26.2, 1 on 26.3 (SDL), so a row that checks for button 0 is never selected here on 26.3.
 		resize(context, 854, 480, 2);
 		context.runOnClient(mc -> {
 			HistoryScreen screen = (HistoryScreen) mc.gui.screen();
 			ScreenRectangle row = screen.entryRow(applyA.id());
 			check(row != null, "the older apply's row is listed");
-			screen.mouseClicked(new MouseButtonEvent(row.left() + 20, row.top() + 5, new MouseButtonInfo(0, 0)), false);
+			screen.mouseClicked(new MouseButtonEvent(row.left() + 20, row.top() + 5, new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0)), false);
 		});
 		context.waitFor(mc -> mc.gui.screen() instanceof HistoryScreen screen && applyA.id().equals(screen.selected()), 40);
 		context.waitTicks(2);
@@ -354,7 +356,7 @@ public class HistoryGameTest implements FabricClientGameTest {
 			Button button = findButton(mc.gui.screen(), key);
 			check(button != null, "No button " + key + " on " + mc.gui.screen());
 			check(button.active, key + " is active");
-			button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(0, 0)));
+			button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0)));
 		});
 		context.waitTicks(2);
 	}
