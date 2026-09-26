@@ -61,8 +61,13 @@ public final class HistoryStartup {
 	}
 
 	// The legacy-import entry for 0.1.x's last run and leftover staged ops, or null. The game's journal calls this under
-	// the apply lock when it first creates history.json.
+	// the apply lock when it first creates history.json. Only when last-apply.json is 0.1.x's (docs/v0.4/SPEC.md 2o L1):
+	// a fresh install, or a history.json deleted after a later RigTune ran, imports nothing.
 	public static JournalEntry legacyEntry(Path configDir, String mcVersion) {
+		ApplyResult lastApply = lastApply(configDir);
+		if (!LegacyImport.fromV010(lastApply)) {
+			return null;
+		}
 		PendingActions leftover = null;
 		Path pendingFile = PendingActions.defaultPath(configDir);
 		try {
@@ -72,7 +77,7 @@ public final class HistoryStartup {
 		} catch (Exception e) {
 			RigTune.LOGGER.warn("Could not read {} for the history", pendingFile, e);
 		}
-		return LegacyImport.entry(lastApply(configDir), leftover, ModJars::modIdOf, ModJars::nameOf, sodiumKeys(configDir), mcVersion);
+		return LegacyImport.entry(lastApply, leftover, ModJars::modIdOf, ModJars::nameOf, sodiumKeys(configDir), mcVersion);
 	}
 
 	private static ApplyResult lastApply(Path configDir) {

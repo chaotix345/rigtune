@@ -4,13 +4,16 @@ import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -131,5 +134,41 @@ class LegacyImportTest {
 	void nothingToImportGivesNull() {
 		assertNull(entry(null, null));
 		assertNull(entry(result(), PendingActions.create(1, MODS, CONFIG, List.of())));
+	}
+
+	// docs/v0.4/SPEC.md 2o L1: every last-apply.json 0.1.0 wrote in the fixtures (hand-written, captured from the released
+	// jar, the user's real instance) is 0.1.x's.
+	@Test
+	void the010LastApplyFilesAreFrom010(@TempDir Path game) throws IOException {
+		Path mods = game.resolve("mods");
+		Path config = game.resolve("config");
+		for (String fixture : List.of("last-apply.json", "captured/last-apply.json", "real-instance/last-apply.json")) {
+			ApplyResult last = ApplyResult.load(V010Fixtures.install(fixture, config.resolve(fixture.replace('/', '-')), mods, config));
+			assertTrue(LegacyImport.fromV010(last), fixture);
+		}
+	}
+
+	// What 0.2.0 and later write, or what can't be told apart: never 0.1.x.
+	@Test
+	void laterOrUnclearLastApplyFilesAreNotFrom010() {
+		Op enable = withId(Op.enableFile(MODS.resolve("x.jar.rigtune-pending"), MODS.resolve("x.jar")).withModId("x"), "x", "g");
+		ApplyResult.OpResult enabled010 = new ApplyResult.OpResult(enable, ApplyResult.Status.OK, "Enabled x.jar");
+		assertTrue(LegacyImport.fromV010(result(enabled010)));
+
+		assertFalse(LegacyImport.fromV010(null));
+		assertFalse(LegacyImport.fromV010(result()));
+		assertFalse(LegacyImport.fromV010(result(enabled010, new ApplyResult.OpResult(withId(Op.disableFile(MODS.resolve("y.jar")), "y", null),
+				ApplyResult.Status.OK, "Disabled y.jar -> y.jar.disabled", MODS.resolve("y.jar.disabled").toString()))), "a resultPath");
+		assertFalse(LegacyImport.fromV010(result(enabled010, new ApplyResult.OpResult(Op.patchToml(CONFIG.resolve("DistantHorizons.toml"),
+				Map.of("a", "1")), ApplyResult.Status.OK, "Patched"))), "a TOML patch");
+		assertFalse(LegacyImport.fromV010(result(enabled010, new ApplyResult.OpResult(Op.patchProperties(CONFIG.resolve("iris.properties"),
+				Map.of("a", "1")), ApplyResult.Status.OK, "Patched"))), "a properties patch");
+		assertFalse(LegacyImport.fromV010(result(new ApplyResult.OpResult(enable.withProjectId("P7dR8mSH"), ApplyResult.Status.OK, "Enabled x.jar"))),
+				"a Modrinth project id");
+		assertFalse(LegacyImport.fromV010(result(enabled010, new ApplyResult.OpResult(new Op(null, null, null, "z", null), ApplyResult.Status.OK,
+				"?"))), "an unknown op type");
+		assertFalse(LegacyImport.fromV010(result(new ApplyResult.OpResult(Op.patchJson(SODIUM, Map.of("a", "1")), ApplyResult.Status.OK, "Patched"))),
+				"only a patch");
+		assertFalse(LegacyImport.fromV010(result(new ApplyResult.OpResult(enable, ApplyResult.Status.FAILED, "locked"))), "no file op done");
 	}
 }

@@ -25,6 +25,31 @@ public final class LegacyImport {
 	private LegacyImport() {
 	}
 
+	// True when last-apply.json was written by 0.1.x (docs/v0.4/SPEC.md 2o L1): a mod file op it did has no resultPath,
+	// which 0.2.0 and later always record, and nothing in it is newer than 0.1.x (a resultPath, a TOML or properties
+	// patch, a Modrinth project or version id, an op type this version doesn't know). A run that did no file op can't
+	// be told apart and counts as not 0.1.x.
+	public static boolean fromV010(ApplyResult lastApply) {
+		if (lastApply == null) {
+			return false;
+		}
+		boolean fileOpDone = false;
+		for (ApplyResult.OpResult r : lastApply.results()) {
+			if (r == null || r.op() == null) {
+				continue;
+			}
+			Op op = r.op();
+			if (r.resultPath() != null || op.type() == null || op.type() == PendingActions.Type.PATCH_TOML
+					|| op.type() == PendingActions.Type.PATCH_PROPERTIES || op.projectId() != null || op.versionId() != null) {
+				return false;
+			}
+			if (r.status() == ApplyResult.Status.OK && (op.type() == PendingActions.Type.ENABLE_FILE || op.type() == PendingActions.Type.DISABLE_FILE)) {
+				fileOpDone = true;
+			}
+		}
+		return fileOpDone;
+	}
+
 	// Null when there's nothing to import.
 	public static JournalEntry entry(ApplyResult lastApply, PendingActions leftover, Function<Path, String> modIdOf,
 			StagedChanges.ConfigKeys config, String mcVersion) {
