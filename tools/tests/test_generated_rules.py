@@ -174,6 +174,16 @@ class GeneratedRulesTests(unittest.TestCase):
             self.assertEqual(rule["kind"], "warning")
             self.assertNotIn("requires", rule)
 
+    # Phase 5 P5B-F6: the rule fires on the estimated (effective) tier, which memory alone can lower on a fast CPU, so its
+    # reason names no component as the one that's short.
+    def test_lambdynamiclights_reason_follows_the_estimated_tier(self):
+        for name, doc in (("rules-v2.json", self.v2), ("knowledge.json", self.knowledge)):
+            mod = next(m for m in doc["mods"] if m["slug"] == "lambdynamiclights")
+            self.assertEqual(mod["avoidWhen"], {"tierAtMost": 2}, name)
+            self.assertNotIn("entry-level", mod["avoidReason"], name)
+            self.assertNotIn("short of", mod["avoidReason"], name)
+            self.assertIn("estimated tier", mod["avoidReason"], name)
+
 
 if __name__ == "__main__":
     unittest.main()

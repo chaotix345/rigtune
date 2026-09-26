@@ -307,8 +307,7 @@ public final class RealController implements RigTuneController {
 		if (lookup == null) {
 			return;
 		}
-		CompletableFuture.supplyAsync(() -> new OnlineDataFetcher(modrinth).fetchAll(lookup.mods(), lookup.slugs(), lookup.gameVersion()),
-						Probes.EXECUTOR)
+		lookup.start(modrinth, Probes.NETWORK)
 				.thenAccept(result -> {
 					online = result;
 					rebuild();
@@ -522,7 +521,7 @@ public final class RealController implements RigTuneController {
 			OnlineDataFetcher.Result data = online;
 			HardwareProfile hw = hardware;
 			String mcVersion = onlineLookups.modrinthGameVersion(hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion());
-			CompletableFuture.supplyAsync(() -> download(downloads, data, mcVersion), Probes.EXECUTOR)
+			CompletableFuture.supplyAsync(() -> download(downloads, data, mcVersion), Probes.NETWORK)
 					.whenComplete((result, error) -> {
 						try {
 							minecraft.execute(() -> {

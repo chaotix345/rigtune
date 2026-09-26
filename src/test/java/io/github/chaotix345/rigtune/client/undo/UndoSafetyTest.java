@@ -12,6 +12,7 @@ import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.history.UndoPlanner;
+import io.github.chaotix345.rigtune.core.model.Text;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -33,6 +34,7 @@ import java.util.zip.ZipOutputStream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.4/SPEC.md 2o (WS-G2): Undo through the real stack (stagers, Staging's merge and journal records, UndoService,
@@ -364,6 +366,64 @@ class UndoSafetyTest {
 		helperRuns();
 		assertEquals(List.of("x-1.jar.disabled", "x-2.jar"), listing());
 		assertEquals("e1", service.plan(false).undoOf());
+		assertFalse(service.plan(false).isEmpty(), "undoable once it's done");
+	}
+
+	// --- review-8 AH-1: the helper was killed between the update's two renames, so it never counted an attempt (attempts
+	// stay 0); only its record of the renames it started (UnfinishedGroups) shows the disable is done.
+
+	private List<Op> updateKilledHalfway() throws IOException {
+		modJar(mods.resolve("x-1.jar"), "x");
+		modJar(mods.resolve("x-2.jar" + PendingActions.PENDING_SUFFIX), "x");
+		List<Op> update = PendingActions.group(Op.disableFile(mods.resolve("x-1.jar")),
+				Op.enableFile(mods.resolve("x-2.jar" + PendingActions.PENDING_SUFFIX), mods.resolve("x-2.jar")).withModId("x"));
+		assertNotNull(staging.stage(update, "e1"));
+		assertThrows(TestExecutors.Killed.class, () -> TestExecutors.killedAt(p -> p.getFileName().toString().equals("x-2.jar" + PendingActions.PENDING_SUFFIX))
+				.run(PendingActions.load(pending), pending));
+		assertEquals(List.of("x-1.jar.disabled", "x-2.jar" + PendingActions.PENDING_SUFFIX), listing());
+		assertTrue(PendingActions.load(pending).ops().stream().allMatch(op -> op.attempts() == 0));
+		return update;
+	}
+
+	@Test
+	void discardKeepsAnUpdateTheHelperWasKilledInAndTheNextExitFinishesIt() throws IOException {
+		List<Op> update = updateKilledHalfway();
+		applyThreads("4", "e2");
+
+		List<Op> dropped = staging.discard();
+
+		assertEquals(1, dropped.size(), dropped.toString());
+		assertEquals(update.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+		assertEquals(List.of("x-1.jar.disabled", "x-2.jar" + PendingActions.PENDING_SUFFIX), listing(), "its download isn't retired");
+		helperRuns();
+		assertEquals(List.of("x-1.jar.disabled", "x-2.jar"), listing());
+		assertFalse(Files.exists(pending));
+	}
+
+	@Test
+	void discardKeepsAnUpdateTheHelperWasKilledInAndTheNextExitRollsItBackWhenItCantFinish() throws IOException {
+		updateKilledHalfway();
+
+		assertEquals(List.of(), staging.discard());
+		TestExecutors.failingMovesOf(p -> p.getFileName().toString().equals("x-2.jar" + PendingActions.PENDING_SUFFIX)).run(PendingActions.load(pending), pending);
+
+		assertEquals(List.of("x-1.jar", "x-2.jar" + PendingActions.PENDING_SUFFIX), listing(), "the old jar is back, never neither");
+	}
+
+	@Test
+	void undoLastOfAnUpdateTheHelperWasKilledInWaitsAndTheNextExitFinishesIt() throws IOException {
+		updateKilledHalfway();
+
+		UndoPlan plan = service.plan(false);
+
+		assertEquals("e1", plan.undoOf());
+		assertTrue(plan.isEmpty(), plan.toString());
+		assertFalse(plan.items().isEmpty());
+		assertTrue(plan.items().stream().allMatch(i -> i.reasonText() instanceof Text.Translatable t && t.key().equals("rigtune.undo.reason.waits_partly")),
+				plan.toString());
+		assertEquals(2, PendingActions.load(pending).ops().size(), "nothing was discarded");
+		helperRuns();
+		assertEquals(List.of("x-1.jar.disabled", "x-2.jar"), listing());
 		assertFalse(service.plan(false).isEmpty(), "undoable once it's done");
 	}
 

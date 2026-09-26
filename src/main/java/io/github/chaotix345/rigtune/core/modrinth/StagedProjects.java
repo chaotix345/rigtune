@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.core.modrinth;
 
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
+import io.github.chaotix345.rigtune.core.apply.LogSafe;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import org.jspecify.annotations.Nullable;
@@ -54,7 +55,7 @@ public record StagedProjects(Set<String> projects, Map<String, String> projectBy
 		try {
 			return fold(PendingActions.load(pendingFile).relocated(InstanceDirs.modsDirOf(pendingFile), InstanceDirs.configDirOf(pendingFile)));
 		} catch (IOException | RuntimeException e) {
-			RigTune.LOGGER.warn("Could not read the staged mods in {}: {}", pendingFile, e.getMessage());
+			RigTune.LOGGER.warn("Could not read the staged mods in {}: {}", LogSafe.name(pendingFile), LogSafe.error(e, pendingFile));
 			return NONE;
 		}
 	}

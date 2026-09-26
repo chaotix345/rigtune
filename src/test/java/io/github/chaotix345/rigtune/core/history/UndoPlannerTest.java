@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.core.history;
 
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
+import io.github.chaotix345.rigtune.core.apply.UnfinishedGroups.Rename;
 import io.github.chaotix345.rigtune.core.history.UndoPlan.Action;
 import io.github.chaotix345.rigtune.core.history.UndoPlanner.Result;
 import io.github.chaotix345.rigtune.core.TextChecks;
@@ -1475,6 +1476,31 @@ class UndoPlannerTest {
 		items(result, Action.SKIP).forEach(i -> assertEquals(UndoPlanner.WAITS_PARTLY, i.reason()));
 		assertTrue(result.script().discardOpIds().isEmpty());
 		assertTrue(result.script().immediate().isEmpty());
+	}
+
+	// review-8 AH-1: the same update after a helper killed between its renames: no attempt was counted, and only the
+	// helper's record shows the disable is done. Undo last and Undo this wait for it, and the recheck at confirm too.
+	@Test
+	void anUpdateAHelperWasKilledInWaitsByTheHelpersRecord() {
+		state.jar("x-1.jar.disabled", "x").jar("x-2.jar.rigtune-pending", "x");
+		List<Op> group = PendingActions.group(Op.disableFile(MODS.resolve("x-1.jar")),
+				Op.enableFile(MODS.resolve("x-2.jar.rigtune-pending"), MODS.resolve("x-2.jar")).withModId("x"));
+		pending.addAll(group);
+		entry("e1", JournalChange.file(JournalChange.DISABLE, "x", "x-1.jar", JournalChange.STAGED, group.get(0).id(), group.get(0).group()),
+				JournalChange.file(JournalChange.ENABLE, "x", "x-2.jar", JournalChange.STAGED, group.get(1).id(), group.get(1).group()));
+		List<Rename> record = List.of(new Rename(group.get(0).id(), MODS.resolve("x-1.jar").toString(), MODS.resolve("x-1.jar.disabled").toString()));
+
+		Result withoutRecord = checked(UndoPlanner.plan(entries, pending, state, false));
+		Result last = checked(UndoPlanner.plan(entries, pending, record, state, false));
+		Result entry = checked(UndoPlanner.planEntry(entries, pending, record, state, "e1"));
+		Result recheck = checked(UndoPlanner.recheck(withoutRecord.plan(), entries, pending, record, state));
+
+		assertEquals(Set.copyOf(group.stream().map(Op::id).toList()), withoutRecord.script().discardOpIds(), "an old .disabled copy alone isn't enough");
+		for (Result result : List.of(last, entry, recheck)) {
+			assertEquals(2, items(result, Action.SKIP).size(), result.plan().toString());
+			items(result, Action.SKIP).forEach(i -> assertEquals(UndoPlanner.WAITS_PARTLY, i.reason()));
+			assertTrue(result.script().discardOpIds().isEmpty(), result.script().toString());
+		}
 	}
 
 	@Test

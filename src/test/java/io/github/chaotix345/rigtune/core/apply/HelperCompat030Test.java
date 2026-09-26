@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,6 +27,7 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.4/SPEC.md "Compatibility promise", docs/v0.4/design/ws-g3.md: WS-G3 changes how the helper runs a group, not
@@ -184,5 +186,73 @@ class HelperCompat030Test {
 		new ApplyExecutor(2, 1).run(PendingActions.load(in.pending()), in.pending());
 
 		assertFalse(Files.exists(UnfinishedGroups.file(in.config())));
+	}
+
+	// --- review-8 CR-1: a downgrade to 0.3.0 while a group is half applied.
+
+	// 0.3.0's HelperLauncher, launching its helper: it deletes every file in config/rigtune/helper/ but its classpath copies.
+	private static void helperFolderCleanedBy030(Instance in) throws Exception {
+		Method helperClasspath = io.github.chaotix345.rigtune.v030.core.apply.HelperLauncher.class.getDeclaredMethod("helperClasspath", Path.class, List.class);
+		helperClasspath.setAccessible(true);
+		Path jar = Files.writeString(in.root().resolve("rigtune-0.3.0+mc26.2.jar"), "0.3.0");
+		helperClasspath.invoke(null, io.github.chaotix345.rigtune.v030.core.apply.HelperLauncher.helperDir(in.config()), List.of(jar));
+	}
+
+	// The new helper is killed after it disabled the old jar and before it enabled the new one.
+	private static void killedBetweenTheRenames(Instance in, List<Op> ops) throws IOException {
+		PendingActions.create(1, in.mods(), in.config(), ops).save(in.pending());
+		Path download = in.mods().resolve("sodium-0.7.1.jar" + PendingActions.PENDING_SUFFIX);
+		assertThrows(TestExecutors.Killed.class, () -> TestExecutors.killedAt(download::equals).run(PendingActions.load(in.pending()), in.pending()));
+		assertTrue(Files.exists(in.mods().resolve("sodium-0.7.0.jar.disabled")));
+		assertTrue(Files.exists(download));
+	}
+
+	private static io.github.chaotix345.rigtune.v030.core.apply.ApplyResult runBy030(Instance in) throws IOException {
+		return new io.github.chaotix345.rigtune.v030.core.apply.ApplyExecutor(2, 1)
+				.run(io.github.chaotix345.rigtune.v030.core.apply.PendingActions.load(in.pending()), in.pending());
+	}
+
+	@Test
+	void aGroupTheNewHelperWasKilledInIsStillRolledBackAfterA030ClientRanItsHelper() throws Exception {
+		Instance in = instance("new");
+		killedBetweenTheRenames(in, update(in));
+		// The download went bad meanwhile (say, a scanner truncated it): no helper will enable it.
+		Files.writeString(in.mods().resolve("sodium-0.7.1.jar" + PendingActions.PENDING_SUFFIX), "not a jar any more");
+
+		helperFolderCleanedBy030(in);
+		assertTrue(Files.exists(UnfinishedGroups.file(in.config())), "0.3.0 only cleans config/rigtune/helper/");
+		io.github.chaotix345.rigtune.v030.core.apply.ApplyResult old = runBy030(in);
+		assertEquals(List.of("FAILED", "FAILED"), old.results().stream().map(r -> r.status().name()).toList());
+		assertEquals(2, PendingActions.load(in.pending()).ops().size(), "0.3.0 refuses the whole group and keeps it pending");
+
+		ApplyResult next = new ApplyExecutor(2, 1).run(PendingActions.load(in.pending()), in.pending());
+
+		assertEquals(List.of(Status.FAILED, Status.FAILED), next.results().stream().map(ApplyResult.OpResult::status).toList());
+		assertTrue(Files.exists(in.mods().resolve("sodium-0.7.0.jar")), "the new helper puts the old jar back by its record");
+		assertFalse(Files.exists(in.mods().resolve("sodium-0.7.0.jar.disabled")));
+		assertFalse(Files.exists(UnfinishedGroups.file(in.config())));
+	}
+
+	// The documented residual (docs/v0.4/design/ws-g3.md "Compatibility"): 0.3.0's own helper never reads the record. It
+	// finds the old jar already gone (SKIPPED_ALREADY_DONE, so that op leaves pending.json) and tries the enable. When the
+	// enable fails, the old jar stays disabled under 0.3.0 (its pre-0.4 behaviour), and after an upgrade back the new
+	// helper can't match the recorded disable to an op any more, so it can't put the old jar back either.
+	@Test
+	void a030HelperThatCantFinishAGroupItCantSeeLeavesTheOldJarDisabled() throws Exception {
+		Instance in = instance("new");
+		killedBetweenTheRenames(in, update(in));
+		Files.delete(in.mods().resolve("sodium-0.7.1.jar" + PendingActions.PENDING_SUFFIX));
+
+		helperFolderCleanedBy030(in);
+		io.github.chaotix345.rigtune.v030.core.apply.ApplyResult old = runBy030(in);
+
+		assertEquals(List.of("SKIPPED_ALREADY_DONE", "FAILED"), old.results().stream().map(r -> r.status().name()).toList());
+		assertEquals(List.of(PendingActions.Type.ENABLE_FILE), PendingActions.load(in.pending()).ops().stream().map(Op::type).toList());
+
+		new ApplyExecutor(2, 1).run(PendingActions.load(in.pending()), in.pending());
+
+		assertTrue(Files.exists(in.mods().resolve("sodium-0.7.0.jar.disabled")));
+		assertFalse(Files.exists(in.mods().resolve("sodium-0.7.0.jar")));
+		assertFalse(Files.exists(UnfinishedGroups.file(in.config())), "the disable's rename is pruned: its op left the plan");
 	}
 }

@@ -364,7 +364,7 @@ def restrictive_problems(kind, rule, label):
     if rule.get("requires"):
         return []
     if kind == "settings":
-        fields = ["when"] if "value" not in rule and ("min" in rule or "max" in rule) else []
+        fields = ["when"] if "min" in rule or "max" in rule else []
     elif kind == "mods":
         fields = ["avoidWhen", "skipUpdateWhen"]
     else:
@@ -376,6 +376,18 @@ def restrictive_problems(kind, rule, label):
             problems.append(f"{label}: {field} uses a condition 0.2.0/0.3.0 don't know, so they'd silently drop this "
                             f"restriction; add \"requires\" (and keep a rule they understand next to it)")
     return problems
+
+
+def value_or_clamp_problems(label, rule):
+    """Review-8 CR-2: a settings rule is a value entry or a clamp, never both (clients read only `value` then, so the
+    min/max restriction would be silently lost) and never neither (it would do nothing)."""
+    has_value = "value" in rule
+    has_clamp = "min" in rule or "max" in rule
+    if has_value and has_clamp:
+        return [f"{label}: sets both value and min/max; clients read only value, so the min/max would be ignored; use one"]
+    if not has_value and not has_clamp:
+        return [f"{label}: needs value or min/max"]
+    return []
 
 
 def contains_null(value):
@@ -546,6 +558,8 @@ def validate_knowledge(knowledge):
                     problems += [f"{label}: {p}" for p in condition_problems(rule[field], V2_CONDITION_KEYS, field)]
             if "requires" in rule and (not isinstance(rule["requires"], list) or not all(isinstance(r, str) for r in rule["requires"])):
                 problems.append(f"{label}: requires must be an array of strings")
+            if kind == "settings":
+                problems += value_or_clamp_problems(label, rule)
             if kind == "settings" and unknown_token(rule.get("value")) and not rule.get("requires"):
                 problems.append(f"{label}: the value {rule['value']!r} isn't a known token ({', '.join(sorted(VALUE_TOKENS))}); "
                                 "a new token needs \"requires\" naming the client feature that resolves it")

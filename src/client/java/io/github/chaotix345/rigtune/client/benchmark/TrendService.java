@@ -134,7 +134,7 @@ public final class TrendService {
 	public void acknowledge(String runId) {
 		acknowledgedNow.add(runId);
 		if (!AwarenessStore.shared(configDir).acknowledgeRegression(runId)) {
-			RigTune.LOGGER.warn("Could not remember the acknowledged benchmark regression in {}", AwarenessStore.file(configDir));
+			RigTune.LOGGER.warn("Could not remember the acknowledged benchmark regression in {}", AwarenessStore.FILE_NAME);
 		}
 	}
 }

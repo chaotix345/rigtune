@@ -48,7 +48,7 @@ public final class StateStore {
 		try {
 			next = change.apply(defaults.apply(root));
 		} catch (RuntimeException e) {
-			RigTune.LOGGER.warn("Not writing {}: the change failed on its content", file.file(), e);
+			RigTune.LOGGER.warn("Not writing {}: the change failed on its content", file.name(), e);
 			return false;
 		}
 		return file.save(next == null ? root : next) == JsonStateFile.Saved.OK;
