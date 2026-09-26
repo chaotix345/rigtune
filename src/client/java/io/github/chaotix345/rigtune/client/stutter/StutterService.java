@@ -38,7 +38,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 // Stutter Doctor (docs/v0.4/SPEC.md 5): the opt-in session monitor (settings.json stutterMonitor), stutter.json and the
 // analysis behind StutterScreen. RealController delegates every C4 stutter method here in one line; StutterHooks calls
 // tick() and the benchmark methods. The session capture runs only while the setting is on and a world is loaded; leaving
-// the world (or turning the monitor off) ends it: its summary goes to stutter.json and the buffers are released.
+// the world (or turning the monitor off, or a benchmark run starting) ends it: its summary goes to stutter.json and the
+// buffers are released.
 // Analysis runs on Probes.EXECUTOR from copies taken on the render thread. Nothing here touches the network.
 public final class StutterService {
 	static final long LIVE_REFRESH_NANOS = 5_000_000_000L;
@@ -62,7 +63,8 @@ public final class StutterService {
 	// Render thread.
 	private boolean analysing;
 	private long lastAnalysis;
-	private boolean sessionPausedForBenchmark;
+	private boolean benchmarkRunning;
+	private boolean resumePaused;
 	private volatile @Nullable Analysis live;
 	private volatile @Nullable Analysis saved;
 	private volatile Saved savedState = Saved.UNKNOWN;
@@ -151,11 +153,12 @@ public final class StutterService {
 		return a == null ? "" : StutterSummary.text(a.report(), a.advice());
 	}
 
-	// END_CLIENT_TICK (render thread): start a session when the monitor is on and a world is loaded, end it otherwise.
+	// END_CLIENT_TICK (render thread): start a session when the monitor is on and a world is loaded (not during a benchmark
+	// run), end it otherwise.
 	void tick(Minecraft minecraft) {
 		boolean want = controller.settings().stutterMonitor && minecraft.level != null;
 		StutterMonitor.Capture session = StutterMonitor.session();
-		if (want && session == null) {
+		if (want && session == null && !benchmarkRunning && StutterMonitor.benchmark() == null) {
 			StutterCapture.startSession();
 			live = null;
 		} else if (!want && session != null) {
@@ -219,40 +222,57 @@ public final class StutterService {
 		}
 	}
 
-	// The benchmark's capture (BenchmarkController, render thread): on during its sweeps only. A running session pauses
-	// for the whole run (its sweeps are the benchmark's, not play) and resumes when it ends.
-	void benchmarkSweep(boolean recording) {
+	// A benchmark run starts (BenchmarkController, render thread, before it changes any setting): a running session ends
+	// here as on leaving the world, its summary judged against the player's own settings; no session runs until the run
+	// ends (review-9 X3-1: a session's and a benchmark's rings together are over the monitorOnRetainedBytes budget; the
+	// run's sweeps aren't play either).
+	void benchmarkStarted(Minecraft minecraft) {
+		benchmarkRunning = true;
+		endSessionForBenchmark(minecraft);
+	}
+
+	// The benchmark's capture (render thread): on during its sweeps only. It starts at the first sweep, after any session
+	// ended, so only one capture's rings are ever held.
+	void benchmarkSweep(Minecraft minecraft, boolean recording) {
 		StutterMonitor.Capture bench = StutterMonitor.benchmark();
 		if (bench == null && recording) {
+			benchmarkRunning = true;
+			endSessionForBenchmark(minecraft);
 			bench = StutterCapture.startBenchmark();
-			StutterMonitor.Capture session = StutterMonitor.session();
-			if (session != null) {
-				session.aroundBenchmark = true;
-			}
-			if (session != null && !session.paused()) {
-				pause(true);
-				sessionPausedForBenchmark = true;
-			}
 		}
 		if (bench != null) {
 			bench.paused = !recording;
 		}
 	}
 
-	// The benchmark ended: its capture is analysed here (it's small) for the result screen's line; a finished run's
-	// summary is also saved to stutter.json.
-	void benchmarkFinished(Minecraft minecraft, boolean keep) {
-		if (sessionPausedForBenchmark) {
-			sessionPausedForBenchmark = false;
-			pause(false);
+	private void endSessionForBenchmark(Minecraft minecraft) {
+		StutterMonitor.Capture session = StutterMonitor.session();
+		if (session != null) {
+			// Saved only with 2 minutes of gameplay (review-8 P5A-F3): the benchmark world's settle frames aren't a session.
+			session.aroundBenchmark = true;
+			resumePaused = session.paused();
+			end(session, minecraft, false);
 		}
+	}
+
+	// The benchmark ended: its capture is released, a fresh session starts if the monitor is on in a world (it follows a
+	// benchmark run: P5A-F3 as above; paused if the ended one was), then the run's capture is analysed here (it's small) for
+	// the result screen's line; a finished run's summary is also saved to stutter.json.
+	void benchmarkFinished(Minecraft minecraft, boolean keep) {
+		benchmarkRunning = false;
 		StutterMonitor.Capture bench = StutterMonitor.benchmark();
 		lastBenchmark = null;
-		if (bench == null) {
-			return;
+		StutterCapture.Copy copy = bench == null ? null : StutterCapture.stop(bench);
+		boolean paused = resumePaused;
+		resumePaused = false;
+		if (controller.settings().stutterMonitor && minecraft.level != null && StutterMonitor.session() == null) {
+			StutterCapture.startSession().aroundBenchmark = true;
+			live = null;
+			if (paused) {
+				pause(true);
+			}
 		}
-		StutterCapture.Copy copy = StutterCapture.stop(bench);
-		if (!keep) {
+		if (copy == null || !keep) {
 			return;
 		}
 		Analysis a = analyze(copy, machine(minecraft));

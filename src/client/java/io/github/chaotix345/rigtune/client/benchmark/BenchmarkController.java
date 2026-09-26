@@ -337,6 +337,7 @@ public final class BenchmarkController {
 		}
 		active = controller;
 		try {
+			StutterHooks.benchmarkStarted();
 			controller.prepare();
 			RigTune.LOGGER.info("Benchmark started: {} in {}, target {} FPS (uncapped), start {}", request.mode(), request.scene(),
 					controller.targetFps, controller.run.original());

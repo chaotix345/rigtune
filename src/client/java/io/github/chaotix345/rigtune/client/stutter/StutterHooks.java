@@ -120,12 +120,24 @@ public final class StutterHooks {
 		failed = false;
 	}
 
-	// BenchmarkController: capture on for each sweep, off in between; finished when the run ends (keep: it wasn't cancelled).
+	// BenchmarkController: started before the run changes any setting (a running session ends); capture on for each sweep,
+	// off in between; finished when the run ends (keep: it wasn't cancelled).
+	public static void benchmarkStarted() {
+		StutterService s = service;
+		if (s != null) {
+			try {
+				s.benchmarkStarted(Minecraft.getInstance());
+			} catch (RuntimeException e) {
+				RigTune.LOGGER.warn("Stutter Doctor: could not end the session for the benchmark", e);
+			}
+		}
+	}
+
 	public static void benchmarkSweep(boolean recording) {
 		StutterService s = service;
 		if (s != null) {
 			try {
-				s.benchmarkSweep(recording);
+				s.benchmarkSweep(Minecraft.getInstance(), recording);
 			} catch (RuntimeException e) {
 				RigTune.LOGGER.warn("Stutter Doctor: benchmark capture failed", e);
 			}

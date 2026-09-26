@@ -243,8 +243,12 @@ public final class StutterMonitor {
 	}
 
 	// Starting and stopping (render thread, through StutterCapture, which owns the shared rings' GC listener and sampler).
-	// The shared rings exist while any capture does.
+	// The shared rings exist while any capture does. One capture at a time (review-9 X3-1): a session's and a benchmark's
+	// frame rings together would be over the monitorOnRetainedBytes budget, so StutterService ends the session first.
 	static synchronized Capture startSession(StutterRings shared, long now, Instant startedAt) {
+		if (benchmark != null) {
+			throw new IllegalStateException("a benchmark capture is running");
+		}
 		rings = shared;
 		Capture c = new Capture(new FrameRing(FrameRing.SESSION_FRAMES, FrameRing.SESSION_CANDIDATES), now, startedAt, StutterReport.MONITOR);
 		session = c;
@@ -253,6 +257,9 @@ public final class StutterMonitor {
 	}
 
 	static synchronized Capture startBenchmark(StutterRings shared, long now, Instant startedAt) {
+		if (session != null) {
+			throw new IllegalStateException("a session capture is running");
+		}
 		rings = shared;
 		Capture c = new Capture(new FrameRing(FrameRing.BENCHMARK_FRAMES, FrameRing.BENCHMARK_CANDIDATES), now, startedAt, StutterReport.BENCHMARK);
 		c.paused = true;
