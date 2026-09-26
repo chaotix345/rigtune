@@ -1,0 +1,33 @@
+{
+  "formatVersion": 1,
+  "profiles": [
+    {
+      "id": "p-2b6d9e41-0c3f-4a15-b8e2-6f1d7c9a3e20",
+      "name": "My settings",
+      "templateId": null,
+      "source": "baseline",
+      "createdAt": "2026-09-21T09:59:59Z",
+      "rigtuneVersion": "0.4.0+mc26.2",
+      "mcVersion": "26.2",
+      "settings": {
+        "vanilla.renderDistance": "12",
+        "vanilla.maxFps": "120"
+      }
+    }
+  ],
+  "active": "template:battery",
+  "switches": [
+    {
+      "entryId": "c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17",
+      "profileId": null,
+      "templateId": "battery",
+      "name": "Battery"
+    }
+  ],
+  "battery": {
+    "prompt": true,
+    "previousProfile": "p-2b6d9e41-0c3f-4a15-b8e2-6f1d7c9a3e20",
+    "lastPromptAt": "2026-09-21T09:59:00Z",
+    "snoozed": false
+  }
+}
