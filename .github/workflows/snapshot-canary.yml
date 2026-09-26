@@ -20,6 +20,8 @@ name: snapshot-canary
 #   gh workflow run snapshot-canary.yml -f mc=26.4-snapshot-1    # a given id
 
 on:
+  push: # TEMPORARY (WS-0 self-test of the skip paths): removed before merge
+    branches: [feat/v04-foundation]
   schedule:
     - cron: '0 5 * * 3' # Wednesday 05:00 UTC (update-rules.yml runs on Monday)
   workflow_dispatch:
@@ -56,7 +58,7 @@ jobs:
       - name: Resolve the version to test
         id: resolve
         env:
-          INPUT_MC: ${{ inputs.mc }}
+          INPUT_MC: ${{ inputs.mc || '26.3' }} # TEMPORARY (WS-0 self-test)
         run: |
           set -eu
           mc=$(printf '%s' "${INPUT_MC:-}" | tr -d '[:space:]')
