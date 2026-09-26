@@ -17,9 +17,12 @@
 - `mod_version` is still 0.3.0 on this branch (WS-0 bumps it): the dry runs build the new jar with `-Pmod_version=0.4.0-dev`.
 
 ## Tasks
-- [ ] **T1 0.3.0 old side.** build.yml's "Compile the E2E drivers" step downloads and sha256-pins the 0.3.0 jar and compiles the driver against it (the only build.yml change). Harness: `RELEASED` table (version → file, sha256); `prepare()` refuses a jar whose version is a released one but whose bytes aren't the release's (tests: `ReleasedJarTest`).
-- [ ] **T2 generalise.** `history_expectation(old_version)` and `--expect-history auto` (0.1.x → legacy-import, else own-update; without the option there is no history check, as in v0.3); a mismatching explicit value is refused (`HistoryExpectationTest`). Version-neutral titles and check names ("the old version", "RigTune <new version>") instead of "0.1.0"/"0.2"; the 3e WARN pattern as a constant. v0.3 commands keep working (`--expect-history` / `own-update` still accepted).
-- [ ] **T3 dry runs** on `-Pmod_version=0.4.0-dev` (under the lock, one at a time): dev-v030-to-040, dev-v020-to-040, dev-v010-to-040, dev-v010-seeded-to-040, dev-undo-after-restart-040 (+ `-profile-hook` with `--profile-switch settings`) → docs/smoke/self-update/dev-*-040/ (PLAN's "dev-*-v04"; named like v0.3's dev runs).
-- [ ] **T4 profile hook.** `--profile-switch {settings,profile}` adds PROFILE_PHASES (`profile-apply`, `profile-undo`, `profile-check`) to the undo scenario; checks `after_profile_apply/undo/check` (+ `profile_label` for mode `profile`) with unit tests; the undo driver's `profile-*` phases (mode `profile` fails fast with a pointer to the README until WS-P's API is wired in `switchProfile`).
-- [ ] **T5 README "v0.4 runs"** with the exact Phase 5 commands.
-- [ ] **T6** self-review (code-reviewer subagent), merge origin/feat/v0.4.0, `./gradlew build`, push, CI green, `docs/v0.4/design/ws-h.md`.
+- [x] **T1 0.3.0 old side.** build.yml's "Compile the E2E drivers" step downloads and sha256-pins the 0.3.0 jar and compiles the driver against it. Harness: `RELEASED` table; `prepare()` refuses a jar whose version is a released one but whose bytes aren't the release's (`ReleasedJarTest`).
+- [x] **T2 generalise.** `history_expectation(old_version)` and `--expect-history auto` (without the option there is no history check, as in v0.3); a mismatching explicit value is refused (`HistoryExpectationTest`). Version-neutral titles and check names; the 3e WARN pattern as a constant.
+- [x] **T3 dry runs** on 0.4.0-dev: dev-v030-to-040, dev-v020-to-040, dev-v010-to-040, dev-v010-seeded-to-040, dev-undo-after-restart-040 → docs/smoke/self-update/dev-*-040/ (PLAN's "dev-*-v04"; named like v0.3's dev runs).
+- [x] **T4 profile part** (reworked after plan review P-H1): two switches before one restart on an instance with Sodium; Undo last twice, and Undo all on a copy; `--profile-switch {settings,profile}`; the stand-in dry run found SPEC amendment 2n.
+- [x] **T5 README "v0.4 runs"** with the exact Phase 5 commands (one lock hold per pair).
+- [x] **T6** self-review (code-reviewer subagent, twice), merge origin/feat/v0.4.0, `./gradlew build`, push, CI green, `docs/v0.4/design/ws-h.md`.
+- [x] **T7 released-jar compatibility harness** (AC3.3, plan review H-M1): `compat030.py` + `compat/Compat030.java` against the released 0.3.0 jar, Gson 2.14.0, fabric-loader, slf4j; in CI's driver step.
+- [x] **T8 "written by 0.4" placeholder sets** in `src/test/resources/v040-written/placeholder/<set>/` (SPEC C1 shapes), composed by `written.py`.
+- [x] **T9 downgrade-040-to-030** (AC3.2): `--scenario downgrade`, driver `src/e2eDowngrade` compiled against the released jar; dry run on the placeholder sets.
