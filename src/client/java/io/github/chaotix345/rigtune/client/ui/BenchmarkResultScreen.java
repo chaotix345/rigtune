@@ -254,7 +254,7 @@ public class BenchmarkResultScreen extends Screen {
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
 		int y = 22;
 		for (Line line : lines) {
-			graphics.centeredText(font, clip(line.text()), width / 2, y, line.color());
+			graphics.centeredText(font, clip(line.text()), width / 2, y, Palette.of(line.color()));
 			y += LINE;
 		}
 		int area = Math.min(width - 16, 460);
@@ -267,7 +267,7 @@ public class BenchmarkResultScreen extends Screen {
 		} else if (table) {
 			drawTable(graphics, left, area);
 		} else if (tune()) {
-			graphics.centeredText(font, Component.translatable("rigtune.benchmark.none"), width / 2, contentTop, COLOR_LABEL);
+			graphics.centeredText(font, Component.translatable("rigtune.benchmark.none"), width / 2, contentTop, Palette.of(COLOR_LABEL));
 		} else {
 			drawChart(graphics, left + area / 6, area * 2 / 3);
 		}
@@ -284,18 +284,18 @@ public class BenchmarkResultScreen extends Screen {
 				? new String[]{"rigtune.benchmark.col.rd", "rigtune.benchmark.col.avg", "rigtune.benchmark.col.low", "rigtune.benchmark.col.p99", "rigtune.benchmark.col.ok"}
 				: new String[]{"rigtune.benchmark.col.rd", "rigtune.benchmark.col.avg", "rigtune.benchmark.col.low", "rigtune.benchmark.col.ok"};
 		int y = contentTop;
-		graphics.fill(left - 4, y - 3, left + tableWidth + 4, y + ROW - 2, 0x60000000);
+		graphics.fill(left - 4, y - 3, left + tableWidth + 4, y + ROW - 2, Palette.of(0x60000000));
 		for (int i = 0; i < headers.length; i++) {
-			graphics.text(font, Component.translatable(headers[i]), left + columns[i], y, COLOR_LABEL, false);
+			graphics.text(font, Component.translatable(headers[i]), left + columns[i], y, Palette.of(COLOR_LABEL), false);
 		}
 		y += ROW + 2;
 		int maxRows = Math.max(0, (contentBottom - y) / ROW);
 		for (PlannerResult.Measurement m : rows.subList(0, Math.min(rows.size(), maxRows))) {
 			boolean best = m.rd() == suggested;
 			if (best) {
-				graphics.fill(left - 4, y - 2, left + tableWidth + 4, y + ROW - 3, met ? 0x3000FF00 : 0x30FFD166);
+				graphics.fill(left - 4, y - 2, left + tableWidth + 4, y + ROW - 3, Palette.of(met ? 0x3000FF00 : 0x30FFD166));
 			}
-			int color = best ? 0xFFFFFFFF : 0xFFDDDDDD;
+			int color = Palette.of(best ? 0xFFFFFFFF : 0xFFDDDDDD);
 			graphics.text(font, Integer.toString(m.rd()), left + columns[0], y, color, false);
 			graphics.text(font, fps(m.stats().avgFps()), left + columns[1], y, color, false);
 			graphics.text(font, fps(m.stats().onePercentLowFps()), left + columns[2], y, color, false);
@@ -303,7 +303,7 @@ public class BenchmarkResultScreen extends Screen {
 				graphics.text(font, String.format(Locale.ROOT, "%.1f", m.stats().p99FrameMs()), left + columns[3], y, color, false);
 			}
 			graphics.text(font, m.passed() ? "✔" : m.complete() ? "✘" : "✘*", left + columns[columns.length - 1], y,
-					m.passed() ? COLOR_PASS : COLOR_FAIL, false);
+					Palette.of(m.passed() ? COLOR_PASS : COLOR_FAIL), false);
 			y += ROW;
 		}
 	}

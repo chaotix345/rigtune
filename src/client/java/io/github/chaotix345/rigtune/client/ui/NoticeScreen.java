@@ -129,7 +129,7 @@ public class NoticeScreen extends Screen {
 			Component message = Texts.component(notice.message());
 			int y = rowY.get(i);
 			graphics.text(font, font.width(message) <= maxWidth ? message.getVisualOrderText() : ComponentRenderUtils.clipText(message, font, maxWidth),
-					left, y, COLOR_NOTICE, false);
+					left, y, Palette.of(COLOR_NOTICE), false);
 			if (mouseX >= left && mouseX < left + maxWidth && mouseY >= y && mouseY < y + 9) {
 				// Wrapped: a notice's detail is often longer than the screen is wide (v0.4, WS-W).
 				graphics.setTooltipForNextFrame(font, font.split(notice.detail() == null ? message
@@ -137,7 +137,7 @@ public class NoticeScreen extends Screen {
 			}
 		}
 		if (notShown > 0) {
-			graphics.text(font, Component.translatable("rigtune.notice.more", notShown), left, moreY, COLOR_LABEL, false);
+			graphics.text(font, Component.translatable("rigtune.notice.more", notShown), left, moreY, Palette.of(COLOR_LABEL), false);
 		}
 	}
 

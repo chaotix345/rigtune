@@ -135,20 +135,20 @@ public class BenchmarkMenuScreen extends Screen {
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 10, 0xFFFFFFFF);
 		int y = 24;
 		for (FormattedCharSequence line : intro) {
-			graphics.centeredText(font, line, width / 2, y, COLOR_TEXT);
+			graphics.centeredText(font, line, width / 2, y, Palette.of(COLOR_TEXT));
 			y += LINE;
 		}
 		String hint = "rigtune.benchmark.menu.scene." + scene.name().toLowerCase(Locale.ROOT) + ".hint";
-		graphics.centeredText(font, Component.translatable(hint), width / 2, hintY, COLOR_LABEL);
+		graphics.centeredText(font, Component.translatable(hint), width / 2, hintY, Palette.of(COLOR_LABEL));
 		int durationY = hintY + LINE;
 		// docs/v0.3/SPEC.md E-M2: Tune's higher render distances make the server load, generate and save more of this world.
 		if (scene == Scene.CURRENT) {
-			graphics.centeredText(font, Component.translatable("rigtune.benchmark.menu.scene.current.saves"), width / 2, durationY, COLOR_LABEL);
+			graphics.centeredText(font, Component.translatable("rigtune.benchmark.menu.scene.current.saves"), width / 2, durationY, Palette.of(COLOR_LABEL));
 			durationY += LINE;
 		}
-		graphics.centeredText(font, Component.translatable("rigtune.benchmark.menu.duration"), width / 2, durationY, COLOR_LABEL);
+		graphics.centeredText(font, Component.translatable("rigtune.benchmark.menu.duration"), width / 2, durationY, Palette.of(COLOR_LABEL));
 		if (status != null) {
-			graphics.centeredText(font, status, width / 2, statusY, COLOR_WARN);
+			graphics.centeredText(font, status, width / 2, statusY, Palette.of(COLOR_WARN));
 		}
 	}
 

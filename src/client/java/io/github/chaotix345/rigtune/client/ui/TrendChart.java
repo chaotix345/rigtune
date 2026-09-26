@@ -40,18 +40,18 @@ final class TrendChart {
 			max = Math.max(max, Math.max(run.result().avgFps(), run.result().onePercentLowFps()));
 		}
 		graphics.text(font, font.width(title) <= chartWidth ? title.getVisualOrderText() : ComponentRenderUtils.clipText(title, font, chartWidth), left, top,
-				COLOR_LABEL, false);
+				Palette.of(COLOR_LABEL), false);
 		int legendY = top + LINE;
-		int x = legend(graphics, font, left, legendY, COLOR_AVG, Component.translatable("rigtune.benchmark.chart.avg"));
-		x = legend(graphics, font, x, legendY, COLOR_LOW, Component.translatable("rigtune.benchmark.chart.low"));
+		int x = legend(graphics, font, left, legendY, Palette.of(COLOR_AVG), Component.translatable("rigtune.benchmark.chart.avg"));
+		x = legend(graphics, font, x, legendY, Palette.of(COLOR_LOW), Component.translatable("rigtune.benchmark.chart.low"));
 		Component maxLabel = Component.translatable("rigtune.benchmark.chart.max", fps(max));
-		graphics.text(font, maxLabel, x, legendY, COLOR_LABEL, false);
+		graphics.text(font, maxLabel, x, legendY, Palette.of(COLOR_LABEL), false);
 		x += font.width(maxLabel) + 8;
 		if (median != null) {
 			Component usual = Component.translatable("rigtune.benchmark.trend.chart.median", fps(median));
 			if (x + 9 + font.width(usual) <= left + chartWidth) {
-				graphics.fill(x, legendY + 3, x + 6, legendY + 4, COLOR_MEDIAN);
-				graphics.text(font, usual, x + 9, legendY, COLOR_LABEL, false);
+				graphics.fill(x, legendY + 3, x + 6, legendY + 4, Palette.of(COLOR_MEDIAN));
+				graphics.text(font, usual, x + 9, legendY, Palette.of(COLOR_LABEL), false);
 			}
 		}
 
@@ -66,37 +66,37 @@ final class TrendChart {
 			BenchmarkRecord run = shown.get(i);
 			int barX = left + i * slot;
 			if (Objects.equals(run.id(), highlightId)) {
-				graphics.fill(barX - 1, barsTop - 1, barX + slot - 1, baseline, 0x30FFFFFF);
+				graphics.fill(barX - 1, barsTop - 1, barX + slot - 1, baseline, Palette.of(0x30FFFFFF));
 			}
 			int avgHeight = (int) Math.round(barsHeight * run.result().avgFps() / max);
 			int lowHeight = (int) Math.round(barsHeight * run.result().onePercentLowFps() / max);
-			graphics.fill(barX, baseline - avgHeight, barX + barWidth, baseline, COLOR_AVG);
-			graphics.fill(barX + barWidth + 1, baseline - lowHeight, barX + 2 * barWidth + 1, baseline, COLOR_LOW);
+			graphics.fill(barX, baseline - avgHeight, barX + barWidth, baseline, Palette.of(COLOR_AVG));
+			graphics.fill(barX + barWidth + 1, baseline - lowHeight, barX + 2 * barWidth + 1, baseline, Palette.of(COLOR_LOW));
 			avgY[i] = baseline - avgHeight;
 			lowY[i] = baseline - lowHeight;
 		}
-		polyline(graphics, left + barWidth / 2, slot, avgY, COLOR_AVG_LINE);
-		polyline(graphics, left + barWidth + 1 + barWidth / 2, slot, lowY, COLOR_LOW_LINE);
+		polyline(graphics, left + barWidth / 2, slot, avgY, Palette.of(COLOR_AVG_LINE));
+		polyline(graphics, left + barWidth + 1 + barWidth / 2, slot, lowY, Palette.of(COLOR_LOW_LINE));
 		if (median != null) {
 			int y = baseline - (int) Math.round(barsHeight * median / max);
 			for (int dash = left; dash < left + shown.size() * slot; dash += 4) {
-				graphics.fill(dash, y, Math.min(dash + 2, left + shown.size() * slot), y + 1, COLOR_MEDIAN);
+				graphics.fill(dash, y, Math.min(dash + 2, left + shown.size() * slot), y + 1, Palette.of(COLOR_MEDIAN));
 			}
 		}
-		graphics.fill(left, baseline, left + shown.size() * slot, baseline + 1, COLOR_LABEL);
+		graphics.fill(left, baseline, left + shown.size() * slot, baseline + 1, Palette.of(COLOR_LABEL));
 		String first = BenchmarkResultScreen.chartDate(shown.getFirst().createdAt(), ZoneId.systemDefault());
-		graphics.text(font, first, left, baseline + 2, COLOR_LABEL, false);
+		graphics.text(font, first, left, baseline + 2, Palette.of(COLOR_LABEL), false);
 		if (shown.size() > 1) {
 			String last = BenchmarkResultScreen.chartDate(shown.getLast().createdAt(), ZoneId.systemDefault());
 			int lastX = Math.max(left + font.width(first) + 6, left + shown.size() * slot - font.width(last));
-			graphics.text(font, last, lastX, baseline + 2, COLOR_LABEL, false);
+			graphics.text(font, last, lastX, baseline + 2, Palette.of(COLOR_LABEL), false);
 		}
 		return true;
 	}
 
 	private static int legend(GuiGraphicsExtractor graphics, Font font, int x, int y, int color, Component label) {
 		graphics.fill(x, y + 1, x + 6, y + 7, color);
-		graphics.text(font, label, x + 9, y, COLOR_LABEL, false);
+		graphics.text(font, label, x + 9, y, Palette.of(COLOR_LABEL), false);
 		return x + 9 + font.width(label) + 8;
 	}
 
