@@ -118,7 +118,7 @@ public class A11yGameTest implements FabricClientGameTest {
 
 	private static void history(ClientGameTestContext context, A11yController controller) {
 		openHistory(context, controller);
-		walk(context, "history", List.of("Apply", "Render distance", "Lithium", "Simulation distance"));
+		walk(context, "history", List.of("Apply", "Render distance", "Lithium", "RigTune 0.3.0"));
 
 		// Enter on the older entry (row 3) selects it, and after the rebuild the focus is on its row again.
 		focusRow(context, 3);
