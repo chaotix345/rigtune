@@ -8,6 +8,7 @@ import io.github.chaotix345.rigtune.core.model.GpuInfo;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.TierBasis;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -114,7 +115,9 @@ public final class ShareReport {
 			out.append("- Launcher: ").append(field(launcher)).append('\n');
 		}
 
-		out.append("- Tier ").append(report.tier().rawTier()).append("/5 · limited by ").append(limit(report.tier().limitingFactor()))
+		// docs/v0.4/SPEC.md 2j: an estimate and its lowest estimated component(s), never "limited by".
+		out.append("- Estimated tier ").append(report.tier().rawTier()).append("/5 · lowest estimated component: ")
+				.append(String.join(", ", TierBasis.lowest(report.tier()).stream().map(ShareReport::limit).toList()))
 				.append(" · goal ").append(capitalised(report.goal().name())).append('\n');
 		out.append("- Rules r").append(report.rulesRevision()).append(" (").append(field(report.rulesSource())).append(") · ")
 				.append(report.online() ? "online" : "offline").append('\n');

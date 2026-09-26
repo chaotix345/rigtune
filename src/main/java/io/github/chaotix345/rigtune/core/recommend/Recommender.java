@@ -17,6 +17,7 @@ import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.model.Text;
+import io.github.chaotix345.rigtune.core.model.TierBasis;
 import io.github.chaotix345.rigtune.core.model.TierResult;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
 import io.github.chaotix345.rigtune.core.rules.Condition;
@@ -81,7 +82,8 @@ public final class Recommender {
 			SettingsSnapshot settings, OnlineData online, Goal goal, String modVersion, Set<String> queuedUpdates) {
 		OnlineData data = online == null ? OnlineData.offline() : online;
 		GpuClass gpuClass = GpuClassifier.from(rules).classify(hardware.gpu());
-		int cpuTier = CpuClassifier.from(rules).classify(hardware.cpu());
+		TierBasis.Cpu cpuBasis = CpuClassifier.from(rules).classifyDetailed(hardware.cpu());
+		int cpuTier = cpuBasis.tier();
 		int memTier = TierCalculator.heapTier(rules.heapTiers, hardware.maxHeapMb());
 		TierResult tier = TierCalculator.calculate(gpuClass.tier(), cpuTier, memTier, goal);
 
@@ -109,7 +111,15 @@ public final class Recommender {
 		List<Recommendation> sorted = new ArrayList<>(session.recs.values());
 		sorted.sort(ORDER);
 		String source = rules.source() == null ? "unknown" : rules.source();
-		return new Report(hardware, gpuClass, tier, goal, List.copyOf(sorted), rules.revision, source, data.online(), Instant.now());
+		return new Report(hardware, gpuClass, tier, goal, List.copyOf(sorted), rules.revision, source, data.online(), Instant.now(),
+				tierBasis(gpuClass, cpuBasis, memTier, hardware.maxHeapMb()));
+	}
+
+	// docs/v0.4/SPEC.md 2j: what each component's tier rests on, for the tier badge's tooltip.
+	private static TierBasis tierBasis(GpuClass gpu, TierBasis.Cpu cpu, int memTier, long heapMb) {
+		TierBasis.Basis gpuBasis = gpu.matchedPattern() != null ? TierBasis.Basis.TABLE_MATCH : TierBasis.Basis.FALLBACK_ESTIMATE;
+		return new TierBasis(new TierBasis.Gpu(gpu.tier(), gpuBasis, gpu.matchedPattern(), gpu.vendor(), gpu.integrated()), cpu,
+				new TierBasis.Memory(memTier, TierBasis.Basis.TABLE_MATCH, heapMb));
 	}
 
 	private static void section(String name, Runnable body) {

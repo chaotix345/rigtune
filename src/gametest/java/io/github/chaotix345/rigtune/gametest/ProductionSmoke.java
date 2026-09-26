@@ -13,6 +13,7 @@ import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.SettingKeys;
+import io.github.chaotix345.rigtune.core.model.TierBasis;
 import io.github.chaotix345.rigtune.core.model.TierResult;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
@@ -317,8 +318,9 @@ final class ProductionSmoke {
 				.append(hw.display().refreshRate()).append(" Hz, fullscreen ").append(hw.display().fullscreen()).append('\n');
 		out.append("  Battery  present ").append(hw.hasBattery()).append(", on battery ").append(hw.onBattery()).append('\n');
 		out.append("  System   ").append(hw.osName()).append(", Minecraft ").append(hw.mcVersion()).append(", flags ").append(hw.flags()).append('\n');
-		out.append("\nTier ").append(tier.rawTier()).append(" (effective ").append(tier.effectiveTier()).append("): GPU ").append(tier.gpuTier())
-				.append(", CPU ").append(tier.cpuTier()).append(", memory ").append(tier.memTier()).append(", limited by ").append(tier.limitingFactor()).append('\n');
+		out.append("\nEstimated tier ").append(tier.rawTier()).append(" (effective ").append(tier.effectiveTier()).append("): GPU ").append(tier.gpuTier())
+				.append(", CPU ").append(tier.cpuTier()).append(", memory ").append(tier.memTier()).append(", lowest estimated ")
+				.append(String.join(", ", TierBasis.lowest(tier))).append('\n');
 
 		Map<Category, List<Recommendation>> byCategory = new EnumMap<>(Category.class);
 		report.recommendations().forEach(r -> byCategory.computeIfAbsent(r.category(), c -> new ArrayList<>()).add(r));

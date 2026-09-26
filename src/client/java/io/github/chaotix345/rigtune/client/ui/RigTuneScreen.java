@@ -12,6 +12,7 @@ import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.TierBasis;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.notice.NoticeAction;
 import io.github.chaotix345.rigtune.core.notice.NoticeBoard;
@@ -28,6 +29,7 @@ import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.gui.screens.ConfirmLinkScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -78,6 +80,10 @@ public class RigTuneScreen extends Screen {
 	private int left;
 	private int right;
 	private int badgeRight;
+	// docs/v0.4/SPEC.md 2j: where the tier badge is drawn (title row, or the start of header line badgeLine) and its one tooltip.
+	private int badgeLine = -1;
+	private @Nullable ScreenRectangle badgeArea;
+	private List<Component> tierTooltipLines = List.of();
 	private int headerBottom;
 	private int statusY;
 	private @Nullable RecommendationList list;
@@ -131,11 +137,15 @@ public class RigTuneScreen extends Screen {
 		tierBadge = shown == null ? null : tierBadge(shown);
 		int badgeRoom = badgeRight - (left + titleWidth + goalWidth + 2 * MARGIN);
 		boolean badgeInTitleRow = tierBadge != null && font.width(tierBadge) <= badgeRoom;
+		badgeLine = -1;
 		headerLines = shown == null ? List.of() : header(shown, badgeInTitleRow ? null : tierBadge);
+		headerTop = 30;
+		badgeArea = tierBadge == null ? null : badgeInTitleRow ? new ScreenRectangle(badgeRight - font.width(tierBadge), 11, font.width(tierBadge), LINE)
+				: badgeLine < 0 ? null : new ScreenRectangle(left, headerTop + badgeLine * LINE, Math.min(font.width(tierBadge), right - left), LINE);
+		tierTooltipLines = shown == null ? List.of() : tierTooltip(shown);
 		if (!badgeInTitleRow) {
 			tierBadge = null;
 		}
-		headerTop = 30;
 		headerBottom = headerTop + Math.max(1, headerLines.size()) * LINE + 2;
 		headerBottom += noticeLine(headerBottom);
 		int listTop = headerBottom + 4;
@@ -210,10 +220,63 @@ public class RigTuneScreen extends Screen {
 		selected.retainAll(ids);
 	}
 
+	// docs/v0.4/SPEC.md 2j (external review §1): "Estimated tier N/5 · lowest estimated component: CPU"; a tie lists every
+	// tied component. An estimate, never a bottleneck.
 	private Component tierBadge(Report report) {
-		return Component.translatable("rigtune.header.tier",
+		return Component.translatable("rigtune.header.tier_estimate",
 				Component.literal(Integer.toString(report.tier().rawTier())).withStyle(ChatFormatting.BOLD),
-				Component.translatable("rigtune.limit." + report.tier().limitingFactor())).withStyle(s -> s.withColor(0xFFFFD166));
+				components(TierBasis.lowest(report.tier()))).withStyle(s -> s.withColor(0xFFFFD166));
+	}
+
+	// "GPU", "GPU, CPU" or "GPU, CPU, memory".
+	private static Component components(List<String> factors) {
+		MutableComponent out = Component.empty();
+		for (int i = 0; i < factors.size(); i++) {
+			if (i > 0) {
+				out.append(Component.literal(", "));
+			}
+			out.append(Component.translatable("rigtune.limit." + factors.get(i)));
+		}
+		return out;
+	}
+
+	// The tier badge's one tooltip: what each component's tier rests on ("GPU tier 4 (table match)", "CPU tier 5 (fallback
+	// estimate from 16 threads)", "Memory tier 5 (6.0 GB heap)"). A mutable list, so other lines (WS-B's last benchmark)
+	// are appended to it and the badge still has exactly one tooltip. Empty for a report without a basis.
+	static List<Component> tierTooltip(Report report) {
+		List<Component> lines = new ArrayList<>();
+		TierBasis basis = report.tierBasis();
+		if (basis == null) {
+			return lines;
+		}
+		lines.add(Component.translatable(basis.gpu().basis() == TierBasis.Basis.TABLE_MATCH ? "rigtune.header.tier_basis.gpu.table"
+				: "rigtune.header.tier_basis.gpu.fallback", basis.gpu().tier()));
+		TierBasis.Cpu cpu = basis.cpu();
+		if (cpu.basis() == TierBasis.Basis.TABLE_MATCH) {
+			lines.add(Component.translatable("rigtune.header.tier_basis.cpu.table", cpu.tier()));
+		} else if (cpu.logicalCores() <= 0) {
+			lines.add(Component.translatable("rigtune.header.tier_basis.cpu.fallback_unknown", cpu.tier()));
+		} else if (cpu.maxFreqMhz() > 0 && cpu.maxFreqMhz() < 2500) {
+			lines.add(Component.translatable("rigtune.header.tier_basis.cpu.fallback_clock", cpu.tier(), cpu.logicalCores(),
+					String.format(Locale.ROOT, "%.1f", cpu.maxFreqMhz() / 1000.0)));
+		} else {
+			lines.add(Component.translatable("rigtune.header.tier_basis.cpu.fallback", cpu.tier(), cpu.logicalCores()));
+		}
+		lines.add(Component.translatable("rigtune.header.tier_basis.memory", basis.memory().tier(), gb(basis.memory().heapMb())));
+		return lines;
+	}
+
+	/** v0.4 (docs/v0.4/SPEC.md 2j): the tier badge's tooltip lines and where the badge is (for the game tests). */
+	public List<Component> tierTooltip() {
+		return List.copyOf(tierTooltipLines);
+	}
+
+	public @Nullable ScreenRectangle tierBadgeArea() {
+		return badgeArea;
+	}
+
+	public @Nullable String tierBadgeText() {
+		return shown == null ? null : tierBadge(shown).getString();
 	}
 
 	private List<Component> header(Report report, @Nullable Component badge) {
@@ -230,6 +293,7 @@ public class RigTuneScreen extends Screen {
 				: Component.translatable("rigtune.header.offline").withStyle(ChatFormatting.GOLD);
 		MutableComponent last = Component.empty();
 		if (badge != null) {
+			badgeLine = lines.size();
 			last.append(badge).append(Component.literal(" · ").withStyle(s -> s.withColor(COLOR_LABEL)));
 		}
 		last.append(Component.translatable("rigtune.header.display_rules",
@@ -254,6 +318,25 @@ public class RigTuneScreen extends Screen {
 	public @Nullable String titleOf(String recommendationId) {
 		return shown == null ? null : shown.recommendations().stream().filter(r -> r.id().equals(recommendationId)).findFirst()
 				.map(r -> displayTitle(r).getString()).orElse(null);
+	}
+
+	/**
+	 * v0.4 (docs/v0.4/SPEC.md 2m): focuses a recommendation's checkbox as keyboard navigation would and returns the list,
+	 * whose narration the game test collects; null when there's no such row.
+	 */
+	public @Nullable ContainerObjectSelectionList<?> focusRecommendation(String recommendationId) {
+		if (list == null) {
+			return null;
+		}
+		for (RecommendationList.Entry entry : list.children()) {
+			if (entry instanceof RecommendationList.RecommendationEntry row && row.recommendation.id().equals(recommendationId) && row.checkbox != null) {
+				setFocused(list);
+				list.setFocused(row);
+				row.setFocused(row.checkbox);
+				return list;
+			}
+		}
+		return null;
 	}
 
 	/** v0.3 (WS-C): the launcher lines shown under the ram-* advice (for the game tests). */
@@ -552,6 +635,10 @@ public class RigTuneScreen extends Screen {
 				y += LINE;
 			}
 		}
+		// After the header lines, so over the badge it replaces a clipped line's own tooltip.
+		if (badgeArea != null && !tierTooltipLines.isEmpty() && badgeArea.containsPoint(mouseX, mouseY)) {
+			graphics.setComponentTooltipForNextFrame(font, tierTooltipLines, mouseX, mouseY);
+		}
 		extractNotice(graphics, mouseX, mouseY);
 		if (list != null && (shown == null || shown.recommendations().isEmpty())) {
 			Component empty = Component.translatable(shown == null ? "rigtune.screen.analysing" : "rigtune.screen.nothing");
@@ -682,6 +769,9 @@ public class RigTuneScreen extends Screen {
 							.onValueChange((box, value) -> toggle(value))
 							.build();
 					this.checkbox.setWidth(BOX);
+					// docs/v0.4/SPEC.md 2m: the narrator names the recommendation. Vanilla draws the label it was built with
+					// (empty: the row draws its own title) and narrates getMessage(), so the row looks the same.
+					this.checkbox.setMessage(Component.translatable("rigtune.screen.recommendation", title, impact));
 				} else {
 					this.checkbox = null;
 				}
