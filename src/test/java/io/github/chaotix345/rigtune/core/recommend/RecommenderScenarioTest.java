@@ -3,8 +3,12 @@ package io.github.chaotix345.rigtune.core.recommend;
 import io.github.chaotix345.rigtune.core.Fixtures;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
+import io.github.chaotix345.rigtune.core.model.CpuInfo;
+import io.github.chaotix345.rigtune.core.model.DisplayInfo;
 import io.github.chaotix345.rigtune.core.model.Goal;
+import io.github.chaotix345.rigtune.core.model.GpuInfo;
 import io.github.chaotix345.rigtune.core.model.GpuVendor;
+import io.github.chaotix345.rigtune.core.model.GraphicsBackend;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.OnlineData;
@@ -274,5 +278,167 @@ class RecommenderScenarioTest {
 		OnlineData staleOffline = new OnlineData(false, Map.of("sodium", false), Map.of());
 		Map<String, Recommendation> stale = byId(Recommender.recommend(RulesLoader.loadBundled(), hw.build(), mods, settings, staleOffline, Goal.BALANCED));
 		assertTrue(stale.containsKey("add:sodium"));
+	}
+
+	// v0.4 SPEC 2l (external review §6): low-end fixtures over the bundled rules. They check that the rules give the intended
+	// recommendations for hardware RigTune hasn't been run on, not how that hardware performs. Expected values are read from
+	// rules/source/knowledge.json as reviewed (revision 14).
+	private static final Map<String, String> LOW_END_SETTINGS = Map.ofEntries(
+			Map.entry("vanilla.renderDistance", "12"),
+			Map.entry("vanilla.simulationDistance", "12"),
+			Map.entry("vanilla.maxFps", "120"),
+			Map.entry("vanilla.enableVsync", "true"),
+			Map.entry("vanilla.inactivityFpsLimit", "minimized"),
+			Map.entry("vanilla.particles", "0"),
+			Map.entry("vanilla.biomeBlendRadius", "2"),
+			Map.entry("vanilla.entityShadows", "true"),
+			Map.entry("vanilla.renderClouds", "true"),
+			Map.entry("vanilla.cutoutLeaves", "true"),
+			Map.entry("vanilla.textureFiltering", "0"),
+			Map.entry("vanilla.prioritizeChunkUpdates", "0"));
+
+	private static Report lowEnd(Fixtures.Hw hw, Map<String, String> settings, String... mods) {
+		return Recommender.recommend(RulesLoader.loadBundled(), hw.build(), Fixtures.mods(mods), new SettingsSnapshot(settings),
+				OnlineData.offline(), Goal.BALANCED);
+	}
+
+	private static Set<String> advice(Report report) {
+		return report.recommendations().stream().map(Recommendation::id).filter(id -> id.startsWith("advice:"))
+				.map(id -> id.substring("advice:".length())).collect(Collectors.toSet());
+	}
+
+	private static boolean cpuTableMatch(Fixtures.Hw hw) {
+		return RulesLoader.loadBundled().cpuTiers.stream().anyMatch(row -> row.find(hw.cpu.name()));
+	}
+
+	// AC2l.1 "nothing ticked that isn't defaultSelected": a ticked addition comes from a rule that doesn't start unticked (no
+	// defaultSelected false, not alpha), and a ticked setting value from an entry for that key that doesn't either.
+	private static void assertOnlyDefaultSelectedTicked(Report report) {
+		RulesDocument rules = RulesLoader.loadBundled();
+		for (Recommendation r : report.recommendations()) {
+			if (!r.selectedByDefault() || !r.appliable()) {
+				continue;
+			}
+			if (r.action() instanceof Action.AddMod add) {
+				RulesDocument.ModRule rule = rules.mods.stream().filter(m -> m.slug.equals(add.slug())).findFirst().orElseThrow();
+				assertTrue(rule.defaultSelected == null || rule.defaultSelected, r.id());
+				assertFalse(rule.alpha(), r.id());
+			} else if (r.action() instanceof Action.SetSetting set) {
+				boolean fromTickedEntry = rules.settings.stream()
+						.filter(e -> e.key.equals(set.key()) && !Boolean.FALSE.equals(e.defaultSelected))
+						.anyMatch(e -> e.isValueEntry() ? producesValue(SettingValues.asString(e.value), set.newValue()) : clampsTo(e, set.newValue()));
+				assertTrue(fromTickedEntry, r.id() + "=" + set.newValue());
+			}
+		}
+	}
+
+	private static boolean producesValue(String entryValue, String value) {
+		return entryValue.startsWith("$") || SettingValues.same(entryValue, value);
+	}
+
+	private static boolean clampsTo(RulesDocument.SettingRule clamp, String value) {
+		return clamp.min != null && SettingValues.same(SettingValues.format(java.math.BigDecimal.valueOf(clamp.min)), value)
+				|| clamp.max != null && SettingValues.same(SettingValues.format(java.math.BigDecimal.valueOf(clamp.max)), value);
+	}
+
+	// (i) An integrated-GPU laptop on battery: Iris Xe, 4 cores / 8 threads, 8 GB RAM, 2 GB heap, 60 Hz.
+	@Test
+	void irisXeLaptopOnBattery() {
+		Fixtures.Hw hw = Fixtures.lowEndLaptop();
+		hw.cpu = new CpuInfo("11th Gen Intel(R) Core(TM) i5-1135G7 @ 2.40GHz", 4, 8, -1);
+		hw.gpu = new GpuInfo("Intel", "Intel(R) Iris(R) Xe Graphics", "4.6.0 - Build 31.0.101.5595", GraphicsBackend.OPENGL, -1);
+		Map<String, String> vsyncOff = new HashMap<>(LOW_END_SETTINGS);
+		vsyncOff.put("vanilla.enableVsync", "false");
+		Report report = lowEnd(hw, vsyncOff, "fabric-api");
+		Map<String, Recommendation> recs = byId(report);
+
+		assertEquals(GpuVendor.INTEL, report.gpuClass().vendor());
+		assertTrue(report.gpuClass().integrated());
+		assertEquals(3, report.gpuClass().tier());
+		assertTrue(report.gpuClass().matchedPattern() != null, "Iris Xe is a table match");
+		assertEquals(3, report.tier().cpuTier());
+		assertFalse(cpuTableMatch(hw), "8 threads, fallback estimate");
+		assertEquals(2, report.tier().memTier());
+		assertEquals(2, report.tier().effectiveTier());
+
+		assertEquals("60", setting(report, "vanilla.maxFps").orElseThrow().newValue());
+		assertTrue(recs.get("set:vanilla.maxFps").selectedByDefault());
+		assertEquals("true", setting(report, "vanilla.enableVsync").orElseThrow().newValue(), "VSync on, on battery");
+		assertTrue(recs.get("set:vanilla.enableVsync").selectedByDefault());
+		assertEquals("afk", setting(report, "vanilla.inactivityFpsLimit").orElseThrow().newValue());
+		assertEquals("8", setting(report, "vanilla.renderDistance").orElseThrow().newValue(), "within the 2 GB heap cap of 8");
+		assertEquals("6", setting(report, "vanilla.simulationDistance").orElseThrow().newValue());
+		assertEquals("1", setting(report, "vanilla.particles").orElseThrow().newValue());
+
+		assertTrue(advice(report).containsAll(Set.of("ram-low", "battery", "laptop-gpu-choice")), advice(report).toString());
+		assertFalse(recs.containsKey("add:nvidium"), "avoided on a non-NVIDIA GPU");
+		assertFalse(recs.get("add:c2me-fabric").selectedByDefault(), "alpha");
+		assertOnlyDefaultSelectedTicked(report);
+
+		assertFalse(setting(lowEnd(hw, LOW_END_SETTINGS, "fabric-api"), "vanilla.enableVsync").isPresent(), "VSync already on stays on");
+	}
+
+	// (ii) An old 4-core desktop: i5-4590, GTX 960, 8 GB RAM, 2 GB heap, 60 Hz.
+	@Test
+	void oldFourCoreDesktop() {
+		Fixtures.Hw hw = Fixtures.userRig();
+		hw.cpu = new CpuInfo("Intel(R) Core(TM) i5-4590 CPU @ 3.30GHz", 4, 4, 3301);
+		hw.gpu = new GpuInfo("NVIDIA Corporation", "NVIDIA GeForce GTX 960/PCIe/SSE2", "4.6.0 NVIDIA 472.12", GraphicsBackend.OPENGL, 2048);
+		hw.ramMb = 8192;
+		hw.heapMb = 2048;
+		hw.display = new DisplayInfo(1920, 1080, 60, true);
+		hw.os = "Windows 10";
+		Report report = lowEnd(hw, LOW_END_SETTINGS, "sodium", "nvidium");
+		Map<String, Recommendation> recs = byId(report);
+
+		assertEquals(GpuVendor.NVIDIA, report.gpuClass().vendor());
+		assertEquals(2, report.gpuClass().tier());
+		assertTrue(report.gpuClass().matchedPattern() != null, "GTX 960 is a table match");
+		assertEquals(2, report.tier().cpuTier());
+		assertFalse(cpuTableMatch(hw), "4 threads, fallback estimate");
+		assertEquals(2, report.tier().memTier());
+		assertEquals(2, report.tier().effectiveTier());
+
+		assertEquals("60", setting(report, "vanilla.maxFps").orElseThrow().newValue(), "the 60 Hz cap");
+		Recommendation vsync = recs.get("set:vanilla.enableVsync");
+		assertEquals("false", ((Action.SetSetting) vsync.action()).newValue());
+		assertFalse(vsync.selectedByDefault(), "VSync off is optional (SPEC 2k)");
+		assertFalse(setting(report, "vanilla.inactivityFpsLimit").isPresent(), "no battery");
+		assertEquals("8", setting(report, "vanilla.renderDistance").orElseThrow().newValue(), "within the 2 GB heap cap of 8");
+		assertEquals("6", setting(report, "vanilla.simulationDistance").orElseThrow().newValue());
+
+		assertTrue(advice(report).contains("ram-low"), advice(report).toString());
+		assertFalse(advice(report).contains("battery"));
+		assertTrue(recs.containsKey("disable:nvidium"), "Nvidium is avoided on a GTX 960");
+		assertFalse(recs.containsKey("add:c2me-fabric"), "C2ME wants a CPU tier of at least 3");
+		assertOnlyDefaultSelectedTicked(report);
+	}
+
+	// (iii) A CPU and a GPU no table row knows: both tiers are fallback estimates.
+	@Test
+	void unrecognisedCpuAndGpu() {
+		Fixtures.Hw hw = Fixtures.userRig();
+		hw.cpu = new CpuInfo("ZHAOXIN KaiXian KX-7000/8@3.0GHz", 8, 8, 3000);
+		hw.gpu = new GpuInfo("Moore Threads", "MTT S80", "4.6.0", GraphicsBackend.OPENGL, 16384);
+		hw.ramMb = 16384;
+		hw.heapMb = 4096;
+		hw.display = new DisplayInfo(1920, 1080, 75, true);
+		Report report = lowEnd(hw, LOW_END_SETTINGS, "sodium");
+		Map<String, Recommendation> recs = byId(report);
+
+		assertEquals(GpuVendor.OTHER, report.gpuClass().vendor());
+		assertEquals(null, report.gpuClass().matchedPattern(), "fallback estimate");
+		assertEquals(2, report.gpuClass().tier(), "gpuVendorFallback for other vendors");
+		assertEquals(3, report.tier().cpuTier());
+		assertFalse(cpuTableMatch(hw), "fallback estimate from 8 threads");
+		assertEquals(4, report.tier().memTier());
+		assertEquals(2, report.tier().effectiveTier());
+
+		assertEquals("70", setting(report, "vanilla.maxFps").orElseThrow().newValue(), "the cap below 75 Hz");
+		assertFalse(recs.get("set:vanilla.enableVsync").selectedByDefault());
+		assertEquals("8", setting(report, "vanilla.renderDistance").orElseThrow().newValue(), "tier 2, inside the 4 GB heap cap of 16");
+		assertTrue(advice(report).stream().noneMatch(id -> id.startsWith("ram-")), advice(report).toString());
+		assertFalse(recs.containsKey("add:nvidium"));
+		assertOnlyDefaultSelectedTicked(report);
 	}
 }

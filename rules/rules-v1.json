@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": 13,
-  "generatedAt": "2026-09-25T22:38:50Z",
+  "revision": 14,
+  "generatedAt": "2026-09-26T06:25:49Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -1100,7 +1100,7 @@
         }
       },
       "impact": "medium",
-      "reason": "Capping the frame rate just below your monitor's refresh rate keeps FreeSync/G-Sync active and avoids rendering frames you can't see, without VSync's input lag."
+      "reason": "Avoids rendering frames your monitor can't show; with FreeSync or G-Sync it also keeps the frame rate inside the variable-refresh range."
     },
     {
       "key": "vanilla.enableVsync",
@@ -1112,7 +1112,8 @@
         }
       },
       "impact": "low",
-      "reason": "With the frame-rate cap in place, VSync mostly adds input lag. Turn it back on if you see screen tearing and your monitor has no FreeSync or G-Sync."
+      "defaultSelected": false,
+      "reason": "Optional: turning VSync off lowers input lag but can cause tearing; leave it on if you see tearing."
     },
     {
       "key": "vanilla.maxFps",

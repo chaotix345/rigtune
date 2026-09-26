@@ -11,7 +11,8 @@
 Its inputs:
 
 - `rules/source/knowledge.json` — the hand-maintained tuning knowledge (GPU/CPU/heap
-  tiers, mod rules, obsolete mods, settings, advice, setting labels). Same shape as the
+  tiers, mod rules, obsolete mods, settings, advice, setting labels, and from 0.4 the
+  Profiles templates and the Stutter Doctor's advice). Same shape as the
   schema in `docs/RULES_SCHEMA.md`, minus the fields the script generates, plus the
   maintainer-only `reviewIgnore` and `v1` fields (per rule, and `"v1": false` on a
   `gpuTiers`/`cpuTiers` row).
@@ -77,11 +78,13 @@ for each rule in `knowledge.json`:
 - Tier rows are copied as they are, except a `gpuTiers`/`cpuTiers` row with `"v1": false`,
   which is left out, so 0.1.x keeps classifying that hardware as before. Give every new
   tier row `"v1": false` (docs/RULES_SCHEMA.md, "v1 on tier rows").
-- `v1` is never written to either output, and `settingLabels` never reaches `rules-v1.json`.
+- `v1` is never written to either output, and `settingLabels`, `profileTemplates` and
+  `stutterAdvice` never reach `rules-v1.json`.
 
 "v2-only" means a condition key 0.1.x doesn't know (`gpuModelMatches`,
-`displayPixelsAtLeast`/`AtMost`, `modVersion`, `mcVersionRange`, `settingIs`) anywhere in the tree, or
-a value outside the v0.1.0 vocabularies.
+`displayPixelsAtLeast`/`AtMost`, `modVersion`, `mcVersionRange`, `settingIs`, and from 0.4
+`driverVersion`) anywhere in the tree, or a value outside the v0.1.0 vocabularies (such as a
+`jvm-` fact under `flags`).
 
 ### Knowledge errors
 
@@ -103,7 +106,21 @@ The script stops (exit code 2, nothing written) and lists every problem when
   unless the field can be left out exactly as safely: an empty `requires`, `avoidSelected: true`,
   or no `avoidWhen` in the v1 rule; `skipUpdateWhen` always can, since 0.1.x offers every update);
 - a v2-only `avoidWhen` on a mod 0.1.x can still be offered (add a v1 `avoidWhen` override);
-- a bad `v1` override (a `null`, a non-v1 field or condition).
+- a bad `v1` override (a `null`, a non-v1 field or condition);
+- (0.4) a key or value 0.2.0/0.3.0 don't know (`driverVersion`, a `jvm-` fact) in a clamp, an
+  `avoidWhen` or a `skipUpdateWhen` without `requires` (there, failing closed would drop the
+  restriction for them);
+- (0.4) a `jvm-` fact outside the list RigTune sets (`jvm-probed` included), a main-list rule testing one
+  without `"requires": ["jvm-flags"]`, or one inside `stutterAdvice`; `"requires": ["stutter-doctor"]` on a
+  main-list rule; a Stutter Doctor key outside `stutterAdvice`; a bad
+  `driverVersion` (`vendor` missing or unknown, a bound that isn't a dotted version, no bound,
+  `atLeast` above `atMost`, an unknown field);
+- (0.4) a bad `profileTemplates` (an unknown or repeated template id, a goal outside
+  performance/balanced/quality, `facts` other than `onBattery`/`hasBattery`, a key profiles don't
+  manage, an entry without exactly one of value or min/max, an unknown `$` token; `$recordingFps`
+  is allowed only here) or `stutterAdvice` (no `"requires": ["stutter-doctor"]`, a repeated id, a
+  kind or impact outside the vocabulary, a share outside 0-100 or for an unknown cause or tag, a
+  `v1` field).
 
 ## Running it
 
@@ -134,13 +151,21 @@ directly (see `tools/tests/test_update_rules.py`).
 - `tools/check_rules_v1.py` (CI job `rules-v1-compat`): `rules-v1.json` has
   schemaVersion 1; only the fields, condition keys and values 0.1.0 understands; only
   `vanilla.`/`sodium.` settings keys; no `requires`, `avoidSelected`, `skipUpdateWhen`, `settingLabels` or
-  `v1`; the same revision and `generatedAt` as `rules-v2.json`; and it equals the
+  `v1`; no `profileTemplates` or `stutterAdvice`; the same revision and `generatedAt` as `rules-v2.json`; and it equals the
   projection rebuilt offline from `knowledge.json` and `rules-v2.json`'s generated data
   (so it also fails when `knowledge.json` was edited without regenerating).
 - CI job `rules-consistency`: `rules/rules-v2.json` equals the bundled copy, and no bundled
   `rules-v1.json` exists.
 - `SchemaConsistencyTest` (JUnit; runs Python, required in CI): the updater's condition keys,
-  rule fields and vocabularies equal the Java classes (v2) and the pinned v0.1.0 copy (v1).
+  rule fields and vocabularies equal the Java classes (v2) and the pinned v0.1.0 copy (v1); its
+  keys and values for 0.2.0/0.3.0 (`LEGACY_V2_*`) equal the pinned v0.3.0 copy; the template fields
+  equal `RulesDocument.ProfileTemplate`.
+- `LegacyRulesParseTest` and `LegacyConditionFailClosedTest` (JUnit): the pinned 0.2.0/0.3.0 rules
+  classes read the bundled rules with unchanged counts, ignore the 0.4 sections, evaluate every
+  `driverVersion` rule to UNKNOWN and skip every `jvm-*` rule.
+- `tools/tests/test_generated_rules.py`: checks the generated files themselves (the VSync entry in
+  both, nothing v2-only in rules-v1.json, the templates, the Stutter Doctor and JVM advice, the
+  driver seeds, and that every number in a `jvm-*` text is one the JVM research measured).
   `V1_VOCABULARIES` in `update_rules.py` are frozen at 0.1.0; extend only `V2_VOCABULARIES`
   (together with `ConditionEvaluator`).
 - `RulesV1DifferentialTest` (JUnit, part of `./gradlew build`): a pinned copy of the
