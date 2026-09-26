@@ -1,0 +1,229 @@
+{
+ "mod-apply": [
+  {
+   "name": "the client exited normally and the helper finished",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver applied the mod changes",
+   "ok": true,
+   "detail": "error: None"
+  },
+  {
+   "name": "the added mod is in mods (the served bytes)",
+   "ok": true,
+   "detail": "e2e-added-1.0.0.jar exists: True"
+  },
+  {
+   "name": "the other mod is disabled",
+   "ok": true,
+   "detail": "e2e-disable-me-1.0.0.jar.disabled exists: True"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  },
+  {
+   "name": "last-apply.json: both ops OK",
+   "ok": true,
+   "detail": "results: [('DISABLE_FILE', 'e2e-disable-me-1.0.0.jar', 'OK'), ('ENABLE_FILE', 'e2e-added-1.0.0.jar', 'OK')]"
+  },
+  {
+   "name": "history.json: one apply entry, both changes APPLIED",
+   "ok": true,
+   "detail": "apply entries: 1; changes: [('file', 'disable', 'e2e-disable-me-1.0.0.jar', 'APPLIED'), ('file', 'enable', 'e2e-added-1.0.0.jar', 'APPLIED')]"
+  }
+ ],
+ "mod-undo": [
+  {
+   "name": "the client exited normally and the helper finished",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver undid the last apply (two reverts after a restart)",
+   "ok": true,
+   "detail": "error: None; undoOf: 273d553c-17f2-44e1-87ee-bf350dcdab3e; plan: [{'description': 'Disable e2e-added-1.0.0.jar', 'action': 'REVERT', 'reason': None, 'needsRestart': True, 'changeIds': ['4c7d133d-8a97-45f6-ad64-9f6875ae758d'], 'opIds': []}, {'description': 'Re-enable e2e-disable-me-1.0.0.jar', 'action': 'REVERT', 'reason': None, 'needsRestart': True, 'changeIds': ['0e7550e3-4738-4eac-936c-b1fb2dd7b686'], 'opIds': []}]"
+  },
+  {
+   "name": "the added mod is disabled again",
+   "ok": true,
+   "detail": "e2e-added-1.0.0.jar.disabled exists: True"
+  },
+  {
+   "name": "the other mod is back",
+   "ok": true,
+   "detail": "e2e-disable-me-1.0.0.jar exists: True"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  },
+  {
+   "name": "last-apply.json: both reversal ops OK",
+   "ok": true,
+   "detail": "results: [('DISABLE_FILE', 'e2e-added-1.0.0.jar', 'OK'), ('ENABLE_FILE', 'e2e-disable-me-1.0.0.jar', 'OK')]"
+  },
+  {
+   "name": "history.json: the undo APPLIED, the apply's changes REVERTED",
+   "ok": true,
+   "detail": "apply changes: {'0e7550e3-4738-4eac-936c-b1fb2dd7b686': 'REVERTED', '4c7d133d-8a97-45f6-ad64-9f6875ae758d': 'REVERTED'}; undo entries: ['273d553c-17f2-44e1-87ee-bf350dcdab3e']; undo changes: [('disable', 'e2e-added-1.0.0.jar', 'APPLIED', '4c7d133d-8a97-45f6-ad64-9f6875ae758d'), ('enable', 'e2e-disable-me-1.0.0.jar', 'APPLIED', '0e7550e3-4738-4eac-936c-b1fb2dd7b686')]"
+  }
+ ],
+ "mod-check": [
+  {
+   "name": "the client exited normally",
+   "ok": true,
+   "detail": "gradle exit 0"
+  },
+  {
+   "name": "the driver checked",
+   "ok": true,
+   "detail": "error: None"
+  },
+  {
+   "name": "the undone mods are as before the apply",
+   "ok": true,
+   "detail": "e2e-disable-me loaded: True; e2e-added loaded: False"
+  },
+  {
+   "name": "nothing left to undo",
+   "ok": true,
+   "detail": "undoable items: 0"
+  },
+  {
+   "name": "no crash report",
+   "ok": true,
+   "detail": "crash-reports: []"
+  },
+  {
+   "name": "mods unchanged by the relaunch",
+   "ok": true,
+   "detail": "unchanged"
+  },
+  {
+   "name": "history.json statuses unchanged",
+   "ok": true,
+   "detail": "unchanged"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  }
+ ],
+ "entry-apply": [
+  {
+   "name": "the client exited normally and the helper finished",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver applied twice, one mod each",
+   "ok": true,
+   "detail": "error: None; apply messages: ['Downloading 1 mod change(s)\u2026', 'Downloading 1 mod change(s)\u2026']"
+  },
+  {
+   "name": "both added mods are in mods (the served bytes)",
+   "ok": true,
+   "detail": "served bytes in mods: {'e2e-first-1.0.0.jar': True, 'e2e-second-1.0.0.jar': True}"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  },
+  {
+   "name": "last-apply.json: both enables OK",
+   "ok": true,
+   "detail": "results: [('ENABLE_FILE', 'e2e-first-1.0.0.jar', 'OK'), ('ENABLE_FILE', 'e2e-second-1.0.0.jar', 'OK')]"
+  },
+  {
+   "name": "history.json: two new apply entries, the older adding e2e-first, both APPLIED",
+   "ok": true,
+   "detail": "new entries: [('apply', '2026-09-26T03:41:43.631602500Z', [('file', 'enable', 'e2e-first-1.0.0.jar', 'APPLIED')]), ('apply', '2026-09-26T03:41:45.120704700Z', [('file', 'enable', 'e2e-second-1.0.0.jar', 'APPLIED')])]"
+  }
+ ],
+ "entry-undo": [
+  {
+   "name": "the client exited normally and the helper finished",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver undid the older Apply only (one revert after a restart)",
+   "ok": true,
+   "detail": "error: None; undoOf: 9cb52b78-fb31-4703-a4ec-87bfa7c8a77a (older 9cb52b78-fb31-4703-a4ec-87bfa7c8a77a); via the undo screen: True; plan: [{'description': 'Disable e2e-first-1.0.0.jar', 'action': 'REVERT', 'reason': None, 'needsRestart': True, 'changeIds': ['576b0202-3a95-49c1-aeee-bfa208ffff6d'], 'opIds': []}]"
+  },
+  {
+   "name": "the older Apply's mod is disabled",
+   "ok": true,
+   "detail": "e2e-first-1.0.0.jar.disabled exists: True; e2e-first-1.0.0.jar exists: False"
+  },
+  {
+   "name": "the newer Apply's mod is still enabled",
+   "ok": true,
+   "detail": "e2e-second-1.0.0.jar exists: True"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  },
+  {
+   "name": "last-apply.json: the reversal op OK",
+   "ok": true,
+   "detail": "results: [('DISABLE_FILE', 'e2e-first-1.0.0.jar', 'OK')]"
+  },
+  {
+   "name": "history.json: one undo of the older Apply, its change REVERTED, the newer APPLIED",
+   "ok": true,
+   "detail": "undo entries of these applies: ['9cb52b78-fb31-4703-a4ec-87bfa7c8a77a']; undo changes: [('disable', 'e2e-first-1.0.0.jar', 'APPLIED', '576b0202-3a95-49c1-aeee-bfa208ffff6d')]; older: {'576b0202-3a95-49c1-aeee-bfa208ffff6d': 'REVERTED'}; newer: {'e3f26626-967c-493f-a7b6-01e4d46b61ef': 'APPLIED'}"
+  }
+ ],
+ "entry-check": [
+  {
+   "name": "the client exited normally",
+   "ok": true,
+   "detail": "gradle exit 0"
+  },
+  {
+   "name": "the driver checked",
+   "ok": true,
+   "detail": "error: None"
+  },
+  {
+   "name": "only the older Apply's mod is off",
+   "ok": true,
+   "detail": "loaded: e2e-first False, e2e-second True, e2e-disable-me True"
+  },
+  {
+   "name": "nothing left to undo on the older Apply",
+   "ok": true,
+   "detail": "undoable items: 0; plan problem: None; method: RigTuneController.undoPlanFor"
+  },
+  {
+   "name": "no crash report",
+   "ok": true,
+   "detail": "crash-reports: []"
+  },
+  {
+   "name": "mods unchanged by the relaunch",
+   "ok": true,
+   "detail": "unchanged"
+  },
+  {
+   "name": "history.json statuses unchanged",
+   "ok": true,
+   "detail": "unchanged"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  }
+ ]
+}

@@ -1,0 +1,106 @@
+{
+ "update": [
+  {
+   "name": "the client exited normally and the helper finished",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver applied the offered update",
+   "ok": true,
+   "detail": "driver: ok=True error=None offered=rigtune-0.4.0-dev+mc26.2.jar"
+  },
+  {
+   "name": "exactly one RigTune jar, the new one",
+   "ok": true,
+   "detail": "rigtune*.jar in mods: ['rigtune-0.4.0-dev+mc26.2.jar']; bytes identical to the served jar: True"
+  },
+  {
+   "name": "the old jar is disabled",
+   "ok": true,
+   "detail": "rigtune-0.3.0+mc26.2.jar.disabled exists: True"
+  },
+  {
+   "name": "no pending.json",
+   "ok": true,
+   "detail": "pending.json exists: False"
+  },
+  {
+   "name": "no leftover downloads",
+   "ok": true,
+   "detail": "*.rigtune-pending: []"
+  },
+  {
+   "name": "last-apply.json: the update's two ops, all OK",
+   "ok": true,
+   "detail": "results: [('DISABLE_FILE', 'rigtune-0.3.0+mc26.2.jar', 'OK'), ('ENABLE_FILE', 'rigtune-0.4.0-dev+mc26.2.jar', 'OK')]"
+  },
+  {
+   "name": "the helper ran from config/rigtune/helper copies",
+   "ok": true,
+   "detail": "helper classpaths seen: [['<instance>\\\\config\\\\rigtune\\\\helper\\\\0-rigtune-0.3.0+mc26.2.jar', '<instance>\\\\config\\\\rigtune\\\\helper\\\\1-gson-2.14.0.jar']]"
+  },
+  {
+   "name": "the old RigTune downloaded the jar from cdn.modrinth.com",
+   "ok": true,
+   "detail": "download requests: [('cdn.modrinth.com', 200, 'chaotix345/rigtune/0.3.0+mc26.2 (github.com/chaotix345/rigtune)')]"
+  },
+  {
+   "name": "the update's depends and breaks are no stricter (M12)",
+   "ok": true,
+   "detail": "same or fewer entries: depends {'fabricloader': '>=0.19.5', 'minecraft': '~26.2', 'java': '>=25', 'fabric-api': '*'} breaks {}"
+  }
+ ],
+ "verify": [
+  {
+   "name": "the relaunched client exited normally",
+   "ok": true,
+   "detail": "gradle exit 0"
+  },
+  {
+   "name": "the driver verified",
+   "ok": true,
+   "detail": "error: None"
+  },
+  {
+   "name": "the new RigTune is loaded from mods/",
+   "ok": true,
+   "detail": "loaded 0.4.0-dev+mc26.2 from ['<instance>\\\\mods\\\\rigtune-0.4.0-dev+mc26.2.jar']"
+  },
+  {
+   "name": "the goal is kept",
+   "ok": true,
+   "detail": "goal: QUALITY"
+  },
+  {
+   "name": "the apply result was shown (rigtune.json lastShownApply)",
+   "ok": true,
+   "detail": "lastShownApply 2026-09-26T02:47:03.428875600Z vs last-apply.json finishedAt 2026-09-26T02:47:03.428875600Z"
+  },
+  {
+   "name": "no further RigTune update is offered",
+   "ok": true,
+   "detail": "online=True updateOffered=False"
+  },
+  {
+   "name": "no crash report",
+   "ok": true,
+   "detail": "crash-reports: []"
+  },
+  {
+   "name": "mods unchanged by the relaunch",
+   "ok": true,
+   "detail": "unchanged"
+  },
+  {
+   "name": "no new pending.json",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "history.json: the old version's own update, both changes APPLIED",
+   "ok": true,
+   "detail": "entries: ['apply']; changes: [('file', 'disable', 'rigtune-0.3.0+mc26.2.jar', 'APPLIED'), ('file', 'enable', 'rigtune-0.4.0-dev+mc26.2.jar', 'APPLIED')]; statuses unchanged by the relaunch: True"
+  }
+ ]
+}

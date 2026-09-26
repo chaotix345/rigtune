@@ -1,0 +1,38 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17",
+      "at": "2026-09-21T10:00:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.4.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "d4f8b207-9e1c-4f30-8c4d-806f7e45ad18",
+          "type": "setting",
+          "key": "vanilla.renderDistance",
+          "before": "12",
+          "after": "8",
+          "status": "APPLIED"
+        },
+        {
+          "id": "e5a9c318-af2d-4041-9d5e-917a8f56be19",
+          "type": "setting",
+          "key": "vanilla.maxFps",
+          "before": "120",
+          "after": "60",
+          "status": "APPLIED"
+        },
+        {
+          "id": "f6b0d429-a03e-4152-8e6f-a28b9067cf1a",
+          "type": "setting",
+          "key": "sodium.performance.chunk_builder_threads",
+          "before": "0",
+          "after": "2",
+          "status": "APPLIED"
+        }
+      ]
+    }
+  ]
+}

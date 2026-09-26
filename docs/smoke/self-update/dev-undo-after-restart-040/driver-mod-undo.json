@@ -1,0 +1,121 @@
+{
+  "phase": "mod-undo",
+  "ok": true,
+  "error": null,
+  "events": [
+    "t+0.0s undo driver loaded, phase mod-undo, output <run>\\out",
+    "t+3.6s title screen",
+    "t+4.6s report ready (online=true)",
+    "t+4.7s undoPlan: 2 item(s), undoOf 273d553c-17f2-44e1-87ee-bf350dcdab3e, problem null",
+    "t+6.7s screenshot e2e-mod-undo-1-plan.png: Saved screenshot as e2e-mod-undo-1-plan.png",
+    "t+7.6s pressed Undo (2)",
+    "t+8.1s staged: 2 op(s) in pending.json",
+    "t+9.2s screenshot e2e-mod-undo-2-after.png: Saved screenshot as e2e-mod-undo-2-after.png",
+    "t+11.2s quitting"
+  ],
+  "rigtuneVersion": "0.4.0-dev+mc26.2",
+  "loadedMods": [
+    "e2e-added",
+    "fabric-advancement-api-v1",
+    "fabric-api",
+    "fabric-api-base",
+    "fabric-api-lookup-api-v1",
+    "fabric-biome-api-v1",
+    "fabric-block-api-v1",
+    "fabric-block-getter-api-v2",
+    "fabric-command-api-v2",
+    "fabric-content-registries-v0",
+    "fabric-convention-tags-v2",
+    "fabric-crash-report-info-v1",
+    "fabric-creative-tab-api-v1",
+    "fabric-data-attachment-api-v1",
+    "fabric-data-generation-api-v1",
+    "fabric-debug-api-v1",
+    "fabric-dimensions-v1",
+    "fabric-entity-events-v1",
+    "fabric-events-interaction-v0",
+    "fabric-game-rule-api-v1",
+    "fabric-item-api-v1",
+    "fabric-key-mapping-api-v1",
+    "fabric-lifecycle-events-v1",
+    "fabric-loot-api-v3",
+    "fabric-menu-api-v1",
+    "fabric-message-api-v1",
+    "fabric-model-loading-api-v1",
+    "fabric-networking-api-v1",
+    "fabric-object-builder-api-v1",
+    "fabric-particles-v1",
+    "fabric-permission-api-v1",
+    "fabric-recipe-api-v1",
+    "fabric-registry-sync-v0",
+    "fabric-renderer-api-v1",
+    "fabric-renderer-indigo",
+    "fabric-rendering-fluids-v1",
+    "fabric-rendering-v1",
+    "fabric-resource-conditions-api-v1",
+    "fabric-resource-loader-v0",
+    "fabric-resource-loader-v1",
+    "fabric-screen-api-v1",
+    "fabric-serialization-api-v1",
+    "fabric-sound-api-v1",
+    "fabric-tag-api-v1",
+    "fabric-transfer-api-v1",
+    "fabric-transitive-access-wideners-v1",
+    "fabricloader",
+    "java",
+    "minecraft",
+    "mixinextras",
+    "rigtune",
+    "rigtune-e2e-undo-driver"
+  ],
+  "undoPlanMeta": {
+    "undoOf": "273d553c-17f2-44e1-87ee-bf350dcdab3e",
+    "at": "2026-09-26T03:40:35.231039100Z",
+    "problem": null
+  },
+  "undoPlan": [
+    {
+      "description": "Disable e2e-added-1.0.0.jar",
+      "action": "REVERT",
+      "reason": null,
+      "needsRestart": true,
+      "changeIds": [
+        "4c7d133d-8a97-45f6-ad64-9f6875ae758d"
+      ],
+      "opIds": []
+    },
+    {
+      "description": "Re-enable e2e-disable-me-1.0.0.jar",
+      "action": "REVERT",
+      "reason": null,
+      "needsRestart": true,
+      "changeIds": [
+        "0e7550e3-4738-4eac-936c-b1fb2dd7b686"
+      ],
+      "opIds": []
+    }
+  ],
+  "undoOf": "273d553c-17f2-44e1-87ee-bf350dcdab3e",
+  "undoButton": "Undo (2)",
+  "pendingOps": [
+    {
+      "type": "DISABLE_FILE",
+      "from": null,
+      "to": null,
+      "path": "<instance>\\mods\\e2e-added-1.0.0.jar",
+      "modId": null,
+      "group": "02860d4a-aceb-448f-8e6b-4f508b7b39b7",
+      "id": "d3c6af3c-65c2-4d95-a361-0cb11ee5b6d7"
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\e2e-disable-me-1.0.0.jar.disabled",
+      "to": "<instance>\\mods\\e2e-disable-me-1.0.0.jar",
+      "path": null,
+      "modId": "e2e-disable-me",
+      "group": "7086bde1-d1de-45e3-8b93-441709fdf15a",
+      "id": "a48bbdb5-4089-40b7-a1a3-5a960f08c6cc"
+    }
+  ],
+  "status": null
+}
