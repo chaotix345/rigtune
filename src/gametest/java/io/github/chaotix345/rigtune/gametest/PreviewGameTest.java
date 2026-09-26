@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.gametest;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
@@ -459,7 +460,7 @@ public class PreviewGameTest implements FabricClientGameTest {
 			Button button = findButton(mc.gui.screen(), key);
 			check(button != null, "No button " + key + " on " + mc.gui.screen());
 			check(button.active, key + " is active");
-			button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(0, 0)));
+			button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0)));
 		});
 		context.waitTicks(2);
 	}
