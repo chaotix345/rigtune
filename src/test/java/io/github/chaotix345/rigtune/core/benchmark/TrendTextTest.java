@@ -31,6 +31,7 @@ class TrendTextTest {
 				TrendText.context(TrendFixtures.run("c").context(new BenchmarkRecord.Context(false, true, null, 2560, 1440, false, 2)).build()).english());
 		assertEquals("Benchmark world · Minecraft 26.2 · RD 12 · SD 8 · conditions not recorded",
 				TrendText.context(TrendFixtures.run("d").context(null).build()).english());
+		assertEquals("Benchmark world · RD 12 · SD 8 · 2560×1440 · shaders off", TrendText.context(TrendFixtures.run("e").build(), false).english());
 	}
 
 	@Test

@@ -74,7 +74,8 @@ public class BenchmarkHistoryScreen extends Screen {
 
 	private Component contextLabel(String key) {
 		BenchmarkRecord example = view.example(key);
-		return example == null ? Component.literal(key) : Texts.component(TrendText.context(example));
+		boolean versions = view.examples().stream().map(BenchmarkRecord::mcVersion).distinct().count() > 1;
+		return example == null ? Component.literal(key) : Texts.component(TrendText.context(example, versions));
 	}
 
 	// The note, the trend, the last benchmark; change rows are cut first (to "…and N more") when space is short.

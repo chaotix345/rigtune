@@ -101,6 +101,8 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		context.waitForScreen(TitleScreen.class);
 		context.runOnClient(mc -> BenchmarkController.setDefaultConfig(SHORT));
 		String savedScene = context.computeOnClient(mc -> ClientSettings.shared(FabricLoader.getInstance().getConfigDir()).benchmarkScene);
+		// v0.4: later classes use the real notice line, so the runs made here don't stay behind (a stale benchmark notice).
+		byte[] savedRuns = readIfPresent(BenchmarkStore.file());
 		try {
 			String[] pair = benchmarkWorldPair(context);
 			String chunkTuneId = benchmarkWorldChunks(context);
@@ -114,6 +116,27 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 				BenchmarkController.setSweepListener(null);
 				ClientSettings.shared(FabricLoader.getInstance().getConfigDir()).benchmarkScene = savedScene;
 			});
+			restoreFile(BenchmarkStore.file(), savedRuns);
+		}
+	}
+
+	private static byte[] readIfPresent(Path file) {
+		try {
+			return Files.exists(file) ? Files.readAllBytes(file) : null;
+		} catch (IOException e) {
+			throw new AssertionError(e);
+		}
+	}
+
+	private static void restoreFile(Path file, byte[] bytes) {
+		try {
+			if (bytes == null) {
+				Files.deleteIfExists(file);
+			} else {
+				Files.write(file, bytes);
+			}
+		} catch (IOException e) {
+			throw new AssertionError(e);
 		}
 	}
 
@@ -451,6 +474,8 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 				JsonObject c = run.getAsJsonObject("context");
 				check(c != null && c.get("protocol").getAsInt() == 1 && c.get("width").getAsInt() > 0 && c.get("height").getAsInt() > 0
 						&& c.has("dhRendering") && c.has("shaders") && c.has("fullscreen"), "context recorded: " + run);
+				// docs/v0.4/SPEC.md 7: and the loaded mods' hash (the journal cursor only once history.json has an entry).
+				check(c.has("modSetHash") && c.get("modSetHash").getAsString().matches("[0-9a-f]{64}"), "modSetHash recorded: " + run);
 			});
 			RigTune.LOGGER.info("Benchmark game test: benchmarks.json has {} runs", runs.size());
 		} catch (IOException | RuntimeException e) {

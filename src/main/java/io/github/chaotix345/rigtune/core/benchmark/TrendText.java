@@ -132,9 +132,16 @@ public final class TrendText {
 
 	// The context selector's label for a group of comparable runs.
 	public static Text context(BenchmarkRecord run) {
+		return context(run, true);
+	}
+
+	// withVersion: name the MC version (worth it only when the history has runs of more than one).
+	public static Text context(BenchmarkRecord run, boolean withVersion) {
 		List<Text> parts = new ArrayList<>();
 		parts.add(scene(run.scene()));
-		parts.add(Text.of("rigtune.benchmark.trend.context.version", "Minecraft %s", run.mcVersion()));
+		if (withVersion) {
+			parts.add(Text.of("rigtune.benchmark.trend.context.version", "Minecraft %s", run.mcVersion()));
+		}
 		parts.add(distances(run));
 		BenchmarkRecord.Context c = run.context();
 		if (c == null) {
