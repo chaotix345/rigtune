@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.core.modrinth;
 
+import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.model.TextException;
 
@@ -34,6 +35,11 @@ public final class DependencyResolver {
 	private final int maxDepth;
 	// The loaded mods' Modrinth versions by id, with their projects and dependencies where known.
 	private final Map<String, ModrinthVersion> installed;
+	// docs/v0.4/SPEC.md 2d (A-H1, A-M1): what earlier Applies staged. Read only by the incompatibility checks, never as
+	// installed: a dependency that is only staged is still resolved (and so joins its staged group).
+	private final StagedProjects staged;
+	// The staged versions with their dependencies, asked of Modrinth once per resolver (one plan); empty when it can't say.
+	private List<ModrinthVersion> stagedVersions;
 
 	public DependencyResolver(ModrinthClient client, String loader, String gameVersion) {
 		this(client, loader, gameVersion, DEFAULT_MAX_DEPTH, Map.of());
@@ -55,11 +61,22 @@ public final class DependencyResolver {
 	}
 
 	private DependencyResolver(ModrinthClient client, String loader, String gameVersion, int maxDepth, Map<String, ModrinthVersion> installed) {
+		this(client, loader, gameVersion, maxDepth, installed, StagedProjects.NONE);
+	}
+
+	private DependencyResolver(ModrinthClient client, String loader, String gameVersion, int maxDepth, Map<String, ModrinthVersion> installed,
+			StagedProjects staged) {
 		this.client = client;
 		this.loader = loader;
 		this.gameVersion = gameVersion;
 		this.maxDepth = maxDepth;
 		this.installed = Map.copyOf(installed);
+		this.staged = staged;
+	}
+
+	// This resolver, also checking against what earlier Applies staged (StagedProjects.read of pending.json).
+	public DependencyResolver withStaged(StagedProjects stagedProjects) {
+		return new DependencyResolver(client, loader, gameVersion, maxDepth, installed, stagedProjects == null ? StagedProjects.NONE : stagedProjects);
 	}
 
 	// A version known only by its id and project (no dependencies).
@@ -158,8 +175,20 @@ public final class DependencyResolver {
 						throw installedIncompatible(version, dep.projectId() != null ? name(dep.projectId()) : versionName(dep.versionId(), together));
 					}
 				}
+				// A staged version, known by id from pending.json itself (no Modrinth call).
+				String stagedProject = staged.projectByVersion().get(dep.versionId());
+				if (stagedProject != null && !same(stagedProject, replacing) && !stagedProject.equals(version.projectId())) {
+					if (updated.contains(stagedProject)) {
+						needed.add(stagedProject);
+					} else {
+						throw stagedIncompatible(version, name(stagedProject));
+					}
+				}
 			} else if (dep.projectId() != null && installedProjects.contains(dep.projectId()) && !dep.projectId().equals(replacing)) {
 				throw installedIncompatible(version, name(dep.projectId()));
+			} else if (dep.projectId() != null && staged.projects().contains(dep.projectId()) && !dep.projectId().equals(replacing)
+					&& !dep.projectId().equals(version.projectId())) {
+				throw stagedIncompatible(version, name(dep.projectId()));
 			}
 			for (ModrinthVersion other : together) {
 				if (other != version && matches(dep, other)) {
@@ -185,6 +214,34 @@ public final class DependencyResolver {
 						name(mine.projectId()), name(version.projectId())));
 			}
 		}
+		// The staged versions' own declarations (A-M1): only when Modrinth could say what they declare.
+		for (ModrinthVersion mine : stagedVersions()) {
+			if (same(mine.projectId(), replacing) || same(mine.projectId(), version.projectId()) || !declaresIncompatible(mine, version)
+					|| declaresIncompatibleWithReplaced(mine, replacing)) {
+				continue;
+			}
+			if (mine.projectId() != null && updated.contains(mine.projectId())) {
+				needed.add(mine.projectId());
+			} else {
+				throw new TextException(Text.of("rigtune.download.staged_incompatible",
+						"Modrinth marks %s, which is waiting for a restart, as incompatible with %s", name(mine.projectId()), name(version.projectId())));
+			}
+		}
+	}
+
+	private List<ModrinthVersion> stagedVersions() {
+		if (stagedVersions == null) {
+			stagedVersions = List.of();
+			if (!staged.projectByVersion().isEmpty()) {
+				try {
+					Map<String, ModrinthVersion> found = client.versions(staged.projectByVersion().keySet());
+					stagedVersions = found.values().stream().filter(v -> v != null && staged.projectByVersion().containsKey(v.id())).toList();
+				} catch (IOException | RuntimeException e) {
+					RigTune.LOGGER.info("Checking only the staged mods' projects, not their own declarations: {}", e.getMessage());
+				}
+			}
+		}
+		return stagedVersions;
 	}
 
 	private boolean declaresIncompatibleWithReplaced(ModrinthVersion declaring, String replacing) {
@@ -206,6 +263,11 @@ public final class DependencyResolver {
 	private IOException installedIncompatible(ModrinthVersion version, Object installedName) {
 		return new TextException(Text.of("rigtune.download.incompatible", "Modrinth marks %s as incompatible with %s, which is installed",
 				name(version.projectId()), installedName));
+	}
+
+	private IOException stagedIncompatible(ModrinthVersion version, Object stagedName) {
+		return new TextException(Text.of("rigtune.download.incompatible_staged", "Modrinth marks %s as incompatible with %s, which is waiting for a restart",
+				name(version.projectId()), stagedName));
 	}
 
 	private IOException bothInstalled(String a, String b) {

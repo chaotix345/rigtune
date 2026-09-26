@@ -179,7 +179,8 @@ public final class DownloadPlanner {
 			attempt.batch.noteReplaced(jarModId, pending);
 			attempt.newProjects.add(version.projectId());
 			attempt.versions.add(version);
-			attempt.ops.add(Op.enableFile(pending, target).withModId(jarModId));
+			// The Modrinth identity lets the next Apply's checks see this staged addition (docs/v0.4/SPEC.md 2d).
+			attempt.ops.add(Op.enableFile(pending, target).withModId(jarModId).withProjectId(version.projectId()).withVersionId(version.id()));
 		}
 	}
 
@@ -212,7 +213,7 @@ public final class DownloadPlanner {
 		}
 		attempt.batch.noteReplaced(jarModId, pending);
 		attempt.ops.add(Op.disableFile(update.currentFile()));
-		attempt.ops.add(Op.enableFile(pending, target).withModId(jarModId));
+		attempt.ops.add(Op.enableFile(pending, target).withModId(jarModId).withProjectId(next.projectId()).withVersionId(next.id()));
 		attempt.versions.add(next);
 		attempt.updatedProject = info.projectId();
 	}

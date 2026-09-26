@@ -62,6 +62,7 @@ import io.github.chaotix345.rigtune.core.modrinth.GatedModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.HttpModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.ModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.OnlineDataFetcher;
+import io.github.chaotix345.rigtune.core.modrinth.StagedProjects;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.preview.DownloadInputs;
@@ -561,7 +562,8 @@ public final class RealController implements RigTuneController {
 
 	// Judged against the installed mods' Modrinth versions and the updates' own versions (SPEC 3b, plan review A-H1).
 	private DownloadPlanner.Result download(List<Recommendation> recs, OnlineDataFetcher.Result data, String mcVersion) {
-		DependencyResolver resolver = new DependencyResolver(modrinth, OnlineDataFetcher.LOADER, mcVersion, data.installedVersions());
+		DependencyResolver resolver = new DependencyResolver(modrinth, OnlineDataFetcher.LOADER, mcVersion, data.installedVersions())
+				.withStaged(StagedProjects.read(pendingFile));
 		Set<String> installedProjects = new HashSet<>(data.projectIdsByModId().values());
 		List<InstalledMod> scanned = mods;
 		Set<String> loadedIds = new HashSet<>();
@@ -770,7 +772,7 @@ public final class RealController implements RigTuneController {
 		DownloadInputs downloads = new DownloadInputs(modrinth, settings.modrinthAllowed(), OnlineDataFetcher.LOADER,
 				onlineLookups.modrinthGameVersion(hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion()), data.installedVersions(),
 				data.updateVersions(), new HashSet<>(data.projectIdsByModId().values()), loadedIds, stagedJarsByModId(),
-				doc == null ? (a, b) -> false : ModConflicts.of(doc)::between);
+				doc == null ? (a, b) -> false : ModConflicts.of(doc)::between, StagedProjects.read(pendingFile));
 		List<PreviewPlanner.ConfigFile> files = ConfigTargets.all(configDir).stream()
 				.map(t -> new PreviewPlanner.ConfigFile(t.prefix(), t.file(), t.stager()::stage, t.reader()::read)).toList();
 		return new PreviewPlanner(FabricLoader.getInstance().getGameDir().resolve("options.txt"), game.now(), game.problems(), files, modsDir, downloads)

@@ -56,6 +56,7 @@ class DownloadPlannerTest {
 	final Map<String, ModrinthVersion> installedVersions = new HashMap<>();
 	final Map<String, ModrinthVersion> updateVersions = new HashMap<>();
 	final List<DownloadPlanner.Result> planned = new ArrayList<>();
+	StagedProjects staged = StagedProjects.NONE;
 
 	@BeforeEach
 	void setUp() throws IOException {
@@ -85,6 +86,7 @@ class DownloadPlannerTest {
 	private void put(String slug, ModrinthVersion v) {
 		client.latestByProject.put(slug, v);
 		client.latestByProject.put(v.projectId(), v);
+		client.byId.put(v.id(), v);
 	}
 
 	// Files are named <version id>.jar and hold a mod whose id is the version id minus its trailing "V", lower-cased
@@ -151,8 +153,8 @@ class DownloadPlannerTest {
 	}
 
 	private DownloadPlanner.Result plan(Set<String> installedProjects, Recommendation... recs) {
-		DownloadPlanner planner = new DownloadPlanner(new DependencyResolver(client, "fabric", "26.2", installedVersions), mods, this::fetch, conflicts,
-				updateVersions);
+		DownloadPlanner planner = new DownloadPlanner(new DependencyResolver(client, "fabric", "26.2", installedVersions).withStaged(staged), mods,
+				this::fetch, conflicts, updateVersions);
 		DownloadPlanner.Result result = planner.plan(List.of(recs), installedProjects, Set.of(), Map.of());
 		planned.add(result);
 		return result;
@@ -529,5 +531,155 @@ class DownloadPlannerTest {
 
 		assertEquals(List.of("aV.jar", "bV.jar"), targets(result.ops()));
 		assertEquals(2, groups(result.ops()));
+	}
+
+	// --- docs/v0.4/SPEC.md 2d (amendments A-H1, A-M1, A-L1): an earlier Apply's staged changes, AC2d.1 and AC2d.4
+
+	private Path pendingFile() throws IOException {
+		Path config = Files.createDirectories(dir.resolve("config"));
+		Path pending = PendingActions.defaultPath(config);
+		Files.createDirectories(pending.getParent());
+		return pending;
+	}
+
+	// One Apply: plans these, merges the ops into pending.json as Staging does, and returns the staged view the next
+	// Apply's checks read.
+	private StagedProjects stage(Recommendation... recs) throws IOException {
+		DownloadPlanner.Result result = plan(Set.of(), recs);
+		assertEquals(List.of(), result.errors());
+		Path pending = pendingFile();
+		PendingActions plan = Files.exists(pending) ? PendingActions.load(pending) : PendingActions.create(1, mods, pending.getParent().getParent(), List.of());
+		plan.merge(result.ops()).plan().save(pending);
+		return StagedProjects.read(pending);
+	}
+
+	@Test
+	void everyEnableCarriesItsModrinthProjectAndVersion() throws IOException {
+		libraryUsers();
+		Recommendation update = updateA();
+
+		DownloadPlanner.Result result = plan(Set.of("A"), add("b", "B"), update);
+
+		Map<String, Op> byFile = new HashMap<>();
+		result.ops().forEach(op -> byFile.put(files(List.of(op)).getFirst(), op));
+		assertEquals("B", byFile.get("bV.jar").projectId());
+		assertEquals("bV", byFile.get("bV.jar").versionId());
+		assertEquals("LIB", byFile.get("libV.jar").projectId());
+		assertEquals("libV", byFile.get("libV.jar").versionId());
+		assertEquals("A", byFile.get("aV.jar").projectId());
+		assertEquals("aV", byFile.get("aV.jar").versionId());
+		// A disable has no Modrinth identity (the staged view leaves it out: SPEC 2d's documented residual).
+		assertEquals(null, byFile.get("a-1.jar").projectId());
+	}
+
+	@Test
+	void aLaterAdditionDeclaringAStagedModIncompatibleIsRefused() throws IOException {
+		titles();
+		put("a", version("aV", "A", "1", T));
+		staged = stage(add("a", "A"));
+		put("b", version("bV", "B", "1", T, incompatible("A")));
+
+		DownloadPlanner.Result result = plan(Set.of(), add("b", "B"));
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of(), result.ops());
+		assertEquals(List.of("Add b: Modrinth marks B Mod as incompatible with A Mod, which is waiting for a restart"), result.errors());
+		assertFalse(fetched.contains("bV.jar"));
+	}
+
+	@Test
+	void aLaterAdditionAStagedModDeclaresIncompatibleIsRefused() throws IOException {
+		titles();
+		put("a", version("aV", "A", "1", T, incompatible("B")));
+		staged = stage(add("a", "A"));
+		put("b", version("bV", "B", "1", T));
+
+		DownloadPlanner.Result result = plan(Set.of(), add("b", "B"));
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of("Add b: Modrinth marks A Mod, which is waiting for a restart, as incompatible with B Mod"), result.errors());
+		assertEquals(1, client.calls.stream().filter(c -> c.equals("versions:aV")).count(), client.calls.toString());
+	}
+
+	@Test
+	void aLaterUpdateIsCheckedAgainstStagedModsBothWays() throws IOException {
+		titles();
+		// Version-specific: a whole-project declaration would match the installed K too, a conflict that exists already.
+		put("b", version("bV", "B", "1", T, new Dependency("K", "kV", "incompatible")));
+		staged = stage(add("b", "B"));
+
+		DownloadPlanner.Result forward = plan(Set.of("A"), updateA(incompatible("B")));
+		DownloadPlanner.Result reverse = plan(Set.of("K"), updateOf("k", "K"));
+
+		assertEquals(List.of("Update a: Modrinth marks A Mod as incompatible with B Mod, which is waiting for a restart"), forward.errors());
+		assertEquals(List.of("Update k: Modrinth marks B Mod, which is waiting for a restart, as incompatible with K Mod"), reverse.errors());
+	}
+
+	@Test
+	void aDeclarationNamingAStagedVersionCountsWithoutAskingModrinth() throws IOException {
+		titles();
+		put("a", version("aV", "A", "1", T));
+		staged = stage(add("a", "A"));
+		client.versionsFailWith = new IOException("Modrinth lookups are off");
+		put("b", version("bV", "B", "1", T, new Dependency(null, "aV", "incompatible")));
+
+		DownloadPlanner.Result result = plan(Set.of(), add("b", "B"));
+
+		assertEquals(List.of("Add b: Modrinth marks B Mod as incompatible with A Mod, which is waiting for a restart"), result.errors());
+	}
+
+	// A-M1: without Modrinth lookups only the forward check runs (the staged versions' own declarations are unknown).
+	@Test
+	void withoutModrinthLookupsOnlyTheForwardCheckRuns() throws IOException {
+		titles();
+		put("a", version("aV", "A", "1", T, new Dependency("K", "kV", "incompatible")));
+		staged = stage(add("a", "A"));
+		client.versionsFailWith = new IOException("Modrinth lookups are off");
+
+		DownloadPlanner.Result forward = plan(Set.of("K"), updateOf("k", "K", incompatible("A")));
+		DownloadPlanner.Result reverse = plan(Set.of("K"), updateOf("k", "K"));
+
+		assertEquals(List.of("Update k: Modrinth marks K Mod as incompatible with A Mod, which is waiting for a restart"), forward.errors());
+		assertEquals(List.of("update-k"), reverse.ids());
+	}
+
+	// A pending.json written by 0.3.0 (no projectId/versionId): v0.3's behaviour, nothing staged counts.
+	@Test
+	void aPlanWithoutModrinthIdsKeepsTheV030Behaviour() throws IOException {
+		titles();
+		put("a", version("aV", "A", "1", T, incompatible("B")));
+		stage(add("a", "A"));
+		Path pending = pendingFile();
+		PendingActions plan = PendingActions.load(pending);
+		plan.withOps(plan.ops().stream().map(op -> new Op(op.type(), op.from(), op.to(), op.path(), op.patches(), op.id(), op.group(), op.modId(),
+				op.attempts())).toList()).save(pending);
+		staged = StagedProjects.read(pending);
+		put("b", version("bV", "B", "1", T, incompatible("A")));
+
+		DownloadPlanner.Result result = plan(Set.of(), add("b", "B"));
+
+		assertTrue(staged.isEmpty());
+		assertEquals(List.of("add-b"), result.ids());
+		assertEquals(List.of(), result.errors());
+	}
+
+	// AC2d.4 (A-H1): an addition that requires a staged mod still resolves it, so it joins that mod's staged group, and
+	// undoing the first Apply (which drops its whole group from pending.json) takes the dependant with it.
+	@Test
+	void anAdditionRequiringAStagedModJoinsItsGroup() throws IOException {
+		put("lib", version("libV", "LIB", "1", T));
+		staged = stage(add("lib", "LIB"));
+		Path pending = pendingFile();
+		Op stagedLib = PendingActions.load(pending).ops().getFirst();
+		put("a", version("aV", "A", "1", T, required("LIB")));
+
+		DownloadPlanner.Result result = plan(Set.of(), add("a", "A"));
+
+		assertEquals(List.of("add-a"), result.ids());
+		assertEquals(List.of("aV.jar", "libV.jar"), targets(result.ops()));
+		PendingActions merged = PendingActions.load(pending).merge(result.ops()).plan();
+		assertEquals(2, merged.ops().size(), merged.ops().toString());
+		assertEquals(1, groups(merged.ops()), merged.ops().toString());
+		assertEquals(List.of(), merged.remove(List.of(stagedLib.id())).plan().ops());
 	}
 }

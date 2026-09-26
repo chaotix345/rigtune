@@ -8,7 +8,9 @@ import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
+import io.github.chaotix345.rigtune.core.modrinth.Dependency;
 import io.github.chaotix345.rigtune.core.modrinth.ModrinthVersion;
+import io.github.chaotix345.rigtune.core.modrinth.StagedProjects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -39,6 +41,7 @@ class PreviewDownloadsTest {
 	final Set<String> installedProjects = new HashSet<>();
 	BiPredicate<String, String> conflicts = (a, b) -> false;
 	boolean lookups = true;
+	StagedProjects staged = StagedProjects.NONE;
 
 	@BeforeEach
 	void setUp() throws IOException {
@@ -47,7 +50,7 @@ class PreviewDownloadsTest {
 
 	private ApplyPreview preview(Recommendation... selected) {
 		DownloadInputs inputs = new DownloadInputs(modrinth, lookups, "fabric", "26.2", Map.of(), updateVersions, installedProjects, Set.of("sodium"),
-				Map.of(), conflicts);
+				Map.of(), conflicts, staged);
 		return new PreviewPlanner(instance.options, PreviewFixtures.vanillaNow(), Map.of(), instance.configFiles(), instance.mods, inputs).preview(List.of(selected));
 	}
 
@@ -226,5 +229,20 @@ class PreviewDownloadsTest {
 
 		assertEquals(before, instance.tree());
 		assertFalse(modrinth.downloaded());
+	}
+
+	// docs/v0.4/SPEC.md 2d: the preview judges an addition against what earlier Applies staged, as Apply does.
+	@Test
+	void anAdditionIncompatibleWithAStagedModIsRefusedInThePreviewToo() {
+		modrinth.put("lithium", version("lithV", "LITHIUM", "lithium-1.0.jar", new Dependency("KRYPTON", null, "incompatible")), "lithium");
+		staged = new StagedProjects(Set.of("KRYPTON"), Map.of("krypV", "KRYPTON"));
+
+		ApplyPreview preview = preview(add("lithium", "LITHIUM", "Lithium"));
+
+		assertEquals(List.of(), preview.downloads());
+		ApplyPreview.Skipped refused = preview.skipped().getFirst();
+		assertEquals(ApplyPreview.Reason.DOWNLOAD_FAILED, refused.reason());
+		assertEquals(Text.of("rigtune.download.incompatible_staged", "Modrinth marks %s as incompatible with %s, which is waiting for a restart", "LITHIUM",
+				"KRYPTON"), refused.detailText());
 	}
 }

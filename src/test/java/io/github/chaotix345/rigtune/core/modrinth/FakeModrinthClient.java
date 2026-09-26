@@ -23,6 +23,9 @@ class FakeModrinthClient implements ModrinthClient {
 	final Map<String, ModrinthVersion> latestByProject = new HashMap<>();
 	final List<String> calls = Collections.synchronizedList(new ArrayList<>());
 	final Map<String, IOException> versionFailures = new HashMap<>();
+	// versions(ids): the versions Modrinth knows by id (docs/v0.4/SPEC.md 2d, A-M1).
+	final Map<String, ModrinthVersion> byId = new HashMap<>();
+	IOException versionsFailWith;
 	final AtomicInteger inFlight = new AtomicInteger();
 	final AtomicInteger maxInFlight = new AtomicInteger();
 	long versionDelayMillis;
@@ -90,6 +93,15 @@ class FakeModrinthClient implements ModrinthClient {
 		} finally {
 			inFlight.decrementAndGet();
 		}
+	}
+
+	@Override
+	public Map<String, ModrinthVersion> versions(Collection<String> ids) throws IOException {
+		call("versions:" + String.join(",", ids));
+		if (versionsFailWith != null) {
+			throw versionsFailWith;
+		}
+		return pick(byId, ids);
 	}
 
 	@Override
