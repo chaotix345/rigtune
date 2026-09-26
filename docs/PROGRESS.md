@@ -17,9 +17,22 @@ Brief: the user's v0.4.0 prompt (full autonomy, research -> release incl. GitHub
 ### Status
 - [x] Phase 0: orient (above).
 - [x] Phase 1: research DONE except jvm-gc (r-jvm, measuring G1/ZGC/COH/Aikar on 26.2 under the lock). Committed 53c06d1 + 89d61ea. Headlines: no 26.4 stable, but 26.4-snapshot-1 now breaks on 2 APIs added in v0.3's benchmark code (patch in scratchpad/r-mcver/snapshot-ifpatch.diff); profiles = ordinary Apply + RT1 binary share code (~100 chars); GC notifications verified on Java 25 (offset calibration needed); existing DebugScreenOverlay mixin is the frame hook; server radius via ClientPacketListener fields, min() is client-side; driver strings parseable, 2 verified known-bad ranges; startup delta ~0.2 s within noise, per-mod timing impossible (Loader 0.19.5); a11y full = 11-14 days (reduced scope). External review (another model, relayed by the user): docs/research/v0.4/external-review.md (no bottleneck language, VSync optional, validation honesty).
-- [x] Phase 2 DONE except the contracts merge: SPEC (359e03b) + PLAN (a672e81) + plan review (docs/v0.4/plan-review.md: 4 H P-H1 same-key replacement breaks undo -> dropped; A-H1 staged ids must not feed the resolver's seen -> separate stagedProjects; B-H1 modSetHash out of comparability; W-H1 server cap only lowers a proposed increase; 11 M, 13 L) folded into SPEC Amendments + PLAN (5bce498). Item 6 still to reconcile with the final jvm-gc.md (J-M2: -Xms/AlwaysPreTouch advice deferred). RUNNING: WS-K contracts (feat/v04-contracts, rigtune-contracts), told about K-M1/K-L1/X-M1/X-M2/X-L1.
+- [x] Phase 2 DONE: SPEC + PLAN + plan review folded in (5bce498); item 6 reconciled with the final jvm-gc.md (7dabe26); launcher-steps research from a separate user-started session (df56876: official launcher defaults to ZGC 4 GB since 26.1; typed -Xmx beats the slider in Modrinth App/GDLauncher); SPEC 2n (second Undo last on a staged key, found by WS-H, e356705). WS-K contracts MERGED (e959776; CI 36217772298 green; 1181 tests per version; screenshots checked: Tools replaces Benchmark, notice line + '…' at 640x480).
 - [x] Phase 3: WS-0 MERGED (86060fb; CI 36214547908 green on 8 jobs; canary proven: green/fail->issue #9/comment/auto-close/skips; `>=26.4-alpha` instead of `>=26.4-snapshot-1`). WS-0 accidentally created+closed issues #7/#8 (retitled '[accidental test, ignore]'); deleting them is the user's call. Follow-up: add_mc_version.py checklist wording (`>=<base>-alpha`). Post-release: `gh workflow run snapshot-canary.yml -f mc=26.3` once the file is on main.
-- [ ] Early Wave A RUNNING: WS-H (test/e2e-v04, rigtune-e2e4; told about H-M1: seeded downgrade run + released-jar harness are its own; two-switch undo step).
+- [ ] Phase 4 Wave A RUNNING (launched from e959776). Watchdog: scratchpad/run_watchdog.sh over scratchpad/agents.txt.
+| ws | branch | worktree | scope |
+|---|---|---|---|
+| WS-H | test/e2e-v04 | rigtune-e2e4 (kept for Phase 5) | MERGED be95f9a (CI 36220255858 green). Dry runs on 0.4.0-dev: v030 20/20, v020 20/20, v010 21/21, seeded 26/26, undo 43/43, downgrade 16/16; two-switch undo phase 69/71 (the 2 failures = SPEC 2n, expected until WS-A merges); released-jar harness compat030.py 9/9 (placeholders); 0.3.0 jar sha256 5717f65c... pinned in build.yml. UNVERIFIED: the real profile-switch driver step (stub until WS-P), real v040-written fixture sets. |
+| WS-P early | feat/profiles-extract (deleted) | - | MERGED 22cc915 (CI 36219635079): Recommender.settingTargets extraction, golden report over 240 scenarios. |
+| coordinator | - | - | core/model/ModSetHash shared by WS-B/WS-F (e1393e1). |
+| WS-A | fix/v04-deferred | rigtune-fixes4 | 2a-2g, 2j, 2m, 2n |
+| WS-R | feat/rules-v04 | rigtune-rules4 | 2k, 2l, tools side, all rules content (templates, stutter, jvm, driver seeds) |
+| WS-P | feat/profiles | rigtune-profiles | item 4 (+ early branch feat/profiles-extract: settingTargets) |
+| WS-S | feat/stutter | rigtune-stutter | item 5 |
+| WS-J | feat/jvm-advice | rigtune-jvm | item 6 |
+| WS-B | feat/bench-history | rigtune-benchhist | item 7 |
+| WS-W | feat/awareness | rigtune-aware | items 8, 9 |
+| WS-F | feat/footprint | rigtune-foot | items 10, 13 |
 - Research worktrees still to remove: rigtune-r-foot (research/footprint, trial saved to scratchpad/r-footprint), rigtune-r-jvm (research/jvm).
 
 ## v0.3.0: RELEASED 2026-09-26

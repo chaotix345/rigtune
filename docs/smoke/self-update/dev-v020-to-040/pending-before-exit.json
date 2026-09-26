@@ -1,0 +1,24 @@
+{
+  "createdAt": "2026-09-26T02:59:01.738757100Z",
+  "gamePid": 29564,
+  "modsDir": "<instance>\\mods",
+  "configDir": "<instance>\\config",
+  "ops": [
+    {
+      "type": "DISABLE_FILE",
+      "path": "<instance>\\mods\\rigtune-0.2.0+mc26.2.jar",
+      "id": "2e5a04f5-73a3-4278-ad47-f1a550e4aa9d",
+      "group": "77df3193-586b-4c49-9e4e-8a6b3fb2c805",
+      "attempts": 0
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\rigtune-0.4.0-dev+mc26.2.jar.rigtune-pending",
+      "to": "<instance>\\mods\\rigtune-0.4.0-dev+mc26.2.jar",
+      "id": "909abc65-eba3-4363-bc45-5a71d561d707",
+      "group": "77df3193-586b-4c49-9e4e-8a6b3fb2c805",
+      "modId": "rigtune",
+      "attempts": 0
+    }
+  ]
+}
