@@ -25,51 +25,51 @@ Decisions (details in docs/v0.4/design/ws-b.md):
 
 ## Task 1: comparability (AC7.1)
 Files: `core/benchmark/BenchmarkTrend.java` (Difference, differences, comparable, contextKey), `BenchmarkHistory.comparable(latest, max)`.
-- [ ] Red: BenchmarkHistoryTest `comparableKeepsOnlyMatchingRuns` (each key varied: MC version, scene, RD, SD, width, height, fullscreen, shaders, pack, DH, protocol; hash ignored), `comparableIsOldestFirstAndCapped`, `runsWithoutAContextCompareOnlyWithEachOther`, `runsWithoutAResultAreLeftOut`.
-- [ ] Green; commit.
+- [x] Red: BenchmarkHistoryTest `comparableKeepsOnlyMatchingRuns` (each key varied: MC version, scene, RD, SD, width, height, fullscreen, shaders, pack, DH, protocol; hash ignored), `comparableIsOldestFirstAndCapped`, `runsWithoutAContextCompareOnlyWithEachOther`, `runsWithoutAResultAreLeftOut`.
+- [x] Green; commit.
 
 ## Task 2: trend maths (AC7.2)
 Files: `core/benchmark/BenchmarkTrend.java` (median, mad, noiseFloorPercent, Regression, Assessment, assess).
-- [ ] Red: BenchmarkTrendTest: median/MAD of fixed arrays (odd, even, one value); floor truth table (below → in line; at → regression; above → regression; n < 3 → no alert whatever the delta; cv null → 5 %; MAD term wins); improvement never a regression; anchored at the newest comparable run before the latest; different conditions → keys, no delta.
-- [ ] Green; commit.
+- [x] Red: BenchmarkTrendTest: median/MAD of fixed arrays (odd, even, one value); floor truth table (below → in line; at → regression; above → regression; n < 3 → no alert whatever the delta; cv null → 5 %; MAD term wins); improvement never a regression; anchored at the newest comparable run before the latest; different conditions → keys, no delta.
+- [x] Green; commit.
 
 ## Task 3: change window (AC7.3)
 Files: `core/benchmark/ChangeWindow.java`.
-- [ ] Red: ChangeWindowTest: by cursor (labels and order); cursor pruned → timestamps; by timestamps; RigTune version change; differing hash without a journal file change → outside; with one → not; empty window → nothing recorded; staged/discarded/abandoned rows left out.
-- [ ] Green; commit.
+- [x] Red: ChangeWindowTest: by cursor (labels and order); cursor pruned → timestamps; by timestamps; RigTune version change; differing hash without a journal file change → outside; with one → not; empty window → nothing recorded; staged/discarded/abandoned rows left out.
+- [x] Green; commit.
 
 ## Task 4: the "needs a rerun" marker
 Files: `core/benchmark/BenchmarkTrend.java` (Current, stale).
-- [ ] Red: BenchmarkTrendTest `staleMarker*`: resolution under 10 % pixel change = same, 10 % or more = different; fullscreen, shaders, pack (only with shaders on), DH, mod set (only when both hashes known), RD, SD, MC version; a run without a context: only RD/SD/MC.
-- [ ] Green; commit.
+- [x] Red: BenchmarkTrendTest `staleMarker*`: resolution under 10 % pixel change = same, 10 % or more = different; fullscreen, shaders, pack (only with shaders on), DH, mod set (only when both hashes known), RD, SD, MC version; a run without a context: only RD/SD/MC.
+- [x] Green; commit.
 
 ## Task 5: context fields in BenchmarkController + compatibility (AC7.4)
 Files: `client/benchmark/BenchmarkController.java` (separate `withModSet` method), `BenchmarkCompatibilityTest`, `src/test/resources/v040-written/ws-b/benchmarks.json`.
-- [ ] Merge origin/feat/v0.4.0 for `core/model/ModSetHash`.
-- [ ] Red: BenchmarkCompatibilityTest: a 0.4 file with the new fields loads in the pinned 0.2.0 and 0.3.0 readers (no `.bad`, every other field equal); 0.3.0 rewrite drops only the two fields; the test writes the v040-written/ws-b fixture and asserts the committed copy equals it.
-- [ ] Green (context population compiles; BenchmarkGameTest asserts `modSetHash` on real runs); run tools/e2e/compat030.py against the fixture if available; commit.
+- [x] Merge origin/feat/v0.4.0 for `core/model/ModSetHash`.
+- [x] Red: BenchmarkCompatibilityTest: a 0.4 file with the new fields loads in the pinned 0.2.0 and 0.3.0 readers (no `.bad`, every other field equal); 0.3.0 rewrite drops only the two fields; the test writes the v040-written/ws-b fixture and asserts the committed copy equals it.
+- [x] Green (context population compiles; BenchmarkGameTest asserts `modSetHash` on real runs); run tools/e2e/compat030.py against the fixture if available; commit.
 
 ## Task 6: TrendService + view
 Files: `client/benchmark/TrendService.java`, `BenchmarkTrend.View` (reshaped), `client/benchmark/BenchmarkStore.java` (reload when the file changed on disk).
-- [ ] View: selected context, contexts (key, label, runs), points (≤ 10, oldest first), median, assessment, change window, last run + stale keys, comparable/other counts.
-- [ ] Unit where pure (grouping in core `BenchmarkTrend.view(...)`: BenchmarkTrendTest `viewGroupsByContext`); commit.
+- [x] View: selected context, contexts (key, label, runs), points (≤ 10, oldest first), median, assessment, change window, last run + stale keys, comparable/other counts.
+- [x] Unit where pure (grouping in core `BenchmarkTrend.view(...)`: BenchmarkTrendTest `viewGroupsByContext`); commit.
 
 ## Task 7: BenchmarkResultScreen lines (AC7.5 unit half)
 Files: `client/ui/BenchmarkTrendLines.java` (new), `BenchmarkResultScreen.java`, `client/ui/TrendChart.java` (new; shared chart: bars, 1 %-low/avg polyline, median line).
-- [ ] Red: BenchmarkResultScreenTest truth table: regression (+ changes, outside, nothing recorded), in line, improvement, too few, different conditions, no result.
-- [ ] Green; the result screen's chart shows comparable runs only; commit.
+- [x] Red: BenchmarkResultScreenTest truth table: regression (+ changes, outside, nothing recorded), in line, improvement, too few, different conditions, no result.
+- [x] Green; the result screen's chart shows comparable runs only; commit.
 
 ## Task 8: BenchmarkHistoryScreen
-- [ ] Context selector (CycleButton), note "N comparable runs; M with different conditions not shown", assessment + changes, last benchmark line with "needs a rerun (…)", chart; fits 640×480@2; commit.
+- [x] Context selector (CycleButton), note "N comparable runs; M with different conditions not shown", assessment + changes, last benchmark line with "needs a rerun (…)", chart; fits 640×480@2; commit.
 
 ## Task 9: notices, tooltip line, share report
 Files: `RegressionNoticeSource`, `BenchmarkStaleNoticeSource`, `AwarenessStore` (acknowledgedRegressions accessors), `RigTuneScreen` (one hook line), `ShareReport` (last-benchmark context line), lang keys.
-- [ ] Red: AwarenessStoreTest-style `acknowledgedRegressions` round trip; ShareReportTest last-benchmark line with context and rerun marker; X4 wording check over `rigtune.benchmark.trend.*`.
-- [ ] Green; commit.
+- [x] Red: AwarenessStoreTest-style `acknowledgedRegressions` round trip; ShareReportTest last-benchmark line with context and rerun marker; X4 wording check over `rigtune.benchmark.trend.*`.
+- [x] Green; commit.
 
 ## Task 10: BenchmarkHistoryGameTest (AC7.5 game half)
-- [ ] Seeded benchmarks.json (4 comparable runs + a regressed latest) and history.json (a mod update between); network off; the regression line, "Changes since then (may be related)" naming the update, the chart and the "not shown" note; the regression notice on RigTuneScreen, acknowledge; after changing the seeded context's resolution: "needs a rerun"; screenshots at 1280×720@2, 640×480@2, 854×480@2; files restored. BenchmarkGameTest restores benchmarks.json (coordinator-approved) and checks modSetHash.
-- [ ] Push; CI green; download and look at the screenshots; commit.
+- [x] Seeded benchmarks.json (4 comparable runs + a regressed latest) and history.json (a mod update between); network off; the regression line, "Changes since then (may be related)" naming the update, the chart and the "not shown" note; the regression notice on RigTuneScreen, acknowledge; after changing the seeded context's resolution: "needs a rerun"; screenshots at 1280×720@2, 640×480@2, 854×480@2; files restored. BenchmarkGameTest restores benchmarks.json (coordinator-approved) and checks modSetHash.
+- [x] Push; CI green; download and look at the screenshots; commit.
 
 ## Task 11: finish
 - [ ] code-reviewer subagent on the diff; fix high/medium findings.
