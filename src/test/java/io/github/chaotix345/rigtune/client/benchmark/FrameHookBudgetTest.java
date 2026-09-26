@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 // JIT_NOISE_BYTES of that. The hot runs must allocate exactly nothing.
 class FrameHookBudgetTest {
 	private static final int CALLS = 10_000_000;
+	private static final int RUNS = 5;
 	static final long JIT_NOISE_BYTES = 4096;
 
 	@Test
@@ -37,7 +38,8 @@ class FrameHookBudgetTest {
 
 		long best = Long.MAX_VALUE;
 		before = mx.getCurrentThreadAllocatedBytes();
-		for (int run = 0; run < 3; run++) {
+		// Best of RUNS: on a busy 4-vCPU runner the loop can sit in C1 code for a while (5 ns/call once, 0.3-0.6 ns in C2).
+		for (int run = 0; run < RUNS; run++) {
 			long start = System.nanoTime();
 			frames(CALLS);
 			best = Math.min(best, System.nanoTime() - start);
@@ -45,8 +47,8 @@ class FrameHookBudgetTest {
 		long hot = mx.getCurrentThreadAllocatedBytes() - before;
 		double nsPerCall = (double) best / CALLS;
 		long allocated = Math.max(hot, Math.max(0, cold - JIT_NOISE_BYTES));
-		System.out.printf(Locale.ROOT, "FrameHookBudgetTest: monitor off: %.3f ns/call (best of 3 x %d hot calls); allocated %d B over %d calls "
-				+ "from cold (%d B forgiven as JIT noise), %d B over the hot calls%n", nsPerCall, CALLS, cold, CALLS, JIT_NOISE_BYTES, hot);
+		System.out.printf(Locale.ROOT, "FrameHookBudgetTest: monitor off: %.3f ns/call (best of %d x %d hot calls); allocated %d B over %d calls "
+				+ "from cold (%d B forgiven as JIT noise), %d B over the hot calls%n", nsPerCall, RUNS, CALLS, cold, CALLS, JIT_NOISE_BYTES, hot);
 		budgets.enforce(budgets.check(Map.of("frameHookNsPerCallOff", nsPerCall, "frameHookAllocBytesOff", allocated)), System.out::println);
 	}
 
