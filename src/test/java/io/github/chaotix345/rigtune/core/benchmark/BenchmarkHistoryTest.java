@@ -220,4 +220,63 @@ class BenchmarkHistoryTest {
 		BenchmarkHistory history = BenchmarkHistory.empty().with(single("a")).with(empty);
 		assertEquals(List.of(single("a")), history.chart("CURRENT", "26.2", 10));
 	}
+
+	// docs/v0.4/SPEC.md AC7.1 (plan review B-H1): comparable = same MC version, scene, render and simulation distance and
+	// conditions (Context.sameConditions); the mod-set hash and journal cursor never split runs.
+	@Test
+	void comparableKeepsOnlyMatchingRuns() {
+		BenchmarkRecord.Context c = TrendFixtures.CONTEXT;
+		BenchmarkRecord latest = TrendFixtures.run("latest").at("2026-09-25T10:00:00Z").build();
+		List<BenchmarkRecord> others = List.of(
+				TrendFixtures.run("same").build(),
+				TrendFixtures.run("other-hash").hash("hash-b").cursor("entry-7").build(),
+				TrendFixtures.run("mc").mc("26.3").build(),
+				TrendFixtures.run("scene").scene("CURRENT").build(),
+				TrendFixtures.run("rd").rd(16).build(),
+				TrendFixtures.run("sd").sd(10).build(),
+				TrendFixtures.run("width").size(1920, 1440).build(),
+				TrendFixtures.run("height").size(2560, 1080).build(),
+				TrendFixtures.run("fullscreen").context(new BenchmarkRecord.Context(false, false, null, 2560, 1440, true, 1)).build(),
+				TrendFixtures.run("shaders").context(new BenchmarkRecord.Context(false, true, "pack.zip", 2560, 1440, false, 1)).build(),
+				TrendFixtures.run("dh").context(new BenchmarkRecord.Context(true, false, null, 2560, 1440, false, 1)).build(),
+				TrendFixtures.run("protocol").context(new BenchmarkRecord.Context(false, false, null, 2560, 1440, false, 2)).build(),
+				TrendFixtures.run("no-context").context(null).build());
+		BenchmarkHistory history = BenchmarkHistory.empty();
+		for (BenchmarkRecord r : others) {
+			history = history.with(r);
+		}
+		history = history.with(TrendFixtures.run("pack").context(new BenchmarkRecord.Context(false, true, "other.zip", 2560, 1440, false, 1)).build())
+				.with(latest);
+		assertEquals(List.of("same", "other-hash", "latest"), history.comparable(latest, 10).stream().map(BenchmarkRecord::id).toList());
+		BenchmarkRecord pack = TrendFixtures.run("pack-2").context(new BenchmarkRecord.Context(false, true, "other.zip", 2560, 1440, false, 1)).build();
+		assertEquals(List.of("pack"), history.comparable(pack, 10).stream().map(BenchmarkRecord::id).toList());
+		assertTrue(c.sameConditions(history.comparable(latest, 10).get(1).context()));
+	}
+
+	@Test
+	void comparableIsOldestFirstAndCapped() {
+		BenchmarkHistory history = BenchmarkHistory.empty();
+		for (int i = 0; i < 14; i++) {
+			history = history.with(TrendFixtures.run("r" + i).build()).with(TrendFixtures.run("x" + i).rd(20).build());
+		}
+		BenchmarkRecord latest = history.runs().get(history.runs().size() - 2);
+		List<String> ids = history.comparable(latest, 10).stream().map(BenchmarkRecord::id).toList();
+		assertEquals(List.of("r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "r12", "r13"), ids);
+		assertEquals(List.of("r12", "r13"), history.comparable(latest, 2).stream().map(BenchmarkRecord::id).toList());
+	}
+
+	@Test
+	void runsWithoutAContextCompareOnlyWithEachOther() {
+		BenchmarkHistory history = BenchmarkHistory.empty().with(single("a")).with(TrendFixtures.run("b").build())
+				.with(TrendFixtures.run("c").context(null).build()).with(single("d"));
+		assertEquals(List.of("a", "d"), history.comparable(single("d"), 10).stream().map(BenchmarkRecord::id).toList());
+	}
+
+	@Test
+	void runsWithoutAResultAreLeftOut() {
+		BenchmarkRecord latest = TrendFixtures.run("latest").build();
+		BenchmarkHistory history = BenchmarkHistory.empty().with(TrendFixtures.run("a").build()).with(TrendFixtures.run("empty").noResult().build())
+				.with(latest);
+		assertEquals(List.of("a", "latest"), history.comparable(latest, 10).stream().map(BenchmarkRecord::id).toList());
+	}
 }
