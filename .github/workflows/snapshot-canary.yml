@@ -58,7 +58,7 @@ jobs:
       - name: Resolve the version to test
         id: resolve
         env:
-          INPUT_MC: ${{ inputs.mc || '26.3' }} # TEMPORARY (WS-0 self-test)
+          INPUT_MC: ${{ inputs.mc || '26.99-snapshot-1' }} # TEMPORARY (WS-0 self-test)
         run: |
           set -eu
           mc=$(printf '%s' "${INPUT_MC:-}" | tr -d '[:space:]')
