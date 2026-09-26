@@ -45,6 +45,24 @@ public final class Condition {
 	// settings key -> expected value, compared with the SettingsSnapshot after SettingValues normalisation.
 	public Map<String, String> settingIs;
 
+	// v0.4, rules-v2 only (docs/v0.4/SPEC.md 9): {"vendor": <gpuVendor>, "atLeast": "526.47", "atMost": "536.22"}. Unknown to
+	// 0.2.0/0.3.0, where it poisons the condition (fail closed).
+	public Map<String, String> driverVersion;
+	// v0.4 Stutter Doctor keys (docs/v0.4/SPEC.md 5), allowed only inside stutterAdvice. They need EvalContext.stutter
+	// (StutterFacts) and are UNKNOWN without it, so they can never fire in the main list. Shares and percentages are 0-100.
+	// stutterShareAtLeast/stutterTaggedShareAtLeast: cause or tag -> minimum share. gcCollector: g1, zgc, shenandoah,
+	// parallel, serial.
+	public Map<String, String> stutterShareAtLeast;
+	public Map<String, String> stutterTaggedShareAtLeast;
+	public Integer gcFullPausesAtLeast;
+	public Integer gcStallsAtLeast;
+	public Integer gcExplicitPausesAtLeast;
+	public Integer liveSetPercentAtLeast;
+	public Long heapRaiseRoomMbAtLeast;
+	public Integer cpuContentionShareAtLeast;
+	public Integer spikesPerMinuteAtLeast;
+	public List<String> gcCollector;
+
 	// Keys of this object that this client doesn't know, filled in while parsing. Any unknown key anywhere in a
 	// condition tree makes the whole top-level condition false (fail closed).
 	public transient Set<String> unknownFields;

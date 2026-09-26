@@ -29,6 +29,10 @@ public final class RulesDocument {
 	public Map<String, UpstreamPack> upstream = new LinkedHashMap<>();
 	// v2: human-readable names for settings keys and their values.
 	public Map<String, SettingLabel> settingLabels = new LinkedHashMap<>();
+	// v0.4, rules-v2 only (docs/v0.4/SPEC.md C2), null when absent (older files, rules-v1.json): the Profiles templates
+	// (item 4) and the Stutter Doctor's advice (item 5, entries `requires: ["stutter-doctor"]`). 0.2.0/0.3.0 ignore both.
+	public ProfileTemplates profileTemplates;
+	public List<AdviceRule> stutterAdvice;
 
 	private transient String source;
 
@@ -65,6 +69,16 @@ public final class RulesDocument {
 		}
 		for (ObsoleteRule rule : obsolete) {
 			if (rule.modIds == null) rule.modIds = new ArrayList<>();
+		}
+		if (stutterAdvice != null) {
+			stutterAdvice.removeIf(r -> r == null || r.id == null);
+		}
+		if (profileTemplates != null) {
+			if (profileTemplates.templates == null) profileTemplates.templates = new ArrayList<>();
+			profileTemplates.templates.removeIf(t -> t == null || t.id == null);
+			for (ProfileTemplate template : profileTemplates.templates) {
+				if (template.settings != null) template.settings.removeIf(r -> r == null || r.key == null);
+			}
 		}
 	}
 
@@ -201,6 +215,22 @@ public final class RulesDocument {
 		public String title;
 		public String text;
 		public String kind;
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md 4, docs/research/v0.4/profiles.md §4.2): {"templates": [...]}.
+	public static final class ProfileTemplates {
+		public List<ProfileTemplate> templates = new ArrayList<>();
+	}
+
+	// id: a template id (max_fps, balanced, quality, battery, recording). goal: a Goal name in lower case. facts: hardware
+	// facts forced before evaluation (only onBattery/hasBattery). settings: SettingRule entries (value or clamp) layered
+	// over the rules' own. requires: client features this template needs; a client that lacks one skips it.
+	public static final class ProfileTemplate {
+		public List<String> requires;
+		public String id;
+		public String goal;
+		public Map<String, Boolean> facts;
+		public List<SettingRule> settings;
 	}
 
 	public static final class SettingLabel {
