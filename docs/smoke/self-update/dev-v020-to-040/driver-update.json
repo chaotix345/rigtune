@@ -1,0 +1,66 @@
+{
+  "phase": "update",
+  "ok": true,
+  "error": null,
+  "events": [
+    "t+0.0s driver loaded, phase update, output <run>\\out",
+    "t+3.8s title screen; goal set to QUALITY",
+    "t+4.8s offered: Update RigTune -> rigtune-0.4.0-dev+mc26.2.jar",
+    "t+5.8s screenshot e2e-update-1-report.png: Saved screenshot as e2e-update-1-report.png",
+    "t+6.8s apply [update:rigtune]: Downloading 1 mod change(s)…",
+    "t+6.9s status: Restart Minecraft to finish applying 1 change(s).",
+    "t+7.3s staged: 2 op(s) in pending.json",
+    "t+9.3s screenshot e2e-update-2-staged.png: Saved screenshot as e2e-update-2-staged.png",
+    "t+11.3s quitting"
+  ],
+  "statuses": [
+    {
+      "t": "6.9",
+      "key": null,
+      "text": "Restart Minecraft to finish applying 1 change(s)."
+    }
+  ],
+  "rigtuneVersion": "0.2.0+mc26.2",
+  "rigtuneOrigin": [
+    "<instance>\\mods\\rigtune-0.2.0+mc26.2.jar"
+  ],
+  "update": {
+    "title": "Update RigTune",
+    "reason": "Version 0.4.0-dev+mc26.2 is available (you have 0.2.0+mc26.2).",
+    "selectedByDefault": true,
+    "currentFile": "<instance>\\mods\\rigtune-0.2.0+mc26.2.jar",
+    "currentVersion": "0.2.0+mc26.2",
+    "newVersion": "0.4.0-dev+mc26.2",
+    "url": "https://cdn.modrinth.com/data/E2ERigTn/versions/E2Enew01/rigtune-0.4.0-dev%2Bmc26.2.jar",
+    "filename": "rigtune-0.4.0-dev+mc26.2.jar",
+    "sha512": "ecbaea8044f6b4db33b8b3d511d59b8a7b7cc51008a6f0cbb2d575f93c1bc073994bf75072dfadd90b3d0bbdfe78139a571766d6428b6a00d794c0a537e61550"
+  },
+  "updateOffered": true,
+  "applyMessage": "Downloading 1 mod change(s)…",
+  "pendingOps": [
+    {
+      "type": "DISABLE_FILE",
+      "from": null,
+      "to": null,
+      "path": "<instance>\\mods\\rigtune-0.2.0+mc26.2.jar",
+      "modId": null,
+      "group": "77df3193-586b-4c49-9e4e-8a6b3fb2c805",
+      "id": "2e5a04f5-73a3-4278-ad47-f1a550e4aa9d"
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\rigtune-0.4.0-dev+mc26.2.jar.rigtune-pending",
+      "to": "<instance>\\mods\\rigtune-0.4.0-dev+mc26.2.jar",
+      "path": null,
+      "modId": "rigtune",
+      "group": "77df3193-586b-4c49-9e4e-8a6b3fb2c805",
+      "id": "909abc65-eba3-4363-bc45-5a71d561d707"
+    }
+  ],
+  "status": "Restart Minecraft to finish applying 1 change(s).",
+  "modsAtQuit": {
+    "fabric-api-0.161.0+26.2.jar": "e5b858ceb13290c274e31cb888ff5a1a40cb91067e7ffab0b5b775aec51e216a",
+    "rigtune-0.2.0+mc26.2.jar": "67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9",
+    "rigtune-0.4.0-dev+mc26.2.jar.rigtune-pending": "bd2c93ae44b9c48a3708f1d4b0bddeb7e1dd2311292f0cd8d7d4f69c6d03f0a4"
+  }
+}
