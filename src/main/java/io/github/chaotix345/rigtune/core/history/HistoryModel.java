@@ -82,10 +82,16 @@ public final class HistoryModel {
 	}
 
 	// undoOf/undoOfAt: for an undo entry, the undone entry's id (or "all") and when it was. undoable: Undo this is offered.
+	// profile (v0.4, WS-P): the profile this entry switched to ("Profile: Battery"), from profiles.json; null otherwise.
 	public record Entry(String id, String kind, String at, String rigtuneVersion, String mcVersion, String undoOf, String undoOfAt, boolean undoable,
-			List<Change> changes) {
+			List<Change> changes, String profile) {
 		public Entry {
 			changes = List.copyOf(changes);
+		}
+
+		public Entry(String id, String kind, String at, String rigtuneVersion, String mcVersion, String undoOf, String undoOfAt, boolean undoable,
+				List<Change> changes) {
+			this(id, kind, at, rigtuneVersion, mcVersion, undoOf, undoOfAt, undoable, changes, null);
 		}
 
 		public String kindKey() {
@@ -119,6 +125,20 @@ public final class HistoryModel {
 
 	public static String kindKey(String kind) {
 		return PREFIX + "kind." + (kind == null ? "unknown" : KINDS.getOrDefault(kind, "unknown"));
+	}
+
+	// v0.4 (WS-P): the view with each profile switch's label (journal entry id -> profile name; only apply entries).
+	public static View withProfiles(View view, Map<String, String> labels) {
+		if (labels.isEmpty()) {
+			return view;
+		}
+		List<Entry> out = new ArrayList<>();
+		for (Entry e : view.entries()) {
+			String label = JournalEntry.APPLY.equals(e.kind()) ? labels.get(e.id()) : null;
+			out.add(label == null ? e : new Entry(e.id(), e.kind(), e.at(), e.rigtuneVersion(), e.mcVersion(), e.undoOf(), e.undoOfAt(), e.undoable(),
+					e.changes(), label));
+		}
+		return new View(view.state(), out);
 	}
 
 	// failures: ApplyFailures.byOpId of last-apply.json.

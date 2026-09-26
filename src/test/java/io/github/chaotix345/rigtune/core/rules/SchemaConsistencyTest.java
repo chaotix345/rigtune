@@ -5,6 +5,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.core.RepoFiles;
+import io.github.chaotix345.rigtune.core.profile.ProfileTemplates;
+import io.github.chaotix345.rigtune.core.profile.ShareKeys;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
@@ -53,6 +55,7 @@ class SchemaConsistencyTest {
 			    "legacyV2ConditionKeys": u.LEGACY_V2_CONDITION_KEYS, "legacyV2Vocabularies": u.LEGACY_V2_VOCABULARIES,
 			    "profileTemplateFields": u.PROFILE_TEMPLATE_FIELDS, "profileTemplateFacts": u.PROFILE_TEMPLATE_FACTS,
 			    "jvmFeature": u.JVM_FEATURE, "stutterFeature": u.STUTTER_FEATURE, "jvmFlagPrefix": u.JVM_FLAG_PREFIX,
+			    "managedProfileKeys": u.MANAGED_PROFILE_KEYS, "profileTemplateIds": u.PROFILE_TEMPLATE_IDS,
 			})))
 			""";
 	private static final Map<String, Class<?>> V1_RULES = Map.of(
@@ -226,6 +229,17 @@ class SchemaConsistencyTest {
 		Assertions.assertTrue(io.github.chaotix345.rigtune.core.recommend.Recommender.SUPPORTED_FEATURES.contains(python.get("jvmFeature").getAsString()));
 		Assertions.assertFalse(io.github.chaotix345.rigtune.core.recommend.Recommender.SUPPORTED_FEATURES.contains(python.get("stutterFeature").getAsString()));
 		assertEquals("jvm-", python.get("jvmFlagPrefix").getAsString());
+	}
+
+	// WS-P (docs/v0.4/design/ws-r.md handoff 6): the updater's managed profile keyset is the share-code table (every key,
+	// the two local-only thread counts included) and its template ids are ProfileTemplates', so neither can drift.
+	@Test
+	void profileKeysAndTemplateIdsMatchWsP() {
+		assertEquals(ShareKeys.MANAGED, set("managedProfileKeys"));
+		assertEquals(Set.of("sodium.performance.chunk_builder_threads", "dh.common.multiThreading.numberOfThreads"),
+				ShareKeys.V1.stream().filter(k -> !k.shareable()).map(ShareKeys.Key::key).collect(java.util.stream.Collectors.toSet()));
+		assertEquals(Arrays.stream(ProfileTemplates.TemplateId.values()).map(ProfileTemplates.TemplateId::id)
+				.collect(java.util.stream.Collectors.toSet()), set("profileTemplateIds"));
 	}
 
 	@Test

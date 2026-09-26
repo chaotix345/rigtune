@@ -60,6 +60,15 @@ public final class HardwareProbe {
 		return slow;
 	}
 
+	// v0.4 (WS-P, PowerWatcher): the power state changed since the scan; later probes see the new onBattery.
+	public static synchronized void setOnBattery(boolean onBattery) {
+		CompletableFuture<SlowPart> current = slow;
+		if (current != null && current.isDone() && !current.isCompletedExceptionally()) {
+			SlowPart s = current.join();
+			slow = CompletableFuture.completedFuture(new SlowPart(s.cpu(), s.totalRamMb(), s.hasBattery(), onBattery, s.cards()));
+		}
+	}
+
 	public static HardwareProfile combine(FastPart fast, SlowPart slow) {
 		long vram = matchVram(fast.gpuName(), slow.cards());
 		GpuInfo gpu = new GpuInfo(fast.gpuVendor(), fast.gpuName(), fast.driver(), fast.backend(), vram);
