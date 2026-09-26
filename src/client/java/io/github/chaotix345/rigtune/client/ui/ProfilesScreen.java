@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.client.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.core.profile.ProfileStore;
 import io.github.chaotix345.rigtune.core.profile.ProfileTemplates.TemplateId;
 import io.github.chaotix345.rigtune.core.profile.ProfileView;
@@ -301,7 +302,7 @@ public class ProfilesScreen extends Screen {
 
 		@Override
 		public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-			if (event.button() == 0) {
+			if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
 				select(view.id());
 				return true;
 			}

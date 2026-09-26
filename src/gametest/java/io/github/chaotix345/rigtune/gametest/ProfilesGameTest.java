@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.gametest;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RealController;
@@ -521,7 +522,7 @@ public class ProfilesGameTest implements FabricClientGameTest {
 
 	private static void press(@Nullable Button button) {
 		check(button != null && button.active, "button there and active");
-		button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(0, 0)));
+		button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0)));
 	}
 
 	private static void screenshotAt(ClientGameTestContext context, int width, int height, int guiScale, @Nullable String name) {
