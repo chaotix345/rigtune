@@ -19,6 +19,7 @@ Brief: the user's v0.4.0 prompt (full autonomy, research -> release incl. GitHub
 - [x] Phase 1: research DONE except jvm-gc (r-jvm, measuring G1/ZGC/COH/Aikar on 26.2 under the lock). Committed 53c06d1 + 89d61ea. Headlines: no 26.4 stable, but 26.4-snapshot-1 now breaks on 2 APIs added in v0.3's benchmark code (patch in scratchpad/r-mcver/snapshot-ifpatch.diff); profiles = ordinary Apply + RT1 binary share code (~100 chars); GC notifications verified on Java 25 (offset calibration needed); existing DebugScreenOverlay mixin is the frame hook; server radius via ClientPacketListener fields, min() is client-side; driver strings parseable, 2 verified known-bad ranges; startup delta ~0.2 s within noise, per-mod timing impossible (Loader 0.19.5); a11y full = 11-14 days (reduced scope). External review (another model, relayed by the user): docs/research/v0.4/external-review.md (no bottleneck language, VSync optional, validation honesty).
 - [x] Phase 2 DONE: SPEC + PLAN + plan review folded in (5bce498); item 6 reconciled with the final jvm-gc.md (7dabe26); launcher-steps research from a separate user-started session (df56876: official launcher defaults to ZGC 4 GB since 26.1; typed -Xmx beats the slider in Modrinth App/GDLauncher); SPEC 2n (second Undo last on a staged key, found by WS-H, e356705). WS-K contracts MERGED (e959776; CI 36217772298 green; 1181 tests per version; screenshots checked: Tools replaces Benchmark, notice line + '…' at 640x480).
 - [x] Phase 3: WS-0 MERGED (86060fb; CI 36214547908 green on 8 jobs; canary proven: green/fail->issue #9/comment/auto-close/skips; `>=26.4-alpha` instead of `>=26.4-snapshot-1`). WS-0 accidentally created+closed issues #7/#8 (retitled '[accidental test, ignore]'); deleting them is the user's call. Follow-up: add_mc_version.py checklist wording (`>=<base>-alpha`). Post-release: `gh workflow run snapshot-canary.yml -f mc=26.3` once the file is on main.
+- Coordinator follow-ups (small, after Wave A): (1) tools/add_mc_version.py checklist: `>=<base>-alpha` for pre-release-introduced breaks (WS0-M1); (2) rules text: jvm-server-flags reason hedged "Paper's server flags, or a set based on them" (WS-J); (3) WS-F F-L1: monitor-on footprint numbers after WS-S; (4) Phase 5: verify the advice menu paths Sodium "Chunk Updates" (Performance page) and DH "NO. of threads"; (5) MultiMC/GDLauncher jvm_steps if WS-J finishes before WS-A; (6) independent apply-pipeline audit (docs/research/v0.4/audit-apply-pipeline.md, 5 H / 7 M / 2 L) being verified -> docs/v0.4/audit-verification.md, then assign fixes.
 - [ ] Phase 4 Wave A RUNNING (launched from e959776). Watchdog: scratchpad/run_watchdog.sh over scratchpad/agents.txt.
 | ws | branch | worktree | scope |
 |---|---|---|---|
@@ -26,13 +27,13 @@ Brief: the user's v0.4.0 prompt (full autonomy, research -> release incl. GitHub
 | WS-P early | feat/profiles-extract (deleted) | - | MERGED 22cc915 (CI 36219635079): Recommender.settingTargets extraction, golden report over 240 scenarios. |
 | coordinator | - | - | core/model/ModSetHash shared by WS-B/WS-F (e1393e1). |
 | WS-A | fix/v04-deferred | rigtune-fixes4 | 2a-2g, 2j, 2m, 2n |
-| WS-R | feat/rules-v04 | rigtune-rules4 | 2k, 2l, tools side, all rules content (templates, stutter, jvm, driver seeds) |
+| WS-R | feat/rules-v04 (deleted) | removed | MERGED 2636702 (CI 36224155899): rules r14; rules-v1 diff = VSync pair + revision/generatedAt only; 5 templates, 5 stutter seeds, 9 jvm-* advice (ZGC option C), 2 driver seeds, all v1:false; Legacy* tests; Python 324. UNVERIFIED: Sodium 'Chunk Updates' page, DH 'NO. of threads' label in advice text. |
 | WS-P | feat/profiles | rigtune-profiles | item 4 (+ early branch feat/profiles-extract: settingTargets) |
 | WS-S | feat/stutter | rigtune-stutter | item 5 |
 | WS-J | feat/jvm-advice | rigtune-jvm | item 6 |
 | WS-B | feat/bench-history | rigtune-benchhist | item 7 |
 | WS-W | feat/awareness | rigtune-aware | items 8, 9 |
-| WS-F | feat/footprint | rigtune-foot | items 10, 13 |
+| WS-F | feat/footprint (deleted) | removed | MERGED 32c425b (CI 36224299780): fail-mode guard, budgets (init wall 368/ceil 400, CPU 150, worker 300, frame 13 ns, tick 111 ns, idle 109 KB, leakSuspects 0); gate proofs 36222846655 + 36222850330 (scratch/ws-f-* branches kept as evidence until Phase 8); lazy HttpClient; startup trend. TODO F-L1 follow-up: monitor-on numbers after WS-S. |
 - Research worktrees still to remove: rigtune-r-foot (research/footprint, trial saved to scratchpad/r-footprint), rigtune-r-jvm (research/jvm).
 
 ## v0.3.0: RELEASED 2026-09-26
