@@ -60,7 +60,7 @@ import java.util.Map;
  * through the controller's Apply (the stand-in); =profile switches to the profile -Drigtune.e2e.profileName through
  * {@link #switchProfile}. Records the values before and after; quits.</li>
  * <li>{@code profile-undo}: Undo this on the switch entry -Drigtune.e2e.entryId (UndoScreen and its Undo button), waits
- * until the settings are back to -Drigtune.e2e.profileOriginals (key:value pairs); quits.</li>
+ * until the settings are back to those in the JSON file -Drigtune.e2e.profileOriginals; quits.</li>
  * <li>{@code profile-check}: records the live values of those settings and what is left to undo on the entry; quits.</li>
  * </ul>
  * Results go to -Drigtune.e2e.out as driver-&lt;phase&gt;.json; screenshots to the instance's screenshots folder.
@@ -89,7 +89,8 @@ public final class UndoDriver implements ClientModInitializer {
 	private final String profileMode = System.getProperty("rigtune.e2e.profileMode", "settings");
 	private final String profileName = System.getProperty("rigtune.e2e.profileName");
 	private final String profileSettings = System.getProperty("rigtune.e2e.profileSettings", "");
-	private final String profileOriginals = System.getProperty("rigtune.e2e.profileOriginals", "");
+	// A JSON object file (bare options.txt key -> value), written by the harness after profile-apply.
+	private final String profileOriginals = System.getProperty("rigtune.e2e.profileOriginals");
 	private final List<String> applyMessages = new ArrayList<>();
 	private int applied;
 	private final Map<String, Object> result = new LinkedHashMap<>();
@@ -174,7 +175,7 @@ public final class UndoDriver implements ClientModInitializer {
 					if (stepTicks % 10 != 0) {
 						return;
 					}
-					Map<String, String> originals = pairs(profileOriginals);
+					Map<String, String> originals = originals();
 					Map<String, String> now = vanilla(originals.keySet());
 					if (!originals.isEmpty() && now.equals(originals)) {
 						result.put("settingsAfter", now);
@@ -341,7 +342,7 @@ public final class UndoDriver implements ClientModInitializer {
 					recordPlan("entryPlanAfter", plan);
 					result.put("entryUndoableAfter", plan == null ? -1
 							: (int) plan.items().stream().filter(i -> i.action() != UndoPlan.Action.SKIP).count());
-					result.put("settingsNow", vanilla(pairs(profileOriginals).keySet()));
+					result.put("settingsNow", vanilla(originals().keySet()));
 					minecraft.gui.setScreen(new UndoScreen(minecraft.gui.screen(), controller, entryId));
 				} else if (stepTicks == 2 * SECOND) {
 					screenshot(minecraft, "e2e-profile-check-1-undo.png");
@@ -364,9 +365,10 @@ public final class UndoDriver implements ClientModInitializer {
 	// What a profile switch applies: one SetSetting per vanilla key whose value differs (docs/research/v0.4/profiles.md).
 	private static List<Recommendation> settingRecommendations(Map<String, String> targets, Map<String, String> before) {
 		List<Recommendation> out = new ArrayList<>();
-		targets.forEach((key, value) -> out.add(new Recommendation("setting:" + SettingsBridge.VANILLA_PREFIX + key, Category.SETTING,
-				Impact.LOW, "Set " + key, "E2E profile switch stand-in",
-				new Action.SetSetting(SettingsBridge.VANILLA_PREFIX + key, before.get(key), value), true)));
+		targets.entrySet().stream().filter(e -> !e.getValue().equals(before.get(e.getKey()))).forEach(e -> out.add(
+				new Recommendation("setting:" + SettingsBridge.VANILLA_PREFIX + e.getKey(), Category.SETTING,
+				Impact.LOW, "Set " + e.getKey(), "E2E profile switch stand-in",
+				new Action.SetSetting(SettingsBridge.VANILLA_PREFIX + e.getKey(), before.get(e.getKey()), e.getValue()), true)));
 		return out;
 	}
 
@@ -375,6 +377,20 @@ public final class UndoDriver implements ClientModInitializer {
 		Map<String, String> all = SettingsBridge.readVanilla(Minecraft.getInstance().options);
 		Map<String, String> out = new LinkedHashMap<>();
 		keys.forEach(key -> out.put(key, all.get(key)));
+		return out;
+	}
+
+	private Map<String, String> originals() {
+		Map<String, String> out = new LinkedHashMap<>();
+		if (profileOriginals == null) {
+			return out;
+		}
+		try {
+			JsonObject json = JsonParser.parseString(Files.readString(Path.of(profileOriginals), StandardCharsets.UTF_8)).getAsJsonObject();
+			json.entrySet().forEach(e -> out.put(e.getKey(), e.getValue().isJsonNull() ? null : e.getValue().getAsString()));
+		} catch (IOException e) {
+			throw new java.io.UncheckedIOException(e);
+		}
 		return out;
 	}
 

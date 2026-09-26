@@ -69,6 +69,11 @@ class OptionsTest(unittest.TestCase):
         fx = ProfileInstance()
         self.assertEqual({"version": "4786", "guiScale": "0", "renderDistance": "6", "maxFps": "90"}, e2e_checks.options_values(fx.instance))
 
+    def test_string_values_are_unquoted_like_the_journal(self):
+        fx = ProfileInstance()
+        (fx.instance / "options.txt").write_text('graphicsPreset:"fast"\nlang:en_us\nresourcePacks:["vanilla"]\n', encoding="utf-8")
+        self.assertEqual({"graphicsPreset": "fast", "lang": "en_us", "resourcePacks": '["vanilla"]'}, e2e_checks.options_values(fx.instance))
+
     def test_missing_file_is_empty(self):
         self.assertEqual({}, e2e_checks.options_values(Path(tempfile.mkdtemp())))
 
@@ -100,6 +105,11 @@ class ProfileApplyTest(unittest.TestCase):
     def test_the_stand_in_must_change_exactly_its_settings(self):
         self.assertEqual(["history.json: the switch changed exactly the chosen settings"],
                          failing(self.check(targets={"renderDistance": "6"})))
+
+    def test_a_target_already_at_its_value_is_named(self):
+        checks = e2e_checks.after_profile_apply(self.fx.instance, self.fx.driver, ["old"], dict(ORIGINALS, maxFps="90"), TARGETS, None)
+        detail = next(c.detail for c in checks if c.name == "history.json: the switch changed exactly the chosen settings")
+        self.assertIn("already at the target: {'maxFps': '90'}", detail)
 
     def test_before_must_be_the_value_before_the_launch(self):
         self.fx.entries[1]["changes"][0]["before"] = "10"
@@ -195,8 +205,18 @@ class ProfileScenarioTest(unittest.TestCase):
 
     def test_jvm_args_pick_the_mode(self):
         run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo", "--profile-switch", "profile", "--profile-name", "Quality")
-        self.assertEqual(["-Drigtune.e2e.profileMode=profile", "-Drigtune.e2e.profileName=Quality",
-                          "-Drigtune.e2e.profileSettings=" + self_update_e2e.PROFILE_SETTINGS_ARG], run.profile_jvm_args())
+        self.assertEqual(["-Drigtune.e2e.profileMode=profile", "-Drigtune.e2e.profileName=Quality"], run.profile_jvm_args())
+        run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo", "--profile-switch", "settings")
+        self.assertEqual(["-Drigtune.e2e.profileMode=settings", "-Drigtune.e2e.profileSettings=" + self_update_e2e.PROFILE_SETTINGS_ARG],
+                         run.profile_jvm_args())
+
+    def test_profile_name_defaults_to_battery_and_needs_profile_mode(self):
+        base = ["--name", "n", "--scenario", "undo", "--new-jar", "b.jar", "--work", "w", "--java-home", "jdk"]
+        self.assertEqual("Battery", self_update_e2e.parse_args(base + ["--profile-switch", "profile"]).profile_name)
+        with self.assertRaises(SystemExit):
+            self_update_e2e.parse_args(base + ["--profile-switch", "settings", "--profile-name", "Quality"])
+        with self.assertRaises(SystemExit):
+            self_update_e2e.parse_args(base + ["--expect-history", "auto"])
 
     def test_only_for_the_undo_scenario(self):
         with self.assertRaises(SystemExit):

@@ -55,14 +55,16 @@ only removes a lock that a killed run of this worktree left behind.
 export JAVA_HOME="C:/Dev/Tools/jdk/jdk-25.0.4.1+1"
 S=<scratch folder>; J=$S/jars; NEW=$J/rigtune-0.4.0+mc26.2.jar; E=docs/smoke/self-update
 LOCK=C:/Dev/Worktrees/.gametest-lock; WT=<this worktree, forward slashes>
-release() { grep -q "worktree: $WT" $LOCK/owner.txt 2>/dev/null && { rm -f $LOCK/owner.txt; rmdir $LOCK; }; }
+release() { grep -qx "worktree: $WT" $LOCK/owner.txt 2>/dev/null && { rm -f $LOCK/owner.txt; rmdir $LOCK; }; }
 run() { python tools/e2e/self_update_e2e.py --work $S/work --evidence $E/$1 --name "$@"; rc=$?; release; return $rc; }
 
 run final-v030-to-040 --old-jar $J/rigtune-0.3.0+mc26.2.jar --old-sha256 5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9 --new-jar $NEW --expect-history auto
 run final-v020-to-040 --old-jar $J/rigtune-0.2.0+mc26.2.jar --old-sha256 67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9 --new-jar $NEW --expect-history auto
 run final-v010-to-040 --old-jar $J/rigtune-0.1.0.jar --old-sha256 8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950 --new-jar $NEW --legacy-disable --expect-history auto
 run final-v010-seeded-to-040 --old-jar $J/rigtune-0.1.0.jar --old-sha256 8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950 --new-jar $NEW --seed tools/e2e/seeds/v010-dh --expect-history auto
-run undo-after-restart-040 --scenario undo --new-jar $NEW --profile-switch profile --profile-name <a WS-P profile>
+run undo-after-restart-040 --scenario undo --new-jar $NEW --profile-switch profile --profile-name Battery
+# until WS-P's API is in UndoDriver.switchProfile (that mode fails there today), the stand-in:
+# run undo-after-restart-040 --scenario undo --new-jar $NEW --profile-switch settings
 ```
 
 - `--expect-history auto` takes the check from the old jar's version (`e2e_checks.history_expectation`): 0.1.x →

@@ -298,8 +298,9 @@ class Run:
             raise SystemExit("building the driver failed; see " + str(self.run_dir / "gradle-driver.log"))
 
     def profile_jvm_args(self):
-        return ["-Drigtune.e2e.profileMode=" + self.profile, "-Drigtune.e2e.profileName=" + self.args.profile_name,
-                "-Drigtune.e2e.profileSettings=" + PROFILE_SETTINGS_ARG]
+        if self.profile == "profile":
+            return ["-Drigtune.e2e.profileMode=profile", "-Drigtune.e2e.profileName=" + self.args.profile_name]
+        return ["-Drigtune.e2e.profileMode=settings", "-Drigtune.e2e.profileSettings=" + PROFILE_SETTINGS_ARG]
 
     def add_jvm_args(self, phase, lines):
         """For values known only after an earlier launch (the entry id of B-M3's older Apply)."""
@@ -582,9 +583,13 @@ class Run:
         if not all(c.ok for c in checks):
             return False
         self.facts["switchEntry"] = new[0].get("id")
-        befores = ",".join("{}:{}".format(c.get("key")[len(e2e_checks.VANILLA):], c.get("before")) for c in new[0].get("changes", []))
+        # The values to restore, as JSON (a value may hold a comma, or be null for an option that had none).
+        originals_file = self.run_dir / "profile-originals.json"
+        originals_file.write_text(json.dumps({c.get("key")[len(e2e_checks.VANILLA):]: c.get("before")
+                                              for c in new[0].get("changes", [])}, indent=1), encoding="utf-8", newline=LF)
         for phase in PROFILE_PHASES[1:]:
-            self.add_jvm_args(phase, ["-Drigtune.e2e.entryId=" + self.facts["switchEntry"], "-Drigtune.e2e.profileOriginals=" + befores])
+            self.add_jvm_args(phase, ["-Drigtune.e2e.entryId=" + self.facts["switchEntry"],
+                                      "-Drigtune.e2e.profileOriginals=" + str(originals_file)])
 
         code = self.launch("profile-undo")
         self.snapshot("profile-undo")
@@ -784,7 +789,10 @@ def resolve_expect_history(value, old_version):
     (e2e_checks.history_expectation); an explicit value that doesn't match it is refused."""
     if not value:
         return None
-    expected = e2e_checks.history_expectation(old_version)
+    try:
+        expected = e2e_checks.history_expectation(old_version)
+    except ValueError as e:
+        raise SystemExit("--expect-history: {}".format(e))
     if value == "auto":
         return expected
     if value != expected:
@@ -864,7 +872,7 @@ def parse_args(argv):
     parser.add_argument("--profile-switch", choices=("settings", "profile"),
                         help="undo: also undo a profile switch after a restart (Phase 5 hook): settings = the stand-in "
                              "(an apply of vanilla settings), profile = through WS-P's API, with its profiles.json label")
-    parser.add_argument("--profile-name", default="Battery", help="--profile-switch profile: the profile to switch to")
+    parser.add_argument("--profile-name", help="--profile-switch profile: the profile to switch to (default Battery)")
     parser.add_argument("--port", type=int, default=443)
     parser.add_argument("--lock", default=DEFAULT_LOCK, help="game-test lock folder, or 'none'")
     parser.add_argument("--agent", default="ws-h", help="the agent named in the lock's owner.txt")
@@ -877,6 +885,12 @@ def parse_args(argv):
         parser.error("--seed is for the self-update scenario")
     if args.profile_switch and args.scenario != "undo":
         parser.error("--profile-switch is for the undo scenario")
+    if args.profile_name and args.profile_switch != "profile":
+        parser.error("--profile-name is for --profile-switch profile")
+    if args.profile_switch == "profile" and not args.profile_name:
+        args.profile_name = "Battery"
+    if args.expect_history and args.scenario != "self-update":
+        parser.error("--expect-history is for the self-update scenario")
     return args
 
 

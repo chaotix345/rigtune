@@ -32,7 +32,7 @@ class ReleasedJarTest(unittest.TestCase):
                          self_update_e2e.RELEASED["0.3.0+mc26.2"])
 
     def test_ci_pins_the_same_jars(self):
-        workflow = (REPO / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
+        workflow = (REPO / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8").replace("\r\n", "\n")
         pinned = dict((name, sha) for sha, name in re.findall(r"^\s*([0-9a-f]{64})  \$old/(\S+)$", workflow, re.MULTILINE))
         self.assertEqual({name: sha for name, sha in self_update_e2e.RELEASED.values()}, pinned)
         for name in pinned:
@@ -57,6 +57,12 @@ class HistoryExpectationTest(unittest.TestCase):
     def test_0_2_and_later_journal_their_own_update(self):
         for version in ("0.2.0+mc26.2", "0.3.0+mc26.2", "0.4.0-dev+mc26.2", "0.10.0", "1.0.0"):
             self.assertEqual("own-update", e2e_checks.history_expectation(version), version)
+
+    def test_a_version_without_major_minor_is_refused(self):
+        with self.assertRaises(ValueError):
+            e2e_checks.history_expectation("dev")
+        with self.assertRaises(SystemExit):
+            self_update_e2e.resolve_expect_history("auto", "dev")
 
     def test_resolve_auto(self):
         self.assertEqual("own-update", self_update_e2e.resolve_expect_history("auto", "0.3.0+mc26.2"))

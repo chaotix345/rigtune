@@ -21,7 +21,10 @@ def history_expectation(old_version):
     """What the new version finds in history.json after updating from old_version: 0.1.x has no journal, so the new
     version imports its last apply once ("legacy-import"); 0.2.0 and later journal their own update as an apply entry
     ("own-update")."""
-    major, minor = (int(part) for part in re.match(r"(\d+)\.(\d+)", old_version).groups())
+    match = re.match(r"(\d+)\.(\d+)", old_version or "")
+    if match is None:
+        raise ValueError("not a RigTune version: {!r}".format(old_version))
+    major, minor = (int(part) for part in match.groups())
     return "legacy-import" if (major, minor) < (0, 2) else "own-update"
 
 
@@ -549,12 +552,22 @@ VANILLA = "vanilla."
 
 
 def options_values(instance):
-    """options.txt as key -> value."""
+    """options.txt as key -> value, a JSON string value unquoted as SettingsBridge.readVanilla (the journal's values)
+    does: options.txt stores e.g. graphicsPreset:"fast", the journal fast."""
     path = Path(instance) / "options.txt"
     if not path.is_file():
         return {}
     pairs = (line.split(":", 1) for line in path.read_text(encoding="utf-8", errors="replace").splitlines() if ":" in line)
-    return {key: value for key, value in pairs}
+    return {key: _unquote(value) for key, value in pairs}
+
+
+def _unquote(value):
+    if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
+        try:
+            return json.loads(value)
+        except ValueError:
+            return value
+    return value
 
 
 def _settings(entry):
@@ -599,8 +612,11 @@ def after_profile_apply(instance, driver, known_entry_ids, originals, targets, l
     if targets is not None:
         got = {k: (c.get("before"), c.get("after")) for k, c in settings.items()}
         wanted = {VANILLA + k: (originals.get(k), v) for k, v in targets.items()}
-        checks.append(Check("history.json: the switch changed exactly the chosen settings", got == wanted,
-                            "(before, after) by key: {}; expected {}".format(got, wanted)))
+        unusable = {k: originals.get(k) for k, v in targets.items() if originals.get(k) in (None, v)}
+        checks.append(Check("history.json: the switch changed exactly the chosen settings", got == wanted and not unusable,
+                            "(before, after) by key: {}; expected {}{}".format(got, wanted, "; missing from options.txt or "
+                                                                              "already at the target: {}".format(unusable)
+                                                                              if unusable else "")))
     checks.append(_options_hold(instance, {k: c.get("after") for k, c in settings.items()}, "options.txt holds the switched values"))
     checks.append(_clean(instance))
     if label is not None:
