@@ -1,5 +1,7 @@
 package io.github.chaotix345.rigtune.core.modrinth;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import io.github.chaotix345.rigtune.core.TextChecks;
 import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
@@ -10,6 +12,7 @@ import io.github.chaotix345.rigtune.core.apply.TestJars;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Impact;
+import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Text;
@@ -57,6 +60,17 @@ class DownloadPlannerTest {
 	final Map<String, ModrinthVersion> updateVersions = new HashMap<>();
 	final List<DownloadPlanner.Result> planned = new ArrayList<>();
 	StagedProjects staged = StagedProjects.NONE;
+	// A downloaded file's fabric.mod.json, where a test sets it: id (else from the file name), version (else "1"), provides.
+	final Map<String, String> jarIds = new HashMap<>();
+	final Map<String, String> jarVersions = new HashMap<>();
+	final Map<String, List<String>> jarProvides = new HashMap<>();
+	final Map<String, String> jarNames = new HashMap<>();
+	// A downloaded file's fabric.mod.json depends / breaks: mod id -> range.
+	final Map<String, Map<String, String>> jarDepends = new HashMap<>();
+	final Map<String, Map<String, String>> jarBreaks = new HashMap<>();
+	VersionPins pins = VersionPins.NONE;
+	// pending.json's staged enables as RealController passes them: mod id -> pending jar.
+	Map<String, String> stagedJars = Map.of();
 
 	@BeforeEach
 	void setUp() throws IOException {
@@ -100,8 +114,27 @@ class DownloadPlannerTest {
 			return Files.writeString(SafeFileNames.resolveJar(mods, file.filename(), PendingActions.PENDING_SUFFIX), "not a jar");
 		}
 		String base = file.filename().substring(0, file.filename().length() - ".jar".length());
-		String id = (base.endsWith("V") ? base.substring(0, base.length() - 1) : base).toLowerCase(Locale.ROOT);
-		return TestJars.modJar(SafeFileNames.resolveJar(mods, file.filename(), PendingActions.PENDING_SUFFIX), id);
+		String id = jarIds.getOrDefault(file.filename(), (base.endsWith("V") ? base.substring(0, base.length() - 1) : base).toLowerCase(Locale.ROOT));
+		JsonObject json = new JsonObject();
+		json.addProperty("schemaVersion", 1);
+		json.addProperty("id", id);
+		json.addProperty("version", jarVersions.getOrDefault(file.filename(), "1"));
+		if (jarNames.containsKey(file.filename())) {
+			json.addProperty("name", jarNames.get(file.filename()));
+		}
+		if (jarProvides.containsKey(file.filename())) {
+			JsonArray provides = new JsonArray();
+			jarProvides.get(file.filename()).forEach(provides::add);
+			json.add("provides", provides);
+		}
+		for (Map.Entry<String, Map<String, Map<String, String>>> section : Map.of("depends", jarDepends, "breaks", jarBreaks).entrySet()) {
+			if (section.getValue().containsKey(file.filename())) {
+				JsonObject ranges = new JsonObject();
+				section.getValue().get(file.filename()).forEach(ranges::addProperty);
+				json.add(section.getKey(), ranges);
+			}
+		}
+		return TestJars.modJar(SafeFileNames.resolveJar(mods, file.filename(), PendingActions.PENDING_SUFFIX), json);
 	}
 
 	private Recommendation update(String current, String next) {
@@ -153,11 +186,53 @@ class DownloadPlannerTest {
 	}
 
 	private DownloadPlanner.Result plan(Set<String> installedProjects, Recommendation... recs) {
+		return plan(installedProjects, Set.of(), recs);
+	}
+
+	private DownloadPlanner.Result plan(Set<String> installedProjects, Set<String> loadedIds, Recommendation... recs) {
 		DownloadPlanner planner = new DownloadPlanner(new DependencyResolver(client, "fabric", "26.2", installedVersions).withStaged(staged), mods,
-				this::fetch, conflicts, updateVersions);
-		DownloadPlanner.Result result = planner.plan(List.of(recs), installedProjects, Set.of(), Map.of());
+				this::fetch, conflicts, updateVersions, pins);
+		DownloadPlanner.Result result = planner.plan(List.of(recs), installedProjects, loadedIds, stagedJars);
 		planned.add(result);
 		return result;
+	}
+
+	private Map<String, String> stagedJarsOf(Path pending) throws IOException {
+		Map<String, String> out = new HashMap<>();
+		for (Op op : PendingActions.load(pending).ops()) {
+			if (op.type() == PendingActions.Type.ENABLE_FILE && op.modId() != null && op.from() != null) {
+				out.put(op.modId(), op.from());
+			}
+		}
+		return out;
+	}
+
+	// docs/v0.4/SPEC.md 2o, H3 (audit-verification.md H3, seen on the real instance): Distant Horizons 3.3.x nests
+	// fabric-api 0.149. The nested copy is in the scan (no file, no hash) but isn't a top-level jar, so it never counts as
+	// present for the planner's drop decision: an addition that requires Fabric API gets a top-level copy in its own group
+	// (Fabric loads the newer top-level copy next to a nested one). Before the fix the download was deleted as a duplicate.
+	@Test
+	void aLibraryPresentOnlyNestedInAnotherModIsStagedTopLevel() {
+		List<InstalledMod> scan = List.of(
+				new InstalledMod("distanthorizons", "Distant Horizons", "3.3.0", mods.resolve("DistantHorizons-3.3.0.jar"), "dh-sha1"),
+				new InstalledMod("fabric-api", "Fabric API", "0.149.0+26.2", null, null),
+				// A top-level jar loaded from outside mods/ (hashed, no file), and one in mods/ whose hash failed.
+				new InstalledMod("sodium", "Sodium", "0.9.2", null, "sodium-sha1"),
+				new InstalledMod("iris", "Iris", "1.11.4", mods.resolve("iris.jar"), null));
+		put("a", version("aV", "A", "1", T, required("FAPI")));
+		put("fabric-api", version("fabric-apiV", "FAPI", "0.161.0", T));
+
+		Set<String> loaded = DownloadPlanner.topLevelIds(scan);
+		DownloadPlanner.Result result = plan(Set.of("DH"), loaded, add("a", "A"));
+		DownloadPlanner.Result withNested = plan(Set.of("DH"), Set.of("distanthorizons", "fabric-api"), add("a", "A"));
+
+		assertEquals(Set.of("distanthorizons", "sodium", "iris"), loaded);
+		assertEquals(Set.of(), DownloadPlanner.topLevelIds(null));
+		assertEquals(List.of(), result.errors());
+		assertEquals(List.of("aV.jar", "fabric-apiV.jar"), targets(result.ops()));
+		assertEquals(1, groups(result.ops()), result.ops().toString());
+		// What the old loadedIds (every scanned id) did: the library's download dropped, the mod staged alone.
+		assertEquals(List.of("aV.jar"), targets(withNested.ops()));
 	}
 
 	// Review 4, rules-accuracy-2, and docs/v0.4/SPEC.md 2e (AC2e.2): a batch never stages both sides of a rules conflict,
@@ -543,6 +618,8 @@ class DownloadPlannerTest {
 		assertEquals(List.of(), result.ops());
 		assertEquals(1, result.errors().size(), result.errors().toString());
 		assertFalse(Files.exists(mods.resolve("libV.jar" + PendingActions.PENDING_SUFFIX)));
+		// The mod's own download, fetched before its dependency failed, isn't left behind either (review of WS-G1, L-2).
+		assertFalse(Files.exists(mods.resolve("aV.jar" + PendingActions.PENDING_SUFFIX)));
 	}
 
 	@Test
@@ -703,5 +780,474 @@ class DownloadPlannerTest {
 		assertEquals(2, merged.ops().size(), merged.ops().toString());
 		assertEquals(1, groups(merged.ops()), merged.ops().toString());
 		assertEquals(List.of(), merged.remove(List.of(stagedLib.id())).plan().ops());
+	}
+
+	// --- docs/v0.4/SPEC.md 2o, H2: the installed mods' fabric.mod.json pins on the mod being updated (or added)
+
+	// An installed mod's `depends` range on target: "0.9.x" (a prefix) or "0.9.2" (exact); the client uses Fabric's predicates.
+	private static VersionPins.Pin dependsOn(String by, String byName, String target, String targetName, String range) {
+		String prefix = range.endsWith("x") ? range.substring(0, range.length() - 1) : null;
+		return new VersionPins.Pin(by, byName, by, target, targetName, VersionPins.Kind.DEPENDS, () -> range,
+				v -> prefix != null ? v.startsWith(prefix) : v.equals(range));
+	}
+
+	// A fabric.mod.json range list as the tests' stand-in for Fabric reads it: "*", "0.9.x" (a prefix) or an exact version.
+	private static boolean fakeMatch(List<String> ranges, String version) {
+		return ranges.stream().anyMatch(range -> range.equals("*")
+				|| (range.endsWith("x") ? version.startsWith(range.substring(0, range.length() - 1)) : version.equals(range)));
+	}
+
+	// What the client reads from the loaded mods (client/probe/FabricPins): their declarations and versions.
+	private static VersionPins loaded(List<VersionPins.Pin> declarations, VersionPins.Loaded... mods) {
+		return new VersionPins(declarations, List.of(mods), DownloadPlannerTest::fakeMatch);
+	}
+
+	private static VersionPins.Loaded mod(String id, String name, String version) {
+		return new VersionPins.Loaded(id, name, version, id);
+	}
+
+	// Iris 1.11.4 declares sodium: ["0.9.x"] (audit-verification.md H2): a Sodium 0.10 update before Iris supports it would
+	// stop the game from starting, so it's refused, naming Iris; its download is deleted and the installed jar is left
+	// alone. A 0.9.3 update is staged.
+	@Test
+	void anUpdateOutsideAnInstalledModsVersionRangeIsRefusedNamingThatMod() throws IOException {
+		pins = new VersionPins(List.of(dependsOn("iris", "Iris", "sodium", "Sodium", "0.9.x")));
+		Recommendation update = updateOf("sodium", "SODIUM");
+		jarVersions.put("sodiumV.jar", "0.10.0+mc26.2");
+
+		DownloadPlanner.Result result = plan(Set.of("SODIUM"), update);
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of(), result.ops());
+		assertEquals(List.of("Update sodium: Iris, which is installed, needs Sodium 0.9.x, not 0.10.0+mc26.2"), result.errors());
+		assertFalse(Files.exists(mods.resolve("sodiumV.jar" + PendingActions.PENDING_SUFFIX)));
+		assertEquals("installed", Files.readString(mods.resolve("sodium-1.jar")));
+
+		jarVersions.put("sodiumV.jar", "0.9.3+mc26.2");
+		DownloadPlanner.Result inRange = plan(Set.of("SODIUM"), update);
+
+		assertEquals(List.of("update-sodium"), inRange.ids());
+		assertEquals(List.of("sodium-1.jar", "sodiumV.jar"), files(inRange.ops()));
+	}
+
+	// Only the pinned update is refused; the rest of the batch goes ahead.
+	@Test
+	void aPinRefusesOnlyTheUpdateItIsAbout() throws IOException {
+		pins = new VersionPins(List.of(dependsOn("nvidium", "Nvidium", "sodium", "Sodium", "0.9.2")));
+		Recommendation sodium = updateOf("sodium", "SODIUM");
+		Recommendation lithium = updateOf("lithium", "LITHIUM");
+		jarVersions.put("sodiumV.jar", "0.9.3");
+
+		DownloadPlanner.Result result = plan(Set.of("SODIUM", "LITHIUM"), sodium, lithium);
+
+		assertEquals(List.of("update-lithium"), result.ids());
+		assertEquals(List.of("Update sodium: Nvidium, which is installed, needs Sodium 0.9.2, not 0.9.3"), result.errors());
+	}
+
+	// The same for an addition (or a library it brings): an installed mod's `breaks` on it stops the game from starting.
+	@Test
+	void anAdditionAnInstalledModBreaksIsRefused() {
+		pins = new VersionPins(List.of(new VersionPins.Pin("iris", "Iris", "iris", "lib", null, VersionPins.Kind.BREAKS, () -> "*", v -> false)));
+		libraryUsers();
+		put("c", version("cV", "C", "1", T));
+
+		DownloadPlanner.Result result = plan(Set.of(), add("a", "A"), add("c", "C"));
+
+		assertEquals(List.of("add-c"), result.ids());
+		assertEquals(List.of("cV.jar"), targets(result.ops()));
+		assertEquals(List.of("Add a: Iris, which is installed, doesn't work with lib 1"), result.errors());
+		assertFalse(Files.exists(mods.resolve("libV.jar" + PendingActions.PENDING_SUFFIX)));
+	}
+
+	// The whole batch is checked, not each item alone. Iris 1.12 requires sodium 0.10.x: ticked together with Sodium 0.10,
+	// the installed Iris 1.11.4's "0.9.x" goes with its own update, so both go in, in one all-or-nothing group, in either
+	// tick order (refusing Sodium would leave Iris 1.12 without the Sodium it needs).
+	@Test
+	void anUpdateThePinningModsOwnUpdateAllowsGoesInWithIt() throws IOException {
+		Recommendation sodium = updateOf("sodium", "SODIUM");
+		Recommendation iris = updateOf("iris", "IRIS");
+		jarVersions.put("sodiumV.jar", "0.10.0");
+		jarVersions.put("irisV.jar", "1.12.0");
+		jarDepends.put("irisV.jar", Map.of("sodium", "0.10.x"));
+		pins = loaded(List.of(dependsOn("iris", "Iris", "sodium", "Sodium", "0.9.x")), mod("sodium", "Sodium", "0.9.3"), mod("iris", "Iris", "1.11.4"));
+
+		for (List<Recommendation> order : List.of(List.of(sodium, iris), List.of(iris, sodium))) {
+			DownloadPlanner.Result result = plan(Set.of("SODIUM", "IRIS"), order.toArray(Recommendation[]::new));
+
+			assertEquals(List.of(), result.errors());
+			assertEquals(Set.of("update-sodium", "update-iris"), Set.copyOf(result.ids()));
+			assertEquals(Set.of("sodium-1.jar", "sodiumV.jar", "iris-1.jar", "irisV.jar"), Set.copyOf(files(result.ops())));
+			assertEquals(1, groups(result.ops()), result.ops().toString());
+		}
+	}
+
+	// Iris 1.12 alone (Sodium 0.9.3 stays): its own "sodium 0.10.x" would stop the game from starting.
+	@Test
+	void anUpdateWhoseOwnRangeExcludesAnInstalledModIsRefused() throws IOException {
+		Recommendation iris = updateOf("iris", "IRIS");
+		jarVersions.put("irisV.jar", "1.12.0");
+		jarDepends.put("irisV.jar", Map.of("sodium", "0.10.x", "minecraft", "*"));
+		pins = loaded(List.of(), mod("sodium", "Sodium", "0.9.3"), mod("iris", "Iris", "1.11.4"), mod("minecraft", "Minecraft", "26.2"));
+
+		DownloadPlanner.Result result = plan(Set.of("SODIUM", "IRIS"), iris);
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of(), result.ops());
+		assertEquals(List.of("Update iris: Iris needs Sodium 0.10.x, not the installed 0.9.3"), result.errors());
+		assertFalse(Files.exists(mods.resolve("irisV.jar" + PendingActions.PENDING_SUFFIX)));
+	}
+
+	// The audit's own H2 case: Install Nvidium (sodium "0.9.2") with the pre-ticked Update Sodium to 0.9.3. RigTune can't
+	// know which one the player wanted (SPEC 2e), so both are refused, each naming the other; either alone is judged
+	// against what's installed.
+	@Test
+	void anAdditionAndAnUpdateThatCantGoInTogetherAreBothRefused() throws IOException {
+		Recommendation sodium = updateOf("sodium", "SODIUM");
+		jarVersions.put("sodiumV.jar", "0.9.3");
+		put("nvidium", version("nvidiumV", "NVIDIUM", "0.4.4", T));
+		jarDepends.put("nvidiumV.jar", Map.of("sodium", "0.9.2"));
+		jarNames.put("nvidiumV.jar", "Nvidium");
+		jarNames.put("sodiumV.jar", "Sodium");
+		pins = loaded(List.of(), mod("sodium", "Sodium", "0.9.2"));
+
+		DownloadPlanner.Result together = plan(Set.of("SODIUM"), add("nvidium", "NVIDIUM"), sodium);
+
+		assertEquals(List.of(), together.ids());
+		assertEquals(List.of(), together.ops());
+		assertEquals(List.of("Update sodium: Nvidium, which would be installed too, needs Sodium 0.9.2, not 0.9.3",
+				"Add nvidium: Nvidium needs Sodium 0.9.2, not the 0.9.3 that would be installed too"), together.errors());
+		assertFalse(Files.exists(mods.resolve("sodiumV.jar" + PendingActions.PENDING_SUFFIX)));
+		assertFalse(Files.exists(mods.resolve("nvidiumV.jar" + PendingActions.PENDING_SUFFIX)));
+
+		assertEquals(List.of("add-nvidium"), plan(Set.of("SODIUM"), add("nvidium", "NVIDIUM")).ids());
+		pins = loaded(List.of(), mod("sodium", "Sodium", "0.9.3"));
+		assertEquals(List.of("Add nvidium: Nvidium needs Sodium 0.9.2, not the installed 0.9.3"), plan(Set.of("SODIUM"), add("nvidium", "NVIDIUM")).errors());
+	}
+
+	// What relied on a refused item can't go in either: Sodium 0.10 is refused (the installed Nvidium pins 0.9.2), so Iris
+	// 1.12, which needs it, is refused too, each with its own reason.
+	@Test
+	void whatReliedOnARefusedItemIsRefusedToo() throws IOException {
+		Recommendation sodium = updateOf("sodium", "SODIUM");
+		Recommendation iris = updateOf("iris", "IRIS");
+		Recommendation lithium = updateOf("lithium", "LITHIUM");
+		jarVersions.put("sodiumV.jar", "0.10.0");
+		jarVersions.put("irisV.jar", "1.12.0");
+		jarDepends.put("irisV.jar", Map.of("sodium", "0.10.x"));
+		pins = loaded(List.of(dependsOn("nvidium", "Nvidium", "sodium", "Sodium", "0.9.2")), mod("sodium", "Sodium", "0.9.2"), mod("iris", "Iris", "1.11.4"));
+
+		DownloadPlanner.Result result = plan(Set.of("SODIUM", "IRIS", "LITHIUM"), sodium, iris, lithium);
+
+		assertEquals(List.of("update-lithium"), result.ids());
+		assertEquals(List.of("lithium-1.jar", "lithiumV.jar"), files(result.ops()));
+		assertEquals(List.of("Update sodium: Nvidium, which is installed, needs Sodium 0.9.2, not 0.10.0",
+				"Update iris: Iris needs Sodium 0.10.x, not the installed 0.9.2"), result.errors());
+	}
+
+	// A `breaks` in a new jar's own fabric.mod.json counts the same way.
+	@Test
+	void anAdditionThatBreaksAnInstalledModIsRefused() {
+		put("b", version("bV", "B", "1", T));
+		jarBreaks.put("bV.jar", Map.of("sodium", "0.9.x"));
+		pins = loaded(List.of(), mod("sodium", "Sodium", "0.9.3"));
+
+		DownloadPlanner.Result result = plan(Set.of(), add("b", "B"));
+
+		assertEquals(List.of("Add b: b doesn't work with the installed Sodium 0.9.3"), result.errors());
+	}
+
+	// Re-review of WS-G1, H-1: a jar that bundles the library it needs is fine next to an older copy nested in another mod
+	// (Fabric picks the copy that fits); without its own copy, the older one is what it gets.
+	@Test
+	void aJarBundlingTheLibraryItNeedsIsntJudgedByAnOlderNestedCopy() {
+		put("b", version("bV", "B", "1", T));
+		jarDepends.put("bV.jar", Map.of("lib", "2.x"));
+		jarProvides.put("bV.jar", List.of("lib"));
+		pins = loaded(List.of(), new VersionPins.Loaded("lib", "Lib", "1.0", "distanthorizons"));
+
+		assertEquals(List.of("add-b"), plan(Set.of(), add("b", "B")).ids());
+
+		jarProvides.remove("bV.jar");
+		assertEquals(List.of("Add b: b needs Lib 2.x, not the installed 1.0"), plan(Set.of(), add("b", "B")).errors());
+	}
+
+	// Re-review of WS-G1, M-3: what an earlier Apply staged counts. A staged Nvidium (sodium "0.9.2") refuses a later Sodium
+	// 0.9.3 update, and its own staged jar is kept.
+	@Test
+	void aStagedModsRangeRefusesALaterUpdate() throws IOException {
+		put("nvidium", version("nvidiumV", "NVIDIUM", "0.4.4", T));
+		jarDepends.put("nvidiumV.jar", Map.of("sodium", "0.9.2"));
+		jarNames.put("nvidiumV.jar", "Nvidium");
+		pins = loaded(List.of(), mod("sodium", "Sodium", "0.9.2"));
+		stage(add("nvidium", "NVIDIUM"));
+		stagedJars = stagedJarsOf(pendingFile());
+		Recommendation sodium = updateOf("sodium", "SODIUM");
+		jarVersions.put("sodiumV.jar", "0.9.3");
+
+		DownloadPlanner.Result result = plan(Set.of("SODIUM"), sodium);
+
+		assertEquals(List.of("Update sodium: Nvidium, which is waiting for a restart, needs Sodium 0.9.2, not 0.9.3"), result.errors());
+		assertTrue(Files.exists(mods.resolve("nvidiumV.jar" + PendingActions.PENDING_SUFFIX)));
+		assertFalse(Files.exists(mods.resolve("sodiumV.jar" + PendingActions.PENDING_SUFFIX)));
+	}
+
+	// ... and a staged update of the pinning mod lifts its pin: Iris 1.12, staged earlier, allows Sodium 0.10.
+	@Test
+	void aStagedUpdateOfThePinningModLiftsItsPin() throws IOException {
+		Recommendation iris = updateOf("iris", "IRIS");
+		jarVersions.put("irisV.jar", "1.12.0");
+		jarDepends.put("irisV.jar", Map.of("sodium", "0.10.x"));
+		stage(iris);
+		stagedJars = stagedJarsOf(pendingFile());
+		pins = loaded(List.of(dependsOn("iris", "Iris", "sodium", "Sodium", "0.9.x")), mod("sodium", "Sodium", "0.9.3"), mod("iris", "Iris", "1.11.4"));
+		Recommendation sodium = updateOf("sodium", "SODIUM");
+		jarVersions.put("sodiumV.jar", "0.10.0");
+
+		DownloadPlanner.Result result = plan(Set.of("SODIUM", "IRIS"), sodium);
+
+		assertEquals(List.of(), result.errors());
+		assertEquals(List.of("update-sodium"), result.ids());
+	}
+
+	// A breaks between two items of one batch refuses both, each naming the other.
+	@Test
+	void aBreaksBetweenTwoItemsOfTheBatchRefusesBoth() throws IOException {
+		Recommendation sodium = updateOf("sodium", "SODIUM");
+		jarVersions.put("sodiumV.jar", "0.9.3");
+		jarNames.put("sodiumV.jar", "Sodium");
+		put("b", version("bV", "B", "1", T));
+		jarBreaks.put("bV.jar", Map.of("sodium", "0.9.3"));
+		jarNames.put("bV.jar", "B Mod");
+		pins = loaded(List.of(), mod("sodium", "Sodium", "0.9.2"));
+
+		DownloadPlanner.Result result = plan(Set.of("SODIUM"), sodium, add("b", "B"));
+
+		assertEquals(List.of("Update sodium: B Mod, which would be installed too, doesn't work with Sodium 0.9.3",
+				"Add b: B Mod doesn't work with Sodium 0.9.3, which would be installed too"), result.errors());
+	}
+
+	// An addition that only works with an update of the batch goes in with it (one group).
+	@Test
+	void anAdditionThatNeedsAnUpdateOfTheBatchJoinsIt() throws IOException {
+		Recommendation sodium = updateOf("sodium", "SODIUM");
+		jarVersions.put("sodiumV.jar", "0.9.3");
+		put("b", version("bV", "B", "1", T));
+		jarDepends.put("bV.jar", Map.of("sodium", "0.9.3"));
+		pins = loaded(List.of(), mod("sodium", "Sodium", "0.9.2"));
+
+		DownloadPlanner.Result result = plan(Set.of("SODIUM"), add("b", "B"), sodium);
+
+		assertEquals(List.of(), result.errors());
+		assertEquals(1, groups(result.ops()), result.ops().toString());
+	}
+
+	// Re-review of WS-G1, M-1: the addition an update waits for is planned after the other updates, so an addition that
+	// relies on a later update still joins it.
+	@Test
+	void theProviderAdditionComesAfterTheOtherUpdates() throws IOException {
+		Recommendation updateA = updateA(required("LIB"));
+		Recommendation updateK = updateOf("k", "K");
+		put("c", version("cV", "C", "1", T));
+		put("lib", version("libV", "LIB", "1", T, new Dependency("K", "k1", "incompatible")));
+
+		DownloadPlanner.Result result = plan(Set.of("A", "K"), updateA, updateK, add("c", "C"), add("lib", "LIB"));
+
+		assertEquals(List.of(), result.errors());
+		assertEquals(List.of("update-a", "update-k", "add-c", "add-lib"), result.ids());
+		Map<String, String> groupByFile = new HashMap<>();
+		result.ops().forEach(op -> groupByFile.put(files(List.of(op)).getFirst(), op.group()));
+		assertEquals(1, java.util.stream.Stream.of("a-1.jar", "aV.jar", "k-1.jar", "kV.jar", "libV.jar").map(groupByFile::get).distinct().count(),
+				result.ops().toString());
+		assertFalse(groupByFile.get("cV.jar").equals(groupByFile.get("aV.jar")));
+	}
+
+	// Re-review of WS-G1, M-2: LIB1 is a ticked addition's own project but LIB2 comes only as another addition's
+	// dependency: the update waits for every addition and joins both.
+	@Test
+	void anUpdateNeedingAnAdditionsDependencyWaitsForAllAdditions() throws IOException {
+		Recommendation update = updateA(required("LIB1"), required("LIB2"));
+		put("lib1", version("lib1V", "LIB1", "1", T));
+		put("x", version("xV", "X", "1", T, required("LIB2")));
+		put("lib2", version("lib2V", "LIB2", "1", T));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update, add("lib1", "LIB1"), add("x", "X"));
+
+		assertEquals(List.of(), result.errors());
+		assertEquals(List.of("update-a", "add-lib1", "add-x"), result.ids());
+		assertEquals(1, groups(result.ops()), result.ops().toString());
+	}
+
+	// --- docs/v0.4/SPEC.md 2o, M4: Apply before the Modrinth lookup finished, or after it failed
+
+	// Without the installed mods' Modrinth data the checks against them see nothing (an addition Modrinth marks
+	// incompatible with an installed mod would go in), so every download is refused, in the planner's order, before
+	// anything is fetched or asked.
+	@Test
+	void nothingIsPlannedBeforeTheInstalledModsWereLookedUp() throws IOException {
+		Recommendation update = updateA();
+		put("b", version("bV", "B", "1", T, incompatible("K")));
+		DownloadPlanner planner = new DownloadPlanner(new DependencyResolver(client, "fabric", "26.2", installedVersions), mods, this::fetch, conflicts,
+				updateVersions, pins).lookedUp(true, false);
+
+		DownloadPlanner.Result result = planner.plan(List.of(add("b", "B"), update), Set.of(), Set.of(), Map.of());
+		planned.add(result);
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of(), result.ops());
+		String wait = "Modrinth's data for your mods isn't loaded yet, or the lookup failed; wait a moment or press Rescan, then try again";
+		assertEquals(List.of("Update a: " + wait, "Add b: " + wait), result.errors());
+		assertEquals(List.of(), fetched);
+		assertEquals(List.of(), client.calls);
+	}
+
+	// --- docs/v0.4/SPEC.md 2o, M7: an update's jar is the same mod
+
+	// The latest version's primary file declares another mod id (a secondary file installed, or a renamed mod): putting
+	// it in place of mod a would leave everything that depends on a without it. Refused, the download deleted.
+	@Test
+	void anUpdateWhoseJarIsAnotherModIsRefused() throws IOException {
+		Recommendation update = updateA();
+		jarIds.put("aV.jar", "other");
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update);
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of(), result.ops());
+		assertEquals(List.of("Update a: aV.jar is a different mod (other, not a)"), result.errors());
+		assertFalse(Files.exists(mods.resolve("aV.jar" + PendingActions.PENDING_SUFFIX)));
+		assertEquals("installed", Files.readString(mods.resolve("a-1.jar")));
+	}
+
+	// A renamed mod that still provides its old id keeps its dependants working (Fabric resolves them to it).
+	@Test
+	void anUpdateWhoseJarProvidesTheOldIdIsStaged() throws IOException {
+		Recommendation update = updateA();
+		jarIds.put("aV.jar", "a-renamed");
+		jarProvides.put("aV.jar", List.of("a"));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update);
+
+		assertEquals(List.of("update-a"), result.ids(), result.errors().toString());
+		assertEquals(java.util.Arrays.asList(null, "a-renamed"), result.ops().stream().map(Op::modId).toList());
+	}
+
+	// --- docs/v0.4/SPEC.md 2o, H1-A: an update whose new version requires a project that isn't installed
+
+	// Updates are ticked by default: staged alone, A 2.0 would stop the game from starting without LIB. Refused before
+	// the download, naming LIB (the minimal fix: an update's dependencies aren't resolved).
+	@Test
+	void anUpdateWhoseNewVersionRequiresAProjectThatIsntInstalledIsRefused() throws IOException {
+		client.projects.add(new ModrinthProject("LIB", "lib", "Lib Mod", "approved", List.of("26.2"), List.of("fabric"), "optional"));
+		Recommendation update = updateA(required("LIB"));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update);
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of(), result.ops());
+		assertEquals(List.of("Update a: its new version needs Lib Mod, which isn't installed"), result.errors());
+		assertEquals(List.of(), fetched);
+		assertEquals("installed", Files.readString(mods.resolve("a-1.jar")));
+	}
+
+	@Test
+	void anUpdateWhoseRequirementsAreInstalledIsStaged() throws IOException {
+		Recommendation update = updateA(required("K"), required("A"), new Dependency("OPT", null, "optional"), new Dependency(null, "libV", "required"));
+
+		DownloadPlanner.Result result = plan(Set.of("A", "K"), update);
+
+		assertEquals(List.of("update-a"), result.ids(), result.errors().toString());
+		assertEquals(List.of("a-1.jar", "aV.jar"), files(result.ops()));
+	}
+
+	// The version it replaces required LIB too, and the game started: LIB is there in a form Modrinth's hashes don't show
+	// (nested in another mod, or a jar Modrinth doesn't know), so the update keeps working with it.
+	@Test
+	void aRequirementTheReplacedVersionAlreadyHadIsntMissing() throws IOException {
+		Recommendation update = updateA(required("LIB"));
+		installedVersions.put("a1", version("a1", "A", "1", T, required("LIB")));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update);
+
+		assertEquals(List.of("update-a"), result.ids(), result.errors().toString());
+	}
+
+	// LIB is added in the same batch (ticked, or brought by another addition): the update waits for the additions and joins
+	// the group that stages LIB, in either tick order, so it's never applied without it.
+	@Test
+	void anUpdateJoinsTheAdditionThatBringsItsRequirement() throws IOException {
+		Recommendation update = updateA(required("LIB"));
+		libraryUsers();
+
+		for (List<Recommendation> recs : List.of(List.of(update, add("lib", "LIB")), List.of(add("lib", "LIB"), update), List.of(update, add("b", "B")))) {
+			DownloadPlanner.Result result = plan(Set.of("A"), recs.toArray(Recommendation[]::new));
+
+			assertEquals(List.of(), result.errors());
+			assertEquals(List.of("update-a", recs.stream().filter(r -> r.id().startsWith("add-")).findFirst().orElseThrow().id()), result.ids());
+			List<String> files = new ArrayList<>(files(result.ops()));
+			files.remove("bV.jar");
+			assertEquals(Set.of("a-1.jar", "aV.jar", "libV.jar"), Set.copyOf(files));
+			assertEquals(1, groups(result.ops()), result.ops().toString());
+		}
+	}
+
+	// Review of WS-G1, M-1: the addition that brings LIB is planned right after the update waits, then the update, so an
+	// addition that relies on the update (it's incompatible with the installed A) still joins it, as without the wait.
+	@Test
+	void theAdditionThatBringsARequirementIsPlannedBeforeTheOtherAdditions() throws IOException {
+		Recommendation update = updateA(required("LIB"));
+		put("x", version("xV", "X", "1", T, new Dependency("A", "a1", "incompatible")));
+		put("lib", version("libV", "LIB", "1", T));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update, add("x", "X"), add("lib", "LIB"));
+
+		assertEquals(List.of(), result.errors());
+		assertEquals(List.of("update-a", "add-x", "add-lib"), result.ids());
+		assertEquals(Set.of("a-1.jar", "aV.jar", "xV.jar", "libV.jar"), Set.copyOf(files(result.ops())));
+		assertEquals(1, groups(result.ops()), result.ops().toString());
+	}
+
+	// Review of WS-G1, M-2: a requirement an earlier Apply staged is in another all-or-nothing group, so the update waits
+	// for the restart, and says so.
+	@Test
+	void anUpdateWhoseRequirementIsOnlyStagedSaysSo() throws IOException {
+		client.projects.add(new ModrinthProject("LIB", "lib", "Lib Mod", "approved", List.of("26.2"), List.of("fabric"), "optional"));
+		put("lib", version("libV", "LIB", "1", T));
+		staged = stage(add("lib", "LIB"));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), updateA(required("LIB")));
+
+		assertEquals(List.of("Update a: its new version needs Lib Mod, which is waiting for a restart; update it after restarting"), result.errors());
+	}
+
+	// Review of WS-G1, M-3: text from a downloaded jar is shown without formatting codes or line breaks.
+	@Test
+	void textFromADownloadedJarIsSanitisedForTheUi() throws IOException {
+		Recommendation update = updateA();
+		jarIds.put("aV.jar", "evil\u00a7c\nmod");
+		jarVersions.put("sodiumV.jar", "0.10.0\u00a7r");
+		Recommendation sodium = updateOf("sodium", "SODIUM");
+		pins = new VersionPins(List.of(dependsOn("iris", "Iris", "sodium", "Sodium", "0.9.x")));
+
+		DownloadPlanner.Result result = plan(Set.of("A", "SODIUM"), update, sodium);
+
+		assertEquals(List.of("Update a: aV.jar is a different mod (evil mod, not a)",
+				"Update sodium: Iris, which is installed, needs Sodium 0.9.x, not 0.10.0"), result.errors());
+	}
+
+	// The addition that would have brought LIB fails: the update is refused too, and each error stays at its item's place
+	// in the planner's order (updates first), which the preview relies on.
+	@Test
+	void anUpdateWhoseRequirementsAdditionFailsIsRefusedInItsOwnPlace() throws IOException {
+		client.projects.add(new ModrinthProject("LIB", "lib", "Lib Mod", "approved", List.of("26.2"), List.of("fabric"), "optional"));
+		Recommendation update = updateA(required("LIB"));
+		libraryUsers();
+		failing.add("libV.jar");
+		put("c", version("cV", "C", "1", T));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), add("lib", "LIB"), update, add("c", "C"));
+
+		assertEquals(List.of("add-c"), result.ids());
+		assertEquals(List.of("Update a: its new version needs Lib Mod, which isn't installed", "Add lib: stalled: libV.jar"), result.errors());
+		assertFalse(fetched.contains("aV.jar"));
 	}
 }

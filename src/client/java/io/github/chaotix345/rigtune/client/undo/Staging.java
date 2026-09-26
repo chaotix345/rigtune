@@ -12,6 +12,7 @@ import io.github.chaotix345.rigtune.core.history.HistoryUpdates;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
+import io.github.chaotix345.rigtune.core.history.PartlyApplied;
 import io.github.chaotix345.rigtune.core.history.StagedChanges;
 import org.jspecify.annotations.Nullable;
 
@@ -29,6 +30,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 // Staging into config/rigtune/pending.json, and the journal records that go with it, under the apply lock: the
 // changes are recorded after the merge, with the ids the ops have in pending.json (review H5).
@@ -81,6 +83,7 @@ public final class Staging {
 				RigTune.LOGGER.error("Could not stage RigTune changes: the apply helper still holds {}", ApplyLock.defaultPath(configDir));
 				return null;
 			}
+			createJournal();
 			Merge merge = mergeLocked(ops);
 			try {
 				if (!journal.update(entries -> recorded(entries, merge, ops, entryId))) {
@@ -93,6 +96,19 @@ public final class Staging {
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.error("Could not write {}", pendingFile, e);
 			return null;
+		}
+	}
+
+	// history.json's first write makes the 0.1.x legacy entry from pending.json (HistoryStartup.legacyEntry): it must see
+	// pending.json as it was before this merge, not this Apply's ops (docs/v0.4/SPEC.md 2o L1). The caller holds the lock.
+	private void createJournal() {
+		if (journal.exists()) {
+			return;
+		}
+		try {
+			journal.update(entries -> entries);
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.warn("Could not create {}", Journal.file(configDir), e);
 		}
 	}
 
@@ -240,11 +256,17 @@ public final class Staging {
 		}
 	}
 
-	// Cancels everything staged (the RigTune screen's Discard pending). Null when the lock is busy.
+	// Cancels everything staged (the RigTune screen's Discard pending), except a group the helper left half done at the
+	// last exit, which the next exit finishes (audit M2; PartlyApplied). Returns the dropped ops; null when the lock is busy.
 	public List<Op> discard() throws IOException {
 		try (ApplyLock lock = lock()) {
 			if (lock == null) {
 				return null;
+			}
+			PendingActions plan = readable();
+			Set<String> halfDone = plan == null ? Set.of() : halfDoneGroups(plan);
+			if (!halfDone.isEmpty()) {
+				return discardExcept(plan, halfDone);
 			}
 			List<Op> dropped = PendingActions.discard(pendingFile, Duration.ZERO);
 			if (dropped != null) {
@@ -252,6 +274,44 @@ public final class Staging {
 			}
 			return dropped;
 		}
+	}
+
+	private @Nullable PendingActions readable() {
+		try {
+			return Files.exists(pendingFile) ? PendingActions.load(pendingFile) : null;
+		} catch (IOException e) {
+			return null;
+		}
+	}
+
+	private Set<String> halfDoneGroups(PendingActions plan) {
+		Set<String> names = new HashSet<>();
+		try (Stream<Path> files = Files.list(InstanceDirs.modsDirOf(pendingFile))) {
+			files.forEach(f -> names.add(f.getFileName().toString()));
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.warn("Could not list the mods folder to check for half-applied changes", e);
+			return Set.of();
+		}
+		return PartlyApplied.groups(plan.ops(), names);
+	}
+
+	// The caller holds the lock. Drops every op outside the half-done groups, as unstageLocked does.
+	private List<Op> discardExcept(PendingActions plan, Set<String> halfDone) throws IOException {
+		List<Op> kept = new ArrayList<>();
+		List<Op> dropped = new ArrayList<>();
+		for (Op op : plan.ops()) {
+			(op != null && op.group() != null && halfDone.contains(op.group()) ? kept : dropped).add(op);
+		}
+		plan.withOps(kept).save(pendingFile);
+		Path planMods = InstanceDirs.modsDirOf(pendingFile);
+		for (Op op : dropped) {
+			if (op != null && kept.stream().noneMatch(k -> op.from() != null && op.from().equals(k.from()))) {
+				PendingActions.retireDownload(op, planMods);
+			}
+		}
+		RigTune.LOGGER.info("Kept {} staged change(s) the helper left half done; the next exit finishes them", kept.size());
+		markDiscarded(dropped);
+		return dropped;
 	}
 
 	private void markDiscarded(List<Op> ops) {

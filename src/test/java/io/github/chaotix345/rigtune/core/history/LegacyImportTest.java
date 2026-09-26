@@ -4,13 +4,16 @@ import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -131,5 +134,74 @@ class LegacyImportTest {
 	void nothingToImportGivesNull() {
 		assertNull(entry(null, null));
 		assertNull(entry(result(), PendingActions.create(1, MODS, CONFIG, List.of())));
+	}
+
+	// docs/v0.4/SPEC.md 2o L1: every last-apply.json 0.1.0 wrote in the fixtures (hand-written, captured from the released
+	// jar, the user's real instance) is 0.1.x's.
+	@Test
+	void the010LastApplyFilesAreFrom010(@TempDir Path game) throws IOException {
+		Path mods = game.resolve("mods");
+		Path config = game.resolve("config");
+		for (String fixture : List.of("last-apply.json", "captured/last-apply.json", "real-instance/last-apply.json")) {
+			ApplyResult last = ApplyResult.load(V010Fixtures.install(fixture, config.resolve(fixture.replace('/', '-')), mods, config));
+			assertTrue(LegacyImport.fromV010(last), fixture);
+		}
+	}
+
+	// What 0.2.0 and later write, or what can't be told apart: never 0.1.x.
+	@Test
+	void laterOrUnclearLastApplyFilesAreNotFrom010() {
+		Op enable = withId(Op.enableFile(MODS.resolve("x.jar.rigtune-pending"), MODS.resolve("x.jar")).withModId("x"), "x", "g");
+		ApplyResult.OpResult enabled010 = new ApplyResult.OpResult(enable, ApplyResult.Status.OK, "Enabled x.jar");
+		assertTrue(LegacyImport.fromV010(result(enabled010)));
+
+		assertFalse(LegacyImport.fromV010(null));
+		assertFalse(LegacyImport.fromV010(result()));
+		assertFalse(LegacyImport.fromV010(result(enabled010, new ApplyResult.OpResult(withId(Op.disableFile(MODS.resolve("y.jar")), "y", null),
+				ApplyResult.Status.OK, "Disabled y.jar -> y.jar.disabled", MODS.resolve("y.jar.disabled").toString()))), "a resultPath");
+		assertFalse(LegacyImport.fromV010(result(enabled010, new ApplyResult.OpResult(Op.patchToml(CONFIG.resolve("DistantHorizons.toml"),
+				Map.of("a", "1")), ApplyResult.Status.OK, "Patched"))), "a TOML patch");
+		assertFalse(LegacyImport.fromV010(result(enabled010, new ApplyResult.OpResult(Op.patchProperties(CONFIG.resolve("iris.properties"),
+				Map.of("a", "1")), ApplyResult.Status.OK, "Patched"))), "a properties patch");
+		assertFalse(LegacyImport.fromV010(result(new ApplyResult.OpResult(enable.withProjectId("P7dR8mSH"), ApplyResult.Status.OK, "Enabled x.jar"))),
+				"a Modrinth project id");
+		assertFalse(LegacyImport.fromV010(result(enabled010, new ApplyResult.OpResult(new Op(null, null, null, "z", null), ApplyResult.Status.OK,
+				"?"))), "an unknown op type");
+		assertFalse(LegacyImport.fromV010(result(new ApplyResult.OpResult(Op.patchJson(SODIUM, Map.of("a", "1")), ApplyResult.Status.OK, "Patched"))),
+				"only a patch");
+		assertFalse(LegacyImport.fromV010(result(new ApplyResult.OpResult(enable, ApplyResult.Status.FAILED, "locked"))), "no file op done");
+
+		// Of those, only the ones with a later marker are known to be a later version's.
+		assertFalse(LegacyImport.fromLater(null));
+		assertFalse(LegacyImport.fromLater(result(enabled010)));
+		assertFalse(LegacyImport.fromLater(result(new ApplyResult.OpResult(enable, ApplyResult.Status.FAILED, "locked"))));
+		assertTrue(LegacyImport.fromLater(result(new ApplyResult.OpResult(enable, ApplyResult.Status.OK, "Enabled x.jar", MODS.resolve("x.jar").toString()))));
+		assertTrue(LegacyImport.fromLater(result(new ApplyResult.OpResult(Op.patchJson(CONFIG.resolve("other.json"), Map.of("a", "1")),
+				ApplyResult.Status.OK, "Patched"))));
+	}
+
+	// docs/v0.4/SPEC.md 2o L1: ops 0.1.x staged (every released 0.1.0 op has an id; updates are grouped) are 0.1.x's; any
+	// op only a later version stages makes the plan a later one.
+	@Test
+	void plansOnly010CouldStageAreRecognised(@TempDir Path game) throws IOException {
+		Path mods = game.resolve("mods");
+		Path config = game.resolve("config");
+		for (String fixture : List.of("pending.json", "captured/pending.json", "pending-pre-groups.json")) {
+			PendingActions plan = PendingActions.load(V010Fixtures.install(fixture, config.resolve(fixture.replace('/', '-')), mods, config));
+			assertTrue(LegacyImport.v010Plan(plan), fixture);
+		}
+		Op sodium = Op.patchJson(SODIUM, Map.of("a", "1"));
+		Op disable = Op.disableFile(MODS.resolve("y.jar"));
+		assertTrue(LegacyImport.v010Plan(PendingActions.create(1, MODS, CONFIG, List.of(sodium, disable))));
+		assertFalse(LegacyImport.v010Plan(null));
+		assertFalse(LegacyImport.v010Plan(PendingActions.create(1, MODS, CONFIG, List.of())));
+		assertFalse(LegacyImport.v010Plan(PendingActions.create(1, MODS, CONFIG, List.of(sodium,
+				Op.patchToml(CONFIG.resolve("DistantHorizons.toml"), Map.of("a", "1"))))), "a TOML patch");
+		assertFalse(LegacyImport.v010Plan(PendingActions.create(1, MODS, CONFIG, List.of(sodium,
+				Op.patchProperties(CONFIG.resolve("iris.properties"), Map.of("a", "1"))))), "a properties patch");
+		assertFalse(LegacyImport.v010Plan(PendingActions.create(1, MODS, CONFIG, List.of(disable,
+				Op.enableFile(MODS.resolve("x.jar.rigtune-pending"), MODS.resolve("x.jar")).withVersionId("v1")))), "a Modrinth version id");
+		assertFalse(LegacyImport.v010Plan(PendingActions.create(1, MODS, CONFIG, List.of(Op.patchJson(CONFIG.resolve("other.json"),
+				Map.of("a", "1"))))), "a JSON patch of another file");
 	}
 }

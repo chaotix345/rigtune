@@ -21,15 +21,21 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 // Works out what "Undo last apply" or "Undo everything" does (docs/v0.2/SPEC.md item 3), without touching anything.
-// - STAGED changes: their whole group is dropped from pending.json (changes of other applies in that group too).
+// - STAGED changes: their whole group is dropped from pending.json (changes of other applies in that group too), unless
+//   the helper left that group half done at the last exit: then it waits for the restart that finishes it (audit M2).
 // - Settings: put back when the current value is still the latest `after`; chained newest to oldest, stopping where
 //   the user changed the value between two applies.
 // - Mod files: newest group first, each group all-or-nothing against a simulated mods folder, so every step is checked
 //   against what the earlier steps leave. A group that would make a mod id load twice or leave a jar without a mod it
-//   depends on is skipped (review M9). The net renames become one new group per set of original groups that touched
-//   the same files, which also undoes update chains that kept one file name (review M6).
+//   depends on is skipped (review M9). The net renames are staged, which also undoes update chains that kept one file
+//   name (review M6), as ONE group, so the helper does all of them or none: a mod and the library it needs are never
+//   undone apart (docs/v0.4/SPEC.md 2o, audit H5). An undo that is safe only because a still-staged op runs at the same
+//   exit joins that op's group, or waits for the restart when it can't.
+// - A change whose file a still-staged op moves at the next exit (the first of two Undo last in one start brings it
+//   back) waits for the restart, and Undo last stops at its entry rather than undoing an older one (audit M3).
 // - RigTune's own jar is never undone, nor is a staged update of it dropped (review L3).
 public final class UndoPlanner {
 	public static final String ALL = "all";
@@ -58,8 +64,15 @@ public final class UndoPlanner {
 	static final String GONE = "It was undone or changed since this list was made";
 	static final String SUPERSEDED = "Changed again by a later apply";
 	static final String SUPERSEDED_GROUP = "Goes with a change a later apply changed again";
+	// The reasons FolderCheck gives (its own copies of these two, checked by FolderCheckTest).
 	static final String LOADED_TWICE = "mod %s would be loaded twice (%s)";
 	static final String MISSING = "%s would be missing %s";
+	static final String WAITS_RESTART = "A change staged earlier still moves %s at the next restart; restart once, then undo it";
+	static final String WAITS_STAGED = "It needs changes that are still waiting for a restart; restart once, then undo it";
+	static final String WAITS_ENTRY = "Part of this apply waits for a restart, so none of it is undone yet; restart once, then undo it";
+	static final String WAITS_PARTLY = "It was partly applied at the last exit; restart once so it finishes, then undo it";
+	private static final Set<String> WAITING = Set.of("rigtune.undo.reason.waits_restart", "rigtune.undo.reason.waits_staged",
+			"rigtune.undo.reason.waits_entry", "rigtune.undo.reason.waits_partly");
 	// The Undo screen's text as rigtune.undo.item.* / rigtune.undo.reason.* keys with the English above (docs/v0.3/SPEC.md
 	// item 9, G-M2); file names, mod ids, labels and values are arguments.
 	private static final Text NONE = Text.of("rigtune.undo.item.none", "(none)");
@@ -141,7 +154,8 @@ public final class UndoPlanner {
 				continue;
 			}
 			Result result = build(ctx, selected, pending, state, null, null, false, entry.id(), entry.at());
-			if (!result.plan().isEmpty()) {
+			// An entry waiting for the restart is still the last one: the next is never undone in its place (audit M3).
+			if (!result.plan().isEmpty() || waits(result.plan())) {
 				return result;
 			}
 		}
@@ -284,6 +298,7 @@ public final class UndoPlanner {
 		final List<Op> fileOps = new ArrayList<>();
 		final Set<String> discardOpIds = new LinkedHashSet<>();
 		final List<Revert> revertList = new ArrayList<>();
+		boolean waits;
 
 		final State state;
 
@@ -305,12 +320,35 @@ public final class UndoPlanner {
 		planStaged(ctx, kept, pending, folder, shownOps, b);
 		planSettings(kept, state, trackedKeys(ctx), pending, b);
 		planFiles(kept, folder, pending, b);
+		if (!all && b.waits) {
+			waitWhole(b);
+		}
 		List<Item> items = new ArrayList<>(b.discards);
 		items.addAll(b.reverts);
 		items.addAll(b.skips);
 		Script script = new Script(Map.copyOf(b.immediate), Map.copyOf(b.staged), List.copyOf(b.fileOps), Set.copyOf(b.discardOpIds),
 				List.copyOf(b.revertList));
 		return new Result(new UndoPlan(all, undoOf, items, at, null), script);
+	}
+
+	private static boolean waits(UndoPlan plan) {
+		return plan.items().stream().anyMatch(i -> i.reasonText() instanceof Text.Translatable t && WAITING.contains(t.key()));
+	}
+
+	// Undo last / Undo this on an entry part of which waits for the restart: none of it is undone now, since undoing the
+	// rest would leave the entry half undone, and Undo last passes over an entry once it was undone (audit M3).
+	private static void waitWhole(Builder b) {
+		Text reason = Text.of("rigtune.undo.reason.waits_entry", WAITS_ENTRY);
+		List<Item> held = new ArrayList<>(b.discards);
+		held.addAll(b.reverts);
+		b.discards.clear();
+		b.reverts.clear();
+		held.forEach(item -> b.skips.add(Item.of(item.descriptionText(), Action.SKIP, reason, false, item.changeIds(), List.of())));
+		b.immediate.clear();
+		b.staged.clear();
+		b.fileOps.clear();
+		b.discardOpIds.clear();
+		b.revertList.clear();
 	}
 
 	// --- changes a later entry changed again (review B-H1)
@@ -393,6 +431,7 @@ public final class UndoPlanner {
 			groupOps.computeIfAbsent(key, k -> op.group() == null ? List.of(op)
 					: pending.stream().filter(o -> o != null && op.group().equals(o.group())).toList());
 		}
+		Set<String> partly = byGroup.isEmpty() ? Set.of() : PartlyApplied.groups(pending, folder.files());
 		for (Map.Entry<String, List<Located>> group : byGroup.entrySet()) {
 			List<Op> ops = groupOps.get(group.getKey());
 			List<String> opIds = ops.stream().map(Op::id).filter(Objects::nonNull).toList();
@@ -400,6 +439,11 @@ public final class UndoPlanner {
 					|| group.getValue().stream().anyMatch(l -> RIGTUNE.equals(l.change().modId()));
 			if (rigtune) {
 				group.getValue().forEach(l -> b.skip(l, Text.of("rigtune.undo.reason.rigtune_staged", RIGTUNE_STAGED)));
+				continue;
+			}
+			if (ops.stream().anyMatch(op -> op.group() != null && partly.contains(op.group()))) {
+				group.getValue().forEach(l -> b.skip(l, Text.of("rigtune.undo.reason.waits_partly", WAITS_PARTLY)));
+				b.waits = true;
 				continue;
 			}
 			if (shownOps != null && !shownOps.containsAll(opIds)) {
@@ -549,7 +593,7 @@ public final class UndoPlanner {
 	// --- mod files, against a simulated mods folder
 
 	// A file's content, identified by the name it has in the real folder now. Its metadata is read only when needed.
-	private static final class Content {
+	private static final class Content implements Supplier<JarInfo> {
 		final String origin;
 		private final Folder folder;
 		private JarInfo info;
@@ -566,6 +610,11 @@ public final class UndoPlanner {
 				info = folder.jar(origin);
 			}
 			return info;
+		}
+
+		@Override
+		public JarInfo get() {
+			return info();
 		}
 	}
 
@@ -590,8 +639,12 @@ public final class UndoPlanner {
 			contents.add(content);
 			sim.put(name, content);
 		}
+		Map<String, Content> start = new LinkedHashMap<>(sim);
 		List<Accepted> accepted = new ArrayList<>();
-		Staged staged = staged(pending, b.discardOpIds, folder);
+		List<Op> live = liveFileOps(pending, b.discardOpIds);
+		Map<String, Content> stagedContents = new HashMap<>();
+		Staged staged = staged(live, folder, stagedContents);
+		Set<String> moving = movedNames(live);
 		Map<String, Text> problems = violations(sim, folder, staged);
 		for (List<Located> group : byGroup.values()) {
 			// Reversal disables first, as the executor runs a group: that frees the name an update chain reuses.
@@ -599,6 +652,13 @@ public final class UndoPlanner {
 			ordered.addAll(group.stream().filter(l -> !JournalChange.ENABLE.equals(l.change().action())).toList());
 			if (ordered.stream().anyMatch(l -> isRigTune(l.change(), sim))) {
 				ordered.forEach(l -> b.skip(l, Text.of("rigtune.undo.reason.rigtune_jar", RIGTUNE_JAR)));
+				continue;
+			}
+			String waiting = waitingFile(ordered, moving);
+			if (waiting != null) {
+				Text reason = Text.of("rigtune.undo.reason.waits_restart", WAITS_RESTART, waiting);
+				ordered.forEach(l -> b.skip(l, reason));
+				b.waits = true;
 				continue;
 			}
 			Map<String, Content> trial = new LinkedHashMap<>(sim);
@@ -629,14 +689,97 @@ public final class UndoPlanner {
 			sim.putAll(trial);
 			problems = violations(sim, folder, staged);
 			accepted.add(new Accepted(ordered, moved));
-			for (Located l : ordered) {
+		}
+		if (accepted.isEmpty()) {
+			return;
+		}
+		String group = joinedGroup(start, sim, folder, live, stagedContents);
+		if (group == null) {
+			Text reason = Text.of("rigtune.undo.reason.waits_staged", WAITS_STAGED);
+			accepted.forEach(a -> a.changes().forEach(l -> b.skip(l, reason)));
+			b.waits = true;
+			return;
+		}
+		for (Accepted a : accepted) {
+			for (Located l : a.changes()) {
 				JournalChange c = l.change();
 				Text what = JournalChange.ENABLE.equals(c.action()) ? Text.of("rigtune.undo.item.disable", "Disable %s", c.file())
 						: Text.of("rigtune.undo.item.reenable", "Re-enable %s", c.file());
 				b.reverts.add(Item.of(what, Action.REVERT, null, true, List.of(c.id()), List.of()));
 			}
 		}
-		netOps(contents, sim, accepted, folder.dir(), b);
+		netOps(contents, sim, accepted, folder.dir(), group, b);
+	}
+
+	// The staged mod-file ops this undo leaves in pending.json.
+	private static List<Op> liveFileOps(List<Op> pending, Set<String> discarded) {
+		return pending.stream()
+				.filter(op -> op != null && op.type() != null && (op.id() == null || !discarded.contains(op.id())))
+				.filter(op -> op.type() == PendingActions.Type.DISABLE_FILE && op.path() != null
+						|| op.type() == PendingActions.Type.ENABLE_FILE && op.from() != null && op.to() != null)
+				.toList();
+	}
+
+	private static Set<String> movedNames(List<Op> live) {
+		Set<String> out = new HashSet<>();
+		for (Op op : live) {
+			if (op.type() == PendingActions.Type.DISABLE_FILE) {
+				out.add(HistoryUpdates.fileName(op.path()));
+			} else {
+				out.add(HistoryUpdates.fileName(op.from()));
+				out.add(HistoryUpdates.fileName(op.to()));
+			}
+		}
+		return out;
+	}
+
+	// Audit M3: a reversal reading or writing a file that a still-staged op moves at the next exit (the first of two Undo
+	// last in one start re-enables x-1.jar, which the second would disable) can't be planned against today's folder.
+	private static String waitingFile(List<Located> group, Set<String> moving) {
+		for (Located l : group) {
+			JournalChange c = l.change();
+			if (!JournalChange.ENABLE.equals(c.action())) {
+				String disabled = c.resultFile() != null ? c.resultFile() : c.file() + DISABLED_SUFFIX;
+				if (moving.contains(disabled)) {
+					return disabled;
+				}
+			}
+			if (moving.contains(c.file())) {
+				return c.file();
+			}
+		}
+		return null;
+	}
+
+	// Audit H5: the group this undo's file ops are staged in. A new one when they are safe on their own; when they are
+	// safe only because a still-staged op runs at the same exit (the second of two Undo last in one start disables a
+	// library whose dependant the first one disables), that op's group, so the helper does both or neither. Null when
+	// that would take an ungrouped op or more than one group: then the undo waits for the restart.
+	private static String joinedGroup(Map<String, Content> before, Map<String, Content> after, Folder folder, List<Op> live,
+			Map<String, Content> cache) {
+		if (added(before, after, folder, staged(List.of(), folder, cache)).isEmpty()) {
+			return PendingActions.newId();
+		}
+		Set<String> groups = new HashSet<>();
+		for (Op op : live) {
+			List<Op> others = live.stream().filter(o -> o != op).toList();
+			if (!added(before, after, folder, staged(others, folder, cache)).isEmpty()) {
+				groups.add(op.group());
+			}
+		}
+		if (groups.size() != 1 || groups.contains(null)) {
+			return null;
+		}
+		String group = groups.iterator().next();
+		List<Op> joined = live.stream().filter(op -> group.equals(op.group())).toList();
+		return added(before, after, folder, staged(joined, folder, cache)).isEmpty() ? group : null;
+	}
+
+	// What the folder `after` breaks that `before` didn't, with these staged ops done.
+	private static Map<String, Text> added(Map<String, Content> before, Map<String, Content> after, Folder folder, Staged staged) {
+		Map<String, Text> out = new TreeMap<>(violations(after, folder, staged));
+		out.keySet().removeAll(violations(before, folder, staged).keySet());
+		return out;
 	}
 
 	private static Text move(JournalChange c, Map<String, Content> sim, Map<Located, Content> moved, Located l) {
@@ -711,68 +854,32 @@ public final class UndoPlanner {
 	private record Staged(Set<String> disabled, Map<String, Content> enabled) {
 	}
 
-	private static Staged staged(List<Op> pending, Set<String> discarded, Folder folder) {
+	private static Staged staged(List<Op> live, Folder folder, Map<String, Content> cache) {
 		Set<String> disabled = new HashSet<>();
 		Map<String, Content> enabled = new LinkedHashMap<>();
-		for (Op op : pending) {
-			if (op == null || op.type() == null || op.id() != null && discarded.contains(op.id())) {
-				continue;
-			}
-			if (op.type() == PendingActions.Type.DISABLE_FILE && op.path() != null) {
+		for (Op op : live) {
+			if (op.type() == PendingActions.Type.DISABLE_FILE) {
 				disabled.add(HistoryUpdates.fileName(op.path()));
-			} else if (op.type() == PendingActions.Type.ENABLE_FILE && op.from() != null && op.to() != null) {
-				enabled.put(HistoryUpdates.fileName(op.to()), new Content(HistoryUpdates.fileName(op.from()), folder));
+			} else {
+				enabled.put(HistoryUpdates.fileName(op.to()), cache.computeIfAbsent(HistoryUpdates.fileName(op.from()), from -> new Content(from, folder)));
 			}
 		}
 		return new Staged(disabled, enabled);
 	}
 
-	// Reasons the folder wouldn't start: a mod id on two active jars, or an active jar without a mod it depends on. By
-	// their English, sorted, so a plan compares and lists them the same way in every language.
+	// Reasons the folder, as these staged ops leave it, wouldn't start (FolderCheck).
 	private static Map<String, Text> violations(Map<String, Content> folderNow, Folder folder, Staged staged) {
 		Map<String, Content> sim = new LinkedHashMap<>(folderNow);
 		staged.disabled().forEach(sim::remove);
 		sim.putAll(staged.enabled());
-		Set<String> provided = new HashSet<>(ALWAYS_PROVIDED);
-		provided.addAll(folder.providedElsewhere());
-		Map<String, List<String>> namesById = new HashMap<>();
-		List<JarInfo> active = new ArrayList<>();
-		for (Map.Entry<String, Content> e : sim.entrySet()) {
-			if (!e.getKey().endsWith(".jar")) {
-				continue;
-			}
-			JarInfo info = e.getValue().info();
-			if (info == null) {
-				continue;
-			}
-			active.add(info);
-			namesById.computeIfAbsent(info.id(), k -> new ArrayList<>()).add(e.getKey());
-			provided.add(info.id());
-			provided.addAll(info.provides());
-		}
-		Map<String, Text> out = new TreeMap<>();
-		namesById.forEach((id, names) -> {
-			if (names.size() > 1) {
-				Text twice = Text.of("rigtune.undo.reason.breaks.twice", LOADED_TWICE, id, String.join(", ", new TreeSet<>(names)));
-				out.put(twice.english(), twice);
-			}
-		});
-		for (JarInfo info : active) {
-			for (String dep : info.depends()) {
-				if (!provided.contains(dep)) {
-					Text missing = Text.of("rigtune.undo.reason.breaks.missing", MISSING, info.id(), dep);
-					out.put(missing.english(), missing);
-				}
-			}
-		}
-		return out;
+		return FolderCheck.problems(sim, folder.providedElsewhere());
 	}
 
-	// One op per file whose place changed, grouped by the sets of original groups that touched the same files. Staging
-	// each original group's reversal on its own doesn't work: two reversals of an update chain that kept one file name
-	// (disable mod.jar twice) would be merged into one broken group by PendingActions.merge's dedupe. So the net renames
-	// are staged, and original groups that moved the same file are joined (union-find) so they stay all-or-nothing.
-	private static void netOps(List<Content> contents, Map<String, Content> sim, List<Accepted> accepted, Path dir, Builder b) {
+	// One op per file whose place changed, all in `group` (audit H5). Staging each original group's reversal on its own
+	// doesn't work: two reversals of an update chain that kept one file name (disable mod.jar twice) would be merged into
+	// one broken group by PendingActions.merge's dedupe. So the net renames are staged. A change whose file ends where it
+	// started (a round trip) follows the first op of the original groups that moved the same files (union-find).
+	private static void netOps(List<Content> contents, Map<String, Content> sim, List<Accepted> accepted, Path dir, String group, Builder b) {
 		Map<Content, String> finalName = new HashMap<>();
 		sim.forEach((name, content) -> finalName.put(content, name));
 		int[] parent = new int[accepted.size()];
@@ -788,8 +895,8 @@ public final class UndoPlanner {
 				}
 			}
 		}
-		Map<Integer, String> groupIds = new HashMap<>();
 		Map<Content, Op> opOf = new HashMap<>();
+		Map<Op, Integer> rootOf = new HashMap<>();
 		List<Op> ops = new ArrayList<>();
 		for (Content content : contents) {
 			Integer by = movedBy.get(content);
@@ -806,19 +913,16 @@ public final class UndoPlanner {
 				op = Op.enableFile(dir.resolve(content.origin), dir.resolve(now)).withModId(content.info() == null ? null : content.info().id());
 			}
 			if (op != null) {
-				op = op.inGroup(groupIds.computeIfAbsent(find(parent, by), k -> PendingActions.newId()));
+				op = op.inGroup(group);
 				opOf.put(content, op);
+				rootOf.put(op, find(parent, by));
 				ops.add(op);
 			}
 		}
 		ops.sort(Comparator.comparingInt(op -> op.type() == PendingActions.Type.DISABLE_FILE ? 0 : 1));
 		Map<Integer, String> anchors = new HashMap<>();
 		for (Op op : ops) {
-			for (Map.Entry<Integer, String> g : groupIds.entrySet()) {
-				if (g.getValue().equals(op.group())) {
-					anchors.putIfAbsent(g.getKey(), op.id());
-				}
-			}
+			anchors.putIfAbsent(rootOf.get(op), op.id());
 		}
 		b.fileOps.addAll(ops);
 		for (int i = 0; i < accepted.size(); i++) {

@@ -1,6 +1,8 @@
 package io.github.chaotix345.rigtune.core.apply;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.RigTune;
@@ -12,7 +14,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -50,6 +56,17 @@ public final class ModJars {
 			return null;
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.debug("Could not read the mod name of {}: {}", jar, e.getMessage());
+			return null;
+		}
+	}
+
+	// docs/v0.4/SPEC.md 2o, H2: the mod's version (fabric.mod.json "version"), which the installed mods' version ranges are
+	// matched against; null as nameOf.
+	public static String versionOf(Path jar) {
+		try {
+			return readField(jar, "version");
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.debug("Could not read the version of {}: {}", jar, e.getMessage());
 			return null;
 		}
 	}
@@ -136,8 +153,47 @@ public final class ModJars {
 		return readField(jar, "id");
 	}
 
+	// docs/v0.4/SPEC.md 2o, H2: a fabric.mod.json section of version ranges ("depends", "breaks"): mod id -> its ranges (a
+	// string, or an array of them: any of them). Empty when the jar or the section can't be read.
+	public static Map<String, List<String>> rangesOf(Path jar, String section) {
+		try {
+			JsonObject root = readRoot(jar);
+			if (root == null || !(root.get(section) instanceof JsonObject ranges)) {
+				return Map.of();
+			}
+			Map<String, List<String>> out = new LinkedHashMap<>();
+			for (Map.Entry<String, JsonElement> e : ranges.entrySet()) {
+				List<String> list = new ArrayList<>();
+				if (e.getValue() instanceof JsonArray array) {
+					array.forEach(range -> {
+						if (range.isJsonPrimitive()) {
+							list.add(range.getAsString());
+						}
+					});
+				} else if (e.getValue().isJsonPrimitive()) {
+					list.add(e.getValue().getAsString());
+				}
+				out.put(e.getKey(), List.copyOf(list));
+			}
+			return out;
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.debug("Could not read the {} of {}: {}", section, jar, e.getMessage());
+			return Map.of();
+		}
+	}
+
 	// A top-level string field of the jar's fabric.mod.json, or null (as readModId).
 	private static String readField(Path jar, String field) throws IOException {
+		JsonObject root = readRoot(jar);
+		if (root == null || !root.has(field)) {
+			return null;
+		}
+		JsonElement value = root.get(field);
+		return value.isJsonPrimitive() ? value.getAsString() : null;
+	}
+
+	// The jar's fabric.mod.json; null when it has none, it's over the cap, or it isn't a JSON object.
+	private static JsonObject readRoot(Path jar) throws IOException {
 		try (ZipFile zip = new ZipFile(jar.toFile())) {
 			ZipEntry entry = zip.getEntry("fabric.mod.json");
 			if (entry == null) {
@@ -152,11 +208,7 @@ public final class ModJars {
 			}
 			try {
 				JsonElement root = JsonParser.parseString(new String(json, StandardCharsets.UTF_8));
-				if (!root.isJsonObject() || !root.getAsJsonObject().has(field)) {
-					return null;
-				}
-				JsonElement value = root.getAsJsonObject().get(field);
-				return value.isJsonPrimitive() ? value.getAsString() : null;
+				return root.isJsonObject() ? root.getAsJsonObject() : null;
 			} catch (JsonParseException e) {
 				return null;
 			}

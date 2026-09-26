@@ -172,6 +172,35 @@ public final class DependencyResolver {
 		refuseIncompatible(update, update.projectId(), installedProjectIds, batch, together, Set.of(), new HashSet<>());
 	}
 
+	// docs/v0.4/SPEC.md 2o, H1-A: the projects an update's new version requires that aren't installed and that the version it
+	// replaces didn't require already (the game starts without those being known here: nested in another mod, or a jar
+	// Modrinth doesn't know). A dependency naming only a version can't be told here and doesn't count.
+	public List<String> missingRequirements(ModrinthVersion update, Set<String> installedProjectIds) {
+		Set<String> before = new HashSet<>();
+		for (ModrinthVersion old : installed.values()) {
+			if (same(old.projectId(), update.projectId())) {
+				old.dependencies().stream().filter(dep -> dep.required() && dep.projectId() != null).forEach(dep -> before.add(dep.projectId()));
+			}
+		}
+		List<String> out = new ArrayList<>();
+		for (Dependency dep : update.dependencies()) {
+			String project = dep.projectId();
+			if (dep.required() && project != null && !project.equals(update.projectId()) && !installedProjectIds.contains(project)
+					&& !before.contains(project) && !out.contains(project)) {
+				out.add(project);
+			}
+		}
+		return out;
+	}
+
+	// One an earlier Apply staged is in another all-or-nothing group, so the update waits for the restart.
+	TextException missingRequirement(String projectId) {
+		return new TextException(staged.projects().contains(projectId)
+				? Text.of("rigtune.download.missing_dependency_staged", "its new version needs %s, which is waiting for a restart; update it after restarting",
+				name(projectId))
+				: Text.of("rigtune.download.missing_dependency", "its new version needs %s, which isn't installed", name(projectId)));
+	}
+
 	// A dependency naming a version (version_id) is incompatible with that version only, not its whole project
 	// (re-check of review 4). replacing: the project whose installed version this one replaces (an update's), or null.
 	private void refuseIncompatible(ModrinthVersion version, String replacing, Set<String> installedProjects, List<ModrinthVersion> batch,

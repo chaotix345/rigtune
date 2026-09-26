@@ -13,6 +13,7 @@ import io.github.chaotix345.rigtune.client.notice.NoticeCenter;
 import io.github.chaotix345.rigtune.client.notice.RegressionNoticeSource;
 import io.github.chaotix345.rigtune.client.notice.ServerLimitNoticeSource;
 import io.github.chaotix345.rigtune.client.notice.WhatsNewNoticeSource;
+import io.github.chaotix345.rigtune.client.probe.FabricPins;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.LauncherProbe;
 import io.github.chaotix345.rigtune.client.probe.ModScanner;
@@ -24,6 +25,7 @@ import io.github.chaotix345.rigtune.client.stutter.StutterService;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
+import io.github.chaotix345.rigtune.client.undo.DisableGuard;
 import io.github.chaotix345.rigtune.client.undo.GameState;
 import io.github.chaotix345.rigtune.client.undo.Staging;
 import io.github.chaotix345.rigtune.client.undo.UndoService;
@@ -428,6 +430,7 @@ public final class RealController implements RigTuneController {
 		List<Op> immediateOps = new ArrayList<>();
 		Map<String, List<String>> immediateOpIds = new LinkedHashMap<>();
 		List<Recommendation> downloads = new ArrayList<>();
+		Set<String> disablesAllowed = DisableGuard.allowed(pendingFile, modsDir, selected);
 		for (Recommendation r : selected) {
 			switch (r.action()) {
 				case Action.SetSetting set when set.key().startsWith(VANILLA) -> vanilla.put(set.key(), set.newValue());
@@ -436,7 +439,7 @@ public final class RealController implements RigTuneController {
 					configPatches.computeIfAbsent(target, t -> new LinkedHashMap<>()).put(set.key().substring(target.prefix().length()), set.newValue());
 					configIds.put(set.key(), r.id());
 				}
-				case Action.DisableMod disable when SafeFileNames.isDirectChild(modsDir, disable.file()) -> {
+				case Action.DisableMod disable when SafeFileNames.isDirectChild(modsDir, disable.file()) && disablesAllowed.contains(r.id()) -> {
 					Op op = Op.disableFile(disable.file());
 					immediateOps.add(op);
 					immediateOpIds.computeIfAbsent(r.id(), k -> new ArrayList<>()).add(op.id());
@@ -566,14 +569,11 @@ public final class RealController implements RigTuneController {
 		DependencyResolver resolver = new DependencyResolver(modrinth, OnlineDataFetcher.LOADER, mcVersion, data.installedVersions())
 				.withStaged(StagedProjects.read(pendingFile));
 		Set<String> installedProjects = new HashSet<>(data.projectIdsByModId().values());
-		List<InstalledMod> scanned = mods;
-		Set<String> loadedIds = new HashSet<>();
-		if (scanned != null) {
-			scanned.forEach(m -> loadedIds.add(m.modId()));
-		}
+		Set<String> loadedIds = DownloadPlanner.topLevelIds(mods);
 		RulesDocument doc = rules;
 		BiPredicate<String, String> conflicts = doc == null ? (a, b) -> false : ModConflicts.of(doc)::between;
-		return new DownloadPlanner(resolver, modsDir, this::fetch, conflicts, data.updateVersions()).plan(recs, installedProjects, loadedIds, stagedJarsByModId());
+		return new DownloadPlanner(resolver, modsDir, this::fetch, conflicts, data.updateVersions(), FabricPins.loaded())
+				.lookedUp(settings.modrinthAllowed(), data.data().online()).plan(recs, installedProjects, loadedIds, stagedJarsByModId());
 	}
 
 	// Mod ids that already have a staged ENABLE_FILE, with that op's pending jar. A newer download for the same id
@@ -770,16 +770,12 @@ public final class RealController implements RigTuneController {
 				: minecraft.isSameThread() ? gameOptions(vanilla) : minecraft.submit(() -> gameOptions(vanilla)).join();
 		OnlineDataFetcher.Result data = online;
 		HardwareProfile hw = hardware;
-		List<InstalledMod> scanned = mods;
-		Set<String> loadedIds = new HashSet<>();
-		if (scanned != null) {
-			scanned.forEach(m -> loadedIds.add(m.modId()));
-		}
+		Set<String> loadedIds = DownloadPlanner.topLevelIds(mods);
 		RulesDocument doc = rules;
 		DownloadInputs downloads = new DownloadInputs(modrinth, settings.modrinthAllowed(), OnlineDataFetcher.LOADER,
 				onlineLookups.modrinthGameVersion(hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion()), data.installedVersions(),
 				data.updateVersions(), new HashSet<>(data.projectIdsByModId().values()), loadedIds, stagedJarsByModId(),
-				doc == null ? (a, b) -> false : ModConflicts.of(doc)::between, StagedProjects.read(pendingFile));
+				doc == null ? (a, b) -> false : ModConflicts.of(doc)::between, StagedProjects.read(pendingFile), data.data().online());
 		List<PreviewPlanner.ConfigFile> files = ConfigTargets.all(configDir).stream()
 				.map(t -> new PreviewPlanner.ConfigFile(t.prefix(), t.file(), t.stager()::stage, t.reader()::read)).toList();
 		return new PreviewPlanner(FabricLoader.getInstance().getGameDir().resolve("options.txt"), game.now(), game.problems(), files, modsDir, downloads)
