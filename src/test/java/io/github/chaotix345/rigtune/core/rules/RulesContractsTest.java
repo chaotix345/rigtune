@@ -96,8 +96,9 @@ class RulesContractsTest {
 		assertEquals(Truth.UNKNOWN, f.truth("{\"driverVersion\": \"531.18\"}"), "not a map: poisoned");
 	}
 
+	// WS-S filled the evaluator (StutterConditionTest has the cases): UNKNOWN without facts, decided with them.
 	@Test
-	void everyStutterKeyParsesAndIsUnknownWithOrWithoutFacts() {
+	void everyStutterKeyParsesAndIsUnknownWithoutFacts() {
 		List<String> keys = List.of("{\"stutterShareAtLeast\": {\"gc\": 30}}", "{\"stutterTaggedShareAtLeast\": {\"dh\": 40}}",
 				"{\"gcFullPausesAtLeast\": 1}", "{\"gcStallsAtLeast\": 1}", "{\"gcExplicitPausesAtLeast\": 2}", "{\"liveSetPercentAtLeast\": 75}",
 				"{\"heapRaiseRoomMbAtLeast\": 2048}", "{\"cpuContentionShareAtLeast\": 30}", "{\"spikesPerMinuteAtLeast\": 3}",
@@ -109,7 +110,7 @@ class RulesContractsTest {
 			assertTrue(c.unknownFields.isEmpty(), json);
 			assertTrue(ConditionEvaluator.hasStutterKey(c), json);
 			assertEquals(Truth.UNKNOWN, ConditionEvaluator.evaluate(c, f.context()), json + " without facts");
-			assertEquals(Truth.UNKNOWN, ConditionEvaluator.evaluate(c, f.context().withStutter(facts)), json + " with facts (stub)");
+			assertEquals(Truth.TRUE, ConditionEvaluator.evaluate(c, f.context().withStutter(facts)), json + " with facts");
 		}
 		assertFalse(ConditionEvaluator.hasStutterKey(RulesLoader.condition("{\"tierAtLeast\": 3}")));
 		assertTrue(RulesLoader.condition("{\"spikesPerMinuteAtLeast\": 0.5}").unknownFields.contains("spikesPerMinuteAtLeast"),
