@@ -63,6 +63,27 @@ class RulesContractsTest {
 		assertNull(v1.stutterAdvice);
 	}
 
+	// Review finding 7 (K-M1's reasoning): an unreadable new section is dropped on its own; the document still loads.
+	@Test
+	void anUnreadableNewSectionIsNullAndTheDocumentStillLoads() {
+		for (String sections : List.of(
+				"\"profileTemplates\": [1, 2], \"stutterAdvice\": {\"id\": \"x\"}",
+				"\"profileTemplates\": {\"templates\": [{\"id\": \"battery\", \"facts\": {\"onBattery\": {\"x\": 1}}}]}, \"stutterAdvice\": [[]]",
+				"\"profileTemplates\": {\"templates\": \"all\"}, \"stutterAdvice\": \"none\"",
+				"\"profileTemplates\": {\"templates\": [{\"id\": \"q\", \"settings\": [{\"key\": \"vanilla.maxFps\", \"max\": \"x\"}]}]}, \"stutterAdvice\": [{\"id\": \"s\", \"requires\": {}}]")) {
+			RulesDocument doc = RulesLoader.parse("{\"schemaVersion\": 2, \"revision\": 3, \"advice\": [{\"id\": \"a\", \"title\": \"t\", \"text\": \"x\"}], "
+					+ sections + "}");
+			assertNull(doc.profileTemplates, sections);
+			assertNull(doc.stutterAdvice, sections);
+			assertEquals(1, doc.advice.size(), sections);
+			assertEquals(3, doc.revision);
+		}
+		RulesDocument badCondition = RulesLoader.parse("{\"schemaVersion\": 2, \"revision\": 1, \"stutterAdvice\": [{\"id\": \"s\", "
+				+ "\"when\": {\"gcStallsAtLeast\": \"x\"}, \"title\": \"t\", \"text\": \"x\"}]}");
+		assertEquals(1, badCondition.stutterAdvice.size(), "a bad condition value poisons only its condition");
+		assertTrue(badCondition.stutterAdvice.getFirst().when.unknownFields.contains("gcStallsAtLeast"));
+	}
+
 	@Test
 	void driverVersionParsesAndIsUnknownForNow() {
 		Condition c = RulesLoader.condition("{\"driverVersion\": {\"vendor\": \"nvidia\", \"atLeast\": \"526.47\", \"atMost\": \"536.22\"}}");

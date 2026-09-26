@@ -68,14 +68,30 @@ public class NoticeScreen extends Screen {
 				dismiss.setTooltip(Tooltip.create(Component.translatable("rigtune.notice.dismiss.tooltip")));
 				buttons.add(dismiss);
 			}
-			int rowHeight = MESSAGE + (buttons.isEmpty() ? 0 : BUTTON) + ROW_GAP;
+			// Buttons in rows of what fits the width.
+			int lines = buttons.isEmpty() ? 0 : 1;
+			int lineX = left;
+			for (Button button : buttons) {
+				if (lineX > left && lineX + button.getWidth() > width - left) {
+					lines++;
+					lineX = left;
+				}
+				lineX += button.getWidth() + GAP;
+			}
+			int rowHeight = MESSAGE + lines * (BUTTON + 2) + ROW_GAP;
 			if (!fitting.isEmpty() && y + rowHeight > bottom) {
 				break;
 			}
 			fitting.add(notice);
 			rowY.add(y);
+			int buttonY = y + MESSAGE;
 			for (Button button : buttons) {
-				button.setPosition(x, y + MESSAGE);
+				if (x > left && x + button.getWidth() > width - left) {
+					x = left;
+					buttonY += BUTTON + 2;
+				}
+				button.setWidth(Math.min(button.getWidth(), width - 2 * left));
+				button.setPosition(x, buttonY);
 				addRenderableWidget(button);
 				x += button.getWidth() + GAP;
 			}

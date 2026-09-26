@@ -63,6 +63,7 @@ public class RigTuneScreen extends Screen {
 	private static final int NOTICE_BUTTON = 14;
 	// Narrower than this (scaled px), the notice line is the message plus one "…" button to NoticeScreen (review X-M2).
 	private static final int NOTICE_INLINE_WIDTH = 400;
+	private static final int MIN_NOTICE_MESSAGE = 80;
 
 	private final @Nullable Screen parent;
 	private final RigTuneController controller;
@@ -295,7 +296,8 @@ public class RigTuneScreen extends Screen {
 
 	// One row under the header lines: the notice's message (its detail as the tooltip), then at most 2 action buttons, a
 	// dismiss button when dismissible, and "+N more", which cycles. On a narrow screen: the message and one "…" button
-	// that opens NoticeScreen (the actions, dismiss and the other notices). Returns the height used (0 without a notice).
+	// that opens NoticeScreen (the actions, dismiss and the other notices), also used when the inline buttons would leave
+	// the message less than MIN_NOTICE_MESSAGE px. Returns the height used (0 without a notice).
 	private int noticeLine(int y) {
 		notices = NoticeBoard.select(controller.notices(), Set.of());
 		noticeIndex = notices.visible().isEmpty() ? 0 : noticeIndex % notices.visible().size();
@@ -307,12 +309,21 @@ public class RigTuneScreen extends Screen {
 		Notice notice = shownNotice;
 		noticeY = y;
 		List<Button> buttons = new ArrayList<>();
-		if (width < NOTICE_INLINE_WIDTH) {
-			Button open = noticeButton(Component.translatable("rigtune.notice.open"), b -> minecraft.gui.setScreen(new NoticeScreen(this, controller)));
-			open.setTooltip(Tooltip.create(Component.translatable("rigtune.notice.open.tooltip")));
-			buttons.add(open);
-			return placeNoticeButtons(buttons, y);
+		if (width >= NOTICE_INLINE_WIDTH) {
+			inlineNoticeButtons(notice, buttons);
+			int total = buttons.stream().mapToInt(b -> b.getWidth() + GAP).sum();
+			if (right - total >= left + MIN_NOTICE_MESSAGE) {
+				return placeNoticeButtons(buttons, y);
+			}
+			buttons.clear();
 		}
+		Button open = noticeButton(Component.translatable("rigtune.notice.open"), b -> minecraft.gui.setScreen(new NoticeScreen(this, controller)));
+		open.setTooltip(Tooltip.create(Component.translatable("rigtune.notice.open.tooltip")));
+		buttons.add(open);
+		return placeNoticeButtons(buttons, y);
+	}
+
+	private void inlineNoticeButtons(Notice notice, List<Button> buttons) {
 		for (NoticeAction action : notice.actions().subList(0, Math.min(2, notice.actions().size()))) {
 			buttons.add(noticeButton(Texts.component(action.label()), b -> {
 				controller.noticeAction(notice.key(), action.id());
@@ -338,7 +349,6 @@ public class RigTuneScreen extends Screen {
 			more.setTooltip(Tooltip.create(Component.translatable("rigtune.notice.more.tooltip")));
 			buttons.add(more);
 		}
-		return placeNoticeButtons(buttons, y);
 	}
 
 	private int placeNoticeButtons(List<Button> buttons, int y) {

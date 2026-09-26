@@ -12,6 +12,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.4/SPEC.md C1/7: the optional Context.modSetHash and journalCursor. benchmarks.json keeps schemaVersion 1.
 class BenchmarkContextFieldsTest {
@@ -33,6 +34,17 @@ class BenchmarkContextFieldsTest {
 		assertEquals("entry-9", read.journalCursor());
 		assertEquals(context, read);
 		assertEquals(1, new Gson().fromJson(Files.readString(file), JsonObject.class).get("schemaVersion").getAsInt());
+	}
+
+	@Test
+	void sameConditionsIgnoresTheModSetAndCursor() {
+		BenchmarkRecord.Context a = new BenchmarkRecord.Context(false, true, "pack.zip", 2560, 1440, true, 1);
+		BenchmarkRecord.Context b = a.withModSet("h1", "e1");
+		assertTrue(a.sameConditions(b));
+		assertTrue(b.sameConditions(a.withModSet("h2", "e2")));
+		assertFalse(a.sameConditions(new BenchmarkRecord.Context(false, true, "other.zip", 2560, 1440, true, 1)));
+		assertFalse(a.sameConditions(new BenchmarkRecord.Context(false, true, "pack.zip", 1920, 1440, true, 1)));
+		assertFalse(a.sameConditions(null));
 	}
 
 	@Test

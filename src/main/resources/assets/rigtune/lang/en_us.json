@@ -176,7 +176,7 @@
 	"rigtune.tools.benchmark_history": "Benchmark history…",
 	"rigtune.tools.jvm": "JVM & memory…",
 	"rigtune.tools.open": "Tools…",
-	"rigtune.tools.open.tooltip": "Profiles, Stutter Doctor, JVM & memory and your benchmark history.",
+	"rigtune.tools.open.tooltip": "Benchmark, Profiles, Stutter Doctor, JVM & memory and your benchmark history.",
 	"rigtune.tools.profiles": "Profiles…",
 	"rigtune.tools.stutter": "Stutter Doctor…",
 	"rigtune.tools.title": "Tools",

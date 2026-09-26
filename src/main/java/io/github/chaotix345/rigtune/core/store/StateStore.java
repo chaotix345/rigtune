@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.core.store;
 
 import com.google.gson.JsonObject;
+import io.github.chaotix345.rigtune.RigTune;
 
 import java.nio.file.Path;
 import java.util.function.UnaryOperator;
@@ -9,7 +10,8 @@ import java.util.function.UnaryOperator;
 // read-modify-write that re-reads the file under this object's lock, so two writers can't lose each other's update. Use
 // one instance per file per process (AwarenessStore.shared, ProfileStore.shared). The JSON root is kept as a JsonObject,
 // so fields this version doesn't know survive every rewrite. JsonStateFile's rules apply (formatVersion, cap, .bad,
-// newer = read-only).
+// newer = read-only). The content is untrusted (players edit these files): accessors type-check every value (instanceof
+// JsonPrimitive / JsonArray / JsonObject) instead of calling getAs* blindly, and a change that throws writes nothing.
 public final class StateStore {
 	private final JsonStateFile file;
 	private final UnaryOperator<JsonObject> defaults;
@@ -42,7 +44,13 @@ public final class StateStore {
 		}
 		JsonObject root = loaded.value() == null ? new JsonObject() : loaded.value().deepCopy();
 		root.remove(JsonStateFile.FORMAT_VERSION_KEY);
-		JsonObject next = change.apply(defaults.apply(root));
+		JsonObject next;
+		try {
+			next = change.apply(defaults.apply(root));
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.warn("Not writing {}: the change failed on its content", file.file(), e);
+			return false;
+		}
 		return file.save(next == null ? root : next) == JsonStateFile.Saved.OK;
 	}
 

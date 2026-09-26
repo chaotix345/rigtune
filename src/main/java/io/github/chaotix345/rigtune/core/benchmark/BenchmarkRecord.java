@@ -63,6 +63,14 @@ public record BenchmarkRecord(String id, String createdAt, String rigtuneVersion
 		public Context withModSet(@Nullable String newModSetHash, @Nullable String newJournalCursor) {
 			return new Context(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, newModSetHash, newJournalCursor);
 		}
+
+		// The conditions part (plan review B-H1): everything but modSetHash and journalCursor. Use this, not equals(), to
+		// compare runs.
+		public boolean sameConditions(@Nullable Context other) {
+			return other != null && dhRendering == other.dhRendering && shaders == other.shaders
+					&& java.util.Objects.equals(shaderPack, other.shaderPack) && width == other.width && height == other.height
+					&& fullscreen == other.fullscreen && protocol == other.protocol;
+		}
 	}
 
 	public BenchmarkRecord(String id, String createdAt, String rigtuneVersion, String mcVersion, String mode, String scene,

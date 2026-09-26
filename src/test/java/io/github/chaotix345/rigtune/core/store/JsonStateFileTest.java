@@ -131,10 +131,13 @@ class JsonStateFileTest {
 	}
 
 	@Test
-	void aFileFarOverTheCapIsMovedAsideUnread() throws IOException {
-		write("{\"formatVersion\": 1, \"note\": \"" + "x".repeat(5000) + "\"}");
-		assertEquals(State.MOVED_ASIDE, store().load(Sample.class).state());
-		assertTrue(Files.exists(file().resolveSibling("sample.json.bad")));
+	void aFileFarOverTheCapIsLeftAloneUnread() throws IOException {
+		write("{\"formatVersion\": 2, \"note\": \"" + "x".repeat(5000) + "\"}");
+		byte[] before = Files.readAllBytes(file());
+		assertEquals(State.UNREADABLE, store().load(Sample.class).state());
+		assertEquals(Saved.READ_ONLY, store().save(new Sample(1, List.of(), null)));
+		assertArrayEquals(before, Files.readAllBytes(file()));
+		assertFalse(Files.exists(file().resolveSibling("sample.json.bad")));
 	}
 
 	@Test

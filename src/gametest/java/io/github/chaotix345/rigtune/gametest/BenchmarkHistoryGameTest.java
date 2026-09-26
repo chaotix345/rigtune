@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.gametest;
 
+import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkHistoryScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
@@ -27,5 +28,6 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 		context.waitForScreen(ToolsScreen.class);
 		context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
 		context.waitForScreen(TitleScreen.class);
+		RigTune.LOGGER.info("BenchmarkHistoryGameTest: registered; the contracts skeleton case passed");
 	}
 }

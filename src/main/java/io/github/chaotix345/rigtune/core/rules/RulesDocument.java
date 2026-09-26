@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.core.rules;
 
 import com.google.gson.JsonElement;
+import com.google.gson.annotations.JsonAdapter;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.core.model.Impact;
 
@@ -31,7 +32,10 @@ public final class RulesDocument {
 	public Map<String, SettingLabel> settingLabels = new LinkedHashMap<>();
 	// v0.4, rules-v2 only (docs/v0.4/SPEC.md C2), null when absent (older files, rules-v1.json): the Profiles templates
 	// (item 4) and the Stutter Doctor's advice (item 5, entries `requires: ["stutter-doctor"]`). 0.2.0/0.3.0 ignore both.
+	// A section this version can't read is null too (LenientSection), never a rejected document.
+	@JsonAdapter(LenientSection.class)
 	public ProfileTemplates profileTemplates;
+	@JsonAdapter(LenientSection.class)
 	public List<AdviceRule> stutterAdvice;
 
 	private transient String source;

@@ -30,8 +30,9 @@ import java.util.Set;
 // stutter.json, server-limits.json, awareness.json and startup-times.json. Each feature's store wraps one of these.
 // - `formatVersion` is written first and is always FORMAT_VERSION; a file without it counts as version 1.
 // - A file from a newer RigTune (higher formatVersion) is read-only: it can still be read, but it is never overwritten.
-// - A corrupt file (not UTF-8, not a JSON object, an unusable formatVersion, a shape the type can't take, or far over the
-//   cap) is moved to <name>.bad (then .bad.1, .bad.2...; never deleted) and the store starts empty.
+// - A corrupt file (not UTF-8, not a JSON object, an unusable formatVersion, or a shape the type can't take) is moved to
+//   <name>.bad (then .bad.1, .bad.2...; never deleted) and the store starts empty. A file over READ_CAP_FACTOR x the cap
+//   isn't read at all and is left alone (UNREADABLE): it may be a newer RigTune's.
 // - Writes are atomic (AtomicFiles) and refused over maxBytes; the caller prunes first.
 // - Nothing here throws to the caller: a file that can't be read, or a corrupt one that can't be moved aside, is
 //   UNREADABLE (left alone, never overwritten this time; the next load tries again), and a failed write returns FAILED.
@@ -118,7 +119,9 @@ public final class JsonStateFile {
 		JsonObject root;
 		try {
 			if (Files.size(file) > maxBytes * READ_CAP_FACTOR) {
-				return movedAside("larger than " + maxBytes * READ_CAP_FACTOR + " bytes", null);
+				// Not one this version wrote, and possibly a newer RigTune's (a bigger cap): left alone, never written.
+				RigTune.LOGGER.warn("{} is larger than {} bytes; leaving it alone", file, maxBytes * READ_CAP_FACTOR);
+				return new Loaded<>(State.UNREADABLE, null, new JsonObject());
 			}
 			root = parse(io.read(file));
 		} catch (CorruptException e) {

@@ -14,7 +14,8 @@ what this list leaves to them. Deviations from SPEC C1-C7 are at the end.
   `withAttempts` keep both. `sameChange` ignores them. Note: `ApplyResult.OpResult` embeds the Op, so last-apply.json's
   op copies carry them too when set (additive; old readers ignore them).
 - `core/benchmark/BenchmarkRecord.Context`: trailing `@Nullable String modSetHash, @Nullable String journalCursor`; old
-  7-arg constructor kept; `withModSet(String modSetHash, String journalCursor)`.
+  7-arg constructor kept; `withModSet(String modSetHash, String journalCursor)`; `sameConditions(Context other)` compares
+  the 7 condition fields only (B-H1: use it, not `equals()`, which now includes the hash and cursor).
 - `client/ClientSettings`: `public volatile boolean stutterMonitor = false`.
 - `core/model/Report`: trailing `@Nullable TierBasis tierBasis`; old 9-arg constructor kept (null). RealController's
   `withoutStaged` and `ModrinthOffAdvice.apply` copy it through.
@@ -31,9 +32,9 @@ what this list leaves to them. Deviations from SPEC C1-C7 are at the end.
 - `<T> Loaded<T> load(Class<T> type)`; `record Loaded<T>(State state, @Nullable T value, JsonObject root)` with
   `writable()`; `enum State { MISSING, OK, MOVED_ASIDE, NEWER, UNREADABLE }`.
   Missing formatVersion = 1; newer = read-only (value parsed if it fits, never written); corrupt (not UTF-8, not a JSON
-  object, formatVersion not a whole number >= 1, a shape T can't take, or > 4 x maxBytes) = moved to `<name>.bad`
-  (`.bad.1`, ... never replaced) and empty; an IOException, or a corrupt file that can't be moved, = UNREADABLE (not
-  written). Nothing throws.
+  object, formatVersion not a whole number >= 1, a shape T can't take) = moved to `<name>.bad` (`.bad.1`, ... never
+  replaced) and empty; an IOException, a corrupt file that can't be moved, or a file over 4 x maxBytes (maybe a newer
+  RigTune's) = UNREADABLE (left alone, not written). Nothing throws.
 - `Saved save(Object value)`, `Saved save(Object value, @Nullable JsonObject previousRoot)`;
   `enum Saved { OK, TOO_LARGE, READ_ONLY, FAILED }`. Writes `formatVersion` first, atomically (`AtomicFiles`), refuses
   over maxBytes, re-checks the file on disk first (never overwrites NEWER/UNREADABLE). With `previousRoot`, unknown
@@ -44,8 +45,9 @@ what this list leaves to them. Deviations from SPEC C1-C7 are at the end.
 
 **`core/store/StateStore`** (plan review X-M1): `new StateStore(Path file, long maxBytes, UnaryOperator<JsonObject> defaults)`;
 `synchronized JsonObject read()` (a copy, defaults filled; a NEWER file as it is); `synchronized boolean update(UnaryOperator<JsonObject>)`
-(re-reads under the lock, applies, writes; false if read-only, too large or failed); `writable()`. The root stays a
-JsonObject, so unknown fields at any depth survive.
+(re-reads under the lock, applies, writes; false if read-only, too large, failed, or the change threw); `writable()`.
+The root stays a JsonObject, so unknown fields at any depth survive. The content is untrusted (players edit it):
+accessors type-check values (`instanceof JsonPrimitive/JsonArray/JsonObject`), never `getAs*` blindly.
 
 **`core/awareness/AwarenessStore`** (awareness.json): `static AwarenessStore shared(Path configDir)` (one per file per
 process), `static Path file(Path configDir)`, `read()`, `update(UnaryOperator<JsonObject>)`, `writable()`,
@@ -70,6 +72,9 @@ enforces the caps.
 - `RulesDocument.profileTemplates` (`ProfileTemplates { List<ProfileTemplate> templates }`,
   `ProfileTemplate { List<String> requires; String id; String goal; Map<String, Boolean> facts; List<SettingRule> settings; }`)
   and `RulesDocument.stutterAdvice` (`List<AdviceRule>`): null when absent; `fillDefaults` drops null/idless entries.
+  Both carry `@JsonAdapter(LenientSection.class)` (`core/rules/LenientSection`): a section this version can't read
+  (wrong shape or value types) is null, which disables only that section, never the whole document. Note Gson reads
+  `facts: {"onBattery": "yes"}` as false; WS-R's updater validates the section.
 - `Condition` keys (plan review K-M1: all adapter-vetted types, so a bad value poisons only its condition):
   `Map<String,String> driverVersion`; stutter keys `Map<String,String> stutterShareAtLeast`,
   `Map<String,String> stutterTaggedShareAtLeast` (cause/tag -> whole percent as a string-or-number, parsed by the
@@ -78,8 +83,10 @@ enforces the caps.
   `Integer cpuContentionShareAtLeast` (whole percent), `Integer spikesPerMinuteAtLeast` (**spikes per minute x 10**:
   30 = 3 a minute), `List<String> gcCollector` (g1, zgc, shenandoah, parallel, serial).
 - `ConditionAdapterFactory` now also vets every `List<String>` key (`STRING_LISTS`): not an array of
-  strings/numbers/booleans/nulls = unknown key (poisoned), instead of Gson rejecting the whole document. Map, Integer
-  and Long keys were already vetted.
+  strings/numbers/booleans/nulls = unknown key (poisoned), instead of Gson rejecting the whole document. Map, Integer,
+  Long and Boolean keys were already vetted. Still not vetted (pre-existing, unchanged): the String keys
+  `gpuModelMatches`/`mcVersionRange` given an object or array, and `anyOf`/`not` of the wrong shape; those reject the
+  document (fail safe: the client falls back to the cache or the bundled rules). Don't add a new String key.
 - `ConditionEvaluator`: `driverVersion(Map<String,String>, EvalContext)` and `stutter(Condition, @Nullable StutterFacts)`
   are stubs returning UNKNOWN (`// filled by WS-R`); `public static boolean hasStutterKey(Condition)`. They sit after
   `settingIs` in `node()`.
@@ -114,7 +121,8 @@ enforces the caps.
   `ServerLimitNoticeSource` (WS-W), `RegressionNoticeSource` + `BenchmarkStaleNoticeSource` (WS-B),
   `HardwareChangeNoticeSource` + `WhatsNewNoticeSource` (WS-W). Registered once in RealController in NoticePriority
   order; each reaches its service through the controller's accessor (nobody edits the registration).
-- Dismissals: `AwarenessService implements NoticeCenter.Dismissals` via `AwarenessStore.shared(configDir)`.
+- Dismissals: `AwarenessService implements NoticeCenter.Dismissals` via `AwarenessStore.shared(configDir)`, plus an
+  in-memory set for the session, so a dismissal still hides the notice while awareness.json is newer or unreadable.
 - `client/ui/ToolsScreen(Screen parent, RigTuneController controller)`: entries in order Benchmark…
   (`rigtune.screen.benchmark_menu`, opens the existing BenchmarkMenuScreen), Profiles…, Stutter Doctor…, JVM & memory…,
   Benchmark history…, then the startup line (`private @Nullable Component startupLine(StartupTimes.View)`, returns null:
@@ -130,8 +138,10 @@ enforces the caps.
   `init()` right after the header height is known (adds `NOTICE_ROW = 16` px only when a notice shows);
   `placeNoticeButtons`, `noticeButton`, `extractNotice` (one call in `extractRenderState` after the header lines);
   public `shownNotice()` and `otherNotices()` for tests. At `width >= NOTICE_INLINE_WIDTH` (400 scaled px): message +
-  up to 2 action buttons + dismiss (`rigtune.notice.dismiss`) + "+N more" (`rigtune.notice.more`, cycles). Narrower:
-  message + one "…" button (`rigtune.notice.open`) opening NoticeScreen. Other workstreams' RigTuneScreen edits (2j
+  up to 2 action buttons + dismiss (`rigtune.notice.dismiss`) + "+N more" (`rigtune.notice.more`, cycles; the index
+  stays in range, so after a dismissal the next notice moves into the slot). Narrower, or when the inline buttons would
+  leave the message under `MIN_NOTICE_MESSAGE` (80 px): message + one "…" button (`rigtune.notice.open`) opening
+  NoticeScreen (which wraps a button row that doesn't fit). Other workstreams' RigTuneScreen edits (2j
   tier badge/tooltip, 2m checkbox label, 7's tooltip helper call, 11 row focus/palette) are in existing methods, away
   from this block.
 
@@ -153,6 +163,8 @@ enforces the caps.
   + `View.EMPTY`; `core/model/ServerLimits(int viewDistance, int simulationDistance, Kind kind, long lastSeenEpochMillis)`
   with `enum Kind { SINGLEPLAYER, LAN_GUEST, REALM, REMOTE }`; `client/footprint/StartupTimes.View(@Nullable Long lastMs, @Nullable Long medianMs, int runs, boolean modSetChanged)`
   + `View.EMPTY`.
+- Services and notice sources get the controller before its constructor has finished: **never call a controller
+  accessor (or do any work) in a service or source constructor**; fetch what you need lazily.
 - Services, each `(RealController controller, Path configDir)`, no work in the constructor:
   `client/profile/ProfileService` (profiles, switchProfile, previewProfile, saveCurrentProfile, importProfileCode,
   exportProfileCode, renameProfile, deleteProfile), `client/stutter/StutterService` (view, setMonitor, pause, clear,
@@ -189,7 +201,7 @@ enforces the caps.
 - Registered in src/gametest/resources/fabric.mod.json after PreviewGameTest: `ProfilesGameTest`, `StutterGameTest`,
   `JvmGameTest`, `BenchmarkHistoryGameTest` (each: RigTune -> ToolsScreen -> its screen via `open*()` -> Done),
   `ServerLimitsGameTest`, `AwarenessGameTest`, `FootprintGameTest`, `A11yGameTest` (title screen reachable). All
-  return early under `-Drigtune.smoke=true`.
+  return early under `-Drigtune.smoke=true` and log "<Class>: registered; the contracts skeleton case passed".
 - UiGameTest: `checkTools` (Tools… right after History…, no footer Benchmark…; main screen at 640x480@2; ToolsScreen
   at 1280x720@2, 640x480@2, 854x480@2; Benchmark and the four entries open and close), the benchmark menu reached
   through Tools, `ui-stub-pending-640x480`-style checks with Discard + a notice at the 3 sizes asserting the list is
@@ -250,3 +262,12 @@ says Tools… → Benchmark….
    "unchanged" list is otherwise right.
 8. `RigTuneController.notices()` returns the visible list (dismissed removed, sorted); screens still pass it through
    `NoticeBoard.select(list, Set.of())` for `top()`/`at()`/`others()`.
+9. The new rules sections are lenient (`LenientSection`) rather than plain typed fields: same types, but a malformed
+   section is dropped alone (self-review finding; K-M1's reasoning).
+
+## Self-review
+A code-reviewer subagent reviewed the diff (1 high, 2 medium, 6 low). Fixed: the notice index after a dismissal
+(also caught by CI), StateStore.update catching a throwing change, inline notice buttons falling back to "…" when
+they would squeeze the message and NoticeScreen wrapping buttons, oversize files left alone (UNREADABLE),
+session-level dismissals, `Context.sameConditions`, lenient new rules sections, the constructor rule above, the Tools
+tooltip.
