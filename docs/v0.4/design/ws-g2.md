@@ -49,8 +49,11 @@ v040-written fixtures are unchanged.
   post-pending names or cancel the pending re-enable).
 
 ## M2 (MAY, done): Undo/Discard of a half-done update
-- `PartlyApplied.groups(ops, files)`: a staged group whose DISABLE is done (jar gone, `.disabled`/`.disabled.N` there)
-  while one of its ENABLEs isn't (download there, target missing): H4's state after a failed rollback or a killed helper.
+- `PartlyApplied.groups(ops, files)`: a staged group whose DISABLE the helper already tried (`attempts > 0`) is done (jar
+  gone, `.disabled`/`.disabled.N` there) while one of its ENABLEs isn't (download there, target missing): H4's state after
+  a failed enable and a failed rollback. `attempts > 0` keeps an old `x.jar.disabled` next to a never-run update (x.jar
+  removed by hand) from counting; the price is that a helper killed before it rewrote pending.json isn't detected (WS-G3's
+  H4 fix recovers that case at the next run).
 - `UndoPlanner.planStaged` skips such a group with `waits_partly` (and Undo last stops at it); `Staging.discard` keeps it
   in pending.json (everything else discarded, downloads retired, journal DISCARDED as before), so the next exit finishes
   it (disable SKIPPED_ALREADY_DONE, enable OK) and a normal undo is possible afterwards. Chosen over staging a re-enable:
@@ -60,22 +63,47 @@ v040-written fixtures are unchanged.
 
 ## M5 + H1-B (MAY, done): the RigTune screen's "Disable X"
 - New core `FolderCheck`: `problems(files, providedElsewhere)` (UndoPlanner.violations' body, which now delegates, so
-  Undo and Apply refuse the same folders) and `disableRefusal(folder, pending, file)`:
-  - M5: the jar's DISABLE is already staged in a group that also enables a jar (an update, or an undo's swap) -> refuse
-    "Another change of it is staged; cancel that first (Undo last or Discard pending)". Refusing (the audit's
+  Undo and Apply refuse the same folders) and `disableRefusals(folder, pending, files)`, one Apply's disables checked
+  as a set:
+  - M5: the jar's DISABLE is already staged in a group whose ENABLE brings the same mod back (same file name or mod id:
+    an update, or an undo's swap back to an older jar) -> refuse "Another change of it is staged; cancel that first
+    (Undo last or Discard pending)". A group that disables it and enables another mod (an undo of several mods, one group
+    since H5) already does what was asked and isn't refused. Refusing (the audit's
     alternative) instead of unstaging the update keeps RealController's staged-recommendation count right without more
     RealController code; the player sees the reason and can cancel the update first.
-  - H1-B: with the staged ops done first (the helper runs them before an op staged after them), disabling the jar
-    leaves an active jar without a mod it depends on -> refuse "The game wouldn't start without it: y would be missing x".
-    Loaded jars' nested mods count as provided (ModsFolder).
-- `client/undo/DisableGuard.allows(pendingFile, modsDir, file)`: reads pending.json and `ModsFolder.current`, logs and
-  shows a toast (`rigtune.toast.disable_refused.*`); an unexpected exception logs and allows (v0.3 behaviour).
-  RealController: the DisableMod case gains `&& DisableGuard.allows(...)` (a refused disable falls to the existing
-  "Nothing to apply for" log; the rest of the Apply goes ahead).
-- Tests: FolderCheckTest (9 cases), UndoSafetyTest (a library an installed mod needs; a staged update absorbing the
-  disable today, then refused).
+  - H1-B: with the staged ops done first (the helper runs them before ops staged after them) and the Apply's other
+    disables too, a jar left active lacks a mod it depends on -> the disable providing it is refused ("The game wouldn't
+    start without it: y would be missing x"), one at a time until the folder starts: disabling a library together with
+    every jar that needs it goes ahead; of two providers of one id only the first is refused; a chain x <- y <- z with x and
+    y ticked refuses both. Loaded jars' nested mods count as provided (ModsFolder).
+- `client/undo/DisableGuard.allowed(pendingFile, modsDir, selected)`: once per Apply, reads pending.json and
+  `ModsFolder.current`, logs each refusal and shows one toast (`rigtune.toast.disable_refused.*`); an unexpected
+  exception logs and allows (v0.3 behaviour). RealController.apply: one line computing the allowed ids before the loop,
+  and the DisableMod case gains `&& disablesAllowed.contains(r.id())` (a refused disable falls to the existing "Nothing
+  to apply for" log; the rest of the Apply goes ahead).
+- Tests: FolderCheckTest (14 cases), UndoSafetyTest (a library an installed mod needs, alone and together with its
+  dependant; a staged update absorbing the disable today, then refused).
+
+## Self-review (code-reviewer subagent; scratchpad ws-g2/review.md): 0 high, 2 medium, 7 low
+- M1 (fixed): the Apply's own disables weren't checked against each other (two providers of one id both disabled;
+  "Disable lib" + "Disable app" refused lib). Now `disableRefusals` over the Apply's set (above).
+- M2 (accepted, pinned by `UndoSafetyTest.undoAllOfUnrelatedModsWaitsWhollyWhenOneRenameFails`): one group per undo means
+  one jar another program holds open holds back the whole undo (retried at the next exits; abandoned after 3 as a whole)
+  instead of the unrelated mods being undone alone. Kept because it is what SPEC 2o/the verification asked for ("one
+  group, or refuse"), and grouping only by dependency edges would also need mod-id edges: re-enabling x-old (one entry)
+  and disabling x-new (another, no shared file) in separate groups can load x twice when only one succeeds.
+- L1 (fixed): the M5 rule now needs the staged ENABLE to bring the same mod back. L2 (fixed): `attempts > 0`.
+  L6 (fixed): one folder read and one toast per Apply. L7: tests added for two disables in one Apply, Undo this on a
+  partly waiting entry, a re-check that turns into waits, `.disabled.N`, a stale copy, Discard with only a half-done group,
+  Undo last of a half-done update through the real helper, Undo all with one failing rename.
+- Left (documented below): L3 (Discard's status doesn't mention kept ops), L4 (joinedGroup doesn't try the joined group
+  together with some of the other staged groups; only matters with two mods providing one id), L5 (an empty UNDO entry
+  when a confirm-time re-check turns everything into waits: harmless, it doesn't count as an undo; UndoService is outside
+  this package).
 
 ## Deviations / residuals
+- Discard pending's status still says "Discarded N pending change(s)" when a half-done group was kept (pending.json and
+  the Discard button stay); RealController's discard message is outside this package.
 - A refused "Disable X" isn't counted in the Apply status line (the toast carries the reason); Preview doesn't show it
   as a skip reason (Preview is PreviewPlanner's, outside this package).
 - `waitingFile` also makes a reversal wait when the moving op is an unjournaled carried-over op (another session's or

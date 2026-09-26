@@ -12,7 +12,6 @@ import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.history.UndoPlanner;
-import io.github.chaotix345.rigtune.core.model.Text;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -23,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,7 +33,6 @@ import java.util.zip.ZipOutputStream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.4/SPEC.md 2o (WS-G2): Undo through the real stack (stagers, Staging's merge and journal records, UndoService,
@@ -283,10 +282,15 @@ class UndoSafetyTest {
 		modJar(mods.resolve("lib.jar"), "lib");
 		modJar(mods.resolve("app.jar"), "app", "lib");
 
-		Text refusal = DisableGuard.refusal(pending, state().folder(), mods.resolve("lib.jar"));
+		assertEquals(Map.of("lib.jar", "The game wouldn't start without it: app would be missing lib"), refusals("lib.jar"));
+		assertEquals(Map.of(), refusals("app.jar"));
+		assertEquals(Map.of(), refusals("lib.jar", "app.jar"), "disabling both in one Apply is fine");
+	}
 
-		assertEquals("The game wouldn't start without it: app would be missing lib", refusal == null ? null : refusal.english());
-		assertNull(DisableGuard.refusal(pending, state().folder(), mods.resolve("app.jar")));
+	private Map<String, String> refusals(String... files) {
+		Map<String, String> out = new LinkedHashMap<>();
+		DisableGuard.refusals(pending, state().folder(), List.of(files)).forEach((file, why) -> out.put(file, why.english()));
+		return out;
 	}
 
 	// Without the check the disable is merged away as a repeat of the update's own disable, and the update still brings
@@ -302,23 +306,29 @@ class UndoSafetyTest {
 		assertEquals(update.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList(),
 				"the disable alone is absorbed into the update");
 
-		Text refusal = DisableGuard.refusal(pending, state().folder(), mods.resolve("x-1.jar"));
-
-		assertEquals("Another change of it is staged; cancel that first (Undo last or Discard pending)", refusal == null ? null : refusal.english());
+		assertEquals(Map.of("x-1.jar", "Another change of it is staged; cancel that first (Undo last or Discard pending)"), refusals("x-1.jar"));
 	}
 
 	// --- audit M2: Discard pending while an update is half done (the helper disabled x-1.jar, then its enable of x-2.jar
 	// failed and so did the rollback) keeps that group, so the next exit finishes it instead of leaving X disabled.
 
-	@Test
-	void discardKeepsAnUpdateTheHelperLeftHalfDone() throws IOException {
+	// The helper's run at the last exit: the enable of x-2.jar fails, and so does putting x-1.jar back.
+	private List<Op> updateLeftHalfDone() throws IOException {
 		modJar(mods.resolve("x-1.jar"), "x");
 		modJar(mods.resolve("x-2.jar" + PendingActions.PENDING_SUFFIX), "x");
 		List<Op> update = PendingActions.group(Op.disableFile(mods.resolve("x-1.jar")),
 				Op.enableFile(mods.resolve("x-2.jar" + PendingActions.PENDING_SUFFIX), mods.resolve("x-2.jar")).withModId("x"));
 		assertNotNull(staging.stage(update, "e1"));
+		TestExecutors.failingMovesOf(p -> p.getFileName().toString().equals("x-2.jar" + PendingActions.PENDING_SUFFIX)
+				|| p.getFileName().toString().equals("x-1.jar.disabled")).run(PendingActions.load(pending), pending);
+		assertEquals(List.of("x-1.jar.disabled", "x-2.jar" + PendingActions.PENDING_SUFFIX), listing());
+		return update;
+	}
+
+	@Test
+	void discardKeepsAnUpdateTheHelperLeftHalfDone() throws IOException {
+		List<Op> update = updateLeftHalfDone();
 		applyThreads("4", "e2");
-		Files.move(mods.resolve("x-1.jar"), mods.resolve("x-1.jar.disabled"));
 
 		List<Op> dropped = staging.discard();
 
@@ -336,6 +346,28 @@ class UndoSafetyTest {
 	}
 
 	@Test
+	void discardWithOnlyAHalfDoneUpdateStagedDropsNothing() throws IOException {
+		List<Op> update = updateLeftHalfDone();
+
+		assertEquals(List.of(), staging.discard());
+		assertEquals(update.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+	}
+
+	@Test
+	void undoLastOfAHalfDoneUpdateWaitsAndTheNextExitFinishesIt() throws IOException {
+		updateLeftHalfDone();
+
+		UndoPlan plan = service.plan(false);
+
+		assertEquals("e1", plan.undoOf());
+		assertTrue(plan.isEmpty(), plan.toString());
+		helperRuns();
+		assertEquals(List.of("x-1.jar.disabled", "x-2.jar"), listing());
+		assertEquals("e1", service.plan(false).undoOf());
+		assertFalse(service.plan(false).isEmpty(), "undoable once it's done");
+	}
+
+	@Test
 	void discardStillDropsAnUpdateTheHelperHasNotStarted() throws IOException {
 		modJar(mods.resolve("x-1.jar"), "x");
 		modJar(mods.resolve("x-2.jar" + PendingActions.PENDING_SUFFIX), "x");
@@ -345,6 +377,24 @@ class UndoSafetyTest {
 		assertEquals(2, staging.discard().size());
 		assertFalse(Files.exists(pending));
 		assertEquals(List.of("x-1.jar", "x-2.jar" + PendingActions.SUPERSEDED_SUFFIX), listing());
+	}
+
+	// The price of one group per undo (review of WS-G2, M2, accepted): one jar that can't be renamed holds back the whole
+	// undo, which the helper retries at the next exits, instead of undoing the other mods on their own.
+	@Test
+	void undoAllOfUnrelatedModsWaitsWhollyWhenOneRenameFails() throws IOException {
+		modJar(mods.resolve("a.jar"), "a");
+		modJar(mods.resolve("b.jar"), "b");
+		journal.record("e1", JournalEntry.APPLY, List.of(JournalChange.file(JournalChange.ENABLE, "a", "a.jar", JournalChange.APPLIED, "op1", "g1")));
+		journal.record("e2", JournalEntry.APPLY, List.of(JournalChange.file(JournalChange.ENABLE, "b", "b.jar", JournalChange.APPLIED, "op2", "g2")));
+		service.undo(service.plan(true));
+
+		TestExecutors.failingMovesOf(p -> p.getFileName().toString().equals("a.jar")).run(PendingActions.load(pending), pending);
+
+		assertEquals(List.of("a.jar", "b.jar"), listing());
+		assertEquals(2, PendingActions.load(pending).ops().size(), "both stay staged for the next exit");
+		helperRuns();
+		assertEquals(List.of("a.jar.disabled", "b.jar.disabled"), listing());
 	}
 
 	@Test

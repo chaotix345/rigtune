@@ -7,7 +7,9 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -97,5 +99,58 @@ class FolderCheckTest {
 
 		assertEquals(List.of(String.format(UndoPlanner.MISSING, "a", "lib"), String.format(UndoPlanner.LOADED_TWICE, "b", "b-1.jar, b-2.jar")),
 				FolderCheck.problems(FolderCheck.files(folder), folder.providedElsewhere()).values().stream().map(Text::english).toList());
+	}
+
+	// --- one Apply's disables, checked together (review of WS-G2, M1)
+
+	private Map<String, String> refusals(String... files) {
+		Map<String, String> out = new LinkedHashMap<>();
+		FolderCheck.disableRefusals(folder, pending, List.of(files)).forEach((file, why) -> out.put(file, why.english()));
+		return out;
+	}
+
+	@Test
+	void disablingALibraryTogetherWithTheOnlyModThatNeedsItGoesAhead() {
+		folder.jar("lib.jar", "lib").jar("app.jar", "app", "lib");
+
+		assertEquals(Map.of(), refusals("lib.jar", "app.jar"));
+		assertEquals(Map.of(), refusals("app.jar", "lib.jar"));
+	}
+
+	@Test
+	void disablingBothProvidersOfAModAnotherNeedsKeepsOne() {
+		folder.files.put("p1.jar", new JarInfo("p1", Set.of("z"), Set.of()));
+		folder.files.put("p2.jar", new JarInfo("p2", Set.of("z"), Set.of()));
+		folder.jar("c.jar", "c", "z");
+
+		assertNull(refusal("p1.jar"));
+		assertEquals(Map.of("p1.jar", "The game wouldn't start without it: c would be missing z"), refusals("p1.jar", "p2.jar"));
+	}
+
+	@Test
+	void aChainOfDependenciesIsRefusedLinkByLink() {
+		folder.jar("x.jar", "x").jar("y.jar", "y", "x").jar("z.jar", "z", "y");
+
+		assertEquals(Map.of("y.jar", "The game wouldn't start without it: z would be missing y",
+				"x.jar", "The game wouldn't start without it: y would be missing x"), refusals("x.jar", "y.jar"));
+	}
+
+	// An undo that disables this jar among others (one group per undo) already does what was asked.
+	@Test
+	void aStagedGroupThatDisablesTheJarAndEnablesAnotherModGoesAhead() {
+		folder.jar("a.jar", "a").jar("c-1.jar.disabled", "c");
+		pending.addAll(PendingActions.group(Op.disableFile(MODS.resolve("a.jar")),
+				Op.enableFile(MODS.resolve("c-1.jar.disabled"), MODS.resolve("c-1.jar")).withModId("c")));
+
+		assertNull(refusal("a.jar"));
+	}
+
+	@Test
+	void aStagedSwapBackToAnOlderJarOfTheSameModIsRefused() {
+		folder.jar("x-2.jar", "x").jar("x-1.jar.disabled", "x");
+		pending.addAll(PendingActions.group(Op.disableFile(MODS.resolve("x-2.jar")),
+				Op.enableFile(MODS.resolve("x-1.jar.disabled"), MODS.resolve("x-1.jar"))));
+
+		assertEquals(FolderCheck.CHANGE_STAGED, refusal("x-2.jar"));
 	}
 }

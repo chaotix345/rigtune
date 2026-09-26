@@ -1498,4 +1498,53 @@ class UndoPlannerTest {
 
 		assertEquals(Set.copyOf(pending.stream().map(Op::id).toList()), result.script().discardOpIds());
 	}
+
+	@Test
+	void aHalfDoneUpdateWhoseJarGotANumberedDisabledNameWaitsToo() {
+		halfDoneUpdate();
+		state.files.remove("x-1.jar.disabled");
+		state.jar("x-1.jar.disabled.1", "x");
+
+		assertTrue(last().script().discardOpIds().isEmpty());
+	}
+
+	// An old x-1.jar.disabled next to a staged update the helper never ran (x-1.jar removed by hand) isn't half done.
+	@Test
+	void aStagedUpdateTheHelperNeverRanIsCancelledEvenNextToAnOldDisabledCopy() {
+		state.jar("x-1.jar.disabled", "x").jar("x-2.jar.rigtune-pending", "x");
+		List<Op> group = PendingActions.group(Op.disableFile(MODS.resolve("x-1.jar")),
+				Op.enableFile(MODS.resolve("x-2.jar.rigtune-pending"), MODS.resolve("x-2.jar")).withModId("x"));
+		pending.addAll(group);
+		entry("e1", JournalChange.file(JournalChange.DISABLE, "x", "x-1.jar", JournalChange.STAGED, group.get(0).id(), group.get(0).group()),
+				JournalChange.file(JournalChange.ENABLE, "x", "x-2.jar", JournalChange.STAGED, group.get(1).id(), group.get(1).group()));
+
+		assertEquals(Set.copyOf(pending.stream().map(Op::id).toList()), last().script().discardOpIds());
+	}
+
+	@Test
+	void undoThisOnAnEntryPartlyWaitingForTheRestartUndoesNoneOfIt() {
+		updateUndoneInThisStart(applied("vanilla.simulationDistance", "8", "6"));
+		state.settings.put("vanilla.simulationDistance", "6");
+
+		Result result = entryOf("a");
+
+		assertTrue(result.plan().isEmpty(), result.plan().toString());
+		assertTrue(result.script().immediate().isEmpty() && result.script().reverts().isEmpty(), result.script().toString());
+	}
+
+	// The confirmed plan is re-planned: if something staged since makes part of it wait, none of it is carried out.
+	@Test
+	void recheckOfAPlanThatNowWaitsCarriesOutNothing() {
+		state.jar("x-1.jar", "x");
+		state.settings.put("vanilla.simulationDistance", "6");
+		entry("a", enabled("x", "x-1.jar", "g1"), applied("vanilla.simulationDistance", "8", "6"));
+		UndoPlan shown = last().plan();
+		assertEquals(2, items(last(), Action.REVERT).size());
+		pending.add(Op.disableFile(MODS.resolve("x-1.jar")).inGroup("u1"));
+
+		Result result = checked(UndoPlanner.recheck(shown, entries, pending, state));
+
+		assertTrue(result.script().immediate().isEmpty() && result.script().fileOps().isEmpty() && result.script().reverts().isEmpty(),
+				result.script().toString());
+	}
 }
