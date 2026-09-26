@@ -20,8 +20,10 @@ import java.util.function.BooleanSupplier;
 // focusable child, and Entry.updateNarration is package-private, so narratables() is the only way to be narrated
 // (docs/research/v0.4/bench-history-a11y.md B2). It draws nothing (the row draws itself), never takes a mouse click
 // (clicks reach the row as before) and its message is the row's text. With an action, Enter or Space runs it.
+// standalone(...) is the same for a line of text that isn't a list row (a notice, a trend line, the startup line; review-8
+// UV-2 to UV-4): placed over the text, it draws only the focus frame while it has the keyboard focus.
 public final class RowFocus extends AbstractWidget {
-	private final LayoutElement row;
+	private final @Nullable LayoutElement row;
 	private final @Nullable Runnable action;
 	private final @Nullable BooleanSupplier selected;
 
@@ -31,16 +33,26 @@ public final class RowFocus extends AbstractWidget {
 
 	// selected: whether the row is the list's selected one (History's open entry, the chosen profile), said after its text.
 	public RowFocus(LayoutElement row, Component message, @Nullable Runnable action, @Nullable BooleanSupplier selected) {
-		super(0, 0, 0, 0, message);
+		this(row, message, action, selected, 0, 0, 0, 0);
+	}
+
+	private RowFocus(@Nullable LayoutElement row, Component message, @Nullable Runnable action, @Nullable BooleanSupplier selected, int x, int y,
+			int width, int height) {
+		super(x, y, width, height, message);
 		this.row = row;
 		this.action = action;
 		this.selected = selected;
 	}
 
+	// A focus stop for a line of text drawn by its screen at (x, y, width, height).
+	public static RowFocus standalone(Component message, int x, int y, int width, int height) {
+		return new RowFocus(null, message, null, null, x, y, width, height);
+	}
+
 	// Where the row is, for arrow navigation out of the list.
 	@Override
 	public ScreenRectangle getRectangle() {
-		return row.getRectangle();
+		return row == null ? super.getRectangle() : row.getRectangle();
 	}
 
 	@Override
@@ -59,6 +71,9 @@ public final class RowFocus extends AbstractWidget {
 
 	@Override
 	protected void extractWidgetRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+		if (row == null && isFocused()) {
+			fill(graphics, getX(), getY(), getWidth(), getHeight());
+		}
 	}
 
 	@Override
@@ -87,14 +102,22 @@ public final class RowFocus extends AbstractWidget {
 		if (!(entry.getFocused() instanceof RowFocus focus) || !focus.isFocused()) {
 			return;
 		}
+		fill(graphics, entry.getX(), entry.getY(), entry.getWidth(), entry.getHeight());
+	}
+
+	private static void fill(GuiGraphicsExtractor graphics, int left, int top, int width, int height) {
 		int color = Palette.focus();
-		int left = entry.getX();
-		int top = entry.getY();
-		int right = left + entry.getWidth();
-		int bottom = top + entry.getHeight() - 1;
-		graphics.fill(left, top, right, top + 1, color);
-		graphics.fill(left, bottom - 1, right, bottom, color);
-		graphics.fill(left, top + 1, left + 1, bottom - 1, color);
-		graphics.fill(right - 1, top + 1, right, bottom - 1, color);
+		for (int[] r : frame(left, top, width, height)) {
+			graphics.fill(r[0], r[1], r[2], r[3], color);
+		}
+	}
+
+	// The frame's four 1 px edges as fill rectangles {x0, y0, x1, y1} (ends exclusive, as GuiGraphicsExtractor.fill), around
+	// exactly [left, left + width) x [top, top + height) (review-8 UV-1: the bottom edge was a row short).
+	static int[][] frame(int left, int top, int width, int height) {
+		int right = left + width;
+		int bottom = top + height;
+		return new int[][]{{left, top, right, top + 1}, {left, bottom - 1, right, bottom}, {left, top + 1, left + 1, bottom - 1},
+				{right - 1, top + 1, right, bottom - 1}};
 	}
 }

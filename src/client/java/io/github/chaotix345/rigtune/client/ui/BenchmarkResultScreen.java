@@ -55,12 +55,18 @@ public class BenchmarkResultScreen extends Screen {
 	private record Line(Component text, int color) {
 	}
 
+	// One drawn row of a status line: its wrapped text, or (full != null) the whole line clipped to one row with the full
+	// text as a tooltip.
+	private record StatusRow(FormattedCharSequence text, int color, @Nullable Component full) {
+	}
+
 	private final @Nullable Screen parent;
 	private final BenchmarkController.Outcome outcome;
 	private final List<PlannerResult.Measurement> rows;
 	private final List<BenchmarkRecord> chartRuns;
 	private final BenchmarkTrend.@Nullable View trend;
 	private List<Line> lines = List.of();
+	private List<StatusRow> shownRows = List.of();
 	// The trend's lines in `lines` (review M3: they give way before the table or chart does).
 	private int trendFrom;
 	private int trendTo;
@@ -115,15 +121,10 @@ public class BenchmarkResultScreen extends Screen {
 	protected void init() {
 		lines = lines();
 		contentBottom = height - 34;
-		// Room for the table's header and 3 rows (or the chart): the trend's lines after its first give way first.
+		// Room for the table's header and 3 rows (or the chart).
 		int maxLines = Math.max(1, (contentBottom - 26 - (tune() ? 4 * ROW + 2 : 44)) / LINE);
-		if (lines.size() > maxLines && trendTo - trendFrom > 1) {
-			List<Line> kept = new ArrayList<>(lines);
-			int drop = Math.min(lines.size() - maxLines, trendTo - trendFrom - 1);
-			kept.subList(trendTo - drop, trendTo).clear();
-			lines = kept;
-		}
-		contentTop = 22 + lines.size() * LINE + 4;
+		shownRows = layout(maxLines);
+		contentTop = 22 + shownRows.size() * LINE + 4;
 		int buttonWidth = Math.min(150, (Math.min(width - 32, 360) - 4) / 2);
 		int y = height - 28;
 		if (!tune()) {
@@ -148,6 +149,67 @@ public class BenchmarkResultScreen extends Screen {
 		use.active = !session.measurements().isEmpty();
 		addRenderableWidget(Button.builder(Component.translatable("rigtune.benchmark.keep", outcome.originalRd()), b -> onClose())
 				.bounds(width / 2 + 2, y, buttonWidth, 20).build());
+	}
+
+	// review-8 P5B-F4: every status line wrapped to the screen's width, within maxRows rows (see fit).
+	private List<StatusRow> layout(int maxRows) {
+		int textWidth = Math.max(40, width - 16);
+		List<List<FormattedCharSequence>> wrapped = new ArrayList<>();
+		int[] counts = new int[lines.size()];
+		for (int i = 0; i < lines.size(); i++) {
+			List<FormattedCharSequence> split = font.split(lines.get(i).text(), textWidth);
+			wrapped.add(split.isEmpty() ? List.of(FormattedCharSequence.EMPTY) : split);
+			counts[i] = wrapped.get(i).size();
+		}
+		int[] shown = fit(counts, maxRows, trendFrom, trendTo);
+		List<StatusRow> out = new ArrayList<>();
+		for (int i = 0; i < lines.size(); i++) {
+			Line line = lines.get(i);
+			if (shown[i] == counts[i]) {
+				wrapped.get(i).forEach(row -> out.add(new StatusRow(row, line.color(), null)));
+			} else if (shown[i] == 1) {
+				out.add(new StatusRow(clip(line.text()), line.color(), line.text()));
+			}
+		}
+		return out;
+	}
+
+	// How many rows each status line gets (0: left out; 1 of more: clipped to one row) so they fit maxRows: the trend's
+	// lines after its first give way first, from its end (review M3), then the line wrapped to the most rows folds back to
+	// one clipped row (the last such line first), until they fit or every line is one row; the table or chart keeps its room.
+	static int[] fit(int[] wrapped, int maxRows, int trendFrom, int trendTo) {
+		int[] shown = wrapped.clone();
+		int total = 0;
+		for (int n : shown) {
+			total += n;
+		}
+		for (int i = trendTo - 1; i > trendFrom && total > maxRows; i--) {
+			total -= shown[i];
+			shown[i] = 0;
+		}
+		while (total > maxRows) {
+			int longest = -1;
+			for (int i = 0; i < shown.length; i++) {
+				if (shown[i] > 1 && (longest < 0 || shown[i] >= shown[longest])) {
+					longest = i;
+				}
+			}
+			if (longest < 0) {
+				break;
+			}
+			total -= shown[longest] - 1;
+			shown[longest] = 1;
+		}
+		return shown;
+	}
+
+	/** For the game tests: the status rows as drawn, and how many of them are clipped (their whole text is a tooltip). */
+	public List<FormattedCharSequence> statusRows() {
+		return shownRows.stream().map(StatusRow::text).toList();
+	}
+
+	public int clippedStatusRows() {
+		return (int) shownRows.stream().filter(r -> r.full() != null).count();
 	}
 
 	// v0.4 (docs/v0.4/SPEC.md 5): the Stutter Doctor's line for the benchmark's sweeps ("2 spikes; likely causes: ...").
@@ -253,8 +315,11 @@ public class BenchmarkResultScreen extends Screen {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
 		int y = 22;
-		for (Line line : lines) {
-			graphics.centeredText(font, clip(line.text()), width / 2, y, Palette.of(line.color()));
+		for (StatusRow row : shownRows) {
+			graphics.centeredText(font, row.text(), width / 2, y, Palette.of(row.color()));
+			if (row.full() != null && mouseX >= 8 && mouseX < width - 8 && mouseY >= y && mouseY < y + LINE) {
+				graphics.setTooltipForNextFrame(font, font.split(row.full(), Math.min(250, width - 16)), mouseX, mouseY);
+			}
 			y += LINE;
 		}
 		int area = Math.min(width - 16, 460);

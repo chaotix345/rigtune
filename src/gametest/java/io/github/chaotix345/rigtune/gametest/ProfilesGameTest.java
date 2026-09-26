@@ -28,7 +28,12 @@ import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.notice.NoticePriority;
+import io.github.chaotix345.rigtune.core.model.Goal;
+import io.github.chaotix345.rigtune.core.model.Recommendation;
+import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
+import io.github.chaotix345.rigtune.core.profile.ProfileImport;
 import io.github.chaotix345.rigtune.core.profile.ProfileStore;
 import io.github.chaotix345.rigtune.core.profile.ProfileView;
 import io.github.chaotix345.rigtune.core.profile.ShareCode;
@@ -294,6 +299,65 @@ public class ProfilesGameTest implements FabricClientGameTest {
 		}
 		context.runOnClient(mc -> mc.gui.screen().onClose());
 		context.waitForScreen(ProfilesScreen.class);
+
+		// review-8 PR-1: a well-formed code while RigTune can't import yet (still scanning this PC): Preview shows why as a
+		// note, and neither Apply nor Save only can be pressed.
+		RigTuneController notReady = new NotReady(controller);
+		context.runOnClient(mc -> mc.gui.setScreen(new ProfileImportScreen(mc.gui.screen(), notReady)));
+		context.waitForScreen(ProfileImportScreen.class);
+		context.runOnClient(mc -> {
+			ProfileImportScreen screen = (ProfileImportScreen) mc.gui.screen();
+			screen.setCode(code);
+			screen.importCode();
+		});
+		context.waitForScreen(PreviewScreen.class);
+		context.waitFor(mc -> mc.gui.screen() instanceof PreviewScreen p && !p.loading() && p.preview() != null, 400);
+		context.waitTicks(2);
+		check(context.computeOnClient(mc -> ((PreviewScreen) mc.gui.screen()).rowText().stream().anyMatch(r -> r.contains("still scanning"))),
+				"the not-ready error shows as a note: " + context.computeOnClient(mc -> ((PreviewScreen) mc.gui.screen()).rowText()));
+		check(context.computeOnClient(mc -> !((PreviewScreen) mc.gui.screen()).applyButton().active), "Apply is off for an import that isn't ready");
+		check(context.computeOnClient(mc -> !((PreviewScreen) mc.gui.screen()).saveOnlyButton().active), "Save only is off for an import that isn't ready");
+		context.takeScreenshot("profiles-import-not-ready");
+		context.runOnClient(mc -> mc.gui.screen().onClose());
+		context.waitForScreen(ProfileImportScreen.class);
+		context.runOnClient(mc -> mc.gui.screen().onClose());
+		context.waitForScreen(ProfilesScreen.class);
+	}
+
+	// RigTune before its first scan finished: an import is refused as not ready (ProfileService's own guard).
+	private record NotReady(RigTuneController real) implements RigTuneController {
+		@Override
+		public @Nullable Report report() {
+			return real.report();
+		}
+
+		@Override
+		public Goal goal() {
+			return real.goal();
+		}
+
+		@Override
+		public void setGoal(Goal goal) {
+			real.setGoal(goal);
+		}
+
+		@Override
+		public Component apply(List<Recommendation> selected) {
+			return real.apply(selected);
+		}
+
+		@Override
+		public void startBenchmark() {
+		}
+
+		@Override
+		public void rescan() {
+		}
+
+		@Override
+		public ProfileImport importProfileCode(String code) {
+			return ProfileImport.failed(Text.of("rigtune.profile.code.error.not_ready", "RigTune is still scanning this PC. Try again in a moment."));
+		}
 	}
 
 	// The laptop hook (SPEC 4, AC4.9's notice half): a debounced AC -> battery edge offers Battery as a notice and never

@@ -104,13 +104,13 @@ public class ProfileImportScreen extends Screen {
 		error = null;
 		String submitted = code;
 		AtomicReference<ProfileImport> result = new AtomicReference<>();
-		Component name = decoded.name() == null ? Component.translatable("rigtune.profile.imported") : Component.literal(decoded.name());
+		Component name = decoded.name() == null ? Component.translatable("rigtune.profile.imported") : SafeLiteral.of(decoded.name());
 		minecraft.gui.setScreen(new PreviewScreen(this, controller, c -> {
 			ProfileImport imported = c.importProfileCode(submitted);
 			result.set(imported);
 			return imported.ok() ? imported.preview() : ApplyPreview.EMPTY.withNotes(List.of(imported.error()));
 		}, new PreviewScreen.Confirm(Component.translatable("rigtune.profile.import.preview", name), Component.translatable("rigtune.profile.preview.apply"),
-				() -> finish(result.get(), true), () -> finish(result.get(), false))));
+				() -> finish(result.get(), true), () -> finish(result.get(), false), () -> result.get() != null && result.get().ok())));
 	}
 
 	private void finish(@Nullable ProfileImport imported, boolean apply) {

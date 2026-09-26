@@ -58,10 +58,19 @@ public class ToolsScreen extends Screen {
 		startupLine = startupLine(startup);
 		// Wrapped to the screen (not the buttons) so the note and the advice fit above Done at 640x480, GUI scale 2.
 		List<FormattedCharSequence> detail = new ArrayList<>();
-		for (Component line : startupDetail(startup)) {
-			detail.addAll(font.split(line, Math.max(40, width - 16)));
-		}
 		int room = Math.max(0, (height - 30 - (startupY + LINE + 2)) / LINE);
+		// review-8 UV-4: the startup line and each note under it are Tab stops the narrator reads.
+		if (startupLine != null) {
+			addRenderableWidget(RowFocus.standalone(startupLine, 8, startupY - 1, Math.max(1, width - 16), LINE));
+		}
+		for (Component line : startupDetail(startup)) {
+			List<FormattedCharSequence> rows = font.split(line, Math.max(40, width - 16));
+			int shown = Math.min(rows.size(), room - detail.size());
+			if (shown > 0) {
+				addRenderableWidget(RowFocus.standalone(line, 8, startupY + LINE + 2 + detail.size() * LINE - 1, Math.max(1, width - 16), shown * LINE));
+			}
+			detail.addAll(rows);
+		}
 		startupDetailClipped = detail.size() > room;
 		startupDetail = new ArrayList<>(detail.subList(0, Math.min(room, detail.size())));
 		addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose())

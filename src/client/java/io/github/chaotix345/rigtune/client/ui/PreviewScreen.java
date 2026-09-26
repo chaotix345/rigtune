@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 
 // Preview (docs/v0.3/SPEC.md item 13): what Apply would do for the ticked items, file by file. The controller works it
@@ -82,8 +83,13 @@ public class PreviewScreen extends Screen {
 
 	// v0.4 (WS-P, docs/v0.4/SPEC.md 4): a profile switch or an imported code, previewed before anything is written, with
 	// Apply / Save only / Cancel. subtitle replaces the usual one; apply and saveOnly run on the render thread and choose
-	// the next screen themselves; saveOnly null leaves that button out. Cancel (and Escape) goes back to parent.
-	public record Confirm(Component subtitle, Component applyLabel, Runnable apply, @Nullable Runnable saveOnly) {
+	// the next screen themselves; saveOnly null leaves that button out. Cancel (and Escape) goes back to parent. ready: read
+	// once the preview has loaded; false keeps Apply and Save only inactive (review-8 PR-1: an import RigTune isn't ready
+	// for shows its error as a note, and nothing can be saved).
+	public record Confirm(Component subtitle, Component applyLabel, Runnable apply, @Nullable Runnable saveOnly, BooleanSupplier ready) {
+		public Confirm(Component subtitle, Component applyLabel, Runnable apply, @Nullable Runnable saveOnly) {
+			this(subtitle, applyLabel, apply, saveOnly, () -> true);
+		}
 	}
 
 	// loader: runs off the render thread, like controller.preview.
@@ -171,14 +177,15 @@ public class PreviewScreen extends Screen {
 		int gap = 4;
 		int buttonWidth = Math.min(120, (column - gap * (count - 1)) / count);
 		int x = (width - (buttonWidth * count + gap * (count - 1))) / 2;
+		boolean ready = preview != null && !loading && !failed && confirm.ready().getAsBoolean();
 		applyButton = addRenderableWidget(Button.builder(confirm.applyLabel(), b -> confirm.apply().run()).bounds(x, top, buttonWidth, 20).build());
-		applyButton.active = preview != null && !loading && !failed && !preview.isEmpty();
+		applyButton.active = ready && !preview.isEmpty();
 		x += buttonWidth + gap;
 		saveOnlyButton = null;
 		if (confirm.saveOnly() != null) {
 			saveOnlyButton = addRenderableWidget(Button.builder(Component.translatable("rigtune.profile.preview.save_only"), b -> confirm.saveOnly().run())
 					.bounds(x, top, buttonWidth, 20).build());
-			saveOnlyButton.active = preview != null && !loading && !failed;
+			saveOnlyButton.active = ready;
 			x += buttonWidth + gap;
 		}
 		cancelButton = addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), b -> onClose()).bounds(x, top, buttonWidth, 20).build());
@@ -283,7 +290,7 @@ public class PreviewScreen extends Screen {
 		prefixes.put(normal(gameDir.resolve("options.txt")), SettingKeys.VANILLA_PREFIX);
 		ConfigTargets.all(FabricLoader.getInstance().getConfigDir()).forEach(t -> prefixes.put(normal(t.file()), t.prefix()));
 		byFile.forEach((file, values) -> {
-			target.row(Component.literal(relative(file)), COLOR_FILE, INDENT, width);
+			target.row(SafeLiteral.of(relative(file)), COLOR_FILE, INDENT, width);
 			for (ApplyPreview.Setting s : values) {
 				target.row(settingRow(s, prefixes.get(normal(file)), labels), COLOR_TEXT, 2 * INDENT, width);
 			}
@@ -296,11 +303,11 @@ public class PreviewScreen extends Screen {
 			return Component.translatable("rigtune.preview.setting", s.key(), value(s.oldValue()), value(s.newValue()));
 		}
 		String key = prefix + s.key();
-		return Component.translatable("rigtune.preview.setting", labels.label(key), labelled(labels, key, s.oldValue()), labelled(labels, key, s.newValue()));
+		return Component.translatable("rigtune.preview.setting", SafeLiteral.of(labels.label(key)), labelled(labels, key, s.oldValue()), labelled(labels, key, s.newValue()));
 	}
 
 	private static Component labelled(HistoryModel.Labels labels, String key, @Nullable String value) {
-		return value == null ? value(null) : Component.literal(labels.value(key, value));
+		return value == null ? value(null) : SafeLiteral.of(labels.value(key, value));
 	}
 
 	private static Path normal(Path file) {
@@ -335,7 +342,7 @@ public class PreviewScreen extends Screen {
 	}
 
 	private static Component value(@Nullable String value) {
-		return value == null ? Component.translatable("rigtune.preview.value.none") : Component.literal(value);
+		return value == null ? Component.translatable("rigtune.preview.value.none") : SafeLiteral.of(value);
 	}
 
 	@Override

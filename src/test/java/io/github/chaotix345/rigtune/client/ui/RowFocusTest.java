@@ -111,6 +111,40 @@ class RowFocusTest {
 		assertFalse(new RowFocus(new Row(), Component.literal("row")).keyPressed(ENTER), "no action: the key goes on");
 	}
 
+	// review-8 UV-1: the focus frame's four 1 px edges cover exactly the rectangle's outline: every edge pixel once, the
+	// bottom row included, nothing inside.
+	@Test
+	void theFocusFrameOutlinesTheWholeRow() {
+		int left = 40;
+		int top = 60;
+		int width = 300;
+		int height = 24;
+		int[][] cover = new int[height][width];
+		for (int[] r : RowFocus.frame(left, top, width, height)) {
+			for (int y = r[1]; y < r[3]; y++) {
+				for (int x = r[0]; x < r[2]; x++) {
+					cover[y - top][x - left]++;
+				}
+			}
+		}
+		for (int y = 0; y < height; y++) {
+			for (int x = 0; x < width; x++) {
+				boolean edge = y == 0 || y == height - 1 || x == 0 || x == width - 1;
+				assertEquals(edge ? 1 : 0, cover[y][x], "pixel " + x + "," + y);
+			}
+		}
+	}
+
+	// review-8 UV-2/UV-3/UV-4: a line of text that isn't a list row gets a focus child placed over it: a Tab stop that
+	// narrates the line and takes no clicks.
+	@Test
+	void aStandaloneFocusNarratesAndSitsWhereItIsPlaced() {
+		RowFocus focus = RowFocus.standalone(Component.literal("The server limits view distance to 6 chunks"), 8, 30, 200, 12);
+		assertEquals(new ScreenRectangle(8, 30, 200, 12), focus.getRectangle());
+		assertFalse(focus.isMouseOver(20, 35));
+		assertTrue(narration(focus).contains("The server limits view distance to 6 chunks"));
+	}
+
 	@Test
 	void clicksStayWithTheRowAndArrowsUseTheRowsPlace() {
 		RowFocus focus = new RowFocus(new Row(), Component.literal("row"));
