@@ -8,7 +8,7 @@
     "clientStartedWallMs": {"limit": 141, "ceiling": null, "what": "wall time of RigTune's CLIENT_STARTED handler (RealController.start) on the render thread"},
     "workerCpuMs5s": {"limit": 300, "ceiling": 300, "what": "CPU of every RigTune thread in the 5 s after CLIENT_STARTED"},
     "frameHookNsPerCallOff": {"limit": 13, "ceiling": 20, "what": "per-frame hook, ns per call, session monitor off (10 M calls)"},
-    "frameHookAllocBytesOff": {"limit": 0, "ceiling": 0, "what": "per-frame hook, bytes allocated, monitor off: the hot calls, or the first 10 M calls from cold beyond 4 KiB of JIT noise"},
+    "frameHookAllocBytesOff": {"limit": 0, "ceiling": 0, "what": "per-frame hook, bytes allocated, monitor off: the hot calls, or the first 10 M calls from cold beyond 64 KiB of JIT noise"},
     "frameHookNsPerCallOn": {"limit": 200, "ceiling": 200, "what": "per-frame hook (FrameTimes.onFrame + StutterMonitor.onFrame), ns per call, session monitor on"},
     "frameHookAllocBytesOn": {"limit": 0, "ceiling": 0, "what": "per-frame hook, bytes allocated as above, monitor on"},
     "frameHookNsPerCallOnPhases": {"limit": 400, "ceiling": 400, "what": "per-frame hook plus the Stutter Doctor's phase timers of a capped frame with one tick and a chunk load (8 System.nanoTime reads), ns per frame, monitor on; its own ceiling (coordinator, 2026-09-26)"},

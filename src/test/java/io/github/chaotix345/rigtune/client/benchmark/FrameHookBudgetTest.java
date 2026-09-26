@@ -22,13 +22,14 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 // timers (MinecraftFrameMixin), against tools/footprint-budgets.json: ns per call over 10 M hot calls, and bytes
 // allocated. Allocation is counted over the first 10 M calls from cold as well as over the hot runs: C2's escape
 // analysis removes an allocation that doesn't escape (a `new long[1]`), but the interpreter and C1 still make it on
-// every call first, so it shows as hundreds of KB. The JVM itself allocates a few bytes on this thread while it compiles
-// the loop (72 B in a bare JVM, 280 B in this test JVM, on Java 25), whatever the hook does: the cold count forgives
-// JIT_NOISE_BYTES of that. At least one hot run must allocate exactly nothing.
+// every call first, so it shows as hundreds of KB (a `new long[1]` showed 129-382 KB). The JVM itself allocates a little
+// on this thread while it compiles the loop (72 B in a bare JVM, 280-960 B in this test JVM, on Java 25; about 1 KB of
+// bookkeeping once on CI), whatever the hook does: the cold count forgives JIT_NOISE_BYTES of that, the same 64 KiB bound
+// as the other allocation tests (StutterMonitorTest, FrameRingAllocationTest). At least one hot run must allocate nothing.
 class FrameHookBudgetTest {
 	private static final int CALLS = 10_000_000;
 	private static final int RUNS = 5;
-	static final long JIT_NOISE_BYTES = 4096;
+	static final long JIT_NOISE_BYTES = 64 * 1024;
 
 	@AfterEach
 	void monitorOff() {

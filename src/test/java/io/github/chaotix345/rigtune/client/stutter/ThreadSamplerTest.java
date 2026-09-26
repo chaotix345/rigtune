@@ -225,6 +225,7 @@ class ThreadSamplerTest {
 			tally.add(ids, times, source, record, null);
 		}
 		long allocated = StutterMonitorTest.allocated() - before;
-		assertTrue(allocated < 1024, "20,000 steady-state samples allocated " + allocated + " bytes");
+		// A per-sample allocation would be at least 320 KB over 20,000 samples.
+		assertTrue(allocated < StutterMonitorTest.NOISE_BYTES, "20,000 steady-state samples allocated " + allocated + " bytes");
 	}
 }
