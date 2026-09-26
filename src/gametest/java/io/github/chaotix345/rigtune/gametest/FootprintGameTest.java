@@ -8,6 +8,9 @@ import io.github.chaotix345.rigtune.client.FootprintStats;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
+import io.github.chaotix345.rigtune.client.probe.PowerWatcher;
+import io.github.chaotix345.rigtune.client.stutter.StutterHooks;
+import io.github.chaotix345.rigtune.client.stutter.StutterMonitor;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
@@ -15,15 +18,21 @@ import io.github.chaotix345.rigtune.core.footprint.FootprintBudgets;
 import io.github.chaotix345.rigtune.core.footprint.StartupTimesStore;
 import io.github.chaotix345.rigtune.core.model.GraphicsBackend;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
+import io.github.chaotix345.rigtune.core.stutter.StutterRings;
+import io.github.chaotix345.rigtune.core.stutter.StutterStore;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 
 import javax.management.ObjectName;
 import java.io.IOException;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -54,9 +63,9 @@ import java.util.stream.Collectors;
 // after the other game tests. Startup numbers come from FootprintStats (measured by RigTune as they happened); this test
 // adds the tick hook's cost, the class histogram (DiagnosticCommand gcClassHistogram, in-process) and the heap after that
 // full GC before and after 20 open/close cycles of RigTuneScreen and the Tools hub, checks the startup-time record and
-// the hub line, writes footprint/footprint-<mc>-<backend>.json (a CI artifact) and gates it with
-// tools/footprint-budgets.json. The session-monitor numbers (monitorOn/OffRetainedBytes, samplerCpuMsPer60s) come with
-// item 5 (F-L1) and are null until then.
+// the hub line, then turns the Stutter Doctor's session monitor on in a singleplayer world (its retained rings, the
+// sampler's CPU over 60 s, the tick work with the monitor on) and off again (F-L1), writes
+// footprint/footprint-<mc>-<backend>.json (a CI artifact) and gates it with tools/footprint-budgets.json.
 public class FootprintGameTest implements FabricClientGameTest {
 	private static final String RIGTUNE = "io.github.chaotix345.rigtune.";
 	private static final String TEST_CLASSES = "io.github.chaotix345.rigtune.gametest.";
@@ -64,6 +73,12 @@ public class FootprintGameTest implements FabricClientGameTest {
 	private static final int CYCLES = 20;
 	private static final int TICK_CALLS = 100_000;
 	private static final int[][] SIZES = {{1280, 720, 2}, {640, 480, 2}, {854, 480, 2}};
+	private static final String SAMPLER = "RigTune stutter sampler";
+	private static final long SAMPLER_WINDOW_NANOS = 60_000_000_000L;
+	// The session capture's objects: none may stay alive once the monitor is off and its session is saved (F-M1).
+	private static final Set<String> CAPTURE_CLASSES = Set.of(RIGTUNE + "core.stutter.FrameRing", RIGTUNE + "core.stutter.FrameRing$Snapshot",
+			RIGTUNE + "core.stutter.StutterRings", RIGTUNE + "core.stutter.StutterRings$Snapshot", RIGTUNE + "core.stutter.RecordRing",
+			RIGTUNE + "client.stutter.StutterMonitor$Capture", RIGTUNE + "client.stutter.StutterCapture$Copy");
 
 	private record ClassCount(long instances, long bytes) {
 	}
@@ -103,9 +118,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 		tickHook(context, measured, out);
 		noticeEvaluation(context, controller, out);
 		retention(context, measured, out);
-		measured.put("monitorOnRetainedBytes", null);
-		measured.put("monitorOffRetainedBytes", null);
-		measured.put("samplerCpuMsPer60s", null);
+		sessionMonitor(context, controller, hardware, measured, out);
 
 		FootprintBudgets budgets;
 		try {
@@ -144,6 +157,23 @@ public class FootprintGameTest implements FabricClientGameTest {
 	// SPEC X5 / AC10.6: the always-on threads that must not exist here: PowerWatcher without a battery (AC4.9) and the
 	// stutter sampler with the session monitor off.
 	private static void checkThreads(HardwareProfile hardware, Map<String, Object> out) {
+		List<String> names = rigtuneThreads();
+		out.put("rigtuneThreads", names);
+		out.put("hasBattery", hardware.hasBattery());
+		checkNoPowerWatcher(hardware, names);
+		if (!ClientSettings.shared(FabricLoader.getInstance().getConfigDir()).stutterMonitor) {
+			check(!names.contains(SAMPLER), "no stutter sampler with the session monitor off: " + names);
+		}
+	}
+
+	// AC4.9 / AC10.6: without a real battery PowerWatcher never starts (CI runners have none).
+	private static void checkNoPowerWatcher(HardwareProfile hardware, List<String> threads) {
+		if (!hardware.hasBattery()) {
+			check(!threads.contains("RigTune power") && !PowerWatcher.isRunning(), "no PowerWatcher without a battery: " + threads);
+		}
+	}
+
+	private static List<String> rigtuneThreads() {
 		ThreadMXBean mx = ManagementFactory.getThreadMXBean();
 		List<String> names = new ArrayList<>();
 		for (ThreadInfo info : mx.getThreadInfo(mx.getAllThreadIds())) {
@@ -152,13 +182,17 @@ public class FootprintGameTest implements FabricClientGameTest {
 			}
 		}
 		names.sort(null);
-		out.put("rigtuneThreads", names);
-		if (!hardware.hasBattery()) {
-			check(!names.contains("RigTune power"), "no PowerWatcher thread without a battery: " + names);
+		return names;
+	}
+
+	private static long threadId(String name) {
+		ThreadMXBean mx = ManagementFactory.getThreadMXBean();
+		for (ThreadInfo info : mx.getThreadInfo(mx.getAllThreadIds())) {
+			if (info != null && name.equals(info.getThreadName())) {
+				return info.getThreadId();
+			}
 		}
-		if (!ClientSettings.shared(FabricLoader.getInstance().getConfigDir()).stutterMonitor) {
-			check(!names.contains("RigTune stutter sampler"), "no stutter sampler with the session monitor off: " + names);
-		}
+		return -1;
 	}
 
 	// AC13.2: this launch wrote exactly one run (the run dir is fresh, and every earlier test went back to a new title
@@ -314,6 +348,131 @@ public class FootprintGameTest implements FabricClientGameTest {
 		out.put("largestRigtuneClassesIdle", idle.rigtune().entrySet().stream()
 				.sorted(Comparator.comparingLong((Map.Entry<String, ClassCount> e) -> e.getValue().bytes()).reversed())
 				.limit(12).collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().bytes(), (a, b) -> a, LinkedHashMap::new)));
+	}
+
+	// F-L1 (AC10.4; F-M1): the session monitor in a singleplayer world, on the play path (no screen open). Retention by
+	// explicit accounting: StutterMonitor.retainedBytes() is 0 at idle, the rings while on, and must be back after it's
+	// off, with no sampler thread, no GC listener and no capture object alive (class histogram once the session is saved).
+	// The sampler's CPU is taken over 60 s of wall time from its thread's start; the END_CLIENT_TICK work with the monitor on
+	// is RigTuneClient.onTick plus the monitor's own listener (StutterHooks.tick, private, called through a method handle).
+	// The heap after a full GC before, during and after is a diagnostic only: a live world moves it by megabytes.
+	private static void sessionMonitor(ClientGameTestContext context, RigTuneController controller, HardwareProfile hardware,
+			Map<String, Number> measured, Map<String, Object> out) {
+		Path configDir = FabricLoader.getInstance().getConfigDir();
+		check(!ClientSettings.shared(configDir).stutterMonitor && !StutterMonitor.active(), "the monitor is off before the world");
+		MethodHandle stutterTick = stutterTick();
+		try (TestSingleplayerContext world = context.worldBuilder().create()) {
+			context.runOnClient(mc -> mc.gui.setScreen(null));
+			context.waitTicks(100);
+			long idleRetained = StutterMonitor.retainedBytes();
+			check(idleRetained == 0 && StutterMonitor.session() == null, "nothing captured or retained with the monitor off: " + idleRetained);
+			Histogram idle = histogram();
+
+			long start = System.nanoTime();
+			context.runOnClient(mc -> controller.setStutterMonitor(true));
+			context.waitFor(mc -> StutterMonitor.session() != null, 100);
+			String startedAt = StutterMonitor.session().startedAt().toString();
+			long sampler = threadId(SAMPLER);
+			check(sampler >= 0 && StutterHooks.gcListenerActive(), "the sampler thread and the GC listener run while capturing: " + rigtuneThreads());
+			long deadline = start + SAMPLER_WINDOW_NANOS;
+			context.waitFor(mc -> System.nanoTime() - deadline >= 0, ClientGameTestContext.NO_TIMEOUT);
+			long samplerCpu = ManagementFactory.getThreadMXBean().getThreadCpuTime(sampler);
+			long window = System.nanoTime() - start;
+			check(samplerCpu >= 0, "the sampler thread is alive after " + window / 1_000_000 + " ms");
+			StutterRings rings = StutterMonitor.rings();
+			long samples = rings == null ? 0 : rings.snapshot().samples().length / StutterRings.SAMPLE_STRIDE;
+			List<String> threadsOn = rigtuneThreads();
+			checkNoPowerWatcher(hardware, threadsOn);
+
+			context.runOnClient(mc -> mc.gui.setScreen(null));
+			long[] tick = context.computeOnClient(mc -> timeTicksWithTheMonitor(mc, stutterTick));
+			check(StutterMonitor.session() != null, "still capturing after the tick timing");
+			long onRetained = StutterMonitor.retainedBytes();
+			long frames = StutterMonitor.session().snapshot().frames();
+			boolean phaseTiming = StutterMonitor.phaseTiming();
+			Histogram on = histogram();
+
+			context.runOnClient(mc -> controller.setStutterMonitor(false));
+			context.waitTicks(5);
+			check(StutterMonitor.session() == null && !StutterMonitor.active(), "no capture after the monitor is off");
+			check(!StutterHooks.gcListenerActive() && threadId(SAMPLER) < 0, "no GC listener and no sampler thread after it's off: " + rigtuneThreads());
+			long offRetained = StutterMonitor.retainedBytes();
+			context.waitFor(mc -> new StutterStore(configDir).sessions().stream().anyMatch(r -> startedAt.equals(r.startedAt())), 400);
+			context.waitTicks(5);
+			Histogram off = histogram();
+			Map<String, Long> leftover = captureInstances(off);
+
+			measured.put("monitorOnRetainedBytes", onRetained);
+			measured.put("monitorOffRetainedBytes", offRetained);
+			measured.put("monitorOffLeftoverInstances", leftover.values().stream().mapToLong(Long::longValue).sum());
+			measured.put("samplerCpuMsPer60s", round2(samplerCpu / 1e6 * SAMPLER_WINDOW_NANOS / window));
+			measured.put("tickHookNsPerCallOn", round2((double) tick[0] / TICK_CALLS));
+			measured.put("tickHookAllocBytesOn", tick[1]);
+			out.put("monitorIdleRetainedBytes", idleRetained);
+			out.put("monitorFrames", frames);
+			out.put("monitorPhaseTiming", phaseTiming);
+			out.put("samplerCpuMs", ms(samplerCpu));
+			out.put("samplerWindowMs", ms(window));
+			out.put("samplerSamples", samples);
+			out.put("rigtuneThreadsMonitorOn", threadsOn);
+			out.put("heapAfterGcWorldIdleBytes", idle.heapAfterGcBytes());
+			out.put("heapAfterGcMonitorOnBytes", on.heapAfterGcBytes());
+			out.put("heapAfterGcMonitorOffBytes", off.heapAfterGcBytes());
+			out.put("monitorOnHeapDeltaBytes", on.heapAfterGcBytes() - idle.heapAfterGcBytes());
+			out.put("monitorOffHeapDeltaBytes", off.heapAfterGcBytes() - idle.heapAfterGcBytes());
+			out.put("captureInstancesWorldIdle", captureInstances(idle));
+			out.put("captureInstancesMonitorOn", captureInstances(on));
+			out.put("captureInstancesMonitorOff", leftover);
+		} finally {
+			context.runOnClient(mc -> controller.setStutterMonitor(false));
+		}
+		context.waitForScreen(TitleScreen.class);
+	}
+
+	private static MethodHandle stutterTick() {
+		try {
+			Method tick = StutterHooks.class.getDeclaredMethod("tick", Minecraft.class);
+			tick.setAccessible(true);
+			return MethodHandles.lookup().unreflect(tick);
+		} catch (ReflectiveOperationException e) {
+			throw new AssertionError("the monitor's END_CLIENT_TICK listener StutterHooks.tick(Minecraft)", e);
+		}
+	}
+
+	// As tickHook: best of 3 rounds after a warm-up, render thread.
+	private static long[] timeTicksWithTheMonitor(Minecraft mc, MethodHandle stutterTick) {
+		com.sun.management.ThreadMXBean mx = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
+		try {
+			for (int i = 0; i < 2 * TICK_CALLS; i++) {
+				RigTuneClient.onTick(mc);
+				stutterTick.invokeExact(mc);
+			}
+			long nanos = Long.MAX_VALUE;
+			long bytes = Long.MAX_VALUE;
+			for (int round = 0; round < 3; round++) {
+				long allocated = mx.getCurrentThreadAllocatedBytes();
+				long start = System.nanoTime();
+				for (int i = 0; i < TICK_CALLS; i++) {
+					RigTuneClient.onTick(mc);
+					stutterTick.invokeExact(mc);
+				}
+				nanos = Math.min(nanos, System.nanoTime() - start);
+				bytes = Math.min(bytes, mx.getCurrentThreadAllocatedBytes() - allocated);
+			}
+			return new long[]{nanos, bytes};
+		} catch (Throwable t) {
+			throw new AssertionError("timing the tick with the monitor on failed", t);
+		}
+	}
+
+	private static Map<String, Long> captureInstances(Histogram histogram) {
+		Map<String, Long> out = new TreeMap<>();
+		histogram.rigtune().forEach((name, count) -> {
+			if (CAPTURE_CLASSES.contains(name) && count.instances() > 0) {
+				out.put(name, count.instances());
+			}
+		});
+		return out;
 	}
 
 	private static void cycle(ClientGameTestContext context) {
