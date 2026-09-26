@@ -536,6 +536,7 @@ public class RigTuneScreen extends Screen {
 		graphics.text(font, title.copy().withStyle(ChatFormatting.BOLD), left, 11, 0xFFFFFFFF, true);
 		if (tierBadge != null) {
 			graphics.text(font, tierBadge, badgeRight - font.width(tierBadge), 11, 0xFFFFFFFF, true);
+			BenchmarkTrendLines.badgeTooltip(graphics, font, controller, tierBadge, badgeRight - font.width(tierBadge), 11, mouseX, mouseY, List.of());
 		}
 		int textWidth = right - left;
 		if (shown == null) {

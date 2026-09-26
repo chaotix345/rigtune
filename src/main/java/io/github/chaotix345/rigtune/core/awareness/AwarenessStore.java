@@ -24,6 +24,7 @@ public final class AwarenessStore {
 	public static final String FILE_NAME = "awareness.json";
 	public static final long MAX_BYTES = 64 * 1024;
 	public static final int MAX_DISMISSED = 256;
+	public static final int MAX_ACKNOWLEDGED = 64;
 	public static final String FINGERPRINT = "fingerprint";
 	public static final String FINGERPRINT_GPU_VENDOR = "gpuVendor";
 	public static final String FINGERPRINT_GPU_RENDERER = "gpuRenderer";
@@ -104,6 +105,36 @@ public final class AwarenessStore {
 			keys.add(key);
 			while (keys.size() > MAX_DISMISSED) {
 				keys.remove(0);
+			}
+			return root;
+		});
+	}
+
+	// docs/v0.4/SPEC.md 7: the benchmark runs whose regression notice the player acknowledged.
+	public Set<String> acknowledgedRegressions() {
+		Set<String> out = new LinkedHashSet<>();
+		if (read().get(ACKNOWLEDGED_REGRESSIONS) instanceof JsonArray ids) {
+			for (JsonElement id : ids) {
+				if (id.isJsonPrimitive()) {
+					out.add(id.getAsString());
+				}
+			}
+		}
+		return out;
+	}
+
+	// Remembers an acknowledged regression (the newest MAX_ACKNOWLEDGED are kept; benchmarks.json keeps 50 runs).
+	public boolean acknowledgeRegression(String runId) {
+		return update(root -> {
+			JsonArray ids = root.getAsJsonArray(ACKNOWLEDGED_REGRESSIONS);
+			for (int i = ids.size() - 1; i >= 0; i--) {
+				if (ids.get(i).isJsonPrimitive() && ids.get(i).getAsString().equals(runId)) {
+					ids.remove(i);
+				}
+			}
+			ids.add(runId);
+			while (ids.size() > MAX_ACKNOWLEDGED) {
+				ids.remove(0);
 			}
 			return root;
 		});

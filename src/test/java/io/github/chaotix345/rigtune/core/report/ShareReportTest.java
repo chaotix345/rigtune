@@ -89,6 +89,20 @@ class ShareReportTest {
 				+ "- render distance 8 · avg 90 FPS · 1% low 60 FPS · target 144 FPS missed\n"), text);
 	}
 
+	// docs/v0.4/SPEC.md 7: the last benchmark's conditions and its "needs a rerun" marker.
+	@Test
+	void benchmarkConditionsAndRerun() {
+		BenchmarkSummary bench = new BenchmarkSummary("2026-09-25T09:30:00Z", "measure", "BENCHMARK_WORLD", 144, 12, 812, 543, true)
+				.withContext("RD 12 · SD 8 · 2560×1440 · shaders off", "Needs a rerun (changed since: resolution, mod set)");
+		String text = ShareReport.format(report(Fixtures.userRig().build(), sample()), VERSIONS, bench);
+
+		assertTrue(text.contains("- render distance 12 · avg 812 FPS · 1% low 543 FPS · target 144 FPS met\n"
+				+ "- conditions: RD 12 · SD 8 · 2560×1440 · shaders off\n"
+				+ "- Needs a rerun (changed since: resolution, mod set)\n"), text);
+		String current = ShareReport.format(report(Fixtures.userRig().build(), sample()), VERSIONS, bench.withContext("RD 12 · SD 8", null));
+		assertTrue(current.contains("- conditions: RD 12 · SD 8\n**Recommendations**"), current);
+	}
+
 	@Test
 	void noBenchmarkYet() {
 		String text = ShareReport.format(report(Fixtures.userRig().build(), sample()), VERSIONS, null);
