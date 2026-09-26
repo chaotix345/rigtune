@@ -40,20 +40,7 @@ EXPECTED = (
 )
 
 
-def _version_key(version):
-    return [int(p) if p.isdigit() else p for p in re.split(r"[.\-+]", version)]
-
-
-def find_jar(cache, group, artifact, version=None):
-    """The jar of group:artifact:version in a Gradle modules cache (files-2.1); the newest version if none is given."""
-    base = Path(cache) / group / artifact
-    versions = [version] if version else sorted((p.name for p in base.iterdir() if p.is_dir()), key=_version_key, reverse=True) \
-        if base.is_dir() else []
-    for v in versions:
-        found = sorted((base / v).glob("*/{}-{}.jar".format(artifact, v)))
-        if found:
-            return found[0]
-    raise SystemExit("{}:{}:{} isn't in the Gradle cache {}; run ./gradlew build first".format(group, artifact, version or "*", cache))
+find_jar = self_update_e2e.e2e_env.gradle_jar
 
 
 def classpath(old_jar, cache, loader):

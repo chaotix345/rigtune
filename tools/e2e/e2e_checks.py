@@ -543,12 +543,18 @@ def after_entry_check(instance, first_id, second_id, other_id, driver, mods_befo
     return checks
 
 
-# --- Phase 5 hook: undo after a restart of a profile-switch entry (docs/v0.4/design/ws-h.md) --------------------------
-# A profile switch is an ordinary apply entry of setting changes (docs/research/v0.4/profiles.md, section 0); 0.4 labels
-# it in config/rigtune/profiles.json ({switches: [{entryId, profileId, templateId, name}]}). On the fresh E2E instance
-# every managed setting is vanilla, applied and reverted at once, so options.txt shows each step.
+# --- The profile part of undo-after-restart (docs/v0.4/design/ws-h.md; plan review P-H1) ------------------------------
+# A profile switch is an ordinary apply entry of setting changes (docs/research/v0.4/profiles.md; SPEC item 4); 0.4
+# labels it in config/rigtune/profiles.json (SPEC C1: switches [{entryId, profileId, templateId, name}]). Vanilla keys
+# are set at once; Sodium keys are staged and written by the helper at exit. Two switches before one restart put the
+# same staged key in both (P-H1): with 0.4's same-key replacement the older switch's staged change is DISCARDED and the
+# newer one's must start at the file's value; without it (0.3.x) both are applied in order. Either way each key's
+# APPLIED changes must chain from its value before the first switch to the last switch's value.
 
 VANILLA = "vanilla."
+SODIUM = "sodium."
+READABLE = (VANILLA, SODIUM)
+SWITCH_STATUSES = ("APPLIED", "DISCARDED")
 
 
 def options_values(instance):
@@ -570,104 +576,146 @@ def _unquote(value):
     return value
 
 
+def _flatten(obj, prefix, out):
+    """SodiumConfigPatcher.flatten: nested objects joined with '.', primitives as Gson's getAsString."""
+    for key, value in obj.items():
+        if isinstance(value, dict):
+            _flatten(value, prefix + key + ".", out)
+        elif isinstance(value, bool):
+            out[prefix + key] = "true" if value else "false"
+        elif value is not None and not isinstance(value, list):
+            out[prefix + key] = str(value)
+    return out
+
+
+def setting_values(instance):
+    """Every setting RigTune can read on the E2E instance, as the journal names it: vanilla.* from options.txt and
+    sodium.* from config/sodium-options.json."""
+    instance = Path(instance)
+    values = {VANILLA + k: v for k, v in options_values(instance).items()}
+    sodium = _load(instance / "config" / "sodium-options.json")
+    if isinstance(sodium, dict):
+        _flatten(sodium, SODIUM, values)
+    return values
+
+
 def _settings(entry):
-    return {c.get("key"): c for c in (entry or {}).get("changes", []) if c.get("type") == "setting"}
+    return [c for c in (entry or {}).get("changes", []) if c.get("type") == "setting"]
 
 
-def _options_hold(instance, values, name):
-    options = options_values(instance)
-    wrong = {key: (options.get(key[len(VANILLA):]), value) for key, value in values.items()
-             if options.get(key[len(VANILLA):]) != value}
-    return Check(name, bool(values) and not wrong, "(options.txt, expected) where they differ: {}".format(wrong) if wrong else
-                 "{} value(s) as expected".format(len(values)))
+def _keys(entries):
+    return list(dict.fromkeys(c.get("key") for e in entries for c in _settings(e)))
 
 
-def profile_label(instance, entry_id, name, check_name):
-    """profiles.json (WS-P) has one switch for entry_id, named name."""
+def _last_ok(instance):
+    last = _load(Path(instance) / "config" / "rigtune" / "last-apply.json") or {}
+    return [r.get("status") for r in last.get("results") or [] if r.get("status") != "OK"]
+
+
+def profile_labels(instance, entry_ids, names, check_name):
+    """profiles.json (WS-P) labels each entry with its profile's name."""
     data = _load(Path(instance) / "config" / "rigtune" / "profiles.json")
     switches = data.get("switches") if isinstance(data, dict) else None
-    mine = [s for s in switches or [] if isinstance(s, dict) and s.get("entryId") == entry_id]
-    return Check(check_name, entry_id is not None and len(mine) == 1 and mine[0].get("name") == name,
-                 "switches for entry {}: {}; expected name {}".format(entry_id, mine, name))
+    got = {s.get("entryId"): s.get("name") for s in switches or [] if isinstance(s, dict)}
+    want = dict(zip(entry_ids, names))
+    ok = len(entry_ids) == len(names) and all(got.get(e) == n for e, n in want.items())
+    return Check(check_name, ok, "labels {}; expected {}".format({e: got.get(e) for e in entry_ids}, want))
 
 
-def after_profile_apply(instance, driver, known_entry_ids, originals, targets, label):
-    """The switch launch: one new apply entry of vanilla setting changes, APPLIED, and options.txt holding the new values.
-    targets (the settings stand-in): the exact bare key -> value it set, with originals (options.txt before the launch)
-    as each change's before; None in profile mode, where the profile decides the keys. label: the profile's name that
-    profiles.json must give the entry (profile mode), or None."""
+def after_profile_apply(instance, driver, known_entry_ids, targets, labels):
+    """Two switches in one start and the helper at exit. targets (the settings stand-in): per switch, the exact keys
+    and values it set; None in profile mode, where the profiles decide. labels: the profile names profiles.json must
+    give the entries (profile mode), or None. The values before the first switch are the driver's settingsBefore."""
     instance = Path(instance)
     driver = driver or {}
-    checks = [Check("the driver switched", driver.get("ok") is True and bool(driver.get("applyMessage")),
-                    "error: {}; apply message: {}".format(driver.get("error"), driver.get("applyMessage")))]
+    count = len(targets) if targets is not None else len(labels or []) or 2
+    checks = [Check("the driver switched {} times".format(count), driver.get("ok") is True and len(driver.get("applyMessages") or []) == count,
+                    "error: {}; apply messages: {}".format(driver.get("error"), driver.get("applyMessages")))]
     new = [e for e in history_entries(instance) or [] if e.get("id") not in set(known_entry_ids)]
-    entry = new[0] if len(new) == 1 else None
-    settings = _settings(entry)
-    ok = (entry is not None and entry.get("kind") == "apply" and bool(settings)
-          and len(settings) == len(entry.get("changes", [])) and all(k and k.startswith(VANILLA) for k in settings)
-          and all(c.get("status") == "APPLIED" for c in settings.values()))
-    checks.append(Check("history.json: one new apply entry of setting changes, all APPLIED", ok,
-                        "new entries: {}".format([(e.get("kind"), [(c.get("type"), c.get("key"), c.get("before"), c.get("after"),
-                                                                   c.get("status")) for c in e.get("changes", [])]) for e in new])))
+    ok = (len(new) == count and all(e.get("kind") == "apply" and _settings(e) and len(_settings(e)) == len(e.get("changes", []))
+                                     and any(c.get("status") == "APPLIED" for c in _settings(e)) for e in new)
+          and all((c.get("key") or "").startswith(READABLE) and c.get("status") in SWITCH_STATUSES for e in new for c in _settings(e)))
+    checks.append(Check("history.json: two new apply entries of setting changes, applied (or discarded when replaced)", ok,
+                        "new entries: {}".format([(e.get("kind"), [(c.get("key"), c.get("before"), c.get("after"), c.get("status"))
+                                                                   for c in e.get("changes", [])]) for e in new])))
+    before = driver.get("settingsBefore") or {}
     if targets is not None:
-        got = {k: (c.get("before"), c.get("after")) for k, c in settings.items()}
-        wanted = {VANILLA + k: (originals.get(k), v) for k, v in targets.items()}
-        unusable = {k: originals.get(k) for k, v in targets.items() if originals.get(k) in (None, v)}
-        checks.append(Check("history.json: the switch changed exactly the chosen settings", got == wanted and not unusable,
-                            "(before, after) by key: {}; expected {}{}".format(got, wanted, "; missing from options.txt or "
-                                                                              "already at the target: {}".format(unusable)
-                                                                              if unusable else "")))
-    checks.append(_options_hold(instance, {k: c.get("after") for k, c in settings.items()}, "options.txt holds the switched values"))
+        got = [{c.get("key"): c.get("after") for c in _settings(e)} for e in new]
+        checks.append(Check("history.json: each switch changed exactly its settings", got == list(targets),
+                            "changed: {}; expected {}".format(got, list(targets))))
+    final, broken = {}, {}
+    for key in _keys(new):
+        applied = [c for e in new for c in _settings(e) if c.get("key") == key and c.get("status") == "APPLIED"]
+        final[key] = [c.get("after") for e in new for c in _settings(e) if c.get("key") == key][-1]
+        chain = [before.get(key)] + [c.get("after") for c in applied]
+        if not applied or [c.get("before") for c in applied] != chain[:-1] or chain[-1] != final[key]:
+            broken[key] = [(c.get("before"), c.get("after"), c.get("status")) for e in new for c in _settings(e) if c.get("key") == key]
+    checks.append(Check("history.json: each key's applied changes run from its value before the first switch to the last",
+                        bool(final) and not broken, "broken chains (before, after, status): {}; values before: {}".format(
+                            broken, {k: before.get(k) for k in final}) if broken else "{} key(s)".format(len(final))))
+    values = setting_values(instance)
+    wrong = {k: (values.get(k), v) for k, v in final.items() if values.get(k) != v}
+    checks.append(Check("the settings hold the last switch's values", bool(final) and not wrong,
+                        "(now, expected) where they differ: {}".format(wrong) if wrong else "{} value(s)".format(len(final))))
     checks.append(_clean(instance))
-    if label is not None:
-        checks.append(profile_label(instance, entry.get("id") if entry else None, label, "profiles.json labels the switch entry"))
+    failed = _last_ok(instance)
+    checks.append(Check("last-apply.json: every op OK", not failed, "statuses not OK: {}".format(failed)))
+    if labels is not None:
+        checks.append(profile_labels(instance, [e.get("id") for e in new], labels, "profiles.json labels each switch entry"))
     return checks
 
 
-def after_profile_undo(instance, driver, entry_id, label):
-    """Undo this on the switch entry in the next launch: every change reverted at once, no restart needed."""
+def after_profile_undo(instance, driver, entry_ids, originals, labels, undo_all):
+    """Undo last twice (the newer switch, then the older), or Undo all, in the start after the switches, and the helper
+    at exit: every key back at its value before the first switch."""
     instance = Path(instance)
     driver = driver or {}
-    entries = {e.get("id"): e for e in history_entries(instance) or []}
-    switch = _settings(entries.get(entry_id))
-    items = [i for i in driver.get("entryPlan") or [] if i.get("action") != "SKIP"]
-    planned = sorted(c for i in items for c in i.get("changeIds") or [])
-    checks = [Check("the driver undid the switch entry now (no restart needed)",
-                    driver.get("ok") is True and driver.get("undoOf") == entry_id and bool(items)
-                    and all(i.get("action") == "REVERT" and i.get("needsRestart") is False for i in items)
-                    and planned == sorted(c.get("id") for c in switch.values()),
-                    "error: {}; undoOf: {} (switch {}); plan: {}".format(driver.get("error"), driver.get("undoOf"), entry_id,
-                                                                        driver.get("entryPlan")))]
-    checks.append(_options_hold(instance, {k: c.get("before") for k, c in switch.items()},
-                                "options.txt holds the values from before the switch"))
-    undos = [e for e in entries.values() if e.get("kind") == "undo" and e.get("undoOf") == entry_id]
+    entries = history_entries(instance) or []
+    switches = [e for e in entries if e.get("id") in entry_ids]
+    plans = driver.get("undoPlans") or []
+    want = ["all"] if undo_all else list(reversed(entry_ids))
+    name = "the driver undid everything (Undo all)" if undo_all else "the driver undid the newer switch, then the older (Undo last twice)"
+    checks = [Check(name, driver.get("ok") is True and [p.get("undoOf") for p in plans] == want
+                    and all(p.get("problem") is None and (p.get("items") or 0) > 0 for p in plans),
+                    "error: {}; plans (undoOf, items, problem): {}; expected {}".format(
+                        driver.get("error"), [(p.get("undoOf"), p.get("items"), p.get("problem")) for p in plans], want))]
+    undos = [e for e in entries if e.get("kind") == "undo" and e.get("undoOf") in want]
     undo_changes = [c for e in undos for c in e.get("changes", [])]
-    ok = (len(undos) == 1 and bool(switch) and all(c.get("status") == "REVERTED" for c in switch.values())
-          and all(c.get("status") == "APPLIED" for c in undo_changes)
-          and sorted(c.get("reverts") for c in undo_changes) == sorted(c.get("id") for c in switch.values()))
-    checks.append(Check("history.json: one undo of the switch, its changes REVERTED", ok,
+    done = [c for e in switches for c in _settings(e) if c.get("status") != "DISCARDED"]
+    ok = (sorted(e.get("undoOf") for e in undos) == sorted(want) and bool(done) and all(c.get("status") == "REVERTED" for c in done)
+          and bool(undo_changes) and all(c.get("status") == "APPLIED" and c.get("reverts") in {d.get("id") for d in done} for c in undo_changes))
+    checks.append(Check("history.json: the switches' changes REVERTED by undo entries, all applied", ok,
                         "switch changes: {}; undo entries: {}; undo changes: {}".format(
-                            {k: c.get("status") for k, c in switch.items()}, len(undos),
-                            [(c.get("key"), c.get("status"), c.get("reverts")) for c in undo_changes])))
+                            [(c.get("key"), c.get("status")) for c in done], [e.get("undoOf") for e in undos],
+                            [(c.get("key"), c.get("after"), c.get("status"), c.get("reverts")) for c in undo_changes])))
+    values = setting_values(instance)
+    keys = _keys(switches)
+    wrong = {k: (values.get(k), originals.get(k)) for k in keys if values.get(k) != originals.get(k)}
+    checks.append(Check("every key is back at its value before the first switch", bool(keys) and not wrong,
+                        "(now, before the switches) where they differ: {}".format(wrong) if wrong else "{} key(s)".format(len(keys))))
     checks.append(_clean(instance))
-    if label is not None:
-        checks.append(profile_label(instance, entry_id, label, "profiles.json still labels the switch entry"))
+    failed = _last_ok(instance)
+    checks.append(Check("last-apply.json: every op OK", not failed, "statuses not OK: {}".format(failed)))
+    if labels is not None:
+        checks.append(profile_labels(instance, entry_ids, labels, "profiles.json still labels each switch entry"))
     return checks
 
 
-def after_profile_check(instance, driver, entry_id, mods_before, statuses_before):
-    """The next start: the game runs with the values from before the switch and nothing is left to undo on it."""
+def after_profile_check(instance, driver, entry_ids, originals, mods_before, statuses_before):
+    """The next start: the game runs with every key at its value before the first switch, nothing is left to undo."""
     instance = Path(instance)
     driver = driver or {}
-    switch = _settings({e.get("id"): e for e in history_entries(instance) or []}.get(entry_id))
-    wanted = {k[len(VANILLA):]: c.get("before") for k, c in switch.items()}
+    keys = _keys([e for e in history_entries(instance) or [] if e.get("id") in entry_ids])
     now = driver.get("settingsNow") or {}
+    wrong = {k: (now.get(k), originals.get(k)) for k in keys if now.get(k) != originals.get(k)}
     checks = [Check("the driver checked", driver.get("ok") is True, "error: {}".format(driver.get("error")))]
-    checks.append(Check("the game runs with the values from before the switch", bool(wanted) and now == wanted,
-                        "live values {}; expected {}".format(now, wanted)))
-    problem = (driver.get("entryPlanAfterMeta") or {}).get("problem")
-    checks.append(Check("nothing left to undo on the switch entry", driver.get("entryUndoableAfter") == 0 and problem is None,
-                        "undoable items: {}; plan problem: {}".format(driver.get("entryUndoableAfter"), problem)))
+    checks.append(Check("the game runs with every key at its value before the first switch", bool(keys) and not wrong,
+                        "(live, before the switches) where they differ: {}".format(wrong) if wrong else "{} key(s)".format(len(keys))))
+    undoable = driver.get("entryUndoable") or {}
+    problems = driver.get("entryProblems") or {}
+    checks.append(Check("nothing left to undo on either switch",
+                        all(undoable.get(e) == 0 for e in entry_ids) and not any(problems.get(e) for e in entry_ids),
+                        "undoable items: {}; plan problems: {}".format(undoable, problems)))
     crashes = sorted(p.name for p in (instance / "crash-reports").glob("*")) if (instance / "crash-reports").is_dir() else []
     checks.append(Check("no crash report", not crashes, "crash-reports: {}".format(crashes)))
     after = listing(instance / "mods")

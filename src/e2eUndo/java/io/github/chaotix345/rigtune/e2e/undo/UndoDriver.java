@@ -8,6 +8,7 @@ import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
+import io.github.chaotix345.rigtune.client.ui.HistoryScreen;
 import io.github.chaotix345.rigtune.client.ui.UndoScreen;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.model.Action;
@@ -39,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Drives RigTune (0.2 and later) for the end-to-end undo after a restart (plan review M14; tools/e2e/README.md). Compiled against
@@ -55,13 +57,14 @@ import java.util.Map;
  * screenshots UndoScreen for that entry, presses its Undo button, waits until the disable of -Drigtune.e2e.entryMod is
  * staged; quits.</li>
  * <li>{@code entry-check}: records the loaded mods and what is left to undo on that entry, quits.</li>
- * <li>{@code profile-apply} (the v0.4 Phase 5 hook, tools/e2e/README.md): a profile switch, which is an ordinary Apply of
- * setting changes. -Drigtune.e2e.profileMode=settings applies the vanilla key:value pairs of -Drigtune.e2e.profileSettings
- * through the controller's Apply (the stand-in); =profile switches to the profile -Drigtune.e2e.profileName through
- * {@link #switchProfile}. Records the values before and after; quits.</li>
- * <li>{@code profile-undo}: Undo this on the switch entry -Drigtune.e2e.entryId (UndoScreen and its Undo button), waits
- * until the settings are back to those in the JSON file -Drigtune.e2e.profileOriginals; quits.</li>
- * <li>{@code profile-check}: records the live values of those settings and what is left to undo on the entry; quits.</li>
+ * <li>{@code profile-apply} (v0.4, plan review P-H1; tools/e2e/README.md "v0.4 runs"): the switches of the JSON file
+ * -Drigtune.e2e.profilePlan, one Apply each in this start: mode settings applies each switch's settings (vanilla and
+ * config keys) through the controller's Apply, as a profile switch does (the stand-in); mode profile switches to each
+ * named profile through {@link #switchProfile}. Records every setting before the first switch; screenshots History.</li>
+ * <li>{@code profile-undo}: Undo last twice (UndoScreen and its Undo button each time, waiting for the undo entry);
+ * {@code profile-undo-all}: Undo all once. Both record each plan; quit (the helper writes the staged reverts).</li>
+ * <li>{@code profile-check}, {@code profile-check-all}: records every setting and what is left to undo on each entry of
+ * -Drigtune.e2e.entryIds; screenshots History; quits.</li>
  * </ul>
  * Results go to -Drigtune.e2e.out as driver-&lt;phase&gt;.json; screenshots to the instance's screenshots folder.
  */
@@ -74,7 +77,7 @@ public final class UndoDriver implements ClientModInitializer {
 	private static final int WATCHDOG = 360 * SECOND;
 
 	private enum Step {
-		WAIT_TITLE, WAIT_READY, ACT, WAIT_STAGED, WAIT_SETTINGS, SHOT, QUIT, DONE
+		WAIT_TITLE, WAIT_READY, ACT, WAIT_STAGED, WAIT_UNDONE, SHOT, QUIT, DONE
 	}
 
 	private final String phase = System.getProperty("rigtune.e2e.phase");
@@ -85,12 +88,12 @@ public final class UndoDriver implements ClientModInitializer {
 	private final String entryMods = System.getProperty("rigtune.e2e.entryMods", "");
 	private final String entryId = System.getProperty("rigtune.e2e.entryId");
 	private final String entryMod = System.getProperty("rigtune.e2e.entryMod");
-	// The profile hook (profile-*): settings (the stand-in) or profile, and the values it sets and those to restore.
-	private final String profileMode = System.getProperty("rigtune.e2e.profileMode", "settings");
-	private final String profileName = System.getProperty("rigtune.e2e.profileName");
-	private final String profileSettings = System.getProperty("rigtune.e2e.profileSettings", "");
-	// A JSON object file (bare options.txt key -> value), written by the harness after profile-apply.
-	private final String profileOriginals = System.getProperty("rigtune.e2e.profileOriginals");
+	// The profile part (profile-*): the plan file ({mode, switches: [{name, settings}]}) and the switch entries.
+	private final String profilePlan = System.getProperty("rigtune.e2e.profilePlan");
+	private final String entryIds = System.getProperty("rigtune.e2e.entryIds", "");
+	private final List<Map<String, Object>> undoPlans = new ArrayList<>();
+	private int undone;
+	private int undosBefore;
 	private final List<String> applyMessages = new ArrayList<>();
 	private int applied;
 	private final Map<String, Object> result = new LinkedHashMap<>();
@@ -105,7 +108,7 @@ public final class UndoDriver implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		if (phase == null || !List.of("mod-apply", "mod-undo", "mod-check", "entry-apply", "entry-undo", "entry-check",
-				"profile-apply", "profile-undo", "profile-check").contains(phase)) {
+				"profile-apply", "profile-undo", "profile-check", "profile-undo-all", "profile-check-all").contains(phase)) {
 			return;
 		}
 		out = Path.of(System.getProperty("rigtune.e2e.out", "e2e-out")).toAbsolutePath();
@@ -170,22 +173,24 @@ public final class UndoDriver implements ClientModInitializer {
 						fail(minecraft, "the changes were not staged within " + STAGE_TIMEOUT / SECOND + " s");
 					}
 				}
-				// profile-undo: vanilla settings revert at once, so the undo is done when the values are back.
-				case WAIT_SETTINGS -> {
+				// profile-undo(-all): an undo is carried out when its journal entry is there (staged keys wait for the helper).
+				case WAIT_UNDONE -> {
 					if (stepTicks % 10 != 0) {
 						return;
 					}
-					Map<String, String> originals = originals();
-					Map<String, String> now = vanilla(originals.keySet());
-					if (!originals.isEmpty() && now.equals(originals)) {
-						result.put("settingsAfter", now);
-						Component status = controller.status();
-						result.put("status", status == null ? null : status.getString());
-						event("settings restored: " + now);
-						next(Step.SHOT);
+					if (undoCount() > undosBefore + undone) {
+						undone++;
+						event("undo " + undone + " recorded");
+						if (undone < (phase.equals("profile-undo") ? 2 : 1)) {
+							next(Step.ACT);
+						} else {
+							result.put("undoPlans", undoPlans);
+							result.put("settingsAfter", settings());
+							next(Step.SHOT);
+						}
 					} else if (stepTicks > STAGE_TIMEOUT) {
-						result.put("settingsAfter", now);
-						fail(minecraft, "the settings were not restored to " + originals + " within " + STAGE_TIMEOUT / SECOND + " s: " + now);
+						result.put("undoPlans", undoPlans);
+						fail(minecraft, "undo " + (undone + 1) + " wasn't recorded in history.json within " + STAGE_TIMEOUT / SECOND + " s");
 					}
 				}
 				case SHOT -> {
@@ -306,46 +311,74 @@ public final class UndoDriver implements ClientModInitializer {
 				}
 			}
 			case "profile-apply" -> {
+				JsonObject plan = plan();
+				List<JsonElement> switches = new ArrayList<>();
+				plan.getAsJsonArray("switches").forEach(switches::add);
 				if (stepTicks == 1) {
-					Map<String, String> targets = pairs(profileSettings);
-					Map<String, String> before = vanilla(targets.keySet());
-					result.put("profileMode", profileMode);
-					result.put("settingsBefore", before);
-					Component message = "profile".equals(profileMode) ? switchProfile(controller, profileName)
-							: controller.apply(settingRecommendations(targets, before));
-					result.put("applyMessage", message.getString());
-					result.put("settingsAfter", vanilla(targets.keySet()));
-					event("switch (" + profileMode + "): " + message.getString());
+					result.put("profileMode", plan.get("mode").getAsString());
+					result.put("settingsBefore", settings());
+				}
+				int index = (stepTicks - 1) / SECOND;
+				if ((stepTicks - 1) % SECOND == 0 && index < switches.size()) {
+					// One switch per second, as a player who switches, then switches again before restarting.
+					JsonObject sw = switches.get(index).getAsJsonObject();
+					String name = sw.get("name").getAsString();
+					Component message = "profile".equals(plan.get("mode").getAsString()) ? switchProfile(controller, name)
+							: controller.apply(settingRecommendations(sw.getAsJsonObject("settings"), settings()));
+					applyMessages.add(message.getString());
+					result.put("applyMessages", applyMessages);
+					event("switch " + (index + 1) + " (" + name + "): " + message.getString());
+				} else if (stepTicks == switches.size() * SECOND + 1) {
+					result.put("settingsAfter", settings());
+					minecraft.gui.setScreen(new HistoryScreen(minecraft.gui.screen(), controller));
+				} else if (stepTicks == (switches.size() + 2) * SECOND) {
+					screenshot(minecraft, "e2e-profile-apply-1-history.png");
 					next(Step.SHOT);
 				}
 			}
-			case "profile-undo" -> {
+			case "profile-undo", "profile-undo-all" -> {
+				boolean all = phase.equals("profile-undo-all");
 				if (stepTicks == 1) {
-					UndoPlan plan = entryPlan(controller);
-					recordPlan("entryPlan", plan);
+					if (undone == 0) {
+						undosBefore = undoCount();
+					}
+					UndoPlan plan = controller.undoPlan(all);
+					Map<String, Object> summary = new LinkedHashMap<>();
+					summary.put("undoOf", plan == null ? null : plan.undoOf());
+					summary.put("problem", plan == null ? "null plan" : plan.problem());
+					summary.put("items", plan == null ? 0 : (int) plan.items().stream().filter(i -> i.action() != UndoPlan.Action.SKIP).count());
+					summary.put("detail", plan == null ? List.of() : plan.items().stream()
+							.map(i -> i.action() + " " + i.description() + (i.needsRestart() ? " (after a restart)" : "")
+									+ (i.reason() == null ? "" : " (" + i.reason() + ")")).toList());
+					undoPlans.add(summary);
+					event("undo " + (undone + 1) + " plan: " + summary);
 					if (plan == null || plan.problem() != null || plan.isEmpty()) {
-						fail(minecraft, "no plan for the switch entry " + entryId + ": " + (plan == null ? "null" : plan.problem()));
+						result.put("undoPlans", undoPlans);
+						fail(minecraft, "no " + (all ? "Undo all" : "Undo last") + " plan: " + (plan == null ? "null" : plan.problem()));
 						return;
 					}
-					result.put("undoOf", plan.undoOf());
-					result.put("viaScreen", true);
-					minecraft.gui.setScreen(new UndoScreen(minecraft.gui.screen(), controller, entryId));
+					minecraft.gui.setScreen(new UndoScreen(minecraft.gui.screen(), controller, all));
 				} else if (stepTicks == 2 * SECOND) {
-					screenshot(minecraft, "e2e-profile-undo-1-plan.png");
+					screenshot(minecraft, "e2e-" + phase + "-" + (undone + 1) + "-plan.png");
 				} else if (stepTicks == 3 * SECOND && pressConfirm(minecraft)) {
-					next(Step.WAIT_SETTINGS);
+					next(Step.WAIT_UNDONE);
 				}
 			}
-			case "profile-check" -> {
+			case "profile-check", "profile-check-all" -> {
 				if (stepTicks == 1) {
-					UndoPlan plan = entryPlan(controller);
-					recordPlan("entryPlanAfter", plan);
-					result.put("entryUndoableAfter", plan == null ? -1
-							: (int) plan.items().stream().filter(i -> i.action() != UndoPlan.Action.SKIP).count());
-					result.put("settingsNow", vanilla(originals().keySet()));
-					minecraft.gui.setScreen(new UndoScreen(minecraft.gui.screen(), controller, entryId));
+					result.put("settingsNow", settings());
+					Map<String, Object> undoable = new LinkedHashMap<>();
+					Map<String, Object> problems = new LinkedHashMap<>();
+					for (String id : entryIds.isBlank() ? new String[0] : entryIds.split(",")) {
+						UndoPlan plan = controller.undoPlanFor(id);
+						undoable.put(id, plan == null ? -1 : (int) plan.items().stream().filter(i -> i.action() != UndoPlan.Action.SKIP).count());
+						problems.put(id, plan == null ? "null plan" : plan.problem());
+					}
+					result.put("entryUndoable", undoable);
+					result.put("entryProblems", problems);
+					minecraft.gui.setScreen(new HistoryScreen(minecraft.gui.screen(), controller));
 				} else if (stepTicks == 2 * SECOND) {
-					screenshot(minecraft, "e2e-profile-check-1-undo.png");
+					screenshot(minecraft, "e2e-" + phase + "-1-history.png");
 				} else if (stepTicks == 3 * SECOND) {
 					next(Step.QUIT);
 				}
@@ -354,53 +387,55 @@ public final class UndoDriver implements ClientModInitializer {
 		}
 	}
 
-	// Phase 5 hook (docs/v0.4/design/ws-h.md): once WS-P merges, switch to the profile `name` here through its API (what
-	// the Profiles screen's switch does, which applies the profile's settings as one Apply and labels the entry in
-	// profiles.json) and return its status message. The harness finds the entry in history.json itself.
+	// Phase 5 (docs/v0.4/design/ws-h.md): once WS-P has merged, switch to the profile `name` here through its API (what
+	// the Profiles screen's switch does: the profile's settings as one Apply, the entry labelled in profiles.json) and
+	// return its status message. The harness finds the entries in history.json itself.
 	private Component switchProfile(RigTuneController controller, String name) {
 		throw new IllegalStateException("--profile-switch profile needs WS-P's profile API in UndoDriver.switchProfile"
 				+ " (tools/e2e/README.md, v0.4 runs); profile " + name);
 	}
 
-	// What a profile switch applies: one SetSetting per vanilla key whose value differs (docs/research/v0.4/profiles.md).
-	private static List<Recommendation> settingRecommendations(Map<String, String> targets, Map<String, String> before) {
+	// What a profile switch applies: one SetSetting per key whose value differs (docs/research/v0.4/profiles.md).
+	private static List<Recommendation> settingRecommendations(JsonObject targets, Map<String, String> now) {
 		List<Recommendation> out = new ArrayList<>();
-		targets.entrySet().stream().filter(e -> !e.getValue().equals(before.get(e.getKey()))).forEach(e -> out.add(
-				new Recommendation("setting:" + SettingsBridge.VANILLA_PREFIX + e.getKey(), Category.SETTING,
-				Impact.LOW, "Set " + e.getKey(), "E2E profile switch stand-in",
-				new Action.SetSetting(SettingsBridge.VANILLA_PREFIX + e.getKey(), before.get(e.getKey()), e.getValue()), true)));
-		return out;
-	}
-
-	// The live vanilla values of these options.txt keys.
-	private static Map<String, String> vanilla(java.util.Collection<String> keys) {
-		Map<String, String> all = SettingsBridge.readVanilla(Minecraft.getInstance().options);
-		Map<String, String> out = new LinkedHashMap<>();
-		keys.forEach(key -> out.put(key, all.get(key)));
-		return out;
-	}
-
-	private Map<String, String> originals() {
-		Map<String, String> out = new LinkedHashMap<>();
-		if (profileOriginals == null) {
-			return out;
+		for (Map.Entry<String, JsonElement> e : targets.entrySet()) {
+			String key = e.getKey();
+			String value = e.getValue().getAsString();
+			if (!value.equals(now.get(key))) {
+				out.add(new Recommendation("setting:" + key, Category.SETTING, Impact.LOW, "Set " + key, "E2E profile switch stand-in",
+						new Action.SetSetting(key, now.get(key), value), true));
+			}
 		}
+		return out;
+	}
+
+	// Every setting RigTune reads (vanilla options and the config files it manages), as the journal names them.
+	private static Map<String, String> settings() {
+		return new TreeMap<>(SettingsBridge.read(Minecraft.getInstance()).values());
+	}
+
+	private JsonObject plan() {
 		try {
-			JsonObject json = JsonParser.parseString(Files.readString(Path.of(profileOriginals), StandardCharsets.UTF_8)).getAsJsonObject();
-			json.entrySet().forEach(e -> out.put(e.getKey(), e.getValue().isJsonNull() ? null : e.getValue().getAsString()));
+			return JsonParser.parseString(Files.readString(Path.of(profilePlan), StandardCharsets.UTF_8)).getAsJsonObject();
 		} catch (IOException e) {
 			throw new java.io.UncheckedIOException(e);
 		}
-		return out;
 	}
 
-	private static Map<String, String> pairs(String spec) {
-		Map<String, String> out = new LinkedHashMap<>();
-		for (String pair : spec.isBlank() ? new String[0] : spec.split(",")) {
-			String[] kv = pair.split(":", 2);
-			out.put(kv[0], kv.length > 1 ? kv[1] : null);
+	private static int undoCount() {
+		Path file = FabricLoader.getInstance().getConfigDir().resolve("rigtune").resolve("history.json");
+		try {
+			if (!Files.isRegularFile(file)) {
+				return 0;
+			}
+			int count = 0;
+			for (JsonElement entry : JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8)).getAsJsonObject().getAsJsonArray("entries")) {
+				count += "undo".equals(entry.getAsJsonObject().get("kind").getAsString()) ? 1 : 0;
+			}
+			return count;
+		} catch (IOException | RuntimeException e) {
+			return -1;
 		}
-		return out;
 	}
 
 	// Press the confirmation screen's Undo button, as a player would; it carries out the plan it shows.

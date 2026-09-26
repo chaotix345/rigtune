@@ -1,5 +1,6 @@
-"""The Phase 5 hook in the undo scenario (docs/v0.4/plans/ws-h.md T4): undo-after-restart of a profile-switch entry,
-which is an ordinary apply entry of setting changes (docs/research/v0.4/profiles.md), labelled in profiles.json."""
+"""The profile part of undo-after-restart (docs/v0.4/plans/ws-h.md T4, plan review P-H1): two profile switches in one
+start (each an ordinary apply entry of setting changes; vanilla keys set at once, Sodium keys staged for the helper),
+a restart, then Undo last twice, or Undo all on a copy of the instance from the same point, and a check start."""
 
 import json
 import sys
@@ -13,182 +14,208 @@ import e2e_checks  # noqa: E402
 import self_update_e2e  # noqa: E402
 from test_self_update_e2e import make_run  # noqa: E402
 
-TARGETS = {"renderDistance": "6", "maxFps": "90"}
-ORIGINALS = {"renderDistance": "12", "maxFps": "120"}
+RD, FPS, THREADS, FOG = "vanilla.renderDistance", "vanilla.maxFps", "sodium.performance.chunk_builder_threads", "sodium.performance.use_fog_occlusion"
+ORIGINALS = {RD: "12", FPS: "120", THREADS: "0", FOG: "true"}
+TARGETS = [{RD: "6", FPS: "90", THREADS: "2", FOG: "false"}, {RD: "10", FPS: "60", THREADS: "4"}]
 
 
 def failing(checks):
     return sorted(c.name for c in checks if not c.ok)
 
 
-class ProfileInstance:
-    """An instance after the switch (an apply entry of two vanilla setting changes) and before its undo."""
+def change(cid, key, before, after, status="APPLIED", reverts=None):
+    out = {"id": cid, "type": "setting", "key": key, "before": before, "after": after, "status": status}
+    if reverts:
+        out["reverts"] = reverts
+    return out
 
-    def __init__(self):
+
+class Instance:
+    """An instance after the two switches and the helper (v0.3 semantics: both staged ops applied in order)."""
+
+    def __init__(self, replacement=False):
         self.instance = Path(tempfile.mkdtemp()) / "instance"
-        self.config = self.instance / "config" / "rigtune"
-        self.config.mkdir(parents=True)
+        self.config = self.instance / "config"
+        (self.config / "rigtune").mkdir(parents=True)
         (self.instance / "mods").mkdir()
-        (self.instance / "mods" / "fabric-api.jar").write_bytes(b"api")
-        self.entries = [{"id": "old", "kind": "apply", "changes": [
-            {"id": "m1", "type": "file", "action": "enable", "file": "e2e-first-1.0.0.jar", "status": "APPLIED"}]}]
-        self.entries.append({"id": "sw", "kind": "apply", "changes": [
-            {"id": "s1", "type": "setting", "key": "vanilla.renderDistance", "before": "12", "after": "6", "status": "APPLIED"},
-            {"id": "s2", "type": "setting", "key": "vanilla.maxFps", "before": "120", "after": "90", "status": "APPLIED"}]})
-        self.options(TARGETS)
+        (self.instance / "mods" / "sodium.jar").write_bytes(b"s")
+        a = [change("a1", RD, "12", "6"), change("a2", FPS, "120", "90"),
+             change("a3", THREADS, "0", "2", "DISCARDED" if replacement else "APPLIED"), change("a4", FOG, "true", "false")]
+        b = [change("b1", RD, "6", "10"), change("b2", FPS, "90", "60"), change("b3", THREADS, "0" if replacement else "2", "4")]
+        self.entries = [{"id": "A", "kind": "apply", "changes": a}, {"id": "B", "kind": "apply", "changes": b}]
+        self.values({RD: "10", FPS: "60", THREADS: "4", FOG: "false"})
         self.write()
-        self.driver = {"ok": True, "applyMessage": "Applied 2 setting(s).", "settingsAfter": dict(TARGETS)}
+        self.driver = {"ok": True, "applyMessages": ["Applied 2 setting(s). Restart ...", "Applied 2 setting(s). Restart ..."],
+                       "settingsBefore": dict(ORIGINALS, **{"vanilla.guiScale": "0"})}
 
-    def options(self, values):
-        lines = ["version:4786", "guiScale:0"] + ["{}:{}".format(k, v) for k, v in values.items()]
+    def values(self, values):
+        lines = ["version:4786"] + ["{}:{}".format(k[len("vanilla."):], v) for k, v in values.items() if k.startswith("vanilla.")]
         (self.instance / "options.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        sodium = {"quality": {"weather_quality": "DEFAULT"}, "performance": {}}
+        for k, v in values.items():
+            if k.startswith("sodium.performance."):
+                name = k[len("sodium.performance."):]
+                sodium["performance"][name] = int(v) if v.isdigit() else v == "true" if v in ("true", "false") else v
+        (self.config / "sodium-options.json").write_text(json.dumps(sodium), encoding="utf-8")
 
     def write(self):
-        (self.config / "history.json").write_text(json.dumps({"formatVersion": 1, "entries": self.entries}))
+        (self.config / "rigtune" / "history.json").write_text(json.dumps({"formatVersion": 1, "entries": self.entries}))
 
-    def label(self, entry_id, name="Battery"):
-        (self.config / "profiles.json").write_text(json.dumps({"formatVersion": 1, "switches": [
-            {"entryId": entry_id, "profileId": "p1", "templateId": "battery", "name": name}]}))
+    def label(self, names):
+        (self.config / "rigtune" / "profiles.json").write_text(json.dumps({"formatVersion": 1, "switches": [
+            {"entryId": e, "profileId": None, "templateId": n.lower(), "name": n} for e, n in names.items()]}))
 
-    def undo(self):
-        """What the undo leaves: the settings back, an undo entry reverting both changes."""
-        self.options(ORIGINALS)
-        for change in self.entries[1]["changes"]:
-            change["status"] = "REVERTED"
-        self.entries.append({"id": "u1", "kind": "undo", "undoOf": "sw", "changes": [
-            {"id": "r1", "type": "setting", "key": "vanilla.renderDistance", "before": "6", "after": "12", "status": "APPLIED", "reverts": "s1"},
-            {"id": "r2", "type": "setting", "key": "vanilla.maxFps", "before": "90", "after": "120", "status": "APPLIED", "reverts": "s2"}]})
+    def undo_last_twice(self):
+        for c in self.entries[0]["changes"] + self.entries[1]["changes"]:
+            if c["status"] == "APPLIED":
+                c["status"] = "REVERTED"
+        self.entries.append({"id": "U1", "kind": "undo", "undoOf": "B", "changes": [
+            change("u1", RD, "10", "6", reverts="b1"), change("u2", FPS, "60", "90", reverts="b2"), change("u3", THREADS, "4", "2", reverts="b3")]})
+        self.entries.append({"id": "U2", "kind": "undo", "undoOf": "A", "changes": [
+            change("u4", RD, "6", "12", reverts="a1"), change("u5", FPS, "90", "120", reverts="a2"), change("u6", THREADS, "2", "0", reverts="a3"),
+            change("u7", FOG, "false", "true", reverts="a4")]})
         self.write()
-        self.driver = {"ok": True, "undoOf": "sw", "viaScreen": True, "settingsAfter": dict(ORIGINALS), "entryPlan": [
-            {"action": "REVERT", "needsRestart": False, "changeIds": ["s1"]},
-            {"action": "REVERT", "needsRestart": False, "changeIds": ["s2"]}]}
+        self.values(ORIGINALS)
+        self.driver = {"ok": True, "undoPlans": [{"undoOf": "B", "problem": None, "items": 3}, {"undoOf": "A", "problem": None, "items": 4}]}
 
 
-class OptionsTest(unittest.TestCase):
-    def test_reads_options_txt(self):
-        fx = ProfileInstance()
-        self.assertEqual({"version": "4786", "guiScale": "0", "renderDistance": "6", "maxFps": "90"}, e2e_checks.options_values(fx.instance))
+class SettingValuesTest(unittest.TestCase):
+    def test_vanilla_from_options_txt_and_sodium_flattened(self):
+        fx = Instance()
+        values = e2e_checks.setting_values(fx.instance)
+        self.assertEqual("10", values[RD])
+        self.assertEqual("4", values[THREADS])
+        self.assertEqual("false", values[FOG])
+        self.assertEqual("DEFAULT", values["sodium.quality.weather_quality"])
 
-    def test_string_values_are_unquoted_like_the_journal(self):
-        fx = ProfileInstance()
-        (fx.instance / "options.txt").write_text('graphicsPreset:"fast"\nlang:en_us\nresourcePacks:["vanilla"]\n', encoding="utf-8")
-        self.assertEqual({"graphicsPreset": "fast", "lang": "en_us", "resourcePacks": '["vanilla"]'}, e2e_checks.options_values(fx.instance))
-
-    def test_missing_file_is_empty(self):
-        self.assertEqual({}, e2e_checks.options_values(Path(tempfile.mkdtemp())))
+    def test_options_txt_strings_are_unquoted_like_the_journal(self):
+        fx = Instance()
+        (fx.instance / "options.txt").write_text('graphicsPreset:"fast"\nresourcePacks:["vanilla"]\n', encoding="utf-8")
+        values = e2e_checks.setting_values(fx.instance)
+        self.assertEqual("fast", values["vanilla.graphicsPreset"])
+        self.assertEqual('["vanilla"]', values["vanilla.resourcePacks"])
 
 
 class ProfileApplyTest(unittest.TestCase):
-    def setUp(self):
-        self.fx = ProfileInstance()
+    def check(self, fx, targets=TARGETS, labels=None):
+        return e2e_checks.after_profile_apply(fx.instance, fx.driver, [], targets, labels)
 
-    def check(self, targets=TARGETS, label=None):
-        return e2e_checks.after_profile_apply(self.fx.instance, self.fx.driver, ["old"], ORIGINALS, targets, label)
+    def test_passes_with_v03_staging(self):
+        self.assertEqual([], failing(self.check(Instance())))
 
-    def test_passes(self):
-        self.assertEqual([], failing(self.check()))
+    def test_passes_with_same_key_replacement(self):
+        # P-H1's fix: switch B's staged op replaces A's (A's change DISCARDED), and B's change starts at the file's value.
+        self.assertEqual([], failing(self.check(Instance(replacement=True))))
 
-    def test_settings_not_in_options_txt(self):
-        self.fx.options(ORIGINALS)
-        self.assertEqual(["options.txt holds the switched values"], failing(self.check()))
+    def test_replacement_with_the_wrong_before_fails(self):
+        fx = Instance(replacement=True)
+        fx.entries[1]["changes"][2]["before"] = "2"
+        fx.write()
+        self.assertEqual(["history.json: each key's applied changes run from its value before the first switch to the last"],
+                         failing(self.check(fx)))
 
-    def test_a_file_change_in_the_switch_fails(self):
-        self.fx.entries[1]["changes"].append({"id": "x", "type": "file", "action": "disable", "file": "a.jar", "status": "APPLIED"})
-        self.fx.write()
-        self.assertEqual(["history.json: one new apply entry of setting changes, all APPLIED"], failing(self.check()))
-
-    def test_two_new_entries_fail(self):
-        self.fx.entries.append({"id": "extra", "kind": "apply", "changes": []})
-        self.fx.write()
-        self.assertIn("history.json: one new apply entry of setting changes, all APPLIED", failing(self.check()))
+    def test_the_file_must_hold_the_last_switch(self):
+        fx = Instance()
+        fx.values({RD: "10", FPS: "60", THREADS: "2", FOG: "false"})
+        self.assertEqual(["the settings hold the last switch's values"], failing(self.check(fx)))
 
     def test_the_stand_in_must_change_exactly_its_settings(self):
-        self.assertEqual(["history.json: the switch changed exactly the chosen settings"],
-                         failing(self.check(targets={"renderDistance": "6"})))
+        fx = Instance()
+        del fx.entries[0]["changes"][3]
+        fx.write()
+        self.assertIn("history.json: each switch changed exactly its settings", failing(self.check(fx)))
 
-    def test_a_target_already_at_its_value_is_named(self):
-        checks = e2e_checks.after_profile_apply(self.fx.instance, self.fx.driver, ["old"], dict(ORIGINALS, maxFps="90"), TARGETS, None)
-        detail = next(c.detail for c in checks if c.name == "history.json: the switch changed exactly the chosen settings")
-        self.assertIn("already at the target: {'maxFps': '90'}", detail)
+    def test_a_change_still_staged_after_the_helper_fails(self):
+        fx = Instance()
+        fx.entries[1]["changes"][2]["status"] = "STAGED"
+        fx.write()
+        self.assertIn("history.json: two new apply entries of setting changes, applied (or discarded when replaced)", failing(self.check(fx)))
 
-    def test_before_must_be_the_value_before_the_launch(self):
-        self.fx.entries[1]["changes"][0]["before"] = "10"
-        self.fx.write()
-        self.assertEqual(["history.json: the switch changed exactly the chosen settings"], failing(self.check()))
+    def test_a_key_without_a_reader_fails(self):
+        fx = Instance()
+        fx.entries[0]["changes"].append(change("x", "dh.client.foo", "1", "2"))
+        fx.write()
+        self.assertIn("history.json: two new apply entries of setting changes, applied (or discarded when replaced)",
+                      failing(self.check(fx, targets=None)))
 
-    def test_profile_mode_checks_the_label(self):
-        self.assertEqual(["profiles.json labels the switch entry"], failing(self.check(targets=None, label="Battery")))
-        self.fx.label("sw")
-        self.assertEqual([], failing(self.check(targets=None, label="Battery")))
-        self.fx.label("sw", name="Quality")
-        self.assertEqual(["profiles.json labels the switch entry"], failing(self.check(targets=None, label="Battery")))
+    def test_profile_mode_checks_both_labels(self):
+        fx = Instance()
+        self.assertEqual(["profiles.json labels each switch entry"], failing(self.check(fx, targets=None, labels=["Battery", "Max FPS"])))
+        fx.label({"A": "Battery", "B": "Max FPS"})
+        self.assertEqual([], failing(self.check(fx, targets=None, labels=["Battery", "Max FPS"])))
 
-    def test_pending_json_fails(self):
-        (self.fx.config / "pending.json").write_text("{}")
-        self.assertEqual(["no pending.json, no leftover downloads"], failing(self.check()))
+    def test_pending_json_left_fails(self):
+        fx = Instance()
+        (fx.config / "rigtune" / "pending.json").write_text("{}")
+        self.assertEqual(["no pending.json, no leftover downloads"], failing(self.check(fx)))
 
 
 class ProfileUndoTest(unittest.TestCase):
     def setUp(self):
-        self.fx = ProfileInstance()
-        self.fx.undo()
+        self.fx = Instance()
+        self.fx.undo_last_twice()
 
-    def check(self, label=None):
-        return e2e_checks.after_profile_undo(self.fx.instance, self.fx.driver, "sw", label)
+    def check(self, labels=None, undo_all=False):
+        return e2e_checks.after_profile_undo(self.fx.instance, self.fx.driver, ["A", "B"], ORIGINALS, labels, undo_all)
 
-    def test_passes(self):
+    def test_undo_last_twice_passes(self):
         self.assertEqual([], failing(self.check()))
 
-    def test_values_not_back(self):
-        self.fx.options(TARGETS)
-        self.assertEqual(["options.txt holds the values from before the switch"], failing(self.check()))
+    def test_every_key_must_be_back(self):
+        self.fx.values(dict(ORIGINALS, **{THREADS: "2"}))
+        self.assertEqual(["every key is back at its value before the first switch"], failing(self.check()))
 
-    def test_plan_needing_a_restart_or_undoing_another_entry(self):
-        self.fx.driver["entryPlan"][0]["needsRestart"] = True
-        self.assertEqual(["the driver undid the switch entry now (no restart needed)"], failing(self.check()))
-        self.fx.undo()
-        self.fx.driver["undoOf"] = "old"
-        self.assertEqual(["the driver undid the switch entry now (no restart needed)"], failing(self.check()))
+    def test_plans_in_the_wrong_order(self):
+        self.fx.driver["undoPlans"].reverse()
+        self.assertIn("the driver undid the newer switch, then the older (Undo last twice)", failing(self.check()))
 
-    def test_plan_missing_a_change(self):
-        self.fx.driver["entryPlan"].pop()
-        self.assertEqual(["the driver undid the switch entry now (no restart needed)"], failing(self.check()))
-
-    def test_change_not_reverted(self):
-        self.fx.entries[1]["changes"][1]["status"] = "APPLIED"
+    def test_a_change_left_applied(self):
+        self.fx.entries[0]["changes"][3]["status"] = "APPLIED"
         self.fx.write()
-        self.assertEqual(["history.json: one undo of the switch, its changes REVERTED"], failing(self.check()))
+        self.assertIn("history.json: the switches' changes REVERTED by undo entries, all applied", failing(self.check()))
 
-    def test_profile_mode_keeps_the_label(self):
-        self.assertEqual(["profiles.json still labels the switch entry"], failing(self.check(label="Battery")))
-        self.fx.label("sw")
-        self.assertEqual([], failing(self.check(label="Battery")))
+    def test_undo_all(self):
+        self.fx.entries = self.fx.entries[:2]
+        self.fx.entries.append({"id": "U", "kind": "undo", "undoOf": "all", "changes": [
+            change("u1", RD, "10", "12", reverts="b1"), change("u2", FPS, "60", "120", reverts="b2"),
+            change("u3", THREADS, "4", "0", reverts="b3"), change("u4", FOG, "false", "true", reverts="a4")]})
+        for c in self.fx.entries[0]["changes"] + self.fx.entries[1]["changes"]:
+            c["status"] = "REVERTED"
+        self.fx.write()
+        self.fx.driver = {"ok": True, "undoPlans": [{"undoOf": "all", "problem": None, "items": 4}]}
+        self.assertEqual([], failing(self.check(undo_all=True)))
+        self.assertIn("the driver undid the newer switch, then the older (Undo last twice)", failing(self.check(undo_all=False)))
+
+    def test_labels_kept(self):
+        self.assertEqual(["profiles.json still labels each switch entry"], failing(self.check(labels=["Battery", "Max FPS"])))
+        self.fx.label({"A": "Battery", "B": "Max FPS"})
+        self.assertEqual([], failing(self.check(labels=["Battery", "Max FPS"])))
 
 
 class ProfileCheckTest(unittest.TestCase):
     def setUp(self):
-        self.fx = ProfileInstance()
-        self.fx.undo()
+        self.fx = Instance()
+        self.fx.undo_last_twice()
         self.mods = e2e_checks.listing(self.fx.instance / "mods")
         self.statuses = e2e_checks.history_statuses(self.fx.instance)
-        self.driver = {"ok": True, "settingsNow": dict(ORIGINALS), "entryUndoableAfter": 0, "entryPlanAfterMeta": {"problem": None}}
+        self.driver = {"ok": True, "settingsNow": dict(ORIGINALS), "entryUndoable": {"A": 0, "B": 0}, "entryProblems": {"A": None, "B": None}}
 
     def check(self):
-        return e2e_checks.after_profile_check(self.fx.instance, self.driver, "sw", self.mods, self.statuses)
+        return e2e_checks.after_profile_check(self.fx.instance, self.driver, ["A", "B"], ORIGINALS, self.mods, self.statuses)
 
     def test_passes(self):
         self.assertEqual([], failing(self.check()))
 
-    def test_game_loaded_other_values(self):
-        self.driver["settingsNow"]["maxFps"] = "90"
-        self.assertEqual(["the game runs with the values from before the switch"], failing(self.check()))
+    def test_game_runs_with_other_values(self):
+        self.driver["settingsNow"][THREADS] = "2"
+        self.assertEqual(["the game runs with every key at its value before the first switch"], failing(self.check()))
 
     def test_something_left_to_undo(self):
-        self.driver["entryUndoableAfter"] = 1
-        self.assertEqual(["nothing left to undo on the switch entry"], failing(self.check()))
+        self.driver["entryUndoable"]["A"] = 1
+        self.assertEqual(["nothing left to undo on either switch"], failing(self.check()))
 
     def test_statuses_changed(self):
-        self.fx.entries[1]["changes"][0]["status"] = "APPLIED"
+        self.fx.entries[0]["changes"][0]["status"] = "APPLIED"
         self.fx.write()
         self.assertEqual(["history.json statuses unchanged"], failing(self.check()))
 
@@ -198,47 +225,46 @@ class ProfileScenarioTest(unittest.TestCase):
         run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo")
         self.assertNotIn("profile-apply", run.checks)
 
-    def test_the_hook_adds_three_phases_after_the_per_entry_ones(self):
+    def test_the_hook_adds_its_phases_after_the_per_entry_ones(self):
         run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo", "--profile-switch", "settings")
         self.assertEqual(list(self_update_e2e.UNDO_PHASES + self_update_e2e.ENTRY_PHASES + self_update_e2e.PROFILE_PHASES), list(run.checks))
-        self.assertEqual(("profile-apply", "profile-undo", "profile-check"), self_update_e2e.PROFILE_PHASES)
+        self.assertEqual(("profile-apply", "profile-undo", "profile-check", "profile-undo-all", "profile-check-all"),
+                         self_update_e2e.PROFILE_PHASES)
 
-    def test_jvm_args_pick_the_mode(self):
-        run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo", "--profile-switch", "profile", "--profile-name", "Quality")
-        self.assertEqual(["-Drigtune.e2e.profileMode=profile", "-Drigtune.e2e.profileName=Quality"], run.profile_jvm_args())
+    def test_the_plan_file_per_mode(self):
         run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo", "--profile-switch", "settings")
-        self.assertEqual(["-Drigtune.e2e.profileMode=settings", "-Drigtune.e2e.profileSettings=" + self_update_e2e.PROFILE_SETTINGS_ARG],
-                         run.profile_jvm_args())
+        self.assertEqual({"mode": "settings", "switches": [{"name": "stand-in A", "settings": TARGETS[0]},
+                                                           {"name": "stand-in B", "settings": TARGETS[1]}]}, run.profile_plan())
+        run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo", "--profile-switch", "profile", "--profile-names", "Quality,Max FPS")
+        self.assertEqual({"mode": "profile", "switches": [{"name": "Quality"}, {"name": "Max FPS"}]}, run.profile_plan())
 
-    def test_profile_name_defaults_to_battery_and_needs_profile_mode(self):
+    def test_profile_names_default_and_need_profile_mode(self):
         base = ["--name", "n", "--scenario", "undo", "--new-jar", "b.jar", "--work", "w", "--java-home", "jdk"]
-        self.assertEqual("Battery", self_update_e2e.parse_args(base + ["--profile-switch", "profile"]).profile_name)
+        self.assertEqual(["Battery", "Max FPS"], self_update_e2e.parse_args(base + ["--profile-switch", "profile"]).profile_names)
         with self.assertRaises(SystemExit):
-            self_update_e2e.parse_args(base + ["--profile-switch", "settings", "--profile-name", "Quality"])
+            self_update_e2e.parse_args(base + ["--profile-switch", "settings", "--profile-names", "Quality"])
+        with self.assertRaises(SystemExit):
+            self_update_e2e.parse_args(base + ["--profile-switch", "profile", "--profile-names", "Battery"])
         with self.assertRaises(SystemExit):
             self_update_e2e.parse_args(base + ["--expect-history", "auto"])
-
-    def test_profile_phases_keep_options_txt_and_profiles_json(self):
-        run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo", "--profile-switch", "settings")
-        run.out.mkdir()
-        run.rigtune_dir.mkdir(parents=True)
-        run.mods.mkdir(parents=True)
-        (run.instance / "options.txt").write_text("maxFps:90", encoding="utf-8")
-        (run.rigtune_dir / "profiles.json").write_text("{}", encoding="utf-8")
-        run.snapshot("profile-apply")
-        run.snapshot("mod-check")
-        self.assertEqual("maxFps:90", (run.out / "options-after-profile-apply.txt").read_text(encoding="utf-8"))
-        self.assertTrue((run.out / "profiles-after-profile-apply.json").is_file())
-        self.assertFalse((run.out / "options-after-mod-check.txt").exists())
 
     def test_only_for_the_undo_scenario(self):
         with self.assertRaises(SystemExit):
             self_update_e2e.parse_args(["--name", "n", "--old-jar", "a.jar", "--new-jar", "b.jar", "--work", "w",
                                         "--java-home", "jdk", "--profile-switch", "settings"])
 
-    def test_stand_in_settings(self):
-        self.assertEqual("renderDistance:6,maxFps:90", self_update_e2e.PROFILE_SETTINGS_ARG)
-        self.assertEqual({"renderDistance": "6", "maxFps": "90"}, self_update_e2e.PROFILE_SETTINGS)
+    def test_profile_phases_keep_the_settings_files(self):
+        run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo", "--profile-switch", "settings")
+        run.out.mkdir()
+        (run.instance / "config" / "rigtune").mkdir(parents=True)
+        (run.instance / "mods").mkdir()
+        (run.instance / "options.txt").write_text("maxFps:90", encoding="utf-8")
+        (run.instance / "config" / "sodium-options.json").write_text("{}", encoding="utf-8")
+        run.snapshot("profile-apply")
+        run.snapshot("mod-check")
+        self.assertEqual("maxFps:90", (run.out / "options-after-profile-apply.txt").read_text(encoding="utf-8"))
+        self.assertTrue((run.out / "sodium-options-after-profile-apply.json").is_file())
+        self.assertFalse((run.out / "options-after-mod-check.txt").exists())
 
 
 if __name__ == "__main__":

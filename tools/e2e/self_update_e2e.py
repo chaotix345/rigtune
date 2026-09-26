@@ -52,13 +52,22 @@ RELEASED = {
 UNDO_PHASES = ("mod-apply", "mod-undo", "mod-check")
 # Plan review B-M3, on the same instance after UNDO_PHASES: Undo this on an older Apply.
 ENTRY_PHASES = ("entry-apply", "entry-undo", "entry-check")
-# Phase 5 hook (docs/v0.4/design/ws-h.md), after ENTRY_PHASES with --profile-switch: a profile switch (an apply entry of
-# setting changes), Undo this on it after a restart, and a check start. Mode settings (the stand-in until WS-P merges)
-# applies PROFILE_SETTINGS through controller.apply, which is what a switch does; mode profile switches to the profile
-# --profile-name through WS-P's API (UndoDriver.switchProfile) and also checks its label in profiles.json.
-PROFILE_PHASES = ("profile-apply", "profile-undo", "profile-check")
-PROFILE_SETTINGS = {"renderDistance": "6", "maxFps": "90"}
-PROFILE_SETTINGS_ARG = ",".join("{}:{}".format(k, v) for k, v in PROFILE_SETTINGS.items())
+# The profile part (docs/v0.4/design/ws-h.md; plan review P-H1), after ENTRY_PHASES with --profile-switch, on an
+# instance of its own that also has Sodium, so staged config keys are covered: two switches in one start
+# (profile-apply; the helper applies the staged keys at exit), then Undo last twice in the next start (profile-undo)
+# and a check start (profile-check); and on a copy of the instance taken after profile-apply, Undo all
+# (profile-undo-all) and a check start (profile-check-all). Mode settings (the stand-in until WS-P's API is in
+# UndoDriver.switchProfile) applies PROFILE_SWITCHES through controller.apply, as a switch does; mode profile switches
+# to --profile-names through WS-P's API and also checks their labels in profiles.json.
+PROFILE_PHASES = ("profile-apply", "profile-undo", "profile-check", "profile-undo-all", "profile-check-all")
+# Both change the vanilla keys (set at once) and the same Sodium key (staged twice before one restart: P-H1); the first
+# also stages a key the second leaves alone.
+PROFILE_SWITCHES = [
+    {"name": "stand-in A", "settings": {"vanilla.renderDistance": "6", "vanilla.maxFps": "90",
+                                        "sodium.performance.chunk_builder_threads": "2", "sodium.performance.use_fog_occlusion": "false"}},
+    {"name": "stand-in B", "settings": {"vanilla.renderDistance": "10", "vanilla.maxFps": "60",
+                                        "sodium.performance.chunk_builder_threads": "4"}},
+]
 ADDED_ID = "e2e-added"
 ADDED_PROJECT = "E2EAddMd"
 OTHER_ID = "e2e-disable-me"
@@ -73,9 +82,11 @@ PHASE_TITLES = {
     "entry-apply": "B-M3: after two Applies in one start, each adding a mod (" + FIRST_ID + ", then " + SECOND_ID + "), and quit (helper done)",
     "entry-undo": "B-M3: after Undo this on the older Apply (" + FIRST_ID + ") and a restart (helper done)",
     "entry-check": "B-M3: after the next start",
-    "profile-apply": "Profile hook: after a profile switch (one apply entry of setting changes) and quit",
-    "profile-undo": "Profile hook: after Undo this on the switch in the next start",
-    "profile-check": "Profile hook: after the next start",
+    "profile-apply": "Profiles (P-H1): after two switches in one start and quit (helper done)",
+    "profile-undo": "Profiles: after Undo last twice in the next start (helper done)",
+    "profile-check": "Profiles: after the next start",
+    "profile-undo-all": "Profiles, on a copy from after the switches: after Undo all (helper done)",
+    "profile-check-all": "Profiles, on that copy: after the next start",
 }
 
 
@@ -106,6 +117,7 @@ class Run:
         self.server = None
         self.watcher = None
         self.profile = args.profile_switch
+        self.profile_instance = self.run_dir / "instance-profile"
         phases = UNDO_PHASES + ENTRY_PHASES + (PROFILE_PHASES if self.profile else ()) if self.undo else ("update", "verify")
         self.checks = {p: [] for p in phases}
         self.facts = {}
@@ -275,6 +287,8 @@ class Run:
         if self.seed is not None:
             self.seed_instance()
         (self.instance / "options.txt").write_text(OPTIONS, encoding="utf-8")
+        if self.profile:
+            self.prepare_profile_instance()
         self.facts["fabricApi"] = api.name
         self.log("instance mods: " + ", ".join(sorted(p.name for p in self.mods.iterdir())))
 
@@ -294,17 +308,39 @@ class Run:
                 lines += ["-Drigtune.e2e.addSlug=" + ADDED_ID, "-Drigtune.e2e.addProject=" + ADDED_PROJECT, "-Drigtune.e2e.disable=" + OTHER_ID,
                           "-Drigtune.e2e.entryMods={}:{},{}:{}".format(FIRST_ID, FIRST_PROJECT, SECOND_ID, SECOND_PROJECT)]
             if phase in PROFILE_PHASES:
-                lines += self.profile_jvm_args()
+                lines.append("-Drigtune.e2e.profilePlan=" + str(self.run_dir / "profile-plan.json"))
             (self.run_dir / "jvm-{}.txt".format(phase)).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
         code = self.gradle("gradle-driver.log", *self.driver_args(":{}:{}".format(self.mc, "e2eUndoDriverJar" if self.undo else "e2eDriverJar")))
         if code != 0:
             raise SystemExit("building the driver failed; see " + str(self.run_dir / "gradle-driver.log"))
 
-    def profile_jvm_args(self):
+    def profile_plan(self):
+        """What the undo driver's profile-apply does (profile-plan.json): the stand-in's switches, or the profiles to switch to."""
         if self.profile == "profile":
-            return ["-Drigtune.e2e.profileMode=profile", "-Drigtune.e2e.profileName=" + self.args.profile_name]
-        return ["-Drigtune.e2e.profileMode=settings", "-Drigtune.e2e.profileSettings=" + PROFILE_SETTINGS_ARG]
+            return {"mode": "profile", "switches": [{"name": n} for n in self.args.profile_names]}
+        return {"mode": "settings", "switches": [dict(s) for s in PROFILE_SWITCHES]}
+
+    def prepare_profile_instance(self):
+        """The profile part's own fresh instance: the installed jar, fabric-api and Sodium (a staged config target)."""
+        self.profile_instance.joinpath("mods").mkdir(parents=True)
+        self.profile_instance.joinpath("config").mkdir()
+        for jar in (self.new_jar, self.fabric_api(), self.sodium()):
+            shutil.copyfile(jar, self.profile_instance / "mods" / jar.name)
+        (self.profile_instance / "options.txt").write_text(OPTIONS, encoding="utf-8")
+        (self.run_dir / "profile-plan.json").write_text(json.dumps(self.profile_plan(), indent=1) + LF, encoding="utf-8", newline=LF)
+        self.facts["sodium"] = self.sodium().name
+
+    def sodium(self):
+        props = (REPO / "versions" / self.mc / "gradle.properties").read_text(encoding="utf-8")
+        version = re.search(r"^sodium_version=(.+)$", props, re.MULTILINE).group(1).strip()
+        return e2e_env.gradle_jar(Path.home() / ".gradle" / "caches" / "modules-2" / "files-2.1", "maven.modrinth", "sodium", version)
+
+    def use_instance(self, instance):
+        """The instance the next launches, waits and snapshots use."""
+        self.instance = instance
+        self.mods = instance / "mods"
+        self.rigtune_dir = instance / "config" / "rigtune"
 
     def add_jvm_args(self, phase, lines):
         """For values known only after an earlier launch (the entry id of B-M3's older Apply)."""
@@ -453,6 +489,7 @@ class Run:
             fixtures.copy_evidence(self.rigtune_dir / name, self.out / "{}-after-{}{}".format(Path(name).stem, phase, Path(name).suffix))
         if phase in PROFILE_PHASES:
             fixtures.copy_evidence(self.instance / "options.txt", self.out / "options-after-{}.txt".format(phase))
+            fixtures.copy_evidence(self.instance / "config" / "sodium-options.json", self.out / "sodium-options-after-{}.json".format(phase))
             fixtures.copy_evidence(self.rigtune_dir / "profiles.json", self.out / "profiles-after-{}.json".format(phase))
         (self.out / "mods-after-{}.json".format(phase)).write_text(json.dumps(e2e_checks.listing(self.mods), indent=1), encoding="utf-8")
 
@@ -573,46 +610,55 @@ class Run:
         return all(c.ok for c in checks) and (not self.profile or self.run_profile_switch())
 
     def run_profile_switch(self):
-        """Phase 5 hook, on the same instance: a profile switch, Undo this on it in the next start, and a check start.
-        Vanilla settings apply and revert at once, so no helper runs; options.txt and history.json show each step."""
-        def exited(code):
-            return e2e_checks.Check("the client exited normally", code == 0, "gradle exit {}".format(code))
+        """The profile part (P-H1), on its own instance: two switches in one start, then Undo last twice and a check
+        start; and on a copy from after the switches, Undo all and a check start. Each undo launch ends with the helper
+        applying the staged (Sodium) reverts."""
+        def exited(code, helper_ok=True):
+            return e2e_checks.Check("the client exited normally" + (" and the helper finished" if helper_ok is not True else ""),
+                                    code == 0 and helper_ok, "gradle exit {}, helper finished: {}".format(code, helper_ok))
 
-        label = self.args.profile_name if self.profile == "profile" else None
-        known = [e.get("id") for e in e2e_checks.history_entries(self.instance) or []]
-        originals = e2e_checks.options_values(self.instance)
-        code = self.launch("profile-apply")
-        self.snapshot("profile-apply")
-        checks = [exited(code)] + e2e_checks.after_profile_apply(self.instance, self.driver("profile-apply"), known, originals,
-                                                                  PROFILE_SETTINGS if self.profile == "settings" else None, label)
-        self.checks["profile-apply"] = checks
-        new = [e for e in e2e_checks.history_entries(self.instance) or [] if e.get("id") not in known]
-        if not all(c.ok for c in checks):
-            return False
-        self.facts["switchEntry"] = new[0].get("id")
-        # The values to restore, as JSON (a value may hold a comma, or be null for an option that had none).
-        originals_file = self.run_dir / "profile-originals.json"
-        originals_file.write_text(json.dumps({c.get("key")[len(e2e_checks.VANILLA):]: c.get("before")
-                                              for c in new[0].get("changes", [])}, indent=1), encoding="utf-8", newline=LF)
-        for phase in PROFILE_PHASES[1:]:
-            self.add_jvm_args(phase, ["-Drigtune.e2e.entryId=" + self.facts["switchEntry"],
-                                      "-Drigtune.e2e.profileOriginals=" + str(originals_file)])
+        base = self.instance
+        labels = list(self.args.profile_names) if self.profile == "profile" else None
+        targets = [s["settings"] for s in PROFILE_SWITCHES] if self.profile == "settings" else None
+        try:
+            self.use_instance(self.profile_instance)
+            code, helper_ok, _ = self.launch_and_apply("profile-apply")
+            driver = self.driver("profile-apply") or {}
+            checks = [exited(code, helper_ok)] + e2e_checks.after_profile_apply(self.instance, driver, [], targets, labels)
+            self.checks["profile-apply"] = checks
+            if not all(c.ok for c in checks):
+                return False
+            ids = [e.get("id") for e in e2e_checks.history_entries(self.instance) or []]
+            self.facts["switchEntries"] = ids
+            originals = driver.get("settingsBefore") or {}
+            for phase in PROFILE_PHASES[1:]:
+                self.add_jvm_args(phase, ["-Drigtune.e2e.entryIds=" + ",".join(ids)])
+            # Undo all starts from the same point as Undo last: a copy of the instance now.
+            copy = self.run_dir / "instance-profile-all"
+            shutil.copytree(self.profile_instance, copy)
 
-        code = self.launch("profile-undo")
-        self.snapshot("profile-undo")
-        checks = [exited(code)] + e2e_checks.after_profile_undo(self.instance, self.driver("profile-undo"), self.facts["switchEntry"], label)
-        self.checks["profile-undo"] = checks
-        if not all(c.ok for c in checks):
-            return False
-
-        mods_before = e2e_checks.listing(self.mods)
-        statuses_before = e2e_checks.history_statuses(self.instance)
-        code = self.launch("profile-check")
-        self.snapshot("profile-check")
-        checks = [exited(code)] + e2e_checks.after_profile_check(self.instance, self.driver("profile-check"), self.facts["switchEntry"],
-                                                                  mods_before, statuses_before)
-        self.checks["profile-check"] = checks
-        return all(c.ok for c in checks)
+            ok = True
+            for instance, undo, check, undo_all in ((self.profile_instance, "profile-undo", "profile-check", False),
+                                                    (copy, "profile-undo-all", "profile-check-all", True)):
+                self.use_instance(instance)
+                code, helper_ok, _ = self.launch_and_apply(undo)
+                checks = [exited(code, helper_ok)] + e2e_checks.after_profile_undo(self.instance, self.driver(undo), ids, originals, labels,
+                                                                                    undo_all)
+                self.checks[undo] = checks
+                if not all(c.ok for c in checks):
+                    ok = False
+                    continue
+                mods_before = e2e_checks.listing(self.mods)
+                statuses_before = e2e_checks.history_statuses(self.instance)
+                code = self.launch(check)
+                self.snapshot(check)
+                checks = [exited(code)] + e2e_checks.after_profile_check(self.instance, self.driver(check), ids, originals, mods_before,
+                                                                          statuses_before)
+                self.checks[check] = checks
+                ok = ok and all(c.ok for c in checks)
+            return ok
+        finally:
+            self.use_instance(base)
 
     def driver(self, phase):
         return e2e_checks._load(self.out / "driver-{}.json".format(phase))
@@ -648,8 +694,8 @@ class Run:
             texts += [self.out / n.format(phase) for n in ("driver-{}.json", "report-{}.txt", "helper-cmdlines-{}.txt",
                                                             "mods-after-{}.json", "history-after-{}.json", "last-apply-after-{}.json",
                                                             "helper-after-{}.log", "pending-{}.json", "options-after-{}.txt",
-                                                            "profiles-after-{}.json")]
-        texts += [self.run_dir / n for n in ("requests.jsonl", "e2e.log", "catalog.json", "profile-originals.json")]
+                                                            "sodium-options-after-{}.json", "profiles-after-{}.json")]
+        texts += [self.run_dir / n for n in ("requests.jsonl", "e2e.log", "catalog.json", "profile-plan.json")]
         texts += [self.run_dir / "captured-raw" / n for n in CAPTURED]
         for source in texts:
             if source.is_file():
@@ -659,7 +705,8 @@ class Run:
             source = self.out / "latest-{}.log".format(phase)
             if source.is_file():
                 (dest / "latest-{}.filtered.log".format(phase)).write_text(self.scrub(filtered_log(source)), encoding="utf-8", newline=LF)
-        for shot in sorted((self.instance / "screenshots").glob("e2e-*.png")):
+        # Every instance of the run (the profile part has its own two).
+        for shot in sorted(self.run_dir.glob("instance*/screenshots/e2e-*.png")):
             shutil.copyfile(shot, dest / shot.name)
         # Scrubbed before serialising: a detail holding a Python repr of paths would be escaped twice by json.dumps.
         (dest / "checks.json").write_text(json.dumps({phase: [dict(c.__dict__, detail=self.scrub(c.detail)) for c in checks]
@@ -684,10 +731,12 @@ class Run:
                           self.first_jar.name, FIRST_PROJECT, self.second_jar.name, SECOND_PROJECT, self.facts.get("olderEntry"),
                           (self.driver("entry-undo") or {}).get("viaScreen"), (self.driver("entry-undo") or {}).get("entryPlanMethod"))]
             if self.profile:
-                lines.append("- Profile hook (`--profile-switch {}`): {} (entry {})".format(
-                    self.profile, "the settings stand-in `{}` through controller.apply".format(PROFILE_SETTINGS_ARG)
-                    if self.profile == "settings" else "a switch to the profile `{}`".format(self.args.profile_name),
-                    self.facts.get("switchEntry")))
+                lines.append("- Profiles (`--profile-switch {}`, plan review P-H1), on an instance of its own with `{}`: two switches "
+                             "in one start ({}; entries {}), a restart, then Undo last twice, and Undo all on a copy of the instance "
+                             "from after the switches".format(
+                                 self.profile, self.facts.get("sodium"),
+                                 "; ".join("`{}` {}".format(s["name"], s.get("settings", "")) for s in self.profile_plan()["switches"]),
+                                 self.facts.get("switchEntries")))
         else:
             lines += ["- Old: `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["old"]),
                       "- New (served by the fake Modrinth): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"])]
@@ -878,9 +927,10 @@ def parse_args(argv):
                              "old side): the new version imports 0.1.x's last apply once; own-update (a 0.2.0 or later "
                              "old side): the old version's journal of its own update is read as it is")
     parser.add_argument("--profile-switch", choices=("settings", "profile"),
-                        help="undo: also undo a profile switch after a restart (Phase 5 hook): settings = the stand-in "
-                             "(an apply of vanilla settings), profile = through WS-P's API, with its profiles.json label")
-    parser.add_argument("--profile-name", help="--profile-switch profile: the profile to switch to (default Battery)")
+                        help="undo: also two profile switches, a restart, Undo last twice / Undo all (P-H1): settings = the "
+                             "stand-in (applies of vanilla and Sodium settings), profile = through WS-P's API, with profiles.json labels")
+    parser.add_argument("--profile-names", type=lambda v: [n.strip() for n in v.split(",")],
+                        help="--profile-switch profile: the two profiles to switch to, comma-separated (default Battery,Max FPS)")
     parser.add_argument("--port", type=int, default=443)
     parser.add_argument("--lock", default=DEFAULT_LOCK, help="game-test lock folder, or 'none'")
     parser.add_argument("--agent", default="ws-h", help="the agent named in the lock's owner.txt")
@@ -893,10 +943,12 @@ def parse_args(argv):
         parser.error("--seed is for the self-update scenario")
     if args.profile_switch and args.scenario != "undo":
         parser.error("--profile-switch is for the undo scenario")
-    if args.profile_name and args.profile_switch != "profile":
-        parser.error("--profile-name is for --profile-switch profile")
-    if args.profile_switch == "profile" and not args.profile_name:
-        args.profile_name = "Battery"
+    if args.profile_names and args.profile_switch != "profile":
+        parser.error("--profile-names is for --profile-switch profile")
+    if args.profile_switch == "profile":
+        args.profile_names = args.profile_names or ["Battery", "Max FPS"]
+        if len(args.profile_names) != 2 or not all(args.profile_names):
+            parser.error("--profile-names needs two profile names")
     if args.expect_history and args.scenario != "self-update":
         parser.error("--expect-history is for the self-update scenario")
     return args
