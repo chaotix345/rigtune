@@ -2,7 +2,7 @@
 
 Checks, in a real production Minecraft client, that an installed RigTune finds its own update on Modrinth, downloads
 it, and that the post-exit helper swaps the jars; then starts the new version on the same instance and checks that it
-reads the old version's files (SPEC item 5). The main scenarios run the unmodified released v0.1.0 and v0.2.0 jars. Nothing here
+reads the old version's files (SPEC item 5). The main scenarios run the unmodified released v0.1.0, v0.2.0 and v0.3.0 jars. Nothing here
 is part of `./gradlew build` or the shipped jar.
 
 ```sh
@@ -33,6 +33,67 @@ Two more modes (Phase 5):
   `mod-apply` (one Apply: add `e2e-added`, disable `e2e-disable-me`; quit; the helper applies both), `mod-undo` (Undo
   last apply: the plan, a screenshot of the confirmation screen, `undo(plan)`; quit; the helper reverts both),
   `mod-check` (the mods as before, nothing left to undo).
+
+### v0.4 runs (docs/v0.4/plans/ws-h.md)
+
+The final runs (Phase 5) start from every released version, on 26.2 only (vanilla 26.3 crashes natively on most local
+launches). Released jars; the harness refuses a jar that claims a released version with other bytes (`RELEASED` in
+`self_update_e2e.py`; CI's "Compile the E2E drivers" step pins the same three and compiles the driver against each):
+
+```sh
+gh release download v0.1.0 -p 'rigtune-0.1.0.jar'         # 8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950
+gh release download v0.2.0 -p 'rigtune-0.2.0+mc26.2.jar'  # 67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9
+gh release download v0.3.0 -p 'rigtune-0.3.0+mc26.2.jar'  # 5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9
+```
+
+The new jar is the release candidate's `./gradlew :26.2:jar` output, copied into the scratch folder first: the fake
+Modrinth serves the file where it is, so a rebuild during a run would change it. Run the five one at a time. The
+harness takes and releases the game-test lock itself (exit 3: busy, try again later); the `release` after each command
+only removes a lock that a killed run of this worktree left behind.
+
+```sh
+export JAVA_HOME="C:/Dev/Tools/jdk/jdk-25.0.4.1+1"
+S=<scratch folder>; J=$S/jars; NEW=$J/rigtune-0.4.0+mc26.2.jar; E=docs/smoke/self-update
+LOCK=C:/Dev/Worktrees/.gametest-lock; WT=<this worktree, forward slashes>
+release() { grep -q "worktree: $WT" $LOCK/owner.txt 2>/dev/null && { rm -f $LOCK/owner.txt; rmdir $LOCK; }; }
+run() { python tools/e2e/self_update_e2e.py --work $S/work --evidence $E/$1 --name "$@"; rc=$?; release; return $rc; }
+
+run final-v030-to-040 --old-jar $J/rigtune-0.3.0+mc26.2.jar --old-sha256 5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9 --new-jar $NEW --expect-history auto
+run final-v020-to-040 --old-jar $J/rigtune-0.2.0+mc26.2.jar --old-sha256 67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9 --new-jar $NEW --expect-history auto
+run final-v010-to-040 --old-jar $J/rigtune-0.1.0.jar --old-sha256 8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950 --new-jar $NEW --legacy-disable --expect-history auto
+run final-v010-seeded-to-040 --old-jar $J/rigtune-0.1.0.jar --old-sha256 8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950 --new-jar $NEW --seed tools/e2e/seeds/v010-dh --expect-history auto
+run undo-after-restart-040 --scenario undo --new-jar $NEW --profile-switch profile --profile-name <a WS-P profile>
+```
+
+- `--expect-history auto` takes the check from the old jar's version (`e2e_checks.history_expectation`): 0.1.x →
+  `legacy-import`, 0.2.0 and later → `own-update` (0.2.0 and 0.3.0 journal their own update as one `apply` entry that
+  the new version must read as it is; with `--legacy-disable` that entry also holds the test mod's disable). An
+  explicit `legacy-import`/`own-update` that doesn't fit the old version is refused, so the v0.3 commands still run.
+- Each run's `RESULT.md` names the old and new jar (version, sha256) and the expected history. The dry runs on a
+  0.4.0-dev build are in `docs/smoke/self-update/dev-*-040` (docs/v0.4/design/ws-h.md has the counts).
+
+**Profile hook (`--profile-switch`, undo scenario).** After the per-entry case, three more launches on the same
+instance: `profile-apply` (a profile switch, which is an ordinary Apply of setting changes: one `apply` journal entry,
+labelled by WS-P in `config/rigtune/profiles.json`), `profile-undo` (Undo this on that entry in the next start:
+`undoPlanFor(entryId)`, `UndoScreen` and its Undo button; the vanilla values revert at once) and `profile-check` (the
+game runs with the values from before the switch, nothing left to undo on the entry, statuses and mods unchanged).
+Checks: exactly one new `apply` entry whose changes are all `vanilla.*` settings, `APPLIED`, with `options.txt` holding
+their `after`; the plan reverts every change of the entry with no restart; one `undo` entry reverting each change, the
+switch's changes `REVERTED`, `options.txt` holding their `before`; no `pending.json` at any step.
+- `--profile-switch settings` (usable now) is the stand-in: the driver applies `renderDistance:6,maxFps:90`
+  (`PROFILE_SETTINGS`) through `controller.apply`, as a switch does, and the checks also want exactly those keys with
+  the `options.txt` values from before the launch as `before`.
+- `--profile-switch profile --profile-name <name>` (Phase 5, once WS-P has merged) also checks that `profiles.json`
+  labels the entry (`switches: [{entryId, profileId, templateId, name}]`, docs/research/v0.4/profiles.md §3) before and
+  after its undo. Before the final run:
+  1. Put WS-P's switch call in `UndoDriver.switchProfile(controller, name)` (src/e2eUndo; today it throws): switch to
+     the profile named `name` the way the Profiles screen does and return the status message. CI's
+     `compileE2eUndoJava` then guards that API.
+  2. If WS-P's `profiles.json` differs from that shape, adjust `e2e_checks.profile_label` and its tests
+     (`tests/test_e2e_profile_hook.py`).
+  3. Pick a profile that changes at least one vanilla option on a fresh instance (every option at its default, no
+     Sodium/DH/Iris), e.g. a battery-style profile lowering the render distance and FPS cap. A profile that also
+     stages config patches would need the helper step (`launch_and_apply`) in `run_profile_switch`.
 
 ### v0.3 runs (docs/v0.3/plans/ws-h.md)
 
