@@ -30,8 +30,11 @@ Background and the evidence behind the policy: docs/research/v0.3/mc-versions.md
 - A pre-release node uses `~<base>-` (for example `~26.4-` for `26.4-snapshot-1`). Don't ship one:
   on a snapshot, Loader's normalized version (`26.4-alpha.1`) isn't a Modrinth game version. When
   the release is out, remove the pre-release node (its `settings.gradle` entry and `versions/<id>/`)
-  and add the release with `add_mc_version.py <base>`; a `//? if >=<id>` block written for the
-  pre-release still matches the release, but rewrite it as `>=<base>`.
+  and add the release with `add_mc_version.py <base>`. Write a block for a pre-release as
+  `//? if >=<base>-alpha` (for example `>=26.4-alpha`), not `>=<id>`: Stonecutter compares
+  pre-release ids as text, so `26.4-pre-1` and `26.4-rc-1` sort below `26.4-snapshot-1` and
+  `>=26.4-snapshot-1` misses them (`-alpha` sorts below all three). Rewrite it as `>=<base>` once
+  the release node replaces the pre-release one.
 - Never an open-ended `>=`: every drop so far has changed bytecode RigTune depends on.
 - A hotfix that changes an API RigTune uses gets its own node (`26.3.1` with `~26.3.1`), and the old
   node is narrowed to `>=26.3 <26.3.1-` so the two jars never accept the same version.
@@ -204,6 +207,38 @@ Results so far (`docs/v0.3/verification/mc-tooling/`):
   above).
 
 Tests: `tools/tests/test_mc_apidiff.py` (synthesized class files, a fake Gradle cache; no JDK needed).
+
+## Snapshot canary
+
+`.github/workflows/snapshot-canary.yml` builds and unit-tests RigTune against the newest Minecraft
+snapshot every Wednesday (05:00 UTC), so an API break shows up while the version is still a
+snapshot. It takes `latest.snapshot` from the Mojang manifest, adds it as a node with
+`add_mc_version.py --prerelease-ok` in the runner's checkout only (never committed, so build.yml's
+game-test legs, release.yml and update-rules.yml don't see it) and runs `./gradlew :<mc>:build`,
+which also compiles the game tests. It skips, with a green run, when the newest snapshot is the
+release or `add_mc_version.py` refuses it: a notice when the snapshot isn't ready yet (no Fabric
+API build, ...), a warning when the refusal needs a change here (another Java version, an id
+format the tool doesn't know). A network error or a crash of `add_mc_version.py` fails the run
+without an issue. Once a release is out the canary skips until the next snapshot: adding the
+release is the "Adding a version" flow above, and an issue still open from its snapshots stays
+open until a green canary run or a human closes it.
+
+Run it by hand: `gh workflow run snapshot-canary.yml`, or `-f mc=<id>` to test a given version.
+The schedule only fires from the copy on `main`.
+
+When a build fails it opens one issue, "Snapshot canary: Minecraft snapshot build is failing"
+(label `snapshot-canary`), with the build reports attached to the run; later failures comment on
+it and the next green run closes it. Keep the title and the label: the workflow finds its open
+issue by both. To fix it:
+
+1. Reproduce locally: `python tools/add_mc_version.py <snapshot> --prerelease-ok` and
+   `./gradlew :<snapshot>:build`. Don't commit the node.
+2. Compile the previous node's classes and run `python tools/mc_apidiff.py <release> <snapshot>`
+   (see above): it lists every member RigTune uses that is missing or changed.
+3. Handle each break with a `//? if >=<base>-alpha {` block (for `26.4-snapshot-1`,
+   `>=26.4-alpha`; see "Version ranges" for why not `>=<snapshot>`) until `:<snapshot>:build`
+   passes. Remove the throwaway node, check that `./gradlew build` still passes, and commit only the
+   source change. When the release ships, rewrite the blocks as `>=<base>`.
 
 ## Hotfixes (no new node)
 
