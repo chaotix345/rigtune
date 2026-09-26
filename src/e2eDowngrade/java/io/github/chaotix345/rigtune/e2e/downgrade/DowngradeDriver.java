@@ -135,12 +135,25 @@ public final class DowngradeDriver implements ClientModInitializer {
 				case UNDO -> {
 					if (stepTicks == 1) {
 						undosBefore = undoCount();
+						if (undosBefore < 0) {
+							fail(minecraft, "couldn't read history.json before the undo");
+							return;
+						}
 						UndoPlan plan = controller.undoPlan(false);
 						Map<String, Object> summary = new LinkedHashMap<>();
 						summary.put("undoOf", plan == null ? null : plan.undoOf());
 						summary.put("problem", plan == null ? "null plan" : plan.problem());
-						summary.put("items", plan == null ? List.of() : plan.items().stream()
-								.map(i -> i.action() + " " + i.description() + (i.reason() == null ? "" : " (" + i.reason() + ")")).toList());
+						List<Map<String, Object>> items = new ArrayList<>();
+						for (UndoPlan.Item item : plan == null ? List.<UndoPlan.Item>of() : plan.items()) {
+							Map<String, Object> i = new LinkedHashMap<>();
+							i.put("action", item.action().name());
+							i.put("description", item.description());
+							i.put("reason", item.reason());
+							i.put("needsRestart", item.needsRestart());
+							i.put("changeIds", item.changeIds());
+							items.add(i);
+						}
+						summary.put("items", items);
 						result.put("undoPlan", summary);
 						event("Undo last plan: " + summary);
 						if (plan == null || plan.problem() != null || plan.isEmpty()) {
@@ -158,7 +171,8 @@ public final class DowngradeDriver implements ClientModInitializer {
 					if (stepTicks % 10 != 0) {
 						return;
 					}
-					if (undoCount() > undosBefore) {
+					int count = undoCount();
+					if (count >= 0 && count > undosBefore) {
 						Component status = controller.status();
 						result.put("undoStatus", status == null ? null : status.getString());
 						event("undo recorded");

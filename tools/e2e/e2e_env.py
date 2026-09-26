@@ -75,7 +75,10 @@ def jvm_args(hosts_file, tls):
 
 
 def _version_key(version):
-    return [int(p) if p.isdigit() else p for p in re.split(r"[.\-+]", version)]
+    """Releases above pre-releases, then the numeric parts, then the rest as text (never int against str)."""
+    match = re.match(r"(\d+(?:\.\d+)*)(.*)", version)
+    numbers, rest = (tuple(int(p) for p in match.group(1).split(".")), match.group(2)) if match else ((), version)
+    return (not rest.startswith("-"), numbers, rest)
 
 
 def gradle_jar(cache, group, artifact, version=None):

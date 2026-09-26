@@ -83,8 +83,8 @@ def main(argv=None):
     old = Path(args.old_jar).resolve()
     version = self_update_e2e.e2e_env.mod_json(old)["version"]
     problem = self_update_e2e.released_problem(version, e2e_checks.digest(old, "sha256"))
-    if version not in self_update_e2e.RELEASED or problem:
-        raise SystemExit("{} isn't a released jar: {}".format(old, problem or version))
+    if version != "0.3.0+mc26.2" or problem:
+        raise SystemExit("{} isn't the released 0.3.0 jar Compat030.java is written for: {}".format(old, problem or version))
 
     instance = Path(args.work or tempfile.mkdtemp(prefix="compat030-")).resolve() / "instance"
     sets = written.resolve(args.written)

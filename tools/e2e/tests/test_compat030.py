@@ -45,6 +45,14 @@ class FindJarTest(unittest.TestCase):
         self.assertEqual([old, gson, loader, slf4j], compat030.classpath(old, self.cache, "0.19.5"))
 
 
+class VersionOrderTest(unittest.TestCase):
+    def test_numbers_then_pre_releases_below_the_release(self):
+        cache = Path(tempfile.mkdtemp())
+        for v in ("2.0.9", "2.0.17", "2.0.18-beta1", "2.0.0.1"):
+            jar(cache, "org.slf4j", "slf4j-api", v)
+        self.assertEqual("slf4j-api-2.0.17.jar", compat030.find_jar(cache, "org.slf4j", "slf4j-api").name)
+
+
 class OutputTest(unittest.TestCase):
     def test_parses_check_lines_and_ignores_the_rest(self):
         out = "SLF4J(W): No SLF4J providers were found.\nPASS Journal: ok | state OK\nFAIL RulesLoader: x | counts {a=1}\n"

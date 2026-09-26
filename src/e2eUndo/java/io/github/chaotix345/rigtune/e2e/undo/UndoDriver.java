@@ -92,6 +92,7 @@ public final class UndoDriver implements ClientModInitializer {
 	private final String profilePlan = System.getProperty("rigtune.e2e.profilePlan");
 	private final String entryIds = System.getProperty("rigtune.e2e.entryIds", "");
 	private final List<Map<String, Object>> undoPlans = new ArrayList<>();
+	private JsonObject plan;
 	private int undone;
 	private int undosBefore;
 	private final List<String> applyMessages = new ArrayList<>();
@@ -178,7 +179,8 @@ public final class UndoDriver implements ClientModInitializer {
 					if (stepTicks % 10 != 0) {
 						return;
 					}
-					if (undoCount() > undosBefore + undone) {
+					int count = undoCount();
+					if (count >= 0 && count > undosBefore + undone) {
 						undone++;
 						event("undo " + undone + " recorded");
 						if (undone < (phase.equals("profile-undo") ? 2 : 1)) {
@@ -341,6 +343,10 @@ public final class UndoDriver implements ClientModInitializer {
 				if (stepTicks == 1) {
 					if (undone == 0) {
 						undosBefore = undoCount();
+						if (undosBefore < 0) {
+							fail(minecraft, "couldn't read history.json before the undo");
+							return;
+						}
 					}
 					UndoPlan plan = controller.undoPlan(all);
 					Map<String, Object> summary = new LinkedHashMap<>();
@@ -415,11 +421,17 @@ public final class UndoDriver implements ClientModInitializer {
 	}
 
 	private JsonObject plan() {
-		try {
-			return JsonParser.parseString(Files.readString(Path.of(profilePlan), StandardCharsets.UTF_8)).getAsJsonObject();
-		} catch (IOException e) {
-			throw new java.io.UncheckedIOException(e);
+		if (plan == null) {
+			if (profilePlan == null) {
+				throw new IllegalStateException("-Drigtune.e2e.profilePlan isn't set (profile-apply needs the plan file)");
+			}
+			try {
+				plan = JsonParser.parseString(Files.readString(Path.of(profilePlan), StandardCharsets.UTF_8)).getAsJsonObject();
+			} catch (IOException e) {
+				throw new java.io.UncheckedIOException(e);
+			}
 		}
+		return plan;
 	}
 
 	private static int undoCount() {

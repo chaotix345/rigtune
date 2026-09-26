@@ -67,6 +67,18 @@ class ComposeTest(unittest.TestCase):
         self.assertEqual((ROOT / "placeholder" / "ws-p" / "profiles.json").read_bytes(),
                          (self.instance / "config" / "rigtune" / "profiles.json").read_bytes())
 
+    def test_pending_ops_from_two_sets_are_merged(self):
+        root = Path(tempfile.mkdtemp())
+        for name, op in (("ws-a", "o1"), ("ws-p", "o2")):
+            (root / name).mkdir()
+            (root / name / "pending.json").write_text(json.dumps({"createdAt": "1", "gamePid": 1, "modsDir": "${INSTANCE}/mods",
+                                                                  "configDir": "${INSTANCE}/config", "ops": [{"type": "PATCH_JSON", "id": op}]}),
+                                                      encoding="utf-8")
+        report = written.compose(written.resolve(root), self.instance)
+        pending = json.loads((self.instance / "config" / "rigtune" / "pending.json").read_text(encoding="utf-8"))
+        self.assertEqual(["o1", "o2"], [op["id"] for op in pending["ops"]])
+        self.assertEqual(["ws-a", "ws-p"], report["pending.json"])
+
     def test_only_history_may_come_from_two_sets(self):
         root = Path(tempfile.mkdtemp())
         for name in ("ws-a", "ws-b"):
@@ -108,6 +120,29 @@ class InstanceStateTest(unittest.TestCase):
         self.assertEqual({"mods/e2e-seed-1.0.0.jar.rigtune-pending": "e2e-seed", "mods/e2e-named-1.0.0.jar.disabled": "e2e-named"},
                          state["jars"])
         self.assertEqual({"renderDistance": "8", "maxFps": "60"}, state["options"])
+        self.assertEqual({"performance": {"chunk_builder_threads": 2}}, state["sodium"])
+
+    def test_each_mod_ends_as_its_latest_applied_change_left_it(self):
+        instance = Path(tempfile.mkdtemp()) / "instance"
+        config = instance / "config" / "rigtune"
+        config.mkdir(parents=True)
+        (config / "history.json").write_text(json.dumps({"formatVersion": 1, "entries": [
+            entry("a", "1", [{"type": "file", "action": "disable", "modId": "m", "file": "m.jar", "status": "APPLIED"}]),
+            {"id": "u", "at": "2", "kind": "undo", "undoOf": "a", "changes": [
+                {"type": "file", "action": "enable", "modId": "m", "file": "m.jar", "status": "APPLIED"}]}]}), encoding="utf-8")
+        self.assertEqual({"mods/m.jar": "m"}, written.instance_state(instance)["jars"])
+
+    def test_config_files_for_applied_config_keys(self):
+        instance = Path(tempfile.mkdtemp()) / "instance"
+        config = instance / "config" / "rigtune"
+        config.mkdir(parents=True)
+        (config / "history.json").write_text(json.dumps({"formatVersion": 1, "entries": [
+            entry("a", "1", [{"type": "setting", "key": "sodium.performance.chunk_builder_threads", "before": "0", "after": "2", "status": "APPLIED"},
+                             {"type": "setting", "key": "sodium.performance.use_fog_occlusion", "before": "true", "after": "false", "status": "APPLIED"},
+                             {"type": "setting", "key": "iris.shaderPack", "before": "", "after": "x.zip", "status": "APPLIED"}])]}), encoding="utf-8")
+        state = written.instance_state(instance)
+        self.assertEqual({"performance": {"chunk_builder_threads": 2, "use_fog_occlusion": False}}, state["sodium"])
+        self.assertEqual({"shaderPack": "x.zip"}, state["iris"])
 
     def test_latest_applied_value_wins_and_reverted_changes_are_ignored(self):
         instance = Path(tempfile.mkdtemp()) / "instance"

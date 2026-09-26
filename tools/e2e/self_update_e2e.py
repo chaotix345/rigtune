@@ -336,7 +336,7 @@ class Run:
                 lines.append("-Drigtune.e2e.profilePlan=" + str(self.run_dir / "profile-plan.json"))
             (self.run_dir / "jvm-{}.txt".format(phase)).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-        code = self.gradle("gradle-driver.log", *self.driver_args(":{}:{}".format(self.mc, "e2eUndoDriverJar" if self.undo else "e2eDriverJar")))
+        code = self.gradle("gradle-driver.log", *self.driver_args(":{}:{}".format(self.mc, self.driver_jar_task())))
         if code != 0:
             raise SystemExit("building the driver failed; see " + str(self.run_dir / "gradle-driver.log"))
 
@@ -389,6 +389,9 @@ class Run:
         self.log("seeded from {}: {} carried-over op(s), jars {}".format(self.seed["dir"], len(self.carried),
                                                                          [j["path"] for j in self.seed["jars"]]))
 
+    def driver_jar_task(self):
+        return "e2eUndoDriverJar" if self.undo else "e2eDowngradeDriverJar" if self.downgrade else "e2eDriverJar"
+
     def driver_args(self, task):
         """The Gradle task plus the properties that pick and build this scenario's driver."""
         if self.undo:
@@ -411,6 +414,12 @@ class Run:
         shutil.copyfile(self.off_jar, self.mods / self.off_jar.name)
         with open(self.instance / "options.txt", "a", encoding="utf-8") as options:
             options.write("".join("{}:{}\n".format(k, v) for k, v in state["options"].items()))
+        # Config targets are files (ConfigTargets), so 0.3.0 reads and reverts these keys without the mods installed.
+        if state["sodium"]:
+            (self.instance / "config" / "sodium-options.json").write_text(json.dumps(state["sodium"], indent=2) + LF, encoding="utf-8", newline=LF)
+        if state["iris"]:
+            (self.instance / "config" / "iris.properties").write_text("".join("{}={}\n".format(k, v) for k, v in state["iris"].items()),
+                                                                     encoding="utf-8", newline=LF)
         self.seeded = seeded_state(self.instance)
         self.facts["writtenSets"] = [{"name": s.name, "placeholder": s.placeholder, "folder": self.scrub(str(s.folder))} for s in sets]
         (self.out / "seeded.json").write_text(json.dumps({"sets": self.facts["writtenSets"], "files": sources, "jars": state["jars"],
@@ -531,7 +540,7 @@ class Run:
     def launch(self, phase):
         self.log("launching the client, phase " + phase)
         started = time.time()
-        self.started[phase] = started
+        self.started[phase] = log_state(self.instance)
         code = self.gradle("gradle-{}.log".format(phase), *self.driver_args(":{}:e2eClient".format(self.mc)),
                            "-Pe2e.instance=" + str(self.instance), "-Pe2e.jvmArgsFile=" + str(self.run_dir / "jvm-{}.txt".format(phase)))
         self.facts["{}Seconds".format(phase)] = round(time.time() - started)
@@ -814,6 +823,8 @@ class Run:
                                  "; ".join("`{}` {}".format(s["name"], s.get("settings", "")) for s in self.profile_plan()["switches"]),
                                  self.facts.get("switchEntries")))
                 lines.append("- " + KNOWN_PROFILE_UNDO)
+                others = ["{}: {}".format(p, c.name) for p, cs in self.checks.items() if p != "profile-undo" for c in cs if not c.ok]
+                lines.append("- Failures other than that known phase: {}".format("; ".join(others) if others else "none"))
         else:
             lines += ["- Old: `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["old"]),
                       "- New (served by the fake Modrinth): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"])]
@@ -939,25 +950,42 @@ def seeded_state(instance):
     config = Path(instance) / "config" / "rigtune"
     entries = e2e_checks.history_entries(instance) or []
     pending = e2e_checks._load(config / "pending.json") or {}
-    undo_last = None
-    for entry in entries:
-        if entry.get("kind") != "undo" and any(c.get("status") in ("APPLIED", "STAGED") for c in entry.get("changes", [])):
-            undo_last = entry.get("id")
     return {"entries": entries, "pendingOps": pending.get("ops") or [],
             "newFiles": {n: e2e_checks.digest(config / n, "sha256") for n in written.NEW_FILES if (config / n).is_file()},
             "json": {n: e2e_checks._load(config / n) for n in written.KEPT if (config / n).is_file()},
-            "profiles": e2e_checks._load(config / "profiles.json"), "undoLast": undo_last}
+            "profiles": e2e_checks._load(config / "profiles.json"), "undoLast": undo_last_entry(entries)}
 
 
-def session_log(instance, since):
-    """The launch's client log: latest.log, after any log rotated during it (logs/*.log.gz newer than `since`; a run
-    across midnight UTC rotates latest.log)."""
+def undo_last_entry(entries):
+    """The entry Undo last picks (UndoPlanner.plan): the newest non-undo entry that no later undo undid (an undo of
+    "all" undoes every entry before it) and that still has a change applied or staged."""
+    for index in range(len(entries) - 1, -1, -1):
+        entry = entries[index]
+        later = entries[index + 1:]
+        undone = any(e.get("kind") == "undo" and e.get("undoOf") in (entry.get("id"), "all") for e in later)
+        if entry.get("kind") != "undo" and not undone and any(c.get("status") in ("APPLIED", "STAGED") for c in entry.get("changes") or []):
+            return entry.get("id")
+    return None
+
+
+def log_state(instance):
+    """Before a launch: the rotated logs there are, and whether a latest.log exists for log4j to roll over at startup."""
     logs = Path(instance) / "logs"
+    latest = logs / "latest.log"
+    return {"rotated": sorted(p.name for p in logs.glob("*.log.gz")) if logs.is_dir() else [],
+            "latest": latest.is_file() and latest.stat().st_size > 0}
+
+
+def session_log(instance, before):
+    """The launch's client log: logs rotated during it (log4j rolls latest.log over at local midnight), then latest.log.
+    The first new .gz is the previous launch's log, rolled over at startup, when there was one (log_state)."""
+    logs = Path(instance) / "logs"
+    new = sorted((p for p in logs.glob("*.log.gz") if p.name not in before["rotated"]), key=lambda p: (p.stat().st_mtime, p.name)) \
+        if logs.is_dir() else []
     text = ""
-    for rotated in sorted(logs.glob("*.log.gz")) if logs.is_dir() else []:
-        if rotated.stat().st_mtime >= since:
-            with gzip.open(rotated, "rt", encoding="utf-8", errors="replace") as f:
-                text += f.read()
+    for rotated in new[1:] if before["latest"] else new:
+        with gzip.open(rotated, "rt", encoding="utf-8", errors="replace") as f:
+            text += f.read()
     latest = logs / "latest.log"
     return text + (latest.read_text(encoding="utf-8", errors="replace") if latest.is_file() else "")
 

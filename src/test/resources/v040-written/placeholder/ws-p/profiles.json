@@ -11,7 +11,8 @@
       "mcVersion": "26.2",
       "settings": {
         "vanilla.renderDistance": "12",
-        "vanilla.maxFps": "120"
+        "vanilla.maxFps": "120",
+        "sodium.performance.chunk_builder_threads": "0"
       }
     }
   ],

@@ -68,6 +68,16 @@ def compose(sets, instance):
                               indent=2) + "\n"
             (config / name).write_text(fixtures.instantiate_json(text, instance) if fixtures.TOKEN in text else text,
                                        encoding="utf-8", newline="\n")
+        elif name == "pending.json" and len(provided) > 1:
+            # A profile switch stages config patches as well as ws-a's download: one plan with every set's ops.
+            plans = [json.loads(path.read_text(encoding="utf-8")) for _, path in provided]
+            merged = dict(plans[0], ops=[op for plan in plans for op in plan.get("ops") or []])
+            ids = [op.get("id") for op in merged["ops"]]
+            if len(set(ids)) != len(ids):
+                raise ValueError("pending.json op ids repeat across sets {}: {}".format([s for s, _ in provided], ids))
+            text = json.dumps(merged, indent=2) + "\n"
+            (config / name).write_text(fixtures.instantiate_json(text, instance) if fixtures.TOKEN in text else text,
+                                       encoding="utf-8", newline="\n")
         elif len(provided) > 1:
             raise ValueError("{} comes from more than one set: {}".format(name, [s for s, _ in provided]))
         else:
@@ -81,25 +91,45 @@ def compose(sets, instance):
 
 
 def instance_state(instance):
-    """What the instance must hold to match the composed journal: jars (path relative to the instance -> mod id) for
-    every pending ENABLE_FILE download and every applied file change, and options (options.txt key -> value) with the
-    latest applied value of every vanilla setting change."""
+    """What the instance must hold to match the composed journal: jars (path relative to the instance -> mod id), each
+    mod as its latest applied file change left it, plus every pending ENABLE_FILE download; options (options.txt key ->
+    value) and the sodium-options.json / iris.properties contents with the latest applied value of every vanilla,
+    sodium.* and iris.* setting change (other config keys have no file here)."""
     instance = Path(instance)
     config = instance / "config" / "rigtune"
-    jars = {}
-    options = {}
+    by_mod = {}
+    options, sodium, iris = {}, {}, {}
     history = config / HISTORY
     for entry in (json.loads(history.read_text(encoding="utf-8")).get("entries") or []) if history.is_file() else []:
         for change in entry.get("changes") or []:
             if change.get("status") != "APPLIED":
                 continue
-            if change.get("type") == "setting" and (change.get("key") or "").startswith("vanilla."):
-                options[change["key"][len("vanilla."):]] = change.get("after")
+            key = change.get("key") or ""
+            if change.get("type") == "setting" and key.startswith("vanilla."):
+                options[key[len("vanilla."):]] = change.get("after")
+            elif change.get("type") == "setting" and key.startswith("sodium."):
+                *path, leaf = key[len("sodium."):].split(".")
+                node = sodium
+                for part in path:
+                    node = node.setdefault(part, {})
+                node[leaf] = _json_value(change.get("after"))
+            elif change.get("type") == "setting" and key.startswith("iris."):
+                iris[key[len("iris."):]] = change.get("after")
             elif change.get("type") == "file" and change.get("file"):
                 name = change["file"] if change.get("action") == "enable" else change.get("resultFile") or change["file"] + ".disabled"
-                jars["mods/" + name] = change.get("modId")
+                by_mod[change.get("modId") or change["file"]] = ("mods/" + name, change.get("modId"))
+    jars = dict(by_mod.values())
     pending = config / "pending.json"
     for op in (json.loads(pending.read_text(encoding="utf-8")).get("ops") or []) if pending.is_file() else []:
         if op.get("type") == "ENABLE_FILE" and op.get("from"):
             jars[Path(op["from"]).resolve().relative_to(instance.resolve()).as_posix()] = op.get("modId")
-    return {"jars": jars, "options": options}
+    return {"jars": jars, "options": options, "sodium": sodium, "iris": iris}
+
+
+def _json_value(text):
+    """A setting value as Sodium's JSON has it: booleans and whole numbers unquoted, anything else a string."""
+    if text in ("true", "false"):
+        return text == "true"
+    if text is not None and text.lstrip("-").isdigit():
+        return int(text)
+    return text

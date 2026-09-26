@@ -732,15 +732,23 @@ def after_profile_check(instance, driver, entry_ids, originals, mods_before, sta
 # The released 0.3.0 starts on files 0.4 wrote (the v040-written fixture sets, composed by written.py), undoes the last
 # entry, applies a change of its own; then 0.4 starts again on what 0.3.0 left.
 
+# ERROR lines every offline E2E client logs (Mojang's services don't resolve; OSHI's Windows performance counters).
+HARMLESS_ERRORS = re.compile(r"Failed to fetch user properties|Failed to request yggdrasil public key|Failed to fetch Realms "
+                             r"feature flags|Couldn't connect to realms|Error reading performance data from registry")
+# WARN lines about RigTune's own files that mean a file wasn't read or kept.
+FILE_WARNINGS = re.compile(r"written by a newer RigTune|Could not (read|record|parse|load)|\.bad\b|unreadable", re.IGNORECASE)
+
+
 def rigtune_log_problems(text):
-    """A RigTune ERROR line, a stack frame in RigTune's code, or a refusal of a file a newer RigTune wrote."""
+    """Any ERROR line but the offline client's usual ones (the production log has no logger names), a stack frame in
+    RigTune's code (not the E2E drivers'), and any WARN line saying a file wasn't read, kept or accepted."""
     out = []
     for line in text.splitlines():
-        if "/ERROR]" in line and re.search(r"rigtune", line, re.IGNORECASE) and "RigTune E2E" not in line:
+        if "/ERROR]" in line and not HARMLESS_ERRORS.search(line):
             out.append(line)
         elif "at io.github.chaotix345.rigtune." in line and ".rigtune.e2e." not in line:
             out.append(line)
-        elif "written by a newer RigTune" in line:
+        elif "/WARN]" in line and FILE_WARNINGS.search(line):
             out.append(line)
     return list(dict.fromkeys(out))
 
@@ -788,13 +796,25 @@ def after_downgrade_old(instance, driver, seeded, old_version, off_name, log_tex
     by_id = {e.get("id"): e for e in entries}
     undo_of = seeded.get("undoLast")
     plan = driver.get("undoPlan") or {}
+    items = plan.get("items") or []
     undos = [e for e in entries if e.get("kind") == "undo" and e.get("undoOf") == undo_of and e.get("rigtuneVersion") == old_version]
-    left = [c.get("id") for c in (by_id.get(undo_of) or {}).get("changes", []) if c.get("status") in ("APPLIED", "STAGED")]
-    ok = (plan.get("undoOf") == undo_of and plan.get("problem") is None and bool(plan.get("items")) and len(undos) == 1
-          and all(c.get("status") == "APPLIED" for c in undos[0].get("changes", [])) and undo_of in by_id and not left)
+    changes = {c.get("id"): c for c in (by_id.get(undo_of) or {}).get("changes", [])}
+    done = [i for i in items if i.get("action") in ("REVERT", "DISCARD_STAGED")]
+    # A config key 0.3.0 can't change on this instance (e.g. DH's, with no DistantHorizons.toml) may be skipped with a
+    # reason; a vanilla key must be undone.
+    skipped_vanilla = [cid for i in items if i.get("action") == "SKIP" for cid in i.get("changeIds") or []
+                       if (changes.get(cid) or {}).get("key", "").startswith(VANILLA) or (changes.get(cid) or {}).get("type") == "file"]
+    not_undone = [cid for i in done for cid in i.get("changeIds") or [] if (changes.get(cid) or {}).get("status") not in ("REVERTED", "DISCARDED")]
+    ok = (plan.get("undoOf") == undo_of and plan.get("problem") is None and bool(done) and len(undos) == 1
+          and all(c.get("status") == "APPLIED" for c in undos[0].get("changes", [])) and undo_of in by_id and not skipped_vanilla
+          and not not_undone)
     checks.append(Check("Undo last reverted the newest undoable entry, recorded by 0.3.0", ok,
-                        "plan: {}; expected undoOf {}; 0.3.0 undo entries of it: {}; its changes still applied or staged: {}".format(
-                            plan, undo_of, [[(c.get("key") or c.get("file"), c.get("status")) for c in e.get("changes", [])] for e in undos], left)))
+                        "plan undoOf {} (expected {}), problem {}, items {}; 0.3.0 undo entries of it: {}; planned but not undone: {}; "
+                        "vanilla or mod changes skipped: {}".format(
+                            plan.get("undoOf"), undo_of, plan.get("problem"),
+                            [(i.get("action"), i.get("description") or i.get("changeIds"), i.get("reason")) for i in items],
+                            [[(c.get("key") or c.get("file"), c.get("status")) for c in e.get("changes", [])] for e in undos],
+                            not_undone, skipped_vanilla)))
     results = _results(instance)
     disabled = [r for r in results if (r.get("op") or {}).get("type") == "DISABLE_FILE" and _name((r.get("op") or {}).get("path")) == off_name]
     journaled = [c for e in entries if e.get("kind") == "apply" and e.get("rigtuneVersion") == old_version for c in e.get("changes", [])
@@ -806,14 +826,17 @@ def after_downgrade_old(instance, driver, seeded, old_version, off_name, log_tex
                                                                                          (mods / (off_name + ".disabled")).is_file(), len(journaled))))
     ops = seeded.get("pendingOps") or []
     status_by_id = {(r.get("op") or {}).get("id"): r.get("status") for r in results}
-    staged = [c for e in entries for c in e.get("changes", []) if c.get("opId") in {op.get("id") for op in ops}]
+    # Ops of the entry Undo last picked are dropped by it (their changes DISCARDED); the others are applied at exit.
+    seeded_target = next((e for e in seeded["entries"] if e.get("id") == undo_of), {})
+    dropped = {c.get("opId") for c in seeded_target.get("changes", []) if c.get("opId")}
+    want = {op.get("id"): ("DISCARDED" if op.get("id") in dropped else "APPLIED") for op in ops}
+    got = {cid: [c.get("status") for e in entries for c in e.get("changes", []) if c.get("opId") == cid] for cid in want}
     pending = instance / "config" / "rigtune" / "pending.json"
-    checks.append(Check("0.4's staged ops (with projectId) applied by 0.3.0's helper",
-                        bool(ops) and all(status_by_id.get(op.get("id")) == "OK" for op in ops) and bool(staged)
-                        and all(c.get("status") == "APPLIED" for c in staged) and not pending.exists(),
-                        "ops {} -> {}; their journal changes {}; pending.json left: {}".format(
-                            [op.get("id") for op in ops], [status_by_id.get(op.get("id")) for op in ops],
-                            [c.get("status") for c in staged], pending.exists())))
+    ok = (bool(ops) and not pending.exists() and all(got[i] and all(s == want[i] for s in got[i]) for i in want)
+          and all((status_by_id.get(i) == "OK") == (want[i] == "APPLIED") for i in want))
+    checks.append(Check("0.4's staged ops (with projectId): applied by 0.3.0's helper, or dropped by its Undo last", ok,
+                        "ops (expected, last-apply, journal): {}; pending.json left: {}".format(
+                            {i: (want[i], status_by_id.get(i), got[i]) for i in want}, pending.exists())))
     now = {name: digest(instance / "config" / "rigtune" / name, "sha256") if (instance / "config" / "rigtune" / name).is_file() else None
            for name in seeded["newFiles"]}
     changed = sorted(n for n in now if now[n] != seeded["newFiles"][n])
@@ -825,7 +848,7 @@ def after_downgrade_old(instance, driver, seeded, old_version, off_name, log_tex
 
 def _item_key(item):
     if isinstance(item, dict):
-        return item.get("id") or item.get("at") or json.dumps(item, sort_keys=True)
+        return item.get("id") or item.get("at") or item.get("startedAt") or json.dumps(item, sort_keys=True)
     return json.dumps(item, sort_keys=True)
 
 

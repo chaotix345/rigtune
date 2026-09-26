@@ -23,6 +23,14 @@
           "before": "120",
           "after": "60",
           "status": "APPLIED"
+        },
+        {
+          "id": "f6b0d429-a03e-4152-8e6f-a28b9067cf1a",
+          "type": "setting",
+          "key": "sodium.performance.chunk_builder_threads",
+          "before": "0",
+          "after": "2",
+          "status": "APPLIED"
         }
       ]
     }
