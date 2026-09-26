@@ -86,6 +86,20 @@ class HelperLauncherTest {
 		assertEquals("ours, updated", Files.readString(HelperLauncher.helperClasspath(helperDir, List.of(ours, gson)).get(0)));
 	}
 
+	// docs/v0.4 audit H4: the helper's record of groups it didn't finish is read by the helper this launch starts.
+	@Test
+	void keepsTheHelpersRecordOfUnfinishedGroups(@TempDir Path dir) throws Exception {
+		Path ours = Files.writeString(dir.resolve("rigtune.jar"), "ours");
+		Path helperDir = Files.createDirectories(HelperLauncher.helperDir(dir.resolve("config")));
+		Path record = Files.writeString(helperDir.resolve("unfinished-groups.json"), "{}");
+		Files.writeString(helperDir.resolve("stale.jar"), "old");
+
+		HelperLauncher.helperClasspath(helperDir, List.of(ours));
+
+		assertTrue(Files.exists(record));
+		assertFalse(Files.exists(helperDir.resolve("stale.jar")));
+	}
+
 	// AC3.3: 0.1.0 left its own helper copies in config/rigtune/helper/; 0.2 replaces them.
 	@Test
 	void theV010HelperCopiesAreReplaced(@TempDir Path dir) throws Exception {
