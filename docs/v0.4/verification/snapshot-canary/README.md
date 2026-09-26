@@ -3,8 +3,8 @@
 Workflow: `.github/workflows/snapshot-canary.yml` (SPEC item 1, AC1.2-AC1.4). A new workflow can't be
 dispatched until it is on the default branch, so the self-test used a temporary
 `push: branches: [feat/v04-foundation]` trigger instead of `workflow_dispatch` (commits `4e5b7d3`,
-removed in `3425a65`; again in `726f82b`/`c46a841` for the forced ids, removed in the commit that
-adds this line). Every run below is a push run on `feat/v04-foundation`. Auto-resolve picked
+removed in `3425a65`; again in `726f82b`/`c46a841` for the forced ids, removed in
+`a3fe2ad`). Every run below is a push run on `feat/v04-foundation`. Auto-resolve picked
 `latest.snapshot` from piston-meta: `26.4-snapshot-1` (`latest.release` 26.3).
 
 | AC1.3 | Run | Commit | Result |
@@ -25,7 +25,7 @@ read-only Gradle cache, the issue body text). (d) used the final file, which dif
 only in the issue title: "Snapshot canary: Minecraft snapshot build is failing", as SPEC item 1
 specifies, instead of "Snapshot canary: RigTune fails to build against the newest Minecraft
 snapshot" (issue #9's title). The title is the `ISSUE_TITLE` env value, and the find/comment/close
-logic reads it from there. `forced mc` came from a temporary expression default rather than
+logic reads it from there. The forced ids came from a temporary expression default rather than
 `-f mc=`; both set the same `INPUT_MC` env var the resolve step reads.
 
 Checked locally only (Git Bash, the extracted `run:` scripts, a stub `python` or `gh` first on
