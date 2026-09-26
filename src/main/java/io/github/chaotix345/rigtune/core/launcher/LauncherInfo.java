@@ -24,6 +24,8 @@ public record LauncherInfo(Launcher launcher, @Nullable Boolean memoryOverride) 
 	public @Nullable String nameKey() {
 		return switch (launcher) {
 			case PRISM -> "rigtune.launcher.name.prism";
+			case MULTIMC -> "rigtune.launcher.name.multimc";
+			case GDLAUNCHER -> "rigtune.launcher.name.gdlauncher";
 			case MODRINTH_APP -> "rigtune.launcher.name.modrinth_app";
 			case ATLAUNCHER -> "rigtune.launcher.name.atlauncher";
 			case CURSEFORGE -> "rigtune.launcher.name.curseforge";
@@ -39,6 +41,9 @@ public record LauncherInfo(Launcher launcher, @Nullable Boolean memoryOverride) 
 	public @Nullable String stepsKey() {
 		return switch (launcher) {
 			case PRISM -> "rigtune.launcher.steps.prism";
+			// docs/v0.4/SPEC.md 2g: the instance's own memory setting (launcher-steps.md, from each launcher's source).
+			case MULTIMC -> "rigtune.launcher.steps.multimc";
+			case GDLAUNCHER -> "rigtune.launcher.steps.gdlauncher";
 			case MODRINTH_APP -> "rigtune.launcher.steps.modrinth_app";
 			case ATLAUNCHER -> "rigtune.launcher.steps.atlauncher";
 			case CURSEFORGE -> Boolean.FALSE.equals(memoryOverride) ? "rigtune.launcher.steps.curseforge.global" : "rigtune.launcher.steps.curseforge.pack";

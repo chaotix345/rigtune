@@ -4,6 +4,9 @@ package io.github.chaotix345.rigtune.core.launcher;
 // UI uses LauncherInfo's translation keys.
 public enum Launcher {
 	PRISM("Prism Launcher"),
+	// docs/v0.4/SPEC.md 2g: MultiMC (PolyMC lands here too, launcher-steps.md finding 6) and GDLauncher (legacy and Carbon).
+	MULTIMC("MultiMC"),
+	GDLAUNCHER("GDLauncher"),
 	MODRINTH_APP("Modrinth App"),
 	ATLAUNCHER("ATLauncher"),
 	CURSEFORGE("CurseForge"),
