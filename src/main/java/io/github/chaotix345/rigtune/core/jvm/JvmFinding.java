@@ -6,9 +6,9 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 
 // One note about the Java arguments (docs/v0.4/SPEC.md 6): the kind and the flag's name as RigTune shows it, built only
-// from a -XX name (sign kept, value dropped), -Xmn/-Xmx or RigTune's own -D marker names. Never a value or a path.
+// from a -XX name (sign kept, value dropped), -Xmn/-Xms/-Xmx or RigTune's own -D marker names. Never a value or a path.
 public record JvmFinding(Kind kind, String flag) {
-	private static final Pattern NAME = Pattern.compile("-XX:[+-]?[A-Za-z][A-Za-z0-9_]*|-Xm[nx]|-D[a-z][a-z.]*");
+	private static final Pattern NAME = Pattern.compile("-XX:[+-]?[A-Za-z][A-Za-z0-9_]*|-Xm[nsx]|-D[a-z][a-z.]*");
 
 	public enum Kind {
 		// getVMOption finds no such option: this Java ignored it (e.g. ZGenerational, removed in Java 24).

@@ -145,8 +145,7 @@ public final class ConditionEvaluator {
 	}
 
 	public static boolean knownFlag(String flag) {
-		return FLAGS.contains(flag) || flag.startsWith(SODIUM_WORKAROUND_FLAG) && flag.length() > SODIUM_WORKAROUND_FLAG.length()
-				|| JvmFacts.RULE_FLAGS.contains(flag);
+		return FLAGS.contains(flag) || flag.startsWith(SODIUM_WORKAROUND_FLAG) && flag.length() > SODIUM_WORKAROUND_FLAG.length();
 	}
 
 	// An OR over the listed values: TRUE if a known value matches; otherwise UNKNOWN if the subject is unknown or a value

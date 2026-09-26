@@ -523,7 +523,8 @@ class KnowledgeV2ScenarioTest {
 		for (Fixtures.Hw hw : List.of(Fixtures.userRig(), Fixtures.lowEndLaptop(), oldNvidia, hd4000, tier1Laptop())) {
 			for (List<String> mods : List.of(List.of("sodium"), DH_MODS, List.of("sodium", "iris", "distanthorizons"), List.of("fabric-api"))) {
 				Set<String> fired = advice(run(hw, mods, Map.of("sodium.performance.chunk_build_defer_mode", "ZERO_FRAMES")));
-				for (Set<String> ids : List.of(jvm, drivers, stutter)) {
+				// jvm-*: replaced by WS-J's scenario tests (core/jvm/JvmScenarioTest, AC6.3); these fixtures carry no jvm- facts.
+				for (Set<String> ids : List.of(drivers, stutter)) {
 					assertTrue(fired.stream().noneMatch(ids::contains), hw.gpu.renderer() + " " + mods + ": " + fired);
 				}
 			}

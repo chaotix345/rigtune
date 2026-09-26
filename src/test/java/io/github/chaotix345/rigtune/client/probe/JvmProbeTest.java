@@ -44,6 +44,12 @@ class JvmProbeTest {
 				4L << 30, -1, "25.0.4", "Test");
 	}
 
+	// Review L6: "25.0.3", as SPEC 6's share line shows it, not "25.0.3+9-LTS".
+	@Test
+	void theVersionWithoutBuildOrOpt() {
+		assertTrue(JvmProbe.javaVersion().matches("\\d+(\\.\\d+)*"), JvmProbe.javaVersion());
+	}
+
 	@Test
 	void readsTheRunningJvm() {
 		JvmSnapshot snapshot = assertDoesNotThrow(JvmProbe::read);
@@ -76,20 +82,28 @@ class JvmProbeTest {
 				report.findings());
 		assertSame(report, JvmProbe.current());
 		JvmProbe.inject(null);
+		assertSame(JvmReport.UNAVAILABLE, JvmProbe.current(), "review L1: never the injected report after the seam is cleared");
 		JvmReport real = JvmProbe.probeAsync().get(10, TimeUnit.SECONDS);
 		assertFalse(real.findings().contains(new JvmFinding(JvmFinding.Kind.IGNORED, "-XX:+ZGenerational")));
 	}
 
+	// Review L3: a failed probe still shows the version, with the check off (not "Checking Java..." forever).
 	@Test
-	void anyFailureIsUnavailable() throws Exception {
+	void anyFailureTurnsTheCheckOff() throws Exception {
 		ExecutorService executor = Executors.newSingleThreadExecutor();
 		try {
-			assertSame(JvmReport.UNAVAILABLE, JvmProbe.start(() -> {
-				throw new IllegalStateException("boom");
-			}, executor).get(5, TimeUnit.SECONDS));
-			assertSame(JvmReport.UNAVAILABLE, JvmProbe.start(() -> {
-				throw new NoClassDefFoundError("com/sun/management/HotSpotDiagnosticMXBean");
-			}, executor).get(5, TimeUnit.SECONDS));
+			for (Throwable failure : List.of(new IllegalStateException("boom"), new NoClassDefFoundError("com/sun/management/HotSpotDiagnosticMXBean"))) {
+				JvmReport report = JvmProbe.start(() -> {
+					if (failure instanceof Error e) {
+						throw e;
+					}
+					throw (RuntimeException) failure;
+				}, executor).get(5, TimeUnit.SECONDS);
+				assertFalse(report.available());
+				assertEquals(Set.of(), report.facts());
+				assertEquals(JvmProbe.javaVersion(), report.javaVersion());
+				assertNotNull(report.javaVersion());
+			}
 		} finally {
 			executor.shutdownNow();
 		}

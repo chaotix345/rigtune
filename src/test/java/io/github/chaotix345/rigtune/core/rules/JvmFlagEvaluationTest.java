@@ -75,11 +75,9 @@ class JvmFlagEvaluationTest {
 	@Test
 	void theVocabulary() {
 		for (String flag : JvmFacts.RULE_FLAGS) {
-			assertTrue(ConditionEvaluator.knownFlag(flag), flag);
 			assertTrue(flag.startsWith(JvmFacts.PREFIX), flag);
 		}
-		assertFalse(ConditionEvaluator.knownFlag(JvmFacts.PROBED));
-		assertFalse(ConditionEvaluator.knownFlag("jvm-xms-large"));
+		assertFalse(JvmFacts.RULE_FLAGS.contains(JvmFacts.PROBED));
 		assertFalse(ConditionEvaluator.FLAGS.stream().anyMatch(flag -> flag.startsWith(JvmFacts.PREFIX)),
 				"the v1/v2 vocabulary the updater mirrors stays without jvm- flags");
 	}

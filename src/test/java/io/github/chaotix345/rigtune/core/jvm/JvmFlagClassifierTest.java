@@ -148,6 +148,7 @@ class JvmFlagClassifierTest {
 		assertEquals(Set.of(SERVER_SET, XMX_DUPLICATE), kinds(report), report.findings().toString());
 		List<String> server = report.flagsFor("advice:jvm-server-flags");
 		assertTrue(server.containsAll(List.of("-Dusing.aikars.flags", "-Daikars.new.flags", "-XX:G1NewSizePercent", "-XX:SurvivorRatio")), server.toString());
+		assertTrue(server.containsAll(List.of("-Xms", "-XX:+AlwaysPreTouch", "-XX:+DisableExplicitGC")), "what keeps memory reserved, too: " + server);
 		assertTrue(report.facts().containsAll(Set.of(JvmFacts.PROBED, JvmFacts.SERVER_FLAGS, "jvm-gc-g1", JvmFacts.GC_TYPED, JvmFacts.XMX_DUPLICATE)));
 		assertFalse(report.facts().contains(JvmFacts.EXPLICIT_GC_DISABLED), "DisableExplicitGC is part of the server set's note");
 		assertClean(report);
@@ -217,6 +218,7 @@ class JvmFlagClassifierTest {
 		VmOptions ergonomicSerial = name -> switch (name) {
 			case "UseSerialGC" -> VmOptions.Lookup.found("true", VmOptions.Origin.ERGONOMIC);
 			case "UseG1GC", "UseZGC", "UseShenandoahGC", "UseParallelGC" -> VmOptions.Lookup.found("false", VmOptions.Origin.DEFAULT);
+			case "MaxHeapSize" -> VmOptions.Lookup.found("268435456", VmOptions.Origin.ERGONOMIC);
 			default -> VmOptions.Lookup.MISSING;
 		};
 		JvmReport serial = JvmFlagClassifier.classify(new JvmSnapshot(List.of(), ergonomicSerial, List.of("Copy", "MarkSweepCompact"), 256 * MIB, -1,
@@ -255,7 +257,8 @@ class JvmFlagClassifierTest {
 	@Test
 	void launcherInjectedFlagsAreNeverFindings() {
 		// Even a JVM that didn't know them: HeapDumpPath (version JSON) and MetaspaceSize (ATLauncher) are the launcher's.
-		VmOptions nothingKnown = name -> name.equals("UseG1GC") ? VmOptions.Lookup.found("true", VmOptions.Origin.ERGONOMIC) : VmOptions.Lookup.MISSING;
+		VmOptions nothingKnown = name -> name.equals("UseG1GC") || name.equals("MaxHeapSize") ? VmOptions.Lookup.found("true", VmOptions.Origin.ERGONOMIC)
+				: VmOptions.Lookup.MISSING;
 		JvmReport report = JvmFlagClassifier.classify(new JvmSnapshot(List.of(HEAP_DUMP, "-XX:MetaspaceSize=256M"), nothingKnown,
 				List.of("G1 Young Generation"), 4096 * MIB, -1, "25", "x"));
 		assertEquals(List.of(), report.findings());
@@ -287,9 +290,36 @@ class JvmFlagClassifierTest {
 		assertTrue(report.available());
 	}
 
+	// Review M1: a diagnostic bean that can't find MaxHeapSize (every HotSpot has it) isn't a working one: no facts.
+	@Test
+	void aBeanThatAnswersNothingIsNotAProbe() {
+		List<String> args = modrinth("-XX:+UseZGC", "-XX:+ZGenerational");
+		for (VmOptions broken : List.<VmOptions>of(name -> VmOptions.Lookup.MISSING, name -> VmOptions.Lookup.FAILED, name -> {
+			throw new IllegalStateException("stub");
+		})) {
+			JvmReport report = JvmFlagClassifier.classify(new JvmSnapshot(args, broken, List.of("ZGC Minor Cycles"), 6144 * MIB, -1, "21", "x"));
+			assertFalse(report.available());
+			assertEquals(Set.of(), report.facts());
+			assertEquals(List.of(), report.findings());
+			assertEquals(JvmCollector.ZGC, report.collector(), "still shown from the bean names");
+		}
+	}
+
+	@Test
+	void argumentFileOptionsAreNeverFindings() {
+		VmOptions vm = name -> switch (name) {
+			case "UseG1GC" -> VmOptions.Lookup.found("true", VmOptions.Origin.ERGONOMIC);
+			case "MaxHeapSize" -> VmOptions.Lookup.found("4294967296", VmOptions.Origin.ERGONOMIC);
+			default -> VmOptions.Lookup.MISSING;
+		};
+		JvmReport report = JvmFlagClassifier.classify(new JvmSnapshot(List.of("-XX:Flags=.hotspotrc", "-XX:VMOptionsFile=C:/x/opts.txt"), vm,
+				List.of("G1 Young Generation"), 4096 * MIB, -1, "25", "x"));
+		assertEquals(List.of(), report.findings());
+	}
+
 	@Test
 	void unknownCollectorIsOther() {
-		VmOptions none = name -> VmOptions.Lookup.MISSING;
+		VmOptions none = name -> name.equals("MaxHeapSize") ? VmOptions.Lookup.found("1", VmOptions.Origin.ERGONOMIC) : VmOptions.Lookup.MISSING;
 		JvmReport report = JvmFlagClassifier.classify(new JvmSnapshot(List.of(), none, List.of("Mystery Collector"), 4096 * MIB, -1, "27", "x"));
 		assertEquals(JvmCollector.OTHER, report.collector());
 		assertEquals(Set.of(JvmFacts.PROBED, "jvm-gc-other"), report.facts());
@@ -297,11 +327,12 @@ class JvmFlagClassifierTest {
 
 	@Test
 	void collectorFromBeansWhenTheOptionsCantTell() {
-		VmOptions failing = name -> VmOptions.Lookup.FAILED;
+		VmOptions failing = name -> name.equals("MaxHeapSize") ? VmOptions.Lookup.found("1", VmOptions.Origin.ERGONOMIC) : VmOptions.Lookup.FAILED;
 		JvmReport report = JvmFlagClassifier.classify(new JvmSnapshot(List.of("-XX:+UseZGC"), failing,
 				List.of("ZGC Minor Cycles", "ZGC Minor Pauses"), 4096 * MIB, -1, "25", "x"));
 		assertEquals(JvmCollector.ZGC, report.collector());
 		assertTrue(report.collectorTyped(), "typed on the command line");
+		assertTrue(report.available());
 	}
 
 	@Test
@@ -312,7 +343,7 @@ class JvmFlagClassifierTest {
 				List.of("-Xmn1G", "-XX:+DisableExplicitGC", "-Xmx2G", "-Xmx3G"), AIKAR)) {
 			seen.addAll(classify(args).facts());
 		}
-		VmOptions none = name -> VmOptions.Lookup.MISSING;
+		VmOptions none = name -> name.equals("MaxHeapSize") ? VmOptions.Lookup.found("1", VmOptions.Origin.ERGONOMIC) : VmOptions.Lookup.MISSING;
 		seen.addAll(JvmFlagClassifier.classify(new JvmSnapshot(List.of(), none, List.of("?"), 1, -1, "27", "x")).facts());
 		Set<String> expected = new java.util.HashSet<>(JvmFacts.RULE_FLAGS);
 		expected.add(JvmFacts.PROBED);

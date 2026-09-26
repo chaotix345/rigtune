@@ -14,8 +14,11 @@ import java.util.Set;
 // bean or the GC beans nothing is concluded: no findings and no facts, so no jvm- rule can fire.
 public final class JvmFlagClassifier {
 	private static final long MIB = 1024L * 1024L;
-	// Added by launchers or the version JSON, never typed by the player (research §1.1): never checked.
-	static final Set<String> LAUNCHER_FLAGS = Set.of("HeapDumpPath", "MetaspaceSize");
+	// Never checked: added by launchers or the version JSON, never typed by the player (research §1.1), and the argument-file
+	// options, which the JVM reads while parsing and getVMOption doesn't know.
+	static final Set<String> NOT_CHECKED = Set.of("HeapDumpPath", "MetaspaceSize", "Flags", "VMOptionsFile");
+	// An option every HotSpot JVM has: a diagnostic bean that can't find it isn't a working one (OpenJ9 may register a stub).
+	static final String ALWAYS_PRESENT = "MaxHeapSize";
 	static final List<String> AIKAR_MARKERS = List.of("using.aikars.flags", "aikars.new.flags");
 	// Aikar's distinctive flags (research §5.2); the launchers' own default set shares only G1NewSizePercent with them.
 	static final List<String> AIKAR_DISTINCTIVE = List.of("G1NewSizePercent", "G1MaxNewSizePercent", "G1MixedGCLiveThresholdPercent",
@@ -31,7 +34,7 @@ public final class JvmFlagClassifier {
 		Collector running = collector(options, snapshot.gcBeanNames(), args);
 		long maxHeapMb = snapshot.maxHeapBytes() > 0 ? snapshot.maxHeapBytes() / MIB : -1;
 		long initialHeapMb = snapshot.initialHeapBytes() > 0 ? snapshot.initialHeapBytes() / MIB : -1;
-		if (options == null || snapshot.gcBeanNames().isEmpty()) {
+		if (options == null || snapshot.gcBeanNames().isEmpty() || !lookup(options, ALWAYS_PRESENT).found()) {
 			return new JvmReport(false, snapshot.javaVersion(), snapshot.vendor(), running.collector, running.typed, maxHeapMb, initialHeapMb,
 					List.of(), Set.of());
 		}
@@ -104,7 +107,7 @@ public final class JvmFlagClassifier {
 	// value = overridden (UseNUMA, UseLargePages on Windows). A failed lookup concludes nothing.
 	private static void ignoredOrOverridden(JvmArgs args, VmOptions options, List<JvmFinding> findings) {
 		for (JvmArgs.XxFlag flag : args.xx().values()) {
-			if (LAUNCHER_FLAGS.contains(flag.name())) {
+			if (NOT_CHECKED.contains(flag.name())) {
 				continue;
 			}
 			VmOptions.Lookup lookup = lookup(options, flag.name());
@@ -117,7 +120,9 @@ public final class JvmFlagClassifier {
 		}
 	}
 
-	// Aikar's markers, or at least 4 of its distinctive flags: each marker and distinctive flag found is one finding.
+	// Aikar's markers, or at least 4 of its distinctive flags (by name, so the >12 GB variant and sets based on it count
+	// too): each marker and distinctive flag found is one finding, and so are the set's flags that keep memory reserved
+	// (-Xms, AlwaysPreTouch) and DisableExplicitGC, so the found line lists what to remove.
 	private static boolean serverSet(JvmArgs args, List<JvmFinding> findings) {
 		List<String> markers = AIKAR_MARKERS.stream().filter(args.propertyKeys()::contains).toList();
 		List<JvmArgs.XxFlag> distinctive = AIKAR_DISTINCTIVE.stream().map(args::xx).filter(f -> f != null).toList();
@@ -126,6 +131,15 @@ public final class JvmFlagClassifier {
 		}
 		markers.forEach(m -> findings.add(new JvmFinding(JvmFinding.Kind.SERVER_SET, "-D" + m)));
 		distinctive.forEach(f -> findings.add(new JvmFinding(JvmFinding.Kind.SERVER_SET, f.display())));
+		if (args.initialHeapBytes() > 0) {
+			findings.add(new JvmFinding(JvmFinding.Kind.SERVER_SET, "-Xms"));
+		}
+		for (String name : List.of("AlwaysPreTouch", "DisableExplicitGC")) {
+			JvmArgs.XxFlag flag = args.xx(name);
+			if (flag != null && Boolean.TRUE.equals(flag.enabled())) {
+				findings.add(new JvmFinding(JvmFinding.Kind.SERVER_SET, flag.display()));
+			}
+		}
 		return true;
 	}
 

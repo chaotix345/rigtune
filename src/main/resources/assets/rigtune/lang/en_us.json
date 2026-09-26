@@ -112,7 +112,7 @@
 	"rigtune.jvm.finding.ignored": "this Java doesn't have this option and ignores it (a future Java may refuse to start with it)",
 	"rigtune.jvm.finding.no_gc": "a collector that never frees memory: the game runs out of memory and crashes",
 	"rigtune.jvm.finding.overridden": "this Java doesn't accept this setting here and uses its own value",
-	"rigtune.jvm.finding.server_set": "part of Paper's server flags (Aikar's flags)",
+	"rigtune.jvm.finding.server_set": "part of Paper's server flags (Aikar's flags) or a set based on them",
 	"rigtune.jvm.finding.stop_the_world_gc": "a collector Java's documentation describes for work where long pauses are acceptable",
 	"rigtune.jvm.finding.xmx_duplicate": "set more than once; Java uses the last one",
 	"rigtune.jvm.finding.young_gen_fixed": "fixes the young generation's size, which turns off G1's pause-time control (Java's documentation)",

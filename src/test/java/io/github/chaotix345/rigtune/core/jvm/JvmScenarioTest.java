@@ -1,25 +1,24 @@
 package io.github.chaotix345.rigtune.core.jvm;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.core.Fixtures;
-import io.github.chaotix345.rigtune.core.RepoFiles;
 import io.github.chaotix345.rigtune.core.launcher.Launcher;
 import io.github.chaotix345.rigtune.core.launcher.LauncherAdvice;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.Goal;
+import io.github.chaotix345.rigtune.core.model.GpuClass;
+import io.github.chaotix345.rigtune.core.model.GpuVendor;
 import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
+import io.github.chaotix345.rigtune.core.model.TierResult;
 import io.github.chaotix345.rigtune.core.recommend.Recommender;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.rules.RulesLoader;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.nio.file.Files;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -29,14 +28,15 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 // AC6.3 (docs/v0.4/SPEC.md 6 with the "Launcher steps" amendment): real command lines through the classifier, its facts
-// into the profile, the rules through the Recommender: each jvm-* advice fires for its case with its found flags and the
-// launcher's Java-arguments steps (none for an unknown launcher), and Java's and the launchers' defaults fire nothing.
-// Until the bundled rules carry the jvm-* advice (WS-R), they run with the fixture advice of
-// src/test/resources/jvm/jvm-advice-fixture.json appended (SPEC 6's conditions, without requires).
+// into the profile, the bundled rules (r14+, each jvm-* entry with requires ["jvm-flags"]) through the Recommender: each
+// jvm-* advice fires for its case with its found flags and the launcher's Java-arguments steps (none for an unknown
+// launcher), and Java's and the launchers' defaults fire nothing. On 0.2.0/0.3.0 (the pinned v030 classes) the entries
+// are skipped by `requires` (LegacyConditionFailClosedTest) and, even if they weren't, fail closed without the facts.
 class JvmScenarioTest {
 	private static final long MIB = 1024L * 1024L;
 	private static final List<String> MOJANG_G1_SET = List.of("-XX:+UnlockExperimentalVMOptions", "-XX:+UseG1GC", "-XX:G1NewSizePercent=20",
@@ -48,17 +48,14 @@ class JvmScenarioTest {
 			"-XX:G1RSetUpdatingPauseTimePercent=5", "-XX:SurvivorRatio=32", "-XX:+PerfDisableSharedMem", "-XX:MaxTenuringThreshold=1",
 			"-Dusing.aikars.flags=https://mcflags.emc.gs", "-Daikars.new.flags=true");
 
-	static RulesDocument rules() throws IOException {
-		JsonObject bundled = JsonParser.parseString(Files.readString(RepoFiles.resolve("src/main/resources/rigtune/rules-v2.json"))).getAsJsonObject();
-		JsonArray advice = bundled.getAsJsonArray("advice");
-		boolean hasJvm = advice.asList().stream().anyMatch(a -> a.getAsJsonObject().get("id").getAsString().startsWith(JvmFacts.PREFIX));
-		if (!hasJvm) {
-			JsonObject fixture = JsonParser.parseString(Files.readString(RepoFiles.resolve("src/test/resources/jvm/jvm-advice-fixture.json"))).getAsJsonObject();
-			for (JsonElement entry : fixture.getAsJsonArray("advice")) {
-				advice.add(entry);
-			}
+	static RulesDocument rules() {
+		return RulesLoader.loadBundled();
+	}
+
+	static String bundledJson() throws IOException {
+		try (InputStream in = RulesLoader.class.getResourceAsStream(RulesLoader.BUNDLED_RESOURCE)) {
+			return new String(in.readAllBytes(), StandardCharsets.UTF_8);
 		}
-		return RulesLoader.parse(bundled.toString());
 	}
 
 	private record Case(String name, long ramMb, List<String> args, List<String> toolOptions, Set<String> expected) {
@@ -124,7 +121,7 @@ class JvmScenarioTest {
 	}
 
 	@Test
-	void eachJvmAdviceFiresForItsCaseWithItsLines() throws IOException {
+	void eachJvmAdviceFiresForItsCaseWithItsLines() {
 		RulesDocument rules = rules();
 		for (Case c : cases()) {
 			JvmReport jvm = classify(c);
@@ -150,7 +147,7 @@ class JvmScenarioTest {
 	}
 
 	@Test
-	void withoutTheHotSpotBeanNothingFires() throws IOException {
+	void withoutTheHotSpotBeanNothingFires() {
 		RulesDocument rules = rules();
 		List<String> args = modrinth(AIKAR.toArray(String[]::new));
 		JvmReport openJ9 = JvmFlagClassifier.classify(new JvmSnapshot(args, null, List.of("scavenge"), 4096 * MIB, -1, "21", "Eclipse OpenJ9"));
@@ -160,10 +157,42 @@ class JvmScenarioTest {
 	}
 
 	@Test
-	void everyFixtureAdviceIsCovered() throws IOException {
+	void everyBundledJvmAdviceIsCoveredAndGated() {
 		Set<String> covered = new TreeSet<>();
 		cases().forEach(c -> covered.addAll(c.expected()));
-		Set<String> ids = rules().advice.stream().map(a -> a.id).filter(id -> id.startsWith(JvmFacts.PREFIX)).collect(Collectors.toCollection(TreeSet::new));
+		Set<String> ids = new TreeSet<>();
+		for (RulesDocument.AdviceRule rule : rules().advice) {
+			if (rule.id.startsWith(JvmFacts.PREFIX)) {
+				ids.add(rule.id);
+				assertEquals(List.of("jvm-flags"), rule.requires, rule.id);
+			}
+		}
+		assertEquals(9, ids.size(), ids.toString());
 		assertEquals(ids, covered);
+	}
+
+	// 0.2.0/0.3.0 never compute a jvm- fact, and their evaluator (the pinned v030 copy) doesn't know the names, so no jvm-*
+	// condition is ever TRUE there, even without the `requires` gate (over RAM/heap points that pass every numeric part).
+	@Test
+	void theLegacyEvaluatorNeverFiresAJvmCondition() throws IOException {
+		var legacy = io.github.chaotix345.rigtune.v030.core.rules.RulesLoader.parse(bundledJson());
+		int checked = 0;
+		for (var rule : legacy.advice) {
+			if (!rule.id.startsWith(JvmFacts.PREFIX)) {
+				continue;
+			}
+			checked++;
+			assertFalse(io.github.chaotix345.rigtune.v030.core.recommend.Recommender.supported(rule.requires), rule.id);
+			for (long[] ramHeap : new long[][] {{8192, 2048}, {8192, 4096}, {16384, 2048}, {16384, 4096}, {32768, 6144}}) {
+				Fixtures.Hw hw = Fixtures.userRig();
+				hw.ramMb = ramHeap[0];
+				hw.heapMb = ramHeap[1];
+				var ctx = new io.github.chaotix345.rigtune.v030.core.rules.EvalContext(hw.build(), new GpuClass(GpuVendor.AMD, false, 5, null),
+						new TierResult(3, 3, 3, 3, 3, "gpu"), Goal.BALANCED, Set.of("sodium"), Map.of(), new SettingsSnapshot(Map.of()));
+				assertNotEquals(io.github.chaotix345.rigtune.v030.core.rules.Truth.TRUE,
+						io.github.chaotix345.rigtune.v030.core.rules.ConditionEvaluator.evaluate(rule.when, ctx), rule.id + " at " + ramHeap[0] + "/" + ramHeap[1]);
+			}
+		}
+		assertEquals(9, checked);
 	}
 }

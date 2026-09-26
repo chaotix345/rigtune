@@ -46,8 +46,9 @@ import java.util.Set;
 // (1) the running JVM through the real probe: in CI plain G1 chosen by Java, no argument notes, no jvm- advice; run with
 // "-XX:+UseZGC -XX:+ZGenerational -Dusing.aikars.flags=x" the notes come from the running JVM. (2) An injected snapshot
 // (the probe's test seam) with those arguments and brand theseus through the real controller: the facts reach the
-// profile, the screen lists the notes, and the jvm-* advice (the bundled rules' once they carry it; a canned report
-// otherwise) shows "Found in your Java arguments" with the Modrinth App's Java-arguments steps. Screenshots at 3 sizes.
+// profile, the bundled rules fire jvm-ignored-flags, the screen lists the notes, and the jvm-* advice shows "Found in your
+// Java arguments" with the Modrinth App's Java-arguments steps (the real report when it also has jvm-server-flags, which
+// needs 16 GB of RAM or less; a canned report with both otherwise). Screenshots at 3 sizes.
 public class JvmGameTest implements FabricClientGameTest {
 	private static final int[][] SIZES = {{1280, 720, 2}, {640, 480, 2}, {854, 480, 2}};
 	private static final String MODRINTH_STEPS = "In the Modrinth App: this instance → Instance settings (gear) → Sync overrides → turn on Custom Java arguments";
@@ -163,11 +164,11 @@ public class JvmGameTest implements FabricClientGameTest {
 		Set<String> flags = real.report().hardware().flags();
 		check(flags.containsAll(Set.of(JvmFacts.PROBED, "jvm-gc-zgc", JvmFacts.GC_TYPED, JvmFacts.IGNORED_FLAGS, JvmFacts.SERVER_FLAGS)), "facts: " + flags);
 
-		// The bundled rules' jvm-* advice once the rules carry it; a canned report until then.
+		// The bundled rules' jvm-* advice (AC6.4 over the real rules); jvm-server-flags only fires with 16 GB of RAM or less.
 		List<Recommendation> bundled = real.report().recommendations().stream().filter(LauncherAdvice::isJvmAdvice).toList();
 		RigTune.LOGGER.info("JvmGameTest: the bundled rules fire {}", bundled.stream().map(Recommendation::id).toList());
-		boolean fromRules = bundled.stream().anyMatch(r -> r.id().equals("advice:jvm-ignored-flags"))
-				&& bundled.stream().anyMatch(r -> r.id().equals("advice:jvm-server-flags"));
+		check(bundled.stream().anyMatch(r -> r.id().equals("advice:jvm-ignored-flags")), "the bundled rules fire jvm-ignored-flags: " + bundled);
+		boolean fromRules = bundled.stream().anyMatch(r -> r.id().equals("advice:jvm-server-flags"));
 		RigTuneController shown = fromRules ? real : new CannedController(real, cannedReport(real.report()));
 
 		openMain(context, shown);
@@ -216,11 +217,9 @@ public class JvmGameTest implements FabricClientGameTest {
 				List.of("ZGC Minor Cycles", "ZGC Minor Pauses", "ZGC Major Cycles", "ZGC Major Pauses"), 4L << 30, 256L << 20, "25.0.3", "Azul Systems, Inc.");
 	}
 
-	// The real report plus two jvm-* advice entries (until the bundled rules carry them).
+	// The real report plus jvm-server-flags (the bundled rules give it only with 16 GB of RAM or less).
 	private static Report cannedReport(Report base) {
 		List<Recommendation> recs = new ArrayList<>(base.recommendations());
-		recs.add(new Recommendation("advice:jvm-ignored-flags", Category.ADVICE, Impact.LOW, "Remove Java arguments Java ignores",
-				"Java ignores some of your Java arguments; ZGenerational was removed in Java 24, and a future Java won't start with it.", new Action.None(), false));
 		recs.add(new Recommendation("advice:jvm-server-flags", Category.ADVICE, Impact.LOW, "Paper's server flags keep all of Minecraft's memory reserved",
 				"In RigTune's tests they gave the same FPS and 1% lows as Java's defaults.", new Action.None(), false));
 		return new Report(base.hardware(), base.gpuClass(), base.tier(), base.goal(), recs, base.rulesRevision(), base.rulesSource(), base.online(),

@@ -22,7 +22,7 @@ public final class JvmService {
 	public JvmReport report() {
 		JvmReport current = JvmProbe.current();
 		if (current.javaVersion() == null) {
-			JvmProbe.probeAsync();
+			JvmProbe.ensureStarted();
 		}
 		return current;
 	}

@@ -38,6 +38,12 @@ public final class JvmProbe {
 	}
 
 	public static synchronized CompletableFuture<JvmReport> probeAsync() {
+		ensureStarted();
+		return withTimeout(probe, TIMEOUT_MS);
+	}
+
+	// Starts the once-per-session probe if none is running or finished; no waiting.
+	public static synchronized void ensureStarted() {
 		if (probe == null) {
 			JvmSnapshot seam = injected;
 			CompletableFuture<JvmReport> started = start(seam != null ? () -> seam : JvmProbe::read, Probes.EXECUTOR);
@@ -51,7 +57,6 @@ public final class JvmProbe {
 				}
 			});
 		}
-		return withTimeout(probe, TIMEOUT_MS);
 	}
 
 	// The latest finished report (UNAVAILABLE until the first probe finishes).
@@ -62,12 +67,13 @@ public final class JvmProbe {
 	/** Game tests only: the next probe classifies this snapshot instead of the running JVM (null: the real one again). */
 	public static synchronized void inject(@Nullable JvmSnapshot snapshot) {
 		injected = snapshot;
-		probe = null;
+		reset();
 	}
 
-	/** Game tests only: the next probe reads again. */
+	/** Game tests only: the next probe reads again (until then there's no report, never a stale one). */
 	public static synchronized void reset() {
 		probe = null;
+		last = JvmReport.UNAVAILABLE;
 	}
 
 	// The report's facts added to the profile's flags (HardwareProbe's one call).
@@ -85,10 +91,32 @@ public final class JvmProbe {
 		try {
 			return CompletableFuture.supplyAsync(() -> classify(read.get()), executor).exceptionally(t -> {
 				RigTune.LOGGER.warn("RigTune: the Java check is off ({})", t.getClass().getSimpleName());
-				return JvmReport.UNAVAILABLE;
+				return failed();
 			});
 		} catch (RuntimeException e) {
-			return CompletableFuture.completedFuture(JvmReport.UNAVAILABLE);
+			return CompletableFuture.completedFuture(failed());
+		}
+	}
+
+	// After a failure the screen says the check is off (not "Checking…" forever): the version and vendor, no facts.
+	static JvmReport failed() {
+		return new JvmReport(false, javaVersion(), property("java.vendor"), null, false, -1, -1, List.of(), Set.of());
+	}
+
+	// "25.0.3": the version numbers without the build and opt parts (Runtime.version() prints "25.0.3+9-LTS").
+	static @Nullable String javaVersion() {
+		try {
+			return String.join(".", Runtime.version().version().stream().map(String::valueOf).toList());
+		} catch (Throwable t) {
+			return property("java.version");
+		}
+	}
+
+	private static @Nullable String property(String name) {
+		try {
+			return System.getProperty(name);
+		} catch (Throwable t) {
+			return null;
 		}
 	}
 
@@ -139,19 +167,7 @@ public final class JvmProbe {
 			// unknown
 		}
 		long initialHeap = initialHeap(options);
-		String version = null;
-		try {
-			version = Runtime.version().toString();
-		} catch (Throwable ignored) {
-			// unknown
-		}
-		String vendor = null;
-		try {
-			vendor = System.getProperty("java.vendor");
-		} catch (Throwable ignored) {
-			// unknown
-		}
-		return new JvmSnapshot(arguments, options, beans, maxHeap, initialHeap, version, vendor);
+		return new JvmSnapshot(arguments, options, beans, maxHeap, initialHeap, javaVersion(), property("java.vendor"));
 	}
 
 	private static long initialHeap(@Nullable VmOptions options) {
