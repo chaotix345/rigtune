@@ -16,11 +16,14 @@ import java.util.Set;
 // The renames of each group a helper run started (docs/v0.4/design/ws-g3.md, audit H4). A group's entry is written just
 // before its first rename and stays until last-apply.json holds the group's results; one left half-applied (a kill, a
 // failed rollback) stays until a later run finishes it or rolls it back. So the next run knows exactly which renames to
-// finish or put back, and what a redo reports as done. A new file in config/rigtune/helper/ (HelperLauncher keeps it):
-// 0.1.0-0.3.0 never read it, and their HelperLauncher deletes it. Helper-safe (core and Gson only) and best effort: an
-// unreadable file counts as empty, and a failed write loses only the record (retried at the next change), never a rename.
+// finish or put back, and what a redo reports as done. A new file, config/rigtune/unfinished-groups.json: 0.1.0-0.3.0
+// never read it, and it isn't in config/rigtune/helper/, which their HelperLauncher empties (review-8 CR-1). 0.4.0 dev
+// builds kept it there; that copy is still read and is deleted at the next write. Helper-safe (core and Gson only) and
+// best effort: an unreadable file counts as empty, and a failed write loses only the record (retried at the next
+// change), never a rename.
 public final class UnfinishedGroups {
 	static final String FILE_NAME = "unfinished-groups.json";
+	private static final String LEGACY_NAME = "helper/" + FILE_NAME;
 
 	// op: the op's id; from/to: the rename's absolute paths (a disable's `to` is the .disabled name it was given).
 	public record Rename(String op, String from, String to) {
@@ -33,28 +36,39 @@ public final class UnfinishedGroups {
 	}
 
 	private final Path file;
+	private final Path legacy;
 	private final Map<String, List<Rename>> groups = new LinkedHashMap<>();
 	private final Set<String> finished = new HashSet<>();
-	// The file doesn't hold `groups`: it was unreadable, or a write failed.
+	// The file doesn't hold `groups`: it was unreadable, a write failed, or the record is still at the legacy place.
 	private boolean dirty;
 
-	private UnfinishedGroups(Path file) {
+	private UnfinishedGroups(Path file, Path legacy) {
 		this.file = file;
+		this.legacy = legacy;
 	}
 
 	static Path file(Path configDir) {
+		return configDir.resolve("rigtune").resolve(FILE_NAME);
+	}
+
+	// Where 0.4.0 dev builds before review-8 kept it (HelperLauncher still keeps a file of this name there).
+	static Path legacyFile(Path configDir) {
 		return HelperLauncher.helperDir(configDir).resolve(FILE_NAME);
 	}
 
 	static UnfinishedGroups load(Path configDir) {
-		UnfinishedGroups out = new UnfinishedGroups(file(configDir));
-		if (!Files.isRegularFile(out.file)) {
+		UnfinishedGroups out = new UnfinishedGroups(file(configDir), legacyFile(configDir));
+		boolean hasLegacy = Files.isRegularFile(out.legacy);
+		// Written again at the next change (put or prune), so the legacy copy goes.
+		out.dirty = hasLegacy;
+		Path source = Files.isRegularFile(out.file) ? out.file : hasLegacy ? out.legacy : null;
+		if (source == null) {
 			return out;
 		}
 		try {
-			out.groups.putAll(read(out.file));
+			out.groups.putAll(read(source));
 		} catch (IOException | RuntimeException e) {
-			ApplyHelper.log("Could not read " + out.file + ": " + e);
+			ApplyHelper.log("Could not read " + (source == out.file ? FILE_NAME : LEGACY_NAME) + ": " + e.getClass().getSimpleName());
 			out.dirty = true;
 		}
 		return out;
@@ -64,8 +78,9 @@ public final class UnfinishedGroups {
 	// rename. Read only; empty when there is none or it can't be read.
 	public static List<Rename> recorded(Path configDir) {
 		Path file = file(configDir);
+		Path source = Files.isRegularFile(file) ? file : legacyFile(configDir);
 		try {
-			return Files.isRegularFile(file) ? read(file).values().stream().flatMap(List::stream).toList() : List.of();
+			return Files.isRegularFile(source) ? read(source).values().stream().flatMap(List::stream).toList() : List.of();
 		} catch (IOException | RuntimeException e) {
 			return List.of();
 		}
@@ -140,9 +155,10 @@ public final class UnfinishedGroups {
 				groups.forEach((group, renames) -> entries.add(new Entry(group, renames)));
 				AtomicFiles.writeString(file, PendingActions.GSON.toJson(new Doc(entries)));
 			}
+			Files.deleteIfExists(legacy);
 			dirty = false;
 		} catch (IOException | RuntimeException e) {
-			ApplyHelper.log("Could not update " + file + ": " + e);
+			ApplyHelper.log("Could not update " + FILE_NAME + ": " + e.getClass().getSimpleName());
 			dirty = true;
 		}
 	}

@@ -312,6 +312,11 @@ class ApplyGroupsTest {
 	}
 
 	private Path unfinished() {
+		return config.resolve("rigtune").resolve("unfinished-groups.json");
+	}
+
+	// Where 0.4.0 dev builds before review-8 kept the record.
+	private Path unfinishedInHelperFolder() {
 		return HelperLauncher.helperDir(config).resolve("unfinished-groups.json");
 	}
 
@@ -585,6 +590,48 @@ class ApplyGroupsTest {
 		ApplyResult result = run(executor((a, b) -> false), update());
 
 		assertEquals(List.of(Status.OK, Status.OK), statuses(result));
+		assertFalse(Files.exists(unfinished()));
+	}
+
+	// review-8 CR-1: 0.1.0-0.3.0's HelperLauncher deletes every other file in config/rigtune/helper/ when it launches its
+	// helper, so the record lives in config/rigtune/, which no older version cleans.
+	@Test
+	void theRecordLivesOutsideTheHelperFolder() throws IOException {
+		assertThrows(Killed.class, () -> run(killedAt(newPending), update()));
+
+		assertEquals(unfinished(), UnfinishedGroups.file(config));
+		assertTrue(Files.exists(unfinished()));
+		assertFalse(UnfinishedGroups.file(config).startsWith(HelperLauncher.helperDir(config)));
+		assertFalse(Files.exists(unfinishedInHelperFolder()));
+	}
+
+	@Test
+	void aRecordADevBuildLeftInTheHelperFolderIsStillReadAndThenMoved() throws IOException {
+		List<Op> ops = update();
+		assertThrows(Killed.class, () -> run(killedAt(newPending), ops));
+		Files.createDirectories(unfinishedInHelperFolder().getParent());
+		Files.move(unfinished(), unfinishedInHelperFolder());
+		assertEquals(2, UnfinishedGroups.recorded(config).size());
+
+		ApplyResult next = executor((from, to) -> from.equals(newPending)).run(PendingActions.load(pending), pending);
+
+		assertEquals(List.of(Status.FAILED, Status.FAILED), statuses(next));
+		assertEquals(List.of("sodium-0.7.0.jar", "sodium-0.7.1.jar.rigtune-pending"), modsListing(), "rolled back by the old record");
+		assertFalse(Files.exists(unfinishedInHelperFolder()));
+		assertFalse(Files.exists(unfinished()));
+	}
+
+	@Test
+	void aStaleRecordInTheHelperFolderIsDroppedWhenTheNewOneExists() throws IOException {
+		List<Op> ops = update();
+		assertThrows(Killed.class, () -> run(killedAt(newPending), ops));
+		Files.createDirectories(unfinishedInHelperFolder().getParent());
+		Files.writeString(unfinishedInHelperFolder(), "{\"groups\":[]}");
+
+		executor((a, b) -> false).run(PendingActions.load(pending), pending);
+
+		assertEquals(List.of("sodium-0.7.0.jar.disabled", "sodium-0.7.1.jar"), modsListing());
+		assertFalse(Files.exists(unfinishedInHelperFolder()));
 		assertFalse(Files.exists(unfinished()));
 	}
 
