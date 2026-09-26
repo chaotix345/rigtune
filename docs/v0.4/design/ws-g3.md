@@ -158,3 +158,36 @@ Why this order is safe:
 - Helper writes: "pending.json loses its abandoned ops, then last-apply.json is written, then the done ops leave
   pending.json, then the journal."
 - HelperLauncher: "…other files in the folder are deleted, except `unfinished-groups.json`."
+
+## Review-8 follow-up (fix-8a, docs/v0.4/design/fix-8a.md)
+
+**CR-1: the record moved to `config/rigtune/unfinished-groups.json`.** 0.1.0-0.3.0's HelperLauncher empties
+`config/rigtune/helper/` (every file but its classpath copies) whenever it launches its helper, so a downgrade to 0.3.0
+lost the record, and after the upgrade back the new helper could no longer roll back the earlier run's renames. No older
+version lists or deletes anything else under `config/rigtune/` (checked with `git grep` at v0.1.0, v0.2.0 and v0.3.0:
+their only folder listings are the mods folder, `mods/update/` and `helper/`). A record a 0.4.0 dev build left in
+`helper/` is still read when the new file is missing, and is deleted at the next write (every helper run writes once
+it loaded one); HelperLauncher still keeps a file of that name in `helper/` so that copy survives until then.
+The "Compatibility" bullet above ("0.1.0-0.3.0 clients delete it ... harmless") is superseded by this.
+
+Residual, stated precisely (pinned by HelperCompat030Test with the verbatim 0.3.0 HelperLauncher and ApplyExecutor):
+0.3.0's own helper never reads the record. On a group the new helper was killed in (old jar renamed to `.disabled`,
+new jar still a download):
+- It finds the old jar gone ("already gone", SKIPPED_ALREADY_DONE), so that op leaves pending.json, and it tries the
+  enable. If the enable works, the group ends applied, as intended; the new helper later prunes the stale record.
+- If the enable fails, the old jar stays disabled under 0.3.0 and only the enable stays pending (0.3.0's pre-0.4
+  behaviour; it abandons the enable and retires the download after its third failed run). After an upgrade back, the
+  new helper can't match the recorded disable to an op any more (its op left pending.json), so it can't put the old jar
+  back either; it retries the enable as 0.3.0 did.
+- If 0.3.0 refuses the whole group (e.g. the download is no longer a mod jar) or its helper doesn't run the group at
+  all, both ops stay pending, the record now survives, and the new helper rolls the group back after the upgrade
+  (`aGroupTheNewHelperWasKilledInIsStillRolledBackAfterA030ClientRanItsHelper`, red with the record in `helper/`).
+
+**AH-1: Undo and Discard pending read the record.** `UnfinishedGroups.recorded(configDir)` (public, read-only, quiet)
+gives the game the renames the helper started; `PartlyApplied.groups(ops, files, recorded)` counts a group as half
+applied when a recorded rename of one of its ops is in effect (exactly the recorded new name in the mods folder, the
+old one gone) while another file op of the group is left (an enable's target missing, a disable's jar still there).
+So a helper killed between two renames (attempts still 0) is seen: Staging.discard keeps the group, and Undo last /
+Undo this / the confirm-time recheck skip it with `waits_partly`; the next exit finishes it or rolls it back. This
+closes WS-G2's M2 residual ("a helper killed mid-group leaves attempts at 0, so PartlyApplied doesn't see it"). The
+attempts > 0 path for a failed rollback is unchanged.
