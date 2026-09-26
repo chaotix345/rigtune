@@ -10,9 +10,11 @@ import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.model.TierResult;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
+import io.github.chaotix345.rigtune.core.stutter.StutterFacts;
 import net.fabricmc.loader.api.SemanticVersion;
 import net.fabricmc.loader.api.Version;
 import net.fabricmc.loader.api.metadata.version.VersionPredicate;
+import org.jspecify.annotations.Nullable;
 
 import java.util.Arrays;
 import java.util.List;
@@ -100,6 +102,8 @@ public final class ConditionEvaluator {
 		t = and(t, () -> c.modVersion == null ? TRUE : modVersions(c.modVersion, ctx));
 		t = and(t, () -> c.mcVersionRange == null ? TRUE : mcVersionRange(c.mcVersionRange, hw.mcVersion()));
 		t = and(t, () -> c.settingIs == null ? TRUE : settingIs(c.settingIs, ctx.settings()));
+		t = and(t, () -> c.driverVersion == null ? TRUE : driverVersion(c.driverVersion, ctx));
+		t = and(t, () -> hasStutterKey(c) ? stutter(c, ctx.stutter()) : TRUE);
 		t = and(t, () -> c.anyOf == null ? TRUE : anyOf(c.anyOf, ctx));
 		return and(t, () -> c.not == null ? TRUE : node(c.not, ctx).not());
 	}
@@ -283,6 +287,24 @@ public final class ConditionEvaluator {
 					: Truth.of(SettingValues.same(settings.get(entry.getKey()), entry.getValue())));
 		}
 		return t;
+	}
+
+	// v0.4 contract stub (docs/v0.4/SPEC.md 9): filled by WS-R. UNKNOWN until then, so no rule using it can fire.
+	private static Truth driverVersion(Map<String, String> wanted, EvalContext ctx) {
+		return UNKNOWN;
+	}
+
+	public static boolean hasStutterKey(Condition c) {
+		return c.stutterShareAtLeast != null || c.stutterTaggedShareAtLeast != null || c.gcFullPausesAtLeast != null
+				|| c.gcStallsAtLeast != null || c.gcExplicitPausesAtLeast != null || c.liveSetPercentAtLeast != null
+				|| c.heapRaiseRoomMbAtLeast != null || c.cpuContentionShareAtLeast != null || c.spikesPerMinuteAtLeast != null
+				|| c.gcCollector != null;
+	}
+
+	// v0.4 contract stub (docs/v0.4/SPEC.md 5): filled by WS-R (the stutter keys against StutterFacts). Without facts (the
+	// main list) every stutter key must stay UNKNOWN; until the stub is filled it is UNKNOWN with facts too.
+	private static Truth stutter(Condition c, @Nullable StutterFacts facts) {
+		return UNKNOWN;
 	}
 
 	private static Truth mcVersionRange(String predicateText, String mcVersion) {

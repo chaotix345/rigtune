@@ -59,7 +59,23 @@ Open RigTune from any of these:
 
 Review the list, untick anything you don't want, and press **Apply** (or **Preview** first, to see exactly what it would change). If mods or config changed, restart Minecraft; the next launch tells you what was applied. Made a mistake? Open **History…** on the RigTune screen: **Undo this** reverts the selected entry, **Undo last** the last apply and **Undo all** everything RigTune has done, immediately or after a restart. Something wrong? **Report a problem** starts a GitHub issue with your report (see the [FAQ](#what-does-report-a-problem-send)).
 
-To run the benchmark, press **Benchmark…** on the RigTune screen. Pick a scene — your current world, or the dedicated benchmark world (no save needed, reachable from the title screen) — and **Tune** or **Measure**. It takes about a minute. Press Esc to cancel; your settings are always restored. In your own world, Tune tests at most 8 render distances above your current one: every distance it tests makes the game load, generate and save that much more of the world.
+To run the benchmark, press **Tools…** on the RigTune screen, then **Benchmark…**. Pick a scene — your current world, or the dedicated benchmark world (no save needed, reachable from the title screen) — and **Tune** or **Measure**. It takes about a minute. Press Esc to cancel; your settings are always restored. In your own world, Tune tests at most 8 render distances above your current one: every distance it tests makes the game load, generate and save that much more of the world.
+
+## Profiles and share codes
+
+<!-- v0.4: filled by the Profiles workstream (docs/v0.4/SPEC.md 4, 12). -->
+
+## Stutter Doctor
+
+<!-- v0.4: filled by the Stutter Doctor workstream (docs/v0.4/SPEC.md 5). -->
+
+## JVM & memory advice
+
+<!-- v0.4: filled by the JVM workstream (docs/v0.4/SPEC.md 6). -->
+
+## RigTune's own footprint
+
+<!-- v0.4: filled by the footprint workstream (docs/v0.4/SPEC.md 10). -->
 
 ## Privacy
 
@@ -93,6 +109,10 @@ rules/REVIEW.md               new upstream mods and problems for a maintainer to
 ```
 
 The v2 format (and how it stays safe for 0.1.x readers) is documented in [docs/RULES_SCHEMA.md](docs/RULES_SCHEMA.md). See [tools/README.md](tools/README.md) for the maintainer workflow. Pull requests that improve the knowledge are very welcome.
+
+## What has been verified
+
+<!-- v0.4: filled by the rules workstream (docs/v0.4/SPEC.md 2l, external review 3). -->
 
 ## FAQ
 

@@ -15,11 +15,15 @@ import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.TierResult;
+import io.github.chaotix345.rigtune.core.notice.Notice;
+import io.github.chaotix345.rigtune.core.notice.NoticeBoard;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -29,6 +33,9 @@ public final class StubController implements RigTuneController {
 	private Goal goal = Goal.BALANCED;
 	private @Nullable Report report;
 	private int benchmarkRequests;
+	private final List<Notice> notices = new ArrayList<>();
+	private final Set<String> dismissed = new HashSet<>();
+	private final List<String> noticeActions = new ArrayList<>();
 
 	public StubController(Supplier<@Nullable HardwareProfile> hardware) {
 		this.hardware = hardware;
@@ -63,6 +70,31 @@ public final class StubController implements RigTuneController {
 
 	public int benchmarkRequests() {
 		return benchmarkRequests;
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md C3/C4): canned notices for the notice line; actions and dismissals are recorded.
+	public void setNotices(List<Notice> canned) {
+		notices.clear();
+		notices.addAll(canned);
+	}
+
+	@Override
+	public List<Notice> notices() {
+		return NoticeBoard.select(notices, dismissed).visible();
+	}
+
+	@Override
+	public void noticeAction(String key, String actionId) {
+		noticeActions.add(key + ":" + actionId);
+	}
+
+	@Override
+	public void dismissNotice(String key) {
+		dismissed.add(key);
+	}
+
+	public List<String> noticeActions() {
+		return List.copyOf(noticeActions);
 	}
 
 	@Override

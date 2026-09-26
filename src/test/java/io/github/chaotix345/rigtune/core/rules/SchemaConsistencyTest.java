@@ -43,6 +43,7 @@ class SchemaConsistencyTest {
 			    return v
 			print(json.dumps(plain({
 			    "v1ConditionKeys": u.V1_CONDITION_KEYS, "v2ConditionKeys": u.V2_CONDITION_KEYS,
+			    "stutterConditionKeys": u.STUTTER_CONDITION_KEYS,
 			    "booleanKeys": u.BOOLEAN_CONDITION_KEYS, "int32Keys": u.INT32_CONDITION_KEYS,
 			    "listKeys": u.LIST_CONDITION_KEYS, "stringKeys": u.STRING_CONDITION_KEYS,
 			    "v1RuleFields": u.V1_RULE_FIELDS, "v2OnlyRuleFields": u.V2_ONLY_RULE_FIELDS,
@@ -137,7 +138,14 @@ class SchemaConsistencyTest {
 	@Test
 	void conditionKeysMatch() {
 		assertEquals(fields(io.github.chaotix345.rigtune.v010.core.rules.Condition.class), set("v1ConditionKeys"));
-		assertEquals(new TreeSet<>(ConditionAdapterFactory.KNOWN_KEYS.keySet()), set("v2ConditionKeys"));
+		// v0.4: the stutter keys are Condition fields too, but the updater allows them only inside stutterAdvice.
+		Set<String> v2AndStutter = new TreeSet<>(set("v2ConditionKeys"));
+		v2AndStutter.addAll(set("stutterConditionKeys"));
+		assertEquals(new TreeSet<>(ConditionAdapterFactory.KNOWN_KEYS.keySet()), v2AndStutter);
+		Set<String> overlap = new TreeSet<>(set("v2ConditionKeys"));
+		overlap.retainAll(set("stutterConditionKeys"));
+		assertEquals(Set.of(), overlap);
+		Assertions.assertTrue(set("v2ConditionKeys").contains("driverVersion") && !set("v1ConditionKeys").contains("driverVersion"));
 		assertEquals(keysOfType(Boolean.class), set("booleanKeys"));
 		assertEquals(keysOfType(Integer.class), set("int32Keys"));
 		Set<String> stringLists = keysOfType(List.class);

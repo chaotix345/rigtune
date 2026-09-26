@@ -12,6 +12,9 @@ import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.notice.Notice;
+import io.github.chaotix345.rigtune.core.notice.NoticeAction;
+import io.github.chaotix345.rigtune.core.notice.NoticeBoard;
 import io.github.chaotix345.rigtune.core.report.IssueLink;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
@@ -55,6 +58,12 @@ public class RigTuneScreen extends Screen {
 	private static final int COLOR_NEUTRAL = 0xFF8A8A8A;
 	private static final int COLOR_OK = 0xFF7FE07F;
 	private static final int COLOR_LAUNCHER = 0xFFA8E0B0;
+	private static final int COLOR_NOTICE = 0xFFFFE08A;
+	private static final int NOTICE_ROW = 16;
+	private static final int NOTICE_BUTTON = 14;
+	// Narrower than this (scaled px), the notice line is the message plus one "…" button to NoticeScreen (review X-M2).
+	private static final int NOTICE_INLINE_WIDTH = 400;
+	private static final int MIN_NOTICE_MESSAGE = 80;
 
 	private final @Nullable Screen parent;
 	private final RigTuneController controller;
@@ -77,6 +86,12 @@ public class RigTuneScreen extends Screen {
 	private @Nullable Map<String, String> captions;
 	private @Nullable Component seenControllerStatus;
 	private LauncherInfo shownLauncher = LauncherInfo.UNKNOWN;
+	// v0.4 (docs/v0.4/SPEC.md C3): the one notice line, read on init/rebuild only.
+	private NoticeBoard.Selection notices = NoticeBoard.select(List.of(), Set.of());
+	private int noticeIndex;
+	private @Nullable Notice shownNotice;
+	private int noticeY;
+	private int noticeTextRight;
 
 	public RigTuneScreen(@Nullable Screen parent, RigTuneController controller) {
 		super(Component.translatable("rigtune.screen.title"));
@@ -122,6 +137,7 @@ public class RigTuneScreen extends Screen {
 		}
 		headerTop = 30;
 		headerBottom = headerTop + Math.max(1, headerLines.size()) * LINE + 2;
+		headerBottom += noticeLine(headerBottom);
 		int listTop = headerBottom + 4;
 
 		List<Button> buttons = new ArrayList<>();
@@ -131,6 +147,9 @@ public class RigTuneScreen extends Screen {
 		// v0.3 (review X-M2): Undo last and Undo all live in the History screen.
 		buttons.add(Button.builder(Component.translatable("rigtune.history.open"), b -> minecraft.gui.setScreen(new HistoryScreen(this, controller)))
 				.tooltip(Tooltip.create(Component.translatable("rigtune.history.open.tooltip"))).build());
+		// v0.4 (C3, X3, plan review X-M2): the one hub button, in place of Benchmark… (now the hub's first entry); features
+		// live behind it, never in this footer.
+		buttons.add(toolsButton());
 		if (controller.hasPendingChanges()) {
 			Button discard = Button.builder(Component.translatable("rigtune.screen.discard"), b -> {
 				status = controller.discardPending();
@@ -139,7 +158,6 @@ public class RigTuneScreen extends Screen {
 			discard.setTooltip(Tooltip.create(Component.translatable("rigtune.screen.discard.tooltip")));
 			buttons.add(discard);
 		}
-		buttons.add(Button.builder(Component.translatable("rigtune.screen.benchmark_menu"), b -> minecraft.gui.setScreen(new BenchmarkMenuScreen(this, controller))).build());
 		buttons.add(Button.builder(Component.translatable("rigtune.screen.rescan"), b -> {
 			status = null;
 			controller.rescan();
@@ -266,6 +284,112 @@ public class RigTuneScreen extends Screen {
 		minecraft.keyboardHandler.setClipboard(text);
 		status = Component.translatable("rigtune.report.copied", text.length());
 		ConfirmLinkScreen.confirmLinkNow(this, IssueLink.uri(controller.reportVersions(), text));
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md C3): Tools… and the notice line. Features fill NoticeSources and ToolsScreen entries, not
+	// this screen.
+
+	private Button toolsButton() {
+		return Button.builder(Component.translatable("rigtune.tools.open"), b -> minecraft.gui.setScreen(new ToolsScreen(this, controller)))
+				.tooltip(Tooltip.create(Component.translatable("rigtune.tools.open.tooltip"))).build();
+	}
+
+	// One row under the header lines: the notice's message (its detail as the tooltip), then at most 2 action buttons, a
+	// dismiss button when dismissible, and "+N more", which cycles. On a narrow screen: the message and one "…" button
+	// that opens NoticeScreen (the actions, dismiss and the other notices), also used when the inline buttons would leave
+	// the message less than MIN_NOTICE_MESSAGE px. Returns the height used (0 without a notice).
+	private int noticeLine(int y) {
+		notices = NoticeBoard.select(controller.notices(), Set.of());
+		noticeIndex = notices.visible().isEmpty() ? 0 : noticeIndex % notices.visible().size();
+		shownNotice = notices.at(noticeIndex);
+		if (shownNotice == null) {
+			noticeIndex = 0;
+			return 0;
+		}
+		Notice notice = shownNotice;
+		noticeY = y;
+		List<Button> buttons = new ArrayList<>();
+		if (width >= NOTICE_INLINE_WIDTH) {
+			inlineNoticeButtons(notice, buttons);
+			int total = buttons.stream().mapToInt(b -> b.getWidth() + GAP).sum();
+			if (right - total >= left + MIN_NOTICE_MESSAGE) {
+				return placeNoticeButtons(buttons, y);
+			}
+			buttons.clear();
+		}
+		Button open = noticeButton(Component.translatable("rigtune.notice.open"), b -> minecraft.gui.setScreen(new NoticeScreen(this, controller)));
+		open.setTooltip(Tooltip.create(Component.translatable("rigtune.notice.open.tooltip")));
+		buttons.add(open);
+		return placeNoticeButtons(buttons, y);
+	}
+
+	private void inlineNoticeButtons(Notice notice, List<Button> buttons) {
+		for (NoticeAction action : notice.actions().subList(0, Math.min(2, notice.actions().size()))) {
+			buttons.add(noticeButton(Texts.component(action.label()), b -> {
+				controller.noticeAction(notice.key(), action.id());
+				if (minecraft.gui.screen() == this) {
+					rebuildWidgets();
+				}
+			}));
+		}
+		if (notice.dismissible()) {
+			Button dismiss = noticeButton(Component.translatable("rigtune.notice.dismiss"), b -> {
+				controller.dismissNotice(notice.key());
+				rebuildWidgets();
+			});
+			dismiss.setTooltip(Tooltip.create(Component.translatable("rigtune.notice.dismiss.tooltip")));
+			buttons.add(dismiss);
+		}
+		if (notices.others() > 0) {
+			Button more = noticeButton(Component.translatable("rigtune.notice.more", notices.others()), b -> {
+				// Kept in range, so a dismissal shows the notice that moves into the dismissed one's place.
+				noticeIndex = (noticeIndex + 1) % notices.visible().size();
+				rebuildWidgets();
+			});
+			more.setTooltip(Tooltip.create(Component.translatable("rigtune.notice.more.tooltip")));
+			buttons.add(more);
+		}
+	}
+
+	private int placeNoticeButtons(List<Button> buttons, int y) {
+		int x = right;
+		for (Button button : buttons.reversed()) {
+			x -= button.getWidth();
+			button.setPosition(x, y + (NOTICE_ROW - NOTICE_BUTTON) / 2);
+			addRenderableWidget(button);
+			x -= GAP;
+		}
+		noticeTextRight = x;
+		return NOTICE_ROW;
+	}
+
+	private Button noticeButton(Component label, Button.OnPress onPress) {
+		return Button.builder(label, onPress).size(font.width(label) + 10, NOTICE_BUTTON).build();
+	}
+
+	private void extractNotice(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+		if (shownNotice == null) {
+			return;
+		}
+		Component message = Texts.component(shownNotice.message());
+		int maxWidth = Math.max(0, noticeTextRight - left);
+		int y = noticeY + (NOTICE_ROW - 8) / 2;
+		graphics.text(font, font.width(message) <= maxWidth ? message.getVisualOrderText() : ComponentRenderUtils.clipText(message, font, maxWidth),
+				left, y, COLOR_NOTICE, false);
+		if (mouseX >= left && mouseX < left + maxWidth && mouseY >= y && mouseY < y + 9) {
+			graphics.setTooltipForNextFrame(font, shownNotice.detail() == null ? message
+					: message.copy().append(CommonComponents.NEW_LINE).append(Texts.component(shownNotice.detail())), mouseX, mouseY);
+		}
+	}
+
+	/** v0.4 (C3): the notice the line shows, or null (for the game tests). */
+	public @Nullable Notice shownNotice() {
+		return shownNotice;
+	}
+
+	/** v0.4 (C3): how many other notices "+N more" cycles through (for the game tests). */
+	public int otherNotices() {
+		return shownNotice == null ? 0 : notices.others();
 	}
 
 	static String cpuName(String raw) {
@@ -422,6 +546,7 @@ public class RigTuneScreen extends Screen {
 				y += LINE;
 			}
 		}
+		extractNotice(graphics, mouseX, mouseY);
 		if (list != null && (shown == null || shown.recommendations().isEmpty())) {
 			Component empty = Component.translatable(shown == null ? "rigtune.screen.analysing" : "rigtune.screen.nothing");
 			graphics.centeredText(font, empty, width / 2, list.getY() + list.getHeight() / 2 - 4, COLOR_LABEL);

@@ -32,6 +32,9 @@ public final class ClientSettings {
 	public volatile String benchmarkScene = "CURRENT";
 	// Whether the one-time privacy toast was shown.
 	public volatile boolean privacyNoticeShown = false;
+	// 0.4.0 (docs/v0.4/SPEC.md 5): the opt-in Stutter Doctor session monitor. Off by default; 0.3.x drops it on rewrite,
+	// which turns the monitor off (the safe default).
+	public volatile boolean stutterMonitor = false;
 
 	public static synchronized ClientSettings shared(Path configDir) {
 		if (shared == null) {
