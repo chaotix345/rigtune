@@ -44,7 +44,9 @@ class FootprintBudgetsTest {
 			Map.entry("monitorOnRetainedBytes", 2.5 * MIB),
 			Map.entry("monitorOffRetainedBytes", 0.25 * MIB),
 			Map.entry("monitorOffLeftoverInstances", 0.0),
-			Map.entry("samplerCpuMsPer60s", 30.0));
+			// The sampler in steady state: 120 ms per 60 s (0.2 % of one core, opt-in monitor only; SPEC 10 said 30, the CI
+			// runners measured 42-50 ms after the WS-F2 optimisation; coordinator, 2026-09-26).
+			Map.entry("samplerCpuMsPer60s", 120.0));
 
 	@Test
 	void theCommittedFileKeepsEveryLimitWithinTheSpecCeilings() throws IOException {

@@ -387,6 +387,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 			long window = System.nanoTime() - start;
 			check(samplerCpu >= 0, "the sampler thread is alive after " + window / 1_000_000 + " ms");
 			long samples = samplerSamples();
+			out.put("samplerJdkFloorMsPer240", samplerFloor());
 			List<String> threadsOn = rigtuneThreads();
 			checkNoPowerWatcher(hardware, threadsOn);
 
@@ -482,6 +483,40 @@ public class FootprintGameTest implements FabricClientGameTest {
 				out.put(name, count.instances() - permanent);
 			}
 		});
+		return out;
+	}
+
+	// A diagnostic under samplerCpuMsPer60s: the CPU of the JDK calls one sample makes, alone, 240 times (60 s at 4 Hz) on
+	// this thread with the same threads alive, plus getThreadInfo for every thread (which the sampler now does only for
+	// threads it hasn't seen).
+	private static Map<String, Number> samplerFloor() {
+		com.sun.management.ThreadMXBean mx = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
+		com.sun.management.OperatingSystemMXBean os = (com.sun.management.OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
+		int n = 240;
+		long[] ids = mx.getAllThreadIds();
+		long c0 = mx.getCurrentThreadCpuTime();
+		for (int i = 0; i < n; i++) {
+			ids = mx.getAllThreadIds();
+		}
+		long c1 = mx.getCurrentThreadCpuTime();
+		for (int i = 0; i < n; i++) {
+			mx.getThreadCpuTime(ids);
+		}
+		long c2 = mx.getCurrentThreadCpuTime();
+		for (int i = 0; i < n; i++) {
+			os.getProcessCpuTime();
+		}
+		long c3 = mx.getCurrentThreadCpuTime();
+		for (int i = 0; i < n; i++) {
+			mx.getThreadInfo(ids, 0);
+		}
+		long c4 = mx.getCurrentThreadCpuTime();
+		Map<String, Number> out = new LinkedHashMap<>();
+		out.put("threads", ids.length);
+		out.put("getAllThreadIds", ms(c1 - c0));
+		out.put("getThreadCpuTime", ms(c2 - c1));
+		out.put("getProcessCpuTime", ms(c3 - c2));
+		out.put("getThreadInfoEveryThread", ms(c4 - c3));
 		return out;
 	}
 
