@@ -244,6 +244,11 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 			int x = BenchmarkWorld.CAMERA_X + o[0];
 			int z = BenchmarkWorld.CAMERA_Z + o[1];
 			int floor = BenchmarkWorld.terrainFloor(level, x, z);
+			// 26.4 (from snapshot 1) renamed getUncachedNoiseBiome to getUncachedBiome (same parameters); ">=26.4-alpha" as in
+			// BenchmarkWorld.terrainFloor.
+			//? if >=26.4-alpha {
+			/*samples.add(new SceneVariety.Sample(o[0], o[1], floor, level.getUncachedBiome(x >> 2, floor >> 2, z >> 2).getRegisteredName()));
+			*///?} else
 			samples.add(new SceneVariety.Sample(o[0], o[1], floor, level.getUncachedNoiseBiome(x >> 2, floor >> 2, z >> 2).getRegisteredName()));
 		}
 		SceneVariety.Report scene = SceneVariety.check(samples, level.getChunkSource().getGenerator().getSeaLevel());

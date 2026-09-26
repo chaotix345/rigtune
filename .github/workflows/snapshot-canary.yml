@@ -1,0 +1,208 @@
+name: snapshot-canary
+
+# Weekly check that RigTune still builds and unit-tests against the newest Minecraft snapshot, so an
+# API break surfaces while the version is still a snapshot, not on release day
+# (docs/research/v0.4/mc-versions.md, sections 3-4; tools/MC_VERSIONS.md, "Snapshot canary").
+#
+# It never blocks a PR or a branch: it runs only on a schedule or by hand, and it never commits or
+# pushes. The node it adds with add_mc_version.py exists only in this run's checkout, so versions/*/
+# on every branch stays as committed and build.yml (tools/gametest_matrix.py), release.yml and
+# update-rules.yml are unaffected.
+#
+# A failing build opens one tracking issue (fixed title, label snapshot-canary), later failures
+# comment on it, and the next green build closes it. A skip (no snapshot newer than the release, or
+# add_mc_version.py refuses the snapshot: no Fabric API build yet, another Java version, ...) is a
+# notice or warning on a green run and leaves the issue alone; a network error or a crash of
+# add_mc_version.py fails the run without touching the issue.
+#
+# GitHub fires `schedule` only from the copy of this file on the default branch. By hand:
+#   gh workflow run snapshot-canary.yml                          # newest snapshot
+#   gh workflow run snapshot-canary.yml -f mc=26.4-snapshot-1    # a given id
+
+on:
+  schedule:
+    - cron: '0 5 * * 3' # Wednesday 05:00 UTC (update-rules.yml runs on Monday)
+  workflow_dispatch:
+    inputs:
+      mc:
+        description: 'Minecraft version id to test (blank: the newest snapshot)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: snapshot-canary
+  cancel-in-progress: false
+
+env:
+  ISSUE_TITLE: 'Snapshot canary: Minecraft snapshot build is failing'
+  ISSUE_LABEL: snapshot-canary
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      # The build runs third-party snapshot dependencies: don't leave the token in .git/config.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: gradle/actions/wrapper-validation@v6
+
+      - name: Resolve the version to test
+        id: resolve
+        env:
+          INPUT_MC: ${{ inputs.mc }}
+        run: |
+          set -eu
+          mc=$(printf '%s' "${INPUT_MC:-}" | tr -d '[:space:]')
+          if [ -z "$mc" ]; then
+            manifest=$(curl -sfL --retry 3 --retry-delay 5 \
+              -H 'User-Agent: chaotix345/rigtune-snapshot-canary/1.0 (github.com/chaotix345/rigtune)' \
+              https://piston-meta.mojang.com/mc/game/version_manifest_v2.json)
+            mc=$(printf '%s' "$manifest" | jq -r '.latest.snapshot')
+            release=$(printf '%s' "$manifest" | jq -r '.latest.release')
+            if [ "$mc" = "$release" ]; then
+              echo "::notice title=Snapshot canary skipped::The newest snapshot is the release ($release): nothing newer to test."
+              echo "Skipped: the newest snapshot is the release ($release)." >> "$GITHUB_STEP_SUMMARY"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "Testing Minecraft $mc"
+          echo "mc=$mc" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v7
+        if: steps.resolve.outputs.skip == 'false'
+        with:
+          python-version: '3.11'
+
+      # Writes settings.gradle and versions/<mc>/gradle.properties in this checkout only. When
+      # add_mc_version.py refuses (it writes nothing), the snapshot isn't ready to test: a skip, with a
+      # warning when the refusal needs a change here (another Java version, an id format the tool
+      # doesn't know). A network error or a crash of the tool fails the run (no issue: the build
+      # didn't run), so a broken check can't pass for "not ready yet" week after week.
+      - name: Add the version as a node (this run only)
+        id: add
+        if: steps.resolve.outputs.skip == 'false'
+        env:
+          MC: ${{ steps.resolve.outputs.mc }}
+        run: |
+          set -eu
+          status=0
+          out=$(python tools/add_mc_version.py "$MC" --prerelease-ok 2>&1) || status=$?
+          printf '%s\n' "$out"
+          if [ "$status" -ne 0 ]; then
+            reason=$(printf '%s\n' "$out" | grep '^add_mc_version: ' | tail -1 | sed 's/^add_mc_version: //')
+            reason=${reason//%/%25}
+            case "$reason" in
+              ''|'unexpected error:'*|'HTTP '*' from '*|'no response from '*|'unreadable '*' from '*|http://*|https://*)
+                echo "::error title=Snapshot canary couldn't check $MC::add_mc_version.py failed: ${reason:-see the log}"
+                exit 1 ;;
+              *'needs Java '*|*"isn't a Minecraft version id this tool understands"*)
+                level=warning ;;
+              *)
+                level=notice ;;
+            esac
+            echo "::$level title=Snapshot canary skipped::add_mc_version.py refused $MC: $reason"
+            echo "Skipped: add_mc_version.py refused $MC ($reason)." >> "$GITHUB_STEP_SUMMARY"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          prev=$(printf '%s\n' "$out" | sed -n 's/^Adding Minecraft .* (after \(.*\))$/\1/p' | head -1)
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          echo "prev=$prev" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v6
+        if: steps.add.outputs.ready == 'true'
+        with:
+          distribution: microsoft
+          java-version: '25'
+
+      # Read-only: snapshot Minecraft and Fabric artifacts shouldn't take build.yml's cache space.
+      - uses: gradle/actions/setup-gradle@v6
+        if: steps.add.outputs.ready == 'true'
+        with:
+          cache-read-only: true
+
+      # build includes compiling the game tests (check depends on gametestClasses in build.gradle).
+      - name: Build and unit-test the node
+        id: build
+        if: steps.add.outputs.ready == 'true'
+        env:
+          MC: ${{ steps.resolve.outputs.mc }}
+        run: ./gradlew ":$MC:build" --stacktrace
+
+      - name: Upload build reports
+        if: failure() && steps.build.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: snapshot-canary-reports-${{ steps.resolve.outputs.mc }}
+          path: |
+            build/reports/**
+            versions/*/build/reports/**
+            versions/*/build/test-results/**
+          if-no-files-found: ignore
+
+      - name: Open or update the tracking issue
+        if: failure() && steps.build.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MC: ${{ steps.resolve.outputs.mc }}
+          PREV: ${{ steps.add.outputs.prev }}
+        run: |
+          set -eu
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label "$ISSUE_LABEL" \
+            --json number,title --jq 'map(select(.title == env.ISSUE_TITLE)) | .[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" \
+              --body "Still failing on \`$MC\` ($(date -u +%Y-%m-%d)): $run_url"
+            echo "Failed: commented on #$existing." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ -z "$(gh label list --repo "$GITHUB_REPOSITORY" --search "$ISSUE_LABEL" --json name \
+              --jq 'map(select(.name == env.ISSUE_LABEL)) | .[0].name // empty')" ]; then
+            gh label create "$ISSUE_LABEL" --repo "$GITHUB_REPOSITORY" --color FBCA04 \
+              --description 'Opened and closed by the snapshot-canary workflow'
+          fi
+          base=${MC%%-*}
+          body_file=$(mktemp)
+          cat > "$body_file" <<EOF
+          The snapshot canary couldn't build RigTune against Minecraft \`$MC\` ($(date -u +%Y-%m-%d)): $run_url
+
+          It ran \`python tools/add_mc_version.py $MC --prerelease-ok\` and \`./gradlew :$MC:build\` in the runner's checkout (nothing was committed). The build reports are attached to the run.
+
+          To fix it (tools/MC_VERSIONS.md, "Snapshot canary"):
+          1. Reproduce locally with the same two commands. Don't commit the node.
+          2. Compile the previous node's classes and run \`python tools/mc_apidiff.py ${PREV:-<previous node>} $MC\` (tools/MC_VERSIONS.md, "tools/mc_apidiff.py"): it lists what RigTune uses that changed.
+          3. Handle each break with a \`//? if >=$base-alpha {\` block (it also matches $base's later snapshots, pre-releases, release candidates and the release) and commit only the source change.
+
+          Every later failing run comments here; the next green run closes this issue.
+          EOF
+          url=$(gh issue create --repo "$GITHUB_REPOSITORY" --title "$ISSUE_TITLE" --label "$ISSUE_LABEL" \
+            --body-file "$body_file")
+          echo "Failed: opened $url." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Close the tracking issue
+        if: steps.build.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MC: ${{ steps.resolve.outputs.mc }}
+        run: |
+          set -eu
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT"
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label "$ISSUE_LABEL" \
+            --json number,title --jq 'map(select(.title == env.ISSUE_TITLE)) | .[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue close "$existing" --repo "$GITHUB_REPOSITORY" --reason completed \
+              --comment "Green again on \`$MC\` ($(date -u +%Y-%m-%d)): $run_url"
+            echo "Green: closed #$existing." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Green: $MC builds and passes its unit tests." >> "$GITHUB_STEP_SUMMARY"
+          fi
