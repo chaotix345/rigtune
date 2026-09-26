@@ -21,6 +21,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 // Works out what "Undo last apply" or "Undo everything" does (docs/v0.2/SPEC.md item 3), without touching anything.
 // - STAGED changes: their whole group is dropped from pending.json (changes of other applies in that group too).
@@ -62,6 +63,7 @@ public final class UndoPlanner {
 	static final String GONE = "It was undone or changed since this list was made";
 	static final String SUPERSEDED = "Changed again by a later apply";
 	static final String SUPERSEDED_GROUP = "Goes with a change a later apply changed again";
+	// The reasons FolderCheck gives (its own copies of these two, checked by FolderCheckTest).
 	static final String LOADED_TWICE = "mod %s would be loaded twice (%s)";
 	static final String MISSING = "%s would be missing %s";
 	static final String WAITS_RESTART = "A change staged earlier still moves %s at the next restart; restart once, then undo it";
@@ -583,7 +585,7 @@ public final class UndoPlanner {
 	// --- mod files, against a simulated mods folder
 
 	// A file's content, identified by the name it has in the real folder now. Its metadata is read only when needed.
-	private static final class Content {
+	private static final class Content implements Supplier<JarInfo> {
 		final String origin;
 		private final Folder folder;
 		private JarInfo info;
@@ -600,6 +602,11 @@ public final class UndoPlanner {
 				info = folder.jar(origin);
 			}
 			return info;
+		}
+
+		@Override
+		public JarInfo get() {
+			return info();
 		}
 	}
 
@@ -852,45 +859,12 @@ public final class UndoPlanner {
 		return new Staged(disabled, enabled);
 	}
 
-	// Reasons the folder wouldn't start: a mod id on two active jars, or an active jar without a mod it depends on. By
-	// their English, sorted, so a plan compares and lists them the same way in every language.
+	// Reasons the folder, as these staged ops leave it, wouldn't start (FolderCheck).
 	private static Map<String, Text> violations(Map<String, Content> folderNow, Folder folder, Staged staged) {
 		Map<String, Content> sim = new LinkedHashMap<>(folderNow);
 		staged.disabled().forEach(sim::remove);
 		sim.putAll(staged.enabled());
-		Set<String> provided = new HashSet<>(ALWAYS_PROVIDED);
-		provided.addAll(folder.providedElsewhere());
-		Map<String, List<String>> namesById = new HashMap<>();
-		List<JarInfo> active = new ArrayList<>();
-		for (Map.Entry<String, Content> e : sim.entrySet()) {
-			if (!e.getKey().endsWith(".jar")) {
-				continue;
-			}
-			JarInfo info = e.getValue().info();
-			if (info == null) {
-				continue;
-			}
-			active.add(info);
-			namesById.computeIfAbsent(info.id(), k -> new ArrayList<>()).add(e.getKey());
-			provided.add(info.id());
-			provided.addAll(info.provides());
-		}
-		Map<String, Text> out = new TreeMap<>();
-		namesById.forEach((id, names) -> {
-			if (names.size() > 1) {
-				Text twice = Text.of("rigtune.undo.reason.breaks.twice", LOADED_TWICE, id, String.join(", ", new TreeSet<>(names)));
-				out.put(twice.english(), twice);
-			}
-		});
-		for (JarInfo info : active) {
-			for (String dep : info.depends()) {
-				if (!provided.contains(dep)) {
-					Text missing = Text.of("rigtune.undo.reason.breaks.missing", MISSING, info.id(), dep);
-					out.put(missing.english(), missing);
-				}
-			}
-		}
-		return out;
+		return FolderCheck.problems(sim, folder.providedElsewhere());
 	}
 
 	// One op per file whose place changed, all in `group` (audit H5). Staging each original group's reversal on its own

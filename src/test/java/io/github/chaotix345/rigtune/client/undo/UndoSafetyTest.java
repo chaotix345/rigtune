@@ -12,6 +12,7 @@ import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.history.UndoPlanner;
+import io.github.chaotix345.rigtune.core.model.Text;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -32,6 +33,7 @@ import java.util.zip.ZipOutputStream;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.4/SPEC.md 2o (WS-G2): Undo through the real stack (stagers, Staging's merge and journal records, UndoService,
@@ -256,6 +258,37 @@ class UndoSafetyTest {
 
 		neverTheDependantAlone();
 		assertEquals(List.of("app.jar", "lib.jar"), listing());
+	}
+
+	// --- audit H1-B and M5: the RigTune screen's "Disable X" is checked before it's staged
+
+	@Test
+	void aDisableOfALibraryAnInstalledModNeedsIsRefused() throws IOException {
+		modJar(mods.resolve("lib.jar"), "lib");
+		modJar(mods.resolve("app.jar"), "app", "lib");
+
+		Text refusal = DisableGuard.refusal(pending, state().folder(), mods.resolve("lib.jar"));
+
+		assertEquals("The game wouldn't start without it: app would be missing lib", refusal == null ? null : refusal.english());
+		assertNull(DisableGuard.refusal(pending, state().folder(), mods.resolve("app.jar")));
+	}
+
+	// Without the check the disable is merged away as a repeat of the update's own disable, and the update still brings
+	// the mod back at the next exit.
+	@Test
+	void aDisableOfAModWhoseUpdateIsStagedIsRefused() throws IOException {
+		modJar(mods.resolve("x-1.jar"), "x");
+		modJar(mods.resolve("x-2.jar" + PendingActions.PENDING_SUFFIX), "x");
+		List<Op> update = PendingActions.group(Op.disableFile(mods.resolve("x-1.jar")),
+				Op.enableFile(mods.resolve("x-2.jar" + PendingActions.PENDING_SUFFIX), mods.resolve("x-2.jar")).withModId("x"));
+		assertNotNull(staging.stage(update, "e1"));
+		assertNotNull(staging.stage(List.of(Op.disableFile(mods.resolve("x-1.jar"))), "e2"));
+		assertEquals(update.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList(),
+				"the disable alone is absorbed into the update");
+
+		Text refusal = DisableGuard.refusal(pending, state().folder(), mods.resolve("x-1.jar"));
+
+		assertEquals("Another change of it is staged; cancel that first (Undo last or Discard pending)", refusal == null ? null : refusal.english());
 	}
 
 	@Test

@@ -24,6 +24,7 @@ import io.github.chaotix345.rigtune.client.stutter.StutterService;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
+import io.github.chaotix345.rigtune.client.undo.DisableGuard;
 import io.github.chaotix345.rigtune.client.undo.GameState;
 import io.github.chaotix345.rigtune.client.undo.Staging;
 import io.github.chaotix345.rigtune.client.undo.UndoService;
@@ -436,7 +437,7 @@ public final class RealController implements RigTuneController {
 					configPatches.computeIfAbsent(target, t -> new LinkedHashMap<>()).put(set.key().substring(target.prefix().length()), set.newValue());
 					configIds.put(set.key(), r.id());
 				}
-				case Action.DisableMod disable when SafeFileNames.isDirectChild(modsDir, disable.file()) -> {
+				case Action.DisableMod disable when SafeFileNames.isDirectChild(modsDir, disable.file()) && DisableGuard.allows(pendingFile, modsDir, disable.file()) -> {
 					Op op = Op.disableFile(disable.file());
 					immediateOps.add(op);
 					immediateOpIds.computeIfAbsent(r.id(), k -> new ArrayList<>()).add(op.id());
