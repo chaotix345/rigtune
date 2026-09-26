@@ -109,7 +109,7 @@ public final class SpikeDetector {
 	public static List<Spike> fromCandidates(FrameRing.Snapshot snapshot, long before) {
 		List<Spike> spikes = new ArrayList<>();
 		for (int r = 0; r < snapshot.candidateRecords(); r++) {
-			long end = snapshot.candidate(r, FrameRing.C_END);
+			long end = snapshot.candidate(r, FrameRing.C_END) & ~1L;
 			long d = snapshot.candidate(r, FrameRing.C_DURATION);
 			long b = snapshot.candidate(r, FrameRing.C_BASELINE);
 			if (end < before && isSpike(d, b)) {
