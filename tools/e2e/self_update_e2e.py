@@ -127,9 +127,13 @@ class Run:
 
     def log(self, message):
         line = "[{}] {}".format(datetime.datetime.now().strftime("%H:%M:%S"), message)
-        print(line, flush=True)
         with open(self.run_dir / "e2e.log", "a", encoding="utf-8") as out:
             out.write(line + "\n")
+        try:
+            print(line, flush=True)
+        except UnicodeEncodeError:
+            # A redirected stdout on Windows is cp1252; RigTune's text (e.g. an undo plan's "90 → 120") isn't.
+            print(line.encode("ascii", "backslashreplace").decode("ascii"), flush=True)
 
     def gradle(self, log_name, *arguments):
         command = (["cmd", "/c", str(REPO / "gradlew.bat")] if os.name == "nt" else [str(REPO / "gradlew")]) + list(arguments)
