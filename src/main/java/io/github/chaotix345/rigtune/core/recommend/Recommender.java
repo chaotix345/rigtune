@@ -81,21 +81,11 @@ public final class Recommender {
 	public static Report recommend(RulesDocument rules, HardwareProfile hardware, List<InstalledMod> mods,
 			SettingsSnapshot settings, OnlineData online, Goal goal, String modVersion, Set<String> queuedUpdates) {
 		OnlineData data = online == null ? OnlineData.offline() : online;
-		GpuClass gpuClass = GpuClassifier.from(rules).classify(hardware.gpu());
-		int cpuTier = CpuClassifier.from(rules).classify(hardware.cpu());
-		int memTier = TierCalculator.heapTier(rules.heapTiers, hardware.maxHeapMb());
-		TierResult tier = TierCalculator.calculate(gpuClass.tier(), cpuTier, memTier, goal);
-
-		List<InstalledMod> installed = mods == null ? List.of() : mods.stream().filter(m -> m.modId() != null).toList();
-		Set<String> loaded = installed.stream().map(InstalledMod::modId).collect(Collectors.toUnmodifiableSet());
-		Map<String, String> versions = new HashMap<>();
-		for (InstalledMod mod : installed) {
-			if (mod.version() != null) {
-				versions.putIfAbsent(mod.modId(), mod.version());
-			}
-		}
+		List<InstalledMod> installed = installed(mods);
 		SettingsSnapshot snapshot = settings == null ? new SettingsSnapshot(Map.of()) : settings;
-		EvalContext ctx = new EvalContext(hardware, gpuClass, tier, goal, loaded, Map.copyOf(versions), snapshot);
+		EvalContext ctx = context(rules, hardware, installed, snapshot, goal);
+		GpuClass gpuClass = ctx.gpu();
+		TierResult tier = ctx.tier();
 
 		Session session = new Session(rules, ctx, installed, snapshot, data, queuedUpdates == null ? Set.of() : queuedUpdates);
 		section("obsolete", session::obsolete);
@@ -121,6 +111,115 @@ public final class Recommender {
 		}
 	}
 
+	// The context recommend() evaluates the rules in: the tiers for this hardware and goal, the loaded mods and the settings.
+	public static EvalContext context(RulesDocument rules, HardwareProfile hardware, List<InstalledMod> mods, SettingsSnapshot settings,
+			Goal goal) {
+		GpuClass gpuClass = GpuClassifier.from(rules).classify(hardware.gpu());
+		int cpuTier = CpuClassifier.from(rules).classify(hardware.cpu());
+		int memTier = TierCalculator.heapTier(rules.heapTiers, hardware.maxHeapMb());
+		TierResult tier = TierCalculator.calculate(gpuClass.tier(), cpuTier, memTier, goal);
+		List<InstalledMod> installed = installed(mods);
+		Set<String> loaded = installed.stream().map(InstalledMod::modId).collect(Collectors.toUnmodifiableSet());
+		Map<String, String> versions = new HashMap<>();
+		for (InstalledMod mod : installed) {
+			if (mod.version() != null) {
+				versions.putIfAbsent(mod.modId(), mod.version());
+			}
+		}
+		SettingsSnapshot snapshot = settings == null ? new SettingsSnapshot(Map.of()) : settings;
+		return new EvalContext(hardware, gpuClass, tier, goal, loaded, Map.copyOf(versions), snapshot);
+	}
+
+	private static List<InstalledMod> installed(List<InstalledMod> mods) {
+		return mods == null ? List.of() : mods.stream().filter(m -> m.modId() != null).toList();
+	}
+
+	// A setting's target from the rules: the value, the reason, the impact and whether it starts ticked.
+	public record SettingTarget(String value, String reason, Impact impact, boolean selected) {
+	}
+
+	// A clamp entry that changed a key's value (from: the value before, to: the clamped value; reason: the rule's).
+	public record Clamp(String key, String from, String to, String reason) {
+	}
+
+	// Every setting target the rules this client supports give in ctx (plan review X-M3): the value entries, then the clamp
+	// entries over them (or over the snapshot's value for a key without one). recommend() turns these into its `set:`
+	// recommendations for the keys the snapshot has and whose value differs; nothing here is filtered by the snapshot.
+	public static Map<String, SettingTarget> settingTargets(RulesDocument rules, EvalContext ctx, SettingsSnapshot snapshot) {
+		List<SettingRule> supported = supportedSettings(rules.settings);
+		Map<String, SettingTarget> targets = settingValues(supported, ctx, Map.of());
+		applyClamps(targets, supported, ctx, snapshot, null);
+		return targets;
+	}
+
+	// The entries a client with SUPPORTED_FEATURES reads.
+	public static List<SettingRule> supportedSettings(List<SettingRule> rules) {
+		return rules == null ? List.of() : rules.stream().filter(r -> supported(r.requires)).toList();
+	}
+
+	// The value entries of rules whose `when` matches in ctx, the last match per key winning, in first-match order. tokens:
+	// extra "$token" values the caller resolves (the Profiles template layer's $recordingFps); a token nobody knows skips
+	// the entry.
+	public static Map<String, SettingTarget> settingValues(List<SettingRule> rules, EvalContext ctx, Map<String, String> tokens) {
+		Map<String, SettingTarget> resolved = new LinkedHashMap<>();
+		for (SettingRule rule : rules) {
+			if (!rule.isValueEntry() || !ConditionEvaluator.matches(rule.when, ctx)) {
+				continue;
+			}
+			String value = SettingValues.asString(rule.value);
+			if (value == null) {
+				continue;
+			}
+			String token = tokens.get(value.trim());
+			if (token != null) {
+				value = token;
+			}
+			value = SettingValues.resolveTokens(value, ctx.hardware().display());
+			if (SettingValues.unresolvedToken(value)) {
+				continue;
+			}
+			resolved.put(rule.key, new SettingTarget(value, Session.text(rule.reason), RulesDocument.impactOf(rule.impact, Impact.LOW),
+					Session.selected(rule.defaultSelected)));
+		}
+		return resolved;
+	}
+
+	// The clamp entries of rules whose `when` matches in ctx, in order, over targets (or the snapshot's value for a key
+	// without a target); a clamped key's target gets the clamped value with the clamp's reason appended. applied (if not
+	// null) receives each clamp that changed a value.
+	public static void applyClamps(Map<String, SettingTarget> targets, List<SettingRule> rules, EvalContext ctx, SettingsSnapshot snapshot,
+			List<Clamp> applied) {
+		for (SettingRule rule : rules) {
+			if (!rule.isClampEntry() || !ConditionEvaluator.matches(rule.when, ctx)) {
+				continue;
+			}
+			SettingTarget current = targets.get(rule.key);
+			String before = current != null ? current.value() : snapshot.get(rule.key);
+			BigDecimal number = SettingValues.number(before);
+			if (number == null) {
+				continue;
+			}
+			BigDecimal clamped = number;
+			if (rule.min != null && clamped.compareTo(BigDecimal.valueOf(rule.min)) < 0) {
+				clamped = BigDecimal.valueOf(rule.min);
+			}
+			if (rule.max != null && clamped.compareTo(BigDecimal.valueOf(rule.max)) > 0) {
+				clamped = BigDecimal.valueOf(rule.max);
+			}
+			if (clamped.compareTo(number) == 0) {
+				continue;
+			}
+			String reason = current == null ? Session.text(rule.reason) : (current.reason() + " " + Session.text(rule.reason)).trim();
+			Impact impact = current != null ? current.impact() : RulesDocument.impactOf(rule.impact, Impact.LOW);
+			boolean selected = current != null ? current.selected() : Session.selected(rule.defaultSelected);
+			String value = SettingValues.format(clamped);
+			targets.put(rule.key, new SettingTarget(value, reason, impact, selected));
+			if (applied != null) {
+				applied.add(new Clamp(rule.key, before, value, Session.text(rule.reason)));
+			}
+		}
+	}
+
 	static boolean supported(List<String> requires) {
 		return requires == null || requires.stream().allMatch(feature -> feature != null && SUPPORTED_FEATURES.contains(feature));
 	}
@@ -141,16 +240,12 @@ public final class Recommender {
 
 	private enum Availability { AVAILABLE, UNAVAILABLE, UNKNOWN }
 
-	private record Resolved(String value, String reason, Impact impact, boolean selected) {
-	}
-
 	private static final class Session {
 		final RulesDocument rules;
 		// The rules this client understands: a rule whose `requires` names an unknown feature doesn't fire. Mod identity
 		// (conflictsWith references by slug) still resolves through every ModRule.
 		final List<ModRule> mods;
 		final List<ObsoleteRule> obsolete;
-		final List<SettingRule> settings;
 		final List<AdviceRule> advice;
 		final EvalContext ctx;
 		final List<InstalledMod> installed;
@@ -170,7 +265,6 @@ public final class Recommender {
 			this.queuedUpdates = queuedUpdates;
 			this.mods = rules.mods.stream().filter(r -> supported(r.requires)).toList();
 			this.obsolete = rules.obsolete.stream().filter(r -> supported(r.requires)).toList();
-			this.settings = rules.settings.stream().filter(r -> supported(r.requires)).toList();
 			this.advice = rules.advice.stream().filter(r -> supported(r.requires)).toList();
 			for (ModRule mod : rules.mods) {
 				bySlug.putIfAbsent(mod.slug, mod);
@@ -325,48 +419,9 @@ public final class Recommender {
 		}
 
 		void settings() {
-			Map<String, Resolved> resolved = new LinkedHashMap<>();
-			for (SettingRule rule : settings) {
-				if (!rule.isValueEntry() || !matches(rule.when)) {
-					continue;
-				}
-				String value = SettingValues.asString(rule.value);
-				if (value == null) {
-					continue;
-				}
-				value = SettingValues.resolveTokens(value, ctx.hardware().display());
-				if (SettingValues.unresolvedToken(value)) {
-					continue;
-				}
-				resolved.put(rule.key, new Resolved(value, text(rule.reason), RulesDocument.impactOf(rule.impact, Impact.LOW), selected(rule.defaultSelected)));
-			}
-			for (SettingRule rule : settings) {
-				if (!rule.isClampEntry() || !matches(rule.when)) {
-					continue;
-				}
-				Resolved current = resolved.get(rule.key);
-				BigDecimal number = SettingValues.number(current != null ? current.value() : snapshot.get(rule.key));
-				if (number == null) {
-					continue;
-				}
-				BigDecimal clamped = number;
-				if (rule.min != null && clamped.compareTo(BigDecimal.valueOf(rule.min)) < 0) {
-					clamped = BigDecimal.valueOf(rule.min);
-				}
-				if (rule.max != null && clamped.compareTo(BigDecimal.valueOf(rule.max)) > 0) {
-					clamped = BigDecimal.valueOf(rule.max);
-				}
-				if (clamped.compareTo(number) == 0) {
-					continue;
-				}
-				String reason = current == null ? text(rule.reason) : (current.reason() + " " + text(rule.reason)).trim();
-				Impact impact = current != null ? current.impact() : RulesDocument.impactOf(rule.impact, Impact.LOW);
-				boolean selected = current != null ? current.selected() : selected(rule.defaultSelected);
-				resolved.put(rule.key, new Resolved(SettingValues.format(clamped), reason, impact, selected));
-			}
-			for (Map.Entry<String, Resolved> entry : resolved.entrySet()) {
+			for (Map.Entry<String, SettingTarget> entry : settingTargets(rules, ctx, snapshot).entrySet()) {
 				String key = entry.getKey();
-				Resolved target = entry.getValue();
+				SettingTarget target = entry.getValue();
 				if (!snapshot.has(key) || !SettingKeys.changeable(key) || !SettingKeys.safeValue(target.value())) {
 					continue;
 				}

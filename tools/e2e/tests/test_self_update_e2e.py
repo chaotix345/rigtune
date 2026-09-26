@@ -127,6 +127,22 @@ class UndoScenarioTest(unittest.TestCase):
                          (run.run_dir / "jvm-entry-undo.txt").read_text(encoding="utf-8").splitlines())
 
 
+class LogTest(unittest.TestCase):
+    def test_a_line_the_console_cant_encode_is_still_logged(self):
+        # A check detail can hold RigTune's text ("Max Framerate: 90 → 120"); a redirected stdout on Windows is cp1252.
+        import io
+        run = make_run(Path(tempfile.mkdtemp()))
+        console = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+        saved, sys.stdout = sys.stdout, console
+        try:
+            run.log("plan: Max Framerate: 90 → 120")
+        finally:
+            sys.stdout = saved
+        console.flush()
+        self.assertIn("90 \\u2192 120", console.buffer.getvalue().decode("cp1252"))
+        self.assertIn("90 → 120", (run.run_dir / "e2e.log").read_text(encoding="utf-8"))
+
+
 class HelperLogTest(unittest.TestCase):
     def test_only_a_log_rewritten_since_the_launch_counts(self):
         log = Path(tempfile.mkdtemp()) / "helper.log"
