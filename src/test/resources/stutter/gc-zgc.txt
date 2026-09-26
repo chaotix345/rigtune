@@ -1,0 +1,161 @@
+# The research GC probe run with -XX:+UseZGC on Temurin 25.0.4.1+1 (docs/research/v0.4/stutter.md §1; scratchpad
+# r-stutter/gcprobe/out-ZGC.txt and gc-ZGC.log). N: bean|gcAction|gcCause|startMs|endMs|receive time on the uptime
+# clock in ms (endMs + the logged delivery latency)|usedAfterMB. T: a notification's endMs|the same pause's end in
+# -Xlog:gc (uptime ms; the ground truth). W: a System.gc() call window on the uptime clock (ms).
+N|ZGC Major Pauses|end of GC pause|Warmup|99|99|126.82|0
+N|ZGC Major Pauses|end of GC pause|Warmup|102|102|129.65|0
+N|ZGC Major Pauses|end of GC pause|Warmup|102|102|130.52|0
+N|ZGC Major Pauses|end of GC pause|Warmup|103|103|131.29|0
+N|ZGC Major Pauses|end of GC pause|Warmup|103|103|132.10|0
+N|ZGC Major Cycles|end of GC cycle|Warmup|99|103|132.74|21
+N|ZGC Major Pauses|end of GC pause|Warmup|110|110|133.33|0
+N|ZGC Major Pauses|end of GC pause|Warmup|112|112|133.92|0
+N|ZGC Major Pauses|end of GC pause|Warmup|112|112|134.40|0
+N|ZGC Major Pauses|end of GC pause|Warmup|114|114|135.06|0
+N|ZGC Major Pauses|end of GC pause|Warmup|115|115|135.89|0
+N|ZGC Major Cycles|end of GC cycle|Warmup|110|116|136.16|76
+N|ZGC Major Pauses|end of GC pause|Warmup|117|117|136.75|0
+N|ZGC Major Pauses|end of GC pause|Warmup|118|118|137.34|0
+N|ZGC Major Pauses|end of GC pause|Warmup|118|118|137.70|0
+N|ZGC Major Pauses|end of GC pause|Warmup|120|120|138.98|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|120|120|139.69|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|120|120|140.59|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|121|121|141.07|0
+N|ZGC Minor Cycles|end of GC cycle|Allocation Rate|120|121|141.39|30
+N|ZGC Major Pauses|end of GC pause|Warmup|121|121|141.63|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|121|121|141.87|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|123|123|142.45|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|123|123|142.79|0
+N|ZGC Minor Cycles|end of GC cycle|Allocation Rate|121|123|143.36|54
+N|ZGC Major Cycles|end of GC cycle|Warmup|117|123|143.99|54
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|123|123|144.35|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|124|124|144.59|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|124|124|144.81|0
+N|ZGC Minor Cycles|end of GC cycle|Allocation Rate|123|124|145.01|36
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|124|124|145.21|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|124|124|145.41|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|124|124|145.66|0
+N|ZGC Minor Cycles|end of GC cycle|Allocation Rate|124|124|145.88|38
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|124|124|146.07|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|125|125|146.29|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|125|125|146.47|0
+N|ZGC Minor Cycles|end of GC cycle|Allocation Rate|124|125|146.68|40
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|147|147|166.11|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|147|147|166.63|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|147|147|167.01|0
+N|ZGC Minor Cycles|end of GC cycle|Allocation Rate|147|147|167.34|29
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|155|155|174.48|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|157|157|176.25|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|157|157|176.70|0
+N|ZGC Minor Cycles|end of GC cycle|Allocation Rate|155|161|180.52|87
+N|ZGC Major Pauses|end of GC pause|Allocation Rate|161|161|180.89|0
+N|ZGC Major Pauses|end of GC pause|Allocation Rate|163|163|182.56|0
+N|ZGC Major Pauses|end of GC pause|Allocation Rate|163|163|183.08|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|167|167|186.00|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|170|170|189.23|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|171|171|190.31|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|172|172|191.15|0
+N|ZGC Minor Cycles|end of GC cycle|Allocation Rate|167|182|201.04|179
+N|ZGC Major Pauses|end of GC pause|Allocation Rate|182|182|201.95|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|182|182|202.25|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|187|187|205.84|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|187|187|206.75|0
+N|ZGC Minor Cycles|end of GC cycle|Allocation Rate|182|192|211.76|163
+N|ZGC Major Cycles|end of GC cycle|Allocation Rate|161|192|211.96|163
+N|ZGC Major Pauses|end of GC pause|Allocation Rate|194|194|213.07|0
+N|ZGC Major Pauses|end of GC pause|Allocation Rate|196|196|215.75|0
+N|ZGC Major Pauses|end of GC pause|Allocation Rate|197|197|216.76|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|204|204|224.73|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|208|208|227.65|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|210|210|229.08|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|211|211|230.09|0
+N|ZGC Minor Cycles|end of GC cycle|Allocation Rate|204|218|237.61|177
+N|ZGC Major Pauses|end of GC pause|Allocation Rate|219|219|238.62|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|219|219|238.89|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|224|224|242.99|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|225|225|244.00|0
+N|ZGC Minor Cycles|end of GC cycle|Allocation Rate|219|229|248.11|247
+N|ZGC Major Cycles|end of GC cycle|Allocation Rate|194|229|248.57|247
+N|ZGC Major Pauses|end of GC pause|Allocation Rate|229|229|248.76|0
+N|ZGC Major Pauses|end of GC pause|Allocation Rate|234|234|254.68|0
+N|ZGC Major Pauses|end of GC pause|Allocation Rate|235|235|254.94|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Stall|242|242|261.54|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Stall|249|249|268.24|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Stall|250|250|268.88|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Stall|258|258|277.30|0
+N|ZGC Minor Cycles|end of GC cycle|Allocation Stall|242|260|279.61|231
+N|ZGC Major Pauses|end of GC pause|Allocation Rate|262|262|281.32|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|262|262|281.58|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|265|265|284.39|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|287|287|306.52|0
+N|ZGC Minor Cycles|end of GC cycle|Allocation Rate|262|287|306.94|177
+N|ZGC Major Cycles|end of GC cycle|Allocation Rate|229|287|307.15|177
+N|ZGC Major Pauses|end of GC pause|Allocation Rate|287|287|307.30|0
+N|ZGC Major Pauses|end of GC pause|Allocation Rate|288|288|307.61|0
+N|ZGC Major Pauses|end of GC pause|Allocation Rate|290|290|309.77|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|291|291|310.20|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|292|292|310.84|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|293|293|312.73|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|308|308|327.59|0
+N|ZGC Minor Cycles|end of GC cycle|Allocation Rate|291|308|327.80|97
+N|ZGC Major Pauses|end of GC pause|Allocation Rate|309|309|328.25|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|309|309|328.43|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|310|310|329.37|0
+N|ZGC Minor Pauses|end of GC pause|Allocation Rate|312|312|331.24|0
+N|ZGC Minor Cycles|end of GC cycle|Allocation Rate|309|312|331.58|35
+N|ZGC Major Cycles|end of GC cycle|Allocation Rate|287|312|332.05|35
+N|ZGC Major Pauses|end of GC pause|System.gc()|312|312|332.53|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|312|312|332.80|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|313|313|332.93|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|313|313|333.03|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|313|313|333.14|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|313|313|333.23|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|315|315|333.90|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|315|315|334.62|0
+N|ZGC Major Cycles|end of GC cycle|System.gc()|312|316|335.20|21
+N|ZGC Major Pauses|end of GC pause|System.gc()|517|517|536.70|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|518|518|537.27|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|518|518|537.69|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|518|518|537.93|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|518|518|538.04|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|518|518|538.17|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|520|520|539.44|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|521|521|540.04|0
+N|ZGC Major Cycles|end of GC cycle|System.gc()|517|521|540.63|21
+N|ZGC Major Pauses|end of GC pause|System.gc()|722|722|741.53|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|723|723|742.03|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|723|723|742.39|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|723|723|742.95|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|723|723|743.34|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|723|723|743.55|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|725|725|744.66|0
+N|ZGC Major Pauses|end of GC pause|System.gc()|726|726|745.97|0
+N|ZGC Major Cycles|end of GC cycle|System.gc()|722|727|746.33|21
+T|121|139.9972
+T|123|141.9798
+T|124|142.7905
+T|124|143.3149
+T|125|143.9254
+T|147|166.4193
+T|161|180.2167
+T|182|200.8837
+T|192|211.5641
+T|218|237.4649
+T|229|247.9473
+T|260|279.4494
+T|287|306.2504
+T|308|327.4985
+T|312|331.0712
+T|103|122.5743
+T|116|134.6737
+T|123|142.0248
+T|192|211.6096
+T|229|247.9881
+T|287|306.2995
+T|312|331.1121
+T|316|335.1255
+T|521|540.5447
+T|727|745.8663
+W|313.161|335.156
+W|536.170|540.611
+W|741.118|745.902

@@ -6,6 +6,7 @@ import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.PowerWatcher;
 import io.github.chaotix345.rigtune.client.probe.Probes;
+import io.github.chaotix345.rigtune.client.stutter.StutterHooks;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
@@ -87,6 +88,7 @@ public final class RigTuneClient implements ClientModInitializer {
 		});
 		powerWatcher(real);
 		ClientTickEvents.END_CLIENT_TICK.register(RigTuneClient::onTick);
+		StutterHooks.install(real.stutterService());
 		registerAwareness(real);
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> addEntryButton(screen, width, height));
 		// The sleep overlay is the one vanilla HUD layer drawn while the GUI is hidden, which the benchmark does.

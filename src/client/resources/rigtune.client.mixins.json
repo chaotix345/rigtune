@@ -5,7 +5,8 @@
 	"client": [
 		"ClientPacketListenerAccessor",
 		"ClientPacketListenerMixin",
-		"DebugScreenOverlayMixin"
+		"DebugScreenOverlayMixin",
+		"MinecraftFrameMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
