@@ -1,7 +1,7 @@
 {
   "formatVersion": 1,
   "mode": "fail",
-  "about": "RigTune's own footprint budgets (docs/v0.4/SPEC.md 10 and its WS-F amendment), read by FrameHookBudgetTest and FootprintGameTest. ceiling = the SPEC's ceiling (null where the SPEC sets none); limit = min(ceiling, 2 x the largest value observed in the calibration: 1 local run + 3 CI runs per leg, docs/v0.4/verification/footprint/README.md); heapGrowthAfterCyclesBytes uses 2 x the largest |delta| (it swings both ways). The monitor-on and sampler budgets stay at their ceilings until item 5 lands (F-L1). mode warn logs a value past its limit, fail fails the test.",
+  "about": "RigTune's own footprint budgets (docs/v0.4/SPEC.md 10 and its WS-F amendment), read by FrameHookBudgetTest and FootprintGameTest. ceiling = the SPEC's ceiling (null where the SPEC sets none); limit = min(ceiling, 2 x the largest value observed in the calibration: 1 local run + 3 CI runs per leg, docs/v0.4/verification/footprint/README.md); heapGrowthAfterCyclesBytes uses 2 x the largest |delta| (it swings both ways). The session-monitor budgets (F-L1) were calibrated by WS-F2 on 85bdcec the same way (3 CI runs per leg, plus every earlier CI run of the same measured code; docs/v0.4/verification/footprint/README.md \"Session monitor\"). mode warn logs a value past its limit, fail fails the test.",
   "budgets": {
     "renderThreadInitWallMs": {"limit": 368, "ceiling": 400, "what": "wall time of RigTunePreLaunch + onInitializeClient on the render thread"},
     "renderThreadInitCpuMs": {"limit": 150, "ceiling": 150, "what": "render-thread CPU time of RigTunePreLaunch + onInitializeClient"},
@@ -9,20 +9,22 @@
     "workerCpuMs5s": {"limit": 300, "ceiling": 300, "what": "CPU of every RigTune thread in the 5 s after CLIENT_STARTED"},
     "frameHookNsPerCallOff": {"limit": 13, "ceiling": 20, "what": "per-frame hook, ns per call, session monitor off (10 M calls)"},
     "frameHookAllocBytesOff": {"limit": 0, "ceiling": 0, "what": "per-frame hook, bytes allocated, monitor off: the hot calls, or the first 10 M calls from cold beyond 64 KiB of JIT noise"},
-    "frameHookNsPerCallOn": {"limit": 200, "ceiling": 200, "what": "per-frame hook (FrameTimes.onFrame + StutterMonitor.onFrame), ns per call, session monitor on"},
+    "frameHookNsPerCallOn": {"limit": 70, "ceiling": 200, "what": "per-frame hook (FrameTimes.onFrame + StutterMonitor.onFrame), ns per call, session monitor on"},
     "frameHookAllocBytesOn": {"limit": 0, "ceiling": 0, "what": "per-frame hook, bytes allocated as above, monitor on"},
     "frameHookNsPerCallOnPhases": {"limit": 400, "ceiling": 400, "what": "per-frame hook plus the Stutter Doctor's phase timers of a capped frame with one tick and a chunk load (8 System.nanoTime reads), ns per frame, monitor on; its own ceiling (coordinator, 2026-09-26)"},
     "frameHookAllocBytesOnPhases": {"limit": 0, "ceiling": 0, "what": "per-frame hook plus the phase timers, bytes allocated as above, monitor on"},
     "tickHookNsPerCall": {"limit": 111, "ceiling": 2000, "what": "RigTune's END_CLIENT_TICK hook, ns per call on the render thread"},
     "tickHookAllocBytes": {"limit": 0, "ceiling": 0, "what": "RigTune's END_CLIENT_TICK hook, bytes allocated per 100,000 calls after warm-up"},
-    "tickHookNsPerCallOn": {"limit": 2000, "ceiling": 2000, "what": "RigTune's END_CLIENT_TICK work in a world with the session monitor on (RigTuneClient.onTick + StutterHooks.tick), ns per call on the render thread"},
+    "tickHookNsPerCallWorld": {"limit": 2000, "ceiling": 2000, "what": "RigTune's END_CLIENT_TICK work in a world with the session monitor off, the play path (RigTuneClient.onTick + StutterHooks.tick), ns per call on the render thread"},
+    "tickHookAllocBytesWorld": {"limit": 0, "ceiling": 0, "what": "the same with the monitor off, bytes allocated per 100,000 calls after warm-up"},
+    "tickHookNsPerCallOn": {"limit": 98, "ceiling": 2000, "what": "RigTune's END_CLIENT_TICK work in a world with the session monitor on (RigTuneClient.onTick + StutterHooks.tick), ns per call on the render thread"},
     "tickHookAllocBytesOn": {"limit": 0, "ceiling": 0, "what": "the same with the monitor on, bytes allocated per 100,000 calls after warm-up"},
     "rigtuneClassBytesIdle": {"limit": 109296, "ceiling": 8388608, "what": "bytes of RigTune-class instances after a full GC at idle (class histogram, shallow)"},
     "heapGrowthAfterCyclesBytes": {"limit": 13518992, "ceiling": null, "what": "heap used after a full GC: after 20 RigTune screen + Tools open/close cycles minus before them"},
     "leakSuspects": {"limit": 0, "ceiling": 0, "what": "RigTune classes with at least one more live instance per open/close cycle"},
     "monitorOnRetainedBytes": {"limit": 2621440, "ceiling": 2621440, "what": "session monitor on in a world: StutterMonitor.retainedBytes() (0 at idle)"},
-    "monitorOffRetainedBytes": {"limit": 262144, "ceiling": 262144, "what": "session monitor off again: StutterMonitor.retainedBytes()"},
+    "monitorOffRetainedBytes": {"limit": 0, "ceiling": 262144, "what": "session monitor off again: StutterMonitor.retainedBytes()"},
     "monitorOffLeftoverInstances": {"limit": 0, "ceiling": 0, "what": "session monitor off again, its session saved: live FrameRing, StutterRings, capture and snapshot objects (class histogram)"},
-    "samplerCpuMsPer60s": {"limit": 120, "ceiling": 120, "what": "\"RigTune stutter sampler\" CPU per 60 s of wall time with the monitor on in a world, in steady state (from 5 s after the thread started); ceiling 120 ms = 0.2 % of one core while the opt-in monitor runs (coordinator, 2026-09-26; SPEC 10 said 30)"}
+    "samplerCpuMsPer60s": {"limit": 101, "ceiling": 120, "what": "\"RigTune stutter sampler\" CPU per 60 s of wall time with the monitor on in a world, in steady state (from 5 s after the thread started); ceiling 120 ms = 0.2 % of one core while the opt-in monitor runs (coordinator, 2026-09-26; SPEC 10 said 30)"}
   }
 }

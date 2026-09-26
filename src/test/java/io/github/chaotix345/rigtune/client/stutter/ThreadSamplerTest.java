@@ -116,13 +116,26 @@ class ThreadSamplerTest {
 
 	@Test
 	void sameAttributionAndCensusAsTheOriginalLoop() {
+		assertEquals(12 + 64, equivalence(new ThreadSampler.Tally()), "each thread's name read once: 10 at the start, 2 later, a burst of 64");
+	}
+
+	// A table that starts at 8 slots: it grows mid-run with live entries in it, and ids that share hash slots probe past
+	// each other.
+	@Test
+	void sameAttributionFromATinyTableThatGrowsWithLiveEntries() {
+		ThreadSampler.Tally tally = new ThreadSampler.Tally(4);
+		assertEquals(12 + 64, equivalence(tally));
+		assertTrue(tally.capacity() >= 128, "grew: " + tally.capacity());
+	}
+
+	// Runs the Tally and the original loop side by side over 60 samples of a changing thread set; returns the names read.
+	private static int equivalence(ThreadSampler.Tally tally) {
 		FakeSource source = new FakeSource();
 		String[] names = {"Render thread", "Server thread", "Worker-Main-1", "Worker-Main-2", "IO-Worker-7", "Chunk Render Task Executor #3",
 				"DH-Render-1", "Netty Local IO #0", "Signal Dispatcher", "RigTune worker"};
 		for (int i = 0; i < names.length; i++) {
 			source.thread(10 + i, names[i]);
 		}
-		ThreadSampler.Tally tally = new ThreadSampler.Tally();
 		Reference reference = new Reference();
 		Random random = new Random(42);
 		for (int sample = 0; sample < 60; sample++) {
@@ -140,6 +153,17 @@ class ThreadSamplerTest {
 				source.endedAfterListing.clear();
 				source.thread(41, "DH-Worker-2");
 			}
+			// A burst of 64 pool threads with widely spread ids, then half of them end.
+			if (sample == 20) {
+				for (int i = 0; i < 64; i++) {
+					source.thread(1_000_003L * (i + 1) + (i % 3), (i % 2 == 0 ? "IO-Worker-" : "Chunk Render Task Executor #") + i);
+				}
+			}
+			if (sample == 30) {
+				for (int i = 0; i < 64; i += 2) {
+					source.end(1_000_003L * (i + 1) + (i % 3));
+				}
+			}
 			for (Map.Entry<Long, Long> e : source.cpu.entrySet()) {
 				e.setValue(e.getValue() + random.nextInt(3_000_000));
 			}
@@ -155,7 +179,7 @@ class ThreadSamplerTest {
 					"sample " + sample + ": CPU per group");
 			assertEquals(expectedCensus, actualCensus, "sample " + sample + ": census");
 		}
-		assertEquals(12, source.nameLookups, "each thread's name read once: 10 at the start, then Worker-Main-3 and DH-Worker-2");
+		return source.nameLookups;
 	}
 
 	private static @Nullable String[] allNames(FakeSource source, long[] ids) {
@@ -200,6 +224,19 @@ class ThreadSamplerTest {
 		tally.add(source.threadIds(), source.cpuTimes(source.threadIds()), source, record, null);
 		assertEquals(300 * 1000L, record[StutterRings.S_WORKER]);
 		assertEquals(300, source.nameLookups);
+
+		// Growing again with the first 300 in the table: they stay known (no name read, deltas from their last time).
+		int before = tally.capacity();
+		for (int i = 0; i < 300; i++) {
+			source.thread(500_000 + 13L * i, "IO-Worker-" + i);
+		}
+		source.cpu.replaceAll((id, t) -> t + 1000);
+		long[] next = new long[StutterRings.SAMPLE_STRIDE];
+		tally.add(source.threadIds(), source.cpuTimes(source.threadIds()), source, next, null);
+		assertTrue(tally.capacity() > before, "grew with live entries: " + before + " -> " + tally.capacity());
+		assertEquals(300 * 1000L, next[StutterRings.S_WORKER], "the known threads' deltas, not their whole CPU time");
+		assertEquals(300 * 1000L, next[StutterRings.S_IO], "the new threads from 0");
+		assertEquals(600, source.nameLookups);
 	}
 
 	// Steady state: the same threads sample after sample. The two JDK calls return fresh arrays in the game; here the arrays

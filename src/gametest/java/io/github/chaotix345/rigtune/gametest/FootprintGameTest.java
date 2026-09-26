@@ -114,13 +114,24 @@ public class FootprintGameTest implements FabricClientGameTest {
 		out.put("os", System.getProperty("os.name") + " " + System.getProperty("os.arch"));
 		out.put("processors", Runtime.getRuntime().availableProcessors());
 
-		startup(out, measured);
-		checkThreads(hardware, out);
-		checkStartupTimes(context, controller, out);
-		tickHook(context, measured, out);
-		noticeEvaluation(context, controller, out);
-		retention(context, measured, out);
-		sessionMonitor(context, controller, hardware, measured, out);
+		boolean complete = false;
+		try {
+			startup(out, measured);
+			checkThreads(hardware, out);
+			checkStartupTimes(context, controller, out);
+			tickHook(context, measured, out);
+			noticeEvaluation(context, controller, out);
+			retention(context, measured, out);
+			sessionMonitor(context, controller, hardware, measured, out);
+			complete = true;
+		} finally {
+			// A failed check still leaves the numbers measured so far in the artifact.
+			if (!complete) {
+				out.put("measured", measured);
+				out.put("incomplete", true);
+				write(mc, backend, out);
+			}
+		}
 
 		FootprintBudgets budgets;
 		try {
@@ -357,7 +368,8 @@ public class FootprintGameTest implements FabricClientGameTest {
 	// off, with no sampler thread, no GC listener and no capture object alive (class histogram once the session is saved).
 	// The sampler's CPU is gated in steady state, over 60 s of wall time from 5 s after its thread started (coordinator,
 	// 2026-09-26); its first 5 s (start-up, the logged census) are recorded apart. The END_CLIENT_TICK work with the monitor on
-	// is RigTuneClient.onTick plus the monitor's own listener (StutterHooks.tick, private, called through a method handle).
+	// is RigTuneClient.onTick plus the monitor's own listener (StutterHooks.tick, private, called through a method handle);
+	// the same pair is timed first with the monitor off (every player's play path).
 	// The heap after a full GC before, during and after is a diagnostic only: a live world moves it by megabytes.
 	private static void sessionMonitor(ClientGameTestContext context, RigTuneController controller, HardwareProfile hardware,
 			Map<String, Number> measured, Map<String, Object> out) {
@@ -370,6 +382,9 @@ public class FootprintGameTest implements FabricClientGameTest {
 			long idleRetained = StutterMonitor.retainedBytes();
 			check(idleRetained == 0 && StutterMonitor.session() == null, "nothing captured or retained with the monitor off: " + idleRetained);
 			Histogram idle = histogram();
+			context.runOnClient(mc -> mc.gui.setScreen(null));
+			long[] tickOff = context.computeOnClient(mc -> timeTicks(mc, stutterTick));
+			check(StutterMonitor.session() == null, "the monitor stayed off through the tick timing");
 
 			long start = System.nanoTime();
 			context.runOnClient(mc -> controller.setStutterMonitor(true));
@@ -392,11 +407,11 @@ public class FootprintGameTest implements FabricClientGameTest {
 			checkNoPowerWatcher(hardware, threadsOn);
 
 			context.runOnClient(mc -> mc.gui.setScreen(null));
-			long[] tick = context.computeOnClient(mc -> timeTicksWithTheMonitor(mc, stutterTick));
+			long[] tick = context.computeOnClient(mc -> timeTicks(mc, stutterTick));
 			check(StutterMonitor.session() != null, "still capturing after the tick timing");
 			long onRetained = StutterMonitor.retainedBytes();
 			long frames = sessionFrames();
-			boolean phaseTiming = StutterMonitor.phaseTiming();
+			boolean phaseTimersSeen = StutterMonitor.phaseTiming();
 			Histogram on = histogram();
 
 			context.runOnClient(mc -> controller.setStutterMonitor(false));
@@ -406,8 +421,15 @@ public class FootprintGameTest implements FabricClientGameTest {
 			long offRetained = StutterMonitor.retainedBytes();
 			context.waitFor(mc -> new StutterStore(configDir).sessions().stream().anyMatch(r -> startedAt.equals(r.startedAt())), 400);
 			context.waitTicks(5);
+			// The save task logs from its copy just after writing stutter.json, so a capture object can outlive the file write
+			// by a moment: up to 3 histograms before counting leftovers.
 			Histogram off = histogram();
 			Map<String, Long> leftover = captureInstances(off);
+			for (int retry = 0; retry < 2 && !leftover.isEmpty(); retry++) {
+				context.waitTicks(20);
+				off = histogram();
+				leftover = captureInstances(off);
+			}
 
 			measured.put("monitorOnRetainedBytes", onRetained);
 			measured.put("monitorOffRetainedBytes", offRetained);
@@ -415,9 +437,12 @@ public class FootprintGameTest implements FabricClientGameTest {
 			measured.put("samplerCpuMsPer60s", round2((samplerCpu - earlyCpu) / 1e6 * SAMPLER_WINDOW_NANOS / (window - earlyWindow)));
 			measured.put("tickHookNsPerCallOn", round2((double) tick[0] / TICK_CALLS));
 			measured.put("tickHookAllocBytesOn", tick[1]);
+			measured.put("tickHookNsPerCallWorld", round2((double) tickOff[0] / TICK_CALLS));
+			measured.put("tickHookAllocBytesWorld", tickOff[1]);
 			out.put("monitorIdleRetainedBytes", idleRetained);
 			out.put("monitorFrames", frames);
-			out.put("monitorPhaseTiming", phaseTiming);
+			// StutterMonitor's phase-timer bits are static: every timer seen since the JVM started, not only this session.
+			out.put("phaseTimersSeen", phaseTimersSeen);
 			out.put("samplerCpuMs", ms(samplerCpu));
 			out.put("samplerWindowMs", ms(window));
 			out.put("samplerCpuMsFirst5s", ms(earlyCpu));
@@ -448,8 +473,8 @@ public class FootprintGameTest implements FabricClientGameTest {
 		}
 	}
 
-	// As tickHook: best of 3 rounds after a warm-up, render thread.
-	private static long[] timeTicksWithTheMonitor(Minecraft mc, MethodHandle stutterTick) {
+	// RigTune's two END_CLIENT_TICK listeners, as tickHook: best of 3 rounds after a warm-up, render thread.
+	private static long[] timeTicks(Minecraft mc, MethodHandle stutterTick) {
 		com.sun.management.ThreadMXBean mx = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
 		try {
 			for (int i = 0; i < 2 * TICK_CALLS; i++) {
@@ -470,7 +495,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 			}
 			return new long[]{nanos, bytes};
 		} catch (Throwable t) {
-			throw new AssertionError("timing the tick with the monitor on failed", t);
+			throw new AssertionError("timing RigTune's tick listeners failed", t);
 		}
 	}
 

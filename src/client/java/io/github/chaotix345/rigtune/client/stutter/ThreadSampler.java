@@ -17,8 +17,9 @@ import java.util.TreeMap;
 // the chunk-build backlog the render thread published (BuildBacklog). getThreadInfo with depth 0 needs no safepoint.
 // No system-wide CPU load: that JDK call takes over 100 ms on Windows. The first sample of a capture logs the
 // thread-name census (for the induced-stutter runs).
-// Cost (SPEC 10, 30 ms of CPU per 60 s): a thread's name is read only the first time its id shows up (Tally), and the
-// per-thread bookkeeping is primitive, so a steady-state sample allocates only the two arrays the JDK calls return.
+// Cost (SPEC 10 as amended: at most 120 ms of CPU per 60 s in steady state): a thread's name is read only the first time
+// its id shows up (Tally), and the per-thread bookkeeping is primitive, so a steady-state sample allocates only the two
+// arrays the JDK calls return.
 final class ThreadSampler implements Runnable {
 	static final String THREAD_NAME = "RigTune stutter sampler";
 	static final long PERIOD_MS = 250;
@@ -157,7 +158,7 @@ final class ThreadSampler implements Runnable {
 	// A thread's name (and so its group) is read only the first time its id shows up: thread ids are never reused, and the
 	// game's threads are named when they're created. A thread that ended (CPU time -1) is dropped; one seen for the first
 	// time counts from 0, as before. The first sample only sets the baseline. Steady state (no new thread, no more threads
-	// than the tables hold) allocates nothing.
+	// than the tables hold) allocates nothing. A thread renamed after its first sample keeps its first name's group.
 	static final class Tally {
 		private static final long EMPTY = Long.MIN_VALUE;
 		private static final int ENDED = -1;

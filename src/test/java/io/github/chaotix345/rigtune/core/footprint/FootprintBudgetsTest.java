@@ -37,6 +37,8 @@ class FootprintBudgetsTest {
 			Map.entry("frameHookAllocBytesOnPhases", 0.0),
 			Map.entry("tickHookNsPerCall", 2000.0),
 			Map.entry("tickHookAllocBytes", 0.0),
+			Map.entry("tickHookNsPerCallWorld", 2000.0),
+			Map.entry("tickHookAllocBytesWorld", 0.0),
 			Map.entry("tickHookNsPerCallOn", 2000.0),
 			Map.entry("tickHookAllocBytesOn", 0.0),
 			Map.entry("rigtuneClassBytesIdle", 8 * MIB),
