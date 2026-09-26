@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.core.modrinth;
 
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.core.apply.LogSafe;
 import io.github.chaotix345.rigtune.core.apply.ModJars;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
@@ -196,7 +197,8 @@ public final class DownloadPlanner {
 				}
 				continue;
 			} catch (IOException | RuntimeException e) {
-				RigTune.LOGGER.warn("Could not prepare {}", rec.id(), e);
+				RigTune.LOGGER.warn("Could not prepare {}: {}", LogSafe.text(rec.id()), LogSafe.error(e),
+						e instanceof IOException || e instanceof TextException ? null : e);
 				dropDownloads(attempt);
 				errorAt[at] = rec.title() + ": " + e.getMessage();
 				// A refusal of the planner or the resolver is translated; a network or file error's detail stays as it is.
@@ -238,7 +240,7 @@ public final class DownloadPlanner {
 				try {
 					attempt.batch.dropDuplicate(Path.of(op.from()));
 				} catch (IOException e) {
-					RigTune.LOGGER.warn("Could not delete {}", op.from(), e);
+					RigTune.LOGGER.warn("Could not delete {} ({})", LogSafe.name(Path.of(op.from())), LogSafe.error(e, Path.of(op.from())));
 				}
 			}
 		}
@@ -369,7 +371,7 @@ public final class DownloadPlanner {
 			}
 			// A second jar with an already-loaded mod id would stop Fabric from starting, so drop it.
 			if (!attempt.modIds.add(jarModId)) {
-				RigTune.LOGGER.info("Skipping {}: mod {} is already present", file.filename(), jarModId);
+				RigTune.LOGGER.info("Skipping {}: mod {} is already present", LogSafe.text(file.filename()), LogSafe.text(jarModId));
 				attempt.batch.dropDuplicate(pending);
 				continue;
 			}
@@ -489,7 +491,7 @@ public final class DownloadPlanner {
 				try {
 					batch.dropDuplicate(Path.of(op.from()));
 				} catch (IOException e) {
-					RigTune.LOGGER.warn("Could not delete {}", op.from(), e);
+					RigTune.LOGGER.warn("Could not delete {} ({})", LogSafe.name(Path.of(op.from())), LogSafe.error(e, Path.of(op.from())));
 				}
 			}
 		}
@@ -507,7 +509,7 @@ public final class DownloadPlanner {
 				}
 			}
 			if (why != null) {
-				RigTune.LOGGER.warn("Not staging {}: {}", rec.id(), why.english());
+				RigTune.LOGGER.warn("Not staging {}: {}", LogSafe.text(rec.id()), LogSafe.text(why.english()));
 				staged[i] = false;
 				opIds.remove(rec.id());
 				errorAt[i] = rec.title() + ": " + why.english();
@@ -594,7 +596,7 @@ public final class DownloadPlanner {
 		void noteReplaced(String modId, Path pending) {
 			String old = modId == null ? null : stagedJars.get(modId);
 			if (old != null && !old.equals(pending.toString())) {
-				RigTune.LOGGER.info("{} replaces the staged {} for mod {}", pending.getFileName(), Path.of(old).getFileName(), modId);
+				RigTune.LOGGER.info("{} replaces the staged {} for mod {}", LogSafe.name(pending), LogSafe.name(Path.of(old)), LogSafe.text(modId));
 			}
 		}
 	}

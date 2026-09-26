@@ -1,24 +1,17 @@
 package io.github.chaotix345.rigtune.core.store;
 
+import io.github.chaotix345.rigtune.core.LogCapture;
 import io.github.chaotix345.rigtune.core.store.JsonStateFile.State;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.core.LogEvent;
-import org.apache.logging.log4j.core.Logger;
-import org.apache.logging.log4j.core.appender.AbstractAppender;
-import org.apache.logging.log4j.core.config.Property;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -32,30 +25,16 @@ class JsonStateFileLogTest {
 
 	@TempDir
 	Path game;
-	final List<String> logged = new CopyOnWriteArrayList<>();
-	private AbstractAppender appender;
+	private LogCapture log;
 
 	@BeforeEach
 	void capture() {
-		appender = new AbstractAppender("rigtune-test-capture", null, null, true, Property.EMPTY_ARRAY) {
-			@Override
-			public void append(LogEvent event) {
-				StringWriter out = new StringWriter();
-				out.append(event.getMessage().getFormattedMessage());
-				if (event.getThrown() != null) {
-					event.getThrown().printStackTrace(new PrintWriter(out));
-				}
-				logged.add(out.toString());
-			}
-		};
-		appender.start();
-		((Logger) LogManager.getLogger("RigTune")).addAppender(appender);
+		log = new LogCapture();
 	}
 
 	@AfterEach
 	void release() {
-		((Logger) LogManager.getLogger("RigTune")).removeAppender(appender);
-		appender.stop();
+		log.close();
 	}
 
 	private Path file() {
@@ -68,9 +47,9 @@ class JsonStateFileLogTest {
 	}
 
 	private void assertOnlyTheNameIsLogged() {
-		assertFalse(logged.isEmpty());
+		assertFalse(log.lines().isEmpty());
 		String home = System.getProperty("user.home");
-		for (String line : logged) {
+		for (String line : log.lines()) {
 			assertTrue(line.contains("sample.json"), line);
 			assertFalse(line.contains(game.toString()), line);
 			assertFalse(line.contains(game.toAbsolutePath().toString()), line);
