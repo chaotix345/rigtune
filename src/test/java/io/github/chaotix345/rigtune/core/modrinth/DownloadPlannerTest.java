@@ -160,25 +160,31 @@ class DownloadPlannerTest {
 		return result;
 	}
 
-	// Review 4, rules-accuracy-2: a batch never stages both sides of a rules conflict; the later one fails before its
-	// download.
+	// Review 4, rules-accuracy-2, and docs/v0.4/SPEC.md 2e (AC2e.2): a batch never stages both sides of a rules conflict,
+	// and which side goes in doesn't follow the tick order: both are refused, before any download, naming each other.
 	@Test
-	void theLaterOfTwoConflictingAdditionsFails() {
+	void twoConflictingAdditionsAreBothRefusedInEitherOrder() {
 		put("krypton", version("kryptonV", "KRYPTON", "1", T));
 		put("b", version("bV", "B", "1", T));
 		put("noise", version("noiseV", "NOISE", "1", T));
 		conflicts = (a, b) -> Set.of("krypton", "noise").equals(Set.of(a, b));
 
 		DownloadPlanner.Result result = plan(Set.of(), add("krypton", "KRYPTON"), add("b", "B"), add("noise", "NOISE"));
+		DownloadPlanner.Result reversed = plan(Set.of(), add("noise", "NOISE"), add("b", "B"), add("krypton", "KRYPTON"));
 
-		assertEquals(List.of("add-krypton", "add-b"), result.ids());
-		assertEquals(List.of("kryptonV.jar", "bV.jar"), targets(result.ops()));
-		assertEquals(List.of("Add noise: it conflicts with krypton, which is being installed too"), result.errors());
+		for (DownloadPlanner.Result r : List.of(result, reversed)) {
+			assertEquals(List.of("add-b"), r.ids());
+			assertEquals(List.of("bV.jar"), targets(r.ops()));
+			assertEquals(Set.of("Add krypton: it conflicts with noise, which is ticked too; tick only one of them",
+					"Add noise: it conflicts with krypton, which is ticked too; tick only one of them"), Set.copyOf(r.errors()));
+		}
+		assertFalse(fetched.contains("kryptonV.jar"));
 		assertFalse(fetched.contains("noiseV.jar"));
 	}
 
+	// 2e: refused together even when one side would have failed anyway.
 	@Test
-	void aConflictWithAnAdditionThatFailedDoesNotCount() {
+	void aConflictingPairIsRefusedEvenWhenOneSideWouldFail() {
 		put("krypton", version("kryptonV", "KRYPTON", "1", T));
 		put("noise", version("noiseV", "NOISE", "1", T));
 		conflicts = (a, b) -> Set.of("krypton", "noise").equals(Set.of(a, b));
@@ -186,24 +192,31 @@ class DownloadPlannerTest {
 
 		DownloadPlanner.Result result = plan(Set.of(), add("krypton", "KRYPTON"), add("noise", "NOISE"));
 
-		assertEquals(List.of("add-noise"), result.ids());
-		assertEquals(List.of("noiseV.jar"), targets(result.ops()));
-		assertEquals(1, result.errors().size(), result.errors().toString());
+		assertEquals(List.of(), result.ids());
+		assertEquals(2, result.errors().size(), result.errors().toString());
+		assertEquals(List.of(), fetched);
 	}
 
-	// Review 4, rules-accuracy-2: a Modrinth "incompatible" dependency between two additions of one batch fails the later.
+	// Review 4, rules-accuracy-2, and 2e (AC2e.2): a Modrinth "incompatible" dependency between two additions of one batch
+	// refuses both, whichever was ticked first.
 	@Test
-	void aModrinthIncompatibilityWithinTheBatchFailsTheLaterAddition() {
+	void twoModrinthIncompatibleAdditionsAreBothRefusedInEitherOrder() {
 		put("a", version("aV", "A", "1", T, incompatible("B")));
 		put("c", version("cV", "C", "1", T));
 		put("b", version("bV", "B", "1", T));
 
 		DownloadPlanner.Result result = plan(Set.of(), add("a", "A"), add("c", "C"), add("b", "B"));
+		DownloadPlanner.Result reversed = plan(Set.of(), add("b", "B"), add("c", "C"), add("a", "A"));
 
-		assertEquals(List.of("add-a", "add-c"), result.ids());
-		assertEquals(List.of("aV.jar", "cV.jar"), targets(result.ops()));
-		assertEquals(List.of("Add b: Modrinth marks A and B as incompatible, and both would be installed"), result.errors());
+		for (DownloadPlanner.Result r : List.of(result, reversed)) {
+			assertEquals(List.of("add-c"), r.ids());
+			assertEquals(List.of("cV.jar"), targets(r.ops()));
+			assertEquals(Set.of("Add a: Modrinth marks A and B as incompatible, and both would be installed",
+					"Add b: Modrinth marks B and A as incompatible, and both would be installed"), Set.copyOf(r.errors()));
+		}
+		assertFalse(fetched.contains("aV.jar"));
 		assertFalse(fetched.contains("bV.jar"));
+		assertEquals(2, client.calls.stream().filter("latestVersion:A"::equals).count(), "one lookup per plan: " + client.calls);
 	}
 
 	// Mod a is installed as a-1.jar (Modrinth version a1 of project A); its update is version aV (file aV.jar).
@@ -312,22 +325,30 @@ class DownloadPlannerTest {
 		assertEquals("installed", Files.readString(mods.resolve("a-1.jar")));
 	}
 
-	// A staged update's version is in the batch: a later update declaring it incompatible is refused.
+	// docs/v0.4/SPEC.md 2e (AC2e.1): two updates whose new versions Modrinth marks incompatible (either declaring it)
+	// are both refused, naming each other, in either tick order; an unrelated update proceeds.
 	@Test
-	void aStagedUpdateIsPartOfTheBatchForTheNextUpdate() throws IOException {
+	void twoMutuallyIncompatibleUpdatesAreBothRefusedInEitherOrder() throws IOException {
 		titles();
-		Recommendation update = updateA();
-		Files.writeString(mods.resolve("k-1.jar"), "installed");
-		installedVersions.put("k1", version("k1", "K", "1", T));
-		ModrinthVersion k2 = version("kV", "K", "2", T, new Dependency(null, "aV", "incompatible"));
-		updateVersions.put("kV", k2);
-		Recommendation updateK = new Recommendation("update-k", Category.UPDATE_MOD, Impact.MEDIUM, "Update k", "",
-				new Action.UpdateMod("k", mods.resolve("k-1.jar"), new UpdateInfo("k", "K", "1", "kV", "2", k2.primaryFile())), true);
+		client.projects.add(new ModrinthProject("M", "m", "M Mod", "approved", List.of("26.2"), List.of("fabric"), "optional"));
+		for (boolean kDeclares : List.of(true, false)) {
+			Recommendation updateA = kDeclares ? updateA() : updateA(new Dependency("K", "kV", "incompatible"));
+			Recommendation updateK = kDeclares ? updateOf("k", "K", new Dependency(null, "aV", "incompatible")) : updateOf("k", "K");
+			Recommendation updateM = updateOf("m", "M");
 
-		DownloadPlanner.Result result = plan(Set.of("A", "K"), update, updateK);
+			DownloadPlanner.Result result = plan(Set.of("A", "K", "M"), updateA, updateK, updateM);
+			DownloadPlanner.Result reversed = plan(Set.of("A", "K", "M"), updateK, updateA, updateM);
 
-		assertEquals(List.of("update-a"), result.ids());
-		assertEquals(List.of("Update k: Modrinth marks K Mod and A Mod as incompatible, and both would be installed"), result.errors());
+			for (DownloadPlanner.Result r : List.of(result, reversed)) {
+				assertEquals(List.of("update-m"), r.ids(), r.errors().toString());
+				assertEquals(List.of("m-1.jar", "mV.jar"), files(r.ops()));
+				assertEquals(Set.of("Update a: Modrinth marks A Mod and K Mod as incompatible, and both would be installed",
+						"Update k: Modrinth marks K Mod and A Mod as incompatible, and both would be installed"), Set.copyOf(r.errors()));
+			}
+			assertFalse(fetched.contains("aV.jar"));
+			assertFalse(fetched.contains("kV.jar"));
+			fetched.clear();
+		}
 	}
 
 	// AC3.2 (iv): updates are planned before additions, so the order they were ticked in doesn't matter.

@@ -144,18 +144,17 @@ class PreviewDownloadsTest {
 	}
 
 	@Test
-	void theLaterOfTwoConflictingAdditionsIsRefused() {
+	void twoConflictingAdditionsAreBothRefused() {
 		lithiumWithFabricApi();
 		modrinth.put("krypton", version("kryV", "KRYPTON", "krypton-1.0.jar"), "krypton");
 		conflicts = (a, b) -> Set.of(a, b).equals(Set.of("lithium", "krypton"));
 
 		ApplyPreview preview = preview(add("lithium", "LITHIUM", "Lithium"), add("krypton", "KRYPTON", "Krypton"));
 
-		assertEquals(List.of("lithium-1.0.jar", "fabric-api-1.0.jar"), preview.downloads().stream().map(ApplyPreview.Download::fileName).toList());
-		ApplyPreview.Skipped refused = preview.skipped().getFirst();
-		assertEquals("add:krypton", refused.recommendationId());
-		assertEquals(ApplyPreview.Reason.DOWNLOAD_FAILED, refused.reason());
-		assertTrue(refused.detail().startsWith("it conflicts with Lithium"), refused.detail());
+		assertEquals(List.of(), preview.downloads());
+		assertEquals(List.of("add:lithium", "add:krypton"), preview.skipped().stream().map(ApplyPreview.Skipped::recommendationId).toList());
+		assertTrue(preview.skipped().stream().allMatch(r -> r.reason() == ApplyPreview.Reason.DOWNLOAD_FAILED));
+		assertTrue(preview.skipped().get(1).detail().startsWith("it conflicts with Lithium"), preview.skipped().get(1).detail());
 	}
 
 	// Review WS-P #3: a file fetched again after a failed item keeps its stand-in mod id, so a later new file isn't taken for

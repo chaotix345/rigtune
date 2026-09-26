@@ -107,7 +107,7 @@
 	"rigtune.category.setting": "Settings",
 	"rigtune.category.advice": "Advice",
 	"rigtune.download.another_mod": "another mod",
-	"rigtune.download.conflicts": "it conflicts with %s, which is being installed too",
+	"rigtune.download.conflicts": "it conflicts with %s, which is ticked too; tick only one of them",
 	"rigtune.download.error": "%s: %s",
 	"rigtune.download.incompatible": "Modrinth marks %s as incompatible with %s, which is installed",
 	"rigtune.download.incompatible_both": "Modrinth marks %s and %s as incompatible, and both would be installed",

@@ -23,6 +23,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 
@@ -101,9 +102,14 @@ public final class DownloadPlanner {
 		List<Recommendation> ordered = new ArrayList<>();
 		recs.stream().filter(r -> r.action() instanceof Action.UpdateMod).forEach(ordered::add);
 		recs.stream().filter(r -> !(r.action() instanceof Action.UpdateMod)).forEach(ordered::add);
+		Map<String, Text> refusedTogether = refusedTogether(ordered);
 		for (Recommendation rec : ordered) {
 			Attempt attempt = new Attempt(batch);
 			try {
+				Text together = refusedTogether.get(rec.id());
+				if (together != null) {
+					throw new TextException(together);
+				}
 				switch (rec.action()) {
 					case Action.AddMod add -> addMod(add, attempt);
 					case Action.UpdateMod update -> updateMod(update, attempt);
@@ -119,9 +125,6 @@ public final class DownloadPlanner {
 				continue;
 			}
 			String group = batch.commit(attempt);
-			if (rec.action() instanceof Action.AddMod add) {
-				batch.added.add(add);
-			}
 			ids.add(rec.id());
 			List<Op> own = attempt.ops.isEmpty() && !attempt.joins.isEmpty()
 					? batch.ops.stream().filter(op -> group.equals(op.group())).toList() : attempt.ops;
@@ -130,13 +133,70 @@ public final class DownloadPlanner {
 		return new Result(List.copyOf(batch.ops), ids, errors, Map.copyOf(opIds), errorTexts);
 	}
 
-	private void addMod(Action.AddMod add, Attempt attempt) throws IOException {
-		// The batch never stages both sides of a conflict: the later one fails (review 4, rules-accuracy-2).
-		for (Action.AddMod earlier : attempt.batch.added) {
-			if (conflicts.test(earlier.slug(), add.slug())) {
-				throw new TextException(Text.of("rigtune.download.conflicts", "it conflicts with %s, which is being installed too", earlier.title()));
+	// docs/v0.4/SPEC.md 2e: pairs of ticked recommendations that can't go in together are refused together, before
+	// anything is downloaded, each naming the other: RigTune can't know which one the player wanted, and the tick order
+	// mustn't decide. Updates: their new versions, either declaring the other incompatible on Modrinth. Additions: the
+	// rules' conflicts (review 4, rules-accuracy-2), and Modrinth's incompatibility between their own versions (a
+	// dependency's is still found when it's resolved, and fails the later one). Recommendation id -> the refusal.
+	private Map<String, Text> refusedTogether(List<Recommendation> ordered) {
+		Map<String, Text> out = new HashMap<>();
+		List<Recommendation> updates = new ArrayList<>();
+		List<Recommendation> additions = new ArrayList<>();
+		Map<String, ModrinthVersion> versions = new HashMap<>();
+		for (Recommendation rec : ordered) {
+			switch (rec.action()) {
+				case Action.UpdateMod update -> {
+					ModrinthVersion next = updateVersions.get(update.update().newVersionId());
+					if (next != null) {
+						updates.add(rec);
+						versions.put(rec.id(), next);
+					}
+				}
+				case Action.AddMod add -> additions.add(rec);
+				default -> {
+				}
 			}
 		}
+		if (additions.size() > 1) {
+			for (Recommendation rec : additions) {
+				Action.AddMod add = (Action.AddMod) rec.action();
+				try {
+					resolver.latest(add.projectId() != null ? add.projectId() : add.slug()).ifPresent(version -> versions.put(rec.id(), version));
+				} catch (IOException | RuntimeException e) {
+					// Resolving it again fails the recommendation with the reason.
+				}
+			}
+		}
+		pairs(updates, versions, out, null);
+		pairs(additions, versions, out, (a, b) -> conflicts.test(((Action.AddMod) a.action()).slug(), ((Action.AddMod) b.action()).slug())
+				? Text.of("rigtune.download.conflicts", "it conflicts with %s, which is ticked too; tick only one of them", ((Action.AddMod) b.action()).title())
+				: null);
+		return out;
+	}
+
+	private void pairs(List<Recommendation> recs, Map<String, ModrinthVersion> versions, Map<String, Text> out,
+			BiFunction<Recommendation, Recommendation, Text> ruleConflict) {
+		for (int i = 0; i < recs.size(); i++) {
+			for (int j = i + 1; j < recs.size(); j++) {
+				Recommendation a = recs.get(i);
+				Recommendation b = recs.get(j);
+				Text ab = ruleConflict == null ? null : ruleConflict.apply(a, b);
+				Text ba = ruleConflict == null ? null : ruleConflict.apply(b, a);
+				ModrinthVersion va = versions.get(a.id());
+				ModrinthVersion vb = versions.get(b.id());
+				if (ab == null && va != null && vb != null && DependencyResolver.incompatible(va, vb)) {
+					ab = resolver.bothInstalled(va.projectId(), vb.projectId()).text();
+					ba = resolver.bothInstalled(vb.projectId(), va.projectId()).text();
+				}
+				if (ab != null) {
+					out.putIfAbsent(a.id(), ab);
+					out.putIfAbsent(b.id(), ba);
+				}
+			}
+		}
+	}
+
+	private void addMod(Action.AddMod add, Attempt attempt) throws IOException {
 		String ref = add.projectId() != null ? add.projectId() : add.slug();
 		DependencyResolver.Resolution resolution = resolver.resolve(ref, attempt.projects, attempt.batch.versions, attempt.batch.groupOfUpdate.keySet());
 		// Allowed only because an update replaces the installed version: it goes in with that update or not at all.
@@ -223,7 +283,7 @@ public final class DownloadPlanner {
 	}
 
 	// What the batch has committed so far. projects and modIds are what is installed (loaded, or already in mods/);
-	// what the batch staged is in groupOfProject and groupOfMod, with the group it went into, and in versions and added.
+	// what the batch staged is in groupOfProject and groupOfMod, with the group it went into, and in versions.
 	// groupOfUpdate: installed project -> the group of its staged update.
 	private static final class Batch {
 		final Set<String> projects;
@@ -234,7 +294,6 @@ public final class DownloadPlanner {
 		final Map<String, String> groupOfUpdate = new LinkedHashMap<>();
 		final List<Op> ops = new ArrayList<>();
 		final List<ModrinthVersion> versions = new ArrayList<>();
-		final List<Action.AddMod> added = new ArrayList<>();
 
 		Batch(Set<String> installedProjects, Set<String> loadedIds, Map<String, String> stagedJars) {
 			this.projects = new HashSet<>(installedProjects);

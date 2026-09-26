@@ -10,6 +10,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -40,6 +41,9 @@ public final class DependencyResolver {
 	private final StagedProjects staged;
 	// The staged versions with their dependencies, asked of Modrinth once per resolver (one plan); empty when it can't say.
 	private List<ModrinthVersion> stagedVersions;
+	// Modrinth's latest version per project or slug, remembered for the resolver's run (one plan), so the pairwise
+	// pre-check of additions (docs/v0.4/SPEC.md 2e) asks nothing twice.
+	private final Map<String, ModrinthVersion> answers = new HashMap<>();
 
 	public DependencyResolver(ModrinthClient client, String loader, String gameVersion) {
 		this(client, loader, gameVersion, DEFAULT_MAX_DEPTH, Map.of());
@@ -117,7 +121,7 @@ public final class DependencyResolver {
 			if (seen.contains(next.idOrSlug())) {
 				continue;
 			}
-			Optional<ModrinthVersion> found = client.latestVersion(next.idOrSlug(), loader, gameVersion);
+			Optional<ModrinthVersion> found = latest(next.idOrSlug());
 			if (found.isEmpty()) {
 				throw new TextException(Text.of("rigtune.download.no_version", "No %s version of %s for Minecraft %s", loader, next.idOrSlug(), gameVersion));
 			}
@@ -145,6 +149,16 @@ public final class DependencyResolver {
 			refuseIncompatible(version, null, installedProjectIds, batch, together, updatedProjects, needed);
 		}
 		return new Resolution(List.copyOf(out), Collections.unmodifiableSet(needed));
+	}
+
+	Optional<ModrinthVersion> latest(String idOrSlug) throws IOException {
+		ModrinthVersion known = answers.get(idOrSlug);
+		if (known != null) {
+			return Optional.of(known);
+		}
+		Optional<ModrinthVersion> found = client.latestVersion(idOrSlug, loader, gameVersion);
+		found.ifPresent(version -> answers.put(idOrSlug, version));
+		return found;
 	}
 
 	// An update's own version (SPEC 3b, plan review A-H1): refused when Modrinth marks it incompatible with an installed
@@ -252,6 +266,11 @@ public final class DependencyResolver {
 		return projectId != null && projectId.equals(other);
 	}
 
+	// docs/v0.4/SPEC.md 2e: two versions that can't go in together, whichever of them declares it.
+	static boolean incompatible(ModrinthVersion a, ModrinthVersion b) {
+		return declaresIncompatible(a, b) || declaresIncompatible(b, a);
+	}
+
 	private static boolean declaresIncompatible(ModrinthVersion declaring, ModrinthVersion target) {
 		return declaring != target && declaring.dependencies().stream().anyMatch(dep -> dep.incompatible() && matches(dep, target));
 	}
@@ -270,7 +289,7 @@ public final class DependencyResolver {
 				name(version.projectId()), stagedName));
 	}
 
-	private IOException bothInstalled(String a, String b) {
+	TextException bothInstalled(String a, String b) {
 		return new TextException(Text.of("rigtune.download.incompatible_both", "Modrinth marks %s and %s as incompatible, and both would be installed",
 				name(a), name(b)));
 	}
