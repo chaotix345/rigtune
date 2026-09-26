@@ -6,6 +6,109 @@ for each release becomes that release's Modrinth changelog (`build.gradle`'s
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-27
+
+### Added
+- **Tools…** on the RigTune screen (in the footer, where Benchmark… was) opens a hub: **Benchmark…**, **Profiles…**, **Stutter Doctor…**, **JVM & memory…**, **Benchmark history…** and your last launch time. Everything in it works with the network off and sends nothing anywhere.
+- **Performance Profiles** (Tools… → Profiles…): switch your video, Sodium, Distant Horizons and Iris settings between whole setups in one click.
+  - Templates, worked out for your PC from the same rules as the main list: **Max FPS**, **Balanced**, **Quality**, **Battery** (60 FPS with VSync, shorter distances, no clouds; shaders and Distant Horizons rendering off when you have them) and **Recording** (a steady frame cap, 60 on most screens, no idle throttle). Your memory and Distant Horizons limits still apply.
+  - **My settings**, saved the first time you open Profiles: the way back. It can't be deleted.
+  - Your own saved profiles (**Save current…**) and imported ones.
+  - A switch is an ordinary Apply: options change at once, Sodium, Distant Horizons and Iris settings at the next restart, History shows it as "Profile: Battery", and Undo this / last / all work as usual.
+  - On a laptop, RigTune *offers* Battery when you unplug, and your previous profile when you plug back in. It never switches by itself, and **Don't offer again** turns the offer off.
+- **Share codes**: **Copy code** puts a code like `RT1-AQdCYXR0…` (about 100 characters) on your clipboard; **Import code…** always opens a Preview first, with **Apply**, **Save only** and **Cancel**, and nothing is written before you click. A code holds only setting values from a fixed list, as numbers, plus a name shown as plain text: no file names, no mods, no downloads. Values beyond your PC's memory and Distant Horizons limits are lowered, and Preview says so. Thread counts stay on your PC. RigTune reads the clipboard only when you press **Paste**.
+- **Stutter Doctor** (Tools… → Stutter Doctor) shows where the time went when the game hitches, and what may help.
+  - The session monitor is **off by default**. Turn it on with **Start** (or in RigTune's settings). While a world is loaded it records frame times, Java's garbage-collection pauses, world saves, chunk loading and how busy the game's threads are; **Pause** and **Stop** do what they say. Leaving the world saves a short summary: numbers only, the last 5 sessions, in `config/rigtune/stutter.json`.
+  - The report: spikes by severity, a frame-time histogram, the likely causes as shares of the lost time (garbage collection, chunk loading, chunk building, game ticks) with **Not explained** always shown, correlations such as world saves or Distant Horizons' background work marked "(not measured)", the 10 worst spikes, and advice that fits (for example more memory, with your launcher's steps, when garbage collection dominates and the heap is nearly full). It gives no verdict or advice before 3 spikes and 2 minutes of gameplay.
+  - The benchmark always records its own sweeps, and its result screen gets one Stutter Doctor line.
+  - **Copy summary** puts a text summary on your clipboard, only when you press it.
+- **JVM & memory** (Tools… → JVM & memory): the Java that runs your game (version, vendor, garbage collector and whether your Java arguments chose it, heap), and notes on Java arguments that Java ignores, that hurt a game client, or that only cost memory. Each note says where your launcher keeps its Java arguments (the Modrinth App, Prism Launcher, MultiMC, ATLauncher, GDLauncher, the CurseForge app and the Minecraft Launcher).
+  - RigTune never tells you to add garbage-collector flags or to switch collector for more frame rate; its notes only ever suggest removing arguments or changing the memory setting. On the one PC they were measured on, Java's defaults, the launchers' default sets, Aikar's flags and ZGC gave the same frame rates within run-to-run noise; what differed was memory (the README has the table).
+  - Your Java arguments are never shown, logged or shared: they can contain folder paths with your Windows user name. **Copy report** adds one line with the Java version, vendor, collector and the number of notes.
+  - It needs a HotSpot-based Java (Temurin, Zulu, Oracle, Microsoft); on OpenJ9 the check turns itself off.
+  - The README has the errors Java prints for arguments that stop the game from starting, and how to get back.
+- **Benchmark history and regression alerts** (Tools… → Benchmark history):
+  - Runs are compared only with runs under the same conditions: Minecraft version, scene, render and simulation distance, window size, fullscreen, shaders and pack, Distant Horizons.
+  - Once there are 3 earlier comparable runs, a run whose 1% low is below your usual by more than the run-to-run noise says so ("1% lows 31% below your usual 630 FPS since 2026-09-26"), then lists the History entries since then as "Changes since then (may be related)", or "No change recorded; possibly a driver, OS or other change". A run under different conditions says "Performance changed under different conditions (shaders); cause unknown." An improvement is never an alert.
+  - The result screen's chart shows comparable runs only, with your usual level as a line.
+  - The tier badge's tooltip and **Copy report** show your last benchmark with its conditions, and "Needs a rerun" when they no longer match your game.
+- **Server-aware advice**: on a server that limits view distance, the RigTune screen says so ("The server limits view distance to 10 chunks (you set 16)"), and a suggested render-distance increase stops at the server's limit ("The server sends at most 10 chunks."). RigTune never suggests lowering your render distance because of a server. Singleplayer, including a world you opened to LAN, is unchanged. The last limit seen per server is kept in `config/rigtune/server-limits.json` for a "(was 6)" note; server addresses aren't stored in readable form there (a keyed hash with a random key kept in the file), and the file never goes into a report.
+- **Change awareness**:
+  - A notice when your GPU, GPU driver or other hardware changed since the last start ("Your GPU driver changed since last time (26.5.1 → 26.8.1)"), with **Re-scan** and **Re-benchmark**. Switching between OpenGL and Vulkan alone isn't a change.
+  - A notice when a rules update brings recommendations you haven't seen yet ("3 new recommendations for you since you last looked: …").
+  - The first start after an upgrade stays quiet and only records where you are.
+  - Two driver warnings for known-bad ranges: NVIDIA drivers 526.47 to 536.22 on Windows (they force Threaded Optimization, which Sodium reports causes crashes and stutter, Sodium issue #1486), and Intel HD Graphics 2500/4000 drivers older than 10.18.10.5161 (can freeze at startup with Sodium, Sodium issue #899).
+- **One notice line** under the RigTune screen's header shows the most important of these (battery offer, server limit, benchmark regression, hardware change, new recommendations, a benchmark that needs a rerun), with "+N more". In a narrow window a "…" button opens them all.
+- **Launch time** in Tools…: your last launch-to-title time, the median of your last 10, and a note when your mod set changed since the previous launch ("may be related"). Fabric Loader doesn't time individual mods, so RigTune can't tell you which mod is slow.
+- **Keyboard and Narrator**: every list row on RigTune's screens can be reached with Tab and the arrow keys and is read by the Narrator; a recommendation's checkbox now names its recommendation. Enter or Space selects a History entry or a profile, and a frame shows the focused row. With Minecraft's High Contrast options on, RigTune's own colours switch to high-contrast ones. The benchmark result's table and the charts aren't reachable yet.
+- **RigTune's own footprint** is checked on every build: a game test on every CI leg and a unit test fail when RigTune's startup work, its per-frame or per-tick cost, its memory, or the Stutter Doctor monitor's cost go over fixed budgets (numbers in the README).
+- For contributors and maintainers:
+  - a snapshot canary workflow (weekly, and on demand) builds RigTune against the newest Minecraft snapshot and keeps one issue open while that fails; it was proven on a branch, and its schedule starts once the file is on main;
+  - a harness in CI runs the released 0.3.0 jar's own classes on the files this version writes, and pinned copies of 0.1.0 and 0.3.0 code read them in the unit tests;
+  - scenario tests run the bundled rules on hardware RigTune wasn't run on (an integrated-graphics laptop on battery, an old 4-core desktop, a CPU and GPU no table knows).
+
+### Changed
+- The header reads "**Estimated tier** 4/5 · lowest estimated component: CPU" instead of "limited by …", and names every tied component ("GPU, CPU"). The tier badge's tooltip gives each component's tier and where it came from: RigTune's hardware table ("table match") or core counts and the GPU vendor ("fallback estimate"). **Copy report** uses the same wording.
+- **VSync off** is an optional suggestion now (unticked), and says what it does: "Optional: turning VSync off lowers input lag but can cause tearing; leave it on if you see tearing." The frame-rate cap no longer claims to keep FreeSync or G-Sync active: "Avoids rendering frames your monitor can't show; with FreeSync or G-Sync it also keeps the frame rate inside the variable-refresh range." RigTune 0.1.x gets the same change.
+- **Launchers**:
+  - MultiMC and GDLauncher are recognised, named, and get their own memory steps. PolyMC is named MultiMC (its steps are the same).
+  - The CurseForge app's memory steps say "choose Custom RAM Allocation" (it's a radio button, not a switch).
+  - The Minecraft Launcher's steps follow Mojang's own help articles: Installations → select the installation → More Options → JVM Arguments → Save.
+  - In the Modrinth App and GDLauncher an `-Xmx` typed into the Java arguments overrides the memory slider; when RigTune sees one, the memory advice says to change it there.
+- **Preview** shows settings the way the main list does ("Particles: All → Decreased", not `particles: 0 → 1`).
+- **History** names mods by their own name ("Sodium") instead of the jar file, for changes made by 0.4 or later.
+- Two ticked items that can't go in together (two updates or two additions that Modrinth or the rules mark as incompatible) are both refused, each naming the other, instead of the one planned later failing. Untick one of them.
+- The helper's failure messages read "Gave up after N tries" and "Gave up after 3 restarts".
+- **Tools…** replaces **Benchmark…** in the RigTune screen's footer; Benchmark… is the first entry in Tools.
+- Modrinth lookups and downloads run on their own threads, so a slow or failing Modrinth no longer holds up History, Undo plans or report rebuilds. Settings changes are saved on their own thread and written before the game quits.
+- "Disable LambDynamicLights" no longer says "entry-level hardware" on a PC whose tier only its memory lowers. Rules revision 16.
+
+### Fixed
+- **On Minecraft 26.3, clicking a row in History did nothing**, and clicking a recommendation's text didn't tick it: 26.3 numbers the left mouse button differently from 26.2. (The RigTune button on Sodium's video settings screen used the same check.)
+- **A second "Undo last" in one session could skip a staged setting.** After two applies that changed the same Sodium, Distant Horizons or Iris setting, the second Undo last said "You changed it since" and left the setting at the in-between value. It now undoes it.
+- A second "Undo last" in one session no longer skips an apply that is only waiting for the first undo's restart and undoes an older, unrelated one instead; it asks you to restart first.
+- Preview, History and the Undo screen could add every widget twice when their list had already loaded.
+- History's **Undo last** and **Undo all** were active with nothing left to undo.
+- **Updates respect other mods' version requirements.** An update that an installed mod doesn't allow (for example Iris requiring Sodium 0.9.x) is refused, naming that mod; ticked together with an update of that mod that does allow it, both go in together. A mod's own requirements on the other mods are checked the same way.
+- **A library bundled inside another mod no longer counts as installed**, so a mod you add that needs the standalone library gets it instead of having it dropped after the download.
+- An update whose new version needs a mod you don't have (and aren't adding in the same Apply) is refused, naming it, instead of staged without it. An update's downloaded jar must be the same mod as the one it replaces.
+- **The incompatibility checks see what an earlier Apply staged**: an addition or update that Modrinth marks incompatible with a mod still waiting for a restart is refused, naming that mod. The other direction, the staged mod's own "incompatible" list, is checked while Modrinth is on.
+- Pressing Apply before RigTune's Modrinth lookup finished (or after it failed) skipped the incompatibility checks against your installed mods. It now asks you to wait a moment or press Rescan.
+- **A helper killed mid-update is finished or rolled back at the next run.** The post-exit helper applies an update's renames as a group; if it is killed between them, or a rollback fails, the next run finishes the group or puts the old jar back, so a mod or its library is never left missing. A group left half done is never given up on. Undo and Discard pending leave such a group alone until the next exit has finished it.
+- The helper writes its result files in a crash-safe order: a helper that died in between no longer makes History call applied changes "Not applied".
+- **Undo keeps a mod and its library together**: all file changes of one undo are applied together or not at all, so a failed rename can't leave a mod active without its library.
+- "Disable X" is refused when another installed mod needs X (the game wouldn't start without it), or when another change of X is already staged (cancel that first). The rest of the Apply goes ahead.
+- Staged setting changes A → B → A for one setting before a restart ended at B; they now end at A.
+- **"Undo all" still reaches your original settings after a long history.** History keeps at most 50 entries; the oldest used to be dropped, so after many applies or profile switches Undo all could no longer restore your own settings or remove mods RigTune added. Old entries are now folded into one baseline entry that keeps what Undo all needs.
+- The "Imported from 0.1" History entry is only created when upgrading from 0.1.x (it also appeared when `history.json` was deleted).
+- Text from outside RigTune (advice from the rules file, setting labels, mod names) is drawn as plain text without formatting codes or invisible characters, and **Copy summary** escapes advice titles the way Copy report does, so a hostile title can't format a Discord message or ping anyone.
+- A Modrinth file name with text-direction or invisible characters is refused. Log lines that name something from a download escape control characters, and RigTune's log lines name its own config files relative to `config/rigtune` instead of by their full path, which can contain your Windows user name.
+
+### Compatibility
+- 0.4.0 changes no file format (no `formatVersion` or `schemaVersion` bump).
+  - New files, which older versions never read: `profiles.json`, `stutter.json`, `server-limits.json`, `awareness.json`, `startup-times.json` and the helper's `unfinished-groups.json`, all in `config/rigtune/`.
+  - New optional fields: a Modrinth project and version id on staged mod additions in `pending.json` (and in `last-apply.json`'s copies of them), `modName` in `history.json`, the mod-set hash and history position of new benchmark runs in `benchmarks.json`, and `stutterMonitor` in `settings.json`. 0.1.0 to 0.3.0 ignore them, and 0.3.0 drops them when it rewrites a file (History then shows file names again, and the monitor is off).
+- A profile switch is an ordinary Apply entry: 0.3.0 lists it and can undo it, without the "Profile:" label.
+- Checked against the released versions: a CI harness runs the released 0.3.0 jar's own classes on the history, pending, benchmark, settings and rules files 0.4 writes; unit tests run pinned copies of the 0.1.0 and 0.3.0 code on them, including 0.3.0's helper on a plan the new helper left.
+- After a downgrade to 0.3.0: its own history cap drops the baseline entry once it adds to a full history, and its helper can't read the new helper's record of a half-done update (it finishes the update if it can, as 0.3.0 always did).
+- A 0.1.x client never gets an unsafe or less conservative recommendation from `rules-v1.json`: its only change is the unticked VSync suggestion and the two reworded reasons. Everything else new in the rules is for 0.4 only: 0.2.0 and 0.3.0 ignore the new sections and never fire a rule with the new driver condition.
+
+### Known issues
+- Shader-pack settings (the options inside a pack such as Complementary or BSL) aren't part of profiles or share codes; profiles only turn shaders on or off (reasons in the README).
+- History's oldest entries are folded into one baseline entry, shown as an ordinary Apply at the oldest date; a profile switch folded into it loses its "Profile:" label.
+- Stutter Doctor claims time for chunk loading or building only with evidence of it. On a fast PC the hitches after entering new terrain are mostly "Not explained".
+- Server-aware advice was tested against a local vanilla dedicated server. Joining a world opened to LAN from another PC, and Realms, weren't tested end to end. The Distant Horizons note on servers ("may still show terrain you've already explored") isn't verified.
+- The battery offer was tested with simulated batteries only (no laptop was available).
+- Real Vulkan driver strings were captured only for AMD and Mesa. An NVIDIA or Intel Vulkan driver that RigTune can't parse is compared as text, so the driver notice then shows the raw strings.
+- The CurseForge app gets no note about an `-Xmx` in its Java arguments (it isn't known whether one overrides Custom RAM Allocation). The Minecraft Launcher's labels come from Mojang's help articles, not from the launcher itself.
+- The benchmark result's table and the benchmark charts can't be reached with the keyboard or read by the Narrator yet. The Narrator text was checked in tests, not with a real screen reader.
+- On some Windows machines vanilla Minecraft 26.3 crashes natively during startup (around the time its sound system starts), with or without RigTune. It can take a few relaunches.
+- An installed 0.1.0, 0.2.0 or 0.3.0 is offered the update only once the Modrinth listing is approved: RigTune finds its own update through Modrinth, which doesn't list versions of a project that is still in review.
+- Quilt isn't supported (see the [README's FAQ](https://github.com/chaotix345/rigtune#does-rigtune-work-with-quilt)).
+- Preview can't show what Apply only learns once a file is downloaded: a file that isn't a Fabric mod, a mod you already have, or a version another mod's requirements don't allow. Modrinth's answers can also change between Preview and Apply.
+- The incompatibility checks don't use disables an earlier Apply staged, and the check of a staged mod's own "incompatible" list needs Modrinth on.
+- Measuring the shader cost turns shaders off and on through Iris, which re-saves `config/iris.properties` and the active pack's settings file with a new date line; every value stays the same.
+
 ## [0.3.0] - 2026-09-26
 
 ### Added
