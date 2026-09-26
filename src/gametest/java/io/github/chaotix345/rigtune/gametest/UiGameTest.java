@@ -4,17 +4,26 @@ import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.compat.ModMenuIntegration;
+import io.github.chaotix345.rigtune.client.ui.BenchmarkHistoryScreen;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkMenuScreen;
 import io.github.chaotix345.rigtune.client.ui.HistoryScreen;
+import io.github.chaotix345.rigtune.client.ui.JvmScreen;
+import io.github.chaotix345.rigtune.client.ui.ProfilesScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneSettingsScreen;
+import io.github.chaotix345.rigtune.client.ui.StutterScreen;
+import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
 import io.github.chaotix345.rigtune.client.ui.UndoScreen;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.Text;
+import io.github.chaotix345.rigtune.core.notice.Notice;
+import io.github.chaotix345.rigtune.core.notice.NoticeAction;
+import io.github.chaotix345.rigtune.core.notice.NoticePriority;
 import io.github.chaotix345.rigtune.core.report.ModrinthOffAdvice;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -41,6 +50,8 @@ import java.util.regex.Pattern;
 // header and report effects, Mod Menu, and Copy report. Every screen is checked for fit at the three reference sizes.
 public class UiGameTest implements FabricClientGameTest {
 	private static final int[][] SIZES = {{854, 480, 2}, {1280, 720, 3}, {1280, 720, 2}};
+	// v0.4 (docs/v0.4/SPEC.md X7): the three standard sizes for the Tools hub and the notice line.
+	private static final int[][] V04_SIZES = {{1280, 720, 2}, {640, 480, 2}, {854, 480, 2}};
 	private static final Pattern DRIVE_PATH = Pattern.compile("(?<![A-Za-z])[A-Za-z]:[\\\\/]");
 
 	@Override
@@ -62,6 +73,7 @@ public class UiGameTest implements FabricClientGameTest {
 
 		checkCopyReport(context, real);
 		checkSubScreens(context);
+		checkTools(context);
 
 		StubController stub = new StubController(RigTuneClient::hardware);
 		context.runOnClient(mc -> mc.gui.setScreen(new RigTuneScreen(new TitleScreen(), new PendingStub(stub))));
@@ -69,6 +81,11 @@ public class UiGameTest implements FabricClientGameTest {
 		context.waitTicks(3);
 		atEverySize(context, "ui-stub-pending");
 		check(context.computeOnClient(mc -> findButton(mc.gui.screen(), "rigtune.screen.discard") != null), "Discard pending shown with pending changes");
+		// v0.4: with Discard pending and Tools… the footer has ten buttons; it still fits at the smallest size.
+		resize(context, 640, 480, 2);
+		checkLayout(context, "ui-stub-pending 640x480@2");
+		context.takeScreenshot("ui-stub-pending-640x480-scale2");
+		checkNoticeLine(context);
 
 		context.runOnClient(mc -> RigTuneClient.open(new TitleScreen()));
 		context.waitForScreen(RigTuneScreen.class);
@@ -144,6 +161,109 @@ public class UiGameTest implements FabricClientGameTest {
 		context.takeScreenshot("ui-benchmark-menu-from-button");
 		context.runOnClient(mc -> mc.gui.screen().onClose());
 		context.waitForScreen(RigTuneScreen.class);
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md C3, X3, X7): one Tools… button right after History…, the footer fitting at 640x480 GUI scale
+	// 2, and the hub opening each of its four screens (skeletons until their workstreams fill them), at the 3 sizes.
+	private static void checkTools(ClientGameTestContext context) {
+		check(context.computeOnClient(mc -> {
+			List<String> keys = Screens.getWidgets(mc.gui.screen()).stream().filter(w -> w instanceof Button)
+					.map(w -> w.getMessage().getContents() instanceof TranslatableContents t ? t.getKey() : "").toList();
+			return keys.indexOf("rigtune.tools.open") == keys.indexOf("rigtune.history.open") + 1;
+		}), "Tools… follows History…");
+		resize(context, 640, 480, 2);
+		checkLayout(context, "ui-main 640x480@2");
+		context.takeScreenshot("ui-tools-footer-640x480-scale2");
+		resize(context, 854, 480, 2);
+
+		pressByKey(context, "rigtune.tools.open");
+		context.waitForScreen(ToolsScreen.class);
+		for (int[] size : V04_SIZES) {
+			resize(context, size[0], size[1], size[2]);
+			checkLayout(context, "ui-tools " + size[0] + "x" + size[1] + "@" + size[2]);
+			context.takeScreenshot("ui-tools-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+		}
+		checkToolsEntry(context, "rigtune.tools.profiles", ProfilesScreen.class, "ui-tools-profiles");
+		checkToolsEntry(context, "rigtune.tools.stutter", StutterScreen.class, "ui-tools-stutter");
+		checkToolsEntry(context, "rigtune.tools.jvm", JvmScreen.class, "ui-tools-jvm");
+		checkToolsEntry(context, "rigtune.tools.benchmark_history", BenchmarkHistoryScreen.class, "ui-tools-benchmark-history");
+		pressByKey(context, "gui.done");
+		context.waitForScreen(RigTuneScreen.class);
+		resize(context, 854, 480, 2);
+	}
+
+	private static void checkToolsEntry(ClientGameTestContext context, String key, Class<? extends Screen> screen, String screenshot) {
+		pressByKey(context, key);
+		context.waitForScreen(screen);
+		context.waitTicks(2);
+		checkLayout(context, screenshot);
+		context.takeScreenshot(screenshot);
+		pressByKey(context, "gui.done");
+		context.waitForScreen(ToolsScreen.class);
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md C3): the one notice line over canned notices: the highest priority shows with at most 2
+	// actions, a dismiss button when dismissible and "+N more", which cycles; dismissing hides it. At the 3 sizes.
+	private static void checkNoticeLine(ClientGameTestContext context) {
+		StubController stub = new StubController(RigTuneClient::hardware);
+		stub.setNotices(List.of(
+				new Notice("test-whats-new", NoticePriority.WHATS_NEW, Text.literal("3 new recommendations for you since you last looked"), null,
+						List.of(), true),
+				new Notice("test-battery", NoticePriority.BATTERY_OFFER, Text.literal("You are on battery power now"),
+						Text.literal("Switching changes settings; undo it in History."), List.of(new NoticeAction("switch", Text.literal("Switch to Battery")),
+						new NoticeAction("snooze", Text.literal("Don't offer again")), new NoticeAction("third", Text.literal("Never shown"))), true),
+				new Notice("test-server", NoticePriority.SERVER_LIMIT, Text.literal("The server limits view distance to 6 chunks"), null, List.of(),
+						false)));
+		context.runOnClient(mc -> mc.gui.setScreen(new RigTuneScreen(new TitleScreen(), stub)));
+		context.waitForScreen(RigTuneScreen.class);
+		context.waitTicks(3);
+		checkShownNotice(context, "test-battery", 2);
+		check(context.computeOnClient(mc -> findLiteralButton(mc.gui.screen(), "Switch to Battery") != null
+				&& findLiteralButton(mc.gui.screen(), "Don't offer again") != null && findLiteralButton(mc.gui.screen(), "Never shown") == null
+				&& findButton(mc.gui.screen(), "rigtune.notice.dismiss") != null && findButton(mc.gui.screen(), "rigtune.notice.more") != null),
+				"two actions, dismiss and +N more");
+		for (int[] size : V04_SIZES) {
+			resize(context, size[0], size[1], size[2]);
+			checkLayout(context, "ui-notice " + size[0] + "x" + size[1] + "@" + size[2]);
+			context.takeScreenshot("ui-notice-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+		}
+		context.runOnClient(mc -> press(findLiteralButton(mc.gui.screen(), "Switch to Battery")));
+		context.waitTicks(2);
+		check(stub.noticeActions().equals(List.of("test-battery:switch")), "action reached the controller: " + stub.noticeActions());
+
+		pressByKey(context, "rigtune.notice.more");
+		checkShownNotice(context, "test-server", 2);
+		check(context.computeOnClient(mc -> findButton(mc.gui.screen(), "rigtune.notice.dismiss") == null), "no dismiss on a notice that can't be dismissed");
+		context.takeScreenshot("ui-notice-cycled");
+		pressByKey(context, "rigtune.notice.more");
+		checkShownNotice(context, "test-whats-new", 2);
+		pressByKey(context, "rigtune.notice.more");
+		checkShownNotice(context, "test-battery", 2);
+
+		pressByKey(context, "rigtune.notice.dismiss");
+		checkShownNotice(context, "test-server", 1);
+		resize(context, 854, 480, 2);
+		context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
+		context.waitForScreen(TitleScreen.class);
+	}
+
+	private static void checkShownNotice(ClientGameTestContext context, String key, int others) {
+		String shown = context.computeOnClient(mc -> mc.gui.screen() instanceof RigTuneScreen screen && screen.shownNotice() != null
+				? screen.shownNotice().key() + "+" + screen.otherNotices() : "none");
+		check(shown.equals(key + "+" + others), "notice line shows " + key + " with " + others + " more: " + shown);
+	}
+
+	private static @Nullable Button findLiteralButton(Screen screen, String label) {
+		return Screens.getWidgets(screen).stream()
+				.filter(w -> w instanceof Button && w.getMessage().getString().equals(label))
+				.map(Button.class::cast)
+				.findFirst()
+				.orElse(null);
+	}
+
+	private static void press(@Nullable Button button) {
+		check(button != null && button.active, "button there and active");
+		button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(0, 0)));
 	}
 
 	// The History screen's button opens WS-B's confirmation screen for the right scope; nothing is undone here
