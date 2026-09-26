@@ -92,8 +92,14 @@ switch's changes `REVERTED`, `options.txt` holding their `before`; no `pending.j
   2. If WS-P's `profiles.json` differs from that shape, adjust `e2e_checks.profile_label` and its tests
      (`tests/test_e2e_profile_hook.py`).
   3. Pick a profile that changes at least one vanilla option on a fresh instance (every option at its default, no
-     Sodium/DH/Iris), e.g. a battery-style profile lowering the render distance and FPS cap. A profile that also
-     stages config patches would need the helper step (`launch_and_apply`) in `run_profile_switch`.
+     Sodium/DH/Iris): SPEC item 3's run uses Battery (`--profile-name Battery`); profiles.json's `switches` shape is
+     SPEC "Shared contracts" C1.
+  4. SPEC item 3 also wants the switch's staged config patches restored after the next exit and a screenshot of History
+     showing "Profile: Battery". The fresh instance has no config target, so neither is covered yet. For them: put
+     Sodium in `mods/` (a `prepare()` copy like fabric-api's), run `profile-apply` and `profile-undo` through
+     `launch_and_apply` (the helper applies and reverts the patches at exit), let the checks accept `sodium.*`
+     changes (compare with `config/sodium-options.json` after each helper run instead of `options.txt`), and add a
+     History screenshot to the driver's `profile-apply` (after the switch) and `profile-undo` (before Undo this).
 
 ### v0.3 runs (docs/v0.3/plans/ws-h.md)
 
