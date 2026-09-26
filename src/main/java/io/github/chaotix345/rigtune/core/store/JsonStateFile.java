@@ -178,7 +178,8 @@ public final class JsonStateFile {
 			}
 			text = gson.toJson(out);
 		} catch (RuntimeException e) {
-			RigTune.LOGGER.warn("Could not serialise {} ({})", name(), LogSafe.error(e, file));
+			// A bug in the value, not the file: its stack trace names no path.
+			RigTune.LOGGER.warn("Could not serialise {}", name(), e);
 			return Saved.FAILED;
 		}
 		if (text.getBytes(StandardCharsets.UTF_8).length > maxBytes) {

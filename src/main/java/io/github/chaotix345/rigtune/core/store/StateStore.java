@@ -2,7 +2,6 @@ package io.github.chaotix345.rigtune.core.store;
 
 import com.google.gson.JsonObject;
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.core.apply.LogSafe;
 
 import java.nio.file.Path;
 import java.util.function.UnaryOperator;
@@ -49,7 +48,7 @@ public final class StateStore {
 		try {
 			next = change.apply(defaults.apply(root));
 		} catch (RuntimeException e) {
-			RigTune.LOGGER.warn("Not writing {}: the change failed on its content ({})", file.name(), LogSafe.error(e, file.file()));
+			RigTune.LOGGER.warn("Not writing {}: the change failed on its content", file.name(), e);
 			return false;
 		}
 		return file.save(next == null ? root : next) == JsonStateFile.Saved.OK;

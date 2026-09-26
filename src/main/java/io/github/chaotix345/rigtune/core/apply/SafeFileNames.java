@@ -149,7 +149,7 @@ public final class SafeFileNames {
 		StringBuilder out = new StringBuilder("\"");
 		name.codePoints().limit(80).forEach(cp -> {
 			if (LogSafe.hidden(cp)) {
-				out.append(String.format("\\u%04x", cp));
+				out.append(LogSafe.escape(cp));
 			} else {
 				out.appendCodePoint(cp);
 			}

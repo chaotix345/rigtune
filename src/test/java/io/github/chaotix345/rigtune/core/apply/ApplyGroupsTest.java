@@ -593,6 +593,18 @@ class ApplyGroupsTest {
 		assertFalse(Files.exists(unfinished()));
 	}
 
+	// Review of fix-8a (SE-3): the helper still re-enables a jar the player named with an invisible character (an Undo of
+	// a disable, staged by this version or an older one); only names from Modrinth are refused for those.
+	@Test
+	void anUndoReEnablesAJarThePlayerNamedWithAZeroWidthCharacter() throws IOException {
+		Path disabled = TestJars.modJar(mods.resolve("x\u200b.jar.disabled"), "x");
+
+		ApplyResult result = run(executor((a, b) -> false), List.of(Op.enableFile(disabled, mods.resolve("x\u200b.jar"))));
+
+		assertEquals(List.of(Status.OK), statuses(result));
+		assertTrue(Files.exists(mods.resolve("x\u200b.jar")));
+	}
+
 	// review-8 CR-1: 0.1.0-0.3.0's HelperLauncher deletes every other file in config/rigtune/helper/ when it launches its
 	// helper, so the record lives in config/rigtune/, which no older version cleans.
 	@Test

@@ -2,6 +2,8 @@ package io.github.chaotix345.rigtune.core.apply;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 // What RigTune's log lines say about files and about text from files or the network. Players paste latest.log and
 // helper.log into issues and chats, so a line names a file without its folders (a Windows path holds the account name;
@@ -29,25 +31,40 @@ public final class LogSafe {
 	}
 
 	// "Type: message" for a log line instead of the exception itself (whose message and stack trace print full paths),
-	// with the folders of `files` and the home folder cut out of the message.
+	// plus "(caused by Type: message)" for its root cause, with the folders of `files` and the home folder cut out of the
+	// messages (ignoring letter case on Windows).
 	public static String error(Throwable e, Path... files) {
 		if (e == null) {
 			return "null";
 		}
+		Throwable root = e;
+		for (int depth = 0; root.getCause() != null && root.getCause() != root && depth < 20; depth++) {
+			root = root.getCause();
+		}
+		String out = describe(e, files);
+		return text(root == e ? out : out + " (caused by " + describe(root, files) + ")");
+	}
+
+	private static String describe(Throwable e, Path... files) {
 		String message = e.getMessage();
 		if (message != null) {
 			for (Path file : files) {
 				Path dir = file == null ? null : file.toAbsolutePath().normalize().getParent();
 				if (dir != null) {
-					message = message.replace(dir + File.separator, "").replace(dir.toString(), ".");
+					message = replace(replace(message, dir + File.separator, ""), dir.toString(), ".");
 				}
 			}
 			String home = System.getProperty("user.home");
 			if (home != null && home.length() > 1) {
-				message = message.replace(home, "~");
+				message = replace(message, home, "~");
 			}
 		}
-		return text(e.getClass().getSimpleName() + (message == null ? "" : ": " + message));
+		return e.getClass().getSimpleName() + (message == null ? "" : ": " + message);
+	}
+
+	private static String replace(String text, String target, String replacement) {
+		int flags = File.separatorChar == '\\' ? Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE : 0;
+		return Pattern.compile(Pattern.quote(target), flags).matcher(text).replaceAll(Matcher.quoteReplacement(replacement));
 	}
 
 	// Text from a file or the network, for one log line: control, format (bidi overrides, zero-width) and line-separator
@@ -64,13 +81,18 @@ public final class LogSafe {
 				break;
 			}
 			if (hidden(cp)) {
-				out.append(cp <= 0xFFFF ? String.format("\\u%04x", cp) : String.format("\\U%08x", cp));
+				out.append(escape(cp));
 			} else {
 				out.appendCodePoint(cp);
 			}
 			kept++;
 		}
 		return out.toString();
+	}
+
+	// A hidden character as it is written in logs and messages: backslash, u, 4 hex digits (U and 8 beyond U+FFFF).
+	static String escape(int cp) {
+		return cp <= 0xFFFF ? String.format("\\u%04x", cp) : String.format("\\U%08x", cp);
 	}
 
 	static boolean hidden(int cp) {

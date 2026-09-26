@@ -44,9 +44,11 @@ pending.json/history.json/last-apply.json shape change; the only new file locati
 
 ## JW-1 (medium): log lines name config files under config/rigtune
 - New `core/apply/LogSafe` (JDK only, so helper-safe): `name(file)` = path under `config/rigtune` ("awareness.json",
-  "helper/unfinished-groups.json") or the bare file name; `error(e, files...)` = "Type: message" with the files' folders
-  and `user.home` cut out (an exception's own message and stack trace print full paths, so these lines no longer pass
-  the exception); `text(s)` for untrusted text (SE-4).
+  "helper/unfinished-groups.json") or the bare file name; `error(e, files...)` = "Type: message (caused by Type:
+  message)" for the exception and its root cause, with the files' folders and `user.home` cut out (letter case ignored on
+  Windows). File-IO lines log that instead of the exception, whose message and stack trace print full paths; the two
+  catches that only see bugs in our own code (JsonStateFile's serialise, StateStore's change) keep the throwable, whose
+  stack frames name no path. `text(s)` for untrusted text (SE-4).
 - Fixed: every JsonStateFile line (9), StateStore, and the v0.4-added lines that printed an absolute config path:
   TrendService (awareness.json), ProfileService and DisableGuard (pending.json), StagedProjects, Staging.createJournal
   (history.json), UnfinishedGroups (helper.log), ModJars' v0.4 debug lines (mods paths). Found with
@@ -69,8 +71,8 @@ pending.json/history.json/last-apply.json shape change; the only new file locati
 ## SE-4 (low): DownloadPlanner's log lines can't be forged
 - The jar's mod id, the Modrinth file name, recommendation ids and refusal text go through `LogSafe.text` (controls,
   format characters and separators escaped as backslash-u plus 4 hex digits, capped at 200 characters); files by name;
-  errors as `LogSafe.error` (a stack trace only for an unexpected RuntimeException, not for an IOException or a planner
-  refusal).
+  errors as `LogSafe.error(e, modsDir)` (the game folder cut, so "mods/x.jar" stays; a stack trace only for an
+  unexpected RuntimeException, not for an IOException or a planner refusal).
 - Test: DownloadPlannerTest `aJarsModIdIsLoggedWithoutControlCharacters` (a dependency jar whose fabric.mod.json id holds
   a newline and an ANSI escape; red first).
 
@@ -92,7 +94,9 @@ pending.json/history.json/last-apply.json shape change; the only new file locati
   scan/slug set, `downloading` still allows one download batch, and the continuations still hop to the render thread.
 - Test: NetworkExecutorTest (injected executors): two lookups wait inside a stuck Modrinth on both network threads while a
   History-style load on a 2-thread worker pool completes; then both lookups finish. `Probes.NETWORK` is its own daemon
-  pool. Red first = the new API didn't compile against the old code (the old code ran the lookup on `Probes.EXECUTOR`).
+  pool. RealController can't be built outside the game, so a source pin checks its wiring (lookup and downloads on
+  `Probes.NETWORK`, no direct `fetchAll`). Red first = the new API didn't compile against the old code (the old code ran
+  the lookup on `Probes.EXECUTOR`).
 
 ## P5B-F6 (low): LambDynamicLights' reason follows the estimated tier
 - knowledge.json: "...which costs CPU time. On this PC's estimated tier, disabling it can win back some frame rate; ..."
@@ -103,6 +107,20 @@ pending.json/history.json/last-apply.json shape change; the only new file locati
 - Not changed (same pattern, outside F6): tier-keyed settings reasons that name a component ("entry-level CPU",
   "entry-level graphics", "entry-level hardware" for renderDistance/simulationDistance/clouds/DH/Iris shadows). They are
   in rules-v1.json too; rewording them is a separate content decision.
+
+## Self-review (code-reviewer subagent; scratchpad fix8a/review.md): 0 high, 1 medium, 4 low, 1 nit
+- M1 (fixed, e2b438a0): the first SE-3 version put the check in `isSafeJarName`, which the helper applies to every enable,
+  including an Undo re-enabling a jar the player named with a zero-width character; such an Undo would have been refused
+  at every exit and abandoned. Now only Modrinth names are checked (`requireJarName`/`resolveJar`); ApplyGroupsTest
+  `anUndoReEnablesAJarThePlayerNamedWithAZeroWidthCharacter` guards it.
+- L1 (fixed): `LogSafe.error` names the root cause; the RuntimeException-only catches keep their stack trace.
+- L2 (fixed): DownloadPlanner cuts the game folder (`LogSafe.error(e, modsDir)`); the home folder is cut ignoring case on
+  Windows (LogSafeTest).
+- L3 (fixed as far as possible): source pin for RealController's use of `Probes.NETWORK` (NetworkExecutorTest).
+- L4 (fixed, pre-existing gap): `Staging.dropQueuedUpdates` keeps a group the helper left half done (an addition killed
+  after the mod's enable no longer loses its library's download when the mod's updater queued a build);
+  StagingTest `aGroupTheHelperWasKilledInIsNotUnstagedForAQueuedUpdate` (red first).
+- Nit (fixed): one escape style (`LogSafe.escape`) in logs and SafeFileNames' messages.
 
 ## Evidence
 - `./gradlew build` (both 26.2 and 26.3): 1807 tests each, 0 failed (before the merge of origin/feat/v0.4.0, which

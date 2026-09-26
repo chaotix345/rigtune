@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.client;
 
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.core.Fixtures;
+import io.github.chaotix345.rigtune.core.RepoFiles;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.modrinth.ModrinthClient;
@@ -12,6 +13,7 @@ import io.github.chaotix345.rigtune.core.rules.RulesLoader;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
@@ -24,6 +26,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -116,5 +119,16 @@ class NetworkExecutorTest {
 		Thread thread = CompletableFuture.supplyAsync(Thread::currentThread, Probes.NETWORK).get(10, TimeUnit.SECONDS);
 		assertEquals("RigTune network", thread.getName());
 		assertTrue(thread.isDaemon());
+	}
+
+	// RealController can't be built outside the game, so this pins its wiring (review of fix-8a): the Modrinth lookup and the
+	// Apply downloads are started on Probes.NETWORK, and nothing there runs a lookup by itself.
+	@Test
+	void realControllerStartsTheLookupAndTheDownloadsOnTheNetworkThreads() throws IOException {
+		String source = Files.readString(RepoFiles.resolve("src/client/java/io/github/chaotix345/rigtune/client/RealController.java"));
+
+		assertTrue(source.contains("lookup.start(modrinth, Probes.NETWORK)"));
+		assertTrue(source.contains("CompletableFuture.supplyAsync(() -> download(downloads, data, mcVersion), Probes.NETWORK)"));
+		assertFalse(source.contains("fetchAll("));
 	}
 }

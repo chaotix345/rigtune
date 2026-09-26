@@ -212,7 +212,8 @@ public final class Staging {
 	// Unstages (as unstageLocked), with its group, every staged enable of a loaded mod that has an update of its own
 	// waiting in mods/update/ (ModJars.queuedUpdates): at exit it would race that mod's own updater for the jar (re-check
 	// of review 4). An enable of a mod that isn't loaded (an addition, an undo's re-enable) stays: a stale jar in
-	// mods/update/ must not cancel it (SPEC 3a). Null when the lock is busy.
+	// mods/update/ must not cancel it (SPEC 3a). A group the helper left half done stays (PartlyApplied). Null when the
+	// lock is busy.
 	public @Nullable List<Op> dropQueuedUpdates(Set<String> queuedModIds, Set<String> loadedModIds) throws IOException {
 		if (queuedModIds.isEmpty() || !Files.exists(pendingFile)) {
 			return List.of();
@@ -226,8 +227,11 @@ public final class Staging {
 			}
 			List<String> ids = new ArrayList<>();
 			Map<String, String> readIds = new HashMap<>();
-			for (Op op : PendingActions.load(pendingFile).ops()) {
-				if (op != null && op.type() == PendingActions.Type.ENABLE_FILE && op.id() != null) {
+			PendingActions plan = PendingActions.load(pendingFile);
+			// As for Discard pending: the next exit finishes such a group or rolls it back.
+			Set<String> halfDone = halfDoneGroups(plan);
+			for (Op op : plan.ops()) {
+				if (op != null && op.type() == PendingActions.Type.ENABLE_FILE && op.id() != null && (op.group() == null || !halfDone.contains(op.group()))) {
 					String modId = modIdOf(op);
 					if (modId != null && queuedModIds.contains(modId) && loadedModIds.contains(modId)) {
 						ids.add(op.id());

@@ -197,7 +197,7 @@ public final class DownloadPlanner {
 				}
 				continue;
 			} catch (IOException | RuntimeException e) {
-				RigTune.LOGGER.warn("Could not prepare {}: {}", LogSafe.text(rec.id()), LogSafe.error(e),
+				RigTune.LOGGER.warn("Could not prepare {}: {}", LogSafe.text(rec.id()), LogSafe.error(e, modsDir),
 						e instanceof IOException || e instanceof TextException ? null : e);
 				dropDownloads(attempt);
 				errorAt[at] = rec.title() + ": " + e.getMessage();

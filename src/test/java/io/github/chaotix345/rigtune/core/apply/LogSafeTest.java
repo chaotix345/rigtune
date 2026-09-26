@@ -2,12 +2,14 @@ package io.github.chaotix345.rigtune.core.apply;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 // review-8 JW-1 and SE-4: what RigTune's log lines may say about a file and about text from files or the network.
 class LogSafeTest {
@@ -35,6 +37,27 @@ class LogSafeTest {
 		assertTrue(error.contains("awareness.json.tmp"), error);
 		assertFalse(error.contains(System.getProperty("user.home")), error);
 		assertFalse(error.contains(GAME.toString()), error);
+	}
+
+	// Review of fix-8a: an HttpClient failure's reason is often only in its cause.
+	@Test
+	void anErrorNamesItsRootCauseToo() {
+		Path file = GAME.resolve("mods").resolve("x.jar");
+		IOException e = new IOException(new java.net.ConnectException("Connection refused: " + file));
+
+		String error = LogSafe.error(e, GAME.resolve("mods"));
+
+		assertTrue(error.startsWith("IOException: "), error);
+		assertTrue(error.endsWith("(caused by ConnectException: Connection refused: mods\\x.jar)") || error.endsWith("(caused by ConnectException: Connection refused: mods/x.jar)"), error);
+		assertFalse(error.contains(System.getProperty("user.home")), error);
+	}
+
+	@Test
+	void onWindowsTheHomeFolderIsCutWhateverItsLetterCase() {
+		assumeTrue(java.io.File.separatorChar == '\\');
+		String home = System.getProperty("user.home");
+
+		assertEquals("IOException: ~\\x", LogSafe.error(new IOException(home.toUpperCase(java.util.Locale.ROOT) + "\\x")));
 	}
 
 	@Test
