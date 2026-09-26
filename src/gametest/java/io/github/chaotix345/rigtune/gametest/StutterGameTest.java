@@ -33,7 +33,7 @@ import java.util.List;
 import java.util.Locale;
 
 // docs/v0.4/SPEC.md 5, AC5.7 (network off, X1): enable the monitor, create a singleplayer world, wait 100 ticks,
-// System.gc(), 40 ticks, save-all, open StutterScreen: a GC event with cause System.gc(), calibrated and overlapping a
+// System.gc(), 40 ticks, a full save (save-all's code), open StutterScreen: a GC event with cause System.gc(), calibrated and overlapping a
 // recorded frame; a save window with begin and end; the screen renders (screenshots at the 3 standard sizes, X7).
 // Disabling removes the GC listener and stops the sampler; leaving the world writes the session to stutter.json and
 // releases the buffers. No spike counts (the harness's tick sync makes frame timing unrepresentative).
@@ -105,7 +105,9 @@ public class StutterGameTest implements FabricClientGameTest {
 				return t;
 			});
 			context.waitTicks(40);
-			singleplayer.getServer().runCommand("save-all");
+			// What save-all runs (the command exists only on dedicated servers): MinecraftServer.saveEverything ->
+			// saveAllChunks, which Fabric's BEFORE_SAVE/AFTER_SAVE wrap.
+			singleplayer.getServer().runOnServer(server -> server.saveEverything(false, true, true));
 			context.waitTicks(40);
 			checkCapture(gcCalled);
 

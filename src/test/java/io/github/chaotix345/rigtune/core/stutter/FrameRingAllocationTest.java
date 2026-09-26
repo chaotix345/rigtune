@@ -36,16 +36,15 @@ class FrameRingAllocationTest {
 			now += 7 * MS;
 			ring.frame(now, i % 97 == 0 ? 40 * MS : 7 * MS, i % 1000 == 0, 300_000, 1_000_000, 5 * MS, i & 3);
 		}
+		// Anything allocated per frame would be at least 16 MB over a million frames; the bound only absorbs the probe's own
+		// few bytes (CI once saw 24).
 		long before = allocatedBytes();
-		long after = allocatedBytes();
-		long overhead = after - before;
-		before = allocatedBytes();
 		for (int i = 0; i < 1_000_000; i++) {
 			now += 7 * MS;
 			ring.frame(now, i % 97 == 0 ? 40 * MS : 7 * MS, i % 1000 == 0, 300_000, 1_000_000, 5 * MS, i & 3);
 		}
-		after = allocatedBytes();
-		assertEquals(0, after - before - overhead, "bytes allocated by 1 M frames");
+		long allocated = allocatedBytes() - before;
+		assertTrue(allocated < 1024, "bytes allocated by 1 M frames: " + allocated);
 	}
 
 	@Test

@@ -20,7 +20,7 @@ import java.nio.file.Path;
 // Development only (docs/v0.4/SPEC.md 5; the induced-stutter runs of AC5.8), read once and inert unless set:
 // - -Drigtune.dev.forceGcEverySec=N: while a capture is on, a daemon thread calls System.gc() every N seconds.
 // - -Drigtune.dev.stutterScript=teleport: from the title screen, turn the session monitor on, open the benchmark world,
-//   stand still 20 s, `tp @a 200000 200 200000` (never-generated terrain), 30 s, `save-all`, 10 s, open the Stutter
+//   stand still 20 s, `tp @a 200000 200 200000` (never-generated terrain), 30 s, a full save (save-all's code), 10 s, open the Stutter
 //   Doctor, then leave the world (which saves the session), log stutter.json and quit. Every step is logged with the
 //   prefix "Dev stutter:". Run it in a plain client, e.g. JAVA_TOOL_OPTIONS=-Drigtune.dev.stutterScript=teleport.
 final class DevStutter {
@@ -106,7 +106,7 @@ final class DevStutter {
 			}
 			case AFTER_TELEPORT -> {
 				if (ticks >= 30 * TICKS_PER_SECOND) {
-					command(minecraft, "save-all");
+					save(minecraft);
 					next(Stage.AFTER_SAVE);
 				}
 			}
@@ -150,6 +150,17 @@ final class DevStutter {
 		}
 		log(command);
 		server.execute(() -> server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), command));
+	}
+
+	// What save-all runs (the command exists only on dedicated servers): a full save with flush.
+	private static void save(Minecraft minecraft) {
+		IntegratedServer server = minecraft.getSingleplayerServer();
+		if (server == null) {
+			log("no integrated server to save");
+			return;
+		}
+		log("save-all (saveEverything with flush)");
+		server.execute(() -> server.saveEverything(false, true, true));
 	}
 
 	private static void next(Stage next) {
