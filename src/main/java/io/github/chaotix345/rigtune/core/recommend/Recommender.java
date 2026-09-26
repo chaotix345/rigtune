@@ -17,6 +17,7 @@ import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.model.Text;
+import io.github.chaotix345.rigtune.core.model.TierBasis;
 import io.github.chaotix345.rigtune.core.model.TierResult;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
 import io.github.chaotix345.rigtune.core.rules.Condition;
@@ -100,7 +101,16 @@ public final class Recommender {
 		List<Recommendation> sorted = new ArrayList<>(session.recs.values());
 		sorted.sort(ORDER);
 		String source = rules.source() == null ? "unknown" : rules.source();
-		return new Report(hardware, gpuClass, tier, goal, List.copyOf(sorted), rules.revision, source, data.online(), Instant.now());
+		return new Report(hardware, gpuClass, tier, goal, List.copyOf(sorted), rules.revision, source, data.online(), Instant.now(),
+				tierBasis(rules, hardware, gpuClass, tier));
+	}
+
+	// docs/v0.4/SPEC.md 2j: what each component's tier rests on, for the tier badge's tooltip (the same classifiers as
+	// context(); the CPU's matched row or formula inputs from classifyDetailed).
+	private static TierBasis tierBasis(RulesDocument rules, HardwareProfile hardware, GpuClass gpu, TierResult tier) {
+		TierBasis.Basis gpuBasis = gpu.matchedPattern() != null ? TierBasis.Basis.TABLE_MATCH : TierBasis.Basis.FALLBACK_ESTIMATE;
+		return new TierBasis(new TierBasis.Gpu(gpu.tier(), gpuBasis, gpu.matchedPattern(), gpu.vendor(), gpu.integrated()),
+				CpuClassifier.from(rules).classifyDetailed(hardware.cpu()), new TierBasis.Memory(tier.memTier(), TierBasis.Basis.TABLE_MATCH, hardware.maxHeapMb()));
 	}
 
 	private static void section(String name, Runnable body) {

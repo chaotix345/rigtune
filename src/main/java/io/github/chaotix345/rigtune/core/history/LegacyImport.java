@@ -28,12 +28,18 @@ public final class LegacyImport {
 	// Null when there's nothing to import.
 	public static JournalEntry entry(ApplyResult lastApply, PendingActions leftover, Function<Path, String> modIdOf,
 			StagedChanges.ConfigKeys config, String mcVersion) {
+		return entry(lastApply, leftover, modIdOf, jar -> null, config, mcVersion);
+	}
+
+	// modNameOf (docs/v0.4/SPEC.md 2c, best effort): a jar's display name where it is now; 0.1.x's jars are often gone.
+	public static JournalEntry entry(ApplyResult lastApply, PendingActions leftover, Function<Path, String> modIdOf, Function<Path, String> modNameOf,
+			StagedChanges.ConfigKeys config, String mcVersion) {
 		List<JournalChange> changes = new ArrayList<>();
 		if (lastApply != null) {
-			changes.addAll(applied(lastApply, modIdOf));
+			changes.addAll(applied(lastApply, modIdOf, modNameOf));
 		}
 		if (leftover != null) {
-			changes.addAll(staged(leftover, modIdOf, config));
+			changes.addAll(staged(leftover, modIdOf, modNameOf, config));
 		}
 		if (changes.isEmpty()) {
 			return null;
@@ -42,7 +48,7 @@ public final class LegacyImport {
 		return new JournalEntry(ChangeRecorder.newEntryId(), at, JournalEntry.LEGACY_IMPORT, null, mcVersion, null, changes);
 	}
 
-	private static List<JournalChange> applied(ApplyResult lastApply, Function<Path, String> modIdOf) {
+	private static List<JournalChange> applied(ApplyResult lastApply, Function<Path, String> modIdOf, Function<Path, String> modNameOf) {
 		Set<String> selfGroups = new HashSet<>();
 		for (ApplyResult.OpResult r : lastApply.results()) {
 			if (r != null && r.op() != null && r.op().type() == PendingActions.Type.ENABLE_FILE
@@ -61,14 +67,15 @@ public final class LegacyImport {
 				if (op.type() == PendingActions.Type.ENABLE_FILE && op.to() != null) {
 					String modId = op.modId() != null ? op.modId() : modIdOf.apply(Path.of(op.to()));
 					if (!UndoPlanner.RIGTUNE.equals(modId)) {
-						out.add(JournalChange.file(JournalChange.ENABLE, modId, HistoryUpdates.fileName(op.to()), JournalChange.APPLIED, op.id(), op.group()));
+						out.add(JournalChange.file(JournalChange.ENABLE, modId, HistoryUpdates.fileName(op.to()), JournalChange.APPLIED, op.id(), op.group())
+								.withModName(modNameOf.apply(Path.of(op.to()))));
 					}
 				} else if (op.type() == PendingActions.Type.DISABLE_FILE && op.path() != null && (op.group() == null || !selfGroups.contains(op.group()))) {
 					String disabledAs = disabledAs(r);
 					String modId = disabledAs == null ? null : modIdOf.apply(Path.of(op.path()).resolveSibling(disabledAs));
 					if (!UndoPlanner.RIGTUNE.equals(modId)) {
 						out.add(JournalChange.file(JournalChange.DISABLE, modId, HistoryUpdates.fileName(op.path()), JournalChange.APPLIED, op.id(), op.group())
-								.withResultFile(disabledAs));
+								.withResultFile(disabledAs).withModName(disabledAs == null ? null : modNameOf.apply(Path.of(op.path()).resolveSibling(disabledAs))));
 					}
 				}
 			} catch (InvalidPathException ignored) {
@@ -91,7 +98,8 @@ public final class LegacyImport {
 	}
 
 	// Ops 0.1.x left in pending.json. Ops without an id (written before ids existed) can't be tracked and are left out.
-	private static List<JournalChange> staged(PendingActions leftover, Function<Path, String> modIdOf, StagedChanges.ConfigKeys config) {
+	private static List<JournalChange> staged(PendingActions leftover, Function<Path, String> modIdOf, Function<Path, String> modNameOf,
+			StagedChanges.ConfigKeys config) {
 		List<Op> tracked = leftover.ops().stream().filter(op -> op != null && op.id() != null && op.type() != null).toList();
 		Set<String> selfGroups = new HashSet<>();
 		tracked.forEach(op -> {
@@ -101,7 +109,7 @@ public final class LegacyImport {
 		});
 		PendingActions base = leftover.withOps(List.of());
 		List<JournalChange> out = new ArrayList<>();
-		for (JournalChange c : StagedChanges.of(base, tracked, base.merge(tracked), config, modIdOf, Set.of()).changes()) {
+		for (JournalChange c : StagedChanges.of(base, tracked, base.merge(tracked), config, modIdOf, modNameOf, Set.of()).changes()) {
 			if (!UndoPlanner.RIGTUNE.equals(c.modId()) && (c.group() == null || !selfGroups.contains(c.group()))) {
 				out.add(c);
 			}

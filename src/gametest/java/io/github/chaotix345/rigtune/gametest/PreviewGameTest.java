@@ -8,6 +8,7 @@ import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
+import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
@@ -120,10 +121,32 @@ public class PreviewGameTest implements FabricClientGameTest {
 				check(rows.contains("options.txt") && rows.contains("config/DistantHorizons.toml"), "files shown relative to the game folder: " + rows);
 				check(rows.stream().anyMatch(r -> r.startsWith("mods/fabric-api-0.140.2+26.2.jar (needed by Add Lithium)")), "a dependency: " + rows);
 				check(rows.stream().anyMatch(r -> r.startsWith("A file from Modrinth for Add FerriteCore")), "an unresolved addition: " + rows);
+				checkSettingRows(context, rows);
 			}
 			press(context, "gui.done");
 			context.waitForScreen(RigTuneScreen.class);
 		}
+	}
+
+	// docs/v0.4/SPEC.md 2b (AC2b.2): each setting row reads as History and the main list name it, not the file's raw key and
+	// value; a vanilla row matches the main list's own title for that key.
+	private static void checkSettingRows(ClientGameTestContext context, List<String> rows) {
+		List<String> expected = List.of("Render Distance: 16 → 12", "Simulation Distance: 12 → 8", "Sodium: Use Entity Culling: Off → On",
+				"Distant Horizons: LOD Chunk Render Distance Radius: 256 → 128", "Distant Horizons: LOD Dropoff Distance: High → Medium",
+				"Iris: Max Shadow Distance: not set → 16");
+		for (String row : expected) {
+			check(rows.contains(row), "a labelled setting row '" + row + "': " + rows);
+		}
+		check(rows.stream().noneMatch(r -> r.startsWith("renderDistance:") || r.startsWith("performance.use_entity_culling:")), "no raw keys: " + rows);
+		press(context, "gui.done");
+		context.waitForScreen(RigTuneScreen.class);
+		List<String> mainList = context.computeOnClient(mc -> {
+			RigTuneScreen screen = (RigTuneScreen) mc.gui.screen();
+			return List.of(screen.titleOf("set-vanilla.renderDistance"), screen.titleOf("set-vanilla.simulationDistance"));
+		});
+		check(mainList.equals(expected.subList(0, 2)), "the main list names them the same: " + mainList);
+		press(context, "rigtune.preview.button");
+		waitForPreview(context, 100);
 	}
 
 	private static void checkFooter(ClientGameTestContext context, String name) {
@@ -530,6 +553,12 @@ public class PreviewGameTest implements FabricClientGameTest {
 		public ApplyPreview preview(List<Recommendation> selected) {
 			asked = selected.stream().map(Recommendation::id).toList();
 			return preview;
+		}
+
+		// The real controller's labels (the game's captions, the rules' settingLabels), as History uses them (SPEC 2b).
+		@Override
+		public HistoryModel.Labels settingLabels() {
+			return RigTuneClient.controller().settingLabels();
 		}
 	}
 }

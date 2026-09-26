@@ -8,7 +8,9 @@ import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
+import io.github.chaotix345.rigtune.core.modrinth.Dependency;
 import io.github.chaotix345.rigtune.core.modrinth.ModrinthVersion;
+import io.github.chaotix345.rigtune.core.modrinth.StagedProjects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -39,6 +41,7 @@ class PreviewDownloadsTest {
 	final Set<String> installedProjects = new HashSet<>();
 	BiPredicate<String, String> conflicts = (a, b) -> false;
 	boolean lookups = true;
+	StagedProjects staged = StagedProjects.NONE;
 
 	@BeforeEach
 	void setUp() throws IOException {
@@ -47,7 +50,7 @@ class PreviewDownloadsTest {
 
 	private ApplyPreview preview(Recommendation... selected) {
 		DownloadInputs inputs = new DownloadInputs(modrinth, lookups, "fabric", "26.2", Map.of(), updateVersions, installedProjects, Set.of("sodium"),
-				Map.of(), conflicts);
+				Map.of(), conflicts, staged);
 		return new PreviewPlanner(instance.options, PreviewFixtures.vanillaNow(), Map.of(), instance.configFiles(), instance.mods, inputs).preview(List.of(selected));
 	}
 
@@ -141,18 +144,17 @@ class PreviewDownloadsTest {
 	}
 
 	@Test
-	void theLaterOfTwoConflictingAdditionsIsRefused() {
+	void twoConflictingAdditionsAreBothRefused() {
 		lithiumWithFabricApi();
 		modrinth.put("krypton", version("kryV", "KRYPTON", "krypton-1.0.jar"), "krypton");
 		conflicts = (a, b) -> Set.of(a, b).equals(Set.of("lithium", "krypton"));
 
 		ApplyPreview preview = preview(add("lithium", "LITHIUM", "Lithium"), add("krypton", "KRYPTON", "Krypton"));
 
-		assertEquals(List.of("lithium-1.0.jar", "fabric-api-1.0.jar"), preview.downloads().stream().map(ApplyPreview.Download::fileName).toList());
-		ApplyPreview.Skipped refused = preview.skipped().getFirst();
-		assertEquals("add:krypton", refused.recommendationId());
-		assertEquals(ApplyPreview.Reason.DOWNLOAD_FAILED, refused.reason());
-		assertTrue(refused.detail().startsWith("it conflicts with Lithium"), refused.detail());
+		assertEquals(List.of(), preview.downloads());
+		assertEquals(List.of("add:lithium", "add:krypton"), preview.skipped().stream().map(ApplyPreview.Skipped::recommendationId).toList());
+		assertTrue(preview.skipped().stream().allMatch(r -> r.reason() == ApplyPreview.Reason.DOWNLOAD_FAILED));
+		assertTrue(preview.skipped().get(1).detail().startsWith("it conflicts with Lithium"), preview.skipped().get(1).detail());
 	}
 
 	// Review WS-P #3: a file fetched again after a failed item keeps its stand-in mod id, so a later new file isn't taken for
@@ -226,5 +228,20 @@ class PreviewDownloadsTest {
 
 		assertEquals(before, instance.tree());
 		assertFalse(modrinth.downloaded());
+	}
+
+	// docs/v0.4/SPEC.md 2d: the preview judges an addition against what earlier Applies staged, as Apply does.
+	@Test
+	void anAdditionIncompatibleWithAStagedModIsRefusedInThePreviewToo() {
+		modrinth.put("lithium", version("lithV", "LITHIUM", "lithium-1.0.jar", new Dependency("KRYPTON", null, "incompatible")), "lithium");
+		staged = new StagedProjects(Set.of("KRYPTON"), Map.of("krypV", "KRYPTON"));
+
+		ApplyPreview preview = preview(add("lithium", "LITHIUM", "Lithium"));
+
+		assertEquals(List.of(), preview.downloads());
+		ApplyPreview.Skipped refused = preview.skipped().getFirst();
+		assertEquals(ApplyPreview.Reason.DOWNLOAD_FAILED, refused.reason());
+		assertEquals(Text.of("rigtune.download.incompatible_staged", "Modrinth marks %s as incompatible with %s, which is waiting for a restart", "LITHIUM",
+				"KRYPTON"), refused.detailText());
 	}
 }

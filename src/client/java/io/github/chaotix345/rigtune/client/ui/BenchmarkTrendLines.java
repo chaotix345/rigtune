@@ -22,6 +22,7 @@ public final class BenchmarkTrendLines {
 	static final int COLOR_GOOD = 0xFF7FE07F;
 	static final int COLOR_WARNING = 0xFFFFD166;
 	static final int COLOR_BAD = 0xFFFF7A6B;
+	private static final int TOOLTIP_WIDTH = 240;
 
 	// The badge's last-benchmark line, worked out once per badge (RigTuneScreen makes a new badge on every init), never per frame.
 	private static @Nullable Component cachedFor;
@@ -85,6 +86,7 @@ public final class BenchmarkTrendLines {
 			}
 			tooltip.append(lines.get(i));
 		}
-		graphics.setTooltipForNextFrame(font, tooltip, mouseX, mouseY);
+		// Split into lines (the joins and the rerun line are line breaks); a single Component would draw them as one line.
+		graphics.setTooltipForNextFrame(font, font.split(tooltip, TOOLTIP_WIDTH), mouseX, mouseY);
 	}
 }

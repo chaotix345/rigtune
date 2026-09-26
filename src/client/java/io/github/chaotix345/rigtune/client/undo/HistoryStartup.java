@@ -72,7 +72,7 @@ public final class HistoryStartup {
 		} catch (Exception e) {
 			RigTune.LOGGER.warn("Could not read {} for the history", pendingFile, e);
 		}
-		return LegacyImport.entry(lastApply(configDir), leftover, ModJars::modIdOf, sodiumKeys(configDir), mcVersion);
+		return LegacyImport.entry(lastApply(configDir), leftover, ModJars::modIdOf, ModJars::nameOf, sodiumKeys(configDir), mcVersion);
 	}
 
 	private static ApplyResult lastApply(Path configDir) {

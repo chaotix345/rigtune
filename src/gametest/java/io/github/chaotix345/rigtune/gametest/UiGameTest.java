@@ -33,7 +33,10 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.components.AbstractSelectionList;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.ContainerObjectSelectionList;
 import net.minecraft.client.gui.components.CycleButton;
+import net.minecraft.client.gui.narration.ScreenNarrationCollector;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -99,6 +102,7 @@ public class UiGameTest implements FabricClientGameTest {
 			context.takeScreenshot("ui-stub-pending-notice-" + size[0] + "x" + size[1] + "-scale" + size[2]);
 		}
 		checkNoticeLine(context);
+		checkTierAndNarration(context);
 
 		context.runOnClient(mc -> RigTuneClient.open(new TitleScreen()));
 		context.waitForScreen(RigTuneScreen.class);
@@ -433,6 +437,54 @@ public class UiGameTest implements FabricClientGameTest {
 		context.waitTicks(40);
 		context.waitFor(mc -> controller.report() != null, 1200);
 		context.waitTicks(3);
+	}
+
+	// docs/v0.4/SPEC.md 2j (AC2j.3) and 2m (AC2m.1): the stub's report (GPU 5 table match, CPU 4 fallback estimate from 16
+	// threads, memory 5): the header says "Estimated tier 4/5 · lowest estimated component: CPU" at the 3 standard sizes
+	// and the badge's one tooltip gives each component's basis (hovered for a screenshot); with a recommendation's
+	// checkbox focused, the list's narration names that recommendation.
+	private static void checkTierAndNarration(ClientGameTestContext context) {
+		StubController stub = new StubController(RigTuneClient::hardware);
+		context.runOnClient(mc -> mc.gui.setScreen(new RigTuneScreen(new TitleScreen(), stub)));
+		context.waitForScreen(RigTuneScreen.class);
+		context.waitTicks(3);
+		List<String> tooltip = List.of("GPU tier 5 (table match)", "CPU tier 4 (fallback estimate from 16 threads)", "Memory tier 5 (6.0 GB heap)");
+		for (int[] size : V04_SIZES) {
+			resize(context, size[0], size[1], size[2]);
+			String name = size[0] + "x" + size[1] + "-scale" + size[2];
+			checkLayout(context, "ui-tier " + name);
+			ScreenRectangle badge = context.computeOnClient(mc -> {
+				RigTuneScreen screen = (RigTuneScreen) mc.gui.screen();
+				String header = String.join("\n", screen.headerLines().stream().map(Component::getString).toList());
+				check(screen.tierBadgeArea() != null, name + ": the tier badge is drawn");
+				check("Estimated tier 4/5 · lowest estimated component: CPU".equals(screen.tierBadgeText()), name + ": badge " + screen.tierBadgeText());
+				check(screen.tierTooltip().stream().map(Component::getString).toList().equals(tooltip), name + ": tooltip " + screen.tierTooltip());
+				check(!header.contains("limited by"), name + ": no bottleneck wording: " + header);
+				return screen.tierBadgeArea();
+			});
+			RigTune.LOGGER.info("UiGameTest: tier badge at {} for {}", badge, name);
+			context.takeScreenshot("ui-tier-" + name);
+			int scale = context.computeOnClient(mc -> (int) mc.getWindow().getGuiScale());
+			context.getInput().setCursorPos((badge.left() + 2) * scale, (badge.top() + 4) * scale);
+			context.waitTicks(3);
+			context.takeScreenshot("ui-tier-tooltip-" + name);
+			context.getInput().setCursorPos(1, 1);
+		}
+		String narration = context.computeOnClient(mc -> {
+			RigTuneScreen screen = (RigTuneScreen) mc.gui.screen();
+			ContainerObjectSelectionList<?> list = screen.focusRecommendation("set-vanilla.renderDistance");
+			check(list != null, "the render distance row is there");
+			ScreenNarrationCollector collector = new ScreenNarrationCollector();
+			//? if >=26.3 {
+			/*collector.update(list::updateWidgetNarration, net.minecraft.client.gui.narration.NarrationTrigger.KEYBOARD);
+			*///?} else
+			collector.update(list::updateWidgetNarration);
+			return collector.collectNarrationText(false);
+		});
+		RigTune.LOGGER.info("UiGameTest: the focused row narrates: {}", narration);
+		String title = context.computeOnClient(mc -> ((RigTuneScreen) mc.gui.screen()).titleOf("set-vanilla.renderDistance"));
+		check(narration.contains(title) && narration.contains("High impact"), "the narration names the recommendation (" + title + "): " + narration);
+		context.takeScreenshot("ui-narration-focused");
 	}
 
 	private static void checkHeader(ClientGameTestContext context, String key) {

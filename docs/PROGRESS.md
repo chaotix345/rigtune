@@ -26,7 +26,9 @@ Brief: the user's v0.4.0 prompt (full autonomy, research -> release incl. GitHub
 | WS-H | test/e2e-v04 | rigtune-e2e4 (kept for Phase 5) | MERGED be95f9a (CI 36220255858 green). Dry runs on 0.4.0-dev: v030 20/20, v020 20/20, v010 21/21, seeded 26/26, undo 43/43, downgrade 16/16; two-switch undo phase 69/71 (the 2 failures = SPEC 2n, expected until WS-A merges); released-jar harness compat030.py 9/9 (placeholders); 0.3.0 jar sha256 5717f65c... pinned in build.yml. UNVERIFIED: the real profile-switch driver step (stub until WS-P), real v040-written fixture sets. |
 | WS-P early | feat/profiles-extract (deleted) | - | MERGED 22cc915 (CI 36219635079): Recommender.settingTargets extraction, golden report over 240 scenarios. |
 | coordinator | - | - | core/model/ModSetHash shared by WS-B/WS-F (e1393e1). |
-| WS-A | fix/v04-deferred | rigtune-fixes4 | 2a-2g, 2j, 2m, 2n |
+| WS-A | fix/v04-deferred (deleted) | removed | MERGED 0132341 (CI 36227862376): 2a-2g, 2j, 2m, 2n verified (unit + CI game tests; 2m pixel diff 0/56,640); 1444 tests/version at merge; MultiMC/GDLauncher jvm_steps added; compat030 9/9 with the real ws-a set. UNVERIFIED: AC2n.2 (WS-H RC run), 2d reverse check end to end (fake Modrinth lacks /v2/versions). |
+| WS-G1 | fix/resolver-audit | rigtune-g1 | Wave B hardening: H2, H3, H1-A (+ M4, M7 if time) |
+| WS-G3 | fix/helper-audit | rigtune-g3 | Wave B hardening: H4, L2 |
 | WS-R | feat/rules-v04 (deleted) | removed | MERGED 2636702 (CI 36224155899): rules r14; rules-v1 diff = VSync pair + revision/generatedAt only; 5 templates, 5 stutter seeds, 9 jvm-* advice (ZGC option C), 2 driver seeds, all v1:false; Legacy* tests; Python 324. UNVERIFIED: Sodium 'Chunk Updates' page, DH 'NO. of threads' label in advice text. |
 | WS-P | feat/profiles | rigtune-profiles | item 4 (+ early branch feat/profiles-extract: settingTargets) |
 | WS-S | feat/stutter | rigtune-stutter | item 5 |

@@ -7,8 +7,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-// Which launcher started the game (docs/v0.3/SPEC.md item 5 with C-M1): the Prism/MultiMC properties and environment,
-// then the brand literals verified from the launchers' sources, then the instance files in the game dir and its parent,
+// Which launcher started the game (docs/v0.3/SPEC.md item 5 with C-M1): Prism's own property (Prism always sets it
+// together with MultiMC's, docs/v0.4/SPEC.md 2g), then MultiMC's property or environment (MultiMC, and PolyMC, which sets
+// only the environment), then the brand literals verified from the launchers' sources, then the instance files in the game dir and its parent,
 // and last the official launcher's brand (CurseForge starts the game through the official launcher and sends it too).
 // Every signal is optional; anything unexpected, including any Throwable, means Unknown.
 public final class LauncherDetector {
@@ -30,9 +31,11 @@ public final class LauncherDetector {
 	private static LauncherInfo detectOrThrow(LauncherSignals signals) {
 		Map<String, String> properties = signals.properties() == null ? Map.of() : signals.properties();
 		Map<String, String> env = signals.env() == null ? Map.of() : signals.env();
-		if (present(properties, LauncherSignals.PRISM_INSTANCE) || present(properties, LauncherSignals.MULTIMC_INSTANCE)
-				|| present(env, LauncherSignals.INST_ID) || present(env, LauncherSignals.INST_NAME)) {
+		if (present(properties, LauncherSignals.PRISM_INSTANCE)) {
 			return LauncherInfo.of(Launcher.PRISM);
+		}
+		if (present(properties, LauncherSignals.MULTIMC_INSTANCE) || present(env, LauncherSignals.INST_ID) || present(env, LauncherSignals.INST_NAME)) {
+			return LauncherInfo.of(Launcher.MULTIMC);
 		}
 		String brand = properties.get(LauncherSignals.BRAND);
 		if (MODRINTH_BRAND.equals(brand)) {
@@ -40,6 +43,9 @@ public final class LauncherDetector {
 		}
 		if (ATLAUNCHER_BRAND.equals(brand)) {
 			return LauncherInfo.of(Launcher.ATLAUNCHER);
+		}
+		if (LauncherSignals.GDLAUNCHER_BRAND.equals(brand)) {
+			return LauncherInfo.of(Launcher.GDLAUNCHER);
 		}
 		for (Path dir : dirs(signals.gameDir())) {
 			if (InstanceFiles.prismInstance(dir)) {

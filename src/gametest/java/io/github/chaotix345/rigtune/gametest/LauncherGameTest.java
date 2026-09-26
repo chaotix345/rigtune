@@ -81,40 +81,60 @@ public class LauncherGameTest implements FabricClientGameTest {
 			RigTune.LOGGER.warn("LauncherGameTest: this run already has a launcher signal ({}); the no-launcher screenshots are skipped", real.launcher());
 		}
 
+		// v0.3: the Modrinth App's brand; v0.4 (docs/v0.4/SPEC.md 2g, AC2g.2): MultiMC's instance property (its INST_*
+		// environment can't be set in-process) and GDLauncher's brand.
+		withSignal(context, real, stub, ramAdvice, noLauncher, LauncherSignals.BRAND, "theseus", Launcher.MODRINTH_APP, "modrinth_app", "launcher-modrinth",
+				"Modrinth App");
+		withSignal(context, real, stub, ramAdvice, noLauncher, LauncherSignals.MULTIMC_INSTANCE, "RigTune test", Launcher.MULTIMC, "multimc",
+				"launcher-multimc", "MultiMC");
+		withSignal(context, real, stub, ramAdvice, noLauncher, LauncherSignals.BRAND, LauncherSignals.GDLAUNCHER_BRAND, Launcher.GDLAUNCHER, "gdlauncher",
+				"launcher-gdlauncher", "GDLauncher");
+
+		resize(context, 854, 480, 0);
+		context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
+		context.waitForScreen(TitleScreen.class);
+	}
+
+	// Sets one launcher signal, goes through the real probe (reset + rescan), checks the ram-* advice lines, the header and
+	// the share report at every size, then puts the property back as it was.
+	private static void withSignal(ClientGameTestContext context, RigTuneController real, RigTuneController stub, long ramAdvice, boolean noLauncher,
+			String property, String value, Launcher expected, String keySuffix, String screenshot, String shareName) {
+		String before = System.getProperty(property);
 		Throwable failure = null;
 		try {
-			System.setProperty(LauncherSignals.BRAND, "theseus");
+			System.setProperty(property, value);
 			redetect(context, real);
-			context.waitFor(mc -> real.launcher().launcher() == Launcher.MODRINTH_APP && real.report() != null, 1200);
-			RigTune.LOGGER.info("LauncherGameTest: with {}=theseus detected {}", LauncherSignals.BRAND, real.launcher());
+			context.waitFor(mc -> real.launcher().launcher() == expected && real.report() != null, 1200);
+			RigTune.LOGGER.info("LauncherGameTest: with {}={} detected {}", property, value, real.launcher());
 
 			open(context, stub);
-			atEverySize(context, "launcher-modrinth");
+			atEverySize(context, screenshot);
 			context.runOnClient(mc -> {
 				RigTuneScreen screen = (RigTuneScreen) mc.gui.screen();
 				List<Component> lines = screen.launcherLines();
 				check(lines.size() == ramAdvice, "one launcher line per ram-* advice: " + lines);
 				for (Component line : lines) {
 					check(line.getContents() instanceof TranslatableContents t && t.getKey().equals("rigtune.launcher.advice")
-							&& key(t.getArgs()[0]).equals("rigtune.launcher.name.modrinth_app")
-							&& key(t.getArgs()[1]).equals("rigtune.launcher.steps.modrinth_app"), "Modrinth App steps: " + line);
+							&& key(t.getArgs()[0]).equals("rigtune.launcher.name." + keySuffix)
+							&& key(t.getArgs()[1]).equals("rigtune.launcher.steps." + keySuffix), expected + " steps: " + line);
 				}
 				check(headerHas(screen, "rigtune.launcher.header.memory") && !headerHas(screen, "rigtune.header.cpu"), "memory line names the launcher");
 				RigTune.LOGGER.info("LauncherGameTest: header {}; line {}", screen.headerLines().stream().map(Component::getString).toList(),
 						lines.getFirst().getString());
 			});
 			String shared = context.computeOnClient(mc -> real.shareReport());
-			check(shared.contains("\n- Launcher: Modrinth App\n"), "the share report names the launcher: " + shared);
+			check(shared.contains("\n- Launcher: " + shareName + "\n"), "the share report names the launcher: " + shared);
+			check(!shared.contains(value) || value.equals(shareName), "the share report has no signal value: " + shared);
 		} catch (RuntimeException | Error e) {
 			failure = e;
 			throw e;
 		} finally {
-			// Later game-test classes get the start-up launcher back; a failure here doesn't hide the one above.
+			// Later checks and game-test classes get the start-up launcher back; a failure here doesn't hide the one above.
 			try {
-				if (startBrand == null) {
-					System.clearProperty(LauncherSignals.BRAND);
+				if (before == null) {
+					System.clearProperty(property);
 				} else {
-					System.setProperty(LauncherSignals.BRAND, startBrand);
+					System.setProperty(property, before);
 				}
 				redetect(context, real);
 				context.waitFor(mc -> real.launcher().known() != noLauncher && real.report() != null, 1200);
@@ -127,10 +147,6 @@ public class LauncherGameTest implements FabricClientGameTest {
 				failure.addSuppressed(e);
 			}
 		}
-
-		resize(context, 854, 480, 0);
-		context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
-		context.waitForScreen(TitleScreen.class);
 	}
 
 	// The bundled rules' recommendations for 16 GB of RAM, a 2 GB heap and Distant Horizons (ram-low and

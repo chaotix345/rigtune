@@ -276,7 +276,7 @@ class ApplyGroupsTest {
 		ApplyResult third = executor((from, to) -> from.equals(lithium)).run(PendingActions.load(pending), pending);
 
 		assertEquals(List.of(Status.ABANDONED, Status.ABANDONED, Status.ABANDONED, Status.FAILED), statuses(third));
-		assertTrue(third.results().get(1).message().startsWith("Gave up after 3 failed attempts: "), third.results().get(1).message());
+		assertTrue(third.results().get(1).message().startsWith("Gave up after 3 restarts: "), third.results().get(1).message());
 		assertEquals(3, third.abandonedOps().size());
 		assertEquals(statuses(third), statuses(ApplyResult.load(ApplyResult.defaultPath(config))));
 		assertEquals(List.of(lithium.toString()), PendingActions.load(pending).ops().stream().map(Op::path).toList());

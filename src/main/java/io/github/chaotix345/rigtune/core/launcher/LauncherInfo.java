@@ -24,6 +24,8 @@ public record LauncherInfo(Launcher launcher, @Nullable Boolean memoryOverride) 
 	public @Nullable String nameKey() {
 		return switch (launcher) {
 			case PRISM -> "rigtune.launcher.name.prism";
+			case MULTIMC -> "rigtune.launcher.name.multimc";
+			case GDLAUNCHER -> "rigtune.launcher.name.gdlauncher";
 			case MODRINTH_APP -> "rigtune.launcher.name.modrinth_app";
 			case ATLAUNCHER -> "rigtune.launcher.name.atlauncher";
 			case CURSEFORGE -> "rigtune.launcher.name.curseforge";
@@ -39,6 +41,9 @@ public record LauncherInfo(Launcher launcher, @Nullable Boolean memoryOverride) 
 	public @Nullable String stepsKey() {
 		return switch (launcher) {
 			case PRISM -> "rigtune.launcher.steps.prism";
+			// docs/v0.4/SPEC.md 2g: the instance's own memory setting (launcher-steps.md, from each launcher's source).
+			case MULTIMC -> "rigtune.launcher.steps.multimc";
+			case GDLAUNCHER -> "rigtune.launcher.steps.gdlauncher";
 			case MODRINTH_APP -> "rigtune.launcher.steps.modrinth_app";
 			case ATLAUNCHER -> "rigtune.launcher.steps.atlauncher";
 			case CURSEFORGE -> Boolean.FALSE.equals(memoryOverride) ? "rigtune.launcher.steps.curseforge.global" : "rigtune.launcher.steps.curseforge.pack";
@@ -52,6 +57,9 @@ public record LauncherInfo(Launcher launcher, @Nullable Boolean memoryOverride) 
 	public @Nullable String jvmStepsKey() {
 		return switch (launcher) {
 			case PRISM -> "rigtune.launcher.jvm_steps.prism";
+			// docs/v0.4/SPEC.md 2g: MultiMC 0.6.16's "Java arguments" box; GDLauncher Carbon's instance and global boxes.
+			case MULTIMC -> "rigtune.launcher.jvm_steps.multimc";
+			case GDLAUNCHER -> "rigtune.launcher.jvm_steps.gdlauncher";
 			case MODRINTH_APP -> "rigtune.launcher.jvm_steps.modrinth_app";
 			case ATLAUNCHER -> "rigtune.launcher.jvm_steps.atlauncher";
 			case CURSEFORGE -> "rigtune.launcher.jvm_steps.curseforge";
@@ -60,10 +68,10 @@ public record LauncherInfo(Launcher launcher, @Nullable Boolean memoryOverride) 
 		};
 	}
 
-	// A -Xmx typed in the Java arguments overrides the memory slider (Modrinth App: args.rs:162,205). Prism and ATLauncher
-	// put their own -Xmx last (or refuse a typed one); the official launcher has no separate memory setting; CurseForge is
-	// UNVERIFIED.
+	// A -Xmx typed in the Java arguments overrides the memory slider (Modrinth App: args.rs:162,205; GDLauncher Carbon:
+	// minecraft.rs:593-594 then :665, launcher-steps.md). Prism, MultiMC and ATLauncher put their own -Xmx last (or refuse
+	// a typed one); the official launcher has no separate memory setting; CurseForge is UNVERIFIED.
 	public boolean typedXmxWins() {
-		return launcher == Launcher.MODRINTH_APP;
+		return launcher == Launcher.MODRINTH_APP || launcher == Launcher.GDLAUNCHER;
 	}
 }
