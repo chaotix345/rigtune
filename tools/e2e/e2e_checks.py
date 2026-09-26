@@ -538,3 +538,126 @@ def after_entry_check(instance, first_id, second_id, other_id, driver, mods_befo
                         "unchanged" if statuses == statuses_before else "before {} after {}".format(statuses_before, statuses)))
     checks.append(_clean(instance))
     return checks
+
+
+# --- Phase 5 hook: undo after a restart of a profile-switch entry (docs/v0.4/design/ws-h.md) --------------------------
+# A profile switch is an ordinary apply entry of setting changes (docs/research/v0.4/profiles.md, section 0); 0.4 labels
+# it in config/rigtune/profiles.json ({switches: [{entryId, profileId, templateId, name}]}). On the fresh E2E instance
+# every managed setting is vanilla, applied and reverted at once, so options.txt shows each step.
+
+VANILLA = "vanilla."
+
+
+def options_values(instance):
+    """options.txt as key -> value."""
+    path = Path(instance) / "options.txt"
+    if not path.is_file():
+        return {}
+    pairs = (line.split(":", 1) for line in path.read_text(encoding="utf-8", errors="replace").splitlines() if ":" in line)
+    return {key: value for key, value in pairs}
+
+
+def _settings(entry):
+    return {c.get("key"): c for c in (entry or {}).get("changes", []) if c.get("type") == "setting"}
+
+
+def _options_hold(instance, values, name):
+    options = options_values(instance)
+    wrong = {key: (options.get(key[len(VANILLA):]), value) for key, value in values.items()
+             if options.get(key[len(VANILLA):]) != value}
+    return Check(name, bool(values) and not wrong, "(options.txt, expected) where they differ: {}".format(wrong) if wrong else
+                 "{} value(s) as expected".format(len(values)))
+
+
+def profile_label(instance, entry_id, name, check_name):
+    """profiles.json (WS-P) has one switch for entry_id, named name."""
+    data = _load(Path(instance) / "config" / "rigtune" / "profiles.json")
+    switches = data.get("switches") if isinstance(data, dict) else None
+    mine = [s for s in switches or [] if isinstance(s, dict) and s.get("entryId") == entry_id]
+    return Check(check_name, entry_id is not None and len(mine) == 1 and mine[0].get("name") == name,
+                 "switches for entry {}: {}; expected name {}".format(entry_id, mine, name))
+
+
+def after_profile_apply(instance, driver, known_entry_ids, originals, targets, label):
+    """The switch launch: one new apply entry of vanilla setting changes, APPLIED, and options.txt holding the new values.
+    targets (the settings stand-in): the exact bare key -> value it set, with originals (options.txt before the launch)
+    as each change's before; None in profile mode, where the profile decides the keys. label: the profile's name that
+    profiles.json must give the entry (profile mode), or None."""
+    instance = Path(instance)
+    driver = driver or {}
+    checks = [Check("the driver switched", driver.get("ok") is True and bool(driver.get("applyMessage")),
+                    "error: {}; apply message: {}".format(driver.get("error"), driver.get("applyMessage")))]
+    new = [e for e in history_entries(instance) or [] if e.get("id") not in set(known_entry_ids)]
+    entry = new[0] if len(new) == 1 else None
+    settings = _settings(entry)
+    ok = (entry is not None and entry.get("kind") == "apply" and bool(settings)
+          and len(settings) == len(entry.get("changes", [])) and all(k and k.startswith(VANILLA) for k in settings)
+          and all(c.get("status") == "APPLIED" for c in settings.values()))
+    checks.append(Check("history.json: one new apply entry of setting changes, all APPLIED", ok,
+                        "new entries: {}".format([(e.get("kind"), [(c.get("type"), c.get("key"), c.get("before"), c.get("after"),
+                                                                   c.get("status")) for c in e.get("changes", [])]) for e in new])))
+    if targets is not None:
+        got = {k: (c.get("before"), c.get("after")) for k, c in settings.items()}
+        wanted = {VANILLA + k: (originals.get(k), v) for k, v in targets.items()}
+        checks.append(Check("history.json: the switch changed exactly the chosen settings", got == wanted,
+                            "(before, after) by key: {}; expected {}".format(got, wanted)))
+    checks.append(_options_hold(instance, {k: c.get("after") for k, c in settings.items()}, "options.txt holds the switched values"))
+    checks.append(_clean(instance))
+    if label is not None:
+        checks.append(profile_label(instance, entry.get("id") if entry else None, label, "profiles.json labels the switch entry"))
+    return checks
+
+
+def after_profile_undo(instance, driver, entry_id, label):
+    """Undo this on the switch entry in the next launch: every change reverted at once, no restart needed."""
+    instance = Path(instance)
+    driver = driver or {}
+    entries = {e.get("id"): e for e in history_entries(instance) or []}
+    switch = _settings(entries.get(entry_id))
+    items = [i for i in driver.get("entryPlan") or [] if i.get("action") != "SKIP"]
+    planned = sorted(c for i in items for c in i.get("changeIds") or [])
+    checks = [Check("the driver undid the switch entry now (no restart needed)",
+                    driver.get("ok") is True and driver.get("undoOf") == entry_id and bool(items)
+                    and all(i.get("action") == "REVERT" and i.get("needsRestart") is False for i in items)
+                    and planned == sorted(c.get("id") for c in switch.values()),
+                    "error: {}; undoOf: {} (switch {}); plan: {}".format(driver.get("error"), driver.get("undoOf"), entry_id,
+                                                                        driver.get("entryPlan")))]
+    checks.append(_options_hold(instance, {k: c.get("before") for k, c in switch.items()},
+                                "options.txt holds the values from before the switch"))
+    undos = [e for e in entries.values() if e.get("kind") == "undo" and e.get("undoOf") == entry_id]
+    undo_changes = [c for e in undos for c in e.get("changes", [])]
+    ok = (len(undos) == 1 and bool(switch) and all(c.get("status") == "REVERTED" for c in switch.values())
+          and all(c.get("status") == "APPLIED" for c in undo_changes)
+          and sorted(c.get("reverts") for c in undo_changes) == sorted(c.get("id") for c in switch.values()))
+    checks.append(Check("history.json: one undo of the switch, its changes REVERTED", ok,
+                        "switch changes: {}; undo entries: {}; undo changes: {}".format(
+                            {k: c.get("status") for k, c in switch.items()}, len(undos),
+                            [(c.get("key"), c.get("status"), c.get("reverts")) for c in undo_changes])))
+    checks.append(_clean(instance))
+    if label is not None:
+        checks.append(profile_label(instance, entry_id, label, "profiles.json still labels the switch entry"))
+    return checks
+
+
+def after_profile_check(instance, driver, entry_id, mods_before, statuses_before):
+    """The next start: the game runs with the values from before the switch and nothing is left to undo on it."""
+    instance = Path(instance)
+    driver = driver or {}
+    switch = _settings({e.get("id"): e for e in history_entries(instance) or []}.get(entry_id))
+    wanted = {k[len(VANILLA):]: c.get("before") for k, c in switch.items()}
+    now = driver.get("settingsNow") or {}
+    checks = [Check("the driver checked", driver.get("ok") is True, "error: {}".format(driver.get("error")))]
+    checks.append(Check("the game runs with the values from before the switch", bool(wanted) and now == wanted,
+                        "live values {}; expected {}".format(now, wanted)))
+    problem = (driver.get("entryPlanAfterMeta") or {}).get("problem")
+    checks.append(Check("nothing left to undo on the switch entry", driver.get("entryUndoableAfter") == 0 and problem is None,
+                        "undoable items: {}; plan problem: {}".format(driver.get("entryUndoableAfter"), problem)))
+    crashes = sorted(p.name for p in (instance / "crash-reports").glob("*")) if (instance / "crash-reports").is_dir() else []
+    checks.append(Check("no crash report", not crashes, "crash-reports: {}".format(crashes)))
+    after = listing(instance / "mods")
+    checks.append(Check("mods unchanged by the relaunch", after == mods_before, "unchanged" if after == mods_before else _diff(mods_before, after)))
+    statuses = history_statuses(instance)
+    checks.append(Check("history.json statuses unchanged", statuses == statuses_before,
+                        "unchanged" if statuses == statuses_before else "before {} after {}".format(statuses_before, statuses)))
+    checks.append(_clean(instance))
+    return checks

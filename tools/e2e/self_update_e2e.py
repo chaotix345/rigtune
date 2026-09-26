@@ -52,6 +52,13 @@ RELEASED = {
 UNDO_PHASES = ("mod-apply", "mod-undo", "mod-check")
 # Plan review B-M3, on the same instance after UNDO_PHASES: Undo this on an older Apply.
 ENTRY_PHASES = ("entry-apply", "entry-undo", "entry-check")
+# Phase 5 hook (docs/v0.4/design/ws-h.md), after ENTRY_PHASES with --profile-switch: a profile switch (an apply entry of
+# setting changes), Undo this on it after a restart, and a check start. Mode settings (the stand-in until WS-P merges)
+# applies PROFILE_SETTINGS through controller.apply, which is what a switch does; mode profile switches to the profile
+# --profile-name through WS-P's API (UndoDriver.switchProfile) and also checks its label in profiles.json.
+PROFILE_PHASES = ("profile-apply", "profile-undo", "profile-check")
+PROFILE_SETTINGS = {"renderDistance": "6", "maxFps": "90"}
+PROFILE_SETTINGS_ARG = ",".join("{}:{}".format(k, v) for k, v in PROFILE_SETTINGS.items())
 ADDED_ID = "e2e-added"
 ADDED_PROJECT = "E2EAddMd"
 OTHER_ID = "e2e-disable-me"
@@ -66,6 +73,9 @@ PHASE_TITLES = {
     "entry-apply": "B-M3: after two Applies in one start, each adding a mod (" + FIRST_ID + ", then " + SECOND_ID + "), and quit (helper done)",
     "entry-undo": "B-M3: after Undo this on the older Apply (" + FIRST_ID + ") and a restart (helper done)",
     "entry-check": "B-M3: after the next start",
+    "profile-apply": "Profile hook: after a profile switch (one apply entry of setting changes) and quit",
+    "profile-undo": "Profile hook: after Undo this on the switch in the next start",
+    "profile-check": "Profile hook: after the next start",
 }
 
 
@@ -95,7 +105,9 @@ class Run:
         self.lock = None if args.lock == "none" else Path(args.lock)
         self.server = None
         self.watcher = None
-        self.checks = {p: [] for p in (UNDO_PHASES + ENTRY_PHASES if self.undo else ("update", "verify"))}
+        self.profile = args.profile_switch
+        phases = UNDO_PHASES + ENTRY_PHASES + (PROFILE_PHASES if self.profile else ()) if self.undo else ("update", "verify")
+        self.checks = {p: [] for p in phases}
         self.facts = {}
         self.jars = self.run_dir / "jars"
         # Test mods: disabled by the old version with its update (so its journal or the legacy import has a non-RigTune
@@ -277,11 +289,17 @@ class Run:
             if self.undo:
                 lines += ["-Drigtune.e2e.addSlug=" + ADDED_ID, "-Drigtune.e2e.addProject=" + ADDED_PROJECT, "-Drigtune.e2e.disable=" + OTHER_ID,
                           "-Drigtune.e2e.entryMods={}:{},{}:{}".format(FIRST_ID, FIRST_PROJECT, SECOND_ID, SECOND_PROJECT)]
+            if phase in PROFILE_PHASES:
+                lines += self.profile_jvm_args()
             (self.run_dir / "jvm-{}.txt".format(phase)).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
         code = self.gradle("gradle-driver.log", *self.driver_args(":{}:{}".format(self.mc, "e2eUndoDriverJar" if self.undo else "e2eDriverJar")))
         if code != 0:
             raise SystemExit("building the driver failed; see " + str(self.run_dir / "gradle-driver.log"))
+
+    def profile_jvm_args(self):
+        return ["-Drigtune.e2e.profileMode=" + self.profile, "-Drigtune.e2e.profileName=" + self.args.profile_name,
+                "-Drigtune.e2e.profileSettings=" + PROFILE_SETTINGS_ARG]
 
     def add_jvm_args(self, phase, lines):
         """For values known only after an earlier launch (the entry id of B-M3's older Apply)."""
@@ -544,6 +562,44 @@ class Run:
                                               mods_before, statuses_before)
         checks.insert(0, e2e_checks.Check("the client exited normally", code == 0, "gradle exit {}".format(code)))
         self.checks["entry-check"] = checks
+        return all(c.ok for c in checks) and (not self.profile or self.run_profile_switch())
+
+    def run_profile_switch(self):
+        """Phase 5 hook, on the same instance: a profile switch, Undo this on it in the next start, and a check start.
+        Vanilla settings apply and revert at once, so no helper runs; options.txt and history.json show each step."""
+        def exited(code):
+            return e2e_checks.Check("the client exited normally", code == 0, "gradle exit {}".format(code))
+
+        label = self.args.profile_name if self.profile == "profile" else None
+        known = [e.get("id") for e in e2e_checks.history_entries(self.instance) or []]
+        originals = e2e_checks.options_values(self.instance)
+        code = self.launch("profile-apply")
+        self.snapshot("profile-apply")
+        checks = [exited(code)] + e2e_checks.after_profile_apply(self.instance, self.driver("profile-apply"), known, originals,
+                                                                  PROFILE_SETTINGS if self.profile == "settings" else None, label)
+        self.checks["profile-apply"] = checks
+        new = [e for e in e2e_checks.history_entries(self.instance) or [] if e.get("id") not in known]
+        if not all(c.ok for c in checks):
+            return False
+        self.facts["switchEntry"] = new[0].get("id")
+        befores = ",".join("{}:{}".format(c.get("key")[len(e2e_checks.VANILLA):], c.get("before")) for c in new[0].get("changes", []))
+        for phase in PROFILE_PHASES[1:]:
+            self.add_jvm_args(phase, ["-Drigtune.e2e.entryId=" + self.facts["switchEntry"], "-Drigtune.e2e.profileOriginals=" + befores])
+
+        code = self.launch("profile-undo")
+        self.snapshot("profile-undo")
+        checks = [exited(code)] + e2e_checks.after_profile_undo(self.instance, self.driver("profile-undo"), self.facts["switchEntry"], label)
+        self.checks["profile-undo"] = checks
+        if not all(c.ok for c in checks):
+            return False
+
+        mods_before = e2e_checks.listing(self.mods)
+        statuses_before = e2e_checks.history_statuses(self.instance)
+        code = self.launch("profile-check")
+        self.snapshot("profile-check")
+        checks = [exited(code)] + e2e_checks.after_profile_check(self.instance, self.driver("profile-check"), self.facts["switchEntry"],
+                                                                  mods_before, statuses_before)
+        self.checks["profile-check"] = checks
         return all(c.ok for c in checks)
 
     def driver(self, phase):
@@ -614,6 +670,11 @@ class Run:
                       "older one (entry {}; through the undo screen: {}; controller method: {})".format(
                           self.first_jar.name, FIRST_PROJECT, self.second_jar.name, SECOND_PROJECT, self.facts.get("olderEntry"),
                           (self.driver("entry-undo") or {}).get("viaScreen"), (self.driver("entry-undo") or {}).get("entryPlanMethod"))]
+            if self.profile:
+                lines.append("- Profile hook (`--profile-switch {}`): {} (entry {})".format(
+                    self.profile, "the settings stand-in `{}` through controller.apply".format(PROFILE_SETTINGS_ARG)
+                    if self.profile == "settings" else "a switch to the profile `{}`".format(self.args.profile_name),
+                    self.facts.get("switchEntry")))
         else:
             lines += ["- Old: `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["old"]),
                       "- New (served by the fake Modrinth): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"])]
@@ -800,6 +861,10 @@ def parse_args(argv):
                         help="auto: from the old jar's version; legacy-import (the value without an argument; a 0.1.x "
                              "old side): the new version imports 0.1.x's last apply once; own-update (a 0.2.0 or later "
                              "old side): the old version's journal of its own update is read as it is")
+    parser.add_argument("--profile-switch", choices=("settings", "profile"),
+                        help="undo: also undo a profile switch after a restart (Phase 5 hook): settings = the stand-in "
+                             "(an apply of vanilla settings), profile = through WS-P's API, with its profiles.json label")
+    parser.add_argument("--profile-name", default="Battery", help="--profile-switch profile: the profile to switch to")
     parser.add_argument("--port", type=int, default=443)
     parser.add_argument("--lock", default=DEFAULT_LOCK, help="game-test lock folder, or 'none'")
     parser.add_argument("--agent", default="ws-h", help="the agent named in the lock's owner.txt")
@@ -810,6 +875,8 @@ def parse_args(argv):
         parser.error("set JAVA_HOME or pass --java-home")
     if args.seed and args.scenario != "self-update":
         parser.error("--seed is for the self-update scenario")
+    if args.profile_switch and args.scenario != "undo":
+        parser.error("--profile-switch is for the undo scenario")
     return args
 
 
