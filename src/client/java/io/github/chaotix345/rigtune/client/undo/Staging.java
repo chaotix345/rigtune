@@ -83,6 +83,7 @@ public final class Staging {
 				RigTune.LOGGER.error("Could not stage RigTune changes: the apply helper still holds {}", ApplyLock.defaultPath(configDir));
 				return null;
 			}
+			createJournal();
 			Merge merge = mergeLocked(ops);
 			try {
 				if (!journal.update(entries -> recorded(entries, merge, ops, entryId))) {
@@ -95,6 +96,19 @@ public final class Staging {
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.error("Could not write {}", pendingFile, e);
 			return null;
+		}
+	}
+
+	// history.json's first write makes the 0.1.x legacy entry from pending.json (HistoryStartup.legacyEntry): it must see
+	// pending.json as it was before this merge, not this Apply's ops (docs/v0.4/SPEC.md 2o L1). The caller holds the lock.
+	private void createJournal() {
+		if (journal.exists()) {
+			return;
+		}
+		try {
+			journal.update(entries -> entries);
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.warn("Could not create {}", Journal.file(configDir), e);
 		}
 	}
 
