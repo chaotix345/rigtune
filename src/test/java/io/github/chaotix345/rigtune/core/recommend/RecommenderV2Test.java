@@ -91,9 +91,16 @@ class RecommenderV2Test {
 		assertTrue(recs.keySet().containsAll(EVERY_KIND_IDS), recs.keySet().toString());
 	}
 
+	// 0.4 knows "jvm-flags" (the jvm-* advice, docs/v0.4/SPEC.md 6). A rule needs every feature it names, so one that also
+	// names a feature the main list doesn't know (the Stutter Doctor's) is still skipped.
 	@Test
-	void noFeaturesAreSupportedYet() {
-		assertTrue(Recommender.SUPPORTED_FEATURES.isEmpty());
+	void onlyJvmFlagsIsSupported() {
+		assertEquals(Set.of("jvm-flags"), Recommender.SUPPORTED_FEATURES);
+		Map<String, Recommendation> kept = run(EVERY_KIND.replace("REQ", ",\"requires\":[\"jvm-flags\"]"), "avoidme", "clash", "sodium", "oldmod");
+		assertTrue(kept.keySet().containsAll(EVERY_KIND_IDS), kept.keySet().toString());
+		Map<String, Recommendation> skipped = run(EVERY_KIND.replace("REQ", ",\"requires\":[\"jvm-flags\",\"stutter-doctor\"]"),
+				"avoidme", "clash", "sodium", "oldmod");
+		assertTrue(skipped.keySet().stream().noneMatch(EVERY_KIND_IDS::contains), skipped.keySet().toString());
 	}
 
 	@Test
