@@ -90,6 +90,11 @@ public class ServerLimitsGameTest implements FabricClientGameTest {
 		Properties properties = new Properties();
 		properties.setProperty("view-distance", "6");
 		properties.setProperty("simulation-distance", "5");
+		// The test server starts in the game-test run directory (wiped per run), where vanilla's Eula reads eula.txt; the
+		// harness writes server.properties there the same way.
+		Path eula = Path.of("eula.txt");
+		write(eula, "eula=true
+");
 		try (TestDedicatedServerContext server = context.worldBuilder().createServer(properties);
 				TestDedicatedServerConnection connection = server.connect()) {
 			connection.waitForChunksRender();
@@ -214,6 +219,14 @@ public class ServerLimitsGameTest implements FabricClientGameTest {
 			return Files.readString(file, StandardCharsets.UTF_8);
 		} catch (IOException e) {
 			throw new AssertionError("Could not read " + file, e);
+		}
+	}
+
+	private static void write(Path file, String text) {
+		try {
+			Files.writeString(file, text, StandardCharsets.UTF_8);
+		} catch (IOException e) {
+			throw new AssertionError("Could not write " + file, e);
 		}
 	}
 
