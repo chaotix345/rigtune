@@ -6,6 +6,7 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.model.Action;
+import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Text;
@@ -90,8 +91,20 @@ public final class DownloadPlanner {
 		this.modIdOf = modIdOf;
 	}
 
-	// installedProjects / loadedIds: the Modrinth projects and mod ids of the loaded mods. stagedJars: mod id -> the
-	// pending jar of an enable already in pending.json (a newer download replaces it when merged).
+	// docs/v0.4/SPEC.md 2o, H3: the loadedIds for plan(): the scanned mods that are top-level jars. A mod nested inside
+	// another (jar-in-jar) is no second copy: Fabric loads a top-level jar next to it (the newer one wins), and the helper's
+	// duplicate check counts top-level jars only. InstalledMod: sha1 is null only for built-in and nested mods; a file is
+	// a jar directly in mods/ (its hash may have failed).
+	public static Set<String> topLevelIds(List<InstalledMod> scanned) {
+		Set<String> out = new HashSet<>();
+		if (scanned != null) {
+			scanned.stream().filter(m -> m.sha1() != null || m.file() != null).forEach(m -> out.add(m.modId()));
+		}
+		return out;
+	}
+
+	// installedProjects / loadedIds: the Modrinth projects and mod ids of the loaded top-level mods (topLevelIds).
+	// stagedJars: mod id -> the pending jar of an enable already in pending.json (a newer download replaces it when merged).
 	public Result plan(List<Recommendation> recs, Set<String> installedProjects, Set<String> loadedIds, Map<String, String> stagedJars) {
 		Batch batch = new Batch(installedProjects, loadedIds, stagedJars);
 		List<String> ids = new ArrayList<>();

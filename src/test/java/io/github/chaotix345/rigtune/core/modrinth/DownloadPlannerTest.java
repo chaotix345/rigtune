@@ -10,6 +10,7 @@ import io.github.chaotix345.rigtune.core.apply.TestJars;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Impact;
+import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Text;
@@ -153,11 +154,43 @@ class DownloadPlannerTest {
 	}
 
 	private DownloadPlanner.Result plan(Set<String> installedProjects, Recommendation... recs) {
+		return plan(installedProjects, Set.of(), recs);
+	}
+
+	private DownloadPlanner.Result plan(Set<String> installedProjects, Set<String> loadedIds, Recommendation... recs) {
 		DownloadPlanner planner = new DownloadPlanner(new DependencyResolver(client, "fabric", "26.2", installedVersions).withStaged(staged), mods,
 				this::fetch, conflicts, updateVersions);
-		DownloadPlanner.Result result = planner.plan(List.of(recs), installedProjects, Set.of(), Map.of());
+		DownloadPlanner.Result result = planner.plan(List.of(recs), installedProjects, loadedIds, Map.of());
 		planned.add(result);
 		return result;
+	}
+
+	// docs/v0.4/SPEC.md 2o, H3 (audit-verification.md H3, seen on the real instance): Distant Horizons 3.3.x nests
+	// fabric-api 0.149. The nested copy is in the scan (no file, no hash) but isn't a top-level jar, so it never counts as
+	// present for the planner's drop decision: an addition that requires Fabric API gets a top-level copy in its own group
+	// (Fabric loads the newer top-level copy next to a nested one). Before the fix the download was deleted as a duplicate.
+	@Test
+	void aLibraryPresentOnlyNestedInAnotherModIsStagedTopLevel() {
+		List<InstalledMod> scan = List.of(
+				new InstalledMod("distanthorizons", "Distant Horizons", "3.3.0", mods.resolve("DistantHorizons-3.3.0.jar"), "dh-sha1"),
+				new InstalledMod("fabric-api", "Fabric API", "0.149.0+26.2", null, null),
+				// A top-level jar loaded from outside mods/ (hashed, no file), and one in mods/ whose hash failed.
+				new InstalledMod("sodium", "Sodium", "0.9.2", null, "sodium-sha1"),
+				new InstalledMod("iris", "Iris", "1.11.4", mods.resolve("iris.jar"), null));
+		put("a", version("aV", "A", "1", T, required("FAPI")));
+		put("fabric-api", version("fabric-apiV", "FAPI", "0.161.0", T));
+
+		Set<String> loaded = DownloadPlanner.topLevelIds(scan);
+		DownloadPlanner.Result result = plan(Set.of("DH"), loaded, add("a", "A"));
+		DownloadPlanner.Result withNested = plan(Set.of("DH"), Set.of("distanthorizons", "fabric-api"), add("a", "A"));
+
+		assertEquals(Set.of("distanthorizons", "sodium", "iris"), loaded);
+		assertEquals(Set.of(), DownloadPlanner.topLevelIds(null));
+		assertEquals(List.of(), result.errors());
+		assertEquals(List.of("aV.jar", "fabric-apiV.jar"), targets(result.ops()));
+		assertEquals(1, groups(result.ops()), result.ops().toString());
+		// What the old loadedIds (every scanned id) did: the library's download dropped, the mod staged alone.
+		assertEquals(List.of("aV.jar"), targets(withNested.ops()));
 	}
 
 	// Review 4, rules-accuracy-2, and docs/v0.4/SPEC.md 2e (AC2e.2): a batch never stages both sides of a rules conflict,

@@ -566,11 +566,7 @@ public final class RealController implements RigTuneController {
 		DependencyResolver resolver = new DependencyResolver(modrinth, OnlineDataFetcher.LOADER, mcVersion, data.installedVersions())
 				.withStaged(StagedProjects.read(pendingFile));
 		Set<String> installedProjects = new HashSet<>(data.projectIdsByModId().values());
-		List<InstalledMod> scanned = mods;
-		Set<String> loadedIds = new HashSet<>();
-		if (scanned != null) {
-			scanned.forEach(m -> loadedIds.add(m.modId()));
-		}
+		Set<String> loadedIds = DownloadPlanner.topLevelIds(mods);
 		RulesDocument doc = rules;
 		BiPredicate<String, String> conflicts = doc == null ? (a, b) -> false : ModConflicts.of(doc)::between;
 		return new DownloadPlanner(resolver, modsDir, this::fetch, conflicts, data.updateVersions()).plan(recs, installedProjects, loadedIds, stagedJarsByModId());
@@ -770,11 +766,7 @@ public final class RealController implements RigTuneController {
 				: minecraft.isSameThread() ? gameOptions(vanilla) : minecraft.submit(() -> gameOptions(vanilla)).join();
 		OnlineDataFetcher.Result data = online;
 		HardwareProfile hw = hardware;
-		List<InstalledMod> scanned = mods;
-		Set<String> loadedIds = new HashSet<>();
-		if (scanned != null) {
-			scanned.forEach(m -> loadedIds.add(m.modId()));
-		}
+		Set<String> loadedIds = DownloadPlanner.topLevelIds(mods);
 		RulesDocument doc = rules;
 		DownloadInputs downloads = new DownloadInputs(modrinth, settings.modrinthAllowed(), OnlineDataFetcher.LOADER,
 				onlineLookups.modrinthGameVersion(hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion()), data.installedVersions(),
