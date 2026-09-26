@@ -12,7 +12,8 @@ import java.util.Map;
 //   movingFast), for stutterTaggedShareAtLeast.
 // gcFullPauses/gcStalls/gcExplicitPauses: gcFullPausesAtLeast/gcStallsAtLeast/gcExplicitPausesAtLeast.
 // liveSetPercent: liveSetPercentAtLeast. heapRaiseRoomMb (min(ram/2, ram - 4096) - heap): heapRaiseRoomMbAtLeast.
-// cpuContentionShare: cpuContentionShareAtLeast. spikesPerMinute: spikesPerMinuteAtLeast.
+// cpuContentionShare: cpuContentionShareAtLeast. spikesPerMinute: spikesPerMinuteAtLeast, whose threshold is x10.
+// The rules' thresholds are whole numbers (plan review K-M1); these facts are measured values.
 // gcCollector (g1, zgc, shenandoah, parallel, serial): gcCollector.
 public record StutterFacts(Map<String, Double> claimedShares, Map<String, Double> taggedShares, int gcFullPauses, int gcStalls,
 		int gcExplicitPauses, @Nullable Double liveSetPercent, @Nullable Long heapRaiseRoomMb, @Nullable Double cpuContentionShare,

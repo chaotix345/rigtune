@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 // The notice slot's model (docs/v0.4/SPEC.md C3): asks every registered source for its current notice, leaves out the
 // dismissed ones and orders the rest by priority (NoticeBoard). A source that throws is skipped (logged), never the
-// screen's problem. Dismissals go to Dismissals, which AwarenessService persists in awareness.json.
+// screen's problem. Dismissals go to Dismissals: AwarenessService, through AwarenessStore (awareness.json).
 public final class NoticeCenter {
 	public interface Dismissals {
 		Set<String> dismissed();
@@ -53,7 +53,7 @@ public final class NoticeCenter {
 				current.add(notice);
 			}
 		}
-		return NoticeBoard.select(current, dismissals.dismissed()).visible();
+		return current.isEmpty() ? List.of() : NoticeBoard.select(current, dismissals.dismissed()).visible();
 	}
 
 	public void act(String key, String actionId) {

@@ -10,9 +10,10 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 
-// The hub behind RigTuneScreen's one "Tools…" button (docs/v0.4/SPEC.md C3, X3): Profiles, Stutter Doctor, JVM & memory
-// and Benchmark history, in that order, then the startup-time line (item 13). Features add nothing to RigTuneScreen's
-// footer; each lives behind its entry here.
+// The hub behind RigTuneScreen's one "Tools…" button (docs/v0.4/SPEC.md C3, X3; plan review X-M2): Benchmark (the
+// existing BenchmarkMenuScreen, formerly a footer button), Profiles, Stutter Doctor, JVM & memory and Benchmark history, in
+// that order, then the startup-time line (item 13). Features add nothing to RigTuneScreen's footer; each lives behind
+// its entry here.
 public class ToolsScreen extends Screen {
 	private static final int BUTTON_WIDTH = 200;
 	private static final int COLOR_LABEL = 0xFFA8A8A8;
@@ -34,6 +35,7 @@ public class ToolsScreen extends Screen {
 		int x = (width - buttonWidth) / 2;
 		int y = 28;
 		for (Button button : List.of(
+				Button.builder(Component.translatable("rigtune.screen.benchmark_menu"), b -> openBenchmark()).build(),
 				Button.builder(Component.translatable("rigtune.tools.profiles"), b -> openProfiles()).build(),
 				Button.builder(Component.translatable("rigtune.tools.stutter"), b -> openStutter()).build(),
 				Button.builder(Component.translatable("rigtune.tools.jvm"), b -> openJvm()).build(),
@@ -51,6 +53,10 @@ public class ToolsScreen extends Screen {
 	// Item 13 (the footprint workstream): "Last launch 14.5 s · median of the last 10: 14.3 s"; null shows nothing.
 	private @Nullable Component startupLine(StartupTimes.View view) {
 		return null;
+	}
+
+	public void openBenchmark() {
+		minecraft.gui.setScreen(new BenchmarkMenuScreen(this, controller));
 	}
 
 	public void openProfiles() {

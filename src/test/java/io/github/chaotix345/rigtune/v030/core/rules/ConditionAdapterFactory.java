@@ -1,4 +1,4 @@
-package io.github.chaotix345.rigtune.core.rules;
+package io.github.chaotix345.rigtune.v030.core.rules;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
@@ -14,10 +14,8 @@ import com.google.gson.stream.JsonWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.lang.reflect.ParameterizedType;
 import java.math.BigDecimal;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
@@ -29,21 +27,13 @@ import java.util.stream.Collectors;
 // - a key with an explicit JSON null (read as an absent field);
 // - a number that isn't an integer in the field's range (Gson's tree reader truncates 3.5 to 3 and wraps 2^32+1 to 1);
 // - a boolean field whose value isn't a JSON boolean ("yes" would read as false);
-// - a map field (modVersion, settingIs, driverVersion, the stutter share maps) that isn't an object of strings, numbers or
-//   booleans (Gson would reject the whole document);
-// - a string-list field (gpuVendor, os, ..., gcCollector) that isn't an array of strings, numbers, booleans or nulls
-//   (v0.4, docs/v0.4/plan-review.md K-M1: Gson would reject the whole document here too).
+// - a map field (modVersion, settingIs) that isn't an object of strings, numbers or booleans (Gson would reject the
+//   whole document).
 // A condition that is itself JSON null (e.g. "recommendWhen": null) becomes a poisoned condition, not "always".
 final class ConditionAdapterFactory implements TypeAdapterFactory {
 	static final Map<String, Class<?>> KNOWN_KEYS = Arrays.stream(Condition.class.getFields())
 			.filter(f -> !Modifier.isStatic(f.getModifiers()) && !Modifier.isTransient(f.getModifiers()))
 			.collect(Collectors.toUnmodifiableMap(Field::getName, Field::getType));
-	// The List<String> fields (every List but anyOf, which holds conditions).
-	static final Set<String> STRING_LISTS = Arrays.stream(Condition.class.getFields())
-			.filter(f -> f.getType() == List.class && f.getGenericType() instanceof ParameterizedType p
-					&& p.getActualTypeArguments()[0] == String.class)
-			.map(Field::getName)
-			.collect(Collectors.toUnmodifiableSet());
 	private static final BigDecimal INT_MIN = BigDecimal.valueOf(Integer.MIN_VALUE);
 	private static final BigDecimal INT_MAX = BigDecimal.valueOf(Integer.MAX_VALUE);
 	private static final BigDecimal LONG_MIN = BigDecimal.valueOf(Long.MIN_VALUE);
@@ -78,8 +68,7 @@ final class ConditionAdapterFactory implements TypeAdapterFactory {
 				Set<String> unknown = new TreeSet<>();
 				for (Map.Entry<String, JsonElement> entry : object.entrySet()) {
 					Class<?> fieldType = KNOWN_KEYS.get(entry.getKey());
-					if (fieldType == null || !readable(fieldType, entry.getValue())
-							|| STRING_LISTS.contains(entry.getKey()) && !stringList(entry.getValue())) {
+					if (fieldType == null || !readable(fieldType, entry.getValue())) {
 						unknown.add(entry.getKey());
 					}
 				}
@@ -108,18 +97,6 @@ final class ConditionAdapterFactory implements TypeAdapterFactory {
 		}
 		if (fieldType == Map.class) {
 			return value.isJsonObject() && value.getAsJsonObject().entrySet().stream().allMatch(e -> e.getValue().isJsonPrimitive());
-		}
-		return true;
-	}
-
-	private static boolean stringList(JsonElement value) {
-		if (!value.isJsonArray()) {
-			return false;
-		}
-		for (JsonElement element : value.getAsJsonArray()) {
-			if (!element.isJsonNull() && !element.isJsonPrimitive()) {
-				return false;
-			}
 		}
 		return true;
 	}

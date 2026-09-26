@@ -61,6 +61,8 @@ public class RigTuneScreen extends Screen {
 	private static final int COLOR_NOTICE = 0xFFFFE08A;
 	private static final int NOTICE_ROW = 16;
 	private static final int NOTICE_BUTTON = 14;
+	// Narrower than this (scaled px), the notice line is the message plus one "…" button to NoticeScreen (review X-M2).
+	private static final int NOTICE_INLINE_WIDTH = 400;
 
 	private final @Nullable Screen parent;
 	private final RigTuneController controller;
@@ -144,7 +146,8 @@ public class RigTuneScreen extends Screen {
 		// v0.3 (review X-M2): Undo last and Undo all live in the History screen.
 		buttons.add(Button.builder(Component.translatable("rigtune.history.open"), b -> minecraft.gui.setScreen(new HistoryScreen(this, controller)))
 				.tooltip(Tooltip.create(Component.translatable("rigtune.history.open.tooltip"))).build());
-		// v0.4 (C3, X3): the one hub button; features live behind it, never in this footer.
+		// v0.4 (C3, X3, plan review X-M2): the one hub button, in place of Benchmark… (now the hub's first entry); features
+		// live behind it, never in this footer.
 		buttons.add(toolsButton());
 		if (controller.hasPendingChanges()) {
 			Button discard = Button.builder(Component.translatable("rigtune.screen.discard"), b -> {
@@ -154,7 +157,6 @@ public class RigTuneScreen extends Screen {
 			discard.setTooltip(Tooltip.create(Component.translatable("rigtune.screen.discard.tooltip")));
 			buttons.add(discard);
 		}
-		buttons.add(Button.builder(Component.translatable("rigtune.screen.benchmark_menu"), b -> minecraft.gui.setScreen(new BenchmarkMenuScreen(this, controller))).build());
 		buttons.add(Button.builder(Component.translatable("rigtune.screen.rescan"), b -> {
 			status = null;
 			controller.rescan();
@@ -292,7 +294,8 @@ public class RigTuneScreen extends Screen {
 	}
 
 	// One row under the header lines: the notice's message (its detail as the tooltip), then at most 2 action buttons, a
-	// dismiss button when dismissible, and "+N more", which cycles. Returns the height used (0 without a notice).
+	// dismiss button when dismissible, and "+N more", which cycles. On a narrow screen: the message and one "…" button
+	// that opens NoticeScreen (the actions, dismiss and the other notices). Returns the height used (0 without a notice).
 	private int noticeLine(int y) {
 		notices = NoticeBoard.select(controller.notices(), Set.of());
 		shownNotice = notices.at(noticeIndex);
@@ -303,6 +306,12 @@ public class RigTuneScreen extends Screen {
 		Notice notice = shownNotice;
 		noticeY = y;
 		List<Button> buttons = new ArrayList<>();
+		if (width < NOTICE_INLINE_WIDTH) {
+			Button open = noticeButton(Component.translatable("rigtune.notice.open"), b -> minecraft.gui.setScreen(new NoticeScreen(this, controller)));
+			open.setTooltip(Tooltip.create(Component.translatable("rigtune.notice.open.tooltip")));
+			buttons.add(open);
+			return placeNoticeButtons(buttons, y);
+		}
 		for (NoticeAction action : notice.actions().subList(0, Math.min(2, notice.actions().size()))) {
 			buttons.add(noticeButton(Texts.component(action.label()), b -> {
 				controller.noticeAction(notice.key(), action.id());
@@ -327,6 +336,10 @@ public class RigTuneScreen extends Screen {
 			more.setTooltip(Tooltip.create(Component.translatable("rigtune.notice.more.tooltip")));
 			buttons.add(more);
 		}
+		return placeNoticeButtons(buttons, y);
+	}
+
+	private int placeNoticeButtons(List<Button> buttons, int y) {
 		int x = right;
 		for (Button button : buttons.reversed()) {
 			x -= button.getWidth();
