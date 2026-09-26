@@ -4,6 +4,7 @@ import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.core.RepoFiles;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.Status;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
+import io.github.chaotix345.rigtune.core.history.HistoryUpdates;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
@@ -18,11 +19,15 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ApplyExecutorTest {
@@ -302,6 +307,88 @@ class ApplyExecutorTest {
 		executor.run(plan(Op.disableFile(mods.resolve("indium.jar"))), pending);
 
 		assertFalse(Files.exists(Journal.file(config)));
+	}
+
+	// A directory where last-apply.json goes: every write of it fails, as on a full disk (the temp file needs space).
+	private Path unwritableLastApply() throws IOException {
+		Path lastApply = Files.createDirectories(ApplyResult.defaultPath(config));
+		Files.writeString(lastApply.resolve("keep"), "x");
+		return lastApply;
+	}
+
+	// What preLaunch's HistoryStartup does with the files the helper left.
+	private List<JournalChange> reconciled() throws IOException {
+		Set<String> pendingIds = !Files.exists(pending) ? Set.of()
+				: PendingActions.load(pending).ops().stream().map(Op::id).filter(Objects::nonNull).collect(Collectors.toSet());
+		Path lastApply = ApplyResult.defaultPath(config);
+		List<ApplyResult.OpResult> results = Files.isRegularFile(lastApply) ? ApplyResult.load(lastApply).results() : List.of();
+		return HistoryUpdates.reconcile(journal().entries(), pendingIds, results).getFirst().changes();
+	}
+
+	// docs/v0.4 audit L2: last-apply.json is written before the done ops leave pending.json, so a failed write of it
+	// (or a death right after it) never makes History call an applied change "Not applied".
+	@Test
+	void aFailedResultWriteLeavesTheDoneOpsPendingSoHistoryNeverSaysNotApplied() throws IOException {
+		Files.writeString(mods.resolve("indium.jar"), "i");
+		Op disable = Op.disableFile(mods.resolve("indium.jar"));
+		journal().record("e1", JournalEntry.APPLY,
+				List.of(JournalChange.file(JournalChange.DISABLE, "indium", "indium.jar", JournalChange.STAGED, disable.id(), null)));
+		Path lastApply = unwritableLastApply();
+
+		assertThrows(IOException.class, () -> executor.run(plan(disable), pending));
+
+		assertTrue(Files.exists(mods.resolve("indium.jar.disabled")));
+		assertEquals(List.of(disable), PendingActions.load(pending).ops());
+		assertEquals(JournalChange.STAGED, reconciled().getFirst().status());
+
+		Files.delete(lastApply.resolve("keep"));
+		Files.delete(lastApply);
+		ApplyResult next = executor.run(PendingActions.load(pending), pending);
+
+		assertEquals(List.of(Status.SKIPPED_ALREADY_DONE), statuses(next));
+		assertEquals(JournalChange.APPLIED, journal().entries().getFirst().changes().getFirst().status());
+		assertFalse(Files.exists(pending));
+	}
+
+	// Review L1: the record of where a disable went outlives a failed result write, so the redo still names the real
+	// .disabled file (here .disabled.1, since an older .disabled was there) and Undo later re-enables the right jar.
+	@Test
+	void aRedoAfterAFailedResultWriteStillNamesTheRealDisabledFile() throws IOException {
+		Files.writeString(mods.resolve("indium.jar"), "current");
+		Files.writeString(mods.resolve("indium.jar.disabled"), "older");
+		Op disable = Op.disableFile(mods.resolve("indium.jar"));
+		journal().record("e1", JournalEntry.APPLY,
+				List.of(JournalChange.file(JournalChange.DISABLE, "indium", "indium.jar", JournalChange.STAGED, disable.id(), null)));
+		Path lastApply = unwritableLastApply();
+		assertThrows(IOException.class, () -> executor.run(plan(disable), pending));
+		Files.delete(lastApply.resolve("keep"));
+		Files.delete(lastApply);
+
+		ApplyResult next = executor.run(PendingActions.load(pending), pending);
+
+		assertEquals(mods.resolve("indium.jar.disabled.1").toString(), next.results().getFirst().resultPath());
+		assertEquals("indium.jar.disabled.1", journal().entries().getFirst().changes().getFirst().resultFile());
+		assertFalse(Files.exists(UnfinishedGroups.file(config)));
+	}
+
+	// An abandoned op leaves pending.json before last-apply.json is written, and a done one after it.
+	@Test
+	void anAbandonedOpLeavesPendingJsonBeforeTheResultAndADoneOneAfter() throws IOException {
+		Files.writeString(mods.resolve("indium.jar"), "i");
+		TestJars.modJar(mods.resolve("sodium-0.7.1.jar.rigtune-pending"), "sodium");
+		TestJars.modJar(mods.resolve("sodium-0.7.2.jar"), "sodium");
+		Op disable = Op.disableFile(mods.resolve("indium.jar"));
+		Op duplicate = Op.enableFile(mods.resolve("sodium-0.7.1.jar.rigtune-pending"), mods.resolve("sodium-0.7.1.jar"));
+		journal().record("e1", JournalEntry.APPLY, List.of(
+				JournalChange.file(JournalChange.DISABLE, "indium", "indium.jar", JournalChange.STAGED, disable.id(), null),
+				JournalChange.file(JournalChange.ENABLE, "sodium", "sodium-0.7.1.jar", JournalChange.STAGED, duplicate.id(), null)));
+		unwritableLastApply();
+
+		assertThrows(IOException.class, () -> executor.run(plan(disable, duplicate), pending));
+
+		assertEquals(List.of(disable), PendingActions.load(pending).ops());
+		assertTrue(Files.exists(mods.resolve("sodium-0.7.1.jar" + PendingActions.SUPERSEDED_SUFFIX)));
+		assertEquals(List.of(JournalChange.STAGED, JournalChange.ABANDONED), reconciled().stream().map(JournalChange::status).toList());
 	}
 
 	// A sharing violation (Windows denying the rename because an AV scanner or the Modrinth App briefly has the jar
