@@ -132,7 +132,8 @@ public class ProfilesScreen extends Screen {
 			previewButton.active = any;
 			copyButton.active = any;
 			renameButton.active = own;
-			deleteButton.active = own;
+			// "My settings" is the way back: it can be re-saved, never deleted.
+			deleteButton.active = own && !ProfileStore.SOURCE_BASELINE.equals(view.source());
 		}
 	}
 
@@ -202,7 +203,7 @@ public class ProfilesScreen extends Screen {
 
 	private void deleteSelected() {
 		ProfileView view = selectedView();
-		if (view == null || view.id().startsWith(ProfileStore.TEMPLATE_PREFIX)) {
+		if (view == null || view.id().startsWith(ProfileStore.TEMPLATE_PREFIX) || ProfileStore.SOURCE_BASELINE.equals(view.source())) {
 			return;
 		}
 		String id = view.id();

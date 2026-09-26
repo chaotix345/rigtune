@@ -205,8 +205,12 @@ public final class ProfileService {
 		store().rename(id, name);
 	}
 
+	// "My settings" (the baseline) can be re-saved but never deleted, so the way back can't be lost by a misclick.
 	public void deleteProfile(String id) {
-		store().delete(id);
+		Profile profile = store().profile(id);
+		if (profile != null && !ProfileStore.SOURCE_BASELINE.equals(profile.source())) {
+			store().delete(id);
+		}
 	}
 
 	// History's labels ("Profile: Battery"), from profiles.json by journal entry id.

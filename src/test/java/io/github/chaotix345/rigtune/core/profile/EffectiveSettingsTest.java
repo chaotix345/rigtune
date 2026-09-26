@@ -90,6 +90,21 @@ class EffectiveSettingsTest {
 		assertEquals("ONE_FRAME", fileSnapshot().get(KEY));
 	}
 
+	@Test
+	void aToBToAToBBeforeARestartEndsAtBWithEverySwitchJournaled() throws IOException {
+		switchTo("ALWAYS", "entry-1");
+		switchTo("ONE_FRAME", "entry-2");
+		List<Recommendation> third = switchTo("ALWAYS", "entry-3");
+		assertEquals(List.of(new Action.SetSetting(KEY, "ONE_FRAME", "ALWAYS")), third.stream().map(Recommendation::action).toList());
+		List<JournalEntry> entries = journal.entries();
+		assertEquals(List.of("entry-1", "entry-2", "entry-3"), entries.stream().map(JournalEntry::id).toList());
+		JournalChange last = entries.get(2).changes().getFirst();
+		assertEquals(List.of("ONE_FRAME", "ALWAYS", JournalChange.STAGED), List.of(last.before(), last.after(), last.status()));
+		assertEquals(3, PendingActions.load(pendingFile).ops().size());
+		new ApplyExecutor(2, 1).run(PendingActions.load(pendingFile), pendingFile);
+		assertEquals("ALWAYS", fileSnapshot().get(KEY));
+	}
+
 	private SettingsSnapshot fileSnapshot() throws IOException {
 		Map<String, String> flat = SodiumConfigPatcher.flatten(JsonParser.parseString(Files.readString(sodium, StandardCharsets.UTF_8)).getAsJsonObject(),
 				"sodium.");
