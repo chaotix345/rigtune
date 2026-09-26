@@ -1,0 +1,5 @@
+[2026-09-26T04:31:41.320592200Z] [RigTune apply] Waiting for game process 58676 to exit
+[2026-09-26T04:31:43.585801300Z] [RigTune apply] Applying 2 operation(s) from <instance>-profile-all\config\rigtune\pending.json
+[2026-09-26T04:31:43.651628200Z] [RigTune apply] OK PATCH_JSON: Patched 1 value(s) in sodium-options.json
+[2026-09-26T04:31:43.651628200Z] [RigTune apply] OK PATCH_JSON: Patched 1 value(s) in sodium-options.json
+[2026-09-26T04:31:43.652628Z] [RigTune apply] All operations done

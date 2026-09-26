@@ -144,6 +144,32 @@ class RulesV1DifferentialTest {
 		throw new AssertionError("no advice " + id);
 	}
 
+	// v0.4 SPEC AC2k.2: with the regenerated rules-v1.json the pinned v0.1.0 recommender offers VSync off unticked (the
+	// baseline ticked it), and the refresh-rate cap stays as it was.
+	@Test
+	void vsyncOffIsUntickedFor010() throws IOException {
+		HardwareProfile rig = hardware().get("user-rig-amd");
+		Map<String, String> settings = Map.of("vanilla.maxFps", "120", "vanilla.enableVsync", "true");
+		Map<String, Recommendation> before = byId(v010(baselineJson()), rig, settings);
+		Map<String, Recommendation> after = byId(v010(repoJson("rules-v1.json")), rig, settings);
+		assertTrue(before.get("set:vanilla.enableVsync").selectedByDefault());
+		Recommendation vsync = after.get("set:vanilla.enableVsync");
+		assertEquals(new Action.SetSetting("vanilla.enableVsync", "true", "false"), vsync.action());
+		assertFalse(vsync.selectedByDefault());
+		assertEquals(before.get("set:vanilla.maxFps").action(), after.get("set:vanilla.maxFps").action());
+		assertTrue(after.get("set:vanilla.maxFps").selectedByDefault());
+	}
+
+	private static Map<String, Recommendation> byId(io.github.chaotix345.rigtune.v010.core.rules.RulesDocument rules, HardwareProfile hw,
+			Map<String, String> settings) {
+		Map<String, Recommendation> out = new LinkedHashMap<>();
+		for (Recommendation r : Recommender.recommend(rules, hw, List.of(mod("sodium")), new SettingsSnapshot(settings), OnlineData.offline(), Goal.BALANCED)
+				.recommendations()) {
+			out.put(r.id(), r);
+		}
+		return out;
+	}
+
 	@Test
 	void repoRulesV1AddsNoTickedActionAndLosesNoWarning() throws IOException {
 		List<String> changes = differences(baselineJson(), repoJson("rules-v1.json"));

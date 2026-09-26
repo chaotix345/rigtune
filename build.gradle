@@ -220,6 +220,45 @@ interface InjectedFs {
 	FileSystemOperations getFs()
 }
 
+// Serves rules-v2.json and rules-v1.json from one folder on 127.0.0.1 (a free port) for as long as the build runs; the
+// server starts when a task first asks for its URL.
+interface RulesFixtureParams extends BuildServiceParameters {
+	DirectoryProperty getRoot()
+}
+
+abstract class RulesFixtureServer implements BuildService<RulesFixtureParams>, AutoCloseable {
+	private com.sun.net.httpserver.HttpServer server
+
+	synchronized String baseUrl() {
+		if (server == null) {
+			File root = parameters.root.get().asFile
+			server = com.sun.net.httpserver.HttpServer.create(new InetSocketAddress(InetAddress.getByName("127.0.0.1"), 0), 0)
+			server.createContext("/", { exchange ->
+				String name = exchange.requestURI.path.replaceFirst("^/", "")
+				File file = new File(root, name)
+				if (exchange.requestMethod == "GET" && name in ["rules-v2.json", "rules-v1.json"] && file.isFile()) {
+					byte[] body = file.bytes
+					exchange.responseHeaders.add("Content-Type", "application/json")
+					exchange.sendResponseHeaders(200, body.length)
+					exchange.responseBody.write(body)
+				} else {
+					exchange.sendResponseHeaders(404, -1)
+				}
+				exchange.close()
+			} as com.sun.net.httpserver.HttpHandler)
+			server.start()
+		}
+		return "http://127.0.0.1:" + server.address.port + "/"
+	}
+
+	@Override
+	void close() {
+		if (server != null) {
+			server.stop(0)
+		}
+	}
+}
+
 def smokeRunDir = layout.projectDirectory.dir("run")
 def extraModsDir = providers.gradleProperty("extraModsDir").map { rootProject.layout.projectDirectory.dir(it).asFile }
 def userOptions = providers.gradleProperty("userOptions").map { rootProject.layout.projectDirectory.file(it).asFile }
@@ -297,6 +336,26 @@ tasks.register("runProductionClientGameTest", net.fabricmc.loom.task.prod.Client
 	}
 }
 
+// Footprint guard (docs/v0.4/SPEC.md 10): FrameHookBudgetTest and FootprintGameTest read the budgets from
+// tools/footprint-budgets.json. The production game tests also get the rules from this checkout's rules/ over loopback
+// (-Drigtune.rules.baseUrl) instead of GitHub, so RigTune's startup work, and the guard's 5 s worker window, don't depend
+// on the network (rules/rules-v2.json is the bundled copy, so the reports stay on the bundled rules).
+def footprintBudgets = rootProject.file("tools/footprint-budgets.json")
+tasks.named("test") {
+	inputs.file(footprintBudgets).withPropertyName("footprintBudgets")
+	systemProperty "rigtune.footprint.budgetsFile", footprintBudgets.absolutePath
+}
+
+def rulesFixture = gradle.sharedServices.registerIfAbsent("rigtuneRulesFixture" + project.path.replace(':', '-'), RulesFixtureServer) {
+	parameters.root = rootProject.layout.projectDirectory.dir("rules")
+}
+
+tasks.named("runProductionClientGameTest") {
+	usesService(rulesFixture)
+	jvmArgs.add("-Drigtune.footprint.budgetsFile=" + footprintBudgets.absolutePath)
+	jvmArgs.add(rulesFixture.map { "-Drigtune.rules.baseUrl=" + it.baseUrl() })
+}
+
 // Self-update end-to-end harness (tools/e2e/README.md), never part of the shipped jar or of `build`. The fake Modrinth
 // server is a JDK-only tool run as `java FakeModrinth.java`; the unit tests compile it from tools/e2e/java.
 sourceSets.test.java.srcDir(rootProject.file("tools/e2e/java"))
@@ -340,6 +399,30 @@ def e2eUndoDriverJar = tasks.register("e2eUndoDriverJar", Jar) {
 	archiveVersion = ""
 }
 
+// The downgrade driver (src/e2eDowngrade, v0.4 SPEC AC3.2) drives the released 0.3.0 jar on files 0.4 wrote, so like the
+// self-update driver it compiles against the released jar (-Pe2e.oldJar), never these sources.
+sourceSets {
+	e2eDowngrade {
+		compileClasspath += sourceSets.client.compileClasspath - sourceSets.main.output + files({
+			e2eOldJar.present ? rootProject.file(e2eOldJar.get()) : []
+		})
+	}
+}
+
+tasks.named("compileE2eDowngradeJava") {
+	doFirst {
+		if (!e2eOldJar.present) {
+			throw new GradleException("Pass -Pe2e.oldJar=<path to the released rigtune-0.3.0+mc26.2.jar>")
+		}
+	}
+}
+
+def e2eDowngradeDriverJar = tasks.register("e2eDowngradeDriverJar", Jar) {
+	from sourceSets.e2eDowngrade.output
+	archiveBaseName = "rigtune-e2e-downgrade-driver"
+	archiveVersion = ""
+}
+
 // One launch of a production client on a scratch instance (-Pe2e.instance=<dir>), with JVM arguments from
 // -Pe2e.jvmArgsFile (one per line). Unlike runProductionSmoke, `mods` is only the driver: Loom would otherwise add this
 // project's jar through -Dfabric.addMods, and RigTune must load only from the instance's mods folder (plan review M10).
@@ -347,8 +430,9 @@ tasks.register("e2eClient", net.fabricmc.loom.task.prod.ClientProductionRunTask)
 	def instance = providers.gradleProperty("e2e.instance")
 	def jvmArgsFile = providers.gradleProperty("e2e.jvmArgsFile")
 	runDir = layout.dir(instance.map { new File(it) })
-	// -Pe2e.driver=undo picks the undo driver; the default is the self-update driver.
-	mods.setFrom(providers.gradleProperty("e2e.driver").getOrElse("") == "undo" ? e2eUndoDriverJar : e2eDriverJar)
+	// -Pe2e.driver=undo or =downgrade picks that driver; the default is the self-update driver.
+	def driver = providers.gradleProperty("e2e.driver").getOrElse("")
+	mods.setFrom(driver == "undo" ? e2eUndoDriverJar : driver == "downgrade" ? e2eDowngradeDriverJar : e2eDriverJar)
 	jvmArgs.addAll(jvmArgsFile.map { new File(it).readLines("UTF-8").findAll { !it.isBlank() } }.orElse([]))
 	programArgs.addAll("--width", "1280", "--height", "720")
 	doFirst {

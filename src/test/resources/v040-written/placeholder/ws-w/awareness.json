@@ -1,0 +1,15 @@
+{
+  "formatVersion": 1,
+  "fingerprint": {
+    "gpuVendor": "ATI Technologies Inc.",
+    "gpuRenderer": "AMD Radeon RX 7800 XT",
+    "gpuDriverRaw": "4.6.0 Core Profile Context 25.9.1.250909",
+    "backend": "OpenGL",
+    "cpuName": "AMD Ryzen 7 7800X3D 8-Core Processor",
+    "totalRamMb": 31948
+  },
+  "lastSeenRulesRevision": 13,
+  "lastSeenRecommendationIds": ["set:vanilla.renderDistance", "add:sodium"],
+  "dismissed": ["rigtune.notice.whats_new"],
+  "acknowledgedRegressions": ["f6b0d429-b03e-4152-8e6f-a28b9067cf21"]
+}

@@ -75,7 +75,26 @@ To run the benchmark, press **Tools…** on the RigTune screen, then **Benchmark
 
 ## RigTune's own footprint
 
-<!-- v0.4: filled by the footprint workstream (docs/v0.4/SPEC.md 10). -->
+RigTune's heavy work (the hardware scan, the mod scan, loading the rules and the Modrinth lookups) runs on its own background threads, not on the way to the title screen. Each frame it checks one flag; each tick it reads a few fields.
+
+**Launch time.** On one Windows PC (Ryzen 7 7800X3D, RX 7800 XT, Minecraft 26.2), launch to title screen took 14.5 s with RigTune and 14.3 s without it: medians of 10 launches each, with RigTune switched off through Fabric Loader's `-Dfabric.debug.disableModIds=rigtune` and everything else the same. That difference is well inside the roughly 2 s spread between launches.
+
+**Budgets.** Every build runs a footprint check (`FootprintGameTest` in each game-test run, `FrameHookBudgetTest` with the unit tests) that fails when RigTune goes over these budgets (`tools/footprint-budgets.json`). The largest values measured on GitHub's runners (3 runs each of 26.2 OpenGL, 26.3 OpenGL and 26.3 Vulkan, with software rendering) and the budgets set from them:
+
+| What | Largest measured | Budget |
+|---|---|---|
+| RigTune's startup work on the game's main thread, CPU time | 96 ms | 150 ms |
+| The same, wall time (includes waiting while the shared runner is busy) | 184 ms | 368 ms |
+| RigTune's call when the game has started, wall time | 70 ms | 141 ms |
+| RigTune's background threads in the first 5 s, CPU time | 187 ms | 300 ms |
+| Per frame | 6.4 ns, nothing allocated | 13 ns, nothing allocated |
+| Per tick | 55 ns, nothing allocated | 111 ns, nothing allocated |
+| RigTune's own objects in memory, after a full garbage collection | 55 KB | 107 KB |
+| RigTune objects left behind by opening and closing its screens 20 times | none | none |
+
+Most of the startup time is Java loading classes the first time they're used, among them Gson's, which Minecraft loads soon after anyway. On the Windows PC above, the same startup work took 65 ms (62 ms of CPU time).
+
+**Your own launch time.** Tools… shows your last launch time and the median of your last 10, and notes when your mod set changed since the previous launch. The times are kept in `config/rigtune/startup-times.json`, on your PC only. Fabric Loader doesn't time individual mods, so RigTune can't tell you which mod is slow: fewer mods and an SSD help most, and if the launch time jumped after you added a mod, check that mod first.
 
 ## Privacy
 
@@ -112,7 +131,13 @@ The v2 format (and how it stays safe for 0.1.x readers) is documented in [docs/R
 
 ## What has been verified
 
-<!-- v0.4: filled by the rules workstream (docs/v0.4/SPEC.md 2l, external review 3). -->
+RigTune's recommendations are estimates, and it's worth knowing what stands behind them:
+
+- **One real machine.** Everything measured (the benchmarks, the Java and garbage-collector comparison behind the JVM advice, local game runs) was measured on one PC: a Ryzen 7 7800X3D with a Radeon RX 7800 XT and 32 GB of RAM on Windows 11. When advice says "in RigTune's tests", that's the PC it means.
+- **Everything else is table-driven.** For other hardware, RigTune estimates a tier from its hardware tables (a "table match") or, for a CPU or GPU the tables don't know, from core counts and the GPU vendor (a "fallback estimate"), and picks settings from the rules for that tier.
+- **Scenario tests check the rules, not performance.** Automated tests run the bundled rules on hardware RigTune hasn't been run on, including an integrated-graphics laptop on battery (Intel Iris Xe, 8 GB), an old 4-core desktop (Core i5-4590 with a GTX 960) and a CPU and GPU no table knows. They check that the rules give the intended recommendations (tiers, battery settings, memory caps, memory advice, nothing ticked that should start unticked), not that those recommendations make the game faster there.
+- **Compatibility is tested against the released versions.** Tests run pinned copies of the released 0.1.0, 0.2.0 and 0.3.0 code on the rules files and the shared state files this version writes; 0.1.x only ever gets a subset of the rules that is at least as cautious as what it shipped with.
+- **Your own measurements are the stronger evidence.** A benchmark on your PC, and a Measure run before and after a change, show what actually happened there; changes RigTune lists between two runs are ones that "may be related", never proven causes.
 
 ## FAQ
 
