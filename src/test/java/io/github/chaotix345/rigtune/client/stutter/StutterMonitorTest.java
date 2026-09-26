@@ -1,17 +1,21 @@
 package io.github.chaotix345.rigtune.client.stutter;
 
+import io.github.chaotix345.rigtune.core.footprint.FootprintBudgets;
 import io.github.chaotix345.rigtune.core.stutter.FrameRing;
 import io.github.chaotix345.rigtune.core.stutter.StutterRings;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // AC5.4 for the real hook: StutterMonitor.onFrame with the phase timers, off and on, allocates nothing; the capture
@@ -99,22 +103,36 @@ class StutterMonitorTest {
 		return (System.nanoTime() - start) / (double) n;
 	}
 
+	// review-9 X3-1: a session's and a benchmark's frame rings together, with the shared rings, are about 2.98 MB, over the
+	// monitorOnRetainedBytes budget, so the monitor never holds both (StutterService ends the session before the benchmark's
+	// capture starts and starts a fresh one after the run).
 	@Test
-	void sessionAndBenchmarkShareTheRingsUntilTheLastStops() {
+	void oneCaptureAtATime() throws IOException {
+		double budget = FootprintBudgets.load().budgets().get("monitorOnRetainedBytes").limit();
 		assertFalse(StutterMonitor.active());
 		assertEquals(0, StutterMonitor.retainedBytes());
 		StutterRings rings = new StutterRings(0);
 		StutterMonitor.Capture session = StutterMonitor.startSession(rings, 1, Instant.EPOCH);
-		StutterMonitor.Capture bench = StutterMonitor.startBenchmark(rings, 2, Instant.EPOCH);
-		assertTrue(StutterMonitor.active());
-		assertTrue(bench.paused(), "the benchmark records only its sweeps");
-		assertEquals(session.retainedBytes() + bench.retainedBytes() + rings.retainedBytes(), StutterMonitor.retainedBytes());
-		assertFalse(StutterMonitor.stop(session), "the benchmark still uses the rings");
-		assertTrue(StutterMonitor.active());
-		assertTrue(StutterMonitor.stop(bench));
+		assertThrows(IllegalStateException.class, () -> StutterMonitor.startBenchmark(rings, 2, Instant.EPOCH));
+		assertSame(session, StutterMonitor.session());
+		assertNull(StutterMonitor.benchmark());
+		assertEquals(session.retainedBytes() + rings.retainedBytes(), StutterMonitor.retainedBytes());
+		assertTrue(StutterMonitor.retainedBytes() <= budget, "session: " + StutterMonitor.retainedBytes());
+		assertTrue(StutterMonitor.stop(session));
 		assertFalse(StutterMonitor.active());
 		assertNull(StutterMonitor.rings());
 		assertEquals(0, StutterMonitor.retainedBytes(), "the buffers are released");
+
+		StutterRings benchRings = new StutterRings(0);
+		StutterMonitor.Capture bench = StutterMonitor.startBenchmark(benchRings, 3, Instant.EPOCH);
+		assertTrue(bench.paused(), "the benchmark records only its sweeps");
+		assertThrows(IllegalStateException.class, () -> StutterMonitor.startSession(benchRings, 4, Instant.EPOCH));
+		assertNull(StutterMonitor.session());
+		assertEquals(bench.retainedBytes() + benchRings.retainedBytes(), StutterMonitor.retainedBytes());
+		assertTrue(StutterMonitor.retainedBytes() <= budget, "benchmark: " + StutterMonitor.retainedBytes());
+		assertTrue(StutterMonitor.stop(bench));
+		assertFalse(StutterMonitor.active());
+		assertEquals(0, StutterMonitor.retainedBytes());
 	}
 
 	@Test

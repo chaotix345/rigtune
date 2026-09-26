@@ -50,6 +50,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -75,6 +76,9 @@ public class FootprintGameTest implements FabricClientGameTest {
 	private static final Pattern HISTOGRAM_LINE = Pattern.compile("^\\s*\\d+:\\s+(\\d+)\\s+(\\d+)\\s+(\\S+)");
 	private static final int CYCLES = 20;
 	private static final int TICK_CALLS = 100_000;
+	// Best of 5 timing blocks, as the frame hook (FrameHookBudgetTest): best of 3 let one slow runner through (run
+	// 36255335999, docs-only change: tickHookNsPerCallWorld 91.62 ns against its 87 ns limit).
+	private static final int TICK_ROUNDS = 5;
 	private static final int[][] SIZES = {{1280, 720, 2}, {640, 480, 2}, {854, 480, 2}};
 	private static final String SAMPLER = "RigTune stutter sampler";
 	private static final long SAMPLER_WINDOW_NANOS = 60_000_000_000L;
@@ -303,7 +307,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 	}
 
 	// RigTune's END_CLIENT_TICK hook on the render thread with a (non-title, non-RigTune) screen open: the path it takes
-	// during play. Best of 3 rounds after a warm-up, so a JIT compile landing in one round doesn't count.
+	// during play. Best of TICK_ROUNDS rounds after a warm-up, so a JIT compile or a slow moment in one round doesn't count.
 	private static void tickHook(ClientGameTestContext context, Map<String, Number> measured, Map<String, Object> out) {
 		context.runOnClient(mc -> mc.gui.setScreen(new ToolsScreen(new TitleScreen(), RigTuneClient.controller())));
 		context.waitForScreen(ToolsScreen.class);
@@ -314,7 +318,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 			}
 			long nanos = Long.MAX_VALUE;
 			long bytes = Long.MAX_VALUE;
-			for (int round = 0; round < 3; round++) {
+			for (int round = 0; round < TICK_ROUNDS; round++) {
 				long allocated = mx.getCurrentThreadAllocatedBytes();
 				long start = System.nanoTime();
 				for (int i = 0; i < TICK_CALLS; i++) {
@@ -451,7 +455,36 @@ public class FootprintGameTest implements FabricClientGameTest {
 				leftover = captureInstances(off);
 			}
 
-			measured.put("monitorOnRetainedBytes", onRetained);
+			// review-9 X3-1: a benchmark run started while the monitor captures ends the session before its own capture starts
+			// (never both rings at once), no session starts while it lasts, and a fresh one (paused if the ended one was)
+			// starts when it ends; the Stutter Doctor's side of a run only.
+			context.runOnClient(mc -> controller.setStutterMonitor(true));
+			context.waitFor(mc -> StutterMonitor.session() != null, 100);
+			boolean ended = context.computeOnClient(mc -> {
+				controller.pauseStutterMonitor(true);
+				StutterHooks.benchmarkStarted();
+				return StutterMonitor.session() == null;
+			});
+			context.waitTicks(20);
+			boolean noneDuringRun = StutterMonitor.session() == null;
+			long[] handover = context.computeOnClient(mc -> {
+				StutterHooks.benchmarkSweep(true);
+				long alone = StutterMonitor.session() == null && StutterMonitor.benchmark() != null ? 1 : 0;
+				long during = StutterMonitor.retainedBytes();
+				StutterHooks.benchmarkSweep(false);
+				StutterHooks.benchmarkFinished(false);
+				StutterMonitor.Capture fresh = StutterMonitor.session();
+				long resumed = fresh != null && fresh.paused() && StutterMonitor.benchmark() == null ? 1 : 0;
+				return new long[]{alone, during, resumed, StutterMonitor.retainedBytes()};
+			});
+			context.runOnClient(mc -> controller.setStutterMonitor(false));
+			context.waitTicks(5);
+			check(ended && noneDuringRun, "the benchmark run ended the session and none started while it lasted");
+			check(handover[0] == 1, "only the benchmark's capture during its sweep: " + Arrays.toString(handover));
+			check(handover[2] == 1, "a fresh session after the run, paused as the ended one was: " + Arrays.toString(handover));
+			check(StutterMonitor.session() == null && !StutterMonitor.active(), "no capture after the monitor is off again");
+
+			measured.put("monitorOnRetainedBytes", Math.max(onRetained, Math.max(handover[1], handover[3])));
 			measured.put("monitorOffRetainedBytes", offRetained);
 			measured.put("monitorOffLeftoverInstances", leftover.values().stream().mapToLong(Long::longValue).sum());
 			measured.put("samplerCpuMsPer60s", round2((samplerCpu - earlyCpu) / 1e6 * SAMPLER_WINDOW_NANOS / (window - earlyWindow)));
@@ -460,6 +493,8 @@ public class FootprintGameTest implements FabricClientGameTest {
 			measured.put("tickHookNsPerCallWorld", round2((double) tickOff[0] / TICK_CALLS));
 			measured.put("tickHookAllocBytesWorld", tickOff[1]);
 			out.put("monitorIdleRetainedBytes", idleRetained);
+			out.put("monitorSessionRetainedBytes", onRetained);
+			out.put("monitorBenchmarkRetainedBytes", handover[1]);
 			out.put("monitorFrames", frames);
 			// StutterMonitor's phase-timer bits are static: every timer seen since the JVM started, not only this session.
 			out.put("phaseTimersSeen", phaseTimersSeen);
@@ -493,7 +528,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 		}
 	}
 
-	// RigTune's two END_CLIENT_TICK listeners, as tickHook: best of 3 rounds after a warm-up, render thread.
+	// RigTune's two END_CLIENT_TICK listeners, as tickHook: best of TICK_ROUNDS rounds after a warm-up, render thread.
 	private static long[] timeTicks(Minecraft mc, MethodHandle stutterTick) {
 		com.sun.management.ThreadMXBean mx = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
 		try {
@@ -503,7 +538,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 			}
 			long nanos = Long.MAX_VALUE;
 			long bytes = Long.MAX_VALUE;
-			for (int round = 0; round < 3; round++) {
+			for (int round = 0; round < TICK_ROUNDS; round++) {
 				long allocated = mx.getCurrentThreadAllocatedBytes();
 				long start = System.nanoTime();
 				for (int i = 0; i < TICK_CALLS; i++) {

@@ -131,6 +131,11 @@ class FrameRingAllocationTest {
 		StutterRings shared = new StutterRings(0);
 		assertEquals((4096 * 3 + 2048 * 5 + 4096 * 13) * 8L, shared.retainedBytes());
 		assertTrue(session.retainedBytes() + shared.retainedBytes() <= 2_621_440L, "within SPEC 10's 2.5 MiB monitor-on allowance (monitorOnRetainedBytes)");
+		FrameRing bench = new FrameRing(FrameRing.BENCHMARK_FRAMES, FrameRing.BENCHMARK_CANDIDATES);
+		assertEquals((32_768 + 10_240 + 18) * 8L + 32_768 * 4L, bench.retainedBytes());
+		assertTrue(bench.retainedBytes() + shared.retainedBytes() <= 2_621_440L, "a benchmark's capture alone fits too");
+		assertTrue(session.retainedBytes() + bench.retainedBytes() + shared.retainedBytes() > 2_621_440L,
+				"both at once would not (review-9 X3-1), so StutterMonitor never holds both");
 	}
 
 	@Test

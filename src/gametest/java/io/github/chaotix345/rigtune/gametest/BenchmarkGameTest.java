@@ -184,8 +184,9 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 			context.runOnClient(mc -> RigTuneClient.controller().setStutterMonitor(false));
 		}
 		context.waitFor(mc -> stutterSessionsSince(configDir, monitorOn).stream().anyMatch(r -> StutterReport.BENCHMARK.equals(r.source())), 400);
-		// The benchmark world's own monitor session ended with the world and was handled (saved or left out).
-		context.waitFor(mc -> StutterHooks.sessionsEnded() > endedBefore, 400);
+		// The benchmark world's monitor sessions were handled (saved or left out): the one the run ended as it started and the
+		// fresh one after the run, which ended with the world (review-9 X3-1).
+		context.waitFor(mc -> StutterHooks.sessionsEnded() >= endedBefore + 2, 400);
 		List<StutterReport> sinceOn = stutterSessionsSince(configDir, monitorOn);
 		check(sinceOn.stream().noneMatch(r -> StutterReport.MONITOR.equals(r.source())), "no settle-frames session saved around the benchmark: "
 				+ sinceOn.stream().map(r -> r.source() + " " + r.spikes().total() + " spikes in " + r.gameplaySeconds() + " s").toList());

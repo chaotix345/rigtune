@@ -380,13 +380,13 @@ public class BenchmarkResultScreen extends Screen {
 				outcome.record() == null ? null : outcome.record().id(), left, contentTop, chartWidth, contentBottom);
 	}
 
-	// The failure's own message is shown as it is (an exception's detail, kept in benchmarks.json).
-	private static Component reason(String notMeasured) {
+	// The failure's own message (an exception's detail, possibly another mod's, kept in benchmarks.json) as outside text.
+	static Component reason(String notMeasured) {
 		if (SessionResult.NOT_MEASURED_DEADLINE.equals(notMeasured)) {
 			return Component.translatable("rigtune.benchmark.not_measured.deadline");
 		}
 		String failed = SessionResult.NOT_MEASURED_FAILED;
-		return Component.literal(notMeasured.startsWith(failed) ? notMeasured.substring(failed.length()) : notMeasured);
+		return SafeLiteral.of(notMeasured.startsWith(failed) ? notMeasured.substring(failed.length()) : notMeasured);
 	}
 
 	// createdAt is UTC (Instant.toString); the chart shows the player's local day.
