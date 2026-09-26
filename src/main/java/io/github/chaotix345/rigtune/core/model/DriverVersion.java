@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.core.model;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.Objects;
 
 // A GPU driver version read from GpuInfo.driverVersion (docs/v0.4/SPEC.md 9, docs/research/v0.4/drivers.md §2):
@@ -37,17 +38,18 @@ public record DriverVersion(GpuVendor vendor, String family, int[] comparable, S
 		return comparable.clone();
 	}
 
-	// The parsed version ("560.94"), or the raw string when it wasn't recognised.
+	// The parsed version ("560.94"; NVIDIA's parts after the first have two digits, "566.03"), or the raw string when it
+	// wasn't recognised.
 	public String display() {
 		if (!known()) {
 			return raw;
 		}
 		StringBuilder out = new StringBuilder();
-		for (int part : comparable) {
-			if (!out.isEmpty()) {
+		for (int i = 0; i < comparable.length; i++) {
+			if (i > 0) {
 				out.append('.');
 			}
-			out.append(part);
+			out.append(i > 0 && GEFORCE.equals(family) ? String.format(Locale.ROOT, "%02d", comparable[i]) : Integer.toString(comparable[i]));
 		}
 		return out.toString();
 	}

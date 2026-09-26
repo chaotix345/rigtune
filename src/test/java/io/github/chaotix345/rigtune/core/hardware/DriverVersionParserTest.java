@@ -139,6 +139,9 @@ class DriverVersionParserTest {
 		assertTrue(DriverVersion.compare(new int[]{10, 18, 10, 4358}, new int[]{10, 18, 10, 5160}) < 0);
 		assertTrue(DriverVersion.compare(new int[]{536, 23}, new int[]{536, 22}) > 0);
 		assertEquals("560.94", DriverVersionParser.parse(GpuVendor.NVIDIA, "4.6.0 NVIDIA 560.94").display());
+		assertEquals("566.03", DriverVersionParser.parse(GpuVendor.NVIDIA, "4.6.0 NVIDIA 566.03").display());
+		assertEquals("535.183.01", DriverVersionParser.parse(GpuVendor.NVIDIA, "4.6.0 NVIDIA 535.183.01").display());
+		assertEquals("31.0.101.5595", DriverVersionParser.parse(GpuVendor.INTEL, "4.6.0 - Build 31.0.101.5595").display());
 		assertEquals("4.6.0 NVIDIA", DriverVersionParser.parse(GpuVendor.NVIDIA, "4.6.0 NVIDIA").display(), "unknown shows the raw string");
 		assertEquals(DriverVersionParser.parse(GpuVendor.NVIDIA, "4.6.0 NVIDIA 560.94"), DriverVersionParser.parse(GpuVendor.NVIDIA, "4.6.0 NVIDIA 560.94"));
 	}
