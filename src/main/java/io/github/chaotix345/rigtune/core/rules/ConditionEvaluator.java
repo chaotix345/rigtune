@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.core.rules;
 
 import io.github.chaotix345.rigtune.core.hardware.DriverVersionParser;
 import io.github.chaotix345.rigtune.core.hardware.GpuClassifier;
+import io.github.chaotix345.rigtune.core.jvm.JvmFacts;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
 import io.github.chaotix345.rigtune.core.model.DriverVersion;
 import io.github.chaotix345.rigtune.core.model.Goal;
@@ -209,12 +210,23 @@ public final class ConditionEvaluator {
 		boolean backendKnown = gpu != null && gpu.backend() != null && gpu.backend() != GraphicsBackend.UNKNOWN;
 		Truth t = TRUE;
 		for (String flag : wanted) {
-			if (flag == null || !flags.contains(flag)) {
+			if (flag != null && flag.startsWith(JvmFacts.PREFIX)) {
+				t = t.and(jvmFlag(flag, flags));
+			} else if (flag == null || !flags.contains(flag)) {
 				boolean decidable = flag != null && knownFlag(flag) && (backendKnown || !flag.equals(BACKEND_VULKAN_FLAG));
 				t = t.and(decidable ? FALSE : UNKNOWN);
 			}
 		}
 		return t;
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md 6, J-M1): a jvm- fact is decidable only once the JVM probe ran (jvm-probed) and only for
+	// the vocabulary this client computes; otherwise UNKNOWN (OpenJ9, the probe not finished, a future fact).
+	private static Truth jvmFlag(String flag, Set<String> present) {
+		if (!present.contains(JvmFacts.PROBED) || !JvmFacts.RULE_FLAGS.contains(flag)) {
+			return UNKNOWN;
+		}
+		return Truth.of(present.contains(flag));
 	}
 
 	private static Truth range(long value, Number atLeast, Number atMost) {

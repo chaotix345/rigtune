@@ -194,6 +194,8 @@ class SchemaConsistencyTest {
 		assertEquals(new TreeSet<>(ConditionEvaluator.OS_FAMILIES), strings(v2.get("os")));
 		assertEquals(ConditionEvaluator.GOALS, strings(v2.get("goal")));
 		assertEquals(ConditionEvaluator.FLAGS, strings(v2.get("flags")));
+		// v0.4 SPEC 6: the updater's JVM_FLAGS are exactly the facts the client computes (jvm-probed isn't rule vocabulary).
+		assertEquals(io.github.chaotix345.rigtune.core.jvm.JvmFacts.RULE_FLAGS, strings(v2.get("jvmFlags")));
 		assertEquals(ConditionEvaluator.SODIUM_WORKAROUND_FLAG, python.get("sodiumWorkaroundFlag").getAsString());
 		assertEquals(RulesDocument.PatternRule.MAX_PATTERN_LENGTH, python.get("maxPatternLength").getAsInt());
 	}

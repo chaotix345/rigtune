@@ -253,7 +253,7 @@ public class RigTuneScreen extends Screen {
 	/** v0.3 (WS-C): the launcher lines shown under the ram-* advice (for the game tests). */
 	public List<Component> launcherLines() {
 		return shown == null ? List.of()
-				: shown.recommendations().stream().map(r -> LauncherLines.adviceLine(r, shownLauncher)).filter(Objects::nonNull).toList();
+				: shown.recommendations().stream().map(r -> LauncherLines.adviceLine(r, shownLauncher, controller.jvmReport())).filter(Objects::nonNull).toList();
 	}
 
 	private void copyReport() {
@@ -670,7 +670,7 @@ public class RigTuneScreen extends Screen {
 				this.titleLines = split.size() > 2 ? List.of(split.get(0), ComponentRenderUtils.clipText(title, font, titleWidth)) : split;
 				this.reasonLines = recommendation.reason() == null || recommendation.reason().isBlank()
 						? List.of() : font.split(Texts.component(recommendation.reasonText()), reasonWidth);
-				Component launcherLine = LauncherLines.adviceLine(recommendation, shownLauncher);
+				Component launcherLine = LauncherLines.adviceLine(recommendation, shownLauncher, controller.jvmReport());
 				this.launcherLines = launcherLine == null ? List.of() : font.split(launcherLine, reasonWidth);
 				if (recommendation.appliable()) {
 					this.checkbox = Checkbox.builder(Component.empty(), font)

@@ -503,15 +503,18 @@ class KnowledgeV2ScenarioTest {
 		}
 	}
 
-	// v0.4: the rules content for keys whose evaluators other workstreams add (the jvm- facts: WS-J) can't fire in the
-	// main list today. Each workstream replaces its part of this with scenario tests for its seeds once its evaluator lands
-	// (driverVersion: WS-W's driverSeedsFireOnTheAffectedDriversOnly; the stutter seeds: WS-S's StutterSeedScenarioTest).
+	// v0.4: without their facts the new advice fires nothing in the main list: the jvm- advice needs the JVM probe's facts
+	// (jvm-probed, plan review J-M1), which these fixtures don't carry, and the stutter seeds are never read by the main list.
+	// Their firing cases: WS-J's core/jvm/JvmScenarioTest, WS-S's StutterSeedScenarioTest, and for driverVersion WS-W's
+	// driverSeedsFireOnTheAffectedDriversOnly.
 	@Test
 	void theV04ContentFiresNothingUntilItsEvaluatorsLand() {
 		RulesDocument rules = RulesLoader.loadBundled();
 		Set<String> jvm = rules.advice.stream().map(a -> a.id).filter(id -> id.startsWith("jvm-")).collect(Collectors.toSet());
 		Set<String> drivers = rules.advice.stream().map(a -> a.id).filter(id -> id.startsWith("driver-")).collect(Collectors.toSet());
+		Set<String> stutter = rules.stutterAdvice.stream().map(a -> a.id).collect(Collectors.toSet());
 		assertEquals(9, jvm.size(), jvm.toString());
+		assertEquals(5, stutter.size());
 		assertEquals(Set.of("driver-nvidia-threaded-optimization", "driver-intel-gen7-old"), drivers);
 
 		Fixtures.Hw oldNvidia = Fixtures.userRig();
@@ -521,7 +524,7 @@ class KnowledgeV2ScenarioTest {
 		for (Fixtures.Hw hw : List.of(Fixtures.userRig(), Fixtures.lowEndLaptop(), oldNvidia, hd4000, tier1Laptop())) {
 			for (List<String> mods : List.of(List.of("sodium"), DH_MODS, List.of("sodium", "iris", "distanthorizons"), List.of("fabric-api"))) {
 				Set<String> fired = advice(run(hw, mods, Map.of("sodium.performance.chunk_build_defer_mode", "ZERO_FRAMES")));
-				for (Set<String> ids : List.of(jvm)) {
+				for (Set<String> ids : List.of(jvm, stutter)) {
 					assertTrue(fired.stream().noneMatch(ids::contains), hw.gpu.renderer() + " " + mods + ": " + fired);
 				}
 			}
