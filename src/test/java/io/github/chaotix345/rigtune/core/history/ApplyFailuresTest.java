@@ -86,14 +86,14 @@ class ApplyFailuresTest {
 		Op dropped = Op.enableFile(game.resolve("mods").resolve("b.jar.rigtune-pending"), game.resolve("mods").resolve("b.jar")).withModId("b").withAttempts(2);
 		Op done = Op.disableFile(game.resolve("mods").resolve("c.jar"));
 		ApplyResult result = new ApplyResult("2026-09-26T10:00:00Z", List.of(new OpResult(retried, Status.FAILED, "busy"),
-				new OpResult(dropped, Status.ABANDONED, "Gave up after 3 failed attempts: busy"), new OpResult(done, Status.OK, "Disabled c.jar")));
+				new OpResult(dropped, Status.ABANDONED, "Gave up after 3 restarts: busy"), new OpResult(done, Status.OK, "Disabled c.jar")));
 
 		Map<String, Failure> byOp = ApplyFailures.byOpId(result, dirs());
 
 		assertEquals(2, byOp.size());
 		assertEquals(2, byOp.get(retried.id()).attempt());
 		assertEquals(Status.ABANDONED, byOp.get(dropped.id()).status());
-		assertEquals("RigTune's helper dropped a change (run finished 2026-09-26T10:00:00Z): ENABLE_FILE b (b.jar): Gave up after 3 failed attempts: busy",
+		assertEquals("RigTune's helper dropped a change (run finished 2026-09-26T10:00:00Z): ENABLE_FILE b (b.jar): Gave up after 3 restarts: busy",
 				ApplyFailures.warnLine(byOp.get(dropped.id()), result.finishedAt()));
 	}
 

@@ -87,9 +87,9 @@ class HistoryScreenTest {
 
 	@Test
 	void anAbandonedChangeSaysItWasNotApplied() throws IOException {
-		Failure dropped = new Failure("op", Status.ABANDONED, PendingActions.Type.ENABLE_FILE, "dh", "dh.jar", "Gave up after 3 failed attempts: busy", 3);
+		Failure dropped = new Failure("op", Status.ABANDONED, PendingActions.Type.ENABLE_FILE, "dh", "dh.jar", "Gave up after 3 restarts: busy", 3);
 
-		assertEquals("Not applied: Gave up after 3 failed attempts: busy", english(HistoryScreen.failureText(change(JournalChange.ABANDONED, dropped))));
+		assertEquals("Not applied: Gave up after 3 restarts: busy", english(HistoryScreen.failureText(change(JournalChange.ABANDONED, dropped))));
 	}
 
 	@Test

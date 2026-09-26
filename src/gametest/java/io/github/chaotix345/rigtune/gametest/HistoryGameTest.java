@@ -116,7 +116,7 @@ public class HistoryGameTest implements FabricClientGameTest {
 			// The last exit's helper run: the disable hit a sharing violation (as in the user's real 0.1.0 run), so the enable wasn't applied.
 			Path jar = modsDir.resolve("fake-mod-1.0.jar");
 			new ApplyResult("2026-09-24T23:09:01Z", List.of(
-					new ApplyResult.OpResult(update.get(0), ApplyResult.Status.FAILED, "Gave up after 10 attempt(s): java.nio.file.FileSystemException: "
+					new ApplyResult.OpResult(update.get(0), ApplyResult.Status.FAILED, "Gave up after 10 tries: java.nio.file.FileSystemException: "
 							+ jar + " -> " + jar + ".disabled: The process cannot access the file because it is being used by another process"),
 					new ApplyResult.OpResult(update.get(1), ApplyResult.Status.FAILED, "Not applied because disabling fake-mod-1.0.jar failed")))
 					.save(lastApplyFile);
@@ -151,7 +151,7 @@ public class HistoryGameTest implements FabricClientGameTest {
 		check(failed.row() == HistoryModel.Row.UPDATED && JournalChange.STAGED.equals(failed.status()), "one staged update row: " + failed);
 		String reason = context.computeOnClient(mc -> HistoryScreen.failureText(failed).getString());
 		RigTune.LOGGER.info("HistoryGameTest: failed change shows: {}", reason);
-		check(reason.startsWith("Last attempt failed: Gave up after 10 attempt(s)") && reason.endsWith("(try 2 of 3 at restart)"), "failure text: " + reason);
+		check(reason.startsWith("Last attempt failed: Gave up after 10 tries") && reason.endsWith("(try 2 of 3 at restart)"), "failure text: " + reason);
 		check(reason.contains("fake-mod-1.0.jar -> fake-mod-1.0.jar.disabled") && !reason.contains(modsDir.toString()), "paths shown as names: " + reason);
 		List<String> rows = context.computeOnClient(mc -> ((HistoryScreen) mc.gui.screen()).changeRowText()).stream()
 				.map(row -> row.replaceAll("\\s+", " ")).toList();

@@ -61,7 +61,7 @@ public final class ApplyFailures {
 
 	// One line for latest.log (English, like the rest of the log). finishedAt: when that helper run finished (the first
 	// 0.3 start may log a run 0.1.x or 0.2.x left long ago). "restart attempt n of 3" counts helper runs, so it isn't
-	// mistaken for the helper's own retries inside a run ("Gave up after 10 attempt(s)").
+	// mistaken for the helper's own retries inside a run ("Gave up after 10 tries"; 0.3.0 and older said "attempt(s)").
 	public static String warnLine(Failure f, String finishedAt) {
 		String what = f.type() + " " + (f.modId() != null ? f.modId() + " (" + f.file() + ")" : f.file());
 		return f.abandoned()
