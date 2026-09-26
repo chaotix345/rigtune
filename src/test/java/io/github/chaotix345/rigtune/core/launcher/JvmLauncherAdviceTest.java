@@ -34,6 +34,8 @@ class JvmLauncherAdviceTest {
 	static Map<Launcher, String> jvmSteps() {
 		Map<Launcher, String> expected = new LinkedHashMap<>();
 		expected.put(Launcher.PRISM, "rigtune.launcher.jvm_steps.prism");
+		expected.put(Launcher.MULTIMC, "rigtune.launcher.jvm_steps.multimc");
+		expected.put(Launcher.GDLAUNCHER, "rigtune.launcher.jvm_steps.gdlauncher");
 		expected.put(Launcher.MODRINTH_APP, "rigtune.launcher.jvm_steps.modrinth_app");
 		expected.put(Launcher.ATLAUNCHER, "rigtune.launcher.jvm_steps.atlauncher");
 		expected.put(Launcher.CURSEFORGE, "rigtune.launcher.jvm_steps.curseforge");
@@ -78,7 +80,9 @@ class JvmLauncherAdviceTest {
 		assertFalse(LauncherAdvice.typedXmxWins(ram, LauncherInfo.of(Launcher.MODRINTH_APP), single));
 		assertFalse(LauncherAdvice.typedXmxWins(ram, LauncherInfo.of(Launcher.MODRINTH_APP), JvmReport.UNAVAILABLE));
 		assertFalse(LauncherAdvice.typedXmxWins(advice("advice:jvm-xmx-duplicate"), LauncherInfo.of(Launcher.MODRINTH_APP), duplicate));
-		for (Launcher launcher : List.of(Launcher.PRISM, Launcher.ATLAUNCHER, Launcher.CURSEFORGE, Launcher.OFFICIAL, Launcher.UNKNOWN)) {
+		// docs/v0.4/SPEC.md 2g + "Launcher steps": GDLauncher appends the typed arguments after its own -Xmx too.
+		assertTrue(LauncherAdvice.typedXmxWins(ram, LauncherInfo.of(Launcher.GDLAUNCHER), duplicate));
+		for (Launcher launcher : List.of(Launcher.PRISM, Launcher.MULTIMC, Launcher.ATLAUNCHER, Launcher.CURSEFORGE, Launcher.OFFICIAL, Launcher.UNKNOWN)) {
 			assertFalse(LauncherAdvice.typedXmxWins(ram, LauncherInfo.of(launcher), duplicate), launcher.name());
 		}
 	}

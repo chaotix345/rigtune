@@ -79,7 +79,9 @@ named below, docs/v0.4/verification/ws-a/.
   instance files without any signal still read as Prism; the signals always come first).
 - Strings from docs/research/v0.4/launcher-steps.md: names, `steps.multimc` (MultiMC 0.6.16 labels), `steps.gdlauncher`
   (Carbon develop 35533d7), `steps.curseforge.pack` ("choose Custom RAM Allocation"), `steps.official` (Mojang's
-  path, "then Save"). WS-J adds `jvm_steps.*`; its switch over `Launcher` needs the two new values after merging.
+  path, "then Save"). After WS-J merged (coordinator): `jvm_steps.multimc` and `jvm_steps.gdlauncher` from the same
+  file, and `LauncherInfo.typedXmxWins` covers GDLauncher too (Carbon pushes its -Xmx, then appends the typed arguments
+  verbatim), so its ram-* advice gets WS-J's typed -Xmx note like the Modrinth App.
 
 ## 2j: no bottleneck language
 - `TierBasis.lowest(TierResult)` (every tied component, gpu/cpu/mem order); `CpuClassifier.classifyDetailed` (classify
@@ -89,7 +91,9 @@ named below, docs/v0.4/verification/ws-a/.
   lowered it] / thread count unknown; memory tier with the heap) is the `List<Component>` from
   `RigTuneScreen.tierTooltip(Report)`, passed as `extraLines` to WS-B's `BenchmarkTrendLines.badgeTooltip`, which adds
   the last-benchmark line: one call, one tooltip, wherever the badge is drawn (title row or the header line). Over the
-  badge the clipped header line's own tooltip is suppressed (the first tooltip set in a frame wins; seen in CI). The longer badge no longer fits the title row at the 3 standard sizes, so it leads the
+  badge the clipped header line's own tooltip is suppressed (the first tooltip set in a frame wins; seen in CI). The
+  hook now splits the joined tooltip into lines (`font.split`, 240 px): as one Component the line breaks were drawn as
+  a glyph on a single line (CI screenshot ui-tier-tooltip-640x480-scale2 on run 36227160333). The longer badge no longer fits the title row at the 3 standard sizes, so it leads the
   display/rules line, which is clipped at 640x480@2 (full text on hover, as before).
 - ShareReport: "- Estimated tier N/5 · lowest estimated component: GPU, CPU · goal ..."; ProductionSmoke's log line
   reworded. `rigtune.limit.*` stay as the component names.
