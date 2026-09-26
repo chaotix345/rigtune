@@ -33,6 +33,8 @@ public final class StutterMonitor {
 		final Instant startedAt;
 		final String source;
 		volatile boolean paused;
+		// A benchmark run started while this session ran (review-8 P5A-F3).
+		volatile boolean aroundBenchmark;
 		private boolean skipNext = true;
 
 		Capture(FrameRing ring, long startNanos, Instant startedAt, String source) {

@@ -31,7 +31,7 @@ class StutterSummaryTest {
 		assertTrue(text.contains("13:32 (12:15 of gameplay) · 87,700 frames · avg 119 FPS · 1% low 61 FPS"), text);
 		assertTrue(text.contains("12 spikes (9 minor, 2 major, 1 severe, 0 freezes) in 9 hitches · 1.8 s lost"), text);
 		assertTrue(text.contains("Likely causes (share of the lost time): garbage collection 44 %, chunk loading 12 %; not explained 44 %"), text);
-		assertTrue(text.contains("7 of 12 spikes during world saves (not measured)"), text);
+		assertTrue(text.contains("7 of 12 spikes happened during world saves (not measured)"), text);
 		assertTrue(text.contains("Worst: 212 ms at 7:11 (garbage collection (high), full GC, System.gc(), world saves (low)); 90 ms at 0:12"), text);
 		assertTrue(text.contains("Advice: Stutter from memory pressure"), text);
 		assertFalse(text.contains("Not enough data"));
@@ -47,6 +47,23 @@ class StutterSummaryTest {
 				List.of(new StutterAdvisor.Fired("a", "warning", Impact.HIGH, "*@everyone* [x](https://e.test) <@&123> ||spoiler||", "x")));
 		assertTrue(text.contains("Advice: \\*@\u200Beveryone\\* \\[x\\](https://e.test) \\<@\u200B&123> \\|\\|spoiler\\|\\|\n"), text);
 		assertFalse(text.contains("@everyone"), text);
+	}
+
+	// review-8 P5B-F3: one spike, one hitch, one freeze read in the singular; the chunk tag reads as its own sentence.
+	@Test
+	void singularCountsAndTheChunkTag() {
+		StutterReport r = report(true, true, 21.7);
+		StutterReport one = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(),
+				r.frames(), r.avgFps(), r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), new StutterReport.Spikes(0, 0, 0, 1), r.lostMs(),
+				r.causes(), Map.of(Attributor.CHUNKS_LOADING, 1), r.worst(), r.facts(), r.advice(), true, true, 1);
+		String text = StutterSummary.text(one, List.of());
+		assertTrue(text.contains("1 spike (0 minor, 0 major, 0 severe, 1 freeze) in 1 hitch · 1.8 s lost"), text);
+		assertTrue(text.contains("The spike happened while chunks were loading (not measured)"), text);
+		StutterReport many = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(),
+				r.frames(), r.avgFps(), r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(),
+				Map.of(Attributor.CHUNKS_LOADING, 5), r.worst(), r.facts(), r.advice(), true, true, r.hitches());
+		assertTrue(StutterSummary.text(many, List.of()).contains("5 of 12 spikes happened while chunks were loading (not measured)"));
+		assertEquals("chunks loading", StutterSummary.notes(List.of("chunksLoading:context")));
 	}
 
 	@Test

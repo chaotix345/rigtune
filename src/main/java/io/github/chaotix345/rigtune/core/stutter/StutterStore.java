@@ -25,6 +25,13 @@ public final class StutterStore {
 		this.file = new JsonStateFile(file(configDir), MAX_BYTES);
 	}
 
+	// review-8 P5A-F3: whether a finished monitor session goes into the file. One a benchmark run interrupted (with the
+	// monitor on, the benchmark world's own session is only its settle frames) needs enough data; the benchmark's capture
+	// is saved on its own. Any other session is saved, short or not.
+	public static boolean worthSaving(StutterReport report, boolean aroundBenchmark) {
+		return !aroundBenchmark || report.enoughData();
+	}
+
 	public static Path file(Path configDir) {
 		return configDir.resolve("rigtune").resolve("stutter.json");
 	}

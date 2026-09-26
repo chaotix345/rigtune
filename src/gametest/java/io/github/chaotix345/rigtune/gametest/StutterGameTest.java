@@ -134,6 +134,8 @@ public class StutterGameTest implements FabricClientGameTest {
 			context.waitTicks(5);
 			check(StutterMonitor.session() == null && !StutterMonitor.active(), "no capture after Stop");
 			check(!StutterHooks.gcListenerActive(), "the GC listener was removed");
+			// review-8 ST-1: stopping doesn't wait for the sampler thread; it ends on its own right after.
+			context.waitFor(mc -> !StutterHooks.samplerRunning() && !samplerThread(), 100);
 			check(!StutterHooks.samplerRunning() && !samplerThread(), "no thread named RigTune stutter sampler");
 			check(StutterMonitor.retainedBytes() == 0, "the buffers were released");
 			waitForSessions(context, configDir, before + 1);

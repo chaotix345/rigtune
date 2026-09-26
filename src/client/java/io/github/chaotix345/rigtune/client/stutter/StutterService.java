@@ -190,8 +190,14 @@ public final class StutterService {
 		savedState = Saved.DONE;
 		Machine machine = machine(minecraft);
 		int gen = generation;
+		boolean aroundBenchmark = session.aroundBenchmark;
 		Runnable save = () -> {
 			Analysis a = analyze(copy, machine);
+			if (!StutterStore.worthSaving(a.report(), aroundBenchmark)) {
+				RigTune.LOGGER.info("Stutter Doctor: session not saved: {} spikes in {} s of gameplay around a benchmark run (the run's own capture is saved)",
+						a.report().spikes().total(), Math.round(a.report().gameplaySeconds()));
+				return;
+			}
 			JsonStateFile.Saved result = store().add(a.report());
 			if (result == JsonStateFile.Saved.OK && gen == generation) {
 				saved = a;
@@ -213,6 +219,9 @@ public final class StutterService {
 		if (bench == null && recording) {
 			bench = StutterCapture.startBenchmark();
 			StutterMonitor.Capture session = StutterMonitor.session();
+			if (session != null) {
+				session.aroundBenchmark = true;
+			}
 			if (session != null && !session.paused()) {
 				pause(true);
 				sessionPausedForBenchmark = true;
@@ -242,7 +251,14 @@ public final class StutterService {
 		Analysis a = analyze(copy, machine(minecraft));
 		lastBenchmark = a.report();
 		RigTune.LOGGER.info("Stutter Doctor: benchmark: {} spikes, causes {}, {}", a.report().spikes().total(), a.report().causes(), phases(copy));
-		io(() -> store().add(a.report()));
+		int gen = generation;
+		// The newest saved summary is what StutterScreen shows when no session runs (review-8 P5A-F3).
+		io(() -> {
+			if (store().add(a.report()) == JsonStateFile.Saved.OK && gen == generation) {
+				saved = a;
+				savedState = Saved.DONE;
+			}
+		});
 	}
 
 	@Nullable StutterReport lastBenchmark() {
