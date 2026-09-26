@@ -93,8 +93,7 @@ public class ServerLimitsGameTest implements FabricClientGameTest {
 		// The test server starts in the game-test run directory (wiped per run), where vanilla's Eula reads eula.txt; the
 		// harness writes server.properties there the same way.
 		Path eula = Path.of("eula.txt");
-		write(eula, "eula=true
-");
+		write(eula, "eula=true\n");
 		try (TestDedicatedServerContext server = context.worldBuilder().createServer(properties);
 				TestDedicatedServerConnection connection = server.connect()) {
 			connection.waitForChunksRender();
