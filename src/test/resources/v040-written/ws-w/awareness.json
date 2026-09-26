@@ -1,0 +1,25 @@
+{
+  "formatVersion": 1,
+  "dismissed": [
+    "server-limit:10:above"
+  ],
+  "acknowledgedRegressions": [],
+  "fingerprint": {
+    "gpuVendor": "AMD",
+    "gpuRenderer": "AMD Radeon RX 7800 XT",
+    "gpuDriverRaw": "3.3.0 Core Profile Context 26.9.1.260915",
+    "backend": "OPENGL",
+    "cpuName": "AMD Ryzen 7 7800X3D 8-Core Processor",
+    "totalRamMb": 31948
+  },
+  "lastSeenRulesRevision": 13,
+  "lastSeenRecommendationIds": [
+    "add:lithium",
+    "add:sodium",
+    "advice:ram-heap-small",
+    "conflict:optifabric+sodium",
+    "disable:indium",
+    "set:vanilla.renderDistance",
+    "set:vanilla.simulationDistance"
+  ]
+}

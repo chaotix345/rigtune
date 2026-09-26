@@ -112,6 +112,12 @@ Rules of thumb for Wave A:
 
 ## Wave B (after the Wave A UI work is merged)
 
+### Hardening round (SPEC 2o; starts when WS-A and WS-P have merged). Branch/worktree per package; files per docs/v0.4/audit-verification.md "Recommended work packages".
+- **WS-G1 resolver** (`fix/resolver-audit`, `rigtune-g1`): H2, H3, H1-A, M4, M7 — DownloadPlanner, DependencyResolver, ModJars (version read), a client helper for fabric.mod.json range predicates, RealController `download()`/`preview()` one-line delegations.
+- **WS-G2 undo safety** (`fix/undo-audit`, `rigtune-g2`): H5, M3, M2, M5, H1-B and the joint M1 × 2n test — UndoPlanner planFiles/netOps/violations/planStaged (+ a core FolderCheck), Staging discard/unstage, RealController.apply's DisableMod branch (one call).
+- **WS-G3 helper atomicity** (`fix/helper-audit`, `rigtune-g3`): H4, L2 — ApplyExecutor runGroup/retrying/rollback/run and their tests; helper-safe (HelperLauncherTest); 0.1.0's pending.json shape unchanged.
+- **WS-G4 history retention** (`fix/journal-audit`, `rigtune-g4`): M6, L1 — Journal.cap fold into a baseline entry, HistoryStartup/LegacyImport gate, Staging.stage's supplier; must round-trip through the pinned and released 0.3.0 Journal (re-run compat030 + the downgrade fixtures).
+
 ### WS-X: accessibility, reduced scope (SPEC 11, P2). Branch `feat/a11y`, worktree `rigtune-a11y`.
 Only if P0/P1 are on track. `client/ui/RowFocus`, `client/ui/Palette`, row children across RigTune's list screens (after WS-A/WS-P/WS-S/WS-B/WS-W have merged their screens), A11yGameTest (AC11.1-AC11.3).
 
