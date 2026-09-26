@@ -214,6 +214,7 @@
 	"rigtune.profile.code.error.newer": "That code was made by a newer RigTune. Update RigTune to import it.",
 	"rigtune.profile.code.error.not_a_code": "That isn't a RigTune profile code. Profile codes start with RT1-.",
 	"rigtune.profile.code.error.too_long": "That code is too long to be a RigTune profile code.",
+	"rigtune.profile.reason": "Part of the %s profile.",
 	"rigtune.profile.title": "Profiles",
 	"rigtune.status.busy": "Still downloading the previous changes…",
 	"rigtune.status.settings_applied": "Applied %s setting(s).",
