@@ -12,6 +12,7 @@ import net.fabricmc.loader.api.ModContainer;
 import net.fabricmc.loader.api.Version;
 import net.fabricmc.loader.api.metadata.ModDependency;
 import net.fabricmc.loader.api.metadata.ModMetadata;
+import net.fabricmc.loader.api.metadata.version.VersionPredicate;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -44,10 +45,15 @@ public final class FabricPins {
 			names.putIfAbsent(mod.getMetadata().getId(), name(mod.getMetadata()));
 		}
 		List<VersionPins.Pin> pins = new ArrayList<>();
+		List<VersionPins.Loaded> loaded = new ArrayList<>();
 		for (ModContainer mod : mods) {
 			try {
 				ModMetadata meta = mod.getMetadata();
 				String top = top(mod).getMetadata().getId();
+				String version = meta.getVersion().getFriendlyString();
+				loaded.add(new VersionPins.Loaded(meta.getId(), names.get(meta.getId()), version, top));
+				// A provided id is present with its provider's version (as Fabric resolves it).
+				meta.getProvides().forEach(alias -> loaded.add(new VersionPins.Loaded(alias, names.get(meta.getId()), version, top)));
 				for (ModDependency dep : meta.getDependencies()) {
 					VersionPins.Kind kind = switch (dep.getKind()) {
 						case DEPENDS -> VersionPins.Kind.DEPENDS;
@@ -56,14 +62,30 @@ public final class FabricPins {
 					};
 					if (kind != null) {
 						pins.add(new VersionPins.Pin(meta.getId(), names.get(meta.getId()), top, dep.getModId(), names.get(dep.getModId()), kind,
-								() -> declared(mod, kind, dep), version -> satisfied(dep, kind, version)));
+								() -> declared(mod, kind, dep), v -> satisfied(dep, kind, v)));
 					}
 				}
 			} catch (RuntimeException e) {
 				RigTune.LOGGER.warn("Could not read the dependencies of {}", mod.getMetadata().getId(), e);
 			}
 		}
-		return new VersionPins(pins);
+		return new VersionPins(pins, loaded, FabricPins::matches);
+	}
+
+	// A new jar's own fabric.mod.json ranges (any of them) against a version, parsed as Fabric parses them; false when
+	// either can't be parsed.
+	static boolean matches(List<String> ranges, String version) {
+		try {
+			Version parsed = Version.parse(version);
+			for (VersionPredicate predicate : VersionPredicate.parse(ranges)) {
+				if (predicate.test(parsed)) {
+					return true;
+				}
+			}
+			return false;
+		} catch (Exception e) {
+			return false;
+		}
 	}
 
 	// A depends range must match the version and a breaks range must not; a version Fabric can't parse is fine for neither.

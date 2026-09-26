@@ -64,6 +64,10 @@ class DownloadPlannerTest {
 	final Map<String, String> jarIds = new HashMap<>();
 	final Map<String, String> jarVersions = new HashMap<>();
 	final Map<String, List<String>> jarProvides = new HashMap<>();
+	final Map<String, String> jarNames = new HashMap<>();
+	// A downloaded file's fabric.mod.json depends / breaks: mod id -> range.
+	final Map<String, Map<String, String>> jarDepends = new HashMap<>();
+	final Map<String, Map<String, String>> jarBreaks = new HashMap<>();
 	VersionPins pins = VersionPins.NONE;
 
 	@BeforeEach
@@ -113,10 +117,20 @@ class DownloadPlannerTest {
 		json.addProperty("schemaVersion", 1);
 		json.addProperty("id", id);
 		json.addProperty("version", jarVersions.getOrDefault(file.filename(), "1"));
+		if (jarNames.containsKey(file.filename())) {
+			json.addProperty("name", jarNames.get(file.filename()));
+		}
 		if (jarProvides.containsKey(file.filename())) {
 			JsonArray provides = new JsonArray();
 			jarProvides.get(file.filename()).forEach(provides::add);
 			json.add("provides", provides);
+		}
+		for (Map.Entry<String, Map<String, Map<String, String>>> section : Map.of("depends", jarDepends, "breaks", jarBreaks).entrySet()) {
+			if (section.getValue().containsKey(file.filename())) {
+				JsonObject ranges = new JsonObject();
+				section.getValue().get(file.filename()).forEach(ranges::addProperty);
+				json.add(section.getKey(), ranges);
+			}
 		}
 		return TestJars.modJar(SafeFileNames.resolveJar(mods, file.filename(), PendingActions.PENDING_SUFFIX), json);
 	}
@@ -763,9 +777,24 @@ class DownloadPlannerTest {
 				v -> prefix != null ? v.startsWith(prefix) : v.equals(range));
 	}
 
+	// A fabric.mod.json range list as the tests' stand-in for Fabric reads it: "*", "0.9.x" (a prefix) or an exact version.
+	private static boolean fakeMatch(List<String> ranges, String version) {
+		return ranges.stream().anyMatch(range -> range.equals("*")
+				|| (range.endsWith("x") ? version.startsWith(range.substring(0, range.length() - 1)) : version.equals(range)));
+	}
+
+	// What the client reads from the loaded mods (client/probe/FabricPins): their declarations and versions.
+	private static VersionPins loaded(List<VersionPins.Pin> declarations, VersionPins.Loaded... mods) {
+		return new VersionPins(declarations, List.of(mods), DownloadPlannerTest::fakeMatch);
+	}
+
+	private static VersionPins.Loaded mod(String id, String name, String version) {
+		return new VersionPins.Loaded(id, name, version, id);
+	}
+
 	// Iris 1.11.4 declares sodium: ["0.9.x"] (audit-verification.md H2): a Sodium 0.10 update before Iris supports it would
-	// stop the game from starting, so it's refused before staging, naming Iris; its download is deleted and the installed
-	// jar is left alone. A 0.9.3 update is staged.
+	// stop the game from starting, so it's refused, naming Iris; its download is deleted and the installed jar is left
+	// alone. A 0.9.3 update is staged.
 	@Test
 	void anUpdateOutsideAnInstalledModsVersionRangeIsRefusedNamingThatMod() throws IOException {
 		pins = new VersionPins(List.of(dependsOn("iris", "Iris", "sodium", "Sodium", "0.9.x")));
@@ -814,6 +843,103 @@ class DownloadPlannerTest {
 		assertEquals(List.of("cV.jar"), targets(result.ops()));
 		assertEquals(List.of("Add a: Iris, which is installed, doesn't work with lib 1"), result.errors());
 		assertFalse(Files.exists(mods.resolve("libV.jar" + PendingActions.PENDING_SUFFIX)));
+	}
+
+	// The whole batch is checked, not each item alone. Iris 1.12 requires sodium 0.10.x: ticked together with Sodium 0.10,
+	// the installed Iris 1.11.4's "0.9.x" goes with its own update, so both go in, in one all-or-nothing group, in either
+	// tick order (refusing Sodium would leave Iris 1.12 without the Sodium it needs).
+	@Test
+	void anUpdateThePinningModsOwnUpdateAllowsGoesInWithIt() throws IOException {
+		Recommendation sodium = updateOf("sodium", "SODIUM");
+		Recommendation iris = updateOf("iris", "IRIS");
+		jarVersions.put("sodiumV.jar", "0.10.0");
+		jarVersions.put("irisV.jar", "1.12.0");
+		jarDepends.put("irisV.jar", Map.of("sodium", "0.10.x"));
+		pins = loaded(List.of(dependsOn("iris", "Iris", "sodium", "Sodium", "0.9.x")), mod("sodium", "Sodium", "0.9.3"), mod("iris", "Iris", "1.11.4"));
+
+		for (List<Recommendation> order : List.of(List.of(sodium, iris), List.of(iris, sodium))) {
+			DownloadPlanner.Result result = plan(Set.of("SODIUM", "IRIS"), order.toArray(Recommendation[]::new));
+
+			assertEquals(List.of(), result.errors());
+			assertEquals(Set.of("update-sodium", "update-iris"), Set.copyOf(result.ids()));
+			assertEquals(Set.of("sodium-1.jar", "sodiumV.jar", "iris-1.jar", "irisV.jar"), Set.copyOf(files(result.ops())));
+			assertEquals(1, groups(result.ops()), result.ops().toString());
+		}
+	}
+
+	// Iris 1.12 alone (Sodium 0.9.3 stays): its own "sodium 0.10.x" would stop the game from starting.
+	@Test
+	void anUpdateWhoseOwnRangeExcludesAnInstalledModIsRefused() throws IOException {
+		Recommendation iris = updateOf("iris", "IRIS");
+		jarVersions.put("irisV.jar", "1.12.0");
+		jarDepends.put("irisV.jar", Map.of("sodium", "0.10.x", "minecraft", "*"));
+		pins = loaded(List.of(), mod("sodium", "Sodium", "0.9.3"), mod("iris", "Iris", "1.11.4"), mod("minecraft", "Minecraft", "26.2"));
+
+		DownloadPlanner.Result result = plan(Set.of("SODIUM", "IRIS"), iris);
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of(), result.ops());
+		assertEquals(List.of("Update iris: it needs Sodium 0.10.x, not the installed 0.9.3"), result.errors());
+		assertFalse(Files.exists(mods.resolve("irisV.jar" + PendingActions.PENDING_SUFFIX)));
+	}
+
+	// The audit's own H2 case: Install Nvidium (sodium "0.9.2") with the pre-ticked Update Sodium to 0.9.3. RigTune can't
+	// know which one the player wanted (SPEC 2e), so both are refused, each naming the other; either alone is judged
+	// against what's installed.
+	@Test
+	void anAdditionAndAnUpdateThatCantGoInTogetherAreBothRefused() throws IOException {
+		Recommendation sodium = updateOf("sodium", "SODIUM");
+		jarVersions.put("sodiumV.jar", "0.9.3");
+		put("nvidium", version("nvidiumV", "NVIDIUM", "0.4.4", T));
+		jarDepends.put("nvidiumV.jar", Map.of("sodium", "0.9.2"));
+		jarNames.put("nvidiumV.jar", "Nvidium");
+		jarNames.put("sodiumV.jar", "Sodium");
+		pins = loaded(List.of(), mod("sodium", "Sodium", "0.9.2"));
+
+		DownloadPlanner.Result together = plan(Set.of("SODIUM"), add("nvidium", "NVIDIUM"), sodium);
+
+		assertEquals(List.of(), together.ids());
+		assertEquals(List.of(), together.ops());
+		assertEquals(List.of("Update sodium: Nvidium, which is ticked too, needs Sodium 0.9.2, not 0.9.3",
+				"Add nvidium: it needs Sodium 0.9.2, not the 0.9.3 that's ticked too"), together.errors());
+		assertFalse(Files.exists(mods.resolve("sodiumV.jar" + PendingActions.PENDING_SUFFIX)));
+		assertFalse(Files.exists(mods.resolve("nvidiumV.jar" + PendingActions.PENDING_SUFFIX)));
+
+		assertEquals(List.of("add-nvidium"), plan(Set.of("SODIUM"), add("nvidium", "NVIDIUM")).ids());
+		pins = loaded(List.of(), mod("sodium", "Sodium", "0.9.3"));
+		assertEquals(List.of("Add nvidium: it needs Sodium 0.9.2, not the installed 0.9.3"), plan(Set.of("SODIUM"), add("nvidium", "NVIDIUM")).errors());
+	}
+
+	// What relied on a refused item can't go in either: Sodium 0.10 is refused (the installed Nvidium pins 0.9.2), so Iris
+	// 1.12, which needs it, is refused too, each with its own reason.
+	@Test
+	void whatReliedOnARefusedItemIsRefusedToo() throws IOException {
+		Recommendation sodium = updateOf("sodium", "SODIUM");
+		Recommendation iris = updateOf("iris", "IRIS");
+		Recommendation lithium = updateOf("lithium", "LITHIUM");
+		jarVersions.put("sodiumV.jar", "0.10.0");
+		jarVersions.put("irisV.jar", "1.12.0");
+		jarDepends.put("irisV.jar", Map.of("sodium", "0.10.x"));
+		pins = loaded(List.of(dependsOn("nvidium", "Nvidium", "sodium", "Sodium", "0.9.2")), mod("sodium", "Sodium", "0.9.2"), mod("iris", "Iris", "1.11.4"));
+
+		DownloadPlanner.Result result = plan(Set.of("SODIUM", "IRIS", "LITHIUM"), sodium, iris, lithium);
+
+		assertEquals(List.of("update-lithium"), result.ids());
+		assertEquals(List.of("lithium-1.jar", "lithiumV.jar"), files(result.ops()));
+		assertEquals(List.of("Update sodium: Nvidium, which is installed, needs Sodium 0.9.2, not 0.10.0",
+				"Update iris: it needs Sodium 0.10.x, not the installed 0.9.2"), result.errors());
+	}
+
+	// A `breaks` in a new jar's own fabric.mod.json counts the same way.
+	@Test
+	void anAdditionThatBreaksAnInstalledModIsRefused() {
+		put("b", version("bV", "B", "1", T));
+		jarBreaks.put("bV.jar", Map.of("sodium", "0.9.x"));
+		pins = loaded(List.of(), mod("sodium", "Sodium", "0.9.3"));
+
+		DownloadPlanner.Result result = plan(Set.of(), add("b", "B"));
+
+		assertEquals(List.of("Add b: it doesn't work with the installed Sodium 0.9.3"), result.errors());
 	}
 
 	// --- docs/v0.4/SPEC.md 2o, M4: Apply before the Modrinth lookup finished, or after it failed

@@ -5,7 +5,9 @@ import io.github.chaotix345.rigtune.core.model.Text;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -114,5 +116,24 @@ class VersionPinsTest {
 
 		assertEquals(new VersionPins(List.of(iris, nvidium)).problem("sodium", "0.10.0").english(),
 				new VersionPins(List.of(nvidium, iris)).problem("sodium", "0.10.0").english());
+	}
+
+	// Two jars that are only fine together (Sodium 0.10 needs the installed Iris's pin gone; Iris 1.12 needs Sodium 0.10)
+	// come back as reliances both ways, so the planner puts them in one group; nothing is refused.
+	@Test
+	void jarsThatAreOnlyFineTogetherAreReliances() {
+		VersionPins pins = new VersionPins(List.of(depends("iris", "Iris", "iris", "sodium", "Sodium", "0.9.x")),
+				List.of(new VersionPins.Loaded("sodium", "Sodium", "0.9.3", "sodium"), new VersionPins.Loaded("iris", "Iris", "1.11.4", "iris")),
+				(ranges, version) -> ranges.stream().anyMatch(range -> accepts(range, version)));
+		VersionPins.Jar sodium = new VersionPins.Jar("sodium", "Sodium", "0.10.0", "sodium", Map.of(), Map.of());
+		VersionPins.Jar iris = new VersionPins.Jar("iris", "Iris", "1.12.0", "iris", Map.of("sodium", List.of("0.10.x")), Map.of());
+
+		VersionPins.Outcome outcome = pins.check(List.of(sodium, iris));
+
+		assertEquals(Map.of(), outcome.refused());
+		assertEquals(Set.of(List.of(0, 1), List.of(1, 0)), outcome.reliances().stream().map(pair -> List.of(pair[0], pair[1])).collect(Collectors.toSet()));
+		// Without Iris's update, Sodium 0.10 is refused; without Sodium's, Iris 1.12 is.
+		assertEquals("Iris, which is installed, needs Sodium 0.9.x, not 0.10.0", pins.check(List.of(sodium)).refused().get(0).english());
+		assertEquals("it needs Sodium 0.10.x, not the installed 0.9.3", pins.check(List.of(iris)).refused().get(0).english());
 	}
 }

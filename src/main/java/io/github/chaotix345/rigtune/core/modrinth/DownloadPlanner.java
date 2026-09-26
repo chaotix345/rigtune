@@ -187,6 +187,7 @@ public final class DownloadPlanner {
 					? batch.ops.stream().filter(op -> group.equals(op.group())).toList() : attempt.ops;
 			opIds.put(rec.id(), own.stream().map(Op::id).toList());
 		}
+		checkVersions(batch, ordered, opIds, staged, errorAt, errorTextAt);
 		List<String> ids = new ArrayList<>();
 		List<String> errors = new ArrayList<>();
 		List<Text> errorTexts = new ArrayList<>();
@@ -318,12 +319,13 @@ public final class DownloadPlanner {
 				attempt.batch.dropDuplicate(pending);
 				continue;
 			}
-			refusePinned(jarModId, pending, attempt);
 			attempt.batch.noteReplaced(jarModId, pending);
 			attempt.newProjects.add(version.projectId());
 			attempt.versions.add(version);
 			// The Modrinth identity lets the next Apply's checks see this staged addition (docs/v0.4/SPEC.md 2d).
-			attempt.ops.add(Op.enableFile(pending, target).withModId(jarModId).withProjectId(version.projectId()).withVersionId(version.id()));
+			Op enable = Op.enableFile(pending, target).withModId(jarModId).withProjectId(version.projectId()).withVersionId(version.id());
+			attempt.ops.add(enable);
+			attempt.jars.add(new NewJar(enable.id(), pending, jarModId, null));
 		}
 	}
 
@@ -373,21 +375,79 @@ public final class DownloadPlanner {
 			attempt.batch.dropDuplicate(pending);
 			throw new TextException(Text.of("rigtune.download.not_same_mod", "%s is a different mod (%s, not %s)", file.filename(), jarModId, update.modId()));
 		}
-		refusePinned(jarModId, pending, attempt);
 		attempt.batch.noteReplaced(jarModId, pending);
 		attempt.ops.add(Op.disableFile(update.currentFile()));
-		attempt.ops.add(Op.enableFile(pending, target).withModId(jarModId).withProjectId(next.projectId()).withVersionId(next.id()));
+		Op enable = Op.enableFile(pending, target).withModId(jarModId).withProjectId(next.projectId()).withVersionId(next.id());
+		attempt.ops.add(enable);
+		attempt.jars.add(new NewJar(enable.id(), pending, jarModId, update.modId()));
 		attempt.versions.add(next);
 		attempt.updatedProject = info.projectId();
 	}
 
-	// docs/v0.4/SPEC.md 2o, H2: an installed mod whose fabric.mod.json `depends` range excludes this jar's version (or whose
-	// `breaks` range includes it) would stop Fabric from starting, so the jar isn't staged.
-	private void refusePinned(String jarModId, Path pending, Attempt attempt) throws IOException {
-		Text problem = pins.problem(jarModId, versionOf.apply(pending));
-		if (problem != null) {
-			attempt.batch.dropDuplicate(pending);
-			throw new TextException(problem);
+	// docs/v0.4/SPEC.md 2o, H2: the fabric.mod.json version ranges over the folder the whole batch leaves behind
+	// (VersionPins), so the tick order doesn't decide: an update an installed mod pins is fine when that mod's own update,
+	// allowing it, goes in with it. A group with a jar that can't go in is dropped with its downloads, and each of its
+	// recommendations gets the reason (a line in the UI, never a silent drop); this repeats, since what relied on a dropped
+	// group may now fail. Jars that are only fine together are joined into one group. The dry run knows no jar's version,
+	// so the preview checks nothing here.
+	private void checkVersions(Batch batch, List<Recommendation> ordered, Map<String, List<String>> opIds, boolean[] staged, String[] errorAt,
+			Text[] errorTextAt) {
+		if (batch.jars.isEmpty() || pins.isEmpty()) {
+			return;
+		}
+		Map<String, VersionPins.Jar> read = new HashMap<>();
+		for (NewJar jar : batch.jars) {
+			read.put(jar.opId(), new VersionPins.Jar(jar.modId(), ModJars.nameOf(jar.path()), versionOf.apply(jar.path()), jar.replaces(),
+					ModJars.rangesOf(jar.path(), "depends"), ModJars.rangesOf(jar.path(), "breaks")));
+		}
+		Map<String, Text> droppedGroups = new LinkedHashMap<>();
+		Map<String, Text> jarWhy = new HashMap<>();
+		while (true) {
+			List<NewJar> live = batch.jars.stream().filter(jar -> !droppedGroups.containsKey(batch.groupOf(jar.opId()))).toList();
+			VersionPins.Outcome outcome = pins.check(live.stream().map(jar -> read.get(jar.opId())).toList());
+			if (outcome.refused().isEmpty()) {
+				outcome.reliances().forEach(pair -> batch.merge(batch.groupOf(live.get(pair[0]).opId()), batch.groupOf(live.get(pair[1]).opId())));
+				break;
+			}
+			outcome.refused().forEach((i, why) -> {
+				jarWhy.putIfAbsent(live.get(i).opId(), why);
+				droppedGroups.putIfAbsent(batch.groupOf(live.get(i).opId()), why);
+			});
+		}
+		if (droppedGroups.isEmpty()) {
+			return;
+		}
+		List<Op> gone = batch.ops.stream().filter(op -> droppedGroups.containsKey(op.group())).toList();
+		batch.ops.removeIf(op -> droppedGroups.containsKey(op.group()));
+		for (Op op : gone) {
+			if (op.type() == PendingActions.Type.ENABLE_FILE && op.from() != null) {
+				try {
+					batch.dropDuplicate(Path.of(op.from()));
+				} catch (IOException e) {
+					RigTune.LOGGER.warn("Could not delete {}", op.from(), e);
+				}
+			}
+		}
+		for (int i = 0; i < ordered.size(); i++) {
+			Recommendation rec = ordered.get(i);
+			List<String> ids = staged[i] ? opIds.get(rec.id()) : null;
+			if (ids == null) {
+				continue;
+			}
+			// The reason for this recommendation's own jar, else the one its group was dropped for.
+			Text why = null;
+			for (Op op : gone) {
+				if (ids.contains(op.id()) && (why == null || jarWhy.containsKey(op.id()))) {
+					why = jarWhy.getOrDefault(op.id(), droppedGroups.get(op.group()));
+				}
+			}
+			if (why != null) {
+				RigTune.LOGGER.warn("Not staging {}: {}", rec.id(), why.english());
+				staged[i] = false;
+				opIds.remove(rec.id());
+				errorAt[i] = rec.title() + ": " + why.english();
+				errorTextAt[i] = Text.of("rigtune.download.error", "%s: %s", rec.titleText(), why);
+			}
 		}
 	}
 
@@ -412,6 +472,7 @@ public final class DownloadPlanner {
 		final Map<String, String> groupOfUpdate = new LinkedHashMap<>();
 		final List<Op> ops = new ArrayList<>();
 		final List<ModrinthVersion> versions = new ArrayList<>();
+		final List<NewJar> jars = new ArrayList<>();
 
 		Batch(Set<String> installedProjects, Set<String> loadedIds, Map<String, String> stagedJars) {
 			this.projects = new HashSet<>(installedProjects);
@@ -440,9 +501,21 @@ public final class DownloadPlanner {
 				groupOfUpdate.put(attempt.updatedProject, group);
 			}
 			versions.addAll(attempt.versions);
+			jars.addAll(attempt.jars);
 			projects.addAll(attempt.projects);
 			modIds.addAll(attempt.modIds);
 			return group;
+		}
+
+		String groupOf(String opId) {
+			return ops.stream().filter(op -> op.id().equals(opId)).map(Op::group).findFirst().orElse(null);
+		}
+
+		// Joins group b into group a.
+		void merge(String a, String b) {
+			if (a != null && b != null && !a.equals(b)) {
+				ops.replaceAll(op -> b.equals(op.group()) ? op.inGroup(a) : op);
+			}
 		}
 
 		// Deletes a just-downloaded jar that no op uses (the one exception to never deleting).
@@ -471,6 +544,7 @@ public final class DownloadPlanner {
 		final List<String> newProjects = new ArrayList<>();
 		final List<ModrinthVersion> versions = new ArrayList<>();
 		final List<Op> ops = new ArrayList<>();
+		final List<NewJar> jars = new ArrayList<>();
 		String updatedProject;
 
 		Attempt(Batch batch, boolean mayWait) {
@@ -479,6 +553,10 @@ public final class DownloadPlanner {
 			this.projects = new HashSet<>(batch.projects);
 			this.modIds = new HashSet<>(batch.modIds);
 		}
+	}
+
+	// A jar the batch stages: its enable op, pending file, mod id, and the loaded mod it replaces (an update's) or null.
+	private record NewJar(String opId, Path path, String modId, String replaces) {
 	}
 
 	// An update that needs a project an addition later in the batch may stage: planned again after the additions.

@@ -16,10 +16,13 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.4/SPEC.md 2o, H2: the loaded mods' pins as Fabric Loader itself reads them. The containers are stand-ins; the
 // version predicates are Fabric's own (VersionPredicate.parse / Version.parse, what ModDependency.matches uses).
@@ -48,10 +51,17 @@ class FabricPinsTest {
 	}
 
 	private static ModContainer mod(String id, String name, ModContainer containedIn, Path json, ModDependency... deps) {
+		return mod(id, name, "1.0.0", List.of(), containedIn, json, deps);
+	}
+
+	private static ModContainer mod(String id, String name, String version, List<String> provides, ModContainer containedIn, Path json,
+			ModDependency... deps) {
 		ModMetadata meta = (ModMetadata) Proxy.newProxyInstance(FabricPinsTest.class.getClassLoader(), new Class<?>[]{ModMetadata.class}, (proxy, method, args) ->
 				switch (method.getName()) {
 					case "getId" -> id;
 					case "getName" -> name;
+					case "getVersion" -> Version.parse(version);
+					case "getProvides" -> provides;
 					case "getDependencies" -> List.of(deps);
 					case "toString" -> id;
 					default -> throw new UnsupportedOperationException(method.getName());
@@ -149,6 +159,28 @@ class FabricPinsTest {
 
 		assertNull(pins.problem("sodium", "anything-at-all"));
 		assertEquals("Iris, which is installed, needs sodium *, not ", pins.problem("sodium", "").english());
+	}
+
+	// A new jar's own ranges are matched against the loaded versions with Fabric's predicates; a provided id is present
+	// with its provider's version.
+	@Test
+	void aNewJarsOwnRangesAreMatchedWithFabricsPredicates() {
+		VersionPins pins = pins(mod("sodium", "Sodium", "0.9.3+mc26.2", List.of(), null, null),
+				mod("fabric-api", "Fabric API", "0.161.0+26.2", List.of("fabric"), null, null));
+		VersionPins.Jar iris = new VersionPins.Jar("iris", "Iris", "1.12.0", "iris", Map.of("sodium", List.of("0.10.x"), "fabric", List.of(">=0.150")), Map.of());
+		VersionPins.Jar old = new VersionPins.Jar("iris", "Iris", "1.11.5", "iris", Map.of("sodium", List.of("0.9.x"), "fabric", List.of(">=0.170")), Map.of());
+
+		assertEquals(Map.of(0, "it needs Sodium 0.10.x, not the installed 0.9.3+mc26.2"), english(pins.check(List.of(iris))));
+		assertEquals(Map.of(0, "it needs Fabric API >=0.170, not the installed 0.161.0+26.2"), english(pins.check(List.of(old))));
+		assertTrue(FabricPins.matches(List.of("0.8.x", "0.9.x"), "0.9.3+mc26.2"));
+		assertFalse(FabricPins.matches(List.of("0.9.2"), "0.9.3"));
+		assertFalse(FabricPins.matches(List.of("0.9.x"), ""));
+	}
+
+	private static Map<Integer, String> english(VersionPins.Outcome outcome) {
+		Map<Integer, String> out = new java.util.HashMap<>();
+		outcome.refused().forEach((i, text) -> out.put(i, text.english()));
+		return out;
 	}
 
 	@Test
