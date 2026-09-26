@@ -1,0 +1,26 @@
+[22:36:34] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, monitor:on, benchWorld, sleep:150, stutterReport:A2, shot:stutter-A2-top, scroll:300, sleep:1, shot:stutter-A2-mid, scroll:700, sleep:1, shot:stutter-A2-low, scroll:5000, sleep:1, shot:stutter-A2-end, leaveWorld, stutterJson, quit]
+[22:36:34] [Render thread/INFO]: Using graphics backend OpenGL, using drivers: 3.3.0 Core Profile Context 26.8.1.260810
+[22:36:34] [Render thread/INFO]: Using graphics device: AMD Radeon RX 7800 XT (ATI Technologies Inc.)
+[22:36:34] [Render thread/INFO]: Using graphics device extensions: GL_ARB_multi_draw_indirect, GL_ARB_buffer_storage, GL_ARB_shader_draw_parameters, GL_ARB_base_instance, GL_KHR_debug, GL_ARB_draw_indirect, GL_ARB_clip_control, GL_ARB_vertex_attrib_binding, GL_ARB_direct_state_access, GL_EXT_texture_filter_anisotropic
+[22:36:40] [Render thread/INFO]: [P5A] 4.0s title screen at JVM uptime 16991 ms
+[22:36:40] [Render thread/INFO]: [P5A] 4.5s report ready (online false, rules r15 bundled)
+[22:36:40] [Render thread/INFO]: [P5A] 4.6s stutter monitor on
+[22:36:40] [Render thread/INFO]: [P5A] 4.6s opening the benchmark world: true
+[22:36:42] [Render thread/INFO]: Stutter Doctor: capture on (collector g1)
+[22:36:43] [Render thread/INFO]: [P5A] 6.0s in the benchmark world at (0.5, 132.81314457236323, 192.5), state READY
+[22:36:43] [RigTune stutter sampler/INFO]: Stutter Doctor: 66 threads {Attach Listener=1, Chunk Render Task Executor #*=10, Common-Cleaner=1, Download-*=3, Finalizer=1, ForkJoinPool.commonPool-delayScheduler=1, ForkJoinPool.commonPool-worker-*=1, HttpClient-2-SelectorManager=1, HttpClient-2-Worker-*=3, IO-Worker-*=7, JNA Cleaner=1, Keep-Alive-Timer=1, Netty Local IO #*=3, Notification Thread=1, Reference Handler=1, Render thread=1, RigTune Modrinth check=4, RigTune rules=1, RigTune stutter sampler=1, RigTune worker=2, Server thread=1, Signal Dispatcher=1, Sodium Async Cull Thread=1, Sound engine=1, Timer hack thread=1, Worker-Main-*=15, Yggdrasil Key Fetcher=1}
+[22:39:13] [Render thread/INFO]: [P5A] 156.1s opened the Stutter Doctor
+[22:39:14] [Render thread/INFO]: [P5A] 157.0s stutter view: monitorOn true, recording true, live true, advice []
+[22:39:14] [Render thread/INFO]: [P5A] stutter summary (A2):
+**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 4096 MB heap
+[22:39:14] [IO-Worker-8/INFO]: [P5A] 157.2s screenshot stutter-A2-top: Saved screenshot as p5a-stutA2-stutter-A2-top.png
+[22:39:14] [Render thread/INFO]: [P5A] 157.6s scroll 300: true
+[22:39:15] [IO-Worker-8/INFO]: [P5A] 158.7s screenshot stutter-A2-mid: Saved screenshot as p5a-stutA2-stutter-A2-mid.png
+[22:39:16] [Render thread/INFO]: [P5A] 159.1s scroll 700: true
+[22:39:17] [IO-Worker-8/INFO]: [P5A] 160.2s screenshot stutter-A2-low: Saved screenshot as p5a-stutA2-stutter-A2-low.png
+[22:39:17] [Render thread/INFO]: [P5A] 160.7s scroll 5000: true
+[22:39:18] [IO-Worker-8/INFO]: [P5A] 161.8s screenshot stutter-A2-end: Saved screenshot as p5a-stutA2-stutter-A2-end.png
+[22:39:19] [Render thread/INFO]: [P5A] 162.2s leaving the benchmark world
+[22:39:19] [Render thread/INFO]: Stutter Doctor: capture off; GC listener removed, sampler stopped
+[22:39:19] [RigTune worker/INFO]: Stutter Doctor: session saved (OK): 0 spikes in 140 s of gameplay, phase timing ok (per-frame baselines: packets 0.2 us, ticks 0.3 us, render 355.8 us; timers seen 1111111), GC offset 17.2 ms
+[22:39:24] [Render thread/INFO]: [P5A] 167.3s quitting

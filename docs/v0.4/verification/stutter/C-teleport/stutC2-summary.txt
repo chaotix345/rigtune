@@ -1,0 +1,6 @@
+[22:27:51] [Render thread/INFO]: [P5A] stutter summary (C2):
+**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 4096 MB heap
+2:21 (2:11 of gameplay) · 7,759 frames · avg 59 FPS · 1% low 30 FPS
+0 spikes (0 minor, 0 major, 0 severe, 0 freezes) in 0 hitches · 0.0 s lost
+Not enough data yet (at least 3 spikes and 2 minutes of gameplay)
+

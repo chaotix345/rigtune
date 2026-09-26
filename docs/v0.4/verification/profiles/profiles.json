@@ -1,0 +1,74 @@
+{
+  "formatVersion": 1,
+  "profiles": [
+    {
+      "id": "p-36392c55-cef2-4092-b0be-150e3446d018",
+      "name": "My settings",
+      "source": "baseline",
+      "createdAt": "2026-09-26T13:48:02.757305Z",
+      "rigtuneVersion": "0.4.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "settings": {
+        "vanilla.renderDistance": "12",
+        "vanilla.simulationDistance": "8",
+        "vanilla.entityDistanceScaling": "1.0",
+        "vanilla.maxFps": "120",
+        "vanilla.enableVsync": "true",
+        "vanilla.inactivityFpsLimit": "afk",
+        "vanilla.particles": "0",
+        "vanilla.biomeBlendRadius": "2",
+        "vanilla.weatherRadius": "10",
+        "vanilla.textureFiltering": "0",
+        "vanilla.renderClouds": "true",
+        "vanilla.prioritizeChunkUpdates": "0",
+        "vanilla.improvedTransparency": "false",
+        "vanilla.entityShadows": "true",
+        "vanilla.cutoutLeaves": "true",
+        "sodium.performance.use_fog_occlusion": "true",
+        "sodium.performance.use_block_face_culling": "true",
+        "sodium.performance.use_entity_culling": "true",
+        "sodium.performance.animate_only_visible_textures": "true",
+        "sodium.performance.chunk_builder_threads": "0",
+        "sodium.performance.chunk_build_defer_mode": "ALWAYS",
+        "sodium.performance.quad_splitting_mode": "SAFE",
+        "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius": "256",
+        "dh.client.advanced.graphics.quality.verticalQuality": "MEDIUM",
+        "dh.client.advanced.graphics.quality.horizontalQuality": "MEDIUM",
+        "dh.client.advanced.graphics.quality.maxHorizontalResolution": "BLOCK",
+        "dh.common.multiThreading.numberOfThreads": "8",
+        "dh.client.advanced.debugging.rendererMode": "DEFAULT",
+        "iris.maxShadowRenderDistance": "32",
+        "iris.enableShaders": "true"
+      }
+    }
+  ],
+  "switches": [
+    {
+      "entryId": "528831b8-bf9c-4173-a2b8-566971845a94",
+      "templateId": "max_fps",
+      "name": "Max FPS"
+    },
+    {
+      "entryId": "5f06e950-d61d-4f36-9f36-d7bfe4c2d68e",
+      "templateId": "battery",
+      "name": "Battery"
+    },
+    {
+      "entryId": "2fe1cfd1-9a39-40a4-b98f-3c34b51555ad",
+      "templateId": "recording",
+      "name": "Recording"
+    },
+    {
+      "entryId": "7799bd56-9afd-4b50-8b35-a4577fb75593",
+      "profileId": "p-36392c55-cef2-4092-b0be-150e3446d018",
+      "name": "My settings"
+    }
+  ],
+  "battery": {
+    "prompt": true,
+    "snoozed": false,
+    "previousProfile": "template:max_fps"
+  },
+  "active": "p-36392c55-cef2-4092-b0be-150e3446d018",
+  "activeEntry": "7799bd56-9afd-4b50-8b35-a4577fb75593"
+}

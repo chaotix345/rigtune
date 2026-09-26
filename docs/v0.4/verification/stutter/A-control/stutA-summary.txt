@@ -1,0 +1,8 @@
+[22:12:11] [Render thread/INFO]: [P5A] stutter summary (A):
+**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 4096 MB heap
+6:02 (5:52 of gameplay) · 14,166 frames · avg 40 FPS · 1% low 28 FPS
+4 spikes (3 minor, 0 major, 1 severe, 0 freezes) in 4 hitches · 0.2 s lost
+Likely causes (share of the lost time): garbage collection 3 %; not explained 97 %
+3 of 4 spikes during the 10 s after a teleport (not measured)
+Worst: 195 ms at 2:39; 39 ms at 0:10 (rendering (low), the 10 s after a teleport); 35 ms at 0:11 (garbage collection (medium), rendering (low), the 10 s after a teleport)
+

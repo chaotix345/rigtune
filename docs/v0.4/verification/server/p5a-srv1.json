@@ -1,0 +1,565 @@
+{
+  "label": "srv1",
+  "script": [
+    "waitTitle",
+    "waitReport",
+    "sleep:3",
+    "notices:title",
+    "connect:127.0.0.1:25577",
+    "sleep:10",
+    "serverLimits:connected",
+    "notices:connected",
+    "report:connected",
+    "open:rigtune",
+    "sleep:4",
+    "shot:rigtune-connected",
+    "open:notice",
+    "sleep:2",
+    "shot:noticescreen-connected",
+    "open:none",
+    "disconnect",
+    "sleep:5",
+    "serverLimits:disconnected",
+    "notices:disconnected",
+    "report:disconnected",
+    "open:rigtune",
+    "sleep:4",
+    "shot:rigtune-disconnected",
+    "file:config/rigtune/server-limits.json",
+    "quit"
+  ],
+  "ok": true,
+  "events": [
+    "0.0s driver loaded: [waitTitle, waitReport, sleep:3, notices:title, connect:127.0.0.1:25577, sleep:10, serverLimits:connected, notices:connected, report:connected, open:rigtune, sleep:4, shot:rigtune-connected, open:notice, sleep:2, shot:noticescreen-connected, open:none, disconnect, sleep:5, serverLimits:disconnected, notices:disconnected, report:disconnected, open:rigtune, sleep:4, shot:rigtune-disconnected, file:config/rigtune/server-limits.json, quit]",
+    "3.6s title screen at JVM uptime 12946 ms",
+    "4.1s report ready (online false, rules r15 bundled)",
+    "7.2s notices []",
+    "7.2s connecting to 127.0.0.1:25577",
+    "12.2s connected: level loaded, server limits ServerLimits[viewDistance=6, simulationDistance=5, kind=REMOTE, lastSeenEpochMillis=1790423289839]",
+    "22.3s serverLimits ServerLimits[viewDistance=6, simulationDistance=5, kind=REMOTE, lastSeenEpochMillis=1790423289839]; options RD 4, effective 4",
+    "22.3s notices [{key=server-limit:6, priority=SERVER_LIMIT, message=The server limits view distance to 6 chunks, detail=Simulation distance on this server: 5 chunks (the server decides it)., actions=[], dismissible=true}]",
+    "22.4s recommendation {id=set:vanilla.renderDistance, title=Render Distance: 4 → 6, reason=Your hardware can handle 12 chunks smoothly; the benchmark can fine-tune it. The server sends at most 6 chunks., key=vanilla.renderDistance, current=4, new=6, selected=false}",
+    "22.4s report: 22 recommendations",
+    "22.4s opened RigTuneScreen",
+    "26.5s screen rigtune-connected: {screen=io.github.chaotix345.rigtune.client.ui.RigTuneScreen, title=RigTune, widgets=[Plain 'Settings', CycleButton 'Goal: Balanced', Plain '×', RecommendationList '', Checkbox 'Install Better Block Entities (Medium impact)', Checkbox 'Install C2ME (Medium impact)', Checkbox 'Install Dynamic FPS (Medium impact)', Checkbox 'Install Entity Culling (Medium impact)', Checkbox 'Install FerriteCore (Medium impact)', Checkbox 'Install ImmediatelyFast (Medium impact)', Checkbox 'Install Lithium (Medium impact)', Checkbox 'Install ModernFix-mVUS (Medium impact)', Checkbox 'Install More Culling (Medium impact)', Checkbox 'Install ScalableLux (Medium impact)', Checkbox 'Install Async Logger (Low impact)', Checkbox 'Install BadOptimizations (Low impact)', Checkbox 'Install Debugify (Low impact)', Checkbox 'Install FastQuit (Low impact)', Checkbox 'Install Ixeris (Low impact)', Checkbox 'Install Krypton (Low impact)', Checkbox 'Install Sodium Extra (Low impact)', Checkbox 'Install Structure Layout Optimizer (Low impact)', Checkbox 'Max Framerate: 120 → 170 (Medium impact)', Checkbox 'Render Distance: 4 → 6 (Medium impact)', Checkbox 'VSync: ON → OFF (Low impact)', Plain 'Apply (13)', Plain 'Preview', Plain 'History…', Plain 'Tools…', Plain 'Rescan', Plain 'Copy report', Plain 'Report a problem', Plain 'Done'], window=1280x720 scale 3}",
+    "26.6s screenshot rigtune-connected: Saved screenshot as p5a-srv1-rigtune-connected.png",
+    "27.0s opened NoticeScreen",
+    "29.0s screen noticescreen-connected: {screen=io.github.chaotix345.rigtune.client.ui.NoticeScreen, title=Notices, widgets=[Plain '×', Plain 'Done'], window=1280x720 scale 3}",
+    "29.1s screenshot noticescreen-connected: Saved screenshot as p5a-srv1-noticescreen-connected.png",
+    "29.5s opened no screen",
+    "29.6s disconnecting",
+    "37.6s serverLimits null; options RD 4, effective 4",
+    "37.7s notices []",
+    "37.7s recommendation {id=set:vanilla.renderDistance, title=Render Distance: 4 → 12, reason=Your hardware can handle 12 chunks smoothly; the benchmark can fine-tune it., key=vanilla.renderDistance, current=4, new=12, selected=false}",
+    "37.7s report: 22 recommendations",
+    "37.8s opened RigTuneScreen",
+    "41.8s screen rigtune-disconnected: {screen=io.github.chaotix345.rigtune.client.ui.RigTuneScreen, title=RigTune, widgets=[Plain 'Settings', CycleButton 'Goal: Balanced', RecommendationList '', Checkbox 'Install Better Block Entities (Medium impact)', Checkbox 'Install C2ME (Medium impact)', Checkbox 'Install Dynamic FPS (Medium impact)', Checkbox 'Install Entity Culling (Medium impact)', Checkbox 'Install FerriteCore (Medium impact)', Checkbox 'Install ImmediatelyFast (Medium impact)', Checkbox 'Install Lithium (Medium impact)', Checkbox 'Install ModernFix-mVUS (Medium impact)', Checkbox 'Install More Culling (Medium impact)', Checkbox 'Install ScalableLux (Medium impact)', Checkbox 'Install Async Logger (Low impact)', Checkbox 'Install BadOptimizations (Low impact)', Checkbox 'Install Debugify (Low impact)', Checkbox 'Install FastQuit (Low impact)', Checkbox 'Install Ixeris (Low impact)', Checkbox 'Install Krypton (Low impact)', Checkbox 'Install Sodium Extra (Low impact)', Checkbox 'Install Structure Layout Optimizer (Low impact)', Checkbox 'Max Framerate: 120 → 170 (Medium impact)', Checkbox 'Render Distance: 4 → 12 (Medium impact)', Checkbox 'VSync: ON → OFF (Low impact)', Plain 'Apply (13)', Plain 'Preview', Plain 'History…', Plain 'Tools…', Plain 'Rescan', Plain 'Copy report', Plain 'Report a problem', Plain 'Done'], window=1280x720 scale 3}",
+    "41.9s screenshot rigtune-disconnected: Saved screenshot as p5a-srv1-rigtune-disconnected.png",
+    "42.4s quitting"
+  ],
+  "rigtuneVersion": "0.4.0-dev+mc26.2",
+  "mods": [
+    "fabric-advancement-api-v1 1.0.0+58719a3b9e",
+    "fabric-api 0.161.0+26.2",
+    "fabric-api-base 2.0.4+ece063239e",
+    "fabric-api-lookup-api-v1 2.0.18+11e1c9a39e",
+    "fabric-biome-api-v1 18.0.6+c7bd5b8e9e",
+    "fabric-block-api-v1 3.1.0+53515aab9e",
+    "fabric-block-getter-api-v2 2.0.7+ec56b6019e",
+    "fabric-command-api-v2 3.1.0+00cb03469e",
+    "fabric-content-registries-v0 11.3.2+37b1aa249e",
+    "fabric-convention-tags-v2 4.7.1+1f023a9e9e",
+    "fabric-crash-report-info-v1 1.0.5+086d547a9e",
+    "fabric-creative-tab-api-v1 5.0.15+6468574f9e",
+    "fabric-data-attachment-api-v1 2.2.19+515ac5339e",
+    "fabric-data-generation-api-v1 25.6.0+c0da0b829e",
+    "fabric-debug-api-v1 1.0.2+c792624d9e",
+    "fabric-dimensions-v1 5.1.12+515ac5339e",
+    "fabric-entity-events-v1 5.0.5+06488ac19e",
+    "fabric-events-interaction-v0 5.2.8+515ac5339e",
+    "fabric-game-rule-api-v1 4.0.8+46a6d00c9e",
+    "fabric-item-api-v1 14.5.0+c68f6cbe9e",
+    "fabric-key-mapping-api-v1 2.0.5+e2bdee789e",
+    "fabric-lifecycle-events-v1 4.1.4+29b6eb019e",
+    "fabric-loot-api-v3 3.0.17+06488ac19e",
+    "fabric-menu-api-v1 2.0.17+086d547a9e",
+    "fabric-message-api-v1 7.0.8+bb2ed3f79e",
+    "fabric-model-loading-api-v1 8.0.17+c80601bb9e",
+    "fabric-networking-api-v1 6.3.4+2989c6a09e",
+    "fabric-object-builder-api-v1 24.1.1+6fcd5f039e",
+    "fabric-particles-v1 5.0.19+d1756aa99e",
+    "fabric-permission-api-v1 1.0.5+e442d8d09e",
+    "fabric-recipe-api-v1 9.0.22+11e1c9a39e",
+    "fabric-registry-sync-v0 7.1.1+c7bd5b8e9e",
+    "fabric-renderer-api-v1 14.1.4+2b0d8a229e",
+    "fabric-renderer-indigo 9.1.4+2b0d8a229e",
+    "fabric-rendering-fluids-v1 6.0.4+06488ac19e",
+    "fabric-rendering-v1 25.3.3+515ac5339e",
+    "fabric-resource-conditions-api-v1 6.1.0+10e9a28b9e",
+    "fabric-resource-loader-v0 3.3.20+4fc5413f9e",
+    "fabric-resource-loader-v1 2.0.13+9edec1269e",
+    "fabric-screen-api-v1 5.2.1+5087f8249e",
+    "fabric-serialization-api-v1 2.0.4+11a26f319e",
+    "fabric-sound-api-v1 2.0.5+11a26f319e",
+    "fabric-tag-api-v1 2.1.4+515ac5339e",
+    "fabric-transfer-api-v1 8.0.13+11dbb7d79e",
+    "fabric-transitive-access-wideners-v1 8.1.4+67c847259e",
+    "fabricloader 0.19.5",
+    "java 25",
+    "minecraft 26.2",
+    "mixinextras 0.5.5",
+    "p5a-driver 1.0.0",
+    "rigtune 0.4.0-dev+mc26.2",
+    "rigtune-e2e-undo-driver 1.0.0",
+    "sodium 0.9.2+mc26.2"
+  ],
+  "notices": {
+    "title": [],
+    "connected": [
+      {
+        "key": "server-limit:6",
+        "priority": "SERVER_LIMIT",
+        "message": "The server limits view distance to 6 chunks",
+        "detail": "Simulation distance on this server: 5 chunks (the server decides it).",
+        "actions": [],
+        "dismissible": true
+      }
+    ],
+    "disconnected": []
+  },
+  "serverLimits": {
+    "connected": "ServerLimits[viewDistance=6, simulationDistance=5, kind=REMOTE, lastSeenEpochMillis=1790423289839]",
+    "disconnected": "null"
+  },
+  "report": {
+    "connected": {
+      "rules": 15,
+      "recommendations": [
+        {
+          "id": "add:better-block-entities",
+          "title": "Install Better Block Entities",
+          "reason": "Draws chests, signs, beds and similar blocks much more cheaply, which helps a lot in storage rooms and large bases.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:c2me-fabric",
+          "title": "Install C2ME",
+          "reason": "Generates and loads chunks on several CPU cores at once, so new terrain appears faster while you explore. RigTune doesn't also offer Fast Noise or Material Rule Compiler, which conflict with it. (alpha build)",
+          "action": "AddMod",
+          "selected": false
+        },
+        {
+          "id": "add:dynamic-fps",
+          "title": "Install Dynamic FPS",
+          "reason": "Lowers the frame rate while Minecraft is in the background or minimised, which saves power, reduces heat and frees your PC for other apps.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:entityculling",
+          "title": "Install Entity Culling",
+          "reason": "Skips drawing mobs, chests and other entities hidden behind walls, which raises FPS in bases, villages and farms.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:ferrite-core",
+          "title": "Install FerriteCore",
+          "reason": "Cuts the memory Minecraft uses for block and model data, which means fewer stutters while the game frees up memory.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:immediatelyfast",
+          "title": "Install ImmediatelyFast",
+          "reason": "Speeds up drawing the HUD, text, items and other on-screen elements, which helps most in busy menus and around lots of signs or name tags.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:lithium",
+          "title": "Install Lithium",
+          "reason": "Speeds up game logic such as mob AI, block ticking and collisions, so your singleplayer world spends less time on each tick.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:modernfix-mvus",
+          "title": "Install ModernFix-mVUS",
+          "reason": "Makes the game start faster and use less memory. This is the community build for current Minecraft versions, because the original ModernFix has no release for them.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:moreculling",
+          "title": "Install More Culling",
+          "reason": "Skips drawing even more things you can't see, such as hidden leaf faces and item frames, on top of what Sodium and Entity Culling already skip.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:scalablelux",
+          "title": "Install ScalableLux",
+          "reason": "A faster lighting engine based on Starlight, so loading chunks and changing blocks costs less CPU time. (alpha build)",
+          "action": "AddMod",
+          "selected": false
+        },
+        {
+          "id": "add:asynclogger",
+          "title": "Install Async Logger",
+          "reason": "Moves Minecraft's log writing off the main thread and filters noisy log spam, which avoids small stutters from disk I/O.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:badoptimizations",
+          "title": "Install BadOptimizations",
+          "reason": "A set of small client-side optimisations, such as skipping lighting and sky-colour updates when nothing has changed. It isn't part of the popular optimisation modpacks, so it starts unticked.",
+          "action": "AddMod",
+          "selected": false
+        },
+        {
+          "id": "add:debugify",
+          "title": "Install Debugify",
+          "reason": "Fixes a long list of known vanilla bugs. Only a few affect performance, so it starts unticked.",
+          "action": "AddMod",
+          "selected": false
+        },
+        {
+          "id": "add:fastquit",
+          "title": "Install FastQuit",
+          "reason": "Takes you back to the title screen straight away while your world finishes saving in the background.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:ixeris",
+          "title": "Install Ixeris",
+          "reason": "Handles window and input events on a separate thread, which can smooth out frame times. On Windows it also reads raw mouse input in batches, which helps most with a high-polling-rate mouse; per its changelog, that part isn't ported to Minecraft 26.3's new SDL window system yet, so the gain there is smaller.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:krypton",
+          "title": "Install Krypton",
+          "reason": "Optimises Minecraft's networking code. The gain on your side is small and mostly shows on busy multiplayer servers.",
+          "action": "AddMod",
+          "selected": false
+        },
+        {
+          "id": "add:sodium-extra",
+          "title": "Install Sodium Extra",
+          "reason": "Adds extra video options to Sodium, such as turning off individual animations, particles or fog, so you can trade looks for FPS.",
+          "action": "AddMod",
+          "selected": false
+        },
+        {
+          "id": "add:structure-layout-optimizer",
+          "title": "Install Structure Layout Optimizer",
+          "reason": "Speeds up how jigsaw structures like villages, bastions and ancient cities generate, which cuts stutter from worldgen on your singleplayer world's built-in server.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "set:vanilla.maxFps",
+          "title": "Max Framerate: 120 → 170",
+          "reason": "Avoids rendering frames your monitor can't show; with FreeSync or G-Sync it also keeps the frame rate inside the variable-refresh range.",
+          "key": "vanilla.maxFps",
+          "current": "120",
+          "new": "170",
+          "selected": true
+        },
+        {
+          "id": "set:vanilla.renderDistance",
+          "title": "Render Distance: 4 → 6",
+          "reason": "Your hardware can handle 12 chunks smoothly; the benchmark can fine-tune it. The server sends at most 6 chunks.",
+          "key": "vanilla.renderDistance",
+          "current": "4",
+          "new": "6",
+          "selected": false
+        },
+        {
+          "id": "set:vanilla.enableVsync",
+          "title": "VSync: On → Off",
+          "reason": "Optional: turning VSync off lowers input lag but can cause tearing; leave it on if you see tearing.",
+          "key": "vanilla.enableVsync",
+          "current": "true",
+          "new": "false",
+          "selected": false
+        },
+        {
+          "id": "advice:sodium-amd-game-optimization",
+          "title": "AMD driver issue handled by Sodium",
+          "reason": "Your AMD driver applies a Minecraft-specific tweak that can make terrain invisible. Sodium hides the game from that driver check automatically, so you don't need to do anything.",
+          "action": "None",
+          "selected": false
+        }
+      ],
+      "online": false,
+      "goal": "BALANCED",
+      "tier": "TierResult[rawTier=4, effectiveTier=4, gpuTier=5, cpuTier=5, memTier=4, limitingFactor=mem]"
+    },
+    "disconnected": {
+      "rules": 15,
+      "recommendations": [
+        {
+          "id": "add:better-block-entities",
+          "title": "Install Better Block Entities",
+          "reason": "Draws chests, signs, beds and similar blocks much more cheaply, which helps a lot in storage rooms and large bases.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:c2me-fabric",
+          "title": "Install C2ME",
+          "reason": "Generates and loads chunks on several CPU cores at once, so new terrain appears faster while you explore. RigTune doesn't also offer Fast Noise or Material Rule Compiler, which conflict with it. (alpha build)",
+          "action": "AddMod",
+          "selected": false
+        },
+        {
+          "id": "add:dynamic-fps",
+          "title": "Install Dynamic FPS",
+          "reason": "Lowers the frame rate while Minecraft is in the background or minimised, which saves power, reduces heat and frees your PC for other apps.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:entityculling",
+          "title": "Install Entity Culling",
+          "reason": "Skips drawing mobs, chests and other entities hidden behind walls, which raises FPS in bases, villages and farms.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:ferrite-core",
+          "title": "Install FerriteCore",
+          "reason": "Cuts the memory Minecraft uses for block and model data, which means fewer stutters while the game frees up memory.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:immediatelyfast",
+          "title": "Install ImmediatelyFast",
+          "reason": "Speeds up drawing the HUD, text, items and other on-screen elements, which helps most in busy menus and around lots of signs or name tags.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:lithium",
+          "title": "Install Lithium",
+          "reason": "Speeds up game logic such as mob AI, block ticking and collisions, so your singleplayer world spends less time on each tick.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:modernfix-mvus",
+          "title": "Install ModernFix-mVUS",
+          "reason": "Makes the game start faster and use less memory. This is the community build for current Minecraft versions, because the original ModernFix has no release for them.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:moreculling",
+          "title": "Install More Culling",
+          "reason": "Skips drawing even more things you can't see, such as hidden leaf faces and item frames, on top of what Sodium and Entity Culling already skip.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:scalablelux",
+          "title": "Install ScalableLux",
+          "reason": "A faster lighting engine based on Starlight, so loading chunks and changing blocks costs less CPU time. (alpha build)",
+          "action": "AddMod",
+          "selected": false
+        },
+        {
+          "id": "add:asynclogger",
+          "title": "Install Async Logger",
+          "reason": "Moves Minecraft's log writing off the main thread and filters noisy log spam, which avoids small stutters from disk I/O.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:badoptimizations",
+          "title": "Install BadOptimizations",
+          "reason": "A set of small client-side optimisations, such as skipping lighting and sky-colour updates when nothing has changed. It isn't part of the popular optimisation modpacks, so it starts unticked.",
+          "action": "AddMod",
+          "selected": false
+        },
+        {
+          "id": "add:debugify",
+          "title": "Install Debugify",
+          "reason": "Fixes a long list of known vanilla bugs. Only a few affect performance, so it starts unticked.",
+          "action": "AddMod",
+          "selected": false
+        },
+        {
+          "id": "add:fastquit",
+          "title": "Install FastQuit",
+          "reason": "Takes you back to the title screen straight away while your world finishes saving in the background.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:ixeris",
+          "title": "Install Ixeris",
+          "reason": "Handles window and input events on a separate thread, which can smooth out frame times. On Windows it also reads raw mouse input in batches, which helps most with a high-polling-rate mouse; per its changelog, that part isn't ported to Minecraft 26.3's new SDL window system yet, so the gain there is smaller.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "add:krypton",
+          "title": "Install Krypton",
+          "reason": "Optimises Minecraft's networking code. The gain on your side is small and mostly shows on busy multiplayer servers.",
+          "action": "AddMod",
+          "selected": false
+        },
+        {
+          "id": "add:sodium-extra",
+          "title": "Install Sodium Extra",
+          "reason": "Adds extra video options to Sodium, such as turning off individual animations, particles or fog, so you can trade looks for FPS.",
+          "action": "AddMod",
+          "selected": false
+        },
+        {
+          "id": "add:structure-layout-optimizer",
+          "title": "Install Structure Layout Optimizer",
+          "reason": "Speeds up how jigsaw structures like villages, bastions and ancient cities generate, which cuts stutter from worldgen on your singleplayer world's built-in server.",
+          "action": "AddMod",
+          "selected": true
+        },
+        {
+          "id": "set:vanilla.maxFps",
+          "title": "Max Framerate: 120 → 170",
+          "reason": "Avoids rendering frames your monitor can't show; with FreeSync or G-Sync it also keeps the frame rate inside the variable-refresh range.",
+          "key": "vanilla.maxFps",
+          "current": "120",
+          "new": "170",
+          "selected": true
+        },
+        {
+          "id": "set:vanilla.renderDistance",
+          "title": "Render Distance: 4 → 12",
+          "reason": "Your hardware can handle 12 chunks smoothly; the benchmark can fine-tune it.",
+          "key": "vanilla.renderDistance",
+          "current": "4",
+          "new": "12",
+          "selected": false
+        },
+        {
+          "id": "set:vanilla.enableVsync",
+          "title": "VSync: On → Off",
+          "reason": "Optional: turning VSync off lowers input lag but can cause tearing; leave it on if you see tearing.",
+          "key": "vanilla.enableVsync",
+          "current": "true",
+          "new": "false",
+          "selected": false
+        },
+        {
+          "id": "advice:sodium-amd-game-optimization",
+          "title": "AMD driver issue handled by Sodium",
+          "reason": "Your AMD driver applies a Minecraft-specific tweak that can make terrain invisible. Sodium hides the game from that driver check automatically, so you don't need to do anything.",
+          "action": "None",
+          "selected": false
+        }
+      ],
+      "online": false,
+      "goal": "BALANCED",
+      "tier": "TierResult[rawTier=4, effectiveTier=4, gpuTier=5, cpuTier=5, memTier=4, limitingFactor=mem]"
+    }
+  },
+  "screen": {
+    "rigtune-connected": {
+      "screen": "io.github.chaotix345.rigtune.client.ui.RigTuneScreen",
+      "title": "RigTune",
+      "widgets": [
+        "Plain 'Settings'",
+        "CycleButton 'Goal: Balanced'",
+        "Plain '×'",
+        "RecommendationList ''",
+        "Checkbox 'Install Better Block Entities (Medium impact)'",
+        "Checkbox 'Install C2ME (Medium impact)'",
+        "Checkbox 'Install Dynamic FPS (Medium impact)'",
+        "Checkbox 'Install Entity Culling (Medium impact)'",
+        "Checkbox 'Install FerriteCore (Medium impact)'",
+        "Checkbox 'Install ImmediatelyFast (Medium impact)'",
+        "Checkbox 'Install Lithium (Medium impact)'",
+        "Checkbox 'Install ModernFix-mVUS (Medium impact)'",
+        "Checkbox 'Install More Culling (Medium impact)'",
+        "Checkbox 'Install ScalableLux (Medium impact)'",
+        "Checkbox 'Install Async Logger (Low impact)'",
+        "Checkbox 'Install BadOptimizations (Low impact)'",
+        "Checkbox 'Install Debugify (Low impact)'",
+        "Checkbox 'Install FastQuit (Low impact)'",
+        "Checkbox 'Install Ixeris (Low impact)'",
+        "Checkbox 'Install Krypton (Low impact)'",
+        "Checkbox 'Install Sodium Extra (Low impact)'",
+        "Checkbox 'Install Structure Layout Optimizer (Low impact)'",
+        "Checkbox 'Max Framerate: 120 → 170 (Medium impact)'",
+        "Checkbox 'Render Distance: 4 → 6 (Medium impact)'",
+        "Checkbox 'VSync: ON → OFF (Low impact)'",
+        "Plain 'Apply (13)'",
+        "Plain 'Preview'",
+        "Plain 'History…'",
+        "Plain 'Tools…'",
+        "Plain 'Rescan'",
+        "Plain 'Copy report'",
+        "Plain 'Report a problem'",
+        "Plain 'Done'"
+      ],
+      "window": "1280x720 scale 3"
+    },
+    "noticescreen-connected": {
+      "screen": "io.github.chaotix345.rigtune.client.ui.NoticeScreen",
+      "title": "Notices",
+      "widgets": [
+        "Plain '×'",
+        "Plain 'Done'"
+      ],
+      "window": "1280x720 scale 3"
+    },
+    "rigtune-disconnected": {
+      "screen": "io.github.chaotix345.rigtune.client.ui.RigTuneScreen",
+      "title": "RigTune",
+      "widgets": [
+        "Plain 'Settings'",
+        "CycleButton 'Goal: Balanced'",
+        "RecommendationList ''",
+        "Checkbox 'Install Better Block Entities (Medium impact)'",
+        "Checkbox 'Install C2ME (Medium impact)'",
+        "Checkbox 'Install Dynamic FPS (Medium impact)'",
+        "Checkbox 'Install Entity Culling (Medium impact)'",
+        "Checkbox 'Install FerriteCore (Medium impact)'",
+        "Checkbox 'Install ImmediatelyFast (Medium impact)'",
+        "Checkbox 'Install Lithium (Medium impact)'",
+        "Checkbox 'Install ModernFix-mVUS (Medium impact)'",
+        "Checkbox 'Install More Culling (Medium impact)'",
+        "Checkbox 'Install ScalableLux (Medium impact)'",
+        "Checkbox 'Install Async Logger (Low impact)'",
+        "Checkbox 'Install BadOptimizations (Low impact)'",
+        "Checkbox 'Install Debugify (Low impact)'",
+        "Checkbox 'Install FastQuit (Low impact)'",
+        "Checkbox 'Install Ixeris (Low impact)'",
+        "Checkbox 'Install Krypton (Low impact)'",
+        "Checkbox 'Install Sodium Extra (Low impact)'",
+        "Checkbox 'Install Structure Layout Optimizer (Low impact)'",
+        "Checkbox 'Max Framerate: 120 → 170 (Medium impact)'",
+        "Checkbox 'Render Distance: 4 → 12 (Medium impact)'",
+        "Checkbox 'VSync: ON → OFF (Low impact)'",
+        "Plain 'Apply (13)'",
+        "Plain 'Preview'",
+        "Plain 'History…'",
+        "Plain 'Tools…'",
+        "Plain 'Rescan'",
+        "Plain 'Copy report'",
+        "Plain 'Report a problem'",
+        "Plain 'Done'"
+      ],
+      "window": "1280x720 scale 3"
+    }
+  },
+  "file": {
+    "config/rigtune/server-limits.json": "{\n  \"formatVersion\": 1,\n  \"salt\": \"5da6da2b681104beb5baf5b04ba1094f\",\n  \"servers\": {\n    \"ce059f1e451904e5a27b90e29e011de1436e12cd2c17f82f75e3b40833cbde99\": {\n      \"viewDistance\": 6,\n      \"simulationDistance\": 5,\n      \"kind\": \"REMOTE\",\n      \"lastSeen\": \"2026-09-26T11:48:09.839Z\"\n    }\n  }\n}"
+  }
+}

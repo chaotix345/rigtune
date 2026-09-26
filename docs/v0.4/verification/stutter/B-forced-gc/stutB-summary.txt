@@ -1,0 +1,8 @@
+[22:16:23] [Render thread/INFO]: [P5A] stutter summary (B):
+**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 4096 MB heap
+2:30 (2:20 of gameplay) · 7,976 frames · avg 57 FPS · 1% low 20 FPS
+28 spikes (0 minor, 28 major, 0 severe, 0 freezes) in 28 hitches · 1.5 s lost
+Likely causes (share of the lost time): garbage collection 100 %; not explained 0 %
+Worst: 89 ms at 1:26 (garbage collection (high), full GC, System.gc()); 89 ms at 1:11 (garbage collection (high), full GC, System.gc()); 87 ms at 2:02 (garbage collection (high), full GC, System.gc())
+Advice: Something asks Java for full garbage collections
+

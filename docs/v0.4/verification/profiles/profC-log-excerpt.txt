@@ -1,0 +1,10 @@
+[23:49:33] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, sleep:5, settings:after-maxfps, file:config/sodium-options.json, file:config/DistantHorizons.toml, file:config/iris.properties, file:options.txt, history:after-maxfps, preview:Battery, switch:Battery, sleep:2, file:config/rigtune/pending.json, open:history, sleep:3, shot:history-battery, quit]
+[23:49:38] [Render thread/INFO]: [P5A] 4.0s title screen at JVM uptime 11818 ms
+[23:49:38] [Render thread/INFO]: [P5A] 4.5s report ready (online false, rules r15 bundled)
+[23:49:43] [Render thread/INFO]: [P5A] 9.6s settings (388 keys)
+[23:49:43] [Render thread/INFO]: [P5A] 9.8s history: 1 entries; profiles [Max FPS]
+[23:49:44] [Render thread/INFO]: [P5A] 9.9s preview Battery: {now=[renderDistance: 10 -> 8, simulationDistance: 8 -> 6, maxFps: 260 -> 60, enableVsync: false -> true, particles: 0 -> 1, renderClouds: true -> false], atRestart=[client.advanced.debugging.rendererMode: DEFAULT -> DISABLED, enableShaders: true -> false], skipped=[], notes=[]}
+[23:49:44] [Render thread/INFO]: [P5A] 9.9s switched to Battery: Switched to Battery; 2 changes apply after a restart. Undo it in History.
+[23:49:46] [Render thread/INFO]: [P5A] 12.0s opened HistoryScreen
+[23:49:49] [IO-Worker-1/INFO]: [P5A] 15.1s screenshot history-battery: Saved screenshot as p5a-profC-history-battery.png
+[23:49:49] [Render thread/INFO]: [P5A] 15.6s quitting

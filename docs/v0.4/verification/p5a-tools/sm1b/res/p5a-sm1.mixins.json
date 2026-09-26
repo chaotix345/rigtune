@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "package": "io.github.chaotix345.p5asm1.mixin",
+  "plugin": "io.github.chaotix345.p5asm1.Sm1Plugin",
+  "compatibilityLevel": "JAVA_25",
+  "client": ["MinecraftAnchorMixin"],
+  "injectors": { "defaultRequire": 1 }
+}

@@ -1,0 +1,14 @@
+[23:54:26] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, sleep:5, settings:after-mysettings, file:config/sodium-options.json, file:config/DistantHorizons.toml, file:config/iris.properties, file:options.txt, history:final, open:history, sleep:3, shot:history-final, export:Battery, export:My settings, export:Max FPS, open:profiles, sleep:3, shot:profiles-final, profiles:final, file:config/rigtune/profiles.json, quit]
+[23:54:31] [Render thread/INFO]: [P5A] 3.9s title screen at JVM uptime 12114 ms
+[23:54:32] [Render thread/INFO]: [P5A] 4.4s report ready (online false, rules r15 bundled)
+[23:54:37] [Render thread/INFO]: [P5A] 9.4s settings (388 keys)
+[23:54:37] [Render thread/INFO]: [P5A] 9.7s history: 4 entries; profiles [My settings, Recording, Battery, Max FPS]
+[23:54:37] [Render thread/INFO]: [P5A] 9.7s opened HistoryScreen
+[23:54:40] [IO-Worker-1/INFO]: [P5A] 12.8s screenshot history-final: Saved screenshot as p5a-profF-history-final.png
+[23:54:40] [Render thread/INFO]: [P5A] 13.3s share code for Battery: RT1-AQdCYXR0ZXJ5HAAGAQECAgMFBAEFAQYBBwIIBwkACgALAAwADQEOAQ8BEAERARIBFAAVARZAFwIYAhkEGwEcIB0A76qvOw
+[23:54:41] [Render thread/INFO]: [P5A] 13.3s share code for My settings: RT1-AQtNeSBzZXR0aW5ncxwACgEDAgIDCwQBBQEGAAcCCAcJAAoCCwAMAA0BDgEPARABEQESARQAFQEW4AEXAhgCGQQbABwgHQHzL53x
+[23:54:41] [Render thread/INFO]: [P5A] 13.4s share code for Max FPS: RT1-AQdNYXggRlBTHAAIAQMCAgMZBAAFAQYABwIIBwkACgILAAwADQEOAQ8BEAERARIBFAAVARZAFwIYAhkEGwAcIB0BsDvIOw
+[23:54:41] [Render thread/INFO]: [P5A] 13.4s opened ProfilesScreen
+[23:54:44] [IO-Worker-1/INFO]: [P5A] 16.5s screenshot profiles-final: Saved screenshot as p5a-profF-profiles-final.png
+[23:54:44] [Render thread/INFO]: [P5A] 17.0s profiles [{source=template, name=Max FPS, id=template:max_fps, active=false}, {source=template, name=Balanced, id=template:balanced, active=false}, {source=template, name=Quality, id=template:quality, active=false}, {source=template, name=Battery, id=template:battery, active=false}, {source=template, name=Recording, id=template:recording, active=false}, {source=baseline, name=My settings, id=p-36392c55-cef2-4092-b0be-150e3446d018, active=true}]
+[23:54:44] [Render thread/INFO]: [P5A] 17.1s quitting

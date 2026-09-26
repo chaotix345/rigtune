@@ -1,0 +1,23 @@
+[00:29:24] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, sleep:3, reflectScreen:net.caffeinemc.mods.sodium.client.gui.VideoSettingsScreen#createScreen, sleep:2, shot:sodium-general, clickPx:120:281, sleep:2, shot:sodium-performance, clickPx:120:227, sleep:2, shot:sodium-quality, open:title, reflectScreen:com.seibel.distanthorizons.common.wrappers.gui.GetConfigScreen#getScreen, sleep:2, shot:dh-main, click:Advanced options, sleep:2, shot:dh-advanced, click:Multi-Threading, sleep:2, shot:dh-multithreading, quit]
+[00:29:29] [Render thread/INFO]: [P5A] 3.9s title screen at JVM uptime 16128 ms
+[00:29:30] [Render thread/INFO]: [P5A] 4.4s report ready (online false, rules r15 bundled)
+[00:29:33] [Render thread/INFO]: [P5A] 7.5s opened net.caffeinemc.mods.sodium.client.gui.VideoSettingsScreen
+[00:29:35] [Render thread/INFO]: [P5A] 9.5s screen sodium-general: {screen=net.caffeinemc.mods.sodium.client.gui.VideoSettingsScreen, title=Sodium Renderer Settings, widgets=[EditBox 'Search', Plain 'RigTune'], window=1280x720 scale 3}
+[00:29:35] [IO-Worker-1/INFO]: [P5A] 9.6s screenshot sodium-general: Saved screenshot as p5a-profM3-sodium-general.png
+[00:29:35] [Render thread/INFO]: [P5A] 10.0s clickPx 120:281 -> gui (40.0, 93.66666666666667) on VideoSettingsScreen: handled true
+[00:29:37] [Render thread/INFO]: [P5A] 12.1s screen sodium-performance: {screen=net.caffeinemc.mods.sodium.client.gui.VideoSettingsScreen, title=Sodium Renderer Settings, widgets=[EditBox 'Search', Plain 'RigTune'], window=1280x720 scale 3}
+[00:29:37] [IO-Worker-1/INFO]: [P5A] 12.1s screenshot sodium-performance: Saved screenshot as p5a-profM3-sodium-performance.png
+[00:29:38] [Render thread/INFO]: [P5A] 12.6s clickPx 120:227 -> gui (40.0, 75.66666666666667) on VideoSettingsScreen: handled true
+[00:29:40] [Render thread/INFO]: [P5A] 14.6s screen sodium-quality: {screen=net.caffeinemc.mods.sodium.client.gui.VideoSettingsScreen, title=Sodium Renderer Settings, widgets=[EditBox 'Search', Plain 'RigTune'], window=1280x720 scale 3}
+[00:29:40] [IO-Worker-1/INFO]: [P5A] 14.7s screenshot sodium-quality: Saved screenshot as p5a-profM3-sodium-quality.png
+[00:29:40] [Render thread/INFO]: [P5A] 15.1s opened TitleScreen
+[00:29:40] [Render thread/INFO]: [P5A] 15.2s opened com.seibel.distanthorizons.common.wrappers.gui.classicConfig.DhConfigScreen
+[00:29:42] [Render thread/INFO]: [P5A] 17.2s screen dh-main: {screen=com.seibel.distanthorizons.common.wrappers.gui.classicConfig.DhConfigScreen, title=Distant Horizons config, widgets=[TexturedButtonWidget '', Plain 'Back', Plain 'Done', ConfigListWidget '', Plain 'True', Plain 'Reset', EditBox '', Plain 'Reset', Plain '3. Medium', Plain 'Reset', Plain '3. Balanced', Plain 'Reset', Plain '§aSurface Then Chunks§r', Plain 'Reset', Plain 'Disabled', Plain 'Reset', Plain 'True', Plain 'Reset', Plain 'Advanced options'], window=1280x720 scale 3}
+[00:29:43] [IO-Worker-1/INFO]: [P5A] 17.3s screenshot dh-main: Saved screenshot as p5a-profM3-dh-main.png
+[00:29:43] [Render thread/INFO]: [P5A] 17.7s click 'Advanced options' (Plain, active true)
+[00:29:45] [Render thread/INFO]: [P5A] 19.8s screen dh-advanced: {screen=com.seibel.distanthorizons.common.wrappers.gui.classicConfig.DhConfigScreen, title=Distant Horizons config, widgets=[TexturedButtonWidget '', Plain 'Back', Plain 'Done', ConfigListWidget '', Plain 'Graphics', Plain 'World Generator', Plain 'Multiplayer', Plain 'Server', Plain 'LOD Building', Plain 'Multi-Threading', Plain 'Auto Updater', Plain 'Logging', Plain 'Debug'], window=1280x720 scale 3}
+[00:29:45] [IO-Worker-1/INFO]: [P5A] 19.9s screenshot dh-advanced: Saved screenshot as p5a-profM3-dh-advanced.png
+[00:29:46] [Render thread/INFO]: [P5A] 20.3s click 'Multi-Threading' (Plain, active true)
+[00:29:48] [Render thread/INFO]: [P5A] 22.3s screen dh-multithreading: {screen=com.seibel.distanthorizons.common.wrappers.gui.classicConfig.DhConfigScreen, title=Distant Horizons config, widgets=[TexturedButtonWidget '', Plain 'Back', Plain 'Done', ConfigListWidget '', EditBox '', Plain 'Reset', EditBox '', Plain 'Reset'], window=1280x720 scale 3}
+[00:29:48] [IO-Worker-1/INFO]: [P5A] 22.4s screenshot dh-multithreading: Saved screenshot as p5a-profM3-dh-multithreading.png
+[00:29:48] [Render thread/INFO]: [P5A] 22.8s quitting
