@@ -4,16 +4,29 @@ import io.github.chaotix345.rigtune.core.model.Text;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
 // What Apply would do for the ticked items (docs/v0.3/SPEC.md item 13). resolved: false when mods are to be downloaded
 // while Modrinth is off in the settings: an addition's files aren't known (Download.fileName null), and Apply can't
-// download anything until Modrinth is on again.
+// download anything until Modrinth is on again. notes (v0.4, WS-P): lines Preview lists after the files, e.g. how RigTune
+// limited a profile's values for this PC (docs/v0.4/plan-review.md P-L2); empty for an ordinary Apply.
 public record ApplyPreview(List<Setting> now, List<Setting> atRestart, List<Download> downloads, List<Disable> disables, List<Skipped> skipped,
-		boolean resolved) {
+		boolean resolved, List<Text> notes) {
 	public static final ApplyPreview EMPTY = new ApplyPreview(List.of(), List.of(), List.of(), List.of(), List.of(), true);
+
+	public ApplyPreview(List<Setting> now, List<Setting> atRestart, List<Download> downloads, List<Disable> disables, List<Skipped> skipped,
+			boolean resolved) {
+		this(now, atRestart, downloads, disables, skipped, resolved, List.of());
+	}
+
+	public ApplyPreview withNotes(List<Text> extra) {
+		List<Text> all = new ArrayList<>(notes);
+		all.addAll(extra);
+		return new ApplyPreview(now, atRestart, downloads, disables, skipped, resolved, all);
+	}
 
 	public record Setting(String recommendationId, Path file, String key, @Nullable String oldValue, String newValue) {
 	}
@@ -62,6 +75,7 @@ public record ApplyPreview(List<Setting> now, List<Setting> atRestart, List<Down
 		downloads = List.copyOf(downloads);
 		disables = List.copyOf(disables);
 		skipped = List.copyOf(skipped);
+		notes = notes == null ? List.of() : List.copyOf(notes);
 	}
 
 	public boolean isEmpty() {

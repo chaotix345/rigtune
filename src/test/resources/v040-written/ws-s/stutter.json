@@ -1,0 +1,138 @@
+{
+  "formatVersion": 1,
+  "sessions": [
+    {
+      "startedAt": "2026-09-24T19:30:00Z",
+      "source": "monitor",
+      "mc": "26.2",
+      "collector": "G1",
+      "heapMaxMb": 4096,
+      "sessionSeconds": 150.0,
+      "gameplaySeconds": 140.0,
+      "frames": 17250,
+      "avgFps": 123.2,
+      "onePercentLowFps": 50.8,
+      "histogramCounts": [
+        0,
+        17236,
+        0,
+        0,
+        0,
+        8,
+        6,
+        0,
+        0
+      ],
+      "histogramTimeMs": [
+        0,
+        137888,
+        0,
+        0,
+        0,
+        680,
+        1440,
+        0,
+        0
+      ],
+      "spikes": {
+        "minor": 0,
+        "major": 8,
+        "severe": 6,
+        "freeze": 0
+      },
+      "lostMs": 2008.0,
+      "causes": {
+        "gc": 0.24,
+        "unknown": 0.76
+      },
+      "tags": {
+        "worldSave": 1
+      },
+      "worst": [
+        {
+          "t": 12.3,
+          "ms": 240.0,
+          "baseMs": 8.0,
+          "causes": []
+        },
+        {
+          "t": 36.6,
+          "ms": 240.0,
+          "baseMs": 8.0,
+          "causes": []
+        },
+        {
+          "t": 61.0,
+          "ms": 240.0,
+          "baseMs": 8.0,
+          "causes": [
+            "worldSave:low"
+          ]
+        },
+        {
+          "t": 85.3,
+          "ms": 240.0,
+          "baseMs": 8.0,
+          "causes": []
+        },
+        {
+          "t": 109.7,
+          "ms": 240.0,
+          "baseMs": 8.0,
+          "causes": []
+        },
+        {
+          "t": 134.1,
+          "ms": 240.0,
+          "baseMs": 8.0,
+          "causes": []
+        },
+        {
+          "t": 24.4,
+          "ms": 85.0,
+          "baseMs": 8.0,
+          "causes": [
+            "gc:high"
+          ]
+        },
+        {
+          "t": 40.7,
+          "ms": 85.0,
+          "baseMs": 8.0,
+          "causes": [
+            "gc:high"
+          ]
+        },
+        {
+          "t": 56.8,
+          "ms": 85.0,
+          "baseMs": 8.0,
+          "causes": [
+            "gc:high"
+          ]
+        },
+        {
+          "t": 73.1,
+          "ms": 85.0,
+          "baseMs": 8.0,
+          "causes": [
+            "gc:high"
+          ]
+        }
+      ],
+      "facts": {
+        "liveSetPct": 71,
+        "fullGcs": 1,
+        "stalls": 0,
+        "explicitGcs": 0,
+        "gcOffsetMs": 18.0
+      },
+      "advice": [
+        "ram-stutter-gc-heap"
+      ],
+      "enoughData": true,
+      "phaseTiming": true,
+      "hitches": 14
+    }
+  ]
+}

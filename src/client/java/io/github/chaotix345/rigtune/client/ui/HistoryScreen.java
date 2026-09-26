@@ -117,12 +117,22 @@ public class HistoryScreen extends Screen {
 		return out.toString();
 	}
 
+	// The history is read only once this screen's widgets exist: a read that is ready at once completes on the render
+	// thread and rebuilds the screen, which inside layout() would add every widget a second time.
 	@Override
 	protected void init() {
-		if (stale) {
+		boolean refresh = stale;
+		if (refresh) {
 			stale = false;
+			loading = true;
+		}
+		layout();
+		if (refresh) {
 			load();
 		}
+	}
+
+	private void layout() {
 		int column = Math.min(width - 32, 480);
 		HistoryModel.Entry entry = selectedEntry();
 		List<Button> buttons = new ArrayList<>();
@@ -277,7 +287,8 @@ public class HistoryScreen extends Screen {
 	// --- text (every word from en_us.json; names, versions and values are data)
 
 	static Component kind(HistoryModel.Entry entry) {
-		return Component.translatable(entry.kindKey());
+		return entry.profile() != null ? Component.translatable("rigtune.profile.history_kind", Component.literal(entry.profile()))
+				: Component.translatable(entry.kindKey());
 	}
 
 	static Component summary(HistoryModel.Entry entry) {

@@ -4,8 +4,8 @@ import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import org.jspecify.annotations.Nullable;
 
-// NoticePriority.BATTERY_OFFER: "Switch to Battery" on an AC -> battery edge (docs/v0.4/SPEC.md 4). Skeleton from the contracts commit (never shows anything); WS-P fills it, reaching its service through the
-// controller (e.g. controller.profileService()).
+// NoticePriority.BATTERY_OFFER (docs/v0.4/SPEC.md 4): "Switch to Battery" after an AC -> battery edge, "Switch back" after
+// the reverse edge while Battery is active; ProfileService decides (BatteryPrompt) and never switches by itself.
 public final class BatteryNoticeSource implements NoticeSource {
 	private final RealController controller;
 
@@ -15,10 +15,11 @@ public final class BatteryNoticeSource implements NoticeSource {
 
 	@Override
 	public @Nullable Notice current() {
-		return null;
+		return controller.profileService().batteryNotice();
 	}
 
 	@Override
 	public void act(String actionId) {
+		controller.profileService().batteryAction(actionId);
 	}
 }

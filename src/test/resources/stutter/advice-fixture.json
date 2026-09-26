@@ -1,0 +1,33 @@
+{
+	"schemaVersion": 2,
+	"revision": 1,
+	"stutterAdvice": [
+		{"id": "ram-stutter-gc-heap", "requires": ["stutter-doctor"], "kind": "warning", "impact": "high",
+			"when": {"stutterShareAtLeast": {"gc": 30}, "anyOf": [{"gcFullPausesAtLeast": 1}, {"gcStallsAtLeast": 1}, {"liveSetPercentAtLeast": 75}],
+				"heapRaiseRoomMbAtLeast": 2048},
+			"title": "Stutter from memory pressure",
+			"text": "Most of the lost time was likely garbage collection, and the heap is nearly full. Give Minecraft about 2 GB more RAM."},
+		{"id": "stutter-gc-explicit", "requires": ["stutter-doctor"], "kind": "info", "impact": "medium",
+			"when": {"gcExplicitPausesAtLeast": 2, "stutterShareAtLeast": {"gc": 10}},
+			"title": "Something forces full garbage collections",
+			"text": "Vanilla never calls System.gc() in normal play; a mod (or running out of direct memory) likely does."},
+		{"id": "stutter-sodium-defer", "requires": ["stutter-doctor"], "kind": "info", "impact": "medium",
+			"when": {"stutterShareAtLeast": {"chunkBuild": 25}, "modPresent": ["sodium"],
+				"anyOf": [{"settingIs": {"sodium.performance.chunk_build_defer_mode": "ZERO_FRAMES"}},
+					{"settingIs": {"sodium.performance.chunk_build_defer_mode": "ONE_FRAME"}}]},
+			"title": "Frames wait for chunk updates",
+			"text": "Set Sodium's Chunk Updates to Deferred (Video Settings > Performance)."},
+		{"id": "stutter-dh-threads", "requires": ["stutter-doctor"], "kind": "info", "impact": "medium",
+			"when": {"modPresent": ["distanthorizons"], "stutterTaggedShareAtLeast": {"dh": 40}, "cpuContentionShareAtLeast": 30},
+			"title": "Distant Horizons competes for the CPU",
+			"text": "Lower Distant Horizons' CPU threads (Advanced > Multithreading) while exploring new terrain."},
+		{"id": "stutter-chunk-loading", "requires": ["stutter-doctor"], "kind": "info", "impact": "low",
+			"when": {"stutterShareAtLeast": {"chunkLoad": 40}},
+			"title": "Loading new chunks",
+			"text": "Most of the lost time was likely spent loading new chunks. A lower render distance, or pre-generating a singleplayer world, may help."},
+		{"id": "stutter-needs-newer", "requires": ["stutter-doctor", "shader-timing"], "kind": "info",
+			"when": {"always": true}, "title": "t", "text": "x"},
+		{"id": "stutter-unknown-key", "requires": ["stutter-doctor"], "kind": "info",
+			"when": {"shaderCompileShareAtLeast": 10}, "title": "t", "text": "x"}
+	]
+}

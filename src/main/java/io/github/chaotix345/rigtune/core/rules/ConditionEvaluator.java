@@ -13,12 +13,14 @@ import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.model.TierResult;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
+import io.github.chaotix345.rigtune.core.stutter.Attributor;
 import io.github.chaotix345.rigtune.core.stutter.StutterFacts;
 import net.fabricmc.loader.api.SemanticVersion;
 import net.fabricmc.loader.api.Version;
 import net.fabricmc.loader.api.metadata.version.VersionPredicate;
 import org.jspecify.annotations.Nullable;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -48,6 +50,8 @@ public final class ConditionEvaluator {
 	public static final String BACKEND_VULKAN_FLAG = "backend-vulkan";
 	public static final Set<String> FLAGS = Set.of(BACKEND_VULKAN_FLAG, "shaders-enabled");
 	public static final String SODIUM_WORKAROUND_FLAG = "sodium-workaround:";
+	// The gcCollector vocabulary (docs/v0.4/SPEC.md 5): GcKind's families.
+	public static final Set<String> GC_COLLECTORS = Set.of("g1", "zgc", "shenandoah", "parallel", "serial");
 	private static final Set<String> DRIVER_VERSION_KEYS = Set.of("vendor", "atLeast", "atMost");
 
 	private ConditionEvaluator() {
@@ -338,10 +342,62 @@ public final class ConditionEvaluator {
 				|| c.gcCollector != null;
 	}
 
-	// v0.4 contract stub (docs/v0.4/SPEC.md 5): filled by WS-R (the stutter keys against StutterFacts). Without facts (the
-	// main list) every stutter key must stay UNKNOWN; until the stub is filled it is UNKNOWN with facts too.
+	// v0.4 (docs/v0.4/SPEC.md 5): the stutter keys against the Stutter Doctor's session facts. Without facts (the main
+	// list) every one is UNKNOWN, so they can never fire there. Thresholds are whole numbers (plan review K-M1): shares
+	// and percentages in whole percent, spikesPerMinuteAtLeast x10. A share-map value that isn't a whole number >= 0, a
+	// cause or tag this version doesn't know, and an unknown fact (null) are UNKNOWN.
 	private static Truth stutter(Condition c, @Nullable StutterFacts facts) {
-		return UNKNOWN;
+		if (facts == null) {
+			return UNKNOWN;
+		}
+		Truth t = c.stutterShareAtLeast == null ? TRUE : shares(c.stutterShareAtLeast, facts.claimedShares(), Attributor.CAUSES, facts.unmeasured());
+		t = and(t, () -> c.stutterTaggedShareAtLeast == null ? TRUE
+				: shares(c.stutterTaggedShareAtLeast, facts.taggedShares(), Attributor.TAGS, facts.unmeasured()));
+		t = and(t, () -> c.gcFullPausesAtLeast == null ? TRUE : gcCount(facts, facts.gcFullPauses(), c.gcFullPausesAtLeast));
+		t = and(t, () -> c.gcStallsAtLeast == null ? TRUE : gcCount(facts, facts.gcStalls(), c.gcStallsAtLeast));
+		t = and(t, () -> c.gcExplicitPausesAtLeast == null ? TRUE : gcCount(facts, facts.gcExplicitPauses(), c.gcExplicitPausesAtLeast));
+		t = and(t, () -> c.liveSetPercentAtLeast == null ? TRUE : atLeast(facts.liveSetPercent(), c.liveSetPercentAtLeast));
+		t = and(t, () -> c.heapRaiseRoomMbAtLeast == null ? TRUE : atLeast(facts.heapRaiseRoomMb() == null ? null : facts.heapRaiseRoomMb().doubleValue(),
+				c.heapRaiseRoomMbAtLeast));
+		t = and(t, () -> c.cpuContentionShareAtLeast == null ? TRUE : atLeast(facts.cpuContentionShare(), c.cpuContentionShareAtLeast));
+		t = and(t, () -> c.spikesPerMinuteAtLeast == null ? TRUE : Truth.of(facts.spikesPerMinute() * 10 >= c.spikesPerMinuteAtLeast));
+		String collector = facts.gcCollector() == null ? "" : facts.gcCollector().toLowerCase(Locale.ROOT);
+		return and(t, () -> c.gcCollector == null ? TRUE : anyEntry(c.gcCollector, GC_COLLECTORS::contains, collector::equals, !collector.isEmpty()));
+	}
+
+	private static Truth gcCount(StutterFacts facts, int count, int threshold) {
+		return facts.gcMeasured() ? Truth.of(count >= threshold) : UNKNOWN;
+	}
+
+	private static Truth atLeast(@Nullable Double value, Number threshold) {
+		return value == null ? UNKNOWN : Truth.of(value >= threshold.doubleValue());
+	}
+
+	// Every entry must hold: the measured share (percent; absent = 0) at least the entry's whole-percent threshold. A cause
+	// or tag the capture couldn't measure is UNKNOWN.
+	private static Truth shares(Map<String, String> wanted, Map<String, Double> measured, List<String> vocabulary, Set<String> unmeasured) {
+		Truth t = TRUE;
+		for (Map.Entry<String, String> entry : wanted.entrySet()) {
+			Integer threshold = wholeNumber(entry.getValue());
+			if (entry.getKey() == null || !vocabulary.contains(entry.getKey()) || threshold == null || unmeasured.contains(entry.getKey())) {
+				t = t.and(UNKNOWN);
+				continue;
+			}
+			t = t.and(Truth.of(measured.getOrDefault(entry.getKey(), 0.0) >= threshold));
+		}
+		return t;
+	}
+
+	private static @Nullable Integer wholeNumber(@Nullable String text) {
+		if (text == null) {
+			return null;
+		}
+		try {
+			BigDecimal value = new BigDecimal(text.trim());
+			return value.signum() < 0 || value.stripTrailingZeros().scale() > 0 ? null : value.intValueExact();
+		} catch (NumberFormatException | ArithmeticException e) {
+			return null;
+		}
 	}
 
 	private static Truth mcVersionRange(String predicateText, String mcVersion) {

@@ -63,11 +63,27 @@ To run the benchmark, press **Tools…** on the RigTune screen, then **Benchmark
 
 ## Profiles and share codes
 
-<!-- v0.4: filled by the Profiles workstream (docs/v0.4/SPEC.md 4, 12). -->
+**Tools… → Profiles…** switches your settings between whole setups in one click:
+- **Templates**, worked out for your PC from the same rules as the main list: **Max FPS** (no frame cap, VSync off), **Balanced** (the same values as applying every setting suggestion), **Quality** (one tier higher), **Battery** (60 FPS with VSync, shorter distances, no clouds; shaders and Distant Horizons rendering off when you have them) and **Recording** (a steady frame cap, 60 on most screens, no idle throttle). The memory and Distant Horizons limits still apply to all of them.
+- **My settings**: your own settings, saved the first time you open Profiles (and before your first switch). It's the way back. You can re-save it by saving under its name, but you can't delete it.
+- Your own saved profiles (**Save current…**) and imported ones.
+
+A switch is an ordinary Apply: options change right away, Sodium, Distant Horizons and Iris settings change at the next restart, and History shows it as "Profile: Battery", with Undo this / last / all as usual. RigTune never switches by itself. On a laptop it notices when you unplug and *offers* Battery (and offers your previous profile when you plug back in); **Don't offer again** turns the offer off.
+
+**Copy code** puts a share code like `RT1-ARJDaGFy…` (about 100 characters) on your clipboard. **Import code…** takes one from a friend and always shows **Preview** first, with **Apply**, **Save only** or **Cancel**. Nothing is written before you click, and RigTune reads the clipboard only when you press **Paste**. A code carries only setting values from a fixed list, as numbers: no text besides a name (cleaned up and shown as plain text), no file names, mods or downloads. Values beyond your PC's memory and Distant Horizons limits are lowered, and Preview says so. Settings your game doesn't have are left out. Thread counts are machine-specific, so they stay in your own profiles and are never shared.
+
+Shader-pack settings (the options inside a pack like Complementary or BSL) aren't part of profiles or share codes. Profiles only turn shaders on or off. Changing a pack's options safely would mean writing files outside `config/` and a new kind of staged change that older RigTune versions can't run. Iris also puts pack option values straight into the shader source, so they must never come from someone else's code. It may come in a later release (docs/research/v0.4/profiles.md §7).
 
 ## Stutter Doctor
 
-<!-- v0.4: filled by the Stutter Doctor workstream (docs/v0.4/SPEC.md 5). -->
+**Tools… → Stutter Doctor** shows where the time went when the game hitches, and what may help.
+
+- **The session monitor** is off by default. Turn it on with **Start** (or **Stutter Doctor monitor** in RigTune's settings). While a world is loaded it records every frame's time, the Java garbage collector's pauses, world saves, chunk loading and how busy the game's threads are. **Pause** stops recording for a while; **Stop** turns it off. Leaving the world ends the session and saves a short summary; the next world starts a new one while the monitor is on. While it's on it uses about 2 MB of memory and well under a microsecond per frame; when it's off it costs nothing (no listeners, no background thread).
+- **The benchmark** always records its own sweeps the same way, and its result screen gets one line (for example "2 spikes during the sweeps; likely causes: Garbage collection 64 %").
+- **The report**: session length, gameplay time, frames, average FPS and 1 % low; a frame-time histogram weighted by play time; the **spikes** (a frame over twice the usual frame time, at least 8 ms more and at least 20 ms; minor under 50 ms, major to 100 ms, severe to 500 ms, freezes beyond); the likely causes as shares of the lost time, measured where possible: garbage-collection pauses, chunk loading, chunk building, game ticks; with **"Not explained"** always shown for what nothing accounts for. World saves, Distant Horizons, a busy CPU, the seconds after a teleport and fast movement are counted as correlations only ("7 of 12 spikes happened during world saves (not measured)"). Then the 10 worst spikes and any advice that fits (for example more memory when garbage collection dominates and the heap is nearly full, with your launcher's steps; or Sodium's Chunk Updates set to Deferred). Menus, an unfocused window and the first 10 s in a world don't count. Everything is "likely": correlation, not proof.
+- It needs at least 3 spikes and 2 minutes of gameplay for a verdict. On some Minecraft versions the per-phase timing may not be available; the report then says "Phase timing unavailable" and chunk loading, ticks and rendering aren't separated.
+
+**Privacy:** all of it happens on your PC; nothing is sent anywhere. The summaries of the last 5 sessions (numbers only, no world or player names) are kept in `config/rigtune/stutter.json` (at most 64 KB); the raw frame times are never saved. **Copy summary** puts a text summary on your clipboard, only when you press it. **Clear** deletes the saved summaries.
 
 ## JVM & memory advice
 

@@ -5,6 +5,7 @@ import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
 import io.github.chaotix345.rigtune.client.benchmark.KeepSettings;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
+import io.github.chaotix345.rigtune.client.stutter.StutterHooks;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkMath;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
@@ -149,6 +150,14 @@ public class BenchmarkResultScreen extends Screen {
 				.bounds(width / 2 + 2, y, buttonWidth, 20).build());
 	}
 
+	// v0.4 (docs/v0.4/SPEC.md 5): the Stutter Doctor's line for the benchmark's sweeps ("2 spikes; likely causes: ...").
+	private static void stutterLine(List<Line> out) {
+		Component line = StutterScreen.benchmarkLine(StutterHooks.lastBenchmark());
+		if (line != null) {
+			out.add(new Line(line, COLOR_LABEL));
+		}
+	}
+
 	private List<Line> lines() {
 		SessionResult session = outcome.session();
 		BenchmarkMath.Aggregate result = session.result();
@@ -173,6 +182,7 @@ public class BenchmarkResultScreen extends Screen {
 				out.add(new Line(Component.translatable("rigtune.benchmark.noisy",
 						String.format(Locale.ROOT, "%.0f%%", result.cv() * 100)), COLOR_WARN));
 			}
+			stutterLine(out);
 		}
 		boolean sdMeasured = session.measurements().stream().anyMatch(m -> m.step().kind() == Step.Kind.SIMULATION_DISTANCE);
 		if (tune() && outcome.request().scene() == BenchmarkRequest.Scene.BENCHMARK_WORLD) {

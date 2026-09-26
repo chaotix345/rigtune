@@ -398,7 +398,8 @@ def checklist(mc, prev):
     base = parse_mc_id(mc).base
     return [
         f"Read Fabric's announcement for {base}; upgrade Loom and Gradle on their own first if it asks.",
-        f"./gradlew :{mc}:build (JAVA_HOME = JDK {JAVA_MAJOR}). Fix compile errors with `//? if >={mc} {{` blocks "
+        f"./gradlew :{mc}:build (JAVA_HOME = JDK {JAVA_MAJOR}). Fix compile errors with `//? if >={base}-alpha {{` blocks "
+        f"(the -alpha floor matches every snapshot, pre-release and RC of {base}; Stonecutter sorts pre/rc below snapshot) "
         f"(./gradlew \"Set active project to {mc}\" to edit them in the IDE).",
         f"python tools/mc_apidiff.py {prev} {mc} --out build/apidiff: review every changed class it lists "
         "(reflection targets, the mixin target, Options keys, runtime defaults), even when the build is green.",

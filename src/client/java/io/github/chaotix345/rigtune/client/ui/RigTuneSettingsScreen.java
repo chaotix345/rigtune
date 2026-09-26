@@ -93,6 +93,7 @@ public class RigTuneSettingsScreen extends Screen {
 					save();
 				}));
 		y += ROW + GAP;
+		y = stutterMonitorRow(x, y, column);
 		noteY = y + 2;
 		updateActive();
 
@@ -108,6 +109,18 @@ public class RigTuneSettingsScreen extends Screen {
 			addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose())
 					.bounds(left + half + GAP, footer, half, ROW).build());
 		}
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md 5): the opt-in Stutter Doctor session monitor (also on StutterScreen).
+	private int stutterMonitorRow(int x, int y, int column) {
+		addRenderableWidget(CycleButton.onOffBuilder(settings.stutterMonitor)
+				.withTooltip(v -> Tooltip.create(Component.translatable("rigtune.stutter.monitor.tooltip")))
+				.create(x, y, column, ROW, Component.translatable("rigtune.stutter.monitor"), (b, v) -> {
+					settings.stutterMonitor = v;
+					save();
+					controller.setStutterMonitor(v);
+				}));
+		return y + ROW + GAP;
 	}
 
 	// Written on a worker thread; each save writes the current values, so the last one always wins.
