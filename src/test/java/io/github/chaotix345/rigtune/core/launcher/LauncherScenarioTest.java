@@ -131,6 +131,7 @@ class LauncherScenarioTest {
 		keys.put("rigtune.launcher.advice", 2);
 		keys.put("rigtune.launcher.header.cpu", 2);
 		keys.put("rigtune.launcher.header.memory", 3);
+		keys.put("rigtune.launcher.xmx_in_java_args", 1);
 		for (Launcher launcher : Launcher.values()) {
 			for (Boolean override : new Boolean[]{null, true, false}) {
 				LauncherInfo info = new LauncherInfo(launcher, override);
