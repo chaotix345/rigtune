@@ -1,0 +1,24 @@
+{
+  "createdAt": "2026-09-26T16:01:02.900960800Z",
+  "gamePid": 42784,
+  "modsDir": "<instance>\\mods",
+  "configDir": "<instance>\\config",
+  "ops": [
+    {
+      "type": "DISABLE_FILE",
+      "path": "<instance>\\mods\\e2e-added-1.0.0.jar",
+      "id": "5bbd68bf-f8e3-4242-bfb6-dbc2eeb74147",
+      "group": "be3c426e-6d73-4dc7-962b-4f2f24b2e4e5",
+      "attempts": 0
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\e2e-disable-me-1.0.0.jar.disabled",
+      "to": "<instance>\\mods\\e2e-disable-me-1.0.0.jar",
+      "id": "8eaf7f93-e060-4050-8dd6-f7dead0661a7",
+      "group": "be3c426e-6d73-4dc7-962b-4f2f24b2e4e5",
+      "modId": "e2e-disable-me",
+      "attempts": 0
+    }
+  ]
+}

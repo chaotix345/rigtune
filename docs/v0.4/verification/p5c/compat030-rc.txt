@@ -1,0 +1,12 @@
+sets: ws-a, ws-p, ws-b, ws-s, ws-w, ws-f
+files: awareness.json <- ws-w, benchmarks.json <- ws-b, history.json <- ws-a+ws-p, pending.json <- ws-a, profiles.json <- ws-p, server-limits.json <- ws-w, settings.json <- ws-s, startup-times.json <- ws-f, stutter.json <- ws-s
+PASS Journal: history.json state OK with the same entries: state OK, readOnly false, entries 3 of 3, warnings []
+PASS HistoryModel: every entry listed, none of an unknown kind: 3 of 3 entries; unknown kinds: []
+PASS UndoPlanner: Undo this on the profile-switch entry reverts each change: kind apply, problem null, items [REVERT renderDistance: 8 \u2192 12, REVERT maxFps: 60 \u2192 120, REVERT sodium.performance.chunk_builder_threads: 2 \u2192 0]
+PASS UndoPlanner: Undo last and Undo all plan without a problem: Undo last: c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17, 3 item(s), problem null; Undo all: 5 item(s), problem null
+PASS BenchmarkHistory: benchmarks.json loads without a .bad: runs 5 of 5, unreadable false, contexts kept true, .bad files []
+PASS PendingActions: pending.json loads with every op's type, id and mod id: 1 of 1 ops: [ENABLE_FILE e2e-seed]
+PASS ClientSettings: settings.json read as written: privacyNoticeShown true (file true), .bad files []
+PASS RulesLoader: rules-v2.json parses with unchanged counts: revision 16, counts {mods=28, settings=56, advice=34, obsolete=6, gpuTiers=43, cpuTiers=8, heapTiers=5}; new sections present: [profileTemplates, stutterAdvice]
+PASS 0.3.0 reading them changed no file: 9 file(s) unchanged
+RESULT PASS

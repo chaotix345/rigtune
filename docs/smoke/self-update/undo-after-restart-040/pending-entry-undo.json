@@ -1,0 +1,15 @@
+{
+  "createdAt": "2026-09-26T16:02:24.044006800Z",
+  "gamePid": 13088,
+  "modsDir": "<instance>\\mods",
+  "configDir": "<instance>\\config",
+  "ops": [
+    {
+      "type": "DISABLE_FILE",
+      "path": "<instance>\\mods\\e2e-first-1.0.0.jar",
+      "id": "244916cc-3655-463c-8c22-b17338b25f07",
+      "group": "e03b2b10-c785-4fd8-ac59-3de13e779552",
+      "attempts": 0
+    }
+  ]
+}

@@ -6,6 +6,23 @@ The harness is `tools/e2e/` (how it works: tools/e2e/README.md). Each run makes 
 twice: the old version applies its "Update RigTune" recommendation and quits, the post-exit helper swaps the jars, then
 the new version starts on the same instance. Each folder's `RESULT.md` has every check with its detail.
 
+## v0.4 (Phase 5 finals on the release candidate, P5-C)
+
+Release candidate `feat/v0.4.0` @ b27f33fa ("Merge fix/review-8b"; built in test/p5-final @ 23be54d1),
+`rigtune-0.4.0-dev+mc26.2.jar` sha256 `4018fe03…9a12`, 2026-09-27, one run per lock hold, each passing on its first run
+(docs/v0.4/verification/p5c/README.md). Commands: tools/e2e/README.md "v0.4 runs". The `dev-*-040*` folders are WS-H's
+dry runs on 0.4.0-dev builds (docs/v0.4/design/ws-h.md).
+
+| run | installed → update | result |
+|---|---|---|
+| [final-v030-to-040](final-v030-to-040/RESULT.md) | released 0.3.0 (`5717f65c…d7e9`) → RC, `--expect-history auto` | PASS (20/20) |
+| [final-v020-to-040](final-v020-to-040/RESULT.md) | released 0.2.0 (`67275e23…7de9`) → RC, `--expect-history auto` | PASS (20/20) |
+| [final-v010-to-040](final-v010-to-040/RESULT.md) | released 0.1.0 (`8294d04a…b950`) → RC, `--legacy-disable --expect-history auto` | PASS (21/21) |
+| [final-v010-seeded-to-040](final-v010-seeded-to-040/RESULT.md) | H-M2 seeded 0.1.0 → RC | PASS (26/26) |
+| [undo-after-restart-040](undo-after-restart-040/RESULT.md) | M14 + B-M3 + two real profile switches (Battery, Max FPS; P-H1, AC2n.2) on the RC | PASS (81/81) |
+| [undo-after-restart-040-settings](undo-after-restart-040-settings/RESULT.md) | the same with the settings stand-in (a Sodium key staged by both switches: SPEC 2n) | PASS (79/79) |
+| [downgrade-040-to-030](downgrade-040-to-030/RESULT.md) | AC3.2: the real "written by 0.4" sets, released 0.3.0, then the RC again | PASS (16/16) |
+
 ## v0.3 (WS-H dry runs; Phase 5 repeats them on the release candidate as `final-*` and `undo-after-restart-030`)
 
 Phase 5 final, on the release candidate `feat/v0.3.0` @ f77af1a (`rigtune-0.3.0-dev+mc26.2.jar`, sha256 `17cfe5b8…0b5f`), 2026-09-26, each passing on its first run (docs/v0.3/verification/README.md "Final runs"):

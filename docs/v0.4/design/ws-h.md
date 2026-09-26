@@ -107,3 +107,12 @@ Released jars (GitHub release assets; sha256 equal to the release's asset digest
 - UNVERIFIED: the profile mode (`--profile-switch profile`) has never run (no Profiles API yet); the downgrade and
   compat checks have only seen placeholder sets; the SPEC's History screenshot showing "Profile: Battery" needs the
   real ws-p set / WS-P (the harness screenshots History in every relevant phase).
+
+## Phase 5 finals (P5-C, 2026-09-27)
+
+On the RC (feat/v0.4.0 @ b27f33fa, jar `4018fe03…9a12`), one run per lock hold, all first-attempt passes:
+final-v030-to-040 20/20, final-v020-to-040 20/20, final-v010-to-040 21/21, final-v010-seeded-to-040 26/26,
+undo-after-restart-040 81/81 (`--profile-switch profile`: `UndoDriver.switchProfile` now calls
+`controller.switchProfile(id)`; the 2n phase passes), undo-after-restart-040-settings 79/79 (the staged Sodium key),
+downgrade-040-to-030 16/16 on the real sets; the v040-written sets regenerated from the RC are byte-identical; compat030
+9/9. The UNVERIFIED items above are closed except 26.3. Details: docs/v0.4/verification/p5c/README.md.

@@ -1,0 +1,80 @@
+{
+ "sets": [
+  {
+   "name": "ws-a",
+   "placeholder": false,
+   "folder": "<repo>\\src\\test\\resources\\v040-written\\ws-a"
+  },
+  {
+   "name": "ws-p",
+   "placeholder": false,
+   "folder": "<repo>\\src\\test\\resources\\v040-written\\ws-p"
+  },
+  {
+   "name": "ws-b",
+   "placeholder": false,
+   "folder": "<repo>\\src\\test\\resources\\v040-written\\ws-b"
+  },
+  {
+   "name": "ws-s",
+   "placeholder": false,
+   "folder": "<repo>\\src\\test\\resources\\v040-written\\ws-s"
+  },
+  {
+   "name": "ws-w",
+   "placeholder": false,
+   "folder": "<repo>\\src\\test\\resources\\v040-written\\ws-w"
+  },
+  {
+   "name": "ws-f",
+   "placeholder": false,
+   "folder": "<repo>\\src\\test\\resources\\v040-written\\ws-f"
+  }
+ ],
+ "files": {
+  "awareness.json": [
+   "ws-w"
+  ],
+  "benchmarks.json": [
+   "ws-b"
+  ],
+  "history.json": [
+   "ws-a",
+   "ws-p"
+  ],
+  "pending.json": [
+   "ws-a"
+  ],
+  "profiles.json": [
+   "ws-p"
+  ],
+  "server-limits.json": [
+   "ws-w"
+  ],
+  "settings.json": [
+   "ws-s"
+  ],
+  "startup-times.json": [
+   "ws-f"
+  ],
+  "stutter.json": [
+   "ws-s"
+  ]
+ },
+ "jars": {
+  "mods/e2e-named-1.0.0.jar.disabled": "e2e-named",
+  "mods/e2e-seed-1.0.0.jar.rigtune-pending": "e2e-seed"
+ },
+ "options": {
+  "renderDistance": "8",
+  "maxFps": "60"
+ },
+ "newFiles": {
+  "profiles.json": "d105ac71257c125275cf3f7761b94f77df286a569db3f01a7888c8f607ad5213",
+  "stutter.json": "cfaa8b54b792c245a009aa6f39943d70c612372260e4863eb1e04a86396d50e1",
+  "server-limits.json": "8639363e0ce56635afc603b862d7637a73715849e8752e8e2b1b95bd667bd0ec",
+  "awareness.json": "fb59082e824c2dfb6aef0a2bd3ce41c4fa71e1e661a658cdb6e7391a73774a94",
+  "startup-times.json": "8241a21c31dadbec3a35c21bed7edbb4fd0838b123931056cea450f8bb87f723"
+ },
+ "undoLast": "c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17"
+}
