@@ -7,6 +7,7 @@ import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.FootprintStats;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
+import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
@@ -23,6 +24,9 @@ import net.minecraft.util.FormattedCharSequence;
 
 import javax.management.ObjectName;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryPoolMXBean;
@@ -185,17 +189,52 @@ public class FootprintGameTest implements FabricClientGameTest {
 				Component line = tools.startupLine();
 				check(line != null && line.getString().contains(expected + " s"), "the hub's startup line at " + where + ": " + line);
 				check(mc.font.width(line) <= tools.width - 4, "the startup line fits at " + where + ": " + line.getString());
-				List<FormattedCharSequence> detail = tools.startupDetail();
-				check(!detail.isEmpty(), "the general advice under the startup line at " + where);
-				for (FormattedCharSequence d : detail) {
-					check(mc.font.width(d) <= tools.width - 4, "an advice line fits at " + where);
-				}
+				checkDetail(mc, tools, where);
 			});
 			context.takeScreenshot("footprint-tools-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+		}
+
+		// The longest case, which one fresh launch can't produce: 12 runs and a changed mod set (a canned view).
+		StubController stub = new StubController(RigTuneClient::hardware);
+		StartupTimes.View trend = new StartupTimes.View(15_125L, 14_517L, 12, true);
+		RigTuneController canned = (RigTuneController) Proxy.newProxyInstance(RigTuneController.class.getClassLoader(),
+				new Class<?>[]{RigTuneController.class}, (proxy, method, args) -> "startupTimes".equals(method.getName())
+						? trend : invoke(method, stub, args));
+		context.runOnClient(mc -> mc.gui.setScreen(new ToolsScreen(new TitleScreen(), canned)));
+		context.waitForScreen(ToolsScreen.class);
+		for (int[] size : SIZES) {
+			resize(context, size[0], size[1], size[2]);
+			String where = "the canned trend at " + size[0] + "x" + size[1] + "@" + size[2];
+			context.runOnClient(mc -> {
+				ToolsScreen tools = (ToolsScreen) mc.gui.screen();
+				Component line = tools.startupLine();
+				check(line != null && line.getString().equals("Last launch 15.1 s · median of the last 10: 14.5 s"), where + ": " + line);
+				check(mc.font.width(line) <= tools.width - 4, where + ": the startup line fits");
+				check(tools.startupDetail().size() >= 2, where + ": the mod-set note and the advice");
+				checkDetail(mc, tools, where);
+			});
+			context.takeScreenshot("footprint-tools-trend-" + size[0] + "x" + size[1] + "-scale" + size[2]);
 		}
 		resize(context, 854, 480, 0);
 		context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
 		context.waitForScreen(TitleScreen.class);
+	}
+
+	private static void checkDetail(net.minecraft.client.Minecraft mc, ToolsScreen tools, String where) {
+		List<FormattedCharSequence> detail = tools.startupDetail();
+		check(!detail.isEmpty(), "the general advice under the startup line at " + where);
+		check(!tools.startupDetailClipped(), "every line under the startup line fits above Done at " + where);
+		for (FormattedCharSequence d : detail) {
+			check(mc.font.width(d) <= tools.width - 4, "an advice line fits at " + where);
+		}
+	}
+
+	private static Object invoke(Method method, Object target, Object[] args) throws Throwable {
+		try {
+			return method.invoke(target, args);
+		} catch (InvocationTargetException e) {
+			throw e.getCause();
+		}
 	}
 
 	// RigTune's END_CLIENT_TICK hook on the render thread with a (non-title, non-RigTune) screen open: the path it takes

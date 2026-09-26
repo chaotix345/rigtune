@@ -29,6 +29,7 @@ public class ToolsScreen extends Screen {
 	private final RigTuneController controller;
 	private @Nullable Component startupLine;
 	private List<FormattedCharSequence> startupDetail = new ArrayList<>();
+	private boolean startupDetailClipped;
 	private int startupY;
 
 	public ToolsScreen(@Nullable Screen parent, RigTuneController controller) {
@@ -55,10 +56,14 @@ public class ToolsScreen extends Screen {
 		startupY = y + 4;
 		StartupTimes.View startup = controller.startupTimes();
 		startupLine = startupLine(startup);
-		startupDetail = new ArrayList<>();
+		// Wrapped to the screen (not the buttons) so the note and the advice fit above Done at 640x480, GUI scale 2.
+		List<FormattedCharSequence> detail = new ArrayList<>();
 		for (Component line : startupDetail(startup)) {
-			startupDetail.addAll(font.split(line, buttonWidth));
+			detail.addAll(font.split(line, Math.max(40, width - 16)));
 		}
+		int room = Math.max(0, (height - 30 - (startupY + LINE + 2)) / LINE);
+		startupDetailClipped = detail.size() > room;
+		startupDetail = new ArrayList<>(detail.subList(0, Math.min(room, detail.size())));
 		addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose())
 				.bounds(x, height - 28, buttonWidth, 20).build());
 	}
@@ -113,9 +118,13 @@ public class ToolsScreen extends Screen {
 		return startupLine;
 	}
 
-	// The wrapped lines under the startup line, for tests.
+	// The wrapped lines under the startup line that fit above Done, and whether any didn't, for tests.
 	public List<FormattedCharSequence> startupDetail() {
 		return List.copyOf(startupDetail);
+	}
+
+	public boolean startupDetailClipped() {
+		return startupDetailClipped;
 	}
 
 	@Override
@@ -126,9 +135,6 @@ public class ToolsScreen extends Screen {
 			graphics.centeredText(font, startupLine, width / 2, startupY, COLOR_LABEL);
 			int y = startupY + LINE + 2;
 			for (FormattedCharSequence line : startupDetail) {
-				if (y + LINE > height - 30) {
-					break;
-				}
 				graphics.centeredText(font, line, width / 2, y, COLOR_DETAIL);
 				y += LINE;
 			}
