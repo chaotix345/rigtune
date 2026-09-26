@@ -84,11 +84,17 @@ public class UndoScreen extends Screen {
 		return plan;
 	}
 
+	// The plan is worked out only once this screen's widgets exist: a plan that is ready at once completes on the render
+	// thread and rebuilds the screen, which inside layout() would add every widget a second time.
 	@Override
 	protected void init() {
-		if (!planned) {
+		boolean start = !planned;
+		if (start) {
 			planned = true;
 			loading = true;
+		}
+		layout();
+		if (start) {
 			CompletableFuture.supplyAsync(() -> entryId != null ? controller.undoPlanFor(entryId) : controller.undoPlan(all), Probes.EXECUTOR).whenComplete((result, error) -> minecraft.execute(() -> {
 				plan = error != null ? UndoPlan.unavailable(all, "rigtune.undo.error")
 						: result != null ? result : UndoPlan.unavailable(all, "rigtune.undo.unavailable");
@@ -96,6 +102,9 @@ public class UndoScreen extends Screen {
 				rebuildWidgets();
 			}));
 		}
+	}
+
+	private void layout() {
 		int column = Math.min(width - 32, 480);
 		int buttonWidth = Math.min(150, (column - 4) / 2);
 		int buttonsY = height - 26;

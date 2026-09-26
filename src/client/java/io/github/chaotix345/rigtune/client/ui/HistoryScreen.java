@@ -121,12 +121,22 @@ public class HistoryScreen extends Screen {
 		return out.toString();
 	}
 
+	// The history is read only once this screen's widgets exist: a read that is ready at once completes on the render
+	// thread and rebuilds the screen, which inside layout() would add every widget a second time.
 	@Override
 	protected void init() {
-		if (stale) {
+		boolean refresh = stale;
+		if (refresh) {
 			stale = false;
+			loading = true;
+		}
+		layout();
+		if (refresh) {
 			load();
 		}
+	}
+
+	private void layout() {
 		int column = Math.min(width - 32, 480);
 		HistoryModel.Entry entry = selectedEntry();
 		List<Button> buttons = new ArrayList<>();

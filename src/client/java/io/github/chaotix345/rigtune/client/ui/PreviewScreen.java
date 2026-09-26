@@ -141,10 +141,6 @@ public class PreviewScreen extends Screen {
 
 	@Override
 	protected void init() {
-		if (!started) {
-			started = true;
-			load();
-		}
 		int column = Math.min(width - 32, 480);
 		int footerTop = height - MARGIN / 2 - 20;
 		int listTop = 32;
@@ -154,10 +150,16 @@ public class PreviewScreen extends Screen {
 		list.setScrollAmount(scroll);
 		if (confirm != null) {
 			confirmButtons(column, footerTop);
-			return;
+		} else {
+			int buttonWidth = Math.min(150, column);
+			addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose()).bounds((width - buttonWidth) / 2, footerTop, buttonWidth, 20).build());
 		}
-		int buttonWidth = Math.min(150, column);
-		addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose()).bounds((width - buttonWidth) / 2, footerTop, buttonWidth, 20).build());
+		// Start the preview only once this screen's widgets exist: a preview that is ready at once completes on the render
+		// thread and rebuilds the screen, which inside this init() would add every widget a second time.
+		if (!started) {
+			started = true;
+			load();
+		}
 	}
 
 	// Apply (only once there's something to apply) / Save only / Cancel, in one row.
