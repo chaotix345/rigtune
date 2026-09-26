@@ -19,6 +19,8 @@ name: snapshot-canary
 #   gh workflow run snapshot-canary.yml -f mc=26.4-snapshot-1    # a given id
 
 on:
+  push: # TEMPORARY (WS-0 self-test): removed before merge
+    branches: [feat/v04-foundation]
   schedule:
     - cron: '0 5 * * 3' # Wednesday 05:00 UTC (update-rules.yml runs on Monday)
   workflow_dispatch:
