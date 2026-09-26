@@ -503,18 +503,16 @@ class KnowledgeV2ScenarioTest {
 		}
 	}
 
-	// v0.4: the rules content for keys whose evaluators other workstreams add (driverVersion: WS-W, the stutter keys: WS-S,
-	// the jvm- facts: WS-J) can't fire in the main list today. Each workstream replaces its part of this with scenario tests
-	// for its seeds once its evaluator lands.
+	// v0.4: the rules content for keys whose evaluators other workstreams add (driverVersion: WS-W, the jvm- facts: WS-J)
+	// can't fire in the main list today. Each workstream replaces its part of this with scenario tests for its seeds once
+	// its evaluator lands (the stutter seeds: StutterSeedScenarioTest, WS-S).
 	@Test
 	void theV04ContentFiresNothingUntilItsEvaluatorsLand() {
 		RulesDocument rules = RulesLoader.loadBundled();
 		Set<String> jvm = rules.advice.stream().map(a -> a.id).filter(id -> id.startsWith("jvm-")).collect(Collectors.toSet());
 		Set<String> drivers = rules.advice.stream().map(a -> a.id).filter(id -> id.startsWith("driver-")).collect(Collectors.toSet());
-		Set<String> stutter = rules.stutterAdvice.stream().map(a -> a.id).collect(Collectors.toSet());
 		assertEquals(9, jvm.size(), jvm.toString());
 		assertEquals(Set.of("driver-nvidia-threaded-optimization", "driver-intel-gen7-old"), drivers);
-		assertEquals(5, stutter.size());
 
 		Fixtures.Hw oldNvidia = Fixtures.userRig();
 		oldNvidia.gpu = new GpuInfo("NVIDIA Corporation", "NVIDIA GeForce RTX 3060/PCIe/SSE2", "4.6.0 NVIDIA 531.18", GraphicsBackend.OPENGL, 12288);
@@ -523,7 +521,7 @@ class KnowledgeV2ScenarioTest {
 		for (Fixtures.Hw hw : List.of(Fixtures.userRig(), Fixtures.lowEndLaptop(), oldNvidia, hd4000, tier1Laptop())) {
 			for (List<String> mods : List.of(List.of("sodium"), DH_MODS, List.of("sodium", "iris", "distanthorizons"), List.of("fabric-api"))) {
 				Set<String> fired = advice(run(hw, mods, Map.of("sodium.performance.chunk_build_defer_mode", "ZERO_FRAMES")));
-				for (Set<String> ids : List.of(jvm, drivers, stutter)) {
+				for (Set<String> ids : List.of(jvm, drivers)) {
 					assertTrue(fired.stream().noneMatch(ids::contains), hw.gpu.renderer() + " " + mods + ": " + fired);
 				}
 			}
