@@ -82,6 +82,7 @@ public final class RigTuneClient implements ClientModInitializer {
 		ClientLifecycleEvents.CLIENT_STARTED.register(minecraft -> FootprintStats.clientStarted(() -> real.start(minecraft)));
 		registerStartupTime(real);
 		ClientLifecycleEvents.CLIENT_STOPPING.register(minecraft -> {
+			SettingsSaver.shared().flush(2_000);
 			BenchmarkController.cancel();
 			real.unstageQueuedUpdates();
 			launchHelperIfPending();
