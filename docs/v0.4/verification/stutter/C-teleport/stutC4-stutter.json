@@ -1,0 +1,475 @@
+{
+ "formatVersion": 1,
+ "sessions": [
+  {
+   "startedAt": "2026-09-26T12:25:30Z",
+   "source": "monitor",
+   "mc": "26.2",
+   "collector": "G1",
+   "heapMaxMb": 4096,
+   "sessionSeconds": 146.9,
+   "gameplaySeconds": 130.7,
+   "frames": 7759,
+   "avgFps": 59.4,
+   "onePercentLowFps": 29.6,
+   "histogramCounts": [
+    0,
+    1154,
+    3976,
+    748,
+    1881,
+    0,
+    0,
+    0,
+    0
+   ],
+   "histogramTimeMs": [
+    0,
+    9617,
+    33347,
+    24933,
+    62795,
+    0,
+    0,
+    0,
+    0
+   ],
+   "spikes": {
+    "minor": 0,
+    "major": 0,
+    "severe": 0,
+    "freeze": 0
+   },
+   "lostMs": 0.0,
+   "causes": {},
+   "tags": {},
+   "worst": [],
+   "facts": {
+    "liveSetPct": 10,
+    "fullGcs": 0,
+    "stalls": 0,
+    "explicitGcs": 0,
+    "gcOffsetMs": 17.1
+   },
+   "advice": [],
+   "enoughData": false,
+   "phaseTiming": true,
+   "hitches": 0
+  },
+  {
+   "startedAt": "2026-09-26T12:29:44Z",
+   "source": "monitor",
+   "mc": "26.2",
+   "collector": "ZGC",
+   "heapMaxMb": 4096,
+   "sessionSeconds": 156.8,
+   "gameplaySeconds": 140.5,
+   "frames": 8082,
+   "avgFps": 57.5,
+   "onePercentLowFps": 29.5,
+   "histogramCounts": [
+    0,
+    1321,
+    3849,
+    925,
+    1987,
+    0,
+    0,
+    0,
+    0
+   ],
+   "histogramTimeMs": [
+    0,
+    11008,
+    32301,
+    30833,
+    66339,
+    0,
+    0,
+    0,
+    0
+   ],
+   "spikes": {
+    "minor": 0,
+    "major": 0,
+    "severe": 0,
+    "freeze": 0
+   },
+   "lostMs": 0.0,
+   "causes": {},
+   "tags": {},
+   "worst": [],
+   "facts": {
+    "liveSetPct": 13,
+    "fullGcs": 0,
+    "stalls": 0,
+    "explicitGcs": 30,
+    "gcOffsetMs": 30.0
+   },
+   "advice": [],
+   "enoughData": false,
+   "phaseTiming": true,
+   "hitches": 0
+  },
+  {
+   "startedAt": "2026-09-26T12:36:42Z",
+   "source": "monitor",
+   "mc": "26.2",
+   "collector": "G1",
+   "heapMaxMb": 4096,
+   "sessionSeconds": 156.6,
+   "gameplaySeconds": 140.3,
+   "frames": 381345,
+   "avgFps": 2718.8,
+   "onePercentLowFps": 705.6,
+   "histogramCounts": [
+    381338,
+    5,
+    2,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "histogramTimeMs": [
+    140209,
+    26,
+    27,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "spikes": {
+    "minor": 0,
+    "major": 0,
+    "severe": 0,
+    "freeze": 0
+   },
+   "lostMs": 0.0,
+   "causes": {},
+   "tags": {},
+   "worst": [],
+   "facts": {
+    "liveSetPct": 10,
+    "fullGcs": 0,
+    "stalls": 0,
+    "explicitGcs": 0,
+    "gcOffsetMs": 17.2
+   },
+   "advice": [],
+   "enoughData": false,
+   "phaseTiming": true,
+   "hitches": 0
+  },
+  {
+   "startedAt": "2026-09-26T13:09:31Z",
+   "source": "monitor",
+   "mc": "26.2",
+   "collector": "G1",
+   "heapMaxMb": 4096,
+   "sessionSeconds": 63.3,
+   "gameplaySeconds": 52.5,
+   "frames": 155692,
+   "avgFps": 2966.9,
+   "onePercentLowFps": 432.9,
+   "histogramCounts": [
+    155558,
+    80,
+    35,
+    18,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "histogramTimeMs": [
+    51185,
+    454,
+    391,
+    405,
+    41,
+    0,
+    0,
+    0,
+    0
+   ],
+   "spikes": {
+    "minor": 12,
+    "major": 0,
+    "severe": 0,
+    "freeze": 0
+   },
+   "lostMs": 310.5,
+   "causes": {
+    "gc": 0.06,
+    "unknown": 0.94
+   },
+   "tags": {
+    "afterTeleport": 12
+   },
+   "worst": [
+    {
+     "t": 31.1,
+     "ms": 41.1,
+     "baseMs": 0.3,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 11.0,
+     "ms": 29.8,
+     "baseMs": 0.4,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 25.9,
+     "ms": 27.7,
+     "baseMs": 0.3,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 11.3,
+     "ms": 27.1,
+     "baseMs": 0.4,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 23.0,
+     "ms": 26.8,
+     "baseMs": 0.3,
+     "causes": [
+      "gc:medium",
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 23.0,
+     "ms": 26.2,
+     "baseMs": 0.3,
+     "causes": [
+      "gc:medium",
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 29.9,
+     "ms": 25.3,
+     "baseMs": 0.3,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 27.4,
+     "ms": 23.8,
+     "baseMs": 0.3,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 26.6,
+     "ms": 22.9,
+     "baseMs": 0.3,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 22.6,
+     "ms": 21.7,
+     "baseMs": 0.4,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    }
+   ],
+   "facts": {
+    "liveSetPct": 12,
+    "fullGcs": 0,
+    "stalls": 0,
+    "explicitGcs": 0,
+    "gcOffsetMs": 17.6
+   },
+   "advice": [],
+   "enoughData": false,
+   "phaseTiming": true,
+   "hitches": 11
+  },
+  {
+   "startedAt": "2026-09-26T13:12:06Z",
+   "source": "monitor",
+   "mc": "26.2",
+   "collector": "G1",
+   "heapMaxMb": 4096,
+   "sessionSeconds": 147.5,
+   "gameplaySeconds": 130.6,
+   "frames": 372135,
+   "avgFps": 2850.3,
+   "onePercentLowFps": 446.6,
+   "histogramCounts": [
+    372005,
+    69,
+    32,
+    25,
+    3,
+    1,
+    0,
+    0,
+    0
+   ],
+   "histogramTimeMs": [
+    129049,
+    391,
+    383,
+    533,
+    121,
+    86,
+    0,
+    0,
+    0
+   ],
+   "spikes": {
+    "minor": 17,
+    "major": 1,
+    "severe": 0,
+    "freeze": 0
+   },
+   "lostMs": 532.2,
+   "causes": {
+    "gc": 0.0,
+    "unknown": 1.0
+   },
+   "tags": {
+    "afterTeleport": 16
+   },
+   "worst": [
+    {
+     "t": 100.7,
+     "ms": 85.9,
+     "baseMs": 0.4,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 101.3,
+     "ms": 43.3,
+     "baseMs": 0.5,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 100.6,
+     "ms": 41.1,
+     "baseMs": 0.4,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 102.5,
+     "ms": 36.2,
+     "baseMs": 0.3,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 104.9,
+     "ms": 31.7,
+     "baseMs": 0.3,
+     "causes": [
+      "gc:low",
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 100.6,
+     "ms": 28.1,
+     "baseMs": 0.4,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 100.8,
+     "ms": 27.6,
+     "baseMs": 0.5,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 101.2,
+     "ms": 25.8,
+     "baseMs": 0.4,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 104.1,
+     "ms": 25.3,
+     "baseMs": 0.3,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 108.6,
+     "ms": 24.9,
+     "baseMs": 0.3,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    }
+   ],
+   "facts": {
+    "liveSetPct": 10,
+    "fullGcs": 0,
+    "stalls": 0,
+    "explicitGcs": 0,
+    "gcOffsetMs": 17.1
+   },
+   "advice": [],
+   "enoughData": true,
+   "phaseTiming": true,
+   "hitches": 14
+  }
+ ]
+}

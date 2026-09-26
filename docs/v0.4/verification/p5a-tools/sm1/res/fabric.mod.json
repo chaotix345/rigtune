@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "p5a-sm1",
+  "version": "1.0.0",
+  "name": "RigTune P5-A S-M1 test mixin",
+  "description": "Test-only: hides Minecraft.runTick's tick() call from later mixins so RigTune's phase-timer target is missing.",
+  "environment": "client",
+  "mixins": ["p5a-sm1.mixins.json"],
+  "depends": { "minecraft": "*" }
+}

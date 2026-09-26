@@ -1,0 +1,270 @@
+{
+ "schemaVersion": 1,
+ "runs": [
+  {
+   "id": "2026-09-26T12:59:42Z-cbe5",
+   "createdAt": "2026-09-26T12:59:42Z",
+   "rigtuneVersion": "0.4.0-dev+mc26.2",
+   "mcVersion": "26.2",
+   "mode": "MEASURE",
+   "scene": "BENCHMARK_WORLD",
+   "phase": "single",
+   "targetFps": 170,
+   "targetMet": true,
+   "knobs": {
+    "renderDistance": {
+     "value": 8,
+     "original": 8
+    },
+    "simulationDistance": {
+     "value": 8,
+     "original": 8
+    }
+   },
+   "result": {
+    "avgFps": 3101.0244148591296,
+    "onePercentLowFps": 630.1227707894312,
+    "p99FrameMs": 1.29165,
+    "repeats": 2,
+    "cv": 0.018672623884736783
+   },
+   "costs": {},
+   "notMeasured": {},
+   "world": {
+    "levelId": "rigtune-benchmark",
+    "seed": 8675309
+   },
+   "deadlineHit": false,
+   "context": {
+    "dhRendering": false,
+    "shaders": false,
+    "width": 1280,
+    "height": 720,
+    "fullscreen": false,
+    "protocol": 1,
+    "modSetHash": "cb9fea6c70b5031c86c951d4c23b89547d40502586693ac12d12f8cc86d4ffd1"
+   }
+  },
+  {
+   "id": "2026-09-26T13:02:17Z-ead4",
+   "createdAt": "2026-09-26T13:02:17Z",
+   "rigtuneVersion": "0.4.0-dev+mc26.2",
+   "mcVersion": "26.2",
+   "mode": "MEASURE",
+   "scene": "BENCHMARK_WORLD",
+   "phase": "single",
+   "targetFps": 170,
+   "targetMet": true,
+   "knobs": {
+    "renderDistance": {
+     "value": 8,
+     "original": 8
+    },
+    "simulationDistance": {
+     "value": 8,
+     "original": 8
+    }
+   },
+   "result": {
+    "avgFps": 3131.556135258267,
+    "onePercentLowFps": 634.1603225117289,
+    "p99FrameMs": 1.3138,
+    "repeats": 2,
+    "cv": 0.040218446636334365
+   },
+   "costs": {},
+   "notMeasured": {},
+   "world": {
+    "levelId": "rigtune-benchmark",
+    "seed": 8675309
+   },
+   "deadlineHit": false,
+   "context": {
+    "dhRendering": false,
+    "shaders": false,
+    "width": 1280,
+    "height": 720,
+    "fullscreen": false,
+    "protocol": 1,
+    "modSetHash": "cb9fea6c70b5031c86c951d4c23b89547d40502586693ac12d12f8cc86d4ffd1"
+   }
+  },
+  {
+   "id": "2026-09-26T13:05:06Z-0a04",
+   "createdAt": "2026-09-26T13:05:06Z",
+   "rigtuneVersion": "0.4.0-dev+mc26.2",
+   "mcVersion": "26.2",
+   "mode": "MEASURE",
+   "scene": "BENCHMARK_WORLD",
+   "phase": "single",
+   "targetFps": 170,
+   "targetMet": true,
+   "knobs": {
+    "renderDistance": {
+     "value": 8,
+     "original": 8
+    },
+    "simulationDistance": {
+     "value": 8,
+     "original": 8
+    }
+   },
+   "result": {
+    "avgFps": 2735.808815305363,
+    "onePercentLowFps": 435.03093758785263,
+    "p99FrameMs": 1.62415,
+    "repeats": 2,
+    "cv": 0.36287663128806996
+   },
+   "costs": {},
+   "notMeasured": {},
+   "world": {
+    "levelId": "rigtune-benchmark",
+    "seed": 8675309
+   },
+   "deadlineHit": false,
+   "context": {
+    "dhRendering": false,
+    "shaders": false,
+    "width": 1280,
+    "height": 720,
+    "fullscreen": false,
+    "protocol": 1,
+    "modSetHash": "cb9fea6c70b5031c86c951d4c23b89547d40502586693ac12d12f8cc86d4ffd1"
+   }
+  },
+  {
+   "id": "2026-09-26T13:07:54Z-c75b",
+   "createdAt": "2026-09-26T13:07:54Z",
+   "rigtuneVersion": "0.4.0-dev+mc26.2",
+   "mcVersion": "26.2",
+   "mode": "MEASURE",
+   "scene": "BENCHMARK_WORLD",
+   "phase": "single",
+   "targetFps": 170,
+   "targetMet": true,
+   "knobs": {
+    "renderDistance": {
+     "value": 16,
+     "original": 16
+    },
+    "simulationDistance": {
+     "value": 8,
+     "original": 8
+    }
+   },
+   "result": {
+    "avgFps": 2181.377536083339,
+    "onePercentLowFps": 565.8597600265598,
+    "p99FrameMs": 1.2979500000000002,
+    "repeats": 2,
+    "cv": 0.15235887073416726
+   },
+   "costs": {},
+   "notMeasured": {},
+   "world": {
+    "levelId": "rigtune-benchmark",
+    "seed": 8675309
+   },
+   "deadlineHit": false,
+   "context": {
+    "dhRendering": false,
+    "shaders": false,
+    "width": 1280,
+    "height": 720,
+    "fullscreen": false,
+    "protocol": 1,
+    "modSetHash": "cb9fea6c70b5031c86c951d4c23b89547d40502586693ac12d12f8cc86d4ffd1"
+   }
+  },
+  {
+   "id": "2026-09-26T14:22:51Z-ba53",
+   "createdAt": "2026-09-26T14:22:51Z",
+   "rigtuneVersion": "0.4.0-dev+mc26.2",
+   "mcVersion": "26.2",
+   "mode": "MEASURE",
+   "scene": "BENCHMARK_WORLD",
+   "phase": "single",
+   "targetFps": 170,
+   "targetMet": true,
+   "knobs": {
+    "renderDistance": {
+     "value": 8,
+     "original": 8
+    },
+    "simulationDistance": {
+     "value": 8,
+     "original": 8
+    }
+   },
+   "result": {
+    "avgFps": 2560.510566645913,
+    "onePercentLowFps": 434.67507023370644,
+    "p99FrameMs": 2.059,
+    "repeats": 2,
+    "cv": 0.016572327906003093
+   },
+   "costs": {},
+   "notMeasured": {},
+   "world": {
+    "levelId": "rigtune-benchmark",
+    "seed": 8675309
+   },
+   "deadlineHit": false,
+   "context": {
+    "dhRendering": false,
+    "shaders": false,
+    "width": 1280,
+    "height": 720,
+    "fullscreen": false,
+    "protocol": 1,
+    "modSetHash": "cb9fea6c70b5031c86c951d4c23b89547d40502586693ac12d12f8cc86d4ffd1"
+   }
+  },
+  {
+   "id": "2026-09-26T14:25:23Z-c5d1",
+   "createdAt": "2026-09-26T14:25:23Z",
+   "rigtuneVersion": "0.4.0-dev+mc26.2",
+   "mcVersion": "26.2",
+   "mode": "MEASURE",
+   "scene": "BENCHMARK_WORLD",
+   "phase": "single",
+   "targetFps": 170,
+   "targetMet": true,
+   "knobs": {
+    "renderDistance": {
+     "value": 8,
+     "original": 8
+    },
+    "simulationDistance": {
+     "value": 8,
+     "original": 8
+    }
+   },
+   "result": {
+    "avgFps": 591.1321303562547,
+    "onePercentLowFps": 384.0623079048245,
+    "p99FrameMs": 2.314,
+    "repeats": 2,
+    "cv": 0.045724804379133274
+   },
+   "costs": {},
+   "notMeasured": {},
+   "world": {
+    "levelId": "rigtune-benchmark",
+    "seed": 8675309
+   },
+   "deadlineHit": false,
+   "context": {
+    "dhRendering": false,
+    "shaders": true,
+    "shaderPack": "ComplementaryReimagined_r5.9.3.zip",
+    "width": 1280,
+    "height": 720,
+    "fullscreen": false,
+    "protocol": 1,
+    "modSetHash": "a0a0298a5610b4646086fad0b7720d6149925ee5f3d5ce70e965d005326c4cf9"
+   }
+  }
+ ]
+}

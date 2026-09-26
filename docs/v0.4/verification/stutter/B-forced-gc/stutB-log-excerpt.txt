@@ -1,0 +1,56 @@
+[22:13:45] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, monitor:on, benchWorld, sleep:150, stutterReport:B, shot:stutter-B-top, scroll:300, sleep:1, shot:stutter-B-mid, scroll:700, sleep:1, shot:stutter-B-low, scroll:5000, sleep:1, shot:stutter-B-end, leaveWorld, stutterJson, quit]
+[22:13:46] [Render thread/INFO]: Using graphics backend OpenGL, using drivers: 3.3.0 Core Profile Context 26.8.1.260810
+[22:13:46] [Render thread/INFO]: Using graphics device: AMD Radeon RX 7800 XT (ATI Technologies Inc.)
+[22:13:46] [Render thread/INFO]: Using graphics device extensions: GL_ARB_multi_draw_indirect, GL_ARB_buffer_storage, GL_ARB_shader_draw_parameters, GL_ARB_base_instance, GL_KHR_debug, GL_ARB_draw_indirect, GL_ARB_clip_control, GL_ARB_vertex_attrib_binding, GL_ARB_direct_state_access, GL_EXT_texture_filter_anisotropic
+[22:13:50] [Render thread/INFO]: [P5A] 3.5s title screen at JVM uptime 16246 ms
+[22:13:50] [Render thread/INFO]: [P5A] 4.0s report ready (online false, rules r15 bundled)
+[22:13:50] [Render thread/INFO]: [P5A] 4.1s stutter monitor on
+[22:13:50] [Render thread/INFO]: [P5A] 4.1s opening the benchmark world: true
+[22:13:52] [Render thread/INFO]: Stutter Doctor: capture on (collector g1)
+[22:13:52] [Render thread/INFO]: [P5A] 5.4s in the benchmark world at (0.5, 133.0, 192.5), state READY
+[22:13:53] [RigTune stutter sampler/INFO]: Stutter Doctor: 62 threads {Attach Listener=1, Chunk Render Task Executor #*=10, Common-Cleaner=1, Download-*=4, Finalizer=1, ForkJoinPool.commonPool-delayScheduler=1, ForkJoinPool.commonPool-worker-*=1, HttpClient-2-SelectorManager=1, HttpClient-2-Worker-*=2, IO-Worker-*=6, JNA Cleaner=1, Keep-Alive-Timer=1, Netty Local IO #*=3, Notification Thread=1, Reference Handler=1, Render thread=1, RigTune dev GC=1, RigTune rules=1, RigTune stutter sampler=1, RigTune worker=2, Server thread=1, Signal Dispatcher=1, Sodium Async Cull Thread=1, Sound engine=1, Timer hack thread=1, Worker-Main-*=15, Yggdrasil Key Fetcher=1}
+[22:13:57] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:14:02] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:14:07] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:14:13] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:14:18] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:14:23] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:14:28] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:14:33] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:14:38] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:14:43] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:14:48] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:14:53] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:14:58] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:15:03] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:15:08] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:15:13] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:15:18] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:15:23] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:15:28] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:15:34] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:15:39] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:15:44] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:15:49] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:15:54] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:15:59] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:16:04] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:16:09] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:16:14] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:16:19] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:16:22] [Render thread/INFO]: [P5A] 155.5s opened the Stutter Doctor
+[22:16:23] [Render thread/INFO]: [P5A] 156.4s stutter view: monitorOn true, recording true, live true, advice [Fired[id=stutter-gc-explicit, kind=info, impact=MEDIUM, title=Something asks Java for full garbage collections, text=Some of the stutter overlapped full garbage collections that were requested on purpose (System.gc()). Minecraft itself doesn't do that in normal play, so a mod, or Java freeing direct memory, likely asked for them. If the stutter started after you added or updated a mod, try the game without it.]]
+[22:16:23] [Render thread/INFO]: [P5A] stutter summary (B):
+**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 4096 MB heap
+[22:16:24] [IO-Worker-11/INFO]: [P5A] 156.6s screenshot stutter-B-top: Saved screenshot as p5a-stutB-stutter-B-top.png
+[22:16:24] [Render thread/INFO]: [P5A] 157.0s scroll 300: true
+[22:16:24] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[22:16:25] [IO-Worker-11/INFO]: [P5A] 158.1s screenshot stutter-B-mid: Saved screenshot as p5a-stutB-stutter-B-mid.png
+[22:16:25] [Render thread/INFO]: [P5A] 158.5s scroll 700: true
+[22:16:27] [IO-Worker-11/INFO]: [P5A] 159.6s screenshot stutter-B-low: Saved screenshot as p5a-stutB-stutter-B-low.png
+[22:16:27] [Render thread/INFO]: [P5A] 160.1s scroll 5000: true
+[22:16:28] [IO-Worker-11/INFO]: [P5A] 161.2s screenshot stutter-B-end: Saved screenshot as p5a-stutB-stutter-B-end.png
+[22:16:29] [Render thread/INFO]: [P5A] 161.6s leaving the benchmark world
+[22:16:29] [Render thread/INFO]: Stutter Doctor: capture off; GC listener removed, sampler stopped
+[22:16:29] [RigTune worker/INFO]: Stutter Doctor: session saved (OK): 28 spikes in 140 s of gameplay, phase timing ok (per-frame baselines: packets 4.9 us, ticks 438.0 us, render 1079.3 us; timers seen 1111111), GC offset 17.3 ms
+[22:16:34] [Render thread/INFO]: [P5A] 166.7s quitting

@@ -1,0 +1,23 @@
+[00:11:36] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, monitor:on, benchWorld, sleep:45, stutterReport:DH, shot:stutter-DH-top, leaveWorld, quit]
+[00:11:41] [Render thread/INFO]: [P5A] 3.9s title screen at JVM uptime 11646 ms
+[00:11:41] [Render thread/INFO]: [P5A] 4.4s report ready (online false, rules r15 bundled)
+[00:11:42] [Render thread/INFO]: [P5A] 4.4s stutter monitor on
+[00:11:44] [Server thread/INFO]: [P5A] BEFORE_SAVE at JVM uptime 14607 ms (flush true, force true)
+[00:11:44] [Server thread/INFO]: [P5A] AFTER_SAVE at JVM uptime 14683 ms (flush true, force true)
+[00:11:44] [Render thread/INFO]: [P5A] 4.5s opening the benchmark world: true
+[00:11:46] [Render thread/INFO]: Stutter Doctor: capture on (collector g1)
+[00:11:47] [RigTune stutter sampler/INFO]: Stutter Doctor: 126 threads {Attach Listener=1, Chunk Render Task Executor #*=10, Common-Cleaner=1, DH-AbstractDelayedConfigTimer=1, DH-ApplyConfigPresetTimer=2, DH-Beacon Culling Thread[0]=1, DH-Chunk Update Queue [minecraft:overworld] Thread[0]=1, DH-Chunk Update Queue [minecraft:the_end] Thread[0]=1, DH-Chunk Update Queue [minecraft:the_nether] Thread[0]=1, DH-ChunkSaveIgnoreTimer=6, DH-Cleanup timer=1, DH-ClientLevelTickCleanup=1, DH-ClientTickTimer=1, DH-DataSource Request Ticker [minecraft:overworld] Thread[0]=1, DH-DataSource Request Ticker [minecraft:the_end] Thread[0]=1, DH-DataSource Request Ticker [minecraft:the_nether] Thread[0]=1, DH-Full Data Migration Thread[0]=1, DH-FullDataPayloadSender=1, DH-GLBuffer Cleanup Thread[0]=1, DH-IO Thread[0]=1, DH-IO Thread[1]=1, DH-IO Thread[2]=1, DH-IO Thread[3]=1, DH-IO Thread[4]=1, DH-IO Thread[5]=1, DH-IO Thread[6]=1, DH-IO Thread[7]=1, DH-LOD Builder Thread[0]=1, DH-LOD Builder Thread[1]=1, DH-LOD Builder Thread[2]=1, DH-LOD Builder Thread[3]=1, DH-LOD Builder Thread[4]=1, DH-LOD Builder Thread[5]=1, DH-LOD Builder Thread[6]=1, DH-LOD Builder Thread[7]=1, DH-Log Ticker Thread[0]=1, DH-Phantom Array Recycler Thread[0]=1, DH-Regen Queue [minecraft:overworld] Thread[0]=1, DH-Render Loader Thread[0]=1, DH-Render Loader Thread[1]=1, DH-Render Loader Thread[2]=1, DH-Render Loader Thread[3]=1, DH-Render Loader Thread[4]=1, DH-Render Loader Thread[5]=1, DH-Render Loader Thread[6]=1, DH-Render Loader Thread[7]=1, DH-Request Module Ticker [minecraft:overworld] Thread[0]=1, DH-Request Module Ticker [minecraft:the_end] Thread[0]=1, DH-Request Module Ticker [minecraft:the_nether] Thread[0]=1, DH-Task Picker Re-queue Schedule Thread[0]=1, DH-Update Propagate Queue [minecraft:overworld] Thread[0]=1, DH-Update Propagate Queue [minecraft:the_end] Thread[0]=1, DH-Update Propagate Queue [minecraft:the_nether] Thread[0]=1, DH-World Gen Progress Updater Thread[0]=3, DH-World Gen Queue Thread[0]=3, DH-delayed save cache cleaner Thread[0]=1, Download-*=2, Finalizer=1, ForkJoinPool.commonPool-delayScheduler=1, ForkJoinPool.commonPool-worker-*=1, HttpClient-2-SelectorManager=1, HttpClient-2-Worker-*=2, IO-Worker-*=9, JNA Cleaner=1, Java2D Disposer=1, Keep-Alive-Timer=1, Netty Local IO #*=3, Notification Thread=1, Reference Handler=1, Render thread=1, RigTune rules=1, RigTune stutter sampler=1, RigTune worker=2, Server thread=1, Signal Dispatcher=1, Sodium Async Cull Thread=1, Sound engine=1, Timer hack thread=1, Worker-Main-*=15, Yggdrasil Key Fetcher=1}
+[00:11:48] [Render thread/INFO]: [P5A] 9.1s in the benchmark world at (0.5, 133.0, 192.5), state READY
+[00:12:33] [Render thread/INFO]: [P5A] 54.1s opened the Stutter Doctor
+[00:12:33] [Server thread/INFO]: [P5A] BEFORE_SAVE at JVM uptime 64046 ms (flush false, force false)
+[00:12:33] [Server thread/INFO]: [P5A] AFTER_SAVE at JVM uptime 64059 ms (flush false, force false)
+[00:12:34] [Render thread/INFO]: [P5A] 55.1s stutter view: monitorOn true, recording true, live true, advice []
+[00:12:34] [Render thread/INFO]: [P5A] stutter summary (DH):
+**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 4096 MB heap
+[00:12:34] [IO-Worker-7/INFO]: [P5A] 55.2s screenshot stutter-DH-top: Saved screenshot as p5a-profDH-stutter-DH-top.png
+[00:12:35] [Server thread/INFO]: [P5A] BEFORE_SAVE at JVM uptime 65690 ms (flush true, force false)
+[00:12:36] [Server thread/INFO]: [P5A] AFTER_SAVE at JVM uptime 66443 ms (flush true, force false)
+[00:12:40] [Render thread/INFO]: [P5A] 55.6s leaving the benchmark world
+[00:12:40] [Render thread/INFO]: Stutter Doctor: capture off; GC listener removed, sampler stopped
+[00:12:40] [RigTune worker/INFO]: Stutter Doctor: session saved (OK): 14 spikes in 37 s of gameplay, phase timing ok (per-frame baselines: packets 1.8 us, ticks 132.4 us, render 2091.1 us; timers seen 1111111), GC offset 17.4 ms
+[00:12:45] [Render thread/INFO]: [P5A] 60.7s quitting

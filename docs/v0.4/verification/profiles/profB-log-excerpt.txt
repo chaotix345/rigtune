@@ -1,0 +1,13 @@
+[23:47:52] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, sleep:5, open:profiles, sleep:3, shot:profiles-first, profiles:first, settings:before-maxfps, preview:Max FPS, switch:Max FPS, sleep:2, file:config/rigtune/pending.json, open:history, sleep:3, shot:history-maxfps, history:after-switch, quit]
+[23:47:57] [Render thread/INFO]: [P5A] 4.0s title screen at JVM uptime 11636 ms
+[23:47:57] [Render thread/INFO]: [P5A] 4.5s report ready (online false, rules r15 bundled)
+[23:48:02] [Render thread/INFO]: [P5A] 9.5s opened ProfilesScreen
+[23:48:05] [IO-Worker-1/INFO]: [P5A] 12.6s screenshot profiles-first: Saved screenshot as p5a-profB-profiles-first.png
+[23:48:06] [Render thread/INFO]: [P5A] 13.1s profiles [{id=template:max_fps, name=Max FPS, source=template, active=false}, {id=template:balanced, name=Balanced, source=template, active=false}, {id=template:quality, name=Quality, source=template, active=false}, {id=template:battery, name=Battery, source=template, active=false}, {id=template:recording, name=Recording, source=template, active=false}, {id=p-36392c55-cef2-4092-b0be-150e3446d018, name=My settings, source=baseline, active=false}]
+[23:48:06] [Render thread/INFO]: [P5A] 13.1s settings (388 keys)
+[23:48:06] [Render thread/INFO]: [P5A] 13.2s preview Max FPS: {now=[renderDistance: 12 -> 10, maxFps: 120 -> 260, enableVsync: true -> false], atRestart=[client.advanced.graphics.quality.lodChunkRenderDistanceRadius: 256 -> 96], skipped=[], notes=[]}
+[23:48:06] [Render thread/INFO]: [P5A] 13.2s switched to Max FPS: Switched to Max FPS; 1 change applies after a restart. Undo it in History.
+[23:48:08] [Render thread/INFO]: [P5A] 15.3s opened HistoryScreen
+[23:48:11] [IO-Worker-1/INFO]: [P5A] 18.4s screenshot history-maxfps: Saved screenshot as p5a-profB-history-maxfps.png
+[23:48:12] [Render thread/INFO]: [P5A] 18.9s history: 1 entries; profiles [Max FPS]
+[23:48:12] [Render thread/INFO]: [P5A] 18.9s quitting

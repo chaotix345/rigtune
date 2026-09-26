@@ -1,0 +1,22 @@
+# ./gradlew :26.2:runProductionClientGameTest -PgametestJvmArgs="-XX:+UseZGC -XX:+ZGenerational -Dusing.aikars.flags=x" (run jvm-zgc, BUILD FAILED in 3m 53s)
+189:[21:42:04] [RigTune worker/INFO]: RigTune: Java 25.0.4.1 (Eclipse Adoptium), ZGC (typed), 2 argument notes [-XX:+ZGenerational, -Dusing.aikars.flags]
+782:[21:44:59] [RigTune worker/WARN]: Modrinth lookups failed; using offline data: io.github.chaotix345.rigtune.core.modrinth.ModrinthException: POST https://api.modrinth.com/v2/version_files/update returned HTTP 502: error code: 502
+784:[21:44:59] [RigTune worker/WARN]: Modrinth lookups failed; using offline data: io.github.chaotix345.rigtune.core.modrinth.ModrinthException: POST https://api.modrinth.com/v2/version_files/update returned HTTP 502: error code: 502
+794:[21:45:18] [Test thread/INFO]: UiGameTest: copied report, 1672 characters (CRLF from the clipboard: false):
+836:[21:45:26] [Test thread/INFO]: UiGameTest: tier badge at ScreenRectangle[position=ScreenPosition[x=80, y=50], width=262, height=10] for 1280x720-scale2
+837:[21:45:27] [Test thread/INFO]: UiGameTest: tier badge at ScreenRectangle[position=ScreenPosition[x=16, y=50], width=262, height=10] for 640x480-scale2
+838:[21:45:27] [Test thread/INFO]: UiGameTest: tier badge at ScreenRectangle[position=ScreenPosition[x=16, y=50], width=262, height=10] for 854x480-scale2
+839:[21:45:27] [Test thread/INFO]: UiGameTest: the focused row narrates: Render Distance: 16 → 12 (High impact) button. Selected list row 12 out of 16. Press Enter to uncheck
+840:[21:45:28] [Test thread/INFO]: UiGameTest: networkEnabled=false saved to settings.json
+841:[21:45:33] [RigTune worker/WARN]: Modrinth lookups failed; using offline data: io.github.chaotix345.rigtune.core.modrinth.ModrinthException: Modrinth is off in RigTune's settings
+842:[21:45:33] [Test thread/INFO]: UiGameTest: network on, Modrinth off saved
+843:[21:45:41] [Test thread/ERROR]: Client gametests failed with an exception
+844:java.lang.AssertionError: Timed out waiting for predicate
+846:	at knot//io.github.chaotix345.rigtune.gametest.UiGameTest.waitForSaved(UiGameTest.java:412)
+847:	at knot//io.github.chaotix345.rigtune.gametest.UiGameTest.checkSettings(UiGameTest.java:380)
+848:	at knot//io.github.chaotix345.rigtune.gametest.UiGameTest.runTest(UiGameTest.java:110)
+853:net.fabricmc.loader.impl.FormattedException: java.lang.AssertionError: Timed out waiting for predicate
+858:Caused by: java.lang.AssertionError: Timed out waiting for predicate
+860:	at knot//io.github.chaotix345.rigtune.gametest.UiGameTest.waitForSaved(UiGameTest.java:412)
+861:	at knot//io.github.chaotix345.rigtune.gametest.UiGameTest.checkSettings(UiGameTest.java:380)
+862:	at knot//io.github.chaotix345.rigtune.gametest.UiGameTest.runTest(UiGameTest.java:110)
