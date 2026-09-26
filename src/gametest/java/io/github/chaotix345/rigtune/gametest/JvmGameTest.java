@@ -29,6 +29,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.gui.components.AbstractSelectionList;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -171,6 +172,7 @@ public class JvmGameTest implements FabricClientGameTest {
 
 		openMain(context, shown);
 		resize(context, 854, 480, 2);
+		scrollToEnd(context);
 		context.takeScreenshot("jvm-main-list-854x480-scale2");
 		context.runOnClient(mc -> {
 			List<String> lines = ((RigTuneScreen) mc.gui.screen()).launcherLines().stream().map(Component::getString).toList();
@@ -182,6 +184,9 @@ public class JvmGameTest implements FabricClientGameTest {
 
 		openJvm(context, shown);
 		atEverySize(context, "jvm-findings");
+		resize(context, 640, 480, 2);
+		scrollToEnd(context);
+		context.takeScreenshot("jvm-findings-640x480-scale2-end");
 		context.runOnClient(mc -> {
 			JvmScreen screen = (JvmScreen) mc.gui.screen();
 			List<String> rows = screen.rowText();
@@ -235,6 +240,18 @@ public class JvmGameTest implements FabricClientGameTest {
 		context.waitForScreen(ToolsScreen.class);
 		context.runOnClient(mc -> ((ToolsScreen) mc.gui.screen()).openJvm());
 		context.waitForScreen(JvmScreen.class);
+		context.waitTicks(3);
+	}
+
+	// The advice sits at the end of both lists.
+	private static void scrollToEnd(ClientGameTestContext context) {
+		context.runOnClient(mc -> {
+			for (AbstractWidget w : Screens.getWidgets(mc.gui.screen())) {
+				if (w instanceof AbstractSelectionList<?> list) {
+					list.setScrollAmount(list.maxScrollAmount());
+				}
+			}
+		});
 		context.waitTicks(3);
 	}
 

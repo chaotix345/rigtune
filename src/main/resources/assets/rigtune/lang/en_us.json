@@ -124,7 +124,7 @@
 	"rigtune.jvm.section.advice": "Advice",
 	"rigtune.jvm.section.findings": "Your Java arguments",
 	"rigtune.jvm.section.java": "This Java",
-	"rigtune.jvm.subtitle": "Java's defaults are the baseline: RigTune never suggests adding GC flags.",
+	"rigtune.jvm.subtitle": "RigTune never suggests adding GC flags.",
 	"rigtune.jvm.title": "JVM & memory",
 	"rigtune.jvm.unavailable": "RigTune can't check the Java arguments on this Java (it needs a HotSpot-based Java such as Temurin or Zulu).",
 	"rigtune.jvm.unknown": "unknown",
