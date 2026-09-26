@@ -155,6 +155,14 @@ jobs:
             versions/${{ matrix.mc }}/build/run/productionClientGameTest/crash-reports/
             versions/${{ matrix.mc }}/build/run/productionClientGameTest/hs_err_pid*.log
           if-no-files-found: ignore
+      # The footprint guard's numbers (docs/v0.4/SPEC.md 10): FootprintGameTest's footprint-<mc>-<backend>.json.
+      - name: Upload footprint numbers
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: footprint-${{ matrix.mc }}-${{ matrix.backend }}
+          path: versions/${{ matrix.mc }}/build/run/productionClientGameTest/footprint/
+          if-no-files-found: ignore
 
   python:
     runs-on: ubuntu-latest

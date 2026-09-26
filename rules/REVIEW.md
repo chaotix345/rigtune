@@ -6,7 +6,7 @@ Target MC versions: 26.3, 26.2. Newest: 26.3.
 - New upstream mods to triage: 0
 - Rule mods with a status or removal concern: 0
 - Rule mods missing a Fabric build for 26.3: 4
-- Rules changed or omitted in rules-v1.json: 33
+- Rules changed or omitted in rules-v1.json: 44
 
 ## (a) Upstream mods not yet tracked in knowledge.json
 None found.
@@ -60,3 +60,14 @@ None found.
 | advice[heavy-shaders] | v1 override: when |
 | advice[shaders-entry-level] | omitted ("v1": false) |
 | advice[spark-profiler] | omitted ("v1": false) |
+| advice[jvm-ignored-flags] | omitted ("v1": false) |
+| advice[jvm-young-gen-fixed] | omitted ("v1": false) |
+| advice[jvm-stop-the-world-gc] | omitted ("v1": false) |
+| advice[jvm-no-gc] | omitted ("v1": false) |
+| advice[jvm-server-flags] | omitted ("v1": false) |
+| advice[jvm-explicit-gc-disabled] | omitted ("v1": false) |
+| advice[jvm-zgc-small-heap] | omitted ("v1": false) |
+| advice[jvm-zgc-small-pc] | omitted ("v1": false) |
+| advice[jvm-xmx-duplicate] | omitted ("v1": false) |
+| advice[driver-nvidia-threaded-optimization] | omitted ("v1": false) |
+| advice[driver-intel-gen7-old] | omitted ("v1": false) |
