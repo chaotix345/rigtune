@@ -1,0 +1,36 @@
+[21:21:52] [main/INFO]: Loading Minecraft 26.2 with Fabric Loader 0.19.5
+[21:21:52] [main/INFO]: Loading 171 mods:
+[21:22:04] [main/ERROR]: Error reading performance data from registry for Process.
+[21:22:08] [Download-2/ERROR]: Failed to fetch user properties
+[21:22:12] [Render thread/ERROR]: Illegal option value 0 for Anisotropic Filtering
+[21:22:13] [Download-2/ERROR]: Failed to fetch Realms feature flags
+[21:22:13] [Render thread/ERROR]: loadFromFile(): Failed to load config file '<repo>\versions\26.2\run\config\malilib.json'
+[21:22:13] [Render thread/ERROR]: loadFromFile(): Failed to load config file '<repo>\versions\26.2\run\config\tweakeroo.json'.
+[21:22:13] [Render thread/ERROR]: loadFromFile(): Failed to load config file '<repo>\versions\26.2\run\config\itemscroller.json'.
+[21:22:14] [RigTune worker/INFO]: RigTune: Java 25.0.4.1 (Eclipse Adoptium), G1 (Java's choice), 0 argument notes []
+[21:22:14] [RigTune worker/INFO]: RigTune: launcher not recognised (generic memory advice)
+[21:22:14] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Technologies Inc., renderer=AMD Radeon RX 7800 XT, driverVersion=3.3.0 Core Profile Context 26.8.1.260810, backend=OPENGL, vramMb=16368], totalRamMb=31849, maxHeapMb=7964, display=DisplayInfo[width=2560, height=1440, refreshRate=180, fullscreen=false], hasBattery=false, onBattery=false, osName=Windows 11 10.0, mcVersion=26.2, flags=[sodium-workaround:AMD_GAME_OPTIMIZATION_BROKEN, jvm-gc-g1, jvm-probed]]
+[21:22:15] [Render thread/ERROR]: io exception while checking versions: Read timed out
+[21:22:17] [RigTune worker/INFO]: Launch to title screen: 25342 ms (54 mods)
+[21:22:17] [Download-2/ERROR]: Couldn't connect to realms
+[21:22:19] [ForkJoinPool.commonPool-worker-1/INFO]: RigTune startup footprint: preLaunch + init 37.9 ms on the render thread (CPU 46.9 ms), client start 10.9 ms; RigTune threads used 281.3 ms of CPU in the first 5 s
+[21:22:19] [Test thread/INFO]: Smoke: restored the player's options after the game test reset: [vanilla.renderDistance: 5 -> 32]
+[21:22:22] [Test thread/WARN]: Smoke: the report changed while paging; the text dump has the newer one
+[21:22:22] [Test thread/INFO]: Smoke: wrote <repo>\versions\26.2\run\rigtune-smoke-report.txt
+[21:22:22] [Test thread/INFO]: Smoke: RigTune screen buttons [Settings, Apply (2), Preview, History…, Tools…, Rescan, Copy report, Report a problem, Done]
+[21:22:23] [Test thread/INFO]: Smoke: Preview of the default ticks: 7 rows:
+[21:22:23] [Test thread/INFO]: Smoke: Preview of every appliable item: 14 rows:
+[21:22:24] [Test thread/INFO]: Smoke: Preview wrote nothing: true (112 files hashed, changed [])
+[21:22:24] [Test thread/INFO]: Smoke: Tools screen buttons [Benchmark…, Profiles…, Stutter Doctor…, JVM & memory…, Benchmark history…, Done]
+[21:22:24] [Test thread/INFO]: Smoke: Tools startup line: Last launch 25.3 s
+[21:22:24] [Test thread/INFO]: Smoke: BenchmarkMenuScreen screen buttons [Tune settings (inactive), Measure before (inactive), Measure after (inactive), Back]
+[21:22:24] [Test thread/INFO]: Smoke: ProfilesScreen screen buttons [Switch (inactive), Preview (inactive), Copy code (inactive), Save current…, Rename… (inactive), Delete (inactive), Import code…, Done]
+[21:22:25] [Test thread/INFO]: Smoke: StutterScreen screen buttons [Start, Pause (inactive), Clear, Copy summary (inactive), Done]
+[21:22:25] [Test thread/INFO]: Smoke: JvmScreen screen buttons [Done]
+[21:22:25] [Test thread/INFO]: Smoke: BenchmarkHistoryScreen screen buttons [Done]
+[21:22:25] [Test thread/INFO]: Smoke: Tools tour opened 5 tool screens; files changed (options.txt, mods/, config/ minus RigTune's state): [] (112 files hashed)
+[21:22:28] [Render thread/ERROR]: loadFromFile(): Failed to load config file '<repo>\versions\26.2\run\config\malilib.json'
+[21:22:28] [Render thread/ERROR]: loadFromFile(): Failed to load config file '<repo>\versions\26.2\run\config\tweakeroo.json'.
+[21:22:28] [Render thread/ERROR]: loadFromFile(): Failed to load config file '<repo>\versions\26.2\run\config\itemscroller.json'.
+[21:22:28] [Download-2/ERROR]: Failed to retrieve profile key pair
+[21:22:59] [Test thread/WARN]: Smoke: chunks not all downloaded and rendered after 30 s; taking the in-world screenshot anyway
