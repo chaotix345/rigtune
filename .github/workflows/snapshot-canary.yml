@@ -38,7 +38,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ISSUE_TITLE: 'Snapshot canary: RigTune fails to build against the newest Minecraft snapshot'
+  ISSUE_TITLE: 'Snapshot canary: Minecraft snapshot build is failing'
   ISSUE_LABEL: snapshot-canary
 
 jobs:

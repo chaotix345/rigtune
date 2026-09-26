@@ -226,9 +226,10 @@ open until a green canary run or a human closes it.
 Run it by hand: `gh workflow run snapshot-canary.yml`, or `-f mc=<id>` to test a given version.
 The schedule only fires from the copy on `main`.
 
-When a build fails it opens one issue, "Snapshot canary: RigTune fails to build against the newest
-Minecraft snapshot" (label `snapshot-canary`), with the build reports attached to the run; later
-failures comment on it and the next green run closes it. To fix it:
+When a build fails it opens one issue, "Snapshot canary: Minecraft snapshot build is failing"
+(label `snapshot-canary`), with the build reports attached to the run; later failures comment on
+it and the next green run closes it. Keep the title and the label: the workflow finds its open
+issue by both. To fix it:
 
 1. Reproduce locally: `python tools/add_mc_version.py <snapshot> --prerelease-ok` and
    `./gradlew :<snapshot>:build`. Don't commit the node.
