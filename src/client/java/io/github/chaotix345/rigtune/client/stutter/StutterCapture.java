@@ -34,15 +34,18 @@ final class StutterCapture {
 		return StutterMonitor.startBenchmark(shared(), System.nanoTime(), Instant.now().truncatedTo(ChronoUnit.SECONDS));
 	}
 
+	// The capture is detached even if its copy fails (a capture left behind would keep the other kind from starting).
 	static synchronized Copy stop(StutterMonitor.Capture capture) {
-		Copy copy = copy(capture);
-		if (StutterMonitor.stop(capture)) {
-			GC.stop();
-			SAMPLER.stop();
-			DevStutter.stopForcedGc();
-			RigTune.LOGGER.info("Stutter Doctor: capture off; GC listener removed, sampler stopped");
+		try {
+			return copy(capture);
+		} finally {
+			if (StutterMonitor.stop(capture)) {
+				GC.stop();
+				SAMPLER.stop();
+				DevStutter.stopForcedGc();
+				RigTune.LOGGER.info("Stutter Doctor: capture off; GC listener removed, sampler stopped");
+			}
 		}
-		return copy;
 	}
 
 	static Copy copy(StutterMonitor.Capture capture) {

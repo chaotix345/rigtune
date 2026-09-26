@@ -456,27 +456,35 @@ public class FootprintGameTest implements FabricClientGameTest {
 			}
 
 			// review-9 X3-1: a benchmark run started while the monitor captures ends the session before its own capture starts
-			// (never both rings at once) and a fresh session starts when it ends; the Stutter Doctor's side of a run only.
+			// (never both rings at once), no session starts while it lasts, and a fresh one (paused if the ended one was)
+			// starts when it ends; the Stutter Doctor's side of a run only.
 			context.runOnClient(mc -> controller.setStutterMonitor(true));
 			context.waitFor(mc -> StutterMonitor.session() != null, 100);
-			long[] handover = context.computeOnClient(mc -> {
+			boolean ended = context.computeOnClient(mc -> {
+				controller.pauseStutterMonitor(true);
 				StutterHooks.benchmarkStarted();
-				long ended = StutterMonitor.session() == null ? 1 : 0;
+				return StutterMonitor.session() == null;
+			});
+			context.waitTicks(20);
+			boolean noneDuringRun = StutterMonitor.session() == null;
+			long[] handover = context.computeOnClient(mc -> {
 				StutterHooks.benchmarkSweep(true);
 				long alone = StutterMonitor.session() == null && StutterMonitor.benchmark() != null ? 1 : 0;
 				long during = StutterMonitor.retainedBytes();
 				StutterHooks.benchmarkSweep(false);
 				StutterHooks.benchmarkFinished(false);
-				long resumed = StutterMonitor.session() != null && StutterMonitor.benchmark() == null ? 1 : 0;
-				return new long[]{ended, alone, during, resumed, StutterMonitor.retainedBytes()};
+				StutterMonitor.Capture fresh = StutterMonitor.session();
+				long resumed = fresh != null && fresh.paused() && StutterMonitor.benchmark() == null ? 1 : 0;
+				return new long[]{alone, during, resumed, StutterMonitor.retainedBytes()};
 			});
 			context.runOnClient(mc -> controller.setStutterMonitor(false));
 			context.waitTicks(5);
-			check(handover[0] == 1 && handover[1] == 1, "the benchmark run ended the session before its capture started: " + Arrays.toString(handover));
-			check(handover[3] == 1, "a fresh session after the run: " + Arrays.toString(handover));
+			check(ended && noneDuringRun, "the benchmark run ended the session and none started while it lasted");
+			check(handover[0] == 1, "only the benchmark's capture during its sweep: " + Arrays.toString(handover));
+			check(handover[2] == 1, "a fresh session after the run, paused as the ended one was: " + Arrays.toString(handover));
 			check(StutterMonitor.session() == null && !StutterMonitor.active(), "no capture after the monitor is off again");
 
-			measured.put("monitorOnRetainedBytes", Math.max(onRetained, Math.max(handover[2], handover[4])));
+			measured.put("monitorOnRetainedBytes", Math.max(onRetained, Math.max(handover[1], handover[3])));
 			measured.put("monitorOffRetainedBytes", offRetained);
 			measured.put("monitorOffLeftoverInstances", leftover.values().stream().mapToLong(Long::longValue).sum());
 			measured.put("samplerCpuMsPer60s", round2((samplerCpu - earlyCpu) / 1e6 * SAMPLER_WINDOW_NANOS / (window - earlyWindow)));
@@ -486,7 +494,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 			measured.put("tickHookAllocBytesWorld", tickOff[1]);
 			out.put("monitorIdleRetainedBytes", idleRetained);
 			out.put("monitorSessionRetainedBytes", onRetained);
-			out.put("monitorBenchmarkRetainedBytes", handover[2]);
+			out.put("monitorBenchmarkRetainedBytes", handover[1]);
 			out.put("monitorFrames", frames);
 			// StutterMonitor's phase-timer bits are static: every timer seen since the JVM started, not only this session.
 			out.put("phaseTimersSeen", phaseTimersSeen);

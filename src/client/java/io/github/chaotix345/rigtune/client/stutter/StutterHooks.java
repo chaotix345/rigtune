@@ -120,6 +120,10 @@ public final class StutterHooks {
 		failed = false;
 	}
 
+	static boolean failed() {
+		return failed;
+	}
+
 	// BenchmarkController: started before the run changes any setting (a running session ends); capture on for each sweep,
 	// off in between; finished when the run ends (keep: it wasn't cancelled).
 	public static void benchmarkStarted() {

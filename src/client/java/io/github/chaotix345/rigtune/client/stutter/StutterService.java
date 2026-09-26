@@ -265,7 +265,9 @@ public final class StutterService {
 		StutterCapture.Copy copy = bench == null ? null : StutterCapture.stop(bench);
 		boolean paused = resumePaused;
 		resumePaused = false;
-		if (controller.settings().stutterMonitor && minecraft.level != null && StutterMonitor.session() == null) {
+		// Not after a failed tick: StutterHooks.tick, which ends a session on leaving the world, is off until the monitor is
+		// turned on again.
+		if (!StutterHooks.failed() && controller.settings().stutterMonitor && minecraft.level != null && StutterMonitor.session() == null) {
 			StutterCapture.startSession().aroundBenchmark = true;
 			live = null;
 			if (paused) {
