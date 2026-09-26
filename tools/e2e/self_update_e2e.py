@@ -62,11 +62,10 @@ ENTRY_PHASES = ("entry-apply", "entry-undo", "entry-check")
 # UndoDriver.switchProfile) applies PROFILE_SWITCHES through controller.apply, as a switch does; mode profile switches
 # to --profile-names through WS-P's API and also checks their labels in profiles.json.
 PROFILE_PHASES = ("profile-apply", "profile-undo", "profile-check", "profile-undo-all", "profile-check-all")
-# Found by the first dry run (docs/smoke/self-update/dev-undo-after-restart-040-profiles): SPEC amendment 2n (WS-A).
-# Remove once 2n has merged and this phase passes.
-KNOWN_PROFILE_UNDO = ("Known until SPEC amendment 2n merges (WS-A; AC2n.2): profile-undo is expected to FAIL. The second Undo "
-                      "last skips the Sodium key the first one staged (\"You changed it since (it's now 4)\": UndoPlanner "
-                      "compares with the file, not the pending staged value), so it ends at the first switch's value.")
+# Found by the first dry run (docs/smoke/self-update/dev-undo-after-restart-040-profiles): SPEC amendment 2n (WS-A),
+# merged in 7794d2cd; since then profile-undo counts like every phase (AC2n.2).
+PROFILE_UNDO_2N = ("SPEC amendment 2n (AC2n.2) is merged: profile-undo (the second Undo last on a key the first one staged) "
+                   "must pass and counts in the verdict like every phase.")
 # Both change the vanilla keys (set at once) and the same Sodium key (staged twice before one restart: P-H1); the first
 # also stages a key the second leaves alone.
 PROFILE_SWITCHES = [
@@ -822,9 +821,7 @@ class Run:
                                  self.profile, self.facts.get("sodium"),
                                  "; ".join("`{}` {}".format(s["name"], s.get("settings", "")) for s in self.profile_plan()["switches"]),
                                  self.facts.get("switchEntries")))
-                lines.append("- " + KNOWN_PROFILE_UNDO)
-                others = ["{}: {}".format(p, c.name) for p, cs in self.checks.items() if p != "profile-undo" for c in cs if not c.ok]
-                lines.append("- Failures other than that known phase: {}".format("; ".join(others) if others else "none"))
+                lines.append("- " + PROFILE_UNDO_2N)
         else:
             lines += ["- Old: `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["old"]),
                       "- New (served by the fake Modrinth): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"])]
