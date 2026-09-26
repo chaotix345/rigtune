@@ -355,7 +355,8 @@ public class FootprintGameTest implements FabricClientGameTest {
 	// F-L1 (AC10.4; F-M1): the session monitor in a singleplayer world, on the play path (no screen open). Retention by
 	// explicit accounting: StutterMonitor.retainedBytes() is 0 at idle, the rings while on, and must be back after it's
 	// off, with no sampler thread, no GC listener and no capture object alive (class histogram once the session is saved).
-	// The sampler's CPU is taken over 60 s of wall time from its thread's start; the END_CLIENT_TICK work with the monitor on
+	// The sampler's CPU is gated in steady state, over 60 s of wall time from 5 s after its thread started (coordinator,
+	// 2026-09-26); its first 5 s (start-up, the logged census) are recorded apart. The END_CLIENT_TICK work with the monitor on
 	// is RigTuneClient.onTick plus the monitor's own listener (StutterHooks.tick, private, called through a method handle).
 	// The heap after a full GC before, during and after is a diagnostic only: a live world moves it by megabytes.
 	private static void sessionMonitor(ClientGameTestContext context, RigTuneController controller, HardwareProfile hardware,
@@ -380,7 +381,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 			context.waitFor(mc -> System.nanoTime() - early >= 0, ClientGameTestContext.NO_TIMEOUT);
 			long earlyCpu = ManagementFactory.getThreadMXBean().getThreadCpuTime(sampler);
 			long earlyWindow = System.nanoTime() - start;
-			long deadline = start + SAMPLER_WINDOW_NANOS;
+			long deadline = start + SAMPLER_EARLY_NANOS + SAMPLER_WINDOW_NANOS;
 			context.waitFor(mc -> System.nanoTime() - deadline >= 0, ClientGameTestContext.NO_TIMEOUT);
 			long samplerCpu = ManagementFactory.getThreadMXBean().getThreadCpuTime(sampler);
 			long window = System.nanoTime() - start;
@@ -410,7 +411,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 			measured.put("monitorOnRetainedBytes", onRetained);
 			measured.put("monitorOffRetainedBytes", offRetained);
 			measured.put("monitorOffLeftoverInstances", leftover.values().stream().mapToLong(Long::longValue).sum());
-			measured.put("samplerCpuMsPer60s", round2(samplerCpu / 1e6 * SAMPLER_WINDOW_NANOS / window));
+			measured.put("samplerCpuMsPer60s", round2((samplerCpu - earlyCpu) / 1e6 * SAMPLER_WINDOW_NANOS / (window - earlyWindow)));
 			measured.put("tickHookNsPerCallOn", round2((double) tick[0] / TICK_CALLS));
 			measured.put("tickHookAllocBytesOn", tick[1]);
 			out.put("monitorIdleRetainedBytes", idleRetained);
@@ -419,7 +420,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 			out.put("samplerCpuMs", ms(samplerCpu));
 			out.put("samplerWindowMs", ms(window));
 			out.put("samplerCpuMsFirst5s", ms(earlyCpu));
-			out.put("samplerCpuMsPer60sAfter5s", round2((samplerCpu - earlyCpu) / 1e6 * SAMPLER_WINDOW_NANOS / (window - earlyWindow)));
+			out.put("samplerCpuMsSteadyWindowMs", ms(window - earlyWindow));
 			out.put("samplerSamples", samples);
 			out.put("rigtuneThreadsMonitorOn", threadsOn);
 			out.put("heapAfterGcWorldIdleBytes", idle.heapAfterGcBytes());

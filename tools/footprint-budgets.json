@@ -23,6 +23,6 @@
     "monitorOnRetainedBytes": {"limit": 2621440, "ceiling": 2621440, "what": "session monitor on in a world: StutterMonitor.retainedBytes() (0 at idle)"},
     "monitorOffRetainedBytes": {"limit": 262144, "ceiling": 262144, "what": "session monitor off again: StutterMonitor.retainedBytes()"},
     "monitorOffLeftoverInstances": {"limit": 0, "ceiling": 0, "what": "session monitor off again, its session saved: live FrameRing, StutterRings, capture and snapshot objects (class histogram)"},
-    "samplerCpuMsPer60s": {"limit": 30, "ceiling": 30, "what": "\"RigTune stutter sampler\" CPU per 60 s of wall time with the monitor on in a world, from the thread's start"}
+    "samplerCpuMsPer60s": {"limit": 30, "ceiling": 30, "what": "\"RigTune stutter sampler\" CPU per 60 s of wall time with the monitor on in a world, in steady state (from 5 s after the thread started; coordinator, 2026-09-26)"}
   }
 }
