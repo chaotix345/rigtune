@@ -53,6 +53,7 @@ import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.SafeText;
 import io.github.chaotix345.rigtune.core.model.ServerLimits;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.model.Text;
@@ -545,7 +546,7 @@ public final class RealController implements RigTuneController {
 	private void finishDownloads(DownloadPlanner.@Nullable Result result, @Nullable Throwable error, String entryId) {
 		if (error != null || result == null) {
 			RigTune.LOGGER.error("RigTune downloads failed", error);
-			status = Component.translatable("rigtune.status.download_failed", error == null ? "?" : error.getMessage());
+			status = Component.translatable("rigtune.status.download_failed", error == null ? "?" : SafeText.clean(error.getMessage()));
 			return;
 		}
 		boolean ok = result.ops().isEmpty() || stage(result.ops(), result.opIds(), entryId);

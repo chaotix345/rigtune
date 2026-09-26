@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.core.RepoFiles;
+import io.github.chaotix345.rigtune.core.benchmark.SessionResult;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
@@ -53,6 +54,8 @@ class TextsTest {
 		assertEquals("Free FPS", Texts.component(Text.literal("§cFree " + rlo + "FPS")).getString());
 		assertEquals("Install Sodium", Texts.component(Text.of("rigtune.rec.install.title", "Install %s", "§kSodium")).getString());
 		assertEquals("a b", SafeLiteral.of("a" + (char) 10 + "b").getString());
+		// review-9 SE2-RESIDUAL: a benchmark step's failure message comes from another mod's exception.
+		assertEquals("No pack red", BenchmarkResultScreen.reason(SessionResult.NOT_MEASURED_FAILED + "No pack §cred" + rlo).getString());
 	}
 
 	// RigTune's en_us.json as the game's language, for client code that uses Component.translatable.
