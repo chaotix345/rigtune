@@ -541,6 +541,29 @@ class KnowledgeV2ScenarioTest {
 		assertFalse(advice(run(withFlags(Fixtures.userRig(), "jvm-probed", "jvm-gc-g1"), "sodium")).stream().anyMatch(id -> id.startsWith("jvm-")));
 	}
 
+	// v0.4 SPEC 6 as decided in WS-R's self-review (coordinator, option C): the two ZGC notes never send a player from one to
+	// the other. jvm-zgc-small-heap needs more than 8 GB of RAM, jvm-zgc-small-pc at most 8 GB, so an 8 GB PC raising its heap
+	// from 3 to 4 GB isn't then told to drop ZGC by a second note after following the first.
+	@Test
+	void zgcAdviceNeverLoops() {
+		Map<String, Set<String>> expected = new java.util.LinkedHashMap<>();
+		expected.put("8192/3072", Set.of());
+		expected.put("8192/4096", Set.of("jvm-zgc-small-pc"));
+		expected.put("7900/3072", Set.of());
+		expected.put("7900/4096", Set.of("jvm-zgc-small-pc"));
+		expected.put("16384/3072", Set.of("jvm-zgc-small-heap"));
+		expected.put("16384/4096", Set.of());
+		expected.put("16384/2048", Set.of("jvm-zgc-small-heap"));
+		for (Map.Entry<String, Set<String>> point : expected.entrySet()) {
+			String[] ramHeap = point.getKey().split("/");
+			Fixtures.Hw hw = withFlags(Fixtures.userRig(), "jvm-probed", "jvm-gc-zgc", "jvm-gc-typed");
+			hw.ramMb = Long.parseLong(ramHeap[0]);
+			hw.heapMb = Long.parseLong(ramHeap[1]);
+			Set<String> zgc = advice(run(hw, "sodium")).stream().filter(id -> id.startsWith("jvm-zgc-")).collect(Collectors.toSet());
+			assertEquals(point.getValue(), zgc, "RAM/heap MB " + point.getKey());
+		}
+	}
+
 	// v0.4 SPEC 9: the Intel seed targets only the Gen7 (Ivy Bridge, ig7icd) HD Graphics that Sodium's check for issue #899
 	// covers, as the renderer strings name them.
 	@Test

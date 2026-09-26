@@ -110,8 +110,9 @@ The script stops (exit code 2, nothing written) and lists every problem when
 - (0.4) a key or value 0.2.0/0.3.0 don't know (`driverVersion`, a `jvm-` fact) in a clamp, an
   `avoidWhen` or a `skipUpdateWhen` without `requires` (there, failing closed would drop the
   restriction for them);
-- (0.4) a `jvm-` fact outside the list RigTune sets (`jvm-probed` included), or a rule testing one
-  without `"requires": ["jvm-flags"]`; a Stutter Doctor key outside `stutterAdvice`; a bad
+- (0.4) a `jvm-` fact outside the list RigTune sets (`jvm-probed` included), a main-list rule testing one
+  without `"requires": ["jvm-flags"]`, or one inside `stutterAdvice`; `"requires": ["stutter-doctor"]` on a
+  main-list rule; a Stutter Doctor key outside `stutterAdvice`; a bad
   `driverVersion` (`vendor` missing or unknown, a bound that isn't a dotted version, no bound,
   `atLeast` above `atMost`, an unknown field);
 - (0.4) a bad `profileTemplates` (an unknown or repeated template id, a goal outside

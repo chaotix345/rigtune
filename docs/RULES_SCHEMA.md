@@ -159,7 +159,7 @@ Human-readable names for recommendation titles (and the share report). `name` re
 | feature | known by | needed by |
 |---|---|---|
 | `jvm-flags` | the main list from 0.4 (`Recommender.SUPPORTED_FEATURES`) | every rule that tests a [jvm- fact](#jvm--facts-v2-04) (the updater enforces it) |
-| `stutter-doctor` | only the Stutter Doctor (0.4+), never the main list | every [stutterAdvice](#stutteradvice-v2-04) entry (the updater enforces it) |
+| `stutter-doctor` | only the Stutter Doctor (0.4+), never the main list | every [stutterAdvice](#stutteradvice-v2-04) entry (the updater enforces it, and refuses it on a main-list rule, which the main list would skip) |
 
 RigTune 0.2.0 and 0.3.0 know no features, so they skip every rule with a non-empty `requires`.
 
@@ -241,7 +241,7 @@ RigTune 0.4 reads the running JVM once per session (on-device; raw arguments are
 | `jvm-explicit-gc-disabled` | `-XX:+DisableExplicitGC` |
 | `jvm-xmx-duplicate` | two or more `-Xmx` values (Java uses the last one) |
 
-- The list is `core/jvm/JvmFacts.RULE_FLAGS`, mirrored in the updater (`JVM_FLAGS`). Any other `jvm-` value is refused, and so is `jvm-probed`: RigTune sets it when the check ran, and every jvm- fact is UNKNOWN while it's absent (OpenJ9, or the check not finished yet), so a `not {"flags": ["jvm-…"]}` can't fire by accident.
+- The updater's list (`JVM_FLAGS`) must equal the client's `core/jvm/JvmFacts.RULE_FLAGS`. Any other `jvm-` value is refused, and so is `jvm-probed`: RigTune sets it when the check ran, and every jvm- fact is UNKNOWN while it's absent (OpenJ9, or the check not finished yet), so a `not {"flags": ["jvm-…"]}` can't fire by accident.
 - A rule that tests a jvm- fact needs `"requires": ["jvm-flags"]` (0.2.0/0.3.0 skip it) and `"v1": false`.
 
 ## profileTemplates (v2, 0.4+)
@@ -286,7 +286,7 @@ AdviceRules the Stutter Doctor evaluates against a session's measured facts (doc
 | spikesPerMinuteAtLeast | int ≥ 0 | spikes per minute **× 10** (30 = 3 a minute) |
 | gcCollector | string[] | `g1`, `zgc`, `shenandoah`, `parallel`, `serial` |
 
-The percentages are whole numbers, as JSON integers or digit strings (the map values are strings in the client; plan review K-M1). A malformed value poisons only its own condition. The whole section is left out of rules-v1.json, and its entries take no `v1`.
+The percentages are whole numbers, as JSON integers or digit strings (the map values are strings in the client; plan review K-M1). A malformed value poisons only its own condition. The jvm- facts aren't available here (the Stutter Doctor doesn't know `jvm-flags`), so the updater refuses them in this section. The whole section is left out of rules-v1.json, and its entries take no `v1`.
 
 ## Settings keys
 - `vanilla.<options.txt key>`, e.g. `vanilla.renderDistance`, `vanilla.simulationDistance`, `vanilla.maxFps`, `vanilla.enableVsync`, `vanilla.particles`, `vanilla.biomeBlendRadius`. Values are strings as they appear in options.txt, **without surrounding quotes**.

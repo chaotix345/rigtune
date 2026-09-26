@@ -176,6 +176,19 @@ class StutterAdviceTests(Base):
         self.assert_invalid("needs a text", stutterAdvice=[stutter(text=" ")])
         self.assert_invalid("stutterAdvice must be an array", stutterAdvice={})
 
+    def test_malformed_values_are_reported_not_raised(self):
+        self.assert_invalid("kind must be one of", stutterAdvice=[stutter(kind=["info"])])
+        self.assert_invalid("impact must be one of", stutterAdvice=[stutter(impact={"x": 1})])
+        self.assert_invalid("needs an id", stutterAdvice=[stutter(id=["a"])])
+        self.assert_invalid("not a key profiles manage", profileTemplates=templates(template(settings=[{"key": ["vanilla.maxFps"], "value": 60}])))
+        self.assert_invalid("id must be one of", profileTemplates=templates(template(id=["battery"])))
+
+    def test_collector_names_are_lower_case(self):
+        self.assert_invalid("must be lower case", stutterAdvice=[stutter(when={"gcCollector": ["G1"]})])
+
+    def test_no_jvm_flags_in_stutter_advice(self):
+        self.assert_invalid("doesn't evaluate jvm- flags", stutterAdvice=[stutter(when={"flags": ["jvm-gc-zgc"]}, requires=["stutter-doctor", "jvm-flags"])])
+
     def test_in_v2_never_in_v1(self):
         knowledge = sample_knowledge(stutterAdvice=[stutter()])
         content = ur.assemble_content(knowledge, knowledge["mods"], {}, {})
@@ -199,6 +212,7 @@ class DriverVersionTests(Base):
             ({"vendor": "nvidia", "atMost": "536.22a"}, "dotted version string"),
             ({"vendor": "nvidia", "atMost": ""}, "dotted version string"),
             ({"vendor": "nvidia", "atMost": "1.99999999999"}, "dotted version string"),
+            ({"vendor": "nvidia", "atMost": "５３６.22"}, "dotted version string"),
             ({"vendor": "nvidia", "atLeast": "536.23", "atMost": "536.22"}, "atLeast is above atMost"),
             ({"vendor": "nvidia", "atLeast": "10.1", "atMost": "10"}, "atLeast is above atMost"),
             ({"vendor": "nvidia", "atMost": "536.22", "family": "geforce"}, "unknown field"),
@@ -235,6 +249,12 @@ class JvmFlagTests(Base):
         self.assert_invalid("set by RigTune itself", advice=[dict(jvm_advice(["jvm-gc-g1"]), when={"not": {"flags": ["jvm-probed"]}})])
         self.assert_invalid("outside the known values", advice=[jvm_advice(["jvm-gc-zgcc"])])
         self.assert_invalid("outside the known values", advice=[jvm_advice(["jvm-xms-large"])])
+
+    def test_stutter_doctor_is_refused_in_the_main_list(self):
+        self.assert_invalid("only the Stutter Doctor's feature", advice=[advice(requires=["stutter-doctor"], v1=False)])
+        self.assert_invalid("only the Stutter Doctor's feature", settings=[{"key": "vanilla.renderDistance", "max": 8, "reason": "r", "v1": False,
+                                                                           "requires": ["stutter-doctor"],
+                                                                           "when": {"driverVersion": {"vendor": "amd", "atMost": "1"}}}])
 
     def test_jvm_flags_are_never_v1_or_legacy(self):
         self.assertFalse(ur.is_v1_condition({"flags": ["jvm-gc-zgc"]}))

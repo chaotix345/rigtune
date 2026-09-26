@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "revision": 14,
-  "generatedAt": "2026-09-26T05:19:03Z",
+  "generatedAt": "2026-09-26T06:25:49Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",

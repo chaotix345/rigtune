@@ -86,7 +86,7 @@ STUTTER_MAP_KEYS = {
 STUTTER_PERCENT_KEYS = frozenset({"liveSetPercentAtLeast", "cpuContentionShareAtLeast"})
 # docs/v0.4/SPEC.md 9: {"vendor": <gpuVendor>, "atLeast": "526.47", "atMost": "536.22"}, compared on the parsed ints.
 DRIVER_VERSION_FIELDS = frozenset({"vendor", "atLeast", "atMost"})
-DRIVER_VERSION_RE = re.compile(r"\d{1,9}(?:\.\d{1,9})*")
+DRIVER_VERSION_RE = re.compile(r"[0-9]{1,9}(?:\.[0-9]{1,9})*")
 # docs/v0.4/SPEC.md 6: the JVM facts rules may test under `flags` (WS-J's core/jvm/JvmFacts.RULE_FLAGS). 0.4 evaluates
 # them only for rules with `requires` naming JVM_FEATURE, which 0.2.0/0.3.0 skip. jvm-probed is set by the client (the
 # check ran; plan review J-M1) and isn't rule vocabulary; any other jvm- flag is refused as a typo.
@@ -285,6 +285,8 @@ def condition_problems(cond, allowed_keys=V2_CONDITION_KEYS, path="condition", v
                         problems.append(f"{where}: {v!r} is set by RigTune itself when its JVM check ran; rules can't test it")
                     elif not known_value(key, v, vocabularies):
                         problems.append(f"{where}: {v!r} is outside the known values")
+                    elif key == "gcCollector" and v != v.lower():
+                        problems.append(f"{where}: {v!r} must be lower case")
         elif key == "driverVersion":
             problems += driver_version_problems(value, where)
         elif key in STUTTER_MAP_KEYS:
@@ -551,6 +553,8 @@ def validate_knowledge(knowledge):
                 problems.append(f"{label}: avoidSelected must be true or false")
             problems += feature_problems(label, [rule[f] for f in CONDITION_FIELDS[kind] if f in rule], rule.get("requires"))
             problems += restrictive_problems(kind, rule, label)
+            if string_list(rule.get("requires")) and STUTTER_FEATURE in rule["requires"]:
+                problems.append(f"{label}: \"{STUTTER_FEATURE}\" is only the Stutter Doctor's feature; the main list would skip this rule")
             if not unknown:
                 try:
                     project_rule(kind, rule, i)
@@ -623,7 +627,7 @@ def template_setting_problems(label, entry, template_requires):
     unknown = sorted(set(entry) - V1_RULE_FIELDS["settings"] - V2_ONLY_RULE_FIELDS["settings"])
     if unknown:
         problems.append(f"{label}: unknown field(s) {', '.join(unknown)}")
-    if entry.get("key") not in MANAGED_PROFILE_KEYS:
+    if not isinstance(entry.get("key"), str) or entry["key"] not in MANAGED_PROFILE_KEYS:
         problems.append(f"{label}: not a key profiles manage (docs/RULES_SCHEMA.md \"profileTemplates\")")
     has_value = "value" in entry
     has_clamp = "min" in entry or "max" in entry
@@ -672,16 +676,17 @@ def stutter_advice_problems(section):
             seen.add(rule["id"])
         if not string_list(rule.get("requires")) or STUTTER_FEATURE not in rule["requires"]:
             problems.append(f'{label}: needs "requires": ["{STUTTER_FEATURE}"]')
-        if rule.get("kind") not in ADVICE_KINDS:
+        if not isinstance(rule.get("kind"), str) or rule["kind"] not in ADVICE_KINDS:
             problems.append(f"{label}: kind must be one of {', '.join(sorted(ADVICE_KINDS))}")
-        if rule.get("impact") not in IMPACTS:
+        if not isinstance(rule.get("impact"), str) or rule["impact"] not in IMPACTS:
             problems.append(f"{label}: impact must be one of {', '.join(sorted(IMPACTS))}")
         for field in ("title", "text"):
             if not isinstance(rule.get(field), str) or not rule[field].strip():
                 problems.append(f"{label}: needs a {field}")
         if "when" in rule:
             problems += [f"{label}: {p}" for p in condition_problems(rule["when"], allowed, "when")]
-            problems += feature_problems(label, [rule["when"]], rule.get("requires"))
+            if uses_jvm_flag(rule["when"]):
+                problems.append(f"{label}: the Stutter Doctor doesn't evaluate jvm- flags (the main list's {JVM_FEATURE} feature)")
     return problems
 
 

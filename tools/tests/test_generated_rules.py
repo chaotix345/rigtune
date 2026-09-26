@@ -16,17 +16,31 @@ CAP_REASON = ("Avoids rendering frames your monitor can't show; with FreeSync or
               "variable-refresh range.")
 VSYNC_REASON = "Optional: turning VSync off lowers input lag but can cause tearing; leave it on if you see tearing."
 VRR_WHEN = {"refreshRateAtLeast": 30, "not": {"onBattery": True}}
-# AC6.5: every number in a jvm-* advice text traces to docs/research/v0.4/jvm-gc.md §4 (or is a threshold SPEC 6 sets).
+# AC6.5: every number in a jvm-* advice text traces to docs/research/v0.4/jvm-gc.md §4 (or is a threshold or fact SPEC 6
+# sets), per rule, so a number can't wander into a claim it doesn't support.
 JVM_TEXT_NUMBERS = {
-    "1": "the \"1% low\" metric",
-    "2": "ZGC at -Xmx2G, §4.3",
-    "4": "the -Xmx4G heap of every §4 run",
-    "4096": "-Xmx4G = 4096 MB: Aikar's set committed all of it (§4.2); ZGC committed 3852 of it",
-    "3852": "ZGC's committed heap at -Xmx4G, §4.2",
-    "1.3": "G1 default committed 1316 MB at -Xmx4G, §4.2",
-    "8": "the 8 GB RAM threshold of jvm-zgc-small-pc (SPEC 6)",
-    "16": "the 16 GB RAM threshold of jvm-server-flags (SPEC 6)",
+    "jvm-server-flags": {
+        "1": "the \"1% low\" metric",
+        "4096": "Aikar's set committed all 4096 MB at -Xms4G -Xmx4G, §4.2",
+        "4": "the -Xmx4G heap of every §4.2 run",
+        "1.3": "G1 default committed 1316 MB at -Xmx4G, §4.2",
+        "16": "the 16 GB RAM threshold (SPEC 6)",
+    },
+    "jvm-zgc-small-heap": {
+        "2": "ZGC at -Xmx2G, §4.3",
+        "1": "the \"1% low\" metric: 564 at 2 GB vs 627 at 4 GB, §4.3",
+        "4": "ZGC at -Xmx4G, §4.3; 4 GB is also what ram-low recommends",
+    },
+    "jvm-zgc-small-pc": {
+        "3.9": "ZGC committed 3852 MB at -Xmx4G, §4.2 (3.9 GB in §0)",
+        "4": "the -Xmx4G heap, §4.2",
+        "1.3": "G1 default committed 1316 MB at -Xmx4G, §4.2",
+        "8": "the 8 GB RAM threshold (SPEC 6)",
+        "26.1": "Mojang's launcher defaults to ZGC from 26.1 (launcher-steps.md finding 5)",
+    },
 }
+# J-M2: no -Xms advice; only jvm-server-flags names it, as part of Aikar's set it describes.
+XMS_ALLOWED = {"jvm-server-flags"}
 NUMBER_RE = re.compile(r"(?<![\w.+-])\d+(?:\.\d+)?")
 
 
@@ -129,14 +143,21 @@ class GeneratedRulesTests(unittest.TestCase):
             self.assertEqual(rule["requires"], ["jvm-flags"], rule_id)
             self.assertEqual(rule["kind"], kinds.get(rule_id, "info"), rule_id)
             for number in NUMBER_RE.findall(rule["text"]):
-                self.assertIn(number, JVM_TEXT_NUMBERS, f"{rule_id}: {number}")
-            self.assertNotIn("-Xms", rule["text"].replace("with the -Xms that comes with them", ""), f"{rule_id}: no -Xms advice (J-M2)")
+                self.assertIn(number, JVM_TEXT_NUMBERS.get(rule_id, {}), f"{rule_id}: {number}")
+            if rule_id not in XMS_ALLOWED:
+                self.assertNotIn("-Xms", rule["text"], f"{rule_id}: no -Xms advice (J-M2)")
             self.assertNotIn("AlwaysPreTouch", rule["text"], rule_id)
         self.assertEqual(rules["jvm-server-flags"]["when"]["ramMbAtMost"], 16384)
         self.assertEqual(rules["jvm-zgc-small-heap"]["when"]["heapMbAtMost"], 3072)
-        self.assertGreaterEqual(rules["jvm-zgc-small-heap"]["when"]["ramMbAtLeast"], 7 * 1024, "only on PCs with about 8 GB or more")
-        self.assertIn("slightly lower 1% lows", rules["jvm-zgc-small-heap"]["text"])
+        # Coordinator decision (self-review, option C): small-heap only above 8 GB, so an 8 GB PC is never sent from one ZGC
+        # rule to the other (KnowledgeV2ScenarioTest.zgcAdviceNeverLoops).
+        self.assertEqual(rules["jvm-zgc-small-heap"]["when"], {"flags": ["jvm-gc-zgc"], "heapMbAtMost": 3072, "ramMbAtLeast": 8193})
+        self.assertIn("test PC, ZGC with 2 GB gave slightly lower 1% lows than with 4 GB", rules["jvm-zgc-small-heap"]["text"])
         self.assertEqual(rules["jvm-zgc-small-pc"]["when"], {"flags": ["jvm-gc-zgc"], "ramMbAtMost": 8192, "heapMbAtLeast": 4096})
+        for rule_id in ("jvm-zgc-small-heap", "jvm-zgc-small-pc"):
+            for claim in ("FPS", "frame rate", "should"):
+                self.assertNotIn(claim, rules[rule_id]["text"], rule_id)
+        self.assertIn("official Minecraft Launcher's default since 26.1", rules["jvm-zgc-small-pc"]["text"])
 
     # SPEC 9: the two verified seeds only.
     def test_driver_seeds(self):
