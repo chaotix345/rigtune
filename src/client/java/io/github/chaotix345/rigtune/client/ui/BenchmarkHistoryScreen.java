@@ -143,7 +143,7 @@ public class BenchmarkHistoryScreen extends Screen {
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, COLOR_TEXT);
 		int y = linesTop;
 		for (Row row : rows) {
-			graphics.centeredText(font, row.text(), width / 2, y, row.color());
+			graphics.centeredText(font, row.text(), width / 2, y, Palette.of(row.color()));
 			y += LINE;
 		}
 		int area = Math.min(width - 16, 460);

@@ -1,0 +1,100 @@
+RigTune production smoke report
+Created 2026-09-26T11:55:57.525093900Z, goal BALANCED, rules revision 15 (bundled), online true
+Restored after the game test reset: vanilla.renderDistance: 5 -> 32
+
+Hardware
+  CPU      AMD Ryzen 7 7800X3D 8-Core Processor, 8 cores / 16 threads, max 4200 MHz
+  GPU      AMD Radeon RX 7800 XT (ATI Technologies Inc.), driver 3.3.0 Core Profile Context 26.8.1.260810, OPENGL, VRAM 16368 MB
+  GPU class GpuClass[vendor=AMD, integrated=false, tier=5, matchedPattern=(?i)RX\s*(?:6[89][05]0|7[89]00|90[7-9]0)\b]
+  Memory   31849 MB RAM, 7964 MB max heap
+  Display  2560x1440 @ 180 Hz, fullscreen false
+  Battery  present false, on battery false
+  System   Windows 11 10.0, Minecraft 26.3, flags [sodium-workaround:AMD_GAME_OPTIMIZATION_BROKEN, jvm-gc-g1, jvm-probed]
+
+Estimated tier 5 (effective 5): GPU 5, CPU 5, memory 5, lowest estimated gpu, cpu, mem
+
+Recommendations: 15 (ADD_MOD 13, SETTING 1, ADVICE 1), shown on 4 screen page(s)
+
+== ADD_MOD (13)
+- [MEDIUM] Install Better Block Entities  (ticked)
+    reason: Draws chests, signs, beds and similar blocks much more cheaply, which helps a lot in storage rooms and large bases.
+    action: add Better Block Entities (Modrinth better-block-entities, ONZm0H7Y)
+    id: add:better-block-entities
+- [MEDIUM] Install C2ME
+    reason: Generates and loads chunks on several CPU cores at once, so new terrain appears faster while you explore. RigTune doesn't also offer Fast Noise or Material Rule Compiler, which conflict with it. (alpha build)
+    action: add C2ME (Modrinth c2me-fabric, VSNURh3q)
+    id: add:c2me-fabric
+- [MEDIUM] Install Dynamic FPS  (ticked)
+    reason: Lowers the frame rate while Minecraft is in the background or minimised, which saves power, reduces heat and frees your PC for other apps.
+    action: add Dynamic FPS (Modrinth dynamic-fps, LQ3K71Q1)
+    id: add:dynamic-fps
+- [MEDIUM] Install ModernFix-mVUS  (ticked)
+    reason: Makes the game start faster and use less memory. This is the community build for current Minecraft versions, because the original ModernFix has no release for them.
+    action: add ModernFix-mVUS (Modrinth modernfix-mvus, TjSm1wrD)
+    id: add:modernfix-mvus
+- [MEDIUM] Install More Culling  (ticked)
+    reason: Skips drawing even more things you can't see, such as hidden leaf faces and item frames, on top of what Sodium and Entity Culling already skip.
+    action: add More Culling (Modrinth moreculling, 51shyZVL)
+    id: add:moreculling
+- [MEDIUM] Install ScalableLux
+    reason: A faster lighting engine based on Starlight, so loading chunks and changing blocks costs less CPU time. (alpha build)
+    action: add ScalableLux (Modrinth scalablelux, Ps1zyz6x)
+    id: add:scalablelux
+- [LOW] Install Async Logger  (ticked)
+    reason: Moves Minecraft's log writing off the main thread and filters noisy log spam, which avoids small stutters from disk I/O.
+    action: add Async Logger (Modrinth asynclogger, zvNzKfGF)
+    id: add:asynclogger
+- [LOW] Install BadOptimizations
+    reason: A set of small client-side optimisations, such as skipping lighting and sky-colour updates when nothing has changed. It isn't part of the popular optimisation modpacks, so it starts unticked.
+    action: add BadOptimizations (Modrinth badoptimizations, g96Z4WVZ)
+    id: add:badoptimizations
+- [LOW] Install Debugify
+    reason: Fixes a long list of known vanilla bugs. Only a few affect performance, so it starts unticked.
+    action: add Debugify (Modrinth debugify, QwxR6Gcd)
+    id: add:debugify
+- [LOW] Install FastQuit  (ticked)
+    reason: Takes you back to the title screen straight away while your world finishes saving in the background.
+    action: add FastQuit (Modrinth fastquit, x1hIzbuY)
+    id: add:fastquit
+- [LOW] Install Ixeris  (ticked)
+    reason: Handles window and input events on a separate thread, which can smooth out frame times. On Windows it also reads raw mouse input in batches, which helps most with a high-polling-rate mouse; per its changelog, that part isn't ported to Minecraft 26.3's new SDL window system yet, so the gain there is smaller.
+    action: add Ixeris (Modrinth ixeris, p8RJPJIC)
+    id: add:ixeris
+- [LOW] Install Sodium Extra
+    reason: Adds extra video options to Sodium, such as turning off individual animations, particles or fog, so you can trade looks for FPS.
+    action: add Sodium Extra (Modrinth sodium-extra, PtjYWJkn)
+    id: add:sodium-extra
+- [LOW] Install Structure Layout Optimizer  (ticked)
+    reason: Speeds up how jigsaw structures like villages, bastions and ancient cities generate, which cuts stutter from worldgen on your singleplayer world's built-in server.
+    action: add Structure Layout Optimizer (Modrinth structure-layout-optimizer, ayPU0OHc)
+    id: add:structure-layout-optimizer
+
+== SETTING (1)
+- [MEDIUM] Render Distance: 32 → 12
+    reason: Your hardware is strong enough for 16 chunks as a starting point; the benchmark can push it further. Distant Horizons already draws the far terrain cheaply, so vanilla chunks beyond 12 cost frame rate without adding much view distance.
+    action: set vanilla.renderDistance: 32 -> 12
+    id: set:vanilla.renderDistance
+
+== ADVICE (1)
+- [LOW] AMD driver issue handled by Sodium
+    reason: Your AMD driver applies a Minecraft-specific tweak that can make terrain invisible. Sodium hides the game from that driver check automatically, so you don't need to do anything.
+    action: none (advice only)
+    id: advice:sodium-amd-game-optimization
+
+Top-level mods loaded (16)
+  distanthorizons 3.3.2
+  entityculling 1.11.2
+  fabric-api 0.161.0+26.3
+  fabric-client-gametest-api-v1 6.0.7+4be74c3f5d
+  fabricloader 0.19.5
+  ferritecore 9.0.0
+  immediatelyfast 1.17.1+26.3
+  iris 1.11.6+mc26.3
+  java 25
+  lithium 0.26.1+mc26.3
+  minecraft 26.3
+  modmenu 21.0.0
+  placeholder-api 3.2.0+26.3
+  rigtune 0.4.0-dev+mc26.3
+  rigtune-gametest 1.0.0
+  sodium 0.9.2+mc26.3

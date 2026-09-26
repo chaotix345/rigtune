@@ -86,7 +86,7 @@ public class ToolsScreen extends Screen {
 			return List.of();
 		}
 		return view.modSetChanged()
-				? List.of(Component.translatable("rigtune.startup.mod_set_changed").withColor(COLOR_NOTE), Component.translatable("rigtune.startup.advice"))
+				? List.of(Component.translatable("rigtune.startup.mod_set_changed").withColor(Palette.of(COLOR_NOTE)), Component.translatable("rigtune.startup.advice"))
 				: List.of(Component.translatable("rigtune.startup.advice"));
 	}
 
@@ -132,10 +132,10 @@ public class ToolsScreen extends Screen {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
 		if (startupLine != null) {
-			graphics.centeredText(font, startupLine, width / 2, startupY, COLOR_LABEL);
+			graphics.centeredText(font, startupLine, width / 2, startupY, Palette.of(COLOR_LABEL));
 			int y = startupY + LINE + 2;
 			for (FormattedCharSequence line : startupDetail) {
-				graphics.centeredText(font, line, width / 2, y, COLOR_DETAIL);
+				graphics.centeredText(font, line, width / 2, y, Palette.of(COLOR_DETAIL));
 				y += LINE;
 			}
 		}

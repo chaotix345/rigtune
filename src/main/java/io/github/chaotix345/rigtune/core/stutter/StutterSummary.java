@@ -1,5 +1,7 @@
 package io.github.chaotix345.rigtune.core.stutter;
 
+import io.github.chaotix345.rigtune.core.report.MarkdownSafe;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -77,7 +79,7 @@ public final class StutterSummary {
 			out.append("GC timing not calibrated yet\n");
 		}
 		if (!advice.isEmpty()) {
-			out.append("Advice: ").append(String.join("; ", advice.stream().map(StutterAdvisor.Fired::title).toList())).append('\n');
+			out.append("Advice: ").append(String.join("; ", advice.stream().map(a -> MarkdownSafe.field(a.title())).toList())).append('\n');
 		}
 		String text = out.toString();
 		return text.length() <= LIMIT ? text : text.substring(0, LIMIT - 1) + "…";

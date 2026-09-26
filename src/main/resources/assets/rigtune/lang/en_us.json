@@ -197,6 +197,8 @@
 	"rigtune.download.staged_incompatible": "Modrinth marks %s, which is waiting for a restart, as incompatible with %s",
 	"rigtune.download.stale": "its Modrinth data changed since the list was made; try again",
 	"rigtune.download.target_exists": "%s is already in the mods folder",
+	"rigtune.a11y.row.select": "Press Enter or Space to select",
+	"rigtune.a11y.selected": "Selected",
 	"rigtune.impact.high": "High",
 	"rigtune.impact.medium": "Medium",
 	"rigtune.impact.low": "Low",

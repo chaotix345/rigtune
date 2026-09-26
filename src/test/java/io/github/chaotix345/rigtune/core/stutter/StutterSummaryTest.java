@@ -42,6 +42,14 @@ class StutterSummaryTest {
 	}
 
 	@Test
+	void adviceTitlesAreInertMarkdown() {
+		String text = StutterSummary.text(report(true, true, 21.7),
+				List.of(new StutterAdvisor.Fired("a", "warning", Impact.HIGH, "*@everyone* [x](https://e.test) <@&123> ||spoiler||", "x")));
+		assertTrue(text.contains("Advice: \\*@\u200Beveryone\\* \\[x\\](https://e.test) \\<@\u200B&123> \\|\\|spoiler\\|\\|\n"), text);
+		assertFalse(text.contains("@everyone"), text);
+	}
+
+	@Test
 	void caveatsAreSpelledOut() {
 		String text = StutterSummary.text(report(false, false, null), List.of());
 		assertTrue(text.contains("Not enough data yet"), text);

@@ -91,7 +91,7 @@ class ChangeDetectorTest {
 		Fingerprint vk = with(AMD, "NVIDIA", "NVIDIA GeForce RTX 3070", "1.3.296 NVIDIA 560.94", GraphicsBackend.VULKAN);
 		assertEquals(NONE, ChangeDetector.compare(gl, vk).kind());
 		assertEquals(NONE, ChangeDetector.compare(vk, gl).kind());
-		Fingerprint amdVk = with(AMD, "AMD", "AMD Radeon RX 7800 XT", "1.3.296 AMD proprietary driver 26.8.1", GraphicsBackend.VULKAN);
+		Fingerprint amdVk = with(AMD, "AMD", "AMD Radeon RX 7800 XT", "1.3.260 AMD open-source driver 2023.Q3.1 (LLPC)", GraphicsBackend.VULKAN);
 		assertEquals(NONE, ChangeDetector.compare(AMD, amdVk).kind(), "unparseable across a backend switch: can't tell, no notice");
 		Fingerprint vkNewer = with(AMD, "NVIDIA", "NVIDIA GeForce RTX 3070", "1.3.296 NVIDIA 566.03", GraphicsBackend.VULKAN);
 		ChangeDetector.Change both = ChangeDetector.compare(gl, vkNewer);

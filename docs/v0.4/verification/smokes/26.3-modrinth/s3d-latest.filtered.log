@@ -1,0 +1,28 @@
+[21:55:30] [main/INFO]: Loading Minecraft 26.3 with Fabric Loader 0.19.5
+[21:55:30] [main/INFO]: Loading 66 mods:
+[21:55:40] [main/ERROR]: Error reading performance data from registry for Process.
+[21:55:44] [Download-2/ERROR]: Failed to fetch user properties
+[21:55:44] [Render thread/ERROR]: Illegal option value 0 for Anisotropic Filtering
+[21:55:46] [Download-4/ERROR]: Failed to fetch Realms feature flags
+[21:55:47] [RigTune worker/INFO]: RigTune: Java 25.0.4.1 (Eclipse Adoptium), G1 (Java's choice), 0 argument notes []
+[21:55:47] [RigTune worker/INFO]: RigTune: launcher not recognised (generic memory advice)
+[21:55:47] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Technologies Inc., renderer=AMD Radeon RX 7800 XT, driverVersion=3.3.0 Core Profile Context 26.8.1.260810, backend=OPENGL, vramMb=16368], totalRamMb=31849, maxHeapMb=7964, display=DisplayInfo[width=2560, height=1440, refreshRate=180, fullscreen=false], hasBattery=false, onBattery=false, osName=Windows 11 10.0, mcVersion=26.3, flags=[sodium-workaround:AMD_GAME_OPTIMIZATION_BROKEN, jvm-gc-g1, jvm-probed]]
+[21:55:48] [RigTune worker/INFO]: Launch to title screen: 18068 ms (14 mods)
+[21:55:48] [Download-4/ERROR]: Couldn't connect to realms
+[21:55:50] [Test thread/INFO]: Smoke: restored the player's options after the game test reset: [vanilla.renderDistance: 5 -> 32]
+[21:55:52] [ForkJoinPool.commonPool-worker-1/INFO]: RigTune startup footprint: preLaunch + init 72.7 ms on the render thread (CPU 78.1 ms), client start 33.2 ms; RigTune threads used 218.8 ms of CPU in the first 5 s
+[21:56:01] [Test thread/INFO]: Smoke: wrote <repo>\versions\26.3\run\rigtune-smoke-report.txt
+[21:56:01] [Test thread/INFO]: Smoke: RigTune screen buttons [Settings, Apply (8), Preview, History…, Tools…, Rescan, Copy report, Report a problem, Done]
+[21:56:02] [Test thread/INFO]: Smoke: Preview of the default ticks: 12 rows:
+[21:56:03] [Test thread/INFO]: Smoke: Preview of every appliable item: 20 rows:
+[21:56:03] [Test thread/INFO]: Smoke: Preview wrote nothing: true (25 files hashed, changed [])
+[21:56:03] [Test thread/INFO]: Smoke: Tools screen buttons [Benchmark…, Profiles…, Stutter Doctor…, JVM & memory…, Benchmark history…, Done]
+[21:56:03] [Test thread/INFO]: Smoke: Tools startup line: Last launch 18.1 s
+[21:56:03] [Test thread/INFO]: Smoke: BenchmarkMenuScreen screen buttons [Tune settings (inactive), Measure before (inactive), Measure after (inactive), Back]
+[21:56:04] [Test thread/INFO]: Smoke: ProfilesScreen screen buttons [Switch (inactive), Preview (inactive), Copy code (inactive), Save current…, Rename… (inactive), Delete (inactive), Import code…, Done]
+[21:56:04] [Test thread/INFO]: Smoke: StutterScreen screen buttons [Start, Pause (inactive), Clear, Copy summary (inactive), Done]
+[21:56:05] [Test thread/INFO]: Smoke: JvmScreen screen buttons [Done]
+[21:56:05] [Test thread/INFO]: Smoke: BenchmarkHistoryScreen screen buttons [Done]
+[21:56:05] [Test thread/INFO]: Smoke: Tools tour opened 5 tool screens; files changed (options.txt, mods/, config/ minus RigTune's state): [] (25 files hashed)
+[21:56:08] [RigTune worker/WARN]: Modrinth lookups failed; using offline data: io.github.chaotix345.rigtune.core.modrinth.ModrinthException: POST https://api.modrinth.com/v2/version_files/update returned HTTP 502: error code: 502
+[21:56:39] [Test thread/WARN]: Smoke: chunks not all downloaded and rendered after 30 s; taking the in-world screenshot anyway

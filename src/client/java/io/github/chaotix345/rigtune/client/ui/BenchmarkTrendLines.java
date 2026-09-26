@@ -53,10 +53,10 @@ public final class BenchmarkTrendLines {
 		if (last == null) {
 			return null;
 		}
-		MutableComponent out = Texts.component(last).withStyle(s -> s.withColor(COLOR_NORMAL));
+		MutableComponent out = Texts.component(last).withStyle(s -> s.withColor(Palette.of(COLOR_NORMAL)));
 		Text rerun = TrendText.rerun(view.stale());
 		if (rerun != null) {
-			out.append(CommonComponents.NEW_LINE).append(Texts.component(rerun).withStyle(s -> s.withColor(COLOR_WARNING)));
+			out.append(CommonComponents.NEW_LINE).append(Texts.component(rerun).withStyle(s -> s.withColor(Palette.of(COLOR_WARNING))));
 		}
 		return out;
 	}

@@ -9,6 +9,7 @@ import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ComponentRenderUtils;
@@ -67,6 +68,8 @@ public class PreviewScreen extends Screen {
 	private volatile boolean closed;
 	private double scroll;
 	private @Nullable PreviewList list;
+	// docs/v0.4/SPEC.md 11: the row that had the keyboard focus before a rebuild, which gets it back.
+	private int focusedRow = -1;
 
 	public PreviewScreen(@Nullable Screen parent, RigTuneController controller, List<Recommendation> selected) {
 		super(Component.translatable("rigtune.preview.title"));
@@ -204,8 +207,18 @@ public class PreviewScreen extends Screen {
 	protected void rebuildWidgets() {
 		if (list != null) {
 			scroll = list.scrollAmount();
+			focusedRow = list.focusedRow();
 		}
 		super.rebuildWidgets();
+	}
+
+	@Override
+	protected void setInitialFocus() {
+		ComponentPath path = RowList.initialFocus(this, list, focusedRow, minecraft.getLastInputType().isKeyboard());
+		focusedRow = -1;
+		if (path != null) {
+			changeFocus(path);
+		}
 	}
 
 	private void populate(PreviewList target) {
@@ -330,13 +343,13 @@ public class PreviewScreen extends Screen {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
 		graphics.centeredText(font, clip(confirm != null ? confirm.subtitle() : Component.translatable("rigtune.preview.subtitle"), width - 16), width / 2, 20,
-				COLOR_LABEL);
+				Palette.of(COLOR_LABEL));
 		Component message = message();
 		if (message != null && list != null) {
 			List<FormattedCharSequence> lines = font.split(message, Math.max(40, Math.min(width - 32, 400)));
 			int y = list.getY() + list.getHeight() / 2 - lines.size() * LINE / 2;
 			for (FormattedCharSequence line : lines) {
-				graphics.centeredText(font, line, width / 2, y, COLOR_LABEL);
+				graphics.centeredText(font, line, width / 2, y, Palette.of(COLOR_LABEL));
 				y += LINE;
 			}
 		}
@@ -367,7 +380,7 @@ public class PreviewScreen extends Screen {
 		super.removed();
 	}
 
-	public final class PreviewList extends ContainerObjectSelectionList<PreviewList.Row> {
+	public final class PreviewList extends RowList<PreviewList.Row> {
 		private final int rowWidth;
 		private boolean first = true;
 
@@ -398,9 +411,12 @@ public class PreviewScreen extends Screen {
 			private final int indent;
 			private final int top;
 			private final boolean shadow;
+			// docs/v0.4/SPEC.md 11: a Tab/arrow stop that narrates the row's text.
+			private final RowFocus focus;
 
 			Row(Component text, int color, int indent, int top, int width, boolean shadow) {
 				this.lines = font.split(text, Math.max(40, width - indent));
+				this.focus = new RowFocus(this, text);
 				this.color = color;
 				this.indent = indent;
 				this.top = top;
@@ -424,19 +440,19 @@ public class PreviewScreen extends Screen {
 			public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 				int y = getContentY() + top;
 				for (FormattedCharSequence line : lines) {
-					graphics.text(font, line, getContentX() + indent, y, color, shadow);
+					graphics.text(font, line, getContentX() + indent, y, Palette.of(color), shadow);
 					y += LINE;
 				}
 			}
 
 			@Override
 			public List<? extends GuiEventListener> children() {
-				return List.of();
+				return List.of(focus);
 			}
 
 			@Override
 			public List<? extends NarratableEntry> narratables() {
-				return List.of();
+				return List.of(focus);
 			}
 		}
 	}

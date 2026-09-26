@@ -137,14 +137,14 @@ public class ProfileImportScreen extends Screen {
 		int textWidth = Math.max(80, Math.min(width - 16, 360));
 		int y = 22;
 		for (FormattedCharSequence line : font.split(Component.translatable("rigtune.profile.import.intro"), textWidth)) {
-			graphics.centeredText(font, line, width / 2, y, COLOR_LABEL);
+			graphics.centeredText(font, line, width / 2, y, Palette.of(COLOR_LABEL));
 			y += 10;
 		}
 		if (error != null && box != null) {
 			int errorY = box.getY() + box.getHeight() + 6;
 			List<FormattedCharSequence> lines = font.split(error, textWidth);
 			for (FormattedCharSequence line : lines) {
-				graphics.centeredText(font, line, width / 2, errorY, COLOR_ERROR);
+				graphics.centeredText(font, line, width / 2, errorY, Palette.of(COLOR_ERROR));
 				errorY += 10;
 			}
 		}
