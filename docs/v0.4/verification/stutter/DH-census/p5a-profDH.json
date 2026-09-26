@@ -1,0 +1,265 @@
+{
+  "label": "profDH",
+  "script": [
+    "waitTitle",
+    "waitReport",
+    "monitor:on",
+    "benchWorld",
+    "sleep:45",
+    "stutterReport:DH",
+    "shot:stutter-DH-top",
+    "leaveWorld",
+    "quit"
+  ],
+  "ok": true,
+  "events": [
+    "0.0s driver loaded: [waitTitle, waitReport, monitor:on, benchWorld, sleep:45, stutterReport:DH, shot:stutter-DH-top, leaveWorld, quit]",
+    "3.9s title screen at JVM uptime 11646 ms",
+    "4.4s report ready (online false, rules r15 bundled)",
+    "4.4s stutter monitor on",
+    "4.5s opening the benchmark world: true",
+    "9.1s in the benchmark world at (0.5, 133.0, 192.5), state READY",
+    "54.1s opened the Stutter Doctor",
+    "55.1s stutter view: monitorOn true, recording true, live true, advice []",
+    "55.1s screen stutter-DH-top: {screen=io.github.chaotix345.rigtune.client.ui.StutterScreen, title=Stutter Doctor, widgets=[Plain 'Stop', Plain 'Pause', Plain 'Clear', Plain 'Copy summary', Plain 'Done', StutterList ''], window=1280x720 scale 3}",
+    "55.2s screenshot stutter-DH-top: Saved screenshot as p5a-profDH-stutter-DH-top.png",
+    "55.6s leaving the benchmark world",
+    "60.7s quitting"
+  ],
+  "rigtuneVersion": "0.4.0-dev+mc26.2",
+  "mods": [
+    "distanthorizons 3.3.2",
+    "fabric-advancement-api-v1 1.0.0+58719a3b9e",
+    "fabric-api 0.161.0+26.2",
+    "fabric-api-base 2.0.4+ece063239e",
+    "fabric-api-lookup-api-v1 2.0.18+11e1c9a39e",
+    "fabric-biome-api-v1 18.0.6+c7bd5b8e9e",
+    "fabric-block-api-v1 3.1.0+53515aab9e",
+    "fabric-block-getter-api-v2 2.0.7+ec56b6019e",
+    "fabric-client-gametest-api-v1 5.0.18+991fd34125",
+    "fabric-command-api-v2 3.1.0+00cb03469e",
+    "fabric-content-registries-v0 11.3.2+37b1aa249e",
+    "fabric-convention-tags-v2 4.7.1+1f023a9e9e",
+    "fabric-crash-report-info-v1 1.0.5+086d547a9e",
+    "fabric-creative-tab-api-v1 5.0.15+6468574f9e",
+    "fabric-data-attachment-api-v1 2.2.19+515ac5339e",
+    "fabric-data-generation-api-v1 25.6.0+c0da0b829e",
+    "fabric-debug-api-v1 1.0.2+c792624d9e",
+    "fabric-dimensions-v1 5.1.12+515ac5339e",
+    "fabric-entity-events-v1 5.0.5+06488ac19e",
+    "fabric-events-interaction-v0 5.2.8+515ac5339e",
+    "fabric-game-rule-api-v1 4.0.8+46a6d00c9e",
+    "fabric-item-api-v1 14.5.0+c68f6cbe9e",
+    "fabric-key-mapping-api-v1 2.0.5+e2bdee789e",
+    "fabric-lifecycle-events-v1 4.1.4+29b6eb019e",
+    "fabric-loot-api-v3 3.0.17+06488ac19e",
+    "fabric-menu-api-v1 2.0.17+086d547a9e",
+    "fabric-message-api-v1 7.0.8+bb2ed3f79e",
+    "fabric-model-loading-api-v1 8.0.17+c80601bb9e",
+    "fabric-networking-api-v1 6.3.4+2989c6a09e",
+    "fabric-object-builder-api-v1 24.1.1+6fcd5f039e",
+    "fabric-particles-v1 5.0.19+d1756aa99e",
+    "fabric-permission-api-v1 1.0.5+e442d8d09e",
+    "fabric-recipe-api-v1 9.0.22+11e1c9a39e",
+    "fabric-registry-sync-v0 7.1.1+c7bd5b8e9e",
+    "fabric-renderer-api-v1 14.1.4+2b0d8a229e",
+    "fabric-renderer-indigo 9.1.4+2b0d8a229e",
+    "fabric-rendering-fluids-v1 6.0.4+06488ac19e",
+    "fabric-rendering-v1 25.3.3+515ac5339e",
+    "fabric-resource-conditions-api-v1 6.1.0+10e9a28b9e",
+    "fabric-resource-loader-v0 3.3.20+4fc5413f9e",
+    "fabric-resource-loader-v1 2.0.13+9edec1269e",
+    "fabric-screen-api-v1 5.2.1+5087f8249e",
+    "fabric-serialization-api-v1 2.0.4+11a26f319e",
+    "fabric-sound-api-v1 2.0.5+11a26f319e",
+    "fabric-tag-api-v1 2.1.4+515ac5339e",
+    "fabric-transfer-api-v1 8.0.13+11dbb7d79e",
+    "fabric-transitive-access-wideners-v1 8.1.4+67c847259e",
+    "fabricloader 0.19.5",
+    "io_github_douira_glsl-transformer 3.0.0-pre3",
+    "iris 1.11.4+mc26.2",
+    "java 25",
+    "minecraft 26.2",
+    "mixinextras 0.5.5",
+    "org_anarres_jcpp 1.4.14",
+    "org_antlr_antlr4-runtime 4.13.1",
+    "p5a-driver 1.0.0",
+    "rigtune 0.4.0-dev+mc26.2",
+    "rigtune-e2e-undo-driver 1.0.0",
+    "sodium 0.9.2+mc26.2"
+  ],
+  "stutterSummary": {
+    "DH": "**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 4096 MB heap\n0:47 (0:37 of gameplay) · 4,341 frames · avg 116 FPS · 1% low 42 FPS\r\n14 spikes (14 minor, 0 major, 0 severe, 0 freezes) in 11 hitches · 0.3 s lost\r\nNot enough data yet (at least 3 spikes and 2 minutes of gameplay)\nLikely causes (share of the lost time): garbage collection 9 %; not explained 91 %\r\n6 of 14 spikes during Distant Horizons background work (not measured)\r\n5 of 14 spikes during the 10 s after a teleport (not measured)\r\nWorst: 48 ms at 0:12 (garbage collection (low), rendering (low), Distant Horizons background work (medium)); 43 ms at 0:12 (rendering (low), the 10 s after a teleport); 39 ms at 0:11 (rendering (low), the 10 s after a teleport)\n"
+  },
+  "stutterReport": {
+    "DH": {
+      "startedAt": "2026-09-26T14:11:46Z",
+      "source": "monitor",
+      "mc": "26.2",
+      "collector": "G1",
+      "heapMaxMb": 4096,
+      "sessionSeconds": 46.9,
+      "gameplaySeconds": 37.3,
+      "frames": 4341,
+      "avgFps": 116.4,
+      "onePercentLowFps": 42.1,
+      "histogramCounts": [
+        0,
+        1043,
+        3264,
+        28,
+        6,
+        0,
+        0,
+        0,
+        0
+      ],
+      "histogramTimeMs": [
+        0,
+        8691,
+        27723,
+        642,
+        236,
+        0,
+        0,
+        0,
+        0
+      ],
+      "spikes": {
+        "minor": 14,
+        "major": 0,
+        "severe": 0,
+        "freeze": 0
+      },
+      "lostMs": 319.1,
+      "causes": {
+        "gc": 0.09,
+        "unknown": 0.91
+      },
+      "tags": {
+        "dh": 6,
+        "afterTeleport": 5
+      },
+      "worst": [
+        {
+          "t": 12.1,
+          "ms": 47.7,
+          "baseMs": 8.3,
+          "causes": [
+            "gc:low",
+            "render:low",
+            "dh:medium"
+          ]
+        },
+        {
+          "t": 11.5,
+          "ms": 43.3,
+          "baseMs": 8.3,
+          "causes": [
+            "render:low",
+            "afterTeleport:context"
+          ]
+        },
+        {
+          "t": 11.1,
+          "ms": 38.6,
+          "baseMs": 8.3,
+          "causes": [
+            "render:low",
+            "afterTeleport:context"
+          ]
+        },
+        {
+          "t": 14.2,
+          "ms": 34.2,
+          "baseMs": 8.3,
+          "causes": [
+            "render:low"
+          ]
+        },
+        {
+          "t": 10.8,
+          "ms": 33.0,
+          "baseMs": 8.3,
+          "causes": [
+            "render:low",
+            "dh:medium",
+            "afterTeleport:context"
+          ]
+        },
+        {
+          "t": 11.1,
+          "ms": 31.9,
+          "baseMs": 8.3,
+          "causes": [
+            "gc:low",
+            "render:low",
+            "dh:medium",
+            "afterTeleport:context"
+          ]
+        },
+        {
+          "t": 13.6,
+          "ms": 31.3,
+          "baseMs": 8.3,
+          "causes": [
+            "render:low"
+          ]
+        },
+        {
+          "t": 39.3,
+          "ms": 30.3,
+          "baseMs": 8.3,
+          "causes": [
+            "render:low"
+          ]
+        },
+        {
+          "t": 12.1,
+          "ms": 28.8,
+          "baseMs": 8.3,
+          "causes": [
+            "render:low",
+            "dh:medium"
+          ]
+        },
+        {
+          "t": 12.4,
+          "ms": 26.0,
+          "baseMs": 8.3,
+          "causes": [
+            "gc:high",
+            "render:low",
+            "dh:medium"
+          ]
+        }
+      ],
+      "facts": {
+        "liveSetPct": 19,
+        "fullGcs": 0,
+        "stalls": 0,
+        "explicitGcs": 0,
+        "gcOffsetMs": 17.4
+      },
+      "advice": [],
+      "enoughData": false,
+      "phaseTiming": true,
+      "hitches": 11
+    }
+  },
+  "screen": {
+    "stutter-DH-top": {
+      "screen": "io.github.chaotix345.rigtune.client.ui.StutterScreen",
+      "title": "Stutter Doctor",
+      "widgets": [
+        "Plain 'Stop'",
+        "Plain 'Pause'",
+        "Plain 'Clear'",
+        "Plain 'Copy summary'",
+        "Plain 'Done'",
+        "StutterList ''"
+      ],
+      "window": "1280x720 scale 3"
+    }
+  }
+}

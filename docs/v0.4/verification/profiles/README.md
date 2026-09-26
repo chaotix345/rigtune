@@ -53,6 +53,16 @@ Share codes of the other profiles (`code-My_settings.txt` 104 characters, `code-
   Horizons' settings'): DH 3.3.2's lang: `distanthorizons.config.common.multiThreading.numberOfThreads` = **"NO. of threads"**
   under "Multi-Threading" (in "Advanced options"); the main DH page instead shows **"CPU Load"**
   (`threadPresetSetting`, "3. Balanced"), whose tooltip says it "modifies how many threads Distant Horizons' will use"
-  (`p5a-profM-dh-config.png`). Runtime path: see profM2 below.
+  (`p5a-profM-dh-config.png`).
 
-(profM2 results are appended below when that run finishes.)
+**Runtime check (run profM3, Sodium 0.9.2 + Iris 1.11.4 + DH 3.3.2 on 26.2):**
+- Sodium: its settings screen (`VideoSettingsScreen.createScreen`, what Video Settings opens with Sodium) lists the pages
+  **General / Quality / Performance** on the left (then Iris: Shader Packs / Settings). The **Performance** page shows
+  **"Chunk Updates: Deferred"** (second row, under "Chunk Update Threads: Default") (`p5a-profM3-sodium-performance.png`;
+  General and Quality pages: `p5a-profM3-sodium-general.png`, `-quality.png`). The advice's "Chunk Updates … Deferred …
+  (Performance page)" matches the real labels. (Sodium's page list is custom-drawn, so the driver clicked it by position.)
+- Distant Horizons: its config screen (`GetConfigScreen.getScreen`, the DH button / Mod Menu) → **Advanced options** →
+  **Multi-Threading** → **"NO. of threads"** (8 on this PC) and "Runtime % for threads" (`p5a-profM3-dh-main.png`,
+  `-dh-advanced.png`, `-dh-multithreading.png`). The advice's quoted label "NO. of threads" matches; the path is two
+  levels down, while the main page offers "CPU Load" (a preset that also sets the thread count). Suggestion for the
+  text (not changed): 'in Distant Horizons' settings (Advanced options → Multi-Threading)', or mention "CPU Load".

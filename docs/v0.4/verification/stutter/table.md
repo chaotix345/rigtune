@@ -2,7 +2,7 @@
 |---|---|---|---|---|---|---|---|---|---|
 | A | control, G1 -Xmx4G, stand still 6 min; default options (VSync on, maxFps 120, inactivity AFK) | 352 s / 14166 frames / 40 FPS / 1% low 28 | 4 (4 hitches), 0.7/min | 235 ms | gc 3%, unknown 97% | afterTeleport 3 | - | gcOffset 16.8 ms, explicit 0, full 0, stalls 0, liveSet 12% | phase True, enough True |
 | A2 | control, G1 -Xmx4G, stand still 150 s; VSync off, maxFps 260, inactivity minimized | 140 s / 381345 frames / 2719 FPS / 1% low 710 | 0 (0 hitches), 0.0/min | 0 ms | - | - | - | gcOffset 17.2 ms, explicit 0, full 0, stalls 0, liveSet 10% | phase True, enough False |
-| A3 | control, G1 -Xmx4G, stand still 6.5 min (autosave window); VSync off, uncapped | (no data) |||||||
+| A3 | control, G1 -Xmx4G, stand still 6.5 min (autosave window); VSync off, uncapped | 383 s / 1015855 frames / 2655 FPS / 1% low 714 | 1 (1 hitches), 0.2/min | 24 ms | unknown 100% | afterTeleport 1 | - | gcOffset 18.2 ms, explicit 0, full 0, stalls 0, liveSet 12% | phase True, enough False |
 | B | forceGcEverySec=5, G1 -Xmx4G, 150 s; default options | 140 s / 7976 frames / 57 FPS / 1% low 20 | 28 (28 hitches), 12.0/min | 1507 ms | gc 100%, unknown 0% | - | stutter-gc-explicit | gcOffset 17.3 ms, explicit 29, full 0, stalls 0, liveSet 9% | phase True, enough True |
 | C1 | product teleport script (-Drigtune.dev.stutterScript=teleport); default options | 50 s / 5403 frames / 108 FPS / 1% low 29 | 14 (13 hitches), 16.8/min | 285 ms | unknown 100% | afterTeleport 13 | - | gcOffset 19.8 ms, explicit 0, full 0, stalls 0, liveSet 12% | phase True, enough False |
 | C2 | driver: 100 s still, tp, 30 s, save, 10 s; default options (AFK throttle) | 131 s / 7759 frames / 59 FPS / 1% low 30 | 0 (0 hitches), 0.0/min | 0 ms | - | - | - | gcOffset 17.1 ms, explicit 0, full 0, stalls 0, liveSet 10% | phase True, enough False |
@@ -11,7 +11,7 @@
 | D | ZGC + forceGcEverySec=5, -Xmx4G, 150 s; default options | 140 s / 8082 frames / 58 FPS / 1% low 30 | 0 (0 hitches), 0.0/min | 0 ms | - | - | - | gcOffset 30.0 ms, explicit 29, full 0, stalls 0, liveSet 13% | phase True, enough False |
 | D2 | ZGC + forceGcEverySec=5, -Xmx4G, 150 s; VSync off, uncapped, -Xlog:gc* | 140 s / 382315 frames / 2722 FPS / 1% low 730 | 0 (0 hitches), 0.0/min | 0 ms | - | - | - | gcOffset 23.1 ms, explicit 28, full 0, stalls 0, liveSet 13% | phase True, enough False |
 | SM1 | S-M1 attempt 1 (@Redirect test mixin) | 32 s / 3832 frames / 119 FPS / 1% low 93 | 3 (3 hitches), 5.6/min | 53 ms | gc 12%, unknown 88% | afterTeleport 3 | - | gcOffset 17.2 ms, explicit 0, full 0, stalls 0, liveSet 11% | phase True, enough False |
-| SM1b | S-M1 attempt 2 (mixin-config plugin removes the INVOKE target) | (no data) |||||||
+| SM1b | S-M1 attempt 2 (mixin-config plugin removes the INVOKE target) | 32 s / 3819 frames / 119 FPS / 1% low 101 | 1 (1 hitches), 1.9/min | 17 ms | gc 30%, unknown 70% | afterTeleport 1 | - | gcOffset 17.1 ms, explicit 0, full 0, stalls 0, liveSet 11% | phase False, enough False |
 
 **A** worst spikes (t s, ms, baseline ms, notes):
 - 159.1 s, 195.3 ms (base 33.3): 
@@ -21,6 +21,10 @@
 
 **A2** worst spikes (t s, ms, baseline ms, notes):
 - GC log: 136 pauses in the JVM, longest 17.2 ms; capture started at JVM uptime ~19 s (1 s log precision)
+
+**A3** worst spikes (t s, ms, baseline ms, notes):
+- 11.6 s, 24.8 ms (base 0.5): render:low, afterTeleport:context
+- GC log: 358 pauses in the JVM, longest 14.7 ms; capture started at JVM uptime ~23 s (1 s log precision)
 
 **B** worst spikes (t s, ms, baseline ms, notes):
 - 86.1 s, 89.2 ms (base 33.3): gc:high:FULL:EXPLICIT
@@ -84,3 +88,6 @@
 - 10.2 s, 30.8 ms (base 8.3): gc:low, render:low, afterTeleport:context
 - 11.1 s, 24.3 ms (base 8.3): render:low, afterTeleport:context
 - 10.7 s, 22.8 ms (base 8.3): gc:medium, render:low, afterTeleport:context
+
+**SM1b** worst spikes (t s, ms, baseline ms, notes):
+- 10.2 s, 25.1 ms (base 8.5): gc:medium, afterTeleport:context

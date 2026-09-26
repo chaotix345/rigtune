@@ -1,5 +1,13 @@
 # P5-A findings (Phase 5 real-run proofs, 2026-09-26)
 
+| id | severity | status (2026-09-27) |
+|---|---|---|
+| P5A-F1 | low | **fixed** on feat/v0.4.0 (c7a2e28, with the captured string as a test vector); re-checked here: the merged jar parses `1.4.349 AMD proprietary driver 26.8.1 (LLPC)` → adrenalin [26, 8, 1] (`drivers/parse-results.txt`) |
+| P5A-F2 | medium | coordinator: round-2 fix batch (a never-claiming "chunks were loading" tag + AC5.8 C amendment); AC5.8 C to be re-run after it merges |
+| P5A-F3 | low | coordinator: round-2 fix batch (don't persist a benchmark's short settle-phase session) |
+| P5A-F4 | low | settings save moved to its own thread (7adc59a, UiGameTest passed on it in attempt 3); network lookups sharing `Probes.EXECUTOR` → round-2 fix batch |
+| P5A-F5 | low (test harness) | open (reported) |
+
 Release candidate: `origin/feat/v0.4.0` @ a3f5c14 (code = 9cf84f6). Evidence folders are next to this file.
 
 ## P5A-F1 (low): the dev machine's real AMD Vulkan driver string parses to UNKNOWN (AC9.8)
@@ -52,7 +60,7 @@ Release candidate: `origin/feat/v0.4.0` @ a3f5c14 (code = 9cf84f6). Evidence fol
 ## P5A-F3 (low, observation): a benchmark run with the session monitor on saves a tiny noisy session
 - With the monitor on, a Measure run's settle frames (between the 10 s world-loading exclusion and the first sweep, when
   the benchmark pauses the session) are saved as their own session: run ovh-on-1 logged
-  `Stutter Doctor: session saved (OK): 33 spikes in 2 s of gameplay`. StutterScreen then shows that 2-second session
+  `Stutter Doctor: session saved (OK): 33 spikes in 2 s of gameplay` (ovh-on-2 and ovh-on-3 saved `0 spikes in 0 s of gameplay` sessions). StutterScreen then shows that 2-second session
   ("33 spikes … Not enough data yet") as the latest one after a benchmark. Harmless (no advice without enough data), but
   noisy. Suggestion: don't save a session with under ~10 s of gameplay, or pause the session from the benchmark's start
   rather than its first sweep. Evidence: `stutter/F-overhead/` (log excerpt in README).
@@ -71,3 +79,15 @@ Release candidate: `origin/feat/v0.4.0` @ a3f5c14 (code = 9cf84f6). Evidence fol
 - **Suggestion:** give network lookups their own executor (or a dedicated single thread), keeping `Probes.EXECUTOR` for
   short local work; and/or let UiGameTest wait longer. Not a v0.4 regression check: the same executor sharing may exist in
   0.3.0 (not checked).
+
+## P5A-F5 (low, test harness): FootprintGameTest's class-bytes budget fails under ZGC (AC6.6's own command)
+- **Seen:** 3rd run of `./gradlew :26.2:runProductionClientGameTest -PgametestJvmArgs="-XX:+UseZGC -XX:+ZGenerational
+  -Dusing.aikars.flags=x"` on feat/v0.4.0 @ 67f8b8c (merged into test/p5-features as 135e586; SettingsSaver fix in):
+  UiGameTest and **JvmGameTest passed** ("AC6.6 detection from the running JVM passed"), then FootprintGameTest failed:
+  `footprint budget rigtuneClassBytesIdle: 120224 > 109296` (`jvm/local-jvm-zgc-3-26.2.txt`, `jvm/footprint-26.2-OpenGL-zgc.json`).
+- **Cause:** the budget is shallow bytes of RigTune instances, calibrated on G1 (compressed oops, 12-byte headers). ZGC has
+  no compressed oops (8-byte references, 16-byte headers), so the same objects are ~1.65× larger: P5-B's local G1 runs of
+  the same test measured 72,312-72,832 bytes (`gametests/26.2-footprint.json`, `26.3-attempt*-footprint.json`); the largest
+  class here is `core.rules.Condition` (61,600 bytes under ZGC). Not a leak (`instanceGrowth {}`, 1,473 instances).
+- **Suggestion:** scale or skip `rigtuneClassBytesIdle` when `UseCompressedOops` reads false (or compare instance counts
+  there), or document that AC6.6's command runs the suite with this one budget expected to fail.

@@ -1,0 +1,10 @@
+[00:12:34] [Render thread/INFO]: [P5A] stutter summary (DH):
+**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 4096 MB heap
+0:47 (0:37 of gameplay) · 4,341 frames · avg 116 FPS · 1% low 42 FPS
+14 spikes (14 minor, 0 major, 0 severe, 0 freezes) in 11 hitches · 0.3 s lost
+Not enough data yet (at least 3 spikes and 2 minutes of gameplay)
+Likely causes (share of the lost time): garbage collection 9 %; not explained 91 %
+6 of 14 spikes during Distant Horizons background work (not measured)
+5 of 14 spikes during the 10 s after a teleport (not measured)
+Worst: 48 ms at 0:12 (garbage collection (low), rendering (low), Distant Horizons background work (medium)); 43 ms at 0:12 (rendering (low), the 10 s after a teleport); 39 ms at 0:11 (rendering (low), the 10 s after a teleport)
+
