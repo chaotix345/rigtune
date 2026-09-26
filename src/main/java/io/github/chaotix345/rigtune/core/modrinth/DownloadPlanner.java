@@ -124,17 +124,27 @@ public final class DownloadPlanner {
 	// stagedJars: mod id -> the pending jar of an enable already in pending.json (a newer download replaces it when merged).
 	public Result plan(List<Recommendation> recs, Set<String> installedProjects, Set<String> loadedIds, Map<String, String> stagedJars) {
 		Batch batch = new Batch(installedProjects, loadedIds, stagedJars);
-		List<String> ids = new ArrayList<>();
-		List<String> errors = new ArrayList<>();
-		List<Text> errorTexts = new ArrayList<>();
 		Map<String, List<String>> opIds = new LinkedHashMap<>();
 		// Every update before any addition, so the outcome doesn't depend on the order they were ticked in (A-H1).
 		List<Recommendation> ordered = new ArrayList<>();
 		recs.stream().filter(r -> r.action() instanceof Action.UpdateMod).forEach(ordered::add);
 		recs.stream().filter(r -> !(r.action() instanceof Action.UpdateMod)).forEach(ordered::add);
 		Map<String, Text> refusedTogether = refusedTogether(ordered);
-		for (Recommendation rec : ordered) {
-			Attempt attempt = new Attempt(batch);
+		// Positions in ordered. An update needing a project that isn't installed waits once until the additions are planned
+		// (docs/v0.4/SPEC.md 2o, H1-A). The ids and errors keep ordered's order (PreviewDownloads matches errors by position).
+		List<Integer> queue = new ArrayList<>();
+		for (int i = 0; i < ordered.size(); i++) {
+			queue.add(i);
+		}
+		Set<Integer> waited = new HashSet<>();
+		boolean[] staged = new boolean[ordered.size()];
+		String[] errorAt = new String[ordered.size()];
+		Text[] errorTextAt = new Text[ordered.size()];
+		for (int q = 0; q < queue.size(); q++) {
+			int at = queue.get(q);
+			Recommendation rec = ordered.get(at);
+			boolean additionsLater = queue.subList(q + 1, queue.size()).stream().anyMatch(i -> ordered.get(i).action() instanceof Action.AddMod);
+			Attempt attempt = new Attempt(batch, additionsLater && !waited.contains(at));
 			try {
 				Text together = refusedTogether.get(rec.id());
 				if (together != null) {
@@ -146,19 +156,34 @@ public final class DownloadPlanner {
 					default -> {
 					}
 				}
+			} catch (WaitForAdditions w) {
+				waited.add(at);
+				queue.add(at);
+				continue;
 			} catch (IOException | RuntimeException e) {
 				RigTune.LOGGER.warn("Could not prepare {}", rec.id(), e);
-				errors.add(rec.title() + ": " + e.getMessage());
+				errorAt[at] = rec.title() + ": " + e.getMessage();
 				// A refusal of the planner or the resolver is translated; a network or file error's detail stays as it is.
-				errorTexts.add(Text.of("rigtune.download.error", "%s: %s", rec.titleText(),
-						e instanceof TextException text ? text.text() : Text.literal(String.valueOf(e.getMessage()))));
+				errorTextAt[at] = Text.of("rigtune.download.error", "%s: %s", rec.titleText(),
+						e instanceof TextException text ? text.text() : Text.literal(String.valueOf(e.getMessage())));
 				continue;
 			}
 			String group = batch.commit(attempt);
-			ids.add(rec.id());
+			staged[at] = true;
 			List<Op> own = attempt.ops.isEmpty() && !attempt.joins.isEmpty()
 					? batch.ops.stream().filter(op -> group.equals(op.group())).toList() : attempt.ops;
 			opIds.put(rec.id(), own.stream().map(Op::id).toList());
+		}
+		List<String> ids = new ArrayList<>();
+		List<String> errors = new ArrayList<>();
+		List<Text> errorTexts = new ArrayList<>();
+		for (int i = 0; i < ordered.size(); i++) {
+			if (staged[i]) {
+				ids.add(ordered.get(i).id());
+			} else if (errorAt[i] != null) {
+				errors.add(errorAt[i]);
+				errorTexts.add(errorTextAt[i]);
+			}
 		}
 		return new Result(List.copyOf(batch.ops), ids, errors, Map.copyOf(opIds), errorTexts);
 	}
@@ -297,6 +322,19 @@ public final class DownloadPlanner {
 			throw new TextException(Text.of("rigtune.download.stale", "its Modrinth data changed since the list was made; try again"));
 		}
 		resolver.checkUpdate(next, attempt.projects, attempt.batch.versions);
+		// docs/v0.4/SPEC.md 2o, H1-A: a project the new version requires that isn't installed would stop the game from
+		// starting. One this batch's additions stage is joined (the update waits for them once); otherwise the update is
+		// refused: an update's own dependencies aren't resolved.
+		for (String project : resolver.missingRequirements(next, attempt.projects)) {
+			String stagedBy = attempt.batch.groupOfProject.get(project);
+			if (stagedBy != null) {
+				attempt.joins.add(stagedBy);
+			} else if (attempt.mayWait) {
+				throw new WaitForAdditions();
+			} else {
+				throw resolver.missingRequirement(project);
+			}
+		}
 		Path pending = fetcher.fetch(file);
 		String jarModId = modIdOf.apply(pending);
 		// As for an added mod (review 4, apply-safety-1): the installed jar is only replaced by a jar with a readable id.
@@ -387,9 +425,10 @@ public final class DownloadPlanner {
 		}
 	}
 
-	// One recommendation's work, on copies of the batch's sets.
+	// One recommendation's work, on copies of the batch's sets. mayWait: an update may still wait for the batch's additions.
 	private static final class Attempt {
 		final Batch batch;
+		final boolean mayWait;
 		final Set<String> projects;
 		final Set<String> modIds;
 		final Set<String> joins = new LinkedHashSet<>();
@@ -398,10 +437,18 @@ public final class DownloadPlanner {
 		final List<Op> ops = new ArrayList<>();
 		String updatedProject;
 
-		Attempt(Batch batch) {
+		Attempt(Batch batch, boolean mayWait) {
 			this.batch = batch;
+			this.mayWait = mayWait;
 			this.projects = new HashSet<>(batch.projects);
 			this.modIds = new HashSet<>(batch.modIds);
+		}
+	}
+
+	// An update that needs a project an addition later in the batch may stage: planned again after the additions.
+	private static final class WaitForAdditions extends RuntimeException {
+		WaitForAdditions() {
+			super(null, null, false, false);
 		}
 	}
 }

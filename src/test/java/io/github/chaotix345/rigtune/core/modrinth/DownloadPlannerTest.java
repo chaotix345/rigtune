@@ -815,4 +815,80 @@ class DownloadPlannerTest {
 		assertEquals(List.of("Add a: Iris, which is installed, doesn't work with lib 1"), result.errors());
 		assertFalse(Files.exists(mods.resolve("libV.jar" + PendingActions.PENDING_SUFFIX)));
 	}
+
+	// --- docs/v0.4/SPEC.md 2o, H1-A: an update whose new version requires a project that isn't installed
+
+	// Updates are ticked by default: staged alone, A 2.0 would stop the game from starting without LIB. Refused before
+	// the download, naming LIB (the minimal fix: an update's dependencies aren't resolved).
+	@Test
+	void anUpdateWhoseNewVersionRequiresAProjectThatIsntInstalledIsRefused() throws IOException {
+		client.projects.add(new ModrinthProject("LIB", "lib", "Lib Mod", "approved", List.of("26.2"), List.of("fabric"), "optional"));
+		Recommendation update = updateA(required("LIB"));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update);
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of(), result.ops());
+		assertEquals(List.of("Update a: its new version needs Lib Mod, which isn't installed"), result.errors());
+		assertEquals(List.of(), fetched);
+		assertEquals("installed", Files.readString(mods.resolve("a-1.jar")));
+	}
+
+	@Test
+	void anUpdateWhoseRequirementsAreInstalledIsStaged() throws IOException {
+		Recommendation update = updateA(required("K"), required("A"), new Dependency("OPT", null, "optional"), new Dependency(null, "libV", "required"));
+
+		DownloadPlanner.Result result = plan(Set.of("A", "K"), update);
+
+		assertEquals(List.of("update-a"), result.ids(), result.errors().toString());
+		assertEquals(List.of("a-1.jar", "aV.jar"), files(result.ops()));
+	}
+
+	// The version it replaces required LIB too, and the game started: LIB is there in a form Modrinth's hashes don't show
+	// (nested in another mod, or a jar Modrinth doesn't know), so the update keeps working with it.
+	@Test
+	void aRequirementTheReplacedVersionAlreadyHadIsntMissing() throws IOException {
+		Recommendation update = updateA(required("LIB"));
+		installedVersions.put("a1", version("a1", "A", "1", T, required("LIB")));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update);
+
+		assertEquals(List.of("update-a"), result.ids(), result.errors().toString());
+	}
+
+	// LIB is added in the same batch (ticked, or brought by another addition): the update waits for the additions and joins
+	// the group that stages LIB, in either tick order, so it's never applied without it.
+	@Test
+	void anUpdateJoinsTheAdditionThatBringsItsRequirement() throws IOException {
+		Recommendation update = updateA(required("LIB"));
+		libraryUsers();
+
+		for (List<Recommendation> recs : List.of(List.of(update, add("lib", "LIB")), List.of(add("lib", "LIB"), update), List.of(update, add("b", "B")))) {
+			DownloadPlanner.Result result = plan(Set.of("A"), recs.toArray(Recommendation[]::new));
+
+			assertEquals(List.of(), result.errors());
+			assertEquals(List.of("update-a", recs.stream().filter(r -> r.id().startsWith("add-")).findFirst().orElseThrow().id()), result.ids());
+			List<String> files = new ArrayList<>(files(result.ops()));
+			files.remove("bV.jar");
+			assertEquals(Set.of("a-1.jar", "aV.jar", "libV.jar"), Set.copyOf(files));
+			assertEquals(1, groups(result.ops()), result.ops().toString());
+		}
+	}
+
+	// The addition that would have brought LIB fails: the update is refused too, and each error stays at its item's place
+	// in the planner's order (updates first), which the preview relies on.
+	@Test
+	void anUpdateWhoseRequirementsAdditionFailsIsRefusedInItsOwnPlace() throws IOException {
+		client.projects.add(new ModrinthProject("LIB", "lib", "Lib Mod", "approved", List.of("26.2"), List.of("fabric"), "optional"));
+		Recommendation update = updateA(required("LIB"));
+		libraryUsers();
+		failing.add("libV.jar");
+		put("c", version("cV", "C", "1", T));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), add("lib", "LIB"), update, add("c", "C"));
+
+		assertEquals(List.of("add-c"), result.ids());
+		assertEquals(List.of("Update a: its new version needs Lib Mod, which isn't installed", "Add lib: stalled: libV.jar"), result.errors());
+		assertFalse(fetched.contains("aV.jar"));
+	}
 }
