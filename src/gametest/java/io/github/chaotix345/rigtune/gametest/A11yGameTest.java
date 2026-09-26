@@ -199,7 +199,8 @@ public class A11yGameTest implements FabricClientGameTest {
 	}
 
 	// AC11.2: the stub's RigTune screen with High Contrast Block Outline off, then on (the option that reloads no resource
-	// pack; Palette reads High Contrast as well). Off draws the label grey and not its high-contrast value; on, the reverse.
+	// pack; Palette reads High Contrast as well). Off draws RigTune's label grey and never its high-contrast value; on, the
+	// label pixels are recoloured (vanilla's button sprites keep some pixels of that grey in both).
 	private static void highContrast(ClientGameTestContext context, A11yController controller) {
 		context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(false));
 		openRigTune(context, controller);
@@ -208,8 +209,9 @@ public class A11yGameTest implements FabricClientGameTest {
 		openRigTune(context, controller);
 		int[] on = count(context.takeScreenshot("a11y-hc-on-854x480-scale2"), LABEL, LABEL_HIGH_CONTRAST);
 		RigTune.LOGGER.info("A11yGameTest: label grey / high-contrast pixels: off {} / {}, on {} / {}", off[0], off[1], on[0], on[1]);
-		check(off[0] >= 200 && off[1] < off[0] / 10, "high contrast off: the label grey is drawn: " + off[0] + " / " + off[1]);
-		check(on[1] >= 200 && on[0] < off[0] / 10, "high contrast on: the labels are recoloured: " + on[0] + " / " + on[1]);
+		check(off[0] >= 200 && off[1] == 0, "high contrast off: the label grey is drawn, its high-contrast value isn't: " + off[0] + " / " + off[1]);
+		check(on[1] >= 200 && off[0] - on[0] >= on[1] * 9 / 10, "high contrast on: the label pixels are recoloured: off " + off[0] + ", on " + on[0]
+				+ " / " + on[1]);
 		for (int[] size : SIZES) {
 			resize(context, size[0], size[1], size[2]);
 			context.takeScreenshot("a11y-hc-rigtune-" + size[0] + "x" + size[1] + "-scale" + size[2]);
