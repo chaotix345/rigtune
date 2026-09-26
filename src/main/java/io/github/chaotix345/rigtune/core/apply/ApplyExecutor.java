@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.core.apply;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.OpResult;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.Status;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
+import io.github.chaotix345.rigtune.core.apply.UnfinishedGroups.Rename;
 import io.github.chaotix345.rigtune.core.history.HistoryUpdates;
 import io.github.chaotix345.rigtune.core.history.Journal;
 
@@ -18,6 +19,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -117,22 +119,29 @@ public final class ApplyExecutor {
 
 		// Called after a failed attempt. Returns whether the caller should try again (having slept if so).
 		boolean onFailure(IOException e) {
+			return allowsAnother(e) && pause();
+		}
+
+		// Counts a failed attempt; whether the policy allows another.
+		boolean allowsAnother(IOException e) {
 			attempt++;
 			if (sharing == null) {
 				sharing = isSharingViolation(e);
 			}
-			if (sharing) {
-				if (elapsedBackoffMillis + backoffMillis > SHARING_RETRY_BUDGET_MILLIS) {
-					return false;
-				}
-				if (!sleeper.sleep(backoffMillis)) {
-					return false;
-				}
-				elapsedBackoffMillis += backoffMillis;
-				backoffMillis = Math.min(backoffMillis * 2, SHARING_RETRY_MAX_MILLIS);
-				return true;
+			return sharing ? elapsedBackoffMillis + backoffMillis <= SHARING_RETRY_BUDGET_MILLIS : attempt < attempts;
+		}
+
+		// The wait before the next attempt; false when interrupted.
+		boolean pause() {
+			if (!sharing) {
+				return sleeper.sleep(retryDelayMillis);
 			}
-			return attempt < attempts && sleeper.sleep(retryDelayMillis);
+			if (!sleeper.sleep(backoffMillis)) {
+				return false;
+			}
+			elapsedBackoffMillis += backoffMillis;
+			backoffMillis = Math.min(backoffMillis * 2, SHARING_RETRY_MAX_MILLIS);
+			return true;
 		}
 
 		int attempt() {
@@ -143,12 +152,22 @@ public final class ApplyExecutor {
 	// Callers hold the apply lock. pendingFile is re-read before it is rewritten, and only the ops run here
 	// that succeeded are removed from it, so ops staged after `plan` was read survive. The mods and config folders
 	// come from where pendingFile is; the ones the plan records are informational only.
+	// The files are written in a crash-safe order (audit L2), so a death or a failed write between two steps never makes
+	// History call an applied change "Not applied": (1) the abandoned ops leave pending.json and the failed ones count a
+	// run, (2) last-apply.json, (3) the done ops leave pending.json, (4) the journal. Before (2), preLaunch's reconcile
+	// finds the done ops still pending (staged; the next run redoes them as SKIPPED_ALREADY_DONE), and from (2) on it
+	// replays last-apply.json. An abandoned op is never still in pending.json once last-apply.json says so, where a later
+	// run could apply it after History has called it abandoned. The record of the groups' renames (UnfinishedGroups) is
+	// pruned only once last-apply.json is written, so a redo still reports where each file went.
 	public ApplyResult run(PendingActions plan, Path pendingFile) throws IOException {
 		Path configDir = InstanceDirs.configDirOf(pendingFile);
 		Path modsDir = InstanceDirs.modsDirOf(pendingFile);
-		ApplyResult result = new ApplyResult(Instant.now().toString(), giveUpOnRepeatFailures(execute(plan, modsDir, configDir)));
-		writeRemaining(plan, pendingFile, result, modsDir);
+		UnfinishedGroups unfinished = UnfinishedGroups.load(configDir);
+		ApplyResult result = new ApplyResult(Instant.now().toString(), giveUpOnRepeatFailures(execute(plan, modsDir, configDir, unfinished)));
+		writeRemaining(plan, pendingFile, result, modsDir, EnumSet.of(Status.ABANDONED), true);
 		result.save(ApplyResult.defaultPath(configDir));
+		unfinished.prune(plan.ops().stream().filter(Objects::nonNull).map(Op::id).filter(Objects::nonNull).toList());
+		writeRemaining(plan, pendingFile, result, modsDir, EnumSet.of(Status.OK, Status.SKIPPED_ALREADY_DONE, Status.ABANDONED), false);
 		updateJournal(configDir, result);
 		return result;
 	}
@@ -170,12 +189,19 @@ public final class ApplyExecutor {
 	}
 
 	// A group with an op that has now failed in MAX_FAILED_RUNS helper runs is abandoned as a whole, so a change that
-	// can never apply doesn't come back at every exit.
+	// can never apply doesn't come back at every exit. Never a group left half-applied: dropping it would retire its
+	// download and leave the mod missing for good, so it stays until a run finishes it or rolls it back.
 	static List<OpResult> giveUpOnRepeatFailures(List<OpResult> results) {
+		Set<String> halfApplied = new HashSet<>();
+		for (int i = 0; i < results.size(); i++) {
+			if (leftHalfApplied(results.get(i))) {
+				halfApplied.add(groupKey(results.get(i).op(), i));
+			}
+		}
 		Set<String> givenUp = new HashSet<>();
 		for (int i = 0; i < results.size(); i++) {
 			OpResult r = results.get(i);
-			if (r.status() == Status.FAILED && r.op() != null && r.op().attempts() + 1 >= MAX_FAILED_RUNS) {
+			if (r.status() == Status.FAILED && r.op() != null && r.op().attempts() + 1 >= MAX_FAILED_RUNS && !halfApplied.contains(groupKey(r.op(), i))) {
 				givenUp.add(groupKey(r.op(), i));
 			}
 		}
@@ -189,15 +215,28 @@ public final class ApplyExecutor {
 		return out;
 	}
 
+	// A rollback that failed leaves its file under the name its group gave it, and its result says where (resultPath);
+	// no other failed result has one.
+	static boolean leftHalfApplied(OpResult r) {
+		return r != null && r.status() == Status.FAILED && r.op() != null && r.resultPath() != null;
+	}
+
 	private static String groupKey(Op op, int index) {
 		return op.group() != null ? "group:" + op.group() : "op:" + index;
 	}
 
-	// Ops that are done or abandoned leave the plan, and failed ones count another attempt. An abandoned enable's
-	// download is renamed to .rigtune-superseded.
-	private static void writeRemaining(PendingActions plan, Path pendingFile, ApplyResult result, Path modsDir) throws IOException {
-		List<Op> leaving = result.results().stream().filter(r -> r.status() != Status.FAILED).map(OpResult::op).filter(Objects::nonNull).toList();
-		List<Op> failed = result.results().stream().filter(r -> r.status() == Status.FAILED).map(OpResult::op).filter(Objects::nonNull).toList();
+	// The ops whose status is in `leaving` leave the plan (the plan passed in when pending.json is gone or unreadable; so
+	// step (3) lists ABANDONED again, and an op step (1) dropped never comes back). With countFailures, failed ones count
+	// another run (at most MAX_FAILED_RUNS - 1: only a half-applied group fails that often without being abandoned), and
+	// an abandoned enable's download is renamed to .rigtune-superseded.
+	private static void writeRemaining(PendingActions plan, Path pendingFile, ApplyResult result, Path modsDir, Set<Status> leaving,
+			boolean countFailures) throws IOException {
+		List<Op> gone = result.results().stream().filter(r -> leaving.contains(r.status())).map(OpResult::op).filter(Objects::nonNull).toList();
+		List<Op> failed = !countFailures ? List.of()
+				: result.results().stream().filter(r -> r.status() == Status.FAILED).map(OpResult::op).filter(Objects::nonNull).toList();
+		if (countFailures && gone.isEmpty() && failed.isEmpty()) {
+			return;
+		}
 		PendingActions base = plan;
 		if (Files.exists(pendingFile)) {
 			try {
@@ -208,15 +247,19 @@ public final class ApplyExecutor {
 		}
 		List<Op> remaining = new ArrayList<>();
 		for (Op op : base.ops()) {
-			if (leaving.stream().anyMatch(d -> d.sameOp(op))) {
+			if (gone.stream().anyMatch(d -> d.sameOp(op))) {
 				continue;
 			}
-			remaining.add(op != null && failed.stream().anyMatch(f -> f.sameOp(op)) ? op.withAttempts(op.attempts() + 1) : op);
+			remaining.add(op != null && failed.stream().anyMatch(f -> f.sameOp(op))
+					? op.withAttempts(Math.min(op.attempts() + 1, MAX_FAILED_RUNS - 1)) : op);
 		}
 		if (remaining.isEmpty()) {
 			Files.deleteIfExists(pendingFile);
-		} else {
+		} else if (!remaining.equals(base.ops()) || !Files.exists(pendingFile)) {
 			base.withOps(remaining).save(pendingFile);
+		}
+		if (!countFailures) {
+			return;
 		}
 		for (Op op : result.abandonedOps()) {
 			if (op != null && remaining.stream().noneMatch(o -> o != null && op.from() != null && op.from().equals(o.from()))) {
@@ -225,7 +268,7 @@ public final class ApplyExecutor {
 		}
 	}
 
-	List<OpResult> execute(PendingActions plan, Path modsDir, Path configDir) {
+	List<OpResult> execute(PendingActions plan, Path modsDir, Path configDir, UnfinishedGroups unfinished) {
 		List<Op> ops = plan.ops();
 		Map<String, List<Integer>> groups = new LinkedHashMap<>();
 		for (int i = 0; i < ops.size(); i++) {
@@ -236,7 +279,7 @@ public final class ApplyExecutor {
 		OpResult[] out = new OpResult[ops.size()];
 		InstalledJars installed = new InstalledJars(modsDir, this::jarModId);
 		for (List<Integer> members : groups.values()) {
-			runGroup(ops, members, modsDir, configDir, installed, out);
+			runGroup(ops, members, modsDir, configDir, installed, unfinished, out);
 			members.forEach(i -> installed.forget(ops.get(i)));
 		}
 		return Arrays.asList(out);
@@ -325,11 +368,22 @@ public final class ApplyExecutor {
 	private record Applied(OpResult result, Undo undo) {
 	}
 
-	// A group is all-or-nothing: disables run first, and an enable runs only once every disable in the group is
-	// OK or already done. When an op fails, the rest are skipped and the earlier renames are undone.
-	private void runGroup(List<Op> ops, List<Integer> members, Path modsDir, Path configDir, InstalledJars installed, OpResult[] out) {
+	// A group is all-or-nothing: disables run first, and an enable runs only once every disable in the group is OK or
+	// already done. Each op is tried once per pass. When one fails, the rest are skipped and every rename of the group is
+	// undone at once; only then is the whole group retried, under the failing op's retry budget (audit H4: retrying in
+	// place kept, say, the old jar disabled and the new one not yet enabled for up to 30 s). If a rollback fails, the
+	// group is half-applied anyway, so the rest is retried in place (roll forward) and the rollback tried again once the
+	// budget is spent. Each pass's renames are recorded in UnfinishedGroups first, so if the helper is killed or a
+	// rollback fails for good, the next run rolls the group forward: renames done earlier that are still in effect count
+	// as done, and if the group fails again they're rolled back with the rest. So no group ends half-applied unless a
+	// rollback fails for good, and then it stays recorded and pending.
+	private void runGroup(List<Op> ops, List<Integer> members, Path modsDir, Path configDir, InstalledJars installed,
+			UnfinishedGroups unfinished, OpResult[] out) {
 		List<Integer> order = new ArrayList<>(members);
 		order.sort(Comparator.comparingInt(i -> rank(ops.get(i))));
+		Op first = ops.get(order.getFirst());
+		String group = first == null ? null : first.group() != null ? first.group() : first.id() != null ? "op:" + first.id() : null;
+		Map<Integer, Undo> earlier = earlierRenames(ops, order, modsDir, unfinished.all());
 
 		String[] problems = new String[ops.size()];
 		String[] modIds = new String[ops.size()];
@@ -338,7 +392,7 @@ public final class ApplyExecutor {
 			Op op = ops.get(i);
 			problems[i] = problem(op, modsDir, configDir);
 			// A jar with no readable mod id can't be checked against what's installed, so it's never enabled; nor is one
-			// that isn't the mod it was staged as.
+			// that isn't the mod it was staged as. (An enable an earlier run did was checked by that run.)
 			if (problems[i] == null && op.type() == PendingActions.Type.ENABLE_FILE && Files.exists(Path.of(op.from()))) {
 				modIds[i] = jarModId(Path.of(op.from()));
 				if (modIds[i] == null) {
@@ -354,38 +408,170 @@ public final class ApplyExecutor {
 				out[i] = new OpResult(ops.get(i), Status.FAILED,
 						problems[i] != null ? "Refused: " + problems[i] : "Not applied: another change in its group was refused");
 			}
+			if (rollBack(ops, new ArrayList<>(earlier.values()), "another change in its group was refused", out)) {
+				unfinished.finish(group);
+			}
 			return;
 		}
 		String duplicate = duplicateProblem(ops, order, modIds, installed);
 		if (duplicate != null) {
+			// What an earlier run did stays: the mod is installed another way, so putting the old jar back would load it twice.
 			for (int i : order) {
-				out[i] = new OpResult(ops.get(i), Status.ABANDONED, "Dropped: " + duplicate);
+				Undo done = earlier.get(i);
+				out[i] = done != null ? doneEarlier(ops.get(i), done) : new OpResult(ops.get(i), Status.ABANDONED, "Dropped: " + duplicate);
 			}
+			unfinished.finish(group);
 			return;
 		}
 
-		List<Undo> undos = new ArrayList<>();
-		for (int k = 0; k < order.size(); k++) {
-			int i = order.get(k);
-			Op op = ops.get(i);
-			Applied applied = apply(op, i);
-			out[i] = applied.result();
-			if (applied.result().status() != Status.FAILED) {
-				if (applied.undo() != null) {
+		Map<Integer, RetryState> states = new HashMap<>();
+		boolean halfApplied = false;
+		while (true) {
+			Map<Integer, Path> targets = new HashMap<>();
+			List<Rename> renames = renames(ops, order, earlier, targets);
+			if (group != null && !renames.isEmpty()) {
+				unfinished.put(group, renames);
+			}
+			List<Undo> undos = new ArrayList<>();
+			int failed = -1;
+			IOException error = null;
+			for (int k = 0; k < order.size() && failed < 0; k++) {
+				int i = order.get(k);
+				Op op = ops.get(i);
+				Undo done = earlier.get(i);
+				Applied applied;
+				if (done != null) {
+					applied = new Applied(doneEarlier(op, done), done);
+				} else {
+					try {
+						applied = tryOnce(op, i, targets.get(i));
+					} catch (IOException e) {
+						error = e;
+						failed = k;
+						break;
+					}
+				}
+				out[i] = applied.result();
+				if (applied.result().status() == Status.FAILED) {
+					failed = k;
+				} else if (applied.undo() != null) {
 					undos.add(applied.undo());
 				}
+			}
+			if (failed < 0) {
+				unfinished.finish(group);
+				return;
+			}
+			int i = order.get(failed);
+			String reason = describe(ops.get(i)) + " failed";
+			for (int rest : order.subList(failed + 1, order.size())) {
+				out[rest] = new OpResult(ops.get(rest), Status.FAILED, "Not applied because " + reason);
+				// A rename done earlier (by an earlier run, or before a failed rollback) of an op this pass didn't reach counts
+				// too: it's rolled back with the rest, or stays done for the next pass.
+				if (earlier.containsKey(rest)) {
+					undos.add(earlier.get(rest));
+				}
+			}
+			RetryState state = states.computeIfAbsent(i, k -> new RetryState());
+			boolean another = error != null && state.allowsAnother(error);
+			if (another && halfApplied) {
+				if (state.pause()) {
+					earlier = byIndex(undos);
+					continue;
+				}
+				another = false;
+			}
+			boolean putBack = rollBack(ops, undos, reason, out);
+			halfApplied = !putBack;
+			earlier = byIndex(undos.stream().filter(u -> leftHalfApplied(out[u.index()])).toList());
+			if (another && state.pause()) {
 				continue;
 			}
-			String reason = describe(op) + " failed";
-			for (int rest : order.subList(k + 1, order.size())) {
-				out[rest] = new OpResult(ops.get(rest), Status.FAILED, "Not applied because " + reason);
+			if (error != null) {
+				out[i] = new OpResult(ops.get(i), Status.FAILED, "Gave up after " + state.attempt() + " tries: " + error);
 			}
-			for (int u = undos.size() - 1; u >= 0; u--) {
-				Undo undo = undos.get(u);
-				out[undo.index()] = rollback(ops.get(undo.index()), undo, reason);
+			if (putBack) {
+				unfinished.finish(group);
 			}
 			return;
 		}
+	}
+
+	// The recorded renames of this group's ops that an earlier run didn't finish or undo: each still in effect (its new
+	// name exists, its old one doesn't), matched to the op by id and paths whichever group recorded it, both names directly
+	// in the mods folder, so a record can never make the helper rename anything the op itself wouldn't.
+	private static Map<Integer, Undo> earlierRenames(List<Op> ops, List<Integer> order, Path modsDir, List<Rename> recorded) {
+		Map<Integer, Undo> out = new LinkedHashMap<>();
+		for (int i : order) {
+			for (Rename r : recorded) {
+				Undo undo = inEffect(ops.get(i), i, r, modsDir);
+				if (undo != null) {
+					out.put(i, undo);
+					break;
+				}
+			}
+		}
+		return out;
+	}
+
+	private static Undo inEffect(Op op, int index, Rename r, Path modsDir) {
+		if (op == null || op.type() == null || r.from() == null || r.to() == null || !Objects.equals(op.id(), r.op())) {
+			return null;
+		}
+		try {
+			Path from = Path.of(r.from());
+			Path to = Path.of(r.to());
+			boolean same = switch (op.type()) {
+				case ENABLE_FILE -> op.from() != null && op.to() != null && from.equals(Path.of(op.from())) && to.equals(Path.of(op.to()));
+				case DISABLE_FILE -> op.path() != null && from.equals(Path.of(op.path())) && fileName(r.to()).startsWith(fileName(r.from()) + ".disabled");
+				case PATCH_JSON, PATCH_TOML, PATCH_PROPERTIES -> false;
+			};
+			return same && SafeFileNames.isDirectChild(modsDir, from) && SafeFileNames.isDirectChild(modsDir, to) && Files.exists(to)
+					&& !Files.exists(from) ? new Undo(index, to, from) : null;
+		} catch (InvalidPathException e) {
+			return null;
+		}
+	}
+
+	// This pass's renames in order: the earlier run's still in effect, then each one this pass will do (an enable whose
+	// download is there and whose name is free, a disable whose jar is there, with the .disabled name it gets in `targets`).
+	private static List<Rename> renames(List<Op> ops, List<Integer> order, Map<Integer, Undo> earlier, Map<Integer, Path> targets) {
+		List<Rename> out = new ArrayList<>();
+		for (int i : order) {
+			Op op = ops.get(i);
+			Undo done = earlier.get(i);
+			if (done != null) {
+				out.add(new Rename(op.id(), done.back().toString(), done.moved().toString()));
+			} else if (op.type() == PendingActions.Type.ENABLE_FILE && Files.exists(Path.of(op.from())) && !Files.exists(Path.of(op.to()))) {
+				out.add(new Rename(op.id(), op.from(), op.to()));
+			} else if (op.type() == PendingActions.Type.DISABLE_FILE && Files.exists(Path.of(op.path()))) {
+				Path target = disabledTarget(Path.of(op.path()));
+				targets.put(i, target);
+				out.add(new Rename(op.id(), op.path(), target.toString()));
+			}
+		}
+		return out;
+	}
+
+	private static Map<Integer, Undo> byIndex(List<Undo> undos) {
+		Map<Integer, Undo> out = new LinkedHashMap<>();
+		undos.forEach(u -> out.put(u.index(), u));
+		return out;
+	}
+
+	private static OpResult doneEarlier(Op op, Undo done) {
+		return new OpResult(op, Status.SKIPPED_ALREADY_DONE, "Already done earlier: " + done.moved().getFileName(), done.moved().toString());
+	}
+
+	// Undoes the renames, newest first, each with the full retry budget. False when one stays where the group put it.
+	private boolean rollBack(List<Op> ops, List<Undo> undos, String reason, OpResult[] out) {
+		boolean all = true;
+		for (int u = undos.size() - 1; u >= 0; u--) {
+			Undo undo = undos.get(u);
+			out[undo.index()] = rollback(ops.get(undo.index()), undo, reason);
+			all &= !leftHalfApplied(out[undo.index()]);
+		}
+		return all;
 	}
 
 	private static int rank(Op op) {
@@ -429,8 +615,10 @@ public final class ApplyExecutor {
 				}
 			}
 		}
+		boolean stuck = Files.exists(undo.moved());
 		return new OpResult(op, Status.FAILED, "Rollback failed (" + (last == null ? "the original name is taken" : last)
-				+ "); " + undo.moved().getFileName() + " was left as it is after " + reason);
+				+ "); " + undo.moved().getFileName() + " was left as it is after " + reason
+				+ (stuck ? "; the next exit finishes or rolls back this change" : ""), stuck ? undo.moved().toString() : null);
 	}
 
 	static String problem(Op op, Path modsDir, Path configDir) {
@@ -467,36 +655,20 @@ public final class ApplyExecutor {
 		};
 	}
 
-	private interface Step {
-		Applied run() throws IOException;
-	}
-
-	private Applied apply(Op op, int index) {
-		return switch (op.type()) {
-			case ENABLE_FILE -> retrying(op, () -> enable(op, index));
-			case DISABLE_FILE -> retrying(op, () -> disable(op, index));
-			case PATCH_JSON -> retrying(op, () -> new Applied(patchJson(op), null));
-			case PATCH_TOML -> retrying(op, () -> new Applied(patchConfig(op, TomlConfigPatcher.patchFile(Path.of(op.path()), patchesOf(op))), null));
-			case PATCH_PROPERTIES -> retrying(op, () -> new Applied(patchConfig(op, PropertiesConfigPatcher.patchFile(Path.of(op.path()), patchesOf(op))), null));
-		};
-	}
-
-	private Applied retrying(Op op, Step step) {
-		RetryState state = new RetryState();
-		IOException last = null;
-		while (true) {
-			try {
-				return step.run();
-			} catch (IOException e) {
-				last = e;
-				if (!state.onFailure(e)) {
-					break;
-				}
-			} catch (RuntimeException e) {
-				return new Applied(new OpResult(op, Status.FAILED, e.toString()), null);
-			}
+	// One try: the op's result, or an IOException a retry might fix. A RuntimeException (a malformed config file, a
+	// patcher's refusal) fails it at once.
+	private Applied tryOnce(Op op, int index, Path disableTarget) throws IOException {
+		try {
+			return switch (op.type()) {
+				case ENABLE_FILE -> enable(op, index);
+				case DISABLE_FILE -> disable(op, index, disableTarget);
+				case PATCH_JSON -> new Applied(patchJson(op), null);
+				case PATCH_TOML -> new Applied(patchConfig(op, TomlConfigPatcher.patchFile(Path.of(op.path()), patchesOf(op))), null);
+				case PATCH_PROPERTIES -> new Applied(patchConfig(op, PropertiesConfigPatcher.patchFile(Path.of(op.path()), patchesOf(op))), null);
+			};
+		} catch (RuntimeException e) {
+			return new Applied(new OpResult(op, Status.FAILED, e.toString()), null);
 		}
-		return new Applied(new OpResult(op, Status.FAILED, "Gave up after " + state.attempt() + " tries: " + last), null);
 	}
 
 	private Applied enable(Op op, int index) throws IOException {
@@ -514,12 +686,13 @@ public final class ApplyExecutor {
 		return new Applied(new OpResult(op, Status.OK, "Enabled " + to.getFileName(), to.toString()), new Undo(index, to, from));
 	}
 
-	private Applied disable(Op op, int index) throws IOException {
+	// planned: the .disabled name recorded for this rename, if any.
+	private Applied disable(Op op, int index, Path planned) throws IOException {
 		Path path = Path.of(op.path());
 		if (!Files.exists(path)) {
 			return new Applied(new OpResult(op, Status.SKIPPED_ALREADY_DONE, path.getFileName() + " is already gone"), null);
 		}
-		Path target = disabledTarget(path);
+		Path target = planned != null ? planned : disabledTarget(path);
 		mover.move(path, target);
 		return new Applied(new OpResult(op, Status.OK, "Disabled " + path.getFileName() + " -> " + target.getFileName(), target.toString()),
 				new Undo(index, target, path));
