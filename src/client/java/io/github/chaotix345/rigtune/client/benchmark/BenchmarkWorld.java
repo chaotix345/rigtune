@@ -320,10 +320,6 @@ public final class BenchmarkWorld {
 
 	/** The terrain height at a column from the world's noise (no trees, no chunk needed). Server thread. */
 	public static int terrainFloor(ServerLevel level, int x, int z) {
-		// 26.4-snapshot-1 renamed ChunkGenerator.getBaseHeight to getFirstFreeHeight (same parameters).
-		//? if >=26.4-snapshot-1 {
-		/*return level.getChunkSource().getGenerator().getFirstFreeHeight(x, z, Heightmap.Types.OCEAN_FLOOR_WG, level, level.getChunkSource().randomState());
-		*///?} else
 		return level.getChunkSource().getGenerator().getBaseHeight(x, z, Heightmap.Types.OCEAN_FLOOR_WG, level, level.getChunkSource().randomState());
 	}
 
