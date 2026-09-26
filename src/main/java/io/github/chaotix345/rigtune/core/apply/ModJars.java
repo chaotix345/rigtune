@@ -54,6 +54,17 @@ public final class ModJars {
 		}
 	}
 
+	// docs/v0.4/SPEC.md 2o, H2: the mod's version (fabric.mod.json "version"), which the installed mods' version ranges are
+	// matched against; null as nameOf.
+	public static String versionOf(Path jar) {
+		try {
+			return readField(jar, "version");
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.debug("Could not read the version of {}: {}", jar, e.getMessage());
+			return null;
+		}
+	}
+
 	// A downloaded file's text shown in the UI (plan review P-L1): no formatting code (U+00A7 and the code after it), no
 	// control, format, separator, private-use or unassigned characters, runs of whitespace (tabs and newlines included) as
 	// one space, at most MAX_NAME_CODE_POINTS; null when nothing is left.

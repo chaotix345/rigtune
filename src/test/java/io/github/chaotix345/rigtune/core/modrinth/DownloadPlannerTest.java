@@ -1,5 +1,7 @@
 package io.github.chaotix345.rigtune.core.modrinth;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 import io.github.chaotix345.rigtune.core.TextChecks;
 import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
@@ -58,6 +60,11 @@ class DownloadPlannerTest {
 	final Map<String, ModrinthVersion> updateVersions = new HashMap<>();
 	final List<DownloadPlanner.Result> planned = new ArrayList<>();
 	StagedProjects staged = StagedProjects.NONE;
+	// A downloaded file's fabric.mod.json, where a test sets it: id (else from the file name), version (else "1"), provides.
+	final Map<String, String> jarIds = new HashMap<>();
+	final Map<String, String> jarVersions = new HashMap<>();
+	final Map<String, List<String>> jarProvides = new HashMap<>();
+	VersionPins pins = VersionPins.NONE;
 
 	@BeforeEach
 	void setUp() throws IOException {
@@ -101,8 +108,17 @@ class DownloadPlannerTest {
 			return Files.writeString(SafeFileNames.resolveJar(mods, file.filename(), PendingActions.PENDING_SUFFIX), "not a jar");
 		}
 		String base = file.filename().substring(0, file.filename().length() - ".jar".length());
-		String id = (base.endsWith("V") ? base.substring(0, base.length() - 1) : base).toLowerCase(Locale.ROOT);
-		return TestJars.modJar(SafeFileNames.resolveJar(mods, file.filename(), PendingActions.PENDING_SUFFIX), id);
+		String id = jarIds.getOrDefault(file.filename(), (base.endsWith("V") ? base.substring(0, base.length() - 1) : base).toLowerCase(Locale.ROOT));
+		JsonObject json = new JsonObject();
+		json.addProperty("schemaVersion", 1);
+		json.addProperty("id", id);
+		json.addProperty("version", jarVersions.getOrDefault(file.filename(), "1"));
+		if (jarProvides.containsKey(file.filename())) {
+			JsonArray provides = new JsonArray();
+			jarProvides.get(file.filename()).forEach(provides::add);
+			json.add("provides", provides);
+		}
+		return TestJars.modJar(SafeFileNames.resolveJar(mods, file.filename(), PendingActions.PENDING_SUFFIX), json);
 	}
 
 	private Recommendation update(String current, String next) {
@@ -159,7 +175,7 @@ class DownloadPlannerTest {
 
 	private DownloadPlanner.Result plan(Set<String> installedProjects, Set<String> loadedIds, Recommendation... recs) {
 		DownloadPlanner planner = new DownloadPlanner(new DependencyResolver(client, "fabric", "26.2", installedVersions).withStaged(staged), mods,
-				this::fetch, conflicts, updateVersions);
+				this::fetch, conflicts, updateVersions, pins);
 		DownloadPlanner.Result result = planner.plan(List.of(recs), installedProjects, loadedIds, Map.of());
 		planned.add(result);
 		return result;
@@ -736,5 +752,67 @@ class DownloadPlannerTest {
 		assertEquals(2, merged.ops().size(), merged.ops().toString());
 		assertEquals(1, groups(merged.ops()), merged.ops().toString());
 		assertEquals(List.of(), merged.remove(List.of(stagedLib.id())).plan().ops());
+	}
+
+	// --- docs/v0.4/SPEC.md 2o, H2: the installed mods' fabric.mod.json pins on the mod being updated (or added)
+
+	// An installed mod's `depends` range on target: "0.9.x" (a prefix) or "0.9.2" (exact); the client uses Fabric's predicates.
+	private static VersionPins.Pin dependsOn(String by, String byName, String target, String targetName, String range) {
+		String prefix = range.endsWith("x") ? range.substring(0, range.length() - 1) : null;
+		return new VersionPins.Pin(by, byName, by, target, targetName, VersionPins.Kind.DEPENDS, () -> range,
+				v -> prefix != null ? v.startsWith(prefix) : v.equals(range));
+	}
+
+	// Iris 1.11.4 declares sodium: ["0.9.x"] (audit-verification.md H2): a Sodium 0.10 update before Iris supports it would
+	// stop the game from starting, so it's refused before staging, naming Iris; its download is deleted and the installed
+	// jar is left alone. A 0.9.3 update is staged.
+	@Test
+	void anUpdateOutsideAnInstalledModsVersionRangeIsRefusedNamingThatMod() throws IOException {
+		pins = new VersionPins(List.of(dependsOn("iris", "Iris", "sodium", "Sodium", "0.9.x")));
+		Recommendation update = updateOf("sodium", "SODIUM");
+		jarVersions.put("sodiumV.jar", "0.10.0+mc26.2");
+
+		DownloadPlanner.Result result = plan(Set.of("SODIUM"), update);
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of(), result.ops());
+		assertEquals(List.of("Update sodium: Iris, which is installed, needs Sodium 0.9.x, not 0.10.0+mc26.2"), result.errors());
+		assertFalse(Files.exists(mods.resolve("sodiumV.jar" + PendingActions.PENDING_SUFFIX)));
+		assertEquals("installed", Files.readString(mods.resolve("sodium-1.jar")));
+
+		jarVersions.put("sodiumV.jar", "0.9.3+mc26.2");
+		DownloadPlanner.Result inRange = plan(Set.of("SODIUM"), update);
+
+		assertEquals(List.of("update-sodium"), inRange.ids());
+		assertEquals(List.of("sodium-1.jar", "sodiumV.jar"), files(inRange.ops()));
+	}
+
+	// Only the pinned update is refused; the rest of the batch goes ahead.
+	@Test
+	void aPinRefusesOnlyTheUpdateItIsAbout() throws IOException {
+		pins = new VersionPins(List.of(dependsOn("nvidium", "Nvidium", "sodium", "Sodium", "0.9.2")));
+		Recommendation sodium = updateOf("sodium", "SODIUM");
+		Recommendation lithium = updateOf("lithium", "LITHIUM");
+		jarVersions.put("sodiumV.jar", "0.9.3");
+
+		DownloadPlanner.Result result = plan(Set.of("SODIUM", "LITHIUM"), sodium, lithium);
+
+		assertEquals(List.of("update-lithium"), result.ids());
+		assertEquals(List.of("Update sodium: Nvidium, which is installed, needs Sodium 0.9.2, not 0.9.3"), result.errors());
+	}
+
+	// The same for an addition (or a library it brings): an installed mod's `breaks` on it stops the game from starting.
+	@Test
+	void anAdditionAnInstalledModBreaksIsRefused() {
+		pins = new VersionPins(List.of(new VersionPins.Pin("iris", "Iris", "iris", "lib", null, VersionPins.Kind.BREAKS, () -> "*", v -> false)));
+		libraryUsers();
+		put("c", version("cV", "C", "1", T));
+
+		DownloadPlanner.Result result = plan(Set.of(), add("a", "A"), add("c", "C"));
+
+		assertEquals(List.of("add-c"), result.ids());
+		assertEquals(List.of("cV.jar"), targets(result.ops()));
+		assertEquals(List.of("Add a: Iris, which is installed, doesn't work with lib 1"), result.errors());
+		assertFalse(Files.exists(mods.resolve("libV.jar" + PendingActions.PENDING_SUFFIX)));
 	}
 }

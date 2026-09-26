@@ -178,6 +178,8 @@
 	"rigtune.download.no_version": "No %s version of %s for Minecraft %s",
 	"rigtune.download.not_a_mod": "%s is not a Fabric mod jar (no readable fabric.mod.json id)",
 	"rigtune.download.outside_mods_folder": "it isn't in this instance's mods folder; update it in your launcher",
+	"rigtune.download.pinned": "%s, which is installed, needs %s %s, not %s",
+	"rigtune.download.pinned_breaks": "%s, which is installed, doesn't work with %s %s",
 	"rigtune.download.staged_incompatible": "Modrinth marks %s, which is waiting for a restart, as incompatible with %s",
 	"rigtune.download.stale": "its Modrinth data changed since the list was made; try again",
 	"rigtune.download.target_exists": "%s is already in the mods folder",

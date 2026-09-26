@@ -63,6 +63,8 @@ public final class DownloadPlanner {
 	private final BiPredicate<String, String> conflicts;
 	private final Map<String, ModrinthVersion> updateVersions;
 	private final Function<Path, String> modIdOf;
+	private final Function<Path, String> versionOf;
+	private final VersionPins pins;
 
 	public DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher) {
 		this(resolver, modsDir, fetcher, (a, b) -> false);
@@ -78,17 +80,32 @@ public final class DownloadPlanner {
 	// can't be checked.
 	public DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher, BiPredicate<String, String> conflicts,
 			Map<String, ModrinthVersion> updateVersions) {
-		this(resolver, modsDir, fetcher, conflicts, updateVersions, ModJars::modIdOf);
+		this(resolver, modsDir, fetcher, conflicts, updateVersions, VersionPins.NONE);
 	}
 
+	// pins: the loaded mods' fabric.mod.json version ranges on other mods (docs/v0.4/SPEC.md 2o, H2), matched against each
+	// downloaded jar's own version.
+	public DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher, BiPredicate<String, String> conflicts,
+			Map<String, ModrinthVersion> updateVersions, VersionPins pins) {
+		this(resolver, modsDir, fetcher, conflicts, updateVersions, ModJars::modIdOf, ModJars::versionOf, pins);
+	}
+
+	// The dry run (DryRunPlanner): nothing is downloaded, so no jar's version is known and no pin is checked.
 	DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher, BiPredicate<String, String> conflicts,
 			Map<String, ModrinthVersion> updateVersions, Function<Path, String> modIdOf) {
+		this(resolver, modsDir, fetcher, conflicts, updateVersions, modIdOf, jar -> null, VersionPins.NONE);
+	}
+
+	private DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher, BiPredicate<String, String> conflicts,
+			Map<String, ModrinthVersion> updateVersions, Function<Path, String> modIdOf, Function<Path, String> versionOf, VersionPins pins) {
 		this.resolver = resolver;
 		this.modsDir = modsDir;
 		this.fetcher = fetcher;
 		this.conflicts = conflicts;
 		this.updateVersions = Map.copyOf(updateVersions);
 		this.modIdOf = modIdOf;
+		this.versionOf = versionOf;
+		this.pins = pins == null ? VersionPins.NONE : pins;
 	}
 
 	// docs/v0.4/SPEC.md 2o, H3: the loadedIds for plan(): the scanned mods that are top-level jars. A mod nested inside
@@ -251,6 +268,7 @@ public final class DownloadPlanner {
 				attempt.batch.dropDuplicate(pending);
 				continue;
 			}
+			refusePinned(jarModId, pending, attempt);
 			attempt.batch.noteReplaced(jarModId, pending);
 			attempt.newProjects.add(version.projectId());
 			attempt.versions.add(version);
@@ -286,11 +304,22 @@ public final class DownloadPlanner {
 			attempt.batch.dropDuplicate(pending);
 			throw notAMod(file);
 		}
+		refusePinned(jarModId, pending, attempt);
 		attempt.batch.noteReplaced(jarModId, pending);
 		attempt.ops.add(Op.disableFile(update.currentFile()));
 		attempt.ops.add(Op.enableFile(pending, target).withModId(jarModId).withProjectId(next.projectId()).withVersionId(next.id()));
 		attempt.versions.add(next);
 		attempt.updatedProject = info.projectId();
+	}
+
+	// docs/v0.4/SPEC.md 2o, H2: an installed mod whose fabric.mod.json `depends` range excludes this jar's version (or whose
+	// `breaks` range includes it) would stop Fabric from starting, so the jar isn't staged.
+	private void refusePinned(String jarModId, Path pending, Attempt attempt) throws IOException {
+		Text problem = pins.problem(jarModId, versionOf.apply(pending));
+		if (problem != null) {
+			attempt.batch.dropDuplicate(pending);
+			throw new TextException(problem);
+		}
 	}
 
 	private static TextException notAMod(ModFile file) {

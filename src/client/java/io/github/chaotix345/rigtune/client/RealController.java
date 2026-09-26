@@ -13,6 +13,7 @@ import io.github.chaotix345.rigtune.client.notice.NoticeCenter;
 import io.github.chaotix345.rigtune.client.notice.RegressionNoticeSource;
 import io.github.chaotix345.rigtune.client.notice.ServerLimitNoticeSource;
 import io.github.chaotix345.rigtune.client.notice.WhatsNewNoticeSource;
+import io.github.chaotix345.rigtune.client.probe.FabricPins;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.LauncherProbe;
 import io.github.chaotix345.rigtune.client.probe.ModScanner;
@@ -569,7 +570,7 @@ public final class RealController implements RigTuneController {
 		Set<String> loadedIds = DownloadPlanner.topLevelIds(mods);
 		RulesDocument doc = rules;
 		BiPredicate<String, String> conflicts = doc == null ? (a, b) -> false : ModConflicts.of(doc)::between;
-		return new DownloadPlanner(resolver, modsDir, this::fetch, conflicts, data.updateVersions()).plan(recs, installedProjects, loadedIds, stagedJarsByModId());
+		return new DownloadPlanner(resolver, modsDir, this::fetch, conflicts, data.updateVersions(), FabricPins.loaded()).plan(recs, installedProjects, loadedIds, stagedJarsByModId());
 	}
 
 	// Mod ids that already have a staged ENABLE_FILE, with that op's pending jar. A newer download for the same id
