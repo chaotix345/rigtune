@@ -94,7 +94,7 @@ Branch `feat/jvm-advice`. Plan: docs/v0.4/plans/ws-j.md. Research: docs/research
   - The bundled-rules scenario lands with WS-R's content.
 - AC6.4: JvmGameTest green on 26.2 OpenGL, 26.3 OpenGL and 26.3 Vulkan.
 - AC6.5: the checklist below.
-- AC6.6: Phase 5.
+- AC6.6: Phase 5. The hook and the detection part were already checked by a local run under the lock, with the full production game-test suite on 26.2, Windows 11, Temurin 25.0.4.1: `-PgametestJvmArgs="-XX:+UseZGC -XX:+ZGenerational -Dusing.aikars.flags=x"` → "RigTune: Java 25.0.4.1+1-LTS (Eclipse Adoptium), ZGC (typed), 2 argument notes [-XX:+ZGenerational, -Dusing.aikars.flags]", and JvmGameTest's "AC6.6 detection from the running JVM passed" (docs/v0.4/verification/jvm/local-gametestJvmArgs-26.2.txt). The 3 benchmark pairs remain Phase 5.
 
 ## AC6.5: every number in `jvm-*` advice text traces to jvm-gc.md §4
 
