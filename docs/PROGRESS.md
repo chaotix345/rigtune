@@ -139,6 +139,9 @@ Brief: the user's v0.2.0 prompt (full autonomy: research → release, including 
 - FIXED for 0.2 (fix/helper-file-lock-retry c5c1d36 -> 9722170): sharing violations back off exponentially (300 ms doubling, 5 s cap, ~30 s budget, rollback too); ApplyHelper settles 2 s after the game exits. 693 tests per version.
 
 ## Lessons (carried over from v0.1.0; don't relearn)
+- v0.4 additions:
+  - Never run unbounded filesystem searches (`find /`, `find C:/`): five research agents left `find /` processes burning a core each for over an hour after they finished, skewing r-jvm's benchmarks. Search known roots only (C:/Users/Admin/.gradle/caches, the repo, the worktree) with -maxdepth and a `timeout 120`. The coordinator killed them with MSYS `/usr/bin/kill -f -9 <winpid>` / `taskkill //PID <pid> //F`.
+  - The watchdog now re-reads scratchpad/agents.txt every loop (`run_watchdog.sh`): drop a finished agent by deleting its line, no restart needed.
 - v0.3 additions:
   - The game-test lock is released with `rm -f .../owner.txt; rmdir .../.gametest-lock` (a hook blocks `rm -rf` on it).
   - The watchdog takes `name=<worktree>;<scratch>@<branch>` and treats a running CI run on that branch as busy (fewer false stalls while agents poll CI).
