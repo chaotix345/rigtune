@@ -2,6 +2,22 @@
 
 Source of truth for resuming after context compaction. Update and commit after every milestone. After a compaction, reread this file before acting.
 
+## v0.4.0 working log (started 2026-09-26)
+
+Brief: the user's v0.4.0 prompt (full autonomy, research -> release incl. GitHub + Modrinth). Theme: an ongoing performance companion. Scope: P0 1-3 (MC currency + snapshot canary CI, the v0.3 deferred defects, real-world self-update + publish), P1 4-10 (Profiles + share codes, Stutter Doctor, JVM/GC advice, benchmark history + regression alerts, server-aware advice, change awareness + driver condition, RigTune's own footprint budget), P2 11-13 (accessibility, shader-pack profiles, startup-time report). docs/v0.4/SPEC.md once written.
+
+### Environment (verified 2026-09-26)
+- Integration branch `feat/v0.4.0` from main @ a601e48 (pushed). Baseline `./gradlew build` OK; main CI 36205601559 green.
+- MC (Mojang manifest + Fabric meta, 2026-09-26): latest release 26.3; 26.4 only `26.4-snapshot-1` (2026-09-22). Fabric loader 0.19.5 stable. -> P0.1 = snapshot canary CI; no 26.4 node.
+- Modrinth `status`: processing (requested approved), 5 versions listed (0.1.0, 0.2.0 x2, 0.3.0 x2). Still in review -> the update can't be offered in the wild yet.
+- No open PRs, no open issues. gh: chaotix345 (gist/project/read:org/repo).
+- Real instance (read-only): not played since 2026-09-25 09:08 (still 0.1.0; DH group pending; DH 3.3.2 queued in mods/update). GL driver string `3.3.0 Core Profile Context 26.8.1.260810` (AMD Adrenalin 26.8.1).
+- Watchdog: scratchpad/run_watchdog.sh (reads scratchpad/agents.txt, one `name=<dir>;<dir>@<branch>` per line; --stall-min 20 --lock-min 12). Scratchpad: C:/Users/Admin/AppData/Local/Temp/claude/C--Dev-Minecraft-Setting-Optimisation-Mod/32b9ff53-5b6c-44d7-bc00-195e4f1a3166/scratchpad
+
+### Status
+- [x] Phase 0: orient (above).
+- [ ] Phase 1: research RUNNING (docs/research/v0.4/, one owner each): mc-versions (r-mcver, trial worktree rigtune-r-snap), profiles, stutter, jvm-gc (r-jvm, worktree rigtune-r-jvm, measures G1/ZGC), server-view-distance, drivers, footprint (r-footprint, worktree rigtune-r-foot), v03-deferred, bench-history-a11y. Digest of the v0.3 docs -> scratchpad/orient/digest.md.
+
 ## v0.3.0: RELEASED 2026-09-26
 - PR #4 merged to main (220ac62); PR #5 (CI: the backend check also reads rotated logs; main's run crossed midnight UTC) merged (7dad498); tag v0.3.0 on 7dad498. GitHub release: https://github.com/chaotix345/rigtune/releases/tag/v0.3.0 (rigtune-0.3.0+mc26.2.jar / +mc26.3.jar + sources). Release run 36204454307 green: both nodes published, "Verify Modrinth files match" confirmed each sha512.
 - Modrinth oBN6pcGa: 0.3.0+mc26.2 (VUNuM4Oj), 0.3.0+mc26.3 (TVKKfk4V) listed; `submit` + `sync-body` (docs/modrinth/body-0.3.md) + a 7th gallery image (History) done. Status still processing (in moderator review), so installed 0.1.0/0.2.0 aren't offered the update in the wild yet; the user's real instance (0.1.0) hasn't been played since 2026-09-25 09:08.
