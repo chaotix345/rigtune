@@ -283,6 +283,17 @@ class RestrictiveRulesTests(Base):
         self.assert_valid(settings=[{"key": "vanilla.renderDistance", "value": 8, "when": driver, "reason": "r", "v1": False}])
         self.assert_valid(settings=[self.clamp({"settingIs": {"dh.a": "X"}})])
 
+    def test_a_settings_rule_has_value_or_min_max_never_both(self):
+        """Review-8 CR-2: clients read only `value` when both are set, so a min/max next to it is silently lost (and its
+        `when` escaped the legacy check above); a rule with neither does nothing. Refused either way, with `requires` too."""
+        driver = {"driverVersion": {"vendor": "nvidia", "atMost": "536.22"}}
+        both = {"key": "vanilla.renderDistance", "value": 8, "reason": "r", "v1": False}
+        self.assert_invalid("both value and min/max", settings=[dict(both, min=4, when=driver)])
+        self.assert_invalid("both value and min/max", settings=[dict(both, max=12)])
+        self.assert_invalid("both value and min/max", settings=[dict(both, max=12, requires=["driver-clamps"])])
+        self.assert_invalid("needs value or min/max", settings=[{"key": "vanilla.renderDistance", "reason": "r", "v1": False}])
+        self.assert_valid(settings=[both, {"key": "vanilla.renderDistance", "min": 4, "max": 12, "reason": "r", "v1": False}])
+
     def test_avoid_when_and_skip_update_when(self):
         driver = {"driverVersion": {"vendor": "amd", "atLeast": "24.8.1"}}
         self.assert_invalid("avoidWhen uses a condition 0.2.0/0.3.0 don't know", mods=[self.mod(avoidWhen=driver, avoidReason="r")])
