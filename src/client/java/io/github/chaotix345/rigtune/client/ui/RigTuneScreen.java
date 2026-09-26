@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.client.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
@@ -836,7 +837,7 @@ public class RigTuneScreen extends Screen {
 				if (super.mouseClicked(event, doubleClick)) {
 					return true;
 				}
-				if (checkbox != null && event.button() == 0) {
+				if (checkbox != null && event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
 					checkbox.onPress(event);
 					return true;
 				}

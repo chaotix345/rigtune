@@ -17,6 +17,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // AC5.4 for the real hook: StutterMonitor.onFrame with the phase timers, off and on, allocates nothing; the capture
 // lifecycle and the phase-timing verdict (plan review S-M1).
 class StutterMonitorTest {
+	// JVM bookkeeping on a CI runner can add about 1 KB over a whole run (1,072 bytes once, run 36231385325); an allocation
+	// per frame would be at least 16 MB over a million frames, so 64 KiB separates the two with a wide margin.
+	static final long NOISE_BYTES = 64 * 1024;
 	@AfterEach
 	void stopEverything() {
 		StutterMonitor.Capture s = StutterMonitor.session();
@@ -54,14 +57,14 @@ class StutterMonitorTest {
 		long before = allocated();
 		frames(1_000_000);
 		long off = allocated() - before;
-		assertTrue(off < 1024, "monitor off: " + off + " bytes");
+		assertTrue(off < NOISE_BYTES, "monitor off: " + off + " bytes");
 
 		StutterMonitor.startSession(new StutterRings(0), System.nanoTime(), Instant.now());
 		frames(1_000_000);
 		before = allocated();
 		frames(1_000_000);
 		long on = allocated() - before;
-		assertTrue(on < 1024, "monitor on: " + on + " bytes");
+		assertTrue(on < NOISE_BYTES, "monitor on: " + on + " bytes");
 	}
 
 	// The per-frame cost, measured (research §2.3: ~21 ns with the monitor on); a gross guard only: SPEC 10's budgets are

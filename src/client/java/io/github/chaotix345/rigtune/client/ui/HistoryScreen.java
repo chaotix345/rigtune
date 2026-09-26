@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.client.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.core.history.ApplyFailures;
@@ -117,12 +118,22 @@ public class HistoryScreen extends Screen {
 		return out.toString();
 	}
 
+	// The history is read only once this screen's widgets exist: a read that is ready at once completes on the render
+	// thread and rebuilds the screen, which inside layout() would add every widget a second time.
 	@Override
 	protected void init() {
-		if (stale) {
+		boolean refresh = stale;
+		if (refresh) {
 			stale = false;
+			loading = true;
+		}
+		layout();
+		if (refresh) {
 			load();
 		}
+	}
+
+	private void layout() {
 		int column = Math.min(width - 32, 480);
 		HistoryModel.Entry entry = selectedEntry();
 		List<Button> buttons = new ArrayList<>();
@@ -419,7 +430,7 @@ public class HistoryScreen extends Screen {
 
 		@Override
 		public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-			if (event.button() == 0) {
+			if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
 				clicked = entry.id();
 				return true;
 			}
