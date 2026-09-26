@@ -38,6 +38,7 @@ class ServerLimitsStoreTest {
 		assertEquals("play.example.com:25566", ServerLimitsStore.address("play.example.com", 25566));
 		assertEquals("[::1]:25565", ServerLimitsStore.address("::1", -1));
 		assertEquals("realm:My World", ServerLimitsStore.realm(" My World "));
+		assertEquals("lan:192.168.1.20", ServerLimitsStore.lan(" 192.168.1.20 "));
 	}
 
 	@Test

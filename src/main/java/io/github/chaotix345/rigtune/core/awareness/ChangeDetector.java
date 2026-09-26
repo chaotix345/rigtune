@@ -106,7 +106,9 @@ public final class ChangeDetector {
 
 	// awareness.json side: the first run (no usable fingerprint, which includes every upgrade from 0.3 or older and a
 	// corrupt file, moved to .bad by the store) seeds silently and is no change; a file this version can't write (a
-	// newer RigTune's, unreadable) is no change either, so a notice that could never be acknowledged never shows.
+	// newer RigTune's, unreadable) is no change either, so a notice that could never be acknowledged never shows. A
+	// difference that isn't a change (a backend switch, RAM noise, a GPU value the earlier probe couldn't read) moves the
+	// stored fingerprint on silently when this probe read everything, so the next comparison starts from what is there.
 	public static Change check(AwarenessStore store, Fingerprint now) {
 		if (!store.writable()) {
 			return Change.NONE;
@@ -116,7 +118,16 @@ public final class ChangeDetector {
 			store.update(now::writeTo);
 			return Change.NONE;
 		}
-		return compare(before, now);
+		Change change = compare(before, now);
+		if (!change.changed() && !now.equals(before) && complete(now)) {
+			store.update(now::writeTo);
+		}
+		return change;
+	}
+
+	private static boolean complete(Fingerprint f) {
+		return !f.gpuRenderer().isBlank() && !f.gpuDriverRaw().isBlank() && !f.cpuName().isBlank() && f.totalRamMb() > 0
+				&& !f.backend().equals(GraphicsBackend.UNKNOWN.name());
 	}
 
 	// The notice was shown or dismissed: the current fingerprint becomes the one to compare with.

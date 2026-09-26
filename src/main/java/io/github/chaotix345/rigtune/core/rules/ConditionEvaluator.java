@@ -293,8 +293,10 @@ public final class ConditionEvaluator {
 	}
 
 	// docs/v0.4/SPEC.md 9: {"vendor" (required, the gpuVendor vocabulary), "atLeast", "atMost" (dotted numbers, inclusive)}.
-	// TRUE/FALSE only when the detected vendor is the rule's and the driver string parses (DriverVersionParser); a vendor
-	// mismatch, an unknown vendor, an unparseable string, a bad number, a missing vendor or another key is UNKNOWN.
+	// TRUE/FALSE only when the detected vendor is the rule's and the driver string parses (DriverVersionParser) as that
+	// vendor's own driver (NVIDIA's, AMD Adrenalin, Intel's Windows build): a Mesa version (nouveau, RADV, zink, ...) is
+	// never compared with a proprietary one. A vendor mismatch, an unknown vendor, an unparseable string, another
+	// family, a bad number, a missing vendor or another key is UNKNOWN.
 	private static Truth driverVersion(Map<String, String> wanted, EvalContext ctx) {
 		for (String key : wanted.keySet()) {
 			if (!DRIVER_VERSION_KEYS.contains(String.valueOf(key))) {
@@ -311,7 +313,7 @@ public final class ConditionEvaluator {
 		int[] atMost = wanted.containsKey("atMost") ? DriverVersion.dotted(wanted.get("atMost")) : new int[0];
 		GpuInfo gpu = ctx.hardware().gpu();
 		DriverVersion version = gpu == null ? DriverVersion.unknown(detected, null) : DriverVersionParser.parse(detected, gpu.backend(), gpu.driverVersion());
-		if (atLeast == null || atMost == null || !version.known()) {
+		if (atLeast == null || atMost == null || !version.known() || !version.family().equals(DriverVersion.vendorFamily(detected))) {
 			return UNKNOWN;
 		}
 		return Truth.of((atLeast.length == 0 || version.compareTo(atLeast) >= 0) && (atMost.length == 0 || version.compareTo(atMost) <= 0));

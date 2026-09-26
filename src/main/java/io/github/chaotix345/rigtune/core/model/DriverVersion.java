@@ -29,6 +29,16 @@ public record DriverVersion(GpuVendor vendor, String family, int[] comparable, S
 		return new DriverVersion(vendor, UNKNOWN_FAMILY, new int[0], raw);
 	}
 
+	// The family of the vendor's own driver (what a driverVersion rule compares against), or null.
+	public static @Nullable String vendorFamily(@Nullable GpuVendor vendor) {
+		return vendor == null ? null : switch (vendor) {
+			case NVIDIA -> GEFORCE;
+			case AMD -> ADRENALIN;
+			case INTEL -> INTEL;
+			default -> null;
+		};
+	}
+
 	public boolean known() {
 		return comparable.length > 0 && !UNKNOWN_FAMILY.equals(family);
 	}

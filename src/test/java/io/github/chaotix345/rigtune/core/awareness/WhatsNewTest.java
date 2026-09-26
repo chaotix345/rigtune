@@ -99,6 +99,16 @@ class WhatsNewTest {
 	}
 
 	@Test
+	void anOlderRevisionIsNotNewsAndKeepsTheBaseline() {
+		AwarenessStore store = AwarenessStore.shared(config);
+		RulesDocument r13 = RulesLoader.parse(RULES_13);
+		RulesDocument r14 = RulesLoader.parse(RULES_14);
+		assertTrue(WhatsNew.acknowledge(store, 14, WhatsNew.potentialIds(r14)));
+		assertEquals(NOTHING, WhatsNew.check(store, report(r13, recs14()), r13).kind());
+		assertEquals(14, WhatsNew.Baseline.read(store.read()).revision());
+	}
+
+	@Test
 	void bumpedWithoutABaselineIsSeededSilently() {
 		AwarenessStore store = AwarenessStore.shared(config);
 		RulesDocument rules = RulesLoader.parse(RULES_14);

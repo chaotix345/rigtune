@@ -57,7 +57,8 @@ class ConditionEvaluatorDriverVersionTest {
 		EvalFixture f = gpu("NVIDIA", "NVIDIA GeForce RTX 3070", "1.3.296 NVIDIA 531.18", GraphicsBackend.VULKAN, GpuVendor.NVIDIA);
 		assertEquals(TRUE, f.truth(NV_RANGE));
 		EvalFixture radv = gpu("AMD", "AMD Radeon RX 7800 XT (RADV NAVI32)", "1.3.290 Mesa RADV 24.2.3", GraphicsBackend.VULKAN, GpuVendor.AMD);
-		assertEquals(TRUE, radv.truth("{\"driverVersion\": {\"vendor\": \"amd\", \"atLeast\": \"24.2\"}}"));
+		assertEquals(UNKNOWN, radv.truth("{\"driverVersion\": {\"vendor\": \"amd\", \"atLeast\": \"24.2\"}}"),
+				"a Mesa version is never compared with Adrenalin's numbers");
 		assertEquals(UNKNOWN, gpu("AMD", "AMD Radeon RX 7800 XT", "1.3.296 AMD proprietary driver 26.8.1", GraphicsBackend.VULKAN, GpuVendor.AMD)
 				.truth("{\"driverVersion\": {\"vendor\": \"amd\", \"atLeast\": \"1\"}}"));
 	}
@@ -79,6 +80,22 @@ class ConditionEvaluatorDriverVersionTest {
 		EvalFixture unknownVendor = gpu("", "", "4.6.0 NVIDIA 531.18", GraphicsBackend.OPENGL, GpuVendor.UNKNOWN);
 		assertEquals(UNKNOWN, unknownVendor.truth("{\"driverVersion\": {\"vendor\": \"unknown\"}}"), "an unknown detected vendor");
 		assertEquals(UNKNOWN, unknownVendor.truth(NV_RANGE));
+	}
+
+	@Test
+	void onlyTheVendorsOwnDriverFamilyTakesPart() {
+		EvalFixture nouveau = gpu("nouveau", "NV167", "4.3 (Core Profile) Mesa 24.2.3", GraphicsBackend.OPENGL, GpuVendor.NVIDIA);
+		assertEquals(UNKNOWN, nouveau.truth("{\"driverVersion\": {\"vendor\": \"nvidia\", \"atMost\": \"470\"}}"), "nouveau is not NVIDIA 24.2");
+		EvalFixture zink = gpu("Mesa", "zink Vulkan 1.3(NVIDIA GeForce RTX 3070 (NVIDIA_PROPRIETARY))", "4.6 (Core Profile) Mesa 24.2.3",
+				GraphicsBackend.OPENGL, GpuVendor.NVIDIA);
+		assertEquals(UNKNOWN, zink.truth("{\"driverVersion\": {\"vendor\": \"nvidia\", \"atMost\": \"470\"}}"));
+		EvalFixture radeonsi = gpu("AMD", "AMD Radeon RX 7800 XT (radeonsi, navi32)", "4.6 (Core Profile) Mesa 23.3.6", GraphicsBackend.OPENGL, GpuVendor.AMD);
+		assertEquals(UNKNOWN, radeonsi.truth("{\"driverVersion\": {\"vendor\": \"amd\", \"atMost\": \"23.12\"}}"));
+		EvalFixture anv = gpu("Intel", "Mesa Intel(R) UHD Graphics 620 (KBL GT2)", "4.6 (Core Profile) Mesa 24.0.5", GraphicsBackend.OPENGL, GpuVendor.INTEL);
+		assertEquals(UNKNOWN, anv.truth("{\"driverVersion\": {\"vendor\": \"intel\", \"atMost\": \"10.18.10.5160\"}}"));
+		EvalFixture adrenalin = gpu("ATI Technologies Inc.", "AMD Radeon RX 7800 XT", "3.3.0 Core Profile Context 26.8.1.260810", GraphicsBackend.OPENGL, GpuVendor.AMD);
+		assertEquals(TRUE, adrenalin.truth("{\"driverVersion\": {\"vendor\": \"amd\", \"atLeast\": \"26.8\"}}"));
+		assertEquals(FALSE, adrenalin.truth("{\"driverVersion\": {\"vendor\": \"amd\", \"atMost\": \"26.7.9\"}}"));
 	}
 
 	@Test

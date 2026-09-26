@@ -30,6 +30,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 // Change awareness (docs/v0.4/SPEC.md 9, plan review W-L3, X-M1): the hardware fingerprint, the what's-new baseline and
 // the notice dismissals, all in awareness.json through the one process-wide AwarenessStore. It is the notice slot's
@@ -46,7 +47,8 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 	// Names the what's-new detail lists before "…".
 	private static final int MAX_NAMES = 8;
 
-	private record Pending(ChangeDetector.Change change, Fingerprint now, String key) {
+	// committed: the fingerprint was written (shown or dismissed); one flag per change, so a newer probe starts clean.
+	private record Pending(ChangeDetector.Change change, Fingerprint now, String key, AtomicBoolean committed) {
 	}
 
 	private record Fresh(int revision, Set<String> potential, List<Recommendation> fresh, String key) {
@@ -58,7 +60,6 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 	// Dismissals of this session, so × still works while awareness.json is from a newer RigTune or unreadable.
 	private final NoticeCenter.Dismissals session = NoticeCenter.inMemory();
 	private volatile @Nullable Pending hardware;
-	private volatile boolean hardwareCommitted;
 	private volatile @Nullable Fresh whatsNew;
 	// Render thread only: the report the what's-new check last ran for.
 	private @Nullable Report checkedReport;
@@ -89,8 +90,7 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 		try {
 			Fingerprint now = Fingerprint.of(hw);
 			ChangeDetector.Change change = ChangeDetector.check(store, now);
-			hardware = change.changed() ? new Pending(change, now, HARDWARE_KEY_PREFIX + now.id()) : null;
-			hardwareCommitted = false;
+			hardware = change.changed() ? new Pending(change, now, HARDWARE_KEY_PREFIX + now.id(), new AtomicBoolean()) : null;
 		} catch (RuntimeException e) {
 			RigTune.LOGGER.warn("Could not compare the hardware with {}", AwarenessStore.FILE_NAME, e);
 		}
@@ -166,10 +166,9 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 	// W-L3: the hardware notice was the notice line's current notice or listed on NoticeScreen.
 	void shown(@Nullable Notice notice) {
 		Pending p = hardware;
-		if (notice == null || p == null || hardwareCommitted || !notice.key().equals(p.key())) {
+		if (notice == null || p == null || p.committed().get() || !notice.key().equals(p.key()) || !p.committed().compareAndSet(false, true)) {
 			return;
 		}
-		hardwareCommitted = true;
 		CompletableFuture.runAsync(() -> ChangeDetector.commit(store, p.now()), Probes.EXECUTOR).exceptionally(e -> {
 			RigTune.LOGGER.warn("Could not update {}", AwarenessStore.FILE_NAME, e);
 			return null;
@@ -188,19 +187,22 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 		return keys;
 	}
 
+	// A hardware or what's-new dismissal is acknowledged by committing the fingerprint or moving the baseline on, not
+	// stored in `dismissed`: a stored key would hide the same change for good if it came back later (A -> B, B -> A,
+	// A -> B) and then never be committed. Other notices' keys are stored.
 	@Override
 	public void dismiss(String key) {
 		session.dismiss(key);
-		store.dismiss(key);
 		Pending p = hardware;
-		if (p != null && key.equals(p.key())) {
-			hardwareCommitted = true;
-			ChangeDetector.commit(store, p.now());
-		}
 		Fresh w = whatsNew;
-		if (w != null && key.equals(w.key())) {
+		if (p != null && key.equals(p.key())) {
+			p.committed().set(true);
+			ChangeDetector.commit(store, p.now());
+		} else if (w != null && key.equals(w.key())) {
 			WhatsNew.acknowledge(store, w.revision(), w.potential());
 			whatsNew = null;
+		} else if (!key.startsWith(HARDWARE_KEY_PREFIX) && !key.startsWith(WHATS_NEW_KEY_PREFIX)) {
+			store.dismiss(key);
 		}
 	}
 }

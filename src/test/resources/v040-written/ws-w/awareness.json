@@ -1,8 +1,6 @@
 {
   "formatVersion": 1,
   "dismissed": [
-    "hardware-changed:595e0fd5",
-    "whats-new:13",
     "server-limit:10:above"
   ],
   "acknowledgedRegressions": [],

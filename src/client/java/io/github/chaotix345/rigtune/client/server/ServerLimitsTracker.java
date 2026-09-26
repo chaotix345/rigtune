@@ -16,6 +16,7 @@ import org.jspecify.annotations.Nullable;
 import java.nio.file.Path;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 // Server-aware advice (docs/v0.4/SPEC.md 8, plan review W-H1): the limits the connected server sent, fed by
 // ClientPacketListenerMixin (login and the two live updates) and cleared on DISCONNECT. The report rebuilds on JOIN, on
@@ -31,7 +32,8 @@ public final class ServerLimitsTracker {
 
 	private final RealController controller;
 	private final Path configDir;
-	private volatile @Nullable Live live;
+	// Written on the render thread (packets, JOIN, DISCONNECT) and by the store lookup (compareAndSet only).
+	private final AtomicReference<@Nullable Live> live = new AtomicReference<>();
 	private volatile @Nullable ServerLimitsStore store;
 	// Bumped on every disconnect, so a store lookup that finishes after it changes nothing.
 	private volatile int connection;
@@ -58,12 +60,12 @@ public final class ServerLimitsTracker {
 
 	// Null when not connected (or not known yet).
 	public @Nullable ServerLimits live() {
-		Live current = live;
+		Live current = live.get();
 		return current == null ? null : current.limits();
 	}
 
 	public @Nullable Live liveState() {
-		return live;
+		return live.get();
 	}
 
 	// For the game tests.
@@ -78,18 +80,22 @@ public final class ServerLimitsTracker {
 			ServerLimits.Kind kind = kind(Minecraft.getInstance(), data);
 			int view = sent.rigtune$serverChunkRadius();
 			int simulation = sent.rigtune$serverSimulationDistance();
-			Live before = live;
+			Live before = live.get();
 			boolean same = before != null && before.limits().kind() == kind && before.limits().viewDistance() == view
 					&& before.limits().simulationDistance() == simulation;
-			if (same && !joined) {
+			if (same) {
+				// JOIN after the login packet: the same limits (and the "(was N)" a lookup may be adding), rebuilt once.
+				if (joined) {
+					rebuild();
+				}
 				return;
 			}
 			String address = address(kind, data);
 			Integer was = before == null || !Objects.equals(before.address(), address) ? null
 					: before.limits().viewDistance() != view ? Integer.valueOf(before.limits().viewDistance()) : before.wasViewDistance();
 			Live next = new Live(new ServerLimits(view, simulation, kind, System.currentTimeMillis()), address, was);
-			live = next;
-			if (!same && kind != ServerLimits.Kind.SINGLEPLAYER && address != null && view > 0) {
+			live.set(next);
+			if (kind != ServerLimits.Kind.SINGLEPLAYER && address != null && view > 0) {
 				remember(next);
 			}
 			if (joined || before != null) {
@@ -106,8 +112,7 @@ public final class ServerLimitsTracker {
 		CompletableFuture.runAsync(() -> {
 			ServerLimitsStore.Entry previous = store().remember(next.address(), next.limits());
 			if (previous != null && previous.viewDistance() != next.limits().viewDistance() && next.wasViewDistance() == null
-					&& at == connection && live == next) {
-				live = new Live(next.limits(), next.address(), previous.viewDistance());
+					&& at == connection && live.compareAndSet(next, new Live(next.limits(), next.address(), previous.viewDistance()))) {
 				rebuild();
 			}
 		}, Probes.EXECUTOR).exceptionally(e -> {
@@ -118,9 +123,7 @@ public final class ServerLimitsTracker {
 
 	private void disconnected() {
 		connection++;
-		Live before = live;
-		live = null;
-		if (before != null) {
+		if (live.getAndSet(null) != null) {
 			rebuild();
 		}
 	}
@@ -159,6 +162,7 @@ public final class ServerLimitsTracker {
 			return null;
 		}
 		ServerAddress parsed = ServerAddress.parseString(data.ip);
-		return ServerLimitsStore.address(parsed.getHost(), parsed.getPort());
+		// An Open-to-LAN game gets a new random port each time: a LAN guest remembers the host only.
+		return kind == ServerLimits.Kind.LAN_GUEST ? ServerLimitsStore.lan(parsed.getHost()) : ServerLimitsStore.address(parsed.getHost(), parsed.getPort());
 	}
 }

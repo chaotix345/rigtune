@@ -149,6 +149,38 @@ class ChangeDetectorTest {
 		assertEquals(NONE, ChangeDetector.check(store, newer).kind());
 	}
 
+	// Review finding: a difference that isn't a change moves the stored fingerprint on, so a later driver update on the
+	// other backend (or after a first probe that couldn't read the GPU) is still seen.
+	@Test
+	void aBackendSwitchMovesTheBaselineOnSilently() {
+		AwarenessStore store = AwarenessStore.shared(config);
+		Fingerprint gl = with(AMD, "ATI Technologies Inc.", "AMD Radeon RX 7800 XT", "3.3.0 Core Profile Context 26.8.1.260810", GraphicsBackend.OPENGL);
+		Fingerprint vk = with(AMD, "AMD", "AMD Radeon RX 7800 XT", "1.3.296 AMD proprietary driver 26.8.1", GraphicsBackend.VULKAN);
+		assertEquals(NONE, ChangeDetector.check(store, gl).kind());
+		assertEquals(NONE, ChangeDetector.check(store, vk).kind());
+		assertEquals(vk, Fingerprint.read(store.read()), "moved on to the Vulkan fingerprint");
+		Fingerprint vkNewer = with(AMD, "AMD", "AMD Radeon RX 7800 XT", "1.3.296 AMD proprietary driver 26.9.1", GraphicsBackend.VULKAN);
+		assertEquals(DRIVER, ChangeDetector.check(store, vkNewer).kind(), "a driver update on Vulkan is seen");
+		assertEquals(vk, Fingerprint.read(store.read()), "a change is only committed when shown or dismissed");
+	}
+
+	@Test
+	void aProbeThatCouldNotReadTheGpuDoesNotOverwrite() {
+		AwarenessStore store = AwarenessStore.shared(config);
+		assertEquals(NONE, ChangeDetector.check(store, AMD).kind());
+		Fixtures.Hw hw = Fixtures.userRig();
+		hw.gpu = new GpuInfo("", "", "", GraphicsBackend.UNKNOWN, -1);
+		assertEquals(NONE, ChangeDetector.check(store, Fingerprint.of(hw.build())).kind());
+		assertEquals(AMD, Fingerprint.read(store.read()), "kept");
+		Fixtures.Hw blankFirst = Fixtures.userRig();
+		blankFirst.gpu = new GpuInfo("", "", "", GraphicsBackend.UNKNOWN, -1);
+		AwarenessStore other = AwarenessStore.shared(config.resolve("other"));
+		assertEquals(NONE, ChangeDetector.check(other, Fingerprint.of(blankFirst.build())).kind(), "seeded with a blank GPU");
+		assertEquals(NONE, ChangeDetector.check(other, AMD).kind());
+		assertEquals(AMD, Fingerprint.read(other.read()), "the full probe replaces the blank one");
+		assertEquals(DRIVER, ChangeDetector.check(other, rig("3.3.0 Core Profile Context 26.9.1.260915")).kind());
+	}
+
 	@Test
 	void a03ShapedInstanceSeedsSilently() throws IOException {
 		Path dir = Files.createDirectories(config.resolve("rigtune"));

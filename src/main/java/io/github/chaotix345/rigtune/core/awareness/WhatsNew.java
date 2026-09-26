@@ -19,7 +19,7 @@ import java.util.Set;
 
 // "What's new for you" (docs/v0.4/SPEC.md 9, plan review W-L3). The baseline in awareness.json is a rules revision and
 // the recommendation ids that revision COULD produce (every rule's id, whether or not it fired here), so a goal change or
-// a newly installed mod never counts as new rules. When the shown report's revision differs from the baseline's: new =
+// a newly installed mod never counts as new rules. When the shown report's revision is newer than the baseline's: new =
 // the report's appliable recommendations and warning/critical advice whose ids the current rules can produce and the
 // baseline's couldn't. No baseline (an upgrade from 0.3 or older) is seeded silently; a revision with nothing new moves
 // the baseline on silently; new ones stay until the notice is dismissed (acknowledge). Bundled and remote revisions are
@@ -126,7 +126,8 @@ public final class WhatsNew {
 		if (baseline == null) {
 			return new Result(Kind.SEEDED, List.of());
 		}
-		if (baseline.revision() == revision) {
+		// An older revision (an older RigTune's bundled rules, a cache that went away) isn't news, and the baseline stays.
+		if (baseline.revision() >= revision) {
 			return Result.NOTHING;
 		}
 		List<Recommendation> fresh = new ArrayList<>();

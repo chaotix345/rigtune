@@ -74,6 +74,12 @@ public final class ServerLimitsStore {
 		return h + ":" + (port > 0 && port <= 65535 ? port : DEFAULT_PORT);
 	}
 
+	// A LAN game by its host only (Open to LAN picks a new port every time).
+	public static String lan(String host) {
+		String h = host == null ? "" : host.strip().toLowerCase(Locale.ROOT);
+		return "lan:" + h;
+	}
+
 	// A Realm by its world name (Realms addresses change between connections).
 	public static String realm(String worldName) {
 		return "realm:" + (worldName == null ? "" : worldName.strip());

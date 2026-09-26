@@ -80,7 +80,7 @@ public class ServerLimitsGameTest implements FabricClientGameTest {
 			check(limits.kind() == ServerLimits.Kind.SINGLEPLAYER, "the player's own world is SINGLEPLAYER: " + limits);
 			openRigTune(context, real);
 			check(serverNotice(context, real) == null, "no server notice in singleplayer: " + notices(context, real));
-			context.takeScreenshot("server-limits-singleplayer");
+			screenshot(context, "server-limits-singleplayer");
 			context.runOnClient(mc -> mc.gui.setScreen(null));
 		}
 		context.waitFor(mc -> real.serverLimits() == null, 200);
@@ -116,7 +116,7 @@ public class ServerLimitsGameTest implements FabricClientGameTest {
 				check(notice.detail().english().contains("Simulation distance on this server: 5 chunks"), notice.detail().english());
 				Notice shown = context.computeOnClient(mc -> ((RigTuneScreen) mc.gui.screen()).shownNotice());
 				check(shown != null && shown.priority().ordinal() <= notice.priority().ordinal(), "the slot shows it (or a higher priority): " + shown);
-				context.takeScreenshot("server-limits-" + name(size));
+				screenshot(context, "server-limits-" + name(size));
 			}
 
 			// W-H1: above the limit the notice explains what the player sees, and no increase is proposed.
@@ -128,7 +128,32 @@ public class ServerLimitsGameTest implements FabricClientGameTest {
 			check(above.detail().english().startsWith("You set 10; the server sends 6, so 6 is what you see."), above.detail().english());
 			Action.SetSetting rd = renderDistance(real.report());
 			check(rd == null || Integer.parseInt(rd.newValue()) <= 10, "no render-distance increase while above the limit: " + rd);
-			context.takeScreenshot("server-limits-above-" + name(SIZES[2]));
+			screenshot(context, "server-limits-above-" + name(SIZES[2]));
+
+			// A live change (the handleSetChunkCacheRadius hook): the server now sends 4; with RD 2 the rules' increase is
+			// capped at 4 with the reason, and the notice says the limit changed (was 6).
+			context.runOnClient(mc -> mc.options.renderDistance().set(2));
+			server.runOnServer(s -> s.getPlayerList().setViewDistance(4));
+			context.waitFor(mc -> real.serverLimits() != null && real.serverLimits().viewDistance() == 4, 200);
+			rebuildAndWait(context, real);
+			context.waitTicks(3);
+			Notice changed = serverNotice(context, real);
+			check(changed != null && changed.message().english().equals("The server limits view distance to 4 chunks"), String.valueOf(changed));
+			check(changed.detail().english().contains("This server's limit changed since last time (was 6)."), changed.detail().english());
+			Action.SetSetting live = renderDistance(real.report());
+			Report uncapped = context.computeOnClient(mc -> Recommender.recommend(real.rules(), real.hardwareProfile(), real.mods(),
+					SettingsBridge.read(mc), OnlineData.offline(), real.goal(), real.modVersion(), Set.of()));
+			Action.SetSetting wanted = renderDistance(uncapped);
+			RigTune.LOGGER.info("ServerLimitsGameTest: live limit 4, RD 2: {} (the rules alone: {})", live, wanted);
+			check(live == null || Integer.parseInt(live.newValue()) <= 4, "the RD recommendation is <= 4 after the live change: " + live);
+			if (wanted != null && Integer.parseInt(wanted.newValue()) > 4) {
+				check(live != null && live.currentValue().equals("2") && live.newValue().equals("4"), "2 -> 4: " + live);
+				Recommendation rec = real.report().recommendations().stream().filter(r -> r.id().equals("set:vanilla.renderDistance")).findFirst()
+						.orElseThrow();
+				check(rec.reason().endsWith("The server sends at most 4 chunks."), rec.reason());
+			}
+			check(context.computeOnClient(BenchmarkController::maxRenderDistance) <= 4, "the benchmark follows the live limit");
+			screenshot(context, "server-limits-live-change-" + name(SIZES[2]));
 			context.runOnClient(mc -> {
 				mc.options.renderDistance().set(5);
 				mc.gui.setScreen(null);
@@ -172,7 +197,7 @@ public class ServerLimitsGameTest implements FabricClientGameTest {
 		context.waitTicks(3);
 		check(serverNotice(context, real) == null, "the notice is gone after disconnect: " + notices(context, real));
 		check(real.report().recommendations().stream().noneMatch(r -> r.reason().contains("The server sends")), "no server reason after disconnect");
-		context.takeScreenshot("server-limits-after-disconnect");
+		screenshot(context, "server-limits-after-disconnect");
 		context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
 	}
 
@@ -245,6 +270,14 @@ public class ServerLimitsGameTest implements FabricClientGameTest {
 			real.settingsChanged();
 		});
 		context.waitFor(mc -> real.report() != null, 1200);
+	}
+
+	// No toast (chat verification, social interactions) over the notice line; the cursor in a corner.
+	private static void screenshot(ClientGameTestContext context, String name) {
+		context.getInput().setCursorPos(1, 1);
+		context.runOnClient(mc -> mc.gui.toastManager().clear());
+		context.waitTicks(2);
+		context.takeScreenshot(name);
 	}
 
 	private static String name(int[] size) {

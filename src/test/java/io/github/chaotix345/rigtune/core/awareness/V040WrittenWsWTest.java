@@ -43,11 +43,10 @@ class V040WrittenWsWTest {
 				"AMD Ryzen 7 7800X3D 8-Core Processor", 31948);
 		assertEquals(ChangeDetector.Kind.NONE, ChangeDetector.check(awareness, older).kind(), "first run seeds");
 		assertEquals(ChangeDetector.Kind.DRIVER, ChangeDetector.check(awareness, now).kind());
-		assertTrue(awareness.dismiss("hardware-changed:" + now.id()));
+		// Dismissing (or seeing) the driver notice commits the new fingerprint; its key isn't stored (AwarenessService).
 		assertTrue(ChangeDetector.commit(awareness, now));
 		assertTrue(WhatsNew.acknowledge(awareness, 13, Set.of("add:sodium", "add:lithium", "set:vanilla.renderDistance",
 				"set:vanilla.simulationDistance", "advice:ram-heap-small", "disable:indium", "conflict:optifabric+sodium")));
-		assertTrue(awareness.dismiss("whats-new:13"));
 		assertTrue(awareness.dismiss("server-limit:10:above"));
 		Files.copy(AwarenessStore.file(config), out.resolve("awareness.json"), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
@@ -57,7 +56,7 @@ class V040WrittenWsWTest {
 				new ServerLimits(12, 10, ServerLimits.Kind.REMOTE, Instant.parse("2026-09-21T19:40:00Z").toEpochMilli()));
 		servers.remember(ServerLimitsStore.address("play.example.com", 25565),
 				new ServerLimits(10, 10, ServerLimits.Kind.REMOTE, Instant.parse("2026-09-24T21:05:00Z").toEpochMilli()));
-		servers.remember(ServerLimitsStore.address("192.168.1.20", 52814),
+		servers.remember(ServerLimitsStore.lan("192.168.1.20"),
 				new ServerLimits(8, 8, ServerLimits.Kind.LAN_GUEST, Instant.parse("2026-09-22T17:12:30Z").toEpochMilli()));
 		servers.remember(ServerLimitsStore.realm("Weekend SMP"),
 				new ServerLimits(10, 8, ServerLimits.Kind.REALM, Instant.parse("2026-09-23T20:00:00Z").toEpochMilli()));
@@ -68,7 +67,7 @@ class V040WrittenWsWTest {
 			assertEquals(written, resource(DIR + name), "copy " + out.resolve(name) + " to src/test/resources" + DIR + name);
 		}
 		String limits = Files.readString(out.resolve("server-limits.json"), StandardCharsets.UTF_8);
-		for (String plain : List.of("example", "192.168", "52814", "Weekend", "realm:")) {
+		for (String plain : List.of("example", "192.168", "lan:", "Weekend", "realm:")) {
 			assertFalse(limits.contains(plain), plain);
 		}
 		assertEquals(10, new ServerLimitsStore(config).get(ServerLimitsStore.address("PLAY.example.com", 0)).viewDistance());
