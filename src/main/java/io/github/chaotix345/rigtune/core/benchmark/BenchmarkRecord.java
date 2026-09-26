@@ -48,9 +48,21 @@ public record BenchmarkRecord(String id, String createdAt, String rigtuneVersion
 	// docs/v0.3/SPEC.md 8: whether Distant Horizons rendered and a shader pack was in use at the start, the pack's file
 	// name, the framebuffer size, fullscreen, and the benchmark protocol version. Runs are only comparable when these
 	// match; mods, drivers and other settings are left out on purpose (their effect is what a comparison looks for).
+	// 0.4.0 on (docs/v0.4/SPEC.md 7, optional): modSetHash, SHA-256 over the sorted (mod id, version) pairs of the loaded
+	// mods; journalCursor, the id of the newest history.json entry at the time of the run. Null in older runs, and dropped
+	// if 0.3.x rewrites the file.
 	public record Context(boolean dhRendering, boolean shaders, @Nullable String shaderPack, int width, int height, boolean fullscreen,
-			int protocol) {
+			int protocol, @Nullable String modSetHash, @Nullable String journalCursor) {
 		public static final int PROTOCOL = 1;
+
+		public Context(boolean dhRendering, boolean shaders, @Nullable String shaderPack, int width, int height, boolean fullscreen,
+				int protocol) {
+			this(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, null, null);
+		}
+
+		public Context withModSet(@Nullable String newModSetHash, @Nullable String newJournalCursor) {
+			return new Context(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, newModSetHash, newJournalCursor);
+		}
 	}
 
 	public BenchmarkRecord(String id, String createdAt, String rigtuneVersion, String mcVersion, String mode, String scene,

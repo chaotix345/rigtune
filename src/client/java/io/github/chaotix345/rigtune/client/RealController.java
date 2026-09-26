@@ -354,7 +354,7 @@ public final class RealController implements RigTuneController {
 			return built;
 		}
 		return new Report(built.hardware(), built.gpuClass(), built.tier(), built.goal(), kept, built.rulesRevision(),
-				built.rulesSource(), built.online(), built.createdAt());
+				built.rulesSource(), built.online(), built.createdAt(), built.tierBasis());
 	}
 
 	// Renaming RigTune's own jar is only safe when the helper runs from copies (see HelperLauncher.launch).

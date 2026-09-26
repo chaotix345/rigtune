@@ -35,10 +35,18 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 
 	// id: unique per staged op. group: ops sharing one are applied all-or-nothing (an update is {disable old, enable new}).
 	// modId: the fabric.mod.json id of the jar an ENABLE_FILE op brings in. attempts: helper runs this op has failed in.
+	// projectId (0.4.0 on, optional): the Modrinth project an ENABLE_FILE op's download belongs to (docs/v0.4/SPEC.md 2d).
+	// The helpers of 0.1.0-0.3.0 ignore it; if one of them rewrites pending.json without it, the op just stops counting as
+	// a staged project.
 	public record Op(Type type, String from, String to, String path, Map<String, String> patches, String id, String group, String modId,
-			int attempts) {
+			int attempts, String projectId) {
 		public Op {
 			patches = patches == null ? null : Collections.unmodifiableMap(new LinkedHashMap<>(patches));
+		}
+
+		public Op(Type type, String from, String to, String path, Map<String, String> patches, String id, String group, String modId,
+				int attempts) {
+			this(type, from, to, path, patches, id, group, modId, attempts, null);
 		}
 
 		public Op(Type type, String from, String to, String path, Map<String, String> patches) {
@@ -66,15 +74,19 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 		}
 
 		public Op inGroup(String newGroup) {
-			return new Op(type, from, to, path, patches, id, newGroup, modId, attempts);
+			return new Op(type, from, to, path, patches, id, newGroup, modId, attempts, projectId);
 		}
 
 		public Op withModId(String newModId) {
-			return new Op(type, from, to, path, patches, id, group, newModId, attempts);
+			return new Op(type, from, to, path, patches, id, group, newModId, attempts, projectId);
 		}
 
 		public Op withAttempts(int newAttempts) {
-			return new Op(type, from, to, path, patches, id, group, modId, newAttempts);
+			return new Op(type, from, to, path, patches, id, group, modId, newAttempts, projectId);
+		}
+
+		public Op withProjectId(String newProjectId) {
+			return new Op(type, from, to, path, patches, id, group, modId, attempts, newProjectId);
 		}
 
 		// Same file change, whatever its id or group.
