@@ -570,7 +570,8 @@ public final class RealController implements RigTuneController {
 		Set<String> loadedIds = DownloadPlanner.topLevelIds(mods);
 		RulesDocument doc = rules;
 		BiPredicate<String, String> conflicts = doc == null ? (a, b) -> false : ModConflicts.of(doc)::between;
-		return new DownloadPlanner(resolver, modsDir, this::fetch, conflicts, data.updateVersions(), FabricPins.loaded()).plan(recs, installedProjects, loadedIds, stagedJarsByModId());
+		return new DownloadPlanner(resolver, modsDir, this::fetch, conflicts, data.updateVersions(), FabricPins.loaded())
+				.lookedUp(data.data().online() || !settings.modrinthAllowed()).plan(recs, installedProjects, loadedIds, stagedJarsByModId());
 	}
 
 	// Mod ids that already have a staged ENABLE_FILE, with that op's pending jar. A newer download for the same id
@@ -772,7 +773,7 @@ public final class RealController implements RigTuneController {
 		DownloadInputs downloads = new DownloadInputs(modrinth, settings.modrinthAllowed(), OnlineDataFetcher.LOADER,
 				onlineLookups.modrinthGameVersion(hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion()), data.installedVersions(),
 				data.updateVersions(), new HashSet<>(data.projectIdsByModId().values()), loadedIds, stagedJarsByModId(),
-				doc == null ? (a, b) -> false : ModConflicts.of(doc)::between, StagedProjects.read(pendingFile));
+				doc == null ? (a, b) -> false : ModConflicts.of(doc)::between, StagedProjects.read(pendingFile), data.data().online());
 		List<PreviewPlanner.ConfigFile> files = ConfigTargets.all(configDir).stream()
 				.map(t -> new PreviewPlanner.ConfigFile(t.prefix(), t.file(), t.stager()::stage, t.reader()::read)).toList();
 		return new PreviewPlanner(FabricLoader.getInstance().getGameDir().resolve("options.txt"), game.now(), game.problems(), files, modsDir, downloads)

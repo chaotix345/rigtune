@@ -41,6 +41,7 @@ class PreviewDownloadsTest {
 	final Set<String> installedProjects = new HashSet<>();
 	BiPredicate<String, String> conflicts = (a, b) -> false;
 	boolean lookups = true;
+	boolean lookedUp = true;
 	StagedProjects staged = StagedProjects.NONE;
 
 	@BeforeEach
@@ -50,7 +51,7 @@ class PreviewDownloadsTest {
 
 	private ApplyPreview preview(Recommendation... selected) {
 		DownloadInputs inputs = new DownloadInputs(modrinth, lookups, "fabric", "26.2", Map.of(), updateVersions, installedProjects, Set.of("sodium"),
-				Map.of(), conflicts, staged);
+				Map.of(), conflicts, staged, lookedUp);
 		return new PreviewPlanner(instance.options, PreviewFixtures.vanillaNow(), Map.of(), instance.configFiles(), instance.mods, inputs).preview(List.of(selected));
 	}
 
@@ -243,5 +244,35 @@ class PreviewDownloadsTest {
 		assertEquals(ApplyPreview.Reason.DOWNLOAD_FAILED, refused.reason());
 		assertEquals(Text.of("rigtune.download.incompatible_staged", "Modrinth marks %s as incompatible with %s, which is waiting for a restart", "LITHIUM",
 				"KRYPTON"), refused.detailText());
+	}
+	// docs/v0.4/SPEC.md 2o, M4: before the installed mods were looked up on Modrinth (or after the lookup failed), Apply
+	// refuses every download, and the preview says so for each, asking Modrinth nothing.
+	@Test
+	void beforeTheInstalledModsWereLookedUpEveryDownloadIsRefused() throws IOException {
+		lithiumWithFabricApi();
+		lookedUp = false;
+
+		ApplyPreview preview = preview(add("lithium", "LITHIUM", "Lithium"), update());
+
+		assertEquals(List.of(), preview.downloads());
+		assertEquals(List.of(), preview.disables());
+		assertEquals(List.of("update:sodium", "add:lithium"), preview.skipped().stream().map(ApplyPreview.Skipped::recommendationId).toList());
+		for (ApplyPreview.Skipped skipped : preview.skipped()) {
+			assertEquals(ApplyPreview.Reason.DOWNLOAD_FAILED, skipped.reason());
+			assertEquals(Text.of("rigtune.download.not_loaded",
+					"Modrinth's data for your mods isn't loaded yet, or the lookup failed; wait a moment or press Rescan, then try again"), skipped.detailText());
+		}
+		assertEquals(List.of(), modrinth.calls);
+	}
+
+	// With Modrinth lookups off there was no lookup to wait for: the usual preview (additions unresolved).
+	@Test
+	void withLookupsOffNothingWaitsForALookup() throws IOException {
+		lookups = false;
+		lookedUp = false;
+
+		ApplyPreview preview = preview(update());
+
+		assertEquals(List.of("sodium-0.6.jar"), preview.downloads().stream().map(ApplyPreview.Download::fileName).toList());
 	}
 }

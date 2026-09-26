@@ -66,6 +66,7 @@ public final class DownloadPlanner {
 	private final Function<Path, String> modIdOf;
 	private final Function<Path, String> versionOf;
 	private final VersionPins pins;
+	private boolean lookedUp = true;
 
 	public DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher) {
 		this(resolver, modsDir, fetcher, (a, b) -> false);
@@ -121,6 +122,14 @@ public final class DownloadPlanner {
 		return out;
 	}
 
+	// docs/v0.4/SPEC.md 2o, M4: false while the installed mods haven't been looked up on Modrinth (the lookup is still
+	// running, or it failed and waits for a Rescan). The checks against installed mods need that data, so plan() then
+	// refuses every recommendation, fetching and asking nothing. With Modrinth lookups off there is nothing to wait for.
+	public DownloadPlanner lookedUp(boolean installedLookedUp) {
+		this.lookedUp = installedLookedUp;
+		return this;
+	}
+
 	// installedProjects / loadedIds: the Modrinth projects and mod ids of the loaded top-level mods (topLevelIds).
 	// stagedJars: mod id -> the pending jar of an enable already in pending.json (a newer download replaces it when merged).
 	public Result plan(List<Recommendation> recs, Set<String> installedProjects, Set<String> loadedIds, Map<String, String> stagedJars) {
@@ -130,6 +139,9 @@ public final class DownloadPlanner {
 		List<Recommendation> ordered = new ArrayList<>();
 		recs.stream().filter(r -> r.action() instanceof Action.UpdateMod).forEach(ordered::add);
 		recs.stream().filter(r -> !(r.action() instanceof Action.UpdateMod)).forEach(ordered::add);
+		if (!lookedUp) {
+			return notLookedUp(ordered);
+		}
 		Map<String, Text> refusedTogether = refusedTogether(ordered);
 		// Positions in ordered. An update needing a project that isn't installed waits once until the additions are planned
 		// (docs/v0.4/SPEC.md 2o, H1-A). The ids and errors keep ordered's order (PreviewDownloads matches errors by position).
@@ -187,6 +199,18 @@ public final class DownloadPlanner {
 			}
 		}
 		return new Result(List.copyOf(batch.ops), ids, errors, Map.copyOf(opIds), errorTexts);
+	}
+
+	private static Result notLookedUp(List<Recommendation> ordered) {
+		Text wait = Text.of("rigtune.download.not_loaded",
+				"Modrinth's data for your mods isn't loaded yet, or the lookup failed; wait a moment or press Rescan, then try again");
+		List<String> errors = new ArrayList<>();
+		List<Text> errorTexts = new ArrayList<>();
+		for (Recommendation rec : ordered) {
+			errors.add(rec.title() + ": " + wait.english());
+			errorTexts.add(Text.of("rigtune.download.error", "%s: %s", rec.titleText(), wait));
+		}
+		return new Result(List.of(), List.of(), errors, Map.of(), errorTexts);
 	}
 
 	// docs/v0.4/SPEC.md 2e: pairs of ticked recommendations that can't go in together are refused together, before

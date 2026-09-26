@@ -816,6 +816,29 @@ class DownloadPlannerTest {
 		assertFalse(Files.exists(mods.resolve("libV.jar" + PendingActions.PENDING_SUFFIX)));
 	}
 
+	// --- docs/v0.4/SPEC.md 2o, M4: Apply before the Modrinth lookup finished, or after it failed
+
+	// Without the installed mods' Modrinth data the checks against them see nothing (an addition Modrinth marks
+	// incompatible with an installed mod would go in), so every download is refused, in the planner's order, before
+	// anything is fetched or asked.
+	@Test
+	void nothingIsPlannedBeforeTheInstalledModsWereLookedUp() throws IOException {
+		Recommendation update = updateA();
+		put("b", version("bV", "B", "1", T, incompatible("K")));
+		DownloadPlanner planner = new DownloadPlanner(new DependencyResolver(client, "fabric", "26.2", installedVersions), mods, this::fetch, conflicts,
+				updateVersions, pins).lookedUp(false);
+
+		DownloadPlanner.Result result = planner.plan(List.of(add("b", "B"), update), Set.of(), Set.of(), Map.of());
+		planned.add(result);
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of(), result.ops());
+		String wait = "Modrinth's data for your mods isn't loaded yet, or the lookup failed; wait a moment or press Rescan, then try again";
+		assertEquals(List.of("Update a: " + wait, "Add b: " + wait), result.errors());
+		assertEquals(List.of(), fetched);
+		assertEquals(List.of(), client.calls);
+	}
+
 	// --- docs/v0.4/SPEC.md 2o, M7: an update's jar is the same mod
 
 	// The latest version's primary file declares another mod id (a secondary file installed, or a renamed mod): putting
