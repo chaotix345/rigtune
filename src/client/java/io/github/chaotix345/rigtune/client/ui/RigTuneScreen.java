@@ -629,15 +629,16 @@ public class RigTuneScreen extends Screen {
 		if (shown == null) {
 			graphics.text(font, Component.translatable("rigtune.screen.analysing"), left, headerTop, COLOR_LABEL, false);
 		} else {
+			// Over the tier badge its own tooltip shows, not the clipped line's full text (the first tooltip set wins).
+			boolean overBadge = badgeArea != null && !tierTooltipLines.isEmpty() && badgeArea.containsPoint(mouseX, mouseY);
 			int y = headerTop;
 			for (Component line : headerLines) {
-				drawClipped(graphics, line, left, y, textWidth, 0xFFFFFFFF, mouseX, mouseY);
+				drawClipped(graphics, line, left, y, textWidth, 0xFFFFFFFF, overBadge ? -1 : mouseX, overBadge ? -1 : mouseY);
 				y += LINE;
 			}
-		}
-		// After the header lines, so over the badge it replaces a clipped line's own tooltip.
-		if (badgeArea != null && !tierTooltipLines.isEmpty() && badgeArea.containsPoint(mouseX, mouseY)) {
-			graphics.setComponentTooltipForNextFrame(font, tierTooltipLines, mouseX, mouseY);
+			if (overBadge) {
+				graphics.setComponentTooltipForNextFrame(font, tierTooltipLines, mouseX, mouseY);
+			}
 		}
 		extractNotice(graphics, mouseX, mouseY);
 		if (list != null && (shown == null || shown.recommendations().isEmpty())) {
