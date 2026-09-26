@@ -73,4 +73,4 @@ Files: `RegressionNoticeSource`, `BenchmarkStaleNoticeSource`, `AwarenessStore` 
 
 ## Task 11: finish
 - [x] code-reviewer subagent on the diff; fix high/medium findings.
-- [ ] Merge origin/feat/v0.4.0, `./gradlew build`, push, CI green; `docs/v0.4/design/ws-b.md`.
+- [x] Merge origin/feat/v0.4.0, `./gradlew build`, push, CI green; `docs/v0.4/design/ws-b.md`.
