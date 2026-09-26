@@ -24,6 +24,8 @@ import net.minecraft.client.gui.components.ComponentRenderUtils;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.FormattedText;
+import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
 import org.jspecify.annotations.Nullable;
 
@@ -171,8 +173,11 @@ public class BenchmarkResultScreen extends Screen {
 		} else if (outcome.record() != null && BenchmarkRecord.BEFORE.equals(outcome.record().phase())) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.saved_before"), COLOR_LABEL));
 		}
+		// Wrapped: "Performance changed under different conditions (…); cause unknown." must be read whole.
 		for (TrendText.Line line : trendLines(trend, ZoneId.systemDefault(), BenchmarkTrendLines::describe)) {
-			out.add(new Line(Texts.component(line.text()), BenchmarkTrendLines.color(line.tone())));
+			for (FormattedText row : font.getSplitter().splitLines(Texts.component(line.text()), width - 16, Style.EMPTY)) {
+				out.add(new Line(Component.literal(row.getString()), BenchmarkTrendLines.color(line.tone())));
+			}
 		}
 		if (session.dhCost() != null) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.cost.dh", BenchmarkMath.percent(session.dhCost().lowGainPercent()),

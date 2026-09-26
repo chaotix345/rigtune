@@ -7,7 +7,6 @@ import io.github.chaotix345.rigtune.core.model.Text;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.ComponentRenderUtils;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
@@ -34,8 +33,13 @@ public class BenchmarkHistoryScreen extends Screen {
 	private @Nullable String contextKey;
 	private BenchmarkTrend.View view = BenchmarkTrend.View.EMPTY;
 	private List<TrendText.Line> lines = List.of();
+	// The lines wrapped to the screen's width.
+	private List<Row> rows = List.of();
 	private int linesTop;
 	private int chartTop;
+
+	private record Row(FormattedCharSequence text, int color) {
+	}
 
 	public BenchmarkHistoryScreen(@Nullable Screen parent, RigTuneController controller) {
 		super(Component.translatable("rigtune.benchmark.trend.title"));
@@ -66,7 +70,14 @@ public class BenchmarkHistoryScreen extends Screen {
 		}
 		int bottom = height - 34;
 		lines = lines(view, Math.max(1, (bottom - CHART_MIN - linesTop) / LINE));
-		chartTop = linesTop + lines.size() * LINE + 4;
+		List<Row> wrapped = new ArrayList<>();
+		for (TrendText.Line line : lines) {
+			for (FormattedCharSequence row : font.split(Texts.component(line.text()), width - 16)) {
+				wrapped.add(new Row(row, BenchmarkTrendLines.color(line.tone())));
+			}
+		}
+		rows = wrapped;
+		chartTop = linesTop + rows.size() * LINE + 4;
 		int buttonWidth = Math.min(200, width - 16);
 		addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, b -> onClose()).bounds((width - buttonWidth) / 2, height - 28, buttonWidth, 20).build());
 	}
@@ -114,12 +125,8 @@ public class BenchmarkHistoryScreen extends Screen {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, COLOR_TEXT);
 		int y = linesTop;
-		for (TrendText.Line line : lines) {
-			Component text = Texts.component(line.text());
-			graphics.centeredText(font, clip(text), width / 2, y, BenchmarkTrendLines.color(line.tone()));
-			if (font.width(text) > width - 16 && mouseY >= y && mouseY < y + 9) {
-				graphics.setTooltipForNextFrame(font, text, mouseX, mouseY);
-			}
+		for (Row row : rows) {
+			graphics.centeredText(font, row.text(), width / 2, y, row.color());
 			y += LINE;
 		}
 		int area = Math.min(width - 16, 460);
@@ -130,10 +137,6 @@ public class BenchmarkHistoryScreen extends Screen {
 			TrendChart.draw(graphics, font, Component.translatable("rigtune.benchmark.chart.title", scene), view.points(), view.median(), null,
 					(width - chartWidth) / 2, chartTop, chartWidth, height - 34);
 		}
-	}
-
-	private FormattedCharSequence clip(Component text) {
-		return font.width(text) <= width - 16 ? text.getVisualOrderText() : ComponentRenderUtils.clipText(text, font, width - 16);
 	}
 
 	@Override
