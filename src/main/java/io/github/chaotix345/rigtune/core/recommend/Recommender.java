@@ -46,8 +46,9 @@ import java.util.stream.Collectors;
 public final class Recommender {
 	public static final String AVAILABILITY_UNKNOWN_NOTE = "(availability not confirmed)";
 	public static final String ALPHA_NOTE = "(alpha build)";
-	// Client features a rule's `requires` may name. 0.2.0 knows none, so any rule with a non-empty `requires` is skipped.
-	public static final Set<String> SUPPORTED_FEATURES = Set.of();
+	// Client features a rule's `requires` may name; a rule needing any other is skipped. 0.2.0 and 0.3.0 know none. 0.4 adds
+	// "jvm-flags": the jvm-* advice testing the jvm- facts (docs/v0.4/SPEC.md 6). "stutter-doctor" is only StutterAdvisor's.
+	public static final Set<String> SUPPORTED_FEATURES = Set.of("jvm-flags");
 	static final String OUTSIDE_MODS_FOLDER = "It isn't in this instance's mods folder, so";
 	// The Recommender's own text as translation keys with their English (docs/v0.3/SPEC.md item 9); rule text stays literal.
 	private static final Text ALPHA = Text.of("rigtune.rec.alpha", ALPHA_NOTE);
