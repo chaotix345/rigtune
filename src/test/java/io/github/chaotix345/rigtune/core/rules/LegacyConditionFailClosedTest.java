@@ -30,7 +30,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * docs/v0.4/SPEC.md "Compatibility promise" (a) and (c), AC9.3, AC6.3: on 0.2.0 and 0.3.0 (the pinned v030 classes, which
  * stand for both) every bundled rule whose condition uses driverVersion or a Stutter Doctor key evaluates UNKNOWN, so it
  * never fires; every jvm-* rule is skipped outright by its `requires`; and the stutterAdvice section is invisible (and would
- * fail closed if it weren't). The current code's own TRUE/FALSE for these keys comes with the evaluators (WS-W, WS-S, WS-J).
+ * fail closed if it weren't). The current code's own TRUE/FALSE for these keys comes with the evaluators (WS-W: the
+ * driverVersion seeds below; WS-S, WS-J).
  */
 class LegacyConditionFailClosedTest {
 	private record Rule(String label, Condition current, io.github.chaotix345.rigtune.v030.core.rules.Condition legacy, List<String> requires) {
@@ -117,6 +118,29 @@ class LegacyConditionFailClosedTest {
 			}
 		}
 		assertEquals(List.of("advice driver-nvidia-threaded-optimization", "advice driver-intel-gen7-old"), checked);
+	}
+
+	// AC9.3's other half (WS-W): the current evaluator gives the seeds' intended TRUE/FALSE on the same hardware.
+	@Test
+	void everyDriverVersionRuleDecidesOnTheCurrentEvaluator() throws IOException {
+		Map<String, List<Truth>> expected = new LinkedHashMap<>();
+		expected.put("nvidia 531.18", List.of(Truth.TRUE, Truth.FALSE));
+		expected.put("nvidia 560.94", List.of(Truth.FALSE, Truth.FALSE));
+		expected.put("hd 4000 old driver", List.of(Truth.FALSE, Truth.TRUE));
+		expected.put("amd", List.of(Truth.FALSE, Truth.FALSE));
+		Map<String, EvalContext> contexts = new LinkedHashMap<>();
+		for (var legacy : legacyContexts().entrySet()) {
+			var old = legacy.getValue();
+			contexts.put(legacy.getKey(), new EvalContext(old.hardware(), old.gpu(), old.tier(), old.goal(), old.loadedModIds(), old.modVersions(), old.settings()));
+		}
+		List<Rule> seeds = bundledRules().stream().filter(r -> usesDriverVersion(r.current())).toList();
+		assertEquals(2, seeds.size());
+		for (Map.Entry<String, EvalContext> ctx : contexts.entrySet()) {
+			for (int i = 0; i < seeds.size(); i++) {
+				assertEquals(expected.get(ctx.getKey()).get(i), ConditionEvaluator.evaluate(seeds.get(i).current(), ctx.getValue()),
+						seeds.get(i).label() + " on " + ctx.getKey());
+			}
+		}
 	}
 
 	@Test

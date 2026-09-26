@@ -131,6 +131,13 @@ public final class ShareReport {
 		out.append("- render distance ").append(b.renderDistance())
 				.append(" · avg ").append(Math.round(b.avgFps())).append(" FPS · 1% low ").append(Math.round(b.onePercentLowFps()))
 				.append(" FPS · target ").append(b.targetFps()).append(" FPS ").append(b.targetMet() ? "met" : "missed").append('\n');
+		// v0.4 (docs/v0.4/SPEC.md 7, external review §2): the run's conditions, and whether it still describes the game.
+		if (!blank(b.conditions())) {
+			out.append("- conditions: ").append(field(b.conditions())).append('\n');
+		}
+		if (!blank(b.rerun())) {
+			out.append("- ").append(field(b.rerun())).append('\n');
+		}
 	}
 
 	// One entry per recommendation; the first of each category carries the category's header, so a cut never leaves a

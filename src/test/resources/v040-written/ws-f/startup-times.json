@@ -1,0 +1,29 @@
+{
+  "formatVersion": 1,
+  "runs": [
+    {
+      "at": "2026-09-23T09:12:40Z",
+      "ms": 14517,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.4.0+mc26.2",
+      "mods": 3,
+      "modSetHash": "b08698a512aa9411109ad20aa24409a58b69c2667ae78f81cc1af7fa38beb7b2"
+    },
+    {
+      "at": "2026-09-24T20:58:10Z",
+      "ms": 14343,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.4.0+mc26.2",
+      "mods": 3,
+      "modSetHash": "b08698a512aa9411109ad20aa24409a58b69c2667ae78f81cc1af7fa38beb7b2"
+    },
+    {
+      "at": "2026-09-25T19:02:44Z",
+      "ms": 15125,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.4.0+mc26.2",
+      "mods": 4,
+      "modSetHash": "2a2bece71e34f3c0879186baa2e32a9cc00480b73e4397f1cf355b45e5cba382"
+    }
+  ]
+}

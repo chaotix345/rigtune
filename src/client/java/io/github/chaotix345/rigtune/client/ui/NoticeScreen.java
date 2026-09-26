@@ -131,8 +131,9 @@ public class NoticeScreen extends Screen {
 			graphics.text(font, font.width(message) <= maxWidth ? message.getVisualOrderText() : ComponentRenderUtils.clipText(message, font, maxWidth),
 					left, y, COLOR_NOTICE, false);
 			if (mouseX >= left && mouseX < left + maxWidth && mouseY >= y && mouseY < y + 9) {
-				graphics.setTooltipForNextFrame(font, notice.detail() == null ? message
-						: message.copy().append(CommonComponents.NEW_LINE).append(Texts.component(notice.detail())), mouseX, mouseY);
+				// Wrapped: a notice's detail is often longer than the screen is wide (v0.4, WS-W).
+				graphics.setTooltipForNextFrame(font, font.split(notice.detail() == null ? message
+						: message.copy().append(CommonComponents.NEW_LINE).append(Texts.component(notice.detail())), Math.min(250, width - 16)), mouseX, mouseY);
 			}
 		}
 		if (notShown > 0) {

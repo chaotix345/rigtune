@@ -377,8 +377,9 @@ public class RigTuneScreen extends Screen {
 		graphics.text(font, font.width(message) <= maxWidth ? message.getVisualOrderText() : ComponentRenderUtils.clipText(message, font, maxWidth),
 				left, y, COLOR_NOTICE, false);
 		if (mouseX >= left && mouseX < left + maxWidth && mouseY >= y && mouseY < y + 9) {
-			graphics.setTooltipForNextFrame(font, shownNotice.detail() == null ? message
-					: message.copy().append(CommonComponents.NEW_LINE).append(Texts.component(shownNotice.detail())), mouseX, mouseY);
+			// Wrapped: a notice's detail is often longer than the screen is wide (v0.4, WS-W).
+			graphics.setTooltipForNextFrame(font, font.split(shownNotice.detail() == null ? message
+					: message.copy().append(CommonComponents.NEW_LINE).append(Texts.component(shownNotice.detail())), Math.min(250, width - 16)), mouseX, mouseY);
 		}
 	}
 
@@ -535,6 +536,7 @@ public class RigTuneScreen extends Screen {
 		graphics.text(font, title.copy().withStyle(ChatFormatting.BOLD), left, 11, 0xFFFFFFFF, true);
 		if (tierBadge != null) {
 			graphics.text(font, tierBadge, badgeRight - font.width(tierBadge), 11, 0xFFFFFFFF, true);
+			BenchmarkTrendLines.badgeTooltip(graphics, font, controller, tierBadge, badgeRight - font.width(tierBadge), 11, mouseX, mouseY, List.of());
 		}
 		int textWidth = right - left;
 		if (shown == null) {

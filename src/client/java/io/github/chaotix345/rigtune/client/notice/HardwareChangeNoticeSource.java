@@ -4,8 +4,8 @@ import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import org.jspecify.annotations.Nullable;
 
-// NoticePriority.HARDWARE_CHANGED: GPU, driver or hardware changed since last time (docs/v0.4/SPEC.md 9). Skeleton from the contracts commit (never shows anything); the change-awareness workstream fills it, reaching its service through the
-// controller (e.g. controller.awarenessService()).
+// NoticePriority.HARDWARE_CHANGED: GPU, driver or hardware changed since last time, with Re-scan and Re-benchmark
+// (docs/v0.4/SPEC.md 9). The state lives in AwarenessService.
 public final class HardwareChangeNoticeSource implements NoticeSource {
 	private final RealController controller;
 
@@ -15,10 +15,11 @@ public final class HardwareChangeNoticeSource implements NoticeSource {
 
 	@Override
 	public @Nullable Notice current() {
-		return null;
+		return controller.awarenessService().hardwareNotice();
 	}
 
 	@Override
 	public void act(String actionId) {
+		controller.awarenessService().hardwareAction(actionId);
 	}
 }

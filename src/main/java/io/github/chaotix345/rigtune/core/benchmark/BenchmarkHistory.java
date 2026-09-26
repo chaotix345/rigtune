@@ -174,4 +174,14 @@ public final class BenchmarkHistory {
 				.filter(r -> scene.equals(r.scene()) && mcVersion.equals(r.mcVersion()) && r.result() != null).toList();
 		return matching.subList(Math.max(0, matching.size() - max), matching.size());
 	}
+
+	/**
+	 * docs/v0.4/SPEC.md 7: the newest `max` runs with a result that are comparable with `latest` (same MC version, scene,
+	 * render and simulation distance and conditions: BenchmarkTrend.comparable), oldest first; latest itself when it's in
+	 * the history.
+	 */
+	public List<BenchmarkRecord> comparable(BenchmarkRecord latest, int max) {
+		List<BenchmarkRecord> matching = runs.stream().filter(r -> r.result() != null && BenchmarkTrend.comparable(r, latest)).toList();
+		return matching.subList(Math.max(0, matching.size() - max), matching.size());
+	}
 }
