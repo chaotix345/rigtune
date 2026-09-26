@@ -196,7 +196,7 @@ public final class BenchmarkController {
 		this.yaw = player.getYRot();
 		this.pitch = player.getXRot();
 		this.wasFlying = player.getAbilities().flying;
-		this.context = context(minecraft, original);
+		this.context = withModSet(context(minecraft, original));
 	}
 
 	// What else shapes the numbers, as the run starts (docs/v0.3/SPEC.md 8, the `context` of a benchmarks.json run).
@@ -206,8 +206,14 @@ public final class BenchmarkController {
 				BenchmarkRecord.Context.PROTOCOL);
 	}
 
+	// v0.4 (docs/v0.4/SPEC.md 7): the mod-set hash and the newest history.json entry, for the trend's change window and the
+	// "needs a rerun" marker.
+	private static BenchmarkRecord.Context withModSet(BenchmarkRecord.Context context) {
+		return context.withModSet(BenchmarkConditions.modSetHash(), BenchmarkConditions.journalCursor());
+	}
+
 	// The pack's file name from Iris' own settings file; null when unknown.
-	private static @Nullable String shaderPack() {
+	static @Nullable String shaderPack() {
 		try {
 			String pack = PropertiesConfigPatcher.readValues(FabricLoader.getInstance().getConfigDir().resolve("iris.properties")).get("shaderPack");
 			return pack == null || pack.isBlank() ? null : pack;
