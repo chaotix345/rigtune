@@ -56,13 +56,14 @@ pending.json/history.json/last-apply.json shape change; the only new file locati
 - Tests: JsonStateFileLogTest (5, red first: each failure path, captured RigTune logger, no temp-folder or home path in
   any line or stack trace) via the new test helper `core/LogCapture` (a Log4j appender); LogSafeTest (4).
 
-## SE-3 (low): SafeFileNames refuses text-direction and invisible characters
-- `problem()` refuses any code point `LogSafe.hidden` flags: Cc (C0 and C1 controls), Cf (bidi overrides and isolates,
-  LRM/RLM, zero-width space/joiners, BOM, word joiner), lone surrogates, U+2028/2029. `quote()` escapes the same, so the
-  refusal message never shows them raw. Letters, emoji (surrogate pairs) and accented names still pass.
-- It also guards the helper's check of enable targets (`ApplyExecutor.containmentProblem`). Only a Modrinth-supplied
-  name could carry these; an older pending.json with such a name would now be refused by the helper ("Refused: ... not a
-  safe .jar name"), which is the intent.
+## SE-3 (low): Modrinth file names with text-direction or invisible characters are refused
+- `requireJarName`/`resolveJar` (every Modrinth-supplied name: DownloadPlanner, DryRunPlanner, HttpModrinthClient,
+  RealController's download target) refuse any code point `LogSafe.hidden` flags: Cc (C0 and C1 controls), Cf (bidi
+  overrides and isolates, LRM/RLM, zero-width space/joiners, BOM, word joiner), lone surrogates, U+2028/2029. `quote()`
+  escapes the same, so the refusal message never shows them raw. Letters, emoji (surrogate pairs) and accented names pass.
+- `isSafeJarName`, the helper's check of every enable target (`ApplyExecutor.containmentProblem`), is unchanged on
+  purpose: it also covers an Undo re-enabling a jar the player named themselves (an emoji's zero-width joiner, say), which
+  must stay undoable.
 - Test: SafeFileNamesTest `rejectsTextDirectionAndInvisibleCharacters` (red first).
 
 ## SE-4 (low): DownloadPlanner's log lines can't be forged

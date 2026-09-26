@@ -43,17 +43,21 @@ class SafeFileNamesTest {
 	}
 
 	// review-8 SE-3: a Modrinth file name can hide what it is with text-direction overrides or invisible characters (a
-	// right-to-left override makes "evil" + RLO + "gpj.jar" read differently on screen). Refused, and escaped in the message.
+	// right-to-left override makes "evil" + RLO + "gpj.jar" read differently on screen). Refused for names from Modrinth,
+	// and escaped in the message.
 	@Test
 	void rejectsTextDirectionAndInvisibleCharacters() {
 		for (String name : List.of("evil\u202egpj.jar", "a\u202a.jar", "a\u2066b.jar", "a\u200b.jar", "a\u200d.jar", "a\u200e.jar", "a\ufeff.jar", "a\u2060.jar", "a\u0085.jar", "a\u009b.jar", "a\u2028.jar", "a\u2029.jar", "a\ud800.jar")) {
-			assertFalse(SafeFileNames.isSafeJarName(name), name);
+			assertThrows(IOException.class, () -> SafeFileNames.requireJarName(name), name);
+			assertThrows(IOException.class, () -> SafeFileNames.resolveJar(Path.of("mods"), name), name);
 		}
+		// A jar the player named themselves (say, with an emoji's zero-width joiner) can still be re-enabled by an Undo.
+		assertTrue(SafeFileNames.isSafeJarName("a\u200d.jar"));
 		IOException e = assertThrows(IOException.class, () -> SafeFileNames.requireJarName("evil\u202egpj.jar"));
 		assertTrue(e.getMessage().contains("\\u202e"), e.getMessage());
 		assertFalse(e.getMessage().contains("\u202e"), e.getMessage());
 		for (String name : List.of("日本語-mod.jar", "\ud83d\ude42-mod.jar", "ümlaut.jar")) {
-			assertTrue(SafeFileNames.isSafeJarName(name), name);
+			assertEquals(name, assertDoesNotThrowName(name));
 		}
 	}
 

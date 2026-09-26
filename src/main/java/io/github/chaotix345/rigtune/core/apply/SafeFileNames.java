@@ -19,19 +19,25 @@ public final class SafeFileNames {
 	private SafeFileNames() {
 	}
 
+	// Any jar name an enable may give (the helper checks every enable with this, the player's own jars on Undo too).
 	public static boolean isSafeJarName(String name) {
 		return problem(name) == null;
 	}
 
+	// A file name Modrinth supplies: also no invisible or text-direction characters (review-8 SE-3), which can make a name
+	// read as another one; a jar the player named themselves stays undoable (isSafeJarName).
 	public static String requireJarName(String name) throws IOException {
 		String problem = problem(name);
+		if (problem == null) {
+			problem = hiddenProblem(name);
+		}
 		if (problem != null) {
 			throw new IOException("Unsafe file name " + quote(name) + ": " + problem);
 		}
 		return name;
 	}
 
-	// Resolves a bare .jar name (plus an optional fixed suffix) inside dir and checks it can't escape.
+	// Resolves a bare .jar name from Modrinth (plus an optional fixed suffix) inside dir and checks it can't escape.
 	public static Path resolveJar(Path dir, String name, String suffix) throws IOException {
 		requireJarName(name);
 		Path target = dir.resolve(name + suffix);
@@ -100,10 +106,6 @@ public final class SafeFileNames {
 			if (FORBIDDEN.indexOf(cp) >= 0) {
 				return "contains '" + (char) cp + "'";
 			}
-			// review-8 SE-3: a text-direction override or an invisible character can make a name read as another one.
-			if (LogSafe.hidden(cp)) {
-				return "contains an invisible or text-direction character";
-			}
 		}
 		if (name.startsWith(".")) {
 			return "starts with a dot";
@@ -133,6 +135,11 @@ public final class SafeFileNames {
 			return "not a valid path";
 		}
 		return null;
+	}
+
+	// C1 controls, format characters (bidi overrides and isolates, zero-width ones, BOM), lone surrogates, line separators.
+	private static String hiddenProblem(String name) {
+		return name.codePoints().anyMatch(LogSafe::hidden) ? "contains an invisible or text-direction character" : null;
 	}
 
 	private static String quote(String name) {
