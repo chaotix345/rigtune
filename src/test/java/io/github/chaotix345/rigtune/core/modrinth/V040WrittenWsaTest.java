@@ -57,6 +57,11 @@ class V040WrittenWsaTest {
 	private static final String TOKEN = "${INSTANCE}";
 	private static final List<String> TIMES = List.of("2026-09-20T09:00:00Z", "2026-09-20T10:00:05Z");
 	private static final Pattern UUID = Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
+	// The ids in order of first appearance (entry, change, op, group; then the second Apply's), the same as WS-H's
+	// placeholder set used where it has them, so the harness's own tests keep their fixed ids.
+	private static final List<String> FIXED_IDS = List.of("5d1c7a90-2e4b-4f6a-8b3c-1a9e0d7f2c11", "6e2d8ba1-3f5c-4a7b-9c4d-2b0f1e803d12",
+			"7f3e9cb2-4a6d-4b8c-8d5e-3c1a2f914e13", "7f3e9cb2-4a6d-4b8c-8d5e-3c1a2f914e14", "8a4f0dc3-5b7e-4c9d-9e6f-4d2b3a025f14",
+			"9b5a1ed4-6c8f-4dae-8f70-5e3c4b136a15", "0a4f3c1e-5b7d-4e2a-9c61-7d2f1b8e4a01", "0a4f3c1e-5b7d-4e2a-9c61-7d2f1b8e4a02");
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 	private static final StagedChanges.ConfigKeys NO_CONFIG = new StagedChanges.ConfigKeys() {
 		@Override
@@ -166,7 +171,7 @@ class V040WrittenWsaTest {
 		Matcher m = UUID.matcher(text);
 		StringBuilder out = new StringBuilder();
 		while (m.find()) {
-			String fixed = uuids.computeIfAbsent(m.group(), k -> "ae1d2c3b-4a5f-4e6d-8c7b-%012d".formatted(uuids.size() + 1));
+			String fixed = uuids.computeIfAbsent(m.group(), k -> FIXED_IDS.get(uuids.size()));
 			m.appendReplacement(out, fixed);
 		}
 		m.appendTail(out);
