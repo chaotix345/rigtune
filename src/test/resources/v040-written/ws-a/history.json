@@ -1,0 +1,46 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "ae1d2c3b-4a5f-4e6d-8c7b-000000000001",
+      "at": "2026-09-20T09:00:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.4.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "ae1d2c3b-4a5f-4e6d-8c7b-000000000002",
+          "type": "file",
+          "action": "disable",
+          "modId": "e2e-named",
+          "file": "e2e-named-1.0.0.jar",
+          "resultFile": "e2e-named-1.0.0.jar.disabled",
+          "status": "APPLIED",
+          "opId": "ae1d2c3b-4a5f-4e6d-8c7b-000000000003",
+          "group": "ae1d2c3b-4a5f-4e6d-8c7b-000000000004",
+          "modName": "E2E Named Mod"
+        }
+      ]
+    },
+    {
+      "id": "ae1d2c3b-4a5f-4e6d-8c7b-000000000005",
+      "at": "2026-09-20T10:00:05Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.4.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "ae1d2c3b-4a5f-4e6d-8c7b-000000000006",
+          "type": "file",
+          "action": "enable",
+          "modId": "e2e-seed",
+          "file": "e2e-seed-1.0.0.jar",
+          "status": "STAGED",
+          "opId": "ae1d2c3b-4a5f-4e6d-8c7b-000000000007",
+          "group": "ae1d2c3b-4a5f-4e6d-8c7b-000000000008",
+          "modName": "E2E Seed Mod"
+        }
+      ]
+    }
+  ]
+}
