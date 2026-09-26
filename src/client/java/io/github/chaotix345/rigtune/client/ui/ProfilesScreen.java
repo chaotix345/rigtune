@@ -224,7 +224,7 @@ public class ProfilesScreen extends Screen {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
 		Component line = status != null ? status : Component.translatable("rigtune.profile.subtitle");
-		graphics.centeredText(font, clip(line, width - 16), width / 2, 20, status != null ? COLOR_STATUS : COLOR_LABEL);
+		graphics.centeredText(font, clip(line, width - 16), width / 2, 20, Palette.of(status != null ? COLOR_STATUS : COLOR_LABEL));
 		if (font.width(line) > width - 16 && mouseY >= 18 && mouseY < 30) {
 			graphics.setTooltipForNextFrame(font, font.split(line, Math.max(120, width / 2)), mouseX, mouseY);
 		}
@@ -264,6 +264,12 @@ public class ProfilesScreen extends Screen {
 		void addRow(ProfileRow row) {
 			addEntry(row);
 		}
+
+		@Override
+		protected void extractItem(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, ProfileRow entry) {
+			super.extractItem(graphics, mouseX, mouseY, partialTick, entry);
+			RowFocus.outline(graphics, entry);
+		}
 	}
 
 	final class ProfileRow extends ContainerObjectSelectionList.Entry<ProfileRow> {
@@ -271,6 +277,8 @@ public class ProfilesScreen extends Screen {
 		private final Component name;
 		private final Component right;
 		private final @Nullable Component tooltip;
+		// docs/v0.4/SPEC.md 11: a Tab/arrow stop narrating the name and state; Enter/Space selects the profile.
+		private final RowFocus focus;
 
 		ProfileRow(ProfileView view) {
 			this.view = view;
@@ -279,22 +287,23 @@ public class ProfilesScreen extends Screen {
 			TemplateId template = view.id().startsWith(ProfileStore.TEMPLATE_PREFIX)
 					? TemplateId.of(view.id().substring(ProfileStore.TEMPLATE_PREFIX.length())) : null;
 			this.tooltip = template == null ? null : Texts.component(template.description());
+			this.focus = new RowFocus(this, RowFocus.join(name, right, tooltip), () -> select(view.id()));
 		}
 
 		@Override
 		public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 			boolean chosen = view.id().equals(selected);
 			if (chosen || hovered) {
-				graphics.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight() - 1, chosen ? 0x30FFFFFF : 0x18FFFFFF);
+				graphics.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight() - 1, Palette.of(chosen ? 0x30FFFFFF : 0x18FFFFFF));
 			}
 			int x = getContentX() + 6;
 			int y = getContentY() + (getContentHeight() - 8) / 2;
 			int rightWidth = font.width(right);
 			if (view.active()) {
-				graphics.fill(getContentX(), getY() + 3, getContentX() + 2, getY() + getHeight() - 4, COLOR_ACTIVE);
+				graphics.fill(getContentX(), getY() + 3, getContentX() + 2, getY() + getHeight() - 4, Palette.of(COLOR_ACTIVE));
 			}
 			graphics.text(font, clip(name, Math.max(20, getContentRight() - x - rightWidth - 8)), x, y, 0xFFFFFFFF, true);
-			graphics.text(font, right, getContentRight() - rightWidth, y, view.active() ? COLOR_ACTIVE : COLOR_LABEL, false);
+			graphics.text(font, right, getContentRight() - rightWidth, y, Palette.of(view.active() ? COLOR_ACTIVE : COLOR_LABEL), false);
 			if (hovered && tooltip != null) {
 				graphics.setTooltipForNextFrame(font, font.split(tooltip, Math.max(120, width / 2)), mouseX, mouseY);
 			}
@@ -311,12 +320,12 @@ public class ProfilesScreen extends Screen {
 
 		@Override
 		public List<? extends GuiEventListener> children() {
-			return List.of();
+			return List.of(focus);
 		}
 
 		@Override
 		public List<? extends NarratableEntry> narratables() {
-			return List.of();
+			return List.of(focus);
 		}
 	}
 

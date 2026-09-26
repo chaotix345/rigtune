@@ -161,9 +161,9 @@ public class JvmScreen extends Screen {
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
-		graphics.centeredText(font, clip(Component.translatable("rigtune.jvm.subtitle"), width - 16), width / 2, 20, COLOR_LABEL);
+		graphics.centeredText(font, clip(Component.translatable("rigtune.jvm.subtitle"), width - 16), width / 2, 20, Palette.of(COLOR_LABEL));
 		if (shownJvm.javaVersion() == null && list != null) {
-			graphics.centeredText(font, Component.translatable("rigtune.jvm.checking"), width / 2, list.getY() + list.getHeight() / 2 - LINE / 2, COLOR_LABEL);
+			graphics.centeredText(font, Component.translatable("rigtune.jvm.checking"), width / 2, list.getY() + list.getHeight() / 2 - LINE / 2, Palette.of(COLOR_LABEL));
 		}
 	}
 
@@ -190,6 +190,12 @@ public class JvmScreen extends Screen {
 			return rowWidth;
 		}
 
+		@Override
+		protected void extractItem(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, Row entry) {
+			super.extractItem(graphics, mouseX, mouseY, partialTick, entry);
+			RowFocus.outline(graphics, entry);
+		}
+
 		void heading(String key, int width) {
 			Row row = new Row(Component.translatable(key).withStyle(ChatFormatting.BOLD), COLOR_HEADING, 0, first ? 1 : 7, width, true);
 			first = false;
@@ -208,9 +214,12 @@ public class JvmScreen extends Screen {
 			private final int indent;
 			private final int top;
 			private final boolean shadow;
+			// docs/v0.4/SPEC.md 11: a Tab/arrow stop that narrates the row's text.
+			private final RowFocus focus;
 
 			Row(Component text, int color, int indent, int top, int width, boolean shadow) {
 				this.text = text;
+				this.focus = new RowFocus(this, text);
 				this.lines = font.split(text, Math.max(40, width - indent));
 				this.color = color;
 				this.indent = indent;
@@ -234,19 +243,19 @@ public class JvmScreen extends Screen {
 			public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 				int y = getContentY() + top;
 				for (FormattedCharSequence line : lines) {
-					graphics.text(font, line, getContentX() + indent, y, color, shadow);
+					graphics.text(font, line, getContentX() + indent, y, Palette.of(color), shadow);
 					y += LINE;
 				}
 			}
 
 			@Override
 			public List<? extends GuiEventListener> children() {
-				return List.of();
+				return List.of(focus);
 			}
 
 			@Override
 			public List<? extends NarratableEntry> narratables() {
-				return List.of();
+				return List.of(focus);
 			}
 		}
 	}

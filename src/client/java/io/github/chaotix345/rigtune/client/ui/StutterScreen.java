@@ -306,7 +306,7 @@ public class StutterScreen extends Screen {
 
 	private void text(StutterList l, Component text, int color, int width, int top) {
 		shownText.add(text);
-		l.add(new TextRow(font.split(text, Math.max(40, width)), color, top));
+		l.add(new TextRow(text, font.split(text, Math.max(40, width)), color, top));
 	}
 
 	private void bar(StutterList l, Component label, double share, int color, Component value) {
@@ -358,7 +358,7 @@ public class StutterScreen extends Screen {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
 		if (status != null) {
-			graphics.centeredText(font, status, width / 2, 20, COLOR_GOOD);
+			graphics.centeredText(font, status, width / 2, 20, Palette.of(COLOR_GOOD));
 		}
 	}
 
@@ -367,17 +367,20 @@ public class StutterScreen extends Screen {
 		minecraft.gui.setScreen(parent);
 	}
 
+	// docs/v0.4/SPEC.md 11: every row is a Tab/arrow stop and narrates what it shows.
 	abstract static class Row extends ContainerObjectSelectionList.Entry<Row> {
 		abstract int height();
 
+		abstract RowFocus focus();
+
 		@Override
 		public List<? extends GuiEventListener> children() {
-			return List.of();
+			return List.of(focus());
 		}
 
 		@Override
 		public List<? extends NarratableEntry> narratables() {
-			return List.of();
+			return List.of(focus());
 		}
 	}
 
@@ -385,11 +388,18 @@ public class StutterScreen extends Screen {
 		private final List<FormattedCharSequence> lines;
 		private final int color;
 		private final int top;
+		private final RowFocus focus;
 
-		TextRow(List<FormattedCharSequence> lines, int color, int top) {
+		TextRow(Component text, List<FormattedCharSequence> lines, int color, int top) {
 			this.lines = lines;
 			this.color = color;
 			this.top = top;
+			this.focus = new RowFocus(this, text);
+		}
+
+		@Override
+		RowFocus focus() {
+			return focus;
 		}
 
 		@Override
@@ -401,7 +411,7 @@ public class StutterScreen extends Screen {
 		public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 			int y = getContentY() + top;
 			for (FormattedCharSequence line : lines) {
-				graphics.text(font, line, getContentX(), y, color, false);
+				graphics.text(font, line, getContentX(), y, Palette.of(color), false);
 				y += LINE;
 			}
 		}
@@ -413,12 +423,19 @@ public class StutterScreen extends Screen {
 		private final double share;
 		private final int color;
 		private final Component value;
+		private final RowFocus focus;
 
 		BarRow(Component label, double share, int color, Component value) {
 			this.label = label;
 			this.share = Math.max(0, Math.min(1, share));
 			this.color = color;
 			this.value = value;
+			this.focus = new RowFocus(this, RowFocus.join(label, value));
+		}
+
+		@Override
+		RowFocus focus() {
+			return focus;
 		}
 
 		@Override
@@ -436,10 +453,10 @@ public class StutterScreen extends Screen {
 			int valueWidth = l == null ? width / 3 : l.valueColumn;
 			int barX = x + labelWidth + 4;
 			int barWidth = Math.max(MIN_BAR, width - labelWidth - valueWidth - 8);
-			graphics.text(font, font.substrByWidth(label, labelWidth).getString(), x, y, COLOR_TEXT, false);
-			graphics.fill(barX, y + 1, barX + barWidth, y + 8, COLOR_BAR_BG);
-			graphics.fill(barX, y + 1, barX + (int) Math.round(barWidth * share), y + 8, color);
-			graphics.text(font, font.substrByWidth(value, valueWidth).getString(), barX + barWidth + 4, y, COLOR_LABEL, false);
+			graphics.text(font, font.substrByWidth(label, labelWidth).getString(), x, y, Palette.of(COLOR_TEXT), false);
+			graphics.fill(barX, y + 1, barX + barWidth, y + 8, Palette.of(COLOR_BAR_BG));
+			graphics.fill(barX, y + 1, barX + (int) Math.round(barWidth * share), y + 8, Palette.of(color));
+			graphics.text(font, font.substrByWidth(value, valueWidth).getString(), barX + barWidth + 4, y, Palette.of(COLOR_LABEL), false);
 		}
 
 		boolean fits() {
@@ -460,6 +477,12 @@ public class StutterScreen extends Screen {
 
 		void add(Row row) {
 			addEntry(row, row.height());
+		}
+
+		@Override
+		protected void extractItem(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, Row entry) {
+			super.extractItem(graphics, mouseX, mouseY, partialTick, entry);
+			RowFocus.outline(graphics, entry);
 		}
 
 		@Override

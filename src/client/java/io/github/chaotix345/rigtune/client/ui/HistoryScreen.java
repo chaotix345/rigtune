@@ -8,6 +8,7 @@ import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.UndoPlanner;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ComponentRenderUtils;
@@ -51,6 +52,8 @@ public class HistoryScreen extends Screen {
 	private boolean failed;
 	private @Nullable String selected;
 	private @Nullable String clicked;
+	// docs/v0.4/SPEC.md 11: the entry chosen with Enter/Space, whose row gets the focus back after the rebuild.
+	private @Nullable String refocus;
 	private double scroll;
 	private @Nullable HistoryList list;
 
@@ -204,6 +207,21 @@ public class HistoryScreen extends Screen {
 		super.rebuildWidgets();
 	}
 
+	@Override
+	protected void setInitialFocus() {
+		String id = refocus;
+		refocus = null;
+		if (id != null && list != null) {
+			for (HistoryList.Row row : list.children()) {
+				if (row instanceof EntryRow r && r.entry.id().equals(id)) {
+					changeFocus(ComponentPath.path(r.focus, r, list, this));
+					return;
+				}
+			}
+		}
+		super.setInitialFocus();
+	}
+
 	private HistoryModel.@Nullable Entry selectedEntry() {
 		return view == null ? null : view.entries().stream().filter(e -> e.id().equals(selected)).findFirst().orElse(null);
 	}
@@ -238,13 +256,13 @@ public class HistoryScreen extends Screen {
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
-		graphics.centeredText(font, clip(Component.translatable("rigtune.history.subtitle"), width - 16), width / 2, 20, COLOR_LABEL);
+		graphics.centeredText(font, clip(Component.translatable("rigtune.history.subtitle"), width - 16), width / 2, 20, Palette.of(COLOR_LABEL));
 		Component message = message();
 		if (message != null && list != null) {
 			List<FormattedCharSequence> lines = font.split(message, Math.max(40, Math.min(width - 32, 400)));
 			int y = list.getY() + list.getHeight() / 2 - lines.size() * LINE / 2;
 			for (FormattedCharSequence line : lines) {
-				graphics.centeredText(font, line, width / 2, y, COLOR_LABEL);
+				graphics.centeredText(font, line, width / 2, y, Palette.of(COLOR_LABEL));
 				y += LINE;
 			}
 		}
@@ -338,15 +356,15 @@ public class HistoryScreen extends Screen {
 
 	static int statusColor(@Nullable String status) {
 		if (status == null) {
-			return COLOR_LABEL;
+			return Palette.of(COLOR_LABEL);
 		}
-		return switch (status) {
+		return Palette.of(switch (status) {
 			case JournalChange.APPLIED -> COLOR_APPLIED;
 			case JournalChange.STAGED -> COLOR_STAGED;
 			case JournalChange.ABANDONED -> COLOR_FAIL;
 			case JournalChange.REVERTED -> COLOR_REVERTED;
 			default -> COLOR_LABEL;
-		};
+		});
 	}
 
 	// --- the list
@@ -368,15 +386,24 @@ public class HistoryScreen extends Screen {
 			addEntry(row, height);
 		}
 
+		@Override
+		protected void extractItem(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, Row entry) {
+			super.extractItem(graphics, mouseX, mouseY, partialTick, entry);
+			RowFocus.outline(graphics, entry);
+		}
+
+		// docs/v0.4/SPEC.md 11: every row is a Tab/arrow stop and narrates what it shows.
 		abstract static class Row extends ContainerObjectSelectionList.Entry<Row> {
+			abstract RowFocus focus();
+
 			@Override
 			public List<? extends GuiEventListener> children() {
-				return List.of();
+				return List.of(focus());
 			}
 
 			@Override
 			public List<? extends NarratableEntry> narratables() {
-				return List.of();
+				return List.of(focus());
 			}
 		}
 	}
@@ -387,6 +414,7 @@ public class HistoryScreen extends Screen {
 		private final Component heading;
 		private final Component summary;
 		private final Component details;
+		private final RowFocus focus;
 
 		EntryRow(HistoryModel.Entry entry, boolean open) {
 			this.entry = entry;
@@ -398,24 +426,34 @@ public class HistoryScreen extends Screen {
 			this.heading = heading;
 			this.summary = summary(entry);
 			this.details = details(entry);
+			// Enter/Space selects the entry as a click does (in the next tick), and the focus stays on its row.
+			this.focus = new RowFocus(this, RowFocus.join(heading, summary, details), () -> {
+				refocus = entry.id();
+				clicked = entry.id();
+			});
+		}
+
+		@Override
+		RowFocus focus() {
+			return focus;
 		}
 
 		@Override
 		public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 			if (open || hovered) {
-				graphics.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight() - 1, open ? 0x30FFFFFF : 0x18FFFFFF);
+				graphics.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight() - 1, Palette.of(open ? 0x30FFFFFF : 0x18FFFFFF));
 			}
 			int x = getContentX();
 			int y = getContentY() + 1;
 			int right = getContentRight();
 			if (open) {
-				graphics.fill(x, getY() + 2, x + 2, getY() + getHeight() - 3, COLOR_STAGED);
+				graphics.fill(x, getY() + 2, x + 2, getY() + getHeight() - 3, Palette.of(COLOR_STAGED));
 			}
 			int summaryWidth = font.width(summary);
 			int textX = x + 6;
 			graphics.text(font, clip(heading, Math.max(20, right - textX - summaryWidth - 6)), textX, y, 0xFFFFFFFF, true);
-			graphics.text(font, summary, right - summaryWidth, y, COLOR_LABEL, false);
-			graphics.text(font, clip(details, Math.max(20, right - textX)), textX, y + 11, COLOR_LABEL, false);
+			graphics.text(font, summary, right - summaryWidth, y, Palette.of(COLOR_LABEL), false);
+			graphics.text(font, clip(details, Math.max(20, right - textX)), textX, y + 11, Palette.of(COLOR_LABEL), false);
 		}
 
 		@Override
@@ -433,6 +471,7 @@ public class HistoryScreen extends Screen {
 		private final Component status;
 		private final List<FormattedCharSequence> lines;
 		private final List<FormattedCharSequence> failure;
+		private final RowFocus focus;
 
 		ChangeRow(HistoryModel.Change change, int width) {
 			this.change = change;
@@ -441,6 +480,12 @@ public class HistoryScreen extends Screen {
 			this.lines = font.split(describe(change), textWidth);
 			Component reason = failureText(change);
 			this.failure = reason == null ? List.of() : font.split(reason, Math.max(40, width - 8));
+			this.focus = new RowFocus(this, RowFocus.join(describe(change), status, reason));
+		}
+
+		@Override
+		RowFocus focus() {
+			return focus;
 		}
 
 		int preferredHeight() {
@@ -455,11 +500,11 @@ public class HistoryScreen extends Screen {
 			boolean inactive = JournalChange.DISCARDED.equals(change.status()) || JournalChange.REVERTED.equals(change.status());
 			graphics.text(font, status, right - font.width(status), y, statusColor(change.status()), false);
 			for (FormattedCharSequence line : lines) {
-				graphics.text(font, line, x, y, inactive ? 0xFFB8B8B8 : 0xFFFFFFFF, false);
+				graphics.text(font, line, x, y, Palette.of(inactive ? 0xFFB8B8B8 : 0xFFFFFFFF), false);
 				y += LINE;
 			}
 			for (FormattedCharSequence line : failure) {
-				graphics.text(font, line, x + 8, y, COLOR_FAIL, false);
+				graphics.text(font, line, x + 8, y, Palette.of(COLOR_FAIL), false);
 				y += LINE;
 			}
 		}

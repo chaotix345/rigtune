@@ -149,7 +149,7 @@ public class RigTuneSettingsScreen extends Screen {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title, width / 2, 15, 0xFFFFFFFF);
 		if (noteY + 9 < height - 28 - GAP) {
-			graphics.centeredText(font, Component.translatable("rigtune.settings.note"), width / 2, noteY, COLOR_NOTE);
+			graphics.centeredText(font, Component.translatable("rigtune.settings.note"), width / 2, noteY, Palette.of(COLOR_NOTE));
 		}
 	}
 

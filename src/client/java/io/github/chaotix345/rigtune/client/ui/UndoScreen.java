@@ -144,18 +144,18 @@ public class UndoScreen extends Screen {
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
-		graphics.centeredText(font, clip(subtitle()), width / 2, 20, COLOR_LABEL);
+		graphics.centeredText(font, clip(subtitle()), width / 2, 20, Palette.of(COLOR_LABEL));
 		Component empty = loading ? Component.translatable("rigtune.undo.loading")
 				: plan == null ? null
 				: plan.problem() != null ? Component.translatable(plan.problem())
 				: plan.items().isEmpty() ? Component.translatable("rigtune.undo.nothing") : null;
 		if (empty != null && list != null) {
-			graphics.centeredText(font, clip(empty), width / 2, list.getY() + list.getHeight() / 2 - 4, COLOR_LABEL);
+			graphics.centeredText(font, clip(empty), width / 2, list.getY() + list.getHeight() / 2 - 4, Palette.of(COLOR_LABEL));
 		}
 		Component line = status != null ? status
 				: plan != null && !plan.items().isEmpty() && plan.isEmpty() ? Component.translatable("rigtune.undo.nothing_possible") : null;
 		if (line != null) {
-			graphics.centeredText(font, clip(line), width / 2, statusY, status == null ? COLOR_LABEL : succeeded(status) ? COLOR_NOW : COLOR_FAIL);
+			graphics.centeredText(font, clip(line), width / 2, statusY, Palette.of(status == null ? COLOR_LABEL : succeeded(status) ? COLOR_NOW : COLOR_FAIL));
 		}
 	}
 
@@ -206,6 +206,12 @@ public class UndoScreen extends Screen {
 			return rowWidth;
 		}
 
+		@Override
+		protected void extractItem(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, Entry entry) {
+			super.extractItem(graphics, mouseX, mouseY, partialTick, entry);
+			RowFocus.outline(graphics, entry);
+		}
+
 		void addSection(Component label, int color) {
 			addEntry(new SectionEntry(label, color), 16);
 		}
@@ -215,34 +221,44 @@ public class UndoScreen extends Screen {
 			addEntry(entry, entry.preferredHeight());
 		}
 
+		// docs/v0.4/SPEC.md 11: every row is a Tab/arrow stop and narrates what it shows.
 		abstract static class Entry extends ContainerObjectSelectionList.Entry<Entry> {
+			abstract RowFocus focus();
+
 			@Override
 			public List<? extends GuiEventListener> children() {
-				return List.of();
+				return List.of(focus());
 			}
 
 			@Override
 			public List<? extends NarratableEntry> narratables() {
-				return List.of();
+				return List.of(focus());
 			}
 		}
 
 		final class SectionEntry extends Entry {
 			private final Component label;
 			private final int color;
+			private final RowFocus focus;
 
 			SectionEntry(Component label, int color) {
 				this.label = label.copy().withStyle(ChatFormatting.BOLD);
 				this.color = color;
+				this.focus = new RowFocus(this, label);
+			}
+
+			@Override
+			RowFocus focus() {
+				return focus;
 			}
 
 			@Override
 			public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 				int y = getContentBottom() - 11;
-				graphics.text(font, label, getContentX(), y, color, true);
+				graphics.text(font, label, getContentX(), y, Palette.of(color), true);
 				int lineX = getContentX() + font.width(label) + 6;
 				if (lineX < getContentRight()) {
-					graphics.fill(lineX, y + 4, getContentRight(), y + 5, 0x40FFFFFF);
+					graphics.fill(lineX, y + 4, getContentRight(), y + 5, Palette.of(0x40FFFFFF));
 				}
 			}
 		}
@@ -251,12 +267,19 @@ public class UndoScreen extends Screen {
 			private final List<FormattedCharSequence> lines;
 			private final List<FormattedCharSequence> reason;
 			private final boolean skipped;
+			private final RowFocus focus;
 
 			ItemEntry(UndoPlan.Item item, int width) {
 				this.lines = font.split(Texts.component(item.descriptionText()), Math.max(40, width));
 				this.reason = item.reason() == null || item.reason().isBlank() ? List.of()
 						: font.split(Texts.component(item.reasonText()), Math.max(40, width - 8));
 				this.skipped = item.action() == UndoPlan.Action.SKIP;
+				this.focus = new RowFocus(this, RowFocus.join(Texts.component(item.descriptionText()), reason.isEmpty() ? null : Texts.component(item.reasonText())));
+			}
+
+			@Override
+			RowFocus focus() {
+				return focus;
 			}
 
 			int preferredHeight() {
@@ -268,11 +291,11 @@ public class UndoScreen extends Screen {
 				int x = getContentX() + 6;
 				int y = getContentY() + 1;
 				for (FormattedCharSequence line : lines) {
-					graphics.text(font, line, x, y, skipped ? 0xFFC8C8C8 : 0xFFFFFFFF, false);
+					graphics.text(font, line, x, y, Palette.of(skipped ? 0xFFC8C8C8 : 0xFFFFFFFF), false);
 					y += LINE;
 				}
 				for (FormattedCharSequence line : reason) {
-					graphics.text(font, line, x + 8, y, COLOR_REASON, false);
+					graphics.text(font, line, x + 8, y, Palette.of(COLOR_REASON), false);
 					y += LINE;
 				}
 			}
