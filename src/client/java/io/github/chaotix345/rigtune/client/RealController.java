@@ -644,7 +644,7 @@ public final class RealController implements RigTuneController {
 				.map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("?");
 		LauncherInfo detected = launcher();
 		return ShareReport.format(shown, new ShareReport.Versions(modVersion, shown.hardware().mcVersion(), loaderVersion), latestBenchmark(),
-				detected.known() ? detected.launcher().displayName() : null);
+				detected.known() ? detected.launcher().displayName() : null, jvmService.report());
 	}
 
 	@Override

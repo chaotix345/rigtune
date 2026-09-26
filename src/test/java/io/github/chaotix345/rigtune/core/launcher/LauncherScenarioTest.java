@@ -133,15 +133,18 @@ class LauncherScenarioTest {
 		keys.put("rigtune.launcher.advice", 2);
 		keys.put("rigtune.launcher.header.cpu", 2);
 		keys.put("rigtune.launcher.header.memory", 3);
+		keys.put("rigtune.launcher.xmx_in_java_args", 1);
 		for (Launcher launcher : Launcher.values()) {
 			for (Boolean override : new Boolean[]{null, true, false}) {
 				LauncherInfo info = new LauncherInfo(launcher, override);
 				if (info.known()) {
 					keys.put(info.nameKey(), 0);
 					keys.put(info.stepsKey(), 0);
+					keys.put(info.jvmStepsKey(), 0);
 				} else {
 					assertNull(info.nameKey());
 					assertNull(info.stepsKey());
+					assertNull(info.jvmStepsKey());
 				}
 			}
 		}

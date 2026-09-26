@@ -51,4 +51,24 @@ public record LauncherInfo(Launcher launcher, @Nullable Boolean memoryOverride) 
 			case UNKNOWN -> null;
 		};
 	}
+
+	// v0.4 (docs/v0.4/SPEC.md 6, docs/research/v0.4/launcher-steps.md): where this launcher keeps the Java arguments. The
+	// official launcher's labels come from Mojang's help articles; CurseForge's from its support pages (both closed source).
+	public @Nullable String jvmStepsKey() {
+		return switch (launcher) {
+			case PRISM -> "rigtune.launcher.jvm_steps.prism";
+			case MODRINTH_APP -> "rigtune.launcher.jvm_steps.modrinth_app";
+			case ATLAUNCHER -> "rigtune.launcher.jvm_steps.atlauncher";
+			case CURSEFORGE -> "rigtune.launcher.jvm_steps.curseforge";
+			case OFFICIAL -> "rigtune.launcher.jvm_steps.official";
+			case UNKNOWN -> null;
+		};
+	}
+
+	// A -Xmx typed in the Java arguments overrides the memory slider (Modrinth App: args.rs:162,205). Prism and ATLauncher
+	// put their own -Xmx last (or refuse a typed one); the official launcher has no separate memory setting; CurseForge is
+	// UNVERIFIED.
+	public boolean typedXmxWins() {
+		return launcher == Launcher.MODRINTH_APP;
+	}
 }

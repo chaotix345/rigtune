@@ -336,6 +336,17 @@ tasks.register("runProductionClientGameTest", net.fabricmc.loom.task.prod.Client
 	}
 }
 
+// v0.4 (docs/v0.4/SPEC.md 6, AC6.6): extra JVM arguments for a LOCAL game-test run, split on whitespace, e.g.
+// ./gradlew :26.2:runProductionClientGameTest -PgametestJvmArgs="-XX:+UseZGC -XX:+ZGenerational -Dusing.aikars.flags=x"
+// (JvmGameTest then checks that the notes come from the running JVM). CI never passes it.
+def gametestJvmArgs = providers.gradleProperty("gametestJvmArgs").map { it.trim().split(/\s+/).findAll { !it.isEmpty() } }.orElse([])
+tasks.named("runProductionClientGameTest") {
+	jvmArgs.addAll(gametestJvmArgs)
+}
+tasks.matching { it.name == "runClientGameTest" }.configureEach {
+	jvmArgumentProviders.add({ gametestJvmArgs.get() } as CommandLineArgumentProvider)
+}
+
 // Footprint guard (docs/v0.4/SPEC.md 10): FrameHookBudgetTest and FootprintGameTest read the budgets from
 // tools/footprint-budgets.json. The production game tests also get the rules from this checkout's rules/ over loopback
 // (-Drigtune.rules.baseUrl) instead of GitHub, so RigTune's startup work, and the guard's 5 s worker window, don't depend
