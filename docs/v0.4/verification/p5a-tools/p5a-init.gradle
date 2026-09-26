@@ -1,0 +1,20 @@
+allprojects {
+  afterEvaluate { p ->
+    if (p.extensions.findByName('sourceSets') != null && p.sourceSets.findByName('e2eUndo') != null) {
+      p.tasks.register('p5aPrintCp') {
+        def cp = p.sourceSets.e2eUndo.compileClasspath
+        def out = new File(System.getProperty('p5a.out', 'p5a-cp') + '-' + p.name + '.txt')
+        doLast { out.text = cp.files.collect { it.absolutePath }.join('\n') }
+      }
+    }
+  }
+}
+// P5-A: extra program arguments for e2eClient (e.g. --graphicsBackend vulkan), from -Pp5aProgramArgs="a b".
+allprojects {
+  afterEvaluate { p ->
+    def extra = p.findProperty('p5aProgramArgs')
+    if (extra) {
+      p.tasks.matching { it.name == 'e2eClient' }.configureEach { t -> t.programArgs.addAll(extra.toString().trim().split(/[\s,]+/) as List) }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+# RC's own DriverVersionParser on the real strings (java -cp <rigtune jar>;gson;jspecify p5a-tools/ParseDriver.java <vendor> <backend> <raw>)
+[mc26.2 jar] raw="3.3.0 Core Profile Context 26.8.1.260810" vendor=AMD backend=OPENGL -> family=adrenalin comparable=[26, 8, 1] display=26.8.1
+[mc26.3 jar] raw="3.3.0 Core Profile Context 26.8.1.260810" vendor=AMD backend=OPENGL -> family=adrenalin comparable=[26, 8, 1] display=26.8.1
+[mc26.3 jar] raw="1.4.349 AMD proprietary driver 26.8.1 (LLPC)" vendor=AMD backend=VULKAN -> family=unknown comparable=[] display=1.4.349 AMD proprietary driver 26.8.1 (LLPC)
+[mc26.2 jar] (the edited fingerprint) raw="3.3.0 Core Profile Context 26.5.1.260501" vendor=AMD backend=OPENGL -> family=adrenalin comparable=[26, 5, 1] display=26.5.1
+
+# After the fix (feat/v0.4.0 c7a2e28, merged here as 135e586; ./gradlew :26.3:jar):
+[merged mc26.3 jar] raw="1.4.349 AMD proprietary driver 26.8.1 (LLPC)" vendor=AMD backend=VULKAN -> family=adrenalin comparable=[26, 8, 1] display=26.8.1

@@ -1,0 +1,10 @@
+[23:51:12] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, sleep:5, settings:after-battery, file:config/sodium-options.json, file:config/DistantHorizons.toml, file:config/iris.properties, file:options.txt, history:after-battery, preview:Recording, switch:Recording, sleep:2, file:config/rigtune/pending.json, open:history, sleep:3, shot:history-recording, quit]
+[23:51:16] [Render thread/INFO]: [P5A] 4.0s title screen at JVM uptime 11722 ms
+[23:51:17] [Render thread/INFO]: [P5A] 4.5s report ready (online false, rules r15 bundled)
+[23:51:22] [Render thread/INFO]: [P5A] 9.5s settings (388 keys)
+[23:51:22] [Render thread/INFO]: [P5A] 9.8s history: 2 entries; profiles [Battery, Max FPS]
+[23:51:22] [Render thread/INFO]: [P5A] 9.8s preview Recording: {now=[renderDistance: 8 -> 12, simulationDistance: 6 -> 8, enableVsync: true -> false, inactivityFpsLimit: afk -> minimized, particles: 1 -> 0, renderClouds: false -> true], atRestart=[client.advanced.graphics.quality.lodChunkRenderDistanceRadius: 96 -> 160, client.advanced.debugging.rendererMode: DISABLED -> DEFAULT, enableShaders: false -> true], skipped=[], notes=[]}
+[23:51:22] [Render thread/INFO]: [P5A] 9.9s switched to Recording: Switched to Recording; 3 changes apply after a restart. Undo it in History.
+[23:51:24] [Render thread/INFO]: [P5A] 12.0s opened HistoryScreen
+[23:51:28] [IO-Worker-1/INFO]: [P5A] 15.1s screenshot history-recording: Saved screenshot as p5a-profD-history-recording.png
+[23:51:28] [Render thread/INFO]: [P5A] 15.5s quitting

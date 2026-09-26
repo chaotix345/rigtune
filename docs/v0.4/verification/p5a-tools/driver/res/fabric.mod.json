@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "p5a-driver",
+  "version": "1.0.0",
+  "name": "RigTune P5-A verification driver",
+  "description": "Test-only: drives RigTune for the v0.4 Phase 5 real-run proofs. Inert unless -Dp5a.script is set.",
+  "environment": "client",
+  "entrypoints": { "client": ["io.github.chaotix345.p5a.P5aDriver"] },
+  "mixins": ["p5a.mixins.json"],
+  "depends": { "fabricloader": ">=0.19", "minecraft": "*", "rigtune": "*" }
+}

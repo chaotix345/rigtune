@@ -1,0 +1,10 @@
+[23:52:49] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, sleep:5, settings:after-recording, file:config/sodium-options.json, file:config/DistantHorizons.toml, file:config/iris.properties, file:options.txt, history:after-recording, preview:My settings, switch:My settings, sleep:2, file:config/rigtune/pending.json, open:history, sleep:3, shot:history-mysettings, quit]
+[23:52:54] [Render thread/INFO]: [P5A] 3.9s title screen at JVM uptime 11816 ms
+[23:52:54] [Render thread/INFO]: [P5A] 4.4s report ready (online false, rules r15 bundled)
+[23:53:00] [Render thread/INFO]: [P5A] 9.4s settings (388 keys)
+[23:53:00] [Render thread/INFO]: [P5A] 9.7s history: 3 entries; profiles [Recording, Battery, Max FPS]
+[23:53:00] [Render thread/INFO]: [P5A] 9.7s preview My settings: {now=[maxFps: 60 -> 120, enableVsync: false -> true, inactivityFpsLimit: minimized -> afk], atRestart=[client.advanced.graphics.quality.lodChunkRenderDistanceRadius: 160 -> 256], skipped=[], notes=[]}
+[23:53:00] [Render thread/INFO]: [P5A] 9.8s switched to My settings: Switched to My settings; 1 change applies after a restart. Undo it in History.
+[23:53:02] [Render thread/INFO]: [P5A] 11.9s opened HistoryScreen
+[23:53:05] [IO-Worker-1/INFO]: [P5A] 15.0s screenshot history-mysettings: Saved screenshot as p5a-profE-history-mysettings.png
+[23:53:06] [Render thread/INFO]: [P5A] 15.4s quitting

@@ -1,0 +1,15 @@
+[23:59:24] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, sleep:5, settings:prof2-before, decode:<scratch>/out/code-Battery.txt, open:import, sleep:2, type:@<scratch>/out/code-Battery.txt, sleep:1, shot:import-screen, click:Import, screenIs:PreviewScreen, sleep:3, shot:import-preview, scroll:400, sleep:1, shot:import-preview-2, settings:prof2-after-preview, file:options.txt, quit]
+[23:59:29] [Render thread/INFO]: [P5A] 4.1s title screen at JVM uptime 13975 ms
+[23:59:30] [Render thread/INFO]: [P5A] 4.6s report ready (online false, rules r15 bundled)
+[23:59:35] [Render thread/INFO]: [P5A] 9.6s settings (388 keys)
+[23:59:35] [Render thread/INFO]: [P5A] 9.7s decoded {name=Battery, error=null, unknownKeys=0, values={dh.client.advanced.debugging.rendererMode=DISABLED, dh.client.advanced.graphics.quality.horizontalQuality=MEDIUM, dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius=96, dh.client.advanced.graphics.quality.maxHorizontalResolution=BLOCK, dh.client.advanced.graphics.quality.verticalQuality=MEDIUM, iris.enableShaders=false, iris.maxShadowRenderDistance=32, sodium.performance.animate_only_visible_textures=true, sodium.performance.chunk_build_defer_mode=ALWAYS, sodium.performance.quad_splitting_mode=SAFE, sodium.performance.use_block_face_culling=true, sodium.performance.use_entity_culling=true, sodium.performance.use_fog_occlusion=true, vanilla.biomeBlendRadius=2, vanilla.cutoutLeaves=true, vanilla.enableVsync=true, vanilla.entityDistanceScaling=1.0, vanilla.entityShadows=true, vanilla.improvedTransparency=false, vanilla.inactivityFpsLimit=afk, vanilla.maxFps=60, vanilla.particles=1, vanilla.prioritizeChunkUpdates=0, vanilla.renderClouds=false, vanilla.renderDistance=8, vanilla.simulationDistance=6, vanilla.textureFiltering=0, vanilla.weatherRadius=10}, preview={now=[renderDistance: 12 -> 8, simulationDistance: 8 -> 6, maxFps: 120 -> 60, particles: 0 -> 1, renderClouds: true -> false], atRestart=[client.advanced.graphics.quality.lodChunkRenderDistanceRadius: 256 -> 96, client.advanced.debugging.rendererMode: DEFAULT -> DISABLED, enableShaders: true -> false], skipped
+[23:59:35] [Render thread/INFO]: [P5A] 9.7s opened ProfileImportScreen
+[23:59:37] [Render thread/INFO]: [P5A] 11.8s typed 98 characters into the edit box
+[23:59:38] [IO-Worker-1/INFO]: [P5A] 12.9s screenshot import-screen: Saved screenshot as p5a-profI-import-screen.png
+[23:59:38] [Render thread/INFO]: [P5A] 13.3s click 'Import' (Plain, active true)
+[23:59:39] [Render thread/INFO]: [P5A] 13.4s screen is PreviewScreen
+[23:59:42] [IO-Worker-1/INFO]: [P5A] 16.5s screenshot import-preview: Saved screenshot as p5a-profI-import-preview.png
+[23:59:42] [Render thread/INFO]: [P5A] 16.9s scroll 400: true
+[23:59:43] [IO-Worker-1/INFO]: [P5A] 18.0s screenshot import-preview-2: Saved screenshot as p5a-profI-import-preview-2.png
+[23:59:44] [Render thread/INFO]: [P5A] 18.5s settings (388 keys)
+[23:59:44] [Render thread/INFO]: [P5A] 18.6s quitting

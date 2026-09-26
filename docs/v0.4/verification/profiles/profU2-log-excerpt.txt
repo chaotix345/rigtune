@@ -1,0 +1,8 @@
+[23:57:47] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, sleep:5, settings:after-undo, file:config/sodium-options.json, file:config/DistantHorizons.toml, file:config/iris.properties, file:options.txt, history:after-undo, open:history, sleep:3, shot:history-after-undo, quit]
+[23:57:52] [Render thread/INFO]: [P5A] 3.9s title screen at JVM uptime 11835 ms
+[23:57:52] [Render thread/INFO]: [P5A] 4.4s report ready (online false, rules r15 bundled)
+[23:57:57] [Render thread/INFO]: [P5A] 9.5s settings (388 keys)
+[23:57:57] [Render thread/INFO]: [P5A] 9.7s history: 3 entries; profiles [null, Battery, Max FPS]
+[23:57:57] [Render thread/INFO]: [P5A] 9.8s opened HistoryScreen
+[23:58:01] [IO-Worker-1/INFO]: [P5A] 12.9s screenshot history-after-undo: Saved screenshot as p5a-profU2-history-after-undo.png
+[23:58:01] [Render thread/INFO]: [P5A] 13.3s quitting
