@@ -151,6 +151,23 @@ public final class HttpModrinthClient implements ModrinthClient {
 				.toList();
 	}
 
+	// GET /v2/versions?ids=[...] ("Get multiple versions", docs.modrinth.com/api/operations/getversions).
+	@Override
+	public Map<String, ModrinthVersion> versions(Collection<String> ids) throws IOException {
+		if (ids.isEmpty()) {
+			return Map.of();
+		}
+		String body = get("/v2/versions?ids=" + encode(array(ids).toString()));
+		Map<String, ModrinthVersion> out = new LinkedHashMap<>();
+		for (JsonElement element : JsonParser.parseString(body).getAsJsonArray()) {
+			ModrinthVersion version = ModrinthVersion.fromJson(element.getAsJsonObject());
+			if (version.id() != null) {
+				out.put(version.id(), version);
+			}
+		}
+		return out;
+	}
+
 	@Override
 	public Optional<ModrinthVersion> latestVersion(String idOrSlug, String loader, String gameVersion) throws IOException {
 		String path = "/v2/project/" + encode(idOrSlug) + "/version"

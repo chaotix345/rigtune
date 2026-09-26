@@ -78,16 +78,23 @@ class LauncherDetectorTest {
 		assertEquals(LauncherInfo.UNKNOWN, LauncherDetector.detect(null));
 	}
 
+	// docs/v0.4/SPEC.md 2g (AC2g.1): Prism always sets its own property together with MultiMC's (PrismLauncher
+	// SystemProperties.java:16-34), so its property alone decides Prism.
 	@Test
-	void prismFromItsProperties() {
+	void prismFromItsProperty() {
 		assertEquals(Launcher.PRISM, detect(Map.of("org.prismlauncher.instance.name", "Ae6r"), Map.of()).launcher());
-		assertEquals(Launcher.PRISM, detect(Map.of("multimc.instance.title", "Ae6r"), Map.of()).launcher());
+		assertEquals(Launcher.PRISM, detect(Map.of("org.prismlauncher.instance.name", "Ae6r", "multimc.instance.title", "Ae6r", BRAND, "PrismLauncher"),
+				Map.of("INST_ID", "Ae6r", "INST_NAME", "Ae6r")).launcher());
 	}
 
+	// MultiMC sets only multimc.instance.title (OneSixLauncher.java:81-82) and INST_ID/INST_NAME; PolyMC only the
+	// environment (launcher-steps.md finding 6), so it is named MultiMC too (its steps are the same).
 	@Test
-	void prismFromItsEnvironment() {
-		assertEquals(Launcher.PRISM, detect(Map.of(), Map.of("INST_ID", "Ae6r")).launcher());
-		assertEquals(Launcher.PRISM, detect(Map.of(), Map.of("INST_NAME", "Ae6r")).launcher());
+	void multimcFromItsPropertyOrEnvironment() {
+		assertEquals(Launcher.MULTIMC, detect(Map.of("multimc.instance.title", "Ae6r"), Map.of("INST_ID", "Ae6r", "INST_NAME", "Ae6r")).launcher());
+		assertEquals(Launcher.MULTIMC, detect(Map.of("multimc.instance.title", "Ae6r"), Map.of()).launcher());
+		assertEquals(Launcher.MULTIMC, detect(Map.of(), Map.of("INST_ID", "Ae6r")).launcher());
+		assertEquals(Launcher.MULTIMC, detect(Map.of(), Map.of("INST_NAME", "Ae6r")).launcher());
 	}
 
 	@Test
@@ -100,6 +107,8 @@ class LauncherDetectorTest {
 		assertEquals(Launcher.MODRINTH_APP, detect(Map.of(BRAND, "theseus"), Map.of()).launcher());
 		assertEquals(Launcher.ATLAUNCHER, detect(Map.of(BRAND, "ATLauncher"), Map.of()).launcher());
 		assertEquals(Launcher.OFFICIAL, detect(Map.of(BRAND, "minecraft-launcher"), Map.of()).launcher());
+		// GDLauncher legacy (index.js:679-680) and Carbon (minecraft.rs:381) both send this brand.
+		assertEquals(Launcher.GDLAUNCHER, detect(Map.of(BRAND, "GDLauncher"), Map.of()).launcher());
 		// Only the verified literals; anything else (other launchers, a different case) is not guessed at.
 		for (String other : new String[]{"PrismLauncher", "gdlauncher", "Theseus", "atlauncher", "java-launcher", "fabric-loom",
 				"Minecraft-Launcher", "minecraft-launcher ", "minecraft-launcher-beta"}) {
@@ -160,7 +169,7 @@ class LauncherDetectorTest {
 	@Test
 	void prismPropertyBeatsTheModrinthBrand() {
 		assertEquals(Launcher.PRISM, detect(Map.of("org.prismlauncher.instance.name", "Ae6r", BRAND, "theseus"), Map.of()).launcher());
-		assertEquals(Launcher.PRISM, detect(Map.of(BRAND, "theseus"), Map.of("INST_NAME", "Ae6r")).launcher());
+		assertEquals(Launcher.MULTIMC, detect(Map.of(BRAND, "theseus"), Map.of("INST_NAME", "Ae6r")).launcher());
 	}
 
 	@Test

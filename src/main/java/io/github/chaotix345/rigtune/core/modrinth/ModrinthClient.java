@@ -18,5 +18,11 @@ public interface ModrinthClient {
 
 	Optional<ModrinthVersion> latestVersion(String idOrSlug, String loader, String gameVersion) throws IOException;
 
+	// The versions with these ids, by id; ids Modrinth doesn't know are left out (docs/v0.4/SPEC.md 2d, amendment A-M1:
+	// the versions earlier Applies staged). A client that can't look them up throws, and the caller does without.
+	default Map<String, ModrinthVersion> versions(Collection<String> ids) throws IOException {
+		throw new IOException("This Modrinth client can't look versions up by id");
+	}
+
 	void download(ModFile file, Path target) throws IOException;
 }

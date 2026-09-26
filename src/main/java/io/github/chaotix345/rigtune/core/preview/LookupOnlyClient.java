@@ -62,6 +62,12 @@ final class LookupOnlyClient implements ModrinthClient {
 	}
 
 	@Override
+	public Map<String, ModrinthVersion> versions(Collection<String> ids) throws IOException {
+		allowed();
+		return delegate.versions(ids);
+	}
+
+	@Override
 	public void download(ModFile file, Path target) throws IOException {
 		throw new IOException("The preview downloads nothing");
 	}

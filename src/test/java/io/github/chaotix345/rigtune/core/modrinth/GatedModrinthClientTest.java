@@ -44,6 +44,11 @@ class GatedModrinthClientTest {
 		}
 
 		@Override
+		public Map<String, ModrinthVersion> versions(Collection<String> ids) {
+			return fail("versions called");
+		}
+
+		@Override
 		public void download(ModFile file, Path target) {
 			fail("download called");
 		}
@@ -59,6 +64,7 @@ class GatedModrinthClientTest {
 		assertThrows(ModrinthException.class, () -> gated.latestVersionsByHashes(List.of("aa"), "fabric", "26.2"));
 		assertThrows(ModrinthException.class, () -> gated.projects(List.of("lithium")));
 		assertThrows(ModrinthException.class, () -> gated.latestVersion("lithium", "fabric", "26.2"));
+		assertThrows(ModrinthException.class, () -> gated.versions(List.of("ZouiUX7t")));
 		assertThrows(ModrinthException.class, () -> gated.download(FILE, dir.resolve("x.jar")));
 		assertFalse(Files.exists(dir.resolve("x.jar")));
 	}

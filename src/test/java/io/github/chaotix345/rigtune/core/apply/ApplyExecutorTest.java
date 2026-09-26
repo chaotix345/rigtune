@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.core.apply;
 
 import com.google.gson.JsonParser;
+import io.github.chaotix345.rigtune.core.RepoFiles;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.Status;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.history.Journal;
@@ -344,7 +345,7 @@ class ApplyExecutorTest {
 		ApplyResult result = executor.run(plan(Op.disableFile(mods.resolve("dh.jar"))), pending);
 
 		assertEquals(List.of(Status.FAILED), statuses(result));
-		assertTrue(result.results().get(0).message().startsWith("Gave up after 10 attempt(s): "), result.results().get(0).message());
+		assertTrue(result.results().get(0).message().startsWith("Gave up after 10 tries: "), result.results().get(0).message());
 		assertEquals(List.of(300L, 600L, 1200L, 2400L, 4800L, 5000L, 5000L, 5000L, 5000L), slept);
 	}
 
@@ -367,7 +368,7 @@ class ApplyExecutorTest {
 		ApplyResult result = executor.run(plan(Op.disableFile(mods.resolve("a.jar"))), pending);
 
 		assertEquals(List.of(Status.FAILED), statuses(result));
-		assertEquals("Gave up after 2 attempt(s): java.io.IOException: disk full", result.results().get(0).message());
+		assertEquals("Gave up after 2 tries: java.io.IOException: disk full", result.results().get(0).message());
 		assertEquals(2, calls.get());
 		assertEquals(List.of(1L), slept);
 	}
@@ -398,5 +399,16 @@ class ApplyExecutorTest {
 		assertEquals("Rolled back because enabling gone.jar failed", result.results().get(0).message());
 		assertEquals(List.of(300L, 600L), slept);
 		assertTrue(Files.exists(mods.resolve("a.jar.rigtune-pending")));
+	}
+
+	// docs/v0.4/SPEC.md 2f (AC2f.1): the helper's own messages never say "attempt(s)", which read as History's separate
+	// "(try n of 3 at restart)" count. Its messages are the English literals in these files.
+	@Test
+	void noHelperMessageSaysAttempts() throws IOException {
+		for (String file : List.of("ApplyExecutor.java", "ApplyHelper.java", "ApplyResult.java")) {
+			String source = Files.readString(RepoFiles.resolve("src/main/java/io/github/chaotix345/rigtune/core/apply/" + file));
+			assertFalse(source.contains("attempt(s)"), file);
+			assertFalse(source.contains("failed attempts"), file);
+		}
 	}
 }

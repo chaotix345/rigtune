@@ -14,6 +14,7 @@ import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.TierBasis;
 import io.github.chaotix345.rigtune.core.model.TierResult;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.notice.NoticeBoard;
@@ -142,6 +143,9 @@ public final class StubController implements RigTuneController {
 						"Sodium enabled a driver workaround for your GPU. A newer driver may fix the underlying issue and improve performance.",
 						new Action.None(), false));
 		TierResult tier = new TierResult(4, Math.clamp(4 + goal.tierOffset(), 1, 5), 5, 4, 5, "cpu");
-		return new Report(hw, new GpuClass(GpuVendor.AMD, false, 5, "(?i)rx\\s*7[89]00"), tier, goal, recs, 2, "bundled", false, Instant.now());
+		// docs/v0.4/SPEC.md 2j: what each tier rests on, for the tier badge's tooltip.
+		TierBasis basis = new TierBasis(new TierBasis.Gpu(5, TierBasis.Basis.TABLE_MATCH, "(?i)rx\\s*7[89]00", GpuVendor.AMD, false),
+				new TierBasis.Cpu(4, TierBasis.Basis.FALLBACK_ESTIMATE, null, 16, 4201), new TierBasis.Memory(5, TierBasis.Basis.TABLE_MATCH, 6144));
+		return new Report(hw, new GpuClass(GpuVendor.AMD, false, 5, "(?i)rx\\s*7[89]00"), tier, goal, recs, 2, "bundled", false, Instant.now(), basis);
 	}
 }

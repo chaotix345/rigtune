@@ -1,12 +1,14 @@
 package io.github.chaotix345.rigtune.core.hardware;
 
 import io.github.chaotix345.rigtune.core.model.CpuInfo;
+import io.github.chaotix345.rigtune.core.model.TierBasis;
 import io.github.chaotix345.rigtune.core.rules.RulesLoader;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CpuClassifierTest {
 	private final CpuClassifier bundled = CpuClassifier.from(RulesLoader.loadBundled());
@@ -60,5 +62,20 @@ class CpuClassifierTest {
 	@Test
 	void noRulesMeansFormula() {
 		assertEquals(3, new CpuClassifier(List.of()).classify(new CpuInfo("AMD Ryzen 7 7800X3D 8-Core Processor", 8, 8, -1)));
+	}
+
+	// docs/v0.4/SPEC.md 2j: what the tier rests on, the matched row or the formula's inputs; the same tier as classify().
+	@Test
+	void classifyDetailedNamesTheRowOrTheFormulasInputs() {
+		CpuInfo known = new CpuInfo("AMD Ryzen 7 7800X3D 8-Core Processor", 8, 16, 4201);
+		TierBasis.Cpu matched = bundled.classifyDetailed(known);
+		assertEquals(TierBasis.Basis.TABLE_MATCH, matched.basis());
+		assertEquals(bundled.classify(known), matched.tier());
+		assertTrue(matched.matchedPattern() != null && !matched.matchedPattern().isBlank(), matched.toString());
+
+		CpuInfo unknown = new CpuInfo("Mystery CPU", 2, 4, 2000);
+		assertEquals(new TierBasis.Cpu(CpuClassifier.formula(4, 2000), TierBasis.Basis.FALLBACK_ESTIMATE, null, 4, 2000), bundled.classifyDetailed(unknown));
+		assertEquals(bundled.classify(unknown), bundled.classifyDetailed(unknown).tier());
+		assertEquals(new TierBasis.Cpu(CpuClassifier.UNKNOWN_CORES_TIER, TierBasis.Basis.FALLBACK_ESTIMATE, null, -1, -1), bundled.classifyDetailed(null));
 	}
 }

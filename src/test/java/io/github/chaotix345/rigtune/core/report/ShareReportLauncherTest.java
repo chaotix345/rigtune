@@ -57,6 +57,25 @@ class ShareReportLauncherTest {
 		}
 	}
 
+	// docs/v0.4/SPEC.md 2g (AC2g.3): MultiMC and GDLauncher by name, and nothing else about them.
+	@Test
+	void namesMultimcAndGdlauncherAndNothingElse() {
+		LauncherInfo multimc = LauncherDetector.detect(new LauncherSignals(Map.of("multimc.instance.title", INSTANCE),
+				Map.of("INST_ID", INSTANCE, "INST_NAME", INSTANCE), GAME_DIR));
+		LauncherInfo gdlauncher = LauncherDetector.detect(new LauncherSignals(Map.of("minecraft.launcher.brand", "GDLauncher"), Map.of(), GAME_DIR));
+
+		String multimcText = ShareReport.format(report(), VERSIONS, null, name(multimc));
+		String gdText = ShareReport.format(report(), VERSIONS, null, name(gdlauncher));
+
+		assertTrue(multimcText.contains("\n- Launcher: MultiMC\n"), multimcText);
+		assertTrue(gdText.contains("\n- Launcher: GDLauncher\n"), gdText);
+		for (String text : List.of(multimcText, gdText)) {
+			for (String leak : List.of("Secret", "alice", "INST_", "multimc.", "instances", "Roaming", "minecraft.launcher")) {
+				assertFalse(text.contains(leak), leak + " in " + text);
+			}
+		}
+	}
+
 	@Test
 	void everyLauncherByName() {
 		for (Launcher launcher : Launcher.values()) {

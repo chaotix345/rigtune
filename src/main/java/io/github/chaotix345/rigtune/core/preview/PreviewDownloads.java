@@ -54,7 +54,7 @@ final class PreviewDownloads {
 				modIdsByFile.put(update.update().file().filename(), update.modId());
 			}
 		}
-		DependencyResolver resolver = new DependencyResolver(client, in.loader(), in.gameVersion(), in.installedVersions());
+		DependencyResolver resolver = new DependencyResolver(client, in.loader(), in.gameVersion(), in.installedVersions()).withStaged(in.staged());
 		DownloadPlanner.Result result = DryRunPlanner.plan(resolver, modsDir, in.conflicts(), in.updateVersions(), modIdsByFile, ordered,
 				in.installedProjects(), in.loadedIds(), in.stagedJars());
 

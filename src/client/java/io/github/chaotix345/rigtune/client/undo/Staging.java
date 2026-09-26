@@ -97,7 +97,7 @@ public final class Staging {
 	}
 
 	private List<JournalEntry> recorded(List<JournalEntry> entries, Merge merge, List<Op> ops, String entryId) {
-		StagedChanges.Outcome outcome = StagedChanges.of(merge.base(), ops, merge.merged(), configKeys(), modIdOf, stagedOpIds(entries));
+		StagedChanges.Outcome outcome = StagedChanges.of(merge.base(), ops, merge.merged(), configKeys(), modIdOf, ModJars::nameOf, stagedOpIds(entries));
 		List<JournalEntry> out = HistoryUpdates.discard(entries, droppedIds(merge));
 		return outcome.changes().isEmpty() ? out : journal.withChanges(out, entryId, JournalEntry.APPLY, outcome.changes());
 	}
