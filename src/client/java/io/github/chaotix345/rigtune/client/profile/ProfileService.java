@@ -60,6 +60,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 // Performance Profiles and share codes (docs/v0.4/SPEC.md 4): profiles.json, switching (an ordinary Apply through
 // RealController.apply(selected, entryId), labelled in profiles.json by the journal entry id), templates, share codes and
@@ -71,6 +72,8 @@ public final class ProfileService {
 	public static final String ACTION_SNOOZE = "snooze";
 	private static final SystemToast.SystemToastId TOAST_ID = new SystemToast.SystemToastId(6000L);
 	private static volatile @Nullable RulesDocument bundled;
+	// Whether a benchmark runs (BenchmarkController.running); ProfilesGameTest stands one in without starting a world.
+	private static volatile BooleanSupplier benchmarkRunning = BenchmarkController::running;
 
 	private final RealController controller;
 	private final Path configDir;
@@ -230,7 +233,7 @@ public final class ProfileService {
 	public void powerChanged(boolean onBattery) {
 		HardwareProbe.setOnBattery(onBattery);
 		Instant now = Instant.now();
-		BatteryPrompt.Decision decision = BatteryPrompt.onEdge(onBattery, store().battery(), store().active(), BenchmarkController.running(), now);
+		BatteryPrompt.Decision decision = BatteryPrompt.onEdge(onBattery, store().battery(), store().active(), benchmarkRunning.getAsBoolean(), now);
 		Offer next = switch (decision.offer()) {
 			case BATTERY -> new Offer(NOTICE_BATTERY + now.getEpochSecond(), decision);
 			case PREVIOUS -> new Offer(NOTICE_BACK + now.getEpochSecond(), decision);
@@ -342,8 +345,13 @@ public final class ProfileService {
 		}
 	}
 
+	// For ProfilesGameTest only: null puts the real check back.
+	public static void overrideBenchmarkCheck(@Nullable BooleanSupplier running) {
+		benchmarkRunning = running == null ? BenchmarkController::running : running;
+	}
+
 	private @Nullable Component refusal() {
-		if (BenchmarkController.running()) {
+		if (benchmarkRunning.getAsBoolean()) {
 			return Component.translatable("rigtune.profile.status.benchmark");
 		}
 		if (controller.downloading()) {
