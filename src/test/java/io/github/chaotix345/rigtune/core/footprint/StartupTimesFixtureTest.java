@@ -18,9 +18,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // The "written by 0.4" startup-times.json (plan review H-M1; set ws-f) for WS-H's downgrade run and released-jar
 // harness: written here by StartupTimesStore itself. The committed file must match what the store writes today; to
-// regenerate it (after a deliberate format change), delete it and run this test once.
+// regenerate it (after a deliberate format change), run this test once with RIGTUNE_WRITE_FIXTURES=1.
 class StartupTimesFixtureTest {
 	static final String FIXTURE = "src/test/resources/v040-written/ws-f/" + StartupTimesStore.FILE_NAME;
+	static final String WRITE_ENV = "RIGTUNE_WRITE_FIXTURES";
 
 	@TempDir
 	Path configDir;
@@ -37,11 +38,12 @@ class StartupTimesFixtureTest {
 		String written = Files.readString(StartupTimesStore.file(configDir), StandardCharsets.UTF_8);
 
 		Path fixture = RepoFiles.resolve(FIXTURE);
-		if (!Files.exists(fixture)) {
+		if ("1".equals(System.getenv(WRITE_ENV))) {
 			Files.createDirectories(fixture.getParent());
 			Files.writeString(fixture, written, StandardCharsets.UTF_8);
 		}
-		assertEquals(written, Files.readString(fixture, StandardCharsets.UTF_8), FIXTURE + " is stale: delete it and rerun this test");
+		assertTrue(Files.isRegularFile(fixture), FIXTURE + " is missing: run this test once with " + WRITE_ENV + "=1");
+		assertEquals(written, Files.readString(fixture, StandardCharsets.UTF_8), FIXTURE + " is stale: run this test once with " + WRITE_ENV + "=1");
 		Path reread = configDir.resolve("reread");
 		Files.createDirectories(StartupTimesStore.file(reread).getParent());
 		Files.copy(fixture, StartupTimesStore.file(reread));

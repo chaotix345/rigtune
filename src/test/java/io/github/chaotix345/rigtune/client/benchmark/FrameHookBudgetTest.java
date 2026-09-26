@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 // analysis removes an allocation that doesn't escape (a `new long[1]`), but the interpreter and C1 still make it on
 // every call first, so it shows as hundreds of KB. The JVM itself allocates a few bytes on this thread while it compiles
 // the loop (72 B in a bare JVM, 280 B in this test JVM, on Java 25), whatever the hook does: the cold count forgives
-// JIT_NOISE_BYTES of that. The hot runs must allocate exactly nothing.
+// JIT_NOISE_BYTES of that. At least one hot run must allocate exactly nothing.
 class FrameHookBudgetTest {
 	private static final int CALLS = 10_000_000;
 	private static final int RUNS = 5;
@@ -37,18 +37,21 @@ class FrameHookBudgetTest {
 		long cold = mx.getCurrentThreadAllocatedBytes() - before;
 
 		long best = Long.MAX_VALUE;
-		before = mx.getCurrentThreadAllocatedBytes();
+		long hot = Long.MAX_VALUE;
 		// Best of RUNS: on a busy 4-vCPU runner the loop can sit in C1 code for a while (5 ns/call once, 0.3-0.6 ns in C2).
+		// The fewest bytes of any run: a recompile or deopt inside one run allocates a little on this thread by itself,
+		// while an allocation in the hook shows in every run.
 		for (int run = 0; run < RUNS; run++) {
+			long allocatedBefore = mx.getCurrentThreadAllocatedBytes();
 			long start = System.nanoTime();
 			frames(CALLS);
 			best = Math.min(best, System.nanoTime() - start);
+			hot = Math.min(hot, mx.getCurrentThreadAllocatedBytes() - allocatedBefore);
 		}
-		long hot = mx.getCurrentThreadAllocatedBytes() - before;
 		double nsPerCall = (double) best / CALLS;
 		long allocated = Math.max(hot, Math.max(0, cold - JIT_NOISE_BYTES));
 		System.out.printf(Locale.ROOT, "FrameHookBudgetTest: monitor off: %.3f ns/call (best of %d x %d hot calls); allocated %d B over %d calls "
-				+ "from cold (%d B forgiven as JIT noise), %d B over the hot calls%n", nsPerCall, RUNS, CALLS, cold, CALLS, JIT_NOISE_BYTES, hot);
+				+ "from cold (%d B forgiven as JIT noise), %d B over the hot calls (fewest of any run)%n", nsPerCall, RUNS, CALLS, cold, CALLS, JIT_NOISE_BYTES, hot);
 		budgets.enforce(budgets.check(Map.of("frameHookNsPerCallOff", nsPerCall, "frameHookAllocBytesOff", allocated)), System.out::println);
 	}
 

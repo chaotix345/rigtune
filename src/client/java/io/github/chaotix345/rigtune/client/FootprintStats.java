@@ -52,9 +52,11 @@ public final class FootprintStats {
 				windowCpuNs);
 	}
 
+	// The wall clock starts first, so the instrumentation's own cost (the first ThreadMXBean call) counts in wall time.
 	public static long preLaunchStart() {
+		long wall = System.nanoTime();
 		preLaunchCpuStart = cpu();
-		return System.nanoTime();
+		return wall;
 	}
 
 	// Only the launch's own call counts: a game test calls onPreLaunch() again later (with the apply lock held).
@@ -66,8 +68,9 @@ public final class FootprintStats {
 	}
 
 	public static long initStart() {
+		long wall = System.nanoTime();
 		initCpuStart = cpu();
-		return System.nanoTime();
+		return wall;
 	}
 
 	public static void initEnd(long start) {
@@ -78,7 +81,9 @@ public final class FootprintStats {
 	}
 
 	// The CLIENT_STARTED handler: opens the worker window (closed on another thread WINDOW_MILLIS later), then times start.
+	// The baseline scan runs on the render thread too, so it counts in clientStartedWallNs.
 	public static void clientStarted(Runnable start) {
+		long wallStart = System.nanoTime();
 		try {
 			windowBaseline = rigTuneThreadCpu();
 			CompletableFuture.delayedExecutor(WINDOW_MILLIS, TimeUnit.MILLISECONDS).execute(FootprintStats::closeWindow);
@@ -86,7 +91,6 @@ public final class FootprintStats {
 			RigTune.LOGGER.debug("RigTune's startup footprint window is off", e);
 		}
 		long cpuStart = cpu();
-		long wallStart = System.nanoTime();
 		try {
 			start.run();
 		} finally {
@@ -96,6 +100,14 @@ public final class FootprintStats {
 	}
 
 	private static void closeWindow() {
+		try {
+			measureWindow();
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.debug("Could not close RigTune's startup footprint window", e);
+		}
+	}
+
+	private static void measureWindow() {
 		Map<Long, Long> baseline = windowBaseline;
 		Map<String, Long> byName = new TreeMap<>();
 		ThreadMXBean mx = threads();

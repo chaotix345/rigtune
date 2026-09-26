@@ -73,7 +73,7 @@ public final class StartupTimes {
 			StartupTimesStore.Run run = new StartupTimesStore.Run(Instant.now().truncatedTo(ChronoUnit.SECONDS).toString(), ms,
 					FabricLoader.getInstance().getRawGameVersion(), controller.modVersion(), topLevel, ModSetHash.of(mods));
 			Saved saved = store().record(run);
-			invalidate();
+			refresh();
 			RigTune.LOGGER.info("Launch to title screen: {} ms ({} mods){}", ms, topLevel,
 					saved == Saved.OK ? "" : "; not saved to " + StartupTimesStore.FILE_NAME + " (" + saved + ")");
 		} catch (RuntimeException e) {
@@ -81,19 +81,22 @@ public final class StartupTimes {
 		}
 	}
 
-	// Synchronized with invalidate(), so a view read while a launch is being recorded is never cached after it.
+	// Synchronized with refresh(), so a view read while a launch is being recorded is never cached after it. Usually
+	// refresh() has already filled it on the worker, and the Tools screen reads no file.
 	public synchronized View view() {
-		View view = cached;
-		if (view == null) {
-			StartupTimesStore.Summary s = StartupTimesStore.summarize(store().runs());
-			view = new View(s.lastMs(), s.medianMs(), s.runs(), s.modSetChanged());
-			cached = view;
+		if (cached == null) {
+			cached = summarize();
 		}
-		return view;
+		return cached;
 	}
 
-	private synchronized void invalidate() {
-		cached = null;
+	private synchronized void refresh() {
+		cached = summarize();
+	}
+
+	private View summarize() {
+		StartupTimesStore.Summary s = StartupTimesStore.summarize(store().runs());
+		return new View(s.lastMs(), s.medianMs(), s.runs(), s.modSetChanged());
 	}
 
 	private synchronized StartupTimesStore store() {
