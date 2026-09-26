@@ -40,11 +40,47 @@ public final class Attributor {
 	static final long MIN_PACKETS = 2 * MS;
 	static final int CHUNK_BURST = 8;
 
+	public static final String FULL = "FULL";
+	public static final String EXPLICIT = "EXPLICIT";
+	public static final String STALL = "STALL";
+	static final String CONTEXT = "context";
+
 	public enum Confidence {
 		HIGH, MEDIUM, LOW;
 
 		public String id() {
 			return name().toLowerCase(Locale.ROOT);
+		}
+
+		static @Nullable Confidence of(String id) {
+			for (Confidence c : values()) {
+				if (c.id().equals(id)) {
+					return c;
+				}
+			}
+			return null;
+		}
+	}
+
+	// A note read back ("gc:high:FULL:EXPLICIT", "cpuContention:low:builder", "afterTeleport:context"): the cause or tag,
+	// its confidence (null for context tags), the GC flags, and the busiest thread group of a contention note.
+	public record Note(String name, @Nullable Confidence confidence, boolean full, boolean explicit, boolean stall, @Nullable String group) {
+		public static Note parse(String note) {
+			String[] p = note.split(":");
+			Confidence confidence = p.length > 1 ? Confidence.of(p[1]) : null;
+			boolean full = false;
+			boolean explicit = false;
+			boolean stall = false;
+			String group = null;
+			for (int i = 2; i < p.length; i++) {
+				switch (p[i]) {
+					case FULL -> full = true;
+					case EXPLICIT -> explicit = true;
+					case STALL -> stall = true;
+					default -> group = p[i];
+				}
+			}
+			return new Note(p[0], confidence, full, explicit, stall, group);
 		}
 	}
 
@@ -120,9 +156,9 @@ public final class Attributor {
 		if (gc > 0) {
 			claims.put(GC, gc);
 			left -= gc;
-			notes.add(GC + ":" + share(gc, e).id() + (full ? ":FULL" : "") + (explicit ? ":EXPLICIT" : "") + (stall ? ":STALL" : ""));
+			notes.add(GC + ":" + share(gc, e).id() + (full ? ":" + FULL : "") + (explicit ? ":" + EXPLICIT : "") + (stall ? ":" + STALL : ""));
 		} else if (stall) {
-			notes.add(GC + ":" + Confidence.MEDIUM.id() + ":STALL");
+			notes.add(GC + ":" + Confidence.MEDIUM.id() + ":" + STALL);
 		}
 
 		boolean measured = ctx.phaseTiming() && phases != null;
@@ -186,14 +222,14 @@ public final class Attributor {
 		for (Interval t : ctx.afterTeleport()) {
 			if (t.overlaps(from, to)) {
 				tags.add(AFTER_TELEPORT);
-				notes.add(AFTER_TELEPORT + ":context");
+				notes.add(AFTER_TELEPORT + ":" + CONTEXT);
 				break;
 			}
 		}
 		for (Interval f : ctx.movingFast()) {
 			if (f.overlaps(from, to)) {
 				tags.add(MOVING_FAST);
-				notes.add(MOVING_FAST + ":context");
+				notes.add(MOVING_FAST + ":" + CONTEXT);
 				break;
 			}
 		}

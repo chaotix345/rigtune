@@ -3,7 +3,8 @@
 	"package": "io.github.chaotix345.rigtune.client.mixin",
 	"compatibilityLevel": "JAVA_25",
 	"client": [
-		"DebugScreenOverlayMixin"
+		"DebugScreenOverlayMixin",
+		"MinecraftFrameMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

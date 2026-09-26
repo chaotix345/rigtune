@@ -30,6 +30,15 @@ public final class StutterAdvisor {
 		public boolean memory() {
 			return id.startsWith(MEMORY_PREFIX);
 		}
+
+		public boolean info() {
+			return "info".equals(kind);
+		}
+
+		// The id the main list would give this advice ("advice:<id>"), which LauncherAdvice recognises for ram- entries.
+		public String recommendationId() {
+			return "advice:" + id;
+		}
 	}
 
 	private StutterAdvisor() {

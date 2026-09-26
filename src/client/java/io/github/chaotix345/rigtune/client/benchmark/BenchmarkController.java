@@ -4,6 +4,7 @@ import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.compat.OptionalMods;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
+import io.github.chaotix345.rigtune.client.stutter.StutterHooks;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen;
 import io.github.chaotix345.rigtune.core.apply.PropertiesConfigPatcher;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkHistory;
@@ -481,6 +482,7 @@ public final class BenchmarkController {
 						listener.accept(step);
 					}
 					FrameTimes.start();
+					stutterSweep(true);
 					throttle.reset();
 					sweep = 0;
 					enter(Phase.SWEEP);
@@ -498,6 +500,7 @@ public final class BenchmarkController {
 						enter(Phase.SWEEP);
 					} else {
 						FrameStats stats = FrameTimes.stop();
+						stutterSweep(false);
 						RigTune.LOGGER.info("Benchmark {} {}: {} frames, avg {} FPS, 1% low {} FPS, client chunks {} (frame limit {}, {})",
 								step.kind(), step.knobs(), stats.frames(), Math.round(stats.avgFps()), Math.round(stats.onePercentLowFps()),
 								level.getChunkSource().getLoadedChunksCount(), minecraft.getFramerateLimitTracker().getFramerateLimit(),
@@ -516,6 +519,11 @@ public final class BenchmarkController {
 				}
 			}
 		}
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md 5): the Stutter Doctor records the benchmark's sweeps (and only those) into its analyser.
+	private static void stutterSweep(boolean recording) {
+		StutterHooks.benchmarkSweep(recording);
 	}
 
 	private void settled(SettleCheck.Result result) {
@@ -582,6 +590,7 @@ public final class BenchmarkController {
 				FrameTimes.stop();
 			}
 		});
+		StutterHooks.benchmarkFinished(!run.cancelled());
 		safely("show the HUD", () -> {
 			if (minecraft.gui.hud.isHidden() != hudWasHidden) {
 				minecraft.gui.hud.toggle();
