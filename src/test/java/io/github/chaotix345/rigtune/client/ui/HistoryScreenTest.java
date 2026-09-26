@@ -110,6 +110,16 @@ class HistoryScreenTest {
 		assertTrue(english(HistoryScreen.describe(change(JournalChange.APPLIED, null))).startsWith("Added dh.jar"));
 	}
 
+	// docs/v0.4/SPEC.md 2c: the mod's name when History has it.
+	@Test
+	void changesNameTheModWhenTheNameIsKnown() throws IOException {
+		Change added = new Change(Row.ADDED, List.of("c"), JournalChange.APPLIED, null, null, null, "sodium-0.7.1.jar", null, "sodium", null, "Sodium");
+		Change update = new Change(Row.UPDATED, List.of("a", "b"), JournalChange.APPLIED, null, null, null, "s-1.jar", "s-2.jar", "sodium", null, "Sodium");
+
+		assertEquals("Added Sodium", english(HistoryScreen.describe(added)));
+		assertEquals("Updated Sodium: s-1.jar → s-2.jar", english(HistoryScreen.describe(update)));
+	}
+
 	private static HistoryModel.Entry entry(Row... rows) {
 		List<Change> changes = new ArrayList<>();
 		for (Row row : rows) {

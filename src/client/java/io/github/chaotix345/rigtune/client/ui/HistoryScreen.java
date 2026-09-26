@@ -135,10 +135,16 @@ public class HistoryScreen extends Screen {
 				.tooltip(Tooltip.create(Component.translatable("rigtune.history.undo_this.tooltip"))).build();
 		undoThis.active = !loading && entry != null && entry.undoable();
 		buttons.add(undoThis);
-		buttons.add(Button.builder(Component.translatable("rigtune.screen.undo_last"), b -> open(new UndoScreen(this, controller, false)))
-				.tooltip(Tooltip.create(Component.translatable("rigtune.screen.undo_last.tooltip"))).build());
-		buttons.add(Button.builder(Component.translatable("rigtune.screen.undo_all"), b -> open(new UndoScreen(this, controller, true)))
-				.tooltip(Tooltip.create(Component.translatable("rigtune.screen.undo_all.tooltip"))).build());
+		// docs/v0.4/SPEC.md 2a: inactive while there's nothing to undo, as Undo this is for its entry.
+		boolean anyUndoable = !loading && HistoryModel.anyUndoable(view);
+		Button undoLast = Button.builder(Component.translatable("rigtune.screen.undo_last"), b -> open(new UndoScreen(this, controller, false)))
+				.tooltip(Tooltip.create(Component.translatable("rigtune.screen.undo_last.tooltip"))).build();
+		undoLast.active = anyUndoable;
+		buttons.add(undoLast);
+		Button undoAll = Button.builder(Component.translatable("rigtune.screen.undo_all"), b -> open(new UndoScreen(this, controller, true)))
+				.tooltip(Tooltip.create(Component.translatable("rigtune.screen.undo_all.tooltip"))).build();
+		undoAll.active = anyUndoable;
+		buttons.add(undoAll);
 		buttons.add(Button.builder(Component.translatable("gui.done"), b -> onClose()).build());
 
 		// As many buttons of at least MIN_BUTTON per row as fit, then the rows balanced (as on the RigTune screen).
@@ -306,10 +312,11 @@ public class HistoryScreen extends Screen {
 	static Component describe(HistoryModel.Change change) {
 		return switch (change.row()) {
 			case SETTING -> Component.translatable("rigtune.history.change.setting", change.label(), value(change.before()), value(change.after()));
-			case ADDED -> Component.translatable("rigtune.history.change.added", change.file());
-			case DISABLED -> Component.translatable("rigtune.history.change.disabled", change.file());
-			case REENABLED -> Component.translatable("rigtune.history.change.reenabled", change.file());
-			case UPDATED -> Component.translatable("rigtune.history.change.updated", change.modId(), change.file(), change.newFile());
+			case ADDED -> Component.translatable("rigtune.history.change.added", change.shownName());
+			case DISABLED -> Component.translatable("rigtune.history.change.disabled", change.shownName());
+			case REENABLED -> Component.translatable("rigtune.history.change.reenabled", change.shownName());
+			case UPDATED -> Component.translatable("rigtune.history.change.updated", change.name() != null ? change.name() : change.modId(), change.file(),
+					change.newFile());
 		};
 	}
 

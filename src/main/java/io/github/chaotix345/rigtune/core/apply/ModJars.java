@@ -21,6 +21,8 @@ import java.util.zip.ZipFile;
 public final class ModJars {
 	// No real fabric.mod.json comes near this; a bigger (or decompression-bomb) entry isn't read (review 4, security-1).
 	public static final int MAX_FABRIC_MOD_JSON_BYTES = 1 << 20;
+	// docs/v0.4/SPEC.md 2c, plan review P-L1: the most of a mod's display name History keeps.
+	public static final int MAX_NAME_CODE_POINTS = 64;
 
 	private ModJars() {
 	}
@@ -36,6 +38,56 @@ public final class ModJars {
 			RigTune.LOGGER.warn("Could not read the mod id of {}", jar, e);
 			return null;
 		}
+	}
+
+	// docs/v0.4/SPEC.md 2c: the mod's display name (fabric.mod.json "name"), sanitised; null when the jar is gone, isn't
+	// readable or has no name (as modIdOf). History shows it instead of the file name.
+	public static String nameOf(Path jar) {
+		try {
+			return sanitizeName(readField(jar, "name"));
+		} catch (NoSuchFileException e) {
+			RigTune.LOGGER.debug("No mod name for {}: the file is gone", jar);
+			return null;
+		} catch (IOException e) {
+			RigTune.LOGGER.debug("Could not read the mod name of {}: {}", jar, e.getMessage());
+			return null;
+		}
+	}
+
+	// A downloaded file's text shown in the UI (plan review P-L1): no formatting code sign (U+00A7), no control, format,
+	// separator, private-use or unassigned characters, runs of whitespace as one space, at most MAX_NAME_CODE_POINTS;
+	// null when nothing is left.
+	public static String sanitizeName(String raw) {
+		if (raw == null) {
+			return null;
+		}
+		StringBuilder out = new StringBuilder();
+		int kept = 0;
+		for (int i = 0; i < raw.length() && kept < MAX_NAME_CODE_POINTS; ) {
+			int cp = raw.codePointAt(i);
+			i += Character.charCount(cp);
+			if (cp == 0x00A7 || unsafe(cp)) {
+				continue;
+			}
+			if (Character.isWhitespace(cp) || Character.isSpaceChar(cp)) {
+				if (out.isEmpty() || out.charAt(out.length() - 1) == ' ') {
+					continue;
+				}
+				cp = ' ';
+			}
+			out.appendCodePoint(cp);
+			kept++;
+		}
+		String name = out.toString().strip();
+		return name.isEmpty() ? null : name;
+	}
+
+	private static boolean unsafe(int cp) {
+		return switch (Character.getType(cp)) {
+			case Character.CONTROL, Character.FORMAT, Character.SURROGATE, Character.PRIVATE_USE, Character.UNASSIGNED,
+					Character.LINE_SEPARATOR, Character.PARAGRAPH_SEPARATOR -> true;
+			default -> false;
+		};
 	}
 
 	// The mod ids of the jars a mod's own updater left in <mods>/update/, directly or in a folder of their own (Distant
@@ -76,6 +128,11 @@ public final class ModJars {
 	// Null when the jar has no fabric.mod.json id, or its fabric.mod.json is over the cap or isn't JSON. Doesn't log:
 	// the apply helper runs without a logger on its classpath.
 	static String readModId(Path jar) throws IOException {
+		return readField(jar, "id");
+	}
+
+	// A top-level string field of the jar's fabric.mod.json, or null (as readModId).
+	private static String readField(Path jar, String field) throws IOException {
 		try (ZipFile zip = new ZipFile(jar.toFile())) {
 			ZipEntry entry = zip.getEntry("fabric.mod.json");
 			if (entry == null) {
@@ -90,11 +147,11 @@ public final class ModJars {
 			}
 			try {
 				JsonElement root = JsonParser.parseString(new String(json, StandardCharsets.UTF_8));
-				if (!root.isJsonObject() || !root.getAsJsonObject().has("id")) {
+				if (!root.isJsonObject() || !root.getAsJsonObject().has(field)) {
 					return null;
 				}
-				JsonElement id = root.getAsJsonObject().get("id");
-				return id.isJsonPrimitive() ? id.getAsString() : null;
+				JsonElement value = root.getAsJsonObject().get(field);
+				return value.isJsonPrimitive() ? value.getAsString() : null;
 			} catch (JsonParseException e) {
 				return null;
 			}
