@@ -98,7 +98,8 @@ class JournalTest {
 		assertEquals(Journal.MAX_ENTRIES, ids.size());
 		assertEquals("staged", ids.get(0));
 		assertFalse(ids.get(1).startsWith("applied-"));
-		assertEquals(List.of("vanilla.a"), capped.get(1).changes().stream().map(JournalChange::key).toList());
+		// Every entry sets 1 -> 2, so the chain breaks at once: the older changes and the newest one.
+		assertEquals(List.of("vanilla.a", "vanilla.a"), capped.get(1).changes().stream().map(JournalChange::key).toList());
 		assertEquals("applied-7", ids.get(2));
 	}
 

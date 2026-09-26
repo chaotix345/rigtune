@@ -34,6 +34,8 @@ public final class Journal implements ChangeRecorder {
 	public static final int FORMAT_VERSION = 1;
 	public static final int MAX_ENTRIES = 50;
 	public static final Duration LOCK_WAIT = Duration.ofSeconds(2);
+	// The id prefix of the entry the cap folds older entries into (docs/v0.4/SPEC.md 2o M6).
+	public static final String BASELINE = "baseline-";
 	static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
 	public interface Log {
@@ -261,11 +263,19 @@ public final class Journal implements ChangeRecorder {
 		}
 		List<JournalEntry> out = new ArrayList<>(entries);
 		drop(out, Journal::finished);
-		while (out.size() > MAX_ENTRIES && fold(out)) {
+		boolean folded = true;
+		while (folded && out.size() > MAX_ENTRIES) {
+			folded = fold(out);
 		}
+		drop(out, e -> !has(e, JournalChange.STAGED) && !isBaseline(e));
 		drop(out, e -> !has(e, JournalChange.STAGED));
 		drop(out, e -> true);
 		return out;
+	}
+
+	// An entry the cap folded (its id starts with BASELINE; 0.3.0 keeps ids when it rewrites the file).
+	public static boolean isBaseline(JournalEntry entry) {
+		return entry.id() != null && entry.id().startsWith(BASELINE) && JournalEntry.APPLY.equals(entry.kind());
 	}
 
 	private static void drop(List<JournalEntry> out, Predicate<JournalEntry> droppable) {
@@ -280,12 +290,13 @@ public final class Journal implements ChangeRecorder {
 
 	// Folds the oldest run of at least two consecutive entries that have nothing staged and no change an undo still
 	// refers to (a staged undo may be discarded) into one entry in their place: as many of them as the cap needs. A run
-	// never crosses another entry, so no change moves past a later one. False when there's no such run.
+	// never crosses another entry, so no change moves past a later one, and never holds the newest entry (the one just
+	// written stays itself). False when there's no such run.
 	private static boolean fold(List<JournalEntry> out) {
 		Set<String> reverting = reverting(out);
 		int start = -1;
-		for (int i = 0; i <= out.size(); i++) {
-			boolean foldable = i < out.size() && !has(out.get(i), JournalChange.STAGED)
+		for (int i = 0; i < out.size(); i++) {
+			boolean foldable = i < out.size() - 1 && !has(out.get(i), JournalChange.STAGED)
 					&& out.get(i).changes().stream().noneMatch(c -> reverting.contains(c.id()));
 			if (foldable && start < 0) {
 				start = i;
@@ -321,9 +332,12 @@ public final class Journal implements ChangeRecorder {
 		return out;
 	}
 
-	// One apply entry (so 0.3.0 lists and undoes it too) with what Undo all could still act on in the run: per settings
-	// key one change from where UndoPlanner's chain would end (newest to oldest while each older change ended where the
-	// newer one started) to the newest value; every applied mod file change as it is. At the run's oldest time.
+	// One apply entry (so 0.3.0 lists and undoes it too) with what Undo all could still act on in the run, at the run's
+	// oldest time; it keeps the id of a baseline the run starts with. Per settings key, the newest change (its id kept)
+	// from where UndoPlanner's chain would end (newest to oldest while each older change ended where the newer one
+	// started). When the player changed the value before that, the older changes become one change before it that ends
+	// elsewhere, so the chain still stops there rather than going on into an older entry. Every applied mod file change
+	// as it is.
 	private static JournalEntry baseline(List<JournalEntry> run) {
 		Map<String, List<JournalChange>> byKey = new LinkedHashMap<>();
 		List<JournalChange> files = new ArrayList<>();
@@ -345,14 +359,25 @@ public final class Journal implements ChangeRecorder {
 		List<JournalChange> changes = new ArrayList<>();
 		byKey.forEach((key, chain) -> {
 			String target = chain.getLast().before();
-			for (int i = chain.size() - 2; i >= 0 && Objects.equals(chain.get(i).after(), target); i--) {
+			int i = chain.size() - 2;
+			for (; i >= 0 && Objects.equals(chain.get(i).after(), target); i--) {
 				target = chain.get(i).before();
 			}
-			changes.add(JournalChange.setting(key, target, chain.getLast().after(), JournalChange.APPLIED, null));
+			if (i >= 0) {
+				changes.add(from(chain.get(i), chain.getFirst().before()));
+			}
+			changes.add(from(chain.getLast(), target));
 		});
 		changes.addAll(files);
 		JournalEntry first = run.getFirst();
-		return new JournalEntry(ChangeRecorder.newEntryId(), first.at(), JournalEntry.APPLY, first.rigtuneVersion(), first.mcVersion(), null, changes);
+		String id = isBaseline(first) ? first.id() : BASELINE + ChangeRecorder.newEntryId();
+		return new JournalEntry(id, first.at(), JournalEntry.APPLY, first.rigtuneVersion(), first.mcVersion(), null, changes);
+	}
+
+	// The applied settings change c, starting from `before`.
+	private static JournalChange from(JournalChange c, String before) {
+		return new JournalChange(c.id(), JournalChange.SETTING, c.key(), before, c.after(), null, null, null, null, JournalChange.APPLIED, c.opId(),
+				c.group(), null);
 	}
 
 	private static boolean finished(JournalEntry entry) {
