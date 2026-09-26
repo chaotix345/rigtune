@@ -503,9 +503,9 @@ class KnowledgeV2ScenarioTest {
 		}
 	}
 
-	// v0.4: the rules content for keys whose evaluators other workstreams add (the stutter keys: WS-S, the jvm- facts: WS-J)
-	// can't fire in the main list today. Each workstream replaces its part of this with scenario tests for its seeds once
-	// its evaluator lands (driverVersion: WS-W's driverSeedsFireOnTheAffectedDriversOnly).
+	// v0.4: the rules content for keys whose evaluators other workstreams add (the stutter keys: WS-S) can't fire in the main
+	// list today. Each workstream replaces its part of this with scenario tests for its seeds once its evaluator lands
+	// (driverVersion: WS-W's driverSeedsFireOnTheAffectedDriversOnly; the jvm- facts: WS-J's core/jvm/JvmScenarioTest).
 	@Test
 	void theV04ContentFiresNothingUntilItsEvaluatorsLand() {
 		RulesDocument rules = RulesLoader.loadBundled();
@@ -523,7 +523,7 @@ class KnowledgeV2ScenarioTest {
 		for (Fixtures.Hw hw : List.of(Fixtures.userRig(), Fixtures.lowEndLaptop(), oldNvidia, hd4000, tier1Laptop())) {
 			for (List<String> mods : List.of(List.of("sodium"), DH_MODS, List.of("sodium", "iris", "distanthorizons"), List.of("fabric-api"))) {
 				Set<String> fired = advice(run(hw, mods, Map.of("sodium.performance.chunk_build_defer_mode", "ZERO_FRAMES")));
-				for (Set<String> ids : List.of(jvm, stutter)) {
+				for (Set<String> ids : List.of(stutter)) {
 					assertTrue(fired.stream().noneMatch(ids::contains), hw.gpu.renderer() + " " + mods + ": " + fired);
 				}
 			}
