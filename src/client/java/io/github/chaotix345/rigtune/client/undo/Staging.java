@@ -12,6 +12,7 @@ import io.github.chaotix345.rigtune.core.history.HistoryUpdates;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
+import io.github.chaotix345.rigtune.core.history.PartlyApplied;
 import io.github.chaotix345.rigtune.core.history.StagedChanges;
 import org.jspecify.annotations.Nullable;
 
@@ -29,6 +30,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 // Staging into config/rigtune/pending.json, and the journal records that go with it, under the apply lock: the
 // changes are recorded after the merge, with the ids the ops have in pending.json (review H5).
@@ -240,11 +242,16 @@ public final class Staging {
 		}
 	}
 
-	// Cancels everything staged (the RigTune screen's Discard pending). Null when the lock is busy.
+	// Cancels everything staged (the RigTune screen's Discard pending), except a group the helper left half done at the
+	// last exit, which the next exit finishes (audit M2; PartlyApplied). Returns the dropped ops; null when the lock is busy.
 	public List<Op> discard() throws IOException {
 		try (ApplyLock lock = lock()) {
 			if (lock == null) {
 				return null;
+			}
+			List<Op> kept = halfDone();
+			if (!kept.isEmpty()) {
+				return discardExcept(kept);
 			}
 			List<Op> dropped = PendingActions.discard(pendingFile, Duration.ZERO);
 			if (dropped != null) {
@@ -252,6 +259,40 @@ public final class Staging {
 			}
 			return dropped;
 		}
+	}
+
+	private List<Op> halfDone() {
+		if (!Files.exists(pendingFile)) {
+			return List.of();
+		}
+		try {
+			List<Op> ops = PendingActions.load(pendingFile).ops();
+			Set<String> names = new HashSet<>();
+			try (Stream<Path> files = Files.list(InstanceDirs.modsDirOf(pendingFile))) {
+				files.forEach(f -> names.add(f.getFileName().toString()));
+			}
+			Set<String> groups = PartlyApplied.groups(ops, names);
+			return ops.stream().filter(op -> op != null && op.group() != null && groups.contains(op.group())).toList();
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.warn("Could not check {} for half-applied changes", pendingFile, e);
+			return List.of();
+		}
+	}
+
+	// The caller holds the lock.
+	private List<Op> discardExcept(List<Op> kept) throws IOException {
+		PendingActions plan = PendingActions.load(pendingFile);
+		List<Op> dropped = plan.ops().stream().filter(op -> kept.stream().noneMatch(k -> k == op || k.equals(op))).toList();
+		plan.withOps(kept).save(pendingFile);
+		Path planMods = InstanceDirs.modsDirOf(pendingFile);
+		for (Op op : dropped) {
+			if (op != null && kept.stream().noneMatch(k -> op.from() != null && op.from().equals(k.from()))) {
+				PendingActions.retireDownload(op, planMods);
+			}
+		}
+		RigTune.LOGGER.info("Kept {} staged change(s) the helper left half done; the next exit finishes them", kept.size());
+		markDiscarded(dropped);
+		return dropped;
 	}
 
 	private void markDiscarded(List<Op> ops) {

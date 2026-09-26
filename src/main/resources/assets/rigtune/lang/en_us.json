@@ -481,6 +481,7 @@
 	"rigtune.undo.reason.superseded_group": "Goes with a change a later apply changed again",
 	"rigtune.undo.reason.update_staged": "Another change of %s is staged; cancel it first (Discard pending)",
 	"rigtune.undo.reason.waits_entry": "Part of this apply waits for a restart, so none of it is undone yet; restart once, then undo it",
+	"rigtune.undo.reason.waits_partly": "It was partly applied at the last exit; restart once so it finishes, then undo it",
 	"rigtune.undo.reason.waits_restart": "A change staged earlier still moves %s at the next restart; restart once, then undo it",
 	"rigtune.undo.reason.waits_staged": "It needs changes that are still waiting for a restart; restart once, then undo it",
 	"rigtune.undo.section.discard": "Cancelled before they're applied",

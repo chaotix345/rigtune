@@ -24,7 +24,8 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 // Works out what "Undo last apply" or "Undo everything" does (docs/v0.2/SPEC.md item 3), without touching anything.
-// - STAGED changes: their whole group is dropped from pending.json (changes of other applies in that group too).
+// - STAGED changes: their whole group is dropped from pending.json (changes of other applies in that group too), unless
+//   the helper left that group half done at the last exit: then it waits for the restart that finishes it (audit M2).
 // - Settings: put back when the current value is still the latest `after`; chained newest to oldest, stopping where
 //   the user changed the value between two applies.
 // - Mod files: newest group first, each group all-or-nothing against a simulated mods folder, so every step is checked
@@ -69,8 +70,9 @@ public final class UndoPlanner {
 	static final String WAITS_RESTART = "A change staged earlier still moves %s at the next restart; restart once, then undo it";
 	static final String WAITS_STAGED = "It needs changes that are still waiting for a restart; restart once, then undo it";
 	static final String WAITS_ENTRY = "Part of this apply waits for a restart, so none of it is undone yet; restart once, then undo it";
+	static final String WAITS_PARTLY = "It was partly applied at the last exit; restart once so it finishes, then undo it";
 	private static final Set<String> WAITING = Set.of("rigtune.undo.reason.waits_restart", "rigtune.undo.reason.waits_staged",
-			"rigtune.undo.reason.waits_entry");
+			"rigtune.undo.reason.waits_entry", "rigtune.undo.reason.waits_partly");
 	// The Undo screen's text as rigtune.undo.item.* / rigtune.undo.reason.* keys with the English above (docs/v0.3/SPEC.md
 	// item 9, G-M2); file names, mod ids, labels and values are arguments.
 	private static final Text NONE = Text.of("rigtune.undo.item.none", "(none)");
@@ -429,6 +431,7 @@ public final class UndoPlanner {
 			groupOps.computeIfAbsent(key, k -> op.group() == null ? List.of(op)
 					: pending.stream().filter(o -> o != null && op.group().equals(o.group())).toList());
 		}
+		Set<String> partly = byGroup.isEmpty() ? Set.of() : PartlyApplied.groups(pending, folder.files());
 		for (Map.Entry<String, List<Located>> group : byGroup.entrySet()) {
 			List<Op> ops = groupOps.get(group.getKey());
 			List<String> opIds = ops.stream().map(Op::id).filter(Objects::nonNull).toList();
@@ -436,6 +439,11 @@ public final class UndoPlanner {
 					|| group.getValue().stream().anyMatch(l -> RIGTUNE.equals(l.change().modId()));
 			if (rigtune) {
 				group.getValue().forEach(l -> b.skip(l, Text.of("rigtune.undo.reason.rigtune_staged", RIGTUNE_STAGED)));
+				continue;
+			}
+			if (ops.stream().anyMatch(op -> op.group() != null && partly.contains(op.group()))) {
+				group.getValue().forEach(l -> b.skip(l, Text.of("rigtune.undo.reason.waits_partly", WAITS_PARTLY)));
+				b.waits = true;
 				continue;
 			}
 			if (shownOps != null && !shownOps.containsAll(opIds)) {

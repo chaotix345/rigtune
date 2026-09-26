@@ -1447,4 +1447,55 @@ class UndoPlannerTest {
 
 		assertEquals(String.format(UndoPlanner.FILE_GONE, "x-1.jar"), only(all(), Action.SKIP).reason());
 	}
+
+	// --- audit M2: an update the helper left half done at the last exit (x-1.jar disabled, x-2.jar still a download) is
+	// never dropped by Undo: that would leave the mod disabled and its replacement never enabled.
+
+	private JournalChange[] halfDoneUpdate() {
+		state.jar("x-1.jar.disabled", "x").jar("x-2.jar.rigtune-pending", "x");
+		state.settings.put("vanilla.renderDistance", "16");
+		entry("c", applied("vanilla.renderDistance", "12", "16"));
+		List<Op> group = PendingActions.group(Op.disableFile(MODS.resolve("x-1.jar")).withAttempts(1),
+				Op.enableFile(MODS.resolve("x-2.jar.rigtune-pending"), MODS.resolve("x-2.jar")).withModId("x").withAttempts(1));
+		pending.addAll(group);
+		JournalChange off = JournalChange.file(JournalChange.DISABLE, "x", "x-1.jar", JournalChange.STAGED, group.get(0).id(), group.get(0).group());
+		JournalChange on = JournalChange.file(JournalChange.ENABLE, "x", "x-2.jar", JournalChange.STAGED, group.get(1).id(), group.get(1).group());
+		entry("e1", off, on);
+		return new JournalChange[]{off, on};
+	}
+
+	@Test
+	void undoLastOfAHalfDoneUpdateWaitsForTheRestartInsteadOfDroppingIt() {
+		halfDoneUpdate();
+
+		Result result = last();
+
+		assertEquals("e1", result.plan().undoOf());
+		assertEquals(2, items(result, Action.SKIP).size(), result.plan().toString());
+		items(result, Action.SKIP).forEach(i -> assertEquals(UndoPlanner.WAITS_PARTLY, i.reason()));
+		assertTrue(result.script().discardOpIds().isEmpty());
+		assertTrue(result.script().immediate().isEmpty());
+	}
+
+	@Test
+	void undoAllKeepsAHalfDoneUpdateAndUndoesTheRest() {
+		halfDoneUpdate();
+
+		Result result = all();
+
+		assertTrue(result.script().discardOpIds().isEmpty(), result.script().toString());
+		assertEquals(Map.of("vanilla.renderDistance", "12"), result.script().immediate());
+		assertEquals(2, items(result, Action.SKIP).size());
+	}
+
+	@Test
+	void aStagedUpdateTheHelperHasNotStartedIsStillCancelled() {
+		halfDoneUpdate();
+		state.files.remove("x-1.jar.disabled");
+		state.jar("x-1.jar", "x");
+
+		Result result = last();
+
+		assertEquals(Set.copyOf(pending.stream().map(Op::id).toList()), result.script().discardOpIds());
+	}
 }

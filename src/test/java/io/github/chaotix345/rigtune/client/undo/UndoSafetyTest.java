@@ -291,6 +291,46 @@ class UndoSafetyTest {
 		assertEquals("Another change of it is staged; cancel that first (Undo last or Discard pending)", refusal == null ? null : refusal.english());
 	}
 
+	// --- audit M2: Discard pending while an update is half done (the helper disabled x-1.jar, then its enable of x-2.jar
+	// failed and so did the rollback) keeps that group, so the next exit finishes it instead of leaving X disabled.
+
+	@Test
+	void discardKeepsAnUpdateTheHelperLeftHalfDone() throws IOException {
+		modJar(mods.resolve("x-1.jar"), "x");
+		modJar(mods.resolve("x-2.jar" + PendingActions.PENDING_SUFFIX), "x");
+		List<Op> update = PendingActions.group(Op.disableFile(mods.resolve("x-1.jar")),
+				Op.enableFile(mods.resolve("x-2.jar" + PendingActions.PENDING_SUFFIX), mods.resolve("x-2.jar")).withModId("x"));
+		assertNotNull(staging.stage(update, "e1"));
+		applyThreads("4", "e2");
+		Files.move(mods.resolve("x-1.jar"), mods.resolve("x-1.jar.disabled"));
+
+		List<Op> dropped = staging.discard();
+
+		assertEquals(1, dropped.size(), dropped.toString());
+		assertEquals(update.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+		assertTrue(journal.entries().stream().filter(e -> e.id().equals("e1")).allMatch(e -> e.changes().stream()
+				.allMatch(c -> JournalChange.STAGED.equals(c.status()))), journal.entries().toString());
+		assertTrue(journal.entries().stream().filter(e -> e.id().equals("e2")).allMatch(e -> e.changes().stream()
+				.allMatch(c -> JournalChange.DISCARDED.equals(c.status()))), journal.entries().toString());
+
+		helperRuns();
+
+		assertEquals(List.of("x-1.jar.disabled", "x-2.jar"), listing());
+		assertEquals("0", threadsInFile());
+	}
+
+	@Test
+	void discardStillDropsAnUpdateTheHelperHasNotStarted() throws IOException {
+		modJar(mods.resolve("x-1.jar"), "x");
+		modJar(mods.resolve("x-2.jar" + PendingActions.PENDING_SUFFIX), "x");
+		assertNotNull(staging.stage(PendingActions.group(Op.disableFile(mods.resolve("x-1.jar")),
+				Op.enableFile(mods.resolve("x-2.jar" + PendingActions.PENDING_SUFFIX), mods.resolve("x-2.jar")).withModId("x")), "e1"));
+
+		assertEquals(2, staging.discard().size());
+		assertFalse(Files.exists(pending));
+		assertEquals(List.of("x-1.jar", "x-2.jar" + PendingActions.SUPERSEDED_SUFFIX), listing());
+	}
+
 	@Test
 	void undoLastTwiceInOneStartStillDisablesBothWhenNothingFails() throws IOException {
 		libraryThenDependant();
