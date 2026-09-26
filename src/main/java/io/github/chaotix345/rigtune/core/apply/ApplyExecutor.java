@@ -183,7 +183,7 @@ public final class ApplyExecutor {
 		for (int i = 0; i < out.size(); i++) {
 			OpResult r = out.get(i);
 			if (r.status() == Status.FAILED && r.op() != null && givenUp.contains(groupKey(r.op(), i))) {
-				out.set(i, new OpResult(r.op(), Status.ABANDONED, "Gave up after " + MAX_FAILED_RUNS + " failed attempts: " + r.message()));
+				out.set(i, new OpResult(r.op(), Status.ABANDONED, "Gave up after " + MAX_FAILED_RUNS + " restarts: " + r.message()));
 			}
 		}
 		return out;
@@ -496,7 +496,7 @@ public final class ApplyExecutor {
 				return new Applied(new OpResult(op, Status.FAILED, e.toString()), null);
 			}
 		}
-		return new Applied(new OpResult(op, Status.FAILED, "Gave up after " + state.attempt() + " attempt(s): " + last), null);
+		return new Applied(new OpResult(op, Status.FAILED, "Gave up after " + state.attempt() + " tries: " + last), null);
 	}
 
 	private Applied enable(Op op, int index) throws IOException {

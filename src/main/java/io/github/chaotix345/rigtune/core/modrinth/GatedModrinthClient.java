@@ -52,6 +52,12 @@ public final class GatedModrinthClient implements ModrinthClient {
 	}
 
 	@Override
+	public Map<String, ModrinthVersion> versions(Collection<String> ids) throws IOException {
+		check();
+		return delegate.versions(ids);
+	}
+
+	@Override
 	public void download(ModFile file, Path target) throws IOException {
 		check();
 		delegate.download(file, target);

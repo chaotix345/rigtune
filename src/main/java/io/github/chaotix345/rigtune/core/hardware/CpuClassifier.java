@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.core.hardware;
 
 import io.github.chaotix345.rigtune.core.model.CpuInfo;
+import io.github.chaotix345.rigtune.core.model.TierBasis;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument.CpuTierRule;
 
@@ -20,17 +21,24 @@ public final class CpuClassifier {
 	}
 
 	public int classify(CpuInfo cpu) {
+		return classifyDetailed(cpu).tier();
+	}
+
+	// docs/v0.4/SPEC.md 2j: the tier with what it rests on: the matched cpuTiers row, or the formula's inputs (a fallback
+	// estimate from the thread count and clock; -1 = unknown).
+	public TierBasis.Cpu classifyDetailed(CpuInfo cpu) {
 		if (cpu == null) {
-			return UNKNOWN_CORES_TIER;
+			return new TierBasis.Cpu(UNKNOWN_CORES_TIER, TierBasis.Basis.FALLBACK_ESTIMATE, null, -1, -1);
 		}
 		if (cpu.name() != null) {
 			for (CpuTierRule rule : rules) {
 				if (rule.find(cpu.name())) {
-					return clamp(rule.tier);
+					return new TierBasis.Cpu(clamp(rule.tier), TierBasis.Basis.TABLE_MATCH, rule.pattern, cpu.logicalCores(), cpu.maxFreqMhz());
 				}
 			}
 		}
-		return formula(cpu.logicalCores(), cpu.maxFreqMhz());
+		return new TierBasis.Cpu(formula(cpu.logicalCores(), cpu.maxFreqMhz()), TierBasis.Basis.FALLBACK_ESTIMATE, null, cpu.logicalCores(),
+				cpu.maxFreqMhz());
 	}
 
 	public static int formula(int logicalCores, long maxFreqMhz) {

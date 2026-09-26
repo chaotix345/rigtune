@@ -50,7 +50,7 @@ public final class HardwareProbe {
 
 	public static CompletableFuture<HardwareProfile> probe(Minecraft minecraft) {
 		FastPart fast = probeFast(minecraft);
-		return slowPart().thenApply(s -> combine(fast, s));
+		return slowPart().thenCombine(JvmProbe.probeAsync(), (s, jvm) -> JvmProbe.withFacts(combine(fast, s), jvm));
 	}
 
 	public static synchronized CompletableFuture<SlowPart> slowPart() {

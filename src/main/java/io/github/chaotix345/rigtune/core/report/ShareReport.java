@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.core.report;
 
+import io.github.chaotix345.rigtune.core.jvm.JvmReport;
 import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.CpuInfo;
@@ -8,6 +9,7 @@ import io.github.chaotix345.rigtune.core.model.GpuInfo;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.TierBasis;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -52,10 +54,20 @@ public final class ShareReport {
 	}
 
 	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, int maxChars, @Nullable String launcher) {
+		return format(report, versions, benchmark, maxChars, launcher, null);
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md 6): jvm adds the Java line; null (or nothing read yet) leaves the report as before.
+	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, @Nullable String launcher, @Nullable JvmReport jvm) {
+		return format(report, versions, benchmark, DISCORD_LIMIT, launcher, jvm);
+	}
+
+	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, int maxChars, @Nullable String launcher,
+			@Nullable JvmReport jvm) {
 		StringBuilder fixed = new StringBuilder();
 		fixed.append("**RigTune ").append(field(versions.rigtune())).append("** · Minecraft ").append(field(versions.minecraft()))
 				.append(" · Fabric Loader ").append(field(versions.loader())).append('\n');
-		hardware(fixed, report, launcher);
+		hardware(fixed, report, launcher, jvm);
 		benchmark(fixed, benchmark);
 
 		List<String> items = items(report.recommendations());
@@ -74,7 +86,7 @@ public final class ShareReport {
 		return hardCut(text, maxChars);
 	}
 
-	private static void hardware(StringBuilder out, Report report, @Nullable String launcher) {
+	private static void hardware(StringBuilder out, Report report, @Nullable String launcher, @Nullable JvmReport jvm) {
 		HardwareProfile hw = report.hardware();
 		CpuInfo cpu = hw.cpu();
 		out.append("**Hardware**\n");
@@ -113,11 +125,33 @@ public final class ShareReport {
 		if (!blank(launcher)) {
 			out.append("- Launcher: ").append(field(launcher)).append('\n');
 		}
+		java(out, jvm);
 
-		out.append("- Tier ").append(report.tier().rawTier()).append("/5 · limited by ").append(limit(report.tier().limitingFactor()))
+		// docs/v0.4/SPEC.md 2j: an estimate and its lowest estimated component(s), never "limited by".
+		out.append("- Estimated tier ").append(report.tier().rawTier()).append("/5 · lowest estimated component: ")
+				.append(String.join(", ", TierBasis.lowest(report.tier()).stream().map(ShareReport::limit).toList()))
 				.append(" · goal ").append(capitalised(report.goal().name())).append('\n');
 		out.append("- Rules r").append(report.rulesRevision()).append(" (").append(field(report.rulesSource())).append(") · ")
 				.append(report.online() ? "online" : "offline").append('\n');
+	}
+
+	// "- Java: 25.0.3 (Azul Systems, Inc.), G1, 2 argument notes": version, vendor, collector and a count, never an argument.
+	private static void java(StringBuilder out, @Nullable JvmReport jvm) {
+		if (jvm == null || blank(jvm.javaVersion())) {
+			return;
+		}
+		out.append("- Java: ").append(field(jvm.javaVersion()));
+		if (!blank(jvm.vendor())) {
+			out.append(" (").append(field(jvm.vendor())).append(')');
+		}
+		if (jvm.collectorName() != null) {
+			out.append(", ").append(jvm.collectorName());
+		}
+		if (jvm.available()) {
+			int notes = jvm.findings().size();
+			out.append(", ").append(notes).append(notes == 1 ? " argument note" : " argument notes");
+		}
+		out.append('\n');
 	}
 
 	private static void benchmark(StringBuilder out, BenchmarkSummary b) {

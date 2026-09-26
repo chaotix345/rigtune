@@ -71,6 +71,12 @@ class UndoPlannerTest {
 			return elsewhere;
 		}
 
+		// Config-file ops map to settings keys by file, as the client's ConfigTargets do.
+		@Override
+		public String keyOf(Op op, String keyInFile) {
+			return op.path() != null && op.path().endsWith("sodium-options.json") ? "sodium." + keyInFile : null;
+		}
+
 		FakeState jar(String name, String modId, String... depends) {
 			files.put(name, new JarInfo(modId, Set.of(), Set.of(depends)));
 			return this;
@@ -1153,5 +1159,102 @@ class UndoPlannerTest {
 				List.of(enabled("x", "x.jar", "g"))));
 
 		assertEquals(Set.of("partly", "staged", "legacy"), UndoPlanner.undoable(entries));
+	}
+
+	// --- docs/v0.4/SPEC.md 2n (found by WS-H's undo-after-restart-040 profile phase), AC2n.1: two switches, each changing
+	// a vanilla key (set at once) and a Sodium key (staged for the helper), applied at a restart; then Undo last twice.
+
+	private static final Path SODIUM_OPTIONS = Path.of("config", "sodium-options.json").toAbsolutePath();
+	private static final String THREADS = "sodium.performance.chunk_builder_threads";
+	private static final String RD = "vanilla.renderDistance";
+
+	// Carries out a plan as UndoService does: vanilla values set now, the staged value as one patch op in pending.json,
+	// both journaled in an undo entry.
+	private void carryOut(String id, Result result, String undoOf, JournalChange... reverted) {
+		Op op = Op.patchJson(SODIUM_OPTIONS, Map.of("performance.chunk_builder_threads", result.script().staged().get(THREADS))).inGroup("g-" + id);
+		pending.add(op);
+		result.script().immediate().forEach(state.settings::put);
+		List<JournalChange> changes = new ArrayList<>();
+		for (JournalChange c : reverted) {
+			boolean staged = c.key().equals(THREADS);
+			changes.add(JournalChange.setting(c.key(), c.after(), c.before(), staged ? JournalChange.STAGED : JournalChange.APPLIED, staged ? op.id() : null)
+					.reverting(c.id()));
+		}
+		undoEntry(id, undoOf, changes.toArray(JournalChange[]::new));
+	}
+
+	// The value the helper leaves: the file's, then pending.json's ops for the key in order.
+	private String afterTheHelper() {
+		String value = state.settings.get(THREADS);
+		for (Op op : pending) {
+			if (op.patches() != null && op.patches().containsKey("performance.chunk_builder_threads")) {
+				value = op.patches().get("performance.chunk_builder_threads");
+			}
+		}
+		return value;
+	}
+
+	private JournalChange[] switches() {
+		JournalChange[] changes = {applied(RD, "12", "6"), applied(THREADS, "1", "2"), applied(RD, "6", "10"), applied(THREADS, "2", "4")};
+		entry("switch-a", changes[0], changes[1]);
+		entry("switch-b", changes[2], changes[3]);
+		state.settings.put(RD, "10");
+		state.settings.put(THREADS, "4");
+		return changes;
+	}
+
+	@Test
+	void undoLastTwiceInOneStartRevertsBothChangesOfAStagedKey() {
+		JournalChange[] c = switches();
+
+		Result undoB = last();
+		assertEquals(Map.of(THREADS, "2"), undoB.script().staged());
+		carryOut("undo-b", undoB, "switch-b", c[2], c[3]);
+
+		Result undoA = last();
+
+		assertEquals(List.of(), items(undoA, Action.SKIP), undoA.plan().toString());
+		assertEquals("switch-a", undoA.plan().undoOf());
+		assertEquals(Map.of(RD, "12"), undoA.script().immediate());
+		assertEquals(Map.of(THREADS, "1"), undoA.script().staged());
+		carryOut("undo-a", undoA, "switch-a", c[0], c[1]);
+		assertEquals("1", afterTheHelper());
+		assertEquals("12", state.settings.get(RD));
+	}
+
+	@Test
+	void undoAllFromTheSamePointStillRevertsTheChain() {
+		switches();
+
+		Result result = all();
+
+		assertEquals(List.of(), items(result, Action.SKIP));
+		assertEquals(Map.of(RD, "12"), result.script().immediate());
+		assertEquals(Map.of(THREADS, "1"), result.script().staged());
+	}
+
+	@Test
+	void aRealChangeSinceStillSkips() {
+		switches();
+		state.settings.put(THREADS, "7");
+
+		UndoPlan.Item skipped = only(last(), Action.SKIP);
+
+		assertEquals("You changed it since (it's now 7)", skipped.reason());
+	}
+
+	// A staged change the same plan discards isn't the value the key will have.
+	@Test
+	void aStagedChangeThisUndoDiscardsDoesNotCountAsTheCurrentValue() {
+		switches();
+		Op staged = Op.patchJson(SODIUM_OPTIONS, Map.of("performance.chunk_builder_threads", "6")).inGroup("g-c");
+		pending.add(staged);
+		entry("switch-c", JournalChange.setting(THREADS, "4", "6", JournalChange.STAGED, staged.id()));
+
+		Result result = all();
+
+		assertEquals(List.of(), items(result, Action.SKIP), result.plan().toString());
+		assertEquals(Set.of(staged.id()), result.script().discardOpIds());
+		assertEquals(Map.of(THREADS, "1"), result.script().staged());
 	}
 }

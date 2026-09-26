@@ -56,6 +56,7 @@ class DownloadPlannerTest {
 	final Map<String, ModrinthVersion> installedVersions = new HashMap<>();
 	final Map<String, ModrinthVersion> updateVersions = new HashMap<>();
 	final List<DownloadPlanner.Result> planned = new ArrayList<>();
+	StagedProjects staged = StagedProjects.NONE;
 
 	@BeforeEach
 	void setUp() throws IOException {
@@ -85,6 +86,7 @@ class DownloadPlannerTest {
 	private void put(String slug, ModrinthVersion v) {
 		client.latestByProject.put(slug, v);
 		client.latestByProject.put(v.projectId(), v);
+		client.byId.put(v.id(), v);
 	}
 
 	// Files are named <version id>.jar and hold a mod whose id is the version id minus its trailing "V", lower-cased
@@ -151,57 +153,71 @@ class DownloadPlannerTest {
 	}
 
 	private DownloadPlanner.Result plan(Set<String> installedProjects, Recommendation... recs) {
-		DownloadPlanner planner = new DownloadPlanner(new DependencyResolver(client, "fabric", "26.2", installedVersions), mods, this::fetch, conflicts,
-				updateVersions);
+		DownloadPlanner planner = new DownloadPlanner(new DependencyResolver(client, "fabric", "26.2", installedVersions).withStaged(staged), mods,
+				this::fetch, conflicts, updateVersions);
 		DownloadPlanner.Result result = planner.plan(List.of(recs), installedProjects, Set.of(), Map.of());
 		planned.add(result);
 		return result;
 	}
 
-	// Review 4, rules-accuracy-2: a batch never stages both sides of a rules conflict; the later one fails before its
-	// download.
+	// Review 4, rules-accuracy-2, and docs/v0.4/SPEC.md 2e (AC2e.2): a batch never stages both sides of a rules conflict,
+	// and which side goes in doesn't follow the tick order: both are refused, before any download, naming each other.
 	@Test
-	void theLaterOfTwoConflictingAdditionsFails() {
+	void twoConflictingAdditionsAreBothRefusedInEitherOrder() {
 		put("krypton", version("kryptonV", "KRYPTON", "1", T));
 		put("b", version("bV", "B", "1", T));
 		put("noise", version("noiseV", "NOISE", "1", T));
 		conflicts = (a, b) -> Set.of("krypton", "noise").equals(Set.of(a, b));
 
 		DownloadPlanner.Result result = plan(Set.of(), add("krypton", "KRYPTON"), add("b", "B"), add("noise", "NOISE"));
+		DownloadPlanner.Result reversed = plan(Set.of(), add("noise", "NOISE"), add("b", "B"), add("krypton", "KRYPTON"));
 
-		assertEquals(List.of("add-krypton", "add-b"), result.ids());
-		assertEquals(List.of("kryptonV.jar", "bV.jar"), targets(result.ops()));
-		assertEquals(List.of("Add noise: it conflicts with krypton, which is being installed too"), result.errors());
+		for (DownloadPlanner.Result r : List.of(result, reversed)) {
+			assertEquals(List.of("add-b"), r.ids());
+			assertEquals(List.of("bV.jar"), targets(r.ops()));
+			assertEquals(Set.of("Add krypton: it conflicts with noise, which is ticked too; tick only one of them",
+					"Add noise: it conflicts with krypton, which is ticked too; tick only one of them"), Set.copyOf(r.errors()));
+		}
+		assertFalse(fetched.contains("kryptonV.jar"));
 		assertFalse(fetched.contains("noiseV.jar"));
 	}
 
+	// 2e: refused together even when one side would have failed anyway.
 	@Test
-	void aConflictWithAnAdditionThatFailedDoesNotCount() {
+	void aConflictingPairIsRefusedEvenWhenOneSideWouldFail() {
 		put("krypton", version("kryptonV", "KRYPTON", "1", T));
 		put("noise", version("noiseV", "NOISE", "1", T));
-		conflicts = (a, b) -> Set.of("krypton", "noise").equals(Set.of(a, b));
+		// One-sided on purpose: either direction refuses both.
+		conflicts = (a, b) -> a.equals("krypton") && b.equals("noise");
 		failing.add("kryptonV.jar");
 
 		DownloadPlanner.Result result = plan(Set.of(), add("krypton", "KRYPTON"), add("noise", "NOISE"));
 
-		assertEquals(List.of("add-noise"), result.ids());
-		assertEquals(List.of("noiseV.jar"), targets(result.ops()));
-		assertEquals(1, result.errors().size(), result.errors().toString());
+		assertEquals(List.of(), result.ids());
+		assertEquals(2, result.errors().size(), result.errors().toString());
+		assertEquals(List.of(), fetched);
 	}
 
-	// Review 4, rules-accuracy-2: a Modrinth "incompatible" dependency between two additions of one batch fails the later.
+	// Review 4, rules-accuracy-2, and 2e (AC2e.2): a Modrinth "incompatible" dependency between two additions of one batch
+	// refuses both, whichever was ticked first.
 	@Test
-	void aModrinthIncompatibilityWithinTheBatchFailsTheLaterAddition() {
+	void twoModrinthIncompatibleAdditionsAreBothRefusedInEitherOrder() {
 		put("a", version("aV", "A", "1", T, incompatible("B")));
 		put("c", version("cV", "C", "1", T));
 		put("b", version("bV", "B", "1", T));
 
 		DownloadPlanner.Result result = plan(Set.of(), add("a", "A"), add("c", "C"), add("b", "B"));
+		DownloadPlanner.Result reversed = plan(Set.of(), add("b", "B"), add("c", "C"), add("a", "A"));
 
-		assertEquals(List.of("add-a", "add-c"), result.ids());
-		assertEquals(List.of("aV.jar", "cV.jar"), targets(result.ops()));
-		assertEquals(List.of("Add b: Modrinth marks A and B as incompatible, and both would be installed"), result.errors());
+		for (DownloadPlanner.Result r : List.of(result, reversed)) {
+			assertEquals(List.of("add-c"), r.ids());
+			assertEquals(List.of("cV.jar"), targets(r.ops()));
+			assertEquals(Set.of("Add a: Modrinth marks A and B as incompatible, and both would be installed",
+					"Add b: Modrinth marks B and A as incompatible, and both would be installed"), Set.copyOf(r.errors()));
+		}
+		assertFalse(fetched.contains("aV.jar"));
 		assertFalse(fetched.contains("bV.jar"));
+		assertEquals(2, client.calls.stream().filter("latestVersion:A"::equals).count(), "one lookup per plan: " + client.calls);
 	}
 
 	// Mod a is installed as a-1.jar (Modrinth version a1 of project A); its update is version aV (file aV.jar).
@@ -310,22 +326,30 @@ class DownloadPlannerTest {
 		assertEquals("installed", Files.readString(mods.resolve("a-1.jar")));
 	}
 
-	// A staged update's version is in the batch: a later update declaring it incompatible is refused.
+	// docs/v0.4/SPEC.md 2e (AC2e.1): two updates whose new versions Modrinth marks incompatible (either declaring it)
+	// are both refused, naming each other, in either tick order; an unrelated update proceeds.
 	@Test
-	void aStagedUpdateIsPartOfTheBatchForTheNextUpdate() throws IOException {
+	void twoMutuallyIncompatibleUpdatesAreBothRefusedInEitherOrder() throws IOException {
 		titles();
-		Recommendation update = updateA();
-		Files.writeString(mods.resolve("k-1.jar"), "installed");
-		installedVersions.put("k1", version("k1", "K", "1", T));
-		ModrinthVersion k2 = version("kV", "K", "2", T, new Dependency(null, "aV", "incompatible"));
-		updateVersions.put("kV", k2);
-		Recommendation updateK = new Recommendation("update-k", Category.UPDATE_MOD, Impact.MEDIUM, "Update k", "",
-				new Action.UpdateMod("k", mods.resolve("k-1.jar"), new UpdateInfo("k", "K", "1", "kV", "2", k2.primaryFile())), true);
+		client.projects.add(new ModrinthProject("M", "m", "M Mod", "approved", List.of("26.2"), List.of("fabric"), "optional"));
+		for (boolean kDeclares : List.of(true, false)) {
+			Recommendation updateA = kDeclares ? updateA() : updateA(new Dependency("K", "kV", "incompatible"));
+			Recommendation updateK = kDeclares ? updateOf("k", "K", new Dependency(null, "aV", "incompatible")) : updateOf("k", "K");
+			Recommendation updateM = updateOf("m", "M");
 
-		DownloadPlanner.Result result = plan(Set.of("A", "K"), update, updateK);
+			DownloadPlanner.Result result = plan(Set.of("A", "K", "M"), updateA, updateK, updateM);
+			DownloadPlanner.Result reversed = plan(Set.of("A", "K", "M"), updateK, updateA, updateM);
 
-		assertEquals(List.of("update-a"), result.ids());
-		assertEquals(List.of("Update k: Modrinth marks K Mod and A Mod as incompatible, and both would be installed"), result.errors());
+			for (DownloadPlanner.Result r : List.of(result, reversed)) {
+				assertEquals(List.of("update-m"), r.ids(), r.errors().toString());
+				assertEquals(List.of("m-1.jar", "mV.jar"), files(r.ops()));
+				assertEquals(Set.of("Update a: Modrinth marks A Mod and K Mod as incompatible, and both would be installed",
+						"Update k: Modrinth marks K Mod and A Mod as incompatible, and both would be installed"), Set.copyOf(r.errors()));
+			}
+			assertFalse(fetched.contains("aV.jar"));
+			assertFalse(fetched.contains("kV.jar"));
+			fetched.clear();
+		}
 	}
 
 	// AC3.2 (iv): updates are planned before additions, so the order they were ticked in doesn't matter.
@@ -529,5 +553,155 @@ class DownloadPlannerTest {
 
 		assertEquals(List.of("aV.jar", "bV.jar"), targets(result.ops()));
 		assertEquals(2, groups(result.ops()));
+	}
+
+	// --- docs/v0.4/SPEC.md 2d (amendments A-H1, A-M1, A-L1): an earlier Apply's staged changes, AC2d.1 and AC2d.4
+
+	private Path pendingFile() throws IOException {
+		Path config = Files.createDirectories(dir.resolve("config"));
+		Path pending = PendingActions.defaultPath(config);
+		Files.createDirectories(pending.getParent());
+		return pending;
+	}
+
+	// One Apply: plans these, merges the ops into pending.json as Staging does, and returns the staged view the next
+	// Apply's checks read.
+	private StagedProjects stage(Recommendation... recs) throws IOException {
+		DownloadPlanner.Result result = plan(Set.of(), recs);
+		assertEquals(List.of(), result.errors());
+		Path pending = pendingFile();
+		PendingActions plan = Files.exists(pending) ? PendingActions.load(pending) : PendingActions.create(1, mods, pending.getParent().getParent(), List.of());
+		plan.merge(result.ops()).plan().save(pending);
+		return StagedProjects.read(pending);
+	}
+
+	@Test
+	void everyEnableCarriesItsModrinthProjectAndVersion() throws IOException {
+		libraryUsers();
+		Recommendation update = updateA();
+
+		DownloadPlanner.Result result = plan(Set.of("A"), add("b", "B"), update);
+
+		Map<String, Op> byFile = new HashMap<>();
+		result.ops().forEach(op -> byFile.put(files(List.of(op)).getFirst(), op));
+		assertEquals("B", byFile.get("bV.jar").projectId());
+		assertEquals("bV", byFile.get("bV.jar").versionId());
+		assertEquals("LIB", byFile.get("libV.jar").projectId());
+		assertEquals("libV", byFile.get("libV.jar").versionId());
+		assertEquals("A", byFile.get("aV.jar").projectId());
+		assertEquals("aV", byFile.get("aV.jar").versionId());
+		// A disable has no Modrinth identity (the staged view leaves it out: SPEC 2d's documented residual).
+		assertEquals(null, byFile.get("a-1.jar").projectId());
+	}
+
+	@Test
+	void aLaterAdditionDeclaringAStagedModIncompatibleIsRefused() throws IOException {
+		titles();
+		put("a", version("aV", "A", "1", T));
+		staged = stage(add("a", "A"));
+		put("b", version("bV", "B", "1", T, incompatible("A")));
+
+		DownloadPlanner.Result result = plan(Set.of(), add("b", "B"));
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of(), result.ops());
+		assertEquals(List.of("Add b: Modrinth marks B Mod as incompatible with A Mod, which is waiting for a restart"), result.errors());
+		assertFalse(fetched.contains("bV.jar"));
+	}
+
+	@Test
+	void aLaterAdditionAStagedModDeclaresIncompatibleIsRefused() throws IOException {
+		titles();
+		put("a", version("aV", "A", "1", T, incompatible("B")));
+		staged = stage(add("a", "A"));
+		put("b", version("bV", "B", "1", T));
+
+		DownloadPlanner.Result result = plan(Set.of(), add("b", "B"));
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of("Add b: Modrinth marks A Mod, which is waiting for a restart, as incompatible with B Mod"), result.errors());
+		assertEquals(1, client.calls.stream().filter(c -> c.equals("versions:aV")).count(), client.calls.toString());
+	}
+
+	@Test
+	void aLaterUpdateIsCheckedAgainstStagedModsBothWays() throws IOException {
+		titles();
+		// Version-specific: a whole-project declaration would match the installed K too, a conflict that exists already.
+		put("b", version("bV", "B", "1", T, new Dependency("K", "kV", "incompatible")));
+		staged = stage(add("b", "B"));
+
+		DownloadPlanner.Result forward = plan(Set.of("A"), updateA(incompatible("B")));
+		DownloadPlanner.Result reverse = plan(Set.of("K"), updateOf("k", "K"));
+
+		assertEquals(List.of("Update a: Modrinth marks A Mod as incompatible with B Mod, which is waiting for a restart"), forward.errors());
+		assertEquals(List.of("Update k: Modrinth marks B Mod, which is waiting for a restart, as incompatible with K Mod"), reverse.errors());
+	}
+
+	@Test
+	void aDeclarationNamingAStagedVersionCountsWithoutAskingModrinth() throws IOException {
+		titles();
+		put("a", version("aV", "A", "1", T));
+		staged = stage(add("a", "A"));
+		client.versionsFailWith = new IOException("Modrinth lookups are off");
+		put("b", version("bV", "B", "1", T, new Dependency(null, "aV", "incompatible")));
+
+		DownloadPlanner.Result result = plan(Set.of(), add("b", "B"));
+
+		assertEquals(List.of("Add b: Modrinth marks B Mod as incompatible with A Mod, which is waiting for a restart"), result.errors());
+	}
+
+	// A-M1: without Modrinth lookups only the forward check runs (the staged versions' own declarations are unknown).
+	@Test
+	void withoutModrinthLookupsOnlyTheForwardCheckRuns() throws IOException {
+		titles();
+		put("a", version("aV", "A", "1", T, new Dependency("K", "kV", "incompatible")));
+		staged = stage(add("a", "A"));
+		client.versionsFailWith = new IOException("Modrinth lookups are off");
+
+		DownloadPlanner.Result forward = plan(Set.of("K"), updateOf("k", "K", incompatible("A")));
+		DownloadPlanner.Result reverse = plan(Set.of("K"), updateOf("k", "K"));
+
+		assertEquals(List.of("Update k: Modrinth marks K Mod as incompatible with A Mod, which is waiting for a restart"), forward.errors());
+		assertEquals(List.of("update-k"), reverse.ids());
+	}
+
+	// A pending.json written by 0.3.0 (no projectId/versionId): v0.3's behaviour, nothing staged counts.
+	@Test
+	void aPlanWithoutModrinthIdsKeepsTheV030Behaviour() throws IOException {
+		titles();
+		put("a", version("aV", "A", "1", T, incompatible("B")));
+		stage(add("a", "A"));
+		Path pending = pendingFile();
+		PendingActions plan = PendingActions.load(pending);
+		plan.withOps(plan.ops().stream().map(op -> new Op(op.type(), op.from(), op.to(), op.path(), op.patches(), op.id(), op.group(), op.modId(),
+				op.attempts())).toList()).save(pending);
+		staged = StagedProjects.read(pending);
+		put("b", version("bV", "B", "1", T, incompatible("A")));
+
+		DownloadPlanner.Result result = plan(Set.of(), add("b", "B"));
+
+		assertTrue(staged.isEmpty());
+		assertEquals(List.of("add-b"), result.ids());
+		assertEquals(List.of(), result.errors());
+	}
+
+	// AC2d.4 (A-H1): an addition that requires a staged mod still resolves it, so it joins that mod's staged group, and
+	// undoing the first Apply (which drops its whole group from pending.json) takes the dependant with it.
+	@Test
+	void anAdditionRequiringAStagedModJoinsItsGroup() throws IOException {
+		put("lib", version("libV", "LIB", "1", T));
+		staged = stage(add("lib", "LIB"));
+		Path pending = pendingFile();
+		Op stagedLib = PendingActions.load(pending).ops().getFirst();
+		put("a", version("aV", "A", "1", T, required("LIB")));
+
+		DownloadPlanner.Result result = plan(Set.of(), add("a", "A"));
+
+		assertEquals(List.of("add-a"), result.ids());
+		assertEquals(List.of("aV.jar", "libV.jar"), targets(result.ops()));
+		PendingActions merged = PendingActions.load(pending).merge(result.ops()).plan();
+		assertEquals(2, merged.ops().size(), merged.ops().toString());
+		assertEquals(1, groups(merged.ops()), merged.ops().toString());
+		assertEquals(List.of(), merged.remove(List.of(stagedLib.id())).plan().ops());
 	}
 }

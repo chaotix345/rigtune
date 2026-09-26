@@ -60,6 +60,7 @@ import io.github.chaotix345.rigtune.core.modrinth.GatedModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.HttpModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.ModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.OnlineDataFetcher;
+import io.github.chaotix345.rigtune.core.modrinth.StagedProjects;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.preview.DownloadInputs;
@@ -156,8 +157,8 @@ public final class RealController implements RigTuneController {
 		this.staging = new Staging(configDir, pendingFile, ConfigTargets.all(configDir), ClientJournal.get());
 		// The Undo screen plans off the render thread; the options are still read on it.
 		this.undoService = new UndoService(staging, ClientJournal.get(),
-				() -> minecraft.isSameThread() ? new GameState(minecraft.options, staging.targets(), modsDir, settingLabels())
-						: minecraft.submit(() -> new GameState(minecraft.options, staging.targets(), modsDir, settingLabels())).join(),
+				() -> minecraft.isSameThread() ? new GameState(minecraft.options, staging.targets(), modsDir, rulesSettingLabels())
+						: minecraft.submit(() -> new GameState(minecraft.options, staging.targets(), modsDir, rulesSettingLabels())).join(),
 				values -> {
 					Map<String, Boolean> written = new LinkedHashMap<>();
 					SettingsBridge.applyVanilla(minecraft.options, values).forEach((key, result) -> written.put(key, result.ok()));
@@ -177,7 +178,7 @@ public final class RealController implements RigTuneController {
 				new BenchmarkStaleNoticeSource(this)), awarenessService);
 	}
 
-	private Map<String, RulesDocument.SettingLabel> settingLabels() {
+	private Map<String, RulesDocument.SettingLabel> rulesSettingLabels() {
 		RulesDocument doc = rules;
 		return doc == null ? Map.of() : doc.settingLabels;
 	}
@@ -562,7 +563,8 @@ public final class RealController implements RigTuneController {
 
 	// Judged against the installed mods' Modrinth versions and the updates' own versions (SPEC 3b, plan review A-H1).
 	private DownloadPlanner.Result download(List<Recommendation> recs, OnlineDataFetcher.Result data, String mcVersion) {
-		DependencyResolver resolver = new DependencyResolver(modrinth, OnlineDataFetcher.LOADER, mcVersion, data.installedVersions());
+		DependencyResolver resolver = new DependencyResolver(modrinth, OnlineDataFetcher.LOADER, mcVersion, data.installedVersions())
+				.withStaged(StagedProjects.read(pendingFile));
 		Set<String> installedProjects = new HashSet<>(data.projectIdsByModId().values());
 		List<InstalledMod> scanned = mods;
 		Set<String> loadedIds = new HashSet<>();
@@ -642,7 +644,7 @@ public final class RealController implements RigTuneController {
 				.map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("?");
 		LauncherInfo detected = launcher();
 		return ShareReport.format(shown, new ShareReport.Versions(modVersion, shown.hardware().mcVersion(), loaderVersion), latestBenchmark(),
-				detected.known() ? detected.launcher().displayName() : null);
+				detected.known() ? detected.launcher().displayName() : null, jvmService.report());
 	}
 
 	@Override
@@ -730,6 +732,12 @@ public final class RealController implements RigTuneController {
 		}
 	}
 
+	// v0.4 (docs/v0.4/SPEC.md 2b): History's labels, for the Preview.
+	@Override
+	public HistoryModel.Labels settingLabels() {
+		return HistoryModel.Labels.of(new GameState(minecraft.options, staging.targets(), modsDir, rulesSettingLabels()));
+	}
+
 	@Override
 	public HistoryModel.@Nullable View history() {
 		Path last = ApplyResult.defaultPath(configDir);
@@ -771,7 +779,7 @@ public final class RealController implements RigTuneController {
 		DownloadInputs downloads = new DownloadInputs(modrinth, settings.modrinthAllowed(), OnlineDataFetcher.LOADER,
 				onlineLookups.modrinthGameVersion(hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion()), data.installedVersions(),
 				data.updateVersions(), new HashSet<>(data.projectIdsByModId().values()), loadedIds, stagedJarsByModId(),
-				doc == null ? (a, b) -> false : ModConflicts.of(doc)::between);
+				doc == null ? (a, b) -> false : ModConflicts.of(doc)::between, StagedProjects.read(pendingFile));
 		List<PreviewPlanner.ConfigFile> files = ConfigTargets.all(configDir).stream()
 				.map(t -> new PreviewPlanner.ConfigFile(t.prefix(), t.file(), t.stager()::stage, t.reader()::read)).toList();
 		return new PreviewPlanner(FabricLoader.getInstance().getGameDir().resolve("options.txt"), game.now(), game.problems(), files, modsDir, downloads)

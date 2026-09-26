@@ -1,6 +1,9 @@
 package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.client.ConfigTargets;
+import io.github.chaotix345.rigtune.core.history.HistoryModel;
+import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
@@ -19,6 +22,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -255,16 +259,37 @@ public class PreviewScreen extends Screen {
 		}
 	}
 
-	// Grouped by file, in order: the file, then its keys.
+	// Grouped by file, in order: the file, then its keys, named and valued as History shows them (docs/v0.4/SPEC.md 2b).
 	private void settings(PreviewList target, List<ApplyPreview.Setting> settings, int width) {
 		Map<Path, List<ApplyPreview.Setting>> byFile = new LinkedHashMap<>();
 		settings.forEach(s -> byFile.computeIfAbsent(s.file(), f -> new ArrayList<>()).add(s));
+		HistoryModel.Labels labels = controller.settingLabels();
+		Map<Path, String> prefixes = new HashMap<>();
+		prefixes.put(normal(gameDir.resolve("options.txt")), SettingKeys.VANILLA_PREFIX);
+		ConfigTargets.all(FabricLoader.getInstance().getConfigDir()).forEach(t -> prefixes.put(normal(t.file()), t.prefix()));
 		byFile.forEach((file, values) -> {
 			target.row(Component.literal(relative(file)), COLOR_FILE, INDENT, width);
 			for (ApplyPreview.Setting s : values) {
-				target.row(Component.translatable("rigtune.preview.setting", s.key(), value(s.oldValue()), value(s.newValue())), COLOR_TEXT, 2 * INDENT, width);
+				target.row(settingRow(s, prefixes.get(normal(file)), labels), COLOR_TEXT, 2 * INDENT, width);
 			}
 		});
+	}
+
+	// "<name>: <before> → <after>" through History's labels; a file RigTune doesn't know (prefix null) keeps the raw key.
+	static Component settingRow(ApplyPreview.Setting s, @Nullable String prefix, HistoryModel.Labels labels) {
+		if (prefix == null) {
+			return Component.translatable("rigtune.preview.setting", s.key(), value(s.oldValue()), value(s.newValue()));
+		}
+		String key = prefix + s.key();
+		return Component.translatable("rigtune.preview.setting", labels.label(key), labelled(labels, key, s.oldValue()), labelled(labels, key, s.newValue()));
+	}
+
+	private static Component labelled(HistoryModel.Labels labels, String key, @Nullable String value) {
+		return value == null ? value(null) : Component.literal(labels.value(key, value));
+	}
+
+	private static Path normal(Path file) {
+		return file.toAbsolutePath().normalize();
 	}
 
 	private String relative(Path file) {

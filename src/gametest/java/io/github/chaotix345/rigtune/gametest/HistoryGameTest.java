@@ -9,6 +9,7 @@ import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.client.ui.UndoScreen;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
+import io.github.chaotix345.rigtune.core.apply.ModJars;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
@@ -36,6 +37,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 // docs/v0.3/SPEC.md item 6 (AC6.3) and 3e (AC3.5's screen half): the History screen over a seeded history.json (an apply
 // that was undone and its undo, an older apply, a benchmark result that changed its render distance again, and an apply
@@ -109,14 +112,15 @@ public class HistoryGameTest implements FabricClientGameTest {
 				List.of(JournalChange.setting(RENDER_DISTANCE, rd1, rd3, JournalChange.APPLIED, null)));
 		JournalEntry applyB = new JournalEntry("hist-apply-b", "2026-09-24T23:08:50Z", JournalEntry.APPLY, "0.3.0", "26.2", null, List.of(
 				JournalChange.file(JournalChange.DISABLE, "fakemod", "fake-mod-1.0.jar", JournalChange.STAGED, update.get(0).id(), update.get(0).group()),
-				JournalChange.file(JournalChange.ENABLE, "fakemod", "fake-mod-1.1.jar", JournalChange.STAGED, update.get(1).id(), update.get(1).group())));
+				JournalChange.file(JournalChange.ENABLE, "fakemod", "fake-mod-1.1.jar", JournalChange.STAGED, update.get(1).id(), update.get(1).group())
+						.withModName(fixtureJarName())));
 		try {
 			Files.deleteIfExists(historyFile);
 			check(journal.update(entries -> List.of(apply0, undo0, applyA, benchmark, applyB)), "seeded history.json");
 			// The last exit's helper run: the disable hit a sharing violation (as in the user's real 0.1.0 run), so the enable wasn't applied.
 			Path jar = modsDir.resolve("fake-mod-1.0.jar");
 			new ApplyResult("2026-09-24T23:09:01Z", List.of(
-					new ApplyResult.OpResult(update.get(0), ApplyResult.Status.FAILED, "Gave up after 10 attempt(s): java.nio.file.FileSystemException: "
+					new ApplyResult.OpResult(update.get(0), ApplyResult.Status.FAILED, "Gave up after 10 tries: java.nio.file.FileSystemException: "
 							+ jar + " -> " + jar + ".disabled: The process cannot access the file because it is being used by another process"),
 					new ApplyResult.OpResult(update.get(1), ApplyResult.Status.FAILED, "Not applied because disabling fake-mod-1.0.jar failed")))
 					.save(lastApplyFile);
@@ -144,6 +148,7 @@ public class HistoryGameTest implements FabricClientGameTest {
 				"entries newest first: " + view.entries());
 		check(applyB.id().equals(context.computeOnClient(mc -> ((HistoryScreen) mc.gui.screen()).selected())), "the newest entry is open");
 		check(entry(view, applyA.id()).undoable() && entry(view, benchmark.id()).undoable(), "applies with something left can be undone");
+		checkUndoButtons(context, true, "seeded history");
 		check(!entry(view, undo0.id()).undoable() && !entry(view, apply0.id()).undoable(), "undos and undone applies can't");
 
 		// AC3.5: the failed staged update shows the helper's reason and the attempt (attempts 1 before that run -> 2 of 3).
@@ -151,11 +156,12 @@ public class HistoryGameTest implements FabricClientGameTest {
 		check(failed.row() == HistoryModel.Row.UPDATED && JournalChange.STAGED.equals(failed.status()), "one staged update row: " + failed);
 		String reason = context.computeOnClient(mc -> HistoryScreen.failureText(failed).getString());
 		RigTune.LOGGER.info("HistoryGameTest: failed change shows: {}", reason);
-		check(reason.startsWith("Last attempt failed: Gave up after 10 attempt(s)") && reason.endsWith("(try 2 of 3 at restart)"), "failure text: " + reason);
+		check(reason.startsWith("Last attempt failed: Gave up after 10 tries") && reason.endsWith("(try 2 of 3 at restart)"), "failure text: " + reason);
 		check(reason.contains("fake-mod-1.0.jar -> fake-mod-1.0.jar.disabled") && !reason.contains(modsDir.toString()), "paths shown as names: " + reason);
 		List<String> rows = context.computeOnClient(mc -> ((HistoryScreen) mc.gui.screen()).changeRowText()).stream()
 				.map(row -> row.replaceAll("\\s+", " ")).toList();
-		check(rows.size() == 2 && rows.get(0).equals("Updated fakemod: fake-mod-1.0.jar → fake-mod-1.1.jar")
+		// docs/v0.4/SPEC.md 2c (AC2c.3): the mod's name, read from the jar at staging, not its id or file name.
+		check(rows.size() == 2 && rows.get(0).equals("Updated Sodium: fake-mod-1.0.jar → fake-mod-1.1.jar")
 				&& rows.get(1).startsWith("Last attempt failed: ") && rows.get(1).endsWith("(try 2 of 3 at restart)"), "the open entry's rows as drawn: " + rows);
 		for (int[] size : SIZES) {
 			resize(context, size[0], size[1], size[2]);
@@ -229,8 +235,37 @@ public class HistoryGameTest implements FabricClientGameTest {
 		HistoryModel.View view = waitForHistory(context);
 		check(view.state() == expected && view.entries().isEmpty(), screenshot + ": " + view);
 		check(context.computeOnClient(mc -> ((HistoryScreen) mc.gui.screen()).selected()) == null, screenshot + ": nothing selected");
+		checkUndoButtons(context, false, screenshot);
 		checkLayout(context, screenshot);
 		context.takeScreenshot(screenshot);
+	}
+
+	// docs/v0.4/SPEC.md 2a (AC2a.2): Undo last and Undo all are active only when something can be undone.
+	private static void checkUndoButtons(ClientGameTestContext context, boolean active, String name) {
+		context.runOnClient(mc -> {
+			Button last = findButton(mc.gui.screen(), "rigtune.screen.undo_last");
+			Button all = findButton(mc.gui.screen(), "rigtune.screen.undo_all");
+			check(last != null && all != null, name + ": both undo buttons are there");
+			check(last.active == active && all.active == active, name + ": Undo last/all active = " + last.active + "/" + all.active + ", expected " + active);
+		});
+	}
+
+	// A jar like the one staging reads (the download), with fabric.mod.json's name "Sodium"; outside the mods folder.
+	private static String fixtureJarName() {
+		Path jar = FabricLoader.getInstance().getGameDir().resolve("rigtune-gametest").resolve("sodium-fixture.jar");
+		try {
+			Files.createDirectories(jar.getParent());
+			try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jar))) {
+				zip.putNextEntry(new ZipEntry("fabric.mod.json"));
+				zip.write("{\"schemaVersion\":1,\"id\":\"sodium\",\"version\":\"0.9.2\",\"name\":\"Sodium\"}".getBytes(StandardCharsets.UTF_8));
+				zip.closeEntry();
+			}
+		} catch (IOException e) {
+			throw new AssertionError(e);
+		}
+		String name = ModJars.nameOf(jar);
+		check("Sodium".equals(name), "the fixture jar's name: " + name);
+		return name;
 	}
 
 	private static HistoryModel.View waitForHistory(ClientGameTestContext context) {

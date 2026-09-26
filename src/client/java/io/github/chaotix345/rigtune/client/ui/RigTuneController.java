@@ -115,6 +115,13 @@ public interface RigTuneController {
 		return null;
 	}
 
+	// v0.4 (WS-A, docs/v0.4/SPEC.md 2b; coordinator-approved addition to C4)
+
+	/** How settings keys and values are named, as History shows them (the Preview's rows; WS-P's profile import preview). Render thread. */
+	default HistoryModel.Labels settingLabels() {
+		return HistoryModel.Labels.RAW;
+	}
+
 	// v0.3 (WS-F)
 
 	/** The versions for the "Report a problem" issue title (v0.3 item 10); null while the report is being built. */

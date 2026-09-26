@@ -87,9 +87,9 @@ class HistoryScreenTest {
 
 	@Test
 	void anAbandonedChangeSaysItWasNotApplied() throws IOException {
-		Failure dropped = new Failure("op", Status.ABANDONED, PendingActions.Type.ENABLE_FILE, "dh", "dh.jar", "Gave up after 3 failed attempts: busy", 3);
+		Failure dropped = new Failure("op", Status.ABANDONED, PendingActions.Type.ENABLE_FILE, "dh", "dh.jar", "Gave up after 3 restarts: busy", 3);
 
-		assertEquals("Not applied: Gave up after 3 failed attempts: busy", english(HistoryScreen.failureText(change(JournalChange.ABANDONED, dropped))));
+		assertEquals("Not applied: Gave up after 3 restarts: busy", english(HistoryScreen.failureText(change(JournalChange.ABANDONED, dropped))));
 	}
 
 	@Test
@@ -108,6 +108,16 @@ class HistoryScreenTest {
 		assertEquals("Render Distance: (none) → 12", english(HistoryScreen.describe(setting)));
 		assertEquals("Updated sodium: s-1.jar → s-2.jar", english(HistoryScreen.describe(update)));
 		assertTrue(english(HistoryScreen.describe(change(JournalChange.APPLIED, null))).startsWith("Added dh.jar"));
+	}
+
+	// docs/v0.4/SPEC.md 2c: the mod's name when History has it.
+	@Test
+	void changesNameTheModWhenTheNameIsKnown() throws IOException {
+		Change added = new Change(Row.ADDED, List.of("c"), JournalChange.APPLIED, null, null, null, "sodium-0.7.1.jar", null, "sodium", null, "Sodium");
+		Change update = new Change(Row.UPDATED, List.of("a", "b"), JournalChange.APPLIED, null, null, null, "s-1.jar", "s-2.jar", "sodium", null, "Sodium");
+
+		assertEquals("Added Sodium", english(HistoryScreen.describe(added)));
+		assertEquals("Updated Sodium: s-1.jar → s-2.jar", english(HistoryScreen.describe(update)));
 	}
 
 	private static HistoryModel.Entry entry(Row... rows) {

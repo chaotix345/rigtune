@@ -238,9 +238,10 @@ class PreviewDifferentialTest {
 	void withItemsThatMeetInOneBatch() throws IOException {
 		ApplyPreview preview = check("items in one batch");
 
-		assertEquals(List.of("sodium-0.6.jar", "krypton-1.0.jar", "modmenu-1.0.jar", "fabric-api-1.0.jar", "sodium-extra-1.0.jar"),
+		// docs/v0.4/SPEC.md 2e: the two conflicting additions are refused together, whatever the tick order.
+		assertEquals(List.of("sodium-0.6.jar", "modmenu-1.0.jar", "fabric-api-1.0.jar", "sodium-extra-1.0.jar"),
 				preview.downloads().stream().map(ApplyPreview.Download::fileName).toList());
-		assertEquals(List.of("add:lithium"), preview.skipped().stream().map(ApplyPreview.Skipped::recommendationId).toList());
+		assertEquals(List.of("add:krypton", "add:lithium"), preview.skipped().stream().map(ApplyPreview.Skipped::recommendationId).toList());
 	}
 
 	private ApplyPreview check(String name) throws IOException {

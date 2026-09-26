@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client.undo;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ConfigTargets;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
+import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.history.UndoPlanner;
 import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
@@ -82,6 +83,13 @@ public final class GameState implements UndoPlanner.State {
 		}
 		ConfigTargets.Target target = ConfigTargets.forKey(targets, key);
 		return target == null ? null : config.computeIfAbsent(target, t -> t.reader().read(t.file())).get(key.substring(target.prefix().length()));
+	}
+
+	// docs/v0.4/SPEC.md 2n: a staged op's key, as Staging maps it when journaling (the op's file picks the namespace).
+	@Override
+	public String keyOf(PendingActions.Op op, String keyInFile) {
+		ConfigTargets.Target target = Staging.targetOf(targets, op);
+		return target == null ? null : target.prefix() + keyInFile;
 	}
 
 	@Override
