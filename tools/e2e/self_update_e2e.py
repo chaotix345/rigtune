@@ -1,9 +1,9 @@
 """Self-update end-to-end test (SPEC item 5): an installed RigTune finds its update on a fake Modrinth, applies it, and
 the post-exit helper swaps the jars; then the new version starts on the same instance and reads the old state.
 
-    python tools/e2e/self_update_e2e.py --name v010-to-dev --old-jar <rigtune-0.1.0.jar> --old-sha256 <hex>
-        --new-jar versions/26.2/build/libs/rigtune-0.2.0-dev+mc26.2.jar --work <scratch dir>
-        [--evidence docs/smoke/self-update/<name>] [--capture-fixtures src/test/resources/v010/captured] [--expect-history]
+    python tools/e2e/self_update_e2e.py --name dev-v030-to-040 --old-jar <rigtune-0.3.0+mc26.2.jar> --old-sha256 <hex>
+        --new-jar versions/26.2/build/libs/rigtune-0.4.0-dev+mc26.2.jar --work <scratch dir> --expect-history auto
+        [--evidence docs/smoke/self-update/<name>] [--capture-fixtures src/test/resources/v010/captured]
 
 Launches a real Minecraft client twice (./gradlew :<mc>:e2eClient), holding the machine-wide game-test lock. See
 tools/e2e/README.md."""
@@ -42,6 +42,13 @@ OPTIONS = "onboardAccessibility:false\nfullscreen:false\nskipMultiplayerWarning:
 LF = chr(10)
 CAPTURED = ("pending.json", "last-apply.json", "rigtune.json", "rules-cache.json", "helper.log")
 SEEDED = ("pending.json", "last-apply.json")
+# The released jars a self-update run starts from, by fabric.mod.json version: file name and sha256 of the GitHub
+# release asset. CI's "Compile the E2E drivers" step pins the same jars (tests/test_e2e_v04.py keeps them equal).
+RELEASED = {
+    "0.1.0": ("rigtune-0.1.0.jar", "8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950"),
+    "0.2.0+mc26.2": ("rigtune-0.2.0+mc26.2.jar", "67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9"),
+    "0.3.0+mc26.2": ("rigtune-0.3.0+mc26.2.jar", "5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9"),
+}
 UNDO_PHASES = ("mod-apply", "mod-undo", "mod-check")
 # Plan review B-M3, on the same instance after UNDO_PHASES: Undo this on an older Apply.
 ENTRY_PHASES = ("entry-apply", "entry-undo", "entry-check")
@@ -53,7 +60,7 @@ SECOND_ID, SECOND_PROJECT = "e2e-second", "E2EScnd1"
 PHASE_TITLES = {
     "update": "After the old version applied the update and quit (helper done)",
     "verify": "After the new version started on the same instance",
-    "mod-apply": "After 0.2 applied {add " + ADDED_ID + " from Modrinth, disable " + OTHER_ID + "} and quit (helper done)",
+    "mod-apply": "After RigTune applied {add " + ADDED_ID + " from Modrinth, disable " + OTHER_ID + "} and quit (helper done)",
     "mod-undo": "After Undo last apply and a restart (helper done)",
     "mod-check": "After the next start",
     "entry-apply": "B-M3: after two Applies in one start, each adding a mod (" + FIRST_ID + ", then " + SECOND_ID + "), and quit (helper done)",
@@ -91,11 +98,13 @@ class Run:
         self.checks = {p: [] for p in (UNDO_PHASES + ENTRY_PHASES if self.undo else ("update", "verify"))}
         self.facts = {}
         self.jars = self.run_dir / "jars"
-        # Test mods: disabled by 0.1.0 with its update (so the legacy import has a non-RigTune change), and for the undo
-        # scenario one served by the fake Modrinth to add and one in mods/ to disable.
+        # Test mods: disabled by the old version with its update (so its journal or the legacy import has a non-RigTune
+        # change), and for the undo scenario one served by the fake Modrinth to add and one in mods/ to disable.
         self.legacy_jar = self.jars / "e2e-legacy-1.0.0.jar" if args.legacy_disable and not self.undo else None
         # H-M2: a real 0.1.0 instance's state (tools/e2e/seeds/<name>); its pending ops are expected to be carried over.
         self.seed = load_seed(args.seed) if args.seed else None
+        # --expect-history resolved against the old jar's version (prepare).
+        self.expect_history = None
         self.carried = []
         self.added_jar = self.jars / "{}-1.0.0.jar".format(ADDED_ID)
         self.other_jar = self.jars / "{}-1.0.0.jar".format(OTHER_ID)
@@ -219,7 +228,12 @@ class Run:
             if self.args.old_sha256 and old_sha256 != self.args.old_sha256.lower():
                 raise SystemExit("{} has sha256 {}, expected {}".format(self.old_jar, old_sha256, self.args.old_sha256))
             self.facts["old"] = {"file": self.old_jar.name, "version": e2e_env.mod_json(self.old_jar)["version"], "sha256": old_sha256}
-            self.log("old {file} {version} sha256 {sha256}".format(**self.facts["old"]))
+            problem = released_problem(self.facts["old"]["version"], old_sha256)
+            if problem:
+                raise SystemExit("{}: {}".format(self.old_jar, problem))
+            self.expect_history = resolve_expect_history(self.args.expect_history, self.facts["old"]["version"])
+            self.log("old {file} {version} sha256 {sha256}".format(**self.facts["old"])
+                     + ("; expected history: " + self.expect_history if self.expect_history else ""))
         self.facts["new"] = {"file": self.new_jar.name, "version": e2e_env.mod_json(self.new_jar)["version"],
                              "sha256": e2e_checks.digest(self.new_jar, "sha256")}
         self.log("new {file} {version} sha256 {sha256}".format(**self.facts["new"]))
@@ -454,7 +468,7 @@ class Run:
             self.snapshot("verify")
         legacy = [self.legacy_jar.name] if self.legacy_jar is not None else []
         checks = e2e_checks.after_verify(self.instance, self.new_jar, self.driver("verify"), last_apply.get("finishedAt"),
-                                         None if self.seed else mods_before, self.args.expect_history,
+                                         None if self.seed else mods_before, self.expect_history,
                                          legacy_disables=legacy, old_jar=self.old_jar, statuses_before=statuses_before)
         if self.seed is not None:
             log = self.out / "latest-verify.log"
@@ -603,9 +617,12 @@ class Run:
         else:
             lines += ["- Old: `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["old"]),
                       "- New (served by the fake Modrinth): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"])]
+            if self.expect_history:
+                lines.append("- Expected history: `{}` (a {} old side)".format(
+                    self.expect_history, "0.1.x" if self.expect_history == "legacy-import" else "0.2.0 or later"))
             if self.legacy_jar is not None:
-                lines.append("- 0.1.0 also disabled `{}` in the same apply (so the 0.2 legacy import has a change that isn't "
-                             "RigTune's)".format(self.legacy_jar.name))
+                lines.append("- The old version also disabled `{}` in the same apply (a change that isn't RigTune's own, for "
+                             "the journal check)".format(self.legacy_jar.name))
             if self.seed is not None:
                 lines += ["- Seeded (plan review H-M2) from `{}`: {}".format(self.scrub(str(self.seed["dir"])), self.seed.get("description", "")),
                           "- Fake jars: " + ", ".join("`{path}` ({id} {version})".format(**j) for j in self.seed["jars"]),
@@ -693,6 +710,28 @@ def load_seed(folder):
     return seed
 
 
+def released_problem(version, sha256):
+    """None, or why a jar claiming a released version isn't that release (RELEASED)."""
+    pinned = RELEASED.get(version)
+    if pinned is None or pinned[1] == sha256:
+        return None
+    return "version {} has sha256 {}, but the released {} has {}".format(version, sha256, pinned[0], pinned[1])
+
+
+def resolve_expect_history(value, old_version):
+    """--expect-history against the old jar's version: "auto" becomes what that version journals
+    (e2e_checks.history_expectation); an explicit value that doesn't match it is refused."""
+    if not value:
+        return None
+    expected = e2e_checks.history_expectation(old_version)
+    if value == "auto":
+        return expected
+    if value != expected:
+        raise SystemExit("--expect-history {} doesn't fit an old side of version {} (it journals as {}); use auto".format(
+            value, old_version, expected))
+    return value
+
+
 def owner_text(agent, repo, run_dir, started):
     """The lock's owner.txt as PLAN's lock protocol asks (agent, worktree, started), plus the run folder that proves
     ownership on release."""
@@ -743,24 +782,24 @@ def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--name", required=True, help="scenario name, e.g. v010-to-dev")
     parser.add_argument("--scenario", choices=("self-update", "undo"), default="self-update",
-                        help="self-update (default), or undo: 0.2 applies a mod change and undoes it after a restart (M14)")
-    parser.add_argument("--old-jar", help="self-update: the installed RigTune jar (e.g. the released v0.1.0)")
+                        help="self-update (default), or undo: the new version applies mod changes and undoes them after a restart (M14, B-M3)")
+    parser.add_argument("--old-jar", help="self-update: the installed RigTune jar (a released one: 0.1.0, 0.2.0 or 0.3.0)")
     parser.add_argument("--old-sha256", help="expected sha256 of --old-jar")
-    parser.add_argument("--new-jar", required=True, help="self-update: the update the fake Modrinth serves; undo: the installed 0.2 jar")
+    parser.add_argument("--new-jar", required=True, help="self-update: the update the fake Modrinth serves; undo: the installed jar")
     parser.add_argument("--seed", help="self-update: seed the instance from a folder like tools/e2e/seeds/v010-dh (H-M2)")
     parser.add_argument("--legacy-disable", action="store_true",
-                        help="self-update: 0.1.0 also disables a test mod, so the 0.2 legacy import has a change that isn't RigTune's")
-    parser.add_argument("--driver-api-jar", help="the released v0.1.0 jar the driver compiles against (default --old-jar)")
+                        help="self-update: the old version also disables a test mod in the same apply, so the journal check has a change that isn't RigTune's")
+    parser.add_argument("--driver-api-jar", help="the released jar the driver compiles against (default --old-jar)")
     parser.add_argument("--work", required=True, help="scratch folder for the run (a fresh instance is made inside)")
     parser.add_argument("--mc", default="26.2")
     parser.add_argument("--fabric-api", help="fabric-api jar (default: from the Gradle cache)")
     parser.add_argument("--evidence", help="copy the evidence here (replaces an earlier evidence folder only)")
     parser.add_argument("--capture-fixtures", help="write the old version's files here, templated (${INSTANCE}); passing runs only")
     parser.add_argument("--capture-anyway", action="store_true", help="capture fixtures from a failed run too (see manifest.json verdict)")
-    parser.add_argument("--expect-history", nargs="?", const="legacy-import", choices=("legacy-import", "own-update"),
-                        help="legacy-import (the default value; a 0.1.x old side): the new version imports 0.1.x's "
-                             "last apply once; own-update (a 0.2.x old side): the old version's journal of its own "
-                             "update is read as it is")
+    parser.add_argument("--expect-history", nargs="?", const="legacy-import", choices=("auto", "legacy-import", "own-update"),
+                        help="auto: from the old jar's version; legacy-import (the value without an argument; a 0.1.x "
+                             "old side): the new version imports 0.1.x's last apply once; own-update (a 0.2.0 or later "
+                             "old side): the old version's journal of its own update is read as it is")
     parser.add_argument("--port", type=int, default=443)
     parser.add_argument("--lock", default=DEFAULT_LOCK, help="game-test lock folder, or 'none'")
     parser.add_argument("--agent", default="ws-h", help="the agent named in the lock's owner.txt")

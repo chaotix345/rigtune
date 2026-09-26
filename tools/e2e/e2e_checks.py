@@ -13,6 +13,16 @@ import e2e_env
 
 # 3a's notice (RealController.droppedQueuedUpdates), when a staged update of a mod with its own update queued is dropped.
 QUEUED_UPDATE_DROPPED = "rigtune.status.queued_update_dropped"
+# 3e (v0.3 WS-B): the WARN line for a change the last exit couldn't apply names its attempt out of the helper's three.
+ATTEMPT = re.compile(r"attempt \d+ of 3", re.IGNORECASE)
+
+
+def history_expectation(old_version):
+    """What the new version finds in history.json after updating from old_version: 0.1.x has no journal, so the new
+    version imports its last apply once ("legacy-import"); 0.2.0 and later journal their own update as an apply entry
+    ("own-update")."""
+    major, minor = (int(part) for part in re.match(r"(\d+)\.(\d+)", old_version).groups())
+    return "legacy-import" if (major, minor) < (0, 2) else "own-update"
 
 
 @dataclass(frozen=True)
@@ -69,7 +79,8 @@ def _load(path):
 def after_update(instance, old_jar, new_jar, driver, server_log, helper_cmdlines, separator=";", extra_disables=(),
                  carried=()):
     """SPEC 5.5 and AC5.2, after the old version applied the update and the post-exit helper finished. extra_disables:
-    jar names the old version disabled in the same apply (so the 0.2 legacy import has something that is not RigTune's).
+    jar names the old version disabled in the same apply (so its journal, or the new version's legacy import of 0.1.x,
+    has something that is not RigTune's).
     carried: the seeded pending.json's ops (H-M2), which the helper retried and failed again, so they stay pending."""
     instance, old_jar, new_jar = Path(instance), Path(old_jar), Path(new_jar)
     mods = instance / "mods"
@@ -94,7 +105,7 @@ def after_update(instance, old_jar, new_jar, driver, server_log, helper_cmdlines
                         "{} exists: {}".format(disabled.name, disabled.is_file())))
     if extra_disables:
         state = {name: ((mods / (name + ".disabled")).is_file(), (mods / name).exists()) for name in extra_disables}
-        checks.append(Check("the other mod 0.1.0 changed is disabled", all(off and not on for off, on in state.values()),
+        checks.append(Check("the other mod the old version changed is disabled", all(off and not on for off, on in state.values()),
                             "(.disabled exists, jar exists): {}".format(state)))
 
     pending = rigtune_dir / "pending.json"
@@ -160,9 +171,9 @@ def depends_not_stricter(old_jar, new_jar):
 def after_verify(instance, new_jar, driver, last_apply_finished_at, mods_before, expect_history, legacy_disables=(),
                  old_jar=None, statuses_before=None):
     """SPEC 5.6: the new version, relaunched on the same instance, reads the old version's state. expect_history:
-    None, "legacy-import" (a 0.1.x old side; True means the same) or "own-update" (a 0.2.x old side: old_jar and the
-    history statuses before the relaunch are needed). legacy_disables: jar names the legacy import must hold as APPLIED
-    disables."""
+    None, "legacy-import" (a 0.1.x old side; True means the same) or "own-update" (a 0.2.0 or later old side: old_jar and
+    the history statuses before the relaunch are needed); see history_expectation. legacy_disables: jar names the old
+    version disabled in the same apply, which the legacy import or its own entry must hold as APPLIED disables."""
     instance, new_jar = Path(instance), Path(new_jar)
     mods = instance / "mods"
     rigtune_dir = instance / "config" / "rigtune"
@@ -194,9 +205,9 @@ def after_verify(instance, new_jar, driver, last_apply_finished_at, mods_before,
     checks.append(Check("no new pending.json", not (rigtune_dir / "pending.json").exists(), ""))
 
     if expect_history == "own-update":
-        checks.append(own_update_history(instance, old_jar, new_jar, statuses_before))
+        checks.append(own_update_history(instance, old_jar, new_jar, statuses_before, legacy_disables=legacy_disables))
     elif expect_history:
-        # SPEC item 3: the first 0.2 run imports 0.1.0's last-apply.json once, as one legacy-import entry, without
+        # v0.2 SPEC item 3: the new version's first run imports 0.1.x's last-apply.json once, as one legacy-import entry, without
         # RigTune's own jars. A file of another shape fails rather than passing with nothing checked.
         history = _load(rigtune_dir / "history.json")
         entries = history.get("entries") if isinstance(history, dict) else None
@@ -247,7 +258,7 @@ def after_seeded_verify(instance, carried, mod_names, driver, log_text, failed_o
 
     # SPEC 3e: op, file, reason, attempt. Identical lines count once.
     warns = list(dict.fromkeys(line for line in log_text.splitlines()
-                               if "/WARN]" in line and re.search(r"attempt \d+ of 3", line, re.IGNORECASE)))
+                               if "/WARN]" in line and ATTEMPT.search(line)))
 
     def files(op):
         """The op's own file names only: one group's ops share a mod id, and a reason can name another op's file."""
@@ -310,14 +321,16 @@ def _diff(before, after):
                                                      sorted(k for k in set(before) & set(after) if before[k] != after[k]))
 
 
-def own_update_history(instance, old_jar, new_jar, statuses_before):
-    """A 0.2.x old side journals its own update as one apply entry (disable the old jar, enable the new one), which its
-    helper marks APPLIED. The new version must read that journal as it is: no legacy import, no status changed by the
-    relaunch (SPEC compatibility promise: every file 0.2.0 wrote keeps working)."""
+def own_update_history(instance, old_jar, new_jar, statuses_before, legacy_disables=()):
+    """A 0.2.0 or later old side journals its own update as one apply entry (disable the old jar, enable the new one, plus
+    legacy_disables: other jars it disabled in the same apply), which its helper marks APPLIED. The new version must
+    read that journal as it is: no legacy import, no status changed by the relaunch (SPEC compatibility promise: every
+    file an older version wrote keeps working)."""
     entries = history_entries(instance)
     got = sorted((c.get("type"), c.get("action"), c.get("file"), c.get("status"))
                  for e in entries or [] for c in e.get("changes", []))
-    wanted = sorted([("file", "disable", Path(old_jar).name, "APPLIED"), ("file", "enable", Path(new_jar).name, "APPLIED")])
+    wanted = sorted([("file", "disable", Path(old_jar).name, "APPLIED"), ("file", "enable", Path(new_jar).name, "APPLIED")]
+                    + [("file", "disable", name, "APPLIED") for name in legacy_disables])
     kinds = [e.get("kind") for e in entries or []]
     statuses = history_statuses(instance)
     ok = entries is not None and kinds == ["apply"] and got == wanted and statuses == statuses_before
@@ -354,7 +367,7 @@ def _clean(instance):
 
 
 def after_mod_apply(instance, added_jar, other_name, driver):
-    """0.2 applied {add a mod from Modrinth, disable another} and the helper ran."""
+    """The installed RigTune (0.2 or later) applied {add a mod from Modrinth, disable another} and the helper ran."""
     instance, added_jar = Path(instance), Path(added_jar)
     mods = instance / "mods"
     driver = driver or {}
@@ -380,7 +393,7 @@ def after_mod_apply(instance, added_jar, other_name, driver):
 
 
 def after_mod_undo(instance, added_name, other_name, driver, apply_entry_id):
-    """0.2 undid the last apply (both changes staged as reversals) and the helper ran after the restart."""
+    """RigTune undid the last apply (both changes staged as reversals) and the helper ran after the restart."""
     instance = Path(instance)
     mods = instance / "mods"
     driver = driver or {}

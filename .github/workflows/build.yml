@@ -53,13 +53,16 @@ jobs:
           mkdir -p "$old"
           gh release download v0.1.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.1.0.jar' -D "$old" --clobber
           gh release download v0.2.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.2.0+mc26.2.jar' -D "$old" --clobber
+          gh release download v0.3.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.3.0+mc26.2.jar' -D "$old" --clobber
           sha256sum -c - <<EOF
           8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950  $old/rigtune-0.1.0.jar
           67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9  $old/rigtune-0.2.0+mc26.2.jar
+          5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9  $old/rigtune-0.3.0+mc26.2.jar
           EOF
           ./gradlew compileE2eUndoJava
           ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.1.0.jar"
           ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.2.0+mc26.2.jar"
+          ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.2.jar"
       - name: Upload jars
         if: always()
         uses: actions/upload-artifact@v7
