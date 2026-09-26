@@ -25,6 +25,7 @@ import io.github.chaotix345.rigtune.client.stutter.StutterService;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
+import io.github.chaotix345.rigtune.client.undo.DisableGuard;
 import io.github.chaotix345.rigtune.client.undo.GameState;
 import io.github.chaotix345.rigtune.client.undo.Staging;
 import io.github.chaotix345.rigtune.client.undo.UndoService;
@@ -429,6 +430,7 @@ public final class RealController implements RigTuneController {
 		List<Op> immediateOps = new ArrayList<>();
 		Map<String, List<String>> immediateOpIds = new LinkedHashMap<>();
 		List<Recommendation> downloads = new ArrayList<>();
+		Set<String> disablesAllowed = DisableGuard.allowed(pendingFile, modsDir, selected);
 		for (Recommendation r : selected) {
 			switch (r.action()) {
 				case Action.SetSetting set when set.key().startsWith(VANILLA) -> vanilla.put(set.key(), set.newValue());
@@ -437,7 +439,7 @@ public final class RealController implements RigTuneController {
 					configPatches.computeIfAbsent(target, t -> new LinkedHashMap<>()).put(set.key().substring(target.prefix().length()), set.newValue());
 					configIds.put(set.key(), r.id());
 				}
-				case Action.DisableMod disable when SafeFileNames.isDirectChild(modsDir, disable.file()) -> {
+				case Action.DisableMod disable when SafeFileNames.isDirectChild(modsDir, disable.file()) && disablesAllowed.contains(r.id()) -> {
 					Op op = Op.disableFile(disable.file());
 					immediateOps.add(op);
 					immediateOpIds.computeIfAbsent(r.id(), k -> new ArrayList<>()).add(op.id());
