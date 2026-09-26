@@ -31,7 +31,7 @@ class StutterStoreTest {
 		return new StutterReport(startedAt, StutterReport.MONITOR, "26.2", "G1", 4096, 900, 812.5, 97000, 119.4, 61.2,
 				new long[]{1, 2, 3, 4, 5, 6, 7, 8, 9}, new long[]{10, 20, 30, 40, 50, 60, 70, 80, 90}, new StutterReport.Spikes(9, 2, 1, 0), 1810.0,
 				Map.of("gc", 0.44, "unknown", 0.56), Map.of("worldSave", 7), w, new StutterReport.Facts(81, 2, 0, 0, 21.7), List.of("ram-stutter-gc-heap"), true,
-				true);
+				true, 10);
 	}
 
 	@Test
@@ -116,6 +116,22 @@ class StutterStoreTest {
 		assertEquals(JsonStateFile.Saved.OK, store.clear());
 		assertEquals(List.of(), store.sessions());
 		assertTrue(Files.readString(file).contains("fromTheFuture"));
+	}
+
+	// A hand-edited file: missing fields and nulls read back as empty values, and the summary and screen code never meets
+	// a null.
+	@Test
+	void aHandEditedSessionWithNullsReadsSafely() throws IOException {
+		Path file = StutterStore.file(dir);
+		Files.createDirectories(file.getParent());
+		Files.writeString(file, "{\"formatVersion\": 1, \"sessions\": [{\"frames\": 5, \"worst\": [null, {\"ms\": 30, \"causes\": [null, \"gc:high\"]}], "
+				+ "\"advice\": [null], \"causes\": {\"gc\": null}}]}", StandardCharsets.UTF_8);
+		StutterReport r = new StutterStore(dir).latest();
+		assertEquals(5, r.frames());
+		assertEquals(1, r.worst().size());
+		assertEquals(List.of("gc:high"), r.worst().getFirst().causes());
+		assertEquals(List.of(), r.advice());
+		assertTrue(StutterSummary.text(r, List.of()).startsWith("**RigTune Stutter Doctor** · session"));
 	}
 
 	@Test

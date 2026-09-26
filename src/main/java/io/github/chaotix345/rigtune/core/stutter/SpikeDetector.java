@@ -112,7 +112,7 @@ public final class SpikeDetector {
 			long end = snapshot.candidate(r, FrameRing.C_END) & ~1L;
 			long d = snapshot.candidate(r, FrameRing.C_DURATION);
 			long b = snapshot.candidate(r, FrameRing.C_BASELINE);
-			if (end < before && isSpike(d, b)) {
+			if (end <= before && isSpike(d, b)) {
 				spikes.add(new Spike(end, d, b));
 			}
 		}

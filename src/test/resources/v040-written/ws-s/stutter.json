@@ -131,7 +131,8 @@
         "ram-stutter-gc-heap"
       ],
       "enoughData": true,
-      "phaseTiming": true
+      "phaseTiming": true,
+      "hitches": 14
     }
   ]
 }

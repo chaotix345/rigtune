@@ -8,10 +8,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 // Turns a capture (copies of its rings) into a StutterReport and StutterFacts (docs/v0.4/SPEC.md 5): spikes, their
 // attribution, the session aggregates and the GC facts. Pure and off the render thread (StutterService runs it on a
@@ -24,13 +26,20 @@ public final class StutterAnalyzer {
 	static final long SAVE_TIMEOUT = 10 * SECOND;
 	static final long TELEPORT_WINDOW = 10 * SECOND;
 	static final double CONTENTION = 0.85;
+	static final int VANILLA_BACKLOG = 8;
 
 	// The capture: its frame ring, the shared rings (filtered to [startNanos, endNanos]), and what the report needs about
 	// the machine. collector: the family (g1, zgc, ...); totalRamMb null when unknown. phaseTiming: the phase timers were
-	// complete (S-M1). deferModeWaits: Sodium's Chunk Updates mode makes frames wait for builds.
+	// complete (S-M1). deferModeWaits: Sodium's Chunk Updates mode makes frames wait for builds. gcMeasured: a GC listener
+	// ran during the capture.
 	public record Input(FrameRing.Snapshot frames, StutterRings.Snapshot rings, long startNanos, long endNanos, Instant startedAt, String source,
 			@Nullable String mc, @Nullable String collector, long heapMaxMb, @Nullable Long totalRamMb, int cores, boolean phaseTiming,
-			boolean deferModeWaits) {
+			boolean deferModeWaits, boolean gcMeasured) {
+		public Input(FrameRing.Snapshot frames, StutterRings.Snapshot rings, long startNanos, long endNanos, Instant startedAt, String source,
+				@Nullable String mc, @Nullable String collector, long heapMaxMb, @Nullable Long totalRamMb, int cores, boolean phaseTiming,
+				boolean deferModeWaits) {
+			this(frames, rings, startNanos, endNanos, startedAt, source, mc, collector, heapMaxMb, totalRamMb, cores, phaseTiming, deferModeWaits, true);
+		}
 	}
 
 	public record Result(StutterReport report, StutterFacts facts, List<Attributor.Attribution> attributions) {
@@ -55,7 +64,8 @@ public final class StutterAnalyzer {
 					f.candidate(r, FrameRing.C_RENDER_BASE), (int) chunks, (int) (chunks >>> 32)));
 		}
 		GcSummary gc = gc(in);
-		Attributor.Context ctx = new Attributor.Context(gc.events(), saves(in), teleports(in), movingFast(in), samples(in), Math.max(1, in.cores()),
+		List<Attributor.Sample> samples = samples(in);
+		Attributor.Context ctx = new Attributor.Context(gc.events(), saves(in), teleports(in), movingFast(in), samples, Math.max(1, in.cores()),
 				in.phaseTiming(), in.deferModeWaits());
 		List<Attributor.Attribution> attributions = new ArrayList<>();
 		for (SpikeDetector.Spike s : spikes) {
@@ -105,17 +115,29 @@ public final class StutterAnalyzer {
 		FrameStats stats = FrameStats.of(gameplayDurations(ends));
 		long[] histogramMs = Arrays.stream(f.histogramNanos()).map(ns -> Math.round(ns / 1e6)).toArray();
 		boolean enough = spikes.size() >= MIN_SPIKES && gameplaySeconds >= MIN_GAMEPLAY_SECONDS;
+		int hitches = SpikeDetector.hitches(spikes).size();
 		StutterReport.Facts facts = new StutterReport.Facts(gc.liveSetPercent() == null ? null : (int) Math.round(gc.liveSetPercent()), gc.fullPauses(),
 				gc.stalls(), gc.explicit(), in.rings().clock().calibrated() ? round(in.rings().clock().offsetMs(), 1) : null);
 		StutterReport report = new StutterReport(in.startedAt().toString(), in.source(), in.mc(), displayName(in.collector()), in.heapMaxMb(),
 				round((in.endNanos() - in.startNanos()) / 1e9, 1), round(gameplaySeconds, 1), f.gameplayFrames(),
 				round(gameplaySeconds > 0 ? f.gameplayFrames() / gameplaySeconds : 0, 1), round(stats.onePercentLowFps(), 1), f.histogramCounts().clone(),
 				histogramMs, new StutterReport.Spikes(severity[0], severity[1], severity[2], severity[3]), round(lost / 1e6, 1), causes, tags, worst, facts,
-				List.of(), enough, in.phaseTiming());
+				List.of(), enough, in.phaseTiming(), hitches);
 
 		Long room = in.totalRamMb() == null || in.totalRamMb() <= 0 ? null : Math.min(in.totalRamMb() / 2, in.totalRamMb() - 4096) - in.heapMaxMb();
+		Set<String> unmeasured = new HashSet<>(List.of(Attributor.RENDER));
+		if (!in.rings().clock().calibrated() || !in.gcMeasured()) {
+			unmeasured.add(Attributor.GC);
+		}
+		if (!in.phaseTiming()) {
+			unmeasured.addAll(List.of(Attributor.CHUNK_LOAD, Attributor.CHUNK_BUILD, Attributor.TICK));
+		}
+		if (samples.isEmpty()) {
+			unmeasured.addAll(List.of(Attributor.DH, Attributor.CPU_CONTENTION));
+		}
 		StutterFacts stutterFacts = new StutterFacts(claimedShares, taggedShares, gc.fullPauses(), gc.stalls(), gc.explicit(), gc.liveSetPercent(), room,
-				contentionShare(in), gameplaySeconds > 0 ? spikes.size() / (gameplaySeconds / 60) : 0, in.collector());
+				contentionShare(in, samples), gameplaySeconds > 0 ? spikes.size() / (gameplaySeconds / 60) : 0, in.collector(), in.gcMeasured(),
+				unmeasured);
 		return new Result(report, stutterFacts, attributions);
 	}
 
@@ -247,15 +269,16 @@ public final class StutterAnalyzer {
 			long scheduled = s[i + StutterRings.S_BACKLOG];
 			long busy = s[i + StutterRings.S_BUSY];
 			long total = s[i + StutterRings.S_TOTAL];
-			boolean backlog = total > 0 ? scheduled > 0 && busy >= total : busy < 0 && scheduled > 0;
+			// Sodium: jobs waiting with every builder busy. Vanilla (no thread counts): a real queue, not the few sections that
+			// are always in flight while moving.
+			boolean backlog = total > 0 ? scheduled > 0 && busy >= total : busy < 0 && scheduled >= VANILLA_BACKLOG;
 			out.add(new Attributor.Sample(t - window, t, (double) s[i + StutterRings.S_DH] / window, (double) s[i + StutterRings.S_PROCESS] / window, top,
 					backlog));
 		}
 		return out;
 	}
 
-	private static @Nullable Double contentionShare(Input in) {
-		List<Attributor.Sample> samples = samples(in);
+	private static @Nullable Double contentionShare(Input in, List<Attributor.Sample> samples) {
 		if (samples.isEmpty()) {
 			return null;
 		}

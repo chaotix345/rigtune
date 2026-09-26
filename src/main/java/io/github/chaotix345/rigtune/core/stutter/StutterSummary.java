@@ -31,7 +31,7 @@ public final class StutterSummary {
 
 	public static String text(StutterReport r, List<StutterAdvisor.Fired> advice) {
 		StringBuilder out = new StringBuilder();
-		out.append("**RigTune Stutter Doctor** · ").append(r.source().equals(StutterReport.BENCHMARK) ? "benchmark" : "session");
+		out.append("**RigTune Stutter Doctor** · ").append(StutterReport.BENCHMARK.equals(r.source()) ? "benchmark" : "session");
 		if (r.mc() != null) {
 			out.append(" · Minecraft ").append(r.mc());
 		}
@@ -42,8 +42,8 @@ public final class StutterSummary {
 		out.append(String.format(Locale.ROOT, "%s (%s of gameplay) · %,d frames · avg %.0f FPS · 1%% low %.0f FPS%n", clock(r.sessionSeconds()),
 				clock(r.gameplaySeconds()), r.frames(), r.avgFps(), r.onePercentLowFps()));
 		StutterReport.Spikes s = r.spikes();
-		out.append(String.format(Locale.ROOT, "%d spikes (%d minor, %d major, %d severe, %d freezes) · %.1f s lost%n", s.total(), s.minor(), s.major(),
-				s.severe(), s.freeze(), r.lostMs() / 1000));
+		out.append(String.format(Locale.ROOT, "%d spikes (%d minor, %d major, %d severe, %d freezes) in %d hitches · %.1f s lost%n", s.total(), s.minor(),
+				s.major(), s.severe(), s.freeze(), r.hitches(), r.lostMs() / 1000));
 		if (!r.enoughData()) {
 			out.append("Not enough data yet (at least 3 spikes and 2 minutes of gameplay)\n");
 		}

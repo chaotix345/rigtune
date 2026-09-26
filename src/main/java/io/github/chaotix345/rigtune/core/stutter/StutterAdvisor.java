@@ -48,6 +48,11 @@ public final class StutterAdvisor {
 		return requires == null || requires.stream().allMatch(feature -> feature != null && SUPPORTED_FEATURES.contains(feature));
 	}
 
+	// For a capture: no advice without enough data for a verdict (fewer than 3 spikes or 2 minutes of gameplay).
+	public static List<Fired> evaluate(@Nullable RulesDocument rules, EvalContext ctx, boolean enoughData) {
+		return enoughData ? evaluate(rules, ctx) : List.of();
+	}
+
 	// ctx must carry the session's facts (EvalContext.withStutter); without them nothing fires.
 	public static List<Fired> evaluate(@Nullable RulesDocument rules, EvalContext ctx) {
 		List<Fired> out = new ArrayList<>();

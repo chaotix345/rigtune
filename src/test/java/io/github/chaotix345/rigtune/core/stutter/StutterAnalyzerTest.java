@@ -195,6 +195,40 @@ class StutterAnalyzerTest {
 		assertArrayEquals(new long[]{0, 0, frames * 16, 0, 40, 0, 0, 0, 0}, report.histogramTimeMs());
 	}
 
+	// Review finding 2: what the capture couldn't measure stays UNKNOWN for the rules (also under `not`).
+	@Test
+	void unmeasuredCausesAndTags() {
+		Capture c = new Capture().frames(150, Map.of(20, 80 * MS, 40, 80 * MS), false);
+		StutterFacts noPhases = StutterAnalyzer.analyze(new StutterAnalyzer.Input(c.ring.snapshot(), c.rings.snapshot(), T0, c.now, STARTED,
+				StutterReport.MONITOR, "26.2", "g1", 4096, null, 16, false, false, true)).facts();
+		assertEquals(java.util.Set.of(Attributor.GC, Attributor.CHUNK_LOAD, Attributor.CHUNK_BUILD, Attributor.TICK, Attributor.RENDER, Attributor.DH,
+				Attributor.CPU_CONTENTION), noPhases.unmeasured(), "no GC yet, no phase timers, no samples");
+		assertTrue(noPhases.gcMeasured());
+		c.gc(T0 + 60 * S, 2, GcKind.PAUSE, 0);
+		StutterFacts measured = c.analyze(true).facts();
+		assertEquals(java.util.Set.of(Attributor.RENDER, Attributor.DH, Attributor.CPU_CONTENTION), measured.unmeasured());
+		StutterFacts noListener = StutterAnalyzer.analyze(new StutterAnalyzer.Input(c.ring.snapshot(), c.rings.snapshot(), T0, c.now, STARTED,
+				StutterReport.MONITOR, "26.2", null, 4096, null, 16, true, false, false)).facts();
+		assertFalse(noListener.gcMeasured());
+		assertTrue(noListener.unmeasured().contains(Attributor.GC));
+	}
+
+	@Test
+	void hitchesCountSpikesUnder100msApartOnce() {
+		Capture c = new Capture().frames(125, Map.of(20, 40 * MS), false);
+		// A burst: three 45 ms frames with one normal frame between them, one hitch.
+		for (int i = 0; i < 3; i++) {
+			c.now += 45 * MS;
+			c.ring.frame(c.now, 45 * MS, false, 300_000, MS, 14 * MS, 0);
+			c.now += 16 * MS;
+			c.ring.frame(c.now, 16 * MS, false, 300_000, MS, 14 * MS, 0);
+		}
+		c.frames(5, Map.of(), false);
+		StutterReport report = c.analyze(true).report();
+		assertEquals(4, report.spikes().total());
+		assertEquals(2, report.hitches());
+	}
+
 	@Test
 	void collectorDisplayNames() {
 		assertEquals("ZGC", StutterAnalyzer.displayName("zgc"));

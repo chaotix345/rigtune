@@ -253,6 +253,8 @@ public class StutterGameTest implements FabricClientGameTest {
 			StutterScreen stutter = (StutterScreen) screen;
 			int top = buttons.stream().mapToInt(AbstractWidget::getY).min().orElse(screen.height);
 			check(stutter.list() != null && stutter.list().getY() + stutter.list().getHeight() <= top, name + ": the list ends above the buttons");
+			check(stutter.list().barsFit(), name + ": every bar's label and value fit their columns");
+			check(stutter.list().getRowRight() <= screen.width, name + ": the rows end inside the screen");
 		});
 	}
 

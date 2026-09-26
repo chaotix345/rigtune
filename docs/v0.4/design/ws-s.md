@@ -82,6 +82,33 @@ method + `GC_COLLECTORS`), en_us.json (the `rigtune.stutter.*` block), README "S
 16. **Tests owned elsewhere, touched:** RulesContractsTest's stutter expectation (stub → decided with facts);
     KnowledgeV2ScenarioTest's stutter part of the fires-nothing check moved into StutterSeedScenarioTest (WS-R handoff).
 
+17. **No advice without enough data** (self-review H1): `StutterAdvisor.evaluate(rules, ctx, enoughData)`; fewer than 3
+    spikes or under 2 minutes of gameplay shows "Not enough data" and no advice (also for short benchmark captures).
+    AC5.8 B's forced-GC run therefore needs at least 2 minutes of gameplay for `stutter-gc-explicit` to show.
+18. **Fail closed on what wasn't measured** (self-review M2): `StutterFacts` gained `gcMeasured` and `unmeasured` (old
+    10-arg constructor kept = everything measured). The gc* counts are UNKNOWN without a GC listener; the `gc` share
+    without a calibrated clock; `chunkLoad`/`chunkBuild`/`tick` without phase timing; `render` always (it never claims);
+    `dh`/`cpuContention` without sampler data. So `not {gcFullPausesAtLeast: 1}` can't fire on "never measured".
+19. **Hitches** (self-review M5): the report counts spikes (as the research's worked example does) and also hitches
+    (spikes < 100 ms apart once): header "12 spikes (...) in 9 hitches", stutter.json `hitches`.
+20. **stutter.json I/O is ordered** (M3/M4): saves, clears and the saved-summary load go through one chained future on
+    Probes.EXECUTOR; a Clear bumps a generation so an older save can't bring its summary back; the summary shows as
+    saved only when the write succeeded; CLIENT_STOPPING waits up to 2 s for a queued save before saving the running
+    session.
+21. **A running session pauses during a benchmark run** (L6) and resumes when it ends, so its sweeps aren't counted twice.
+
+## Self-review
+A code-reviewer subagent reviewed the diff: 1 high, 4 medium, 12 low, no crash-class bug on the hot path. Fixed: H1, M2-M5
+(above), L6-L8 (session paused during a benchmark; retry after a failed tick when the monitor is turned on again;
+movement state reset at each capture start), L10-L12 (list width `width - 32`; bar label/value columns sized to the
+widest text, checked by the game test; a hand-edited stutter.json with nulls or no `source` reads safely), L14 (above),
+L15 (the vanilla backlog needs a queue of 8+), L16 (a candidate at the ring's first frame counts). Not changed, with
+reasons: L9 (RigTuneSettingsScreen already drops its note line when it doesn't fit; at 640x480@2 the new row pushes it
+out, as designed); L13 (the benchmark's analysis stays synchronous at the run's end: ≤ 32k frames, a few ms, and an async
+line would need a BenchmarkResultScreen refresh in WS-B's file); L17 (the uptime anchor cancels out of the pause mapping,
+but it makes the stored `gcOffsetMs` exact; ≤ 1 ms once per capture start). The thread-name census stays at INFO (it's
+Phase 5's evidence, research §6).
+
 ## Verification
 - Unit tests (26.2 local): 1298 → see the final report for both versions. New: GcKindTest, GcClockTest,
   FrameRingAllocationTest (AC5.4), SpikeDetectorTest (AC5.1), AttributorTest (AC5.2, the worked example exactly),
@@ -98,10 +125,16 @@ method + `GC_COLLECTORS`), en_us.json (the `rigtune.stutter.*` block), README "S
 - Memory while on: 1.98 MB (`StutterMonitor.retainedBytes()`: frame ring 1 MiB + candidates 320 KiB + events 96 KiB +
   GC 80 KiB + samples 416 KiB), 0 when off (F-M1).
 
+- **Dev switches, end to end** (local, 26.2, `JAVA_TOOL_OPTIONS="-Drigtune.dev.stutterScript=teleport
+  -Drigtune.dev.forceGcEverySec=5" ./gradlew :26.2:runClient` under the lock; run dir options.txt with
+  `onboardAccessibility:false`): monitor on → benchmark world → 20 s still → teleport → 30 s → full save → 10 s → report →
+  leave → stutter.json logged → quit, "PASSED". Report: 63 s session, 52 s gameplay, 19 spikes, GC 88 % of the lost time
+  (the forced full GCs, ~100 ms each on an 8 GB heap), 11 of 19 spikes after the teleport, `stutter-gc-explicit` fired,
+  phase timers 1111111 (limiter pair too: frame rate capped), GC offset 17.9 ms. (A dev check, not AC5.8's evidence: the
+  forced GCs dominate the teleport part; run C is without them.)
+
 ## UNVERIFIED / left for Phase 5
-- AC5.8 induced runs A-F (and S-M1's missing-target run showing "phase timing unavailable"); the teleport dev script
-  (`-Drigtune.dev.stutterScript=teleport`, e.g. via `JAVA_TOOL_OPTIONS` on `runClient`) compiles and is wired but hasn't
-  been run end to end; `-Drigtune.dev.forceGcEverySec` likewise.
+- AC5.8 induced runs A-F, and S-M1's missing-target run showing "phase timing unavailable".
 - The `DH-` thread prefix at runtime, whether autosave causes client spikes, full-GC durations on a multi-GB heap
   (research §10).
 - FootprintGameTest's monitor-on numbers (AC10.4) are WS-F's follow-up (F-L1).

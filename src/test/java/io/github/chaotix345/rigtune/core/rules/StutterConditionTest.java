@@ -81,6 +81,23 @@ class StutterConditionTest {
 		assertEquals(UNKNOWN, eval("{\"not\": {\"liveSetPercentAtLeast\": 75}}", unknown), "not over UNKNOWN stays UNKNOWN");
 	}
 
+	// Review finding 2: a count the capture couldn't measure (no GC listener) and a cause it couldn't measure (no phase
+	// timers, an uncalibrated GC clock) are UNKNOWN, so `not` can't turn "never measured" into TRUE.
+	@Test
+	void unmeasuredIsUnknownEvenUnderNot() {
+		StutterFacts blind = new StutterFacts(Map.of("unknown", 100.0), Map.of(), 0, 0, 0, null, 4096L, null, 1.0, "g1", false,
+				java.util.Set.of("gc", "chunkLoad", "chunkBuild", "tick", "render", "dh", "cpuContention"));
+		for (String json : new String[]{"{\"gcFullPausesAtLeast\": 1}", "{\"not\": {\"gcFullPausesAtLeast\": 1}}", "{\"not\": {\"gcStallsAtLeast\": 1}}",
+				"{\"gcExplicitPausesAtLeast\": 0}", "{\"not\": {\"stutterShareAtLeast\": {\"chunkLoad\": 30}}}", "{\"not\": {\"stutterShareAtLeast\": {\"gc\": 1}}}",
+				"{\"not\": {\"stutterTaggedShareAtLeast\": {\"dh\": 40}}}", "{\"stutterShareAtLeast\": {\"render\": 0}}"}) {
+			assertEquals(UNKNOWN, eval(json, blind), json);
+		}
+		assertEquals(TRUE, eval("{\"stutterShareAtLeast\": {\"unknown\": 90}}", blind), "the unexplained share is always known");
+		assertEquals(TRUE, eval("{\"not\": {\"stutterTaggedShareAtLeast\": {\"worldSave\": 1}}}", blind), "save windows need no sampler");
+		assertEquals(FALSE, eval("{\"not\": {\"gcFullPausesAtLeast\": 1}}", new StutterFacts(Map.of(), Map.of(), 2, 0, 0, null, null, null, 0, "g1")),
+				"measured counts decide");
+	}
+
 	@Test
 	void collector() {
 		assertEquals(TRUE, eval("{\"gcCollector\": [\"g1\"]}"));

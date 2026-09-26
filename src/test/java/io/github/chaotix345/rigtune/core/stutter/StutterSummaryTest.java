@@ -20,7 +20,7 @@ class StutterSummaryTest {
 				Map.of(Attributor.GC, 0.44, Attributor.CHUNK_LOAD, 0.12, Attributor.UNKNOWN, 0.44), Map.of(Attributor.WORLD_SAVE, 7),
 				List.of(new StutterReport.Worst(431.2, 212, 7.1, List.of("gc:high:FULL:EXPLICIT", "worldSave:low")),
 						new StutterReport.Worst(12, 90, 7, List.of())),
-				new StutterReport.Facts(81, 2, 0, 1, offset), List.of("ram-stutter-gc-heap"), enough, phases);
+				new StutterReport.Facts(81, 2, 0, 1, offset), List.of("ram-stutter-gc-heap"), enough, phases, 9);
 	}
 
 	@Test
@@ -29,7 +29,7 @@ class StutterSummaryTest {
 				List.of(new StutterAdvisor.Fired("ram-stutter-gc-heap", "warning", Impact.HIGH, "Stutter from memory pressure", "x")));
 		assertTrue(text.startsWith("**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 6144 MB heap\n"), text);
 		assertTrue(text.contains("13:32 (12:15 of gameplay) · 87,700 frames · avg 119 FPS · 1% low 61 FPS"), text);
-		assertTrue(text.contains("12 spikes (9 minor, 2 major, 1 severe, 0 freezes) · 1.8 s lost"), text);
+		assertTrue(text.contains("12 spikes (9 minor, 2 major, 1 severe, 0 freezes) in 9 hitches · 1.8 s lost"), text);
 		assertTrue(text.contains("Likely causes (share of the lost time): garbage collection 44 %, chunk loading 12 %; not explained 44 %"), text);
 		assertTrue(text.contains("7 of 12 spikes during world saves (not measured)"), text);
 		assertTrue(text.contains("Worst: 212 ms at 7:11 (garbage collection (high), full GC, System.gc(), world saves (low)); 90 ms at 0:12"), text);
@@ -55,7 +55,7 @@ class StutterSummaryTest {
 		StutterReport r = report(true, true, 1.0);
 		StutterReport big = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(),
 				r.frames(), r.avgFps(), r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(), r.tags(),
-				List.of(new StutterReport.Worst(1, 500, 7, Collections.nCopies(400, "gc:high:FULL"))), r.facts(), r.advice(), true, true);
+				List.of(new StutterReport.Worst(1, 500, 7, Collections.nCopies(400, "gc:high:FULL"))), r.facts(), r.advice(), true, true, r.hitches());
 		assertTrue(StutterSummary.text(big, List.of()).length() <= StutterSummary.LIMIT);
 	}
 

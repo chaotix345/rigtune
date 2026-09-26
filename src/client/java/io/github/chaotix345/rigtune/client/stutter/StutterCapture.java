@@ -20,7 +20,7 @@ final class StutterCapture {
 
 	// A stopped (or, for a live analysis, copied) capture: everything StutterAnalyzer needs from the render thread.
 	record Copy(FrameRing.Snapshot frames, StutterRings.Snapshot rings, long startNanos, long endNanos, Instant startedAt, String source,
-			boolean phaseTiming, @Nullable String collector) {
+			boolean phaseTiming, @Nullable String collector, boolean gcMeasured) {
 	}
 
 	private StutterCapture() {
@@ -48,7 +48,7 @@ final class StutterCapture {
 	static Copy copy(StutterMonitor.Capture capture) {
 		StutterRings rings = StutterMonitor.rings();
 		return new Copy(capture.snapshot(), rings == null ? StutterRings.Snapshot.EMPTY : rings.snapshot(), capture.startNanos(), System.nanoTime(),
-				capture.startedAt(), capture.source(), StutterMonitor.phaseTiming(), GC.collector());
+				capture.startedAt(), capture.source(), StutterMonitor.phaseTiming(), GC.collector(), GC.active());
 	}
 
 	private static StutterRings shared() {

@@ -115,6 +115,16 @@ class StutterAdvisorTest {
 		assertTrue(StutterAdvisor.supported(null));
 	}
 
+	// Review finding 1: a capture without enough data for a verdict gets no advice, whatever its facts say.
+	@Test
+	void noAdviceWithoutEnoughData() throws IOException {
+		RulesDocument rules = fixture();
+		StutterFacts gcHeavy = facts(Map.of("gc", 90.0), Map.of(), 3, 0, 0, 90.0, 8192L, null);
+		var ctx = StutterAdvisor.context(rules, Fixtures.userRig().build(), Fixtures.mods("sodium"), null, Goal.BALANCED, gcHeavy);
+		assertEquals(List.of("ram-stutter-gc-heap"), StutterAdvisor.evaluate(rules, ctx, true).stream().map(StutterAdvisor.Fired::id).toList());
+		assertEquals(List.of(), StutterAdvisor.evaluate(rules, ctx, false));
+	}
+
 	@Test
 	void firedAdviceCarriesItsText() throws IOException {
 		RulesDocument rules = fixture();

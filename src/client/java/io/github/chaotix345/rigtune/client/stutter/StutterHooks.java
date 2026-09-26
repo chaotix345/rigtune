@@ -33,6 +33,7 @@ public final class StutterHooks {
 	private static double lastZ;
 	private static boolean fast;
 	private static boolean failed;
+	private static boolean wasActive;
 
 	private StutterHooks() {
 	}
@@ -64,7 +65,13 @@ public final class StutterHooks {
 		try {
 			s.tick(minecraft);
 			DevStutter.tick(minecraft, s);
-			if (!StutterMonitor.active()) {
+			boolean active = StutterMonitor.active();
+			if (active && !wasActive) {
+				hadPlayer = false;
+				fast = false;
+			}
+			wasActive = active;
+			if (!active) {
 				return;
 			}
 			StutterMonitor.setExcluded(minecraft.gui.screen() != null || !minecraft.isWindowActive());
@@ -73,7 +80,7 @@ public final class StutterHooks {
 				BuildBacklog.refresh(minecraft, sodium);
 			}
 		} catch (RuntimeException e) {
-			RigTune.LOGGER.error("Stutter Doctor: tick failed; capture is off until the next start", e);
+			RigTune.LOGGER.error("Stutter Doctor: tick failed; capture is off until the monitor is turned on again", e);
 			failed = true;
 			s.shutdown(minecraft);
 		}
@@ -106,6 +113,11 @@ public final class StutterHooks {
 		lastX = x;
 		lastY = y;
 		lastZ = z;
+	}
+
+	// Turning the monitor on again after a failed tick tries once more.
+	static void retry() {
+		failed = false;
 	}
 
 	// BenchmarkController: capture on for each sweep, off in between; finished when the run ends (keep: it wasn't cancelled).

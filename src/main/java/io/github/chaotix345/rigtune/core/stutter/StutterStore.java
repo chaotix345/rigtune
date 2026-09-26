@@ -84,6 +84,6 @@ public final class StutterStore {
 		}
 		return new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(), r.frames(),
 				r.avgFps(), r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(), r.tags(),
-				List.copyOf(r.worst().subList(0, StutterReport.MAX_WORST)), r.facts(), r.advice(), r.enoughData(), r.phaseTiming());
+				List.copyOf(r.worst().subList(0, StutterReport.MAX_WORST)), r.facts(), r.advice(), r.enoughData(), r.phaseTiming(), r.hitches());
 	}
 }

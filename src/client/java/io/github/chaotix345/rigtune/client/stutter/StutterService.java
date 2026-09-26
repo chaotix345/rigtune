@@ -13,6 +13,7 @@ import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
+import io.github.chaotix345.rigtune.core.store.JsonStateFile;
 import io.github.chaotix345.rigtune.core.stutter.StutterAdvisor;
 import io.github.chaotix345.rigtune.core.stutter.StutterAnalyzer;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
@@ -28,6 +29,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 // Stutter Doctor (docs/v0.4/SPEC.md 5): the opt-in session monitor (settings.json stutterMonitor), stutter.json and the
 // analysis behind StutterScreen. RealController delegates every C4 stutter method here in one line; StutterHooks calls
@@ -56,10 +60,15 @@ public final class StutterService {
 	// Render thread.
 	private boolean analysing;
 	private long lastAnalysis;
+	private boolean sessionPausedForBenchmark;
 	private volatile @Nullable Analysis live;
 	private volatile @Nullable Analysis saved;
 	private volatile Saved savedState = Saved.UNKNOWN;
 	private volatile @Nullable StutterReport lastBenchmark;
+	// stutter.json work runs in order on the shared executor (a save queued before a Clear never lands after it); a Clear
+	// bumps the generation so an older save doesn't bring its summary back on screen.
+	private CompletableFuture<Void> io = CompletableFuture.completedFuture(null);
+	private volatile int generation;
 
 	public StutterService(RealController controller, Path configDir) {
 		this.controller = controller;
@@ -93,6 +102,9 @@ public final class StutterService {
 	}
 
 	public void setMonitor(boolean on) {
+		if (on) {
+			StutterHooks.retry();
+		}
 		ClientSettings settings = controller.settings();
 		if (settings.stutterMonitor != on) {
 			settings.stutterMonitor = on;
@@ -122,7 +134,12 @@ public final class StutterService {
 		live = null;
 		saved = null;
 		savedState = Saved.DONE;
-		CompletableFuture.runAsync(() -> store().clear(), Probes.EXECUTOR);
+		generation++;
+		io(() -> store().clear());
+	}
+
+	private synchronized void io(Runnable task) {
+		io = io.handle((ignored, error) -> null).thenRunAsync(() -> safely(task), Probes.EXECUTOR);
 	}
 
 	public String summary() {
@@ -142,8 +159,20 @@ public final class StutterService {
 		}
 	}
 
-	// CLIENT_STOPPING: the running session is saved right away, on this thread.
+	// CLIENT_STOPPING: the running session is saved right away, on this thread, after any save still queued (leaving the
+	// world and quitting at once must not lose that session).
 	void shutdown(Minecraft minecraft) {
+		CompletableFuture<Void> pending;
+		synchronized (this) {
+			pending = io;
+		}
+		try {
+			pending.get(2, TimeUnit.SECONDS);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		} catch (ExecutionException | TimeoutException e) {
+			RigTune.LOGGER.warn("Stutter Doctor: a queued session save didn't finish before quitting", e);
+		}
 		StutterMonitor.Capture session = StutterMonitor.session();
 		if (session != null) {
 			end(session, minecraft, true);
@@ -159,26 +188,34 @@ public final class StutterService {
 		live = null;
 		savedState = Saved.DONE;
 		Machine machine = machine(minecraft);
+		int gen = generation;
 		Runnable save = () -> {
 			Analysis a = analyze(copy, machine);
-			var result = store().add(a.report());
-			saved = a;
-			savedState = Saved.DONE;
+			JsonStateFile.Saved result = store().add(a.report());
+			if (result == JsonStateFile.Saved.OK && gen == generation) {
+				saved = a;
+			}
 			RigTune.LOGGER.info("Stutter Doctor: session saved ({}): {} spikes in {} s of gameplay, {}, GC offset {} ms", result,
 					a.report().spikes().total(), Math.round(a.report().gameplaySeconds()), phases(copy), a.report().facts().gcOffsetMs());
 		};
 		if (now) {
 			safely(save);
 		} else {
-			CompletableFuture.runAsync(() -> safely(save), Probes.EXECUTOR);
+			io(save);
 		}
 	}
 
-	// The benchmark's capture (BenchmarkController, render thread): on during its sweeps only.
+	// The benchmark's capture (BenchmarkController, render thread): on during its sweeps only. A running session pauses
+	// for the whole run (its sweeps are the benchmark's, not play) and resumes when it ends.
 	void benchmarkSweep(boolean recording) {
 		StutterMonitor.Capture bench = StutterMonitor.benchmark();
 		if (bench == null && recording) {
 			bench = StutterCapture.startBenchmark();
+			StutterMonitor.Capture session = StutterMonitor.session();
+			if (session != null && !session.paused()) {
+				pause(true);
+				sessionPausedForBenchmark = true;
+			}
 		}
 		if (bench != null) {
 			bench.paused = !recording;
@@ -188,6 +225,10 @@ public final class StutterService {
 	// The benchmark ended: its capture is analysed here (it's small) for the result screen's line; a finished run's
 	// summary is also saved to stutter.json.
 	void benchmarkFinished(Minecraft minecraft, boolean keep) {
+		if (sessionPausedForBenchmark) {
+			sessionPausedForBenchmark = false;
+			pause(false);
+		}
 		StutterMonitor.Capture bench = StutterMonitor.benchmark();
 		lastBenchmark = null;
 		if (bench == null) {
@@ -200,7 +241,7 @@ public final class StutterService {
 		Analysis a = analyze(copy, machine(minecraft));
 		lastBenchmark = a.report();
 		RigTune.LOGGER.info("Stutter Doctor: benchmark: {} spikes, causes {}, {}", a.report().spikes().total(), a.report().causes(), phases(copy));
-		CompletableFuture.runAsync(() -> safely(() -> store().add(a.report())), Probes.EXECUTOR);
+		io(() -> store().add(a.report()));
 	}
 
 	@Nullable StutterReport lastBenchmark() {
@@ -234,7 +275,7 @@ public final class StutterService {
 			return;
 		}
 		savedState = Saved.LOADING;
-		CompletableFuture.runAsync(() -> {
+		io(() -> {
 			try {
 				StutterReport latest = store().latest();
 				saved = latest == null ? null : new Analysis(null, latest, adviceFor(latest.advice(), controller.rules()));
@@ -243,7 +284,7 @@ public final class StutterService {
 			} finally {
 				savedState = Saved.DONE;
 			}
-		}, Probes.EXECUTOR);
+		});
 	}
 
 	// A saved session keeps only advice ids; their titles and texts come from the current rules.
@@ -275,9 +316,11 @@ public final class StutterService {
 		boolean waits = defer != null && (SettingValues.same(defer, "ZERO_FRAMES") || SettingValues.same(defer, "ONE_FRAME"));
 		StutterAnalyzer.Result result = StutterAnalyzer.analyze(new StutterAnalyzer.Input(c.frames(), c.rings(), c.startNanos(), c.endNanos(), c.startedAt(),
 				c.source(), HardwareProbe.minecraftVersion(), c.collector(), Runtime.getRuntime().maxMemory() / MIB,
-				hw == null || hw.totalRamMb() <= 0 ? null : hw.totalRamMb(), Runtime.getRuntime().availableProcessors(), c.phaseTiming(), waits));
+				hw == null || hw.totalRamMb() <= 0 ? null : hw.totalRamMb(), Runtime.getRuntime().availableProcessors(), c.phaseTiming(), waits,
+				c.gcMeasured()));
 		List<StutterAdvisor.Fired> advice = m.rules() == null || hw == null ? List.of()
-				: StutterAdvisor.evaluate(m.rules(), StutterAdvisor.context(m.rules(), hw, m.mods(), m.settings(), m.goal(), result.facts()));
+				: StutterAdvisor.evaluate(m.rules(), StutterAdvisor.context(m.rules(), hw, m.mods(), m.settings(), m.goal(), result.facts()),
+						result.report().enoughData());
 		StutterReport report = result.report().withAdvice(advice.stream().map(StutterAdvisor.Fired::id).toList());
 		return new Analysis(null, report, advice);
 	}

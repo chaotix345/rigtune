@@ -313,11 +313,12 @@ public final class ConditionEvaluator {
 		if (facts == null) {
 			return UNKNOWN;
 		}
-		Truth t = c.stutterShareAtLeast == null ? TRUE : shares(c.stutterShareAtLeast, facts.claimedShares(), Attributor.CAUSES);
-		t = and(t, () -> c.stutterTaggedShareAtLeast == null ? TRUE : shares(c.stutterTaggedShareAtLeast, facts.taggedShares(), Attributor.TAGS));
-		t = and(t, () -> c.gcFullPausesAtLeast == null ? TRUE : Truth.of(facts.gcFullPauses() >= c.gcFullPausesAtLeast));
-		t = and(t, () -> c.gcStallsAtLeast == null ? TRUE : Truth.of(facts.gcStalls() >= c.gcStallsAtLeast));
-		t = and(t, () -> c.gcExplicitPausesAtLeast == null ? TRUE : Truth.of(facts.gcExplicitPauses() >= c.gcExplicitPausesAtLeast));
+		Truth t = c.stutterShareAtLeast == null ? TRUE : shares(c.stutterShareAtLeast, facts.claimedShares(), Attributor.CAUSES, facts.unmeasured());
+		t = and(t, () -> c.stutterTaggedShareAtLeast == null ? TRUE
+				: shares(c.stutterTaggedShareAtLeast, facts.taggedShares(), Attributor.TAGS, facts.unmeasured()));
+		t = and(t, () -> c.gcFullPausesAtLeast == null ? TRUE : gcCount(facts, facts.gcFullPauses(), c.gcFullPausesAtLeast));
+		t = and(t, () -> c.gcStallsAtLeast == null ? TRUE : gcCount(facts, facts.gcStalls(), c.gcStallsAtLeast));
+		t = and(t, () -> c.gcExplicitPausesAtLeast == null ? TRUE : gcCount(facts, facts.gcExplicitPauses(), c.gcExplicitPausesAtLeast));
 		t = and(t, () -> c.liveSetPercentAtLeast == null ? TRUE : atLeast(facts.liveSetPercent(), c.liveSetPercentAtLeast));
 		t = and(t, () -> c.heapRaiseRoomMbAtLeast == null ? TRUE : atLeast(facts.heapRaiseRoomMb() == null ? null : facts.heapRaiseRoomMb().doubleValue(),
 				c.heapRaiseRoomMbAtLeast));
@@ -327,16 +328,21 @@ public final class ConditionEvaluator {
 		return and(t, () -> c.gcCollector == null ? TRUE : anyEntry(c.gcCollector, GC_COLLECTORS::contains, collector::equals, !collector.isEmpty()));
 	}
 
+	private static Truth gcCount(StutterFacts facts, int count, int threshold) {
+		return facts.gcMeasured() ? Truth.of(count >= threshold) : UNKNOWN;
+	}
+
 	private static Truth atLeast(@Nullable Double value, Number threshold) {
 		return value == null ? UNKNOWN : Truth.of(value >= threshold.doubleValue());
 	}
 
-	// Every entry must hold: the measured share (percent; absent = 0) at least the entry's whole-percent threshold.
-	private static Truth shares(Map<String, String> wanted, Map<String, Double> measured, List<String> vocabulary) {
+	// Every entry must hold: the measured share (percent; absent = 0) at least the entry's whole-percent threshold. A cause
+	// or tag the capture couldn't measure is UNKNOWN.
+	private static Truth shares(Map<String, String> wanted, Map<String, Double> measured, List<String> vocabulary, Set<String> unmeasured) {
 		Truth t = TRUE;
 		for (Map.Entry<String, String> entry : wanted.entrySet()) {
 			Integer threshold = wholeNumber(entry.getValue());
-			if (entry.getKey() == null || !vocabulary.contains(entry.getKey()) || threshold == null) {
+			if (entry.getKey() == null || !vocabulary.contains(entry.getKey()) || threshold == null || unmeasured.contains(entry.getKey())) {
 				t = t.and(UNKNOWN);
 				continue;
 			}

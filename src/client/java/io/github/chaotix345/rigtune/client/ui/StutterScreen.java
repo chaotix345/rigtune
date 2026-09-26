@@ -46,6 +46,7 @@ public class StutterScreen extends Screen {
 	private static final int COLOR_AMBER = 0xFFFFB347;
 	private static final int COLOR_BAD = 0xFFFF7A6B;
 	private static final int COLOR_BAR_BG = 0x40FFFFFF;
+	private static final int MIN_BAR = 30;
 	private static final String[] EDGES = {"4.2", "8.3", "16.7", "33", "50", "100", "250", "1000"};
 	private static final Map<String, String> CAUSES = Map.of(Attributor.GC, "rigtune.stutter.cause.gc", Attributor.CHUNK_LOAD,
 			"rigtune.stutter.cause.chunk_load", Attributor.CHUNK_BUILD, "rigtune.stutter.cause.chunk_build", Attributor.TICK, "rigtune.stutter.cause.tick",
@@ -71,7 +72,7 @@ public class StutterScreen extends Screen {
 	@Override
 	protected void init() {
 		view = controller.stutter();
-		int column = Math.min(MAX_COLUMN, width - 16);
+		int column = Math.min(MAX_COLUMN, width - 32);
 		int x = (width - column) / 2;
 		int gap = 4;
 		int third = (column - 2 * gap) / 3;
@@ -101,6 +102,7 @@ public class StutterScreen extends Screen {
 		int listTop = 32;
 		list = new StutterList(listTop, Math.max(20, upper - 4 - listTop), column);
 		populate(list, column - 12);
+		list.fitColumns();
 		addRenderableWidget(list);
 		list.setScrollAmount(scroll);
 	}
@@ -173,7 +175,7 @@ public class StutterScreen extends Screen {
 		text(l, Component.translatable("rigtune.stutter.header.frames", number(r.frames()), number(r.avgFps()), number(r.onePercentLowFps())), COLOR_TEXT,
 				width, 0);
 		StutterReport.Spikes s = r.spikes();
-		text(l, Component.translatable("rigtune.stutter.header.spikes", s.total(), s.minor(), s.major(), s.severe(), s.freeze(),
+		text(l, Component.translatable("rigtune.stutter.header.spikes", s.total(), s.minor(), s.major(), s.severe(), s.freeze(), r.hitches(),
 				String.format(Locale.ROOT, "%.1f", r.lostMs() / 1000)), COLOR_TEXT, width, 0);
 		if (!r.enoughData()) {
 			text(l, Component.translatable("rigtune.stutter.not_enough"), COLOR_NOTE, width, 0);
@@ -426,22 +428,30 @@ public class StutterScreen extends Screen {
 
 		@Override
 		public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
+			StutterList l = list;
 			int x = getContentX();
 			int y = getContentY();
 			int width = getContentWidth();
-			int labelWidth = Math.min(width / 3, 110);
-			int valueWidth = Math.min(width / 3, 100);
+			int labelWidth = l == null ? width / 3 : l.labelColumn;
+			int valueWidth = l == null ? width / 3 : l.valueColumn;
 			int barX = x + labelWidth + 4;
-			int barWidth = Math.max(10, width - labelWidth - valueWidth - 8);
+			int barWidth = Math.max(MIN_BAR, width - labelWidth - valueWidth - 8);
 			graphics.text(font, font.substrByWidth(label, labelWidth).getString(), x, y, COLOR_TEXT, false);
 			graphics.fill(barX, y + 1, barX + barWidth, y + 8, COLOR_BAR_BG);
 			graphics.fill(barX, y + 1, barX + (int) Math.round(barWidth * share), y + 8, color);
 			graphics.text(font, font.substrByWidth(value, valueWidth).getString(), barX + barWidth + 4, y, COLOR_LABEL, false);
 		}
+
+		boolean fits() {
+			StutterList l = list;
+			return l != null && font.width(label) <= l.labelColumn && font.width(value) <= l.valueColumn;
+		}
 	}
 
 	public final class StutterList extends ContainerObjectSelectionList<Row> {
 		private final int rowWidth;
+		private int labelColumn;
+		private int valueColumn;
 
 		StutterList(int top, int listHeight, int rowWidth) {
 			super(StutterScreen.this.minecraft, StutterScreen.this.width, listHeight, top, LINE + 1);
@@ -459,6 +469,28 @@ public class StutterScreen extends Screen {
 
 		public int rows() {
 			return children().size();
+		}
+
+		// The bars line up: the label and value columns are as wide as their widest text, within 40 % of the row each, so
+		// the bar keeps at least MIN_BAR px.
+		void fitColumns() {
+			int width = getRowWidth() - 12;
+			int labels = 0;
+			int values = 0;
+			for (Row row : children()) {
+				if (row instanceof BarRow bar) {
+					labels = Math.max(labels, font.width(bar.label));
+					values = Math.max(values, font.width(bar.value));
+				}
+			}
+			int cap = Math.max(20, (width - MIN_BAR - 8) / 2);
+			labelColumn = Math.min(labels, cap);
+			valueColumn = Math.min(values, cap);
+		}
+
+		// Every bar row's label and value fit their columns (for the game test).
+		public boolean barsFit() {
+			return children().stream().noneMatch(row -> row instanceof BarRow bar && !bar.fits());
 		}
 	}
 }
