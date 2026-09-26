@@ -221,7 +221,7 @@ RigTune's recommendations are estimates, and it's worth knowing what stands behi
   - **Server-aware advice**, against a local vanilla 26.2 dedicated server with view distance 6, then 10: the notice, the capped suggestion, "(was 6)", and no address in `server-limits.json`.
   - **Driver strings**: the PC's real OpenGL and 26.3 Vulkan strings (AMD Adrenalin 26.8.1) parse to the right version, and a changed driver in the stored fingerprint raised the driver notice once.
   - A production client with a copy of a real 50-mod instance on 26.2 (Sodium, Iris, Distant Horizons and more), and one with a Modrinth mod set on 26.3; opening every tool wrote nothing.
-  - Every client game test passed on both versions on this PC; CI runs them on every push on Linux (26.2 OpenGL, 26.3 OpenGL, 26.3 Vulkan, with software rendering).
+  - Every client game test passed on both versions on this PC with the release candidate; CI runs them on every push on Linux (26.2 OpenGL, 26.3 OpenGL, 26.3 Vulkan, with software rendering).
 - **Compatibility is tested against the released versions.** Tests run pinned copies of the released 0.1.0, 0.2.0 and 0.3.0 code on the rules files and the shared state files this version writes, and a CI job runs the released 0.3.0 jar's own classes on them; 0.1.x only ever gets a subset of the rules that is at least as cautious as what it shipped with.
 - **Your own measurements are the stronger evidence.** A benchmark on your PC, and a Measure run before and after a change, show what actually happened there; changes RigTune lists between two runs are ones that "may be related", never proven causes.
 
