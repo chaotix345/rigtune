@@ -67,4 +67,10 @@ run ends, so only one capture's rings are ever held (review-9 X3-1)". Left for t
 ## Verification
 
 - `./gradlew build`: 26.2 and 26.3 green, 1842 unit tests each (0 failures, 1 skipped).
-- CI: see the run linked in the hand-back.
+- CI green on every job: [36258254138](https://github.com/chaotix345/rigtune/actions/runs/36258254138) (`6bed87b`) and
+  [36259190547](https://github.com/chaotix345/rigtune/actions/runs/36259190547) (`7dbbff7`, the self-review fixes plus
+  the merge of `origin/feat/v0.4.0`).
+- FootprintGameTest in 36259190547, all 3 legs: `monitorSessionRetainedBytes` 2,506,896 and
+  `monitorBenchmarkRetainedBytes` 1,081,488 (as computed above), so `monitorOnRetainedBytes` is 2,506,896, under
+  2,621,440. Tick hooks, best of 5, in ns per call: `tickHookNsPerCall` 15.19 / 15.72 / 28.78, `tickHookNsPerCallWorld`
+  10.83 / 20.32 / 16.35 and `tickHookNsPerCallOn` 43.15 / 43.23 / 37.72 (26.2 GL / 26.3 GL / 26.3 VK).
