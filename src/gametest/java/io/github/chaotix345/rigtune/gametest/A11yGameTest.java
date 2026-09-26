@@ -36,6 +36,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.InputType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -92,7 +93,10 @@ public class A11yGameTest implements FabricClientGameTest {
 			stutter(context, controller);
 			highContrast(context, controller);
 		} finally {
-			context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(outline));
+			context.runOnClient(mc -> {
+				mc.options.highContrastBlockOutline().set(outline);
+				mc.setLastInputType(InputType.MOUSE);
+			});
 			setNetwork(context, real, configDir, network);
 			resize(context, 854, 480, 0);
 			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
@@ -118,6 +122,9 @@ public class A11yGameTest implements FabricClientGameTest {
 
 	private static void history(ClientGameTestContext context, A11yController controller) {
 		openHistory(context, controller);
+		// After keyboard use a (re)built screen focuses its first button as before, not the first row (review M3).
+		check(context.computeOnClient(A11yGameTest::rowIndex) == -1 && context.computeOnClient(mc -> mc.gui.screen().getFocused() != null),
+				"history: the initial focus is a button, not a row");
 		walk(context, "history", List.of("Apply", "Render distance", "Lithium", "RigTune 0.3.0"));
 
 		// Enter on the older entry (row 3) selects it, and after the rebuild the focus is on its row again.
@@ -127,6 +134,8 @@ public class A11yGameTest implements FabricClientGameTest {
 		context.waitTicks(2);
 		check(context.computeOnClient(mc -> focusedRectangle(mc).equals(((HistoryScreen) mc.gui.screen()).entryRow("e1"))),
 				"history: the focus is back on the selected entry's row");
+		String selected = context.computeOnClient(A11yGameTest::narration);
+		check(selected.contains("Selected"), "history: the open entry says it's selected: " + selected);
 		context.takeScreenshot("a11y-history-enter-854x480-scale2");
 		// Up to the newer entry, and Space selects it.
 		context.getInput().pressKey(InputConstants.KEY_UP);
@@ -167,6 +176,17 @@ public class A11yGameTest implements FabricClientGameTest {
 		context.waitTicks(1);
 		check(context.computeOnClient(A11yGameTest::rowIndex) == rows - 2, "undo: Up moved back one row");
 		context.takeScreenshot("a11y-undo-arrows-854x480-scale2");
+		int[] over = context.computeOnClient(mc -> {
+			ScreenRectangle first = ((AbstractWidget) ((ContainerEventHandler) list(mc).children().get(0)).children().get(0)).getRectangle();
+			int scale = (int) mc.getWindow().getGuiScale();
+			return new int[]{(first.left() + 20) * scale, (first.top() + first.height() / 2) * scale};
+		});
+		context.getInput().setCursorPos(over[0], over[1]);
+		context.waitTicks(3);
+		String[] hovered = context.computeOnClient(mc -> new String[]{narration(mc), leafText(mc)});
+		check(hovered[0].contains(hovered[1]), "undo: with the cursor on another row the focused row still narrates (" + hovered[1] + "): " + hovered[0]);
+		context.getInput().setCursorPos(1, 1);
+		context.waitTicks(1);
 	}
 
 	private static void jvm(ClientGameTestContext context, A11yController controller) {
@@ -186,6 +206,8 @@ public class A11yGameTest implements FabricClientGameTest {
 		context.waitTicks(2);
 		check("p-a11y".equals(context.computeOnClient(mc -> ((ProfilesScreen) mc.gui.screen()).selected())), "profiles: Enter selected the profile");
 		check(context.computeOnClient(A11yGameTest::rowIndex) == 2, "profiles: the focus stayed on its row");
+		String selected = context.computeOnClient(A11yGameTest::narration);
+		check(selected.contains("My settings") && selected.contains("Selected"), "profiles: the chosen profile says it's selected: " + selected);
 		context.takeScreenshot("a11y-profiles-enter-854x480-scale2");
 	}
 
@@ -196,6 +218,12 @@ public class A11yGameTest implements FabricClientGameTest {
 		walk(context, "stutter", List.of());
 		focusRow(context, 3);
 		context.takeScreenshot("a11y-stutter-focus-854x480-scale2");
+		// A live session brings a new report every few seconds and the screen rebuilds: the focus stays on row 3 (review M1).
+		StutterView before = context.computeOnClient(mc -> ((StutterScreen) mc.gui.screen()).shownView());
+		controller.refreshStutter();
+		context.waitFor(mc -> ((StutterScreen) mc.gui.screen()).shownView() != before, 40);
+		context.waitTicks(2);
+		check(context.computeOnClient(A11yGameTest::rowIndex) == 3, "stutter: a refresh kept the focused row");
 	}
 
 	// AC11.2: the stub's RigTune screen with High Contrast Block Outline off, then on (the option that reloads no resource
@@ -410,7 +438,7 @@ public class A11yGameTest implements FabricClientGameTest {
 				StutterReport.MONITOR, "26.2", "g1", 4096, 32768L, 16, true, false)).report();
 	}
 
-	// The stub's report plus a canned history, undo plan, preview, profiles and stutter session; the real JVM report.
+	// The stub's report plus a canned history, undo plan, preview, profiles and stutter session; the real JVM report, read once.
 	private static final class A11yController implements RigTuneController {
 		private final StubController stub;
 		private final RigTuneController real;
@@ -418,12 +446,14 @@ public class A11yGameTest implements FabricClientGameTest {
 		private final HistoryModel.View history;
 		private final UndoPlan plan;
 		private final List<ProfileView> profiles;
-		private final StutterView stutter;
+		private final JvmReport jvm;
+		private volatile StutterView stutter;
 
 		A11yController(StubController stub, RigTuneController real, Path configDir) {
 			this.stub = stub;
 			this.real = real;
 			this.configDir = configDir;
+			this.jvm = real.jvmReport();
 			this.history = new HistoryModel.View(Journal.State.OK, List.of(
 					new HistoryModel.Entry("e2", JournalEntry.APPLY, "2026-09-25T10:05:31Z", "0.4.0", "26.2", null, null, true, List.of(
 							new HistoryModel.Change(HistoryModel.Row.SETTING, List.of("c1"), JournalChange.APPLIED, "Render distance", "16", "12", null, null,
@@ -513,7 +543,12 @@ public class A11yGameTest implements FabricClientGameTest {
 
 		@Override
 		public JvmReport jvmReport() {
-			return real.jvmReport();
+			return jvm;
+		}
+
+		// A live session's refresh: the same capture, a new report.
+		void refreshStutter() {
+			stutter = new StutterView(false, false, false, false, false, stutterReport(), List.of());
 		}
 	}
 }

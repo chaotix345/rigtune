@@ -9,6 +9,7 @@ import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ComponentRenderUtils;
@@ -67,6 +68,8 @@ public class PreviewScreen extends Screen {
 	private volatile boolean closed;
 	private double scroll;
 	private @Nullable PreviewList list;
+	// docs/v0.4/SPEC.md 11: the row that had the keyboard focus before a rebuild, which gets it back.
+	private int focusedRow = -1;
 
 	public PreviewScreen(@Nullable Screen parent, RigTuneController controller, List<Recommendation> selected) {
 		super(Component.translatable("rigtune.preview.title"));
@@ -204,8 +207,18 @@ public class PreviewScreen extends Screen {
 	protected void rebuildWidgets() {
 		if (list != null) {
 			scroll = list.scrollAmount();
+			focusedRow = list.focusedRow();
 		}
 		super.rebuildWidgets();
+	}
+
+	@Override
+	protected void setInitialFocus() {
+		ComponentPath path = RowList.initialFocus(this, list, focusedRow, minecraft.getLastInputType().isKeyboard());
+		focusedRow = -1;
+		if (path != null) {
+			changeFocus(path);
+		}
 	}
 
 	private void populate(PreviewList target) {
@@ -367,7 +380,7 @@ public class PreviewScreen extends Screen {
 		super.removed();
 	}
 
-	public final class PreviewList extends ContainerObjectSelectionList<PreviewList.Row> {
+	public final class PreviewList extends RowList<PreviewList.Row> {
 		private final int rowWidth;
 		private boolean first = true;
 
@@ -379,12 +392,6 @@ public class PreviewScreen extends Screen {
 		@Override
 		public int getRowWidth() {
 			return rowWidth;
-		}
-
-		@Override
-		protected void extractItem(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, Row entry) {
-			super.extractItem(graphics, mouseX, mouseY, partialTick, entry);
-			RowFocus.outline(graphics, entry);
 		}
 
 		void heading(String key, int width) {

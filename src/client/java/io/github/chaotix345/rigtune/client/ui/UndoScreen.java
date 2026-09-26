@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client.ui;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ComponentRenderUtils;
@@ -55,6 +56,8 @@ public class UndoScreen extends Screen {
 	private boolean done;
 	private @Nullable Component status;
 	private @Nullable UndoList list;
+	// docs/v0.4/SPEC.md 11: the row that had the keyboard focus before a rebuild, which gets it back.
+	private int focusedRow = -1;
 	private int statusY;
 
 	public UndoScreen(@Nullable Screen parent, RigTuneController controller, boolean all) {
@@ -140,6 +143,20 @@ public class UndoScreen extends Screen {
 		}
 	}
 
+	@Override
+	protected void rebuildWidgets() {
+		focusedRow = list == null ? -1 : list.focusedRow();
+		super.rebuildWidgets();
+	}
+	@Override
+	protected void setInitialFocus() {
+		ComponentPath path = RowList.initialFocus(this, list, focusedRow, minecraft.getLastInputType().isKeyboard());
+		focusedRow = -1;
+		if (path != null) {
+			changeFocus(path);
+		}
+	}
+
 	private void confirm() {
 		if (plan == null || done) {
 			return;
@@ -202,7 +219,7 @@ public class UndoScreen extends Screen {
 		minecraft.gui.setScreen(parent);
 	}
 
-	final class UndoList extends ContainerObjectSelectionList<UndoList.Entry> {
+	final class UndoList extends RowList<UndoList.Entry> {
 		private final int rowWidth;
 
 		UndoList(int top, int listHeight, int rowWidth) {
@@ -213,12 +230,6 @@ public class UndoScreen extends Screen {
 		@Override
 		public int getRowWidth() {
 			return rowWidth;
-		}
-
-		@Override
-		protected void extractItem(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, Entry entry) {
-			super.extractItem(graphics, mouseX, mouseY, partialTick, entry);
-			RowFocus.outline(graphics, entry);
 		}
 
 		void addSection(Component label, int color) {

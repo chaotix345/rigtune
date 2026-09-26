@@ -78,8 +78,19 @@ class RowFocusTest {
 	@Test
 	void aRowWithAnActionSaysHowToUseIt() {
 		String text = narration(new RowFocus(new Row(), Component.literal("Apply · 2026-09-25 20:05"), () -> {
-		}));
+		}, null));
 		assertTrue(text.contains("Apply · 2026-09-25 20:05") && text.contains("rigtune.a11y.row.select"), text);
+	}
+
+	@Test
+	void theSelectedRowSaysSo() {
+		boolean[] selected = {false};
+		RowFocus focus = new RowFocus(new Row(), Component.literal("My settings"), () -> {
+		}, () -> selected[0]);
+		assertFalse(narration(focus).contains("rigtune.a11y.selected"));
+		selected[0] = true;
+		String text = narration(focus);
+		assertTrue(text.contains("My settings") && text.contains("rigtune.a11y.selected"), text);
 	}
 
 	@Test
@@ -92,7 +103,7 @@ class RowFocusTest {
 	@Test
 	void enterAndSpaceRunTheActionOtherKeysDont() {
 		AtomicInteger runs = new AtomicInteger();
-		RowFocus focus = new RowFocus(new Row(), Component.literal("row"), runs::incrementAndGet);
+		RowFocus focus = new RowFocus(new Row(), Component.literal("row"), runs::incrementAndGet, null);
 		assertTrue(focus.keyPressed(ENTER));
 		assertTrue(focus.keyPressed(SPACE));
 		assertFalse(focus.keyPressed(TAB));

@@ -676,22 +676,22 @@ public class RigTuneScreen extends Screen {
 	}
 
 	static int impactColor(Impact impact) {
-		return Palette.of(switch (impact) {
+		return switch (impact) {
 			case HIGH -> 0xFFFFB347;
 			case MEDIUM -> 0xFFFFE08A;
 			case LOW -> 0xFF9AA0A6;
-		});
+		};
 	}
 
 	static int accentColor(Category category) {
-		return Palette.of(switch (category) {
+		return switch (category) {
 			case WARNING -> COLOR_WARNING;
 			case ADVICE -> COLOR_ADVICE;
 			default -> COLOR_NEUTRAL;
-		});
+		};
 	}
 
-	final class RecommendationList extends ContainerObjectSelectionList<RecommendationList.Entry> {
+	final class RecommendationList extends RowList<RecommendationList.Entry> {
 		RecommendationList(int top, int listHeight) {
 			super(RigTuneScreen.this.minecraft, RigTuneScreen.this.width, listHeight, top, 24);
 		}
@@ -703,12 +703,6 @@ public class RigTuneScreen extends Screen {
 
 		void addCategory(Category category, int count) {
 			addEntry(new CategoryEntry(category, count), 16);
-		}
-
-		@Override
-		protected void extractItem(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, Entry entry) {
-			super.extractItem(graphics, mouseX, mouseY, partialTick, entry);
-			RowFocus.outline(graphics, entry);
 		}
 
 		void addRecommendation(Recommendation recommendation) {
@@ -820,7 +814,7 @@ public class RigTuneScreen extends Screen {
 					graphics.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight() - 1, Palette.of(0x18FFFFFF));
 				}
 				boolean informational = checkbox == null;
-				int accent = accentColor(recommendation.category());
+				int accent = Palette.of(accentColor(recommendation.category()));
 				if (informational) {
 					graphics.fill(x + 6, y + 1, x + 9, getY() + getHeight() - 4, accent);
 				} else {
@@ -834,7 +828,7 @@ public class RigTuneScreen extends Screen {
 					graphics.text(font, line, textX, titleY, titleColor, true);
 					titleY += 9;
 				}
-				graphics.text(font, impact, right - font.width(impact), y + 4, impactColor(recommendation.impact()), true);
+				graphics.text(font, impact, right - font.width(impact), y + 4, Palette.of(impactColor(recommendation.impact())), true);
 				int reasonY = y + Math.max(BOX, titleLines.size() * 9 + 4) + 1;
 				for (FormattedCharSequence line : reasonLines) {
 					graphics.text(font, line, textX, reasonY, Palette.of(informational && recommendation.category() == Category.WARNING ? 0xFFE8B0A8 : COLOR_REASON), false);

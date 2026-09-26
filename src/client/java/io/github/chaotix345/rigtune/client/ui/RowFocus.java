@@ -14,6 +14,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
 // docs/v0.4/SPEC.md 11: a custom list row's focusable, narratable child. A row is a Tab/arrow stop only through a
 // focusable child, and Entry.updateNarration is package-private, so narratables() is the only way to be narrated
@@ -22,15 +23,18 @@ import java.util.List;
 public final class RowFocus extends AbstractWidget {
 	private final LayoutElement row;
 	private final @Nullable Runnable action;
+	private final @Nullable BooleanSupplier selected;
 
 	public RowFocus(LayoutElement row, Component message) {
-		this(row, message, null);
+		this(row, message, null, null);
 	}
 
-	public RowFocus(LayoutElement row, Component message, @Nullable Runnable action) {
+	// selected: whether the row is the list's selected one (History's open entry, the chosen profile), said after its text.
+	public RowFocus(LayoutElement row, Component message, @Nullable Runnable action, @Nullable BooleanSupplier selected) {
 		super(0, 0, 0, 0, message);
 		this.row = row;
 		this.action = action;
+		this.selected = selected;
 	}
 
 	// Where the row is, for arrow navigation out of the list.
@@ -59,7 +63,8 @@ public final class RowFocus extends AbstractWidget {
 
 	@Override
 	protected void updateWidgetNarration(NarrationElementOutput output) {
-		output.add(NarratedElementType.TITLE, getMessage());
+		output.add(NarratedElementType.TITLE, selected != null && selected.getAsBoolean()
+				? join(getMessage(), Component.translatable("rigtune.a11y.selected")) : getMessage());
 		if (action != null) {
 			output.add(NarratedElementType.USAGE, Component.translatable("rigtune.a11y.row.select"));
 		}

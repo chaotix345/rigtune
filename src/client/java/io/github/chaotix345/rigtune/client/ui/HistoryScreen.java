@@ -54,6 +54,7 @@ public class HistoryScreen extends Screen {
 	private @Nullable String clicked;
 	// docs/v0.4/SPEC.md 11: the entry chosen with Enter/Space, whose row gets the focus back after the rebuild.
 	private @Nullable String refocus;
+	private int focusedRow = -1;
 	private double scroll;
 	private @Nullable HistoryList list;
 
@@ -213,23 +214,31 @@ public class HistoryScreen extends Screen {
 	protected void rebuildWidgets() {
 		if (list != null) {
 			scroll = list.scrollAmount();
+			focusedRow = list.focusedRow();
 		}
 		super.rebuildWidgets();
 	}
 
+	// After Enter/Space the chosen entry's row (rows move when an entry opens); after any other rebuild the same row, or
+	// the first button (RowList.initialFocus).
 	@Override
 	protected void setInitialFocus() {
 		String id = refocus;
+		int row = focusedRow;
 		refocus = null;
+		focusedRow = -1;
 		if (id != null && list != null) {
-			for (HistoryList.Row row : list.children()) {
-				if (row instanceof EntryRow r && r.entry.id().equals(id)) {
-					changeFocus(ComponentPath.path(r.focus, r, list, this));
+			for (HistoryList.Row r : list.children()) {
+				if (r instanceof EntryRow entryRow && entryRow.entry.id().equals(id)) {
+					changeFocus(ComponentPath.path(entryRow.focus, entryRow, list, this));
 					return;
 				}
 			}
 		}
-		super.setInitialFocus();
+		ComponentPath path = RowList.initialFocus(this, list, row, minecraft.getLastInputType().isKeyboard());
+		if (path != null) {
+			changeFocus(path);
+		}
 	}
 
 	private HistoryModel.@Nullable Entry selectedEntry() {
@@ -379,7 +388,7 @@ public class HistoryScreen extends Screen {
 
 	// --- the list
 
-	final class HistoryList extends ContainerObjectSelectionList<HistoryList.Row> {
+	final class HistoryList extends RowList<HistoryList.Row> {
 		private final int rowWidth;
 
 		HistoryList(int top, int listHeight, int rowWidth) {
@@ -394,12 +403,6 @@ public class HistoryScreen extends Screen {
 
 		void addRow(Row row, int height) {
 			addEntry(row, height);
-		}
-
-		@Override
-		protected void extractItem(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, Row entry) {
-			super.extractItem(graphics, mouseX, mouseY, partialTick, entry);
-			RowFocus.outline(graphics, entry);
 		}
 
 		// docs/v0.4/SPEC.md 11: every row is a Tab/arrow stop and narrates what it shows.
@@ -440,7 +443,7 @@ public class HistoryScreen extends Screen {
 			this.focus = new RowFocus(this, RowFocus.join(heading, summary, details), () -> {
 				refocus = entry.id();
 				clicked = entry.id();
-			});
+			}, () -> open);
 		}
 
 		@Override

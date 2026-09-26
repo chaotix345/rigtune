@@ -7,6 +7,7 @@ import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ComponentRenderUtils;
@@ -40,6 +41,8 @@ public class JvmScreen extends Screen {
 	private @Nullable Report shownReport;
 	private double scroll;
 	private @Nullable JvmList list;
+	// docs/v0.4/SPEC.md 11: the row that had the keyboard focus before a rebuild, which gets it back.
+	private int focusedRow = -1;
 
 	public JvmScreen(@Nullable Screen parent, RigTuneController controller) {
 		super(Component.translatable("rigtune.jvm.title"));
@@ -74,8 +77,18 @@ public class JvmScreen extends Screen {
 	protected void rebuildWidgets() {
 		if (list != null) {
 			scroll = list.scrollAmount();
+			focusedRow = list.focusedRow();
 		}
 		super.rebuildWidgets();
+	}
+
+	@Override
+	protected void setInitialFocus() {
+		ComponentPath path = RowList.initialFocus(this, list, focusedRow, minecraft.getLastInputType().isKeyboard());
+		focusedRow = -1;
+		if (path != null) {
+			changeFocus(path);
+		}
 	}
 
 	private void populate(JvmList target, int width) {
@@ -176,7 +189,7 @@ public class JvmScreen extends Screen {
 		minecraft.gui.setScreen(parent);
 	}
 
-	public final class JvmList extends ContainerObjectSelectionList<JvmList.Row> {
+	public final class JvmList extends RowList<JvmList.Row> {
 		private final int rowWidth;
 		private boolean first = true;
 
@@ -188,12 +201,6 @@ public class JvmScreen extends Screen {
 		@Override
 		public int getRowWidth() {
 			return rowWidth;
-		}
-
-		@Override
-		protected void extractItem(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, Row entry) {
-			super.extractItem(graphics, mouseX, mouseY, partialTick, entry);
-			RowFocus.outline(graphics, entry);
 		}
 
 		void heading(String key, int width) {

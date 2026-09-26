@@ -12,6 +12,7 @@ import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import io.github.chaotix345.rigtune.core.stutter.StutterSummary;
 import io.github.chaotix345.rigtune.core.stutter.StutterView;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ContainerObjectSelectionList;
@@ -60,6 +61,8 @@ public class StutterScreen extends Screen {
 	private StutterView view = StutterView.EMPTY;
 	private @Nullable Component status;
 	private @Nullable StutterList list;
+	// docs/v0.4/SPEC.md 11: the row that had the keyboard focus before a rebuild, which gets it back.
+	private int focusedRow = -1;
 	private final List<Component> shownText = new ArrayList<>();
 	private double scroll;
 
@@ -115,6 +118,21 @@ public class StutterScreen extends Screen {
 				scroll = list.scrollAmount();
 			}
 			rebuildWidgets();
+		}
+	}
+
+	// docs/v0.4/SPEC.md 11 (review M1): a live session refreshes the screen every few seconds; the focused row stays.
+	@Override
+	protected void rebuildWidgets() {
+		focusedRow = list == null ? -1 : list.focusedRow();
+		super.rebuildWidgets();
+	}
+	@Override
+	protected void setInitialFocus() {
+		ComponentPath path = RowList.initialFocus(this, list, focusedRow, minecraft.getLastInputType().isKeyboard());
+		focusedRow = -1;
+		if (path != null) {
+			changeFocus(path);
 		}
 	}
 
@@ -465,7 +483,7 @@ public class StutterScreen extends Screen {
 		}
 	}
 
-	public final class StutterList extends ContainerObjectSelectionList<Row> {
+	public final class StutterList extends RowList<Row> {
 		private final int rowWidth;
 		private int labelColumn;
 		private int valueColumn;
@@ -477,12 +495,6 @@ public class StutterScreen extends Screen {
 
 		void add(Row row) {
 			addEntry(row, row.height());
-		}
-
-		@Override
-		protected void extractItem(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick, Row entry) {
-			super.extractItem(graphics, mouseX, mouseY, partialTick, entry);
-			RowFocus.outline(graphics, entry);
 		}
 
 		@Override
