@@ -4,8 +4,8 @@
   "error": null,
   "events": [
     "t+0.0s downgrade driver loaded, phase downgrade-new, output <run>\\out",
-    "t+3.6s title screen",
-    "t+4.6s report ready (online=true)",
+    "t+3.7s title screen",
+    "t+4.7s report ready (online=true)",
     "t+4.7s history: OK, 5 entries",
     "t+6.7s screenshot e2e-downgrade-new-1-history.png: Saved screenshot as e2e-downgrade-new-1-history.png",
     "t+7.7s quitting"
@@ -18,7 +18,7 @@
     "state": "OK",
     "entries": [
       {
-        "id": "2942dab2-0866-4141-8a8b-c5905bab353a",
+        "id": "886fb05d-7a92-4c05-8442-a2234f65b5bf",
         "kind": "apply",
         "kindKey": "rigtune.history.kind.apply",
         "undoable": true,
@@ -28,14 +28,15 @@
         ]
       },
       {
-        "id": "52a15a0e-0ee3-492f-b277-c747f738b9a4",
+        "id": "8b727557-3c7c-4557-9b9b-369640b1426a",
         "kind": "undo",
         "kindKey": "rigtune.history.kind.undo",
         "undoable": false,
-        "changes": 2,
+        "changes": 3,
         "labels": [
           "Render Distance: APPLIED",
-          "Max Framerate: APPLIED"
+          "Max Framerate: APPLIED",
+          "Sodium: Chunk Update Threads: APPLIED"
         ]
       },
       {
@@ -43,10 +44,11 @@
         "kind": "apply",
         "kindKey": "rigtune.history.kind.apply",
         "undoable": false,
-        "changes": 2,
+        "changes": 3,
         "labels": [
           "Render Distance: REVERTED",
-          "Max Framerate: REVERTED"
+          "Max Framerate: REVERTED",
+          "Sodium: Chunk Update Threads: REVERTED"
         ]
       },
       {

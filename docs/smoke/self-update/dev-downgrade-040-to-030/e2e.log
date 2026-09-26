@@ -1,34 +1,36 @@
-[14:32:05] run folder <run>
-[14:32:05] old rigtune-0.3.0+mc26.2.jar 0.3.0+mc26.2 sha256 5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9
-[14:32:05] new rigtune-0.4.0-dev+mc26.2.jar 0.4.0-dev+mc26.2 sha256 2083302f49794dc3b854f53999d1f58aaa5002b85bfaa68e3b8ef972943e1c57
-[14:32:05] composed from ws-a (placeholder), ws-p (placeholder), ws-b (placeholder), ws-s (placeholder), ws-w (placeholder), ws-f (placeholder); jars ['mods/e2e-named-1.0.0.jar.disabled', 'mods/e2e-seed-1.0.0.jar.rigtune-pending']; options {'renderDistance': '8', 'maxFps': '60'}
-[14:32:05] instance mods: e2e-downgrade-off-1.0.0.jar, e2e-named-1.0.0.jar.disabled, e2e-seed-1.0.0.jar.rigtune-pending, fabric-api-0.161.0+26.2.jar, rigtune-0.3.0+mc26.2.jar
-[14:32:06] gradle :26.2:e2eDriverJar -Pe2e.driver=downgrade -Pe2e.oldJar=~\AppData\Local\Temp\claude\C--Dev-Minecraft-Setting-Optimisation-Mod\32b9ff53-5b6c-44d7-bc00-195e4f1a3166\scratchpad\ws-h\jars\rigtune-0.3.0+mc26.2.jar
-[14:32:16] FakeModrinth listening on https://127.0.0.1:443
-[14:32:18] redirect probe: OK
-[14:32:18] launching the client, phase downgrade-old
-[14:32:18] gradle :26.2:e2eClient -Pe2e.driver=downgrade -Pe2e.oldJar=~\AppData\Local\Temp\claude\C--Dev-Minecraft-Setting-Optimisation-Mod\32b9ff53-5b6c-44d7-bc00-195e4f1a3166\scratchpad\ws-h\jars\rigtune-0.3.0+mc26.2.jar -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-downgrade-old.txt
-[14:32:48] client exited (gradle exit 0) after 31 s
-[14:32:51] helper finished: [2026-09-26T04:32:50.805305100Z] [RigTune apply] All operations done
-[14:32:51] helper command line(s) seen: 1
-[14:32:51] reinstalled rigtune-0.4.0-dev+mc26.2.jar in place of rigtune-0.3.0+mc26.2.jar
-[14:32:51] launching the client, phase downgrade-new
-[14:32:51] gradle :26.2:e2eClient -Pe2e.driver=downgrade -Pe2e.oldJar=~\AppData\Local\Temp\claude\C--Dev-Minecraft-Setting-Optimisation-Mod\32b9ff53-5b6c-44d7-bc00-195e4f1a3166\scratchpad\ws-h\jars\rigtune-0.3.0+mc26.2.jar -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-downgrade-new.txt
-[14:33:09] client exited (gradle exit 0) after 19 s
-[14:33:12] downgrade-old [PASS] the client exited normally and the helper finished: gradle exit 0, helper finished: True
-[14:33:12] downgrade-old [PASS] the driver ran the released 0.3.0: error: None; loaded 0.3.0+mc26.2
-[14:33:12] downgrade-old [PASS] latest.log: no RigTune ERROR, stack trace or refusal of a newer file: none
-[14:33:12] downgrade-old [PASS] History lists every entry 0.4 wrote (state OK): state OK; 3 of 3 listed; missing []; unknown kinds []
-[14:33:12] downgrade-old [PASS] Undo last reverted the newest undoable entry, recorded by 0.3.0: plan: {'undoOf': 'c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17', 'problem': None, 'items': ['REVERT Render Distance: 8 → 12', 'REVERT Max Framerate: 60 → 120']}; expected undoOf c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17; 0.3.0 undo entries of it: [[('vanilla.renderDistance', 'APPLIED'), ('vanilla.maxFps', 'APPLIED')]]; its changes still applied or staged: []
-[14:33:12] downgrade-old [PASS] 0.3.0's own Apply staged and applied (disable e2e-downgrade-off-1.0.0.jar): last-apply: ['OK']; e2e-downgrade-off-1.0.0.jar.disabled: True; journaled by 0.3.0: 1
-[14:33:12] downgrade-old [PASS] 0.4's staged ops (with projectId) applied by 0.3.0's helper: ops ['0a4f3c1e-5b7d-4e2a-9c61-7d2f1b8e4a01'] -> ['OK']; their journal changes ['APPLIED']; pending.json left: False
-[14:33:12] downgrade-old [PASS] the files only 0.4 writes are byte-identical: 5 file(s): ['awareness.json', 'profiles.json', 'server-limits.json', 'startup-times.json', 'stutter.json']
-[14:33:12] downgrade-old [PASS] no .bad file, no crash report: .bad: []; crash-reports: []
-[14:33:12] downgrade-new [PASS] the relaunched client exited normally: gradle exit 0
-[14:33:12] downgrade-new [PASS] 0.4 loaded from mods/ again: error: None; loaded 0.4.0-dev+mc26.2 from ['<instance>\\mods\\rigtune-0.4.0-dev+mc26.2.jar']
-[14:33:12] downgrade-new [PASS] latest.log: no RigTune ERROR, stack trace or refusal of a newer file: none
-[14:33:12] downgrade-new [PASS] no .bad file, no crash report: .bad: []; crash-reports: []
-[14:33:12] downgrade-new [PASS] History lists every entry of history.json (state OK): state OK; listed 5 of 5; unknown kinds []
-[14:33:12] downgrade-new [PASS] profiles.json still labels the switch entries 0.3.0 kept: expected {'c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17': 'Battery'}; labels now {'c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17': 'Battery'}
-[14:33:12] downgrade-new [PASS] 0.4 read its own files back (none reset or moved to .bad): 5 file(s) kept their items
-[14:33:12] VERDICT PASS
+[15:08:43] run folder <run>
+[15:08:43] old rigtune-0.3.0+mc26.2.jar 0.3.0+mc26.2 sha256 5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9
+[15:08:43] new rigtune-0.4.0-dev+mc26.2.jar 0.4.0-dev+mc26.2 sha256 2083302f49794dc3b854f53999d1f58aaa5002b85bfaa68e3b8ef972943e1c57
+[15:08:43] composed from ws-a (placeholder), ws-p (placeholder), ws-b (placeholder), ws-s (placeholder), ws-w (placeholder), ws-f (placeholder); jars ['mods/e2e-named-1.0.0.jar.disabled', 'mods/e2e-seed-1.0.0.jar.rigtune-pending']; options {'renderDistance': '8', 'maxFps': '60'}
+[15:08:43] instance mods: e2e-downgrade-off-1.0.0.jar, e2e-named-1.0.0.jar.disabled, e2e-seed-1.0.0.jar.rigtune-pending, fabric-api-0.161.0+26.2.jar, rigtune-0.3.0+mc26.2.jar
+[15:08:44] gradle :26.2:e2eDowngradeDriverJar -Pe2e.driver=downgrade -Pe2e.oldJar=~\AppData\Local\Temp\claude\C--Dev-Minecraft-Setting-Optimisation-Mod\32b9ff53-5b6c-44d7-bc00-195e4f1a3166\scratchpad\ws-h\jars\rigtune-0.3.0+mc26.2.jar
+[15:08:45] took the game-test lock C:\Dev\Worktrees\.gametest-lock
+[15:08:46] FakeModrinth listening on https://127.0.0.1:443
+[15:08:48] redirect probe: OK
+[15:08:48] launching the client, phase downgrade-old
+[15:08:48] gradle :26.2:e2eClient -Pe2e.driver=downgrade -Pe2e.oldJar=~\AppData\Local\Temp\claude\C--Dev-Minecraft-Setting-Optimisation-Mod\32b9ff53-5b6c-44d7-bc00-195e4f1a3166\scratchpad\ws-h\jars\rigtune-0.3.0+mc26.2.jar -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-downgrade-old.txt
+[15:09:20] client exited (gradle exit 0) after 32 s
+[15:09:22] helper finished: [2026-09-26T05:09:22.332558900Z] [RigTune apply] All operations done
+[15:09:22] helper command line(s) seen: 1
+[15:09:22] reinstalled rigtune-0.4.0-dev+mc26.2.jar in place of rigtune-0.3.0+mc26.2.jar
+[15:09:22] launching the client, phase downgrade-new
+[15:09:22] gradle :26.2:e2eClient -Pe2e.driver=downgrade -Pe2e.oldJar=~\AppData\Local\Temp\claude\C--Dev-Minecraft-Setting-Optimisation-Mod\32b9ff53-5b6c-44d7-bc00-195e4f1a3166\scratchpad\ws-h\jars\rigtune-0.3.0+mc26.2.jar -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-downgrade-new.txt
+[15:09:41] client exited (gradle exit 0) after 19 s
+[15:09:44] released the game-test lock
+[15:09:44] downgrade-old [PASS] the client exited normally and the helper finished: gradle exit 0, helper finished: True
+[15:09:44] downgrade-old [PASS] the driver ran the released 0.3.0: error: None; loaded 0.3.0+mc26.2
+[15:09:44] downgrade-old [PASS] latest.log: no RigTune ERROR, stack trace or refusal of a newer file: none
+[15:09:44] downgrade-old [PASS] History lists every entry 0.4 wrote (state OK): state OK; 3 of 3 listed; missing []; unknown kinds []
+[15:09:44] downgrade-old [PASS] Undo last reverted the newest undoable entry, recorded by 0.3.0: plan undoOf c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17 (expected c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17), problem None, items [('REVERT', 'Render Distance: 8 → 12', None), ('REVERT', 'Max Framerate: 60 → 120', None), ('REVERT', 'Sodium: Chunk Update Threads: 2 → Default', None)]; 0.3.0 undo entries of it: [[('vanilla.renderDistance', 'APPLIED'), ('vanilla.maxFps', 'APPLIED'), ('sodium.performance.chunk_builder_threads', 'APPLIED')]]; planned but not undone: []; vanilla or mod changes skipped: []
+[15:09:44] downgrade-old [PASS] 0.3.0's own Apply staged and applied (disable e2e-downgrade-off-1.0.0.jar): last-apply: ['OK']; e2e-downgrade-off-1.0.0.jar.disabled: True; journaled by 0.3.0: 1
+[15:09:44] downgrade-old [PASS] 0.4's staged ops (with projectId): applied by 0.3.0's helper, or dropped by its Undo last: ops (expected, last-apply, journal): {'0a4f3c1e-5b7d-4e2a-9c61-7d2f1b8e4a01': ('APPLIED', 'OK', ['APPLIED'])}; pending.json left: False
+[15:09:44] downgrade-old [PASS] the files only 0.4 writes are byte-identical: 5 file(s): ['awareness.json', 'profiles.json', 'server-limits.json', 'startup-times.json', 'stutter.json']
+[15:09:44] downgrade-old [PASS] no .bad file, no crash report: .bad: []; crash-reports: []
+[15:09:44] downgrade-new [PASS] the relaunched client exited normally: gradle exit 0
+[15:09:44] downgrade-new [PASS] 0.4 loaded from mods/ again: error: None; loaded 0.4.0-dev+mc26.2 from ['<instance>\\mods\\rigtune-0.4.0-dev+mc26.2.jar']
+[15:09:44] downgrade-new [PASS] latest.log: no RigTune ERROR, stack trace or refusal of a newer file: none
+[15:09:44] downgrade-new [PASS] no .bad file, no crash report: .bad: []; crash-reports: []
+[15:09:44] downgrade-new [PASS] History lists every entry of history.json (state OK): state OK; listed 5 of 5; unknown kinds []
+[15:09:44] downgrade-new [PASS] profiles.json still labels the switch entries 0.3.0 kept: expected {'c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17': 'Battery'}; labels now {'c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17': 'Battery'}
+[15:09:44] downgrade-new [PASS] 0.4 read its own files back (none reset or moved to .bad): 5 file(s) kept their items
+[15:09:44] VERDICT PASS

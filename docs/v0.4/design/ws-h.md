@@ -14,7 +14,7 @@ the released-jar compatibility harness, and the two-switch profile case.
 | seeded 0.1.0 → new (H-M2) | `... --seed tools/e2e/seeds/v010-dh --expect-history auto` | PASS 26/26 | final-v010-seeded-to-040 |
 | undo after restart + per entry (M14, B-M3) | `--scenario undo` | PASS 43/43 | undo-after-restart-040 |
 | + two profile switches (P-H1) | `--scenario undo --profile-switch settings` (stand-in) | 69/71: M14/B-M3 43/43, switches 8/8, Undo all + check 14/14, **Undo last twice 4/6 (SPEC 2n, expected)** | same run, `--profile-switch profile` |
-| downgrade (AC3.2) | `--scenario downgrade --old-jar rigtune-0.3.0+mc26.2.jar` | PASS 16/16 (placeholder sets) | downgrade-040-to-030 |
+| downgrade (AC3.2) | `--scenario downgrade --old-jar rigtune-0.3.0+mc26.2.jar` | PASS 16/16 (placeholder sets; 0.3.0's Undo last also reverts a staged Sodium key) | downgrade-040-to-030 |
 | released-jar harness (AC3.3) | `python tools/e2e/compat030.py --old-jar rigtune-0.3.0+mc26.2.jar` | PASS 9/9 locally and in CI (placeholder sets) | every CI run |
 
 Evidence folders: `dev-v030-to-040`, `dev-v020-to-040`, `dev-v010-to-040`, `dev-v010-seeded-to-040`,
@@ -73,6 +73,17 @@ Released jars (GitHub release assets; sha256 equal to the release's asset digest
 - **Lock (X-L3).** The five self-update/undo dry runs went through a runner that retried every 120 s on exit 3 and
   paused 150 s after each run (the lock was held by another session, r-jvm, most of that hour); the later pair ran
   under one hold (`--lock none` inside, released in the same script). README gives Phase 5 the same `pair` pattern.
+
+- **Self-review** (code-reviewer subagent, twice). First pass (0 high, 4 medium, 6 low; all fixed in 68b9419):
+  options.txt string values unquoted like the journal, the profile originals as a JSON file, `release()` matching the
+  worktree line exactly, argument checks. Second pass (0 high, 5 medium, 7 low; all fixed in 8f459bd): the session
+  log leaves out the previous launch rolled over at startup; the log check fits the production log (no logger
+  names: any ERROR but the offline client's usual ones); Undo last's expected entry follows UndoPlanner; a config key
+  0.3.0 skips is allowed, a vanilla or mod change isn't; Compat030 counts staged changes and DISCARD_STAGED; pending.json
+  merges across sets; each mod ends as its latest applied change left it; the downgrade instance gets
+  sodium-options.json/iris.properties for applied config keys (config targets are files, so 0.3.0 reverts them
+  without the mods); the downgrade run pre-builds its own driver; RESULT.md lists failures other than the known 2n
+  phase. The downgrade dry run was repeated after it (16/16).
 
 ## Findings
 

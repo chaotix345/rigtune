@@ -14,9 +14,18 @@
       "attempts": 0
     },
     {
+      "type": "PATCH_JSON",
+      "path": "<instance>\\config\\sodium-options.json",
+      "patches": {
+        "performance.chunk_builder_threads": "0"
+      },
+      "id": "85b3386f-ce25-4707-a306-13b85e0ebaa2",
+      "attempts": 0
+    },
+    {
       "type": "DISABLE_FILE",
       "path": "<instance>\\mods\\e2e-downgrade-off-1.0.0.jar",
-      "id": "51382223-eef6-4848-bd98-9b98adf7380f",
+      "id": "9ae3b6ff-a035-4aa7-9624-c4562b140390",
       "attempts": 0
     }
   ]

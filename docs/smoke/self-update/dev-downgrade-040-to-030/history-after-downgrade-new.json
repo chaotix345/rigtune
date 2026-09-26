@@ -62,19 +62,27 @@
           "before": "120",
           "after": "60",
           "status": "REVERTED"
+        },
+        {
+          "id": "f6b0d429-a03e-4152-8e6f-a28b9067cf1a",
+          "type": "setting",
+          "key": "sodium.performance.chunk_builder_threads",
+          "before": "0",
+          "after": "2",
+          "status": "REVERTED"
         }
       ]
     },
     {
-      "id": "52a15a0e-0ee3-492f-b277-c747f738b9a4",
-      "at": "2026-09-26T04:32:41.826711300Z",
+      "id": "8b727557-3c7c-4557-9b9b-369640b1426a",
+      "at": "2026-09-26T05:09:14.691534500Z",
       "kind": "undo",
       "rigtuneVersion": "0.3.0+mc26.2",
       "mcVersion": "26.2",
       "undoOf": "c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17",
       "changes": [
         {
-          "id": "aeba07b1-a3fb-47fc-9556-decdd2c64806",
+          "id": "49542fe1-a2a7-4722-bc08-6f4536569f52",
           "type": "setting",
           "key": "vanilla.renderDistance",
           "before": "8",
@@ -83,32 +91,42 @@
           "reverts": "d4f8b207-9e1c-4f30-8c4d-806f7e45ad18"
         },
         {
-          "id": "b57e8166-c16f-4b70-9169-e42bdc0d3f37",
+          "id": "b250461b-5706-4f70-a521-3347c0145410",
           "type": "setting",
           "key": "vanilla.maxFps",
           "before": "60",
           "after": "120",
           "status": "APPLIED",
           "reverts": "e5a9c318-af2d-4041-9d5e-917a8f56be19"
+        },
+        {
+          "id": "ceb932be-b172-4998-bce4-5bd33616d162",
+          "type": "setting",
+          "key": "sodium.performance.chunk_builder_threads",
+          "before": "2",
+          "after": "0",
+          "status": "APPLIED",
+          "opId": "85b3386f-ce25-4707-a306-13b85e0ebaa2",
+          "reverts": "f6b0d429-a03e-4152-8e6f-a28b9067cf1a"
         }
       ]
     },
     {
-      "id": "2942dab2-0866-4141-8a8b-c5905bab353a",
-      "at": "2026-09-26T04:32:43.294787300Z",
+      "id": "886fb05d-7a92-4c05-8442-a2234f65b5bf",
+      "at": "2026-09-26T05:09:16.138997600Z",
       "kind": "apply",
       "rigtuneVersion": "0.3.0+mc26.2",
       "mcVersion": "26.2",
       "changes": [
         {
-          "id": "0de76809-c5a5-410c-8f26-caadbd7833b0",
+          "id": "20a75d87-ec32-488e-8ece-1c9936c5c011",
           "type": "file",
           "action": "disable",
           "modId": "e2e-downgrade-off",
           "file": "e2e-downgrade-off-1.0.0.jar",
           "resultFile": "e2e-downgrade-off-1.0.0.jar.disabled",
           "status": "APPLIED",
-          "opId": "51382223-eef6-4848-bd98-9b98adf7380f"
+          "opId": "9ae3b6ff-a035-4aa7-9624-c4562b140390"
         }
       ]
     }

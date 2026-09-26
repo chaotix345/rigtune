@@ -4,19 +4,19 @@
   "error": null,
   "events": [
     "t+0.0s downgrade driver loaded, phase downgrade-old, output <run>\\out",
-    "t+3.6s title screen",
-    "t+4.6s report ready (online=true)",
-    "t+4.7s history: OK, 3 entries",
-    "t+6.7s screenshot e2e-downgrade-old-1-history.png: Saved screenshot as e2e-downgrade-old-1-history.png",
-    "t+7.7s Undo last plan: {undoOf=c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17, problem=null, items=[REVERT Render Distance: 8 → 12, REVERT Max Framerate: 60 → 120]}",
-    "t+9.7s screenshot e2e-downgrade-old-2-undo.png: Saved screenshot as e2e-downgrade-old-2-undo.png",
-    "t+10.6s pressed Undo (2)",
-    "t+11.1s undo recorded",
-    "t+12.1s apply disable e2e-downgrade-off: Restart Minecraft to finish applying 2 change(s).",
-    "t+12.6s staged",
-    "t+12.7s historyAtQuit: OK, 5 entries",
-    "t+14.7s screenshot e2e-downgrade-old-3-history.png: Saved screenshot as e2e-downgrade-old-3-history.png",
-    "t+15.7s quitting"
+    "t+3.8s title screen",
+    "t+4.8s report ready (online=true)",
+    "t+4.9s history: OK, 3 entries",
+    "t+6.9s screenshot e2e-downgrade-old-1-history.png: Saved screenshot as e2e-downgrade-old-1-history.png",
+    "t+7.9s Undo last plan: {undoOf=c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17, problem=null, items=[{action=REVERT, description=Render Distance: 8 → 12, reason=null, needsRestart=false, changeIds=[d4f8b207-9e1c-4f30-8c4d-806f7e45ad18]}, {action=REVERT, description=Max Framerate: 60 → 120, reason=null, needsRestart=false, changeIds=[e5a9c318-af2d-4041-9d5e-917a8f56be19]}, {action=REVERT, description=Sodium: Chunk Update Threads: 2 → Default, reason=null, needsRestart=true, changeIds=[f6b0d429-a03e-4152-8e6f-a28b9067cf1a]}]}",
+    "t+9.9s screenshot e2e-downgrade-old-2-undo.png: Saved screenshot as e2e-downgrade-old-2-undo.png",
+    "t+10.8s pressed Undo (3)",
+    "t+11.3s undo recorded",
+    "t+12.3s apply disable e2e-downgrade-off: Restart Minecraft to finish applying 3 change(s).",
+    "t+12.8s staged",
+    "t+12.9s historyAtQuit: OK, 5 entries",
+    "t+14.9s screenshot e2e-downgrade-old-3-history.png: Saved screenshot as e2e-downgrade-old-3-history.png",
+    "t+15.9s quitting"
   ],
   "rigtuneVersion": "0.3.0+mc26.2",
   "rigtuneOrigin": [
@@ -30,10 +30,11 @@
         "kind": "apply",
         "kindKey": "rigtune.history.kind.apply",
         "undoable": true,
-        "changes": 2,
+        "changes": 3,
         "labels": [
           "Render Distance: APPLIED",
-          "Max Framerate: APPLIED"
+          "Max Framerate: APPLIED",
+          "Sodium: Chunk Update Threads: APPLIED"
         ]
       },
       {
@@ -62,18 +63,43 @@
     "undoOf": "c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17",
     "problem": null,
     "items": [
-      "REVERT Render Distance: 8 → 12",
-      "REVERT Max Framerate: 60 → 120"
+      {
+        "action": "REVERT",
+        "description": "Render Distance: 8 → 12",
+        "reason": null,
+        "needsRestart": false,
+        "changeIds": [
+          "d4f8b207-9e1c-4f30-8c4d-806f7e45ad18"
+        ]
+      },
+      {
+        "action": "REVERT",
+        "description": "Max Framerate: 60 → 120",
+        "reason": null,
+        "needsRestart": false,
+        "changeIds": [
+          "e5a9c318-af2d-4041-9d5e-917a8f56be19"
+        ]
+      },
+      {
+        "action": "REVERT",
+        "description": "Sodium: Chunk Update Threads: 2 → Default",
+        "reason": null,
+        "needsRestart": true,
+        "changeIds": [
+          "f6b0d429-a03e-4152-8e6f-a28b9067cf1a"
+        ]
+      }
     ]
   },
-  "undoButton": "Undo (2)",
+  "undoButton": "Undo (3)",
   "undoStatus": null,
-  "applyMessage": "Restart Minecraft to finish applying 2 change(s).",
+  "applyMessage": "Restart Minecraft to finish applying 3 change(s).",
   "historyAtQuit": {
     "state": "OK",
     "entries": [
       {
-        "id": "2942dab2-0866-4141-8a8b-c5905bab353a",
+        "id": "886fb05d-7a92-4c05-8442-a2234f65b5bf",
         "kind": "apply",
         "kindKey": "rigtune.history.kind.apply",
         "undoable": true,
@@ -83,14 +109,15 @@
         ]
       },
       {
-        "id": "52a15a0e-0ee3-492f-b277-c747f738b9a4",
+        "id": "8b727557-3c7c-4557-9b9b-369640b1426a",
         "kind": "undo",
         "kindKey": "rigtune.history.kind.undo",
         "undoable": false,
-        "changes": 2,
+        "changes": 3,
         "labels": [
           "Render Distance: APPLIED",
-          "Max Framerate: APPLIED"
+          "Max Framerate: APPLIED",
+          "Sodium: Chunk Update Threads: STAGED"
         ]
       },
       {
@@ -98,10 +125,11 @@
         "kind": "apply",
         "kindKey": "rigtune.history.kind.apply",
         "undoable": false,
-        "changes": 2,
+        "changes": 3,
         "labels": [
           "Render Distance: REVERTED",
-          "Max Framerate: REVERTED"
+          "Max Framerate: REVERTED",
+          "Sodium: Chunk Update Threads: APPLIED"
         ]
       },
       {
