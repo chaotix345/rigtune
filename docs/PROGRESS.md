@@ -26,13 +26,13 @@ Brief: the user's v0.4.0 prompt (full autonomy, research -> release incl. GitHub
 | WS-P early | feat/profiles-extract (deleted) | - | MERGED 22cc915 (CI 36219635079): Recommender.settingTargets extraction, golden report over 240 scenarios. |
 | coordinator | - | - | core/model/ModSetHash shared by WS-B/WS-F (e1393e1). |
 | WS-A | fix/v04-deferred | rigtune-fixes4 | 2a-2g, 2j, 2m, 2n |
-| WS-R | feat/rules-v04 | rigtune-rules4 | 2k, 2l, tools side, all rules content (templates, stutter, jvm, driver seeds) |
+| WS-R | feat/rules-v04 (deleted) | removed | MERGED 2636702 (CI 36224155899): rules r14; rules-v1 diff = VSync pair + revision/generatedAt only; 5 templates, 5 stutter seeds, 9 jvm-* advice (ZGC option C), 2 driver seeds, all v1:false; Legacy* tests; Python 324. UNVERIFIED: Sodium 'Chunk Updates' page, DH 'NO. of threads' label in advice text. |
 | WS-P | feat/profiles | rigtune-profiles | item 4 (+ early branch feat/profiles-extract: settingTargets) |
 | WS-S | feat/stutter | rigtune-stutter | item 5 |
 | WS-J | feat/jvm-advice | rigtune-jvm | item 6 |
 | WS-B | feat/bench-history | rigtune-benchhist | item 7 |
 | WS-W | feat/awareness | rigtune-aware | items 8, 9 |
-| WS-F | feat/footprint | rigtune-foot | items 10, 13 |
+| WS-F | feat/footprint (deleted) | removed | MERGED 32c425b (CI 36224299780): fail-mode guard, budgets (init wall 368/ceil 400, CPU 150, worker 300, frame 13 ns, tick 111 ns, idle 109 KB, leakSuspects 0); gate proofs 36222846655 + 36222850330 (scratch/ws-f-* branches kept as evidence until Phase 8); lazy HttpClient; startup trend. TODO F-L1 follow-up: monitor-on numbers after WS-S. |
 - Research worktrees still to remove: rigtune-r-foot (research/footprint, trial saved to scratchpad/r-footprint), rigtune-r-jvm (research/jvm).
 
 ## v0.3.0: RELEASED 2026-09-26
