@@ -1,0 +1,99 @@
+# Local throwaway 26.4-snapshot-1 node, final predicates (>=26.4-alpha), 2026-09-26T03:15Z, branch feat/v04-foundation @ 726f82b (the node was removed afterwards; never committed)
+
+$ python tools/add_mc_version.py 26.4-snapshot-1 --prerelease-ok
+Adding Minecraft 26.4-snapshot-1 (after 26.3)
+  Mojang: 26.4-snapshot-1 is a snapshot, released 2026-09-22
+  Java: 25
+  Fabric Loader: 0.19.5 (gradle.properties) is listed for 26.4-snapshot-1
+  Fabric API: 0.161.1+26.4 (beta)
+  Mod Menu: 22.0.0-alpha.1 (alpha)
+  Sodium: none for 26.4-snapshot-1
+  Iris: none for 26.4-snapshot-1; 26.3's id bAdKrpw8 is kept (compileOnly, API only)
+  No "Fabric for Minecraft 26.4" post on the Fabric blog yet: check https://fabricmc.net/blog/ for the Loom and Gradle versions it needs before building.
+
+settings.gradle:
+--- a/settings.gradle
++++ b/settings.gradle
+@@ -20,3 +20,3 @@
+ 	create(getRootProject()) {
+-		versions '26.2', '26.3'
++		versions '26.2', '26.3', '26.4-snapshot-1'
+ 		vcsVersion = '26.2'
+
+versions/26.4-snapshot-1/gradle.properties (new):
+  minecraft_dependency=~26.4-
+  fabric_api_version=0.161.1+26.4
+  modmenu_version=22.0.0-alpha.1
+  # Iris 1.11.6+26.3-fabric (Modrinth version id), compileOnly for the benchmark; no Iris build for 26.4-snapshot-1 yet, so 26.3's is kept
+  iris_version=bAdKrpw8
+
+Notes:
+  - No Sodium build for 26.4-snapshot-1 yet: sodium_version is left out, so dev runs and game tests run without Sodium. Add it when Sodium ships for this version.
+  - 26.4-snapshot-1 is a pre-release node: don't ship it (docs/research/v0.3/mc-versions.md, section 5.4). Once 26.4 is released, remove this node and add 26.4.
+
+Wrote settings.gradle and versions/26.4-snapshot-1/gradle.properties.
+
+Next steps (tools/MC_VERSIONS.md):
+  1. Read Fabric's announcement for 26.4; upgrade Loom and Gradle on their own first if it asks.
+  2. ./gradlew :26.4-snapshot-1:build (JAVA_HOME = JDK 25). Fix compile errors with `//? if >=26.4-snapshot-1 {` blocks (./gradlew "Set active project to 26.4-snapshot-1" to edit them in the IDE).
+  3. python tools/mc_apidiff.py 26.3 26.4-snapshot-1 --out build/apidiff: review every changed class it lists (reflection targets, the mixin target, Options keys, runtime defaults), even when the build is green.
+  4. ./gradlew :26.4-snapshot-1:runClientGameTest (opens a game window) and a production smoke test with 26.4-snapshot-1's mods.
+  5. Review the version-specific rules (vulkan-backend, ixeris, vulkanmod, mixintrace-reborn) and regenerate the rules for every supported version: python tools/update_rules.py, then check rules/REVIEW.md.
+  6. Update the README, DESIGN, Modrinth body and CHANGELOG version lines (and KnowledgeV2ScenarioTest's version list).
+  7. ./gradlew "Reset active project", check git diff, commit on a feature branch and push: CI builds every node and runs its game-test legs (tools/gametest_matrix.py reads versions/*/, so no workflow edit).
+  8. Release: tag it; release.yml publishes every versions/*/ node (versionType alpha for a pre-release id).
+  9. For each later hotfix of 26.4: bytecode-compare, then PATCH the Modrinth versions' game_versions (tools/MC_VERSIONS.md, Hotfixes).
+
+$ ./gradlew :26.4-snapshot-1:build --console=plain   (JAVA_HOME=C:/Dev/Tools/jdk/jdk-25.0.4.1+1)
+Starting a Gradle Daemon, 1 busy and 6 stopped Daemons could not be reused, use --status for details
+Running Stonecutter 0.9.8
+
+> Configure project :26.2
+Fabric Loom: 1.17.21
+
+> Configure project :26.3
+Fabric Loom: 1.17.21
+
+> Configure project :26.4-snapshot-1
+Fabric Loom: 1.17.21
+
+> Task :26.4-snapshot-1:stonecutterPrepare
+> Task :26.4-snapshot-1:stonecutterGenerate
+> Task :26.4-snapshot-1:compileJava
+> Task :26.4-snapshot-1:processResources
+> Task :26.4-snapshot-1:classes
+> Task :26.4-snapshot-1:stonecutterPrepareClient
+> Task :26.4-snapshot-1:stonecutterGenerateClient
+
+> Task :26.4-snapshot-1:compileClientJava
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :26.4-snapshot-1:processClientResources
+> Task :26.4-snapshot-1:processIncludeJars
+> Task :26.4-snapshot-1:jar
+> Task :26.4-snapshot-1:sourcesJar
+> Task :26.4-snapshot-1:assemble
+> Task :26.4-snapshot-1:clientClasses
+> Task :26.4-snapshot-1:stonecutterPrepareGametest
+> Task :26.4-snapshot-1:stonecutterGenerateGametest
+> Task :26.4-snapshot-1:compileGametestJava
+> Task :26.4-snapshot-1:processGametestResources
+> Task :26.4-snapshot-1:gametestClasses
+> Task :26.4-snapshot-1:stonecutterPrepareTest
+> Task :26.4-snapshot-1:stonecutterGenerateTest
+> Task :26.4-snapshot-1:compileTestJava
+> Task :26.4-snapshot-1:processTestResources
+> Task :26.4-snapshot-1:testClasses
+> Task :26.4-snapshot-1:test
+> Task :26.4-snapshot-1:validateAccessWidener NO-SOURCE
+> Task :26.4-snapshot-1:check
+> Task :26.4-snapshot-1:build
+
+[Incubating] Problems report is available at: file:///C:/Dev/Worktrees/rigtune-found4/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 1m 37s
+20 actionable tasks: 20 executed
+
+# From versions/26.4-snapshot-1/build/test-results/test/*.xml:
+26.4-snapshot-1 unit tests: 104 classes, 1126 tests, 0 failures, 0 errors, 1 skipped (io.github.chaotix345.rigtune.core.launcher.LauncherDetectorTest)
