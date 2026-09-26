@@ -3,7 +3,6 @@ package io.github.chaotix345.rigtune.client;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.awareness.AwarenessService;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
-import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
 import io.github.chaotix345.rigtune.client.benchmark.TrendService;
 import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
 import io.github.chaotix345.rigtune.client.jvm.JvmService;
@@ -36,7 +35,6 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
-import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecords;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
@@ -623,7 +621,7 @@ public final class RealController implements RigTuneController {
 
 	@Override
 	public @Nullable BenchmarkSummary latestBenchmark() {
-		return BenchmarkStore.history().latest().map(BenchmarkRecords::summary).orElse(null);
+		return trendService.latestSummary();
 	}
 
 	@Override
