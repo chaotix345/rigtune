@@ -12,6 +12,6 @@ RigTune 0.4.0 for Minecraft Java 26.2 and 26.3 (Fabric). Download the jar for yo
 - **Keyboard and Narrator** support for every list row, and high-contrast colours.
 - **Fixes that also affect 0.3.0**: clicking a row in History on 26.3; a second "Undo last" skipping a staged setting; updates now respect other mods' version requirements; a helper killed mid-update is finished or rolled back at the next run; undo keeps a mod and its library together; "Undo all" still reaches your original settings after a long history.
 
-No file format changed: every file 0.1.0 to 0.3.0 wrote keeps working, and 0.3.0 reads what 0.4.0 writes.
+No file format changed: every file 0.1.0 to 0.3.0 wrote keeps working, and 0.3.0 reads what 0.4.0 writes (checked with the released jars, including self-updates from 0.1.0, 0.2.0 and 0.3.0 and a downgrade to 0.3.0 and back).
 
 **Full changelog**: [CHANGELOG.md](https://github.com/chaotix345/rigtune/blob/main/CHANGELOG.md#040---2026-09-27) · [compare v0.3.0...v0.4.0](https://github.com/chaotix345/rigtune/compare/v0.3.0...v0.4.0)
