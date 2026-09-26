@@ -164,3 +164,10 @@ server limits: WS-W caps only the main-list path.
 10. **Importing the same code again (same name and values) reuses its profile.**
 11. **The battery back-offer looks up only the profile's name** (no template compute on the render thread).
 12. (tests) The AC4.2 timing bound is the mean and 99th percentile, not every sample (deviation above, coordinator-approved).
+
+## Footprint (SPEC 10)
+Once WS-F's budgets were merged, a cached bundled RulesDocument in ProfileService, plus the built-in template section held in a
+static field, pushed `rigtuneClassBytesIdle` to 114,568 bytes against a budget of 109,296 (CI run 36227826218). Neither is
+kept now: the bundled rules load only for a document without the template, and the built-in copy is parsed only when neither
+document has it. After ProfilesGameTest, the same measure is 69,120 to 69,648 bytes on the 3 legs (CI run 36228392253).
+PowerWatcher's thread exists only on machines with a real battery.
