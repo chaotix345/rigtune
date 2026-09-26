@@ -19,11 +19,11 @@ import java.util.Set;
 // finish or put back, and what a redo reports as done. A new file in config/rigtune/helper/ (HelperLauncher keeps it):
 // 0.1.0-0.3.0 never read it, and their HelperLauncher deletes it. Helper-safe (core and Gson only) and best effort: an
 // unreadable file counts as empty, and a failed write loses only the record (retried at the next change), never a rename.
-final class UnfinishedGroups {
+public final class UnfinishedGroups {
 	static final String FILE_NAME = "unfinished-groups.json";
 
 	// op: the op's id; from/to: the rename's absolute paths (a disable's `to` is the .disabled name it was given).
-	record Rename(String op, String from, String to) {
+	public record Rename(String op, String from, String to) {
 	}
 
 	private record Entry(String group, List<Rename> renames) {
@@ -52,15 +52,32 @@ final class UnfinishedGroups {
 			return out;
 		}
 		try {
-			Doc doc = PendingActions.GSON.fromJson(Files.readString(out.file, StandardCharsets.UTF_8), Doc.class);
-			for (Entry entry : doc == null || doc.groups() == null ? List.<Entry>of() : doc.groups()) {
-				if (entry != null && entry.group() != null && entry.renames() != null) {
-					out.groups.put(entry.group(), entry.renames().stream().filter(Objects::nonNull).toList());
-				}
-			}
+			out.groups.putAll(read(out.file));
 		} catch (IOException | RuntimeException e) {
 			ApplyHelper.log("Could not read " + out.file + ": " + e);
 			out.dirty = true;
+		}
+		return out;
+	}
+
+	// The record as the game sees it before the next helper run (Undo and Discard pending; review-8 AH-1): every recorded
+	// rename. Read only; empty when there is none or it can't be read.
+	public static List<Rename> recorded(Path configDir) {
+		Path file = file(configDir);
+		try {
+			return Files.isRegularFile(file) ? read(file).values().stream().flatMap(List::stream).toList() : List.of();
+		} catch (IOException | RuntimeException e) {
+			return List.of();
+		}
+	}
+
+	private static Map<String, List<Rename>> read(Path file) throws IOException {
+		Map<String, List<Rename>> out = new LinkedHashMap<>();
+		Doc doc = PendingActions.GSON.fromJson(Files.readString(file, StandardCharsets.UTF_8), Doc.class);
+		for (Entry entry : doc == null || doc.groups() == null ? List.<Entry>of() : doc.groups()) {
+			if (entry != null && entry.group() != null && entry.renames() != null) {
+				out.put(entry.group(), entry.renames().stream().filter(Objects::nonNull).toList());
+			}
 		}
 		return out;
 	}

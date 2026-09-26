@@ -11,6 +11,19 @@ public final class TestExecutors {
 	private TestExecutors() {
 	}
 
+	// A helper killed (PC shutdown, Task Manager) just before it renames a matching file: nothing after the throw runs.
+	public static final class Killed extends Error {
+	}
+
+	public static ApplyExecutor killedAt(Predicate<Path> at) {
+		return new ApplyExecutor(2, 1, (from, to) -> {
+			if (at.test(from)) {
+				throw new Killed();
+			}
+			Files.move(from, to);
+		}, millis -> true);
+	}
+
 	public static ApplyExecutor failingMovesOf(Predicate<Path> fails) {
 		return new ApplyExecutor(2, 1, (from, to) -> {
 			if (fails.test(from)) {

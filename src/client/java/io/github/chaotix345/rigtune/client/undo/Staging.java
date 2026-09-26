@@ -8,6 +8,7 @@ import io.github.chaotix345.rigtune.core.apply.ModJars;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
+import io.github.chaotix345.rigtune.core.apply.UnfinishedGroups;
 import io.github.chaotix345.rigtune.core.history.HistoryUpdates;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
@@ -257,7 +258,8 @@ public final class Staging {
 	}
 
 	// Cancels everything staged (the RigTune screen's Discard pending), except a group the helper left half done at the
-	// last exit, which the next exit finishes (audit M2; PartlyApplied). Returns the dropped ops; null when the lock is busy.
+	// last exit (a failed rollback, or a kill between two renames), which the next exit finishes or rolls back (audit M2,
+	// review-8 AH-1; PartlyApplied). Returns the dropped ops; null when the lock is busy.
 	public List<Op> discard() throws IOException {
 		try (ApplyLock lock = lock()) {
 			if (lock == null) {
@@ -292,7 +294,17 @@ public final class Staging {
 			RigTune.LOGGER.warn("Could not list the mods folder to check for half-applied changes", e);
 			return Set.of();
 		}
-		return PartlyApplied.groups(plan.ops(), names);
+		return PartlyApplied.groups(plan.ops(), names, unfinishedRenames());
+	}
+
+	// The helper's record of the renames it started and hasn't finished (review-8 AH-1: a helper killed mid-group leaves
+	// no attempt counted, only this), from the config folder the helper uses for this pending.json.
+	public List<UnfinishedGroups.Rename> unfinishedRenames() {
+		try {
+			return UnfinishedGroups.recorded(InstanceDirs.configDirOf(pendingFile));
+		} catch (RuntimeException e) {
+			return List.of();
+		}
 	}
 
 	// The caller holds the lock. Drops every op outside the half-done groups, as unstageLocked does.
