@@ -33,10 +33,13 @@ public final class ProfileSwitch {
 		List<Recommendation> out = new ArrayList<>();
 		for (ShareKeys.Key tableKey : ShareKeys.V1) {
 			String key = tableKey.key();
-			String target = values.get(key);
-			if (target == null || !takesPart(key, snapshot, loadedMods) || !SettingKeys.safeValue(target) || tableKey.encode(target) == null) {
+			String raw = values.get(key);
+			Integer wire = raw == null || !SettingKeys.safeValue(raw) ? null : tableKey.encode(raw);
+			if (wire == null || !takesPart(key, snapshot, loadedMods)) {
 				continue;
 			}
+			// The table's own spelling, whatever the profile or rule wrote ("always" -> ALWAYS, "12.0" -> 12).
+			String target = tableKey.decode(wire, 60);
 			String current = snapshot.get(key);
 			if (SettingValues.same(current, target)) {
 				continue;

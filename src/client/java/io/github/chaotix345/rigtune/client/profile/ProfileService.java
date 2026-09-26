@@ -26,6 +26,7 @@ import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.notice.NoticeAction;
 import io.github.chaotix345.rigtune.core.notice.NoticePriority;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
+import io.github.chaotix345.rigtune.core.profile.ActiveProfile;
 import io.github.chaotix345.rigtune.core.profile.BatteryPrompt;
 import io.github.chaotix345.rigtune.core.profile.EffectiveSettings;
 import io.github.chaotix345.rigtune.core.profile.ProfileImport;
@@ -59,6 +60,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 
@@ -102,7 +104,7 @@ public final class ProfileService {
 	// profiles.
 	public List<ProfileView> profiles() {
 		ensureBaseline();
-		String active = store().active();
+		String active = active();
 		List<ProfileView> out = new ArrayList<>();
 		for (TemplateId id : TemplateId.values()) {
 			String viewId = ProfileStore.TEMPLATE_PREFIX + id.id();
@@ -173,7 +175,7 @@ public final class ProfileService {
 		Target target = new Target(Text.literal(english), english, null, null, clamped.values(), clamped.clamps(), true);
 		List<Recommendation> recs = ProfileSwitch.build(clamped.values(), snapshot, ModScanner.loadedIds(), labels(), english);
 		ApplyPreview preview = effective(controller.preview(recs), recs).withNotes(notes(target, snapshot, decoded.unknownKeys()));
-		return new ProfileImport(decoded.name(), preview, decoded.unknownKeys(), null, clamped.values());
+		return new ProfileImport(decoded.name(), preview, decoded.unknownKeys(), null, decoded.values(refreshRate(hardware)));
 	}
 
 	// Preview's Apply for a code: saved as an imported profile (when there's room), then switched to.
@@ -187,7 +189,9 @@ public final class ProfileService {
 		}
 		Profile profile = importedProfile(imported);
 		boolean saved = store().saveProfile(profile);
-		return switchTo(new Target(name(profile), english(profile), saved ? profile.id() : null, null, imported.values(), List.of(), true));
+		ProfileTemplates.Result clamped = ProfileTemplates.clamp(imported.values(), controller.rules(), controller.hardwareProfile(), mods(), snapshot(),
+				controller.goal());
+		return switchTo(new Target(name(profile), english(profile), saved ? profile.id() : null, null, clamped.values(), clamped.clamps(), true));
 	}
 
 	// Preview's Save only for a code.
@@ -198,10 +202,17 @@ public final class ProfileService {
 		return save(importedProfile(imported));
 	}
 
+	// A template is computed for this PC; a saved or imported profile is shared as saved (the recipient's own limits apply on
+	// import, so this PC's clamps aren't passed on).
 	public @Nullable String exportProfileCode(String id) {
-		Target target = resolve(id);
 		HardwareProfile hardware = controller.hardwareProfile();
-		return target == null ? null : ShareCode.encode(target.english(), target.values(), hardware == null ? -1 : refreshRate(hardware));
+		int refresh = hardware == null ? -1 : refreshRate(hardware);
+		Profile own = id.startsWith(ProfileStore.TEMPLATE_PREFIX) ? null : store().profile(id);
+		if (own != null) {
+			return ShareCode.encode(english(own), own.settings(), refresh);
+		}
+		Target target = resolve(id);
+		return target == null ? null : ShareCode.encode(target.english(), target.values(), refresh);
 	}
 
 	public void renameProfile(String id, String name) {
@@ -233,7 +244,7 @@ public final class ProfileService {
 	public void powerChanged(boolean onBattery) {
 		HardwareProbe.setOnBattery(onBattery);
 		Instant now = Instant.now();
-		BatteryPrompt.Decision decision = BatteryPrompt.onEdge(onBattery, store().battery(), store().active(), benchmarkRunning.getAsBoolean(), now);
+		BatteryPrompt.Decision decision = BatteryPrompt.onEdge(onBattery, store().battery(), active(), benchmarkRunning.getAsBoolean(), now);
 		Offer next = switch (decision.offer()) {
 			case BATTERY -> new Offer(NOTICE_BATTERY + now.getEpochSecond(), decision);
 			case PREVIOUS -> new Offer(NOTICE_BACK + now.getEpochSecond(), decision);
@@ -263,7 +274,7 @@ public final class ProfileService {
 			return null;
 		}
 		String target = current.decision().target();
-		if (target == null || target.equals(store().active())) {
+		if (target == null || target.equals(active())) {
 			offer = null;
 			return null;
 		}
@@ -298,8 +309,7 @@ public final class ProfileService {
 		if (offer.decision().offer() == BatteryPrompt.Offer.BATTERY) {
 			return Text.of("rigtune.battery.offer", "You're on battery power. Switch to the Battery profile to make it last longer?");
 		}
-		Target back = resolve(offer.decision().target());
-		return Text.of("rigtune.battery.back", "You're plugged in again. Switch back to %s?", back == null ? Text.literal("?") : back.name());
+		return Text.of("rigtune.battery.back", "You're plugged in again. Switch back to %s?", displayName(offer.decision().target()));
 	}
 
 	// The switch itself: one journal entry of kind apply, labelled in profiles.json.
@@ -308,10 +318,10 @@ public final class ProfileService {
 		ensureBaseline();
 		SettingsSnapshot snapshot = snapshot();
 		List<Recommendation> recs = ProfileSwitch.build(target.values(), snapshot, ModScanner.loadedIds(), labels(), target.english());
-		String previous = store().active();
+		String previous = active();
 		Component name = Texts.component(target.name());
 		if (recs.isEmpty()) {
-			markActive(target, previous);
+			markActive(target, previous, null);
 			return Component.translatable("rigtune.profile.status.already", name);
 		}
 		String entryId = ChangeRecorder.newEntryId();
@@ -321,7 +331,7 @@ public final class ProfileService {
 			return result;
 		}
 		store().recordSwitch(new ProfileStore.Switch(entryId, target.profileId(), target.templateId(), target.english()), journalIds());
-		markActive(target, previous);
+		markActive(target, previous, entryId);
 		offer = null;
 		long staged = entry.changes().stream().filter(c -> JournalChange.STAGED.equals(c.status())).count();
 		MutableComponent message = staged > 1 ? Component.translatable("rigtune.profile.status.switched_restart", name, staged)
@@ -337,10 +347,10 @@ public final class ProfileService {
 		return message;
 	}
 
-	private void markActive(Target target, @Nullable String previous) {
+	private void markActive(Target target, @Nullable String previous, @Nullable String entryId) {
 		String id = target.profileId() != null ? target.profileId()
 				: target.templateId() != null ? ProfileStore.TEMPLATE_PREFIX + target.templateId() : null;
-		store().setActive(id);
+		store().setActive(id, entryId);
 		if (BatteryPrompt.BATTERY.equals(id) && !BatteryPrompt.BATTERY.equals(previous)) {
 			store().rememberPrevious(previous);
 		}
@@ -424,9 +434,41 @@ public final class ProfileService {
 		return Component.translatable("rigtune.profile.status.saved", Texts.component(name(profile)));
 	}
 
+	// The same code imported again reuses its profile (same name and values), so repeats don't fill the cap.
 	private Profile importedProfile(ProfileImport imported) {
-		return new Profile(ProfileStore.newProfileId(), imported.name(), null, ProfileStore.SOURCE_IMPORTED, Instant.now().toString(),
-				controller.modVersion(), HardwareProbe.minecraftVersion(), imported.values());
+		String name = ProfileNames.sanitise(imported.name());
+		Profile same = store().profiles().stream().filter(p -> ProfileStore.SOURCE_IMPORTED.equals(p.source())
+				&& Objects.equals(p.name(), name) && p.settings().equals(imported.values())).findFirst().orElse(null);
+		return new Profile(same != null ? same.id() : ProfileStore.newProfileId(), name, null, ProfileStore.SOURCE_IMPORTED,
+				same != null ? same.createdAt() : Instant.now().toString(), controller.modVersion(), HardwareProbe.minecraftVersion(), imported.values());
+	}
+
+	// The active profile, while the switch that made it active still stands (not undone: ActiveProfile).
+	private @Nullable String active() {
+		String active = store().active();
+		if (active == null) {
+			return null;
+		}
+		try {
+			Journal journal = ClientJournal.get();
+			return ActiveProfile.inEffect(store().activeEntry(), journal.state(), journal.entries()) ? active : null;
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.warn("Could not read RigTune's history", e);
+			return active;
+		}
+	}
+
+	// A profile id's name without computing it (the battery offer's text).
+	private Text displayName(@Nullable String id) {
+		if (id == null) {
+			return Text.literal("?");
+		}
+		if (id.startsWith(ProfileStore.TEMPLATE_PREFIX)) {
+			TemplateId template = TemplateId.of(id.substring(ProfileStore.TEMPLATE_PREFIX.length()));
+			return template == null ? Text.literal("?") : template.displayName();
+		}
+		Profile profile = store().profile(id);
+		return profile == null ? Text.literal("?") : name(profile);
 	}
 
 	private static Text name(Profile profile) {

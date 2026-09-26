@@ -40,6 +40,15 @@ class ProfileSwitchTest {
 	}
 
 	@Test
+	void valuesAreWrittenInTheTablesSpelling() {
+		SettingsSnapshot snapshot = ProfileFixtures.snapshot(List.of("sodium"), false);
+		List<Recommendation> recs = ProfileSwitch.build(Map.of("sodium.performance.chunk_build_defer_mode", "always", "vanilla.enableVsync", " FALSE",
+				"vanilla.renderDistance", "\"9\""), snapshot, Set.of("sodium"), Map.of(), "x");
+		assertEquals(Map.of("sodium.performance.chunk_build_defer_mode", "ALWAYS", "vanilla.enableVsync", "false", "vanilla.renderDistance", "9"),
+				values(recs));
+	}
+
+	@Test
 	void modKeysNeedTheirModLoadedAndAKeyIsNeverCreated() {
 		SettingsSnapshot vanillaOnly = ProfileFixtures.snapshot(List.of(), false);
 		Map<String, String> target = Map.of("sodium.performance.use_entity_culling", "false", "iris.enableShaders", "false",

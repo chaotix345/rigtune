@@ -143,3 +143,24 @@ server limits: WS-W caps only the main-list path.
 - DH/Iris keys in a real game: the game tests run with Sodium only, and the DH/Iris patch paths are unit-tested.
 - The 50-entry journal cap: 50 switches evict the first Apply, so "My settings" is the way back. The coordinator will list
   the cap as a known limit in the README (M6).
+
+## Self-review (code-reviewer subagent, scratchpad ws-p/review.md): 0 high, 1 medium, 11 low; all fixed except 12 (documented)
+1. (medium) **An undone switch left its profile "active".** profiles.json now keeps `activeEntry`, the switch's journal
+   entry id (an additive field). `core/profile/ActiveProfile.inEffect` voids the active profile once that entry has no
+   applied or staged change left, or is gone from a readable journal. That view feeds the Profiles screen's marker, the
+   battery prompt, the back-offer and the "previous profile". Covered by ActiveProfileTest and a ProfilesGameTest check
+   after Undo this.
+2. **Hand-edited profile values** are read and written in the table's own spelling (`key.decode(key.encode(v))`, in
+   ProfileStore and ProfileSwitch).
+3. **The decoder checks the whole code shape (character set, 8 characters or more) before the version.**
+4. **The import box keeps one character over 4096**, so an overlong paste is rejected as too long instead of being cut to fit.
+5. **The import screen only decodes** (for the error line). Preview works out the switch off the render thread through the
+   loader; a "not ready" error shows as a Preview note.
+6. **A poll that read no battery doesn't feed the debouncer.**
+7. **`PowerWatcher.stop()` sets a flag**, so a start that arrives after the client began stopping doesn't happen.
+8. **Copy code shares a saved or imported profile's saved values**, not this PC's clamped ones. Imported profiles are stored
+   unclamped; Apply and every later switch clamp them for the PC they run on.
+9. **Keys inside a profile's `settings` that this version doesn't manage survive a re-save.**
+10. **Importing the same code again (same name and values) reuses its profile.**
+11. **The battery back-offer looks up only the profile's name** (no template compute on the render thread).
+12. (tests) The AC4.2 timing bound is the mean and 99th percentile, not every sample (deviation above, coordinator-approved).

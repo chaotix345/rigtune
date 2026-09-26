@@ -183,6 +183,8 @@ public class ProfilesGameTest implements FabricClientGameTest {
 		context.waitTicks(2);
 		checkSeed(context, "Undo this on Battery");
 		check(!stagedValues().contains("true"), "the staged Sodium change is dropped: " + stagedValues());
+		List<ProfileView> after = context.computeOnClient(mc -> controller.profiles());
+		check(after.stream().noneMatch(ProfileView::active), "an undone switch leaves no profile marked active: " + after);
 	}
 
 	// P-H1: Battery -> Max FPS -> restart -> Undo last twice (or Undo all) puts every staged and vanilla key back.

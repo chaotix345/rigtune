@@ -21,6 +21,8 @@ public final class PowerWatcher {
 	public static final long PERIOD_SECONDS = 30;
 	private static final String THREAD_NAME = "RigTune power";
 	private static @Nullable PowerWatcher running;
+	// Set by stop(): a start that the startup probe finishes after the client began stopping doesn't happen.
+	private static boolean stopped;
 
 	// One battery as the watcher sees it (OSHI's PowerSource in the game; a fake in tests).
 	public interface Battery {
@@ -78,7 +80,7 @@ public final class PowerWatcher {
 
 	// In the game: after the startup probe, only when it found a real battery. Idempotent.
 	public static synchronized void startIfBattery(boolean hasBattery, boolean onBattery, Consumer<Boolean> listener) {
-		if (!hasBattery || running != null) {
+		if (!hasBattery || running != null || stopped) {
 			return;
 		}
 		ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
@@ -101,6 +103,7 @@ public final class PowerWatcher {
 	}
 
 	public static synchronized void stop() {
+		stopped = true;
 		if (running != null) {
 			running.executor.shutdownNow();
 			running = null;
@@ -115,10 +118,16 @@ public final class PowerWatcher {
 	void poll() {
 		try {
 			boolean onBattery = false;
+			boolean read = false;
 			for (Battery battery : batteries) {
 				if (battery.update()) {
+					read = true;
 					onBattery |= !battery.powerOnLine() && battery.discharging();
 				}
+			}
+			// A poll that read no battery tells nothing (it isn't "on AC").
+			if (!read) {
+				return;
 			}
 			Boolean edge = debouncer.poll(onBattery);
 			if (edge != null) {

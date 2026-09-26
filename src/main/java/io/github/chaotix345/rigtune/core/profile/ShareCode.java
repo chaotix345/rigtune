@@ -112,11 +112,7 @@ public final class ShareCode {
 		if (!head.lookingAt()) {
 			throw new ShareCodeException(Reason.NOT_A_CODE, "no RT<version>- prefix");
 		}
-		String version = head.group(1);
-		if (!version.equals(Integer.toString(VERSION))) {
-			boolean newer = version.charAt(0) != '0' && (version.length() > 1 || version.charAt(0) > '1');
-			throw new ShareCodeException(newer ? Reason.NEWER : Reason.NOT_A_CODE, "version " + version);
-		}
+		// The whole ^RT[0-9]+-[A-Za-z0-9_-]{8,}$ shape first, then the version (SPEC 4's order).
 		String payload = code.substring(head.end());
 		for (int i = 0; i < payload.length(); i++) {
 			if (ALPHABET.indexOf(payload.charAt(i)) < 0) {
@@ -125,6 +121,11 @@ public final class ShareCode {
 		}
 		if (payload.length() < 8) {
 			throw new ShareCodeException(Reason.TRUNCATED, payload.length() + " payload characters");
+		}
+		String version = head.group(1);
+		if (!version.equals(Integer.toString(VERSION))) {
+			boolean newer = version.charAt(0) != '0' && (version.length() > 1 || version.charAt(0) > '1');
+			throw new ShareCodeException(newer ? Reason.NEWER : Reason.NOT_A_CODE, "version " + version);
 		}
 		byte[] bytes = unbase64(payload);
 		if (bytes.length < 5) {

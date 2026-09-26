@@ -123,7 +123,35 @@ class ProfileStoreTest {
 		assertEquals("Newer", saved.get("name").getAsString());
 		assertTrue(root.getAsJsonObject("battery").get("autoSwitch").getAsBoolean());
 		assertTrue(root.getAsJsonObject("battery").get("snoozed").getAsBoolean());
+		assertEquals("7", saved.getAsJsonObject("settings").get("future.key").getAsString(), "a later RigTune's key inside settings survives");
+		assertEquals("60", saved.getAsJsonObject("settings").get("vanilla.maxFps").getAsString());
+		assertFalse(saved.getAsJsonObject("settings").has("vanilla.renderDistance"), "managed keys are replaced as a whole");
 		assertEquals(1, root.get("formatVersion").getAsInt());
+	}
+
+	@Test
+	void handEditedValuesReadInTheTablesSpelling() throws IOException {
+		String id = ProfileStore.newProfileId();
+		Files.createDirectories(file().getParent());
+		Files.writeString(file(), "{\"profiles\": [{\"id\": \"" + id + "\", \"source\": \"saved\", \"settings\": {"
+				+ "\"sodium.performance.chunk_build_defer_mode\": \"always\", \"vanilla.enableVsync\": \" TRUE\", \"vanilla.renderDistance\": \"1e1\","
+				+ "\"vanilla.entityDistanceScaling\": \"1\", \"vanilla.maxFps\": \"144\", \"vanilla.particles\": 7}}]}", StandardCharsets.UTF_8);
+		assertEquals(Map.of("sodium.performance.chunk_build_defer_mode", "ALWAYS", "vanilla.enableVsync", "true", "vanilla.renderDistance", "10",
+				"vanilla.entityDistanceScaling", "1.0"), store().profile(id).settings());
+	}
+
+	@Test
+	void theActiveProfileKeepsTheEntryThatMadeItActive() {
+		Profile saved = profile(ProfileStore.newProfileId(), "Evening", ProfileStore.SOURCE_SAVED);
+		assertTrue(store().saveProfile(saved));
+		assertTrue(store().setActive(saved.id(), "entry-7"));
+		assertEquals("entry-7", store().activeEntry());
+		assertTrue(store().setActive("template:battery"));
+		assertNull(store().activeEntry(), "a switch that changed nothing has no entry");
+		assertTrue(store().setActive(saved.id(), "entry-8"));
+		assertTrue(store().delete(saved.id()));
+		assertNull(store().active());
+		assertNull(store().activeEntry());
 	}
 
 	@Test

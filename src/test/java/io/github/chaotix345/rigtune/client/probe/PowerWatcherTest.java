@@ -21,6 +21,7 @@ class PowerWatcherTest {
 		final int capacity;
 		boolean onLine = true;
 		boolean discharging;
+		boolean readable = true;
 		int updates;
 
 		FakeBattery(String name, String chemistry, int capacity) {
@@ -52,7 +53,7 @@ class PowerWatcherTest {
 		@Override
 		public boolean update() {
 			updates++;
-			return true;
+			return readable;
 		}
 
 		@Override
@@ -105,6 +106,16 @@ class PowerWatcherTest {
 			watcher.poll();
 			assertEquals(List.of(true, false), edges);
 			assertEquals(5, laptop.updates);
+			// Polls that read no battery tell nothing: unplugged but unreadable doesn't count as "on AC" again.
+			laptop.onLine = false;
+			laptop.discharging = true;
+			watcher.poll();
+			watcher.poll();
+			assertEquals(List.of(true, false, true), edges);
+			laptop.readable = false;
+			watcher.poll();
+			watcher.poll();
+			assertEquals(List.of(true, false, true), edges);
 			assertEquals(0, placeholder.updates);
 			assertTrue(laptop.updates > 0);
 		} finally {

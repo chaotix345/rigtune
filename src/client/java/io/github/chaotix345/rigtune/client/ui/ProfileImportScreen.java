@@ -1,7 +1,9 @@
 package io.github.chaotix345.rigtune.client.ui;
 
+import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.profile.ProfileImport;
 import io.github.chaotix345.rigtune.core.profile.ShareCode;
+import io.github.chaotix345.rigtune.core.profile.ShareCodeException;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
@@ -13,6 +15,7 @@ import net.minecraft.util.FormattedCharSequence;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 // Import a share code (docs/v0.4/SPEC.md 4): an edit box, Paste (the only place the clipboard is read) and Import, which
 // decodes the code and opens Preview with Apply / Save only / Cancel. Nothing is written before one of those is clicked;
@@ -40,8 +43,9 @@ public class ProfileImportScreen extends Screen {
 		return error;
 	}
 
+	// One character over the decoder's raw cap is kept, so an overlong paste is rejected as too long rather than cut to fit.
 	public void setCode(String value) {
-		code = value.length() > ShareCode.MAX_RAW_CHARS ? value.substring(0, ShareCode.MAX_RAW_CHARS) : value;
+		code = value.length() > ShareCode.MAX_RAW_CHARS + 1 ? value.substring(0, ShareCode.MAX_RAW_CHARS + 1) : value;
 		if (box != null) {
 			box.setValue(code);
 		}
@@ -54,7 +58,7 @@ public class ProfileImportScreen extends Screen {
 		int left = (width - column) / 2;
 		int boxY = Math.max(44, height / 2 - 24);
 		box = new EditBox(font, left, boxY, column, 20, Component.translatable("rigtune.profile.import.box"));
-		box.setMaxLength(ShareCode.MAX_RAW_CHARS);
+		box.setMaxLength(ShareCode.MAX_RAW_CHARS + 1);
 		box.setHint(Component.translatable("rigtune.profile.import.hint"));
 		box.setValue(code);
 		box.setResponder(value -> {
@@ -87,18 +91,33 @@ public class ProfileImportScreen extends Screen {
 		error = null;
 	}
 
-	// Decodes the code; a rejected one shows its error, a good one opens Preview.
+	// Checks the code here (a rejected one shows its error at once); a good one opens Preview, which works out what applying
+	// it would do off the render thread.
 	public void importCode() {
-		ProfileImport result = controller.importProfileCode(code);
-		if (!result.ok()) {
-			error = Texts.component(result.error());
+		ShareCode.Decoded decoded;
+		try {
+			decoded = ShareCode.decode(code);
+		} catch (ShareCodeException e) {
+			error = Texts.component(e.text());
 			return;
 		}
 		error = null;
-		Component name = result.name() == null ? Component.translatable("rigtune.profile.imported") : Component.literal(result.name());
-		minecraft.gui.setScreen(new PreviewScreen(this, controller, c -> result.preview(), new PreviewScreen.Confirm(
-				Component.translatable("rigtune.profile.import.preview", name), Component.translatable("rigtune.profile.preview.apply"),
-				() -> finish(controller.applyImportedProfile(result), true), () -> finish(controller.saveImportedProfile(result), false))));
+		String submitted = code;
+		AtomicReference<ProfileImport> result = new AtomicReference<>();
+		Component name = decoded.name() == null ? Component.translatable("rigtune.profile.imported") : Component.literal(decoded.name());
+		minecraft.gui.setScreen(new PreviewScreen(this, controller, c -> {
+			ProfileImport imported = c.importProfileCode(submitted);
+			result.set(imported);
+			return imported.ok() ? imported.preview() : ApplyPreview.EMPTY.withNotes(List.of(imported.error()));
+		}, new PreviewScreen.Confirm(Component.translatable("rigtune.profile.import.preview", name), Component.translatable("rigtune.profile.preview.apply"),
+				() -> finish(result.get(), true), () -> finish(result.get(), false))));
+	}
+
+	private void finish(@Nullable ProfileImport imported, boolean apply) {
+		if (imported == null) {
+			return;
+		}
+		finish(apply ? controller.applyImportedProfile(imported) : controller.saveImportedProfile(imported), apply);
 	}
 
 	private void finish(Component result, boolean applied) {

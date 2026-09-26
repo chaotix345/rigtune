@@ -99,7 +99,7 @@ class V030CompatTest {
 		assertTrue(store.batteryOffered("2026-09-21T09:59:00Z"));
 		assertTrue(store.rememberPrevious(FIXTURE_BASELINE));
 		assertTrue(store.recordSwitch(new ProfileStore.Switch(FIXTURE_ENTRY, null, "battery", "Battery"), null));
-		assertTrue(store.setActive("template:battery"));
+		assertTrue(store.setActive("template:battery", FIXTURE_ENTRY));
 	}
 
 	@Test

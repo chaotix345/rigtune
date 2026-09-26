@@ -28,5 +28,6 @@
     "lastPromptAt": "2026-09-21T09:59:00Z",
     "previousProfile": "p-2b6d9e41-0c3f-4a15-b8e2-6f1d7c9a3e20"
   },
-  "active": "template:battery"
+  "active": "template:battery",
+  "activeEntry": "c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17"
 }

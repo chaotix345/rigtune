@@ -110,6 +110,7 @@ public final class ProfileStore {
 	public static final String MC_VERSION = "mcVersion";
 	public static final String SETTINGS = "settings";
 	public static final String ENTRY_ID = "entryId";
+	public static final String ACTIVE_ENTRY = "activeEntry";
 	public static final String PROFILE_ID = "profileId";
 	public static final String SOURCE_BASELINE = "baseline";
 	public static final String SOURCE_SAVED = "saved";
@@ -207,6 +208,7 @@ public final class ProfileStore {
 			}
 			if (id.equals(string(root, ACTIVE))) {
 				root.remove(ACTIVE);
+				root.remove(ACTIVE_ENTRY);
 			}
 			JsonObject battery = root.getAsJsonObject(BATTERY);
 			if (id.equals(string(battery, BATTERY_PREVIOUS_PROFILE))) {
@@ -223,14 +225,32 @@ public final class ProfileStore {
 	}
 
 	public boolean setActive(@Nullable String id) {
+		return setActive(id, null);
+	}
+
+	// entryId: the journal entry of the switch that made it active (null when the switch changed nothing): once that entry
+	// is undone, the profile no longer counts as active (ActiveProfile.inEffect).
+	public boolean setActive(@Nullable String id, @Nullable String entryId) {
 		return update(root -> {
 			if (id == null || !validActive(id)) {
 				root.remove(ACTIVE);
+				root.remove(ACTIVE_ENTRY);
 			} else {
 				root.addProperty(ACTIVE, id);
+				if (entryId != null && ENTRY_ID_SHAPE.matcher(entryId).matches()) {
+					root.addProperty(ACTIVE_ENTRY, entryId);
+				} else {
+					root.remove(ACTIVE_ENTRY);
+				}
 			}
 			return root;
 		});
+	}
+
+	// The journal entry of the switch that made the active profile active, or null.
+	public @Nullable String activeEntry() {
+		String entry = string(read(), ACTIVE_ENTRY);
+		return entry != null && ENTRY_ID_SHAPE.matcher(entry).matches() ? entry : null;
 	}
 
 	public List<Switch> switches() {
@@ -365,10 +385,13 @@ public final class ProfileStore {
 		Map<String, String> out = new LinkedHashMap<>();
 		if (element instanceof JsonObject object) {
 			for (Map.Entry<String, JsonElement> entry : object.entrySet()) {
-				if (ShareKeys.managed(entry.getKey()) && entry.getValue() instanceof JsonPrimitive primitive) {
+				ShareKeys.Key key = ShareKeys.byKey(entry.getKey());
+				if (key != null && entry.getValue() instanceof JsonPrimitive primitive) {
 					String value = primitive.getAsString();
-					if (SettingKeys.safeValue(value) && value.length() <= 64) {
-						out.put(entry.getKey(), value);
+					Integer wire = value.length() <= 64 && SettingKeys.safeValue(value) ? key.encode(value) : null;
+					if (wire != null) {
+						// The table's own spelling ("always" -> ALWAYS, " true" -> true): what reaches the writers.
+						out.put(entry.getKey(), key.decode(wire, 60));
 					}
 				}
 			}
@@ -384,7 +407,13 @@ public final class ProfileStore {
 		object.addProperty(CREATED_AT, profile.createdAt());
 		object.addProperty(RIGTUNE_VERSION, profile.rigtuneVersion());
 		object.addProperty(MC_VERSION, profile.mcVersion());
-		JsonObject settings = new JsonObject();
+		// Keys this version doesn't manage (a later RigTune's) stay; the managed ones are replaced.
+		JsonObject settings = object.get(SETTINGS) instanceof JsonObject existing ? existing : new JsonObject();
+		for (String key : List.copyOf(settings.keySet())) {
+			if (ShareKeys.managed(key)) {
+				settings.remove(key);
+			}
+		}
 		profile.settings().forEach((key, value) -> {
 			if (ShareKeys.managed(key) && SettingKeys.safeValue(value)) {
 				settings.addProperty(key, value);
