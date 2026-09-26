@@ -5,6 +5,7 @@ import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
+import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.recommend.Recommender;
 import io.github.chaotix345.rigtune.core.recommend.Recommender.Clamp;
 import io.github.chaotix345.rigtune.core.recommend.Recommender.SettingTarget;
@@ -47,6 +48,32 @@ public final class ProfileTemplates {
 
 		public Goal defaultGoal() {
 			return goal;
+		}
+
+		// The name the Profiles screen shows; its English is what share codes and History labels carry.
+		public Text displayName() {
+			return switch (this) {
+				case MAX_FPS -> Text.of("rigtune.profile.template.max_fps", "Max FPS");
+				case BALANCED -> Text.of("rigtune.profile.template.balanced", "Balanced");
+				case QUALITY -> Text.of("rigtune.profile.template.quality", "Quality");
+				case BATTERY -> Text.of("rigtune.profile.template.battery", "Battery");
+				case RECORDING -> Text.of("rigtune.profile.template.recording", "Recording");
+			};
+		}
+
+		public Text description() {
+			return switch (this) {
+				case MAX_FPS -> Text.of("rigtune.profile.template.max_fps.tooltip",
+						"No frame cap and VSync off, with RigTune's performance settings. The memory and Distant Horizons limits still apply.");
+				case BALANCED -> Text.of("rigtune.profile.template.balanced.tooltip",
+						"RigTune's setting recommendations for this PC, the same as applying every setting suggestion.");
+				case QUALITY -> Text.of("rigtune.profile.template.quality.tooltip",
+						"One tier above this PC's estimate, for better looks. The memory and Distant Horizons limits still apply.");
+				case BATTERY -> Text.of("rigtune.profile.template.battery.tooltip",
+						"For playing unplugged: 60 FPS with VSync, shorter distances, no clouds, and shaders and Distant Horizons off.");
+				case RECORDING -> Text.of("rigtune.profile.template.recording.tooltip",
+						"Steady frame pacing for recording: a fixed frame cap (60 on most screens), no idle throttle, and chunk builds spread out.");
+			};
 		}
 
 		public static @Nullable TemplateId of(@Nullable String id) {

@@ -739,7 +739,7 @@ public final class RealController implements RigTuneController {
 			RigTune.LOGGER.warn("Could not read {}", last, e);
 		}
 		try {
-			return undoService.history(lastApply, List.of(modsDir, configDir));
+			return profileService.labelled(undoService.history(lastApply, List.of(modsDir, configDir)));
 		} catch (RuntimeException e) {
 			RigTune.LOGGER.error("Could not read RigTune's history", e);
 			return null;
@@ -908,6 +908,16 @@ public final class RealController implements RigTuneController {
 	@Override
 	public void deleteProfile(String id) {
 		profileService.deleteProfile(id);
+	}
+
+	@Override
+	public Component applyImportedProfile(ProfileImport imported) {
+		return profileService.applyImportedProfile(imported);
+	}
+
+	@Override
+	public Component saveImportedProfile(ProfileImport imported) {
+		return profileService.saveImportedProfile(imported);
 	}
 
 	// Stutter Doctor (item 5).
