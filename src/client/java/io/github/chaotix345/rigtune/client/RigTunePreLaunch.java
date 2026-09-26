@@ -28,6 +28,7 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 
 	@Override
 	public void onPreLaunch() {
+		long footprint = FootprintStats.preLaunchStart();
 		Path configDir = FabricLoader.getInstance().getConfigDir();
 		Path lockFile = ApplyLock.defaultPath(configDir);
 		ApplyLock lock = null;
@@ -71,6 +72,7 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 					? "RigTune's apply helper is still running; its changes take effect after the next restart"
 					: "RigTune's apply helper finished while the game was starting; mod file changes take effect after the next restart");
 		}
+		FootprintStats.preLaunchEnd(footprint);
 	}
 
 	// docs/v0.3/SPEC.md 3e (review B-M1): one WARN line per op the last helper run didn't apply, so the reason is in
