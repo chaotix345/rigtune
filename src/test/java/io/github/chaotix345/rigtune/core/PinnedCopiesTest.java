@@ -76,7 +76,8 @@ class PinnedCopiesTest {
 	@Test
 	void pendingActions010And030ParseA04PendingJson() throws Exception {
 		Path mods = dir.resolve("mods");
-		Op enable = Op.enableFile(mods.resolve("lithium.jar.rigtune-pending"), mods.resolve("lithium.jar")).withModId("lithium").withProjectId("gvQqBUqZ");
+		Op enable = Op.enableFile(mods.resolve("lithium.jar.rigtune-pending"), mods.resolve("lithium.jar")).withModId("lithium").withProjectId("gvQqBUqZ")
+				.withVersionId("ZouiUX7t");
 		Op patch = Op.patchJson(dir.resolve("sodium-options.json"), Map.of("quality.weather_quality", "FAST"));
 		Path file = dir.resolve("pending.json");
 		PendingActions.create(42, mods, dir, List.of(enable, patch)).save(file);
