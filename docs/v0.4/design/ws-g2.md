@@ -58,8 +58,12 @@ v040-written fixtures are unchanged.
   in pending.json (everything else discarded, downloads retired, journal DISCARDED as before), so the next exit finishes
   it (disable SKIPPED_ALREADY_DONE, enable OK) and a normal undo is possible afterwards. Chosen over staging a re-enable:
   no unjournaled op, and the mod comes back either way.
-- If WS-G3's H4 fix introduces a new intermediate name (e.g. `.rigtune-ready`), PartlyApplied must learn it (noted for
-  the coordinator's merge of G2/G3).
+- Checked against WS-G3's merged H4 fix (helper/unfinished-groups.json, roll forward or back at the next run): a failed
+  rollback still leaves exactly this state with the FAILED ops' attempts counted, and UndoSafetyTest's half-done cases
+  run through the new helper (the next exit finishes the update). Residual: a helper killed mid-group leaves attempts at
+  0, so PartlyApplied doesn't see it; an Undo or Discard before the next exit would drop that group and the helper's
+  record of it is then pruned (kill + a game that still starts + a cancel in that session). UnfinishedGroups' reader is
+  package-private in core/apply (WS-G3's file), so using the record itself is left to a follow-up.
 
 ## M5 + H1-B (MAY, done): the RigTune screen's "Disable X"
 - New core `FolderCheck`: `problems(files, providedElsewhere)` (UndoPlanner.violations' body, which now delegates, so
