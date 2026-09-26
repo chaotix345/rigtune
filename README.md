@@ -112,7 +112,13 @@ The v2 format (and how it stays safe for 0.1.x readers) is documented in [docs/R
 
 ## What has been verified
 
-<!-- v0.4: filled by the rules workstream (docs/v0.4/SPEC.md 2l, external review 3). -->
+RigTune's recommendations are estimates, and it's worth knowing what stands behind them:
+
+- **One real machine.** Everything measured (the benchmarks, the Java and garbage-collector comparison behind the JVM advice, local game runs) was measured on one PC: a Ryzen 7 7800X3D with a Radeon RX 7800 XT and 32 GB of RAM on Windows 11. When advice says "in RigTune's tests", that's the PC it means.
+- **Everything else is table-driven.** For other hardware, RigTune estimates a tier from its hardware tables (a "table match") or, for a CPU or GPU the tables don't know, from core counts and the GPU vendor (a "fallback estimate"), and picks settings from the rules for that tier.
+- **Scenario tests check the rules, not performance.** Automated tests run the bundled rules on hardware RigTune hasn't been run on, including an integrated-graphics laptop on battery (Intel Iris Xe, 8 GB), an old 4-core desktop (Core i5-4590 with a GTX 960) and a CPU and GPU no table knows. They check that the rules give the intended recommendations (tiers, battery settings, memory caps, memory advice, nothing ticked that should start unticked), not that those recommendations make the game faster there.
+- **Compatibility is tested against the released versions.** Tests run pinned copies of the released 0.1.0, 0.2.0 and 0.3.0 code on the rules files and the shared state files this version writes; 0.1.x only ever gets a subset of the rules that is at least as cautious as what it shipped with.
+- **Your own measurements are the stronger evidence.** A benchmark on your PC, and a Measure run before and after a change, show what actually happened there; changes RigTune lists between two runs are ones that "may be related", never proven causes.
 
 ## FAQ
 

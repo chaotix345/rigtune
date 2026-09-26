@@ -46,6 +46,8 @@ Both files come from one run and share `revision` and `generatedAt`. See tools/R
 | settings | SettingRule[] | |
 | advice | AdviceRule[] | |
 | settingLabels | map settings key → SettingLabel | **v2 only**, optional (below) |
+| profileTemplates | object | **v2 only, 0.4+**, optional: the Profiles templates ([profileTemplates](#profiletemplates-v2-04)) |
+| stutterAdvice | AdviceRule[] | **v2 only, 0.4+**, optional: the Stutter Doctor's advice ([stutterAdvice](#stutteradvice-v2-04)) |
 | availability | map mcVersion → slug[] | **generated**: slugs with a Fabric release for that MC version. The offline fallback |
 | upstream | object | **generated**: `{ "fabulouslyOptimized": {"mcVersion": "26.2", "slugs": [...]}, "additive": {...} }` |
 
@@ -142,7 +144,9 @@ If it's installed, recommend disabling it (impact high). May carry `requires`.
 
 `kind` is one of info, warning or critical. Advice is informational only: it has no action. May carry `requires`.
 
-**The `ram-` id prefix** marks advice whose fix is changing the memory (heap) allocation: RigTune 0.3+ shows the detected launcher's steps for that ("In the Modrinth App: …") under every advice whose id starts with `ram-`. Use the prefix only for such advice, and give every such advice the prefix. Older clients ignore it (it's only an id).
+**The `ram-` id prefix** marks advice whose fix is changing the memory (heap) allocation: RigTune 0.3+ shows the detected launcher's steps for that ("In the Modrinth App: …") under every advice whose id starts with `ram-`. Use the prefix only for such advice, and give every such advice the prefix (in `stutterAdvice` too). Older clients ignore it (it's only an id).
+
+**The `jvm-` id prefix** (0.4+) marks advice about the Java arguments. RigTune 0.4 adds "Found in your Java arguments: <flag names>" (from its own flag table, never the raw arguments) and the detected launcher's Java-arguments steps under every advice whose id starts with `jvm-`. Such advice tests the [jvm- facts](#jvm--facts-v2-04) and carries `"requires": ["jvm-flags"]` and `"v1": false`. Heap advice stays `ram-` (it points at the launcher's memory setting, which for Prism overrides an `-Xmx` typed in the Java arguments).
 
 ## SettingLabel (v2)
 `"settingLabels": { "sodium.performance.chunk_builder_threads": { "name": "Chunk builder threads", "values": { "0": "Auto" } } }`
@@ -150,7 +154,14 @@ If it's installed, recommend disabling it (impact high). May carry `requires`.
 Human-readable names for recommendation titles (and the share report). `name` replaces the caption made from the key (the mod prefix, e.g. `Sodium: `, stays); `values` maps a setting value (compared after normalisation, so `"0"` also matches `0.0`) to a label. A missing label falls back to the key's caption and the raw value. Labels never change what is applied.
 
 ## requires (v2)
-`"requires": ["some-client-feature"]` on a ModRule, ObsoleteRule, SettingRule or AdviceRule. A rule whose `requires` names any feature this client doesn't know is **skipped entirely** (no addition, disable, conflict warning, setting or advice). RigTune 0.2.0 knows no features, so today any non-empty `requires` hides the rule from every client. It is the escape hatch for future rule-level fields that must not fail open: a rule that depends on such a field lists the feature that implements it.
+`"requires": ["some-client-feature"]` on a ModRule, ObsoleteRule, SettingRule or AdviceRule (and on a profile template or its settings entries). A rule whose `requires` names any feature this client doesn't know is **skipped entirely** (no addition, disable, conflict warning, setting or advice). It is the escape hatch for future rule-level fields that must not fail open: a rule that depends on such a field lists the feature that implements it.
+
+| feature | known by | needed by |
+|---|---|---|
+| `jvm-flags` | the main list from 0.4 (`Recommender.SUPPORTED_FEATURES`) | every rule that tests a [jvm- fact](#jvm--facts-v2-04) (the updater enforces it) |
+| `stutter-doctor` | only the Stutter Doctor (0.4+), never the main list | every [stutterAdvice](#stutteradvice-v2-04) entry (the updater enforces it) |
+
+RigTune 0.2.0 and 0.3.0 know no features, so they skip every rule with a non-empty `requires`.
 
 ## reviewIgnore (source-only)
 `{ "slug": "servercore", "reason": "server-only" }`
@@ -179,11 +190,12 @@ This is a JSON object. Every field is optional, all present fields must hold (AN
 | goal | string[] | performance, balanced, quality | a value outside the list |
 | mcVersion | string[] | exact match on the running MC version | MC version unknown |
 | modPresent / modAbsent | string[] | mod ids. modPresent: all loaded; modAbsent: none loaded | a `null` entry |
-| flags | string[] | all present in HardwareProfile.flags: `shaders-enabled`, `backend-vulkan`, `sodium-workaround:<NAME>` | a flag outside that list that isn't present; `backend-vulkan` absent while the backend is unknown |
+| flags | string[] | all present in HardwareProfile.flags: `shaders-enabled`, `backend-vulkan`, `sodium-workaround:<NAME>`; from 0.4 also the [jvm- facts](#jvm--facts-v2-04) (v2, only in rules with `requires: ["jvm-flags"]`) | a flag outside that list that isn't present; `backend-vulkan` absent while the backend is unknown; a jvm- fact while RigTune's JVM check hasn't run |
 | gpuModelMatches (v2) | string | Java regex *found* in the GPU subject string (the same one `gpuTiers` see), at most 200 characters, with the same read budget | no GPU info; invalid or overlong regex; budget exhausted |
 | displayPixelsAtLeast / displayPixelsAtMost (v2) | int | display width × height | width or height unknown (≤ 0) |
 | modVersion (v2) | object: mod id → Fabric version predicate | every listed mod is loaded and its version satisfies the predicate (Fabric Loader's `VersionPredicate`, as in fabric.mod.json: `">=0.6.0 <0.8.0"`, `"~0.9"`, `"*"`). A listed mod that isn't loaded is FALSE | unparseable predicate (any term that isn't a semantic version, e.g. `">=>="` or `\|\|`); the installed version is missing or not a semantic version |
 | mcVersionRange (v2) | string: Fabric version predicate | the running MC version satisfies it | unparseable predicate or MC version |
+| driverVersion (v2, 0.4+) | object: `{"vendor": <gpuVendor>, "atLeast": "526.47", "atMost": "536.22"}` | the detected GPU vendor is `vendor` and the parsed driver version is within the bounds ([driverVersion](#driverversion-v2-04)) | a vendor mismatch or unknown vendor; a driver string RigTune can't parse; an unknown field or a missing `vendor` |
 | settingIs (v2) | object: settings key → string, number or boolean | every listed key is in the current settings (the same `SettingsSnapshot` setting rules see) and its value equals the expected one after normalisation (case-insensitive, `1.0` equals `1`, `true` equals `"true"`). An empty object is TRUE | a listed key isn't in the snapshot (the mod or its config file is missing, or the config predates the key). So `not {"settingIs": …}` on a missing key is UNKNOWN, never TRUE. A value that isn't an object of strings, numbers and booleans poisons the condition like an unknown key |
 | anyOf | Condition[] | at least one holds (an empty list is FALSE) | see below |
 | not | Condition | negation | see below |
@@ -207,6 +219,75 @@ A condition evaluates to TRUE, FALSE or UNKNOWN. Only a top-level TRUE fires; UN
 
 v1 (0.1.x) evaluates the same fields two-valued: unknown RAM/VRAM/refresh are false, and unknown keys are ignored. That's why rules-v1.json may only contain v1 keys and v1 values (below).
 
+The Stutter Doctor's keys (0.4+) are Condition fields too, but the updater allows them only inside [stutterAdvice](#stutteradvice-v2-04); in the main list they are always UNKNOWN.
+
+### driverVersion (v2, 0.4+)
+`{"driverVersion": {"vendor": "nvidia", "atLeast": "526.47", "atMost": "536.22"}}`
+- `vendor` (required) is a lower-case `gpuVendor` value; `atLeast`/`atMost` are dotted version strings (digits and dots, each part below 2^31), compared left to right on the numbers RigTune parses from the driver string, with missing trailing parts as 0. The updater requires at least one bound and `atLeast` ≤ `atMost`.
+- TRUE or FALSE only when the detected vendor matches and the driver string parses (AMD Adrenalin "… Context 26.8.1.…", Mesa "(Core Profile) Mesa 24.2.3", "NVIDIA 560.94", Intel Windows "- Build 31.0.101.5595"; on 26.3's Vulkan backend only the driver part of MC's string). Anything else is UNKNOWN: a vendor mismatch, an unknown vendor, an unparseable or pre-2024 five-part AMD string, an unknown field, a missing `vendor`.
+- 0.2.0/0.3.0 don't know the key, so a condition using it is UNKNOWN there (fail closed). That is safe for advice and value entries; in a clamp, an `avoidWhen` or a `skipUpdateWhen` the rule needs `requires` ([Rules for maintainers](#rules-for-maintainers); the updater enforces it).
+- It's a v2 key, so a warning using it needs a `v1` decision (the seeds use `"v1": false`).
+
+### jvm- facts (v2, 0.4+)
+RigTune 0.4 reads the running JVM once per session (on-device; raw arguments are never shown, logged or shared) and adds facts to `HardwareProfile.flags`, which `flags` tests:
+
+| fact | set when |
+|---|---|
+| `jvm-gc-g1`, `jvm-gc-zgc`, `jvm-gc-shenandoah`, `jvm-gc-parallel`, `jvm-gc-serial`, `jvm-gc-epsilon`, `jvm-gc-other` | the collector that runs |
+| `jvm-gc-typed` | the collector was chosen in the arguments (not Java's own default) |
+| `jvm-ignored-flags` | a `-XX` flag Java ignores (no such option any more) or overrides |
+| `jvm-young-gen-fixed` | `-Xmn`, `-XX:NewSize` or `-XX:MaxNewSize` |
+| `jvm-server-flags` | Aikar's markers, or at least 4 of its distinctive flags |
+| `jvm-explicit-gc-disabled` | `-XX:+DisableExplicitGC` |
+| `jvm-xmx-duplicate` | two or more `-Xmx` values (Java uses the last one) |
+
+- The list is `core/jvm/JvmFacts.RULE_FLAGS`, mirrored in the updater (`JVM_FLAGS`). Any other `jvm-` value is refused, and so is `jvm-probed`: RigTune sets it when the check ran, and every jvm- fact is UNKNOWN while it's absent (OpenJ9, or the check not finished yet), so a `not {"flags": ["jvm-…"]}` can't fire by accident.
+- A rule that tests a jvm- fact needs `"requires": ["jvm-flags"]` (0.2.0/0.3.0 skip it) and `"v1": false`.
+
+## profileTemplates (v2, 0.4+)
+```json
+"profileTemplates": { "templates": [
+  { "id": "battery", "goal": "performance", "facts": { "onBattery": true, "hasBattery": true },
+    "settings": [ { "key": "vanilla.renderDistance", "max": 8, "reason": "…" },
+                  { "key": "dh.client.advanced.debugging.rendererMode", "value": "DISABLED", "when": { "modPresent": ["distanthorizons"] } } ] },
+  { "id": "recording", "goal": "balanced", "settings": [ { "key": "vanilla.maxFps", "value": "$recordingFps" } ] }
+] }
+```
+The Profiles templates (docs/v0.4/SPEC.md item 4). RigTune 0.4 computes a template on demand, in layers: the player's saved baseline, then the rules' value entries evaluated with the template's `goal` and forced `facts`, then the template's `settings`, then every clamp (the rules' and the template's), then only keys present in the instance. 0.2.0/0.3.0 ignore the section; a document without it (rules-v1.json, an old cache) makes 0.4 use the bundled rules' section.
+
+| field | notes |
+|---|---|
+| id | one of `max_fps`, `balanced`, `quality`, `battery`, `recording`, each at most once |
+| goal | `performance`, `balanced` or `quality` |
+| facts | optional; forces `onBattery`/`hasBattery` (booleans) before the rules are evaluated |
+| settings | optional SettingRules (value **or** min/max, `when`, `reason`, `impact`, `defaultSelected`, `requires`) over the keys profiles manage: the share-code table (vanilla renderDistance, simulationDistance, entityDistanceScaling, maxFps, enableVsync, inactivityFpsLimit, particles, biomeBlendRadius, weatherRadius, textureFiltering, renderClouds, prioritizeChunkUpdates, improvedTransparency, entityShadows, cutoutLeaves; Sodium's culling switches, chunk_build_defer_mode, quad_splitting_mode; `iris.enableShaders`, `iris.maxShadowRenderDistance`; DH's quality keys and `rendererMode`) plus the local-only `sodium.performance.chunk_builder_threads` and `dh.common.multiThreading.numberOfThreads`. Never `vanilla.graphicsPreset` or `iris.shaderPack` |
+| requires | optional; a client that lacks a feature skips the template |
+
+`"$recordingFps"` is resolved only here (60 when the display is 60 Hz or more or unknown, else its rate rounded down to a multiple of 10, at least 30); the main settings may not use it. The updater validates the section (ids, goal, facts, keys, value xor min/max, tokens, conditions) and never writes it to rules-v1.json. Templates take no `v1`.
+
+## stutterAdvice (v2, 0.4+)
+```json
+"stutterAdvice": [
+  { "id": "ram-stutter-gc-heap", "requires": ["stutter-doctor"], "kind": "warning", "impact": "high",
+    "when": { "stutterShareAtLeast": { "gc": 30 }, "anyOf": [ { "gcFullPausesAtLeast": 1 }, { "liveSetPercentAtLeast": 75 } ], "heapRaiseRoomMbAtLeast": 2048 },
+    "title": "…", "text": "…" }
+]
+```
+AdviceRules the Stutter Doctor evaluates against a session's measured facts (docs/v0.4/SPEC.md item 5); the main list never reads the section, and 0.2.0/0.3.0 ignore it. Every entry needs `"requires": ["stutter-doctor"]`, a unique `id`, a `kind` (info, warning, critical), an `impact` (high, medium, low), a `title` and a `text`. Memory advice ids start with `ram-` (the launcher's memory steps); advice never suggests `-XX:+DisableExplicitGC`, and any wording about the garbage collector follows the JVM advice's measured conclusion (keep Java's defaults; size the heap). Conditions may use every v2 key plus the Stutter Doctor's keys, which are UNKNOWN anywhere else:
+
+| field | type | meaning |
+|---|---|---|
+| stutterShareAtLeast | object: cause → whole percent | the share of the lost time each cause claimed: `gc`, `chunkLoad`, `chunkBuild`, `tick`, `render`, `unknown` |
+| stutterTaggedShareAtLeast | object: tag → whole percent | the share of spikes carrying each tag (claims no time): `worldSave`, `dh`, `cpuContention`, `afterTeleport`, `movingFast` |
+| gcFullPausesAtLeast / gcStallsAtLeast / gcExplicitPausesAtLeast | int ≥ 0 | full collections (not System.gc()), allocation stalls, System.gc() pauses in the session |
+| liveSetPercentAtLeast | int 0-100 | live data after an old/full collection, as a share of the maximum heap |
+| heapRaiseRoomMbAtLeast | int ≥ 0 | room to raise the heap: min(RAM/2, RAM − 4096) − heap, in MB |
+| cpuContentionShareAtLeast | int 0-100 | the share of spikes with the CPU contended |
+| spikesPerMinuteAtLeast | int ≥ 0 | spikes per minute **× 10** (30 = 3 a minute) |
+| gcCollector | string[] | `g1`, `zgc`, `shenandoah`, `parallel`, `serial` |
+
+The percentages are whole numbers, as JSON integers or digit strings (the map values are strings in the client; plan review K-M1). A malformed value poisons only its own condition. The whole section is left out of rules-v1.json, and its entries take no `v1`.
+
 ## Settings keys
 - `vanilla.<options.txt key>`, e.g. `vanilla.renderDistance`, `vanilla.simulationDistance`, `vanilla.maxFps`, `vanilla.enableVsync`, `vanilla.particles`, `vanilla.biomeBlendRadius`. Values are strings as they appear in options.txt, **without surrounding quotes**.
 - `sodium.<section>.<field>` is a path inside `config/sodium-options.json`, e.g. `sodium.performance.chunk_builder_threads`.
@@ -228,13 +309,15 @@ v1 (0.1.x) evaluates the same fields two-valued: unknown RAM/VRAM/refresh are fa
   - a rule field outside the v1 whitelist (`requires`, `avoidSelected`, `skipUpdateWhen`) without an explicit `v1`. With an override the field is left out only if that is exactly as safe: `requires` only when empty, `avoidSelected` only when true or when the v1 rule has no `avoidWhen`, `skipUpdateWhen` always (0.1.x offers every available update whatever its rules say, and the field only ever takes one away). Otherwise use `"v1": false`;
   - unknown fields (including unknown top-level fields), unknown condition keys, nulls, values outside the vocabularies, out-of-range integers, regexes over 200 characters and malformed `settingLabels` anywhere in knowledge.json.
 - When a ModRule is left out, the other rules' `conflictsWith` references to its slug become its `modIds` (0.1.x resolves a slug only through a rule it has, but matches a mod id directly), so 0.1.x still sees the conflict. REVIEW.md (d) lists each rewrite.
-- `settingLabels` is left out of rules-v1.json. Tier rules are copied as they are, except `gpuTiers`/`cpuTiers` rows with `"v1": false`, which are left out ([v1 on tier rows](#v1-on-tier-rows-source-only)).
+- `settingLabels`, `profileTemplates` and `stutterAdvice` are left out of rules-v1.json (0.1.x rejects nothing, but none of them is for it). Tier rules are copied as they are, except `gpuTiers`/`cpuTiers` rows with `"v1": false`, which are left out ([v1 on tier rows](#v1-on-tier-rows-source-only)).
+- 0.4's new advice (`jvm-*`, the driver seeds) carries `"v1": false`: its keys and facts are v2-only, and 0.1.x must not get a warning it can't evaluate.
 - Every omission and field change is listed in `rules/REVIEW.md` section (d).
 - `tools/check_rules_v1.py` (CI job `rules-v1-compat`) checks the result. The pinned-v0.1.0 differential test (`RulesV1DifferentialTest`) checks that, compared with the baseline `src/test/resources/v010/rules-v1-baseline.json` (the rules 0.1.0 shipped), rules-v1.json gives 0.1.x no new appliable recommendation (ticked or not), ticks none that was unticked, and loses no conflict or advice. `SchemaConsistencyTest` checks the updater's field lists and vocabularies against the Java code and the pinned v0.1.0 copy.
 
 ## Rules for maintainers
 - **UNKNOWN switches restrictions off.** A condition that is UNKNOWN doesn't fire, so a clamp, a lower value, an `avoidWhen` or a warning gated on something a client may not know (RAM, VRAM, refresh rate, display size, GPU model, mod versions, the backend, a mod's config value) silently doesn't apply where it's unknown. For example `{"key": "vanilla.renderDistance", "max": 8, "when": {"not": {"vramMbAtLeast": 4096}}}` does nothing on a machine that doesn't report VRAM. Gate restrictions on always-known facts (heap, tiers, goal, installed mods), or add a second rule that covers the unknown case with one of those.
 - **Never add a v2-only or future field to an existing restrictive rule** (a clamp, a lower value, an `avoidWhen`, a warning). Clients that don't know the field poison the whole rule, so they'd *lose* the restriction they have today. Add a new rule next to the old one instead (or gate the new one with `requires`).
+- **A key or value newer than 0.2.0/0.3.0 in a clamp, an `avoidWhen` or a `skipUpdateWhen` needs `requires`** (plan review R-L1; the updater refuses it otherwise). There, failing closed means *not* restricting (no clamp, no disable, an update offered), so `requires` makes older clients skip the rule knowingly; keep a rule they understand next to it. The keys and values 0.2.0/0.3.0 know are the updater's `LEGACY_V2_CONDITION_KEYS`/`LEGACY_V2_VOCABULARIES`, checked against the pinned copy by SchemaConsistencyTest.
 - **Tier-rule schema changes (`gpuTiers`, `cpuTiers`, `heapTiers`) need a new schemaVersion**: tier rules have no fail-closed handling.
 - **A new `gpuTiers`/`cpuTiers` row gets `"v1": false`**, so 0.1.x keeps classifying that hardware as 0.1.0 did. Insert it before the broader row that matches the same strings today (the first match wins), and add the strings to GpuClassifierTest/CpuClassifierTest, including one the new row must not catch.
 - A setting rule that *restricts* for a v2-only condition needs a deliberate `v1` decision (override or `false`), and REVIEW.md (d) shows it.
