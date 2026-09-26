@@ -1,0 +1,134 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "5d1c7a90-2e4b-4f6a-8b3c-1a9e0d7f2c11",
+      "at": "2026-09-20T09:00:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.4.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "6e2d8ba1-3f5c-4a7b-9c4d-2b0f1e803d12",
+          "type": "file",
+          "action": "disable",
+          "modId": "e2e-named",
+          "file": "e2e-named-1.0.0.jar",
+          "resultFile": "e2e-named-1.0.0.jar.disabled",
+          "status": "APPLIED",
+          "opId": "7f3e9cb2-4a6d-4b8c-8d5e-3c1a2f914e13",
+          "group": "7f3e9cb2-4a6d-4b8c-8d5e-3c1a2f914e13"
+        }
+      ]
+    },
+    {
+      "id": "8a4f0dc3-5b7e-4c9d-9e6f-4d2b3a025f14",
+      "at": "2026-09-20T10:00:05Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.4.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "9b5a1ed4-6c8f-4dae-8f70-5e3c4b136a15",
+          "type": "file",
+          "action": "enable",
+          "modId": "e2e-seed",
+          "file": "e2e-seed-1.0.0.jar",
+          "status": "APPLIED",
+          "opId": "0a4f3c1e-5b7d-4e2a-9c61-7d2f1b8e4a01",
+          "group": "0a4f3c1e-5b7d-4e2a-9c61-7d2f1b8e4a01"
+        }
+      ]
+    },
+    {
+      "id": "c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17",
+      "at": "2026-09-21T10:00:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.4.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "d4f8b207-9e1c-4f30-8c4d-806f7e45ad18",
+          "type": "setting",
+          "key": "vanilla.renderDistance",
+          "before": "12",
+          "after": "8",
+          "status": "REVERTED"
+        },
+        {
+          "id": "e5a9c318-af2d-4041-9d5e-917a8f56be19",
+          "type": "setting",
+          "key": "vanilla.maxFps",
+          "before": "120",
+          "after": "60",
+          "status": "REVERTED"
+        },
+        {
+          "id": "f6b0d429-a03e-4152-8e6f-a28b9067cf1a",
+          "type": "setting",
+          "key": "sodium.performance.chunk_builder_threads",
+          "before": "0",
+          "after": "2",
+          "status": "REVERTED"
+        }
+      ]
+    },
+    {
+      "id": "8b727557-3c7c-4557-9b9b-369640b1426a",
+      "at": "2026-09-26T05:09:14.691534500Z",
+      "kind": "undo",
+      "rigtuneVersion": "0.3.0+mc26.2",
+      "mcVersion": "26.2",
+      "undoOf": "c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17",
+      "changes": [
+        {
+          "id": "49542fe1-a2a7-4722-bc08-6f4536569f52",
+          "type": "setting",
+          "key": "vanilla.renderDistance",
+          "before": "8",
+          "after": "12",
+          "status": "APPLIED",
+          "reverts": "d4f8b207-9e1c-4f30-8c4d-806f7e45ad18"
+        },
+        {
+          "id": "b250461b-5706-4f70-a521-3347c0145410",
+          "type": "setting",
+          "key": "vanilla.maxFps",
+          "before": "60",
+          "after": "120",
+          "status": "APPLIED",
+          "reverts": "e5a9c318-af2d-4041-9d5e-917a8f56be19"
+        },
+        {
+          "id": "ceb932be-b172-4998-bce4-5bd33616d162",
+          "type": "setting",
+          "key": "sodium.performance.chunk_builder_threads",
+          "before": "2",
+          "after": "0",
+          "status": "APPLIED",
+          "opId": "85b3386f-ce25-4707-a306-13b85e0ebaa2",
+          "reverts": "f6b0d429-a03e-4152-8e6f-a28b9067cf1a"
+        }
+      ]
+    },
+    {
+      "id": "886fb05d-7a92-4c05-8442-a2234f65b5bf",
+      "at": "2026-09-26T05:09:16.138997600Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.3.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "20a75d87-ec32-488e-8ece-1c9936c5c011",
+          "type": "file",
+          "action": "disable",
+          "modId": "e2e-downgrade-off",
+          "file": "e2e-downgrade-off-1.0.0.jar",
+          "resultFile": "e2e-downgrade-off-1.0.0.jar.disabled",
+          "status": "APPLIED",
+          "opId": "9ae3b6ff-a035-4aa7-9624-c4562b140390"
+        }
+      ]
+    }
+  ]
+}

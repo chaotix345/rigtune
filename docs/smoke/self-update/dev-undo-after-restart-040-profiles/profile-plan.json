@@ -1,0 +1,22 @@
+{
+ "mode": "settings",
+ "switches": [
+  {
+   "name": "stand-in A",
+   "settings": {
+    "vanilla.renderDistance": "6",
+    "vanilla.maxFps": "90",
+    "sodium.performance.chunk_builder_threads": "2",
+    "sodium.performance.use_fog_occlusion": "false"
+   }
+  },
+  {
+   "name": "stand-in B",
+   "settings": {
+    "vanilla.renderDistance": "10",
+    "vanilla.maxFps": "60",
+    "sodium.performance.chunk_builder_threads": "4"
+   }
+  }
+ ]
+}
