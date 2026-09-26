@@ -1,0 +1,133 @@
+[02:05:17] run folder <run>
+[02:05:17] new rigtune-0.4.0-dev+mc26.2.jar 0.4.0-dev+mc26.2 sha256 4018fe03ee2164724f144f77abc829b3b73ac25e941e38f5c3c6aeb8778a9a12
+[02:05:17] instance mods: e2e-disable-me-1.0.0.jar, fabric-api-0.161.0+26.2.jar, rigtune-0.4.0-dev+mc26.2.jar
+[02:05:18] gradle :26.2:e2eUndoDriverJar -Pe2e.driver=undo
+[02:05:24] FakeModrinth listening on https://127.0.0.1:443
+[02:05:25] redirect probe: OK
+[02:05:25] launching the client, phase mod-apply
+[02:05:25] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-mod-apply.txt
+[02:05:49] client exited (gradle exit 0) after 24 s
+[02:05:51] helper finished: [2026-09-26T16:05:51.419833400Z] [RigTune apply] All operations done
+[02:05:51] helper command line(s) seen: 1
+[02:05:52] launching the client, phase mod-undo
+[02:05:52] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-mod-undo.txt
+[02:06:14] client exited (gradle exit 0) after 23 s
+[02:06:17] helper finished: [2026-09-26T16:06:16.844381800Z] [RigTune apply] All operations done
+[02:06:17] helper command line(s) seen: 1
+[02:06:17] launching the client, phase mod-check
+[02:06:17] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-mod-check.txt
+[02:06:41] client exited (gradle exit 0) after 24 s
+[02:06:41] launching the client, phase entry-apply
+[02:06:41] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-entry-apply.txt
+[02:07:04] client exited (gradle exit 0) after 22 s
+[02:07:06] helper finished: [2026-09-26T16:07:06.050383200Z] [RigTune apply] All operations done
+[02:07:06] helper command line(s) seen: 1
+[02:07:06] launching the client, phase entry-undo
+[02:07:06] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-entry-undo.txt
+[02:07:29] client exited (gradle exit 0) after 23 s
+[02:07:31] helper finished: [2026-09-26T16:07:31.015278Z] [RigTune apply] All operations done
+[02:07:31] helper command line(s) seen: 1
+[02:07:31] launching the client, phase entry-check
+[02:07:31] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance> -Pe2e.jvmArgsFile=<run>\jvm-entry-check.txt
+[02:07:49] client exited (gradle exit 0) after 19 s
+[02:07:50] launching the client, phase profile-apply
+[02:07:50] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance>-profile -Pe2e.jvmArgsFile=<run>\jvm-profile-apply.txt
+[02:08:16] client exited (gradle exit 0) after 26 s
+[02:08:18] helper finished: [2026-09-26T16:08:18.244894900Z] [RigTune apply] All operations done
+[02:08:18] helper command line(s) seen: 1
+[02:08:18] launching the client, phase profile-undo
+[02:08:18] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance>-profile -Pe2e.jvmArgsFile=<run>\jvm-profile-undo.txt
+[02:08:45] client exited (gradle exit 0) after 27 s
+[02:08:48] helper finished: [2026-09-26T16:08:47.885696700Z] [RigTune apply] All operations done
+[02:08:48] helper command line(s) seen: 1
+[02:08:48] launching the client, phase profile-check
+[02:08:48] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance>-profile -Pe2e.jvmArgsFile=<run>\jvm-profile-check.txt
+[02:09:12] client exited (gradle exit 0) after 24 s
+[02:09:12] launching the client, phase profile-undo-all
+[02:09:12] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance>-profile-all -Pe2e.jvmArgsFile=<run>\jvm-profile-undo-all.txt
+[02:09:37] client exited (gradle exit 0) after 25 s
+[02:09:39] helper finished: [2026-09-26T16:09:39.489219500Z] [RigTune apply] All operations done
+[02:09:39] helper command line(s) seen: 1
+[02:09:39] launching the client, phase profile-check-all
+[02:09:39] gradle :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<instance>-profile-all -Pe2e.jvmArgsFile=<run>\jvm-profile-check-all.txt
+[02:09:58] client exited (gradle exit 0) after 19 s
+[02:10:02] mod-apply [PASS] the client exited normally and the helper finished: gradle exit 0, helper finished: True
+[02:10:02] mod-apply [PASS] the driver applied the mod changes: error: None
+[02:10:02] mod-apply [PASS] the added mod is in mods (the served bytes): e2e-added-1.0.0.jar exists: True
+[02:10:02] mod-apply [PASS] the other mod is disabled: e2e-disable-me-1.0.0.jar.disabled exists: True
+[02:10:02] mod-apply [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[02:10:02] mod-apply [PASS] last-apply.json: both ops OK: results: [('DISABLE_FILE', 'e2e-disable-me-1.0.0.jar', 'OK'), ('ENABLE_FILE', 'e2e-added-1.0.0.jar', 'OK')]
+[02:10:02] mod-apply [PASS] history.json: one apply entry, both changes APPLIED: apply entries: 1; changes: [('file', 'disable', 'e2e-disable-me-1.0.0.jar', 'APPLIED'), ('file', 'enable', 'e2e-added-1.0.0.jar', 'APPLIED')]
+[02:10:02] mod-undo [PASS] the client exited normally and the helper finished: gradle exit 0, helper finished: True
+[02:10:02] mod-undo [PASS] the driver undid the last apply (two reverts after a restart): error: None; undoOf: 17b82467-de1c-41cf-994d-35affe0dbd3f; plan: [{'description': 'Disable e2e-added-1.0.0.jar', 'action': 'REVERT', 'reason': None, 'needsRestart': True, 'changeIds': ['1add4957-5124-408c-b3e9-d50ed260b4a8'], 'opIds': []}, {'description': 'Re-enable e2e-disable-me-1.0.0.jar', 'action': 'REVERT', 'reason': None, 'needsRestart': True, 'changeIds': ['13dc9348-a060-4bd7-bc46-23b5e8382481'], 'opIds': []}]
+[02:10:02] mod-undo [PASS] the added mod is disabled again: e2e-added-1.0.0.jar.disabled exists: True
+[02:10:02] mod-undo [PASS] the other mod is back: e2e-disable-me-1.0.0.jar exists: True
+[02:10:02] mod-undo [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[02:10:02] mod-undo [PASS] last-apply.json: both reversal ops OK: results: [('DISABLE_FILE', 'e2e-added-1.0.0.jar', 'OK'), ('ENABLE_FILE', 'e2e-disable-me-1.0.0.jar', 'OK')]
+[02:10:02] mod-undo [PASS] history.json: the undo APPLIED, the apply's changes REVERTED: apply changes: {'13dc9348-a060-4bd7-bc46-23b5e8382481': 'REVERTED', '1add4957-5124-408c-b3e9-d50ed260b4a8': 'REVERTED'}; undo entries: ['17b82467-de1c-41cf-994d-35affe0dbd3f']; undo changes: [('disable', 'e2e-added-1.0.0.jar', 'APPLIED', '1add4957-5124-408c-b3e9-d50ed260b4a8'), ('enable', 'e2e-disable-me-1.0.0.jar', 'APPLIED', '13dc9348-a060-4bd7-bc46-23b5e8382481')]
+[02:10:02] mod-check [PASS] the client exited normally: gradle exit 0
+[02:10:02] mod-check [PASS] the driver checked: error: None
+[02:10:02] mod-check [PASS] the undone mods are as before the apply: e2e-disable-me loaded: True; e2e-added loaded: False
+[02:10:02] mod-check [PASS] nothing left to undo: undoable items: 0
+[02:10:02] mod-check [PASS] no crash report: crash-reports: []
+[02:10:02] mod-check [PASS] mods unchanged by the relaunch: unchanged
+[02:10:02] mod-check [PASS] history.json statuses unchanged: unchanged
+[02:10:02] mod-check [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[02:10:02] entry-apply [PASS] the client exited normally and the helper finished: gradle exit 0, helper finished: True
+[02:10:02] entry-apply [PASS] the driver applied twice, one mod each: error: None; apply messages: ['Downloading 1 mod change(s)…', 'Downloading 1 mod change(s)…']
+[02:10:02] entry-apply [PASS] both added mods are in mods (the served bytes): served bytes in mods: {'e2e-first-1.0.0.jar': True, 'e2e-second-1.0.0.jar': True}
+[02:10:02] entry-apply [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[02:10:02] entry-apply [PASS] last-apply.json: both enables OK: results: [('ENABLE_FILE', 'e2e-first-1.0.0.jar', 'OK'), ('ENABLE_FILE', 'e2e-second-1.0.0.jar', 'OK')]
+[02:10:02] entry-apply [PASS] history.json: two new apply entries, the older adding e2e-first, both APPLIED: new entries: [('apply', '2026-09-26T16:06:58.043288900Z', [('file', 'enable', 'e2e-first-1.0.0.jar', 'APPLIED')]), ('apply', '2026-09-26T16:06:59.536352100Z', [('file', 'enable', 'e2e-second-1.0.0.jar', 'APPLIED')])]
+[02:10:02] entry-undo [PASS] the client exited normally and the helper finished: gradle exit 0, helper finished: True
+[02:10:02] entry-undo [PASS] the driver undid the older Apply only (one revert after a restart): error: None; undoOf: 992052c8-392d-4a29-a65a-958f69419b0e (older 992052c8-392d-4a29-a65a-958f69419b0e); via the undo screen: True; plan: [{'description': 'Disable e2e-first-1.0.0.jar', 'action': 'REVERT', 'reason': None, 'needsRestart': True, 'changeIds': ['45929cc1-9ad5-46e7-bdf5-f157e0154a7c'], 'opIds': []}]
+[02:10:02] entry-undo [PASS] the older Apply's mod is disabled: e2e-first-1.0.0.jar.disabled exists: True; e2e-first-1.0.0.jar exists: False
+[02:10:02] entry-undo [PASS] the newer Apply's mod is still enabled: e2e-second-1.0.0.jar exists: True
+[02:10:02] entry-undo [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[02:10:02] entry-undo [PASS] last-apply.json: the reversal op OK: results: [('DISABLE_FILE', 'e2e-first-1.0.0.jar', 'OK')]
+[02:10:02] entry-undo [PASS] history.json: one undo of the older Apply, its change REVERTED, the newer APPLIED: undo entries of these applies: ['992052c8-392d-4a29-a65a-958f69419b0e']; undo changes: [('disable', 'e2e-first-1.0.0.jar', 'APPLIED', '45929cc1-9ad5-46e7-bdf5-f157e0154a7c')]; older: {'45929cc1-9ad5-46e7-bdf5-f157e0154a7c': 'REVERTED'}; newer: {'a550fdcd-7a09-4616-8460-18b1830344a1': 'APPLIED'}
+[02:10:02] entry-check [PASS] the client exited normally: gradle exit 0
+[02:10:02] entry-check [PASS] the driver checked: error: None
+[02:10:02] entry-check [PASS] only the older Apply's mod is off: loaded: e2e-first False, e2e-second True, e2e-disable-me True
+[02:10:02] entry-check [PASS] nothing left to undo on the older Apply: undoable items: 0; plan problem: None; method: RigTuneController.undoPlanFor
+[02:10:02] entry-check [PASS] no crash report: crash-reports: []
+[02:10:02] entry-check [PASS] mods unchanged by the relaunch: unchanged
+[02:10:02] entry-check [PASS] history.json statuses unchanged: unchanged
+[02:10:02] entry-check [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[02:10:02] profile-apply [PASS] the client exited normally: gradle exit 0, helper finished: True
+[02:10:02] profile-apply [PASS] the driver switched 2 times: error: None; apply messages: ['Applied 2 setting(s). Restart Minecraft to finish applying 2 change(s).', 'Applied 2 setting(s). Restart Minecraft to finish applying 2 change(s).']
+[02:10:02] profile-apply [PASS] history.json: two new apply entries of setting changes, applied (or discarded when replaced): new entries: [('apply', [('vanilla.maxFps', '120', '90', 'APPLIED'), ('vanilla.renderDistance', '12', '6', 'APPLIED'), ('sodium.performance.chunk_builder_threads', '0', '2', 'APPLIED'), ('sodium.performance.use_fog_occlusion', 'true', 'false', 'APPLIED')]), ('apply', [('vanilla.maxFps', '90', '60', 'APPLIED'), ('vanilla.renderDistance', '6', '10', 'APPLIED'), ('sodium.performance.chunk_builder_threads', '2', '4', 'APPLIED')])]
+[02:10:02] profile-apply [PASS] history.json: each switch changed exactly its settings: changed: [{'vanilla.maxFps': '90', 'vanilla.renderDistance': '6', 'sodium.performance.chunk_builder_threads': '2', 'sodium.performance.use_fog_occlusion': 'false'}, {'vanilla.maxFps': '60', 'vanilla.renderDistance': '10', 'sodium.performance.chunk_builder_threads': '4'}]; expected [{'vanilla.renderDistance': '6', 'vanilla.maxFps': '90', 'sodium.performance.chunk_builder_threads': '2', 'sodium.performance.use_fog_occlusion': 'false'}, {'vanilla.renderDistance': '10', 'vanilla.maxFps': '60', 'sodium.performance.chunk_builder_threads': '4'}]
+[02:10:02] profile-apply [PASS] history.json: each key's applied changes run from its value before the first switch to the last: 4 key(s)
+[02:10:02] profile-apply [PASS] the settings hold the last switch's values: 4 value(s)
+[02:10:02] profile-apply [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[02:10:02] profile-apply [PASS] last-apply.json: every op OK: statuses not OK: []
+[02:10:02] profile-undo [PASS] the client exited normally: gradle exit 0, helper finished: True
+[02:10:02] profile-undo [PASS] the driver undid the newer switch, then the older (Undo last twice): error: None; plans (undoOf, items, problem): [('288e6645-d339-45cd-bc98-acdc0b421ded', 3, None), ('99c70199-dcbb-4c1c-8ded-5dd462f12375', 4, None)]; expected ['288e6645-d339-45cd-bc98-acdc0b421ded', '99c70199-dcbb-4c1c-8ded-5dd462f12375']
+[02:10:02] profile-undo [PASS] history.json: the switches' changes REVERTED by undo entries, all applied: switch changes: [('vanilla.maxFps', 'REVERTED'), ('vanilla.renderDistance', 'REVERTED'), ('sodium.performance.chunk_builder_threads', 'REVERTED'), ('sodium.performance.use_fog_occlusion', 'REVERTED'), ('vanilla.maxFps', 'REVERTED'), ('vanilla.renderDistance', 'REVERTED'), ('sodium.performance.chunk_builder_threads', 'REVERTED')]; undo entries: ['288e6645-d339-45cd-bc98-acdc0b421ded', '99c70199-dcbb-4c1c-8ded-5dd462f12375']; undo changes: [('vanilla.maxFps', '90', 'APPLIED', '4466e0de-adaa-4fba-8dfe-24f015333da3'), ('vanilla.renderDistance', '6', 'APPLIED', '142d147e-45e1-41f4-a5d0-3a4ac0ce3d76'), ('sodium.performance.chunk_builder_threads', '2', 'APPLIED', 'aec96b11-91ea-4545-82dd-99971bded24d'), ('vanilla.maxFps', '120', 'APPLIED', '14bfb466-0225-4cce-acb9-0ccd49f898a7'), ('vanilla.renderDistance', '12', 'APPLIED', 'fa2b97b5-6ad8-4731-8a67-2e30763d1282'), ('sodium.performance.chunk_builder_threads', '0', 'APPLIED', '9f7d1d41-e743-407e-bc9c-8bb798121feb'), ('sodium.performance.use_fog_occlusion', 'true', 'APPLIED', 'bd96eca2-6248-45c1-94ab-5f9d0402d256')]
+[02:10:02] profile-undo [PASS] every key is back at its value before the first switch: 4 key(s)
+[02:10:02] profile-undo [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[02:10:02] profile-undo [PASS] last-apply.json: every op OK: statuses not OK: []
+[02:10:02] profile-check [PASS] the client exited normally: gradle exit 0, helper finished: True
+[02:10:02] profile-check [PASS] the driver checked: error: None
+[02:10:02] profile-check [PASS] the game runs with every key at its value before the first switch: 4 key(s)
+[02:10:02] profile-check [PASS] nothing left to undo on either switch: undoable items: {'99c70199-dcbb-4c1c-8ded-5dd462f12375': 0, '288e6645-d339-45cd-bc98-acdc0b421ded': 0}; plan problems: {'99c70199-dcbb-4c1c-8ded-5dd462f12375': None, '288e6645-d339-45cd-bc98-acdc0b421ded': None}
+[02:10:02] profile-check [PASS] no crash report: crash-reports: []
+[02:10:02] profile-check [PASS] mods unchanged by the relaunch: unchanged
+[02:10:02] profile-check [PASS] history.json statuses unchanged: unchanged
+[02:10:02] profile-check [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[02:10:02] profile-undo-all [PASS] the client exited normally: gradle exit 0, helper finished: True
+[02:10:02] profile-undo-all [PASS] the driver undid everything (Undo all): error: None; plans (undoOf, items, problem): [('all', 4, None)]; expected ['all']
+[02:10:02] profile-undo-all [PASS] history.json: the switches' changes REVERTED by undo entries, all applied: switch changes: [('vanilla.maxFps', 'REVERTED'), ('vanilla.renderDistance', 'REVERTED'), ('sodium.performance.chunk_builder_threads', 'REVERTED'), ('sodium.performance.use_fog_occlusion', 'REVERTED'), ('vanilla.maxFps', 'REVERTED'), ('vanilla.renderDistance', 'REVERTED'), ('sodium.performance.chunk_builder_threads', 'REVERTED')]; undo entries: ['all']; undo changes: [('vanilla.maxFps', '90', 'APPLIED', '4466e0de-adaa-4fba-8dfe-24f015333da3'), ('vanilla.maxFps', '120', 'APPLIED', '14bfb466-0225-4cce-acb9-0ccd49f898a7'), ('vanilla.renderDistance', '6', 'APPLIED', '142d147e-45e1-41f4-a5d0-3a4ac0ce3d76'), ('vanilla.renderDistance', '12', 'APPLIED', 'fa2b97b5-6ad8-4731-8a67-2e30763d1282'), ('sodium.performance.chunk_builder_threads', '2', 'APPLIED', 'aec96b11-91ea-4545-82dd-99971bded24d'), ('sodium.performance.chunk_builder_threads', '0', 'APPLIED', '9f7d1d41-e743-407e-bc9c-8bb798121feb'), ('sodium.performance.use_fog_occlusion', 'true', 'APPLIED', 'bd96eca2-6248-45c1-94ab-5f9d0402d256')]
+[02:10:02] profile-undo-all [PASS] every key is back at its value before the first switch: 4 key(s)
+[02:10:02] profile-undo-all [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[02:10:02] profile-undo-all [PASS] last-apply.json: every op OK: statuses not OK: []
+[02:10:02] profile-check-all [PASS] the client exited normally: gradle exit 0, helper finished: True
+[02:10:02] profile-check-all [PASS] the driver checked: error: None
+[02:10:02] profile-check-all [PASS] the game runs with every key at its value before the first switch: 4 key(s)
+[02:10:02] profile-check-all [PASS] nothing left to undo on either switch: undoable items: {'99c70199-dcbb-4c1c-8ded-5dd462f12375': 0, '288e6645-d339-45cd-bc98-acdc0b421ded': 0}; plan problems: {'99c70199-dcbb-4c1c-8ded-5dd462f12375': None, '288e6645-d339-45cd-bc98-acdc0b421ded': None}
+[02:10:02] profile-check-all [PASS] no crash report: crash-reports: []
+[02:10:02] profile-check-all [PASS] mods unchanged by the relaunch: unchanged
+[02:10:02] profile-check-all [PASS] history.json statuses unchanged: unchanged
+[02:10:02] profile-check-all [PASS] no pending.json, no leftover downloads: pending.json exists: False; *.rigtune-pending: []
+[02:10:02] VERDICT PASS

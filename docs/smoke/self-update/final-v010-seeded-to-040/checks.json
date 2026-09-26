@@ -1,0 +1,136 @@
+{
+ "update": [
+  {
+   "name": "the client exited normally and the helper finished",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver applied the offered update",
+   "ok": true,
+   "detail": "driver: ok=True error=None offered=rigtune-0.4.0-dev+mc26.2.jar"
+  },
+  {
+   "name": "exactly one RigTune jar, the new one",
+   "ok": true,
+   "detail": "rigtune*.jar in mods: ['rigtune-0.4.0-dev+mc26.2.jar']; bytes identical to the served jar: True"
+  },
+  {
+   "name": "the old jar is disabled",
+   "ok": true,
+   "detail": "rigtune-0.1.0.jar.disabled exists: True"
+  },
+  {
+   "name": "pending.json holds only the carried-over group, one attempt more",
+   "ok": true,
+   "detail": "ops (id, attempts): [('041919d9-18c9-4b04-89c4-f15e4e4a80c5', 2), ('db7f487d-6371-43c5-944e-c053428ad70d', 2)]; expected [('041919d9-18c9-4b04-89c4-f15e4e4a80c5', 2), ('db7f487d-6371-43c5-944e-c053428ad70d', 2)]"
+  },
+  {
+   "name": "no leftover downloads but the carried-over group's",
+   "ok": true,
+   "detail": "*.rigtune-pending: ['DistantHorizons-3.3.2-26.2-fabric-neoforge.jar.rigtune-pending']; expected ['DistantHorizons-3.3.2-26.2-fabric-neoforge.jar.rigtune-pending']"
+  },
+  {
+   "name": "last-apply.json: the update's two ops OK, the carried-over ops FAILED",
+   "ok": true,
+   "detail": "results: [('DISABLE_FILE', 'fabric-26.2.jar', 'FAILED'), ('ENABLE_FILE', 'DistantHorizons-3.3.2-26.2-fabric-neoforge.jar', 'FAILED'), ('DISABLE_FILE', 'rigtune-0.1.0.jar', 'OK'), ('ENABLE_FILE', 'rigtune-0.4.0-dev+mc26.2.jar', 'OK')]"
+  },
+  {
+   "name": "the helper ran from config/rigtune/helper copies",
+   "ok": true,
+   "detail": "helper classpaths seen: [['<instance>\\\\config\\\\rigtune\\\\helper\\\\0-rigtune-0.1.0.jar', '<instance>\\\\config\\\\rigtune\\\\helper\\\\1-gson-2.14.0.jar']]"
+  },
+  {
+   "name": "the old RigTune downloaded the jar from cdn.modrinth.com",
+   "ok": true,
+   "detail": "download requests: [('cdn.modrinth.com', 200, 'chaotix345/rigtune/0.1.0 (github.com/chaotix345/rigtune)')]"
+  },
+  {
+   "name": "the update's depends and breaks are no stricter (M12)",
+   "ok": true,
+   "detail": "same or fewer entries: depends {'fabricloader': '>=0.19.5', 'minecraft': '~26.2', 'java': '>=25', 'fabric-api': '*'} breaks {}"
+  }
+ ],
+ "verify": [
+  {
+   "name": "the relaunched client exited normally",
+   "ok": true,
+   "detail": "gradle exit 0"
+  },
+  {
+   "name": "the driver verified",
+   "ok": true,
+   "detail": "error: None"
+  },
+  {
+   "name": "the new RigTune is loaded from mods/",
+   "ok": true,
+   "detail": "loaded 0.4.0-dev+mc26.2 from ['<instance>\\\\mods\\\\rigtune-0.4.0-dev+mc26.2.jar']"
+  },
+  {
+   "name": "the goal is kept",
+   "ok": true,
+   "detail": "goal: QUALITY"
+  },
+  {
+   "name": "the apply result was shown (rigtune.json lastShownApply)",
+   "ok": true,
+   "detail": "lastShownApply 2026-09-26T15:59:15.166664500Z vs last-apply.json finishedAt 2026-09-26T15:59:15.166664500Z"
+  },
+  {
+   "name": "no further RigTune update is offered",
+   "ok": true,
+   "detail": "online=True updateOffered=False"
+  },
+  {
+   "name": "no crash report",
+   "ok": true,
+   "detail": "crash-reports: []"
+  },
+  {
+   "name": "no new pending.json",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "name": "history.json: one legacy import, without RigTune's own jars",
+   "ok": true,
+   "detail": "history.json entries: 1; legacy-import entries: 1; RigTune changes: []; expected disables missing: []; imported changes: [[{'id': '07115538-ae8e-4c26-b285-c647fe5a018b', 'type': 'file', 'action': 'disable', 'modId': 'distanthorizons', 'file': 'fabric-26.2.jar', 'status': 'DISCARDED', 'opId': '041919d9-18c9-4b04-89c4-f15e4e4a80c5', 'group': '7b8043de-f5c3-4881-8309-27265240f39e', 'modName': 'Distant Horizons'}, {'id': 'b1987936-816c-4f9c-894d-8c981d5ddc01', 'type': 'file', 'action': 'enable', 'modId': 'distanthorizons', 'file': 'DistantHorizons-3.3.2-26.2-fabric-neoforge.jar', 'status': 'DISCARDED', 'opId': 'db7f487d-6371-43c5-944e-c053428ad70d', 'group': '7b8043de-f5c3-4881-8309-27265240f39e', 'modName': 'Distant Horizons'}]]"
+  },
+  {
+   "name": "the carried-over group is dropped",
+   "ok": true,
+   "detail": "pending.json absent; carried-over ops still in it: []"
+  },
+  {
+   "name": "the drop is announced (status notice)",
+   "ok": true,
+   "detail": "statuses seen: [('rigtune.status.queued_update_dropped', 'rigtune.status.queued_update_dropped'), ('rigtune.status.queued_update_dropped', \"Cancelled RigTune's pending change to Distant Horizons: it has an update of its own waiting in mods/update.\")]"
+  },
+  {
+   "name": "history.json: the carried-over changes are DISCARDED",
+   "ok": true,
+   "detail": "statuses by op id: {'041919d9-18c9-4b04-89c4-f15e4e4a80c5': ['DISCARDED'], 'db7f487d-6371-43c5-944e-c053428ad70d': ['DISCARDED']}"
+  },
+  {
+   "name": "latest.log: a WARN line per failed op, with its attempt (3e)",
+   "ok": true,
+   "detail": "ops with a line of their own: 2 of 2; failed ops: [('DISABLE_FILE', ['fabric-26.2.jar']), ('ENABLE_FILE', ['DistantHorizons-3.3.2-26.2-fabric-neoforge.jar', 'DistantHorizons-3.3.2-26.2-fabric-neoforge.jar.rigtune-pending'])]; WARN lines with an attempt: [\"[01:59:24] [main/WARN]: RigTune's helper couldn't apply a change (run finished 2026-09-26T15:59:15.166664500Z, restart attempt 2 of 3; it's retried at the next exit): DISABLE_FILE fabric-26.2.jar: Gave up after 10 attempt(s): java.nio.file.FileSystemException: fabric-26.2.jar -> fabric-26.2.jar.disabled: The process cannot access the file because it is being used by another process\", \"[01:59:24] [main/WARN]: RigTune's helper couldn't apply a change (run finished 2026-09-26T15:59:15.166664500Z, restart attempt 2 of 3; it's retried at the next exit): ENABLE_FILE distanthorizons (DistantHorizons-3.3.2-26.2-fabric-neoforge.jar): Not applied because disabling fabric-26.2.jar failed\"]"
+  },
+  {
+   "name": "nothing in mods/ changes at exit",
+   "ok": true,
+   "detail": "helper runs at exit: 0; mods/ at quit -> after exit: unchanged"
+  },
+  {
+   "name": "the installed and queued jars are untouched, RigTune's build not enabled",
+   "ok": true,
+   "detail": "unchanged: {'fabric-26.2.jar': True, 'update/DistantHorizons-3.3.2 - 26.2 neo/fabric-26.2.jar': True}; RigTune's build enabled: []"
+  },
+  {
+   "name": "during the session mods/ changed only by retiring the dropped download",
+   "ok": true,
+   "detail": "removed ['DistantHorizons-3.3.2-26.2-fabric-neoforge.jar.rigtune-pending'], added ['DistantHorizons-3.3.2-26.2-fabric-neoforge.jar.rigtune-superseded'], changed []"
+  }
+ ]
+}

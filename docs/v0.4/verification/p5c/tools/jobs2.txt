@@ -1,0 +1,1 @@
+stut-run.sh C1r2 0 600

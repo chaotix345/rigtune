@@ -1,0 +1,69 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "0b4a41f2-8c06-428e-8c2e-e5f7eb24ee2e",
+      "at": "2026-09-26T16:00:37.826846Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.4.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "652e98f8-0d45-4b44-b2c5-a49319c205b5",
+          "type": "file",
+          "action": "disable",
+          "modId": "e2e-disable-me",
+          "file": "e2e-disable-me-1.0.0.jar",
+          "resultFile": "e2e-disable-me-1.0.0.jar.disabled",
+          "status": "REVERTED",
+          "opId": "53e88a2b-9ecb-471c-96f4-0184cd48f8a9",
+          "modName": "RigTune E2E test mod e2e-disable-me"
+        },
+        {
+          "id": "313beaa8-e6ff-4cac-85ff-0b35aad3a215",
+          "type": "file",
+          "action": "enable",
+          "modId": "e2e-added",
+          "file": "e2e-added-1.0.0.jar",
+          "status": "REVERTED",
+          "opId": "dd403448-669c-4553-8c24-e553f0a3cfa4",
+          "group": "62fedfe8-4e71-4ccd-841f-ef46e95c42a7",
+          "modName": "RigTune E2E test mod e2e-added"
+        }
+      ]
+    },
+    {
+      "id": "ed828f6c-e092-44a5-9150-ac667568dad1",
+      "at": "2026-09-26T16:01:02.905036300Z",
+      "kind": "undo",
+      "rigtuneVersion": "0.4.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "undoOf": "0b4a41f2-8c06-428e-8c2e-e5f7eb24ee2e",
+      "changes": [
+        {
+          "id": "45ec6073-e14e-4285-828e-a29f41e8995a",
+          "type": "file",
+          "action": "disable",
+          "modId": "e2e-added",
+          "file": "e2e-added-1.0.0.jar",
+          "resultFile": "e2e-added-1.0.0.jar.disabled",
+          "status": "APPLIED",
+          "opId": "5bbd68bf-f8e3-4242-bfb6-dbc2eeb74147",
+          "group": "be3c426e-6d73-4dc7-962b-4f2f24b2e4e5",
+          "reverts": "313beaa8-e6ff-4cac-85ff-0b35aad3a215"
+        },
+        {
+          "id": "d8fbe59c-6a5c-48b5-93db-9b7215b6376e",
+          "type": "file",
+          "action": "enable",
+          "modId": "e2e-disable-me",
+          "file": "e2e-disable-me-1.0.0.jar",
+          "status": "APPLIED",
+          "opId": "8eaf7f93-e060-4050-8dd6-f7dead0661a7",
+          "group": "be3c426e-6d73-4dc7-962b-4f2f24b2e4e5",
+          "reverts": "652e98f8-0d45-4b44-b2c5-a49319c205b5"
+        }
+      ]
+    }
+  ]
+}

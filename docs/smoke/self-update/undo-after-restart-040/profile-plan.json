@@ -1,0 +1,11 @@
+{
+ "mode": "profile",
+ "switches": [
+  {
+   "name": "Battery"
+  },
+  {
+   "name": "Max FPS"
+  }
+ ]
+}

@@ -9,8 +9,10 @@ import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.HistoryScreen;
+import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.ui.UndoScreen;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
+import io.github.chaotix345.rigtune.core.profile.ProfileView;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Impact;
@@ -393,12 +395,20 @@ public final class UndoDriver implements ClientModInitializer {
 		}
 	}
 
-	// Phase 5 (docs/v0.4/design/ws-h.md): once WS-P has merged, switch to the profile `name` here through its API (what
-	// the Profiles screen's switch does: the profile's settings as one Apply, the entry labelled in profiles.json) and
-	// return its status message. The harness finds the entries in history.json itself.
+	// Switches to the profile `name` (a template or saved profile, matched by its shown name or id) the way the Profiles
+	// screen's Switch does (ProfilesScreen.switchSelected: controller.switchProfile(id), one Apply labelled in
+	// profiles.json) and returns its status message. The harness finds the entries in history.json itself.
 	private Component switchProfile(RigTuneController controller, String name) {
-		throw new IllegalStateException("--profile-switch profile needs WS-P's profile API in UndoDriver.switchProfile"
-				+ " (tools/e2e/README.md, v0.4 runs); profile " + name);
+		List<String> seen = new ArrayList<>();
+		for (ProfileView p : controller.profiles()) {
+			String shown = Texts.component(p.name()).getString();
+			if (shown.equalsIgnoreCase(name) || p.id().equals(name)) {
+				event("profile " + name + " = " + p.id());
+				return controller.switchProfile(p.id());
+			}
+			seen.add(shown + " (" + p.id() + ")");
+		}
+		throw new IllegalStateException("no profile named " + name + "; profiles: " + seen);
 	}
 
 	// What a profile switch applies: one SetSetting per key whose value differs (docs/research/v0.4/profiles.md).

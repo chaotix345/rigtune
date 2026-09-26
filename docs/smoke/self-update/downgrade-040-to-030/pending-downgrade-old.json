@@ -1,0 +1,32 @@
+{
+  "createdAt": "2026-09-20T10:00:05Z",
+  "gamePid": 4242,
+  "modsDir": "<instance>\\mods",
+  "configDir": "<instance>\\config",
+  "ops": [
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\e2e-seed-1.0.0.jar.rigtune-pending",
+      "to": "<instance>\\mods\\e2e-seed-1.0.0.jar",
+      "id": "0a4f3c1e-5b7d-4e2a-9c61-7d2f1b8e4a01",
+      "group": "0a4f3c1e-5b7d-4e2a-9c61-7d2f1b8e4a02",
+      "modId": "e2e-seed",
+      "attempts": 0
+    },
+    {
+      "type": "PATCH_JSON",
+      "path": "<instance>\\config\\sodium-options.json",
+      "patches": {
+        "performance.chunk_builder_threads": "0"
+      },
+      "id": "f9529fd7-2045-44ea-9ad5-7ad24f7960e2",
+      "attempts": 0
+    },
+    {
+      "type": "DISABLE_FILE",
+      "path": "<instance>\\mods\\e2e-downgrade-off-1.0.0.jar",
+      "id": "2e223dbf-16e6-4bc8-b4ba-6f399b85d641",
+      "attempts": 0
+    }
+  ]
+}

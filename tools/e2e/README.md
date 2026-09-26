@@ -77,8 +77,10 @@ pair "undo-after-restart-040 --scenario undo --new-jar $NEW --profile-switch pro
 python tools/e2e/compat030.py --old-jar $J/rigtune-0.3.0+mc26.2.jar   # no client; CI runs it on every push too
 ```
 
-Before the final runs: the `v040-written` sets must be the real ones (below), and `UndoDriver.switchProfile` must call
-WS-P's API (until then `--profile-switch profile` fails there; `--profile-switch settings` is the stand-in).
+Before the final runs: the `v040-written` sets must be the real ones (below). `UndoDriver.switchProfile` calls WS-P's
+API (`controller.switchProfile(id)` for the profile whose shown name matches, as the Profiles screen's Switch does; P5-C).
+On the E2E instance the Battery and Max FPS templates change only `vanilla.*` keys, so the Phase 5 finals also run
+`--profile-switch settings` (whose switches stage the same Sodium key twice) as the staged-key proof of SPEC 2n.
 
 - `--expect-history auto` takes the check from the old jar's version (`e2e_checks.history_expectation`): 0.1.x →
   `legacy-import`, 0.2.0 and later → `own-update` (0.2.0 and 0.3.0 journal their own update as one `apply` entry that
@@ -129,17 +131,16 @@ its own with Sodium (from the Gradle cache), so staged config keys are covered:
   `profile-apply`, with Undo all. Checks: the plans' `undoOf` in that order, no problem; every applied change of both
   switches `REVERTED` by `APPLIED` undo entries; every key back at its value before the first switch in the files and,
   in the check start, in the game; nothing left to undo on either entry; statuses and mods unchanged; labels kept.
-- **Known: `profile-undo` is expected to FAIL until SPEC amendment 2n merges** (WS-A; AC2n.2): the second Undo last
-  skips the Sodium key the first one staged (UndoPlanner compares with the file, not the pending staged value), so it
-  ends at the first switch's value (first seen in `docs/smoke/self-update/dev-undo-after-restart-040-profiles`). The
-  harness doesn't work around it; `profile-undo-all` and `profile-check-all` pass.
+- SPEC amendment 2n (WS-A; AC2n.2), found here: the second Undo last skipped the Sodium key the first one staged
+  (UndoPlanner compared with the file, not the pending staged value), so it ended at the first switch's value (first
+  seen in `docs/smoke/self-update/dev-undo-after-restart-040-profiles`). Fixed in 7794d2cd; `profile-undo` now counts
+  in the verdict like every phase.
 - `--profile-switch settings` (usable now): two stand-in switches (`PROFILE_SWITCHES`: render distance, FPS cap, and
   Sodium's chunk builder threads staged by both, fog occlusion by the first) through `controller.apply`, and the checks
   also want exactly those keys and values.
-- `--profile-switch profile --profile-names 'Battery,Max FPS'` (Phase 5; the default names): first put WS-P's switch
-  call in `UndoDriver.switchProfile(controller, name)` (switch the way the Profiles screen does; return its status
-  message; CI's `compileE2eUndoJava` then guards the API), and adjust `e2e_checks.profile_labels` if WS-P's
-  `profiles.json` differs from SPEC C1's `switches: [{entryId, profileId, templateId, name}]`. The checks take keys
+- `--profile-switch profile --profile-names 'Battery,Max FPS'` (Phase 5; the default names): `UndoDriver.switchProfile`
+  switches the way the Profiles screen does and returns its status message (CI's `compileE2eUndoJava` guards the API);
+  `e2e_checks.profile_labels` reads WS-P's `profiles.json` `switches: [{entryId, templateId, name}]`. The checks take keys
   and values from the journal, so a real profile's keys need no list; a key outside `vanilla.*`/`sodium.*` (DH, Iris:
   not installed on the E2E instance) fails with its name.
 

@@ -2,6 +2,21 @@
 
 Release candidate: `feat/v0.4.0` @ 9cf84f6 (a3f5c14 adds only a PROGRESS line). The accessibility branch (item 11) was still pending when this ran. Machine: Ryzen 7 7800X3D, Radeon RX 7800 XT, 32 GB, 2560x1440 @ 180 Hz, Windows 11, JDK 25.0.4.1. Every local game launch took the machine-wide game-test lock (`C:/Dev/Worktrees/.gametest-lock`, atomic mkdir + owner.txt) and released it in the same command. The user's real instance was only read.
 
+## P5-C (release-candidate finals)
+
+Release candidate `feat/v0.4.0` @ b27f33fa (after fix/review-8b), built in `test/p5-final` @ 23be54d1 (test-side
+commits only): `rigtune-0.4.0-dev+mc26.2.jar` sha256 `4018fe03…9a12`, 26.3 `568aa0b4…4b85`. Details: [p5c/](p5c/README.md).
+
+| deliverable | result | evidence |
+|---|---|---|
+| "Written by 0.4" fixtures regenerated from the RC | all 6 sets byte-identical (no change) | [p5c/](p5c/README.md) |
+| AC3.3 released-jar harness (`compat030.py`, released 0.3.0) | **PASS 9/9** | [p5c/compat030-rc.txt](p5c/compat030-rc.txt) |
+| AC3.1 upgrade runs | **PASS**: 0.3.0 20/20, 0.2.0 20/20, 0.1.0 21/21, seeded 0.1.0 26/26 | docs/smoke/self-update/final-*-040/ |
+| AC3.1 undo-after-restart-040 with two real profile switches (AC2n.2) | **PASS 81/81**; settings stand-in with a staged Sodium key 79/79 | docs/smoke/self-update/undo-after-restart-040*/ |
+| AC3.2 downgrade-040-to-030 (real sets) | **PASS 16/16** | docs/smoke/self-update/downgrade-040-to-030/ |
+| AC5.8 C re-run (teleport, 26.2) | **PASS** against the amended AC (3 runs) | [stutter/C-rerun/](stutter/C-rerun/README.md) |
+| Findings | P5C-F1 (low; decided as a SPEC refinement, 427f4a7) | [P5C-FINDINGS.md](P5C-FINDINGS.md) |
+
 ## P5-B (local game tests, production smokes, real instance, footprint numbers)
 
 Branch `test/p5-smokes`. It has no product-code change, and two test-only changes in the gametest source set:
