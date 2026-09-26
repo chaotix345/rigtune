@@ -1,7 +1,9 @@
 package io.github.chaotix345.rigtune.core.rules;
 
+import io.github.chaotix345.rigtune.core.hardware.DriverVersionParser;
 import io.github.chaotix345.rigtune.core.hardware.GpuClassifier;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
+import io.github.chaotix345.rigtune.core.model.DriverVersion;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.GpuInfo;
 import io.github.chaotix345.rigtune.core.model.GpuVendor;
@@ -45,6 +47,7 @@ public final class ConditionEvaluator {
 	public static final String BACKEND_VULKAN_FLAG = "backend-vulkan";
 	public static final Set<String> FLAGS = Set.of(BACKEND_VULKAN_FLAG, "shaders-enabled");
 	public static final String SODIUM_WORKAROUND_FLAG = "sodium-workaround:";
+	private static final Set<String> DRIVER_VERSION_KEYS = Set.of("vendor", "atLeast", "atMost");
 
 	private ConditionEvaluator() {
 	}
@@ -289,9 +292,29 @@ public final class ConditionEvaluator {
 		return t;
 	}
 
-	// v0.4 contract stub (docs/v0.4/SPEC.md 9): filled by WS-R. UNKNOWN until then, so no rule using it can fire.
+	// docs/v0.4/SPEC.md 9: {"vendor" (required, the gpuVendor vocabulary), "atLeast", "atMost" (dotted numbers, inclusive)}.
+	// TRUE/FALSE only when the detected vendor is the rule's and the driver string parses (DriverVersionParser); a vendor
+	// mismatch, an unknown vendor, an unparseable string, a bad number, a missing vendor or another key is UNKNOWN.
 	private static Truth driverVersion(Map<String, String> wanted, EvalContext ctx) {
-		return UNKNOWN;
+		for (String key : wanted.keySet()) {
+			if (!DRIVER_VERSION_KEYS.contains(String.valueOf(key))) {
+				return UNKNOWN;
+			}
+		}
+		String vendor = wanted.get("vendor");
+		GpuVendor detected = ctx.gpu() == null || ctx.gpu().vendor() == null ? GpuVendor.UNKNOWN : ctx.gpu().vendor();
+		if (vendor == null || detected == GpuVendor.UNKNOWN || !GPU_VENDORS.contains(vendor.toLowerCase(Locale.ROOT))
+				|| !vendor.equalsIgnoreCase(detected.name())) {
+			return UNKNOWN;
+		}
+		int[] atLeast = wanted.containsKey("atLeast") ? DriverVersion.dotted(wanted.get("atLeast")) : new int[0];
+		int[] atMost = wanted.containsKey("atMost") ? DriverVersion.dotted(wanted.get("atMost")) : new int[0];
+		GpuInfo gpu = ctx.hardware().gpu();
+		DriverVersion version = gpu == null ? DriverVersion.unknown(detected, null) : DriverVersionParser.parse(detected, gpu.backend(), gpu.driverVersion());
+		if (atLeast == null || atMost == null || !version.known()) {
+			return UNKNOWN;
+		}
+		return Truth.of((atLeast.length == 0 || version.compareTo(atLeast) >= 0) && (atMost.length == 0 || version.compareTo(atMost) <= 0));
 	}
 
 	public static boolean hasStutterKey(Condition c) {
