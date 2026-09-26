@@ -236,7 +236,7 @@ public class StutterGameTest implements FabricClientGameTest {
 					buttons.add(b);
 				}
 			}
-			check(buttons.size() >= 6, name + ": the 6 buttons");
+			check(buttons.size() == 5, name + ": the 5 buttons (Start or Stop, Pause, Clear, Copy summary, Done)");
 			for (AbstractWidget w : buttons) {
 				check(w.getX() >= 0 && w.getY() >= 0 && w.getX() + w.getWidth() <= screen.width && w.getY() + w.getHeight() <= screen.height,
 						name + ": " + w.getMessage().getString() + " inside the screen");

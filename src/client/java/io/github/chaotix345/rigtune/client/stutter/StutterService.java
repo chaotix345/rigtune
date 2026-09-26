@@ -282,11 +282,12 @@ public final class StutterService {
 		return new Analysis(null, report, advice);
 	}
 
-	// "phase timing ok (baselines: packets 0.31 ms, ticks 1.20 ms, render 5.02 ms)", for the logs (S-M1's first-run check).
+	// "phase timing ok (per-frame baselines: packets 12.0 us, ticks 8.1 us, render 450.2 us; timers seen 11111)", for the
+	// logs (S-M1's first-run check). The tick baseline is small at high frame rates: most frames have no tick.
 	static String phases(StutterCapture.Copy copy) {
 		long[] b = copy.frames().phaseBaselines();
-		return String.format(java.util.Locale.ROOT, "phase timing %s (baselines: packets %.2f ms, ticks %.2f ms, render %.2f ms; timers seen %s)",
-				copy.phaseTiming() ? "ok" : "unavailable", b[0] / 1e6, b[1] / 1e6, b[2] / 1e6, Integer.toBinaryString(StutterMonitor.phaseSeen()));
+		return String.format(java.util.Locale.ROOT, "phase timing %s (per-frame baselines: packets %.1f us, ticks %.1f us, render %.1f us; timers seen %s)",
+				copy.phaseTiming() ? "ok" : "unavailable", b[0] / 1e3, b[1] / 1e3, b[2] / 1e3, Integer.toBinaryString(StutterMonitor.phaseSeen()));
 	}
 
 	private static void safely(Runnable body) {

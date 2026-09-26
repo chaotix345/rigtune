@@ -64,6 +64,38 @@ class StutterMonitorTest {
 		assertTrue(on < 1024, "monitor on: " + on + " bytes");
 	}
 
+	// The per-frame cost, measured (research §2.3: ~21 ns with the monitor on); a gross guard only: SPEC 10's budgets are
+	// FrameHookBudgetTest's (WS-F). The phase timers add their own calls (7 per frame with the frame rate capped).
+	@Test
+	void perFrameCost() {
+		int n = 10_000_000;
+		double off = nanosPerFrame(n);
+		StutterMonitor.startSession(new StutterRings(0), System.nanoTime(), Instant.now());
+		double on = nanosPerFrame(n);
+		double onWithPhases = nanosPerFrameWithPhases(n);
+		System.out.printf("StutterMonitor.onFrame: %.1f ns off, %.1f ns on, %.1f ns on with the phase timers%n", off, on, onWithPhases);
+		assertTrue(off < 50, "off: " + off);
+		assertTrue(on < 1000, "on: " + on);
+	}
+
+	static double nanosPerFrame(int n) {
+		for (int i = 0; i < n / 5; i++) {
+			StutterMonitor.onFrame(7_000_000L);
+		}
+		long start = System.nanoTime();
+		for (int i = 0; i < n; i++) {
+			StutterMonitor.onFrame(7_000_000L);
+		}
+		return (System.nanoTime() - start) / (double) n;
+	}
+
+	static double nanosPerFrameWithPhases(int n) {
+		frames(n / 5);
+		long start = System.nanoTime();
+		frames(n);
+		return (System.nanoTime() - start) / (double) n;
+	}
+
 	@Test
 	void sessionAndBenchmarkShareTheRingsUntilTheLastStops() {
 		assertFalse(StutterMonitor.active());
