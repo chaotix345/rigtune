@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.client.profile;
 
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.client.ConfigTargets;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
@@ -8,11 +9,14 @@ import io.github.chaotix345.rigtune.client.probe.ModScanner;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
+import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
+import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
+import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
@@ -23,6 +27,7 @@ import io.github.chaotix345.rigtune.core.notice.NoticeAction;
 import io.github.chaotix345.rigtune.core.notice.NoticePriority;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.profile.BatteryPrompt;
+import io.github.chaotix345.rigtune.core.profile.EffectiveSettings;
 import io.github.chaotix345.rigtune.core.profile.ProfileImport;
 import io.github.chaotix345.rigtune.core.profile.ProfileNames;
 import io.github.chaotix345.rigtune.core.profile.ProfileNotes;
@@ -36,6 +41,7 @@ import io.github.chaotix345.rigtune.core.profile.ShareCode;
 import io.github.chaotix345.rigtune.core.profile.ShareCodeException;
 import io.github.chaotix345.rigtune.core.profile.ShareKeys;
 import io.github.chaotix345.rigtune.core.recommend.Recommender.Clamp;
+import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.rules.RulesLoader;
 import net.minecraft.client.Minecraft;
@@ -44,6 +50,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import org.jspecify.annotations.Nullable;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -122,7 +130,7 @@ public final class ProfileService {
 		}
 		SettingsSnapshot snapshot = snapshot();
 		List<Recommendation> recs = ProfileSwitch.build(target.values(), snapshot, ModScanner.loadedIds(), labels(), target.english());
-		return controller.preview(recs).withNotes(notes(target, snapshot, 0));
+		return effective(controller.preview(recs), recs).withNotes(notes(target, snapshot, 0));
 	}
 
 	// Saves the current values of the managed keys. A name one of the player's profiles already has overwrites that profile,
@@ -161,7 +169,7 @@ public final class ProfileService {
 		ProfileTemplates.Result clamped = ProfileTemplates.clamp(decoded.values(refreshRate(hardware)), rules, hardware, mods(), snapshot, controller.goal());
 		Target target = new Target(Text.literal(english), english, null, null, clamped.values(), clamped.clamps(), true);
 		List<Recommendation> recs = ProfileSwitch.build(clamped.values(), snapshot, ModScanner.loadedIds(), labels(), english);
-		ApplyPreview preview = controller.preview(recs).withNotes(notes(target, snapshot, decoded.unknownKeys()));
+		ApplyPreview preview = effective(controller.preview(recs), recs).withNotes(notes(target, snapshot, decoded.unknownKeys()));
 		return new ProfileImport(decoded.name(), preview, decoded.unknownKeys(), null, clamped.values());
 	}
 
@@ -289,6 +297,8 @@ public final class ProfileService {
 
 	// The switch itself: one journal entry of kind apply, labelled in profiles.json.
 	private Component switchTo(Target target) {
+		// The way back: "My settings" exists before the first switch, even one made from the battery offer.
+		ensureBaseline();
 		SettingsSnapshot snapshot = snapshot();
 		List<Recommendation> recs = ProfileSwitch.build(target.values(), snapshot, ModScanner.loadedIds(), labels(), target.english());
 		String previous = store().active();
@@ -434,12 +444,61 @@ public final class ProfileService {
 		return out;
 	}
 
+	// THE current values every switch, Preview, template and save uses: the files, with each staged key at the value its last
+	// still-pending op sets (docs/research/v0.4/audit-apply-pipeline.md M1; EffectiveSettings).
 	private SettingsSnapshot snapshot() {
 		Minecraft minecraft = controller.minecraft();
 		if (minecraft == null) {
 			return new SettingsSnapshot(Map.of());
 		}
-		return minecraft.isSameThread() ? SettingsBridge.read(minecraft) : minecraft.submit(() -> SettingsBridge.read(minecraft)).join();
+		SettingsSnapshot files = minecraft.isSameThread() ? SettingsBridge.read(minecraft) : minecraft.submit(() -> SettingsBridge.read(minecraft)).join();
+		Map<String, Path> fileByPrefix = new LinkedHashMap<>();
+		ConfigTargets.all(configDir).forEach(t -> fileByPrefix.put(t.prefix(), t.file()));
+		return EffectiveSettings.of(files, pendingOps(), fileByPrefix);
+	}
+
+	private List<PendingActions.Op> pendingOps() {
+		Path file = PendingActions.defaultPath(configDir);
+		if (!Files.isRegularFile(file)) {
+			return List.of();
+		}
+		try {
+			return PendingActions.load(file).relocated(InstanceDirs.modsDirOf(file), InstanceDirs.configDirOf(file)).ops();
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.warn("Could not read {}", file, e);
+			return List.of();
+		}
+	}
+
+	// PreviewPlanner compares a staged key with its file. When an earlier Apply in this start already staged that key, the
+	// file isn't what the restart starts from, so a change the switch does stage would show as unchanged: those rows (and
+	// the "from" values of the staged ones) come from the switch's own effective values.
+	private ApplyPreview effective(ApplyPreview preview, List<Recommendation> recs) {
+		Map<String, Action.SetSetting> byId = new LinkedHashMap<>();
+		recs.forEach(r -> {
+			if (r.action() instanceof Action.SetSetting set) {
+				byId.put(r.id(), set);
+			}
+		});
+		List<ConfigTargets.Target> targets = ConfigTargets.all(configDir);
+		List<ApplyPreview.Setting> atRestart = new ArrayList<>();
+		for (ApplyPreview.Setting setting : preview.atRestart()) {
+			Action.SetSetting set = byId.get(setting.recommendationId());
+			atRestart.add(set == null ? setting : new ApplyPreview.Setting(setting.recommendationId(), setting.file(), setting.key(), set.currentValue(),
+					setting.newValue()));
+		}
+		List<ApplyPreview.Skipped> skipped = new ArrayList<>();
+		for (ApplyPreview.Skipped skip : preview.skipped()) {
+			Action.SetSetting set = byId.get(skip.recommendationId());
+			ConfigTargets.Target target = set == null ? null : ConfigTargets.forKey(targets, set.key());
+			if (skip.reason() == ApplyPreview.Reason.UNCHANGED && target != null && !SettingValues.same(set.currentValue(), set.newValue())) {
+				atRestart.add(new ApplyPreview.Setting(skip.recommendationId(), target.file(), set.key().substring(target.prefix().length()),
+						set.currentValue(), set.newValue()));
+			} else {
+				skipped.add(skip);
+			}
+		}
+		return new ApplyPreview(preview.now(), atRestart, preview.downloads(), preview.disables(), skipped, preview.resolved(), preview.notes());
 	}
 
 	private List<InstalledMod> mods() {
