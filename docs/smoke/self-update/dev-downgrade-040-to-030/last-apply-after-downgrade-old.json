@@ -1,0 +1,30 @@
+{
+  "finishedAt": "2026-09-26T04:32:50.746807300Z",
+  "results": [
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "<instance>\\mods\\e2e-seed-1.0.0.jar.rigtune-pending",
+        "to": "<instance>\\mods\\e2e-seed-1.0.0.jar",
+        "id": "0a4f3c1e-5b7d-4e2a-9c61-7d2f1b8e4a01",
+        "group": "0a4f3c1e-5b7d-4e2a-9c61-7d2f1b8e4a01",
+        "modId": "e2e-seed",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled e2e-seed-1.0.0.jar",
+      "resultPath": "<instance>\\mods\\e2e-seed-1.0.0.jar"
+    },
+    {
+      "op": {
+        "type": "DISABLE_FILE",
+        "path": "<instance>\\mods\\e2e-downgrade-off-1.0.0.jar",
+        "id": "51382223-eef6-4848-bd98-9b98adf7380f",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Disabled e2e-downgrade-off-1.0.0.jar -> e2e-downgrade-off-1.0.0.jar.disabled",
+      "resultPath": "<instance>\\mods\\e2e-downgrade-off-1.0.0.jar.disabled"
+    }
+  ]
+}

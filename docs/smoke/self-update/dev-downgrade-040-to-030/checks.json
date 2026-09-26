@@ -1,0 +1,86 @@
+{
+ "downgrade-old": [
+  {
+   "name": "the client exited normally and the helper finished",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver ran the released 0.3.0",
+   "ok": true,
+   "detail": "error: None; loaded 0.3.0+mc26.2"
+  },
+  {
+   "name": "latest.log: no RigTune ERROR, stack trace or refusal of a newer file",
+   "ok": true,
+   "detail": "none"
+  },
+  {
+   "name": "History lists every entry 0.4 wrote (state OK)",
+   "ok": true,
+   "detail": "state OK; 3 of 3 listed; missing []; unknown kinds []"
+  },
+  {
+   "name": "Undo last reverted the newest undoable entry, recorded by 0.3.0",
+   "ok": true,
+   "detail": "plan: {'undoOf': 'c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17', 'problem': None, 'items': ['REVERT Render Distance: 8 \u2192 12', 'REVERT Max Framerate: 60 \u2192 120']}; expected undoOf c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17; 0.3.0 undo entries of it: [[('vanilla.renderDistance', 'APPLIED'), ('vanilla.maxFps', 'APPLIED')]]; its changes still applied or staged: []"
+  },
+  {
+   "name": "0.3.0's own Apply staged and applied (disable e2e-downgrade-off-1.0.0.jar)",
+   "ok": true,
+   "detail": "last-apply: ['OK']; e2e-downgrade-off-1.0.0.jar.disabled: True; journaled by 0.3.0: 1"
+  },
+  {
+   "name": "0.4's staged ops (with projectId) applied by 0.3.0's helper",
+   "ok": true,
+   "detail": "ops ['0a4f3c1e-5b7d-4e2a-9c61-7d2f1b8e4a01'] -> ['OK']; their journal changes ['APPLIED']; pending.json left: False"
+  },
+  {
+   "name": "the files only 0.4 writes are byte-identical",
+   "ok": true,
+   "detail": "5 file(s): ['awareness.json', 'profiles.json', 'server-limits.json', 'startup-times.json', 'stutter.json']"
+  },
+  {
+   "name": "no .bad file, no crash report",
+   "ok": true,
+   "detail": ".bad: []; crash-reports: []"
+  }
+ ],
+ "downgrade-new": [
+  {
+   "name": "the relaunched client exited normally",
+   "ok": true,
+   "detail": "gradle exit 0"
+  },
+  {
+   "name": "0.4 loaded from mods/ again",
+   "ok": true,
+   "detail": "error: None; loaded 0.4.0-dev+mc26.2 from ['<instance>\\\\mods\\\\rigtune-0.4.0-dev+mc26.2.jar']"
+  },
+  {
+   "name": "latest.log: no RigTune ERROR, stack trace or refusal of a newer file",
+   "ok": true,
+   "detail": "none"
+  },
+  {
+   "name": "no .bad file, no crash report",
+   "ok": true,
+   "detail": ".bad: []; crash-reports: []"
+  },
+  {
+   "name": "History lists every entry of history.json (state OK)",
+   "ok": true,
+   "detail": "state OK; listed 5 of 5; unknown kinds []"
+  },
+  {
+   "name": "profiles.json still labels the switch entries 0.3.0 kept",
+   "ok": true,
+   "detail": "expected {'c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17': 'Battery'}; labels now {'c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17': 'Battery'}"
+  },
+  {
+   "name": "0.4 read its own files back (none reset or moved to .bad)",
+   "ok": true,
+   "detail": "5 file(s) kept their items"
+  }
+ ]
+}
