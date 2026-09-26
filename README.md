@@ -141,6 +141,17 @@ RigTune's heavy work (the hardware scan, the mod scan, loading the rules and the
 
 Most of the startup time is Java loading classes the first time they're used, among them Gson's, which Minecraft loads soon after anyway. On the Windows PC above, the same startup work took 65 ms (62 ms of CPU time).
 
+**The Stutter Doctor's session monitor** is off by default. Off, it costs next to nothing: no garbage-collection listener, no thread, one flag check per frame and a few field reads per tick. While it's on (in a world), it holds about 2 MB of memory for its frame and event buffers and gives all of it back when it stops. It adds 25-37 ns per frame, or 150-260 ns with its per-phase timing; that's well under a thousandth of a frame even at 240 FPS. Its sampler thread uses up to about 50 ms of CPU per minute, under 0.1 % of one core. The same checks measure it on GitHub's runners (3 runs of each version and backend, plus earlier runs of the same code):
+
+| With the session monitor on | Largest measured | Budget |
+|---|---|---|
+| Per frame | 37 ns, nothing allocated | 75 ns, nothing allocated |
+| Per frame, with the per-phase timing | 256 ns, nothing allocated | 400 ns, nothing allocated |
+| Per tick | 50 ns, nothing allocated | 101 ns, nothing allocated |
+| Its buffers in memory | 1.98 MB | 2.5 MiB |
+| Left in memory after it's turned off | nothing | nothing |
+| Its sampler thread, CPU time per minute | 51 ms | 102 ms |
+
 **Your own launch time.** Tools… shows your last launch time and the median of your last 10, and notes when your mod set changed since the previous launch. The times are kept in `config/rigtune/startup-times.json`, on your PC only. Fabric Loader doesn't time individual mods, so RigTune can't tell you which mod is slow: fewer mods and an SSD help most, and if the launch time jumped after you added a mod, check that mod first.
 
 ## Privacy

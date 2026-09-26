@@ -5,7 +5,7 @@ SPEC 10 + amendments F-M1 (the monitor-on/off budget asserts on `StutterMonitor.
 and the class histogram are diagnostics/leak checks), F-M2 (budgets = 2 × max observed, never above the ceiling), F-L1,
 S-M1 (the phase timers ship, `require = 0`). Product code stays untouched; test seams live in the test source sets.
 
-- [ ] F2-1 `FrameHookBudgetTest` (JUnit, 10 M calls each, same method as the monitor-off case: allocation over the first
+- [x] F2-1 `FrameHookBudgetTest` (JUnit, 10 M calls each, same method as the monitor-off case: allocation over the first
       10 M calls from cold beyond 4 KiB of JIT noise and over the hot runs, ns/call best of 5):
       - `frameHookWithTheMonitorOn`: what `DebugScreenOverlayMixin` runs per frame (`FrameTimes.onFrame` +
         `StutterMonitor.onFrame`) with a session capture on → `frameHookNsPerCallOn`, `frameHookAllocBytesOn`.
@@ -14,7 +14,7 @@ S-M1 (the phase timers ship, `require = 0`). Product code stays untouched; test 
         `frameHookNsPerCallOnPhases`, `frameHookAllocBytesOnPhases` (new budgets, ceiling 200 ns / 0 B).
       - The session starts through a test-only accessor in `src/test/.../client/stutter/` (StutterMonitor's start/stop are
         package-private); stopped in `@AfterEach`. Occasional 60 ms frames exercise the candidate path.
-- [ ] F2-2 `FootprintGameTest.sessionMonitor` (after the title-screen retention part): a singleplayer world
+- [x] F2-2 `FootprintGameTest.sessionMonitor` (after the title-screen retention part): a singleplayer world
       (`worldBuilder().create()`), settle, heap after a full GC with the monitor off (in-world idle); monitor on
       (`controller.setStutterMonitor(true)`); the sampler thread must exist; its CPU over 60 s of wall time
       (`samplerCpuMsPer60s`); the END_CLIENT_TICK work with the monitor on (`RigTuneClient.onTick` + `StutterHooks.tick`,
@@ -24,11 +24,11 @@ S-M1 (the phase timers ship, `require = 0`). Product code stays untouched; test 
       FrameRing / StutterRings / Capture / Copy / snapshots (`monitorOffLeftoverInstances`, limit 0); heap after a full GC
       (diagnostic). PowerWatcher: `PowerWatcher.isRunning()` false and no "RigTune power" thread without a battery, at the
       title and in the world (AC4.9/AC10.6); `hasBattery` recorded so the check isn't silently vacuous.
-- [ ] F2-3 `tools/footprint-budgets.json`: the new keys (at their ceilings until calibrated); `FootprintBudgetsTest` pins
+- [x] F2-3 `tools/footprint-budgets.json`: the new keys (at their ceilings until calibrated); `FootprintBudgetsTest` pins
       their ceilings.
-- [ ] F2-4 Calibration: 3 CI runs per leg (the java job for F2-1, the 3 game-test legs for F2-2) on the same commit (the
+- [x] F2-4 Calibration: 3 CI runs per leg (the java job for F2-1, the 3 game-test legs for F2-2) on the same commit (the
       branch + 2 scratch branches in parallel), plus 1 local 26.2 run under the machine lock if the lock is free; budget =
       min(ceiling, 2 × max observed); fail mode stays.
-- [ ] F2-5 docs: verification README (calibration table for the monitor metrics, the X5 map with the monitor, the phase
+- [x] F2-5 docs: verification README (calibration table for the monitor metrics, the X5 map with the monitor, the phase
       timers, PowerWatcher), README "RigTune's own footprint" monitor numbers, `docs/v0.4/design/ws-f2.md`.
-- [ ] F2-6 Finish: code-reviewer subagent on the diff; merge `origin/feat/v0.4.0`; `./gradlew build`; push; CI green.
+- [x] F2-6 Finish: code-reviewer subagent on the diff; merge `origin/feat/v0.4.0`; `./gradlew build`; push; CI green.
