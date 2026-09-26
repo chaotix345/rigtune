@@ -14,4 +14,4 @@ RigTune 0.4.0 for Minecraft Java 26.2 and 26.3 (Fabric). Download the jar for yo
 
 No file format changed: every file 0.1.0 to 0.3.0 wrote keeps working, and 0.3.0 reads what 0.4.0 writes (checked with the released jars, including self-updates from 0.1.0, 0.2.0 and 0.3.0 and a downgrade to 0.3.0 and back).
 
-**Full changelog**: [CHANGELOG.md](https://github.com/chaotix345/rigtune/blob/main/CHANGELOG.md#040---2026-09-27) · [compare v0.3.0...v0.4.0](https://github.com/chaotix345/rigtune/compare/v0.3.0...v0.4.0)
+**Full changelog**: [CHANGELOG.md](https://github.com/chaotix345/rigtune/blob/main/CHANGELOG.md#040---2026-09-26) · [compare v0.3.0...v0.4.0](https://github.com/chaotix345/rigtune/compare/v0.3.0...v0.4.0)

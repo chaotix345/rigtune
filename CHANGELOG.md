@@ -6,7 +6,7 @@ for each release becomes that release's Modrinth changelog (`build.gradle`'s
 
 ## [Unreleased]
 
-## [0.4.0] - 2026-09-27
+## [0.4.0] - 2026-09-26
 
 ### Added
 - **Tools…** on the RigTune screen (in the footer, where Benchmark… was) opens a hub: **Benchmark…**, **Profiles…**, **Stutter Doctor…**, **JVM & memory…**, **Benchmark history…** and your last launch time. Everything in it works with the network off and sends nothing anywhere.
