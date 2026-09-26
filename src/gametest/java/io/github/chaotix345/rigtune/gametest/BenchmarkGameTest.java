@@ -521,7 +521,7 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 				Button button = button(mc, key);
 				if (button != null) {
 					check(button.active, key + " is active");
-					button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(0, 0)));
+					button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0)));
 					return;
 				}
 			}

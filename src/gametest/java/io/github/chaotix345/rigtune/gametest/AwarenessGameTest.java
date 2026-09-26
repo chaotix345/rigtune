@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.gametest;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -206,7 +207,7 @@ public class AwarenessGameTest implements FabricClientGameTest {
 		context.runOnClient(mc -> {
 			Button button = findButton(mc.gui.screen(), key);
 			check(button != null, "a '" + key + "' button on " + mc.gui.screen());
-			button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(0, 0)));
+			button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0)));
 		});
 	}
 

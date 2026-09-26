@@ -12,6 +12,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // AC5.4: 1 M frames after warm-up allocate 0 bytes; wrap-around and snapshot order; the histogram; F-M1's accounting.
 class FrameRingAllocationTest {
+	// JVM bookkeeping on a CI runner can add about 1 KB over a whole run (1,072 bytes once, run 36231385325); an allocation
+	// per frame would be at least 16 MB over a million frames, so 64 KiB separates the two with a wide margin.
+	static final long NOISE_BYTES = 64 * 1024;
 	private static final long MS = 1_000_000L;
 
 	static long allocatedBytes() {
@@ -44,7 +47,7 @@ class FrameRingAllocationTest {
 			ring.frame(now, i % 97 == 0 ? 40 * MS : 7 * MS, i % 1000 == 0, 300_000, 1_000_000, 5 * MS, i & 3);
 		}
 		long allocated = allocatedBytes() - before;
-		assertTrue(allocated < 1024, "bytes allocated by 1 M frames: " + allocated);
+		assertTrue(allocated < NOISE_BYTES, "bytes allocated by 1 M frames: " + allocated);
 	}
 
 	@Test
