@@ -27,11 +27,11 @@ Brief: the user's v0.4.0 prompt (full autonomy, research -> release incl. GitHub
 | WS-P early | feat/profiles-extract (deleted) | - | MERGED 22cc915 (CI 36219635079): Recommender.settingTargets extraction, golden report over 240 scenarios. |
 | coordinator | - | - | core/model/ModSetHash shared by WS-B/WS-F (e1393e1). |
 | WS-A | fix/v04-deferred (deleted) | removed | MERGED 0132341 (CI 36227862376): 2a-2g, 2j, 2m, 2n verified (unit + CI game tests; 2m pixel diff 0/56,640); 1444 tests/version at merge; MultiMC/GDLauncher jvm_steps added; compat030 9/9 with the real ws-a set. UNVERIFIED: AC2n.2 (WS-H RC run), 2d reverse check end to end (fake Modrinth lacks /v2/versions). |
-| WS-G1 | fix/resolver-audit | rigtune-g1 | Wave B hardening: H2, H3, H1-A (+ M4, M7 if time) |
-| WS-G3 | fix/helper-audit | rigtune-g3 | Wave B hardening: H4, L2 |
-| WS-G2 | fix/undo-audit | rigtune-g2 | Wave B hardening: H5, M3 (+ M2, M5, H1-B if time), M1x2n test |
+| WS-G1 | fix/resolver-audit (deleted) | removed | MERGED 2b0ea54 (CI 36233796911): H2 batch-level pins (Fabric predicates via client/probe/FabricPins, core VersionPins), H3 top-level ids, H1-A, M7, M4; 1686 tests/version. UNVERIFIED: in a real game; Preview can list a download Apply refuses on a range. |
+| WS-G3 | fix/helper-audit (deleted) | removed | MERGED 6ecf822 (CI 36233023517): H4 roll forward else back across runs (config/rigtune/helper/unfinished-groups.json), L2 write order; HelperCompat030Test; compat030 9/9. UNVERIFIED: real locked files/killed JVM (simulated), power cut. |
+| WS-G2 | fix/undo-audit (deleted) | removed | MERGED 4a6775a (CI 36235100038): H5 one group per undo, M1x2n test, M3, M2, M5 + H1-B (core FolderCheck, DisableGuard toast); 1731 tests/version. UNVERIFIED: toast in a game test; a killed-helper (attempts 0) half group. |
 | WS-G4 | fix/journal-audit | rigtune-g4 | Wave B hardening: M6 fold, L1 |
-| WS-F2 | feat/footprint-monitor | rigtune-f2 | monitor-on footprint budgets (F-L1, AC10.4) |
+| WS-F2 | feat/footprint-monitor (deleted) | removed | MERGED d69c9fb (CI 36234923809): monitor-on budgets calibrated (frame 37->75 ns; +phase timers 256->400; tick 50->101; world tick 43->87; retained 1.98 MB/2.5 MiB, 0 off; sampler 50.8->102 ms/60 s); ThreadSampler optimised (~20-25 %). |
 | WS-X | feat/a11y | rigtune-a11y | P2 item 11 reduced (row focus/narration, palette) |
 | coordinator | chore/v04-followups | rigtune-followups | rules r15 (jvm-server-flags hedge), add_mc_version checklist `>=<base>-alpha`, UI race fix (Preview/History/Undo started their async load before adding widgets -> duplicate widgets; integration CI 36229741259 26.3 GL failed once, rerun passed) |
 | WS-R | feat/rules-v04 (deleted) | removed | MERGED 2636702 (CI 36224155899): rules r14; rules-v1 diff = VSync pair + revision/generatedAt only; 5 templates, 5 stutter seeds, 9 jvm-* advice (ZGC option C), 2 driver seeds, all v1:false; Legacy* tests; Python 324. UNVERIFIED: Sodium 'Chunk Updates' page, DH 'NO. of threads' label in advice text. |
