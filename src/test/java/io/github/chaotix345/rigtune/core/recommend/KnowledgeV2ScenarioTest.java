@@ -503,9 +503,9 @@ class KnowledgeV2ScenarioTest {
 		}
 	}
 
-	// v0.4: the rules content for keys whose evaluators other workstreams add (driverVersion: WS-W, the stutter keys: WS-S,
-	// the jvm- facts: WS-J) can't fire in the main list today. Each workstream replaces its part of this with scenario tests
-	// for its seeds once its evaluator lands.
+	// v0.4: the rules content for keys whose evaluators other workstreams add (the stutter keys: WS-S, the jvm- facts: WS-J)
+	// can't fire in the main list today. Each workstream replaces its part of this with scenario tests for its seeds once
+	// its evaluator lands (driverVersion: WS-W's driverSeedsFireOnTheAffectedDriversOnly).
 	@Test
 	void theV04ContentFiresNothingUntilItsEvaluatorsLand() {
 		RulesDocument rules = RulesLoader.loadBundled();
@@ -523,11 +523,76 @@ class KnowledgeV2ScenarioTest {
 		for (Fixtures.Hw hw : List.of(Fixtures.userRig(), Fixtures.lowEndLaptop(), oldNvidia, hd4000, tier1Laptop())) {
 			for (List<String> mods : List.of(List.of("sodium"), DH_MODS, List.of("sodium", "iris", "distanthorizons"), List.of("fabric-api"))) {
 				Set<String> fired = advice(run(hw, mods, Map.of("sodium.performance.chunk_build_defer_mode", "ZERO_FRAMES")));
-				for (Set<String> ids : List.of(jvm, drivers, stutter)) {
+				for (Set<String> ids : List.of(jvm, stutter)) {
 					assertTrue(fired.stream().noneMatch(ids::contains), hw.gpu.renderer() + " " + mods + ": " + fired);
 				}
 			}
 		}
+	}
+
+	// v0.4 SPEC 9 (AC9.4): the driver seeds warn on exactly the affected drivers, on Windows, and never on a driver string
+	// RigTune can't read.
+	@Test
+	void driverSeedsFireOnTheAffectedDriversOnly() {
+		String nvidia = "driver-nvidia-threaded-optimization";
+		String intel = "driver-intel-gen7-old";
+		Map<String, Set<String>> expected = new java.util.LinkedHashMap<>();
+		Map<String, Fixtures.Hw> hardware = new java.util.LinkedHashMap<>();
+		hardware.put("NVIDIA 531.18 Windows", nvidiaRig("4.6.0 NVIDIA 531.18", "Windows 11"));
+		expected.put("NVIDIA 531.18 Windows", Set.of(nvidia));
+		hardware.put("NVIDIA 526.47 Windows", nvidiaRig("4.6.0 NVIDIA 526.47", "Windows 10"));
+		expected.put("NVIDIA 526.47 Windows", Set.of(nvidia));
+		hardware.put("NVIDIA 536.22 Windows", nvidiaRig("4.6.0 NVIDIA 536.22", "Windows 11"));
+		expected.put("NVIDIA 536.22 Windows", Set.of(nvidia));
+		hardware.put("NVIDIA 536.23 Windows", nvidiaRig("4.6.0 NVIDIA 536.23", "Windows 11"));
+		expected.put("NVIDIA 536.23 Windows", Set.of());
+		hardware.put("NVIDIA 560.94 Windows", nvidiaRig("4.6.0 NVIDIA 560.94", "Windows 11"));
+		expected.put("NVIDIA 560.94 Windows", Set.of());
+		hardware.put("NVIDIA 531.18 Linux", nvidiaRig("4.6.0 NVIDIA 531.18", "Linux"));
+		expected.put("NVIDIA 531.18 Linux", Set.of());
+		hardware.put("NVIDIA unparseable", nvidiaRig("4.6.0 NVIDIA", "Windows 11"));
+		expected.put("NVIDIA unparseable", Set.of());
+		hardware.put("NVIDIA 531.18 Vulkan", nvidiaRig("1.3.296 NVIDIA 531.18", "Windows 11"));
+		hardware.get("NVIDIA 531.18 Vulkan").gpu = new GpuInfo("NVIDIA", "NVIDIA GeForce RTX 3060", "1.3.296 NVIDIA 531.18", GraphicsBackend.VULKAN, 12288);
+		expected.put("NVIDIA 531.18 Vulkan", Set.of(nvidia));
+		hardware.put("HD 4000 10.18.10.4358", hd4000("4.0.0 - Build 10.18.10.4358"));
+		expected.put("HD 4000 10.18.10.4358", Set.of(intel));
+		hardware.put("HD 4000 10.18.10.5160", hd4000("4.0.0 - Build 10.18.10.5160"));
+		expected.put("HD 4000 10.18.10.5160", Set.of(intel));
+		hardware.put("HD 4000 10.18.10.5161", hd4000("4.0.0 - Build 10.18.10.5161"));
+		expected.put("HD 4000 10.18.10.5161", Set.of());
+		hardware.put("HD 4000 unparseable", hd4000("4.0.0 - Build"));
+		expected.put("HD 4000 unparseable", Set.of());
+		Fixtures.Hw hd4600 = hd4000("4.3.0 - Build 10.18.10.4358");
+		hd4600.gpu = new GpuInfo("Intel", "Intel(R) HD Graphics 4600", "4.3.0 - Build 10.18.10.4358", GraphicsBackend.OPENGL, -1);
+		hardware.put("HD 4600 old driver", hd4600);
+		expected.put("HD 4600 old driver", Set.of());
+		hardware.put("AMD", Fixtures.userRig());
+		expected.put("AMD", Set.of());
+		for (Map.Entry<String, Fixtures.Hw> hw : hardware.entrySet()) {
+			Map<String, Recommendation> recs = run(hw.getValue(), "sodium");
+			Set<String> fired = advice(recs).stream().filter(id -> id.startsWith("driver-")).collect(Collectors.toSet());
+			assertEquals(expected.get(hw.getKey()), fired, hw.getKey());
+			for (String id : fired) {
+				Recommendation rec = recs.get("advice:" + id);
+				assertEquals(Category.WARNING, rec.category(), id);
+				assertFalse(rec.appliable(), id);
+			}
+		}
+	}
+
+	private static Fixtures.Hw nvidiaRig(String driver, String os) {
+		Fixtures.Hw hw = Fixtures.userRig();
+		hw.gpu = new GpuInfo("NVIDIA Corporation", "NVIDIA GeForce RTX 3060/PCIe/SSE2", driver, GraphicsBackend.OPENGL, 12288);
+		hw.os = os;
+		return hw;
+	}
+
+	private static Fixtures.Hw hd4000(String driver) {
+		Fixtures.Hw hw = Fixtures.lowEndLaptop();
+		hw.gpu = new GpuInfo("Intel", "Intel(R) HD Graphics 4000", driver, GraphicsBackend.OPENGL, -1);
+		hw.os = "Windows 10";
+		return hw;
 	}
 
 	// v0.4 SPEC 6: the main list evaluates the jvm-* advice (Recommender.SUPPORTED_FEATURES has "jvm-flags") once the JVM

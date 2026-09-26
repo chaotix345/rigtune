@@ -3,7 +3,6 @@ package io.github.chaotix345.rigtune.client;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.awareness.AwarenessService;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
-import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
 import io.github.chaotix345.rigtune.client.benchmark.TrendService;
 import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
 import io.github.chaotix345.rigtune.client.jvm.JvmService;
@@ -36,7 +35,6 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
-import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecords;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
@@ -71,6 +69,7 @@ import io.github.chaotix345.rigtune.core.profile.ProfileImport;
 import io.github.chaotix345.rigtune.core.profile.ProfileView;
 import io.github.chaotix345.rigtune.core.recommend.ModConflicts;
 import io.github.chaotix345.rigtune.core.recommend.Recommender;
+import io.github.chaotix345.rigtune.core.recommend.ServerCap;
 import io.github.chaotix345.rigtune.core.report.ModrinthOffAdvice;
 import io.github.chaotix345.rigtune.core.report.ShareReport;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
@@ -275,6 +274,7 @@ public final class RealController implements RigTuneController {
 				return;
 			}
 			RigTuneClient.setHardware(hardware);
+			awarenessService.afterProbe(hardware);
 			rebuild();
 			fetchOnline();
 		});
@@ -313,7 +313,7 @@ public final class RealController implements RigTuneController {
 				});
 	}
 
-	private void rebuild() {
+	public void rebuild() {
 		minecraft.execute(() -> {
 			RulesDocument doc = rules;
 			HardwareProfile hw = hardware;
@@ -323,13 +323,14 @@ public final class RealController implements RigTuneController {
 			}
 			SettingsSnapshot settings = SettingsBridge.read(minecraft);
 			Goal g = goal;
+			ServerLimits live = serverLimitsTracker.live();
 			var data = this.settings.modrinthAllowed() ? online.data() : OnlineData.offline();
 			int gen = ++generation;
 			CompletableFuture.supplyAsync(() -> {
 						Set<String> queued = ModScanner.queuedUpdates();
 						Set<String> loaded = ModScanner.loadedIds();
 						List<Op> dropped = dropQueuedUpdates(queued, loaded);
-						return new Rebuilt(Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion, queued), dropped, queued, loaded);
+						return new Rebuilt(ServerCap.apply(Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion, queued), live, doc), dropped, queued, loaded);
 					}, Probes.EXECUTOR)
 					.whenComplete((rebuilt, error) -> minecraft.execute(() -> {
 						if (error != null) {
@@ -625,7 +626,7 @@ public final class RealController implements RigTuneController {
 
 	@Override
 	public @Nullable BenchmarkSummary latestBenchmark() {
-		return BenchmarkStore.history().latest().map(BenchmarkRecords::summary).orElse(null);
+		return trendService.latestSummary();
 	}
 
 	@Override

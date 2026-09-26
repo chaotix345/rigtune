@@ -4,8 +4,8 @@ import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import org.jspecify.annotations.Nullable;
 
-// NoticePriority.WHATS_NEW: new recommendations since the last look (docs/v0.4/SPEC.md 9). Skeleton from the contracts commit (never shows anything); the change-awareness workstream fills it, reaching its service through the
-// controller (e.g. controller.awarenessService()).
+// NoticePriority.WHATS_NEW: new recommendations since the last look (docs/v0.4/SPEC.md 9); it stays until dismissed. The
+// state lives in AwarenessService.
 public final class WhatsNewNoticeSource implements NoticeSource {
 	private final RealController controller;
 
@@ -15,7 +15,7 @@ public final class WhatsNewNoticeSource implements NoticeSource {
 
 	@Override
 	public @Nullable Notice current() {
-		return null;
+		return controller.awarenessService().whatsNewNotice();
 	}
 
 	@Override

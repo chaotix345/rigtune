@@ -1,0 +1,24 @@
+{
+  "formatVersion": 1,
+  "salt": "3f9a0c1e5b7d2468ace013579bdf2468",
+  "servers": {
+    "72a4e2c69a3a6daef2806d4d0c124ff836c9391cfe8813d612531f953b477cf0": {
+      "viewDistance": 10,
+      "simulationDistance": 10,
+      "kind": "REMOTE",
+      "lastSeen": "2026-09-24T21:05:00Z"
+    },
+    "65cfc0f88b4cc978f3343f46d14da2a49e32fe1bfc256a20a27cd9a80370b5af": {
+      "viewDistance": 8,
+      "simulationDistance": 8,
+      "kind": "LAN_GUEST",
+      "lastSeen": "2026-09-22T17:12:30Z"
+    },
+    "73bf8ad4e9412b14b878c11620341377e8712a5a2beb40f65355f424adb66a1a": {
+      "viewDistance": 10,
+      "simulationDistance": 8,
+      "kind": "REALM",
+      "lastSeen": "2026-09-23T20:00:00Z"
+    }
+  }
+}
