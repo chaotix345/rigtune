@@ -12,7 +12,8 @@ name: snapshot-canary
 # A failing build opens one tracking issue (fixed title, label snapshot-canary), later failures
 # comment on it, and the next green build closes it. A skip (no snapshot newer than the release, or
 # add_mc_version.py refuses the snapshot: no Fabric API build yet, another Java version, ...) is a
-# notice on a green run and leaves the issue alone.
+# notice or warning on a green run and leaves the issue alone; a network error or a crash of
+# add_mc_version.py fails the run without touching the issue.
 #
 # GitHub fires `schedule` only from the copy of this file on the default branch. By hand:
 #   gh workflow run snapshot-canary.yml                          # newest snapshot
@@ -84,7 +85,10 @@ jobs:
           python-version: '3.11'
 
       # Writes settings.gradle and versions/<mc>/gradle.properties in this checkout only. When
-      # add_mc_version.py refuses (it writes nothing), the snapshot isn't ready to test: a skip.
+      # add_mc_version.py refuses (it writes nothing), the snapshot isn't ready to test: a skip, with a
+      # warning when the refusal needs a change here (another Java version, an id format the tool
+      # doesn't know). A network error or a crash of the tool fails the run (no issue: the build
+      # didn't run), so a broken check can't pass for "not ready yet" week after week.
       - name: Add the version as a node (this run only)
         id: add
         if: steps.resolve.outputs.skip == 'false'
@@ -98,8 +102,17 @@ jobs:
           if [ "$status" -ne 0 ]; then
             reason=$(printf '%s\n' "$out" | grep '^add_mc_version: ' | tail -1 | sed 's/^add_mc_version: //')
             reason=${reason//%/%25}
-            echo "::notice title=Snapshot canary skipped::add_mc_version.py refused $MC: ${reason:-see the log}"
-            echo "Skipped: add_mc_version.py refused $MC (${reason:-see the log})." >> "$GITHUB_STEP_SUMMARY"
+            case "$reason" in
+              ''|'unexpected error:'*|'HTTP '*' from '*|'no response from '*|'unreadable '*' from '*|http://*|https://*)
+                echo "::error title=Snapshot canary couldn't check $MC::add_mc_version.py failed: ${reason:-see the log}"
+                exit 1 ;;
+              *'needs Java '*|*"isn't a Minecraft version id this tool understands"*)
+                level=warning ;;
+              *)
+                level=notice ;;
+            esac
+            echo "::$level title=Snapshot canary skipped::add_mc_version.py refused $MC: $reason"
+            echo "Skipped: add_mc_version.py refused $MC ($reason)." >> "$GITHUB_STEP_SUMMARY"
             echo "ready=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -113,8 +126,11 @@ jobs:
           distribution: microsoft
           java-version: '25'
 
+      # Read-only: snapshot Minecraft and Fabric artifacts shouldn't take build.yml's cache space.
       - uses: gradle/actions/setup-gradle@v6
         if: steps.add.outputs.ready == 'true'
+        with:
+          cache-read-only: true
 
       # build includes compiling the game tests (check depends on gametestClasses in build.gradle).
       - name: Build and unit-test the node
@@ -157,6 +173,7 @@ jobs:
             gh label create "$ISSUE_LABEL" --repo "$GITHUB_REPOSITORY" --color FBCA04 \
               --description 'Opened and closed by the snapshot-canary workflow'
           fi
+          base=${MC%%-*}
           body_file=$(mktemp)
           cat > "$body_file" <<EOF
           The snapshot canary couldn't build RigTune against Minecraft \`$MC\` ($(date -u +%Y-%m-%d)): $run_url
@@ -165,8 +182,8 @@ jobs:
 
           To fix it (tools/MC_VERSIONS.md, "Snapshot canary"):
           1. Reproduce locally with the same two commands. Don't commit the node.
-          2. \`python tools/mc_apidiff.py ${PREV:-<previous node>} $MC\` lists what RigTune uses that changed.
-          3. Handle each break with a \`//? if >=$MC {\` block and commit only the source change.
+          2. Compile the previous node's classes and run \`python tools/mc_apidiff.py ${PREV:-<previous node>} $MC\` (tools/MC_VERSIONS.md, "tools/mc_apidiff.py"): it lists what RigTune uses that changed.
+          3. Handle each break with a \`//? if >=$base-alpha {\` block (it also matches $base's later snapshots, pre-releases, release candidates and the release) and commit only the source change.
 
           Every later failing run comments here; the next green run closes this issue.
           EOF
