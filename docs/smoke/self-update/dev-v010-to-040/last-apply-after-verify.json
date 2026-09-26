@@ -1,0 +1,39 @@
+{
+  "finishedAt": "2026-09-26T03:13:21.925180700Z",
+  "results": [
+    {
+      "op": {
+        "type": "DISABLE_FILE",
+        "path": "<instance>\\mods\\e2e-legacy-1.0.0.jar",
+        "id": "48215311-0f85-4f7b-8249-013685aa1e3c",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Disabled e2e-legacy-1.0.0.jar -> e2e-legacy-1.0.0.jar.disabled"
+    },
+    {
+      "op": {
+        "type": "DISABLE_FILE",
+        "path": "<instance>\\mods\\rigtune-0.1.0.jar",
+        "id": "5716b733-94c3-4732-ae45-13a0cbaf0233",
+        "group": "9a33b108-733c-41d3-98a0-242c270e44a8",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Disabled rigtune-0.1.0.jar -> rigtune-0.1.0.jar.disabled"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "<instance>\\mods\\rigtune-0.4.0-dev+mc26.2.jar.rigtune-pending",
+        "to": "<instance>\\mods\\rigtune-0.4.0-dev+mc26.2.jar",
+        "id": "7be30279-63ba-4fd3-9f60-cd608d0ccc08",
+        "group": "9a33b108-733c-41d3-98a0-242c270e44a8",
+        "modId": "rigtune",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled rigtune-0.4.0-dev+mc26.2.jar"
+    }
+  ]
+}
