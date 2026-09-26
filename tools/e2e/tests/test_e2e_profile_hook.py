@@ -218,6 +218,19 @@ class ProfileScenarioTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self_update_e2e.parse_args(base + ["--expect-history", "auto"])
 
+    def test_profile_phases_keep_options_txt_and_profiles_json(self):
+        run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo", "--profile-switch", "settings")
+        run.out.mkdir()
+        run.rigtune_dir.mkdir(parents=True)
+        run.mods.mkdir(parents=True)
+        (run.instance / "options.txt").write_text("maxFps:90", encoding="utf-8")
+        (run.rigtune_dir / "profiles.json").write_text("{}", encoding="utf-8")
+        run.snapshot("profile-apply")
+        run.snapshot("mod-check")
+        self.assertEqual("maxFps:90", (run.out / "options-after-profile-apply.txt").read_text(encoding="utf-8"))
+        self.assertTrue((run.out / "profiles-after-profile-apply.json").is_file())
+        self.assertFalse((run.out / "options-after-mod-check.txt").exists())
+
     def test_only_for_the_undo_scenario(self):
         with self.assertRaises(SystemExit):
             self_update_e2e.parse_args(["--name", "n", "--old-jar", "a.jar", "--new-jar", "b.jar", "--work", "w",

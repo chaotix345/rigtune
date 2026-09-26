@@ -447,6 +447,9 @@ class Run:
     def snapshot(self, phase):
         for name in ("history.json", "last-apply.json", "helper.log"):
             fixtures.copy_evidence(self.rigtune_dir / name, self.out / "{}-after-{}{}".format(Path(name).stem, phase, Path(name).suffix))
+        if phase in PROFILE_PHASES:
+            fixtures.copy_evidence(self.instance / "options.txt", self.out / "options-after-{}.txt".format(phase))
+            fixtures.copy_evidence(self.rigtune_dir / "profiles.json", self.out / "profiles-after-{}.json".format(phase))
         (self.out / "mods-after-{}.json".format(phase)).write_text(json.dumps(e2e_checks.listing(self.mods), indent=1), encoding="utf-8")
 
     def run_update(self):
@@ -640,8 +643,9 @@ class Run:
         for phase in self.checks:
             texts += [self.out / n.format(phase) for n in ("driver-{}.json", "report-{}.txt", "helper-cmdlines-{}.txt",
                                                             "mods-after-{}.json", "history-after-{}.json", "last-apply-after-{}.json",
-                                                            "helper-after-{}.log", "pending-{}.json")]
-        texts += [self.run_dir / n for n in ("requests.jsonl", "e2e.log", "catalog.json")]
+                                                            "helper-after-{}.log", "pending-{}.json", "options-after-{}.txt",
+                                                            "profiles-after-{}.json")]
+        texts += [self.run_dir / n for n in ("requests.jsonl", "e2e.log", "catalog.json", "profile-originals.json")]
         texts += [self.run_dir / "captured-raw" / n for n in CAPTURED]
         for source in texts:
             if source.is_file():
