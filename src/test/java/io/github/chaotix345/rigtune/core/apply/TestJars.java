@@ -23,6 +23,17 @@ public final class TestJars {
 		return jar;
 	}
 
+	// A Fabric mod jar with this fabric.mod.json.
+	public static Path modJar(Path jar, com.google.gson.JsonObject fabricModJson) throws IOException {
+		Files.createDirectories(jar.toAbsolutePath().getParent());
+		try (OutputStream out = Files.newOutputStream(jar); ZipOutputStream zip = new ZipOutputStream(out)) {
+			zip.putNextEntry(new ZipEntry("fabric.mod.json"));
+			zip.write(fabricModJson.toString().getBytes(StandardCharsets.UTF_8));
+			zip.closeEntry();
+		}
+		return jar;
+	}
+
 	// A Fabric mod jar whose fabric.mod.json also has a display name.
 	public static Path modJar(Path jar, String modId, String name) throws IOException {
 		Files.createDirectories(jar.toAbsolutePath().getParent());
