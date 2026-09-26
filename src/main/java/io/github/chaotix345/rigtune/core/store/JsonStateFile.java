@@ -8,6 +8,7 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.core.apply.AtomicFiles;
+import io.github.chaotix345.rigtune.core.apply.LogSafe;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -112,6 +113,11 @@ public final class JsonStateFile {
 		return maxBytes;
 	}
 
+	// The file as log lines name it: its path under config/rigtune, never the absolute path (review-8 JW-1).
+	public String name() {
+		return LogSafe.name(file);
+	}
+
 	public synchronized <T> Loaded<T> load(Class<T> type) {
 		if (!Files.isRegularFile(file)) {
 			return new Loaded<>(State.MISSING, null, new JsonObject());
@@ -120,19 +126,19 @@ public final class JsonStateFile {
 		try {
 			if (Files.size(file) > maxBytes * READ_CAP_FACTOR) {
 				// Not one this version wrote, and possibly a newer RigTune's (a bigger cap): left alone, never written.
-				RigTune.LOGGER.warn("{} is larger than {} bytes; leaving it alone", file, maxBytes * READ_CAP_FACTOR);
+				RigTune.LOGGER.warn("{} is larger than {} bytes; leaving it alone", name(), maxBytes * READ_CAP_FACTOR);
 				return new Loaded<>(State.UNREADABLE, null, new JsonObject());
 			}
 			root = parse(io.read(file));
 		} catch (CorruptException e) {
 			return movedAside(e.getMessage(), e.getCause());
 		} catch (IOException | RuntimeException e) {
-			RigTune.LOGGER.warn("Could not read {}; leaving it alone for now", file, e);
+			RigTune.LOGGER.warn("Could not read {}; leaving it alone for now ({})", name(), LogSafe.error(e, file));
 			return new Loaded<>(State.UNREADABLE, null, new JsonObject());
 		}
 		int version = formatVersion(root);
 		if (version > FORMAT_VERSION) {
-			RigTune.LOGGER.info("{} is from a newer RigTune (formatVersion {}); reading it only, never writing it", file, version);
+			RigTune.LOGGER.info("{} is from a newer RigTune (formatVersion {}); reading it only, never writing it", name(), version);
 			return new Loaded<>(State.NEWER, fitOrNull(root, type), root);
 		}
 		if (version < 1) {
@@ -161,7 +167,7 @@ public final class JsonStateFile {
 		try {
 			JsonElement tree = value instanceof JsonElement element ? element : gson.toJsonTree(value);
 			if (!tree.isJsonObject()) {
-				RigTune.LOGGER.warn("Not writing {}: not a JSON object", file);
+				RigTune.LOGGER.warn("Not writing {}: not a JSON object", name());
 				return Saved.FAILED;
 			}
 			JsonObject merged = preserveUnknown(tree.getAsJsonObject(), previous, knownKeys(value.getClass()));
@@ -172,11 +178,12 @@ public final class JsonStateFile {
 			}
 			text = gson.toJson(out);
 		} catch (RuntimeException e) {
-			RigTune.LOGGER.warn("Could not serialise {}", file, e);
+			// A bug in the value, not the file: its stack trace names no path.
+			RigTune.LOGGER.warn("Could not serialise {}", name(), e);
 			return Saved.FAILED;
 		}
 		if (text.getBytes(StandardCharsets.UTF_8).length > maxBytes) {
-			RigTune.LOGGER.warn("Not writing {}: larger than its {} byte cap", file, maxBytes);
+			RigTune.LOGGER.warn("Not writing {}: larger than its {} byte cap", name(), maxBytes);
 			return Saved.TOO_LARGE;
 		}
 		if (!load(JsonObject.class).writable()) {
@@ -186,7 +193,7 @@ public final class JsonStateFile {
 			AtomicFiles.writeString(file, text);
 			return Saved.OK;
 		} catch (IOException | RuntimeException e) {
-			RigTune.LOGGER.warn("Could not write {}", file, e);
+			RigTune.LOGGER.warn("Could not write {} ({})", name(), LogSafe.error(e, file));
 			return Saved.FAILED;
 		}
 	}
@@ -237,10 +244,11 @@ public final class JsonStateFile {
 		Path bad = free(file, ".bad");
 		try {
 			io.moveAside(file, bad);
-			RigTune.LOGGER.warn("Corrupt {} ({}); kept it as {} and started empty", file, why, bad.getFileName(), cause);
+			RigTune.LOGGER.warn("Corrupt {} ({}{}); kept it as {} and started empty", name(), why, cause == null ? "" : ": " + LogSafe.error(cause, file),
+					LogSafe.name(bad));
 			return new Loaded<>(State.MOVED_ASIDE, null, new JsonObject());
 		} catch (IOException | RuntimeException e) {
-			RigTune.LOGGER.warn("Corrupt {} ({}) couldn't be moved aside; leaving it alone for now", file, why, e);
+			RigTune.LOGGER.warn("Corrupt {} ({}) couldn't be moved aside; leaving it alone for now ({})", name(), why, LogSafe.error(e, file));
 			return new Loaded<>(State.UNREADABLE, null, new JsonObject());
 		}
 	}

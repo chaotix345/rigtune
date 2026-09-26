@@ -421,7 +421,7 @@
 			"reason": "Makes held, worn and dropped light sources such as torches and glowstone light up the area around them as they move. It's a visual feature rather than a performance one, so RigTune doesn't suggest adding it.",
 			"recommendWhen": { "always": false },
 			"avoidWhen": { "tierAtMost": 2 },
-			"avoidReason": "LambDynamicLights keeps relighting the area around moving light sources, which costs CPU time that entry-level hardware is short of. Disabling it can win back some frame rate; if you'd rather keep the effect, pick a less smooth dynamic lighting mode in its settings instead. It starts unticked because it's a visual choice.",
+			"avoidReason": "LambDynamicLights keeps relighting the area around moving light sources, which costs CPU time. On this PC's estimated tier, disabling it can win back some frame rate; if you'd rather keep the effect, pick a less smooth dynamic lighting mode in its settings instead. It starts unticked because it's a visual choice.",
 			"avoidSelected": false,
 			"conflictsWith": ["sodiumdynamiclights", "ryoamiclights", "optifabric"],
 			"defaultSelected": false,

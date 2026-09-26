@@ -7,6 +7,7 @@ import io.github.chaotix345.rigtune.core.apply.HeldLock;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
+import io.github.chaotix345.rigtune.core.apply.TestExecutors;
 import io.github.chaotix345.rigtune.core.apply.TestJars;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
@@ -28,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StagingTest {
@@ -229,6 +231,24 @@ class StagingTest {
 		// The notice names the mod from the dropped ops (re-check of review 6): the enable carries the id read from its jar.
 		assertEquals("distanthorizons", dropped.stream().filter(op -> op.type() == PendingActions.Type.ENABLE_FILE)
 				.findFirst().orElseThrow().modId());
+	}
+
+	// Review of fix-8a (the AH-1 class): an addition the helper was killed in (the mod enabled, its library not yet) isn't
+	// unstaged because the mod's own updater queued a build: that would retire the library's download and leave the mod
+	// without it. The next exit finishes the group or rolls it back.
+	@Test
+	void aGroupTheHelperWasKilledInIsNotUnstagedForAQueuedUpdate() throws IOException {
+		Path lib = pendingJar("lib.jar", "lib");
+		List<Op> addition = PendingActions.group(Op.enableFile(pendingJar("a.jar", "a"), mods.resolve("a.jar")).withModId("a"),
+				Op.enableFile(lib, mods.resolve("lib.jar")).withModId("lib"));
+		assertNotNull(staging.stage(addition, "e1"));
+		assertThrows(TestExecutors.Killed.class, () -> TestExecutors.killedAt(lib::equals).run(PendingActions.load(pending), pending));
+		assertTrue(Files.exists(mods.resolve("a.jar")));
+
+		assertEquals(List.of(), staging.dropQueuedUpdates(Set.of("a"), Set.of("a")));
+
+		assertEquals(addition.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+		assertTrue(Files.exists(lib));
 	}
 
 	@Test

@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.core.history;
 
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
+import io.github.chaotix345.rigtune.core.apply.UnfinishedGroups.Rename;
 import io.github.chaotix345.rigtune.core.history.UndoPlan.Action;
 import io.github.chaotix345.rigtune.core.history.UndoPlan.Item;
 import io.github.chaotix345.rigtune.core.model.Text;
@@ -139,7 +140,13 @@ public final class UndoPlanner {
 	}
 
 	public static Result plan(List<JournalEntry> entries, List<Op> pending, State state, boolean all) {
-		Context ctx = new Context(entries);
+		return plan(entries, pending, List.of(), state, all);
+	}
+
+	// unfinished: the helper's record of the renames it started (UnfinishedGroups.recorded), which shows a group it was
+	// killed in the middle of (review-8 AH-1).
+	public static Result plan(List<JournalEntry> entries, List<Op> pending, Collection<Rename> unfinished, State state, boolean all) {
+		Context ctx = new Context(entries, unfinished);
 		if (all) {
 			return build(ctx, ctx.candidates(l -> true), pending, state, null, null, true, ALL, null);
 		}
@@ -165,7 +172,11 @@ public final class UndoPlanner {
 	// "Undo this" on one history entry (docs/v0.3/SPEC.md item 6): what's left of it to undo, planned like Undo last.
 	// An unknown id, an undo entry or an entry with nothing left gives an empty plan (undoOf null).
 	public static Result planEntry(List<JournalEntry> entries, List<Op> pending, State state, String entryId) {
-		Context ctx = new Context(entries);
+		return planEntry(entries, pending, List.of(), state, entryId);
+	}
+
+	public static Result planEntry(List<JournalEntry> entries, List<Op> pending, Collection<Rename> unfinished, State state, String entryId) {
+		Context ctx = new Context(entries, unfinished);
 		for (int i = 0; i < entries.size(); i++) {
 			JournalEntry entry = entries.get(i);
 			if (entryId == null || !entryId.equals(entry.id()) || JournalEntry.UNDO.equals(entry.kind())) {
@@ -192,7 +203,11 @@ public final class UndoPlanner {
 	// The plan the player confirmed, re-planned against the current state (review M8): only the changes it would
 	// undo are considered, and any whose state changed become skips.
 	public static Result recheck(UndoPlan shown, List<JournalEntry> entries, List<Op> pending, State state) {
-		Context ctx = new Context(entries);
+		return recheck(shown, entries, pending, List.of(), state);
+	}
+
+	public static Result recheck(UndoPlan shown, List<JournalEntry> entries, List<Op> pending, Collection<Rename> unfinished, State state) {
+		Context ctx = new Context(entries, unfinished);
 		Set<String> wanted = new LinkedHashSet<>();
 		Set<String> shownOps = new HashSet<>();
 		Set<String> shownIds = new HashSet<>();
@@ -233,9 +248,15 @@ public final class UndoPlanner {
 		final List<Located> all = new ArrayList<>();
 		final Set<String> beingReverted = new HashSet<>();
 		final Set<Integer> undone = new HashSet<>();
+		final Collection<Rename> unfinished;
 
 		Context(List<JournalEntry> entries) {
+			this(entries, List.of());
+		}
+
+		Context(List<JournalEntry> entries, Collection<Rename> unfinished) {
 			this.entries = entries;
+			this.unfinished = unfinished == null ? List.of() : unfinished;
 			Map<String, Integer> indexById = new HashMap<>();
 			for (int i = 0; i < entries.size(); i++) {
 				JournalEntry entry = entries.get(i);
@@ -431,7 +452,7 @@ public final class UndoPlanner {
 			groupOps.computeIfAbsent(key, k -> op.group() == null ? List.of(op)
 					: pending.stream().filter(o -> o != null && op.group().equals(o.group())).toList());
 		}
-		Set<String> partly = byGroup.isEmpty() ? Set.of() : PartlyApplied.groups(pending, folder.files());
+		Set<String> partly = byGroup.isEmpty() ? Set.of() : PartlyApplied.groups(pending, folder.files(), ctx.unfinished);
 		for (Map.Entry<String, List<Located>> group : byGroup.entrySet()) {
 			List<Op> ops = groupOps.get(group.getKey());
 			List<String> opIds = ops.stream().map(Op::id).filter(Objects::nonNull).toList();

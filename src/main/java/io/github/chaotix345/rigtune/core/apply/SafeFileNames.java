@@ -19,19 +19,25 @@ public final class SafeFileNames {
 	private SafeFileNames() {
 	}
 
+	// Any jar name an enable may give (the helper checks every enable with this, the player's own jars on Undo too).
 	public static boolean isSafeJarName(String name) {
 		return problem(name) == null;
 	}
 
+	// A file name Modrinth supplies: also no invisible or text-direction characters (review-8 SE-3), which can make a name
+	// read as another one; a jar the player named themselves stays undoable (isSafeJarName).
 	public static String requireJarName(String name) throws IOException {
 		String problem = problem(name);
+		if (problem == null) {
+			problem = hiddenProblem(name);
+		}
 		if (problem != null) {
 			throw new IOException("Unsafe file name " + quote(name) + ": " + problem);
 		}
 		return name;
 	}
 
-	// Resolves a bare .jar name (plus an optional fixed suffix) inside dir and checks it can't escape.
+	// Resolves a bare .jar name from Modrinth (plus an optional fixed suffix) inside dir and checks it can't escape.
 	public static Path resolveJar(Path dir, String name, String suffix) throws IOException {
 		requireJarName(name);
 		Path target = dir.resolve(name + suffix);
@@ -91,13 +97,14 @@ public final class SafeFileNames {
 		if (name.length() > MAX_LENGTH) {
 			return "longer than " + MAX_LENGTH + " characters";
 		}
-		for (int i = 0; i < name.length(); i++) {
-			char c = name.charAt(i);
-			if (c < 0x20 || c == 0x7f) {
+		for (int i = 0; i < name.length(); ) {
+			int cp = name.codePointAt(i);
+			i += Character.charCount(cp);
+			if (cp < 0x20 || cp == 0x7f) {
 				return "contains a control character";
 			}
-			if (FORBIDDEN.indexOf(c) >= 0) {
-				return "contains '" + c + "'";
+			if (FORBIDDEN.indexOf(cp) >= 0) {
+				return "contains '" + (char) cp + "'";
 			}
 		}
 		if (name.startsWith(".")) {
@@ -130,14 +137,19 @@ public final class SafeFileNames {
 		return null;
 	}
 
+	// C1 controls, format characters (bidi overrides and isolates, zero-width ones, BOM), lone surrogates, line separators.
+	private static String hiddenProblem(String name) {
+		return name.codePoints().anyMatch(LogSafe::hidden) ? "contains an invisible or text-direction character" : null;
+	}
+
 	private static String quote(String name) {
 		if (name == null) {
 			return "null";
 		}
 		StringBuilder out = new StringBuilder("\"");
 		name.codePoints().limit(80).forEach(cp -> {
-			if (cp < 0x20 || cp == 0x7f) {
-				out.append(String.format("\\u%04x", cp));
+			if (LogSafe.hidden(cp)) {
+				out.append(LogSafe.escape(cp));
 			} else {
 				out.appendCodePoint(cp);
 			}

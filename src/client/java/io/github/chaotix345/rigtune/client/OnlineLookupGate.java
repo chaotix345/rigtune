@@ -2,12 +2,16 @@ package io.github.chaotix345.rigtune.client;
 
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.InstalledMod;
+import io.github.chaotix345.rigtune.core.modrinth.ModrinthClient;
+import io.github.chaotix345.rigtune.core.modrinth.OnlineDataFetcher;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.function.Supplier;
 
 // Decides when RealController looks the installed mods up on Modrinth. It's asked after every scan and every rules
@@ -16,6 +20,10 @@ import java.util.function.Supplier;
 // gameVersion: the version Modrinth is asked about; hardware.mcVersion() (normalized) stays for the rules' conditions.
 final class OnlineLookupGate {
 	record Lookup(List<InstalledMod> mods, List<String> slugs, HardwareProfile hardware, String gameVersion) {
+		// The lookup on `network` (Probes.NETWORK in the game; Phase 5 P5A-F4), never on the worker pool.
+		CompletableFuture<OnlineDataFetcher.Result> start(ModrinthClient client, Executor network) {
+			return CompletableFuture.supplyAsync(() -> new OnlineDataFetcher(client).fetchAll(mods, slugs, gameVersion), network);
+		}
 	}
 
 	private final Supplier<@Nullable String> rawGameVersion;

@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.core.modrinth;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import io.github.chaotix345.rigtune.core.LogCapture;
 import io.github.chaotix345.rigtune.core.TextChecks;
 import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
@@ -620,6 +621,25 @@ class DownloadPlannerTest {
 		assertFalse(Files.exists(mods.resolve("libV.jar" + PendingActions.PENDING_SUFFIX)));
 		// The mod's own download, fetched before its dependency failed, isn't left behind either (review of WS-G1, L-2).
 		assertFalse(Files.exists(mods.resolve("aV.jar" + PendingActions.PENDING_SUFFIX)));
+	}
+
+	// review-8 SE-4: a downloaded jar's mod id is the jar author's text; the log line naming it can't be split into a forged
+	// second line or carry terminal escapes.
+	@Test
+	void aJarsModIdIsLoggedWithoutControlCharacters() {
+		libraryUsers();
+		String id = "lib\n[main/INFO]: fake\u001b[2J";
+		jarIds.put("libV.jar", id);
+
+		List<String> lines;
+		try (LogCapture log = new LogCapture()) {
+			assertEquals(List.of("add-a"), plan(Set.of(), Set.of(id), add("a", "A")).ids());
+			lines = log.lines().stream().filter(l -> l.startsWith("Skipping")).toList();
+		}
+
+		assertEquals(1, lines.size(), lines.toString());
+		assertFalse(lines.getFirst().contains("\n") || lines.getFirst().contains("\u001b"), lines.getFirst());
+		assertTrue(lines.getFirst().contains("lib\\u000a[main/INFO]: fake\\u001b[2J"), lines.getFirst());
 	}
 
 	@Test

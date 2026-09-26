@@ -10,6 +10,7 @@ import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
+import io.github.chaotix345.rigtune.core.apply.LogSafe;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
@@ -534,7 +535,7 @@ public final class ProfileService {
 		try {
 			return PendingActions.load(file).relocated(InstanceDirs.modsDirOf(file), InstanceDirs.configDirOf(file)).ops();
 		} catch (IOException | RuntimeException e) {
-			RigTune.LOGGER.warn("Could not read {}", file, e);
+			RigTune.LOGGER.warn("Could not read {} ({})", LogSafe.name(file), LogSafe.error(e, file));
 			return List.of();
 		}
 	}
