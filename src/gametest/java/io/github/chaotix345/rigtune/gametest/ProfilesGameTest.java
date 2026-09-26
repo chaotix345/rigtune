@@ -150,7 +150,7 @@ public class ProfilesGameTest implements FabricClientGameTest {
 		});
 		context.waitTicks(3);
 		Component status = context.computeOnClient(mc -> ((ProfilesScreen) mc.gui.screen()).status());
-		check(key(status).equals("rigtune.profile.status.switched_restart"), "the toast says what applies after a restart: " + text(status));
+		check(key(status).startsWith("rigtune.profile.status.switched_restart"), "the toast says what applies after a restart: " + text(status));
 		context.takeScreenshot("profiles-switched-battery");
 		Map<String, String> now = context.computeOnClient(mc -> vanilla(mc.options));
 		check("60".equals(now.get("vanilla.maxFps")) && "true".equals(now.get("vanilla.enableVsync")), "Battery's frame cap applied now: " + now);

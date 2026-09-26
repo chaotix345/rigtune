@@ -324,7 +324,8 @@ public final class ProfileService {
 		markActive(target, previous);
 		offer = null;
 		long staged = entry.changes().stream().filter(c -> JournalChange.STAGED.equals(c.status())).count();
-		MutableComponent message = staged > 0 ? Component.translatable("rigtune.profile.status.switched_restart", name, staged)
+		MutableComponent message = staged > 1 ? Component.translatable("rigtune.profile.status.switched_restart", name, staged)
+				: staged == 1 ? Component.translatable("rigtune.profile.status.switched_restart_one", name)
 				: Component.translatable("rigtune.profile.status.switched", name);
 		int failed = recs.size() - entry.changes().size();
 		if (failed > 0) {
