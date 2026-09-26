@@ -50,6 +50,9 @@ class SchemaConsistencyTest {
 			    "v1Vocabularies": u.V1_VOCABULARIES, "v2Vocabularies": u.V2_VOCABULARIES,
 			    "sodiumWorkaroundFlag": u.SODIUM_WORKAROUND_FLAG, "maxPatternLength": u.MAX_PATTERN_LENGTH,
 			    "sourceOnlyTierFields": u.SOURCE_ONLY_TIER_FIELDS,
+			    "legacyV2ConditionKeys": u.LEGACY_V2_CONDITION_KEYS, "legacyV2Vocabularies": u.LEGACY_V2_VOCABULARIES,
+			    "profileTemplateFields": u.PROFILE_TEMPLATE_FIELDS, "profileTemplateFacts": u.PROFILE_TEMPLATE_FACTS,
+			    "jvmFeature": u.JVM_FEATURE, "stutterFeature": u.STUTTER_FEATURE, "jvmFlagPrefix": u.JVM_FLAG_PREFIX,
 			})))
 			""";
 	private static final Map<String, Class<?>> V1_RULES = Map.of(
@@ -193,6 +196,34 @@ class SchemaConsistencyTest {
 		assertEquals(ConditionEvaluator.FLAGS, strings(v2.get("flags")));
 		assertEquals(ConditionEvaluator.SODIUM_WORKAROUND_FLAG, python.get("sodiumWorkaroundFlag").getAsString());
 		assertEquals(RulesDocument.PatternRule.MAX_PATTERN_LENGTH, python.get("maxPatternLength").getAsInt());
+	}
+
+	// v0.4 (plan review R-L1): the updater's idea of what 0.2.0/0.3.0 understand is the pinned v030 copy (byte-identical in
+	// both), so "a key they don't know in a clamp, avoidWhen or skipUpdateWhen needs requires" is checked against the real thing.
+	@Test
+	void legacyV2KeysAndVocabulariesMatchThePinnedV030Copy() {
+		assertEquals(fields(io.github.chaotix345.rigtune.v030.core.rules.Condition.class), set("legacyV2ConditionKeys"));
+		JsonObject legacy = python.getAsJsonObject("legacyV2Vocabularies");
+		assertEquals(Set.of("gpuVendor", "backend", "os", "goal", "flags"), legacy.keySet());
+		assertEquals(io.github.chaotix345.rigtune.v030.core.rules.ConditionEvaluator.GPU_VENDORS, strings(legacy.get("gpuVendor")));
+		assertEquals(io.github.chaotix345.rigtune.v030.core.rules.ConditionEvaluator.BACKENDS, strings(legacy.get("backend")));
+		assertEquals(new TreeSet<>(io.github.chaotix345.rigtune.v030.core.rules.ConditionEvaluator.OS_FAMILIES), strings(legacy.get("os")));
+		assertEquals(io.github.chaotix345.rigtune.v030.core.rules.ConditionEvaluator.GOALS, strings(legacy.get("goal")));
+		assertEquals(io.github.chaotix345.rigtune.v030.core.rules.ConditionEvaluator.FLAGS, strings(legacy.get("flags")));
+		assertEquals(io.github.chaotix345.rigtune.v030.core.rules.ConditionEvaluator.SODIUM_WORKAROUND_FLAG, python.get("sodiumWorkaroundFlag").getAsString());
+	}
+
+	// v0.4 sections (SPEC C2): template fields as RulesDocument.ProfileTemplate declares them; stutterAdvice entries are
+	// AdviceRules (ruleFieldsMatch covers them); the main list supports jvm-flags and never stutter-doctor.
+	@Test
+	void v04SectionsAndFeaturesMatch() {
+		assertEquals(fields(RulesDocument.ProfileTemplate.class), set("profileTemplateFields"));
+		assertEquals(Set.of("onBattery", "hasBattery"), set("profileTemplateFacts"));
+		Set<String> booleanFields = new TreeSet<>(keysOfType(Boolean.class));
+		Assertions.assertTrue(booleanFields.containsAll(set("profileTemplateFacts")), "template facts are boolean Condition keys");
+		Assertions.assertTrue(io.github.chaotix345.rigtune.core.recommend.Recommender.SUPPORTED_FEATURES.contains(python.get("jvmFeature").getAsString()));
+		Assertions.assertFalse(io.github.chaotix345.rigtune.core.recommend.Recommender.SUPPORTED_FEATURES.contains(python.get("stutterFeature").getAsString()));
+		assertEquals("jvm-", python.get("jvmFlagPrefix").getAsString());
 	}
 
 	@Test

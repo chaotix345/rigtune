@@ -55,9 +55,9 @@ class RulesContractsTest {
 
 	@Test
 	void bothSectionsAreNullWhenAbsent() {
-		RulesDocument bundled = RulesLoader.loadBundled();
-		assertNull(bundled.profileTemplates);
-		assertNull(bundled.stutterAdvice);
+		RulesDocument v2 = RulesLoader.parse("{\"schemaVersion\": 2, \"revision\": 1}");
+		assertNull(v2.profileTemplates);
+		assertNull(v2.stutterAdvice);
 		RulesDocument v1 = RulesLoader.parse("{\"schemaVersion\": 1, \"revision\": 1}");
 		assertNull(v1.profileTemplates);
 		assertNull(v1.stutterAdvice);
@@ -136,8 +136,9 @@ class RulesContractsTest {
 		assertEquals(plain.settings(), with.settings());
 	}
 
+	// WS-R: the jvm-* advice (SPEC 6) needs "jvm-flags"; "stutter-doctor" stays StutterAdvisor's only.
 	@Test
-	void theMainListStillKnowsNoFeatures() {
-		assertEquals(Set.of(), Recommender.SUPPORTED_FEATURES, "WS-R changes it together with the jvm-* content");
+	void theMainListKnowsOnlyJvmFlags() {
+		assertEquals(Set.of("jvm-flags"), Recommender.SUPPORTED_FEATURES);
 	}
 }
