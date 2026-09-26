@@ -276,7 +276,7 @@ public final class RigTuneClient implements ClientModInitializer {
 		widgets.add(button);
 		// Sodium's page list sits earlier in the child list and swallows clicks in its column, so claim ours first.
 		ScreenMouseEvents.allowMouseClick(screen).register((s, event) -> {
-			if (event.button() == 0 && button.visible && button.isMouseOver(event.x(), event.y()) && Screens.getWidgets(s).contains(button)) {
+			if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && button.visible && button.isMouseOver(event.x(), event.y()) && Screens.getWidgets(s).contains(button)) {
 				button.playDownSound(Minecraft.getInstance().getSoundManager());
 				button.onPress(event);
 				return false;
