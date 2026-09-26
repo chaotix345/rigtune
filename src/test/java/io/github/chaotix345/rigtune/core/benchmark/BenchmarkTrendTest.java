@@ -210,6 +210,19 @@ class BenchmarkTrendTest {
 		assertEquals(List.of(), BenchmarkTrend.stale(shaders, new Current("26.2", 12, 8, 2560, 1440, false, true, "p.zip", false, "hash-a")));
 	}
 
+	// Review M2: Tune suggested 16, the player kept 12: nothing changed since.
+	@Test
+	void staleMarkerATuneThePlayerDidntTake() {
+		java.util.Map<String, BenchmarkRecord.KnobResult> knobs = new java.util.LinkedHashMap<>();
+		knobs.put(BenchmarkRecord.RENDER_DISTANCE, new BenchmarkRecord.KnobResult(16, 12, null, null, null));
+		knobs.put(BenchmarkRecord.SIMULATION_DISTANCE, new BenchmarkRecord.KnobResult(8, 8, null, null, null));
+		BenchmarkRecord tune = new BenchmarkRecord("t", "2026-09-24T10:00:00Z", "0.4.0", "26.2", "TUNE", "CURRENT", BenchmarkRecord.SINGLE, null, 144, true,
+				knobs, new BenchmarkRecord.Result(800, 500, 2, 2, 0.02), java.util.Map.of(), java.util.Map.of(), null, false, TrendFixtures.CONTEXT);
+		assertEquals(List.of(), BenchmarkTrend.stale(tune, NOW));
+		assertEquals(List.of(), BenchmarkTrend.stale(tune, new Current("26.2", 16, 8, 2560, 1440, false, false, null, false, "hash-a")));
+		assertEquals(List.of(Difference.RENDER_DISTANCE), BenchmarkTrend.stale(tune, new Current("26.2", 10, 8, 2560, 1440, false, false, null, false, "hash-a")));
+	}
+
 	@Test
 	void staleMarkerOnlyComparesWhatWasRecorded() {
 		// Unknown hash on either side: the mod set isn't claimed to differ.

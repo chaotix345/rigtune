@@ -43,7 +43,8 @@ class BenchmarkResultScreenTest {
 	}
 
 	// docs/v0.4/SPEC.md AC7.5: the truth table of the trend lines under the result (regression with its changes, the
-	// outside and nothing-recorded cases, in line, improvement, too few, different conditions, no result).
+	// outside and nothing-recorded cases, in line, improvement, too few, different conditions, no result). The result
+	// screen counts the changes in one line (review M3); Benchmark history lists them (TrendTextTest).
 
 	private static final Function<HistoryModel.Change, Text> DESCRIBE = c -> Text.literal(c.row() == HistoryModel.Row.SETTING
 			? c.label() + ": " + c.before() + " → " + c.after() : "Updated " + c.modId() + ": " + c.file() + " → " + c.newFile());
@@ -98,8 +99,7 @@ class BenchmarkResultScreenTest {
 	void aRegressionListsTheChangesSinceTheBaselineAsPossiblyRelated() {
 		// Median of 540, 545, 538, 550 = 542.5; 440 is 18.9 % below it.
 		assertEquals(List.of("BAD 1% lows 19% below your usual 543 FPS since 2026-09-23",
-						"WARNING Changes since then (may be related):",
-						"NORMAL · Updated sodium: sodium-0.6.5.jar → sodium-0.6.6.jar"),
+						"WARNING Changes since then (may be related): 1, listed in Benchmark history"),
 				english(regressed(run("latest", "2026-09-25T10:00:00Z", 440.0, 12, 2560, "hash-b", "0.4.0"), UPDATE)));
 	}
 
@@ -113,13 +113,20 @@ class BenchmarkResultScreenTest {
 	@Test
 	void aRegressionWithManyChangesAVersionChangeAndTheModSetChangedOutside() {
 		assertEquals(List.of("BAD 1% lows 19% below your usual 543 FPS since 2026-09-23",
+						"WARNING Changes since then (may be related): 4, listed in Benchmark history",
+						"WARNING Something outside RigTune changed too (the mod set differs)"),
+				english(regressed(run("latest", "2026-09-25T10:00:00Z", 440.0, 12, 2560, "hash-b", "0.4.1"),
+						settings("e1", "2026-09-24T12:00:00Z", "vanilla.clouds", "vanilla.particles", "vanilla.entityShadows"))));
+		// Benchmark history lists them (3 rows: 2 and "…and N more").
+		BenchmarkTrend.View listed = regressed(run("latest", "2026-09-25T10:00:00Z", 440.0, 12, 2560, "hash-b", "0.4.1"),
+				settings("e1", "2026-09-24T12:00:00Z", "vanilla.clouds", "vanilla.particles", "vanilla.entityShadows"));
+		assertEquals(List.of("BAD 1% lows 19% below your usual 543 FPS since 2026-09-23",
 						"WARNING Changes since then (may be related):",
 						"NORMAL · RigTune 0.4.0 → 0.4.1",
 						"NORMAL · clouds: 1 → 2",
 						"NORMAL · …and 2 more (see History)",
 						"WARNING Something outside RigTune changed too (the mod set differs)"),
-				english(regressed(run("latest", "2026-09-25T10:00:00Z", 440.0, 12, 2560, "hash-b", "0.4.1"),
-						settings("e1", "2026-09-24T12:00:00Z", "vanilla.clouds", "vanilla.particles", "vanilla.entityShadows"))));
+				TrendText.assessment(listed, ZoneOffset.UTC, DESCRIBE, 3).stream().map(l -> l.tone() + " " + l.text().english()).toList());
 	}
 
 	@Test

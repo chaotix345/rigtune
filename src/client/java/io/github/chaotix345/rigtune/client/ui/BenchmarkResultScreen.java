@@ -46,8 +46,6 @@ public class BenchmarkResultScreen extends Screen {
 	private static final int ROW = 12;
 	private static final int LINE = 11;
 	private static final int CHART_RUNS = BenchmarkTrend.MAX_RUNS;
-	// Change rows listed under a regression before "…and N more" (the rest is on the Benchmark history screen).
-	private static final int MAX_CHANGE_LINES = 3;
 	private static final int COLOR_LABEL = 0xFFA8A8A8;
 	private static final int COLOR_PASS = 0xFF7FE07F;
 	private static final int COLOR_FAIL = 0xFFFF7A6B;
@@ -62,6 +60,9 @@ public class BenchmarkResultScreen extends Screen {
 	private final List<BenchmarkRecord> chartRuns;
 	private final BenchmarkTrend.@Nullable View trend;
 	private List<Line> lines = List.of();
+	// The trend's lines in `lines` (review M3: they give way before the table or chart does).
+	private int trendFrom;
+	private int trendTo;
 	private int contentTop;
 	private int contentBottom;
 
@@ -86,9 +87,19 @@ public class BenchmarkResultScreen extends Screen {
 		return view.latest() != null && record.id().equals(view.latest().id()) ? view : null;
 	}
 
-	// Under the gain line (docs/v0.4/SPEC.md 7): the run against the usual of its comparable runs, or why nothing is claimed.
+	// Under the gain line (docs/v0.4/SPEC.md 7): the run against the usual of its comparable runs, or why nothing is claimed;
+	// a regression's changes as one line with their number (the list is on Benchmark history).
 	static List<TrendText.Line> trendLines(BenchmarkTrend.@Nullable View view, ZoneId zone, Function<HistoryModel.Change, Text> describe) {
-		return view == null ? List.of() : TrendText.assessment(view, zone, describe, MAX_CHANGE_LINES);
+		return view == null ? List.of() : TrendText.assessment(view, zone, describe, 0);
+	}
+
+	/** For the game tests: where the table or chart starts and ends. */
+	public int contentTop() {
+		return contentTop;
+	}
+
+	public int contentBottom() {
+		return contentBottom;
 	}
 
 	public BenchmarkController.Outcome outcome() {
@@ -102,8 +113,16 @@ public class BenchmarkResultScreen extends Screen {
 	@Override
 	protected void init() {
 		lines = lines();
-		contentTop = 22 + lines.size() * LINE + 4;
 		contentBottom = height - 34;
+		// Room for the table's header and 3 rows (or the chart): the trend's lines after its first give way first.
+		int maxLines = Math.max(1, (contentBottom - 26 - (tune() ? 4 * ROW + 2 : 44)) / LINE);
+		if (lines.size() > maxLines && trendTo - trendFrom > 1) {
+			List<Line> kept = new ArrayList<>(lines);
+			int drop = Math.min(lines.size() - maxLines, trendTo - trendFrom - 1);
+			kept.subList(trendTo - drop, trendTo).clear();
+			lines = kept;
+		}
+		contentTop = 22 + lines.size() * LINE + 4;
 		int buttonWidth = Math.min(150, (Math.min(width - 32, 360) - 4) / 2);
 		int y = height - 28;
 		if (!tune()) {
@@ -174,11 +193,13 @@ public class BenchmarkResultScreen extends Screen {
 			out.add(new Line(Component.translatable("rigtune.benchmark.saved_before"), COLOR_LABEL));
 		}
 		// Wrapped: "Performance changed under different conditions (…); cause unknown." must be read whole.
+		trendFrom = out.size();
 		for (TrendText.Line line : trendLines(trend, ZoneId.systemDefault(), BenchmarkTrendLines::describe)) {
 			for (FormattedText row : font.getSplitter().splitLines(Texts.component(line.text()), width - 16, Style.EMPTY)) {
 				out.add(new Line(Component.literal(row.getString()), BenchmarkTrendLines.color(line.tone())));
 			}
 		}
+		trendTo = out.size();
 		if (session.dhCost() != null) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.cost.dh", BenchmarkMath.percent(session.dhCost().lowGainPercent()),
 					BenchmarkMath.percent(session.dhCost().avgGainPercent())), COLOR_LABEL));

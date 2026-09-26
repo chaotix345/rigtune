@@ -30,7 +30,8 @@ public final class TrendText {
 	}
 
 	// The lines under a run's result: the trend of the view's newest run. describe: History's own text for a change row.
-	// maxChanges: how many change rows to list before "…and N more".
+	// maxChanges: how many change rows to list before "…and N more"; 0 = one line with their number (the result screen,
+	// where the full list would push the results off a small screen: review M3).
 	public static List<Line> assessment(BenchmarkTrend.View view, ZoneId zone, Function<HistoryModel.Change, Text> describe, int maxChanges) {
 		Assessment a = view.assessment();
 		if (a == null) {
@@ -81,7 +82,6 @@ public final class TrendText {
 			out.add(new Line(Text.of("rigtune.benchmark.trend.no_change", "No change recorded; possibly a driver, OS or other change"), Tone.WARNING));
 			return out;
 		}
-		out.add(new Line(Text.of("rigtune.benchmark.trend.changes", "Changes since then (may be related):"), Tone.WARNING));
 		List<Text> items = new ArrayList<>();
 		if (window.rigtuneChanged()) {
 			items.add(Text.of("rigtune.benchmark.trend.rigtune", "RigTune %s → %s", window.rigtuneFrom(), window.rigtuneTo()));
@@ -89,12 +89,20 @@ public final class TrendText {
 		for (ChangeWindow.Item item : window.items()) {
 			items.add(describe.apply(item.change()));
 		}
-		int shown = items.size() > maxChanges ? Math.max(0, maxChanges - 1) : items.size();
-		for (Text item : items.subList(0, shown)) {
-			out.add(new Line(Text.join("", Text.literal("· "), item), Tone.NORMAL));
-		}
-		if (shown < items.size()) {
-			out.add(new Line(Text.of("rigtune.benchmark.trend.changes.more", "· …and %s more (see History)", items.size() - shown), Tone.NORMAL));
+		if (maxChanges <= 0) {
+			if (!items.isEmpty()) {
+				out.add(new Line(Text.of("rigtune.benchmark.trend.changes.count", "Changes since then (may be related): %s, listed in Benchmark history",
+						items.size()), Tone.WARNING));
+			}
+		} else {
+			out.add(new Line(Text.of("rigtune.benchmark.trend.changes", "Changes since then (may be related):"), Tone.WARNING));
+			int shown = items.size() > maxChanges ? Math.max(0, maxChanges - 1) : items.size();
+			for (Text item : items.subList(0, shown)) {
+				out.add(new Line(Text.of("rigtune.benchmark.trend.change", "· %s", item), Tone.NORMAL));
+			}
+			if (shown < items.size()) {
+				out.add(new Line(Text.of("rigtune.benchmark.trend.changes.more", "· …and %s more (see History)", items.size() - shown), Tone.NORMAL));
+			}
 		}
 		if (window.outsideChange()) {
 			out.add(new Line(Text.of("rigtune.benchmark.trend.outside", "Something outside RigTune changed too (the mod set differs)"), Tone.WARNING));
@@ -244,7 +252,12 @@ public final class TrendText {
 		return value == null ? "?" : Long.toString(Math.round(value));
 	}
 
+	// Whole percent; below 1 % (a very steady history has a tiny floor) one decimal, never "0%".
 	static String percent(@Nullable Double value) {
-		return value == null ? "?" : String.format(Locale.ROOT, "%d", Math.round(Math.abs(value)));
+		if (value == null) {
+			return "?";
+		}
+		double abs = Math.abs(value);
+		return abs < 0.95 ? String.format(Locale.ROOT, "%.1f", abs) : String.format(Locale.ROOT, "%d", Math.round(abs));
 	}
 }

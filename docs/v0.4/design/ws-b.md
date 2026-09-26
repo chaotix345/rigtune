@@ -63,11 +63,33 @@ Branch `feat/bench-history`. Plan: docs/v0.4/plans/ws-b.md. SPEC 7 as amended by
 ## Verification
 - Unit (both versions): BenchmarkHistoryTest (AC7.1, 4 new), BenchmarkTrendTest (AC7.2 + marker + view, 17),
   ChangeWindowTest (AC7.3, 7), BenchmarkCompatibilityTest (AC7.4, 3 new: pinned 0.2.0 and 0.3.0 readers, 0.3.0 rewrite),
-  BenchmarkResultScreenTest (AC7.5 truth table, 7 new), TrendTextTest (6), ShareReportTest (+1), AcknowledgedRegressionsTest (3).
+  BenchmarkResultScreenTest (AC7.5 truth table, 7 new), TrendTextTest (7), ShareReportTest (+1), AcknowledgedRegressionsTest (3);
+  after the self-review fixes 1242 unit tests per version, 0 failures.
 - Released-jar harness (WS-H's tools/e2e/compat030.py from origin/test/e2e-v04, run locally against the released
   rigtune-0.3.0+mc26.2.jar with the placeholder sets + the real ws-b set): RESULT PASS, "BenchmarkHistory: benchmarks.json
   loads without a .bad: runs 5 of 5, unreadable false, contexts kept true".
 - BenchmarkHistoryGameTest (AC7.5, CI, both versions): see the CI run in the hand-back.
+
+## Self-review (code-reviewer subagent: 0 high, 3 medium, 12 low; report in the WS-B scratch dir, review.md)
+- M1 fixed: a staged change (mod file, Sodium/DH/Iris key) is journaled before it takes effect at the next start, so
+  `ChangeWindow` also lists staged changes that took effect from the entries between the comparable run before the
+  baseline and the baseline (without one: the entry at the baseline's cursor), and works out "outside RigTune" after
+  them. Staged = a mod-file row or a change whose JournalChange has an opId (TrendService passes those ids).
+  ChangeWindowTest: 2 new cases.
+- M2 fixed: a Tune whose suggestion the player didn't take (Keep: the game is at the knob's original value) isn't
+  "render distance changed" in the marker or the stale notice. BenchmarkTrendTest: 1 new case.
+- M3 fixed: the result screen counts a regression's changes in one line ("Changes since then (may be related): N,
+  listed in Benchmark history"; the list is on Benchmark history), and its trend lines give way (after the first) so
+  the table keeps its header and 3 rows (or the chart its minimum). BenchmarkHistoryGameTest opens a crowded Tune result
+  at 640×480@2 and checks the room (screenshot `bench-history-result-640x480-scale2`).
+- Lows fixed: L1 (wrapped rows are budgeted; the game test asserts the chart is drawn at each size), L2 (a pack
+  difference counts only with shaders on), L3 (a drop under 1 % keeps a decimal, never "0%"), L4 (an unreadable
+  history.json gives no change lines instead of "No change recorded"), L5 (the memo keeps 4 contexts), L6
+  (BenchmarkStore takes the file's stamp before the read), L7 (both game tests restore files before any client call;
+  the previous GUI scale is restored), L8 (screenshots re-seed at each size, so they show the seeded case), L9 (runs
+  without an id take no part), L10 (the change bullet is a lang key), L12 (the game test uses Details…, which opens
+  Benchmark history and acknowledges). L11 (RigTune left out of the benchmark's mod-set hash) is documented above; WS-F
+  uses the shared hash for its own purpose. L12's tooltip at 640×480@2 stays as decided (deviation 5).
 
 ## Deviations / decisions
 1. "Your usual" excludes the latest run (median of the comparable runs before it). AC7.5's "4 comparable runs + a

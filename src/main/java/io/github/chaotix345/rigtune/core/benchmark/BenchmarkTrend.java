@@ -155,7 +155,7 @@ public final class BenchmarkTrend {
 		}
 		if (ca.shaders() != cb.shaders()) {
 			out.add(Difference.SHADERS);
-		} else if (!Objects.equals(ca.shaderPack(), cb.shaderPack())) {
+		} else if (ca.shaders() && !Objects.equals(ca.shaderPack(), cb.shaderPack())) {
 			out.add(Difference.SHADER_PACK);
 		}
 		if (ca.dhRendering() != cb.dhRendering()) {
@@ -279,12 +279,10 @@ public final class BenchmarkTrend {
 		if (!Objects.equals(last.mcVersion(), now.mcVersion())) {
 			out.add(Difference.MC_VERSION);
 		}
-		Integer rd = knob(last, BenchmarkRecord.RENDER_DISTANCE);
-		if (rd != null && rd != now.renderDistance()) {
+		if (knobChanged(last.knobs().get(BenchmarkRecord.RENDER_DISTANCE), now.renderDistance())) {
 			out.add(Difference.RENDER_DISTANCE);
 		}
-		Integer sd = knob(last, BenchmarkRecord.SIMULATION_DISTANCE);
-		if (sd != null && sd != now.simulationDistance()) {
+		if (knobChanged(last.knobs().get(BenchmarkRecord.SIMULATION_DISTANCE), now.simulationDistance())) {
 			out.add(Difference.SIMULATION_DISTANCE);
 		}
 		BenchmarkRecord.Context c = last.context();
@@ -313,12 +311,20 @@ public final class BenchmarkTrend {
 		return List.copyOf(out);
 	}
 
+	// A Tune whose suggestion the player didn't take (Keep: the game is still at the original value) changed nothing
+	// (review M2); the last-benchmark line names the distance it measured.
+	private static boolean knobChanged(BenchmarkRecord.@Nullable KnobResult knob, int now) {
+		return knob != null && knob.value() != now && !(knob.original() != knob.value() && knob.original() == now);
+	}
+
 	// The trend of one context (contextKey; null or unknown = the newest run's) over `runs` (benchmarks.json, oldest
 	// first). now: the current conditions for the marker, or null when unknown.
 	public static View view(List<BenchmarkRecord> runs, @Nullable String contextKey, @Nullable Current now) {
 		Map<String, BenchmarkRecord> newestByKey = new LinkedHashMap<>();
 		Map<String, List<BenchmarkRecord>> byKey = new LinkedHashMap<>();
 		int withResult = 0;
+		// A run without a result, or without an id (a hand edit), takes no part.
+		runs = runs.stream().filter(r -> r.id() != null).toList();
 		for (BenchmarkRecord r : runs.reversed()) {
 			if (r.result() == null) {
 				continue;

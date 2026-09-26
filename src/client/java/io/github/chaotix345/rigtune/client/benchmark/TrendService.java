@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.client.benchmark;
 
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.RealController;
+import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.awareness.AwarenessStore;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecords;
@@ -10,6 +11,8 @@ import io.github.chaotix345.rigtune.core.benchmark.ChangeWindow;
 import io.github.chaotix345.rigtune.core.benchmark.TrendText;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.Journal;
+import io.github.chaotix345.rigtune.core.history.JournalChange;
+import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
 import io.github.chaotix345.rigtune.core.model.Text;
 import net.minecraft.client.Minecraft;
@@ -19,7 +22,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -34,10 +40,16 @@ public final class TrendService {
 	private final Path configDir;
 	// Acknowledged this session, so "Got it" still works while awareness.json is from a newer RigTune or unreadable.
 	private final Set<String> acknowledgedNow = ConcurrentHashMap.newKeySet();
-	// The last view: the notice sources and the screens ask for the same one several times per screen init.
-	private volatile @Nullable Memo memo;
+	// The last views, one per context asked for (the notice sources, the result screen and Benchmark history ask for the
+	// same ones several times per screen init; review L5).
+	private final Map<String, Memo> memos = new LinkedHashMap<>(8, 0.75f, true) {
+		@Override
+		protected boolean removeEldestEntry(Map.Entry<String, Memo> eldest) {
+			return size() > 4;
+		}
+	};
 
-	private record Memo(Object runs, Object journal, @Nullable String contextKey, BenchmarkTrend.@Nullable Current now, BenchmarkTrend.View view) {
+	private record Memo(Object runs, Object journal, BenchmarkTrend.@Nullable Current now, BenchmarkTrend.View view) {
 	}
 
 	public TrendService(RealController controller, Path configDir) {
@@ -50,21 +62,47 @@ public final class TrendService {
 		Minecraft minecraft = controller.minecraft();
 		BenchmarkTrend.Current now = minecraft == null ? null : BenchmarkConditions.current(minecraft);
 		Object journal = stamp(Journal.file(configDir));
-		Memo last = memo;
-		if (last != null && last.runs() == runs && last.journal().equals(journal) && Objects.equals(last.contextKey(), contextKey)
-				&& Objects.equals(last.now(), now)) {
-			return last.view();
+		String memoKey = String.valueOf(contextKey);
+		synchronized (memos) {
+			Memo last = memos.get(memoKey);
+			if (last != null && last.runs() == runs && last.journal().equals(journal) && Objects.equals(last.now(), now)) {
+				return last.view();
+			}
 		}
 		BenchmarkTrend.View view = BenchmarkTrend.view(runs, contextKey, now);
 		BenchmarkTrend.Assessment assessment = view.assessment();
-		if (assessment != null && assessment.regression() != null) {
-			BenchmarkRecord baseline = runs.stream().filter(r -> Objects.equals(r.id(), assessment.baselineRunId())).findFirst().orElse(null);
-			if (baseline != null) {
-				view = view.withChanges(ChangeWindow.between(baseline, view.latest(), historyEntries()));
+		if (assessment != null && assessment.regression() != null && view.latest() != null) {
+			view = view.withChanges(changes(view.latest(), runs));
+		}
+		synchronized (memos) {
+			memos.put(memoKey, new Memo(runs, journal, now, view));
+		}
+		return view;
+	}
+
+	// What History recorded between the regression's baseline and the latest run; null (no change lines at all) when
+	// history.json exists but can't be read, rather than "No change recorded" (review L4).
+	private @Nullable ChangeWindow changes(BenchmarkRecord latest, List<BenchmarkRecord> runs) {
+		List<BenchmarkRecord> baseline = BenchmarkTrend.baseline(latest, runs);
+		HistoryModel.View history = controller.history();
+		if (baseline.isEmpty() || history == null || history.state() != Journal.State.OK && history.state() != Journal.State.MISSING) {
+			return null;
+		}
+		BenchmarkRecord previous = baseline.size() >= 2 ? baseline.get(baseline.size() - 2) : null;
+		return ChangeWindow.between(previous, baseline.getLast(), latest, history.entries(), stagedChangeIds());
+	}
+
+	// Journal changes staged for the next start (they carry the pending op's id).
+	private static Set<String> stagedChangeIds() {
+		Set<String> out = new HashSet<>();
+		for (JournalEntry entry : ClientJournal.get().entries()) {
+			for (JournalChange change : entry.changes()) {
+				if (change.opId() != null && change.id() != null) {
+					out.add(change.id());
+				}
 			}
 		}
-		memo = new Memo(runs, journal, contextKey, now, view);
-		return view;
+		return out;
 	}
 
 	private static Object stamp(Path file) {
@@ -74,12 +112,6 @@ public final class TrendService {
 		} catch (IOException e) {
 			return "missing";
 		}
-	}
-
-	// History's entries, newest first; none when history.json is missing, corrupt, newer or unreadable.
-	private List<HistoryModel.Entry> historyEntries() {
-		HistoryModel.View history = controller.history();
-		return history == null || history.state() != Journal.State.OK ? List.of() : history.entries();
 	}
 
 	// The share report's latest benchmark: the newest run with a result, with its conditions and the rerun marker (the

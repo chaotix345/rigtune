@@ -111,12 +111,12 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 			checkHistoryFile(pair, tuneId, chunkTuneId);
 			shaderAdviceScreen(context);
 		} finally {
+			restoreFile(BenchmarkStore.file(), savedRuns);
 			context.runOnClient(mc -> {
 				BenchmarkController.setDefaultConfig(BenchmarkController.Config.DEFAULT);
 				BenchmarkController.setSweepListener(null);
 				ClientSettings.shared(FabricLoader.getInstance().getConfigDir()).benchmarkScene = savedScene;
 			});
-			restoreFile(BenchmarkStore.file(), savedRuns);
 		}
 	}
 

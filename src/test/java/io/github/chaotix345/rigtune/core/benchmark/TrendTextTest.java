@@ -49,6 +49,15 @@ class TrendTextTest {
 		assertEquals("RD 12 · SD 8", TrendText.conditions(TrendFixtures.run("c").context(null).build()).english());
 	}
 
+	// Review L3: a very steady history has a tiny floor; a drop is never shown as "0%".
+	@Test
+	void smallPercentagesKeepADecimal() {
+		assertEquals("0.6", TrendText.percent(-0.6));
+		assertEquals("1", TrendText.percent(-0.95));
+		assertEquals("19", TrendText.percent(-18.9));
+		assertEquals("?", TrendText.percent(null));
+	}
+
 	@Test
 	void theNote() {
 		assertEquals("4 comparable runs; 1 with different conditions not shown", TrendText.note(4, 1).english());

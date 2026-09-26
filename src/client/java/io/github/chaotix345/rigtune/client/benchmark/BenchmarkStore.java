@@ -28,9 +28,12 @@ public final class BenchmarkStore {
 	}
 
 	public static synchronized BenchmarkHistory history() {
-		if (history == null || !Objects.equals(stamp, stamp(file()))) {
+		Object now = stamp(file());
+		if (history == null || !Objects.equals(stamp, now)) {
+			// Taken before the read, so a write during it is seen next time (review L6); a corrupt file moved aside is
+			// "missing" next time and read once more (empty).
 			history = BenchmarkHistory.load(file());
-			stamp = stamp(file());
+			stamp = now;
 		}
 		return history;
 	}

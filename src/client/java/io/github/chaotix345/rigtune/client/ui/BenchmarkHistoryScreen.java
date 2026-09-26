@@ -37,6 +37,7 @@ public class BenchmarkHistoryScreen extends Screen {
 	private List<Row> rows = List.of();
 	private int linesTop;
 	private int chartTop;
+	private boolean chartDrawn;
 
 	private record Row(FormattedCharSequence text, int color) {
 	}
@@ -69,17 +70,28 @@ public class BenchmarkHistoryScreen extends Screen {
 			linesTop = 46;
 		}
 		int bottom = height - 34;
-		lines = lines(view, Math.max(1, (bottom - CHART_MIN - linesTop) / LINE));
-		List<Row> wrapped = new ArrayList<>();
-		for (TrendText.Line line : lines) {
-			for (FormattedCharSequence row : font.split(Texts.component(line.text()), width - 16)) {
-				wrapped.add(new Row(row, BenchmarkTrendLines.color(line.tone())));
+		int maxRows = Math.max(1, (bottom - CHART_MIN - linesTop) / LINE);
+		// Wrapped rows count (review L1): fewer change rows until they fit (at least 2 are listed).
+		for (int budget = maxRows; ; budget--) {
+			lines = lines(view, budget);
+			rows = wrap(lines);
+			if (rows.size() <= maxRows || budget <= 1) {
+				break;
 			}
 		}
-		rows = wrapped;
 		chartTop = linesTop + rows.size() * LINE + 4;
 		int buttonWidth = Math.min(200, width - 16);
 		addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, b -> onClose()).bounds((width - buttonWidth) / 2, height - 28, buttonWidth, 20).build());
+	}
+
+	private List<Row> wrap(List<TrendText.Line> shown) {
+		List<Row> out = new ArrayList<>();
+		for (TrendText.Line line : shown) {
+			for (FormattedCharSequence row : font.split(Texts.component(line.text()), width - 16)) {
+				out.add(new Row(row, BenchmarkTrendLines.color(line.tone())));
+			}
+		}
+		return out;
 	}
 
 	private Component contextLabel(String key) {
@@ -120,6 +132,11 @@ public class BenchmarkHistoryScreen extends Screen {
 		return view;
 	}
 
+	/** For the game tests: the chart fitted and was drawn in the last frame. */
+	public boolean chartDrawn() {
+		return chartDrawn;
+	}
+
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
@@ -134,7 +151,7 @@ public class BenchmarkHistoryScreen extends Screen {
 		BenchmarkRecord latest = view.latest();
 		if (latest != null) {
 			Component scene = Texts.component(TrendText.scene(latest.scene()));
-			TrendChart.draw(graphics, font, Component.translatable("rigtune.benchmark.chart.title", scene), view.points(), view.median(), null,
+			chartDrawn = TrendChart.draw(graphics, font, Component.translatable("rigtune.benchmark.chart.title", scene), view.points(), view.median(), null,
 					(width - chartWidth) / 2, chartTop, chartWidth, height - 34);
 		}
 	}

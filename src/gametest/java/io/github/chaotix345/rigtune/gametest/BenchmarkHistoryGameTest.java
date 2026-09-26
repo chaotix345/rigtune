@@ -4,10 +4,12 @@ import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkConditions;
+import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
 import io.github.chaotix345.rigtune.client.notice.BenchmarkStaleNoticeSource;
 import io.github.chaotix345.rigtune.client.notice.RegressionNoticeSource;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkHistoryScreen;
+import io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkTrendLines;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
@@ -15,9 +17,15 @@ import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
 import io.github.chaotix345.rigtune.core.awareness.AwarenessStore;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkHistory;
+import io.github.chaotix345.rigtune.core.benchmark.BenchmarkMath;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
+import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
 import io.github.chaotix345.rigtune.core.benchmark.ChangeWindow;
+import io.github.chaotix345.rigtune.core.benchmark.FrameStats;
+import io.github.chaotix345.rigtune.core.benchmark.Knobs;
+import io.github.chaotix345.rigtune.core.benchmark.PlannerResult;
+import io.github.chaotix345.rigtune.core.benchmark.SessionResult;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
@@ -78,19 +86,21 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 		byte[] history = read(historyFile);
 		byte[] awareness = read(awarenessFile);
 		boolean network = context.computeOnClient(mc -> ClientSettings.shared(configDir).networkEnabled);
+		int guiScale = context.computeOnClient(mc -> mc.options.guiScale().get());
 		try {
 			context.runOnClient(mc -> ClientSettings.shared(configDir).networkEnabled = false);
 			resize(context, 854, 480, 2);
 			run(context, controller, benchmarksFile);
 		} finally {
+			// The files first: later classes must never see the seeded runs, whatever fails below.
+			restore(benchmarksFile, benchmarks);
+			restore(historyFile, history);
+			restore(awarenessFile, awareness);
 			context.runOnClient(mc -> {
 				ClientSettings.shared(configDir).networkEnabled = network;
 				mc.gui.setScreen(new TitleScreen());
 			});
-			restore(benchmarksFile, benchmarks);
-			restore(historyFile, history);
-			restore(awarenessFile, awareness);
-			resize(context, 854, 480, 0);
+			resize(context, 854, 480, guiScale);
 		}
 		RigTune.LOGGER.info("BenchmarkHistoryGameTest: passed");
 	}
@@ -123,9 +133,15 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 				&& regression.detail().english().contains("fake-mod-1.1.jar"), "its detail names the update: " + regression.detail());
 		check(notice(context, controller, STALE_KEY) == null, "no stale notice under the seeded conditions");
 		context.takeScreenshot("bench-history-notice-854x480-scale2");
+		// Seeded again at each size, so the screenshots show the seeded case without a "needs a rerun" marker.
 		resize(context, 1280, 720, 2);
+		reseed(context, benchmarksFile);
+		context.runOnClient(mc -> RigTuneClient.open(new TitleScreen()));
+		context.waitForScreen(RigTuneScreen.class);
+		context.waitTicks(3);
 		context.takeScreenshot("bench-history-notice-1280x720-scale2");
 		resize(context, 854, 480, 2);
+		reseed(context, benchmarksFile);
 
 		// Tools -> Benchmark history.
 		context.runOnClient(mc -> mc.gui.setScreen(new ToolsScreen(mc.gui.screen(), controller)));
@@ -149,11 +165,37 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 		check(has(lines, "Last benchmark: 1% low 440 FPS · ") && !has(lines, "Needs a rerun"), "the last benchmark, current: " + lines);
 		for (int[] size : SIZES) {
 			resize(context, size[0], size[1], size[2]);
+			reseed(context, benchmarksFile);
+			context.runOnClient(mc -> mc.gui.setScreen(new BenchmarkHistoryScreen(new ToolsScreen(null, controller), controller)));
+			context.waitForScreen(BenchmarkHistoryScreen.class);
+			context.waitTicks(3);
 			checkLayout(context, "history " + size[0] + "x" + size[1]);
-			check(lines(context).size() >= 5, "lines at " + size[0] + "x" + size[1] + ": " + lines(context));
+			List<String> shown = lines(context);
+			check(shown.size() == 5 && has(shown, "Changes since then (may be related):") && !has(shown, "Needs a rerun"),
+					"lines at " + size[0] + "x" + size[1] + ": " + shown);
+			check(context.computeOnClient(mc -> ((BenchmarkHistoryScreen) mc.gui.screen()).chartDrawn()), "the chart is drawn at " + size[0] + "x" + size[1]);
 			context.takeScreenshot("bench-history-" + size[0] + "x" + size[1] + "-scale" + size[2]);
 		}
+
+		// The result screen of a Tune with many lines at 640x480@2 (review M3): the changes are counted in one line, and
+		// the table keeps room for its header and 3 rows.
+		resize(context, 640, 480, 2);
+		BenchmarkTrend.Current small = reseed(context, benchmarksFile);
+		BenchmarkRecord latest = context.computeOnClient(mc -> BenchmarkStore.history().runs().getLast());
+		check(LATEST.equals(latest.id()), "the seeded latest run: " + latest.id());
+		BenchmarkController.Outcome outcome = tuneOutcome(small, latest);
+		context.runOnClient(mc -> mc.gui.setScreen(new BenchmarkResultScreen(new TitleScreen(), outcome)));
+		context.waitForScreen(BenchmarkResultScreen.class);
+		context.waitTicks(3);
+		int top = context.computeOnClient(mc -> ((BenchmarkResultScreen) mc.gui.screen()).contentTop());
+		int bottom = context.computeOnClient(mc -> ((BenchmarkResultScreen) mc.gui.screen()).contentBottom());
+		check(top + 12 * 4 + 2 <= bottom, "room for the table at 640x480@2: " + top + " to " + bottom);
+		context.takeScreenshot("bench-history-result-640x480-scale2");
 		resize(context, 854, 480, 2);
+		reseed(context, benchmarksFile);
+		context.runOnClient(mc -> mc.gui.setScreen(new BenchmarkHistoryScreen(new ToolsScreen(null, controller), controller)));
+		context.waitForScreen(BenchmarkHistoryScreen.class);
+		context.waitTicks(3);
 
 		// The context selector: the other conditions' single run, then back.
 		String selected = view.contextKey();
@@ -165,12 +207,17 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 		cycleSelector(context);
 		check(selected.equals(context.computeOnClient(mc -> ((BenchmarkHistoryScreen) mc.gui.screen()).view().contextKey())), "back to the latest's");
 
-		// Got it: acknowledged in awareness.json, the notice is gone.
-		context.runOnClient(mc -> mc.gui.screen().onClose());
-		context.waitForScreen(ToolsScreen.class);
-		context.runOnClient(mc -> controller.noticeAction(REGRESSION_KEY, RegressionNoticeSource.ACKNOWLEDGE));
+		// Details… on RigTune's screen: opens Benchmark history and acknowledges the run in awareness.json (Got it takes the
+		// same path without opening it); the notice is gone.
+		context.runOnClient(mc -> RigTuneClient.open(new TitleScreen()));
+		context.waitForScreen(RigTuneScreen.class);
+		context.waitTicks(3);
+		context.runOnClient(mc -> controller.noticeAction(REGRESSION_KEY, RegressionNoticeSource.DETAILS));
+		context.waitForScreen(BenchmarkHistoryScreen.class);
 		check(notice(context, controller, REGRESSION_KEY) == null, "acknowledged, the regression notice is gone");
 		check(AwarenessStore.shared(configDir).acknowledgedRegressions().contains(LATEST), "awareness.json acknowledgedRegressions has the run");
+		context.runOnClient(mc -> mc.gui.screen().onClose());
+		context.waitForScreen(RigTuneScreen.class);
 
 		// The latest run's resolution changed on disk: not comparable any more, and it needs a rerun.
 		seed(benchmarksFile, now, now.width() * 2);
@@ -205,6 +252,27 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 		context.runOnClient(mc -> controller.dismissNotice(STALE_KEY));
 		check(notice(context, controller, STALE_KEY) == null, "dismissed, the stale notice is gone");
 		check(AwarenessStore.shared(configDir).dismissed().contains(STALE_KEY), "awareness.json dismissed has the key");
+	}
+
+	// Seeds again under the conditions of the current window size.
+	private static BenchmarkTrend.Current reseed(ClientGameTestContext context, Path file) {
+		BenchmarkTrend.Current now = context.computeOnClient(BenchmarkConditions::current);
+		seed(file, now, now.width());
+		return now;
+	}
+
+	// A Tune that fills the result screen: noisy, a Distant Horizons cost, an incomplete step and the deadline, as the
+	// seeded (regressed) latest run.
+	private static BenchmarkController.Outcome tuneOutcome(BenchmarkTrend.Current now, BenchmarkRecord record) {
+		int rd = now.renderDistance();
+		Knobs original = new Knobs(rd, now.simulationDistance(), false, false);
+		List<PlannerResult.Measurement> steps = List.of(new PlannerResult.Measurement(rd, new FrameStats(900, 704, 440, 3.1, 9), true, true),
+				new PlannerResult.Measurement(rd + 2, new FrameStats(900, 650, 400, 3.4, 10), true, true),
+				new PlannerResult.Measurement(rd + 4, new FrameStats(900, 600, 380, 3.6, 11), false, false));
+		SessionResult session = new SessionResult(BenchmarkRequest.Mode.TUNE, original, original, 60, new PlannerResult(rd, true, rd, steps, "test"),
+				List.of(), new BenchmarkMath.Aggregate(704, 440, 3.1, 2, 0.08), new SessionResult.Cost(440, 704, 470, 760), null, Map.of(), true);
+		return new BenchmarkController.Outcome(new BenchmarkRequest(BenchmarkRequest.Mode.TUNE, BenchmarkRequest.Scene.CURRENT, null), session, false,
+				record, null, true, false, List.of());
 	}
 
 	// Under the current conditions except the latest run's width: a run with another render distance (not shown), 4

@@ -72,5 +72,5 @@ Files: `RegressionNoticeSource`, `BenchmarkStaleNoticeSource`, `AwarenessStore` 
 - [x] Push; CI green; download and look at the screenshots; commit.
 
 ## Task 11: finish
-- [ ] code-reviewer subagent on the diff; fix high/medium findings.
+- [x] code-reviewer subagent on the diff; fix high/medium findings.
 - [ ] Merge origin/feat/v0.4.0, `./gradlew build`, push, CI green; `docs/v0.4/design/ws-b.md`.
