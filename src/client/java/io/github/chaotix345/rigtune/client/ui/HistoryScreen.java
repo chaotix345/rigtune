@@ -315,7 +315,7 @@ public class HistoryScreen extends Screen {
 	// --- text (every word from en_us.json; names, versions and values are data)
 
 	static Component kind(HistoryModel.Entry entry) {
-		return entry.profile() != null ? Component.translatable("rigtune.profile.history_kind", Component.literal(entry.profile()))
+		return entry.profile() != null ? Component.translatable("rigtune.profile.history_kind", SafeLiteral.of(entry.profile()))
 				: Component.translatable(entry.kindKey());
 	}
 
@@ -350,17 +350,17 @@ public class HistoryScreen extends Screen {
 
 	static Component describe(HistoryModel.Change change) {
 		return switch (change.row()) {
-			case SETTING -> Component.translatable("rigtune.history.change.setting", change.label(), value(change.before()), value(change.after()));
-			case ADDED -> Component.translatable("rigtune.history.change.added", change.shownName());
-			case DISABLED -> Component.translatable("rigtune.history.change.disabled", change.shownName());
-			case REENABLED -> Component.translatable("rigtune.history.change.reenabled", change.shownName());
-			case UPDATED -> Component.translatable("rigtune.history.change.updated", change.name() != null ? change.name() : change.modId(), change.file(),
-					change.newFile());
+			case SETTING -> Component.translatable("rigtune.history.change.setting", SafeLiteral.of(change.label()), value(change.before()), value(change.after()));
+			case ADDED -> Component.translatable("rigtune.history.change.added", SafeLiteral.of(change.shownName()));
+			case DISABLED -> Component.translatable("rigtune.history.change.disabled", SafeLiteral.of(change.shownName()));
+			case REENABLED -> Component.translatable("rigtune.history.change.reenabled", SafeLiteral.of(change.shownName()));
+			case UPDATED -> Component.translatable("rigtune.history.change.updated", SafeLiteral.of(change.name() != null ? change.name() : change.modId()),
+					SafeLiteral.of(change.file()), SafeLiteral.of(change.newFile()));
 		};
 	}
 
 	private static Component value(@Nullable String value) {
-		return value == null ? Component.translatable("rigtune.history.change.none") : Component.literal(value);
+		return value == null ? Component.translatable("rigtune.history.change.none") : SafeLiteral.of(value);
 	}
 
 	// "Last attempt failed: <reason> (try n of 3 at restart)" for a staged change, "Not applied: <reason>" for an abandoned one.

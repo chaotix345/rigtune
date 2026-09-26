@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
+import io.github.chaotix345.rigtune.client.ui.RowFocus;
 import io.github.chaotix345.rigtune.client.ui.HistoryScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
@@ -324,7 +325,8 @@ public class HistoryGameTest implements FabricClientGameTest {
 			for (AbstractWidget w : widgets) {
 				check(w.getX() >= 0 && w.getY() >= 0 && w.getRight() <= screen.width && w.getBottom() <= screen.height,
 						name + ": " + describe(w) + " outside " + screen.width + "x" + screen.height);
-				if (!(w instanceof AbstractSelectionList<?>)) {
+				// A RowFocus draws no label: its message is what the narrator reads (review-8 UV-2 to UV-4).
+				if (!(w instanceof AbstractSelectionList<?>) && !(w instanceof RowFocus)) {
 					check(mc.font.width(w.getMessage()) <= w.getWidth() - 4, name + ": label doesn't fit " + describe(w));
 				}
 			}

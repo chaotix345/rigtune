@@ -12,6 +12,7 @@ import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkWorld;
 import io.github.chaotix345.rigtune.client.benchmark.MarkerRestore;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
+import io.github.chaotix345.rigtune.client.stutter.StutterHooks;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkMenuScreen;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
@@ -27,6 +28,8 @@ import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
+import io.github.chaotix345.rigtune.core.stutter.StutterReport;
+import io.github.chaotix345.rigtune.core.stutter.StutterStore;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
@@ -50,6 +53,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -120,6 +125,10 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		}
 	}
 
+	private static List<StutterReport> stutterSessionsSince(Path configDir, Instant since) {
+		return new StutterStore(configDir).sessions().stream().filter(r -> !Instant.parse(r.startedAt()).isBefore(since)).toList();
+	}
+
 	private static byte[] readIfPresent(Path file) {
 		try {
 			return Files.exists(file) ? Files.readAllBytes(file) : null;
@@ -158,10 +167,28 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		pressByKey(context, "gui.done");
 		context.waitForScreen(TitleScreen.class);
 
-		openMenu(context);
-		check(buttonActive(context, "rigtune.benchmark.menu.measure_after"), "Measure after is offered");
-		pressByKey(context, "rigtune.benchmark.menu.measure_after");
-		BenchmarkRecord after = runInBenchmarkWorld(context, null, "bench-world-after");
+		// review-8 P5A-F3: the Measure after runs with the session monitor on; the benchmark world's settle frames aren't saved
+		// as a session of their own, the run's own capture is.
+		Path configDir = FabricLoader.getInstance().getConfigDir();
+		Instant monitorOn = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+		int endedBefore = context.computeOnClient(mc -> StutterHooks.sessionsEnded());
+		context.runOnClient(mc -> RigTuneClient.controller().setStutterMonitor(true));
+		check(context.computeOnClient(mc -> ClientSettings.shared(configDir).stutterMonitor), "the session monitor is on for the Measure after run");
+		BenchmarkRecord after;
+		try {
+			openMenu(context);
+			check(buttonActive(context, "rigtune.benchmark.menu.measure_after"), "Measure after is offered");
+			pressByKey(context, "rigtune.benchmark.menu.measure_after");
+			after = runInBenchmarkWorld(context, null, "bench-world-after");
+		} finally {
+			context.runOnClient(mc -> RigTuneClient.controller().setStutterMonitor(false));
+		}
+		context.waitFor(mc -> stutterSessionsSince(configDir, monitorOn).stream().anyMatch(r -> StutterReport.BENCHMARK.equals(r.source())), 400);
+		// The benchmark world's own monitor session ended with the world and was handled (saved or left out).
+		context.waitFor(mc -> StutterHooks.sessionsEnded() > endedBefore, 400);
+		List<StutterReport> sinceOn = stutterSessionsSince(configDir, monitorOn);
+		check(sinceOn.stream().noneMatch(r -> StutterReport.MONITOR.equals(r.source())), "no settle-frames session saved around the benchmark: "
+				+ sinceOn.stream().map(r -> r.source() + " " + r.spikes().total() + " spikes in " + r.gameplaySeconds() + " s").toList());
 		check(BenchmarkRecord.AFTER.equals(after.phase()) && before.pairId().equals(after.pairId()), "after pairs with before: " + after);
 		check(context.computeOnClient(mc -> BenchmarkController.lastOutcome().gain()) != null, "gain computed for the pair");
 		check(modified(marker).equals(created), "benchmark world reused, not recreated");

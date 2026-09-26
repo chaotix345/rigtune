@@ -229,6 +229,90 @@ class StutterAnalyzerTest {
 		assertEquals(2, report.hitches());
 	}
 
+	// review-8 ST-2: later near-spike candidates (26 ms frames: over 1.5 x the 16 ms baseline, under the 32 ms spike line)
+	// push the spike's candidate record out of a small candidate ring while its frame is still in the frame ring; its
+	// measured phases still attribute it.
+	@Test
+	void aSpikeKeepsItsPhasesAfterItsCandidateRecordIsEvicted() {
+		FrameRing ring = new FrameRing(8192, 4);
+		StutterRings rings = new StutterRings(ANCHOR);
+		long now = T0;
+		for (int i = 0; i < 300; i++) {
+			ring.frame(now += 16 * MS, 16 * MS, false, 300_000, MS, 14 * MS, 0);
+		}
+		ring.frame(now += 80 * MS, 80 * MS, false, 60 * MS, MS, 14 * MS, 12);
+		long spikeEnd = now;
+		for (int k = 0; k < 20; k++) {
+			for (int i = 0; i < 10; i++) {
+				ring.frame(now += 16 * MS, 16 * MS, false, 300_000, MS, 14 * MS, 0);
+			}
+			ring.frame(now += 26 * MS, 26 * MS, false, 300_000, MS, 14 * MS, 0);
+		}
+		FrameRing.Snapshot snapshot = ring.snapshot();
+		assertEquals(4, snapshot.candidateRecords());
+		assertTrue(snapshot.candidate(0, FrameRing.C_END) > spikeEnd, "the spike's own record is gone");
+		StutterAnalyzer.Result r = StutterAnalyzer.analyze(new StutterAnalyzer.Input(snapshot, rings.snapshot(), T0, now, STARTED, StutterReport.MONITOR,
+				"26.2", "g1", 4096, 32768L, 16, true, false));
+		assertEquals(1, r.attributions().size());
+		Attributor.Attribution a = r.attributions().getFirst();
+		assertEquals(spikeEnd, a.spike().end());
+		long exact = 60 * MS - 300_000;
+		long claimed = a.claims().getOrDefault(Attributor.CHUNK_LOAD, 0L);
+		assertTrue(claimed <= exact && claimed >= exact * 15 / 16 - 64, "chunk packets claimed from the frame's own phases: " + claimed);
+	}
+
+	// review-8 P5A-F2 (AC5.8 C): after a teleport into new terrain the chunk loads around each hitch tag it "chunks were
+	// loading"; the tag never claims milliseconds, and a hitch with no chunk loads nearby isn't tagged.
+	@Test
+	void hitchesWhileChunksLoadCarryTheTagAndClaimNothing() {
+		Capture c = new Capture();
+		c.frames(100, Map.of(40, 70 * MS), false);
+		c.rings.event(StutterRings.TELEPORT, c.now, 0);
+		java.util.Set<Integer> spikeFrames = java.util.Set.of(30, 90, 150, 210, 270, 330, 390, 450);
+		for (int i = 0; i < 500; i++) {
+			long d = spikeFrames.contains(i) ? 60 * MS : 16 * MS;
+			c.now += d;
+			// No packets excess (the builder keeps up, research: P5-A C4): the render phase holds the excess, no backlog.
+			c.ring.frame(c.now, d, false, 300_000, MS, d - 2 * MS, i % 7 == 0 ? 2 : 0);
+		}
+		c.frames(40, Map.of(), false);
+		StutterAnalyzer.Result r = c.analyze(true);
+		StutterReport report = r.report();
+		assertEquals(9, report.spikes().total());
+		assertEquals(8, report.tags().get(Attributor.CHUNKS_LOADING), "every hitch after the teleport, not the one at 40 s");
+		assertEquals(8, report.tags().get(Attributor.AFTER_TELEPORT));
+		assertEquals(Map.of(Attributor.UNKNOWN, 1.0), report.causes(), "a tag never claims milliseconds");
+		assertEquals(100.0 * 8 / 9, r.facts().taggedShares().get(Attributor.CHUNKS_LOADING), 0.01);
+		Attributor.Attribution tagged = r.attributions().getLast();
+		assertTrue(tagged.notes().contains(Attributor.CHUNKS_LOADING + ":context"), tagged.notes().toString());
+		assertTrue(tagged.claims().isEmpty());
+		assertFalse(r.attributions().getFirst().tags().contains(Attributor.CHUNKS_LOADING), "no chunk loads near the hitch at 40 s");
+	}
+
+	// A hitch older than the frame ring keeps the tag through its candidate record's chunk loads.
+	@Test
+	void theTagSurvivesInCandidateRecordsOlderThanTheFrameRing() {
+		FrameRing ring = new FrameRing(256, 64);
+		StutterRings rings = new StutterRings(ANCHOR);
+		long now = T0;
+		for (int i = 0; i < 100; i++) {
+			ring.frame(now += 16 * MS, 16 * MS, false, 300_000, MS, 14 * MS, 0);
+		}
+		ring.frame(now += 16 * MS, 16 * MS, false, 300_000, MS, 14 * MS, 3);
+		ring.frame(now += 70 * MS, 70 * MS, false, 300_000, MS, 68 * MS, 0);
+		for (int i = 0; i < 100; i++) {
+			ring.frame(now += 16 * MS, 16 * MS, false, 300_000, MS, 14 * MS, 0);
+		}
+		ring.frame(now += 70 * MS, 70 * MS, false, 300_000, MS, 68 * MS, 0);
+		for (int i = 0; i < 400; i++) {
+			ring.frame(now += 16 * MS, 16 * MS, false, 300_000, MS, 14 * MS, 0);
+		}
+		StutterAnalyzer.Result r = StutterAnalyzer.analyze(new StutterAnalyzer.Input(ring.snapshot(), rings.snapshot(), T0, now, STARTED, StutterReport.MONITOR,
+				"26.2", "g1", 4096, 32768L, 16, true, false));
+		assertEquals(2, r.report().spikes().total());
+		assertEquals(Map.of(Attributor.CHUNKS_LOADING, 1), r.report().tags(), "the first hitch's previous frame loaded chunks; nothing loaded near the second");
+	}
+
 	@Test
 	void collectorDisplayNames() {
 		assertEquals("ZGC", StutterAnalyzer.displayName("zgc"));

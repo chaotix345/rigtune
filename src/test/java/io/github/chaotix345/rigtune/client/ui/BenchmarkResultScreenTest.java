@@ -19,9 +19,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class BenchmarkResultScreenTest {
+	// review-8 P5B-F4: status lines wrap; when the rows would crowd out the table, the trend's later lines go first, then
+	// the most-wrapped line folds back to one clipped row (its text a tooltip).
+	@Test
+	void statusLinesWrapWithinTheirRows() {
+		assertArrayEquals(new int[]{1, 2, 1, 2}, BenchmarkResultScreen.fit(new int[]{1, 2, 1, 2}, 6, 0, 0), "everything fits wrapped");
+		assertArrayEquals(new int[]{1, 2, 1, 0, 0, 2}, BenchmarkResultScreen.fit(new int[]{1, 2, 1, 1, 1, 2}, 6, 2, 5),
+				"the trend (lines 2-4) keeps its first line; its later lines go first, from the end");
+		assertArrayEquals(new int[]{1, 2, 1, 1}, BenchmarkResultScreen.fit(new int[]{1, 2, 1, 3}, 5, 0, 0), "then the most-wrapped line folds back");
+		assertArrayEquals(new int[]{1, 1, 1, 1}, BenchmarkResultScreen.fit(new int[]{1, 2, 1, 2}, 3, 0, 0), "never below one row a line");
+		assertArrayEquals(new int[]{2, 1}, BenchmarkResultScreen.fit(new int[]{2, 2}, 3, 0, 0), "ties: the later line folds first");
+	}
+
 	@Test
 	void theChartDateIsTheLocalDay() {
 		assertEquals("09-26", BenchmarkResultScreen.chartDate("2026-09-25T20:05:31Z", ZoneOffset.ofHours(10)));

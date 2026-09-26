@@ -14,7 +14,8 @@ import java.util.Set;
 // milliseconds in a fixed order, each capped at what is left: GC pause overlap, then chunk-packet handling (the packets
 // phase, with chunk loads), then client ticks, then the render phase as chunk building (only with evidence: a Sodium
 // build backlog or a waiting Chunk Updates mode; without it the render excess stays unexplained). Correlations (a world
-// save, Distant Horizons, CPU contention, after a teleport, moving fast) are tags that never claim milliseconds. The
+// save, Distant Horizons, CPU contention, after a teleport, chunks loading nearby, moving fast) are tags that never claim
+// milliseconds. The
 // unexplained remainder is always kept. Everything here is "likely", never a proven cause.
 public final class Attributor {
 	public static final long MS = 1_000_000L;
@@ -32,11 +33,15 @@ public final class Attributor {
 	public static final String CPU_CONTENTION = "cpuContention";
 	public static final String AFTER_TELEPORT = "afterTeleport";
 	public static final String MOVING_FAST = "movingFast";
-	public static final List<String> TAGS = List.of(WORLD_SAVE, DH, CPU_CONTENTION, AFTER_TELEPORT, MOVING_FAST);
+	// review-8 P5A-F2: chunks loaded within CHUNK_NEAR of the spike (the client's CHUNK_LOAD count, not a measurement of
+	// what they cost).
+	public static final String CHUNKS_LOADING = "chunksLoading";
+	public static final List<String> TAGS = List.of(WORLD_SAVE, DH, CPU_CONTENTION, AFTER_TELEPORT, CHUNKS_LOADING, MOVING_FAST);
 
 	static final long STALL_NEAR = 100 * MS;
 	static final long SAVE_NEAR = 50 * MS;
 	static final long SAMPLE_NEAR = 125 * MS;
+	static final long CHUNK_NEAR = 250 * MS;
 	static final long MIN_PACKETS = 2 * MS;
 	static final int CHUNK_BURST = 8;
 
@@ -105,9 +110,15 @@ public final class Attributor {
 	}
 
 	// The capture's evidence. phaseTiming: the phase timers were complete (S-M1); otherwise the phases are ignored.
-	// deferModeWaits: Sodium's Chunk Updates mode makes frames wait for builds (ZERO_FRAMES/ONE_FRAME).
+	// deferModeWaits: Sodium's Chunk Updates mode makes frames wait for builds (ZERO_FRAMES/ONE_FRAME). chunkLoading: the
+	// spans in which the client loaded chunks (review-8 P5A-F2).
 	public record Context(List<GcEvent> gc, List<Interval> saves, List<Interval> afterTeleport, List<Interval> movingFast, List<Sample> samples,
-			int cores, boolean phaseTiming, boolean deferModeWaits) {
+			int cores, boolean phaseTiming, boolean deferModeWaits, List<Interval> chunkLoading) {
+		public Context(List<GcEvent> gc, List<Interval> saves, List<Interval> afterTeleport, List<Interval> movingFast, List<Sample> samples, int cores,
+				boolean phaseTiming, boolean deferModeWaits) {
+			this(gc, saves, afterTeleport, movingFast, samples, cores, phaseTiming, deferModeWaits, List.of());
+		}
+
 		public static Context empty() {
 			return new Context(List.of(), List.of(), List.of(), List.of(), List.of(), 1, false, false);
 		}
@@ -223,6 +234,16 @@ public final class Attributor {
 			if (t.overlaps(from, to)) {
 				tags.add(AFTER_TELEPORT);
 				notes.add(AFTER_TELEPORT + ":" + CONTEXT);
+				break;
+			}
+		}
+		for (Interval c : ctx.chunkLoading()) {
+			if (c.overlaps(from - CHUNK_NEAR, to + CHUNK_NEAR)) {
+				tags.add(CHUNKS_LOADING);
+				// A chunk-loading claim or note already says so.
+				if (notes.stream().noneMatch(n -> n.startsWith(CHUNK_LOAD + ":"))) {
+					notes.add(CHUNKS_LOADING + ":" + CONTEXT);
+				}
 				break;
 			}
 		}

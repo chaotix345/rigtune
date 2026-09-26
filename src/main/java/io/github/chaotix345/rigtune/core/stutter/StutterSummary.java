@@ -22,6 +22,7 @@ public final class StutterSummary {
 			Map.entry(Attributor.DH, "Distant Horizons background work"),
 			Map.entry(Attributor.CPU_CONTENTION, "a busy CPU"),
 			Map.entry(Attributor.AFTER_TELEPORT, "the 10 s after a teleport"),
+			Map.entry(Attributor.CHUNKS_LOADING, "chunks loading"),
 			Map.entry(Attributor.MOVING_FAST, "fast movement"));
 
 	private StutterSummary() {
@@ -44,8 +45,8 @@ public final class StutterSummary {
 		out.append(String.format(Locale.ROOT, "%s (%s of gameplay) · %,d frames · avg %.0f FPS · 1%% low %.0f FPS%n", clock(r.sessionSeconds()),
 				clock(r.gameplaySeconds()), r.frames(), r.avgFps(), r.onePercentLowFps()));
 		StutterReport.Spikes s = r.spikes();
-		out.append(String.format(Locale.ROOT, "%d spikes (%d minor, %d major, %d severe, %d freezes) in %d hitches · %.1f s lost%n", s.total(), s.minor(),
-				s.major(), s.severe(), s.freeze(), r.hitches(), r.lostMs() / 1000));
+		out.append(String.format(Locale.ROOT, "%s (%d minor, %d major, %d severe, %s) in %s · %.1f s lost%n", count(s.total(), "spike", "spikes"), s.minor(),
+				s.major(), s.severe(), count(s.freeze(), "freeze", "freezes"), count(r.hitches(), "hitch", "hitches"), r.lostMs() / 1000));
 		if (!r.enoughData()) {
 			out.append("Not enough data yet (at least 3 spikes and 2 minutes of gameplay)\n");
 		}
@@ -63,7 +64,9 @@ public final class StutterSummary {
 			for (String tag : Attributor.TAGS) {
 				Integer n = r.tags().get(tag);
 				if (n != null && n > 0) {
-					out.append(String.format(Locale.ROOT, "%d of %d spikes during %s (not measured)%n", n, s.total(), name(tag)));
+					String when = Attributor.CHUNKS_LOADING.equals(tag) ? "while chunks were loading" : "during " + name(tag);
+					out.append(s.total() == 1 ? String.format(Locale.ROOT, "The spike happened %s (not measured)%n", when)
+							: String.format(Locale.ROOT, "%d of %d spikes happened %s (not measured)%n", n, s.total(), when));
 				}
 			}
 			List<String> worst = new ArrayList<>();
@@ -83,6 +86,11 @@ public final class StutterSummary {
 		}
 		String text = out.toString();
 		return text.length() <= LIMIT ? text : text.substring(0, LIMIT - 1) + "…";
+	}
+
+	// "1 spike", "2 spikes".
+	static String count(long n, String one, String many) {
+		return n + " " + (n == 1 ? one : many);
 	}
 
 	// "gc:high:FULL" -> "garbage collection (high), full GC".

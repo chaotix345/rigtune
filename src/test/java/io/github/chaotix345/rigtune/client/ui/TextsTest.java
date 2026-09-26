@@ -45,6 +45,16 @@ class TextsTest {
 		}
 	}
 
+	// review-8 SE-2: literal data (rule titles and texts, names) and string arguments are drawn without formatting codes or
+	// bidi controls, which Minecraft's font would otherwise apply.
+	@Test
+	void outsideTextIsInert() {
+		String rlo = String.valueOf((char) 0x202E);
+		assertEquals("Free FPS", Texts.component(Text.literal("§cFree " + rlo + "FPS")).getString());
+		assertEquals("Install Sodium", Texts.component(Text.of("rigtune.rec.install.title", "Install %s", "§kSodium")).getString());
+		assertEquals("a b", SafeLiteral.of("a" + (char) 10 + "b").getString());
+	}
+
 	// RigTune's en_us.json as the game's language, for client code that uses Component.translatable.
 	static Language rigtuneEnglish(Language base) throws IOException {
 		Map<String, String> lang = new HashMap<>();

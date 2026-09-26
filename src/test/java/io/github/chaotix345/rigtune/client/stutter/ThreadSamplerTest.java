@@ -265,4 +265,100 @@ class ThreadSamplerTest {
 		// A per-sample allocation would be at least 320 KB over 20,000 samples.
 		assertTrue(allocated < StutterMonitorTest.NOISE_BYTES, "20,000 steady-state samples allocated " + allocated + " bytes");
 	}
+
+	// One thread whose CPU grows by `step` ns per sample, in group `name`; the second threadIds() call (the first sample
+	// that counts) can hang, ignoring interrupts, until released, like a sampler thread the scheduler doesn't run.
+	private static final class SteadySource implements ThreadSampler.Source {
+		final String name;
+		final long step;
+		final java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+		final java.util.concurrent.CountDownLatch release;
+		volatile @Nullable Thread caller;
+		long cpu;
+		int calls;
+
+		SteadySource(String name, long step, boolean hang) {
+			this.name = name;
+			this.step = step;
+			this.release = new java.util.concurrent.CountDownLatch(hang ? 1 : 0);
+		}
+
+		@Override
+		public long[] threadIds() {
+			caller = Thread.currentThread();
+			if (++calls == 2) {
+				entered.countDown();
+				boolean interrupted = false;
+				while (release.getCount() > 0) {
+					try {
+						release.await();
+					} catch (InterruptedException e) {
+						interrupted = true;
+					}
+				}
+				if (interrupted) {
+					Thread.currentThread().interrupt();
+				}
+			}
+			return new long[]{7};
+		}
+
+		@Override
+		public long[] cpuTimes(long[] ids) {
+			cpu += step;
+			return new long[]{cpu};
+		}
+
+		@Override
+		public @Nullable String[] names(long[] ids) {
+			return new String[]{name};
+		}
+
+		@Override
+		public long processCpu() {
+			return -1;
+		}
+	}
+
+	private static int samples(StutterRings rings) {
+		return rings.snapshot().samples().length / StutterRings.SAMPLE_STRIDE;
+	}
+
+	// review-8 ST-1: stopping the last capture runs on the render thread, so stop() never waits for the sampler thread, even
+	// one that doesn't answer its interrupt; that worker never writes into the rings of a capture started after it.
+	@Test
+	void stopNeverWaitsAndAStoppedWorkerStaysOutOfTheNextCapture() throws Exception {
+		SteadySource hung = new SteadySource("DH-Worker-1", 5_000_000, true);
+		SteadySource next = new SteadySource("Server thread", 1_000_000, false);
+		java.util.Iterator<SteadySource> sources = List.of(hung, next).iterator();
+		ThreadSampler sampler = new ThreadSampler(sources::next);
+		StutterRings first = new StutterRings(0);
+		StutterRings second = new StutterRings(0);
+		sampler.start(first);
+		assertTrue(hung.entered.await(5, java.util.concurrent.TimeUnit.SECONDS), "the sampler took its first sample");
+
+		long before = System.nanoTime();
+		sampler.stop();
+		long stopMs = (System.nanoTime() - before) / 1_000_000;
+		assertTrue(stopMs < 100, "stop() returned after " + stopMs + " ms");
+		assertFalse(sampler.running(), "no sampler for this capture any more");
+
+		sampler.start(second);
+		hung.release.countDown();
+		Thread old = hung.caller;
+		old.join(5_000);
+		assertFalse(old.isAlive(), "the stopped worker ended once it could");
+		long deadline = System.nanoTime() + 5_000_000_000L;
+		while (samples(second) < 2 && System.nanoTime() < deadline) {
+			Thread.sleep(20);
+		}
+		sampler.stop();
+		assertTrue(samples(second) >= 2, "the new capture's worker samples");
+		assertEquals(0, samples(first), "the stopped worker wrote nothing, not even into its own capture's rings");
+		long[] s = second.snapshot().samples();
+		for (int i = 0; i + StutterRings.SAMPLE_STRIDE <= s.length; i += StutterRings.SAMPLE_STRIDE) {
+			assertEquals(0, s[i + StutterRings.S_DH], "only the new worker's threads in the new capture's rings");
+			assertEquals(1_000_000, s[i + StutterRings.S_SERVER]);
+		}
+	}
 }

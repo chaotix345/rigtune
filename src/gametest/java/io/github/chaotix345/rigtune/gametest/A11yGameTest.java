@@ -4,14 +4,20 @@ import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
+import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
+import io.github.chaotix345.rigtune.client.ui.BenchmarkHistoryScreen;
 import io.github.chaotix345.rigtune.client.ui.HistoryScreen;
 import io.github.chaotix345.rigtune.client.ui.JvmScreen;
+import io.github.chaotix345.rigtune.client.ui.NoticeScreen;
 import io.github.chaotix345.rigtune.client.ui.PreviewScreen;
 import io.github.chaotix345.rigtune.client.ui.ProfilesScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.client.ui.StutterScreen;
+import io.github.chaotix345.rigtune.client.ui.Texts;
+import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
 import io.github.chaotix345.rigtune.client.ui.UndoScreen;
+import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
@@ -22,6 +28,9 @@ import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.Text;
+import io.github.chaotix345.rigtune.core.notice.Notice;
+import io.github.chaotix345.rigtune.core.notice.NoticeAction;
+import io.github.chaotix345.rigtune.core.notice.NoticePriority;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.profile.ProfileStore;
 import io.github.chaotix345.rigtune.core.profile.ProfileTemplates.TemplateId;
@@ -91,6 +100,7 @@ public class A11yGameTest implements FabricClientGameTest {
 			jvm(context, controller);
 			profiles(context, controller);
 			stutter(context, controller);
+			standaloneText(context, controller);
 			highContrast(context, controller);
 		} finally {
 			context.runOnClient(mc -> {
@@ -224,6 +234,104 @@ public class A11yGameTest implements FabricClientGameTest {
 		context.waitFor(mc -> ((StutterScreen) mc.gui.screen()).shownView() != before, 40);
 		context.waitTicks(2);
 		check(context.computeOnClient(A11yGameTest::rowIndex) == 3, "stutter: a refresh kept the focused row");
+	}
+
+	// review-8 UV-2 to UV-4: text that isn't a list row is a Tab stop the narrator reads: the notice line (with its detail;
+	// inline and behind the narrow screens' "..." button) and NoticeScreen's rows, every line of Benchmark history, and the
+	// Tools startup line with the notes under it.
+	private static void standaloneText(ClientGameTestContext context, A11yController controller) {
+		String message = "The server limits view distance to 6 chunks";
+		controller.notices = List.of(new Notice("a11y-notice", NoticePriority.SERVER_LIMIT, Text.literal(message),
+				Text.literal("You set 12; the server sends 6, so 6 is what you see."), List.of(new NoticeAction("open", Text.literal("Open"))), true));
+		try {
+			for (int[] size : new int[][]{{854, 480, 2}, {640, 480, 2}}) {
+				resize(context, size[0], size[1], size[2]);
+				openRigTune(context, controller);
+				String said = tabUntilNarrates(context, "notice line " + size[0] + "x" + size[1], message);
+				check(said.contains("the server sends 6"), "the notice's detail is narrated with it: " + said);
+				context.takeScreenshot("a11y-notice-focus-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			}
+			context.runOnClient(mc -> mc.gui.setScreen(new NoticeScreen(new TitleScreen(), controller)));
+			context.waitForScreen(NoticeScreen.class);
+			tabUntilNarrates(context, "notice screen", message);
+		} finally {
+			controller.notices = List.of();
+			resize(context, 854, 480, 2);
+		}
+
+		context.runOnClient(mc -> mc.gui.setScreen(new BenchmarkHistoryScreen(new TitleScreen(), controller)));
+		context.waitForScreen(BenchmarkHistoryScreen.class);
+		context.waitTicks(2);
+		List<String> lines = context.computeOnClient(mc -> ((BenchmarkHistoryScreen) mc.gui.screen()).shownLines().stream()
+				.map(line -> Texts.component(line.text()).getString()).toList());
+		String history = tabAll(context);
+		check(!lines.isEmpty(), "benchmark history shows lines");
+		for (String line : lines) {
+			check(history.contains(line), "benchmark history: \"" + line + "\" is narrated: " + history);
+		}
+		context.takeScreenshot("a11y-benchmark-history-focus-854x480-scale2");
+
+		context.runOnClient(mc -> mc.gui.setScreen(new ToolsScreen(new TitleScreen(), controller)));
+		context.waitForScreen(ToolsScreen.class);
+		context.waitTicks(2);
+		Component startup = context.computeOnClient(mc -> ((ToolsScreen) mc.gui.screen()).startupLine());
+		check(startup != null, "the Tools screen shows the startup line (FootprintGameTest recorded this launch)");
+		String tools = tabAll(context);
+		check(tools.contains(startup.getString()), "tools: the startup line is narrated: " + tools);
+		String advice = Component.translatable("rigtune.startup.advice").getString();
+		check(tools.contains(advice.substring(0, Math.min(40, advice.length()))), "tools: the startup advice is narrated: " + tools);
+		RigTune.LOGGER.info("A11yGameTest: the notice line, NoticeScreen, Benchmark history's {} lines and the Tools startup line are narrated", lines.size());
+	}
+
+	// Tab (at most 40 presses, from nothing focused) until the focused widget narrates `text`; returns what it narrates.
+	private static String tabUntilNarrates(ClientGameTestContext context, String name, String text) {
+		context.getInput().setCursorPos(1, 1);
+		context.runOnClient(mc -> mc.gui.screen().clearFocus());
+		for (int i = 0; i < 40; i++) {
+			tab(context);
+			String said = context.computeOnClient(A11yGameTest::focusedNarration);
+			if (said.contains(text)) {
+				return said;
+			}
+		}
+		throw new AssertionError(name + ": Tab never reached a stop that narrates \"" + text + "\"");
+	}
+
+	// Tab once round every stop (from nothing focused, until the first comes back), joining what each narrates.
+	private static String tabAll(ClientGameTestContext context) {
+		context.getInput().setCursorPos(1, 1);
+		context.runOnClient(mc -> mc.gui.screen().clearFocus());
+		StringBuilder out = new StringBuilder();
+		Object first = null;
+		for (int i = 0; i < 60; i++) {
+			tab(context);
+			Object leaf = context.computeOnClient(mc -> {
+				ComponentPath path = mc.gui.screen().getCurrentFocusPath();
+				return path == null ? null : path.leafComponent();
+			});
+			if (leaf == null || leaf == first) {
+				break;
+			}
+			if (first == null) {
+				first = leaf;
+			}
+			out.append(context.computeOnClient(A11yGameTest::focusedNarration)).append('\n');
+		}
+		return out.toString();
+	}
+
+	// What the focused widget narrates (ScreenNarrationCollector over its own narration), or "".
+	private static String focusedNarration(Minecraft mc) {
+		ComponentPath path = mc.gui.screen().getCurrentFocusPath();
+		if (path == null || !(path.leafComponent() instanceof AbstractWidget widget)) {
+			return "";
+		}
+		ScreenNarrationCollector collector = new ScreenNarrationCollector();
+		//? if >=26.3 {
+		/*collector.update(widget::updateNarration, net.minecraft.client.gui.narration.NarrationTrigger.KEYBOARD);
+		*///?} else
+		collector.update(widget::updateNarration);
+		return collector.collectNarrationText(false);
 	}
 
 	// AC11.2: the stub's RigTune screen with High Contrast Block Outline off, then on (the option that reloads no resource
@@ -448,6 +556,7 @@ public class A11yGameTest implements FabricClientGameTest {
 		private final List<ProfileView> profiles;
 		private final JvmReport jvm;
 		private volatile StutterView stutter;
+		volatile List<Notice> notices = List.of();
 
 		A11yController(StubController stub, RigTuneController real, Path configDir) {
 			this.stub = stub;
@@ -544,6 +653,21 @@ public class A11yGameTest implements FabricClientGameTest {
 		@Override
 		public JvmReport jvmReport() {
 			return jvm;
+		}
+
+		@Override
+		public List<Notice> notices() {
+			return notices;
+		}
+
+		@Override
+		public BenchmarkTrend.View benchmarkTrend(@Nullable String contextKey) {
+			return real.benchmarkTrend(contextKey);
+		}
+
+		@Override
+		public StartupTimes.View startupTimes() {
+			return real.startupTimes();
 		}
 
 		// A live session's refresh: the same capture, a new report.

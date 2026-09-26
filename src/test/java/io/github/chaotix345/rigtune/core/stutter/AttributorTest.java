@@ -245,6 +245,28 @@ class AttributorTest {
 		assertEquals(Map.of(Attributor.CHUNK_LOAD, 39 * MS), Attributor.attribute(s, p, gcOnly()).claims());
 	}
 
+	// review-8 P5A-F2: chunk loads within 250 ms of the spike tag it "chunks were loading"; the tag claims nothing and adds
+	// no note next to a chunk-loading claim or note, which already says so.
+	@Test
+	void chunksLoadingNearbyIsATagThatClaimsNothing() {
+		SpikeDetector.Spike s = spike(10_000 * MS, 60 * MS, 16 * MS);
+		Context near = new Context(List.of(), List.of(), List.of(), List.of(), List.of(), 8, true, false, List.of(new Interval(10_180 * MS, 10_200 * MS)));
+		Attribution a = Attributor.attribute(s, null, near);
+		assertEquals(Set.of(Attributor.CHUNKS_LOADING), a.tags());
+		assertEquals(List.of("chunksLoading:context"), a.notes());
+		assertEquals(Map.of(), a.claims());
+		assertEquals(44 * MS, a.unexplained());
+
+		Context far = new Context(List.of(), List.of(), List.of(), List.of(), List.of(), 8, true, false, List.of(new Interval(10_300 * MS, 10_400 * MS),
+				new Interval(9_000 * MS, 9_680 * MS)));
+		assertEquals(Set.of(), Attributor.attribute(s, null, far).tags(), "250 ms either side of the frame, no more");
+
+		Phases packets = new Phases(40 * MS, MS, 5 * MS, MS, MS, 5 * MS, 6, 0);
+		Attribution claimed = Attributor.attribute(s, packets, near);
+		assertEquals(List.of("chunkLoad:high"), claimed.notes());
+		assertEquals(Set.of(Attributor.CHUNKS_LOADING), claimed.tags(), "still counted as a tag");
+	}
+
 	static double ms(Long nanos) {
 		return nanos / 1e6;
 	}

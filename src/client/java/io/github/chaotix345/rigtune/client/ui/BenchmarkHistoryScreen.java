@@ -80,6 +80,17 @@ public class BenchmarkHistoryScreen extends Screen {
 			}
 		}
 		chartTop = linesTop + rows.size() * LINE + 4;
+		// review-8 UV-3: each line (the note, the trend or regression, its changes, the last benchmark) is a Tab stop the
+		// narrator reads, over the rows it wraps to. The chart itself stays painted (v0.5).
+		int row = 0;
+		for (TrendText.Line line : lines) {
+			Component text = Texts.component(line.text());
+			int count = font.split(text, width - 16).size();
+			if (count > 0) {
+				addRenderableWidget(RowFocus.standalone(text, 8, linesTop + row * LINE - 1, Math.max(1, width - 16), count * LINE));
+			}
+			row += count;
+		}
 		int buttonWidth = Math.min(200, width - 16);
 		addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, b -> onClose()).bounds((width - buttonWidth) / 2, height - 28, buttonWidth, 20).build());
 	}
@@ -97,7 +108,7 @@ public class BenchmarkHistoryScreen extends Screen {
 	private Component contextLabel(String key) {
 		BenchmarkRecord example = view.example(key);
 		boolean versions = view.examples().stream().map(BenchmarkRecord::mcVersion).distinct().count() > 1;
-		return example == null ? Component.literal(key) : Texts.component(TrendText.context(example, versions));
+		return example == null ? SafeLiteral.of(key) : Texts.component(TrendText.context(example, versions));
 	}
 
 	// The note, the trend, the last benchmark; change rows are cut first (to "…and N more") when space is short.
