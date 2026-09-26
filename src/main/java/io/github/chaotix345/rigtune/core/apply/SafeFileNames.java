@@ -91,13 +91,18 @@ public final class SafeFileNames {
 		if (name.length() > MAX_LENGTH) {
 			return "longer than " + MAX_LENGTH + " characters";
 		}
-		for (int i = 0; i < name.length(); i++) {
-			char c = name.charAt(i);
-			if (c < 0x20 || c == 0x7f) {
+		for (int i = 0; i < name.length(); ) {
+			int cp = name.codePointAt(i);
+			i += Character.charCount(cp);
+			if (cp < 0x20 || cp == 0x7f) {
 				return "contains a control character";
 			}
-			if (FORBIDDEN.indexOf(c) >= 0) {
-				return "contains '" + c + "'";
+			if (FORBIDDEN.indexOf(cp) >= 0) {
+				return "contains '" + (char) cp + "'";
+			}
+			// review-8 SE-3: a text-direction override or an invisible character can make a name read as another one.
+			if (LogSafe.hidden(cp)) {
+				return "contains an invisible or text-direction character";
 			}
 		}
 		if (name.startsWith(".")) {
@@ -136,7 +141,7 @@ public final class SafeFileNames {
 		}
 		StringBuilder out = new StringBuilder("\"");
 		name.codePoints().limit(80).forEach(cp -> {
-			if (cp < 0x20 || cp == 0x7f) {
+			if (LogSafe.hidden(cp)) {
 				out.append(String.format("\\u%04x", cp));
 			} else {
 				out.appendCodePoint(cp);
