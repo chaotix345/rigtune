@@ -63,6 +63,8 @@ class DriverVersionParserTest {
 		parses(GpuVendor.AMD, GraphicsBackend.VULKAN, "1.3.290 Mesa RADV 24.2.3", DriverVersion.MESA, 24, 2, 3);
 		parses(GpuVendor.AMD, GraphicsBackend.VULKAN, "1.3.289 radv Mesa 24.0.9-0ubuntu0.1", DriverVersion.MESA, 24, 0, 9);
 		parses(GpuVendor.INTEL, GraphicsBackend.VULKAN, "1.3.289 Intel open-source Mesa driver Mesa 24.2.3", DriverVersion.MESA, 24, 2, 3);
+		// A real 26.3 Vulkan string, captured by CI's game tests (lavapipe, the Mesa software Vulkan driver; run 36223335920).
+		parses(GpuVendor.SOFTWARE, GraphicsBackend.VULKAN, "1.4.318 llvmpipe Mesa 25.2.8-0ubuntu0.24.04.2 (LLVM 20.1.2)", DriverVersion.MESA, 25, 2, 8);
 		// The API version is never the driver version.
 		assertFalse(DriverVersionParser.parse(GpuVendor.AMD, GraphicsBackend.VULKAN, "1.3.296 AMD proprietary driver 24.12.1 (AMD proprietary shader compiler)").known());
 		assertFalse(DriverVersionParser.parse(GpuVendor.INTEL, GraphicsBackend.VULKAN, "1.3.296 Intel Corporation 101.5595").known());
