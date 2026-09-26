@@ -296,4 +296,59 @@ Source: docs/research/v0.4/external-review.md (an outside model's read, each cla
 ---
 
 ## Amendments from the plan review
-(To be written after docs/v0.4/plan-review.md. These will override the body where they conflict.)
+Source: docs/v0.4/plan-review.md (4 H, 11 M, 13 L; every finding accepted with the reviewer's preferred fix unless noted). **These override the body where they conflict.**
+
+### WS-0 (item 1)
+- WS0-M1 (done in WS-0): snapshot-introduced breaks use `//? if >=26.4-alpha {` (Stonecutter sorts `pre`/`rc` below `snapshot`, so `>=26.4-snapshot-1` misses 26.4-pre-N/rc-N); tools/MC_VERSIONS.md says so. Follow-up: tools/add_mc_version.py's printed checklist still says `>=<mc>`: change it to `>=<base>-alpha` for pre-release-introduced breaks (coordinator follow-up branch).
+
+### WS-K (contracts)
+- K-M1: every new `Condition` field is an adapter-vetted type (Integer/Long, List<String>, Map<String,String>; numbers inside maps parsed by the evaluator, UNKNOWN on a bad value) so a malformed value poisons only its condition, never the whole document. Stutter shares are whole percent, rates ×10. A ConditionAdapterFactoryTest case per new key with a wrong-typed value.
+- K-L1: core/rules is pinned once under `v030/` (byte-identical to v0.2.0; `LegacyConditionFailClosedTest` and `LegacyRulesParseTest` use it), plus a pinned `SUPPORTED_FEATURES` stub (empty) for AC6.3; ws-k.md lists the pinned files and the current model classes they compile against.
+- X-M1: `AwarenessStore` and `ProfileStore` shells land in the contracts: one process-wide instance per file, a synchronized `update(UnaryOperator<JsonObject>)` that re-reads under the lock; features add typed accessors only; a two-thread test proves no lost update. Notice dismissals, the fingerprint/what's-new baseline and `acknowledgedRegressions` all go through `AwarenessStore.update`; switch labels, saves and battery-prompt state through `ProfileStore.update`.
+- X-M2 (layout): **"Tools…" replaces "Benchmark" in the footer** (count stays 8, 9 with Discard); ToolsScreen's first entry is Benchmark (BenchmarkMenuScreen), then Profiles, Stutter Doctor, JVM & memory, Benchmark history, the startup line. Below ~400 scaled px the notice line shows the message truncated (tooltip) plus one "…" button opening `NoticeScreen` (actions, dismiss, the other notices). UiGameTest: at 640×480@2 with Discard and a notice, ≥ 2 recommendation rows fully visible.
+- X-L1: README gets empty per-feature section headings (Profiles and share codes, Stutter Doctor, JVM & memory advice, RigTune's own footprint, What has been verified); each workstream fills only its own.
+
+### WS-H (item 3)
+- H-M1: **seed, don't drive.** Each feature workstream commits "written by 0.4" fixtures from its own tests under `src/test/resources/v040-written/` (WS-P: profiles.json + history.json with a switch entry; WS-A: pending.json with `projectId`/`versionId`, history.json with `modName`; WS-B: benchmarks.json with the new context fields; WS-S: stutter.json; WS-W: awareness.json, server-limits.json; WS-F: startup-times.json if item 13 ships). `downgrade-040-to-030` copies them into the instance before starting the released 0.3.0 jar; the released-jar harness (now in WS-H's Owns/Tasks; classpath: the released 0.3.0 jar, Gson 2.14.0, fabric-loader, slf4j) reads them. Phase 5 (coordinator) regenerates them from the RC and re-runs AC3.2/AC3.3.
+- P-H1 (below) extends `undo-after-restart-040`: Battery → Max FPS → restart → Undo last → Undo last ⇒ every staged and vanilla key back at its pre-Battery value; plus Undo all from the same start.
+
+### WS-A (item 2)
+- A-H1 (replaces 2d's "fold into installedProjects"): `installedProjects` is unchanged. `StagedProjects.fold` produces a separate `stagedProjects` set that **only the incompatibility checks** read (`refuseIncompatible`, `checkUpdate`), never the resolver's `seen`; a later addition that requires a staged mod keeps v0.3's behaviour (re-resolved, joined to the staged group). New AC2d.4: an addition that requires a staged mod is joined to that mod's staged group, so Undo of the first Apply drops both (or refuses), never the dependant alone.
+- A-M1: ENABLE_FILE ops also get an optional `versionId` (same rules as `projectId`); with Modrinth on, the planner fetches those versions (cached for the run) into the resolver's `installed` view marked staged, so the reverse declaration works; with Modrinth off only the forward check runs (documented).
+- A-L1: every Op copy method (`inGroup`, `withModId`, `withAttempts`, …) carries `projectId`/`versionId` (PendingActionsTest round trip through each); the fold reads the relocated view (`PendingActions.relocated`); the two call sites are `download()` and `preview()` in RealController (SPEC 2d's line numbers were off).
+- P-L1 (2c part): `modName` is untrusted (a downloaded fabric.mod.json): strip `§` (U+00A7) and control characters and cap it at 64 code points before it reaches history.json.
+
+### WS-R (rules)
+- R-L1: "fails closed" is safe only where not firing is conservative. update_rules.py refuses a v2-new key (`driverVersion`, the stutter keys, `jvm-` flags) inside a clamp entry, an `avoidWhen` or a `skipUpdateWhen` unless the rule carries `requires` (Python test). 9's wording becomes "fails closed, which is safe for advice and value entries".
+- J-M2: `-Xms`/`AlwaysPreTouch` advice is **deferred** (item 6 drops `jvm-heap-reserved` and the facts `jvm-xms-large`/`jvm-pretouch`), matching the Deferred list, unless the final jvm-gc.md measured a reason to keep it (then the coordinator amends again).
+
+### WS-P (item 4)
+- P-H1: **no same-key patch replacement.** `PendingActions.merge` is unchanged; two switches before a restart leave two ops per key, the helper applies both in order, History shows both as applied, and Undo last/all work as in 0.3.0. AC4.8 is removed; AC4.11 gains Battery → Max FPS → restart → Undo last ×2 (every key back at its pre-Battery value) and Undo all from the same start.
+- P-L1: the name sanitiser also drops `§` (added to AC4.3's list).
+- P-L2: the switch toast says "Switched to Battery; N changes apply after a restart" whenever anything was staged. Imported and saved profiles are clamped by the same rules clamps as templates (heap/DH caps) before Preview, and Preview lists each clamp ("limited to 8 for your memory").
+- X-M3: WS-P's `Recommender.settingTargets(...)` extraction lands first as a small early PR (recommend() output unchanged, golden report); WS-W applies its server cap to the output in the main-list path only. **Templates never use server limits.**
+
+### WS-S (item 5)
+- S-M1: the phase-timer injectors are `require = 0` (and `expect = 0`); a static flag set by each handler's first call; an incomplete pair turns phase attribution off (no-phase rules) and the report says "phase timing unavailable". `require = 1` stays only on the existing `logFrameDuration` hook and WS-W's packet-listener hooks. AC5.8 adds a run where the phase-timer target is missing (a test mixin config): the game starts and shows "phase timing unavailable".
+
+### WS-J (item 6)
+- J-M1: a `jvm-probed` fact is set only when the probe read the GC beans and `HotSpotDiagnosticMXBean`; every `jvm-*` flag evaluates UNKNOWN while it's absent (evaluator tests with `not`/`anyOf` over a profile without JVM facts); update_rules.py refuses `jvm-probed` in rules.
+- J-M2: see WS-R.
+
+### WS-B (item 7)
+- B-H1: **`modSetHash` is not part of comparability.** Comparable = MC version, scene, RD/SD, context. The hash feeds the "needs a rerun" marker and the change window ("Something outside RigTune changed too" when hashes differ without a matching journal change). AC7.1's "runs without modSetHash only with each other" is removed; AC7.5 stands.
+- B-L1: BENCHMARK_STALE is dismissible per latest-run id (AwarenessStore); for the marker, a resolution change under 10 % in pixel count counts as the same; comparability stays exact.
+
+### WS-W (items 8, 9)
+- W-H1 (replaces item 8's clamp and AC8.1): the server limit only **lowers a proposed increase**: with target T, current C and limit L, if T > C the target becomes min(T, max(C, L)) with the reason when capped; if C ≥ L and T ≤ C, no decrease is emitted because of the server. The notice explains ("you set 16; the server sends 10, so 10 is what you see"). The report rebuilds on JOIN and DISCONNECT. AC8.1: RD 16, limit 10 → no render-distance recommendation from the server; RD 6, target 12, limit 10 → 6 → 10 with the reason; after disconnect no server reason remains.
+- W-L1: server keys are HMAC-SHA256 with a random 16-byte salt created once and stored in the file; docs say "not stored in readable form", never "private"; the file never goes into the share report.
+- W-L2: AC8.4's citation: `TestWorldBuilder.createServer(Properties)` is in fabric-client-gametest-api-v1 6.0.2 (26.2) and 6.0.7 (26.3).
+- W-L3: HARDWARE_CHANGED counts as shown only when rendered as the top notice or cycled to; WHAT'S NEW compares against the ids the previous rules revision could produce (not the last report), so goal changes or newly installed mods don't count as "new rules".
+
+### WS-F (items 10, 13)
+- F-M1: retention is measured by (a) explicit accounting (`StutterMonitor.retainedBytes()` = ring sizes; the monitor-on/off budget asserts on it) and (b) a whole-heap delta (`MemoryMXBean` used heap after the histogram's full GC, at idle vs after opening/closing the screens 20 times, CI-calibrated tolerance). The class histogram stays as a diagnostic (a RigTune instance count growing across the 20 cycles = leak signal).
+- F-L1: AC10.4's monitor-on numbers are WS-F's after WS-S merges (a follow-up branch by WS-F, else the coordinator in Phase 5). Item 13's parts elsewhere (startup-times.json in AC3.2, the ToolsScreen startup line, AC13.2) apply "if item 13 ships".
+
+### Cross-cutting
+- X-L2: AC2m.1's "before" is the CI screenshot of feat/v0.4.0 right after WS-K merges; compare the crop of the first recommendation row.
+- X-L3: Phase 5 also covers AC2i.1 (read-only real-instance check) and AC10.5 (RC numbers in the README). Lock order in Wave A: WS-S's phase-timer smoke and WS-F's calibration go first (short, unblock decisions); WS-H batches its dev runs per scenario pair.
