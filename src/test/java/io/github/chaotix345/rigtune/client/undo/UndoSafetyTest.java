@@ -244,6 +244,22 @@ class UndoSafetyTest {
 		assertEquals(List.of("app.jar", "lib.jar"), listing());
 	}
 
+	// One Apply that added a mod and its library in two groups (a dependency staged by an earlier Apply and joined, a
+	// 0.2.0 entry): Undo last, and the dependant's rename fails.
+	@Test
+	void undoLastOfOneApplyThatAddedAModAndItsLibraryLeavesBothWhenARenameFails() throws IOException {
+		modJar(mods.resolve("lib.jar"), "lib");
+		modJar(mods.resolve("app.jar"), "app", "lib");
+		journal.record("e1", JournalEntry.APPLY, List.of(JournalChange.file(JournalChange.ENABLE, "lib", "lib.jar", JournalChange.APPLIED, "op1", "g1"),
+				JournalChange.file(JournalChange.ENABLE, "app", "app.jar", JournalChange.APPLIED, "op2", "g2")));
+
+		undoLast("e1");
+		TestExecutors.failingMovesOf(p -> p.getFileName().toString().equals("app.jar")).run(PendingActions.load(pending), pending);
+
+		neverTheDependantAlone();
+		assertEquals(List.of("app.jar", "lib.jar"), listing());
+	}
+
 	@Test
 	void undoLastTwiceInOneStartJoinsTheFirstUndosGroupSoAFailedRenameLeavesBoth() throws IOException {
 		libraryThenDependant();

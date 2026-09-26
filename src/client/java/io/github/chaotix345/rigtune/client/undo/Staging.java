@@ -249,9 +249,10 @@ public final class Staging {
 			if (lock == null) {
 				return null;
 			}
-			List<Op> kept = halfDone();
-			if (!kept.isEmpty()) {
-				return discardExcept(kept);
+			PendingActions plan = readable();
+			Set<String> halfDone = plan == null ? Set.of() : halfDoneGroups(plan);
+			if (!halfDone.isEmpty()) {
+				return discardExcept(plan, halfDone);
 			}
 			List<Op> dropped = PendingActions.discard(pendingFile, Duration.ZERO);
 			if (dropped != null) {
@@ -261,28 +262,32 @@ public final class Staging {
 		}
 	}
 
-	private List<Op> halfDone() {
-		if (!Files.exists(pendingFile)) {
-			return List.of();
-		}
+	private @Nullable PendingActions readable() {
 		try {
-			List<Op> ops = PendingActions.load(pendingFile).ops();
-			Set<String> names = new HashSet<>();
-			try (Stream<Path> files = Files.list(InstanceDirs.modsDirOf(pendingFile))) {
-				files.forEach(f -> names.add(f.getFileName().toString()));
-			}
-			Set<String> groups = PartlyApplied.groups(ops, names);
-			return ops.stream().filter(op -> op != null && op.group() != null && groups.contains(op.group())).toList();
-		} catch (IOException | RuntimeException e) {
-			RigTune.LOGGER.warn("Could not check {} for half-applied changes", pendingFile, e);
-			return List.of();
+			return Files.exists(pendingFile) ? PendingActions.load(pendingFile) : null;
+		} catch (IOException e) {
+			return null;
 		}
 	}
 
-	// The caller holds the lock.
-	private List<Op> discardExcept(List<Op> kept) throws IOException {
-		PendingActions plan = PendingActions.load(pendingFile);
-		List<Op> dropped = plan.ops().stream().filter(op -> kept.stream().noneMatch(k -> k == op || k.equals(op))).toList();
+	private Set<String> halfDoneGroups(PendingActions plan) {
+		Set<String> names = new HashSet<>();
+		try (Stream<Path> files = Files.list(InstanceDirs.modsDirOf(pendingFile))) {
+			files.forEach(f -> names.add(f.getFileName().toString()));
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.warn("Could not list the mods folder to check for half-applied changes", e);
+			return Set.of();
+		}
+		return PartlyApplied.groups(plan.ops(), names);
+	}
+
+	// The caller holds the lock. Drops every op outside the half-done groups, as unstageLocked does.
+	private List<Op> discardExcept(PendingActions plan, Set<String> halfDone) throws IOException {
+		List<Op> kept = new ArrayList<>();
+		List<Op> dropped = new ArrayList<>();
+		for (Op op : plan.ops()) {
+			(op != null && op.group() != null && halfDone.contains(op.group()) ? kept : dropped).add(op);
+		}
 		plan.withOps(kept).save(pendingFile);
 		Path planMods = InstanceDirs.modsDirOf(pendingFile);
 		for (Op op : dropped) {
