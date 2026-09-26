@@ -70,6 +70,7 @@
 	"rigtune.settings.title": "RigTune settings",
 	"rigtune.share.copied": "Copied the report to the clipboard (%s characters).",
 	"rigtune.share.unavailable": "Nothing to copy yet: the report is still being built.",
+	"rigtune.server.cap_reason": "The server sends at most %s chunks.",
 	"rigtune.header.cpu": "CPU %s · %s threads · RAM %s · Heap %s",
 	"rigtune.header.gpu": "GPU %s · %s VRAM · %s · GPU tier %s",
 	"rigtune.header.tier": "Tier %s/5 · limited by %s",
