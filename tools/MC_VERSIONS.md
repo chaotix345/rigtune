@@ -205,6 +205,32 @@ Results so far (`docs/v0.3/verification/mc-tooling/`):
 
 Tests: `tools/tests/test_mc_apidiff.py` (synthesized class files, a fake Gradle cache; no JDK needed).
 
+## Snapshot canary
+
+`.github/workflows/snapshot-canary.yml` builds and unit-tests RigTune against the newest Minecraft
+snapshot every Wednesday (05:00 UTC), so an API break shows up while the version is still a
+snapshot. It takes `latest.snapshot` from the Mojang manifest, adds it as a node with
+`add_mc_version.py --prerelease-ok` in the runner's checkout only (never committed, so build.yml's
+game-test legs, release.yml and update-rules.yml don't see it) and runs `./gradlew :<mc>:build`,
+which also compiles the game tests. It skips with a notice, and a green run, when the newest
+snapshot is the release or `add_mc_version.py` refuses it (no Fabric API build yet, another Java
+version, ...).
+
+Run it by hand: `gh workflow run snapshot-canary.yml`, or `-f mc=<id>` to test a given version.
+The schedule only fires from the copy on `main`.
+
+When a build fails it opens one issue, "Snapshot canary: RigTune fails to build against the newest
+Minecraft snapshot" (label `snapshot-canary`), with the build reports attached to the run; later
+failures comment on it and the next green run closes it. To fix it:
+
+1. Reproduce locally: `python tools/add_mc_version.py <snapshot> --prerelease-ok` and
+   `./gradlew :<snapshot>:build`. Don't commit the node.
+2. Compile the previous node's classes and run `python tools/mc_apidiff.py <release> <snapshot>`
+   (see above): it lists every member RigTune uses that is missing or changed.
+3. Handle each break with a `//? if >=<snapshot> {` block until `:<snapshot>:build` passes. Remove
+   the throwaway node, check that `./gradlew build` still passes, and commit only the source change.
+   When the release ships, rewrite the blocks as `>=<release>` (see "Version ranges").
+
 ## Hotfixes (no new node)
 
 When Mojang ships a hotfix (26.3.1) that RigTune's `~26.3` range already accepts:
