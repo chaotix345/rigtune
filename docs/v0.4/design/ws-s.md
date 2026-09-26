@@ -110,7 +110,9 @@ but it makes the stored `gcOffsetMs` exact; ≤ 1 ms once per capture start). Th
 Phase 5's evidence, research §6).
 
 ## Verification
-- Unit tests (26.2 local): 1298 → see the final report for both versions. New: GcKindTest, GcClockTest,
+- Unit tests after merging origin/feat/v0.4.0 (WS-W, WS-B, WS-F): 1445 on 26.2 and 1445 on 26.3, all green locally
+  (`./gradlew build`) and in CI (run 36227519166: java, python, rules and all three game-test legs green; StutterGameTest's
+  screenshots stutter-off, stutter-{1280x720,640x480,854x480}-scale2 and stutter-saved looked at on every leg). New: GcKindTest, GcClockTest,
   FrameRingAllocationTest (AC5.4), SpikeDetectorTest (AC5.1), AttributorTest (AC5.2, the worked example exactly),
   StutterAnalyzerTest, StutterConditionTest, StutterAdvisorTest (fixture rules) + StutterSeedScenarioTest (bundled r14
   seeds) (AC5.5), StutterStoreTest (AC5.5), StutterSummaryTest, StutterMonitorTest (hot path 0 bytes, lifecycle,
