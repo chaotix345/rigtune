@@ -22,11 +22,17 @@ matches, so WS-H's compat030 harness wasn't re-run.
   found the regression that design causes (confirmed with the coordinator): Iris 1.12 (sodium "0.10.x") and Sodium 0.10
   ticked together; the installed Iris 1.11.4's "0.9.x" refused Sodium, and Iris 1.12 went in alone. 0.3 staged both.
 - Now (488edf2) `DownloadPlanner.checkVersions` runs after the plan loop over the folder the batch leaves behind:
-  - core `VersionPins.check(jars)`: (a) every loaded mod's `depends`/`breaks` on a jar of the batch; a declaration of a jar
-    the batch replaces (the mod itself, or a mod nested in it) goes with it, and a jar only fine because of that replacement
-    relies on it; (b) every new jar's own `depends`/`breaks` (`ModJars.rangesOf`) on what will be present: another jar of
-    the batch (a jar that's only fine with it relies on it), else the loaded mod unless its top-level jar is replaced. A
-    target that won't be present, or isn't known, is left to Fabric and H1-A.
+  - core `VersionPins.check(jars, staged)`: (a) every loaded mod's `depends`/`breaks` on a jar of the batch; a declaration
+    of a jar that's replaced (the mod itself, or a mod nested in it) goes with it, and a jar only fine because of a
+    replacement in the batch relies on it; (b) every new jar's own `depends`/`breaks` (`ModJars.rangesOf`) on what will be
+    present: another top-level jar (a batch jar that's only fine with another batch jar relies on it), else the loaded mod
+    unless its top-level jar is replaced. A target that isn't a top-level jar and that one of these jars provides or nests
+    (`JarInfo`) isn't judged: Fabric picks the copy that fits (re-review H-1: a jar bundling the library it needs, next to an
+    older copy nested in another mod). A target that won't be present, or isn't known, is left to Fabric and H1-A.
+  - `staged` (re-review M-3): pending.json's enables (RealController's `stagedJarsByModId`, already a planner input) count
+    as present, a staged update replacing its mod (a staged Iris 1.12 lifts Iris 1.11's pin); they're never refused, and a
+    conflict between one of them and the loaded mods isn't this batch's doing. A staged Nvidium refuses a later Sodium
+    update past its pin. A batch jar relying on a staged one is allowed (separate groups: see residuals).
   - A group with a refused jar is dropped with its downloads; every recommendation in it gets a localised line (never a
     silent drop); repeated until nothing is refused (what relied on a dropped group is judged against the loaded version
     next time). Reliance pairs are then joined into one all-or-nothing group.
@@ -37,28 +43,38 @@ matches, so WS-H's compat030 harness wasn't re-run.
   (provides aliases with the provider's version); a matcher for raw ranges with `VersionPredicate.parse`. The range shown for
   an installed pin is read lazily from the declaring mod's own fabric.mod.json (`findPath`, capped), else Fabric's form.
   A version Fabric can't parse is fine for no depends.
-- Keys (rigtune.download.*): `pinned`, `pinned_breaks` (an installed mod's), `pinned_ticked`, `pinned_breaks_ticked` (a ticked
-  jar's, on the other side of a pair), `needs_version`, `breaks_version` (the jar's own, on an installed mod),
-  `needs_version_ticked`, `breaks_version_ticked` (on another ticked jar). Text from a downloaded jar (id, version, ranges)
-  goes through `VersionPins.shown` = `ModJars.sanitizeName` (P-L1).
+- Keys (rigtune.download.*), each naming the declaring mod first (re-review L-1: a dropped group's other items show the same
+  line, so it can't say "it"): `pinned`, `pinned_breaks` (an installed mod's declaration), `pinned_batch`,
+  `pinned_breaks_batch` (another jar of the batch's, shown on the target's item; "would be installed too", since it may be a
+  dependency nobody ticked), `pinned_staged`, `pinned_breaks_staged` (a staged jar's), `needs_version`, `breaks_version` (a
+  jar's own, on an installed mod), `needs_version_batch`, `breaks_version_batch`, `needs_version_staged`,
+  `breaks_version_staged`. A jar with no name shows the loaded mod's name for its id. Text from a downloaded jar (id,
+  version, ranges) goes through `VersionPins.shown` = `ModJars.sanitizeName` (P-L1).
 - Tests: VersionPinsTest, FabricPinsTest (stand-in containers, Fabric's real predicates: Iris "0.9.x", Nvidium "0.9.2", arrays,
   breaks, nested, provides alias, unparseable), DownloadPlannerTest: the coordinator's three cases (Sodium 0.10 + Iris 1.12 in
   either tick order: both staged, one group; Sodium 0.10 alone with Iris 1.11.4 installed: refused naming Iris; Install
   Nvidium + Update Sodium past its pin: both refused, each naming the other, and Nvidium alone against the installed Sodium),
-  Iris 1.12 alone, a chain (Sodium refused on Nvidium's pin, so Iris 1.12 is refused too), an addition's own `breaks`.
+  Iris 1.12 alone, a chain (Sodium refused on Nvidium's pin, so Iris 1.12 is refused too), an addition's own `breaks`, a
+  breaks pair inside the batch, an addition joining the update it needs, a jar bundling its library next to an older nested
+  copy, a staged Nvidium refusing a later Sodium update, a staged Iris 1.12 lifting the installed Iris's pin. ModJarsTest
+  covers `rangesOf`/`versionOf`; FabricPinsTest the real minecraft/java version strings.
 - Residuals: the dry run (Preview) knows no jar's version, so it checks no range and can list a download Apply then refuses
-  (the refusal is in Apply's status line); ranges on an id the new jar provides or nests aren't matched; a target a new jar
-  requires that won't be present at all is left to Fabric (H1-A covers Modrinth-level requirements); mods staged for
-  disabling in pending.json, or disabled in the same Apply, still count as present (over-blocking only).
+  (the refusal is in Apply's status line); declarations on an id a new jar provides or nests aren't matched against it, and
+  the nested mods' own declarations inside a new jar aren't read (re-review L-2); a target a new jar requires that won't be
+  present at all is left to Fabric (H1-A covers Modrinth-level requirements); mods staged for disabling in pending.json, or
+  disabled in the same Apply, still count as present (over-blocking only); a batch jar that relies on a staged jar is in
+  another all-or-nothing group, so a helper failure of the earlier group could split them (as with any two Applies); range
+  text over 64 characters is cut in the message (re-review L-3); each jar's fabric.mod.json is read a few times per plan
+  (L-6, small).
 
 ## H1-A: an update whose new version requires a project that isn't installed
 - `DependencyResolver.missingRequirements(update, installedProjects)`: required projects of the new version that aren't
   installed and that the version it replaces didn't already require (the game started without those being known here: nested
   in another mod, or a jar Modrinth doesn't know). Version-only dependencies don't count.
-- DownloadPlanner: a project an earlier item of this batch staged is joined; otherwise the update waits once: the ticked
-  additions whose own project it needs are planned next (review M-1: the other additions still see the update, A-H1), then
-  the update joins the group that staged it; a project only an addition's dependency brings makes it wait for all
-  additions. Else refused before the download: `missing_dependency` ("its new version needs %s, which isn't installed"), or
+- DownloadPlanner: a project an earlier item of this batch staged is joined; otherwise the update waits once. When ticked
+  additions' own projects cover everything it needs, they're planned first among the additions, after the remaining
+  updates, then the update, which joins their groups (review M-1, re-review M-1: the other additions still see every update,
+  A-H1). Otherwise (a project only an addition's dependency brings) it waits for all additions (re-review M-2). Else refused before the download: `missing_dependency` ("its new version needs %s, which isn't installed"), or
   `missing_dependency_staged` when only an earlier Apply staged it (another all-or-nothing group: update after restarting).
 - ids and errors keep the planner's order (updates first) whatever the processing order, since PreviewDownloads matches
   errors by position (PreviewDownloadsTest checks a waiting update and a failed addition keep their own reasons).
@@ -81,7 +97,18 @@ matches, so WS-H's compat030 harness wasn't re-run.
 
 ## Other review fixes
 - L-2: a failed recommendation's downloads that nothing else stages are deleted (they used to be left as
-  `*.jar.rigtune-pending` when a later dependency failed).
+  `*.jar.rigtune-pending` when a later dependency failed). A download still used by a surviving op or by a pending.json enable
+  (`stagedJars`, which lists ops with a mod id: every enable RigTune stages) is kept (re-review L-4 notes the exact-string
+  match; the paths come from the same pending.json).
+
+## Self-review
+- Review 1 (0132341..6737008): 1 high (the forward-only H2 regression above), 3 medium (a waiting update invisible to
+  additions, a staged requirement refused as "isn't installed", unsanitised jar text), 5 low: all high/medium fixed with
+  tests; L-2, L-5 fixed; L-1 (topLevelIds' residual, kept per the coordinator), L-3, L-4 documented.
+- Review 2 (6737008..dd1e28b): 1 high (a jar judged by an older nested copy of the library it bundles), 3 medium (provider
+  placement before later updates, partial provider coverage, staged jars invisible), 6 low: all high/medium fixed with tests;
+  L-1 (message subject) fixed by naming the declaring mod; L-2, L-3, L-4, L-6 documented; L-5 (`problem()` only used by
+  tests) kept as a one-jar convenience.
 
 ## RealController (hotspot) edits
 - `download()`: `DownloadPlanner.topLevelIds(mods)`; `FabricPins.loaded()` as the planner's pins; `.lookedUp(settings.modrinthAllowed(),

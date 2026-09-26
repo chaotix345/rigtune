@@ -170,11 +170,22 @@ class FabricPinsTest {
 		VersionPins.Jar iris = new VersionPins.Jar("iris", "Iris", "1.12.0", "iris", Map.of("sodium", List.of("0.10.x"), "fabric", List.of(">=0.150")), Map.of());
 		VersionPins.Jar old = new VersionPins.Jar("iris", "Iris", "1.11.5", "iris", Map.of("sodium", List.of("0.9.x"), "fabric", List.of(">=0.170")), Map.of());
 
-		assertEquals(Map.of(0, "it needs Sodium 0.10.x, not the installed 0.9.3+mc26.2"), english(pins.check(List.of(iris))));
-		assertEquals(Map.of(0, "it needs Fabric API >=0.170, not the installed 0.161.0+26.2"), english(pins.check(List.of(old))));
+		assertEquals(Map.of(0, "Iris needs Sodium 0.10.x, not the installed 0.9.3+mc26.2"), english(pins.check(List.of(iris))));
+		assertEquals(Map.of(0, "Iris needs Fabric API >=0.170, not the installed 0.161.0+26.2"), english(pins.check(List.of(old))));
 		assertTrue(FabricPins.matches(List.of("0.8.x", "0.9.x"), "0.9.3+mc26.2"));
 		assertFalse(FabricPins.matches(List.of("0.9.2"), "0.9.3"));
 		assertFalse(FabricPins.matches(List.of("0.9.x"), ""));
+	}
+
+	// The built-in mods Fabric lists (minecraft, java) with their real version strings.
+	@Test
+	void minecraftAndJavaAreJudgedWithTheirOwnVersions() {
+		VersionPins pins = pins(mod("minecraft", "Minecraft", "26.2", List.of(), null, null), mod("java", "OpenJDK 64-Bit Server VM", "25", List.of(), null, null));
+		VersionPins.Jar fine = new VersionPins.Jar("x", "X", "1.0.0", null, Map.of("minecraft", List.of("~26.2"), "java", List.of(">=21")), Map.of());
+		VersionPins.Jar tooNew = new VersionPins.Jar("x", "X", "1.0.0", null, Map.of("minecraft", List.of(">=26.3")), Map.of());
+
+		assertEquals(Map.of(), english(pins.check(List.of(fine))));
+		assertEquals(Map.of(0, "X needs Minecraft >=26.3, not the installed 26.2"), english(pins.check(List.of(tooNew))));
 	}
 
 	private static Map<Integer, String> english(VersionPins.Outcome outcome) {

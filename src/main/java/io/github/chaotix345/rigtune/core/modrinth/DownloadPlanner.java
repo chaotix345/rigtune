@@ -171,20 +171,28 @@ public final class DownloadPlanner {
 				}
 			} catch (WaitForAdditions w) {
 				waited.add(at);
-				// The additions that bring what it needs go next, then the update, so the other additions are still judged with
-				// the update in the batch (A-H1). A project only an addition's dependency brings: it waits for all of them.
+				// When ticked additions install every project it needs, they go first among the additions, then the update, so
+				// the other additions are still judged with the update in the batch and the remaining updates keep their place
+				// (A-H1). A project only an addition's dependency brings: the update waits for all of them.
 				List<Integer> providers = new ArrayList<>();
+				Set<String> provided = new HashSet<>();
 				for (int later : queue.subList(q + 1, queue.size())) {
-					if (ordered.get(later).action() instanceof Action.AddMod add && w.missing.contains(rootProject(add))) {
+					String project = ordered.get(later).action() instanceof Action.AddMod add ? rootProject(add) : null;
+					if (project != null && w.missing.contains(project)) {
 						providers.add(later);
+						provided.add(project);
 					}
 				}
-				if (providers.isEmpty()) {
+				if (!provided.containsAll(w.missing)) {
 					queue.add(at);
 				} else {
 					queue.subList(q + 1, queue.size()).removeAll(providers);
-					queue.addAll(q + 1, providers);
-					queue.add(q + 1 + providers.size(), at);
+					int firstAddition = q + 1;
+					while (firstAddition < queue.size() && !(ordered.get(queue.get(firstAddition)).action() instanceof Action.AddMod)) {
+						firstAddition++;
+					}
+					queue.addAll(firstAddition, providers);
+					queue.add(firstAddition + providers.size(), at);
 				}
 				continue;
 			} catch (IOException | RuntimeException e) {
@@ -215,6 +223,12 @@ public final class DownloadPlanner {
 			}
 		}
 		return new Result(List.copyOf(batch.ops), ids, errors, Map.copyOf(opIds), errorTexts);
+	}
+
+	private VersionPins.Jar jarOf(Path jar, String modId, String replaces) {
+		JarInfo info = JarInfo.read(jar);
+		return new VersionPins.Jar(modId, ModJars.nameOf(jar), versionOf.apply(jar), replaces, info == null ? Set.of() : info.provides(),
+				ModJars.rangesOf(jar, "depends"), ModJars.rangesOf(jar, "breaks"));
 	}
 
 	// A failed recommendation's downloads that nothing else stages are deleted (review of WS-G1, L-2).
@@ -443,14 +457,19 @@ public final class DownloadPlanner {
 		}
 		Map<String, VersionPins.Jar> read = new HashMap<>();
 		for (NewJar jar : batch.jars) {
-			read.put(jar.opId(), new VersionPins.Jar(jar.modId(), ModJars.nameOf(jar.path()), versionOf.apply(jar.path()), jar.replaces(),
-					ModJars.rangesOf(jar.path(), "depends"), ModJars.rangesOf(jar.path(), "breaks")));
+			read.put(jar.opId(), jarOf(jar.path(), jar.modId(), jar.replaces()));
 		}
+		// What earlier Applies staged (pending.json's enables) counts as present: a staged update replaces its mod too.
+		Map<String, VersionPins.Jar> stagedJars = new LinkedHashMap<>();
+		batch.stagedJars.forEach((modId, path) -> stagedJars.put(modId, jarOf(Path.of(path), modId, modId)));
 		Map<String, Text> droppedGroups = new LinkedHashMap<>();
 		Map<String, Text> jarWhy = new HashMap<>();
 		while (true) {
 			List<NewJar> live = batch.jars.stream().filter(jar -> !droppedGroups.containsKey(batch.groupOf(jar.opId()))).toList();
-			VersionPins.Outcome outcome = pins.check(live.stream().map(jar -> read.get(jar.opId())).toList());
+			Set<String> liveIds = new HashSet<>();
+			live.forEach(jar -> liveIds.add(jar.modId()));
+			List<VersionPins.Jar> stillStaged = stagedJars.entrySet().stream().filter(e -> !liveIds.contains(e.getKey())).map(Map.Entry::getValue).toList();
+			VersionPins.Outcome outcome = pins.check(live.stream().map(jar -> read.get(jar.opId())).toList(), stillStaged);
 			if (outcome.refused().isEmpty()) {
 				outcome.reliances().forEach(pair -> batch.merge(batch.groupOf(live.get(pair[0]).opId()), batch.groupOf(live.get(pair[1]).opId())));
 				break;

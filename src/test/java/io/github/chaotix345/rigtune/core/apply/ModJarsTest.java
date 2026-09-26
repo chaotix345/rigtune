@@ -125,4 +125,17 @@ class ModJarsTest {
 		assertNull(ModJars.sanitizeName(null));
 		assertNull(ModJars.sanitizeName("\u00a7\n"));
 	}
+
+	// docs/v0.4/SPEC.md 2o, H2: a fabric.mod.json section of ranges, a string or an array; empty when there is none.
+	@Test
+	void rangesOfReadsStringsAndArrays(@org.junit.jupiter.api.io.TempDir Path dir) throws IOException {
+		com.google.gson.JsonObject json = com.google.gson.JsonParser.parseString(
+				"{\"id\":\"iris\",\"version\":\"1.12.0\",\"depends\":{\"sodium\":[\"0.10.x\",\"0.11.x\"],\"minecraft\":\"~26.2\"}}").getAsJsonObject();
+		Path jar = TestJars.modJar(dir.resolve("iris.jar"), json);
+
+		assertEquals(java.util.Map.of("sodium", java.util.List.of("0.10.x", "0.11.x"), "minecraft", java.util.List.of("~26.2")), ModJars.rangesOf(jar, "depends"));
+		assertEquals(java.util.Map.of(), ModJars.rangesOf(jar, "breaks"));
+		assertEquals("1.12.0", ModJars.versionOf(jar));
+		assertEquals(java.util.Map.of(), ModJars.rangesOf(dir.resolve("missing.jar"), "depends"));
+	}
 }

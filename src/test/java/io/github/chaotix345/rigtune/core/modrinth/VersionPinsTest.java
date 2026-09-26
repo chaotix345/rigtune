@@ -134,6 +134,6 @@ class VersionPinsTest {
 		assertEquals(Set.of(List.of(0, 1), List.of(1, 0)), outcome.reliances().stream().map(pair -> List.of(pair[0], pair[1])).collect(Collectors.toSet()));
 		// Without Iris's update, Sodium 0.10 is refused; without Sodium's, Iris 1.12 is.
 		assertEquals("Iris, which is installed, needs Sodium 0.9.x, not 0.10.0", pins.check(List.of(sodium)).refused().get(0).english());
-		assertEquals("it needs Sodium 0.10.x, not the installed 0.9.3", pins.check(List.of(iris)).refused().get(0).english());
+		assertEquals("Iris needs Sodium 0.10.x, not the installed 0.9.3", pins.check(List.of(iris)).refused().get(0).english());
 	}
 }
