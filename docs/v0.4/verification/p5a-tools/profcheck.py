@@ -37,11 +37,13 @@ for name, prun, plabel, srun, slabel in STEPS:
     ok = bad = 0
     lines = []
     for key, (old, new, part) in sorted(pr.items()):
-        got = settings.get(key)
+        cands = [k for k in settings if k == key or k.endswith('.' + key)]
+        full = cands[0] if len(cands) == 1 else key
+        got = settings.get(full)
         match = got is not None and str(got) == str(new)
         ok += match
         bad += not match
-        lines.append('| %s | %s | %s | %s | %s | %s |\n' % (key, part, old, new, got, 'ok' if match else '**MISMATCH**'))
+        lines.append('| %s | %s | %s | %s | %s | %s |\n' % (full, part, old, new, got, 'ok' if match else '**MISMATCH**'))
     md.append('## %s: switch in %s, checked after the restart in %s: %d of %d keys match%s\n\n' % (name, prun, srun, ok, ok + bad,
                                                                                                   '' if bad == 0 else ', %d MISMATCH' % bad))
     md.append('switch message: %s\n\n' % p['switch'][plabel])

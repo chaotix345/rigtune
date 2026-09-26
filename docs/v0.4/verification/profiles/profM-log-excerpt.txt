@@ -1,0 +1,11 @@
+[23:46:20] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, sleep:3, vanillaVideo, sleep:2, shot:sodium-video-first, click:Performance, sleep:2, shot:sodium-performance, open:title, reflectScreen:com.seibel.distanthorizons.common.wrappers.gui.GetConfigScreen#getScreen, sleep:2, shot:dh-config, quit]
+[23:46:25] [Render thread/INFO]: [P5A] 4.0s title screen at JVM uptime 11926 ms
+[23:46:26] [Render thread/INFO]: [P5A] 4.5s report ready (online false, rules r15 bundled)
+[23:46:29] [Render thread/INFO]: [P5A] 7.5s opened vanilla video settings -> net.minecraft.client.gui.screens.options.VideoSettingsScreen
+[23:46:31] [IO-Worker-1/INFO]: [P5A] 9.6s screenshot sodium-video-first: Saved screenshot as p5a-profM-sodium-video-first.png
+[23:46:31] [Render thread/INFO]: [P5A] 10.1s click 'Quality & Performance' (StringWidget, active false)
+[23:46:33] [IO-Worker-1/INFO]: [P5A] 12.2s screenshot sodium-performance: Saved screenshot as p5a-profM-sodium-performance.png
+[23:46:34] [Render thread/INFO]: [P5A] 12.6s opened TitleScreen
+[23:46:34] [Render thread/INFO]: [P5A] 12.7s opened com.seibel.distanthorizons.common.wrappers.gui.classicConfig.DhConfigScreen
+[23:46:36] [IO-Worker-1/INFO]: [P5A] 14.8s screenshot dh-config: Saved screenshot as p5a-profM-dh-config.png
+[23:46:36] [Render thread/INFO]: [P5A] 15.2s quitting

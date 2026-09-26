@@ -21,4 +21,39 @@ the save latency itself is noted in `../P5A-FINDINGS.md` (P5A-F4, low).
 
 ## (b) 3 interleaved pairs, G1 default vs Aikar's set, capped at 144 FPS
 
-(filled in below)
+**Method.** Production 26.2 client + Sodium 0.9.2 + the RC jar on one scratch instance: RD 16, SD 12, `maxFps:144`
+(26.2 rounds it to its 10-FPS step: **the effective limit logged was 140**), VSync off, inactivity limit "minimized"
+(no AFK throttle), 1280×720 window. The product's benchmark always uncaps the frame rate, so the capped measurement is
+the driver's own (`capped:4:20:10`): in RigTune's benchmark world (fixed seed, camera at 0,192), wait 20 s for
+terrain, turn the camera for a 10 s warm-up, then record every frame (`DebugScreenOverlay.logFrameDuration`, the same hook
+RigTune records from) for 4 sweeps × 20 s = 80 s while turning 360° per sweep, the protocol of jvm-gc.md §4.1/§4.3.
+Stats use RigTune's `FrameStats.of` (1 % low = mean of the slowest 1 %). GC counts/times are the GC beans' deltas over
+the recorded window; `pairs/<run>-gc.log` is `-Xlog:gc,safepoint` for the whole run.
+Configurations: **G1 default** `-Xmx4G`; **Aikar's set** = `-Xms4G -Xmx4G` + the 19 flags + 2 markers exactly as
+research `cfg/aikar.txt` (jvm-gc.md §4.1). Order: a discarded warm-up (G1, it created the world), then
+g1, aikar, aikar, g1, g1, aikar (one client at a time, the lock released between runs).
+
+| run | frames | avg FPS | 1% low FPS | p99 ms | max ms | frames > 8 ms | > 16.7 ms | GC in window (bean deltas) | heap committed MB |
+|---|---|---|---|---|---|---|---|---|---|
+| jvm-g1-1 | 11128 | 139.09 | 125.84 | 7.70 | 10.13 | 21 | 0 | Young: 4, 9 ms; Concurrent: 2, 5 ms | 1044 |
+| jvm-aikar-1 | 11131 | 139.13 | 127.21 | 7.62 | 8.95 | 23 | 0 | Young: 1, 4 ms | 4096 |
+| jvm-aikar-2 | 11134 | 139.16 | 125.80 | 7.66 | 12.24 | 25 | 0 | Young: 1, 4 ms | 4096 |
+| jvm-g1-2 | 11128 | 139.09 | 126.09 | 7.75 | 8.29 | 24 | 0 | Young: 3, 10 ms; Concurrent: 2, 5 ms | 976 |
+| jvm-g1-3 | 11129 | 139.11 | 125.71 | 7.71 | 13.48 | 21 | 0 | Young: 4, 9 ms; Concurrent: 2, 7 ms | 898 |
+| jvm-aikar-3 | 11131 | 139.15 | 126.62 | 7.69 | 8.24 | 19 | 0 | Young: 1, 4 ms | 4096 |
+| (jvm-warm, discarded) | 11129 | 139.11 | 126.16 | 7.64 | 11.23 | 22 | 0 | Young: 5, 14 ms; Concurrent: 4, 7 ms | 1100 |
+
+| | G1 default (n = 3) | Aikar's set (n = 3) |
+|---|---|---|
+| 1 % low FPS, mean (range) | **125.88** (125.71-126.09) | **126.54** (125.80-127.21) |
+| frames > 8 ms, total (per run) | **66** (21, 24, 21) | **67** (23, 25, 19) |
+| p99 frame ms, mean | 7.72 | 7.66 |
+| average FPS, mean | 139.10 | 139.15 |
+| frames > 16.7 ms | 0 | 0 |
+| heap committed | 0.9-1.0 GB | 4.0 GB (all of `-Xmx`) |
+
+**Verdict: PASS.** The default's 1 % low is 0.5 % below Aikar's set (125.88 vs 126.54), inside the runs' own spread
+(Aikar 125.80-127.21 overlaps every G1 run) and far inside item 7's noise floor (2 × max(cv or 5 %, …) ≥ 10 %). Frames
+over 8 ms: 66 for the default vs 67 for Aikar's set, so the default is no worse. It matches jvm-gc.md §4.3's capped G1
+row (139 / 126 / p99 7.63 / 23 frames > 8 ms) and the `jvm-server-flags` wording ("the same frame rates and 1 % lows as
+Java's defaults", "all 4096 MB of a 4 GB allocation"): no wording change needed.

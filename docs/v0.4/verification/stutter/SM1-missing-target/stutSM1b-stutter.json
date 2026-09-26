@@ -1,0 +1,75 @@
+{
+ "formatVersion": 1,
+ "sessions": [
+  {
+   "startedAt": "2026-09-26T14:01:11Z",
+   "source": "monitor",
+   "mc": "26.2",
+   "collector": "G1",
+   "heapMaxMb": 4096,
+   "sessionSeconds": 49.1,
+   "gameplaySeconds": 32.0,
+   "frames": 3819,
+   "avgFps": 119.3,
+   "onePercentLowFps": 100.6,
+   "histogramCounts": [
+    0,
+    893,
+    2924,
+    2,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "histogramTimeMs": [
+    0,
+    7442,
+    24534,
+    45,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "spikes": {
+    "minor": 1,
+    "major": 0,
+    "severe": 0,
+    "freeze": 0
+   },
+   "lostMs": 16.6,
+   "causes": {
+    "gc": 0.3,
+    "unknown": 0.7
+   },
+   "tags": {
+    "afterTeleport": 1
+   },
+   "worst": [
+    {
+     "t": 10.2,
+     "ms": 25.1,
+     "baseMs": 8.5,
+     "causes": [
+      "gc:medium",
+      "afterTeleport:context"
+     ]
+    }
+   ],
+   "facts": {
+    "liveSetPct": 12,
+    "fullGcs": 0,
+    "stalls": 0,
+    "explicitGcs": 0,
+    "gcOffsetMs": 17.1
+   },
+   "advice": [],
+   "enoughData": false,
+   "phaseTiming": false,
+   "hitches": 1
+  }
+ ]
+}
