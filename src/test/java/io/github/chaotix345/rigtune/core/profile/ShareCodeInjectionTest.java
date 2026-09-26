@@ -87,9 +87,12 @@ class ShareCodeInjectionTest {
 			}
 		}
 		assertEquals(8, recs.size(), "every value takes part: " + recs);
-		byte[] out = (vanilla + new String(Files.readAllBytes(sodium), StandardCharsets.UTF_8) + Files.readString(toml, StandardCharsets.UTF_8)
-				+ Files.readString(properties, StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
-		return out;
+		// java.util.Properties.store heads the file with a comment holding the time it was written: it depends on the clock,
+		// not on the code, so it's left out of the comparison.
+		String iris = Files.readString(properties, StandardCharsets.ISO_8859_1).lines().filter(line -> !line.startsWith("#"))
+				.collect(java.util.stream.Collectors.joining(System.lineSeparator()));
+		return (vanilla + new String(Files.readAllBytes(sodium), StandardCharsets.UTF_8) + Files.readString(toml, StandardCharsets.UTF_8) + iris)
+				.getBytes(StandardCharsets.UTF_8);
 	}
 
 	private static Path copy(String resource, Path to) throws IOException {
