@@ -297,6 +297,17 @@ tasks.register("runProductionClientGameTest", net.fabricmc.loom.task.prod.Client
 	}
 }
 
+// v0.4 (docs/v0.4/SPEC.md 6, AC6.6): extra JVM arguments for a LOCAL game-test run, split on whitespace, e.g.
+// ./gradlew :26.2:runProductionClientGameTest -PgametestJvmArgs="-XX:+UseZGC -XX:+ZGenerational -Dusing.aikars.flags=x"
+// (JvmGameTest then checks that the notes come from the running JVM). CI never passes it.
+def gametestJvmArgs = providers.gradleProperty("gametestJvmArgs").map { it.trim().split(/\s+/).findAll { !it.isEmpty() } }.orElse([])
+tasks.named("runProductionClientGameTest") {
+	jvmArgs.addAll(gametestJvmArgs)
+}
+tasks.matching { it.name == "runClientGameTest" }.configureEach {
+	jvmArgumentProviders.add({ gametestJvmArgs.get() } as CommandLineArgumentProvider)
+}
+
 // Self-update end-to-end harness (tools/e2e/README.md), never part of the shipped jar or of `build`. The fake Modrinth
 // server is a JDK-only tool run as `java FakeModrinth.java`; the unit tests compile it from tools/e2e/java.
 sourceSets.test.java.srcDir(rootProject.file("tools/e2e/java"))
