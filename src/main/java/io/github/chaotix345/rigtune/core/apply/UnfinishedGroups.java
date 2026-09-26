@@ -6,17 +6,19 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
-// The renames of each group a helper run started but hasn't finished (docs/v0.4/design/ws-g3.md, audit H4). A group's
-// entry is written just before its first rename, removed once the group is complete or rolled back, and stays when the
-// helper is killed or a rollback fails, so the next run knows exactly which renames to finish or put back. A new file in
-// config/rigtune/helper/ (HelperLauncher keeps it): 0.1.0-0.3.0 never read it, and their HelperLauncher deletes it.
-// Helper-safe (core and Gson only) and best effort: an unreadable file counts as empty, and a failed write loses only
-// the record, never the group's own renames.
+// The renames of each group a helper run started (docs/v0.4/design/ws-g3.md, audit H4). A group's entry is written just
+// before its first rename and stays until last-apply.json holds the group's results; one left half-applied (a kill, a
+// failed rollback) stays until a later run finishes it or rolls it back. So the next run knows exactly which renames to
+// finish or put back, and what a redo reports as done. A new file in config/rigtune/helper/ (HelperLauncher keeps it):
+// 0.1.0-0.3.0 never read it, and their HelperLauncher deletes it. Helper-safe (core and Gson only) and best effort: an
+// unreadable file counts as empty, and a failed write loses only the record (retried at the next change), never a rename.
 final class UnfinishedGroups {
 	static final String FILE_NAME = "unfinished-groups.json";
 
@@ -32,7 +34,9 @@ final class UnfinishedGroups {
 
 	private final Path file;
 	private final Map<String, List<Rename>> groups = new LinkedHashMap<>();
-	private boolean unreadable;
+	private final Set<String> finished = new HashSet<>();
+	// The file doesn't hold `groups`: it was unreadable, or a write failed.
+	private boolean dirty;
 
 	private UnfinishedGroups(Path file) {
 		this.file = file;
@@ -56,32 +60,56 @@ final class UnfinishedGroups {
 			}
 		} catch (IOException | RuntimeException e) {
 			ApplyHelper.log("Could not read " + out.file + ": " + e);
-			out.unreadable = true;
+			out.dirty = true;
 		}
 		return out;
 	}
 
-	List<Rename> of(String group) {
-		return group == null ? List.of() : groups.getOrDefault(group, List.of());
+	// Every recorded rename, whichever group recorded it: staging may have moved an op into another group since.
+	List<Rename> all() {
+		return groups.values().stream().flatMap(List::stream).toList();
 	}
 
+	// A pass's renames for `group`, replacing any recorded for the same ops elsewhere.
 	void put(String group, List<Rename> renames) {
-		if (group != null && !renames.equals(groups.get(group))) {
-			groups.put(group, List.copyOf(renames));
+		finished.remove(group);
+		Set<String> ops = new HashSet<>();
+		renames.forEach(r -> ops.add(r.op()));
+		boolean changed = !renames.equals(groups.get(group));
+		for (Map.Entry<String, List<Rename>> e : groups.entrySet()) {
+			if (!e.getKey().equals(group) && e.getValue().stream().anyMatch(r -> r.op() != null && ops.contains(r.op()))) {
+				e.setValue(e.getValue().stream().filter(r -> r.op() == null || !ops.contains(r.op())).toList());
+				changed = true;
+			}
+		}
+		groups.values().removeIf(List::isEmpty);
+		groups.put(group, List.copyOf(renames));
+		if (changed || dirty) {
 			save();
 		}
 	}
 
-	void remove(String group) {
-		if (group != null && groups.remove(group) != null) {
-			save();
+	// The group ended with its renames all done or all put back: its entry goes once last-apply.json says so (prune).
+	void finish(String group) {
+		if (group != null && groups.containsKey(group)) {
+			finished.add(group);
 		}
 	}
 
-	// Entries of groups no longer in the plan (finished by an older helper, or discarded in game) are stale, and so is
-	// an unreadable file.
-	void retainOnly(Collection<String> live) {
-		if (groups.keySet().retainAll(live) || unreadable) {
+	// After last-apply.json is written: drops the finished groups and the renames of ops no longer in the plan (finished
+	// by an older helper, discarded in game, or replaced by a newer staged op).
+	void prune(Collection<String> planOpIds) {
+		boolean changed = groups.keySet().removeAll(finished);
+		finished.clear();
+		for (Map.Entry<String, List<Rename>> e : groups.entrySet()) {
+			List<Rename> kept = e.getValue().stream().filter(r -> r.op() == null || planOpIds.contains(r.op())).toList();
+			if (kept.size() != e.getValue().size()) {
+				e.setValue(kept);
+				changed = true;
+			}
+		}
+		groups.values().removeIf(List::isEmpty);
+		if (changed || dirty) {
 			save();
 		}
 	}
@@ -90,15 +118,15 @@ final class UnfinishedGroups {
 		try {
 			if (groups.isEmpty()) {
 				Files.deleteIfExists(file);
-				unreadable = false;
-				return;
+			} else {
+				List<Entry> entries = new ArrayList<>();
+				groups.forEach((group, renames) -> entries.add(new Entry(group, renames)));
+				AtomicFiles.writeString(file, PendingActions.GSON.toJson(new Doc(entries)));
 			}
-			List<Entry> entries = new ArrayList<>();
-			groups.forEach((group, renames) -> entries.add(new Entry(group, renames)));
-			AtomicFiles.writeString(file, PendingActions.GSON.toJson(new Doc(entries)));
-			unreadable = false;
+			dirty = false;
 		} catch (IOException | RuntimeException e) {
 			ApplyHelper.log("Could not update " + file + ": " + e);
+			dirty = true;
 		}
 	}
 }

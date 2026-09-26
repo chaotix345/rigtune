@@ -10,23 +10,32 @@ child-JVM runs pass). No pending.json/last-apply.json shape change, no new op ty
 ## H4: no group is left half-applied
 
 **In one run.** Each op of a group is tried once per pass. When one fails, the rest are skipped and every rename of the
-pass is rolled back at once (the rollback keeps its full retry budget). Only then is the whole group retried, under one
-group-level RetryState (the same policies as before: sharing violation 300 ms doubling to 5 s over ~30 s, anything else
-`attempts` × delay). Between two passes the group is untouched. The half-applied window is now only the time between two
-back-to-back renames, plus a rollback. Before, it was the whole in-place retry of the failing op (up to ~30 s). A group
-whose first op fails behaves as before (nothing to roll back, the same sleeps and the same "Gave up after N tries").
+pass is rolled back at once (the rollback keeps its full retry budget). Only then is the whole group retried, under the
+failing op's own RetryState (the same policies as before: sharing violation 300 ms doubling to 5 s over ~30 s, anything
+else `attempts` × delay; one state per op, so a quick failure of one op never cuts another's sharing budget). Between two
+passes the group is untouched. The half-applied window is now only the time between two back-to-back renames, plus a
+rollback. Before, it was the whole in-place retry of the failing op (up to ~30 s). A group whose first op fails behaves
+as before (nothing to roll back, the same sleeps and the same "Gave up after N tries").
 
-**Across runs: the record.** Just before a pass of a group with two or more ops renames anything, the helper records that
-pass's renames (op id, from, to; a disable's `.disabled` name is decided then and used for the move) in
-`config/rigtune/helper/unfinished-groups.json`, one entry per group id. The entry is removed when the group is complete
-or fully rolled back, or when the group is refused or dropped. It stays when the helper is killed or a rollback fails.
-Entries of groups no longer in pending.json are dropped at the end of every run, and so is an unreadable file. Reads
-and writes are best effort: an unreadable file counts as empty, and a failed write loses only the record, never the
-group's own renames. HelperLauncher's cleanup of `helper/` keeps this one file.
+If a rollback fails (after its own budget), the group is half-applied anyway. So the remaining ops are then retried in
+place under the same budget (roll forward), and one more full rollback is tried only once that budget is spent (review
+M1: otherwise one failed try of the enable plus a failed rollback would end the run without the mod, where the old code
+kept retrying the enable). Worst case per group: about 30 s of retries plus two rollback budgets.
+
+**Across runs: the record.** Just before a pass renames anything, the helper records that pass's renames (op id, from,
+to; a disable's `.disabled` name is decided then and used for the move) in `config/rigtune/helper/unfinished-groups.json`,
+one entry per group (lone ops too). Entries stay until last-apply.json has been written (then `prune` drops the groups
+that ended consistently and the renames of ops no longer in the plan), so a redo after a kill or a failed result write
+still reports the real `.disabled` name (review L1). A half-applied group's entry stays until a later run ends the group.
+Reads and writes are best effort: an unreadable file counts as empty and is replaced; a failed write is retried at the
+next change and never stops a group (review L2: a group still runs without a record, as before this change).
+HelperLauncher's cleanup of `helper/` keeps this one file.
 
 **Recovery rule: roll forward, else roll back completely.** At the next helper run, each recorded rename of the group
-that is still in effect counts as done by this run. "In effect" means the new name exists and the old one doesn't; the
-record is matched to the group's op by id and paths, and both names must be directly in the mods folder. Such an op
+that is still in effect counts as done by this run. "In effect" means the new name exists and the old one doesn't. The
+record is matched to the op by op id and paths, whichever group recorded it (staging can move a staged op into another
+group, e.g. when a newer update of the same mod takes over the group), and both names must be directly in the mods
+folder. Such an op
 reports SKIPPED_ALREADY_DONE with its resultPath, so History gets the real `.disabled` name, and it goes on the group's
 undo list. So the group:
 - completes when its remaining renames succeed (for an update, usually just the enable), or
@@ -83,12 +92,16 @@ Why this order is safe:
   - `aGroupLeftHalfAppliedIsNeverAbandoned`.
   - `anEarlierRenameAfterTheFailingOpIsRolledBackToo`: an earlier run's rename of an op after the one that fails now
     (the new jar left active by a failed rollback, next to the old one) is put back too, never forgotten.
-  - Record safety: `aRecordThatDoesntMatchItsOpsIsIgnored` and `anUnreadableRecordIsIgnoredAndReplaced` guard the new
-    code, so they can't be red on the old code.
+  - Review round: `aRollbackThatFailsMidRunIsRolledForwardInTheSameRun` (M1), `eachOpKeepsItsOwnRetryPolicy` (L3),
+    `aRecordStillMatchesAnOpStagingMovedToAnotherGroup`; all red on the code before the review fixes.
+  - Guards for the new code (they can't be red on the old code): `aRecordThatDoesntMatchItsOpsIsIgnored`,
+    `anUnreadableRecordIsIgnoredAndReplaced`, `aRecordThatCantBeWrittenNeverStopsTheGroup`,
+    `aRefusedGroupPutsBackWhatAnEarlierRunDid`, `aDroppedGroupKeepsWhatAnEarlierRunDid`.
 - ApplyExecutorTest:
   - `aFailedResultWriteLeavesTheDoneOpsPendingSoHistoryNeverSaysNotApplied`: last-apply.json is a non-empty directory.
     Reconcile gives STAGED, and APPLIED after the next run; the old code gave ABANDONED.
   - `anAbandonedOpLeavesPendingJsonBeforeTheResultAndADoneOneAfter`.
+  - `aRedoAfterAFailedResultWriteStillNamesTheRealDisabledFile` (review L1: `.disabled.1`, not a guessed `.disabled`).
 - HelperLauncherTest: `keepsTheHelpersRecordOfUnfinishedGroups`.
 - HelperCompat030Test (compatibility), using the pinned v030 copies:
   - A pending.json staged by 0.3.0's own PendingActions runs identically under the new helper and 0.3.0's: statuses,
@@ -124,15 +137,24 @@ Why this order is safe:
 - UNVERIFIED: real Windows sharing violations and kills were simulated with the Mover seam (a FileSystemException or
   an Error), not with a real locked file or a killed JVM. The audit's shutdown-hook idea was not implemented (not needed
   for the minimal fix).
-- M2 (WS-G2): Undo/Discard of a half-done update in game drops the group. This helper then drops its stale record at
-  the next run and doesn't re-enable the old jar. The record holds what a repair would need, if WS-G2 wants it.
+- Review M2, declined (pre-existing audit M2, owned by WS-G2): Undo/Discard of a half-done update in game drops the
+  group; the helper then prunes its renames (their ops are no longer in the plan) and doesn't re-enable the old jar,
+  exactly as before this change. Keeping or acting on such orphans needs a duplicate check (the player may have
+  installed the mod by hand meanwhile) and belongs with WS-G2's fix; the record isn't meant as its data source.
+- Review lows accepted as limits: each retry pass redoes and rolls back the earlier renames (more renames of big jars
+  under a long sharing violation; speculative whether that provokes scanners, L4); a record matches by name, not file
+  identity, so a rename the player made by hand to the same names counts as the helper's (speculative, L5); a group
+  stuck half-applied repeats "try 3 of 3" at every exit (L6); a death between writing last-apply.json and rewriting
+  pending.json shows the done ops as staged until the next exit (History is right; cosmetic, L7); a rollback whose
+  moved file vanished still says "the original name is taken" (pre-existing, L8).
 
 ## For DESIGN.md (coordinator)
 - ApplyExecutor: "A group is tried as a whole: each op once per pass; on a failure every rename of the pass is rolled back
-  at once and the group is retried under one retry budget. A multi-op group's renames are recorded in
-  `config/rigtune/helper/unfinished-groups.json` first; after a kill or a failed rollback the next run finishes the group
-  or, if it fails again, rolls back the earlier run's renames too. A group left half-applied is never abandoned."
-- Retry policy: "…the budget is per group, not per op; a rollback has its own full budget."
+  at once and the group is retried under the failing op's retry budget (after a failed rollback, the rest is retried in
+  place instead, then one more rollback). Each pass's renames are recorded in `config/rigtune/helper/unfinished-groups.json`
+  first and kept until last-apply.json is written; after a kill or a failed rollback the next run finishes the group or,
+  if it fails again, rolls back the earlier run's renames too. A group left half-applied is never abandoned."
+- Retry policy: "…a failing op's retry is a retry of its whole group, after a rollback; a rollback has its own full budget."
 - Helper writes: "pending.json loses its abandoned ops, then last-apply.json is written, then the done ops leave
   pending.json, then the journal."
 - HelperLauncher: "…other files in the folder are deleted, except `unfinished-groups.json`."

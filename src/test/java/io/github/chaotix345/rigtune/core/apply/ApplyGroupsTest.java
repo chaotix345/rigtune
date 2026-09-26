@@ -404,8 +404,109 @@ class ApplyGroupsTest {
 		ApplyResult next = executor((from, to) -> from.equals(newPending)).run(PendingActions.load(pending), pending);
 
 		assertEquals(List.of(Status.FAILED, Status.FAILED), statuses(next));
+		assertTrue(next.results().get(1).message().startsWith("Gave up after 2 tries: java.io.IOException"), next.results().get(1).message());
 		assertEquals(List.of("sodium-0.7.0.jar", "sodium-0.7.1.jar.rigtune-pending"), modsListing());
 		assertFalse(Files.exists(unfinished()));
+	}
+
+	// Review M1: a rollback that fails leaves the group half-applied anyway, so the rest is tried again in the same run
+	// (roll forward) instead of ending the run without the mod.
+	@Test
+	void aRollbackThatFailsMidRunIsRolledForwardInTheSameRun() throws IOException {
+		AtomicInteger enableDenied = new AtomicInteger();
+		ApplyExecutor executor = new ApplyExecutor(2, 1, (from, to) -> {
+			if (from.equals(newPending) && enableDenied.incrementAndGet() == 1 || to.equals(oldJar)) {
+				throw sharing(from);
+			}
+			Files.move(from, to);
+		}, millis -> true);
+
+		ApplyResult result = run(executor, update());
+
+		assertTrue(result.allSucceeded(), result.toString());
+		assertEquals(mods.resolve("sodium-0.7.0.jar.disabled").toString(), result.results().getFirst().resultPath());
+		assertEquals(List.of("sodium-0.7.1.jar"), enabledJars());
+		assertFalse(Files.exists(unfinished()));
+	}
+
+	// Review L3: each op keeps its own retry policy, so a quick failure of one op doesn't cut another's sharing budget.
+	@Test
+	void eachOpKeepsItsOwnRetryPolicy() throws IOException {
+		AtomicInteger disableDenied = new AtomicInteger();
+		AtomicInteger enableDenied = new AtomicInteger();
+		ApplyExecutor executor = new ApplyExecutor(2, 1, (from, to) -> {
+			if (from.equals(oldJar) && disableDenied.incrementAndGet() == 1) {
+				throw new IOException("a moment's trouble");
+			}
+			if (from.equals(newPending) && enableDenied.incrementAndGet() <= 3) {
+				throw sharing(from);
+			}
+			Files.move(from, to);
+		}, millis -> true);
+
+		ApplyResult result = run(executor, update());
+
+		assertEquals(List.of(Status.OK, Status.OK), statuses(result));
+		assertEquals(List.of("sodium-0.7.1.jar"), enabledJars());
+	}
+
+	// Staging can move a staged op into another group (a newer update of the same mod takes over the group): the record
+	// still matches it by op id.
+	@Test
+	void aRecordStillMatchesAnOpStagingMovedToAnotherGroup() throws IOException {
+		List<Op> ops = update();
+		assertThrows(Killed.class, () -> run(killedAt(newPending), ops));
+		PendingActions.load(pending).withOps(ops.stream().map(op -> op.inGroup("regrouped")).toList()).save(pending);
+
+		executor((from, to) -> from.equals(newPending)).run(PendingActions.load(pending), pending);
+
+		assertEquals(List.of("sodium-0.7.0.jar", "sodium-0.7.1.jar.rigtune-pending"), modsListing());
+		assertFalse(Files.exists(unfinished()));
+	}
+
+	// A group refused at the next run (its download is no longer a mod) puts back what the killed run did.
+	@Test
+	void aRefusedGroupPutsBackWhatAnEarlierRunDid() throws IOException {
+		List<Op> ops = update();
+		assertThrows(Killed.class, () -> run(killedAt(newPending), ops));
+		TestJars.plainJar(newPending);
+
+		ApplyResult next = executor((a, b) -> false).run(PendingActions.load(pending), pending);
+
+		assertEquals(List.of(Status.FAILED, Status.FAILED), statuses(next));
+		assertTrue(next.results().getFirst().message().startsWith("Rolled back because another change in its group was refused"),
+				next.results().getFirst().message());
+		assertEquals(List.of("sodium-0.7.0.jar", "sodium-0.7.1.jar.rigtune-pending"), modsListing());
+		assertFalse(Files.exists(unfinished()));
+	}
+
+	// A group dropped at the next run (the mod was installed another way meanwhile) keeps the earlier run's disable:
+	// putting the old jar back would load the mod twice.
+	@Test
+	void aDroppedGroupKeepsWhatAnEarlierRunDid() throws IOException {
+		List<Op> ops = update();
+		assertThrows(Killed.class, () -> run(killedAt(newPending), ops));
+		TestJars.modJar(mods.resolve("sodium-0.7.2.jar"), "sodium");
+
+		ApplyResult next = executor((a, b) -> false).run(PendingActions.load(pending), pending);
+
+		assertEquals(List.of(Status.SKIPPED_ALREADY_DONE, Status.ABANDONED), statuses(next));
+		assertEquals(mods.resolve("sodium-0.7.0.jar.disabled").toString(), next.results().getFirst().resultPath());
+		assertTrue(oneActiveSodium(), modsListing().toString());
+		assertFalse(Files.exists(pending));
+		assertFalse(Files.exists(unfinished()));
+	}
+
+	// The record is best effort: when it can't be written, the group still runs.
+	@Test
+	void aRecordThatCantBeWrittenNeverStopsTheGroup() throws IOException {
+		Files.createDirectories(unfinished());
+		Files.writeString(unfinished().resolve("keep"), "a directory where the record goes");
+
+		ApplyResult result = run(executor((a, b) -> false), update());
+
+		assertEquals(List.of(Status.OK, Status.OK), statuses(result));
+		assertEquals(List.of("sodium-0.7.1.jar"), enabledJars());
 	}
 
 	@Test

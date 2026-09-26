@@ -350,6 +350,27 @@ class ApplyExecutorTest {
 		assertFalse(Files.exists(pending));
 	}
 
+	// Review L1: the record of where a disable went outlives a failed result write, so the redo still names the real
+	// .disabled file (here .disabled.1, since an older .disabled was there) and Undo later re-enables the right jar.
+	@Test
+	void aRedoAfterAFailedResultWriteStillNamesTheRealDisabledFile() throws IOException {
+		Files.writeString(mods.resolve("indium.jar"), "current");
+		Files.writeString(mods.resolve("indium.jar.disabled"), "older");
+		Op disable = Op.disableFile(mods.resolve("indium.jar"));
+		journal().record("e1", JournalEntry.APPLY,
+				List.of(JournalChange.file(JournalChange.DISABLE, "indium", "indium.jar", JournalChange.STAGED, disable.id(), null)));
+		Path lastApply = unwritableLastApply();
+		assertThrows(IOException.class, () -> executor.run(plan(disable), pending));
+		Files.delete(lastApply.resolve("keep"));
+		Files.delete(lastApply);
+
+		ApplyResult next = executor.run(PendingActions.load(pending), pending);
+
+		assertEquals(mods.resolve("indium.jar.disabled.1").toString(), next.results().getFirst().resultPath());
+		assertEquals("indium.jar.disabled.1", journal().entries().getFirst().changes().getFirst().resultFile());
+		assertFalse(Files.exists(UnfinishedGroups.file(config)));
+	}
+
 	// An abandoned op leaves pending.json before last-apply.json is written, and a done one after it.
 	@Test
 	void anAbandonedOpLeavesPendingJsonBeforeTheResultAndADoneOneAfter() throws IOException {
