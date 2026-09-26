@@ -18,6 +18,7 @@ Branch `test/p5-smokes`. It has no product-code change, and two test-only change
 | Production smoke 26.3, a Modrinth set (Sodium, Iris, Lithium, FerriteCore, ImmediatelyFast, Entity Culling, Mod Menu, DH 3.3.2-26.3) | **PASS on launch 4**. Launch 1 ran offline (Modrinth network failure); launches 2-3 hit the native crash (0xC0000005); launch 4 used `ALSOFT_DRIVERS=null` | [smokes/26.3-modrinth/](smokes/26.3-modrinth/README.md) |
 | AC2i.1 real-instance check (read-only) | **Done**: not played since 2026-09-25 09:08; state byte-identical to the E2E seed; nothing to compare yet | [real-instance.md](real-instance.md) |
 | AC10.5 RC footprint numbers | **Collected** from CI run 36236205018 (all 3 legs, `fail` mode, 0 violations), for the coordinator to fold into README | [footprint/rc-numbers.md](footprint/rc-numbers.md) |
+| CI on this branch | **Green** on [36241924437](https://github.com/chaotix345/rigtune/actions/runs/36241924437) attempt 2, every job. On attempt 1 both 26.3 legs timed out in `UiGameTest.checkSettings` → `waitForSaved` (UiGameTest.java:412), before any changed code runs. fix/review-7's run 36240897813 hit the same flake | CI |
 | Findings | No release blocker. F1 (MEDIUM, local test gate), F2 (LOW, test port, fixed on this branch), F3-F6 (LOW) | [P5B-FINDINGS.md](P5B-FINDINGS.md) |
 
 ## P5-A (features)
