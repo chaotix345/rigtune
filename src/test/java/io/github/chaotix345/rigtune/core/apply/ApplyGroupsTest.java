@@ -441,6 +441,22 @@ class ApplyGroupsTest {
 		assertFalse(Files.exists(pending));
 	}
 
+	// An earlier run's rename after the op that fails now (here the new jar, left active by a failed rollback while the
+	// old one came back) is rolled back too, never forgotten.
+	@Test
+	void anEarlierRenameAfterTheFailingOpIsRolledBackToo() throws IOException {
+		Path libPending = TestJars.modJar(mods.resolve("lib.jar" + PendingActions.PENDING_SUFFIX), "lib");
+		List<Op> ops = PendingActions.group(Op.disableFile(oldJar), Op.enableFile(newPending, newJar), Op.enableFile(libPending, mods.resolve("lib.jar")));
+		run(executor((from, to) -> from.equals(libPending) || from.equals(newJar)), ops);
+		assertEquals(List.of("lib.jar.rigtune-pending", "sodium-0.7.0.jar", "sodium-0.7.1.jar"), modsListing());
+
+		ApplyResult next = executor((from, to) -> from.equals(oldJar)).run(PendingActions.load(pending), pending);
+
+		assertEquals(List.of(Status.FAILED, Status.FAILED, Status.FAILED), statuses(next));
+		assertEquals(List.of("lib.jar.rigtune-pending", "sodium-0.7.0.jar", "sodium-0.7.1.jar.rigtune-pending"), modsListing());
+		assertFalse(Files.exists(unfinished()));
+	}
+
 	// The record only ever names renames its own ops would do: one outside the mods folder, or for another op, is ignored.
 	@Test
 	void aRecordThatDoesntMatchItsOpsIsIgnored() throws IOException {

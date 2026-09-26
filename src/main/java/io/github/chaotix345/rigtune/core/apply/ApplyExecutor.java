@@ -453,6 +453,13 @@ public final class ApplyExecutor {
 			}
 			int i = order.get(failed);
 			String reason = describe(ops.get(i)) + " failed";
+			for (int rest : order.subList(failed + 1, order.size())) {
+				out[rest] = new OpResult(ops.get(rest), Status.FAILED, "Not applied because " + reason);
+				// An earlier run's rename of an op this pass didn't reach is put back too.
+				if (earlier.containsKey(rest)) {
+					undos.add(earlier.get(rest));
+				}
+			}
 			boolean putBack = rollBack(ops, undos, reason, out);
 			if (putBack) {
 				earlier = Map.of();
@@ -462,9 +469,6 @@ public final class ApplyExecutor {
 			}
 			if (error != null) {
 				out[i] = new OpResult(ops.get(i), Status.FAILED, "Gave up after " + (state.attempt() + (putBack ? 0 : 1)) + " tries: " + error);
-			}
-			for (int rest : order.subList(failed + 1, order.size())) {
-				out[rest] = new OpResult(ops.get(rest), Status.FAILED, "Not applied because " + reason);
 			}
 			if (putBack) {
 				unfinished.remove(group);
