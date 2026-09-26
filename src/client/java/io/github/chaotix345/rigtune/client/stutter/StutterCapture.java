@@ -9,6 +9,7 @@ import org.jspecify.annotations.Nullable;
 import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 // Starts and stops captures (render thread) together with what they share: the rings, the GC listener, the sampler and
 // the dev GC thread exist exactly while a capture does. Stopping copies the capture's rings for the analysis and
@@ -26,11 +27,11 @@ final class StutterCapture {
 	}
 
 	static synchronized StutterMonitor.Capture startSession() {
-		return StutterMonitor.startSession(shared(), System.nanoTime(), Instant.now());
+		return StutterMonitor.startSession(shared(), System.nanoTime(), Instant.now().truncatedTo(ChronoUnit.SECONDS));
 	}
 
 	static synchronized StutterMonitor.Capture startBenchmark() {
-		return StutterMonitor.startBenchmark(shared(), System.nanoTime(), Instant.now());
+		return StutterMonitor.startBenchmark(shared(), System.nanoTime(), Instant.now().truncatedTo(ChronoUnit.SECONDS));
 	}
 
 	static synchronized Copy stop(StutterMonitor.Capture capture) {
