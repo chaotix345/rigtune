@@ -71,7 +71,7 @@ public final class StartupTimes {
 				}
 			}
 			StartupTimesStore.Run run = new StartupTimesStore.Run(Instant.now().truncatedTo(ChronoUnit.SECONDS).toString(), ms,
-					FabricLoader.getInstance().getRawGameVersion(), controller.modVersion(), topLevel, ModSetHash.of(mods));
+					FabricLoader.getInstance().getRawGameVersion(), controller.modVersion(), topLevel, ModSetHash.ofLoadedMods(mods));
 			Saved saved = store().record(run);
 			refresh();
 			RigTune.LOGGER.info("Launch to title screen: {} ms ({} mods){}", ms, topLevel,

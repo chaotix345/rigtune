@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 
 // tools/footprint-budgets.json (docs/v0.4/SPEC.md 10): the footprint guard's limits, read by FrameHookBudgetTest (JUnit)
@@ -24,6 +25,11 @@ import java.util.function.Consumer;
 public final class FootprintBudgets {
 	public static final String PROPERTY = "rigtune.footprint.budgetsFile";
 	public static final String REPO_PATH = "tools/footprint-budgets.json";
+	// Budgets on shallow object sizes (a class histogram's bytes). Without compressed oops (ZGC always; any heap over 32 GB)
+	// every reference is 8 bytes instead of 4 and object headers grow, so the same objects measure up to about twice as big
+	// (P5-A F5: 120,224 bytes under ZGC for what G1 runs measure at about 72 KB, with no instance growth).
+	public static final Set<String> SHALLOW_SIZE_KEYS = Set.of("rigtuneClassBytesIdle");
+	public static final double UNCOMPRESSED_OOPS_FACTOR = 2;
 
 	public enum Mode { WARN, FAIL }
 
@@ -50,6 +56,23 @@ public final class FootprintBudgets {
 
 	public Map<String, Budget> budgets() {
 		return budgets;
+	}
+
+	// These budgets for a JVM with or without compressed oops (HotSpot's UseCompressedOops): without, each shallow-size
+	// limit doubles, never past its ceiling. Every other budget, the leak checks included, is unchanged.
+	public FootprintBudgets forCompressedOops(boolean compressedOops) {
+		if (compressedOops) {
+			return this;
+		}
+		Map<String, Budget> scaled = new LinkedHashMap<>(budgets);
+		for (String key : SHALLOW_SIZE_KEYS) {
+			Budget b = scaled.get(key);
+			if (b != null) {
+				double limit = b.limit() * UNCOMPRESSED_OOPS_FACTOR;
+				scaled.put(key, new Budget(key, b.ceiling() == null ? limit : Math.min(limit, b.ceiling()), b.ceiling(), b.what() + " (doubled: no compressed oops)"));
+			}
+		}
+		return new FootprintBudgets(mode, scaled);
 	}
 
 	// -Drigtune.footprint.budgetsFile (set by build.gradle), else tools/footprint-budgets.json above the working directory.

@@ -20,6 +20,17 @@ class ModSetHashTest {
 		assertEquals(expected, ModSetHash.of(Map.of("sodium", "0.9.2", "iris", "1.11.6")));
 	}
 
+	// review-8 BF-1: the loaded mods' hash (benchmarks.json and startup-times.json alike) leaves RigTune itself out, so a
+	// RigTune update alone never reads as a mod-set change; its version is recorded on its own.
+	@Test
+	void theLoadedModsHashLeavesRigTuneOut() {
+		assertEquals(io.github.chaotix345.rigtune.RigTune.MOD_ID, ModSetHash.RIGTUNE_ID);
+		String before = ModSetHash.ofLoadedMods(Map.of("sodium", "0.9.2", "rigtune", "0.4.0+mc26.2"));
+		assertEquals(before, ModSetHash.ofLoadedMods(Map.of("sodium", "0.9.2", "rigtune", "0.4.1+mc26.2")));
+		assertEquals(ModSetHash.of(Map.of("sodium", "0.9.2")), before);
+		assertNotEquals(before, ModSetHash.ofLoadedMods(Map.of("sodium", "0.9.3", "rigtune", "0.4.0+mc26.2")));
+	}
+
 	@Test
 	void theInsertionOrderDoesNotMatter() {
 		Map<String, String> a = new LinkedHashMap<>();
