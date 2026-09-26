@@ -63,7 +63,7 @@ public final class FootprintStats {
 	public static void preLaunchEnd(long start) {
 		if (preLaunchWallNs == UNSET) {
 			preLaunchWallNs = System.nanoTime() - start;
-			preLaunchCpuNs = since(preLaunchCpuStart);
+			preLaunchCpuNs = singleThreadCpu(since(preLaunchCpuStart), preLaunchWallNs);
 		}
 	}
 
@@ -76,7 +76,7 @@ public final class FootprintStats {
 	public static void initEnd(long start) {
 		if (initWallNs == UNSET) {
 			initWallNs = System.nanoTime() - start;
-			initCpuNs = since(initCpuStart);
+			initCpuNs = singleThreadCpu(since(initCpuStart), initWallNs);
 		}
 	}
 
@@ -95,7 +95,7 @@ public final class FootprintStats {
 			start.run();
 		} finally {
 			clientStartedWallNs = System.nanoTime() - wallStart;
-			clientStartedCpuNs = since(cpuStart);
+			clientStartedCpuNs = singleThreadCpu(since(cpuStart), clientStartedWallNs);
 		}
 	}
 
@@ -161,6 +161,10 @@ public final class FootprintStats {
 	private static long since(long cpuStart) {
 		long now = cpu();
 		return cpuStart < 0 || now < 0 ? UNSET : now - cpuStart;
+	}
+
+	static long singleThreadCpu(long cpuNs, long wallNs) {
+		return cpuNs < 0 ? UNSET : Math.min(cpuNs, wallNs);
 	}
 
 	// The first call's cost (loading the management classes, if nothing else has yet) is kept apart in mxInitNs.
