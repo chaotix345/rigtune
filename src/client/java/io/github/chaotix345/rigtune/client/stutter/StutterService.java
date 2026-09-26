@@ -164,8 +164,8 @@ public final class StutterService {
 			var result = store().add(a.report());
 			saved = a;
 			savedState = Saved.DONE;
-			RigTune.LOGGER.info("Stutter Doctor: session saved ({}): {} spikes in {} s of gameplay", result, a.report().spikes().total(),
-					Math.round(a.report().gameplaySeconds()));
+			RigTune.LOGGER.info("Stutter Doctor: session saved ({}): {} spikes in {} s of gameplay, {}, GC offset {} ms", result,
+					a.report().spikes().total(), Math.round(a.report().gameplaySeconds()), phases(copy), a.report().facts().gcOffsetMs());
 		};
 		if (now) {
 			safely(save);
@@ -199,8 +199,7 @@ public final class StutterService {
 		}
 		Analysis a = analyze(copy, machine(minecraft));
 		lastBenchmark = a.report();
-		RigTune.LOGGER.info("Stutter Doctor: benchmark: {} spikes, causes {}, phase timing {}", a.report().spikes().total(), a.report().causes(),
-				a.report().phaseTiming() ? "ok" : "unavailable");
+		RigTune.LOGGER.info("Stutter Doctor: benchmark: {} spikes, causes {}, {}", a.report().spikes().total(), a.report().causes(), phases(copy));
 		CompletableFuture.runAsync(() -> safely(() -> store().add(a.report())), Probes.EXECUTOR);
 	}
 
@@ -281,6 +280,13 @@ public final class StutterService {
 				: StutterAdvisor.evaluate(m.rules(), StutterAdvisor.context(m.rules(), hw, m.mods(), m.settings(), m.goal(), result.facts()));
 		StutterReport report = result.report().withAdvice(advice.stream().map(StutterAdvisor.Fired::id).toList());
 		return new Analysis(null, report, advice);
+	}
+
+	// "phase timing ok (baselines: packets 0.31 ms, ticks 1.20 ms, render 5.02 ms)", for the logs (S-M1's first-run check).
+	static String phases(StutterCapture.Copy copy) {
+		long[] b = copy.frames().phaseBaselines();
+		return String.format(java.util.Locale.ROOT, "phase timing %s (baselines: packets %.2f ms, ticks %.2f ms, render %.2f ms; timers seen %s)",
+				copy.phaseTiming() ? "ok" : "unavailable", b[0] / 1e6, b[1] / 1e6, b[2] / 1e6, Integer.toBinaryString(StutterMonitor.phaseSeen()));
 	}
 
 	private static void safely(Runnable body) {

@@ -142,14 +142,15 @@ public final class FrameRing {
 			System.arraycopy(candidates, (int) ((firstCandidate + i) % candidateCapacity) * STRIDE, cands, i * STRIDE, STRIDE);
 		}
 		return new Snapshot(out, cands, histogramCounts.clone(), histogramNanos.clone(), frames, gameplayFrames, gameplayNanos, excludedFrames,
-				candidateCount);
+				candidateCount, new long[]{Math.max(0, packetsBase), Math.max(0, ticksBase), Math.max(0, renderBase)});
 	}
 
 	// ends: chronological (bit 0 = excluded); candidates: chronological records of STRIDE longs; the histogram and
-	// counters cover the whole capture, even what the rings no longer hold.
+	// counters cover the whole capture, even what the rings no longer hold. phaseBaselines: the running packets, ticks and
+	// render baselines (ns) at the snapshot, for the logs.
 	public record Snapshot(long[] ends, long[] candidates, long[] histogramCounts, long[] histogramNanos, long frames, long gameplayFrames,
-			long gameplayNanos, long excludedFrames, long candidateCount) {
-		public static final Snapshot EMPTY = new Snapshot(new long[0], new long[0], new long[BUCKETS], new long[BUCKETS], 0, 0, 0, 0, 0);
+			long gameplayNanos, long excludedFrames, long candidateCount, long[] phaseBaselines) {
+		public static final Snapshot EMPTY = new Snapshot(new long[0], new long[0], new long[BUCKETS], new long[BUCKETS], 0, 0, 0, 0, 0, new long[3]);
 
 		public int candidateRecords() {
 			return candidates.length / STRIDE;
