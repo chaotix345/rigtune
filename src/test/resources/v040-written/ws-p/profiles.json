@@ -1,0 +1,38 @@
+{
+  "formatVersion": 1,
+  "profiles": [
+    {
+      "id": "p-0e5a4b01-7c2d-4e8f-9a10-b0a77e2b00b1",
+      "name": "My settings",
+      "source": "baseline",
+      "createdAt": "2026-09-21T09:59:59Z",
+      "rigtuneVersion": "0.4.0+mc26.2",
+      "mcVersion": "26.2",
+      "settings": {
+        "vanilla.renderDistance": "12",
+        "vanilla.maxFps": "170",
+        "vanilla.enableVsync": "false",
+        "sodium.performance.chunk_build_defer_mode": "ONE_FRAME"
+      }
+    }
+  ],
+  "switches": [
+    {
+      "entryId": "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b0001",
+      "templateId": "battery",
+      "name": "Battery"
+    },
+    {
+      "entryId": "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b0002",
+      "templateId": "max_fps",
+      "name": "Max FPS"
+    }
+  ],
+  "battery": {
+    "prompt": true,
+    "snoozed": false,
+    "previousProfile": "p-0e5a4b01-7c2d-4e8f-9a10-b0a77e2b00b1",
+    "lastPromptAt": "2026-09-21T09:59:00Z"
+  },
+  "active": "template:max_fps"
+}

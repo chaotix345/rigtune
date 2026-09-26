@@ -1,0 +1,81 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b0001",
+      "at": "2026-09-21T10:00:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.4.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b1001",
+          "type": "setting",
+          "key": "vanilla.renderDistance",
+          "before": "12",
+          "after": "8",
+          "status": "APPLIED"
+        },
+        {
+          "id": "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b1002",
+          "type": "setting",
+          "key": "vanilla.maxFps",
+          "before": "170",
+          "after": "60",
+          "status": "APPLIED"
+        },
+        {
+          "id": "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b1003",
+          "type": "setting",
+          "key": "vanilla.enableVsync",
+          "before": "false",
+          "after": "true",
+          "status": "APPLIED"
+        },
+        {
+          "id": "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b1004",
+          "type": "setting",
+          "key": "sodium.performance.chunk_build_defer_mode",
+          "before": "ONE_FRAME",
+          "after": "ALWAYS",
+          "status": "APPLIED",
+          "opId": "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b2001"
+        }
+      ]
+    },
+    {
+      "id": "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b0002",
+      "at": "2026-09-21T10:05:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.4.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b1011",
+          "type": "setting",
+          "key": "vanilla.maxFps",
+          "before": "60",
+          "after": "260",
+          "status": "APPLIED"
+        },
+        {
+          "id": "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b1012",
+          "type": "setting",
+          "key": "vanilla.enableVsync",
+          "before": "true",
+          "after": "false",
+          "status": "APPLIED"
+        },
+        {
+          "id": "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b1013",
+          "type": "setting",
+          "key": "sodium.performance.chunk_build_defer_mode",
+          "before": "ALWAYS",
+          "after": "ONE_FRAME",
+          "status": "APPLIED",
+          "opId": "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b2002"
+        }
+      ]
+    }
+  ]
+}
