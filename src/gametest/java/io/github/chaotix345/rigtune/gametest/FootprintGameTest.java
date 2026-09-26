@@ -75,10 +75,12 @@ public class FootprintGameTest implements FabricClientGameTest {
 	private static final int[][] SIZES = {{1280, 720, 2}, {640, 480, 2}, {854, 480, 2}};
 	private static final String SAMPLER = "RigTune stutter sampler";
 	private static final long SAMPLER_WINDOW_NANOS = 60_000_000_000L;
-	// The session capture's objects: none may stay alive once the monitor is off and its session is saved (F-M1).
-	private static final Set<String> CAPTURE_CLASSES = Set.of(RIGTUNE + "core.stutter.FrameRing", RIGTUNE + "core.stutter.FrameRing$Snapshot",
-			RIGTUNE + "core.stutter.StutterRings", RIGTUNE + "core.stutter.StutterRings$Snapshot", RIGTUNE + "core.stutter.RecordRing",
-			RIGTUNE + "client.stutter.StutterMonitor$Capture", RIGTUNE + "client.stutter.StutterCapture$Copy");
+	private static final long SAMPLER_EARLY_NANOS = 5_000_000_000L;
+	// The session capture's objects: none may stay alive once the monitor is off and its session is saved (F-M1), except
+	// each Snapshot class's EMPTY constant (one instance once the class is initialised).
+	private static final Map<String, Integer> CAPTURE_CLASSES = Map.of(RIGTUNE + "core.stutter.FrameRing", 0, RIGTUNE + "core.stutter.FrameRing$Snapshot", 1,
+			RIGTUNE + "core.stutter.StutterRings", 0, RIGTUNE + "core.stutter.StutterRings$Snapshot", 1, RIGTUNE + "core.stutter.RecordRing", 0,
+			RIGTUNE + "client.stutter.StutterMonitor$Capture", 0, RIGTUNE + "client.stutter.StutterCapture$Copy", 0);
 
 	private record ClassCount(long instances, long bytes) {
 	}
@@ -374,13 +376,16 @@ public class FootprintGameTest implements FabricClientGameTest {
 			String startedAt = StutterMonitor.session().startedAt().toString();
 			long sampler = threadId(SAMPLER);
 			check(sampler >= 0 && StutterHooks.gcListenerActive(), "the sampler thread and the GC listener run while capturing: " + rigtuneThreads());
+			long early = start + SAMPLER_EARLY_NANOS;
+			context.waitFor(mc -> System.nanoTime() - early >= 0, ClientGameTestContext.NO_TIMEOUT);
+			long earlyCpu = ManagementFactory.getThreadMXBean().getThreadCpuTime(sampler);
+			long earlyWindow = System.nanoTime() - start;
 			long deadline = start + SAMPLER_WINDOW_NANOS;
 			context.waitFor(mc -> System.nanoTime() - deadline >= 0, ClientGameTestContext.NO_TIMEOUT);
 			long samplerCpu = ManagementFactory.getThreadMXBean().getThreadCpuTime(sampler);
 			long window = System.nanoTime() - start;
 			check(samplerCpu >= 0, "the sampler thread is alive after " + window / 1_000_000 + " ms");
-			StutterRings rings = StutterMonitor.rings();
-			long samples = rings == null ? 0 : rings.snapshot().samples().length / StutterRings.SAMPLE_STRIDE;
+			long samples = samplerSamples();
 			List<String> threadsOn = rigtuneThreads();
 			checkNoPowerWatcher(hardware, threadsOn);
 
@@ -388,7 +393,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 			long[] tick = context.computeOnClient(mc -> timeTicksWithTheMonitor(mc, stutterTick));
 			check(StutterMonitor.session() != null, "still capturing after the tick timing");
 			long onRetained = StutterMonitor.retainedBytes();
-			long frames = StutterMonitor.session().snapshot().frames();
+			long frames = sessionFrames();
 			boolean phaseTiming = StutterMonitor.phaseTiming();
 			Histogram on = histogram();
 
@@ -413,6 +418,8 @@ public class FootprintGameTest implements FabricClientGameTest {
 			out.put("monitorPhaseTiming", phaseTiming);
 			out.put("samplerCpuMs", ms(samplerCpu));
 			out.put("samplerWindowMs", ms(window));
+			out.put("samplerCpuMsFirst5s", ms(earlyCpu));
+			out.put("samplerCpuMsPer60sAfter5s", round2((samplerCpu - earlyCpu) / 1e6 * SAMPLER_WINDOW_NANOS / (window - earlyWindow)));
 			out.put("samplerSamples", samples);
 			out.put("rigtuneThreadsMonitorOn", threadsOn);
 			out.put("heapAfterGcWorldIdleBytes", idle.heapAfterGcBytes());
@@ -465,14 +472,27 @@ public class FootprintGameTest implements FabricClientGameTest {
 		}
 	}
 
+	// Live capture objects beyond the permanent EMPTY constants.
 	private static Map<String, Long> captureInstances(Histogram histogram) {
 		Map<String, Long> out = new TreeMap<>();
 		histogram.rigtune().forEach((name, count) -> {
-			if (CAPTURE_CLASSES.contains(name) && count.instances() > 0) {
-				out.put(name, count.instances());
+			Integer permanent = CAPTURE_CLASSES.get(name);
+			if (permanent != null && count.instances() > permanent) {
+				out.put(name, count.instances() - permanent);
 			}
 		});
 		return out;
+	}
+
+	// The sampler's records in the rings; a separate method so no local variable of the test keeps the rings alive.
+	private static long samplerSamples() {
+		StutterRings rings = StutterMonitor.rings();
+		return rings == null ? 0 : rings.snapshot().samples().length / StutterRings.SAMPLE_STRIDE;
+	}
+
+	private static long sessionFrames() {
+		StutterMonitor.Capture session = StutterMonitor.session();
+		return session == null ? -1 : session.snapshot().frames();
 	}
 
 	private static void cycle(ClientGameTestContext context) {
