@@ -1,0 +1,13 @@
+[21:40:13] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, sleep:5, hardware, notices:after-edit, open:rigtune, sleep:3, shot:rigtune-hwchange, open:notice, sleep:2, shot:noticescreen, file:config/rigtune/awareness.json, quit]
+[21:40:14] [Render thread/INFO]: Using graphics backend OpenGL, using drivers: 3.3.0 Core Profile Context 26.8.1.260810
+[21:40:14] [Render thread/INFO]: OpenGL Version: 3.3.0 Core Profile Context 26.8.1.260810
+[21:40:14] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Technologies Inc., renderer=AMD Radeon RX 7800 XT, driverVersion=3.3.0 Core Profile Context 26.8.1.260810, backend=OPENGL, vramMb=16368], totalRamMb=31849, maxHeapMb=4096, display=DisplayInfo[width=2560, height=1440, refreshRate=180, fullscreen=false], hasBattery=false, onBattery=false, osName=Windows 11 10.0, mcVersion=26.2, flags=[jvm-probed, jvm-gc-g1, sodium-workaround:AMD_GAME_OPTIMIZATION_BROKEN]]
+[21:40:17] [Render thread/INFO]: [P5A] 3.6s title screen at JVM uptime 11881 ms
+[21:40:18] [Render thread/INFO]: [P5A] 4.1s report ready (online false, rules r15 bundled)
+[21:40:23] [Render thread/INFO]: [P5A] 9.1s hardware {gpuVendor=ATI Technologies Inc., gpuRenderer=AMD Radeon RX 7800 XT, gpuDriver=3.3.0 Core Profile Context 26.8.1.260810, backend=OPENGL, vramMb=16368, cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], ramMb=31849, maxHeapMb=4096, flags={flags=jvm-gc-g1 jvm-probed sodium-workaround:AMD_GAME_OPTIMIZATION_BROKEN}, gpuClass=GpuClass[vendor=AMD, integrated=false, tier=5, matchedPattern=(?i)RX\s*(?:6[89][05]0|7[89]00|90[7-9]0)\b]}
+[21:40:23] [Render thread/INFO]: [P5A] 9.2s notices [{key=hardware-changed:7467fa70, priority=HARDWARE_CHANGED, message=Your GPU driver changed since last time (26.5.1 → 26.8.1), detail=Re-scan to refresh the recommendations, or re-benchmark to measure again., actions=[Re-scan, Re-benchmark], dismissible=true}]
+[21:40:23] [Render thread/INFO]: [P5A] 9.2s opened RigTuneScreen
+[21:40:26] [IO-Worker-1/INFO]: [P5A] 12.4s screenshot rigtune-hwchange: Saved screenshot as p5a-aware2-rigtune-hwchange.png
+[21:40:27] [Render thread/INFO]: [P5A] 12.8s opened NoticeScreen
+[21:40:29] [IO-Worker-1/INFO]: [P5A] 14.9s screenshot noticescreen: Saved screenshot as p5a-aware2-noticescreen.png
+[21:40:29] [Render thread/INFO]: [P5A] 15.4s quitting

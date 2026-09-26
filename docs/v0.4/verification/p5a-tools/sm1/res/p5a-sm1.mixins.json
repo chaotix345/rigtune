@@ -1,0 +1,7 @@
+{
+  "required": true,
+  "package": "io.github.chaotix345.p5asm1",
+  "compatibilityLevel": "JAVA_25",
+  "client": ["HideTickCallMixin"],
+  "injectors": { "defaultRequire": 1 }
+}

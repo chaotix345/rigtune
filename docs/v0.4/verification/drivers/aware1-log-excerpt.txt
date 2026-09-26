@@ -1,0 +1,12 @@
+[21:33:33] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, sleep:5, hardware, jvm, notices:first, file:config/rigtune/awareness.json, open:rigtune, sleep:3, shot:rigtune-first, quit]
+[21:33:33] [Render thread/INFO]: Using graphics backend OpenGL, using drivers: 3.3.0 Core Profile Context 26.8.1.260810
+[21:33:54] [Render thread/INFO]: OpenGL Version: 3.3.0 Core Profile Context 26.8.1.260810
+[21:33:54] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Technologies Inc., renderer=AMD Radeon RX 7800 XT, driverVersion=3.3.0 Core Profile Context 26.8.1.260810, backend=OPENGL, vramMb=16368], totalRamMb=31849, maxHeapMb=4096, display=DisplayInfo[width=2560, height=1440, refreshRate=180, fullscreen=false], hasBattery=false, onBattery=false, osName=Windows 11 10.0, mcVersion=26.2, flags=[jvm-probed, jvm-gc-g1, sodium-workaround:AMD_GAME_OPTIMIZATION_BROKEN]]
+[21:33:57] [Render thread/INFO]: [P5A] 3.7s title screen at JVM uptime 39853 ms
+[21:33:58] [Render thread/INFO]: [P5A] 4.2s report ready (online true, rules r15 bundled)
+[21:34:03] [Render thread/INFO]: [P5A] 9.3s hardware {gpuVendor=ATI Technologies Inc., gpuRenderer=AMD Radeon RX 7800 XT, gpuDriver=3.3.0 Core Profile Context 26.8.1.260810, backend=OPENGL, vramMb=16368, cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], ramMb=31849, maxHeapMb=4096, flags={flags=jvm-gc-g1 jvm-probed sodium-workaround:AMD_GAME_OPTIMIZATION_BROKEN}, gpuClass=GpuClass[vendor=AMD, integrated=false, tier=5, matchedPattern=(?i)RX\s*(?:6[89][05]0|7[89]00|90[7-9]0)\b]}
+[21:34:03] [Render thread/INFO]: [P5A] 9.3s jvm report JvmReport[available=true, javaVersion=25.0.4.1, vendor=Eclipse Adoptium, collector=G1, collectorTyped=false, maxHeapMb=4096, initialHeapMb=498, findings=[], facts=[jvm-probed, jvm-gc-g1]]
+[21:34:03] [Render thread/INFO]: [P5A] 9.4s notices []
+[21:34:03] [Render thread/INFO]: [P5A] 9.5s opened RigTuneScreen
+[21:34:06] [IO-Worker-1/INFO]: [P5A] 12.6s screenshot rigtune-first: Saved screenshot as p5a-aware1-rigtune-first.png
+[21:34:07] [Render thread/INFO]: [P5A] 13.0s quitting

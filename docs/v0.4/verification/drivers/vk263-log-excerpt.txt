@@ -1,0 +1,22 @@
+== vk263-1
+[21:53:30] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, sleep:5, hardware, file:config/rigtune/awareness.json, open:rigtune, sleep:3, shot:rigtune-vulkan, quit]
+[21:53:31] [Render thread/INFO]: Using graphics backend OpenGL, using drivers: 3.3.0 Core Profile Context 26.8.1.260810
+[21:53:32] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Technologies Inc., renderer=AMD Radeon RX 7800 XT, driverVersion=3.3.0 Core Profile Context 26.8.1.260810, backend=OPENGL, vramMb=16368], totalRamMb=31849, maxHeapMb=4096, display=DisplayInfo[width=2560, height=1440, refreshRate=180, fullscreen=false], hasBattery=false, onBattery=false, osName=Windows 11 10.0, mcVersion=26.3, flags=[jvm-gc-g1, jvm-probed]]
+> Process 'command 'C:\Dev\Tools\jdk\jdk-25.0.4.1+1\bin\java.exe'' finished with non-zero exit value -1073741819 (NTSTATUS 0xC0000005)
+BUILD FAILED in 15s
+== vk263-2
+[21:59:36] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, sleep:5, hardware, file:config/rigtune/awareness.json, open:rigtune, sleep:3, shot:rigtune-vulkan, quit]
+[21:59:36] [Render thread/WARN]: Detected unexpected shutdown during last game startup: resetting fullscreen mode
+[21:59:37] [Render thread/WARN]: Detected unexpected shutdown during last game startup: resetting preferred graphics API to Default
+[21:59:38] [Render thread/INFO]: Using graphics backend OpenGL, using drivers: 3.3.0 Core Profile Context 26.8.1.260810
+[21:59:39] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Technologies Inc., renderer=AMD Radeon RX 7800 XT, driverVersion=3.3.0 Core Profile Context 26.8.1.260810, backend=OPENGL, vramMb=16368], totalRamMb=31849, maxHeapMb=4096, display=DisplayInfo[width=2560, height=1440, refreshRate=180, fullscreen=false], hasBattery=false, onBattery=false, osName=Windows 11 10.0, mcVersion=26.3, flags=[jvm-gc-g1, jvm-probed]]
+> Process 'command 'C:\Dev\Tools\jdk\jdk-25.0.4.1+1\bin\java.exe'' finished with non-zero exit value -1073741819 (NTSTATUS 0xC0000005)
+BUILD FAILED in 17s
+== vk263-3
+[22:40:44] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, sleep:5, hardware, file:config/rigtune/awareness.json, open:rigtune, sleep:3, shot:rigtune-vulkan, quit]
+[22:40:44] [Render thread/WARN]: Detected unexpected shutdown during last game startup: resetting fullscreen mode
+[22:40:45] [Render thread/WARN]: Graphics backend forced to vulkan by launch argument, in-game preferred graphics backend setting is ignored
+[22:40:46] [Render thread/INFO]: Using graphics backend Vulkan, using drivers: 1.4.349 AMD proprietary driver 26.8.1 (LLPC)
+[22:40:47] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=AMD, renderer=AMD Radeon RX 7800 XT, driverVersion=1.4.349 AMD proprietary driver 26.8.1 (LLPC), backend=VULKAN, vramMb=16368], totalRamMb=31849, maxHeapMb=4096, display=DisplayInfo[width=2560, height=1440, refreshRate=180, fullscreen=false], hasBattery=false, onBattery=false, osName=Windows 11 10.0, mcVersion=26.3, flags=[backend-vulkan, jvm-gc-g1, jvm-probed]]
+[22:40:55] [Render thread/INFO]: [P5A] 9.2s hardware {gpuVendor=AMD, gpuRenderer=AMD Radeon RX 7800 XT, gpuDriver=1.4.349 AMD proprietary driver 26.8.1 (LLPC), backend=VULKAN, vramMb=16368, cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], ramMb=31849, maxHeapMb=4096, flags={flags=backend-vulkan jvm-gc-g1 jvm-probed}, gpuClass=GpuClass[vendor=AMD, integrated=false, tier=5, matchedPattern=(?i)RX\s*(?:6[89][05]0|7[89]00|90[7-9]0)\b]}
+BUILD SUCCESSFUL in 27s

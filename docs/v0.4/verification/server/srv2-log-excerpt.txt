@@ -1,0 +1,23 @@
+[21:50:12] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, sleep:3, notices:title, connect:127.0.0.1:25577, sleep:10, serverLimits:connected, notices:connected, report:connected, open:rigtune, sleep:4, shot:rigtune-connected, open:notice, sleep:2, shot:noticescreen-connected, open:none, disconnect, sleep:5, serverLimits:disconnected, notices:disconnected, report:disconnected, open:rigtune, sleep:4, shot:rigtune-disconnected, file:config/rigtune/server-limits.json, quit]
+[21:50:16] [Render thread/INFO]: [P5A] 3.6s title screen at JVM uptime 12591 ms
+[21:50:17] [Render thread/INFO]: [P5A] 4.1s report ready (online false, rules r15 bundled)
+[21:50:20] [Render thread/INFO]: [P5A] 7.1s notices []
+[21:50:20] [Render thread/INFO]: [P5A] 7.2s connecting to 127.0.0.1:25577
+[21:50:25] [Render thread/INFO]: [P5A] 12.2s connected: level loaded, server limits ServerLimits[viewDistance=10, simulationDistance=5, kind=REMOTE, lastSeenEpochMillis=1790423421687]
+[21:50:35] [Render thread/INFO]: [P5A] 22.2s serverLimits ServerLimits[viewDistance=10, simulationDistance=5, kind=REMOTE, lastSeenEpochMillis=1790423421687]; options RD 16, effective 10
+[21:50:35] [Render thread/INFO]: [P5A] 22.3s notices [{key=server-limit:10:above, priority=SERVER_LIMIT, message=The server limits view distance to 10 chunks (you set 16), detail=You set 16; the server sends 10, so 10 is what you see. Simulation distance on this server: 5 chunks (the server decides it). This server's limit changed since last time (was 6)., actions=[], dismissible=true}]
+[21:50:35] [Render thread/INFO]: [P5A] 22.3s recommendation {id=set:vanilla.renderDistance, title=Render Distance: 16 → 12, reason=Your hardware can handle 12 chunks smoothly; the benchmark can fine-tune it., key=vanilla.renderDistance, current=16, new=12, selected=false}
+[21:50:35] [Render thread/INFO]: [P5A] 22.4s opened RigTuneScreen
+[21:50:39] [IO-Worker-1/INFO]: [P5A] 26.5s screenshot rigtune-connected: Saved screenshot as p5a-srv2-rigtune-connected.png
+[21:50:40] [Render thread/INFO]: [P5A] 26.9s opened NoticeScreen
+[21:50:42] [Render thread/INFO]: [P5A] 29.0s screen noticescreen-connected: {screen=io.github.chaotix345.rigtune.client.ui.NoticeScreen, title=Notices, widgets=[Plain '×', Plain 'Done'], window=1280x720 scale 3}
+[21:50:42] [IO-Worker-1/INFO]: [P5A] 29.1s screenshot noticescreen-connected: Saved screenshot as p5a-srv2-noticescreen-connected.png
+[21:50:42] [Render thread/INFO]: [P5A] 29.5s opened no screen
+[21:50:42] [Render thread/INFO]: [P5A] 29.5s disconnecting
+[21:50:50] [Render thread/INFO]: [P5A] 37.6s serverLimits null; options RD 16, effective 10
+[21:50:50] [Render thread/INFO]: [P5A] 37.6s notices []
+[21:50:50] [Render thread/INFO]: [P5A] 37.7s recommendation {id=set:vanilla.renderDistance, title=Render Distance: 16 → 12, reason=Your hardware can handle 12 chunks smoothly; the benchmark can fine-tune it., key=vanilla.renderDistance, current=16, new=12, selected=false}
+[21:50:51] [Render thread/INFO]: [P5A] 37.7s opened RigTuneScreen
+[21:50:55] [IO-Worker-1/INFO]: [P5A] 41.8s screenshot rigtune-disconnected: Saved screenshot as p5a-srv2-rigtune-disconnected.png
+[21:50:55] [Render thread/INFO]: [P5A] file config/rigtune/server-limits.json:
+[21:50:55] [Render thread/INFO]: [P5A] 42.3s quitting
