@@ -231,7 +231,7 @@ class HistoryModelTest {
 		assertEquals(Row.UPDATED, changes.get(0).row());
 		assertEquals("Sodium", changes.get(0).name());
 		assertEquals("Sodium", changes.get(0).shownName());
-		assertEquals("aIris", changes.get(1).shownName());
+		assertEquals("Iris", changes.get(1).shownName());
 		assertNull(changes.get(2).name());
 		assertEquals("dh.jar", changes.get(2).shownName());
 		assertEquals("dh.jar", changes.get(2).file());

@@ -117,7 +117,9 @@ class ModJarsTest {
 	void theNameLosesFormattingCodesAndControlCharactersAndIsCapped() throws IOException {
 		Path jar = TestJars.modJar(dir.resolve("evil.jar"), "evil", "\u00a7cRed\u202e\u200b  Mod\n\t\u0007\ufeff");
 
-		assertEquals("cRed Mod", ModJars.nameOf(jar));
+		assertEquals("Red Mod", ModJars.nameOf(jar));
+		assertEquals("Foo Bar", ModJars.sanitizeName("Foo\tBar\n"));
+		assertEquals("Fancy", ModJars.sanitizeName("\u00a7lFancy\u00a7"));
 		assertEquals(64, ModJars.sanitizeName("\ud835\udcd0".repeat(100)).codePointCount(0, 128));
 		assertEquals("\ud835\udcd0".repeat(64), ModJars.sanitizeName("\ud835\udcd0".repeat(100)));
 		assertNull(ModJars.sanitizeName(null));

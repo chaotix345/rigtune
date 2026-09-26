@@ -86,10 +86,10 @@ named below, docs/v0.4/verification/ws-a/.
   delegates to it); Recommender fills `Report.tierBasis` at the Report (same classifiers as WS-P's `context()`).
 - Header: `rigtune.header.tier_estimate` ("Estimated tier N/5 · lowest estimated component: CPU"); the badge's one
   tooltip (`rigtune.header.tier_basis.*`: table match / fallback estimate from N threads [at X GHz when the clock
-  lowered it] / thread count unknown; memory tier with the heap) is a mutable `List<Component>` from
-  `RigTuneScreen.tierTooltip(Report)`: WS-B appends its last-benchmark lines to that list (coordinator rule: one
-  tooltip, rendered once). Over the badge the clipped header line's own tooltip is suppressed (the first tooltip set
-  in a frame wins; seen in CI). The longer badge no longer fits the title row at the 3 standard sizes, so it leads the
+  lowered it] / thread count unknown; memory tier with the heap) is the `List<Component>` from
+  `RigTuneScreen.tierTooltip(Report)`, passed as `extraLines` to WS-B's `BenchmarkTrendLines.badgeTooltip`, which adds
+  the last-benchmark line: one call, one tooltip, wherever the badge is drawn (title row or the header line). Over the
+  badge the clipped header line's own tooltip is suppressed (the first tooltip set in a frame wins; seen in CI). The longer badge no longer fits the title row at the 3 standard sizes, so it leads the
   display/rules line, which is clipped at 640x480@2 (full text on hover, as before).
 - ShareReport: "- Estimated tier N/5 · lowest estimated component: GPU, CPU · goal ..."; ProductionSmoke's log line
   reworded. `rigtune.limit.*` stay as the component names.
@@ -114,3 +114,13 @@ named below, docs/v0.4/verification/ws-a/.
 - `tools/e2e/compat030.py` (origin/test/e2e-v04) on this set + WS-H's placeholders, released
   rigtune-0.3.0+mc26.2.jar (sha256 5717f65c...): RESULT PASS, all 9 checks (Journal state OK 3/3 entries, PendingActions
   1/1 op with type, id and mod id, no file changed).
+
+## Self-review
+A code-reviewer subagent: 0 high, 0 medium, 8 low. Fixed: a one-sided `conflicts` predicate now refuses both additions
+(either direction counts); the name sanitiser turns tabs/newlines into a space and drops a formatting code's letter with
+its `§`; `ModJars.nameOf` also catches RuntimeException (a cosmetic name never aborts staging or the legacy import);
+V040WrittenWsaTest fails in CI instead of writing a missing set. Left as documented residuals (safe direction or out of
+2e's scope): a dependency-level Modrinth incompatibility between two additions still fails the later one; a staged
+version's declarations still count when the same batch re-resolves that project to a newer version (over-blocking);
+`checkUpdate` against earlier batch versions is now reached only after the pairwise pre-check (no test of that branch
+alone). The badge hover width is already clipped to the column.

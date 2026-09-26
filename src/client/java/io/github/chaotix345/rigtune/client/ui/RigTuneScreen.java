@@ -83,6 +83,7 @@ public class RigTuneScreen extends Screen {
 	// docs/v0.4/SPEC.md 2j: where the tier badge is drawn (title row, or the start of header line badgeLine) and its one tooltip.
 	private int badgeLine = -1;
 	private @Nullable ScreenRectangle badgeArea;
+	private @Nullable Component badgeComponent;
 	private List<Component> tierTooltipLines = List.of();
 	private int headerBottom;
 	private int statusY;
@@ -143,6 +144,7 @@ public class RigTuneScreen extends Screen {
 		badgeArea = tierBadge == null ? null : badgeInTitleRow ? new ScreenRectangle(badgeRight - font.width(tierBadge), 11, font.width(tierBadge), LINE)
 				: badgeLine < 0 ? null : new ScreenRectangle(left, headerTop + badgeLine * LINE, Math.min(font.width(tierBadge), right - left), LINE);
 		tierTooltipLines = shown == null ? List.of() : tierTooltip(shown);
+		badgeComponent = tierBadge;
 		if (!badgeInTitleRow) {
 			tierBadge = null;
 		}
@@ -625,21 +627,21 @@ public class RigTuneScreen extends Screen {
 		graphics.text(font, title.copy().withStyle(ChatFormatting.BOLD), left, 11, 0xFFFFFFFF, true);
 		if (tierBadge != null) {
 			graphics.text(font, tierBadge, badgeRight - font.width(tierBadge), 11, 0xFFFFFFFF, true);
-			BenchmarkTrendLines.badgeTooltip(graphics, font, controller, tierBadge, badgeRight - font.width(tierBadge), 11, mouseX, mouseY, List.of());
 		}
 		int textWidth = right - left;
 		if (shown == null) {
 			graphics.text(font, Component.translatable("rigtune.screen.analysing"), left, headerTop, COLOR_LABEL, false);
 		} else {
 			// Over the tier badge its own tooltip shows, not the clipped line's full text (the first tooltip set wins).
-			boolean overBadge = badgeArea != null && !tierTooltipLines.isEmpty() && badgeArea.containsPoint(mouseX, mouseY);
+			boolean overBadge = badgeArea != null && badgeArea.containsPoint(mouseX, mouseY);
 			int y = headerTop;
 			for (Component line : headerLines) {
 				drawClipped(graphics, line, left, y, textWidth, 0xFFFFFFFF, overBadge ? -1 : mouseX, overBadge ? -1 : mouseY);
 				y += LINE;
 			}
-			if (overBadge) {
-				graphics.setComponentTooltipForNextFrame(font, tierTooltipLines, mouseX, mouseY);
+			// The badge's one tooltip (2j + WS-B): the tier basis lines, then WS-B's last-benchmark line, wherever it's drawn.
+			if (badgeArea != null) {
+				BenchmarkTrendLines.badgeTooltip(graphics, font, controller, badgeComponent, badgeArea.left(), badgeArea.top(), mouseX, mouseY, tierTooltipLines);
 			}
 		}
 		extractNotice(graphics, mouseX, mouseY);

@@ -48,15 +48,15 @@ public final class ModJars {
 		} catch (NoSuchFileException e) {
 			RigTune.LOGGER.debug("No mod name for {}: the file is gone", jar);
 			return null;
-		} catch (IOException e) {
+		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.debug("Could not read the mod name of {}: {}", jar, e.getMessage());
 			return null;
 		}
 	}
 
-	// A downloaded file's text shown in the UI (plan review P-L1): no formatting code sign (U+00A7), no control, format,
-	// separator, private-use or unassigned characters, runs of whitespace as one space, at most MAX_NAME_CODE_POINTS;
-	// null when nothing is left.
+	// A downloaded file's text shown in the UI (plan review P-L1): no formatting code (U+00A7 and the code after it), no
+	// control, format, separator, private-use or unassigned characters, runs of whitespace (tabs and newlines included) as
+	// one space, at most MAX_NAME_CODE_POINTS; null when nothing is left.
 	public static String sanitizeName(String raw) {
 		if (raw == null) {
 			return null;
@@ -66,10 +66,15 @@ public final class ModJars {
 		for (int i = 0; i < raw.length() && kept < MAX_NAME_CODE_POINTS; ) {
 			int cp = raw.codePointAt(i);
 			i += Character.charCount(cp);
-			if (cp == 0x00A7 || unsafe(cp)) {
+			if (cp == 0x00A7) {
+				i += i < raw.length() ? Character.charCount(raw.codePointAt(i)) : 0;
 				continue;
 			}
-			if (Character.isWhitespace(cp) || Character.isSpaceChar(cp)) {
+			boolean space = Character.isWhitespace(cp) || Character.isSpaceChar(cp);
+			if (!space && unsafe(cp)) {
+				continue;
+			}
+			if (space) {
 				if (out.isEmpty() || out.charAt(out.length() - 1) == ' ') {
 					continue;
 				}

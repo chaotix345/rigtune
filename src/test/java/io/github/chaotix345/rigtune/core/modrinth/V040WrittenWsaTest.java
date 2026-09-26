@@ -90,6 +90,8 @@ class V040WrittenWsaTest {
 		for (Map.Entry<String, String> file : written.entrySet()) {
 			Path committed = RepoFiles.resolve(SET.resolve(file.getKey()).toString());
 			if (!Files.exists(committed)) {
+				// Regenerated only on a developer's machine: in CI a missing set is a failure, not a new file.
+				assertTrue(System.getenv("CI") == null, committed + " is missing; run this test locally to write it, then commit it");
 				Files.createDirectories(committed.getParent());
 				Files.writeString(committed, file.getValue(), StandardCharsets.UTF_8);
 			}

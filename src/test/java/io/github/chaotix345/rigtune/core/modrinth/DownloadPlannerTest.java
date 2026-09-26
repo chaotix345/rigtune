@@ -187,7 +187,8 @@ class DownloadPlannerTest {
 	void aConflictingPairIsRefusedEvenWhenOneSideWouldFail() {
 		put("krypton", version("kryptonV", "KRYPTON", "1", T));
 		put("noise", version("noiseV", "NOISE", "1", T));
-		conflicts = (a, b) -> Set.of("krypton", "noise").equals(Set.of(a, b));
+		// One-sided on purpose: either direction refuses both.
+		conflicts = (a, b) -> a.equals("krypton") && b.equals("noise");
 		failing.add("kryptonV.jar");
 
 		DownloadPlanner.Result result = plan(Set.of(), add("krypton", "KRYPTON"), add("noise", "NOISE"));

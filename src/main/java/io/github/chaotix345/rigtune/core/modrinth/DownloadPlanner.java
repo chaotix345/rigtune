@@ -168,7 +168,9 @@ public final class DownloadPlanner {
 			}
 		}
 		pairs(updates, versions, out, null);
+		// Either direction of the rules' conflicts counts (ModConflicts is symmetric; a caller's predicate may not be).
 		pairs(additions, versions, out, (a, b) -> conflicts.test(((Action.AddMod) a.action()).slug(), ((Action.AddMod) b.action()).slug())
+				|| conflicts.test(((Action.AddMod) b.action()).slug(), ((Action.AddMod) a.action()).slug())
 				? Text.of("rigtune.download.conflicts", "it conflicts with %s, which is ticked too; tick only one of them", ((Action.AddMod) b.action()).title())
 				: null);
 		return out;
