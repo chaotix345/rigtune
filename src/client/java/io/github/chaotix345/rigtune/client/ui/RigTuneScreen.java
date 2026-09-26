@@ -250,6 +250,12 @@ public class RigTuneScreen extends Screen {
 		return List.copyOf(headerLines);
 	}
 
+	/** v0.4 (docs/v0.4/SPEC.md 2b): a recommendation's title as the list draws it, or null (for the game tests). */
+	public @Nullable String titleOf(String recommendationId) {
+		return shown == null ? null : shown.recommendations().stream().filter(r -> r.id().equals(recommendationId)).findFirst()
+				.map(r -> displayTitle(r).getString()).orElse(null);
+	}
+
 	/** v0.3 (WS-C): the launcher lines shown under the ram-* advice (for the game tests). */
 	public List<Component> launcherLines() {
 		return shown == null ? List.of()

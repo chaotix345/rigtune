@@ -158,8 +158,8 @@ public final class RealController implements RigTuneController {
 		this.staging = new Staging(configDir, pendingFile, ConfigTargets.all(configDir), ClientJournal.get());
 		// The Undo screen plans off the render thread; the options are still read on it.
 		this.undoService = new UndoService(staging, ClientJournal.get(),
-				() -> minecraft.isSameThread() ? new GameState(minecraft.options, staging.targets(), modsDir, settingLabels())
-						: minecraft.submit(() -> new GameState(minecraft.options, staging.targets(), modsDir, settingLabels())).join(),
+				() -> minecraft.isSameThread() ? new GameState(minecraft.options, staging.targets(), modsDir, rulesSettingLabels())
+						: minecraft.submit(() -> new GameState(minecraft.options, staging.targets(), modsDir, rulesSettingLabels())).join(),
 				values -> {
 					Map<String, Boolean> written = new LinkedHashMap<>();
 					SettingsBridge.applyVanilla(minecraft.options, values).forEach((key, result) -> written.put(key, result.ok()));
@@ -179,7 +179,7 @@ public final class RealController implements RigTuneController {
 				new BenchmarkStaleNoticeSource(this)), awarenessService);
 	}
 
-	private Map<String, RulesDocument.SettingLabel> settingLabels() {
+	private Map<String, RulesDocument.SettingLabel> rulesSettingLabels() {
 		RulesDocument doc = rules;
 		return doc == null ? Map.of() : doc.settingLabels;
 	}
@@ -729,6 +729,12 @@ public final class RealController implements RigTuneController {
 			RigTune.LOGGER.error("Could not work out what to undo", e);
 			return UndoPlan.unavailable(false, "rigtune.undo.error");
 		}
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md 2b): History's labels, for the Preview.
+	@Override
+	public HistoryModel.Labels settingLabels() {
+		return HistoryModel.Labels.of(new GameState(minecraft.options, staging.targets(), modsDir, rulesSettingLabels()));
 	}
 
 	@Override

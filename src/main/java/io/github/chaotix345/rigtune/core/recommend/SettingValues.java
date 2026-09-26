@@ -104,7 +104,7 @@ public final class SettingValues {
 	}
 
 	// "<name>: <current> → <target>", with the rules' settingLabels where they exist and the caption from the key otherwise.
-	static Text describe(SettingLabel label, String key, String current, String target) {
+	public static Text describe(SettingLabel label, String key, String current, String target) {
 		return Text.of("rigtune.rec.setting.title", "%s: %s → %s", name(label, key), valueLabel(label, current), valueLabel(label, target));
 	}
 
