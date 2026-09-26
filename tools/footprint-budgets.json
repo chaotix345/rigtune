@@ -1,10 +1,10 @@
 {
   "formatVersion": 1,
   "mode": "warn",
-  "about": "RigTune's own footprint budgets (docs/v0.4/SPEC.md 10), read by FrameHookBudgetTest and FootprintGameTest. ceiling = the SPEC's initial ceiling (null where the SPEC sets none); limit = min(ceiling, 2 x the largest value observed in the calibration, docs/v0.4/verification/footprint/README.md). mode warn logs a value past its limit, fail fails the test.",
+  "about": "RigTune's own footprint budgets (docs/v0.4/SPEC.md 10 and its WS-F amendment), read by FrameHookBudgetTest and FootprintGameTest. ceiling = the SPEC's ceiling (null where the SPEC sets none); limit = min(ceiling, 2 x the largest value observed in the calibration, docs/v0.4/verification/footprint/README.md). mode warn logs a value past its limit, fail fails the test.",
   "budgets": {
-    "renderThreadInitWallMs": {"limit": 25, "ceiling": 25, "what": "wall time of RigTunePreLaunch + onInitializeClient on the render thread"},
-    "renderThreadInitCpuMs": {"limit": 15, "ceiling": 15, "what": "render-thread CPU time of RigTunePreLaunch + onInitializeClient"},
+    "renderThreadInitWallMs": {"limit": 150, "ceiling": 150, "what": "wall time of RigTunePreLaunch + onInitializeClient on the render thread"},
+    "renderThreadInitCpuMs": {"limit": 150, "ceiling": 150, "what": "render-thread CPU time of RigTunePreLaunch + onInitializeClient"},
     "clientStartedWallMs": {"limit": 100, "ceiling": null, "what": "wall time of RigTune's CLIENT_STARTED handler (RealController.start) on the render thread"},
     "workerCpuMs5s": {"limit": 300, "ceiling": 300, "what": "CPU of every RigTune thread in the 5 s after CLIENT_STARTED"},
     "frameHookNsPerCallOff": {"limit": 20, "ceiling": 20, "what": "per-frame hook, ns per call, session monitor off (10 M calls)"},

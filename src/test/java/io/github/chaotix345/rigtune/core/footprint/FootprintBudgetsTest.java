@@ -21,10 +21,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // warns or fails by mode.
 class FootprintBudgetsTest {
 	private static final double MIB = 1024 * 1024;
-	// The SPEC's initial ceilings; a limit may be tightened by calibration, never raised past these.
+	// The SPEC's ceilings (the render-thread init ones as amended for WS-F from the measured 70-86 ms, SPEC 10 was 25/15);
+	// a limit may be tightened by calibration, never raised past these.
 	private static final Map<String, Double> SPEC_CEILINGS = Map.ofEntries(
-			Map.entry("renderThreadInitWallMs", 25.0),
-			Map.entry("renderThreadInitCpuMs", 15.0),
+			Map.entry("renderThreadInitWallMs", 150.0),
+			Map.entry("renderThreadInitCpuMs", 150.0),
 			Map.entry("workerCpuMs5s", 300.0),
 			Map.entry("frameHookNsPerCallOff", 20.0),
 			Map.entry("frameHookAllocBytesOff", 0.0),

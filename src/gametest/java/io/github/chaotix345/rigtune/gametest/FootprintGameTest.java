@@ -291,6 +291,10 @@ public class FootprintGameTest implements FabricClientGameTest {
 
 	// GC.class_histogram through the DiagnosticCommand MBean (a full GC first), then the heap right after that GC.
 	private static Histogram histogram() {
+		Map<String, Long> countsBefore = new HashMap<>();
+		for (GarbageCollectorMXBean gc : ManagementFactory.getGarbageCollectorMXBeans()) {
+			countsBefore.put(gc.getName(), gc.getCollectionCount());
+		}
 		String text;
 		long start = System.nanoTime();
 		try {
@@ -315,35 +319,33 @@ public class FootprintGameTest implements FabricClientGameTest {
 		}
 		check(!rigtune.isEmpty(), "the histogram lists RigTune classes");
 		String[] collector = new String[1];
-		long heap = heapAfterLastGc(collector);
+		long heap = heapAfterFullGc(countsBefore, collector);
 		return new Histogram(rigtune, heap, collector[0], millis);
 	}
 
-	// The heap pools' usage after the most recent stop-the-world collection (the histogram's full GC), from its GcInfo;
-	// the current heap usage if the JVM doesn't say.
-	private static long heapAfterLastGc(String[] collector) {
+	// The heap pools' usage right after the histogram's full GC, from that collector's GcInfo (a young GC that ran after it
+	// would count garbage in the old generation): the full-GC bean (G1 "Old Generation", "MarkSweep", ZGC "Major") whose
+	// count went up; the current heap usage if the JVM doesn't say.
+	private static long heapAfterFullGc(Map<String, Long> countsBefore, String[] collector) {
 		Set<String> heapPools = ManagementFactory.getMemoryPoolMXBeans().stream().filter(p -> p.getType() == MemoryType.HEAP)
 				.map(MemoryPoolMXBean::getName).collect(Collectors.toSet());
-		long latest = -1;
-		long used = -1;
 		for (GarbageCollectorMXBean gc : ManagementFactory.getGarbageCollectorMXBeans()) {
-			if (!(gc instanceof com.sun.management.GarbageCollectorMXBean bean) || gc.getName().contains("Concurrent")) {
+			String name = gc.getName();
+			boolean full = name.contains("Old") || name.contains("MarkSweep") || name.contains("Major");
+			if (!full || gc.getCollectionCount() <= countsBefore.getOrDefault(name, 0L)
+					|| !(gc instanceof com.sun.management.GarbageCollectorMXBean bean)) {
 				continue;
 			}
 			GcInfo info = bean.getLastGcInfo();
-			if (info != null && info.getEndTime() > latest) {
-				latest = info.getEndTime();
-				used = info.getMemoryUsageAfterGc().entrySet().stream().filter(e -> heapPools.contains(e.getKey()))
+			if (info != null) {
+				collector[0] = name;
+				return info.getMemoryUsageAfterGc().entrySet().stream().filter(e -> heapPools.contains(e.getKey()))
 						.mapToLong(e -> e.getValue().getUsed()).sum();
-				collector[0] = gc.getName();
 			}
 		}
-		if (used < 0) {
-			MemoryUsage heap = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
-			collector[0] = "none (MemoryMXBean)";
-			return heap.getUsed();
-		}
-		return used;
+		MemoryUsage heap = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
+		collector[0] = "none (MemoryMXBean)";
+		return heap.getUsed();
 	}
 
 	private static void write(String mc, String backend, Map<String, Object> out) {

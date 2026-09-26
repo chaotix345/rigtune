@@ -57,9 +57,12 @@ public final class FootprintStats {
 		return System.nanoTime();
 	}
 
+	// Only the launch's own call counts: a game test calls onPreLaunch() again later (with the apply lock held).
 	public static void preLaunchEnd(long start) {
-		preLaunchWallNs = System.nanoTime() - start;
-		preLaunchCpuNs = since(preLaunchCpuStart);
+		if (preLaunchWallNs == UNSET) {
+			preLaunchWallNs = System.nanoTime() - start;
+			preLaunchCpuNs = since(preLaunchCpuStart);
+		}
 	}
 
 	public static long initStart() {
@@ -68,8 +71,10 @@ public final class FootprintStats {
 	}
 
 	public static void initEnd(long start) {
-		initWallNs = System.nanoTime() - start;
-		initCpuNs = since(initCpuStart);
+		if (initWallNs == UNSET) {
+			initWallNs = System.nanoTime() - start;
+			initCpuNs = since(initCpuStart);
+		}
 	}
 
 	// The CLIENT_STARTED handler: opens the worker window (closed on another thread WINDOW_MILLIS later), then times start.
