@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client.benchmark;
 import io.github.chaotix345.rigtune.client.stutter.StutterMonitor;
 import io.github.chaotix345.rigtune.client.stutter.StutterMonitorAccess;
 import io.github.chaotix345.rigtune.core.footprint.FootprintBudgets;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -50,16 +51,19 @@ class FrameHookBudgetTest {
 	}
 
 	// The same plus every phase-timer call of a frame with one tick, a chunk load and the frame-rate limiter (a capped
-	// frame rate): the most calls a frame without extra ticks makes (MinecraftFrameMixin; S-M1).
+	// frame rate): the most calls a frame without extra ticks makes (MinecraftFrameMixin; S-M1). 8 System.nanoTime() reads
+	// per frame, so this case has its own ceiling (400 ns, coordinator 2026-09-26; SPEC 10's 200 ns covers the two onFrame
+	// calls). The uncapped frame (no limiter pair, 6 reads) is logged as a diagnostic; its allocation is gated too.
 	@Test
 	void frameHookWithTheMonitorOnAndThePhaseTimers() throws IOException {
 		StutterMonitorAccess.startSession();
 		assertTrue(StutterMonitor.active(), "the session capture is on");
 		measure("monitor on with the phase timers", "frameHookNsPerCallOnPhases", "frameHookAllocBytesOnPhases", FrameHookBudgetTest::phasedFrames);
 		assertTrue(StutterMonitor.phaseTiming(), "every phase timer ran");
+		measure("monitor on with the phase timers, uncapped (diagnostic)", null, "frameHookAllocBytesOnPhases", FrameHookBudgetTest::uncappedFrames);
 	}
 
-	private static void measure(String label, String nsKey, String bytesKey, IntConsumer hook) throws IOException {
+	private static void measure(String label, @Nullable String nsKey, String bytesKey, IntConsumer hook) throws IOException {
 		FootprintBudgets budgets = FootprintBudgets.load();
 		com.sun.management.ThreadMXBean mx = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
 		assumeTrue(mx.isThreadAllocatedMemorySupported() && mx.isThreadAllocatedMemoryEnabled(), "no per-thread allocation counter");
@@ -88,7 +92,7 @@ class FrameHookBudgetTest {
 		System.out.printf(Locale.ROOT, "FrameHookBudgetTest: %s: %.3f ns/call (best of %d x %d hot calls); allocated %d B over %d calls "
 				+ "from cold (%d B forgiven as JIT noise), %d B over the hot calls (fewest of any run)%n", label, nsPerCall, RUNS, CALLS, cold, CALLS,
 				JIT_NOISE_BYTES, hot);
-		budgets.enforce(budgets.check(Map.of(nsKey, nsPerCall, bytesKey, allocated)), System.out::println);
+		budgets.enforce(budgets.check(nsKey == null ? Map.of(bytesKey, allocated) : Map.of(nsKey, nsPerCall, bytesKey, allocated)), System.out::println);
 	}
 
 	private static void frames(int calls) {
@@ -120,6 +124,20 @@ class FrameHookBudgetTest {
 			StutterMonitor.renderStart();
 			StutterMonitor.limiterStart();
 			StutterMonitor.limiterEnd();
+			long d = duration(i);
+			FrameTimes.onFrame(d);
+			StutterMonitor.onFrame(d);
+		}
+	}
+
+	private static void uncappedFrames(int calls) {
+		for (int i = 0; i < calls; i++) {
+			StutterMonitor.packetsStart();
+			StutterMonitor.chunkLoaded();
+			StutterMonitor.packetsEnd();
+			StutterMonitor.tickStart();
+			StutterMonitor.tickEnd();
+			StutterMonitor.renderStart();
 			long d = duration(i);
 			FrameTimes.onFrame(d);
 			StutterMonitor.onFrame(d);

@@ -32,7 +32,8 @@ class FootprintBudgetsTest {
 			Map.entry("frameHookAllocBytesOff", 0.0),
 			Map.entry("frameHookNsPerCallOn", 200.0),
 			Map.entry("frameHookAllocBytesOn", 0.0),
-			Map.entry("frameHookNsPerCallOnPhases", 200.0),
+			// The phase timers' case has its own ceiling (8 System.nanoTime reads per frame; coordinator, 2026-09-26).
+			Map.entry("frameHookNsPerCallOnPhases", 400.0),
 			Map.entry("frameHookAllocBytesOnPhases", 0.0),
 			Map.entry("tickHookNsPerCall", 2000.0),
 			Map.entry("tickHookAllocBytes", 0.0),
