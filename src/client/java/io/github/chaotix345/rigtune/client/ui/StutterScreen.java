@@ -54,7 +54,8 @@ public class StutterScreen extends Screen {
 			Attributor.RENDER, "rigtune.stutter.cause.render", Attributor.UNKNOWN, "rigtune.stutter.cause.unknown");
 	private static final Map<String, String> TAGS = Map.of(Attributor.WORLD_SAVE, "rigtune.stutter.tag.world_save", Attributor.DH,
 			"rigtune.stutter.tag.dh", Attributor.CPU_CONTENTION, "rigtune.stutter.tag.cpu_contention", Attributor.AFTER_TELEPORT,
-			"rigtune.stutter.tag.after_teleport", Attributor.MOVING_FAST, "rigtune.stutter.tag.moving_fast");
+			"rigtune.stutter.tag.after_teleport", Attributor.CHUNKS_LOADING, "rigtune.stutter.tag.chunks_loading", Attributor.MOVING_FAST,
+			"rigtune.stutter.tag.moving_fast");
 
 	private final @Nullable Screen parent;
 	protected final RigTuneController controller;
@@ -192,9 +193,7 @@ public class StutterScreen extends Screen {
 		text(l, time, COLOR_TEXT, width, ROW_GAP);
 		text(l, Component.translatable("rigtune.stutter.header.frames", number(r.frames()), number(r.avgFps()), number(r.onePercentLowFps())), COLOR_TEXT,
 				width, 0);
-		StutterReport.Spikes s = r.spikes();
-		text(l, Component.translatable("rigtune.stutter.header.spikes", s.total(), s.minor(), s.major(), s.severe(), s.freeze(), r.hitches(),
-				String.format(Locale.ROOT, "%.1f", r.lostMs() / 1000)), COLOR_TEXT, width, 0);
+		text(l, spikesLine(r), COLOR_TEXT, width, 0);
 		if (!r.enoughData()) {
 			text(l, Component.translatable("rigtune.stutter.not_enough"), COLOR_NOTE, width, 0);
 		}
@@ -204,6 +203,31 @@ public class StutterScreen extends Screen {
 		if (!r.phaseTiming()) {
 			text(l, Component.translatable("rigtune.stutter.phase_unavailable"), COLOR_LABEL, width, 0);
 		}
+	}
+
+	// "12 spikes (9 minor, 2 major, 1 severe, 0 freezes) in 9 hitches, 1.8 s lost", singular where the count is 1 (review-8
+	// P5B-F3).
+	static Component spikesLine(StutterReport r) {
+		StutterReport.Spikes s = r.spikes();
+		return Component.translatable("rigtune.stutter.header.spikes",
+				count(s.total(), "rigtune.stutter.count.spikes.one", "rigtune.stutter.count.spikes.many"), s.minor(), s.major(), s.severe(),
+				count(s.freeze(), "rigtune.stutter.count.freezes.one", "rigtune.stutter.count.freezes.many"),
+				count(r.hitches(), "rigtune.stutter.count.hitches.one", "rigtune.stutter.count.hitches.many"), String.format(Locale.ROOT, "%.1f", r.lostMs() / 1000));
+	}
+
+	private static Component count(long n, String one, String many) {
+		return Component.translatable(n == 1 ? one : many, n);
+	}
+
+	// "7 of 12 spikes happened during world saves (not measured)"; the chunk tag reads "while chunks were loading" (review-8
+	// P5A-F2); one spike reads "The spike happened ...".
+	static Component tagLine(String tag, int n, int total) {
+		if (Attributor.CHUNKS_LOADING.equals(tag)) {
+			return total == 1 ? Component.translatable("rigtune.stutter.tag.chunks_loading.one")
+					: Component.translatable("rigtune.stutter.tag.chunks_loading.many", n, total);
+		}
+		Component name = Component.translatable(TAGS.get(tag));
+		return total == 1 ? Component.translatable("rigtune.stutter.tag.one", name) : Component.translatable("rigtune.stutter.tag", n, total, name);
 	}
 
 	private void histogram(StutterList l, StutterReport r, int width) {
@@ -244,8 +268,8 @@ public class StutterScreen extends Screen {
 		}
 		for (String tag : Attributor.TAGS) {
 			Integer n = r.tags().get(tag);
-			if (n != null && n > 0) {
-				text(l, Component.translatable("rigtune.stutter.tag", n, r.spikes().total(), Component.translatable(TAGS.get(tag))), COLOR_LABEL, width, 0);
+			if (n != null && n > 0 && TAGS.containsKey(tag)) {
+				text(l, tagLine(tag, n, r.spikes().total()), COLOR_LABEL, width, 0);
 			}
 		}
 	}
@@ -304,9 +328,10 @@ public class StutterScreen extends Screen {
 		}
 		LauncherInfo launcher = controller.launcher();
 		for (StutterAdvisor.Fired f : advice) {
-			text(l, Component.literal(f.title()).withStyle(ChatFormatting.BOLD), f.info() ? COLOR_TEXT : COLOR_NOTE, width, ROW_GAP);
+			// The title and text come from the rules feed: drawn inert (review-8 SE-2).
+			text(l, SafeLiteral.of(f.title()).withStyle(ChatFormatting.BOLD), f.info() ? COLOR_TEXT : COLOR_NOTE, width, ROW_GAP);
 			if (!f.text().isEmpty()) {
-				text(l, Component.literal(f.text()), COLOR_LABEL, width, 0);
+				text(l, SafeLiteral.of(f.text()), COLOR_LABEL, width, 0);
 			}
 			if (f.memory()) {
 				Component steps = LauncherLines.adviceLine(Recommendation.of(f.recommendationId(), Category.ADVICE, f.impact(), Text.literal(f.title()),
@@ -366,6 +391,9 @@ public class StutterScreen extends Screen {
 				causes.append(Component.translatable(CAUSES.get(cause))).append(Component.literal(" " + percent(share)));
 				any = true;
 			}
+		}
+		if (spikes == 1) {
+			return any ? Component.translatable("rigtune.stutter.benchmark.spikes.one", causes) : Component.translatable("rigtune.stutter.benchmark.unexplained.one");
 		}
 		return any ? Component.translatable("rigtune.stutter.benchmark.spikes", spikes, causes)
 				: Component.translatable("rigtune.stutter.benchmark.unexplained", spikes);

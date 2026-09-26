@@ -6,6 +6,7 @@ import io.github.chaotix345.rigtune.core.model.GpuVendor;
 import io.github.chaotix345.rigtune.core.model.GraphicsBackend;
 import org.jspecify.annotations.Nullable;
 
+import java.util.Arrays;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
@@ -55,15 +56,23 @@ public final class ChangeDetector {
 	}
 
 	// Parsed versions when both parse (same family); otherwise the raw strings, but only on the same backend (a backend
-	// switch changes the string's whole shape).
+	// switch changes the string's whole shape). Across a backend switch only the parts both versions have are compared
+	// (review-8 JW-2): GL and Vulkan can report the same driver with more or fewer parts ("550.54.14" vs "550.54").
 	private static @Nullable Change driver(Fingerprint before, Fingerprint now) {
 		GpuVendor vendor = vendor(now.gpuVendor());
 		DriverVersion a = DriverVersionParser.parse(vendor, backend(before.backend()), before.gpuDriverRaw());
 		DriverVersion b = DriverVersionParser.parse(vendor, backend(now.backend()), now.gpuDriverRaw());
-		if (a.known() && b.known() && a.family().equals(b.family())) {
-			return DriverVersion.compare(a.comparable(), b.comparable()) == 0 ? null : new Change(Kind.DRIVER, a.display(), b.display());
-		}
 		boolean sameBackend = before.backend().equals(now.backend());
+		if (a.known() && b.known() && a.family().equals(b.family())) {
+			int[] x = a.comparable();
+			int[] y = b.comparable();
+			if (!sameBackend) {
+				int common = Math.min(x.length, y.length);
+				x = Arrays.copyOf(x, common);
+				y = Arrays.copyOf(y, common);
+			}
+			return DriverVersion.compare(x, y) == 0 ? null : new Change(Kind.DRIVER, a.display(), b.display());
+		}
 		if (sameBackend && !before.gpuDriverRaw().strip().equals(now.gpuDriverRaw().strip()) && !now.gpuDriverRaw().isBlank()) {
 			return new Change(Kind.DRIVER, before.gpuDriverRaw().strip(), now.gpuDriverRaw().strip());
 		}

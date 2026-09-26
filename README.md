@@ -86,7 +86,7 @@ Shader-pack settings (the options inside a pack like Complementary or BSL) aren'
 
 **Tools… → Stutter Doctor** shows where the time went when the game hitches, and what may help.
 
-- **The session monitor** is off by default. Turn it on with **Start** (or **Stutter Doctor monitor** in RigTune's settings). While a world is loaded it records every frame's time, the Java garbage collector's pauses, world saves, chunk loading and how busy the game's threads are. **Pause** stops recording for a while; **Stop** turns it off. Leaving the world ends the session and saves a short summary; the next world starts a new one while the monitor is on. While it's on it uses about 2 MB of memory and well under a microsecond per frame; when it's off it costs nothing (no listeners, no background thread).
+- **The session monitor** is off by default. Turn it on with **Start** (or **Stutter Doctor monitor** in RigTune's settings). While a world is loaded it records every frame's time, the Java garbage collector's pauses, world saves, chunk loading and how busy the game's threads are. **Pause** stops recording for a while; **Stop** turns it off. Leaving the world ends the session and saves a short summary; the next world starts a new one while the monitor is on. While it's on it uses about 2.5 MB of memory and well under a microsecond per frame; when it's off it costs nothing (no listeners, no background thread).
 - **The benchmark** always records its own sweeps the same way, and its result screen gets one line (for example "2 spikes during the sweeps; likely causes: Garbage collection 64 %").
 - **The report**: session length, gameplay time, frames, average FPS and 1 % low; a frame-time histogram weighted by play time; the **spikes** (a frame over twice the usual frame time, at least 8 ms more and at least 20 ms; minor under 50 ms, major to 100 ms, severe to 500 ms, freezes beyond); the likely causes as shares of the lost time, measured where possible: garbage-collection pauses, chunk loading, chunk building, game ticks; with **"Not explained"** always shown for what nothing accounts for. World saves, Distant Horizons, a busy CPU, the seconds after a teleport and fast movement are counted as correlations only ("7 of 12 spikes happened during world saves (not measured)"). Then the 10 worst spikes and any advice that fits (for example more memory when garbage collection dominates and the heap is nearly full, with your launcher's steps; or Sodium's Chunk Updates set to Deferred). Menus, an unfocused window and the first 10 s in a world don't count. Everything is "likely": correlation, not proof.
 - It needs at least 3 spikes and 2 minutes of gameplay for a verdict. On some Minecraft versions the per-phase timing may not be available; the report then says "Phase timing unavailable" and chunk loading, ticks and rendering aren't separated.
@@ -148,14 +148,14 @@ RigTune's heavy work (the hardware scan, the mod scan, loading the rules and the
 
 Most of the startup time is Java loading classes the first time they're used, among them Gson's, which Minecraft loads soon after anyway. On the Windows PC above, the same startup work took 65 ms (62 ms of CPU time) when the budgets were calibrated.
 
-**The Stutter Doctor's session monitor** is off by default. Off, it costs next to nothing: no garbage-collection listener, no thread, one flag check per frame and a few field reads per tick. While it's on (in a world), it holds about 2 MB of memory for its frame and event buffers and gives all of it back when it stops. It adds about 35 ns per frame, or about 240 ns with its per-phase timing; that's well under a thousandth of a frame even at 240 FPS. Its sampler thread uses up to about 55 ms of CPU per minute, under 0.1 % of one core. The same checks measure it, in the same release-candidate run:
+**The Stutter Doctor's session monitor** is off by default. Off, it costs next to nothing: no garbage-collection listener, no thread, one flag check per frame and a few field reads per tick. While it's on (in a world), it holds about 2.5 MB of memory for its frame and event buffers and gives all of it back when it stops. It adds about 35 ns per frame, or about 240 ns with its per-phase timing; that's well under a thousandth of a frame even at 240 FPS. Its sampler thread uses up to about 55 ms of CPU per minute, under 0.1 % of one core. The same checks measure it, in the same release-candidate run:
 
 | With the session monitor on | Release candidate | Budget |
 |---|---|---|
 | Per frame | 35 ns, nothing allocated | 75 ns, nothing allocated |
 | Per frame, with the per-phase timing | 239 ns, nothing allocated | 400 ns, nothing allocated |
 | Per tick | 49 ns, nothing allocated | 101 ns, nothing allocated |
-| Its buffers in memory | 1.98 MB | 2.5 MiB (2.62 MB) |
+| Its buffers in memory (their exact size in 0.4.0) | 2.51 MB | 2.5 MiB (2.62 MB) |
 | Left in memory after it's turned off | nothing | nothing |
 | Its sampler thread, CPU time per minute | 54 ms | 102 ms |
 

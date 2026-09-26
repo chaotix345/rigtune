@@ -66,10 +66,11 @@ public final class StutterAnalyzer {
 		GcSummary gc = gc(in);
 		List<Attributor.Sample> samples = samples(in);
 		Attributor.Context ctx = new Attributor.Context(gc.events(), saves(in), teleports(in), movingFast(in), samples, Math.max(1, in.cores()),
-				in.phaseTiming(), in.deferModeWaits());
+				in.phaseTiming(), in.deferModeWaits(), chunkLoading(f, ringStart));
 		List<Attributor.Attribution> attributions = new ArrayList<>();
 		for (SpikeDetector.Spike s : spikes) {
-			attributions.add(Attributor.attribute(s, phases.get(s.end()), ctx));
+			Attributor.Phases p = phases.get(s.end());
+			attributions.add(Attributor.attribute(s, p != null ? p : framePhases(f, s.end()), ctx));
 		}
 
 		long lost = 0;
@@ -139,6 +140,83 @@ public final class StutterAnalyzer {
 				contentionShare(in, samples), gameplaySeconds > 0 ? spikes.size() / (gameplaySeconds / 60) : 0, in.collector(), in.gcMeasured(),
 				unmeasured);
 		return new Result(report, stutterFacts, attributions);
+	}
+
+	// review-8 ST-2: the phases of a frame the frame ring still holds, from its own phase word (the excess over the
+	// baselines, so the baselines are 0), for a spike whose candidate record was pushed out; null when it isn't held.
+	static Attributor.@Nullable Phases framePhases(FrameRing.Snapshot f, long end) {
+		if (!f.hasFramePhases()) {
+			return null;
+		}
+		int i = indexOf(f.ends(), end);
+		if (i < 0) {
+			return null;
+		}
+		int word = f.framePhases()[i];
+		int previous = i > 0 ? FrameRing.chunkLoads(f.framePhases()[i - 1]) : 0;
+		return new Attributor.Phases(FrameRing.packetsExcess(word), FrameRing.ticksExcess(word), FrameRing.renderExcess(word), 0, 0, 0,
+				FrameRing.chunkLoads(word), previous);
+	}
+
+	// The index of the frame ending at `end` (ends ascend; bit 0 is the excluded flag), or -1.
+	static int indexOf(long[] ends, long end) {
+		int lo = 0;
+		int hi = ends.length - 1;
+		while (lo <= hi) {
+			int mid = (lo + hi) >>> 1;
+			long v = ends[mid] & ~1L;
+			if (v < end) {
+				lo = mid + 1;
+			} else if (v > end) {
+				hi = mid - 1;
+			} else {
+				return mid;
+			}
+		}
+		return -1;
+	}
+
+	// review-8 P5A-F2: when the client loaded chunks, oldest first, spans less than Attributor.CHUNK_NEAR apart merged
+	// (which never tags a spike the window wouldn't). Frames older than the frame ring count through their candidate
+	// records (their own and the previous frame's loads), the frame ring's frames through their phase words.
+	static List<Attributor.Interval> chunkLoading(FrameRing.Snapshot f, long ringStart) {
+		List<Attributor.Interval> out = new ArrayList<>();
+		boolean ring = f.hasFramePhases();
+		for (int r = 0; r < f.candidateRecords(); r++) {
+			long end = f.candidate(r, FrameRing.C_END) & ~1L;
+			if (ring && end >= ringStart) {
+				break;
+			}
+			long chunks = f.candidate(r, FrameRing.C_CHUNKS);
+			boolean own = (int) chunks > 0;
+			boolean previous = (int) (chunks >>> 32) > 0;
+			if (own || previous) {
+				long start = end - f.candidate(r, FrameRing.C_DURATION) - (previous ? f.candidate(r, FrameRing.C_BASELINE) : 0);
+				addSpan(out, start, end);
+			}
+		}
+		if (ring) {
+			long[] ends = f.ends();
+			int[] words = f.framePhases();
+			for (int i = 0; i < ends.length; i++) {
+				if (FrameRing.chunkLoads(words[i]) > 0) {
+					long end = ends[i] & ~1L;
+					addSpan(out, i > 0 ? ends[i - 1] & ~1L : end, end);
+				}
+			}
+		}
+		return out;
+	}
+
+	private static void addSpan(List<Attributor.Interval> out, long start, long end) {
+		if (!out.isEmpty()) {
+			Attributor.Interval last = out.getLast();
+			if (start >= last.start() && start - last.end() <= Attributor.CHUNK_NEAR) {
+				out.set(out.size() - 1, new Attributor.Interval(last.start(), Math.max(last.end(), end)));
+				return;
+			}
+		}
+		out.add(new Attributor.Interval(start, end));
 	}
 
 	static long[] gameplayDurations(long[] ends) {

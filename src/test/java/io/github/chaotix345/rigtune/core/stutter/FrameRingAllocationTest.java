@@ -127,10 +127,10 @@ class FrameRingAllocationTest {
 	@Test
 	void retainedBytesCountTheRings() {
 		FrameRing session = new FrameRing(FrameRing.SESSION_FRAMES, FrameRing.SESSION_CANDIDATES);
-		assertEquals((131_072 + 40_960 + 18) * 8L, session.retainedBytes());
+		assertEquals((131_072 + 40_960 + 18) * 8L + 131_072 * 4L, session.retainedBytes(), "the frame ring's ends and phase words, candidates, histogram");
 		StutterRings shared = new StutterRings(0);
 		assertEquals((4096 * 3 + 2048 * 5 + 4096 * 13) * 8L, shared.retainedBytes());
-		assertTrue(session.retainedBytes() + shared.retainedBytes() < 2_500_000L, "within SPEC 10's 2.5 MiB monitor-on allowance");
+		assertTrue(session.retainedBytes() + shared.retainedBytes() <= 2_621_440L, "within SPEC 10's 2.5 MiB monitor-on allowance (monitorOnRetainedBytes)");
 	}
 
 	@Test

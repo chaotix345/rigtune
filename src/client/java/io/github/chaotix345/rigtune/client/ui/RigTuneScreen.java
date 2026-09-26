@@ -445,13 +445,23 @@ public class RigTuneScreen extends Screen {
 
 	private int placeNoticeButtons(List<Button> buttons, int y) {
 		int x = right;
+		for (Button button : buttons) {
+			x -= button.getWidth() + GAP;
+		}
+		noticeTextRight = x;
+		// review-8 UV-2: the notice's own text (and its detail) is a Tab stop the narrator reads, ahead of its buttons.
+		Notice notice = shownNotice;
+		if (notice != null) {
+			addRenderableWidget(RowFocus.standalone(RowFocus.join(Texts.component(notice.message()), notice.detail() == null ? null
+					: Texts.component(notice.detail())), left, y, Math.max(1, noticeTextRight - left), NOTICE_ROW));
+		}
+		x = right;
 		for (Button button : buttons.reversed()) {
 			x -= button.getWidth();
 			button.setPosition(x, y + (NOTICE_ROW - NOTICE_BUTTON) / 2);
 			addRenderableWidget(button);
 			x -= GAP;
 		}
-		noticeTextRight = x;
 		return NOTICE_ROW;
 	}
 
@@ -506,7 +516,7 @@ public class RigTuneScreen extends Screen {
 	}
 
 	private static Component value(String text) {
-		return Component.literal(text == null ? "?" : text).withStyle(ChatFormatting.WHITE);
+		return SafeLiteral.of(text == null ? "?" : text).withStyle(ChatFormatting.WHITE);
 	}
 
 	private static Component value(Component text) {
