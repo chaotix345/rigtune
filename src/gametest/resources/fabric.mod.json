@@ -13,7 +13,15 @@
 			"io.github.chaotix345.rigtune.gametest.UiGameTest",
 			"io.github.chaotix345.rigtune.gametest.ReportGameTest",
 			"io.github.chaotix345.rigtune.gametest.HistoryGameTest",
-			"io.github.chaotix345.rigtune.gametest.PreviewGameTest"
+			"io.github.chaotix345.rigtune.gametest.PreviewGameTest",
+			"io.github.chaotix345.rigtune.gametest.ProfilesGameTest",
+			"io.github.chaotix345.rigtune.gametest.StutterGameTest",
+			"io.github.chaotix345.rigtune.gametest.JvmGameTest",
+			"io.github.chaotix345.rigtune.gametest.BenchmarkHistoryGameTest",
+			"io.github.chaotix345.rigtune.gametest.ServerLimitsGameTest",
+			"io.github.chaotix345.rigtune.gametest.AwarenessGameTest",
+			"io.github.chaotix345.rigtune.gametest.FootprintGameTest",
+			"io.github.chaotix345.rigtune.gametest.A11yGameTest"
 		]
 	},
 	"depends": {

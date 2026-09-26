@@ -67,13 +67,22 @@ V1_CONDITION_KEYS = frozenset({
 })
 V2_CONDITION_KEYS = V1_CONDITION_KEYS | {
     "gpuModelMatches", "displayPixelsAtLeast", "displayPixelsAtMost", "modVersion", "mcVersionRange", "settingIs",
+    "driverVersion",
 }
+# v0.4 Stutter Doctor keys (docs/v0.4/SPEC.md 5): Condition fields, but allowed only inside `stutterAdvice`.
+STUTTER_CONDITION_KEYS = frozenset({
+    "stutterShareAtLeast", "stutterTaggedShareAtLeast", "gcFullPausesAtLeast", "gcStallsAtLeast", "gcExplicitPausesAtLeast",
+    "liveSetPercentAtLeast", "heapRaiseRoomMbAtLeast", "cpuContentionShareAtLeast", "spikesPerMinuteAtLeast", "gcCollector",
+})
 BOOLEAN_CONDITION_KEYS = frozenset({"always", "gpuIntegrated", "hasBattery", "onBattery"})
-LIST_CONDITION_KEYS = frozenset({"gpuVendor", "backend", "os", "goal", "mcVersion", "modPresent", "modAbsent", "flags"})
+LIST_CONDITION_KEYS = frozenset({"gpuVendor", "backend", "os", "goal", "mcVersion", "modPresent", "modAbsent", "flags",
+                                 "gcCollector"})
 STRING_CONDITION_KEYS = frozenset({"gpuModelMatches", "mcVersionRange"})
 # Java Integer fields; every other numeric key is a Java Long.
 INT32_CONDITION_KEYS = frozenset({"tierAtLeast", "tierAtMost", "rawTierAtLeast", "rawTierAtMost", "gpuTierAtLeast",
-                                  "gpuTierAtMost", "cpuTierAtLeast", "cpuTierAtMost", "refreshRateAtLeast"})
+                                  "gpuTierAtMost", "cpuTierAtLeast", "cpuTierAtMost", "refreshRateAtLeast",
+                                  "gcFullPausesAtLeast", "gcStallsAtLeast", "gcExplicitPausesAtLeast", "liveSetPercentAtLeast",
+                                  "cpuContentionShareAtLeast", "spikesPerMinuteAtLeast"})
 MAX_PATTERN_LENGTH = 200
 
 # Enumerated condition values. V1 is what 0.1.0 understands and is frozen: 0.1.x evaluates two-valued, so a value it
