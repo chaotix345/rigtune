@@ -87,6 +87,12 @@ public final class UndoPlanner {
 		default String value(String key, String value) {
 			return value;
 		}
+
+		// The settings key a config-file op's key sets ("sodium." + the key inside sodium-options.json), or null when
+		// the op's file isn't one RigTune knows (docs/v0.4/SPEC.md 2n).
+		default String keyOf(Op op, String keyInFile) {
+			return null;
+		}
 	}
 
 	public interface Folder {
@@ -297,7 +303,7 @@ public final class UndoPlanner {
 		Folder folder = state.folder();
 		List<Located> kept = withoutSuperseded(ctx, selected, pending, planIds, b);
 		planStaged(ctx, kept, pending, folder, shownOps, b);
-		planSettings(kept, state, trackedKeys(ctx), b);
+		planSettings(kept, state, trackedKeys(ctx), pending, b);
 		planFiles(kept, folder, pending, b);
 		List<Item> items = new ArrayList<>(b.discards);
 		items.addAll(b.reverts);
@@ -443,7 +449,7 @@ public final class UndoPlanner {
 		return out;
 	}
 
-	private static void planSettings(List<Located> selected, State state, Set<String> tracked, Builder b) {
+	private static void planSettings(List<Located> selected, State state, Set<String> tracked, List<Op> pending, Builder b) {
 		Map<String, List<Located>> byKey = new LinkedHashMap<>();
 		for (Located l : selected) {
 			if (JournalChange.APPLIED.equals(l.change().status()) && l.change().isSetting() && l.change().key() != null) {
@@ -455,7 +461,7 @@ public final class UndoPlanner {
 		for (Map.Entry<String, List<Located>> keyed : byKey.entrySet()) {
 			String key = keyed.getKey();
 			List<Located> changes = keyed.getValue().stream().sorted(NEWEST_FIRST).toList();
-			String current = state.setting(key);
+			String current = state.immediate(key) ? state.setting(key) : afterRestart(state, key, pending, b.discardOpIds);
 			if (state.immediate(key) && current != null) {
 				skippedNow.put(key, current);
 			}
@@ -520,6 +526,24 @@ public final class UndoPlanner {
 				}
 			}
 		}
+	}
+
+	// docs/v0.4/SPEC.md 2n: a staged key's value once the helper has run: the last still-pending op that sets it (the
+	// helper applies them in order; ops this plan discards left out, as StagedChanges' stagedValue reads them), else the
+	// file's value. So a second Undo last in one start compares against what the first one staged.
+	private static String afterRestart(State state, String key, List<Op> pending, Set<String> discarded) {
+		String value = state.setting(key);
+		for (Op op : pending) {
+			if (op == null || op.patches() == null || op.id() != null && discarded.contains(op.id())) {
+				continue;
+			}
+			for (Map.Entry<String, String> patch : op.patches().entrySet()) {
+				if (key.equals(state.keyOf(op, patch.getKey()))) {
+					value = patch.getValue();
+				}
+			}
+		}
+		return value;
 	}
 
 	// --- mod files, against a simulated mods folder
