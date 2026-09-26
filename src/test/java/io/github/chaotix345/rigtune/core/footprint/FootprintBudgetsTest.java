@@ -32,12 +32,17 @@ class FootprintBudgetsTest {
 			Map.entry("frameHookAllocBytesOff", 0.0),
 			Map.entry("frameHookNsPerCallOn", 200.0),
 			Map.entry("frameHookAllocBytesOn", 0.0),
+			Map.entry("frameHookNsPerCallOnPhases", 200.0),
+			Map.entry("frameHookAllocBytesOnPhases", 0.0),
 			Map.entry("tickHookNsPerCall", 2000.0),
 			Map.entry("tickHookAllocBytes", 0.0),
+			Map.entry("tickHookNsPerCallOn", 2000.0),
+			Map.entry("tickHookAllocBytesOn", 0.0),
 			Map.entry("rigtuneClassBytesIdle", 8 * MIB),
 			Map.entry("leakSuspects", 0.0),
 			Map.entry("monitorOnRetainedBytes", 2.5 * MIB),
 			Map.entry("monitorOffRetainedBytes", 0.25 * MIB),
+			Map.entry("monitorOffLeftoverInstances", 0.0),
 			Map.entry("samplerCpuMsPer60s", 30.0));
 
 	@Test
