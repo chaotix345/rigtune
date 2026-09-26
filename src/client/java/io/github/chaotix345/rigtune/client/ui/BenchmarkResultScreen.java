@@ -117,6 +117,7 @@ public class BenchmarkResultScreen extends Screen {
 			out.add(new Line(Component.translatable("rigtune.benchmark.measured", fps(result.avgFps()), fps(result.onePercentLowFps())), 0xFFFFFFFF));
 		}
 		out.add(new Line(Component.translatable("rigtune.benchmark.target", Math.round(outcome.targetFps())), 0xFFFFFFFF));
+		serverLimitLine(out);
 		if (result != null) {
 			String p99 = String.format(Locale.ROOT, "%.1f", result.p99FrameMs());
 			// Measure's headline already has the averages.
@@ -175,6 +176,13 @@ public class BenchmarkResultScreen extends Screen {
 			out.add(new Line(Component.translatable("rigtune.benchmark.deadline"), COLOR_WARN));
 		}
 		return out;
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md 8): the connected server's view distance capped the Tune's steps; the notice's own sentence.
+	private void serverLimitLine(List<Line> out) {
+		if (outcome.serverLimit() > 0) {
+			out.add(new Line(Component.translatable("rigtune.server.notice", outcome.serverLimit()), COLOR_WARN));
+		}
 	}
 
 	@Override

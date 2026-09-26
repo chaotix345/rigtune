@@ -84,6 +84,7 @@ public final class RigTuneClient implements ClientModInitializer {
 			launchHelperIfPending();
 		});
 		ClientTickEvents.END_CLIENT_TICK.register(RigTuneClient::onTick);
+		registerAwareness(real);
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> addEntryButton(screen, width, height));
 		// The sleep overlay is the one vanilla HUD layer drawn while the GUI is hidden, which the benchmark does.
 		HudElementRegistry.attachElementAfter(VanillaHudElements.SLEEP, HUD_ID, (graphics, delta) -> {
@@ -95,6 +96,12 @@ public final class RigTuneClient implements ClientModInitializer {
 			}
 		});
 		FootprintStats.initEnd(footprint);
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md 8, 9): the server limits' DISCONNECT/JOIN and the awareness notices' "shown" signal.
+	private static void registerAwareness(RealController real) {
+		real.serverLimitsTracker().register();
+		real.awarenessService().register();
 	}
 
 	public static RigTuneController controller() {
