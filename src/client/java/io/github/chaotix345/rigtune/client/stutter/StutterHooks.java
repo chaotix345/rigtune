@@ -157,4 +157,10 @@ public final class StutterHooks {
 	public static boolean samplerRunning() {
 		return StutterCapture.SAMPLER.running();
 	}
+
+	// For BenchmarkGameTest (review-8 P5A-F3): monitor sessions whose end was handled, saved or not.
+	public static int sessionsEnded() {
+		StutterService s = service;
+		return s == null ? 0 : s.sessionsEnded();
+	}
 }

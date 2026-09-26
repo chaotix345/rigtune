@@ -98,8 +98,8 @@ public class JvmScreen extends Screen {
 		}
 		target.heading("rigtune.jvm.section.java", width);
 		target.row(Component.translatable("rigtune.jvm.java", jvm.javaVersion(), jvm.vendor() == null ? Component.translatable("rigtune.jvm.unknown")
-				: Component.literal(jvm.vendor())), COLOR_TEXT, INDENT, width);
-		Component collector = jvm.collectorName() == null ? Component.translatable("rigtune.jvm.unknown") : Component.literal(jvm.collectorName());
+				: SafeLiteral.of(jvm.vendor())), COLOR_TEXT, INDENT, width);
+		Component collector = jvm.collectorName() == null ? Component.translatable("rigtune.jvm.unknown") : SafeLiteral.of(jvm.collectorName());
 		target.row(Component.translatable("rigtune.jvm.collector", collector,
 				Component.translatable(jvm.collectorTyped() ? "rigtune.jvm.collector.typed" : "rigtune.jvm.collector.default")), COLOR_TEXT, INDENT, width);
 		target.row(Component.translatable("rigtune.jvm.heap", RigTuneScreen.gb(jvm.maxHeapMb()), RigTuneScreen.gb(jvm.initialHeapMb())), COLOR_TEXT,
@@ -112,7 +112,7 @@ public class JvmScreen extends Screen {
 			target.row(Component.translatable("rigtune.jvm.no_findings"), COLOR_REASON, INDENT, width);
 		}
 		for (JvmFinding finding : jvm.findings()) {
-			target.row(Component.translatable("rigtune.jvm.finding", Component.literal(finding.flag()).withStyle(ChatFormatting.WHITE),
+			target.row(Component.translatable("rigtune.jvm.finding", SafeLiteral.of(finding.flag()).withStyle(ChatFormatting.WHITE),
 					Component.translatable(finding.kind().reasonKey())), COLOR_REASON, INDENT, width);
 		}
 

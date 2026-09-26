@@ -53,7 +53,7 @@ final class LauncherLines {
 			return memory.copy().append(" ").append(Component.translatable("rigtune.launcher.xmx_in_java_args", Component.translatable(name)));
 		}
 		List<String> flags = jvm.flagsFor(recommendation.id());
-		MutableComponent line = flags.isEmpty() ? null : Component.translatable("rigtune.jvm.found_flags", Component.literal(String.join(", ", flags)));
+		MutableComponent line = flags.isEmpty() ? null : Component.translatable("rigtune.jvm.found_flags", SafeLiteral.of(String.join(", ", flags)));
 		String steps = LauncherAdvice.jvmStepsKey(recommendation, launcher);
 		String name = launcher.nameKey();
 		if (steps != null && name != null) {

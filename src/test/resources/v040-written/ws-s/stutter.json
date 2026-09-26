@@ -46,7 +46,8 @@
         "unknown": 0.76
       },
       "tags": {
-        "worldSave": 1
+        "worldSave": 1,
+        "chunksLoading": 8
       },
       "worst": [
         {
@@ -92,7 +93,8 @@
           "ms": 85.0,
           "baseMs": 8.0,
           "causes": [
-            "gc:high"
+            "gc:high",
+            "chunksLoading:context"
           ]
         },
         {
@@ -100,7 +102,8 @@
           "ms": 85.0,
           "baseMs": 8.0,
           "causes": [
-            "gc:high"
+            "gc:high",
+            "chunksLoading:context"
           ]
         },
         {
@@ -108,7 +111,8 @@
           "ms": 85.0,
           "baseMs": 8.0,
           "causes": [
-            "gc:high"
+            "gc:high",
+            "chunksLoading:context"
           ]
         },
         {
@@ -116,7 +120,8 @@
           "ms": 85.0,
           "baseMs": 8.0,
           "causes": [
-            "gc:high"
+            "gc:high",
+            "chunksLoading:context"
           ]
         }
       ],

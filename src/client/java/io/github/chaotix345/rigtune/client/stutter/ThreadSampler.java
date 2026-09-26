@@ -10,6 +10,7 @@ import java.lang.management.ThreadMXBean;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.Supplier;
 
 // The 4 Hz thread-CPU sampler (docs/v0.4/SPEC.md 5; research §3.5), a daemon thread that runs only while a capture is
 // on: every 250 ms it groups each Java thread's CPU time by name (Render thread, Server thread, Worker-Main-*,
@@ -20,7 +21,10 @@ import java.util.TreeMap;
 // Cost (SPEC 10 as amended: at most 120 ms of CPU per 60 s in steady state): a thread's name is read only the first time
 // its id shows up (Tally), and the per-thread bookkeeping is primitive, so a steady-state sample allocates only the two
 // arrays the JDK calls return.
-final class ThreadSampler implements Runnable {
+// Stopping never waits for the thread (review-8 ST-1: the last capture stops on the render thread): each start gets its
+// own Worker holding its own rings; stop() takes them away and interrupts it, and the thread ends on its own moments
+// later without writing anything more, so it can't touch a capture started after it.
+final class ThreadSampler {
 	static final String THREAD_NAME = "RigTune stutter sampler";
 	static final long PERIOD_MS = 250;
 
@@ -38,33 +42,45 @@ final class ThreadSampler implements Runnable {
 		long processCpu();
 	}
 
+	private final Supplier<? extends @Nullable Source> sources;
+	private @Nullable Worker worker;
 	private volatile @Nullable Thread thread;
-	private volatile @Nullable StutterRings rings;
+
+	ThreadSampler() {
+		this(ThreadSampler::jvmSource);
+	}
+
+	// sources: where each started worker reads its numbers (called on the sampler thread; null: the sampler is off).
+	ThreadSampler(Supplier<? extends @Nullable Source> sources) {
+		this.sources = sources;
+	}
 
 	synchronized void start(StutterRings target) {
 		stop();
-		rings = target;
-		Thread t = new Thread(this, THREAD_NAME);
+		Worker w = new Worker(target, sources);
+		Thread t = new Thread(w, THREAD_NAME);
 		t.setDaemon(true);
 		t.setPriority(Thread.NORM_PRIORITY - 1);
+		worker = w;
 		thread = t;
 		t.start();
 	}
 
+	// Never waits (see above).
 	synchronized void stop() {
+		Worker w = worker;
 		Thread t = thread;
+		worker = null;
 		thread = null;
-		rings = null;
+		if (w != null) {
+			w.target = null;
+		}
 		if (t != null) {
 			t.interrupt();
-			try {
-				t.join(1000);
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-			}
 		}
 	}
 
+	// A sampler for the current capture (a stopped worker's thread may still be ending).
 	boolean running() {
 		Thread t = thread;
 		return t != null && t.isAlive();
@@ -92,55 +108,78 @@ final class ThreadSampler implements Runnable {
 		return name.startsWith("DH-") ? StutterRings.S_DH : StutterRings.S_OTHER;
 	}
 
-	@Override
-	public void run() {
+	// The game's source: the JVM's ThreadMXBean, or null (logged) when it can't read thread CPU times.
+	private static @Nullable Source jvmSource() {
 		ThreadMXBean threads = ManagementFactory.getThreadMXBean();
 		if (!(threads instanceof com.sun.management.ThreadMXBean cpu) || !threads.isThreadCpuTimeSupported() || !threads.isThreadCpuTimeEnabled()) {
 			RigTune.LOGGER.warn("Stutter Doctor: thread CPU times unavailable; the sampler is off");
-			return;
+			return null;
 		}
 		com.sun.management.OperatingSystemMXBean os = ManagementFactory.getOperatingSystemMXBean() instanceof com.sun.management.OperatingSystemMXBean o ? o : null;
-		loop(new JvmSource(cpu, os));
+		return new JvmSource(cpu, os);
 	}
 
-	private void loop(Source source) {
-		Tally tally = new Tally();
-		long[] record = new long[StutterRings.SAMPLE_STRIDE];
-		long lastTime = System.nanoTime();
-		long lastProcess = source.processCpu();
-		try {
-			while (thread == Thread.currentThread()) {
-				Thread.sleep(PERIOD_MS);
-				StutterRings target = rings;
-				if (target == null) {
-					return;
-				}
-				long[] ids = source.threadIds();
-				long[] times = source.cpuTimes(ids);
-				long now = System.nanoTime();
-				Arrays.fill(record, 0);
-				Map<String, Integer> census = tally.first() ? new TreeMap<>() : null;
-				boolean counted = tally.add(ids, times, source, record, census);
-				long process = source.processCpu();
-				record[StutterRings.S_TIME] = now;
-				record[StutterRings.S_WINDOW] = now - lastTime;
-				record[StutterRings.S_PROCESS] = process < 0 || lastProcess < 0 ? 0 : Math.max(0, process - lastProcess);
-				record[StutterRings.S_BACKLOG] = BuildBacklog.scheduled();
-				record[StutterRings.S_BUSY] = BuildBacklog.busy();
-				record[StutterRings.S_TOTAL] = BuildBacklog.total();
-				if (counted) {
-					target.sample(record);
-				}
-				if (census != null) {
-					RigTune.LOGGER.info("Stutter Doctor: {} threads {}", ids.length, census);
-				}
-				lastTime = now;
-				lastProcess = process;
+	// One start's sampling loop, writing only into its own capture's rings until stop() takes them away.
+	private static final class Worker implements Runnable {
+		private final Supplier<? extends @Nullable Source> sources;
+		volatile @Nullable StutterRings target;
+
+		Worker(StutterRings target, Supplier<? extends @Nullable Source> sources) {
+			this.target = target;
+			this.sources = sources;
+		}
+
+		@Override
+		public void run() {
+			Source source = sources.get();
+			if (source != null) {
+				loop(source);
 			}
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-		} catch (RuntimeException e) {
-			RigTune.LOGGER.warn("Stutter Doctor: the sampler stopped", e);
+		}
+
+		private void loop(Source source) {
+			Tally tally = new Tally();
+			long[] record = new long[StutterRings.SAMPLE_STRIDE];
+			long lastTime = System.nanoTime();
+			long lastProcess = source.processCpu();
+			try {
+				while (target != null) {
+					Thread.sleep(PERIOD_MS);
+					if (target == null) {
+						return;
+					}
+					long[] ids = source.threadIds();
+					long[] times = source.cpuTimes(ids);
+					long now = System.nanoTime();
+					Arrays.fill(record, 0);
+					Map<String, Integer> census = tally.first() ? new TreeMap<>() : null;
+					boolean counted = tally.add(ids, times, source, record, census);
+					long process = source.processCpu();
+					record[StutterRings.S_TIME] = now;
+					record[StutterRings.S_WINDOW] = now - lastTime;
+					record[StutterRings.S_PROCESS] = process < 0 || lastProcess < 0 ? 0 : Math.max(0, process - lastProcess);
+					record[StutterRings.S_BACKLOG] = BuildBacklog.scheduled();
+					record[StutterRings.S_BUSY] = BuildBacklog.busy();
+					record[StutterRings.S_TOTAL] = BuildBacklog.total();
+					// Stopped while reading: nothing more goes into the rings.
+					StutterRings rings = target;
+					if (rings == null) {
+						return;
+					}
+					if (counted) {
+						rings.sample(record);
+					}
+					if (census != null) {
+						RigTune.LOGGER.info("Stutter Doctor: {} threads {}", ids.length, census);
+					}
+					lastTime = now;
+					lastProcess = process;
+				}
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			} catch (RuntimeException e) {
+				RigTune.LOGGER.warn("Stutter Doctor: the sampler stopped", e);
+			}
 		}
 	}
 

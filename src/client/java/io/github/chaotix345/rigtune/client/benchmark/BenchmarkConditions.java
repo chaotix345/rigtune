@@ -32,11 +32,11 @@ public final class BenchmarkConditions {
 			Map<String, String> mods = new TreeMap<>();
 			for (ModContainer mod : FabricLoader.getInstance().getAllMods()) {
 				String id = mod.getMetadata().getId();
-				if (!"builtin".equals(mod.getMetadata().getType()) && !RigTune.MOD_ID.equals(id)) {
+				if (!"builtin".equals(mod.getMetadata().getType())) {
 					mods.put(id, mod.getMetadata().getVersion().getFriendlyString());
 				}
 			}
-			hash = ModSetHash.of(mods);
+			hash = ModSetHash.ofLoadedMods(mods);
 			modSetHash = hash;
 		}
 		return hash;

@@ -104,6 +104,29 @@ class ChangeDetectorTest {
 		assertEquals(NONE, ChangeDetector.compare(mesaGl, radv).kind());
 	}
 
+	// review-8 JW-2: the two backends can report the same driver with a different number of parts; across a backend switch
+	// only the parts both report are compared, so a switch alone never raises the driver notice.
+	@Test
+	void aBackendSwitchComparesOnlyThePartsBothBackendsReport() {
+		Fingerprint amdVk = with(AMD, "AMD", "AMD Radeon RX 7800 XT", "1.4.349 AMD proprietary driver 26.8.1 (LLPC)", GraphicsBackend.VULKAN);
+		assertEquals(NONE, ChangeDetector.compare(AMD, amdVk).kind(), "the P5-A pair: GL Context 26.8.1.260810, Vulkan 26.8.1");
+		assertEquals(NONE, ChangeDetector.compare(amdVk, AMD).kind());
+		Fingerprint nvGl = with(AMD, "NVIDIA Corporation", "NVIDIA GeForce RTX 3070/PCIe/SSE2", "4.6.0 NVIDIA 550.54.14", GraphicsBackend.OPENGL);
+		Fingerprint nvVk = with(AMD, "NVIDIA", "NVIDIA GeForce RTX 3070", "1.3.296 NVIDIA 550.54", GraphicsBackend.VULKAN);
+		assertEquals(NONE, ChangeDetector.compare(nvGl, nvVk).kind(), "550.54.14 on GL, 550.54 on Vulkan: the same driver");
+		assertEquals(NONE, ChangeDetector.compare(nvVk, nvGl).kind());
+		Fingerprint mesaGl = with(AMD, "AMD", "AMD Radeon RX 7800 XT (radeonsi, navi32)", "4.6 (Core Profile) Mesa 24.2.3", GraphicsBackend.OPENGL);
+		Fingerprint radv = with(AMD, "AMD", "AMD Radeon RX 7800 XT (RADV NAVI32)", "1.3.290 Mesa RADV 24.2", GraphicsBackend.VULKAN);
+		assertEquals(NONE, ChangeDetector.compare(mesaGl, radv).kind());
+		Fingerprint nvVkNewer = with(AMD, "NVIDIA", "NVIDIA GeForce RTX 3070", "1.3.296 NVIDIA 555.42", GraphicsBackend.VULKAN);
+		ChangeDetector.Change update = ChangeDetector.compare(nvGl, nvVkNewer);
+		assertEquals(DRIVER, update.kind(), "a real update across the switch still shows");
+		assertEquals("550.54.14", update.from());
+		assertEquals("555.42", update.to());
+		Fingerprint nvGlLonger = with(AMD, "NVIDIA Corporation", "NVIDIA GeForce RTX 3070/PCIe/SSE2", "4.6.0 NVIDIA 550.54", GraphicsBackend.OPENGL);
+		assertEquals(DRIVER, ChangeDetector.compare(nvGlLonger, nvGl).kind(), "on one backend every part counts");
+	}
+
 	@Test
 	void mesaUpdateChangesTheRendererSuffixButIsADriverChange() {
 		Fingerprint a = with(AMD, "AMD", "AMD Radeon RX 7800 XT (radeonsi, navi32, LLVM 17.0.6, DRM 3.54)", "4.6 (Core Profile) Mesa 24.0.9",

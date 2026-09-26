@@ -15,6 +15,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -132,6 +133,23 @@ class StutterStoreTest {
 		assertEquals(List.of("gc:high"), r.worst().getFirst().causes());
 		assertEquals(List.of(), r.advice());
 		assertTrue(StutterSummary.text(r, List.of()).startsWith("**RigTune Stutter Doctor** · session"));
+	}
+
+	// review-8 P5A-F3: a monitor session that a benchmark run interrupted (the benchmark world's settle frames) is saved only
+	// with enough data; the benchmark's own capture is saved as source "benchmark". Other sessions are always saved (AC5.7).
+	@Test
+	void aShortSessionAroundABenchmarkIsNotSaved() {
+		StutterReport enough = report("2026-09-26T10:00:00Z", 3, 1);
+		StutterReport tiny = new StutterReport(enough.startedAt(), enough.source(), enough.mc(), enough.collector(), enough.heapMaxMb(), 14, 2, 280, 140,
+				20, enough.histogramCounts(), enough.histogramTimeMs(), new StutterReport.Spikes(33, 0, 0, 0), 900, enough.causes(), enough.tags(),
+				enough.worst(), enough.facts(), List.of(), false, true, 12);
+		assertTrue(StutterStore.worthSaving(tiny, false), "a short session without a benchmark is saved as before");
+		assertFalse(StutterStore.worthSaving(tiny, true), "33 spikes in 2 s of a benchmark world's settle frames");
+		assertTrue(StutterStore.worthSaving(enough, true));
+		StutterReport smooth = new StutterReport(enough.startedAt(), enough.source(), enough.mc(), enough.collector(), enough.heapMaxMb(), 3600, 3500,
+				400_000, 114, 90, enough.histogramCounts(), enough.histogramTimeMs(), new StutterReport.Spikes(1, 0, 0, 0), 30, enough.causes(), Map.of(),
+				List.of(), enough.facts(), List.of(), false, true, 1);
+		assertTrue(StutterStore.worthSaving(smooth, true), "an hour of smooth play after a benchmark in the player's own world is kept (1 spike)");
 	}
 
 	@Test

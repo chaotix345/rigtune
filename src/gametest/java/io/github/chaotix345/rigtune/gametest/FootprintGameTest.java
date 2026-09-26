@@ -2,7 +2,9 @@ package io.github.chaotix345.rigtune.gametest;
 
 import com.google.gson.GsonBuilder;
 import com.sun.management.GcInfo;
+import com.sun.management.HotSpotDiagnosticMXBean;
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.client.benchmark.BenchmarkConditions;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.FootprintStats;
 import io.github.chaotix345.rigtune.client.RealController;
@@ -28,6 +30,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
+import org.jspecify.annotations.Nullable;
 
 import javax.management.ObjectName;
 import java.io.IOException;
@@ -134,8 +137,11 @@ public class FootprintGameTest implements FabricClientGameTest {
 		}
 
 		FootprintBudgets budgets;
+		// P5-A F5: without compressed oops (ZGC) shallow sizes are up to twice as big; that budget scales, the leak checks don't.
+		Boolean compressedOops = compressedOops();
+		out.put("compressedOops", compressedOops);
 		try {
-			budgets = FootprintBudgets.load();
+			budgets = FootprintBudgets.load().forCompressedOops(!Boolean.FALSE.equals(compressedOops));
 		} catch (IOException e) {
 			throw new AssertionError("Could not read the footprint budgets", e);
 		}
@@ -198,6 +204,16 @@ public class FootprintGameTest implements FabricClientGameTest {
 		return names;
 	}
 
+	// HotSpot's UseCompressedOops (false under ZGC and on heaps over 32 GB); null when it can't be read.
+	private static @Nullable Boolean compressedOops() {
+		try {
+			return Boolean.valueOf(ManagementFactory.getPlatformMXBean(HotSpotDiagnosticMXBean.class).getVMOption("UseCompressedOops").getValue());
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.warn("FootprintGameTest: UseCompressedOops unreadable; budgets as for compressed oops", e);
+			return null;
+		}
+	}
+
 	private static long threadId(String name) {
 		ThreadMXBean mx = ManagementFactory.getThreadMXBean();
 		for (ThreadInfo info : mx.getThreadInfo(mx.getAllThreadIds())) {
@@ -221,6 +237,8 @@ public class FootprintGameTest implements FabricClientGameTest {
 		check(FabricLoader.getInstance().getRawGameVersion().equals(run.mcVersion()), "run's MC version: " + run);
 		check(((RealController) controller).modVersion().equals(run.rigtuneVersion()), "run's RigTune version: " + run);
 		check(run.mods() >= 3 && run.modSetHash() != null && run.modSetHash().matches("[0-9a-f]{64}"), "mod count and hash: " + run);
+		// review-8 BF-1: the same mod-set hash as the benchmark's, RigTune itself left out.
+		check(run.modSetHash().equals(BenchmarkConditions.modSetHash()), "the startup mod-set hash leaves RigTune out like the benchmark's: " + run);
 		out.put("launchToTitleMs", run.ms());
 		out.put("mods", run.mods());
 
@@ -417,6 +435,8 @@ public class FootprintGameTest implements FabricClientGameTest {
 			context.runOnClient(mc -> controller.setStutterMonitor(false));
 			context.waitTicks(5);
 			check(StutterMonitor.session() == null && !StutterMonitor.active(), "no capture after the monitor is off");
+			// review-8 ST-1: stopping doesn't wait for the sampler thread; it ends on its own right after.
+			context.waitFor(mc -> threadId(SAMPLER) < 0, 100);
 			check(!StutterHooks.gcListenerActive() && threadId(SAMPLER) < 0, "no GC listener and no sampler thread after it's off: " + rigtuneThreads());
 			long offRetained = StutterMonitor.retainedBytes();
 			context.waitFor(mc -> new StutterStore(configDir).sessions().stream().anyMatch(r -> startedAt.equals(r.startedAt())), 400);

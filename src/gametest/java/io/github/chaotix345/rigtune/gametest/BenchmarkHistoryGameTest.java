@@ -192,6 +192,23 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 		int bottom = context.computeOnClient(mc -> ((BenchmarkResultScreen) mc.gui.screen()).contentBottom());
 		check(top + 12 * 4 + 2 <= bottom, "room for the table at 640x480@2: " + top + " to " + bottom);
 		context.takeScreenshot("bench-history-result-640x480-scale2");
+		// review-8 P5B-F4: the status lines wrap to the width at every size; a line folds back to one clipped row (its text
+		// a tooltip) only where the table would otherwise lose its header and 3 rows.
+		for (int[] size : SIZES) {
+			resize(context, size[0], size[1], size[2]);
+			context.waitTicks(3);
+			String where = size[0] + "x" + size[1] + "@" + size[2];
+			int[] fit = context.computeOnClient(mc -> {
+				BenchmarkResultScreen result = (BenchmarkResultScreen) mc.gui.screen();
+				int widest = result.statusRows().stream().mapToInt(mc.font::width).max().orElse(0);
+				return new int[]{widest, result.width, result.clippedStatusRows(), result.statusRows().size(), result.contentTop(), result.contentBottom()};
+			});
+			check(fit[0] <= fit[1] - 16, where + ": every status row fits the width (" + fit[0] + " of " + (fit[1] - 16) + ")");
+			check(fit[4] + 12 * 4 + 2 <= fit[5], where + ": room for the table: " + fit[4] + " to " + fit[5]);
+			check(size[0] == 640 || fit[2] == 0, where + ": no status line clipped: " + fit[2] + " of " + fit[3]);
+			RigTune.LOGGER.info("BenchmarkHistoryGameTest: result screen at {}: {} status rows, {} clipped", where, fit[3], fit[2]);
+			context.takeScreenshot("bench-result-wrapped-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+		}
 		resize(context, 854, 480, 2);
 		reseed(context, benchmarksFile);
 		context.runOnClient(mc -> mc.gui.setScreen(new BenchmarkHistoryScreen(new ToolsScreen(null, controller), controller)));

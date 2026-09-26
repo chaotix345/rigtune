@@ -63,6 +63,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 
 // Performance Profiles and share codes (docs/v0.4/SPEC.md 4): profiles.json, switching (an ordinary Apply through
@@ -79,7 +80,9 @@ public final class ProfileService {
 
 	private final RealController controller;
 	private final Path configDir;
-	private volatile @Nullable Offer offer;
+	// Set on the "RigTune power" thread, read and cleared on the render thread: cleared only with retire (review-8 PR-2), so a
+	// fresh offer stored meanwhile is never lost.
+	private final AtomicReference<@Nullable Offer> offer = new AtomicReference<>();
 
 	// A pending battery offer: its notice key and what it offers.
 	private record Offer(String key, BatteryPrompt.Decision decision) {
@@ -119,12 +122,17 @@ public final class ProfileService {
 	}
 
 	public Component switchProfile(String id) {
+		return switchProfile(id, offer.get());
+	}
+
+	// answered: the battery offer this switch answers (retired after it unless a newer one came meanwhile), or null.
+	private Component switchProfile(String id, @Nullable Offer answered) {
 		Component refused = refusal();
 		if (refused != null) {
 			return refused;
 		}
 		Target target = resolve(id);
-		return target == null ? Component.translatable("rigtune.profile.status.unavailable") : switchTo(target);
+		return target == null ? Component.translatable("rigtune.profile.status.unavailable") : switchTo(target, answered);
 	}
 
 	// Off the render thread (Preview loads in the background).
@@ -191,7 +199,7 @@ public final class ProfileService {
 		boolean saved = store().saveProfile(profile);
 		ProfileTemplates.Result clamped = ProfileTemplates.clamp(imported.values(), controller.rules(), controller.hardwareProfile(), mods(), snapshot(),
 				controller.goal());
-		return switchTo(new Target(name(profile), english(profile), saved ? profile.id() : null, null, clamped.values(), clamped.clamps(), true));
+		return switchTo(new Target(name(profile), english(profile), saved ? profile.id() : null, null, clamped.values(), clamped.clamps(), true), offer.get());
 	}
 
 	// Preview's Save only for a code.
@@ -253,7 +261,7 @@ public final class ProfileService {
 		if (next != null && decision.offer() == BatteryPrompt.Offer.BATTERY) {
 			store().batteryOffered(now.toString());
 		}
-		offer = next;
+		offer.set(next);
 		Minecraft minecraft = controller.minecraft();
 		if (minecraft == null) {
 			return;
@@ -269,13 +277,13 @@ public final class ProfileService {
 
 	// BatteryNoticeSource's notice: the pending offer, while it still applies.
 	public @Nullable Notice batteryNotice() {
-		Offer current = offer;
+		Offer current = offer.get();
 		if (current == null) {
 			return null;
 		}
 		String target = current.decision().target();
 		if (target == null || target.equals(active())) {
-			offer = null;
+			retire(offer, current);
 			return null;
 		}
 		Text switchLabel = current.decision().offer() == BatteryPrompt.Offer.BATTERY
@@ -287,22 +295,27 @@ public final class ProfileService {
 	}
 
 	public void batteryAction(String actionId) {
-		Offer current = offer;
+		Offer current = offer.get();
 		if (current == null) {
 			return;
 		}
-		offer = null;
+		retire(offer, current);
 		if (ACTION_SNOOZE.equals(actionId)) {
 			store().snoozeBattery(true);
 			return;
 		}
 		if (ACTION_SWITCH.equals(actionId) && current.decision().target() != null) {
-			Component result = switchProfile(current.decision().target());
+			Component result = switchProfile(current.decision().target(), null);
 			Minecraft minecraft = controller.minecraft();
 			if (minecraft != null) {
 				SystemToast.addOrUpdate(minecraft.gui.toastManager(), TOAST_ID, Component.translatable("rigtune.profile.title"), result);
 			}
 		}
+	}
+
+	// Clears the slot only if it still holds `seen`: an offer the power thread stored after it was read stays.
+	static <T> boolean retire(AtomicReference<@Nullable T> slot, @Nullable T seen) {
+		return seen != null && slot.compareAndSet(seen, null);
 	}
 
 	private Text message(Offer offer) {
@@ -313,7 +326,7 @@ public final class ProfileService {
 	}
 
 	// The switch itself: one journal entry of kind apply, labelled in profiles.json.
-	private Component switchTo(Target target) {
+	private Component switchTo(Target target, @Nullable Offer answered) {
 		// The way back: "My settings" exists before the first switch, even one made from the battery offer.
 		ensureBaseline();
 		SettingsSnapshot snapshot = snapshot();
@@ -332,7 +345,7 @@ public final class ProfileService {
 		}
 		store().recordSwitch(new ProfileStore.Switch(entryId, target.profileId(), target.templateId(), target.english()), journalIds());
 		markActive(target, previous, entryId);
-		offer = null;
+		retire(offer, answered);
 		long staged = entry.changes().stream().filter(c -> JournalChange.STAGED.equals(c.status())).count();
 		MutableComponent message = staged > 1 ? Component.translatable("rigtune.profile.status.switched_restart", name, staged)
 				: staged == 1 ? Component.translatable("rigtune.profile.status.switched_restart_one", name)

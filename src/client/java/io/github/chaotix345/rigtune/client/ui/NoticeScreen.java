@@ -84,6 +84,9 @@ public class NoticeScreen extends Screen {
 			}
 			fitting.add(notice);
 			rowY.add(y);
+			// review-8 UV-2: the notice's own text (and its detail) is a Tab stop the narrator reads, ahead of its buttons.
+			addRenderableWidget(RowFocus.standalone(RowFocus.join(Texts.component(notice.message()), notice.detail() == null ? null
+					: Texts.component(notice.detail())), left, y - 1, Math.max(1, width - 2 * left), MESSAGE));
 			int buttonY = y + MESSAGE;
 			for (Button button : buttons) {
 				if (x > left && x + button.getWidth() > width - left) {

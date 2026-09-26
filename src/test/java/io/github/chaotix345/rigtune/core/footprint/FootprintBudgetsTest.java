@@ -105,6 +105,31 @@ class FootprintBudgetsTest {
 		assertEquals("footprint budget a: 2 > 1 (A)", error.getMessage());
 	}
 
+	// P5-A F5: without compressed oops (ZGC) the same objects measure up to about twice as big in a class histogram, so the
+	// shallow-size budget doubles there (never past its ceiling); every other budget, the leak checks included, stays.
+	@Test
+	void shallowSizeBudgetsDoubleWithoutCompressedOops() throws IOException {
+		FootprintBudgets committed = FootprintBudgets.load(RepoFiles.resolve(FootprintBudgets.REPO_PATH));
+		assertEquals(committed.budgets(), committed.forCompressedOops(true).budgets());
+		FootprintBudgets zgc = committed.forCompressedOops(false);
+		double idle = committed.budgets().get("rigtuneClassBytesIdle").limit();
+		assertEquals(2 * idle, zgc.budgets().get("rigtuneClassBytesIdle").limit());
+		for (String key : committed.budgets().keySet()) {
+			if (!FootprintBudgets.SHALLOW_SIZE_KEYS.contains(key)) {
+				assertEquals(committed.budgets().get(key), zgc.budgets().get(key), key);
+			}
+		}
+		assertEquals(0, zgc.budgets().get("leakSuspects").limit());
+		assertEquals(committed.mode(), zgc.mode());
+		Map<String, Number> zgcRun = Map.of("rigtuneClassBytesIdle", 120_224, "leakSuspects", 0);
+		assertEquals(1, committed.check(zgcRun).size(), "the local ZGC run's 120,224 bytes against the G1 limit");
+		assertEquals(List.of(), zgc.check(zgcRun));
+
+		FootprintBudgets capped = FootprintBudgets.parse("{\"mode\": \"fail\", \"budgets\": {\"rigtuneClassBytesIdle\": {\"limit\": 700, \"ceiling\": 1000}}}")
+				.forCompressedOops(false);
+		assertEquals(1000, capped.budgets().get("rigtuneClassBytesIdle").limit(), "never past the ceiling");
+	}
+
 	@Test
 	void aLimitAboveItsCeilingOrAnUnknownModeIsRejected() {
 		assertThrows(IllegalArgumentException.class, () -> FootprintBudgets.parse(
