@@ -1,0 +1,10 @@
+[23:10:34] [Render thread/INFO]: Dev stutter: report:
+**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 4096 MB heap
+1:02 (0:53 of gameplay) · 155,692 frames · avg 2967 FPS · 1% low 433 FPS
+12 spikes (12 minor, 0 major, 0 severe, 0 freezes) in 11 hitches · 0.3 s lost
+Not enough data yet (at least 3 spikes and 2 minutes of gameplay)
+Likely causes (share of the lost time): garbage collection 6 %; not explained 94 %
+12 of 12 spikes during the 10 s after a teleport (not measured)
+Worst: 41 ms at 0:31 (rendering (low), the 10 s after a teleport); 30 ms at 0:11 (rendering (low), the 10 s after a teleport); 28 ms at 0:26 (rendering (low), the 10 s after a teleport)
+
+[23:10:34] [Server thread/INFO]: Stopping server
