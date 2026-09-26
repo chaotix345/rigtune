@@ -13,8 +13,9 @@ import java.util.regex.Pattern;
 // OpenGL: the whole GL_VERSION string. AMD Windows "… Core Profile Context YY.M.rev.build" (adrenalin; AMD's older
 // five-segment form is UNKNOWN: its mapping isn't verified); "(Core Profile) Mesa x.y.z" for any vendor (mesa); "NVIDIA
 // ddd.dd[.dd]" (geforce); Intel Windows "- Build a.b.c.d" (intel-igpu).
-// Vulkan (26.3): MC composes "<api version> <driverName> <driverInfo>"; the API version is dropped and only NVIDIA's number
-// and a Mesa version are read from the rest (exact Vulkan strings are UNVERIFIED until a real capture, SPEC AC9.8).
+// Vulkan (26.3): MC composes "<api version> <driverName> <driverInfo>"; the API version is dropped and only NVIDIA's number,
+// AMD Windows "AMD proprietary driver YY.M.rev" (adrenalin; verified against the same PC's GL string, SPEC AC9.8) and a
+// Mesa version are read from the rest.
 // An unknown backend tries the OpenGL forms, then the Vulkan ones.
 public final class DriverVersionParser {
 	// Longer strings are not a driver string any GPU reports (VK_MAX_DRIVER_INFO_SIZE is 256 per part).
@@ -25,6 +26,7 @@ public final class DriverVersionParser {
 	private static final Pattern INTEL_BUILD = Pattern.compile("-\\s*Build\\s+(\\d{1,9})\\.(\\d{1,9})\\.(\\d{1,9})\\.(\\d{1,9})(?![.\\d])");
 	private static final Pattern VULKAN_API = Pattern.compile("^\\s*\\d{1,3}\\.\\d{1,4}\\.\\d{1,5}\\s+");
 	private static final Pattern MESA_VK = Pattern.compile("\\bMesa\\s+(?:[A-Za-z]{1,16}\\s+)?(\\d{1,4})\\.(\\d{1,4})\\.(\\d{1,4})");
+	private static final Pattern ADRENALIN_VK = Pattern.compile("\\bAMD proprietary driver\\s+(\\d{1,3})\\.(\\d{1,2})\\.(\\d{1,2})(?![.\\d])");
 
 	private DriverVersionParser() {
 	}
@@ -69,7 +71,11 @@ public final class DriverVersionParser {
 			return null;
 		}
 		String driver = raw.substring(api.end());
-		DriverVersion found = vendor == GpuVendor.NVIDIA ? match(GEFORCE, driver, vendor, DriverVersion.GEFORCE, raw) : null;
+		DriverVersion found = switch (vendor) {
+			case NVIDIA -> match(GEFORCE, driver, vendor, DriverVersion.GEFORCE, raw);
+			case AMD -> match(ADRENALIN_VK, driver, vendor, DriverVersion.ADRENALIN, raw);
+			default -> null;
+		};
 		return found != null ? found : match(MESA_VK, driver, vendor, DriverVersion.MESA, raw);
 	}
 

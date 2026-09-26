@@ -65,17 +65,26 @@ class DriverVersionParserTest {
 		parses(GpuVendor.INTEL, GraphicsBackend.VULKAN, "1.3.289 Intel open-source Mesa driver Mesa 24.2.3", DriverVersion.MESA, 24, 2, 3);
 		// A real 26.3 Vulkan string, captured by CI's game tests (lavapipe, the Mesa software Vulkan driver; run 36223335920).
 		parses(GpuVendor.SOFTWARE, GraphicsBackend.VULKAN, "1.4.318 llvmpipe Mesa 25.2.8-0ubuntu0.24.04.2 (LLVM 20.1.2)", DriverVersion.MESA, 25, 2, 8);
+		// A real 26.3 Vulkan string from an AMD Windows PC (P5-A, AC9.8): the proprietary driver's number is the Adrenalin
+		// version (the same PC's GL string reads Context 26.8.1.260810).
+		parses(GpuVendor.AMD, GraphicsBackend.VULKAN, "1.4.349 AMD proprietary driver 26.8.1 (LLPC)", DriverVersion.ADRENALIN, 26, 8, 1);
+		parses(GpuVendor.AMD, "1.4.349 AMD proprietary driver 26.8.1 (LLPC)", DriverVersion.ADRENALIN, 26, 8, 1);
+		parses(GpuVendor.AMD, GraphicsBackend.VULKAN, "1.3.296 AMD proprietary driver 24.12.1 (AMD proprietary shader compiler)", DriverVersion.ADRENALIN, 24, 12, 1);
 		// The API version is never the driver version.
-		assertFalse(DriverVersionParser.parse(GpuVendor.AMD, GraphicsBackend.VULKAN, "1.3.296 AMD proprietary driver 24.12.1 (AMD proprietary shader compiler)").known());
+		assertFalse(DriverVersionParser.parse(GpuVendor.AMD, GraphicsBackend.VULKAN, "1.3.260 AMD open-source driver 2023.Q3.1 (LLPC)").known());
+		assertFalse(DriverVersionParser.parse(GpuVendor.AMD, GraphicsBackend.VULKAN, "1.4.349 AMD proprietary driver 26.8 (LLPC)").known());
 		assertFalse(DriverVersionParser.parse(GpuVendor.INTEL, GraphicsBackend.VULKAN, "1.3.296 Intel Corporation 101.5595").known());
 		assertFalse(DriverVersionParser.parse(GpuVendor.NVIDIA, GraphicsBackend.VULKAN, "1.3.296").known());
 		// The GL sub-parsers don't read a Vulkan string, and the GL backend doesn't read the Vulkan form.
 		assertFalse(DriverVersionParser.parse(GpuVendor.AMD, GraphicsBackend.VULKAN, "3.3.0 Core Profile Context 26.8.1.260810").known());
 		assertFalse(DriverVersionParser.parse(GpuVendor.AMD, GraphicsBackend.OPENGL, "1.3.290 Mesa RADV 24.2.3").known());
+		assertFalse(DriverVersionParser.parse(GpuVendor.AMD, GraphicsBackend.OPENGL, "1.4.349 AMD proprietary driver 26.8.1 (LLPC)").known());
 	}
 
 	@Test
 	void vendorGatesTheVendorFamilies() {
+		unknown(GpuVendor.NVIDIA, "1.4.349 AMD proprietary driver 26.8.1 (LLPC)");
+		unknown(GpuVendor.UNKNOWN, "1.4.349 AMD proprietary driver 26.8.1 (LLPC)");
 		unknown(GpuVendor.INTEL, "4.6.0 NVIDIA 560.94");
 		unknown(GpuVendor.NVIDIA, "3.3.0 Core Profile Context 26.8.1.260810");
 		unknown(GpuVendor.AMD, "4.6.0 - Build 31.0.101.5595");

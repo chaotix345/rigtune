@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client.stutter;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RealController;
+import io.github.chaotix345.rigtune.client.SettingsSaver;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
@@ -108,7 +109,7 @@ public final class StutterService {
 		ClientSettings settings = controller.settings();
 		if (settings.stutterMonitor != on) {
 			settings.stutterMonitor = on;
-			CompletableFuture.runAsync(() -> settings.save(configDir), Probes.EXECUTOR);
+			SettingsSaver.shared().save(settings, configDir);
 		}
 		Minecraft minecraft = controller.minecraft();
 		if (minecraft != null) {

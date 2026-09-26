@@ -19,6 +19,7 @@ class FootprintStatsTest {
 		assertTrue(first.initWallNs() >= 0, "wall time recorded: " + first);
 		assertTrue(first.initCpuNs() >= 0, "CPU time recorded (HotSpot supports thread CPU time): " + first);
 		assertTrue(first.mxInitNs() >= 0, "the ThreadMXBean's first-call cost is kept apart: " + first);
+		assertTrue(first.initCpuNs() <= first.initWallNs(), "one thread's CPU never exceeds its wall time: " + first);
 
 		long again = FootprintStats.initStart();
 		Thread.sleep(30);
@@ -36,6 +37,13 @@ class FootprintStatsTest {
 		}));
 		assertTrue(ran.get());
 		assertTrue(FootprintStats.snapshot().clientStartedWallNs() >= 0);
+	}
+
+	@Test
+	void singleThreadCpuIsClampedToWallTime() {
+		assertEquals(140_000_000L, FootprintStats.singleThreadCpu(156_250_000L, 140_000_000L));
+		assertEquals(100_000_000L, FootprintStats.singleThreadCpu(100_000_000L, 140_000_000L));
+		assertEquals(FootprintStats.UNSET, FootprintStats.singleThreadCpu(FootprintStats.UNSET, 140_000_000L));
 	}
 
 	@Test

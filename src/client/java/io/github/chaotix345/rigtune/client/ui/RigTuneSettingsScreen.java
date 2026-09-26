@@ -1,8 +1,8 @@
 package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.client.ClientSettings;
+import io.github.chaotix345.rigtune.client.SettingsSaver;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkWorld;
-import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import net.fabricmc.loader.api.FabricLoader;
@@ -16,7 +16,6 @@ import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.util.Locale;
-import java.util.concurrent.CompletableFuture;
 
 // The v0.2 settings (docs/v0.2/SPEC.md item 8). Every change is saved at once; the network switches also make the
 // controller reload and rescan, so the report reflects them.
@@ -123,9 +122,9 @@ public class RigTuneSettingsScreen extends Screen {
 		return y + ROW + GAP;
 	}
 
-	// Written on a worker thread; each save writes the current values, so the last one always wins.
+	// Written on the settings thread (SettingsSaver), never behind the worker pool; each save writes the current values.
 	private void save() {
-		CompletableFuture.runAsync(() -> settings.save(configDir), Probes.EXECUTOR);
+		SettingsSaver.shared().save(settings, configDir);
 	}
 
 	private void networkChanged() {

@@ -59,7 +59,9 @@ class ConditionEvaluatorDriverVersionTest {
 		EvalFixture radv = gpu("AMD", "AMD Radeon RX 7800 XT (RADV NAVI32)", "1.3.290 Mesa RADV 24.2.3", GraphicsBackend.VULKAN, GpuVendor.AMD);
 		assertEquals(UNKNOWN, radv.truth("{\"driverVersion\": {\"vendor\": \"amd\", \"atLeast\": \"24.2\"}}"),
 				"a Mesa version is never compared with Adrenalin's numbers");
-		assertEquals(UNKNOWN, gpu("AMD", "AMD Radeon RX 7800 XT", "1.3.296 AMD proprietary driver 26.8.1", GraphicsBackend.VULKAN, GpuVendor.AMD)
+		assertEquals(TRUE, gpu("AMD", "AMD Radeon RX 7800 XT", "1.4.349 AMD proprietary driver 26.8.1 (LLPC)", GraphicsBackend.VULKAN, GpuVendor.AMD)
+				.truth("{\"driverVersion\": {\"vendor\": \"amd\", \"atLeast\": \"26.8\"}}"));
+		assertEquals(UNKNOWN, gpu("AMD", "AMD Radeon RX 7800 XT", "1.3.260 AMD open-source driver 2023.Q3.1 (LLPC)", GraphicsBackend.VULKAN, GpuVendor.AMD)
 				.truth("{\"driverVersion\": {\"vendor\": \"amd\", \"atLeast\": \"1\"}}"));
 	}
 
