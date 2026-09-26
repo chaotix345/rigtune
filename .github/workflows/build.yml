@@ -124,11 +124,14 @@ jobs:
         timeout-minutes: 20
         run: ./gradlew ":${{ matrix.mc }}:runProductionClientGameTest" --stacktrace
       # A leg whose backend fails falls back to the other one and would still pass: fail it instead.
+      # The line is written at start-up; a run that crosses midnight UTC has it in the rotated
+      # log (logs/<date>-<n>.log.gz), not latest.log, so both are searched.
       - name: Check the game used ${{ matrix.backend }}
         run: |
-          grep -F "Using graphics backend ${{ matrix.backend }}" \
-            "versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs/latest.log" \
-            || { echo "::error::latest.log doesn't name the ${{ matrix.backend }} backend"; exit 1; }
+          logs="versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs"
+          { cat "$logs/latest.log"; for f in "$logs"/*.log.gz; do [ -e "$f" ] && zcat "$f"; done; } \
+            | grep -F "Using graphics backend ${{ matrix.backend }}" \
+            || { echo "::error::the game's logs don't name the ${{ matrix.backend }} backend"; exit 1; }
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v7
