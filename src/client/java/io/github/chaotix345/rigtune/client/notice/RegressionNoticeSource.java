@@ -35,7 +35,8 @@ public final class RegressionNoticeSource implements NoticeSource {
 	public @Nullable Notice current() {
 		BenchmarkTrend.View view = controller.trendService().trend(null);
 		BenchmarkTrend.Assessment assessment = view.assessment();
-		if (assessment == null || assessment.regression() == null || controller.trendService().acknowledged(assessment.latestRunId())) {
+		if (assessment == null || assessment.regression() == null || assessment.latestRunId() == null
+				|| controller.trendService().acknowledged(assessment.latestRunId())) {
 			runId = null;
 			return null;
 		}

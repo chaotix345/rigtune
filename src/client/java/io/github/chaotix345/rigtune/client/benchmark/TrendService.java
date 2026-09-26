@@ -58,7 +58,7 @@ public final class TrendService {
 		BenchmarkTrend.View view = BenchmarkTrend.view(runs, contextKey, now);
 		BenchmarkTrend.Assessment assessment = view.assessment();
 		if (assessment != null && assessment.regression() != null) {
-			BenchmarkRecord baseline = runs.stream().filter(r -> r.id().equals(assessment.baselineRunId())).findFirst().orElse(null);
+			BenchmarkRecord baseline = runs.stream().filter(r -> Objects.equals(r.id(), assessment.baselineRunId())).findFirst().orElse(null);
 			if (baseline != null) {
 				view = view.withChanges(ChangeWindow.between(baseline, view.latest(), historyEntries()));
 			}

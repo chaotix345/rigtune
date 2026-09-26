@@ -227,7 +227,7 @@ public final class BenchmarkTrend {
 
 	private static List<BenchmarkRecord> before(BenchmarkRecord latest, List<BenchmarkRecord> runs) {
 		for (int i = runs.size() - 1; i >= 0; i--) {
-			if (runs.get(i).id().equals(latest.id())) {
+			if (Objects.equals(runs.get(i).id(), latest.id())) {
 				return runs.subList(0, i);
 			}
 		}

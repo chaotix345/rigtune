@@ -12,6 +12,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.function.Function;
 
 // The words of the benchmark trend (docs/v0.4/SPEC.md 7, X4): the result and history screens, the two notices, the tier
@@ -65,7 +66,7 @@ public final class TrendText {
 	// The baseline run's day: the newest comparable run before the latest.
 	public static String since(BenchmarkTrend.View view, Assessment a, ZoneId zone) {
 		for (BenchmarkRecord r : view.points()) {
-			if (r.id().equals(a.baselineRunId())) {
+			if (Objects.equals(r.id(), a.baselineRunId())) {
 				return date(r.createdAt(), zone);
 			}
 		}
@@ -155,7 +156,8 @@ public final class TrendText {
 		return Text.join(" · ", parts);
 	}
 
-	private static Text scene(String scene) {
+	// The scene's name ("Benchmark world"); a hand-edited value is shown as it is.
+	public static Text scene(@Nullable String scene) {
 		return "BENCHMARK_WORLD".equals(scene) ? Text.of("rigtune.benchmark.scene.benchmark_world", "Benchmark world")
 				: "CURRENT".equals(scene) ? Text.of("rigtune.benchmark.scene.current", "Current world") : Text.literal(String.valueOf(scene));
 	}

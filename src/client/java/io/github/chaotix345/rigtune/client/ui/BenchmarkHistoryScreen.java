@@ -19,7 +19,6 @@ import org.jspecify.annotations.Nullable;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 // Benchmark history (docs/v0.4/SPEC.md 7), opened from ToolsScreen and from the regression notice: one context at a time
 // (the selector lists every context with a result, newest first), the note "N comparable runs; M with different
@@ -127,7 +126,7 @@ public class BenchmarkHistoryScreen extends Screen {
 		int chartWidth = Math.min(area, BenchmarkTrend.MAX_RUNS * 24);
 		BenchmarkRecord latest = view.latest();
 		if (latest != null) {
-			Component scene = Component.translatable("rigtune.benchmark.scene." + latest.scene().toLowerCase(Locale.ROOT));
+			Component scene = Texts.component(TrendText.scene(latest.scene()));
 			TrendChart.draw(graphics, font, Component.translatable("rigtune.benchmark.chart.title", scene), view.points(), view.median(), null,
 					(width - chartWidth) / 2, chartTop, chartWidth, height - 34);
 		}
