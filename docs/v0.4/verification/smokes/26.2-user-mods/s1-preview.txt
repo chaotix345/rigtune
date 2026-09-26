@@ -1,0 +1,136 @@
+Preview of the default ticks (7 rows):
+  Downloaded now, added at the next restart
+  mods/DistantHorizons-3.3.2-26.2-fabric-neoforge.jar (Update Distant Horizons)
+  mods/modernfix-5.27.19-build.2.jar (Update ModernFix)
+  Each download is checked again when it arrives: a file that isn't a Fabric mod, or a mod you already have, is left out.
+  Renamed to .disabled at the next restart
+  mods/fabric-26.2.jar → fabric-26.2.jar.disabled (Update Distant Horizons)
+  mods/modernfix-5.27.19-build.1.jar → modernfix-5.27.19-build.1.jar.disabled (Update ModernFix)
+Preview of every appliable item (14 rows):
+  Written now
+  options.txt
+  Render Distance: 32 → 16
+  Downloaded now, added at the next restart
+  mods/DistantHorizons-3.3.2-26.2-fabric-neoforge.jar (Update Distant Horizons)
+  mods/modernfix-5.27.19-build.2.jar (Update ModernFix)
+  mods/BadOptimizations-2.4.1-26.2-fabric.jar (Install BadOptimizations)
+  mods/debugify-26.2.0.1.jar (Install Debugify)
+  mods/krypton-0.3.1.jar (Install Krypton)
+  mods/sodium-extra-fabric-0.9.4+mc26.2.jar (Install Sodium Extra)
+  Each download is checked again when it arrives: a file that isn't a Fabric mod, or a mod you already have, is left out.
+  Renamed to .disabled at the next restart
+  mods/fabric-26.2.jar → fabric-26.2.jar.disabled (Update Distant Horizons)
+  mods/modernfix-5.27.19-build.1.jar → modernfix-5.27.19-build.1.jar.disabled (Update ModernFix)
+Files hashed before and after (options.txt, mods/, config/): 112 / 112, changed: []
+  e6f4d135f257d311374c15f59d04e827ea68e30855c0bba43e5f169937d59332  config/BBEConfig.json
+  dc82e20ce5fba9d1bef22b10b11bfb3cdb13211b42e21d6cb01e03ad0b50f7d7  config/DistantHorizons.toml
+  4069ce1a439d8c37453c1b1e9f2037e0942674c7e48723a39b37eab245792ad4  config/MouseTweaks.cfg
+  65edc28ca2bf6bd3e3684ae545fb74bcc0ec935a40d6ac60cb68c00c152e34fb  config/appleskin.json5
+  e0804713763b355f2d434ae1c930dd9fe5e720db313ca68fad3ea32c208b1d59  config/asynclogger.toml
+  dee286337f4d870b63bb0a4c8d9add6385b363f1edd04209e6a74ff9fd7d9d6e  config/asynclogger/default.toml
+  33c9756b19ba9d397da81073487f9602a6f0d51229eca52113b05fe901897145  config/c2me.toml
+  28eaff624c99a24e49882e5f56496a9e0f55e9a25e583e9313b0360494810b65  config/continuity.json
+  ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356  config/dynamic_fps.json
+  4a6d510b7e0157027b1cf2022184567fd5387aa09d08db108cb0369ba371ddbe  config/entityculling.json
+  e85f39867513fe26179ba3cf7a00d343e9642ceaa96e7ea3cde6a1c3aa69dd4e  config/fastquit.toml
+  71d5e19e278cb843d92f90a99b8a9772780c62e5611b7c8cc92097cd18399b08  config/ferritecore.mixin.properties
+  090400f1c6b3bc3ed7a9565c6c091b9ff2a224f2fce3dd6c2f78025f1baf99b1  config/gammautils.json
+  351554b5d847acfb0dcdd05a93b5b93f27035178bcbde4d5193b4dc5a5a2f11b  config/immediatelyfast.json
+  a44027e5b5bf7106a7657a84978cbdb46b0d55ac9db0cf77636d4670c4ebfdc3  config/inventoryprofilesnext/inventoryprofiles.json
+  4d3264b58c502afaeca3f44e8d2db0843c54b8ba957afd21a2d450fe10dafefb  config/iris-excluded.json
+  a93417ea6a06dedbaa2fe5cdf04ec818408de725258f9aca3c3ece1a314ff239  config/iris.properties
+  c02ede146ae967651ceafba4301bb814674e66ffcfdd078ab14ba251418a0434  config/ixeris.toml
+  5fdbc62f6013fcabc6e4b71783e121f82a35c06d12c33d26ac1cf75ccda828f5  config/jade/jade.json
+  f54628b0930ae4e260dadefbc3e6ca73e0c31b1bd7a8744cb761e1a3b9ef8064  config/jade/profiles/1/jade.json
+  a1387b66698960f32e6aec82aba61303dccb17867e9adee0645e7393d67b74a1  config/jade/profiles/2/jade.json
+  5cc035e1310343a74468c379deb0977332f19ebac9f48c24214dda39f60828ee  config/jade/profiles/3/jade.json
+  2e7ef877746e4fba54f07c1f5896cb67a9a85b23d0c4c8803680d1540fb7f00f  config/jade/sort-order.json
+  fdd6958ff17541c8d1c891bd1602088bb6888f41229e966387a07311f32ec6d9  config/lambdynlights.toml
+  6cf6f83720071fd1657c8e79b357caf68d40f410ae123e5f922483eb1d1d25be  config/lithium.properties
+  858812e126d5ad8fb8ac178c2922d3218bd3780943b6682d9f732df1178dcf91  config/modernfix-mixins.properties
+  e8f1becee4d20e11702910e0d3eedbe35175922c6ba1a98b52efeb8c9ab3a11d  config/modmenu.json
+  976a76d9aeb5c7e9c2a2293dfd1b38a850c20948ffaf813221868089e2fa0953  config/moreculling.toml
+  dcfa0d157393f3815df0f3c700fbeff32c65d610ceda5763bdbea7a77cb96b75  config/resourceful-config-web.json
+  1cafa61d73f05a19711e8746e1893e46a9bb7a51059d15383c8d45f241a7855e  config/rigtune/history.json
+  a59667baa54738c1b294393a9b3652bcf7d392cdb8cba1c08a8006885b18e919  config/roughlyenoughitems/collapsible.json5
+  ca309b4418ea010975a67b62fda8e4c232572bca3bbb0232b434d9aab5094a81  config/roughlyenoughitems/config.json5
+  589c13e9ebbb9ae1b868d73be8c4e30323dcb03efacf59d75b9d614f1b069b47  config/roughlyenoughitems/favorites.json5
+  cddaeff35a583a71e407da47e3d53b1282ef75d773bffc3760f020a43f408d4a  config/roughlyenoughitems/hints.json
+  a243b77f5d848f3e3376fd29054fe807800464951e8c89bd984054fc05f33c6a  config/seedmapper/config.json
+  2a854627ed0fe2f11660616425b072da440fa93f1e2d0ae80d0e49e648f27d10  config/simplewaypoints/config.json
+  c239ce69bf597cb64c055a6577d581ee223230bd71b3bcd42e428973afcfa287  config/sodium-fingerprint.json
+  b627c4456e6fa0bc4b5f85e2f1cd949faedae3cb9afdaf2a5f52e6f3b6ae1f01  config/sodium-mixins.properties
+  a254b8f531a8cef6ade6f1b860e80ee4cfbf5fb5905d0963c24b121c4f6518a2  config/sodium-options.json
+  5a9058652bc0b88b8810e0b94eba0e1a90cbff2472845c53a7e67442682a1579  config/structure_layout_optimizer.jsonc
+  60420a41571a4658b91babfa2b47d6fefb7c1766eeea969f51ff98ab34c2431c  config/transition.json
+  0a282f3623f7f9443a1d10b5768865f69e58b74e000dcfb4f40399626b7a6124  config/trender.json
+  43ed9dbfa5b4d6f0f3d2e8c2ced17ad298164b22c68ff11d415257a39b074336  config/xaero/lib/client.cfg
+  98f698d96a6d21d830a455b4ad045b70516fa63c298021742d8499e7f0366cd2  config/xaero/lib/common.cfg
+  34ae854b17d896d7cb853bdc28c27231a3947e91cb9f0991f372846ee3c2a907  config/xaero/lib/profiles/default.cfg
+  d438aea41ca41e93697e059f523686935c0add482f6abe96b532bbf10c6ed80a  config/xaero/lib/server_profiles/default.cfg
+  c0915eff5d1a7905cd1038d646eb9086fd1a29e2f637d53535e4da161de17b9f  config/xaero/minimap/client.cfg
+  2b49df024c03a369c62a303c72755e7fedeb4f4653ff53a12fd37bd83ccd4ed0  config/xaero/minimap/common.cfg
+  d44155ad6524baf93af689dcc2f7bab16d1989475f4c91a88ee526687e4957ec  config/xaero/minimap/default_radar_categories_client.json
+  a4c652cafa7dea324e5f5cf3b1df46a84e54b6d4f877195857bce55a559c1cfd  config/xaero/minimap/default_radar_categories_server.json
+  f1ff62b22cfc97486d00e8bd3367a3207f0a8da235e7b365c5aa2a54e3f8dc25  config/xaero/minimap/profiles/default.cfg
+  184e654fa1fc8ad09943c97c4e65ab78acb5b3cfca22417a831513d1b6d9bbc6  config/xaero/minimap/profiles/info_display_config/default.cfg.txt
+  d438aea41ca41e93697e059f523686935c0add482f6abe96b532bbf10c6ed80a  config/xaero/minimap/server_profiles/default.cfg
+  d0f079a8df083f6f60a0e0c1316a25fc841755a91bdcb2f86c66ead8e7d4d13d  config/xaero/world-map/client.cfg
+  0c229eb0daf85bd09af51f21eeeb99497a3bd50a825d5ab1ca695fb21bf6cf9d  config/xaero/world-map/common.cfg
+  5422abf9c83fedef6509144293fad20f588d4bb6ce0cf1af78cbcd2bcd0d2ccf  config/xaero/world-map/profiles/default.cfg
+  d438aea41ca41e93697e059f523686935c0add482f6abe96b532bbf10c6ed80a  config/xaero/world-map/server_profiles/default.cfg
+  58c9270f258d0b224bb7d0f7c927544d5fbe5f1b8027c820e1e14ecbf48fb88c  config/xaerohud.txt
+  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  config/xaeropatreon.txt
+  121b93764159be6fb7dab523b29a844e2bb78400ce8c48f52135a097e9b0006e  config/yacl.json5
+  82caee9b1f532332c798ee216c9a9ba5857c35e58afacba44946d9264fc05b36  config/zoomify.json
+  b648cedc6e33fd90adf9c3affacabcb740e52ab112ca5f4cb92578d4b7c88608  mods/Gamma-Utils-Fabric-3.1.1+mc26.2.jar
+  85cd8d19bc97b9f2af339897f84ac26af16ab31baa0602689edcfa19dfc1b3e9  mods/ImmediatelyFast-Fabric-1.16.5+26.2.jar
+  c4b4864d915bbe382510762a72404112dc0a627d5c18069621b74678aa7813da  mods/InventoryProfilesNext-fabric-26.2-2.3.7.jar
+  ec279346c6926ace1792a4ae83b7702ae56ef72856fe486965c70e524c747af6  mods/Ixeris-4.6.8+26.2-fabric.jar
+  ffe5d2e83a531c3fbe75ad54095e6a9eafc73a38d5827b4c90bedb4b03618b87  mods/Jade-mc26.2-Fabric-26.2.11.jar
+  4592eff38a2e7af3487688e888a637a8cbd4767b46662df94d993a889102effe  mods/MouseTweaks-fabric-mc26.2-2.31.jar
+  e1f3138849b7ec68d029ba07a8158e9bec4032c02f20c3999fe335c638fc8d89  mods/ResourcefulConfig-5.0.0.jar
+  9ba9d2a31531759549924064f33d3d45af342e7246f877efb8cee9f75f6ddaa9  mods/RoughlyEnoughItems-26.2.820.jar
+  8d76cf27589dcc8e16c34ba0709a9ee2134cfcd60b90862f8cbd204ea9b6c7c8  mods/ScalableLux-fabric-0.3.0-alpha.0.3-all.jar
+  e92f4d28973aec7ba9dbbfa74d163a1fadab0288fb3482247eb443cf03aa2178  mods/appleskin-fabric-mc26.2-3.0.10.jar
+  c38877ec420be75e4c2e9a063f6f978973aa07578ca27bfa23976b96796d0ff4  mods/architectury-fabric-21.1.10.jar
+  34dd1a6f9c47a4f2b36cb42f64309822dded7e466047332638c58f18a7e76478  mods/asynclogger-2.2.2+26.1.2-fabric.jar
+  6a92718b5a2bf2c3fad78d0aef9a29f6cd9bb92bb5c8de45263dfa5e6010b6e0  mods/bbe-fabric-1.3.7+mc26.2.jar
+  3395a95eb44753ae7cadb78519f1d5dda1a1b0cecee024d3f1e1a6138b803532  mods/c2me-fabric-mc26.2-0.4.2-alpha.0.52.jar
+  429e097edc91ef8cfc7b8c7ad97570ce7070cde4574218aca4324d681aa6223f  mods/carpet-extra-26.2-26.2.jar
+  d1dbd72d001b3da9108f047081167a5e18277fe4aa511b391c4445627c6b46f8  mods/carpet-tis-addition-v1.82.4-mc26.2.jar
+  def4be7639cd66704f7e304d658ea0f6bf490fb4a6eaa2dbf18ec2c3999d6349  mods/cloth-config-26.2.155.jar
+  2094a52b98e247f664ef2ecdbb41d7dcad7779cc7a8fb87f0ed8a4f8196c0446  mods/continuity-3.0.1+26.2.jar
+  3123c15a5840e2bc5f44a5cc1b4785f75e96bdb903fd5dc901d10e08e53faaaa  mods/cwb-4.1.0+26.2.jar
+  a2c4865320e41deb2e462c4999804106d620c15089d61cbcb0d6505959a4a47b  mods/dynamic-fps-3.11.9+minecraft-26.2.0-fabric.jar
+  ed48546f952edfbb4673aa44968650cc5966a573d2e64e727f58e11cbc36cf31  mods/entityculling-fabric-1.11.2-mc26.2.jar
+  8cd6c5926766962cf817609b91e01a616ce5b639ef95cc5856c1dfcbdd9f3f9d  mods/fabric-26.2.jar
+  e5b858ceb13290c274e31cb888ff5a1a40cb91067e7ffab0b5b775aec51e216a  mods/fabric-api-0.161.0+26.2.jar
+  f6ada912af65c91536d4b0d80adf26cc438253252ddaf259f2c6617ae471311c  mods/fabric-carpet-26.2+v260616.jar
+  620c2709be2a262b837cf976f6f85f6eda80a56af2ba4242e0bdc83a60fee7a5  mods/fabric-language-kotlin-1.14.1+kotlin.2.4.20.jar
+  f18490dfd6c52f9abf4cbf06e0228269425acb42a8b75dd29cd26c574aac47a4  mods/fastquit-3.1.5+mc26.2.jar
+  213966c72ed967acc7392beb28a866fba301ff56b9976c2e7801c2db7de6bf22  mods/ferritecore-9.0.0-fabric.jar
+  ec94a9ee28780277486f1a778f8b97b11f0563f3bfe5183a368af789d745ded4  mods/freecam-fabric-1.4.1+mc26.2.jar
+  f1f7ab57c974d193ba33aa285864a0ded949216f402116fceaf4dc7739b4dd7c  mods/iris-fabric-1.11.4+mc26.2.jar
+  ea42343cf128a36c10dd74c0b5bfd4b60811f55608e8a4d2451ed6272580b009  mods/itemscroller-fabric-26.2-0.32.2.jar
+  fdb3971cd628e7da0a9ca222c2ad501cf2f59df1b73e7f04cbc7e03194689a52  mods/lambdynamiclights-4.12.4+26.2.jar
+  46ee9e464c41a5641e89835782f0bec5ba93efb9d0010d0fcc3fda22e472f976  mods/libIPN-fabric-26.2-6.8.3.jar
+  6de0774f78aee1698154dc7e7fa3c3afb19201e3d9474ddaf073fa4f4309a064  mods/litematica-fabric-26.2-0.28.8.jar
+  2dcf791e4f33f0f9db416c55e17791c9474c807075751b54089de8d119af4e48  mods/litematica-printer-26.2-3.2.2.jar
+  fdde92e238e8075f89ad7f701f2a3d5854af88ba9a67657184a4407b104ac563  mods/lithium-fabric-0.25.3+mc26.2.jar
+  db49040123d8dfe725a95407b4e777383e7162656045bff38ff72fc570080600  mods/malilib-fabric-26.2-0.29.6.jar
+  f96ac5997b3effb5b8bf6a4d2379465a6a6a2a7ab5e848a3b531fe1a6795abba  mods/minihud-fabric-26.2-0.40.7.jar
+  f9d0b89ae51e4436466ded48c45fec3528b3cca05799cb29837cf0ae81a08a9d  mods/modernfix-5.27.19-build.1.jar
+  00865605007fbf26d4712b40ccdd55b1cdebad79a9ccfcc1ff635ed522f5bb27  mods/modmenu-20.0.3.jar
+  ea04505496e4d35a8c94199884b6fafa69057efe50f2096d2988c11163d49122  mods/moreculling-fabric-26.2-1.8.1.jar
+  c2ca2b5c397a0c198a32e7af68d2d0a011bc2c7baeae5cffd3996efd65c5069e  mods/placeholder-api-3.1.0-beta.1+26.2.jar
+  4bb01b27fcfbb3ed103661eee497dfb048034a2278947467c2167a609f9c7784  mods/seedmapper-2.32.1.jar
+  042ae88c7f2f4129f6606e2e692e95d6608e0cc52cd8d9f4a5410dd09a28aa78  mods/shulkerboxtooltip-fabric-5.4.1+26.2.jar
+  16a5e91db49750f8c046ecca3b8f2af5a28ea6f9b6581b42f123ca8fda20864f  mods/sodium-fabric-0.9.2+mc26.2.jar
+  189a4356cc34b34156ec18dd22b9d63e617f12dddfe31729c640fcc62b5ad1fc  mods/structure_layout_optimizer-1.1.4+26.1-fabric.jar
+  3e16eb78583c95a8075e73da2e395ef01a9f03caeeb182255d70f8c9c6de104d  mods/tweakeroo-fabric-26.2-0.29.5.jar
+  075f262947e5e5c0192c9c36639fa667200c078d257cb656de0b4a3ce2d65240  mods/xaerominimap-fabric-26.2-26.5.1.jar
+  599bdc53c29d8ef7ec16b7c2d3d52a5de694638ce6f556c4ab4c8e6d40b6c89f  mods/xaeroworldmap-fabric-26.2-1.46.1.jar
+  69ab51b2475332d1d26ef4f3b3a2b7e5c47dfc904a76730462f83a9c38780e39  mods/yet_another_config_lib_v3-3.9.7+26.2-fabric.jar
+  b57d07447ab87dbf4df274265f0d53cf39fcaf5e2c02296bfd64a8687254ea11  mods/zoomify-2.16.3+26.2.jar
+  24ab5f01eaaf0b9440a9395c72288b2b71c1cebdbdb4e6c0c8a596d150546670  options.txt

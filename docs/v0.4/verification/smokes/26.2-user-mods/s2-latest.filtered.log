@@ -1,0 +1,34 @@
+[21:29:24] [main/INFO]: Loading Minecraft 26.2 with Fabric Loader 0.19.5
+[21:29:24] [main/INFO]: Loading 169 mods:
+[21:29:41] [main/ERROR]: Error reading performance data from registry for Process.
+[21:29:45] [Download-2/ERROR]: Failed to fetch user properties
+[21:29:49] [Render thread/ERROR]: Illegal option value 0 for Anisotropic Filtering
+[21:29:51] [Download-2/ERROR]: Failed to fetch Realms feature flags
+[21:29:51] [Render thread/ERROR]: loadFromFile(): Failed to load config file '<repo>\versions\26.2\run\config\malilib.json'
+[21:29:51] [Render thread/ERROR]: loadFromFile(): Failed to load config file '<repo>\versions\26.2\run\config\tweakeroo.json'.
+[21:29:51] [Render thread/ERROR]: loadFromFile(): Failed to load config file '<repo>\versions\26.2\run\config\itemscroller.json'.
+[21:29:52] [RigTune worker/INFO]: RigTune: Java 25.0.4.1 (Eclipse Adoptium), G1 (Java's choice), 0 argument notes []
+[21:29:52] [RigTune worker/INFO]: RigTune: launcher Modrinth App
+[21:29:52] [RigTune worker/INFO]: Hardware: HardwareProfile[cpu=CpuInfo[name=AMD Ryzen 7 7800X3D 8-Core Processor, physicalCores=8, logicalCores=16, maxFreqMhz=4200], gpu=GpuInfo[vendorString=ATI Technologies Inc., renderer=AMD Radeon RX 7800 XT, driverVersion=3.3.0 Core Profile Context 26.8.1.260810, backend=OPENGL, vramMb=16368], totalRamMb=31849, maxHeapMb=2048, display=DisplayInfo[width=2560, height=1440, refreshRate=180, fullscreen=false], hasBattery=false, onBattery=false, osName=Windows 11 10.0, mcVersion=26.2, flags=[jvm-probed, jvm-gc-g1, sodium-workaround:AMD_GAME_OPTIMIZATION_BROKEN]]
+[21:29:54] [RigTune worker/INFO]: Launch to title screen: 30636 ms (52 mods)
+[21:29:54] [Download-2/ERROR]: Couldn't connect to realms
+[21:29:56] [Test thread/INFO]: Smoke: restored the player's options after the game test reset: [vanilla.renderDistance: 5 -> 32]
+[21:29:56] [ForkJoinPool.commonPool-worker-1/INFO]: RigTune startup footprint: preLaunch + init 38.8 ms on the render thread (CPU 46.9 ms), client start 14.4 ms; RigTune threads used 265.6 ms of CPU in the first 5 s
+[21:30:01] [Test thread/INFO]: Smoke: wrote <repo>\versions\26.2\run\rigtune-smoke-report.txt
+[21:30:01] [Test thread/INFO]: Smoke: RigTune screen buttons [Settings, Apply (10), Preview, History…, Tools…, Rescan, Copy report, Report a problem, Done]
+[21:30:02] [Test thread/INFO]: Smoke: Preview of the default ticks: 16 rows:
+[21:30:03] [Test thread/INFO]: Smoke: Preview of every appliable item: 23 rows:
+[21:30:03] [Test thread/INFO]: Smoke: Preview wrote nothing: true (106 files hashed, changed [])
+[21:30:03] [Test thread/INFO]: Smoke: Tools screen buttons [Benchmark…, Profiles…, Stutter Doctor…, JVM & memory…, Benchmark history…, Done]
+[21:30:03] [Test thread/INFO]: Smoke: Tools startup line: Last launch 30.6 s
+[21:30:04] [Test thread/INFO]: Smoke: BenchmarkMenuScreen screen buttons [Tune settings (inactive), Measure before (inactive), Measure after (inactive), Back]
+[21:30:04] [Test thread/INFO]: Smoke: ProfilesScreen screen buttons [Switch (inactive), Preview (inactive), Copy code (inactive), Save current…, Rename… (inactive), Delete (inactive), Import code…, Done]
+[21:30:04] [Test thread/INFO]: Smoke: StutterScreen screen buttons [Start, Pause (inactive), Clear, Copy summary (inactive), Done]
+[21:30:04] [Test thread/INFO]: Smoke: JvmScreen screen buttons [Done]
+[21:30:05] [Test thread/INFO]: Smoke: BenchmarkHistoryScreen screen buttons [Done]
+[21:30:05] [Test thread/INFO]: Smoke: Tools tour opened 5 tool screens; files changed (options.txt, mods/, config/ minus RigTune's state): [] (106 files hashed)
+[21:30:07] [Render thread/ERROR]: loadFromFile(): Failed to load config file '<repo>\versions\26.2\run\config\malilib.json'
+[21:30:07] [Render thread/ERROR]: loadFromFile(): Failed to load config file '<repo>\versions\26.2\run\config\tweakeroo.json'.
+[21:30:07] [Render thread/ERROR]: loadFromFile(): Failed to load config file '<repo>\versions\26.2\run\config\itemscroller.json'.
+[21:30:07] [Download-2/ERROR]: Failed to retrieve profile key pair
+[21:30:38] [Test thread/WARN]: Smoke: chunks not all downloaded and rendered after 30 s; taking the in-world screenshot anyway
