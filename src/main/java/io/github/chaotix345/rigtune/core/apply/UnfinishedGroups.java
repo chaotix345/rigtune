@@ -23,7 +23,6 @@ import java.util.Set;
 // change), never a rename.
 public final class UnfinishedGroups {
 	static final String FILE_NAME = "unfinished-groups.json";
-	private static final String LEGACY_NAME = "helper/" + FILE_NAME;
 
 	// op: the op's id; from/to: the rename's absolute paths (a disable's `to` is the .disabled name it was given).
 	public record Rename(String op, String from, String to) {
@@ -68,7 +67,7 @@ public final class UnfinishedGroups {
 		try {
 			out.groups.putAll(read(source));
 		} catch (IOException | RuntimeException e) {
-			ApplyHelper.log("Could not read " + (source == out.file ? FILE_NAME : LEGACY_NAME) + ": " + e.getClass().getSimpleName());
+			ApplyHelper.log("Could not read " + LogSafe.name(source) + ": " + LogSafe.error(e, source));
 			out.dirty = true;
 		}
 		return out;
@@ -158,7 +157,7 @@ public final class UnfinishedGroups {
 			Files.deleteIfExists(legacy);
 			dirty = false;
 		} catch (IOException | RuntimeException e) {
-			ApplyHelper.log("Could not update " + FILE_NAME + ": " + e.getClass().getSimpleName());
+			ApplyHelper.log("Could not update " + LogSafe.name(file) + ": " + LogSafe.error(e, file, legacy));
 			dirty = true;
 		}
 	}

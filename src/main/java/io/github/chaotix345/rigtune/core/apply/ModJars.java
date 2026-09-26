@@ -52,10 +52,10 @@ public final class ModJars {
 		try {
 			return sanitizeName(readField(jar, "name"));
 		} catch (NoSuchFileException e) {
-			RigTune.LOGGER.debug("No mod name for {}: the file is gone", jar);
+			RigTune.LOGGER.debug("No mod name for {}: the file is gone", LogSafe.name(jar));
 			return null;
 		} catch (IOException | RuntimeException e) {
-			RigTune.LOGGER.debug("Could not read the mod name of {}: {}", jar, e.getMessage());
+			RigTune.LOGGER.debug("Could not read the mod name of {}: {}", LogSafe.name(jar), LogSafe.error(e, jar));
 			return null;
 		}
 	}
@@ -66,7 +66,7 @@ public final class ModJars {
 		try {
 			return readField(jar, "version");
 		} catch (IOException | RuntimeException e) {
-			RigTune.LOGGER.debug("Could not read the version of {}: {}", jar, e.getMessage());
+			RigTune.LOGGER.debug("Could not read the version of {}: {}", LogSafe.name(jar), LogSafe.error(e, jar));
 			return null;
 		}
 	}
@@ -177,7 +177,7 @@ public final class ModJars {
 			}
 			return out;
 		} catch (IOException | RuntimeException e) {
-			RigTune.LOGGER.debug("Could not read the {} of {}: {}", section, jar, e.getMessage());
+			RigTune.LOGGER.debug("Could not read the {} of {}: {}", section, LogSafe.name(jar), LogSafe.error(e, jar));
 			return Map.of();
 		}
 	}

@@ -1,0 +1,82 @@
+package io.github.chaotix345.rigtune.core.apply;
+
+import java.io.File;
+import java.nio.file.Path;
+
+// What RigTune's log lines say about files and about text from files or the network. Players paste latest.log and
+// helper.log into issues and chats, so a line names a file without its folders (a Windows path holds the account name;
+// review-8 JW-1), and untrusted text can't start a new line or hide characters (review-8 SE-4). JDK only (helper-safe).
+public final class LogSafe {
+	static final int MAX_TEXT = 200;
+
+	private LogSafe() {
+	}
+
+	// A file under config/rigtune by its path there ("awareness.json", "helper/unfinished-groups.json"), any other file
+	// by its name.
+	public static String name(Path file) {
+		if (file == null) {
+			return "null";
+		}
+		Path abs = file.toAbsolutePath().normalize();
+		for (int i = abs.getNameCount() - 2; i >= 1; i--) {
+			if (abs.getName(i).toString().equals("rigtune") && abs.getName(i - 1).toString().equals("config")) {
+				return text(abs.subpath(i + 1, abs.getNameCount()).toString().replace(File.separatorChar, '/'));
+			}
+		}
+		Path name = abs.getFileName();
+		return text(name == null ? "" : name.toString());
+	}
+
+	// "Type: message" for a log line instead of the exception itself (whose message and stack trace print full paths),
+	// with the folders of `files` and the home folder cut out of the message.
+	public static String error(Throwable e, Path... files) {
+		if (e == null) {
+			return "null";
+		}
+		String message = e.getMessage();
+		if (message != null) {
+			for (Path file : files) {
+				Path dir = file == null ? null : file.toAbsolutePath().normalize().getParent();
+				if (dir != null) {
+					message = message.replace(dir + File.separator, "").replace(dir.toString(), ".");
+				}
+			}
+			String home = System.getProperty("user.home");
+			if (home != null && home.length() > 1) {
+				message = message.replace(home, "~");
+			}
+		}
+		return text(e.getClass().getSimpleName() + (message == null ? "" : ": " + message));
+	}
+
+	// Text from a file or the network, for one log line: control, format (bidi overrides, zero-width) and line-separator
+	// characters escaped (backslash, u, 4 hex digits), at most MAX_TEXT characters.
+	public static String text(Object value) {
+		String raw = String.valueOf(value);
+		StringBuilder out = new StringBuilder();
+		int kept = 0;
+		for (int i = 0; i < raw.length(); ) {
+			int cp = raw.codePointAt(i);
+			i += Character.charCount(cp);
+			if (kept == MAX_TEXT) {
+				out.append('…');
+				break;
+			}
+			if (hidden(cp)) {
+				out.append(cp <= 0xFFFF ? String.format("\\u%04x", cp) : String.format("\\U%08x", cp));
+			} else {
+				out.appendCodePoint(cp);
+			}
+			kept++;
+		}
+		return out.toString();
+	}
+
+	static boolean hidden(int cp) {
+		return switch (Character.getType(cp)) {
+			case Character.CONTROL, Character.FORMAT, Character.SURROGATE, Character.LINE_SEPARATOR, Character.PARAGRAPH_SEPARATOR -> true;
+			default -> false;
+		};
+	}
+}

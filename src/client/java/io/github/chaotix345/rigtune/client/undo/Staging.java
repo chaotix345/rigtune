@@ -4,6 +4,7 @@ import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ConfigTargets;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
+import io.github.chaotix345.rigtune.core.apply.LogSafe;
 import io.github.chaotix345.rigtune.core.apply.ModJars;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
@@ -109,7 +110,7 @@ public final class Staging {
 		try {
 			journal.update(entries -> entries);
 		} catch (IOException | RuntimeException e) {
-			RigTune.LOGGER.warn("Could not create {}", Journal.file(configDir), e);
+			RigTune.LOGGER.warn("Could not create {} ({})", LogSafe.name(Journal.file(configDir)), LogSafe.error(e, Journal.file(configDir)));
 		}
 	}
 

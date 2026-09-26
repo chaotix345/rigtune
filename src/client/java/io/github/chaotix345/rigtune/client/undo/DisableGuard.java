@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.client.undo;
 
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ui.Texts;
+import io.github.chaotix345.rigtune.core.apply.LogSafe;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
@@ -71,7 +72,7 @@ public final class DisableGuard {
 			try {
 				pending = PendingActions.load(pendingFile).ops();
 			} catch (IOException e) {
-				RigTune.LOGGER.warn("Could not read {}", pendingFile, e);
+				RigTune.LOGGER.warn("Could not read {} ({})", LogSafe.name(pendingFile), LogSafe.error(e, pendingFile));
 			}
 		}
 		return FolderCheck.disableRefusals(folder, pending, files);
