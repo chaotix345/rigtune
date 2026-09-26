@@ -32,9 +32,9 @@ map). Plan: docs/v0.4/plans/ws-f.md.
   - `rigtune.startup.last` ("Last launch %s s") with one run, else `rigtune.startup.last_median` ("… · median of the
     last N: %s s", N = min(10, runs));
   - `rigtune.startup.mod_set_changed` ("may be related") in a highlight colour;
-  - `rigtune.startup.advice` (general advice only, never a mod name), wrapped to the button width and clipped above
-    Done.
-  - For tests: `startupLine()`, `startupDetail()`.
+  - `rigtune.startup.advice` (general advice only, never a mod name), wrapped to the screen width (the button width
+    left 5 lines for 4 at 640x480@2) and kept above Done; `startupDetailClipped()` tells the test if a line didn't fit.
+  - For tests: `startupLine()`, `startupDetail()`, `startupDetailClipped()`.
 - **`core/footprint/FootprintBudgets`** parses tools/footprint-budgets.json strictly: mode warn|fail, and every limit
   ≥ 0 and ≤ its ceiling. `check(Map)` skips null (unmeasured) values; `enforce` throws one AssertionError in fail mode.
   `-Drigtune.footprint.budgetsFile` (the property is camelCase, because LangCheckTest would read a dotted lower-case

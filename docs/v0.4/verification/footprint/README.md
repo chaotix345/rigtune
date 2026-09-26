@@ -158,7 +158,11 @@ regression.
 
 ## SPEC 13 (startup-time trend)
 
-AC13.1: `StartupTimesTest` (11 cases). AC13.2: FootprintGameTest; screenshots `footprint-tools-<w>x<h>-scale<s>`.
+AC13.1: `StartupTimesTest` (11 cases). AC13.2 is FootprintGameTest: exactly one run from this launch, its fields,
+and the hub line (`footprint-tools-<w>x<h>-scale<s>`). It also checks the longest case, which one fresh launch can't
+produce: a canned 12-run view with a changed mod set, "Last launch 15.1 s · median of the last 10: 14.5 s", the
+note and the advice, nothing clipped above Done (`footprint-tools-trend-<w>x<h>-scale<s>`). The standard 3 sizes
+are 1280×720@2, 640×480@2 and 854×480@2.
 The v040-written set `src/test/resources/v040-written/ws-f/startup-times.json` is written by `StartupTimesFixtureTest`
 through the store. WS-H's released-0.3.0 harness (`tools/e2e/compat030.py` from `origin/test/e2e-v04`, run locally
 2026-09-26 with the released `rigtune-0.3.0+mc26.2.jar`, the other sets still placeholders) passed 9/9, including "0.3.0
