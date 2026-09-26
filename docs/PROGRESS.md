@@ -2,6 +2,17 @@
 
 Source of truth for resuming after context compaction. Update and commit after every milestone. After a compaction, reread this file before acting.
 
+## v0.3.0: RELEASED 2026-09-26
+- PR #4 merged to main (220ac62); PR #5 (CI: the backend check also reads rotated logs; main's run crossed midnight UTC) merged (7dad498); tag v0.3.0 on 7dad498. GitHub release: https://github.com/chaotix345/rigtune/releases/tag/v0.3.0 (rigtune-0.3.0+mc26.2.jar / +mc26.3.jar + sources). Release run 36204454307 green: both nodes published, "Verify Modrinth files match" confirmed each sha512.
+- Modrinth oBN6pcGa: 0.3.0+mc26.2 (VUNuM4Oj), 0.3.0+mc26.3 (TVKKfk4V) listed; `submit` + `sync-body` (docs/modrinth/body-0.3.md) + a 7th gallery image (History) done. Status still processing (in moderator review), so installed 0.1.0/0.2.0 aren't offered the update in the wild yet; the user's real instance (0.1.0) hasn't been played since 2026-09-25 09:08.
+- Rules r13 live: raw rules-v1.json and rules-v2.json on main = HTTP 200 (schema 1 / 2, revision 13). update-rules run 36204761915 green: no content change, no PR. No bot rules PR was opened during v0.3.
+- Final numbers: 1126 unit tests per MC version (1 skipped: the FIFO test on Windows; CI runs it on Linux), was 848; Python tools 285, e2e 125. CI: 8 jobs incl. client game tests on Linux/Xvfb (26.2 OpenGL, 26.3 OpenGL, 26.3 Vulkan).
+- Verification (docs/v0.3/verification/README.md): self-update E2E on the RC: 0.2.0->0.3 20/20, 0.1.0->0.3 21/21, the user's real 0.1.0 state (failed DH group + DH's queued build) 26/26, undo-after-restart incl. per-entry 43/43; local game tests both versions (8 classes, 87 screenshots each); smokes with the user's mods (26.2) and a Modrinth set (26.3); real Tune chunk counts grow with RD (docs/v0.3/verification/benchmark/).
+- Reviews: plan review (docs/v0.3/plan-review.md: 4 H, 25 M, 11 L folded into SPEC "Amendments"), round 1 (docs/reviews/review-5.md: H + M fixed), round 2 (review-6.md: 1 M fixed), focused re-check: no medium or higher (2 lows fixed).
+- Deferred to v0.4 (with reasons): benchmark median-vs-history UI (needs >= 3 comparable runs; `context` is recorded from 0.3.0 on); a full extra language (no native-speaker verification; rule text is English-only); Quilt (QFAPI retired at 26.1; unverified); History's Undo last/all stay active with nothing to undo; Preview shows raw options.txt values; helper's "Gave up after N attempt(s)" prefix; MultiMC shown as Prism, GDLauncher unrecognised; incompatibility checks don't see changes staged by an earlier Apply; History shows file names (journal has no mod names).
+- Next steps (v0.4.0 ideas): add MC 26.4 with tools/add_mc_version.py once it's stable and Sodium ships (expected mid-December; the vulkan-backend advice already stops at 26.4; check Sodium on Vulkan); watch Modrinth moderation and answer moderator messages (the user must forward them); after approval, read the real instance's logs for the offered update; the median comparison UI; friendly labels in Preview; mod names in History (record names at stage time); per-launcher steps verified against live CurseForge/official launcher UIs; a community translation.
+- Leftovers: local branches research/ci-gametest, scratch/ws-h-history, scratch/ws-h-history-2 (unmerged, local only; a hook blocks `branch -D`; the user can delete them). All worktrees removed; merged branches deleted local + remote.
+
 ## v0.3.0 working log (started 2026-09-26)
 
 Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub + Modrinth). Scope: P0 1-4, P1 5-10, P2 11-13 (docs/v0.3/SPEC.md once written).
@@ -24,8 +35,8 @@ Brief: the user's v0.3.0 prompt (full autonomy, research -> release incl. GitHub
 - [x] Phase 6 DONE: round 1 (review-5.md: H + M confirmed, fixed), round 2 (review-6.md: 1 M, fixed afd71d3), focused re-check of the last fixes: NO medium or higher; 2 new lows fixed (62f951a). fix/review-6 awaiting CI 36201892745, then merge.
 - Phase 5 FINAL runs RUNNING on f77af1a (agent p5final, worktree rigtune-p5final, branch test/p5-final): E2E final-v020-to-030 / final-v010-to-030 / final-v010-seeded-to-030 / undo-after-restart-030, local game tests, quick smokes.
 - Release docs RUNNING (agent docs3, worktree rigtune-docs3, branch docs/v0.3-release): CHANGELOG [0.3.0], README, DESIGN fold-ins, docs/modrinth/body-0.3.md.
-- [ ] Phase 7: IN PROGRESS: fix/review-6 merged (a5ebf1f); mod_version 0.3.0 (026b33c); PR #4 https://github.com/chaotix345/rigtune/pull/4 open, CI running. Steps: (1) merge fix/review-6 [done]; (2) merge origin/main (nothing new expected) and confirm rules revision 13 > main's 10; (3) bump mod_version 0.3.0-dev -> 0.3.0, build, push, CI; (4) PR feat/v0.3.0 -> main (body scratchpad/pr-body-v030.md), CI green, merge commit; (5) check Report a problem's live prefill with problem.yml on main (read-only, Claude in Chrome; never submit); (6) tag v0.3.0 on the main merge commit -> release.yml; (7) modrinth_project.py submit + sync-body (body-0.3.md) + status; (8) raw rules v1/v2 = 200; (9) gh workflow run update-rules.yml -> success.
-- [ ] Phase 8: wrap-up
+- [x] Phase 7 DONE (see the top). Was: IN PROGRESS: fix/review-6 merged (a5ebf1f); mod_version 0.3.0 (026b33c); PR #4 https://github.com/chaotix345/rigtune/pull/4 open, CI running. Steps: (1) merge fix/review-6 [done]; (2) merge origin/main (nothing new expected) and confirm rules revision 13 > main's 10; (3) bump mod_version 0.3.0-dev -> 0.3.0, build, push, CI; (4) PR feat/v0.3.0 -> main (body scratchpad/pr-body-v030.md), CI green, merge commit; (5) check Report a problem's live prefill with problem.yml on main (read-only, Claude in Chrome; never submit); (6) tag v0.3.0 on the main merge commit -> release.yml; (7) modrinth_project.py submit + sync-body (body-0.3.md) + status; (8) raw rules v1/v2 = 200; (9) gh workflow run update-rules.yml -> success.
+- [x] Phase 8 DONE: docs (CHANGELOG/README/DESIGN/Modrinth body via docs/v0.3-release), PROGRESS, memory, worktrees removed, merged branches deleted, final report.
 
 ### Agents (v0.3)
 | name | branch | worktree | status |
@@ -112,6 +123,14 @@ Brief: the user's v0.2.0 prompt (full autonomy: research → release, including 
 - FIXED for 0.2 (fix/helper-file-lock-retry c5c1d36 -> 9722170): sharing violations back off exponentially (300 ms doubling, 5 s cap, ~30 s budget, rollback too); ApplyHelper settles 2 s after the game exits. 693 tests per version.
 
 ## Lessons (carried over from v0.1.0; don't relearn)
+- v0.3 additions:
+  - The game-test lock is released with `rm -f .../owner.txt; rmdir .../.gametest-lock` (a hook blocks `rm -rf` on it).
+  - The watchdog takes `name=<worktree>;<scratch>@<branch>` and treats a running CI run on that branch as busy (fewer false stalls while agents poll CI).
+  - Wave A can start before the foundation merges when no workstream touches build files/workflows; tell each agent to merge the integration branch once it lands.
+  - Code-reviewer subagent hand-backs arrive at the coordinator: forward them to the requesting agent with decisions.
+  - Anything that greps the game's latest.log in CI must also read the rotated logs/*.log.gz (a run that crosses midnight UTC rotates it).
+  - The permission classifier refuses disabling a workflow (CI bypass); a hook blocks force-deleting a git branch even with the user's approval in chat (the user can run it with the ! prefix). The hook scans the whole command text, so don't even quote that command in a heredoc.
+  - A merge to main with a green PR can still go red on main (time-dependent CI): wait for main's own CI before tagging.
 - NO STALLS (the user was explicit, after WS-E sat idle for 2 h waiting on a notification that never came):
   - Always keep the watchdog running while agents work: `python <scratchpad>/watchdog.py name=dir ... --stall-min 15 --lock-min 8` in the background. It exits and wakes me on a stalled agent or a stale lock. Nudge the agent, then restart the watchdog with the current agent list.
   - Tell every agent: never wait on background notifications. Poll `gh run list` and the processes yourself, and chain the lock release into the same command as the game run.
