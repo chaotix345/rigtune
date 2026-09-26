@@ -137,9 +137,11 @@ class LauncherScenarioTest {
 				if (info.known()) {
 					keys.put(info.nameKey(), 0);
 					keys.put(info.stepsKey(), 0);
+					keys.put(info.jvmStepsKey(), 0);
 				} else {
 					assertNull(info.nameKey());
 					assertNull(info.stepsKey());
+					assertNull(info.jvmStepsKey());
 				}
 			}
 		}
