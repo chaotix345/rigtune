@@ -51,6 +51,12 @@ two session ends is guaranteed.
 - L5 (not changed): decision 2's trade-off (both halves of an in-place run's session face the 2-minute gate). This
   keeps P5A-F3's rule for sessions a run interrupts.
 
+## For the coordinator (DESIGN.md)
+
+docs/DESIGN.md:215 still says "a running session pauses during a benchmark". Fold in: "a benchmark run ends a running
+session as leaving the world does (saved only with 2 minutes of gameplay, P5A-F3) and a fresh one starts when the
+run ends, so only one capture's rings are ever held (review-9 X3-1)". Left for the docs owner.
+
 ## Not done (blocked)
 
 - The coordinator's first request for the flake, raising every `*NsPerCall` limit in tools/footprint-budgets.json to
