@@ -22,7 +22,9 @@ Brief: the user's v0.4.0 prompt (full autonomy, research -> release incl. GitHub
 - [ ] Phase 4 Wave A RUNNING (launched from e959776). Watchdog: scratchpad/run_watchdog.sh over scratchpad/agents.txt.
 | ws | branch | worktree | scope |
 |---|---|---|---|
-| WS-H | test/e2e-v04 | rigtune-e2e4 | E2E 0.1/0.2/0.3 -> 0.4 (dry runs PASS 20/20/21/26/43), downgrade run, released-jar harness (9/9 on placeholders), two-switch undo phase (fails until 2n) |
+| WS-H | test/e2e-v04 | rigtune-e2e4 (kept for Phase 5) | MERGED be95f9a (CI 36220255858 green). Dry runs on 0.4.0-dev: v030 20/20, v020 20/20, v010 21/21, seeded 26/26, undo 43/43, downgrade 16/16; two-switch undo phase 69/71 (the 2 failures = SPEC 2n, expected until WS-A merges); released-jar harness compat030.py 9/9 (placeholders); 0.3.0 jar sha256 5717f65c... pinned in build.yml. UNVERIFIED: the real profile-switch driver step (stub until WS-P), real v040-written fixture sets. |
+| WS-P early | feat/profiles-extract (deleted) | - | MERGED 22cc915 (CI 36219635079): Recommender.settingTargets extraction, golden report over 240 scenarios. |
+| coordinator | - | - | core/model/ModSetHash shared by WS-B/WS-F (e1393e1). |
 | WS-A | fix/v04-deferred | rigtune-fixes4 | 2a-2g, 2j, 2m, 2n |
 | WS-R | feat/rules-v04 | rigtune-rules4 | 2k, 2l, tools side, all rules content (templates, stutter, jvm, driver seeds) |
 | WS-P | feat/profiles | rigtune-profiles | item 4 (+ early branch feat/profiles-extract: settingTargets) |

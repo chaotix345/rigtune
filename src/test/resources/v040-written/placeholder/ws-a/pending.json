@@ -1,0 +1,18 @@
+{
+  "createdAt": "2026-09-20T10:00:05Z",
+  "gamePid": 4242,
+  "modsDir": "${INSTANCE}/mods",
+  "configDir": "${INSTANCE}/config",
+  "ops": [
+    {
+      "type": "ENABLE_FILE",
+      "from": "${INSTANCE}/mods/e2e-seed-1.0.0.jar.rigtune-pending",
+      "to": "${INSTANCE}/mods/e2e-seed-1.0.0.jar",
+      "id": "0a4f3c1e-5b7d-4e2a-9c61-7d2f1b8e4a01",
+      "group": "0a4f3c1e-5b7d-4e2a-9c61-7d2f1b8e4a01",
+      "modId": "e2e-seed",
+      "attempts": 0,
+      "projectId": "E2ESeed1"
+    }
+  ]
+}

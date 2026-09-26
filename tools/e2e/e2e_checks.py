@@ -10,9 +10,23 @@ from pathlib import Path
 from urllib.parse import unquote
 
 import e2e_env
+import written
 
 # 3a's notice (RealController.droppedQueuedUpdates), when a staged update of a mod with its own update queued is dropped.
 QUEUED_UPDATE_DROPPED = "rigtune.status.queued_update_dropped"
+# 3e (v0.3 WS-B): the WARN line for a change the last exit couldn't apply names its attempt out of the helper's three.
+ATTEMPT = re.compile(r"attempt \d+ of 3", re.IGNORECASE)
+
+
+def history_expectation(old_version):
+    """What the new version finds in history.json after updating from old_version: 0.1.x has no journal, so the new
+    version imports its last apply once ("legacy-import"); 0.2.0 and later journal their own update as an apply entry
+    ("own-update")."""
+    match = re.match(r"(\d+)\.(\d+)", old_version or "")
+    if match is None:
+        raise ValueError("not a RigTune version: {!r}".format(old_version))
+    major, minor = (int(part) for part in match.groups())
+    return "legacy-import" if (major, minor) < (0, 2) else "own-update"
 
 
 @dataclass(frozen=True)
@@ -69,7 +83,8 @@ def _load(path):
 def after_update(instance, old_jar, new_jar, driver, server_log, helper_cmdlines, separator=";", extra_disables=(),
                  carried=()):
     """SPEC 5.5 and AC5.2, after the old version applied the update and the post-exit helper finished. extra_disables:
-    jar names the old version disabled in the same apply (so the 0.2 legacy import has something that is not RigTune's).
+    jar names the old version disabled in the same apply (so its journal, or the new version's legacy import of 0.1.x,
+    has something that is not RigTune's).
     carried: the seeded pending.json's ops (H-M2), which the helper retried and failed again, so they stay pending."""
     instance, old_jar, new_jar = Path(instance), Path(old_jar), Path(new_jar)
     mods = instance / "mods"
@@ -94,7 +109,7 @@ def after_update(instance, old_jar, new_jar, driver, server_log, helper_cmdlines
                         "{} exists: {}".format(disabled.name, disabled.is_file())))
     if extra_disables:
         state = {name: ((mods / (name + ".disabled")).is_file(), (mods / name).exists()) for name in extra_disables}
-        checks.append(Check("the other mod 0.1.0 changed is disabled", all(off and not on for off, on in state.values()),
+        checks.append(Check("the other mod the old version changed is disabled", all(off and not on for off, on in state.values()),
                             "(.disabled exists, jar exists): {}".format(state)))
 
     pending = rigtune_dir / "pending.json"
@@ -160,9 +175,9 @@ def depends_not_stricter(old_jar, new_jar):
 def after_verify(instance, new_jar, driver, last_apply_finished_at, mods_before, expect_history, legacy_disables=(),
                  old_jar=None, statuses_before=None):
     """SPEC 5.6: the new version, relaunched on the same instance, reads the old version's state. expect_history:
-    None, "legacy-import" (a 0.1.x old side; True means the same) or "own-update" (a 0.2.x old side: old_jar and the
-    history statuses before the relaunch are needed). legacy_disables: jar names the legacy import must hold as APPLIED
-    disables."""
+    None, "legacy-import" (a 0.1.x old side; True means the same) or "own-update" (a 0.2.0 or later old side: old_jar and
+    the history statuses before the relaunch are needed); see history_expectation. legacy_disables: jar names the old
+    version disabled in the same apply, which the legacy import or its own entry must hold as APPLIED disables."""
     instance, new_jar = Path(instance), Path(new_jar)
     mods = instance / "mods"
     rigtune_dir = instance / "config" / "rigtune"
@@ -194,9 +209,9 @@ def after_verify(instance, new_jar, driver, last_apply_finished_at, mods_before,
     checks.append(Check("no new pending.json", not (rigtune_dir / "pending.json").exists(), ""))
 
     if expect_history == "own-update":
-        checks.append(own_update_history(instance, old_jar, new_jar, statuses_before))
+        checks.append(own_update_history(instance, old_jar, new_jar, statuses_before, legacy_disables=legacy_disables))
     elif expect_history:
-        # SPEC item 3: the first 0.2 run imports 0.1.0's last-apply.json once, as one legacy-import entry, without
+        # v0.2 SPEC item 3: the new version's first run imports 0.1.x's last-apply.json once, as one legacy-import entry, without
         # RigTune's own jars. A file of another shape fails rather than passing with nothing checked.
         history = _load(rigtune_dir / "history.json")
         entries = history.get("entries") if isinstance(history, dict) else None
@@ -247,7 +262,7 @@ def after_seeded_verify(instance, carried, mod_names, driver, log_text, failed_o
 
     # SPEC 3e: op, file, reason, attempt. Identical lines count once.
     warns = list(dict.fromkeys(line for line in log_text.splitlines()
-                               if "/WARN]" in line and re.search(r"attempt \d+ of 3", line, re.IGNORECASE)))
+                               if "/WARN]" in line and ATTEMPT.search(line)))
 
     def files(op):
         """The op's own file names only: one group's ops share a mod id, and a reason can name another op's file."""
@@ -310,14 +325,16 @@ def _diff(before, after):
                                                      sorted(k for k in set(before) & set(after) if before[k] != after[k]))
 
 
-def own_update_history(instance, old_jar, new_jar, statuses_before):
-    """A 0.2.x old side journals its own update as one apply entry (disable the old jar, enable the new one), which its
-    helper marks APPLIED. The new version must read that journal as it is: no legacy import, no status changed by the
-    relaunch (SPEC compatibility promise: every file 0.2.0 wrote keeps working)."""
+def own_update_history(instance, old_jar, new_jar, statuses_before, legacy_disables=()):
+    """A 0.2.0 or later old side journals its own update as one apply entry (disable the old jar, enable the new one, plus
+    legacy_disables: other jars it disabled in the same apply), which its helper marks APPLIED. The new version must
+    read that journal as it is: no legacy import, no status changed by the relaunch (SPEC compatibility promise: every
+    file an older version wrote keeps working)."""
     entries = history_entries(instance)
     got = sorted((c.get("type"), c.get("action"), c.get("file"), c.get("status"))
                  for e in entries or [] for c in e.get("changes", []))
-    wanted = sorted([("file", "disable", Path(old_jar).name, "APPLIED"), ("file", "enable", Path(new_jar).name, "APPLIED")])
+    wanted = sorted([("file", "disable", Path(old_jar).name, "APPLIED"), ("file", "enable", Path(new_jar).name, "APPLIED")]
+                    + [("file", "disable", name, "APPLIED") for name in legacy_disables])
     kinds = [e.get("kind") for e in entries or []]
     statuses = history_statuses(instance)
     ok = entries is not None and kinds == ["apply"] and got == wanted and statuses == statuses_before
@@ -354,7 +371,7 @@ def _clean(instance):
 
 
 def after_mod_apply(instance, added_jar, other_name, driver):
-    """0.2 applied {add a mod from Modrinth, disable another} and the helper ran."""
+    """The installed RigTune (0.2 or later) applied {add a mod from Modrinth, disable another} and the helper ran."""
     instance, added_jar = Path(instance), Path(added_jar)
     mods = instance / "mods"
     driver = driver or {}
@@ -380,7 +397,7 @@ def after_mod_apply(instance, added_jar, other_name, driver):
 
 
 def after_mod_undo(instance, added_name, other_name, driver, apply_entry_id):
-    """0.2 undid the last apply (both changes staged as reversals) and the helper ran after the restart."""
+    """RigTune undid the last apply (both changes staged as reversals) and the helper ran after the restart."""
     instance = Path(instance)
     mods = instance / "mods"
     driver = driver or {}
@@ -524,4 +541,362 @@ def after_entry_check(instance, first_id, second_id, other_id, driver, mods_befo
     checks.append(Check("history.json statuses unchanged", statuses == statuses_before,
                         "unchanged" if statuses == statuses_before else "before {} after {}".format(statuses_before, statuses)))
     checks.append(_clean(instance))
+    return checks
+
+
+# --- The profile part of undo-after-restart (docs/v0.4/design/ws-h.md; plan review P-H1) ------------------------------
+# A profile switch is an ordinary apply entry of setting changes (docs/research/v0.4/profiles.md; SPEC item 4); 0.4
+# labels it in config/rigtune/profiles.json (SPEC C1: switches [{entryId, profileId, templateId, name}]). Vanilla keys
+# are set at once; Sodium keys are staged and written by the helper at exit. Two switches before one restart put the
+# same staged key in both (P-H1): with 0.4's same-key replacement the older switch's staged change is DISCARDED and the
+# newer one's must start at the file's value; without it (0.3.x) both are applied in order. Either way each key's
+# APPLIED changes must chain from its value before the first switch to the last switch's value.
+
+VANILLA = "vanilla."
+SODIUM = "sodium."
+READABLE = (VANILLA, SODIUM)
+SWITCH_STATUSES = ("APPLIED", "DISCARDED")
+
+
+def options_values(instance):
+    """options.txt as key -> value, a JSON string value unquoted as SettingsBridge.readVanilla (the journal's values)
+    does: options.txt stores e.g. graphicsPreset:"fast", the journal fast."""
+    path = Path(instance) / "options.txt"
+    if not path.is_file():
+        return {}
+    pairs = (line.split(":", 1) for line in path.read_text(encoding="utf-8", errors="replace").splitlines() if ":" in line)
+    return {key: _unquote(value) for key, value in pairs}
+
+
+def _unquote(value):
+    if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
+        try:
+            return json.loads(value)
+        except ValueError:
+            return value
+    return value
+
+
+def _flatten(obj, prefix, out):
+    """SodiumConfigPatcher.flatten: nested objects joined with '.', primitives as Gson's getAsString."""
+    for key, value in obj.items():
+        if isinstance(value, dict):
+            _flatten(value, prefix + key + ".", out)
+        elif isinstance(value, bool):
+            out[prefix + key] = "true" if value else "false"
+        elif value is not None and not isinstance(value, list):
+            out[prefix + key] = str(value)
+    return out
+
+
+def setting_values(instance):
+    """Every setting RigTune can read on the E2E instance, as the journal names it: vanilla.* from options.txt and
+    sodium.* from config/sodium-options.json."""
+    instance = Path(instance)
+    values = {VANILLA + k: v for k, v in options_values(instance).items()}
+    sodium = _load(instance / "config" / "sodium-options.json")
+    if isinstance(sodium, dict):
+        _flatten(sodium, SODIUM, values)
+    return values
+
+
+def _settings(entry):
+    return [c for c in (entry or {}).get("changes", []) if c.get("type") == "setting"]
+
+
+def _keys(entries):
+    return list(dict.fromkeys(c.get("key") for e in entries for c in _settings(e)))
+
+
+def _last_ok(instance):
+    last = _load(Path(instance) / "config" / "rigtune" / "last-apply.json") or {}
+    return [r.get("status") for r in last.get("results") or [] if r.get("status") != "OK"]
+
+
+def profile_labels(instance, entry_ids, names, check_name):
+    """profiles.json (WS-P) labels each entry with its profile's name."""
+    data = _load(Path(instance) / "config" / "rigtune" / "profiles.json")
+    switches = data.get("switches") if isinstance(data, dict) else None
+    got = {s.get("entryId"): s.get("name") for s in switches or [] if isinstance(s, dict)}
+    want = dict(zip(entry_ids, names))
+    ok = len(entry_ids) == len(names) and all(got.get(e) == n for e, n in want.items())
+    return Check(check_name, ok, "labels {}; expected {}".format({e: got.get(e) for e in entry_ids}, want))
+
+
+def after_profile_apply(instance, driver, known_entry_ids, targets, labels):
+    """Two switches in one start and the helper at exit. targets (the settings stand-in): per switch, the exact keys
+    and values it set; None in profile mode, where the profiles decide. labels: the profile names profiles.json must
+    give the entries (profile mode), or None. The values before the first switch are the driver's settingsBefore."""
+    instance = Path(instance)
+    driver = driver or {}
+    count = len(targets) if targets is not None else len(labels or []) or 2
+    checks = [Check("the driver switched {} times".format(count), driver.get("ok") is True and len(driver.get("applyMessages") or []) == count,
+                    "error: {}; apply messages: {}".format(driver.get("error"), driver.get("applyMessages")))]
+    new = [e for e in history_entries(instance) or [] if e.get("id") not in set(known_entry_ids)]
+    ok = (len(new) == count and all(e.get("kind") == "apply" and _settings(e) and len(_settings(e)) == len(e.get("changes", []))
+                                     and any(c.get("status") == "APPLIED" for c in _settings(e)) for e in new)
+          and all((c.get("key") or "").startswith(READABLE) and c.get("status") in SWITCH_STATUSES for e in new for c in _settings(e)))
+    checks.append(Check("history.json: two new apply entries of setting changes, applied (or discarded when replaced)", ok,
+                        "new entries: {}".format([(e.get("kind"), [(c.get("key"), c.get("before"), c.get("after"), c.get("status"))
+                                                                   for c in e.get("changes", [])]) for e in new])))
+    before = driver.get("settingsBefore") or {}
+    if targets is not None:
+        got = [{c.get("key"): c.get("after") for c in _settings(e)} for e in new]
+        checks.append(Check("history.json: each switch changed exactly its settings", got == list(targets),
+                            "changed: {}; expected {}".format(got, list(targets))))
+    final, broken = {}, {}
+    for key in _keys(new):
+        applied = [c for e in new for c in _settings(e) if c.get("key") == key and c.get("status") == "APPLIED"]
+        final[key] = [c.get("after") for e in new for c in _settings(e) if c.get("key") == key][-1]
+        chain = [before.get(key)] + [c.get("after") for c in applied]
+        if not applied or [c.get("before") for c in applied] != chain[:-1] or chain[-1] != final[key]:
+            broken[key] = [(c.get("before"), c.get("after"), c.get("status")) for e in new for c in _settings(e) if c.get("key") == key]
+    checks.append(Check("history.json: each key's applied changes run from its value before the first switch to the last",
+                        bool(final) and not broken, "broken chains (before, after, status): {}; values before: {}".format(
+                            broken, {k: before.get(k) for k in final}) if broken else "{} key(s)".format(len(final))))
+    values = setting_values(instance)
+    wrong = {k: (values.get(k), v) for k, v in final.items() if values.get(k) != v}
+    checks.append(Check("the settings hold the last switch's values", bool(final) and not wrong,
+                        "(now, expected) where they differ: {}".format(wrong) if wrong else "{} value(s)".format(len(final))))
+    checks.append(_clean(instance))
+    failed = _last_ok(instance)
+    checks.append(Check("last-apply.json: every op OK", not failed, "statuses not OK: {}".format(failed)))
+    if labels is not None:
+        checks.append(profile_labels(instance, [e.get("id") for e in new], labels, "profiles.json labels each switch entry"))
+    return checks
+
+
+def after_profile_undo(instance, driver, entry_ids, originals, labels, undo_all):
+    """Undo last twice (the newer switch, then the older), or Undo all, in the start after the switches, and the helper
+    at exit: every key back at its value before the first switch."""
+    instance = Path(instance)
+    driver = driver or {}
+    entries = history_entries(instance) or []
+    switches = [e for e in entries if e.get("id") in entry_ids]
+    plans = driver.get("undoPlans") or []
+    want = ["all"] if undo_all else list(reversed(entry_ids))
+    name = "the driver undid everything (Undo all)" if undo_all else "the driver undid the newer switch, then the older (Undo last twice)"
+    checks = [Check(name, driver.get("ok") is True and [p.get("undoOf") for p in plans] == want
+                    and all(p.get("problem") is None and (p.get("items") or 0) > 0 for p in plans),
+                    "error: {}; plans (undoOf, items, problem): {}; expected {}".format(
+                        driver.get("error"), [(p.get("undoOf"), p.get("items"), p.get("problem")) for p in plans], want))]
+    undos = [e for e in entries if e.get("kind") == "undo" and e.get("undoOf") in want]
+    undo_changes = [c for e in undos for c in e.get("changes", [])]
+    done = [c for e in switches for c in _settings(e) if c.get("status") != "DISCARDED"]
+    ok = (sorted(e.get("undoOf") for e in undos) == sorted(want) and bool(done) and all(c.get("status") == "REVERTED" for c in done)
+          and bool(undo_changes) and all(c.get("status") == "APPLIED" and c.get("reverts") in {d.get("id") for d in done} for c in undo_changes))
+    checks.append(Check("history.json: the switches' changes REVERTED by undo entries, all applied", ok,
+                        "switch changes: {}; undo entries: {}; undo changes: {}".format(
+                            [(c.get("key"), c.get("status")) for c in done], [e.get("undoOf") for e in undos],
+                            [(c.get("key"), c.get("after"), c.get("status"), c.get("reverts")) for c in undo_changes])))
+    values = setting_values(instance)
+    keys = _keys(switches)
+    wrong = {k: (values.get(k), originals.get(k)) for k in keys if values.get(k) != originals.get(k)}
+    checks.append(Check("every key is back at its value before the first switch", bool(keys) and not wrong,
+                        "(now, before the switches) where they differ: {}".format(wrong) if wrong else "{} key(s)".format(len(keys))))
+    checks.append(_clean(instance))
+    failed = _last_ok(instance)
+    checks.append(Check("last-apply.json: every op OK", not failed, "statuses not OK: {}".format(failed)))
+    if labels is not None:
+        checks.append(profile_labels(instance, entry_ids, labels, "profiles.json still labels each switch entry"))
+    return checks
+
+
+def after_profile_check(instance, driver, entry_ids, originals, mods_before, statuses_before):
+    """The next start: the game runs with every key at its value before the first switch, nothing is left to undo."""
+    instance = Path(instance)
+    driver = driver or {}
+    keys = _keys([e for e in history_entries(instance) or [] if e.get("id") in entry_ids])
+    now = driver.get("settingsNow") or {}
+    wrong = {k: (now.get(k), originals.get(k)) for k in keys if now.get(k) != originals.get(k)}
+    checks = [Check("the driver checked", driver.get("ok") is True, "error: {}".format(driver.get("error")))]
+    checks.append(Check("the game runs with every key at its value before the first switch", bool(keys) and not wrong,
+                        "(live, before the switches) where they differ: {}".format(wrong) if wrong else "{} key(s)".format(len(keys))))
+    undoable = driver.get("entryUndoable") or {}
+    problems = driver.get("entryProblems") or {}
+    checks.append(Check("nothing left to undo on either switch",
+                        all(undoable.get(e) == 0 for e in entry_ids) and not any(problems.get(e) for e in entry_ids),
+                        "undoable items: {}; plan problems: {}".format(undoable, problems)))
+    crashes = sorted(p.name for p in (instance / "crash-reports").glob("*")) if (instance / "crash-reports").is_dir() else []
+    checks.append(Check("no crash report", not crashes, "crash-reports: {}".format(crashes)))
+    after = listing(instance / "mods")
+    checks.append(Check("mods unchanged by the relaunch", after == mods_before, "unchanged" if after == mods_before else _diff(mods_before, after)))
+    statuses = history_statuses(instance)
+    checks.append(Check("history.json statuses unchanged", statuses == statuses_before,
+                        "unchanged" if statuses == statuses_before else "before {} after {}".format(statuses_before, statuses)))
+    checks.append(_clean(instance))
+    return checks
+
+
+# --- The downgrade run (docs/v0.4/SPEC.md AC3.2; plan review H-M1) ----------------------------------------------------
+# The released 0.3.0 starts on files 0.4 wrote (the v040-written fixture sets, composed by written.py), undoes the last
+# entry, applies a change of its own; then 0.4 starts again on what 0.3.0 left.
+
+# ERROR lines every offline E2E client logs (Mojang's services don't resolve; OSHI's Windows performance counters).
+HARMLESS_ERRORS = re.compile(r"Failed to fetch user properties|Failed to request yggdrasil public key|Failed to fetch Realms "
+                             r"feature flags|Couldn't connect to realms|Error reading performance data from registry")
+# WARN lines about RigTune's own files that mean a file wasn't read or kept.
+FILE_WARNINGS = re.compile(r"written by a newer RigTune|Could not (read|record|parse|load)|\.bad\b|unreadable", re.IGNORECASE)
+
+
+def rigtune_log_problems(text):
+    """Any ERROR line but the offline client's usual ones (the production log has no logger names), a stack frame in
+    RigTune's code (not the E2E drivers'), and any WARN line saying a file wasn't read, kept or accepted."""
+    out = []
+    for line in text.splitlines():
+        if "/ERROR]" in line and not HARMLESS_ERRORS.search(line):
+            out.append(line)
+        elif "at io.github.chaotix345.rigtune." in line and ".rigtune.e2e." not in line:
+            out.append(line)
+        elif "/WARN]" in line and FILE_WARNINGS.search(line):
+            out.append(line)
+    return list(dict.fromkeys(out))
+
+
+def _bad_or_crash(instance):
+    config = Path(instance) / "config" / "rigtune"
+    bad = sorted(p.name for p in config.iterdir() if ".bad" in p.name) if config.is_dir() else []
+    crashes = sorted(p.name for p in (Path(instance) / "crash-reports").glob("*")) if (Path(instance) / "crash-reports").is_dir() else []
+    return Check("no .bad file, no crash report", not bad and not crashes, ".bad: {}; crash-reports: {}".format(bad, crashes))
+
+
+def _log_check(log_text):
+    problems = rigtune_log_problems(log_text)
+    return Check("latest.log: no RigTune ERROR, stack trace or refusal of a newer file", not problems,
+                 "{} line(s): {}".format(len(problems), problems[:5]) if problems else "none")
+
+
+def _view(driver):
+    view = (driver or {}).get("history") or {}
+    entries = view.get("entries") or []
+    return view.get("state"), [e.get("id") for e in entries], [e.get("id") for e in entries if str(e.get("kindKey") or "").endswith(".unknown")]
+
+
+def _results(instance):
+    last = _load(Path(instance) / "config" / "rigtune" / "last-apply.json") or {}
+    return last.get("results") or []
+
+
+def after_downgrade_old(instance, driver, seeded, old_version, off_name, log_text):
+    """0.3.0 on 0.4's files, and its helper at exit. seeded: self_update_e2e.seeded_state before the launch; off_name: the
+    test mod jar 0.3.0's own Apply disables."""
+    instance = Path(instance)
+    mods = instance / "mods"
+    driver = driver or {}
+    checks = [Check("the driver ran the released 0.3.0", driver.get("ok") is True and driver.get("rigtuneVersion") == old_version,
+                    "error: {}; loaded {}".format(driver.get("error"), driver.get("rigtuneVersion")))]
+    checks.append(_log_check(log_text))
+    state, ids, unknown = _view(driver)
+    seeded_ids = [e.get("id") for e in seeded["entries"]]
+    missing = [i for i in seeded_ids if i not in ids]
+    checks.append(Check("History lists every entry 0.4 wrote (state OK)", state == "OK" and not missing and not unknown,
+                        "state {}; {} of {} listed; missing {}; unknown kinds {}".format(state, len(seeded_ids) - len(missing),
+                                                                                      len(seeded_ids), missing, unknown)))
+    entries = history_entries(instance) or []
+    by_id = {e.get("id"): e for e in entries}
+    undo_of = seeded.get("undoLast")
+    plan = driver.get("undoPlan") or {}
+    items = plan.get("items") or []
+    undos = [e for e in entries if e.get("kind") == "undo" and e.get("undoOf") == undo_of and e.get("rigtuneVersion") == old_version]
+    changes = {c.get("id"): c for c in (by_id.get(undo_of) or {}).get("changes", [])}
+    done = [i for i in items if i.get("action") in ("REVERT", "DISCARD_STAGED")]
+    # A config key 0.3.0 can't change on this instance (e.g. DH's, with no DistantHorizons.toml) may be skipped with a
+    # reason; a vanilla key must be undone.
+    skipped_vanilla = [cid for i in items if i.get("action") == "SKIP" for cid in i.get("changeIds") or []
+                       if (changes.get(cid) or {}).get("key", "").startswith(VANILLA) or (changes.get(cid) or {}).get("type") == "file"]
+    not_undone = [cid for i in done for cid in i.get("changeIds") or [] if (changes.get(cid) or {}).get("status") not in ("REVERTED", "DISCARDED")]
+    ok = (plan.get("undoOf") == undo_of and plan.get("problem") is None and bool(done) and len(undos) == 1
+          and all(c.get("status") == "APPLIED" for c in undos[0].get("changes", [])) and undo_of in by_id and not skipped_vanilla
+          and not not_undone)
+    checks.append(Check("Undo last reverted the newest undoable entry, recorded by 0.3.0", ok,
+                        "plan undoOf {} (expected {}), problem {}, items {}; 0.3.0 undo entries of it: {}; planned but not undone: {}; "
+                        "vanilla or mod changes skipped: {}".format(
+                            plan.get("undoOf"), undo_of, plan.get("problem"),
+                            [(i.get("action"), i.get("description") or i.get("changeIds"), i.get("reason")) for i in items],
+                            [[(c.get("key") or c.get("file"), c.get("status")) for c in e.get("changes", [])] for e in undos],
+                            not_undone, skipped_vanilla)))
+    results = _results(instance)
+    disabled = [r for r in results if (r.get("op") or {}).get("type") == "DISABLE_FILE" and _name((r.get("op") or {}).get("path")) == off_name]
+    journaled = [c for e in entries if e.get("kind") == "apply" and e.get("rigtuneVersion") == old_version for c in e.get("changes", [])
+                 if c.get("action") == "disable" and c.get("file") == off_name and c.get("status") == "APPLIED"]
+    checks.append(Check("0.3.0's own Apply staged and applied (disable {})".format(off_name),
+                        [r.get("status") for r in disabled] == ["OK"] and (mods / (off_name + ".disabled")).is_file()
+                        and not (mods / off_name).exists() and len(journaled) == 1,
+                        "last-apply: {}; {}.disabled: {}; journaled by 0.3.0: {}".format([r.get("status") for r in disabled], off_name,
+                                                                                         (mods / (off_name + ".disabled")).is_file(), len(journaled))))
+    ops = seeded.get("pendingOps") or []
+    status_by_id = {(r.get("op") or {}).get("id"): r.get("status") for r in results}
+    # Ops of the entry Undo last picked are dropped by it (their changes DISCARDED); the others are applied at exit.
+    seeded_target = next((e for e in seeded["entries"] if e.get("id") == undo_of), {})
+    dropped = {c.get("opId") for c in seeded_target.get("changes", []) if c.get("opId")}
+    want = {op.get("id"): ("DISCARDED" if op.get("id") in dropped else "APPLIED") for op in ops}
+    got = {cid: [c.get("status") for e in entries for c in e.get("changes", []) if c.get("opId") == cid] for cid in want}
+    pending = instance / "config" / "rigtune" / "pending.json"
+    ok = (bool(ops) and not pending.exists() and all(got[i] and all(s == want[i] for s in got[i]) for i in want)
+          and all((status_by_id.get(i) == "OK") == (want[i] == "APPLIED") for i in want))
+    checks.append(Check("0.4's staged ops (with projectId): applied by 0.3.0's helper, or dropped by its Undo last", ok,
+                        "ops (expected, last-apply, journal): {}; pending.json left: {}".format(
+                            {i: (want[i], status_by_id.get(i), got[i]) for i in want}, pending.exists())))
+    now = {name: digest(instance / "config" / "rigtune" / name, "sha256") if (instance / "config" / "rigtune" / name).is_file() else None
+           for name in seeded["newFiles"]}
+    changed = sorted(n for n in now if now[n] != seeded["newFiles"][n])
+    checks.append(Check("the files only 0.4 writes are byte-identical", not changed,
+                        "changed: {}".format(changed) if changed else "{} file(s): {}".format(len(now), sorted(now))))
+    checks.append(_bad_or_crash(instance))
+    return checks
+
+
+def _item_key(item):
+    if isinstance(item, dict):
+        return item.get("id") or item.get("at") or item.get("startedAt") or json.dumps(item, sort_keys=True)
+    return json.dumps(item, sort_keys=True)
+
+
+def _lost(seed, now, fields):
+    """The seeded items (list entries by id/at, dict keys) of these fields that `now` no longer has."""
+    lost = {}
+    for field in fields:
+        before, after = (seed or {}).get(field), (now or {}).get(field)
+        if isinstance(before, dict):
+            gone = [k for k in before if not isinstance(after, dict) or k not in after]
+        else:
+            kept = {_item_key(i) for i in after} if isinstance(after, list) else set()
+            gone = [_item_key(i) for i in before or [] if _item_key(i) not in kept]
+        if gone:
+            lost[field] = gone
+    return lost
+
+
+def after_downgrade_new(instance, driver, new_jar, seeded, log_text, kept=None):
+    """0.4 starts again on what 0.3.0 left: it loads, logs no RigTune error, lists the journal, keeps the profile labels
+    of entries 0.3.0 kept, and reads its own files back. kept: file -> fields (written.KEPT)."""
+    instance, new_jar = Path(instance), Path(new_jar)
+    config = instance / "config" / "rigtune"
+    driver = driver or {}
+    version = e2e_env.mod_json(new_jar)["version"]
+    origin = driver.get("rigtuneOrigin") or []
+    checks = [Check("0.4 loaded from mods/ again", driver.get("ok") is True and driver.get("rigtuneVersion") == version
+                    and [_norm(p) for p in origin] == [_norm(instance / "mods" / new_jar.name)],
+                    "error: {}; loaded {} from {}".format(driver.get("error"), driver.get("rigtuneVersion"), origin))]
+    checks.append(_log_check(log_text))
+    checks.append(_bad_or_crash(instance))
+    state, ids, unknown = _view(driver)
+    journal = [e.get("id") for e in history_entries(instance) or []]
+    checks.append(Check("History lists every entry of history.json (state OK)", state == "OK" and sorted(ids) == sorted(journal) and not unknown,
+                        "state {}; listed {} of {}; unknown kinds {}".format(state, len(ids), len(journal), unknown)))
+    seeded_switches = [s for s in ((seeded.get("profiles") or {}).get("switches") or []) if isinstance(s, dict)]
+    now = _load(config / "profiles.json") or {}
+    labels = {s.get("entryId"): s.get("name") for s in now.get("switches") or [] if isinstance(s, dict)}
+    expected = {s.get("entryId"): s.get("name") for s in seeded_switches if s.get("entryId") in journal}
+    checks.append(Check("profiles.json still labels the switch entries 0.3.0 kept", bool(expected) and all(labels.get(k) == v for k, v in expected.items()),
+                        "expected {}; labels now {}".format(expected, labels)))
+    lost = {}
+    for name, fields in (kept or written.KEPT).items():
+        if name in seeded.get("json", {}):
+            current = _load(config / name) if (config / name).is_file() else None
+            gone = _lost(seeded["json"][name], current, fields)
+            if current is None or gone:
+                lost[name] = gone or "missing"
+    checks.append(Check("0.4 read its own files back (none reset or moved to .bad)", not lost,
+                        "lost: {}".format(lost) if lost else "{} file(s) kept their items".format(len(seeded.get("json", {})))))
     return checks

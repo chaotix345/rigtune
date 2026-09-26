@@ -40,7 +40,7 @@ class SelfUpdateWithAnotherChangeTest(unittest.TestCase):
     def test_extra_disable_missing(self):
         (self.fx.mods / (LEGACY + ".disabled")).unlink()
         (self.fx.mods / LEGACY).write_bytes(b"x")
-        self.assertEqual(["the other mod 0.1.0 changed is disabled"], names(self.after_update()))
+        self.assertEqual(["the other mod the old version changed is disabled"], names(self.after_update()))
 
     def test_without_the_extra_op_in_last_apply(self):
         self.fx.write_last_apply("OK", "OK")

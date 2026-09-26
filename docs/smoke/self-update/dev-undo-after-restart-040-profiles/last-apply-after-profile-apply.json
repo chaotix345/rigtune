@@ -1,0 +1,44 @@
+{
+  "finishedAt": "2026-09-26T04:30:48.221668100Z",
+  "results": [
+    {
+      "op": {
+        "type": "PATCH_JSON",
+        "path": "<instance>-profile\\config\\sodium-options.json",
+        "patches": {
+          "performance.chunk_builder_threads": "2"
+        },
+        "id": "17751004-138d-4f91-9769-fce596590c19",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Patched 1 value(s) in sodium-options.json"
+    },
+    {
+      "op": {
+        "type": "PATCH_JSON",
+        "path": "<instance>-profile\\config\\sodium-options.json",
+        "patches": {
+          "performance.use_fog_occlusion": "false"
+        },
+        "id": "9be7d7d2-3743-4ea3-87ef-a84af97075e4",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Patched 1 value(s) in sodium-options.json"
+    },
+    {
+      "op": {
+        "type": "PATCH_JSON",
+        "path": "<instance>-profile\\config\\sodium-options.json",
+        "patches": {
+          "performance.chunk_builder_threads": "4"
+        },
+        "id": "09156c2b-729b-4b24-9c0e-ecf1b356c962",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Patched 1 value(s) in sodium-options.json"
+    }
+  ]
+}
