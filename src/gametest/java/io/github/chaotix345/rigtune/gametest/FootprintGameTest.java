@@ -76,6 +76,9 @@ public class FootprintGameTest implements FabricClientGameTest {
 	private static final Pattern HISTOGRAM_LINE = Pattern.compile("^\\s*\\d+:\\s+(\\d+)\\s+(\\d+)\\s+(\\S+)");
 	private static final int CYCLES = 20;
 	private static final int TICK_CALLS = 100_000;
+	// Best of 5 timing blocks, as the frame hook (FrameHookBudgetTest): best of 3 let one slow runner through (run
+	// 36255335999, docs-only change: tickHookNsPerCallWorld 91.62 ns against its 87 ns limit).
+	private static final int TICK_ROUNDS = 5;
 	private static final int[][] SIZES = {{1280, 720, 2}, {640, 480, 2}, {854, 480, 2}};
 	private static final String SAMPLER = "RigTune stutter sampler";
 	private static final long SAMPLER_WINDOW_NANOS = 60_000_000_000L;
@@ -304,7 +307,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 	}
 
 	// RigTune's END_CLIENT_TICK hook on the render thread with a (non-title, non-RigTune) screen open: the path it takes
-	// during play. Best of 3 rounds after a warm-up, so a JIT compile landing in one round doesn't count.
+	// during play. Best of TICK_ROUNDS rounds after a warm-up, so a JIT compile or a slow moment in one round doesn't count.
 	private static void tickHook(ClientGameTestContext context, Map<String, Number> measured, Map<String, Object> out) {
 		context.runOnClient(mc -> mc.gui.setScreen(new ToolsScreen(new TitleScreen(), RigTuneClient.controller())));
 		context.waitForScreen(ToolsScreen.class);
@@ -315,7 +318,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 			}
 			long nanos = Long.MAX_VALUE;
 			long bytes = Long.MAX_VALUE;
-			for (int round = 0; round < 3; round++) {
+			for (int round = 0; round < TICK_ROUNDS; round++) {
 				long allocated = mx.getCurrentThreadAllocatedBytes();
 				long start = System.nanoTime();
 				for (int i = 0; i < TICK_CALLS; i++) {
@@ -517,7 +520,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 		}
 	}
 
-	// RigTune's two END_CLIENT_TICK listeners, as tickHook: best of 3 rounds after a warm-up, render thread.
+	// RigTune's two END_CLIENT_TICK listeners, as tickHook: best of TICK_ROUNDS rounds after a warm-up, render thread.
 	private static long[] timeTicks(Minecraft mc, MethodHandle stutterTick) {
 		com.sun.management.ThreadMXBean mx = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
 		try {
@@ -527,7 +530,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 			}
 			long nanos = Long.MAX_VALUE;
 			long bytes = Long.MAX_VALUE;
-			for (int round = 0; round < 3; round++) {
+			for (int round = 0; round < TICK_ROUNDS; round++) {
 				long allocated = mx.getCurrentThreadAllocatedBytes();
 				long start = System.nanoTime();
 				for (int i = 0; i < TICK_CALLS; i++) {

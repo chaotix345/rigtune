@@ -16,7 +16,9 @@ WS-F, branch `feat/footprint`; the session monitor's part (F-L1) by WS-F2, branc
 - `FootprintGameTest` (every client game-test leg, production client, after the other game tests in the same JVM):
   - startup numbers from `client/FootprintStats`, measured by RigTune itself as they happen, so the test's position
     doesn't matter;
-  - the END_CLIENT_TICK hook (best of 3 × 100,000 calls on the render thread after a 200,000-call warm-up);
+  - the END_CLIENT_TICK hook (best of 5 × 100,000 calls on the render thread after a 200,000-call warm-up; best of 3
+    until review-9, when one slow runner measured tickHookNsPerCallWorld 91.62 ns against 87 on a docs-only change, run
+    [36255335999](https://github.com/chaotix345/rigtune/actions/runs/36255335999); the limits are unchanged);
   - the notice evaluation;
   - the DiagnosticCommand class histogram and the heap after that histogram's full GC (G1 Old Generation GcInfo),
     before and after 20 RigTuneScreen + Tools open/close cycles;
