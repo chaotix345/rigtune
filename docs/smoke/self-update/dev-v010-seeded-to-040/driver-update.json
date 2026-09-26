@@ -1,0 +1,87 @@
+{
+  "phase": "update",
+  "ok": true,
+  "error": null,
+  "events": [
+    "t+0.0s driver loaded, phase update, output <run>\\out",
+    "t+3.7s title screen; goal set to QUALITY",
+    "t+4.7s offered: Update RigTune -> rigtune-0.4.0-dev+mc26.2.jar",
+    "t+5.8s screenshot e2e-update-1-report.png: Saved screenshot as e2e-update-1-report.png",
+    "t+6.7s apply [update:rigtune]: Downloading 1 mod change(s)…",
+    "t+6.8s status: Restart Minecraft to finish applying 3 change(s).",
+    "t+7.2s staged: 4 op(s) in pending.json",
+    "t+9.3s screenshot e2e-update-2-staged.png: Saved screenshot as e2e-update-2-staged.png",
+    "t+11.3s quitting"
+  ],
+  "statuses": [
+    {
+      "t": "6.8",
+      "key": null,
+      "text": "Restart Minecraft to finish applying 3 change(s)."
+    }
+  ],
+  "rigtuneVersion": "0.1.0",
+  "rigtuneOrigin": [
+    "<instance>\\mods\\rigtune-0.1.0.jar"
+  ],
+  "update": {
+    "title": "Update RigTune",
+    "reason": "Version 0.4.0-dev+mc26.2 is available (you have 0.1.0).",
+    "selectedByDefault": true,
+    "currentFile": "<instance>\\mods\\rigtune-0.1.0.jar",
+    "currentVersion": "0.1.0",
+    "newVersion": "0.4.0-dev+mc26.2",
+    "url": "https://cdn.modrinth.com/data/E2ERigTn/versions/E2Enew01/rigtune-0.4.0-dev%2Bmc26.2.jar",
+    "filename": "rigtune-0.4.0-dev+mc26.2.jar",
+    "sha512": "ecbaea8044f6b4db33b8b3d511d59b8a7b7cc51008a6f0cbb2d575f93c1bc073994bf75072dfadd90b3d0bbdfe78139a571766d6428b6a00d794c0a537e61550"
+  },
+  "updateOffered": true,
+  "applyMessage": "Downloading 1 mod change(s)…",
+  "pendingOps": [
+    {
+      "type": "DISABLE_FILE",
+      "from": null,
+      "to": null,
+      "path": "<instance>\\mods\\fabric-26.2.jar",
+      "modId": null,
+      "group": "7b8043de-f5c3-4881-8309-27265240f39e",
+      "id": "041919d9-18c9-4b04-89c4-f15e4e4a80c5"
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\DistantHorizons-3.3.2-26.2-fabric-neoforge.jar.rigtune-pending",
+      "to": "<instance>\\mods\\DistantHorizons-3.3.2-26.2-fabric-neoforge.jar",
+      "path": null,
+      "modId": "distanthorizons",
+      "group": "7b8043de-f5c3-4881-8309-27265240f39e",
+      "id": "db7f487d-6371-43c5-944e-c053428ad70d"
+    },
+    {
+      "type": "DISABLE_FILE",
+      "from": null,
+      "to": null,
+      "path": "<instance>\\mods\\rigtune-0.1.0.jar",
+      "modId": null,
+      "group": "853666b1-e944-4977-a03d-4c16658d2e94",
+      "id": "8d96551e-0ef5-4484-8ea3-2fc8a335eb7a"
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "<instance>\\mods\\rigtune-0.4.0-dev+mc26.2.jar.rigtune-pending",
+      "to": "<instance>\\mods\\rigtune-0.4.0-dev+mc26.2.jar",
+      "path": null,
+      "modId": "rigtune",
+      "group": "853666b1-e944-4977-a03d-4c16658d2e94",
+      "id": "dcb4ab24-f30f-412d-95d8-949d2843690b"
+    }
+  ],
+  "status": "Restart Minecraft to finish applying 3 change(s).",
+  "modsAtQuit": {
+    "DistantHorizons-3.3.2-26.2-fabric-neoforge.jar.rigtune-pending": "65751ec0cc1d6cc9184e3ed5747fefa4f1724084b293d0c80e51c1b986736af7",
+    "fabric-26.2.jar": "d4fa20084fc280f06825b7b522f6d6d4781a0ddeabb9e06e56576af756176de7",
+    "fabric-api-0.161.0+26.2.jar": "e5b858ceb13290c274e31cb888ff5a1a40cb91067e7ffab0b5b775aec51e216a",
+    "rigtune-0.1.0.jar": "8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950",
+    "rigtune-0.4.0-dev+mc26.2.jar.rigtune-pending": "bd2c93ae44b9c48a3708f1d4b0bddeb7e1dd2311292f0cd8d7d4f69c6d03f0a4",
+    "update/DistantHorizons-3.3.2 - 26.2 neo/fabric-26.2.jar": "65751ec0cc1d6cc9184e3ed5747fefa4f1724084b293d0c80e51c1b986736af7"
+  }
+}

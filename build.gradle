@@ -340,6 +340,30 @@ def e2eUndoDriverJar = tasks.register("e2eUndoDriverJar", Jar) {
 	archiveVersion = ""
 }
 
+// The downgrade driver (src/e2eDowngrade, v0.4 SPEC AC3.2) drives the released 0.3.0 jar on files 0.4 wrote, so like the
+// self-update driver it compiles against the released jar (-Pe2e.oldJar), never these sources.
+sourceSets {
+	e2eDowngrade {
+		compileClasspath += sourceSets.client.compileClasspath - sourceSets.main.output + files({
+			e2eOldJar.present ? rootProject.file(e2eOldJar.get()) : []
+		})
+	}
+}
+
+tasks.named("compileE2eDowngradeJava") {
+	doFirst {
+		if (!e2eOldJar.present) {
+			throw new GradleException("Pass -Pe2e.oldJar=<path to the released rigtune-0.3.0+mc26.2.jar>")
+		}
+	}
+}
+
+def e2eDowngradeDriverJar = tasks.register("e2eDowngradeDriverJar", Jar) {
+	from sourceSets.e2eDowngrade.output
+	archiveBaseName = "rigtune-e2e-downgrade-driver"
+	archiveVersion = ""
+}
+
 // One launch of a production client on a scratch instance (-Pe2e.instance=<dir>), with JVM arguments from
 // -Pe2e.jvmArgsFile (one per line). Unlike runProductionSmoke, `mods` is only the driver: Loom would otherwise add this
 // project's jar through -Dfabric.addMods, and RigTune must load only from the instance's mods folder (plan review M10).
@@ -347,8 +371,9 @@ tasks.register("e2eClient", net.fabricmc.loom.task.prod.ClientProductionRunTask)
 	def instance = providers.gradleProperty("e2e.instance")
 	def jvmArgsFile = providers.gradleProperty("e2e.jvmArgsFile")
 	runDir = layout.dir(instance.map { new File(it) })
-	// -Pe2e.driver=undo picks the undo driver; the default is the self-update driver.
-	mods.setFrom(providers.gradleProperty("e2e.driver").getOrElse("") == "undo" ? e2eUndoDriverJar : e2eDriverJar)
+	// -Pe2e.driver=undo or =downgrade picks that driver; the default is the self-update driver.
+	def driver = providers.gradleProperty("e2e.driver").getOrElse("")
+	mods.setFrom(driver == "undo" ? e2eUndoDriverJar : driver == "downgrade" ? e2eDowngradeDriverJar : e2eDriverJar)
 	jvmArgs.addAll(jvmArgsFile.map { new File(it).readLines("UTF-8").findAll { !it.isBlank() } }.orElse([]))
 	programArgs.addAll("--width", "1280", "--height", "720")
 	doFirst {
