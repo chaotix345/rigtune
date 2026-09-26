@@ -25,29 +25,58 @@ public final class LegacyImport {
 	private LegacyImport() {
 	}
 
-	// True when last-apply.json was written by 0.1.x (docs/v0.4/SPEC.md 2o L1): a mod file op it did has no resultPath,
-	// which 0.2.0 and later always record, and nothing in it is newer than 0.1.x (a resultPath, a TOML or properties
-	// patch, a Modrinth project or version id, an op type this version doesn't know). A run that did no file op can't
-	// be told apart and counts as not 0.1.x.
-	public static boolean fromV010(ApplyResult lastApply) {
+	// True when last-apply.json was written by 0.2.0 or later (docs/v0.4/SPEC.md 2o L1): a resultPath, which 0.2.0 and
+	// later record on every mod file op they do, or an op 0.1.x couldn't have staged.
+	public static boolean fromLater(ApplyResult lastApply) {
 		if (lastApply == null) {
 			return false;
 		}
-		boolean fileOpDone = false;
 		for (ApplyResult.OpResult r : lastApply.results()) {
-			if (r == null || r.op() == null) {
-				continue;
-			}
-			Op op = r.op();
-			if (r.resultPath() != null || op.type() == null || op.type() == PendingActions.Type.PATCH_TOML
-					|| op.type() == PendingActions.Type.PATCH_PROPERTIES || op.projectId() != null || op.versionId() != null) {
-				return false;
-			}
-			if (r.status() == ApplyResult.Status.OK && (op.type() == PendingActions.Type.ENABLE_FILE || op.type() == PendingActions.Type.DISABLE_FILE)) {
-				fileOpDone = true;
+			if (r != null && r.op() != null && (r.resultPath() != null || !v010Op(r.op()))) {
+				return true;
 			}
 		}
-		return fileOpDone;
+		return false;
+	}
+
+	// True when last-apply.json was written by 0.1.x: not by a later version, and a mod file op it did has no
+	// resultPath. A run that did no file op can't be told apart and counts as not 0.1.x.
+	public static boolean fromV010(ApplyResult lastApply) {
+		return lastApply != null && !fromLater(lastApply) && lastApply.results().stream().anyMatch(r -> r != null && r.op() != null
+				&& r.status() == ApplyResult.Status.OK && (r.op().type() == PendingActions.Type.ENABLE_FILE || r.op().type() == PendingActions.Type.DISABLE_FILE));
+	}
+
+	// True when pending.json holds ops and every one is an op 0.1.x could stage. 0.2.0 and 0.3.0 stage the same shapes,
+	// so this only counts where no later version's last-apply.json exists (HistoryStartup): 0.1.x staged them and its
+	// helper hasn't run since (a 0.1.0 Apply, then the upgrade before the next exit).
+	public static boolean v010Plan(PendingActions plan) {
+		if (plan == null) {
+			return false;
+		}
+		boolean any = false;
+		for (Op op : plan.ops()) {
+			if (op == null) {
+				continue;
+			}
+			if (!v010Op(op)) {
+				return false;
+			}
+			any = true;
+		}
+		return any;
+	}
+
+	// 0.1.x staged only mod file enables and disables (without Modrinth project or version ids) and sodium-options.json
+	// patches.
+	private static boolean v010Op(Op op) {
+		if (op.type() == null || op.projectId() != null || op.versionId() != null) {
+			return false;
+		}
+		return switch (op.type()) {
+			case ENABLE_FILE, DISABLE_FILE -> true;
+			case PATCH_JSON -> op.path() != null && "sodium-options.json".equals(HistoryUpdates.fileName(op.path()));
+			case PATCH_TOML, PATCH_PROPERTIES -> false;
+		};
 	}
 
 	// Null when there's nothing to import.

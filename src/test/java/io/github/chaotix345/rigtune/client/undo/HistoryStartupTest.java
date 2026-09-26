@@ -105,6 +105,40 @@ class HistoryStartupTest {
 		assertEquals(List.of(), kinds());
 	}
 
+	// A 0.1.0 player who pressed Apply and upgraded before 0.1.0's helper ever ran: pending.json only, no last-apply.json.
+	// Its ops are imported (so History can undo them), once.
+	@Test
+	void a010PendingPlanWithoutALastApplyIsImportedOnce() throws IOException {
+		V010Fixtures.install("pending.json", pending, mods, config);
+		List<String> staged = PendingActions.load(pending).ops().stream().map(Op::id).toList();
+
+		HistoryStartup.run(config, journal, true);
+		List<JournalEntry> first = journal.entries();
+		HistoryStartup.run(config, journal, true);
+
+		assertEquals(List.of(JournalEntry.LEGACY_IMPORT), kinds());
+		assertEquals(staged, first.getFirst().changes().stream().map(JournalChange::opId).toList());
+		assertTrue(first.getFirst().changes().stream().allMatch(c -> JournalChange.STAGED.equals(c.status())));
+		assertEquals(first, journal.entries());
+	}
+
+	// Staged ops only a later RigTune writes (a Distant Horizons patch, a Modrinth download) aren't 0.1.x's.
+	@Test
+	void pendingOpsOfALaterVersionAreNotImported() throws IOException {
+		Files.createDirectories(pending.getParent());
+		PendingActions.create(1, mods, config, List.of(Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4")),
+				Op.patchToml(config.resolve("DistantHorizons.toml"), Map.of("client.advanced.debugging.rendererMode", "DISABLED")))).save(pending);
+		HistoryStartup.run(config, journal, true);
+		assertEquals(List.of(), kinds());
+
+		Files.delete(Journal.file(config));
+		PendingActions.create(1, mods, config, List.of(Op.enableFile(mods.resolve("x.jar.rigtune-pending"), mods.resolve("x.jar")).withModId("x")
+				.withProjectId("AANobbMI"))).save(pending);
+		HistoryStartup.run(config, journal, true);
+		assertTrue(journal.exists());
+		assertEquals(List.of(), kinds());
+	}
+
 	// The user's real 0.1.0 state (src/test/resources/v010/real-instance/): one legacy entry, and none again at the next start.
 	@Test
 	void theReal010StateIsImportedOnce() throws IOException {

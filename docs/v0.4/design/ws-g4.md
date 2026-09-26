@@ -59,12 +59,22 @@ and a rewrite loses only `modName`. No v040-written fixture changed, since the f
 
 ## L1: the "Imported from 0.1" gate
 
-- `LegacyImport.fromV010(ApplyResult)` is true when last-apply.json was written by 0.1.x. Two things must hold:
-  - A mod file op finished OK without a `resultPath`. 0.2.0 and later always record one; review-checked at the tags.
-  - Nothing in the file is newer than 0.1.x: no `resultPath`, no PATCH_TOML or PATCH_PROPERTIES, no `projectId` or
-    `versionId`, and no op type this version can't parse.
-- `HistoryStartup.legacyEntry` imports only then. A fresh install imports nothing. So does a history.json deleted after
-  a later RigTune's helper ran.
+- `LegacyImport.fromLater(ApplyResult)`: last-apply.json was written by 0.2.0 or later. That means it has a
+  `resultPath`, which 0.2.0 and later record on every mod file op they do (review-checked at the tags), or an op 0.1.x
+  couldn't stage.
+- `fromV010(ApplyResult)`: last-apply.json isn't from a later version, and a mod file op finished OK without a
+  `resultPath`.
+- `v010Plan(PendingActions)`: pending.json holds ops, and every one is an op 0.1.x could stage.
+  - That means ENABLE_FILE or DISABLE_FILE with no Modrinth `projectId`/`versionId`, or a PATCH_JSON of
+    sodium-options.json.
+  - Released 0.1.0 gives every op an id (v0.1.0 `PendingActions`:43-52) and groups update pairs. So "no id and no
+    group" isn't the 0.1.0 shape; only pre-release plans lack ids, and LegacyImport can't track those anyway.
+- `HistoryStartup.legacyEntry` checks in order:
+  - A later version's last-apply.json → nothing.
+  - Otherwise, import when last-apply.json is 0.1.x's, or pending.json is a 0.1.x plan. This covers a 0.1.0 Apply
+    followed by the upgrade before 0.1.0's helper ever ran (coordinator follow-up).
+  - The leftovers are imported only when they form a 0.1.x plan.
+- A fresh install imports nothing, and neither does a history.json deleted after a later RigTune's helper ran.
 - The second start never imports again. The supplier runs only when history.json is MISSING, and a test now pins it.
 - Case (ii) is a first start that couldn't lock, where the first journal write is a staging. `Staging.stage` now creates
   a missing history.json before its merge, so the legacy entry reads pending.json as it was, and the Apply's own ops
@@ -83,10 +93,10 @@ and a rewrite loses only `modName`. No v040-written fixture changed, since the f
    (JournalFoldV030Test), and startup reconcile.
 2. **Fallback drop.** It needs no run of 2 at all: about 25 interleaved entries with changes still staged, or 48 older
    ones. The newest entry and a baseline go last.
-3. **Some 0.1.x leftovers aren't imported any more.** Two cases: a 0.1.0 last run that did no mod file op (only
-   patches, skips or failures), and a 0.1.0 pending.json with no last-apply.json (0.1.0 staged, then the game crashed
-   before its helper ran). Their leftover ops apply at the next exit without a History entry. Neither can be told apart
-   from later versions' files, and SPEC's wording is "only when a 0.1.0 last-apply.json really exists".
+3. **A residual mislabel.** 0.2.0 and 0.3.0 stage the same shapes as 0.1.x, and so do 0.4's undo ops and Sodium patches.
+   So a history.json deleted on a 0.2+ instance whose helper never did a mod file op (it only ever patched Sodium, or
+   never ran) still imports its pending ops as "Imported from 0.1". They stay tracked and undoable; only the label is
+   wrong. Any Distant Horizons/Iris patch, Modrinth download or 0.2+ last-apply.json rules it out.
 4. **A stale 0.1.x last-apply.json** (the player never staged anything after upgrading, then deleted history.json) is
    imported again. That is intended: RigTune never undid those changes, or its helper would have rewritten the file,
    so they are still in effect and belong in History.
@@ -126,7 +136,8 @@ and a rewrite loses only `modName`. No v040-written fixture changed, since the f
   - L-3: stable baseline id, and each change keeps its newest id.
   - L-4 in part: opId kept.
   - Nit: the empty while loop.
-- **Documented:** L-4 (timestamps), L-5 (intended), L-6 (residual 3), and the display nits (residual 7).
+- **Documented:** L-4 (timestamps), L-5 (intended), and the display nits (residual 7).
+- **L-6: fixed** by the coordinator follow-up: 0.1.x plans are imported without a last-apply.json.
 - **Kept:** the undo-kind skip in `baseline()`, which matches UndoPlanner's candidates.
 - The plan text is updated.
 
@@ -134,8 +145,8 @@ and a rewrite loses only `modName`. No v040-written fixture changed, since the f
 - Unit tests: `./gradlew build` on both 26.2 and 26.3 (counts in the hand-back). New tests:
   - JournalFoldTest (12)
   - JournalFoldV030Test (2)
-  - HistoryStartupTest (5)
-  - LegacyImportTest (+2)
+  - HistoryStartupTest (7)
+  - LegacyImportTest (+3)
   - JournalTest: `capFoldsOldUnfinishedEntriesOnlyWhenItMust` replaces the drop expectation.
 - Red first on 8869abc's code:
   - 7 of the first 8 JournalFoldTest tests and the JournalTest change failed. `noFoldableRunFallsBackToDropping` pins

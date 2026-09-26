@@ -170,5 +170,38 @@ class LegacyImportTest {
 		assertFalse(LegacyImport.fromV010(result(new ApplyResult.OpResult(Op.patchJson(SODIUM, Map.of("a", "1")), ApplyResult.Status.OK, "Patched"))),
 				"only a patch");
 		assertFalse(LegacyImport.fromV010(result(new ApplyResult.OpResult(enable, ApplyResult.Status.FAILED, "locked"))), "no file op done");
+
+		// Of those, only the ones with a later marker are known to be a later version's.
+		assertFalse(LegacyImport.fromLater(null));
+		assertFalse(LegacyImport.fromLater(result(enabled010)));
+		assertFalse(LegacyImport.fromLater(result(new ApplyResult.OpResult(enable, ApplyResult.Status.FAILED, "locked"))));
+		assertTrue(LegacyImport.fromLater(result(new ApplyResult.OpResult(enable, ApplyResult.Status.OK, "Enabled x.jar", MODS.resolve("x.jar").toString()))));
+		assertTrue(LegacyImport.fromLater(result(new ApplyResult.OpResult(Op.patchJson(CONFIG.resolve("other.json"), Map.of("a", "1")),
+				ApplyResult.Status.OK, "Patched"))));
+	}
+
+	// docs/v0.4/SPEC.md 2o L1: ops 0.1.x staged (every released 0.1.0 op has an id; updates are grouped) are 0.1.x's; any
+	// op only a later version stages makes the plan a later one.
+	@Test
+	void plansOnly010CouldStageAreRecognised(@TempDir Path game) throws IOException {
+		Path mods = game.resolve("mods");
+		Path config = game.resolve("config");
+		for (String fixture : List.of("pending.json", "captured/pending.json", "pending-pre-groups.json")) {
+			PendingActions plan = PendingActions.load(V010Fixtures.install(fixture, config.resolve(fixture.replace('/', '-')), mods, config));
+			assertTrue(LegacyImport.v010Plan(plan), fixture);
+		}
+		Op sodium = Op.patchJson(SODIUM, Map.of("a", "1"));
+		Op disable = Op.disableFile(MODS.resolve("y.jar"));
+		assertTrue(LegacyImport.v010Plan(PendingActions.create(1, MODS, CONFIG, List.of(sodium, disable))));
+		assertFalse(LegacyImport.v010Plan(null));
+		assertFalse(LegacyImport.v010Plan(PendingActions.create(1, MODS, CONFIG, List.of())));
+		assertFalse(LegacyImport.v010Plan(PendingActions.create(1, MODS, CONFIG, List.of(sodium,
+				Op.patchToml(CONFIG.resolve("DistantHorizons.toml"), Map.of("a", "1"))))), "a TOML patch");
+		assertFalse(LegacyImport.v010Plan(PendingActions.create(1, MODS, CONFIG, List.of(sodium,
+				Op.patchProperties(CONFIG.resolve("iris.properties"), Map.of("a", "1"))))), "a properties patch");
+		assertFalse(LegacyImport.v010Plan(PendingActions.create(1, MODS, CONFIG, List.of(disable,
+				Op.enableFile(MODS.resolve("x.jar.rigtune-pending"), MODS.resolve("x.jar")).withVersionId("v1")))), "a Modrinth version id");
+		assertFalse(LegacyImport.v010Plan(PendingActions.create(1, MODS, CONFIG, List.of(Op.patchJson(CONFIG.resolve("other.json"),
+				Map.of("a", "1"))))), "a JSON patch of another file");
 	}
 }
