@@ -22,7 +22,8 @@ public class NoticeScreen extends Screen {
 	private static final int COLOR_NOTICE = 0xFFFFE08A;
 	private static final int COLOR_LABEL = 0xFFA8A8A8;
 	private static final int TOP = 24;
-	private static final int ROW = 31;
+	private static final int MESSAGE = 11;
+	private static final int ROW_GAP = 6;
 	private static final int BUTTON = 14;
 	private static final int GAP = 4;
 	private static final int LINE_FOR_MORE = 10;
@@ -30,7 +31,9 @@ public class NoticeScreen extends Screen {
 	private final @Nullable Screen parent;
 	private final RigTuneController controller;
 	private List<Notice> shown = List.of();
+	private final List<Integer> rowY = new ArrayList<>();
 	private int notShown;
+	private int moreY;
 
 	public NoticeScreen(@Nullable Screen parent, RigTuneController controller) {
 		super(Component.translatable("rigtune.notice.title"));
@@ -41,14 +44,13 @@ public class NoticeScreen extends Screen {
 	@Override
 	protected void init() {
 		List<Notice> notices = controller.notices();
-		int rows = Math.max(1, (height - 28 - GAP - TOP - LINE_FOR_MORE) / ROW);
-		shown = notices.subList(0, Math.min(rows, notices.size()));
-		notShown = notices.size() - shown.size();
+		int bottom = height - 28 - GAP - LINE_FOR_MORE;
 		int left = margin();
-		for (int i = 0; i < shown.size(); i++) {
-			Notice notice = shown.get(i);
+		int y = TOP;
+		List<Notice> fitting = new ArrayList<>();
+		rowY.clear();
+		for (Notice notice : notices) {
 			int x = left;
-			int y = TOP + i * ROW + 11;
 			List<Button> buttons = new ArrayList<>();
 			for (NoticeAction action : notice.actions().subList(0, Math.min(2, notice.actions().size()))) {
 				buttons.add(button(Texts.component(action.label()), b -> {
@@ -66,12 +68,22 @@ public class NoticeScreen extends Screen {
 				dismiss.setTooltip(Tooltip.create(Component.translatable("rigtune.notice.dismiss.tooltip")));
 				buttons.add(dismiss);
 			}
+			int rowHeight = MESSAGE + (buttons.isEmpty() ? 0 : BUTTON) + ROW_GAP;
+			if (!fitting.isEmpty() && y + rowHeight > bottom) {
+				break;
+			}
+			fitting.add(notice);
+			rowY.add(y);
 			for (Button button : buttons) {
-				button.setPosition(x, y);
+				button.setPosition(x, y + MESSAGE);
 				addRenderableWidget(button);
 				x += button.getWidth() + GAP;
 			}
+			y += rowHeight;
 		}
+		shown = List.copyOf(fitting);
+		notShown = notices.size() - shown.size();
+		moreY = y;
 		int buttonWidth = Math.min(200, width - 16);
 		addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose())
 				.bounds((width - buttonWidth) / 2, height - 28, buttonWidth, 20).build());
@@ -99,7 +111,7 @@ public class NoticeScreen extends Screen {
 		for (int i = 0; i < shown.size(); i++) {
 			Notice notice = shown.get(i);
 			Component message = Texts.component(notice.message());
-			int y = TOP + i * ROW;
+			int y = rowY.get(i);
 			graphics.text(font, font.width(message) <= maxWidth ? message.getVisualOrderText() : ComponentRenderUtils.clipText(message, font, maxWidth),
 					left, y, COLOR_NOTICE, false);
 			if (mouseX >= left && mouseX < left + maxWidth && mouseY >= y && mouseY < y + 9) {
@@ -108,7 +120,7 @@ public class NoticeScreen extends Screen {
 			}
 		}
 		if (notShown > 0) {
-			graphics.text(font, Component.translatable("rigtune.notice.more", notShown), left, TOP + shown.size() * ROW, COLOR_LABEL, false);
+			graphics.text(font, Component.translatable("rigtune.notice.more", notShown), left, moreY, COLOR_LABEL, false);
 		}
 	}
 

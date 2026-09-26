@@ -298,6 +298,7 @@ public class RigTuneScreen extends Screen {
 	// that opens NoticeScreen (the actions, dismiss and the other notices). Returns the height used (0 without a notice).
 	private int noticeLine(int y) {
 		notices = NoticeBoard.select(controller.notices(), Set.of());
+		noticeIndex = notices.visible().isEmpty() ? 0 : noticeIndex % notices.visible().size();
 		shownNotice = notices.at(noticeIndex);
 		if (shownNotice == null) {
 			noticeIndex = 0;
@@ -330,7 +331,8 @@ public class RigTuneScreen extends Screen {
 		}
 		if (notices.others() > 0) {
 			Button more = noticeButton(Component.translatable("rigtune.notice.more", notices.others()), b -> {
-				noticeIndex++;
+				// Kept in range, so a dismissal shows the notice that moves into the dismissed one's place.
+				noticeIndex = (noticeIndex + 1) % notices.visible().size();
 				rebuildWidgets();
 			});
 			more.setTooltip(Tooltip.create(Component.translatable("rigtune.notice.more.tooltip")));
