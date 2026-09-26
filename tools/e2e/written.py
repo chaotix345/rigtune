@@ -15,6 +15,11 @@ SETS = ("ws-a", "ws-p", "ws-b", "ws-s", "ws-w", "ws-f")
 # Files only 0.4 writes and reads: a downgrade to 0.3.0 must leave them byte-identical.
 NEW_FILES = ("profiles.json", "stutter.json", "server-limits.json", "awareness.json", "startup-times.json")
 HISTORY = "history.json"
+# What 0.4 must still hold when it starts again after a downgrade (it may add to them): per file, top-level collections
+# whose seeded items (by id or at, else whole) must all still be there. awareness.json's lastSeen* fields and the
+# fingerprint are refreshed at every start, so only its user decisions are compared.
+KEPT = {"stutter.json": ("sessions",), "startup-times.json": ("runs",), "server-limits.json": ("servers",),
+        "awareness.json": ("dismissed", "acknowledgedRegressions"), "benchmarks.json": ("runs",)}
 
 
 @dataclass(frozen=True)

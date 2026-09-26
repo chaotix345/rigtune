@@ -10,6 +10,7 @@ tools/e2e/README.md."""
 
 import argparse
 import datetime
+import gzip
 import json
 import os
 import re
@@ -29,6 +30,7 @@ sys.path.insert(0, str(HERE))
 import e2e_checks  # noqa: E402
 import e2e_env  # noqa: E402
 import fixtures  # noqa: E402
+import written  # noqa: E402
 
 JAVA_SOURCES = HERE / "java" / "io" / "github" / "chaotix345" / "rigtune" / "e2e"
 DEFAULT_LOCK = "C:/Dev/Worktrees/.gametest-lock"
@@ -68,6 +70,10 @@ PROFILE_SWITCHES = [
     {"name": "stand-in B", "settings": {"vanilla.renderDistance": "10", "vanilla.maxFps": "60",
                                         "sodium.performance.chunk_builder_threads": "4"}},
 ]
+# The downgrade run (SPEC AC3.2): the released 0.3.0 on files 0.4 wrote, then 0.4 again. OFF_ID: the test mod 0.3.0's
+# own Apply disables.
+DOWNGRADE_PHASES = ("downgrade-old", "downgrade-new")
+OFF_ID = "e2e-downgrade-off"
 ADDED_ID = "e2e-added"
 ADDED_PROJECT = "E2EAddMd"
 OTHER_ID = "e2e-disable-me"
@@ -82,6 +88,8 @@ PHASE_TITLES = {
     "entry-apply": "B-M3: after two Applies in one start, each adding a mod (" + FIRST_ID + ", then " + SECOND_ID + "), and quit (helper done)",
     "entry-undo": "B-M3: after Undo this on the older Apply (" + FIRST_ID + ") and a restart (helper done)",
     "entry-check": "B-M3: after the next start",
+    "downgrade-old": "The released old version on files the new one wrote: History, Undo last, its own Apply, quit (helper done)",
+    "downgrade-new": "The new version again, on what the old one left",
     "profile-apply": "Profiles (P-H1): after two switches in one start and quit (helper done)",
     "profile-undo": "Profiles: after Undo last twice in the next start (helper done)",
     "profile-check": "Profiles: after the next start",
@@ -109,6 +117,7 @@ class Run:
         self.mods = self.instance / "mods"
         self.rigtune_dir = self.instance / "config" / "rigtune"
         self.undo = args.scenario == "undo"
+        self.downgrade = args.scenario == "downgrade"
         # self-update: old_jar is installed and new_jar served as its update. undo: new_jar is installed, nothing to update.
         self.old_jar = Path(args.old_jar).resolve() if args.old_jar else None
         self.new_jar = Path(args.new_jar).resolve()
@@ -118,13 +127,17 @@ class Run:
         self.watcher = None
         self.profile = args.profile_switch
         self.profile_instance = self.run_dir / "instance-profile"
-        phases = UNDO_PHASES + ENTRY_PHASES + (PROFILE_PHASES if self.profile else ()) if self.undo else ("update", "verify")
+        phases = UNDO_PHASES + ENTRY_PHASES + (PROFILE_PHASES if self.profile else ()) if self.undo \
+            else DOWNGRADE_PHASES if self.downgrade else ("update", "verify")
         self.checks = {p: [] for p in phases}
         self.facts = {}
         self.jars = self.run_dir / "jars"
         # Test mods: disabled by the old version with its update (so its journal or the legacy import has a non-RigTune
         # change), and for the undo scenario one served by the fake Modrinth to add and one in mods/ to disable.
-        self.legacy_jar = self.jars / "e2e-legacy-1.0.0.jar" if args.legacy_disable and not self.undo else None
+        self.legacy_jar = self.jars / "e2e-legacy-1.0.0.jar" if args.legacy_disable and args.scenario == "self-update" else None
+        self.off_jar = self.jars / "{}-1.0.0.jar".format(OFF_ID)
+        self.seeded = None
+        self.started = {}
         # H-M2: a real 0.1.0 instance's state (tools/e2e/seeds/<name>); its pending ops are expected to be carried over.
         self.seed = load_seed(args.seed) if args.seed else None
         # --expect-history resolved against the old jar's version (prepare).
@@ -289,6 +302,8 @@ class Run:
         (self.instance / "options.txt").write_text(OPTIONS, encoding="utf-8")
         if self.profile:
             self.prepare_profile_instance()
+        if self.downgrade:
+            self.prepare_downgrade()
         self.facts["fabricApi"] = api.name
         self.log("instance mods: " + ", ".join(sorted(p.name for p in self.mods.iterdir())))
 
@@ -297,11 +312,16 @@ class Run:
         self.hosts.write_text(e2e_env.hosts_file_text(socket.gethostname()), encoding="utf-8")
         rules = sorted((REPO / "rules").glob("rules-v*.json"))
         self.catalog = self.run_dir / "catalog.json"
-        self.catalog.write_text(json.dumps(e2e_env.catalog(self.old_jar, self.new_jar, self.mc, rules, extra_projects=extra_projects),
+        # The downgrade run's fake Modrinth knows only the released jar, so neither side is offered an update.
+        self.served = self.old_jar if self.downgrade else self.new_jar
+        self.catalog.write_text(json.dumps(e2e_env.catalog(None if self.downgrade else self.old_jar, self.served, self.mc, rules,
+                                                           extra_projects=extra_projects),
                                            indent=1), encoding="utf-8")
         common = e2e_env.jvm_args(self.hosts, self.tls) + list(self.args.jvm_arg or [])
         for phase in self.checks:
             lines = common + ["-Drigtune.e2e.phase=" + phase, "-Drigtune.e2e.out=" + str(self.out)]
+            if phase in DOWNGRADE_PHASES:
+                lines.append("-Drigtune.e2e.disable=" + OFF_ID)
             if phase == "update" and self.legacy_jar is not None:
                 lines.append("-Drigtune.e2e.alsoDisable=e2e-legacy")
             if self.undo:
@@ -366,7 +386,55 @@ class Run:
 
     def driver_args(self, task):
         """The Gradle task plus the properties that pick and build this scenario's driver."""
-        return [task, "-Pe2e.driver=undo"] if self.undo else [task, "-Pe2e.oldJar=" + str(self.api_jar)]
+        if self.undo:
+            return [task, "-Pe2e.driver=undo"]
+        if self.downgrade:
+            return [task, "-Pe2e.driver=downgrade", "-Pe2e.oldJar=" + str(self.api_jar)]
+        return [task, "-Pe2e.oldJar=" + str(self.api_jar)]
+
+    def prepare_downgrade(self):
+        """The instance as 0.4 left it: the "written by 0.4" sets in config/rigtune/ (written.py), the jars and options.txt
+        values their journal implies, and a test mod for 0.3.0's own Apply."""
+        sets = written.resolve(self.args.written)
+        sources = written.compose(sets, self.instance)
+        state = written.instance_state(self.instance)
+        for path, mod_id in state["jars"].items():
+            target = self.instance / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            e2e_env.test_mod_jar(target, mod_id or "e2e-unknown")
+        e2e_env.test_mod_jar(self.off_jar, OFF_ID)
+        shutil.copyfile(self.off_jar, self.mods / self.off_jar.name)
+        with open(self.instance / "options.txt", "a", encoding="utf-8") as options:
+            options.write("".join("{}:{}\n".format(k, v) for k, v in state["options"].items()))
+        self.seeded = seeded_state(self.instance)
+        self.facts["writtenSets"] = [{"name": s.name, "placeholder": s.placeholder, "folder": self.scrub(str(s.folder))} for s in sets]
+        (self.out / "seeded.json").write_text(json.dumps({"sets": self.facts["writtenSets"], "files": sources, "jars": state["jars"],
+                                                          "options": state["options"], "newFiles": self.seeded["newFiles"],
+                                                          "undoLast": self.seeded["undoLast"]}, indent=1) + LF, encoding="utf-8", newline=LF)
+        self.log("composed from {}; jars {}; options {}".format(
+            ", ".join(s.name + (" (placeholder)" if s.placeholder else "") for s in sets), sorted(state["jars"]), state["options"]))
+
+    def run_downgrade(self):
+        """SPEC AC3.2: the released 0.3.0 on 0.4's files (History, Undo last, its own Apply; its helper at exit), then the
+        player reinstalls 0.4 and it starts on what 0.3.0 left."""
+        code, helper_ok, _ = self.launch_and_apply("downgrade-old")
+        checks = [e2e_checks.Check("the client exited normally and the helper finished", code == 0 and helper_ok,
+                                   "gradle exit {}, helper finished: {}".format(code, helper_ok))]
+        checks += e2e_checks.after_downgrade_old(self.instance, self.driver("downgrade-old"), self.seeded, self.facts["old"]["version"],
+                                                 self.off_jar.name, session_log(self.instance, self.started["downgrade-old"]))
+        self.checks["downgrade-old"] = checks
+        if not all(c.ok for c in checks):
+            return False
+        shutil.move(str(self.mods / self.old_jar.name), str(self.jars / ("uninstalled-" + self.old_jar.name)))
+        shutil.copyfile(self.new_jar, self.mods / self.new_jar.name)
+        self.log("reinstalled {} in place of {}".format(self.new_jar.name, self.old_jar.name))
+        code = self.launch("downgrade-new")
+        self.snapshot("downgrade-new")
+        checks = [e2e_checks.Check("the relaunched client exited normally", code == 0, "gradle exit {}".format(code))]
+        checks += e2e_checks.after_downgrade_new(self.instance, self.driver("downgrade-new"), self.new_jar, self.seeded,
+                                                 session_log(self.instance, self.started["downgrade-new"]))
+        self.checks["downgrade-new"] = checks
+        return all(c.ok for c in checks)
 
     def start_server(self):
         requests = self.run_dir / "requests.jsonl"
@@ -397,7 +465,7 @@ class Run:
         self.server = None
 
     def probe(self):
-        new_url = "https://{}/data/{}/versions/E2Enew01/{}".format(e2e_env.CDN_HOST, e2e_env.PROJECT_ID, quote(self.new_jar.name, safe=""))
+        new_url = "https://{}/data/{}/versions/E2Enew01/{}".format(e2e_env.CDN_HOST, e2e_env.PROJECT_ID, quote(self.served.name, safe=""))
         urls = ["https://{}/v2/project/rigtune/version".format(e2e_env.API_HOST), new_url]
         urls += ["https://{}{}{}".format(e2e_env.RAW_HOST, e2e_env.RULES_URL_DIR, p.name) for p in sorted((REPO / "rules").glob("rules-v*.json"))]
         command = [str(self.java)] + e2e_env.jvm_args(self.hosts, self.tls) + [str(JAVA_SOURCES / "RedirectProbe.java"),
@@ -458,6 +526,7 @@ class Run:
     def launch(self, phase):
         self.log("launching the client, phase " + phase)
         started = time.time()
+        self.started[phase] = started
         code = self.gradle("gradle-{}.log".format(phase), *self.driver_args(":{}:e2eClient".format(self.mc)),
                            "-Pe2e.instance=" + str(self.instance), "-Pe2e.jvmArgsFile=" + str(self.run_dir / "jvm-{}.txt".format(phase)))
         self.facts["{}Seconds".format(phase)] = round(time.time() - started)
@@ -688,7 +757,7 @@ class Run:
             else:
                 shutil.rmtree(dest)
         dest.mkdir(parents=True)
-        texts = [self.out / n for n in ("redirect-probe.txt", "helper-dir.txt", "pending-before-exit.json")]
+        texts = [self.out / n for n in ("redirect-probe.txt", "helper-dir.txt", "pending-before-exit.json", "seeded.json")]
         texts += [self.out / ("seeded-" + n) for n in SEEDED]
         for phase in self.checks:
             texts += [self.out / n.format(phase) for n in ("driver-{}.json", "report-{}.txt", "helper-cmdlines-{}.txt",
@@ -717,6 +786,8 @@ class Run:
 
     def result_markdown(self, verdict, files):
         installed = self.facts["new"] if self.undo else self.facts["old"]
+        if self.downgrade:
+            return self.downgrade_markdown(verdict, files)
         lines = ["# {} E2E: {}".format("Undo after restart" if self.undo else "Self-update", self.name), "",
                  "- Verdict: **{}**".format(verdict),
                  "- Run: {} UTC, MC {}, {} + {}{} in a fresh scratch instance".format(
@@ -766,6 +837,25 @@ class Run:
         lines += ["## Files", ""] + ["- `{}`".format(f) for f in files if f != "RESULT.md"] + [""]
         return "\n".join(lines)
 
+    def downgrade_markdown(self, verdict, files):
+        lines = ["# Downgrade E2E: " + self.name, "", "- Verdict: **{}**".format(verdict),
+                 "- Run: {} UTC, MC {}, a fresh scratch instance with {} + {} + `{}` (for 0.3.0's own Apply)".format(
+                     self.run_dir.name.rsplit("-", 2)[-2], self.mc, self.facts["old"]["file"], self.facts.get("fabricApi"), self.off_jar.name),
+                 "- Old (started on 0.4's files): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["old"]),
+                 "- New (reinstalled after it): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"]),
+                 "- \"Written by 0.4\" sets (plan review H-M1; `seeded.json`): " + ", ".join(
+                     "`{}`{}".format(s["name"], " (**placeholder**)" if s["placeholder"] else "") for s in self.facts.get("writtenSets", [])),
+                 "- Client time: " + ", ".join("{} {} s".format(p, self.facts.get("{}Seconds".format(p))) for p in self.checks), ""]
+        for phase in self.checks:
+            lines += ["## " + PHASE_TITLES[phase], "", "| check | result | detail |", "|---|---|---|"]
+            if not self.checks[phase]:
+                lines.append("| (not run) | | |")
+            for c in self.checks[phase]:
+                lines.append("| {} | {} | {} |".format(c.name, "PASS" if c.ok else "**FAIL**", self.scrub(c.detail).replace("|", "\\|")))
+            lines.append("")
+        lines += ["## Files", ""] + ["- `{}`".format(f) for f in files if f != "RESULT.md"] + [""]
+        return "\n".join(lines)
+
     def capture_fixtures(self, verdict):
         dest = Path(self.args.capture_fixtures).resolve()
         raw = self.run_dir / "captured-raw"
@@ -803,6 +893,9 @@ class Run:
             if self.undo:
                 if self.run_undo_scenario():
                     verdict = "PASS"
+            elif self.downgrade:
+                if self.run_downgrade():
+                    verdict = "PASS"
             elif self.run_update():
                 if self.run_verify():
                     verdict = "PASS"
@@ -831,6 +924,36 @@ def load_seed(folder):
     seed = json.loads((folder / "seed.json").read_text(encoding="utf-8"))
     seed["dir"] = folder
     return seed
+
+
+def seeded_state(instance):
+    """What 0.4 left in config/rigtune/ (after written.compose), for the downgrade checks: the journal entries, the
+    staged ops, the sha256 of the 0.4-only files, their content where 0.4 must keep items (written.KEPT), profiles.json,
+    and the entry Undo last should pick (the newest non-undo entry with a change still applied or staged)."""
+    config = Path(instance) / "config" / "rigtune"
+    entries = e2e_checks.history_entries(instance) or []
+    pending = e2e_checks._load(config / "pending.json") or {}
+    undo_last = None
+    for entry in entries:
+        if entry.get("kind") != "undo" and any(c.get("status") in ("APPLIED", "STAGED") for c in entry.get("changes", [])):
+            undo_last = entry.get("id")
+    return {"entries": entries, "pendingOps": pending.get("ops") or [],
+            "newFiles": {n: e2e_checks.digest(config / n, "sha256") for n in written.NEW_FILES if (config / n).is_file()},
+            "json": {n: e2e_checks._load(config / n) for n in written.KEPT if (config / n).is_file()},
+            "profiles": e2e_checks._load(config / "profiles.json"), "undoLast": undo_last}
+
+
+def session_log(instance, since):
+    """The launch's client log: latest.log, after any log rotated during it (logs/*.log.gz newer than `since`; a run
+    across midnight UTC rotates latest.log)."""
+    logs = Path(instance) / "logs"
+    text = ""
+    for rotated in sorted(logs.glob("*.log.gz")) if logs.is_dir() else []:
+        if rotated.stat().st_mtime >= since:
+            with gzip.open(rotated, "rt", encoding="utf-8", errors="replace") as f:
+                text += f.read()
+    latest = logs / "latest.log"
+    return text + (latest.read_text(encoding="utf-8", errors="replace") if latest.is_file() else "")
 
 
 def released_problem(version, sha256):
@@ -907,11 +1030,13 @@ def filtered_log(path):
 def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--name", required=True, help="scenario name, e.g. v010-to-dev")
-    parser.add_argument("--scenario", choices=("self-update", "undo"), default="self-update",
+    parser.add_argument("--scenario", choices=("self-update", "undo", "downgrade"), default="self-update",
                         help="self-update (default), or undo: the new version applies mod changes and undoes them after a restart (M14, B-M3)")
     parser.add_argument("--old-jar", help="self-update: the installed RigTune jar (a released one: 0.1.0, 0.2.0 or 0.3.0)")
     parser.add_argument("--old-sha256", help="expected sha256 of --old-jar")
     parser.add_argument("--new-jar", required=True, help="self-update: the update the fake Modrinth serves; undo: the installed jar")
+    parser.add_argument("--written", default=str(REPO / "src" / "test" / "resources" / "v040-written"),
+                        help="downgrade: the \"written by 0.4\" fixture sets (plan review H-M1)")
     parser.add_argument("--seed", help="self-update: seed the instance from a folder like tools/e2e/seeds/v010-dh (H-M2)")
     parser.add_argument("--legacy-disable", action="store_true",
                         help="self-update: the old version also disables a test mod in the same apply, so the journal check has a change that isn't RigTune's")
@@ -941,6 +1066,8 @@ def parse_args(argv):
         parser.error("set JAVA_HOME or pass --java-home")
     if args.seed and args.scenario != "self-update":
         parser.error("--seed is for the self-update scenario")
+    if args.scenario == "downgrade" and not args.old_jar:
+        parser.error("--scenario downgrade needs --old-jar (the released 0.3.0 jar) and --new-jar (0.4)")
     if args.profile_switch and args.scenario != "undo":
         parser.error("--profile-switch is for the undo scenario")
     if args.profile_names and args.profile_switch != "profile":

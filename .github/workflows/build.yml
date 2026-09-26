@@ -63,6 +63,7 @@ jobs:
           ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.1.0.jar"
           ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.2.0+mc26.2.jar"
           ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.2.jar"
+          ./gradlew :26.2:compileE2eDowngradeJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.2.jar"
           # The released-jar compatibility harness (docs/v0.4/SPEC.md AC3.3): 0.3.0's own classes read the files 0.4 writes.
           python3 tools/e2e/compat030.py --old-jar "$old/rigtune-0.3.0+mc26.2.jar"
       - name: Upload jars

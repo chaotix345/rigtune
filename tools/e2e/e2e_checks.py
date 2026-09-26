@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 import e2e_env
+import written
 
 # 3a's notice (RealController.droppedQueuedUpdates), when a staged update of a mod with its own update queued is dropped.
 QUEUED_UPDATE_DROPPED = "rigtune.status.queued_update_dropped"
@@ -724,4 +725,155 @@ def after_profile_check(instance, driver, entry_ids, originals, mods_before, sta
     checks.append(Check("history.json statuses unchanged", statuses == statuses_before,
                         "unchanged" if statuses == statuses_before else "before {} after {}".format(statuses_before, statuses)))
     checks.append(_clean(instance))
+    return checks
+
+
+# --- The downgrade run (docs/v0.4/SPEC.md AC3.2; plan review H-M1) ----------------------------------------------------
+# The released 0.3.0 starts on files 0.4 wrote (the v040-written fixture sets, composed by written.py), undoes the last
+# entry, applies a change of its own; then 0.4 starts again on what 0.3.0 left.
+
+def rigtune_log_problems(text):
+    """A RigTune ERROR line, a stack frame in RigTune's code, or a refusal of a file a newer RigTune wrote."""
+    out = []
+    for line in text.splitlines():
+        if "/ERROR]" in line and re.search(r"rigtune", line, re.IGNORECASE) and "RigTune E2E" not in line:
+            out.append(line)
+        elif "at io.github.chaotix345.rigtune." in line and ".rigtune.e2e." not in line:
+            out.append(line)
+        elif "written by a newer RigTune" in line:
+            out.append(line)
+    return list(dict.fromkeys(out))
+
+
+def _bad_or_crash(instance):
+    config = Path(instance) / "config" / "rigtune"
+    bad = sorted(p.name for p in config.iterdir() if ".bad" in p.name) if config.is_dir() else []
+    crashes = sorted(p.name for p in (Path(instance) / "crash-reports").glob("*")) if (Path(instance) / "crash-reports").is_dir() else []
+    return Check("no .bad file, no crash report", not bad and not crashes, ".bad: {}; crash-reports: {}".format(bad, crashes))
+
+
+def _log_check(log_text):
+    problems = rigtune_log_problems(log_text)
+    return Check("latest.log: no RigTune ERROR, stack trace or refusal of a newer file", not problems,
+                 "{} line(s): {}".format(len(problems), problems[:5]) if problems else "none")
+
+
+def _view(driver):
+    view = (driver or {}).get("history") or {}
+    entries = view.get("entries") or []
+    return view.get("state"), [e.get("id") for e in entries], [e.get("id") for e in entries if str(e.get("kindKey") or "").endswith(".unknown")]
+
+
+def _results(instance):
+    last = _load(Path(instance) / "config" / "rigtune" / "last-apply.json") or {}
+    return last.get("results") or []
+
+
+def after_downgrade_old(instance, driver, seeded, old_version, off_name, log_text):
+    """0.3.0 on 0.4's files, and its helper at exit. seeded: self_update_e2e.seeded_state before the launch; off_name: the
+    test mod jar 0.3.0's own Apply disables."""
+    instance = Path(instance)
+    mods = instance / "mods"
+    driver = driver or {}
+    checks = [Check("the driver ran the released 0.3.0", driver.get("ok") is True and driver.get("rigtuneVersion") == old_version,
+                    "error: {}; loaded {}".format(driver.get("error"), driver.get("rigtuneVersion")))]
+    checks.append(_log_check(log_text))
+    state, ids, unknown = _view(driver)
+    seeded_ids = [e.get("id") for e in seeded["entries"]]
+    missing = [i for i in seeded_ids if i not in ids]
+    checks.append(Check("History lists every entry 0.4 wrote (state OK)", state == "OK" and not missing and not unknown,
+                        "state {}; {} of {} listed; missing {}; unknown kinds {}".format(state, len(seeded_ids) - len(missing),
+                                                                                      len(seeded_ids), missing, unknown)))
+    entries = history_entries(instance) or []
+    by_id = {e.get("id"): e for e in entries}
+    undo_of = seeded.get("undoLast")
+    plan = driver.get("undoPlan") or {}
+    undos = [e for e in entries if e.get("kind") == "undo" and e.get("undoOf") == undo_of and e.get("rigtuneVersion") == old_version]
+    left = [c.get("id") for c in (by_id.get(undo_of) or {}).get("changes", []) if c.get("status") in ("APPLIED", "STAGED")]
+    ok = (plan.get("undoOf") == undo_of and plan.get("problem") is None and bool(plan.get("items")) and len(undos) == 1
+          and all(c.get("status") == "APPLIED" for c in undos[0].get("changes", [])) and undo_of in by_id and not left)
+    checks.append(Check("Undo last reverted the newest undoable entry, recorded by 0.3.0", ok,
+                        "plan: {}; expected undoOf {}; 0.3.0 undo entries of it: {}; its changes still applied or staged: {}".format(
+                            plan, undo_of, [[(c.get("key") or c.get("file"), c.get("status")) for c in e.get("changes", [])] for e in undos], left)))
+    results = _results(instance)
+    disabled = [r for r in results if (r.get("op") or {}).get("type") == "DISABLE_FILE" and _name((r.get("op") or {}).get("path")) == off_name]
+    journaled = [c for e in entries if e.get("kind") == "apply" and e.get("rigtuneVersion") == old_version for c in e.get("changes", [])
+                 if c.get("action") == "disable" and c.get("file") == off_name and c.get("status") == "APPLIED"]
+    checks.append(Check("0.3.0's own Apply staged and applied (disable {})".format(off_name),
+                        [r.get("status") for r in disabled] == ["OK"] and (mods / (off_name + ".disabled")).is_file()
+                        and not (mods / off_name).exists() and len(journaled) == 1,
+                        "last-apply: {}; {}.disabled: {}; journaled by 0.3.0: {}".format([r.get("status") for r in disabled], off_name,
+                                                                                         (mods / (off_name + ".disabled")).is_file(), len(journaled))))
+    ops = seeded.get("pendingOps") or []
+    status_by_id = {(r.get("op") or {}).get("id"): r.get("status") for r in results}
+    staged = [c for e in entries for c in e.get("changes", []) if c.get("opId") in {op.get("id") for op in ops}]
+    pending = instance / "config" / "rigtune" / "pending.json"
+    checks.append(Check("0.4's staged ops (with projectId) applied by 0.3.0's helper",
+                        bool(ops) and all(status_by_id.get(op.get("id")) == "OK" for op in ops) and bool(staged)
+                        and all(c.get("status") == "APPLIED" for c in staged) and not pending.exists(),
+                        "ops {} -> {}; their journal changes {}; pending.json left: {}".format(
+                            [op.get("id") for op in ops], [status_by_id.get(op.get("id")) for op in ops],
+                            [c.get("status") for c in staged], pending.exists())))
+    now = {name: digest(instance / "config" / "rigtune" / name, "sha256") if (instance / "config" / "rigtune" / name).is_file() else None
+           for name in seeded["newFiles"]}
+    changed = sorted(n for n in now if now[n] != seeded["newFiles"][n])
+    checks.append(Check("the files only 0.4 writes are byte-identical", not changed,
+                        "changed: {}".format(changed) if changed else "{} file(s): {}".format(len(now), sorted(now))))
+    checks.append(_bad_or_crash(instance))
+    return checks
+
+
+def _item_key(item):
+    if isinstance(item, dict):
+        return item.get("id") or item.get("at") or json.dumps(item, sort_keys=True)
+    return json.dumps(item, sort_keys=True)
+
+
+def _lost(seed, now, fields):
+    """The seeded items (list entries by id/at, dict keys) of these fields that `now` no longer has."""
+    lost = {}
+    for field in fields:
+        before, after = (seed or {}).get(field), (now or {}).get(field)
+        if isinstance(before, dict):
+            gone = [k for k in before if not isinstance(after, dict) or k not in after]
+        else:
+            kept = {_item_key(i) for i in after} if isinstance(after, list) else set()
+            gone = [_item_key(i) for i in before or [] if _item_key(i) not in kept]
+        if gone:
+            lost[field] = gone
+    return lost
+
+
+def after_downgrade_new(instance, driver, new_jar, seeded, log_text, kept=None):
+    """0.4 starts again on what 0.3.0 left: it loads, logs no RigTune error, lists the journal, keeps the profile labels
+    of entries 0.3.0 kept, and reads its own files back. kept: file -> fields (written.KEPT)."""
+    instance, new_jar = Path(instance), Path(new_jar)
+    config = instance / "config" / "rigtune"
+    driver = driver or {}
+    version = e2e_env.mod_json(new_jar)["version"]
+    origin = driver.get("rigtuneOrigin") or []
+    checks = [Check("0.4 loaded from mods/ again", driver.get("ok") is True and driver.get("rigtuneVersion") == version
+                    and [_norm(p) for p in origin] == [_norm(instance / "mods" / new_jar.name)],
+                    "error: {}; loaded {} from {}".format(driver.get("error"), driver.get("rigtuneVersion"), origin))]
+    checks.append(_log_check(log_text))
+    checks.append(_bad_or_crash(instance))
+    state, ids, unknown = _view(driver)
+    journal = [e.get("id") for e in history_entries(instance) or []]
+    checks.append(Check("History lists every entry of history.json (state OK)", state == "OK" and sorted(ids) == sorted(journal) and not unknown,
+                        "state {}; listed {} of {}; unknown kinds {}".format(state, len(ids), len(journal), unknown)))
+    seeded_switches = [s for s in ((seeded.get("profiles") or {}).get("switches") or []) if isinstance(s, dict)]
+    now = _load(config / "profiles.json") or {}
+    labels = {s.get("entryId"): s.get("name") for s in now.get("switches") or [] if isinstance(s, dict)}
+    expected = {s.get("entryId"): s.get("name") for s in seeded_switches if s.get("entryId") in journal}
+    checks.append(Check("profiles.json still labels the switch entries 0.3.0 kept", bool(expected) and all(labels.get(k) == v for k, v in expected.items()),
+                        "expected {}; labels now {}".format(expected, labels)))
+    lost = {}
+    for name, fields in (kept or written.KEPT).items():
+        if name in seeded.get("json", {}):
+            current = _load(config / name) if (config / name).is_file() else None
+            gone = _lost(seeded["json"][name], current, fields)
+            if current is None or gone:
+                lost[name] = gone or "missing"
+    checks.append(Check("0.4 read its own files back (none reset or moved to .bad)", not lost,
+                        "lost: {}".format(lost) if lost else "{} file(s) kept their items".format(len(seeded.get("json", {})))))
     return checks
