@@ -73,7 +73,6 @@ public final class ProfileService {
 	public static final String ACTION_SWITCH = "switch";
 	public static final String ACTION_SNOOZE = "snooze";
 	private static final SystemToast.SystemToastId TOAST_ID = new SystemToast.SystemToastId(6000L);
-	private static volatile @Nullable RulesDocument bundled;
 	// Whether a benchmark runs (BenchmarkController.running); ProfilesGameTest stands one in without starting a world.
 	private static volatile BooleanSupplier benchmarkRunning = BenchmarkController::running;
 
@@ -388,7 +387,9 @@ public final class ProfileService {
 			SettingsSnapshot snapshot = snapshot();
 			Profile baseline = store().baseline();
 			Map<String, String> base = baseline != null ? baseline.settings() : managed(snapshot);
-			ProfileTemplates.Result result = ProfileTemplates.compute(template, rules, bundledRules(), hardware, mods(), snapshot, base);
+			// The bundled rules only for a document without the template (an old cache); not kept (idle footprint).
+			RulesDocument fallback = ProfileTemplates.defines(template, rules) ? null : RulesLoader.loadBundled();
+			ProfileTemplates.Result result = ProfileTemplates.compute(template, rules, fallback, hardware, mods(), snapshot, base);
 			return new Target(template.displayName(), template.displayName().english(), null, template.id(), result.values(), List.of(), false);
 		}
 		Profile profile = store().profile(id);
@@ -568,15 +569,6 @@ public final class ProfileService {
 
 	private static int refreshRate(HardwareProfile hardware) {
 		return hardware.display() == null ? -1 : hardware.display().refreshRate();
-	}
-
-	private static RulesDocument bundledRules() {
-		RulesDocument doc = bundled;
-		if (doc == null) {
-			doc = RulesLoader.loadBundled();
-			bundled = doc;
-		}
-		return doc;
 	}
 
 	private static @Nullable JournalEntry entry(String entryId) {

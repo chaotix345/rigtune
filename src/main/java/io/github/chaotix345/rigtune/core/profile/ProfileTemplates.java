@@ -110,8 +110,10 @@ public final class ProfileTemplates {
 			    {"key": "vanilla.prioritizeChunkUpdates", "value": 0, "when": {"modAbsent": ["sodium"]}}]}
 			]}
 			""";
-	private static final RulesDocument.ProfileTemplates BUILT_IN_SECTION = RulesLoader.parse(
-			"{\"schemaVersion\": 2, \"profileTemplates\": " + BUILT_IN + "}").profileTemplates;
+	// Parsed only when neither rules document has the template, and not kept (RigTune's idle footprint, SPEC 10).
+	private static RulesDocument.ProfileTemplates builtIn() {
+		return RulesLoader.parse("{\"schemaVersion\": 2, \"profileTemplates\": " + BUILT_IN + "}").profileTemplates;
+	}
 
 	// values: key -> value for the managed keys; clamps: every clamp that changed a value.
 	public record Result(Map<String, String> values, List<Clamp> clamps) {
@@ -174,19 +176,35 @@ public final class ProfileTemplates {
 
 	// The template's definition: the active rules' entry, else the bundled rules', else the built-in one. An entry this client
 	// can't use (an unknown `requires`) counts as absent.
-	static ProfileTemplate definition(TemplateId id, RulesDocument active, @Nullable RulesDocument bundled) {
-		for (RulesDocument.ProfileTemplates section : new RulesDocument.ProfileTemplates[] {active == null ? null : active.profileTemplates,
-				bundled == null ? null : bundled.profileTemplates, BUILT_IN_SECTION}) {
-			if (section == null || section.templates == null) {
-				continue;
-			}
-			for (ProfileTemplate template : section.templates) {
-				if (template != null && id.id().equals(template.id) && Recommender.supported(template.requires)) {
-					return template;
-				}
+	static ProfileTemplate definition(TemplateId id, @Nullable RulesDocument active, @Nullable RulesDocument bundled) {
+		ProfileTemplate found = find(id, active == null ? null : active.profileTemplates);
+		if (found == null) {
+			found = find(id, bundled == null ? null : bundled.profileTemplates);
+		}
+		if (found == null) {
+			found = find(id, builtIn());
+		}
+		if (found == null) {
+			throw new IllegalStateException("No built-in template " + id.id());
+		}
+		return found;
+	}
+
+	// Whether this document's own section defines the template (so the bundled rules aren't needed).
+	public static boolean defines(TemplateId id, @Nullable RulesDocument rules) {
+		return rules != null && find(id, rules.profileTemplates) != null;
+	}
+
+	private static @Nullable ProfileTemplate find(TemplateId id, RulesDocument.@Nullable ProfileTemplates section) {
+		if (section == null || section.templates == null) {
+			return null;
+		}
+		for (ProfileTemplate template : section.templates) {
+			if (template != null && id.id().equals(template.id) && Recommender.supported(template.requires)) {
+				return template;
 			}
 		}
-		throw new IllegalStateException("No built-in template " + id.id());
+		return null;
 	}
 
 	private static Goal goal(@Nullable String name, Goal fallback) {
