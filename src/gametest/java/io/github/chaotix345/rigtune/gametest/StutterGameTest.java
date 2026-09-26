@@ -151,6 +151,7 @@ public class StutterGameTest implements FabricClientGameTest {
 		context.waitForScreen(TitleScreen.class);
 		context.waitTicks(5);
 		check(StutterMonitor.session() == null && StutterMonitor.retainedBytes() == 0, "leaving the world ended the session and released the buffers");
+		context.waitFor(mc -> !samplerThread(), 100);
 		check(!samplerThread(), "no sampler thread after leaving");
 		waitForSessions(context, configDir, before + 2);
 		List<StutterReport> sessions = new StutterStore(configDir).sessions();

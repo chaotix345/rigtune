@@ -12,6 +12,7 @@ import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkWorld;
 import io.github.chaotix345.rigtune.client.benchmark.MarkerRestore;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
+import io.github.chaotix345.rigtune.client.stutter.StutterHooks;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkMenuScreen;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
@@ -170,6 +171,7 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		// as a session of their own, the run's own capture is.
 		Path configDir = FabricLoader.getInstance().getConfigDir();
 		Instant monitorOn = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+		int endedBefore = context.computeOnClient(mc -> StutterHooks.sessionsEnded());
 		context.runOnClient(mc -> RigTuneClient.controller().setStutterMonitor(true));
 		check(context.computeOnClient(mc -> ClientSettings.shared(configDir).stutterMonitor), "the session monitor is on for the Measure after run");
 		BenchmarkRecord after;
@@ -182,7 +184,8 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 			context.runOnClient(mc -> RigTuneClient.controller().setStutterMonitor(false));
 		}
 		context.waitFor(mc -> stutterSessionsSince(configDir, monitorOn).stream().anyMatch(r -> StutterReport.BENCHMARK.equals(r.source())), 400);
-		context.waitTicks(40);
+		// The benchmark world's own monitor session ended with the world and was handled (saved or left out).
+		context.waitFor(mc -> StutterHooks.sessionsEnded() > endedBefore, 400);
 		List<StutterReport> sinceOn = stutterSessionsSince(configDir, monitorOn);
 		check(sinceOn.stream().noneMatch(r -> StutterReport.MONITOR.equals(r.source())), "no settle-frames session saved around the benchmark: "
 				+ sinceOn.stream().map(r -> r.source() + " " + r.spikes().total() + " spikes in " + r.gameplaySeconds() + " s").toList());

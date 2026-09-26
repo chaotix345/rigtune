@@ -27,6 +27,15 @@ class SafeTextTest {
 		assertEquals("a b c", SafeText.clean("a\u2028b\u2029c"));
 	}
 
+	// The joiners stay: emoji sequences and Persian or Indic names need them.
+	@Test
+	void joinersStay() {
+		String zwnj = String.valueOf((char) 0x200C);
+		String zwj = String.valueOf((char) 0x200D);
+		String text = "mi" + zwnj + "khaham " + zwj;
+		assertSame(text, SafeText.clean(text));
+	}
+
 	@Test
 	void ordinaryTextIsUntouched() {
 		String text = "Sodium 0.9.2 · 1% low → 60 FPS ● naïve 日本語 Ελληνικά (50% of %s)";

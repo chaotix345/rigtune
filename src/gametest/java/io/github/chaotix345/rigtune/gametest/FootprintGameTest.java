@@ -2,9 +2,9 @@ package io.github.chaotix345.rigtune.gametest;
 
 import com.google.gson.GsonBuilder;
 import com.sun.management.GcInfo;
-import io.github.chaotix345.rigtune.client.benchmark.BenchmarkConditions;
 import com.sun.management.HotSpotDiagnosticMXBean;
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.client.benchmark.BenchmarkConditions;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.FootprintStats;
 import io.github.chaotix345.rigtune.client.RealController;
@@ -30,9 +30,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
+import org.jspecify.annotations.Nullable;
 
 import javax.management.ObjectName;
-import org.jspecify.annotations.Nullable;
 import java.io.IOException;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;

@@ -33,6 +33,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 // Stutter Doctor (docs/v0.4/SPEC.md 5): the opt-in session monitor (settings.json stutterMonitor), stutter.json and the
 // analysis behind StutterScreen. RealController delegates every C4 stutter method here in one line; StutterHooks calls
@@ -70,6 +71,8 @@ public final class StutterService {
 	// bumps the generation so an older save doesn't bring its summary back on screen.
 	private CompletableFuture<Void> io = CompletableFuture.completedFuture(null);
 	private volatile int generation;
+	// Monitor sessions whose end was handled (saved, or left out around a benchmark), for the game tests.
+	private final AtomicInteger sessionsEnded = new AtomicInteger();
 
 	public StutterService(RealController controller, Path configDir) {
 		this.controller = controller;
@@ -193,17 +196,21 @@ public final class StutterService {
 		boolean aroundBenchmark = session.aroundBenchmark;
 		Runnable save = () -> {
 			Analysis a = analyze(copy, machine);
-			if (!StutterStore.worthSaving(a.report(), aroundBenchmark)) {
-				RigTune.LOGGER.info("Stutter Doctor: session not saved: {} spikes in {} s of gameplay around a benchmark run (the run's own capture is saved)",
-						a.report().spikes().total(), Math.round(a.report().gameplaySeconds()));
-				return;
+			try {
+				if (!StutterStore.worthSaving(a.report(), aroundBenchmark)) {
+					RigTune.LOGGER.info("Stutter Doctor: session not saved: {} spikes in {} s of gameplay around a benchmark run (the run's own capture is saved)",
+							a.report().spikes().total(), Math.round(a.report().gameplaySeconds()));
+					return;
+				}
+				JsonStateFile.Saved result = store().add(a.report());
+				if (result == JsonStateFile.Saved.OK && gen == generation) {
+					saved = a;
+				}
+				RigTune.LOGGER.info("Stutter Doctor: session saved ({}): {} spikes in {} s of gameplay, {}, GC offset {} ms", result,
+						a.report().spikes().total(), Math.round(a.report().gameplaySeconds()), phases(copy), a.report().facts().gcOffsetMs());
+			} finally {
+				sessionsEnded.incrementAndGet();
 			}
-			JsonStateFile.Saved result = store().add(a.report());
-			if (result == JsonStateFile.Saved.OK && gen == generation) {
-				saved = a;
-			}
-			RigTune.LOGGER.info("Stutter Doctor: session saved ({}): {} spikes in {} s of gameplay, {}, GC offset {} ms", result,
-					a.report().spikes().total(), Math.round(a.report().gameplaySeconds()), phases(copy), a.report().facts().gcOffsetMs());
 		};
 		if (now) {
 			safely(save);
@@ -263,6 +270,10 @@ public final class StutterService {
 
 	@Nullable StutterReport lastBenchmark() {
 		return lastBenchmark;
+	}
+
+	int sessionsEnded() {
+		return sessionsEnded.get();
 	}
 
 	private void refreshLive(StutterMonitor.Capture session) {

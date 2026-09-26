@@ -146,6 +146,10 @@ class StutterStoreTest {
 		assertTrue(StutterStore.worthSaving(tiny, false), "a short session without a benchmark is saved as before");
 		assertFalse(StutterStore.worthSaving(tiny, true), "33 spikes in 2 s of a benchmark world's settle frames");
 		assertTrue(StutterStore.worthSaving(enough, true));
+		StutterReport smooth = new StutterReport(enough.startedAt(), enough.source(), enough.mc(), enough.collector(), enough.heapMaxMb(), 3600, 3500,
+				400_000, 114, 90, enough.histogramCounts(), enough.histogramTimeMs(), new StutterReport.Spikes(1, 0, 0, 0), 30, enough.causes(), Map.of(),
+				List.of(), enough.facts(), List.of(), false, true, 1);
+		assertTrue(StutterStore.worthSaving(smooth, true), "an hour of smooth play after a benchmark in the player's own world is kept (1 spike)");
 	}
 
 	@Test

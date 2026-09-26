@@ -121,12 +121,17 @@ public final class ProfileService {
 	}
 
 	public Component switchProfile(String id) {
+		return switchProfile(id, offer.get());
+	}
+
+	// answered: the battery offer this switch answers (retired after it unless a newer one came meanwhile), or null.
+	private Component switchProfile(String id, @Nullable Offer answered) {
 		Component refused = refusal();
 		if (refused != null) {
 			return refused;
 		}
 		Target target = resolve(id);
-		return target == null ? Component.translatable("rigtune.profile.status.unavailable") : switchTo(target);
+		return target == null ? Component.translatable("rigtune.profile.status.unavailable") : switchTo(target, answered);
 	}
 
 	// Off the render thread (Preview loads in the background).
@@ -193,7 +198,7 @@ public final class ProfileService {
 		boolean saved = store().saveProfile(profile);
 		ProfileTemplates.Result clamped = ProfileTemplates.clamp(imported.values(), controller.rules(), controller.hardwareProfile(), mods(), snapshot(),
 				controller.goal());
-		return switchTo(new Target(name(profile), english(profile), saved ? profile.id() : null, null, clamped.values(), clamped.clamps(), true));
+		return switchTo(new Target(name(profile), english(profile), saved ? profile.id() : null, null, clamped.values(), clamped.clamps(), true), offer.get());
 	}
 
 	// Preview's Save only for a code.
@@ -299,7 +304,7 @@ public final class ProfileService {
 			return;
 		}
 		if (ACTION_SWITCH.equals(actionId) && current.decision().target() != null) {
-			Component result = switchProfile(current.decision().target());
+			Component result = switchProfile(current.decision().target(), null);
 			Minecraft minecraft = controller.minecraft();
 			if (minecraft != null) {
 				SystemToast.addOrUpdate(minecraft.gui.toastManager(), TOAST_ID, Component.translatable("rigtune.profile.title"), result);
@@ -320,9 +325,8 @@ public final class ProfileService {
 	}
 
 	// The switch itself: one journal entry of kind apply, labelled in profiles.json.
-	private Component switchTo(Target target) {
+	private Component switchTo(Target target, @Nullable Offer answered) {
 		// The way back: "My settings" exists before the first switch, even one made from the battery offer.
-		Offer pending = offer.get();
 		ensureBaseline();
 		SettingsSnapshot snapshot = snapshot();
 		List<Recommendation> recs = ProfileSwitch.build(target.values(), snapshot, ModScanner.loadedIds(), labels(), target.english());
@@ -340,7 +344,7 @@ public final class ProfileService {
 		}
 		store().recordSwitch(new ProfileStore.Switch(entryId, target.profileId(), target.templateId(), target.english()), journalIds());
 		markActive(target, previous, entryId);
-		retire(offer, pending);
+		retire(offer, answered);
 		long staged = entry.changes().stream().filter(c -> JournalChange.STAGED.equals(c.status())).count();
 		MutableComponent message = staged > 1 ? Component.translatable("rigtune.profile.status.switched_restart", name, staged)
 				: staged == 1 ? Component.translatable("rigtune.profile.status.switched_restart_one", name)

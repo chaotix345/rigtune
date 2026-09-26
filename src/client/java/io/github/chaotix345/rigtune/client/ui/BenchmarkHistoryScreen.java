@@ -85,8 +85,10 @@ public class BenchmarkHistoryScreen extends Screen {
 		int row = 0;
 		for (TrendText.Line line : lines) {
 			Component text = Texts.component(line.text());
-			int count = Math.max(1, font.split(text, width - 16).size());
-			addRenderableWidget(RowFocus.standalone(text, 8, linesTop + row * LINE - 1, Math.max(1, width - 16), count * LINE));
+			int count = font.split(text, width - 16).size();
+			if (count > 0) {
+				addRenderableWidget(RowFocus.standalone(text, 8, linesTop + row * LINE - 1, Math.max(1, width - 16), count * LINE));
+			}
 			row += count;
 		}
 		int buttonWidth = Math.min(200, width - 16);

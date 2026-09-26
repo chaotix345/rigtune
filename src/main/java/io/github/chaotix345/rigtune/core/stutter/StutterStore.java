@@ -25,11 +25,12 @@ public final class StutterStore {
 		this.file = new JsonStateFile(file(configDir), MAX_BYTES);
 	}
 
-	// review-8 P5A-F3: whether a finished monitor session goes into the file. One a benchmark run interrupted (with the
-	// monitor on, the benchmark world's own session is only its settle frames) needs enough data; the benchmark's capture
-	// is saved on its own. Any other session is saved, short or not.
+	// review-8 P5A-F3: whether a finished monitor session goes into the file. One a benchmark run interrupted needs the
+	// "enough data" gameplay time (with the monitor on, the benchmark world's own session is only its settle frames; the
+	// benchmark's capture is saved on its own), however few spikes it had: a long smooth session after a benchmark in the
+	// player's own world is kept. Any other session is saved, short or not.
 	public static boolean worthSaving(StutterReport report, boolean aroundBenchmark) {
-		return !aroundBenchmark || report.enoughData();
+		return !aroundBenchmark || report.gameplaySeconds() >= StutterAnalyzer.MIN_GAMEPLAY_SECONDS;
 	}
 
 	public static Path file(Path configDir) {

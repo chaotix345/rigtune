@@ -236,9 +236,6 @@ public class A11yGameTest implements FabricClientGameTest {
 		check(context.computeOnClient(A11yGameTest::rowIndex) == 3, "stutter: a refresh kept the focused row");
 	}
 
-	// AC11.2: the stub's RigTune screen with High Contrast Block Outline off, then on (the option that reloads no resource
-	// pack; Palette reads High Contrast as well). Off draws RigTune's label grey and never its high-contrast value; on, the
-	// label pixels are recoloured (vanilla's button sprites keep some pixels of that grey in both).
 	// review-8 UV-2 to UV-4: text that isn't a list row is a Tab stop the narrator reads: the notice line (with its detail;
 	// inline and behind the narrow screens' "..." button) and NoticeScreen's rows, every line of Benchmark history, and the
 	// Tools startup line with the notes under it.
@@ -337,6 +334,9 @@ public class A11yGameTest implements FabricClientGameTest {
 		return collector.collectNarrationText(false);
 	}
 
+	// AC11.2: the stub's RigTune screen with High Contrast Block Outline off, then on (the option that reloads no resource
+	// pack; Palette reads High Contrast as well). Off draws RigTune's label grey and never its high-contrast value; on, the
+	// label pixels are recoloured (vanilla's button sprites keep some pixels of that grey in both).
 	private static void highContrast(ClientGameTestContext context, A11yController controller) {
 		context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(false));
 		openRigTune(context, controller);
