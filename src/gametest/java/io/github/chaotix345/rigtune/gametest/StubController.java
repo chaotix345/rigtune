@@ -14,12 +14,17 @@ import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.TierBasis;
 import io.github.chaotix345.rigtune.core.model.TierResult;
+import io.github.chaotix345.rigtune.core.notice.Notice;
+import io.github.chaotix345.rigtune.core.notice.NoticeBoard;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -29,6 +34,9 @@ public final class StubController implements RigTuneController {
 	private Goal goal = Goal.BALANCED;
 	private @Nullable Report report;
 	private int benchmarkRequests;
+	private final List<Notice> notices = new ArrayList<>();
+	private final Set<String> dismissed = new HashSet<>();
+	private final List<String> noticeActions = new ArrayList<>();
 
 	public StubController(Supplier<@Nullable HardwareProfile> hardware) {
 		this.hardware = hardware;
@@ -63,6 +71,31 @@ public final class StubController implements RigTuneController {
 
 	public int benchmarkRequests() {
 		return benchmarkRequests;
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md C3/C4): canned notices for the notice line; actions and dismissals are recorded.
+	public void setNotices(List<Notice> canned) {
+		notices.clear();
+		notices.addAll(canned);
+	}
+
+	@Override
+	public List<Notice> notices() {
+		return NoticeBoard.select(notices, dismissed).visible();
+	}
+
+	@Override
+	public void noticeAction(String key, String actionId) {
+		noticeActions.add(key + ":" + actionId);
+	}
+
+	@Override
+	public void dismissNotice(String key) {
+		dismissed.add(key);
+	}
+
+	public List<String> noticeActions() {
+		return List.copyOf(noticeActions);
 	}
 
 	@Override
@@ -110,6 +143,9 @@ public final class StubController implements RigTuneController {
 						"Sodium enabled a driver workaround for your GPU. A newer driver may fix the underlying issue and improve performance.",
 						new Action.None(), false));
 		TierResult tier = new TierResult(4, Math.clamp(4 + goal.tierOffset(), 1, 5), 5, 4, 5, "cpu");
-		return new Report(hw, new GpuClass(GpuVendor.AMD, false, 5, "(?i)rx\\s*7[89]00"), tier, goal, recs, 2, "bundled", false, Instant.now());
+		// docs/v0.4/SPEC.md 2j: what each tier rests on, for the tier badge's tooltip.
+		TierBasis basis = new TierBasis(new TierBasis.Gpu(5, TierBasis.Basis.TABLE_MATCH, "(?i)rx\\s*7[89]00", GpuVendor.AMD, false),
+				new TierBasis.Cpu(4, TierBasis.Basis.FALLBACK_ESTIMATE, null, 16, 4201), new TierBasis.Memory(5, TierBasis.Basis.TABLE_MATCH, 6144));
+		return new Report(hw, new GpuClass(GpuVendor.AMD, false, 5, "(?i)rx\\s*7[89]00"), tier, goal, recs, 2, "bundled", false, Instant.now(), basis);
 	}
 }

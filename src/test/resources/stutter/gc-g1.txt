@@ -1,0 +1,49 @@
+# The research GC probe run with -XX:+UseG1GC on Temurin 25.0.4.1+1 (docs/research/v0.4/stutter.md §1; scratchpad
+# r-stutter/gcprobe/out-G1.txt and gc-G1.log). N: bean|gcAction|gcCause|startMs|endMs|receive time on the uptime
+# clock in ms (endMs + the logged delivery latency)|usedAfterMB. T: a notification's endMs|the same pause's end in
+# -Xlog:gc (uptime ms; the ground truth). W: a System.gc() call window on the uptime clock (ms).
+N|G1 Young Generation|end of minor GC|G1 Evacuation Pause|101|102|127.79|6
+N|G1 Young Generation|end of minor GC|G1 Evacuation Pause|112|113|130.98|6
+N|G1 Young Generation|end of minor GC|G1 Evacuation Pause|121|122|139.88|6
+N|G1 Young Generation|end of minor GC|G1 Evacuation Pause|131|133|151.54|23
+N|G1 Young Generation|end of minor GC|G1 Evacuation Pause|139|145|162.79|68
+N|G1 Young Generation|end of minor GC|G1 Evacuation Pause|150|156|173.88|111
+N|G1 Young Generation|end of minor GC|G1 Evacuation Pause|164|167|184.55|141
+N|G1 Young Generation|end of minor GC|G1 Evacuation Pause|169|171|189.73|165
+N|G1 Young Generation|end of minor GC|G1 Evacuation Pause|175|177|195.02|184
+N|G1 Concurrent GC|end of concurrent GC pause|No GC|177|177|195.75|145
+N|G1 Concurrent GC|end of concurrent GC pause|No GC|178|178|196.12|170
+N|G1 Young Generation|end of minor GC|G1 Evacuation Pause|179|180|197.96|160
+N|G1 Young Generation|end of minor GC|G1 Evacuation Pause|182|183|201.95|175
+N|G1 Young Generation|end of minor GC|G1 Humongous Allocation|184|184|202.66|178
+N|G1 Young Generation|end of minor GC|G1 Humongous Allocation|186|186|203.99|183
+N|G1 Young Generation|end of minor GC|G1 Humongous Allocation|189|189|207.59|184
+N|G1 Concurrent GC|end of concurrent GC pause|No GC|189|190|208.09|41
+N|G1 Concurrent GC|end of concurrent GC pause|No GC|196|196|213.43|71
+N|G1 Old Generation|end of major GC|System.gc()|199|201|218.41|12
+N|G1 Old Generation|end of major GC|System.gc()|403|405|422.36|12
+N|G1 Old Generation|end of major GC|System.gc()|606|608|625.37|12
+T|102|119.4226
+T|113|130.2103
+T|122|139.2746
+T|133|150.8361
+T|145|162.2373
+T|156|173.2975
+T|167|184.1177
+T|171|188.8905
+T|177|194.2084
+T|180|197.7594
+T|183|200.9112
+T|184|201.8749
+T|186|203.7155
+T|189|206.7839
+T|201|218.1296
+T|405|422.0375
+T|608|625.0581
+T|177|194.5450
+T|178|195.7103
+T|190|207.2559
+T|196|213.2126
+W|216.417|218.155
+W|420.021|422.073
+W|622.954|625.094

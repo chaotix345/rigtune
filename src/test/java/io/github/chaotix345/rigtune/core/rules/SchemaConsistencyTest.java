@@ -5,6 +5,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.core.RepoFiles;
+import io.github.chaotix345.rigtune.core.profile.ProfileTemplates;
+import io.github.chaotix345.rigtune.core.profile.ShareKeys;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
@@ -43,12 +45,17 @@ class SchemaConsistencyTest {
 			    return v
 			print(json.dumps(plain({
 			    "v1ConditionKeys": u.V1_CONDITION_KEYS, "v2ConditionKeys": u.V2_CONDITION_KEYS,
+			    "stutterConditionKeys": u.STUTTER_CONDITION_KEYS,
 			    "booleanKeys": u.BOOLEAN_CONDITION_KEYS, "int32Keys": u.INT32_CONDITION_KEYS,
 			    "listKeys": u.LIST_CONDITION_KEYS, "stringKeys": u.STRING_CONDITION_KEYS,
 			    "v1RuleFields": u.V1_RULE_FIELDS, "v2OnlyRuleFields": u.V2_ONLY_RULE_FIELDS,
 			    "v1Vocabularies": u.V1_VOCABULARIES, "v2Vocabularies": u.V2_VOCABULARIES,
 			    "sodiumWorkaroundFlag": u.SODIUM_WORKAROUND_FLAG, "maxPatternLength": u.MAX_PATTERN_LENGTH,
 			    "sourceOnlyTierFields": u.SOURCE_ONLY_TIER_FIELDS,
+			    "legacyV2ConditionKeys": u.LEGACY_V2_CONDITION_KEYS, "legacyV2Vocabularies": u.LEGACY_V2_VOCABULARIES,
+			    "profileTemplateFields": u.PROFILE_TEMPLATE_FIELDS, "profileTemplateFacts": u.PROFILE_TEMPLATE_FACTS,
+			    "jvmFeature": u.JVM_FEATURE, "stutterFeature": u.STUTTER_FEATURE, "jvmFlagPrefix": u.JVM_FLAG_PREFIX,
+			    "managedProfileKeys": u.MANAGED_PROFILE_KEYS, "profileTemplateIds": u.PROFILE_TEMPLATE_IDS,
 			})))
 			""";
 	private static final Map<String, Class<?>> V1_RULES = Map.of(
@@ -137,7 +144,14 @@ class SchemaConsistencyTest {
 	@Test
 	void conditionKeysMatch() {
 		assertEquals(fields(io.github.chaotix345.rigtune.v010.core.rules.Condition.class), set("v1ConditionKeys"));
-		assertEquals(new TreeSet<>(ConditionAdapterFactory.KNOWN_KEYS.keySet()), set("v2ConditionKeys"));
+		// v0.4: the stutter keys are Condition fields too, but the updater allows them only inside stutterAdvice.
+		Set<String> v2AndStutter = new TreeSet<>(set("v2ConditionKeys"));
+		v2AndStutter.addAll(set("stutterConditionKeys"));
+		assertEquals(new TreeSet<>(ConditionAdapterFactory.KNOWN_KEYS.keySet()), v2AndStutter);
+		Set<String> overlap = new TreeSet<>(set("v2ConditionKeys"));
+		overlap.retainAll(set("stutterConditionKeys"));
+		assertEquals(Set.of(), overlap);
+		Assertions.assertTrue(set("v2ConditionKeys").contains("driverVersion") && !set("v1ConditionKeys").contains("driverVersion"));
 		assertEquals(keysOfType(Boolean.class), set("booleanKeys"));
 		assertEquals(keysOfType(Integer.class), set("int32Keys"));
 		Set<String> stringLists = keysOfType(List.class);
@@ -183,8 +197,49 @@ class SchemaConsistencyTest {
 		assertEquals(new TreeSet<>(ConditionEvaluator.OS_FAMILIES), strings(v2.get("os")));
 		assertEquals(ConditionEvaluator.GOALS, strings(v2.get("goal")));
 		assertEquals(ConditionEvaluator.FLAGS, strings(v2.get("flags")));
+		// v0.4 SPEC 6: the updater's JVM_FLAGS are exactly the facts the client computes (jvm-probed isn't rule vocabulary).
+		assertEquals(io.github.chaotix345.rigtune.core.jvm.JvmFacts.RULE_FLAGS, strings(v2.get("jvmFlags")));
 		assertEquals(ConditionEvaluator.SODIUM_WORKAROUND_FLAG, python.get("sodiumWorkaroundFlag").getAsString());
 		assertEquals(RulesDocument.PatternRule.MAX_PATTERN_LENGTH, python.get("maxPatternLength").getAsInt());
+	}
+
+	// v0.4 (plan review R-L1): the updater's idea of what 0.2.0/0.3.0 understand is the pinned v030 copy (byte-identical in
+	// both), so "a key they don't know in a clamp, avoidWhen or skipUpdateWhen needs requires" is checked against the real thing.
+	@Test
+	void legacyV2KeysAndVocabulariesMatchThePinnedV030Copy() {
+		assertEquals(fields(io.github.chaotix345.rigtune.v030.core.rules.Condition.class), set("legacyV2ConditionKeys"));
+		JsonObject legacy = python.getAsJsonObject("legacyV2Vocabularies");
+		assertEquals(Set.of("gpuVendor", "backend", "os", "goal", "flags"), legacy.keySet());
+		assertEquals(io.github.chaotix345.rigtune.v030.core.rules.ConditionEvaluator.GPU_VENDORS, strings(legacy.get("gpuVendor")));
+		assertEquals(io.github.chaotix345.rigtune.v030.core.rules.ConditionEvaluator.BACKENDS, strings(legacy.get("backend")));
+		assertEquals(new TreeSet<>(io.github.chaotix345.rigtune.v030.core.rules.ConditionEvaluator.OS_FAMILIES), strings(legacy.get("os")));
+		assertEquals(io.github.chaotix345.rigtune.v030.core.rules.ConditionEvaluator.GOALS, strings(legacy.get("goal")));
+		assertEquals(io.github.chaotix345.rigtune.v030.core.rules.ConditionEvaluator.FLAGS, strings(legacy.get("flags")));
+		assertEquals(io.github.chaotix345.rigtune.v030.core.rules.ConditionEvaluator.SODIUM_WORKAROUND_FLAG, python.get("sodiumWorkaroundFlag").getAsString());
+	}
+
+	// v0.4 sections (SPEC C2): template fields as RulesDocument.ProfileTemplate declares them; stutterAdvice entries are
+	// AdviceRules (ruleFieldsMatch covers them); the main list supports jvm-flags and never stutter-doctor.
+	@Test
+	void v04SectionsAndFeaturesMatch() {
+		assertEquals(fields(RulesDocument.ProfileTemplate.class), set("profileTemplateFields"));
+		assertEquals(Set.of("onBattery", "hasBattery"), set("profileTemplateFacts"));
+		Set<String> booleanFields = new TreeSet<>(keysOfType(Boolean.class));
+		Assertions.assertTrue(booleanFields.containsAll(set("profileTemplateFacts")), "template facts are boolean Condition keys");
+		Assertions.assertTrue(io.github.chaotix345.rigtune.core.recommend.Recommender.SUPPORTED_FEATURES.contains(python.get("jvmFeature").getAsString()));
+		Assertions.assertFalse(io.github.chaotix345.rigtune.core.recommend.Recommender.SUPPORTED_FEATURES.contains(python.get("stutterFeature").getAsString()));
+		assertEquals("jvm-", python.get("jvmFlagPrefix").getAsString());
+	}
+
+	// WS-P (docs/v0.4/design/ws-r.md handoff 6): the updater's managed profile keyset is the share-code table (every key,
+	// the two local-only thread counts included) and its template ids are ProfileTemplates', so neither can drift.
+	@Test
+	void profileKeysAndTemplateIdsMatchWsP() {
+		assertEquals(ShareKeys.MANAGED, set("managedProfileKeys"));
+		assertEquals(Set.of("sodium.performance.chunk_builder_threads", "dh.common.multiThreading.numberOfThreads"),
+				ShareKeys.V1.stream().filter(k -> !k.shareable()).map(ShareKeys.Key::key).collect(java.util.stream.Collectors.toSet()));
+		assertEquals(Arrays.stream(ProfileTemplates.TemplateId.values()).map(ProfileTemplates.TemplateId::id)
+				.collect(java.util.stream.Collectors.toSet()), set("profileTemplateIds"));
 	}
 
 	@Test

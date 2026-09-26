@@ -4,15 +4,22 @@ import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
+import io.github.chaotix345.rigtune.client.ui.BenchmarkHistoryScreen;
+import io.github.chaotix345.rigtune.client.ui.BenchmarkMenuScreen;
 import io.github.chaotix345.rigtune.client.ui.HistoryScreen;
+import io.github.chaotix345.rigtune.client.ui.JvmScreen;
 import io.github.chaotix345.rigtune.client.ui.PreviewScreen;
+import io.github.chaotix345.rigtune.client.ui.ProfilesScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
+import io.github.chaotix345.rigtune.client.ui.StutterScreen;
+import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.SettingKeys;
+import io.github.chaotix345.rigtune.core.model.TierBasis;
 import io.github.chaotix345.rigtune.core.model.TierResult;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
@@ -22,7 +29,9 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractSelectionList;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.ConfirmLinkScreen;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import org.jspecify.annotations.Nullable;
 
@@ -135,6 +144,55 @@ final class ProductionSmoke {
 		context.waitForScreen(RigTuneScreen.class);
 		context.runOnClient(mc -> mc.keyboardHandler.setClipboard(clipboard));
 		preview(context);
+		v04Tools(context);
+	}
+
+	// v0.4 Phase 5 (P5-B): Tools… from the footer, then each tool screen in the hub's order, and back. Logs each screen's
+	// buttons and whether options.txt, mods/ or config/ changed (RigTune's own state files aside, as in preview()).
+	private static void v04Tools(ClientGameTestContext context) {
+		Map<String, String> before = snapshot();
+		context.clickScreenButton("rigtune.tools.open");
+		context.waitForScreen(ToolsScreen.class);
+		context.waitTicks(3);
+		context.takeScreenshot("smoke-tools");
+		logButtons(context, "Tools");
+		String startup = context.computeOnClient(mc -> {
+			Component line = ((ToolsScreen) mc.gui.screen()).startupLine();
+			return line == null ? "none" : line.getString();
+		});
+		RigTune.LOGGER.info("Smoke: Tools startup line: {}", startup);
+		List<String> tools = List.of("rigtune.screen.benchmark_menu", "rigtune.tools.profiles", "rigtune.tools.stutter", "rigtune.tools.jvm",
+				"rigtune.tools.benchmark_history");
+		List<Class<? extends Screen>> screens = List.of(BenchmarkMenuScreen.class, ProfilesScreen.class, StutterScreen.class, JvmScreen.class,
+				BenchmarkHistoryScreen.class);
+		List<String> shots = List.of("smoke-tool-benchmark", "smoke-tool-profiles", "smoke-tool-stutter", "smoke-tool-jvm", "smoke-tool-benchmark-history");
+		for (int i = 0; i < tools.size(); i++) {
+			context.clickScreenButton(tools.get(i));
+			context.waitForScreen(screens.get(i));
+			context.waitTicks(5);
+			context.takeScreenshot(shots.get(i));
+			logButtons(context, screens.get(i).getSimpleName());
+			context.runOnClient(mc -> mc.gui.screen().onClose());
+			context.waitForScreen(ToolsScreen.class);
+		}
+		context.runOnClient(mc -> mc.gui.screen().onClose());
+		context.waitForScreen(RigTuneScreen.class);
+		Map<String, String> after = snapshot();
+		List<String> changed = new ArrayList<>();
+		before.forEach((k, v) -> {
+			if (!v.equals(after.get(k))) {
+				changed.add(k);
+			}
+		});
+		after.keySet().stream().filter(k -> !before.containsKey(k)).forEach(changed::add);
+		RigTune.LOGGER.info("Smoke: Tools tour opened {} tool screens; files changed (options.txt, mods/, config/ minus RigTune's state): {} ({} files hashed)",
+				tools.size(), changed, before.size());
+	}
+
+	private static void logButtons(ClientGameTestContext context, String screen) {
+		List<String> buttons = context.computeOnClient(mc -> mc.gui.screen().children().stream()
+				.filter(Button.class::isInstance).map(b -> ((Button) b).getMessage().getString() + (((Button) b).active ? "" : " (inactive)")).toList());
+		RigTune.LOGGER.info("Smoke: {} screen buttons {}", screen, buttons);
 	}
 
 	// v0.3 final run: Preview from the footer with the default ticks, then a preview of every appliable item; neither may
@@ -317,8 +375,9 @@ final class ProductionSmoke {
 				.append(hw.display().refreshRate()).append(" Hz, fullscreen ").append(hw.display().fullscreen()).append('\n');
 		out.append("  Battery  present ").append(hw.hasBattery()).append(", on battery ").append(hw.onBattery()).append('\n');
 		out.append("  System   ").append(hw.osName()).append(", Minecraft ").append(hw.mcVersion()).append(", flags ").append(hw.flags()).append('\n');
-		out.append("\nTier ").append(tier.rawTier()).append(" (effective ").append(tier.effectiveTier()).append("): GPU ").append(tier.gpuTier())
-				.append(", CPU ").append(tier.cpuTier()).append(", memory ").append(tier.memTier()).append(", limited by ").append(tier.limitingFactor()).append('\n');
+		out.append("\nEstimated tier ").append(tier.rawTier()).append(" (effective ").append(tier.effectiveTier()).append("): GPU ").append(tier.gpuTier())
+				.append(", CPU ").append(tier.cpuTier()).append(", memory ").append(tier.memTier()).append(", lowest estimated ")
+				.append(String.join(", ", TierBasis.lowest(tier))).append('\n');
 
 		Map<Category, List<Recommendation>> byCategory = new EnumMap<>(Category.class);
 		report.recommendations().forEach(r -> byCategory.computeIfAbsent(r.category(), c -> new ArrayList<>()).add(r));

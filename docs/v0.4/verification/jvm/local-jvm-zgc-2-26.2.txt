@@ -1,0 +1,25 @@
+# ./gradlew :26.2:runProductionClientGameTest -PgametestJvmArgs="-XX:+UseZGC -XX:+ZGenerational -Dusing.aikars.flags=x" (run jvm-zgc-2, BUILD FAILED in 3m 26s)
+189:[22:01:02] [RigTune worker/INFO]: RigTune: Java 25.0.4.1 (Eclipse Adoptium), ZGC (typed), 2 argument notes [-XX:+ZGenerational, -Dusing.aikars.flags]
+325:[22:01:22] [RigTune worker/WARN]: Modrinth lookups failed; using offline data: java.net.http.HttpTimeoutException: request timed out
+783:[22:03:43] [RigTune worker/WARN]: Modrinth lookups failed; using offline data: io.github.chaotix345.rigtune.core.modrinth.ModrinthException: POST https://api.modrinth.com/v2/version_files returned HTTP 502: error code: 502
+785:[22:03:43] [RigTune worker/WARN]: Modrinth lookups failed; using offline data: io.github.chaotix345.rigtune.core.modrinth.ModrinthException: POST https://api.modrinth.com/v2/version_files returned HTTP 502: error code: 502
+789:[22:03:46] [RigTune worker/WARN]: Modrinth lookups failed; using offline data: io.github.chaotix345.rigtune.core.modrinth.ModrinthException: POST https://api.modrinth.com/v2/version_files returned HTTP 503: no available server
+793:[22:03:47] [RigTune worker/WARN]: Modrinth lookups failed; using offline data: io.github.chaotix345.rigtune.core.modrinth.ModrinthException: POST https://api.modrinth.com/v2/version_files returned HTTP 503: no available server
+797:[22:03:49] [RigTune worker/WARN]: Modrinth lookups failed; using offline data: io.github.chaotix345.rigtune.core.modrinth.ModrinthException: POST https://api.modrinth.com/v2/version_files returned HTTP 503: no available server
+801:[22:03:49] [RigTune worker/WARN]: Modrinth lookups failed; using offline data: io.github.chaotix345.rigtune.core.modrinth.ModrinthException: POST https://api.modrinth.com/v2/version_files returned HTTP 503: no available server
+803:[22:03:54] [Test thread/INFO]: UiGameTest: copied report, 1633 characters (CRLF from the clipboard: false):
+843:[22:04:03] [Test thread/INFO]: UiGameTest: tier badge at ScreenRectangle[position=ScreenPosition[x=80, y=50], width=262, height=10] for 1280x720-scale2
+844:[22:04:03] [Test thread/INFO]: UiGameTest: tier badge at ScreenRectangle[position=ScreenPosition[x=16, y=50], width=262, height=10] for 640x480-scale2
+845:[22:04:03] [Test thread/INFO]: UiGameTest: tier badge at ScreenRectangle[position=ScreenPosition[x=16, y=50], width=262, height=10] for 854x480-scale2
+846:[22:04:04] [Test thread/INFO]: UiGameTest: the focused row narrates: Render Distance: 16 → 12 (High impact) button. Selected list row 12 out of 16. Press Enter to uncheck
+847:[22:04:05] [Test thread/INFO]: UiGameTest: networkEnabled=false saved to settings.json
+848:[22:04:12] [Test thread/ERROR]: Client gametests failed with an exception
+849:java.lang.AssertionError: Timed out waiting for predicate
+851:	at knot//io.github.chaotix345.rigtune.gametest.UiGameTest.waitForSaved(UiGameTest.java:412)
+852:	at knot//io.github.chaotix345.rigtune.gametest.UiGameTest.checkSettings(UiGameTest.java:365)
+853:	at knot//io.github.chaotix345.rigtune.gametest.UiGameTest.runTest(UiGameTest.java:110)
+858:net.fabricmc.loader.impl.FormattedException: java.lang.AssertionError: Timed out waiting for predicate
+863:Caused by: java.lang.AssertionError: Timed out waiting for predicate
+865:	at knot//io.github.chaotix345.rigtune.gametest.UiGameTest.waitForSaved(UiGameTest.java:412)
+866:	at knot//io.github.chaotix345.rigtune.gametest.UiGameTest.checkSettings(UiGameTest.java:365)
+867:	at knot//io.github.chaotix345.rigtune.gametest.UiGameTest.runTest(UiGameTest.java:110)

@@ -12,6 +12,7 @@ import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkWorld;
 import io.github.chaotix345.rigtune.client.benchmark.MarkerRestore;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
+import io.github.chaotix345.rigtune.client.stutter.StutterHooks;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkMenuScreen;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
@@ -27,6 +28,8 @@ import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
+import io.github.chaotix345.rigtune.core.stutter.StutterReport;
+import io.github.chaotix345.rigtune.core.stutter.StutterStore;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
@@ -50,6 +53,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -101,6 +106,8 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		context.waitForScreen(TitleScreen.class);
 		context.runOnClient(mc -> BenchmarkController.setDefaultConfig(SHORT));
 		String savedScene = context.computeOnClient(mc -> ClientSettings.shared(FabricLoader.getInstance().getConfigDir()).benchmarkScene);
+		// v0.4: later classes use the real notice line, so the runs made here don't stay behind (a stale benchmark notice).
+		byte[] savedRuns = readIfPresent(BenchmarkStore.file());
 		try {
 			String[] pair = benchmarkWorldPair(context);
 			String chunkTuneId = benchmarkWorldChunks(context);
@@ -109,11 +116,36 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 			checkHistoryFile(pair, tuneId, chunkTuneId);
 			shaderAdviceScreen(context);
 		} finally {
+			restoreFile(BenchmarkStore.file(), savedRuns);
 			context.runOnClient(mc -> {
 				BenchmarkController.setDefaultConfig(BenchmarkController.Config.DEFAULT);
 				BenchmarkController.setSweepListener(null);
 				ClientSettings.shared(FabricLoader.getInstance().getConfigDir()).benchmarkScene = savedScene;
 			});
+		}
+	}
+
+	private static List<StutterReport> stutterSessionsSince(Path configDir, Instant since) {
+		return new StutterStore(configDir).sessions().stream().filter(r -> !Instant.parse(r.startedAt()).isBefore(since)).toList();
+	}
+
+	private static byte[] readIfPresent(Path file) {
+		try {
+			return Files.exists(file) ? Files.readAllBytes(file) : null;
+		} catch (IOException e) {
+			throw new AssertionError(e);
+		}
+	}
+
+	private static void restoreFile(Path file, byte[] bytes) {
+		try {
+			if (bytes == null) {
+				Files.deleteIfExists(file);
+			} else {
+				Files.write(file, bytes);
+			}
+		} catch (IOException e) {
+			throw new AssertionError(e);
 		}
 	}
 
@@ -135,10 +167,29 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		pressByKey(context, "gui.done");
 		context.waitForScreen(TitleScreen.class);
 
-		openMenu(context);
-		check(buttonActive(context, "rigtune.benchmark.menu.measure_after"), "Measure after is offered");
-		pressByKey(context, "rigtune.benchmark.menu.measure_after");
-		BenchmarkRecord after = runInBenchmarkWorld(context, null, "bench-world-after");
+		// review-8 P5A-F3: the Measure after runs with the session monitor on; the benchmark world's settle frames aren't saved
+		// as a session of their own, the run's own capture is.
+		Path configDir = FabricLoader.getInstance().getConfigDir();
+		Instant monitorOn = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+		int endedBefore = context.computeOnClient(mc -> StutterHooks.sessionsEnded());
+		context.runOnClient(mc -> RigTuneClient.controller().setStutterMonitor(true));
+		check(context.computeOnClient(mc -> ClientSettings.shared(configDir).stutterMonitor), "the session monitor is on for the Measure after run");
+		BenchmarkRecord after;
+		try {
+			openMenu(context);
+			check(buttonActive(context, "rigtune.benchmark.menu.measure_after"), "Measure after is offered");
+			pressByKey(context, "rigtune.benchmark.menu.measure_after");
+			after = runInBenchmarkWorld(context, null, "bench-world-after");
+		} finally {
+			context.runOnClient(mc -> RigTuneClient.controller().setStutterMonitor(false));
+		}
+		context.waitFor(mc -> stutterSessionsSince(configDir, monitorOn).stream().anyMatch(r -> StutterReport.BENCHMARK.equals(r.source())), 400);
+		// The benchmark world's monitor sessions were handled (saved or left out): the one the run ended as it started and the
+		// fresh one after the run, which ended with the world (review-9 X3-1).
+		context.waitFor(mc -> StutterHooks.sessionsEnded() >= endedBefore + 2, 400);
+		List<StutterReport> sinceOn = stutterSessionsSince(configDir, monitorOn);
+		check(sinceOn.stream().noneMatch(r -> StutterReport.MONITOR.equals(r.source())), "no settle-frames session saved around the benchmark: "
+				+ sinceOn.stream().map(r -> r.source() + " " + r.spikes().total() + " spikes in " + r.gameplaySeconds() + " s").toList());
 		check(BenchmarkRecord.AFTER.equals(after.phase()) && before.pairId().equals(after.pairId()), "after pairs with before: " + after);
 		check(context.computeOnClient(mc -> BenchmarkController.lastOutcome().gain()) != null, "gain computed for the pair");
 		check(modified(marker).equals(created), "benchmark world reused, not recreated");
@@ -244,6 +295,11 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 			int x = BenchmarkWorld.CAMERA_X + o[0];
 			int z = BenchmarkWorld.CAMERA_Z + o[1];
 			int floor = BenchmarkWorld.terrainFloor(level, x, z);
+			// 26.4 (from snapshot 1) renamed getUncachedNoiseBiome to getUncachedBiome (same parameters); ">=26.4-alpha" as in
+			// BenchmarkWorld.terrainFloor.
+			//? if >=26.4-alpha {
+			/*samples.add(new SceneVariety.Sample(o[0], o[1], floor, level.getUncachedBiome(x >> 2, floor >> 2, z >> 2).getRegisteredName()));
+			*///?} else
 			samples.add(new SceneVariety.Sample(o[0], o[1], floor, level.getUncachedNoiseBiome(x >> 2, floor >> 2, z >> 2).getRegisteredName()));
 		}
 		SceneVariety.Report scene = SceneVariety.check(samples, level.getChunkSource().getGenerator().getSeaLevel());
@@ -446,6 +502,8 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 				JsonObject c = run.getAsJsonObject("context");
 				check(c != null && c.get("protocol").getAsInt() == 1 && c.get("width").getAsInt() > 0 && c.get("height").getAsInt() > 0
 						&& c.has("dhRendering") && c.has("shaders") && c.has("fullscreen"), "context recorded: " + run);
+				// docs/v0.4/SPEC.md 7: and the loaded mods' hash (the journal cursor only once history.json has an entry).
+				check(c.has("modSetHash") && c.get("modSetHash").getAsString().matches("[0-9a-f]{64}"), "modSetHash recorded: " + run);
 			});
 			RigTune.LOGGER.info("Benchmark game test: benchmarks.json has {} runs", runs.size());
 		} catch (IOException | RuntimeException e) {
@@ -491,7 +549,7 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 				Button button = button(mc, key);
 				if (button != null) {
 					check(button.active, key + " is active");
-					button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(0, 0)));
+					button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0)));
 					return;
 				}
 			}

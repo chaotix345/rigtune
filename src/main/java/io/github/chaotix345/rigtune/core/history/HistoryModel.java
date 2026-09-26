@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.core.history;
 
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
+import io.github.chaotix345.rigtune.core.apply.ModJars;
 import io.github.chaotix345.rigtune.core.history.ApplyFailures.Failure;
 
 import java.util.ArrayList;
@@ -58,10 +59,21 @@ public final class HistoryModel {
 	public enum Row { SETTING, ADDED, DISABLED, REENABLED, UPDATED }
 
 	// before/after: shown values, null when the key was absent. failure: why its op wasn't applied at the last exit.
+	// name (docs/v0.4/SPEC.md 2c): the mod's display name when staging recorded it (an update: the new jar's), else null.
 	public record Change(Row row, List<String> changeIds, String status, String label, String before, String after, String file, String newFile,
-			String modId, Failure failure) {
+			String modId, Failure failure, String name) {
 		public Change {
 			changeIds = List.copyOf(changeIds);
+		}
+
+		public Change(Row row, List<String> changeIds, String status, String label, String before, String after, String file, String newFile,
+				String modId, Failure failure) {
+			this(row, changeIds, status, label, before, after, file, newFile, modId, failure, null);
+		}
+
+		// What a file row names: the mod, else its file.
+		public String shownName() {
+			return name != null ? name : file;
 		}
 
 		public String statusKey() {
@@ -70,10 +82,16 @@ public final class HistoryModel {
 	}
 
 	// undoOf/undoOfAt: for an undo entry, the undone entry's id (or "all") and when it was. undoable: Undo this is offered.
+	// profile (v0.4, WS-P): the profile this entry switched to ("Profile: Battery"), from profiles.json; null otherwise.
 	public record Entry(String id, String kind, String at, String rigtuneVersion, String mcVersion, String undoOf, String undoOfAt, boolean undoable,
-			List<Change> changes) {
+			List<Change> changes, String profile) {
 		public Entry {
 			changes = List.copyOf(changes);
+		}
+
+		public Entry(String id, String kind, String at, String rigtuneVersion, String mcVersion, String undoOf, String undoOfAt, boolean undoable,
+				List<Change> changes) {
+			this(id, kind, at, rigtuneVersion, mcVersion, undoOf, undoOfAt, undoable, changes, null);
 		}
 
 		public String kindKey() {
@@ -96,12 +114,31 @@ public final class HistoryModel {
 		}
 	}
 
+	// docs/v0.4/SPEC.md 2a: whether Undo last / Undo all have anything to act on.
+	public static boolean anyUndoable(View view) {
+		return view != null && view.entries().stream().anyMatch(Entry::undoable);
+	}
+
 	public static String statusKey(String status) {
 		return PREFIX + "status." + (status != null && STATUSES.contains(status) ? status.toLowerCase(Locale.ROOT) : "unknown");
 	}
 
 	public static String kindKey(String kind) {
 		return PREFIX + "kind." + (kind == null ? "unknown" : KINDS.getOrDefault(kind, "unknown"));
+	}
+
+	// v0.4 (WS-P): the view with each profile switch's label (journal entry id -> profile name; only apply entries).
+	public static View withProfiles(View view, Map<String, String> labels) {
+		if (labels.isEmpty()) {
+			return view;
+		}
+		List<Entry> out = new ArrayList<>();
+		for (Entry e : view.entries()) {
+			String label = JournalEntry.APPLY.equals(e.kind()) ? labels.get(e.id()) : null;
+			out.add(label == null ? e : new Entry(e.id(), e.kind(), e.at(), e.rigtuneVersion(), e.mcVersion(), e.undoOf(), e.undoOfAt(), e.undoable(),
+					e.changes(), label));
+		}
+		return new View(view.state(), out);
 	}
 
 	// failures: ApplyFailures.byOpId of last-apply.json.
@@ -140,11 +177,11 @@ public final class HistoryModel {
 				// The disable runs first, so its reason is the cause ("Not applied because disabling x failed" for the enable).
 				Failure failure = failure(off, failures);
 				out.add(new Change(Row.UPDATED, List.of(off.id(), on.id()), c.status(), null, null, null, off.file(), on.file(), on.modId(),
-						failure != null ? failure : failure(on, failures)));
+						failure != null ? failure : failure(on, failures), name(on.modName() != null ? on : off)));
 				continue;
 			}
 			Row row = JournalChange.DISABLE.equals(c.action()) ? Row.DISABLED : c.reverts() != null ? Row.REENABLED : Row.ADDED;
-			out.add(new Change(row, List.of(c.id()), c.status(), null, null, null, c.file(), null, c.modId(), failure(c, failures)));
+			out.add(new Change(row, List.of(c.id()), c.status(), null, null, null, c.file(), null, c.modId(), failure(c, failures), name(c)));
 		}
 		return out;
 	}
@@ -163,6 +200,11 @@ public final class HistoryModel {
 			}
 		}
 		return null;
+	}
+
+	// history.json is the player's file too: a hand-edited name gets the same sanitising as one read from a jar.
+	private static String name(JournalChange c) {
+		return ModJars.sanitizeName(c.modName());
 	}
 
 	private static String shown(Labels labels, String key, String value) {

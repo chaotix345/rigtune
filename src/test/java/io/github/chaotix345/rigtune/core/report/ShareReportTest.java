@@ -58,7 +58,7 @@ class ShareReportTest {
 		assertTrue(text.contains("- CPU: AMD Ryzen 7 7800X3D 8-Core Processor (8 cores, 16 threads)\n"), text);
 		assertTrue(text.contains("- GPU: AMD Radeon RX 7800 XT · driver 25.9.1 · OpenGL · 16 GB VRAM\n"), text);
 		assertTrue(text.contains("- RAM 32 GB · heap 6.0 GB · display 2560×1440 @ 180 Hz\n"), text);
-		assertTrue(text.contains("- Tier 4/5 · limited by CPU · goal Balanced\n"), text);
+		assertTrue(text.contains("- Estimated tier 4/5 · lowest estimated component: CPU · goal Balanced\n"), text);
 		assertTrue(text.contains("- Rules r7 (remote) · online\n"), text);
 		assertTrue(text.contains("**Recommendations** (5; [x] = suggested)\n"), text);
 
@@ -87,6 +87,20 @@ class ShareReportTest {
 
 		assertTrue(text.contains("**Latest benchmark** 2026-09-25 · measure · benchmark world\n"
 				+ "- render distance 8 · avg 90 FPS · 1% low 60 FPS · target 144 FPS missed\n"), text);
+	}
+
+	// docs/v0.4/SPEC.md 7: the last benchmark's conditions and its "needs a rerun" marker.
+	@Test
+	void benchmarkConditionsAndRerun() {
+		BenchmarkSummary bench = new BenchmarkSummary("2026-09-25T09:30:00Z", "measure", "BENCHMARK_WORLD", 144, 12, 812, 543, true)
+				.withContext("RD 12 · SD 8 · 2560×1440 · shaders off", "Needs a rerun (changed since: resolution, mod set)");
+		String text = ShareReport.format(report(Fixtures.userRig().build(), sample()), VERSIONS, bench);
+
+		assertTrue(text.contains("- render distance 12 · avg 812 FPS · 1% low 543 FPS · target 144 FPS met\n"
+				+ "- conditions: RD 12 · SD 8 · 2560×1440 · shaders off\n"
+				+ "- Needs a rerun (changed since: resolution, mod set)\n"), text);
+		String current = ShareReport.format(report(Fixtures.userRig().build(), sample()), VERSIONS, bench.withContext("RD 12 · SD 8", null));
+		assertTrue(current.contains("- conditions: RD 12 · SD 8\n**Recommendations**"), current);
 	}
 
 	@Test
@@ -123,7 +137,7 @@ class ShareReportTest {
 				Goal.PERFORMANCE, sample(), 2, "bundled", false, Instant.now());
 		String text = ShareReport.format(offline, VERSIONS, null);
 
-		assertTrue(text.contains("- Tier 3/5 · limited by GPU · goal Performance\n"), text);
+		assertTrue(text.contains("- Estimated tier 3/5 · lowest estimated component: GPU · goal Performance\n"), text);
 		assertTrue(text.contains("- Rules r2 (bundled) · offline\n"), text);
 	}
 
@@ -289,5 +303,16 @@ class ShareReportTest {
 
 		assertFalse(text.contains("G".repeat(121)), text);
 		assertTrue(text.contains("G".repeat(119) + "…"), text);
+	}
+
+	// docs/v0.4/SPEC.md 2j (AC2j.1): an estimate, and a tie lists every tied component, never "limited by".
+	@Test
+	void theTierLineIsAnEstimateAndListsTies() {
+		Report balanced = new Report(Fixtures.userRig().build(), new GpuClass(GpuVendor.AMD, false, 5, "x"), new TierResult(5, 5, 5, 5, 5, "gpu"),
+				Goal.BALANCED, sample(), 2, "bundled", false, Instant.now());
+		String text = ShareReport.format(balanced, VERSIONS, null);
+
+		assertTrue(text.contains("- Estimated tier 5/5 · lowest estimated component: GPU, CPU, memory · goal Balanced\n"), text);
+		assertFalse(text.contains("limited by"), text);
 	}
 }

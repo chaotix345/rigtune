@@ -1,6 +1,8 @@
 package io.github.chaotix345.rigtune.core.apply;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.RigTune;
@@ -12,7 +14,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -21,6 +27,8 @@ import java.util.zip.ZipFile;
 public final class ModJars {
 	// No real fabric.mod.json comes near this; a bigger (or decompression-bomb) entry isn't read (review 4, security-1).
 	public static final int MAX_FABRIC_MOD_JSON_BYTES = 1 << 20;
+	// docs/v0.4/SPEC.md 2c, plan review P-L1: the most of a mod's display name History keeps.
+	public static final int MAX_NAME_CODE_POINTS = 64;
 
 	private ModJars() {
 	}
@@ -36,6 +44,72 @@ public final class ModJars {
 			RigTune.LOGGER.warn("Could not read the mod id of {}", jar, e);
 			return null;
 		}
+	}
+
+	// docs/v0.4/SPEC.md 2c: the mod's display name (fabric.mod.json "name"), sanitised; null when the jar is gone, isn't
+	// readable or has no name (as modIdOf). History shows it instead of the file name.
+	public static String nameOf(Path jar) {
+		try {
+			return sanitizeName(readField(jar, "name"));
+		} catch (NoSuchFileException e) {
+			RigTune.LOGGER.debug("No mod name for {}: the file is gone", LogSafe.name(jar));
+			return null;
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.debug("Could not read the mod name of {}: {}", LogSafe.name(jar), LogSafe.error(e, jar));
+			return null;
+		}
+	}
+
+	// docs/v0.4/SPEC.md 2o, H2: the mod's version (fabric.mod.json "version"), which the installed mods' version ranges are
+	// matched against; null as nameOf.
+	public static String versionOf(Path jar) {
+		try {
+			return readField(jar, "version");
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.debug("Could not read the version of {}: {}", LogSafe.name(jar), LogSafe.error(e, jar));
+			return null;
+		}
+	}
+
+	// A downloaded file's text shown in the UI (plan review P-L1): no formatting code (U+00A7 and the code after it), no
+	// control, format, separator, private-use or unassigned characters, runs of whitespace (tabs and newlines included) as
+	// one space, at most MAX_NAME_CODE_POINTS; null when nothing is left.
+	public static String sanitizeName(String raw) {
+		if (raw == null) {
+			return null;
+		}
+		StringBuilder out = new StringBuilder();
+		int kept = 0;
+		for (int i = 0; i < raw.length() && kept < MAX_NAME_CODE_POINTS; ) {
+			int cp = raw.codePointAt(i);
+			i += Character.charCount(cp);
+			if (cp == 0x00A7) {
+				i += i < raw.length() ? Character.charCount(raw.codePointAt(i)) : 0;
+				continue;
+			}
+			boolean space = Character.isWhitespace(cp) || Character.isSpaceChar(cp);
+			if (!space && unsafe(cp)) {
+				continue;
+			}
+			if (space) {
+				if (out.isEmpty() || out.charAt(out.length() - 1) == ' ') {
+					continue;
+				}
+				cp = ' ';
+			}
+			out.appendCodePoint(cp);
+			kept++;
+		}
+		String name = out.toString().strip();
+		return name.isEmpty() ? null : name;
+	}
+
+	private static boolean unsafe(int cp) {
+		return switch (Character.getType(cp)) {
+			case Character.CONTROL, Character.FORMAT, Character.SURROGATE, Character.PRIVATE_USE, Character.UNASSIGNED,
+					Character.LINE_SEPARATOR, Character.PARAGRAPH_SEPARATOR -> true;
+			default -> false;
+		};
 	}
 
 	// The mod ids of the jars a mod's own updater left in <mods>/update/, directly or in a folder of their own (Distant
@@ -76,6 +150,50 @@ public final class ModJars {
 	// Null when the jar has no fabric.mod.json id, or its fabric.mod.json is over the cap or isn't JSON. Doesn't log:
 	// the apply helper runs without a logger on its classpath.
 	static String readModId(Path jar) throws IOException {
+		return readField(jar, "id");
+	}
+
+	// docs/v0.4/SPEC.md 2o, H2: a fabric.mod.json section of version ranges ("depends", "breaks"): mod id -> its ranges (a
+	// string, or an array of them: any of them). Empty when the jar or the section can't be read.
+	public static Map<String, List<String>> rangesOf(Path jar, String section) {
+		try {
+			JsonObject root = readRoot(jar);
+			if (root == null || !(root.get(section) instanceof JsonObject ranges)) {
+				return Map.of();
+			}
+			Map<String, List<String>> out = new LinkedHashMap<>();
+			for (Map.Entry<String, JsonElement> e : ranges.entrySet()) {
+				List<String> list = new ArrayList<>();
+				if (e.getValue() instanceof JsonArray array) {
+					array.forEach(range -> {
+						if (range.isJsonPrimitive()) {
+							list.add(range.getAsString());
+						}
+					});
+				} else if (e.getValue().isJsonPrimitive()) {
+					list.add(e.getValue().getAsString());
+				}
+				out.put(e.getKey(), List.copyOf(list));
+			}
+			return out;
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.debug("Could not read the {} of {}: {}", section, LogSafe.name(jar), LogSafe.error(e, jar));
+			return Map.of();
+		}
+	}
+
+	// A top-level string field of the jar's fabric.mod.json, or null (as readModId).
+	private static String readField(Path jar, String field) throws IOException {
+		JsonObject root = readRoot(jar);
+		if (root == null || !root.has(field)) {
+			return null;
+		}
+		JsonElement value = root.get(field);
+		return value.isJsonPrimitive() ? value.getAsString() : null;
+	}
+
+	// The jar's fabric.mod.json; null when it has none, it's over the cap, or it isn't a JSON object.
+	private static JsonObject readRoot(Path jar) throws IOException {
 		try (ZipFile zip = new ZipFile(jar.toFile())) {
 			ZipEntry entry = zip.getEntry("fabric.mod.json");
 			if (entry == null) {
@@ -90,11 +208,7 @@ public final class ModJars {
 			}
 			try {
 				JsonElement root = JsonParser.parseString(new String(json, StandardCharsets.UTF_8));
-				if (!root.isJsonObject() || !root.getAsJsonObject().has("id")) {
-					return null;
-				}
-				JsonElement id = root.getAsJsonObject().get("id");
-				return id.isJsonPrimitive() ? id.getAsString() : null;
+				return root.isJsonObject() ? root.getAsJsonObject() : null;
 			} catch (JsonParseException e) {
 				return null;
 			}

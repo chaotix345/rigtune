@@ -1,0 +1,193 @@
+package io.github.chaotix345.rigtune.client.stutter;
+
+import io.github.chaotix345.rigtune.core.footprint.FootprintBudgets;
+import io.github.chaotix345.rigtune.core.stutter.FrameRing;
+import io.github.chaotix345.rigtune.core.stutter.StutterRings;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.time.Instant;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+// AC5.4 for the real hook: StutterMonitor.onFrame with the phase timers, off and on, allocates nothing; the capture
+// lifecycle and the phase-timing verdict (plan review S-M1).
+class StutterMonitorTest {
+	// JVM bookkeeping on a CI runner can add about 1 KB over a whole run (1,072 bytes once, run 36231385325); an allocation
+	// per frame would be at least 16 MB over a million frames, so 64 KiB separates the two with a wide margin.
+	static final long NOISE_BYTES = 64 * 1024;
+	@AfterEach
+	void stopEverything() {
+		StutterMonitor.Capture s = StutterMonitor.session();
+		if (s != null) {
+			StutterMonitor.stop(s);
+		}
+		StutterMonitor.Capture b = StutterMonitor.benchmark();
+		if (b != null) {
+			StutterMonitor.stop(b);
+		}
+	}
+
+	static long allocated() {
+		return ((com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean()).getCurrentThreadAllocatedBytes();
+	}
+
+	static void frames(int n) {
+		for (int i = 0; i < n; i++) {
+			StutterMonitor.packetsStart();
+			StutterMonitor.chunkLoaded();
+			StutterMonitor.packetsEnd();
+			StutterMonitor.tickStart();
+			StutterMonitor.tickEnd();
+			StutterMonitor.renderStart();
+			StutterMonitor.onFrame(7_000_000L);
+		}
+	}
+
+	@Test
+	void aMillionFramesAllocateNothingOffOrOn() {
+		Assumptions.assumeTrue(ManagementFactory.getThreadMXBean() instanceof com.sun.management.ThreadMXBean bean && bean.isThreadAllocatedMemorySupported());
+		// Anything allocated per frame would be at least 16 MB over a million frames; the bound only absorbs the probe's own
+		// few bytes.
+		frames(1_000_000);
+		long before = allocated();
+		frames(1_000_000);
+		long off = allocated() - before;
+		assertTrue(off < NOISE_BYTES, "monitor off: " + off + " bytes");
+
+		StutterMonitor.startSession(new StutterRings(0), System.nanoTime(), Instant.now());
+		frames(1_000_000);
+		before = allocated();
+		frames(1_000_000);
+		long on = allocated() - before;
+		assertTrue(on < NOISE_BYTES, "monitor on: " + on + " bytes");
+	}
+
+	// The per-frame cost, measured (research §2.3: ~21 ns with the monitor on); a gross guard only: SPEC 10's budgets are
+	// FrameHookBudgetTest's (WS-F). The phase timers add their own calls (7 per frame with the frame rate capped).
+	@Test
+	void perFrameCost() {
+		int n = 10_000_000;
+		double off = nanosPerFrame(n);
+		StutterMonitor.startSession(new StutterRings(0), System.nanoTime(), Instant.now());
+		double on = nanosPerFrame(n);
+		double onWithPhases = nanosPerFrameWithPhases(n);
+		System.out.printf("StutterMonitor.onFrame: %.1f ns off, %.1f ns on, %.1f ns on with the phase timers%n", off, on, onWithPhases);
+		assertTrue(off < 50, "off: " + off);
+		assertTrue(on < 1000, "on: " + on);
+	}
+
+	static double nanosPerFrame(int n) {
+		for (int i = 0; i < n / 5; i++) {
+			StutterMonitor.onFrame(7_000_000L);
+		}
+		long start = System.nanoTime();
+		for (int i = 0; i < n; i++) {
+			StutterMonitor.onFrame(7_000_000L);
+		}
+		return (System.nanoTime() - start) / (double) n;
+	}
+
+	static double nanosPerFrameWithPhases(int n) {
+		frames(n / 5);
+		long start = System.nanoTime();
+		frames(n);
+		return (System.nanoTime() - start) / (double) n;
+	}
+
+	// review-9 X3-1: a session's and a benchmark's frame rings together, with the shared rings, are about 2.98 MB, over the
+	// monitorOnRetainedBytes budget, so the monitor never holds both (StutterService ends the session before the benchmark's
+	// capture starts and starts a fresh one after the run).
+	@Test
+	void oneCaptureAtATime() throws IOException {
+		double budget = FootprintBudgets.load().budgets().get("monitorOnRetainedBytes").limit();
+		assertFalse(StutterMonitor.active());
+		assertEquals(0, StutterMonitor.retainedBytes());
+		StutterRings rings = new StutterRings(0);
+		StutterMonitor.Capture session = StutterMonitor.startSession(rings, 1, Instant.EPOCH);
+		assertThrows(IllegalStateException.class, () -> StutterMonitor.startBenchmark(rings, 2, Instant.EPOCH));
+		assertSame(session, StutterMonitor.session());
+		assertNull(StutterMonitor.benchmark());
+		assertEquals(session.retainedBytes() + rings.retainedBytes(), StutterMonitor.retainedBytes());
+		assertTrue(StutterMonitor.retainedBytes() <= budget, "session: " + StutterMonitor.retainedBytes());
+		assertTrue(StutterMonitor.stop(session));
+		assertFalse(StutterMonitor.active());
+		assertNull(StutterMonitor.rings());
+		assertEquals(0, StutterMonitor.retainedBytes(), "the buffers are released");
+
+		StutterRings benchRings = new StutterRings(0);
+		StutterMonitor.Capture bench = StutterMonitor.startBenchmark(benchRings, 3, Instant.EPOCH);
+		assertTrue(bench.paused(), "the benchmark records only its sweeps");
+		assertThrows(IllegalStateException.class, () -> StutterMonitor.startSession(benchRings, 4, Instant.EPOCH));
+		assertNull(StutterMonitor.session());
+		assertEquals(bench.retainedBytes() + benchRings.retainedBytes(), StutterMonitor.retainedBytes());
+		assertTrue(StutterMonitor.retainedBytes() <= budget, "benchmark: " + StutterMonitor.retainedBytes());
+		assertTrue(StutterMonitor.stop(bench));
+		assertFalse(StutterMonitor.active());
+		assertEquals(0, StutterMonitor.retainedBytes());
+	}
+
+	@Test
+	void theFirstFrameAndTheFrameAfterAPauseAreExcluded() {
+		StutterMonitor.Capture session = StutterMonitor.startSession(new StutterRings(0), System.nanoTime(), Instant.now());
+		StutterMonitor.onFrame(7_000_000L);
+		StutterMonitor.onFrame(7_000_000L);
+		session.paused = true;
+		StutterMonitor.onFrame(7_000_000L);
+		session.paused = false;
+		StutterMonitor.onFrame(900_000_000L);
+		StutterMonitor.onFrame(7_000_000L);
+		FrameRing.Snapshot s = session.snapshot();
+		assertEquals(4, s.frames(), "the paused frame isn't recorded");
+		assertEquals(2, s.excludedFrames());
+		assertTrue(FrameRing.Snapshot.excluded(s.ends()[0]));
+		assertFalse(FrameRing.Snapshot.excluded(s.ends()[1]));
+		assertTrue(FrameRing.Snapshot.excluded(s.ends()[2]), "spans the pause");
+		assertEquals(14_000_000L, s.gameplayNanos());
+	}
+
+	@Test
+	void menusAndWorldLoadingAreExcluded() {
+		StutterMonitor.Capture session = StutterMonitor.startSession(new StutterRings(0), System.nanoTime(), Instant.now());
+		StutterMonitor.onFrame(7_000_000L);
+		StutterMonitor.setExcluded(true);
+		StutterMonitor.onFrame(7_000_000L);
+		StutterMonitor.setExcluded(false);
+		StutterMonitor.onFrame(7_000_000L);
+		StutterMonitor.levelChanged(System.nanoTime());
+		StutterMonitor.onFrame(7_000_000L);
+		StutterMonitor.levelChanged(System.nanoTime() - StutterMonitor.LOADING_NANOS);
+		StutterMonitor.onFrame(7_000_000L);
+		FrameRing.Snapshot s = session.snapshot();
+		assertEquals(5, s.frames());
+		assertEquals(3, s.excludedFrames(), "the first frame, the menu frame and the world-loading frame");
+		assertEquals(2, session.snapshot().gameplayFrames());
+		long[] events = StutterMonitor.rings().snapshot().events();
+		assertEquals(StutterRings.LEVEL_CHANGE, events[0]);
+	}
+
+	// S-M1: every required timer fired, and the limiter pair both halves or neither.
+	@Test
+	void phaseTimingNeedsCompletePairs() {
+		StutterMonitor.startSession(new StutterRings(0), System.nanoTime(), Instant.now());
+		frames(3);
+		if ((StutterMonitor.phaseSeen() & StutterMonitor.LIMITER) == 0) {
+			assertTrue(StutterMonitor.phaseTiming(), "the limiter never ran (uncapped): fine");
+		}
+		StutterMonitor.limiterStart();
+		if ((StutterMonitor.phaseSeen() & StutterMonitor.LIMITER_END) == 0) {
+			assertFalse(StutterMonitor.phaseTiming(), "half a pair");
+		}
+		StutterMonitor.limiterEnd();
+		assertTrue(StutterMonitor.phaseTiming());
+		assertEquals(StutterMonitor.REQUIRED | StutterMonitor.LIMITER, StutterMonitor.phaseSeen());
+	}
+}

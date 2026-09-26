@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "revision": 1,
+  "advice": [
+    {
+      "id": "driver-nvidia-threaded-optimization",
+      "v1": false,
+      "kind": "warning",
+      "when": {"os": ["windows"], "gpuVendor": ["nvidia"], "driverVersion": {"vendor": "nvidia", "atLeast": "526.47", "atMost": "536.22"}},
+      "title": "Update your NVIDIA driver",
+      "text": "NVIDIA drivers 526.47 to 536.22 force Threaded Optimization for Minecraft, which Sodium reports causes crashes and stutter (Sodium issue #1486). Update your graphics driver."
+    },
+    {
+      "id": "driver-intel-gen7-old",
+      "v1": false,
+      "kind": "warning",
+      "when": {"os": ["windows"], "gpuVendor": ["intel"], "gpuModelMatches": "(?i)\\bHD Graphics (2500|4000)\\b", "driverVersion": {"vendor": "intel", "atMost": "10.18.10.5160"}},
+      "title": "Update your Intel graphics driver",
+      "text": "Intel HD Graphics drivers older than 10.18.10.5161 can freeze Minecraft at startup with Sodium (Sodium issue #899); update the driver."
+    }
+  ]
+}

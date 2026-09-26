@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.gametest;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
@@ -98,7 +99,7 @@ public class ReportGameTest implements FabricClientGameTest {
 	private static void pressAndCheck(ClientGameTestContext context, RigTuneController controller, String name) {
 		String[] result = context.computeOnClient(mc -> {
 			Button button = findButton(mc.gui.screen(), "rigtune.report.button");
-			button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(0, 0)));
+			button.onPress(new MouseButtonEvent(button.getX() + 1, button.getY() + 1, new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0)));
 			String report = controller.shareReport();
 			return new String[]{mc.keyboardHandler.getClipboard(), report, IssueLink.uri(controller.reportVersions(), report).toString()};
 		});

@@ -57,9 +57,13 @@ public final class HttpModrinthClient implements ModrinthClient {
 				Duration.ofSeconds(30), Duration.ofMinutes(10), Duration.ofSeconds(10));
 	}
 
-	private final HttpClient http;
+	// Both built on first use (a request, always off the render thread), never in the constructor: RealController makes
+	// this client in onInitializeClient, where java.net.http's classes and threads cost the render thread tens of ms
+	// (docs/v0.4/SPEC.md 10). With Modrinth or the network off, GatedModrinthClient stops every call first, so neither
+	// is ever built.
+	private volatile HttpClient http;
 	// Downloads follow redirects by hand, so every hop is checked against the allowlist before it is requested.
-	private final HttpClient downloads;
+	private volatile HttpClient downloads;
 	private final String baseUrl;
 	private final String userAgent;
 	private final Limits limits;
@@ -80,14 +84,37 @@ public final class HttpModrinthClient implements ModrinthClient {
 		this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
 		this.userAgent = userAgent(modVersion);
 		this.limits = limits;
-		this.http = HttpClient.newBuilder()
-				.connectTimeout(CONNECT_TIMEOUT)
-				.followRedirects(HttpClient.Redirect.NORMAL)
-				.build();
-		this.downloads = HttpClient.newBuilder()
-				.connectTimeout(CONNECT_TIMEOUT)
-				.followRedirects(HttpClient.Redirect.NEVER)
-				.build();
+	}
+
+	private HttpClient http() {
+		HttpClient client = http;
+		if (client == null) {
+			synchronized (this) {
+				client = http;
+				if (client == null) {
+					http = client = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).followRedirects(HttpClient.Redirect.NORMAL).build();
+				}
+			}
+		}
+		return client;
+	}
+
+	private HttpClient downloads() {
+		HttpClient client = downloads;
+		if (client == null) {
+			synchronized (this) {
+				client = downloads;
+				if (client == null) {
+					downloads = client = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).followRedirects(HttpClient.Redirect.NEVER).build();
+				}
+			}
+		}
+		return client;
+	}
+
+	// For tests: whether either HttpClient exists yet.
+	boolean httpClientsBuilt() {
+		return http != null || downloads != null;
 	}
 
 	public static String userAgent(String modVersion) {
@@ -122,6 +149,23 @@ public final class HttpModrinthClient implements ModrinthClient {
 		return JsonParser.parseString(body).getAsJsonArray().asList().stream()
 				.map(e -> ModrinthProject.fromJson(e.getAsJsonObject()))
 				.toList();
+	}
+
+	// GET /v2/versions?ids=[...] ("Get multiple versions", docs.modrinth.com/api/operations/getversions).
+	@Override
+	public Map<String, ModrinthVersion> versions(Collection<String> ids) throws IOException {
+		if (ids.isEmpty()) {
+			return Map.of();
+		}
+		String body = get("/v2/versions?ids=" + encode(array(ids).toString()));
+		Map<String, ModrinthVersion> out = new LinkedHashMap<>();
+		for (JsonElement element : JsonParser.parseString(body).getAsJsonArray()) {
+			ModrinthVersion version = ModrinthVersion.fromJson(element.getAsJsonObject());
+			if (version.id() != null) {
+				out.put(version.id(), version);
+			}
+		}
+		return out;
 	}
 
 	@Override
@@ -174,7 +218,7 @@ public final class HttpModrinthClient implements ModrinthClient {
 				// Only a 2xx body is written; a redirect's body is discarded.
 				for (int hop = 0; ; hop++) {
 					request = request(uri).GET().build();
-					response = exchange(downloads, request, (info, progress) -> info.statusCode() / 100 == 2
+					response = exchange(downloads(), request, (info, progress) -> info.statusCode() / 100 == 2
 							? BoundedHttp.capped(cap, false, progress, buffer -> {
 								digest.update(buffer.duplicate());
 								while (buffer.hasRemaining()) {
@@ -294,7 +338,7 @@ public final class HttpModrinthClient implements ModrinthClient {
 	}
 
 	private String sendForString(HttpRequest request) throws IOException {
-		HttpResponse<byte[]> response = exchange(http, request, (info, progress) -> info.statusCode() / 100 == 2
+		HttpResponse<byte[]> response = exchange(http(), request, (info, progress) -> info.statusCode() / 100 == 2
 				? BoundedHttp.bytes(limits.maxJsonBytes(), false, progress)
 				: BoundedHttp.bytes(ERROR_BODY_BYTES, true, progress), limits.jsonStall(), limits.jsonDeadline());
 		String body = new String(response.body(), StandardCharsets.UTF_8);

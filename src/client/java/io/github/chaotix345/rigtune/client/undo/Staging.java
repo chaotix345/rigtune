@@ -4,14 +4,17 @@ import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ConfigTargets;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
+import io.github.chaotix345.rigtune.core.apply.LogSafe;
 import io.github.chaotix345.rigtune.core.apply.ModJars;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
+import io.github.chaotix345.rigtune.core.apply.UnfinishedGroups;
 import io.github.chaotix345.rigtune.core.history.HistoryUpdates;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
+import io.github.chaotix345.rigtune.core.history.PartlyApplied;
 import io.github.chaotix345.rigtune.core.history.StagedChanges;
 import org.jspecify.annotations.Nullable;
 
@@ -29,6 +32,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 // Staging into config/rigtune/pending.json, and the journal records that go with it, under the apply lock: the
 // changes are recorded after the merge, with the ids the ops have in pending.json (review H5).
@@ -81,6 +85,7 @@ public final class Staging {
 				RigTune.LOGGER.error("Could not stage RigTune changes: the apply helper still holds {}", ApplyLock.defaultPath(configDir));
 				return null;
 			}
+			createJournal();
 			Merge merge = mergeLocked(ops);
 			try {
 				if (!journal.update(entries -> recorded(entries, merge, ops, entryId))) {
@@ -96,8 +101,21 @@ public final class Staging {
 		}
 	}
 
+	// history.json's first write makes the 0.1.x legacy entry from pending.json (HistoryStartup.legacyEntry): it must see
+	// pending.json as it was before this merge, not this Apply's ops (docs/v0.4/SPEC.md 2o L1). The caller holds the lock.
+	private void createJournal() {
+		if (journal.exists()) {
+			return;
+		}
+		try {
+			journal.update(entries -> entries);
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.warn("Could not create {} ({})", LogSafe.name(Journal.file(configDir)), LogSafe.error(e, Journal.file(configDir)));
+		}
+	}
+
 	private List<JournalEntry> recorded(List<JournalEntry> entries, Merge merge, List<Op> ops, String entryId) {
-		StagedChanges.Outcome outcome = StagedChanges.of(merge.base(), ops, merge.merged(), configKeys(), modIdOf, stagedOpIds(entries));
+		StagedChanges.Outcome outcome = StagedChanges.of(merge.base(), ops, merge.merged(), configKeys(), modIdOf, ModJars::nameOf, stagedOpIds(entries));
 		List<JournalEntry> out = HistoryUpdates.discard(entries, droppedIds(merge));
 		return outcome.changes().isEmpty() ? out : journal.withChanges(out, entryId, JournalEntry.APPLY, outcome.changes());
 	}
@@ -194,7 +212,8 @@ public final class Staging {
 	// Unstages (as unstageLocked), with its group, every staged enable of a loaded mod that has an update of its own
 	// waiting in mods/update/ (ModJars.queuedUpdates): at exit it would race that mod's own updater for the jar (re-check
 	// of review 4). An enable of a mod that isn't loaded (an addition, an undo's re-enable) stays: a stale jar in
-	// mods/update/ must not cancel it (SPEC 3a). Null when the lock is busy.
+	// mods/update/ must not cancel it (SPEC 3a). A group the helper left half done stays (PartlyApplied). Null when the
+	// lock is busy.
 	public @Nullable List<Op> dropQueuedUpdates(Set<String> queuedModIds, Set<String> loadedModIds) throws IOException {
 		if (queuedModIds.isEmpty() || !Files.exists(pendingFile)) {
 			return List.of();
@@ -208,8 +227,11 @@ public final class Staging {
 			}
 			List<String> ids = new ArrayList<>();
 			Map<String, String> readIds = new HashMap<>();
-			for (Op op : PendingActions.load(pendingFile).ops()) {
-				if (op != null && op.type() == PendingActions.Type.ENABLE_FILE && op.id() != null) {
+			PendingActions plan = PendingActions.load(pendingFile);
+			// As for Discard pending: the next exit finishes such a group or rolls it back.
+			Set<String> halfDone = halfDoneGroups(plan);
+			for (Op op : plan.ops()) {
+				if (op != null && op.type() == PendingActions.Type.ENABLE_FILE && op.id() != null && (op.group() == null || !halfDone.contains(op.group()))) {
 					String modId = modIdOf(op);
 					if (modId != null && queuedModIds.contains(modId) && loadedModIds.contains(modId)) {
 						ids.add(op.id());
@@ -240,11 +262,18 @@ public final class Staging {
 		}
 	}
 
-	// Cancels everything staged (the RigTune screen's Discard pending). Null when the lock is busy.
+	// Cancels everything staged (the RigTune screen's Discard pending), except a group the helper left half done at the
+	// last exit (a failed rollback, or a kill between two renames), which the next exit finishes or rolls back (audit M2,
+	// review-8 AH-1; PartlyApplied). Returns the dropped ops; null when the lock is busy.
 	public List<Op> discard() throws IOException {
 		try (ApplyLock lock = lock()) {
 			if (lock == null) {
 				return null;
+			}
+			PendingActions plan = readable();
+			Set<String> halfDone = plan == null ? Set.of() : halfDoneGroups(plan);
+			if (!halfDone.isEmpty()) {
+				return discardExcept(plan, halfDone);
 			}
 			List<Op> dropped = PendingActions.discard(pendingFile, Duration.ZERO);
 			if (dropped != null) {
@@ -252,6 +281,54 @@ public final class Staging {
 			}
 			return dropped;
 		}
+	}
+
+	private @Nullable PendingActions readable() {
+		try {
+			return Files.exists(pendingFile) ? PendingActions.load(pendingFile) : null;
+		} catch (IOException e) {
+			return null;
+		}
+	}
+
+	private Set<String> halfDoneGroups(PendingActions plan) {
+		Set<String> names = new HashSet<>();
+		try (Stream<Path> files = Files.list(InstanceDirs.modsDirOf(pendingFile))) {
+			files.forEach(f -> names.add(f.getFileName().toString()));
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.warn("Could not list the mods folder to check for half-applied changes", e);
+			return Set.of();
+		}
+		return PartlyApplied.groups(plan.ops(), names, unfinishedRenames());
+	}
+
+	// The helper's record of the renames it started and hasn't finished (review-8 AH-1: a helper killed mid-group leaves
+	// no attempt counted, only this), from the config folder the helper uses for this pending.json.
+	public List<UnfinishedGroups.Rename> unfinishedRenames() {
+		try {
+			return UnfinishedGroups.recorded(InstanceDirs.configDirOf(pendingFile));
+		} catch (RuntimeException e) {
+			return List.of();
+		}
+	}
+
+	// The caller holds the lock. Drops every op outside the half-done groups, as unstageLocked does.
+	private List<Op> discardExcept(PendingActions plan, Set<String> halfDone) throws IOException {
+		List<Op> kept = new ArrayList<>();
+		List<Op> dropped = new ArrayList<>();
+		for (Op op : plan.ops()) {
+			(op != null && op.group() != null && halfDone.contains(op.group()) ? kept : dropped).add(op);
+		}
+		plan.withOps(kept).save(pendingFile);
+		Path planMods = InstanceDirs.modsDirOf(pendingFile);
+		for (Op op : dropped) {
+			if (op != null && kept.stream().noneMatch(k -> op.from() != null && op.from().equals(k.from()))) {
+				PendingActions.retireDownload(op, planMods);
+			}
+		}
+		RigTune.LOGGER.info("Kept {} staged change(s) the helper left half done; the next exit finishes them", kept.size());
+		markDiscarded(dropped);
+		return dropped;
 	}
 
 	private void markDiscarded(List<Op> ops) {

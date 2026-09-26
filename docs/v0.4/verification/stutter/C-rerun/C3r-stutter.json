@@ -1,0 +1,167 @@
+{
+ "formatVersion": 1,
+ "sessions": [
+  {
+   "startedAt": "2026-09-26T16:14:30Z",
+   "source": "monitor",
+   "mc": "26.2",
+   "collector": "G1",
+   "heapMaxMb": 4096,
+   "sessionSeconds": 63.4,
+   "gameplaySeconds": 52.6,
+   "frames": 137699,
+   "avgFps": 2619.9,
+   "onePercentLowFps": 332.2,
+   "histogramCounts": [
+    137568,
+    69,
+    37,
+    24,
+    1,
+    0,
+    0,
+    0,
+    0
+   ],
+   "histogramTimeMs": [
+    51169,
+    395,
+    448,
+    515,
+    33,
+    0,
+    0,
+    0,
+    0
+   ],
+   "spikes": {
+    "minor": 14,
+    "major": 0,
+    "severe": 0,
+    "freeze": 0
+   },
+   "lostMs": 343.1,
+   "causes": {
+    "gc": 0.05,
+    "chunkBuild": 0.07,
+    "unknown": 0.89
+   },
+   "tags": {
+    "afterTeleport": 14,
+    "chunksLoading": 11
+   },
+   "worst": [
+    {
+     "t": 23.3,
+     "ms": 33.5,
+     "baseMs": 0.3,
+     "causes": [
+      "render:low",
+      "afterTeleport:context",
+      "chunksLoading:context"
+     ]
+    },
+    {
+     "t": 29.9,
+     "ms": 29.0,
+     "baseMs": 0.3,
+     "causes": [
+      "render:low",
+      "afterTeleport:context",
+      "chunksLoading:context"
+     ]
+    },
+    {
+     "t": 25.7,
+     "ms": 28.8,
+     "baseMs": 0.2,
+     "causes": [
+      "render:low",
+      "afterTeleport:context",
+      "chunksLoading:context"
+     ]
+    },
+    {
+     "t": 26.8,
+     "ms": 28.2,
+     "baseMs": 0.3,
+     "causes": [
+      "render:low",
+      "afterTeleport:context",
+      "chunksLoading:context"
+     ]
+    },
+    {
+     "t": 10.7,
+     "ms": 27.4,
+     "baseMs": 0.4,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    },
+    {
+     "t": 26.4,
+     "ms": 23.9,
+     "baseMs": 0.3,
+     "causes": [
+      "chunkBuild:medium",
+      "afterTeleport:context",
+      "chunksLoading:context"
+     ]
+    },
+    {
+     "t": 26.7,
+     "ms": 22.9,
+     "baseMs": 0.3,
+     "causes": [
+      "gc:low",
+      "render:low",
+      "afterTeleport:context",
+      "chunksLoading:context"
+     ]
+    },
+    {
+     "t": 23.7,
+     "ms": 22.5,
+     "baseMs": 0.2,
+     "causes": [
+      "render:low",
+      "afterTeleport:context",
+      "chunksLoading:context"
+     ]
+    },
+    {
+     "t": 27.4,
+     "ms": 22.3,
+     "baseMs": 0.3,
+     "causes": [
+      "render:low",
+      "afterTeleport:context",
+      "chunksLoading:context"
+     ]
+    },
+    {
+     "t": 10.1,
+     "ms": 22.3,
+     "baseMs": 0.4,
+     "causes": [
+      "render:low",
+      "afterTeleport:context"
+     ]
+    }
+   ],
+   "facts": {
+    "liveSetPct": 12,
+    "fullGcs": 0,
+    "stalls": 0,
+    "explicitGcs": 0,
+    "gcOffsetMs": 17.4
+   },
+   "advice": [],
+   "enoughData": false,
+   "phaseTiming": true,
+   "hitches": 13
+  }
+ ]
+}

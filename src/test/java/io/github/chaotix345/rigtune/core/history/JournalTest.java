@@ -83,18 +83,24 @@ class JournalTest {
 		assertEquals("newest", ids.getLast());
 	}
 
+	// docs/v0.4/SPEC.md 2o M6: unfinished entries are folded into one baseline entry in their place (JournalFoldTest).
 	@Test
-	void capDropsOldUnfinishedEntriesOnlyWhenItMust() {
+	void capFoldsOldUnfinishedEntriesOnlyWhenItMust() {
 		List<JournalEntry> many = new ArrayList<>();
 		for (int i = 0; i < 55; i++) {
 			many.add(entry("applied-" + i, vanilla("vanilla.a", "1", "2")));
 		}
 		many.addFirst(entry("staged", JournalChange.setting("sodium.a", "0", "1", JournalChange.STAGED, "op")));
 
-		List<String> ids = Journal.cap(many).stream().map(JournalEntry::id).toList();
+		List<JournalEntry> capped = Journal.cap(many);
+		List<String> ids = capped.stream().map(JournalEntry::id).toList();
 
 		assertEquals(Journal.MAX_ENTRIES, ids.size());
-		assertEquals(List.of("staged", "applied-6"), ids.subList(0, 2));
+		assertEquals("staged", ids.get(0));
+		assertFalse(ids.get(1).startsWith("applied-"));
+		// Every entry sets 1 -> 2, so the chain breaks at once: the older changes and the newest one.
+		assertEquals(List.of("vanilla.a", "vanilla.a"), capped.get(1).changes().stream().map(JournalChange::key).toList());
+		assertEquals("applied-7", ids.get(2));
 	}
 
 	// Review: an earlier .bad backup is never overwritten.

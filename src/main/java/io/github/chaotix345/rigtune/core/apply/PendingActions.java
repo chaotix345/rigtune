@@ -35,10 +35,18 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 
 	// id: unique per staged op. group: ops sharing one are applied all-or-nothing (an update is {disable old, enable new}).
 	// modId: the fabric.mod.json id of the jar an ENABLE_FILE op brings in. attempts: helper runs this op has failed in.
+	// projectId, versionId (0.4.0 on, optional): the Modrinth project and version an ENABLE_FILE op's download belongs to
+	// (docs/v0.4/SPEC.md 2d, amendments A-M1/A-L1). The helpers of 0.1.0-0.3.0 ignore them; if one of them rewrites
+	// pending.json without them, the op just stops counting as a staged project.
 	public record Op(Type type, String from, String to, String path, Map<String, String> patches, String id, String group, String modId,
-			int attempts) {
+			int attempts, String projectId, String versionId) {
 		public Op {
 			patches = patches == null ? null : Collections.unmodifiableMap(new LinkedHashMap<>(patches));
+		}
+
+		public Op(Type type, String from, String to, String path, Map<String, String> patches, String id, String group, String modId,
+				int attempts) {
+			this(type, from, to, path, patches, id, group, modId, attempts, null, null);
 		}
 
 		public Op(Type type, String from, String to, String path, Map<String, String> patches) {
@@ -66,15 +74,23 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 		}
 
 		public Op inGroup(String newGroup) {
-			return new Op(type, from, to, path, patches, id, newGroup, modId, attempts);
+			return new Op(type, from, to, path, patches, id, newGroup, modId, attempts, projectId, versionId);
 		}
 
 		public Op withModId(String newModId) {
-			return new Op(type, from, to, path, patches, id, group, newModId, attempts);
+			return new Op(type, from, to, path, patches, id, group, newModId, attempts, projectId, versionId);
 		}
 
 		public Op withAttempts(int newAttempts) {
-			return new Op(type, from, to, path, patches, id, group, modId, newAttempts);
+			return new Op(type, from, to, path, patches, id, group, modId, newAttempts, projectId, versionId);
+		}
+
+		public Op withProjectId(String newProjectId) {
+			return new Op(type, from, to, path, patches, id, group, modId, attempts, newProjectId, versionId);
+		}
+
+		public Op withVersionId(String newVersionId) {
+			return new Op(type, from, to, path, patches, id, group, modId, attempts, projectId, newVersionId);
 		}
 
 		// Same file change, whatever its id or group.
@@ -137,16 +153,17 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 	public record Merged(PendingActions plan, List<Path> superseded, Map<String, String> survivingIds, List<Op> replaced) {
 	}
 
-	// Adds staged ops. An op that repeats a staged change is dropped and the two groups are joined. An ENABLE_FILE
-	// whose mod id already has a staged ENABLE_FILE replaces it, taking over the rest of its group (such as the
-	// update's disable), and the replaced op's pending jar is returned for the caller to retire.
+	// Adds staged ops. An op that repeats a staged change is dropped and the two groups are joined (a patch only repeats
+	// the LAST pending op for its file and key: see repeatOf). An ENABLE_FILE whose mod id already has a staged
+	// ENABLE_FILE replaces it, taking over the rest of its group (such as the update's disable), and the replaced op's
+	// pending jar is returned for the caller to retire.
 	public Merged merge(List<Op> incoming) {
 		List<Op> merged = new ArrayList<>(ops);
 		List<Path> superseded = new ArrayList<>();
 		List<Op> replaced = new ArrayList<>();
 		Map<String, String> target = new LinkedHashMap<>();
 		for (Op op : incoming) {
-			Op same = merged.stream().filter(existing -> existing.sameChange(op)).findFirst().orElse(null);
+			Op same = repeatOf(merged, op);
 			if (same != null) {
 				if (op.group() != null && !op.group().equals(same.group())) {
 					regroup(merged, same, op.group());
@@ -198,6 +215,32 @@ public record PendingActions(String createdAt, long gamePid, String modsDir, Str
 			}
 		});
 		return new Merged(withOps(merged), retire, surviving, List.copyOf(replaced));
+	}
+
+	// The staged op `op` repeats, or null. A patch repeats only the last pending op for its file and keys: an older identical
+	// patch that a later op overrode is no repeat (dropping the new one would leave the later value to apply at exit:
+	// A -> B -> A -> B ending at A, docs/research/v0.4/audit-apply-pipeline.md M1).
+	private static Op repeatOf(List<Op> merged, Op op) {
+		if (!isPatch(op)) {
+			return merged.stream().filter(existing -> existing.sameChange(op)).findFirst().orElse(null);
+		}
+		for (int i = merged.size() - 1; i >= 0; i--) {
+			Op existing = merged.get(i);
+			if (existing == null) {
+				continue;
+			}
+			if (existing.sameChange(op)) {
+				return existing;
+			}
+			if (isPatch(existing) && Objects.equals(existing.path(), op.path()) && existing.patches().keySet().stream().anyMatch(op.patches()::containsKey)) {
+				return null;
+			}
+		}
+		return null;
+	}
+
+	private static boolean isPatch(Op op) {
+		return op != null && op.patches() != null && (op.type() == Type.PATCH_JSON || op.type() == Type.PATCH_TOML || op.type() == Type.PATCH_PROPERTIES);
 	}
 
 	public record Removed(PendingActions plan, List<Op> removed) {

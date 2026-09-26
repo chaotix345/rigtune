@@ -1,0 +1,67 @@
+[23:11:59] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, monitor:on, benchWorld, sleep:100, tp:-300000_200_300000, probe:30, save, sleep:10, stutterReport:C4, shot:stutter-C4-top, scroll:300, sleep:1, shot:stutter-C4-mid, scroll:700, sleep:1, shot:stutter-C4-low, scroll:5000, sleep:1, shot:stutter-C4-end, leaveWorld, stutterJson, quit]
+[23:12:00] [Render thread/INFO]: Using graphics backend OpenGL, using drivers: 3.3.0 Core Profile Context 26.8.1.260810
+[23:12:00] [Render thread/INFO]: Using graphics device: AMD Radeon RX 7800 XT (ATI Technologies Inc.)
+[23:12:00] [Render thread/INFO]: Using graphics device extensions: GL_ARB_multi_draw_indirect, GL_ARB_buffer_storage, GL_ARB_shader_draw_parameters, GL_ARB_base_instance, GL_KHR_debug, GL_ARB_draw_indirect, GL_ARB_clip_control, GL_ARB_vertex_attrib_binding, GL_ARB_direct_state_access, GL_EXT_texture_filter_anisotropic
+[23:12:04] [Render thread/INFO]: [P5A] 3.7s title screen at JVM uptime 14993 ms
+[23:12:04] [Render thread/INFO]: [P5A] 4.2s report ready (online false, rules r15 bundled)
+[23:12:04] [Render thread/INFO]: [P5A] 4.2s stutter monitor on
+[23:12:04] [Render thread/INFO]: [P5A] 4.3s opening the benchmark world: true
+[23:12:05] [Server thread/INFO]: [P5A] BEFORE_SAVE at JVM uptime 16537 ms (flush true, force true)
+[23:12:05] [Server thread/INFO]: [P5A] AFTER_SAVE at JVM uptime 16625 ms (flush true, force true)
+[23:12:06] [Render thread/INFO]: Stutter Doctor: capture on (collector g1)
+[23:12:06] [Render thread/INFO]: [P5A] 5.8s in the benchmark world at (0.5, 133.0, 192.5), state READY
+[23:12:06] [RigTune stutter sampler/INFO]: Stutter Doctor: 59 threads {Attach Listener=1, Chunk Render Task Executor #*=10, Common-Cleaner=1, Download-*=2, Finalizer=1, ForkJoinPool.commonPool-delayScheduler=1, ForkJoinPool.commonPool-worker-*=2, HttpClient-2-SelectorManager=1, HttpClient-2-Worker-*=2, IO-Worker-*=5, JNA Cleaner=1, Keep-Alive-Timer=1, Netty Local IO #*=3, Notification Thread=1, Reference Handler=1, Render thread=1, RigTune rules=1, RigTune stutter sampler=1, RigTune worker=2, Server thread=1, Signal Dispatcher=1, Sodium Async Cull Thread=1, Sound engine=1, Timer hack thread=1, Worker-Main-*=15, Yggdrasil Key Fetcher=1}
+[23:13:46] [Render thread/INFO]: [P5A] 105.9s command: tp @a -300000 200 300000
+[23:13:47] [Render thread/INFO]: [P5A] 106.9s probe 1.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 763)
+[23:13:48] [Render thread/INFO]: [P5A] 107.9s probe 2.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 768)
+[23:13:49] [Render thread/INFO]: [P5A] 108.9s probe 3.00s: sodium scheduled 0 busy 0 total 10; chunk loads +9 (total 820)
+[23:13:50] [Render thread/INFO]: [P5A] 109.9s probe 4.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 843)
+[23:13:51] [Render thread/INFO]: [P5A] 110.9s probe 5.00s: sodium scheduled 0 busy 0 total 10; chunk loads +11 (total 895)
+[23:13:52] [Render thread/INFO]: [P5A] 111.9s probe 6.00s: sodium scheduled 0 busy 0 total 10; chunk loads +23 (total 955)
+[23:13:53] [Render thread/INFO]: [P5A] 112.9s probe 7.00s: sodium scheduled 0 busy 0 total 10; chunk loads +24 (total 1022)
+[23:13:54] [Render thread/INFO]: [P5A] 113.9s probe 8.00s: sodium scheduled 0 busy 0 total 10; chunk loads +12 (total 1078)
+[23:13:55] [Render thread/INFO]: [P5A] 114.9s probe 9.00s: sodium scheduled 0 busy 0 total 10; chunk loads +25 (total 1170)
+[23:13:56] [Render thread/INFO]: [P5A] 115.9s probe 10.00s: sodium scheduled 0 busy 0 total 10; chunk loads +17 (total 1236)
+[23:13:57] [Render thread/INFO]: [P5A] 116.9s probe 11.00s: sodium scheduled 0 busy 0 total 10; chunk loads +17 (total 1303)
+[23:13:58] [Render thread/INFO]: [P5A] 117.9s probe 12.00s: sodium scheduled 0 busy 0 total 10; chunk loads +5 (total 1353)
+[23:13:59] [Render thread/INFO]: [P5A] 118.9s probe 13.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:00] [Render thread/INFO]: [P5A] 119.9s probe 14.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:01] [Render thread/INFO]: [P5A] 120.9s probe 15.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:02] [Render thread/INFO]: [P5A] 121.9s probe 16.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:03] [Render thread/INFO]: [P5A] 122.9s probe 17.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:04] [Render thread/INFO]: [P5A] 123.9s probe 18.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:05] [Render thread/INFO]: [P5A] 124.9s probe 19.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:06] [Render thread/INFO]: [P5A] 125.9s probe 20.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:07] [Render thread/INFO]: [P5A] 126.9s probe 21.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:08] [Render thread/INFO]: [P5A] 127.9s probe 22.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:09] [Render thread/INFO]: [P5A] 128.9s probe 23.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:10] [Render thread/INFO]: [P5A] 129.9s probe 24.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:11] [Render thread/INFO]: [P5A] 130.9s probe 25.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:12] [Render thread/INFO]: [P5A] 131.9s probe 26.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:13] [Render thread/INFO]: [P5A] 132.9s probe 27.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:14] [Render thread/INFO]: [P5A] 133.9s probe 28.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:15] [Render thread/INFO]: [P5A] 134.9s probe 29.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:16] [Render thread/INFO]: [P5A] 135.9s probe 30.00s: sodium scheduled 0 busy 0 total 10; chunk loads +0 (total 1400)
+[23:14:16] [Render thread/INFO]: [P5A] 135.9s probe done: 120 samples, 0 with busy >= total and scheduled > 0, max scheduled 0, chunk loads so far 1400
+[23:14:16] [Render thread/INFO]: [P5A] 135.9s save-all (saveEverything with flush)
+[23:14:16] [Server thread/INFO]: [P5A] BEFORE_SAVE at JVM uptime 147902 ms (flush true, force true)
+[23:14:17] [Server thread/INFO]: [P5A] AFTER_SAVE at JVM uptime 148006 ms (flush true, force true)
+[23:14:27] [Render thread/INFO]: [P5A] 146.0s opened the Stutter Doctor
+[23:14:27] [Server thread/INFO]: [P5A] BEFORE_SAVE at JVM uptime 157985 ms (flush false, force false)
+[23:14:27] [Server thread/INFO]: [P5A] AFTER_SAVE at JVM uptime 157998 ms (flush false, force false)
+[23:14:27] [Render thread/INFO]: [P5A] 146.9s stutter view: monitorOn true, recording true, live true, advice []
+[23:14:27] [Render thread/INFO]: [P5A] stutter summary (C4):
+**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 4096 MB heap
+[23:14:28] [IO-Worker-8/INFO]: [P5A] 147.0s screenshot stutter-C4-top: Saved screenshot as p5a-stutC4-stutter-C4-top.png
+[23:14:28] [Render thread/INFO]: [P5A] 147.5s scroll 300: true
+[23:14:29] [IO-Worker-8/INFO]: [P5A] 148.6s screenshot stutter-C4-mid: Saved screenshot as p5a-stutC4-stutter-C4-mid.png
+[23:14:30] [Render thread/INFO]: [P5A] 149.0s scroll 700: true
+[23:14:31] [IO-Worker-8/INFO]: [P5A] 150.1s screenshot stutter-C4-low: Saved screenshot as p5a-stutC4-stutter-C4-low.png
+[23:14:31] [Render thread/INFO]: [P5A] 150.6s scroll 5000: true
+[23:14:32] [IO-Worker-8/INFO]: [P5A] 151.7s screenshot stutter-C4-end: Saved screenshot as p5a-stutC4-stutter-C4-end.png
+[23:14:33] [Server thread/INFO]: [P5A] BEFORE_SAVE at JVM uptime 164299 ms (flush true, force false)
+[23:14:34] [Server thread/INFO]: [P5A] AFTER_SAVE at JVM uptime 165033 ms (flush true, force false)
+[23:14:34] [Render thread/INFO]: [P5A] 152.1s leaving the benchmark world
+[23:14:34] [Render thread/INFO]: Stutter Doctor: capture off; GC listener removed, sampler stopped
+[23:14:34] [RigTune worker/INFO]: Stutter Doctor: session saved (OK): 18 spikes in 131 s of gameplay, phase timing ok (per-frame baselines: packets 0.2 us, ticks 0.0 us, render 275.4 us; timers seen 1111111), GC offset 17.1 ms
+[23:14:38] [Render thread/INFO]: [P5A] 157.2s quitting

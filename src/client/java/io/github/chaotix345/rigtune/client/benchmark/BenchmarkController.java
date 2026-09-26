@@ -2,8 +2,10 @@ package io.github.chaotix345.rigtune.client.benchmark;
 
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.compat.OptionalMods;
+import io.github.chaotix345.rigtune.client.mixin.ClientPacketListenerAccessor;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
+import io.github.chaotix345.rigtune.client.stutter.StutterHooks;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen;
 import io.github.chaotix345.rigtune.core.apply.PropertiesConfigPatcher;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkHistory;
@@ -31,12 +33,12 @@ import net.minecraft.client.Options;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.Vec3;
 import org.jspecify.annotations.Nullable;
 
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -101,8 +103,14 @@ public final class BenchmarkController {
 	// record: the stored run (null when cancelled); before: the "before" of a Measure pair when this is its "after".
 	// restoreOk: every changed setting was put back. throttled: the run was stopped because a step was measured while
 	// the game was throttled (it counts as cancelled, so nothing is stored). settles: each step's settle, in order.
+	// serverLimit (v0.4, docs/v0.4/SPEC.md 8): the connected server's view distance when it capped the Tune's steps, else 0.
 	public record Outcome(BenchmarkRequest request, SessionResult session, boolean cancelled, @Nullable BenchmarkRecord record,
-			@Nullable BenchmarkRecord before, boolean restoreOk, boolean throttled, List<Settled> settles) {
+			@Nullable BenchmarkRecord before, boolean restoreOk, boolean throttled, List<Settled> settles, int serverLimit) {
+		public Outcome(BenchmarkRequest request, SessionResult session, boolean cancelled, @Nullable BenchmarkRecord record,
+				@Nullable BenchmarkRecord before, boolean restoreOk, boolean throttled, List<Settled> settles) {
+			this(request, session, cancelled, record, before, restoreOk, throttled, settles, 0);
+		}
+
 		public PlannerResult result() {
 			return session.renderDistance();
 		}
@@ -145,6 +153,7 @@ public final class BenchmarkController {
 	private final boolean wasFlying;
 	// The server's (or the options') render distance limit: chunks beyond it never arrive.
 	private final int chunkLimit;
+	private final int serverLimit;
 	private final int cameraChunkX;
 	private final int cameraChunkZ;
 	private final List<Settled> settles = new ArrayList<>();
@@ -180,8 +189,10 @@ public final class BenchmarkController {
 		this.targetFps = targetFps(minecraft, config);
 		Timing timing = config.timing();
 		long now = System.nanoTime();
-		this.chunkLimit = maxRenderDistance(options, minecraft.hasSingleplayerServer());
+		int serverRadius = serverRadius(minecraft);
+		this.chunkLimit = maxRenderDistance(optionMax(options), minecraft.hasSingleplayerServer(), serverRadius);
 		int maxRd = tuneMaxRenderDistance(request.scene(), original.renderDistance(), config.maxRenderDistance(), chunkLimit);
+		this.serverLimit = serverLimit(request, original.renderDistance(), config.maxRenderDistance(), optionMax(options), maxRd, serverRadius);
 		BenchmarkSession session = request.mode() == BenchmarkRequest.Mode.MEASURE
 				? BenchmarkSession.measure(original, targetFps, timing, now)
 				: BenchmarkSession.tune(original, new BenchmarkSession.TuneLimits(MIN_RD, maxRd, targetFps,
@@ -196,7 +207,7 @@ public final class BenchmarkController {
 		this.yaw = player.getYRot();
 		this.pitch = player.getXRot();
 		this.wasFlying = player.getAbilities().flying;
-		this.context = context(minecraft, original);
+		this.context = withModSet(context(minecraft, original));
 	}
 
 	// What else shapes the numbers, as the run starts (docs/v0.3/SPEC.md 8, the `context` of a benchmarks.json run).
@@ -206,8 +217,14 @@ public final class BenchmarkController {
 				BenchmarkRecord.Context.PROTOCOL);
 	}
 
+	// v0.4 (docs/v0.4/SPEC.md 7): the mod-set hash and the newest history.json entry, for the trend's change window and the
+	// "needs a rerun" marker.
+	private static BenchmarkRecord.Context withModSet(BenchmarkRecord.Context context) {
+		return context.withModSet(BenchmarkConditions.modSetHash(), BenchmarkConditions.journalCursor());
+	}
+
 	// The pack's file name from Iris' own settings file; null when unknown.
-	private static @Nullable String shaderPack() {
+	static @Nullable String shaderPack() {
 		try {
 			String pack = PropertiesConfigPatcher.readValues(FabricLoader.getInstance().getConfigDir().resolve("iris.properties")).get("shaderPack");
 			return pack == null || pack.isBlank() ? null : pack;
@@ -320,6 +337,7 @@ public final class BenchmarkController {
 		}
 		active = controller;
 		try {
+			StutterHooks.benchmarkStarted();
 			controller.prepare();
 			RigTune.LOGGER.info("Benchmark started: {} in {}, target {} FPS (uncapped), start {}", request.mode(), request.scene(),
 					controller.targetFps, controller.run.original());
@@ -481,6 +499,7 @@ public final class BenchmarkController {
 						listener.accept(step);
 					}
 					FrameTimes.start();
+					stutterSweep(true);
 					throttle.reset();
 					sweep = 0;
 					enter(Phase.SWEEP);
@@ -498,6 +517,7 @@ public final class BenchmarkController {
 						enter(Phase.SWEEP);
 					} else {
 						FrameStats stats = FrameTimes.stop();
+						stutterSweep(false);
 						RigTune.LOGGER.info("Benchmark {} {}: {} frames, avg {} FPS, 1% low {} FPS, client chunks {} (frame limit {}, {})",
 								step.kind(), step.knobs(), stats.frames(), Math.round(stats.avgFps()), Math.round(stats.onePercentLowFps()),
 								level.getChunkSource().getLoadedChunksCount(), minecraft.getFramerateLimitTracker().getFramerateLimit(),
@@ -516,6 +536,11 @@ public final class BenchmarkController {
 				}
 			}
 		}
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md 5): the Stutter Doctor records the benchmark's sweeps (and only those) into its analyser.
+	private static void stutterSweep(boolean recording) {
+		StutterHooks.benchmarkSweep(recording);
 	}
 
 	private void settled(SettleCheck.Result result) {
@@ -582,6 +607,7 @@ public final class BenchmarkController {
 				FrameTimes.stop();
 			}
 		});
+		StutterHooks.benchmarkFinished(!run.cancelled());
 		safely("show the HUD", () -> {
 			if (minecraft.gui.hud.isHidden() != hudWasHidden) {
 				minecraft.gui.hud.toggle();
@@ -657,7 +683,7 @@ public final class BenchmarkController {
 		SessionResult result = run.result();
 		boolean restoreOk = run.restoreOk() && environmentRestored;
 		if (run.cancelled()) {
-			return new Outcome(request, result, true, null, null, restoreOk, throttled, List.copyOf(settles));
+			return new Outcome(request, result, true, null, null, restoreOk, throttled, List.copyOf(settles), serverLimit);
 		}
 		BenchmarkHistory history = BenchmarkStore.history();
 		String phase = BenchmarkRecords.phase(request, history);
@@ -669,7 +695,7 @@ public final class BenchmarkController {
 		BenchmarkRecord record = BenchmarkRecords.of(result, request, phase, id, createdAt, rigtuneVersion(), HardwareProbe.minecraftVersion(), world,
 				context);
 		BenchmarkStore.add(record);
-		return new Outcome(request, result, false, record, before, restoreOk, false, List.copyOf(settles));
+		return new Outcome(request, result, false, record, before, restoreOk, false, List.copyOf(settles), serverLimit);
 	}
 
 	private static String rigtuneVersion() {
@@ -687,26 +713,34 @@ public final class BenchmarkController {
 		return options.simulationDistance().values() instanceof OptionInstance.IntRangeBase range ? Math.max(MIN_SD, range.minInclusive()) : MIN_SD;
 	}
 
-	static int maxRenderDistance(Options options, boolean integratedServer) {
-		int max = MAX_RD;
+	// The highest render distance the benchmark may use (the existing clamp, docs/v0.4/SPEC.md 8): the option's own
+	// maximum and, off the player's own world, the view distance the server sent (vanilla's
+	// Options.getEffectiveRenderDistance is the same min()). Read through ClientPacketListenerAccessor, not reflection.
+	public static int maxRenderDistance(Minecraft minecraft) {
+		return maxRenderDistance(optionMax(minecraft.options), minecraft.hasSingleplayerServer(), serverRadius(minecraft));
+	}
+
+	static int maxRenderDistance(int optionMax, boolean integratedServer, int serverRadius) {
+		return integratedServer || serverRadius <= 0 ? optionMax : Math.min(optionMax, serverRadius);
+	}
+
+	private static int optionMax(Options options) {
 		OptionInstance.ValueSet<Integer> values = options.renderDistance().values();
-		if (values instanceof OptionInstance.IntRangeBase range) {
-			max = Math.min(max, range.maxInclusive());
+		return values instanceof OptionInstance.IntRangeBase range ? Math.min(MAX_RD, range.maxInclusive()) : MAX_RD;
+	}
+
+	// The view distance the connected server sent; 0 when not connected or not known.
+	static int serverRadius(Minecraft minecraft) {
+		ClientPacketListener connection = minecraft.getConnection();
+		return connection instanceof ClientPacketListenerAccessor sent ? sent.rigtune$serverChunkRadius() : 0;
+	}
+
+	// The server's view distance when it lowered a Tune's highest step (the result screen then says so), else 0.
+	static int serverLimit(BenchmarkRequest request, int startRd, int configMax, int optionMax, int maxRd, int serverRadius) {
+		if (request.mode() != BenchmarkRequest.Mode.TUNE || serverRadius <= 0) {
+			return 0;
 		}
-		if (integratedServer) {
-			return max;
-		}
-		try {
-			Field field = Options.class.getDeclaredField("serverRenderDistance");
-			field.setAccessible(true);
-			int server = field.getInt(options);
-			if (server > 0) {
-				max = Math.min(max, server);
-			}
-		} catch (ReflectiveOperationException | RuntimeException e) {
-			RigTune.LOGGER.debug("Server render distance unavailable", e);
-		}
-		return max;
+		return maxRd < tuneMaxRenderDistance(request.scene(), startRd, configMax, optionMax) ? serverRadius : 0;
 	}
 
 	private boolean sectionsReady() {

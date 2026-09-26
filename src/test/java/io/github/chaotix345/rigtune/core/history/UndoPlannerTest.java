@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.core.history;
 
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
+import io.github.chaotix345.rigtune.core.apply.UnfinishedGroups.Rename;
 import io.github.chaotix345.rigtune.core.history.UndoPlan.Action;
 import io.github.chaotix345.rigtune.core.history.UndoPlanner.Result;
 import io.github.chaotix345.rigtune.core.TextChecks;
@@ -69,6 +70,12 @@ class UndoPlannerTest {
 		@Override
 		public Set<String> providedElsewhere() {
 			return elsewhere;
+		}
+
+		// Config-file ops map to settings keys by file, as the client's ConfigTargets do.
+		@Override
+		public String keyOf(Op op, String keyInFile) {
+			return op.path() != null && op.path().endsWith("sodium-options.json") ? "sodium." + keyInFile : null;
 		}
 
 		FakeState jar(String name, String modId, String... depends) {
@@ -1153,5 +1160,417 @@ class UndoPlannerTest {
 				List.of(enabled("x", "x.jar", "g"))));
 
 		assertEquals(Set.of("partly", "staged", "legacy"), UndoPlanner.undoable(entries));
+	}
+
+	// --- docs/v0.4/SPEC.md 2n (found by WS-H's undo-after-restart-040 profile phase), AC2n.1: two switches, each changing
+	// a vanilla key (set at once) and a Sodium key (staged for the helper), applied at a restart; then Undo last twice.
+
+	private static final Path SODIUM_OPTIONS = Path.of("config", "sodium-options.json").toAbsolutePath();
+	private static final String THREADS = "sodium.performance.chunk_builder_threads";
+	private static final String RD = "vanilla.renderDistance";
+
+	// Carries out a plan as UndoService does: vanilla values set now, the staged value as one patch op in pending.json,
+	// both journaled in an undo entry.
+	private void carryOut(String id, Result result, String undoOf, JournalChange... reverted) {
+		Op op = Op.patchJson(SODIUM_OPTIONS, Map.of("performance.chunk_builder_threads", result.script().staged().get(THREADS))).inGroup("g-" + id);
+		pending.add(op);
+		result.script().immediate().forEach(state.settings::put);
+		List<JournalChange> changes = new ArrayList<>();
+		for (JournalChange c : reverted) {
+			boolean staged = c.key().equals(THREADS);
+			changes.add(JournalChange.setting(c.key(), c.after(), c.before(), staged ? JournalChange.STAGED : JournalChange.APPLIED, staged ? op.id() : null)
+					.reverting(c.id()));
+		}
+		undoEntry(id, undoOf, changes.toArray(JournalChange[]::new));
+	}
+
+	// The value the helper leaves: the file's, then pending.json's ops for the key in order.
+	private String afterTheHelper() {
+		String value = state.settings.get(THREADS);
+		for (Op op : pending) {
+			if (op.patches() != null && op.patches().containsKey("performance.chunk_builder_threads")) {
+				value = op.patches().get("performance.chunk_builder_threads");
+			}
+		}
+		return value;
+	}
+
+	private JournalChange[] switches() {
+		JournalChange[] changes = {applied(RD, "12", "6"), applied(THREADS, "1", "2"), applied(RD, "6", "10"), applied(THREADS, "2", "4")};
+		entry("switch-a", changes[0], changes[1]);
+		entry("switch-b", changes[2], changes[3]);
+		state.settings.put(RD, "10");
+		state.settings.put(THREADS, "4");
+		return changes;
+	}
+
+	@Test
+	void undoLastTwiceInOneStartRevertsBothChangesOfAStagedKey() {
+		JournalChange[] c = switches();
+
+		Result undoB = last();
+		assertEquals(Map.of(THREADS, "2"), undoB.script().staged());
+		carryOut("undo-b", undoB, "switch-b", c[2], c[3]);
+
+		Result undoA = last();
+
+		assertEquals(List.of(), items(undoA, Action.SKIP), undoA.plan().toString());
+		assertEquals("switch-a", undoA.plan().undoOf());
+		assertEquals(Map.of(RD, "12"), undoA.script().immediate());
+		assertEquals(Map.of(THREADS, "1"), undoA.script().staged());
+		carryOut("undo-a", undoA, "switch-a", c[0], c[1]);
+		assertEquals("1", afterTheHelper());
+		assertEquals("12", state.settings.get(RD));
+	}
+
+	@Test
+	void undoAllFromTheSamePointStillRevertsTheChain() {
+		switches();
+
+		Result result = all();
+
+		assertEquals(List.of(), items(result, Action.SKIP));
+		assertEquals(Map.of(RD, "12"), result.script().immediate());
+		assertEquals(Map.of(THREADS, "1"), result.script().staged());
+	}
+
+	@Test
+	void aRealChangeSinceStillSkips() {
+		switches();
+		state.settings.put(THREADS, "7");
+
+		UndoPlan.Item skipped = only(last(), Action.SKIP);
+
+		assertEquals("You changed it since (it's now 7)", skipped.reason());
+	}
+
+	// A staged change the same plan discards isn't the value the key will have.
+	@Test
+	void aStagedChangeThisUndoDiscardsDoesNotCountAsTheCurrentValue() {
+		switches();
+		Op staged = Op.patchJson(SODIUM_OPTIONS, Map.of("performance.chunk_builder_threads", "6")).inGroup("g-c");
+		pending.add(staged);
+		entry("switch-c", JournalChange.setting(THREADS, "4", "6", JournalChange.STAGED, staged.id()));
+
+		Result result = all();
+
+		assertEquals(List.of(), items(result, Action.SKIP), result.plan().toString());
+		assertEquals(Set.of(staged.id()), result.script().discardOpIds());
+		assertEquals(Map.of(THREADS, "1"), result.script().staged());
+	}
+
+	// --- docs/v0.4/SPEC.md 2o, audit H5: a mod and the library it depends on are never undone in separate groups, so the
+	// helper (all-or-nothing per group) never leaves the mod active without its library.
+
+	private void sodiumThenSodiumExtra() {
+		state.jar("sodium.jar", "sodium").jar("sodium-extra.jar", "sodium-extra", "sodium");
+		entry("e1", enabled("sodium", "sodium.jar", "g1"));
+		entry("e2", enabled("sodium-extra", "sodium-extra.jar", "g2"));
+	}
+
+	@Test
+	void undoAllOfAModAndItsLibraryFromTwoAppliesIsOneGroup() {
+		sodiumThenSodiumExtra();
+
+		List<Op> ops = all().script().fileOps();
+
+		assertEquals(List.of("disable sodium-extra.jar", "disable sodium.jar"), ops.stream().map(UndoPlannerTest::describe).toList());
+		assertEquals(1, ops.stream().map(Op::group).distinct().count(), ops.toString());
+	}
+
+	@Test
+	void everyFileOpOfOneUndoIsOneGroup() {
+		state.jar("a.jar", "a").jar("b.jar", "b").jar("c-1.jar.disabled", "c").jar("c-2.jar", "c");
+		entry("e1", enabled("a", "a.jar", "g1"));
+		entry("e2", enabled("b", "b.jar", null));
+		entry("e3", disabled("c", "c-1.jar", "c-1.jar.disabled", "g3"), enabled("c", "c-2.jar", "g3"));
+
+		Result result = all();
+
+		assertEquals(4, result.script().fileOps().size());
+		assertEquals(1, result.script().fileOps().stream().map(Op::group).distinct().count(), result.script().fileOps().toString());
+		assertTrue(result.script().fileOps().stream().allMatch(op -> op.group() != null));
+	}
+
+	// The second of two Undo last in one start is safe only because the first one's disable runs at the same exit: it
+	// joins that group.
+	@Test
+	void aSecondUndoLastJoinsTheGroupOfTheStagedDisableItReliesOn() {
+		sodiumThenSodiumExtra();
+		Op first = Op.disableFile(MODS.resolve("sodium-extra.jar")).inGroup("u1");
+		pending.add(first);
+		undoEntry("u", "e2", JournalChange.file(JournalChange.DISABLE, "sodium-extra", "sodium-extra.jar", JournalChange.STAGED, first.id(), "u1")
+				.reverting(entries.get(1).changes().getFirst().id()));
+
+		Result result = last();
+
+		assertEquals("e1", result.plan().undoOf());
+		assertEquals(List.of("disable sodium.jar"), result.script().fileOps().stream().map(UndoPlannerTest::describe).toList());
+		assertEquals("u1", result.script().fileOps().getFirst().group());
+	}
+
+	@Test
+	void aSecondUndoLastThatReliesOnNothingStagedGetsItsOwnGroup() {
+		state.jar("a.jar", "a").jar("b.jar", "b");
+		JournalChange b = enabled("b", "b.jar", "g2");
+		entry("e1", enabled("a", "a.jar", "g1"));
+		entry("e2", b);
+		Op first = Op.disableFile(MODS.resolve("b.jar")).inGroup("u1");
+		pending.add(first);
+		undoEntry("u", "e2", JournalChange.file(JournalChange.DISABLE, "b", "b.jar", JournalChange.STAGED, first.id(), "u1").reverting(b.id()));
+
+		Result result = last();
+
+		assertEquals(List.of("disable a.jar"), result.script().fileOps().stream().map(UndoPlannerTest::describe).toList());
+		assertTrue(!"u1".equals(result.script().fileOps().getFirst().group()));
+	}
+
+	// A re-enable that needs a library an earlier undo re-enables joins that undo's group too.
+	@Test
+	void aReEnableThatReliesOnAStagedReEnableJoinsItsGroup() {
+		state.jar("lib.jar.disabled", "lib").jar("app.jar.disabled", "app", "lib");
+		JournalChange lib = disabled("lib", "lib.jar", "lib.jar.disabled", "g1");
+		entry("e1", disabled("app", "app.jar", "app.jar.disabled", "g2"));
+		entry("e2", lib);
+		Op back = Op.enableFile(MODS.resolve("lib.jar.disabled"), MODS.resolve("lib.jar")).withModId("lib").inGroup("u1");
+		pending.add(back);
+		undoEntry("u", "e2", JournalChange.file(JournalChange.ENABLE, "lib", "lib.jar", JournalChange.STAGED, back.id(), "u1").reverting(lib.id()));
+
+		Result result = last();
+
+		assertEquals(List.of("enable app.jar.disabled -> app.jar (app)"), result.script().fileOps().stream().map(UndoPlannerTest::describe).toList());
+		assertEquals("u1", result.script().fileOps().getFirst().group());
+	}
+
+	// Joining an ungrouped staged op (or two staged groups) isn't possible, so the undo waits for the restart instead.
+	@Test
+	void anUndoThatReliesOnAnUngroupedStagedChangeWaitsForTheRestart() {
+		sodiumThenSodiumExtra();
+		Op disable = Op.disableFile(MODS.resolve("sodium-extra.jar"));
+		pending.add(disable);
+		entry("e3", JournalChange.file(JournalChange.DISABLE, "sodium-extra", "sodium-extra.jar", JournalChange.STAGED, disable.id(), null));
+
+		Result result = entryOf("e1");
+
+		UndoPlan.Item item = only(result, Action.SKIP);
+		assertEquals(UndoPlanner.WAITS_STAGED, item.reason());
+		assertTrue(result.script().fileOps().isEmpty());
+		assertTrue(items(result, Action.REVERT).isEmpty());
+	}
+
+	@Test
+	void anUndoThatReliesOnTwoStagedGroupsWaitsForTheRestart() {
+		state.jar("lib.jar", "lib").jar("app1.jar", "app1", "lib").jar("app2.jar", "app2", "lib");
+		entry("e1", enabled("lib", "lib.jar", "g1"));
+		entry("e2", enabled("app1", "app1.jar", "g2"));
+		entry("e3", enabled("app2", "app2.jar", "g3"));
+		Op off1 = Op.disableFile(MODS.resolve("app1.jar")).inGroup("u1");
+		Op off2 = Op.disableFile(MODS.resolve("app2.jar")).inGroup("u2");
+		pending.add(off1);
+		pending.add(off2);
+		undoEntry("u1", "e2", JournalChange.file(JournalChange.DISABLE, "app1", "app1.jar", JournalChange.STAGED, off1.id(), "u1")
+				.reverting(entries.get(1).changes().getFirst().id()));
+		undoEntry("u2", "e3", JournalChange.file(JournalChange.DISABLE, "app2", "app2.jar", JournalChange.STAGED, off2.id(), "u2")
+				.reverting(entries.get(2).changes().getFirst().id()));
+
+		Result result = last();
+
+		assertEquals("e1", result.plan().undoOf());
+		assertEquals(UndoPlanner.WAITS_STAGED, only(result, Action.SKIP).reason());
+		assertTrue(result.script().fileOps().isEmpty());
+	}
+
+	// --- audit M3: a second Undo last in one start stops at the entry the first one left, whose file comes back only at
+	// the restart, instead of undoing an older, unrelated entry; and it never says the file is gone.
+
+	// C changed render distance; A added X; B updated X (x-1.jar -> x-2.jar); the first Undo last (of B) is staged.
+	private void updateUndoneInThisStart(JournalChange... alsoInA) {
+		state.jar("x-2.jar", "x").jar("x-1.jar.disabled", "x");
+		state.settings.put("vanilla.renderDistance", "16");
+		entry("c", applied("vanilla.renderDistance", "12", "16"));
+		List<JournalChange> a = new ArrayList<>(List.of(enabled("x", "x-1.jar", "g1")));
+		a.addAll(List.of(alsoInA));
+		entry("a", a.toArray(JournalChange[]::new));
+		JournalChange disable1 = disabled("x", "x-1.jar", "x-1.jar.disabled", "g2");
+		JournalChange enable2 = enabled("x", "x-2.jar", "g2");
+		entry("b", disable1, enable2);
+		Op off = Op.disableFile(MODS.resolve("x-2.jar")).inGroup("u1");
+		Op back = Op.enableFile(MODS.resolve("x-1.jar.disabled"), MODS.resolve("x-1.jar")).withModId("x").inGroup("u1");
+		pending.add(off);
+		pending.add(back);
+		undoEntry("u", "b", JournalChange.file(JournalChange.DISABLE, "x", "x-2.jar", JournalChange.STAGED, off.id(), "u1").reverting(enable2.id()),
+				JournalChange.file(JournalChange.ENABLE, "x", "x-1.jar", JournalChange.STAGED, back.id(), "u1").reverting(disable1.id()));
+	}
+
+	@Test
+	void aSecondUndoLastStopsAtTheEntryWhoseFileTheFirstOneBringsBack() {
+		updateUndoneInThisStart();
+
+		Result result = last();
+
+		assertEquals("a", result.plan().undoOf());
+		UndoPlan.Item item = only(result, Action.SKIP);
+		assertEquals(String.format(UndoPlanner.WAITS_RESTART, "x-1.jar"), item.reason());
+		assertTrue(result.script().fileOps().isEmpty());
+		assertTrue(result.script().immediate().isEmpty());
+	}
+
+	@Test
+	void undoAllFromThatPointSaysTheFileWaitsForTheRestartNotThatItIsGone() {
+		updateUndoneInThisStart();
+
+		Result result = all();
+
+		assertEquals(String.format(UndoPlanner.WAITS_RESTART, "x-1.jar"), only(result, Action.SKIP).reason());
+		assertEquals(Map.of("vanilla.renderDistance", "12"), result.script().immediate());
+		assertTrue(result.script().fileOps().isEmpty());
+	}
+
+	// Undoing A's setting now and its mod never (Undo last passes over an entry once it was undone) would leave it half
+	// undone: the whole entry waits.
+	@Test
+	void anEntryPartlyWaitingForTheRestartIsNotPartlyUndone() {
+		updateUndoneInThisStart(applied("vanilla.simulationDistance", "8", "6"));
+		state.settings.put("vanilla.simulationDistance", "6");
+
+		Result result = last();
+
+		assertEquals("a", result.plan().undoOf());
+		assertEquals(2, items(result, Action.SKIP).size(), result.plan().toString());
+		assertTrue(result.plan().isEmpty());
+		assertTrue(result.script().immediate().isEmpty() && result.script().reverts().isEmpty(), result.script().toString());
+		assertTrue(items(result, Action.SKIP).stream().anyMatch(i -> UndoPlanner.WAITS_ENTRY.equals(i.reason())), result.plan().toString());
+	}
+
+	@Test
+	void aFileThatIsReallyGoneStillSaysSo() {
+		entry("e1", enabled("x", "x-1.jar", "g1"));
+
+		assertEquals(String.format(UndoPlanner.FILE_GONE, "x-1.jar"), only(all(), Action.SKIP).reason());
+	}
+
+	// --- audit M2: an update the helper left half done at the last exit (x-1.jar disabled, x-2.jar still a download) is
+	// never dropped by Undo: that would leave the mod disabled and its replacement never enabled.
+
+	private JournalChange[] halfDoneUpdate() {
+		state.jar("x-1.jar.disabled", "x").jar("x-2.jar.rigtune-pending", "x");
+		state.settings.put("vanilla.renderDistance", "16");
+		entry("c", applied("vanilla.renderDistance", "12", "16"));
+		List<Op> group = PendingActions.group(Op.disableFile(MODS.resolve("x-1.jar")).withAttempts(1),
+				Op.enableFile(MODS.resolve("x-2.jar.rigtune-pending"), MODS.resolve("x-2.jar")).withModId("x").withAttempts(1));
+		pending.addAll(group);
+		JournalChange off = JournalChange.file(JournalChange.DISABLE, "x", "x-1.jar", JournalChange.STAGED, group.get(0).id(), group.get(0).group());
+		JournalChange on = JournalChange.file(JournalChange.ENABLE, "x", "x-2.jar", JournalChange.STAGED, group.get(1).id(), group.get(1).group());
+		entry("e1", off, on);
+		return new JournalChange[]{off, on};
+	}
+
+	@Test
+	void undoLastOfAHalfDoneUpdateWaitsForTheRestartInsteadOfDroppingIt() {
+		halfDoneUpdate();
+
+		Result result = last();
+
+		assertEquals("e1", result.plan().undoOf());
+		assertEquals(2, items(result, Action.SKIP).size(), result.plan().toString());
+		items(result, Action.SKIP).forEach(i -> assertEquals(UndoPlanner.WAITS_PARTLY, i.reason()));
+		assertTrue(result.script().discardOpIds().isEmpty());
+		assertTrue(result.script().immediate().isEmpty());
+	}
+
+	// review-8 AH-1: the same update after a helper killed between its renames: no attempt was counted, and only the
+	// helper's record shows the disable is done. Undo last and Undo this wait for it, and the recheck at confirm too.
+	@Test
+	void anUpdateAHelperWasKilledInWaitsByTheHelpersRecord() {
+		state.jar("x-1.jar.disabled", "x").jar("x-2.jar.rigtune-pending", "x");
+		List<Op> group = PendingActions.group(Op.disableFile(MODS.resolve("x-1.jar")),
+				Op.enableFile(MODS.resolve("x-2.jar.rigtune-pending"), MODS.resolve("x-2.jar")).withModId("x"));
+		pending.addAll(group);
+		entry("e1", JournalChange.file(JournalChange.DISABLE, "x", "x-1.jar", JournalChange.STAGED, group.get(0).id(), group.get(0).group()),
+				JournalChange.file(JournalChange.ENABLE, "x", "x-2.jar", JournalChange.STAGED, group.get(1).id(), group.get(1).group()));
+		List<Rename> record = List.of(new Rename(group.get(0).id(), MODS.resolve("x-1.jar").toString(), MODS.resolve("x-1.jar.disabled").toString()));
+
+		Result withoutRecord = checked(UndoPlanner.plan(entries, pending, state, false));
+		Result last = checked(UndoPlanner.plan(entries, pending, record, state, false));
+		Result entry = checked(UndoPlanner.planEntry(entries, pending, record, state, "e1"));
+		Result recheck = checked(UndoPlanner.recheck(withoutRecord.plan(), entries, pending, record, state));
+
+		assertEquals(Set.copyOf(group.stream().map(Op::id).toList()), withoutRecord.script().discardOpIds(), "an old .disabled copy alone isn't enough");
+		for (Result result : List.of(last, entry, recheck)) {
+			assertEquals(2, items(result, Action.SKIP).size(), result.plan().toString());
+			items(result, Action.SKIP).forEach(i -> assertEquals(UndoPlanner.WAITS_PARTLY, i.reason()));
+			assertTrue(result.script().discardOpIds().isEmpty(), result.script().toString());
+		}
+	}
+
+	@Test
+	void undoAllKeepsAHalfDoneUpdateAndUndoesTheRest() {
+		halfDoneUpdate();
+
+		Result result = all();
+
+		assertTrue(result.script().discardOpIds().isEmpty(), result.script().toString());
+		assertEquals(Map.of("vanilla.renderDistance", "12"), result.script().immediate());
+		assertEquals(2, items(result, Action.SKIP).size());
+	}
+
+	@Test
+	void aStagedUpdateTheHelperHasNotStartedIsStillCancelled() {
+		halfDoneUpdate();
+		state.files.remove("x-1.jar.disabled");
+		state.jar("x-1.jar", "x");
+
+		Result result = last();
+
+		assertEquals(Set.copyOf(pending.stream().map(Op::id).toList()), result.script().discardOpIds());
+	}
+
+	@Test
+	void aHalfDoneUpdateWhoseJarGotANumberedDisabledNameWaitsToo() {
+		halfDoneUpdate();
+		state.files.remove("x-1.jar.disabled");
+		state.jar("x-1.jar.disabled.1", "x");
+
+		assertTrue(last().script().discardOpIds().isEmpty());
+	}
+
+	// An old x-1.jar.disabled next to a staged update the helper never ran (x-1.jar removed by hand) isn't half done.
+	@Test
+	void aStagedUpdateTheHelperNeverRanIsCancelledEvenNextToAnOldDisabledCopy() {
+		state.jar("x-1.jar.disabled", "x").jar("x-2.jar.rigtune-pending", "x");
+		List<Op> group = PendingActions.group(Op.disableFile(MODS.resolve("x-1.jar")),
+				Op.enableFile(MODS.resolve("x-2.jar.rigtune-pending"), MODS.resolve("x-2.jar")).withModId("x"));
+		pending.addAll(group);
+		entry("e1", JournalChange.file(JournalChange.DISABLE, "x", "x-1.jar", JournalChange.STAGED, group.get(0).id(), group.get(0).group()),
+				JournalChange.file(JournalChange.ENABLE, "x", "x-2.jar", JournalChange.STAGED, group.get(1).id(), group.get(1).group()));
+
+		assertEquals(Set.copyOf(pending.stream().map(Op::id).toList()), last().script().discardOpIds());
+	}
+
+	@Test
+	void undoThisOnAnEntryPartlyWaitingForTheRestartUndoesNoneOfIt() {
+		updateUndoneInThisStart(applied("vanilla.simulationDistance", "8", "6"));
+		state.settings.put("vanilla.simulationDistance", "6");
+
+		Result result = entryOf("a");
+
+		assertTrue(result.plan().isEmpty(), result.plan().toString());
+		assertTrue(result.script().immediate().isEmpty() && result.script().reverts().isEmpty(), result.script().toString());
+	}
+
+	// The confirmed plan is re-planned: if something staged since makes part of it wait, none of it is carried out.
+	@Test
+	void recheckOfAPlanThatNowWaitsCarriesOutNothing() {
+		state.jar("x-1.jar", "x");
+		state.settings.put("vanilla.simulationDistance", "6");
+		entry("a", enabled("x", "x-1.jar", "g1"), applied("vanilla.simulationDistance", "8", "6"));
+		UndoPlan shown = last().plan();
+		assertEquals(2, items(last(), Action.REVERT).size());
+		pending.add(Op.disableFile(MODS.resolve("x-1.jar")).inGroup("u1"));
+
+		Result result = checked(UndoPlanner.recheck(shown, entries, pending, state));
+
+		assertTrue(result.script().immediate().isEmpty() && result.script().fileOps().isEmpty() && result.script().reverts().isEmpty(),
+				result.script().toString());
 	}
 }

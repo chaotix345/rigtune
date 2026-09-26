@@ -2,7 +2,7 @@
 
 Checks, in a real production Minecraft client, that an installed RigTune finds its own update on Modrinth, downloads
 it, and that the post-exit helper swaps the jars; then starts the new version on the same instance and checks that it
-reads the old version's files (SPEC item 5). The main scenarios run the unmodified released v0.1.0 and v0.2.0 jars. Nothing here
+reads the old version's files (SPEC item 5). The main scenarios run the unmodified released v0.1.0, v0.2.0 and v0.3.0 jars. Nothing here
 is part of `./gradlew build` or the shipped jar.
 
 ```sh
@@ -33,6 +33,116 @@ Two more modes (Phase 5):
   `mod-apply` (one Apply: add `e2e-added`, disable `e2e-disable-me`; quit; the helper applies both), `mod-undo` (Undo
   last apply: the plan, a screenshot of the confirmation screen, `undo(plan)`; quit; the helper reverts both),
   `mod-check` (the mods as before, nothing left to undo).
+
+### v0.4 runs (docs/v0.4/plans/ws-h.md)
+
+SPEC item 3 (AC3.1-AC3.3): the self-update from every released version, undo after a restart (with two profile
+switches, plan review P-H1), the downgrade to 0.3.0 (AC3.2), and the released-jar compatibility harness (AC3.3, in CI).
+All on 26.2 (vanilla 26.3 crashes natively on most local launches). Released jars; the harness refuses a jar that
+claims a released version with other bytes (`RELEASED` in `self_update_e2e.py`; CI's "Compile the E2E drivers" step
+pins the same three, compiles the self-update driver against each and the downgrade driver against 0.3.0):
+
+```sh
+gh release download v0.1.0 -p 'rigtune-0.1.0.jar'         # 8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950
+gh release download v0.2.0 -p 'rigtune-0.2.0+mc26.2.jar'  # 67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9
+gh release download v0.3.0 -p 'rigtune-0.3.0+mc26.2.jar'  # 5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9
+```
+
+The new jar is the release candidate's `./gradlew :26.2:jar` output, copied into the scratch folder first: the fake
+Modrinth serves the file where it is, so a rebuild during a run would change it. Hold the game-test lock once per pair
+of runs (plan review X-L3), with the harness's own locking off (`--lock none`), and release it in the same command:
+
+```sh
+export JAVA_HOME="C:/Dev/Tools/jdk/jdk-25.0.4.1+1"
+S=<scratch folder>; J=$S/jars; NEW=$J/rigtune-0.4.0+mc26.2.jar; E=docs/smoke/self-update
+LOCK=C:/Dev/Worktrees/.gametest-lock; WT=<this worktree, forward slashes>
+run() { python tools/e2e/self_update_e2e.py --lock none --work $S/work --evidence $E/$1 --name "$@"; }
+pair() {  # pair "<run args>" "<run args>": one lock hold, released pass or fail, only if this worktree took it
+  mkdir $LOCK || return 3
+  printf "agent: <you>\nworktree: %s\nstarted: %s\n" "$WT" "$(date -Is)" > $LOCK/owner.txt
+  eval "run $1"; r1=$?; eval "run $2"; r2=$?
+  grep -qx "worktree: $WT" $LOCK/owner.txt && { rm -f $LOCK/owner.txt; rmdir $LOCK; }
+  return $(( r1 > r2 ? r1 : r2 ))
+}
+O3="--old-jar $J/rigtune-0.3.0+mc26.2.jar --old-sha256 5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9"
+O2="--old-jar $J/rigtune-0.2.0+mc26.2.jar --old-sha256 67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9"
+O1="--old-jar $J/rigtune-0.1.0.jar --old-sha256 8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950"
+
+pair "final-v030-to-040 $O3 --new-jar $NEW --expect-history auto" \
+     "final-v020-to-040 $O2 --new-jar $NEW --expect-history auto"
+pair "final-v010-to-040 $O1 --new-jar $NEW --legacy-disable --expect-history auto" \
+     "final-v010-seeded-to-040 $O1 --new-jar $NEW --seed tools/e2e/seeds/v010-dh --expect-history auto"
+pair "undo-after-restart-040 --scenario undo --new-jar $NEW --profile-switch profile --profile-names 'Battery,Max FPS'" \
+     "downgrade-040-to-030 --scenario downgrade $O3 --new-jar $NEW"
+python tools/e2e/compat030.py --old-jar $J/rigtune-0.3.0+mc26.2.jar   # no client; CI runs it on every push too
+```
+
+Before the final runs: the `v040-written` sets must be the real ones (below). `UndoDriver.switchProfile` calls WS-P's
+API (`controller.switchProfile(id)` for the profile whose shown name matches, as the Profiles screen's Switch does; P5-C).
+On the E2E instance the Battery and Max FPS templates change only `vanilla.*` keys, so the Phase 5 finals also run
+`--profile-switch settings` (whose switches stage the same Sodium key twice) as the staged-key proof of SPEC 2n.
+
+- `--expect-history auto` takes the check from the old jar's version (`e2e_checks.history_expectation`): 0.1.x →
+  `legacy-import`, 0.2.0 and later → `own-update` (0.2.0 and 0.3.0 journal their own update as one `apply` entry that
+  the new version must read as it is; with `--legacy-disable` that entry also holds the test mod's disable). An
+  explicit `legacy-import`/`own-update` that doesn't fit the old version is refused, so the v0.3 commands still run.
+- Each run's `RESULT.md` names its jars (version, sha256). The dry runs on 0.4.0-dev builds are in
+  `docs/smoke/self-update/dev-*-040*` (counts in docs/v0.4/design/ws-h.md).
+
+**"Written by 0.4" sets** (`src/test/resources/v040-written/`, plan review H-M1): each feature workstream commits the
+files its own tests write, as `<set>/` (ws-a, ws-p, ws-b, ws-s, ws-w, ws-f; names as in `config/rigtune/`); until then
+`placeholder/<set>/` (hand-written in SPEC C1 shapes; README there) stands in. `written.py` composes them into one
+`config/rigtune/` (history.json entries merged by `at`; `${INSTANCE}` paths filled in) and derives what the instance
+must hold to match (a jar for each staged download and applied file change, `options.txt` values of applied vanilla
+changes). Every report names the sets and marks placeholders.
+
+**Downgrade (`--scenario downgrade`, AC3.2).** A fresh instance with the released 0.3.0 (`--old-jar`), fabric-api, the
+composed files and a test mod `e2e-downgrade-off`; the fake Modrinth knows only 0.3.0, so nothing offers an update.
+- `downgrade-old` (0.3.0, driver `src/e2eDowngrade` compiled against the released jar): records and screenshots
+  History, Undo last (plan, undo screen, its Undo button), then Apply of "disable e2e-downgrade-off"; quit, the 0.3.0
+  helper applies it and 0.4's staged op. Checks: no RigTune ERROR, stack trace or "written by a newer RigTune" in the
+  session's log (rotated `logs/*.log.gz` included); History lists every entry 0.4 wrote (state OK, no unknown kind);
+  Undo last reverted the newest undoable entry and 0.3.0 journaled it; 0.3.0's own Apply staged, applied and
+  journaled; 0.4's staged ops (with `projectId`) applied by 0.3.0's helper; the 0.4-only files (profiles, stutter,
+  server-limits, awareness, startup-times) byte-identical; no `.bad`, no crash.
+- `downgrade-new`: 0.3.0's jar is removed and 0.4 put back (as a player reinstalls it). Checks: 0.4 loads from mods/,
+  no RigTune error in the log, History lists every entry, `profiles.json` still labels every switch entry 0.3.0 kept,
+  and 0.4 still holds every seeded item of its own files (`written.KEPT`; it may add more); no `.bad`, no crash.
+
+**Released-jar compatibility harness (`compat030.py`, AC3.3).** No client: `tools/e2e/compat/Compat030.java` runs as a
+single-file program compiled against the released 0.3.0 jar, Gson 2.14.0 (what MC 26.2/26.3 ship), fabric-loader and
+slf4j from the Gradle cache, never these sources, on the composed sets and the bundled rules-v2.json: 0.3.0's Journal
+reads history.json with state OK and the same entries; HistoryModel lists every entry with no unknown kind;
+UndoPlanner's Undo this on the profile-switch entry (from profiles.json) reverts each change, and Undo last/all plan;
+BenchmarkHistory loads benchmarks.json without a `.bad`; PendingActions keeps each op's type, id and mod id; ClientSettings
+reads settings.json as written; RulesLoader gets the same counts with and without 0.4's new sections; nothing changes
+on disk. CI runs it in the "Compile the E2E drivers" step. A formatVersion 2 history.json or an unknown op type fails it.
+
+**Profiles in undo-after-restart (`--profile-switch`, plan review P-H1).** After the per-entry case, on an instance of
+its own with Sodium (from the Gradle cache), so staged config keys are covered:
+- `profile-apply`: two switches in one start (each an ordinary Apply of setting changes: one `apply` entry, labelled by
+  WS-P in `profiles.json`); History screenshot; quit, the helper writes the staged keys. Checks: two new `apply` entries
+  of `vanilla.*`/`sodium.*` setting changes, each `APPLIED` or (replaced by the later switch's same-key op, 0.4's P-H1
+  fix) `DISCARDED`; each key's applied changes chain from its value before the first switch (the driver reads every
+  setting first) to the last switch's value; the files (`options.txt`, `config/sodium-options.json`) hold it; every op
+  `OK`; with `profile`, both labels.
+- `profile-undo` + `profile-check`: Undo last twice in the next start (the newer switch, then the older), quit and the
+  helper, then a check start. `profile-undo-all` + `profile-check-all`: the same from a copy of the instance taken after
+  `profile-apply`, with Undo all. Checks: the plans' `undoOf` in that order, no problem; every applied change of both
+  switches `REVERTED` by `APPLIED` undo entries; every key back at its value before the first switch in the files and,
+  in the check start, in the game; nothing left to undo on either entry; statuses and mods unchanged; labels kept.
+- SPEC amendment 2n (WS-A; AC2n.2), found here: the second Undo last skipped the Sodium key the first one staged
+  (UndoPlanner compared with the file, not the pending staged value), so it ended at the first switch's value (first
+  seen in `docs/smoke/self-update/dev-undo-after-restart-040-profiles`). Fixed in 7794d2cd; `profile-undo` now counts
+  in the verdict like every phase.
+- `--profile-switch settings` (usable now): two stand-in switches (`PROFILE_SWITCHES`: render distance, FPS cap, and
+  Sodium's chunk builder threads staged by both, fog occlusion by the first) through `controller.apply`, and the checks
+  also want exactly those keys and values.
+- `--profile-switch profile --profile-names 'Battery,Max FPS'` (Phase 5; the default names): `UndoDriver.switchProfile`
+  switches the way the Profiles screen does and returns its status message (CI's `compileE2eUndoJava` guards the API);
+  `e2e_checks.profile_labels` reads WS-P's `profiles.json` `switches: [{entryId, templateId, name}]`. The checks take keys
+  and values from the journal, so a real profile's keys need no list; a key outside `vanilla.*`/`sodium.*` (DH, Iris:
+  not installed on the E2E instance) fails with its name.
 
 ### v0.3 runs (docs/v0.3/plans/ws-h.md)
 
@@ -84,11 +194,14 @@ old jar is passed (`compileE2eJava -Pe2e.oldJar=<jar>` works for both), so no `-
 | `e2e_env.py` | keytool certificate (SANs for the three hosts) and PKCS12 truststore, the `jdk.net.hosts.file`, the JVM arguments, the catalog. |
 | `src/e2e/` (Gradle source set `e2e`) | The driver mod, compiled against the released old jar (`-Pe2e.oldJar`: v0.1.0 or v0.2.0), never against the current sources. Phase `update`: title screen → goal QUALITY → wait for "Update RigTune" → apply only it → wait until it's in pending.json (copied out: the helper deletes it) → quit through `Minecraft.stop()`, like the Quit button. Phase `verify`: screenshots of the title screen (apply toast) and the RigTune screen, the loaded version, the goal, whether an update is still offered → quit. |
 | `src/e2eUndo/` (Gradle source set `e2eUndo`) | The undo driver, compiled against this repository's sources (0.2's `undoPlan`/`undo(plan)` and `UndoScreen`). The test mods are minimal Fabric mods (a `fabric.mod.json` only) made by `e2e_env.test_mod_jar`. |
-| `:<mc>:e2eClient` (build.gradle) | Loom `ClientProductionRunTask` with `runDir` = the scratch instance and `mods` = the driver jar only (`-Pe2e.driver=undo` picks the undo driver). Loom's default would add this project's jar via `-Dfabric.addMods` (two RigTunes, and one outside mods/ that can't be updated); here RigTune loads only from the instance's `mods/`. |
+| `src/e2eDowngrade/` (Gradle source set `e2eDowngrade`) | The downgrade driver (v0.4 AC3.2), compiled against the released 0.3.0 jar (`-Pe2e.oldJar`) like the self-update driver: History, Undo last and an Apply on 0.3.0, History on 0.4. |
+| `:<mc>:e2eClient` (build.gradle) | Loom `ClientProductionRunTask` with `runDir` = the scratch instance and `mods` = the driver jar only (`-Pe2e.driver=undo` or `=downgrade` picks that driver). Loom's default would add this project's jar via `-Dfabric.addMods` (two RigTunes, and one outside mods/ that can't be updated); here RigTune loads only from the instance's `mods/`. |
 | `self_update_e2e.py` | Checks it can run (Windows, `pwsh`, the lock's folder), makes a fresh instance (`mods/` = the old jar + fabric-api from the Gradle cache, a minimal `options.txt`) and the TLS material, hosts file and catalog, builds the driver, then takes the game-test lock, starts the server, runs the probe, launches phase `update`, records the helper's command line while it runs, waits for it, checks, launches phase `verify`, checks, stops the server, makes sure none of its clients remain, releases the lock, and writes the evidence (and the fixtures, if the run passed). |
 | `e2e_checks.py` | The assertions (below). |
 | `fixtures.py` | Replaces the instance path with `${INSTANCE}` in captured files; templates and instantiates seeds. |
 | `make_seed.py` | Makes a seed (H-M2) from a real instance's RigTune files, reading only. |
+| `written.py` | Composes the "written by 0.4" fixture sets (`src/test/resources/v040-written/`, placeholders until the features land) into an instance, and derives the jars and options their journal implies (v0.4 H-M1). |
+| `compat030.py`, `compat/Compat030.java` | The released-jar compatibility harness (v0.4 AC3.3): the composed sets read by the released 0.3.0 jar's own classes; no client, run in CI. |
 
 Only JVM properties redirect the client (v0.1.0 has no base-URL setting):
 `-Djdk.net.hosts.file=<hosts>` (the three hosts, `localhost` and the machine name → 127.0.0.1; any other name fails to

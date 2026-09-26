@@ -69,6 +69,8 @@ class LauncherScenarioTest {
 	private static Map<LauncherInfo, String> launchers() {
 		Map<LauncherInfo, String> expected = new LinkedHashMap<>();
 		expected.put(LauncherInfo.of(Launcher.PRISM), "rigtune.launcher.steps.prism");
+		expected.put(LauncherInfo.of(Launcher.MULTIMC), "rigtune.launcher.steps.multimc");
+		expected.put(LauncherInfo.of(Launcher.GDLAUNCHER), "rigtune.launcher.steps.gdlauncher");
 		expected.put(LauncherInfo.of(Launcher.MODRINTH_APP), "rigtune.launcher.steps.modrinth_app");
 		expected.put(LauncherInfo.of(Launcher.ATLAUNCHER), "rigtune.launcher.steps.atlauncher");
 		expected.put(LauncherInfo.of(Launcher.OFFICIAL), "rigtune.launcher.steps.official");
@@ -131,15 +133,18 @@ class LauncherScenarioTest {
 		keys.put("rigtune.launcher.advice", 2);
 		keys.put("rigtune.launcher.header.cpu", 2);
 		keys.put("rigtune.launcher.header.memory", 3);
+		keys.put("rigtune.launcher.xmx_in_java_args", 1);
 		for (Launcher launcher : Launcher.values()) {
 			for (Boolean override : new Boolean[]{null, true, false}) {
 				LauncherInfo info = new LauncherInfo(launcher, override);
 				if (info.known()) {
 					keys.put(info.nameKey(), 0);
 					keys.put(info.stepsKey(), 0);
+					keys.put(info.jvmStepsKey(), 0);
 				} else {
 					assertNull(info.nameKey());
 					assertNull(info.stepsKey());
+					assertNull(info.jvmStepsKey());
 				}
 			}
 		}
@@ -151,5 +156,28 @@ class LauncherScenarioTest {
 			launcherKeys.remove(key.getKey());
 		}
 		assertTrue(launcherKeys.isEmpty(), "unused rigtune.launcher keys: " + launcherKeys);
+	}
+
+	// docs/v0.4/SPEC.md 2g and "Launcher steps": the launchers' own labels (docs/research/v0.4/launcher-steps.md, read from
+	// their source or official help): MultiMC's and GDLauncher's names and memory steps, CurseForge's radio button, and
+	// Mojang's own path for the official launcher.
+	@Test
+	void theStepsUseTheLaunchersOwnLabels() throws IOException {
+		JsonObject lang;
+		try (InputStream in = LauncherScenarioTest.class.getResourceAsStream("/assets/rigtune/lang/en_us.json")) {
+			lang = JsonParser.parseReader(new InputStreamReader(in, StandardCharsets.UTF_8)).getAsJsonObject();
+		}
+		Map<String, String> expected = new LinkedHashMap<>();
+		expected.put("rigtune.launcher.name.multimc", "MultiMC");
+		expected.put("rigtune.launcher.name.gdlauncher", "GDLauncher");
+		expected.put("rigtune.launcher.steps.multimc", "right-click this instance → Edit Instance → Settings → Java → tick Memory → Maximum memory allocation.");
+		expected.put("rigtune.launcher.steps.gdlauncher", "this instance → Settings tab → turn on Instance Java Memory → set the slider.");
+		expected.put("rigtune.launcher.steps.curseforge.pack",
+				"My Modpacks → this pack's three-dot menu → Profile Options → Memory Settings → choose Custom RAM Allocation → set the slider.");
+		expected.put("rigtune.launcher.steps.official",
+				"Installations → select this installation → More Options → JVM Arguments: change the number in -Xmx (-Xmx4G is 4 GB), then Save.");
+		expected.forEach((key, text) -> assertEquals(text, lang.has(key) ? lang.get(key).getAsString() : null, key));
+		assertEquals("MultiMC", Launcher.MULTIMC.displayName());
+		assertEquals("GDLauncher", Launcher.GDLAUNCHER.displayName());
 	}
 }

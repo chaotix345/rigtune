@@ -13,6 +13,9 @@ public record LauncherSignals(@Nullable Map<String, String> properties, @Nullabl
 	public static final String BRAND = "minecraft.launcher.brand";
 	public static final String INST_ID = "INST_ID";
 	public static final String INST_NAME = "INST_NAME";
+	// docs/v0.4/SPEC.md 2g: the brand GDLauncher sends, legacy (src/app/desktop/utils/index.js:679-680) and Carbon
+	// (crates/carbon_app/src/managers/minecraft/minecraft.rs:381).
+	public static final String GDLAUNCHER_BRAND = "GDLauncher";
 	public static final List<String> PROPERTIES = List.of(PRISM_INSTANCE, MULTIMC_INSTANCE, BRAND);
 	public static final List<String> ENV = List.of(INST_ID, INST_NAME);
 }

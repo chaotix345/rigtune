@@ -1,0 +1,5 @@
+[23:44:37] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, sleep:15, settings:initial, file:config/sodium-options.json, file:config/DistantHorizons.toml, file:config/iris.properties, file:options.txt, quit]
+[23:44:42] [Render thread/INFO]: [P5A] 4.0s title screen at JVM uptime 17635 ms
+[23:44:43] [Render thread/INFO]: [P5A] 4.5s report ready (online false, rules r15 bundled)
+[23:44:58] [Render thread/INFO]: [P5A] 19.6s settings (388 keys)
+[23:44:58] [Render thread/INFO]: [P5A] 19.8s quitting

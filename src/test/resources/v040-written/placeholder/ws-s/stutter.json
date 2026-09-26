@@ -1,0 +1,25 @@
+{
+  "formatVersion": 1,
+  "sessions": [
+    {
+      "startedAt": "2026-09-23T20:15:00Z",
+      "source": "monitor",
+      "mc": "26.2",
+      "collector": "G1",
+      "heapMaxMb": 4096,
+      "gameplaySeconds": 1260,
+      "frames": 201600,
+      "histogramCounts": [150211, 38420, 9102, 2604, 911, 244, 71, 28, 9],
+      "histogramTimeMs": [712330.0, 318201.5, 121904.2, 52880.7, 26031.4, 10877.9, 4410.2, 2608.8, 1874.3],
+      "spikes": {"minor": 244, "major": 71, "severe": 28, "freeze": 9},
+      "lostMs": 9204.6,
+      "causes": {"gc": 0.44, "chunkLoad": 0.12, "chunkBuild": 0.07, "tick": 0.04, "render": 0.02, "unknown": 0.31},
+      "tags": {"worldSave": 7, "dh": 0, "cpuContention": 2, "afterTeleport": 1, "movingFast": 11},
+      "worst": [
+        {"t": 431.2, "ms": 212, "baseMs": 7.1, "causes": ["gc:high:FULL"]}
+      ],
+      "facts": {"liveSetPct": 71, "fullGcs": 3, "stalls": 1, "explicitGcs": 0, "gcOffsetMs": 3.5},
+      "advice": ["ram-stutter-gc-heap"]
+    }
+  ]
+}

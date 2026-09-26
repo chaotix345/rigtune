@@ -218,6 +218,22 @@ class HttpModrinthClientTest {
 		assertTrue(projects.getFirst().supports("fabric", "26.2"));
 	}
 
+	// docs/v0.4/SPEC.md 2d (A-M1): the versions earlier Applies staged, by id (GET /v2/versions?ids=[...]).
+	@Test
+	void versionsSendIdsAsJsonArrayAndAreKeyedById() throws IOException {
+		respond("/v2/versions", 200, "[" + VERSION_JSON + "]");
+
+		Map<String, ModrinthVersion> result = client.versions(List.of("xJZxADzI", "gone0000"));
+
+		Recorded req = requests.get("/v2/versions");
+		assertEquals("GET", req.method());
+		assertEquals("[\"xJZxADzI\",\"gone0000\"]", param(req.query(), "ids"));
+		assertEquals(List.of("xJZxADzI"), List.copyOf(result.keySet()));
+		assertEquals(List.of(new Dependency("P7dR8mSH", null, "required")), result.get("xJZxADzI").dependencies());
+		assertEquals(Map.of(), client.versions(List.of()));
+		assertEquals(1, hits("/v2/versions"));
+	}
+
 	private static String version(String id, String type, String date) {
 		return VERSION_JSON.replace("\"xJZxADzI\"", "\"" + id + "\"")
 				.replace("\"release\"", "\"" + type + "\"")

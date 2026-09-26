@@ -1,0 +1,8 @@
+**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 4096 MB heap
+1:02 (0:52 of gameplay) · 5,300 frames · avg 102 FPS · 1% low 30 FPS
+12 spikes (12 minor, 0 major, 0 severe, 0 freezes) in 10 hitches · 0.2 s lost
+Not enough data yet (at least 3 spikes and 2 minutes of gameplay)
+Likely causes (share of the lost time): garbage collection 10 %; not explained 90 %
+12 of 12 spikes happened during the 10 s after a teleport (not measured)
+9 of 12 spikes happened while chunks were loading (not measured)
+Worst: 34 ms at 0:22 (garbage collection (low), rendering (low), the 10 s after a teleport); 31 ms at 0:24 (garbage collection (medium), rendering (low), the 10 s after a teleport, chunks loading); 28 ms at 0:23 (garbage collection (low), rendering (low), the 10 s after a teleport, chunks loading)

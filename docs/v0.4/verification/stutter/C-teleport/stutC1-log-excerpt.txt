@@ -1,0 +1,16 @@
+[22:18:04] [Render thread/INFO]: Using graphics backend OpenGL, using drivers: 3.3.0 Core Profile Context 26.8.1.260810
+[22:18:04] [Render thread/INFO]: Using graphics device: AMD Radeon RX 7800 XT (ATI Technologies Inc.)
+[22:18:04] [Render thread/INFO]: Using graphics device extensions: GL_ARB_multi_draw_indirect, GL_ARB_buffer_storage, GL_ARB_shader_draw_parameters, GL_ARB_base_instance, GL_KHR_debug, GL_ARB_draw_indirect, GL_ARB_clip_control, GL_ARB_vertex_attrib_binding, GL_ARB_direct_state_access, GL_EXT_texture_filter_anisotropic
+[22:18:07] [Render thread/INFO]: Dev stutter: monitor on; opening the benchmark world: true
+[22:18:09] [Render thread/INFO]: Stutter Doctor: capture on (collector g1)
+[22:18:09] [Render thread/INFO]: Dev stutter: in the benchmark world; standing still for 20 s
+[22:18:10] [RigTune stutter sampler/INFO]: Stutter Doctor: 63 threads {Attach Listener=1, Chunk Render Task Executor #*=10, Common-Cleaner=1, Download-*=4, Finalizer=1, ForkJoinPool.commonPool-delayScheduler=1, ForkJoinPool.commonPool-worker-*=1, HttpClient-1-SelectorManager=1, HttpClient-1-Worker-*=2, HttpClient-2-SelectorManager=1, HttpClient-2-Worker-*=2, IO-Worker-*=5, JNA Cleaner=1, Keep-Alive-Timer=1, Netty Local IO #*=3, Notification Thread=1, Reference Handler=1, Render thread=1, RigTune rules=1, RigTune stutter sampler=1, RigTune worker=2, Server thread=1, Signal Dispatcher=1, Sodium Async Cull Thread=1, Sound engine=1, Timer hack thread=1, Worker-Main-*=15, Yggdrasil Key Fetcher=1}
+[22:18:29] [Render thread/INFO]: Dev stutter: tp @a 200000 200 200000
+[22:18:59] [Render thread/INFO]: Dev stutter: save-all (saveEverything with flush)
+[22:19:09] [Render thread/INFO]: Dev stutter: opened the Stutter Doctor
+[22:19:09] [Render thread/INFO]: Dev stutter: report:
+**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 4096 MB heap
+[22:19:10] [Render thread/INFO]: Stutter Doctor: capture off; GC listener removed, sampler stopped
+[22:19:10] [RigTune worker/INFO]: Stutter Doctor: session saved (OK): 14 spikes in 50 s of gameplay, phase timing ok (per-frame baselines: packets 3.1 us, ticks 196.8 us, render 879.9 us; timers seen 1111111), GC offset 19.8 ms
+[22:19:15] [Render thread/INFO]: Dev stutter: <scratch>\inst\p5a-inst-stut262\config\rigtune\stutter.json:
+[22:19:15] [Render thread/INFO]: Dev stutter: PASSED; stopping the client

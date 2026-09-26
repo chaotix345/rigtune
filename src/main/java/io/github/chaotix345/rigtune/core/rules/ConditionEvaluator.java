@@ -1,7 +1,10 @@
 package io.github.chaotix345.rigtune.core.rules;
 
+import io.github.chaotix345.rigtune.core.hardware.DriverVersionParser;
 import io.github.chaotix345.rigtune.core.hardware.GpuClassifier;
+import io.github.chaotix345.rigtune.core.jvm.JvmFacts;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
+import io.github.chaotix345.rigtune.core.model.DriverVersion;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.GpuInfo;
 import io.github.chaotix345.rigtune.core.model.GpuVendor;
@@ -10,10 +13,14 @@ import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.model.TierResult;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
+import io.github.chaotix345.rigtune.core.stutter.Attributor;
+import io.github.chaotix345.rigtune.core.stutter.StutterFacts;
 import net.fabricmc.loader.api.SemanticVersion;
 import net.fabricmc.loader.api.Version;
 import net.fabricmc.loader.api.metadata.version.VersionPredicate;
+import org.jspecify.annotations.Nullable;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -43,6 +50,9 @@ public final class ConditionEvaluator {
 	public static final String BACKEND_VULKAN_FLAG = "backend-vulkan";
 	public static final Set<String> FLAGS = Set.of(BACKEND_VULKAN_FLAG, "shaders-enabled");
 	public static final String SODIUM_WORKAROUND_FLAG = "sodium-workaround:";
+	// The gcCollector vocabulary (docs/v0.4/SPEC.md 5): GcKind's families.
+	public static final Set<String> GC_COLLECTORS = Set.of("g1", "zgc", "shenandoah", "parallel", "serial");
+	private static final Set<String> DRIVER_VERSION_KEYS = Set.of("vendor", "atLeast", "atMost");
 
 	private ConditionEvaluator() {
 	}
@@ -100,6 +110,8 @@ public final class ConditionEvaluator {
 		t = and(t, () -> c.modVersion == null ? TRUE : modVersions(c.modVersion, ctx));
 		t = and(t, () -> c.mcVersionRange == null ? TRUE : mcVersionRange(c.mcVersionRange, hw.mcVersion()));
 		t = and(t, () -> c.settingIs == null ? TRUE : settingIs(c.settingIs, ctx.settings()));
+		t = and(t, () -> c.driverVersion == null ? TRUE : driverVersion(c.driverVersion, ctx));
+		t = and(t, () -> hasStutterKey(c) ? stutter(c, ctx.stutter()) : TRUE);
 		t = and(t, () -> c.anyOf == null ? TRUE : anyOf(c.anyOf, ctx));
 		return and(t, () -> c.not == null ? TRUE : node(c.not, ctx).not());
 	}
@@ -198,12 +210,23 @@ public final class ConditionEvaluator {
 		boolean backendKnown = gpu != null && gpu.backend() != null && gpu.backend() != GraphicsBackend.UNKNOWN;
 		Truth t = TRUE;
 		for (String flag : wanted) {
-			if (flag == null || !flags.contains(flag)) {
+			if (flag != null && flag.startsWith(JvmFacts.PREFIX)) {
+				t = t.and(jvmFlag(flag, flags));
+			} else if (flag == null || !flags.contains(flag)) {
 				boolean decidable = flag != null && knownFlag(flag) && (backendKnown || !flag.equals(BACKEND_VULKAN_FLAG));
 				t = t.and(decidable ? FALSE : UNKNOWN);
 			}
 		}
 		return t;
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md 6, J-M1): a jvm- fact is decidable only once the JVM probe ran (jvm-probed) and only for
+	// the vocabulary this client computes; otherwise UNKNOWN (OpenJ9, the probe not finished, a future fact).
+	private static Truth jvmFlag(String flag, Set<String> present) {
+		if (!present.contains(JvmFacts.PROBED) || !JvmFacts.RULE_FLAGS.contains(flag)) {
+			return UNKNOWN;
+		}
+		return Truth.of(present.contains(flag));
 	}
 
 	private static Truth range(long value, Number atLeast, Number atMost) {
@@ -283,6 +306,98 @@ public final class ConditionEvaluator {
 					: Truth.of(SettingValues.same(settings.get(entry.getKey()), entry.getValue())));
 		}
 		return t;
+	}
+
+	// docs/v0.4/SPEC.md 9: {"vendor" (required, the gpuVendor vocabulary), "atLeast", "atMost" (dotted numbers, inclusive)}.
+	// TRUE/FALSE only when the detected vendor is the rule's and the driver string parses (DriverVersionParser) as that
+	// vendor's own driver (NVIDIA's, AMD Adrenalin, Intel's Windows build): a Mesa version (nouveau, RADV, zink, ...) is
+	// never compared with a proprietary one. A vendor mismatch, an unknown vendor, an unparseable string, another
+	// family, a bad number, a missing vendor or another key is UNKNOWN.
+	private static Truth driverVersion(Map<String, String> wanted, EvalContext ctx) {
+		for (String key : wanted.keySet()) {
+			if (!DRIVER_VERSION_KEYS.contains(String.valueOf(key))) {
+				return UNKNOWN;
+			}
+		}
+		String vendor = wanted.get("vendor");
+		GpuVendor detected = ctx.gpu() == null || ctx.gpu().vendor() == null ? GpuVendor.UNKNOWN : ctx.gpu().vendor();
+		if (vendor == null || detected == GpuVendor.UNKNOWN || !GPU_VENDORS.contains(vendor.toLowerCase(Locale.ROOT))
+				|| !vendor.equalsIgnoreCase(detected.name())) {
+			return UNKNOWN;
+		}
+		int[] atLeast = wanted.containsKey("atLeast") ? DriverVersion.dotted(wanted.get("atLeast")) : new int[0];
+		int[] atMost = wanted.containsKey("atMost") ? DriverVersion.dotted(wanted.get("atMost")) : new int[0];
+		GpuInfo gpu = ctx.hardware().gpu();
+		DriverVersion version = gpu == null ? DriverVersion.unknown(detected, null) : DriverVersionParser.parse(detected, gpu.backend(), gpu.driverVersion());
+		if (atLeast == null || atMost == null || !version.known() || !version.family().equals(DriverVersion.vendorFamily(detected))) {
+			return UNKNOWN;
+		}
+		return Truth.of((atLeast.length == 0 || version.compareTo(atLeast) >= 0) && (atMost.length == 0 || version.compareTo(atMost) <= 0));
+	}
+
+	public static boolean hasStutterKey(Condition c) {
+		return c.stutterShareAtLeast != null || c.stutterTaggedShareAtLeast != null || c.gcFullPausesAtLeast != null
+				|| c.gcStallsAtLeast != null || c.gcExplicitPausesAtLeast != null || c.liveSetPercentAtLeast != null
+				|| c.heapRaiseRoomMbAtLeast != null || c.cpuContentionShareAtLeast != null || c.spikesPerMinuteAtLeast != null
+				|| c.gcCollector != null;
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md 5): the stutter keys against the Stutter Doctor's session facts. Without facts (the main
+	// list) every one is UNKNOWN, so they can never fire there. Thresholds are whole numbers (plan review K-M1): shares
+	// and percentages in whole percent, spikesPerMinuteAtLeast x10. A share-map value that isn't a whole number >= 0, a
+	// cause or tag this version doesn't know, and an unknown fact (null) are UNKNOWN.
+	private static Truth stutter(Condition c, @Nullable StutterFacts facts) {
+		if (facts == null) {
+			return UNKNOWN;
+		}
+		Truth t = c.stutterShareAtLeast == null ? TRUE : shares(c.stutterShareAtLeast, facts.claimedShares(), Attributor.CAUSES, facts.unmeasured());
+		t = and(t, () -> c.stutterTaggedShareAtLeast == null ? TRUE
+				: shares(c.stutterTaggedShareAtLeast, facts.taggedShares(), Attributor.TAGS, facts.unmeasured()));
+		t = and(t, () -> c.gcFullPausesAtLeast == null ? TRUE : gcCount(facts, facts.gcFullPauses(), c.gcFullPausesAtLeast));
+		t = and(t, () -> c.gcStallsAtLeast == null ? TRUE : gcCount(facts, facts.gcStalls(), c.gcStallsAtLeast));
+		t = and(t, () -> c.gcExplicitPausesAtLeast == null ? TRUE : gcCount(facts, facts.gcExplicitPauses(), c.gcExplicitPausesAtLeast));
+		t = and(t, () -> c.liveSetPercentAtLeast == null ? TRUE : atLeast(facts.liveSetPercent(), c.liveSetPercentAtLeast));
+		t = and(t, () -> c.heapRaiseRoomMbAtLeast == null ? TRUE : atLeast(facts.heapRaiseRoomMb() == null ? null : facts.heapRaiseRoomMb().doubleValue(),
+				c.heapRaiseRoomMbAtLeast));
+		t = and(t, () -> c.cpuContentionShareAtLeast == null ? TRUE : atLeast(facts.cpuContentionShare(), c.cpuContentionShareAtLeast));
+		t = and(t, () -> c.spikesPerMinuteAtLeast == null ? TRUE : Truth.of(facts.spikesPerMinute() * 10 >= c.spikesPerMinuteAtLeast));
+		String collector = facts.gcCollector() == null ? "" : facts.gcCollector().toLowerCase(Locale.ROOT);
+		return and(t, () -> c.gcCollector == null ? TRUE : anyEntry(c.gcCollector, GC_COLLECTORS::contains, collector::equals, !collector.isEmpty()));
+	}
+
+	private static Truth gcCount(StutterFacts facts, int count, int threshold) {
+		return facts.gcMeasured() ? Truth.of(count >= threshold) : UNKNOWN;
+	}
+
+	private static Truth atLeast(@Nullable Double value, Number threshold) {
+		return value == null ? UNKNOWN : Truth.of(value >= threshold.doubleValue());
+	}
+
+	// Every entry must hold: the measured share (percent; absent = 0) at least the entry's whole-percent threshold. A cause
+	// or tag the capture couldn't measure is UNKNOWN.
+	private static Truth shares(Map<String, String> wanted, Map<String, Double> measured, List<String> vocabulary, Set<String> unmeasured) {
+		Truth t = TRUE;
+		for (Map.Entry<String, String> entry : wanted.entrySet()) {
+			Integer threshold = wholeNumber(entry.getValue());
+			if (entry.getKey() == null || !vocabulary.contains(entry.getKey()) || threshold == null || unmeasured.contains(entry.getKey())) {
+				t = t.and(UNKNOWN);
+				continue;
+			}
+			t = t.and(Truth.of(measured.getOrDefault(entry.getKey(), 0.0) >= threshold));
+		}
+		return t;
+	}
+
+	private static @Nullable Integer wholeNumber(@Nullable String text) {
+		if (text == null) {
+			return null;
+		}
+		try {
+			BigDecimal value = new BigDecimal(text.trim());
+			return value.signum() < 0 || value.stripTrailingZeros().scale() > 0 ? null : value.intValueExact();
+		} catch (NumberFormatException | ArithmeticException e) {
+			return null;
+		}
 	}
 
 	private static Truth mcVersionRange(String predicateText, String mcVersion) {

@@ -1,0 +1,12 @@
+{
+  "formatVersion": 1,
+  "salt": "5da6da2b681104beb5baf5b04ba1094f",
+  "servers": {
+    "ce059f1e451904e5a27b90e29e011de1436e12cd2c17f82f75e3b40833cbde99": {
+      "viewDistance": 10,
+      "simulationDistance": 5,
+      "kind": "REMOTE",
+      "lastSeen": "2026-09-26T11:50:21.687Z"
+    }
+  }
+}

@@ -2,6 +2,8 @@
 
 Images to upload to the Modrinth gallery, in display order, via `python tools/modrinth_project.py gallery`. `featured: true` marks the one used as the project's spotlight image. `description` is used as the image's alt text (Modrinth requires alt text for gallery images).
 
+Updated for the v0.4.0 release: five new images from the v0.4 Phase 5 runs on the real test PC (Ryzen 7 7800X3D + RX 7800 XT): report-0.4.jpg (the report with the "Estimated tier" header and the new footer), profiles.png, stutter-doctor.png (a test session with a forced garbage collection every 5 s, so the numbers are deliberately bad), jvm-memory.png (a test launch with an ignored ZGC flag and Aikar's marker) and tools.jpg. `gallery` uploads only titles that aren't there yet.
+
 Updated for the v0.3.0 release: one new image, `history.jpg` (the History screen, new in 0.3.0; a copy of the Phase 5 game-test screenshot docs/v0.3/verification/p5/img/a263-history-after-undo.jpg, whose entries are the test's seeded history). The other six images went live with the 0.2.0 release; re-running `gallery` at release time adds only the new one (uploads are by title, additive). `report.png` is still a 0.1-era capture: its footer predates 0.3's History…, Preview and Report a problem buttons, and replacing the live image takes a new title or an edit on Modrinth, since `gallery` skips a title that's already there.
 
 ## docs/images/report.png
@@ -37,4 +39,29 @@ Updated for the v0.3.0 release: one new image, `history.jpg` (the History screen
 ## docs/smoke/rigtune-in-world.png
 - title: RigTune opened in a world
 - description: The RigTune screen opened with F8 while in a singleplayer world, showing the Add mods section with per-mod reasons and impact ratings.
+- featured: false
+
+## docs/images/report-0.4.jpg
+- title: RigTune report (0.4)
+- description: The RigTune screen in 0.4 on the test PC: the hardware header with the estimated tier and its lowest estimated components, recommendations with plain-English reasons and impact ratings, and the footer with Apply, Preview, History, Tools, Rescan, Copy report and Report a problem.
+- featured: false
+
+## docs/images/tools.jpg
+- title: Tools hub
+- description: The Tools screen listing Benchmark, Profiles, Stutter Doctor, JVM and memory, Benchmark history and the last launch time.
+- featured: false
+
+## docs/images/profiles.png
+- title: Performance Profiles
+- description: The Profiles screen with the Max FPS, Balanced, Quality, Battery and Recording templates, the player's My settings profile marked active, a tooltip describing the Battery template, and buttons to switch, preview, copy or import a share code.
+- featured: false
+
+## docs/images/stutter-doctor.png
+- title: Stutter Doctor
+- description: The Stutter Doctor report from a test session with a forced garbage collection every 5 seconds: session length, frames, average FPS and 1% low, the spike count by severity, and a frame-time histogram, with Stop, Pause, Clear and Copy summary buttons.
+- featured: false
+
+## docs/images/jvm-memory.png
+- title: JVM and memory advice
+- description: The JVM and memory screen for a test launch: the Java version, the garbage collector set in the Java arguments and the heap size, notes on two Java arguments (one Java ignores, one from Paper's server flags), and advice to remove the ignored flag.
 - featured: false

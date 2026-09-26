@@ -215,4 +215,37 @@ class HistoryModelTest {
 		assertSame(Journal.State.CORRUPT, view.state());
 		assertTrue(view.entries().isEmpty());
 	}
+
+	// docs/v0.4/SPEC.md 2c: a file change shows the mod's name when staging recorded it, else the file name; an update
+	// takes the new jar's name. A name edited into history.json by hand is sanitised like one read from a jar (P-L1).
+	@Test
+	void fileRowsPreferTheModName() {
+		add("e1", JournalEntry.APPLY, null,
+				file(JournalChange.DISABLE, "sodium", "sodium-0.7.0.jar", JournalChange.APPLIED, "g").withModName("Sodium (old)"),
+				file(JournalChange.ENABLE, "sodium", "sodium-0.7.1.jar", JournalChange.APPLIED, "g").withModName("Sodium"),
+				file(JournalChange.ENABLE, "iris", "iris.jar", JournalChange.APPLIED, null).withModName("\u00a7aIris\u202e"),
+				file(JournalChange.DISABLE, "dh", "dh.jar", JournalChange.APPLIED, null));
+
+		List<Change> changes = entry("e1").changes();
+
+		assertEquals(Row.UPDATED, changes.get(0).row());
+		assertEquals("Sodium", changes.get(0).name());
+		assertEquals("Sodium", changes.get(0).shownName());
+		assertEquals("Iris", changes.get(1).shownName());
+		assertNull(changes.get(2).name());
+		assertEquals("dh.jar", changes.get(2).shownName());
+		assertEquals("dh.jar", changes.get(2).file());
+	}
+
+	// docs/v0.4/SPEC.md 2a (AC2a.1): Undo last / Undo all are offered only when some entry has something to undo.
+	@Test
+	void anyUndoableIsFalseForAnEmptyOrFullyUndoneHistory() {
+		assertFalse(HistoryModel.anyUndoable(view(Map.of())));
+		assertFalse(HistoryModel.anyUndoable(null));
+		add("apply", JournalEntry.APPLY, null, setting("vanilla.renderDistance", "12", "8", JournalChange.APPLIED));
+		assertTrue(HistoryModel.anyUndoable(view(Map.of())));
+		add("undo", JournalEntry.UNDO, "apply", setting("vanilla.renderDistance", "8", "12", JournalChange.APPLIED)
+				.reverting(entries.getFirst().changes().getFirst().id()));
+		assertFalse(HistoryModel.anyUndoable(view(Map.of())));
+	}
 }

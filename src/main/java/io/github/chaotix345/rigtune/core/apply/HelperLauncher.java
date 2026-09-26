@@ -77,7 +77,9 @@ public final class HelperLauncher {
 	}
 
 	// Copies each jar into helperDir (reusing an identical copy) and keeps directories as they are: class
-	// directories only occur in development, where nothing runs from mods/. Other files in helperDir are removed.
+	// directories only occur in development, where nothing runs from mods/. Other files in helperDir are removed, except
+	// a record of unfinished groups (UnfinishedGroups) a 0.4.0 dev build left here, which the helper about to start still
+	// reads and moves to config/rigtune/ (review-8 CR-1).
 	static List<Path> helperClasspath(Path helperDir, List<Path> sources) throws IOException {
 		Files.createDirectories(helperDir);
 		List<Path> distinct = sources.stream().distinct().toList();
@@ -96,7 +98,7 @@ public final class HelperLauncher {
 		}
 		try (Stream<Path> files = Files.list(helperDir)) {
 			for (Path file : files.toList()) {
-				if (!out.contains(file)) {
+				if (!out.contains(file) && !file.getFileName().toString().equals(UnfinishedGroups.FILE_NAME)) {
 					try {
 						Files.deleteIfExists(file);
 					} catch (IOException ignored) {

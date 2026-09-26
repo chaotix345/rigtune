@@ -1,0 +1,8 @@
+{
+  "gpuVendor": "AMD",
+  "gpuRenderer": "AMD Radeon RX 7800 XT",
+  "gpuDriverRaw": "1.4.349 AMD proprietary driver 26.8.1 (LLPC)",
+  "backend": "VULKAN",
+  "cpuName": "AMD Ryzen 7 7800X3D 8-Core Processor",
+  "totalRamMb": 31849
+}

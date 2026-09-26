@@ -1,0 +1,4 @@
+[22:42:18] [main/INFO]: Found graphics adapter: AdapterInfo{vendor=AMD, description='AMD Radeon(TM) Graphics', adapterType=0x00002303, openglIcdFilePath='C:\WINDOWS\System32\DriverStore\FileRepository\u0203303.inf_amd64_e5876a26758f154c\B026363\atig6pxx.dll', openglIcdVersion=32.0.21045.5002}
+[22:42:25] [RigTune worker/INFO]: RigTune: Java 25.0.4.1 (Eclipse Adoptium), ZGC (typed), 2 argument notes [-XX:+ZGenerational, -Dusing.aikars.flags]
+[22:42:28] [Render thread/INFO]: [P5A] 3.6s title screen at JVM uptime 13099 ms
+[22:42:33] [Render thread/INFO]: [P5A] 9.2s jvm report JvmReport[available=true, javaVersion=25.0.4.1, vendor=Eclipse Adoptium, collector=ZGC, collectorTyped=true, maxHeapMb=7964, initialHeapMb=498, findings=[JvmFinding[kind=IGNORED, flag=-XX:+ZGenerational], JvmFinding[kind=SERVER_SET, flag=-Dusing.aikars.flags]], facts=[jvm-gc-typed, jvm-gc-zgc, jvm-server-flags, jvm-ignored-flags, jvm-probed]]

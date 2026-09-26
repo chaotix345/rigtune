@@ -1,0 +1,194 @@
+[02:17:35] [Render thread/INFO]: Using graphics backend OpenGL, using drivers: 3.3.0 Core Profile Context 26.8.1.260810
+[02:17:35] [Render thread/INFO]: Using graphics device: AMD Radeon RX 7800 XT (ATI Technologies Inc.)
+[02:17:35] [Render thread/INFO]: Using graphics device extensions: GL_ARB_multi_draw_indirect, GL_ARB_buffer_storage, GL_ARB_shader_draw_parameters, GL_ARB_base_instance, GL_KHR_debug, GL_ARB_draw_indirect, GL_ARB_clip_control, GL_ARB_vertex_attrib_binding, GL_ARB_direct_state_access, GL_EXT_texture_filter_anisotropic
+[02:17:41] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:overworld
+[02:17:41] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_nether
+[02:17:41] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_end
+[02:17:41] [Server thread/INFO]: ThreadedAnvilChunkStorage (world): All chunks are saved
+[02:17:41] [Server thread/INFO]: ThreadedAnvilChunkStorage (DIM-1): All chunks are saved
+[02:17:41] [Server thread/INFO]: ThreadedAnvilChunkStorage (DIM1): All chunks are saved
+[02:17:41] [Server thread/INFO]: ThreadedAnvilChunkStorage: All dimensions are saved
+[02:17:41] [Render thread/INFO]: Dev stutter: monitor on; opening the benchmark world: true
+[02:17:42] [Render thread/INFO]: Stutter Doctor: capture on (collector g1)
+[02:17:43] [RigTune stutter sampler/INFO]: Stutter Doctor: 64 threads {Attach Listener=1, Chunk Render Task Executor #*=10, Common-Cleaner=1, Download-*=2, Finalizer=1, ForkJoinPool.commonPool-delayScheduler=1, ForkJoinPool.commonPool-worker-*=1, HttpClient-1-SelectorManager=1, HttpClient-1-Worker-*=2, IO-Worker-*=9, JNA Cleaner=1, Keep-Alive-Timer=1, Netty Local IO #*=3, Notification Thread=1, Reference Handler=1, Render thread=1, RigTune network=1, RigTune rules=1, RigTune settings=1, RigTune stutter sampler=1, RigTune worker=2, Server thread=1, Signal Dispatcher=1, Sodium Async Cull Thread=1, Sound engine=1, Timer hack thread=1, Worker-Main-*=15, Yggdrasil Key Fetcher=1}
+[02:17:44] [Render thread/INFO]: Dev stutter: in the benchmark world; standing still for 20 s
+[02:18:04] [Render thread/INFO]: Dev stutter: tp @a 200000 200 200000
+[02:18:34] [Render thread/INFO]: Dev stutter: save-all (saveEverything with flush)
+[02:18:34] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:overworld
+[02:18:34] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_nether
+[02:18:34] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_end
+[02:18:34] [Server thread/INFO]: ThreadedAnvilChunkStorage (world): All chunks are saved
+[02:18:34] [Server thread/INFO]: ThreadedAnvilChunkStorage (DIM-1): All chunks are saved
+[02:18:34] [Server thread/INFO]: ThreadedAnvilChunkStorage (DIM1): All chunks are saved
+[02:18:34] [Server thread/INFO]: ThreadedAnvilChunkStorage: All dimensions are saved
+[02:18:44] [Render thread/INFO]: Dev stutter: opened the Stutter Doctor
+[02:18:44] [Render thread/INFO]: Dev stutter: report:
+**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 4096 MB heap
+1:02 (0:52 of gameplay) · 5,307 frames · avg 102 FPS · 1% low 30 FPS
+8 spikes (8 minor, 0 major, 0 severe, 0 freezes) in 8 hitches · 0.1 s lost
+Not enough data yet (at least 3 spikes and 2 minutes of gameplay)
+Likely causes (share of the lost time): none measured; not explained 100 %
+8 of 8 spikes happened during the 10 s after a teleport (not measured)
+7 of 8 spikes happened while chunks were loading (not measured)
+Worst: 31 ms at 0:11 (rendering (low), the 10 s after a teleport, chunks loading); 27 ms at 0:25 (rendering (low), the 10 s after a teleport, chunks loading); 26 ms at 0:27 (garbage collection (low), rendering (low), the 10 s after a teleport, chunks loading)
+
+[02:18:44] [Server thread/INFO]: Stopping server
+[02:18:44] [Server thread/INFO]: Saving worlds
+[02:18:44] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:overworld
+[02:18:45] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_nether
+[02:18:45] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_end
+[02:18:45] [Server thread/INFO]: ThreadedAnvilChunkStorage (world): All chunks are saved
+[02:18:45] [Server thread/INFO]: ThreadedAnvilChunkStorage (DIM-1): All chunks are saved
+[02:18:45] [Server thread/INFO]: ThreadedAnvilChunkStorage (DIM1): All chunks are saved
+[02:18:45] [Server thread/INFO]: ThreadedAnvilChunkStorage: All dimensions are saved
+[02:18:45] [Render thread/INFO]: Stutter Doctor: capture off; GC listener removed, sampler stopped
+[02:18:45] [RigTune worker/INFO]: Stutter Doctor: session saved (OK): 8 spikes in 52 s of gameplay, phase timing ok (per-frame baselines: packets 1.5 us, ticks 235.5 us, render 930.2 us; timers seen 1111111), GC offset 17.3 ms
+[02:18:50] [Render thread/INFO]: Dev stutter: <scratch>\inst\p5c-C1r2\config\rigtune\stutter.json:
+{
+  "formatVersion": 1,
+  "sessions": [
+    {
+      "startedAt": "2026-09-26T16:17:42Z",
+      "source": "monitor",
+      "mc": "26.2",
+      "collector": "G1",
+      "heapMaxMb": 4096,
+      "sessionSeconds": 62.8,
+      "gameplaySeconds": 51.8,
+      "frames": 5307,
+      "avgFps": 102.4,
+      "onePercentLowFps": 29.8,
+      "histogramCounts": [
+        0,
+        1210,
+        3805,
+        95,
+        197,
+        0,
+        0,
+        0,
+        0
+      ],
+      "histogramTimeMs": [
+        0,
+        10083,
+        32143,
+        3021,
+        6579,
+        0,
+        0,
+        0,
+        0
+      ],
+      "spikes": {
+        "minor": 8,
+        "major": 0,
+        "severe": 0,
+        "freeze": 0
+      },
+      "lostMs": 129.7,
+      "causes": {
+        "gc": 0.0,
+        "unknown": 1.0
+      },
+      "tags": {
+        "afterTeleport": 8,
+        "chunksLoading": 7
+      },
+      "worst": [
+        {
+          "t": 10.5,
+          "ms": 30.5,
+          "baseMs": 8.3,
+          "causes": [
+            "render:low",
+            "afterTeleport:context",
+            "chunksLoading:context"
+          ]
+        },
+        {
+          "t": 25.0,
+          "ms": 26.6,
+          "baseMs": 8.3,
+          "causes": [
+            "render:low",
+            "afterTeleport:context",
+            "chunksLoading:context"
+          ]
+        },
+        {
+          "t": 26.6,
+          "ms": 26.1,
+          "baseMs": 8.3,
+          "causes": [
+            "gc:low",
+            "render:low",
+            "afterTeleport:context",
+            "chunksLoading:context"
+          ]
+        },
+        {
+          "t": 29.0,
+          "ms": 24.1,
+          "baseMs": 8.3,
+          "causes": [
+            "render:low",
+            "afterTeleport:context",
+            "chunksLoading:context"
+          ]
+        },
+        {
+          "t": 22.6,
+          "ms": 23.7,
+          "baseMs": 8.3,
+          "causes": [
+            "render:low",
+            "afterTeleport:context",
+            "chunksLoading:context"
+          ]
+        },
+        {
+          "t": 26.2,
+          "ms": 23.1,
+          "baseMs": 8.3,
+          "causes": [
+            "render:low",
+            "afterTeleport:context",
+            "chunksLoading:context"
+          ]
+        },
+        {
+          "t": 26.4,
+          "ms": 21.4,
+          "baseMs": 8.3,
+          "causes": [
+            "render:low",
+            "afterTeleport:context",
+            "chunksLoading:context"
+          ]
+        },
+        {
+          "t": 22.0,
+          "ms": 20.9,
+          "baseMs": 8.3,
+          "causes": [
+            "render:low",
+            "afterTeleport:context"
+          ]
+        }
+      ],
+      "facts": {
+        "liveSetPct": 12,
+        "fullGcs": 0,
+        "stalls": 0,
+        "explicitGcs": 0,
+        "gcOffsetMs": 17.3
+      },
+      "advice": [],
+      "enoughData": false,
+      "phaseTiming": true,
+      "hitches": 8
+    }
+  ]
+}
+[02:18:50] [Render thread/INFO]: Dev stutter: PASSED; stopping the client

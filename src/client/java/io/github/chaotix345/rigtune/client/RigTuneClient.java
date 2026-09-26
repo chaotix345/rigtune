@@ -3,7 +3,10 @@ package io.github.chaotix345.rigtune.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
+import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
+import io.github.chaotix345.rigtune.client.probe.PowerWatcher;
 import io.github.chaotix345.rigtune.client.probe.Probes;
+import io.github.chaotix345.rigtune.client.stutter.StutterHooks;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
@@ -65,6 +68,7 @@ public final class RigTuneClient implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
+		long footprint = FootprintStats.initStart();
 		ChangeRecorder.install(ClientJournal.get());
 		RealController real = new RealController();
 		controller = real;
@@ -75,13 +79,18 @@ public final class RigTuneClient implements ClientModInitializer {
 		InputConstants.Type keyboard = InputConstants.Type.KEYSYM;
 		openKey = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.rigtune.open", keyboard, InputConstants.KEY_F8, category));
 
-		ClientLifecycleEvents.CLIENT_STARTED.register(real::start);
+		ClientLifecycleEvents.CLIENT_STARTED.register(minecraft -> FootprintStats.clientStarted(() -> real.start(minecraft)));
+		registerStartupTime(real);
 		ClientLifecycleEvents.CLIENT_STOPPING.register(minecraft -> {
+			SettingsSaver.shared().flush(2_000);
 			BenchmarkController.cancel();
 			real.unstageQueuedUpdates();
 			launchHelperIfPending();
 		});
+		powerWatcher(real);
 		ClientTickEvents.END_CLIENT_TICK.register(RigTuneClient::onTick);
+		StutterHooks.install(real.stutterService());
+		registerAwareness(real);
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> addEntryButton(screen, width, height));
 		// The sleep overlay is the one vanilla HUD layer drawn while the GUI is hidden, which the benchmark does.
 		HudElementRegistry.attachElementAfter(VanillaHudElements.SLEEP, HUD_ID, (graphics, delta) -> {
@@ -92,10 +101,24 @@ public final class RigTuneClient implements ClientModInitializer {
 				graphics.text(font, progress, 8, 7, 0xFFFFFFFF, false);
 			}
 		});
+		FootprintStats.initEnd(footprint);
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md 8, 9): the server limits' DISCONNECT/JOIN and the awareness notices' "shown" signal.
+	private static void registerAwareness(RealController real) {
+		real.serverLimitsTracker().register();
+		real.awarenessService().register();
 	}
 
 	public static RigTuneController controller() {
 		return controller;
+	}
+
+	// v0.4 (WS-P, docs/v0.4/SPEC.md 4): follows the power state once the startup probe has found a real battery.
+	private static void powerWatcher(RealController real) {
+		ClientLifecycleEvents.CLIENT_STARTED.register(minecraft -> HardwareProbe.slowPart().thenAcceptAsync(slow ->
+				PowerWatcher.startIfBattery(slow.hasBattery(), slow.onBattery(), real.profileService()::powerChanged), Probes.EXECUTOR));
+		ClientLifecycleEvents.CLIENT_STOPPING.register(minecraft -> PowerWatcher.stop());
 	}
 
 	public static void setController(RigTuneController newController) {
@@ -123,6 +146,15 @@ public final class RigTuneClient implements ClientModInitializer {
 		return screen;
 	}
 
+	// docs/v0.4/SPEC.md 13 (the footprint workstream): launch-to-title, recorded once per launch at the first title screen.
+	private static void registerStartupTime(RealController real) {
+		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
+			if (screen instanceof TitleScreen) {
+				real.startupTimesService().titleScreenShown();
+			}
+		});
+	}
+
 	private static void launchHelperIfPending() {
 		Path configDir = FabricLoader.getInstance().getConfigDir();
 		Path pending = PendingActions.defaultPath(configDir);
@@ -137,7 +169,8 @@ public final class RigTuneClient implements ClientModInitializer {
 		}
 	}
 
-	private static void onTick(Minecraft minecraft) {
+	// Public for the footprint game test, which times it (docs/v0.4/SPEC.md 10).
+	public static void onTick(Minecraft minecraft) {
 		BenchmarkController.tick(minecraft);
 		while (openKey.consumeClick()) {
 			if (!(minecraft.gui.screen() instanceof RigTuneScreen) && !BenchmarkController.running()) {
@@ -244,7 +277,7 @@ public final class RigTuneClient implements ClientModInitializer {
 		widgets.add(button);
 		// Sodium's page list sits earlier in the child list and swallows clicks in its column, so claim ours first.
 		ScreenMouseEvents.allowMouseClick(screen).register((s, event) -> {
-			if (event.button() == 0 && button.visible && button.isMouseOver(event.x(), event.y()) && Screens.getWidgets(s).contains(button)) {
+			if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && button.visible && button.isMouseOver(event.x(), event.y()) && Screens.getWidgets(s).contains(button)) {
 				button.playDownSound(Minecraft.getInstance().getSoundManager());
 				button.onPress(event);
 				return false;

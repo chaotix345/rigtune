@@ -1,0 +1,158 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "99c70199-dcbb-4c1c-8ded-5dd462f12375",
+      "at": "2026-09-26T16:08:07.270453700Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.4.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "14bfb466-0225-4cce-acb9-0ccd49f898a7",
+          "type": "setting",
+          "key": "vanilla.maxFps",
+          "before": "120",
+          "after": "90",
+          "status": "REVERTED"
+        },
+        {
+          "id": "fa2b97b5-6ad8-4731-8a67-2e30763d1282",
+          "type": "setting",
+          "key": "vanilla.renderDistance",
+          "before": "12",
+          "after": "6",
+          "status": "REVERTED"
+        },
+        {
+          "id": "9f7d1d41-e743-407e-bc9c-8bb798121feb",
+          "type": "setting",
+          "key": "sodium.performance.chunk_builder_threads",
+          "before": "0",
+          "after": "2",
+          "status": "REVERTED",
+          "opId": "8930bb05-d9a9-49a1-af9b-39ca59bb0246"
+        },
+        {
+          "id": "bd96eca2-6248-45c1-94ab-5f9d0402d256",
+          "type": "setting",
+          "key": "sodium.performance.use_fog_occlusion",
+          "before": "true",
+          "after": "false",
+          "status": "REVERTED",
+          "opId": "c92c633f-623d-4f1d-81dd-d497ea336dbc"
+        }
+      ]
+    },
+    {
+      "id": "288e6645-d339-45cd-bc98-acdc0b421ded",
+      "at": "2026-09-26T16:08:08.265579500Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.4.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "4466e0de-adaa-4fba-8dfe-24f015333da3",
+          "type": "setting",
+          "key": "vanilla.maxFps",
+          "before": "90",
+          "after": "60",
+          "status": "REVERTED"
+        },
+        {
+          "id": "142d147e-45e1-41f4-a5d0-3a4ac0ce3d76",
+          "type": "setting",
+          "key": "vanilla.renderDistance",
+          "before": "6",
+          "after": "10",
+          "status": "REVERTED"
+        },
+        {
+          "id": "aec96b11-91ea-4545-82dd-99971bded24d",
+          "type": "setting",
+          "key": "sodium.performance.chunk_builder_threads",
+          "before": "2",
+          "after": "4",
+          "status": "REVERTED",
+          "opId": "d93a1328-2feb-4cbc-ac5d-391b34639c59"
+        }
+      ]
+    },
+    {
+      "id": "48a1bf57-e987-4ac8-84d7-7d6a44b61eb9",
+      "at": "2026-09-26T16:09:33.026118900Z",
+      "kind": "undo",
+      "rigtuneVersion": "0.4.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "undoOf": "all",
+      "changes": [
+        {
+          "id": "c38883e3-0e5b-4c2b-b0e7-ea20e2acfb3f",
+          "type": "setting",
+          "key": "vanilla.maxFps",
+          "before": "60",
+          "after": "90",
+          "status": "APPLIED",
+          "reverts": "4466e0de-adaa-4fba-8dfe-24f015333da3"
+        },
+        {
+          "id": "4f5cb1a5-a403-4914-924c-9983cd0694de",
+          "type": "setting",
+          "key": "vanilla.maxFps",
+          "before": "90",
+          "after": "120",
+          "status": "APPLIED",
+          "reverts": "14bfb466-0225-4cce-acb9-0ccd49f898a7"
+        },
+        {
+          "id": "72566715-58d5-4744-b033-9a4a87d5582f",
+          "type": "setting",
+          "key": "vanilla.renderDistance",
+          "before": "10",
+          "after": "6",
+          "status": "APPLIED",
+          "reverts": "142d147e-45e1-41f4-a5d0-3a4ac0ce3d76"
+        },
+        {
+          "id": "c58bc11c-5e33-4d81-9a93-388cedb573c2",
+          "type": "setting",
+          "key": "vanilla.renderDistance",
+          "before": "6",
+          "after": "12",
+          "status": "APPLIED",
+          "reverts": "fa2b97b5-6ad8-4731-8a67-2e30763d1282"
+        },
+        {
+          "id": "71457552-3528-4f5c-a6a5-4a3ccc22d849",
+          "type": "setting",
+          "key": "sodium.performance.chunk_builder_threads",
+          "before": "4",
+          "after": "2",
+          "status": "APPLIED",
+          "opId": "8c1fcebd-ca2d-4f05-8e39-7f5a569330f2",
+          "reverts": "aec96b11-91ea-4545-82dd-99971bded24d"
+        },
+        {
+          "id": "4c3b217a-21c2-4cc1-ac57-736c91b0cd39",
+          "type": "setting",
+          "key": "sodium.performance.chunk_builder_threads",
+          "before": "2",
+          "after": "0",
+          "status": "APPLIED",
+          "opId": "8c1fcebd-ca2d-4f05-8e39-7f5a569330f2",
+          "reverts": "9f7d1d41-e743-407e-bc9c-8bb798121feb"
+        },
+        {
+          "id": "b4ec7d33-0166-4d47-8466-2fd5a9dfa3f6",
+          "type": "setting",
+          "key": "sodium.performance.use_fog_occlusion",
+          "before": "false",
+          "after": "true",
+          "status": "APPLIED",
+          "opId": "57601e8a-3c2c-46df-97f8-4f3b30b74a79",
+          "reverts": "bd96eca2-6248-45c1-94ab-5f9d0402d256"
+        }
+      ]
+    }
+  ]
+}

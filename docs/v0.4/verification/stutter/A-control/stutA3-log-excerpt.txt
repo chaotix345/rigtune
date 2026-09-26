@@ -1,0 +1,42 @@
+[00:03:27] [Render thread/INFO]: [P5A] 0.0s driver loaded: [waitTitle, waitReport, monitor:on, benchWorld, sleep:390, stutterReport:A3, shot:stutter-A3-top, scroll:300, sleep:1, shot:stutter-A3-mid, scroll:700, sleep:1, shot:stutter-A3-low, scroll:5000, sleep:1, shot:stutter-A3-end, leaveWorld, stutterJson, quit]
+[00:03:28] [Render thread/INFO]: Using graphics backend OpenGL, using drivers: 3.3.0 Core Profile Context 26.8.1.260810
+[00:03:28] [Render thread/INFO]: Using graphics device: AMD Radeon RX 7800 XT (ATI Technologies Inc.)
+[00:03:28] [Render thread/INFO]: Using graphics device extensions: GL_ARB_multi_draw_indirect, GL_ARB_buffer_storage, GL_ARB_shader_draw_parameters, GL_ARB_base_instance, GL_KHR_debug, GL_ARB_draw_indirect, GL_ARB_clip_control, GL_ARB_vertex_attrib_binding, GL_ARB_direct_state_access, GL_EXT_texture_filter_anisotropic
+[00:03:31] [Render thread/INFO]: [P5A] 3.6s title screen at JVM uptime 16646 ms
+[00:03:32] [Render thread/INFO]: [P5A] 4.1s report ready (online false, rules r15 bundled)
+[00:03:32] [Render thread/INFO]: [P5A] 4.2s stutter monitor on
+[00:03:34] [Server thread/INFO]: [P5A] BEFORE_SAVE at JVM uptime 19550 ms (flush true, force true)
+[00:03:34] [Server thread/INFO]: [P5A] AFTER_SAVE at JVM uptime 19616 ms (flush true, force true)
+[00:03:34] [Render thread/INFO]: [P5A] 4.2s opening the benchmark world: true
+[00:03:37] [Render thread/INFO]: Stutter Doctor: capture on (collector g1)
+[00:03:37] [RigTune stutter sampler/INFO]: Stutter Doctor: 62 threads {Attach Listener=1, Chunk Render Task Executor #*=10, Common-Cleaner=1, Download-*=2, Finalizer=1, ForkJoinPool.commonPool-delayScheduler=1, ForkJoinPool.commonPool-worker-*=1, HttpClient-2-SelectorManager=1, HttpClient-2-Worker-*=2, IO-Worker-*=9, JNA Cleaner=1, Keep-Alive-Timer=1, Netty Local IO #*=3, Notification Thread=1, Reference Handler=1, Render thread=1, RigTune rules=1, RigTune stutter sampler=1, RigTune worker=2, Server thread=1, Signal Dispatcher=1, Sodium Async Cull Thread=1, Sound engine=1, Timer hack thread=1, Worker-Main-*=15, Yggdrasil Key Fetcher=1}
+[00:03:39] [Render thread/INFO]: [P5A] 9.3s in the benchmark world at (0.5, 133.0, 192.5), state READY
+[00:08:36] [Server thread/INFO]: [P5A] BEFORE_SAVE at JVM uptime 321431 ms (flush false, force false)
+[00:08:36] [Server thread/INFO]: [P5A] AFTER_SAVE at JVM uptime 321453 ms (flush false, force false)
+[00:10:09] [Render thread/INFO]: [P5A] 399.3s opened the Stutter Doctor
+[00:10:09] [Server thread/INFO]: [P5A] BEFORE_SAVE at JVM uptime 414381 ms (flush false, force false)
+[00:10:09] [Server thread/INFO]: [P5A] AFTER_SAVE at JVM uptime 414403 ms (flush false, force false)
+[00:10:10] [Render thread/INFO]: [P5A] 400.3s stutter view: monitorOn true, recording true, live true, advice []
+[00:10:10] [Render thread/INFO]: [P5A] stutter summary (A3):
+**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 4096 MB heap
+[00:10:10] [IO-Worker-18/INFO]: [P5A] 400.4s screenshot stutter-A3-top: Saved screenshot as p5a-stutA3-stutter-A3-top.png
+[00:10:11] [Render thread/INFO]: [P5A] 400.8s scroll 300: true
+[00:10:12] [IO-Worker-18/INFO]: [P5A] 401.9s screenshot stutter-A3-mid: Saved screenshot as p5a-stutA3-stutter-A3-mid.png
+[00:10:12] [Render thread/INFO]: [P5A] 402.4s scroll 700: true
+[00:10:13] [IO-Worker-18/INFO]: [P5A] 403.5s screenshot stutter-A3-low: Saved screenshot as p5a-stutA3-stutter-A3-low.png
+[00:10:14] [Render thread/INFO]: [P5A] 403.9s scroll 5000: true
+[00:10:15] [IO-Worker-18/INFO]: [P5A] 405.0s screenshot stutter-A3-end: Saved screenshot as p5a-stutA3-stutter-A3-end.png
+[00:10:15] [Server thread/INFO]: [P5A] BEFORE_SAVE at JVM uptime 420711 ms (flush true, force false)
+[00:10:16] [Server thread/INFO]: [P5A] AFTER_SAVE at JVM uptime 421453 ms (flush true, force false)
+[00:10:16] [Render thread/INFO]: [P5A] 405.5s leaving the benchmark world
+[00:10:16] [Render thread/INFO]: Stutter Doctor: capture off; GC listener removed, sampler stopped
+[00:10:16] [RigTune worker/INFO]: Stutter Doctor: session saved (OK): 1 spikes in 383 s of gameplay, phase timing ok (per-frame baselines: packets 0.3 us, ticks 0.2 us, render 346.3 us; timers seen 1111111), GC offset 18.2 ms
+[00:10:21] [Render thread/INFO]: [P5A] 410.6s quitting
+[00:03:34] [Server thread/INFO]: [P5A] BEFORE_SAVE at JVM uptime 19550 ms (flush true, force true)
+[00:03:34] [Server thread/INFO]: [P5A] AFTER_SAVE at JVM uptime 19616 ms (flush true, force true)
+[00:08:36] [Server thread/INFO]: [P5A] BEFORE_SAVE at JVM uptime 321431 ms (flush false, force false)
+[00:08:36] [Server thread/INFO]: [P5A] AFTER_SAVE at JVM uptime 321453 ms (flush false, force false)
+[00:10:09] [Server thread/INFO]: [P5A] BEFORE_SAVE at JVM uptime 414381 ms (flush false, force false)
+[00:10:09] [Server thread/INFO]: [P5A] AFTER_SAVE at JVM uptime 414403 ms (flush false, force false)
+[00:10:15] [Server thread/INFO]: [P5A] BEFORE_SAVE at JVM uptime 420711 ms (flush true, force false)
+[00:10:16] [Server thread/INFO]: [P5A] AFTER_SAVE at JVM uptime 421453 ms (flush true, force false)

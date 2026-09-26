@@ -484,4 +484,168 @@ class KnowledgeV2ScenarioTest {
 		assertFalse(advice(run(Fixtures.userRig(), "sodium")).contains("spark-profiler"));
 		assertFalse(advice(run(Fixtures.lowEndLaptop(), "fabric-api")).contains("spark-profiler"));
 	}
+
+	// v0.4 SPEC 2k (external review §4): VSync off is optional (unticked) and neither reason claims variable refresh.
+	@Test
+	void vsyncOffIsOptionalAndHonest() {
+		Map<String, Recommendation> recs = run(Fixtures.userRig(), List.of("sodium"), Map.of("vanilla.maxFps", "120", "vanilla.enableVsync", "true"));
+		Recommendation vsync = recs.get("set:vanilla.enableVsync");
+		assertEquals(new Action.SetSetting("vanilla.enableVsync", "true", "false"), vsync.action());
+		assertFalse(vsync.selectedByDefault(), "VSync off starts unticked");
+		assertEquals("Optional: turning VSync off lowers input lag but can cause tearing; leave it on if you see tearing.", vsync.reason());
+		Recommendation cap = recs.get("set:vanilla.maxFps");
+		assertEquals("170", target(recs, "vanilla.maxFps"));
+		assertTrue(cap.selectedByDefault());
+		assertTrue(cap.reason().startsWith("Avoids rendering frames your monitor can't show; with FreeSync or G-Sync it also keeps the frame rate "
+				+ "inside the variable-refresh range."), cap.reason());
+		for (Recommendation rec : List.of(vsync, cap)) {
+			assertFalse(rec.reason().contains("keeps FreeSync"), rec.reason());
+		}
+	}
+
+	// v0.4: without their facts the new advice fires nothing in the main list: the jvm- advice needs the JVM probe's facts
+	// (jvm-probed, plan review J-M1), which these fixtures don't carry, and the stutter seeds are never read by the main list.
+	// Their firing cases: WS-J's core/jvm/JvmScenarioTest, WS-S's StutterSeedScenarioTest, and for driverVersion WS-W's
+	// driverSeedsFireOnTheAffectedDriversOnly.
+	@Test
+	void theV04ContentFiresNothingUntilItsEvaluatorsLand() {
+		RulesDocument rules = RulesLoader.loadBundled();
+		Set<String> jvm = rules.advice.stream().map(a -> a.id).filter(id -> id.startsWith("jvm-")).collect(Collectors.toSet());
+		Set<String> drivers = rules.advice.stream().map(a -> a.id).filter(id -> id.startsWith("driver-")).collect(Collectors.toSet());
+		Set<String> stutter = rules.stutterAdvice.stream().map(a -> a.id).collect(Collectors.toSet());
+		assertEquals(9, jvm.size(), jvm.toString());
+		assertEquals(5, stutter.size());
+		assertEquals(Set.of("driver-nvidia-threaded-optimization", "driver-intel-gen7-old"), drivers);
+
+		Fixtures.Hw oldNvidia = Fixtures.userRig();
+		oldNvidia.gpu = new GpuInfo("NVIDIA Corporation", "NVIDIA GeForce RTX 3060/PCIe/SSE2", "4.6.0 NVIDIA 531.18", GraphicsBackend.OPENGL, 12288);
+		Fixtures.Hw hd4000 = Fixtures.lowEndLaptop();
+		hd4000.gpu = new GpuInfo("Intel", "Intel(R) HD Graphics 4000", "4.0.0 - Build 10.18.10.4358", GraphicsBackend.OPENGL, -1);
+		for (Fixtures.Hw hw : List.of(Fixtures.userRig(), Fixtures.lowEndLaptop(), oldNvidia, hd4000, tier1Laptop())) {
+			for (List<String> mods : List.of(List.of("sodium"), DH_MODS, List.of("sodium", "iris", "distanthorizons"), List.of("fabric-api"))) {
+				Set<String> fired = advice(run(hw, mods, Map.of("sodium.performance.chunk_build_defer_mode", "ZERO_FRAMES")));
+				for (Set<String> ids : List.of(jvm, stutter)) {
+					assertTrue(fired.stream().noneMatch(ids::contains), hw.gpu.renderer() + " " + mods + ": " + fired);
+				}
+			}
+		}
+	}
+
+	// v0.4 SPEC 9 (AC9.4): the driver seeds warn on exactly the affected drivers, on Windows, and never on a driver string
+	// RigTune can't read.
+	@Test
+	void driverSeedsFireOnTheAffectedDriversOnly() {
+		String nvidia = "driver-nvidia-threaded-optimization";
+		String intel = "driver-intel-gen7-old";
+		Map<String, Set<String>> expected = new java.util.LinkedHashMap<>();
+		Map<String, Fixtures.Hw> hardware = new java.util.LinkedHashMap<>();
+		hardware.put("NVIDIA 531.18 Windows", nvidiaRig("4.6.0 NVIDIA 531.18", "Windows 11"));
+		expected.put("NVIDIA 531.18 Windows", Set.of(nvidia));
+		hardware.put("NVIDIA 526.47 Windows", nvidiaRig("4.6.0 NVIDIA 526.47", "Windows 10"));
+		expected.put("NVIDIA 526.47 Windows", Set.of(nvidia));
+		hardware.put("NVIDIA 536.22 Windows", nvidiaRig("4.6.0 NVIDIA 536.22", "Windows 11"));
+		expected.put("NVIDIA 536.22 Windows", Set.of(nvidia));
+		hardware.put("NVIDIA 536.23 Windows", nvidiaRig("4.6.0 NVIDIA 536.23", "Windows 11"));
+		expected.put("NVIDIA 536.23 Windows", Set.of());
+		hardware.put("NVIDIA 560.94 Windows", nvidiaRig("4.6.0 NVIDIA 560.94", "Windows 11"));
+		expected.put("NVIDIA 560.94 Windows", Set.of());
+		hardware.put("NVIDIA 531.18 Linux", nvidiaRig("4.6.0 NVIDIA 531.18", "Linux"));
+		expected.put("NVIDIA 531.18 Linux", Set.of());
+		hardware.put("NVIDIA unparseable", nvidiaRig("4.6.0 NVIDIA", "Windows 11"));
+		expected.put("NVIDIA unparseable", Set.of());
+		hardware.put("NVIDIA 531.18 Vulkan", nvidiaRig("1.3.296 NVIDIA 531.18", "Windows 11"));
+		hardware.get("NVIDIA 531.18 Vulkan").gpu = new GpuInfo("NVIDIA", "NVIDIA GeForce RTX 3060", "1.3.296 NVIDIA 531.18", GraphicsBackend.VULKAN, 12288);
+		expected.put("NVIDIA 531.18 Vulkan", Set.of(nvidia));
+		hardware.put("HD 4000 10.18.10.4358", hd4000("4.0.0 - Build 10.18.10.4358"));
+		expected.put("HD 4000 10.18.10.4358", Set.of(intel));
+		hardware.put("HD 4000 10.18.10.5160", hd4000("4.0.0 - Build 10.18.10.5160"));
+		expected.put("HD 4000 10.18.10.5160", Set.of(intel));
+		hardware.put("HD 4000 10.18.10.5161", hd4000("4.0.0 - Build 10.18.10.5161"));
+		expected.put("HD 4000 10.18.10.5161", Set.of());
+		hardware.put("HD 4000 unparseable", hd4000("4.0.0 - Build"));
+		expected.put("HD 4000 unparseable", Set.of());
+		Fixtures.Hw hd4600 = hd4000("4.3.0 - Build 10.18.10.4358");
+		hd4600.gpu = new GpuInfo("Intel", "Intel(R) HD Graphics 4600", "4.3.0 - Build 10.18.10.4358", GraphicsBackend.OPENGL, -1);
+		hardware.put("HD 4600 old driver", hd4600);
+		expected.put("HD 4600 old driver", Set.of());
+		hardware.put("AMD", Fixtures.userRig());
+		expected.put("AMD", Set.of());
+		for (Map.Entry<String, Fixtures.Hw> hw : hardware.entrySet()) {
+			Map<String, Recommendation> recs = run(hw.getValue(), "sodium");
+			Set<String> fired = advice(recs).stream().filter(id -> id.startsWith("driver-")).collect(Collectors.toSet());
+			assertEquals(expected.get(hw.getKey()), fired, hw.getKey());
+			for (String id : fired) {
+				Recommendation rec = recs.get("advice:" + id);
+				assertEquals(Category.WARNING, rec.category(), id);
+				assertFalse(rec.appliable(), id);
+			}
+		}
+	}
+
+	private static Fixtures.Hw nvidiaRig(String driver, String os) {
+		Fixtures.Hw hw = Fixtures.userRig();
+		hw.gpu = new GpuInfo("NVIDIA Corporation", "NVIDIA GeForce RTX 3060/PCIe/SSE2", driver, GraphicsBackend.OPENGL, 12288);
+		hw.os = os;
+		return hw;
+	}
+
+	private static Fixtures.Hw hd4000(String driver) {
+		Fixtures.Hw hw = Fixtures.lowEndLaptop();
+		hw.gpu = new GpuInfo("Intel", "Intel(R) HD Graphics 4000", driver, GraphicsBackend.OPENGL, -1);
+		hw.os = "Windows 10";
+		return hw;
+	}
+
+	// v0.4 SPEC 6: the main list evaluates the jvm-* advice (Recommender.SUPPORTED_FEATURES has "jvm-flags") once the JVM
+	// check has put its facts into HardwareProfile.flags; jvm-probed says the check ran (plan review J-M1).
+	@Test
+	void jvmAdviceIsEvaluatedOnceTheFactsExist() {
+		Recommendation noGc = run(withFlags(Fixtures.userRig(), "jvm-probed", "jvm-gc-epsilon", "jvm-gc-typed"), "sodium").get("advice:jvm-no-gc");
+		assertNotNull(noGc);
+		assertEquals(Category.WARNING, noGc.category());
+		assertEquals(Impact.HIGH, noGc.impact());
+		assertFalse(advice(run(withFlags(Fixtures.userRig(), "jvm-probed", "jvm-gc-g1"), "sodium")).stream().anyMatch(id -> id.startsWith("jvm-")));
+	}
+
+	// v0.4 SPEC 6 as decided in WS-R's self-review (coordinator, option C): the two ZGC notes never send a player from one to
+	// the other. jvm-zgc-small-heap needs more than 8 GB of RAM, jvm-zgc-small-pc at most 8 GB, so an 8 GB PC raising its heap
+	// from 3 to 4 GB isn't then told to drop ZGC by a second note after following the first.
+	@Test
+	void zgcAdviceNeverLoops() {
+		Map<String, Set<String>> expected = new java.util.LinkedHashMap<>();
+		expected.put("8192/3072", Set.of());
+		expected.put("8192/4096", Set.of("jvm-zgc-small-pc"));
+		expected.put("7900/3072", Set.of());
+		expected.put("7900/4096", Set.of("jvm-zgc-small-pc"));
+		expected.put("16384/3072", Set.of("jvm-zgc-small-heap"));
+		expected.put("16384/4096", Set.of());
+		expected.put("16384/2048", Set.of("jvm-zgc-small-heap"));
+		for (Map.Entry<String, Set<String>> point : expected.entrySet()) {
+			String[] ramHeap = point.getKey().split("/");
+			Fixtures.Hw hw = withFlags(Fixtures.userRig(), "jvm-probed", "jvm-gc-zgc", "jvm-gc-typed");
+			hw.ramMb = Long.parseLong(ramHeap[0]);
+			hw.heapMb = Long.parseLong(ramHeap[1]);
+			Set<String> zgc = advice(run(hw, "sodium")).stream().filter(id -> id.startsWith("jvm-zgc-")).collect(Collectors.toSet());
+			assertEquals(point.getValue(), zgc, "RAM/heap MB " + point.getKey());
+		}
+	}
+
+	// v0.4 SPEC 9: the Intel seed targets only the Gen7 (Ivy Bridge, ig7icd) HD Graphics that Sodium's check for issue #899
+	// covers, as the renderer strings name them.
+	@Test
+	void intelGen7DriverSeedTargetsIvyBridgeHdGraphicsOnly() {
+		RulesDocument.AdviceRule seed = RulesLoader.loadBundled().advice.stream().filter(a -> a.id.equals("driver-intel-gen7-old")).findFirst().orElseThrow();
+		java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(seed.when.gpuModelMatches);
+		for (String gen7 : List.of("Intel(R) HD Graphics 4000", "Intel(R) HD Graphics 2500", "Intel(R) HD Graphics P4000", "Intel HD Graphics 4000")) {
+			assertTrue(pattern.matcher(gen7).find(), gen7);
+		}
+		for (String other : List.of("Intel(R) HD Graphics 3000", "Intel(R) HD Graphics 2000", "Intel(R) HD Graphics 4400", "Intel(R) HD Graphics 4600",
+				"Intel(R) HD Graphics 5000", "Intel(R) Iris(R) Pro Graphics 5200", "Intel(R) HD Graphics 400", "Intel(R) HD Graphics 520",
+				"Intel(R) HD Graphics", "Intel(R) UHD Graphics 620", "Intel(R) Iris(R) Xe Graphics", "Intel(R) HD Graphics 40000")) {
+			assertFalse(pattern.matcher(other).find(), other);
+		}
+		assertEquals(Map.of("vendor", "intel", "atMost", "10.18.10.5160"), seed.when.driverVersion);
+		assertEquals(List.of("windows"), seed.when.os);
+		assertEquals(List.of("intel"), seed.when.gpuVendor);
+	}
 }

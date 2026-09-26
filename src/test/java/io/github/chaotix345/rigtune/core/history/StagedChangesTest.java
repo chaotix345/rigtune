@@ -2,7 +2,10 @@ package io.github.chaotix345.rigtune.core.history;
 
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
+import io.github.chaotix345.rigtune.core.apply.ModJars;
+import io.github.chaotix345.rigtune.core.apply.TestJars;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -10,6 +13,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StagedChangesTest {
@@ -126,5 +130,33 @@ class StagedChangesTest {
 
 		assertEquals(List.of(old.id()), outcome.discardedOpIds());
 		assertEquals(List.of(newer.id()), outcome.changes().stream().map(JournalChange::opId).toList());
+	}
+
+	// docs/v0.4/SPEC.md 2c (AC2c.1): each file change records the jar's display name, read where the jar is at staging
+	// time: the download (op.from()) for an enable, the installed jar (op.path()) for a disable; null when it can't be read.
+	@Test
+	void fileChangesRecordTheJarsNameFromWhereTheJarIsNow(@TempDir Path dir) throws Exception {
+		Path mods = dir.resolve("mods");
+		Path download = TestJars.modJar(mods.resolve("sodium-0.7.1.jar.rigtune-pending"), "sodium", "Sodium");
+		Path installed = TestJars.modJar(mods.resolve("iris-1.0.jar"), "iris", "Iris Shaders");
+		List<Op> ops = List.of(
+				Op.enableFile(download, mods.resolve("sodium-0.7.1.jar")).withModId("sodium"),
+				Op.disableFile(installed),
+				Op.disableFile(mods.resolve("gone.jar")));
+		PendingActions base = PendingActions.create(1, mods, dir.resolve("config"), List.of());
+
+		List<JournalChange> changes = StagedChanges.of(base, ops, base.merge(ops), CONFIG_KEYS, ModJars::modIdOf, ModJars::nameOf, Set.of()).changes();
+
+		assertEquals("Sodium", changes.get(0).modName());
+		assertEquals("Iris Shaders", changes.get(1).modName());
+		assertNull(changes.get(2).modName());
+		assertEquals("sodium-0.7.1.jar", changes.get(0).file());
+	}
+
+	@Test
+	void withoutANameReaderNothingIsRecorded() {
+		List<Op> ops = List.of(Op.disableFile(MODS.resolve("sodium-0.7.0.jar")));
+
+		assertNull(stage(plan(List.of()), ops, Set.of()).changes().getFirst().modName());
 	}
 }

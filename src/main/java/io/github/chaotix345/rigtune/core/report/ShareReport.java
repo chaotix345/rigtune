@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.core.report;
 
+import io.github.chaotix345.rigtune.core.jvm.JvmReport;
 import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.CpuInfo;
@@ -8,6 +9,7 @@ import io.github.chaotix345.rigtune.core.model.GpuInfo;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.TierBasis;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -15,22 +17,14 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Pattern;
+
+import static io.github.chaotix345.rigtune.core.report.MarkdownSafe.clip;
+import static io.github.chaotix345.rigtune.core.report.MarkdownSafe.field;
 
 // The "Copy report" text (docs/v0.2/SPEC.md item 10): Markdown for a Discord message or an issue. Only what the report
 // shows about the machine and the suggestions' titles: no reasons, no file paths, no user or world names.
 public final class ShareReport {
 	public static final int DISCORD_LIMIT = 2000;
-	private static final int FIELD_LIMIT = 120;
-	private static final String PATH = "(path)";
-	// A drive, home or root start, then folders that may contain spaces (each ends at a separator), then a last
-	// segment without spaces. Finally any word with a backslash (relative Windows paths, UNC paths).
-	private static final List<Pattern> PATHS = List.of(
-			Pattern.compile("(?i)(?<!\\w)[a-z]:[\\\\/](?:[^\\\\/\\r\\n]*[\\\\/])*[^\\s\\\\/]*"),
-			Pattern.compile("~[\\\\/](?:[^\\\\/\\r\\n]*[\\\\/])*[^\\s\\\\/]*"),
-			Pattern.compile("(?<![\\w:/.])/[^\\s/][^/\\r\\n]*/(?:[^/\\r\\n]*/)*[^\\s/]*"),
-			Pattern.compile("\\S*\\\\\\S*"));
-	private static final String MARKDOWN = "\\*_~`|[]<";
 
 	public record Versions(String rigtune, String minecraft, String loader) {
 	}
@@ -52,10 +46,20 @@ public final class ShareReport {
 	}
 
 	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, int maxChars, @Nullable String launcher) {
+		return format(report, versions, benchmark, maxChars, launcher, null);
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md 6): jvm adds the Java line; null (or nothing read yet) leaves the report as before.
+	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, @Nullable String launcher, @Nullable JvmReport jvm) {
+		return format(report, versions, benchmark, DISCORD_LIMIT, launcher, jvm);
+	}
+
+	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, int maxChars, @Nullable String launcher,
+			@Nullable JvmReport jvm) {
 		StringBuilder fixed = new StringBuilder();
 		fixed.append("**RigTune ").append(field(versions.rigtune())).append("** · Minecraft ").append(field(versions.minecraft()))
 				.append(" · Fabric Loader ").append(field(versions.loader())).append('\n');
-		hardware(fixed, report, launcher);
+		hardware(fixed, report, launcher, jvm);
 		benchmark(fixed, benchmark);
 
 		List<String> items = items(report.recommendations());
@@ -74,7 +78,7 @@ public final class ShareReport {
 		return hardCut(text, maxChars);
 	}
 
-	private static void hardware(StringBuilder out, Report report, @Nullable String launcher) {
+	private static void hardware(StringBuilder out, Report report, @Nullable String launcher, @Nullable JvmReport jvm) {
 		HardwareProfile hw = report.hardware();
 		CpuInfo cpu = hw.cpu();
 		out.append("**Hardware**\n");
@@ -113,11 +117,33 @@ public final class ShareReport {
 		if (!blank(launcher)) {
 			out.append("- Launcher: ").append(field(launcher)).append('\n');
 		}
+		java(out, jvm);
 
-		out.append("- Tier ").append(report.tier().rawTier()).append("/5 · limited by ").append(limit(report.tier().limitingFactor()))
+		// docs/v0.4/SPEC.md 2j: an estimate and its lowest estimated component(s), never "limited by".
+		out.append("- Estimated tier ").append(report.tier().rawTier()).append("/5 · lowest estimated component: ")
+				.append(String.join(", ", TierBasis.lowest(report.tier()).stream().map(ShareReport::limit).toList()))
 				.append(" · goal ").append(capitalised(report.goal().name())).append('\n');
 		out.append("- Rules r").append(report.rulesRevision()).append(" (").append(field(report.rulesSource())).append(") · ")
 				.append(report.online() ? "online" : "offline").append('\n');
+	}
+
+	// "- Java: 25.0.3 (Azul Systems, Inc.), G1, 2 argument notes": version, vendor, collector and a count, never an argument.
+	private static void java(StringBuilder out, @Nullable JvmReport jvm) {
+		if (jvm == null || blank(jvm.javaVersion())) {
+			return;
+		}
+		out.append("- Java: ").append(field(jvm.javaVersion()));
+		if (!blank(jvm.vendor())) {
+			out.append(" (").append(field(jvm.vendor())).append(')');
+		}
+		if (jvm.collectorName() != null) {
+			out.append(", ").append(jvm.collectorName());
+		}
+		if (jvm.available()) {
+			int notes = jvm.findings().size();
+			out.append(", ").append(notes).append(notes == 1 ? " argument note" : " argument notes");
+		}
+		out.append('\n');
 	}
 
 	private static void benchmark(StringBuilder out, BenchmarkSummary b) {
@@ -131,6 +157,13 @@ public final class ShareReport {
 		out.append("- render distance ").append(b.renderDistance())
 				.append(" · avg ").append(Math.round(b.avgFps())).append(" FPS · 1% low ").append(Math.round(b.onePercentLowFps()))
 				.append(" FPS · target ").append(b.targetFps()).append(" FPS ").append(b.targetMet() ? "met" : "missed").append('\n');
+		// v0.4 (docs/v0.4/SPEC.md 7, external review §2): the run's conditions, and whether it still describes the game.
+		if (!blank(b.conditions())) {
+			out.append("- conditions: ").append(field(b.conditions())).append('\n');
+		}
+		if (!blank(b.rerun())) {
+			out.append("- ").append(field(b.rerun())).append('\n');
+		}
 	}
 
 	// One entry per recommendation; the first of each category carries the category's header, so a cut never leaves a
@@ -200,57 +233,12 @@ public final class ShareReport {
 		return clip(text, maxChars);
 	}
 
-	// At most max characters, ending in "…", never splitting a surrogate pair.
-	private static String clip(String text, int max) {
-		if (text.length() <= max) {
-			return text;
-		}
-		int end = max - 1;
-		if (end > 0 && Character.isHighSurrogate(text.charAt(end - 1))) {
-			end--;
-		}
-		return text.substring(0, end) + "…";
-	}
-
 	private static String stripTrailingNewline(StringBuilder text) {
 		int end = text.length();
 		while (end > 0 && text.charAt(end - 1) == '\n') {
 			end--;
 		}
 		return text.substring(0, end);
-	}
-
-	// Replaces anything that looks like a file path, which is where user names would show up.
-	static String scrub(String text) {
-		String out = text;
-		for (Pattern pattern : PATHS) {
-			out = pattern.matcher(out).replaceAll(PATH);
-		}
-		return out;
-	}
-
-	// Text from outside RigTune (hardware names, mod titles): no paths, bounded, and inert as Markdown, so a mod
-	// called "*@everyone*" can't format the message or ping anyone.
-	private static String field(String value) {
-		if (blank(value)) {
-			return "?";
-		}
-		return escape(clip(scrub(value.strip().replaceAll("\\s+", " ")), FIELD_LIMIT));
-	}
-
-	private static String escape(String text) {
-		StringBuilder out = new StringBuilder(text.length() + 8);
-		for (int i = 0; i < text.length(); i++) {
-			char c = text.charAt(i);
-			if (MARKDOWN.indexOf(c) >= 0) {
-				out.append('\\');
-			}
-			out.append(c);
-			if (c == '@') {
-				out.append('​');
-			}
-		}
-		return out.toString();
 	}
 
 	private static boolean blank(String value) {

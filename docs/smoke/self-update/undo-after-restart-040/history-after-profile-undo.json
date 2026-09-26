@@ -1,0 +1,230 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "86bdf09f-2ab6-4569-85fa-d829df4b3a4e",
+      "at": "2026-09-26T16:03:09.116621400Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.4.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "f00d1cc4-7514-4de1-9779-ceb34cef613f",
+          "type": "setting",
+          "key": "vanilla.maxFps",
+          "before": "120",
+          "after": "60",
+          "status": "REVERTED"
+        },
+        {
+          "id": "4d61c0ea-fb75-4d81-8bc2-6111105c9103",
+          "type": "setting",
+          "key": "vanilla.particles",
+          "before": "0",
+          "after": "1",
+          "status": "REVERTED"
+        },
+        {
+          "id": "6cb16c93-a90d-40e6-b79e-041680608122",
+          "type": "setting",
+          "key": "vanilla.renderClouds",
+          "before": "true",
+          "after": "false",
+          "status": "REVERTED"
+        },
+        {
+          "id": "84f54124-94de-4e56-a77a-c8a7da172331",
+          "type": "setting",
+          "key": "vanilla.renderDistance",
+          "before": "12",
+          "after": "8",
+          "status": "REVERTED"
+        },
+        {
+          "id": "a5f42a64-e7a7-487a-a785-bb1979981dfc",
+          "type": "setting",
+          "key": "vanilla.simulationDistance",
+          "before": "12",
+          "after": "6",
+          "status": "REVERTED"
+        }
+      ]
+    },
+    {
+      "id": "cd6da796-896b-4539-b85d-19656642db86",
+      "at": "2026-09-26T16:03:10.100144900Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.4.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "331511be-9b82-4824-81bf-c7311d786cef",
+          "type": "setting",
+          "key": "vanilla.enableVsync",
+          "before": "true",
+          "after": "false",
+          "status": "REVERTED"
+        },
+        {
+          "id": "24ff189e-c5da-4d1b-8c9d-68b6ae7e06df",
+          "type": "setting",
+          "key": "vanilla.maxFps",
+          "before": "60",
+          "after": "260",
+          "status": "REVERTED"
+        },
+        {
+          "id": "a8aff6c9-3ac5-4f45-b934-f6549ccb7e9e",
+          "type": "setting",
+          "key": "vanilla.particles",
+          "before": "1",
+          "after": "0",
+          "status": "REVERTED"
+        },
+        {
+          "id": "b7ba24a5-0559-4432-bd0c-ecbb0bbdefc1",
+          "type": "setting",
+          "key": "vanilla.renderClouds",
+          "before": "false",
+          "after": "true",
+          "status": "REVERTED"
+        },
+        {
+          "id": "87d07159-006b-4862-8234-50b2f1792f2f",
+          "type": "setting",
+          "key": "vanilla.renderDistance",
+          "before": "8",
+          "after": "12",
+          "status": "REVERTED"
+        },
+        {
+          "id": "b4bd76fd-d32d-4348-a26a-f7178bc08ccb",
+          "type": "setting",
+          "key": "vanilla.simulationDistance",
+          "before": "6",
+          "after": "10",
+          "status": "REVERTED"
+        }
+      ]
+    },
+    {
+      "id": "084a913b-2217-4166-9fc7-913dc0eb8177",
+      "at": "2026-09-26T16:03:36.248741700Z",
+      "kind": "undo",
+      "rigtuneVersion": "0.4.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "undoOf": "cd6da796-896b-4539-b85d-19656642db86",
+      "changes": [
+        {
+          "id": "4ca0b49c-b5ea-4a61-9e8c-fdfeb1fbda6e",
+          "type": "setting",
+          "key": "vanilla.enableVsync",
+          "before": "false",
+          "after": "true",
+          "status": "APPLIED",
+          "reverts": "331511be-9b82-4824-81bf-c7311d786cef"
+        },
+        {
+          "id": "380c6f6a-7c13-4fba-8a8a-8bd3c22662be",
+          "type": "setting",
+          "key": "vanilla.maxFps",
+          "before": "260",
+          "after": "60",
+          "status": "APPLIED",
+          "reverts": "24ff189e-c5da-4d1b-8c9d-68b6ae7e06df"
+        },
+        {
+          "id": "9aaf8489-7bd8-408c-88c0-bc44c5995f76",
+          "type": "setting",
+          "key": "vanilla.particles",
+          "before": "0",
+          "after": "1",
+          "status": "APPLIED",
+          "reverts": "a8aff6c9-3ac5-4f45-b934-f6549ccb7e9e"
+        },
+        {
+          "id": "df037033-5f5d-4c0e-86bc-e616095ace26",
+          "type": "setting",
+          "key": "vanilla.renderClouds",
+          "before": "true",
+          "after": "false",
+          "status": "APPLIED",
+          "reverts": "b7ba24a5-0559-4432-bd0c-ecbb0bbdefc1"
+        },
+        {
+          "id": "d86923d7-797e-402b-8f30-689c014d63d8",
+          "type": "setting",
+          "key": "vanilla.renderDistance",
+          "before": "12",
+          "after": "8",
+          "status": "APPLIED",
+          "reverts": "87d07159-006b-4862-8234-50b2f1792f2f"
+        },
+        {
+          "id": "9e346d01-4848-4457-a02f-15a3596e3af1",
+          "type": "setting",
+          "key": "vanilla.simulationDistance",
+          "before": "10",
+          "after": "6",
+          "status": "APPLIED",
+          "reverts": "b4bd76fd-d32d-4348-a26a-f7178bc08ccb"
+        }
+      ]
+    },
+    {
+      "id": "a969cc47-8ba0-448b-a82c-f68787fbbbb9",
+      "at": "2026-09-26T16:03:39.766640Z",
+      "kind": "undo",
+      "rigtuneVersion": "0.4.0-dev+mc26.2",
+      "mcVersion": "26.2",
+      "undoOf": "86bdf09f-2ab6-4569-85fa-d829df4b3a4e",
+      "changes": [
+        {
+          "id": "d84291ac-ce4c-486c-a2c7-783b2380a8db",
+          "type": "setting",
+          "key": "vanilla.maxFps",
+          "before": "60",
+          "after": "120",
+          "status": "APPLIED",
+          "reverts": "f00d1cc4-7514-4de1-9779-ceb34cef613f"
+        },
+        {
+          "id": "15347f92-c9dc-4626-bb69-1684b92e74ce",
+          "type": "setting",
+          "key": "vanilla.particles",
+          "before": "1",
+          "after": "0",
+          "status": "APPLIED",
+          "reverts": "4d61c0ea-fb75-4d81-8bc2-6111105c9103"
+        },
+        {
+          "id": "628efd64-bb33-4b7f-8c03-2c6d41d7f991",
+          "type": "setting",
+          "key": "vanilla.renderClouds",
+          "before": "false",
+          "after": "true",
+          "status": "APPLIED",
+          "reverts": "6cb16c93-a90d-40e6-b79e-041680608122"
+        },
+        {
+          "id": "6759fb1e-4f19-4fe6-b2c0-eaffb5d4e025",
+          "type": "setting",
+          "key": "vanilla.renderDistance",
+          "before": "8",
+          "after": "12",
+          "status": "APPLIED",
+          "reverts": "84f54124-94de-4e56-a77a-c8a7da172331"
+        },
+        {
+          "id": "58e28293-84c0-4e2b-a8a2-0951cc818719",
+          "type": "setting",
+          "key": "vanilla.simulationDistance",
+          "before": "6",
+          "after": "12",
+          "status": "APPLIED",
+          "reverts": "a5f42a64-e7a7-487a-a785-bb1979981dfc"
+        }
+      ]
+    }
+  ]
+}

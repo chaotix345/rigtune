@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": 13,
-  "generatedAt": "2026-09-25T22:38:50Z",
+  "revision": 16,
+  "generatedAt": "2026-09-26T14:45:07Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -953,7 +953,7 @@
       "avoidWhen": {
         "tierAtMost": 2
       },
-      "avoidReason": "LambDynamicLights keeps relighting the area around moving light sources, which costs CPU time that entry-level hardware is short of. Disabling it can win back some frame rate; if you'd rather keep the effect, pick a less smooth dynamic lighting mode in its settings instead. It starts unticked because it's a visual choice.",
+      "avoidReason": "LambDynamicLights keeps relighting the area around moving light sources, which costs CPU time. On this PC's estimated tier, disabling it can win back some frame rate; if you'd rather keep the effect, pick a less smooth dynamic lighting mode in its settings instead. It starts unticked because it's a visual choice.",
       "avoidSelected": false,
       "conflictsWith": [
         "sodiumdynamiclights",
@@ -1194,7 +1194,7 @@
         }
       },
       "impact": "medium",
-      "reason": "Capping the frame rate just below your monitor's refresh rate keeps FreeSync/G-Sync active and avoids rendering frames you can't see, without VSync's input lag."
+      "reason": "Avoids rendering frames your monitor can't show; with FreeSync or G-Sync it also keeps the frame rate inside the variable-refresh range."
     },
     {
       "key": "vanilla.enableVsync",
@@ -1206,7 +1206,8 @@
         }
       },
       "impact": "low",
-      "reason": "With the frame-rate cap in place, VSync mostly adds input lag. Turn it back on if you see screen tearing and your monitor has no FreeSync or G-Sync."
+      "defaultSelected": false,
+      "reason": "Optional: turning VSync off lowers input lag but can cause tearing; leave it on if you see tearing."
     },
     {
       "key": "vanilla.maxFps",
@@ -1971,6 +1972,204 @@
       "impact": "low",
       "title": "Find what causes lag with spark",
       "text": "Run /sparkc profiler start, play through the lag, then /sparkc profiler stop and open the link it prints: under Render thread, the highest percentages cost the most time. Stopping uploads the profile to spark.lucko.me with your player name and UUID, mod list, system details and Java launch arguments; anyone with the link can see it."
+    },
+    {
+      "id": "jvm-ignored-flags",
+      "requires": [
+        "jvm-flags"
+      ],
+      "when": {
+        "flags": [
+          "jvm-ignored-flags"
+        ]
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "Java ignores some of your Java arguments",
+      "text": "Java doesn't use some of the flags in your Java arguments: they were removed from Java, or they don't work on this PC. They do nothing now, and a removed flag can stop a later Java from starting (OpenJDK says so for -XX:+ZGenerational). Remove them from your Java arguments."
+    },
+    {
+      "id": "jvm-young-gen-fixed",
+      "requires": [
+        "jvm-flags"
+      ],
+      "when": {
+        "flags": [
+          "jvm-young-gen-fixed",
+          "jvm-gc-g1"
+        ]
+      },
+      "kind": "warning",
+      "impact": "medium",
+      "title": "Fixed young-generation size in your Java arguments",
+      "text": "Your Java arguments fix the size of Java's young generation (-Xmn, NewSize or MaxNewSize). Java's own G1 tuning guide says that \"overrides and practically disables pause-time control\", the part of the garbage collector that keeps its pauses short. Remove it from your Java arguments."
+    },
+    {
+      "id": "jvm-stop-the-world-gc",
+      "requires": [
+        "jvm-flags"
+      ],
+      "when": {
+        "flags": [
+          "jvm-gc-typed"
+        ],
+        "anyOf": [
+          {
+            "flags": [
+              "jvm-gc-serial"
+            ]
+          },
+          {
+            "flags": [
+              "jvm-gc-parallel"
+            ]
+          }
+        ]
+      },
+      "kind": "warning",
+      "impact": "medium",
+      "title": "Your Java arguments pick a collector that pauses the game",
+      "text": "Your Java arguments switch Java to its Serial or Parallel garbage collector, which stop the game for every collection. Java's own documentation suggests Parallel only when \"pauses of one second or longer are acceptable\". Remove -XX:+UseSerialGC or -XX:+UseParallelGC so Java uses its default collector, G1."
+    },
+    {
+      "id": "jvm-no-gc",
+      "requires": [
+        "jvm-flags"
+      ],
+      "when": {
+        "flags": [
+          "jvm-gc-epsilon"
+        ]
+      },
+      "kind": "critical",
+      "impact": "high",
+      "title": "Java is set to never free memory",
+      "text": "Your Java arguments turn on Epsilon (-XX:+UseEpsilonGC), a garbage collector that never frees memory: Minecraft will run out of memory and crash. Remove it from your Java arguments."
+    },
+    {
+      "id": "jvm-server-flags",
+      "requires": [
+        "jvm-flags"
+      ],
+      "when": {
+        "flags": [
+          "jvm-server-flags"
+        ],
+        "ramMbAtMost": 16384
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "Server flags in your Java arguments",
+      "text": "These are Paper's server flags (\"Aikar's flags\") or a set based on them. In RigTune's tests they gave the same frame rates and 1% lows as Java's defaults, but with the -Xms usually pasted with them Minecraft kept its whole memory allocation reserved even when it didn't need it (all 4096 MB of a 4 GB allocation, against about 1.3 GB with Java's defaults). On a PC with 16 GB of RAM or less, remove these flags and keep only your launcher's memory setting."
+    },
+    {
+      "id": "jvm-explicit-gc-disabled",
+      "requires": [
+        "jvm-flags"
+      ],
+      "when": {
+        "flags": [
+          "jvm-explicit-gc-disabled"
+        ],
+        "not": {
+          "flags": [
+            "jvm-server-flags"
+          ]
+        }
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "Explicit garbage collection is turned off",
+      "text": "-XX:+DisableExplicitGC stops Minecraft's out-of-memory recovery and Java's direct-memory cleanup from asking for a garbage collection, and it brings no benefit in play. Remove it from your Java arguments."
+    },
+    {
+      "id": "jvm-zgc-small-heap",
+      "requires": [
+        "jvm-flags"
+      ],
+      "when": {
+        "flags": [
+          "jvm-gc-zgc"
+        ],
+        "heapMbAtMost": 3072,
+        "ramMbAtLeast": 8193
+      },
+      "kind": "info",
+      "impact": "medium",
+      "title": "ZGC with little memory",
+      "text": "Java's ZGC guide says ZGC works better the more memory it gets, and it keeps almost all of that memory in use. On RigTune's test PC, ZGC with 2 GB gave slightly lower 1% lows than with 4 GB. This PC has room for 4 GB. The options: 4 GB in your launcher's memory setting, or removing -XX:+UseZGC, which returns to Java's default collector (G1)."
+    },
+    {
+      "id": "jvm-zgc-small-pc",
+      "requires": [
+        "jvm-flags"
+      ],
+      "when": {
+        "flags": [
+          "jvm-gc-zgc"
+        ],
+        "ramMbAtMost": 8192,
+        "heapMbAtLeast": 4096
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "ZGC on a PC with 8 GB of RAM or less",
+      "text": "ZGC keeps almost its whole heap committed: on RigTune's test PC it kept 3.9 of 4 GB, against about 1.3 GB for Java's default collector (G1). On a PC with 8 GB of RAM or less, that leaves less memory for everything else. ZGC is the official Minecraft Launcher's default since 26.1, so this may not be something you changed. If the game or the PC feels slow, removing -XX:+UseZGC returns to G1."
+    },
+    {
+      "id": "jvm-xmx-duplicate",
+      "requires": [
+        "jvm-flags"
+      ],
+      "when": {
+        "flags": [
+          "jvm-xmx-duplicate"
+        ]
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "Memory is set more than once",
+      "text": "Your Java arguments set the maximum memory (-Xmx) more than once, and Java uses only the last one, so the memory your launcher shows may not be what Minecraft gets. Keep only one: remove the extra -Xmx from your Java arguments."
+    },
+    {
+      "id": "driver-nvidia-threaded-optimization",
+      "when": {
+        "os": [
+          "windows"
+        ],
+        "gpuVendor": [
+          "nvidia"
+        ],
+        "driverVersion": {
+          "vendor": "nvidia",
+          "atLeast": "526.47",
+          "atMost": "536.22"
+        }
+      },
+      "kind": "warning",
+      "impact": "high",
+      "title": "Update your NVIDIA graphics driver",
+      "text": "NVIDIA drivers 526.47 to 536.22 force Threaded Optimization for Minecraft, which Sodium reports causes crashes and stutter (Sodium issue #1486). Update your graphics driver."
+    },
+    {
+      "id": "driver-intel-gen7-old",
+      "when": {
+        "os": [
+          "windows"
+        ],
+        "gpuVendor": [
+          "intel"
+        ],
+        "gpuModelMatches": "(?i)\\bHD\\s*Graphics\\s*P?(?:2500|4000)\\b",
+        "driverVersion": {
+          "vendor": "intel",
+          "atMost": "10.18.10.5160"
+        }
+      },
+      "kind": "warning",
+      "impact": "high",
+      "title": "Intel HD Graphics driver too old for Sodium",
+      "text": "Intel HD Graphics drivers older than 10.18.10.5161 can freeze Minecraft at startup with Sodium (Sodium issue #899); update the driver."
     }
   ],
   "settingLabels": {
@@ -2164,6 +2363,247 @@
       "name": "Max Shadow Distance"
     }
   },
+  "profileTemplates": {
+    "templates": [
+      {
+        "id": "max_fps",
+        "goal": "performance",
+        "settings": [
+          {
+            "key": "vanilla.maxFps",
+            "value": 260,
+            "reason": "Max FPS takes the frame-rate cap off."
+          },
+          {
+            "key": "vanilla.enableVsync",
+            "value": false,
+            "reason": "VSync would hold the frame rate at your monitor's refresh rate."
+          }
+        ]
+      },
+      {
+        "id": "balanced",
+        "goal": "balanced"
+      },
+      {
+        "id": "quality",
+        "goal": "quality"
+      },
+      {
+        "id": "battery",
+        "goal": "performance",
+        "facts": {
+          "onBattery": true,
+          "hasBattery": true
+        },
+        "settings": [
+          {
+            "key": "iris.enableShaders",
+            "value": false,
+            "when": {
+              "modPresent": [
+                "iris"
+              ]
+            },
+            "reason": "Shader packs multiply the GPU's work, which drains the battery fastest."
+          },
+          {
+            "key": "dh.client.advanced.debugging.rendererMode",
+            "value": "DISABLED",
+            "when": {
+              "modPresent": [
+                "distanthorizons"
+              ]
+            },
+            "reason": "Turning Distant Horizons' rendering off saves the GPU work of drawing its far terrain."
+          },
+          {
+            "key": "vanilla.renderClouds",
+            "value": "false",
+            "reason": "Clouds off saves GPU work on battery."
+          },
+          {
+            "key": "vanilla.renderDistance",
+            "max": 8,
+            "reason": "Fewer chunks mean less CPU and GPU work on battery."
+          },
+          {
+            "key": "vanilla.simulationDistance",
+            "max": 6,
+            "reason": "A shorter simulation distance means less CPU work on battery."
+          },
+          {
+            "key": "vanilla.particles",
+            "min": 1,
+            "reason": "Fewer particles save GPU work on battery."
+          }
+        ]
+      },
+      {
+        "id": "recording",
+        "goal": "balanced",
+        "settings": [
+          {
+            "key": "vanilla.maxFps",
+            "value": "$recordingFps",
+            "reason": "A steady frame rate at a usual recording rate (60 FPS, or your display's rate below that) leaves headroom for the recording software."
+          },
+          {
+            "key": "vanilla.enableVsync",
+            "value": true,
+            "when": {
+              "not": {
+                "refreshRateAtLeast": 61
+              }
+            },
+            "reason": "On a display of 60 Hz or less the cap is at or below the refresh rate, so VSync stops tearing at little cost."
+          },
+          {
+            "key": "vanilla.enableVsync",
+            "value": false,
+            "when": {
+              "refreshRateAtLeast": 61
+            },
+            "reason": "Above 60 Hz, VSync would add input lag on top of the 60 FPS cap."
+          },
+          {
+            "key": "vanilla.inactivityFpsLimit",
+            "value": "minimized",
+            "reason": "Keeps the full frame rate during idle or cinematic shots instead of lowering it after a minute without input."
+          },
+          {
+            "key": "sodium.performance.chunk_build_defer_mode",
+            "value": "ALWAYS",
+            "when": {
+              "modPresent": [
+                "sodium"
+              ]
+            },
+            "reason": "Deferred chunk updates never make a frame wait for chunk building, for even frame times; blocks may take a moment to appear."
+          },
+          {
+            "key": "vanilla.prioritizeChunkUpdates",
+            "value": 0,
+            "when": {
+              "modAbsent": [
+                "sodium"
+              ]
+            },
+            "reason": "The Threaded chunk builder doesn't make frames wait for chunk building, for even frame times."
+          }
+        ]
+      }
+    ]
+  },
+  "stutterAdvice": [
+    {
+      "id": "ram-stutter-gc-heap",
+      "requires": [
+        "stutter-doctor"
+      ],
+      "when": {
+        "stutterShareAtLeast": {
+          "gc": 30
+        },
+        "anyOf": [
+          {
+            "gcFullPausesAtLeast": 1
+          },
+          {
+            "gcStallsAtLeast": 1
+          },
+          {
+            "liveSetPercentAtLeast": 75
+          }
+        ],
+        "heapRaiseRoomMbAtLeast": 2048
+      },
+      "kind": "warning",
+      "impact": "high",
+      "title": "Stutter likely linked to low memory",
+      "text": "Garbage-collection pauses took a large share of the time lost to stutter, and Minecraft's memory was nearly full, so it likely needs more. Give Minecraft about 2 GB more in your launcher's memory setting; this PC has room for it. Switching the garbage collector or adding GC flags likely isn't the fix: in RigTune's tests they gave no frame-rate gain over Java's defaults, so more memory is the change to try first."
+    },
+    {
+      "id": "stutter-gc-explicit",
+      "requires": [
+        "stutter-doctor"
+      ],
+      "when": {
+        "gcExplicitPausesAtLeast": 2,
+        "stutterShareAtLeast": {
+          "gc": 10
+        }
+      },
+      "kind": "info",
+      "impact": "medium",
+      "title": "Something asks Java for full garbage collections",
+      "text": "Some of the stutter overlapped full garbage collections that were requested on purpose (System.gc()). Minecraft itself doesn't do that in normal play, so a mod, or Java freeing direct memory, likely asked for them. If the stutter started after you added or updated a mod, try the game without it."
+    },
+    {
+      "id": "stutter-sodium-defer",
+      "requires": [
+        "stutter-doctor"
+      ],
+      "when": {
+        "stutterShareAtLeast": {
+          "chunkBuild": 25
+        },
+        "modPresent": [
+          "sodium"
+        ],
+        "anyOf": [
+          {
+            "settingIs": {
+              "sodium.performance.chunk_build_defer_mode": "ZERO_FRAMES"
+            }
+          },
+          {
+            "settingIs": {
+              "sodium.performance.chunk_build_defer_mode": "ONE_FRAME"
+            }
+          }
+        ]
+      },
+      "kind": "info",
+      "impact": "medium",
+      "title": "Frames wait for chunk updates",
+      "text": "Chunk building likely took part in a good share of the stutter, and Sodium's Chunk Updates setting makes frames wait for it. Set Chunk Updates to Deferred in Sodium's video settings (Performance page): frames stop waiting, though changed blocks may take a moment to appear."
+    },
+    {
+      "id": "stutter-dh-threads",
+      "requires": [
+        "stutter-doctor"
+      ],
+      "when": {
+        "modPresent": [
+          "distanthorizons"
+        ],
+        "stutterTaggedShareAtLeast": {
+          "dh": 40
+        },
+        "cpuContentionShareAtLeast": 30
+      },
+      "kind": "info",
+      "impact": "medium",
+      "title": "Distant Horizons may compete for the CPU",
+      "text": "Distant Horizons was busy during many of the spikes while the CPU was heavily loaded, so they may be related. While you explore new terrain, try a lower \"NO. of threads\" in Distant Horizons' settings: it builds far terrain more slowly but leaves more CPU for the game."
+    },
+    {
+      "id": "stutter-chunk-loading",
+      "requires": [
+        "stutter-doctor"
+      ],
+      "when": {
+        "stutterShareAtLeast": {
+          "chunkLoad": 30
+        }
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "Stutter while loading chunks",
+      "text": "Loading new chunks likely took part in a large share of the stutter. A render distance 2 to 4 chunks shorter loads fewer chunks at a time. If you fly or teleport a lot in singleplayer, pre-generating the world (for example with the Chunky mod) means the game no longer has to generate new terrain while you play."
+    }
+  ],
   "availability": {
     "26.3": [
       "asynclogger",

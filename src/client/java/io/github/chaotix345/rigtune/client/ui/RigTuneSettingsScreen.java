@@ -1,8 +1,8 @@
 package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.client.ClientSettings;
+import io.github.chaotix345.rigtune.client.SettingsSaver;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkWorld;
-import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import net.fabricmc.loader.api.FabricLoader;
@@ -16,7 +16,6 @@ import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.util.Locale;
-import java.util.concurrent.CompletableFuture;
 
 // The v0.2 settings (docs/v0.2/SPEC.md item 8). Every change is saved at once; the network switches also make the
 // controller reload and rescan, so the report reflects them.
@@ -93,6 +92,7 @@ public class RigTuneSettingsScreen extends Screen {
 					save();
 				}));
 		y += ROW + GAP;
+		y = stutterMonitorRow(x, y, column);
 		noteY = y + 2;
 		updateActive();
 
@@ -110,9 +110,21 @@ public class RigTuneSettingsScreen extends Screen {
 		}
 	}
 
-	// Written on a worker thread; each save writes the current values, so the last one always wins.
+	// v0.4 (docs/v0.4/SPEC.md 5): the opt-in Stutter Doctor session monitor (also on StutterScreen).
+	private int stutterMonitorRow(int x, int y, int column) {
+		addRenderableWidget(CycleButton.onOffBuilder(settings.stutterMonitor)
+				.withTooltip(v -> Tooltip.create(Component.translatable("rigtune.stutter.monitor.tooltip")))
+				.create(x, y, column, ROW, Component.translatable("rigtune.stutter.monitor"), (b, v) -> {
+					settings.stutterMonitor = v;
+					save();
+					controller.setStutterMonitor(v);
+				}));
+		return y + ROW + GAP;
+	}
+
+	// Written on the settings thread (SettingsSaver), never behind the worker pool; each save writes the current values.
 	private void save() {
-		CompletableFuture.runAsync(() -> settings.save(configDir), Probes.EXECUTOR);
+		SettingsSaver.shared().save(settings, configDir);
 	}
 
 	private void networkChanged() {
@@ -136,7 +148,7 @@ public class RigTuneSettingsScreen extends Screen {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title, width / 2, 15, 0xFFFFFFFF);
 		if (noteY + 9 < height - 28 - GAP) {
-			graphics.centeredText(font, Component.translatable("rigtune.settings.note"), width / 2, noteY, COLOR_NOTE);
+			graphics.centeredText(font, Component.translatable("rigtune.settings.note"), width / 2, noteY, Palette.of(COLOR_NOTE));
 		}
 	}
 

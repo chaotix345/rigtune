@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.client.ui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
@@ -12,6 +13,10 @@ import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.TierBasis;
+import io.github.chaotix345.rigtune.core.notice.Notice;
+import io.github.chaotix345.rigtune.core.notice.NoticeAction;
+import io.github.chaotix345.rigtune.core.notice.NoticeBoard;
 import io.github.chaotix345.rigtune.core.report.IssueLink;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
@@ -25,6 +30,7 @@ import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.gui.screens.ConfirmLinkScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -55,6 +61,12 @@ public class RigTuneScreen extends Screen {
 	private static final int COLOR_NEUTRAL = 0xFF8A8A8A;
 	private static final int COLOR_OK = 0xFF7FE07F;
 	private static final int COLOR_LAUNCHER = 0xFFA8E0B0;
+	private static final int COLOR_NOTICE = 0xFFFFE08A;
+	private static final int NOTICE_ROW = 16;
+	private static final int NOTICE_BUTTON = 14;
+	// Narrower than this (scaled px), the notice line is the message plus one "…" button to NoticeScreen (review X-M2).
+	private static final int NOTICE_INLINE_WIDTH = 400;
+	private static final int MIN_NOTICE_MESSAGE = 80;
 
 	private final @Nullable Screen parent;
 	private final RigTuneController controller;
@@ -69,6 +81,11 @@ public class RigTuneScreen extends Screen {
 	private int left;
 	private int right;
 	private int badgeRight;
+	// docs/v0.4/SPEC.md 2j: where the tier badge is drawn (title row, or the start of header line badgeLine) and its one tooltip.
+	private int badgeLine = -1;
+	private @Nullable ScreenRectangle badgeArea;
+	private @Nullable Component badgeComponent;
+	private List<Component> tierTooltipLines = List.of();
 	private int headerBottom;
 	private int statusY;
 	private @Nullable RecommendationList list;
@@ -77,6 +94,12 @@ public class RigTuneScreen extends Screen {
 	private @Nullable Map<String, String> captions;
 	private @Nullable Component seenControllerStatus;
 	private LauncherInfo shownLauncher = LauncherInfo.UNKNOWN;
+	// v0.4 (docs/v0.4/SPEC.md C3): the one notice line, read on init/rebuild only.
+	private NoticeBoard.Selection notices = NoticeBoard.select(List.of(), Set.of());
+	private int noticeIndex;
+	private @Nullable Notice shownNotice;
+	private int noticeY;
+	private int noticeTextRight;
 
 	public RigTuneScreen(@Nullable Screen parent, RigTuneController controller) {
 		super(Component.translatable("rigtune.screen.title"));
@@ -116,12 +139,18 @@ public class RigTuneScreen extends Screen {
 		tierBadge = shown == null ? null : tierBadge(shown);
 		int badgeRoom = badgeRight - (left + titleWidth + goalWidth + 2 * MARGIN);
 		boolean badgeInTitleRow = tierBadge != null && font.width(tierBadge) <= badgeRoom;
+		badgeLine = -1;
 		headerLines = shown == null ? List.of() : header(shown, badgeInTitleRow ? null : tierBadge);
+		headerTop = 30;
+		badgeArea = tierBadge == null ? null : badgeInTitleRow ? new ScreenRectangle(badgeRight - font.width(tierBadge), 11, font.width(tierBadge), LINE)
+				: badgeLine < 0 ? null : new ScreenRectangle(left, headerTop + badgeLine * LINE, Math.min(font.width(tierBadge), right - left), LINE);
+		tierTooltipLines = shown == null ? List.of() : tierTooltip(shown);
+		badgeComponent = tierBadge;
 		if (!badgeInTitleRow) {
 			tierBadge = null;
 		}
-		headerTop = 30;
 		headerBottom = headerTop + Math.max(1, headerLines.size()) * LINE + 2;
+		headerBottom += noticeLine(headerBottom);
 		int listTop = headerBottom + 4;
 
 		List<Button> buttons = new ArrayList<>();
@@ -131,6 +160,9 @@ public class RigTuneScreen extends Screen {
 		// v0.3 (review X-M2): Undo last and Undo all live in the History screen.
 		buttons.add(Button.builder(Component.translatable("rigtune.history.open"), b -> minecraft.gui.setScreen(new HistoryScreen(this, controller)))
 				.tooltip(Tooltip.create(Component.translatable("rigtune.history.open.tooltip"))).build());
+		// v0.4 (C3, X3, plan review X-M2): the one hub button, in place of Benchmark… (now the hub's first entry); features
+		// live behind it, never in this footer.
+		buttons.add(toolsButton());
 		if (controller.hasPendingChanges()) {
 			Button discard = Button.builder(Component.translatable("rigtune.screen.discard"), b -> {
 				status = controller.discardPending();
@@ -139,7 +171,6 @@ public class RigTuneScreen extends Screen {
 			discard.setTooltip(Tooltip.create(Component.translatable("rigtune.screen.discard.tooltip")));
 			buttons.add(discard);
 		}
-		buttons.add(Button.builder(Component.translatable("rigtune.screen.benchmark_menu"), b -> minecraft.gui.setScreen(new BenchmarkMenuScreen(this, controller))).build());
 		buttons.add(Button.builder(Component.translatable("rigtune.screen.rescan"), b -> {
 			status = null;
 			controller.rescan();
@@ -192,33 +223,87 @@ public class RigTuneScreen extends Screen {
 		selected.retainAll(ids);
 	}
 
+	// docs/v0.4/SPEC.md 2j (external review §1): "Estimated tier N/5 · lowest estimated component: CPU"; a tie lists every
+	// tied component. An estimate, never a bottleneck.
 	private Component tierBadge(Report report) {
-		return Component.translatable("rigtune.header.tier",
+		return Component.translatable("rigtune.header.tier_estimate",
 				Component.literal(Integer.toString(report.tier().rawTier())).withStyle(ChatFormatting.BOLD),
-				Component.translatable("rigtune.limit." + report.tier().limitingFactor())).withStyle(s -> s.withColor(0xFFFFD166));
+				components(TierBasis.lowest(report.tier()))).withStyle(s -> s.withColor(Palette.of(0xFFFFD166)));
+	}
+
+	// "GPU", "GPU, CPU" or "GPU, CPU, memory".
+	private static Component components(List<String> factors) {
+		MutableComponent out = Component.empty();
+		for (int i = 0; i < factors.size(); i++) {
+			if (i > 0) {
+				out.append(Component.literal(", "));
+			}
+			out.append(Component.translatable("rigtune.limit." + factors.get(i)));
+		}
+		return out;
+	}
+
+	// The tier badge's one tooltip: what each component's tier rests on ("GPU tier 4 (table match)", "CPU tier 5 (fallback
+	// estimate from 16 threads)", "Memory tier 5 (6.0 GB heap)"). A mutable list, so other lines (WS-B's last benchmark)
+	// are appended to it and the badge still has exactly one tooltip. Empty for a report without a basis.
+	static List<Component> tierTooltip(Report report) {
+		List<Component> lines = new ArrayList<>();
+		TierBasis basis = report.tierBasis();
+		if (basis == null) {
+			return lines;
+		}
+		lines.add(Component.translatable(basis.gpu().basis() == TierBasis.Basis.TABLE_MATCH ? "rigtune.header.tier_basis.gpu.table"
+				: "rigtune.header.tier_basis.gpu.fallback", basis.gpu().tier()));
+		TierBasis.Cpu cpu = basis.cpu();
+		if (cpu.basis() == TierBasis.Basis.TABLE_MATCH) {
+			lines.add(Component.translatable("rigtune.header.tier_basis.cpu.table", cpu.tier()));
+		} else if (cpu.logicalCores() <= 0) {
+			lines.add(Component.translatable("rigtune.header.tier_basis.cpu.fallback_unknown", cpu.tier()));
+		} else if (cpu.maxFreqMhz() > 0 && cpu.maxFreqMhz() < 2500) {
+			lines.add(Component.translatable("rigtune.header.tier_basis.cpu.fallback_clock", cpu.tier(), cpu.logicalCores(),
+					String.format(Locale.ROOT, "%.1f", cpu.maxFreqMhz() / 1000.0)));
+		} else {
+			lines.add(Component.translatable("rigtune.header.tier_basis.cpu.fallback", cpu.tier(), cpu.logicalCores()));
+		}
+		lines.add(Component.translatable("rigtune.header.tier_basis.memory", basis.memory().tier(), gb(basis.memory().heapMb())));
+		return lines;
+	}
+
+	/** v0.4 (docs/v0.4/SPEC.md 2j): the tier badge's tooltip lines and where the badge is (for the game tests). */
+	public List<Component> tierTooltip() {
+		return List.copyOf(tierTooltipLines);
+	}
+
+	public @Nullable ScreenRectangle tierBadgeArea() {
+		return badgeArea;
+	}
+
+	public @Nullable String tierBadgeText() {
+		return shown == null ? null : tierBadge(shown).getString();
 	}
 
 	private List<Component> header(Report report, @Nullable Component badge) {
 		HardwareProfile hw = report.hardware();
 		List<Component> lines = new ArrayList<>(LauncherLines.cpuAndMemory(shownLauncher, value(cpuName(hw.cpu().name())),
-				value(Integer.toString(hw.cpu().logicalCores())), value(gb(hw.totalRamMb())), value(gb(hw.maxHeapMb())), COLOR_LABEL));
+				value(Integer.toString(hw.cpu().logicalCores())), value(gb(hw.totalRamMb())), value(gb(hw.maxHeapMb())), Palette.of(COLOR_LABEL)));
 		lines.add(Component.translatable("rigtune.header.gpu",
 				value(hw.gpu().renderer()),
 				value(gb(hw.gpu().vramMb())),
 				value(backendName(hw.gpu().backend())),
-				value(Integer.toString(report.tier().gpuTier()))).withStyle(s -> s.withColor(COLOR_LABEL)));
+				value(Integer.toString(report.tier().gpuTier()))).withStyle(s -> s.withColor(Palette.of(COLOR_LABEL))));
 		MutableComponent online = report.online()
-				? Component.translatable("rigtune.header.online").withStyle(s -> s.withColor(COLOR_OK))
+				? Component.translatable("rigtune.header.online").withStyle(s -> s.withColor(Palette.of(COLOR_OK)))
 				: Component.translatable("rigtune.header.offline").withStyle(ChatFormatting.GOLD);
 		MutableComponent last = Component.empty();
 		if (badge != null) {
-			last.append(badge).append(Component.literal(" · ").withStyle(s -> s.withColor(COLOR_LABEL)));
+			badgeLine = lines.size();
+			last.append(badge).append(Component.literal(" · ").withStyle(s -> s.withColor(Palette.of(COLOR_LABEL))));
 		}
 		last.append(Component.translatable("rigtune.header.display_rules",
 				value(display(hw.display())),
 				value(Integer.toString(report.rulesRevision())),
 				value(report.rulesSource()),
-				online).withStyle(s -> s.withColor(COLOR_LABEL)));
+				online).withStyle(s -> s.withColor(Palette.of(COLOR_LABEL))));
 		lines.add(last);
 		if (!settings.networkEnabled) {
 			lines.add(Component.translatable("rigtune.screen.header.network_off").withStyle(ChatFormatting.GOLD));
@@ -232,10 +317,35 @@ public class RigTuneScreen extends Screen {
 		return List.copyOf(headerLines);
 	}
 
+	/** v0.4 (docs/v0.4/SPEC.md 2b): a recommendation's title as the list draws it, or null (for the game tests). */
+	public @Nullable String titleOf(String recommendationId) {
+		return shown == null ? null : shown.recommendations().stream().filter(r -> r.id().equals(recommendationId)).findFirst()
+				.map(r -> displayTitle(r).getString()).orElse(null);
+	}
+
+	/**
+	 * v0.4 (docs/v0.4/SPEC.md 2m): focuses a recommendation's checkbox as keyboard navigation would and returns the list,
+	 * whose narration the game test collects; null when there's no such row.
+	 */
+	public @Nullable ContainerObjectSelectionList<?> focusRecommendation(String recommendationId) {
+		if (list == null) {
+			return null;
+		}
+		for (RecommendationList.Entry entry : list.children()) {
+			if (entry instanceof RecommendationList.RecommendationEntry row && row.recommendation.id().equals(recommendationId) && row.checkbox != null) {
+				setFocused(list);
+				list.setFocused(row);
+				row.setFocused(row.checkbox);
+				return list;
+			}
+		}
+		return null;
+	}
+
 	/** v0.3 (WS-C): the launcher lines shown under the ram-* advice (for the game tests). */
 	public List<Component> launcherLines() {
 		return shown == null ? List.of()
-				: shown.recommendations().stream().map(r -> LauncherLines.adviceLine(r, shownLauncher)).filter(Objects::nonNull).toList();
+				: shown.recommendations().stream().map(r -> LauncherLines.adviceLine(r, shownLauncher, controller.jvmReport())).filter(Objects::nonNull).toList();
 	}
 
 	private void copyReport() {
@@ -268,6 +378,123 @@ public class RigTuneScreen extends Screen {
 		ConfirmLinkScreen.confirmLinkNow(this, IssueLink.uri(controller.reportVersions(), text));
 	}
 
+	// v0.4 (docs/v0.4/SPEC.md C3): Tools… and the notice line. Features fill NoticeSources and ToolsScreen entries, not
+	// this screen.
+
+	private Button toolsButton() {
+		return Button.builder(Component.translatable("rigtune.tools.open"), b -> minecraft.gui.setScreen(new ToolsScreen(this, controller)))
+				.tooltip(Tooltip.create(Component.translatable("rigtune.tools.open.tooltip"))).build();
+	}
+
+	// One row under the header lines: the notice's message (its detail as the tooltip), then at most 2 action buttons, a
+	// dismiss button when dismissible, and "+N more", which cycles. On a narrow screen: the message and one "…" button
+	// that opens NoticeScreen (the actions, dismiss and the other notices), also used when the inline buttons would leave
+	// the message less than MIN_NOTICE_MESSAGE px. Returns the height used (0 without a notice).
+	private int noticeLine(int y) {
+		notices = NoticeBoard.select(controller.notices(), Set.of());
+		noticeIndex = notices.visible().isEmpty() ? 0 : noticeIndex % notices.visible().size();
+		shownNotice = notices.at(noticeIndex);
+		if (shownNotice == null) {
+			noticeIndex = 0;
+			return 0;
+		}
+		Notice notice = shownNotice;
+		noticeY = y;
+		List<Button> buttons = new ArrayList<>();
+		if (width >= NOTICE_INLINE_WIDTH) {
+			inlineNoticeButtons(notice, buttons);
+			int total = buttons.stream().mapToInt(b -> b.getWidth() + GAP).sum();
+			if (right - total >= left + MIN_NOTICE_MESSAGE) {
+				return placeNoticeButtons(buttons, y);
+			}
+			buttons.clear();
+		}
+		Button open = noticeButton(Component.translatable("rigtune.notice.open"), b -> minecraft.gui.setScreen(new NoticeScreen(this, controller)));
+		open.setTooltip(Tooltip.create(Component.translatable("rigtune.notice.open.tooltip")));
+		buttons.add(open);
+		return placeNoticeButtons(buttons, y);
+	}
+
+	private void inlineNoticeButtons(Notice notice, List<Button> buttons) {
+		for (NoticeAction action : notice.actions().subList(0, Math.min(2, notice.actions().size()))) {
+			buttons.add(noticeButton(Texts.component(action.label()), b -> {
+				controller.noticeAction(notice.key(), action.id());
+				if (minecraft.gui.screen() == this) {
+					rebuildWidgets();
+				}
+			}));
+		}
+		if (notice.dismissible()) {
+			Button dismiss = noticeButton(Component.translatable("rigtune.notice.dismiss"), b -> {
+				controller.dismissNotice(notice.key());
+				rebuildWidgets();
+			});
+			dismiss.setTooltip(Tooltip.create(Component.translatable("rigtune.notice.dismiss.tooltip")));
+			buttons.add(dismiss);
+		}
+		if (notices.others() > 0) {
+			Button more = noticeButton(Component.translatable("rigtune.notice.more", notices.others()), b -> {
+				// Kept in range, so a dismissal shows the notice that moves into the dismissed one's place.
+				noticeIndex = (noticeIndex + 1) % notices.visible().size();
+				rebuildWidgets();
+			});
+			more.setTooltip(Tooltip.create(Component.translatable("rigtune.notice.more.tooltip")));
+			buttons.add(more);
+		}
+	}
+
+	private int placeNoticeButtons(List<Button> buttons, int y) {
+		int x = right;
+		for (Button button : buttons) {
+			x -= button.getWidth() + GAP;
+		}
+		noticeTextRight = x;
+		// review-8 UV-2: the notice's own text (and its detail) is a Tab stop the narrator reads, ahead of its buttons.
+		Notice notice = shownNotice;
+		if (notice != null) {
+			addRenderableWidget(RowFocus.standalone(RowFocus.join(Texts.component(notice.message()), notice.detail() == null ? null
+					: Texts.component(notice.detail())), left, y, Math.max(1, noticeTextRight - left), NOTICE_ROW));
+		}
+		x = right;
+		for (Button button : buttons.reversed()) {
+			x -= button.getWidth();
+			button.setPosition(x, y + (NOTICE_ROW - NOTICE_BUTTON) / 2);
+			addRenderableWidget(button);
+			x -= GAP;
+		}
+		return NOTICE_ROW;
+	}
+
+	private Button noticeButton(Component label, Button.OnPress onPress) {
+		return Button.builder(label, onPress).size(font.width(label) + 10, NOTICE_BUTTON).build();
+	}
+
+	private void extractNotice(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
+		if (shownNotice == null) {
+			return;
+		}
+		Component message = Texts.component(shownNotice.message());
+		int maxWidth = Math.max(0, noticeTextRight - left);
+		int y = noticeY + (NOTICE_ROW - 8) / 2;
+		graphics.text(font, font.width(message) <= maxWidth ? message.getVisualOrderText() : ComponentRenderUtils.clipText(message, font, maxWidth),
+				left, y, Palette.of(COLOR_NOTICE), false);
+		if (mouseX >= left && mouseX < left + maxWidth && mouseY >= y && mouseY < y + 9) {
+			// Wrapped: a notice's detail is often longer than the screen is wide (v0.4, WS-W).
+			graphics.setTooltipForNextFrame(font, font.split(shownNotice.detail() == null ? message
+					: message.copy().append(CommonComponents.NEW_LINE).append(Texts.component(shownNotice.detail())), Math.min(250, width - 16)), mouseX, mouseY);
+		}
+	}
+
+	/** v0.4 (C3): the notice the line shows, or null (for the game tests). */
+	public @Nullable Notice shownNotice() {
+		return shownNotice;
+	}
+
+	/** v0.4 (C3): how many other notices "+N more" cycles through (for the game tests). */
+	public int otherNotices() {
+		return shownNotice == null ? 0 : notices.others();
+	}
+
 	static String cpuName(String raw) {
 		if (raw == null) {
 			return "?";
@@ -289,7 +516,7 @@ public class RigTuneScreen extends Screen {
 	}
 
 	private static Component value(String text) {
-		return Component.literal(text == null ? "?" : text).withStyle(ChatFormatting.WHITE);
+		return SafeLiteral.of(text == null ? "?" : text).withStyle(ChatFormatting.WHITE);
 	}
 
 	private static Component value(Component text) {
@@ -405,7 +632,7 @@ public class RigTuneScreen extends Screen {
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
 		if (minecraft.level != null) {
-			graphics.fill(0, 0, width, headerBottom, 0x70000000);
+			graphics.fill(0, 0, width, headerBottom, Palette.of(0x70000000));
 		}
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.text(font, title.copy().withStyle(ChatFormatting.BOLD), left, 11, 0xFFFFFFFF, true);
@@ -414,20 +641,27 @@ public class RigTuneScreen extends Screen {
 		}
 		int textWidth = right - left;
 		if (shown == null) {
-			graphics.text(font, Component.translatable("rigtune.screen.analysing"), left, headerTop, COLOR_LABEL, false);
+			graphics.text(font, Component.translatable("rigtune.screen.analysing"), left, headerTop, Palette.of(COLOR_LABEL), false);
 		} else {
+			// Over the tier badge its own tooltip shows, not the clipped line's full text (the first tooltip set wins).
+			boolean overBadge = badgeArea != null && badgeArea.containsPoint(mouseX, mouseY);
 			int y = headerTop;
 			for (Component line : headerLines) {
-				drawClipped(graphics, line, left, y, textWidth, 0xFFFFFFFF, mouseX, mouseY);
+				drawClipped(graphics, line, left, y, textWidth, 0xFFFFFFFF, overBadge ? -1 : mouseX, overBadge ? -1 : mouseY);
 				y += LINE;
 			}
+			// The badge's one tooltip (2j + WS-B): the tier basis lines, then WS-B's last-benchmark line, wherever it's drawn.
+			if (badgeArea != null) {
+				BenchmarkTrendLines.badgeTooltip(graphics, font, controller, badgeComponent, badgeArea.left(), badgeArea.top(), mouseX, mouseY, tierTooltipLines);
+			}
 		}
+		extractNotice(graphics, mouseX, mouseY);
 		if (list != null && (shown == null || shown.recommendations().isEmpty())) {
 			Component empty = Component.translatable(shown == null ? "rigtune.screen.analysing" : "rigtune.screen.nothing");
-			graphics.centeredText(font, empty, width / 2, list.getY() + list.getHeight() / 2 - 4, COLOR_LABEL);
+			graphics.centeredText(font, empty, width / 2, list.getY() + list.getHeight() / 2 - 4, Palette.of(COLOR_LABEL));
 		}
 		if (status != null) {
-			drawClipped(graphics, status, left, statusY, textWidth, COLOR_OK, mouseX, mouseY);
+			drawClipped(graphics, status, left, statusY, textWidth, Palette.of(COLOR_OK), mouseX, mouseY);
 		}
 	}
 
@@ -467,7 +701,7 @@ public class RigTuneScreen extends Screen {
 		};
 	}
 
-	final class RecommendationList extends ContainerObjectSelectionList<RecommendationList.Entry> {
+	final class RecommendationList extends RowList<RecommendationList.Entry> {
 		RecommendationList(int top, int listHeight) {
 			super(RigTuneScreen.this.minecraft, RigTuneScreen.this.width, listHeight, top, 24);
 		}
@@ -492,32 +726,35 @@ public class RigTuneScreen extends Screen {
 		final class CategoryEntry extends Entry {
 			private final Component label;
 			private final int color;
+			private final RowFocus focus;
 
 			CategoryEntry(Category category, int count) {
 				this.label = Component.translatable("rigtune.category." + category.name().toLowerCase(Locale.ROOT))
 						.append(Component.literal("  " + count).withStyle(ChatFormatting.GRAY))
 						.withStyle(ChatFormatting.BOLD);
 				this.color = category == Category.WARNING ? COLOR_WARNING : category == Category.ADVICE ? COLOR_ADVICE : 0xFFFFD166;
+				this.focus = new RowFocus(this, label);
 			}
 
 			@Override
 			public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
 				int y = getContentBottom() - 11;
-				graphics.text(font, label, getContentX(), y, color, true);
+				graphics.text(font, label, getContentX(), y, Palette.of(color), true);
 				int lineX = getContentX() + font.width(label) + 6;
 				if (lineX < getContentRight()) {
-					graphics.fill(lineX, y + 4, getContentRight(), y + 5, 0x40FFFFFF);
+					graphics.fill(lineX, y + 4, getContentRight(), y + 5, Palette.of(0x40FFFFFF));
 				}
 			}
 
+			// docs/v0.4/SPEC.md 11: the heading is a Tab stop and narrates its name and count.
 			@Override
 			public List<? extends GuiEventListener> children() {
-				return List.of();
+				return List.of(focus);
 			}
 
 			@Override
 			public List<? extends NarratableEntry> narratables() {
-				return List.of();
+				return List.of(focus);
 			}
 		}
 
@@ -525,6 +762,8 @@ public class RigTuneScreen extends Screen {
 			private static final int BOX = 17;
 			private final Recommendation recommendation;
 			private final @Nullable Checkbox checkbox;
+			// docs/v0.4/SPEC.md 11: an informational row (no checkbox) is a Tab stop too, narrating its title, impact and reason.
+			private final @Nullable RowFocus focus;
 			private final Component impact;
 			private final List<FormattedCharSequence> titleLines;
 			private final List<FormattedCharSequence> reasonLines;
@@ -543,7 +782,7 @@ public class RigTuneScreen extends Screen {
 				this.titleLines = split.size() > 2 ? List.of(split.get(0), ComponentRenderUtils.clipText(title, font, titleWidth)) : split;
 				this.reasonLines = recommendation.reason() == null || recommendation.reason().isBlank()
 						? List.of() : font.split(Texts.component(recommendation.reasonText()), reasonWidth);
-				Component launcherLine = LauncherLines.adviceLine(recommendation, shownLauncher);
+				Component launcherLine = LauncherLines.adviceLine(recommendation, shownLauncher, controller.jvmReport());
 				this.launcherLines = launcherLine == null ? List.of() : font.split(launcherLine, reasonWidth);
 				if (recommendation.appliable()) {
 					this.checkbox = Checkbox.builder(Component.empty(), font)
@@ -551,8 +790,14 @@ public class RigTuneScreen extends Screen {
 							.onValueChange((box, value) -> toggle(value))
 							.build();
 					this.checkbox.setWidth(BOX);
+					// docs/v0.4/SPEC.md 2m: the narrator names the recommendation. Vanilla draws the label it was built with
+					// (empty: the row draws its own title) and narrates getMessage(), so the row looks the same.
+					this.checkbox.setMessage(Component.translatable("rigtune.screen.recommendation", title, impact));
+					this.focus = null;
 				} else {
 					this.checkbox = null;
+					this.focus = new RowFocus(this, RowFocus.join(Component.translatable("rigtune.screen.recommendation", title, impact),
+							reasonLines.isEmpty() ? null : Texts.component(recommendation.reasonText()), launcherLine));
 				}
 			}
 
@@ -576,31 +821,31 @@ public class RigTuneScreen extends Screen {
 				int y = getContentY();
 				int right = getContentRight();
 				if (hovered) {
-					graphics.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight() - 1, 0x18FFFFFF);
+					graphics.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight() - 1, Palette.of(0x18FFFFFF));
 				}
 				boolean informational = checkbox == null;
-				int accent = accentColor(recommendation.category());
+				int accent = Palette.of(accentColor(recommendation.category()));
 				if (informational) {
 					graphics.fill(x + 6, y + 1, x + 9, getY() + getHeight() - 4, accent);
 				} else {
 					checkbox.setPosition(x, y);
 					checkbox.extractRenderState(graphics, mouseX, mouseY, partialTick);
 				}
-				int titleColor = informational ? (recommendation.category() == Category.WARNING || recommendation.category() == Category.ADVICE ? accent : 0xFFDDDDDD) : 0xFFFFFFFF;
+				int titleColor = informational ? (recommendation.category() == Category.WARNING || recommendation.category() == Category.ADVICE ? accent : Palette.of(0xFFDDDDDD)) : 0xFFFFFFFF;
 				int textX = x + textIndent;
 				int titleY = y + (titleLines.size() == 1 ? 4 : 0);
 				for (FormattedCharSequence line : titleLines) {
 					graphics.text(font, line, textX, titleY, titleColor, true);
 					titleY += 9;
 				}
-				graphics.text(font, impact, right - font.width(impact), y + 4, impactColor(recommendation.impact()), true);
+				graphics.text(font, impact, right - font.width(impact), y + 4, Palette.of(impactColor(recommendation.impact())), true);
 				int reasonY = y + Math.max(BOX, titleLines.size() * 9 + 4) + 1;
 				for (FormattedCharSequence line : reasonLines) {
-					graphics.text(font, line, textX, reasonY, informational && recommendation.category() == Category.WARNING ? 0xFFE8B0A8 : COLOR_REASON, false);
+					graphics.text(font, line, textX, reasonY, Palette.of(informational && recommendation.category() == Category.WARNING ? 0xFFE8B0A8 : COLOR_REASON), false);
 					reasonY += 9;
 				}
 				for (FormattedCharSequence line : launcherLines) {
-					graphics.text(font, line, textX, reasonY, COLOR_LAUNCHER, false);
+					graphics.text(font, line, textX, reasonY, Palette.of(COLOR_LAUNCHER), false);
 					reasonY += 9;
 				}
 			}
@@ -610,7 +855,7 @@ public class RigTuneScreen extends Screen {
 				if (super.mouseClicked(event, doubleClick)) {
 					return true;
 				}
-				if (checkbox != null && event.button() == 0) {
+				if (checkbox != null && event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
 					checkbox.onPress(event);
 					return true;
 				}
@@ -619,12 +864,12 @@ public class RigTuneScreen extends Screen {
 
 			@Override
 			public List<? extends GuiEventListener> children() {
-				return checkbox == null ? List.of() : List.of(checkbox);
+				return checkbox != null ? List.of(checkbox) : List.of(Objects.requireNonNull(focus));
 			}
 
 			@Override
 			public List<? extends NarratableEntry> narratables() {
-				return checkbox == null ? List.of() : List.of(checkbox);
+				return checkbox != null ? List.of(checkbox) : List.of(Objects.requireNonNull(focus));
 			}
 		}
 	}

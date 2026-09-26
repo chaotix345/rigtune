@@ -1,16 +1,31 @@
 package io.github.chaotix345.rigtune.client;
 
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.client.awareness.AwarenessService;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
-import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
+import io.github.chaotix345.rigtune.client.benchmark.TrendService;
+import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
+import io.github.chaotix345.rigtune.client.jvm.JvmService;
+import io.github.chaotix345.rigtune.client.notice.BatteryNoticeSource;
+import io.github.chaotix345.rigtune.client.notice.BenchmarkStaleNoticeSource;
+import io.github.chaotix345.rigtune.client.notice.HardwareChangeNoticeSource;
+import io.github.chaotix345.rigtune.client.notice.NoticeCenter;
+import io.github.chaotix345.rigtune.client.notice.RegressionNoticeSource;
+import io.github.chaotix345.rigtune.client.notice.ServerLimitNoticeSource;
+import io.github.chaotix345.rigtune.client.notice.WhatsNewNoticeSource;
+import io.github.chaotix345.rigtune.client.probe.FabricPins;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.LauncherProbe;
 import io.github.chaotix345.rigtune.client.probe.ModScanner;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
+import io.github.chaotix345.rigtune.client.profile.ProfileService;
+import io.github.chaotix345.rigtune.client.server.ServerLimitsTracker;
+import io.github.chaotix345.rigtune.client.stutter.StutterService;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
+import io.github.chaotix345.rigtune.client.undo.DisableGuard;
 import io.github.chaotix345.rigtune.client.undo.GameState;
 import io.github.chaotix345.rigtune.client.undo.Staging;
 import io.github.chaotix345.rigtune.client.undo.UndoService;
@@ -22,11 +37,12 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
-import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecords;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
+import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
+import io.github.chaotix345.rigtune.core.jvm.JvmReport;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
@@ -37,6 +53,8 @@ import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.SafeText;
+import io.github.chaotix345.rigtune.core.model.ServerLimits;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.modrinth.DependencyResolver;
@@ -45,15 +63,21 @@ import io.github.chaotix345.rigtune.core.modrinth.GatedModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.HttpModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.ModrinthClient;
 import io.github.chaotix345.rigtune.core.modrinth.OnlineDataFetcher;
+import io.github.chaotix345.rigtune.core.modrinth.StagedProjects;
+import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.preview.DownloadInputs;
 import io.github.chaotix345.rigtune.core.preview.PreviewPlanner;
+import io.github.chaotix345.rigtune.core.profile.ProfileImport;
+import io.github.chaotix345.rigtune.core.profile.ProfileView;
 import io.github.chaotix345.rigtune.core.recommend.ModConflicts;
 import io.github.chaotix345.rigtune.core.recommend.Recommender;
+import io.github.chaotix345.rigtune.core.recommend.ServerCap;
 import io.github.chaotix345.rigtune.core.report.ModrinthOffAdvice;
 import io.github.chaotix345.rigtune.core.report.ShareReport;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.rules.RulesSources;
+import io.github.chaotix345.rigtune.core.stutter.StutterView;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -98,6 +122,15 @@ public final class RealController implements RigTuneController {
 	private final boolean selfFileActions = HelperLauncher.selfUpdateSupported();
 	private final Staging staging;
 	private final UndoService undoService;
+	// v0.4 (docs/v0.4/SPEC.md C4): one service per feature, each its workstream's own file.
+	private final ProfileService profileService;
+	private final StutterService stutterService;
+	private final JvmService jvmService;
+	private final TrendService trendService;
+	private final ServerLimitsTracker serverLimitsTracker;
+	private final AwarenessService awarenessService;
+	private final StartupTimes startupTimes;
+	private final NoticeCenter noticeCenter;
 
 	private volatile @Nullable RulesDocument rules;
 	private volatile @Nullable HardwareProfile hardware;
@@ -127,16 +160,28 @@ public final class RealController implements RigTuneController {
 		this.staging = new Staging(configDir, pendingFile, ConfigTargets.all(configDir), ClientJournal.get());
 		// The Undo screen plans off the render thread; the options are still read on it.
 		this.undoService = new UndoService(staging, ClientJournal.get(),
-				() -> minecraft.isSameThread() ? new GameState(minecraft.options, staging.targets(), modsDir, settingLabels())
-						: minecraft.submit(() -> new GameState(minecraft.options, staging.targets(), modsDir, settingLabels())).join(),
+				() -> minecraft.isSameThread() ? new GameState(minecraft.options, staging.targets(), modsDir, rulesSettingLabels())
+						: minecraft.submit(() -> new GameState(minecraft.options, staging.targets(), modsDir, rulesSettingLabels())).join(),
 				values -> {
 					Map<String, Boolean> written = new LinkedHashMap<>();
 					SettingsBridge.applyVanilla(minecraft.options, values).forEach((key, result) -> written.put(key, result.ok()));
 					return written;
 				});
+		// v0.4 (C4): the services only keep references here; none of them does work in its constructor.
+		this.profileService = new ProfileService(this, configDir);
+		this.stutterService = new StutterService(this, configDir);
+		this.jvmService = new JvmService(this, configDir);
+		this.trendService = new TrendService(this, configDir);
+		this.serverLimitsTracker = new ServerLimitsTracker(this, configDir);
+		this.awarenessService = new AwarenessService(this, configDir);
+		this.startupTimes = new StartupTimes(this, configDir);
+		// C3: one source per notice priority, in NoticePriority order; each reaches its service through this controller.
+		this.noticeCenter = new NoticeCenter(List.of(new BatteryNoticeSource(this), new ServerLimitNoticeSource(this),
+				new RegressionNoticeSource(this), new HardwareChangeNoticeSource(this), new WhatsNewNoticeSource(this),
+				new BenchmarkStaleNoticeSource(this)), awarenessService);
 	}
 
-	private Map<String, RulesDocument.SettingLabel> settingLabels() {
+	private Map<String, RulesDocument.SettingLabel> rulesSettingLabels() {
 		RulesDocument doc = rules;
 		return doc == null ? Map.of() : doc.settingLabels;
 	}
@@ -232,6 +277,7 @@ public final class RealController implements RigTuneController {
 				return;
 			}
 			RigTuneClient.setHardware(hardware);
+			awarenessService.afterProbe(hardware);
 			rebuild();
 			fetchOnline();
 		});
@@ -262,15 +308,14 @@ public final class RealController implements RigTuneController {
 		if (lookup == null) {
 			return;
 		}
-		CompletableFuture.supplyAsync(() -> new OnlineDataFetcher(modrinth).fetchAll(lookup.mods(), lookup.slugs(), lookup.gameVersion()),
-						Probes.EXECUTOR)
+		lookup.start(modrinth, Probes.NETWORK)
 				.thenAccept(result -> {
 					online = result;
 					rebuild();
 				});
 	}
 
-	private void rebuild() {
+	public void rebuild() {
 		minecraft.execute(() -> {
 			RulesDocument doc = rules;
 			HardwareProfile hw = hardware;
@@ -280,13 +325,14 @@ public final class RealController implements RigTuneController {
 			}
 			SettingsSnapshot settings = SettingsBridge.read(minecraft);
 			Goal g = goal;
+			ServerLimits live = serverLimitsTracker.live();
 			var data = this.settings.modrinthAllowed() ? online.data() : OnlineData.offline();
 			int gen = ++generation;
 			CompletableFuture.supplyAsync(() -> {
 						Set<String> queued = ModScanner.queuedUpdates();
 						Set<String> loaded = ModScanner.loadedIds();
 						List<Op> dropped = dropQueuedUpdates(queued, loaded);
-						return new Rebuilt(Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion, queued), dropped, queued, loaded);
+						return new Rebuilt(ServerCap.apply(Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion, queued), live, doc), dropped, queued, loaded);
 					}, Probes.EXECUTOR)
 					.whenComplete((rebuilt, error) -> minecraft.execute(() -> {
 						if (error != null) {
@@ -354,7 +400,7 @@ public final class RealController implements RigTuneController {
 			return built;
 		}
 		return new Report(built.hardware(), built.gpuClass(), built.tier(), built.goal(), kept, built.rulesRevision(),
-				built.rulesSource(), built.online(), built.createdAt());
+				built.rulesSource(), built.online(), built.createdAt(), built.tierBasis());
 	}
 
 	// Renaming RigTune's own jar is only safe when the helper runs from copies (see HelperLauncher.launch).
@@ -368,11 +414,15 @@ public final class RealController implements RigTuneController {
 
 	@Override
 	public Component apply(List<Recommendation> selected) {
+		return apply(selected, ChangeRecorder.newEntryId());
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md 4, C4): the same Apply, journaled under a given entry id (a profile switch labels it in
+	// profiles.json). One journal entry per Apply, downloads that finish later included (review H4).
+	public Component apply(List<Recommendation> selected, String entryId) {
 		if (downloading) {
 			return Component.translatable("rigtune.status.busy");
 		}
-		// One journal entry per Apply, downloads that finish later included (review H4).
-		String entryId = ChangeRecorder.newEntryId();
 		Map<String, String> vanilla = new LinkedHashMap<>();
 		List<ConfigTargets.Target> targets = ConfigTargets.all(configDir);
 		Map<ConfigTargets.Target, Map<String, String>> configPatches = new LinkedHashMap<>();
@@ -380,6 +430,7 @@ public final class RealController implements RigTuneController {
 		List<Op> immediateOps = new ArrayList<>();
 		Map<String, List<String>> immediateOpIds = new LinkedHashMap<>();
 		List<Recommendation> downloads = new ArrayList<>();
+		Set<String> disablesAllowed = DisableGuard.allowed(pendingFile, modsDir, selected);
 		for (Recommendation r : selected) {
 			switch (r.action()) {
 				case Action.SetSetting set when set.key().startsWith(VANILLA) -> vanilla.put(set.key(), set.newValue());
@@ -388,7 +439,7 @@ public final class RealController implements RigTuneController {
 					configPatches.computeIfAbsent(target, t -> new LinkedHashMap<>()).put(set.key().substring(target.prefix().length()), set.newValue());
 					configIds.put(set.key(), r.id());
 				}
-				case Action.DisableMod disable when SafeFileNames.isDirectChild(modsDir, disable.file()) -> {
+				case Action.DisableMod disable when SafeFileNames.isDirectChild(modsDir, disable.file()) && disablesAllowed.contains(r.id()) -> {
 					Op op = Op.disableFile(disable.file());
 					immediateOps.add(op);
 					immediateOpIds.computeIfAbsent(r.id(), k -> new ArrayList<>()).add(op.id());
@@ -471,7 +522,7 @@ public final class RealController implements RigTuneController {
 			OnlineDataFetcher.Result data = online;
 			HardwareProfile hw = hardware;
 			String mcVersion = onlineLookups.modrinthGameVersion(hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion());
-			CompletableFuture.supplyAsync(() -> download(downloads, data, mcVersion), Probes.EXECUTOR)
+			CompletableFuture.supplyAsync(() -> download(downloads, data, mcVersion), Probes.NETWORK)
 					.whenComplete((result, error) -> {
 						try {
 							minecraft.execute(() -> {
@@ -495,7 +546,7 @@ public final class RealController implements RigTuneController {
 	private void finishDownloads(DownloadPlanner.@Nullable Result result, @Nullable Throwable error, String entryId) {
 		if (error != null || result == null) {
 			RigTune.LOGGER.error("RigTune downloads failed", error);
-			status = Component.translatable("rigtune.status.download_failed", error == null ? "?" : error.getMessage());
+			status = Component.translatable("rigtune.status.download_failed", error == null ? "?" : SafeText.clean(error.getMessage()));
 			return;
 		}
 		boolean ok = result.ops().isEmpty() || stage(result.ops(), result.opIds(), entryId);
@@ -515,16 +566,14 @@ public final class RealController implements RigTuneController {
 
 	// Judged against the installed mods' Modrinth versions and the updates' own versions (SPEC 3b, plan review A-H1).
 	private DownloadPlanner.Result download(List<Recommendation> recs, OnlineDataFetcher.Result data, String mcVersion) {
-		DependencyResolver resolver = new DependencyResolver(modrinth, OnlineDataFetcher.LOADER, mcVersion, data.installedVersions());
+		DependencyResolver resolver = new DependencyResolver(modrinth, OnlineDataFetcher.LOADER, mcVersion, data.installedVersions())
+				.withStaged(StagedProjects.read(pendingFile));
 		Set<String> installedProjects = new HashSet<>(data.projectIdsByModId().values());
-		List<InstalledMod> scanned = mods;
-		Set<String> loadedIds = new HashSet<>();
-		if (scanned != null) {
-			scanned.forEach(m -> loadedIds.add(m.modId()));
-		}
+		Set<String> loadedIds = DownloadPlanner.topLevelIds(mods);
 		RulesDocument doc = rules;
 		BiPredicate<String, String> conflicts = doc == null ? (a, b) -> false : ModConflicts.of(doc)::between;
-		return new DownloadPlanner(resolver, modsDir, this::fetch, conflicts, data.updateVersions()).plan(recs, installedProjects, loadedIds, stagedJarsByModId());
+		return new DownloadPlanner(resolver, modsDir, this::fetch, conflicts, data.updateVersions(), FabricPins.loaded())
+				.lookedUp(settings.modrinthAllowed(), data.data().online()).plan(recs, installedProjects, loadedIds, stagedJarsByModId());
 	}
 
 	// Mod ids that already have a staged ENABLE_FILE, with that op's pending jar. A newer download for the same id
@@ -577,7 +626,7 @@ public final class RealController implements RigTuneController {
 
 	@Override
 	public @Nullable BenchmarkSummary latestBenchmark() {
-		return BenchmarkStore.history().latest().map(BenchmarkRecords::summary).orElse(null);
+		return trendService.latestSummary();
 	}
 
 	@Override
@@ -595,7 +644,7 @@ public final class RealController implements RigTuneController {
 				.map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("?");
 		LauncherInfo detected = launcher();
 		return ShareReport.format(shown, new ShareReport.Versions(modVersion, shown.hardware().mcVersion(), loaderVersion), latestBenchmark(),
-				detected.known() ? detected.launcher().displayName() : null);
+				detected.known() ? detected.launcher().displayName() : null, jvmService.report());
 	}
 
 	@Override
@@ -683,6 +732,12 @@ public final class RealController implements RigTuneController {
 		}
 	}
 
+	// v0.4 (docs/v0.4/SPEC.md 2b): History's labels, for the Preview.
+	@Override
+	public HistoryModel.Labels settingLabels() {
+		return HistoryModel.Labels.of(new GameState(minecraft.options, staging.targets(), modsDir, rulesSettingLabels()));
+	}
+
 	@Override
 	public HistoryModel.@Nullable View history() {
 		Path last = ApplyResult.defaultPath(configDir);
@@ -693,7 +748,7 @@ public final class RealController implements RigTuneController {
 			RigTune.LOGGER.warn("Could not read {}", last, e);
 		}
 		try {
-			return undoService.history(lastApply, List.of(modsDir, configDir));
+			return profileService.labelled(undoService.history(lastApply, List.of(modsDir, configDir)));
 		} catch (RuntimeException e) {
 			RigTune.LOGGER.error("Could not read RigTune's history", e);
 			return null;
@@ -715,16 +770,12 @@ public final class RealController implements RigTuneController {
 				: minecraft.isSameThread() ? gameOptions(vanilla) : minecraft.submit(() -> gameOptions(vanilla)).join();
 		OnlineDataFetcher.Result data = online;
 		HardwareProfile hw = hardware;
-		List<InstalledMod> scanned = mods;
-		Set<String> loadedIds = new HashSet<>();
-		if (scanned != null) {
-			scanned.forEach(m -> loadedIds.add(m.modId()));
-		}
+		Set<String> loadedIds = DownloadPlanner.topLevelIds(mods);
 		RulesDocument doc = rules;
 		DownloadInputs downloads = new DownloadInputs(modrinth, settings.modrinthAllowed(), OnlineDataFetcher.LOADER,
 				onlineLookups.modrinthGameVersion(hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion()), data.installedVersions(),
 				data.updateVersions(), new HashSet<>(data.projectIdsByModId().values()), loadedIds, stagedJarsByModId(),
-				doc == null ? (a, b) -> false : ModConflicts.of(doc)::between);
+				doc == null ? (a, b) -> false : ModConflicts.of(doc)::between, StagedProjects.read(pendingFile), data.data().online());
 		List<PreviewPlanner.ConfigFile> files = ConfigTargets.all(configDir).stream()
 				.map(t -> new PreviewPlanner.ConfigFile(t.prefix(), t.file(), t.stager()::stage, t.reader()::read)).toList();
 		return new PreviewPlanner(FabricLoader.getInstance().getGameDir().resolve("options.txt"), game.now(), game.problems(), files, modsDir, downloads)
@@ -736,5 +787,196 @@ public final class RealController implements RigTuneController {
 
 	private GameOptions gameOptions(Map<String, String> vanilla) {
 		return new GameOptions(SettingsBridge.readVanilla(minecraft.options), SettingsBridge.problems(minecraft.options, vanilla));
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md C4): read access for the feature services and notice sources, so they need no new
+	// RealController code. Values may be null until the first scan, rules load or client start.
+
+	public @Nullable Minecraft minecraft() {
+		return minecraft;
+	}
+
+	public Path configDir() {
+		return configDir;
+	}
+
+	public Path modsDir() {
+		return modsDir;
+	}
+
+	public String modVersion() {
+		return modVersion;
+	}
+
+	public ClientSettings settings() {
+		return settings;
+	}
+
+	public @Nullable RulesDocument rules() {
+		return rules;
+	}
+
+	public @Nullable HardwareProfile hardwareProfile() {
+		return hardware;
+	}
+
+	public @Nullable List<InstalledMod> mods() {
+		return mods;
+	}
+
+	public boolean downloading() {
+		return downloading;
+	}
+
+	public ProfileService profileService() {
+		return profileService;
+	}
+
+	public StutterService stutterService() {
+		return stutterService;
+	}
+
+	public JvmService jvmService() {
+		return jvmService;
+	}
+
+	public TrendService trendService() {
+		return trendService;
+	}
+
+	public ServerLimitsTracker serverLimitsTracker() {
+		return serverLimitsTracker;
+	}
+
+	public AwarenessService awarenessService() {
+		return awarenessService;
+	}
+
+	public StartupTimes startupTimesService() {
+		return startupTimes;
+	}
+
+	// v0.4 (C4): one-line delegations. Notice slot (C3).
+
+	@Override
+	public List<Notice> notices() {
+		return noticeCenter.notices();
+	}
+
+	@Override
+	public void noticeAction(String key, String actionId) {
+		noticeCenter.act(key, actionId);
+	}
+
+	@Override
+	public void dismissNotice(String key) {
+		noticeCenter.dismiss(key);
+	}
+
+	// Profiles (item 4).
+
+	@Override
+	public List<ProfileView> profiles() {
+		return profileService.profiles();
+	}
+
+	@Override
+	public Component switchProfile(String id) {
+		return profileService.switchProfile(id);
+	}
+
+	@Override
+	public ApplyPreview previewProfile(String id) {
+		return profileService.previewProfile(id);
+	}
+
+	@Override
+	public Component saveCurrentProfile(String name) {
+		return profileService.saveCurrentProfile(name);
+	}
+
+	@Override
+	public ProfileImport importProfileCode(String code) {
+		return profileService.importProfileCode(code);
+	}
+
+	@Override
+	public @Nullable String exportProfileCode(String id) {
+		return profileService.exportProfileCode(id);
+	}
+
+	@Override
+	public void renameProfile(String id, String name) {
+		profileService.renameProfile(id, name);
+	}
+
+	@Override
+	public void deleteProfile(String id) {
+		profileService.deleteProfile(id);
+	}
+
+	@Override
+	public Component applyImportedProfile(ProfileImport imported) {
+		return profileService.applyImportedProfile(imported);
+	}
+
+	@Override
+	public Component saveImportedProfile(ProfileImport imported) {
+		return profileService.saveImportedProfile(imported);
+	}
+
+	// Stutter Doctor (item 5).
+
+	@Override
+	public StutterView stutter() {
+		return stutterService.view();
+	}
+
+	@Override
+	public void setStutterMonitor(boolean on) {
+		stutterService.setMonitor(on);
+	}
+
+	@Override
+	public void pauseStutterMonitor(boolean paused) {
+		stutterService.pause(paused);
+	}
+
+	@Override
+	public void clearStutter() {
+		stutterService.clear();
+	}
+
+	@Override
+	public String stutterSummary() {
+		return stutterService.summary();
+	}
+
+	// JVM & memory (item 6).
+
+	@Override
+	public JvmReport jvmReport() {
+		return jvmService.report();
+	}
+
+	// Benchmark history (item 7).
+
+	@Override
+	public BenchmarkTrend.View benchmarkTrend(@Nullable String contextKey) {
+		return trendService.trend(contextKey);
+	}
+
+	// Server-aware advice (item 8).
+
+	@Override
+	public @Nullable ServerLimits serverLimits() {
+		return serverLimitsTracker.live();
+	}
+
+	// Startup-time report (item 13).
+
+	@Override
+	public StartupTimes.View startupTimes() {
+		return startupTimes.view();
 	}
 }

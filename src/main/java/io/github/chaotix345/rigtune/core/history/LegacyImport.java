@@ -25,15 +25,75 @@ public final class LegacyImport {
 	private LegacyImport() {
 	}
 
+	// True when last-apply.json was written by 0.2.0 or later (docs/v0.4/SPEC.md 2o L1): a resultPath, which 0.2.0 and
+	// later record on every mod file op they do, or an op 0.1.x couldn't have staged.
+	public static boolean fromLater(ApplyResult lastApply) {
+		if (lastApply == null) {
+			return false;
+		}
+		for (ApplyResult.OpResult r : lastApply.results()) {
+			if (r != null && r.op() != null && (r.resultPath() != null || !v010Op(r.op()))) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// True when last-apply.json was written by 0.1.x: not by a later version, and a mod file op it did has no
+	// resultPath. A run that did no file op can't be told apart and counts as not 0.1.x.
+	public static boolean fromV010(ApplyResult lastApply) {
+		return lastApply != null && !fromLater(lastApply) && lastApply.results().stream().anyMatch(r -> r != null && r.op() != null
+				&& r.status() == ApplyResult.Status.OK && (r.op().type() == PendingActions.Type.ENABLE_FILE || r.op().type() == PendingActions.Type.DISABLE_FILE));
+	}
+
+	// True when pending.json holds ops and every one is an op 0.1.x could stage. 0.2.0 and 0.3.0 stage the same shapes,
+	// so this only counts where no later version's last-apply.json exists (HistoryStartup): 0.1.x staged them and its
+	// helper hasn't run since (a 0.1.0 Apply, then the upgrade before the next exit).
+	public static boolean v010Plan(PendingActions plan) {
+		if (plan == null) {
+			return false;
+		}
+		boolean any = false;
+		for (Op op : plan.ops()) {
+			if (op == null) {
+				continue;
+			}
+			if (!v010Op(op)) {
+				return false;
+			}
+			any = true;
+		}
+		return any;
+	}
+
+	// 0.1.x staged only mod file enables and disables (without Modrinth project or version ids) and sodium-options.json
+	// patches.
+	private static boolean v010Op(Op op) {
+		if (op.type() == null || op.projectId() != null || op.versionId() != null) {
+			return false;
+		}
+		return switch (op.type()) {
+			case ENABLE_FILE, DISABLE_FILE -> true;
+			case PATCH_JSON -> op.path() != null && "sodium-options.json".equals(HistoryUpdates.fileName(op.path()));
+			case PATCH_TOML, PATCH_PROPERTIES -> false;
+		};
+	}
+
 	// Null when there's nothing to import.
 	public static JournalEntry entry(ApplyResult lastApply, PendingActions leftover, Function<Path, String> modIdOf,
 			StagedChanges.ConfigKeys config, String mcVersion) {
+		return entry(lastApply, leftover, modIdOf, jar -> null, config, mcVersion);
+	}
+
+	// modNameOf (docs/v0.4/SPEC.md 2c, best effort): a jar's display name where it is now; 0.1.x's jars are often gone.
+	public static JournalEntry entry(ApplyResult lastApply, PendingActions leftover, Function<Path, String> modIdOf, Function<Path, String> modNameOf,
+			StagedChanges.ConfigKeys config, String mcVersion) {
 		List<JournalChange> changes = new ArrayList<>();
 		if (lastApply != null) {
-			changes.addAll(applied(lastApply, modIdOf));
+			changes.addAll(applied(lastApply, modIdOf, modNameOf));
 		}
 		if (leftover != null) {
-			changes.addAll(staged(leftover, modIdOf, config));
+			changes.addAll(staged(leftover, modIdOf, modNameOf, config));
 		}
 		if (changes.isEmpty()) {
 			return null;
@@ -42,7 +102,7 @@ public final class LegacyImport {
 		return new JournalEntry(ChangeRecorder.newEntryId(), at, JournalEntry.LEGACY_IMPORT, null, mcVersion, null, changes);
 	}
 
-	private static List<JournalChange> applied(ApplyResult lastApply, Function<Path, String> modIdOf) {
+	private static List<JournalChange> applied(ApplyResult lastApply, Function<Path, String> modIdOf, Function<Path, String> modNameOf) {
 		Set<String> selfGroups = new HashSet<>();
 		for (ApplyResult.OpResult r : lastApply.results()) {
 			if (r != null && r.op() != null && r.op().type() == PendingActions.Type.ENABLE_FILE
@@ -61,14 +121,15 @@ public final class LegacyImport {
 				if (op.type() == PendingActions.Type.ENABLE_FILE && op.to() != null) {
 					String modId = op.modId() != null ? op.modId() : modIdOf.apply(Path.of(op.to()));
 					if (!UndoPlanner.RIGTUNE.equals(modId)) {
-						out.add(JournalChange.file(JournalChange.ENABLE, modId, HistoryUpdates.fileName(op.to()), JournalChange.APPLIED, op.id(), op.group()));
+						out.add(JournalChange.file(JournalChange.ENABLE, modId, HistoryUpdates.fileName(op.to()), JournalChange.APPLIED, op.id(), op.group())
+								.withModName(modNameOf.apply(Path.of(op.to()))));
 					}
 				} else if (op.type() == PendingActions.Type.DISABLE_FILE && op.path() != null && (op.group() == null || !selfGroups.contains(op.group()))) {
 					String disabledAs = disabledAs(r);
 					String modId = disabledAs == null ? null : modIdOf.apply(Path.of(op.path()).resolveSibling(disabledAs));
 					if (!UndoPlanner.RIGTUNE.equals(modId)) {
 						out.add(JournalChange.file(JournalChange.DISABLE, modId, HistoryUpdates.fileName(op.path()), JournalChange.APPLIED, op.id(), op.group())
-								.withResultFile(disabledAs));
+								.withResultFile(disabledAs).withModName(disabledAs == null ? null : modNameOf.apply(Path.of(op.path()).resolveSibling(disabledAs))));
 					}
 				}
 			} catch (InvalidPathException ignored) {
@@ -91,7 +152,8 @@ public final class LegacyImport {
 	}
 
 	// Ops 0.1.x left in pending.json. Ops without an id (written before ids existed) can't be tracked and are left out.
-	private static List<JournalChange> staged(PendingActions leftover, Function<Path, String> modIdOf, StagedChanges.ConfigKeys config) {
+	private static List<JournalChange> staged(PendingActions leftover, Function<Path, String> modIdOf, Function<Path, String> modNameOf,
+			StagedChanges.ConfigKeys config) {
 		List<Op> tracked = leftover.ops().stream().filter(op -> op != null && op.id() != null && op.type() != null).toList();
 		Set<String> selfGroups = new HashSet<>();
 		tracked.forEach(op -> {
@@ -101,7 +163,7 @@ public final class LegacyImport {
 		});
 		PendingActions base = leftover.withOps(List.of());
 		List<JournalChange> out = new ArrayList<>();
-		for (JournalChange c : StagedChanges.of(base, tracked, base.merge(tracked), config, modIdOf, Set.of()).changes()) {
+		for (JournalChange c : StagedChanges.of(base, tracked, base.merge(tracked), config, modIdOf, modNameOf, Set.of()).changes()) {
 			if (!UndoPlanner.RIGTUNE.equals(c.modId()) && (c.group() == null || !selfGroups.contains(c.group()))) {
 				out.add(c);
 			}

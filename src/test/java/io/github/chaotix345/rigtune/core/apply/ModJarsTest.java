@@ -95,4 +95,47 @@ class ModJarsTest {
 		assertEquals(Set.of(), ModJars.queuedUpdates(Files.createDirectories(dir.resolve("mods"))));
 		assertEquals(Set.of(), ModJars.queuedUpdates(dir.resolve("missing")));
 	}
+
+	// docs/v0.4/SPEC.md 2c (AC2c.1) and plan review P-L1: the mod's display name, with modIdOf's null-on-failure contract,
+	// and sanitised because it comes from a downloaded file.
+	@Test
+	void readsTheModName() throws IOException {
+		assertEquals("Sodium", ModJars.nameOf(TestJars.modJar(dir.resolve("sodium.jar"), "sodium", "Sodium")));
+	}
+
+	@Test
+	void aMissingOrUnreadableJarOrNameHasNoName() throws IOException {
+		assertNull(ModJars.nameOf(dir.resolve("gone.jar")));
+		assertNull(ModJars.nameOf(TestJars.modJar(dir.resolve("unnamed.jar"), "unnamed")));
+		assertNull(ModJars.nameOf(TestJars.plainJar(dir.resolve("plain.jar"))));
+		assertNull(ModJars.nameOf(Files.writeString(dir.resolve("text.jar"), "not a zip")));
+		assertNull(ModJars.nameOf(jarWith("object.jar", "{\"id\": \"x\", \"name\": {\"en\": \"X\"}}")));
+		assertNull(ModJars.nameOf(jarWith("blank.jar", "{\"id\": \"x\", \"name\": \" \u00a7 \\u0007 \"}")));
+	}
+
+	@Test
+	void theNameLosesFormattingCodesAndControlCharactersAndIsCapped() throws IOException {
+		Path jar = TestJars.modJar(dir.resolve("evil.jar"), "evil", "\u00a7cRed\u202e\u200b  Mod\n\t\u0007\ufeff");
+
+		assertEquals("Red Mod", ModJars.nameOf(jar));
+		assertEquals("Foo Bar", ModJars.sanitizeName("Foo\tBar\n"));
+		assertEquals("Fancy", ModJars.sanitizeName("\u00a7lFancy\u00a7"));
+		assertEquals(64, ModJars.sanitizeName("\ud835\udcd0".repeat(100)).codePointCount(0, 128));
+		assertEquals("\ud835\udcd0".repeat(64), ModJars.sanitizeName("\ud835\udcd0".repeat(100)));
+		assertNull(ModJars.sanitizeName(null));
+		assertNull(ModJars.sanitizeName("\u00a7\n"));
+	}
+
+	// docs/v0.4/SPEC.md 2o, H2: a fabric.mod.json section of ranges, a string or an array; empty when there is none.
+	@Test
+	void rangesOfReadsStringsAndArrays(@org.junit.jupiter.api.io.TempDir Path dir) throws IOException {
+		com.google.gson.JsonObject json = com.google.gson.JsonParser.parseString(
+				"{\"id\":\"iris\",\"version\":\"1.12.0\",\"depends\":{\"sodium\":[\"0.10.x\",\"0.11.x\"],\"minecraft\":\"~26.2\"}}").getAsJsonObject();
+		Path jar = TestJars.modJar(dir.resolve("iris.jar"), json);
+
+		assertEquals(java.util.Map.of("sodium", java.util.List.of("0.10.x", "0.11.x"), "minecraft", java.util.List.of("~26.2")), ModJars.rangesOf(jar, "depends"));
+		assertEquals(java.util.Map.of(), ModJars.rangesOf(jar, "breaks"));
+		assertEquals("1.12.0", ModJars.versionOf(jar));
+		assertEquals(java.util.Map.of(), ModJars.rangesOf(dir.resolve("missing.jar"), "depends"));
+	}
 }

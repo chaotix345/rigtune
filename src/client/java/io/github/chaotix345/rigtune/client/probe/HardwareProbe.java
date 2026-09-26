@@ -50,7 +50,7 @@ public final class HardwareProbe {
 
 	public static CompletableFuture<HardwareProfile> probe(Minecraft minecraft) {
 		FastPart fast = probeFast(minecraft);
-		return slowPart().thenApply(s -> combine(fast, s));
+		return slowPart().thenCombine(JvmProbe.probeAsync(), (s, jvm) -> JvmProbe.withFacts(combine(fast, s), jvm));
 	}
 
 	public static synchronized CompletableFuture<SlowPart> slowPart() {
@@ -58,6 +58,15 @@ public final class HardwareProbe {
 			slow = CompletableFuture.supplyAsync(HardwareProbe::probeSlow, Probes.EXECUTOR);
 		}
 		return slow;
+	}
+
+	// v0.4 (WS-P, PowerWatcher): the power state changed since the scan; later probes see the new onBattery.
+	public static synchronized void setOnBattery(boolean onBattery) {
+		CompletableFuture<SlowPart> current = slow;
+		if (current != null && current.isDone() && !current.isCompletedExceptionally()) {
+			SlowPart s = current.join();
+			slow = CompletableFuture.completedFuture(new SlowPart(s.cpu(), s.totalRamMb(), s.hasBattery(), onBattery, s.cards()));
+		}
 	}
 
 	public static HardwareProfile combine(FastPart fast, SlowPart slow) {

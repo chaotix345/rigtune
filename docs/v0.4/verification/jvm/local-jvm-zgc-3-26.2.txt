@@ -1,0 +1,30 @@
+# ./gradlew :26.2:runProductionClientGameTest -PgametestJvmArgs="-XX:+UseZGC -XX:+ZGenerational -Dusing.aikars.flags=x" (run jvm-zgc-3 on test/p5-features @ 135e586 = feat/v0.4.0 @ 67f8b8c + evidence, BUILD FAILED in 6m 42s)
+195:[00:14:12] [RigTune worker/INFO]: RigTune: Java 25.0.4.1 (Eclipse Adoptium), ZGC (typed), 2 argument notes [-XX:+ZGenerational, -Dusing.aikars.flags]
+798:[00:17:15] [Test thread/INFO]: UiGameTest: copied report, 1633 characters (CRLF from the clipboard: false):
+838:[00:17:24] [Test thread/INFO]: UiGameTest: tier badge at ScreenRectangle[position=ScreenPosition[x=80, y=50], width=262, height=10] for 1280x720-scale2
+839:[00:17:24] [Test thread/INFO]: UiGameTest: tier badge at ScreenRectangle[position=ScreenPosition[x=16, y=50], width=262, height=10] for 640x480-scale2
+840:[00:17:24] [Test thread/INFO]: UiGameTest: tier badge at ScreenRectangle[position=ScreenPosition[x=16, y=50], width=262, height=10] for 854x480-scale2
+841:[00:17:25] [Test thread/INFO]: UiGameTest: the focused row narrates: Render Distance: 16 → 12 (High impact) button. Selected list row 12 out of 16. Press Enter to uncheck
+842:[00:17:26] [Test thread/INFO]: UiGameTest: networkEnabled=false saved to settings.json
+843:[00:17:28] [Test thread/INFO]: UiGameTest: network on, Modrinth off saved
+848:[00:17:31] [Test thread/INFO]: UiGameTest: Modrinth on, startup toast off and the benchmark world saved
+915:[00:17:48] [Test thread/INFO]: ProfilesGameTest: AC4.11 passed
+1021:[00:18:03] [Test thread/INFO]: StutterGameTest: passed
+1024:[00:18:23] [Test thread/INFO]: JvmGameTest: network off
+1025:[00:18:23] [Test thread/INFO]: JvmGameTest: running JVM: Java 25.0.4.1 (Eclipse Adoptium), ZGC typed=true, heap 7964 MB, notes [JvmFinding[kind=IGNORED, flag=-XX:+ZGenerational], JvmFinding[kind=SERVER_SET, flag=-Dusing.aikars.flags]], facts [jvm-ignored-flags, jvm-server-flags, jvm-gc-zgc, jvm-gc-typed, jvm-probed]
+1026:[00:18:23] [Test thread/INFO]: JvmGameTest: AC6.6 detection from the running JVM passed
+1027:[00:18:24] [Render thread/INFO]: JvmGameTest: running rows [This Java, Java 25.0.4.1 (Eclipse Adoptium), Garbage collector: ZGC, set in your Java arguments, Heap: up to 7.8 GB, starting at 0.5 GB, Your Java arguments, -XX:+ZGenerational: this Java doesn't have this option and ignores it (a future Java may refuse to start with it), -Dusing.aikars.flags: part of Paper's server flags (Aikar's fl
+1028:[00:18:24] [RigTune worker/INFO]: RigTune: Java 25.0.3 (Azul Systems, Inc.), ZGC (typed), 2 argument notes [-XX:+ZGenerational, -Dusing.aikars.flags]
+1030:[00:18:24] [Test thread/INFO]: JvmGameTest: the bundled rules fire [advice:jvm-ignored-flags]
+1031:[00:18:24] [Render thread/INFO]: JvmGameTest: main list lines [Found in your Java arguments: -XX:+ZGenerational. In the Modrinth App: this instance → Instance settings (gear) → Sync overrides → turn on Custom Java arguments → edit the box., Found in your Java arguments: -Dusing.aikars.flags. In the Modrinth App: this instance → Instance settings (gear) → Sync overrides → turn on
+1032:[00:18:25] [Render thread/INFO]: JvmGameTest: findings rows [This Java, Java 25.0.3 (Azul Systems, Inc.), Garbage collector: ZGC, set in your Java arguments, Heap: up to 4.0 GB, starting at 0.3 GB, Your Java arguments, -XX:+ZGenerational: this Java doesn't have this option and ignores it (a future Java may refuse to start with it), -Dusing.aikars.flags: part of Paper's server flags (Aikar's f
+1033:[00:18:25] [RigTune worker/INFO]: RigTune: Java 25.0.4.1 (Eclipse Adoptium), ZGC (typed), 2 argument notes [-XX:+ZGenerational, -Dusing.aikars.flags]
+1037:[00:18:45] [Test thread/INFO]: JvmGameTest: network on
+1038:[00:18:45] [Test thread/INFO]: JvmGameTest: passed
+1039:[00:18:50] [Test thread/INFO]: BenchmarkHistoryGameTest: passed
+1452:[00:20:34] [Test thread/ERROR]: Client gametests failed with an exception
+1453:java.lang.AssertionError: footprint budget rigtuneClassBytesIdle: 120224 > 109296 (bytes of RigTune-class instances after a full GC at idle (class histogram, shallow))
+1455:	at knot//io.github.chaotix345.rigtune.gametest.FootprintGameTest.runTest(FootprintGameTest.java:147)
+1460:net.fabricmc.loader.impl.FormattedException: java.lang.AssertionError: footprint budget rigtuneClassBytesIdle: 120224 > 109296 (bytes of RigTune-class instances after a full GC at idle (class histogram, shallow))
+1465:Caused by: java.lang.AssertionError: footprint budget rigtuneClassBytesIdle: 120224 > 109296 (bytes of RigTune-class instances after a full GC at idle (class histogram, shallow))
+1467:	at knot//io.github.chaotix345.rigtune.gametest.FootprintGameTest.runTest(FootprintGameTest.java:147)

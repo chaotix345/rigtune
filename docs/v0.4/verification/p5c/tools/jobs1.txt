@@ -1,0 +1,8 @@
+e2e-one.sh final-v020-to-040 --old-jar <scratch>/jars/rigtune-0.2.0+mc26.2.jar --old-sha256 67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9 --new-jar <scratch>/jars/rc/rigtune-0.4.0-dev+mc26.2.jar --expect-history auto
+e2e-one.sh final-v010-to-040 --old-jar <scratch>/jars/rigtune-0.1.0.jar --old-sha256 8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950 --new-jar <scratch>/jars/rc/rigtune-0.4.0-dev+mc26.2.jar --legacy-disable --expect-history auto
+e2e-one.sh final-v010-seeded-to-040 --old-jar <scratch>/jars/rigtune-0.1.0.jar --old-sha256 8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950 --new-jar <scratch>/jars/rc/rigtune-0.4.0-dev+mc26.2.jar --seed tools/e2e/seeds/v010-dh --expect-history auto
+e2e-one.sh undo-after-restart-040 --scenario undo --new-jar <scratch>/jars/rc/rigtune-0.4.0-dev+mc26.2.jar --profile-switch profile --profile-names 'Battery,Max FPS'
+e2e-one.sh undo-after-restart-040-settings --scenario undo --new-jar <scratch>/jars/rc/rigtune-0.4.0-dev+mc26.2.jar --profile-switch settings
+e2e-one.sh downgrade-040-to-030 --scenario downgrade --old-jar <scratch>/jars/rigtune-0.3.0+mc26.2.jar --old-sha256 5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9 --new-jar <scratch>/jars/rc/rigtune-0.4.0-dev+mc26.2.jar
+stut-run.sh C1r 0 600
+stut-run.sh C3r 1 600

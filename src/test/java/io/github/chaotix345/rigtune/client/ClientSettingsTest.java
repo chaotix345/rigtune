@@ -72,6 +72,20 @@ class ClientSettingsTest {
 		assertTrue(reloaded.privacyNoticeShown);
 	}
 
+	// docs/v0.4/SPEC.md C1/5: stutterMonitor is optional and off by default; a 0.3.x file without it reads as off.
+	@Test
+	void stutterMonitorDefaultsOffAndRoundTrips(@TempDir Path configDir) throws IOException {
+		assertFalse(new ClientSettings().stutterMonitor);
+		write(ClientSettings.file(configDir), "{\"networkEnabled\": true, \"privacyNoticeShown\": true}");
+		assertFalse(ClientSettings.load(configDir).stutterMonitor);
+
+		ClientSettings settings = ClientSettings.load(configDir);
+		settings.stutterMonitor = true;
+		settings.save(configDir);
+		assertTrue(Files.readString(ClientSettings.file(configDir)).contains("\"stutterMonitor\": true"));
+		assertTrue(ClientSettings.load(configDir).stutterMonitor);
+	}
+
 	@Test
 	void unknownSceneFallsBackToCurrent(@TempDir Path configDir) throws IOException {
 		write(ClientSettings.file(configDir), "{\"benchmarkScene\": \"MOON_BASE\"}");

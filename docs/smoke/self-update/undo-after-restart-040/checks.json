@@ -1,0 +1,429 @@
+{
+ "mod-apply": [
+  {
+   "name": "the client exited normally and the helper finished",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver applied the mod changes",
+   "ok": true,
+   "detail": "error: None"
+  },
+  {
+   "name": "the added mod is in mods (the served bytes)",
+   "ok": true,
+   "detail": "e2e-added-1.0.0.jar exists: True"
+  },
+  {
+   "name": "the other mod is disabled",
+   "ok": true,
+   "detail": "e2e-disable-me-1.0.0.jar.disabled exists: True"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  },
+  {
+   "name": "last-apply.json: both ops OK",
+   "ok": true,
+   "detail": "results: [('DISABLE_FILE', 'e2e-disable-me-1.0.0.jar', 'OK'), ('ENABLE_FILE', 'e2e-added-1.0.0.jar', 'OK')]"
+  },
+  {
+   "name": "history.json: one apply entry, both changes APPLIED",
+   "ok": true,
+   "detail": "apply entries: 1; changes: [('file', 'disable', 'e2e-disable-me-1.0.0.jar', 'APPLIED'), ('file', 'enable', 'e2e-added-1.0.0.jar', 'APPLIED')]"
+  }
+ ],
+ "mod-undo": [
+  {
+   "name": "the client exited normally and the helper finished",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver undid the last apply (two reverts after a restart)",
+   "ok": true,
+   "detail": "error: None; undoOf: 0b4a41f2-8c06-428e-8c2e-e5f7eb24ee2e; plan: [{'description': 'Disable e2e-added-1.0.0.jar', 'action': 'REVERT', 'reason': None, 'needsRestart': True, 'changeIds': ['313beaa8-e6ff-4cac-85ff-0b35aad3a215'], 'opIds': []}, {'description': 'Re-enable e2e-disable-me-1.0.0.jar', 'action': 'REVERT', 'reason': None, 'needsRestart': True, 'changeIds': ['652e98f8-0d45-4b44-b2c5-a49319c205b5'], 'opIds': []}]"
+  },
+  {
+   "name": "the added mod is disabled again",
+   "ok": true,
+   "detail": "e2e-added-1.0.0.jar.disabled exists: True"
+  },
+  {
+   "name": "the other mod is back",
+   "ok": true,
+   "detail": "e2e-disable-me-1.0.0.jar exists: True"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  },
+  {
+   "name": "last-apply.json: both reversal ops OK",
+   "ok": true,
+   "detail": "results: [('DISABLE_FILE', 'e2e-added-1.0.0.jar', 'OK'), ('ENABLE_FILE', 'e2e-disable-me-1.0.0.jar', 'OK')]"
+  },
+  {
+   "name": "history.json: the undo APPLIED, the apply's changes REVERTED",
+   "ok": true,
+   "detail": "apply changes: {'652e98f8-0d45-4b44-b2c5-a49319c205b5': 'REVERTED', '313beaa8-e6ff-4cac-85ff-0b35aad3a215': 'REVERTED'}; undo entries: ['0b4a41f2-8c06-428e-8c2e-e5f7eb24ee2e']; undo changes: [('disable', 'e2e-added-1.0.0.jar', 'APPLIED', '313beaa8-e6ff-4cac-85ff-0b35aad3a215'), ('enable', 'e2e-disable-me-1.0.0.jar', 'APPLIED', '652e98f8-0d45-4b44-b2c5-a49319c205b5')]"
+  }
+ ],
+ "mod-check": [
+  {
+   "name": "the client exited normally",
+   "ok": true,
+   "detail": "gradle exit 0"
+  },
+  {
+   "name": "the driver checked",
+   "ok": true,
+   "detail": "error: None"
+  },
+  {
+   "name": "the undone mods are as before the apply",
+   "ok": true,
+   "detail": "e2e-disable-me loaded: True; e2e-added loaded: False"
+  },
+  {
+   "name": "nothing left to undo",
+   "ok": true,
+   "detail": "undoable items: 0"
+  },
+  {
+   "name": "no crash report",
+   "ok": true,
+   "detail": "crash-reports: []"
+  },
+  {
+   "name": "mods unchanged by the relaunch",
+   "ok": true,
+   "detail": "unchanged"
+  },
+  {
+   "name": "history.json statuses unchanged",
+   "ok": true,
+   "detail": "unchanged"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  }
+ ],
+ "entry-apply": [
+  {
+   "name": "the client exited normally and the helper finished",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver applied twice, one mod each",
+   "ok": true,
+   "detail": "error: None; apply messages: ['Downloading 1 mod change(s)\u2026', 'Downloading 1 mod change(s)\u2026']"
+  },
+  {
+   "name": "both added mods are in mods (the served bytes)",
+   "ok": true,
+   "detail": "served bytes in mods: {'e2e-first-1.0.0.jar': True, 'e2e-second-1.0.0.jar': True}"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  },
+  {
+   "name": "last-apply.json: both enables OK",
+   "ok": true,
+   "detail": "results: [('ENABLE_FILE', 'e2e-first-1.0.0.jar', 'OK'), ('ENABLE_FILE', 'e2e-second-1.0.0.jar', 'OK')]"
+  },
+  {
+   "name": "history.json: two new apply entries, the older adding e2e-first, both APPLIED",
+   "ok": true,
+   "detail": "new entries: [('apply', '2026-09-26T16:01:46.497248200Z', [('file', 'enable', 'e2e-first-1.0.0.jar', 'APPLIED')]), ('apply', '2026-09-26T16:01:47.987843400Z', [('file', 'enable', 'e2e-second-1.0.0.jar', 'APPLIED')])]"
+  }
+ ],
+ "entry-undo": [
+  {
+   "name": "the client exited normally and the helper finished",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver undid the older Apply only (one revert after a restart)",
+   "ok": true,
+   "detail": "error: None; undoOf: 8c725f7e-434d-4ca6-a1c6-4ad542027638 (older 8c725f7e-434d-4ca6-a1c6-4ad542027638); via the undo screen: True; plan: [{'description': 'Disable e2e-first-1.0.0.jar', 'action': 'REVERT', 'reason': None, 'needsRestart': True, 'changeIds': ['e37e9ea6-8917-455e-9e51-098448f28c4b'], 'opIds': []}]"
+  },
+  {
+   "name": "the older Apply's mod is disabled",
+   "ok": true,
+   "detail": "e2e-first-1.0.0.jar.disabled exists: True; e2e-first-1.0.0.jar exists: False"
+  },
+  {
+   "name": "the newer Apply's mod is still enabled",
+   "ok": true,
+   "detail": "e2e-second-1.0.0.jar exists: True"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  },
+  {
+   "name": "last-apply.json: the reversal op OK",
+   "ok": true,
+   "detail": "results: [('DISABLE_FILE', 'e2e-first-1.0.0.jar', 'OK')]"
+  },
+  {
+   "name": "history.json: one undo of the older Apply, its change REVERTED, the newer APPLIED",
+   "ok": true,
+   "detail": "undo entries of these applies: ['8c725f7e-434d-4ca6-a1c6-4ad542027638']; undo changes: [('disable', 'e2e-first-1.0.0.jar', 'APPLIED', 'e37e9ea6-8917-455e-9e51-098448f28c4b')]; older: {'e37e9ea6-8917-455e-9e51-098448f28c4b': 'REVERTED'}; newer: {'0e0d0a2e-b7bc-4793-b0f5-636c79c69a01': 'APPLIED'}"
+  }
+ ],
+ "entry-check": [
+  {
+   "name": "the client exited normally",
+   "ok": true,
+   "detail": "gradle exit 0"
+  },
+  {
+   "name": "the driver checked",
+   "ok": true,
+   "detail": "error: None"
+  },
+  {
+   "name": "only the older Apply's mod is off",
+   "ok": true,
+   "detail": "loaded: e2e-first False, e2e-second True, e2e-disable-me True"
+  },
+  {
+   "name": "nothing left to undo on the older Apply",
+   "ok": true,
+   "detail": "undoable items: 0; plan problem: None; method: RigTuneController.undoPlanFor"
+  },
+  {
+   "name": "no crash report",
+   "ok": true,
+   "detail": "crash-reports: []"
+  },
+  {
+   "name": "mods unchanged by the relaunch",
+   "ok": true,
+   "detail": "unchanged"
+  },
+  {
+   "name": "history.json statuses unchanged",
+   "ok": true,
+   "detail": "unchanged"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  }
+ ],
+ "profile-apply": [
+  {
+   "name": "the client exited normally",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver switched 2 times",
+   "ok": true,
+   "detail": "error: None; apply messages: ['Switched to Battery. Undo it in History.', 'Switched to Max FPS. Undo it in History.']"
+  },
+  {
+   "name": "history.json: two new apply entries of setting changes, applied (or discarded when replaced)",
+   "ok": true,
+   "detail": "new entries: [('apply', [('vanilla.maxFps', '120', '60', 'APPLIED'), ('vanilla.particles', '0', '1', 'APPLIED'), ('vanilla.renderClouds', 'true', 'false', 'APPLIED'), ('vanilla.renderDistance', '12', '8', 'APPLIED'), ('vanilla.simulationDistance', '12', '6', 'APPLIED')]), ('apply', [('vanilla.enableVsync', 'true', 'false', 'APPLIED'), ('vanilla.maxFps', '60', '260', 'APPLIED'), ('vanilla.particles', '1', '0', 'APPLIED'), ('vanilla.renderClouds', 'false', 'true', 'APPLIED'), ('vanilla.renderDistance', '8', '12', 'APPLIED'), ('vanilla.simulationDistance', '6', '10', 'APPLIED')])]"
+  },
+  {
+   "name": "history.json: each key's applied changes run from its value before the first switch to the last",
+   "ok": true,
+   "detail": "6 key(s)"
+  },
+  {
+   "name": "the settings hold the last switch's values",
+   "ok": true,
+   "detail": "6 value(s)"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  },
+  {
+   "name": "last-apply.json: every op OK",
+   "ok": true,
+   "detail": "statuses not OK: []"
+  },
+  {
+   "name": "profiles.json labels each switch entry",
+   "ok": true,
+   "detail": "labels {'86bdf09f-2ab6-4569-85fa-d829df4b3a4e': 'Battery', 'cd6da796-896b-4539-b85d-19656642db86': 'Max FPS'}; expected {'86bdf09f-2ab6-4569-85fa-d829df4b3a4e': 'Battery', 'cd6da796-896b-4539-b85d-19656642db86': 'Max FPS'}"
+  }
+ ],
+ "profile-undo": [
+  {
+   "name": "the client exited normally",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver undid the newer switch, then the older (Undo last twice)",
+   "ok": true,
+   "detail": "error: None; plans (undoOf, items, problem): [('cd6da796-896b-4539-b85d-19656642db86', 6, None), ('86bdf09f-2ab6-4569-85fa-d829df4b3a4e', 5, None)]; expected ['cd6da796-896b-4539-b85d-19656642db86', '86bdf09f-2ab6-4569-85fa-d829df4b3a4e']"
+  },
+  {
+   "name": "history.json: the switches' changes REVERTED by undo entries, all applied",
+   "ok": true,
+   "detail": "switch changes: [('vanilla.maxFps', 'REVERTED'), ('vanilla.particles', 'REVERTED'), ('vanilla.renderClouds', 'REVERTED'), ('vanilla.renderDistance', 'REVERTED'), ('vanilla.simulationDistance', 'REVERTED'), ('vanilla.enableVsync', 'REVERTED'), ('vanilla.maxFps', 'REVERTED'), ('vanilla.particles', 'REVERTED'), ('vanilla.renderClouds', 'REVERTED'), ('vanilla.renderDistance', 'REVERTED'), ('vanilla.simulationDistance', 'REVERTED')]; undo entries: ['cd6da796-896b-4539-b85d-19656642db86', '86bdf09f-2ab6-4569-85fa-d829df4b3a4e']; undo changes: [('vanilla.enableVsync', 'true', 'APPLIED', '331511be-9b82-4824-81bf-c7311d786cef'), ('vanilla.maxFps', '60', 'APPLIED', '24ff189e-c5da-4d1b-8c9d-68b6ae7e06df'), ('vanilla.particles', '1', 'APPLIED', 'a8aff6c9-3ac5-4f45-b934-f6549ccb7e9e'), ('vanilla.renderClouds', 'false', 'APPLIED', 'b7ba24a5-0559-4432-bd0c-ecbb0bbdefc1'), ('vanilla.renderDistance', '8', 'APPLIED', '87d07159-006b-4862-8234-50b2f1792f2f'), ('vanilla.simulationDistance', '6', 'APPLIED', 'b4bd76fd-d32d-4348-a26a-f7178bc08ccb'), ('vanilla.maxFps', '120', 'APPLIED', 'f00d1cc4-7514-4de1-9779-ceb34cef613f'), ('vanilla.particles', '0', 'APPLIED', '4d61c0ea-fb75-4d81-8bc2-6111105c9103'), ('vanilla.renderClouds', 'true', 'APPLIED', '6cb16c93-a90d-40e6-b79e-041680608122'), ('vanilla.renderDistance', '12', 'APPLIED', '84f54124-94de-4e56-a77a-c8a7da172331'), ('vanilla.simulationDistance', '12', 'APPLIED', 'a5f42a64-e7a7-487a-a785-bb1979981dfc')]"
+  },
+  {
+   "name": "every key is back at its value before the first switch",
+   "ok": true,
+   "detail": "6 key(s)"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  },
+  {
+   "name": "last-apply.json: every op OK",
+   "ok": true,
+   "detail": "statuses not OK: []"
+  },
+  {
+   "name": "profiles.json still labels each switch entry",
+   "ok": true,
+   "detail": "labels {'86bdf09f-2ab6-4569-85fa-d829df4b3a4e': 'Battery', 'cd6da796-896b-4539-b85d-19656642db86': 'Max FPS'}; expected {'86bdf09f-2ab6-4569-85fa-d829df4b3a4e': 'Battery', 'cd6da796-896b-4539-b85d-19656642db86': 'Max FPS'}"
+  }
+ ],
+ "profile-check": [
+  {
+   "name": "the client exited normally",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver checked",
+   "ok": true,
+   "detail": "error: None"
+  },
+  {
+   "name": "the game runs with every key at its value before the first switch",
+   "ok": true,
+   "detail": "6 key(s)"
+  },
+  {
+   "name": "nothing left to undo on either switch",
+   "ok": true,
+   "detail": "undoable items: {'86bdf09f-2ab6-4569-85fa-d829df4b3a4e': 0, 'cd6da796-896b-4539-b85d-19656642db86': 0}; plan problems: {'86bdf09f-2ab6-4569-85fa-d829df4b3a4e': None, 'cd6da796-896b-4539-b85d-19656642db86': None}"
+  },
+  {
+   "name": "no crash report",
+   "ok": true,
+   "detail": "crash-reports: []"
+  },
+  {
+   "name": "mods unchanged by the relaunch",
+   "ok": true,
+   "detail": "unchanged"
+  },
+  {
+   "name": "history.json statuses unchanged",
+   "ok": true,
+   "detail": "unchanged"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  }
+ ],
+ "profile-undo-all": [
+  {
+   "name": "the client exited normally",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver undid everything (Undo all)",
+   "ok": true,
+   "detail": "error: None; plans (undoOf, items, problem): [('all', 6, None)]; expected ['all']"
+  },
+  {
+   "name": "history.json: the switches' changes REVERTED by undo entries, all applied",
+   "ok": true,
+   "detail": "switch changes: [('vanilla.maxFps', 'REVERTED'), ('vanilla.particles', 'REVERTED'), ('vanilla.renderClouds', 'REVERTED'), ('vanilla.renderDistance', 'REVERTED'), ('vanilla.simulationDistance', 'REVERTED'), ('vanilla.enableVsync', 'REVERTED'), ('vanilla.maxFps', 'REVERTED'), ('vanilla.particles', 'REVERTED'), ('vanilla.renderClouds', 'REVERTED'), ('vanilla.renderDistance', 'REVERTED'), ('vanilla.simulationDistance', 'REVERTED')]; undo entries: ['all']; undo changes: [('vanilla.maxFps', '60', 'APPLIED', '24ff189e-c5da-4d1b-8c9d-68b6ae7e06df'), ('vanilla.maxFps', '120', 'APPLIED', 'f00d1cc4-7514-4de1-9779-ceb34cef613f'), ('vanilla.particles', '1', 'APPLIED', 'a8aff6c9-3ac5-4f45-b934-f6549ccb7e9e'), ('vanilla.particles', '0', 'APPLIED', '4d61c0ea-fb75-4d81-8bc2-6111105c9103'), ('vanilla.renderClouds', 'false', 'APPLIED', 'b7ba24a5-0559-4432-bd0c-ecbb0bbdefc1'), ('vanilla.renderClouds', 'true', 'APPLIED', '6cb16c93-a90d-40e6-b79e-041680608122'), ('vanilla.renderDistance', '8', 'APPLIED', '87d07159-006b-4862-8234-50b2f1792f2f'), ('vanilla.renderDistance', '12', 'APPLIED', '84f54124-94de-4e56-a77a-c8a7da172331'), ('vanilla.simulationDistance', '6', 'APPLIED', 'b4bd76fd-d32d-4348-a26a-f7178bc08ccb'), ('vanilla.simulationDistance', '12', 'APPLIED', 'a5f42a64-e7a7-487a-a785-bb1979981dfc'), ('vanilla.enableVsync', 'true', 'APPLIED', '331511be-9b82-4824-81bf-c7311d786cef')]"
+  },
+  {
+   "name": "every key is back at its value before the first switch",
+   "ok": true,
+   "detail": "6 key(s)"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  },
+  {
+   "name": "last-apply.json: every op OK",
+   "ok": true,
+   "detail": "statuses not OK: []"
+  },
+  {
+   "name": "profiles.json still labels each switch entry",
+   "ok": true,
+   "detail": "labels {'86bdf09f-2ab6-4569-85fa-d829df4b3a4e': 'Battery', 'cd6da796-896b-4539-b85d-19656642db86': 'Max FPS'}; expected {'86bdf09f-2ab6-4569-85fa-d829df4b3a4e': 'Battery', 'cd6da796-896b-4539-b85d-19656642db86': 'Max FPS'}"
+  }
+ ],
+ "profile-check-all": [
+  {
+   "name": "the client exited normally",
+   "ok": true,
+   "detail": "gradle exit 0, helper finished: True"
+  },
+  {
+   "name": "the driver checked",
+   "ok": true,
+   "detail": "error: None"
+  },
+  {
+   "name": "the game runs with every key at its value before the first switch",
+   "ok": true,
+   "detail": "6 key(s)"
+  },
+  {
+   "name": "nothing left to undo on either switch",
+   "ok": true,
+   "detail": "undoable items: {'86bdf09f-2ab6-4569-85fa-d829df4b3a4e': 0, 'cd6da796-896b-4539-b85d-19656642db86': 0}; plan problems: {'86bdf09f-2ab6-4569-85fa-d829df4b3a4e': None, 'cd6da796-896b-4539-b85d-19656642db86': None}"
+  },
+  {
+   "name": "no crash report",
+   "ok": true,
+   "detail": "crash-reports: []"
+  },
+  {
+   "name": "mods unchanged by the relaunch",
+   "ok": true,
+   "detail": "unchanged"
+  },
+  {
+   "name": "history.json statuses unchanged",
+   "ok": true,
+   "detail": "unchanged"
+  },
+  {
+   "name": "no pending.json, no leftover downloads",
+   "ok": true,
+   "detail": "pending.json exists: False; *.rigtune-pending: []"
+  }
+ ]
+}

@@ -65,15 +65,51 @@ V1_CONDITION_KEYS = frozenset({
     "heapMbAtLeast", "heapMbAtMost", "ramMbAtLeast", "ramMbAtMost", "vramMbAtLeast", "vramMbAtMost",
     "refreshRateAtLeast", "backend", "os", "goal", "mcVersion", "modPresent", "modAbsent", "flags", "anyOf", "not",
 })
-V2_CONDITION_KEYS = V1_CONDITION_KEYS | {
+# What 0.2.0 and 0.3.0 understand (their Condition is byte-identical; SchemaConsistencyTest checks this against the pinned
+# v030 copy). A key or value outside it is newer than them and poisons the condition there, so the rule doesn't fire: safe
+# for advice and value entries, not for rules whose firing is the protection (plan review R-L1, restrictive_problems).
+LEGACY_V2_CONDITION_KEYS = V1_CONDITION_KEYS | {
     "gpuModelMatches", "displayPixelsAtLeast", "displayPixelsAtMost", "modVersion", "mcVersionRange", "settingIs",
 }
+V2_CONDITION_KEYS = LEGACY_V2_CONDITION_KEYS | {"driverVersion"}
+# v0.4 Stutter Doctor keys (docs/v0.4/SPEC.md 5): Condition fields, but allowed only inside `stutterAdvice`.
+STUTTER_CONDITION_KEYS = frozenset({
+    "stutterShareAtLeast", "stutterTaggedShareAtLeast", "gcFullPausesAtLeast", "gcStallsAtLeast", "gcExplicitPausesAtLeast",
+    "liveSetPercentAtLeast", "heapRaiseRoomMbAtLeast", "cpuContentionShareAtLeast", "spikesPerMinuteAtLeast", "gcCollector",
+})
+# The share maps' keys (core/stutter/StutterFacts): causes that claim lost milliseconds, and tags that only count spikes.
+# Values are whole percent (0-100), as numbers or digit strings (plan review K-M1).
+STUTTER_MAP_KEYS = {
+    "stutterShareAtLeast": frozenset({"gc", "chunkLoad", "chunkBuild", "tick", "render", "unknown"}),
+    "stutterTaggedShareAtLeast": frozenset({"worldSave", "dh", "cpuContention", "afterTeleport", "movingFast"}),
+}
+STUTTER_PERCENT_KEYS = frozenset({"liveSetPercentAtLeast", "cpuContentionShareAtLeast"})
+# docs/v0.4/SPEC.md 9: {"vendor": <gpuVendor>, "atLeast": "526.47", "atMost": "536.22"}, compared on the parsed ints.
+DRIVER_VERSION_FIELDS = frozenset({"vendor", "atLeast", "atMost"})
+DRIVER_VERSION_RE = re.compile(r"[0-9]{1,9}(?:\.[0-9]{1,9})*")
+# docs/v0.4/SPEC.md 6: the JVM facts rules may test under `flags` (WS-J's core/jvm/JvmFacts.RULE_FLAGS). 0.4 evaluates
+# them only for rules with `requires` naming JVM_FEATURE, which 0.2.0/0.3.0 skip. jvm-probed is set by the client (the
+# check ran; plan review J-M1) and isn't rule vocabulary; any other jvm- flag is refused as a typo.
+JVM_FLAG_PREFIX = "jvm-"
+JVM_FLAGS = frozenset({
+    "jvm-gc-g1", "jvm-gc-zgc", "jvm-gc-shenandoah", "jvm-gc-parallel", "jvm-gc-serial", "jvm-gc-epsilon", "jvm-gc-other",
+    "jvm-gc-typed", "jvm-ignored-flags", "jvm-young-gen-fixed", "jvm-server-flags", "jvm-explicit-gc-disabled",
+    "jvm-xmx-duplicate",
+})
+JVM_PROBED_FLAG = "jvm-probed"
+# Client features a rule's `requires` may name (docs/RULES_SCHEMA.md "requires"): jvm-flags is the main Recommender's in
+# 0.4 (Recommender.SUPPORTED_FEATURES); stutter-doctor only the Stutter Doctor's (every stutterAdvice entry needs it).
+JVM_FEATURE = "jvm-flags"
+STUTTER_FEATURE = "stutter-doctor"
 BOOLEAN_CONDITION_KEYS = frozenset({"always", "gpuIntegrated", "hasBattery", "onBattery"})
-LIST_CONDITION_KEYS = frozenset({"gpuVendor", "backend", "os", "goal", "mcVersion", "modPresent", "modAbsent", "flags"})
+LIST_CONDITION_KEYS = frozenset({"gpuVendor", "backend", "os", "goal", "mcVersion", "modPresent", "modAbsent", "flags",
+                                 "gcCollector"})
 STRING_CONDITION_KEYS = frozenset({"gpuModelMatches", "mcVersionRange"})
 # Java Integer fields; every other numeric key is a Java Long.
 INT32_CONDITION_KEYS = frozenset({"tierAtLeast", "tierAtMost", "rawTierAtLeast", "rawTierAtMost", "gpuTierAtLeast",
-                                  "gpuTierAtMost", "cpuTierAtLeast", "cpuTierAtMost", "refreshRateAtLeast"})
+                                  "gpuTierAtMost", "cpuTierAtLeast", "cpuTierAtMost", "refreshRateAtLeast",
+                                  "gcFullPausesAtLeast", "gcStallsAtLeast", "gcExplicitPausesAtLeast", "liveSetPercentAtLeast",
+                                  "cpuContentionShareAtLeast", "spikesPerMinuteAtLeast"})
 MAX_PATTERN_LENGTH = 200
 
 # Enumerated condition values. V1 is what 0.1.0 understands and is frozen: 0.1.x evaluates two-valued, so a value it
@@ -92,12 +128,42 @@ V2_VOCABULARIES = {
     "os": ("windows", "macos", "linux"),
     "goal": frozenset({"performance", "balanced", "quality"}),
     "flags": frozenset({"backend-vulkan", "shaders-enabled"}),
+    # v0.4, not in ConditionEvaluator.FLAGS: the jvm- facts (WS-J evaluates them separately) and the Stutter Doctor's
+    # collector names (stutterAdvice only).
+    "jvmFlags": JVM_FLAGS,
+    "gcCollector": frozenset({"g1", "zgc", "shenandoah", "parallel", "serial"}),
 }
+# 0.2.0/0.3.0's vocabularies (ConditionEvaluator, byte-identical in both; SchemaConsistencyTest checks the pinned copy).
+LEGACY_V2_VOCABULARIES = {k: v for k, v in V2_VOCABULARIES.items() if k not in ("jvmFlags", "gcCollector")}
 SODIUM_WORKAROUND_FLAG = "sodium-workaround:"
 KNOWLEDGE_TOP_LEVEL = frozenset({
     "minModVersion", "gpuTiers", "gpuVendorFallback", "cpuTiers", "heapTiers", "mods", "obsolete", "settings", "advice",
-    "settingLabels", "reviewIgnore",
+    "settingLabels", "profileTemplates", "stutterAdvice", "reviewIgnore",
 })
+# v0.4 rules-v2 sections (docs/v0.4/SPEC.md C2): never written to rules-v1.json.
+V2_ONLY_SECTIONS = ("settingLabels", "profileTemplates", "stutterAdvice")
+# profileTemplates (docs/v0.4/SPEC.md 4, docs/research/v0.4/profiles.md §4.2).
+PROFILE_TEMPLATE_IDS = ("max_fps", "balanced", "quality", "battery", "recording")
+PROFILE_TEMPLATE_FIELDS = frozenset({"requires", "id", "goal", "facts", "settings"})
+PROFILE_TEMPLATE_FACTS = frozenset({"onBattery", "hasBattery"})
+# The keys a profile manages: the share-code table plus the two local-only thread counts (profiles.md §5.2). Never
+# vanilla.graphicsPreset or iris.shaderPack.
+MANAGED_PROFILE_KEYS = frozenset({
+    "vanilla.renderDistance", "vanilla.simulationDistance", "vanilla.entityDistanceScaling", "vanilla.maxFps",
+    "vanilla.enableVsync", "vanilla.inactivityFpsLimit", "vanilla.particles", "vanilla.biomeBlendRadius",
+    "vanilla.weatherRadius", "vanilla.textureFiltering", "vanilla.renderClouds", "vanilla.prioritizeChunkUpdates",
+    "vanilla.improvedTransparency", "vanilla.entityShadows", "vanilla.cutoutLeaves",
+    "sodium.performance.use_fog_occlusion", "sodium.performance.use_block_face_culling",
+    "sodium.performance.use_entity_culling", "sodium.performance.animate_only_visible_textures",
+    "sodium.performance.chunk_build_defer_mode", "sodium.performance.quad_splitting_mode",
+    "sodium.performance.chunk_builder_threads",
+    "iris.enableShaders", "iris.maxShadowRenderDistance",
+    "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", "dh.client.advanced.graphics.quality.verticalQuality",
+    "dh.client.advanced.graphics.quality.horizontalQuality", "dh.client.advanced.graphics.quality.maxHorizontalResolution",
+    "dh.client.advanced.debugging.rendererMode", "dh.common.multiThreading.numberOfThreads",
+})
+ADVICE_KINDS = frozenset({"info", "warning", "critical"})
+IMPACTS = frozenset({"high", "medium", "low"})
 
 RULE_KINDS = ("mods", "obsolete", "settings", "advice")
 TIER_KINDS = ("gpuTiers", "cpuTiers", "heapTiers")
@@ -122,6 +188,8 @@ CONDITION_FIELDS = {"mods": ("recommendWhen", "avoidWhen", "skipUpdateWhen"), "o
 V1_SETTING_PREFIXES = ("vanilla.", "sodium.")
 # Computed setting values both 0.1.0 and 0.2 resolve. A new token needs a new client, so it must come with `requires`.
 VALUE_TOKENS = frozenset({"$refreshRate", "$refreshRateCap"})
+# Resolved only in 0.4's template layer (docs/v0.4/SPEC.md 4), so allowed only inside profileTemplates.
+TEMPLATE_VALUE_TOKENS = VALUE_TOKENS | {"$recordingFps"}
 NEVER = {"always": False}
 MISSING = object()
 
@@ -136,12 +204,50 @@ def known_value(field, value, vocabularies=None):
     if field == "os":
         return lower != "" and any(family.startswith(lower) for family in vocabularies["os"])
     if field == "flags":
-        return value in vocabularies["flags"] or (value.startswith(SODIUM_WORKAROUND_FLAG) and len(value) > len(SODIUM_WORKAROUND_FLAG))
+        return (value in vocabularies["flags"] or value in vocabularies.get("jvmFlags", ())
+                or (value.startswith(SODIUM_WORKAROUND_FLAG) and len(value) > len(SODIUM_WORKAROUND_FLAG)))
     return lower in vocabularies[field]
 
 
 def is_integer(value):
     return isinstance(value, int) and not isinstance(value, bool)
+
+
+def whole_percent(value):
+    """A share threshold inside a stutter map: 0-100 as a JSON integer or a digit string (the Java field is a
+    Map<String, String>, its numbers parsed by the evaluator; plan review K-M1)."""
+    if is_integer(value):
+        return 0 <= value <= 100
+    return isinstance(value, str) and value.isascii() and value.isdigit() and int(value) <= 100
+
+
+def driver_version_parts(text):
+    return [int(p) for p in text.split(".")] if isinstance(text, str) and DRIVER_VERSION_RE.fullmatch(text) else None
+
+
+def driver_version_problems(value, where):
+    if not isinstance(value, dict):
+        return [f'{where} must be an object like {{"vendor": "nvidia", "atLeast": "526.47", "atMost": "536.22"}}']
+    problems = [f"{where}.{k}: unknown field (only vendor, atLeast, atMost)" for k in sorted(set(value) - DRIVER_VERSION_FIELDS)]
+    vendor = value.get("vendor")
+    if not isinstance(vendor, str) or not known_value("gpuVendor", vendor) or vendor != vendor.lower():
+        problems.append(f"{where}.vendor must be a lower-case gpuVendor value")
+    bounds = {}
+    for key in ("atLeast", "atMost"):
+        if key in value:
+            parts = driver_version_parts(value[key])
+            if parts is None:
+                problems.append(f'{where}.{key} must be a dotted version string like "526.47"')
+            else:
+                bounds[key] = parts
+    if "atLeast" not in value and "atMost" not in value:
+        problems.append(f"{where} needs atLeast or atMost")
+    if len(bounds) == 2:
+        width = max(len(bounds["atLeast"]), len(bounds["atMost"]))
+        pad = lambda parts: parts + [0] * (width - len(parts))
+        if pad(bounds["atLeast"]) > pad(bounds["atMost"]):
+            problems.append(f"{where}: atLeast is above atMost")
+    return problems
 
 
 def condition_problems(cond, allowed_keys=V2_CONDITION_KEYS, path="condition", vocabularies=None):
@@ -153,7 +259,10 @@ def condition_problems(cond, allowed_keys=V2_CONDITION_KEYS, path="condition", v
     for key, value in cond.items():
         where = f"{path}.{key}"
         if key not in allowed_keys:
-            problems.append(f"{where}: unknown condition key")
+            if key in STUTTER_CONDITION_KEYS and allowed_keys is V2_CONDITION_KEYS:
+                problems.append(f"{where}: a Stutter Doctor key, allowed only inside stutterAdvice")
+            else:
+                problems.append(f"{where}: unknown condition key")
         elif value is None:
             problems.append(f"{where}: null")
         elif key == "not":
@@ -171,7 +280,28 @@ def condition_problems(cond, allowed_keys=V2_CONDITION_KEYS, path="condition", v
             if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
                 problems.append(f"{where} must be an array of strings")
             else:
-                problems += [f"{where}: {v!r} is outside the known values" for v in value if not known_value(key, v, vocabularies)]
+                for v in value:
+                    if key == "flags" and v == JVM_PROBED_FLAG:
+                        problems.append(f"{where}: {v!r} is set by RigTune itself when its JVM check ran; rules can't test it")
+                    elif not known_value(key, v, vocabularies):
+                        problems.append(f"{where}: {v!r} is outside the known values")
+                    elif key == "gcCollector" and v != v.lower():
+                        problems.append(f"{where}: {v!r} must be lower case")
+        elif key == "driverVersion":
+            problems += driver_version_problems(value, where)
+        elif key in STUTTER_MAP_KEYS:
+            if not isinstance(value, dict) or not value:
+                problems.append(f"{where} must map {'causes' if key == 'stutterShareAtLeast' else 'tags'} to whole percentages")
+            else:
+                for name, share in value.items():
+                    if name not in STUTTER_MAP_KEYS[key]:
+                        problems.append(f"{where}.{name}: not one of {', '.join(sorted(STUTTER_MAP_KEYS[key]))}")
+                    elif not whole_percent(share):
+                        problems.append(f"{where}.{name} must be a whole percentage (0-100)")
+        elif key in STUTTER_PERCENT_KEYS and is_integer(value) and not 0 <= value <= 100:
+            problems.append(f"{where} must be a whole percentage (0-100)")
+        elif key in STUTTER_CONDITION_KEYS and is_integer(value) and value < 0:
+            problems.append(f"{where} can't be negative")
         elif key in STRING_CONDITION_KEYS:
             if not isinstance(value, str) or not value.strip():
                 problems.append(f"{where} must be a non-empty string")
@@ -196,6 +326,68 @@ def bits(key):
 
 def is_v1_condition(cond):
     return not condition_problems(cond, V1_CONDITION_KEYS, vocabularies=V1_VOCABULARIES)
+
+
+def is_legacy_v2_condition(cond):
+    """Whether 0.2.0 and 0.3.0 understand every key and value (so the condition doesn't poison there)."""
+    return not condition_problems(cond, LEGACY_V2_CONDITION_KEYS, vocabularies=LEGACY_V2_VOCABULARIES)
+
+
+def condition_nodes(cond):
+    """Every object of a condition tree (itself, then through not/anyOf)."""
+    if not isinstance(cond, dict):
+        return
+    yield cond
+    yield from condition_nodes(cond.get("not"))
+    any_of = cond.get("anyOf")
+    for sub in any_of if isinstance(any_of, list) else []:
+        yield from condition_nodes(sub)
+
+
+def uses_jvm_flag(cond):
+    return any(isinstance(node.get("flags"), list) and any(isinstance(f, str) and f.startswith(JVM_FLAG_PREFIX) for f in node["flags"])
+               for node in condition_nodes(cond))
+
+
+def feature_problems(label, conditions, requires):
+    """A condition testing a jvm- fact needs `requires` naming jvm-flags, so 0.2.0/0.3.0 skip the whole rule (SPEC 6)."""
+    requires = requires if isinstance(requires, list) else []
+    if any(uses_jvm_flag(c) for c in conditions) and JVM_FEATURE not in requires:
+        return [f'{label}: a rule that tests a jvm- flag needs "requires": ["{JVM_FEATURE}"]']
+    return []
+
+
+def restrictive_problems(kind, rule, label):
+    """Plan review R-L1. A key or value 0.2.0/0.3.0 don't know makes a condition UNKNOWN there, and the rule doesn't fire.
+    Where firing is the protection (a clamp, an avoidWhen, a skipUpdateWhen), not firing loses it, so such a rule must
+    carry `requires` (then older clients skip it knowingly, and the maintainer keeps a legacy rule next to it)."""
+    if rule.get("requires"):
+        return []
+    if kind == "settings":
+        fields = ["when"] if "min" in rule or "max" in rule else []
+    elif kind == "mods":
+        fields = ["avoidWhen", "skipUpdateWhen"]
+    else:
+        fields = []
+    problems = []
+    for field in fields:
+        cond = rule.get(field)
+        if isinstance(cond, dict) and not condition_problems(cond, V2_CONDITION_KEYS, field) and not is_legacy_v2_condition(cond):
+            problems.append(f"{label}: {field} uses a condition 0.2.0/0.3.0 don't know, so they'd silently drop this "
+                            f"restriction; add \"requires\" (and keep a rule they understand next to it)")
+    return problems
+
+
+def value_or_clamp_problems(label, rule):
+    """Review-8 CR-2: a settings rule is a value entry or a clamp, never both (clients read only `value` then, so the
+    min/max restriction would be silently lost) and never neither (it would do nothing)."""
+    has_value = "value" in rule
+    has_clamp = "min" in rule or "max" in rule
+    if has_value and has_clamp:
+        return [f"{label}: sets both value and min/max; clients read only value, so the min/max would be ignored; use one"]
+    if not has_value and not has_clamp:
+        return [f"{label}: needs value or min/max"]
+    return []
 
 
 def contains_null(value):
@@ -366,11 +558,17 @@ def validate_knowledge(knowledge):
                     problems += [f"{label}: {p}" for p in condition_problems(rule[field], V2_CONDITION_KEYS, field)]
             if "requires" in rule and (not isinstance(rule["requires"], list) or not all(isinstance(r, str) for r in rule["requires"])):
                 problems.append(f"{label}: requires must be an array of strings")
+            if kind == "settings":
+                problems += value_or_clamp_problems(label, rule)
             if kind == "settings" and unknown_token(rule.get("value")) and not rule.get("requires"):
                 problems.append(f"{label}: the value {rule['value']!r} isn't a known token ({', '.join(sorted(VALUE_TOKENS))}); "
                                 "a new token needs \"requires\" naming the client feature that resolves it")
             if "avoidSelected" in rule and not isinstance(rule["avoidSelected"], bool):
                 problems.append(f"{label}: avoidSelected must be true or false")
+            problems += feature_problems(label, [rule[f] for f in CONDITION_FIELDS[kind] if f in rule], rule.get("requires"))
+            problems += restrictive_problems(kind, rule, label)
+            if string_list(rule.get("requires")) and STUTTER_FEATURE in rule["requires"]:
+                problems.append(f"{label}: \"{STUTTER_FEATURE}\" is only the Stutter Doctor's feature; the main list would skip this rule")
             if not unknown:
                 try:
                     project_rule(kind, rule, i)
@@ -380,8 +578,130 @@ def validate_knowledge(knowledge):
     if unknown_top:
         problems.append(f"unknown top-level field(s) {', '.join(unknown_top)}")
     problems += setting_label_problems(knowledge.get("settingLabels", {}))
+    if "profileTemplates" in knowledge:
+        problems += profile_template_problems(knowledge["profileTemplates"])
+    if "stutterAdvice" in knowledge:
+        problems += stutter_advice_problems(knowledge["stutterAdvice"])
     if problems:
         raise KnowledgeError("invalid knowledge:\n  " + "\n  ".join(problems))
+
+
+def string_list(value):
+    return isinstance(value, list) and all(isinstance(v, str) for v in value)
+
+
+def profile_template_problems(section):
+    """profileTemplates (v0.4, rules-v2 only): {"templates": [{"id", "goal", "facts"?, "settings"?, "requires"?}]}.
+    Settings entries are SettingRules over the managed keyset; `$recordingFps` is allowed here only."""
+    if not isinstance(section, dict):
+        return ['profileTemplates must be an object like {"templates": [...]}']
+    problems = [f"profileTemplates: unknown field(s) {', '.join(sorted(set(section) - {'templates'}))}"] if set(section) - {"templates"} else []
+    templates = section.get("templates")
+    if not isinstance(templates, list):
+        return problems + ["profileTemplates.templates must be an array"]
+    seen = set()
+    for i, template in enumerate(templates):
+        if not isinstance(template, dict):
+            problems.append(f"profileTemplates.templates[{i}] must be an object")
+            continue
+        label = f"profileTemplates[{template.get('id', i)}]"
+        unknown = sorted(set(template) - PROFILE_TEMPLATE_FIELDS)
+        if unknown:
+            problems.append(f"{label}: unknown field(s) {', '.join(unknown)} (the section never reaches rules-v1.json, so no v1)")
+        if contains_null(template):
+            problems.append(f"{label}: null isn't allowed in a template")
+        template_id = template.get("id")
+        if template_id not in PROFILE_TEMPLATE_IDS:
+            problems.append(f"{label}: id must be one of {', '.join(PROFILE_TEMPLATE_IDS)}")
+        elif template_id in seen:
+            problems.append(f"{label}: duplicate id")
+        else:
+            seen.add(template_id)
+        if not isinstance(template.get("goal"), str) or not known_value("goal", template["goal"]) or template["goal"] != template["goal"].lower():
+            problems.append(f"{label}: goal must be one of {', '.join(sorted(V2_VOCABULARIES['goal']))}")
+        facts = template.get("facts", {})
+        if not isinstance(facts, dict) or not all(k in PROFILE_TEMPLATE_FACTS and isinstance(v, bool) for k, v in facts.items()):
+            problems.append(f"{label}: facts may only set {', '.join(sorted(PROFILE_TEMPLATE_FACTS))} to true or false")
+        if "requires" in template and not string_list(template["requires"]):
+            problems.append(f"{label}: requires must be an array of strings")
+        settings = template.get("settings", [])
+        if not isinstance(settings, list):
+            problems.append(f"{label}: settings must be an array")
+            continue
+        for j, entry in enumerate(settings):
+            problems += template_setting_problems(f"{label}.settings[{j}]", entry, template.get("requires"))
+    return problems
+
+
+def template_setting_problems(label, entry, template_requires):
+    if not isinstance(entry, dict):
+        return [f"{label} must be an object"]
+    label = f"{label} {entry.get('key')}"
+    problems = []
+    unknown = sorted(set(entry) - V1_RULE_FIELDS["settings"] - V2_ONLY_RULE_FIELDS["settings"])
+    if unknown:
+        problems.append(f"{label}: unknown field(s) {', '.join(unknown)}")
+    if not isinstance(entry.get("key"), str) or entry["key"] not in MANAGED_PROFILE_KEYS:
+        problems.append(f"{label}: not a key profiles manage (docs/RULES_SCHEMA.md \"profileTemplates\")")
+    has_value = "value" in entry
+    has_clamp = "min" in entry or "max" in entry
+    if has_value == has_clamp:
+        problems.append(f"{label}: needs either value or min/max")
+    for bound in ("min", "max"):
+        if bound in entry and (isinstance(entry[bound], bool) or not isinstance(entry[bound], (int, float))):
+            problems.append(f"{label}: {bound} must be a number")
+    if has_value and not isinstance(entry["value"], (str, int, float, bool)):
+        problems.append(f"{label}: value must be a string, number or boolean")
+    requires = [f for group in (entry.get("requires"), template_requires) if string_list(group) for f in group]
+    value = entry.get("value")
+    if isinstance(value, str) and value.strip().startswith("$") and value.strip() not in TEMPLATE_VALUE_TOKENS and not requires:
+        problems.append(f"{label}: the value {value!r} isn't a known token ({', '.join(sorted(TEMPLATE_VALUE_TOKENS))})")
+    if "requires" in entry and not string_list(entry["requires"]):
+        problems.append(f"{label}: requires must be an array of strings")
+    if "when" in entry:
+        problems += [f"{label}: {p}" for p in condition_problems(entry["when"], V2_CONDITION_KEYS, "when")]
+        problems += feature_problems(label, [entry["when"]], requires)
+    return problems
+
+
+def stutter_advice_problems(section):
+    """stutterAdvice (v0.4, rules-v2 only): AdviceRules for the Stutter Doctor. Each needs `requires` naming
+    stutter-doctor (the main Recommender doesn't know it) and may use the stutter condition keys."""
+    if not isinstance(section, list):
+        return ["stutterAdvice must be an array"]
+    problems = []
+    seen = set()
+    allowed = V2_CONDITION_KEYS | STUTTER_CONDITION_KEYS
+    for i, rule in enumerate(section):
+        if not isinstance(rule, dict):
+            problems.append(f"stutterAdvice[{i}] must be an object")
+            continue
+        label = f"stutterAdvice[{rule.get('id', i)}]"
+        unknown = sorted(set(rule) - V1_RULE_FIELDS["advice"] - V2_ONLY_RULE_FIELDS["advice"])
+        if unknown:
+            problems.append(f"{label}: unknown field(s) {', '.join(unknown)} (the section never reaches rules-v1.json, so no v1)")
+        if contains_null(rule):
+            problems.append(f"{label}: null isn't allowed in a rule")
+        if not isinstance(rule.get("id"), str) or not rule["id"].strip():
+            problems.append(f"{label}: needs an id")
+        elif rule["id"] in seen:
+            problems.append(f"{label}: duplicate id")
+        else:
+            seen.add(rule["id"])
+        if not string_list(rule.get("requires")) or STUTTER_FEATURE not in rule["requires"]:
+            problems.append(f'{label}: needs "requires": ["{STUTTER_FEATURE}"]')
+        if not isinstance(rule.get("kind"), str) or rule["kind"] not in ADVICE_KINDS:
+            problems.append(f"{label}: kind must be one of {', '.join(sorted(ADVICE_KINDS))}")
+        if not isinstance(rule.get("impact"), str) or rule["impact"] not in IMPACTS:
+            problems.append(f"{label}: impact must be one of {', '.join(sorted(IMPACTS))}")
+        for field in ("title", "text"):
+            if not isinstance(rule.get(field), str) or not rule[field].strip():
+                problems.append(f"{label}: needs a {field}")
+        if "when" in rule:
+            problems += [f"{label}: {p}" for p in condition_problems(rule["when"], allowed, "when")]
+            if uses_jvm_flag(rule["when"]):
+                problems.append(f"{label}: the Stutter Doctor doesn't evaluate jvm- flags (the main list's {JVM_FEATURE} feature)")
+    return problems
 
 
 def fo_contents_url(mc_version):
@@ -846,8 +1166,9 @@ def assemble_content(knowledge, mods, availability, upstream):
     content["obsolete"] = knowledge.get("obsolete", [])
     content["settings"] = knowledge.get("settings", [])
     content["advice"] = knowledge.get("advice", [])
-    if "settingLabels" in knowledge:
-        content["settingLabels"] = knowledge["settingLabels"]
+    for section in V2_ONLY_SECTIONS:
+        if section in knowledge:
+            content[section] = knowledge[section]
     content["availability"] = availability
     content["upstream"] = upstream
     return content
@@ -870,7 +1191,7 @@ def v1_projection(content):
     notes = []
     omitted_mods = {}
     for key, value in content.items():
-        if key in ("schemaVersion", "settingLabels"):
+        if key == "schemaVersion" or key in V2_ONLY_SECTIONS:
             continue
         if key in RULE_KINDS:
             projected = []

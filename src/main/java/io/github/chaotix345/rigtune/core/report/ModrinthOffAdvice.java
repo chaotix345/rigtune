@@ -47,6 +47,6 @@ public final class ModrinthOffAdvice {
 			return report;
 		}
 		return new Report(report.hardware(), report.gpuClass(), report.tier(), report.goal(), List.copyOf(out), report.rulesRevision(),
-				report.rulesSource(), report.online(), report.createdAt());
+				report.rulesSource(), report.online(), report.createdAt(), report.tierBasis());
 	}
 }

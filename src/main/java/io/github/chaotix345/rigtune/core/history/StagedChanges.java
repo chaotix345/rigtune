@@ -35,6 +35,13 @@ public final class StagedChanges {
 	// base: pending.json as it was before the merge. journaledOpIds: op ids that already have a STAGED change.
 	public static Outcome of(PendingActions base, List<Op> incoming, PendingActions.Merged merged, ConfigKeys config,
 			Function<Path, String> modIdOf, Set<String> journaledOpIds) {
+		return of(base, incoming, merged, config, modIdOf, jar -> null, journaledOpIds);
+	}
+
+	// modNameOf (docs/v0.4/SPEC.md 2c): a jar's display name (ModJars.nameOf), read where the jar is now: the download
+	// (op.from()) for an enable, the installed jar (op.path()) for a disable.
+	public static Outcome of(PendingActions base, List<Op> incoming, PendingActions.Merged merged, ConfigKeys config,
+			Function<Path, String> modIdOf, Function<Path, String> modNameOf, Set<String> journaledOpIds) {
 		Set<String> recorded = new HashSet<>(journaledOpIds);
 		List<JournalChange> changes = new ArrayList<>();
 		for (Op op : incoming) {
@@ -45,9 +52,9 @@ public final class StagedChanges {
 			Op staged = merged.plan().ops().stream().filter(o -> o != null && id.equals(o.id())).findFirst().orElse(op);
 			switch (op.type()) {
 				case ENABLE_FILE -> changes.add(JournalChange.file(JournalChange.ENABLE, Objects.requireNonNullElse(staged.modId(), op.modId()),
-						HistoryUpdates.fileName(op.to()), JournalChange.STAGED, id, staged.group()));
+						HistoryUpdates.fileName(op.to()), JournalChange.STAGED, id, staged.group()).withModName(nameAt(modNameOf, op.from())));
 				case DISABLE_FILE -> changes.add(JournalChange.file(JournalChange.DISABLE, modIdOf.apply(Path.of(op.path())),
-						HistoryUpdates.fileName(op.path()), JournalChange.STAGED, id, staged.group()));
+						HistoryUpdates.fileName(op.path()), JournalChange.STAGED, id, staged.group()).withModName(nameAt(modNameOf, op.path())));
 				case PATCH_JSON, PATCH_TOML, PATCH_PROPERTIES -> {
 					if (op.patches() == null) {
 						continue;
@@ -70,6 +77,14 @@ public final class StagedChanges {
 		}
 		List<String> discarded = merged.replaced().stream().map(Op::id).filter(Objects::nonNull).toList();
 		return new Outcome(List.copyOf(changes), discarded);
+	}
+
+	private static String nameAt(Function<Path, String> modNameOf, String path) {
+		try {
+			return path == null ? null : modNameOf.apply(Path.of(path));
+		} catch (RuntimeException e) {
+			return null;
+		}
 	}
 
 	// The value the last already-staged op for this file and key sets, or null if none does.

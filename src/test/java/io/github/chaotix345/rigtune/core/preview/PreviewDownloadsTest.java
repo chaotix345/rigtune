@@ -8,7 +8,9 @@ import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
+import io.github.chaotix345.rigtune.core.modrinth.Dependency;
 import io.github.chaotix345.rigtune.core.modrinth.ModrinthVersion;
+import io.github.chaotix345.rigtune.core.modrinth.StagedProjects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -39,6 +41,8 @@ class PreviewDownloadsTest {
 	final Set<String> installedProjects = new HashSet<>();
 	BiPredicate<String, String> conflicts = (a, b) -> false;
 	boolean lookups = true;
+	boolean lookedUp = true;
+	StagedProjects staged = StagedProjects.NONE;
 
 	@BeforeEach
 	void setUp() throws IOException {
@@ -47,7 +51,7 @@ class PreviewDownloadsTest {
 
 	private ApplyPreview preview(Recommendation... selected) {
 		DownloadInputs inputs = new DownloadInputs(modrinth, lookups, "fabric", "26.2", Map.of(), updateVersions, installedProjects, Set.of("sodium"),
-				Map.of(), conflicts);
+				Map.of(), conflicts, staged, lookedUp);
 		return new PreviewPlanner(instance.options, PreviewFixtures.vanillaNow(), Map.of(), instance.configFiles(), instance.mods, inputs).preview(List.of(selected));
 	}
 
@@ -141,18 +145,17 @@ class PreviewDownloadsTest {
 	}
 
 	@Test
-	void theLaterOfTwoConflictingAdditionsIsRefused() {
+	void twoConflictingAdditionsAreBothRefused() {
 		lithiumWithFabricApi();
 		modrinth.put("krypton", version("kryV", "KRYPTON", "krypton-1.0.jar"), "krypton");
 		conflicts = (a, b) -> Set.of(a, b).equals(Set.of("lithium", "krypton"));
 
 		ApplyPreview preview = preview(add("lithium", "LITHIUM", "Lithium"), add("krypton", "KRYPTON", "Krypton"));
 
-		assertEquals(List.of("lithium-1.0.jar", "fabric-api-1.0.jar"), preview.downloads().stream().map(ApplyPreview.Download::fileName).toList());
-		ApplyPreview.Skipped refused = preview.skipped().getFirst();
-		assertEquals("add:krypton", refused.recommendationId());
-		assertEquals(ApplyPreview.Reason.DOWNLOAD_FAILED, refused.reason());
-		assertTrue(refused.detail().startsWith("it conflicts with Lithium"), refused.detail());
+		assertEquals(List.of(), preview.downloads());
+		assertEquals(List.of("add:lithium", "add:krypton"), preview.skipped().stream().map(ApplyPreview.Skipped::recommendationId).toList());
+		assertTrue(preview.skipped().stream().allMatch(r -> r.reason() == ApplyPreview.Reason.DOWNLOAD_FAILED));
+		assertTrue(preview.skipped().get(1).detail().startsWith("it conflicts with Lithium"), preview.skipped().get(1).detail());
 	}
 
 	// Review WS-P #3: a file fetched again after a failed item keeps its stand-in mod id, so a later new file isn't taken for
@@ -180,6 +183,21 @@ class PreviewDownloadsTest {
 
 		assertEquals(ApplyPreview.Reason.DOWNLOAD_FAILED, preview.skipped().getFirst().reason());
 		assertEquals("No fabric version of NOTHING for Minecraft 26.2", preview.skipped().getFirst().detail());
+	}
+
+	// Review of WS-G1: an update that waits for the addition bringing its requirement (docs/v0.4/SPEC.md 2o, H1-A), which then
+	// fails: each skipped row still carries its own reason (the planner's errors keep their order).
+	@Test
+	void aWaitingUpdateAndTheFailedAdditionKeepTheirOwnReasons() throws IOException {
+		Recommendation update = update();
+		updateVersions.put("sodV6", version("sodV6", "SODIUM", "sodium-0.6.jar", required("LIB")));
+
+		ApplyPreview preview = preview(add("lib", "LIB", "Lib"), update);
+
+		Map<String, String> reasons = new HashMap<>();
+		preview.skipped().forEach(skip -> reasons.put(skip.recommendationId(), skip.detail()));
+		assertEquals(Map.of("update:sodium", "its new version needs LIB, which isn't installed",
+				"add:lib", "No fabric version of LIB for Minecraft 26.2"), reasons);
 	}
 
 	@Test
@@ -226,5 +244,50 @@ class PreviewDownloadsTest {
 
 		assertEquals(before, instance.tree());
 		assertFalse(modrinth.downloaded());
+	}
+
+	// docs/v0.4/SPEC.md 2d: the preview judges an addition against what earlier Applies staged, as Apply does.
+	@Test
+	void anAdditionIncompatibleWithAStagedModIsRefusedInThePreviewToo() {
+		modrinth.put("lithium", version("lithV", "LITHIUM", "lithium-1.0.jar", new Dependency("KRYPTON", null, "incompatible")), "lithium");
+		staged = new StagedProjects(Set.of("KRYPTON"), Map.of("krypV", "KRYPTON"));
+
+		ApplyPreview preview = preview(add("lithium", "LITHIUM", "Lithium"));
+
+		assertEquals(List.of(), preview.downloads());
+		ApplyPreview.Skipped refused = preview.skipped().getFirst();
+		assertEquals(ApplyPreview.Reason.DOWNLOAD_FAILED, refused.reason());
+		assertEquals(Text.of("rigtune.download.incompatible_staged", "Modrinth marks %s as incompatible with %s, which is waiting for a restart", "LITHIUM",
+				"KRYPTON"), refused.detailText());
+	}
+	// docs/v0.4/SPEC.md 2o, M4: before the installed mods were looked up on Modrinth (or after the lookup failed), Apply
+	// refuses every download, and the preview says so for each, asking Modrinth nothing.
+	@Test
+	void beforeTheInstalledModsWereLookedUpEveryDownloadIsRefused() throws IOException {
+		lithiumWithFabricApi();
+		lookedUp = false;
+
+		ApplyPreview preview = preview(add("lithium", "LITHIUM", "Lithium"), update());
+
+		assertEquals(List.of(), preview.downloads());
+		assertEquals(List.of(), preview.disables());
+		assertEquals(List.of("update:sodium", "add:lithium"), preview.skipped().stream().map(ApplyPreview.Skipped::recommendationId).toList());
+		for (ApplyPreview.Skipped skipped : preview.skipped()) {
+			assertEquals(ApplyPreview.Reason.DOWNLOAD_FAILED, skipped.reason());
+			assertEquals(Text.of("rigtune.download.not_loaded",
+					"Modrinth's data for your mods isn't loaded yet, or the lookup failed; wait a moment or press Rescan, then try again"), skipped.detailText());
+		}
+		assertEquals(List.of(), modrinth.calls);
+	}
+
+	// With Modrinth lookups off there was no lookup to wait for: the usual preview (additions unresolved).
+	@Test
+	void withLookupsOffNothingWaitsForALookup() throws IOException {
+		lookups = false;
+		lookedUp = false;
+
+		ApplyPreview preview = preview(update());
+
+		assertEquals(List.of("sodium-0.6.jar"), preview.downloads().stream().map(ApplyPreview.Download::fileName).toList());
 	}
 }
