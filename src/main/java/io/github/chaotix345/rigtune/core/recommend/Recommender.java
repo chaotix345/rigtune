@@ -230,7 +230,7 @@ public final class Recommender {
 		}
 	}
 
-	static boolean supported(List<String> requires) {
+	public static boolean supported(List<String> requires) {
 		return requires == null || requires.stream().allMatch(feature -> feature != null && SUPPORTED_FEATURES.contains(feature));
 	}
 

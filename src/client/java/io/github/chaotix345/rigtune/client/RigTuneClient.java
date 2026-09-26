@@ -3,6 +3,8 @@ package io.github.chaotix345.rigtune.client;
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
+import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
+import io.github.chaotix345.rigtune.client.probe.PowerWatcher;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
@@ -83,6 +85,7 @@ public final class RigTuneClient implements ClientModInitializer {
 			real.unstageQueuedUpdates();
 			launchHelperIfPending();
 		});
+		powerWatcher(real);
 		ClientTickEvents.END_CLIENT_TICK.register(RigTuneClient::onTick);
 		registerAwareness(real);
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> addEntryButton(screen, width, height));
@@ -106,6 +109,13 @@ public final class RigTuneClient implements ClientModInitializer {
 
 	public static RigTuneController controller() {
 		return controller;
+	}
+
+	// v0.4 (WS-P, docs/v0.4/SPEC.md 4): follows the power state once the startup probe has found a real battery.
+	private static void powerWatcher(RealController real) {
+		ClientLifecycleEvents.CLIENT_STARTED.register(minecraft -> HardwareProbe.slowPart().thenAcceptAsync(slow ->
+				PowerWatcher.startIfBattery(slow.hasBattery(), slow.onBattery(), real.profileService()::powerChanged), Probes.EXECUTOR));
+		ClientLifecycleEvents.CLIENT_STOPPING.register(minecraft -> PowerWatcher.stop());
 	}
 
 	public static void setController(RigTuneController newController) {

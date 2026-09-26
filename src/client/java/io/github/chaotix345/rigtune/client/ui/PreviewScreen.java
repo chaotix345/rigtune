@@ -5,6 +5,7 @@ import io.github.chaotix345.rigtune.client.ConfigTargets;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
+import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
@@ -28,6 +29,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Function;
 
 // Preview (docs/v0.3/SPEC.md item 13): what Apply would do for the ticked items, file by file. The controller works it
 // out off the render thread; nothing is written or downloaded.
@@ -51,6 +53,12 @@ public class PreviewScreen extends Screen {
 	private final @Nullable Screen parent;
 	private final RigTuneController controller;
 	private final List<Recommendation> selected;
+	// v0.4 (WS-P): what to preview, and the confirm buttons (null: the plain Preview with Done).
+	private final Function<RigTuneController, ApplyPreview> loader;
+	private final @Nullable Confirm confirm;
+	private @Nullable Button applyButton;
+	private @Nullable Button saveOnlyButton;
+	private @Nullable Button cancelButton;
 	private final Path gameDir = FabricLoader.getInstance().getGameDir();
 	private @Nullable ApplyPreview preview;
 	private boolean started;
@@ -65,6 +73,36 @@ public class PreviewScreen extends Screen {
 		this.parent = parent;
 		this.controller = controller;
 		this.selected = List.copyOf(selected);
+		this.loader = c -> c.preview(this.selected);
+		this.confirm = null;
+	}
+
+	// v0.4 (WS-P, docs/v0.4/SPEC.md 4): a profile switch or an imported code, previewed before anything is written, with
+	// Apply / Save only / Cancel. subtitle replaces the usual one; apply and saveOnly run on the render thread and choose
+	// the next screen themselves; saveOnly null leaves that button out. Cancel (and Escape) goes back to parent.
+	public record Confirm(Component subtitle, Component applyLabel, Runnable apply, @Nullable Runnable saveOnly) {
+	}
+
+	// loader: runs off the render thread, like controller.preview.
+	public PreviewScreen(@Nullable Screen parent, RigTuneController controller, Function<RigTuneController, ApplyPreview> loader, Confirm confirm) {
+		super(Component.translatable("rigtune.preview.title"));
+		this.parent = parent;
+		this.controller = controller;
+		this.selected = List.of();
+		this.loader = loader;
+		this.confirm = confirm;
+	}
+
+	public @Nullable Button applyButton() {
+		return applyButton;
+	}
+
+	public @Nullable Button saveOnlyButton() {
+		return saveOnlyButton;
+	}
+
+	public @Nullable Button cancelButton() {
+		return cancelButton;
 	}
 
 	// Null while loading or after a failure.
@@ -114,14 +152,37 @@ public class PreviewScreen extends Screen {
 		populate(list);
 		addRenderableWidget(list);
 		list.setScrollAmount(scroll);
+		if (confirm != null) {
+			confirmButtons(column, footerTop);
+			return;
+		}
 		int buttonWidth = Math.min(150, column);
 		addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose()).bounds((width - buttonWidth) / 2, footerTop, buttonWidth, 20).build());
+	}
+
+	// Apply (only once there's something to apply) / Save only / Cancel, in one row.
+	private void confirmButtons(int column, int top) {
+		int count = confirm.saveOnly() == null ? 2 : 3;
+		int gap = 4;
+		int buttonWidth = Math.min(120, (column - gap * (count - 1)) / count);
+		int x = (width - (buttonWidth * count + gap * (count - 1))) / 2;
+		applyButton = addRenderableWidget(Button.builder(confirm.applyLabel(), b -> confirm.apply().run()).bounds(x, top, buttonWidth, 20).build());
+		applyButton.active = preview != null && !loading && !failed && !preview.isEmpty();
+		x += buttonWidth + gap;
+		saveOnlyButton = null;
+		if (confirm.saveOnly() != null) {
+			saveOnlyButton = addRenderableWidget(Button.builder(Component.translatable("rigtune.profile.preview.save_only"), b -> confirm.saveOnly().run())
+					.bounds(x, top, buttonWidth, 20).build());
+			saveOnlyButton.active = preview != null && !loading && !failed;
+			x += buttonWidth + gap;
+		}
+		cancelButton = addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), b -> onClose()).bounds(x, top, buttonWidth, 20).build());
 	}
 
 	private void load() {
 		loading = true;
 		// A preview still queued when the screen closes is skipped.
-		CompletableFuture.supplyAsync(() -> closed ? null : controller.preview(selected), PREVIEWS).whenComplete((result, error) -> minecraft.execute(() -> {
+		CompletableFuture.supplyAsync(() -> closed ? null : loader.apply(controller), PREVIEWS).whenComplete((result, error) -> minecraft.execute(() -> {
 			if (closed) {
 				return;
 			}
@@ -183,6 +244,18 @@ public class PreviewScreen extends Screen {
 			for (ApplyPreview.Skipped skipped : shown.skipped()) {
 				target.row(skipped(skipped), COLOR_NOTE, INDENT, width);
 			}
+		}
+		notes(target, shown, width);
+	}
+
+	// v0.4 (WS-P): the preview's notes (a profile's clamps and left-out keys, plan review P-L2).
+	private void notes(PreviewList target, ApplyPreview shown, int width) {
+		if (shown.notes().isEmpty()) {
+			return;
+		}
+		target.heading("rigtune.profile.preview.notes", width);
+		for (Text note : shown.notes()) {
+			target.row(Texts.component(note), COLOR_NOTE, INDENT, width);
 		}
 	}
 
@@ -254,7 +327,8 @@ public class PreviewScreen extends Screen {
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
-		graphics.centeredText(font, clip(Component.translatable("rigtune.preview.subtitle"), width - 16), width / 2, 20, COLOR_LABEL);
+		graphics.centeredText(font, clip(confirm != null ? confirm.subtitle() : Component.translatable("rigtune.preview.subtitle"), width - 16), width / 2, 20,
+				COLOR_LABEL);
 		Component message = message();
 		if (message != null && list != null) {
 			List<FormattedCharSequence> lines = font.split(message, Math.max(40, Math.min(width - 32, 400)));
@@ -273,7 +347,7 @@ public class PreviewScreen extends Screen {
 		if (failed || preview == null) {
 			return Component.translatable("rigtune.preview.error");
 		}
-		return preview.isEmpty() && preview.skipped().isEmpty() ? Component.translatable("rigtune.preview.empty") : null;
+		return preview.isEmpty() && preview.skipped().isEmpty() && preview.notes().isEmpty() ? Component.translatable("rigtune.preview.empty") : null;
 	}
 
 	private FormattedCharSequence clip(Component text, int maxWidth) {

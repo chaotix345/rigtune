@@ -277,7 +277,8 @@ public class HistoryScreen extends Screen {
 	// --- text (every word from en_us.json; names, versions and values are data)
 
 	static Component kind(HistoryModel.Entry entry) {
-		return Component.translatable(entry.kindKey());
+		return entry.profile() != null ? Component.translatable("rigtune.profile.history_kind", Component.literal(entry.profile()))
+				: Component.translatable(entry.kindKey());
 	}
 
 	static Component summary(HistoryModel.Entry entry) {

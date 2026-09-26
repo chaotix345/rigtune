@@ -63,7 +63,16 @@ To run the benchmark, press **Tools…** on the RigTune screen, then **Benchmark
 
 ## Profiles and share codes
 
-<!-- v0.4: filled by the Profiles workstream (docs/v0.4/SPEC.md 4, 12). -->
+**Tools… → Profiles…** switches your settings between whole setups in one click:
+- **Templates**, worked out for your PC from the same rules as the main list: **Max FPS** (no frame cap, VSync off), **Balanced** (the same values as applying every setting suggestion), **Quality** (one tier higher), **Battery** (60 FPS with VSync, shorter distances, no clouds; shaders and Distant Horizons rendering off when you have them) and **Recording** (a steady frame cap, 60 on most screens, no idle throttle). The memory and Distant Horizons limits still apply to all of them.
+- **My settings**: your own settings, saved the first time you open Profiles (and before your first switch). It's the way back. You can re-save it by saving under its name, but you can't delete it.
+- Your own saved profiles (**Save current…**) and imported ones.
+
+A switch is an ordinary Apply: options change right away, Sodium, Distant Horizons and Iris settings change at the next restart, and History shows it as "Profile: Battery", with Undo this / last / all as usual. RigTune never switches by itself. On a laptop it notices when you unplug and *offers* Battery (and offers your previous profile when you plug back in); **Don't offer again** turns the offer off.
+
+**Copy code** puts a share code like `RT1-ARJDaGFy…` (about 100 characters) on your clipboard. **Import code…** takes one from a friend and always shows **Preview** first, with **Apply**, **Save only** or **Cancel**. Nothing is written before you click, and RigTune reads the clipboard only when you press **Paste**. A code carries only setting values from a fixed list, as numbers: no text besides a name (cleaned up and shown as plain text), no file names, mods or downloads. Values beyond your PC's memory and Distant Horizons limits are lowered, and Preview says so. Settings your game doesn't have are left out. Thread counts are machine-specific, so they stay in your own profiles and are never shared.
+
+Shader-pack settings (the options inside a pack like Complementary or BSL) aren't part of profiles or share codes. Profiles only turn shaders on or off. Changing a pack's options safely would mean writing files outside `config/` and a new kind of staged change that older RigTune versions can't run. Iris also puts pack option values straight into the shader source, so they must never come from someone else's code. It may come in a later release (docs/research/v0.4/profiles.md §7).
 
 ## Stutter Doctor
 

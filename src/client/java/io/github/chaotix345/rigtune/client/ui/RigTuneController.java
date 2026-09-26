@@ -84,6 +84,18 @@ public interface RigTuneController {
 		return "";
 	}
 
+	// v0.4 (WS-P, coordinator-approved addition to C4): the import Preview's buttons (docs/v0.4/SPEC.md 4).
+
+	/** Preview's Apply for a decoded share code: saves it as an imported profile, then switches to it. */
+	default Component applyImportedProfile(ProfileImport imported) {
+		return Component.translatable("rigtune.status.nothing");
+	}
+
+	/** Preview's Save only for a decoded share code: saves it as an imported profile, applying nothing. */
+	default Component saveImportedProfile(ProfileImport imported) {
+		return Component.translatable("rigtune.status.nothing");
+	}
+
 	// v0.3 (WS-C)
 
 	/** The launcher that started the game (docs/v0.3/SPEC.md item 5); UNKNOWN when it isn't recognised. */
