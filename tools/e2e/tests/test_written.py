@@ -63,8 +63,10 @@ class ComposeTest(unittest.TestCase):
         self.assertEqual(self.instance / "mods", Path(pending["ops"][0]["from"]).parent)
 
     def test_files_without_instance_paths_keep_their_bytes(self):
-        written.compose(written.resolve(ROOT), self.instance)
-        self.assertEqual((ROOT / "placeholder" / "ws-p" / "profiles.json").read_bytes(),
+        sets = written.resolve(ROOT)
+        written.compose(sets, self.instance)
+        ws_p = next(s for s in sets if s.name == "ws-p")  # the real set once WS-P committed it, else the placeholder
+        self.assertEqual((ws_p.folder / "profiles.json").read_bytes(),
                          (self.instance / "config" / "rigtune" / "profiles.json").read_bytes())
 
     def test_pending_ops_from_two_sets_are_merged(self):

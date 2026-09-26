@@ -31,11 +31,15 @@ import static org.junit.jupiter.api.Assertions.fail;
 // docs/v0.4/SPEC.md AC4.12: a history.json written after profile switches, read by the pinned 0.3.0 Journal, HistoryModel
 // and UndoPlanner (src/test/java/.../v030/, verbatim v0.3.0); a 0.3.0 rewrite keeps the entry ids, so 0.4's labels in
 // profiles.json come back. Also writes the "written by 0.4" fixture set src/test/resources/v040-written/ws-p/ (plan review
-// H-M1): a Battery switch then a Max FPS switch, both applied at a restart, labelled in profiles.json.
+// H-M1): a Battery switch applied at a restart, labelled in profiles.json, with the entry, change and profile ids of WS-H's
+// placeholder set (tools/e2e's tests and the released-jar harness name them).
 class V030CompatTest {
 	static final String BATTERY_ENTRY = "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b0001";
 	static final String MAX_FPS_ENTRY = "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b0002";
 	static final String BASELINE_ID = "p-0e5a4b01-7c2d-4e8f-9a10-b0a77e2b00b1";
+	// The fixture set's ids (WS-H's placeholder ws-p set: src/test/resources/v040-written/placeholder/ on test/e2e-v04).
+	static final String FIXTURE_ENTRY = "c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17";
+	static final String FIXTURE_BASELINE = "p-2b6d9e41-0c3f-4a15-b8e2-6f1d7c9a3e20";
 	private static final String FIXTURE = "/v040-written/ws-p/";
 
 	@TempDir
@@ -79,9 +83,28 @@ class V030CompatTest {
 		assertTrue(store.setActive("template:max_fps"));
 	}
 
+	// The fixture set: what 0.4 leaves after a Battery switch and a restart (its staged change applied by the helper).
+	static void writeFixture(Path configDir) throws IOException {
+		Journal journal = new Journal(configDir, "0.4.0+mc26.2", "26.2", (message, error) -> {
+			throw new AssertionError(message, error);
+		});
+		assertTrue(journal.update(entries -> List.of(new JournalEntry(FIXTURE_ENTRY, "2026-09-21T10:00:00Z", JournalEntry.APPLY, "0.4.0+mc26.2", "26.2",
+				null, List.of(change("d4f8b207-9e1c-4f30-8c4d-806f7e45ad18", "vanilla.renderDistance", "12", "8", null),
+						change("e5a9c318-af2d-4041-9d5e-917a8f56be19", "vanilla.maxFps", "120", "60", null),
+						change("f6b0d429-a03e-4152-8e6f-a28b9067cf1a", "sodium.performance.chunk_builder_threads", "0", "2", null))))));
+		ProfileStore store = ProfileStore.shared(configDir);
+		assertTrue(store.saveProfile(new ProfileStore.Profile(FIXTURE_BASELINE, "My settings", null, ProfileStore.SOURCE_BASELINE, "2026-09-21T09:59:59Z",
+				"0.4.0+mc26.2", "26.2", ShareCodeTest.ordered("vanilla.renderDistance", "12", "vanilla.maxFps", "120",
+						"sodium.performance.chunk_builder_threads", "0"))));
+		assertTrue(store.batteryOffered("2026-09-21T09:59:00Z"));
+		assertTrue(store.rememberPrevious(FIXTURE_BASELINE));
+		assertTrue(store.recordSwitch(new ProfileStore.Switch(FIXTURE_ENTRY, null, "battery", "Battery"), null));
+		assertTrue(store.setActive("template:battery"));
+	}
+
 	@Test
 	void theCommittedFixtureIsWhatThe04CodeWrites() throws IOException {
-		write(dir);
+		writeFixture(dir);
 		List<String> stale = new ArrayList<>();
 		for (String name : List.of("history.json", "profiles.json")) {
 			String written = Files.readString(dir.resolve("rigtune").resolve(name), StandardCharsets.UTF_8).replace("\r\n", "\n");

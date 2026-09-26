@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "profiles": [
     {
-      "id": "p-0e5a4b01-7c2d-4e8f-9a10-b0a77e2b00b1",
+      "id": "p-2b6d9e41-0c3f-4a15-b8e2-6f1d7c9a3e20",
       "name": "My settings",
       "source": "baseline",
       "createdAt": "2026-09-21T09:59:59Z",
@@ -10,29 +10,23 @@
       "mcVersion": "26.2",
       "settings": {
         "vanilla.renderDistance": "12",
-        "vanilla.maxFps": "170",
-        "vanilla.enableVsync": "false",
-        "sodium.performance.chunk_build_defer_mode": "ONE_FRAME"
+        "vanilla.maxFps": "120",
+        "sodium.performance.chunk_builder_threads": "0"
       }
     }
   ],
   "switches": [
     {
-      "entryId": "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b0001",
+      "entryId": "c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17",
       "templateId": "battery",
       "name": "Battery"
-    },
-    {
-      "entryId": "0e5a4b01-7c2d-4e8f-9a10-b0a77e2b0002",
-      "templateId": "max_fps",
-      "name": "Max FPS"
     }
   ],
   "battery": {
     "prompt": true,
     "snoozed": false,
-    "previousProfile": "p-0e5a4b01-7c2d-4e8f-9a10-b0a77e2b00b1",
-    "lastPromptAt": "2026-09-21T09:59:00Z"
+    "lastPromptAt": "2026-09-21T09:59:00Z",
+    "previousProfile": "p-2b6d9e41-0c3f-4a15-b8e2-6f1d7c9a3e20"
   },
-  "active": "template:max_fps"
+  "active": "template:battery"
 }
