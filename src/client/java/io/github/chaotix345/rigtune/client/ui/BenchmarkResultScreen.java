@@ -4,6 +4,7 @@ import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
 import io.github.chaotix345.rigtune.client.benchmark.KeepSettings;
+import io.github.chaotix345.rigtune.client.compat.OptionalMods;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.stutter.StutterHooks;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkMath;
@@ -12,16 +13,23 @@ import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
 import io.github.chaotix345.rigtune.core.benchmark.Knobs;
 import io.github.chaotix345.rigtune.core.benchmark.PlannerResult;
+import io.github.chaotix345.rigtune.core.benchmark.ResultNotes;
 import io.github.chaotix345.rigtune.core.benchmark.SessionResult;
 import io.github.chaotix345.rigtune.core.benchmark.ShaderAdvice;
 import io.github.chaotix345.rigtune.core.benchmark.Step;
 import io.github.chaotix345.rigtune.core.benchmark.TrendText;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.model.Text;
+import io.github.chaotix345.rigtune.core.stutter.Attributor;
+import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ComponentRenderUtils;
+import net.minecraft.client.gui.components.ContainerObjectSelectionList;
+import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
@@ -52,7 +60,16 @@ public class BenchmarkResultScreen extends Screen {
 	private static final int COLOR_FAIL = 0xFFFF7A6B;
 	private static final int COLOR_WARN = 0xFFFFD166;
 
-	private record Line(Component text, int color) {
+	// spoken: what its Tab stop narrates (the whole line; null for a continuation row of a wrapped trend line, which joins
+	// the stop above it).
+	private record Line(Component text, int color, @Nullable Component spoken, boolean continuation) {
+		Line(Component text, int color) {
+			this(text, color, text, false);
+		}
+	}
+
+	// docs/v0.5/SPEC.md 2A (L3): a status line's Tab stop over the rows it's drawn on.
+	private record Stop(Component text, int firstRow, int rows) {
 	}
 
 	// One drawn row of a status line: its wrapped text, or (full != null) the whole line clipped to one row with the full
@@ -67,6 +84,17 @@ public class BenchmarkResultScreen extends Screen {
 	private final BenchmarkTrend.@Nullable View trend;
 	private List<Line> lines = List.of();
 	private List<StatusRow> shownRows = List.of();
+	private List<Stop> stops = List.of();
+	private @Nullable ResultTable table;
+	// docs/v0.4/SPEC.md 11 (RowList): the table row that had the keyboard focus, and the table's scroll, kept across a
+	// rebuild (a resize or GUI scale change).
+	private int focusedRow = -1;
+	private double scroll;
+	// Where the table and the chart are drawn (chartWidth 0: no chart).
+	private int tableLeft;
+	private int tableWidth;
+	private int chartLeft;
+	private int chartWidth;
 	// The trend's lines in `lines` (review M3: they give way before the table or chart does).
 	private int trendFrom;
 	private int trendTo;
@@ -125,6 +153,23 @@ public class BenchmarkResultScreen extends Screen {
 		int maxLines = Math.max(1, (contentBottom - 26 - (tune() ? 4 * ROW + 2 : 44)) / LINE);
 		shownRows = layout(maxLines);
 		contentTop = 22 + shownRows.size() * LINE + 4;
+		// docs/v0.5/SPEC.md 2A (L3): every status line, each table row and the chart are Tab stops the narrator reads, in
+		// the order they're drawn.
+		for (Stop stop : stops) {
+			addRenderableWidget(RowFocus.standalone(stop.text(), 8, 22 + stop.firstRow() * LINE - 1, Math.max(1, width - 16), stop.rows() * LINE));
+		}
+		placeContent();
+		table = null;
+		if (tune() && !rows.isEmpty()) {
+			table = addRenderableWidget(new ResultTable());
+			table.setScrollAmount(scroll);
+		} else if (tune()) {
+			addRenderableWidget(RowFocus.standalone(Component.translatable("rigtune.benchmark.none"), 8, contentTop - 1, Math.max(1, width - 16), LINE));
+		}
+		Component chart = chartNarration();
+		if (chart != null) {
+			addRenderableWidget(RowFocus.standalone(chart, chartLeft, contentTop - 1, chartWidth, contentBottom - contentTop + 1));
+		}
 		int buttonWidth = Math.min(150, (Math.min(width - 32, 360) - 4) / 2);
 		int y = height - 28;
 		if (!tune()) {
@@ -146,9 +191,40 @@ public class BenchmarkResultScreen extends Screen {
 			KeepSettings.apply(minecraft, values);
 			onClose();
 		}).bounds(width / 2 - buttonWidth - 2, y, buttonWidth, 20).build());
-		use.active = !session.measurements().isEmpty();
+		// Never for a distance that couldn't be measured (review M1): with no Render distance step on loaded terrain, the
+		// suggestion is where it started.
+		use.active = !session.measurements().isEmpty() && (rows.isEmpty() || rows.stream().anyMatch(PlannerResult.Measurement::complete));
 		addRenderableWidget(Button.builder(Component.translatable("rigtune.benchmark.keep", outcome.originalRd()), b -> onClose())
 				.bounds(width / 2 + 2, y, buttonWidth, 20).build());
+	}
+
+	@Override
+	protected void rebuildWidgets() {
+		if (table != null) {
+			scroll = table.scrollAmount();
+			focusedRow = table.focusedRow();
+		}
+		super.rebuildWidgets();
+	}
+
+	// The focused table row comes back after a rebuild; otherwise, after keyboard use, the first button has it as in 0.4
+	// (Use, or Done), not the first status line.
+	@Override
+	protected void setInitialFocus() {
+		boolean keyboard = minecraft.getLastInputType().isKeyboard();
+		ComponentPath path = focusedRow >= 0 ? RowList.initialFocus(this, table, focusedRow, keyboard) : null;
+		focusedRow = -1;
+		if (path == null && keyboard) {
+			for (GuiEventListener child : children()) {
+				if (child instanceof Button button && button.active) {
+					path = ComponentPath.path(this, ComponentPath.leaf(button));
+					break;
+				}
+			}
+		}
+		if (path != null) {
+			changeFocus(path);
+		}
 	}
 
 	// review-8 P5B-F4: every status line wrapped to the screen's width, within maxRows rows (see fit).
@@ -163,14 +239,28 @@ public class BenchmarkResultScreen extends Screen {
 		}
 		int[] shown = fit(counts, maxRows, trendFrom, trendTo);
 		List<StatusRow> out = new ArrayList<>();
+		List<Stop> lineStops = new ArrayList<>();
 		for (int i = 0; i < lines.size(); i++) {
 			Line line = lines.get(i);
+			if (shown[i] == 0) {
+				continue;
+			}
+			// A wrapped trend line's rows narrate as one line.
+			if (line.continuation() && !lineStops.isEmpty() && shown[i - 1] > 0) {
+				Stop previous = lineStops.removeLast();
+				lineStops.add(new Stop(previous.text(), previous.firstRow(), previous.rows() + shown[i]));
+			} else {
+				lineStops.add(new Stop(line.spoken() != null ? line.spoken() : line.text(), out.size(), shown[i]));
+			}
+			// A wrapped trend line whose later rows fit() left out: its first row shows the whole line as a tooltip.
+			boolean cut = line.spoken() != null && i + 1 < lines.size() && lines.get(i + 1).continuation() && shown[i + 1] == 0;
 			if (shown[i] == counts[i]) {
-				wrapped.get(i).forEach(row -> out.add(new StatusRow(row, line.color(), null)));
-			} else if (shown[i] == 1) {
+				wrapped.get(i).forEach(row -> out.add(new StatusRow(row, line.color(), cut ? line.spoken() : null)));
+			} else {
 				out.add(new StatusRow(clip(line.text()), line.color(), line.text()));
 			}
 		}
+		stops = lineStops;
 		return out;
 	}
 
@@ -212,11 +302,43 @@ public class BenchmarkResultScreen extends Screen {
 		return (int) shownRows.stream().filter(r -> r.full() != null).count();
 	}
 
-	// v0.4 (docs/v0.4/SPEC.md 5): the Stutter Doctor's line for the benchmark's sweeps ("2 spikes; likely causes: ...").
-	private static void stutterLine(List<Line> out) {
+	// docs/v0.5/SPEC.md 2B: the noise warning with what it went with (RW-7), Distant Horizons generating terrain during the
+	// run (RW-6) and measured with its rendering off (RW-9).
+	private void noteLines(List<Line> out, BenchmarkMath.Aggregate result) {
+		StutterReport capture = StutterHooks.lastBenchmark();
+		int spikes = capture == null ? 0 : capture.spikes().total();
+		BenchmarkRecord.Context context = outcome.record() == null ? null : outcome.record().context();
+		Text noisy = ResultNotes.noisy(result.cv(), spikes, tagged(capture, Attributor.DH), tagged(capture, Attributor.CHUNKS_LOADING),
+				context != null && Boolean.TRUE.equals(context.dhGenerating()));
+		if (noisy != null) {
+			out.add(new Line(Texts.component(noisy), COLOR_WARN));
+		}
+		Text generating = ResultNotes.dhGenerating(context);
+		if (generating != null) {
+			out.add(new Line(Texts.component(generating), COLOR_WARN));
+		}
+		Text dhOff = ResultNotes.dhOff(OptionalMods.dhLoaded(), outcome.session().original().dhRendering());
+		if (dhOff != null) {
+			out.add(new Line(Texts.component(dhOff), COLOR_LABEL));
+		}
+	}
+
+	private static int tagged(@Nullable StutterReport capture, String tag) {
+		Integer n = capture == null ? null : capture.tags().get(tag);
+		return n == null ? 0 : n;
+	}
+
+	// v0.4 (docs/v0.4/SPEC.md 5): the Stutter Doctor's line for the benchmark's sweeps ("2 spikes; likely causes: ..."), and
+	// (docs/v0.5/SPEC.md RW-15) how many steps it left out.
+	private void stutterLine(List<Line> out) {
 		Component line = StutterScreen.benchmarkLine(StutterHooks.lastBenchmark());
-		if (line != null) {
-			out.add(new Line(line, COLOR_LABEL));
+		if (line == null) {
+			return;
+		}
+		out.add(new Line(line, COLOR_LABEL));
+		Text leftOut = ResultNotes.stutterStepsLeftOut(outcome.stepsLeftOut());
+		if (leftOut != null) {
+			out.add(new Line(Texts.component(leftOut), COLOR_LABEL));
 		}
 	}
 
@@ -227,8 +349,10 @@ public class BenchmarkResultScreen extends Screen {
 		if (tune()) {
 			PlannerResult rd = outcome.result();
 			Component value = Component.literal(Integer.toString(session.chosen().renderDistance())).withStyle(ChatFormatting.BOLD);
-			out.add(new Line(Component.translatable(rd.targetMet() ? "rigtune.benchmark.met" : "rigtune.benchmark.missed", value),
-					rd.targetMet() ? COLOR_PASS : COLOR_WARN));
+			Text nothing = ResultNotes.nothingMeasured(rows, outcome.originalRd());
+			out.add(nothing != null ? new Line(Texts.component(nothing), COLOR_WARN)
+					: new Line(Component.translatable(rd.targetMet() ? "rigtune.benchmark.met" : "rigtune.benchmark.missed", value),
+							rd.targetMet() ? COLOR_PASS : COLOR_WARN));
 		} else if (result != null) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.measured", fps(result.avgFps()), fps(result.onePercentLowFps())), 0xFFFFFFFF));
 		}
@@ -240,10 +364,7 @@ public class BenchmarkResultScreen extends Screen {
 			out.add(new Line(tune()
 					? Component.translatable("rigtune.benchmark.result", fps(result.avgFps()), fps(result.onePercentLowFps()), p99, result.repeats())
 					: Component.translatable("rigtune.benchmark.result.detail", p99, result.repeats()), COLOR_LABEL));
-			if (BenchmarkMath.noisy(result.cv())) {
-				out.add(new Line(Component.translatable("rigtune.benchmark.noisy",
-						String.format(Locale.ROOT, "%.0f%%", result.cv() * 100)), COLOR_WARN));
-			}
+			noteLines(out, result);
 			stutterLine(out);
 		}
 		boolean sdMeasured = session.measurements().stream().anyMatch(m -> m.step().kind() == Step.Kind.SIMULATION_DISTANCE);
@@ -262,14 +383,24 @@ public class BenchmarkResultScreen extends Screen {
 					? new Line(Component.translatable("rigtune.benchmark.gain", BenchmarkMath.percent(gain.lowPercent()), BenchmarkMath.percent(gain.avgPercent())),
 							gain.lowPercent() >= 0 ? COLOR_PASS : COLOR_FAIL)
 					: new Line(Component.translatable("rigtune.benchmark.gain.none"), COLOR_LABEL));
+		} else if (ResultNotes.pairCaveat(outcome.before(), outcome.record()) != null) {
+			// No verdict (review M4): both runs' numbers and why they can't be compared.
+			Text before = ResultNotes.before(outcome.before());
+			if (before != null) {
+				out.add(new Line(Texts.component(before), COLOR_LABEL));
+			}
+			out.add(new Line(Texts.component(ResultNotes.pairCaveat(outcome.before(), outcome.record())), COLOR_WARN));
 		} else if (outcome.record() != null && BenchmarkRecord.BEFORE.equals(outcome.record().phase())) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.saved_before"), COLOR_LABEL));
 		}
 		// Wrapped: "Performance changed under different conditions (…); cause unknown." must be read whole.
 		trendFrom = out.size();
 		for (TrendText.Line line : trendLines(trend, ZoneId.systemDefault(), BenchmarkTrendLines::describe)) {
-			for (FormattedText row : font.getSplitter().splitLines(Texts.component(line.text()), width - 16, Style.EMPTY)) {
-				out.add(new Line(Component.literal(row.getString()), BenchmarkTrendLines.color(line.tone())));
+			Component full = Texts.component(line.text());
+			boolean first = true;
+			for (FormattedText row : font.getSplitter().splitLines(full, width - 16, Style.EMPTY)) {
+				out.add(new Line(Component.literal(row.getString()), BenchmarkTrendLines.color(line.tone()), first ? full : null, !first));
+				first = false;
 			}
 		}
 		trendTo = out.size();
@@ -293,9 +424,11 @@ public class BenchmarkResultScreen extends Screen {
 			out.add(new Line(Component.translatable("rigtune.benchmark.cost.shaders.not_measured",
 					reason(session.notMeasured().get(BenchmarkRecord.SHADERS))), COLOR_WARN));
 		}
-		// docs/v0.3/SPEC.md E-M1: a step measured before its terrain had loaded doesn't count, whatever its FPS.
-		if (tune() && rows.stream().anyMatch(m -> !m.complete())) {
-			out.add(new Line(Component.translatable("rigtune.benchmark.incomplete"), COLOR_WARN));
+		// docs/v0.5/SPEC.md RW-5: a distance whose terrain hadn't loaded (on the second try too) isn't measured: not a pass,
+		// not a fail.
+		Text unmeasured = tune() ? ResultNotes.unmeasured(rows) : null;
+		if (unmeasured != null) {
+			out.add(new Line(Texts.component(unmeasured), COLOR_WARN));
 		}
 		if (session.deadlineHit()) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.deadline"), COLOR_WARN));
@@ -322,62 +455,188 @@ public class BenchmarkResultScreen extends Screen {
 			}
 			y += LINE;
 		}
-		int area = Math.min(width - 16, 460);
-		int left = (width - area) / 2;
-		boolean table = tune() && !rows.isEmpty();
-		if (table && area >= 300) {
-			int half = (area - 12) / 2;
-			drawTable(graphics, left, half);
-			drawChart(graphics, left + half + 12, half);
-		} else if (table) {
-			drawTable(graphics, left, area);
+		if (table != null) {
+			drawTableHeader(graphics);
 		} else if (tune()) {
 			graphics.centeredText(font, Component.translatable("rigtune.benchmark.none"), width / 2, contentTop, Palette.of(COLOR_LABEL));
-		} else {
-			drawChart(graphics, left + area / 6, area * 2 / 3);
+		}
+		if (chartWidth > 0) {
+			drawChart(graphics, chartLeft, chartWidth);
 		}
 	}
 
-	private void drawTable(GuiGraphicsExtractor graphics, int left, int tableWidth) {
-		int suggested = outcome.session().chosen().renderDistance();
-		boolean met = outcome.result().targetMet();
-		// Next to the chart the table is narrow, so the P99 column is left out.
-		boolean p99 = tableWidth >= 260;
-		int[] columns = p99 ? new int[]{0, tableWidth * 22 / 100, tableWidth * 44 / 100, tableWidth * 66 / 100, tableWidth * 88 / 100}
+	// Next to the chart when there's room, else the table alone; Measure has only the chart.
+	private void placeContent() {
+		int area = Math.min(width - 16, 460);
+		int left = (width - area) / 2;
+		chartWidth = 0;
+		if (tune() && !rows.isEmpty() && area >= 300) {
+			tableLeft = left;
+			tableWidth = (area - 12) / 2;
+			chartLeft = left + tableWidth + 12;
+			chartWidth = tableWidth;
+		} else if (tune()) {
+			tableLeft = left;
+			tableWidth = area;
+		} else {
+			chartLeft = left + area / 6;
+			chartWidth = area * 2 / 3;
+		}
+	}
+
+	// Next to the chart the table is narrow, so the P99 column is left out.
+	private boolean p99Column() {
+		return tableWidth >= 260;
+	}
+
+	private int[] columns() {
+		return p99Column() ? new int[]{0, tableWidth * 22 / 100, tableWidth * 44 / 100, tableWidth * 66 / 100, tableWidth * 88 / 100}
 				: new int[]{0, tableWidth * 30 / 100, tableWidth * 58 / 100, tableWidth * 84 / 100};
-		String[] headers = p99
+	}
+
+	private String[] headers() {
+		return p99Column()
 				? new String[]{"rigtune.benchmark.col.rd", "rigtune.benchmark.col.avg", "rigtune.benchmark.col.low", "rigtune.benchmark.col.p99", "rigtune.benchmark.col.ok"}
 				: new String[]{"rigtune.benchmark.col.rd", "rigtune.benchmark.col.avg", "rigtune.benchmark.col.low", "rigtune.benchmark.col.ok"};
-		int y = contentTop;
-		graphics.fill(left - 4, y - 3, left + tableWidth + 4, y + ROW - 2, Palette.of(0x60000000));
-		for (int i = 0; i < headers.length; i++) {
-			graphics.text(font, Component.translatable(headers[i]), left + columns[i], y, Palette.of(COLOR_LABEL), false);
+	}
+
+	// A row's cells as drawn: distance, average FPS, 1 % low, P99 (wide table only) and the mark.
+	private List<String> cells(PlannerResult.Measurement m) {
+		List<String> out = new ArrayList<>(List.of(Integer.toString(m.rd()), fps(m.stats().avgFps()), fps(m.stats().onePercentLowFps())));
+		if (p99Column()) {
+			out.add(String.format(Locale.ROOT, "%.1f", m.stats().p99FrameMs()));
 		}
-		y += ROW + 2;
-		int maxRows = Math.max(0, (contentBottom - y) / ROW);
-		for (PlannerResult.Measurement m : rows.subList(0, Math.min(rows.size(), maxRows))) {
-			boolean best = m.rd() == suggested;
-			if (best) {
-				graphics.fill(left - 4, y - 2, left + tableWidth + 4, y + ROW - 3, Palette.of(met ? 0x3000FF00 : 0x30FFD166));
+		out.add(ResultNotes.mark(m));
+		return out;
+	}
+
+	// The chart's title and textual equivalent (L3) with this run's trend line; null when no chart is drawn.
+	private @Nullable Component chartNarration() {
+		if (chartWidth <= 0 || !TrendChart.fits(chartRuns, contentTop, chartWidth, contentBottom)) {
+			return null;
+		}
+		Text summary = TrendText.chartSummary(chartRuns, trend == null ? null : trend.median(), ZoneId.systemDefault());
+		List<TrendText.Line> trendLines = trendLines(trend, ZoneId.systemDefault(), BenchmarkTrendLines::describe);
+		return RowFocus.join(chartTitle(), summary == null ? null : Texts.component(summary),
+				trendLines.isEmpty() ? null : Texts.component(trendLines.getFirst().text()));
+	}
+
+	/**
+	 * For the game tests (docs/v0.5/SPEC.md AC2A.2): every text the screen shows or narrates: the status lines (whole), the
+	 * table's header and each row's cells and narration, and the chart's title and textual equivalent.
+	 */
+	public List<String> textContent() {
+		List<String> out = new ArrayList<>();
+		lines.forEach(line -> out.add(line.text().getString()));
+		stops.forEach(stop -> out.add(stop.text().getString()));
+		if (table != null) {
+			for (String header : headers()) {
+				out.add(Component.translatable(header).getString());
 			}
-			int color = Palette.of(best ? 0xFFFFFFFF : 0xFFDDDDDD);
-			graphics.text(font, Integer.toString(m.rd()), left + columns[0], y, color, false);
-			graphics.text(font, fps(m.stats().avgFps()), left + columns[1], y, color, false);
-			graphics.text(font, fps(m.stats().onePercentLowFps()), left + columns[2], y, color, false);
-			if (p99) {
-				graphics.text(font, String.format(Locale.ROOT, "%.1f", m.stats().p99FrameMs()), left + columns[3], y, color, false);
+			for (ResultTable.Row row : table.children()) {
+				out.add(String.join(" | ", row.cells));
+				out.add(row.focus.getMessage().getString());
 			}
-			graphics.text(font, m.passed() ? "✔" : m.complete() ? "✘" : "✘*", left + columns[columns.length - 1], y,
-					Palette.of(m.passed() ? COLOR_PASS : COLOR_FAIL), false);
-			y += ROW;
+		}
+		Component chart = chartNarration();
+		if (chart != null) {
+			out.add(chart.getString());
+		}
+		return out;
+	}
+
+	private void drawTableHeader(GuiGraphicsExtractor graphics) {
+		int[] columns = columns();
+		String[] headers = headers();
+		int y = contentTop;
+		graphics.fill(tableLeft - 4, y - 3, tableLeft + tableWidth + 4, y + ROW - 2, Palette.of(0x60000000));
+		for (int i = 0; i < headers.length; i++) {
+			graphics.text(font, Component.translatable(headers[i]), tableLeft + columns[i], y, Palette.of(COLOR_LABEL), false);
 		}
 	}
 
 	// The runs comparable with this one (TrendChart): bars, the 1% low and average polylines, and the usual (median) line.
-	private void drawChart(GuiGraphicsExtractor graphics, int left, int chartWidth) {
+	private void drawChart(GuiGraphicsExtractor graphics, int left, int width) {
+		TrendChart.draw(graphics, font, chartTitle(), chartRuns, trend == null ? null : trend.median(), outcome.record() == null ? null : outcome.record().id(),
+				left, contentTop, width, contentBottom);
+	}
+
+	private Component chartTitle() {
 		Component sceneName = Component.translatable("rigtune.benchmark.scene." + outcome.request().scene().name().toLowerCase(Locale.ROOT));
-		TrendChart.draw(graphics, font, Component.translatable("rigtune.benchmark.chart.title", sceneName), chartRuns, trend == null ? null : trend.median(),
-				outcome.record() == null ? null : outcome.record().id(), left, contentTop, chartWidth, contentBottom);
+		return Component.translatable("rigtune.benchmark.chart.title", sceneName);
+	}
+
+	// docs/v0.5/SPEC.md 2A (L3): the measured distances as list rows, each a Tab stop that narrates its distance, numbers
+	// and verdict; the header stays painted above them, and rows that don't fit scroll. Drawn as the painted table was.
+	public final class ResultTable extends RowList<ResultTable.Row> {
+		ResultTable() {
+			super(BenchmarkResultScreen.this.minecraft, BenchmarkResultScreen.this.tableWidth + 8,
+					Math.max(ROW, BenchmarkResultScreen.this.contentBottom - (BenchmarkResultScreen.this.contentTop + ROW - 2)),
+					BenchmarkResultScreen.this.contentTop + ROW - 2, ROW);
+			setX(tableLeft - 4);
+			int suggested = outcome.session().chosen().renderDistance();
+			for (PlannerResult.Measurement m : rows) {
+				addEntry(new Row(m, m.rd() == suggested));
+			}
+		}
+
+		@Override
+		public int getRowWidth() {
+			return tableWidth + 8;
+		}
+
+		// Inside the table's right edge, clear of the chart next to it.
+		@Override
+		protected int scrollBarX() {
+			return getRowRight() - scrollbarWidth();
+		}
+
+		@Override
+		protected void extractListBackground(GuiGraphicsExtractor graphics) {
+		}
+
+		@Override
+		protected void extractListSeparators(GuiGraphicsExtractor graphics) {
+		}
+
+		public final class Row extends ContainerObjectSelectionList.Entry<Row> {
+			private final PlannerResult.Measurement measurement;
+			private final boolean best;
+			private final List<String> cells;
+			private final RowFocus focus;
+
+			Row(PlannerResult.Measurement measurement, boolean best) {
+				this.measurement = measurement;
+				this.best = best;
+				this.cells = cells(measurement);
+				this.focus = new RowFocus(this, Texts.component(ResultNotes.row(measurement, best)));
+			}
+
+			@Override
+			public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
+				int y = getY() + 2;
+				if (best) {
+					graphics.fill(getX(), getY(), getX() + getWidth(), getY() + ROW - 1, Palette.of(outcome.result().targetMet() ? 0x3000FF00 : 0x30FFD166));
+				}
+				int[] columns = columns();
+				int color = Palette.of(best ? 0xFFFFFFFF : 0xFFDDDDDD);
+				for (int i = 0; i < cells.size() - 1; i++) {
+					graphics.text(font, cells.get(i), tableLeft + columns[i], y, color, false);
+				}
+				graphics.text(font, cells.getLast(), tableLeft + columns[columns.length - 1], y,
+						Palette.of(measurement.passed() ? COLOR_PASS : measurement.complete() ? COLOR_FAIL : COLOR_WARN), false);
+			}
+
+			@Override
+			public List<? extends GuiEventListener> children() {
+				return List.of(focus);
+			}
+
+			@Override
+			public List<? extends NarratableEntry> narratables() {
+				return List.of(focus);
+			}
+		}
 	}
 
 	// The failure's own message (an exception's detail, possibly another mod's, kept in benchmarks.json) as outside text.

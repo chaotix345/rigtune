@@ -47,8 +47,10 @@ class ChangeWindowTest {
 		return TrendFixtures.run("base").at("2026-09-21T10:00:00Z").cursor("e1").build();
 	}
 
+	// Sodium was updated in between, so the latest run loaded another mod set (BH-2: a 0.4 run's mod rows are listed only
+	// when its hash isn't the baseline's).
 	private static BenchmarkRecord latest() {
-		return TrendFixtures.run("latest").at("2026-09-25T10:00:00Z").cursor("e4").build();
+		return TrendFixtures.run("latest").at("2026-09-25T10:00:00Z").cursor("e4").hash("hash-b").build();
 	}
 
 	private static List<String> described(ChangeWindow window) {
@@ -98,7 +100,7 @@ class ChangeWindowTest {
 	void byTimestampsWithoutCursors() {
 		// 0.3.0 runs (or runs a 0.3.0 rewrite stripped) have no cursor: (baseline.createdAt, latest.createdAt].
 		BenchmarkRecord base = TrendFixtures.run("base").at("2026-09-21T10:00:00Z").build();
-		BenchmarkRecord last = TrendFixtures.run("latest").at("2026-09-24T08:00:00Z").build();
+		BenchmarkRecord last = TrendFixtures.run("latest").at("2026-09-24T08:00:00Z").hash("hash-b").build();
 		ChangeWindow window = ChangeWindow.between(base, last, history(BEFORE, UPDATE, NOT_IN_EFFECT, SETTING, AFTER));
 		assertFalse(window.byCursor());
 		assertEquals(EXPECTED, described(window));
@@ -159,6 +161,94 @@ class ChangeWindowTest {
 		List<String> expected = new java.util.ArrayList<>(List.of("s2 sodium.quality.weather_quality: FANCY -> FAST"));
 		expected.addAll(EXPECTED);
 		assertEquals(expected, described(window));
+	}
+
+	// docs/v0.5/SPEC.md BH-2 (AC2B.2; the audit's AuditVerifyBenchmarkTest.bh2ChangeStagedDuringTheLatestRunIsNotListedForIt):
+	// run B was made while a mod change was still staged; after the restart it is APPLIED, but it didn't run during B.
+	private static final JournalChange LITHIUM = JournalChange.file(JournalChange.ENABLE, "lithium", "lithium-0.18.jar", JournalChange.APPLIED,
+			"op-l", "g-l");
+	private static final JournalEntry STAGED_THEN_APPLIED = new JournalEntry("e2", "2026-09-22T12:00:00Z", JournalEntry.APPLY, "0.4.0", "26.2", null,
+			List.of(LITHIUM));
+
+	private static BenchmarkRecord base() {
+		return TrendFixtures.run("base").at("2026-09-21T10:00:00Z").cursor("e1").hash("hash-a").build();
+	}
+
+	@Test
+	void bh2ChangeStagedDuringTheLatestRunIsNotListedForIt() {
+		List<HistoryModel.Entry> entries = history(BEFORE, STAGED_THEN_APPLIED);
+		// With the field (0.5): the change's id was staged when B started.
+		BenchmarkRecord b = TrendFixtures.run("b").at("2026-09-22T13:00:00Z").cursor("e2").hash("hash-a").staged(List.of(LITHIUM.id())).build();
+		ChangeWindow window = ChangeWindow.between(null, base(), b, entries, java.util.Set.of());
+		assertEquals(List.of(), described(window));
+		assertFalse(window.outsideChange());
+		// B's mod set differs for another reason: not the staged change, so it's outside RigTune.
+		BenchmarkRecord otherHash = TrendFixtures.run("b").at("2026-09-22T13:00:00Z").cursor("e2").hash("hash-b").staged(List.of(LITHIUM.id())).build();
+		ChangeWindow outside = ChangeWindow.between(null, base(), otherHash, entries, java.util.Set.of());
+		assertEquals(List.of(), described(outside));
+		assertTrue(outside.outsideChange());
+		// Without the field (a 0.4 run): B's mod-set hash equals the baseline's, so the mod row wasn't loaded during B.
+		BenchmarkRecord old = TrendFixtures.run("b").at("2026-09-22T13:00:00Z").cursor("e2").hash("hash-a").build();
+		assertEquals(List.of(), described(ChangeWindow.between(null, base(), old, entries, java.util.Set.of())));
+		// Settings rows are unaffected by the fallback.
+		JournalEntry settings = new JournalEntry("e2b", "2026-09-22T12:30:00Z", JournalEntry.APPLY, "0.4.0", "26.2", null,
+				List.of(JournalChange.setting("vanilla.clouds", "1", "0", JournalChange.APPLIED, null)));
+		BenchmarkRecord oldLater = TrendFixtures.run("b").at("2026-09-22T13:00:00Z").cursor("e2b").hash("hash-a").build();
+		assertEquals(List.of("e2b Clouds: 1 -> 0"),
+				described(ChangeWindow.between(null, base(), oldLater, history(BEFORE, STAGED_THEN_APPLIED, settings), java.util.Set.of())));
+	}
+
+	@Test
+	void bh2TheNextRunListsTheCarriedChange() {
+		List<HistoryModel.Entry> entries = history(BEFORE, STAGED_THEN_APPLIED, AFTER);
+		BenchmarkRecord c = TrendFixtures.run("c").at("2026-09-26T09:00:00Z").cursor("e5").hash("hash-b").staged(List.of()).build();
+		// B recorded the staged id: exactly that change is carried into the next window.
+		BenchmarkRecord b = TrendFixtures.run("b").at("2026-09-22T13:00:00Z").cursor("e2").hash("hash-a").staged(List.of(LITHIUM.id())).build();
+		ChangeWindow window = ChangeWindow.between(base(), b, c, entries, java.util.Set.of());
+		assertEquals(List.of("e2 ADDED lithium-0.18.jar", "e5 Clouds: 1 -> 0"), described(window));
+		assertFalse(window.outsideChange(), "the carried mod change may explain the new hash");
+		// A 0.4 B (no field): today's carried path finds it between the previous run and B.
+		BenchmarkRecord old = TrendFixtures.run("b").at("2026-09-22T13:00:00Z").cursor("e2").hash("hash-a").build();
+		assertEquals(List.of("e2 ADDED lithium-0.18.jar", "e5 Clouds: 1 -> 0"),
+				described(ChangeWindow.between(base(), old, c, entries, java.util.Set.of())));
+	}
+
+	// Review (part 2 M1): staged when A started and still when B started, applied only after B: listed for neither A..B.
+	@Test
+	void bh2AChangeStagedAtBothStartsIsNotListedForTheLater() {
+		List<HistoryModel.Entry> entries = history(BEFORE, STAGED_THEN_APPLIED);
+		BenchmarkRecord a = TrendFixtures.run("a").at("2026-09-22T12:30:00Z").cursor("e2").hash("hash-a").staged(List.of(LITHIUM.id())).build();
+		BenchmarkRecord b = TrendFixtures.run("b").at("2026-09-22T13:00:00Z").cursor("e2").hash("hash-a").staged(List.of(LITHIUM.id())).build();
+		ChangeWindow window = ChangeWindow.between(null, a, b, entries, java.util.Set.of());
+		assertEquals(List.of(), described(window));
+		assertTrue(window.nothingRecorded());
+		// A 0.4 baseline (the M1 guess carries it in) and a 0.5 latest that lists it: not listed either.
+		BenchmarkRecord old = TrendFixtures.run("a").at("2026-09-22T12:30:00Z").cursor("e2").hash("hash-a").build();
+		assertEquals(List.of(), described(ChangeWindow.between(null, old, b, entries, java.util.Set.of())));
+	}
+
+	// Review (part 2 M2): without the field, equal mod-set hashes mean no mod file changed between the runs: a carried-in
+	// mod row isn't listed either.
+	@Test
+	void bh2EqualHashesDropACarriedModRowToo() {
+		JournalEntry stagedUpdate = new JournalEntry("s1", "2026-09-21T09:00:00Z", JournalEntry.APPLY, "0.4.0", "26.2", null, List.of(
+				JournalChange.file(JournalChange.DISABLE, "sodium", "sodium-0.6.5.jar", JournalChange.APPLIED, "op-1", "g-1"),
+				JournalChange.file(JournalChange.ENABLE, "sodium", "sodium-0.6.6.jar", JournalChange.APPLIED, "op-2", "g-1")));
+		BenchmarkRecord base = TrendFixtures.run("base").at("2026-09-21T10:00:00Z").cursor("s1").build();
+		BenchmarkRecord same = TrendFixtures.run("latest").at("2026-09-25T10:00:00Z").cursor("s1").build();
+		ChangeWindow window = ChangeWindow.between(null, base, same, history(BEFORE, stagedUpdate), java.util.Set.of());
+		assertEquals(List.of(), described(window));
+	}
+
+	@Test
+	void bh2AHashChangeKeepsTheModRowWithoutTheField() {
+		BenchmarkRecord b = TrendFixtures.run("b").at("2026-09-22T13:00:00Z").cursor("e2").hash("hash-b").build();
+		assertEquals(List.of("e2 ADDED lithium-0.18.jar"),
+				described(ChangeWindow.between(null, base(), b, history(BEFORE, STAGED_THEN_APPLIED), java.util.Set.of())));
+		// An unknown hash tells nothing about what was loaded: listed as before (possibly related).
+		BenchmarkRecord unknown = TrendFixtures.run("b").at("2026-09-22T13:00:00Z").cursor("e2").hash(null).build();
+		assertEquals(List.of("e2 ADDED lithium-0.18.jar"),
+				described(ChangeWindow.between(null, base(), unknown, history(BEFORE, STAGED_THEN_APPLIED), java.util.Set.of())));
 	}
 
 	@Test

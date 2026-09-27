@@ -17,6 +17,7 @@ import io.github.chaotix345.rigtune.client.ui.BenchmarkMenuScreen;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
+import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
 import io.github.chaotix345.rigtune.core.benchmark.FrameStats;
 import io.github.chaotix345.rigtune.core.benchmark.Knobs;
 import io.github.chaotix345.rigtune.core.benchmark.PlannerResult;
@@ -125,6 +126,14 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		}
 	}
 
+	private static boolean markerFor(Path marker, String mcVersion) {
+		try {
+			return Files.isRegularFile(marker) && Files.readString(marker, StandardCharsets.UTF_8).contains("\"" + mcVersion + "\"");
+		} catch (IOException e) {
+			return false;
+		}
+	}
+
 	private static List<StutterReport> stutterSessionsSince(Path configDir, Instant since) {
 		return new StutterStore(configDir).sessions().stream().filter(r -> !Instant.parse(r.startedAt()).isBefore(since)).toList();
 	}
@@ -156,10 +165,21 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		context.takeScreenshot("bench-menu-title");
 		check(!buttonActive(context, "rigtune.benchmark.menu.measure_after"), "Measure after needs a before first");
 		Settings settings = context.computeOnClient(Settings::of);
+		// Reused only when its marker records this Minecraft version (else it is recreated, and the run creates it).
+		boolean worldExisted = context.computeOnClient(mc -> markerFor(BenchmarkWorld.markerPath(mc), HardwareProbe.minecraftVersion()));
 
 		pressByKey(context, "rigtune.benchmark.menu.measure_before");
 		BenchmarkRecord before = runInBenchmarkWorld(context, "bench-world-running", "bench-world-before");
 		check(BenchmarkRecord.BEFORE.equals(before.phase()), "first run is the before: " + before);
+		// docs/v0.5/SPEC.md RW-8 (AC2B.7): the first run in a fresh run dir created the benchmark world; BH-2: the staged
+		// changes at its start are recorded (none here).
+		if (worldExisted && System.getenv("CI") != null) {
+			RigTune.LOGGER.warn("Benchmark game test: the benchmark world already existed in CI's run dir; worldFresh true isn't exercised");
+		}
+		RigTune.LOGGER.info("Benchmark game test: the benchmark world existed before the first run: {}; worldFresh {}", worldExisted,
+				before.context().worldFresh());
+		check(Boolean.valueOf(!worldExisted).equals(before.context().worldFresh()), "worldFresh on the run that created the world: " + before.context());
+		check(before.context().stagedAtStart() != null && before.context().dhGenerating() == null, "stagedAtStart recorded: " + before.context());
 		check(context.computeOnClient(Settings::of).equals(settings), "settings restored after the world run");
 		Path marker = context.computeOnClient(BenchmarkWorld::markerPath);
 		check(Files.isRegularFile(marker), "benchmark world marker written");
@@ -183,7 +203,13 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		} finally {
 			context.runOnClient(mc -> RigTuneClient.controller().setStutterMonitor(false));
 		}
-		context.waitFor(mc -> stutterSessionsSince(configDir, monitorOn).stream().anyMatch(r -> StutterReport.BENCHMARK.equals(r.source())), 400);
+		// The run's own capture is saved when at least one step was recorded (RW-15 leaves out a step whose terrain hadn't loaded).
+		BenchmarkController.Outcome afterOutcome = context.computeOnClient(mc -> BenchmarkController.lastOutcome());
+		if (afterOutcome.stepsLeftOut() < afterOutcome.settles().size()) {
+			context.waitFor(mc -> stutterSessionsSince(configDir, monitorOn).stream().anyMatch(r -> StutterReport.BENCHMARK.equals(r.source())), 400);
+		} else {
+			RigTune.LOGGER.warn("Benchmark game test: every step of the Measure after run timed out settling; no capture to wait for");
+		}
 		// The benchmark world's monitor sessions were handled (saved or left out): the one the run ended as it started and the
 		// fresh one after the run, which ended with the world (review-9 X3-1).
 		context.waitFor(mc -> StutterHooks.sessionsEnded() >= endedBefore + 2, 400);
@@ -191,7 +217,15 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		check(sinceOn.stream().noneMatch(r -> StutterReport.MONITOR.equals(r.source())), "no settle-frames session saved around the benchmark: "
 				+ sinceOn.stream().map(r -> r.source() + " " + r.spikes().total() + " spikes in " + r.gameplaySeconds() + " s").toList());
 		check(BenchmarkRecord.AFTER.equals(after.phase()) && before.pairId().equals(after.pairId()), "after pairs with before: " + after);
-		check(context.computeOnClient(mc -> BenchmarkController.lastOutcome().gain()) != null, "gain computed for the pair");
+		check(Boolean.FALSE.equals(after.context().worldFresh()), "the next run reuses the world: worldFresh false: " + after.context());
+		// docs/v0.5/SPEC.md RW-8 (review M4): a pair whose before (or after) is left out of the trend gets no gain verdict: both
+		// runs' numbers and the caveat instead. In a fresh run dir the before created the world.
+		boolean comparable = !BenchmarkTrend.excluded(before) && !BenchmarkTrend.excluded(after);
+		List<String> shown = context.computeOnClient(mc -> ((BenchmarkResultScreen) mc.gui.screen()).textContent());
+		check((context.computeOnClient(mc -> BenchmarkController.lastOutcome().gain()) != null) == comparable, "a gain only for a comparable pair");
+		check(shown.stream().anyMatch(l -> l.startsWith("Compared with before")) == comparable, "the gain line only for a comparable pair: " + shown);
+		check(shown.stream().anyMatch(l -> l.endsWith("Measure before again.")) == !comparable
+				&& shown.stream().anyMatch(l -> l.startsWith("Before: ")) == !comparable, "the caveat and the before's numbers otherwise: " + shown);
 		check(modified(marker).equals(created), "benchmark world reused, not recreated");
 		pressByKey(context, "gui.done");
 		context.waitForScreen(TitleScreen.class);
@@ -504,6 +538,10 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 						&& c.has("dhRendering") && c.has("shaders") && c.has("fullscreen"), "context recorded: " + run);
 				// docs/v0.4/SPEC.md 7: and the loaded mods' hash (the journal cursor only once history.json has an entry).
 				check(c.has("modSetHash") && c.get("modSetHash").getAsString().matches("[0-9a-f]{64}"), "modSetHash recorded: " + run);
+				// docs/v0.5/SPEC.md BH-2 and RW-8: the staged changes at the start (a list, here empty); worldFresh only in the
+				// benchmark world.
+				check(c.has("stagedAtStart") && c.get("stagedAtStart").isJsonArray(), "stagedAtStart recorded: " + run);
+				check(c.has("worldFresh") == "BENCHMARK_WORLD".equals(run.get("scene").getAsString()), "worldFresh only in the benchmark world: " + run);
 			});
 			RigTune.LOGGER.info("Benchmark game test: benchmarks.json has {} runs", runs.size());
 		} catch (IOException | RuntimeException e) {

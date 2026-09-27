@@ -14,8 +14,11 @@ import javax.management.NotificationListener;
 import javax.management.openmbean.CompositeData;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryPoolMXBean;
+import java.lang.management.MemoryType;
 import java.lang.management.MemoryUsage;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -28,12 +31,27 @@ final class GcListener implements NotificationListener {
 	private final List<NotificationEmitter> registered = new ArrayList<>();
 	private volatile @Nullable StutterRings rings;
 	private volatile @Nullable String collector;
+	// The heap pools' names and whether they are generational Shenandoah's, read once per start (SD-6, NEW-1).
+	private volatile List<String> heapPools = List.of();
+	private volatile boolean shenandoahGenerational;
 	private boolean failureLogged;
 
 	synchronized void start(StutterRings target) {
 		stop();
 		rings = target;
 		List<String> names = new ArrayList<>();
+		List<String> heap = new ArrayList<>();
+		try {
+			for (MemoryPoolMXBean pool : ManagementFactory.getMemoryPoolMXBeans()) {
+				if (pool.getType() == MemoryType.HEAP) {
+					heap.add(pool.getName());
+				}
+			}
+		} catch (RuntimeException | LinkageError e) {
+			RigTune.LOGGER.warn("Stutter Doctor: memory pools unavailable; the live set won't be measured", e);
+		}
+		heapPools = List.copyOf(heap);
+		shenandoahGenerational = GcKind.shenandoahGenerational(heap);
 		try {
 			for (GarbageCollectorMXBean bean : ManagementFactory.getGarbageCollectorMXBeans()) {
 				names.add(bean.getName());
@@ -79,8 +97,8 @@ final class GcListener implements NotificationListener {
 		try {
 			GarbageCollectionNotificationInfo info = GarbageCollectionNotificationInfo.from((CompositeData) notification.getUserData());
 			GcInfo gc = info.getGcInfo();
-			int flags = GcKind.classify(info.getGcName(), info.getGcAction(), info.getGcCause());
-			long used = (flags & GcKind.MAJOR) != 0 ? oldGenerationUsed(gc.getMemoryUsageAfterGc()) : 0;
+			int flags = GcKind.classify(info.getGcName(), info.getGcAction(), info.getGcCause(), shenandoahGenerational);
+			long used = (flags & GcKind.MAJOR) != 0 ? oldGenerationUsed(gc.getMemoryUsageAfterGc(), heapPools) : 0;
 			target.gc(received, gc.getStartTime(), gc.getEndTime(), flags, used);
 		} catch (RuntimeException | LinkageError e) {
 			if (!failureLogged) {
@@ -90,19 +108,22 @@ final class GcListener implements NotificationListener {
 		}
 	}
 
-	// The old generation's pool when there is one, else every pool (Shenandoah has a single one).
-	static long oldGenerationUsed(Map<String, MemoryUsage> after) {
+	// The old generation's pool when there is one, else the heap pools (non-generational Shenandoah has one, "Shenandoah";
+	// v0.5 SD-6: Metaspace and the CodeHeaps are in the same map and aren't the heap). 0 (no sample) when neither is known.
+	static long oldGenerationUsed(Map<String, MemoryUsage> after, Collection<String> heapPools) {
 		long old = 0;
-		long all = 0;
+		long heap = 0;
 		boolean found = false;
 		for (Map.Entry<String, MemoryUsage> e : after.entrySet()) {
 			long used = e.getValue() == null ? 0 : e.getValue().getUsed();
-			all += used;
+			if (heapPools.contains(e.getKey())) {
+				heap += used;
+			}
 			if (GcKind.oldPool(e.getKey())) {
 				old += used;
 				found = true;
 			}
 		}
-		return found ? old : all;
+		return found ? old : heap;
 	}
 }

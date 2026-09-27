@@ -66,6 +66,59 @@ class StutterSummaryTest {
 		assertEquals("chunks loading", StutterSummary.notes(List.of("chunksLoading:context")));
 	}
 
+	// docs/v0.5/SPEC.md 2S SD-2 (AC2S.6): when frames, average and 1 % low cover only the frame ring's window, the line says
+	// so; a session shorter than the ring (every gameplay frame in the histogram is counted in frames) doesn't.
+	@Test
+	void theWindowIsNamedOnlyWhenTheCaptureIsLonger() {
+		StutterReport r = report(true, true, 21.7);
+		StutterReport windowed = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), 3300, 3276.8, 131_071, 200.0, 200.0,
+				new long[]{0, 131_072, 131_072, 0, 0, 0, 0, 0, 0}, r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(), r.tags(), r.worst(), r.facts(),
+				r.advice(), true, true, r.hitches());
+		assertTrue(StutterSummary.text(windowed, List.of()).contains("· 131,071 frames · avg 200 FPS · 1% low 200 FPS (over the last 10:55)" + System.lineSeparator()),
+				StutterSummary.text(windowed, List.of()));
+		StutterReport whole = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(),
+				36, r.avgFps(), r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(), r.tags(), r.worst(),
+				r.facts(), r.advice(), true, true, r.hitches());
+		assertFalse(StutterSummary.text(whole, List.of()).contains("over the last"));
+		assertFalse(StutterSummary.text(r, List.of()).contains("over the last"), "a 0.4 session: never");
+	}
+
+	// RW-10 (AC2S.12): Copy summary shows the same whole percentages as the screen: none at 0, at most 100 in total.
+	@Test
+	void rw10PercentagesNeverTotalOverOneHundred() {
+		Map<String, Double> causes = new java.util.LinkedHashMap<>();
+		causes.put(Attributor.GC, 0.60);
+		causes.put(Attributor.CHUNK_LOAD, 0.0);
+		causes.put(Attributor.TICK, 0.18);
+		causes.put(Attributor.UNKNOWN, 0.23);
+		assertEquals(Map.of(Attributor.GC, 59, Attributor.TICK, 18, Attributor.UNKNOWN, 23), StutterSummary.percentages(causes));
+		// Review fix: a hand-edited share is clamped (no long trimming loop, no overflow).
+		assertEquals(Map.of(Attributor.GC, 50, Attributor.UNKNOWN, 50), StutterSummary.percentages(Map.of(Attributor.GC, 2e9, Attributor.UNKNOWN, 0.5)));
+		assertEquals(Map.of(Attributor.UNKNOWN, 50), StutterSummary.percentages(Map.of(Attributor.GC, -3.0, Attributor.UNKNOWN, 0.5)));
+		StutterReport r = report(true, true, 21.7);
+		StutterReport real = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(),
+				r.frames(), r.avgFps(), r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), causes, r.tags(), r.worst(),
+				r.facts(), r.advice(), true, true, r.hitches());
+		assertTrue(StutterSummary.text(real, List.of()).contains("Likely causes (share of the lost time): garbage collection 59 %, game ticks 18 %; not explained 23 %"),
+				StutterSummary.text(real, List.of()));
+	}
+
+	// docs/v0.5/SPEC.md 2S RW-11: Copy summary names the settings that changed and says the advice used the ones at the end.
+	@Test
+	void rw11SettingsChangesAreNamed() {
+		StutterReport r = report(true, true, 21.7);
+		StutterReport tagged = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(),
+				r.frames(), r.avgFps(), r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(),
+				Map.of(Attributor.SETTINGS_CHANGED, 4), r.worst(), r.facts(), r.advice(), true, true, r.hitches())
+				.withSettings(Map.of(StutterReport.RENDER_DISTANCE, "32", StutterReport.DH_RENDERING, "false"),
+						Map.of(StutterReport.RENDER_DISTANCE, "12", StutterReport.DH_RENDERING, "true"));
+		String text = StutterSummary.text(tagged, List.of(new StutterAdvisor.Fired("a", "info", Impact.LOW, "Try this", "x")));
+		assertTrue(text.contains("Settings changed during this session (render distance 32 → 12, Distant Horizons rendering off → on)"), text);
+		assertTrue(text.contains("4 of 12 spikes happened during the 10 s after a settings change or resource reload (not measured)"), text);
+		assertTrue(text.contains("The advice uses the settings at the end of the session"), text);
+		assertFalse(StutterSummary.text(r, List.of()).contains("settings at the end"));
+	}
+
 	@Test
 	void caveatsAreSpelledOut() {
 		String text = StutterSummary.text(report(false, false, null), List.of());

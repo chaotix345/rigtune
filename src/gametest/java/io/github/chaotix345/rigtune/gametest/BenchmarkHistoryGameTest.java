@@ -66,6 +66,7 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 	private static final String LATEST = "bh-latest";
 	private static final String REGRESSION_KEY = RegressionNoticeSource.KEY_PREFIX + LATEST;
 	private static final String STALE_KEY = BenchmarkStaleNoticeSource.KEY_PREFIX + LATEST;
+	private static final String BEFORE_UPDATE = "b0".repeat(32);
 
 	private final Path configDir = FabricLoader.getInstance().getConfigDir();
 	private final Path historyFile = Journal.file(configDir);
@@ -291,15 +292,16 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 	}
 
 	// Under the current conditions except the latest run's width: a run with another render distance (not shown), 4
-	// comparable runs (1 % lows 540, 545, 538, 550: median 542.5) and the latest at 440 (19 % below it).
+	// comparable runs (1 % lows 540, 545, 538, 550: median 542.5) and the latest at 440 (19 % below it). The runs before the
+	// mod update loaded another mod set (docs/v0.5/SPEC.md BH-2: a run's mod rows are listed only when its hash differs).
 	private static void seed(Path file, BenchmarkTrend.Current now, int latestWidth) {
 		List<BenchmarkRecord> runs = new ArrayList<>();
-		runs.add(run("bh-other", "2026-09-18T10:00:00Z", 300, now, now.renderDistance() + 2, now.width(), null));
+		runs.add(run("bh-other", "2026-09-18T10:00:00Z", 300, now, now.renderDistance() + 2, now.width(), null, BEFORE_UPDATE));
 		double[] lows = {540, 545, 538, 550};
 		for (int i = 0; i < lows.length; i++) {
-			runs.add(run("bh-" + i, "2026-09-" + (19 + i) + "T10:00:00Z", lows[i], now, now.renderDistance(), now.width(), "bh-apply-0"));
+			runs.add(run("bh-" + i, "2026-09-" + (19 + i) + "T10:00:00Z", lows[i], now, now.renderDistance(), now.width(), "bh-apply-0", BEFORE_UPDATE));
 		}
-		runs.add(run(LATEST, "2026-09-24T10:00:00Z", 440, now, now.renderDistance(), latestWidth, "bh-update"));
+		runs.add(run(LATEST, "2026-09-24T10:00:00Z", 440, now, now.renderDistance(), latestWidth, "bh-update", now.modSetHash()));
 		BenchmarkHistory history = BenchmarkHistory.empty();
 		for (BenchmarkRecord r : runs) {
 			history = history.with(r);
@@ -311,12 +313,13 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 		}
 	}
 
-	private static BenchmarkRecord run(String id, String at, double low, BenchmarkTrend.Current now, int rd, int width, @Nullable String cursor) {
+	private static BenchmarkRecord run(String id, String at, double low, BenchmarkTrend.Current now, int rd, int width, @Nullable String cursor,
+			@Nullable String modSetHash) {
 		Map<String, BenchmarkRecord.KnobResult> knobs = new LinkedHashMap<>();
 		knobs.put(BenchmarkRecord.RENDER_DISTANCE, new BenchmarkRecord.KnobResult(rd, rd, null, null, null));
 		knobs.put(BenchmarkRecord.SIMULATION_DISTANCE, new BenchmarkRecord.KnobResult(now.simulationDistance(), now.simulationDistance(), null, null, null));
 		BenchmarkRecord.Context context = new BenchmarkRecord.Context(now.dhRendering(), now.shaders(), now.shaderPack(), width, now.height(),
-				now.fullscreen(), BenchmarkRecord.Context.PROTOCOL).withModSet(now.modSetHash(), cursor);
+				now.fullscreen(), BenchmarkRecord.Context.PROTOCOL).withModSet(modSetHash, cursor);
 		return new BenchmarkRecord(id, at, "0.4.0", now.mcVersion(), "MEASURE", "BENCHMARK_WORLD", BenchmarkRecord.SINGLE, null, 144, true, knobs,
 				new BenchmarkRecord.Result(low * 1.6, low, 1000 / low, 2, 0.02), Map.of(), Map.of(), new BenchmarkRecord.World("rigtune-benchmark", 8675309L),
 				false, context);

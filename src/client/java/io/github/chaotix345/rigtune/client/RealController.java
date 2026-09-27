@@ -26,6 +26,7 @@ import io.github.chaotix345.rigtune.client.probe.FabricPins;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.LauncherProbe;
 import io.github.chaotix345.rigtune.client.probe.ModScanner;
+import io.github.chaotix345.rigtune.client.probe.PreviewJarChecks;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.profile.ProfileService;
@@ -36,6 +37,7 @@ import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.client.undo.DisableGuard;
 import io.github.chaotix345.rigtune.client.undo.GameState;
+import io.github.chaotix345.rigtune.client.undo.RefusedDisables;
 import io.github.chaotix345.rigtune.client.undo.StaleGroups;
 import io.github.chaotix345.rigtune.client.undo.Staging;
 import io.github.chaotix345.rigtune.client.undo.UndoService;
@@ -734,13 +736,14 @@ public final class RealController implements RigTuneController {
 			return Component.translatable("rigtune.status.busy");
 		}
 		try {
-			List<Op> dropped = staging.discard();
-			if (dropped == null) {
+			// docs/v0.5/SPEC.md 2H L7: the status says so when a change already under way was kept.
+			Staging.Discard discard = staging.discardPending();
+			if (discard == null) {
 				return Component.translatable("rigtune.status.discard_busy");
 			}
 			recountStaged();
 			rebuild();
-			return Component.translatable("rigtune.status.discarded", dropped.size());
+			return discard.status();
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.error("Could not discard {}", pendingFile, e);
 			return Component.translatable("rigtune.status.discard_failed");
@@ -840,11 +843,12 @@ public final class RealController implements RigTuneController {
 		DownloadInputs downloads = new DownloadInputs(modrinth, settings.modrinthAllowed(), OnlineDataFetcher.LOADER,
 				onlineLookups.modrinthGameVersion(hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion()), data.installedVersions(),
 				data.updateVersions(), new HashSet<>(data.projectIdsByModId().values()), loadedIds, stagedJarsByModId(),
-				doc == null ? (a, b) -> false : ModConflicts.of(doc)::between, StagedProjects.read(pendingFile), data.data().online());
+				doc == null ? (a, b) -> false : ModConflicts.of(doc)::between, StagedProjects.read(pendingFile), data.data().online())
+				.withJarChecks(PreviewJarChecks.of(modVersion, settings::modrinthAllowed));
 		List<PreviewPlanner.ConfigFile> files = ConfigTargets.all(configDir).stream()
 				.map(t -> new PreviewPlanner.ConfigFile(t.prefix(), t.file(), t.stager()::stage, t.reader()::read)).toList();
 		return new PreviewPlanner(FabricLoader.getInstance().getGameDir().resolve("options.txt"), game.now(), game.problems(), files, modsDir, downloads)
-				.preview(selected);
+				.withDisableRefusals(RefusedDisables.previewRefusals(pendingFile, modsDir)).preview(selected);
 	}
 
 	private record GameOptions(Map<String, String> now, Map<String, String> problems) {

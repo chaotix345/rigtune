@@ -118,3 +118,9 @@ their network step.
 ## Head green on every job, twice, no re-runs
 
 A commit can't name its own runs: the final head's two runs are in the handoff to the coordinator (and PROGRESS).
+
+## Flakes found after the first streak
+
+| date | run | what | fix |
+|---|---|---|---|
+| 2026-09-27 | [36336797155](https://github.com/chaotix345/rigtune/actions/runs/36336797155) (94654c11, feat/v0.5.0) | the java job's `actions/setup-java` download of Microsoft JDK 25.0.3 failed its checksum (`sha256 expected 8c896f5e…, actual 1398c2c2…`); run 36336931445 downloaded it fine a minute later; every other job of the run was green | fix/v05-ci-jdk-retry: every JDK download in build.yml and release.yml is tried once more after 30 s, and a second failure fails the job; `continue-on-error` is allowed only there (test_ci_workflow.py `jdk_retry_problems`, JdkRetryTests). WS-E's e2e.yml follows the same rule. |
