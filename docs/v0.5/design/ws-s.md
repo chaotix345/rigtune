@@ -189,7 +189,6 @@ API difference: none expected); the full build and the game tests are CI's.
   StutterStore check; the StutterSummary check kind is being added to the interpreter by WS-E (r-verify), and closes
   with WS-E: the check goes into `expect.json` once its name exists.
 - RW-11 with Iris or Distant Horizons loaded (the shaders and DH bits): unit-tested only; CI loads neither.
-- AC2B.9 closes with WS-B's BenchmarkController call.
 
 **Self-review** (two code-reviewer passes on a7613410..d4dc6662; reports in the scratch dir, sent to the coordinator
 with the dispositions): 0 high, 3 medium, ~10 low. Fixed in c7781b4f: (M) the DH world-gen service test couldn't fail on
@@ -272,7 +271,7 @@ screen) and of 36328669112 (`stutter-640x480-scale2`: the new "Settings changed 
 | AC2S.12 (RW-10) | verified | StutterScreenTextTest.rw10NoZeroRowAndAtMostOneHundred (red: "Chunk loading 0 %", 101 %), StutterSummaryTest.rw10PercentagesNeverTotalOverOneHundred |
 | AC2S.13 (RW-11) | unit + game test verified; compat040 part (StutterSummary check kind) closes with WS-E | StutterAnalyzerTest.rw11AReloadTagsTheNextTenSecondsAndClaimsNothing, StutterStoreTest.theSettingsFieldsAndTagRoundTripAndA04SessionStillReads, SettingsWatchTest (4), StutterScreenTextTest.settingsChangedLines, StutterSummaryTest.rw11SettingsChangesAreNamed; StutterGameTest on 3 legs (run 36328669112); v050-written/ws-s + expect.json |
 | AC2S.14 (DH bucket) | verified | ThreadSamplerTest.dhWorldGenThreadsGetTheirOwnBucket, .aSteadyStateSampleAllocatesNothing (DH names), StutterAnalyzerTest.dhWorldGenCpuOverTheRecordedSweepsOnly, .worldGenCpuStillCountsAsDh, StutterServiceTest.aFinishedBenchmarkReportsItsDhWorldGenCpu; merged early (cc3f52e0) |
-| AC2B.9 (RW-15) | WS-S part verified; closes with WS-B (its count, its line, its call) | StutterServiceTest.anExcludedStepRecordsNoFrames (called as BenchmarkController calls it; the seam never starts or resumes the capture) |
+| AC2B.9 (RW-15) | verified (WS-B merged first, fb6c0727, so WS-S closes it) | BenchmarkController → StutterSteps.STUTTER_HOOKS → StutterHooks.benchmarkStepExcluded (WS-B; its StutterStepsTest and the count/line); StutterServiceTest.anExcludedStepRecordsNoFrames drives StutterService with that exact call pattern (the left-out step's frames and the gaps stay out; the seam never starts or resumes the capture) |
 
 CI: run 36319389803 (S1, 6496f2cd), 36325283747 (S1-S8, 8bd62a8d), 36328669112 (S1-S12, f9aada54), 36333351347
 (36994bb8, after merging WS-R's r17) and 36336531220 (d6fe1bd5: the review fixes, after merging WS-P): every job green
