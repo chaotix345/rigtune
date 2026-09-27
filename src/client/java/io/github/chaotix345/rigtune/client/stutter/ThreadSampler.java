@@ -14,8 +14,9 @@ import java.util.function.Supplier;
 
 // The 4 Hz thread-CPU sampler (docs/v0.4/SPEC.md 5; research §3.5), a daemon thread that runs only while a capture is
 // on: every 250 ms it groups each Java thread's CPU time by name (Render thread, Server thread, Worker-Main-*,
-// IO-Worker-*, Sodium's Chunk Render Task Executor #*, DH-*, other), reads the process's CPU time, and records them with
-// the chunk-build backlog the render thread published (BuildBacklog). getThreadInfo with depth 0 needs no safepoint.
+// IO-Worker-*, Sodium's Chunk Render Task Executor #*, DH-World Gen* (v0.5), the other DH-*, other), reads the process's
+// CPU time, and records them with the chunk-build backlog the render thread published (BuildBacklog). getThreadInfo with
+// depth 0 needs no safepoint.
 // No system-wide CPU load: that JDK call takes over 100 ms on Windows. The first sample of a capture logs the
 // thread-name census (for the induced-stutter runs).
 // Cost (SPEC 10 as amended: at most 120 ms of CPU per 60 s in steady state): a thread's name is read only the first time
@@ -27,6 +28,9 @@ import java.util.function.Supplier;
 final class ThreadSampler {
 	static final String THREAD_NAME = "RigTune stutter sampler";
 	static final long PERIOD_MS = 250;
+	// Distant Horizons names its pool threads "DH-" + pool + " Thread..."; "World Gen" is its world generation pool
+	// (DH 3.3.2's DhThreadFactory and ThreadPoolUtil).
+	static final String DH_WORLD_GEN = "DH-World Gen";
 
 	// Where a sample's numbers come from: the JVM's ThreadMXBean in the game, a fake in tests.
 	interface Source {
@@ -105,7 +109,10 @@ final class ThreadSampler {
 		if (name.startsWith("Chunk Render Task Executor")) {
 			return StutterRings.S_BUILDER;
 		}
-		return name.startsWith("DH-") ? StutterRings.S_DH : StutterRings.S_OTHER;
+		if (name.startsWith("DH-")) {
+			return name.startsWith(DH_WORLD_GEN) ? StutterRings.S_DH_WORLD_GEN : StutterRings.S_DH;
+		}
+		return StutterRings.S_OTHER;
 	}
 
 	// The game's source: the JVM's ThreadMXBean, or null (logged) when it can't read thread CPU times.

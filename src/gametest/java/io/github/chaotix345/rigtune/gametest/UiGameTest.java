@@ -52,6 +52,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 // WS-E (docs/v0.2/SPEC.md items 8 and 10): the RigTune screen's buttons, the settings screen, the network switches'
 // header and report effects, Mod Menu, and Copy report. Every screen is checked for fit at the three reference sizes.
@@ -571,8 +572,11 @@ public class UiGameTest implements FabricClientGameTest {
 		context.waitTicks(1);
 	}
 
+	// v0.5 (WS-L1 milestone 1): the settings' switches are a RowList's rows, so a list's row widgets are searched too.
 	private static CycleButton<?> findCycle(Screen screen, String nameKey) {
 		return Screens.getWidgets(screen).stream()
+				.flatMap(w -> w instanceof ContainerObjectSelectionList<?> list ? list.children().stream()
+						.flatMap(row -> row.children().stream()).filter(AbstractWidget.class::isInstance).map(AbstractWidget.class::cast) : Stream.of(w))
 				.filter(w -> w instanceof CycleButton<?> && w.getMessage().getContents() instanceof TranslatableContents t
 						&& t.getArgs().length > 0 && t.getArgs()[0] instanceof Component name
 						&& name.getContents() instanceof TranslatableContents n && n.getKey().equals(nameKey))
