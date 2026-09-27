@@ -41,6 +41,10 @@ Owner: WS-F, the P5 agent (AC8.17's fresh-instance run at three sizes, the 26.3 
 
 ## startup
 Owner: WS-W (2L's performance-counter advice, AC2L.5), WS-W2 (AC9.8's launches).
+- WS-W's code-deciding run (2026-09-28, this PC, Windows 11 with the counters off, the branch's 26.2 production client,
+  not yet the RC jar): the detection read Perflib off and PerfOS's REG_SZ as unusual; CrashReportMixin measured the
+  crash-report setup at 3135 ms and Tools showed the advice with "3.1 s"; the Perflib key exported before and after is
+  byte-identical. Details in docs/v0.5/design/ws-w.md, "Evidence" (W13). AC2L.5 itself is Phase 5's (RC jar).
 
 ## smoke
 Owner: the coordinator (3i's production smokes: AC3i.1-AC3i.3).

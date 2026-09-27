@@ -241,7 +241,8 @@ public class ToolsScreen extends Screen {
 
 		// top: the space above the row's first line (more above the first line of a new part).
 		Row row(Component text, int color, @Nullable Runnable action, int top) {
-			Row row = new Row(text, color, action, top, rowWidth - 8);
+			// The row's content width (an entry's content is its width less 2 px a side).
+			Row row = new Row(text, color, action, top, rowWidth - 4);
 			addEntry(row, row.height());
 			return row;
 		}
