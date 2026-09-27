@@ -200,7 +200,8 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 				&& mc.gui.toastManager().getToast(SystemToast.class, absent) == null), "no leftover toast while the policy isn't known");
 		LauncherRepairService.overridePolicy(policy);
 		context.waitFor(mc -> mc.gui.toastManager().getToast(SystemToast.class, shown) != null, 200);
-		context.waitTicks(10);
+		// Past the toast's slide-in, so the screenshot shows all of it.
+		context.waitTicks(30);
 		check(context.computeOnClient(mc -> mc.gui.toastManager().getToast(SystemToast.class, absent) == null), "under " + policy + " only its own toast");
 		context.getInput().setCursorPos(1, 1);
 		context.takeScreenshot("launcher-leftover-toast-" + policy.name().toLowerCase(Locale.ROOT));
