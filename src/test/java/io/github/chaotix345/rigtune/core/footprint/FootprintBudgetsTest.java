@@ -14,6 +14,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -60,6 +61,17 @@ class FootprintBudgetsTest {
 			assertTrue(budget.limit() <= spec.getValue(), spec.getKey() + " limit " + budget.limit());
 		}
 		assertTrue(budgets.budgets().keySet().containsAll(List.of("clientStartedWallMs", "heapGrowthAfterCyclesBytes")));
+	}
+
+	// v0.5 (docs/v0.5/design/ws-ci.md): the monitor-on tick work is gated as a median ratio against a reference workload. In
+	// the r-ci probe (189 measurements, 5 runner CPU models) 1x measured at most 1.577 and a 2x regression at least 2.393:
+	// the limit sits between, and FootprintGameTest fails any run whose own "called twice" ratio doesn't exceed it.
+	@Test
+	void theTickRatioGateSitsBetweenTheObservedOneAndTwoTimes() throws IOException {
+		Budget ratio = FootprintBudgets.load(RepoFiles.resolve(FootprintBudgets.REPO_PATH)).budgets().get("tickHookOnVsReference");
+		assertNotNull(ratio, "the ratio budget");
+		assertNull(ratio.ceiling(), "no SPEC ceiling for a ratio");
+		assertTrue(ratio.limit() > 1.577 && ratio.limit() < 2.393, "limit " + ratio.limit());
 	}
 
 	@Test
