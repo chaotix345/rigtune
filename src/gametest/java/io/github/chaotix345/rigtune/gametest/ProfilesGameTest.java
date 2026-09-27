@@ -123,6 +123,7 @@ public class ProfilesGameTest implements FabricClientGameTest {
 			batteryOffer(context, controller);
 			pf1BatteryOfferFromAFreshStart(context, controller);
 			pf3DeletingTheBackOffersTargetRetiresIt(context, controller);
+			l8HistoryIncludesTheFoldedSwitches(context, controller);
 			refusedDuringABenchmark(context, controller);
 		} finally {
 			ProfileService.overrideBenchmarkCheck(null);
@@ -506,6 +507,48 @@ public class ProfilesGameTest implements FabricClientGameTest {
 	private static @Nullable Notice batteryNotice(ClientGameTestContext context, RigTuneController controller) {
 		return context.computeOnClient(mc -> controller.notices()).stream().filter(n -> n.priority() == NoticePriority.BATTERY_OFFER).findFirst()
 				.orElse(null);
+	}
+
+	// docs/v0.5/SPEC.md L8 (AC2H.3): a baseline that folded five profile switches lists the newest three and "+2" on its
+	// History row (wrapped under the details), through the real controller's labels; screenshots at the three sizes.
+	private void l8HistoryIncludesTheFoldedSwitches(ClientGameTestContext context, RigTuneController controller) {
+		reset(context);
+		clearJournal();
+		List<String> names = List.of("Battery", "Max FPS", "Balanced", "Quality", "Recording");
+		List<String> folded = new ArrayList<>();
+		for (int i = 0; i < names.size(); i++) {
+			folded.add("l8-switch-" + i);
+		}
+		String baselineId = Journal.BASELINE + "l8-game-test";
+		JournalEntry baseline = new JournalEntry(baselineId, "2026-09-20T09:00:00Z", JournalEntry.APPLY, "0.5.0", "26.2", null,
+				List.of(JournalChange.setting("vanilla.particles", "0", "1", JournalChange.APPLIED, null))).withFoldedEntryIds(folded);
+		JournalEntry later = new JournalEntry("l8-later", "2026-09-21T09:00:00Z", JournalEntry.APPLY, "0.5.0", "26.2", null,
+				List.of(JournalChange.setting("vanilla.particles", "1", "0", JournalChange.APPLIED, null)));
+		try {
+			check(journal.update(entries -> List.of(baseline, later)), "history.json written");
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+		for (int i = 0; i < names.size(); i++) {
+			ProfileStore.shared(configDir).recordSwitch(new ProfileStore.Switch(folded.get(i), null, null, names.get(i)), Journal.idsWithFolded(journal.entries()));
+		}
+		HistoryModel.View view = context.computeOnClient(mc -> controller.history());
+		HistoryModel.Entry row = view.entries().stream().filter(e -> e.id().equals(baselineId)).findFirst().orElseThrow();
+		check(row.includes().equals(List.of("Recording", "Quality", "Balanced", "Max FPS", "Battery")), "the baseline includes its switches, newest first: "
+				+ row.includes());
+		context.runOnClient(mc -> mc.gui.setScreen(new HistoryScreen(new TitleScreen(), controller)));
+		context.waitForScreen(HistoryScreen.class);
+		context.waitFor(mc -> mc.gui.screen() instanceof HistoryScreen history && !history.loading(), 400);
+		context.runOnClient(mc -> {
+			((HistoryScreen) mc.gui.screen()).select(baselineId);
+			mc.gui.toastManager().clear();
+		});
+		context.waitTicks(2);
+		for (int[] size : SIZES) {
+			screenshotAt(context, size[0], size[1], size[2], "profiles-history-includes-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+		}
+		context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
+		clearJournal();
 	}
 
 	private void refusedDuringABenchmark(ClientGameTestContext context, RigTuneController controller) {
