@@ -48,6 +48,20 @@ report of at most 10 lines, then stop until "go on the client part".
 
 No new `//? if` block expected (ti §4). Code-deciding run: T12 only.
 
+**Phase 2 additions (coordinator's decisions of 2026-09-28, COORDINATOR-DECISIONS.md):**
+- T5b (core, red first in `TryItVerdictTest`): WS-B's M4 rule: a pair with either run left out of the trend
+  (`BenchmarkTrend.excluded`: a fresh benchmark world, or DH generating) gets no verdict: NOT_COMPARABLE with the cause
+  `Excluded(FRESH_WORLD | DH_GENERATING)`, named right after the conditions.
+- Game tests leave worlds through `GameTestWorlds.create/leave` only; X12's scrolling check is at 1280x720@3 (854x480
+  caps at scale 2); the TRY_IT notice source stats metadata only (history.json's modification time) and reads no file
+  content on the render thread.
+- T7: WS-K's `V05ServicesTest` line `tryIt().view()` stays as it is while it reads no file (the service answers its
+  in-memory view); if that changes, only that line is replaced (marked "WS-T").
+- AC6.12's own footprint keys: `FootprintGameTest` and `tools/footprint-budgets.json` are frozen (ws-ci/WS-K), so, as
+  WS-S did for RW-11's listener, the idle tick is measured strictly in a unit test (0 bytes per 100,000 calls) and in
+  `TryItGameTest` (0 bytes summed over the timed blocks, ns per call logged); `tryItTickNsPerCall`/`tryItTickAllocBytes`
+  go to the post-Wave-B footprint checkpoint (SPEC 1h).
+
 ## Design decisions (phase 1)
 
 - **The derivation reads the journal itself**, not HistoryModel.View (ti §2.3 named the View): it needs the change's
