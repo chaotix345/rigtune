@@ -420,6 +420,7 @@ public final class DownloadPlanner {
 			throw new TextException(Text.of("rigtune.download.stale", "its Modrinth data changed since the list was made; try again"));
 		}
 		resolver.checkUpdate(next, attempt.projects, attempt.batch.versions);
+		resolver.refuseDisabledRequirements(next);
 		// docs/v0.4/SPEC.md 2o, H1-A: a project the new version requires that isn't installed would stop the game from
 		// starting. One this batch's additions stage is joined (the update waits for them once); otherwise the update is
 		// refused: an update's own dependencies aren't resolved.

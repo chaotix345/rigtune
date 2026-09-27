@@ -54,7 +54,9 @@ final class PreviewDownloads {
 				modIdsByFile.put(update.update().file().filename(), update.modId());
 			}
 		}
-		DependencyResolver resolver = new DependencyResolver(client, in.loader(), in.gameVersion(), in.installedVersions()).withStaged(in.staged());
+		// docs/v0.5/SPEC.md 2H L9: this Apply's own "Disable" items are staged before its downloads, so they count as staged.
+		DependencyResolver resolver = new DependencyResolver(client, in.loader(), in.gameVersion(), in.installedVersions())
+				.withStaged(in.staged().withDisabled(out.disables.stream().map(ApplyPreview.Disable::file).toList()));
 		// docs/v0.5/SPEC.md 2H L5: each download's fabric.mod.json, read in memory with Modrinth on only.
 		DryRunPlanner.Checks checks = in.lookups() ? in.checks() : null;
 		DryRunPlanner.Planned planned;

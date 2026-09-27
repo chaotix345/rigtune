@@ -179,6 +179,7 @@
 	"rigtune.download.incompatible_staged": "Modrinth marks %s as incompatible with %s, which is waiting for a restart",
 	"rigtune.download.missing_dependency": "its new version needs %s, which isn't installed",
 	"rigtune.download.missing_dependency_staged": "its new version needs %s, which is waiting for a restart; update it after restarting",
+	"rigtune.download.needs_disabled": "it needs %s, which is being turned off at the next restart",
 	"rigtune.download.needs_version": "%s needs %s %s, not the installed %s",
 	"rigtune.download.needs_version_batch": "%s needs %s %s, not the %s that would be installed too",
 	"rigtune.download.needs_version_staged": "%s needs %s %s, not the %s that's waiting for a restart",

@@ -41,6 +41,9 @@ public final class DependencyResolver {
 	private final StagedProjects staged;
 	// The staged versions with their dependencies, asked of Modrinth once per resolver (one plan); empty when it can't say.
 	private List<ModrinthVersion> stagedVersions;
+	// docs/v0.5/SPEC.md 2H L9: the installed projects a staged disable turns off at the next restart, from their files'
+	// SHA-1s (no Modrinth call); made once per resolver.
+	private Set<String> disabledProjects;
 	// Modrinth's latest version per project or slug, remembered for the resolver's run (one plan), so the pairwise
 	// pre-check of additions (docs/v0.4/SPEC.md 2e) asks nothing twice.
 	private final Map<String, ModrinthVersion> answers = new HashMap<>();
@@ -137,6 +140,10 @@ public final class DependencyResolver {
 				continue;
 			}
 			for (Dependency dep : version.dependencies()) {
+				// L9: a required mod that a staged disable turns off at the next restart wouldn't be there.
+				if (dep.required() && dep.projectId() != null && disabledProjects().contains(dep.projectId())) {
+					throw disabledRequirement(dep.projectId());
+				}
 				if (dep.required() && dep.projectId() != null && !seen.contains(dep.projectId())) {
 					queue.add(new Pending(dep.projectId(), next.depth() + 1));
 				}
@@ -191,6 +198,35 @@ public final class DependencyResolver {
 			}
 		}
 		return out;
+	}
+
+	// docs/v0.5/SPEC.md 2H L9: an update whose new version requires a mod a staged disable turns off at the next restart
+	// would stop the game from starting, so it's refused, naming the mod.
+	public void refuseDisabledRequirements(ModrinthVersion update) throws TextException {
+		for (Dependency dep : update.dependencies()) {
+			if (dep.required() && dep.projectId() != null && !dep.projectId().equals(update.projectId()) && disabledProjects().contains(dep.projectId())) {
+				throw disabledRequirement(dep.projectId());
+			}
+		}
+	}
+
+	private TextException disabledRequirement(String projectId) {
+		return new TextException(Text.of("rigtune.download.needs_disabled", "it needs %s, which is being turned off at the next restart", name(projectId)));
+	}
+
+	private Set<String> disabledProjects() {
+		if (disabledProjects == null) {
+			Set<String> out = new HashSet<>();
+			if (!staged.disabledSha1s().isEmpty()) {
+				for (ModrinthVersion version : installed.values()) {
+					if (version.projectId() != null && version.files().stream().anyMatch(f -> f.sha1() != null && staged.disabledSha1s().contains(f.sha1()))) {
+						out.add(version.projectId());
+					}
+				}
+			}
+			disabledProjects = out;
+		}
+		return disabledProjects;
 	}
 
 	// One an earlier Apply staged is in another all-or-nothing group, so the update waits for the restart.
