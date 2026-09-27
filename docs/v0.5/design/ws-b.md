@@ -52,3 +52,94 @@ No code-deciding run in WS-B. AC2B.5 (the real DH run) is the rolling Phase 5 ag
 - **WS-T**: part 1 leaves `BenchmarkController.show()` and the CURRENT-cancel branch of `finish()` as they are for WS-T's
   outcome hook; B8 touches only the stored context (`outcome()`'s record), not those.
 - `BenchmarkTrend.noiseFloorPercent`, `median`, `mad` keep their signatures.
+
+---
+
+# As landed
+
+Commits on `fix/v05-benchmark` (TDD: each red first, in a build slot on 26.2; the red logs are in the WS-B scratch dir as
+`b*-red.log`): 34b40d88 RW-5, c9fb21f4 RW-15 (+ the RW-5 screen line), a6825a28 context fields + RW-8/RW-6 exclusion,
+829809dd the `ws-b` set (part 1, CI 36317805129 green on every job and leg); ef45e840 BH-1, a0bad56c BH-2, 96681309
+RW-7/RW-9/RW-6's line, 511c896b L3, 52c866be RW-6 detection, 58986e31 the unmeasured line shortened (part 2).
+
+## What each item does now
+- **RW-5** (`RenderDistancePlanner`): `lowestFail` counts complete steps only; the search bounds itself by the lowest
+  incomplete distance above the best pass (and below the lowest complete fail) while it measures below it; once the
+  search is done (converged or at `maxRdSteps`) that distance is measured again **once** (`remeasured`), outside the
+  step limit (a re-record replaces the measurement, so `measurements.size()` doesn't grow). `BenchmarkSession`'s existing
+  deadline check decides whether it still fits (`rw5NoRemeasurePastTheDeadline`). The reason: "31 meets the target; 32
+  couldn't be measured (its terrain hadn't loaded)". The result screen: `?` in the table (warning colour) and "? Render
+  distance 32 couldn't be measured: its terrain hadn't loaded in time." (`ResultNotes.unmeasured`); no ✘ for it.
+- **RW-15**: `client/benchmark/StutterSteps` decides per step: settled → `benchmarkSweep(true/false)`; timed out
+  incomplete → `benchmarkStepExcluded(true/false)` **instead**, so the capture stays paused through it whatever the seam
+  does (a run ending inside such a step closes it). `Outcome.stepsLeftOut()` counts the incomplete settles; the result
+  screen adds "The stutter check left out N step(s) whose terrain hadn't loaded." under the Stutter Doctor line.
+- **Context fields** (recorded in BenchmarkController's constructor, before any setting changes): `worldFresh` =
+  `BenchmarkWorld.createdThisOpen()` in the benchmark world (null in the player's own world); `stagedAtStart` =
+  `BenchmarkConditions.stagedIds(history.json)`: the ids of changes with status STAGED, `[]` when none, null (left out)
+  past 64 or when history.json can't be read. `dhGenerating` is set on the stored record (`storedContext()` in
+  `outcome()`, after `StutterHooks.benchmarkFinished`) = `DhGeneration.generating(StutterHooks.lastBenchmarkDhWorldGenCores(),
+  OptionalMods.dhLoaded())`: at least 0.5 core-equivalents of "DH world generation" CPU over the recorded sweeps → true;
+  DH loaded but below → false; no DH or nothing sampled → null.
+- **RW-8/RW-6 exclusion** (`BenchmarkTrend.excluded`): a run with `worldFresh` or `dhGenerating` true is left out of
+  `baseline` (so of "your usual", the floor and the change window's baseline) and of `previousOfScene` (never the run a
+  "different conditions" line compares with); as the latest run it is assessed `Kind.EXCLUDED` (never a regression, so no
+  regression notice), with the usual of the runs before it when there are 3, and the line "Left out of the trend: the
+  first run in a new benchmark world" / "…: Distant Horizons was generating terrain" (a first run names the world). The
+  chart still shows the run.
+- **BH-1**: "Not enough earlier comparable runs for a trend yet (%s of 3)", "(from %s earlier runs)".
+- **BH-2** (`ChangeWindow`): with the baseline's `stagedAtStart` the carried-in rows are exactly its listed changes that
+  took effect (instead of the M1 guess); with the latest's, its window leaves out the changes it lists. Without the
+  field (0.4 runs): mod-file rows are left out of the latest's window when both mod-set hashes are known and equal
+  (Deviations 1).
+- **RW-7/RW-9/RW-6 lines** (`ResultNotes`, after the result line): the noisy line names Distant Horizons building
+  terrain (at least half the capture's spikes tagged `dh`) or new terrain being generated (`chunksLoading`), else the
+  generic line; "Measured with Distant Horizons rendering off" when DH is loaded and the run's original `dhRendering` was
+  off; "Distant Horizons was generating terrain during this run, so these numbers may be low." exactly when the stored
+  record's `dhGenerating` is true.
+- **L3** (`BenchmarkResultScreen`): the table is a `RowList` (`ResultTable`, list background and separators off, the
+  scrollbar inside its right edge) under the painted header; rows are drawn as the painted ones were (same columns,
+  highlight, colours) and each is a `RowFocus` narrating "Render distance 8: average 620 FPS, 1% low 390 FPS, P99 3.6 ms,
+  meets the target. Suggested" (`ResultNotes.row`; P99 narrated even where the narrow table hides its column); rows that
+  don't fit scroll (before: cut). Every status line is a `RowFocus.standalone` over its rows (a wrapped trend line is one
+  stop, a clipped line narrates its whole text), and so is "No measurements were taken.". Each chart keeps its pixels and
+  gets a stop over it narrating its title, `TrendText.chartSummary` ("5 comparable runs from 2026-09-20 to 2026-09-24: 1%
+  lows 540, 545, 538, 550, 440 FPS; averages …. Your usual: 543 FPS") and the trend's first line; Benchmark history gets
+  the same over its chart (`chartSummary()` for the tests). `textContent()` lists every shown or narrated string (AC2A.2).
+- **Fixtures**: `src/test/resources/v050-written/ws-b/` (benchmarks.json: a fresh-world Measure run, a run with a staged
+  id, a DH-generating Tune, a Tune in the player's own world; expect.json: 0.4.0's BenchmarkHistory loads 4 runs, no
+  `.bad`), written by `BenchmarkWrittenV050Test` (`RIGTUNE_REGENERATE_FIXTURES=1` rewrites it). No `placeholder/ws-b/` is
+  on the branch (WS-E's placeholders haven't merged); whoever merges second deletes it.
+- **compat030** against the set (compat030's `written.py` doesn't know the v0.5 sets yet): the v040-written tree copied
+  to scratch with the 4 v0.5 runs appended to `ws-b/benchmarks.json` (the README's concatenation rule), the released
+  0.3.0 jar: `RESULT PASS`, "BenchmarkHistory: benchmarks.json loads without a .bad: runs 9 of 9, … contexts kept true",
+  "0.3.0 reading them changed no file: 9 file(s) unchanged". compat040 isn't on the integration branch yet (WS-E).
+
+## Deviations
+1. **BH-2's fallback drops mod-file rows only for a proven-equal mod set**: SPEC says they are listed "only when its
+   modSetHash differs from the baseline's". A hash unknown on either side proves nothing, so such rows are still listed
+   (possibly related), as in 0.4; only both hashes known and equal drops them
+   (`bh2AHashChangeKeepsTheModRowWithoutTheField`).
+2. **The unmeasured line is shorter than first written** ("…couldn't be measured: its terrain hadn't loaded in time.",
+   without "so it counts as neither a pass nor a fail"): the longer one wrapped and forced a clipped status line at
+   854×480@2 (BenchmarkHistoryGameTest, run 36324863949, 26.2 GL). The `?` mark and the row's narration ("not
+   measured") carry the rest; nothing calls it a fail.
+3. **`stagedAtStart` is `[]` when nothing is staged** (not left out): it tells a 0.5 run with nothing staged from a 0.4
+   run, which the fallback treats differently.
+4. The RW-15 seam is called **instead of** the sweep calls (ws-k.md's seam comment says "while a step … is measured
+   again"; SPEC RW-15 is the rule). Told to the coordinator for WS-S.
+5. ChangeWindowTest's `latest()` fixture and BenchmarkHistoryGameTest's seed now load a different mod set after their
+   mod update: under BH-2's fallback a 0.4-shaped run with the same hash no longer lists the update, as intended.
+6. `V05TestContext.SCROLLING` (854×480 at GUI scale 3) can't be reached: Minecraft caps the scale at 2 for 854×480, so
+   `a11y-bench-result-scrolled-854x480-scale3` is taken at scale 2 (5 rows fit at every X12 size; scrolling is the
+   list's own vanilla behaviour).
+
+## Residuals / UNVERIFIED
+- **UNVERIFIED**: `DhGeneration.MIN_CORES = 0.5` is a starting value. AC2B.5's real run (rolling Phase 5: dev PC, DH
+  3.3.2, a fresh benchmark world) checks that such a run records `dhGenerating = true`, the screen names it and the
+  trend leaves it out. Also UNVERIFIED (WS-S): `DH-World Gen` as DH's only world-generation thread prefix outside 3.3.2.
+- A step left out of the stutter capture also leaves its world-generation CPU out of `dhGenerating` (WS-S averages over
+  the recorded sweeps); a fresh-world run whose every step timed out records no `dhGenerating` (null), but it is
+  `worldFresh` and left out of the trend anyway.
+- RW-6's "no stutter advice on benchmark-world captures" is WS-S's (StutterService.analyze).
+- The narration checked is what vanilla's pipeline collects (CI has no TTS), as in 0.4.
