@@ -114,6 +114,31 @@ public class TimingProbeGameTest implements FabricClientGameTest {
 			}
 			m.put("legacyBest5", best / 100_000.0);
 			m.put("legacyBlocks", legacy);
+			// The cheapest fix: keep best of 5, but start only once a 20k-call block ran with no JIT compilation anywhere in
+			// the JVM (cap 5 s).
+			long quietStart = System.nanoTime();
+			int quietBlocks = 0;
+			while (System.nanoTime() - quietStart < 5_000_000_000L) {
+				long before = jit.getTotalCompilationTime();
+				for (int i = 0; i < CALLS; i++) {
+					hook.call(mc);
+				}
+				quietBlocks++;
+				if (jit.getTotalCompilationTime() == before) {
+					break;
+				}
+			}
+			m.put("quietWarmupMs", (System.nanoTime() - quietStart) / 1_000_000);
+			m.put("quietWarmupBlocks", quietBlocks);
+			long quietBest = Long.MAX_VALUE;
+			for (int round = 0; round < 5; round++) {
+				long start = System.nanoTime();
+				for (int i = 0; i < 100_000; i++) {
+					hook.call(mc);
+				}
+				quietBest = Math.min(quietBest, System.nanoTime() - start);
+			}
+			m.put("quietBest5", quietBest / 100_000.0);
 			long jit1 = jit.getTotalCompilationTime();
 			// Warm the twin and the reference too.
 			for (int i = 0; i < 200_000; i++) {

@@ -1,0 +1,18 @@
+// RESEARCH ONLY (r-ci): resolves every resolvable configuration of every project, so a later --offline build finds all
+// artifacts in the Gradle cache.
+allprojects {
+	tasks.register('prefetchDependencies') {
+		doLast {
+			int ok = 0
+			project.configurations.findAll { it.canBeResolved }.each { c ->
+				try {
+					c.resolve()
+					ok++
+				} catch (Exception e) {
+					logger.warn("prefetch: ${project.path}:${c.name}: ${e.message?.readLines()?.first()}")
+				}
+			}
+			logger.lifecycle("prefetch: ${project.path}: ${ok} configurations resolved")
+		}
+	}
+}

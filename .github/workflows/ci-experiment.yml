@@ -102,15 +102,18 @@ jobs:
           path: hang-out/
 
   offline-gametest:
-    name: offline game tests (${{ matrix.mc }})
+    name: offline game tests (${{ matrix.mc }}, ${{ matrix.backend }})
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
-        mc: ['26.2', '26.3']
+        include:
+          - {mc: '26.2', backend: OpenGL}
+          - {mc: '26.3', backend: OpenGL}
+          - {mc: '26.3', backend: Vulkan}
     env:
-      SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER: skip
+      SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER: ${{ matrix.backend == 'OpenGL' && 'skip' || '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -120,8 +123,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: true
+      - name: Install the Mesa Vulkan driver (lavapipe)
+        if: matrix.backend == 'Vulkan'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers
       - name: Prefetch (network)
-        run: ./gradlew --no-daemon ":${{ matrix.mc }}:downloadAssets" ":${{ matrix.mc }}:jar" ":${{ matrix.mc }}:gametestJar"
+        run: ./gradlew --no-daemon --init-script .github/ci/prefetch.init.gradle ":${{ matrix.mc }}:prefetchDependencies" ":${{ matrix.mc }}:downloadAssets" ":${{ matrix.mc }}:jar" ":${{ matrix.mc }}:gametestJar"
       - name: Game tests in a network namespace (loopback only), --offline
         run: |
           set -o pipefail
@@ -137,11 +143,12 @@ jobs:
         if: always()
         run: |
           logs="versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs"
+          grep -F "Using graphics backend" "$logs/latest.log" || true
           grep -hE "Modrinth lookups failed|Could not check|UnknownHost|No route|Connection refused|passed|GameTest" "$logs/latest.log" | head -80 || true
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: offline-gametest-${{ matrix.mc }}
+          name: offline-gametest-${{ matrix.mc }}-${{ matrix.backend }}
           path: |
             offline-gametest.log
             versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs/
@@ -163,7 +170,7 @@ jobs:
       - name: Prefetch (network, no cache as in build.yml's java job)
         run: |
           start=$(date +%s)
-          ./gradlew --no-daemon assemble testClasses gametestClasses
+          ./gradlew --no-daemon --init-script .github/ci/prefetch.init.gradle prefetchDependencies assemble testClasses gametestClasses
           echo "prefetch took $(( $(date +%s) - start )) s"
       - name: Unit tests and Python tests with no network but loopback
         run: |
@@ -173,6 +180,6 @@ jobs:
             cd "$W"
             exec sudo -u runner env PATH="$P" HOME=/home/runner JAVA_HOME="$J" CI=true bash -c "
               ./gradlew --offline build --stacktrace; echo gradle-exit=\$?
-              python -m unittest discover -s tools/tests 2>&1 | tail -3; echo py-exit=\$?
-              python -m unittest discover -s tools/e2e/tests 2>&1 | tail -3; echo py-e2e-exit=\$?"'
+              python -m unittest discover -s tools/tests > py.log 2>&1; echo py-exit=\$?; tail -4 py.log
+              python -m unittest discover -s tools/e2e/tests > py-e2e.log 2>&1; echo py-e2e-exit=\$?; tail -4 py-e2e.log"'
           echo "took $(( $(date +%s) - start )) s"
