@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client.ui;
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
+import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
@@ -566,8 +567,14 @@ public class RigTuneScreen extends Screen {
 		if (chosen.isEmpty()) {
 			return;
 		}
-		status = controller.apply(chosen);
+		// v0.5 (docs/v0.5/SPEC.md 8, C02): a new player's first press of this button shows what that Apply's entry holds.
+		boolean first = controller.firstApplyPending();
+		String entryId = ChangeRecorder.newEntryId();
+		status = controller.apply(chosen, entryId);
 		updateApplyButton();
+		if (first) {
+			minecraft.gui.setScreen(new FirstApplyScreen(this, controller, entryId, status));
+		}
 	}
 
 	private void updateApplyButton() {
