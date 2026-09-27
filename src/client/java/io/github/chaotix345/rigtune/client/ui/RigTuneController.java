@@ -7,17 +7,22 @@ import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.jvm.JvmReport;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.ServerLimits;
+import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.profile.ProfileImport;
 import io.github.chaotix345.rigtune.core.profile.ProfileView;
+import io.github.chaotix345.rigtune.core.profile.ServerProfilesView;
 import io.github.chaotix345.rigtune.core.report.ShareReport;
+import io.github.chaotix345.rigtune.core.stutter.FixOffer;
 import io.github.chaotix345.rigtune.core.stutter.StutterView;
+import io.github.chaotix345.rigtune.core.tryit.TryItView;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
@@ -233,5 +238,90 @@ public interface RigTuneController {
 
 	default StartupTimes.View startupTimes() {
 		return StartupTimes.View.EMPTY;
+	}
+
+	// v0.5 contracts (docs/v0.5/SPEC.md C4, PLAN contracts item 7). RealController delegates each in one line to its
+	// feature's service, made lazily (V05Services, X4). These defaults are 0.4's behaviour. Render thread unless noted.
+
+	// C02 first-time Apply (WS-F).
+
+	/** True when the Apply button should open the first-Apply confirmation after this Apply. */
+	default boolean firstApplyPending() {
+		return false;
+	}
+
+	/** The same Apply, journaled under a given entry id (profile switches, stutter fixes, Try it, the first Apply). */
+	default Component apply(List<Recommendation> selected, String entryId) {
+		return apply(selected);
+	}
+
+	/** True while an Apply's downloads are still running. */
+	default boolean downloading() {
+		return false;
+	}
+
+	// P0.4 (WS-L1).
+
+	/** Who changes this instance's mod files (docs/v0.5/SPEC.md 4a). No I/O. */
+	default ModFilesPolicy modFiles() {
+		return ModFilesPolicy.RIGTUNE;
+	}
+
+	// C20 Stutter Doctor fixes (WS-S2).
+
+	/** What the fix would change, writing nothing. Off the render thread. */
+	default ApplyPreview previewStutterFix(FixOffer.Offer offer) {
+		return ApplyPreview.EMPTY;
+	}
+
+	default Component applyStutterFix(FixOffer.Offer offer) {
+		return Component.translatable("rigtune.status.nothing");
+	}
+
+	default void dismissStutterFix(String entryId) {
+	}
+
+	// C09 Measured Try It (WS-T).
+
+	default TryItView tryIt() {
+		return TryItView.EMPTY;
+	}
+
+	/** Why this recommendation can't be tried now, or null when it can. */
+	default @Nullable Text tryItRefusal(Recommendation rec) {
+		return TryItView.UNAVAILABLE;
+	}
+
+	default Component startTryIt(Recommendation rec, BenchmarkRequest.Scene scene) {
+		return Component.translatable("rigtune.status.nothing");
+	}
+
+	default void tryItMeasureNow() {
+	}
+
+	default Component tryItKeep() {
+		return Component.translatable("rigtune.status.nothing");
+	}
+
+	default void tryItCancel() {
+	}
+
+	// C16 per-server profile offers (WS-P2).
+
+	default ServerProfilesView serverProfiles() {
+		return ServerProfilesView.EMPTY;
+	}
+
+	/** Offers this profile (null: the active one) on the connected server. */
+	default Component rememberServerProfile(@Nullable String profileId) {
+		return Component.empty();
+	}
+
+	default Component forgetServerProfile(String key) {
+		return Component.empty();
+	}
+
+	default Component forgetAllServerProfiles() {
+		return Component.empty();
 	}
 }

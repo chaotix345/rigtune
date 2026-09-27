@@ -44,6 +44,9 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 	public static final String WHATS_NEW_KEY_PREFIX = "whats-new:";
 	public static final String RESCAN = "rescan";
 	public static final String REBENCHMARK = "rebenchmark";
+	// v0.5 (docs/v0.5/SPEC.md 7, C16): notice keys whose × hides the notice for this session only, never stored: a
+	// server-profile offer's key is per join and could never match again.
+	public static final List<String> SESSION_ONLY_PREFIXES = List.of("server-profile:");
 	// Names the what's-new detail lists before "…".
 	private static final int MAX_NAMES = 8;
 
@@ -201,8 +204,12 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 		} else if (w != null && key.equals(w.key())) {
 			WhatsNew.acknowledge(store, w.revision(), w.potential());
 			whatsNew = null;
-		} else if (!key.startsWith(HARDWARE_KEY_PREFIX) && !key.startsWith(WHATS_NEW_KEY_PREFIX)) {
+		} else if (!key.startsWith(HARDWARE_KEY_PREFIX) && !key.startsWith(WHATS_NEW_KEY_PREFIX) && !sessionOnly(key)) {
 			store.dismiss(key);
 		}
+	}
+
+	static boolean sessionOnly(String key) {
+		return SESSION_ONLY_PREFIXES.stream().anyMatch(key::startsWith);
 	}
 }
