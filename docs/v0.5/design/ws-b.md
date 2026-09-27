@@ -138,9 +138,11 @@ RW-7/RW-9/RW-6's line, 511c896b L3, 52c866be RW-6 detection, 58986e31 the unmeas
 7. **Keyboard initial focus stays on the first button** (Use, or Done) as in 0.4, not the first status line: the
    result screen overrides `setInitialFocus` (the focused table row and the scroll come back after a rebuild, the
    JvmScreen pattern).
-8. **A Measure pair whose "before" is left out of the trend** (a fresh-world or DH-generating run) still shows "Compared
-   with before": SPEC question sent to the coordinator with the self-review (proposed: keep the numbers, add one caveat
-   line); open until decided.
+8. **A Measure pair whose "before" is left out of the trend** (a fresh-world or DH-generating run) keeps "Compared with
+   before" with a caveat line under it ("The “before” run was the first in a new benchmark world, so this comparison may
+   be off." / the DH-generating equivalent; `ResultNotes.gainCaveat`, 69f8f550): the option proposed to the coordinator
+   for the review's SPEC question (part 1 M4), landed while the decision is pending; one commit to revert if the answer is
+   "withhold" or "leave".
 
 ## Self-review (code-reviewer subagents; reports in the WS-B scratch dir, review-part1.md and review-part2.md)
 Part 1 (a7613410..829809dd): 0 high, 4 medium, 7 low, 2 nits. Part 2 (829809dd..58986e31): 0 high, 4 medium, 7 low.
@@ -152,7 +154,7 @@ Sent to the coordinator with proposed dispositions; fixed in 03c46c37 (red tests
 - part 1 M1 (a distance that couldn't be measured suggested / "Use best tested" for it), M2 (the second try could cost
   the repeats), M3 (an unreadable history.json recorded as "nothing staged"), L5-L7 (reason wording, "In progress", the
   climb after a passing second try), L8 (left-out line without a capture), L9-L10 (BenchmarkGameTest robustness): fixed.
-- part 1 M4: the SPEC question above (Deviations 8). L11 (the note counts excluded runs): left; the trend's "earlier"
+- part 1 M4: the SPEC question above (Deviations 8; the proposed caveat landed, `ResultNotesTest.m4AComparisonWithAnExcludedBeforeSaysSo`). L11 (the note counts excluded runs): left; the trend's "earlier"
   count and the "Left out of the trend" line explain it. N12 (StutterHooks' seam comment) is WS-S's file: passed on.
   N13 (a fixture Tune with targetMet false and a best-effort 16): realistic, left.
 - part 2 M1-M2 (carried-in rows escaped the latest's staged / equal-hash exclusion), M3 (focus and scroll lost on a
