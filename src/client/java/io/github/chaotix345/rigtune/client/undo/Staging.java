@@ -18,6 +18,7 @@ import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.PartlyApplied;
 import io.github.chaotix345.rigtune.core.history.StagedChanges;
 import io.github.chaotix345.rigtune.core.history.StaleOps;
+import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -316,6 +317,20 @@ public final class Staging {
 	// last exit (a failed rollback, or a kill between two renames), which the next exit finishes or rolls back (audit M2,
 	// review-8 AH-1; PartlyApplied). Returns the dropped ops; null when the lock is busy.
 	public List<Op> discard() throws IOException {
+		Discard discard = discardPending();
+		return discard == null ? null : discard.dropped();
+	}
+
+	// docs/v0.5/SPEC.md 2H L7: Discard pending's outcome. keptGroup: a group the helper left half done stayed staged.
+	public record Discard(List<Op> dropped, boolean keptGroup) {
+		// The RigTune screen's status line, which says so when a change already under way was kept.
+		public Component status() {
+			return Component.translatable(keptGroup ? "rigtune.status.discarded_with_kept" : "rigtune.status.discarded", dropped.size());
+		}
+	}
+
+	// As discard(), saying whether a half-done group was kept; null when the lock is busy.
+	public @Nullable Discard discardPending() throws IOException {
 		try (ApplyLock lock = lock()) {
 			if (lock == null) {
 				return null;
@@ -323,13 +338,14 @@ public final class Staging {
 			PendingActions plan = readable();
 			Set<String> halfDone = plan == null ? Set.of() : halfDoneGroups(plan);
 			if (!halfDone.isEmpty()) {
-				return discardExcept(plan, halfDone);
+				return new Discard(discardExcept(plan, halfDone), true);
 			}
 			List<Op> dropped = PendingActions.discard(pendingFile, Duration.ZERO);
-			if (dropped != null) {
-				markDiscarded(dropped);
+			if (dropped == null) {
+				return null;
 			}
-			return dropped;
+			markDiscarded(dropped);
+			return new Discard(dropped, false);
 		}
 	}
 

@@ -13,6 +13,7 @@ import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.StaleOps;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -461,5 +462,43 @@ class StagingTest {
 		}
 
 		assertEquals(before, Files.readString(pending));
+	}
+
+	// --- docs/v0.5/SPEC.md 2H L7: Discard pending says when it kept a group the helper left half done
+
+	@Test
+	void aDiscardThatKeepsAHalfDoneGroupSaysSo() throws IOException {
+		Path lib = pendingJar("lib.jar", "lib");
+		List<Op> addition = PendingActions.group(Op.enableFile(pendingJar("a.jar", "a"), mods.resolve("a.jar")).withModId("a"),
+				Op.enableFile(lib, mods.resolve("lib.jar")).withModId("lib"));
+		assertNotNull(staging.stage(addition, "e1"));
+		assertThrows(TestExecutors.Killed.class, () -> TestExecutors.killedAt(lib::equals).run(PendingActions.load(pending), pending));
+		List<Op> update = update("x-1.jar", "x-2.jar", "x");
+		assertNotNull(staging.stage(update, "e2"));
+
+		Staging.Discard discard = staging.discardPending();
+
+		assertTrue(discard.keptGroup());
+		assertEquals(update.stream().map(Op::id).toList(), discard.dropped().stream().map(Op::id).toList());
+		assertEquals(addition.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+		TranslatableContents status = (TranslatableContents) discard.status().getContents();
+		assertEquals("rigtune.status.discarded_with_kept", status.getKey());
+		assertEquals(List.of(2), List.of(status.getArgs()));
+	}
+
+	@Test
+	void aCleanDiscardKeepsTodaysMessage() throws Exception {
+		assertNotNull(staging.stage(update("x-1.jar", "x-2.jar", "x"), "e1"));
+
+		Staging.Discard discard = staging.discardPending();
+
+		assertFalse(discard.keptGroup());
+		assertFalse(Files.exists(pending));
+		TranslatableContents status = (TranslatableContents) discard.status().getContents();
+		assertEquals("rigtune.status.discarded", status.getKey());
+		assertEquals(List.of(2), List.of(status.getArgs()));
+		try (HeldLock helper = HeldLock.hold(ApplyLock.defaultPath(config))) {
+			assertNull(staging.discardPending());
+		}
 	}
 }
