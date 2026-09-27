@@ -41,13 +41,13 @@ public final class RealWorldFixtures {
 		}
 	}
 
-	// Writes the capture's config/rigtune/ files into <instance>/config/rigtune/ and returns <instance>/config.
+	// Writes the capture's rigtune/ files (its config/rigtune/) into <instance>/config/rigtune/ and returns <instance>/config.
 	public static Path config(Path instance) {
 		Path rigtune = instance.resolve("config").resolve("rigtune");
 		try {
 			Files.createDirectories(rigtune);
 			for (String name : List.of("history.json", "last-apply.json", "helper.log")) {
-				Files.writeString(rigtune.resolve(name), text("config/rigtune/" + name, instance), StandardCharsets.UTF_8);
+				Files.writeString(rigtune.resolve(name), text("rigtune/" + name, instance), StandardCharsets.UTF_8);
 			}
 			Files.createDirectories(instance.resolve("mods"));
 		} catch (IOException e) {

@@ -12,8 +12,9 @@ Records from the user's own instance, templated so a test can use them without e
   user name, no machine path, no instance name. `RealWorldFixturesTest` fails on any of them.
 - **As recorded.** Contents are the records' own (ids, times, messages), only the paths templated. Nothing is made up; what
   isn't a copy says so below.
-- **One folder per capture**, named by its date. The generator is `make_realworld.py` in the WS-L1 scratch folder (read-only
-  copies in, this folder out); it is not needed to use the fixtures.
+- **One folder per capture**, named by its date; the instance's `config/rigtune/` files are in its `rigtune/` folder (the
+  repository's `.gitignore` leaves out every `config/` folder). The generator is `make_realworld.py` in the WS-L1 scratch
+  folder (read-only copies in, this folder out); it is not needed to use the fixtures.
 
 ## `2026-09-27/`: RigTune 0.1.0's apply, then 0.4.0's first start (docs/research/v0.5/real-world-2026-09-27.md)
 
@@ -23,9 +24,9 @@ leftover DH group at the exit of 0.4.0's first session (2026-09-27 01:08 UTC). C
 
 | file | what it is | source |
 |---|---|---|
-| `config/rigtune/history.json` | the legacy-import entry (0.1.0's apply, 17 file changes, all APPLIED after 0.4.0's helper run: the DH pair included, RW-1; the disable of `fabric-26.2.jar` has no `resultFile`, RW-14) | copy (file names only already) |
-| `config/rigtune/last-apply.json` | 0.4.0's helper result: both DH ops `SKIPPED_ALREADY_DONE` | copy, paths templated |
-| `config/rigtune/helper.log` | that helper run's log | copy, the plan's path templated |
+| `rigtune/history.json` | the legacy-import entry (0.1.0's apply, 17 file changes, all APPLIED after 0.4.0's helper run: the DH pair included, RW-1; the disable of `fabric-26.2.jar` has no `resultFile`, RW-14) | copy (file names only already) |
+| `rigtune/last-apply.json` | 0.4.0's helper result: both DH ops `SKIPPED_ALREADY_DONE` | copy, paths templated |
+| `rigtune/helper.log` | that helper run's log | copy, the plan's path templated |
 | `seeded/pending-0.1.0.json` | 0.1.0's `pending.json` before that run (the DH group, attempt 1) | docs/smoke/self-update/final-v010-seeded-to-040/seeded-pending.json, `<instance>` templated |
 | `mods-listing.txt` | the instance's `mods/` file names at the copy | copy |
 | `mod-ids.json` | the mod id each jar RigTune's records name declares (its `fabric.mod.json`) | read from the jars by rw's `RealWorld20260927Test` |
