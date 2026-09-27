@@ -47,6 +47,16 @@ class StutterFixSeedsTest {
 		assertEquals(1, RULES.stutterFixes.get(2).set.min.getAsInt());
 	}
 
+	// The client's own check of the section (FixSpec, WS-S2) accepts every seed the updater validated, with the same targets.
+	@Test
+	void theClientAcceptsEverySeed() {
+		List<FixSpec> specs = FixSpec.of(RULES);
+		assertEquals(RULES.stutterFixes.stream().map(f -> f.adviceId).toList(), specs.stream().map(FixSpec::adviceId).toList());
+		assertEquals(List.of("ALWAYS"), specs.stream().filter(s -> s.value() != null).map(FixSpec::value).toList());
+		assertEquals(List.of(-2, -2), specs.stream().filter(s -> s.value() == null).map(FixSpec::step).toList());
+		assertEquals(List.of(6, 1), specs.stream().filter(s -> s.value() == null).map(FixSpec::min).toList());
+	}
+
 	// Neither the main list nor the Stutter Doctor's advice knows the fix feature, and an evidence condition never fires
 	// without a session's facts.
 	@Test

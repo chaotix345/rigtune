@@ -291,7 +291,7 @@ class SchemaConsistencyTest {
 				assertEquals(share.max(), entry.get("max").getAsInt(), key);
 			}
 		}
-		assertEquals(8, python.get("maxFixStep").getAsInt());
+		assertEquals(io.github.chaotix345.rigtune.core.stutter.FixSpec.MAX_STEP, python.get("maxFixStep").getAsInt());
 	}
 
 	@Test
