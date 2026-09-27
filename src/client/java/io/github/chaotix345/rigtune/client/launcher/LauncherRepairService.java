@@ -50,6 +50,9 @@ public final class LauncherRepairService {
 	public static final String CANCEL = "cancel";
 	public static final String APPLY = "apply";
 	public static final String COPY = "copy";
+	// The title screen's leftover toasts (the game test finds them by these).
+	public static final SystemToast.SystemToastId LEFTOVER_TOAST = new SystemToast.SystemToastId(10000L);
+	public static final SystemToast.SystemToastId HELD_TOAST = new SystemToast.SystemToastId(10000L);
 
 	// Game tests only: the policy to use instead of the controller's (null: the controller's).
 	private static volatile @Nullable ModFilesPolicy policyOverride;
@@ -64,8 +67,9 @@ public final class LauncherRepairService {
 	}
 
 	// held: what the next exit's helper would hold, as of pendingModified (null: no pending.json); findings: null until
-	// wanted (the repair notice is asked under LAUNCHER).
-	private record State(List<Op> held, @Nullable FileTime pendingModified, LauncherRepair.@Nullable Findings findings) {
+	// wanted (the repair notice is asked under LAUNCHER), as of historyModified.
+	private record State(List<Op> held, @Nullable FileTime pendingModified, LauncherRepair.@Nullable Findings findings,
+			@Nullable FileTime historyModified) {
 	}
 
 	private final @Nullable RealController controller;
@@ -119,7 +123,8 @@ public final class LauncherRepairService {
 
 	private static void show(List<HelperToasts.Toast> toasts) {
 		Minecraft minecraft = Minecraft.getInstance();
-		minecraft.execute(() -> toasts.forEach(t -> SystemToast.add(minecraft.gui.toastManager(), new SystemToast.SystemToastId(10000L), t.title(), t.body())));
+		minecraft.execute(() -> toasts.forEach(t -> SystemToast.add(minecraft.gui.toastManager(), t.kind() == HelperToasts.Kind.HELD ? HELD_TOAST
+				: LEFTOVER_TOAST, t.title(), t.body())));
 	}
 
 	// ---- HELD_MOD_CHANGES (4d)
@@ -135,12 +140,16 @@ public final class LauncherRepairService {
 		if (current == null || current.held().isEmpty()) {
 			return null;
 		}
-		int changes = LauncherRepair.modChanges(current.held());
+		return heldNotice(LauncherRepair.modChanges(current.held()), policy, env().launcher().get());
+	}
+
+	// The notice itself (also the A11y walk's canned one).
+	public static Notice heldNotice(int changes, ModFilesPolicy policy, Launcher launcher) {
 		Text message = policy == ModFilesPolicy.PENDING
 				? Text.of("rigtune.repair.held.message.pending", "%s mod change(s) from an earlier Apply are waiting while RigTune checks which"
 						+ " launcher manages this instance's mods.", changes)
 				: Text.of("rigtune.repair.held.message", "%s mod change(s) from an earlier Apply are waiting: %s manages this instance's mods.", changes,
-						LauncherRepair.name(env().launcher().get()));
+						LauncherRepair.name(launcher));
 		return new Notice(HELD_KEY, NoticePriority.HELD_MOD_CHANGES, message,
 				Text.of("rigtune.repair.held.detail", "RigTune changes no mod file in an instance whose launcher keeps its own list of mods, so it"
 						+ " holds these at exit. Cancel them, or let RigTune apply them at the next exit (that turns on \"Let RigTune change them"
@@ -197,7 +206,12 @@ public final class LauncherRepairService {
 		}
 		LauncherRepair.Findings findings = current == null ? null : current.findings();
 		Launcher launcher = env().launcher().get();
-		if (findings == null || !LauncherRepair.actionable(findings, launcher)) {
+		return findings == null ? null : repairNotice(findings, launcher);
+	}
+
+	// The notice itself, or null when nothing needs a step in this launcher (also the A11y walk's canned one).
+	public static @Nullable Notice repairNotice(LauncherRepair.Findings findings, Launcher launcher) {
+		if (!LauncherRepair.actionable(findings, launcher)) {
 			return null;
 		}
 		return new Notice(findings.key(), NoticePriority.LAUNCHER_REPAIR, LauncherRepair.message(launcher), LauncherRepair.detail(findings, launcher),
@@ -213,13 +227,14 @@ public final class LauncherRepairService {
 
 	// ---- The state, read on a worker
 
-	// The last result, or null while none is ready (a refresh then starts). One whose pending.json changed since (Discard,
-	// Undo, a drop at a rebuild) is stale: null and a refresh.
+	// The last result, or null while none is ready; a refresh starts when there's none, or when pending.json (Discard,
+	// Undo, a drop at a rebuild) or, for the findings, history.json changed since. Until it's done the last result stays
+	// (a refresh that changes what shows asks for a rebuild). Two stats, only under LAUNCHER or PENDING.
 	private @Nullable State current() {
 		State current = state;
-		if (current == null || !current.held().isEmpty() && !Objects.equals(current.pendingModified(), modified(env().pendingFile()))) {
+		if (current == null || !Objects.equals(current.pendingModified(), modified(env().pendingFile()))
+				|| current.findings() != null && !Objects.equals(current.historyModified(), modified(Journal.file(env().configDir())))) {
 			refresh();
-			return null;
 		}
 		return current;
 	}
@@ -230,7 +245,9 @@ public final class LauncherRepairService {
 				try {
 					State before = state;
 					State after = refreshNow();
-					if (after != null && !after.equals(before) && (!after.held().isEmpty() || after.findings() != null && !after.findings().isEmpty())) {
+					boolean shows = after != null && (!after.held().isEmpty() || after.findings() != null && !after.findings().isEmpty());
+					if (after != null && (before == null ? shows
+							: !before.held().equals(after.held()) || !Objects.equals(before.findings(), after.findings()))) {
 						env().rebuild().run();
 					}
 				} finally {
@@ -245,9 +262,10 @@ public final class LauncherRepairService {
 			Path pendingFile = env().pendingFile();
 			FileTime modified = modified(pendingFile);
 			List<Op> held = modified == null ? List.of() : ApplyExecutor.held(PendingActions.load(pendingFile), pendingFile);
+			FileTime history = modified(Journal.file(env().configDir()));
 			LauncherRepair.Findings findings = !findingsWanted ? null
 					: LauncherRepair.find(env().journal().get().entries(), env().folder().apply(InstanceDirs.modsDirOf(pendingFile)));
-			State fresh = new State(held, modified, findings);
+			State fresh = new State(held, modified, findings, history);
 			state = fresh;
 			return fresh;
 		} catch (IOException | RuntimeException e) {
