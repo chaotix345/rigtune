@@ -400,9 +400,12 @@ public final class StutterAnalyzer {
 		return events(in, StutterRings.TELEPORT).stream().map(t -> new Attributor.Interval(t[0], t[0] + TELEPORT_WINDOW)).toList();
 	}
 
-	// v0.5 RW-11: after each settings change or resource reload, the next 10 s.
+	// v0.5 RW-11: after each settings change or resource reload, the next 10 s. The event is dated when the old value was
+	// last seen; its value's bits from StutterRings.SETTINGS_LEAD_SHIFT say how many ms later the change was seen, so the window runs
+	// from the one to 10 s after the other.
 	private static List<Attributor.Interval> settingsChanged(Input in) {
-		return events(in, StutterRings.SETTINGS_CHANGED).stream().map(t -> new Attributor.Interval(t[0], t[0] + SETTINGS_WINDOW)).toList();
+		return events(in, StutterRings.SETTINGS_CHANGED).stream()
+				.map(t -> new Attributor.Interval(t[0], t[0] + (t[1] >>> StutterRings.SETTINGS_LEAD_SHIFT) * MS + SETTINGS_WINDOW)).toList();
 	}
 
 	public static List<Attributor.Sample> samples(Input in) {
@@ -443,6 +446,7 @@ public final class StutterAnalyzer {
 		long[] s = in.rings().samples();
 		long cpu = 0;
 		long time = 0;
+		int p = 0;
 		for (int i = 0; i + StutterRings.SAMPLE_STRIDE <= s.length; i += StutterRings.SAMPLE_STRIDE) {
 			long t = s[i + StutterRings.S_TIME];
 			long window = s[i + StutterRings.S_WINDOW];
@@ -450,7 +454,10 @@ public final class StutterAnalyzer {
 				continue;
 			}
 			long mid = t - window / 2;
-			if (paused.stream().noneMatch(p -> p.overlaps(mid, mid))) {
+			while (p < paused.size() && paused.get(p).end() < mid) {
+				p++;
+			}
+			if (p == paused.size() || paused.get(p).start() > mid) {
 				cpu += s[i + StutterRings.S_DH_WORLD_GEN];
 				time += window;
 			}

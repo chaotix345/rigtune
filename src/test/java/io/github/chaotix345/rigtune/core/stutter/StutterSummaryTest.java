@@ -92,6 +92,9 @@ class StutterSummaryTest {
 		causes.put(Attributor.TICK, 0.18);
 		causes.put(Attributor.UNKNOWN, 0.23);
 		assertEquals(Map.of(Attributor.GC, 59, Attributor.TICK, 18, Attributor.UNKNOWN, 23), StutterSummary.percentages(causes));
+		// Review fix: a hand-edited share is clamped (no long trimming loop, no overflow).
+		assertEquals(Map.of(Attributor.GC, 50, Attributor.UNKNOWN, 50), StutterSummary.percentages(Map.of(Attributor.GC, 2e9, Attributor.UNKNOWN, 0.5)));
+		assertEquals(Map.of(Attributor.UNKNOWN, 50), StutterSummary.percentages(Map.of(Attributor.GC, -3.0, Attributor.UNKNOWN, 0.5)));
 		StutterReport r = report(true, true, 21.7);
 		StutterReport real = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(),
 				r.frames(), r.avgFps(), r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), causes, r.tags(), r.worst(),

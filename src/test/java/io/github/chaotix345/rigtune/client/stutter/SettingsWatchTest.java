@@ -38,6 +38,57 @@ class SettingsWatchTest {
 		assertEquals(SettingsWatch.RELOAD, s.check(12, 12, false, 4 * TICK), "and went away");
 	}
 
+	// Review fix: a reload longer than the 10 s window keeps it open (the RELOAD bit again every 5 s while the overlay is up).
+	@Test
+	void aLongReloadKeepsItsWindowOpen() {
+		SettingsWatch.State s = new SettingsWatch.State();
+		s.check(12, 12, false, 0);
+		int reloads = 0;
+		for (int i = 1; i <= 300; i++) {
+			if ((s.check(12, 12, true, i * TICK) & SettingsWatch.RELOAD) != 0) {
+				reloads++;
+			}
+		}
+		assertEquals(3, reloads, "15 s of overlay: when it appeared, then at 5 s and 10 s");
+		assertEquals(SettingsWatch.RELOAD, s.check(12, 12, false, 301 * TICK), "and when it went away");
+	}
+
+	// Review fix: the event says how long after its time the change was seen, so the window ends 10 s after that.
+	@Test
+	void theLeadIsTheTimeBetweenTheLastLookAndTheChange() {
+		SettingsWatch.State s = new SettingsWatch.State();
+		s.check(12, 12, false, 0);
+		s.optionalDue(0);
+		s.checkOptional(false, false, 0);
+		for (int i = 1; i < 20; i++) {
+			s.check(12, 12, false, i * TICK);
+			s.optionalDue(0);
+		}
+		int changed = s.check(12, 12, false, 20 * TICK);
+		assertTrue(s.optionalDue(changed));
+		assertEquals(SettingsWatch.SHADERS, s.checkOptional(true, false, 20 * TICK));
+		assertEquals(0, s.since(), "dated at the last Iris read");
+		assertEquals(1000, s.leadMillis(20 * TICK), "seen 1 s later");
+	}
+
+	// Review fix (M3): a check that throws is off for the rest of that session (one warning), and tries again in the next.
+	@Test
+	void aFailingCheckStaysOffForThatSession() {
+		StutterMonitorAccess.startSession();
+		try (io.github.chaotix345.rigtune.core.LogCapture log = new io.github.chaotix345.rigtune.core.LogCapture()) {
+			for (int i = 0; i < 50; i++) {
+				SettingsWatch.tick(null);
+			}
+			assertEquals(1, log.lines().stream().filter(l -> l.contains("the settings check failed")).count());
+			StutterMonitorAccess.stopAll();
+			StutterMonitorAccess.startSession();
+			SettingsWatch.tick(null);
+			assertEquals(2, log.lines().stream().filter(l -> l.contains("the settings check failed")).count(), "a new session tries again");
+		} finally {
+			StutterMonitorAccess.stopAll();
+		}
+	}
+
 	@Test
 	void irisAndDhAreReadAfterAReloadAndAtMostOnceASecond() {
 		SettingsWatch.State s = new SettingsWatch.State();

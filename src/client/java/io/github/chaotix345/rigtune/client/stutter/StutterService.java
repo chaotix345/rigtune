@@ -149,7 +149,12 @@ public final class StutterService {
 	public void clear() {
 		StutterMonitor.Capture session = StutterMonitor.session();
 		if (session != null) {
-			StutterCapture.stop(session);
+			try {
+				StutterCapture.stop(session);
+			} catch (RuntimeException e) {
+				// L1: detached anyway (stop's finally); Clear drops this session's data in any case.
+				RigTune.LOGGER.debug("Stutter Doctor: the cleared session's capture couldn't be copied", e);
+			}
 			startSession(controller.minecraft());
 		}
 		live = null;

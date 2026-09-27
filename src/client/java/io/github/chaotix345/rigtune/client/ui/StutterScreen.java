@@ -300,7 +300,7 @@ public class StutterScreen extends Screen {
 			return;
 		}
 		// v0.5 RW-10: no 0 % row, and the whole percentages never total more than 100 (StutterSummary.percentages).
-		StutterSummary.percentages(r.causes()).forEach((cause, percent) -> bar(l, Component.translatable(CAUSES.get(cause)), r.causes().get(cause),
+		StutterSummary.percentages(r.causes()).forEach((cause, percent) -> bar(l, Component.translatable(CAUSES.get(cause)), percent / 100.0,
 				cause.equals(Attributor.UNKNOWN) ? COLOR_LABEL : COLOR_AMBER, Component.literal(percent + " %")));
 		for (String tag : Attributor.REPORT_TAGS) {
 			Integer n = r.tags().get(tag);
@@ -366,7 +366,7 @@ public class StutterScreen extends Screen {
 	private void advice(StutterList l, StutterReport r, List<StutterAdvisor.Fired> advice, int width) {
 		heading(l, "rigtune.stutter.advice", width);
 		if (!r.settingChanges().isEmpty()) {
-			text(l, Component.translatable("rigtune.stutter.settings.advice"), COLOR_LABEL, width, 0);
+			text(l, Component.translatable(view.live() ? "rigtune.stutter.settings.advice.live" : "rigtune.stutter.settings.advice"), COLOR_LABEL, width, 0);
 		}
 		if (advice.isEmpty()) {
 			text(l, Component.translatable("rigtune.stutter.advice.none"), COLOR_LABEL, width, 0);

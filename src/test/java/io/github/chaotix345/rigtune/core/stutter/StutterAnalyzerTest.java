@@ -403,6 +403,15 @@ class StutterAnalyzerTest {
 		assertEquals(Map.of(), after.facts().taggedShares(), "not a rules tag");
 		assertTrue(after.report().worst().stream().filter(w -> w.ms() == 90.0).findFirst().orElseThrow().causes().contains("settingsChanged:context"));
 		assertFalse(Attributor.TAGS.contains(Attributor.SETTINGS_CHANGED));
+
+		// An event whose change was seen 900 ms after its time: the window reaches 10 s after that, so the 80 ms spike
+		// starting 10.1 s after the event's time (ending before 10.9 s) is tagged too.
+		Capture late = new Capture().frames(150, Map.of(40, 80 * MS), false);
+		late.rings.event(StutterRings.SETTINGS_CHANGED, late.spikeStarts.get(40) - 10_100 * MS, 1 | 900L << StutterRings.SETTINGS_LEAD_SHIFT);
+		assertEquals(Map.of(Attributor.SETTINGS_CHANGED, 1), late.analyze(true).report().tags());
+		Capture early = new Capture().frames(150, Map.of(40, 80 * MS), false);
+		early.rings.event(StutterRings.SETTINGS_CHANGED, early.spikeStarts.get(40) - 10_100 * MS, 1);
+		assertEquals(Map.of(), early.analyze(true).report().tags(), "without the lead, 10 s had passed");
 	}
 
 	// Review finding 2: what the capture couldn't measure stays UNKNOWN for the rules (also under `not`).

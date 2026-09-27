@@ -190,6 +190,39 @@ class StutterServiceTest {
 		assertEquals(2, service.lastBenchmarkExcludedSteps());
 	}
 
+	// A 1 ms sampler window with `cores` of DH world generation, all of it after the last call (it ends 1 ms from now).
+	private static void worldGen(StutterRings rings, long cores) {
+		long until = System.nanoTime() + MS;
+		while (System.nanoTime() < until) {
+			Thread.onSpinWait();
+		}
+		long[] sample = new long[StutterRings.SAMPLE_STRIDE];
+		sample[StutterRings.S_TIME] = System.nanoTime();
+		sample[StutterRings.S_WINDOW] = MS;
+		sample[StutterRings.S_DH_WORLD_GEN] = cores * MS;
+		rings.sample(sample);
+	}
+
+	// L1's guard in Clear: a failing copy doesn't reach the click handler, and Clear still starts a fresh session.
+	@Test
+	void clearSurvivesAFailingCopy(@TempDir Path dir) throws ReflectiveOperationException {
+		Queue io = new Queue();
+		StutterService service = service(dir, io);
+		StutterMonitor.Capture first = StutterCapture.startSession();
+		Function<StutterMonitor.Capture, StutterCapture.Copy> copier = StutterCapture.copier;
+		StutterCapture.copier = c -> {
+			throw new IllegalStateException("copy failed (test)");
+		};
+		try {
+			assertDoesNotThrow(service::clear);
+		} finally {
+			StutterCapture.copier = copier;
+		}
+		assertNotNull(StutterMonitor.session());
+		assertTrue(StutterMonitor.session() != first, "a fresh session");
+		io.runAll();
+	}
+
 	private static void frames(int n) {
 		for (int i = 0; i < n; i++) {
 			StutterMonitor.onFrame(5_000_000L);
@@ -202,19 +235,22 @@ class StutterServiceTest {
 	void aFinishedBenchmarkReportsItsDhWorldGenCpu(@TempDir Path dir) throws ReflectiveOperationException {
 		Queue io = new Queue();
 		StutterService service = service(dir, io);
+		long started = System.nanoTime();
 		service.benchmarkStarted(null);
 		service.benchmarkSweep(null, true);
 		StutterRings rings = StutterMonitor.rings();
 		assertNotNull(rings, "the sweep started the benchmark's capture");
-		long[] sample = new long[StutterRings.SAMPLE_STRIDE];
-		sample[StutterRings.S_TIME] = System.nanoTime();
-		sample[StutterRings.S_WINDOW] = 250 * MS;
-		sample[StutterRings.S_DH_WORLD_GEN] = 2 * 250 * MS;
-		rings.sample(sample);
+		worldGen(rings, 2);
+		service.benchmarkSweep(null, false);
+		worldGen(rings, 6);
+		service.benchmarkSweep(null, true);
+		worldGen(rings, 1);
 		service.benchmarkFinished(null, true);
 		Double cores = service.lastBenchmarkDhWorldGenCores();
 		assertNotNull(cores);
-		assertTrue(cores > 0, "world generation ran during the sweep: " + cores);
+		// The capture's own sampler adds a 250 ms window of its own after about half a second; a slower run can't be exact.
+		org.junit.jupiter.api.Assumptions.assumeTrue(System.nanoTime() - started < 400 * MS, "the run took under 400 ms");
+		assertEquals(1.5, cores, 1e-9, "the two sweeps' windows (2 and 1 cores), not the one between them (6)");
 
 		service.benchmarkStarted(null);
 		service.benchmarkSweep(null, true);

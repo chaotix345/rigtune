@@ -109,7 +109,8 @@ public final class StutterSummary {
 		int total = 0;
 		for (String cause : Attributor.CAUSES) {
 			Double share = causes.get(cause);
-			int percent = share == null ? 0 : (int) Math.round(share * 100);
+			// A hand-edited file can hold any number: at most 100 each, so the trimming below stays short.
+			int percent = share == null ? 0 : (int) Math.round(Math.max(0, Math.min(1, share)) * 100);
 			if (percent > 0) {
 				out.put(cause, percent);
 				total += percent;

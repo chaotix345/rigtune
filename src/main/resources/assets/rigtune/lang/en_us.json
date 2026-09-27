@@ -469,6 +469,7 @@
 	"rigtune.stutter.phase_unavailable": "Phase timing unavailable: chunk loading, ticks and rendering can't be measured separately.",
 	"rigtune.stutter.resume": "Resume",
 	"rigtune.stutter.settings.advice": "The advice uses the settings at the end of the session.",
+	"rigtune.stutter.settings.advice.live": "The advice uses the current settings.",
 	"rigtune.stutter.settings.change": "%s %s → %s",
 	"rigtune.stutter.settings.changed": "Settings changed during this session (%s)",
 	"rigtune.stutter.settings.dh_rendering": "Distant Horizons rendering",

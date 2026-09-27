@@ -26,11 +26,15 @@ final class SettingsWatch {
 	static final int DH_RENDERING = 1 << 3;
 	static final int RELOAD = 1 << 4;
 	static final int OPTIONAL_EVERY_TICKS = 20;
+	// A reload that lasts keeps its window open: its RELOAD bit repeats every 5 s while the loading overlay is up.
+	static final int RELOAD_REPEAT_TICKS = 100;
 
 	private static boolean registered;
 	private static boolean iris;
 	private static boolean dh;
 	private static final State STATE = new State();
+	// The session whose check threw: no more checks (or warnings) until another session starts.
+	private static StutterMonitor.@Nullable Capture failed;
 
 	private SettingsWatch() {
 	}
@@ -72,8 +76,10 @@ final class SettingsWatch {
 		}
 	}
 
-	private static void tick(Minecraft minecraft) {
-		if (StutterMonitor.session() == null) {
+	// The listener (package-private for SettingsWatchTest).
+	static void tick(Minecraft minecraft) {
+		StutterMonitor.Capture session = StutterMonitor.session();
+		if (session == null || session == failed) {
 			STATE.disarm();
 			return;
 		}
@@ -85,11 +91,12 @@ final class SettingsWatch {
 				changed |= STATE.checkOptional(iris && OptionalMods.shadersInUse(), dh && OptionalMods.dhRendering(), now);
 			}
 			if (changed != 0) {
-				StutterMonitor.event(StutterRings.SETTINGS_CHANGED, STATE.since(), changed);
+				StutterMonitor.event(StutterRings.SETTINGS_CHANGED, STATE.since(), changed | STATE.leadMillis(now) << StutterRings.SETTINGS_LEAD_SHIFT);
 			}
 		} catch (RuntimeException e) {
-			RigTune.LOGGER.warn("Stutter Doctor: the settings check failed; settings changes aren't tagged in this session", e);
+			failed = session;
 			STATE.disarm();
+			RigTune.LOGGER.warn("Stutter Doctor: the settings check failed; settings changes aren't tagged in this session", e);
 		}
 	}
 
@@ -116,6 +123,7 @@ final class SettingsWatch {
 		private int renderDistance;
 		private int simulationDistance;
 		private boolean overlay;
+		private int overlayTicks;
 		private long lastCheck;
 		private boolean optionalArmed;
 		private boolean shaders;
@@ -144,6 +152,10 @@ final class SettingsWatch {
 				}
 				if (overlay != this.overlay) {
 					changed |= RELOAD;
+					overlayTicks = 0;
+				} else if (overlay && ++overlayTicks >= RELOAD_REPEAT_TICKS) {
+					changed |= RELOAD;
+					overlayTicks = 0;
 				}
 			}
 			since = lastCheck;
@@ -183,6 +195,11 @@ final class SettingsWatch {
 		// When the last change's old value was last seen (nanos).
 		long since() {
 			return since;
+		}
+
+		// How long before `now` that was, in whole milliseconds.
+		long leadMillis(long now) {
+			return Math.max(0, now - since) / 1_000_000L;
 		}
 	}
 }

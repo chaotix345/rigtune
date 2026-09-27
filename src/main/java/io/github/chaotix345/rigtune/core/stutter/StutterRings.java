@@ -30,6 +30,9 @@ public final class StutterRings {
 	public static final int PAUSE_END = 8;
 	// v0.5 RW-11: a setting changed or resources reloaded while a session ran; value: the SettingsWatch bits of what changed.
 	public static final int SETTINGS_CHANGED = 9;
+	// A SETTINGS_CHANGED value's bits from here up: the ms between the event's time (the old value last seen) and the check
+	// that saw the change.
+	public static final int SETTINGS_LEAD_SHIFT = 16;
 
 	// GC records.
 	public static final int GC_STRIDE = 5;
