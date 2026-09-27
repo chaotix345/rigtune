@@ -215,6 +215,29 @@ def gametestJar = tasks.register("gametestJar", Jar) {
 	archiveClassifier = "gametest"
 }
 
+// v0.5 (ws-ci, SPEC 1g): which game-test classes a run gets, and their wall times. -PgametestClasses=A,B (simple names;
+// build.yml passes a split part's slice from tools/gametest_matrix.py; empty or unset = every class) keeps those, in
+// fabric.mod.json's order. Every class kept runs through TimedGameTests, which logs its wall time.
+def gametestClasses = providers.gradleProperty("gametestClasses").map { it.split(",")*.trim().findAll { !it.isEmpty() } }.orElse([])
+tasks.named("processGametestResources") {
+	inputs.property("gametestClasses", gametestClasses)
+	doLast {
+		File file = new File(destinationDir, "fabric.mod.json")
+		def mod = new groovy.json.JsonSlurper().parse(file)
+		List<String> entries = mod.entrypoints["fabric-client-gametest"]
+		List<String> wanted = gametestClasses.get()
+		def unknown = wanted - entries.collect { it.substring(it.lastIndexOf('.') + 1) }
+		if (!unknown.isEmpty()) {
+			throw new GradleException("-PgametestClasses: no game-test class named " + unknown.join(", "))
+		}
+		mod.entrypoints["fabric-client-gametest"] = entries
+				.findAll { wanted.isEmpty() || it.substring(it.lastIndexOf('.') + 1) in wanted }
+				.collect { [adapter: "rigtune-timed", value: it] }
+		mod.languageAdapters = ["rigtune-timed": "io.github.chaotix345.rigtune.gametest.TimedGameTests"]
+		file.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(mod)) + "\n", "UTF-8")
+	}
+}
+
 interface InjectedFs {
 	@javax.inject.Inject
 	FileSystemOperations getFs()

@@ -1,4 +1,4 @@
-"""Rules for the CI workflows (docs/v0.5/SPEC.md AC1a.1, AC1c.3; docs/v0.5/design/ws-ci.md).
+"""Rules for the CI workflows (docs/v0.5/SPEC.md AC1a.1, AC1a.3, AC1c.3, 1e, 1g; docs/v0.5/design/ws-ci.md).
 
 The workflows are read with a small parser for their fixed shape (jobs -> steps -> keys, block scalars), since the tools
 use the standard library only.
@@ -120,6 +120,22 @@ class BuildWorkflowTests(unittest.TestCase):
         self.assertIn("unshare --net", script)
         self.assertIn("ip link set lo up", script)
 
+    # AC1a.3: loopback carries multicast in the namespace, checked on every leg before the game tests.
+    def test_every_leg_checks_loopback_multicast_in_the_namespace(self):
+        script = (ROOT / "tools" / "ci" / "offline.sh").read_text(encoding="utf-8")
+        self.assertIn("ip link set lo multicast on", script)
+        self.assertIn("ip route add 224.0.0.0/4 dev lo", script)
+        steps = self.jobs["client-gametest"]["steps"]
+        names = [s.get("name") for s in steps]
+        check = names.index("Check loopback multicast")
+        self.assertEqual("tools/ci/offline.sh java tools/ci/MulticastCheck.java", steps[check]["run"].strip())
+        self.assertNotIn("if", steps[check])
+        self.assertLess(names.index("Resolve dependencies (network)"), check)
+        self.assertLess(check, names.index("Client game tests"))
+        source = (ROOT / "tools" / "ci" / "MulticastCheck.java").read_text(encoding="utf-8")
+        self.assertIn('"224.0.2.60"', source)
+        self.assertIn("new MulticastSocket(4445)", source)
+
     def test_no_step_ignores_its_failure(self):
         self.assertNotIn("continue-on-error", self.text)
 
@@ -130,20 +146,53 @@ class BuildWorkflowTests(unittest.TestCase):
         self.assertGreaterEqual(int(game["timeout-minutes"]), 15)
         self.assertGreater(int(job["keys"]["timeout-minutes"]), int(game["timeout-minutes"]))
         self.assertIn("kill -QUIT", game["run"])
+        # The game's JVM runs KnotClient; Gradle's and the fake Modrinth's JVMs are java too (SPEC 1e).
+        self.assertIn("pgrep -f KnotClient", game["run"])
         self.assertIn("/proc/$p/comm", game["run"])
 
+    # SPEC 1g: the dormant split. A part's classes reach both Gradle steps, and its artifacts and job name say which part.
+    def test_a_split_part_reaches_gradle_and_names_its_artifacts(self):
+        job = self.jobs["client-gametest"]
+        self.assertIn("GAMETEST_CLASSES: ${{ matrix.classes }}", self.text)
+        self.assertIn("matrix.part", job["keys"]["name"])
+        for s in job["steps"]:
+            if s.get("name") in ("Resolve dependencies (network)", "Client game tests"):
+                self.assertIn('"-PgametestClasses=$GAMETEST_CLASSES"', s["run"], s["name"])
+        artifacts = re.findall(r"^\s+name: ((?:gametest|footprint)-.*)$", self.text.split("  client-gametest:")[1].split("\n  python:")[0], re.M)
+        self.assertEqual(3, len(artifacts))
+        for name in artifacts:
+            self.assertTrue(name.endswith("${{ matrix.suffix }}"), name)
+        matrix = [s for s in self.jobs["gametest-matrix"]["steps"] if s.get("id") == "matrix"][0]
+        self.assertIn('${PARTS:+--parts "$PARTS"}', matrix["run"])
 
-class AllWorkflowsTests(unittest.TestCase):
-    # AC1c.3: a fixed environment: no moving runner image, a patch-pinned JDK.
+
+class StreakWorkflowsTests(unittest.TestCase):
+    # The workflows in the 5-run acceptance (build.yml, and WS-E's e2e.yml once it exists) and release.yml.
+    FILES = [WORKFLOWS / name for name in ("build.yml", "e2e.yml", "release.yml") if (WORKFLOWS / name).exists()]
+
+    # AC1c.3: a fixed environment: no moving runner image, a patch-pinned JDK. snapshot-canary.yml and update-rules.yml
+    # aren't in the streak and stay as they are.
     def test_pinned_runner_and_jdk(self):
-        files = sorted(WORKFLOWS.glob("*.yml"))
-        self.assertTrue(files)
-        for file in files:
+        self.assertIn(WORKFLOWS / "build.yml", self.FILES)
+        self.assertIn(WORKFLOWS / "release.yml", self.FILES)
+        for file in self.FILES:
             text = file.read_text(encoding="utf-8")
             for runner in re.findall(r"runs-on:\s*(\S+)", text):
                 self.assertRegex(runner, r"^ubuntu-\d\d\.\d\d$", file.name)
             for version in re.findall(r"java-version:\s*(\S+)", text):
                 self.assertRegex(version.strip("'\""), r"^\d+\.\d+\.\d+$", file.name)
+
+    # AC1a.1 for e2e.yml (SPEC 1a): outside a download step ("... (network)"), every Gradle command runs --offline.
+    def test_e2e_gradle_runs_offline(self):
+        file = WORKFLOWS / "e2e.yml"
+        if not file.exists():
+            self.skipTest("e2e.yml doesn't exist yet (WS-E)")
+        for name, job in parse_jobs(file.read_text(encoding="utf-8")).items():
+            for s in job["steps"]:
+                if "(network)" in s.get("name", ""):
+                    continue
+                for command in gradle_commands(s.get("run", "")):
+                    self.assertIn("--offline", command, f"e2e.yml {name} / {s.get('name')}: {command}")
 
 
 class CheckFakeModrinthTests(unittest.TestCase):
