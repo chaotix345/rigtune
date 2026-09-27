@@ -9,8 +9,8 @@ import net.fabricmc.loader.api.FabricLoader;
 import java.nio.file.Path;
 
 // Every game-test class that turns RigTune's network switch off (X1) or back on goes through here (v0.5 ws-ci). The switch
-// is saved, the controller rescans (settingsChanged), and the call returns once the report built after that is published
-// with the matching online state: offline with the network off; with it on (and Modrinth allowed), online, from the fake
+// is saved, the controller rescans (settingsChanged), and the call returns once a report built after that (a new instance,
+// not the one from before the switch) is published with the matching online state: offline with the network off; with it on (and Modrinth allowed), online, from the fake
 // Modrinth the production game tests run against. Flipping ClientSettings.networkEnabled alone left the report on screen
 // online or offline depending on when something else rebuilt it (BenchmarkHistoryGameTest's screenshots, WS-X).
 final class GameTestNet {
@@ -26,7 +26,9 @@ final class GameTestNet {
 
 	static boolean set(ClientGameTestContext context, RigTuneController controller, Path configDir, boolean on) {
 		boolean before = context.computeOnClient(mc -> ClientSettings.shared(configDir).networkEnabled);
+		Report[] old = new Report[1];
 		boolean online = context.computeOnClient(mc -> {
+			old[0] = controller.report();
 			ClientSettings settings = ClientSettings.shared(configDir);
 			settings.networkEnabled = on;
 			settings.save(configDir);
@@ -35,7 +37,7 @@ final class GameTestNet {
 		});
 		context.waitFor(mc -> {
 			Report report = controller.report();
-			return report != null && report.online() == online;
+			return report != null && report != old[0] && report.online() == online;
 		}, TIMEOUT_TICKS);
 		return before;
 	}

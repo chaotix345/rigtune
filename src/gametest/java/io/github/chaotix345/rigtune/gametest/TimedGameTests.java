@@ -8,9 +8,9 @@ import net.fabricmc.loader.api.ModContainer;
 
 // Every game-test class runs through here (build.gradle's processGametestResources routes each fabric-client-gametest
 // entrypoint to this adapter): the class is made by Fabric's default adapter, and its wall time goes into the log as
-// "Game-test class <Name> finished in <ms> ms" (or "failed", when runTest threw), per leg and part, for tools/ci_streak.py
-// (docs/v0.5/SPEC.md 1g). "finished" isn't "passed": Fabric's own checks after runTest (back on the title screen, no
-// server left) can still fail the class.
+// "Game-test class <Name> runTest returned in <ms> ms" (or "runTest threw"), per leg and part, for tools/ci_streak.py
+// (docs/v0.5/SPEC.md 1g). Returning isn't passing: Fabric's own checks after runTest (back on the title screen, no server
+// left) can still fail the class.
 public final class TimedGameTests implements LanguageAdapter {
 	@Override
 	public <T> T create(ModContainer mod, String value, Class<T> type) throws LanguageAdapterException {
@@ -22,12 +22,12 @@ public final class TimedGameTests implements LanguageAdapter {
 		String name = value.substring(value.lastIndexOf('.') + 1);
 		return type.cast((FabricClientGameTest) context -> {
 			long start = System.nanoTime();
-			String outcome = "failed";
+			String outcome = "threw";
 			try {
 				test.runTest(context);
-				outcome = "finished";
+				outcome = "returned";
 			} finally {
-				RigTune.LOGGER.info("Game-test class {} {} in {} ms", name, outcome, (System.nanoTime() - start) / 1_000_000);
+				RigTune.LOGGER.info("Game-test class {} runTest {} in {} ms", name, outcome, (System.nanoTime() - start) / 1_000_000);
 			}
 		});
 	}

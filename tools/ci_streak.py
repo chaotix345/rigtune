@@ -28,9 +28,9 @@ REQUIRED_JOBS = ("java", "python", "gametest-matrix", "rules-consistency", "rule
 REQUIRED_LEGS = ("26.2, OpenGL", "26.3, OpenGL", "26.3, Vulkan")
 GAME_TEST_PREFIX = "client game tests ("
 COUNTED_EVENTS = ("push", "workflow_dispatch")
-CLASS_LINE = re.compile(r"Game-test class (\w+) (finished|failed) in (\d+) ms")
+CLASS_LINE = re.compile(r"Game-test class (\w+) runTest (returned|threw) in (\d+) ms")
 REQUESTS_LINE = re.compile(r"(\d+) requests to the fake Modrinth")
-RATIO_LINE = re.compile(r'"(tickHookOnVsReference|tickHookOnTwinVsReference)": ([0-9.]+)')
+RATIO_LINE = re.compile(r'"(tickHookOnVsReference|tickHookOnTwinVsReference)": ([-0-9.eE+]+)')
 
 
 def gh_text(args):
@@ -113,8 +113,12 @@ def streak(runs, jobs_of, sha=None, extra=()):
 
 
 def leg_details(log):
-    """From a game-test job's log: [(class, outcome, ms)], the fake Modrinth's request count and the tick ratios."""
-    classes = [(m.group(1), m.group(2), int(m.group(3))) for m in CLASS_LINE.finditer(log)]
+    """From a game-test job's log: [(class, outcome, ms)] (each class once), the fake Modrinth's request count and the tick
+    ratios."""
+    classes = {}
+    for m in CLASS_LINE.finditer(log):
+        classes.setdefault(m.group(1), (m.group(1), m.group(2), int(m.group(3))))
+    classes = list(classes.values())
     requests = REQUESTS_LINE.search(log)
     ratios = {m.group(1): float(m.group(2)) for m in RATIO_LINE.finditer(log)}
     return {"classes": classes, "requests": int(requests.group(1)) if requests else None, "ratios": ratios}
@@ -138,7 +142,7 @@ def describe_leg(name, details):
     if ratio is not None:
         parts.append("tickHookOnVsReference %.3f (twin %.3f)" % (ratio, details["ratios"].get("tickHookOnTwinVsReference", float("nan"))))
     if details["classes"]:
-        parts.append("classes: " + ", ".join("%s %.1f s%s" % (c, ms / 1000, "" if outcome == "finished" else " FAILED")
+        parts.append("classes: " + ", ".join("%s %.1f s%s" % (c, ms / 1000, "" if outcome == "returned" else " THREW")
                                              for c, outcome, ms in details["classes"]))
     return name + ": " + ("; ".join(parts) if parts else "nothing recorded")
 

@@ -520,15 +520,34 @@ tasks.named("runProductionClientGameTest") {
 }
 
 // RigTune's post-exit apply helper can still be writing into the run folder after the game has exited (a pending apply is
-// left only when a subset of the classes runs). It starts at exit, settles 2 s (ApplyHelper.SETTLE_MILLIS), then holds
-// config/rigtune/apply.lock while it applies, and deletes pending.json once everything is applied. A finalizer, so a failed
-// run waits too: the next run's wipe and the uploaded artifacts see a finished folder.
+// left only when a subset of the classes runs). The game starts it on its way out, so it exists once the game has exited;
+// it settles 2 s (ApplyHelper.SETTLE_MILLIS), then holds config/rigtune/apply.lock while it applies, and deletes
+// pending.json once everything is applied. A finalizer, so a failed run waits too: the next run's wipe and the uploaded
+// artifacts see a finished folder. Up to 60 s. Where the OS shows command lines (Linux: CI) it waits for the helper process
+// itself, the one with ApplyHelper and this run's pending.json on its command line. Windows' ProcessHandle shows none, so
+// there it waits until pending.json is gone or, after 10 s, apply.lock is free.
 tasks.register("awaitApplyHelper") {
 	def rigtuneDir = productionGameTestRunDir.map { it.dir("config/rigtune").asFile }
 	doLast {
 		File pending = new File(rigtuneDir.get(), "pending.json")
 		File lock = new File(rigtuneDir.get(), "apply.lock")
+		String pendingPath = rootProject.relativePath(pending)
 		long start = System.nanoTime()
+		if (ProcessHandle.current().info().commandLine().present) {
+			def helpers = {
+				ProcessHandle.allProcesses().filter { p ->
+					p.info().commandLine().map { it.contains("ApplyHelper") && it.contains(pendingPath) }.orElse(false)
+				}.count()
+			}
+			long found = helpers()
+			while (helpers() > 0 && System.nanoTime() - start < 60_000_000_000L) {
+				Thread.sleep(250)
+			}
+			if (found > 0) {
+				logger.lifecycle("awaitApplyHelper: waited ${(System.nanoTime() - start).intdiv(1_000_000L)} ms for the apply helper process; ${helpers() > 0 ? 'still running' : 'it exited'}")
+			}
+			return
+		}
 		while (pending.exists() && System.nanoTime() - start < 60_000_000_000L) {
 			// Past the settle delay, with room for the helper's JVM start, a free lock means the helper is done (or never ran).
 			if (System.nanoTime() - start > 10_000_000_000L && lock.exists()) {

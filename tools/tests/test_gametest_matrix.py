@@ -169,6 +169,15 @@ class GametestMatrixTests(unittest.TestCase):
         halves = gm.split(classes, 2)
         self.assertEqual(classes, halves[0] + halves[1])
 
+    # FootprintGameTest runs second to last, just before A11yGameTest, with the split off or on.
+    def test_footprint_stays_second_to_last_in_its_part(self):
+        repo = Path(__file__).resolve().parent.parent.parent
+        classes = gm.game_test_classes(repo)
+        for parts in (1, 2):
+            with self.subTest(parts=parts):
+                part = [p for p in gm.split(classes, parts) if "FootprintGameTest" in p][0]
+                self.assertEqual(["FootprintGameTest", "A11yGameTest"], part[-2:])
+
     def test_repository_nodes_all_listed(self):
         repo = Path(__file__).resolve().parent.parent.parent
         on_disk = sorted(p.name for p in (repo / "versions").iterdir() if p.is_dir() and not p.name.startswith("."))
