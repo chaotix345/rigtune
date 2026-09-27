@@ -159,11 +159,15 @@ public final class ApplyExecutor {
 	// replays last-apply.json. An abandoned op is never still in pending.json once last-apply.json says so, where a later
 	// run could apply it after History has called it abandoned. The record of the groups' renames (UnfinishedGroups) is
 	// pruned only once last-apply.json is written, so a redo still reports where each file went.
+	// The last-apply.json this run replaces is read first: its done ops prove the renames of a run that died after writing
+	// it and before rewriting pending.json (docs/v0.5/SPEC.md 4f, RW-1).
 	public ApplyResult run(PendingActions plan, Path pendingFile) throws IOException {
 		Path configDir = InstanceDirs.configDirOf(pendingFile);
 		Path modsDir = InstanceDirs.modsDirOf(pendingFile);
 		UnfinishedGroups unfinished = UnfinishedGroups.load(configDir);
-		ApplyResult result = new ApplyResult(Instant.now().toString(), giveUpOnRepeatFailures(execute(plan, modsDir, configDir, unfinished)));
+		Map<String, OpResult> doneBefore = doneBefore(ApplyResult.defaultPath(configDir));
+		ApplyResult result = new ApplyResult(Instant.now().toString(),
+				giveUpOnRepeatFailures(execute(plan, modsDir, configDir, unfinished, doneBefore)));
 		writeRemaining(plan, pendingFile, result, modsDir, EnumSet.of(Status.ABANDONED), true);
 		result.save(ApplyResult.defaultPath(configDir));
 		unfinished.prune(plan.ops().stream().filter(Objects::nonNull).map(Op::id).filter(Objects::nonNull).toList());
@@ -268,7 +272,32 @@ public final class ApplyExecutor {
 		}
 	}
 
+	// The ops the last run renamed itself, by op id: OK, or done earlier with its resultPath (never a bare "already
+	// done", which proves nothing). Empty when there is no readable last-apply.json: the safe side.
+	static Map<String, OpResult> doneBefore(Path lastApply) {
+		if (!Files.isRegularFile(lastApply)) {
+			return Map.of();
+		}
+		try {
+			Map<String, OpResult> out = new HashMap<>();
+			for (OpResult r : ApplyResult.load(lastApply).results()) {
+				if (r != null && r.op() != null && r.op().id() != null
+						&& (r.status() == Status.OK || r.status() == Status.SKIPPED_ALREADY_DONE && r.resultPath() != null)) {
+					out.put(r.op().id(), r);
+				}
+			}
+			return out;
+		} catch (IOException | RuntimeException e) {
+			ApplyHelper.log("Could not read " + LogSafe.name(lastApply) + "; no op counts as done by the last run: " + LogSafe.error(e, lastApply));
+			return Map.of();
+		}
+	}
+
 	List<OpResult> execute(PendingActions plan, Path modsDir, Path configDir, UnfinishedGroups unfinished) {
+		return execute(plan, modsDir, configDir, unfinished, Map.of());
+	}
+
+	List<OpResult> execute(PendingActions plan, Path modsDir, Path configDir, UnfinishedGroups unfinished, Map<String, OpResult> doneBefore) {
 		List<Op> ops = plan.ops();
 		Map<String, List<Integer>> groups = new LinkedHashMap<>();
 		for (int i = 0; i < ops.size(); i++) {
@@ -279,7 +308,7 @@ public final class ApplyExecutor {
 		OpResult[] out = new OpResult[ops.size()];
 		InstalledJars installed = new InstalledJars(modsDir, this::jarModId);
 		for (List<Integer> members : groups.values()) {
-			runGroup(ops, members, modsDir, configDir, installed, unfinished, out);
+			runGroup(ops, members, modsDir, configDir, installed, unfinished, doneBefore, out);
 			members.forEach(i -> installed.forget(ops.get(i)));
 		}
 		return Arrays.asList(out);
@@ -351,6 +380,49 @@ public final class ApplyExecutor {
 		return null;
 	}
 
+	// docs/v0.5/SPEC.md 4f (RW-1): an enable whose download is gone while its jar is there, with no record of RigTune doing
+	// that rename (a recorded rename still in effect, or the last run's own result), was put there by the launcher or the
+	// player (the real-world run of 2026-09-27), so the group is dropped as installed another way instead of being reported
+	// done and journaled as RigTune's change.
+	private static String installedElsewhere(List<Op> ops, List<Integer> order, Map<Integer, Undo> earlier, Map<String, OpResult> doneBefore) {
+		for (int i : order) {
+			Op op = ops.get(i);
+			if (op.type() != PendingActions.Type.ENABLE_FILE || earlier.containsKey(i) || doneByLastRun(op, doneBefore) != null) {
+				continue;
+			}
+			if (!Files.exists(Path.of(op.from())) && Files.exists(Path.of(op.to()))) {
+				return fileName(op.to()) + " is already in the mods folder and RigTune has no record of putting it there, so it was installed another way";
+			}
+		}
+		return null;
+	}
+
+	// The op's rename as the last run did it, still in effect, reported with where the file went (so a redo of this redo
+	// still finds it proven); null when last-apply.json doesn't prove it.
+	private static OpResult doneByLastRun(Op op, Map<String, OpResult> doneBefore) {
+		OpResult before = op.id() == null ? null : doneBefore.get(op.id());
+		if (before == null || before.op() == null || before.op().type() != op.type()) {
+			return null;
+		}
+		try {
+			return switch (op.type()) {
+				case ENABLE_FILE -> before.op().to() != null && fileName(before.op().to()).equals(fileName(op.to()))
+						&& !Files.exists(Path.of(op.from())) && Files.exists(Path.of(op.to()))
+						? new OpResult(op, Status.SKIPPED_ALREADY_DONE, "Already done earlier: " + fileName(op.to()), Path.of(op.to()).toString()) : null;
+				case DISABLE_FILE -> {
+					Path path = Path.of(op.path());
+					Path moved = before.resultPath() == null ? null : path.resolveSibling(fileName(before.resultPath()));
+					yield moved != null && moved.getFileName().toString().startsWith(path.getFileName() + ".disabled")
+							&& !Files.exists(path) && Files.exists(moved)
+							? new OpResult(op, Status.SKIPPED_ALREADY_DONE, "Already done earlier: " + moved.getFileName(), moved.toString()) : null;
+				}
+				case PATCH_JSON, PATCH_TOML, PATCH_PROPERTIES -> null;
+			};
+		} catch (InvalidPathException e) {
+			return null;
+		}
+	}
+
 	// Every enable is checked with the id its jar declares: one staged without a mod id (by 0.1.0, or an Undo of a jar it
 	// couldn't read; review 3, apply-safety-1) and one staged with an id alike (review 4, apply-safety-1). Null when
 	// there is none, also after an Error (review 4, security-1): one bad jar must fail only its own check, never the helper.
@@ -378,7 +450,7 @@ public final class ApplyExecutor {
 	// as done, and if the group fails again they're rolled back with the rest. So no group ends half-applied unless a
 	// rollback fails for good, and then it stays recorded and pending.
 	private void runGroup(List<Op> ops, List<Integer> members, Path modsDir, Path configDir, InstalledJars installed,
-			UnfinishedGroups unfinished, OpResult[] out) {
+			UnfinishedGroups unfinished, Map<String, OpResult> doneBefore, OpResult[] out) {
 		List<Integer> order = new ArrayList<>(members);
 		order.sort(Comparator.comparingInt(i -> rank(ops.get(i))));
 		Op first = ops.get(order.getFirst());
@@ -413,12 +485,15 @@ public final class ApplyExecutor {
 			}
 			return;
 		}
-		String duplicate = duplicateProblem(ops, order, modIds, installed);
+		String elsewhere = installedElsewhere(ops, order, earlier, doneBefore);
+		String duplicate = elsewhere != null ? elsewhere : duplicateProblem(ops, order, modIds, installed);
 		if (duplicate != null) {
 			// What an earlier run did stays: the mod is installed another way, so putting the old jar back would load it twice.
 			for (int i : order) {
 				Undo done = earlier.get(i);
-				out[i] = done != null ? doneEarlier(ops.get(i), done) : new OpResult(ops.get(i), Status.ABANDONED, "Dropped: " + duplicate);
+				OpResult lastRun = done == null ? doneByLastRun(ops.get(i), doneBefore) : null;
+				out[i] = done != null ? doneEarlier(ops.get(i), done) : lastRun != null ? lastRun
+						: new OpResult(ops.get(i), Status.ABANDONED, "Dropped: " + duplicate);
 			}
 			unfinished.finish(group);
 			return;
@@ -439,9 +514,13 @@ public final class ApplyExecutor {
 				int i = order.get(k);
 				Op op = ops.get(i);
 				Undo done = earlier.get(i);
+				OpResult lastRun = done == null ? doneByLastRun(op, doneBefore) : null;
 				Applied applied;
 				if (done != null) {
 					applied = new Applied(doneEarlier(op, done), done);
+				} else if (lastRun != null) {
+					// Done by the last run, which finished the group: never rolled back with this pass.
+					applied = new Applied(lastRun, null);
 				} else {
 					try {
 						applied = tryOnce(op, i, targets.get(i));
