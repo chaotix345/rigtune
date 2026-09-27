@@ -42,8 +42,9 @@ public final class StutterSummary {
 			out.append(" · ").append(r.collector());
 		}
 		out.append(", ").append(r.heapMaxMb()).append(" MB heap\n");
-		out.append(String.format(Locale.ROOT, "%s (%s of gameplay) · %,d frames · avg %.0f FPS · 1%% low %.0f FPS%n", clock(r.sessionSeconds()),
-				clock(r.gameplaySeconds()), r.frames(), r.avgFps(), r.onePercentLowFps()));
+		Double window = r.windowSeconds();
+		out.append(String.format(Locale.ROOT, "%s (%s of gameplay) · %,d frames · avg %.0f FPS · 1%% low %.0f FPS%s%n", clock(r.sessionSeconds()),
+				clock(r.gameplaySeconds()), r.frames(), r.avgFps(), r.onePercentLowFps(), window == null ? "" : " (over the last " + clock(window) + ")"));
 		StutterReport.Spikes s = r.spikes();
 		out.append(String.format(Locale.ROOT, "%s (%d minor, %d major, %d severe, %s) in %s · %.1f s lost%n", count(s.total(), "spike", "spikes"), s.minor(),
 				s.major(), s.severe(), count(s.freeze(), "freeze", "freezes"), count(r.hitches(), "hitch", "hitches"), r.lostMs() / 1000));

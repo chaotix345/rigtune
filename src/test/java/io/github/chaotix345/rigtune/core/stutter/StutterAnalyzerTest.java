@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.core.stutter;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -339,6 +340,34 @@ class StutterAnalyzerTest {
 		}
 		long allocated = threads.getCurrentThreadAllocatedBytes() - before;
 		assertTrue(allocated < 64 * 1024, "20,000 GC records allocated " + allocated + " bytes");
+	}
+
+	// docs/v0.5/SPEC.md 2S SD-2 (AC2S.6; audit-verify's sd2OnePercentLowIsNeverAboveTheAverage): once the frame ring wrapped,
+	// frames, average and 1 % low all cover its window (the newest frames), and the report says how long that window is.
+	@Test
+	void sd2OnePercentLowIsNeverAboveTheAverage() {
+		FrameRing ring = new FrameRing(FrameRing.SESSION_FRAMES, FrameRing.SESSION_CANDIDATES);
+		long now = T0;
+		for (int i = 0; i < FrameRing.SESSION_FRAMES; i++) {
+			now += 20 * MS;
+			ring.frame(now, 20 * MS, false, 0, 0, 0, 0);
+		}
+		for (int i = 0; i < FrameRing.SESSION_FRAMES; i++) {
+			now += 5 * MS;
+			ring.frame(now, 5 * MS, false, 0, 0, 0, 0);
+		}
+		StutterReport report = StutterAnalyzer.analyze(new StutterAnalyzer.Input(ring.snapshot(), new StutterRings(ANCHOR).snapshot(), T0, now, STARTED,
+				StutterReport.MONITOR, "26.2", "g1", 4096, 32768L, 16, false, false)).report();
+		assertTrue(report.onePercentLowFps() <= report.avgFps(), "1% low " + report.onePercentLowFps() + " > average " + report.avgFps());
+		assertEquals(200.0, report.avgFps(), 0.1, "the window's own average");
+		assertEquals(FrameRing.SESSION_FRAMES - 1, report.frames(), "the window's frames (the first held one has no duration)");
+		assertEquals(3276.8, report.gameplaySeconds(), 0.1, "gameplay time is still the whole capture's");
+		assertEquals(655.4, report.windowSeconds(), 0.5, "the window: its frames at its average");
+
+		Capture shortCapture = new Capture().frames(180, Map.of(20, 80 * MS), false);
+		StutterReport whole = shortCapture.analyze(true).report();
+		assertNull(whole.windowSeconds(), "a capture shorter than the ring has no window to name");
+		assertEquals(Arrays.stream(whole.histogramCounts()).sum(), whole.frames());
 	}
 
 	// Review finding 2: what the capture couldn't measure stays UNKNOWN for the rules (also under `not`).

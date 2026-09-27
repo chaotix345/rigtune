@@ -145,14 +145,18 @@ public final class StutterAnalyzer {
 
 		double gameplaySeconds = f.gameplayNanos() / 1e9;
 		FrameStats stats = FrameStats.of(gameplayDurations(ends));
+		// SD-2: once the frame ring wrapped, frames, average and 1 % low all describe its window (StutterReport.windowSeconds).
+		boolean wrapped = f.frames() > ends.length;
+		long frames = wrapped ? stats.frames() : f.gameplayFrames();
+		double avgFps = wrapped ? stats.avgFps() : gameplaySeconds > 0 ? f.gameplayFrames() / gameplaySeconds : 0;
 		long[] histogramMs = Arrays.stream(f.histogramNanos()).map(ns -> Math.round(ns / 1e6)).toArray();
 		boolean enough = spikes.size() >= MIN_SPIKES && gameplaySeconds >= MIN_GAMEPLAY_SECONDS;
 		int hitches = SpikeDetector.hitches(spikes).size();
 		StutterReport.Facts facts = new StutterReport.Facts(gc.liveSetPercent() == null ? null : (int) Math.round(gc.liveSetPercent()), gc.fullPauses(),
 				gc.stalls(), gc.explicit(), in.rings().clock().calibrated() ? round(in.rings().clock().offsetMs(), 1) : null);
 		StutterReport report = new StutterReport(in.startedAt().toString(), in.source(), in.mc(), displayName(in.collector()), in.heapMaxMb(),
-				round((in.endNanos() - in.startNanos()) / 1e9, 1), round(gameplaySeconds, 1), f.gameplayFrames(),
-				round(gameplaySeconds > 0 ? f.gameplayFrames() / gameplaySeconds : 0, 1), round(stats.onePercentLowFps(), 1), f.histogramCounts().clone(),
+				round((in.endNanos() - in.startNanos()) / 1e9, 1), round(gameplaySeconds, 1), frames, round(avgFps, 1), round(stats.onePercentLowFps(), 1),
+				f.histogramCounts().clone(),
 				histogramMs, new StutterReport.Spikes(severity[0], severity[1], severity[2], severity[3]), round(lost / 1e6, 1), causes, tags, worst, facts,
 				List.of(), enough, in.phaseTiming(), hitches);
 

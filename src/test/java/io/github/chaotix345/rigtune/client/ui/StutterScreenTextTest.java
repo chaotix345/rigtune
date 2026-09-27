@@ -51,6 +51,17 @@ class StutterScreenTextTest {
 		assertEquals("Rendering ● · chunks loading", StutterScreen.notes(List.of("render:low", "chunksLoading:context")).getString());
 	}
 
+	// docs/v0.5/SPEC.md 2S SD-2 (AC2S.6): the header's frames line names the window its numbers cover, when there is one.
+	@Test
+	void theFramesLineNamesTheWindow() {
+		StutterReport r = report(new StutterReport.Spikes(9, 2, 1, 0), 9, Map.of(), Map.of());
+		StutterReport windowed = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), 3300, 3276.8, 131_071, 200.0, 200.0,
+				new long[]{0, 131_072, 131_072, 0, 0, 0, 0, 0, 0}, r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(), r.tags(), r.worst(), r.facts(),
+				r.advice(), true, true, r.hitches());
+		assertEquals("131,071 frames · average 200 FPS · 1% low 200 FPS over the last 10:55 of gameplay", StutterScreen.framesLine(windowed).getString());
+		assertEquals("10,000 frames · average 60 FPS · 1% low 30 FPS", StutterScreen.framesLine(r).getString());
+	}
+
 	@Test
 	void theBenchmarkLineCountsOneSpike() {
 		assertEquals("Stutter Doctor: 1 spike during the sweeps; no cause measured",

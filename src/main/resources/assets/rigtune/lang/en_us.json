@@ -459,6 +459,7 @@
 	"rigtune.stutter.tag.one": "The spike happened during %s (not measured)",
 	"rigtune.stutter.tag.world_save": "world saves",
 	"rigtune.stutter.title": "Stutter Doctor",
+	"rigtune.stutter.window.frames": "%s frames · average %s FPS · 1%% low %s FPS over the last %s of gameplay",
 	"rigtune.stutter.worst": "Worst spikes",
 	"rigtune.stutter.worst.row": "%s  %s ms (usual %s ms)  %s",
 	"rigtune.stutter.worst.unexplained": "not explained",

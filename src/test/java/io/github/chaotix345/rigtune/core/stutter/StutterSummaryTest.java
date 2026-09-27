@@ -66,6 +66,23 @@ class StutterSummaryTest {
 		assertEquals("chunks loading", StutterSummary.notes(List.of("chunksLoading:context")));
 	}
 
+	// docs/v0.5/SPEC.md 2S SD-2 (AC2S.6): when frames, average and 1 % low cover only the frame ring's window, the line says
+	// so; a session shorter than the ring (every gameplay frame in the histogram is counted in frames) doesn't.
+	@Test
+	void theWindowIsNamedOnlyWhenTheCaptureIsLonger() {
+		StutterReport r = report(true, true, 21.7);
+		StutterReport windowed = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), 3300, 3276.8, 131_071, 200.0, 200.0,
+				new long[]{0, 131_072, 131_072, 0, 0, 0, 0, 0, 0}, r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(), r.tags(), r.worst(), r.facts(),
+				r.advice(), true, true, r.hitches());
+		assertTrue(StutterSummary.text(windowed, List.of()).contains("· 131,071 frames · avg 200 FPS · 1% low 200 FPS (over the last 10:55)" + System.lineSeparator()),
+				StutterSummary.text(windowed, List.of()));
+		StutterReport whole = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(),
+				36, r.avgFps(), r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(), r.tags(), r.worst(),
+				r.facts(), r.advice(), true, true, r.hitches());
+		assertFalse(StutterSummary.text(whole, List.of()).contains("over the last"));
+		assertFalse(StutterSummary.text(r, List.of()).contains("over the last"), "a 0.4 session: never");
+	}
+
 	@Test
 	void caveatsAreSpelledOut() {
 		String text = StutterSummary.text(report(false, false, null), List.of());

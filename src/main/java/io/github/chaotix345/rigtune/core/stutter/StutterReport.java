@@ -77,6 +77,18 @@ public record StutterReport(String startedAt, String source, @Nullable String mc
 	public record Facts(@Nullable Integer liveSetPct, int fullGcs, int stalls, int explicitGcs, @Nullable Double gcOffsetMs) {
 	}
 
+	// v0.5 SD-2 (docs/v0.5/SPEC.md 2S): once a capture outgrew the frame ring, frames, avgFps and onePercentLowFps cover the
+	// ring's window (its newest frames); every gameplay frame of the capture is still in the histogram, so then the
+	// histogram holds more frames than `frames`. The window's length in seconds, or null when the numbers cover the whole
+	// capture (always so in a 0.4 session).
+	public @Nullable Double windowSeconds() {
+		long all = 0;
+		for (long n : histogramCounts) {
+			all += n;
+		}
+		return all > frames && avgFps > 0 ? frames / avgFps : null;
+	}
+
 	public StutterReport withAdvice(List<String> ids) {
 		return new StutterReport(startedAt, source, mc, collector, heapMaxMb, sessionSeconds, gameplaySeconds, frames, avgFps, onePercentLowFps,
 				histogramCounts, histogramTimeMs, spikes, lostMs, causes, tags, worst, facts, List.copyOf(ids), enoughData, phaseTiming, hitches,

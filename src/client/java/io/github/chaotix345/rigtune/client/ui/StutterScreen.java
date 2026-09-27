@@ -191,8 +191,7 @@ public class StutterScreen extends Screen {
 				? Component.translatable("rigtune.stutter.header.time.benchmark", clock(r.gameplaySeconds()))
 				: Component.translatable("rigtune.stutter.header.time.monitor", clock(r.sessionSeconds()), clock(r.gameplaySeconds()));
 		text(l, time, COLOR_TEXT, width, ROW_GAP);
-		text(l, Component.translatable("rigtune.stutter.header.frames", number(r.frames()), number(r.avgFps()), number(r.onePercentLowFps())), COLOR_TEXT,
-				width, 0);
+		text(l, framesLine(r), COLOR_TEXT, width, 0);
 		text(l, spikesLine(r), COLOR_TEXT, width, 0);
 		if (!r.enoughData()) {
 			text(l, Component.translatable("rigtune.stutter.not_enough"), COLOR_NOTE, width, 0);
@@ -203,6 +202,15 @@ public class StutterScreen extends Screen {
 		if (!r.phaseTiming()) {
 			text(l, Component.translatable("rigtune.stutter.phase_unavailable"), COLOR_LABEL, width, 0);
 		}
+	}
+
+	// "97,000 frames · average 119 FPS · 1% low 61 FPS", and when those cover only the frame ring's window (v0.5 SD-2)
+	// "... over the last 13:15 of gameplay".
+	static Component framesLine(StutterReport r) {
+		Double window = r.windowSeconds();
+		return window == null
+				? Component.translatable("rigtune.stutter.header.frames", number(r.frames()), number(r.avgFps()), number(r.onePercentLowFps()))
+				: Component.translatable("rigtune.stutter.window.frames", number(r.frames()), number(r.avgFps()), number(r.onePercentLowFps()), clock(window));
 	}
 
 	// "12 spikes (9 minor, 2 major, 1 severe, 0 freezes) in 9 hitches, 1.8 s lost", singular where the count is 1 (review-8
