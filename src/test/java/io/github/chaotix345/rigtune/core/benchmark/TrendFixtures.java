@@ -106,6 +106,12 @@ final class TrendFixtures {
 			return this;
 		}
 
+		// docs/v0.5/SPEC.md BH-2: the ids of the changes still staged when the run started.
+		Run staged(java.util.@Nullable List<String> ids) {
+			context = context.withStagedAtStart(ids);
+			return this;
+		}
+
 		// docs/v0.5/SPEC.md RW-8: the run created the benchmark world.
 		Run fresh() {
 			context = context.withWorldFresh(true);

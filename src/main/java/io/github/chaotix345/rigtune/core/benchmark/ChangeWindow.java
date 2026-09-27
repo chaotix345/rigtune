@@ -21,6 +21,10 @@ import java.util.Set;
 // start, which may be after the baseline run (review M1): so staged changes that took effect are also listed from the
 // entries between the comparable run before the baseline and the baseline (or, without one, the entry at the baseline's
 // cursor), before the window's own.
+// docs/v0.5/SPEC.md BH-2: a 0.5 run records the ids of the changes still staged when it started (Context.stagedAtStart).
+// Those never ran during it: they are left out of that run's window and carried into the next run's, which then carries
+// exactly them instead of the M1 guess above. A run without the field (0.4) lists mod-file rows only when its mod-set hash
+// isn't the same as the baseline's (the hash is what was loaded; unknown on either side lists them, as before).
 public record ChangeWindow(boolean byCursor, List<Item> items, @Nullable String rigtuneFrom, @Nullable String rigtuneTo, boolean outsideChange) {
 	// One change row of a History entry, labelled as the History screen labels it.
 	public record Item(String entryId, String entryKind, String at, HistoryModel.Change change) {
@@ -54,17 +58,32 @@ public record ChangeWindow(boolean byCursor, List<Item> items, @Nullable String 
 			window = byTime(baseline, latest, oldestFirst);
 		}
 		List<Item> items = new ArrayList<>();
-		for (HistoryModel.Entry entry : carried(previous, baseline, oldestFirst)) {
-			for (HistoryModel.Change change : entry.changes()) {
-				boolean staged = change.row() != HistoryModel.Row.SETTING || change.changeIds().stream().anyMatch(stagedChangeIds::contains);
-				if (staged && tookEffect(change)) {
-					items.add(new Item(entry.id(), entry.kind(), entry.at(), change));
+		List<String> stagedAtBaseline = baseline.context() == null ? null : baseline.context().stagedAtStart();
+		if (stagedAtBaseline != null) {
+			for (HistoryModel.Entry entry : oldestFirst) {
+				for (HistoryModel.Change change : entry.changes()) {
+					if (tookEffect(change) && change.changeIds().stream().anyMatch(stagedAtBaseline::contains)) {
+						items.add(new Item(entry.id(), entry.kind(), entry.at(), change));
+					}
+				}
+			}
+		} else {
+			for (HistoryModel.Entry entry : carried(previous, baseline, oldestFirst)) {
+				for (HistoryModel.Change change : entry.changes()) {
+					boolean staged = change.row() != HistoryModel.Row.SETTING || change.changeIds().stream().anyMatch(stagedChangeIds::contains);
+					if (staged && tookEffect(change)) {
+						items.add(new Item(entry.id(), entry.kind(), entry.at(), change));
+					}
 				}
 			}
 		}
+		List<String> stagedAtLatest = latest.context() == null ? null : latest.context().stagedAtStart();
+		boolean sameModSet = sameModSet(baseline, latest);
 		for (HistoryModel.Entry entry : window) {
 			for (HistoryModel.Change change : entry.changes()) {
-				if (tookEffect(change)) {
+				boolean notLoaded = stagedAtLatest != null ? change.changeIds().stream().anyMatch(stagedAtLatest::contains)
+						: change.row() != HistoryModel.Row.SETTING && sameModSet;
+				if (tookEffect(change) && !notLoaded && items.stream().noneMatch(i -> i.change() == change)) {
 					items.add(new Item(entry.id(), entry.kind(), entry.at(), change));
 				}
 			}
@@ -74,6 +93,13 @@ public record ChangeWindow(boolean byCursor, List<Item> items, @Nullable String 
 		boolean modChange = items.stream().anyMatch(i -> i.change().row() != HistoryModel.Row.SETTING);
 		boolean outside = before != null && after != null && !before.equals(after) && !modChange;
 		return new ChangeWindow(byCursor, items, baseline.rigtuneVersion(), latest.rigtuneVersion(), outside);
+	}
+
+	// Both runs' mod-set hashes are known and equal: the same mods were loaded.
+	private static boolean sameModSet(BenchmarkRecord a, BenchmarkRecord b) {
+		String ha = a.context() == null ? null : a.context().modSetHash();
+		String hb = b.context() == null ? null : b.context().modSetHash();
+		return ha != null && ha.equals(hb);
 	}
 
 	private static boolean tookEffect(HistoryModel.Change change) {
