@@ -13,6 +13,7 @@ Owner: ws-ci, WS-K (the X4 render-thread flag), the 1h checkpoint after Wave B. 
 
 ## stutter
 Owner: WS-S (NEW-1's measurement, SD-*, RW-10/11, the DH bucket), WS-S2 (AC5.14's calibration run: `stutter-fixes/`).
+- `new1-generational-shenandoah/`: NEW-1's code-deciding run (AC2S.11): generational Shenandoah's notifications don't tell young from global/old cycles, so its live set is unmeasured (WS-S, 2026-09-27).
 
 ## benchmark
 Owner: WS-B (RW-5..RW-9, RW-15, BH-1/2, L3; AC2B.5's DH run with the P5 agent).

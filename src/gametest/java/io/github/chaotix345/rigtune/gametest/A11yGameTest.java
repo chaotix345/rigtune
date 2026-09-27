@@ -14,6 +14,8 @@ import io.github.chaotix345.rigtune.client.ui.PreviewScreen;
 import io.github.chaotix345.rigtune.client.ui.ProfilesScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
+import io.github.chaotix345.rigtune.client.ui.RigTuneSettingsScreen;
+import io.github.chaotix345.rigtune.client.ui.RowFocus;
 import io.github.chaotix345.rigtune.client.ui.StutterScreen;
 import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
@@ -637,6 +639,122 @@ public class A11yGameTest implements FabricClientGameTest {
 	// ---- WS-L1 (4e, 4b): RigTuneSettingsScreen's mod-files row and MOD_FILES_NEWS on NoticeScreen.
 
 	private static void walkModFilesRowAndNews(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		// PLAN-4 (WS-L1 milestone 1), X6, X12: the settings are a scrolling RowList. Tab reaches every row in order and each
+		// narrates its label; at every size each widget is inside the screen and its label fits, and where the rows don't all
+		// fit the list scrolls to its last one.
+		try {
+			openSettings(v05);
+			walkSettings(context);
+			for (int[] size : V05TestContext.SIZES) {
+				settingsLayout(v05, size, false);
+			}
+			settingsLayout(v05, V05TestContext.SCROLLING, true);
+		} finally {
+			v05.resize(854, 480, 2);
+			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
+			context.waitForScreen(TitleScreen.class);
+		}
+	}
+
+	private static void openSettings(V05TestContext v05) {
+		v05.context().runOnClient(mc -> mc.gui.setScreen(new RigTuneSettingsScreen(new TitleScreen(), v05.stub())));
+		v05.context().waitFor(mc -> mc.gui.screen() instanceof RigTuneSettingsScreen && rows(mc) >= 8, 200);
+		v05.context().getInput().setCursorPos(1, 1);
+		v05.context().waitTicks(2);
+	}
+
+	// As walk(), for a list whose switches can be inactive: this class runs with the network off, which greys out the Rules
+	// updates and Modrinth switches, and vanilla gives an inactive widget no Tab stop (as before the list). Tab visits
+	// exactly the rows whose switch is active (and the note), in order, each narrating its label, then leaves the list.
+	private static void walkSettings(ClientGameTestContext context) {
+		context.runOnClient(mc -> mc.gui.screen().clearFocus());
+		List<Integer> stops = context.computeOnClient(mc -> {
+			List<Integer> out = new ArrayList<>();
+			List<?> entries = list(mc).children();
+			for (int i = 0; i < entries.size(); i++) {
+				GuiEventListener child = ((ContainerEventHandler) entries.get(i)).children().getFirst();
+				if (!(child instanceof AbstractWidget w) || w.active) {
+					out.add(i);
+				}
+			}
+			return out;
+		});
+		check(stops.size() >= 6 && stops.getLast() == context.computeOnClient(A11yGameTest::rows) - 1, "settings: the active rows and the note: " + stops);
+		int presses = 0;
+		while (context.computeOnClient(A11yGameTest::rowIndex) == -1) {
+			check(presses++ < 40, "settings: Tab never reached the list");
+			tab(context);
+		}
+		StringBuilder narrated = new StringBuilder();
+		for (int stop : stops) {
+			String[] seen = context.computeOnClient(mc -> new String[]{Integer.toString(rowIndex(mc)), narration(mc), leafText(mc)});
+			check(Integer.parseInt(seen[0]) == stop, "settings: Tab focused row " + seen[0] + ", not row " + stop + " (stops " + stops + ")");
+			check(!seen[2].isEmpty() && seen[1].contains(seen[2]), "settings: row " + stop + " narrates its text (" + seen[2] + "): " + seen[1]);
+			narrated.append(seen[1]).append('\n');
+			tab(context);
+		}
+		check(context.computeOnClient(A11yGameTest::rowIndex) == -1, "settings: the Tab after the last row leaves the list");
+		for (String key : List.of("rigtune.settings.network", "rigtune.settings.startup_toast", "rigtune.settings.goal", "rigtune.settings.scene",
+				"rigtune.stutter.monitor", "rigtune.settings.note")) {
+			String text = Component.translatable(key).getString();
+			check(narrated.toString().contains(text), "settings: \"" + text + "\" is narrated: " + narrated);
+		}
+		RigTune.LOGGER.info("A11yGameTest: settings: Tab reached the {} active rows of {} in order", stops.size(), context.computeOnClient(A11yGameTest::rows));
+	}
+
+	// The screen's own widgets inside it and apart, every row's switch label fitting its width, and the last row inside the
+	// list once scrolled to. scrolls: the rows must not all fit here.
+	private static void settingsLayout(V05TestContext v05, int[] size, boolean scrolls) {
+		ClientGameTestContext context = v05.context();
+		v05.resize(size[0], size[1], size[2]);
+		// After keyboard use the rebuilt screen focuses its first switch, whose tooltip would cover the rows.
+		context.runOnClient(mc -> mc.gui.screen().clearFocus());
+		context.waitTicks(1);
+		String name = "settings " + size[0] + "x" + size[1] + "@" + size[2];
+		String shot = "settings-" + size[0] + "x" + size[1] + "-scale" + size[2];
+		boolean scrollable = context.computeOnClient(mc -> {
+			RigTuneSettingsScreen screen = (RigTuneSettingsScreen) mc.gui.screen();
+			List<AbstractWidget> widgets = Screens.getWidgets(screen).stream().filter(w -> w.visible).toList();
+			for (AbstractWidget w : widgets) {
+				check(w.getX() >= 0 && w.getY() >= 0 && w.getRight() <= screen.width && w.getBottom() <= screen.height, name + ": " + w + " outside the screen");
+			}
+			for (int i = 0; i < widgets.size(); i++) {
+				for (int j = i + 1; j < widgets.size(); j++) {
+					AbstractWidget a = widgets.get(i);
+					AbstractWidget b = widgets.get(j);
+					check(!(a.getX() < b.getRight() && b.getX() < a.getRight() && a.getY() < b.getBottom() && b.getY() < a.getBottom()), name + ": " + a + " overlaps " + b);
+				}
+			}
+			RigTuneSettingsScreen.SettingsList rows = screen.list();
+			check(rows != null && rows.getY() >= 26, name + ": the list sits under the title");
+			for (RigTuneSettingsScreen.SettingsList.Row row : rows.children()) {
+				for (GuiEventListener child : row.children()) {
+					if (child instanceof AbstractWidget w && !(w instanceof RowFocus)) {
+						check(mc.font.width(w.getMessage()) <= w.getWidth() - 4, name + ": label doesn't fit " + w.getMessage().getString());
+					}
+				}
+			}
+			return rows.maxScrollAmount() > 0;
+		});
+		context.takeScreenshot(shot);
+		check(scrollable || !scrolls, name + ": the rows all fit, so this size doesn't show the scrolling list");
+		if (!scrollable) {
+			return;
+		}
+		context.runOnClient(mc -> {
+			RigTuneSettingsScreen.SettingsList rows = ((RigTuneSettingsScreen) mc.gui.screen()).list();
+			rows.setScrollAmount(rows.maxScrollAmount());
+		});
+		context.waitTicks(2);
+		context.runOnClient(mc -> {
+			RigTuneSettingsScreen.SettingsList rows = ((RigTuneSettingsScreen) mc.gui.screen()).list();
+			int last = rows.children().size() - 1;
+			check(rows.getRowTop(last) >= rows.getY() && rows.getRowBottom(last) <= rows.getBottom(), name + ": the last row is shown once scrolled");
+		});
+		context.takeScreenshot(shot + "-scrolled");
+		context.runOnClient(mc -> ((RigTuneSettingsScreen) mc.gui.screen()).list().setScrollAmount(0));
+		context.waitTicks(1);
 	}
 
 	// ---- WS-L2 (4d, 4g): NoticeScreen with the held-changes and repair notices.

@@ -11,8 +11,8 @@
 Its inputs:
 
 - `rules/source/knowledge.json` — the hand-maintained tuning knowledge (GPU/CPU/heap
-  tiers, mod rules, obsolete mods, settings, advice, setting labels, and from 0.4 the
-  Profiles templates and the Stutter Doctor's advice). Same shape as the
+  tiers, mod rules, obsolete mods, settings, advice, setting labels, from 0.4 the
+  Profiles templates and the Stutter Doctor's advice, and from 0.5 its fixes). Same shape as the
   schema in `docs/RULES_SCHEMA.md`, minus the fields the script generates, plus the
   maintainer-only `reviewIgnore` and `v1` fields (per rule, and `"v1": false` on a
   `gpuTiers`/`cpuTiers` row).
@@ -56,7 +56,7 @@ It requires only the Python 3.11+ standard library (no `pip install` needed).
    **ignoring `revision` and `generatedAt`**. If neither changed, the files are left
    untouched. If either changed (or one doesn't exist yet), both get
    `revision = max(old revisions) + 1` and the same `generatedAt`, and all three files
-   are written.
+   are written. `--revision N` writes exactly N instead (see "One revision per release").
 9. Writes `rules/REVIEW.md` — see below.
 
 ## The v1 projection and `v1` overrides
@@ -78,8 +78,8 @@ for each rule in `knowledge.json`:
 - Tier rows are copied as they are, except a `gpuTiers`/`cpuTiers` row with `"v1": false`,
   which is left out, so 0.1.x keeps classifying that hardware as before. Give every new
   tier row `"v1": false` (docs/RULES_SCHEMA.md, "v1 on tier rows").
-- `v1` is never written to either output, and `settingLabels`, `profileTemplates` and
-  `stutterAdvice` never reach `rules-v1.json`.
+- `v1` is never written to either output, and `settingLabels`, `profileTemplates`,
+  `stutterAdvice` and `stutterFixes` never reach `rules-v1.json`.
 
 "v2-only" means a condition key 0.1.x doesn't know (`gpuModelMatches`,
 `displayPixelsAtLeast`/`AtMost`, `modVersion`, `mcVersionRange`, `settingIs`, and from 0.4
@@ -120,7 +120,17 @@ The script stops (exit code 2, nothing written) and lists every problem when
   manage, an entry without exactly one of value or min/max, an unknown `$` token; `$recordingFps`
   is allowed only here) or `stutterAdvice` (no `"requires": ["stutter-doctor"]`, a repeated id, a
   kind or impact outside the vocabulary, a share outside 0-100 or for an unknown cause or tag, a
-  `v1` field).
+  `v1` field);
+- (0.5) a bad `stutterFixes` entry (docs/RULES_SCHEMA.md "stutterFixes"): an unknown field or a
+  null; a missing, repeated or unknown `adviceId` (it must be a `stutterAdvice` id); no
+  `"requires": ["stutter-fix"]`, or `stutter-doctor`/`jvm-flags` next to it; no `evidence`, a bad
+  condition or a `jvm-` fact in it, or no Stutter Doctor key at its top level (it must test the
+  session); a `set.key` outside the three allowlisted settings; both or
+  neither of `value` and `step`; a value the key's share-code entry doesn't hold; a step that is 0,
+  over 8 either way, not a whole number or on an enum key; a negative step without `min` or a
+  positive one without `max`; `min`/`max` with a value, outside the key's range, or `min` above
+  `max`; and `causeSpikesAtLeast` anywhere but a fix's `evidence` (or with an unknown cause or a
+  count that isn't a whole number from 0).
 
 ## Running it
 
@@ -130,8 +140,20 @@ python tools/update_rules.py --dry-run             # compute + print a summary, 
 python tools/update_rules.py --mc-versions 26.2,26.3
 python tools/update_rules.py --knowledge path/to/knowledge.json --out-dir path/to/scratch
 python tools/update_rules.py --offline-fixtures path/to/fixtures   # no network; see below
+python tools/update_rules.py --revision 17          # write revision 17 if anything changed (one release, one revision)
+python tools/update_rules.py --revision 17 --skip-main-check   # the same without comparing with main (offline; check main yourself)
 python tools/check_rules_v1.py                     # offline: is rules-v1.json safe and in sync?
 ```
+
+### One revision per release
+Every regeneration for a release lands in one revision, R = main's revision at release time + 1, so
+pass `--revision <R>` while preparing it: when the content changed, both files get exactly R (a
+second regeneration inside R keeps R); an R below the files' current revision is refused, also when
+nothing changed. R must also be above main's revision: the updater runs `git fetch origin main` and
+reads `origin/main:rules/rules-v2.json`, and refuses R if it isn't higher (merge main into the
+branch first and use main's revision + 1) or if origin can't be reached (unless `--skip-main-check`,
+after checking main yourself). Without `--revision` the updater writes the current revision + 1, as
+the weekly bot does, and never looks at main.
 
 After regenerating, run `./gradlew build` (both MC versions): the scenario tests read the
 bundled rules, and `RulesV1DifferentialTest` checks `rules/rules-v1.json`.
@@ -151,7 +173,7 @@ directly (see `tools/tests/test_update_rules.py`).
 - `tools/check_rules_v1.py` (CI job `rules-v1-compat`): `rules-v1.json` has
   schemaVersion 1; only the fields, condition keys and values 0.1.0 understands; only
   `vanilla.`/`sodium.` settings keys; no `requires`, `avoidSelected`, `skipUpdateWhen`, `settingLabels` or
-  `v1`; no `profileTemplates` or `stutterAdvice`; the same revision and `generatedAt` as `rules-v2.json`; and it equals the
+  `v1`; no `profileTemplates`, `stutterAdvice` or `stutterFixes`; the same revision and `generatedAt` as `rules-v2.json`; and it equals the
   projection rebuilt offline from `knowledge.json` and `rules-v2.json`'s generated data
   (so it also fails when `knowledge.json` was edited without regenerating).
 - CI job `rules-consistency`: `rules/rules-v2.json` equals the bundled copy, and no bundled
@@ -214,6 +236,20 @@ four sections a maintainer should work through before merging:
 None of this auto-applies: `knowledge.json` is hand-edited, and the generated
 files only reflect what's already there. REVIEW.md is a punch list for the
 *next* edit to `knowledge.json`, not something the script acts on itself.
+
+### While a release is prepared on an integration branch
+The weekly PR still targets main. Instead of merging it, re-run the updater on the integration
+branch with the release's `--revision`, triage REVIEW.md there, and check that the branch's files
+carry every upstream change the bot found:
+
+```
+python tools/rules_upstream_diff.py <the bot PR's rules-v2.json> rules/rules-v2.json
+```
+
+It compares only the upstream data (`availability`, the `upstream` lists, each mod's `upstream`
+flags; mods only one file has are left out), ignoring `revision`, `generatedAt` and everything from
+`knowledge.json`, prints each difference and exits 1 if there is one. Then close the bot's PR with a
+link to the integration branch (merge it into main only if it is safety-relevant).
 
 ## Tests
 
