@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.client.undo.HistoryStartup;
+import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
@@ -23,6 +24,7 @@ import java.util.function.Consumer;
 public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 	private static volatile @Nullable ApplyResult unseenResult;
 	private static volatile int leftoverOps;
+	private static volatile int leftoverFileOps;
 	private static volatile boolean helperBusy;
 	static final Duration HELPER_WAIT = Duration.ofSeconds(5);
 
@@ -105,6 +107,10 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 	}
 
 	static void readState(Path configDir, boolean stillRunning, @Nullable String lastShownApply) {
+		readState(configDir, stillRunning, lastShownApply, line -> RigTune.LOGGER.warn(line));
+	}
+
+	static void readState(Path configDir, boolean stillRunning, @Nullable String lastShownApply, Consumer<String> warn) {
 		try {
 			Path last = ApplyResult.defaultPath(configDir);
 			if (Files.isRegularFile(last)) {
@@ -119,8 +125,15 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 		try {
 			Path pending = PendingActions.defaultPath(configDir);
 			if (!stillRunning && Files.isRegularFile(pending)) {
-				leftoverOps = PendingActions.load(pending).ops().size();
-				RigTune.LOGGER.warn("{} staged RigTune change(s) were not applied; they will be retried at the next exit", leftoverOps);
+				List<PendingActions.Op> ops = PendingActions.load(pending).ops();
+				leftoverOps = ops.size();
+				// v0.5 (docs/v0.5/SPEC.md 4d): ops in mod-file groups are retried at the next exit, or held for the player's
+				// choice where the launcher keeps its own list of mods; that is known only after launcher detection, so their
+				// WARN comes with the title screen's toast (LauncherRepairService.leftoverAtTitle).
+				leftoverFileOps = ApplyExecutor.fileGroupOps(ops).size();
+				if (leftoverFileOps == 0) {
+					warn.accept(leftoverOps + " staged RigTune change(s) were not applied; they will be retried at the next exit");
+				}
 			}
 		} catch (Exception e) {
 			RigTune.LOGGER.warn("Could not read pending RigTune changes", e);
@@ -142,6 +155,13 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 	public static int takeLeftoverOps() {
 		int count = leftoverOps;
 		leftoverOps = 0;
+		return count;
+	}
+
+	// The leftover ops in groups with a mod-file op (docs/v0.5/SPEC.md 4d).
+	public static int takeLeftoverFileOps() {
+		int count = leftoverFileOps;
+		leftoverFileOps = 0;
 		return count;
 	}
 }

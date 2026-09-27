@@ -14,6 +14,7 @@ import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Impact;
@@ -163,9 +164,17 @@ public final class RigTuneClient implements ClientModInitializer {
 		if (!Files.isRegularFile(pending)) {
 			return;
 		}
+		// v0.5 (docs/v0.5/SPEC.md 4d): in an instance whose launcher keeps its own list of mods (or while that isn't known),
+		// the helper holds mod-file changes for the player's choice; a policy that can't be read holds them too.
+		ModFilesPolicy policy;
 		try {
-			HelperLauncher.launch(configDir, pending);
-			RigTune.LOGGER.info("Started the RigTune apply helper for {}", pending);
+			policy = controller == null ? ModFilesPolicy.PENDING : controller.modFiles();
+		} catch (RuntimeException e) {
+			policy = ModFilesPolicy.PENDING;
+		}
+		try {
+			HelperLauncher.launch(configDir, pending, policy);
+			RigTune.LOGGER.info("Started the RigTune apply helper for {}{}", pending, HelperLauncher.holds(policy) ? " (mod-file changes held)" : "");
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.error("Could not start the RigTune apply helper; staged changes stay in {}", pending, e);
 		}
@@ -230,10 +239,18 @@ public final class RigTuneClient implements ClientModInitializer {
 					Component.translatable("rigtune.toast.busy.body"));
 		}
 		int leftover = RigTunePreLaunch.takeLeftoverOps();
-		if (leftover > 0) {
-			SystemToast.add(minecraft.gui.toastManager(), new SystemToast.SystemToastId(10000L),
-					Component.translatable("rigtune.toast.leftover.title", leftover),
-					Component.translatable("rigtune.toast.leftover.body"));
+		int leftoverFileOps = RigTunePreLaunch.takeLeftoverFileOps();
+		if (leftover > 0 && leftoverFileOps > 0 && controller instanceof RealController real) {
+			// v0.5 (docs/v0.5/SPEC.md 4d): retried at the next exit, or held for the player's choice? The WARN and the toasts
+			// wait until the policy is known.
+			real.v05().launcherRepair().leftoverAtTitle(leftover);
+		} else if (leftover > 0) {
+			if (leftoverFileOps > 0) {
+				HelperToasts.warnLines(leftover, 0).forEach(RigTune.LOGGER::warn);
+			}
+			for (HelperToasts.Toast toast : HelperToasts.leftover(leftover, 0)) {
+				SystemToast.add(minecraft.gui.toastManager(), new SystemToast.SystemToastId(10000L), toast.title(), toast.body());
+			}
 		}
 		// v0.5 (PLAN contracts 13f): the features' title-screen toasts.
 		V05Services.titleScreen(minecraft, controller);
