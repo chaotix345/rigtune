@@ -449,6 +449,7 @@
 	"rigtune.stutter.count.hitches.one": "%s hitch",
 	"rigtune.stutter.count.spikes.many": "%s spikes",
 	"rigtune.stutter.count.spikes.one": "%s spike",
+	"rigtune.stutter.fix.hold_reason": "You set this on %s with the Stutter Doctor's fix; changing it here undoes that fix.",
 	"rigtune.stutter.flag.explicit": "System.gc()",
 	"rigtune.stutter.flag.full": "full GC",
 	"rigtune.stutter.flag.stall": "allocation stall",
