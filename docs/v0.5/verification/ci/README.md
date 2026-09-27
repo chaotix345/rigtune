@@ -37,6 +37,23 @@ legs `Full thread dump OpenJDK 64-Bit Server VM (25.0.3+9-LTS …)` with
 (07:00:49 / 07:00:58 / 07:00:56 for steps started 06:47:49 / 06:47:58 / 06:47:56), then "timed out after 15 minutes"
 (07:03:02 / 07:03:11 / 07:03:08), each job over 2-6 s later.
 
+The final wiring (the exact `net.fabricmc.loader.impl.launch.knot.KnotClient` argument; offline.sh's `--timeout 14m`,
+GNU timeout as root inside the sudo; the step's 30-s wait and kill): run
+[36304837319](https://github.com/chaotix345/rigtune/actions/runs/36304837319) (df3a64f7): on all 3 legs the dump naming
+`HangProbeGameTest.sleepsForever` 13:00 into the step, "The game-test run exited 124 (124: stopped by the 14-min
+timeout)" at 14:00, "No java process left (1 s after the run exited)", the step over at 14:01 (08:15:31 / 08:15:40 /
+08:15:36 for steps started 08:01:30 / 08:01:38 / 08:01:35), each job 4-6 s later. The run before it,
+[36303866869](https://github.com/chaotix345/rigtune/actions/runs/36303866869) (2f6ee87c, without the wait), listed three
+java processes still shutting down 0.1 s after timeout returned.
+
+## The apply-helper wait on Linux
+
+`scratch/ws-ci-proof-helper` (654760d9): fabric.mod.json cut to RigTuneClientGameTest and BenchmarkGameTest, so RigTune's
+apply helper runs after the game. Run [36303870792](https://github.com/chaotix345/rigtune/actions/runs/36303870792): on
+all 3 legs "Started the RigTune apply helper for …/config/rigtune/pending.json", then "awaitApplyHelper: waited 2451 /
+2392 / 2101 ms for the apply helper process; it exited"; the legs green. Its python job is red on purpose: the ordering
+test finds no FootprintGameTest in that cut list.
+
 ## AC1e.4: local subset run twice
 
 Windows 11, JDK 25.0.4, `:26.2:runProductionClientGameTest` with only RigTuneClientGameTest and BenchmarkGameTest as
@@ -50,7 +67,10 @@ Local check (a third subset run, 16:01 AEST, after the review fix): the helper a
 Every leg runs `tools/ci/offline.sh java tools/ci/MulticastCheck.java` ("Check loopback multicast") before the game tests:
 one datagram to 224.0.2.60:4445, received on a `MulticastSocket(4445)` joined to the group.
 Run [36300180213](https://github.com/chaotix345/rigtune/actions/runs/36300180213) (24235857): "Loopback multicast works:
-224.0.2.60:4445 received from 0.0.0.0" on all 3 legs; the same on all 6 jobs of 36300926064 below.
+224.0.2.60:4445 received from 0.0.0.0" on all 3 legs; the same on all 6 jobs of 36300926064 below. With the check that
+nothing off the machine answers: [36303836102](https://github.com/chaotix345/rigtune/actions/runs/36303836102)
+(c890b1ea): "Nothing off the machine is reachable: 1.1.1.1:443 gave java.net.SocketException: Network is unreachable" on
+all 3 legs.
 
 ## AC1g.4: the dormant split, proven once
 
@@ -63,6 +83,20 @@ Two runs of 24235857:
   RigTuneClientGameTest to PreviewGameTest and "… part 2/2" with ProfilesGameTest to A11yGameTest. Per leg the two parts
   logged 16 "Game-test class" lines for 16 different classes, every job green. The parts' class time: 238-282 s (part 1),
   176-181 s (part 2); job wall times 5.6-6.6 min and 4.7 min, against 7.4-9.8 min unsplit in 36300180213.
+
+With the switch as one flag in build.yml (`GAMETEST_PARTS`) and "runTest returned" lines, on c890b1ea:
+[36303836102](https://github.com/chaotix345/rigtune/actions/runs/36303836102) (push, one part) green, and
+[36304357982](https://github.com/chaotix345/rigtune/actions/runs/36304357982) (`-f gametest_parts=2`): 6 jobs green, per
+leg 16 "runTest returned" lines for 16 different classes, part 2 ending FootprintGameTest, A11yGameTest.
+
+## SPEC-4: e2eClient offline
+
+Locally (Windows, under the game-test lock): `./gradlew :26.2:prefetchDependencies :26.2:downloadAssets`, then
+`./gradlew --offline :26.2:e2eClient -Pe2e.driver=undo -Pe2e.instance=<empty scratch instance>` with
+`-Djava.awt.headless=true`: the driver built and the client launched offline ("Loading Minecraft 26.2 with Fabric Loader
+0.19.5"), then stopped at Fabric's dependency check as intended ("requires any version of rigtune, which is missing"). The
+cache was warm, so this shows e2eClient needs nothing online beyond it; WS-E's E2E jobs run the same two prefetch tasks in
+their network step.
 
 ## AC1c: caches and pins
 
