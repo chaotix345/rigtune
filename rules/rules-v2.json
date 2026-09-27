@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "revision": 17,
-  "generatedAt": "2026-09-27T12:18:46Z",
+  "generatedAt": "2026-09-27T12:38:00Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -1057,7 +1057,7 @@
         "tierAtMost": 2
       },
       "impact": "high",
-      "reason": "8 chunks is a good balance of view distance and frame rate for entry-level hardware."
+      "reason": "On this PC's estimated tier, 8 chunks is a good balance of view distance and frame rate."
     },
     {
       "key": "vanilla.renderDistance",
@@ -1143,7 +1143,7 @@
           }
         }
       },
-      "reason": "On entry-level hardware, stay at the low end of the 8 to 12 vanilla chunks Distant Horizons' FAQ recommends; Distant Horizons draws the terrain beyond that."
+      "reason": "On this PC's estimated tier, stay at the low end of the 8 to 12 vanilla chunks Distant Horizons' FAQ recommends; Distant Horizons draws the terrain beyond that."
     },
     {
       "key": "vanilla.simulationDistance",
@@ -1162,7 +1162,7 @@
         "tierAtMost": 2
       },
       "impact": "medium",
-      "reason": "Simulating up to 6 chunks keeps nearby farms working without overloading an entry-level CPU."
+      "reason": "On this PC's estimated tier, simulating up to 6 chunks keeps nearby farms working while keeping the game's tick load down."
     },
     {
       "key": "vanilla.simulationDistance",
@@ -1309,7 +1309,7 @@
         "tierAtMost": 2
       },
       "impact": "low",
-      "reason": "Turning clouds off saves GPU time on entry-level graphics."
+      "reason": "On this PC's estimated tier, turning clouds off saves some GPU time."
     },
     {
       "key": "vanilla.cutoutLeaves",
@@ -1445,7 +1445,7 @@
         "tierAtMost": 1
       },
       "impact": "high",
-      "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 64 to 96 chunks for entry-level PCs; on low-end hardware RigTune caps it lower, at 48."
+      "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 64 to 96 chunks for lower-end PCs; on this PC's estimated tier RigTune caps it lower, at 48."
     },
     {
       "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius",
@@ -1458,7 +1458,7 @@
         "tierAtMost": 2
       },
       "impact": "high",
-      "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 64 to 96 chunks for entry-level PCs; RigTune caps it at 64."
+      "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 64 to 96 chunks for lower-end PCs; on this PC's estimated tier RigTune caps it at 64."
     },
     {
       "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius",
@@ -1641,7 +1641,7 @@
         "tierAtMost": 2
       },
       "impact": "medium",
-      "reason": "Iris's own description says lowering the shadow distance can significantly increase performance, since less terrain is drawn a second time for shadows. 6 chunks keeps shadows around you on entry-level hardware. Shader packs that set their own shadow distance ignore this."
+      "reason": "Iris's own description says lowering the shadow distance can significantly increase performance, since less terrain is drawn a second time for shadows. On this PC's estimated tier, 6 chunks keeps shadows around you at a lower cost. Shader packs that set their own shadow distance ignore this."
     },
     {
       "key": "iris.maxShadowRenderDistance",

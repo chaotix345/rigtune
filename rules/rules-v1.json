@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "revision": 17,
-  "generatedAt": "2026-09-27T12:18:46Z",
+  "generatedAt": "2026-09-27T12:38:00Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -973,7 +973,7 @@
         "tierAtMost": 2
       },
       "impact": "high",
-      "reason": "8 chunks is a good balance of view distance and frame rate for entry-level hardware."
+      "reason": "On this PC's estimated tier, 8 chunks is a good balance of view distance and frame rate."
     },
     {
       "key": "vanilla.renderDistance",
@@ -1049,7 +1049,7 @@
         ],
         "tierAtMost": 2
       },
-      "reason": "On entry-level hardware, stay at the low end of the 8 to 12 vanilla chunks Distant Horizons' FAQ recommends; Distant Horizons draws the terrain beyond that."
+      "reason": "On this PC's estimated tier, stay at the low end of the 8 to 12 vanilla chunks Distant Horizons' FAQ recommends; Distant Horizons draws the terrain beyond that."
     },
     {
       "key": "vanilla.simulationDistance",
@@ -1068,7 +1068,7 @@
         "tierAtMost": 2
       },
       "impact": "medium",
-      "reason": "Simulating up to 6 chunks keeps nearby farms working without overloading an entry-level CPU."
+      "reason": "On this PC's estimated tier, simulating up to 6 chunks keeps nearby farms working while keeping the game's tick load down."
     },
     {
       "key": "vanilla.simulationDistance",
@@ -1215,7 +1215,7 @@
         "tierAtMost": 2
       },
       "impact": "low",
-      "reason": "Turning clouds off saves GPU time on entry-level graphics."
+      "reason": "On this PC's estimated tier, turning clouds off saves some GPU time."
     },
     {
       "key": "vanilla.cutoutLeaves",

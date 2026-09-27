@@ -184,6 +184,42 @@ class GeneratedV05Tests(unittest.TestCase):
     def stutter(self, advice_id):
         return next(a for a in self.v2["stutterAdvice"] if a["id"] == advice_id)
 
+    # L4 (AC2R.1): no rule names a hardware type for a combined-tier condition any more; ids such as shaders-entry-level stay.
+    def test_no_entry_level_wording(self):
+        def texts(node, path=""):
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    if key in ("reason", "avoidReason", "text", "title") and isinstance(value, str):
+                        yield f"{path}.{key}", value
+                    else:
+                        yield from texts(value, f"{path}.{key}")
+            elif isinstance(node, list):
+                for i, value in enumerate(node):
+                    yield from texts(value, f"{path}[{i}]")
+
+        for name, doc in (("knowledge.json", repo_json("rules", "source", "knowledge.json")), ("rules-v2.json", self.v2),
+                          ("rules-v1.json", self.v1)):
+            found = [where for where, text in texts(doc) if "entry-level" in text.lower()]
+            self.assertEqual(found, [], name)
+        self.assertIn("shaders-entry-level", [a["id"] for a in self.v2["advice"]])
+
+    # AC2R.1: against r16, the settings are the same entries in the same order and only L4's seven reasons differ, in both
+    # files (so keys, values, bounds, conditions and ticks are untouched).
+    def test_l4_changed_only_reasons(self):
+        r16_v1 = repo_json("src", "test", "resources", "rules", "r16", "rules-v1.json")
+        for name, old, new in (("rules-v2.json", self.r16, self.v2), ("rules-v1.json", r16_v1, self.v1)):
+            self.assertEqual(len(old["settings"]), len(new["settings"]), name)
+            changed = []
+            for i, (before, after) in enumerate(zip(old["settings"], new["settings"])):
+                self.assertEqual({k: v for k, v in before.items() if k != "reason"}, {k: v for k, v in after.items() if k != "reason"}, f"{name} settings[{i}]")
+                if before.get("reason") != after.get("reason"):
+                    changed.append(i)
+                    self.assertIn("entry-level", before["reason"], f"{name} settings[{i}]")
+                    self.assertIn("estimated tier", after["reason"], f"{name} settings[{i}]")
+            expected = [i for i, before in enumerate(old["settings"]) if "entry-level" in before.get("reason", "")]
+            self.assertEqual(changed, expected, name)
+            self.assertEqual(len(expected), 7 if name == "rules-v2.json" else 4, name)
+
     # L2 (SPEC 2S): one info entry on the tag, calibrated on P5C-F1's re-runs and AC5.8's A control (ChunksLoadingSeedTest).
     def test_the_l2_seed(self):
         seed = self.stutter("stutter-chunks-loading-tag")
