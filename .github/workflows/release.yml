@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       # Only whether the secret is set ('true'/'false'), so `if:` conditions below can test it (an
       # `if:` can't reference `secrets.*` directly). The token itself is set only on the two steps
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: microsoft
-          java-version: '25'
+          java-version: '25.0.3'
 
       # Built once. The release step copies the jars out of the build (to $RUNNER_TEMP/release-files),
       # and both the GitHub release and the Modrinth publish upload those copies, so the two carry

@@ -2,7 +2,6 @@ package io.github.chaotix345.rigtune.gametest;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkHistoryScreen;
@@ -87,9 +86,8 @@ public class A11yGameTest implements FabricClientGameTest {
 		RigTuneController real = RigTuneClient.controller();
 		context.waitFor(mc -> real.report() != null, 1200);
 		Path configDir = FabricLoader.getInstance().getConfigDir();
-		boolean network = context.computeOnClient(mc -> ClientSettings.shared(configDir).networkEnabled);
 		boolean outline = context.computeOnClient(mc -> mc.options.highContrastBlockOutline().get());
-		setNetwork(context, real, configDir, false);
+		boolean network = GameTestNet.set(context, real, false);
 		try {
 			A11yController controller = new A11yController(new StubController(RigTuneClient::hardware), real, configDir);
 			resize(context, 854, 480, 2);
@@ -107,7 +105,7 @@ public class A11yGameTest implements FabricClientGameTest {
 				mc.options.highContrastBlockOutline().set(outline);
 				mc.setLastInputType(InputType.MOUSE);
 			});
-			setNetwork(context, real, configDir, network);
+			GameTestNet.set(context, real, network);
 			resize(context, 854, 480, 0);
 			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
 		}
@@ -491,16 +489,6 @@ public class A11yGameTest implements FabricClientGameTest {
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}
-	}
-
-	private static void setNetwork(ClientGameTestContext context, RigTuneController real, Path configDir, boolean on) {
-		context.runOnClient(mc -> {
-			ClientSettings settings = ClientSettings.shared(configDir);
-			settings.networkEnabled = on;
-			settings.save(configDir);
-			real.settingsChanged();
-		});
-		context.waitFor(mc -> ClientSettings.load(configDir).networkEnabled == on && real.report() != null, 1200);
 	}
 
 	private static void resize(ClientGameTestContext context, int width, int height, int guiScale) {

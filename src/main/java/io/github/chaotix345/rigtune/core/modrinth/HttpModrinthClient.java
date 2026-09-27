@@ -4,6 +4,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.core.apply.LogSafe;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.net.BoundedHttp;
@@ -16,6 +18,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -38,6 +41,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 public final class HttpModrinthClient implements ModrinthClient {
 	public static final String DEFAULT_BASE_URL = "https://api.modrinth.com";
@@ -60,20 +64,52 @@ public final class HttpModrinthClient implements ModrinthClient {
 	// Both built on first use (a request, always off the render thread), never in the constructor: RealController makes
 	// this client in onInitializeClient, where java.net.http's classes and threads cost the render thread tens of ms
 	// (docs/v0.4/SPEC.md 10). With Modrinth or the network off, GatedModrinthClient stops every call first, so neither
-	// is ever built.
+	// is ever built. Both speak HTTP/1.1: on 2026-09-26 every lookup of whole CI sessions failed with "Stream N cancelled"
+	// on one HTTP/2 connection the JDK had marked for shutdown (docs/v0.5/design/ws-ci.md). A failure of the connection (no
+	// HTTP response, a reset, "Stream N cancelled", a timeout) drops the client that had it (dropClient), so the next
+	// request starts on a fresh connection pool; a failure of RigTune's own body handling (over the cap, a disk write)
+	// doesn't.
 	private volatile HttpClient http;
 	// Downloads follow redirects by hand, so every hop is checked against the allowlist before it is requested.
 	private volatile HttpClient downloads;
+	private int clientsBuilt;
 	private final String baseUrl;
 	private final String userAgent;
 	private final Limits limits;
+	private final Transport transport;
+
+	// How a request is sent: BoundedHttp.send (tests put a failing transport in front of it).
+	interface Transport {
+		<T> HttpResponse<T> send(HttpClient http, HttpRequest request, HttpResponse.BodyHandler<T> handler, BoundedHttp.Progress progress,
+				Duration stall, Duration deadline) throws IOException;
+	}
 
 	public HttpModrinthClient(String modVersion) {
 		this(modVersion, baseUrlOrDefault(System.getProperty(BASE_URL_PROPERTY)));
 	}
 
+	// The -Drigtune.modrinth.baseUrl override counts only as https, or as plain http on this machine (a local test server),
+	// like -Drigtune.rules.baseUrl; anything else is ignored with a warning.
 	private static String baseUrlOrDefault(String configured) {
-		return configured == null || configured.isBlank() ? DEFAULT_BASE_URL : configured.trim();
+		if (configured == null || configured.isBlank()) {
+			return DEFAULT_BASE_URL;
+		}
+		String text = configured.trim();
+		if (extraDownloadOrigin(text) == null && !isDefault(text)) {
+			RigTune.LOGGER.warn("Ignoring -D{}={}: not an https URL (or http on localhost)", BASE_URL_PROPERTY, LogSafe.text(configured));
+			return DEFAULT_BASE_URL;
+		}
+		RigTune.LOGGER.info("Modrinth requests go to {} (-D{})", LogSafe.text(text), BASE_URL_PROPERTY);
+		return text;
+	}
+
+	private static boolean isDefault(String baseUrl) {
+		try {
+			URI uri = URI.create(baseUrl);
+			return uri.getScheme() != null && uri.getHost() != null && sameOrigin(uri, URI.create(DEFAULT_BASE_URL));
+		} catch (IllegalArgumentException e) {
+			return false;
+		}
 	}
 
 	public HttpModrinthClient(String modVersion, String baseUrl) {
@@ -81,9 +117,14 @@ public final class HttpModrinthClient implements ModrinthClient {
 	}
 
 	HttpModrinthClient(String modVersion, String baseUrl, Limits limits) {
+		this(modVersion, baseUrl, limits, BoundedHttp::send);
+	}
+
+	HttpModrinthClient(String modVersion, String baseUrl, Limits limits, Transport transport) {
 		this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
 		this.userAgent = userAgent(modVersion);
 		this.limits = limits;
+		this.transport = transport;
 	}
 
 	private HttpClient http() {
@@ -92,7 +133,7 @@ public final class HttpModrinthClient implements ModrinthClient {
 			synchronized (this) {
 				client = http;
 				if (client == null) {
-					http = client = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).followRedirects(HttpClient.Redirect.NORMAL).build();
+					http = client = build(HttpClient.Redirect.NORMAL);
 				}
 			}
 		}
@@ -105,16 +146,56 @@ public final class HttpModrinthClient implements ModrinthClient {
 			synchronized (this) {
 				client = downloads;
 				if (client == null) {
-					downloads = client = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).followRedirects(HttpClient.Redirect.NEVER).build();
+					downloads = client = build(HttpClient.Redirect.NEVER);
 				}
 			}
 		}
 		return client;
 	}
 
+	// Called with the lock held.
+	private HttpClient build(HttpClient.Redirect redirects) {
+		clientsBuilt++;
+		return HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(CONNECT_TIMEOUT).followRedirects(redirects).build();
+	}
+
+	// After a connection failure (see http): the next request builds a fresh client. Requests still running on the old one
+	// finish; it accepts no new ones (exchange sends a request that got it just before once more, on the fresh one).
+	private void dropClient(HttpClient client) {
+		synchronized (this) {
+			if (http == client) {
+				http = null;
+			} else if (downloads == client) {
+				downloads = null;
+			} else {
+				return;
+			}
+		}
+		client.shutdown();
+	}
+
+	private synchronized boolean dropped(HttpClient client) {
+		return http != client && downloads != client;
+	}
+
 	// For tests: whether either HttpClient exists yet.
 	boolean httpClientsBuilt() {
 		return http != null || downloads != null;
+	}
+
+	// For tests.
+	synchronized int clientsBuilt() {
+		return clientsBuilt;
+	}
+
+	// For tests: the protocol of the lookup client and of the download client.
+	List<HttpClient.Version> httpVersions() {
+		return List.of(http().version(), downloads().version());
+	}
+
+	// For tests.
+	String baseUrl() {
+		return baseUrl;
 	}
 
 	public static String userAgent(String modVersion) {
@@ -218,7 +299,7 @@ public final class HttpModrinthClient implements ModrinthClient {
 				// Only a 2xx body is written; a redirect's body is discarded.
 				for (int hop = 0; ; hop++) {
 					request = request(uri).GET().build();
-					response = exchange(downloads(), request, (info, progress) -> info.statusCode() / 100 == 2
+					response = exchange(this::downloads, request, (info, progress) -> info.statusCode() / 100 == 2
 							? BoundedHttp.capped(cap, false, progress, buffer -> {
 								digest.update(buffer.duplicate());
 								while (buffer.hasRemaining()) {
@@ -337,10 +418,18 @@ public final class HttpModrinthClient implements ModrinthClient {
 		return HttpRequest.newBuilder(uri).timeout(REQUEST_TIMEOUT).header("User-Agent", userAgent);
 	}
 
+	// A lookup is a read, so an I/O failure is tried once more, on the fresh client exchange() switched to, with the same
+	// stall and deadline limits: a reset connection, or "Stream N cancelled" when the JDK had marked its HTTP/2 connection
+	// for shutdown (2026-09-26). An HTTP status (429 has its own retry in exchange), a timeout or an interrupt isn't retried.
 	private String sendForString(HttpRequest request) throws IOException {
-		HttpResponse<byte[]> response = exchange(http(), request, (info, progress) -> info.statusCode() / 100 == 2
-				? BoundedHttp.bytes(limits.maxJsonBytes(), false, progress)
-				: BoundedHttp.bytes(ERROR_BODY_BYTES, true, progress), limits.jsonStall(), limits.jsonDeadline());
+		HttpResponse<byte[]> response;
+		try {
+			response = sendJson(request);
+		} catch (HttpTimeoutException | InterruptedIOException e) {
+			throw e;
+		} catch (IOException e) {
+			response = sendJson(request);
+		}
 		String body = new String(response.body(), StandardCharsets.UTF_8);
 		if (response.statusCode() / 100 != 2) {
 			throw error(request, response.statusCode(), body);
@@ -348,16 +437,43 @@ public final class HttpModrinthClient implements ModrinthClient {
 		return body;
 	}
 
+	private HttpResponse<byte[]> sendJson(HttpRequest request) throws IOException {
+		return exchange(this::http, request, (info, progress) -> info.statusCode() / 100 == 2
+				? BoundedHttp.bytes(limits.maxJsonBytes(), false, progress)
+				: BoundedHttp.bytes(ERROR_BODY_BYTES, true, progress), limits.jsonStall(), limits.jsonDeadline());
+	}
+
 	private interface Handler<T> {
 		HttpResponse.BodySubscriber<T> apply(HttpResponse.ResponseInfo info, BoundedHttp.Progress progress);
 	}
 
-	// A 429 is retried once, after its Retry-After (capped at limits.maxRetryWait()).
-	private <T> HttpResponse<T> exchange(HttpClient client, HttpRequest request, Handler<T> handler, Duration stall, Duration deadline)
-			throws IOException {
+	// A 429 is retried once, after its Retry-After (capped at limits.maxRetryWait()). A request that failed before any
+	// response on a client another thread had dropped meanwhile (the JDK refuses new requests on a client that is shutting
+	// down) is sent once more, on the fresh client; once a body has begun, a download's sink already holds some of it.
+	private <T> HttpResponse<T> exchange(Supplier<HttpClient> clients, HttpRequest request, Handler<T> handler, Duration stall,
+			Duration deadline) throws IOException {
+		HttpClient client = clients.get();
+		boolean resent = false;
 		for (int attempt = 1; ; attempt++) {
 			BoundedHttp.Progress progress = new BoundedHttp.Progress();
-			HttpResponse<T> response = BoundedHttp.send(client, request, info -> handler.apply(info, progress), progress, stall, deadline);
+			HttpResponse<T> response;
+			try {
+				response = transport.send(client, request, info -> handler.apply(info, progress), progress, stall, deadline);
+			} catch (InterruptedIOException e) {
+				throw e;
+			} catch (IOException e) {
+				boolean connection = !progress.failedInBody();
+				if (connection && !resent && !progress.started() && !(e instanceof HttpTimeoutException) && dropped(client)) {
+					resent = true;
+					client = clients.get();
+					attempt--;
+					continue;
+				}
+				if (connection) {
+					dropClient(client);
+				}
+				throw e;
+			}
 			if (response.statusCode() != 429 || attempt > 1) {
 				return response;
 			}

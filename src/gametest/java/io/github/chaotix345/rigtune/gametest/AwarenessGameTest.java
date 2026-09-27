@@ -6,7 +6,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.awareness.AwarenessService;
@@ -21,7 +20,6 @@ import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -57,12 +55,11 @@ public class AwarenessGameTest implements FabricClientGameTest {
 		if (!(RigTuneClient.controller() instanceof RealController real)) {
 			throw new AssertionError("AwarenessGameTest needs the real controller");
 		}
-		Path configDir = FabricLoader.getInstance().getConfigDir();
 		Path file = real.awarenessService().file();
 		context.waitFor(mc -> Files.isRegularFile(file), 200);
 		String original = read(file);
 		try {
-			setNetwork(context, configDir, real, false);
+			GameTestNet.set(context, real, false);
 			String currentDriver = seed(context, real, file);
 			rescan(context, real);
 			openRigTune(context);
@@ -75,7 +72,7 @@ public class AwarenessGameTest implements FabricClientGameTest {
 		} finally {
 			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
 			write(file, original);
-			setNetwork(context, configDir, real, true);
+			GameTestNet.set(context, real, true);
 			resize(context, 854, 480, 0);
 		}
 	}
@@ -244,16 +241,6 @@ public class AwarenessGameTest implements FabricClientGameTest {
 		context.runOnClient(mc -> RigTuneClient.open(new TitleScreen()));
 		context.waitForScreen(RigTuneScreen.class);
 		context.waitTicks(3);
-	}
-
-	private static void setNetwork(ClientGameTestContext context, Path configDir, RealController real, boolean on) {
-		context.runOnClient(mc -> {
-			ClientSettings settings = ClientSettings.shared(configDir);
-			settings.networkEnabled = on;
-			settings.save(configDir);
-			real.settingsChanged();
-		});
-		context.waitFor(mc -> real.report() != null, 1200);
 	}
 
 	private static String read(Path file) {

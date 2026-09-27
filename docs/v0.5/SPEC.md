@@ -910,3 +910,5 @@ Sources: docs/v0.5/plan-review-spec.md (SPEC-1..34: 7 high, 14 medium, 13 low) a
 | PLAN-20 | L | 3b: set names `ws-<id>` (AC5.13, AC6.11, AC7.14 follow), a `ws-p` set (PF-5/PF-1), per-file merge rules, data-driven compat040 (`expect.json` per set). |
 | PLAN-21 | L | 1g: `ci_streak.py` requires the jobs present plus ws-ci's minimum set; the RC streak also requires WS-E's E2E push jobs. |
 | PLAN-23 | L | AC1c.3 is scoped to build.yml, e2e.yml and release.yml. |
+
+- **Coordinator, after ws-ci (2026-09-27):** the `tickHookOnVsReference` limit is **2.05**, not 1.95 (1d, 1h, AC1d.2): with the final timing, 192 calibration measurements on 6 runner CPU models put 1x work at most 1.745 and doubled work at least 2.462, so 1.95 would have missed a 2x slowdown on some CPUs; ws-ci.md has the arithmetic. The tick 0-allocation keys are the SUM of bytes over all 48 work blocks after warm-up (strict; stricter than v0.4's fewest-of-5-runs), with a unit test that one allocating block fails.

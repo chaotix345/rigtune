@@ -49,23 +49,13 @@ public class StutterGameTest implements FabricClientGameTest {
 		RigTuneController controller = RigTuneClient.controller();
 		context.waitForScreen(TitleScreen.class);
 		context.waitFor(mc -> controller.report() != null, 1200);
-		ClientSettings settings = ClientSettings.shared(configDir);
-		boolean networkBefore = settings.networkEnabled;
+		boolean networkBefore = GameTestNet.set(context, controller, false);
 		try {
-			context.runOnClient(mc -> {
-				settings.networkEnabled = false;
-				settings.save(configDir);
-				controller.settingsChanged();
-			});
 			hubAndEmptyScreen(context, controller);
 			inAWorld(context, controller, configDir);
 		} finally {
-			context.runOnClient(mc -> {
-				controller.setStutterMonitor(false);
-				settings.networkEnabled = networkBefore;
-				settings.save(configDir);
-				controller.settingsChanged();
-			});
+			context.runOnClient(mc -> controller.setStutterMonitor(false));
+			GameTestNet.set(context, controller, networkBefore);
 			resize(context, 854, 480, 0);
 		}
 		RigTune.LOGGER.info("StutterGameTest: passed");

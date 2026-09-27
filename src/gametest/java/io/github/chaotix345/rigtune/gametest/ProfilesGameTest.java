@@ -2,7 +2,6 @@ package io.github.chaotix345.rigtune.gametest;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
@@ -113,12 +112,10 @@ public class ProfilesGameTest implements FabricClientGameTest {
 		context.waitFor(mc -> RigTuneClient.controller().report() != null, 1200);
 		RigTuneController controller = RigTuneClient.controller();
 		check(controller instanceof RealController, "the real controller");
-		ClientSettings settings = ClientSettings.shared(configDir);
-		boolean network = settings.networkEnabled;
 		Map<Path, byte[]> saved = backup(historyFile, profilesFile, pendingFile, sodiumFile, lastApplyFile);
 		Map<String, String> original = context.computeOnClient(mc -> vanilla(mc.options));
+		boolean network = GameTestNet.set(context, controller, false);
 		try {
-			settings.networkEnabled = false;
 			context.runOnClient(mc -> controller.discardPending());
 			batterySwitchAndUndoThis(context, controller);
 			twoSwitchesThenUndo(context, controller, false);
@@ -129,7 +126,7 @@ public class ProfilesGameTest implements FabricClientGameTest {
 			refusedDuringABenchmark(context, controller);
 		} finally {
 			ProfileService.overrideBenchmarkCheck(null);
-			settings.networkEnabled = network;
+			GameTestNet.set(context, controller, network);
 			context.runOnClient(mc -> {
 				controller.discardPending();
 				SettingsBridge.applyVanilla(mc.options, original);

@@ -39,6 +39,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.lang.management.CompilationMXBean;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryPoolMXBean;
@@ -75,10 +76,25 @@ public class FootprintGameTest implements FabricClientGameTest {
 	private static final String TEST_CLASSES = "io.github.chaotix345.rigtune.gametest.";
 	private static final Pattern HISTOGRAM_LINE = Pattern.compile("^\\s*\\d+:\\s+(\\d+)\\s+(\\d+)\\s+(\\S+)");
 	private static final int CYCLES = 20;
-	private static final int TICK_CALLS = 100_000;
-	// Best of 5 timing blocks, as the frame hook (FrameHookBudgetTest): best of 3 let one slow runner through (run
-	// 36255335999, docs-only change: tickHookNsPerCallWorld 91.62 ns against its 87 ns limit).
-	private static final int TICK_ROUNDS = 5;
+	// v0.5 (docs/v0.5/design/ws-ci.md): every tick timing is TICK_BLOCKS interleaved triples of TICK_BLOCK_CALLS calls: the
+	// work, the work twice per call (a deliberate, exact 2x regression), and a fixed pure-Java reference workload, timed by
+	// the wall clock (Windows quantises thread CPU time to 15.6 ms). ns per call is the median work block. The best of 5
+	// blocks it replaces flaked when the JIT was still compiling during all 5 (runs 36255335999, 36263433380; the r-ci probe
+	// saw 29 ms of compilation in the outlying measurements, none in the others); the median ratio of work to reference
+	// shares the runner's speed and any compilation with both sides.
+	private static final int TICK_BLOCKS = 48;
+	private static final int TICK_BLOCK_CALLS = 20_000;
+	private static final int TICK_WARM_UP_ROUNDS = 300;
+	private static final int TICK_WARM_UP_CALLS = 1_000;
+	private static final long TICK_JIT_QUIET_MS = 100;
+	private static final long TICK_JIT_QUIET_CAP_MS = 10_000;
+	// Gated: the monitor-on tick work over the reference. Recorded: the same for the work called twice, which must exceed
+	// that limit on every run, or this runner couldn't have seen a 2x regression.
+	private static final String TICK_RATIO_KEY = "tickHookOnVsReference";
+	private static final String TICK_TWIN_KEY = "tickHookOnTwinVsReference";
+	private static final long[] REFERENCE = new long[256];
+	private static long referenceState = 0x9E3779B97F4A7C15L;
+	private static long referenceSink;
 	private static final int[][] SIZES = {{1280, 720, 2}, {640, 480, 2}, {854, 480, 2}};
 	private static final String SAMPLER = "RigTune stutter sampler";
 	private static final long SAMPLER_WINDOW_NANOS = 60_000_000_000L;
@@ -150,11 +166,19 @@ public class FootprintGameTest implements FabricClientGameTest {
 			throw new AssertionError("Could not read the footprint budgets", e);
 		}
 		List<FootprintBudgets.Violation> violations = budgets.check(measured);
+		String blind = blindRatioGate(measured, budgets);
 		out.put("measured", measured);
 		out.put("budgetMode", budgets.mode().name().toLowerCase(Locale.ROOT));
 		out.put("violations", violations.stream().map(FootprintBudgets.Violation::message).toList());
+		out.put("ratioGateSelfCheck", blind == null ? "ok" : blind);
 		write(mc, backend, out);
 		budgets.enforce(violations, RigTune.LOGGER::warn);
+		if (blind != null) {
+			if (budgets.mode() == FootprintBudgets.Mode.FAIL) {
+				throw new AssertionError(blind);
+			}
+			RigTune.LOGGER.warn("WARN-ONLY {}", blind);
+		}
 		RigTune.LOGGER.info("FootprintGameTest: {} budget(s), {} over (mode {})", budgets.budgets().size(), violations.size(), budgets.mode());
 	}
 
@@ -307,33 +331,18 @@ public class FootprintGameTest implements FabricClientGameTest {
 	}
 
 	// RigTune's END_CLIENT_TICK hook on the render thread with a (non-title, non-RigTune) screen open: the path it takes
-	// during play. Best of TICK_ROUNDS rounds after a warm-up, so a JIT compile or a slow moment in one round doesn't count.
+	// during play, timed as timeTick does.
 	private static void tickHook(ClientGameTestContext context, Map<String, Number> measured, Map<String, Object> out) {
 		context.runOnClient(mc -> mc.gui.setScreen(new ToolsScreen(new TitleScreen(), RigTuneClient.controller())));
 		context.waitForScreen(ToolsScreen.class);
-		long[] best = context.computeOnClient(mc -> {
-			com.sun.management.ThreadMXBean mx = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
-			for (int i = 0; i < 2 * TICK_CALLS; i++) {
-				RigTuneClient.onTick(mc);
-			}
-			long nanos = Long.MAX_VALUE;
-			long bytes = Long.MAX_VALUE;
-			for (int round = 0; round < TICK_ROUNDS; round++) {
-				long allocated = mx.getCurrentThreadAllocatedBytes();
-				long start = System.nanoTime();
-				for (int i = 0; i < TICK_CALLS; i++) {
-					RigTuneClient.onTick(mc);
-				}
-				nanos = Math.min(nanos, System.nanoTime() - start);
-				bytes = Math.min(bytes, mx.getCurrentThreadAllocatedBytes() - allocated);
-			}
-			return new long[]{nanos, bytes};
-		});
+		TickTiming timing = context.computeOnClient(mc -> timeTick(mc, RigTuneClient::onTick));
 		context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
 		context.waitForScreen(TitleScreen.class);
-		measured.put("tickHookNsPerCall", round2((double) best[0] / TICK_CALLS));
-		measured.put("tickHookAllocBytes", best[1]);
-		out.put("tickHookCalls", TICK_CALLS);
+		measured.put("tickHookNsPerCall", timing.nsPerCall());
+		measured.put("tickHookAllocBytes", timing.allocBytes());
+		out.put("tickHookTiming", timing.detail());
+		out.put("tickHookCalls", TICK_BLOCKS * TICK_BLOCK_CALLS);
+		out.put("cpu", cpuModel());
 	}
 
 	// SPEC X5: notices are evaluated on screen init/rebuild only; their cost per evaluation, for the record.
@@ -405,7 +414,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 			check(idleRetained == 0 && StutterMonitor.session() == null, "nothing captured or retained with the monitor off: " + idleRetained);
 			Histogram idle = histogram();
 			context.runOnClient(mc -> mc.gui.setScreen(null));
-			long[] tickOff = context.computeOnClient(mc -> timeTicks(mc, stutterTick));
+			TickTiming tickOff = context.computeOnClient(mc -> timeTick(mc, playTick(stutterTick)));
 			check(StutterMonitor.session() == null, "the monitor stayed off through the tick timing");
 
 			long start = System.nanoTime();
@@ -429,7 +438,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 			checkNoPowerWatcher(hardware, threadsOn);
 
 			context.runOnClient(mc -> mc.gui.setScreen(null));
-			long[] tick = context.computeOnClient(mc -> timeTicks(mc, stutterTick));
+			TickTiming tick = context.computeOnClient(mc -> timeTick(mc, playTick(stutterTick)));
 			check(StutterMonitor.session() != null, "still capturing after the tick timing");
 			long onRetained = StutterMonitor.retainedBytes();
 			long frames = sessionFrames();
@@ -488,10 +497,14 @@ public class FootprintGameTest implements FabricClientGameTest {
 			measured.put("monitorOffRetainedBytes", offRetained);
 			measured.put("monitorOffLeftoverInstances", leftover.values().stream().mapToLong(Long::longValue).sum());
 			measured.put("samplerCpuMsPer60s", round2((samplerCpu - earlyCpu) / 1e6 * SAMPLER_WINDOW_NANOS / (window - earlyWindow)));
-			measured.put("tickHookNsPerCallOn", round2((double) tick[0] / TICK_CALLS));
-			measured.put("tickHookAllocBytesOn", tick[1]);
-			measured.put("tickHookNsPerCallWorld", round2((double) tickOff[0] / TICK_CALLS));
-			measured.put("tickHookAllocBytesWorld", tickOff[1]);
+			measured.put("tickHookNsPerCallOn", tick.nsPerCall());
+			measured.put("tickHookAllocBytesOn", tick.allocBytes());
+			measured.put(TICK_RATIO_KEY, tick.vsReference());
+			measured.put(TICK_TWIN_KEY, tick.twinVsReference());
+			measured.put("tickHookNsPerCallWorld", tickOff.nsPerCall());
+			measured.put("tickHookAllocBytesWorld", tickOff.allocBytes());
+			out.put("tickHookTimingOn", tick.detail());
+			out.put("tickHookTimingWorld", tickOff.detail());
 			out.put("monitorIdleRetainedBytes", idleRetained);
 			out.put("monitorSessionRetainedBytes", onRetained);
 			out.put("monitorBenchmarkRetainedBytes", handover[1]);
@@ -528,30 +541,177 @@ public class FootprintGameTest implements FabricClientGameTest {
 		}
 	}
 
-	// RigTune's two END_CLIENT_TICK listeners, as tickHook: best of TICK_ROUNDS rounds after a warm-up, render thread.
-	private static long[] timeTicks(Minecraft mc, MethodHandle stutterTick) {
+	@FunctionalInterface
+	private interface TickWork {
+		void run(Minecraft mc) throws Throwable;
+	}
+
+	// ratios: medians over the triples of work / reference and of work-twice / reference.
+	private record TickTiming(double nsPerCall, long allocBytes, double vsReference, double twinVsReference, Map<String, Object> detail) {
+	}
+
+	// RigTune's two END_CLIENT_TICK listeners on the play path: RigTuneClient.onTick and the monitor's own
+	// (StutterHooks.tick, private, through a method handle).
+	private static TickWork playTick(MethodHandle stutterTick) {
+		return mc -> {
+			RigTuneClient.onTick(mc);
+			stutterTick.invokeExact(mc);
+		};
+	}
+
+	// See TICK_BLOCKS. On the render thread; bytes are every work block's allocation after the warm-up, summed (strict: an
+	// allocation in any one block fails the 0-allocation keys; the per-block bytes go into the JSON). The three loops are small
+	// methods of their own, warmed up in short calls, so each is compiled as itself (not as an on-stack replacement inside
+	// a bigger method); then the blocks wait until the JIT has finished nothing for TICK_JIT_QUIET_MS (at most
+	// TICK_JIT_QUIET_CAP_MS). The first proof run (36295129832, the classes cut to two, so the timing ran a minute into the
+	// JVM with 250-380 ms of compilation during the blocks) had the reference 1.3-1.8x slower than in the full suite.
+	private static TickTiming timeTick(Minecraft mc, TickWork work) {
 		com.sun.management.ThreadMXBean mx = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
+		CompilationMXBean jit = ManagementFactory.getCompilationMXBean();
 		try {
-			for (int i = 0; i < 2 * TICK_CALLS; i++) {
-				RigTuneClient.onTick(mc);
-				stutterTick.invokeExact(mc);
+			for (int round = 0; round < TICK_WARM_UP_ROUNDS; round++) {
+				once(mc, work, TICK_WARM_UP_CALLS);
+				twice(mc, work, TICK_WARM_UP_CALLS);
+				referenceSink += reference(TICK_WARM_UP_CALLS);
 			}
-			long nanos = Long.MAX_VALUE;
-			long bytes = Long.MAX_VALUE;
-			for (int round = 0; round < TICK_ROUNDS; round++) {
-				long allocated = mx.getCurrentThreadAllocatedBytes();
-				long start = System.nanoTime();
-				for (int i = 0; i < TICK_CALLS; i++) {
-					RigTuneClient.onTick(mc);
-					stutterTick.invokeExact(mc);
+			long waitStart = System.nanoTime();
+			long quietSince = waitStart;
+			long compiled = jit.getTotalCompilationTime();
+			while (System.nanoTime() - quietSince < TICK_JIT_QUIET_MS * 1_000_000L && System.nanoTime() - waitStart < TICK_JIT_QUIET_CAP_MS * 1_000_000L) {
+				once(mc, work, TICK_WARM_UP_CALLS);
+				referenceSink += reference(TICK_WARM_UP_CALLS);
+				long now = jit.getTotalCompilationTime();
+				if (now != compiled) {
+					compiled = now;
+					quietSince = System.nanoTime();
 				}
-				nanos = Math.min(nanos, System.nanoTime() - start);
-				bytes = Math.min(bytes, mx.getCurrentThreadAllocatedBytes() - allocated);
 			}
-			return new long[]{nanos, bytes};
+			long quietWaitMs = (System.nanoTime() - waitStart) / 1_000_000;
+			double[] onceNs = new double[TICK_BLOCKS];
+			double[] twiceNs = new double[TICK_BLOCKS];
+			double[] referenceNs = new double[TICK_BLOCKS];
+			double[] cpuRatio = new double[TICK_BLOCKS];
+			long[] blockBytes = new long[TICK_BLOCKS];
+			long jitBefore = jit.getTotalCompilationTime();
+			for (int block = 0; block < TICK_BLOCKS; block++) {
+				long c0 = mx.getCurrentThreadCpuTime();
+				long allocated = mx.getCurrentThreadAllocatedBytes();
+				long t0 = System.nanoTime();
+				once(mc, work, TICK_BLOCK_CALLS);
+				long t1 = System.nanoTime();
+				blockBytes[block] = mx.getCurrentThreadAllocatedBytes() - allocated;
+				long c1 = mx.getCurrentThreadCpuTime();
+				long t2 = System.nanoTime();
+				twice(mc, work, TICK_BLOCK_CALLS);
+				long t3 = System.nanoTime();
+				long c3 = mx.getCurrentThreadCpuTime();
+				referenceSink += reference(TICK_BLOCK_CALLS);
+				long t4 = System.nanoTime();
+				long c4 = mx.getCurrentThreadCpuTime();
+				onceNs[block] = (t1 - t0) / (double) TICK_BLOCK_CALLS;
+				twiceNs[block] = (t3 - t2) / (double) TICK_BLOCK_CALLS;
+				referenceNs[block] = (t4 - t3) / (double) TICK_BLOCK_CALLS;
+				cpuRatio[block] = c4 > c3 ? (c1 - c0) / (double) (c4 - c3) : Double.NaN;
+			}
+			double[] ratio = new double[TICK_BLOCKS];
+			double[] twinRatio = new double[TICK_BLOCKS];
+			for (int block = 0; block < TICK_BLOCKS; block++) {
+				ratio[block] = onceNs[block] / referenceNs[block];
+				twinRatio[block] = twiceNs[block] / referenceNs[block];
+			}
+			Map<String, Object> detail = new LinkedHashMap<>();
+			detail.put("blockCalls", TICK_BLOCK_CALLS);
+			detail.put("medianNs", round2(median(onceNs)));
+			detail.put("medianTwiceNs", round2(median(twiceNs)));
+			detail.put("medianReferenceNs", round2(median(referenceNs)));
+			detail.put("vsReference", round3(median(ratio)));
+			detail.put("twinVsReference", round3(median(twinRatio)));
+			// Thread CPU time instead of wall (a diagnostic: Windows counts thread CPU in 15.6 ms steps, so it is NaN or
+			// meaningless there; with no measurable block at all it is null).
+			double[] cpuRatios = Arrays.stream(cpuRatio).filter(r -> !Double.isNaN(r)).toArray();
+			detail.put("vsReferenceCpu", cpuRatios.length == 0 ? null : round3(median(cpuRatios)));
+			detail.put("jitQuietWaitMs", quietWaitMs);
+			detail.put("jitMsDuringBlocks", jit.getTotalCompilationTime() - jitBefore);
+			detail.put("ns", Arrays.stream(onceNs).map(FootprintGameTest::round2).toArray());
+			detail.put("twiceNs", Arrays.stream(twiceNs).map(FootprintGameTest::round2).toArray());
+			detail.put("referenceNs", Arrays.stream(referenceNs).map(FootprintGameTest::round2).toArray());
+			detail.put("allocBytesPerBlock", blockBytes);
+			return new TickTiming(round2(median(onceNs)), FootprintBudgets.allocatedBytes(blockBytes), round3(median(ratio)),
+					round3(median(twinRatio)), detail);
 		} catch (Throwable t) {
 			throw new AssertionError("timing RigTune's tick listeners failed", t);
 		}
+	}
+
+	private static void once(Minecraft mc, TickWork work, int calls) throws Throwable {
+		for (int i = 0; i < calls; i++) {
+			work.run(mc);
+		}
+	}
+
+	private static void twice(Minecraft mc, TickWork work, int calls) throws Throwable {
+		for (int i = 0; i < calls; i++) {
+			work.run(mc);
+			work.run(mc);
+		}
+	}
+
+	// A fixed pure-Java workload (loads, stores, a branch) of roughly the tick work's cost per call, the runner's yardstick.
+	private static long reference(int calls) {
+		long x = referenceState;
+		long sum = 0;
+		for (int i = 0; i < calls; i++) {
+			for (int k = 0; k < 6; k++) {
+				x ^= x << 13;
+				x ^= x >>> 7;
+				x ^= x << 17;
+				int slot = (int) (x & 255);
+				if ((x & 1) == 0) {
+					REFERENCE[slot] += x;
+				} else {
+					sum += REFERENCE[slot];
+				}
+			}
+			x += i;
+		}
+		referenceState = x;
+		return sum;
+	}
+
+	private static double median(double[] values) {
+		double[] sorted = values.clone();
+		Arrays.sort(sorted);
+		int mid = sorted.length / 2;
+		return sorted.length % 2 == 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+	}
+
+	private static double round3(double value) {
+		return Math.round(value * 1000) / 1000.0;
+	}
+
+	// The CPU's model name (Linux), for reading timings across runner types.
+	private static String cpuModel() {
+		try {
+			for (String line : Files.readAllLines(Path.of("/proc/cpuinfo"), StandardCharsets.UTF_8)) {
+				if (line.startsWith("model name")) {
+					return line.substring(line.indexOf(':') + 1).trim();
+				}
+			}
+		} catch (IOException | RuntimeException ignored) {
+		}
+		return System.getProperty("os.arch");
+	}
+
+	// The deliberate-slowdown proof on every run: the monitor-on tick work called twice must measure above the ratio's
+	// limit, or this runner couldn't have seen a 2x regression. null when it does (or nothing was measured).
+	private static @Nullable String blindRatioGate(Map<String, Number> measured, FootprintBudgets budgets) {
+		FootprintBudgets.Budget ratio = budgets.budgets().get(TICK_RATIO_KEY);
+		Number twin = measured.get(TICK_TWIN_KEY);
+		if (ratio == null || twin == null || twin.doubleValue() > ratio.limit()) {
+			return null;
+		}
+		return String.format(Locale.ROOT, "footprint gate %s can't see a 2x regression on this runner: the tick work called twice measured %.3f, not above the limit %s",
+				TICK_RATIO_KEY, twin.doubleValue(), ratio.limit());
 	}
 
 	// Live capture objects beyond the permanent EMPTY constants.
