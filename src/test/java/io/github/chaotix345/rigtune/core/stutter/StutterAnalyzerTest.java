@@ -364,6 +364,19 @@ class StutterAnalyzerTest {
 		assertEquals(3276.8, report.gameplaySeconds(), 0.1, "gameplay time is still the whole capture's");
 		assertEquals(655.4, report.windowSeconds(), 0.5, "the window: its frames at its average");
 
+		// A window of excluded frames only (a long stay in a menu): the whole capture's numbers, no window.
+		FrameRing menu = new FrameRing(FrameRing.SESSION_FRAMES, FrameRing.SESSION_CANDIDATES);
+		long at = T0;
+		for (int i = 0; i < 2 * FrameRing.SESSION_FRAMES; i++) {
+			at += 5 * MS;
+			menu.frame(at, 5 * MS, i >= 1000, 0, 0, 0, 0);
+		}
+		StutterReport inMenu = StutterAnalyzer.analyze(new StutterAnalyzer.Input(menu.snapshot(), new StutterRings(ANCHOR).snapshot(), T0, at, STARTED,
+				StutterReport.MONITOR, "26.2", "g1", 4096, 32768L, 16, false, false)).report();
+		assertEquals(1000, inMenu.frames());
+		assertEquals(200.0, inMenu.avgFps(), 0.1);
+		assertNull(inMenu.windowSeconds());
+
 		Capture shortCapture = new Capture().frames(180, Map.of(20, 80 * MS), false);
 		StutterReport whole = shortCapture.analyze(true).report();
 		assertNull(whole.windowSeconds(), "a capture shorter than the ring has no window to name");

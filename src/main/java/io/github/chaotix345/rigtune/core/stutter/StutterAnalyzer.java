@@ -149,8 +149,9 @@ public final class StutterAnalyzer {
 
 		double gameplaySeconds = f.gameplayNanos() / 1e9;
 		FrameStats stats = FrameStats.of(gameplayDurations(ends));
-		// SD-2: once the frame ring wrapped, frames, average and 1 % low all describe its window (StutterReport.windowSeconds).
-		boolean wrapped = f.frames() > ends.length;
+		// SD-2: once the frame ring wrapped, frames, average and 1 % low all describe its window (StutterReport.windowSeconds),
+		// unless the window holds no gameplay frame at all (a long stay in a menu): then as in 0.4.
+		boolean wrapped = f.frames() > ends.length && stats.frames() > 0;
 		long frames = wrapped ? stats.frames() : f.gameplayFrames();
 		double avgFps = wrapped ? stats.avgFps() : gameplaySeconds > 0 ? f.gameplayFrames() / gameplaySeconds : 0;
 		long[] histogramMs = Arrays.stream(f.histogramNanos()).map(ns -> Math.round(ns / 1e6)).toArray();
