@@ -5,6 +5,7 @@ import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.core.model.ServerLimits;
 import io.github.chaotix345.rigtune.core.server.ServerProfileStore.Entry;
 import io.github.chaotix345.rigtune.core.server.ServerProfileStore.Result;
+import io.github.chaotix345.rigtune.core.store.JsonStateFile;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -338,9 +339,102 @@ class ServerProfileStoreTest {
 		ServerProfileStore store = store();
 		assertEquals(List.of(), store.entries());
 		assertNull(store.joined(PLAY, T0));
-		assertEquals(Result.READ_ONLY, store.remember(PLAY, REMOTE, "p-1", T0));
+		// Not a newer RigTune's file as far as anyone knows: "couldn't save that (the log says why)", never "read-only".
+		assertEquals(Result.FAILED, store.remember(PLAY, REMOTE, "p-1", T0));
+		assertEquals(Result.FAILED, store.forget(PLAY));
+		assertEquals(Result.FAILED, store.forgetKey("a".repeat(64)));
+		assertEquals(Result.FAILED, store.forgetAll());
+		assertEquals(0, store.forgetProfile("p-1"));
 		assertArrayEquals(big, Files.readAllBytes(file()));
 		assertFalse(Files.exists(file().resolveSibling("server-profiles.json.bad")));
+	}
+
+	@Test
+	void aServerForgottenBetweenTheLookupAndTheWriteIsNotAnswered() throws IOException {
+		ServerProfileStore store = store();
+		store.remember(PLAY, REMOTE, "p-1", T0);
+		store.remember(OTHER, REMOTE, "p-2", T0);
+		ServerProfileStore.beforeUpdate = () -> assertEquals(Result.OK, store.forget(PLAY));
+		try {
+			assertNull(store.joined(PLAY, T1), "forgotten meanwhile: no offer");
+		} finally {
+			ServerProfileStore.beforeUpdate = null;
+		}
+		assertNull(store.get(PLAY));
+		assertEquals(List.of(store.keyOf(OTHER)), new ArrayList<>(json().getAsJsonObject("servers").keySet()), "the rest as it was");
+		assertEquals("2026-09-20T10:00:00Z", json().getAsJsonObject("servers").getAsJsonObject(store.keyOf(OTHER)).get("lastSeen").getAsString());
+	}
+
+	@Test
+	void twoRemembersRacingForTheLastPlaceGiveOneOkAndOneFull() throws IOException {
+		ServerProfileStore store = store();
+		for (int i = 0; i < ServerProfileStore.MAX_SERVERS - 1; i++) {
+			assertEquals(Result.OK, store.remember(server(i), REMOTE, "p-1", T0));
+		}
+		Result[] other = new Result[1];
+		ServerProfileStore.beforeUpdate = () -> other[0] = store.remember(server(40), REMOTE, "p-2", T1);
+		try {
+			assertEquals(Result.FULL, store.remember(server(41), REMOTE, "p-3", T1), "the 32nd place went meanwhile");
+		} finally {
+			ServerProfileStore.beforeUpdate = null;
+		}
+		assertEquals(Result.OK, other[0]);
+		assertEquals(ServerProfileStore.MAX_SERVERS, store.entries().size());
+		assertEquals("p-2", store.get(server(40)).profile());
+		assertNull(store.get(server(41)));
+		assertEquals(ServerProfileStore.MAX_SERVERS, json().getAsJsonObject("servers").size());
+	}
+
+	@Test
+	void aValidSaltWithServersThatIsntAnObject() throws IOException {
+		String salt = "0123456789abcdef0123456789abcdef";
+		for (String servers : new String[]{"[]", "5", "\"x\"", "null"}) {
+			write("{\"formatVersion\": 1, \"salt\": \"" + salt + "\", \"servers\": " + servers + "}");
+			ServerProfileStore store = store();
+			assertEquals(List.of(), store.entries(), servers);
+			assertNull(store.get(PLAY), servers);
+			assertNull(store.joined(PLAY, T0), servers);
+			assertEquals(ServerLimitsStore.key(salt, PLAY), store.keyOf(PLAY), servers);
+			assertEquals(Result.OK, store.forget(PLAY), servers);
+			assertEquals(Result.OK, store.remember(PLAY, REMOTE, "p-1", T0), servers);
+			JsonObject root = json();
+			assertEquals(salt, root.get("salt").getAsString(), servers + ": the salt stays");
+			assertEquals(List.of(ServerLimitsStore.key(salt, PLAY)), new ArrayList<>(root.getAsJsonObject("servers").keySet()), servers);
+		}
+	}
+
+	@Test
+	void aRememberThatWouldPassTheCapFailsAndLeavesTheFile() throws IOException {
+		store().remember(OTHER, REMOTE, "p-1", T0);
+		JsonObject root = json();
+		// A player-added field that leaves too little room for one more entry.
+		int room = (int) ServerProfileStore.MAX_BYTES - JsonStateFile.GSON.toJson(root).getBytes(StandardCharsets.UTF_8).length - 100;
+		root.addProperty("notes", "n".repeat(room));
+		write(root.toString());
+		byte[] before = Files.readAllBytes(file());
+		assertTrue(store().writable());
+		assertEquals(Result.FAILED, store().remember(PLAY, REMOTE, "p-" + "a".repeat(64), T1));
+		assertArrayEquals(before, Files.readAllBytes(file()));
+		assertNull(store().get(PLAY));
+		assertEquals("p-1", store().get(OTHER).profile());
+	}
+
+	@Test
+	void forgetKeyWithoutAKeyAndOnAnEntryThisVersionCantRead() throws IOException {
+		ServerProfileStore store = store();
+		store.remember(PLAY, REMOTE, "p-1", T0);
+		byte[] before = Files.readAllBytes(file());
+		assertEquals(Result.OK, store.forgetKey(null));
+		assertArrayEquals(before, Files.readAllBytes(file()), "nothing written");
+		JsonObject root = json();
+		String salt = root.get("salt").getAsString();
+		String unreadable = ServerLimitsStore.key(salt, OTHER);
+		root.getAsJsonObject("servers").add(unreadable, JsonParser.parseString("{\"profile\": \"p-1\", \"kind\": \"MARS\"}"));
+		write(root.toString());
+		assertNull(store.get(OTHER));
+		assertEquals(Result.OK, store.forgetKey(unreadable), "a key names whatever is there");
+		assertFalse(json().getAsJsonObject("servers").has(unreadable));
+		assertEquals("p-1", store.get(PLAY).profile());
 	}
 
 	@Test

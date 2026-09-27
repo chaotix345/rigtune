@@ -113,6 +113,8 @@ public record ServerProfilesView(State state, ServerLimits.@Nullable Kind kind, 
 				: notWritten(result);
 	}
 
+	// READ_ONLY only for a newer RigTune's file; FAILED for anything else (unreadable now, over the cap, a write error),
+	// whose reason JsonStateFile logs.
 	private static Text notWritten(ServerProfileStore.Result result) {
 		return result == ServerProfileStore.Result.READ_ONLY
 				? Text.of("rigtune.profile.server.status.read_only", "server-profiles.json was written by a newer RigTune, so this version doesn't change it.")

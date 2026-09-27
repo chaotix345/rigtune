@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.core.model.ServerLimits;
+import io.github.chaotix345.rigtune.core.store.JsonStateFile;
 import io.github.chaotix345.rigtune.core.store.StateStore;
 import org.jspecify.annotations.Nullable;
 
@@ -50,18 +51,25 @@ public final class ServerProfileStore {
 	private static final SecureRandom RANDOM = new SecureRandom();
 	private static final Map<Path, ServerProfileStore> SHARED = new HashMap<>();
 
-	// READ_ONLY: the file is from a newer RigTune (or can't be read now); FAILED: refused (not a server, not a profile id)
-	// or the write failed. Forgetting what isn't there is OK.
+	// READ_ONLY: the file is from a newer RigTune; FAILED: refused (not a server, not a profile id), the file can't be read
+	// now (an I/O error, over 4 x the cap: JsonStateFile logs which) or the write failed (over the cap, an I/O error).
+	// Forgetting what isn't there is OK.
 	public enum Result { OK, FULL, READ_ONLY, FAILED }
 
 	// key: the entry's HMAC key (64 hex); setAt/lastSeen null when the file doesn't hold a readable time.
 	public record Entry(String key, String profile, ServerLimits.Kind kind, @Nullable Instant setAt, @Nullable Instant lastSeen) {
 	}
 
+	// Tests only: run once between a write's first read and its update, standing in for another thread's write there.
+	static volatile @Nullable Runnable beforeUpdate;
+
 	private final StateStore store;
+	// Asked only once the store isn't writable, to tell a newer file (READ_ONLY) from an unreadable one (FAILED).
+	private final JsonStateFile probe;
 
 	private ServerProfileStore(Path file) {
 		this.store = new StateStore(file, MAX_BYTES, root -> root);
+		this.probe = new JsonStateFile(file, MAX_BYTES);
 	}
 
 	public static Path file(Path configDir) {
@@ -106,6 +114,7 @@ public final class ServerProfileStore {
 		}
 		Instant seen = now.truncatedTo(ChronoUnit.SECONDS);
 		Entry[] touched = {null};
+		raced();
 		boolean written = store.update(root -> {
 			if (servers(root).get(found.key()) instanceof JsonObject e && entry(found.key(), e) != null) {
 				e.addProperty(LAST_SEEN, seen.toString());
@@ -113,7 +122,9 @@ public final class ServerProfileStore {
 			}
 			return root;
 		});
-		return written && touched[0] != null ? touched[0] : found;
+		// Not written: a newer (or unreadable) file still answers as it is. Written: what's there now, null when it was
+		// forgotten meanwhile (the content was left as it was).
+		return written ? touched[0] : found;
 	}
 
 	// Offer profileId on this server from now on (replacing its profile in place when it's already remembered).
@@ -127,13 +138,14 @@ public final class ServerProfileStore {
 			return Result.FAILED;
 		}
 		if (!store.writable()) {
-			return Result.READ_ONLY;
+			return notWritable();
 		}
 		if (full(store.read(), address)) {
 			return Result.FULL;
 		}
 		String at = now.truncatedTo(ChronoUnit.SECONDS).toString();
 		boolean[] full = {false};
+		raced();
 		boolean written = store.update(root -> {
 			if (salt(root) == null) {
 				byte[] salt = new byte[16];
@@ -171,7 +183,7 @@ public final class ServerProfileStore {
 	// key: an entry's key (a row of the list).
 	public Result forgetKey(@Nullable String key) {
 		if (!store.writable()) {
-			return Result.READ_ONLY;
+			return notWritable();
 		}
 		if (key == null || !servers(store.read()).has(key)) {
 			return Result.OK;
@@ -205,7 +217,7 @@ public final class ServerProfileStore {
 	// Every entry, the ones this version can't read too; the salt stays.
 	public Result forgetAll() {
 		if (!store.writable()) {
-			return Result.READ_ONLY;
+			return notWritable();
 		}
 		JsonElement servers = store.read().get(SERVERS);
 		if (servers == null || servers instanceof JsonObject o && o.size() == 0) {
@@ -225,6 +237,18 @@ public final class ServerProfileStore {
 	// This server's key (the list marks its row), or null without a salt: nothing is written.
 	public @Nullable String keyOf(String address) {
 		return key(store.read(), address);
+	}
+
+	private Result notWritable() {
+		return probe.load(JsonObject.class).state() == JsonStateFile.State.NEWER ? Result.READ_ONLY : Result.FAILED;
+	}
+
+	private static void raced() {
+		Runnable hook = beforeUpdate;
+		if (hook != null) {
+			beforeUpdate = null;
+			hook.run();
+		}
 	}
 
 	private static List<Entry> entries(JsonObject root) {
