@@ -386,29 +386,43 @@ An en_us.json merge conflict is resolved by the merging agent, keeping both side
   launcher, try-it, server-profiles, first-apply, startup, smoke, real-instance) with its owner.
 
 ## 16. Footprint baseline (per leg, from CI's footprint-<mc>-<backend>.json)
-"Before" = the integration branch's last five green runs (36293289958, 36293968281, 36296295977, 36297472703,
-36298895950: docs-only commits on 0.4's code), median and range; "after" = this branch's head. ms, render-thread CPU
-unless noted. `tickHookOnVsReference` is ws-ci's new key: its baseline comes with the held part's runs.
+**The per-leg baseline for every workstream's deltas is the WS-K head's run, 36310249248 (head a6074bfc, ws-ci + WS-K
+merged)**, first column. For comparison: the integration branch's last five green runs before WS-K (36293289958,
+36293968281, 36296295977, 36297472703, 36298895950: 0.4's code), median and range, and WS-K's two earlier runs (before
+ws-ci: 36302121033, 36304533461). ms of render-thread CPU unless noted; `tickHookOnVsReference` is ws-ci's ratio (limit
+2.05), first measured with WS-K on this run.
 
-| leg | key | before: median (range) | after: WS-K run 36302121033 |
-|---|---|---|---|
-| 26.2 OpenGL | preLaunchCpuMs + initCpuMs = renderThreadInitCpuMs | 98.7 (63.5-102.8) | 112.9 (pre 59.7, init 53.1) |
-| 26.2 OpenGL | initCpuMs (onInitializeClient only) | 50.1 (33.9-52.6) | 53.1 |
-| 26.2 OpenGL | clientStartedWallMs | 44.3 (25.5-69.9) | 50.2 |
-| 26.2 OpenGL | workerCpuMs5s | 204.5 (132.8-214.1) | 191.5 |
-| 26.3 OpenGL | renderThreadInitCpuMs | 108.7 (95.6-117.1) | 110.4 |
-| 26.3 OpenGL | initCpuMs | 54.4 (49.2-57.3) | 53.0 |
-| 26.3 OpenGL | clientStartedWallMs | 30.4 (20.4-36.0) | 24.5 |
-| 26.3 OpenGL | workerCpuMs5s | 194.5 (173.1-200.1) | 180.2 |
-| 26.3 Vulkan | renderThreadInitCpuMs | 96.6 (74.9-116.6) | 102.5 |
-| 26.3 Vulkan | initCpuMs | 50.2 (38.5-55.0) | 57.6 |
-| 26.3 Vulkan | clientStartedWallMs | 34.5 (24.7-49.4) | 46.6 |
-| 26.3 Vulkan | workerCpuMs5s | 178.0 (144.6-217.0) | 208.0 |
+| leg | key | WS-K head (36310249248) | before WS-K: median (range) | WS-K runs before ws-ci |
+|---|---|---|---|---|
+| 26.2 OpenGL | renderThreadInitCpuMs (preLaunch + init) | 82.2 (40.9 + 41.3) | 98.7 (63.5-102.8) | 112.9, 112.4 |
+| 26.2 OpenGL | initCpuMs (onInitializeClient) | 41.3 | 50.1 (33.9-52.6) | 53.1, 54.0 |
+| 26.2 OpenGL | clientStartedWallMs | 36.4 | 44.3 (25.5-69.9) | 50.2, 51.5 |
+| 26.2 OpenGL | workerCpuMs5s | 135.5 | 204.5 (132.8-214.1) | 191.5, 193.0 |
+| 26.2 OpenGL | tickHookOnVsReference | 1.481 | (new) | (new) |
+| 26.3 OpenGL | renderThreadInitCpuMs | 82.2 (38.5 + 43.7) | 108.7 (95.6-117.1) | 110.4, 77.8 |
+| 26.3 OpenGL | initCpuMs | 43.7 | 54.4 (49.2-57.3) | 53.0, 45.5 |
+| 26.3 OpenGL | clientStartedWallMs | 27.0 | 30.4 (20.4-36.0) | 24.5, 31.9 |
+| 26.3 OpenGL | workerCpuMs5s | 153.2 | 194.5 (173.1-200.1) | 180.2, 141.4 |
+| 26.3 OpenGL | tickHookOnVsReference | 1.746 | (new) | (new) |
+| 26.3 Vulkan | renderThreadInitCpuMs | 120.0 (63.2 + 56.8) | 96.6 (74.9-116.6) | 102.5, 109.4 |
+| 26.3 Vulkan | initCpuMs | 56.8 | 50.2 (38.5-55.0) | 57.6, 51.9 |
+| 26.3 Vulkan | clientStartedWallMs | 39.9 | 34.5 (24.7-49.4) | 46.6, 42.0 |
+| 26.3 Vulkan | workerCpuMs5s | 200.7 | 178.0 (144.6-217.0) | 208.0, 201.7 |
+| 26.3 Vulkan | tickHookOnVsReference | 1.535 | (new) | (new) |
 
-Reading: every "after" value is inside or within a few ms of the "before" range, whose spread (one runner to the next)
-is larger than any change WS-K could make; the budgets (150 / 141 / 300) keep their margin. 26.2's 112.9 comes from
-preLaunch (59.7 vs a 48-50 median), code WS-K didn't change beyond two volatile writes. More "after" runs (the held
-part, the first streak on the ws-ci + WS-K SHA) replace this single sample.
+The same run: `v05RenderThreadResolve` null on all three legs (the X4 flag, AC-X.2) and `v05HolderCreatedOn` "RigTune
+worker" (the start hook's task made the holder); no budget violation; `rigtuneClassBytesIdle` 76632 / 76664 / 77000
+(limit 109296). Reading: runner-to-runner spread (26.2 renderThreadInitCpuMs 63.5-112.9 across runs of near-identical
+code) is larger than anything WS-K's init work (one small class, three lambdas, a phase ordering) can add; every value
+keeps its budget's margin (150 / 141 / 300). Each workstream reports its deltas against the first column, noting the
+spread; the first 5-run streak on the merged SHA gives the medians.
+
+**Screenshots looked at** (PLAN protocol 4): `gametest-screenshots-26.2-OpenGL` of run 36310249248 (WS-K head) against
+the same artifact of 36309924157 (feat/v0.5.0 with ws-ci, before WS-K) and of 36304533461 (WS-K before ws-ci): 200
+screenshots each, compared pixel by pixel. 86 are identical, among them all 12 `launcher-*` (RamAdviceController) and
+`profiles-import-not-ready` (NotReady). The rest differ in the header's CPU line (the runner's CPU model: "AMD EPYC 7763"
+vs "Intel Xeon 6973P-C", cropped and looked at) or in live-world and benchmark content; none in the rows or widgets of
+the converted wrappers' screens (`jvm-main-list`, `ui-stub-pending-*`, `preview-footer-*`, `a11y-*`: header line only).
 
 ## 17. Deviations, residuals, UNVERIFIED
 - `LauncherModText.guideLine` takes `optedIn` (a third parameter): see 7.
@@ -441,7 +455,7 @@ section 11, and the shared busy refusal (`Busy`, C8).
 | AC | status | evidence |
 |---|---|---|
 | AC-X.1 (BusyTest; callers delegate; no second copy) | verified for ProfileService (the other two callers land with C20/C09 and add themselves to BusyTest's list) | BusyTest (unit, CI run 36302121033 java job) |
-| AC-X.2 (the flag unset at initEnd/after CLIENT_STARTED on 3 legs; unit for worker vs render thread) | see §16's run | FootprintStatsTest, V05ServicesTest; FootprintGameTest on 3 legs |
+| AC-X.2 (the flag unset at initEnd/after CLIENT_STARTED on 3 legs; unit for worker vs render thread) | verified (every CI run from here on repeats it) | FootprintStatsTest, V05ServicesTest; FootprintGameTest on 3 legs, run 36310249248 (`v05RenderThreadResolve` null) |
 | AC-X.3 (NoticeBoardTest pins 14 slots; LangCheckTest, WordingTest, PseudoLocaleTest, PaletteTest pass on both nodes) | verified on this branch (release-candidate check is the RC's) | CI 36302121033: java job (both nodes) green |
 | AC7.12 (SERVER_PROFILE pinned after BATTERY_OFFER, before SERVER_LIMIT) | verified | NoticeBoardTest |
-| Behaviour unchanged (every unit test and game test green on both nodes and all three legs) | verified | CI 36302121033: all 8 jobs green |
+| Behaviour unchanged (every unit test and game test green on both nodes and all three legs) | verified | CI 36302121033, 36304533461, 36310249248: all 8 jobs green each |
