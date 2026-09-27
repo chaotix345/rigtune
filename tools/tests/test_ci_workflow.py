@@ -152,13 +152,15 @@ class BuildWorkflowTests(unittest.TestCase):
         limit = re.search(r"offline\.sh --timeout (\d+)m ", game["run"])
         self.assertIsNotNone(limit, "the game-test run has offline.sh's timeout")
         self.assertLess(dump, int(limit.group(1)) * 60)
-        self.assertLessEqual(int(limit.group(1)) * 60 + 30, int(game["timeout-minutes"]) * 60 - 30)
+        self.assertLess(int(limit.group(1)) * 60 + 15, int(game["timeout-minutes"]) * 60 - 30)
         script = (ROOT / "tools" / "ci" / "offline.sh").read_text(encoding="utf-8")
-        self.assertIn("timeout --kill-after=30s", script)
+        self.assertIn("timeout --kill-after=15s", script)
         self.assertLess(script.index('"${limit[@]}"'), script.index("setpriv"), "the timeout runs as root, outside setpriv")
         # What the timeout's TERM leaves (it returns once Gradle's launcher has exited) is killed within the step.
         self.assertIn("pkill -KILL -x java", game["run"])
-        self.assertLessEqual(int(limit.group(1)) * 60 + 30 + 30, int(game["timeout-minutes"]) * 60)
+        # TERM, KILL 15 s later, then up to 20 s of waiting: well inside the step's limit.
+        wait = int(re.search(r'\[ "\$waited" -lt (\d+) \]', game["run"]).group(1))
+        self.assertLess(int(limit.group(1)) * 60 + 15 + wait + 10, int(game["timeout-minutes"]) * 60)
         self.assertIn("kill -QUIT", game["run"])
         # The game's JVM runs KnotClient; Gradle's and the fake Modrinth's JVMs are java too (SPEC 1e). KnotClient comes
         # after the classpath, so the whole cmdline is searched, not pgrep -f's view of it.

@@ -4,12 +4,12 @@
 # carries multicast (a route for 224.0.0.0/4 on lo, still nothing off the machine), so vanilla's LAN discovery works
 # (docs/v0.5/SPEC.md 1a; tools/ci/MulticastCheck.java checks it).
 # --timeout <duration>: GNU timeout, running as root inside the sudo, sends TERM to the command's whole process group
-# (Gradle, xvfb-run, the game) after <duration> and KILL 30 s later, although they run as the calling user.
+# (Gradle, xvfb-run, the game) after <duration> and KILL 15 s later, although they run as the calling user.
 #   tools/ci/offline.sh [--timeout 14m] ./gradlew --no-daemon --offline :26.2:runProductionClientGameTest
 set -euo pipefail
 limit=()
 if [ "${1:-}" = --timeout ]; then
-	limit=(timeout --kill-after=30s "$2")
+	limit=(timeout --kill-after=15s "$2")
 	shift 2
 fi
 if [ "$#" -eq 0 ]; then

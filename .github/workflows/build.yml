@@ -203,8 +203,9 @@ jobs:
       # has KnotClient as an argument; Gradle's and the fake Modrinth's are java too) prints every thread's stack and locks
       # into this log first (run 36235561444 hung with none). The whole /proc/<pid>/cmdline is read: KnotClient comes after
       # a long classpath. At 14 min timeout (as root, in offline.sh) sends TERM to the run's process group and returns once
-      # Gradle's launcher has exited; the step then gives every java process (they run as this user) 30 s to end and kills
-      # what is left, before the step's 15-min limit (which can't signal the root-owned sudo).
+      # Gradle's launcher has exited (KILL 15 s after TERM if it hasn't); the step then gives every java process (they run
+      # as this user) 20 s to end and kills what is left, before the step's 15-min limit (which can't signal the root-owned
+      # sudo).
       - name: Client game tests
         timeout-minutes: 15
         run: |
@@ -219,7 +220,7 @@ jobs:
           if [ "$code" -ne 0 ]; then
             echo "The game-test run exited $code (124: stopped by the 14-min timeout)"
             waited=0
-            while pgrep -x java >/dev/null && [ "$waited" -lt 30 ]; do sleep 1; waited=$((waited + 1)); done
+            while pgrep -x java >/dev/null && [ "$waited" -lt 20 ]; do sleep 1; waited=$((waited + 1)); done
             if pgrep -x java >/dev/null; then
               echo "java still running after $waited s; killing it:"
               ps -o pid,user,etime,comm -C java || true
