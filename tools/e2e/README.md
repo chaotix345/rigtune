@@ -18,8 +18,8 @@ python tools/e2e/self_update_e2e.py --name v010-to-dev \
 python -m unittest discover -s tools/e2e/tests
 ```
 
-Windows only (process checks use PowerShell 7, `pwsh`). It opens a game window twice (well under a minute each) and
-needs port 443 free on 127.0.0.1. Exit code 0 means every
+It runs on Windows (process checks use PowerShell 7, `pwsh`) and on Linux (from `/proc`; v0.5, below). It opens a game
+window twice (well under a minute each) and needs port 443 free on 127.0.0.1. Exit code 0 means every
 check passed, 1 a failed check, 3 that the game-test lock is held. For a 0.2 → newer 0.2 run (plan review M12), build
 two jars with `-Pmod_version=...`, pass them as `--old-jar`/`--new-jar`, and pass the v0.1.0 jar as
 `--driver-api-jar`.
@@ -33,6 +33,33 @@ Two more modes (Phase 5):
   `mod-apply` (one Apply: add `e2e-added`, disable `e2e-disable-me`; quit; the helper applies both), `mod-undo` (Undo
   last apply: the plan, a screenshot of the confirmation screen, `undo(plan)`; quit; the helper reverts both),
   `mod-check` (the mods as before, nothing left to undo).
+
+### v0.5: Linux CI (docs/v0.5/SPEC.md 3a-3c; docs/v0.5/design/ws-e.md)
+
+- **Linux.** The harness lists processes from `/proc`, kills with SIGKILL, and records the helper's command lines from a
+  watcher thread. The seed's held jar is made immutable (`sudo -n chattr +i`, lifted after the helper): a Linux rename
+  isn't blocked by an open handle, but an immutable file's rename fails with EPERM, a `FileSystemException` as on
+  Windows.
+  - Under Xvfb the narrator and the sound system log ERROR lines, and GLFW logs its X11 cursor block. The downgrade log
+    check ignores those (`e2e_checks.HARMLESS_ERRORS`, `XVFB_CURSOR`).
+  - The fake Modrinth needs port 443: `sudo sysctl -w net.ipv4.ip_unprivileged_port_start=443`.
+  - Loom wraps the client in `xvfb-run -a` when `CI` is set.
+- **`e2e_matrix.py --tier push|release`** prints the scenarios from one table.
+  - Old jars, tags and sha256 come from `RELEASED`; the nodes from `versions/*/`.
+  - Push: each node's newest release → new.
+  - Release: every released jar → new; the `v010-dh` seed; undo with `--profile-switch profile` and `settings`; downgrades to 0.4.0 and 0.3.0.
+- **`.github/workflows/e2e.yml`** (reusable) runs one job per row on the jars artifact the caller names; nothing is rebuilt.
+  - The old jar is downloaded with `gh release download` and checked with `sha256sum -c`.
+  - `tools/e2e/resolve-deps.gradle` puts fabric-api and Sodium into the Gradle cache.
+  - The evidence is uploaded as `e2e-<id>-<mc>`. There is no automatic retry.
+  - release.yml calls it on the staged release files (build → e2e → publish).
+  - `tools/e2e/release_verify.py` then checks Modrinth's metadata and CDN bytes against the GitHub assets.
+- **Fixtures.** `written.py` composes `v040-written` and then `v050-written` (a 0.5 instance holds both).
+  - A file several sets provide is deep-merged (objects key by key, lists without exact duplicates, the later set's
+    scalar). A different `formatVersion` is refused.
+  - `--written` may repeat. The downgrade checks use `written.new_files_for(<old version>)`.
+- **`compat040.py`** is the released 0.4.0's own classes on those fixtures and the bundled rules (14 checks), like
+  compat030.
 
 ### v0.4 runs (docs/v0.4/plans/ws-h.md)
 

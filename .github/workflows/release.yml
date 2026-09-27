@@ -1,58 +1,80 @@
 name: release
 
+# A v* tag publishes: `build` builds once and stages one main and one sources jar per Minecraft node; `e2e` runs the
+# release tier of the E2E (.github/workflows/e2e.yml) on exactly those staged jars; `publish` uploads exactly those jars
+# to the GitHub release and to Modrinth, then checks what Modrinth serves. The published bytes are the tested bytes by
+# construction: a rebuild isn't byte-stable (one manifest entry's order differs between machines,
+# docs/research/v0.5/verification-gaps.md §5), so nothing is rebuilt after `build` (docs/v0.5/SPEC.md 3c).
+#
+# A workflow_dispatch is a dry run and publishes nothing: the tag is v<mod_version>, the same guard, build, staging and
+# E2E run, `gh release create` is only printed, Modrinth gets Minotaur's debug mode (-PmodrinthDryRun: the payload is
+# logged, no API call, no token), and the verify step checks an existing release (`verify-tag`), reading only.
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      e2e-tier:
+        description: the E2E tier the dry run runs (a real release always runs the release tier)
+        type: choice
+        options: [release, push]
+        default: release
+      verify-tag:
+        description: an existing release the dry run's verify step checks (read-only)
+        type: string
+        default: v0.4.0
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
-    env:
-      # Only whether the secret is set ('true'/'false'), so `if:` conditions below can test it (an
-      # `if:` can't reference `secrets.*` directly). The token itself is set only on the two steps
-      # that use it, so the build (Gradle, its plugins, dependencies and tests) never sees it
-      # (review 6, security-1).
-      MODRINTH_TOKEN_SET: ${{ secrets.MODRINTH_TOKEN != '' }}
+  build:
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
 
       - uses: gradle/actions/wrapper-validation@v6
 
+      # A real release is its tag; a dry run is the release this commit would be.
+      - name: The release tag
+        id: tag
+        run: |
+          set -eu
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            tag="v$(sed -n 's/^mod_version=//p' gradle.properties)"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "release tag: $tag (event $GITHUB_EVENT_NAME)"
+
       # The tag names the release: it must be v<mod_version> exactly (a v0.3.0 tag on a commit that
       # still says 0.3.0-dev would publish 0.3.0-dev+mc<mc> as a release).
       - name: Check the tag matches mod_version
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          grep -qxF "mod_version=${GITHUB_REF_NAME#v}" gradle.properties \
-            || { echo "::error::tag ${GITHUB_REF_NAME} doesn't match mod_version in gradle.properties"; exit 1; }
+          grep -qxF "mod_version=${TAG#v}" gradle.properties \
+            || { echo "::error::tag ${TAG} doesn't match mod_version in gradle.properties"; exit 1; }
 
       - uses: actions/setup-java@v6
         with:
           distribution: microsoft
           java-version: '25'
 
-      # Built once. The release step copies the jars out of the build (to $RUNNER_TEMP/release-files),
-      # and both the GitHub release and the Modrinth publish upload those copies, so the two carry
-      # the same bytes by construction even if a later Gradle task touched versions/<mc>/build/libs
-      # (Minotaur's `modrinth` depends on `assemble`); "Verify Modrinth files match" re-downloads and
-      # hashes both sides anyway (M11).
       - name: Build
         run: ./gradlew build
 
-      # Exactly one rigtune-<ver>+mc<mc>.jar and one -sources.jar per Minecraft version in versions/.
-      - name: Create GitHub release
-        id: release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Exactly one rigtune-<ver>+mc<mc>.jar and one -sources.jar per Minecraft version in versions/, copied out of the
+      # build once: every later job uses these copies.
+      - name: Stage the release files
         run: |
           set -eu
-          tag="${GITHUB_REF_NAME}"
           staged="$RUNNER_TEMP/release-files"
           mkdir -p "$staged"
-          files=()
           for dir in versions/*/; do
             mc=$(basename "$dir")
             for suffix in "" "-sources"; do
@@ -62,20 +84,93 @@ jobs:
                 exit 1
               fi
               cp "${found[0]}" "$staged/"
-              files+=("$staged/$(basename "${found[0]}")")
             done
           done
-          gh release create "$tag" \
-            --title "RigTune $tag" \
+          (cd "$staged" && sha256sum -- *.jar | tee SHA256SUMS)
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-files
+          path: ${{ runner.temp }}/release-files/
+          if-no-files-found: error
+
+  # The release tier on the staged jars (the dry run may pick the push tier to save time).
+  e2e:
+    needs: build
+    uses: ./.github/workflows/e2e.yml
+    with:
+      tier: ${{ github.event_name == 'push' && 'release' || inputs.e2e-tier }}
+      jars-artifact: release-files
+
+  publish:
+    needs: [build, e2e]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.build.outputs.tag }}
+      DRY_RUN: ${{ github.event_name != 'push' }}
+      # Only whether the secret is set ('true'/'false'), so `if:` conditions below can test it (an
+      # `if:` can't reference `secrets.*` directly). The token itself is set only on the two steps
+      # that use it, so the build (Gradle, its plugins, dependencies and tests) never sees it
+      # (review 6, security-1).
+      MODRINTH_TOKEN_SET: ${{ secrets.MODRINTH_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25'
+
+      - name: The staged release files (the jars the E2E tested)
+        uses: actions/download-artifact@v7
+        with:
+          name: release-files
+          path: ${{ runner.temp }}/release-files
+
+      - name: Check the staged files are the ones the build listed
+        run: |
+          set -eu
+          cd "$RUNNER_TEMP/release-files"
+          sha256sum -c SHA256SUMS
+
+      # Exactly the staged files: one rigtune-*+mc<mc>.jar and one -sources.jar per node.
+      - name: Create GitHub release
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          staged="$RUNNER_TEMP/release-files"
+          files=()
+          for dir in versions/*/; do
+            mc=$(basename "$dir")
+            for suffix in "" "-sources"; do
+              mapfile -t found < <(find "$staged" -maxdepth 1 -name "rigtune-*+mc${mc}${suffix}.jar")
+              if [ "${#found[@]}" -ne 1 ]; then
+                echo "Expected exactly one staged rigtune-*+mc${mc}${suffix}.jar, found: ${found[*]:-none}"
+                exit 1
+              fi
+              files+=("${found[0]}")
+            done
+          done
+          if [ "$DRY_RUN" = true ]; then
+            echo "dry run: would run gh release create $TAG --title \"RigTune $TAG\" --generate-notes ${files[*]}"
+            exit 0
+          fi
+          gh release create "$TAG" \
+            --title "RigTune $TAG" \
             --generate-notes \
             "${files[@]}"
 
       # --- Modrinth publishing ---
       # One Modrinth version per Minecraft version (build.gradle's `modrinth {}` block; versionType
       # release only for a plain release id), for every versions/*/ node, so a new node needs no
-      # edit here. Each node uploads the exact file the release step attached (its copy in
-      # $RUNNER_TEMP/release-files, passed as -PmodrinthFile). A failure is recorded as an error and
-      # the loop carries on with the others; the step fails at the end if any node failed.
+      # edit here. Each node uploads the exact file the release step attached (the staged copy,
+      # passed as -PmodrinthFile). A failure is recorded as an error and the loop carries on with
+      # the others; the step fails at the end if any node failed. A dry run passes -PmodrinthDryRun
+      # and no token: Minotaur logs the payload and calls nothing.
       # `if: !cancelled()` (rather than the default `if: success()`) lets the verify step below run
       # even when this one failed.
       #
@@ -92,16 +187,18 @@ jobs:
       #     --version-number "$ver+mc$mc" --name "RigTune $ver (MC $mc)" --game-versions "$mc" \
       #     --version-type release --changelog-file recovery/changelog.md --sha256 "${digest#sha256:}"
       # (--version-type alpha for a node whose id isn't a plain release.) Then check it the way the
-      # verify step does: `python tools/modrinth_project.py status` lists the version, and in the
-      # authenticated version list (GET /v2/project/rigtune/version) the file with the GitHub
-      # asset's sha1 must have the asset's sha512.
+      # verify step does: `python tools/e2e/release_verify.py --tag "$tag"` (with MODRINTH_TOKEN set).
       - name: Publish to Modrinth (every Minecraft version)
-        if: ${{ !cancelled() && steps.release.outcome == 'success' && env.MODRINTH_TOKEN_SET == 'true' }}
+        if: ${{ !cancelled() && steps.release.outcome == 'success' && (env.MODRINTH_TOKEN_SET == 'true' || env.DRY_RUN == 'true') }}
         env:
-          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          MODRINTH_TOKEN: ${{ github.event_name == 'push' && secrets.MODRINTH_TOKEN || '' }}
         run: |
           set -u
           staged="$RUNNER_TEMP/release-files"
+          dry=()
+          if [ "$DRY_RUN" = true ]; then
+            dry=(-PmodrinthDryRun)
+          fi
           status=0
           for dir in versions/*/; do
             mc=$(basename "$dir")
@@ -111,8 +208,9 @@ jobs:
               status=1
               continue
             fi
-            if ./gradlew ":$mc:modrinth" "-PmodrinthFile=${found[0]}"; then
-              echo "published: $mc (${found[0]})"
+            # -x assemble: Minotaur's task depends on it, but the upload is the staged file, so nothing is built here.
+            if ./gradlew ":$mc:modrinth" "-PmodrinthFile=${found[0]}" -x assemble "${dry[@]}"; then
+              echo "published: $mc (${found[0]})${dry[*]:+ (dry run: payload only)}"
             else
               echo "::error::Modrinth publish failed for $mc"
               status=1
@@ -121,62 +219,17 @@ jobs:
           exit "$status"
 
       - name: Notice if Modrinth publishing was skipped
-        if: ${{ env.MODRINTH_TOKEN_SET != 'true' }}
+        if: ${{ env.MODRINTH_TOKEN_SET != 'true' && env.DRY_RUN != 'true' }}
         run: echo "::notice::MODRINTH_TOKEN repo secret is not set; skipped publishing to Modrinth. GitHub release only."
 
-      # M11: prove the file Modrinth is now serving is byte-identical to the one just attached to
-      # the GitHub release, rather than assuming it because they came from the same build. Finds
-      # each re-downloaded GitHub asset's sha1 in the project's authenticated version list (the
-      # public /v2/version_file lookup hides versions of a project in moderation) and compares
-      # that file's sha512.
+      # M11 and SPEC 3c: for each node, the GitHub asset's sha1 is found in the project's authenticated version list
+      # (the public lookup hides versions of a project in moderation), that file's sha512 must equal the asset's, the
+      # bytes its CDN url serves must hash to the same, and the version's number, game versions, loaders and type are
+      # checked (tools/e2e/release_verify.py). A dry run checks `verify-tag`, an existing release, reading only.
       - name: Verify Modrinth files match the GitHub release
         if: ${{ !cancelled() && steps.release.outcome == 'success' && env.MODRINTH_TOKEN_SET == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
-        run: |
-          set -eu
-          tag="${GITHUB_REF_NAME}"
-          scratch=$(mktemp -d)
-          status=0
-          for dir in versions/*/; do
-            mc=$(basename "$dir")
-            mapfile -t found < <(find "${dir}build/libs" -maxdepth 1 -name "rigtune-*+mc${mc}.jar" 2>/dev/null)
-            if [ "${#found[@]}" -ne 1 ]; then
-              echo "::error::expected exactly one rigtune-*+mc${mc}.jar locally, found: ${found[*]:-none}"
-              status=1
-              continue
-            fi
-            asset=$(basename "${found[0]}")
-            if ! gh release download "$tag" --repo "${GITHUB_REPOSITORY}" -p "$asset" -D "$scratch" --clobber; then
-              echo "::error::could not download GitHub release asset $asset to verify"
-              status=1
-              continue
-            fi
-            sha1_local=$(sha1sum "$scratch/$asset" | cut -d' ' -f1)
-            sha512_local=$(sha512sum "$scratch/$asset" | cut -d' ' -f1)
-            # The project's version list, fetched with the token: the public hash lookup
-            # (/v2/version_file) hides versions of a project that's still in moderation.
-            versions_json="$scratch/versions.json"
-            if [ ! -s "$versions_json" ] && ! curl -sf \
-                -H "User-Agent: chaotix345/rigtune/release (github.com/chaotix345/rigtune)" \
-                -H "Authorization: ${MODRINTH_TOKEN}" \
-                "https://api.modrinth.com/v2/project/rigtune/version" -o "$versions_json"; then
-              echo "::error::could not list the Modrinth project's versions"
-              status=1
-              continue
-            fi
-            sha512_remote=$(jq -r --arg s "$sha1_local" '[.[].files[] | select(.hashes.sha1 == $s) | .hashes.sha512][0] // empty' "$versions_json")
-            if [ -z "$sha512_remote" ]; then
-              echo "::error::no Modrinth version file matches $asset's sha1 ($sha1_local): upload missing or corrupted"
-              status=1
-              continue
-            fi
-            if [ "$sha512_local" != "$sha512_remote" ]; then
-              echo "::error::sha512 mismatch for $asset: GitHub=$sha512_local Modrinth=$sha512_remote"
-              status=1
-              continue
-            fi
-            echo "verified: $asset sha512 matches its Modrinth upload"
-          done
-          exit "$status"
+          VERIFY_TAG: ${{ github.event_name == 'push' && needs.build.outputs.tag || inputs.verify-tag }}
+        run: python3 tools/e2e/release_verify.py --tag "$VERIFY_TAG"
