@@ -84,7 +84,10 @@ public class FootprintGameTest implements FabricClientGameTest {
 	// shares the runner's speed and any compilation with both sides.
 	private static final int TICK_BLOCKS = 48;
 	private static final int TICK_BLOCK_CALLS = 20_000;
-	private static final int TICK_WARM_UP_CALLS = 200_000;
+	private static final int TICK_WARM_UP_ROUNDS = 300;
+	private static final int TICK_WARM_UP_CALLS = 1_000;
+	private static final long TICK_JIT_QUIET_MS = 100;
+	private static final long TICK_JIT_QUIET_CAP_MS = 10_000;
 	// Gated: the monitor-on tick work over the reference. Recorded: the same for the work called twice, which must exceed
 	// that limit on every run, or this runner couldn't have seen a 2x regression.
 	private static final String TICK_RATIO_KEY = "tickHookOnVsReference";
@@ -556,82 +559,119 @@ public class FootprintGameTest implements FabricClientGameTest {
 		};
 	}
 
-	// See TICK_BLOCKS. On the render thread; bytes are the fewest any work block allocated.
+	// See TICK_BLOCKS. On the render thread; bytes are the fewest any work block allocated. The three loops are small
+	// methods of their own, warmed up in short calls, so each is compiled as itself (not as an on-stack replacement inside
+	// a bigger method); then the blocks wait until the JIT has finished nothing for TICK_JIT_QUIET_MS (at most
+	// TICK_JIT_QUIET_CAP_MS). The first proof run (36295129832, the classes cut to two, so the timing ran a minute into the
+	// JVM with 250-380 ms of compilation during the blocks) had the reference 1.3-1.8x slower than in the full suite.
 	private static TickTiming timeTick(Minecraft mc, TickWork work) {
 		com.sun.management.ThreadMXBean mx = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
 		CompilationMXBean jit = ManagementFactory.getCompilationMXBean();
 		try {
-			for (int i = 0; i < TICK_WARM_UP_CALLS; i++) {
-				work.run(mc);
-				work.run(mc);
-				work.run(mc);
-				reference(i);
+			for (int round = 0; round < TICK_WARM_UP_ROUNDS; round++) {
+				once(mc, work, TICK_WARM_UP_CALLS);
+				twice(mc, work, TICK_WARM_UP_CALLS);
+				referenceSink += reference(TICK_WARM_UP_CALLS);
 			}
-			double[] once = new double[TICK_BLOCKS];
-			double[] twice = new double[TICK_BLOCKS];
-			double[] reference = new double[TICK_BLOCKS];
+			long waitStart = System.nanoTime();
+			long quietSince = waitStart;
+			long compiled = jit.getTotalCompilationTime();
+			while (System.nanoTime() - quietSince < TICK_JIT_QUIET_MS * 1_000_000L && System.nanoTime() - waitStart < TICK_JIT_QUIET_CAP_MS * 1_000_000L) {
+				once(mc, work, TICK_WARM_UP_CALLS);
+				referenceSink += reference(TICK_WARM_UP_CALLS);
+				long now = jit.getTotalCompilationTime();
+				if (now != compiled) {
+					compiled = now;
+					quietSince = System.nanoTime();
+				}
+			}
+			long quietWaitMs = (System.nanoTime() - waitStart) / 1_000_000;
+			double[] onceNs = new double[TICK_BLOCKS];
+			double[] twiceNs = new double[TICK_BLOCKS];
+			double[] referenceNs = new double[TICK_BLOCKS];
+			double[] cpuRatio = new double[TICK_BLOCKS];
 			long bytes = Long.MAX_VALUE;
 			long jitBefore = jit.getTotalCompilationTime();
 			for (int block = 0; block < TICK_BLOCKS; block++) {
 				long allocated = mx.getCurrentThreadAllocatedBytes();
+				long c0 = mx.getCurrentThreadCpuTime();
 				long t0 = System.nanoTime();
-				for (int i = 0; i < TICK_BLOCK_CALLS; i++) {
-					work.run(mc);
-				}
+				once(mc, work, TICK_BLOCK_CALLS);
 				long t1 = System.nanoTime();
+				long c1 = mx.getCurrentThreadCpuTime();
 				bytes = Math.min(bytes, mx.getCurrentThreadAllocatedBytes() - allocated);
 				long t2 = System.nanoTime();
-				for (int i = 0; i < TICK_BLOCK_CALLS; i++) {
-					work.run(mc);
-					work.run(mc);
-				}
+				twice(mc, work, TICK_BLOCK_CALLS);
 				long t3 = System.nanoTime();
-				for (int i = 0; i < TICK_BLOCK_CALLS; i++) {
-					reference(i);
-				}
+				long c3 = mx.getCurrentThreadCpuTime();
+				referenceSink += reference(TICK_BLOCK_CALLS);
 				long t4 = System.nanoTime();
-				once[block] = (t1 - t0) / (double) TICK_BLOCK_CALLS;
-				twice[block] = (t3 - t2) / (double) TICK_BLOCK_CALLS;
-				reference[block] = (t4 - t3) / (double) TICK_BLOCK_CALLS;
+				long c4 = mx.getCurrentThreadCpuTime();
+				onceNs[block] = (t1 - t0) / (double) TICK_BLOCK_CALLS;
+				twiceNs[block] = (t3 - t2) / (double) TICK_BLOCK_CALLS;
+				referenceNs[block] = (t4 - t3) / (double) TICK_BLOCK_CALLS;
+				cpuRatio[block] = c4 > c3 ? (c1 - c0) / (double) (c4 - c3) : Double.NaN;
 			}
 			double[] ratio = new double[TICK_BLOCKS];
 			double[] twinRatio = new double[TICK_BLOCKS];
 			for (int block = 0; block < TICK_BLOCKS; block++) {
-				ratio[block] = once[block] / reference[block];
-				twinRatio[block] = twice[block] / reference[block];
+				ratio[block] = onceNs[block] / referenceNs[block];
+				twinRatio[block] = twiceNs[block] / referenceNs[block];
 			}
 			Map<String, Object> detail = new LinkedHashMap<>();
 			detail.put("blockCalls", TICK_BLOCK_CALLS);
-			detail.put("medianNs", round2(median(once)));
-			detail.put("medianTwiceNs", round2(median(twice)));
-			detail.put("medianReferenceNs", round2(median(reference)));
+			detail.put("medianNs", round2(median(onceNs)));
+			detail.put("medianTwiceNs", round2(median(twiceNs)));
+			detail.put("medianReferenceNs", round2(median(referenceNs)));
 			detail.put("vsReference", round3(median(ratio)));
 			detail.put("twinVsReference", round3(median(twinRatio)));
+			// Thread CPU time instead of wall (a diagnostic: Windows counts thread CPU in 15.6 ms steps, so it is NaN or
+			// meaningless there).
+			detail.put("vsReferenceCpu", round3(median(Arrays.stream(cpuRatio).filter(r -> !Double.isNaN(r)).toArray())));
+			detail.put("jitQuietWaitMs", quietWaitMs);
 			detail.put("jitMsDuringBlocks", jit.getTotalCompilationTime() - jitBefore);
-			detail.put("ns", Arrays.stream(once).map(FootprintGameTest::round2).toArray());
-			detail.put("twiceNs", Arrays.stream(twice).map(FootprintGameTest::round2).toArray());
-			detail.put("referenceNs", Arrays.stream(reference).map(FootprintGameTest::round2).toArray());
-			return new TickTiming(round2(median(once)), bytes, round3(median(ratio)), round3(median(twinRatio)), detail);
+			detail.put("ns", Arrays.stream(onceNs).map(FootprintGameTest::round2).toArray());
+			detail.put("twiceNs", Arrays.stream(twiceNs).map(FootprintGameTest::round2).toArray());
+			detail.put("referenceNs", Arrays.stream(referenceNs).map(FootprintGameTest::round2).toArray());
+			return new TickTiming(round2(median(onceNs)), bytes, round3(median(ratio)), round3(median(twinRatio)), detail);
 		} catch (Throwable t) {
 			throw new AssertionError("timing RigTune's tick listeners failed", t);
 		}
 	}
 
-	// A fixed pure-Java workload (loads, stores, a branch) of roughly the tick work's cost, the runner's yardstick.
-	private static void reference(int i) {
-		long x = referenceState;
-		for (int k = 0; k < 6; k++) {
-			x ^= x << 13;
-			x ^= x >>> 7;
-			x ^= x << 17;
-			int slot = (int) (x & 255);
-			if ((x & 1) == 0) {
-				REFERENCE[slot] += x;
-			} else {
-				referenceSink += REFERENCE[slot];
-			}
+	private static void once(Minecraft mc, TickWork work, int calls) throws Throwable {
+		for (int i = 0; i < calls; i++) {
+			work.run(mc);
 		}
-		referenceState = x + i;
+	}
+
+	private static void twice(Minecraft mc, TickWork work, int calls) throws Throwable {
+		for (int i = 0; i < calls; i++) {
+			work.run(mc);
+			work.run(mc);
+		}
+	}
+
+	// A fixed pure-Java workload (loads, stores, a branch) of roughly the tick work's cost per call, the runner's yardstick.
+	private static long reference(int calls) {
+		long x = referenceState;
+		long sum = 0;
+		for (int i = 0; i < calls; i++) {
+			for (int k = 0; k < 6; k++) {
+				x ^= x << 13;
+				x ^= x >>> 7;
+				x ^= x << 17;
+				int slot = (int) (x & 255);
+				if ((x & 1) == 0) {
+					REFERENCE[slot] += x;
+				} else {
+					sum += REFERENCE[slot];
+				}
+			}
+			x += i;
+		}
+		referenceState = x;
+		return sum;
 	}
 
 	private static double median(double[] values) {

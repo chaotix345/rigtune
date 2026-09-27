@@ -1,5 +1,7 @@
 package io.github.chaotix345.rigtune.core.footprint;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.core.RepoFiles;
 import io.github.chaotix345.rigtune.core.footprint.FootprintBudgets.Budget;
 import io.github.chaotix345.rigtune.core.footprint.FootprintBudgets.Mode;
@@ -7,10 +9,13 @@ import io.github.chaotix345.rigtune.core.footprint.FootprintBudgets.Violation;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -63,15 +68,56 @@ class FootprintBudgetsTest {
 		assertTrue(budgets.budgets().keySet().containsAll(List.of("clientStartedWallMs", "heapGrowthAfterCyclesBytes")));
 	}
 
-	// v0.5 (docs/v0.5/design/ws-ci.md): the monitor-on tick work is gated as a median ratio against a reference workload. In
-	// the r-ci probe (189 measurements, 5 runner CPU models) 1x measured at most 1.577 and a 2x regression at least 2.393:
-	// the limit sits between, and FootprintGameTest fails any run whose own "called twice" ratio doesn't exceed it.
+	// v0.5 (docs/v0.5/design/ws-ci.md): the monitor-on tick and frame work are gated as median ratios against a reference
+	// workload. Each limit sits between the largest 1x ratio and the smallest 2x ratio of its calibration (recorded next to
+	// it); FootprintGameTest and FrameHookBudgetTest fail any run whose own doubled-work ratio doesn't exceed it.
 	@Test
-	void theTickRatioGateSitsBetweenTheObservedOneAndTwoTimes() throws IOException {
-		Budget ratio = FootprintBudgets.load(RepoFiles.resolve(FootprintBudgets.REPO_PATH)).budgets().get("tickHookOnVsReference");
-		assertNotNull(ratio, "the ratio budget");
-		assertNull(ratio.ceiling(), "no SPEC ceiling for a ratio");
-		assertTrue(ratio.limit() > 1.577 && ratio.limit() < 2.393, "limit " + ratio.limit());
+	void theRatioGatesSitBetweenTheirCalibratedOneAndTwoTimes() throws IOException {
+		JsonObject budgets = JsonParser.parseString(Files.readString(RepoFiles.resolve(FootprintBudgets.REPO_PATH), StandardCharsets.UTF_8))
+				.getAsJsonObject().getAsJsonObject("budgets");
+		for (String key : List.of("tickHookOnVsReference", "frameHookOnVsReference", "frameHookOnPhasesVsReference")) {
+			JsonObject b = budgets.getAsJsonObject(key);
+			assertNotNull(b, key);
+			assertTrue(b.get("ceiling").isJsonNull(), key + ": no SPEC ceiling for a ratio");
+			double limit = b.get("limit").getAsDouble();
+			assertTrue(b.get("max1x").getAsDouble() < limit && limit < b.get("min2x").getAsDouble(), key + " limit " + limit);
+		}
+	}
+
+	// v0.5 SPEC AC1d.1: the six per-call ns limits are min(ceiling, 4 x the recorded max observed) (user-approved, ws-ci);
+	// every other timing limit stays min(ceiling, 2 x its recorded max) (docs/v0.4/verification/footprint/README.md).
+	@Test
+	void timingLimitsFollowTheirRecordedRule() throws IOException {
+		JsonObject budgets = JsonParser.parseString(Files.readString(RepoFiles.resolve(FootprintBudgets.REPO_PATH), StandardCharsets.UTF_8))
+				.getAsJsonObject().getAsJsonObject("budgets");
+		Map<String, String> rules = new TreeMap<>();
+		budgets.entrySet().forEach(entry -> {
+			JsonObject b = entry.getValue().getAsJsonObject();
+			if (!b.has("rule")) {
+				return;
+			}
+			String rule = b.get("rule").getAsString();
+			double factor = switch (rule) {
+				case "4x" -> 4;
+				case "2x" -> 2;
+				default -> throw new AssertionError(entry.getKey() + ": rule " + rule);
+			};
+			double expected = Math.ceil(factor * b.get("observedMax").getAsDouble() - 1e-9);
+			if (!b.get("ceiling").isJsonNull()) {
+				expected = Math.min(expected, b.get("ceiling").getAsDouble());
+			}
+			assertEquals(expected, b.get("limit").getAsDouble(), entry.getKey());
+			rules.put(entry.getKey(), rule);
+		});
+		Map<String, String> expected = new TreeMap<>();
+		for (String key : List.of("frameHookNsPerCallOff", "frameHookNsPerCallOn", "frameHookNsPerCallOnPhases", "tickHookNsPerCall",
+				"tickHookNsPerCallWorld", "tickHookNsPerCallOn")) {
+			expected.put(key, "4x");
+		}
+		for (String key : List.of("renderThreadInitWallMs", "renderThreadInitCpuMs", "clientStartedWallMs", "workerCpuMs5s", "samplerCpuMsPer60s")) {
+			expected.put(key, "2x");
+		}
+		assertEquals(expected, rules);
 	}
 
 	@Test
