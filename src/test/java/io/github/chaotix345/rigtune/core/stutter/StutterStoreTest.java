@@ -125,14 +125,21 @@ class StutterStoreTest {
 	void aHandEditedSessionWithNullsReadsSafely() throws IOException {
 		Path file = StutterStore.file(dir);
 		Files.createDirectories(file.getParent());
-		Files.writeString(file, "{\"formatVersion\": 1, \"sessions\": [{\"frames\": 5, \"worst\": [null, {\"ms\": 30, \"causes\": [null, \"gc:high\"]}], "
-				+ "\"advice\": [null], \"causes\": {\"gc\": null}}]}", StandardCharsets.UTF_8);
+		// v0.5 SD-5: with a spike, so Copy summary reaches the causes (a null "unknown" crashed the click handler in 0.4).
+		Files.writeString(file, "{\"formatVersion\": 1, \"sessions\": [{\"frames\": 5, \"spikes\": {\"minor\": 1}, "
+				+ "\"worst\": [null, {\"ms\": 30, \"causes\": [null, \"gc:high\"]}], \"advice\": [null], \"causes\": {\"gc\": null, \"unknown\": null}, "
+				+ "\"tags\": {\"dh\": null, \"worldSave\": 1}, \"settingsAtStart\": {\"renderDistance\": null, \"shaders\": \"true\"}}]}", StandardCharsets.UTF_8);
 		StutterReport r = new StutterStore(dir).latest();
 		assertEquals(5, r.frames());
 		assertEquals(1, r.worst().size());
 		assertEquals(List.of("gc:high"), r.worst().getFirst().causes());
 		assertEquals(List.of(), r.advice());
-		assertTrue(StutterSummary.text(r, List.of()).startsWith("**RigTune Stutter Doctor** · session"));
+		assertEquals(Map.of(), r.causes(), "null values are dropped");
+		assertEquals(Map.of(Attributor.WORLD_SAVE, 1), r.tags());
+		assertEquals(Map.of("shaders", "true"), r.settingsAtStart());
+		String text = StutterSummary.text(r, List.of());
+		assertTrue(text.startsWith("**RigTune Stutter Doctor** · session"));
+		assertTrue(text.contains("not explained 100 %"), text);
 	}
 
 	// review-8 P5A-F3: a monitor session that a benchmark run interrupted (the benchmark world's settle frames) is saved only

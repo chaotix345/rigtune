@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.core.stutter;
 
 import org.jspecify.annotations.Nullable;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -11,7 +12,8 @@ import java.util.Objects;
 // causes: share of the lost time each cause claimed (0-1, "unknown" = not explained); tags: how many spikes carried
 // each correlational tag; worst: the 10 longest spikes (t = seconds into the capture). facts.gcOffsetMs is null until
 // the GC clock was calibrated. hitches: spikes less than 100 ms apart counted once.
-// A hand-edited file may hold nulls anywhere: the compact constructors keep them out of the lists.
+// A hand-edited file may hold nulls anywhere: the compact constructors keep them out of the lists and, since v0.5 (SD-5:
+// a null "unknown" share crashed Copy summary's click handler), out of the maps' values.
 // v0.5 (docs/v0.5/SPEC.md C1, RW-11; optional): settingsAtStart/settingsAtEnd, the managed settings when the session
 // started and ended (null in older files and when not captured; not written when null; 0.4.0 ignores them and drops them
 // on rewrite).
@@ -28,11 +30,27 @@ public record StutterReport(String startedAt, String source, @Nullable String mc
 		histogramCounts = histogramCounts == null ? new long[FrameRing.BUCKETS] : histogramCounts;
 		histogramTimeMs = histogramTimeMs == null ? new long[FrameRing.BUCKETS] : histogramTimeMs;
 		spikes = spikes == null ? new Spikes(0, 0, 0, 0) : spikes;
-		causes = causes == null ? Map.of() : causes;
-		tags = tags == null ? Map.of() : tags;
+		causes = causes == null ? Map.of() : withoutNulls(causes);
+		tags = tags == null ? Map.of() : withoutNulls(tags);
 		worst = worst == null ? List.of() : worst.stream().filter(Objects::nonNull).toList();
 		facts = facts == null ? new Facts(null, 0, 0, 0, null) : facts;
 		advice = advice == null ? List.of() : advice.stream().filter(Objects::nonNull).toList();
+		settingsAtStart = settingsAtStart == null ? null : withoutNulls(settingsAtStart);
+		settingsAtEnd = settingsAtEnd == null ? null : withoutNulls(settingsAtEnd);
+	}
+
+	// The map itself when no value is null (its order kept), else a copy without those entries.
+	private static <V> Map<String, V> withoutNulls(Map<String, V> map) {
+		if (map.values().stream().noneMatch(Objects::isNull)) {
+			return map;
+		}
+		Map<String, V> out = new LinkedHashMap<>();
+		map.forEach((k, v) -> {
+			if (v != null) {
+				out.put(k, v);
+			}
+		});
+		return out;
 	}
 
 	public StutterReport(String startedAt, String source, @Nullable String mc, @Nullable String collector, long heapMaxMb, double sessionSeconds,
