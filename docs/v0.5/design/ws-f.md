@@ -268,6 +268,15 @@ legs), no tick or frame work, and to `workerCpuMs5s` only `FirstRunService.load`
   109.92 / 94.04 / 86.89, clientStartedWallMs 42.71 / 30.67 / 46.09, workerCpuMs5s 158.32 / 170.58 / 194.80,
   tickHookOnVsReference 1.445 / 1.457 / 1.467 (26.2 GL / 26.3 GL / 26.3 VK), the X4 flag null, the holder made on the
   RigTune worker.
+- **36333050582** (e1ac2d7a: the review fixes + `origin/feat/v0.5.0` at 690b8f4c, WS-R's r17 included): all 8 jobs green
+  (java: 2189 tests, 2 skipped, 0 failures on each node). Looked at the 26.2 OpenGL `firstapply-confirmation-1280x720-scale2`
+  (8 applied + 1 staged, the restart note, the undo hint), `firstapply-after-854x480-scale2` (Apply's status line kept, no
+  guide, "Discard pending" for the staged op); logs: the fresh path on all 3 legs, FirstApplyGameTest 12.3-13.6 s,
+  A11yGameTest's walks. Footprint: renderThreadInitCpuMs 98.74 / 116.54 / 110.41, clientStartedWallMs 48.62 / 19.95 /
+  40.51, workerCpuMs5s 209.44 / 205.08 / 210.99, tickHookOnVsReference 1.692 / 1.557 / 1.565 (26.2 GL / 26.3 GL / 26.3 VK),
+  the X4 flag null, the holder made on the RigTune worker (every value inside its budget; the spread between this run
+  and the two before it on nearly the same WS-F code is ±20 ms and ±50 ms of workerCpuMs5s, the other workstreams'
+  merges included).
 
 ## AC table
 | AC | status | evidence |
