@@ -415,7 +415,7 @@ public class FootprintGameTest implements FabricClientGameTest {
 		Path configDir = FabricLoader.getInstance().getConfigDir();
 		check(!ClientSettings.shared(configDir).stutterMonitor && !StutterMonitor.active(), "the monitor is off before the world");
 		MethodHandle stutterTick = stutterTick();
-		try (TestSingleplayerContext world = context.worldBuilder().create()) {
+		try (TestSingleplayerContext world = GameTestWorlds.create(context)) {
 			context.runOnClient(mc -> mc.gui.setScreen(null));
 			context.waitTicks(100);
 			long idleRetained = StutterMonitor.retainedBytes();
