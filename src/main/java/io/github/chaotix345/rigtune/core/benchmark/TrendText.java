@@ -29,7 +29,8 @@ public final class TrendText {
 	private TrendText() {
 	}
 
-	// The lines under a run's result: the trend of the view's newest run. describe: History's own text for a change row.
+	// The lines under a run's result: the trend of the view's newest run. Its counts are of the earlier runs (the newest
+	// isn't in its own usual; docs/v0.5/SPEC.md BH-1), so they never contradict the note's count of every comparable run. describe: History's own text for a change row.
 	// maxChanges: how many change rows to list before "…and N more"; 0 = one line with their number (the result screen,
 	// where the full list would push the results off a small screen: review M3).
 	public static List<Line> assessment(BenchmarkTrend.View view, ZoneId zone, Function<HistoryModel.Change, Text> describe, int maxChanges) {
@@ -39,12 +40,12 @@ public final class TrendText {
 		}
 		return switch (a.kind()) {
 			case NO_RESULT -> List.of();
-			case TOO_FEW -> List.of(new Line(Text.of("rigtune.benchmark.trend.too_few", "Not enough comparable runs for a trend yet (%s of 3)",
+			case TOO_FEW -> List.of(new Line(Text.of("rigtune.benchmark.trend.too_few", "Not enough earlier comparable runs for a trend yet (%s of 3)",
 					a.baselineRuns()), Tone.NORMAL));
-			case IN_LINE -> List.of(new Line(Text.of("rigtune.benchmark.trend.in_line", "1%% lows in line with your usual %s FPS (%s comparable runs)",
+			case IN_LINE -> List.of(new Line(Text.of("rigtune.benchmark.trend.in_line", "1%% lows in line with your usual %s FPS (from %s earlier runs)",
 					fps(a.median()), a.baselineRuns()), Tone.NORMAL));
 			case IMPROVEMENT -> List.of(new Line(Text.of("rigtune.benchmark.trend.improvement",
-					"1%% lows %s%% above your usual %s FPS (%s comparable runs)", percent(a.deltaPercent()), fps(a.median()), a.baselineRuns()), Tone.GOOD));
+					"1%% lows %s%% above your usual %s FPS (from %s earlier runs)", percent(a.deltaPercent()), fps(a.median()), a.baselineRuns()), Tone.GOOD));
 			case REGRESSION -> {
 				List<Line> out = new ArrayList<>();
 				out.add(new Line(regression(a, since(view, a, zone)), Tone.BAD));

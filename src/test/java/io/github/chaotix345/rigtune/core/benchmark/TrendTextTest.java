@@ -49,6 +49,22 @@ class TrendTextTest {
 		assertEquals("RD 12 · SD 8", TrendText.conditions(TrendFixtures.run("c").context(null).build()).english());
 	}
 
+	// docs/v0.5/SPEC.md BH-1 (AC2B.1; the audit's AuditVerifyBenchmarkTest.bh1NoteAndTrendAgree): the note counts every
+	// comparable run, the trend the earlier ones, and says so: "3 comparable runs" next to "(2 of 3)" read as a contradiction.
+	@Test
+	void bh1NoteAndTrendAgree() {
+		List<BenchmarkRecord> runs = List.of(TrendFixtures.run("a").at("2026-09-20T10:00:00Z").build(),
+				TrendFixtures.run("b").at("2026-09-21T10:00:00Z").build(), TrendFixtures.run("c").at("2026-09-22T10:00:00Z").build());
+		BenchmarkTrend.View view = BenchmarkTrend.view(runs, null, null);
+		assertEquals("3 comparable runs; 0 with different conditions not shown", TrendText.note(view.comparableRuns(), view.otherRuns()).english());
+		assertEquals(List.of("NORMAL Not enough earlier comparable runs for a trend yet (2 of 3)"), lines(runs));
+		List<BenchmarkRecord> four = new java.util.ArrayList<>(runs);
+		four.add(TrendFixtures.run("d").at("2026-09-23T10:00:00Z").build());
+		assertEquals(List.of("NORMAL 1% lows in line with your usual 500 FPS (from 3 earlier runs)"), lines(four));
+		four.add(TrendFixtures.run("e").at("2026-09-24T10:00:00Z").low(600).build());
+		assertEquals(List.of("GOOD 1% lows 20% above your usual 500 FPS (from 4 earlier runs)"), lines(four));
+	}
+
 	// docs/v0.5/SPEC.md RW-8/RW-6: a run left out of the trend says why, and claims nothing about its numbers.
 	@Test
 	void rw8TheExcludedLineNamesWhy() {
