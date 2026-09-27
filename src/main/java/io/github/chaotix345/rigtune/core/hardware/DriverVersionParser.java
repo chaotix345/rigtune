@@ -20,7 +20,9 @@ import java.util.regex.Pattern;
 public final class DriverVersionParser {
 	// Longer strings are not a driver string any GPU reports (VK_MAX_DRIVER_INFO_SIZE is 256 per part).
 	static final int MAX_LENGTH = 1024;
-	private static final Pattern ADRENALIN = Pattern.compile("\\bContext\\s+(\\d{1,3})\\.(\\d{1,2})\\.(\\d{1,2})\\.\\d{1,9}(?![.\\d])");
+	// v0.5 2D (vg §4.3): the second part is a month, so AMD's legacy branch "Context 22.20.x.YYMMDD" (Ryzen/Vega iGPUs on
+	// the legacy driver) is UNKNOWN rather than Adrenalin 22.20.x.
+	private static final Pattern ADRENALIN = Pattern.compile("\\bContext\\s+(\\d{1,3})\\.([1-9]|1[0-2])\\.(\\d{1,2})\\.\\d{1,9}(?![.\\d])");
 	private static final Pattern MESA_GL = Pattern.compile("\\(Core Profile\\)\\s+Mesa\\s+(\\d{1,4})\\.(\\d{1,4})\\.(\\d{1,4})");
 	private static final Pattern GEFORCE = Pattern.compile("\\bNVIDIA\\s+(\\d{3})\\.(\\d{2,3})(?:\\.(\\d{1,3}))?(?![.\\d])");
 	private static final Pattern INTEL_BUILD = Pattern.compile("-\\s*Build\\s+(\\d{1,9})\\.(\\d{1,9})\\.(\\d{1,9})\\.(\\d{1,9})(?![.\\d])");

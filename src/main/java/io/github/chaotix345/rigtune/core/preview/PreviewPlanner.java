@@ -37,17 +37,30 @@ public final class PreviewPlanner {
 	private final List<ConfigFile> configFiles;
 	private final Path modsDir;
 	private final DownloadInputs downloads;
+	private final @Nullable Function<List<String>, Map<String, Text>> disableRefusals;
 
 	// vanillaNow: the game's options as they are now, keyed without "vanilla."; vanillaProblems: the values the game would
 	// refuse (SettingsBridge.problems), same keys.
 	public PreviewPlanner(Path optionsFile, Map<String, String> vanillaNow, Map<String, String> vanillaProblems, List<ConfigFile> configFiles,
 			Path modsDir, DownloadInputs downloads) {
+		this(optionsFile, vanillaNow, vanillaProblems, configFiles, modsDir, downloads, null);
+	}
+
+	private PreviewPlanner(Path optionsFile, Map<String, String> vanillaNow, Map<String, String> vanillaProblems, List<ConfigFile> configFiles,
+			Path modsDir, DownloadInputs downloads, @Nullable Function<List<String>, Map<String, Text>> disableRefusals) {
 		this.optionsFile = optionsFile;
 		this.vanillaNow = Map.copyOf(vanillaNow);
 		this.vanillaProblems = Map.copyOf(vanillaProblems);
 		this.configFiles = List.copyOf(configFiles);
 		this.modsDir = modsDir;
 		this.downloads = Objects.requireNonNull(downloads);
+		this.disableRefusals = disableRefusals;
+	}
+
+	// docs/v0.5/SPEC.md 2V (ws-g2): the "Disable" items' refusals as Apply gets them from DisableGuard (the file names of one
+	// Apply's disables, checked together -> file name -> why); a refused one is under "Not changed" with the reason.
+	public PreviewPlanner withDisableRefusals(Function<List<String>, Map<String, Text>> refusals) {
+		return new PreviewPlanner(optionsFile, vanillaNow, vanillaProblems, configFiles, modsDir, downloads, refusals);
 	}
 
 	public ApplyPreview preview(List<Recommendation> selected) {
@@ -56,6 +69,7 @@ public final class PreviewPlanner {
 		Map<ConfigFile, Map<String, String>> patches = new LinkedHashMap<>();
 		Map<String, Recommendation> configRecs = new HashMap<>();
 		List<Recommendation> downloadRecs = new ArrayList<>();
+		Map<String, Text> refusedDisables = refusedDisables(selected);
 		for (Recommendation r : selected) {
 			switch (r.action()) {
 				case Action.SetSetting set when set.key().startsWith(VANILLA) -> vanilla.put(set.key(), r);
@@ -64,6 +78,9 @@ public final class PreviewPlanner {
 					patches.computeIfAbsent(file, f -> new LinkedHashMap<>()).put(set.key().substring(file.prefix().length()), set.newValue());
 					configRecs.put(set.key(), r);
 				}
+				case Action.DisableMod disable when SafeFileNames.isDirectChild(modsDir, disable.file())
+						&& refusedDisables.containsKey(String.valueOf(disable.file().getFileName())) ->
+						out.skipText(r, ApplyPreview.Reason.REFUSED, refusedDisables.get(String.valueOf(disable.file().getFileName())));
 				case Action.DisableMod disable when SafeFileNames.isDirectChild(modsDir, disable.file()) ->
 						out.disables.add(new ApplyPreview.Disable(r.id(), r.title(), disable.file(), ApplyExecutor.disabledTarget(disable.file()),
 								r.titleText()));
@@ -76,7 +93,21 @@ public final class PreviewPlanner {
 		vanilla.values().forEach(r -> vanilla(r, (Action.SetSetting) r.action(), out));
 		patches.forEach((file, values) -> config(file, values, configRecs, out));
 		boolean resolved = downloadRecs.isEmpty() || PreviewDownloads.add(downloadRecs, downloads, modsDir, out);
-		return new ApplyPreview(out.now, out.atRestart, out.downloads, out.disables, out.skipped, resolved);
+		boolean checked = !out.downloads.isEmpty() && !out.unchecked && out.downloads.stream().allMatch(d -> d.fileName() != null);
+		return new ApplyPreview(out.now, out.atRestart, out.downloads, out.disables, out.skipped, resolved, List.of(), checked);
+	}
+
+	private Map<String, Text> refusedDisables(List<Recommendation> selected) {
+		if (disableRefusals == null) {
+			return Map.of();
+		}
+		List<String> files = new ArrayList<>();
+		for (Recommendation r : selected) {
+			if (r.action() instanceof Action.DisableMod disable && SafeFileNames.isDirectChild(modsDir, disable.file())) {
+				files.add(String.valueOf(disable.file().getFileName()));
+			}
+		}
+		return files.isEmpty() ? Map.of() : disableRefusals.apply(files);
 	}
 
 	private @Nullable ConfigFile configFile(String key) {
@@ -128,6 +159,8 @@ public final class PreviewPlanner {
 		final List<ApplyPreview.Download> downloads = new ArrayList<>();
 		final List<ApplyPreview.Disable> disables = new ArrayList<>();
 		final List<ApplyPreview.Skipped> skipped = new ArrayList<>();
+		// docs/v0.5/SPEC.md 2H L5: a listed download whose fabric.mod.json wasn't read.
+		boolean unchecked;
 
 		// detail: the game's or the config patcher's own message, shown as it is.
 		void skip(Recommendation r, ApplyPreview.Reason reason, @Nullable String detail) {

@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.client.ClientSettings;
+import io.github.chaotix345.rigtune.client.SettingsSaver;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkWorld;
@@ -68,7 +69,8 @@ public class BenchmarkMenuScreen extends Screen {
 						scene = value;
 						ClientSettings settings = ClientSettings.shared(configDir());
 						settings.benchmarkScene = value.name();
-						settings.save(configDir());
+						// v0.5 L6 (X8, WS-W): settings.json only through SettingsSaver, never raw on the render thread.
+						SettingsSaver.shared().save(settings, configDir());
 						status = null;
 						rebuildWidgets();
 					}));

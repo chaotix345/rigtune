@@ -14,6 +14,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 // Every current notice with its actions and dismiss button, for screens too narrow for the inline notice line
 // (docs/v0.4/SPEC.md C3, plan review X-M2). Opened by the notice line's "…" button; Done returns to RigTuneScreen, which
@@ -34,6 +35,7 @@ public class NoticeScreen extends Screen {
 	private final List<Integer> rowY = new ArrayList<>();
 	private int notShown;
 	private int moreY;
+	private @Nullable Consumer<List<Notice>> onListed;
 
 	public NoticeScreen(@Nullable Screen parent, RigTuneController controller) {
 		super(Component.translatable("rigtune.notice.title"));
@@ -106,6 +108,16 @@ public class NoticeScreen extends Screen {
 		int buttonWidth = Math.min(200, width - 16);
 		addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose())
 				.bounds((width - buttonWidth) / 2, height - 28, buttonWidth, 20).build());
+		// v0.5 AW-2 (docs/v0.5/SPEC.md 2W): what this init listed, rebuilds included (AFTER_INIT misses rebuildWidgets).
+		Consumer<List<Notice>> listener = onListed;
+		if (listener != null) {
+			listener.accept(shown);
+		}
+	}
+
+	// AwarenessService's "shown" signal, set when the screen first initialises; told what each later init lists.
+	public void onListed(@Nullable Consumer<List<Notice>> listener) {
+		this.onListed = listener;
 	}
 
 	private int margin() {
