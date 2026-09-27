@@ -135,6 +135,18 @@ public final class ProfileStore {
 	public record Battery(boolean prompt, @Nullable String previousProfile, @Nullable String lastPromptAt, boolean snoozed) {
 	}
 
+	// v0.5 (coordinator review L10): the parts the battery offer needs from one read of the file (it is asked on every
+	// screen init).
+	public record Snapshot(List<Profile> profiles, @Nullable String active, @Nullable String activeEntry, Battery battery) {
+		public Snapshot {
+			profiles = List.copyOf(profiles);
+		}
+
+		public @Nullable Profile profile(String id) {
+			return profiles.stream().filter(p -> p.id().equals(id)).findFirst().orElse(null);
+		}
+	}
+
 	public static String newProfileId() {
 		return "p-" + UUID.randomUUID();
 	}
@@ -218,9 +230,18 @@ public final class ProfileStore {
 		});
 	}
 
+	public Snapshot snapshot() {
+		JsonObject root = read();
+		return new Snapshot(profiles(root), active(root), activeEntry(root), battery(root));
+	}
+
 	// "p-<uuid>", "template:<id>" or null.
 	public @Nullable String active() {
-		String active = string(read(), ACTIVE);
+		return active(read());
+	}
+
+	private static @Nullable String active(JsonObject root) {
+		String active = string(root, ACTIVE);
 		return validActive(active) ? active : null;
 	}
 
@@ -249,7 +270,11 @@ public final class ProfileStore {
 
 	// The journal entry of the switch that made the active profile active, or null.
 	public @Nullable String activeEntry() {
-		String entry = string(read(), ACTIVE_ENTRY);
+		return activeEntry(read());
+	}
+
+	private static @Nullable String activeEntry(JsonObject root) {
+		String entry = string(root, ACTIVE_ENTRY);
 		return entry != null && ENTRY_ID_SHAPE.matcher(entry).matches() ? entry : null;
 	}
 
@@ -309,7 +334,11 @@ public final class ProfileStore {
 	}
 
 	public Battery battery() {
-		JsonObject battery = read().get(BATTERY) instanceof JsonObject object ? object : null;
+		return battery(read());
+	}
+
+	private static Battery battery(JsonObject root) {
+		JsonObject battery = root.get(BATTERY) instanceof JsonObject object ? object : null;
 		return new Battery(bool(battery, BATTERY_PROMPT, true), string(battery, BATTERY_PREVIOUS_PROFILE), string(battery, BATTERY_LAST_PROMPT_AT),
 				bool(battery, BATTERY_SNOOZED, false));
 	}

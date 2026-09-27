@@ -224,6 +224,17 @@ public final class ProfileService {
 		return target == null ? null : ShareCode.encode(target.english(), target.values(), refresh);
 	}
 
+	// v0.5 PF-5: how many of the profile's values its code leaves out (a DH LOD radius beyond what share codes carry), for
+	// Copy code's status. The same profile resolution as exportProfileCode.
+	public int profileCodeLeftOut(String id) {
+		Profile own = id.startsWith(ProfileStore.TEMPLATE_PREFIX) ? null : store().profile(id);
+		if (own != null) {
+			return ShareCode.leftOut(own.settings());
+		}
+		Target target = resolve(id);
+		return target == null ? 0 : ShareCode.leftOut(target.values());
+	}
+
 	public void renameProfile(String id, String name) {
 		store().rename(id, name);
 	}
@@ -253,7 +264,8 @@ public final class ProfileService {
 	public void powerChanged(boolean onBattery) {
 		HardwareProbe.setOnBattery(onBattery);
 		Instant now = Instant.now();
-		BatteryPrompt.Decision decision = BatteryPrompt.onEdge(onBattery, store().battery(), active(), benchmarkRunning.getAsBoolean(), now);
+		ProfileStore.Snapshot profiles = store().snapshot();
+		BatteryPrompt.Decision decision = BatteryPrompt.onEdge(onBattery, profiles.battery(), active(profiles), benchmarkRunning.getAsBoolean(), now);
 		Offer next = switch (decision.offer()) {
 			case BATTERY -> new Offer(NOTICE_BATTERY + now.getEpochSecond(), decision);
 			case PREVIOUS -> new Offer(NOTICE_BACK + now.getEpochSecond(), decision);
@@ -270,20 +282,22 @@ public final class ProfileService {
 		minecraft.execute(() -> {
 			if (next != null) {
 				SystemToast.addOrUpdate(minecraft.gui.toastManager(), BATTERY_TOAST_ID, Component.translatable("rigtune.battery.toast.title"),
-						Texts.component(message(next)));
+						Texts.component(message(next, profiles)));
 			}
 			controller.rescan();
 		});
 	}
 
 	// BatteryNoticeSource's notice: the pending offer, while it still applies (v0.5 PF-3: its target still resolves). Only
-	// the unplug offer has "Don't offer again" (PF-2); both keep their ×.
+	// the unplug offer has "Don't offer again" (PF-2); both keep their ×. profiles.json is read once (this is asked on
+	// every screen init).
 	public @Nullable Notice batteryNotice() {
 		Offer current = offer.get();
 		if (current == null) {
 			return null;
 		}
-		if (!BatteryPrompt.stillOffered(current.decision(), active(), this::resolves)) {
+		ProfileStore.Snapshot profiles = store().snapshot();
+		if (!BatteryPrompt.stillOffered(current.decision(), active(profiles), id -> resolvedName(id, profiles) != null)) {
 			retire(offer, current);
 			return null;
 		}
@@ -294,7 +308,7 @@ public final class ProfileService {
 		if (BatteryPrompt.offersSnooze(current.decision().offer())) {
 			actions.add(new NoticeAction(ACTION_SNOOZE, Text.of("rigtune.battery.action.snooze", "Don't offer again")));
 		}
-		return new Notice(current.key(), NoticePriority.BATTERY_OFFER, message(current), null, actions, true);
+		return new Notice(current.key(), NoticePriority.BATTERY_OFFER, message(current, profiles), null, actions, true);
 	}
 
 	public void batteryAction(String actionId) {
@@ -304,7 +318,10 @@ public final class ProfileService {
 		}
 		retire(offer, current);
 		if (ACTION_SNOOZE.equals(actionId)) {
-			store().snoozeBattery(true);
+			// Only the unplug offer has it (PF-2): on the plug-in offer it would also stop the unplug offer.
+			if (BatteryPrompt.offersSnooze(current.decision().offer())) {
+				store().snoozeBattery(true);
+			}
 			return;
 		}
 		if (ACTION_SWITCH.equals(actionId) && current.decision().target() != null) {
@@ -321,20 +338,27 @@ public final class ProfileService {
 		return seen != null && slot.compareAndSet(seen, null);
 	}
 
-	private Text message(Offer offer) {
+	private Text message(Offer offer, ProfileStore.Snapshot profiles) {
 		if (offer.decision().offer() == BatteryPrompt.Offer.BATTERY) {
 			return Text.of("rigtune.battery.offer", "You're on battery power. Switch to the Battery profile to make it last longer?");
 		}
-		return Text.of("rigtune.battery.back", "You're plugged in again. Switch back to %s?", displayName(offer.decision().target()));
+		Text name = resolvedName(offer.decision().target(), profiles);
+		return Text.of("rigtune.battery.back", "You're plugged in again. Switch back to %s?", name == null ? Text.literal("?") : name);
 	}
 
 	// The switch itself: one journal entry of kind apply, labelled in profiles.json.
 	private Component switchTo(Target target, @Nullable Offer answered) {
-		// The way back: "My settings" exists before the first switch, even one made from the battery offer.
-		ensureBaseline();
+		String previous = active();
+		// The way back: "My settings" exists before the first switch, even one made from the battery offer. v0.5 PF-1
+		// (coordinator decision): a switch to Battery with no profile in effect first refreshes it to the current values, as
+		// the plug-in offer switches back to it.
+		if (previous == null && BatteryPrompt.BATTERY.equals(activeId(target))) {
+			refreshBaseline();
+		} else {
+			ensureBaseline();
+		}
 		SettingsSnapshot snapshot = snapshot();
 		List<Recommendation> recs = ProfileSwitch.build(target.values(), snapshot, ModScanner.loadedIds(), labels(), target.english());
-		String previous = active();
 		Component name = Texts.component(target.name());
 		if (recs.isEmpty()) {
 			markActive(target, previous, null);
@@ -364,14 +388,20 @@ public final class ProfileService {
 	}
 
 	private void markActive(Target target, @Nullable String previous, @Nullable String entryId) {
-		String id = target.profileId() != null ? target.profileId()
-				: target.templateId() != null ? ProfileStore.TEMPLATE_PREFIX + target.templateId() : null;
+		String id = activeId(target);
 		store().setActive(id, entryId);
 		if (BatteryPrompt.BATTERY.equals(id) && !BatteryPrompt.BATTERY.equals(previous)) {
-			// v0.5 PF-1: with no profile active, "My settings" (saved by ensureBaseline before this switch) is the way back.
+			// v0.5 PF-1: with no profile in effect, "My settings" (refreshed to the current values by switchTo just before this
+			// switch) is the way back.
 			Profile baseline = store().baseline();
 			store().rememberPrevious(BatteryPrompt.previousFor(previous, baseline == null ? null : baseline.id()));
 		}
+	}
+
+	// What profiles.json's "active" holds once this target is switched to.
+	private static @Nullable String activeId(Target target) {
+		return target.profileId() != null ? target.profileId()
+				: target.templateId() != null ? ProfileStore.TEMPLATE_PREFIX + target.templateId() : null;
 	}
 
 	// For ProfilesGameTest only: null puts the real check back.
@@ -429,6 +459,18 @@ public final class ProfileService {
 		return ProfileNotes.of(target.clamps(), newerKeys, notHere, labels());
 	}
 
+	// "My settings" set to the current values (saved when there is none yet), its id, name and creation time kept.
+	private void refreshBaseline() {
+		Profile baseline = store().baseline();
+		Map<String, String> values = baseline == null ? Map.of() : current();
+		if (baseline == null || values.isEmpty() || !store().writable()) {
+			ensureBaseline();
+			return;
+		}
+		store().saveProfile(new Profile(baseline.id(), baseline.name(), baseline.templateId(), ProfileStore.SOURCE_BASELINE, baseline.createdAt(),
+				controller.modVersion(), HardwareProbe.minecraftVersion(), values));
+	}
+
 	private void ensureBaseline() {
 		if (store().baseline() != null || !store().writable()) {
 			return;
@@ -459,36 +501,35 @@ public final class ProfileService {
 
 	// The active profile, while the switch that made it active still stands (not undone: ActiveProfile).
 	private @Nullable String active() {
-		String active = store().active();
+		return active(store().snapshot());
+	}
+
+	private @Nullable String active(ProfileStore.Snapshot profiles) {
+		String active = profiles.active();
 		if (active == null) {
 			return null;
 		}
 		try {
 			Journal journal = ClientJournal.get();
-			return ActiveProfile.inEffect(store().activeEntry(), journal.state(), journal.entries()) ? active : null;
+			return ActiveProfile.inEffect(profiles.activeEntry(), journal.state(), journal.entries()) ? active : null;
 		} catch (RuntimeException e) {
 			RigTune.LOGGER.warn("Could not read RigTune's history", e);
 			return active;
 		}
 	}
 
-	// Whether a profile id still names something to switch to (a template, or a profile still in profiles.json).
-	private boolean resolves(String id) {
-		return id.startsWith(ProfileStore.TEMPLATE_PREFIX) ? TemplateId.of(id.substring(ProfileStore.TEMPLATE_PREFIX.length())) != null
-				: store().profile(id) != null;
-	}
-
-	// A profile id's name without computing it (the battery offer's text).
-	private Text displayName(@Nullable String id) {
+	// A profile id's name without computing it (the battery offer's text), or null when it no longer names anything to
+	// switch to (an unknown template, or a profile gone from profiles.json).
+	private static @Nullable Text resolvedName(@Nullable String id, ProfileStore.Snapshot profiles) {
 		if (id == null) {
-			return Text.literal("?");
+			return null;
 		}
 		if (id.startsWith(ProfileStore.TEMPLATE_PREFIX)) {
 			TemplateId template = TemplateId.of(id.substring(ProfileStore.TEMPLATE_PREFIX.length()));
-			return template == null ? Text.literal("?") : template.displayName();
+			return template == null ? null : template.displayName();
 		}
-		Profile profile = store().profile(id);
-		return profile == null ? Text.literal("?") : name(profile);
+		Profile profile = profiles.profile(id);
+		return profile == null ? null : name(profile);
 	}
 
 	private static Text name(Profile profile) {

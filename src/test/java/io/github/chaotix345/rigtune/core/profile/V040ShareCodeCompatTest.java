@@ -1,11 +1,13 @@
 package io.github.chaotix345.rigtune.core.profile;
 
+import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -66,6 +68,28 @@ class V040ShareCodeCompatTest {
 		for (int importer : IMPORTERS) {
 			assertEquals("60", io.github.chaotix345.rigtune.v040.core.profile.ShareCode.decode(code).values(importer).get("vanilla.maxFps"));
 		}
+	}
+
+	// The pinned 0.4.0 decoder resolves "match the display" through the CURRENT SettingValues.refreshRateCap, which the pin
+	// doesn't copy: its values are still 0.4.0's, so a pinned decode is 0.4.0's decode (coordinator review L6).
+	@Test
+	void theRefreshCapIsStill040s() {
+		for (int hz = -5; hz <= 400; hz++) {
+			assertEquals(refreshRateCap040(hz), SettingValues.refreshRateCap(hz), hz + " Hz");
+		}
+		assertEquals(List.of(60, 60, 30, 50, 60, 60, 70, 90, 110, 140, 160, 170, 230, 250),
+				Stream.of(-1, 0, 25, 50, 60, 65, 75, 100, 120, 144, 165, 180, 240, 360).map(SettingValues::refreshRateCap).toList());
+	}
+
+	// v0.4.0's SettingValues.refreshRateCap, verbatim (git show v0.4.0:src/main/java/io/github/chaotix345/rigtune/core/
+	// recommend/SettingValues.java, lines 51-58).
+	private static int refreshRateCap040(int refreshRate) {
+		int hz = refreshRate > 0 ? refreshRate : 60;
+		int cap = hz / 10 * 10;
+		if (cap == hz && hz >= 100) {
+			cap -= 10;
+		}
+		return Math.clamp(cap, 30, 250);
 	}
 
 	private static boolean same(Map<String, String> values, int sender) throws Exception {

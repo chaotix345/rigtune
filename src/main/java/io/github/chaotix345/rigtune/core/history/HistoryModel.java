@@ -168,7 +168,7 @@ public final class HistoryModel {
 			JournalEntry e = entries.get(i);
 			String undoOfAt = e.undoOf() == null || UndoPlanner.ALL.equals(e.undoOf()) ? null : atById.get(e.undoOf());
 			out.add(new Entry(e.id(), e.kind(), e.at(), e.rigtuneVersion(), e.mcVersion(), e.undoOf(), undoOfAt, undoable.contains(e.id()),
-					rows(e, failures, labels), null, e.foldedEntryIds(), List.of()));
+					rows(e, failures, labels), null, Journal.folded(e), List.of()));
 		}
 		return new View(state, out);
 	}

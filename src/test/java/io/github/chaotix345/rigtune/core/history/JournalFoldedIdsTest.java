@@ -110,6 +110,26 @@ class JournalFoldedIdsTest {
 		assertEquals(Set.of(), Journal.idsWithFolded(List.of()));
 	}
 
+	// history.json is the player's file too: only a baseline's foldedEntryIds count, and at most its newest MAX_FOLDED_IDS
+	// (coordinator review L4).
+	@Test
+	void onlyABaselinesNewestFoldedIdsCount() {
+		JournalEntry edited = apply("plain", 0).withFoldedEntryIds(List.of("x", "y"));
+		List<String> many = IntStream.range(0, 60).mapToObj(i -> "f" + i).toList();
+		JournalEntry baseline = new JournalEntry(Journal.BASELINE + "b", START.toString(), JournalEntry.APPLY, "0.5.0+mc26.2", "26.2", null,
+				List.of()).withFoldedEntryIds(many);
+
+		assertEquals(List.of(), Journal.folded(edited));
+		assertEquals(many.subList(10, 60), Journal.folded(baseline));
+		assertEquals(Set.of("plain", Journal.BASELINE + "b"), Set.copyOf(Journal.idsWithFolded(List.of(edited, baseline)).stream()
+				.filter(id -> !id.startsWith("f")).toList()));
+		assertEquals(50, Journal.idsWithFolded(List.of(baseline)).size() - 1);
+		assertNull(Journal.holding(List.of(edited), "x"));
+		assertNull(Journal.holding(List.of(baseline), "f0"));
+		assertEquals(baseline, Journal.holding(List.of(baseline), "f59"));
+		assertEquals(List.of(), HistoryModel.build(Journal.State.OK, List.of(edited), Map.of(), HistoryModel.Labels.RAW).entries().getFirst().folded());
+	}
+
 	// The fold keeps UndoPlanner's view unchanged: the same changes as before L8 (the list is the only addition).
 	@Test
 	void theFoldedChangesAreUnchanged() {

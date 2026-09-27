@@ -5,12 +5,12 @@
       "class": "Journal",
       "file": "history.json",
       "state": "OK",
-      "entries": 2
+      "entries": 50
     },
     {
       "class": "HistoryModel",
       "file": "history.json",
-      "entries": 2,
+      "entries": 50,
       "unknownKinds": 0
     },
     {

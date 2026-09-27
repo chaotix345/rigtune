@@ -14,6 +14,7 @@ import io.github.chaotix345.rigtune.client.ui.ProfilesScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneSettingsScreen;
+import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
 import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
@@ -34,6 +35,7 @@ import io.github.chaotix345.rigtune.core.profile.ProfileImport;
 import io.github.chaotix345.rigtune.core.profile.ProfileStore;
 import io.github.chaotix345.rigtune.core.profile.ProfileView;
 import io.github.chaotix345.rigtune.core.profile.ShareCode;
+import io.github.chaotix345.rigtune.core.profile.ShareCodeException;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -129,6 +131,8 @@ public class ProfilesGameTest implements FabricClientGameTest {
 			batteryOffer(context, controller);
 			pf1BatteryOfferFromAFreshStart(context, controller);
 			pf3DeletingTheBackOffersTargetRetiresIt(context, controller);
+			pf1StaleMySettingsIsRefreshedFirst(context, controller);
+			pf5CopyCodeSaysWhatItLeavesOut(context, controller);
 			l8HistoryIncludesTheFoldedSwitches(context, controller);
 			refusedDuringABenchmark(context, controller);
 		} finally {
@@ -521,11 +525,18 @@ public class ProfilesGameTest implements FabricClientGameTest {
 			check(back != null && back.message().english().contains("Evening"), "the plug-in offer names Evening: " + back);
 			context.runOnClient(mc -> controller.deleteProfile(evening));
 			check(ProfileStore.shared(configDir).profile(evening) == null, "Evening deleted");
-			check(batteryNotice(context, controller) == null, "PF-3: the offer for a deleted profile is retired");
-			check(context.computeOnClient(mc -> controller.notices()).stream().noneMatch(n -> n.message().english().contains("Switch back to ?")),
-					"no notice says \"Switch back to ?\"");
+			// The screen the player comes back to lists its notices at init: its notice line (the battery offer's slot is the
+			// first) must not offer the deleted profile as "Switch back to ?".
 			context.runOnClient(mc -> mc.gui.setScreen(new RigTuneScreen(new TitleScreen(), controller)));
 			context.waitForScreen(RigTuneScreen.class);
+			context.waitTicks(1);
+			String shown = context.computeOnClient(mc -> {
+				Notice notice = ((RigTuneScreen) mc.gui.screen()).shownNotice();
+				return notice == null ? "" : notice.key() + " | " + Texts.component(notice.message()).getString();
+			});
+			check(!shown.startsWith(ProfileService.NOTICE_BACK) && !shown.contains("Switch back to ?"),
+					"PF-3: the notice line doesn't offer the deleted profile: " + shown);
+			check(batteryNotice(context, controller) == null, "PF-3: the offer for a deleted profile is retired");
 			screenshotAt(context, 854, 480, 2, "profiles-battery-back-deleted-854x480-scale2");
 		} finally {
 			HardwareProbe.setOnBattery(onBattery);
@@ -535,6 +546,73 @@ public class ProfilesGameTest implements FabricClientGameTest {
 			});
 			context.waitFor(mc -> controller.report() != null, 1200);
 		}
+	}
+
+	// docs/v0.5/SPEC.md PF-1, coordinator decision (review L2): taking Battery with no profile in effect first refreshes "My
+	// settings" to the current values, so plugging back in returns to the settings the player had, not an older snapshot.
+	private void pf1StaleMySettingsIsRefreshedFirst(ClientGameTestContext context, RigTuneController controller) {
+		reset(context);
+		ProfileService service = ((RealController) controller).profileService();
+		boolean onBattery = context.computeOnClient(mc -> controller.report()).hardware().onBattery();
+		try {
+			check("12".equals(ProfileStore.shared(configDir).baseline().settings().get("vanilla.renderDistance")), "My settings holds the seed's 12");
+			// The player changes a value by hand afterwards; no profile is in effect.
+			context.runOnClient(mc -> SettingsBridge.applyVanilla(mc.options, Map.of("vanilla.renderDistance", "10")));
+			Notice offer = offerOnUnplug(context, controller, service);
+			context.runOnClient(mc -> controller.noticeAction(offer.key(), ProfileService.ACTION_SWITCH));
+			context.waitTicks(2);
+			check(BATTERY.equals(ProfileStore.shared(configDir).active()), "the offer switched to Battery");
+			ProfileStore.Profile mine = ProfileStore.shared(configDir).baseline();
+			check("10".equals(mine.settings().get("vanilla.renderDistance")), "My settings was refreshed to the current 10 first: " + mine.settings());
+			check(mine.id().equals(ProfileStore.shared(configDir).battery().previousProfile()), "and is the way back");
+			service.powerChanged(false);
+			context.waitTicks(3);
+			context.waitFor(mc -> controller.report() != null, 1200);
+			Notice back = batteryNotice(context, controller);
+			check(back != null && back.key().startsWith(ProfileService.NOTICE_BACK), "the plug-in offer: " + back);
+			context.runOnClient(mc -> controller.noticeAction(back.key(), ProfileService.ACTION_SWITCH));
+			context.waitTicks(2);
+			check("10".equals(context.computeOnClient(mc -> vanilla(mc.options)).get("vanilla.renderDistance")), "switching back restores the player's 10");
+		} finally {
+			HardwareProbe.setOnBattery(onBattery);
+			context.runOnClient(mc -> {
+				mc.gui.setScreen(new TitleScreen());
+				controller.rescan();
+			});
+			context.waitFor(mc -> controller.report() != null, 1200);
+		}
+	}
+
+	// docs/v0.5/SPEC.md PF-5 (AC2P.5): a profile holding a DH LOD radius of 1024 (DH's own range) is copied without it (key
+	// 22 carries 32..512 only), and Copy code's status says one setting is left out.
+	private void pf5CopyCodeSaysWhatItLeavesOut(ClientGameTestContext context, RigTuneController controller) {
+		reset(context);
+		String radius = "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius";
+		String id = ProfileStore.newProfileId();
+		Map<String, String> values = new LinkedHashMap<>();
+		values.put("vanilla.renderDistance", "12");
+		values.put(radius, "1024");
+		check(ProfileStore.shared(configDir).saveProfile(new ProfileStore.Profile(id, "Far LODs", null, ProfileStore.SOURCE_SAVED, Instant.now().toString(),
+				null, null, values)), "a profile with a 1024 radius saved");
+		check("1024".equals(ProfileStore.shared(configDir).profile(id).settings().get(radius)), "profiles.json keeps the 1024 radius");
+		check(context.computeOnClient(mc -> controller.profileCodeLeftOut(id)) == 1, "one value can't go in a code");
+		openProfiles(context, controller);
+		context.runOnClient(mc -> {
+			ProfilesScreen screen = (ProfilesScreen) mc.gui.screen();
+			screen.select(id);
+			screen.copySelected();
+		});
+		context.waitTicks(1);
+		String status = context.computeOnClient(mc -> text(((ProfilesScreen) mc.gui.screen()).status()));
+		check(status.contains(Component.translatable("rigtune.profile.status.not_carried_one").getString()), "the status says 1 setting is left out: " + status);
+		String code = context.computeOnClient(mc -> mc.keyboardHandler.getClipboard());
+		try {
+			Map<String, String> decoded = ShareCode.decode(code).values(60);
+			check(decoded.equals(Map.of("vanilla.renderDistance", "12")), "the code carries the rest, never the radius: " + decoded);
+		} catch (ShareCodeException e) {
+			throw new AssertionError("the copied code decodes: " + code, e);
+		}
+		context.takeScreenshot("profiles-copy-code-left-out");
 	}
 
 	private static @Nullable Notice batteryNotice(ClientGameTestContext context, RigTuneController controller) {

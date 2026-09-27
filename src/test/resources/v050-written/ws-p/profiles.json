@@ -10,8 +10,9 @@
       "mcVersion": "26.2",
       "settings": {
         "vanilla.simulationDistance": "12",
-        "vanilla.particles": "0",
+        "vanilla.particles": "2",
         "vanilla.biomeBlendRadius": "1",
+        "vanilla.weatherRadius": "10",
         "vanilla.renderClouds": "true",
         "vanilla.entityShadows": "true",
         "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius": "1024"

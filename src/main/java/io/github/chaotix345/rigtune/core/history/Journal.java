@@ -7,6 +7,7 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.AtomicFiles;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.charset.CharacterCodingException;
@@ -280,28 +281,36 @@ public final class Journal implements ChangeRecorder {
 		return entry.id() != null && entry.id().startsWith(BASELINE) && JournalEntry.APPLY.equals(entry.kind());
 	}
 
+	// v0.5 L8: the ids an entry folded: a baseline's foldedEntryIds, at most the newest MAX_FOLDED_IDS (history.json is the
+	// player's file too, so another entry's list, or a longer one, isn't trusted), else none.
+	public static List<String> folded(JournalEntry entry) {
+		List<String> ids = entry.foldedEntryIds();
+		if (ids == null || !isBaseline(entry)) {
+			return List.of();
+		}
+		return ids.subList(Math.max(0, ids.size() - MAX_FOLDED_IDS), ids.size());
+	}
+
 	// v0.5 L8: the ids the journal still accounts for: every entry's own and the ids a baseline folded (their profile labels
 	// and the records that name them still resolve through it). ProfileService prunes the switch labels against these.
 	public static Set<String> idsWithFolded(List<JournalEntry> entries) {
 		Set<String> out = new HashSet<>();
 		for (JournalEntry entry : entries) {
 			out.add(entry.id());
-			if (entry.foldedEntryIds() != null) {
-				out.addAll(entry.foldedEntryIds());
-			}
+			out.addAll(folded(entry));
 		}
 		return out;
 	}
 
 	// v0.5 L8: the entry with this id, else the baseline that folded it (C09's and C20's records find a folded entry), else
 	// null.
-	public static JournalEntry holding(List<JournalEntry> entries, String id) {
+	public static @Nullable JournalEntry holding(List<JournalEntry> entries, String id) {
 		JournalEntry folded = null;
 		for (JournalEntry entry : entries) {
 			if (id.equals(entry.id())) {
 				return entry;
 			}
-			if (folded == null && entry.foldedEntryIds() != null && entry.foldedEntryIds().contains(id)) {
+			if (folded == null && folded(entry).contains(id)) {
 				folded = entry;
 			}
 		}
@@ -404,9 +413,7 @@ public final class Journal implements ChangeRecorder {
 		String id = isBaseline(first) ? first.id() : BASELINE + ChangeRecorder.newEntryId();
 		List<String> folded = new ArrayList<>();
 		for (JournalEntry entry : run) {
-			if (entry.foldedEntryIds() != null) {
-				folded.addAll(entry.foldedEntryIds());
-			}
+			folded.addAll(folded(entry));
 			if (!id.equals(entry.id())) {
 				folded.add(entry.id());
 			}

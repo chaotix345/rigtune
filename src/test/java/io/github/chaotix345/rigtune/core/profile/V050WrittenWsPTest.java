@@ -13,17 +13,22 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // The "written by 0.5" set src/test/resources/v050-written/ws-p/ (docs/v0.5/SPEC.md 3b, X11; the set's README), written
-// by 0.5's own code: a Max FPS switch folded into History's baseline (L8: foldedEntryIds, its label kept), then Battery
-// taken from the unplug offer while no profile was in effect any more (PF-1: battery.previousProfile = My settings),
-// with "My settings" holding a DH LOD radius of 1024 (PF-5). By default the test compares with the committed files;
+// by 0.5's own code: an Apply and a Max FPS switch, 48 more Applies, then Battery taken from the unplug offer, written
+// through Journal.update, whose cap folds the first two into History's baseline (L8: foldedEntryIds, the Max FPS label
+// kept); no profile was in effect any more, so "My settings" was refreshed to the current values and remembered as the
+// way back (PF-1: battery.previousProfile), holding a DH LOD radius of 1024 (PF-5). The fold's random baseline id is the
+// one value replaced (by a fixed id), so the set is stable. By default the test compares with the committed files;
 // RIGTUNE_REGENERATE_FIXTURES=1 writes them instead. The pinned 0.3.0 Journal reads the history (AC2H.3). Its entries
 // change keys no v040-written history changes, later than theirs, so composed with those sets (compat030, the downgrade
 // E2E) each set's Undo this still reverts its own changes.
@@ -43,16 +48,28 @@ class V050WrittenWsPTest {
 		return new JournalChange(id, JournalChange.SETTING, key, before, after, null, null, null, null, JournalChange.APPLIED, null, null, null);
 	}
 
-	// The history as 0.5 leaves it: the baseline the cap folded the Apply and the Max FPS switch into, then the Battery switch.
-	static List<JournalEntry> entries() {
-		JournalEntry baseline = new JournalEntry(BASELINE_ENTRY, "2026-09-22T09:00:00Z", JournalEntry.APPLY, "0.5.0+mc26.2", "26.2", null, List.of(
-				change("360052a0-a38c-4bc5-be83-726d580f4ac7", "vanilla.biomeBlendRadius", "2", "1"),
-				change("73b9f3c9-e0bc-4de9-9b42-594e7631251f", "vanilla.particles", "0", "2"))).withFoldedEntryIds(List.of(FOLDED_APPLY, FOLDED_MAX_FPS));
-		JournalEntry battery = new JournalEntry(BATTERY_ENTRY, "2026-09-23T10:00:00Z", JournalEntry.APPLY, "0.5.0+mc26.2", "26.2", null, List.of(
-				change("c79c115a-d6ae-4a9c-afa8-f7973b343755", "vanilla.simulationDistance", "12", "8"),
+	private static String fixed(String what, int i) {
+		return UUID.nameUUIDFromBytes(("rigtune v050-written ws-p " + what + " " + i).getBytes(StandardCharsets.UTF_8)).toString();
+	}
+
+	private static JournalEntry apply(String id, String at, JournalChange... changes) {
+		return new JournalEntry(id, at, JournalEntry.APPLY, "0.5.0+mc26.2", "26.2", null, List.of(changes));
+	}
+
+	// The 51 entries as they were written, oldest first: the Apply, the Max FPS switch, 48 Applies of the weather radius,
+	// the Battery switch. The cap folds the first two.
+	static List<JournalEntry> written() {
+		List<JournalEntry> out = new ArrayList<>();
+		out.add(apply(FOLDED_APPLY, "2026-09-22T09:00:00Z", change("360052a0-a38c-4bc5-be83-726d580f4ac7", "vanilla.biomeBlendRadius", "2", "1")));
+		out.add(apply(FOLDED_MAX_FPS, "2026-09-22T09:30:00Z", change("73b9f3c9-e0bc-4de9-9b42-594e7631251f", "vanilla.particles", "0", "2")));
+		for (int i = 0; i < 48; i++) {
+			out.add(apply(fixed("entry", i), Instant.parse("2026-09-22T10:00:00Z").plusSeconds(60L * i).toString(),
+					change(fixed("change", i), "vanilla.weatherRadius", i % 2 == 0 ? "10" : "9", i % 2 == 0 ? "9" : "10")));
+		}
+		out.add(apply(BATTERY_ENTRY, "2026-09-23T10:00:00Z", change("c79c115a-d6ae-4a9c-afa8-f7973b343755", "vanilla.simulationDistance", "12", "8"),
 				change("6385d72a-5a85-4134-a52a-342f0deceb1b", "vanilla.renderClouds", "true", "false"),
 				change("e469bda9-a192-401a-887d-3db753112418", "vanilla.entityShadows", "true", "false")));
-		return List.of(baseline, battery);
+		return out;
 	}
 
 	// history.json and profiles.json in configDir/rigtune/, in the order ProfileService writes them.
@@ -61,15 +78,25 @@ class V050WrittenWsPTest {
 			throw new AssertionError(message, error);
 		});
 		ProfileStore store = ProfileStore.shared(configDir);
+		// My settings, saved before the first switch.
 		assertTrue(store.saveProfile(new ProfileStore.Profile(MY_SETTINGS, "My settings", null, ProfileStore.SOURCE_BASELINE, "2026-09-22T09:29:59Z",
 				"0.5.0+mc26.2", "26.2", ShareCodeTest.ordered("vanilla.simulationDistance", "12", "vanilla.particles", "0", "vanilla.biomeBlendRadius", "1",
-						"vanilla.renderClouds", "true", "vanilla.entityShadows", "true", DH_RADIUS, "1024"))));
+						"vanilla.weatherRadius", "10", "vanilla.renderClouds", "true", "vanilla.entityShadows", "true", DH_RADIUS, "1024"))));
 		assertTrue(store.recordSwitch(new ProfileStore.Switch(FOLDED_MAX_FPS, null, "max_fps", "Max FPS"), null));
 		assertTrue(store.setActive("template:max_fps", FOLDED_MAX_FPS));
-		assertTrue(journal.update(entries -> entries()));
-		// The unplug offer, taken: Max FPS's entry is folded away, so no profile is in effect and PF-1 remembers My settings.
+		assertTrue(journal.update(entries -> written()));
+		List<JournalEntry> capped = journal.entries();
+		assertEquals(Journal.MAX_ENTRIES, capped.size());
+		assertEquals(List.of(FOLDED_APPLY, FOLDED_MAX_FPS), capped.getFirst().foldedEntryIds(), "the cap folded the Apply and the switch");
+		assertTrue(journal.update(entries -> entries.stream().map(e -> Journal.isBaseline(e) ? new JournalEntry(BASELINE_ENTRY, e.at(), e.kind(),
+				e.rigtuneVersion(), e.mcVersion(), e.undoOf(), e.changes(), e.foldedEntryIds()) : e).toList()));
+		// The unplug offer, taken: Max FPS's entry is folded away, so no profile is in effect (the fold also ends the active
+		// marker: ActiveProfile). My settings is refreshed to the current values and remembered as the way back (PF-1).
 		String inEffect = ActiveProfile.inEffect(store.activeEntry(), journal.state(), journal.entries()) ? store.active() : null;
 		assertNull(inEffect);
+		assertTrue(store.saveProfile(new ProfileStore.Profile(MY_SETTINGS, "My settings", null, ProfileStore.SOURCE_BASELINE, "2026-09-22T09:29:59Z",
+				"0.5.0+mc26.2", "26.2", ShareCodeTest.ordered("vanilla.simulationDistance", "12", "vanilla.particles", "2", "vanilla.biomeBlendRadius", "1",
+						"vanilla.weatherRadius", "10", "vanilla.renderClouds", "true", "vanilla.entityShadows", "true", DH_RADIUS, "1024"))));
 		assertTrue(store.batteryOffered("2026-09-23T09:59:00Z"));
 		assertTrue(store.recordSwitch(new ProfileStore.Switch(BATTERY_ENTRY, null, "battery", "Battery"), Journal.idsWithFolded(journal.entries())));
 		assertTrue(store.setActive(BatteryPrompt.BATTERY, BATTERY_ENTRY));
@@ -120,13 +147,17 @@ class V050WrittenWsPTest {
 			throw new AssertionError(message, error);
 		});
 		assertEquals(io.github.chaotix345.rigtune.v030.core.history.Journal.State.OK, old.state());
-		assertEquals(List.of(BASELINE_ENTRY, BATTERY_ENTRY), old.entries().stream().map(io.github.chaotix345.rigtune.v030.core.history.JournalEntry::id).toList());
+		List<String> ids = old.entries().stream().map(io.github.chaotix345.rigtune.v030.core.history.JournalEntry::id).toList();
+		assertEquals(Journal.MAX_ENTRIES, ids.size());
+		assertEquals(BASELINE_ENTRY, ids.getFirst());
+		assertEquals(BATTERY_ENTRY, ids.getLast());
 		var view = io.github.chaotix345.rigtune.v030.core.history.HistoryModel.build(old.state(), old.entries(), Map.of(),
 				io.github.chaotix345.rigtune.v030.core.history.HistoryModel.Labels.RAW);
+		assertEquals(Journal.MAX_ENTRIES, view.entries().size());
 		for (var entry : view.entries()) {
 			assertEquals("rigtune.history.kind.apply", entry.kindKey(), entry.id());
-			assertTrue(entry.undoable(), entry.id());
 		}
+		assertTrue(view.entries().getFirst().undoable() && view.entries().getLast().undoable(), "Undo this is offered on the switch and the baseline");
 		assertTrue(Files.readString(Journal.file(config), StandardCharsets.UTF_8).contains("\"foldedEntryIds\""), "the set carries the field");
 	}
 
