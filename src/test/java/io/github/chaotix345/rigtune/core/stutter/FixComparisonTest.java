@@ -58,6 +58,18 @@ class FixComparisonTest {
 		assertEquals(0, FixComparison.effective(1, 2.5));
 		assertEquals(7, FixComparison.effective(7, 1.0));
 		assertEquals(0, FixComparison.effective(0, 1.0));
+		// Exact given φ's value: 3 / nextUp(6) is just under a half, which h/φ + 0.5 in doubles would round up to 1.
+		assertEquals(0, FixComparison.effective(3, Math.nextUp(6.0)));
+	}
+
+	// A hand-edited file's absurd variance can't make φ infinite or NaN: the comparison still answers, conservatively.
+	@Test
+	void anAbsurdVarianceStaysFinite() {
+		SessionOutcome junk = new SessionOutcome(1, 300, 20, 100, 5, 4, 1e308);
+		double phi = FixComparison.dispersion(junk, SessionOutcome.NONE);
+		assertEquals(Double.MAX_VALUE, phi);
+		FixComparison.Verdict v = FixComparison.compare(junk, side(0, 300, 0, 0, 0, 0, 0, 0));
+		assertEquals(FixComparison.Kind.SAME, v.kind());
 	}
 
 	// Two still controls: a naive ratio would call it a 77 % improvement.

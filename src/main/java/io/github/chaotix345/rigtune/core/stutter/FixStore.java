@@ -5,12 +5,14 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import io.github.chaotix345.rigtune.core.model.SettingKeys;
+import io.github.chaotix345.rigtune.core.profile.ShareKeys;
 import io.github.chaotix345.rigtune.core.store.JsonStateFile;
 import io.github.chaotix345.rigtune.core.store.StateStore;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
@@ -24,16 +26,19 @@ import java.util.function.UnaryOperator;
 // in the order they were applied: {"formatVersion": 1, "fixes": [{...}, ...]}. Written only on StutterService's ordered
 // io chain (X8); the render thread never reads it.
 // JsonStateFile's rules through StateStore (X7): formatVersion 1, at most MAX_BYTES, corrupt -> .bad and empty, newer
-// -> read-only, over 4 x the cap -> left alone. One instance per file per process. At most MAX_RECORDS records: the
-// oldest one that isn't active goes first, also to fit the byte cap; the active one is never dropped. A record is written
-// into its own JSON object, so fields this version doesn't know survive at every depth. Players edit these files: every
-// value is type-checked, one of the wrong type reads as absent (its default), and a record without what it needs (or
-// with a key outside FixSpec.KEYS) is skipped and left in the file.
+// -> read-only, over 4 x the cap -> left alone. One instance per file per process. At most MAX_RECORDS readable records:
+// the oldest one that isn't active goes first, also to fit the byte cap; the active one is never dropped. A record is
+// written into its own JSON object, so fields this version doesn't know survive at every depth. Players edit these files:
+// every value is type-checked, one of the wrong type reads as absent (its default), and a record without what it needs
+// (a key outside FixSpec.KEYS, a from or to that isn't a value of the key, an appliedAt more than a day ahead) is skipped
+// and left in the file: pruning never drops it (it may be a newer version's), so a file full of them can't be written.
 public final class FixStore {
 	public static final String FILE_NAME = "stutter-fixes.json";
 	public static final long MAX_BYTES = 32 * 1024;
 	public static final int MAX_RECORDS = 10;
 	static final String FIXES = "fixes";
+	// How far ahead of the clock an appliedAt may be (a clock corrected meanwhile), not more.
+	static final Duration FUTURE = Duration.ofDays(1);
 
 	private static final Map<Path, FixStore> SHARED = new HashMap<>();
 
@@ -71,10 +76,11 @@ public final class FixStore {
 
 	// The readable records, oldest first (a newer file's too).
 	public List<FixTracker.Record> records() {
+		Instant now = Instant.now();
 		List<FixTracker.Record> out = new ArrayList<>();
 		if (store.read().get(FIXES) instanceof JsonArray fixes) {
 			for (JsonElement e : fixes) {
-				FixTracker.Record r = decode(e);
+				FixTracker.Record r = decode(e, now);
 				if (r != null) {
 					out.add(r);
 				}
@@ -90,10 +96,11 @@ public final class FixStore {
 
 	// Adds the record last (replacing one with the same entry id), then prunes. False when nothing was written.
 	public boolean add(FixTracker.Record record) {
+		Instant now = Instant.now();
 		return store.update(root -> {
 			JsonArray fixes = root.get(FIXES) instanceof JsonArray a ? a : new JsonArray();
 			for (int i = fixes.size() - 1; i >= 0; i--) {
-				FixTracker.Record r = decode(fixes.get(i));
+				FixTracker.Record r = decode(fixes.get(i), now);
 				if (r != null && r.entryId().equals(record.entryId())) {
 					fixes.remove(i);
 				}
@@ -102,7 +109,7 @@ public final class FixStore {
 			encode(record, o);
 			fixes.add(o);
 			root.add(FIXES, fixes);
-			prune(root, fixes);
+			prune(root, fixes, now);
 			return root;
 		});
 	}
@@ -112,13 +119,14 @@ public final class FixStore {
 		if (records().stream().noneMatch(r -> r.entryId().equals(entryId))) {
 			return false;
 		}
+		Instant now = Instant.now();
 		boolean[] found = {false};
 		boolean written = store.update(root -> {
 			if (!(root.get(FIXES) instanceof JsonArray fixes)) {
 				return root;
 			}
 			for (JsonElement e : fixes) {
-				FixTracker.Record r = decode(e);
+				FixTracker.Record r = decode(e, now);
 				if (r != null && r.entryId().equals(entryId)) {
 					FixTracker.Record next = change.apply(r);
 					if (next != null) {
@@ -128,7 +136,7 @@ public final class FixStore {
 					break;
 				}
 			}
-			prune(root, fixes);
+			prune(root, fixes, now);
 			return root;
 		});
 		return found[0] && written;
@@ -139,18 +147,28 @@ public final class FixStore {
 		return update(entryId, FixTracker.Record::dismiss);
 	}
 
-	private static void prune(JsonObject root, JsonArray fixes) {
+	private static void prune(JsonObject root, JsonArray fixes, Instant now) {
 		boolean dropped = true;
-		while (dropped && (fixes.size() > MAX_RECORDS || bytes(root) > MAX_BYTES)) {
-			dropped = dropOldest(fixes);
+		while (dropped && (readable(fixes, now) > MAX_RECORDS || bytes(root) > MAX_BYTES)) {
+			dropped = dropOldest(fixes, now);
 		}
 	}
 
-	// Drops the oldest element that isn't an active record (a finished one, or one this version can't read).
-	private static boolean dropOldest(JsonArray fixes) {
+	private static int readable(JsonArray fixes, Instant now) {
+		int n = 0;
+		for (JsonElement e : fixes) {
+			if (decode(e, now) != null) {
+				n++;
+			}
+		}
+		return n;
+	}
+
+	// Drops the oldest readable record that isn't active.
+	private static boolean dropOldest(JsonArray fixes, Instant now) {
 		for (int i = 0; i < fixes.size(); i++) {
-			FixTracker.Record r = decode(fixes.get(i));
-			if (r == null || !r.active()) {
+			FixTracker.Record r = decode(fixes.get(i), now);
+			if (r != null && !r.active()) {
 				fixes.remove(i);
 				return true;
 			}
@@ -253,7 +271,7 @@ public final class FixStore {
 		return made;
 	}
 
-	static FixTracker.@Nullable Record decode(@Nullable JsonElement e) {
+	static FixTracker.@Nullable Record decode(@Nullable JsonElement e, Instant now) {
 		if (!(e instanceof JsonObject o)) {
 			return null;
 		}
@@ -266,8 +284,8 @@ public final class FixStore {
 		FixTracker.State state = FixTracker.State.of(string(o, "state"));
 		SessionOutcome before = outcome(o.get("before"));
 		FixConditions conditions = conditions(o.get("conditions"));
-		if (entryId == null || adviceId == null || key == null || !FixSpec.KEYS.contains(key) || from == null || to == null || appliedAt == null
-				|| state == null || before == null || conditions == null) {
+		if (entryId == null || adviceId == null || key == null || !FixSpec.KEYS.contains(key) || !valueOf(key, from) || !valueOf(key, to)
+				|| appliedAt == null || appliedAt.isAfter(now.plus(FUTURE)) || state == null || before == null || conditions == null) {
 			return null;
 		}
 		SessionOutcome after = outcome(o.get("after"));
@@ -277,6 +295,11 @@ public final class FixStore {
 		return new FixTracker.Record(entryId, adviceId, key, from, to, appliedAt, whole(o, "rulesRevision", 0), bool(o, "now",
 				key.startsWith(SettingKeys.VANILLA_PREFIX)), state, before, conditions, after, whole(o, "skipped", 0), skip(o.get("lastSkip")), verdict,
 				bool(o, "dismissed", false));
+	}
+
+	private static boolean valueOf(String key, @Nullable String value) {
+		ShareKeys.Key table = ShareKeys.byKey(key);
+		return value != null && table != null && table.encode(value) != null;
 	}
 
 	private static @Nullable SessionOutcome outcome(@Nullable JsonElement e) {

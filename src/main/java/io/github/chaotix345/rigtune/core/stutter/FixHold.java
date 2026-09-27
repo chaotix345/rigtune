@@ -8,21 +8,41 @@ import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import org.jspecify.annotations.Nullable;
 
 import java.math.BigDecimal;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
 // docs/v0.5/SPEC.md 5 (C20), the main list's post-step (V05Hooks.afterRecommend, after ServerCap, never inside Recommender
 // or settingTargets, so templates never see fixes): a SetSetting that would move an actively fixed key away from the fix's
-// target is unticked, with the hold's reason, so the main list doesn't undo the fix by default (r16 recommends Chunk Updates
-// ONE_FRAME and render distance 12/16 on some tiers). Away: for a number, back toward or past the old value (further the
-// same way is left alone); for any other value, anything but the target. The service passes a hold only while the fix's
-// change is in effect (applied or staged), so nothing is held once it's undone.
+// target is unticked, with a neutral reason (no claim about what changing it does to stutter, X3), so the main list doesn't
+// undo the fix by default (r16 recommends Chunk Updates ONE_FRAME and render distance 12/16 on some tiers). Away: for a
+// number, back toward or past the old value (further the same way is left alone); for any other value, anything but the
+// target. holds() gives a hold only while the fix's change is in effect, and none once its comparison found more stutter
+// (the main list may then recommend going back).
 public final class FixHold {
 	// The fix moved key from `from` to `to`, applied on appliedOn (yyyy-MM-dd).
 	public record Hold(String key, String from, String to, String appliedOn) {
 	}
 
 	private FixHold() {
+	}
+
+	// The tracked fixes whose change is in effect: staged, measuring, compared (unless the verdict is MORE) or expired, a
+	// dismissed one included (dismissing hides the block; the setting stays). Never an undone, not applied or replaced one.
+	// appliedOn is the player's local day in zone.
+	public static List<Hold> holds(List<FixTracker.Record> records, ZoneId zone) {
+		List<Hold> out = new ArrayList<>();
+		for (FixTracker.Record r : records) {
+			boolean inEffect = switch (r.state()) {
+				case STAGED, MEASURING, EXPIRED -> true;
+				case COMPARED -> r.verdict() == null || r.verdict().kind() != FixComparison.Kind.MORE;
+				case UNDONE, NOT_APPLIED, REPLACED -> false;
+			};
+			if (inEffect) {
+				out.add(new Hold(r.key(), r.from(), r.to(), r.appliedAt().atZone(zone).toLocalDate().toString()));
+			}
+		}
+		return out;
 	}
 
 	// The report itself when no recommendation is held.
@@ -51,7 +71,7 @@ public final class FixHold {
 		for (Hold hold : holds) {
 			if (hold.key().equals(set.key()) && away(set.newValue(), hold)) {
 				Text reason = Text.join(" ", r.reasonText(), Text.of("rigtune.stutter.fix.hold_reason",
-						"The Stutter Doctor's fix set this on %s; changing it back may bring the stutter back.", hold.appliedOn()));
+						"You set this on %s with the Stutter Doctor's fix; changing it here undoes that fix.", hold.appliedOn()));
 				return Recommendation.of(r.id(), r.category(), r.impact(), r.titleText(), reason, r.action(), false);
 			}
 		}
@@ -68,7 +88,7 @@ public final class FixHold {
 		if (from == null || to == null || next == null || from.compareTo(to) == 0) {
 			return true;
 		}
-		return next.subtract(to).signum() != to.subtract(from).signum();
+		return next.compareTo(to) != to.compareTo(from);
 	}
 
 	private static @Nullable BigDecimal number(@Nullable String value) {

@@ -229,6 +229,57 @@ class FixStoreTest {
 		assertEquals(FixTrackerTest.measuring().before().hitches(), records.getFirst().before().hitches());
 	}
 
+	// A record from the future (a clock set wrong, a hand edit) is skipped: more than a day ahead, or Instant.MAX's year.
+	@Test
+	void anAppliedAtInTheFutureIsSkipped() throws IOException {
+		assertTrue(store().add(FixTrackerTest.measuring()));
+		JsonObject root = onDisk();
+		JsonArray fixes = root.getAsJsonArray("fixes");
+		JsonObject good = fixes.get(0).getAsJsonObject();
+		Instant now = Instant.now();
+		for (String when : List.of("+1000000000-12-31T00:00:00Z", now.plusSeconds(2 * 86_400).toString(), now.plusSeconds(12 * 3600).toString())) {
+			JsonObject copy = good.deepCopy();
+			copy.addProperty("entryId", when);
+			copy.addProperty("appliedAt", when);
+			fixes.add(copy);
+		}
+		write(root.toString());
+		assertEquals(List.of("entry-1", now.plusSeconds(12 * 3600).toString()), ids(FixStore.shared(dir).records()));
+	}
+
+	// from and to must be values of the key (ShareKeys): a hand-edited "1e99999999" or "NEVER" drops the record.
+	@Test
+	void fromAndToMustBeValuesOfTheKey() throws IOException {
+		assertTrue(store().add(finished("rd", FixTracker.State.MEASURING)));
+		assertTrue(store().add(FixTrackerTest.staged()));
+		JsonObject root = onDisk();
+		JsonArray fixes = root.getAsJsonArray("fixes");
+		fixes.get(0).getAsJsonObject().addProperty("from", "1e99999999");
+		JsonObject sodium = fixes.get(1).getAsJsonObject();
+		JsonObject bad = sodium.deepCopy();
+		bad.addProperty("entryId", "never");
+		bad.addProperty("to", "NEVER");
+		fixes.add(bad);
+		write(root.toString());
+		assertEquals(List.of("entry-1"), ids(FixStore.shared(dir).records()));
+		assertEquals("sodium.performance.chunk_build_defer_mode", FixStore.shared(dir).records().getFirst().key());
+	}
+
+	// The header's promise: a record this version can't read is left in the file, even when pruning.
+	@Test
+	void unreadableRecordsAreNeverDropped() throws IOException {
+		write("{\"formatVersion\": 1, \"fixes\": [7, {\"entryId\": \"from-the-future\", \"shape\": \"unknown\"}]}");
+		for (int i = 0; i < 11; i++) {
+			assertTrue(store().add(finished("done-" + i, FixTracker.State.COMPARED)));
+		}
+		JsonArray fixes = onDisk().getAsJsonArray("fixes");
+		assertEquals(7, fixes.get(0).getAsInt());
+		assertEquals("unknown", fixes.get(1).getAsJsonObject().get("shape").getAsString());
+		List<String> ids = ids(store().records());
+		assertEquals(FixStore.MAX_RECORDS, ids.size());
+		assertEquals("done-1", ids.getFirst());
+	}
+
 	@Test
 	void fixesThatIsntAListReadsEmpty() throws IOException {
 		write("{\"formatVersion\": 1, \"fixes\": {\"a\": 1}}");
@@ -260,6 +311,6 @@ class FixStoreTest {
 		assertEquals(List.of(), store().records());
 		assertTrue(Files.exists(file().resolveSibling(FixStore.FILE_NAME + ".bad")));
 		assertTrue(store().add(FixTrackerTest.staged()));
-		assertEquals(Instant.parse("2026-10-02T09:14:00Z"), store().records().getFirst().appliedAt());
+		assertEquals(Instant.parse("2026-09-02T09:14:00Z"), store().records().getFirst().appliedAt());
 	}
 }

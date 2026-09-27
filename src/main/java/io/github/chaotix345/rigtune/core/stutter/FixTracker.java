@@ -14,15 +14,20 @@ import java.util.Locale;
 // docs/v0.5/SPEC.md 5 (C20): a tracked stutter fix follows its journal entry. staged -> measuring (once the change is in
 // effect: at once for vanilla keys; for a staged key, the first session that starts with key = target while its change is
 // APPLIED) -> compared; or undone (REVERTED), not applied (DISCARDED/ABANDONED, or nothing recorded for the key), replaced
-// (the key changed again), expired (5 skipped sessions, 14 days, or the entry gone from the journal). Only monitor sessions
-// that started after the apply count, each of at least MIN_SESSION_SECONDS under the fix's conditions; the after side
-// accumulates to clamp(before gameplay, MIN_AFTER_SECONDS, MAX_AFTER_SECONDS), then FixComparison decides once. Pure.
+// (the key changed again; also a staged fix whose first session after the helper applied it starts elsewhere: waiting for an
+// on-target session would hold the one-fix slot until it expires), expired (5 skipped sessions, 14 days, or the entry gone
+// from the journal). Only monitor sessions that started after the apply count, each of at least MIN_SESSION_SECONDS under
+// the fix's conditions; the after side accumulates to clamp(before gameplay, MIN_AFTER_SECONDS, MAX_AFTER_SECONDS), then
+// FixComparison decides once. Pure.
 public final class FixTracker {
 	public static final double MIN_SESSION_SECONDS = 120;
 	public static final double MIN_AFTER_SECONDS = 300;
 	public static final double MAX_AFTER_SECONDS = 1200;
 	public static final int MAX_SKIPPED = 5;
 	public static final Duration MAX_AGE = Duration.ofDays(14);
+	// Wave B stamps appliedAt before restarting the session and captures the next start after the settings write; a start
+	// that still reads the old value this soon after the apply is ignored, never taken as "replaced".
+	public static final Duration SETTLE = Duration.ofSeconds(5);
 	public static final String SHORT = "short";
 
 	public enum State {
@@ -59,6 +64,10 @@ public final class FixTracker {
 	public record Record(String entryId, String adviceId, String key, String from, String to, Instant appliedAt, int rulesRevision, boolean now,
 			State state, SessionOutcome before, FixConditions conditions, @Nullable SessionOutcome after, int skipped, @Nullable Skip lastSkip,
 			FixComparison.@Nullable Verdict verdict, boolean dismissed) {
+		public Record {
+			skipped = Math.max(0, skipped);
+		}
+
 		// Staged or measuring, and not dismissed: it blocks another fix and is still being advanced.
 		public boolean active() {
 			return state.tracking() && !dismissed;
@@ -125,15 +134,19 @@ public final class FixTracker {
 		if (change == null || JournalChange.DISCARDED.equals(status) || JournalChange.ABANDONED.equals(status)) {
 			return r.withState(State.NOT_APPLIED);
 		}
-		if (now.isAfter(r.appliedAt().plus(MAX_AGE))) {
+		if (Duration.between(r.appliedAt(), now).compareTo(MAX_AGE) > 0) {
 			return r.withState(State.EXPIRED);
 		}
 		if (session == null || session.startedAt().isBefore(r.appliedAt()) || !StutterReport.MONITOR.equals(session.source())
 				|| !JournalChange.APPLIED.equals(status)) {
 			return r;
 		}
-		boolean startsAtTarget = SettingValues.same(session.atStart().settings().get(r.key()), r.to());
-		if (!startsAtTarget || !SettingValues.same(session.atEnd().settings().get(r.key()), r.to())) {
+		String atStart = session.atStart().settings().get(r.key());
+		if (!SettingValues.same(atStart, r.to()) && SettingValues.same(atStart, r.from())
+				&& Duration.between(r.appliedAt(), session.startedAt()).compareTo(SETTLE) <= 0) {
+			return r;
+		}
+		if (!SettingValues.same(atStart, r.to()) || !SettingValues.same(session.atEnd().settings().get(r.key()), r.to())) {
 			return r.withState(State.REPLACED);
 		}
 		Record m = r.state() == State.STAGED ? r.withState(State.MEASURING) : r;

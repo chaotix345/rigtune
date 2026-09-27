@@ -42,7 +42,7 @@ class FixHoldTest {
 		assertEquals(back.id(), r.id());
 		assertEquals(back.titleText(), r.titleText());
 		assertEquals(back.action(), r.action());
-		assertEquals("The rules' reason. The Stutter Doctor's fix set this on 2026-10-02; changing it back may bring the stutter back.",
+		assertEquals("The rules' reason. You set this on 2026-10-02 with the Stutter Doctor's fix; changing it here undoes that fix.",
 				r.reasonText().english());
 		assertEquals(r.reasonText().english(), r.reason());
 		// Past where it was is away from the fix too.
@@ -75,6 +75,39 @@ class FixHoldTest {
 		Report none = report(new Recommendation("add:lithium", Category.ADD_MOD, Impact.HIGH, "Add Lithium", "r", new Action.AddMod("lithium", "id",
 				"Lithium"), true));
 		assertSame(none, FixHold.apply(none, List.of(RD_HOLD)));
+	}
+
+	// Numbers compare by sign only (no subtraction), so a hand-edited "1e99999999" costs nothing.
+	@Test
+	void hugeExponentsAreCheap() {
+		Report r = report(set(RD, "10", "1e99999999"));
+		Report held = org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(java.time.Duration.ofSeconds(2),
+				() -> FixHold.apply(r, List.of(RD_HOLD, new FixHold.Hold(RD, "1e99999999", "10", "2026-10-02"))));
+		assertFalse(held.recommendations().getFirst().selectedByDefault());
+	}
+
+	// The holds come from the tracked fixes whose change is in effect: staged, measuring, compared (unless the comparison
+	// found more stutter, when the main list may recommend going back) and expired; dismissed ones too (the setting stays).
+	// Never an undone, not applied or replaced one. The date is the player's local day.
+	@Test
+	void holdsFromTheTrackedFixes() {
+		FixTracker.Record m = FixTrackerTest.measuring();
+		SessionOutcome before = FixComparisonTest.side(10, 300, 500, 2, 2, 2, 2, 2);
+		SessionOutcome worse = FixComparisonTest.side(20, 300, 1000, 4, 4, 4, 4, 4);
+		SessionOutcome better = FixComparisonTest.side(0, 300, 0, 0, 0, 0, 0, 0);
+		java.util.function.BiFunction<FixTracker.State, SessionOutcome, FixTracker.Record> make = (state, after) -> new FixTracker.Record(state.id(),
+				m.adviceId(), m.key(), m.from(), m.to(), Instant.parse("2026-10-02T23:30:00Z"), m.rulesRevision(), m.now(), state, before, m.conditions(),
+				after, 0, null, after == null ? null : FixComparison.compare(before, after), false);
+		List<FixTracker.Record> records = List.of(make.apply(FixTracker.State.STAGED, null), make.apply(FixTracker.State.MEASURING, null),
+				make.apply(FixTracker.State.COMPARED, better), make.apply(FixTracker.State.COMPARED, worse), make.apply(FixTracker.State.EXPIRED, null),
+				make.apply(FixTracker.State.UNDONE, better), make.apply(FixTracker.State.NOT_APPLIED, null), make.apply(FixTracker.State.REPLACED, null),
+				make.apply(FixTracker.State.MEASURING, null).dismiss());
+		assertEquals(FixComparison.Kind.MORE, records.get(3).verdict().kind());
+		List<FixHold.Hold> holds = FixHold.holds(records, java.time.ZoneOffset.UTC);
+		assertEquals(5, holds.size());
+		assertEquals(new FixHold.Hold(RD, "12", "10", "2026-10-02"), holds.getFirst());
+		assertEquals("2026-10-03", FixHold.holds(records.subList(0, 1), java.time.ZoneOffset.ofHours(2)).getFirst().appliedOn());
+		assertEquals(List.of(), FixHold.holds(records.subList(3, 4), java.time.ZoneOffset.UTC));
 	}
 
 	@Test

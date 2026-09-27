@@ -33,6 +33,22 @@ public record FixSpec(String adviceId, Condition evidence, String key, @Nullable
 	public static final Set<String> SET_FIELDS = Set.of("key", "value", "step", "min", "max");
 	public static final int MAX_STEP = 8;
 
+	// Whoever builds one, a FixSpec is valid: an advice id and evidence, an allowlisted key, a value of the key (in the
+	// table's spelling) or a step of 1..MAX_STEP on a whole-number key with its bound.
+	public FixSpec {
+		ShareKeys.Key table = ShareKeys.byKey(key);
+		boolean valid = adviceId != null && evidence != null && key != null && KEYS.contains(key) && table != null;
+		if (valid && value != null) {
+			Integer wire = table.encode(value);
+			valid = step == 0 && wire != null && table.decode(wire, 60).equals(value);
+		} else if (valid) {
+			valid = step != 0 && Math.abs(step) <= MAX_STEP && table.kind() == ShareKeys.Kind.INT && (step < 0 ? min != null : max != null);
+		}
+		if (!valid) {
+			throw new IllegalArgumentException("Not a valid stutter fix");
+		}
+	}
+
 	// The valid entries, in the section's order; for an advice id only its first valid entry.
 	public static List<FixSpec> of(@Nullable RulesDocument rules) {
 		if (rules == null || rules.stutterFixes == null) {
@@ -140,8 +156,8 @@ public record FixSpec(String adviceId, Condition evidence, String key, @Nullable
 	}
 
 	// The value the fix sets from `current`, or null when there's nothing to do: already the value; a step that can't move
-	// in its direction (at or past its bound, or current isn't a whole number); target = clamp(current + step, bound, the
-	// table's range).
+	// in its direction (at or past its bound, or current isn't a whole number in the table's range); target =
+	// clamp(current + step, bound, the table's range).
 	public @Nullable String target(@Nullable String current) {
 		if (current == null || !SettingKeys.safeValue(current)) {
 			return null;
@@ -151,7 +167,8 @@ public record FixSpec(String adviceId, Condition evidence, String key, @Nullable
 		}
 		ShareKeys.Key table = ShareKeys.byKey(key);
 		Integer now = wholeNumber(current);
-		if (table == null || now == null) {
+		// Outside the table's range the rule's step doesn't describe the change (and the record couldn't be stored).
+		if (table == null || now == null || table.encode(current) == null) {
 			return null;
 		}
 		long t = (long) now + step;

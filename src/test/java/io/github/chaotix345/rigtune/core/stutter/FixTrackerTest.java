@@ -22,7 +22,7 @@ class FixTrackerTest {
 	private static final String ENTRY = "entry-1";
 	private static final String RD = "vanilla.renderDistance";
 	private static final String DEFER = "sodium.performance.chunk_build_defer_mode";
-	private static final Instant APPLIED_AT = Instant.parse("2026-10-02T09:14:00Z");
+	private static final Instant APPLIED_AT = Instant.parse("2026-09-02T09:14:00Z");
 	private static final SessionOutcome BEFORE = FixComparisonTest.side(20, 400, 1600, 2, 3, 3, 4, 4, 4, 0);
 
 	private static FixConditions conditions(String key, String value) {
@@ -231,6 +231,44 @@ class FixTrackerTest {
 		FixTracker.SessionEnd s = session(1, 500, 2, RD, "10");
 		FixTracker.SessionEnd changedWhilePlaying = new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), s.atStart(), conditions(RD, "8"));
 		assertEquals(FixTracker.State.REPLACED, advance(measuring(), journal(RD, JournalChange.APPLIED), changedWhilePlaying, at(1)).state());
+	}
+
+	// Wave B stamps appliedAt before the session restart and captures the next session's start after the write; should a
+	// start still read the old value within SETTLE of the apply, it is ignored rather than taken as "replaced".
+	@Test
+	void aSessionStartingAtTheOldValueRightAfterTheApplyIsIgnored() {
+		FixTracker.Record r = measuring();
+		List<JournalEntry> journal = journal(RD, JournalChange.APPLIED);
+		FixTracker.SessionEnd s = session(0, 500, 2, RD, "12");
+		FixTracker.SessionEnd early = new FixTracker.SessionEnd(APPLIED_AT.plusSeconds(3), s.source(), s.outcome(), s.atStart(), conditions(RD, "10"));
+		assertSame(r, advance(r, journal, early, at(1)));
+		FixTracker.SessionEnd late = new FixTracker.SessionEnd(APPLIED_AT.plusSeconds(6), s.source(), s.outcome(), s.atStart(), conditions(RD, "10"));
+		assertEquals(FixTracker.State.REPLACED, advance(r, journal, late, at(1)).state());
+		// Anything other than the old value right after the apply is still "replaced".
+		FixTracker.SessionEnd other = new FixTracker.SessionEnd(APPLIED_AT.plusSeconds(3), s.source(), s.outcome(), conditions(RD, "16"),
+				conditions(RD, "16"));
+		assertEquals(FixTracker.State.REPLACED, advance(r, journal, other, at(1)).state());
+	}
+
+	// An appliedAt far in the future or the past (a hand-edited file) never throws.
+	@Test
+	void extremeDatesDontThrow() {
+		FixTracker.Record m = measuring();
+		for (Instant when : List.of(Instant.parse("+1000000000-12-31T00:00:00Z"), Instant.MAX, Instant.MIN)) {
+			FixTracker.Record r = new FixTracker.Record(m.entryId(), m.adviceId(), m.key(), m.from(), m.to(), when, m.rulesRevision(), m.now(), m.state(),
+					m.before(), m.conditions(), m.after(), m.skipped(), m.lastSkip(), m.verdict(), m.dismissed());
+			FixTracker.advance(r, Journal.State.OK, journal(RD, JournalChange.APPLIED), session(1, 500, 2, RD, "10"), at(1));
+		}
+		assertEquals(FixTracker.State.EXPIRED, FixTracker.advance(new FixTracker.Record(m.entryId(), m.adviceId(), m.key(), m.from(), m.to(), Instant.MIN,
+				m.rulesRevision(), m.now(), m.state(), m.before(), m.conditions(), m.after(), m.skipped(), m.lastSkip(), m.verdict(), m.dismissed()),
+				Journal.State.OK, journal(RD, JournalChange.APPLIED), null, at(1)).state());
+	}
+
+	@Test
+	void aNegativeSkipCountReadsAsZero() {
+		FixTracker.Record m = measuring();
+		assertEquals(0, new FixTracker.Record(m.entryId(), m.adviceId(), m.key(), m.from(), m.to(), m.appliedAt(), m.rulesRevision(), m.now(), m.state(),
+				m.before(), m.conditions(), m.after(), -3, m.lastSkip(), m.verdict(), m.dismissed()).skipped());
 	}
 
 	@Test

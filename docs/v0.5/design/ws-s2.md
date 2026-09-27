@@ -20,7 +20,7 @@ commit. Local runs: `./gradlew :26.2:test --tests '<classes>'` in a build slot; 
 |---|---|---|---|---|
 | S1 | The comparison: `SessionOutcome` (gameplay, hitches, lost ms, 60-s wall-time bins with their mean and sample variance; `plus` for accumulated after sessions, Chan's pooled update) and `FixComparison` (exact binomial CDF in log space, n capped at 100,000; pooled dispersion φ; effective counts h/φ rounded half up; verdict LESS / SAME / MORE with both rates, both lost-ms rates, φ, pLess, pMore) | new `core/stutter/SessionOutcome`, `FixComparison` | `SessionOutcomeTest` (bins from hitch starts, the partial last bin, one bin, `plus` equals the outcome of the concatenated bins), `FixComparisonTest` (the CDF against the exact values below; every case of the table below; the rounding rule; zero or one bin → φ = 1; C4's own φ = 14; the guard off; the n cap; no hitches on either side) | AC5.7 (unit) |
 | S2 | Dominated spikes and `causeSpikesAtLeast`'s truth: `FixEvidence.dominatedSpikes(List<Attribution>)` (a cause, or `unknown` for the unexplained part, that claimed at least half of a spike's lost time) and `FixEvidence.causeSpikesAtLeast(wanted, counts, unmeasured)` → TRUE / FALSE / UNKNOWN | new `core/stutter/FixEvidence` | `FixEvidenceTest` (40 % doesn't count, 50 % and 60 % do; TRUE/FALSE; UNKNOWN for an unmeasured cause, a cause outside `Attributor.CAUSES`, a negative or fractional or non-numeric threshold; several entries AND together) | AC5.4 (the core half; Wave B wires it: `StutterFacts.causeSpikes`, `StutterAnalyzer`, `ConditionEvaluator.causeSpikes`) |
-| S3 | `FixSpec` becomes the validated entry: `static List<FixSpec> of(RulesDocument)` (requires ⊇ {`stutter-fix`} and ⊆ `FixOffers.SUPPORTED_FEATURES`, an existing `stutterAdvice` id, the first entry per id, evidence present, key in `KEYS` and in `ShareKeys`, value xor step, a value that encodes in the key's table entry (kept in the table's spelling), a whole-number step ≠ 0 with \|step\| ≤ 8 on an INT key and its bound (min when negative, max when positive)); `@Nullable String target(@Nullable String current)` (value: null when already there; step: clamp(current + step, bound, table range), null unless it moves in the step's direction); the WS-K constants kept | `core/stutter/FixSpec`, new `FixOffers` (`SUPPORTED_FEATURES` only in this task) | `FixSpecTest` (the three sf §2.2 seeds parse; each refusal drops only its entry; an unknown feature skips; a key outside the allowlist refused (AC5.15); target: RD 7 → 6 at min 6, RD 6 → none, RD 4 at min 6 → none, RD 40 → 32 (clamped into the table's 2..32); `always` → `ALWAYS`; value already current → none) | AC5.15 (client), AC5.3 (spec part) |
+| S3 | `FixSpec` becomes the validated entry: `static List<FixSpec> of(RulesDocument)` (requires ⊇ {`stutter-fix`} and ⊆ `FixOffers.SUPPORTED_FEATURES`, an existing `stutterAdvice` id, the first entry per id, evidence present, key in `KEYS` and in `ShareKeys`, value xor step, a value that encodes in the key's table entry (kept in the table's spelling), a whole-number step ≠ 0 with \|step\| ≤ 8 on an INT key and its bound (min when negative, max when positive)); `@Nullable String target(@Nullable String current)` (value: null when already there; step: clamp(current + step, bound, table range), null unless it moves in the step's direction); the WS-K constants kept | `core/stutter/FixSpec`, new `FixOffers` (`SUPPORTED_FEATURES` only in this task) | `FixSpecTest` (the three sf §2.2 seeds parse; each refusal drops only its entry; an unknown feature skips; a key outside the allowlist refused (AC5.15); target: RD 7 → 6 at min 6, RD 6 → none, RD 4 at min 6 → none, RD 40 → none (outside the table's 2..32, the review's M3 follow-up); `always` → `ALWAYS`; value already current → none) | AC5.15 (client), AC5.3 (spec part) |
 | S4 | The gate and the offers: `FixGate` (constants `MIN_HITCHES` 8, `MIN_GAMEPLAY_SECONDS` 300; `check(report, busy, storeWritable)` → the first of BENCHMARK, STORE, BUSY, LENGTH, or null) and `FixOffers.evaluate(specs, fired, report, ctx, effective, loadedMods, live, busy, storeWritable)` → per advice id an `Offer` (from the effective value, `now` for vanilla keys), a `NotYet(reason, args)` (the gate's, then SERVER with the server's view distance, then EVIDENCE), or nothing (silent: advice not fired; the key missing, not changeable or its mod not loaded (`ProfileSwitch.takesPart`); no target, i.e. the effective value, staged ops included, is already the target) | new `core/stutter/FixGate`, `FixOffers` | `FixGateTest` (each floor alone: 7 hitches, 299 s, a benchmark source, busy, a read-only store; 8 hitches and 300 s pass), `FixOffersTest` (AC5.3's list, each failing alone: evidence FALSE, evidence UNKNOWN (an unmeasured cause), advice not fired, key missing, mod not loaded, value already the target, a staged op setting the target, a server sending ≤ the target only on LAN/Realm/remote (never singleplayer); all passing → exactly one Offer with the right from/to/now; LENGTH's args) | AC5.3 (unit; the four one-line texts land with the UI in Wave B) |
 | S5 | "Same conditions": `FixConditions` (MC version, mod-set hash, max heap, collector, window size and fullscreen, world kind, phase timing, GC listener, the managed settings + `iris.shaderPack`) and `differences(other, fixKey)` → reason ids in a fixed order (version, mods, memory, display, world, measurement, then each setting in `ShareKeys.V1` order, others after, the fixed key left out) with the setting's key and both values as args | new `core/stutter/FixConditions` | `FixConditionsTest` (each condition alone gives its reason id; the fixed key excluded; values compared as `SettingValues.same` ("12" = "12.0"); a key on one side only differs; the order is stable) | AC5.8 (conditions) |
 | S6 | The tracker: `FixTracker.Record` and `State` (staged, measuring, compared, undone, not_applied, replaced, expired) and `advance(record, journalState, entries, @Nullable SessionEnd, now)`: the journal first (REVERTED → undone, DISCARDED/ABANDONED or no change for the key → not applied, the entry gone from a readable journal → tracking stops (expired; a compared record keeps its verdict), an unreadable journal decides nothing); 14 days after the apply → expired; sessions that started before the apply or aren't monitor sessions are ignored; staged → measuring at the first session that starts with key = target while the change is APPLIED (that session counts); key ≠ target at a measuring session's start or end → replaced; < 120 s or a differing condition → skipped with its reason (5 → expired); otherwise accumulated until clamp(before gameplay, 300 s, 1200 s), then compared with the verdict | new `core/stutter/FixTracker` | `FixTrackerTest` (every transition, incl. replaced; 5 skips / 14 days → expired; accumulation over two sessions to the target; a pre-apply session and a benchmark capture ignored; a dismissed record left alone; an unreadable journal leaves it) | AC5.8 (tracker), AC5.6 (the record's side) |
@@ -150,8 +150,8 @@ Signatures (package `core/stutter`; everything pure, no Minecraft type):
   to, appliedAt, rulesRevision, now, state, before{sessions, gameplaySeconds, hitches, lostMs, bins, binMean, binVariance},
   conditions{mc, modSetHash, heapMaxMb, collector, width, height, fullscreen, world, phaseTiming, gcMeasured, settings{}},
   after{...}?, skipped, lastSkip{reason, args}?, verdict?, phi?, pLess?, pMore?, dismissed}]}`.
-- `FixHold.apply(Report, List<Hold>)` filled; en_us.json `rigtune.stutter.fix.hold_reason` ("The Stutter Doctor's fix set
-  this on %s; changing it back may bring the stutter back.").
+- `FixHold.apply(Report, List<Hold>)` filled, + `holds(List<FixTracker.Record>, ZoneId)` (the review's M1); en_us.json
+  `rigtune.stutter.fix.hold_reason` ("You set this on %s with the Stutter Doctor's fix; changing it here undoes that fix.").
 
 CI on the pushed head 437a9655 (Wave A + a merge of origin/feat/v0.5.0 @ 1de15adf, docs only): run 36318487663, all 8
 jobs green; unit tests 2001 per node (26.2 and 26.3), 0 failures, 2 ignored (as before). Footprint on that run against
@@ -184,12 +184,49 @@ empty until Wave B. No new `//? if` block.
 | AC5.1, AC5.2 | WS-R | |
 | AC5.5, AC5.11-AC5.14, AC5.16 | Wave B | |
 
+### The pure-core review (coordinator's decisions, fixed before the phase-A hand-back)
+A code-reviewer subagent read a7613410..4fff5775 (0 high, 4 medium, 6 low); the coordinator decided each; all are fixed in
+the commit after 2aa200a6 with tests:
+- **M1** `FixHold`: no hold once a comparison found more stutter (`holds(records, zone)`: staged, measuring, compared
+  unless MORE, expired, dismissed ones too; never undone / not applied / replaced), and neutral wording with no claim about
+  stutter (X3): "You set this on %s with the Stutter Doctor's fix; changing it here undoes that fix." (FixHoldTest
+  `holdsFromTheTrackedFixes`).
+- **M2** A record whose `appliedAt` is more than a day ahead of the clock (`FixStore.FUTURE`), `+1000000000-12-31` included,
+  is skipped on read; `FixTracker` measures age with `Duration.between(appliedAt, now)`, so no date can overflow
+  (FixStoreTest `anAppliedAtInTheFutureIsSkipped`, FixTrackerTest `extremeDatesDontThrow`).
+- **M3** `FixHold` compares signs with `compareTo` (no subtraction: "1e99999999" costs nothing, FixHoldTest
+  `hugeExponentsAreCheap`); a stored record whose `from` or `to` isn't a value of the key (`ShareKeys.encode`) is skipped
+  (FixStoreTest `fromAndToMustBeValuesOfTheKey`). So that a real offer can always be stored, `FixSpec.target` now also
+  refuses a current value outside the table's range (RD 40: no offer; the step the rule describes isn't the change then).
+- **M4, a Wave B contract**: the client stamps `appliedAt` before it restarts the session for an immediate fix, and
+  captures the next session's `atStart` after the settings write; a Wave B test pins that order. The core tolerance lands
+  now: a session that starts at the fix's `from` within `FixTracker.SETTLE` (5 s) of `appliedAt` is ignored, never
+  "replaced" (FixTrackerTest `aSessionStartingAtTheOldValueRightAfterTheApplyIsIgnored`).
+- **L5** (decision): a staged fix whose first session after the helper applied it starts at another value becomes
+  "replaced" at once. Waiting for an on-target session instead would hold the one-fix slot (no other offer) until the
+  14-day expiry when the key really was changed (a profile switch, the Sodium menu before joining a world).
+- **L6** `from`/`to` validated on read (M3); `skipped` is clamped to ≥ 0 in `FixTracker.Record`.
+- **L7** A record this version can't read is never dropped by pruning (the header's promise; it may be a newer version's):
+  only readable records count toward `MAX_RECORDS` (FixStoreTest `unreadableRecordsAreNeverDropped`).
+- **L8** `FixSpec`'s compact constructor refuses an invalid spec, whoever builds it (FixSpecTest
+  `theConstructorRefusesAnInvalidSpec`).
+- **L9** The rounding is exact for φ's value (`BigDecimal` h/φ, HALF_UP): 3 / nextUp(6) → 0, where h/φ + 0.5 in doubles
+  gives 1 (FixComparisonTest). φ itself stays a double (from the stored bin statistics); an absurd hand-edited variance
+  can't make it infinite or NaN (clamped to `Double.MAX_VALUE`, NaN → 1; `anAbsurdVarianceStaysFinite`).
+- **L10** Dates stay yyyy-MM-dd, the player's local day (TrendText's convention; `holds` takes the zone).
+- Test fixtures' `appliedAt` moved into the past (2026-09-02), since a record more than a day ahead is now skipped.
+- 11 new tests (99 C20 unit tests in all: FixComparisonTest 16, FixSpecTest 12, FixHoldTest 7, FixStoreTest 15,
+  FixTrackerTest 21, the rest as above); locally `core.stutter.*`, `core.store.*`, `core.rules.*`, `client.V05*`,
+  LangCheckTest, WordingTest, PseudoLocaleTest: 50 suites, 432 tests, 0 failures.
+
 ## Wave B: task plan (after WS-S merges; outline, detailed when resumed)
 - C1 `StutterFacts.causeSpikes` (optional, old constructors kept) + `StutterAnalyzer` fills it through
   `FixEvidence.dominatedSpikes` + `ConditionEvaluator.causeSpikes` → `FixEvidence.causeSpikesAtLeast` (AC5.4's
   `StutterConditionTest`/`StutterAnalyzerTest` cases).
 - C2 `StutterView` fields (offers, tracked block model), old constructor kept.
-- C3 `StutterFixService` (preview, apply with the busy check (C8, added to `BusyTest.CALLERS`) and C20's own refusals, the
+- C3 `StutterFixService` (preview, apply with the busy check (C8, added to `BusyTest.CALLERS`) and C20's own refusals,
+  `appliedAt` stamped before `restartSession` and the next `atStart` captured after the write (M4's contract, pinned by a
+  test), `holds()` = `FixHold.holds(store records, zone)`, the
   record on StutterService's io chain, `restartSession` for a vanilla fix, `onSessionStart`/`onSessionEnded`, `holds()`,
   `dismiss`).
 - C4 the C20 hook lines in StutterService / StutterMonitor (Capture: live limits, conditions at start) / StutterHooks

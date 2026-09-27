@@ -170,8 +170,9 @@ class FixSpecTest {
 		assertNull(rd.target("6"));
 		// Already below the rule's floor: the step never raises it.
 		assertNull(rd.target("4"));
-		// Out of the table's range: clamped into it.
-		assertEquals("32", rd.target("40"));
+		// Outside the table's range there's nothing the rule's step describes (and the record couldn't be stored).
+		assertNull(rd.target("40"));
+		assertNull(rd.target("1"));
 		assertEquals("10", rd.target("12.0"));
 		assertNull(rd.target("far"));
 		assertNull(rd.target(null));
@@ -181,6 +182,29 @@ class FixSpecTest {
 		FixSpec up = specs(withSet("{\"key\": \"vanilla.renderDistance\", \"step\": 4, \"max\": 16}")).getFirst();
 		assertEquals("16", up.target("14"));
 		assertNull(up.target("16"));
+	}
+
+	// A FixSpec can't be built invalid, whoever builds it.
+	@Test
+	void theConstructorRefusesAnInvalidSpec() throws IOException {
+		io.github.chaotix345.rigtune.core.rules.Condition always = specs(SODIUM).getFirst().evidence();
+		String rd = "vanilla.renderDistance";
+		String defer = "sodium.performance.chunk_build_defer_mode";
+		for (Runnable bad : List.<Runnable>of(
+				() -> new FixSpec(null, always, rd, null, -2, 6, null),
+				() -> new FixSpec("a", null, rd, null, -2, 6, null),
+				() -> new FixSpec("a", always, "vanilla.maxFps", "60", 0, null, null),
+				() -> new FixSpec("a", always, null, "10", 0, null, null),
+				() -> new FixSpec("a", always, rd, "10", -2, 6, null),
+				() -> new FixSpec("a", always, rd, null, 0, null, null),
+				() -> new FixSpec("a", always, rd, null, -9, 6, null),
+				() -> new FixSpec("a", always, rd, null, -2, null, null),
+				() -> new FixSpec("a", always, rd, null, 2, 6, null),
+				() -> new FixSpec("a", always, defer, null, 1, null, 2),
+				() -> new FixSpec("a", always, defer, "NEVER", 0, null, null))) {
+			org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, bad::run);
+		}
+		assertEquals("ALWAYS", new FixSpec("a", always, defer, "ALWAYS", 0, null, null).value());
 	}
 
 	@Test

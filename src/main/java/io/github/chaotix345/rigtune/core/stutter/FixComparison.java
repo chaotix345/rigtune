@@ -2,6 +2,8 @@ package io.github.chaotix345.rigtune.core.stutter;
 
 import org.jspecify.annotations.Nullable;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Locale;
 
@@ -103,7 +105,9 @@ public final class FixComparison {
 		if (df == 0 || sum <= 0) {
 			return 1;
 		}
-		return Math.max(1, m2 / df / (sum / bins));
+		double ratio = m2 / df / (sum / bins);
+		// Only absurd hand-edited values get here non-finite: an infinite ratio counts as the most dispersed, NaN as none.
+		return Double.isNaN(ratio) ? 1 : Math.clamp(ratio, 1, Double.MAX_VALUE);
 	}
 
 	// One side's own dispersion (variance / mean of its bins), under the same rules.
@@ -111,9 +115,10 @@ public final class FixComparison {
 		return dispersion(side, SessionOutcome.NONE);
 	}
 
-	// h/φ to the nearest integer, halves up.
+	// h/φ to the nearest integer, halves up, exactly for φ's value (h/φ + 0.5 in doubles can round a quotient just under a
+	// half up).
 	static int effective(int hitches, double phi) {
-		return (int) Math.floor(hitches / phi + 0.5);
+		return new BigDecimal(hitches).divide(new BigDecimal(phi), 0, RoundingMode.HALF_UP).intValueExact();
 	}
 
 	// P(X <= k) for X ~ Bin(n, p), exact up to floating point: the pmf in log space from pmf(0) = (1-p)^n by the ratio
