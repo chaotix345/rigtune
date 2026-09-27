@@ -5,8 +5,6 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -16,20 +14,28 @@ class StartupNoticesTest {
 	void thePrivacyNoticeIsShownOnce(@TempDir Path configDir) {
 		ClientSettings settings = ClientSettings.load(configDir);
 
-		assertTrue(StartupNotices.takePrivacyNotice(settings, configDir, Runnable::run));
-		assertFalse(StartupNotices.takePrivacyNotice(settings, configDir, Runnable::run));
-		assertFalse(StartupNotices.takePrivacyNotice(ClientSettings.load(configDir), configDir, Runnable::run), "remembered in settings.json");
+		assertTrue(StartupNotices.takePrivacyNotice(settings, configDir));
+		assertFalse(StartupNotices.takePrivacyNotice(settings, configDir));
+		assertTrue(SettingsSaver.shared().flush(2_000));
+		assertFalse(StartupNotices.takePrivacyNotice(ClientSettings.load(configDir), configDir), "remembered in settings.json");
+	}
+
+	// v0.5 L6 (docs/v0.5/SPEC.md 2R, X8; AC2R.2): taking the notice is a pure state change; the flag is saved through
+	// SettingsSaver (its own thread, flushed on quit), so a quick quit keeps it and it can't race a newer save.
+	@Test
+	void takingTheNoticeIsAPureStateChange(@TempDir Path configDir) {
+		ClientSettings settings = ClientSettings.load(configDir);
+		assertTrue(StartupNotices.takePrivacyNotice(settings));
+		assertTrue(settings.privacyNoticeShown);
+		assertFalse(StartupNotices.takePrivacyNotice(settings));
+		assertFalse(Files.exists(ClientSettings.file(configDir)), "nothing written");
 	}
 
 	@Test
-	void theNoticeIsTakenAtOnceAndSavedOnTheGivenExecutor(@TempDir Path configDir) {
+	void theFlagIsSavedThroughSettingsSaver(@TempDir Path configDir) {
 		ClientSettings settings = ClientSettings.load(configDir);
-		List<Runnable> queued = new ArrayList<>();
-
-		assertTrue(StartupNotices.takePrivacyNotice(settings, configDir, queued::add));
-		assertFalse(StartupNotices.takePrivacyNotice(settings, configDir, queued::add));
-		assertFalse(Files.exists(ClientSettings.file(configDir)), "nothing written on the calling thread");
-		queued.forEach(Runnable::run);
+		assertTrue(StartupNotices.takePrivacyNotice(settings, configDir));
+		assertTrue(SettingsSaver.shared().flush(2_000), "the queued save is SettingsSaver's");
 		assertTrue(ClientSettings.load(configDir).privacyNoticeShown);
 	}
 
