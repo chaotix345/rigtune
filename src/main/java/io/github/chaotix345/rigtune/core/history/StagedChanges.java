@@ -76,7 +76,27 @@ public final class StagedChanges {
 			}
 		}
 		List<String> discarded = merged.replaced().stream().map(Op::id).filter(Objects::nonNull).toList();
-		return new Outcome(List.copyOf(changes), discarded);
+		return new Outcome(pairUpdates(changes), discarded);
+	}
+
+	// docs/v0.5/SPEC.md 2H RW-4: a disable whose jar gave no mod id (gone by the time it was read: a launcher removed it)
+	// gets the mod id of the single enable in its group, so History pairs the two as "Updated <mod>". With several enables
+	// in the group (an addition joined to an update) the disable's own mod can't be told, so it stays without one.
+	static List<JournalChange> pairUpdates(List<JournalChange> changes) {
+		List<JournalChange> out = new ArrayList<>(changes.size());
+		for (JournalChange c : changes) {
+			if (c.isFile() && JournalChange.DISABLE.equals(c.action()) && c.modId() == null && c.group() != null) {
+				List<String> enables = changes.stream().filter(e -> e.isFile() && JournalChange.ENABLE.equals(e.action()) && c.group().equals(e.group()))
+						.map(JournalChange::modId).toList();
+				if (enables.size() == 1 && enables.getFirst() != null) {
+					out.add(new JournalChange(c.id(), c.type(), c.key(), c.before(), c.after(), c.action(), enables.getFirst(), c.file(), c.resultFile(),
+							c.status(), c.opId(), c.group(), c.reverts(), c.modName()));
+					continue;
+				}
+			}
+			out.add(c);
+		}
+		return List.copyOf(out);
 	}
 
 	private static String nameAt(Function<Path, String> modNameOf, String path) {
