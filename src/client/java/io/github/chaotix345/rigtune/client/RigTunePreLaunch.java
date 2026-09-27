@@ -110,12 +110,12 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 		if (result.finishedAt() == null || result.finishedAt().equals(state.lastWarnedApply)) {
 			return;
 		}
-		List<ApplyFailures.Failure> failures = ApplyFailures.of(result, List.of(modsDir, configDir)).stream()
-				.filter(f -> f.opId() == null || !stale.contains(f.opId())).toList();
+		List<ApplyFailures.Failure> failures = ApplyFailures.of(result, List.of(modsDir, configDir));
 		if (failures.isEmpty()) {
 			return;
 		}
-		failures.forEach(f -> log.accept(ApplyFailures.warnLine(f, result.finishedAt())));
+		// The run counts as logged even when all its failures were stale: they're dropped, never retried.
+		failures.stream().filter(f -> f.opId() == null || !stale.contains(f.opId())).forEach(f -> log.accept(ApplyFailures.warnLine(f, result.finishedAt())));
 		state.lastWarnedApply = result.finishedAt();
 		state.save(configDir);
 	}

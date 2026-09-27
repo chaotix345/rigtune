@@ -70,6 +70,9 @@ class PreLaunchStaleOpsTest {
 		assertEquals(0, RigTunePreLaunch.takeLeftoverOps());
 		assertEquals(2, RigTunePreLaunch.staleOps.size());
 		assertEquals(List.of(), warnOnce());
+		// The rebuild then drops the group; at the next start that old run isn't replayed either.
+		RigTunePreLaunch.staleOps = Set.of();
+		assertEquals(List.of(), warnOnce());
 	}
 
 	// 0.4's count (every op) and lines without the check, as before; and a runnable group next to the stale one is still
