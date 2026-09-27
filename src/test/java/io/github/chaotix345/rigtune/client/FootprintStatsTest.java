@@ -2,9 +2,14 @@ package io.github.chaotix345.rigtune.client;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -51,5 +56,54 @@ class FootprintStatsTest {
 		assertEquals(null, new FootprintStats.Snapshot(0, 0, 0, 0, 0, 0, 0, null).windowCpuTotalNs());
 		assertEquals(30L, new FootprintStats.Snapshot(0, 0, 0, 0, 0, 0, 0,
 				java.util.Map.of("RigTune worker", 10L, "RigTune rules", 20L)).windowCpuTotalNs());
+	}
+
+	// docs/v0.5/SPEC.md X4.3, AC-X.2 (plan review PLAN-1): the flag is set only by a lazy resolution on the render thread
+	// while it runs preLaunch, onInitializeClient or the CLIENT_STARTED handler, so the executor tasks the handler submits
+	// can never race it. The test's own thread stands in for the render thread.
+	@Test
+	void aWorkerResolvingInsideTheWindowLeavesTheFlagUnset() throws Exception {
+		FootprintStats.clearRenderThreadResolve();
+		ExecutorService worker = Executors.newSingleThreadExecutor();
+		try {
+			FootprintStats.clientStarted(() -> CompletableFuture.runAsync(() -> FootprintStats.lazyResolved("worker"), worker).join());
+		} finally {
+			worker.shutdownNow();
+		}
+		assertNull(FootprintStats.renderThreadResolve());
+	}
+
+	@Test
+	void theRenderThreadInsideTheWindowSetsIt() {
+		FootprintStats.clearRenderThreadResolve();
+		FootprintStats.clientStarted(() -> {
+			assertTrue(FootprintStats.inStartupWindow());
+			FootprintStats.lazyResolved("holder");
+		});
+		assertEquals("holder during the CLIENT_STARTED handler", FootprintStats.renderThreadResolve());
+		FootprintStats.lazyResolved("later");
+		assertEquals("holder during the CLIENT_STARTED handler", FootprintStats.renderThreadResolve(), "the first resolution is kept");
+		FootprintStats.clearRenderThreadResolve();
+	}
+
+	@Test
+	void theRenderThreadAfterTheWindowLeavesItUnset() {
+		FootprintStats.clearRenderThreadResolve();
+		FootprintStats.clientStarted(() -> {
+		});
+		assertFalse(FootprintStats.inStartupWindow());
+		FootprintStats.lazyResolved("holder");
+		assertNull(FootprintStats.renderThreadResolve());
+	}
+
+	@Test
+	void initIsAWindowToo() {
+		FootprintStats.clearRenderThreadResolve();
+		long start = FootprintStats.initStart();
+		FootprintStats.lazyResolved("holder");
+		FootprintStats.initEnd(start);
+		assertFalse(FootprintStats.inStartupWindow());
+		assertEquals("holder during onInitializeClient", FootprintStats.renderThreadResolve());
+		FootprintStats.clearRenderThreadResolve();
 	}
 }
