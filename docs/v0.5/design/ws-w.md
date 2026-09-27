@@ -78,7 +78,10 @@ shared game-test files got only imports besides those bodies and their helpers.
 ## Evidence
 
 - **CI** (every job and all three legs green): run 36321500954 (47da8e55: W1-W7), 36325022781 (021929c2: + W8-W10),
-  36326382550 (edfe8263). Unit tests 2006 per node, 2 skipped (ApplyLockTest's and LogSafeTest's Windows-only cases, as
+  36326382550 (edfe8263), 36332107491 (4423f6eb: origin/feat/v0.5.0 690b8f4c merged), and after the code review's fixes
+  **36334845522 (c42d9126): 2254 unit tests per node, 2 skipped, 0 failed**; its screenshots `awareness-aw2-*-1280x720-scale3`
+  and `a11y-tools-startup-1280x720-scale3` looked at (the driver notice listed under four canned ones after the
+  dismissal; the Tools list scrolling under the buttons, Done clear). Unit tests 2006 per node, 2 skipped (ApplyLockTest's and LogSafeTest's Windows-only cases, as
   before). The first push's run 36319839409 failed on every leg in `awarenessFixes` only: at 854×480 the game caps the
   GUI scale at 2 (Window.calculateScale keeps the GUI at least 320×240), so all three notices fit; fixed in d3576d79 by
   counting the rows that fit first.
@@ -124,7 +127,10 @@ Run 36326382550 (edfe8263), ms, with ws-k.md's baseline and its "before WK" / ea
 | 26.3 OpenGL | 116.9 (82.2; 77.8-117.1) | 35.0 (27.0; 20.4-36.0) | 207.8 (153.2; 141.4-200.1) | 1.527 (1.746) | 0 |
 | 26.3 Vulkan | 114.2 (120.0; 74.9-116.6) | 35.6 (39.9; 24.7-49.4) | 190.6 (200.7; 144.6-217.0) | 1.572 (1.535) | 0 |
 
-`v05RenderThreadResolve` null and `v05HolderCreatedOn` "RigTune worker" on every leg; `rigtuneClassBytesIdle`
+The final run 36334845522 (c42d9126): 26.2 OpenGL 87.3 / 23.2 / 170.5 / 1.476, 26.3 OpenGL 125.6 / 35.3 / 230.3 / 1.569,
+26.3 Vulkan 101.7 / 38.4 / 194.5 / 1.512 (same columns), `tickHookAllocBytes` 0 on every leg; 26.3 OpenGL's worker 230.3
+is that leg's highest so far and inside the 300 budget (its render-thread init is 125.6 of 150 on the same run, so the
+runner looks slow overall). `v05RenderThreadResolve` null and `v05HolderCreatedOn` "RigTune worker" on every leg; `rigtuneClassBytesIdle`
 76672/76728/76504 (limit 109296). Reading: WS-W adds no render-thread init work (AW-2's listener is set in AFTER_INIT,
 not at init; the mixin runs in vanilla's own startup before RigTune's window; nothing else at init), so the init values
 sit inside the runner spread (this branch's earlier run 36321500954: 118.6/104.7/110.4). The worker adds, on Linux,
