@@ -1,0 +1,6 @@
+{
+  "set": "ws-f",
+  "checks": [
+    {"class": "AwarenessStore", "file": "awareness.json", "keeps": ["dismissed"], "noBad": true}
+  ]
+}
