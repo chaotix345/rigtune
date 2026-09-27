@@ -77,7 +77,13 @@ H9, H10, H11. Pushes: the first with H1 (this file goes up with it), then batche
   statuses it already knows), so no `v050-written/ws-h` set.
 
 ## H1 live run
-(filled in when H1 lands)
+2026-09-27 22:20 AEST (12:20 UTC), RigTune's own `RangeReader` (the unit-tested client, default limits) against the same
+Sodium 0.9.2 file on cdn.modrinth.com, through `RangeReaderTest.liveCheckAgainstModrinthsCdn` (runs only with
+`RIGTUNE_LIVE_RANGE_CHECK=1`, never in CI): `read 4008 bytes of fabric.mod.json (3 request(s), 138327 bytes)`, parsed
+as `FabricModJson[id=sodium, name=Sodium, version=0.9.2+mc26.2, provides=[indium], depends={fabricloader=[>=0.16.0],
+fabric-resource-loader-v0=[*], minecraft=[~26.2], …}, breaks={embeddium=[*], …}]`. That is 7.3 % of the file's
+1885572 bytes: the 64 KiB tail, the 70292 bytes of central directory before it, and the entry with its local header and
+the 1 KiB slack.
 
 ## What landed
 (filled in per task)
