@@ -1,0 +1,10 @@
+{
+  "formatVersion": 1,
+  "dismissed": [],
+  "acknowledgedRegressions": [],
+  "optionsAtExit": {
+    "vanilla.maxFps": "144",
+    "vanilla.renderClouds": "fast",
+    "vanilla.renderDistance": "12"
+  }
+}
