@@ -88,7 +88,7 @@ class RealWorldUndoTest {
 					"enable entityculling-fabric-1.11.1-mc26.2.jar.disabled -> entityculling-fabric-1.11.1-mc26.2.jar").stream().sorted().toList(),
 					ops(result).stream().sorted().toList(), result.plan().toString());
 			assertEquals(List.of("RigTune didn't disable fabric-26.2.jar (it was already gone)"), skipped(result, DH_OLD));
-			assertEquals(List.of("RigTune didn't disable fabric-26.2.jar (it was already gone)"), skipped(result, DH));
+			assertEquals(List.of("Changed together with fabric-26.2.jar, which RigTune didn't disable (it was already gone)"), skipped(result, DH));
 			assertEquals(List.of("modmenu-20.0.2.jar.disabled is no longer in the mods folder"), skipped(result, "modmenu-20.0.2.jar"));
 			assertTrue(ops(result).stream().noneMatch(op -> op.contains(DH) || op.contains(DH_OLD)), ops(result).toString());
 		}

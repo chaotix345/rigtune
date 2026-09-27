@@ -97,13 +97,16 @@ class LauncherLinesModStepsTest {
 				List.of("c1"), List.of());
 		UndoPlan.Item turnedOff = UndoPlan.Item.of(Text.of("rigtune.undo.item.disable", "Disable %s", "indium.jar"), UndoPlan.Action.SKIP, reason, false,
 				List.of("c2"), List.of());
-		assertEquals("In the Modrinth App: this instance → Content → select it → Disable.", LauncherLines.undoStepsLine(added, app).getString());
+		assertEquals("In the Modrinth App: this instance → Content → select it → Disable.", LauncherLines.undoStepsLine(added).getString());
 		assertEquals("In the Modrinth App: this instance → Content → filter Disabled → select it → Enable.",
-				LauncherLines.undoStepsLine(turnedOff, app).getString());
-		assertNull(LauncherLines.undoStepsLine(added, LauncherInfo.UNKNOWN));
+				LauncherLines.undoStepsLine(turnedOff).getString());
+		Text yours = Text.of("rigtune.undo.reason.launcher_managed", "This instance's mods are managed by %s: change it there",
+				LauncherModText.nameOrYours(LauncherInfo.UNKNOWN));
+		assertNull(LauncherLines.undoStepsLine(UndoPlan.Item.of(Text.of("rigtune.undo.item.enable", "Enable %s", "lithium.jar"), UndoPlan.Action.SKIP,
+				yours, false, List.of("c1"), List.of())), "no steps where the reason names no launcher");
 		UndoPlan.Item gone = UndoPlan.Item.of(Text.of("rigtune.undo.item.enable", "Enable %s", "x.jar"), UndoPlan.Action.SKIP,
 				Text.of("rigtune.undo.reason.file_gone", "%s is no longer in the mods folder", "x.jar"), false, List.of("c3"), List.of());
-		assertNull(LauncherLines.undoStepsLine(gone, app));
+		assertNull(LauncherLines.undoStepsLine(gone));
 	}
 
 	@Test

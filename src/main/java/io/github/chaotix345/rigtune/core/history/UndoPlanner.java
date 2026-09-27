@@ -5,6 +5,7 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.UnfinishedGroups.Rename;
 import io.github.chaotix345.rigtune.core.history.UndoPlan.Action;
 import io.github.chaotix345.rigtune.core.history.UndoPlan.Item;
+import io.github.chaotix345.rigtune.core.launcher.Launcher;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.launcher.LauncherModText;
 import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
@@ -82,6 +83,7 @@ public final class UndoPlanner {
 	static final String LAUNCHER_MANAGED = "This instance's mods are managed by %s: change it there";
 	static final String LAUNCHER_PENDING = "Checking which launcher manages this instance's mods; undo it once that's known";
 	static final String NOT_DISABLED_BY_RIGTUNE = "RigTune didn't disable %s (it was already gone)";
+	static final String NOT_DISABLED_TOGETHER = "Changed together with %s, which RigTune didn't disable (it was already gone)";
 	private static final Set<String> WAITING = Set.of("rigtune.undo.reason.waits_restart", "rigtune.undo.reason.waits_staged",
 			"rigtune.undo.reason.waits_entry", "rigtune.undo.reason.waits_partly");
 	// The Undo screen's text as rigtune.undo.item.* / rigtune.undo.reason.* keys with the English above (docs/v0.3/SPEC.md
@@ -674,14 +676,12 @@ public final class UndoPlanner {
 		if (byGroup.isEmpty()) {
 			return;
 		}
-		// v0.5 (docs/v0.5/SPEC.md 4c, RW-2): the launcher keeps its own record of the mods, so none of them is renamed back.
+		// v0.5 (docs/v0.5/SPEC.md 4c, RW-2): where the launcher keeps its own record of the mods, none of them is renamed back
+		// (after RigTune's own jar, which is never undone either way, so no launcher steps are offered for it: review M3).
 		ModFilesPolicy policy = b.state.modFiles();
-		if (policy.launcherManages()) {
-			Text reason = policy == ModFilesPolicy.PENDING ? Text.of("rigtune.undo.reason.launcher_managed.pending", LAUNCHER_PENDING)
-					: Text.of("rigtune.undo.reason.launcher_managed", LAUNCHER_MANAGED, LauncherModText.nameOrYours(b.state.launcher()));
-			byGroup.values().forEach(group -> group.forEach(l -> b.skip(l, reason)));
-			return;
-		}
+		Text launcherReason = !policy.launcherManages() ? null : policy == ModFilesPolicy.PENDING
+				? Text.of("rigtune.undo.reason.launcher_managed.pending", LAUNCHER_PENDING)
+				: Text.of("rigtune.undo.reason.launcher_managed", LAUNCHER_MANAGED, LauncherModText.nameOrYours(b.state.launcher()));
 		List<Content> contents = new ArrayList<>();
 		Map<String, Content> sim = new LinkedHashMap<>();
 		for (String name : new TreeSet<>(folder.files())) {
@@ -704,6 +704,10 @@ public final class UndoPlanner {
 				ordered.forEach(l -> b.skip(l, Text.of("rigtune.undo.reason.rigtune_jar", RIGTUNE_JAR)));
 				continue;
 			}
+			if (launcherReason != null) {
+				ordered.forEach(l -> b.skip(l, launcherReason));
+				continue;
+			}
 			String waiting = waitingFile(ordered, moving);
 			if (waiting != null) {
 				Text reason = Text.of("rigtune.undo.reason.waits_restart", WAITS_RESTART, waiting);
@@ -714,9 +718,11 @@ public final class UndoPlanner {
 			Map<String, Content> trial = new LinkedHashMap<>(sim);
 			Map<Located, Content> moved = new LinkedHashMap<>();
 			Text failure = null;
+			Located failedAt = null;
 			for (Located l : ordered) {
 				failure = move(l.change(), trial, moved, l);
 				if (failure != null) {
+					failedAt = l;
 					break;
 				}
 			}
@@ -732,7 +738,11 @@ public final class UndoPlanner {
 			}
 			if (failure != null) {
 				Text reason = failure;
-				ordered.forEach(l -> b.skip(l, reason));
+				// RW-14 (review L8): the change RigTune never did gets that reason, its group mates what they go with.
+				Text together = failedAt != null && notDisabledByRigTune(failure)
+						? Text.of("rigtune.undo.reason.not_disabled_by_rigtune.together", NOT_DISABLED_TOGETHER, failedAt.change().file()) : null;
+				Located first = failedAt;
+				ordered.forEach(l -> b.skip(l, together != null && l != first ? together : reason));
 				continue;
 			}
 			sim.clear();
@@ -761,6 +771,10 @@ public final class UndoPlanner {
 		netOps(contents, sim, accepted, folder.dir(), group, b);
 	}
 
+	private static boolean notDisabledByRigTune(Text reason) {
+		return reason instanceof Text.Translatable t && "rigtune.undo.reason.not_disabled_by_rigtune".equals(t.key());
+	}
+
 	// v0.5 (docs/v0.5/SPEC.md 4c): for an item skipped because the launcher keeps the mods, the kind of that launcher's steps
 	// that change it back there (LauncherInfo.modStepsKey): "disable" for a jar RigTune enabled, "enable" for one it turned
 	// off. Null for any other item, and under PENDING (no launcher to give steps for yet).
@@ -774,6 +788,17 @@ public final class UndoPlanner {
 			case "rigtune.undo.item.disable" -> "enable";
 			default -> null;
 		};
+	}
+
+	// Review H1: the launcher an item's launcher-managed reason names (the one the plan was made with), so the steps under
+	// it can never name another. Null for any other item, and where the reason names no launcher.
+	public static @Nullable LauncherInfo launcherOf(UndoPlan.Item item) {
+		if (!(item.reasonText() instanceof Text.Translatable reason) || !"rigtune.undo.reason.launcher_managed".equals(reason.key())
+				|| reason.args().isEmpty()) {
+			return null;
+		}
+		Launcher named = LauncherModText.launcherNamed(reason.args().get(0));
+		return named == null ? null : LauncherInfo.of(named);
 	}
 
 	// The staged mod-file ops this undo leaves in pending.json.

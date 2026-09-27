@@ -49,20 +49,18 @@ final class LauncherLines {
 	// its kind. Null for any other row, and where no launcher is named (PENDING, a packwiz index under the official launcher
 	// or an unknown one).
 	static @Nullable Component modStepsLine(Recommendation recommendation, LauncherInfo launcher) {
-		String kind = LauncherModAdvice.kindOf(recommendation);
-		String steps = kind == null ? null : launcher.modStepsKey(kind);
-		Text name = LauncherModText.launcherName(launcher);
-		if (steps == null || name == null) {
-			return null;
-		}
-		return Component.translatable("rigtune.launcher.advice", Texts.component(name), Component.translatable(steps));
+		return stepsLine(LauncherModAdvice.kindOf(recommendation), launcher);
 	}
 
 	// v0.5 (docs/v0.5/SPEC.md 4c): for an Undo item skipped because the launcher keeps the mod files, "In <launcher>: <steps>"
-	// to change it back there (its disable steps for a jar RigTune enabled, its enable steps for one it turned off). Null
-	// for any other item, and where no launcher is named.
-	static @Nullable Component undoStepsLine(UndoPlan.Item item, LauncherInfo launcher) {
-		String kind = UndoPlanner.launcherStepsKind(item);
+	// to change it back there (its disable steps for a jar RigTune enabled, its enable steps for one it turned off), for the
+	// launcher the item's reason names (review H1: one source). Null for any other item, and where no launcher is named.
+	static @Nullable Component undoStepsLine(UndoPlan.Item item) {
+		LauncherInfo launcher = UndoPlanner.launcherOf(item);
+		return launcher == null ? null : stepsLine(UndoPlanner.launcherStepsKind(item), launcher);
+	}
+
+	private static @Nullable Component stepsLine(@Nullable String kind, LauncherInfo launcher) {
 		String steps = kind == null ? null : launcher.modStepsKey(kind);
 		Text name = LauncherModText.launcherName(launcher);
 		if (steps == null || name == null) {

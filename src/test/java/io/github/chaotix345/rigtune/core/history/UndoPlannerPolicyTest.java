@@ -129,6 +129,28 @@ class UndoPlannerPolicyTest {
 		items(result, Action.SKIP).forEach(i -> kinds.put(i.description(), UndoPlanner.launcherStepsKind(i)));
 		assertEquals(Map.of("Enable lithium.jar", "disable", "Disable indium.jar", "enable", "Disable sodium-0.7.0.jar", "enable",
 				"Enable sodium-0.7.1.jar", "disable"), kinds);
+		for (UndoPlan.Item item : items(result, Action.SKIP)) {
+			assertEquals(LauncherInfo.of(Launcher.MODRINTH_APP), UndoPlanner.launcherOf(item), "the steps' launcher is the reason's (review H1)");
+		}
+	}
+
+	// Review M3: RigTune's own update is never undone, and under LAUNCHER no steps to disable the new RigTune or turn the
+	// old one back on are offered either: its own reason comes first.
+	@Test
+	void underLauncherRigTunesOwnUpdateKeepsItsOwnReason() {
+		state.policy = ModFilesPolicy.LAUNCHER;
+		state.jar("rigtune-0.4.0.jar.disabled", "rigtune").jar("rigtune-0.5.0.jar", "rigtune");
+		entry("e1", disabled("rigtune", "rigtune-0.4.0.jar", "rigtune-0.4.0.jar.disabled", "g-self"), enabled("rigtune", "rigtune-0.5.0.jar", "g-self"));
+
+		Result result = all();
+
+		List<UndoPlan.Item> skipped = items(result, Action.SKIP);
+		assertEquals(2, skipped.size(), result.plan().toString());
+		for (UndoPlan.Item item : skipped) {
+			assertEquals("RigTune never undoes its own update", item.reason(), item.toString());
+			assertNull(UndoPlanner.launcherStepsKind(item));
+			assertNull(UndoPlanner.launcherOf(item));
+		}
 	}
 
 	@Test
@@ -136,7 +158,8 @@ class UndoPlannerPolicyTest {
 		anAddADisableAndAnUpdatePair();
 		state.policy = ModFilesPolicy.LAUNCHER;
 		state.launcher = LauncherInfo.UNKNOWN;
-		assertTrue(items(all(), Action.SKIP).stream().allMatch(i -> i.reason().equals("This instance's mods are managed by your launcher: change it there")));
+		assertTrue(items(all(), Action.SKIP).stream().allMatch(i -> i.reason().equals("This instance's mods are managed by your launcher: change it there")
+				&& UndoPlanner.launcherOf(i) == null));
 		state.policy = ModFilesPolicy.PENDING;
 		state.launcher = null;
 		Result pendingPlan = all();
@@ -190,6 +213,21 @@ class UndoPlannerPolicyTest {
 		UndoPlan.Item item = items(result, Action.SKIP).getFirst();
 		assertEquals("RigTune didn't disable indium.jar (it was already gone)", item.reason());
 		assertNull(UndoPlanner.launcherStepsKind(item));
+	}
+
+	// Review L8: the change RigTune never did keeps RW-14's reason; what was changed with it says so, naming that file.
+	@Test
+	void aGroupMateOfADisableRigTuneNeverDidSaysWhatItWentWith() {
+		state.jar("sodium-0.7.1.jar", "sodium");
+		entry("e1", disabled("sodium", "sodium-0.7.0.jar", null, "g-update"), enabled("sodium", "sodium-0.7.1.jar", "g-update"));
+
+		Result result = all();
+
+		assertTrue(result.script().fileOps().isEmpty(), result.script().toString());
+		Map<String, String> reasons = new HashMap<>();
+		items(result, Action.SKIP).forEach(i -> reasons.put(i.description(), i.reason()));
+		assertEquals(Map.of("Disable sodium-0.7.0.jar", "RigTune didn't disable sodium-0.7.0.jar (it was already gone)",
+				"Enable sodium-0.7.1.jar", "Changed together with sodium-0.7.0.jar, which RigTune didn't disable (it was already gone)"), reasons);
 	}
 
 	@Test

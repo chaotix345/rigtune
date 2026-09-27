@@ -299,7 +299,7 @@ public class UndoScreen extends Screen {
 
 			// v0.5 (docs/v0.5/SPEC.md 4c): an item the launcher keeps gets its steps after the reason.
 			private Component reason(UndoPlan.Item item) {
-				Component steps = LauncherLines.undoStepsLine(item, controller.launcher());
+				Component steps = LauncherLines.undoStepsLine(item);
 				return steps == null ? Texts.component(item.reasonText()) : Texts.component(item.reasonText()).append(". ").append(steps);
 			}
 
