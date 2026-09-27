@@ -26,6 +26,7 @@ import io.github.chaotix345.rigtune.client.probe.FabricPins;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.LauncherProbe;
 import io.github.chaotix345.rigtune.client.probe.ModScanner;
+import io.github.chaotix345.rigtune.client.probe.PreviewJarChecks;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.profile.ProfileService;
@@ -840,7 +841,8 @@ public final class RealController implements RigTuneController {
 		DownloadInputs downloads = new DownloadInputs(modrinth, settings.modrinthAllowed(), OnlineDataFetcher.LOADER,
 				onlineLookups.modrinthGameVersion(hw == null ? HardwareProbe.minecraftVersion() : hw.mcVersion()), data.installedVersions(),
 				data.updateVersions(), new HashSet<>(data.projectIdsByModId().values()), loadedIds, stagedJarsByModId(),
-				doc == null ? (a, b) -> false : ModConflicts.of(doc)::between, StagedProjects.read(pendingFile), data.data().online());
+				doc == null ? (a, b) -> false : ModConflicts.of(doc)::between, StagedProjects.read(pendingFile), data.data().online())
+				.withJarChecks(PreviewJarChecks.of(modVersion, settings::modrinthAllowed));
 		List<PreviewPlanner.ConfigFile> files = ConfigTargets.all(configDir).stream()
 				.map(t -> new PreviewPlanner.ConfigFile(t.prefix(), t.file(), t.stager()::stage, t.reader()::read)).toList();
 		return new PreviewPlanner(FabricLoader.getInstance().getGameDir().resolve("options.txt"), game.now(), game.problems(), files, modsDir, downloads)

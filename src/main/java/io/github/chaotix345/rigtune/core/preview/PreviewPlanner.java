@@ -76,7 +76,8 @@ public final class PreviewPlanner {
 		vanilla.values().forEach(r -> vanilla(r, (Action.SetSetting) r.action(), out));
 		patches.forEach((file, values) -> config(file, values, configRecs, out));
 		boolean resolved = downloadRecs.isEmpty() || PreviewDownloads.add(downloadRecs, downloads, modsDir, out);
-		return new ApplyPreview(out.now, out.atRestart, out.downloads, out.disables, out.skipped, resolved);
+		boolean checked = !out.downloads.isEmpty() && !out.unchecked && out.downloads.stream().allMatch(d -> d.fileName() != null);
+		return new ApplyPreview(out.now, out.atRestart, out.downloads, out.disables, out.skipped, resolved, List.of(), checked);
 	}
 
 	private @Nullable ConfigFile configFile(String key) {
@@ -128,6 +129,8 @@ public final class PreviewPlanner {
 		final List<ApplyPreview.Download> downloads = new ArrayList<>();
 		final List<ApplyPreview.Disable> disables = new ArrayList<>();
 		final List<ApplyPreview.Skipped> skipped = new ArrayList<>();
+		// docs/v0.5/SPEC.md 2H L5: a listed download whose fabric.mod.json wasn't read.
+		boolean unchecked;
 
 		// detail: the game's or the config patcher's own message, shown as it is.
 		void skip(Recommendation r, ApplyPreview.Reason reason, @Nullable String detail) {

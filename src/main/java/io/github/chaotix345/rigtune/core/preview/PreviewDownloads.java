@@ -55,8 +55,18 @@ final class PreviewDownloads {
 			}
 		}
 		DependencyResolver resolver = new DependencyResolver(client, in.loader(), in.gameVersion(), in.installedVersions()).withStaged(in.staged());
-		DownloadPlanner.Result result = DryRunPlanner.plan(resolver, modsDir, in.conflicts(), in.updateVersions(), modIdsByFile, ordered,
-				in.installedProjects(), in.loadedIds(), in.stagedJars(), in.lookups(), in.lookedUp());
+		// docs/v0.5/SPEC.md 2H L5: each download's fabric.mod.json, read in memory with Modrinth on only.
+		DryRunPlanner.Checks checks = in.lookups() ? in.checks() : null;
+		DryRunPlanner.Planned planned;
+		try {
+			planned = DryRunPlanner.plan(resolver, modsDir, in.conflicts(), in.updateVersions(), modIdsByFile, ordered, in.installedProjects(),
+					in.loadedIds(), in.stagedJars(), in.lookups(), in.lookedUp(), checks);
+		} finally {
+			if (checks != null) {
+				checks.close().run();
+			}
+		}
+		DownloadPlanner.Result result = planned.result();
 
 		Map<String, Recommendation> owner = new HashMap<>();
 		for (Recommendation r : ordered) {
@@ -74,6 +84,7 @@ final class PreviewDownloads {
 					String name = target.getFileName().toString();
 					out.downloads.add(new ApplyPreview.Download(r.id(), r.title(), name, target, !name.equals(ownFile(r, client)), r.titleText()));
 					withFiles.add(r.id());
+					out.unchecked |= !planned.checkedFiles().contains(name);
 				}
 				case DISABLE_FILE -> {
 					Path file = Path.of(op.path());

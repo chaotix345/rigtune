@@ -14,6 +14,7 @@ import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.model.TextException;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -67,6 +68,7 @@ public final class DownloadPlanner {
 	private final Function<Path, String> modIdOf;
 	private final Function<Path, String> versionOf;
 	private final VersionPins pins;
+	private final @Nullable DryJars dryJars;
 	private boolean lookedUp = true;
 
 	public DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher) {
@@ -93,14 +95,21 @@ public final class DownloadPlanner {
 		this(resolver, modsDir, fetcher, conflicts, updateVersions, ModJars::modIdOf, ModJars::versionOf, pins);
 	}
 
-	// The dry run (DryRunPlanner): nothing is downloaded, so no jar's version is known and no pin is checked.
+	// The dry run (DryRunPlanner): nothing is downloaded. Without dryJars no jar's version is known and no pin is checked
+	// (pins NONE); with them (docs/v0.5/SPEC.md 2H L5), each planned jar is what its in-memory read of fabric.mod.json says.
 	DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher, BiPredicate<String, String> conflicts,
-			Map<String, ModrinthVersion> updateVersions, Function<Path, String> modIdOf) {
-		this(resolver, modsDir, fetcher, conflicts, updateVersions, modIdOf, jar -> null, VersionPins.NONE);
+			Map<String, ModrinthVersion> updateVersions, Function<Path, String> modIdOf, @Nullable DryJars dryJars, VersionPins pins) {
+		this(resolver, modsDir, fetcher, conflicts, updateVersions, modIdOf, jar -> null, pins, dryJars);
 	}
 
 	private DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher, BiPredicate<String, String> conflicts,
 			Map<String, ModrinthVersion> updateVersions, Function<Path, String> modIdOf, Function<Path, String> versionOf, VersionPins pins) {
+		this(resolver, modsDir, fetcher, conflicts, updateVersions, modIdOf, versionOf, pins, null);
+	}
+
+	private DownloadPlanner(DependencyResolver resolver, Path modsDir, Fetcher fetcher, BiPredicate<String, String> conflicts,
+			Map<String, ModrinthVersion> updateVersions, Function<Path, String> modIdOf, Function<Path, String> versionOf, VersionPins pins,
+			@Nullable DryJars dryJars) {
 		this.resolver = resolver;
 		this.modsDir = modsDir;
 		this.fetcher = fetcher;
@@ -109,6 +118,12 @@ public final class DownloadPlanner {
 		this.modIdOf = modIdOf;
 		this.versionOf = versionOf;
 		this.pins = pins == null ? VersionPins.NONE : pins;
+		this.dryJars = dryJars;
+	}
+
+	// The dry run's planned jars (DryRunPlanner), by the path the fetcher gave: what their fabric.mod.json reads say.
+	interface DryJars {
+		VersionPins.Jar jar(Path pending, String modId, String replaces);
 	}
 
 	// docs/v0.4/SPEC.md 2o, H3: the loadedIds for plan(): the scanned mods that are top-level jars. A mod nested inside
@@ -450,8 +465,8 @@ public final class DownloadPlanner {
 	// (VersionPins), so the tick order doesn't decide: an update an installed mod pins is fine when that mod's own update,
 	// allowing it, goes in with it. A group with a jar that can't go in is dropped with its downloads, and each of its
 	// recommendations gets the reason (a line in the UI, never a silent drop); this repeats, since what relied on a dropped
-	// group may now fail. Jars that are only fine together are joined into one group. The dry run knows no jar's version,
-	// so the preview checks nothing here.
+	// group may now fail. Jars that are only fine together are joined into one group. The dry run judges its jars by what
+	// their in-memory reads said (dryJars; docs/v0.5/SPEC.md 2H L5); without them it checks nothing here.
 	private void checkVersions(Batch batch, List<Recommendation> ordered, Map<String, List<String>> opIds, boolean[] staged, String[] errorAt,
 			Text[] errorTextAt) {
 		if (batch.jars.isEmpty() || pins.isEmpty()) {
@@ -459,7 +474,7 @@ public final class DownloadPlanner {
 		}
 		Map<String, VersionPins.Jar> read = new HashMap<>();
 		for (NewJar jar : batch.jars) {
-			read.put(jar.opId(), jarOf(jar.path(), jar.modId(), jar.replaces()));
+			read.put(jar.opId(), dryJars != null ? dryJars.jar(jar.path(), jar.modId(), jar.replaces()) : jarOf(jar.path(), jar.modId(), jar.replaces()));
 		}
 		// What earlier Applies staged (pending.json's enables) counts as present: a staged update replaces its mod too.
 		Map<String, VersionPins.Jar> stagedJars = new LinkedHashMap<>();
