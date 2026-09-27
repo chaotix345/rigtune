@@ -310,6 +310,14 @@ legs), no tick or frame work, and to `workerCpuMs5s` only `FirstRunService.load`
   the X4 flag null, the holder made on the RigTune worker (every value inside its budget; the spread between this run
   and the two before it on nearly the same WS-F code is ±20 ms and ±50 ms of workerCpuMs5s, the other workstreams'
   merges included).
+- **36336520594** (f7f2943a: the coordinator's decisions from both review rounds + `origin/feat/v0.5.0` at 48a67b22, WS-P
+  included): all 8 jobs green (java: 2225 tests, 2 skipped, 0 failures on each node). Logs on all 3 legs: the fresh path,
+  the shortened guide message 206 px in 365 / 280 / 266 px rooms (0 other notices), FirstApplyGameTest 12.3-13.5 s; the
+  client game-test step 520 s (26.2 GL), 493 s (26.3 GL), 476 s (26.3 VK). Looked at the 26.3 Vulkan
+  `firstapply-guide-640x480-scale2` (the shorter line with room to spare before "…") and
+  `firstapply-confirmation-640x480-scale2`. Footprint: renderThreadInitCpuMs 103.48 / 108.98 / 109.00, clientStartedWallMs
+  49.65 / 34.72 / 50.91, workerCpuMs5s 209.23 / 203.53 / 210.60, tickHookOnVsReference 1.531 / 1.618 / 1.602, the X4 flag
+  null, the holder made on the RigTune worker.
 
 ## AC table
 | AC | status | evidence |
