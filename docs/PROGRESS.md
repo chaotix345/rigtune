@@ -25,8 +25,9 @@ Brief: the user's v0.5.0 prompt (full autonomy: research -> release incl. GitHub
 
 ### Status
 - [x] Phase 0: orient. Baseline `./gradlew build` on feat/v0.5.0 green: 1842 tests per MC version (1 skipped). Issues #7/#8 deleted (the user's FOR THE USER item 3). Watchdog running.
-- [ ] Phase 1: research (docs/research/v0.5/: ci-robustness, v04-leftovers, verification-gaps, brainstorm + one file per picked feature).
-- [ ] Phase 2: SPEC + contracts + PLAN + plan review.
+- [x] Phase 1: research DONE except launcher-managed-mods (r-launchers finishing): ci-robustness, verification-gaps, v04-leftovers, audit-v040-features + verification, real-world-2026-09-27, brainstorm, feature-{stutter-fixes,try-it,server-profiles,launch-alerts,first-apply}.
+- [ ] Phase 2 RUNNING: spec5 writes docs/v0.5/SPEC.md from the coordinator's brief (scratchpad/spec/brief.md: P0.1 CI, P0.2 leftovers + audit + real-world defects, P0.3 verification, P0.4 never fight the launcher, P1 C20/C09/C16/C02/C18 (C18 first cut), P2 C07/C08/controller/a11y sweep/perf-counter advice).
+- [ ] Phase 2 (rest): coordinator review of SPEC -> PLAN.md (file ownership, hotspots, waves) -> independent plan review -> Amendments -> contracts commit.
 - [ ] Phase 3: foundation = P0.1 CI robustness, alone.
 - [ ] Phase 4: features and fixes (Wave A/B).
 - [ ] Phase 5: verification.
