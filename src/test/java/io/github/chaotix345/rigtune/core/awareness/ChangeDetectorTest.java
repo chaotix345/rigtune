@@ -159,6 +159,42 @@ class ChangeDetectorTest {
 		assertEquals(NONE, ChangeDetector.compare(AMD, Fingerprint.of(hw.build())).kind());
 	}
 
+	// v0.5 Latent 2 (docs/v0.5/SPEC.md 2W, AC2W.3; av's test): HardwareProbe's "unknown" placeholders (a probe that
+	// couldn't read the GPU or the CPU) are no GPU and no CPU, never a change.
+	@Test
+	void latentUnknownGpuIsNoChange() {
+		Fixtures.Hw failed = Fixtures.userRig();
+		failed.gpu = new GpuInfo("unknown", "unknown", "unknown", GraphicsBackend.UNKNOWN, -1);
+		Fingerprint unknown = Fingerprint.of(failed.build());
+		assertEquals(NONE, ChangeDetector.compare(AMD, unknown).kind());
+		assertEquals("", unknown.gpuRenderer());
+		assertEquals("", unknown.gpuDriverRaw());
+		assertEquals(NONE, ChangeDetector.compare(unknown, AMD).kind());
+	}
+
+	@Test
+	void aFirstRunSeedFromAnUnknownProbeThenARealGpuRaisesNothing() {
+		AwarenessStore store = AwarenessStore.shared(config);
+		Fixtures.Hw failed = Fixtures.userRig();
+		failed.gpu = new GpuInfo("unknown", "unknown", "unknown", GraphicsBackend.UNKNOWN, -1);
+		failed.cpu = new CpuInfo("unknown", -1, 16, -1);
+		assertEquals(NONE, ChangeDetector.check(store, Fingerprint.of(failed.build())).kind(), "seeded from a failed probe");
+		assertEquals(NONE, ChangeDetector.check(store, AMD).kind(), "the first good probe is no change");
+		assertEquals(AMD, Fingerprint.read(store.read()), "and becomes the fingerprint to compare with");
+		assertEquals(DRIVER, ChangeDetector.check(store, rig("3.3.0 Core Profile Context 26.9.1.260915")).kind());
+	}
+
+	@Test
+	void anUnknownCpuIsNoHardwareChange() {
+		Fixtures.Hw failed = Fixtures.userRig();
+		failed.gpu = new GpuInfo("ATI Technologies Inc.", "AMD Radeon RX 7800 XT", AMD.gpuDriverRaw(), GraphicsBackend.OPENGL, 16384);
+		failed.cpu = new CpuInfo("unknown", -1, 16, -1);
+		Fingerprint unknownCpu = Fingerprint.of(failed.build());
+		assertEquals("", unknownCpu.cpuName());
+		assertEquals(NONE, ChangeDetector.compare(AMD, unknownCpu).kind());
+		assertEquals(NONE, ChangeDetector.compare(unknownCpu, AMD).kind());
+	}
+
 	@Test
 	void firstRunSeedsSilentlyThenDetects() {
 		AwarenessStore store = AwarenessStore.shared(config);
