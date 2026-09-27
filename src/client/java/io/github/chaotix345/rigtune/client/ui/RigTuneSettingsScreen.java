@@ -4,6 +4,8 @@ import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.SettingsSaver;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkWorld;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
+import io.github.chaotix345.rigtune.core.launcher.LauncherModText;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -101,6 +103,7 @@ public class RigTuneSettingsScreen extends Screen {
 		// ---- WS-P (docs/v0.5/SPEC.md 2P, PF-2): the battery-offer row, from its own method, is added on the line below.
 		stutterMonitorRow(rows, column);
 		// ---- WS-L1 (docs/v0.5/SPEC.md 4e): the mod-files row.
+		modFilesRow(rows, column);
 		rows.note(Component.translatable("rigtune.settings.note"));
 		addRenderableWidget(rows);
 		updateActive();
@@ -127,6 +130,30 @@ public class RigTuneSettingsScreen extends Screen {
 					save();
 					controller.setStutterMonitor(v);
 				}));
+	}
+
+	// v0.5 (docs/v0.5/SPEC.md 4e): who changes this instance's mod files. Shown where a launcher keeps its own record of
+	// them (or before that's known), and wherever the opt-in is on. Choosing saves settings.json (SettingsSaver) and
+	// rescans, so the report follows the policy.
+	private void modFilesRow(SettingsList rows, int column) {
+		if (!showModFilesRow(controller.modFiles(), settings.modFilesByRigTune)) {
+			return;
+		}
+		Component launcher = Texts.component(LauncherModText.nameOrYours(controller.launcher()));
+		rows.add(CycleButton.builder((Boolean rigtune) -> rigtune ? Component.translatable("rigtune.settings.mod_files.rigtune")
+						: Component.translatable("rigtune.settings.mod_files.launcher", launcher), settings.modFilesByRigTune)
+				.withValues(false, true)
+				.withTooltip(v -> Tooltip.create(Component.translatable("rigtune.settings.mod_files.tooltip")))
+				.create(0, 0, column, ROW, Component.translatable("rigtune.settings.mod_files"), (b, v) -> {
+					settings.modFilesByRigTune = v;
+					save();
+					controller.rescan();
+				}));
+	}
+
+	// The mod-files row's rule: the policy says the launcher keeps the mods (LAUNCHER, PENDING), or the opt-in is on.
+	static boolean showModFilesRow(ModFilesPolicy policy, boolean optIn) {
+		return optIn || policy.launcherManages();
 	}
 
 	// Written on the settings thread (SettingsSaver), never behind the worker pool; each save writes the current values.

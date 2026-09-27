@@ -4,6 +4,8 @@ import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
+import io.github.chaotix345.rigtune.core.launcher.LauncherModText;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
@@ -309,6 +311,10 @@ public class RigTuneScreen extends Screen {
 			lines.add(Component.translatable("rigtune.screen.header.network_off").withStyle(ChatFormatting.GOLD));
 		} else if (!settings.modrinth) {
 			lines.add(Component.translatable("rigtune.screen.header.modrinth_off").withStyle(ChatFormatting.GOLD));
+		} else if (settings.modFilesByRigTune) {
+			// v0.5 (docs/v0.5/SPEC.md 4e, WS-L1): the per-instance opt-in shares this one warning line, after the two above.
+			lines.add(Texts.component(Objects.requireNonNull(LauncherModText.guideLine(ModFilesPolicy.RIGTUNE, shownLauncher, true)))
+					.withStyle(ChatFormatting.GOLD));
 		}
 		return lines;
 	}
