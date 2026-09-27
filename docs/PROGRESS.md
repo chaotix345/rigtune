@@ -13,6 +13,8 @@ Brief: the user's v0.5.0 prompt (full autonomy: research -> release incl. GitHub
 
 - REAL-WORLD SESSION 2026-09-27 10:43-11:08 (0.4.0, first launch after 0.1.0; Stutter monitor on; one benchmark; world THE ONE): clean upgrade (legacy WARN lines, launcher Modrinth App, Java 25.0.3 Azul G1, footprint 85.1 ms render-thread init / 46.9 ms CPU, launch-to-title 32.3 s), stutter session saved (132 spikes / 831 s). DIVERGENCE (bug, P0.4): at exit the 0.4 helper marked 0.1.0's stale DH group SKIPPED_ALREADY_DONE ("fabric-26.2.jar is already gone"; "DistantHorizons-3.3.2-...jar is already enabled") although the Modrinth App had installed that file; DESIGN says such a group is ABANDONED. History likely claims the update as applied; an Undo might disable the app's DH jar -> the user was told not to press Undo until checked. Also FastQuit WARNs around the benchmark world exit (same WARN for the user's own world; maybe FastQuit's quirk). realworld agent analysing.
 
+- USER HARDWARE (2026-09-27): no Realms subscription (Realms stays local-RealmsConnect or UNVERIFIED); a LAPTOP: Lenovo IdeaPad Pro 5i Gen 10 16" (Core Ultra 5 225H or Ultra 7 255H, P/E/LPE hybrid; integrated Intel Arc only; 2880x1800 OLED 120 Hz; Windows 11; real battery) -> Phase 5 "user laptop run" kit (RC jar + ~15 min checklist: battery offer incl. PF-1, Intel Arc GL/Vulkan driver strings, iGPU/hybrid-CPU detection, 120 Hz cap, C02 first run, one benchmark; logs copied back); no controller (controller polish P2, UNVERIFIED).
+
 ### Environment (verified 2026-09-27)
 - Integration branch `feat/v0.5.0` from main @ 987179e4; mod_version 0.5.0-dev.
 - MC (Mojang manifest 2026-09-27): latest release 26.3, snapshot 26.4-snapshot-1 -> no new node.
