@@ -612,6 +612,8 @@ public class ProfilesGameTest implements FabricClientGameTest {
 		} catch (ShareCodeException e) {
 			throw new AssertionError("the copied code decodes: " + code, e);
 		}
+		context.runOnClient(mc -> mc.gui.toastManager().clear());
+		context.waitTicks(1);
 		context.takeScreenshot("profiles-copy-code-left-out");
 	}
 
