@@ -649,4 +649,15 @@ public final class ProfileService {
 		}
 		return Journal.idsWithFolded(journal.entries());
 	}
+
+	// v0.5 C16 (WS-P2, read-only): the active profile's id, while the switch that made it active still stands.
+	public @Nullable String activeProfileId() {
+		return active();
+	}
+
+	// v0.5 C16 (WS-P2, read-only): a profile id's name, or null when it no longer names anything to switch to (a deleted
+	// profile, a template this version doesn't know).
+	public @Nullable Text nameOf(@Nullable String id) {
+		return resolvedName(id, store().snapshot());
+	}
 }

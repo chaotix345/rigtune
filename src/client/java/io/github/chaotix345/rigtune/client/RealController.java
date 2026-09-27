@@ -984,6 +984,7 @@ public final class RealController implements RigTuneController {
 	@Override
 	public void deleteProfile(String id) {
 		profileService.deleteProfile(id);
+		v05().serverProfiles().forgetProfile(id);
 	}
 
 	@Override
