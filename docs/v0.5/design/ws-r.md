@@ -75,7 +75,7 @@ then a commit. Pushes batched, never during a streak.
 | R5 4i | 65ba0fd6 | the deciding test `OldClientWarningTest.theConditionReachesExactlyTheReleasedOldClients` passed before the rule existed (so it ships); red then green: the bundled-rule tests, `RulesV1DifferentialTest.rulesV1GainsOnlyTheOldClientWarning`, `test_the_old_client_warning`, the relative-count tests |
 | R6 2T tool | 2d266d35 | `UpstreamDiffTests` (6); `python tools/rules_upstream_diff.py src/test/resources/rules/r16/rules-v2.json rules/rules-v2.json` lists exactly R1's fold |
 | merge of feat/v0.5.0 (WS-L1 m1, WS-P2 A, WS-S2's early core) | 6ebc52ea, 76c3f2a4 | WS-S2's `FixSpecTest.noSectionNoFixes` assumed no bundled section (true until R): it now strips the section; new `StutterFixSeedsTest.theClientAcceptsEverySeed` (the client's `FixSpec.of` accepts all three seeds with the same targets); `MAX_FIX_STEP` tied to `FixSpec.MAX_STEP` |
-| the code review's fixes (0 H, 1 M, 6 L; coordinator's decisions) | 35d5cdf2 | M1 `test_evidence_must_test_the_session`; L2 `test_an_advice_id_that_isnt_a_string`; L3 `test_a_pinned_revision_at_or_below_mains_is_refused`, `test_mains_revision_unavailable_refuses_unless_skipped`, `test_main_revision_reads_origin_main` (and a live `--revision 16` run refused: "isn't above main's revision 16"); L4 the warning's last sentence; L5 in 76c3f2a4; L6 `LegacyParserTest.unknownKeys` walks not/anyOf and settings/mods/templates conditions (+ `theUnknownKeyWalkReachesNestedConditions`); L7 `ChunksLoadingSeedTest.theSpikeRateKeepsTheStillControlOut` |
+| the code review's fixes (0 H, 1 M, 6 L; coordinator's decisions) | 5549f756 | M1 `test_evidence_must_test_the_session`; L2 `test_an_advice_id_that_isnt_a_string`; L3 `test_a_pinned_revision_at_or_below_mains_is_refused`, `test_mains_revision_unavailable_refuses_unless_skipped`, `test_main_revision_reads_origin_main` (and a live `--revision 16` run refused: "isn't above main's revision 16"); L4 the warning's last sentence; L5 in 76c3f2a4; L6 `LegacyParserTest.unknownKeys` walks not/anyOf and settings/mods/templates conditions (+ `theUnknownKeyWalkReachesNestedConditions`); L7 `ChunksLoadingSeedTest.theSpikeRateKeepsTheStillControlOut` |
 
 Every regeneration ran `python tools/update_rules.py --revision 17` live (Modrinth/GitHub), then `check_rules_v1.py`, the
 Python suite from the repository root (418 tests after the review, 1 skipped) and `:26.2:test` over `core.*` and `v0*` in a build slot
@@ -84,7 +84,7 @@ and 4i (the warning), plus `revision`/`generatedAt`.
 
 CI (every job, every leg green): 36321718784 (c526ca81: R1-R4 + feat/v0.5.0 with WS-S's early merge), 36324314978
 (2d266d35: + R5, R6), 36328564937 (ee88e2d0: + the merge of feat/v0.5.0 with WS-S2's core, this doc); the head with the
-review's fixes (35d5cdf2 and the next merge) is reported with its run in the final report. Looked at (run 36324314978, `gametest-screenshots-26.2-OpenGL`): `0051_ui-main-1280x720-scale2`
+review's fixes (5549f756 and the next merge) is reported with its run in the final report. Looked at (run 36324314978, `gametest-screenshots-26.2-OpenGL`): `0051_ui-main-1280x720-scale2`
 (header "Rules r17 (bundled…)"; Warnings 1, the llvmpipe one: no old-client warning on 0.5.0-dev), `0135_stutter-1280x720-
 scale2`, `0138_stutter-saved` (unchanged layout; no session there has enough data for advice).
 
