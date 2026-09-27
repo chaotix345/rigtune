@@ -973,3 +973,33 @@ def after_kill_check(instance, driver, change_ids, mod_id):
                         "the entry's changes: {}".format(dict(zip(change_ids, got)))))
     checks.append(_bad_or_crash(instance))
     return checks
+
+
+# --- guard-apply (docs/v0.5/SPEC.md 3f, AC3f.7) ---------------------------------------------------------------------
+# One start after entry-check: a pinned update refused, an addition staged, an update that addition's version declares
+# incompatible refused. driver: the undo driver's pinStatus / addStatus / reverseStatus (each Apply's status line).
+
+
+def after_guard_apply(instance, driver, server_log, installed, added_name, pin, staged_version, refused_ids):
+    mods = Path(instance) / "mods"
+    driver = driver or {}
+    pin_status, reverse_status = driver.get("pinStatus") or "", driver.get("reverseStatus") or ""
+    target, pin_range, pin_version = pin
+    checks = [Check("the driver ran its three Applies", driver.get("ok") is True,
+                    "error: {}; statuses {}".format(driver.get("error"), [driver.get(k) for k in ("pinStatus", "addStatus", "reverseStatus")]))]
+    checks.append(Check("the pinned update is refused with the pin (WS-G1)", "which is installed, needs" in pin_status and pin_range in pin_status
+                        and pin_version in pin_status, pin_status or "no outcome"))
+    checks.append(Check("the update the staged addition declares incompatible is refused (2d's reverse check)",
+                        "which is waiting for a restart, as incompatible with" in reverse_status, reverse_status or "no outcome"))
+    asked = [r for r in server_log or [] if r.get("method") == "GET" and r.get("path") == "/v2/versions" and staged_version in unquote(r.get("query") or "")]
+    checks.append(Check("RigTune read the staged version back from Modrinth", bool(asked),
+                        "GET /v2/versions naming {}: {}".format(staged_version, len(asked))))
+    results = {(r.get("op") or {}).get("modId"): r.get("status") for r in _results(instance)}
+    journaled = [c.get("modId") for e in history_entries(instance) or [] for c in e.get("changes", []) if c.get("modId") in refused_ids]
+    now = sorted(listing(mods))
+    checks.append(Check("only the addition went in; the refused updates changed nothing",
+                        all(n in now for n in installed) and added_name in now and not journaled
+                        and not any(m in results for m in refused_ids)
+                        and not any(n.startswith(refused_ids) and n not in installed and n != added_name for n in now),
+                        "mods/: {}; last-apply: {}; journal changes of {}: {}".format(now, results, list(refused_ids), journaled)))
+    return checks

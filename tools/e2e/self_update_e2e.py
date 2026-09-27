@@ -61,6 +61,16 @@ RELEASED = {
 UNDO_PHASES = ("mod-apply", "mod-undo", "mod-check")
 # Plan review B-M3, on the same instance after UNDO_PHASES: Undo this on an older Apply.
 ENTRY_PHASES = ("entry-apply", "entry-undo", "entry-check")
+# docs/v0.5/SPEC.md 3f (AC3f.7), on the same instance after ENTRY_PHASES: one start with three Applies the resolver
+# judges against what's installed and staged. PIN_TARGET's update (1.0.0 -> 2.0.0) is refused: the installed PINNER's
+# fabric.mod.json pins it to 1.0.x (WS-G1's version pins, v0.4 H2). REV_ADD is added (staged); then REV_TARGET's update
+# (1.0.0 -> 1.1.0) is refused: REV_ADD's Modrinth version declares that version incompatible, which RigTune can only
+# know by reading the staged version back through /v2/versions (2d's reverse check, A-M1).
+GUARD_PHASES = ("guard-apply",)
+PIN_TARGET, PIN_TARGET_PROJECT = "e2e-pin-target", "E2EPinTg"
+PINNER = "e2e-pinner"
+REV_TARGET, REV_TARGET_PROJECT, REV_TARGET_NEXT = "e2e-rev-target", "E2ERevTg", "E2ERevT2"
+REV_ADD, REV_ADD_PROJECT, REV_ADD_VERSION = "e2e-rev-add", "E2ERevAd", "E2ERevAV"
 # The profile part (docs/v0.4/design/ws-h.md; plan review P-H1), after ENTRY_PHASES with --profile-switch, on an
 # instance of its own that also has Sodium, so staged config keys are covered: two switches in one start
 # (profile-apply; the helper applies the staged keys at exit), then Undo last twice in the next start (profile-undo)
@@ -113,6 +123,7 @@ PHASE_TITLES = {
     "entry-apply": "B-M3: after two Applies in one start, each adding a mod (" + FIRST_ID + ", then " + SECOND_ID + "), and quit (helper done)",
     "entry-undo": "B-M3: after Undo this on the older Apply (" + FIRST_ID + ") and a restart (helper done)",
     "entry-check": "B-M3: after the next start",
+    "guard-apply": "AC3f.7: after a pinned update, an addition and an update the staged addition declares incompatible (helper done)",
     "downgrade-old": "The released old version on files the new one wrote: History, Undo last, its own Apply, quit (helper done)",
     "downgrade-new": "The new version again, on what the old one left",
     "profile-apply": "Profiles (P-H1): after two switches in one start and quit (helper done)",
@@ -156,7 +167,7 @@ class Run:
         self.watcher = None
         self.profile = args.profile_switch
         self.profile_instance = self.run_dir / "instance-profile"
-        phases = UNDO_PHASES + ENTRY_PHASES + (PROFILE_PHASES if self.profile else ()) if self.undo \
+        phases = UNDO_PHASES + ENTRY_PHASES + GUARD_PHASES + (PROFILE_PHASES if self.profile else ()) if self.undo \
             else DOWNGRADE_PHASES if self.downgrade else KILL_PHASES if self.kill else ("update", "verify")
         self.checks = {p: [] for p in phases}
         self.facts = {}
@@ -176,6 +187,10 @@ class Run:
         self.other_jar = self.jars / "{}-1.0.0.jar".format(OTHER_ID)
         self.first_jar = self.jars / "{}-1.0.0.jar".format(FIRST_ID)
         self.second_jar = self.jars / "{}-1.0.0.jar".format(SECOND_ID)
+        # guard-apply: the installed jars (copied in before that start) and what the fake Modrinth serves.
+        self.guard_jars = {name: self.jars / name for name in ("{}-1.0.0.jar".format(PIN_TARGET), "{}-2.0.0.jar".format(PIN_TARGET),
+                                                                "{}-1.0.0.jar".format(PINNER), "{}-1.0.0.jar".format(REV_TARGET),
+                                                                "{}-1.1.0.jar".format(REV_TARGET), "{}-1.0.0.jar".format(REV_ADD))}
 
     # --- plumbing -------------------------------------------------------------------------------------------------
 
@@ -315,7 +330,7 @@ class Run:
         shutil.copyfile(installed, self.mods / installed.name)
         api = self.fabric_api()
         shutil.copyfile(api, self.mods / api.name)
-        extra_projects = []
+        extra_projects, more_projects = [], []
         if self.legacy_jar is not None:
             e2e_env.test_mod_jar(self.legacy_jar, "e2e-legacy")
             shutil.copyfile(self.legacy_jar, self.mods / self.legacy_jar.name)
@@ -327,6 +342,7 @@ class Run:
             for jar, mod_id, project in ((self.first_jar, FIRST_ID, FIRST_PROJECT), (self.second_jar, SECOND_ID, SECOND_PROJECT)):
                 e2e_env.test_mod_jar(jar, mod_id)
                 extra_projects.append((project, mod_id, jar))
+            more_projects = self.guard_catalog()
         if self.seed is not None:
             self.seed_instance()
         (self.instance / "options.txt").write_text(OPTIONS, encoding="utf-8")
@@ -347,7 +363,8 @@ class Run:
         # The downgrade run's fake Modrinth knows only the released jar, so neither side is offered an update.
         self.served = self.old_jar if self.downgrade else self.new_jar
         self.catalog.write_text(json.dumps(e2e_env.catalog(None if self.downgrade else self.old_jar, self.served, self.mc, rules,
-                                                           extra_projects=extra_projects),
+                                                           extra_projects=extra_projects,
+                                                           more_projects=more_projects),
                                            indent=1), encoding="utf-8")
         common = e2e_env.jvm_args(self.hosts, self.tls) + list(self.args.jvm_arg or [])
         for phase in self.checks:
@@ -358,7 +375,9 @@ class Run:
                 lines.append("-Drigtune.e2e.alsoDisable=e2e-legacy")
             if self.undo:
                 lines += ["-Drigtune.e2e.addSlug=" + ADDED_ID, "-Drigtune.e2e.addProject=" + ADDED_PROJECT, "-Drigtune.e2e.disable=" + OTHER_ID,
-                          "-Drigtune.e2e.entryMods={}:{},{}:{}".format(FIRST_ID, FIRST_PROJECT, SECOND_ID, SECOND_PROJECT)]
+                          "-Drigtune.e2e.entryMods={}:{},{}:{}".format(FIRST_ID, FIRST_PROJECT, SECOND_ID, SECOND_PROJECT),
+                          "-Drigtune.e2e.pinTarget=" + PIN_TARGET, "-Drigtune.e2e.reverseTarget=" + REV_TARGET,
+                          "-Drigtune.e2e.reverseAdd={}:{}".format(REV_ADD, REV_ADD_PROJECT)]
             if phase in PROFILE_PHASES:
                 lines.append("-Drigtune.e2e.profilePlan=" + str(self.run_dir / "profile-plan.json"))
             (self.run_dir / "jvm-{}.txt".format(phase)).write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -366,6 +385,22 @@ class Run:
         code = self.gradle("gradle-driver.log", *self.driver_args(":{}:{}".format(self.mc, self.driver_jar_task())))
         if code != 0:
             raise SystemExit("building the driver failed; see " + str(self.run_dir / "gradle-driver.log"))
+
+    def guard_catalog(self):
+        """guard-apply's test mods, and their Modrinth projects: PIN_TARGET and REV_TARGET with the installed version and
+        its update, REV_ADD with one version that declares REV_TARGET's update incompatible (by version id)."""
+        now = datetime.datetime.now(datetime.timezone.utc)
+        older, newer = now - datetime.timedelta(days=2), now - datetime.timedelta(hours=1)
+        jar = lambda mod_id, version: self.guard_jars["{}-{}.jar".format(mod_id, version)]
+        for mod_id, version in ((PIN_TARGET, "1.0.0"), (PIN_TARGET, "2.0.0"), (REV_TARGET, "1.0.0"), (REV_TARGET, "1.1.0"), (REV_ADD, "1.0.0")):
+            e2e_env.test_mod_jar(jar(mod_id, version), mod_id, version)
+        e2e_env.test_mod_jar(jar(PINNER, "1.0.0"), PINNER, "1.0.0", depends={PIN_TARGET: "1.0.x"})
+        incompatible = {"project_id": REV_TARGET_PROJECT, "version_id": REV_TARGET_NEXT, "file_name": None, "dependency_type": "incompatible"}
+        return [(PIN_TARGET_PROJECT, PIN_TARGET, [e2e_env.version("E2EPinT1", jar(PIN_TARGET, "1.0.0"), older, self.mc),
+                                                  e2e_env.version("E2EPinT2", jar(PIN_TARGET, "2.0.0"), newer, self.mc)]),
+                (REV_TARGET_PROJECT, REV_TARGET, [e2e_env.version("E2ERevT1", jar(REV_TARGET, "1.0.0"), older, self.mc),
+                                                  e2e_env.version(REV_TARGET_NEXT, jar(REV_TARGET, "1.1.0"), newer, self.mc)]),
+                (REV_ADD_PROJECT, REV_ADD, [e2e_env.version(REV_ADD_VERSION, jar(REV_ADD, "1.0.0"), older, self.mc, [incompatible])])]
 
     def profile_plan(self):
         """What the undo driver's profile-apply does (profile-plan.json): the stand-in's switches, or the profiles to switch to."""
@@ -806,7 +841,20 @@ class Run:
                                               mods_before, statuses_before)
         checks.insert(0, e2e_checks.Check("the client exited normally", code == 0, "gradle exit {}".format(code)))
         self.checks["entry-check"] = checks
-        return all(c.ok for c in checks) and (not self.profile or self.run_profile_switch())
+        return all(c.ok for c in checks) and self.run_guard(exited) and (not self.profile or self.run_profile_switch())
+
+    def run_guard(self, exited):
+        """AC3f.7, on the same instance: the installed jars go in, then one start with the three Applies (guard_catalog)."""
+        installed = ["{}-1.0.0.jar".format(m) for m in (PIN_TARGET, PINNER, REV_TARGET)]
+        for name in installed:
+            shutil.copyfile(self.guard_jars[name], self.mods / name)
+        self.log("guard-apply: installed " + ", ".join(installed))
+        code, helper_ok, _ = self.launch_and_apply("guard-apply")
+        checks = [exited(code, helper_ok)] + e2e_checks.after_guard_apply(
+            self.instance, self.driver("guard-apply"), self.server_log(), installed, "{}-1.0.0.jar".format(REV_ADD),
+            (PIN_TARGET, "1.0.x", "2.0.0"), REV_ADD_VERSION, (REV_TARGET, PIN_TARGET))
+        self.checks["guard-apply"] = checks
+        return all(c.ok for c in checks)
 
     def run_profile_switch(self):
         """The profile part (P-H1), on its own instance: two switches in one start, then Undo last twice and a check

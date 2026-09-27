@@ -33,6 +33,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -69,6 +70,10 @@ import java.util.TreeMap;
  * -Drigtune.e2e.entryIds; screenshots History; quits.</li>
  * <li>{@code kill-first}, {@code kill-second}, {@code kill-check} (v0.5 helper-kill, docs/v0.5/SPEC.md AC3f.5): screenshots
  * History with the harness's staged group; quits (the helper, if any, runs at the exit).</li>
+ * <li>{@code guard-apply} (v0.5, AC3f.7): three Applies in one start, each after the one before has its outcome: the
+ * report's update of -Drigtune.e2e.pinTarget (an installed mod pins it), the addition -Drigtune.e2e.reverseAdd (slug:project),
+ * then the report's update of -Drigtune.e2e.reverseTarget (the staged addition's version declares that update incompatible).
+ * Records each outcome (the status line); quits.</li>
  * </ul>
  * Results go to -Drigtune.e2e.out as driver-&lt;phase&gt;.json; screenshots to the instance's screenshots folder.
  */
@@ -95,6 +100,12 @@ public final class UndoDriver implements ClientModInitializer {
 	// The profile part (profile-*): the plan file ({mode, switches: [{name, settings}]}) and the switch entries.
 	private final String profilePlan = System.getProperty("rigtune.e2e.profilePlan");
 	private final String entryIds = System.getProperty("rigtune.e2e.entryIds", "");
+	// guard-apply (AC3f.7): the mod ids whose report updates are applied, and the slug:project added in between.
+	private final String pinTarget = System.getProperty("rigtune.e2e.pinTarget", "");
+	private final String reverseTarget = System.getProperty("rigtune.e2e.reverseTarget", "");
+	private final String reverseAdd = System.getProperty("rigtune.e2e.reverseAdd", "");
+	private int guardStep;
+	private Component statusBefore;
 	private final List<Map<String, Object>> undoPlans = new ArrayList<>();
 	private JsonObject plan;
 	private int undone;
@@ -114,7 +125,7 @@ public final class UndoDriver implements ClientModInitializer {
 	public void onInitializeClient() {
 		if (phase == null || !List.of("mod-apply", "mod-undo", "mod-check", "entry-apply", "entry-undo", "entry-check",
 				"profile-apply", "profile-undo", "profile-check", "profile-undo-all", "profile-check-all", "kill-first", "kill-second",
-				"kill-check").contains(phase)) {
+				"kill-check", "guard-apply").contains(phase)) {
 			return;
 		}
 		out = Path.of(System.getProperty("rigtune.e2e.out", "e2e-out")).toAbsolutePath();
@@ -403,8 +414,86 @@ public final class UndoDriver implements ClientModInitializer {
 					next(Step.QUIT);
 				}
 			}
+			case "guard-apply" -> guard(minecraft, controller);
 			default -> fail(minecraft, "unknown phase " + phase);
 		}
+	}
+
+	// guard-apply: each Apply's outcome is the status line its downloads leave (the Apply itself only says they started).
+	private void guard(Minecraft minecraft, RigTuneController controller) {
+		if (stepTicks % 10 != 0) {
+			return;
+		}
+		switch (guardStep) {
+			case 0 -> {
+				Recommendation pin = updateRow(controller, pinTarget);
+				Recommendation reverse = updateRow(controller, reverseTarget);
+				if (pin != null && reverse != null) {
+					guardApply(controller, pin, "pin");
+				} else if (stepTicks > READY_TIMEOUT) {
+					fail(minecraft, "no update rows for " + pinTarget + " and " + reverseTarget + " in "
+							+ controller.report().recommendations().stream().map(Recommendation::id).toList());
+				}
+			}
+			case 1 -> {
+				if (outcome(controller, "pin")) {
+					String[] add = reverseAdd.split(":", 2);
+					guardApply(controller, new Recommendation("add:" + add[0], Category.ADD_MOD, Impact.LOW, "Install " + add[0], "E2E test mod",
+							new Action.AddMod(add[0], add[1], add[0]), true), "add");
+				}
+			}
+			case 2 -> {
+				String[] add = reverseAdd.split(":", 2);
+				if (outcome(controller, "add") && ops().stream().anyMatch(op -> "ENABLE_FILE".equals(op.get("type")) && add[0].equals(op.get("modId")))) {
+					guardApply(controller, updateRow(controller, reverseTarget), "reverse");
+				}
+			}
+			case 3 -> {
+				if (outcome(controller, "reverse")) {
+					result.put("pendingOps", ops());
+					RigTuneClient.open(minecraft.gui.screen());
+					next(Step.SHOT);
+				}
+			}
+			default -> {
+			}
+		}
+		if (guardStep < 3 && stepTicks > STAGE_TIMEOUT) {
+			fail(minecraft, "guard-apply step " + guardStep + " had no outcome within " + STAGE_TIMEOUT / SECOND + " s");
+		}
+	}
+
+	private static List<Map<String, Object>> ops() {
+		try {
+			return pendingOps();
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
+
+	private static Recommendation updateRow(RigTuneController controller, String modId) {
+		return controller.report() == null ? null
+				: controller.report().recommendations().stream().filter(r -> r.id().equals("update:" + modId)).findFirst().orElse(null);
+	}
+
+	private void guardApply(RigTuneController controller, Recommendation rec, String name) {
+		statusBefore = controller.status();
+		Component message = controller.apply(List.of(rec));
+		result.put(name + "Apply", message.getString());
+		event("apply " + rec.id() + ": " + message.getString());
+		guardStep++;
+		stepTicks = 0;
+	}
+
+	// A new status line once the Apply's downloads are done (finishDownloads sets a new one, refused or staged).
+	private boolean outcome(RigTuneController controller, String name) {
+		Component status = controller.status();
+		if (status == null || status == statusBefore) {
+			return false;
+		}
+		result.put(name + "Status", status.getString());
+		event(name + " outcome: " + status.getString());
+		return true;
 	}
 
 	// Switches to the profile `name` (a template or saved profile, matched by its shown name or id) the way the Profiles

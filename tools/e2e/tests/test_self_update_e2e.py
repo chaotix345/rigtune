@@ -115,9 +115,9 @@ class LockTest(unittest.TestCase):
 
 
 class UndoScenarioTest(unittest.TestCase):
-    def test_the_undo_scenario_ends_with_the_per_entry_phases(self):
+    def test_the_undo_scenario_ends_with_the_per_entry_and_guard_phases(self):
         run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo")
-        self.assertEqual(["mod-apply", "mod-undo", "mod-check", "entry-apply", "entry-undo", "entry-check"], list(run.checks))
+        self.assertEqual(["mod-apply", "mod-undo", "mod-check", "entry-apply", "entry-undo", "entry-check", "guard-apply"], list(run.checks))
 
     def test_entry_id_is_added_to_a_phase_after_the_earlier_launch(self):
         run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo")

@@ -227,7 +227,8 @@ class ProfileScenarioTest(unittest.TestCase):
 
     def test_the_hook_adds_its_phases_after_the_per_entry_ones(self):
         run = make_run(Path(tempfile.mkdtemp()), "--scenario", "undo", "--profile-switch", "settings")
-        self.assertEqual(list(self_update_e2e.UNDO_PHASES + self_update_e2e.ENTRY_PHASES + self_update_e2e.PROFILE_PHASES), list(run.checks))
+        self.assertEqual(list(self_update_e2e.UNDO_PHASES + self_update_e2e.ENTRY_PHASES + self_update_e2e.GUARD_PHASES
+                              + self_update_e2e.PROFILE_PHASES), list(run.checks))
         self.assertEqual(("profile-apply", "profile-undo", "profile-check", "profile-undo-all", "profile-check-all"),
                          self_update_e2e.PROFILE_PHASES)
 
