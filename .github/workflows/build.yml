@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       gametest_parts:
-        description: "JVMs per game-test leg (the dormant split, docs/v0.5/SPEC.md 1g); empty = tools/gametest_matrix.py's PARTS"
+        description: "JVMs per game-test leg (the split, docs/v0.5/SPEC.md 1g); empty = GAMETEST_PARTS below"
         required: false
         type: string
 
@@ -27,6 +27,11 @@ concurrency:
 # loopback (tools/ci/offline.sh). The game tests' Modrinth is a local fake (build.gradle's ModrinthFixture), their rules a
 # local fixture (RulesFixtureServer). Runner images are pinned: ubuntu-latest moves to 26.04 (another Mesa and Xvfb) in
 # November 2026.
+env:
+  # The game-test split (docs/v0.5/SPEC.md 1g): JVMs per leg, each running a contiguous slice of the classes
+  # (tools/gametest_matrix.py). 1 = off. A dispatch's gametest_parts input overrides it for that run.
+  GAMETEST_PARTS: 1
+
 jobs:
   java:
     runs-on: ubuntu-24.04
@@ -124,9 +129,9 @@ jobs:
       - id: matrix
         name: List the game-test legs
         env:
-          PARTS: ${{ inputs.gametest_parts }}
+          PARTS: ${{ inputs.gametest_parts || env.GAMETEST_PARTS }}
         run: |
-          matrix=$(python3 tools/gametest_matrix.py ${PARTS:+--parts "$PARTS"})
+          matrix=$(python3 tools/gametest_matrix.py --parts "$PARTS")
           echo "$matrix"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
@@ -138,7 +143,8 @@ jobs:
     name: client game tests (${{ matrix.mc }}, ${{ matrix.backend }}${{ matrix.part && format(', part {0}', matrix.part) || '' }})
     needs: gametest-matrix
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # The 15-min game-test step plus a cold cache and one retry cycle of the network step.
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.gametest-matrix.outputs.matrix) }}
@@ -194,19 +200,26 @@ jobs:
       # With no network but loopback: RigTune gets Modrinth and its rules from local fixtures, and Minecraft's own
       # services (accounts, Realms) fail at once, the same way every run. If the game finds no graphics backend it opens a
       # blocking error dialog, so a hang means a timeout here; at 13 min the game's JVM (the java process whose command line
-      # has KnotClient; Gradle's and the fake Modrinth's are java too) prints every thread's stack and locks into this log
-      # first (run 36235561444 hung with none). The whole /proc/<pid>/cmdline is searched: KnotClient comes after a long
-      # classpath.
+      # has KnotClient as an argument; Gradle's and the fake Modrinth's are java too) prints every thread's stack and locks
+      # into this log first (run 36235561444 hung with none). The whole /proc/<pid>/cmdline is read: KnotClient comes after
+      # a long classpath. At 14 min timeout (as root, in offline.sh) ends Gradle, xvfb-run and the game; the step's 15-min
+      # limit is the backstop. A failed run lists any java process left.
       - name: Client game tests
         timeout-minutes: 15
         run: |
           set -eu
           ( sleep 780; for p in $(pgrep -x java || true); do
-              if tr '\0' '\n' < "/proc/$p/cmdline" 2>/dev/null | grep -qF KnotClient; then kill -QUIT "$p" || true; fi
+              if tr '\0' '\n' < "/proc/$p/cmdline" 2>/dev/null | grep -qxF net.fabricmc.loader.impl.launch.knot.KnotClient; then kill -QUIT "$p" || true; fi
             done ) >/dev/null 2>&1 &
           watcher=$!
           trap 'kill "$watcher" 2>/dev/null || true' EXIT
-          tools/ci/offline.sh ./gradlew --no-daemon --offline ":${{ matrix.mc }}:runProductionClientGameTest" "-PgametestClasses=$GAMETEST_CLASSES" --stacktrace
+          code=0
+          tools/ci/offline.sh --timeout 14m ./gradlew --no-daemon --offline ":${{ matrix.mc }}:runProductionClientGameTest" "-PgametestClasses=$GAMETEST_CLASSES" --stacktrace || code=$?
+          if [ "$code" -ne 0 ]; then
+            echo "The game-test run exited $code (124: stopped by the 14-min timeout)"
+            ps -o pid,user,etime,comm -C java || echo "No java process left"
+            exit "$code"
+          fi
       # A leg whose backend fails falls back to the other one and would still pass: fail it instead.
       # The line is written at start-up; a run that crosses midnight UTC has it in the rotated
       # log (logs/<date>-<n>.log.gz), not latest.log, so both are searched.

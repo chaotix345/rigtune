@@ -341,6 +341,7 @@ class HttpModrinthClientTest {
 		IOException e = assertThrows(IOException.class, () -> capped.projects(List.of("sodium")));
 
 		assertTrue(e.getMessage().contains("larger than 100 bytes"), e.getMessage());
+		assertEquals(1, capped.clientsBuilt(), "a body over its cap says nothing about the connection: the client stays");
 	}
 
 	@Test
@@ -682,6 +683,42 @@ class HttpModrinthClientTest {
 		assertEquals(2, transport.calls.get(), "one request and one retry, then no more requests");
 		assertEquals(1, warnings.size(), warnings.toString());
 		assertTrue(warnings.getFirst().contains("Stream 5 cancelled") && warnings.getFirst().contains("ClosedChannelException"), warnings.getFirst());
+	}
+
+	// ws-ci review: a request that got a client just before another thread's failure dropped it fails (the JDK refuses new
+	// requests on a client that is shutting down); it is sent once more on the fresh client. A download, which has no retry
+	// of its own.
+	@Test
+	void aRequestOnAClientAnotherFailureJustDroppedIsSentOnTheFreshOne(@TempDir Path dir) throws Exception {
+		byte[] jar = "pretend jar".getBytes(StandardCharsets.UTF_8);
+		ModFile file = new ModFile(url("/cdn/mod.jar"), "mod.jar", sha512(jar), jar.length);
+		responses.put("/cdn/mod.jar", new Response(200, jar));
+		AtomicInteger calls = new AtomicInteger();
+		HttpModrinthClient[] owner = new HttpModrinthClient[1];
+		HttpModrinthClient.Transport transport = new HttpModrinthClient.Transport() {
+			@Override
+			public <T> java.net.http.HttpResponse<T> send(HttpClient http, java.net.http.HttpRequest request,
+					java.net.http.HttpResponse.BodyHandler<T> handler, io.github.chaotix345.rigtune.core.net.BoundedHttp.Progress progress,
+					Duration stall, Duration deadline) throws IOException {
+				int call = calls.incrementAndGet();
+				if (call == 1) {
+					// Meanwhile another download on the same client fails on its connection and drops the client.
+					assertThrows(IOException.class, () -> owner[0].download(file, dir.resolve("other.jar.rigtune-pending")));
+					throw new IOException("closed");
+				}
+				if (call == 2) {
+					throw new IOException("Connection reset");
+				}
+				return io.github.chaotix345.rigtune.core.net.BoundedHttp.send(http, request, handler, progress, stall, deadline);
+			}
+		};
+		owner[0] = new HttpModrinthClient("1.2.3", url("/"), FAST, transport);
+
+		owner[0].download(file, dir.resolve("mod.jar.rigtune-pending"));
+
+		assertEquals("pretend jar", Files.readString(dir.resolve("mod.jar.rigtune-pending")));
+		assertEquals(3, calls.get(), "the first download was sent once more");
+		assertEquals(2, owner[0].clientsBuilt(), "on the client built after the drop");
 	}
 
 	// Fails the first `failures` sends like the JDK did on 2026-09-26, then sends for real.

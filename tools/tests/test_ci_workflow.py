@@ -110,7 +110,7 @@ class BuildWorkflowTests(unittest.TestCase):
     def test_tests_run_in_the_loopback_only_namespace(self):
         game = [s for s in self.jobs["client-gametest"]["steps"] if s.get("name") == "Client game tests"]
         self.assertEqual(1, len(game))
-        self.assertRegex(game[0]["run"], r"tools/ci/offline\.sh ./gradlew [^\n]*--offline[^\n]*:runProductionClientGameTest")
+        self.assertRegex(game[0]["run"], r"tools/ci/offline\.sh (--timeout \S+ )?./gradlew [^\n]*--offline[^\n]*:runProductionClientGameTest")
         build = [s for s in self.jobs["java"]["steps"] if s.get("name") == "Build and test"]
         self.assertIn("tools/ci/offline.sh ./gradlew", build[0]["run"])
         for s in self.jobs["python"]["steps"]:
@@ -135,6 +135,7 @@ class BuildWorkflowTests(unittest.TestCase):
         source = (ROOT / "tools" / "ci" / "MulticastCheck.java").read_text(encoding="utf-8")
         self.assertIn('"224.0.2.60"', source)
         self.assertIn("new MulticastSocket(4445)", source)
+        self.assertIn("{1, 1, 1, 1}), 443", source, "and something off the machine stays unreachable")
 
     def test_no_step_ignores_its_failure(self):
         self.assertNotIn("continue-on-error", self.text)
@@ -144,12 +145,22 @@ class BuildWorkflowTests(unittest.TestCase):
         job = self.jobs["client-gametest"]
         game = [s for s in job["steps"] if s.get("name") == "Client game tests"][0]
         self.assertGreaterEqual(int(game["timeout-minutes"]), 15)
-        self.assertGreater(int(job["keys"]["timeout-minutes"]), int(game["timeout-minutes"]))
+        # Room for a cold cache and one retry cycle of the network step before the game tests (coordinator: 35 min).
+        self.assertGreaterEqual(int(job["keys"]["timeout-minutes"]), int(game["timeout-minutes"]) + 20)
+        # The dump at `sleep N`, then offline.sh's timeout (TERM as root, KILL 30 s later), both inside the step's limit.
+        dump = int(re.search(r"sleep (\d+);", game["run"]).group(1))
+        limit = re.search(r"offline\.sh --timeout (\d+)m ", game["run"])
+        self.assertIsNotNone(limit, "the game-test run has offline.sh's timeout")
+        self.assertLess(dump, int(limit.group(1)) * 60)
+        self.assertLessEqual(int(limit.group(1)) * 60 + 30, int(game["timeout-minutes"]) * 60 - 30)
+        script = (ROOT / "tools" / "ci" / "offline.sh").read_text(encoding="utf-8")
+        self.assertIn("timeout --kill-after=30s", script)
+        self.assertLess(script.index('"${limit[@]}"'), script.index("setpriv"), "the timeout runs as root, outside setpriv")
         self.assertIn("kill -QUIT", game["run"])
         # The game's JVM runs KnotClient; Gradle's and the fake Modrinth's JVMs are java too (SPEC 1e). KnotClient comes
         # after the classpath, so the whole cmdline is searched, not pgrep -f's view of it.
         self.assertIn("pgrep -x java", game["run"])
-        self.assertIn('/proc/$p/cmdline" 2>/dev/null | grep -qF KnotClient', game["run"])
+        self.assertIn('/proc/$p/cmdline" 2>/dev/null | grep -qxF net.fabricmc.loader.impl.launch.knot.KnotClient', game["run"])
         self.assertNotIn("pgrep -f", game["run"])
 
     # SPEC 1g: the dormant split. A part's classes reach both Gradle steps, and its artifacts and job name say which part.
@@ -164,8 +175,11 @@ class BuildWorkflowTests(unittest.TestCase):
         self.assertEqual(3, len(artifacts))
         for name in artifacts:
             self.assertTrue(name.endswith("${{ matrix.suffix }}"), name)
+        # One flag in build.yml switches the split (1 = off); a dispatch input overrides it for one run.
+        self.assertRegex(self.text, r"(?m)^env:\n(  #.*\n)*  GAMETEST_PARTS: 1$")
         matrix = [s for s in self.jobs["gametest-matrix"]["steps"] if s.get("id") == "matrix"][0]
-        self.assertIn('${PARTS:+--parts "$PARTS"}', matrix["run"])
+        self.assertIn('--parts "$PARTS"', matrix["run"])
+        self.assertIn("PARTS: ${{ inputs.gametest_parts || env.GAMETEST_PARTS }}", self.text)
 
 
 class StreakWorkflowsTests(unittest.TestCase):
