@@ -135,7 +135,8 @@ public final class LegacyImport {
 			} catch (InvalidPathException ignored) {
 			}
 		}
-		return out;
+		// docs/v0.5/SPEC.md 2H RW-4: the old jar of an update is often gone by now, so its disable pairs with its enable.
+		return StagedChanges.pairUpdates(out);
 	}
 
 	// Where a disabled jar went: resultPath (0.2), else 0.1.0's "Disabled x -> y" message, else x.disabled; unknown
