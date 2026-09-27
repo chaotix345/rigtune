@@ -10,12 +10,15 @@ import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.awareness.AwarenessService;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkMenuScreen;
+import io.github.chaotix345.rigtune.client.ui.NoticeScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.core.awareness.WhatsNew;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.notice.Notice;
+import io.github.chaotix345.rigtune.core.notice.NoticePriority;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -32,6 +35,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
@@ -87,7 +91,94 @@ public class AwarenessGameTest implements FabricClientGameTest {
 
 	// ---- WS-W (AW-1, AW-2).
 
+	// AW-2 (AC2W.2): NoticeScreen at 854x480 GUI scale 3 lists two notices above a fresh driver notice that doesn't fit;
+	// dismissing the top one rebuilds it, the driver notice is listed and awareness.json holds the new driver. AW-1
+	// (AC2W.1): a rescan keeps the shown, committed notice; its own Re-scan retires it. The 0.4 block dismissed the same
+	// key for this session, so the notice line never shows it: a wrapper lists it on NoticeScreen under the two canned ones.
 	private static void awarenessFixes(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		RealController real = v05.realController();
+		Path file = real.awarenessService().file();
+		String current = seedOlderDriver(file);
+		rescan(context, real);
+		Notice hardware = context.computeOnClient(mc -> real.awarenessService().hardwareNotice());
+		check(hardware != null && hardware.message().english().startsWith("Your GPU driver changed since last time ("), "a fresh driver notice: " + hardware);
+		check(!current.equals(storedDriver(file)), "not shown yet, so not committed");
+		ListedNotices listed = new ListedNotices(real);
+		try {
+			v05.resize(V05TestContext.SCROLLING[0], V05TestContext.SCROLLING[1], V05TestContext.SCROLLING[2]);
+			context.runOnClient(mc -> mc.gui.setScreen(new NoticeScreen(new TitleScreen(), listed)));
+			context.waitForScreen(NoticeScreen.class);
+			context.waitTicks(3);
+			List<Notice> before = context.computeOnClient(mc -> ((NoticeScreen) mc.gui.screen()).shown());
+			check(context.computeOnClient(mc -> listed.notices().size()) >= 3, "three notices");
+			check(before.stream().noneMatch(n -> n.key().equals(hardware.key())), "the driver notice doesn't fit below the other two: " + before);
+			screenshot(context, "awareness-aw2-before-854x480-scale3");
+			check(!current.equals(storedDriver(file)), "not listed, so not committed");
+
+			press(context, "rigtune.notice.dismiss");
+			List<Notice> after = context.computeOnClient(mc -> ((NoticeScreen) mc.gui.screen()).shown());
+			check(after.stream().anyMatch(n -> n.key().equals(hardware.key())), "listed after the rebuild: " + after);
+			context.waitFor(mc -> current.equals(storedDriver(file)), 100);
+			screenshot(context, "awareness-aw2-after-854x480-scale3");
+			RigTune.LOGGER.info("AwarenessGameTest: AW-2: the driver notice listed after a NoticeScreen rebuild committed {}", current);
+
+			context.runOnClient(mc -> real.rescan());
+			context.waitFor(mc -> real.report() != null, 1200);
+			Notice kept = context.computeOnClient(mc -> real.awarenessService().hardwareNotice());
+			check(kept != null && kept.key().equals(hardware.key()), "AW-1: a rescan keeps the shown notice: " + kept);
+
+			press(context, "rigtune.awareness.rescan");
+			context.waitFor(mc -> real.report() != null && real.awarenessService().hardwareNotice() == null, 1200);
+			check(context.computeOnClient(mc -> ((NoticeScreen) mc.gui.screen()).shown()).stream().noneMatch(n -> n.key().equals(hardware.key())),
+					"its own Re-scan retired it");
+			screenshot(context, "awareness-aw1-retired-854x480-scale3");
+			RigTune.LOGGER.info("AwarenessGameTest: AW-1: the committed driver notice survived a rescan; its own Re-scan retired it");
+		} finally {
+			v05.resize(1280, 720, 2);
+			openRigTune(context);
+		}
+	}
+
+	// An older driver string in the fingerprint (as seed() does); returns the stored, current one.
+	private static String seedOlderDriver(Path file) {
+		JsonObject root = JsonParser.parseString(read(file)).getAsJsonObject();
+		JsonObject fingerprint = root.getAsJsonObject("fingerprint");
+		String current = fingerprint.get("gpuDriverRaw").getAsString();
+		fingerprint.addProperty("gpuDriverRaw", current.contains("Mesa") ? "4.5 (Core Profile) Mesa 23.0.0" : "0.0 (an older driver)");
+		write(file, root.toString());
+		return current;
+	}
+
+	// The real controller with two canned, dismissible notices listed above the hardware notice (the source's own, not
+	// filtered by this session's dismissals); their dismissals stay here.
+	private static final class ListedNotices extends ForwardingController {
+		private final RealController real;
+		private final List<Notice> canned = new ArrayList<>(List.of(
+				new Notice("test-aw2-first", NoticePriority.BENCHMARK_REGRESSION, Text.literal("A notice listed first"), null, List.of(), true),
+				new Notice("test-aw2-second", NoticePriority.BENCHMARK_REGRESSION, Text.literal("A notice listed second"), null, List.of(), true)));
+
+		ListedNotices(RealController real) {
+			super(real);
+			this.real = real;
+		}
+
+		@Override
+		public List<Notice> notices() {
+			List<Notice> out = new ArrayList<>(canned);
+			Notice hardware = real.awarenessService().hardwareNotice();
+			if (hardware != null) {
+				out.add(hardware);
+			}
+			return out;
+		}
+
+		@Override
+		public void dismissNotice(String key) {
+			if (!canned.removeIf(n -> n.key().equals(key))) {
+				super.dismissNotice(key);
+			}
+		}
 	}
 
 	// ---- WS-W2 (C18, AC9.2-AC9.3): a seeded startup-times.json and the STARTUP_REGRESSION notice.
