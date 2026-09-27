@@ -67,16 +67,24 @@ def missing(lines):
     return [name for name in EXPECTED if name not in names]
 
 
-def main(argv=None):
+def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--old-jar", required=True, help="the released rigtune-0.3.0+mc26.2.jar")
-    parser.add_argument("--written", default=str(REPO / "src" / "test" / "resources" / "v040-written"))
+    parser.add_argument("--written", action="append",
+                        help="a fixture root (repeatable; default: v040-written, plus v050-written when it exists: "
+                             "docs/v0.5/SPEC.md AC3b.2)")
     parser.add_argument("--rules", default=str(REPO / "src" / "main" / "resources" / "rigtune" / "rules-v2.json"))
     parser.add_argument("--gradle-cache", default=str(Path.home() / ".gradle" / "caches" / "modules-2" / "files-2.1"))
     parser.add_argument("--java", default=str(Path(os.environ["JAVA_HOME"]) / "bin" / "java") if os.environ.get("JAVA_HOME") else "java")
     parser.add_argument("--work", help="folder for the composed instance (default: a new temporary folder)")
     parser.add_argument("--out", help="write the checks here as JSON")
     args = parser.parse_args(argv)
+    args.written = args.written or [str(p) for p in self_update_e2e.default_written(REPO)]
+    return args
+
+
+def main(argv=None):
+    args = parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="backslashreplace")  # a redirected stdout on Windows is cp1252
 
@@ -87,9 +95,9 @@ def main(argv=None):
         raise SystemExit("{} isn't the released 0.3.0 jar Compat030.java is written for: {}".format(old, problem or version))
 
     instance = Path(args.work or tempfile.mkdtemp(prefix="compat030-")).resolve() / "instance"
-    sets = written.resolve(args.written)
+    sets = written.resolve_all(args.written)
     sources = written.compose(sets, instance)
-    print("sets: " + ", ".join("{}{}".format(s.name, " (PLACEHOLDER)" if s.placeholder else "") for s in sets))
+    print("sets: " + ", ".join("{}/{}{}".format(s.generation, s.name, " (PLACEHOLDER)" if s.placeholder else "") for s in sets))
     print("files: " + ", ".join("{} <- {}".format(name, "+".join(owners)) for name, owners in sources.items()))
 
     cp = os.pathsep.join(str(p) for p in classpath(old, args.gradle_cache, loader_version(REPO / "gradle.properties")))
