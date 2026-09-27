@@ -27,7 +27,8 @@ def failing(checks):
 
 class ReleasedJarTest(unittest.TestCase):
     def test_every_released_old_side_is_pinned(self):
-        self.assertEqual({"0.1.0", "0.2.0+mc26.2", "0.3.0+mc26.2"}, set(self_update_e2e.RELEASED))
+        self.assertEqual({"0.1.0", "0.2.0+mc26.2", "0.3.0+mc26.2", "0.2.0+mc26.3", "0.3.0+mc26.3", "0.4.0+mc26.2", "0.4.0+mc26.3"},
+                         set(self_update_e2e.RELEASED))
         self.assertEqual(("rigtune-0.3.0+mc26.2.jar", "5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9"),
                          self_update_e2e.RELEASED["0.3.0+mc26.2"])
 

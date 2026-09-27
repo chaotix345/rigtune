@@ -54,16 +54,30 @@ jobs:
           gh release download v0.1.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.1.0.jar' -D "$old" --clobber
           gh release download v0.2.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.2.0+mc26.2.jar' -D "$old" --clobber
           gh release download v0.3.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.3.0+mc26.2.jar' -D "$old" --clobber
+          gh release download v0.2.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.2.0+mc26.3.jar' -D "$old" --clobber
+          gh release download v0.3.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.3.0+mc26.3.jar' -D "$old" --clobber
+          gh release download v0.4.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.4.0+mc26.2.jar' -D "$old" --clobber
+          gh release download v0.4.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.4.0+mc26.3.jar' -D "$old" --clobber
           sha256sum -c - <<EOF
           8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950  $old/rigtune-0.1.0.jar
           67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9  $old/rigtune-0.2.0+mc26.2.jar
           5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9  $old/rigtune-0.3.0+mc26.2.jar
+          98a2a2e14d7cc49fcaa1fde087d40d1ace277b721ee6bc9d1ba94ced29a0a7d9  $old/rigtune-0.2.0+mc26.3.jar
+          cc43ebdf6b92666e5cf380004252fa59a81fa72b90f44cb280e45063cbf28084  $old/rigtune-0.3.0+mc26.3.jar
+          801cd3b8e91c6a27b819d64c5b433bea6d7ac99d4776cb853c873a9cafdd868a  $old/rigtune-0.4.0+mc26.2.jar
+          2d8328d73cb4789142036325eed11d1cd4ce6678fff7ca539cab9c09781499a7  $old/rigtune-0.4.0+mc26.3.jar
           EOF
           ./gradlew compileE2eUndoJava
           ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.1.0.jar"
           ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.2.0+mc26.2.jar"
           ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.2.jar"
+          ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.4.0+mc26.2.jar"
+          ./gradlew :26.3:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.2.0+mc26.3.jar"
+          ./gradlew :26.3:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.3.jar"
+          ./gradlew :26.3:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.4.0+mc26.3.jar"
           ./gradlew :26.2:compileE2eDowngradeJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.2.jar"
+          ./gradlew :26.2:compileE2eDowngradeJava "-Pe2e.oldJar=$old/rigtune-0.4.0+mc26.2.jar"
+          ./gradlew :26.3:compileE2eDowngradeJava "-Pe2e.oldJar=$old/rigtune-0.4.0+mc26.3.jar"
           # The released-jar compatibility harness (docs/v0.4/SPEC.md AC3.3): 0.3.0's own classes read the files 0.4 writes.
           python3 tools/e2e/compat030.py --old-jar "$old/rigtune-0.3.0+mc26.2.jar"
       - name: Upload jars

@@ -1,0 +1,166 @@
+# Research experiment (docs/research/v0.5/verification-gaps.md, r-verify): the self-update E2E on Linux CI under Xvfb,
+# and the probes behind the battery and LAN-guest test designs. Runs only on the research branch.
+name: r-verify-experiment
+
+on:
+  push:
+    branches: [research/v05-verify]
+
+permissions:
+  contents: read
+
+jobs:
+  e2e-linux:
+    name: e2e ${{ matrix.name }} (${{ matrix.mc }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { mc: '26.2', name: linux-v040-to-dev, tag: v0.4.0, old: 'rigtune-0.4.0+mc26.2.jar', args: '--expect-history auto' }
+          - { mc: '26.3', name: linux-v040-to-dev, tag: v0.4.0, old: 'rigtune-0.4.0+mc26.3.jar', args: '--expect-history auto' }
+          - { mc: '26.2', name: linux-v010-seeded-to-dev, tag: v0.1.0, old: 'rigtune-0.1.0.jar', args: '--seed tools/e2e/seeds/v010-dh --expect-history auto' }
+          - { mc: '26.3', name: linux-undo-after-restart, tag: '', old: '', args: '--scenario undo' }
+    env:
+      SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER: skip
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Build the new jar
+        run: |
+          set -eu
+          ./gradlew ":${{ matrix.mc }}:jar"
+          mkdir -p "$RUNNER_TEMP/jars"
+          cp versions/${{ matrix.mc }}/build/libs/rigtune-*+mc${{ matrix.mc }}.jar "$RUNNER_TEMP/jars/"
+          ls -l "$RUNNER_TEMP/jars"
+      - name: Download the released old jar
+        if: matrix.old != ''
+        run: gh release download "${{ matrix.tag }}" -R "$GITHUB_REPOSITORY" -p '${{ matrix.old }}' -D "$RUNNER_TEMP/jars" --clobber
+      - name: Let the fake Modrinth bind 443
+        run: sudo sysctl -w net.ipv4.ip_unprivileged_port_start=443
+      - name: Run the E2E scenario
+        run: |
+          set -u
+          new=$(ls "$RUNNER_TEMP"/jars/rigtune-*-dev+mc${{ matrix.mc }}.jar)
+          old_args=()
+          if [ -n "${{ matrix.old }}" ]; then
+            old_args=(--old-jar "$RUNNER_TEMP/jars/${{ matrix.old }}")
+          fi
+          start=$(date +%s)
+          python3 tools/e2e/self_update_e2e.py --lock none --mc "${{ matrix.mc }}" --name "${{ matrix.name }}" \
+            "${old_args[@]}" --new-jar "$new" --work "$RUNNER_TEMP/e2e" \
+            --evidence "$RUNNER_TEMP/evidence/${{ matrix.name }}-${{ matrix.mc }}" ${{ matrix.args }}
+          rc=$?
+          echo "wall seconds: $(( $(date +%s) - start )), exit $rc"
+          exit $rc
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-${{ matrix.name }}-${{ matrix.mc }}
+          path: |
+            ${{ runner.temp }}/evidence/
+            ${{ runner.temp }}/e2e/*/e2e.log
+            ${{ runner.temp }}/e2e/*/gradle-*.log
+            ${{ runner.temp }}/e2e/*/instance*/logs/
+            ${{ runner.temp }}/e2e/*/instance*/crash-reports/
+          if-no-files-found: ignore
+
+  probes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25'
+      - name: Load the kernel's simulated battery (test_power)
+        run: |
+          uname -r
+          sudo modprobe test_power || { sudo apt-get update && sudo apt-get install -y "linux-modules-extra-$(uname -r)" && sudo modprobe test_power; }
+          ls -l /sys/class/power_supply/ /sys/module/test_power/parameters/
+          for d in /sys/class/power_supply/*; do echo "== $d"; cat "$d/uevent"; done
+          sudo chmod a+w /sys/module/test_power/parameters/ac_online /sys/module/test_power/parameters/battery_status
+          ls -l /sys/module/test_power/parameters/
+      - name: Read it with OSHI 6.9.0 (the game's version), flipping AC and battery state in between
+        run: |
+          set -eu
+          cd "$RUNNER_TEMP"
+          m=https://repo1.maven.org/maven2
+          curl -sfLO $m/com/github/oshi/oshi-core/6.9.0/oshi-core-6.9.0.jar
+          curl -sfLO $m/net/java/dev/jna/jna/5.17.0/jna-5.17.0.jar
+          curl -sfLO $m/net/java/dev/jna/jna-platform/5.17.0/jna-platform-5.17.0.jar
+          curl -sfLO $m/org/slf4j/slf4j-api/2.0.17/slf4j-api-2.0.17.jar
+          cat > PowerProbe.java <<'EOF'
+          import oshi.SystemInfo;
+          import oshi.hardware.PowerSource;
+          import java.nio.file.Files;
+          import java.nio.file.Path;
+          import java.util.List;
+
+          public class PowerProbe {
+              static final Path P = Path.of("/sys/module/test_power/parameters");
+
+              public static void main(String[] args) throws Exception {
+                  List<PowerSource> sources = new SystemInfo().getHardware().getPowerSources();
+                  print("initial", sources);
+                  set("ac_online", "off");
+                  set("battery_status", "discharging");
+                  print("after ac_online=off, battery_status=discharging", sources);
+                  set("ac_online", "on");
+                  set("battery_status", "charging");
+                  print("after ac_online=on, battery_status=charging", sources);
+                  print("a fresh SystemInfo", new SystemInfo().getHardware().getPowerSources());
+              }
+
+              static void set(String name, String value) throws Exception {
+                  Files.writeString(P.resolve(name), value);
+              }
+
+              static void print(String title, List<PowerSource> sources) {
+                  System.out.println("== " + title);
+                  for (PowerSource s : sources) {
+                      boolean updated = s.updateAttributes();
+                      boolean real = !((s.getDeviceName() == null || s.getDeviceName().equalsIgnoreCase("unknown"))
+                              && (s.getChemistry() == null || s.getChemistry().equalsIgnoreCase("unknown")))
+                              && Math.max(s.getMaxCapacity(), s.getDesignCapacity()) > 1;
+                      System.out.println(s.getName() + " | device=" + s.getDeviceName() + " chemistry=" + s.getChemistry()
+                              + " max=" + s.getMaxCapacity() + " design=" + s.getDesignCapacity() + " powerOnLine=" + s.isPowerOnLine()
+                              + " discharging=" + s.isDischarging() + " charging=" + s.isCharging() + " updated=" + updated
+                              + " -> RigTune realBattery=" + real + ", onBattery=" + (real && !s.isPowerOnLine() && s.isDischarging()));
+                  }
+              }
+          }
+          EOF
+          java -cp oshi-core-6.9.0.jar:jna-5.17.0.jar:jna-platform-5.17.0.jar:slf4j-api-2.0.17.jar PowerProbe.java
+      - name: LAN discovery on the runner (vanilla's multicast group and port)
+        run: |
+          cd "$RUNNER_TEMP"
+          cat > LanProbe.java <<'EOF'
+          import java.net.*;
+          import java.nio.charset.StandardCharsets;
+
+          public class LanProbe {
+              public static void main(String[] args) throws Exception {
+                  InetAddress group = InetAddress.getByName("224.0.2.60");
+                  try (MulticastSocket in = new MulticastSocket(4445); DatagramSocket out = new DatagramSocket()) {
+                      in.setSoTimeout(5000);
+                      in.joinGroup(group);
+                      byte[] ping = "[MOTD]RigTune LAN test[/MOTD][AD]25570[/AD]".getBytes(StandardCharsets.UTF_8);
+                      out.send(new DatagramPacket(ping, ping.length, group, 4445));
+                      byte[] buffer = new byte[1024];
+                      DatagramPacket got = new DatagramPacket(buffer, buffer.length);
+                      in.receive(got);
+                      System.out.println("received from " + got.getAddress().getHostAddress() + ": "
+                              + new String(got.getData(), got.getOffset(), got.getLength(), StandardCharsets.UTF_8));
+                  }
+              }
+          }
+          EOF
+          java LanProbe.java
