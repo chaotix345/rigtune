@@ -466,11 +466,12 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 		}
 	}
 
-	// X12: every widget inside the screen, no two overlapping, every label fitting, at the three sizes and 854x480 at scale 3
-	// (the lists scroll there), with a screenshot of each.
+	// X12: every widget inside the screen, no two overlapping, every label fitting, at the three sizes and at GUI scale 3 (the
+	// lists scroll there; 1280x720, since the game caps 854x480 at scale 2: the SPEC's X12 amendment), with a screenshot
+	// of each.
 	private static void layoutAtEverySize(ClientGameTestContext context, V05TestContext v05, String name) {
 		List<int[]> sizes = new ArrayList<>(List.of(V05TestContext.SIZES));
-		sizes.add(V05TestContext.SCROLLING);
+		sizes.add(new int[]{1280, 720, 3});
 		for (int[] size : sizes) {
 			v05.resize(size[0], size[1], size[2]);
 			String at = name + "-" + size[0] + "x" + size[1] + "-scale" + size[2];
