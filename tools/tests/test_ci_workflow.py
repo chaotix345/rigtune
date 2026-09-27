@@ -169,6 +169,19 @@ class CheckFakeModrinthTests(unittest.TestCase):
         fallback = cfm.problems(self.STARTUP, ["[RigTune network/WARN]: Modrinth lookups failed; using offline data: IOException: Stream 5 cancelled\n"])
         self.assertEqual(1, len(fallback))
 
+    def test_the_fakes_own_errors_fail_but_an_unknown_project_or_hash_is_an_answer(self):
+        answers = [{"method": "GET", "path": "/v2/project/nope/version", "status": 404},
+                   {"method": "GET", "path": "/v2/project/nope", "status": 404},
+                   {"method": "GET", "path": "/v2/version_file/0123abcd", "status": 404}]
+        self.assertEqual([], cfm.problems(self.STARTUP + answers, []))
+        for bad in ({"method": "POST", "path": "/v2/version_files", "status": 400},
+                    {"method": "DELETE", "path": "/v2/projects", "status": 405},
+                    {"method": "GET", "path": "/v2/search", "status": 404},
+                    {"method": "GET", "path": "/v2/versions"}):
+            found = cfm.problems(self.STARTUP + [bad], [])
+            self.assertEqual(1, len(found), bad)
+            self.assertIn(bad["path"], found[0])
+
 
 if __name__ == "__main__":
     unittest.main()
