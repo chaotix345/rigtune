@@ -11,6 +11,7 @@ import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -34,8 +35,11 @@ public final class StaleGroups {
 	}
 
 	// The ops dropped from pending.json (empty: none; a busy lock leaves them for the next rebuild). loaded: the loaded mod
-	// ids (ModScanner.loadedIds()); the jars they were loaded from are FabricLoader's.
-	public static List<Op> drop(Staging staging, Set<String> loaded) throws IOException {
+	// ids (ModScanner.loadedIds()); the jars they were loaded from are FabricLoader's, asked only while something is staged.
+	public static List<Op> drop(@Nullable Staging staging, Set<String> loaded) throws IOException {
+		if (staging == null || !Files.exists(staging.pendingFile())) {
+			return List.of();
+		}
 		return drop(staging, loaded, loadedFrom(FabricLoader.getInstance().getAllMods()));
 	}
 
