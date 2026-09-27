@@ -19,7 +19,7 @@ Brief: the user's v0.5.0 prompt (full autonomy: research -> release incl. GitHub
 - Watchdog: scratchpad/run_watchdog.sh (re-reads scratchpad/agents.txt; `name=<dir>;<dir>@<branch>` per line; --stall-min 25 --lock-min 12). Scratchpad: C:/Users/Admin/AppData/Local/Temp/claude/C--Dev-Minecraft-Setting-Optimisation-Mod/590d2d3e-58b4-418a-a809-0e625214088f/scratchpad
 
 ### Status
-- [ ] Phase 0: orient (in progress).
+- [x] Phase 0: orient. Baseline `./gradlew build` on feat/v0.5.0 green: 1842 tests per MC version (1 skipped). Issues #7/#8 deleted (the user's FOR THE USER item 3). Watchdog running.
 - [ ] Phase 1: research (docs/research/v0.5/: ci-robustness, v04-leftovers, verification-gaps, brainstorm + one file per picked feature).
 - [ ] Phase 2: SPEC + contracts + PLAN + plan review.
 - [ ] Phase 3: foundation = P0.1 CI robustness, alone.
@@ -28,6 +28,14 @@ Brief: the user's v0.5.0 prompt (full autonomy: research -> release incl. GitHub
 - [ ] Phase 6: review rounds (review-11.md onwards).
 - [ ] Phase 7: release.
 - [ ] Phase 8: wrap-up.
+
+### Agents (v0.5)
+| name | branch | worktree | status |
+|---|---|---|---|
+| brainstorm (Workflow wf_8b239ca5-6ea) | - | - | RUNNING: 6 angle generators -> merge -> 7 judges -> synthesis + critic -> docs/research/v0.5/brainstorm.md |
+| r-ci (opus) | research/v05-ci (optional) | rigtune-r-ci (optional) | RUNNING -> docs/research/v0.5/ci-robustness.md |
+| r-verify (opus) | research/v05-verify (optional) | rigtune-r-verify (optional) | RUNNING -> docs/research/v0.5/verification-gaps.md |
+| r-leftovers (sonnet) | - | - | RUNNING -> docs/research/v0.5/v04-leftovers.md |
 
 ### REMAINING PLAN
 1. Phase 1: launch r-ci, r-leftovers, r-verify research agents + the brainstorm Workflow; then one research agent per picked feature; fold in the other session's audit (verified).
