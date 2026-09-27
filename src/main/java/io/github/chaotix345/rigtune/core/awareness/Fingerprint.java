@@ -16,6 +16,8 @@ import java.util.Locale;
 public record Fingerprint(String gpuVendor, String gpuRenderer, String gpuDriverRaw, String backend, String cpuName, long totalRamMb) {
 	// Longer values in the file are cut (the file is untrusted: players edit it).
 	static final int MAX_STRING = 256;
+	// What HardwareProbe reports for a value it couldn't read.
+	static final String UNKNOWN_PLACEHOLDER = "unknown";
 
 	public Fingerprint {
 		gpuVendor = cut(gpuVendor);
@@ -25,12 +27,18 @@ public record Fingerprint(String gpuVendor, String gpuRenderer, String gpuDriver
 		cpuName = cut(cpuName);
 	}
 
+	// v0.5 Latent 2 (docs/v0.5/SPEC.md 2W): HardwareProbe's "unknown" placeholder (a probe that couldn't read the GPU or the
+	// CPU) is no value, so a failed probe can't raise "Your GPU changed" or seed a fingerprint a good probe then differs from.
 	public static Fingerprint of(HardwareProfile hw) {
 		GpuInfo gpu = hw.gpu();
-		String vendorString = gpu == null ? "" : gpu.vendorString();
-		String renderer = gpu == null ? "" : gpu.renderer();
-		return new Fingerprint(GpuClassifier.detectVendor(vendorString, renderer).name(), renderer, gpu == null ? "" : gpu.driverVersion(),
-				gpu == null || gpu.backend() == null ? "UNKNOWN" : gpu.backend().name(), hw.cpu() == null ? "" : hw.cpu().name(), hw.totalRamMb());
+		String vendorString = gpu == null ? "" : known(gpu.vendorString());
+		String renderer = gpu == null ? "" : known(gpu.renderer());
+		return new Fingerprint(GpuClassifier.detectVendor(vendorString, renderer).name(), renderer, gpu == null ? "" : known(gpu.driverVersion()),
+				gpu == null || gpu.backend() == null ? "UNKNOWN" : gpu.backend().name(), hw.cpu() == null ? "" : known(hw.cpu().name()), hw.totalRamMb());
+	}
+
+	private static String known(@Nullable String probed) {
+		return probed == null || probed.strip().equalsIgnoreCase(UNKNOWN_PLACEHOLDER) ? "" : probed;
 	}
 
 	// The stored fingerprint, or null when there is none (the first run, an upgrade from 0.3 or older) or it isn't usable
@@ -48,7 +56,8 @@ public record Fingerprint(String gpuVendor, String gpuRenderer, String gpuDriver
 			return null;
 		}
 		long ram = f.get(AwarenessStore.FINGERPRINT_TOTAL_RAM_MB) instanceof JsonPrimitive p && p.isNumber() ? safeLong(p) : -1;
-		return new Fingerprint(vendor, renderer, driver, backend, cpu, ram);
+		// v0.5 Latent 2 (review M1): a fingerprint 0.4 stored from a failed probe holds the placeholder too.
+		return new Fingerprint(vendor, known(renderer), known(driver), backend, known(cpu), ram);
 	}
 
 	// Replaces the fingerprint in awareness.json's root (unknown fields inside it are kept).

@@ -3,11 +3,16 @@ package io.github.chaotix345.rigtune.client;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.client.undo.HistoryStartup;
+import io.github.chaotix345.rigtune.client.undo.StaleGroups;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
+import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
+import io.github.chaotix345.rigtune.core.apply.UnfinishedGroups;
 import io.github.chaotix345.rigtune.core.history.ApplyFailures;
+import io.github.chaotix345.rigtune.core.history.PartlyApplied;
+import io.github.chaotix345.rigtune.core.history.StaleOps;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint;
 import org.jspecify.annotations.Nullable;
@@ -16,13 +21,20 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 	private static volatile @Nullable ApplyResult unseenResult;
 	private static volatile int leftoverOps;
+	// The ids of staged ops that can never run (readState), whose old failures warnOnce doesn't replay.
+	static volatile Set<String> staleOps = Set.of();
 	private static volatile boolean helperBusy;
 	static final Duration HELPER_WAIT = Duration.ofSeconds(5);
 
@@ -61,7 +73,8 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 		// A helper still running writes a newer result; its failures are logged at the next start.
 		if (!busy || lock != null) {
 			try {
-				warnOnce(configDir, InstanceDirs.modsDir(FabricLoader.getInstance().getGameDir()), ClientState.shared(configDir), RigTune.LOGGER::warn);
+				warnOnce(configDir, InstanceDirs.modsDir(FabricLoader.getInstance().getGameDir()), ClientState.shared(configDir), RigTune.LOGGER::warn,
+						staleOps);
 			} catch (Throwable t) {
 				RigTune.LOGGER.warn("Could not check the last RigTune apply result for failures", t);
 			}
@@ -78,6 +91,12 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 	// docs/v0.3/SPEC.md 3e (review B-M1): one WARN line per op the last helper run didn't apply, so the reason is in
 	// latest.log and not only in helper.log; each run (finishedAt) is logged once.
 	static void warnOnce(Path configDir, Path modsDir, ClientState state, Consumer<String> log) {
+		warnOnce(configDir, modsDir, state, log, Set.of());
+	}
+
+	// stale: the ids of staged ops that can never run (readState, docs/v0.5/SPEC.md 2H RW-3), whose old failures aren't
+	// replayed: RigTune drops them once the game has started.
+	static void warnOnce(Path configDir, Path modsDir, ClientState state, Consumer<String> log, Set<String> stale) {
 		Path last = ApplyResult.defaultPath(configDir);
 		ApplyResult result;
 		try {
@@ -95,16 +114,25 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 		if (failures.isEmpty()) {
 			return;
 		}
-		failures.forEach(f -> log.accept(ApplyFailures.warnLine(f, result.finishedAt())));
+		// The run counts as logged even when all its failures were stale: they're dropped, never retried.
+		failures.stream().filter(f -> f.opId() == null || !stale.contains(f.opId())).forEach(f -> log.accept(ApplyFailures.warnLine(f, result.finishedAt())));
 		state.lastWarnedApply = result.finishedAt();
 		state.save(configDir);
 	}
 
 	private static void readState(Path configDir, boolean stillRunning) {
-		readState(configDir, stillRunning, ClientState.shared(configDir).lastShownApply);
+		readState(configDir, stillRunning, ClientState.shared(configDir).lastShownApply,
+				() -> StaleGroups.loadedFrom(FabricLoader.getInstance().getAllMods()));
 	}
 
+	// Every staged op counted, stale or not (0.4's count).
 	static void readState(Path configDir, boolean stillRunning, @Nullable String lastShownApply) {
+		readState(configDir, stillRunning, lastShownApply, null);
+	}
+
+	// loadedFrom: a loaded mod id -> the jar files it was loaded from, asked only when pending.json exists; null: no op is
+	// judged stale.
+	static void readState(Path configDir, boolean stillRunning, @Nullable String lastShownApply, @Nullable Supplier<Map<String, Set<String>>> loadedFrom) {
 		try {
 			Path last = ApplyResult.defaultPath(configDir);
 			if (Files.isRegularFile(last)) {
@@ -119,11 +147,60 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 		try {
 			Path pending = PendingActions.defaultPath(configDir);
 			if (!stillRunning && Files.isRegularFile(pending)) {
-				leftoverOps = PendingActions.load(pending).ops().size();
-				RigTune.LOGGER.warn("{} staged RigTune change(s) were not applied; they will be retried at the next exit", leftoverOps);
+				// docs/v0.5/SPEC.md 2H RW-3: a group that can never run (its download gone, or its mod loaded from another jar)
+				// isn't "retried": the first rebuild drops it and says so.
+				PendingActions plan = PendingActions.load(pending);
+				Set<String> staleGroups = loadedFrom == null ? Set.of() : staleGroups(plan, pending, loadedFrom);
+				Set<String> staleIds = new HashSet<>();
+				int runnable = 0;
+				for (Op op : plan.ops()) {
+					if (op != null && op.id() != null && staleGroups.contains(op.group() != null ? op.group() : "op:" + op.id())) {
+						staleIds.add(op.id());
+					} else {
+						runnable++;
+					}
+				}
+				staleOps = Set.copyOf(staleIds);
+				leftoverOps = runnable;
+				if (runnable > 0) {
+					RigTune.LOGGER.warn("{} staged RigTune change(s) were not applied; they will be retried at the next exit", runnable);
+				}
+				if (!staleIds.isEmpty()) {
+					RigTune.LOGGER.info("{} staged RigTune change(s) can never run (the download is gone, or the mod is installed another way); "
+							+ "RigTune drops them once the game has started", staleIds.size());
+				}
 			}
 		} catch (Exception e) {
 			RigTune.LOGGER.warn("Could not read pending RigTune changes", e);
+		}
+	}
+
+	// The groups (an ungrouped op: "op:<id>") StaleOps finds, as Staging.dropStale will at the first rebuild: from
+	// Files.exists and FabricLoader's origins, no jar opened (an enable staged without a mod id is judged by its files
+	// alone). Only when something looks stale are the mods folder's names and the helper's record read, for the groups it
+	// left half done (never stale). Nothing on an error: every op is then counted, as before.
+	private static Set<String> staleGroups(PendingActions plan, Path pending, Supplier<Map<String, Set<String>>> loadedFrom) {
+		try {
+			PendingActions here = plan.relocated(InstanceDirs.modsDirOf(pending), InstanceDirs.configDirOf(pending));
+			Map<String, Set<String>> origins = loadedFrom.get();
+			List<StaleOps.Stale> found = StaleOps.find(here.ops(), Files::exists, origins, Op::modId, Set.of());
+			if (!found.isEmpty()) {
+				Set<String> names = new HashSet<>();
+				try (Stream<Path> files = Files.list(InstanceDirs.modsDirOf(pending))) {
+					files.forEach(f -> names.add(f.getFileName().toString()));
+				}
+				Set<String> halfDone = PartlyApplied.groups(here.ops(), names, UnfinishedGroups.recorded(InstanceDirs.configDirOf(pending)));
+				found = StaleOps.find(here.ops(), Files::exists, origins, Op::modId, halfDone);
+			}
+			Set<String> out = new HashSet<>();
+			for (StaleOps.Stale stale : found) {
+				here.ops().stream().filter(op -> op != null && stale.opId().equals(op.id())).findFirst()
+						.ifPresent(op -> out.add(op.group() != null ? op.group() : "op:" + op.id()));
+			}
+			return out;
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.warn("Could not check RigTune's staged changes for ones that can never run", e);
+			return Set.of();
 		}
 	}
 

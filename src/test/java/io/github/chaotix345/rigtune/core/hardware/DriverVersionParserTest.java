@@ -99,6 +99,19 @@ class DriverVersionParserTest {
 		unknown(GpuVendor.AMD, "22.20.27.09.230330");
 	}
 
+	// v0.5 2D (vg §4.3): Adrenalin's second part is a month; AMD's legacy branch "Context 22.20.x.YYMMDD" (Ryzen/Vega iGPUs
+	// on the legacy driver) is UNKNOWN, not Adrenalin 22.20.x.
+	@Test
+	void theAdrenalinMonthIsOneToTwelve() {
+		unknown(GpuVendor.AMD, "4.6.0 Core Profile Context 22.20.24.220816");
+		unknown(GpuVendor.AMD, "3.3.0 Core Profile Context 22.20.44.221025");
+		unknown(GpuVendor.AMD, "3.3.0 Core Profile Context 26.13.1.261310");
+		unknown(GpuVendor.AMD, "3.3.0 Core Profile Context 26.0.1.260010");
+		parses(GpuVendor.AMD, "4.6.0 Compatibility Profile Context 23.1.1.230106", DriverVersion.ADRENALIN, 23, 1, 1);
+		parses(GpuVendor.AMD, "3.3.0 Core Profile Context 22.12.1.221205", DriverVersion.ADRENALIN, 22, 12, 1);
+		parses(GpuVendor.AMD, "3.3.0 Core Profile Context 26.10.2.261021", DriverVersion.ADRENALIN, 26, 10, 2);
+	}
+
 	@Test
 	void garbageIsUnknown() {
 		for (String raw : new String[]{"", " ", "unknown", "1.0", "25.9.1", "NVIDIA", "NVIDIA 56", "3.3.0 Core Profile Context",
