@@ -29,6 +29,14 @@ Run [36297443360](https://github.com/chaotix345/rigtune/actions/runs/36297443360
 The dump comes 13:00 into the step; the step timeout stops the Gradle run under `sudo unshare` (each job ended 3 s later,
 well inside its 25-min timeout).
 
+That run's watcher picked the JVM by `pgrep -f fabric.client.gametest`. The final watcher (every `java` process whose whole
+`/proc/<pid>/cmdline` contains KnotClient, SPEC-29 and the second code review) was proven again: the hang probe merged with
+feat/v05-ci at 00ca8da3, run [36301097653](https://github.com/chaotix345/rigtune/actions/runs/36301097653): on all 3
+legs `Full thread dump OpenJDK 64-Bit Server VM (25.0.3+9-LTS …)` with
+`at io.github.chaotix345.rigtune.gametest.HangProbeGameTest.sleepsForever(HangProbeGameTest.java:17)` 13:00 into the step
+(07:00:49 / 07:00:58 / 07:00:56 for steps started 06:47:49 / 06:47:58 / 06:47:56), then "timed out after 15 minutes"
+(07:03:02 / 07:03:11 / 07:03:08), each job over 2-6 s later.
+
 ## AC1e.4: local subset run twice
 
 Windows 11, JDK 25.0.4, `:26.2:runProductionClientGameTest` with only RigTuneClientGameTest and BenchmarkGameTest as
@@ -41,11 +49,20 @@ Local check (a third subset run, 16:01 AEST, after the review fix): the helper a
 
 Every leg runs `tools/ci/offline.sh java tools/ci/MulticastCheck.java` ("Check loopback multicast") before the game tests:
 one datagram to 224.0.2.60:4445, received on a `MulticastSocket(4445)` joined to the group.
-PROOF_MC
+Run [36300180213](https://github.com/chaotix345/rigtune/actions/runs/36300180213) (24235857): "Loopback multicast works:
+224.0.2.60:4445 received from 0.0.0.0" on all 3 legs; the same on all 6 jobs of 36300926064 below.
 
 ## AC1g.4: the dormant split, proven once
 
-PROOF_SPLIT
+Two runs of 24235857:
+- [36300180213](https://github.com/chaotix345/rigtune/actions/runs/36300180213) (push, the default one part): the 3 legs
+  as before, each running all 16 classes (the per-class lines: RigTuneClientGameTest 49-57 s, BenchmarkGameTest 95-157 s,
+  FootprintGameTest 82-84 s, A11yGameTest 23-25 s, the others 2-41 s), every job green.
+- [36300926064](https://github.com/chaotix345/rigtune/actions/runs/36300926064) (`gh workflow run build.yml --ref
+  feat/v05-ci -f gametest_parts=2`): 6 game-test jobs, "client game tests (<mc>, <backend>, part 1/2)" with
+  RigTuneClientGameTest to PreviewGameTest and "… part 2/2" with ProfilesGameTest to A11yGameTest. Per leg the two parts
+  logged 16 "Game-test class" lines for 16 different classes, every job green. The parts' class time: 238-282 s (part 1),
+  176-181 s (part 2); job wall times 5.6-6.6 min and 4.7 min, against 7.4-9.8 min unsplit in 36300180213.
 
 ## AC1c: caches and pins
 
@@ -56,9 +73,11 @@ PROOF_SPLIT
   `gh release download` never ran (`[ -s … ] ||`), and the three jars passed `sha256sum -c`; the Vulkan leg restored
   `lavapipe-ubuntu24-20260920.314.1` and installed `mesa-vulkan-drivers 25.2.8-0ubuntu0.24.04.2` from the cached `.deb`s
   (the step took 2 s).
-- AC1c.1 (the second run of one SHA restores the Gradle cache; its first `./gradlew` step under 60 s): PROOF_C_CACHE
+- AC1c.1: both runs of 24235857 (36300180213, 36300926064) restored the java job's Gradle cache (a restore-key hit on a
+  `main` entry; this branch only reads) and their first `./gradlew` step, "Resolve dependencies (network)", took 18 s and
+  20 s.
 - AC1c.3: `tools/tests/test_ci_workflow.py`.
 
 ## Head green on every job, twice, no re-runs
 
-PROOF_C
+A commit can't name its own runs: the final head's two runs are in the handoff to the coordinator (and PROGRESS).
