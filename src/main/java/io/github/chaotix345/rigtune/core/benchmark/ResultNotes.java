@@ -43,15 +43,15 @@ public final class ResultNotes {
 				: null;
 	}
 
-	// RW-7: the noise warning (cv above BenchmarkMath.NOISY_CV), naming Distant Horizons building terrain or new terrain
-	// being generated when those tags are on at least half of the benchmark capture's spikes (Distant Horizons first);
-	// otherwise the generic line. Null when the run wasn't noisy.
-	public static @Nullable Text noisy(@Nullable Double cv, int spikes, int dhTagged, int chunksLoadingTagged) {
+	// RW-7: the noise warning (cv above BenchmarkMath.NOISY_CV), naming Distant Horizons building terrain when the run's
+	// dhGenerating is set or dh-tagged spikes are at least half of the benchmark capture's, else new terrain being
+	// generated when chunksLoading-tagged ones are; otherwise the generic line. Null when the run wasn't noisy.
+	public static @Nullable Text noisy(@Nullable Double cv, int spikes, int dhTagged, int chunksLoadingTagged, boolean dhGenerating) {
 		if (!BenchmarkMath.noisy(cv)) {
 			return null;
 		}
 		String spread = String.format(Locale.ROOT, "%.0f%%", cv * 100);
-		if (spikes > 0 && 2 * dhTagged >= spikes) {
+		if (dhGenerating || spikes > 0 && 2 * dhTagged >= spikes) {
 			return Text.of("rigtune.benchmark.noisy.dh", "Results were noisy (%s spread) while Distant Horizons was building terrain; a later run may be steadier.",
 					spread);
 		}

@@ -58,14 +58,17 @@ class ResultNotesTest {
 		String generic = "Results were noisy (7% spread): close background apps and retry.";
 		String dh = "Results were noisy (7% spread) while Distant Horizons was building terrain; a later run may be steadier.";
 		String terrain = "Results were noisy (7% spread) while new terrain was still being generated; a later run may be steadier.";
-		assertNull(ResultNotes.noisy(0.03, 58, 40, 0));
-		assertNull(ResultNotes.noisy(null, 58, 40, 0));
-		assertEquals(dh, english(ResultNotes.noisy(0.07, 58, 40, 0)), "the real run: 40 of 58 spikes tagged dh");
-		assertEquals(dh, english(ResultNotes.noisy(0.07, 58, 29, 0)), "exactly half");
-		assertEquals(generic, english(ResultNotes.noisy(0.07, 58, 28, 0)));
-		assertEquals(terrain, english(ResultNotes.noisy(0.07, 10, 2, 5)));
-		assertEquals(dh, english(ResultNotes.noisy(0.07, 10, 6, 9)), "both: Distant Horizons first");
-		assertEquals(generic, english(ResultNotes.noisy(0.07, 0, 0, 0)), "no spikes, no capture");
+		assertNull(ResultNotes.noisy(0.03, 58, 40, 0, false));
+		assertNull(ResultNotes.noisy(null, 58, 40, 0, true));
+		assertEquals(dh, english(ResultNotes.noisy(0.07, 58, 40, 0, false)), "the real run: 40 of 58 spikes tagged dh");
+		assertEquals(dh, english(ResultNotes.noisy(0.07, 58, 29, 0, false)), "exactly half");
+		assertEquals(generic, english(ResultNotes.noisy(0.07, 58, 28, 0, false)));
+		assertEquals(terrain, english(ResultNotes.noisy(0.07, 10, 2, 5, false)));
+		assertEquals(dh, english(ResultNotes.noisy(0.07, 10, 6, 9, false)), "both: Distant Horizons first");
+		assertEquals(generic, english(ResultNotes.noisy(0.07, 0, 0, 0, false)), "no spikes, no capture");
+		// Review (part 2 L7): the run's own dhGenerating names Distant Horizons whatever the tags (never "background apps").
+		assertEquals(dh, english(ResultNotes.noisy(0.07, 58, 3, 0, true)));
+		assertEquals(dh, english(ResultNotes.noisy(0.07, 0, 0, 0, true)));
 	}
 
 	// RW-6 (AC2B.4): the line appears exactly when the run's dhGenerating is set.

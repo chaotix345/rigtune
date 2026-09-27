@@ -58,11 +58,14 @@ public record ChangeWindow(boolean byCursor, List<Item> items, @Nullable String 
 			window = byTime(baseline, latest, oldestFirst);
 		}
 		List<Item> items = new ArrayList<>();
+		List<String> stagedAtLatest = latest.context() == null ? null : latest.context().stagedAtStart();
+		boolean sameModSet = sameModSet(baseline, latest);
 		List<String> stagedAtBaseline = baseline.context() == null ? null : baseline.context().stagedAtStart();
 		if (stagedAtBaseline != null) {
 			for (HistoryModel.Entry entry : oldestFirst) {
 				for (HistoryModel.Change change : entry.changes()) {
-					if (tookEffect(change) && change.changeIds().stream().anyMatch(stagedAtBaseline::contains)) {
+					if (tookEffect(change) && change.changeIds().stream().anyMatch(stagedAtBaseline::contains)
+							&& !notLoaded(change, stagedAtLatest, sameModSet)) {
 						items.add(new Item(entry.id(), entry.kind(), entry.at(), change));
 					}
 				}
@@ -71,19 +74,15 @@ public record ChangeWindow(boolean byCursor, List<Item> items, @Nullable String 
 			for (HistoryModel.Entry entry : carried(previous, baseline, oldestFirst)) {
 				for (HistoryModel.Change change : entry.changes()) {
 					boolean staged = change.row() != HistoryModel.Row.SETTING || change.changeIds().stream().anyMatch(stagedChangeIds::contains);
-					if (staged && tookEffect(change)) {
+					if (staged && tookEffect(change) && !notLoaded(change, stagedAtLatest, sameModSet)) {
 						items.add(new Item(entry.id(), entry.kind(), entry.at(), change));
 					}
 				}
 			}
 		}
-		List<String> stagedAtLatest = latest.context() == null ? null : latest.context().stagedAtStart();
-		boolean sameModSet = sameModSet(baseline, latest);
 		for (HistoryModel.Entry entry : window) {
 			for (HistoryModel.Change change : entry.changes()) {
-				boolean notLoaded = stagedAtLatest != null ? change.changeIds().stream().anyMatch(stagedAtLatest::contains)
-						: change.row() != HistoryModel.Row.SETTING && sameModSet;
-				if (tookEffect(change) && !notLoaded && items.stream().noneMatch(i -> i.change() == change)) {
+				if (tookEffect(change) && !notLoaded(change, stagedAtLatest, sameModSet) && items.stream().noneMatch(i -> i.change() == change)) {
 					items.add(new Item(entry.id(), entry.kind(), entry.at(), change));
 				}
 			}
@@ -93,6 +92,13 @@ public record ChangeWindow(boolean byCursor, List<Item> items, @Nullable String 
 		boolean modChange = items.stream().anyMatch(i -> i.change().row() != HistoryModel.Row.SETTING);
 		boolean outside = before != null && after != null && !before.equals(after) && !modChange;
 		return new ChangeWindow(byCursor, items, baseline.rigtuneVersion(), latest.rigtuneVersion(), outside);
+	}
+
+	// BH-2: the change didn't run during the latest run: it was still staged when it started, or (a run without the field)
+	// it is a mod-file row and both runs loaded the same mods. Applies to carried-in rows too (review M1, M2).
+	private static boolean notLoaded(HistoryModel.Change change, @Nullable List<String> stagedAtLatest, boolean sameModSet) {
+		return stagedAtLatest != null ? change.changeIds().stream().anyMatch(stagedAtLatest::contains)
+				: change.row() != HistoryModel.Row.SETTING && sameModSet;
 	}
 
 	// Both runs' mod-set hashes are known and equal: the same mods were loaded.

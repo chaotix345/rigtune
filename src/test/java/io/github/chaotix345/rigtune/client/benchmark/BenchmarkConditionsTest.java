@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.client.benchmark;
 
+import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import org.junit.jupiter.api.Test;
@@ -36,5 +37,17 @@ class BenchmarkConditionsTest {
 		JournalEntry sixtyFour = new JournalEntry("e3", "2026-09-22T10:00:00Z", JournalEntry.APPLY, "0.5.0", "26.2", null, many);
 		assertEquals(64, BenchmarkConditions.stagedIds(List.of(sixtyFour)).size());
 		assertNull(BenchmarkConditions.stagedIds(List.of(sixtyFour, staged)), "65 staged: left out");
+	}
+
+	// Review (part 1 M3): an unreadable history.json isn't "nothing staged" (the journal answers no entries then): left out.
+	@Test
+	void bh2AnUnreadableHistoryLeavesTheFieldOut() {
+		JournalEntry staged = new JournalEntry("e2", "2026-09-21T10:00:00Z", JournalEntry.APPLY, "0.5.0", "26.2", null,
+				List.of(change("c3", JournalChange.STAGED)));
+		assertEquals(List.of("c3"), BenchmarkConditions.stagedIds(Journal.State.OK, List.of(staged)));
+		assertEquals(List.of(), BenchmarkConditions.stagedIds(Journal.State.MISSING, List.of()), "no history.json: nothing staged");
+		for (Journal.State state : List.of(Journal.State.CORRUPT, Journal.State.NEWER, Journal.State.UNREADABLE)) {
+			assertNull(BenchmarkConditions.stagedIds(state, List.of()), state.name());
+		}
 	}
 }

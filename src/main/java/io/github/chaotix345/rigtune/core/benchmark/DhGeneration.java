@@ -14,7 +14,8 @@ public final class DhGeneration {
 	private DhGeneration() {
 	}
 
-	// Null (the field left out) without Distant Horizons, or when nothing was sampled.
+	// Null (the field left out) without Distant Horizons, or when nothing was sampled; false: below the threshold, which
+	// includes no "DH-World Gen" thread seen at all (the prefix is UNVERIFIED outside DH 3.3.2).
 	public static @Nullable Boolean generating(@Nullable Double worldGenCores, boolean dhLoaded) {
 		if (!dhLoaded || worldGenCores == null) {
 			return null;

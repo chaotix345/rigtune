@@ -5,6 +5,7 @@ import io.github.chaotix345.rigtune.client.compat.OptionalMods;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
+import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.model.ModSetHash;
@@ -61,11 +62,17 @@ public final class BenchmarkConditions {
 	// null when history.json can't be read or more than MAX_STAGED are staged.
 	public static @Nullable List<String> stagedAtStart() {
 		try {
-			return stagedIds(ClientJournal.get().entries());
+			Journal journal = ClientJournal.get();
+			return stagedIds(journal.state(), journal.entries());
 		} catch (RuntimeException e) {
 			RigTune.LOGGER.warn("Could not read the history for the benchmark's staged changes", e);
 			return null;
 		}
+	}
+
+	// The journal answers no entries for a corrupt, newer or unreadable history.json: that isn't "nothing staged" (review M3).
+	static @Nullable List<String> stagedIds(Journal.State state, List<JournalEntry> entries) {
+		return state == Journal.State.OK ? stagedIds(entries) : state == Journal.State.MISSING ? List.of() : null;
 	}
 
 	static @Nullable List<String> stagedIds(List<JournalEntry> entries) {

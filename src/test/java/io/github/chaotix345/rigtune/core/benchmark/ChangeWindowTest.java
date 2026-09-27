@@ -213,6 +213,33 @@ class ChangeWindowTest {
 				described(ChangeWindow.between(base(), old, c, entries, java.util.Set.of())));
 	}
 
+	// Review (part 2 M1): staged when A started and still when B started, applied only after B: listed for neither A..B.
+	@Test
+	void bh2AChangeStagedAtBothStartsIsNotListedForTheLater() {
+		List<HistoryModel.Entry> entries = history(BEFORE, STAGED_THEN_APPLIED);
+		BenchmarkRecord a = TrendFixtures.run("a").at("2026-09-22T12:30:00Z").cursor("e2").hash("hash-a").staged(List.of(LITHIUM.id())).build();
+		BenchmarkRecord b = TrendFixtures.run("b").at("2026-09-22T13:00:00Z").cursor("e2").hash("hash-a").staged(List.of(LITHIUM.id())).build();
+		ChangeWindow window = ChangeWindow.between(null, a, b, entries, java.util.Set.of());
+		assertEquals(List.of(), described(window));
+		assertTrue(window.nothingRecorded());
+		// A 0.4 baseline (the M1 guess carries it in) and a 0.5 latest that lists it: not listed either.
+		BenchmarkRecord old = TrendFixtures.run("a").at("2026-09-22T12:30:00Z").cursor("e2").hash("hash-a").build();
+		assertEquals(List.of(), described(ChangeWindow.between(null, old, b, entries, java.util.Set.of())));
+	}
+
+	// Review (part 2 M2): without the field, equal mod-set hashes mean no mod file changed between the runs: a carried-in
+	// mod row isn't listed either.
+	@Test
+	void bh2EqualHashesDropACarriedModRowToo() {
+		JournalEntry stagedUpdate = new JournalEntry("s1", "2026-09-21T09:00:00Z", JournalEntry.APPLY, "0.4.0", "26.2", null, List.of(
+				JournalChange.file(JournalChange.DISABLE, "sodium", "sodium-0.6.5.jar", JournalChange.APPLIED, "op-1", "g-1"),
+				JournalChange.file(JournalChange.ENABLE, "sodium", "sodium-0.6.6.jar", JournalChange.APPLIED, "op-2", "g-1")));
+		BenchmarkRecord base = TrendFixtures.run("base").at("2026-09-21T10:00:00Z").cursor("s1").build();
+		BenchmarkRecord same = TrendFixtures.run("latest").at("2026-09-25T10:00:00Z").cursor("s1").build();
+		ChangeWindow window = ChangeWindow.between(null, base, same, history(BEFORE, stagedUpdate), java.util.Set.of());
+		assertEquals(List.of(), described(window));
+	}
+
 	@Test
 	void bh2AHashChangeKeepsTheModRowWithoutTheField() {
 		BenchmarkRecord b = TrendFixtures.run("b").at("2026-09-22T13:00:00Z").cursor("e2").hash("hash-b").build();

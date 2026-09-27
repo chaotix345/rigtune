@@ -427,6 +427,18 @@ class BenchmarkSessionTest {
 		assertFalse(session.result().deadlineHit());
 	}
 
+	// Review (part 1 M2): the second try only starts when a full repeat still fits after it, so it never costs the result.
+	@Test
+	void rw5ARemeasureNeverCostsTheRepeat() {
+		// Six steps end at 123 s; the re-measure (37.5 s) would still fit before 200 - 10, but not with a repeat after it.
+		Timing timing = new Timing(6, 8.0, 2.0, 20.0, 1.5, 6.0, 2.0, 2, 200.0);
+		BenchmarkSession session = BenchmarkSession.tune(new Knobs(32, 12, false, false), new TuneLimits(4, 32, 170, false, 5), timing, 0);
+		assertEquals(List.of(32, 17, 24, 28, 30, 31), tuneFrom32(session));
+		assertTrue(session.result().measurements().stream().anyMatch(m -> m.step().kind() == Kind.REPEAT), "the repeat ran");
+		assertNotNull(session.result().result());
+		assertTrue(session.result().renderDistance().reason().contains("32 couldn't be measured"), session.result().renderDistance().reason());
+	}
+
 	@Test
 	void rw5NoRemeasurePastTheDeadline() {
 		// Six 20.5 s steps end at 123 s; a seventh (worst case 37.5 s) would end past 160 - 10.

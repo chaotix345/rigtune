@@ -125,6 +125,14 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		}
 	}
 
+	private static boolean markerFor(Path marker, String mcVersion) {
+		try {
+			return Files.isRegularFile(marker) && Files.readString(marker, StandardCharsets.UTF_8).contains("\"" + mcVersion + "\"");
+		} catch (IOException e) {
+			return false;
+		}
+	}
+
 	private static List<StutterReport> stutterSessionsSince(Path configDir, Instant since) {
 		return new StutterStore(configDir).sessions().stream().filter(r -> !Instant.parse(r.startedAt()).isBefore(since)).toList();
 	}
@@ -156,7 +164,8 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		context.takeScreenshot("bench-menu-title");
 		check(!buttonActive(context, "rigtune.benchmark.menu.measure_after"), "Measure after needs a before first");
 		Settings settings = context.computeOnClient(Settings::of);
-		boolean worldExisted = context.computeOnClient(mc -> Files.exists(BenchmarkWorld.markerPath(mc).getParent()));
+		// Reused only when its marker records this Minecraft version (else it is recreated, and the run creates it).
+		boolean worldExisted = context.computeOnClient(mc -> markerFor(BenchmarkWorld.markerPath(mc), HardwareProbe.minecraftVersion()));
 
 		pressByKey(context, "rigtune.benchmark.menu.measure_before");
 		BenchmarkRecord before = runInBenchmarkWorld(context, "bench-world-running", "bench-world-before");
@@ -190,7 +199,13 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		} finally {
 			context.runOnClient(mc -> RigTuneClient.controller().setStutterMonitor(false));
 		}
-		context.waitFor(mc -> stutterSessionsSince(configDir, monitorOn).stream().anyMatch(r -> StutterReport.BENCHMARK.equals(r.source())), 400);
+		// The run's own capture is saved when at least one step was recorded (RW-15 leaves out a step whose terrain hadn't loaded).
+		BenchmarkController.Outcome afterOutcome = context.computeOnClient(mc -> BenchmarkController.lastOutcome());
+		if (afterOutcome.stepsLeftOut() < afterOutcome.settles().size()) {
+			context.waitFor(mc -> stutterSessionsSince(configDir, monitorOn).stream().anyMatch(r -> StutterReport.BENCHMARK.equals(r.source())), 400);
+		} else {
+			RigTune.LOGGER.warn("Benchmark game test: every step of the Measure after run timed out settling; no capture to wait for");
+		}
 		// The benchmark world's monitor sessions were handled (saved or left out): the one the run ended as it started and the
 		// fresh one after the run, which ended with the world (review-9 X3-1).
 		context.waitFor(mc -> StutterHooks.sessionsEnded() >= endedBefore + 2, 400);

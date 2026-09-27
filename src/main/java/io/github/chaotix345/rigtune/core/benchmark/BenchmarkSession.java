@@ -120,7 +120,8 @@ public final class BenchmarkSession {
 				endStage();
 				continue;
 			}
-			double needed = step.protocol().worstCaseSeconds() + (step.kind() == Kind.BASELINE ? timing.quickSettled().worstCaseSeconds() : 0);
+			double needed = step.protocol().worstCaseSeconds() + (step.kind() == Kind.BASELINE ? timing.quickSettled().worstCaseSeconds() : 0)
+					+ (remeasure(step) ? timing.full().worstCaseSeconds() : 0);
 			if ((nowNanos - startNanos) / 1e9 + needed > timing.deadlineSeconds() - SLACK_SECONDS) {
 				deadlineHit = true;
 				skip(step);
@@ -268,9 +269,16 @@ public final class BenchmarkSession {
 		}
 	}
 
+	// docs/v0.5/SPEC.md RW-5: a second try of a distance whose terrain hadn't loaded starts only when a full repeat still
+	// fits after it, so it never costs the run its result (review M2).
+	private boolean remeasure(Step step) {
+		return step.kind() == Kind.RENDER_DISTANCE && planner != null && planner.remeasures(step.knobs().renderDistance());
+	}
+
 	private void endStage() {
 		switch (stage) {
 			case RENDER_DISTANCE -> {
+				planner().finish();
 				chosen = original.withRenderDistance(chosenRd());
 				stage = sdCandidates.isEmpty() ? Stage.REPEAT : Stage.SIMULATION_DISTANCE;
 			}

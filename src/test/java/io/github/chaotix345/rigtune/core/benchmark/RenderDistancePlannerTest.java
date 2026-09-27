@@ -237,7 +237,11 @@ class RenderDistancePlannerTest {
 	// No time left for the second try (the session's deadline): 32 couldn't be measured, and nothing says it failed.
 	@Test
 	void rw5WithNoTimeLeftItCouldntBeMeasured() {
-		PlannerResult result = incompleteAt32ThenPassesBelow().result();
+		RenderDistancePlanner planner = incompleteAt32ThenPassesBelow();
+		assertEquals("In progress", planner.result().reason(), "32 is still to be measured again");
+		// BenchmarkSession ends the stage: the deadline left no time for the second try.
+		planner.finish();
+		PlannerResult result = planner.result();
 		assertTrue(result.targetMet());
 		assertEquals(31, result.bestRd());
 		assertTrue(result.reason().contains("32 couldn't be measured"), result.reason());
@@ -255,6 +259,49 @@ class RenderDistancePlannerTest {
 		assertTrue(planner.done());
 		assertEquals(31, planner.result().bestRd());
 		assertTrue(planner.result().reason().contains("32 couldn't be measured"), planner.result().reason());
+	}
+
+	// Review (part 1 M1): with no step measured on loaded terrain, nothing is suggested but the distance it started from.
+	@Test
+	void rw5NothingMeasuredSuggestsTheStart() {
+		RenderDistancePlanner planner = new RenderDistancePlanner(MIN, MAX, 12, 100, 2);
+		planner.record(12, low(400), false);
+		planner.record(6, low(500), false);
+		planner.finish();
+		PlannerResult result = planner.result();
+		assertFalse(result.targetMet());
+		assertEquals(12, result.suggestedRd());
+		assertTrue(result.reason().startsWith("Nothing could be measured"), result.reason());
+	}
+
+	// Review (part 1 L5): below target without reaching the step limit is not "Step limit reached".
+	@Test
+	void rw5NoMeasuredDistanceMeetsTheTarget() {
+		RenderDistancePlanner planner = new RenderDistancePlanner(4, MAX, 8, 100, 6);
+		planner.record(8, low(50));
+		assertEquals(OptionalInt.of(5), planner.next());
+		planner.record(5, low(60));
+		assertEquals(OptionalInt.of(4), planner.next());
+		planner.record(4, low(90), false);
+		assertEquals(OptionalInt.of(4), planner.next(), "measured again once");
+		planner.record(4, low(90), false);
+		assertTrue(planner.done());
+		planner.finish();
+		assertEquals("No measured distance meets the target; 4 couldn't be measured (its terrain hadn't loaded)", planner.result().reason());
+	}
+
+	// Review (part 1 L7): after a re-measure passes, the climb goes on in small steps from the distance it started at.
+	@Test
+	void rw5TheClimbAfterAPassingRemeasureStartsSmall() {
+		RenderDistancePlanner planner = new RenderDistancePlanner(4, MAX, 16, 100, 10);
+		planner.record(16, low(300), false);
+		for (int expected : new int[]{9, 12, 14, 15}) {
+			assertEquals(OptionalInt.of(expected), planner.next());
+			planner.record(expected, low(300));
+		}
+		assertEquals(OptionalInt.of(16), planner.next());
+		planner.record(16, low(300));
+		assertEquals(OptionalInt.of(18), planner.next());
 	}
 
 	// An incomplete step below a pass can't change the answer: it isn't measured again, and the search above it goes on.
@@ -278,6 +325,6 @@ class RenderDistancePlannerTest {
 
 		RenderDistancePlanner onlyIncomplete = new RenderDistancePlanner(MIN, MAX, 16, 1000, 1);
 		onlyIncomplete.record(16, low(400), false);
-		assertEquals(16, onlyIncomplete.result().bestEffortRd());
+		assertEquals(16, onlyIncomplete.result().bestEffortRd(), "the start (review M1: never an unmeasured distance)");
 	}
 }

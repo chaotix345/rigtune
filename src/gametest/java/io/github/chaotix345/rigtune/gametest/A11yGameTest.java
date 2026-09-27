@@ -525,7 +525,8 @@ public class A11yGameTest implements FabricClientGameTest {
 	// A seeded Tune result (5 distances: 3 pass, 1 fails, 1 couldn't be measured) over seeded comparable runs, then Benchmark
 	// history over them: Tab reaches every status line, each table row in order and the chart's textual equivalent, each
 	// narrates its text; every value of the painted table is in the screen's text (AC2A.2: nothing lost against the WS-K
-	// merge's screenshots); X12's layout at the 3 sizes (and 854x480@3, where the table scrolls); high contrast.
+	// merge's screenshots); X12's layout at the 3 sizes; a 12-row table scrolls and Tab brings its last row into view;
+	// high contrast.
 	private static void walkBenchmarkScreens(V05TestContext v05) {
 		ClientGameTestContext context = v05.context();
 		Path file = io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore.file();
@@ -536,7 +537,7 @@ public class A11yGameTest implements FabricClientGameTest {
 			io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend.Current now = context.computeOnClient(
 					io.github.chaotix345.rigtune.client.benchmark.BenchmarkConditions::current);
 			io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord latest = benchSeed(file, now);
-			io.github.chaotix345.rigtune.client.benchmark.BenchmarkController.Outcome outcome = benchOutcome(now, latest);
+			io.github.chaotix345.rigtune.client.benchmark.BenchmarkController.Outcome outcome = benchOutcome(now, latest, 0);
 			int rd = now.renderDistance();
 			List<String> cells = List.of(rd + " | 704 | 440 | ✔", (rd + 2) + " | 650 | 400 | ✔", (rd + 3) + " | 620 | 390 | ✔", (rd + 4) + " | 600 | 380 | ✘",
 					(rd + 6) + " | 500 | 300 | ?");
@@ -565,12 +566,16 @@ public class A11yGameTest implements FabricClientGameTest {
 			v05.resize(854, 480, 2);
 			benchOpenResult(context, outcome);
 			walk(context, "bench result", List.of("meets the target", "misses the target", "not measured", "Suggested"));
-			// 854x480@3: the table scrolls; the last row is reached and shown.
-			v05.resize(V05TestContext.SCROLLING[0], V05TestContext.SCROLLING[1], V05TestContext.SCROLLING[2]);
-			benchOpenResult(context, outcome);
-			benchLayout(context, "bench result 854x480@3");
-			focusRow(context, 4);
-			context.takeScreenshot("a11y-bench-result-scrolled-854x480-scale3");
+			// A long table scrolls (854x480 can't be GUI scale 3, so 12 distances at 640x480@2): Tab reaches the last row and the
+			// list brings it into view.
+			v05.resize(640, 480, 2);
+			benchOpenResult(context, benchOutcome(now, latest, 7));
+			benchLayout(context, "bench result, 12 rows, 640x480@2");
+			check(context.computeOnClient(mc -> list(mc).maxScrollAmount() > 0), "the 12-row table scrolls at 640x480@2");
+			focusRow(context, 11);
+			check(context.computeOnClient(mc -> list(mc).getRowTop(11) >= list(mc).getY() && list(mc).getRowBottom(11) <= list(mc).getBottom()),
+					"the focused last row is scrolled into view");
+			context.takeScreenshot("a11y-bench-result-scrolled-640x480-scale2");
 			v05.resize(854, 480, 2);
 			context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(true));
 			benchOpenResult(context, outcome);
@@ -650,13 +655,18 @@ public class A11yGameTest implements FabricClientGameTest {
 		return last;
 	}
 
+	// extra: more failing distances above the 5 (for the scrolling check).
 	private static io.github.chaotix345.rigtune.client.benchmark.BenchmarkController.Outcome benchOutcome(
-			io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend.Current now, io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord record) {
+			io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend.Current now, io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord record,
+			int extra) {
 		int rd = now.renderDistance();
 		io.github.chaotix345.rigtune.core.benchmark.Knobs original = new io.github.chaotix345.rigtune.core.benchmark.Knobs(rd, now.simulationDistance(), false, false);
-		List<io.github.chaotix345.rigtune.core.benchmark.PlannerResult.Measurement> steps = List.of(
+		List<io.github.chaotix345.rigtune.core.benchmark.PlannerResult.Measurement> steps = new java.util.ArrayList<>(List.of(
 				benchStep(rd, 704, 440, 3.1, true, true), benchStep(rd + 2, 650, 400, 3.4, true, true), benchStep(rd + 3, 620, 390, 3.6, true, true),
-				benchStep(rd + 4, 600, 380, 3.8, false, true), benchStep(rd + 6, 500, 300, 4.4, false, false));
+				benchStep(rd + 4, 600, 380, 3.8, false, true), benchStep(rd + 6, 500, 300, 4.4, false, false)));
+		for (int i = 0; i < extra; i++) {
+			steps.add(benchStep(rd + 7 + i, 480 - 10 * i, 290 - 10 * i, 4.6, false, true));
+		}
 		io.github.chaotix345.rigtune.core.benchmark.SessionResult session = new io.github.chaotix345.rigtune.core.benchmark.SessionResult(
 				io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest.Mode.TUNE, original, original.withRenderDistance(rd + 3), 60,
 				new io.github.chaotix345.rigtune.core.benchmark.PlannerResult(rd + 3, true, rd + 3, steps, "test"), List.of(),

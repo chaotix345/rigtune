@@ -23,6 +23,7 @@ import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.stutter.Attributor;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ComponentRenderUtils;
@@ -85,6 +86,10 @@ public class BenchmarkResultScreen extends Screen {
 	private List<StatusRow> shownRows = List.of();
 	private List<Stop> stops = List.of();
 	private @Nullable ResultTable table;
+	// docs/v0.4/SPEC.md 11 (RowList): the table row that had the keyboard focus, and the table's scroll, kept across a
+	// rebuild (a resize or GUI scale change).
+	private int focusedRow = -1;
+	private double scroll;
 	// Where the table and the chart are drawn (chartWidth 0: no chart).
 	private int tableLeft;
 	private int tableWidth;
@@ -157,6 +162,7 @@ public class BenchmarkResultScreen extends Screen {
 		table = null;
 		if (tune() && !rows.isEmpty()) {
 			table = addRenderableWidget(new ResultTable());
+			table.setScrollAmount(scroll);
 		} else if (tune()) {
 			addRenderableWidget(RowFocus.standalone(Component.translatable("rigtune.benchmark.none"), 8, contentTop - 1, Math.max(1, width - 16), LINE));
 		}
@@ -185,9 +191,40 @@ public class BenchmarkResultScreen extends Screen {
 			KeepSettings.apply(minecraft, values);
 			onClose();
 		}).bounds(width / 2 - buttonWidth - 2, y, buttonWidth, 20).build());
-		use.active = !session.measurements().isEmpty();
+		// Never for a distance that couldn't be measured (review M1): with no Render distance step on loaded terrain, the
+		// suggestion is where it started.
+		use.active = !session.measurements().isEmpty() && (rows.isEmpty() || rows.stream().anyMatch(PlannerResult.Measurement::complete));
 		addRenderableWidget(Button.builder(Component.translatable("rigtune.benchmark.keep", outcome.originalRd()), b -> onClose())
 				.bounds(width / 2 + 2, y, buttonWidth, 20).build());
+	}
+
+	@Override
+	protected void rebuildWidgets() {
+		if (table != null) {
+			scroll = table.scrollAmount();
+			focusedRow = table.focusedRow();
+		}
+		super.rebuildWidgets();
+	}
+
+	// The focused table row comes back after a rebuild; otherwise, after keyboard use, the first button has it as in 0.4
+	// (Use, or Done), not the first status line.
+	@Override
+	protected void setInitialFocus() {
+		boolean keyboard = minecraft.getLastInputType().isKeyboard();
+		ComponentPath path = focusedRow >= 0 ? RowList.initialFocus(this, table, focusedRow, keyboard) : null;
+		focusedRow = -1;
+		if (path == null && keyboard) {
+			for (GuiEventListener child : children()) {
+				if (child instanceof Button button && button.active) {
+					path = ComponentPath.path(this, ComponentPath.leaf(button));
+					break;
+				}
+			}
+		}
+		if (path != null) {
+			changeFocus(path);
+		}
 	}
 
 	// review-8 P5B-F4: every status line wrapped to the screen's width, within maxRows rows (see fit).
@@ -215,8 +252,10 @@ public class BenchmarkResultScreen extends Screen {
 			} else {
 				lineStops.add(new Stop(line.spoken() != null ? line.spoken() : line.text(), out.size(), shown[i]));
 			}
+			// A wrapped trend line whose later rows fit() left out: its first row shows the whole line as a tooltip.
+			boolean cut = line.spoken() != null && i + 1 < lines.size() && lines.get(i + 1).continuation() && shown[i + 1] == 0;
 			if (shown[i] == counts[i]) {
-				wrapped.get(i).forEach(row -> out.add(new StatusRow(row, line.color(), null)));
+				wrapped.get(i).forEach(row -> out.add(new StatusRow(row, line.color(), cut ? line.spoken() : null)));
 			} else {
 				out.add(new StatusRow(clip(line.text()), line.color(), line.text()));
 			}
@@ -268,11 +307,13 @@ public class BenchmarkResultScreen extends Screen {
 	private void noteLines(List<Line> out, BenchmarkMath.Aggregate result) {
 		StutterReport capture = StutterHooks.lastBenchmark();
 		int spikes = capture == null ? 0 : capture.spikes().total();
-		Text noisy = ResultNotes.noisy(result.cv(), spikes, tagged(capture, Attributor.DH), tagged(capture, Attributor.CHUNKS_LOADING));
+		BenchmarkRecord.Context context = outcome.record() == null ? null : outcome.record().context();
+		Text noisy = ResultNotes.noisy(result.cv(), spikes, tagged(capture, Attributor.DH), tagged(capture, Attributor.CHUNKS_LOADING),
+				context != null && Boolean.TRUE.equals(context.dhGenerating()));
 		if (noisy != null) {
 			out.add(new Line(Texts.component(noisy), COLOR_WARN));
 		}
-		Text generating = ResultNotes.dhGenerating(outcome.record() == null ? null : outcome.record().context());
+		Text generating = ResultNotes.dhGenerating(context);
 		if (generating != null) {
 			out.add(new Line(Texts.component(generating), COLOR_WARN));
 		}
@@ -291,9 +332,10 @@ public class BenchmarkResultScreen extends Screen {
 	// (docs/v0.5/SPEC.md RW-15) how many steps it left out.
 	private void stutterLine(List<Line> out) {
 		Component line = StutterScreen.benchmarkLine(StutterHooks.lastBenchmark());
-		if (line != null) {
-			out.add(new Line(line, COLOR_LABEL));
+		if (line == null) {
+			return;
 		}
+		out.add(new Line(line, COLOR_LABEL));
 		Text leftOut = ResultNotes.stutterStepsLeftOut(outcome.stepsLeftOut());
 		if (leftOut != null) {
 			out.add(new Line(Texts.component(leftOut), COLOR_LABEL));

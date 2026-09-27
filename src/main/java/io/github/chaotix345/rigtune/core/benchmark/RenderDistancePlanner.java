@@ -19,6 +19,8 @@ public final class RenderDistancePlanner {
 	private final List<Measurement> measurements = new ArrayList<>();
 	// Distances measured again after an incomplete step (RW-5: once each).
 	private final Set<Integer> remeasured = new HashSet<>();
+	// BenchmarkSession ended the search (done, or no time left for its next step).
+	private boolean finished;
 
 	public RenderDistancePlanner(int minRd, int maxRd, int startRd, double targetFps, int maxSteps) {
 		if (minRd > maxRd) {
@@ -52,8 +54,10 @@ public final class RenderDistancePlanner {
 			if (pass >= maxRd) {
 				return OptionalInt.empty();
 			}
-			// Everything so far passed, so measurements.size() counts the upward steps taken: +2, +4, +8...
-			long step = 1L << Math.min(measurements.size(), 30);
+			// Everything so far passed, so the steps at or above the start count the upward steps taken: +2, +4, +8... (steps
+			// below it were measured under an incomplete start, which then passed when measured again; review L7).
+			long upward = measurements.stream().filter(m -> m.rd() >= startRd).count();
+			long step = 1L << Math.min(upward, 30);
 			return OptionalInt.of((int) Math.min(maxRd, pass + step));
 		}
 		if (bound - pass <= 1) {
@@ -96,6 +100,16 @@ public final class RenderDistancePlanner {
 		return next().isEmpty();
 	}
 
+	// BenchmarkSession ended the render distance stage; a pending second try didn't fit the deadline.
+	public void finish() {
+		finished = true;
+	}
+
+	// RW-5: rd is a second try of a distance whose terrain hadn't loaded (BenchmarkSession keeps a repeat's time after it).
+	public boolean remeasures(int rd) {
+		return measurements.stream().anyMatch(m -> m.rd() == rd && !m.complete()) && !remeasured.contains(rd);
+	}
+
 	public PlannerResult result() {
 		if (measurements.isEmpty()) {
 			return new PlannerResult(minRd, false, minRd, measurements, "No measurements yet");
@@ -106,11 +120,12 @@ public final class RenderDistancePlanner {
 		return new PlannerResult(met ? pass : minRd, met, bestEffort(), measurements, reason(met, pass, fail));
 	}
 
-	// The best 1% low among the complete steps (all steps when none is complete).
+	// The best 1% low among the complete steps; the start when none is complete (a distance that couldn't be measured is
+	// never suggested; review M1).
 	private int bestEffort() {
 		List<Measurement> candidates = measurements.stream().filter(Measurement::complete).toList();
 		if (candidates.isEmpty()) {
-			candidates = measurements;
+			return startRd;
 		}
 		Measurement best = candidates.getFirst();
 		for (Measurement m : candidates) {
@@ -124,14 +139,18 @@ public final class RenderDistancePlanner {
 	}
 
 	private String reason(boolean met, int pass, int fail) {
-		if (measurements.size() < maxSteps && search().isPresent()) {
+		if (!finished && !done()) {
 			return "In progress";
+		}
+		if (measurements.stream().noneMatch(Measurement::complete)) {
+			return "Nothing could be measured: the terrain hadn't loaded in time";
 		}
 		int unmeasured = lowestUnmeasured(pass, fail);
 		String notMeasured = unmeasured == NO_FAIL ? "" : "; " + unmeasured + " couldn't be measured (its terrain hadn't loaded)";
 		if (!met) {
 			return (fail == minRd ? "Even the minimum render distance (" + minRd + ") misses the target"
-					: "Step limit reached without meeting the target") + notMeasured;
+					: measurements.size() >= maxSteps ? "Step limit reached without meeting the target" : "No measured distance meets the target")
+					+ notMeasured;
 		}
 		if (fail == NO_FAIL && pass >= maxRd) {
 			return "Target met at the maximum render distance (" + maxRd + ")";
