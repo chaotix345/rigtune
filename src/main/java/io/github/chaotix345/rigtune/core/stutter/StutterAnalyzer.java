@@ -42,7 +42,9 @@ public final class StutterAnalyzer {
 		}
 	}
 
-	public record Result(StutterReport report, StutterFacts facts, List<Attributor.Attribution> attributions) {
+	// dhWorldGenCores (v0.5, docs/v0.5/SPEC.md 2S for 2B's RW-6): the core-equivalents Distant Horizons' world generation
+	// used over the sampler windows the capture recorded (dhWorldGenCores(Input)); null without such a window.
+	public record Result(StutterReport report, StutterFacts facts, List<Attributor.Attribution> attributions, @Nullable Double dhWorldGenCores) {
 	}
 
 	private StutterAnalyzer() {
@@ -139,7 +141,7 @@ public final class StutterAnalyzer {
 		StutterFacts stutterFacts = new StutterFacts(claimedShares, taggedShares, gc.fullPauses(), gc.stalls(), gc.explicit(), gc.liveSetPercent(), room,
 				contentionShare(in, samples), gameplaySeconds > 0 ? spikes.size() / (gameplaySeconds / 60) : 0, in.collector(), in.gcMeasured(),
 				unmeasured);
-		return new Result(report, stutterFacts, attributions);
+		return new Result(report, stutterFacts, attributions, dhWorldGenCores(in));
 	}
 
 	// review-8 ST-2: the phases of a frame the frame ring still holds, from its own phase word (the excess over the
@@ -336,11 +338,13 @@ public final class StutterAnalyzer {
 			if (window <= 0 || t < in.startNanos() || t - window > in.endNanos()) {
 				continue;
 			}
+			long dh = s[i + StutterRings.S_DH] + s[i + StutterRings.S_DH_WORLD_GEN];
 			String top = null;
 			long topCpu = -1;
 			for (int g = StutterRings.S_SERVER; g <= StutterRings.S_OTHER; g++) {
-				if (s[i + g] > topCpu) {
-					topCpu = s[i + g];
+				long cpu = g == StutterRings.S_DH ? dh : s[i + g];
+				if (cpu > topCpu) {
+					topCpu = cpu;
 					top = StutterRings.GROUPS[g - StutterRings.S_RENDER];
 				}
 			}
@@ -350,10 +354,32 @@ public final class StutterAnalyzer {
 			// Sodium: jobs waiting with every builder busy. Vanilla (no thread counts): a real queue, not the few sections that
 			// are always in flight while moving.
 			boolean backlog = total > 0 ? scheduled > 0 && busy >= total : busy < 0 && scheduled >= VANILLA_BACKLOG;
-			out.add(new Attributor.Sample(t - window, t, (double) s[i + StutterRings.S_DH] / window, (double) s[i + StutterRings.S_PROCESS] / window, top,
-					backlog));
+			out.add(new Attributor.Sample(t - window, t, (double) dh / window, (double) s[i + StutterRings.S_PROCESS] / window, top, backlog));
 		}
 		return out;
+	}
+
+	// Distant Horizons' world generation CPU per second of the sampler windows the capture recorded: a window counts when
+	// its midpoint lies outside every pause (PAUSE_BEGIN to PAUSE_END; a benchmark capture is paused between its sweeps and
+	// for an excluded step). Null when no window counts (no sampler, or nothing recorded).
+	static @Nullable Double dhWorldGenCores(Input in) {
+		List<Attributor.Interval> paused = pairs(in, StutterRings.PAUSE_BEGIN, StutterRings.PAUSE_END, Long.MAX_VALUE / 4);
+		long[] s = in.rings().samples();
+		long cpu = 0;
+		long time = 0;
+		for (int i = 0; i + StutterRings.SAMPLE_STRIDE <= s.length; i += StutterRings.SAMPLE_STRIDE) {
+			long t = s[i + StutterRings.S_TIME];
+			long window = s[i + StutterRings.S_WINDOW];
+			if (window <= 0 || t < in.startNanos() || t - window > in.endNanos()) {
+				continue;
+			}
+			long mid = t - window / 2;
+			if (paused.stream().noneMatch(p -> p.overlaps(mid, mid))) {
+				cpu += s[i + StutterRings.S_DH_WORLD_GEN];
+				time += window;
+			}
+		}
+		return time == 0 ? null : (double) cpu / time;
 	}
 
 	private static @Nullable Double contentionShare(Input in, List<Attributor.Sample> samples) {

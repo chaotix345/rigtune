@@ -50,7 +50,8 @@ public final class StutterService {
 	private final Path configDir;
 	private @Nullable StutterStore store;
 
-	private record Analysis(StutterMonitor.@Nullable Capture capture, StutterReport report, List<StutterAdvisor.Fired> advice) {
+	private record Analysis(StutterMonitor.@Nullable Capture capture, StutterReport report, List<StutterAdvisor.Fired> advice,
+			@Nullable Double dhWorldGenCores) {
 	}
 
 	private enum Saved { UNKNOWN, LOADING, DONE }
@@ -69,6 +70,7 @@ public final class StutterService {
 	private volatile @Nullable Analysis saved;
 	private volatile Saved savedState = Saved.UNKNOWN;
 	private volatile @Nullable StutterReport lastBenchmark;
+	private volatile @Nullable Double lastBenchmarkDhWorldGen;
 	// stutter.json work runs in order on the shared executor (a save queued before a Clear never lands after it); a Clear
 	// bumps the generation so an older save doesn't bring its summary back on screen.
 	private CompletableFuture<Void> io = CompletableFuture.completedFuture(null);
@@ -241,7 +243,16 @@ public final class StutterService {
 			bench = StutterCapture.startBenchmark();
 		}
 		if (bench != null) {
-			bench.paused = !recording;
+			pauseBenchmark(bench, !recording);
+		}
+	}
+
+	// v0.5 (docs/v0.5/SPEC.md 2S, RW-6's bucket): each flip of the benchmark capture's recording is an event too, as the
+	// session's Pause is, so the analysis knows which sampler windows fell in the sweeps.
+	private static void pauseBenchmark(StutterMonitor.Capture bench, boolean paused) {
+		if (bench.paused != paused) {
+			bench.paused = paused;
+			StutterMonitor.event(paused ? StutterRings.PAUSE_BEGIN : StutterRings.PAUSE_END, System.nanoTime(), 0);
 		}
 	}
 
@@ -262,6 +273,7 @@ public final class StutterService {
 		benchmarkRunning = false;
 		StutterMonitor.Capture bench = StutterMonitor.benchmark();
 		lastBenchmark = null;
+		lastBenchmarkDhWorldGen = null;
 		StutterCapture.Copy copy = bench == null ? null : StutterCapture.stop(bench);
 		boolean paused = resumePaused;
 		resumePaused = false;
@@ -279,6 +291,7 @@ public final class StutterService {
 		}
 		Analysis a = analyze(copy, machine(minecraft));
 		lastBenchmark = a.report();
+		lastBenchmarkDhWorldGen = a.dhWorldGenCores();
 		RigTune.LOGGER.info("Stutter Doctor: benchmark: {} spikes, causes {}, {}", a.report().spikes().total(), a.report().causes(), phases(copy));
 		int gen = generation;
 		// The newest saved summary is what StutterScreen shows when no session runs (review-8 P5A-F3).
@@ -292,6 +305,10 @@ public final class StutterService {
 
 	@Nullable StutterReport lastBenchmark() {
 		return lastBenchmark;
+	}
+
+	@Nullable Double lastBenchmarkDhWorldGenCores() {
+		return lastBenchmarkDhWorldGen;
 	}
 
 	int sessionsEnded() {
@@ -315,7 +332,7 @@ public final class StutterService {
 			if (error != null) {
 				RigTune.LOGGER.warn("Stutter Doctor: analysis failed", error);
 			} else if (StutterMonitor.session() == session) {
-				live = new Analysis(session, result.report(), result.advice());
+				live = new Analysis(session, result.report(), result.advice(), result.dhWorldGenCores());
 			}
 		}));
 	}
@@ -328,7 +345,7 @@ public final class StutterService {
 		io(() -> {
 			try {
 				StutterReport latest = store().latest();
-				saved = latest == null ? null : new Analysis(null, latest, adviceFor(latest.advice(), controller.rules()));
+				saved = latest == null ? null : new Analysis(null, latest, adviceFor(latest.advice(), controller.rules()), null);
 			} catch (RuntimeException e) {
 				RigTune.LOGGER.warn("Stutter Doctor: could not read the saved sessions", e);
 			} finally {
@@ -372,7 +389,7 @@ public final class StutterService {
 				: StutterAdvisor.evaluate(m.rules(), StutterAdvisor.context(m.rules(), hw, m.mods(), m.settings(), m.goal(), result.facts()),
 						result.report().enoughData());
 		StutterReport report = result.report().withAdvice(advice.stream().map(StutterAdvisor.Fired::id).toList());
-		return new Analysis(null, report, advice);
+		return new Analysis(null, report, advice, result.dhWorldGenCores());
 	}
 
 	// "phase timing ok (per-frame baselines: packets 12.0 us, ticks 8.1 us, render 450.2 us; timers seen 11111)", for the
