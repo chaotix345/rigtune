@@ -35,6 +35,9 @@ public final class ClientSettings {
 	// 0.4.0 (docs/v0.4/SPEC.md 5): the opt-in Stutter Doctor session monitor. Off by default; 0.3.x drops it on rewrite,
 	// which turns the monitor off (the safe default).
 	public volatile boolean stutterMonitor = false;
+	// 0.5.0 (docs/v0.5/SPEC.md 4e): the per-instance opt-in that lets RigTune change mod files in an instance whose
+	// launcher keeps its own record of them. Off by default; 0.4.x drops it on rewrite, which turns it off (the safe side).
+	public volatile boolean modFilesByRigTune = false;
 
 	public static synchronized ClientSettings shared(Path configDir) {
 		if (shared == null) {
