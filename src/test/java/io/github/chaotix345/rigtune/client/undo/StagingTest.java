@@ -12,6 +12,7 @@ import io.github.chaotix345.rigtune.core.apply.TestJars;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
+import io.github.chaotix345.rigtune.core.history.StaleOps;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -361,5 +362,104 @@ class StagingTest {
 		assertNotNull(staging.stage(List.of(Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4"))), "e1"));
 
 		assertEquals(JournalChange.DISCARDED, changesOf("e0").getFirst().status());
+	}
+
+	// --- docs/v0.5/SPEC.md 2H RW-3: groups that can never run are dropped at launch (Staging.dropStale)
+
+	private static final String DH = "DistantHorizons-3.3.2-26.2-fabric-neoforge.jar";
+
+	// The real 0.1.0 DH group (real-world-2026-09-27.md §3): DH 3.3.0 as fabric-26.2.jar, its 3.3.2 download staged.
+	private List<Op> stageTheDhGroup() throws IOException {
+		TestJars.modJar(mods.resolve("fabric-26.2.jar"), "distanthorizons");
+		List<Op> dh = PendingActions.group(Op.disableFile(mods.resolve("fabric-26.2.jar")),
+				Op.enableFile(pendingJar(DH, "distanthorizons"), mods.resolve(DH)).withModId("distanthorizons"));
+		assertNotNull(staging.stage(dh, "e1"));
+		return dh;
+	}
+
+	// The player's fix in the Modrinth App: the download and fabric-26.2.jar deleted, DH 3.3.2 installed at the staged name.
+	@Test
+	void theRealDhGroupIsDroppedAsInstalledAnotherWay() throws IOException {
+		List<Op> dh = stageTheDhGroup();
+		List<Op> other = update("y-1.jar", "y-2.jar", "y");
+		assertNotNull(staging.stage(other, "e2"));
+		Files.delete(mods.resolve(DH + PendingActions.PENDING_SUFFIX));
+		Files.delete(mods.resolve("fabric-26.2.jar"));
+		TestJars.modJar(mods.resolve(DH), "distanthorizons");
+
+		Staging.StaleDrop drop = staging.dropStale(Map.of("distanthorizons", Set.of(DH), "y", Set.of("y-1.jar")));
+
+		assertEquals(dh.stream().map(Op::id).toList(), drop.dropped().stream().map(Op::id).toList());
+		assertEquals(List.of(new StaleOps.Stale(dh.get(1).id(),
+				StaleOps.Why.INSTALLED, "distanthorizons", DH, DH)), drop.stale());
+		assertEquals(other.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+		assertEquals(List.of(JournalChange.ABANDONED, JournalChange.ABANDONED), changesOf("e1").stream().map(JournalChange::status).toList());
+		assertTrue(changesOf("e2").stream().allMatch(c -> JournalChange.STAGED.equals(c.status())));
+		assertTrue(Files.exists(mods.resolve(DH)), "the app's jar is left alone");
+	}
+
+	// The second leg: DH 3.3.0 disabled in the app (fabric-26.2.jar.disabled) instead of removed.
+	@Test
+	void theDhGroupWithTheOldJarDisabledInTheAppIsDroppedToo() throws IOException {
+		stageTheDhGroup();
+		Files.delete(mods.resolve(DH + PendingActions.PENDING_SUFFIX));
+		Files.move(mods.resolve("fabric-26.2.jar"), mods.resolve("fabric-26.2.jar.disabled"));
+		TestJars.modJar(mods.resolve(DH), "distanthorizons");
+
+		Staging.StaleDrop drop = staging.dropStale(Map.of("distanthorizons", Set.of(DH)));
+
+		assertEquals(2, drop.dropped().size());
+		assertFalse(Files.exists(pending));
+		assertEquals(List.of(JournalChange.ABANDONED, JournalChange.ABANDONED), changesOf("e1").stream().map(JournalChange::status).toList());
+		assertTrue(Files.exists(mods.resolve("fabric-26.2.jar.disabled")));
+	}
+
+	// The download deleted and DH not installed another way: it can never apply, so it's cancelled (DISCARDED).
+	@Test
+	void aGroupWhoseDownloadIsGoneIsDiscarded() throws IOException {
+		stageTheDhGroup();
+		Files.delete(mods.resolve(DH + PendingActions.PENDING_SUFFIX));
+
+		Staging.StaleDrop drop = staging.dropStale(Map.of("distanthorizons", Set.of("fabric-26.2.jar")));
+
+		assertEquals(StaleOps.Why.GONE, drop.stale().getFirst().why());
+		assertEquals(List.of(JournalChange.DISCARDED, JournalChange.DISCARDED), changesOf("e1").stream().map(JournalChange::status).toList());
+		assertTrue(Files.exists(mods.resolve("fabric-26.2.jar")), "the installed jar stays");
+	}
+
+	// The download still there, the mod installed through the launcher under another name: dropped, the download retired.
+	@Test
+	void aModLoadedFromAnotherJarIsDroppedAndItsDownloadRetired() throws IOException {
+		stageTheDhGroup();
+		TestJars.modJar(mods.resolve("DistantHorizons-3.3.2-from-the-app.jar"), "distanthorizons");
+
+		Staging.StaleDrop drop = staging.dropStale(Map.of("distanthorizons", Set.of("fabric-26.2.jar", "DistantHorizons-3.3.2-from-the-app.jar")));
+
+		assertEquals("DistantHorizons-3.3.2-from-the-app.jar", drop.stale().getFirst().installedAs());
+		assertTrue(Files.exists(mods.resolve(DH + PendingActions.SUPERSEDED_SUFFIX)));
+		assertFalse(Files.exists(mods.resolve(DH + PendingActions.PENDING_SUFFIX)));
+	}
+
+	// A group the helper left half done (killed between two renames) is never dropped, whatever StaleOps would say; an
+	// ordinary update isn't stale; a busy lock drops nothing.
+	@Test
+	void halfDoneAndRunnableGroupsStayAndABusyLockDropsNothing() throws Exception {
+		Path lib = pendingJar("lib.jar", "lib");
+		List<Op> addition = PendingActions.group(Op.enableFile(pendingJar("a.jar", "a"), mods.resolve("a.jar")).withModId("a"),
+				Op.enableFile(lib, mods.resolve("lib.jar")).withModId("lib"));
+		assertNotNull(staging.stage(addition, "e1"));
+		assertThrows(TestExecutors.Killed.class, () -> TestExecutors.killedAt(lib::equals).run(PendingActions.load(pending), pending));
+		assertTrue(Files.exists(mods.resolve("a.jar")));
+		List<Op> update = update("x-1.jar", "x-2.jar", "x");
+		assertNotNull(staging.stage(update, "e2"));
+		String before = Files.readString(pending);
+
+		assertEquals(Staging.StaleDrop.NONE, staging.dropStale(Map.of("a", Set.of("a-from-the-app.jar"), "x", Set.of("x-1.jar"))));
+		try (HeldLock helper = HeldLock.hold(ApplyLock.defaultPath(config))) {
+			Files.delete(mods.resolve("x-2.jar" + PendingActions.PENDING_SUFFIX));
+			assertNull(staging.dropStale(Map.of()));
+		}
+
+		assertEquals(before, Files.readString(pending));
 	}
 }
