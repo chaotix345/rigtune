@@ -590,6 +590,72 @@ public class A11yGameTest implements FabricClientGameTest {
 	// ---- WS-P (PF-2): RigTuneSettingsScreen's battery-offer row.
 
 	private static void walkBatteryOfferRow(V05TestContext v05) {
+		// PF-2 (AC2P.2): the "Battery offer" switch is a Tab stop that narrates its label and state; Enter turns the offer off
+		// (profiles.json's battery.snoozed, the same switch as "Don't offer again") and on again. profiles.json is put back.
+		ClientGameTestContext context = v05.context();
+		Path file = ProfileStore.file(v05.configDir());
+		byte[] saved = batteryOfferFileBytes(file);
+		try {
+			ProfileStore.shared(v05.configDir()).snoozeBattery(false);
+			context.runOnClient(mc -> mc.gui.setScreen(new RigTuneSettingsScreen(new TitleScreen(), v05.stub())));
+			context.waitFor(mc -> mc.gui.screen() instanceof RigTuneSettingsScreen, 200);
+			context.waitTicks(2);
+			int row = context.computeOnClient(A11yGameTest::batteryOfferRowIndex);
+			focusRow(context, row);
+			String label = Component.translatable("rigtune.settings.battery_offer").getString();
+			boolean[] states = {true, false, true};
+			for (int i = 0; i < states.length; i++) {
+				boolean on = states[i];
+				String state = Component.translatable(on ? "options.on" : "options.off").getString();
+				String[] seen = context.computeOnClient(mc -> new String[] {narration(mc), leafText(mc)});
+				check(seen[1].contains(label) && seen[1].contains(state), "battery offer: the focused switch says " + label + " " + state + ": " + seen[1]);
+				check(seen[0].contains(seen[1]), "battery offer: the row narrates " + seen[1] + ": " + seen[0]);
+				check(ProfileStore.shared(v05.configDir()).battery().snoozed() == !on, "battery offer: battery.snoozed is " + !on);
+				if (i == 0) {
+					context.takeScreenshot("a11y-settings-battery-offer-focused");
+				}
+				context.getInput().pressKey(InputConstants.KEY_RETURN);
+				context.waitTicks(2);
+			}
+			RigTune.LOGGER.info("A11yGameTest: settings: the battery-offer row is a Tab stop, narrates its state and switches the offer");
+		} finally {
+			batteryOfferFileRestore(file, saved);
+			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
+			context.waitForScreen(TitleScreen.class);
+		}
+	}
+
+	private static int batteryOfferRowIndex(Minecraft mc) {
+		String label = Component.translatable("rigtune.settings.battery_offer").getString();
+		List<?> rows = list(mc).children();
+		for (int i = 0; i < rows.size(); i++) {
+			for (GuiEventListener child : ((ContainerEventHandler) rows.get(i)).children()) {
+				if (child instanceof AbstractWidget w && w.getMessage().getString().startsWith(label)) {
+					return i;
+				}
+			}
+		}
+		throw new AssertionError("no battery-offer row on " + mc.gui.screen());
+	}
+
+	private static byte @Nullable [] batteryOfferFileBytes(Path file) {
+		try {
+			return java.nio.file.Files.exists(file) ? java.nio.file.Files.readAllBytes(file) : null;
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
+
+	private static void batteryOfferFileRestore(Path file, byte @Nullable [] bytes) {
+		try {
+			if (bytes == null) {
+				java.nio.file.Files.deleteIfExists(file);
+			} else {
+				java.nio.file.Files.write(file, bytes);
+			}
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
 	}
 
 	// ---- WS-L1 (4e, 4b): RigTuneSettingsScreen's mod-files row and MOD_FILES_NEWS on NoticeScreen.

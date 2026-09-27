@@ -7,6 +7,7 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.AtomicFiles;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.charset.CharacterCodingException;
@@ -36,6 +37,8 @@ public final class Journal implements ChangeRecorder {
 	public static final Duration LOCK_WAIT = Duration.ofSeconds(2);
 	// The id prefix of the entry the cap folds older entries into (docs/v0.4/SPEC.md 2o M6).
 	public static final String BASELINE = "baseline-";
+	// v0.5 L8: at most this many ids in a baseline's foldedEntryIds (the newest kept).
+	public static final int MAX_FOLDED_IDS = 50;
 	static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
 	public interface Log {
@@ -291,6 +294,42 @@ public final class Journal implements ChangeRecorder {
 		return entry.id() != null && entry.id().startsWith(BASELINE) && JournalEntry.APPLY.equals(entry.kind());
 	}
 
+	// v0.5 L8: the ids an entry folded: a baseline's foldedEntryIds, at most the newest MAX_FOLDED_IDS (history.json is the
+	// player's file too, so another entry's list, or a longer one, isn't trusted), else none.
+	public static List<String> folded(JournalEntry entry) {
+		List<String> ids = entry.foldedEntryIds();
+		if (ids == null || !isBaseline(entry)) {
+			return List.of();
+		}
+		return ids.subList(Math.max(0, ids.size() - MAX_FOLDED_IDS), ids.size());
+	}
+
+	// v0.5 L8: the ids the journal still accounts for: every entry's own and the ids a baseline folded (their profile labels
+	// and the records that name them still resolve through it). ProfileService prunes the switch labels against these.
+	public static Set<String> idsWithFolded(List<JournalEntry> entries) {
+		Set<String> out = new HashSet<>();
+		for (JournalEntry entry : entries) {
+			out.add(entry.id());
+			out.addAll(folded(entry));
+		}
+		return out;
+	}
+
+	// v0.5 L8: the entry with this id, else the baseline that folded it (C09's and C20's records find a folded entry), else
+	// null.
+	public static @Nullable JournalEntry holding(List<JournalEntry> entries, String id) {
+		JournalEntry folded = null;
+		for (JournalEntry entry : entries) {
+			if (id.equals(entry.id())) {
+				return entry;
+			}
+			if (folded == null && folded(entry).contains(id)) {
+				folded = entry;
+			}
+		}
+		return folded;
+	}
+
 	private static void drop(List<JournalEntry> out, Predicate<JournalEntry> droppable) {
 		for (int i = 0; i < out.size() && out.size() > MAX_ENTRIES; ) {
 			if (droppable.test(out.get(i))) {
@@ -350,7 +389,8 @@ public final class Journal implements ChangeRecorder {
 	// from where UndoPlanner's chain would end (newest to oldest while each older change ended where the newer one
 	// started). When the player changed the value before that, the older changes become one change before it that ends
 	// elsewhere, so the chain still stops there rather than going on into an older entry. Every applied mod file change
-	// as it is.
+	// as it is. v0.5 L8: foldedEntryIds holds the ids it folded, oldest first (a folded baseline's own list, then its id),
+	// the newest MAX_FOLDED_IDS kept, so a folded switch keeps its profile label.
 	private static JournalEntry baseline(List<JournalEntry> run) {
 		Map<String, List<JournalChange>> byKey = new LinkedHashMap<>();
 		List<JournalChange> files = new ArrayList<>();
@@ -384,7 +424,15 @@ public final class Journal implements ChangeRecorder {
 		changes.addAll(files);
 		JournalEntry first = run.getFirst();
 		String id = isBaseline(first) ? first.id() : BASELINE + ChangeRecorder.newEntryId();
-		return new JournalEntry(id, first.at(), JournalEntry.APPLY, first.rigtuneVersion(), first.mcVersion(), null, changes);
+		List<String> folded = new ArrayList<>();
+		for (JournalEntry entry : run) {
+			folded.addAll(folded(entry));
+			if (!id.equals(entry.id())) {
+				folded.add(entry.id());
+			}
+		}
+		return new JournalEntry(id, first.at(), JournalEntry.APPLY, first.rigtuneVersion(), first.mcVersion(), null, changes,
+				List.copyOf(folded.subList(Math.max(0, folded.size() - MAX_FOLDED_IDS), folded.size())));
 	}
 
 	// The applied settings change c, starting from `before`.

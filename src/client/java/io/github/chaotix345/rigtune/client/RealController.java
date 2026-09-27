@@ -972,6 +972,11 @@ public final class RealController implements RigTuneController {
 	}
 
 	@Override
+	public int profileCodeLeftOut(String id) {
+		return profileService.profileCodeLeftOut(id);
+	}
+
+	@Override
 	public void renameProfile(String id, String name) {
 		profileService.renameProfile(id, name);
 	}
