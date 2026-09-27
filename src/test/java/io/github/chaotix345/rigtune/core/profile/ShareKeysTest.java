@@ -1,8 +1,11 @@
 package io.github.chaotix345.rigtune.core.profile;
 
+import io.github.chaotix345.rigtune.core.RepoFiles;
 import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -12,8 +15,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.4/SPEC.md AC4.4: the v1 table is frozen and append-only.
 class ShareKeysTest {
-	// PINNED: index | key | kind | bounds or values | shareable. Never edit a line; a new key is a new line at the end (and a new
-	// enum value goes at the end of its list).
+	// PINNED: index | key | kind | bounds or values | shareable. Never edit a line; a new key is a new line at the end.
+	// never extend an existing key's range or enum; add a new key index (older decoders skip unknown indices): a 0.4.0
+	// decoder rejects the whole code on an out-of-range known key (docs/v0.5/SPEC.md Latent 1).
 	private static final List<String> PINNED = List.of(
 			"0|vanilla.renderDistance|INT|2..32|true",
 			"1|vanilla.simulationDistance|INT|5..32|true",
@@ -58,6 +62,39 @@ class ShareKeysTest {
 		}
 		assertNull(ShareKeys.byIndex(ShareKeys.V1.size()));
 		assertNull(ShareKeys.byIndex(-1));
+	}
+
+	// docs/v0.5/SPEC.md AC2P.6: each key's wire range, pinned: index | smallest wire value | largest wire value (maxFps also
+	// takes MATCH_DISPLAY). A 0.4.0 decoder rejects a whole code with a known key outside its own range, so none of these
+	// ever changes.
+	private static final List<String> PINNED_WIRE = List.of(
+			"0|0|30", "1|0|27", "2|0|18", "3|0|25+26", "4|0|1", "5|0|1", "6|0|2", "7|0|7", "8|0|7", "9|0|2",
+			"10|0|2", "11|0|2", "12|0|1", "13|0|1", "14|0|1", "15|0|1", "16|0|1", "17|0|1", "18|0|1", "19|0|32",
+			"20|0|2", "21|0|2", "22|0|480", "23|0|6", "24|0|4", "25|0|4", "26|0|31", "27|0|1", "28|0|32", "29|0|1");
+
+	@Test
+	void everyKeysWireRangeIsPinned() {
+		List<String> actual = ShareKeys.V1.stream().map(k -> k.index() + "|" + (k.validWire(0) ? 0 : -1) + "|" + k.maxWire()
+				+ (k.validWire(ShareKeys.MATCH_DISPLAY) && ShareKeys.MATCH_DISPLAY > k.maxWire() ? "+" + ShareKeys.MATCH_DISPLAY : "")).toList();
+		assertEquals(PINNED_WIRE, actual);
+		for (ShareKeys.Key key : ShareKeys.V1) {
+			assertFalse(key.validWire(-1), key.key());
+			assertFalse(key.validWire(key.maxWire() + (key.maxWire() + 1 == ShareKeys.MATCH_DISPLAY && key.kind() == ShareKeys.Kind.INT10 ? 2 : 1)), key.key());
+		}
+	}
+
+	// docs/v0.5/SPEC.md Latent 1 (AC2P.6): the table's comment and this test's pin comment both carry the rule, and neither
+	// invites a value at the end of an existing enum any more. Only the files' comment lines are read.
+	@Test
+	void theLatent1RuleIsInBothComments() throws IOException {
+		String rule = "never extend an existing key's range or enum; add a new key index (older decoders skip unknown indices)";
+		for (String file : List.of("src/main/java/io/github/chaotix345/rigtune/core/profile/ShareKeys.java",
+				"src/test/java/io/github/chaotix345/rigtune/core/profile/ShareKeysTest.java")) {
+			String comments = String.join(" ", Files.readAllLines(RepoFiles.resolve(file)).stream().map(String::strip)
+					.filter(line -> line.startsWith("//")).map(line -> line.substring(2).strip()).toList());
+			assertTrue(comments.contains(rule), file + " carries the rule");
+			assertFalse(comments.contains("at the end of an enum") || comments.contains("enum value goes at the end"), file + " no longer invites it");
+		}
 	}
 
 	@Test

@@ -11,8 +11,9 @@ import java.util.Map;
 import java.util.Set;
 
 // The v1 share-code key table (docs/v0.4/SPEC.md 4, docs/research/v0.4/profiles.md §5.2): FROZEN and APPEND-ONLY. A key's
-// index is its wire id, and an enum's value order is its wire values, so neither ever changes; a later RigTune only adds
-// keys at the end (and values at the end of an enum), each a varint type, so older decoders can skip what they don't know.
+// index is its wire id, and an enum's value order is its wire values, so neither ever changes. A later RigTune only adds
+// keys at the end, each a varint type: never extend an existing key's range or enum; add a new key index (older decoders
+// skip unknown indices). A 0.4.0 decoder rejects the whole code on an out-of-range known key (docs/v0.5/SPEC.md Latent 1).
 // Every value is an integer on the wire (no strings, paths, mod ids or floats). The two thread counts are local-only:
 // profiles keep them, share codes never carry them (a decoder drops them). This table is also the profiles' managed
 // keyset: a profile never holds another key (never vanilla.graphicsPreset or iris.shaderPack).
