@@ -258,8 +258,9 @@ public class FirstApplyScreen extends Screen {
 
 	private void layout() {
 		int column = Math.min(width - 32, 480);
-		items = items(status, view, failed, loading, entryId, shownDownloading, controller.modFiles());
-		HistoryModel.Entry entry = loading || failed ? null : entry(view, entryId);
+		// A reload (downloads finished, back from Undo or History) keeps the rows it has until the new ones arrive.
+		items = items(status, view, failed, loading && view == null, entryId, shownDownloading, controller.modFiles());
+		HistoryModel.Entry entry = shownEntry();
 		List<Button> buttons = new ArrayList<>();
 		Button undo = Button.builder(Component.translatable("rigtune.firstrun.applied.undo"), b -> open(new UndoScreen(this, controller, entryId)))
 				.tooltip(Tooltip.create(Component.translatable("rigtune.firstrun.applied.undo.tooltip"))).build();
@@ -321,6 +322,10 @@ public class FirstApplyScreen extends Screen {
 		}));
 	}
 
+	private HistoryModel.@Nullable Entry shownEntry() {
+		return failed ? null : entry(view, entryId);
+	}
+
 	private void open(Screen screen) {
 		stale = true;
 		minecraft.gui.setScreen(screen);
@@ -363,14 +368,14 @@ public class FirstApplyScreen extends Screen {
 
 	@Override
 	public Component getNarrationMessage() {
-		return narration(title, loading || failed ? null : entry(view, entryId), items);
+		return narration(title, shownEntry(), items);
 	}
 
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
-		HistoryModel.Entry entry = loading || failed ? null : entry(view, entryId);
+		HistoryModel.Entry entry = shownEntry();
 		if (entry != null) {
 			Component summary = HistoryScreen.summary(entry);
 			graphics.centeredText(font, font.width(summary) <= width - 16 ? summary.getVisualOrderText() : ComponentRenderUtils.clipText(summary, font, width - 16),
