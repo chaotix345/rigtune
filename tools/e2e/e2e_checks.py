@@ -794,13 +794,14 @@ def after_downgrade_old(instance, driver, seeded, old_version, off_name, log_tex
     instance = Path(instance)
     mods = instance / "mods"
     driver = driver or {}
-    checks = [Check("the driver ran the released 0.3.0", driver.get("ok") is True and driver.get("rigtuneVersion") == old_version,
+    old = old_version.split("+")[0]
+    checks = [Check("the driver ran the released {}".format(old), driver.get("ok") is True and driver.get("rigtuneVersion") == old_version,
                     "error: {}; loaded {}".format(driver.get("error"), driver.get("rigtuneVersion")))]
     checks.append(_log_check(log_text))
     state, ids, unknown = _view(driver)
     seeded_ids = [e.get("id") for e in seeded["entries"]]
     missing = [i for i in seeded_ids if i not in ids]
-    checks.append(Check("History lists every entry 0.4 wrote (state OK)", state == "OK" and not missing and not unknown,
+    checks.append(Check("History lists every entry the newer versions wrote (state OK)", state == "OK" and not missing and not unknown,
                         "state {}; {} of {} listed; missing {}; unknown kinds {}".format(state, len(seeded_ids) - len(missing),
                                                                                       len(seeded_ids), missing, unknown)))
     entries = history_entries(instance) or []
@@ -819,8 +820,8 @@ def after_downgrade_old(instance, driver, seeded, old_version, off_name, log_tex
     ok = (plan.get("undoOf") == undo_of and plan.get("problem") is None and bool(done) and len(undos) == 1
           and all(c.get("status") == "APPLIED" for c in undos[0].get("changes", [])) and undo_of in by_id and not skipped_vanilla
           and not not_undone)
-    checks.append(Check("Undo last reverted the newest undoable entry, recorded by 0.3.0", ok,
-                        "plan undoOf {} (expected {}), problem {}, items {}; 0.3.0 undo entries of it: {}; planned but not undone: {}; "
+    checks.append(Check("Undo last reverted the newest undoable entry, recorded by {}".format(old), ok,
+                        "plan undoOf {} (expected {}), problem {}, items {}; its undo entries of it: {}; planned but not undone: {}; "
                         "vanilla or mod changes skipped: {}".format(
                             plan.get("undoOf"), undo_of, plan.get("problem"),
                             [(i.get("action"), i.get("description") or i.get("changeIds"), i.get("reason")) for i in items],
@@ -830,10 +831,10 @@ def after_downgrade_old(instance, driver, seeded, old_version, off_name, log_tex
     disabled = [r for r in results if (r.get("op") or {}).get("type") == "DISABLE_FILE" and _name((r.get("op") or {}).get("path")) == off_name]
     journaled = [c for e in entries if e.get("kind") == "apply" and e.get("rigtuneVersion") == old_version for c in e.get("changes", [])
                  if c.get("action") == "disable" and c.get("file") == off_name and c.get("status") == "APPLIED"]
-    checks.append(Check("0.3.0's own Apply staged and applied (disable {})".format(off_name),
+    checks.append(Check("{}'s own Apply staged and applied (disable {})".format(old, off_name),
                         [r.get("status") for r in disabled] == ["OK"] and (mods / (off_name + ".disabled")).is_file()
                         and not (mods / off_name).exists() and len(journaled) == 1,
-                        "last-apply: {}; {}.disabled: {}; journaled by 0.3.0: {}".format([r.get("status") for r in disabled], off_name,
+                        "last-apply: {}; {}.disabled: {}; journaled by it: {}".format([r.get("status") for r in disabled], off_name,
                                                                                          (mods / (off_name + ".disabled")).is_file(), len(journaled))))
     ops = seeded.get("pendingOps") or []
     status_by_id = {(r.get("op") or {}).get("id"): r.get("status") for r in results}
@@ -845,13 +846,13 @@ def after_downgrade_old(instance, driver, seeded, old_version, off_name, log_tex
     pending = instance / "config" / "rigtune" / "pending.json"
     ok = (bool(ops) and not pending.exists() and all(got[i] and all(s == want[i] for s in got[i]) for i in want)
           and all((status_by_id.get(i) == "OK") == (want[i] == "APPLIED") for i in want))
-    checks.append(Check("0.4's staged ops (with projectId): applied by 0.3.0's helper, or dropped by its Undo last", ok,
+    checks.append(Check("the newer versions' staged ops (with projectId): applied by {}'s helper, or dropped by its Undo last".format(old), ok,
                         "ops (expected, last-apply, journal): {}; pending.json left: {}".format(
                             {i: (want[i], status_by_id.get(i), got[i]) for i in want}, pending.exists())))
     now = {name: digest(instance / "config" / "rigtune" / name, "sha256") if (instance / "config" / "rigtune" / name).is_file() else None
            for name in seeded["newFiles"]}
     changed = sorted(n for n in now if now[n] != seeded["newFiles"][n])
-    checks.append(Check("the files only 0.4 writes are byte-identical", not changed,
+    checks.append(Check("the files only the newer versions write are byte-identical", not changed,
                         "changed: {}".format(changed) if changed else "{} file(s): {}".format(len(now), sorted(now))))
     checks.append(_bad_or_crash(instance))
     return checks
@@ -886,7 +887,7 @@ def after_downgrade_new(instance, driver, new_jar, seeded, log_text, kept=None):
     driver = driver or {}
     version = e2e_env.mod_json(new_jar)["version"]
     origin = driver.get("rigtuneOrigin") or []
-    checks = [Check("0.4 loaded from mods/ again", driver.get("ok") is True and driver.get("rigtuneVersion") == version
+    checks = [Check("{} loaded from mods/ again".format(version.split("+")[0]), driver.get("ok") is True and driver.get("rigtuneVersion") == version
                     and [_norm(p) for p in origin] == [_norm(instance / "mods" / new_jar.name)],
                     "error: {}; loaded {} from {}".format(driver.get("error"), driver.get("rigtuneVersion"), origin))]
     checks.append(_log_check(log_text))
@@ -899,7 +900,7 @@ def after_downgrade_new(instance, driver, new_jar, seeded, log_text, kept=None):
     now = _load(config / "profiles.json") or {}
     labels = {s.get("entryId"): s.get("name") for s in now.get("switches") or [] if isinstance(s, dict)}
     expected = {s.get("entryId"): s.get("name") for s in seeded_switches if s.get("entryId") in journal}
-    checks.append(Check("profiles.json still labels the switch entries 0.3.0 kept", bool(expected) and all(labels.get(k) == v for k, v in expected.items()),
+    checks.append(Check("profiles.json still labels the switch entries the old version kept", bool(expected) and all(labels.get(k) == v for k, v in expected.items()),
                         "expected {}; labels now {}".format(expected, labels)))
     lost = {}
     for name, fields in (kept or written.KEPT).items():
@@ -908,6 +909,6 @@ def after_downgrade_new(instance, driver, new_jar, seeded, log_text, kept=None):
             gone = _lost(seeded["json"][name], current, fields)
             if current is None or gone:
                 lost[name] = gone or "missing"
-    checks.append(Check("0.4 read its own files back (none reset or moved to .bad)", not lost,
+    checks.append(Check("{} read its own files back (none reset or moved to .bad)".format(version.split("+")[0]), not lost,
                         "lost: {}".format(lost) if lost else "{} file(s) kept their items".format(len(seeded.get("json", {})))))
     return checks

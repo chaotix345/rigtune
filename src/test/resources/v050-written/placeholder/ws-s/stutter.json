@@ -58,11 +58,11 @@
       ],
       "settingsAtStart": {
         "vanilla.renderDistance": "12",
-        "sodium.performance.chunk_builder_threads": "0"
+        "sodium.performance.chunk_builder_threads": "2"
       },
       "settingsAtEnd": {
         "vanilla.renderDistance": "10",
-        "sodium.performance.chunk_builder_threads": "0"
+        "sodium.performance.chunk_builder_threads": "2"
       }
     }
   ]
