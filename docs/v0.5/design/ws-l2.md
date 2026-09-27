@@ -193,6 +193,8 @@ tick listener exists only after a leftover with mod-file ops. Every value stays 
 
 ## CI runs and screenshots looked at
 
+- 36334218896 (the review fixes and the stagedChanged hook, merged with feat/v0.5.0 @ 690b8f4c): green on every job and
+  leg.
 - 36319156664, 36323550509: green (the core and client tasks). 36325285181 (the game tests) and 36327592019 (merged
   with feat/v0.5.0): green on every job and all three legs, with 2207 unit tests per node, 3 skipped. One of the three is
   `LauncherRepairTest.theRealInstance`, which needs WS-L1's fixtures.
