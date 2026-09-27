@@ -12,6 +12,7 @@ import com.mojang.blaze3d.systems.DeviceInfo;
 import com.mojang.blaze3d.systems.GpuDevice;
 //?}
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.core.hardware.PerfCounters;
 import io.github.chaotix345.rigtune.core.model.CpuInfo;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
 import io.github.chaotix345.rigtune.core.model.GpuInfo;
@@ -24,6 +25,7 @@ import oshi.hardware.CentralProcessor;
 import oshi.hardware.GraphicsCard;
 import oshi.hardware.HardwareAbstractionLayer;
 import oshi.hardware.PowerSource;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,6 +37,7 @@ import java.util.concurrent.CompletableFuture;
 public final class HardwareProbe {
 	private static final long MIB = 1024L * 1024L;
 	private static volatile CompletableFuture<SlowPart> slow;
+	private static volatile @Nullable PerfCounters seededPerfCounters;
 
 	public record Card(String name, String vendor, long vramMb) {
 	}
@@ -42,7 +45,11 @@ public final class HardwareProbe {
 	public record FastPart(String gpuName, String gpuVendor, String driver, GraphicsBackend backend, DisplayInfo display, Set<String> flags) {
 	}
 
-	public record SlowPart(CpuInfo cpu, long totalRamMb, boolean hasBattery, boolean onBattery, List<Card> cards) {
+	// v0.5 2L: perfCounters, Windows' performance-counter switches (read-only; NOT_READ elsewhere).
+	public record SlowPart(CpuInfo cpu, long totalRamMb, boolean hasBattery, boolean onBattery, List<Card> cards, PerfCounters perfCounters) {
+		public SlowPart(CpuInfo cpu, long totalRamMb, boolean hasBattery, boolean onBattery, List<Card> cards) {
+			this(cpu, totalRamMb, hasBattery, onBattery, cards, PerfCounters.NOT_READ);
+		}
 	}
 
 	private HardwareProbe() {
@@ -65,8 +72,24 @@ public final class HardwareProbe {
 		CompletableFuture<SlowPart> current = slow;
 		if (current != null && current.isDone() && !current.isCompletedExceptionally()) {
 			SlowPart s = current.join();
-			slow = CompletableFuture.completedFuture(new SlowPart(s.cpu(), s.totalRamMb(), s.hasBattery(), onBattery, s.cards()));
+			slow = CompletableFuture.completedFuture(new SlowPart(s.cpu(), s.totalRamMb(), s.hasBattery(), onBattery, s.cards(), s.perfCounters()));
 		}
+	}
+
+	// v0.5 2L: the slow part's performance-counter check once it has finished (never waits for it), else NOT_READ; a
+	// game test's seeded result first.
+	public static PerfCounters perfCounters() {
+		PerfCounters seeded = seededPerfCounters;
+		if (seeded != null) {
+			return seeded;
+		}
+		CompletableFuture<SlowPart> current = slow;
+		return current != null && current.isDone() && !current.isCompletedExceptionally() ? current.join().perfCounters() : PerfCounters.NOT_READ;
+	}
+
+	// For the game tests (A11yGameTest's Tools walk): a probe result to show; null goes back to the real one.
+	public static void seedPerfCounters(@Nullable PerfCounters seeded) {
+		seededPerfCounters = seeded;
 	}
 
 	public static HardwareProfile combine(FastPart fast, SlowPart slow) {
@@ -204,7 +227,12 @@ public final class HardwareProbe {
 				RigTune.LOGGER.warn("Could not read graphics cards", t);
 			}
 		}
-		return new SlowPart(new CpuInfo(cpuName, physical, logical, maxMhz), ramMb, hasBattery, onBattery, List.copyOf(cards));
+		// v0.5 2L (docs/v0.5/SPEC.md X4): on this worker, never in preLaunch; microseconds, and only on Windows.
+		PerfCounters counters = PerfCounters.detect(System.getProperty("os.name", ""), WindowsRegistry::new);
+		if (counters.off() || !counters.servicesOff().isEmpty() || !counters.unusual().isEmpty()) {
+			RigTune.LOGGER.info(counters.describe());
+		}
+		return new SlowPart(new CpuInfo(cpuName, physical, logical, maxMhz), ramMb, hasBattery, onBattery, List.copyOf(cards), counters);
 	}
 
 	// On desktops Windows OSHI reports a placeholder "System Battery" with unknown device/chemistry and a capacity of 1.

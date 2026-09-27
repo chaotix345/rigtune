@@ -912,3 +912,18 @@ Sources: docs/v0.5/plan-review-spec.md (SPEC-1..34: 7 high, 14 medium, 13 low) a
 | PLAN-23 | L | AC1c.3 is scoped to build.yml, e2e.yml and release.yml. |
 
 - **Coordinator, after ws-ci (2026-09-27):** the `tickHookOnVsReference` limit is **2.05**, not 1.95 (1d, 1h, AC1d.2): with the final timing, 192 calibration measurements on 6 runner CPU models put 1x work at most 1.745 and doubled work at least 2.462, so 1.95 would have missed a 2x slowdown on some CPUs; ws-ci.md has the arithmetic. The tick 0-allocation keys are the SUM of bytes over all 48 work blocks after warm-up (strict; stricter than v0.4's fewest-of-5-runs), with a unit test that one allocating block fails.
+- **Coordinator, after ws-ci's review (2026-09-27):** the tick keys' 0-allocation check is the SUM of bytes over all 48 measured blocks after warm-up == 0 (no "fewest-allocating block"), at least as strict as v0.4's min-of-5 x 100k; a test proves an allocation every 30,000 calls fails it (1d, 1h; FootprintGameTest).
+
+## Amendments (Wave A implementation reviews, 2026-09-28)
+Coordinator decisions taken while reviewing Wave A; where this list and the body disagree, this list wins.
+
+| source | item | what changed |
+|---|---|---|
+| WS-B review M4 | 2B, X3 | A Measure pair where EITHER run (before or after) is left out of the trend (a fresh benchmark world, or Distant Horizons generating terrain) gets NO gain verdict or percentage. Both runs' numbers are shown with one caveat line naming the cause and ending "Measure before again." |
+| WS-T review L8 | 6 | Try It in the CURRENT scene records the block position, dimension and server key with the before run; an after run that differs is NOT_COMPARABLE ("you moved"). RigTune never teleports the player. |
+| WS-P review L2 | 2P (PF-1) | When no profile is active at the Battery switch, "My settings" is first refreshed to the current effective settings, so the plug-in offer restores what the player actually had. |
+| WS-L2 review L8 | X8 | A notice source may stat (metadata only) a couple of small files in `notices()` on screen init or rebuild; never per frame, and no content reads while nothing is pending. |
+| WS-W review L8 | X12 | 854x480 can't be GUI scale 3 (the game caps it at 2): scroll and a11y checks at scale 3 use 1280x720@3. |
+| WS-S review M1 | X4.4, 1h | Until the post-Wave-B footprint checkpoint adds `settingsCheckNsPerCall`/`settingsCheckAllocBytes` to the footprint JSON, StutterGameTest gates RW-11's settings check with the strict sum-of-bytes == 0 rule and logs ns/call. |
+| WS-L1 review H1, M2 | 4a, 4e | The late launcher answer reaches the report (one `rebuild()`), and the Undo reason and steps read ONE launcher source. The "your launcher's own list may go out of date" warning shows only when the player opted in AND the live policy is LAUNCHER. |
+| WS-L1 review M3 | 4b | Undo never gives launcher steps for RigTune's own update pair (the "never undo its own update" rule wins over the launcher policy). |

@@ -5,6 +5,7 @@
 	"client": [
 		"ClientPacketListenerAccessor",
 		"ClientPacketListenerMixin",
+		"CrashReportMixin",
 		"DebugScreenOverlayMixin",
 		"MinecraftFrameMixin"
 	],

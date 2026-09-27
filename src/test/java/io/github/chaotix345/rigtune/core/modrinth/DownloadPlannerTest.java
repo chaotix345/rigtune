@@ -1270,4 +1270,122 @@ class DownloadPlannerTest {
 		assertEquals(List.of("Update a: its new version needs Lib Mod, which isn't installed", "Add lib: stalled: libV.jar"), result.errors());
 		assertFalse(fetched.contains("aV.jar"));
 	}
+
+	// --- docs/v0.5/SPEC.md 2H L9 (AC2H.4): a mod staged for disabling counts as absent for what depends on it; the
+	// incompatibility checks still count it (L10)
+
+	// lib is installed as lib-1.jar (a real jar with the id "lib"), which Modrinth knows by its SHA-1 as version lib1 of LIB.
+	private Path installedLib() throws Exception {
+		Path jar = TestJars.modJar(mods.resolve("lib-1.jar"), "lib");
+		String sha1 = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-1").digest(Files.readAllBytes(jar)));
+		installedVersions.put("lib1", new ModrinthVersion("lib1", "LIB", "1", "release", List.of("26.2"), List.of("fabric"), T,
+				List.of(new ModrinthFile("https://cdn/lib-1.jar", "lib-1.jar", sha1, "sha512-lib1", 10, true)), List.of()));
+		return jar;
+	}
+
+	// pending.json holding these ops, as an earlier Apply (or this Apply's own "Disable" items, staged before its downloads)
+	// left it, read as RealController.download reads it.
+	private StagedProjects pendingWith(List<Op> ops) throws IOException {
+		Path pending = pendingFile();
+		PendingActions.create(1, mods, pending.getParent().getParent(), ops).save(pending);
+		return StagedProjects.read(pending);
+	}
+
+	@Test
+	void anAdditionNeedingAModStagedForDisablingIsRefused() throws Exception {
+		Path lib = installedLib();
+		staged = pendingWith(List.of(Op.disableFile(lib)));
+		put("a", version("aV", "A", "1", T, required("LIB")));
+		put("b", version("bV", "B", "1", T, required("A")));
+
+		DownloadPlanner.Result result = plan(Set.of("LIB"), add("a", "A"), add("b", "B"));
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of(), result.ops());
+		assertEquals(List.of("Add a: it needs LIB, which is being turned off at the next restart",
+				"Add b: it needs LIB, which is being turned off at the next restart"), result.errors());
+	}
+
+	@Test
+	void anUpdateWhoseNewVersionNeedsAModStagedForDisablingIsRefused() throws Exception {
+		Path lib = installedLib();
+		staged = pendingWith(List.of(Op.disableFile(lib)));
+		Recommendation update = updateOf("a", "A", required("LIB"));
+
+		DownloadPlanner.Result result = plan(Set.of("LIB", "A"), update);
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of("Update a: it needs LIB, which is being turned off at the next restart"), result.errors());
+		assertEquals(List.of(), fetched);
+	}
+
+	// An update or an undo's swap of lib stages its disable with an enable of the same mod: lib stays, so nothing changes.
+	@Test
+	void aDisableWhoseModAStagedEnableBringsBackDoesNotCount() throws Exception {
+		Path lib = installedLib();
+		Path next = TestJars.modJar(mods.resolve("lib-2.jar" + PendingActions.PENDING_SUFFIX), "lib");
+		staged = pendingWith(PendingActions.group(Op.disableFile(lib), Op.enableFile(next, mods.resolve("lib-2.jar")).withModId("lib")));
+		put("a", version("aV", "A", "1", T, required("LIB")));
+
+		DownloadPlanner.Result result = plan(Set.of("LIB"), add("a", "A"));
+
+		assertEquals(List.of("add-a"), result.ids());
+		assertEquals(List.of("aV.jar"), targets(result.ops()));
+	}
+
+	// An earlier Apply's staged update of lib (its enable carries lib's Modrinth project; its download here unreadable, so
+	// its mod id can't be read): lib isn't going away (review L4).
+	@Test
+	void aProjectAStagedEnableBringsIsNeverTurnedOff() throws Exception {
+		Path lib = installedLib();
+		Path next = Files.writeString(mods.resolve("lib-2.jar" + PendingActions.PENDING_SUFFIX), "not readable as a jar");
+		staged = pendingWith(PendingActions.group(Op.disableFile(lib), Op.enableFile(next, mods.resolve("lib-2.jar")).withProjectId("LIB")
+				.withVersionId("lib2")));
+		put("a", version("aV", "A", "1", T, required("LIB")));
+
+		DownloadPlanner.Result result = plan(Set.of("LIB"), add("a", "A"));
+
+		assertEquals(List.of("add-a"), result.ids());
+	}
+
+	// L10 (SPEC "Not fixed"): for the incompatibility checks a mod staged for disabling is still present (over-blocking,
+	// the safe side: an Undo of the disable would otherwise leave both mods active).
+	@Test
+	void anAdditionIncompatibleWithAModStagedForDisablingIsStillRefused() throws Exception {
+		Path lib = installedLib();
+		staged = pendingWith(List.of(Op.disableFile(lib)));
+		put("a", version("aV", "A", "1", T, incompatible("LIB")));
+
+		DownloadPlanner.Result result = plan(Set.of("LIB"), add("a", "A"));
+
+		assertEquals(List.of(), result.ids());
+		assertEquals(List.of("Add a: Modrinth marks A as incompatible with LIB, which is installed"), result.errors());
+	}
+
+	// --- docs/v0.5/SPEC.md 2V (ws-a, AC2V.5): checkUpdate against earlier batch versions, alone. An update whose new
+	// version needs a project only a ticked addition brings waits for it (H1-A), so it is judged with the addition's
+	// version in the batch; the pairwise pre-check (refusedTogether) never pairs an update with an addition, so only
+	// checkUpdate's batch branch can refuse it, whichever of the two declares the incompatibility.
+
+	@Test
+	void anUpdateThatWaitedIsRefusedWhenTheAdditionsVersionDeclaresItIncompatible() throws Exception {
+		Recommendation update = updateOf("a", "A", required("P"));
+		put("p", version("pV", "P", "1", T, new Dependency(null, "aV", "incompatible")));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update, add("p", "P"));
+
+		assertEquals(List.of("add-p"), result.ids());
+		assertEquals(List.of("Update a: Modrinth marks P and A as incompatible, and both would be installed"), result.errors());
+	}
+
+	@Test
+	void anUpdateThatWaitedIsRefusedWhenItsVersionDeclaresTheAdditionsIncompatible() throws Exception {
+		Recommendation update = updateOf("a", "A", required("P"), new Dependency(null, "pV", "incompatible"));
+		put("p", version("pV", "P", "1", T));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update, add("p", "P"));
+
+		assertEquals(List.of("add-p"), result.ids());
+		assertEquals(List.of("Update a: Modrinth marks A and P as incompatible, and both would be installed"), result.errors());
+	}
 }

@@ -45,7 +45,8 @@ class V05HooksTest {
 		List<Component> parts = new ArrayList<>(List.of(Component.literal("1 setting applied.")));
 		V05Hooks.ApplyFacts facts = new V05Hooks.ApplyFacts("entry-1", List.of(ADD), Set.of(), 1, 0, 0, false, 1);
 		RefusedDisables.afterApply(facts, parts);
-		OutsideChanges.afterApply(null, facts, parts);
+		// 4h's step (WS-W, filled) adds its line only in a Modrinth App instance (OutsideChangesClientTest).
+		assertNull(OutsideChanges.syncLine(LauncherInfo.UNKNOWN, true));
 		assertEquals(1, parts.size());
 		assertEquals(List.of(), StaleGroups.drop(null, Set.of("lithium")));
 		assertNull(StaleGroups.status(List.of(), List.of()));

@@ -1,23 +1,30 @@
 package io.github.chaotix345.rigtune.client;
 
 import java.nio.file.Path;
-import java.util.concurrent.Executor;
 
 // The title-screen toasts that depend on the settings (docs/v0.2/SPEC.md item 8).
 public final class StartupNotices {
 	private StartupNotices() {
 	}
 
-	// The one-time "RigTune uses the network" toast: true the first time only. The flag is set at once and
-	// written to settings.json on the given executor, off the render thread.
-	public static boolean takePrivacyNotice(ClientSettings settings, Path configDir, Executor io) {
+	// The one-time "RigTune uses the network" toast: true the first time only. A pure state change: the flag is set at once.
+	public static boolean takePrivacyNotice(ClientSettings settings) {
 		synchronized (settings) {
 			if (settings.privacyNoticeShown) {
 				return false;
 			}
 			settings.privacyNoticeShown = true;
+			return true;
 		}
-		io.execute(() -> settings.save(configDir));
+	}
+
+	// v0.5 L6 (docs/v0.5/SPEC.md 2R, X8): the same, with the flag saved through SettingsSaver (its own thread, flushed on
+	// quit), so a quick quit keeps it and it can't race a newer save.
+	public static boolean takePrivacyNotice(ClientSettings settings, Path configDir) {
+		if (!takePrivacyNotice(settings)) {
+			return false;
+		}
+		SettingsSaver.shared().save(settings, configDir);
 		return true;
 	}
 
