@@ -236,6 +236,25 @@ public final class TrendText {
 		return Text.of("rigtune.benchmark.trend.empty", "No benchmark runs yet. Run one from Tools → Benchmark…");
 	}
 
+	// docs/v0.5/SPEC.md 2A (L3): the chart's textual equivalent, its runs oldest first ("5 comparable runs from 2026-09-20 to
+	// 2026-09-24: 1% lows 540, 545, 538, 550, 440 FPS; averages …. Your usual: 543 FPS"); the screens add its title and the
+	// trend line. Null when the chart has nothing to show.
+	public static @Nullable Text chartSummary(List<BenchmarkRecord> runs, @Nullable Double median, ZoneId zone) {
+		List<BenchmarkRecord> shown = runs.stream().filter(r -> r.result() != null).toList();
+		if (shown.isEmpty()) {
+			return null;
+		}
+		String lows = String.join(", ", shown.stream().map(r -> fps(r.result().onePercentLowFps())).toList());
+		String averages = String.join(", ", shown.stream().map(r -> fps(r.result().avgFps())).toList());
+		Text runsText = shown.size() == 1
+				? Text.of("rigtune.benchmark.trend.chart.summary.one", "1 comparable run on %s: 1%% low %s FPS, average %s FPS",
+						date(shown.getFirst().createdAt(), zone), lows, averages)
+				: Text.of("rigtune.benchmark.trend.chart.summary", "%s comparable runs from %s to %s: 1%% lows %s FPS; averages %s FPS", shown.size(),
+						date(shown.getFirst().createdAt(), zone), date(shown.getLast().createdAt(), zone), lows, averages);
+		return median == null ? runsText
+				: Text.join(". ", runsText, Text.of("rigtune.benchmark.trend.chart.usual", "Your usual: %s FPS", fps(median)));
+	}
+
 	// "N comparable runs; M with different conditions not shown".
 	public static Text note(int comparable, int other) {
 		return comparable == 1 ? Text.of("rigtune.benchmark.trend.note.one", "1 comparable run; %s with different conditions not shown", other)

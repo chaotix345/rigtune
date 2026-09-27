@@ -85,6 +85,23 @@ class TrendTextTest {
 				.stream().map(l -> l.tone() + " " + l.text().english()).toList();
 	}
 
+	// docs/v0.5/SPEC.md 2A (L3, AC2A.1): the chart's textual equivalent names its runs' days and numbers, oldest first, and
+	// "your usual"; the screens add the chart's title and the trend line.
+	@Test
+	void l3ChartSummaryNamesTheNumbers() {
+		List<BenchmarkRecord> runs = new java.util.ArrayList<>();
+		double[] lows = {540, 545.4, 538, 550, 440};
+		for (int i = 0; i < lows.length; i++) {
+			runs.add(TrendFixtures.run("r" + i).at("2026-09-2" + i + "T10:00:00Z").low(lows[i]).avg(800 + i).build());
+		}
+		assertEquals("5 comparable runs from 2026-09-20 to 2026-09-24: 1% lows 540, 545, 538, 550, 440 FPS; averages 800, 801, 802, 803, 804 FPS. "
+				+ "Your usual: 543 FPS", TrendText.chartSummary(runs, 542.5, ZoneOffset.UTC).english());
+		assertEquals("1 comparable run on 2026-09-20: 1% low 540 FPS, average 800 FPS",
+				TrendText.chartSummary(runs.subList(0, 1), null, ZoneOffset.UTC).english());
+		assertNull(TrendText.chartSummary(List.of(TrendFixtures.run("x").noResult().build()), null, ZoneOffset.UTC));
+		assertNull(TrendText.chartSummary(List.of(), 500.0, ZoneOffset.UTC));
+	}
+
 	// Review L3: a very steady history has a tiny floor; a drop is never shown as "0%".
 	@Test
 	void smallPercentagesKeepADecimal() {

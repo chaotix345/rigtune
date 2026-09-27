@@ -62,6 +62,18 @@ public final class ResultNotes {
 		return Text.of("rigtune.benchmark.noisy", "Results were noisy (%s spread): close background apps and retry.", spread);
 	}
 
+	// docs/v0.5/SPEC.md 2A (L3): what a table row narrates: its distance, average FPS, 1 % low, P99 and pass / fail / not
+	// measured, then whether it is the suggested one.
+	public static Text row(PlannerResult.Measurement row, boolean suggested) {
+		Text verdict = row.passed() ? Text.of("rigtune.benchmark.row.pass", "meets the target")
+				: row.complete() ? Text.of("rigtune.benchmark.row.fail", "misses the target")
+				: Text.of("rigtune.benchmark.row.not_measured", "not measured (its terrain hadn't loaded in time)");
+		Text text = Text.of("rigtune.benchmark.row", "Render distance %s: average %s FPS, 1%% low %s FPS, P99 %s ms, %s", row.rd(),
+				Math.round(row.stats().avgFps()), Math.round(row.stats().onePercentLowFps()), String.format(Locale.ROOT, "%.1f", row.stats().p99FrameMs()),
+				verdict);
+		return suggested ? Text.join(". ", text, Text.of("rigtune.benchmark.row.suggested", "Suggested")) : text;
+	}
+
 	// The table's last column.
 	public static String mark(PlannerResult.Measurement row) {
 		return row.passed() ? "✔" : row.complete() ? "✘" : "?";

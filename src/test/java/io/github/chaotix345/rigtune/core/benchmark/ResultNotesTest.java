@@ -79,6 +79,17 @@ class ResultNotesTest {
 		assertNull(ResultNotes.dhGenerating(null));
 	}
 
+	// docs/v0.5/SPEC.md 2A (L3, AC2A.1): each table row is a Tab stop that narrates its knob, average FPS, 1 % low, P99 and
+	// pass / fail / not measured, and says which one is suggested.
+	@Test
+	void l3TheRowNarratesItsKnobNumbersAndVerdict() {
+		assertEquals("Render distance 12: average 600 FPS, 1% low 300 FPS, P99 3.3 ms, meets the target. Suggested",
+				english(ResultNotes.row(row(12, true, true), true)));
+		assertEquals("Render distance 16: average 600 FPS, 1% low 300 FPS, P99 3.3 ms, misses the target", english(ResultNotes.row(row(16, false, true), false)));
+		assertEquals("Render distance 32: average 600 FPS, 1% low 300 FPS, P99 3.3 ms, not measured (its terrain hadn't loaded in time)",
+				english(ResultNotes.row(row(32, false, false), false)));
+	}
+
 	// The table's last column: a pass, a fail, or not measured (no ✘ for a distance that couldn't be measured).
 	@Test
 	void rw5TheTableMarksAnUnmeasuredDistanceWithoutAFail() {
