@@ -1,0 +1,10 @@
+{
+  "networkEnabled": true,
+  "remoteRules": true,
+  "modrinth": true,
+  "startupToast": true,
+  "benchmarkScene": "CURRENT",
+  "privacyNoticeShown": true,
+  "stutterMonitor": false,
+  "modFilesByRigTune": true
+}

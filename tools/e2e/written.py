@@ -11,6 +11,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import e2e_env
 import fixtures
 
 # One fixture set per owner (PLAN hotspots: src/test/resources/v040-written/).
@@ -206,6 +207,27 @@ def _merge(file, path, old, new, owner, conflicts, owners):
         conflicts.append((file, path, owners.get(path), owner))
     owners[path] = owner
     return copy.deepcopy(new)
+
+
+def materialize(instance):
+    """The files the composed pending.json's ops act on, so a helper can apply them: a minimal mod jar (fabric.mod.json
+    only, the op's mod id) for every DISABLE_FILE path and ENABLE_FILE source, and an empty config file for every
+    PATCH_* target. Files already there are left alone."""
+    instance = Path(instance)
+    pending = instance / "config" / "rigtune" / "pending.json"
+    for op in (json.loads(pending.read_text(encoding="utf-8")).get("ops") or []) if pending.is_file() else []:
+        kind = op.get("type") or ""
+        source = op.get("path") if kind in ("DISABLE_FILE",) or kind.startswith("PATCH_") else op.get("from")
+        if not source or Path(source).exists():
+            continue
+        target = Path(source)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if kind == "PATCH_JSON":
+            target.write_text("{}\n", encoding="utf-8", newline="\n")
+        elif kind.startswith("PATCH_"):
+            target.write_text("", encoding="utf-8")
+        else:
+            e2e_env.test_mod_jar(target, op.get("modId") or "e2e-unknown")
 
 
 def instance_state(instance):

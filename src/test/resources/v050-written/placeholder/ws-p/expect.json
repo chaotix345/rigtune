@@ -1,0 +1,28 @@
+{
+  "set": "ws-p",
+  "checks": [
+    {
+      "class": "Journal",
+      "file": "history.json",
+      "state": "OK",
+      "entries": 1
+    },
+    {
+      "class": "HistoryModel",
+      "file": "history.json",
+      "entries": 1,
+      "unknownKinds": 0
+    },
+    {
+      "class": "ProfileStore",
+      "file": "profiles.json",
+      "state": "OK",
+      "keeps": [
+        "profiles",
+        "switches",
+        "battery"
+      ],
+      "noBad": true
+    }
+  ]
+}

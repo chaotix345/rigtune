@@ -61,6 +61,26 @@ def check_old_jar(old):
     return old
 
 
+def set_instances(sets, work):
+    """For every set with an expect.json: that set alone composed into work/<set>/instance and again into
+    work/<set>/spare (the checks that write use the spare), each with the files its pending ops act on
+    (written.materialize). Returns ([(set, instance config dir, expect.json, spare config dir)], [sets without one])."""
+    expectations = written.expectations(sets)
+    out, missing = [], []
+    for fixture in sets:
+        if fixture.name not in expectations:
+            missing.append(fixture.name)
+            continue
+        folders_ = []
+        for kind in ("instance", "spare"):
+            instance = Path(work) / fixture.name / kind
+            written.compose([fixture], instance)
+            written.materialize(instance)
+            folders_.append(instance / "config")
+        out.append((fixture.name, folders_[0], expectations[fixture.name], folders_[1]))
+    return out, missing
+
+
 def folders(work):
     """The composed instance, and the program's own scratch folder beside it (its checks write only there)."""
     work = Path(work).resolve()
@@ -98,14 +118,18 @@ def main(argv=None):
     for file, key, earlier, later in conflicts:
         print("merged: {} {}: {} overrides {}".format(file, key, later, earlier))
 
+    # Every "written by 0.5" set carries its expect.json (the v050-written README); each is checked on its own instance.
+    per_set, without = set_instances([s for s in sets if s.generation == written.V050.name], scratch.parent / "sets")
+    set_args = [a for name, config, expect, spare in per_set for a in ("--set", "|".join((name, str(config), str(expect), str(spare))))]
+
     cp = os.pathsep.join(str(p) for p in compat030.classpath(old, args.gradle_cache, compat030.loader_version(REPO / "gradle.properties")))
     result = subprocess.run([args.java, "-Dstdout.encoding=UTF-8", "-Dfile.encoding=UTF-8", "-cp", cp, str(PROGRAM), "--config", str(instance / "config"),
-                             "--rules", str(Path(args.rules).resolve()), "--scratch", str(scratch)],
+                             "--rules", str(Path(args.rules).resolve()), "--scratch", str(scratch)] + set_args,
                             capture_output=True, text=True, encoding="utf-8", errors="replace")
-    lines = compat030.parse(result.stdout)
+    lines = compat030.parse(result.stdout) + [(False, name + " expect.json", "missing: every v050-written set has one") for name in without]
     for ok, name, detail in lines:
         print("{} {}: {}".format("PASS" if ok else "FAIL", name, detail))
-    absent = missing(lines)
+    absent = missing(lines) + [name + " (no check reported)" for name, *_ in per_set if not any(n.startswith(name + " ") for _, n, _ in lines)]
     if absent or result.returncode not in (0, 1):
         print("the program didn't report {} (exit {}):\n{}{}".format(absent, result.returncode, result.stdout, result.stderr))
     if args.out:

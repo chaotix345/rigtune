@@ -3,6 +3,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.client.ClientSettings;
+import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
+import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.awareness.AwarenessStore;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkHistory;
@@ -15,6 +17,7 @@ import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.history.UndoPlanner;
+import io.github.chaotix345.rigtune.core.model.ServerLimits;
 import io.github.chaotix345.rigtune.core.profile.ProfileStore;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.rules.RulesLoader;
@@ -61,7 +64,19 @@ public final class Compat040 {
 
 	public static void main(String[] args) throws Exception {
 		Map<String, Path> opts = new LinkedHashMap<>();
+		List<String[]> sets = new ArrayList<>();
 		for (int i = 0; i + 1 < args.length; i += 2) {
+			if (args[i].equals("--set")) {
+				// <set>|<its own instance's config dir>|<its expect.json>|<a spare copy's config dir> (compat040.py composes each
+				// set alone, twice: the checks that write, ApplyHelper and keeps, write only into the spare).
+				String[] parts = args[i + 1].split("\\|", 4);
+				if (parts.length != 4) {
+					System.err.println("--set takes <name>|<config dir>|<expect.json>|<spare config dir>, not " + args[i + 1]);
+					System.exit(2);
+				}
+				sets.add(parts);
+				continue;
+			}
 			if (!List.of("--config", "--rules", "--scratch").contains(args[i])) {
 				System.err.println("unknown argument " + args[i]);
 				System.exit(2);
@@ -69,13 +84,225 @@ public final class Compat040 {
 			opts.put(args[i], Path.of(args[i + 1]));
 		}
 		if (opts.size() != 3) {
-			System.err.println("usage: Compat040.java --config <instance>/config --rules <rules-v2.json> --scratch <dir>");
+			System.err.println("usage: Compat040.java --config <instance>/config --rules <rules-v2.json> --scratch <dir> "
+					+ "[--set <name>|<config dir>|<expect.json>|<spare config dir>]...");
 			System.exit(2);
 		}
 		Compat040 run = new Compat040();
 		run.run(opts.get("--config"), opts.get("--rules"), opts.get("--scratch"));
+		for (String[] set : sets) {
+			run.runSet(set[0], Path.of(set[1]), Path.of(set[2]), Path.of(set[3]), opts.get("--scratch").resolve("sets").resolve(set[0]));
+		}
 		run.lines.forEach(System.out::println);
 		System.exit(run.failed ? 1 : 0);
+	}
+
+	// --- A set's expect.json (src/test/resources/v050-written/README.md): each check runs 0.4.0's own class on the set's
+	// own instance (config/rigtune/ holding only that set's files) and compares what it sees with the expectations. A check
+	// kind or an expectation this interpreter doesn't know fails; a check with no expectation fails.
+
+	private static final Set<String> CLASSES = Set.of("Journal", "HistoryModel", "UndoPlanner", "BenchmarkHistory", "PendingActions",
+			"ApplyHelper", "ClientSettings", "StutterStore", "AwarenessStore", "ProfileStore", "ServerLimitsStore", "RestoreMarker", "Unread");
+	private static final Map<String, Set<String>> EXPECTATIONS = Map.ofEntries(
+			Map.entry("Journal", Set.of("state", "entries", "noBad")),
+			Map.entry("HistoryModel", Set.of("entries", "unknownKinds")),
+			Map.entry("UndoPlanner", Set.of("undoThis", "problems")),
+			Map.entry("BenchmarkHistory", Set.of("state", "runs", "noBad")),
+			Map.entry("PendingActions", Set.of("state", "ops")),
+			Map.entry("ApplyHelper", Set.of("appliesGroup")),
+			Map.entry("ClientSettings", Set.of("state", "noBad")),
+			Map.entry("StutterStore", Set.of("state", "sessions", "noBad")),
+			Map.entry("AwarenessStore", Set.of("state", "keeps", "noBad")),
+			Map.entry("ProfileStore", Set.of("state", "keeps", "noBad")),
+			Map.entry("ServerLimitsStore", Set.of("state", "keeps", "noBad")),
+			Map.entry("RestoreMarker", Set.of("state")),
+			Map.entry("Unread", Set.of("unchanged")));
+
+	void runSet(String set, Path config, Path expectFile, Path spare, Path scratch) throws Exception {
+		Path dir = config.resolve("rigtune");
+		JsonObject expect;
+		try {
+			expect = json(expectFile);
+		} catch (RuntimeException e) {
+			check(set + " expect.json", false, "unreadable " + expectFile + ": " + e);
+			return;
+		}
+		if (!(expect.get("checks") instanceof JsonArray checks) || checks.isEmpty()) {
+			check(set + " expect.json", false, "no checks in " + expectFile);
+			return;
+		}
+		Map<String, String> before = digests(dir);
+		List<String[]> unread = new ArrayList<>();
+		long appliers = 0;
+		for (JsonElement element : checks) {
+			appliers += element.getAsJsonObject().has("class") && element.getAsJsonObject().get("class").getAsString().equals("ApplyHelper") ? 1 : 0;
+		}
+		if (appliers > 1) {
+			check(set + " expect.json", false, "at most one ApplyHelper check per set (it applies the spare copy's pending.json)");
+		}
+		int index = 0;
+		for (JsonElement element : checks) {
+			index++;
+			JsonObject c = element.getAsJsonObject();
+			String kind = c.has("class") ? c.get("class").getAsString() : "?";
+			String file = c.has("file") ? c.get("file").getAsString() : "?";
+			String name = set + " #" + index + " " + kind + " " + file;
+			List<String> keys = c.keySet().stream().filter(k -> !k.equals("class") && !k.equals("file")).toList();
+			List<String> unknown = keys.stream().filter(k -> !EXPECTATIONS.getOrDefault(kind, Set.of()).contains(k)).toList();
+			if (!CLASSES.contains(kind) || !unknown.isEmpty() || keys.isEmpty()) {
+				check(name, false, !CLASSES.contains(kind) ? "no check kind " + kind : keys.isEmpty() ? "no expectation"
+						: "unknown expectation(s) " + unknown + " for " + kind);
+				continue;
+			}
+			if (kind.equals("Unread")) {
+				unread.add(new String[]{name, file});
+				continue;
+			}
+			try {
+				setCheck(name, kind, file, c, config, dir, spare, scratch.resolve("check-" + index));
+			} catch (Exception e) {
+				check(name, false, "threw " + e);
+			}
+		}
+		Map<String, String> after = digests(dir);
+		for (String[] u : unread) {
+			boolean same = before.containsKey(u[1]) && before.get(u[1]).equals(after.get(u[1]));
+			check(u[0], same, same ? "byte-identical after 0.4.0's checks" : "before " + before.get(u[1]) + ", after " + after.get(u[1]));
+		}
+		check(set + " 0.4.0 reading the set changed no file", before.equals(after), before.equals(after) ? before.size() + " file(s) unchanged"
+				: "before " + before + ", after " + after);
+	}
+
+	private void setCheck(String name, String kind, String file, JsonObject c, Path config, Path dir, Path spare, Path scratch) throws Exception {
+		List<String> seen = new ArrayList<>();
+		boolean ok = true;
+		switch (kind) {
+			case "Journal" -> {
+				Journal journal = new Journal(config, VERSION, MC, (message, error) -> seen.add("warning " + message));
+				ok &= expectState(c, journal.state() == Journal.State.OK && !journal.readOnly(), journal.state() + (journal.readOnly() ? " read-only" : ""), seen);
+				ok &= expectInt(c, "entries", journal.entries().size(), seen);
+			}
+			case "HistoryModel" -> {
+				Journal journal = new Journal(config, VERSION, MC, (message, error) -> { });
+				HistoryModel.View view = HistoryModel.build(journal.state(), journal.entries(), Map.of(),
+						HistoryModel.Labels.of(plannerState(config, journal.entries())));
+				ok &= expectInt(c, "entries", view.entries().size(), seen);
+				ok &= expectInt(c, "unknownKinds", (int) view.entries().stream().filter(e -> e.kindKey().endsWith(".unknown")).count(), seen);
+			}
+			case "UndoPlanner" -> {
+				List<JournalEntry> entries = new Journal(config, VERSION, MC, (message, error) -> { }).entries();
+				List<PendingActions.Op> ops = Files.isRegularFile(dir.resolve("pending.json")) ? PendingActions.load(dir.resolve("pending.json")).ops()
+						: List.of();
+				String id = c.get("undoThis").getAsString();
+				UndoPlan plan = UndoPlanner.planEntry(entries, ops, plannerState(config, entries), id).plan();
+				int problems = plan.problem() == null ? 0 : 1;
+				seen.add("Undo this on " + id + ": " + plan.items().size() + " item(s), problem " + plan.problem());
+				ok &= !plan.isEmpty() || problems > 0;
+				ok &= c.has("problems") ? expectInt(c, "problems", problems, seen) : problems == 0;
+			}
+			case "BenchmarkHistory" -> {
+				BenchmarkHistory history = BenchmarkHistory.load(dir.resolve(file));
+				ok &= expectState(c, !history.unreadable(), history.unreadable() ? "unreadable" : "OK", seen);
+				ok &= expectInt(c, "runs", history.runs().size(), seen);
+			}
+			case "PendingActions" -> {
+				List<PendingActions.Op> ops = PendingActions.load(dir.resolve(file)).ops();
+				boolean typed = ops.stream().allMatch(o -> o.type() != null);
+				ok &= expectState(c, typed, typed ? "OK" : "an op of a type 0.4.0 doesn't know", seen);
+				ok &= expectInt(c, "ops", ops.size(), seen);
+			}
+			case "ApplyHelper" -> {
+				String group = c.get("appliesGroup").getAsString();
+				Path pending = spare.resolve("rigtune").resolve(file);
+				PendingActions plan = PendingActions.load(pending);
+				List<String> ids = plan.ops().stream().filter(o -> group.equals(o.group())).map(PendingActions.Op::id).toList();
+				ApplyResult result = new ApplyExecutor().run(plan, pending);
+				List<String> done = result.results().stream().filter(r -> r.op() != null && group.equals(r.op().group()))
+						.filter(r -> r.status() == ApplyResult.Status.OK).map(r -> r.op().id()).toList();
+				seen.add("group " + group + ": ops " + ids + ", OK " + done + "; " + result.results().stream().map(r -> r.status() + " " + r.message()).toList());
+				ok &= !ids.isEmpty() && done.containsAll(ids);
+			}
+			case "ClientSettings" -> {
+				JsonObject raw = json(dir.resolve(file));
+				ClientSettings settings = ClientSettings.load(config);
+				JsonObject read = JsonParser.parseString(new com.google.gson.Gson().toJson(settings)).getAsJsonObject();
+				List<String> differ = raw.keySet().stream().filter(read::has).filter(k -> !raw.get(k).equals(read.get(k))).toList();
+				ok &= expectState(c, differ.isEmpty(), differ.isEmpty() ? "OK" : "read differently: " + differ, seen);
+			}
+			case "StutterStore" -> {
+				int inFile = json(dir.resolve(file)).getAsJsonArray("sessions").size();
+				List<StutterReport> sessions = new StutterStore(config).sessions();
+				for (StutterReport session : sessions) {
+					StutterSummary.text(session, List.of());
+				}
+				ok &= expectState(c, sessions.size() == inFile, sessions.size() + " of " + inFile + " session(s) loaded", seen);
+				ok &= expectInt(c, "sessions", sessions.size(), seen);
+			}
+			case "AwarenessStore", "ProfileStore", "ServerLimitsStore" -> {
+				boolean writable = switch (kind) {
+					case "AwarenessStore" -> AwarenessStore.shared(config).writable();
+					case "ProfileStore" -> ProfileStore.shared(config).writable();
+					default -> new ServerLimitsStore(config).writable();
+				};
+				ok &= expectState(c, writable, writable ? "OK" : "read-only or unreadable", seen);
+				if (c.has("keeps")) {
+					Path copied = spare.resolve("rigtune").resolve(file);
+					String was = digest(copied);
+					switch (kind) {
+						case "AwarenessStore" -> AwarenessStore.shared(spare).dismiss("compat040.check");
+						case "ProfileStore" -> ProfileStore.shared(spare).batteryOffered("2026-01-01T00:00:00Z");
+						default -> new ServerLimitsStore(spare).remember("compat040.example", new ServerLimits(8, 6, ServerLimits.Kind.REMOTE,
+								1_700_000_000_000L));
+					}
+					boolean wrote = !was.equals(digest(copied));
+					JsonObject after = json(copied);
+					List<String> lost = new ArrayList<>();
+					c.getAsJsonArray("keeps").forEach(k -> {
+						if (!after.has(k.getAsString())) {
+							lost.add(k.getAsString());
+						}
+					});
+					seen.add("a 0.4.0 write on a copy (" + (wrote ? "written" : "NOT written") + ") lost " + lost);
+					ok &= wrote && lost.isEmpty();
+				}
+			}
+			case "RestoreMarker" -> {
+				Path copy = scratch.resolve("marker").resolve(file);
+				Files.createDirectories(copy.getParent());
+				Files.copy(dir.resolve(file), copy);
+				List<String> set = new ArrayList<>();
+				boolean done = RestoreMarker.restorePending(copy, target("dh", set), target("iris", set));
+				ok &= expectState(c, done && !Files.exists(copy), "restored " + set + ", done " + done, seen);
+			}
+			default -> {
+				ok = false;
+				seen.add("no check kind " + kind);
+			}
+		}
+		if (c.has("noBad")) {
+			List<String> bad = bad(dir).stream().filter(n -> n.startsWith(file)).toList();
+			boolean want = c.get("noBad").getAsBoolean();
+			ok &= bad.isEmpty() == want;
+			seen.add(".bad files " + bad);
+		}
+		check(name, ok, String.join("; ", seen));
+	}
+
+	private static boolean expectState(JsonObject c, boolean ok, String actual, List<String> seen) {
+		seen.add("state " + actual);
+		if (!c.has("state")) {
+			return true;
+		}
+		return c.get("state").getAsString().equals("OK") == ok;
+	}
+
+	private static boolean expectInt(JsonObject c, String key, int actual, List<String> seen) {
+		seen.add(key + " " + actual);
+		return !c.has(key) || c.get(key).getAsInt() == actual;
+	}
+
+	private static String digest(Path file) throws Exception {
+		return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file)));
 	}
 
 	private void check(String name, boolean ok, String detail) {

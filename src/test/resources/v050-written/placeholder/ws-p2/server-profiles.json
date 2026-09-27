@@ -1,0 +1,19 @@
+{
+  "formatVersion": 1,
+  "placeholder": "hand-written by WS-E; the real set comes from WS-P2's tests",
+  "salt": "00112233445566778899aabbccddeeff",
+  "servers": {
+    "a1": {
+      "kind": "REMOTE",
+      "profileId": "template:balanced"
+    },
+    "b2": {
+      "kind": "LAN_GUEST",
+      "profileId": "template:max_fps"
+    },
+    "c3": {
+      "kind": "REALM",
+      "profileId": "template:quality"
+    }
+  }
+}

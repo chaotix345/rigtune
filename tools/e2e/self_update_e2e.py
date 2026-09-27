@@ -417,6 +417,8 @@ class Run:
             target = self.instance / path
             target.parent.mkdir(parents=True, exist_ok=True)
             e2e_env.test_mod_jar(target, mod_id or "e2e-unknown")
+        # The staged ops' own sources too (a disabled jar of a staged group, a patch target), so the old helper can apply them.
+        written.materialize(self.instance)
         e2e_env.test_mod_jar(self.off_jar, OFF_ID)
         shutil.copyfile(self.off_jar, self.mods / self.off_jar.name)
         with open(self.instance / "options.txt", "a", encoding="utf-8") as options:

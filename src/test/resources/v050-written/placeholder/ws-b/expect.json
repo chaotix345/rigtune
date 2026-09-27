@@ -1,0 +1,12 @@
+{
+  "set": "ws-b",
+  "checks": [
+    {
+      "class": "BenchmarkHistory",
+      "file": "benchmarks.json",
+      "state": "OK",
+      "runs": 2,
+      "noBad": true
+    }
+  ]
+}
