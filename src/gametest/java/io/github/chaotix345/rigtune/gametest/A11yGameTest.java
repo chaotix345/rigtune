@@ -4,6 +4,8 @@ import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
+import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
+import io.github.chaotix345.rigtune.client.probe.PreloadTimer;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkHistoryScreen;
 import io.github.chaotix345.rigtune.client.ui.HistoryScreen;
 import io.github.chaotix345.rigtune.client.ui.JvmScreen;
@@ -17,6 +19,8 @@ import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
 import io.github.chaotix345.rigtune.client.ui.UndoScreen;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
+import io.github.chaotix345.rigtune.core.hardware.PerfCounterAdvice;
+import io.github.chaotix345.rigtune.core.hardware.PerfCounters;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
@@ -54,6 +58,8 @@ import net.minecraft.client.gui.components.events.ContainerEventHandler;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.ScreenNarrationCollector;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
+import net.minecraft.client.gui.screens.ConfirmLinkScreen;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
@@ -63,6 +69,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import javax.imageio.ImageIO;
 
@@ -514,7 +521,101 @@ public class A11yGameTest implements FabricClientGameTest {
 
 	// ---- WS-W, then WS-W2 (2L, C18 AC9.5): ToolsScreen's startup lines.
 
+	// 2L (AC2L.2, X6, X12): Tools' launch-time list with a seeded probe result (Windows' performance counters off, this PC's
+	// shape) and a canned startup trend: at every size the advice rows are there and fit, the widgets sit inside the screen
+	// without overlapping; Tab reaches every row and each narrates its text; a Microsoft page's row opens vanilla's link
+	// confirmation (cancelled). With the counters on, no advice row.
 	private static void walkToolsStartup(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		Screen found = context.computeOnClient(mc -> mc.gui.screen());
+		ToolsTrend tools = new ToolsTrend(v05.stub(), new StartupTimes.View(15_125L, 14_517L, 12, true));
+		PerfCounters off = new PerfCounters(true, true, List.of(), List.of("PerfOS"));
+		HardwareProbe.seedPerfCounters(off);
+		try {
+			List<String> expected = new ArrayList<>();
+			for (PerfCounterAdvice.Line line : PerfCounterAdvice.lines(off, PreloadTimer.preloadMs())) {
+				expected.add(Texts.component(line.text()).getString());
+			}
+			check(expected.size() >= 4, "the advice lines: " + expected);
+			int[][] sizes = {SIZES[0], SIZES[1], SIZES[2], V05TestContext.SCROLLING};
+			for (int[] size : sizes) {
+				v05.resize(size[0], size[1], size[2]);
+				String where = size[0] + "x" + size[1] + "@" + size[2];
+				openTools(context, tools);
+				context.runOnClient(mc -> {
+					ToolsScreen screen = (ToolsScreen) mc.gui.screen();
+					List<String> shown = screen.perfCounterLines().stream().map(Component::getString).toList();
+					check(shown.equals(expected), where + ": the advice rows " + shown);
+					check(screen.rowText().containsAll(expected) && screen.rowText().contains(screen.startupLine().getString()), where + ": rows " + screen.rowText());
+					check(screen.rowsFit(), where + ": every row's lines fit");
+					checkToolsLayout(screen, where);
+				});
+				context.takeScreenshot("a11y-tools-startup-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			}
+			v05.resize(854, 480, 2);
+			openTools(context, tools);
+			List<String> walked = new ArrayList<>(expected);
+			walked.add(Component.translatable("rigtune.startup.advice").getString());
+			walk(context, "tools startup", walked);
+			String entryRow = expected.get(expected.size() - 2);
+			int linkRow = context.computeOnClient(mc -> ((ToolsScreen) mc.gui.screen()).rowText().indexOf(entryRow));
+			focusRow(context, linkRow);
+			context.takeScreenshot("a11y-tools-startup-link-focus-854x480-scale2");
+			context.getInput().pressKey(InputConstants.KEY_RETURN);
+			context.waitFor(mc -> mc.gui.screen() instanceof ConfirmLinkScreen, 40);
+			context.takeScreenshot("a11y-tools-startup-link-confirm-854x480-scale2");
+			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
+			context.waitForScreen(ToolsScreen.class);
+			RigTune.LOGGER.info("A11yGameTest: Tools' launch-time advice: {} rows at every size, Tab and narration, the link confirmation", expected.size());
+
+			HardwareProbe.seedPerfCounters(new PerfCounters(true, false, List.of("PerfProc"), List.of()));
+			openTools(context, tools);
+			check(context.computeOnClient(mc -> ((ToolsScreen) mc.gui.screen()).perfCounterLines()).isEmpty(), "no advice while the counters are on");
+		} finally {
+			HardwareProbe.seedPerfCounters(null);
+			v05.resize(854, 480, 2);
+			context.runOnClient(mc -> mc.gui.setScreen(found));
+			context.waitTicks(2);
+		}
+	}
+
+	private static void openTools(ClientGameTestContext context, RigTuneController controller) {
+		context.runOnClient(mc -> mc.gui.setScreen(new ToolsScreen(new TitleScreen(), controller)));
+		context.waitForScreen(ToolsScreen.class);
+		context.getInput().setCursorPos(1, 1);
+		context.waitTicks(3);
+	}
+
+	// X12: every widget inside the screen and no two overlapping.
+	private static void checkToolsLayout(ToolsScreen screen, String where) {
+		List<AbstractWidget> widgets = Screens.getWidgets(screen);
+		for (AbstractWidget w : widgets) {
+			check(w.getX() >= 0 && w.getY() >= 0 && w.getX() + w.getWidth() <= screen.width && w.getY() + w.getHeight() <= screen.height,
+					where + ": " + w.getMessage().getString() + " inside the screen");
+		}
+		for (int i = 0; i < widgets.size(); i++) {
+			for (int j = i + 1; j < widgets.size(); j++) {
+				ScreenRectangle a = widgets.get(i).getRectangle();
+				ScreenRectangle b = widgets.get(j).getRectangle();
+				check(a.intersection(b) == null, where + ": " + widgets.get(i).getMessage().getString() + " and " + widgets.get(j).getMessage().getString()
+						+ " overlap");
+			}
+		}
+	}
+
+	// The stub with a canned startup trend (a changed mod set, so the note shows too).
+	private static final class ToolsTrend extends ForwardingController {
+		private final StartupTimes.View trend;
+
+		ToolsTrend(RigTuneController delegate, StartupTimes.View trend) {
+			super(delegate);
+			this.trend = trend;
+		}
+
+		@Override
+		public StartupTimes.View startupTimes() {
+			return trend;
+		}
 	}
 
 	// ---- WS-B (L3, AC2A.1-AC2A.2): BenchmarkResultScreen and BenchmarkHistoryScreen.
