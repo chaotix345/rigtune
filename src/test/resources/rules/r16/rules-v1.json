@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 2,
-  "revision": 17,
-  "generatedAt": "2026-09-27T11:47:48Z",
+  "schemaVersion": 1,
+  "revision": 16,
+  "generatedAt": "2026-09-26T14:45:07Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -38,12 +38,6 @@
       "vendor": "nvidia",
       "integrated": false,
       "tier": 4
-    },
-    {
-      "pattern": "(?i)RTX\\s*5050\\b(?!\\s*Ti)",
-      "vendor": "nvidia",
-      "integrated": false,
-      "tier": 3
     },
     {
       "pattern": "(?i)RTX\\s*(?:20[5-8]0|3050)\\b|GTX\\s*(?:10[6-8]0|16[56]0)\\b",
@@ -112,12 +106,6 @@
       "tier": 3
     },
     {
-      "pattern": "(?i)RX\\s*9070\\s*GRE\\b",
-      "vendor": "amd",
-      "integrated": false,
-      "tier": 4
-    },
-    {
       "pattern": "(?i)RX\\s*(?:6[89][05]0|7[89]00|90[7-9]0)\\b",
       "vendor": "amd",
       "integrated": false,
@@ -176,18 +164,6 @@
       "vendor": "intel",
       "integrated": false,
       "tier": 2
-    },
-    {
-      "pattern": "(?i)Arc(?:\\s*\\(TM\\))?\\s*Pro\\s*B50\\b",
-      "vendor": "intel",
-      "integrated": false,
-      "tier": 3
-    },
-    {
-      "pattern": "(?i)Arc(?:\\s*\\(TM\\))?\\s*Pro\\s*B[67]\\d\\b",
-      "vendor": "intel",
-      "integrated": false,
-      "tier": 4
     },
     {
       "pattern": "(?i)Arc(?:\\s*\\(TM\\))?\\s*(?:\\d{3}V|B3\\d0|Graphics)",
@@ -777,7 +753,7 @@
           "nvidia"
         ],
         "gpuIntegrated": false,
-        "gpuModelMatches": "(?i)GTX\\s*16[56]0\\b|RTX\\s*(?:20[6-8]0|30[5-9]0|40[5-9]0|50[5-9]0)\\b|Quadro\\s*RTX\\s*\\d{4}\\b|RTX\\s*A\\d{3,4}\\b|RTX\\s*\\d{4}\\s*Ada\\b",
+        "gpuTierAtLeast": 4,
         "modPresent": [
           "sodium"
         ]
@@ -792,7 +768,7 @@
             }
           },
           {
-            "gpuModelMatches": "(?i)GTX\\s*(?:[4-9]\\d0|10[5-8]0)M?\\b|GeForce\\s*(?:GTS?\\s*)?\\d{3,4}(?:M|MX)?\\b|\\bMX\\s*[1-3]\\d0\\b|TITAN\\s*(?:X|Xp|V|Black|Z)\\b|GTX\\s*TITAN|Quadro\\s*(?:[KMP]\\d{3,4}M?|G[PV]100)\\b"
+            "gpuTierAtMost": 2
           },
           {
             "flags": [
@@ -819,7 +795,7 @@
       "category": "rendering",
       "impact": "medium",
       "stability": "beta",
-      "reason": "Renders the game at a lower internal resolution and upscales it, which cuts GPU work on weak or integrated graphics, or on a mid-range graphics card driving a 1440p or larger screen, at the cost of some sharpness.",
+      "reason": "Renders the game at a lower internal resolution and upscales it, which cuts GPU work on weak or integrated graphics at the cost of some sharpness.",
       "recommendWhen": {
         "anyOf": [
           {
@@ -827,11 +803,6 @@
           },
           {
             "gpuIntegrated": true
-          },
-          {
-            "gpuTierAtLeast": 3,
-            "gpuTierAtMost": 3,
-            "displayPixelsAtLeast": 3686400
           }
         ]
       },
@@ -911,7 +882,7 @@
       "conflictsWith": [],
       "defaultSelected": false,
       "upstream": {
-        "fabulouslyOptimized": true,
+        "fabulouslyOptimized": false,
         "additive": false
       }
     },
@@ -934,61 +905,6 @@
       "upstream": {
         "fabulouslyOptimized": false,
         "additive": true
-      }
-    },
-    {
-      "slug": "lambdynamiclights",
-      "projectId": "yBW8D80W",
-      "title": "LambDynamicLights",
-      "modIds": [
-        "lambdynlights"
-      ],
-      "category": "lighting",
-      "impact": "low",
-      "stability": "stable",
-      "reason": "Makes held, worn and dropped light sources such as torches and glowstone light up the area around them as they move. It's a visual feature rather than a performance one, so RigTune doesn't suggest adding it.",
-      "recommendWhen": {
-        "always": false
-      },
-      "avoidWhen": {
-        "tierAtMost": 2
-      },
-      "avoidReason": "LambDynamicLights keeps relighting the area around moving light sources, which costs CPU time. On this PC's estimated tier, disabling it can win back some frame rate; if you'd rather keep the effect, pick a less smooth dynamic lighting mode in its settings instead. It starts unticked because it's a visual choice.",
-      "avoidSelected": false,
-      "conflictsWith": [
-        "sodiumdynamiclights",
-        "ryoamiclights",
-        "optifabric"
-      ],
-      "defaultSelected": false,
-      "upstream": {
-        "fabulouslyOptimized": true,
-        "additive": true
-      }
-    },
-    {
-      "slug": "distanthorizons",
-      "projectId": "uCdwusMi",
-      "title": "Distant Horizons",
-      "modIds": [
-        "distanthorizons"
-      ],
-      "category": "rendering",
-      "impact": "low",
-      "stability": "stable",
-      "reason": "Draws far-away terrain as simplified chunks beyond the vanilla render distance. RigTune doesn't suggest adding it; this rule tells RigTune how to treat it when it's installed.",
-      "recommendWhen": {
-        "always": false
-      },
-      "skipUpdateWhen": {
-        "settingIs": {
-          "dh.client.advanced.autoUpdater.enableAutoUpdater": true
-        }
-      },
-      "conflictsWith": [],
-      "upstream": {
-        "fabulouslyOptimized": false,
-        "additive": false
       }
     }
   ],
@@ -1120,12 +1036,7 @@
       "when": {
         "modPresent": [
           "distanthorizons"
-        ],
-        "not": {
-          "settingIs": {
-            "dh.client.advanced.debugging.rendererMode": "DISABLED"
-          }
-        }
+        ]
       },
       "reason": "Distant Horizons already draws the far terrain cheaply, so vanilla chunks beyond 12 cost frame rate without adding much view distance."
     },
@@ -1136,12 +1047,7 @@
         "modPresent": [
           "distanthorizons"
         ],
-        "tierAtMost": 2,
-        "not": {
-          "settingIs": {
-            "dh.client.advanced.debugging.rendererMode": "DISABLED"
-          }
-        }
+        "tierAtMost": 2
       },
       "reason": "On entry-level hardware, stay at the low end of the 8 to 12 vanilla chunks Distant Horizons' FAQ recommends; Distant Horizons draws the terrain beyond that."
     },
@@ -1434,231 +1340,6 @@
       },
       "impact": "low",
       "reason": "Skipping Sodium's extra work for overlapping see-through blocks (like waterlogged glass panes) helps very weak GPUs; those blocks may look slightly wrong."
-    },
-    {
-      "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius",
-      "max": 48,
-      "when": {
-        "modPresent": [
-          "distanthorizons"
-        ],
-        "tierAtMost": 1
-      },
-      "impact": "high",
-      "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 64 to 96 chunks for entry-level PCs; on low-end hardware RigTune caps it lower, at 48."
-    },
-    {
-      "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius",
-      "max": 64,
-      "when": {
-        "modPresent": [
-          "distanthorizons"
-        ],
-        "tierAtLeast": 2,
-        "tierAtMost": 2
-      },
-      "impact": "high",
-      "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 64 to 96 chunks for entry-level PCs; RigTune caps it at 64."
-    },
-    {
-      "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius",
-      "max": 96,
-      "when": {
-        "modPresent": [
-          "distanthorizons"
-        ],
-        "tierAtLeast": 3,
-        "tierAtMost": 3
-      },
-      "impact": "medium",
-      "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 96 to 128 chunks for mid-range PCs; RigTune caps it at 96."
-    },
-    {
-      "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius",
-      "value": 160,
-      "when": {
-        "modPresent": [
-          "distanthorizons"
-        ],
-        "tierAtLeast": 4,
-        "tierAtMost": 4
-      },
-      "impact": "medium",
-      "defaultSelected": false,
-      "reason": "Your hardware has headroom, but Distant Horizons' default of 256 chunks is a lot of far terrain to keep in memory; 160 chunks is a lighter starting point. This is RigTune's own estimate, so it starts unticked."
-    },
-    {
-      "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius",
-      "value": 256,
-      "when": {
-        "modPresent": [
-          "distanthorizons"
-        ],
-        "tierAtLeast": 5
-      },
-      "impact": "low",
-      "defaultSelected": false,
-      "reason": "256 chunks is Distant Horizons' default and a good starting point for hardware this strong; going further costs more memory and GPU time."
-    },
-    {
-      "key": "dh.client.advanced.graphics.quality.verticalQuality",
-      "value": "LOW",
-      "when": {
-        "modPresent": [
-          "distanthorizons"
-        ],
-        "tierAtMost": 2
-      },
-      "impact": "medium",
-      "reason": "Low is the vertical quality Distant Horizons' own Low quality preset uses (its default is Medium), and its description says higher settings use more memory and GPU time. Distant overhangs and caves look simpler."
-    },
-    {
-      "key": "dh.client.advanced.graphics.quality.horizontalQuality",
-      "value": "LOWEST",
-      "when": {
-        "modPresent": [
-          "distanthorizons"
-        ],
-        "tierAtMost": 1
-      },
-      "impact": "low",
-      "reason": "The LOD dropoff distance sets how soon far terrain loses detail. Lowest is what Distant Horizons' own Minimum quality preset uses (its default is Medium), and its description says higher settings use more memory and GPU time."
-    },
-    {
-      "key": "dh.client.advanced.graphics.quality.horizontalQuality",
-      "value": "LOW",
-      "when": {
-        "modPresent": [
-          "distanthorizons"
-        ],
-        "tierAtLeast": 2,
-        "tierAtMost": 2
-      },
-      "impact": "low",
-      "reason": "The LOD dropoff distance sets how soon far terrain loses detail. Low is what Distant Horizons' own Low quality preset uses (its default is Medium), and its description says higher settings use more memory and GPU time."
-    },
-    {
-      "key": "dh.client.advanced.graphics.quality.maxHorizontalResolution",
-      "value": "TWO_BLOCKS",
-      "when": {
-        "modPresent": [
-          "distanthorizons"
-        ],
-        "tierAtMost": 2
-      },
-      "impact": "medium",
-      "reason": "2 blocks is the maximum far-terrain resolution Distant Horizons' own Minimum quality preset uses; every other preset uses Block, its default, which its description says costs more memory and GPU time."
-    },
-    {
-      "key": "dh.common.multiThreading.numberOfThreads",
-      "max": 1,
-      "when": {
-        "modPresent": [
-          "distanthorizons"
-        ],
-        "cpuTierAtMost": 1,
-        "modAbsent": [
-          "chunky"
-        ]
-      },
-      "impact": "low",
-      "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this small, more than 1 Distant Horizons thread competes with Minecraft itself and can cause stutter while far terrain loads."
-    },
-    {
-      "key": "dh.common.multiThreading.numberOfThreads",
-      "max": 2,
-      "when": {
-        "modPresent": [
-          "distanthorizons"
-        ],
-        "cpuTierAtLeast": 2,
-        "cpuTierAtMost": 2,
-        "modAbsent": [
-          "chunky"
-        ]
-      },
-      "impact": "low",
-      "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 2 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads."
-    },
-    {
-      "key": "dh.common.multiThreading.numberOfThreads",
-      "max": 4,
-      "when": {
-        "modPresent": [
-          "distanthorizons"
-        ],
-        "cpuTierAtLeast": 3,
-        "cpuTierAtMost": 3,
-        "modAbsent": [
-          "chunky"
-        ]
-      },
-      "impact": "low",
-      "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 4 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads."
-    },
-    {
-      "key": "dh.common.multiThreading.numberOfThreads",
-      "max": 6,
-      "when": {
-        "modPresent": [
-          "distanthorizons"
-        ],
-        "cpuTierAtLeast": 4,
-        "cpuTierAtMost": 4,
-        "modAbsent": [
-          "chunky"
-        ]
-      },
-      "impact": "low",
-      "reason": "Distant Horizons uses half of your CPU threads by default. On a CPU this size, more than 6 Distant Horizons threads compete with Minecraft itself and can cause stutter while far terrain loads."
-    },
-    {
-      "key": "iris.maxShadowRenderDistance",
-      "max": 4,
-      "when": {
-        "modPresent": [
-          "iris"
-        ],
-        "flags": [
-          "shaders-enabled"
-        ],
-        "tierAtMost": 1
-      },
-      "impact": "medium",
-      "reason": "Iris's own description says lowering the shadow distance can significantly increase performance, since less terrain is drawn a second time for shadows. 4 chunks keeps shadows around you on low-end hardware. Shader packs that set their own shadow distance ignore this."
-    },
-    {
-      "key": "iris.maxShadowRenderDistance",
-      "max": 6,
-      "when": {
-        "modPresent": [
-          "iris"
-        ],
-        "flags": [
-          "shaders-enabled"
-        ],
-        "tierAtLeast": 2,
-        "tierAtMost": 2
-      },
-      "impact": "medium",
-      "reason": "Iris's own description says lowering the shadow distance can significantly increase performance, since less terrain is drawn a second time for shadows. 6 chunks keeps shadows around you on entry-level hardware. Shader packs that set their own shadow distance ignore this."
-    },
-    {
-      "key": "iris.maxShadowRenderDistance",
-      "max": 8,
-      "when": {
-        "modPresent": [
-          "iris"
-        ],
-        "flags": [
-          "shaders-enabled"
-        ],
-        "tierAtLeast": 3,
-        "tierAtMost": 3
-      },
-      "impact": "low",
-      "defaultSelected": false,
-      "reason": "Iris's own description says lowering the shadow distance can significantly increase performance, since less terrain is drawn a second time for shadows. 8 chunks, a little under the render distance, trims that cost on mid-range hardware. Shader packs that set their own shadow distance ignore this."
     }
   ],
   "advice": [
@@ -1724,12 +1405,7 @@
           "distanthorizons"
         ],
         "heapMbAtMost": 5500,
-        "ramMbAtLeast": 12000,
-        "not": {
-          "flags": [
-            "shaders-enabled"
-          ]
-        }
+        "ramMbAtLeast": 12000
       },
       "kind": "warning",
       "impact": "medium",
@@ -1743,10 +1419,7 @@
           "shaders-enabled"
         ],
         "heapMbAtMost": 5500,
-        "ramMbAtLeast": 12000,
-        "modAbsent": [
-          "distanthorizons"
-        ]
+        "ramMbAtLeast": 12000
       },
       "kind": "warning",
       "impact": "medium",
@@ -1769,24 +1442,6 @@
       "impact": "medium",
       "title": "Distant Horizons with shaders needs more memory",
       "text": "Distant Horizons with a shader pack is one of the heaviest setups. You have plenty of RAM, so allocate about 8 GB to Minecraft in your launcher."
-    },
-    {
-      "id": "ram-distant-horizons-shaders-limited",
-      "when": {
-        "modPresent": [
-          "distanthorizons"
-        ],
-        "flags": [
-          "shaders-enabled"
-        ],
-        "heapMbAtMost": 5500,
-        "ramMbAtLeast": 12000,
-        "ramMbAtMost": 15999
-      },
-      "kind": "warning",
-      "impact": "medium",
-      "title": "Distant Horizons with shaders needs more memory",
-      "text": "Distant Horizons with a shader pack is one of the heaviest setups: per its FAQ, Distant Horizons alone needs roughly 2 to 4 GB more memory than vanilla, and the shader pack adds more. Allocate 6 GB in your launcher. This PC has less than 16 GB of RAM, so don't go much higher; keep Distant Horizons' render distance moderate instead."
     },
     {
       "id": "ram-distant-horizons-low-system",
@@ -1833,8 +1488,7 @@
       "when": {
         "backend": [
           "vulkan"
-        ],
-        "mcVersionRange": "<26.4-"
+        ]
       },
       "kind": "info",
       "impact": "medium",
@@ -1864,27 +1518,12 @@
         "flags": [
           "shaders-enabled"
         ],
-        "gpuTierAtMost": 3,
-        "tierAtLeast": 3
+        "gpuTierAtMost": 3
       },
       "kind": "warning",
       "impact": "high",
       "title": "Shaders are heavy for this GPU",
       "text": "A shader pack is on, and on this graphics card shaders usually cost more FPS than every other setting combined. Try a lighter pack or a lower shader quality preset, or turn shaders off in Video Settings > Shader Packs."
-    },
-    {
-      "id": "shaders-entry-level",
-      "when": {
-        "flags": [
-          "shaders-enabled"
-        ],
-        "tierAtMost": 2,
-        "gpuTierAtMost": 3
-      },
-      "kind": "warning",
-      "impact": "high",
-      "title": "Shaders are heavy for this PC",
-      "text": "A shader pack is on, and at this hardware level shaders usually cost more FPS than every other setting combined. Turn shaders off in Video Settings > Shader Packs, or switch to a pack made for low-end PCs, such as MakeUp - Ultra Fast."
     },
     {
       "id": "shaders-distant-horizons",
@@ -1960,648 +1599,6 @@
       "impact": "low",
       "title": "OpenGL setting adjusted by Sodium",
       "text": "Your system doesn't support one of OpenGL's faster error-checking modes (common on Linux with Wayland), so Sodium turned it off to avoid a crash at start-up. You don't need to do anything."
-    },
-    {
-      "id": "spark-profiler",
-      "when": {
-        "modPresent": [
-          "spark"
-        ]
-      },
-      "kind": "info",
-      "impact": "low",
-      "title": "Find what causes lag with spark",
-      "text": "Run /sparkc profiler start, play through the lag, then /sparkc profiler stop and open the link it prints: under Render thread, the highest percentages cost the most time. Stopping uploads the profile to spark.lucko.me with your player name and UUID, mod list, system details and Java launch arguments; anyone with the link can see it."
-    },
-    {
-      "id": "jvm-ignored-flags",
-      "requires": [
-        "jvm-flags"
-      ],
-      "when": {
-        "flags": [
-          "jvm-ignored-flags"
-        ]
-      },
-      "kind": "info",
-      "impact": "low",
-      "title": "Java ignores some of your Java arguments",
-      "text": "Java doesn't use some of the flags in your Java arguments: they were removed from Java, or they don't work on this PC. They do nothing now, and a removed flag can stop a later Java from starting (OpenJDK says so for -XX:+ZGenerational). Remove them from your Java arguments."
-    },
-    {
-      "id": "jvm-young-gen-fixed",
-      "requires": [
-        "jvm-flags"
-      ],
-      "when": {
-        "flags": [
-          "jvm-young-gen-fixed",
-          "jvm-gc-g1"
-        ]
-      },
-      "kind": "warning",
-      "impact": "medium",
-      "title": "Fixed young-generation size in your Java arguments",
-      "text": "Your Java arguments fix the size of Java's young generation (-Xmn, NewSize or MaxNewSize). Java's own G1 tuning guide says that \"overrides and practically disables pause-time control\", the part of the garbage collector that keeps its pauses short. Remove it from your Java arguments."
-    },
-    {
-      "id": "jvm-stop-the-world-gc",
-      "requires": [
-        "jvm-flags"
-      ],
-      "when": {
-        "flags": [
-          "jvm-gc-typed"
-        ],
-        "anyOf": [
-          {
-            "flags": [
-              "jvm-gc-serial"
-            ]
-          },
-          {
-            "flags": [
-              "jvm-gc-parallel"
-            ]
-          }
-        ]
-      },
-      "kind": "warning",
-      "impact": "medium",
-      "title": "Your Java arguments pick a collector that pauses the game",
-      "text": "Your Java arguments switch Java to its Serial or Parallel garbage collector, which stop the game for every collection. Java's own documentation suggests Parallel only when \"pauses of one second or longer are acceptable\". Remove -XX:+UseSerialGC or -XX:+UseParallelGC so Java uses its default collector, G1."
-    },
-    {
-      "id": "jvm-no-gc",
-      "requires": [
-        "jvm-flags"
-      ],
-      "when": {
-        "flags": [
-          "jvm-gc-epsilon"
-        ]
-      },
-      "kind": "critical",
-      "impact": "high",
-      "title": "Java is set to never free memory",
-      "text": "Your Java arguments turn on Epsilon (-XX:+UseEpsilonGC), a garbage collector that never frees memory: Minecraft will run out of memory and crash. Remove it from your Java arguments."
-    },
-    {
-      "id": "jvm-server-flags",
-      "requires": [
-        "jvm-flags"
-      ],
-      "when": {
-        "flags": [
-          "jvm-server-flags"
-        ],
-        "ramMbAtMost": 16384
-      },
-      "kind": "info",
-      "impact": "low",
-      "title": "Server flags in your Java arguments",
-      "text": "These are Paper's server flags (\"Aikar's flags\") or a set based on them. In RigTune's tests they gave the same frame rates and 1% lows as Java's defaults, but with the -Xms usually pasted with them Minecraft kept its whole memory allocation reserved even when it didn't need it (all 4096 MB of a 4 GB allocation, against about 1.3 GB with Java's defaults). On a PC with 16 GB of RAM or less, remove these flags and keep only your launcher's memory setting."
-    },
-    {
-      "id": "jvm-explicit-gc-disabled",
-      "requires": [
-        "jvm-flags"
-      ],
-      "when": {
-        "flags": [
-          "jvm-explicit-gc-disabled"
-        ],
-        "not": {
-          "flags": [
-            "jvm-server-flags"
-          ]
-        }
-      },
-      "kind": "info",
-      "impact": "low",
-      "title": "Explicit garbage collection is turned off",
-      "text": "-XX:+DisableExplicitGC stops Minecraft's out-of-memory recovery and Java's direct-memory cleanup from asking for a garbage collection, and it brings no benefit in play. Remove it from your Java arguments."
-    },
-    {
-      "id": "jvm-zgc-small-heap",
-      "requires": [
-        "jvm-flags"
-      ],
-      "when": {
-        "flags": [
-          "jvm-gc-zgc"
-        ],
-        "heapMbAtMost": 3072,
-        "ramMbAtLeast": 8193
-      },
-      "kind": "info",
-      "impact": "medium",
-      "title": "ZGC with little memory",
-      "text": "Java's ZGC guide says ZGC works better the more memory it gets, and it keeps almost all of that memory in use. On RigTune's test PC, ZGC with 2 GB gave slightly lower 1% lows than with 4 GB. This PC has room for 4 GB. The options: 4 GB in your launcher's memory setting, or removing -XX:+UseZGC, which returns to Java's default collector (G1)."
-    },
-    {
-      "id": "jvm-zgc-small-pc",
-      "requires": [
-        "jvm-flags"
-      ],
-      "when": {
-        "flags": [
-          "jvm-gc-zgc"
-        ],
-        "ramMbAtMost": 8192,
-        "heapMbAtLeast": 4096
-      },
-      "kind": "info",
-      "impact": "low",
-      "title": "ZGC on a PC with 8 GB of RAM or less",
-      "text": "ZGC keeps almost its whole heap committed: on RigTune's test PC it kept 3.9 of 4 GB, against about 1.3 GB for Java's default collector (G1). On a PC with 8 GB of RAM or less, that leaves less memory for everything else. ZGC is the official Minecraft Launcher's default since 26.1, so this may not be something you changed. If the game or the PC feels slow, removing -XX:+UseZGC returns to G1."
-    },
-    {
-      "id": "jvm-xmx-duplicate",
-      "requires": [
-        "jvm-flags"
-      ],
-      "when": {
-        "flags": [
-          "jvm-xmx-duplicate"
-        ]
-      },
-      "kind": "info",
-      "impact": "low",
-      "title": "Memory is set more than once",
-      "text": "Your Java arguments set the maximum memory (-Xmx) more than once, and Java uses only the last one, so the memory your launcher shows may not be what Minecraft gets. Keep only one: remove the extra -Xmx from your Java arguments."
-    },
-    {
-      "id": "driver-nvidia-threaded-optimization",
-      "when": {
-        "os": [
-          "windows"
-        ],
-        "gpuVendor": [
-          "nvidia"
-        ],
-        "driverVersion": {
-          "vendor": "nvidia",
-          "atLeast": "526.47",
-          "atMost": "536.22"
-        }
-      },
-      "kind": "warning",
-      "impact": "high",
-      "title": "Update your NVIDIA graphics driver",
-      "text": "NVIDIA drivers 526.47 to 536.22 force Threaded Optimization for Minecraft, which Sodium reports causes crashes and stutter (Sodium issue #1486). Update your graphics driver."
-    },
-    {
-      "id": "driver-intel-gen7-old",
-      "when": {
-        "os": [
-          "windows"
-        ],
-        "gpuVendor": [
-          "intel"
-        ],
-        "gpuModelMatches": "(?i)\\bHD\\s*Graphics\\s*P?(?:2500|4000)\\b",
-        "driverVersion": {
-          "vendor": "intel",
-          "atMost": "10.18.10.5160"
-        }
-      },
-      "kind": "warning",
-      "impact": "high",
-      "title": "Intel HD Graphics driver too old for Sodium",
-      "text": "Intel HD Graphics drivers older than 10.18.10.5161 can freeze Minecraft at startup with Sodium (Sodium issue #899); update the driver."
-    }
-  ],
-  "settingLabels": {
-    "vanilla.renderDistance": {
-      "name": "Render Distance"
-    },
-    "vanilla.simulationDistance": {
-      "name": "Simulation Distance"
-    },
-    "vanilla.maxFps": {
-      "name": "Max Framerate",
-      "values": {
-        "260": "Unlimited"
-      }
-    },
-    "vanilla.enableVsync": {
-      "name": "VSync",
-      "values": {
-        "true": "On",
-        "false": "Off"
-      }
-    },
-    "vanilla.inactivityFpsLimit": {
-      "name": "Reduce FPS when",
-      "values": {
-        "afk": "AFK",
-        "minimized": "Minimized"
-      }
-    },
-    "vanilla.particles": {
-      "name": "Particles",
-      "values": {
-        "0": "All",
-        "1": "Decreased",
-        "2": "Minimal"
-      }
-    },
-    "vanilla.biomeBlendRadius": {
-      "name": "Biome Blend",
-      "values": {
-        "0": "Off",
-        "1": "3x3",
-        "2": "5x5",
-        "3": "7x7",
-        "4": "9x9",
-        "5": "11x11",
-        "6": "13x13",
-        "7": "15x15"
-      }
-    },
-    "vanilla.entityDistanceScaling": {
-      "name": "Entity Distance"
-    },
-    "vanilla.entityShadows": {
-      "name": "Entity Shadows",
-      "values": {
-        "true": "On",
-        "false": "Off"
-      }
-    },
-    "vanilla.renderClouds": {
-      "name": "Clouds",
-      "values": {
-        "false": "Off",
-        "fast": "Fast",
-        "true": "Fancy"
-      }
-    },
-    "vanilla.cutoutLeaves": {
-      "name": "See-Through Leaves",
-      "values": {
-        "true": "On",
-        "false": "Off"
-      }
-    },
-    "vanilla.improvedTransparency": {
-      "name": "Improved Transparency",
-      "values": {
-        "true": "On",
-        "false": "Off"
-      }
-    },
-    "vanilla.textureFiltering": {
-      "name": "Texture Filtering",
-      "values": {
-        "0": "None",
-        "1": "RGSS",
-        "2": "Anisotropic"
-      }
-    },
-    "vanilla.weatherRadius": {
-      "name": "Weather Effect Radius"
-    },
-    "vanilla.prioritizeChunkUpdates": {
-      "name": "Chunk Builder",
-      "values": {
-        "0": "Threaded",
-        "1": "Semi Blocking",
-        "2": "Fully Blocking"
-      }
-    },
-    "sodium.performance.use_fog_occlusion": {
-      "name": "Use Fog Occlusion",
-      "values": {
-        "true": "On",
-        "false": "Off"
-      }
-    },
-    "sodium.performance.use_block_face_culling": {
-      "name": "Use Block Face Culling",
-      "values": {
-        "true": "On",
-        "false": "Off"
-      }
-    },
-    "sodium.performance.use_entity_culling": {
-      "name": "Use Entity Culling",
-      "values": {
-        "true": "On",
-        "false": "Off"
-      }
-    },
-    "sodium.performance.animate_only_visible_textures": {
-      "name": "Animate Only Visible Textures",
-      "values": {
-        "true": "On",
-        "false": "Off"
-      }
-    },
-    "sodium.performance.chunk_builder_threads": {
-      "name": "Chunk Update Threads",
-      "values": {
-        "0": "Default"
-      }
-    },
-    "sodium.performance.chunk_build_defer_mode": {
-      "name": "Chunk Updates",
-      "values": {
-        "ALWAYS": "Deferred",
-        "ONE_FRAME": "Soon",
-        "ZERO_FRAMES": "Immediate"
-      }
-    },
-    "sodium.performance.quad_splitting_mode": {
-      "name": "Block Transparency Limits",
-      "values": {
-        "OFF": "Basic",
-        "SAFE": "Safe",
-        "UNLIMITED": "Unlimited"
-      }
-    },
-    "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius": {
-      "name": "LOD Chunk Render Distance Radius"
-    },
-    "dh.client.advanced.graphics.quality.verticalQuality": {
-      "name": "Vertical Quality",
-      "values": {
-        "HEIGHT_MAP": "Height Map",
-        "LOW": "Low",
-        "MEDIUM": "Medium",
-        "HIGH": "High",
-        "VERY_HIGH": "Very High",
-        "EXTREME": "Extreme",
-        "PIXEL_ART": "Pixel Art"
-      }
-    },
-    "dh.client.advanced.graphics.quality.horizontalQuality": {
-      "name": "LOD Dropoff Distance",
-      "values": {
-        "LOWEST": "Lowest",
-        "LOW": "Low",
-        "MEDIUM": "Medium",
-        "HIGH": "High",
-        "EXTREME": "Extreme"
-      }
-    },
-    "dh.client.advanced.graphics.quality.maxHorizontalResolution": {
-      "name": "Max Horizontal Resolution",
-      "values": {
-        "CHUNK": "Chunk",
-        "HALF_CHUNK": "Half a chunk",
-        "FOUR_BLOCKS": "4 blocks",
-        "TWO_BLOCKS": "2 blocks",
-        "BLOCK": "Block"
-      }
-    },
-    "dh.common.multiThreading.numberOfThreads": {
-      "name": "NO. of threads"
-    },
-    "iris.maxShadowRenderDistance": {
-      "name": "Max Shadow Distance"
-    }
-  },
-  "profileTemplates": {
-    "templates": [
-      {
-        "id": "max_fps",
-        "goal": "performance",
-        "settings": [
-          {
-            "key": "vanilla.maxFps",
-            "value": 260,
-            "reason": "Max FPS takes the frame-rate cap off."
-          },
-          {
-            "key": "vanilla.enableVsync",
-            "value": false,
-            "reason": "VSync would hold the frame rate at your monitor's refresh rate."
-          }
-        ]
-      },
-      {
-        "id": "balanced",
-        "goal": "balanced"
-      },
-      {
-        "id": "quality",
-        "goal": "quality"
-      },
-      {
-        "id": "battery",
-        "goal": "performance",
-        "facts": {
-          "onBattery": true,
-          "hasBattery": true
-        },
-        "settings": [
-          {
-            "key": "iris.enableShaders",
-            "value": false,
-            "when": {
-              "modPresent": [
-                "iris"
-              ]
-            },
-            "reason": "Shader packs multiply the GPU's work, which drains the battery fastest."
-          },
-          {
-            "key": "dh.client.advanced.debugging.rendererMode",
-            "value": "DISABLED",
-            "when": {
-              "modPresent": [
-                "distanthorizons"
-              ]
-            },
-            "reason": "Turning Distant Horizons' rendering off saves the GPU work of drawing its far terrain."
-          },
-          {
-            "key": "vanilla.renderClouds",
-            "value": "false",
-            "reason": "Clouds off saves GPU work on battery."
-          },
-          {
-            "key": "vanilla.renderDistance",
-            "max": 8,
-            "reason": "Fewer chunks mean less CPU and GPU work on battery."
-          },
-          {
-            "key": "vanilla.simulationDistance",
-            "max": 6,
-            "reason": "A shorter simulation distance means less CPU work on battery."
-          },
-          {
-            "key": "vanilla.particles",
-            "min": 1,
-            "reason": "Fewer particles save GPU work on battery."
-          }
-        ]
-      },
-      {
-        "id": "recording",
-        "goal": "balanced",
-        "settings": [
-          {
-            "key": "vanilla.maxFps",
-            "value": "$recordingFps",
-            "reason": "A steady frame rate at a usual recording rate (60 FPS, or your display's rate below that) leaves headroom for the recording software."
-          },
-          {
-            "key": "vanilla.enableVsync",
-            "value": true,
-            "when": {
-              "not": {
-                "refreshRateAtLeast": 61
-              }
-            },
-            "reason": "On a display of 60 Hz or less the cap is at or below the refresh rate, so VSync stops tearing at little cost."
-          },
-          {
-            "key": "vanilla.enableVsync",
-            "value": false,
-            "when": {
-              "refreshRateAtLeast": 61
-            },
-            "reason": "Above 60 Hz, VSync would add input lag on top of the 60 FPS cap."
-          },
-          {
-            "key": "vanilla.inactivityFpsLimit",
-            "value": "minimized",
-            "reason": "Keeps the full frame rate during idle or cinematic shots instead of lowering it after a minute without input."
-          },
-          {
-            "key": "sodium.performance.chunk_build_defer_mode",
-            "value": "ALWAYS",
-            "when": {
-              "modPresent": [
-                "sodium"
-              ]
-            },
-            "reason": "Deferred chunk updates never make a frame wait for chunk building, for even frame times; blocks may take a moment to appear."
-          },
-          {
-            "key": "vanilla.prioritizeChunkUpdates",
-            "value": 0,
-            "when": {
-              "modAbsent": [
-                "sodium"
-              ]
-            },
-            "reason": "The Threaded chunk builder doesn't make frames wait for chunk building, for even frame times."
-          }
-        ]
-      }
-    ]
-  },
-  "stutterAdvice": [
-    {
-      "id": "ram-stutter-gc-heap",
-      "requires": [
-        "stutter-doctor"
-      ],
-      "when": {
-        "stutterShareAtLeast": {
-          "gc": 30
-        },
-        "anyOf": [
-          {
-            "gcFullPausesAtLeast": 1
-          },
-          {
-            "gcStallsAtLeast": 1
-          },
-          {
-            "liveSetPercentAtLeast": 75
-          }
-        ],
-        "heapRaiseRoomMbAtLeast": 2048
-      },
-      "kind": "warning",
-      "impact": "high",
-      "title": "Stutter likely linked to low memory",
-      "text": "Garbage-collection pauses took a large share of the time lost to stutter, and Minecraft's memory was nearly full, so it likely needs more. Give Minecraft about 2 GB more in your launcher's memory setting; this PC has room for it. Switching the garbage collector or adding GC flags likely isn't the fix: in RigTune's tests they gave no frame-rate gain over Java's defaults, so more memory is the change to try first."
-    },
-    {
-      "id": "stutter-gc-explicit",
-      "requires": [
-        "stutter-doctor"
-      ],
-      "when": {
-        "gcExplicitPausesAtLeast": 2,
-        "stutterShareAtLeast": {
-          "gc": 10
-        }
-      },
-      "kind": "info",
-      "impact": "medium",
-      "title": "Something asks Java for full garbage collections",
-      "text": "Some of the stutter overlapped full garbage collections that were requested on purpose (System.gc()). Minecraft itself doesn't do that in normal play, so a mod, or Java freeing direct memory, likely asked for them. If the stutter started after you added or updated a mod, try the game without it."
-    },
-    {
-      "id": "stutter-sodium-defer",
-      "requires": [
-        "stutter-doctor"
-      ],
-      "when": {
-        "stutterShareAtLeast": {
-          "chunkBuild": 25
-        },
-        "modPresent": [
-          "sodium"
-        ],
-        "anyOf": [
-          {
-            "settingIs": {
-              "sodium.performance.chunk_build_defer_mode": "ZERO_FRAMES"
-            }
-          },
-          {
-            "settingIs": {
-              "sodium.performance.chunk_build_defer_mode": "ONE_FRAME"
-            }
-          }
-        ]
-      },
-      "kind": "info",
-      "impact": "medium",
-      "title": "Frames wait for chunk updates",
-      "text": "Chunk building likely took part in a good share of the stutter, and Sodium's Chunk Updates setting makes frames wait for it. Set Chunk Updates to Deferred in Sodium's video settings (Performance page): frames stop waiting, though changed blocks may take a moment to appear."
-    },
-    {
-      "id": "stutter-dh-threads",
-      "requires": [
-        "stutter-doctor"
-      ],
-      "when": {
-        "modPresent": [
-          "distanthorizons"
-        ],
-        "stutterTaggedShareAtLeast": {
-          "dh": 40
-        },
-        "cpuContentionShareAtLeast": 30
-      },
-      "kind": "info",
-      "impact": "medium",
-      "title": "Distant Horizons may compete for the CPU",
-      "text": "Distant Horizons was busy during many of the spikes while the CPU was heavily loaded, so they may be related. While you explore new terrain, try a lower \"NO. of threads\" in Distant Horizons' settings: it builds far terrain more slowly but leaves more CPU for the game."
-    },
-    {
-      "id": "stutter-chunk-loading",
-      "requires": [
-        "stutter-doctor"
-      ],
-      "when": {
-        "stutterShareAtLeast": {
-          "chunkLoad": 30
-        }
-      },
-      "kind": "info",
-      "impact": "low",
-      "title": "Stutter while loading chunks",
-      "text": "Loading new chunks likely took part in a large share of the stutter. A render distance 2 to 4 chunks shorter loads fewer chunks at a time. If you fly or teleport a lot in singleplayer, pre-generating the world (for example with the Chunky mod) means the game no longer has to generate new terrain while you play."
     }
   ],
   "availability": {
@@ -2621,7 +1618,6 @@
       "lambdynamiclights",
       "lithium",
       "modernfix-mvus",
-      "moonrise-opt",
       "moreculling",
       "nvidium",
       "renderscale",
@@ -2674,9 +1670,7 @@
         "cloth-config",
         "configmanager",
         "continuity",
-        "controlify",
         "crash-assistant",
-        "debugify",
         "dynamic-fps",
         "e4mc",
         "entity-model-features",
@@ -2703,12 +1697,9 @@
         "reeses-sodium-options",
         "renice-shot",
         "rrls",
-        "skyboxify",
         "sodium",
         "sodium-extra",
-        "sodium-shadowy-path-blocks",
-        "yacl",
-        "zoomify"
+        "sodium-shadowy-path-blocks"
       ]
     },
     "additive": {

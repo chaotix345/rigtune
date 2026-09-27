@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": 17,
-  "generatedAt": "2026-09-27T11:47:48Z",
+  "revision": 16,
+  "generatedAt": "2026-09-26T14:45:07Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -911,7 +911,7 @@
       "conflictsWith": [],
       "defaultSelected": false,
       "upstream": {
-        "fabulouslyOptimized": true,
+        "fabulouslyOptimized": false,
         "additive": false
       }
     },
@@ -2621,7 +2621,6 @@
       "lambdynamiclights",
       "lithium",
       "modernfix-mvus",
-      "moonrise-opt",
       "moreculling",
       "nvidium",
       "renderscale",
@@ -2674,9 +2673,7 @@
         "cloth-config",
         "configmanager",
         "continuity",
-        "controlify",
         "crash-assistant",
-        "debugify",
         "dynamic-fps",
         "e4mc",
         "entity-model-features",
@@ -2703,12 +2700,9 @@
         "reeses-sodium-options",
         "renice-shot",
         "rrls",
-        "skyboxify",
         "sodium",
         "sodium-extra",
-        "sodium-shadowy-path-blocks",
-        "yacl",
-        "zoomify"
+        "sodium-shadowy-path-blocks"
       ]
     },
     "additive": {

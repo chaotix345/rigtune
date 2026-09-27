@@ -5,7 +5,7 @@ Target MC versions: 26.3, 26.2. Newest: 26.3.
 ## Summary
 - New upstream mods to triage: 0
 - Rule mods with a status or removal concern: 0
-- Rule mods missing a Fabric build for 26.3: 4
+- Rule mods missing a Fabric build for 26.3: 3
 - Rules changed or omitted in rules-v1.json: 44
 
 ## (a) Upstream mods not yet tracked in knowledge.json
@@ -17,7 +17,6 @@ None found.
 ## (c) Rule mods with no Fabric release for 26.3
 | slug | title |
 |---|---|
-| moonrise-opt | Moonrise |
 | krypton | Krypton |
 | vulkanmod | VulkanMod |
 | particle-core | Particle Core |

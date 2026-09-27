@@ -1002,6 +1002,7 @@
 		{ "slug": "skyboxify", "reason": "cosmetic custom sky and skybox support, no performance relevance" },
 		{ "slug": "sodium-shadowy-path-blocks", "reason": "a cosmetic lighting fix for dirt-path blocks under Sodium, no performance angle" },
 		{ "slug": "yacl", "reason": "config-screen library (YetAnotherConfigLib) that mods needing it pull in as a dependency" },
-		{ "slug": "zconfig", "reason": "a mixin-config plugin for Fast Noise (already tracked as zfastnoise), pulled in as its dependency" }
+		{ "slug": "zconfig", "reason": "a mixin-config plugin for Fast Noise (already tracked as zfastnoise), pulled in as its dependency" },
+		{ "slug": "zoomify", "reason": "a zoom key (OptiFine's zoom as a mod); a QoL feature, not a performance optimization" }
 	]
 }

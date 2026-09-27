@@ -1261,13 +1261,19 @@ def now_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def finalize_documents(pairs):
+def finalize_documents(pairs, revision=None):
     """pairs: [(content, old_doc)]. If any content differs from its old document (ignoring revision and
-    generatedAt), every document gets revision max(old revisions) + 1 and one generatedAt; otherwise None."""
+    generatedAt), every document gets revision max(old revisions) + 1 and one generatedAt; otherwise None.
+    `revision` pins the new revision instead (v0.5: every regeneration of a release lands in one revision R), which may
+    equal the old one but never goes below it (refused even when nothing changed: the release's R is out of date)."""
+    old_revision = max((old.get("revision", 0) if old else 0) for _, old in pairs)
+    if revision is not None and revision < max(old_revision, 1):
+        raise UpdateRulesError(f"--revision {revision} is below the rules' current revision {old_revision} (or 1); "
+                               "a revision never goes down")
     changed = any(old is None or not deep_equal(strip_meta(old), content) for content, old in pairs)
     if not changed:
         return None
-    new_revision = max((old.get("revision", 0) if old else 0) for _, old in pairs) + 1
+    new_revision = old_revision + 1 if revision is None else revision
     if new_revision >= MAX_SAFE_REVISION:
         raise UpdateRulesError(
             f"revision {new_revision} would be at or above {MAX_SAFE_REVISION} (2**31-2); "
@@ -1352,6 +1358,8 @@ def parse_args(argv=None):
     parser.add_argument("--mc-versions", help="Comma-separated MC versions, overriding the Stonecutter nodes and their hotfix releases")
     parser.add_argument("--dry-run", action="store_true", help="Compute everything and print a summary, without writing files")
     parser.add_argument("--offline-fixtures", help="Directory of canned HTTP responses keyed by sha256(url).json, for offline runs")
+    parser.add_argument("--revision", type=int, help="Write this revision when the content changed (a release's one revision; "
+                        "never below the current one) instead of the current revision + 1")
     return parser.parse_args(argv)
 
 
@@ -1390,7 +1398,7 @@ def main(argv=None):
             knowledge, client, args.mc_versions, old_doc, nodes=nodes,
         )
         v1_content, _ = v1_projection(content)
-        finals = finalize_documents([(v2_content(content), old_v2), (v1_content, old_v1)])
+        finals = finalize_documents([(v2_content(content), old_v2), (v1_content, old_v1)], revision=args.revision)
     except UpdateRulesError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
