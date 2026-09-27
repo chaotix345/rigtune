@@ -1,14 +1,20 @@
-# Real-world session 2026-09-27: RigTune 0.4.0's first launch after 0.1.0
+# Real-world sessions 2026-09-27: RigTune 0.4.0's first two launches after 0.1.0
 
 The user's Modrinth App instance `Fabric 26.2`: Ryzen 7 7800X3D, RX 7800 XT, 32 GB, 2560x1440 at 180 Hz, 52 mod jars
 (170 Fabric mods counting nested ones), including Sodium, Iris, Distant Horizons 3.3.2, C2ME, ModernFix and FastQuit.
-The session ran 10:43-11:08 local time (UTC+10). Times in the JSON files are UTC.
+Two sessions, local time (UTC+10); times in the JSON files are UTC:
+- **Session 1 (10:43–11:08):** the first 0.4.0 launch after 0.1.0, with one benchmark.
+- **Session 2 (11:30–12:24):** the second launch, steady state (§11).
 
-**Inputs.** Read-only copies in `<scratch>/realworld/instance-copy/`: config/rigtune/*, logs/latest.log and
-mods-listing.txt. I also read some files in the live instance (%APPDATA%/ModrinthApp/profiles/Fabric 26.2), without
-writing anything: rigtune.json, file timestamps, the 11:30 latest.log, saves/rigtune-benchmark, and the FastQuit and DH
-jars (inspected with javap). I compared against the seeded E2E (`docs/smoke/self-update/final-v010-seeded-to-040/`,
-`docs/v0.4/verification/p5c/README.md`), docs/DESIGN.md and docs/v0.4/SPEC.md.
+**Inputs.**
+- Read-only copies: session 1 in `<scratch>/realworld/instance-copy/`, session 2 in `instance-copy-2/`. Each has
+  config/rigtune/*, logs/latest.log and mods-listing.txt.
+- The live instance (%APPDATA%/ModrinthApp/profiles/Fabric 26.2), read without writing anything: rigtune.json, file
+  timestamps, saves/rigtune-benchmark, the FastQuit and DH jars (inspected with javap), and every rotated log back to
+  2026-07-09 (43 launches, for §12).
+- This PC's performance-counter registry values and services, read-only, for §12.
+- Expectations compared against: the seeded E2E (`docs/smoke/self-update/final-v010-seeded-to-040/`,
+  `docs/v0.4/verification/p5c/README.md`), docs/DESIGN.md and docs/v0.4/SPEC.md.
 
 **Code references.** Line numbers are for `feat/v0.5.0` (no src/ changes between e4832c60 and 9d6dd2c2). Short paths:
 - `core/` = `src/main/java/io/github/chaotix345/rigtune/core/`
@@ -28,8 +34,14 @@ pushed.
 - **4 medium:** RW-3, RW-5, RW-6, RW-11.
 - **7 low:** RW-4, RW-7, RW-8, RW-9, RW-10, RW-14, RW-15.
 - **1 info:** RW-12 (FastQuit: not a RigTune bug).
+- **1 lead:** RW-16 (launch time). Windows performance counters are switched off on this PC, and vanilla's startup system
+  report waits 5–7 s for them at most launches. That was 7 s, or 25%, of session 2's 27.9 s to the title screen. RigTune could detect this
+  read-only and skip the wait using OSHI's own documented switches. Measured with a replica of vanilla's calls: 6.3 s
+  down to 0.8 s. See §12.
 - RW-13 is a knowledge note, not counted.
-- No RigTune exception, crash or ERROR line in latest.log.
+- No RigTune exception, crash or ERROR line in either session's log.
+- Session 2 had nothing new except the false "RigTune applied 2 change(s)" toast from RW-1. The journal didn't change
+  at its exit, and no helper ran.
 
 **Advice for the user now:** don't use Undo last, Undo all or Undo this on the "Imported from 0.1" entry in History
 until P0.4 (launcher-managed mods) lands. See RW-2.
@@ -53,6 +65,7 @@ until P0.4 (launcher-managed mods) lands. See RW-2.
 | RW-13 | note | The session shows several knowledge gaps. See §9. | n/a | Knowledge research | n/a |
 | RW-14 | LOW | Undo would guess `<file>.disabled` for a disable that RigTune found "already gone" (no `resultFile`). In variant D that file is the app's own disable, so Undo re-enables a jar RigTune never disabled. | `core/history/UndoPlanner.java:817` falls back to `file + ".disabled"`. As far as the code shows, since v0.2.0 an APPLIED disable without `resultFile` means RigTune did no rename: 0.2+ helpers record `resultPath` on every OK (`HistoryUpdates.java:46-49`), and the legacy import computes one for 0.1.0 OKs (`LegacyImport.java:143-152`). | Skip it: "RigTune didn't disable %s (it was already gone)". Update the UndoPlannerTest fixtures that rely on the fallback. | UndoPlannerTest |
 | RW-15 | LOW | All 10 worst benchmark spikes (t = 1.3–15.9 s, 37–59 ms) fall inside the RD-32 sweep measured on unsettled terrain (10:45:17–10:45:33). They make up the benchmark's Stutter Doctor line ("58 spikes… GC 35%"). | Every sweep goes into the stutter capture, including a step whose settle was incomplete (`client/benchmark/BenchmarkController.java:502,520`). | Don't record the sweeps of an incomplete step, or tag them `unsettled` and leave them out of shares and advice. | BenchmarkController / StutterService test |
+| RW-16 | LEAD (launch time) | Every launch since the instance's first (2026-07-09, 43 launches): vanilla's `CrashReport.preload` → `SystemReport` on the main thread spends 5–7 s (median 6 s; 0–2 s when warm) on OSHI queries that fail: PDH `0xC0000BB8`, then WMI "Invalid Query", then NPEs on `OSProcess`. Here it was 7 s of the 27.9 s to the title screen. | Not RigTune: `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Perflib` "Disable Performance Counters" = 1 (REG_DWORD, read-only check). Microsoft documents this entry as switching off all registry-based performance counters on the system. OSHI only checks the per-service keys (here PerfOS has a REG_SZ "0", hence its "Invalid registry value type" WARN), so it tries PDH and then a WMI table that doesn't exist. RigTune's own OSHI calls don't pay this (§12.3). | (a) Detect it read-only: the Perflib value, plus a timing of `CrashReport.preload`. (b) Only then, in preLaunch, set OSHI's documented `oshi.os.windows.perfos.disabled` / `perfproc.disabled` = true, so vanilla skips the dead queries with the same results. (c) Advice text citing Microsoft; the Windows-side fix is UNVERIFIED on Windows 11. Not `lodctr /R` (§12.4). | Standalone replica of vanilla's calls on this PC (`<scratch>/realworld/oshi/probe`); a unit test of the detector with a fake registry; one real launch to confirm the in-game saving |
 
 ## 1. Timeline
 
@@ -63,7 +76,7 @@ until P0.4 (launcher-managed mods) lands. See RW-2.
 | 10:15 | 0.4.0 replaced 0.1.0 (through the app, not RigTune's self-update). | coordinator |
 | 10:43:33 | Launch: Fabric Loader 0.19.5, 170 mods. | log:1-2 |
 | 10:43:39 | preLaunch: 3 WARNs (RW-3). History created with the legacy import: 15 APPLIED and 2 STAGED. | log:274-276; history.json |
-| 10:43:41–48 | Vanilla `SystemReport` OSHI stall, about 6 s on the main thread (broken PerfOS counters). Not RigTune; also in pre-RigTune logs. | log:282-310 |
+| 10:43:41–48 | Vanilla `SystemReport` OSHI stall, 7 s on the main thread (Windows performance counters are switched off; RW-16, §12). Not RigTune; it's in every log back to 2026-07-09. | log:282-310 |
 | 10:43:59 | RigTune worker: Java 25.0.3 Azul, G1 (Java's choice), 0 argument notes; launcher Modrinth App; hardware line. | log:601-604 |
 | 10:44:03 | Title screen: "Launch to title screen: 32284 ms (52 mods)". | log:645 |
 | 10:44:04 | "RigTune startup footprint: preLaunch + init 85.1 ms on the render thread (CPU 46.9 ms), client start 19.7 ms; RigTune threads used 234.4 ms of CPU in the first 5 s". | log:646 |
@@ -312,8 +325,11 @@ private static String installedElsewhere(List<Op> ops, List<Integer> order, Map<
 - **In game:** no RigTune chat. DH's chat nags (high vanilla RD, "G1 Garbage collector detected") are DH's own.
 - **11:08, Stutter Doctor session:** saved; no advice ("No advice for this session"). The Stutter screen would show a
   "Chunk loading 0%" bar (RW-10).
-- **11:30, next start:** "RigTune applied 2 change(s) / RigTune's staged changes were applied." This is false (RW-1). The
-  live rigtune.json `lastShownApply` = 2026-09-27T01:08:48.2923068Z, which is this helper run.
+- **11:30, next start (session 2):** "RigTune applied 2 change(s) / RigTune's staged changes were applied." This is
+  false (RW-1). rigtune.json `lastShownApply` = 2026-09-27T01:08:48.2923068Z, which is the 11:08 helper run; the file was
+  written at 11:30:33.
+- **Session 2, nothing else:** no preLaunch WARN, no leftover toast, no what's-new (awareness.json unchanged, r16), no new
+  benchmark or trend notice (benchmarks.json unchanged). Stutter Doctor saved the session with no advice.
 
 ## 5. Benchmark (RW-5 to RW-9, RW-15)
 
@@ -393,6 +409,13 @@ the same method as PauseScreen's Save and Quit; only the reason text differs.
 - The growth of `DH-ChunkSaveIgnoreTimer` (6→12) and `DH-World Gen Progress Updater` (3→6) is DH leaking timers per
   world, which is DH's own.
 
+**Session 2 confirms the model.**
+- At 12:24:34 the server had 729 + 2203 chunks to unload, so it finished *after* the client's teardown.
+- The order was right: `Disconnected "THE ONE" from the client` (render thread, 12:24:35), then `Finished saving "THE ONE"
+  (0s)` (server thread, 12:24:35).
+- So there was no WARN, the "done" toast showed, and at quit there was no "Waiting for…" line.
+- Which side wins depends only on how long each teardown takes.
+
 **Verdict.** This is a FastQuit + DH quirk, not a RigTune bug. The benchmark needs no FastQuit-specific change; RW-6
 (no DH generation in the benchmark world) would shorten the teardown that widens the race.
 
@@ -404,6 +427,7 @@ the same method as PauseScreen's Save and Quit; only the reason text differs.
 |---|---|---|---|---|---|---|---|---|---|
 | benchmark | 00:45:17 | 164.7 / 128.4 | 103,964 | 809.8 / 318.5 | 56/2/0 (hitches 30) | 1.5 s | gc 0.35, unknown 0.65 | dh 40, chunksLoading 30 | [] |
 | monitor | 00:49:51 | 1131.8 / 830.9 | 137,039 | 164.9 / 121.2 | 126/3/3 (hitches 104) | 3.3 s | gc 0.60, tick 0.18, chunkLoad 0.0, unknown 0.23 | dh 7, chunksLoading 47, movingFast 52 | [] |
+| monitor, session 2 | 01:30:46 | 3229.1 / 3019.0 | 507,932 | 168.2 / 125.8 | 54/2/1 (hitches 29) | 1.6 s | gc 0.04, tick 0.02, unknown 0.94 | chunksLoading 6, movingFast 1 | [] |
 
 **What it concluded.**
 - Monitor session: 3.3 s lost in 831 s (0.4%), 60% of the claimed time GC, with no full GC, no stall, a live set of 37%
@@ -425,7 +449,26 @@ after joining THE ONE is the player's own action, not a start delay.
   where the worst spikes are (t = 65–75 s), so those can't get a `dh`/contention tag.
 - The GC ring still held t = 74.7 (that spike has `gc:high`).
 - The advice didn't change. SD-2: 137,039 frames > the 131,072-frame ring, so the 1% low leaves out about the first 36 s.
-- The 11:30 session (57 spikes in 3019 s, copy in `instance-copy-2`) is a better SD-1 sample for whoever verifies it.
+- **Session 2 shows SD-1 and SD-2 plainly** (3229 s capture):
+  - **SD-1:** the thread sampler ring (4096 samples × ≥ 250 ms, `ThreadSampler.java:29`, `StutterRings.java:10`) holds
+    at most the last ~1024 s. So the first ~2200 s of the session have no thread samples, and no spike there can get a
+    `dh` or contention tag.
+  - Nine of the ten worst spikes (t = 20.6–608.4 s, including the worst, 284.6 ms at t = 518.7 s ≈ 11:39:25) fall in
+    that uncovered stretch. They carry only `render:low`, `tick` or GC notes, and the session ends up 94% "unknown".
+  - The GC ring didn't wrap: spikes at t = 20.6 and 30.7 s still carry `gc:high` / `gc:medium`. At a ~168 FPS cap with a
+    19% live set there were few GCs, so GC attribution held.
+  - **SD-2:** 507,932 frames against the 131,072-frame ring (`FrameRing.java:17`). The 1% low (125.8 FPS) describes
+    only the last ~13 min of a 54-min session, while avg FPS covers all of it.
+  - The advice ([]) is still right: 1.6 s lost in 3019 s is 0.05%. But the "unknown 94%" headline is mostly what the
+    rings can't see. Both findings are already CONFIRMED in `audit-v040-verification.md:37-38`. This is real-world
+    corroboration, not a new finding.
+- **Session 1 vs 2:**
+  - 132 spikes / 831 s (0.16/s, 0.40% lost) vs 57 / 3019 s (0.019/s, 0.05% lost).
+  - The play differed. Session 1: RD 32 until 10:53, shader toggles, elytra flight (`movingFast` 52, `chunksLoading`
+    47), right after a benchmark. Session 2: RD 12 from the start, DH on, mostly mining in the Nether (one dimension
+    change at 11:31:24, `movingFast` 1).
+  - The live set was 37% → 19%, and GC share 60% → 4%.
+  - Nothing here points at RigTune; the settings and activity explain the difference.
 
 **RW-11.** See the table. The capture spans shader toggles with Iris compile failures and an RD change. The 236.6 ms
 "tick" spike coincides with the Iris pipeline rebuild at 10:51:02.
@@ -450,7 +493,8 @@ after joining THE ONE is the player's own action, not a start delay.
   - ModernFix's "Game took 85.152 seconds to start" fires at the first world join, in every log of this instance
     including 0.1.0's. Its "total 4.88 s < main menu to in-game 5.88 s" shows its own start time was unset; that is
     ModernFix's quirk.
-  - The next start (11:30) took 27,870 ms.
+  - The next start (11:30) took 27,870 ms. The startup-times trend now has 2 runs with the same modSetHash:
+    32,284 → 27,870 ms. See §11 for where the 4.4 s went.
 - **Footprint:** init 85.1 ms (budget 368), CPU 46.9 (150), client start 19.7 (141), worker CPU 234.4 ms in 5 s (300,
   78%), all within `tools/footprint-budgets.json`. 11:30: 51.5 / 42.4 / 15.4 / 218.8. During play RigTune had 6 threads:
   worker ×2, network, rules, stutter sampler, and settings (which lives 10 s after a save).
@@ -467,9 +511,8 @@ after joining THE ONE is the player's own action, not a start delay.
   identifier") and Iris disables shaders, three times in this session. A candidate for `shaders-distant-horizons`-style
   advice, once the fixed versions are verified.
 - G1 + DH: DH warns at every world join; RigTune has no stance. Needs research (heap 6 GB, 7800X3D) before any advice.
-- A broken Windows PerfOS registry value (REG_DWORD type) and PDH 0xC0000BB8 cost about 6 s of the main thread at every
-  launch (vanilla `SystemReport` via OSHI, 10:43:41→48). A possible "your perf counters are broken (lodctr /r)" advice;
-  the fix is unverified.
+- Windows performance counters switched off → about 6 s of vanilla launch time: now RW-16, analysed in §12. The earlier
+  guess of "broken counters, lodctr /r" was wrong for this PC.
 - C2ME disables `ioSystem.gcFreeChunkSerializer` because of Architectury (log:207): informational.
 
 ## 10. latest.log: RigTune WARN/ERROR lines
@@ -480,6 +523,225 @@ RigTune's WARNs:
 
 There are no RigTune ERRORs and no stack frame from `io.github.chaotix345` anywhere in the log. The 4 ERROR lines are
 vanilla/OSHI (log:290) and Iris (log:1176, 1223, 1298).
+
+## 11. Session 2 (11:30–12:24): the second 0.4.0 launch, steady state
+
+**Inputs.** `instance-copy-2/`, copied at 12:26:
+- `mods-listing.txt` is identical to session 1.
+- helper.log, last-apply.json, history.json, awareness.json, benchmarks.json and settings.json are byte-identical to the
+  session-1 copies.
+- Only rigtune.json, startup-times.json and stutter.json changed.
+- There is no pending.json and no unfinished-groups.json.
+
+| when (local) | what | evidence |
+|---|---|---|
+| 11:30:06 | Launch (170 mods). | log:1 |
+| 11:30:11–18 | Vanilla OSHI stall on the main thread, 7 s (RW-16). | log:~282-300 |
+| 11:30:18 | "ModernFix reached bootstrap stage (13.01 s after launch)". | log:354 |
+| (preLaunch) | No WARN: no pending.json since 11:08. The journal reconcile had nothing to change (history.json byte-identical). | log; copies |
+| 11:30:29 | RigTune worker: the same Java / launcher / hardware lines as session 1. | log:598-601 |
+| 11:30:33 | "Launch to title screen: 27870 ms (52 mods)". rigtune.json `lastShownApply` set to the 11:08 run: the false "RigTune applied 2 change(s)" toast (RW-1). | log:642; rigtune.json |
+| 11:30:34 | Footprint: preLaunch + init 51.5 ms on the render thread (CPU 42.4 ms), client start 15.4 ms, RigTune threads 218.8 ms CPU in 5 s. | log:643 |
+| 11:30:42–46 | THE ONE joined at RD 12 / SD 12. DH renderer up (11:30:45). Stutter Doctor capture on at 11:30:46 (the monitor setting stayed on). 214 threads: RigTune has 5 (worker ×2, network, rules, sampler). | log:692-863 |
+| 11:31:24–12:24 | To the Nether, then mining. The "Mismatch in destroy block pos" WARNs are the vanilla server's. | log |
+| 12:24:34–35 | Save and Quit. FastQuit in the right order, "Finished saving "THE ONE" (0s)" (§6). "Stutter Doctor: session saved (OK): 57 spikes in 3019 s of gameplay". | log:1040-1092 |
+| 12:24:40 | Quit Game. No "Started the RigTune apply helper": nothing was staged. | log:1095-1098 |
+
+| | session 1 | session 2 |
+|---|---|---|
+| launch to title (JVM uptime) | 32,284 ms | 27,870 ms |
+| JVM start → start of the OSHI block (JVM start = ModernFix bootstrap time − its "s after launch") | 10.7 s | 6.0 s |
+| vanilla OSHI block | 7 s | 7 s |
+| ModernFix bootstrap | 17.71 s | 13.01 s |
+| bootstrap → title | ~15 s | ~15 s |
+| RigTune preLaunch + init (render thread) / CPU | 85.1 / 46.9 ms | 51.5 / 42.4 ms |
+| client start | 19.7 ms | 15.4 ms |
+| RigTune threads, CPU in the first 5 s | 234.4 ms | 218.8 ms |
+| RigTune notices | leftover toast, 3 WARNs (RW-3), benchmark result screen | "applied 2 change(s)" toast (false, RW-1) |
+| Stutter Doctor | 132 spikes / 831 s, advice [] | 57 spikes / 3019 s, advice [] (§7) |
+| helper at exit | ran: SKIPPED ×2 → history STAGED→APPLIED (RW-1) | none; history.json, last-apply.json and helper.log unchanged (live mtimes still 11:08:48) |
+| FastQuit | the race: 2 WARNs, 2 stale entries | the right order, no WARN |
+
+**Readings:**
+- **The 4.4 s faster launch** all came before the OSHI block: 10.7 → 6.0 s of early loading. Timestamps are
+  whole seconds, so ±1 s. The OSHI block (7 s) and bootstrap→title (~15 s) were the same both times. A warmer OS file
+  cache on the second launch is plausible (session 1 was the first launch after the app re-synced the instance and
+  0.4.0 was installed); UNVERIFIED.
+- **RigTune's own footprint** fell 85.1 → 51.5 ms. Session 1's preLaunch did one-time work: it created history.json
+  with the legacy import under the apply lock, and logged the carried-over failures. That plausibly explains part of the
+  difference; it isn't isolated. Both are well within `tools/footprint-budgets.json`.
+- **Nothing new diverged.** Session 2 is what the design predicts for a steady-state start, apart from the RW-1 toast.
+
+## 12. Launch time: Windows performance counters are off (RW-16)
+
+### 12.1 What it costs, measured in every launch log
+
+Vanilla 26.2's `Main.main` calls `CrashReport.preload()` (javap: `net.minecraft.client.main.Main`, the
+`invokestatic CrashReport.preload` at bytecode offset 749). That builds a crash report, and its `SystemReport` queries
+OSHI on the main thread. This happens before any mod's client init, so RigTune's footprint doesn't include it.
+
+The block, from the first OSHI line to the last, in whole seconds:
+
+| log | RigTune | block | step that waits |
+|---|---|---|---|
+| 2026-09-25-1 (09:03) | 0.1.0 | 09:03:33 → 39, **6 s** | "Disabling further attempts to query Paging File" → "COM exception: Invalid Query … Win32_PerfRawData_PerfOS_PagingFile": 4 s |
+| 2026-09-27-1 (10:43, session 1) | 0.4.0 | 10:43:41 → 48, **7 s** | the same: 5 s |
+| latest (11:30, session 2) | 0.4.0 | 11:30:11 → 18, **7 s** | the same: 6 s |
+| all 43 launch logs since 2026-07-09 | before and with RigTune | median **6 s**; 31 launches at 5–9 s, 12 at 0–2 s | the WMI paging-file fallback, 4–6 s cold |
+
+- Half of the 0–2 s launches are relaunches within minutes of another launch (09-13 12:35/12:38/12:41, 09-20
+  22:12/22:17, 08-30 14:58). That fits WMI being warm; see the probe's warm run (§12.5). The other six are UNVERIFIED.
+- The WARN is in the instance's very first log (2026-07-09), so this PC has had it since before RigTune.
+- The two launch logs without the block (09-13-2, 09-13-5) are tiny (under 1 KB compressed): launches that stopped
+  early.
+
+### 12.2 Why: this PC's performance counters are switched off (read-only checks)
+
+**Registry values:**
+- `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Perflib`: **"Disable Performance Counters" = 1 (REG_DWORD)**.
+  Also there: Last Counter 19102. The 009 name table is intact: its `Counter` value holds 13,907 strings (index/name pairs).
+- `HKLM\SYSTEM\CurrentControlSet\Services\PerfOS\Performance`: "Disable Performance Counters" = "0" as **REG_SZ**.
+  PerfProc has 0 as a REG_DWORD; PerfDisk has no value.
+
+**The counters fail everywhere:**
+- `typeperf "\Processor(_Total)\% Processor Time" -sc 1` (and the Paging File and Process counters): "Error: No valid
+  counters".
+- `Get-Counter '\Processor(_Total)\% Processor Time'`: "Internal performance counter API call failed. Error: c0000bb8".
+- `Get-Counter -ListSet *`: "error 00000422". That is ERROR_SERVICE_DISABLED. Microsoft's description of the Perflib
+  entry (§12.4) says that with value 1 "the system returns an error to the program explaining that the Performance
+  Library (Perflib) service is disabled".
+
+**How OSHI 6.9.0 reacts** (javap of `oshi.driver.windows.perfmon.PerfmonDisabled`):
+- It checks only the per-service `…\Services\{PerfOS,PerfProc,PerfDisk}\Performance` values, never the Perflib one.
+- It warns "Invalid registry value type detected for PerfOS counters. Should be REG_DWORD. Ignoring" (the REG_SZ above)
+  and treats the counters as enabled.
+- So `PagingFile.querySwapUsed` tries PDH ("Failed to add PDH Counter … 0xC0000BB8") and then its WMI backup table.
+  After ~5 s cold, WMI answers "Invalid Query": that perf table isn't there with counters off.
+- `getCurrentProcess` then fails the same way: first HKEY_PERFORMANCE_DATA, then PDH, then WMI, so the process is null
+  and vanilla logs the three NPE WARNs.
+
+**Who set it:** unknown. As circumstantial evidence, Perflib's own events list extensible-counter DLLs that are missing
+(sysmain.dll, bitsperf.dll, msdtcuiu.dll), which suggests Windows components were removed, as some "debloat" tools do.
+UNVERIFIED. RigTune must not guess or blame.
+
+**Side effect of these checks:** my typeperf/Get-Counter runs made Windows write two Perflib warning events (1008:
+WmiApRpl, MSDTC) to the Application log at 13:20:20. No registry value, service or file was changed.
+
+### 12.3 Does RigTune pay it too? No
+
+- **Timing:** RigTune's OSHI probe runs on the "RigTune worker" executor at CLIENT_STARTED
+  (`client/RigTuneClient.java:119`; `client/probe/HardwareProbe.java:56-58`), after vanilla's block. Its "Hardware:"
+  line comes in the same second as the Java line in both sessions (10:43:59, 11:30:29).
+- **Calls:** `HardwareProbe.probeSlow` (`:164-205`) uses these, per javap of OSHI 6.9.0:
+  - processor identifier: WMI `Win32_Processor`, a CIMv2 class, not a perf table;
+  - max frequency: PowrProf `CallNtPowerInformation`;
+  - processor counts: `GetLogicalProcessorInformationEx`;
+  - memory total;
+  - power sources: PowrProf;
+  - graphics cards: registry.
+
+  None of these reaches `oshi/driver/windows/perfmon/*`. The PDH-backed OSHI calls are current frequency, load ticks,
+  load average, swap used and process data, and RigTune calls none of them.
+- **The JDK:** `ThreadSampler` uses `getProcessCpuTime` (GetProcessTimes). No RigTune code calls the JDK's
+  `getCpuLoad` / `getProcessCpuLoad`, which read PDH counters on Windows.
+- **The logs:** in both 0.4.0 sessions the OSHI WARN block appears exactly once, on `main`, at startup.
+
+### 12.4 What Microsoft documents (and what it doesn't)
+
+- **Perflib entry.** "Disable Performance Counters Entry", in the Windows Server 2003 Registry Reference (archived,
+  last updated 2009): https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2003/cc737243(v=ws.10)
+  - Key `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Perflib`, REG_DWORD, range 0 | 1, default 0.
+  - "0: Enables performance counters. Programs can retrieve performance data from the registry. 1: Disables performance
+    counters."
+  - "To make changes to this entry effective, restart Windows."
+  - "This entry affects all performance counters on the system."
+- **Per-service entry.** "Disable Performance Counters", same reference:
+  https://learn.microsoft.com/en-us/previous-versions/windows/it-pro/windows-server-2003/cc784382(v=ws.10)
+  - `HKLM\SYSTEM\CurrentControlSet\Services\<service>\Performance`, REG_DWORD 0 | 1; 2 = the 32-bit version disabled, 4 =
+    the 64-bit version disabled.
+  - "To enable or disable all registry-based performance counters on the system, add the Disable Performance Counters
+    Entry entry to the Perflib subkey."
+- **Current troubleshooting article.** "Manually rebuild performance counters…" (KB 2554336):
+  https://learn.microsoft.com/en-us/troubleshoot/windows-server/performance/manually-rebuild-performance-counters
+  - Its first resolution step is "Ensure that the counters aren't disabled in the registry … this value should be set to
+    0 … A value of 1 means the counter is disabled".
+  - Only after that does it cover rebuilding corrupted libraries: at an administrative prompt, `lodctr /R` in system32
+    and in sysWOW64, `WINMGMT.EXE /RESYNCPERF`, then restart the `pla` and `winmgmt` services.
+- **`lodctr` on this PC.** Command reference: https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/lodctr.
+  Local `lodctr /?` shows `/R` ("Rebuilds perf registry from scratch based on current registry settings and backup INI
+  files"), `/Q[:service]`, and `/E:<service>` / `/D:<service>` ("Enables / Disables the performance counter provider").
+  It has no switch for the Perflib-wide entry.
+
+**For this PC:**
+- The documented Windows-side fix is to put the Perflib entry back to its default 0 and restart Windows.
+  - **UNVERIFIED on Windows 11.** The reference is for Windows Server 2003, though this PC behaves exactly as it
+    describes. I did not change the value to prove that the stall disappears; that needs the user, as an administrator.
+  - **UNVERIFIED** whether WMI's perf tables come back on their own afterwards or need `winmgmt /resyncperf`. The
+    article pairs that command with rebuilds, not with this setting.
+- **`lodctr /R` is not the fix here.** The name table is intact, Microsoft puts "make sure they aren't disabled" first,
+  and nothing documents `/R` resetting the Perflib entry.
+- **The REG_SZ PerfOS value:** its documented type is REG_DWORD, and how Windows reads a REG_SZ there is undocumented.
+  Say "unusual type" at most.
+- **RigTune must never write the registry.** It is HKLM, needs an administrator, is system-wide, and someone may have
+  set it on purpose.
+
+### 12.5 What RigTune could honestly do (proposal; design call for the coordinator)
+
+**a. Detect, read-only.** On Windows, in preLaunch, read the Perflib entry with JNA's `Advapi32Util`. JNA and
+jna-platform ship with Minecraft; OSHI's `PerfmonDisabled` reads the per-service values the same way. A REG_DWORD ≠ 0
+means counters are off. Also read the three per-service entries: a DWORD ≠ 0 means that service's counters are off;
+another type means "unusual" only. The read costs microseconds and needs no administrator.
+
+**b. Measure.** Time `CrashReport.preload()` with a tiny HEAD/RETURN mixin and store it as `systemReportMs` in
+startup-times.json. Then advice can say "7.0 s at this launch" instead of guessing, and the launch-time alerts work
+(C18, `docs/research/v0.5/feature-launch-alerts.md`) can split launch time into vanilla and mods. UNVERIFIED that the
+mixin applies that early (Fabric preLaunch runs before `Main.main`, so it should); one real launch confirms it.
+
+**c. Skip the wait, without touching Windows.** Only when (a) finds counters off, set OSHI's own documented switches in
+preLaunch, before vanilla's report: `oshi.os.windows.perfos.disabled=true` and `oshi.os.windows.perfproc.disabled=true`.
+Set them through `oshi.util.GlobalConfig.set` as well as system properties.
+- OSHI's `oshi.properties` says: "If counters are either intentionally disabled, or the application depending on OSHI
+  does not require any of the relevant performance counters, setting these values to true will skip querying these
+  counters and return 0 values for the associated metrics. No log messages will be generated."
+- **Measured on this PC.** A standalone replica makes the OSHI calls vanilla 26.2's `SystemReport` makes (javap of
+  `net.minecraft.SystemReport`), in order: OSHI 6.9.0, JNA 5.17.0, JDK 25, no Minecraft.
+  `<scratch>/realworld/oshi/probe/Probe.java`, output in `probe-output.txt`:
+
+  | run | swap used (PerfOS) | current process (PerfProc) | all of vanilla's OSHI calls |
+  |---|---|---|---|
+  | cold, default | 5,091 ms (WMI "Invalid Query") | 623 ms → null | **6,294 ms** |
+  | cold, switches on | 0 ms | 147 ms → null | **774 ms** |
+  | warm (2 s later), default | 672 ms | 705 ms → null | **1,943 ms** |
+  | warm, switches on | 0 ms | 142 ms → null | **707 ms** |
+
+  The results are identical with and without the switches: swap used 0, process null, and vanilla's crash-report fields
+  are "unknown" either way. The saving is about 5.5 s cold and 1.2 s warm.
+- **Caveats:**
+  - The switches must be set before OSHI's `PerfmonDisabled` class initialises, which is at vanilla's first perfmon
+    query. C2ME already uses OSHI at mixin time ("CPU name" at 10:43:36), which initialises `GlobalConfig`; so system
+    properties alone would be too late, and `GlobalConfig.set` is needed. UNVERIFIED in game until one real launch.
+  - It affects every OSHI user in the process: they get 0 or empty PerfOS/PerfProc metrics instead of a slow failure.
+    That only happens where Windows itself reports those counters off, so nothing that works today stops working (PDH
+    and WMI both fail on this PC).
+  - Give it an opt-out setting and one INFO line ("Windows performance counters are off; told OSHI not to query them").
+- **Not proposed:** `oshi.util.wmi.timeout`. It would cut every WMI query short, including ones that work.
+
+**d. Advise.** Windows only, when (a) is true and (b) measured ≥ 2 s, as launch-time advice:
+> "Windows performance counters are turned off on this PC (the Perflib setting 'Disable Performance Counters' is 1).
+> Minecraft's crash-report setup waited 7.0 s for them at this launch; RigTune now skips that wait. Microsoft documents
+> this setting (link): 0 is the default, and Windows needs a restart after a change. RigTune doesn't change Windows
+> settings."
+
+Use a new probe flag `windows-perf-counters-off` in `HardwareProfile.flags`, and a rules-v2 advice gated on
+`"when": {"flags": ["windows-perf-counters-off"]}`, the way `sodium-amd-game-optimization` is gated. Older clients
+never emit the flag, so the rule stays silent for them. Say nothing about who turned the counters off.
+
+**e. Tests:**
+- A detector unit test with a fake registry reader: 1 / 0 / REG_SZ / absent / not Windows.
+- "Switches set only when detected": a unit test on the preLaunch hook with the reader faked.
+- The probe as a manual Windows check.
+- One launch on this PC, done by the user, not an agent: the OSHI block should be gone from latest.log, and launch to
+  title should drop by about 5–6 s cold.
 
 ## Reproduce
 
@@ -493,4 +755,10 @@ export JAVA_HOME="C:/Dev/Tools/jdk/jdk-25.0.4.1+1"
 - The worktree currently has the prototype applied (`src/main/…/ApplyExecutor.java`). With it, the 2 reproduction tests
   fail by design; `git -C C:/Dev/Worktrees/rigtune-realworld stash` restores today's behaviour.
 - The tests read the copied instance from `<scratch>/realworld/instance-copy` (tests C and D skip if it's gone).
+- RW-16 probe (read-only; no Minecraft, no gradle): in `<scratch>/realworld/oshi/probe`, run
+  `java -Dlog4j2.level=WARN -cp "oshi-core-6.9.0.jar;jna-5.17.0.jar;jna-platform-5.17.0.jar;slf4j-api-2.0.17.jar;log4j-api-2.26.0.jar;log4j-core-2.26.0.jar;log4j-slf4j2-impl-2.26.0.jar" Probe.java`,
+  then the same with `-Doshi.os.windows.perfos.disabled=true -Doshi.os.windows.perfproc.disabled=true`.
+- The launch-log measurements for §12.1 were made with a script over the live instance's logs (read-only). Session
+  copies of 09-20 to 09-27 are in `<scratch>/realworld/oshi/*.log`.
+- The Microsoft pages quoted in §12.4 are saved as text in `<scratch>/realworld/msdocs/`.
 - Copies of both test files, the diff and the dump are in `<scratch>/realworld/`.
