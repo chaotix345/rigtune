@@ -78,7 +78,7 @@ class SessionOutcomeTest {
 		}
 		StutterReport report = new StutterReport(Instant.EPOCH.toString(), StutterReport.MONITOR, "26.2", "G1", 4096, 90, 80, 8000, 100, 50, null, null,
 				null, 90, Map.of(), Map.of(), List.of(), null, List.of(), false, true, 2);
-		StutterAnalyzer.Result result = new StutterAnalyzer.Result(report, null, attributions);
+		StutterAnalyzer.Result result = new StutterAnalyzer.Result(report, null, attributions, null);
 		SessionOutcome o = SessionOutcome.of(result, start);
 		assertEquals(2, o.hitches());
 		assertEquals(2, o.bins());
