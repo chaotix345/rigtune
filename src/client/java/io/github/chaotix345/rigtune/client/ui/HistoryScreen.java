@@ -364,12 +364,18 @@ public class HistoryScreen extends Screen {
 	}
 
 	// "Last attempt failed: <reason> (try n of 3 at restart)" for a staged change, "Not applied: <reason>" for an abandoned one.
+	// v0.5 (docs/v0.5/SPEC.md 2V, ws-g3 L6): a change failed at the capped attempt belongs to a group the helper left half
+	// applied (only such a group fails that often without being abandoned; its attempts stay at the cap), which is retried at
+	// every exit: it says so instead of repeating "try 3 of 3".
 	public static @Nullable Component failureText(HistoryModel.Change change) {
 		ApplyFailures.Failure f = change.failure();
 		if (f == null) {
 			return null;
 		}
-		return f.abandoned() ? Component.translatable("rigtune.history.not_applied", f.reason())
+		if (f.abandoned()) {
+			return Component.translatable("rigtune.history.not_applied", f.reason());
+		}
+		return f.attempt() >= ApplyFailures.MAX_ATTEMPTS ? Component.translatable("rigtune.history.failed_held")
 				: Component.translatable("rigtune.history.failed", f.reason(), f.attempt(), ApplyFailures.MAX_ATTEMPTS);
 	}
 

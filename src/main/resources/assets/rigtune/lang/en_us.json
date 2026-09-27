@@ -226,6 +226,7 @@
 	"rigtune.history.empty": "RigTune hasn't changed anything yet.",
 	"rigtune.history.error": "Could not read RigTune's history; see the log.",
 	"rigtune.history.failed": "Last attempt failed: %s (try %s of %s at restart)",
+	"rigtune.history.failed_held": "Can't finish on its own yet; RigTune tries again at each exit (see config/rigtune/helper.log)",
 	"rigtune.history.kind.apply": "Apply",
 	"rigtune.history.kind.benchmark": "Benchmark result",
 	"rigtune.history.kind.legacy_import": "Imported from 0.1",
