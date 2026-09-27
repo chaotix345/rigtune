@@ -232,6 +232,20 @@ None of this auto-applies: `knowledge.json` is hand-edited, and the generated
 files only reflect what's already there. REVIEW.md is a punch list for the
 *next* edit to `knowledge.json`, not something the script acts on itself.
 
+### While a release is prepared on an integration branch
+The weekly PR still targets main. Instead of merging it, re-run the updater on the integration
+branch with the release's `--revision`, triage REVIEW.md there, and check that the branch's files
+carry every upstream change the bot found:
+
+```
+python tools/rules_upstream_diff.py <the bot PR's rules-v2.json> rules/rules-v2.json
+```
+
+It compares only the upstream data (`availability`, the `upstream` lists, each mod's `upstream`
+flags; mods only one file has are left out), ignoring `revision`, `generatedAt` and everything from
+`knowledge.json`, prints each difference and exits 1 if there is one. Then close the bot's PR with a
+link to the integration branch (merge it into main only if it is safety-relevant).
+
 ## Tests
 
 ```

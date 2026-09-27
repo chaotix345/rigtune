@@ -331,6 +331,65 @@ class StutterFixesTests(Base):
         self.assertEqual(with_section, without_section)
 
 
+def generated(**changes):
+    doc = {"schemaVersion": 2, "revision": 17, "generatedAt": "2026-09-28T03:00:00Z",
+           "mods": [{"slug": "sodium", "reason": "r", "upstream": {"fabulouslyOptimized": True, "additive": True}},
+                    {"slug": "moonrise-opt", "upstream": {"fabulouslyOptimized": False, "additive": False}}],
+           "availability": {"26.3": ["sodium"], "26.2": ["moonrise-opt", "sodium"]},
+           "upstream": {"fabulouslyOptimized": {"mcVersion": "26.3", "slugs": ["sodium"]}, "additive": {"mcVersion": "26.3", "slugs": ["sodium"]}}}
+    doc.update(changes)
+    return doc
+
+
+# 2T (AC2T.2): the upstream data a weekly bot PR found is carried by the integration branch's generated files.
+class UpstreamDiffTests(unittest.TestCase):
+    def setUp(self):
+        import rules_upstream_diff
+        self.diff = rules_upstream_diff.differences
+
+    def test_equal_generated_data_passes(self):
+        self.assertEqual(self.diff(generated(), generated()), [])
+
+    def test_revision_generated_at_and_knowledge_fields_are_ignored(self):
+        mods = [{"slug": "sodium", "reason": "reworded", "upstream": {"fabulouslyOptimized": True, "additive": True}},
+                {"slug": "moonrise-opt", "upstream": {"fabulouslyOptimized": False, "additive": False}},
+                {"slug": "new-rule", "upstream": {"fabulouslyOptimized": True, "additive": False}}]
+        ours = generated(revision=18, generatedAt="2026-09-29T00:00:00Z", mods=mods, advice=[{"id": "x"}],
+                         availability={"26.3": ["new-rule", "sodium"], "26.2": ["moonrise-opt", "sodium"]})
+        self.assertEqual(self.diff(generated(), ours), [])
+
+    def test_availability_changes_are_reported(self):
+        bot = generated(availability={"26.3": ["moonrise-opt", "sodium"], "26.2": ["moonrise-opt", "sodium"]})
+        self.assertEqual(self.diff(bot, generated()), ["availability 26.3: moonrise-opt only in the first file"])
+        self.assertEqual(self.diff(generated(availability={"26.2": ["moonrise-opt", "sodium"]}), generated()),
+                         ["availability 26.3: only in the second file"])
+
+    def test_upstream_changes_are_reported(self):
+        bot = generated(upstream={"fabulouslyOptimized": {"mcVersion": "26.3", "slugs": ["sodium", "zoomify"]},
+                                  "additive": {"mcVersion": "26.3", "slugs": ["sodium"]}})
+        self.assertEqual(self.diff(bot, generated()), ["upstream fabulouslyOptimized: zoomify only in the first file"])
+        bot = generated(upstream={"fabulouslyOptimized": {"mcVersion": "26.4", "slugs": ["sodium"]},
+                                  "additive": {"mcVersion": "26.3", "slugs": ["sodium"]}})
+        self.assertEqual(self.diff(bot, generated()), ["upstream fabulouslyOptimized: mcVersion 26.4 vs 26.3"])
+
+    def test_a_mods_upstream_flags_are_reported(self):
+        bot = generated(mods=[{"slug": "sodium", "upstream": {"fabulouslyOptimized": True, "additive": True}},
+                              {"slug": "moonrise-opt", "upstream": {"fabulouslyOptimized": True, "additive": False}}])
+        self.assertEqual(self.diff(bot, generated()), ["mods[moonrise-opt].upstream: {'additive': False, 'fabulouslyOptimized': True} vs "
+                                                       "{'additive': False, 'fabulouslyOptimized': False}"])
+
+    def test_main_exit_codes(self):
+        import rules_upstream_diff
+        with tempfile.TemporaryDirectory() as tmp:
+            a, b = Path(tmp) / "a.json", Path(tmp) / "b.json"
+            a.write_text(json.dumps(generated()), encoding="utf-8")
+            b.write_text(json.dumps(generated()), encoding="utf-8")
+            self.assertEqual(rules_upstream_diff.main([str(a), str(b)]), 0)
+            b.write_text(json.dumps(generated(availability={"26.2": []})), encoding="utf-8")
+            self.assertEqual(rules_upstream_diff.main([str(a), str(b)]), 1)
+            self.assertEqual(rules_upstream_diff.main([str(a), str(Path(tmp) / "missing.json")]), 2)
+
+
 # The generated files as the release revision R carries them (v0.5 content; docs/v0.5/design/ws-r.md).
 class GeneratedV05Tests(unittest.TestCase):
     @classmethod
