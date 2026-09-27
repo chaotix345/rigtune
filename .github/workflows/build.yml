@@ -32,7 +32,7 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: microsoft
-          java-version: '25'
+          java-version: '25.0.3'
       # The Gradle home (distribution, dependencies, Loom's Minecraft files) is cached; main and the integration branch
       # write it, every other ref reads theirs or main's.
       - uses: gradle/actions/setup-gradle@v6
@@ -144,14 +144,15 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: microsoft
-          java-version: '25'
+          java-version: '25.0.3'
       - uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feat/v0.5.0' }}
       - name: Runner
         id: runner
         run: |
-          echo "image $ImageOS $ImageVersion; $(lscpu | sed -n 's/^Model name: *//p'); $(nproc) CPUs" | tee -a "$GITHUB_STEP_SUMMARY"
+          mesa=$(dpkg-query -W -f='${Version}' libgl1-mesa-dri 2>/dev/null || echo unknown)
+          echo "image $ImageOS $ImageVersion; Mesa $mesa; $(lscpu | sed -n 's/^Model name: *//p'); $(nproc) CPUs" | tee -a "$GITHUB_STEP_SUMMARY"
           echo "lavapipe-key=lavapipe-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
       # lavapipe: the .debs are cached per runner image, so a warm leg installs without the Ubuntu archive.
       - uses: actions/cache@v6
@@ -159,7 +160,7 @@ jobs:
         with:
           path: ~/lavapipe-debs
           key: ${{ steps.runner.outputs.lavapipe-key }}
-      - name: Install the Mesa Vulkan driver (lavapipe)
+      - name: Install the Mesa Vulkan driver (lavapipe; network on a cache miss)
         if: matrix.backend == 'Vulkan'
         run: |
           set -eu
@@ -201,13 +202,10 @@ jobs:
           { cat "$logs/latest.log"; for f in "$logs"/*.log.gz; do [ -e "$f" ] && zcat "$f"; done; } \
             | grep -F "Using graphics backend ${{ matrix.backend }}" \
             || { echo "::error::the game's logs don't name the ${{ matrix.backend }} backend"; exit 1; }
-      # The game's Modrinth lookups went to the local fake, and it answered every one.
+      # The game's Modrinth lookups went to the local fake: each start-up request answered, no server error, and no lookup
+      # fell back to offline data except while a test had Modrinth off.
       - name: Check the fake Modrinth
-        run: |
-          log="versions/${{ matrix.mc }}/build/gametest-modrinth/requests.jsonl"
-          [ -s "$log" ] || { echo "::error::the fake Modrinth logged no request"; exit 1; }
-          echo "$(wc -l < "$log") requests to the fake Modrinth"
-          if grep -E '"status": ?5[0-9][0-9]' "$log"; then echo "::error::the fake Modrinth answered with a server error"; exit 1; fi
+        run: python3 tools/ci/check_fake_modrinth.py "versions/${{ matrix.mc }}/build/gametest-modrinth/requests.jsonl" "versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs"
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v7
