@@ -12,6 +12,7 @@ import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.notice.NoticeAction;
 import io.github.chaotix345.rigtune.core.notice.NoticePriority;
+import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
@@ -20,6 +21,8 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -62,6 +65,35 @@ class OutsideChangesClientTest {
 		}
 	}
 
+	// Review M2: the app syncs options.txt only, so the line needs a vanilla setting written now: in the Apply status...
+	@Test
+	void theApplyStatusLineNeedsAVanillaSettingWrittenNow() {
+		LauncherInfo app = LauncherInfo.of(Launcher.MODRINTH_APP);
+		Recommendation clouds = set("vanilla.renderClouds", "fancy", "fast");
+		Recommendation sodium = set("sodium.quality.weather_quality", "FANCY", "FAST");
+		assertNotNull(OutsideChanges.applyLine(app, new V05Hooks.ApplyFacts("e1", List.of(clouds, sodium), Set.of(), 1, 0, 1, false, 0)));
+		assertNull(OutsideChanges.applyLine(app, new V05Hooks.ApplyFacts("e1", List.of(sodium), Set.of(), 1, 0, 1, false, 0)), "a Sodium change only");
+		assertNull(OutsideChanges.applyLine(app, new V05Hooks.ApplyFacts("e1", List.of(clouds), Set.of(), 0, 1, 0, false, 0)), "the write failed");
+		assertNull(OutsideChanges.applyLine(LauncherInfo.of(Launcher.PRISM), new V05Hooks.ApplyFacts("e1", List.of(clouds), Set.of(), 1, 0, 0, false, 0)));
+	}
+
+	// ... and in Preview's "Written now".
+	@Test
+	void thePreviewLineNeedsOptionsTxtWrittenNow() {
+		LauncherInfo app = LauncherInfo.of(Launcher.MODRINTH_APP);
+		ApplyPreview.Setting options = new ApplyPreview.Setting("set:vanilla.renderClouds", Path.of("game", "options.txt"), "renderClouds", "fancy", "fast");
+		ApplyPreview.Setting sodium = new ApplyPreview.Setting("set:sodium.quality.weather_quality", Path.of("game", "config", "sodium-options.json"),
+				"quality.weather_quality", "FANCY", "FAST");
+		assertNotNull(OutsideChanges.previewLine(app, preview(List.of(options))));
+		assertNull(OutsideChanges.previewLine(app, preview(List.of(sodium))), "nothing in options.txt");
+		assertNull(OutsideChanges.previewLine(app, preview(List.of())));
+		assertNull(OutsideChanges.previewLine(LauncherInfo.UNKNOWN, preview(List.of(options))));
+	}
+
+	private static ApplyPreview preview(List<ApplyPreview.Setting> now) {
+		return new ApplyPreview(now, List.of(), List.of(), List.of(), List.of(), true);
+	}
+
 	@Test
 	void anApplyAddsItsVanillaKeysToTheWatchedOnes() {
 		V05Hooks.ApplyFacts facts = new V05Hooks.ApplyFacts("e1", List.of(set("vanilla.renderClouds", "fancy", "fast"), set("vanilla.fullscreen", "false", "true"),
@@ -74,13 +106,15 @@ class OutsideChangesClientTest {
 	void theStopSnapshotIsNothingDuringABenchmarkOrTryItOrWithNothingWatched() {
 		Map<String, String> watched = Map.of("vanilla.renderClouds", "fast");
 		Map<String, String> now = Map.of("renderClouds", "fancy");
-		assertEquals(Map.of("vanilla.renderClouds", "fancy"), OutsideChanges.stopSnapshot(false, watched, () -> now));
+		Instant exit = Instant.parse("2026-09-27T22:00:00Z");
+		assertEquals(Map.of(OutsideOptions.EXIT_AT, "2026-09-27T22:00:00Z", "vanilla.renderClouds", "fancy"),
+				OutsideChanges.stopSnapshot(false, watched, () -> now, exit), "stamped with the exit time (review L6)");
 		assertNull(OutsideChanges.stopSnapshot(true, watched, () -> {
 			throw new AssertionError("the options aren't read while busy");
-		}));
-		assertNull(OutsideChanges.stopSnapshot(false, null, () -> now), "the start hook hasn't read the journal");
-		assertNull(OutsideChanges.stopSnapshot(false, Map.of(), () -> now), "RigTune never applied a vanilla key");
-		assertNull(OutsideChanges.stopSnapshot(false, watched, Map::of), "none of them in the game's options");
+		}, exit));
+		assertNull(OutsideChanges.stopSnapshot(false, null, () -> now, exit), "the start hook hasn't read the journal");
+		assertNull(OutsideChanges.stopSnapshot(false, Map.of(), () -> now, exit), "RigTune never applied a vanilla key");
+		assertNull(OutsideChanges.stopSnapshot(false, watched, Map::of, exit), "none of them in the game's options");
 	}
 
 	// AC4h.3: the stop handler does no I/O beyond one AwarenessStore.update (setOptionsAtExit is one update).

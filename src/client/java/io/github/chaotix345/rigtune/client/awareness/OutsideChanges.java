@@ -10,6 +10,7 @@ import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.awareness.AwarenessStore;
 import io.github.chaotix345.rigtune.core.awareness.OutsideOptions;
+import io.github.chaotix345.rigtune.core.footprint.StartupTimesStore;
 import io.github.chaotix345.rigtune.core.launcher.Launcher;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.Action;
@@ -21,6 +22,7 @@ import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.notice.NoticeAction;
 import io.github.chaotix345.rigtune.core.notice.NoticePriority;
+import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument.SettingLabel;
@@ -36,9 +38,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 // docs/v0.5/SPEC.md 4h: settings changed outside the game (docs/research/v0.5/launcher-managed-mods.md §2), a one-shot
@@ -58,46 +62,58 @@ public final class OutsideChanges {
 	private static final int MAX_NAMES = 8;
 	// options.txt larger than this isn't the game's (it is a few KiB).
 	private static final long MAX_OPTIONS_BYTES = 1024 * 1024;
+	private static final String OPTIONS_FILE = "options.txt";
 	private static final SystemToast.SystemToastId TOAST_ID = new SystemToast.SystemToastId(6000L);
 
 	// What the start comparison found, until the player acts on it.
 	record Found(String key, List<OutsideOptions.Change> changes) {
 	}
 
-	// The watched keys and RigTune's values: null until the start hook has read the journal.
-	private static volatile @Nullable Map<String, String> applied;
+	// The watched keys and RigTune's values: null until the start hook has read the journal. Updated atomically: the start
+	// hook's worker and an Apply on the render thread can both add to it (review L4).
+	private static final AtomicReference<@Nullable Map<String, String>> APPLIED = new AtomicReference<>();
 	private static volatile @Nullable Found found;
 
 	private OutsideChanges() {
 	}
 
 	public static void snapshotAtStop(RealController controller, Minecraft minecraft) {
-		Map<String, String> snapshot = stopSnapshot(BenchmarkController.running() || Busy.tryItRunning.getAsBoolean(), applied,
-				() -> SettingsBridge.readVanilla(minecraft.options));
+		Map<String, String> snapshot = stopSnapshot(BenchmarkController.running() || Busy.tryItRunning.getAsBoolean(), APPLIED.get(),
+				() -> SettingsBridge.readVanilla(minecraft.options), Instant.now());
 		if (snapshot != null) {
 			AwarenessStore.shared(controller.configDir()).setOptionsAtExit(snapshot);
 		}
 	}
 
-	// The snapshot to store at a clean exit, or null for none: while a benchmark or a Try it runs, before the journal was
-	// read, when RigTune never applied a vanilla key, or when none of them is among the game's options.
-	static @Nullable Map<String, String> stopSnapshot(boolean busy, @Nullable Map<String, String> watched, Supplier<Map<String, String>> vanillaNow) {
+	// The snapshot to store at a clean exit (stamped with the exit time), or null for none: while a benchmark or a Try it
+	// runs, before the journal was read, when RigTune never applied a vanilla key, or when none of them is among the
+	// game's options.
+	static @Nullable Map<String, String> stopSnapshot(boolean busy, @Nullable Map<String, String> watched, Supplier<Map<String, String>> vanillaNow,
+			Instant exitAt) {
 		if (busy || watched == null || watched.isEmpty()) {
 			return null;
 		}
 		Map<String, String> snapshot = OutsideOptions.snapshot(watched.keySet(), vanillaNow.get());
-		return snapshot.isEmpty() ? null : snapshot;
+		return snapshot.isEmpty() ? null : OutsideOptions.stamped(snapshot, exitAt);
 	}
 
 	public static void compareAtStart(RealController controller) {
 		Map<String, String> snapshot = AwarenessStore.shared(controller.configDir()).takeOptionsAtExit();
-		Map<String, String> watched = new LinkedHashMap<>(OutsideOptions.applied(ClientJournal.get().entries()));
-		Map<String, String> thisSession = applied;
-		if (thisSession != null) {
-			watched.putAll(thisSession);
-		}
-		applied = watched;
+		Map<String, String> fromJournal = OutsideOptions.applied(ClientJournal.get().entries());
+		Map<String, String> watched = APPLIED.updateAndGet(thisSession -> {
+			Map<String, String> merged = new LinkedHashMap<>(fromJournal);
+			if (thisSession != null) {
+				merged.putAll(thisSession);
+			}
+			return Collections.unmodifiableMap(merged);
+		});
 		if (snapshot == null) {
+			return;
+		}
+		// Review L6: a launch of another RigTune version since that exit (0.5 -> 0.4.0 -> 0.5) may have changed options in
+		// game; the snapshot is from before it, so nothing is compared.
+		if (OutsideOptions.anotherVersionSince(snapshot, new StartupTimesStore(controller.configDir()).runs(), controller.modVersion())) {
+			RigTune.LOGGER.info("RigTune: another RigTune version ran since the last clean exit; settings changed outside the game aren't checked this time");
 			return;
 		}
 		List<OutsideOptions.Change> changes = OutsideOptions.compare(snapshot, OutsideOptions.parseOptions(options()), watched);
@@ -110,7 +126,7 @@ public final class OutsideChanges {
 
 	// options.txt now; nothing when it can't be read.
 	private static List<String> options() {
-		Path file = FabricLoader.getInstance().getGameDir().resolve("options.txt");
+		Path file = FabricLoader.getInstance().getGameDir().resolve(OPTIONS_FILE);
 		try {
 			return Files.isRegularFile(file) && Files.size(file) <= MAX_OPTIONS_BYTES ? Files.readAllLines(file, StandardCharsets.UTF_8) : List.of();
 		} catch (IOException | RuntimeException e) {
@@ -121,7 +137,7 @@ public final class OutsideChanges {
 
 	public static void afterApply(RealController controller, V05Hooks.ApplyFacts facts, List<Component> parts) {
 		watch(facts);
-		Component line = syncLine(controller.launcher(), facts.settingsOk() > 0);
+		Component line = applyLine(controller.launcher(), facts);
 		if (line != null) {
 			parts.add(line);
 		}
@@ -129,23 +145,38 @@ public final class OutsideChanges {
 
 	// This session's Apply: its changeable vanilla keys join the watched ones (its own selection, no I/O).
 	static void watch(V05Hooks.ApplyFacts facts) {
-		Map<String, String> watched = new LinkedHashMap<>();
-		Map<String, String> before = applied;
-		if (before != null) {
-			watched.putAll(before);
-		}
+		Map<String, String> added = new LinkedHashMap<>();
 		for (Recommendation r : facts.selected()) {
-			if (r.action() instanceof Action.SetSetting set && set.key().startsWith(SettingKeys.VANILLA_PREFIX) && SettingKeys.changeable(set.key())) {
-				watched.put(set.key(), set.newValue());
+			if (vanilla(r)) {
+				added.put(((Action.SetSetting) r.action()).key(), ((Action.SetSetting) r.action()).newValue());
 			}
 		}
-		applied = watched;
+		APPLIED.updateAndGet(before -> {
+			Map<String, String> watched = before == null ? new LinkedHashMap<>() : new LinkedHashMap<>(before);
+			watched.putAll(added);
+			return Collections.unmodifiableMap(watched);
+		});
 	}
 
-	// AC4h.4: in a Modrinth App instance, whose game-settings sync copies options.txt to the app's other synced instances,
-	// when settings were written now (Preview's "Written now" and the Apply status).
-	public static @Nullable Component syncLine(LauncherInfo launcher, boolean settingsWritten) {
-		return settingsWritten && launcher.launcher() == Launcher.MODRINTH_APP ? Component.translatable("rigtune.outside.sync_line") : null;
+	private static boolean vanilla(Recommendation r) {
+		return r.action() instanceof Action.SetSetting set && set.key().startsWith(SettingKeys.VANILLA_PREFIX) && SettingKeys.changeable(set.key());
+	}
+
+	// AC4h.4 (review M2): the Apply status's line, only when a vanilla setting (options.txt, what the app syncs) was
+	// written now.
+	static @Nullable Component applyLine(LauncherInfo launcher, V05Hooks.ApplyFacts facts) {
+		return syncLine(launcher, facts.settingsOk() > 0 && facts.selected().stream().anyMatch(OutsideChanges::vanilla));
+	}
+
+	// AC4h.4 (review M2): Preview's line under "Written now", only when options.txt is among what is written now.
+	public static @Nullable Component previewLine(LauncherInfo launcher, ApplyPreview preview) {
+		return syncLine(launcher, preview.now().stream().anyMatch(s -> s.file() != null && s.file().getFileName() != null
+				&& OPTIONS_FILE.equals(s.file().getFileName().toString())));
+	}
+
+	// In a Modrinth App instance, whose game-settings sync copies options.txt to the app's other synced instances.
+	public static @Nullable Component syncLine(LauncherInfo launcher, boolean optionsWritten) {
+		return optionsWritten && launcher.launcher() == Launcher.MODRINTH_APP ? Component.translatable("rigtune.outside.sync_line") : null;
 	}
 
 	// The notice while the comparison's changes are waiting for the player; no file I/O.
@@ -238,12 +269,12 @@ public final class OutsideChanges {
 
 	// For the unit tests: the watched keys.
 	static Map<String, String> watched() {
-		Map<String, String> watched = applied;
+		Map<String, String> watched = APPLIED.get();
 		return watched == null ? Map.of() : watched;
 	}
 
 	static void reset() {
-		applied = null;
+		APPLIED.set(null);
 		found = null;
 	}
 }

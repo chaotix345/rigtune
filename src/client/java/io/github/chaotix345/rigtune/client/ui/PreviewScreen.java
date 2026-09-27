@@ -287,7 +287,7 @@ public class PreviewScreen extends Screen {
 
 	// 4h (WS-W), under "Written now": the Modrinth App's game-settings sync line.
 	private void settingsSyncLine(PreviewList target, ApplyPreview shown, int width) {
-		Component line = OutsideChanges.syncLine(controller.launcher(), !shown.now().isEmpty());
+		Component line = OutsideChanges.previewLine(controller.launcher(), shown);
 		if (line != null) {
 			target.row(line, COLOR_NOTE, INDENT, width);
 		}

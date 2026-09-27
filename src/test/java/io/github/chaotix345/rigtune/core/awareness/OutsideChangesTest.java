@@ -1,11 +1,13 @@
 package io.github.chaotix345.rigtune.core.awareness;
 
+import io.github.chaotix345.rigtune.core.footprint.StartupTimesStore;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -90,6 +92,40 @@ class OutsideChangesTest {
 		assertEquals(Map.of(), OutsideOptions.applied(journal));
 	}
 
+	// Review L5: undoing a later Apply leaves the earlier one in effect: its value is RigTune's again.
+	@Test
+	void undoingALaterApplyWatchesTheEarlierValue() {
+		JournalChange first = set("vanilla.maxFps", "260", "120");
+		JournalChange second = set("vanilla.maxFps", "120", "60").withStatus(JournalChange.REVERTED);
+		JournalChange undo = set("vanilla.maxFps", "60", "120").reverting(second.id());
+		List<JournalEntry> journal = List.of(apply("e1", first), apply("e2", second), new JournalEntry("u2", "2026-09-22T10:00:00Z", JournalEntry.UNDO,
+				"0.5.0", "26.2", "e2", List.of(undo)));
+		assertEquals(Map.of("vanilla.maxFps", "120"), OutsideOptions.applied(journal));
+	}
+
+	// Review L7: options.txt already holds RigTune's value: nothing to apply again, no notice.
+	@Test
+	void aChangeBackToRigTunesValueIsNothing() {
+		assertEquals(List.of(), startUp(Map.of("renderClouds", "fancy", "maxFps", "120"), options("renderClouds:\"fast\"", "maxFps:120")));
+	}
+
+	// Review L6: the snapshot carries its exit time; a launch by another RigTune version since then (0.5 -> 0.4.0 -> 0.5,
+	// read from startup-times.json, which 0.4 writes at every launch) means options may have changed in game under it.
+	@Test
+	void aSessionOfAnotherVersionSinceTheExitSkipsTheComparison() {
+		Map<String, String> stamped = OutsideOptions.stamped(Map.of("vanilla.maxFps", "120"), Instant.parse("2026-09-27T10:00:00.250Z"));
+		assertEquals(OutsideOptions.EXIT_AT, stamped.keySet().iterator().next());
+		StartupTimesStore.Run wrote = new StartupTimesStore.Run("2026-09-27T09:00:00Z", 15000, "26.2", "0.5.0+mc26.2", 7, null);
+		StartupTimesStore.Run old = new StartupTimesStore.Run("2026-09-27T11:00:00Z", 15000, "26.2", "0.4.0+mc26.2", 7, null);
+		StartupTimesStore.Run self = new StartupTimesStore.Run("2026-09-27T12:00:00Z", 15000, "26.2", "0.5.0+mc26.2", 7, null);
+		assertTrue(OutsideOptions.anotherVersionSince(stamped, List.of(wrote, old, self), "0.5.0+mc26.2"));
+		assertFalse(OutsideOptions.anotherVersionSince(stamped, List.of(wrote, self), "0.5.0+mc26.2"));
+		assertFalse(OutsideOptions.anotherVersionSince(stamped, List.of(wrote), "0.5.0+mc26.2"), "this launch not recorded yet");
+		assertFalse(OutsideOptions.anotherVersionSince(Map.of("vanilla.maxFps", "120"), List.of(wrote, old), "0.5.0+mc26.2"), "no stamp: can't tell");
+		assertEquals(List.of(), OutsideOptions.compare(stamped, OutsideOptions.parseOptions(options("maxFps:120")), Map.of("vanilla.maxFps", "120")),
+				"the stamp is never a setting");
+	}
+
 	@Test
 	void noSnapshotNoComparison() {
 		assertEquals(List.of(), OutsideOptions.compare(null, OutsideOptions.parseOptions(options("renderClouds:\"fancy\"")), OutsideOptions.applied(JOURNAL)));
@@ -146,14 +182,19 @@ class OutsideChangesTest {
 	}
 
 	@Test
-	void theSnapshotHoldsAtMost64Keys() {
+	void theStampedSnapshotHoldsAtMost64Keys() {
 		Map<String, String> now = new LinkedHashMap<>();
 		List<String> keys = new ArrayList<>();
 		for (int i = 0; i < 80; i++) {
 			now.put("k" + i, "v");
 			keys.add("vanilla.k" + i);
 		}
-		assertEquals(AwarenessStore.MAX_OPTIONS_AT_EXIT, OutsideOptions.snapshot(Set.copyOf(keys), now).size());
+		Map<String, String> snapshot = OutsideOptions.snapshot(Set.copyOf(keys), now);
+		assertEquals(AwarenessStore.MAX_OPTIONS_AT_EXIT - 1, snapshot.size(), "room for the exit stamp");
+		Map<String, String> stamped = OutsideOptions.stamped(snapshot, Instant.parse("2026-09-27T10:00:00Z"));
+		assertEquals(AwarenessStore.MAX_OPTIONS_AT_EXIT, stamped.size());
+		assertTrue(AwarenessStore.shared(config).setOptionsAtExit(stamped));
+		assertEquals(stamped, AwarenessStore.shared(config).optionsAtExit(), "the store keeps all of it, the stamp first");
 	}
 
 	@Test
