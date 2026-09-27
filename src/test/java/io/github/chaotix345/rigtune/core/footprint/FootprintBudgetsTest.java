@@ -101,6 +101,27 @@ class FootprintBudgetsTest {
 		}
 	}
 
+	// Coordinator: a hook that allocates once every 30,000 calls. Across FootprintGameTest's 48 blocks of 20,000 calls
+	// (960,000 calls after warm-up) a third of the blocks see no allocation, so the fewest-allocating block (0) passed it;
+	// the sum over every block fails it, as v0.4's 5 runs of 100,000 calls did.
+	@Test
+	void aTickHookAllocatingEvery30000CallsFailsItsZeroAllocationBudget() throws IOException {
+		FootprintBudgets budgets = FootprintBudgets.load(RepoFiles.resolve(FootprintBudgets.REPO_PATH));
+		int blocks = 48;
+		int blockCalls = 20_000;
+		long[] perBlock = new long[blocks];
+		for (long call = 30_000; call <= (long) blocks * blockCalls; call += 30_000) {
+			perBlock[(int) ((call - 1) / blockCalls)] += 24;
+		}
+		assertEquals(0, java.util.Arrays.stream(perBlock).min().orElseThrow(), "some blocks see no allocation");
+
+		for (String key : List.of("tickHookAllocBytes", "tickHookAllocBytesWorld", "tickHookAllocBytesOn")) {
+			List<Violation> violations = budgets.check(Map.of(key, FootprintBudgets.allocatedBytes(perBlock)));
+			assertEquals(1, violations.size(), key);
+			assertEquals(32 * 24, violations.getFirst().value(), key + ": 32 allocations of 24 B in 960,000 calls");
+		}
+	}
+
 	// v0.5 SPEC AC1d.1: the six per-call ns limits are min(ceiling, 4 x the recorded max observed) (user-approved, ws-ci);
 	// every other timing limit stays min(ceiling, 2 x its recorded max) (docs/v0.4/verification/footprint/README.md).
 	@Test
