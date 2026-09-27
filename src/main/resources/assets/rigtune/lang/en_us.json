@@ -265,6 +265,8 @@
 	"rigtune.tools.profiles": "Profiles…",
 	"rigtune.tools.stutter": "Stutter Doctor…",
 	"rigtune.tools.title": "Tools",
+	"rigtune.tryit.refused.running": "A Try it (measured) is still in progress. Finish or cancel it first.",
+	"rigtune.tryit.refused.unavailable": "Try it (measured) isn't available here.",
 	"rigtune.preview.button": "Preview",
 	"rigtune.preview.button.tooltip": "See exactly what Apply would change for the ticked items, file by file. Nothing is changed or downloaded.",
 	"rigtune.preview.detail.control_characters": "Value contains control characters",

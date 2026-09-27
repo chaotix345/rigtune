@@ -128,4 +128,16 @@ class ClientSettingsTest {
 		assertDefaults(ClientSettings.load(configDir));
 		assertFalse(Files.exists(ClientSettings.file(configDir)));
 	}
+
+	// docs/v0.5/SPEC.md 4e (AC4e.3): the per-instance opt-in; a 0.4-shaped file reads as off.
+	@Test
+	void modFilesByRigTuneDefaultsOffAndRoundTrips(@TempDir Path configDir) throws IOException {
+		write(ClientSettings.file(configDir), "{\"networkEnabled\": true, \"stutterMonitor\": true}");
+		assertFalse(ClientSettings.load(configDir).modFilesByRigTune);
+		ClientSettings settings = ClientSettings.load(configDir);
+		settings.modFilesByRigTune = true;
+		settings.save(configDir);
+		assertTrue(ClientSettings.load(configDir).modFilesByRigTune);
+		assertTrue(ClientSettings.load(configDir).stutterMonitor);
+	}
 }

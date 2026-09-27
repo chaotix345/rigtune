@@ -88,7 +88,7 @@ public final class HistoryUpdates {
 		for (JournalEntry e : entries) {
 			List<JournalChange> changes = e.changes().stream().map(change).toList();
 			out.add(changes.equals(e.changes()) ? e
-					: new JournalEntry(e.id(), e.at(), e.kind(), e.rigtuneVersion(), e.mcVersion(), e.undoOf(), changes));
+					: new JournalEntry(e.id(), e.at(), e.kind(), e.rigtuneVersion(), e.mcVersion(), e.undoOf(), changes, e.foldedEntryIds()));
 		}
 		return out;
 	}

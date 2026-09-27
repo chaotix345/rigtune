@@ -159,6 +159,12 @@ public final class StutterHooks {
 		}
 	}
 
+	// docs/v0.5/SPEC.md 2B RW-15 (PLAN contracts item 12): true while a benchmark step that ran out of time is measured
+	// again, false after it; that step's frames stay out of the benchmark's capture. BenchmarkController calls it (WS-B).
+	// Contracts seam (WS-K): a no-op until WS-S implements it.
+	public static void benchmarkStepExcluded(boolean excluded) {
+	}
+
 	// The last finished benchmark's capture summary (BenchmarkResultScreen's line), or null.
 	public static @Nullable StutterReport lastBenchmark() {
 		StutterService s = service;

@@ -69,12 +69,35 @@ public class AwarenessGameTest implements FabricClientGameTest {
 			checkRebenchmark(context, real, hardwareKey);
 			checkDismissals(context, real, file, hardwareKey);
 			RigTune.LOGGER.info("AwarenessGameTest: driver notice (shown -> committed), Re-benchmark, what's new and dismissals checked");
+			// v0.5 (docs/v0.5/SPEC.md C6; PLAN contracts item 16): one block per owner, with the contracts' context record.
+			V05TestContext v05 = V05TestContext.of(context);
+			awarenessFixes(v05);
+			startupRegression(v05);
+			settingsChangedOutside(v05);
 		} finally {
 			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
 			write(file, original);
 			GameTestNet.set(context, real, true);
 			resize(context, 854, 480, 0);
 		}
+	}
+
+	// --- v0.5 blocks (docs/v0.5/SPEC.md C6): one method per owner; an owner edits only its own method's body and adds its
+	// own private helpers right below it. Each block puts back what it changed.
+
+	// ---- WS-W (AW-1, AW-2).
+
+	private static void awarenessFixes(V05TestContext v05) {
+	}
+
+	// ---- WS-W2 (C18, AC9.2-AC9.3): a seeded startup-times.json and the STARTUP_REGRESSION notice.
+
+	private static void startupRegression(V05TestContext v05) {
+	}
+
+	// ---- WS-W (4h, AC4h.2): the options snapshot and SETTINGS_CHANGED_OUTSIDE.
+
+	private static void settingsChangedOutside(V05TestContext v05) {
 	}
 
 	// An older driver string in the fingerprint, and a baseline one rules revision back whose ids lack the report's

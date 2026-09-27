@@ -4,7 +4,9 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 // One run in config/rigtune/benchmarks.json (docs/research/v0.2/benchmark.md §7 plus the RigTune version, mode and
 // scene). mode and scene are the BenchmarkRequest enum names. phase: "before"/"after" for a Measure pair (pairId
@@ -51,8 +53,13 @@ public record BenchmarkRecord(String id, String createdAt, String rigtuneVersion
 	// 0.4.0 on (docs/v0.4/SPEC.md 7, optional): modSetHash, SHA-256 over the sorted (mod id, version) pairs of the loaded
 	// mods; journalCursor, the id of the newest history.json entry at the time of the run. Null in older runs, and dropped
 	// if 0.3.x rewrites the file.
+	// 0.5.0 on (docs/v0.5/SPEC.md C1, optional; null in older runs, not written when null, dropped if 0.4.x rewrites the
+	// file): worldFresh, whether this run created the benchmark world (RW-8); dhGenerating, whether Distant Horizons was
+	// generating the world during the run (RW-6); stagedAtStart, the ids of the changes staged for the next restart when
+	// the run started (BH-2, at most 64, else left out).
 	public record Context(boolean dhRendering, boolean shaders, @Nullable String shaderPack, int width, int height, boolean fullscreen,
-			int protocol, @Nullable String modSetHash, @Nullable String journalCursor) {
+			int protocol, @Nullable String modSetHash, @Nullable String journalCursor, @Nullable Boolean worldFresh, @Nullable Boolean dhGenerating,
+			@Nullable List<String> stagedAtStart) {
 		public static final int PROTOCOL = 1;
 
 		public Context(boolean dhRendering, boolean shaders, @Nullable String shaderPack, int width, int height, boolean fullscreen,
@@ -60,15 +67,40 @@ public record BenchmarkRecord(String id, String createdAt, String rigtuneVersion
 			this(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, null, null);
 		}
 
+		public Context(boolean dhRendering, boolean shaders, @Nullable String shaderPack, int width, int height, boolean fullscreen,
+				int protocol, @Nullable String modSetHash, @Nullable String journalCursor) {
+			this(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, modSetHash, journalCursor, null, null, null);
+		}
+
+		public Context {
+			stagedAtStart = stagedAtStart == null ? null : stagedAtStart.stream().filter(Objects::nonNull).toList();
+		}
+
 		public Context withModSet(@Nullable String newModSetHash, @Nullable String newJournalCursor) {
-			return new Context(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, newModSetHash, newJournalCursor);
+			return new Context(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, newModSetHash, newJournalCursor, worldFresh,
+					dhGenerating, stagedAtStart);
+		}
+
+		public Context withWorldFresh(@Nullable Boolean fresh) {
+			return new Context(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, modSetHash, journalCursor, fresh, dhGenerating,
+					stagedAtStart);
+		}
+
+		public Context withDhGenerating(@Nullable Boolean generating) {
+			return new Context(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, modSetHash, journalCursor, worldFresh, generating,
+					stagedAtStart);
+		}
+
+		public Context withStagedAtStart(@Nullable List<String> ids) {
+			return new Context(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, modSetHash, journalCursor, worldFresh,
+					dhGenerating, ids);
 		}
 
 		// The conditions part (plan review B-H1): everything but modSetHash and journalCursor. Use this, not equals(), to
 		// compare runs.
 		public boolean sameConditions(@Nullable Context other) {
 			return other != null && dhRendering == other.dhRendering && shaders == other.shaders
-					&& java.util.Objects.equals(shaderPack, other.shaderPack) && width == other.width && height == other.height
+					&& Objects.equals(shaderPack, other.shaderPack) && width == other.width && height == other.height
 					&& fullscreen == other.fullscreen && protocol == other.protocol;
 		}
 	}

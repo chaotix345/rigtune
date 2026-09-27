@@ -37,6 +37,11 @@ public final class RulesDocument {
 	public ProfileTemplates profileTemplates;
 	@JsonAdapter(LenientSection.class)
 	public List<AdviceRule> stutterAdvice;
+	// v0.5, rules-v2 only (docs/v0.5/SPEC.md 5, C2), null when absent: the Stutter Doctor's one-click fixes, one per
+	// stutterAdvice id (core/stutter/FixSpec validates them). 0.2.0-0.4.0 ignore the section. An entry this version can't
+	// read drops only itself; a section that isn't an array is null (LenientEntries), which costs no advice.
+	@JsonAdapter(LenientEntries.class)
+	public List<StutterFix> stutterFixes;
 
 	private transient String source;
 
@@ -76,6 +81,9 @@ public final class RulesDocument {
 		}
 		if (stutterAdvice != null) {
 			stutterAdvice.removeIf(r -> r == null || r.id == null);
+		}
+		if (stutterFixes != null) {
+			stutterFixes.removeIf(r -> r == null);
 		}
 		if (profileTemplates != null) {
 			if (profileTemplates.templates == null) profileTemplates.templates = new ArrayList<>();
@@ -235,6 +243,25 @@ public final class RulesDocument {
 		public String goal;
 		public Map<String, Boolean> facts;
 		public List<SettingRule> settings;
+	}
+
+	// v0.5 (docs/research/v0.5/feature-stutter-fixes.md §2.2): requires must name "stutter-fix" (FixSpec.FEATURE); adviceId,
+	// a stutterAdvice id; evidence, a Condition that may use causeSpikesAtLeast; set, the change. FixSpec checks them.
+	public static final class StutterFix {
+		public List<String> requires;
+		public String adviceId;
+		public Condition evidence;
+		public FixSet set;
+	}
+
+	// key: one of FixSpec.KEYS. value xor step (a whole number, |step| <= 8, with min when negative and max when
+	// positive). Numbers stay JsonElements, so a wrong type drops one entry (FixSpec), never the section.
+	public static final class FixSet {
+		public String key;
+		public JsonElement value;
+		public JsonElement step;
+		public JsonElement min;
+		public JsonElement max;
 	}
 
 	public static final class SettingLabel {

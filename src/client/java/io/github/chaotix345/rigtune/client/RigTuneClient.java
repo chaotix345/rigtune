@@ -91,6 +91,8 @@ public final class RigTuneClient implements ClientModInitializer {
 		ClientTickEvents.END_CLIENT_TICK.register(RigTuneClient::onTick);
 		StutterHooks.install(real.stutterService());
 		registerAwareness(real);
+		// v0.5 (docs/v0.5/SPEC.md X4.2, PLAN contracts 13e): the features' event listeners, registrations only.
+		V05Services.registerEvents(real);
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> addEntryButton(screen, width, height));
 		// The sleep overlay is the one vanilla HUD layer drawn while the GUI is hidden, which the benchmark does.
 		HudElementRegistry.attachElementAfter(VanillaHudElements.SLEEP, HUD_ID, (graphics, delta) -> {
@@ -245,6 +247,8 @@ public final class RigTuneClient implements ClientModInitializer {
 					Component.translatable("rigtune.toast.leftover.title", leftover),
 					Component.translatable("rigtune.toast.leftover.body"));
 		}
+		// v0.5 (PLAN contracts 13f): the features' title-screen toasts.
+		V05Services.titleScreen(minecraft, controller);
 	}
 
 	static boolean important(Recommendation r) {

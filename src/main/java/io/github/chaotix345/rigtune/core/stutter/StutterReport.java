@@ -12,10 +12,14 @@ import java.util.Objects;
 // each correlational tag; worst: the 10 longest spikes (t = seconds into the capture). facts.gcOffsetMs is null until
 // the GC clock was calibrated. hitches: spikes less than 100 ms apart counted once.
 // A hand-edited file may hold nulls anywhere: the compact constructors keep them out of the lists.
+// v0.5 (docs/v0.5/SPEC.md C1, RW-11; optional): settingsAtStart/settingsAtEnd, the managed settings when the session
+// started and ended (null in older files and when not captured; not written when null; 0.4.0 ignores them and drops them
+// on rewrite).
 public record StutterReport(String startedAt, String source, @Nullable String mc, @Nullable String collector, long heapMaxMb,
 		double sessionSeconds, double gameplaySeconds, long frames, double avgFps, double onePercentLowFps, long[] histogramCounts,
 		long[] histogramTimeMs, Spikes spikes, double lostMs, Map<String, Double> causes, Map<String, Integer> tags, List<Worst> worst,
-		Facts facts, List<String> advice, boolean enoughData, boolean phaseTiming, int hitches) {
+		Facts facts, List<String> advice, boolean enoughData, boolean phaseTiming, int hitches, @Nullable Map<String, String> settingsAtStart,
+		@Nullable Map<String, String> settingsAtEnd) {
 	public static final String MONITOR = "monitor";
 	public static final String BENCHMARK = "benchmark";
 	public static final int MAX_WORST = 10;
@@ -29,6 +33,14 @@ public record StutterReport(String startedAt, String source, @Nullable String mc
 		worst = worst == null ? List.of() : worst.stream().filter(Objects::nonNull).toList();
 		facts = facts == null ? new Facts(null, 0, 0, 0, null) : facts;
 		advice = advice == null ? List.of() : advice.stream().filter(Objects::nonNull).toList();
+	}
+
+	public StutterReport(String startedAt, String source, @Nullable String mc, @Nullable String collector, long heapMaxMb, double sessionSeconds,
+			double gameplaySeconds, long frames, double avgFps, double onePercentLowFps, long[] histogramCounts, long[] histogramTimeMs, Spikes spikes,
+			double lostMs, Map<String, Double> causes, Map<String, Integer> tags, List<Worst> worst, Facts facts, List<String> advice, boolean enoughData,
+			boolean phaseTiming, int hitches) {
+		this(startedAt, source, mc, collector, heapMaxMb, sessionSeconds, gameplaySeconds, frames, avgFps, onePercentLowFps, histogramCounts,
+				histogramTimeMs, spikes, lostMs, causes, tags, worst, facts, advice, enoughData, phaseTiming, hitches, null, null);
 	}
 
 	public record Spikes(int minor, int major, int severe, int freeze) {
@@ -49,6 +61,12 @@ public record StutterReport(String startedAt, String source, @Nullable String mc
 
 	public StutterReport withAdvice(List<String> ids) {
 		return new StutterReport(startedAt, source, mc, collector, heapMaxMb, sessionSeconds, gameplaySeconds, frames, avgFps, onePercentLowFps,
-				histogramCounts, histogramTimeMs, spikes, lostMs, causes, tags, worst, facts, List.copyOf(ids), enoughData, phaseTiming, hitches);
+				histogramCounts, histogramTimeMs, spikes, lostMs, causes, tags, worst, facts, List.copyOf(ids), enoughData, phaseTiming, hitches,
+				settingsAtStart, settingsAtEnd);
+	}
+
+	public StutterReport withSettings(@Nullable Map<String, String> atStart, @Nullable Map<String, String> atEnd) {
+		return new StutterReport(startedAt, source, mc, collector, heapMaxMb, sessionSeconds, gameplaySeconds, frames, avgFps, onePercentLowFps,
+				histogramCounts, histogramTimeMs, spikes, lostMs, causes, tags, worst, facts, advice, enoughData, phaseTiming, hitches, atStart, atEnd);
 	}
 }

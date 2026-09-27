@@ -84,6 +84,15 @@ STUTTER_MAP_KEYS = {
     "stutterTaggedShareAtLeast": frozenset({"worldSave", "dh", "cpuContention", "afterTeleport", "movingFast"}),
 }
 STUTTER_PERCENT_KEYS = frozenset({"liveSetPercentAtLeast", "cpuContentionShareAtLeast"})
+# v0.5 C20 (docs/v0.5/SPEC.md 5, C2): the stutterFixes section's shape, mirroring core/stutter/FixSpec and
+# RulesDocument.StutterFix/FixSet (SchemaConsistencyTest). Constants only: nothing accepts the section or the key yet, so
+# causeSpikesAtLeast is refused as an unknown key everywhere until the rules workstream adds the validator.
+STUTTER_FIX_FEATURE = "stutter-fix"
+STUTTER_FIX_FIELDS = frozenset({"requires", "adviceId", "evidence", "set"})
+STUTTER_FIX_SET_FIELDS = frozenset({"key", "value", "step", "min", "max"})
+STUTTER_FIX_KEYS = frozenset({"vanilla.renderDistance", "sodium.performance.chunk_build_defer_mode",
+                              "dh.common.multiThreading.numberOfThreads"})
+STUTTER_FIX_CONDITION_KEYS = frozenset({"causeSpikesAtLeast"})
 # docs/v0.4/SPEC.md 9: {"vendor": <gpuVendor>, "atLeast": "526.47", "atMost": "536.22"}, compared on the parsed ints.
 DRIVER_VERSION_FIELDS = frozenset({"vendor", "atLeast", "atMost"})
 DRIVER_VERSION_RE = re.compile(r"[0-9]{1,9}(?:\.[0-9]{1,9})*")
