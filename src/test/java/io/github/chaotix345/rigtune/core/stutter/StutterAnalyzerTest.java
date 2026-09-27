@@ -173,6 +173,57 @@ class StutterAnalyzerTest {
 		assertEquals(14.0, samples.getFirst().processCores(), 1e-9);
 	}
 
+	// docs/v0.5/SPEC.md 2S (AC2S.14) for 2B's RW-6: a benchmark capture reports the CPU Distant Horizons' world generation
+	// used during its sweeps, the sampler windows outside its pauses (a window counts by its midpoint).
+	@Test
+	void dhWorldGenCpuOverTheRecordedSweepsOnly() {
+		Capture c = new Capture().frames(150, Map.of(), false);
+		worldGen(c, 10, 2);
+		c.rings.event(StutterRings.PAUSE_BEGIN, T0 + 30 * S, 0);
+		worldGen(c, 30, 6);
+		c.rings.event(StutterRings.PAUSE_END, T0 + 50 * S, 0);
+		worldGen(c, 50, 1);
+		assertEquals(1.5, c.analyze(true).dhWorldGenCores(), 1e-9, "20 s at 2 cores and 20 s at 1; the paused 20 s at 6 left out");
+
+		Capture open = new Capture().frames(150, Map.of(), false);
+		worldGen(open, 10, 2);
+		open.rings.event(StutterRings.PAUSE_BEGIN, T0 + 30 * S, 0);
+		worldGen(open, 30, 6);
+		assertEquals(2.0, open.analyze(true).dhWorldGenCores(), 1e-9, "a pause that never ended lasts to the capture's end");
+	}
+
+	@Test
+	void withoutSamplesThereIsNoWorldGenFigure() {
+		assertNull(new Capture().frames(150, Map.of(), false).analyze(true).dhWorldGenCores());
+	}
+
+	// The dh tag and the busiest-group note keep their meaning: world generation is DH work.
+	@Test
+	void worldGenCpuStillCountsAsDh() {
+		Capture c = new Capture().frames(150, Map.of(20, 80 * MS), false);
+		long[] busy = new long[StutterRings.SAMPLE_STRIDE];
+		for (int i = 0; i < 4; i++) {
+			fill(busy, T0 + (20 + i) * S, 250 * MS, 0, 14 * 250 * MS);
+			busy[StutterRings.S_DH_WORLD_GEN] = 3 * 250 * MS;
+			c.rings.sample(busy);
+		}
+		assertEquals(Map.of(Attributor.DH, 1), c.analyze(true).report().tags());
+		Attributor.Sample first = StutterAnalyzer.samples(new StutterAnalyzer.Input(c.ring.snapshot(), c.rings.snapshot(), T0, c.now, STARTED,
+				StutterReport.MONITOR, null, null, 0, null, 16, false, false)).getFirst();
+		assertEquals("dh", first.topGroup());
+		assertEquals(3.0, first.dhCores(), 1e-9);
+	}
+
+	// 20 s of 250 ms sampler windows from `fromSecond`, with `cores` of DH world generation each.
+	private static void worldGen(Capture c, int fromSecond, long cores) {
+		long[] s = new long[StutterRings.SAMPLE_STRIDE];
+		for (int i = 1; i <= 80; i++) {
+			fill(s, T0 + fromSecond * S + i * 250 * MS, 250 * MS, 0, 4 * 250 * MS);
+			s[StutterRings.S_DH_WORLD_GEN] = cores * 250 * MS;
+			c.rings.sample(s);
+		}
+	}
+
 	static void fill(long[] s, long t, long window, long dh, long process) {
 		java.util.Arrays.fill(s, 0);
 		s[StutterRings.S_TIME] = t;
