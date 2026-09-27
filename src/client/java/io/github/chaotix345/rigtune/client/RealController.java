@@ -37,6 +37,7 @@ import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.client.undo.DisableGuard;
 import io.github.chaotix345.rigtune.client.undo.GameState;
+import io.github.chaotix345.rigtune.client.undo.RefusedDisables;
 import io.github.chaotix345.rigtune.client.undo.StaleGroups;
 import io.github.chaotix345.rigtune.client.undo.Staging;
 import io.github.chaotix345.rigtune.client.undo.UndoService;
@@ -847,7 +848,7 @@ public final class RealController implements RigTuneController {
 		List<PreviewPlanner.ConfigFile> files = ConfigTargets.all(configDir).stream()
 				.map(t -> new PreviewPlanner.ConfigFile(t.prefix(), t.file(), t.stager()::stage, t.reader()::read)).toList();
 		return new PreviewPlanner(FabricLoader.getInstance().getGameDir().resolve("options.txt"), game.now(), game.problems(), files, modsDir, downloads)
-				.preview(selected);
+				.withDisableRefusals(RefusedDisables.previewRefusals(pendingFile, modsDir)).preview(selected);
 	}
 
 	private record GameOptions(Map<String, String> now, Map<String, String> problems) {

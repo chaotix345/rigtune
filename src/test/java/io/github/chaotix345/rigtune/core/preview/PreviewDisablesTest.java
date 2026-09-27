@@ -24,9 +24,9 @@ import static io.github.chaotix345.rigtune.core.preview.PreviewFakeModrinth.requ
 import static io.github.chaotix345.rigtune.core.preview.PreviewFakeModrinth.version;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-// The preview's "Disable X" items: docs/v0.5/SPEC.md 2H L9 (AC2H.4, the same batch): a ticked Disable of a mod counts as
+// The preview's "Disable X" items. docs/v0.5/SPEC.md 2H L9 (AC2H.4, the same batch): a ticked Disable of a mod counts as
 // staged for disabling, so an addition ticked with it that needs that mod is refused in the preview as Apply refuses it
-// (Apply stages its disables before its downloads).
+// (Apply stages its disables before its downloads). 2V (AC2V.3): one DisableGuard refuses is under "Not changed".
 class PreviewDisablesTest {
 	@TempDir
 	Path dir;
@@ -73,5 +73,45 @@ class PreviewDisablesTest {
 		ApplyPreview preview = preview(add("a", "A"));
 
 		assertEquals(List.of("a-1.0.jar"), preview.downloads().stream().map(ApplyPreview.Download::fileName).toList());
+	}
+
+	// --- docs/v0.5/SPEC.md 2V (ws-g2, AC2V.3): a "Disable X" DisableGuard refuses is under "Not changed" with its reason,
+	// as Apply leaves it out (RealController.apply stages only DisableGuard.allowed's items); the others are renamed.
+
+	@Test
+	void aRefusedDisableIsNotChangedWithDisableGuardsReason() throws Exception {
+		Path other = TestJars.modJar(instance.mods.resolve("other-1.jar"), "other");
+		Recommendation disableOther = new Recommendation("disable:other", Category.REMOVE_MOD, Impact.LOW, "Disable other", "",
+				new Action.DisableMod("other", other), true);
+		io.github.chaotix345.rigtune.core.model.Text needed = io.github.chaotix345.rigtune.core.model.Text.of("rigtune.toast.disable_refused.needed",
+				"The game wouldn't start without it: %s", "a needs lib");
+		List<List<String>> asked = new java.util.ArrayList<>();
+		DownloadInputs inputs = new DownloadInputs(modrinth, true, "fabric", "26.2", installed, Map.of(), Set.of("LIB"), Set.of("lib"), Map.of(),
+				(a, b) -> false, StagedProjects.NONE, true);
+
+		ApplyPreview preview = new PreviewPlanner(instance.options, PreviewFixtures.vanillaNow(), Map.of(), instance.configFiles(), instance.mods, inputs)
+				.withDisableRefusals(files -> {
+					asked.add(files);
+					return Map.of("lib-1.jar", needed);
+				}).preview(List.of(disableLib(), disableOther));
+
+		assertEquals(List.of(List.of("lib-1.jar", "other-1.jar")), asked, "all of the Apply's disables, checked together as Apply checks them");
+		assertEquals(List.of("disable:other"), preview.disables().stream().map(ApplyPreview.Disable::recommendationId).toList());
+		assertEquals(List.of(new ApplyPreview.Skipped("disable:lib", "Disable lib", ApplyPreview.Reason.REFUSED, needed.english(), disableLib().titleText(),
+				needed)), preview.skipped());
+	}
+
+	// A refused disable isn't staged, so it doesn't count as a staged disable for the additions either (L9).
+	@Test
+	void aRefusedDisableDoesNotTurnItsModOffForTheAdditions() {
+		DownloadInputs inputs = new DownloadInputs(modrinth, true, "fabric", "26.2", installed, Map.of(), Set.of("LIB"), Set.of("lib"), Map.of(),
+				(a, b) -> false, StagedProjects.NONE, true);
+
+		ApplyPreview preview = new PreviewPlanner(instance.options, PreviewFixtures.vanillaNow(), Map.of(), instance.configFiles(), instance.mods, inputs)
+				.withDisableRefusals(files -> Map.of("lib-1.jar", io.github.chaotix345.rigtune.core.model.Text.literal("needed")))
+				.preview(List.of(disableLib(), add("a", "A")));
+
+		assertEquals(List.of("a-1.0.jar"), preview.downloads().stream().map(ApplyPreview.Download::fileName).toList());
+		assertEquals(List.of(), preview.disables());
 	}
 }

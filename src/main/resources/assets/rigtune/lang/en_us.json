@@ -420,6 +420,7 @@
 	"rigtune.status.discarded_with_kept": "Discarded %s pending change(s); one change already under way finishes at the next restart.",
 	"rigtune.status.discard_busy": "RigTune's apply helper is busy; try again in a moment.",
 	"rigtune.status.discard_failed": "Could not discard the pending changes; see the log.",
+	"rigtune.status.disables_refused": "%s mod(s) not disabled: another mod needs them, or another change of them is staged.",
 	"rigtune.status.queued_update_dropped": "Cancelled RigTune's pending change to %s: it has an update of its own waiting in mods/update.",
 	"rigtune.status.stale_gone": "RigTune dropped its pending change to %s: its download is gone.",
 	"rigtune.status.stale_installed": "RigTune dropped its pending change to %s: it is already installed (%s).",
