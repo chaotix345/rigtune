@@ -36,6 +36,15 @@ class GameTestSourcesTest {
 	}
 
 	// AC1e.1: UiGameTest's settings checks (waitForSaved) wait for the save on SettingsSaver, not by polling settings.json.
+	// The tick hooks' 0-allocation keys are the sum over every timed block (FootprintBudgets.allocatedBytes), never the
+	// fewest-allocating block (coordinator: the 0-allocation checks stay strict).
+	@Test
+	void footprintTickAllocationIsTheSumOverEveryBlock() throws IOException {
+		String footprint = Files.readString(GAMETEST.resolve("FootprintGameTest.java"), StandardCharsets.UTF_8);
+		assertTrue(footprint.contains("FootprintBudgets.allocatedBytes(blockBytes)"), "timeTick sums the blocks' bytes");
+		assertFalse(Pattern.compile("Math\\.min\\(\\s*bytes").matcher(footprint).find(), "no fewest-allocating block");
+	}
+
 	@Test
 	void uiGameTestWaitsOnSettingsSaverNotAPoll() {
 		String ui = read(GAMETEST.resolve("UiGameTest.java"));

@@ -559,7 +559,8 @@ public class FootprintGameTest implements FabricClientGameTest {
 		};
 	}
 
-	// See TICK_BLOCKS. On the render thread; bytes are the fewest any work block allocated. The three loops are small
+	// See TICK_BLOCKS. On the render thread; bytes are every work block's allocation after the warm-up, summed (strict: an
+	// allocation in any one block fails the 0-allocation keys; the per-block bytes go into the JSON). The three loops are small
 	// methods of their own, warmed up in short calls, so each is compiled as itself (not as an on-stack replacement inside
 	// a bigger method); then the blocks wait until the JIT has finished nothing for TICK_JIT_QUIET_MS (at most
 	// TICK_JIT_QUIET_CAP_MS). The first proof run (36295129832, the classes cut to two, so the timing ran a minute into the
@@ -590,16 +591,16 @@ public class FootprintGameTest implements FabricClientGameTest {
 			double[] twiceNs = new double[TICK_BLOCKS];
 			double[] referenceNs = new double[TICK_BLOCKS];
 			double[] cpuRatio = new double[TICK_BLOCKS];
-			long bytes = Long.MAX_VALUE;
+			long[] blockBytes = new long[TICK_BLOCKS];
 			long jitBefore = jit.getTotalCompilationTime();
 			for (int block = 0; block < TICK_BLOCKS; block++) {
-				long allocated = mx.getCurrentThreadAllocatedBytes();
 				long c0 = mx.getCurrentThreadCpuTime();
+				long allocated = mx.getCurrentThreadAllocatedBytes();
 				long t0 = System.nanoTime();
 				once(mc, work, TICK_BLOCK_CALLS);
 				long t1 = System.nanoTime();
+				blockBytes[block] = mx.getCurrentThreadAllocatedBytes() - allocated;
 				long c1 = mx.getCurrentThreadCpuTime();
-				bytes = Math.min(bytes, mx.getCurrentThreadAllocatedBytes() - allocated);
 				long t2 = System.nanoTime();
 				twice(mc, work, TICK_BLOCK_CALLS);
 				long t3 = System.nanoTime();
@@ -626,14 +627,17 @@ public class FootprintGameTest implements FabricClientGameTest {
 			detail.put("vsReference", round3(median(ratio)));
 			detail.put("twinVsReference", round3(median(twinRatio)));
 			// Thread CPU time instead of wall (a diagnostic: Windows counts thread CPU in 15.6 ms steps, so it is NaN or
-			// meaningless there).
-			detail.put("vsReferenceCpu", round3(median(Arrays.stream(cpuRatio).filter(r -> !Double.isNaN(r)).toArray())));
+			// meaningless there; with no measurable block at all it is null).
+			double[] cpuRatios = Arrays.stream(cpuRatio).filter(r -> !Double.isNaN(r)).toArray();
+			detail.put("vsReferenceCpu", cpuRatios.length == 0 ? null : round3(median(cpuRatios)));
 			detail.put("jitQuietWaitMs", quietWaitMs);
 			detail.put("jitMsDuringBlocks", jit.getTotalCompilationTime() - jitBefore);
 			detail.put("ns", Arrays.stream(onceNs).map(FootprintGameTest::round2).toArray());
 			detail.put("twiceNs", Arrays.stream(twiceNs).map(FootprintGameTest::round2).toArray());
 			detail.put("referenceNs", Arrays.stream(referenceNs).map(FootprintGameTest::round2).toArray());
-			return new TickTiming(round2(median(onceNs)), bytes, round3(median(ratio)), round3(median(twinRatio)), detail);
+			detail.put("allocBytesPerBlock", blockBytes);
+			return new TickTiming(round2(median(onceNs)), FootprintBudgets.allocatedBytes(blockBytes), round3(median(ratio)),
+					round3(median(twinRatio)), detail);
 		} catch (Throwable t) {
 			throw new AssertionError("timing RigTune's tick listeners failed", t);
 		}

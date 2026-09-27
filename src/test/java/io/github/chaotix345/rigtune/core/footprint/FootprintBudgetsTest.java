@@ -84,6 +84,23 @@ class FootprintBudgetsTest {
 		}
 	}
 
+	// v0.5 (coordinator, user's instruction): the 0-allocation keys stay strict. A tick hook that allocates in one of its
+	// 48 timed blocks fails, wherever that block falls; the fewest-allocating block (0 here) would have passed it.
+	@Test
+	void aTickHookAllocatingInOneOf48BlocksFailsItsZeroAllocationBudget() throws IOException {
+		FootprintBudgets budgets = FootprintBudgets.load(RepoFiles.resolve(FootprintBudgets.REPO_PATH));
+		for (String key : List.of("tickHookAllocBytes", "tickHookAllocBytesWorld", "tickHookAllocBytesOn")) {
+			for (int block : new int[] {0, 23, 47}) {
+				long[] perBlock = new long[48];
+				perBlock[block] = 16;
+				List<Violation> violations = budgets.check(Map.of(key, FootprintBudgets.allocatedBytes(perBlock)));
+				assertEquals(1, violations.size(), key + ", block " + block);
+				assertEquals(16, violations.getFirst().value(), key);
+			}
+			assertEquals(List.of(), budgets.check(Map.of(key, FootprintBudgets.allocatedBytes(new long[48]))), key + " with no allocation");
+		}
+	}
+
 	// v0.5 SPEC AC1d.1: the six per-call ns limits are min(ceiling, 4 x the recorded max observed) (user-approved, ws-ci);
 	// every other timing limit stays min(ceiling, 2 x its recorded max) (docs/v0.4/verification/footprint/README.md).
 	@Test
