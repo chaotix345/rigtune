@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.core.stutter;
 import io.github.chaotix345.rigtune.core.report.MarkdownSafe;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -23,7 +24,11 @@ public final class StutterSummary {
 			Map.entry(Attributor.CPU_CONTENTION, "a busy CPU"),
 			Map.entry(Attributor.AFTER_TELEPORT, "the 10 s after a teleport"),
 			Map.entry(Attributor.CHUNKS_LOADING, "chunks loading"),
-			Map.entry(Attributor.MOVING_FAST, "fast movement"));
+			Map.entry(Attributor.MOVING_FAST, "fast movement"),
+			Map.entry(Attributor.SETTINGS_CHANGED, "the 10 s after a settings change or resource reload"));
+	// v0.5 RW-11: the four settings' names, for "Settings changed during this session (render distance 32 → 12)".
+	private static final Map<String, String> SETTING_NAMES = Map.of(StutterReport.RENDER_DISTANCE, "render distance", StutterReport.SIMULATION_DISTANCE,
+			"simulation distance", StutterReport.SHADERS, "shaders", StutterReport.DH_RENDERING, "Distant Horizons rendering");
 
 	private StutterSummary() {
 	}
@@ -42,25 +47,30 @@ public final class StutterSummary {
 			out.append(" · ").append(r.collector());
 		}
 		out.append(", ").append(r.heapMaxMb()).append(" MB heap\n");
-		out.append(String.format(Locale.ROOT, "%s (%s of gameplay) · %,d frames · avg %.0f FPS · 1%% low %.0f FPS%n", clock(r.sessionSeconds()),
-				clock(r.gameplaySeconds()), r.frames(), r.avgFps(), r.onePercentLowFps()));
+		Double window = r.windowSeconds();
+		out.append(String.format(Locale.ROOT, "%s (%s of gameplay) · %,d frames · avg %.0f FPS · 1%% low %.0f FPS%s%n", clock(r.sessionSeconds()),
+				clock(r.gameplaySeconds()), r.frames(), r.avgFps(), r.onePercentLowFps(), window == null ? "" : " (over the last " + clock(window) + ")"));
 		StutterReport.Spikes s = r.spikes();
 		out.append(String.format(Locale.ROOT, "%s (%d minor, %d major, %d severe, %s) in %s · %.1f s lost%n", count(s.total(), "spike", "spikes"), s.minor(),
 				s.major(), s.severe(), count(s.freeze(), "freeze", "freezes"), count(r.hitches(), "hitch", "hitches"), r.lostMs() / 1000));
 		if (!r.enoughData()) {
 			out.append("Not enough data yet (at least 3 spikes and 2 minutes of gameplay)\n");
 		}
+		List<StutterReport.SettingChange> changes = r.settingChanges();
+		if (!changes.isEmpty()) {
+			out.append("Settings changed during this session (").append(String.join(", ", changes.stream().map(StutterSummary::change).toList())).append(")\n");
+		}
 		if (s.total() > 0) {
 			List<String> causes = new ArrayList<>();
-			for (String cause : Attributor.CAUSES) {
-				Double share = r.causes().get(cause);
-				if (share != null && share > 0 && !cause.equals(Attributor.UNKNOWN)) {
-					causes.add(String.format(Locale.ROOT, "%s %.0f %%", name(cause), share * 100));
+			Map<String, Integer> shown = percentages(r.causes());
+			shown.forEach((cause, percent) -> {
+				if (!cause.equals(Attributor.UNKNOWN)) {
+					causes.add(String.format(Locale.ROOT, "%s %d %%", name(cause), percent));
 				}
-			}
-			double unexplained = r.causes().getOrDefault(Attributor.UNKNOWN, causes.isEmpty() ? 1.0 : 0.0);
+			});
+			int unexplained = shown.getOrDefault(Attributor.UNKNOWN, causes.isEmpty() ? 100 : 0);
 			out.append("Likely causes (share of the lost time): ").append(causes.isEmpty() ? "none measured" : String.join(", ", causes))
-					.append(String.format(Locale.ROOT, "; not explained %.0f %%%n", unexplained * 100));
+					.append(String.format(Locale.ROOT, "; not explained %d %%%n", unexplained));
 			for (String tag : Attributor.TAGS) {
 				Integer n = r.tags().get(tag);
 				if (n != null && n > 0) {
@@ -84,8 +94,48 @@ public final class StutterSummary {
 		if (!advice.isEmpty()) {
 			out.append("Advice: ").append(String.join("; ", advice.stream().map(a -> MarkdownSafe.field(a.title())).toList())).append('\n');
 		}
+		if (!changes.isEmpty()) {
+			out.append("The advice uses the settings at the end of the session\n");
+		}
 		String text = out.toString();
 		return text.length() <= LIMIT ? text : text.substring(0, LIMIT - 1) + "…";
+	}
+
+	// v0.5 RW-10 (docs/v0.5/SPEC.md 2S): the causes' shares as the whole percentages shown, in Attributor.CAUSES order. A share
+	// that rounds to 0 isn't shown, and the shown ones never total more than 100 (the shares are rounded to two decimals, so
+	// they can add up to 1.01): the excess comes off the largest.
+	public static Map<String, Integer> percentages(Map<String, Double> causes) {
+		Map<String, Integer> out = new LinkedHashMap<>();
+		int total = 0;
+		for (String cause : Attributor.CAUSES) {
+			Double share = causes.get(cause);
+			// A hand-edited file can hold any number: at most 100 each, so the trimming below stays short.
+			int percent = share == null ? 0 : (int) Math.round(Math.max(0, Math.min(1, share)) * 100);
+			if (percent > 0) {
+				out.put(cause, percent);
+				total += percent;
+			}
+		}
+		for (; total > 100; total--) {
+			String largest = null;
+			for (Map.Entry<String, Integer> e : out.entrySet()) {
+				if (largest == null || e.getValue() > out.get(largest)) {
+					largest = e.getKey();
+				}
+			}
+			out.merge(largest, -1, Integer::sum);
+		}
+		return out;
+	}
+
+	// "render distance 32 → 12", "shaders on → off".
+	static String change(StutterReport.SettingChange c) {
+		return SETTING_NAMES.getOrDefault(c.key(), c.key()) + " " + onOff(c.from()) + " → " + onOff(c.to());
+	}
+
+	private static String onOff(String value) {
+		Boolean on = StutterReport.onOff(value);
+		return on == null ? value : on ? "on" : "off";
 	}
 
 	// "1 spike", "2 spikes".

@@ -1,13 +1,22 @@
 package io.github.chaotix345.rigtune.core.stutter;
 
+import org.jspecify.annotations.Nullable;
+
 // The capture rings that aren't per frame, shared by the session monitor and the benchmark's capture while either is on
 // (docs/research/v0.4/stutter.md §2.5): events (server thread saves, render thread level changes/teleports/movement/
 // pauses), GC notifications (Notification Thread, with the GcClock) and the 4 Hz thread-CPU samples. Each record is a
 // few longs; every write goes through the ring's lock and allocates nothing.
+// v0.5 SD-1 (docs/v0.5/SPEC.md 2S): long sessions outlast the GC ring (~35 min of young pauses) and the sample ring
+// (~17 min), so the whole capture's full, explicit and stall collections are also counted as they arrive, and the live-set
+// samples (major collections, rare) keep their own small ring the young pauses can't push out; the snapshot carries these
+// with how many records each ring ever took, so the analysis knows what the rings still cover.
 public final class StutterRings {
 	public static final int EVENT_CAPACITY = 4096;
 	public static final int GC_CAPACITY = 2048;
 	public static final int SAMPLE_CAPACITY = 4096;
+	public static final int LIVE_CAPACITY = 256;
+	// Live-set samples: received nanos, bytes, GC flags.
+	public static final int LIVE_STRIDE = 3;
 
 	// Event records: kind, nanoTime, value.
 	public static final int EVENT_STRIDE = 3;
@@ -19,6 +28,11 @@ public final class StutterRings {
 	public static final int FAST_END = 6;
 	public static final int PAUSE_BEGIN = 7;
 	public static final int PAUSE_END = 8;
+	// v0.5 RW-11: a setting changed or resources reloaded while a session ran; value: the SettingsWatch bits of what changed.
+	public static final int SETTINGS_CHANGED = 9;
+	// A SETTINGS_CHANGED value's bits from here up: the ms between the event's time (the old value last seen) and the check
+	// that saw the change.
+	public static final int SETTINGS_LEAD_SHIFT = 16;
 
 	// GC records.
 	public static final int GC_STRIDE = 5;
@@ -57,6 +71,10 @@ public final class StutterRings {
 	private final RecordRing samples = new RecordRing(SAMPLE_CAPACITY, SAMPLE_STRIDE);
 	private final GcClock clock;
 	private final long[] gcRecord = new long[GC_STRIDE];
+	private final RecordRing live = new RecordRing(LIVE_CAPACITY, LIVE_STRIDE);
+	private int fullGcs;
+	private int explicitGcs;
+	private int stalls;
 
 	public StutterRings(long nanosAtUptimeZero) {
 		this.clock = new GcClock(nanosAtUptimeZero);
@@ -74,6 +92,21 @@ public final class StutterRings {
 		gcRecord[G_FLAGS] = flags;
 		gcRecord[G_USED_AFTER] = usedAfterBytes;
 		gc.add(gcRecord);
+		// The same rules as the analysis's count over the held records (one collection each, phases not counted).
+		if (GcKind.collection(flags)) {
+			if ((flags & GcKind.FULL) != 0 && (flags & GcKind.EXPLICIT) == 0) {
+				fullGcs++;
+			}
+			if ((flags & GcKind.STALL_HINT) != 0) {
+				stalls++;
+			}
+			if ((flags & GcKind.EXPLICIT) != 0) {
+				explicitGcs++;
+			}
+		}
+		if ((flags & GcKind.MAJOR) != 0 && usedAfterBytes > 0) {
+			live.add(receivedNanos, usedAfterBytes, flags);
+		}
 	}
 
 	public void sample(long[] record) {
@@ -81,18 +114,31 @@ public final class StutterRings {
 	}
 
 	public long retainedBytes() {
-		return events.retainedBytes() + gc.retainedBytes() + samples.retainedBytes();
+		return events.retainedBytes() + gc.retainedBytes() + samples.retainedBytes() + live.retainedBytes();
 	}
 
 	public synchronized Snapshot snapshot() {
-		return new Snapshot(events.snapshot(), gc.snapshot(), samples.snapshot(), clock.calibration());
+		// The sampler writes under the samples ring's own lock, so its records and count are read in one call.
+		RecordRing.Held held = samples.held();
+		return new Snapshot(events.snapshot(), gc.snapshot(), held.records(), clock.calibration(),
+				new Totals(gc.added(), held.added(), fullGcs, explicitGcs, stalls, live.snapshot()));
 	}
 
 	public synchronized GcClock.Calibration calibration() {
 		return clock.calibration();
 	}
 
-	public record Snapshot(long[] events, long[] gc, long[] samples, GcClock.Calibration clock) {
+	// totals: null in a snapshot built by hand (the analysis then goes by the held records alone).
+	public record Snapshot(long[] events, long[] gc, long[] samples, GcClock.Calibration clock, @Nullable Totals totals) {
 		public static final Snapshot EMPTY = new Snapshot(new long[0], new long[0], new long[0], new GcClock.Calibration(0, Double.NaN));
+
+		public Snapshot(long[] events, long[] gc, long[] samples, GcClock.Calibration clock) {
+			this(events, gc, samples, clock, null);
+		}
+	}
+
+	// The whole capture's GC counts, how many GC and sample records the rings ever took (more than they hold: they wrapped),
+	// and the live-set samples (LIVE_STRIDE longs each, oldest first).
+	public record Totals(long gcAdded, long samplesAdded, int fullGcs, int explicitGcs, int stalls, long[] liveSamples) {
 	}
 }
