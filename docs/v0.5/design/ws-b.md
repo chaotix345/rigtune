@@ -66,8 +66,10 @@ RW-7/RW-9/RW-6's line, 511c896b L3, 52c866be RW-6 detection, 58986e31 the unmeas
 - **RW-5** (`RenderDistancePlanner`): `lowestFail` counts complete steps only; the search bounds itself by the lowest
   incomplete distance above the best pass (and below the lowest complete fail) while it measures below it; once the
   search is done (converged or at `maxRdSteps`) that distance is measured again **once** (`remeasured`), outside the
-  step limit (a re-record replaces the measurement, so `measurements.size()` doesn't grow). `BenchmarkSession`'s existing
-  deadline check decides whether it still fits (`rw5NoRemeasurePastTheDeadline`). The reason: "31 meets the target; 32
+  step limit (a re-record replaces the measurement, so `measurements.size()` doesn't grow). `BenchmarkSession`'s
+  deadline check decides whether it still fits, keeping a full repeat's time after it (`rw5NoRemeasurePastTheDeadline`,
+  `rw5ARemeasureNeverCostsTheRepeat`). A distance that couldn't be measured is never suggested (with none settled, the
+  start; the Use button is then off). The reason: "31 meets the target; 32
   couldn't be measured (its terrain hadn't loaded)". The result screen: `?` in the table (warning colour) and "? Render
   distance 32 couldn't be measured: its terrain hadn't loaded in time." (`ResultNotes.unmeasured`); no ✘ for it.
 - **RW-15**: `client/benchmark/StutterSteps` decides per step: settled → `benchmarkSweep(true/false)`; timed out
@@ -130,9 +132,34 @@ RW-7/RW-9/RW-6's line, 511c896b L3, 52c866be RW-6 detection, 58986e31 the unmeas
    again"; SPEC RW-15 is the rule). Told to the coordinator for WS-S.
 5. ChangeWindowTest's `latest()` fixture and BenchmarkHistoryGameTest's seed now load a different mod set after their
    mod update: under BH-2's fallback a 0.4-shaped run with the same hash no longer lists the update, as intended.
-6. `V05TestContext.SCROLLING` (854×480 at GUI scale 3) can't be reached: Minecraft caps the scale at 2 for 854×480, so
-   `a11y-bench-result-scrolled-854x480-scale3` is taken at scale 2 (5 rows fit at every X12 size; scrolling is the
-   list's own vanilla behaviour).
+6. `V05TestContext.SCROLLING` (854×480 at GUI scale 3) can't be reached: Minecraft caps the scale at 2 for 854×480. The
+   walk forces a real scroll instead: 12 distances at 640×480@2 (`maxScrollAmount() > 0`, Tab to the last row scrolls it
+   into view; screenshot `a11y-bench-result-scrolled-640x480-scale2`).
+7. **Keyboard initial focus stays on the first button** (Use, or Done) as in 0.4, not the first status line: the
+   result screen overrides `setInitialFocus` (the focused table row and the scroll come back after a rebuild, the
+   JvmScreen pattern).
+8. **A Measure pair whose "before" is left out of the trend** (a fresh-world or DH-generating run) still shows "Compared
+   with before": SPEC question sent to the coordinator with the self-review (proposed: keep the numbers, add one caveat
+   line); open until decided.
+
+## Self-review (code-reviewer subagents; reports in the WS-B scratch dir, review-part1.md and review-part2.md)
+Part 1 (a7613410..829809dd): 0 high, 4 medium, 7 low, 2 nits. Part 2 (829809dd..58986e31): 0 high, 4 medium, 7 low.
+Sent to the coordinator with proposed dispositions; fixed in 03c46c37 (red tests first: `rw5NothingMeasuredSuggestsTheStart`,
+`rw5NoMeasuredDistanceMeetsTheTarget`, `rw5TheClimbAfterAPassingRemeasureStartsSmall`, the "In progress" half of
+`rw5WithNoTimeLeftItCouldntBeMeasured`, `BenchmarkSessionTest.rw5ARemeasureNeverCostsTheRepeat`,
+`BenchmarkConditionsTest.bh2AnUnreadableHistoryLeavesTheFieldOut`, `ChangeWindowTest.bh2AChangeStagedAtBothStartsIsNotListedForTheLater`,
+`.bh2EqualHashesDropACarriedModRowToo`, `ResultNotesTest.rw7TruthTable`'s dhGenerating cases):
+- part 1 M1 (a distance that couldn't be measured suggested / "Use best tested" for it), M2 (the second try could cost
+  the repeats), M3 (an unreadable history.json recorded as "nothing staged"), L5-L7 (reason wording, "In progress", the
+  climb after a passing second try), L8 (left-out line without a capture), L9-L10 (BenchmarkGameTest robustness): fixed.
+- part 1 M4: the SPEC question above (Deviations 8). L11 (the note counts excluded runs): left; the trend's "earlier"
+  count and the "Left out of the trend" line explain it. N12 (StutterHooks' seam comment) is WS-S's file: passed on.
+  N13 (a fixture Tune with targetMet false and a best-effort 16): realistic, left.
+- part 2 M1-M2 (carried-in rows escaped the latest's staged / equal-hash exclusion), M3 (focus and scroll lost on a
+  rebuild), M4 (the scroll check never scrolled), L6 (a cut trend line without its tooltip), L7 (a DH-generating run's
+  noisy line blamed background apps), L8 (doc: `false` includes "no world-gen thread seen"), L10 (keyboard initial
+  focus), nit (comment wrap): fixed. L5 (the walk's screen shows the real last capture's Stutter Doctor line): left, the
+  checks don't depend on it. L9 (the RW-6 line and "Left out of the trend" both show): left, SPEC asks for both.
 
 ## Residuals / UNVERIFIED
 - **UNVERIFIED**: `DhGeneration.MIN_CORES = 0.5` is a starting value. AC2B.5's real run (rolling Phase 5: dev PC, DH
