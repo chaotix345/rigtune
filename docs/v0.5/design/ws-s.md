@@ -114,7 +114,8 @@ API difference: none expected); the full build and the game tests are CI's.
 - **S8 RW-10.** `StutterSummary.percentages(causes)`: rounded whole percentages, none at 0, the excess over 100 taken off
   the largest; used by the screen's cause rows (`StutterScreen.causeRows` for the tests), Copy summary and the benchmark
   line.
-- **S9 RW-11.** `StutterRings.SETTINGS_CHANGED` (9, value = what changed); `Attributor.SETTINGS_CHANGED`
+- **S9 RW-11.** `StutterRings.SETTINGS_CHANGED` (9, value = what changed, and from bit `SETTINGS_LEAD_SHIFT` (16) up the ms
+  between the event's time and the check that saw the change); `Attributor.SETTINGS_CHANGED`
   (`"settingsChanged"`, in `REPORT_TAGS`, not in `TAGS`), `Context.settingsChanged` (a spike ending in (t, t + 10 s]);
   `StutterReport.RENDER_DISTANCE`/`SIMULATION_DISTANCE`/`SHADERS`/`DH_RENDERING`, `settingChanges()`, `onOff()`;
   `client/stutter/SettingsWatch` (the listener, `State` for the tests, `values()` for the maps, `cost()` for the game
@@ -149,7 +150,9 @@ API difference: none expected); the full build and the game tests are CI's.
 - RW-11: the map keys are `renderDistance`, `simulationDistance`, `shaders`, `dhRendering` (the benchmark's knob names),
   not settings keys; a resource reload is vanilla's loading overlay appearing or going away (`minecraft.gui.overlay()`,
   javap'd on 26.2 and 26.3), so no mixin and no reload listener; a change is dated when the old value was last seen
-  (the tick before, or the last Iris/DH read up to 1 s before), so a pipeline rebuild's own spike falls in the window.
+  (the tick before, or the last Iris/DH read up to 1 s before), so a pipeline rebuild's own spike falls in the window,
+  and the window ends 10 s after the change was seen (the lead rides in the event's value); a reload that lasts repeats
+  its event every 5 s while the loading overlay is up, so its window stays open.
 - RW-11's listener cost is measured in StutterGameTest (logged, 0 bytes asserted), not under FootprintGameTest keys
   (ws-ci/WS-K's file; asked the coordinator).
 - TDD: the tasks that added an API (S1, S9, S10, S11) went red by not compiling; SD-2's assertion red is the audit's run
@@ -168,6 +171,17 @@ API difference: none expected); the full build and the game tests are CI's.
   StutterStore check; a StutterSummary check kind needs WS-E's interpreter (asked the coordinator).
 - RW-11 with Iris or Distant Horizons loaded (the shaders and DH bits): unit-tested only; CI loads neither.
 - AC2B.9 closes with WS-B's BenchmarkController call.
+
+**Self-review** (two code-reviewer passes on a7613410..d4dc6662; reports in the scratch dir, sent to the coordinator
+with the dispositions): 0 high, 3 medium, ~10 low. Fixed in c7781b4f: (M) the DH world-gen service test couldn't fail on
+the pause wiring (now exact: 1.5 cores from two sweeps, the gap's 6 left out); (M) a throwing settings check re-armed and
+logged every tick (now off for that session, one warning); (L) a hand-edited huge share looped the trimming ~1e9 times
+(clamped to [0, 1]); bars drawn at the shown percentage; a long reload's window; the window's end after a late-seen
+change; the live view's advice note ("the current settings"); L1's guard in Clear; one walk over the world-gen pauses.
+Fixed before the review's report: the samples ring's wrap by capacity (d4dc6662). Waiting for the coordinator: (M)
+RW-11's cost under FootprintGameTest keys (recorded above as a deviation); (L) OptionalMods (frozen) logs a WARN with a
+stack on every failing Iris/DH call, which SettingsWatch makes once a second (a broken Iris/DH API would flood the log);
+(L) a compat040 StutterSummary check kind (WS-E).
 
 ## 5. Docs (for the docs workstream)
 
