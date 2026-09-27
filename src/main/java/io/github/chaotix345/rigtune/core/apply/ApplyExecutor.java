@@ -6,6 +6,7 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.UnfinishedGroups.Rename;
 import io.github.chaotix345.rigtune.core.history.HistoryUpdates;
 import io.github.chaotix345.rigtune.core.history.Journal;
+import io.github.chaotix345.rigtune.core.history.PartlyApplied;
 
 import java.io.IOException;
 import java.nio.file.DirectoryNotEmptyException;
@@ -172,12 +173,23 @@ public final class ApplyExecutor {
 	// The last-apply.json this run replaces is read first: its done ops prove the renames of a run that died after writing
 	// it and before rewriting pending.json (docs/v0.5/SPEC.md 4f, RW-1).
 	public ApplyResult run(PendingActions plan, Path pendingFile) throws IOException {
+		return run(plan, pendingFile, false);
+	}
+
+	// holdFileOps (docs/v0.5/SPEC.md 4d; the 0.5 helper's -Drigtune.helper.holdFileOps, HelperLauncher): the held groups
+	// (held(...)) don't run. They stay in pending.json as they are, attempts unchanged, and aren't in the result, so
+	// last-apply.json never names them (no new status). A run that ran nothing writes nothing.
+	public ApplyResult run(PendingActions plan, Path pendingFile, boolean holdFileOps) throws IOException {
 		Path configDir = InstanceDirs.configDirOf(pendingFile);
 		Path modsDir = InstanceDirs.modsDirOf(pendingFile);
 		UnfinishedGroups unfinished = UnfinishedGroups.load(configDir, recordWriter);
 		Map<String, OpResult> doneBefore = doneBefore(ApplyResult.defaultPath(configDir));
-		ApplyResult result = new ApplyResult(Instant.now().toString(),
-				giveUpOnRepeatFailures(execute(plan, modsDir, configDir, unfinished, doneBefore)));
+		Set<Integer> held = holdFileOps ? heldIndexes(plan.ops(), modsDir, unfinished.all(), doneBefore) : Set.of();
+		List<OpResult> ran = execute(plan, modsDir, configDir, unfinished, doneBefore, held).stream().filter(Objects::nonNull).toList();
+		if (ran.isEmpty() && !held.isEmpty()) {
+			return new ApplyResult(Instant.now().toString(), List.of());
+		}
+		ApplyResult result = new ApplyResult(Instant.now().toString(), giveUpOnRepeatFailures(ran));
 		writeRemaining(plan, pendingFile, result, modsDir, EnumSet.of(Status.ABANDONED), true);
 		result.save(ApplyResult.defaultPath(configDir));
 		unfinished.prune(plan.ops().stream().filter(Objects::nonNull).map(Op::id).filter(Objects::nonNull).toList());
@@ -308,20 +320,89 @@ public final class ApplyExecutor {
 	}
 
 	List<OpResult> execute(PendingActions plan, Path modsDir, Path configDir, UnfinishedGroups unfinished, Map<String, OpResult> doneBefore) {
+		return execute(plan, modsDir, configDir, unfinished, doneBefore, Set.of());
+	}
+
+	// held: the indexes of ops that don't run (their result stays null).
+	List<OpResult> execute(PendingActions plan, Path modsDir, Path configDir, UnfinishedGroups unfinished, Map<String, OpResult> doneBefore,
+			Set<Integer> held) {
 		List<Op> ops = plan.ops();
+		OpResult[] out = new OpResult[ops.size()];
+		InstalledJars installed = new InstalledJars(modsDir, this::jarModId);
+		for (List<Integer> members : groups(ops).values()) {
+			if (held.containsAll(members)) {
+				continue;
+			}
+			runGroup(ops, members, modsDir, configDir, installed, unfinished, doneBefore, out);
+			members.forEach(i -> installed.forget(ops.get(i)));
+		}
+		return Arrays.asList(out);
+	}
+
+	// The plan's groups in order: each group's op indexes; an op without a group is one alone.
+	private static Map<String, List<Integer>> groups(List<Op> ops) {
 		Map<String, List<Integer>> groups = new LinkedHashMap<>();
 		for (int i = 0; i < ops.size(); i++) {
 			Op op = ops.get(i);
 			String key = op != null && op.group() != null ? "group:" + op.group() : "op:" + i;
 			groups.computeIfAbsent(key, k -> new ArrayList<>()).add(i);
 		}
-		OpResult[] out = new OpResult[ops.size()];
-		InstalledJars installed = new InstalledJars(modsDir, this::jarModId);
-		for (List<Integer> members : groups.values()) {
-			runGroup(ops, members, modsDir, configDir, installed, unfinished, doneBefore, out);
-			members.forEach(i -> installed.forget(ops.get(i)));
+		return groups;
+	}
+
+	private static boolean isFileOp(Op op) {
+		return op != null && (op.type() == PendingActions.Type.ENABLE_FILE || op.type() == PendingActions.Type.DISABLE_FILE);
+	}
+
+	// docs/v0.5/SPEC.md 4d: the ops of every group with a mod-file op, the ones an advice instance's helper can hold.
+	public static List<Op> fileGroupOps(List<Op> ops) {
+		List<Integer> indexes = new ArrayList<>();
+		for (List<Integer> members : groups(ops).values()) {
+			if (members.stream().anyMatch(i -> isFileOp(ops.get(i)))) {
+				indexes.addAll(members);
+			}
 		}
-		return Arrays.asList(out);
+		indexes.sort(Comparator.naturalOrder());
+		return indexes.stream().map(ops::get).toList();
+	}
+
+	// docs/v0.5/SPEC.md 4d: what the helper holds with holdFileOps, in plan order, from RigTune's own records next to
+	// pendingFile (unfinished-groups.json, last-apply.json) and its mods folder, as the helper will see them. The notice and
+	// the start-up counts use this, so they name what the helper leaves.
+	public static List<Op> held(PendingActions plan, Path pendingFile) {
+		Path configDir = InstanceDirs.configDirOf(pendingFile);
+		List<Integer> indexes = new ArrayList<>(heldIndexes(plan.ops(), InstanceDirs.modsDirOf(pendingFile), UnfinishedGroups.recorded(configDir),
+				doneBefore(ApplyResult.defaultPath(configDir))));
+		indexes.sort(Comparator.naturalOrder());
+		return indexes.stream().map(plan.ops()::get).toList();
+	}
+
+	// Every op of a group with a mod-file op, except a group RigTune's own records show half done or done already (a
+	// recorded rename in effect, a failed rollback PartlyApplied finds, an op the last run did): holding one would leave a
+	// mod missing (its old jar disabled, its replacement never enabled) until the player chose, and Discard can't drop it
+	// either, so it is finished (or rolled back) as in 0.4.
+	private static Set<Integer> heldIndexes(List<Op> ops, Path modsDir, List<Rename> recorded, Map<String, OpResult> doneBefore) {
+		Set<String> files = new HashSet<>();
+		try (Stream<Path> listing = Files.list(modsDir)) {
+			listing.forEach(f -> files.add(f.getFileName().toString()));
+		} catch (IOException | RuntimeException e) {
+			// Nothing is known to be half done: every file group is held.
+		}
+		Set<String> partly = PartlyApplied.groups(ops, files, recorded);
+		Set<Integer> out = new HashSet<>();
+		for (List<Integer> members : groups(ops).values()) {
+			if (members.stream().noneMatch(i -> isFileOp(ops.get(i)))) {
+				continue;
+			}
+			Op first = ops.get(members.getFirst());
+			boolean started = first != null && first.group() != null && partly.contains(first.group())
+					|| !earlierRenames(ops, members, modsDir, recorded).isEmpty()
+					|| members.stream().anyMatch(i -> isFileOp(ops.get(i)) && doneByLastRun(ops.get(i), doneBefore) != null);
+			if (!started) {
+				out.addAll(members);
+			}
+		}
+		return out;
 	}
 
 	// The mod ids of the jars in the mods folder, each read once; forget() drops the names a group may have renamed.
@@ -428,7 +509,8 @@ public final class ApplyExecutor {
 				}
 				case PATCH_JSON, PATCH_TOML, PATCH_PROPERTIES -> null;
 			};
-		} catch (InvalidPathException e) {
+		} catch (RuntimeException e) {
+			// A missing or invalid path proves nothing.
 			return null;
 		}
 	}
