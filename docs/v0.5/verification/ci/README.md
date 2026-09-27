@@ -37,6 +37,16 @@ entrypoints, twice in a row under `C:/Dev/Worktrees/.gametest-lock` (2026-09-27 
 files were found". Both runs leave a pending apply, so RigTune's apply helper ran after each.
 Local check (a third subset run, 16:01 AEST, after the review fix): the helper applied its plan at 16:01:02.50 and `awaitApplyHelper` logged "waited 1758 ms; pending.json applied" before the build ended.
 
+## AC1a.3: loopback multicast in the namespace
+
+Every leg runs `tools/ci/offline.sh java tools/ci/MulticastCheck.java` ("Check loopback multicast") before the game tests:
+one datagram to 224.0.2.60:4445, received on a `MulticastSocket(4445)` joined to the group.
+PROOF_MC
+
+## AC1g.4: the dormant split, proven once
+
+PROOF_SPLIT
+
 ## AC1c: caches and pins
 
 - AC1c.2: `./gradlew buildEnvironment` resolves `net.fabricmc.fabric-loom.gradle.plugin:1.17.21 -> net.fabricmc:fabric-loom:1.17.21`.

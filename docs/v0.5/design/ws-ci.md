@@ -1,23 +1,29 @@
 # WS-CI: rock-solid CI (v0.5 P0.1, SPEC 1) as landed
 
-Branch `feat/v05-ci` (from `feat/v0.5.0` @ ab2c1947). Research and evidence: docs/research/v0.5/ci-robustness.md (every
-`build.yml` failure since v0.1 classified: 1 in 6 runs since the full v0.4 suite failed for a reason other than the code,
-9 outages and 5 flakes). Decisions: the r-ci row of docs/PROGRESS.md; SPEC 1 (AC1a.1-AC1g.3). Proof runs and their
-evidence: docs/v0.5/verification/ci/README.md and docs/v0.5/verification/footprint/README.md.
+Branch `feat/v05-ci` (from `feat/v0.5.0` @ ab2c1947; `feat/v0.5.0` merged in again at b208c795, with the SPEC/PLAN
+amendments of 054cc882). Research and evidence: docs/research/v0.5/ci-robustness.md (every `build.yml` failure since
+v0.1 classified: 1 in 6 runs since the full v0.4 suite failed for a reason other than the code, 9 outages and 5 flakes).
+Decisions: the r-ci row of docs/PROGRESS.md; SPEC 1 (AC1a.1-AC1g.4) with the plan-review amendments for ws-ci (SPEC-3/
+PLAN-2 loopback multicast, PLAN-3 the dormant split, SPEC-4 E2E offline, SPEC-29 SIGQUIT to KnotClient, PLAN-21 the
+streak's job set, PLAN-23 AC1c.3's scope). Proof runs and their evidence: docs/v0.5/verification/ci/README.md and
+docs/v0.5/verification/footprint/README.md.
 
 ## What landed
 
 | SPEC | Change | Files | Tests / proof |
 |---|---|---|---|
-| 1a | One "Resolve dependencies (network)" step per building job (`prefetchDependencies`: each node resolves every resolvable configuration; plus the leg's `downloadAssets`, fake-Modrinth catalog and jars; plus the released E2E jars in the java job), retried by `tools/ci/retry.sh` (3 tries, 30 s / 90 s). Every later Gradle step runs `--offline`. Unit, Python and client game tests run with no network but loopback: `tools/ci/offline.sh` (`sudo --preserve-env env PATH HOME unshare --net`, `ip link set lo up`, back to the runner's uid/gid with `setpriv`, the environment kept). `prefetchDependencies` fails when any configuration doesn't resolve, so the retry covers it. Tests are never retried. | `.github/workflows/build.yml`, `build.gradle`, `tools/ci/offline.sh`, `tools/ci/retry.sh` | `tools/tests/test_ci_workflow.py` (AC1a.1); proof (a) (AC1a.2) |
+| 1a | One "Resolve dependencies (network)" step per building job (`prefetchDependencies`: each node resolves every resolvable configuration; plus the leg's `downloadAssets`, fake-Modrinth catalog and jars; plus the released E2E jars in the java job), retried by `tools/ci/retry.sh` (3 tries, 30 s / 90 s). Every later Gradle step runs `--offline`. Unit, Python and client game tests run with no network but loopback: `tools/ci/offline.sh` (`sudo --preserve-env env PATH HOME unshare --net`, `ip link set lo up`, back to the runner's uid/gid with `setpriv`, the environment kept). In the namespace loopback also carries multicast (`ip link set lo multicast on`, `ip route add 224.0.0.0/4 dev lo`: nothing off the machine), so vanilla's LAN discovery works; every leg checks it first with `tools/ci/MulticastCheck.java` (one datagram to 224.0.2.60:4445, received on a `MulticastSocket(4445)` joined to the group, as vanilla's pinger and detector do). `prefetchDependencies` fails when any configuration doesn't resolve, so the retry covers it. Tests are never retried. | `.github/workflows/build.yml`, `build.gradle`, `tools/ci/offline.sh`, `tools/ci/retry.sh`, `tools/ci/MulticastCheck.java` | `tools/tests/test_ci_workflow.py` (AC1a.1; e2e.yml's rule waits for WS-E's file); proof (a) (AC1a.2); every leg's "Check loopback multicast" (AC1a.3) |
 | 1b | `ModrinthFixture`, a BuildService next to `RulesFixtureServer`, runs the E2E's `FakeModrinth.java` as a single-file program on 127.0.0.1 with a free port (it serves until its stdin closes, in `close()`). `gametestModrinthCatalog` writes the node's catalog: the `productionGameTestMods` jars (fabric-api, Mod Menu, Sodium; real hashes) and one fixture version per other rules mod (ids from a hash of slug and node, a fixed date), requiring fabric-api unless `tools/gametest/modrinth-candidates.json` lists relations (Entity Culling incompatible with Sodium; Sodium Extra requiring Sodium). `runProductionClientGameTest` and the dev `runClientGameTest` get `-Drigtune.modrinth.baseUrl`. `FakeModrinth` answers `GET /v2/versions?ids=`. The request log is uploaded; `tools/ci/check_fake_modrinth.py` fails a leg without the four start-up lookups answered 200, with any answer other than 2xx or a 404 to a lookup of one project or file hash (the fake answers 400 when its own routing throws), or with a "Modrinth lookups failed; using offline data" line outside a Modrinth-off test. A fake that didn't start fails every run task of the build (never a missing URL, which would mean live Modrinth). PreviewGameTest's real preview waits 1200 ticks (was 6000). | `build.gradle`, `tools/e2e/java/…/FakeModrinth.java`, `tools/gametest/modrinth-candidates.json`, `tools/ci/check_fake_modrinth.py`, `PreviewGameTest` | `FakeModrinthTest.versionsByIdReturnsKnownVersionsOnly` (AC1b.1, red first); `test_ci_workflow.CheckFakeModrinthTests`; every leg (AC1b.2, AC1b.3) |
-| 1c | `setup-gradle` in the java job; `main` and `feat/v0.5.0` write the Gradle cache, other refs read it. `loom_version=1.17.21`; `org.gradle.internal.repository.max.tentatives=6`, `initial.backoff=1000`. `actions/cache` for the three released jars (key = their sha256s) and the lavapipe `.deb`s (key = `$ImageOS-$ImageVersion`, `dpkg -i` on a hit). Every job in every workflow on `ubuntu-24.04`; `setup-java` `25.0.3` everywhere; each leg prints image, Mesa and CPU; the footprint JSON records `cpu`. | `build.yml`, `release.yml`, `snapshot-canary.yml`, `update-rules.yml`, `gradle.properties` | `test_ci_workflow.AllWorkflowsTests` (AC1c.3); AC1c.2 below |
+| 1c | `setup-gradle` in the java job; `main` and `feat/v0.5.0` write the Gradle cache, other refs read it. `loom_version=1.17.21`; `org.gradle.internal.repository.max.tentatives=6`, `initial.backoff=1000`. `actions/cache` for the three released jars (key = their sha256s) and the lavapipe `.deb`s (key = `$ImageOS-$ImageVersion`, `dpkg -i` on a hit). Every job of build.yml and release.yml on `ubuntu-24.04` with `setup-java` `25.0.3` (snapshot-canary.yml and update-rules.yml are frozen and left as they were, PLAN-23); each leg prints image, Mesa and CPU; the footprint JSON records `cpu`. | `build.yml`, `release.yml`, `gradle.properties` | `test_ci_workflow.StreakWorkflowsTests` (AC1c.3: build.yml, release.yml, e2e.yml once it exists); AC1c.2 below |
 | 1d | Footprint budgets and the ratio gates (next section). | `tools/footprint-budgets.json`, `FootprintGameTest`, `FrameHookBudgetTest`, `FootprintBudgetsTest` | `FootprintBudgetsTest.timingLimitsFollowTheirRecordedRule` (AC1d.1), `theRatioGatesSitBetweenTheirCalibratedOneAndTwoTimes`; proof (b) (AC1d.3) |
-| 1e | `GameTestNet.set(context, controller[, configDir], on)`: save the switch, `settingsChanged()`, wait for the report built after it with `online() == (on && modrinthAllowed)`; used by A11y, Awareness, BenchmarkHistory, Jvm, Profiles, ServerLimits, Stutter and UiGameTest's restore. BenchmarkHistoryGameTest checks and logs, before each of its 8 screenshots, that the offline report is on screen and the Apply label. UiGameTest's `waitForSaved` flushes `SettingsSaver` (10 s) and reads `settings.json` once. The game-test step times out at 15 min (job 25); at 13 min a watcher sends SIGQUIT to the game's JVM only (`/proc/<pid>/comm` = `java`, not the `xvfb-run` wrapper). `awaitApplyHelper`, a finalizer of `runProductionClientGameTest` (so after a failed run too): while `config/rigtune/pending.json` exists, up to 60 s, it waits until RigTune's apply helper has deleted it or, after 10 s (the helper's 2 s settle plus its JVM start), `apply.lock` is free. ThreadSamplerTest: `stop()` bound 500 ms plus "returned while the worker was still stuck". | `GameTestNet.java` + 8 game-test classes, `build.yml`, `build.gradle`, `SettingsSaverTest`, `ThreadSamplerTest` | `GameTestSourcesTest` (AC1e.1, AC1e.2 unit part), `SettingsSaverTest.aSaveIsNotBlockedByBusyWorkerAndNetworkPools` (AC1e.1); hang proof (AC1e.3); local subset run (AC1e.4) |
-| 1f | Root cause below. Both Modrinth HttpClients speak HTTP/1.1. A lookup that fails without an HTTP response (not a status error, a timeout or an interrupt) drops the HttpClient and is sent once more on a fresh one, with the same stall and deadline limits (downloads are never retried). The lookup warnings print the cause chain (`LogSafe.error`). `-Drigtune.modrinth.baseUrl` counts only as https, or http on a loopback host (`localhost`, `127.x.x.x`, `[::1]`); anything else is ignored with one WARN naming the property, an accepted override is logged once. | `HttpModrinthClient`, `OnlineDataFetcher` | `HttpModrinthClientTest`: `aLookupThatFailsOnceIsRetriedOnAFreshClient`, `twoFailuresInARowFallBackToOfflineDataWithOneWarning` (AC1f.1), `theClientsSpeakHttp11`, `aTransportFailureStartsAFreshClientButAnHttpErrorDoesNot` (red without the fix), `baseUrlPropertyTakesOnlyHttpsOrHttpOnThisMachine` (AC1f.2) |
-| 1g | `tools/ci_streak.py`: lists `build.yml` runs on a branch (optionally one SHA), oldest first; a run counts when push or dispatch, attempt 1, every job green, none skipped, the required jobs and ≥ 3 legs present; a cancelled run or another event neither counts nor breaks; any other completed run breaks. Writes `docs/v0.5/verification/ci-streak.md`. | `tools/ci_streak.py` | `tools/tests/test_ci_streak.py` (AC1g.1) |
+| 1e | `GameTestNet.set(context, controller[, configDir], on)`: save the switch, `settingsChanged()`, wait for the report built after it with `online() == (on && modrinthAllowed)`; used by A11y, Awareness, BenchmarkHistory, Jvm, Profiles, ServerLimits, Stutter and UiGameTest's restore. BenchmarkHistoryGameTest checks and logs, before each of its 8 screenshots, that the offline report is on screen and the Apply label. UiGameTest's `waitForSaved` flushes `SettingsSaver` (10 s) and reads `settings.json` once. The game-test step times out at 15 min (job 25); at 13 min a watcher sends SIGQUIT to the game's JVM only: the process whose command line contains `KnotClient` and whose `/proc/<pid>/comm` is `java` (not Gradle's or the fake Modrinth's JVM, not the `xvfb-run` wrapper). `awaitApplyHelper`, a finalizer of `runProductionClientGameTest` (so after a failed run too): while `config/rigtune/pending.json` exists, up to 60 s, it waits until RigTune's apply helper has deleted it or, after 10 s (the helper's 2 s settle plus its JVM start), `apply.lock` is free. ThreadSamplerTest: `stop()` bound 500 ms plus "returned while the worker was still stuck". | `GameTestNet.java` + 8 game-test classes, `build.yml`, `build.gradle`, `SettingsSaverTest`, `ThreadSamplerTest` | `GameTestSourcesTest` (AC1e.1, AC1e.2 unit part), `SettingsSaverTest.aSaveIsNotBlockedByBusyWorkerAndNetworkPools` (AC1e.1); hang proof (AC1e.3); local subset run (AC1e.4) |
+| 1f | Root cause below. Both Modrinth HttpClients speak HTTP/1.1. A lookup that fails with an I/O error other than a timeout or an interrupt (no HTTP response: a reset, "Stream N cancelled"; or a body that broke off) drops the HttpClient and is sent once more on a fresh one, with the same stall and deadline limits (downloads are never retried). The lookup warnings print the cause chain (`LogSafe.error`). `-Drigtune.modrinth.baseUrl` counts only as https, or http on a loopback host (`localhost`, `127.x.x.x`, `[::1]`); anything else is ignored with one WARN naming the property, an accepted override is logged once. | `HttpModrinthClient`, `OnlineDataFetcher` | `HttpModrinthClientTest`: `aLookupThatFailsOnceIsRetriedOnAFreshClient`, `twoFailuresInARowFallBackToOfflineDataWithOneWarning` (AC1f.1), `theClientsSpeakHttp11`, `aTransportFailureStartsAFreshClientButAnHttpErrorDoesNot` (red without the fix), `baseUrlPropertyTakesOnlyHttpsOrHttpOnThisMachine` (AC1f.2) |
+| 1g | `tools/ci_streak.py`: lists `build.yml` runs on a branch (optionally one SHA), oldest first; a run counts when push or dispatch, attempt 1, every job it has green (none skipped), and ws-ci's minimum set present (java, python, gametest-matrix, rules-consistency, rules-v1-compat, a job for each of the 3 legs, a split leg's parts counting as the leg) plus any `--require` job (the RC streak: WS-E's E2E push jobs); a cancelled run or another event neither counts nor breaks; any other completed run breaks. `docs/v0.5/verification/ci-streak.md` gets each run's row (SHA, event, attempt, total and per-leg durations) and, from each leg's job log, every game-test class's wall time, the requests to the fake Modrinth, and `tickHookOnVsReference` with its twin. The dormant split: `tools/gametest_matrix.py --parts N` (`PARTS = 1`, the switch; build.yml's dispatch input `gametest_parts` overrides it for one run) turns each leg into N jobs, each with a contiguous slice of fabric.mod.json's classes (the first class in part 1), named "…, part k/N", with `-part<k>` artifacts; build.gradle's `-PgametestClasses=A,B` keeps those classes; `TimedGameTests`, a Fabric language adapter every game-test entrypoint goes through, logs "Game-test class <Name> passed in <ms> ms"; `awaitApplyHelper` (1e) is the wait between two parts run one after the other. | `tools/ci_streak.py`, `tools/gametest_matrix.py`, `build.yml`, `build.gradle`, `TimedGameTests.java` | `tools/tests/test_ci_streak.py` (AC1g.1), `test_gametest_matrix.py` (one part = the legs unchanged; two parts run every class once, first class in part 1), `test_ci_workflow` (the part reaches Gradle and the artifact names); split proof (AC1g.4) |
 
-Local: `./gradlew build` green on both nodes, 1852 unit tests each (1 skipped); `tools/tests` 343, `tools/e2e/tests` 216.
+Local: `./gradlew build` green on both nodes, 1852 unit tests each (1 skipped); `tools/tests` 352 (1 skipped: e2e.yml), `tools/e2e/tests` 216.
+A local run of `:26.2:runProductionClientGameTest -PgametestClasses=RigTuneClientGameTest,BenchmarkGameTest` (under the
+game-test lock) ran those two classes only and logged "Game-test class RigTuneClientGameTest passed in 45801 ms" and
+"… BenchmarkGameTest passed in 107133 ms"; `awaitApplyHelper` waited 2007 ms for the helper.
 
 ## "Stream N cancelled": root cause (SPEC 1f)
 
@@ -64,7 +70,7 @@ calibration: renderThreadInitWallMs 183.67 → 368, renderThreadInitCpuMs 95.94 
 **(b) The gates that catch a 2x regression: median ratios to a reference workload.**
 - Tick (FootprintGameTest.timeTick, every tick case, on the render thread): the work, the work called twice per
   iteration, and a fixed pure-Java reference (6 xorshift rounds with array loads and stores per call) are three small loop
-  methods, warmed up in 300 short calls each; the blocks start once the JIT has finished nothing for 100 ms (cap 10 s);
+  methods, warmed up in 300 rounds of 1,000 calls each; the blocks start once the JIT has finished nothing for 100 ms (cap 10 s);
   then 48 interleaved triples of 20,000 calls, timed by the wall clock. ns per call = the median work block (the ns keys);
   bytes = the fewest-allocating work block (the 0-allocation keys, still 0). Gate `tickHookOnVsReference` = the median
   over triples of work / reference for the monitor-on work (`RigTuneClient.onTick` + `StutterHooks.tick`).
@@ -92,7 +98,7 @@ calibration: renderThreadInitWallMs 183.67 → 368, renderThreadInitCpuMs 95.94 
   compilation during the blocks in 192 measurements), and the calibration of that code puts the limit at 2.05 (1.17x above
   the 1x max, 1.20x below the doubled monitor's min). One probe JVM read 2.47-2.56 at 1x for two repetitions: its world
   was a few seconds old (the monitor's tick work depends on chunks still building); FootprintGameTest times the monitor-on
-  work after its 65 s sampler window, and the production values so far are 1.44-1.50 (36293436864).
+  work after its 65 s sampler window, and the production values so far are 1.31-1.55 (36293436864, 36297288375).
 - The sub-10 ns paths (title screen; world with the monitor off) keep the ns backstop and the 0-allocation gates only; their
   ratios are recorded (`tickHookTiming`, `tickHookTimingWorld`): 1x and 2x overlap there under any estimator (research 5.1).
 
@@ -133,6 +139,18 @@ Details and log lines: docs/v0.5/verification/ci/README.md and docs/v0.5/verific
    can't see a bounded `join(1000)`, which is the regression the test guards.
 7. SPEC 1f's retry covers every transport failure of a lookup, not only "Stream N cancelled", and the transport is HTTP/1.1,
    so that exact exception can't recur from RigTune's Modrinth client.
+8. SPEC 1a says the prefetch logs and skips a configuration it can't resolve; it fails instead (code review H1), so the
+   retry loop covers it. All 48 configurations per node resolve today; one that never can would have to be excluded by name.
+9. SPEC 1b fails a leg on a 5xx from the fake; the check also fails on a 400/405 and on a 404 outside a project or hash
+   lookup (code review M3).
+10. SPEC 1e's lock wait in `runProductionClientGameTest`'s `doLast` is the `awaitApplyHelper` finalizer: the helper takes
+    the lock only 2 s after the game exits, and a `doLast` doesn't run after a failed run (code review M2).
+11. SPEC 1d(b) says 200k warm-up calls; the timing warms each loop method with 300 x 1,000 calls and then waits for the
+    JIT to go quiet (above).
+12. The split's parts are separate matrix jobs (a runner each, research 7 item 5), not two JVMs one after the other in
+    one job: parallel parts shorten the run, and a part's step keeps its own 15-min timeout. Run by hand one after the
+    other (`-PgametestClasses=…` twice), `awaitApplyHelper` is the wait between them.
+13. ci-streak.md doesn't carry the frame-hook ratios: they are in the java job's test reports, not its log.
 
 ## UNVERIFIED / residuals
 
@@ -145,6 +163,11 @@ Details and log lines: docs/v0.5/verification/ci/README.md and docs/v0.5/verific
   Xeon 8573C, 8370C, 6973P-C); a new runner type could sit elsewhere, which the self-check would at least flag.
 - AC1e.2's pixel comparison of `bench-history-*` between two runs of one SHA: with the offline report asserted before every
   screenshot, the remaining differences are the known regions; not pixel-diffed here.
+- SPEC-4's E2E jobs aren't in build.yml yet (WS-E adds them): not run offline here. What they need is what the game-test
+  legs already fetch: `prefetchDependencies` and `downloadAssets` in their "(network)" step (`e2eClient` is the same
+  `ClientProductionRunTask` as `runProductionClientGameTest`, and the drivers compile against the cached old jar); then
+  `--offline`, also in the harness's Gradle arguments. The workflow test applies AC1a.1 to e2e.yml as soon as it exists.
+- LanGuestGameTest (WS-E) is where vanilla's own LAN discovery runs in the namespace; MulticastCheck mirrors its calls.
 
 ## Code review
 
@@ -179,6 +202,12 @@ checked against the same findings.
   timeouts and the SIGQUIT dump, the apply-lock wait. "RigTune's own footprint": the 4× rule for the six per-call ns keys,
   the three ratio gates with their self-check, and "the 5 s worker window runs against the local fake Modrinth" (SPEC 1b).
 - The first 5-run streak (AC1g.2): after the merge, dispatch one at a time with a push freeze, then
-  `python tools/ci_streak.py --branch feat/v0.5.0 --sha <merge SHA> --write docs/v0.5/verification/ci-streak.md`.
+  `python tools/ci_streak.py --branch feat/v0.5.0 --sha <merge SHA> --write docs/v0.5/verification/ci-streak.md`; for the
+  RC streak add `--require "<E2E push job name>"` for each of WS-E's two jobs.
+- The split switch: `PARTS = 2` in `tools/gametest_matrix.py` (one line); a single run with two parts:
+  `gh workflow run build.yml --ref <branch> -f gametest_parts=2`. Part 1 today is RigTuneClientGameTest to PreviewGameTest
+  (8 classes), part 2 ProfilesGameTest to A11yGameTest (8).
+- release.yml (WS-E's) got only the runner and JDK pins AC1c.3 needs; WS-E keeps them in its restructure.
+- A decision: the tick ratio limit is 2.05, not the SPEC's 1.95 (AC1d.2, 1h), with the calibration above.
 - Branches for you to delete (I delete none): `scratch/ws-ci-proof-slowdown`, `scratch/ws-ci-proof-hang`, and once this
   is merged `research/v05-ci`; worktrees `C:/Dev/Worktrees/rigtune-r-ci` and `C:/Dev/Worktrees/rigtune-ci-proofs`.
