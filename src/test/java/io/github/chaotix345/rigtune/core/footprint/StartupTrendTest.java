@@ -191,4 +191,17 @@ class StartupTrendTest {
 		runs.add(run(16_049));
 		assertEquals("Launch time 11% higher than usual (16.0 s vs your usual ~14.5 s)", StartupTrend.regression(StartupTrend.assess(runs)).english());
 	}
+
+	@Test
+	void oneKeyPerLaunchAndTheLogLine() {
+		Run latest = new Run("2026-09-27T10:00:00Z", 14_500, "26.2", "0.5.0", 92, "h2");
+		Assessment slower = StartupTrend.assess(steady(6, latest));
+		assertEquals("startup.regression.2026-09-27T10:00:00Z", StartupTrend.key(slower));
+		assertNull(StartupTrend.key(StartupTrend.assess(List.of())));
+		assertEquals("SLOWER: +45.0 % vs the median 10.0 s of 6 comparable launches (floor 10.0 %); changed since the previous one: MOD_COUNT",
+				StartupTrend.describe(slower));
+		assertEquals("IN_LINE: +0.0 % vs the median 10.0 s of 6 comparable launches (floor 10.0 %)", StartupTrend.describe(StartupTrend.assess(steady(6, run(10_000)))));
+		assertEquals("too few comparable launches (2 of 5)", StartupTrend.describe(StartupTrend.assess(steady(2, run(10_000)))));
+		assertEquals("no launch recorded", StartupTrend.describe(StartupTrend.assess(List.of())));
+	}
 }

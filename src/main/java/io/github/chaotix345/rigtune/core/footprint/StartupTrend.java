@@ -20,6 +20,8 @@ import java.util.Objects;
 public final class StartupTrend {
 	public static final int MIN_RUNS = 5;
 	public static final int MAX_RUNS = StartupTimesStore.MEDIAN_OF;
+	// The notice's key and awareness.json's acknowledgement (acknowledgedStartupRegressions): one per launch, by its time.
+	public static final String KEY_PREFIX = "startup.regression.";
 	private static final double EPSILON = 1e-9;
 
 	public enum Kind {
@@ -102,6 +104,20 @@ public final class StartupTrend {
 
 	private static boolean differ(@Nullable String a, @Nullable String b) {
 		return a != null && b != null && !a.isBlank() && !b.isBlank() && !Objects.equals(a, b);
+	}
+
+	public static @Nullable String key(Assessment a) {
+		return a.latest() == null ? null : KEY_PREFIX + a.latest().at();
+	}
+
+	// For the launch's log line (English, not shown in the game).
+	public static String describe(Assessment a) {
+		return switch (a.kind()) {
+			case NO_RUN -> "no launch recorded";
+			case TOO_FEW -> "too few comparable launches (" + a.baselineRuns() + " of " + MIN_RUNS + ")";
+			default -> String.format(Locale.ROOT, "%s: %+.1f %% vs the median %.1f s of %d comparable launches (floor %.1f %%)%s", a.kind(), a.deltaPercent(),
+					a.medianMs() / 1000.0, a.baselineRuns(), a.floorPercent(), a.cause() == Cause.NONE ? "" : "; changed since the previous one: " + a.cause());
+		};
 	}
 
 	// The notice's message and Tools' first regression row: "Launch time 45% higher than usual (21.3 s vs your usual ~14.7 s)".
