@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.client.launcher;
 
 import io.github.chaotix345.rigtune.client.RealController;
+import io.github.chaotix345.rigtune.client.SettingsSaver;
 import io.github.chaotix345.rigtune.client.probe.LauncherProbe;
 import io.github.chaotix345.rigtune.core.history.FirstRun;
 import io.github.chaotix345.rigtune.core.launcher.InstanceEvidence;
@@ -11,7 +12,6 @@ import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.notice.NoticeAction;
 import io.github.chaotix345.rigtune.core.notice.NoticePriority;
-import net.minecraft.client.Minecraft;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -19,8 +19,9 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 // docs/v0.5/SPEC.md 4a-4b, 4e (P0.4): the instance's mod-files policy and the MOD_FILES_NEWS notice. Reached only through
-// RealController.v05() (X4); nothing happens in the constructor. The policy is read live from LauncherProbe's answers
-// (the detection, the .index/ listing: both in memory once in) and settings.json's opt-in: no I/O, any thread.
+// RealController.v05() (X4); nothing happens in the constructor. The policy is read live from the launcher RealController
+// recorded (LauncherProbe.recorded(), the value its launcher() shows), the .index/ listing's answer (both in memory once in)
+// and settings.json's opt-in: no I/O, any thread.
 public final class ModFilesService {
 	// MOD_FILES_NEWS (4b): its key (dismissed in awareness.json like any notice, so once per instance) and its action.
 	public static final String NEWS_KEY = "launcher.mod_files_news";
@@ -29,13 +30,12 @@ public final class ModFilesService {
 	private final Supplier<@Nullable LauncherInfo> launcher;
 	private final Supplier<@Nullable InstanceEvidence> evidence;
 	private final BooleanSupplier optIn;
-	private volatile boolean watchingLateAnswer;
 
 	public ModFilesService(RealController controller) {
-		this(controller, LauncherProbe::answer, LauncherProbe::evidence, () -> controller.settings().modFilesByRigTune);
+		this(controller, LauncherProbe::recorded, LauncherProbe::evidence, () -> controller.settings().modFilesByRigTune);
 	}
 
-	// The policy's inputs: the detection's answer and the listing's (null until in), and the opt-in.
+	// The policy's inputs: the recorded launcher and the listing's answer (null until in), and the opt-in.
 	ModFilesService(@Nullable RealController controller, Supplier<@Nullable LauncherInfo> launcher, Supplier<@Nullable InstanceEvidence> evidence,
 			BooleanSupplier optIn) {
 		this.controller = controller;
@@ -46,25 +46,7 @@ public final class ModFilesService {
 
 	// Render thread, no I/O (screens and RealController.modFiles()); also the rebuild's worker (the report post-step).
 	public ModFilesPolicy policy() {
-		watchLateAnswer();
 		return ModFilesPolicy.of(launcher.get(), evidence.get(), optIn.getAsBoolean());
-	}
-
-	// AC4a.3: a detection that answers after the probe's 3 s cap (the report was built PENDING) is picked up with one
-	// rescan, on the render thread: the probe answers it at once, RealController records the launcher and rebuilds the
-	// report with the final policy. Set up once, on the first policy() call.
-	private void watchLateAnswer() {
-		RealController real = controller;
-		if (watchingLateAnswer || real == null) {
-			return;
-		}
-		watchingLateAnswer = true;
-		LauncherProbe.onLateAnswer(answer -> {
-			Minecraft minecraft = real.minecraft();
-			if (minecraft != null) {
-				minecraft.execute(real::rescan);
-			}
-		});
 	}
 
 	// What the instance would be without the opt-in: whether a launcher keeps its own record (the Settings row, the
@@ -73,10 +55,22 @@ public final class ModFilesService {
 		return ModFilesPolicy.of(launcher.get(), evidence.get(), false);
 	}
 
-	// The opt-in is on and is what makes the policy RIGTUNE (the instance would otherwise be LAUNCHER or PENDING): the
-	// opted-in header line, the share line, C02's guide (LauncherModText.guideLine's optedIn).
+	// The opt-in is on where a launcher is known to keep its own record of the mods (the instance would otherwise be
+	// LAUNCHER): the opted-in header line, the share line, C02's guide (LauncherModText.guideLine's optedIn).
 	public boolean optedIn() {
-		return optIn.getAsBoolean() && withoutOptIn().launcherManages();
+		return optIn.getAsBoolean() && withoutOptIn() == ModFilesPolicy.LAUNCHER;
+	}
+
+	// Turns the per-instance opt-in on or off (also WS-L2's "Let RigTune apply them"): settings.json through SettingsSaver
+	// (X8), then one rebuild, which reads the new policy.
+	public void setOptIn(boolean on) {
+		RealController real = controller;
+		if (real == null) {
+			return;
+		}
+		real.settings().modFilesByRigTune = on;
+		SettingsSaver.shared().save(real.settings(), real.configDir());
+		real.rebuild();
 	}
 
 	// MOD_FILES_NEWS (4b): what changed for a player who used RigTune before, under LAUNCHER only (never PENDING: nothing is

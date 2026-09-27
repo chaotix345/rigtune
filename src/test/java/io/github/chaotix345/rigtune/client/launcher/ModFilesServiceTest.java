@@ -52,7 +52,7 @@ class ModFilesServiceTest {
 		assertEquals(ModFilesPolicy.RIGTUNE, service.policy());
 		assertEquals(ModFilesPolicy.LAUNCHER, service.withoutOptIn());
 		assertEquals(true, service.optedIn());
-		assertEquals("- Mod files: RigTune (opted in)", service.shareLine());
+		assertEquals("RigTune (opted in)", service.shareLine());
 	}
 
 	// An opt-in left on in an instance whose launcher keeps no record changes nothing and isn't reported.
@@ -68,9 +68,18 @@ class ModFilesServiceTest {
 
 	@Test
 	void theShareLineFollowsThePolicy() {
-		assertEquals("- Mod files: waiting for the launcher check", service.shareLine());
+		assertEquals("waiting for the launcher check", service.shareLine());
 		launcher.set(LauncherInfo.of(Launcher.GDLAUNCHER));
 		evidence.set(InstanceEvidence.NONE);
-		assertEquals("- Mod files: changed in GDLauncher", service.shareLine());
+		assertEquals("changed in GDLauncher", service.shareLine());
+	}
+
+	// Review M2: before detection answers, the opt-in isn't known to matter (no "list may go out of date" warning yet).
+	@Test
+	void anOptInWhilePendingIsNotOptedIn() {
+		optIn.set(true);
+		assertEquals(ModFilesPolicy.RIGTUNE, service.policy());
+		assertEquals(ModFilesPolicy.PENDING, service.withoutOptIn());
+		assertEquals(false, service.optedIn());
 	}
 }

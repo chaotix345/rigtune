@@ -47,6 +47,14 @@ class ShareReportModFilesTest {
 		assertFalse(text(ModFilesPolicy.RIGTUNE, false).contains("Mod files"));
 	}
 
+	// Review M4: the line is escaped like every other field (a launcher name is data).
+	@Test
+	void theLineIsEscaped() {
+		String text = ShareReport.format(report(), VERSIONS, null, "Modrinth App", null, "changed in *bold* [link](x)");
+		assertTrue(text.contains("- Mod files: " + MarkdownSafe.field("changed in *bold* [link](x)") + "\n"), text);
+		assertFalse(text.contains("*bold*"), text);
+	}
+
 	@Test
 	void plainRigTuneIsTheReportAsBefore() {
 		assertEquals(ShareReport.format(report(), VERSIONS, null, "Modrinth App", null), text(ModFilesPolicy.RIGTUNE, false));

@@ -30,6 +30,17 @@ public final class LauncherModText {
 	}
 
 	// The name, or "your launcher".
+	// The launcher a launcherName() names (an Undo reason's argument), null for anything else ("your launcher" too).
+	public static @Nullable Launcher launcherNamed(@Nullable Object name) {
+		for (Launcher launcher : Launcher.values()) {
+			Text named = launcherName(LauncherInfo.of(launcher));
+			if (named != null && named.equals(name)) {
+				return launcher;
+			}
+		}
+		return null;
+	}
+
 	public static Text nameOrYours(@Nullable LauncherInfo launcher) {
 		Text name = launcherName(launcher);
 		return name != null ? name : Text.of("rigtune.launcher.mod_files.your_launcher", YOUR_LAUNCHER);
@@ -62,12 +73,13 @@ public final class LauncherModText {
 		};
 	}
 
-	// The share report's line (4b, English only, like its "- Launcher:" line); null for plain RIGTUNE (0.4's report).
+	// The share report's "- Mod files: <this>" (4b, English only, like its "- Launcher:" line); null for plain RIGTUNE
+	// (0.4's report). ShareReport escapes it like every other field.
 	public static @Nullable String shareLine(ModFilesPolicy policy, @Nullable LauncherInfo launcher, boolean optedIn) {
 		return switch (policy) {
-			case LAUNCHER -> "- Mod files: changed in " + (launcherName(launcher) != null ? launcher.launcher().displayName() : "the launcher");
-			case PENDING -> "- Mod files: waiting for the launcher check";
-			case RIGTUNE -> optedIn ? "- Mod files: RigTune (opted in)" : null;
+			case LAUNCHER -> "changed in " + (launcherName(launcher) != null ? launcher.launcher().displayName() : "the launcher");
+			case PENDING -> "waiting for the launcher check";
+			case RIGTUNE -> optedIn ? "RigTune (opted in)" : null;
 		};
 	}
 }

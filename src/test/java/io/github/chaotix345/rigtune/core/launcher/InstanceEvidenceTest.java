@@ -8,20 +8,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermissions;
-import java.util.ArrayDeque;
-import java.util.Queue;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.concurrent.RejectedExecutionException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 // docs/v0.5/SPEC.md 4a, AC4a.2: the bounded listing of <mods>/.index/ (at least one regular *.pw.toml; stop at the first
-// match or after 256 entries; regular files only; no symlink followed; never an exception).
+// match or after 256 entries; regular files only; no symlink followed; never an exception). That it runs on the executor
+// it is given is LauncherProbeTest's (the real path, LauncherProbe.startListing).
 class InstanceEvidenceTest {
 	@TempDir
 	Path dir;
@@ -124,34 +119,5 @@ class InstanceEvidenceTest {
 		} finally {
 			Files.setPosixFilePermissions(other, PosixFilePermissions.fromString("rwx------"));
 		}
-	}
-
-	// The listing runs on the executor it's given, never on the caller's thread.
-	@Test
-	void theListingRunsOnTheGivenExecutor() throws Exception {
-		Files.writeString(index().resolve("sodium.pw.toml"), "");
-		Queue<Runnable> queued = new ArrayDeque<>();
-		Executor executor = queued::add;
-		CompletableFuture<InstanceEvidence> listing = InstanceEvidence.listAsync(dir.resolve("mods"), executor);
-		assertFalse(listing.isDone());
-		assertEquals(1, queued.size());
-		String[] ranOn = new String[1];
-		Thread worker = new Thread(() -> {
-			ranOn[0] = Thread.currentThread().getName();
-			queued.poll().run();
-		}, "evidence-worker");
-		worker.start();
-		worker.join();
-		assertEquals("evidence-worker", ranOn[0]);
-		assertNotEquals(Thread.currentThread().getName(), ranOn[0]);
-		assertTrue(listing.get().packwizIndex());
-	}
-
-	@Test
-	void anExecutorThatRefusesIsNoEvidence() throws Exception {
-		CompletableFuture<InstanceEvidence> listing = InstanceEvidence.listAsync(dir.resolve("mods"), r -> {
-			throw new RejectedExecutionException("full");
-		});
-		assertEquals(InstanceEvidence.NONE, listing.get());
 	}
 }

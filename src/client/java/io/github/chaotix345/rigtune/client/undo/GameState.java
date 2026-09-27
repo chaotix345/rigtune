@@ -61,10 +61,11 @@ public final class GameState implements UndoPlanner.State {
 		return modFiles.get();
 	}
 
-	// The launcher the launcher-managed skip names: what detection answered (the policy's own source), null until then.
+	// The launcher the launcher-managed skip names: the one RealController recorded (the policy's own source), null until
+	// an answer is.
 	@Override
 	public @Nullable LauncherInfo launcher() {
-		return LauncherProbe.answer();
+		return LauncherProbe.recorded();
 	}
 
 	// As the RigTune screen shows settings: a vanilla option's caption, a mod's key as its recommendation names it, and

@@ -59,8 +59,8 @@ public final class ShareReport {
 		return format(report, versions, benchmark, maxChars, launcher, jvm, null);
 	}
 
-	// v0.5 (docs/v0.5/SPEC.md 4b): modFiles is the "- Mod files: ..." line under the launcher's (LauncherModText.shareLine),
-	// or null for none (RigTune changes mod files, as in 0.4).
+	// v0.5 (docs/v0.5/SPEC.md 4b): modFiles is what the "- Mod files:" line under the launcher's says
+	// (LauncherModText.shareLine), or null for none (RigTune changes mod files, as in 0.4).
 	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, @Nullable String launcher, @Nullable JvmReport jvm,
 			@Nullable String modFiles) {
 		return format(report, versions, benchmark, DISCORD_LIMIT, launcher, jvm, modFiles);
@@ -130,7 +130,7 @@ public final class ShareReport {
 			out.append("- Launcher: ").append(field(launcher)).append('\n');
 		}
 		if (!blank(modFiles)) {
-			out.append(modFiles).append('\n');
+			out.append("- Mod files: ").append(field(modFiles)).append('\n');
 		}
 		java(out, jvm);
 

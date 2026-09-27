@@ -8,8 +8,6 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 
 // docs/v0.5/SPEC.md 4a: what the instance's own files say about who keeps a record of its mods. packwizIndex: <mods>/.index/
 // holds at least one regular *.pw.toml (Prism's and PolyMC's packwiz metadata, lm §3.1), from a bounded listing: the
@@ -25,19 +23,9 @@ public record InstanceEvidence(boolean packwizIndex) {
 	record Scan(boolean found, int examined) {
 	}
 
-	// On the caller's thread.
+	// On the caller's thread (LauncherProbe runs it as one task on Probes.EXECUTOR).
 	public static InstanceEvidence list(@Nullable Path modsDir) {
 		return scan(modsDir).found() ? new InstanceEvidence(true) : NONE;
-	}
-
-	// On the given executor (LauncherProbe: Probes.EXECUTOR), never the caller's thread. An executor that refuses the task
-	// is no evidence.
-	public static CompletableFuture<InstanceEvidence> listAsync(@Nullable Path modsDir, Executor executor) {
-		try {
-			return CompletableFuture.supplyAsync(() -> list(modsDir), executor).exceptionally(t -> NONE);
-		} catch (RuntimeException e) {
-			return CompletableFuture.completedFuture(NONE);
-		}
 	}
 
 	static Scan scan(@Nullable Path modsDir) {

@@ -4,12 +4,17 @@ import io.github.chaotix345.rigtune.core.launcher.InstanceEvidence;
 import io.github.chaotix345.rigtune.core.launcher.Launcher;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.launcher.LauncherSignals;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -19,9 +24,11 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // C-M1: the probe runs off the render thread with a timeout, and any failure is Unknown; only the named signals are read.
 class LauncherProbeTest {
@@ -41,8 +48,10 @@ class LauncherProbeTest {
 		}
 	}
 
+	// v0.5 (docs/v0.5/SPEC.md 4a, AC4a.3; review L13): a detection that hasn't answered within the cap is NOT_YET: PENDING
+	// for the mod-files policy, never the Unknown that would make it RIGTUNE; as a value it still reads as Unknown.
 	@Test
-	void aStalledDetectorTimesOutAsUnknown() throws Exception {
+	void aStalledDetectorTimesOutAsNotYetWhichIsPending() throws Exception {
 		ExecutorService executor = Executors.newSingleThreadExecutor();
 		CountDownLatch never = new CountDownLatch(1);
 		try {
@@ -54,7 +63,11 @@ class LauncherProbeTest {
 				}
 				return LauncherInfo.of(Launcher.PRISM);
 			}, executor, 100));
+			assertSame(LauncherProbe.NOT_YET, info);
 			assertEquals(LauncherInfo.UNKNOWN, info);
+			assertNotSame(LauncherInfo.UNKNOWN, LauncherProbe.NOT_YET);
+			assertEquals(ModFilesPolicy.PENDING, ModFilesPolicy.of(LauncherProbe.detected(info), InstanceEvidence.NONE, false));
+			assertEquals(ModFilesPolicy.RIGTUNE, ModFilesPolicy.of(LauncherProbe.detected(LauncherInfo.UNKNOWN), InstanceEvidence.NONE, false));
 		} finally {
 			never.countDown();
 			executor.shutdownNow();
@@ -76,7 +89,7 @@ class LauncherProbeTest {
 				}
 				return LauncherInfo.of(Launcher.PRISM);
 			}, executor);
-			assertEquals(LauncherInfo.UNKNOWN, await(LauncherProbe.withTimeout(detection, 100)));
+			assertSame(LauncherProbe.NOT_YET, await(LauncherProbe.withTimeout(detection, 100)));
 			release.countDown();
 			assertEquals(LauncherInfo.of(Launcher.PRISM), detection.get(5, TimeUnit.SECONDS));
 			assertEquals(LauncherInfo.of(Launcher.PRISM), await(LauncherProbe.withTimeout(detection, 1)));
@@ -121,46 +134,53 @@ class LauncherProbeTest {
 		}, 1000)));
 	}
 
-	// v0.5 (docs/v0.5/SPEC.md 4a, AC4a.3): a detection that hasn't answered within the cap is NOT_YET (PENDING for the
-	// mod-files policy), never the Unknown that would make it RIGTUNE; as a value it still reads as Unknown for the rest.
-	@Test
-	void aStalledDetectorIsNotYet() throws Exception {
-		ExecutorService executor = Executors.newSingleThreadExecutor();
-		CountDownLatch never = new CountDownLatch(1);
-		try {
-			LauncherInfo info = await(LauncherProbe.probeAsync(() -> {
-				try {
-					never.await();
-				} catch (InterruptedException e) {
-					Thread.currentThread().interrupt();
-				}
-				return LauncherInfo.of(Launcher.PRISM);
-			}, executor, 100));
-			assertSame(LauncherProbe.NOT_YET, info);
-			assertEquals(LauncherInfo.UNKNOWN, info);
-			assertNotSame(LauncherInfo.UNKNOWN, LauncherProbe.NOT_YET);
-		} finally {
-			never.countDown();
-			executor.shutdownNow();
+	// A controller as RealController.launcherDetected records probe answers (WS-L1's approved lines): recorded() keeps an
+	// answer already in over a stale NOT_YET, and the late answer is recorded with one rebuild; rebuild() here builds the
+	// report's policy as the post-step does.
+	static final class Recorder {
+		volatile LauncherInfo launcher = LauncherInfo.UNKNOWN;
+		final List<ModFilesPolicy> reports = new CopyOnWriteArrayList<>();
+		final List<String> threads = new CopyOnWriteArrayList<>();
+
+		void detected(LauncherInfo detected) {
+			launcher = LauncherProbe.record(detected);
+			LauncherProbe.onLateAnswer(late -> {
+				threads.add(Thread.currentThread().getName());
+				detected(late);
+				rebuild();
+			});
+		}
+
+		void rebuild() {
+			assertSame(LauncherProbe.detected(launcher), LauncherProbe.recorded(), "one launcher source");
+			reports.add(ModFilesPolicy.of(LauncherProbe.recorded(), LauncherProbe.evidence(), false));
 		}
 	}
 
-	// The probe answers once both the detection and the .index/ listing have (the policy needs both); until then the
-	// detection's own answer is already there for the policy (evidence first needs the listing, the rest the launcher).
+	private static void lateOnThisThread() {
+		LauncherProbe.lateExecutor(Runnable::run);
+	}
+
+	private static void restore() {
+		LauncherProbe.onLateAnswer(null);
+		LauncherProbe.lateExecutor(null);
+		LauncherProbe.reset();
+	}
+
+	// Review L6: a probe waits for the detection alone, so a slow .index/ listing never turns an answered detection into
+	// NOT_YET (0.4's memory and Java-arguments advice keep their launcher); the listing's answer then comes late.
 	@Test
-	void theProbeWaitsForTheListingToo() throws Exception {
-		CompletableFuture<LauncherInfo> detection = CompletableFuture.completedFuture(LauncherInfo.of(Launcher.OFFICIAL));
+	void theProbeWaitsForTheDetectionAlone() throws Exception {
 		CompletableFuture<InstanceEvidence> listing = new CompletableFuture<>();
-		LauncherProbe.begin(detection, listing);
+		LauncherProbe.begin(CompletableFuture.completedFuture(LauncherInfo.of(Launcher.OFFICIAL)), listing);
 		try {
-			assertSame(LauncherProbe.NOT_YET, await(LauncherProbe.probe(100)));
+			assertEquals(LauncherInfo.of(Launcher.OFFICIAL), await(LauncherProbe.probe(100)));
 			assertEquals(LauncherInfo.of(Launcher.OFFICIAL), LauncherProbe.answer());
 			assertNull(LauncherProbe.evidence());
 			listing.complete(new InstanceEvidence(true));
-			assertEquals(LauncherInfo.of(Launcher.OFFICIAL), await(LauncherProbe.probe(100)));
 			assertEquals(new InstanceEvidence(true), LauncherProbe.evidence());
 		} finally {
-			LauncherProbe.reset();
+			restore();
 		}
 	}
 
@@ -169,64 +189,109 @@ class LauncherProbeTest {
 		LauncherProbe.reset();
 		assertNull(LauncherProbe.answer());
 		assertNull(LauncherProbe.evidence());
+		assertSame(LauncherProbe.NOT_YET, LauncherProbe.record(LauncherProbe.NOT_YET));
+		assertNull(LauncherProbe.recorded());
 	}
 
-	// AC4a.3: when the answer comes after a probe's cap, the late-answer listener gets it exactly once per detection,
-	// however many probes timed out.
+	// AC4a.3 / review H1: a slow detector; the probe answers NOT_YET, the report is PENDING; when the answer comes it is
+	// recorded with exactly one rebuild, off the caller's thread, and the final policy lands in the report.
 	@Test
-	void aLateAnswerIsHandedOnOnce() throws Exception {
+	void aLateAnswerIsRecordedWithOneRebuild() throws Exception {
 		CompletableFuture<LauncherInfo> detection = new CompletableFuture<>();
-		List<LauncherInfo> late = new CopyOnWriteArrayList<>();
-		LauncherProbe.onLateAnswer(late::add);
+		ExecutorService late = Executors.newSingleThreadExecutor(r -> new Thread(r, "late-answer"));
+		LauncherProbe.lateExecutor(late);
 		LauncherProbe.begin(detection, CompletableFuture.completedFuture(InstanceEvidence.NONE));
+		Recorder recorder = new Recorder();
 		try {
-			assertSame(LauncherProbe.NOT_YET, await(LauncherProbe.probe(50)));
-			assertNull(LauncherProbe.answer());
-			assertSame(LauncherProbe.NOT_YET, await(LauncherProbe.probe(50)));
-			assertEquals(List.of(), late);
+			recorder.detected(await(LauncherProbe.probe(50)));
+			recorder.rebuild();
+			assertSame(LauncherProbe.NOT_YET, recorder.launcher);
+			assertEquals(List.of(ModFilesPolicy.PENDING), recorder.reports);
+			recorder.detected(await(LauncherProbe.probe(50)));
 			detection.complete(LauncherInfo.of(Launcher.MODRINTH_APP));
-			assertEquals(List.of(LauncherInfo.of(Launcher.MODRINTH_APP)), late);
-			LauncherProbe.onLateAnswer(late::add);
-			assertEquals(1, late.size(), "once per detection");
-			assertEquals(LauncherInfo.of(Launcher.MODRINTH_APP), await(LauncherProbe.probe(50)));
+			late.shutdown();
+			assertTrue(late.awaitTermination(5, TimeUnit.SECONDS));
+			assertEquals(List.of(ModFilesPolicy.PENDING, ModFilesPolicy.LAUNCHER), recorder.reports, "exactly one rebuild, with the final policy");
+			assertEquals(LauncherInfo.of(Launcher.MODRINTH_APP), recorder.launcher);
+			assertEquals(List.of("late-answer"), recorder.threads, "on the late-answer executor, never the caller's thread");
 		} finally {
-			LauncherProbe.onLateAnswer(ignored -> {});
-			LauncherProbe.reset();
+			late.shutdownNow();
+			restore();
 		}
 	}
 
-	// A detection that answers within the cap never calls the listener.
+	// The race seen in the local game test: the late answer is recorded, then a stale chain hands over the NOT_YET it got
+	// earlier; the answer stays, and no second rebuild follows.
+	@Test
+	void aStaleNotYetAfterTheLateAnswerKeepsTheAnswer() throws Exception {
+		CompletableFuture<LauncherInfo> detection = new CompletableFuture<>();
+		lateOnThisThread();
+		LauncherProbe.begin(detection, CompletableFuture.completedFuture(InstanceEvidence.NONE));
+		Recorder recorder = new Recorder();
+		try {
+			LauncherInfo stale = await(LauncherProbe.probe(20));
+			assertSame(LauncherProbe.NOT_YET, stale);
+			recorder.detected(stale);
+			detection.complete(LauncherInfo.of(Launcher.ATLAUNCHER));
+			assertEquals(LauncherInfo.of(Launcher.ATLAUNCHER), recorder.launcher);
+			recorder.detected(stale);
+			assertEquals(LauncherInfo.of(Launcher.ATLAUNCHER), recorder.launcher, "a stale NOT_YET never overwrites the answer");
+			assertEquals(LauncherInfo.of(Launcher.ATLAUNCHER), LauncherProbe.recorded());
+			assertEquals(List.of(ModFilesPolicy.LAUNCHER), recorder.reports);
+		} finally {
+			restore();
+		}
+	}
+
+	// The late listing: the detection answered in time, the .index/ listing after the probe; the rebuild comes when the
+	// listing does, and the policy follows the evidence.
+	@Test
+	void aLateListingRebuildsOnce() throws Exception {
+		CompletableFuture<InstanceEvidence> listing = new CompletableFuture<>();
+		lateOnThisThread();
+		LauncherProbe.begin(CompletableFuture.completedFuture(LauncherInfo.UNKNOWN), listing);
+		Recorder recorder = new Recorder();
+		try {
+			recorder.detected(await(LauncherProbe.probe(50)));
+			recorder.rebuild();
+			assertEquals(List.of(ModFilesPolicy.PENDING), recorder.reports, "a folder launcher waits for the listing");
+			listing.complete(new InstanceEvidence(true));
+			assertEquals(List.of(ModFilesPolicy.PENDING, ModFilesPolicy.LAUNCHER), recorder.reports);
+		} finally {
+			restore();
+		}
+	}
+
+	// A detection whose probe had everything in never calls the listener.
 	@Test
 	void anAnswerInTimeIsNotLate() throws Exception {
-		List<LauncherInfo> late = new ArrayList<>();
-		LauncherProbe.onLateAnswer(late::add);
+		lateOnThisThread();
 		LauncherProbe.begin(CompletableFuture.completedFuture(LauncherInfo.of(Launcher.ATLAUNCHER)), CompletableFuture.completedFuture(InstanceEvidence.NONE));
+		Recorder recorder = new Recorder();
 		try {
-			assertEquals(LauncherInfo.of(Launcher.ATLAUNCHER), await(LauncherProbe.probe(1000)));
-			assertEquals(List.of(), late);
+			recorder.detected(await(LauncherProbe.probe(1000)));
+			assertEquals(LauncherInfo.of(Launcher.ATLAUNCHER), recorder.launcher);
+			assertEquals(List.of(), recorder.reports);
 		} finally {
-			LauncherProbe.onLateAnswer(ignored -> {});
-			LauncherProbe.reset();
+			restore();
 		}
 	}
 
-	// The listener set after the timeout and after the answer came (the report's first rebuild made it): it gets the
-	// answer at once.
+	// The listener set after the answer came (the timed-out chain recorded later than the answer): it gets it at once.
 	@Test
 	void aListenerSetAfterTheAnswerCameGetsItAtOnce() throws Exception {
 		CompletableFuture<LauncherInfo> detection = new CompletableFuture<>();
-		LauncherProbe.onLateAnswer(ignored -> {});
+		lateOnThisThread();
 		LauncherProbe.begin(detection, CompletableFuture.completedFuture(InstanceEvidence.NONE));
 		try {
-			LauncherProbe.onLateAnswer(null);
-			assertSame(LauncherProbe.NOT_YET, await(LauncherProbe.probe(10)));
+			LauncherInfo stale = await(LauncherProbe.probe(10));
 			detection.complete(LauncherInfo.of(Launcher.ATLAUNCHER));
-			List<LauncherInfo> late = new ArrayList<>();
-			LauncherProbe.onLateAnswer(late::add);
-			assertEquals(List.of(LauncherInfo.of(Launcher.ATLAUNCHER)), late);
+			Recorder recorder = new Recorder();
+			recorder.detected(stale);
+			assertEquals(LauncherInfo.of(Launcher.ATLAUNCHER), recorder.launcher);
+			assertEquals(List.of(ModFilesPolicy.LAUNCHER), recorder.reports);
 		} finally {
-			LauncherProbe.onLateAnswer(ignored -> {});
-			LauncherProbe.reset();
+			restore();
 		}
 	}
 
@@ -234,14 +299,46 @@ class LauncherProbeTest {
 	@Test
 	void aResetDropsTheOldDetectionsLateAnswer() throws Exception {
 		CompletableFuture<LauncherInfo> old = new CompletableFuture<>();
+		lateOnThisThread();
 		List<LauncherInfo> late = new ArrayList<>();
 		LauncherProbe.onLateAnswer(late::add);
 		LauncherProbe.begin(old, CompletableFuture.completedFuture(InstanceEvidence.NONE));
-		assertSame(LauncherProbe.NOT_YET, await(LauncherProbe.probe(10)));
-		LauncherProbe.reset();
-		old.complete(LauncherInfo.of(Launcher.PRISM));
-		assertEquals(List.of(), late);
-		LauncherProbe.onLateAnswer(ignored -> {});
+		try {
+			assertSame(LauncherProbe.NOT_YET, await(LauncherProbe.probe(10)));
+			LauncherProbe.reset();
+			old.complete(LauncherInfo.of(Launcher.PRISM));
+			assertEquals(List.of(), late);
+		} finally {
+			restore();
+		}
+	}
+
+	// AC4a.2 (review L7, L14): the whole listing is one task on the executor it's given (the real path), never the caller's
+	// thread; an executor that refuses it is no evidence.
+	@Test
+	void theListingRunsOnTheGivenExecutor(@TempDir Path dir) throws Exception {
+		Path index = Files.createDirectories(dir.resolve("mods").resolve(".index"));
+		Files.writeString(index.resolve("sodium.pw.toml"), "");
+		Queue<Runnable> queued = new ArrayDeque<>();
+		String[] resolvedOn = new String[1];
+		CompletableFuture<InstanceEvidence> listing = LauncherProbe.startListing(() -> {
+			resolvedOn[0] = Thread.currentThread().getName();
+			return dir.resolve("mods");
+		}, queued::add);
+		assertFalse(listing.isDone());
+		assertEquals(1, queued.size());
+		assertNull(resolvedOn[0], "not even the mods folder on the caller's thread");
+		Thread worker = new Thread(() -> queued.poll().run(), "evidence-worker");
+		worker.start();
+		worker.join();
+		assertEquals("evidence-worker", resolvedOn[0]);
+		assertTrue(listing.get().packwizIndex());
+		assertEquals(InstanceEvidence.NONE, LauncherProbe.startListing(() -> dir, r -> {
+			throw new RejectedExecutionException("full");
+		}).get());
+		assertEquals(InstanceEvidence.NONE, LauncherProbe.startListing(() -> {
+			throw new IllegalStateException("boom");
+		}, Runnable::run).get());
 	}
 
 	@Test

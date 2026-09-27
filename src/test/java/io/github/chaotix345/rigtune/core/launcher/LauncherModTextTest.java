@@ -89,10 +89,10 @@ class LauncherModTextTest {
 
 	@Test
 	void theShareReportLine() {
-		assertEquals("- Mod files: changed in Modrinth App", LauncherModText.shareLine(ModFilesPolicy.LAUNCHER, MODRINTH_APP, false));
-		assertEquals("- Mod files: changed in the launcher", LauncherModText.shareLine(ModFilesPolicy.LAUNCHER, LauncherInfo.UNKNOWN, false));
-		assertEquals("- Mod files: waiting for the launcher check", LauncherModText.shareLine(ModFilesPolicy.PENDING, null, false));
-		assertEquals("- Mod files: RigTune (opted in)", LauncherModText.shareLine(ModFilesPolicy.RIGTUNE, MODRINTH_APP, true));
+		assertEquals("changed in Modrinth App", LauncherModText.shareLine(ModFilesPolicy.LAUNCHER, MODRINTH_APP, false));
+		assertEquals("changed in the launcher", LauncherModText.shareLine(ModFilesPolicy.LAUNCHER, LauncherInfo.UNKNOWN, false));
+		assertEquals("waiting for the launcher check", LauncherModText.shareLine(ModFilesPolicy.PENDING, null, false));
+		assertEquals("RigTune (opted in)", LauncherModText.shareLine(ModFilesPolicy.RIGTUNE, MODRINTH_APP, true));
 		assertNull(LauncherModText.shareLine(ModFilesPolicy.RIGTUNE, MODRINTH_APP, false));
 		assertNull(LauncherModText.shareLine(ModFilesPolicy.RIGTUNE, LauncherInfo.UNKNOWN, false));
 	}
