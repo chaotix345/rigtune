@@ -9,16 +9,30 @@ import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.awareness.AwarenessService;
+import io.github.chaotix345.rigtune.client.awareness.OutsideChanges;
+import io.github.chaotix345.rigtune.client.probe.LauncherProbe;
+import io.github.chaotix345.rigtune.client.probe.Probes;
+import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkMenuScreen;
 import io.github.chaotix345.rigtune.client.ui.NoticeScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
+import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.awareness.WhatsNew;
+import io.github.chaotix345.rigtune.core.history.Journal;
+import io.github.chaotix345.rigtune.core.history.JournalEntry;
+import io.github.chaotix345.rigtune.core.history.UndoPlan;
+import io.github.chaotix345.rigtune.core.launcher.Launcher;
+import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
+import io.github.chaotix345.rigtune.core.launcher.LauncherSignals;
+import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
+import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.notice.NoticePriority;
+import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -28,6 +42,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import org.jspecify.annotations.Nullable;
 
@@ -37,8 +52,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.CompletableFuture;
 
 // docs/v0.4/SPEC.md 9 (AC9.7) and the notice slot, with the real controller and the network off (X1): a seeded
 // awareness.json with an older driver string -> the driver notice (committed to awareness.json once shown, W-L3), and
@@ -208,7 +225,134 @@ public class AwarenessGameTest implements FabricClientGameTest {
 
 	// ---- WS-W (4h, AC4h.2): the options snapshot and SETTINGS_CHANGED_OUTSIDE.
 
+	// A session's clean exit and the next start, in one run: RigTune applies a vanilla key (an ordinary Apply), the stop
+	// snapshot is stored (the call CLIENT_STOPPING makes), options.txt is changed and loaded behind RigTune's back (as the
+	// Modrinth App's sync does before a launch), then the start comparison runs on the worker. Under brand theseus the
+	// notice carries the app's steps; "Apply RigTune's values again" writes one journal entry, which Undo reverts; Keep
+	// retires it and writes nothing. The option, the brand and the launcher are put back (awareness.json by runTest).
 	private static void settingsChangedOutside(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		RealController real = v05.realController();
+		Journal journal = ClientJournal.get();
+		String original = option(context, OUTSIDE_KEY);
+		String rigtune = "true".equals(original) ? "false" : "true";
+		String brand = System.getProperty(LauncherSignals.BRAND);
+		LauncherInfo launcher = context.computeOnClient(mc -> real.launcher());
+		try {
+			System.setProperty(LauncherSignals.BRAND, "theseus");
+			redetect(context, real);
+			context.waitFor(mc -> real.launcher().launcher() == Launcher.MODRINTH_APP && real.report() != null, 1200);
+
+			Component applied = context.computeOnClient(mc -> real.apply(List.of(outsideSet(original, rigtune))));
+			check(rigtune.equals(option(context, OUTSIDE_KEY)), "RigTune applied it: " + applied.getString());
+			check(hasKey(applied, "rigtune.outside.sync_line"), "the Apply status names the Modrinth App's sync (AC4h.4): " + applied.getString());
+			Notice notice = restartWithOutsideChange(context, real, original);
+			// Other classes' vanilla changes may be flagged too (a key they changed in memory only); this one must be.
+			check(notice.message().english().contains("changed outside the game since you last played (")
+					&& notice.detail() != null && notice.detail().english().contains(described(real, rigtune, original)), notice.message().english() + " / "
+					+ notice.detail());
+			check(notice.detail() != null && notice.detail().english().contains("App settings → Synced settings → Sync game options"),
+					"the Modrinth App's steps: " + notice.detail());
+			openRigTune(context);
+			for (int[] size : SIZES) {
+				resize(context, size[0], size[1], size[2]);
+				cycleTo(context, notice.key());
+				screenshot(context, "awareness-outside-" + name(size));
+			}
+			int entries = journal.entries().size();
+			press(context, "rigtune.outside.reapply");
+			context.waitFor(mc -> rigtune.equals(option(mc, OUTSIDE_KEY)), 100);
+			List<JournalEntry> after = journal.entries();
+			check(after.size() == entries + 1, "one journal entry: " + entries + " -> " + after.size());
+			JournalEntry again = after.getLast();
+			check(JournalEntry.APPLY.equals(again.kind()) && again.changes().stream().anyMatch(c -> ("vanilla." + OUTSIDE_KEY).equals(c.key())
+					&& original.equals(c.before()) && rigtune.equals(c.after())), "an ordinary Apply of RigTune's value: " + again);
+			check(findOutside(context, real) == null, "gone once applied again");
+			UndoPlan plan = context.computeOnClient(mc -> real.undoPlanFor(again.id()));
+			check(plan != null && plan.problem() == null && !plan.items().isEmpty(), "Undo this plans: " + plan);
+			context.runOnClient(mc -> real.undo(plan));
+			context.waitFor(mc -> original.equals(option(mc, OUTSIDE_KEY)), 100);
+			RigTune.LOGGER.info("AwarenessGameTest: 4h: the outside change was flagged under theseus, applied again as one entry, undone");
+
+			context.runOnClient(mc -> real.apply(List.of(outsideSet(original, rigtune))));
+			Notice kept = restartWithOutsideChange(context, real, original);
+			openRigTune(context);
+			cycleTo(context, kept.key());
+			int before = journal.entries().size();
+			press(context, "rigtune.outside.keep");
+			check(findOutside(context, real) == null, "Keep retires it");
+			check(journal.entries().size() == before && original.equals(option(context, OUTSIDE_KEY)), "Keep changes nothing");
+			RigTune.LOGGER.info("AwarenessGameTest: 4h: Keep retired the notice and wrote nothing");
+		} finally {
+			Notice left = findOutside(context, real);
+			if (left != null) {
+				context.runOnClient(mc -> real.noticeAction(left.key(), OutsideChanges.KEEP));
+			}
+			context.runOnClient(mc -> SettingsBridge.applyVanilla(mc.options, Map.of(OUTSIDE_KEY, original)));
+			if (brand == null) {
+				System.clearProperty(LauncherSignals.BRAND);
+			} else {
+				System.setProperty(LauncherSignals.BRAND, brand);
+			}
+			redetect(context, real);
+			context.waitFor(mc -> real.launcher().equals(launcher) && real.report() != null, 1200);
+			resize(context, 1280, 720, 2);
+			openRigTune(context);
+		}
+	}
+
+	private static final String OUTSIDE_KEY = "entityShadows";
+
+	// The stop snapshot (as CLIENT_STOPPING takes it), the key changed in options.txt and loaded (as the Modrinth App's sync
+	// writes it before a launch), then the start comparison on the worker; returns the notice.
+	private static Notice restartWithOutsideChange(ClientGameTestContext context, RealController real, String outside) {
+		context.runOnClient(mc -> OutsideChanges.snapshotAtStop(real, mc));
+		JsonObject root = JsonParser.parseString(read(real.awarenessService().file())).getAsJsonObject();
+		check(root.get("optionsAtExit") instanceof JsonObject snapshot && snapshot.has("vanilla." + OUTSIDE_KEY), "the stop snapshot: " + root);
+		context.runOnClient(mc -> SettingsBridge.applyVanilla(mc.options, Map.of(OUTSIDE_KEY, outside)));
+		CompletableFuture.runAsync(() -> OutsideChanges.compareAtStart(real), Probes.EXECUTOR).join();
+		check(!JsonParser.parseString(read(real.awarenessService().file())).getAsJsonObject().has("optionsAtExit"), "the snapshot is consumed");
+		Notice notice = findOutside(context, real);
+		check(notice != null, "SETTINGS_CHANGED_OUTSIDE: " + notices(context, real));
+		return notice;
+	}
+
+	private static @Nullable Notice findOutside(ClientGameTestContext context, RealController real) {
+		return find(notices(context, real), OutsideChanges.KEY_PREFIX);
+	}
+
+	private static String option(ClientGameTestContext context, String key) {
+		return context.computeOnClient(mc -> option(mc, key));
+	}
+
+	private static String option(net.minecraft.client.Minecraft mc, String key) {
+		return SettingsBridge.readVanilla(mc.options).get(key);
+	}
+
+	private static Recommendation outsideSet(String from, String to) {
+		return new Recommendation("set:vanilla." + OUTSIDE_KEY, Category.SETTING, Impact.LOW, "Entity shadows", "",
+				new Action.SetSetting("vanilla." + OUTSIDE_KEY, from, to), true);
+	}
+
+	// "Entity Shadows: On → Off", with the rules' labels, as the notice names a change.
+	private static String described(RealController real, String from, String to) {
+		RulesDocument rules = real.rules();
+		String key = "vanilla." + OUTSIDE_KEY;
+		return SettingValues.describe(rules == null ? null : rules.settingLabels.get(key), key, from, to).english();
+	}
+
+	private static boolean hasKey(Component component, String key) {
+		if (component.getContents() instanceof TranslatableContents t && t.getKey().equals(key)) {
+			return true;
+		}
+		return component.getSiblings().stream().anyMatch(c -> hasKey(c, key));
+	}
+
+	private static void redetect(ClientGameTestContext context, RealController real) {
+		context.runOnClient(mc -> {
+			LauncherProbe.reset();
+			real.rescan();
+		});
 	}
 
 	// An older driver string in the fingerprint, and a baseline one rules revision back whose ids lack the report's

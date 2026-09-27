@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ConfigTargets;
+import io.github.chaotix345.rigtune.client.awareness.OutsideChanges;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
@@ -286,6 +287,10 @@ public class PreviewScreen extends Screen {
 
 	// 4h (WS-W), under "Written now": the Modrinth App's game-settings sync line.
 	private void settingsSyncLine(PreviewList target, ApplyPreview shown, int width) {
+		Component line = OutsideChanges.syncLine(controller.launcher(), !shown.now().isEmpty());
+		if (line != null) {
+			target.row(line, COLOR_NOTE, INDENT, width);
+		}
 	}
 
 	// L5 (docs/v0.5/SPEC.md 2H, WS-H), under the downloads: what the in-memory fabric.mod.json checks found.
