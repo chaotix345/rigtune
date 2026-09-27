@@ -59,6 +59,7 @@ class SchemaConsistencyTest {
 			    "stutterFixFeature": u.STUTTER_FIX_FEATURE, "stutterFixFields": u.STUTTER_FIX_FIELDS,
 			    "stutterFixSetFields": u.STUTTER_FIX_SET_FIELDS, "stutterFixKeys": u.STUTTER_FIX_KEYS,
 			    "stutterFixConditionKeys": u.STUTTER_FIX_CONDITION_KEYS, "stutterMapKeys": u.STUTTER_MAP_KEYS,
+			    "stutterFixKeyValues": u.STUTTER_FIX_KEY_VALUES, "maxFixStep": u.MAX_FIX_STEP,
 			})))
 			""";
 	private static final Map<String, Class<?>> V1_RULES = Map.of(
@@ -269,6 +270,28 @@ class SchemaConsistencyTest {
 		assertEquals(new TreeSet<>(io.github.chaotix345.rigtune.core.stutter.Attributor.CAUSES), strings(maps.get("stutterShareAtLeast")));
 		assertEquals(new TreeSet<>(io.github.chaotix345.rigtune.core.stutter.Attributor.TAGS), strings(maps.get("stutterTaggedShareAtLeast")));
 		assertEquals(Set.of("stutterShareAtLeast", "stutterTaggedShareAtLeast"), maps.keySet());
+	}
+
+	// v0.5 C20 (AC5.1, AC5.15): the values the updater lets a fix set are each key's ShareKeys entry (an ENUM's values, an
+	// INT's range), so a seed can only name a target the client can decode.
+	@Test
+	void stutterFixValuesMatchShareKeys() {
+		JsonObject table = python.getAsJsonObject("stutterFixKeyValues");
+		assertEquals(io.github.chaotix345.rigtune.core.stutter.FixSpec.KEYS, table.keySet());
+		for (String key : table.keySet()) {
+			JsonObject entry = table.getAsJsonObject(key);
+			ShareKeys.Key share = ShareKeys.byKey(key);
+			Assertions.assertNotNull(share, key);
+			assertEquals(share.kind().name(), entry.get("kind").getAsString(), key);
+			if (share.kind() == ShareKeys.Kind.ENUM) {
+				assertEquals(new TreeSet<>(share.values()), strings(entry.get("values")), key);
+			} else {
+				assertEquals(ShareKeys.Kind.INT, share.kind(), key);
+				assertEquals(share.min(), entry.get("min").getAsInt(), key);
+				assertEquals(share.max(), entry.get("max").getAsInt(), key);
+			}
+		}
+		assertEquals(8, python.get("maxFixStep").getAsInt());
 	}
 
 	@Test

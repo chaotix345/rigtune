@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "revision": 17,
-  "generatedAt": "2026-09-27T12:38:00Z",
+  "generatedAt": "2026-09-27T12:58:04Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -2618,6 +2618,63 @@
       "impact": "low",
       "title": "Hitches while chunks were loading",
       "text": "Most of the hitches happened while chunks were loading nearby (RigTune notes this, it doesn't measure it), so the two may be related. A render distance 2 to 4 chunks shorter, or Sodium's Chunk Updates set to Deferred (Sodium's default, on the Performance page of its video settings), may reduce them."
+    }
+  ],
+  "stutterFixes": [
+    {
+      "adviceId": "stutter-sodium-defer",
+      "requires": [
+        "stutter-fix"
+      ],
+      "evidence": {
+        "stutterShareAtLeast": {
+          "chunkBuild": 40
+        },
+        "causeSpikesAtLeast": {
+          "chunkBuild": 5
+        }
+      },
+      "set": {
+        "key": "sodium.performance.chunk_build_defer_mode",
+        "value": "ALWAYS"
+      }
+    },
+    {
+      "adviceId": "stutter-chunk-loading",
+      "requires": [
+        "stutter-fix"
+      ],
+      "evidence": {
+        "stutterShareAtLeast": {
+          "chunkLoad": 40
+        },
+        "causeSpikesAtLeast": {
+          "chunkLoad": 5
+        }
+      },
+      "set": {
+        "key": "vanilla.renderDistance",
+        "step": -2,
+        "min": 6
+      }
+    },
+    {
+      "adviceId": "stutter-dh-threads",
+      "requires": [
+        "stutter-fix"
+      ],
+      "evidence": {
+        "stutterTaggedShareAtLeast": {
+          "dh": 60
+        },
+        "cpuContentionShareAtLeast": 50,
+        "spikesPerMinuteAtLeast": 20
+      },
+      "set": {
+        "key": "dh.common.multiThreading.numberOfThreads",
+        "step": -2,
+        "min": 1
+      }
     }
   ],
   "availability": {

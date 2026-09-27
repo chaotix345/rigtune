@@ -173,6 +173,164 @@ class ChunksLoadingSeedV1Tests(unittest.TestCase):
         self.assertEqual(ur.strip_meta(repo_json("rules", "rules-v1.json")), with_seed)
 
 
+def fix(**fields):
+    entry = {"adviceId": "stutter-sodium-defer", "requires": ["stutter-fix"],
+             "evidence": {"stutterShareAtLeast": {"chunkBuild": 40}, "causeSpikesAtLeast": {"chunkBuild": 5}},
+             "set": {"key": "sodium.performance.chunk_build_defer_mode", "value": "ALWAYS"}}
+    entry.update(fields)
+    return entry
+
+
+STUTTER_ADVICE_IDS = ("stutter-sodium-defer", "stutter-chunk-loading", "stutter-dh-threads")
+
+
+def with_fixes(*fixes, **sections):
+    advice = [stutter_advice(id=i, when={"stutterShareAtLeast": {"chunkBuild": 25}}) for i in STUTTER_ADVICE_IDS]
+    return sample_knowledge(stutterAdvice=sections.pop("stutterAdvice", advice), stutterFixes=list(fixes), **sections)
+
+
+def without(mapping, key):
+    return {k: v for k, v in mapping.items() if k != key}
+
+
+# C20's rules side (AC5.1, AC5.15): the stutterFixes section's validator. Every refusal has its own test.
+class StutterFixesTests(Base):
+    def test_the_three_seeds_are_valid(self):
+        self.assert_valid(with_fixes(
+            fix(),
+            fix(adviceId="stutter-chunk-loading", evidence={"stutterShareAtLeast": {"chunkLoad": 40}, "causeSpikesAtLeast": {"chunkLoad": "5"}},
+                set={"key": "vanilla.renderDistance", "step": -2, "min": 6}),
+            fix(adviceId="stutter-dh-threads", evidence={"stutterTaggedShareAtLeast": {"dh": 60}, "cpuContentionShareAtLeast": 50,
+                                                          "spikesPerMinuteAtLeast": 20},
+                set={"key": "dh.common.multiThreading.numberOfThreads", "step": -2, "min": 1})))
+
+    def test_a_future_feature_next_to_stutter_fix_is_allowed(self):
+        self.assert_valid(with_fixes(fix(requires=["stutter-fix", "stutter-fix-2"])))
+
+    def test_not_an_array(self):
+        self.assert_invalid("stutterFixes must be an array", dict(with_fixes(), stutterFixes={"adviceId": "x"}))
+
+    def test_an_entry_that_isnt_an_object(self):
+        self.assert_invalid("stutterFixes[0] must be an object", with_fixes("stutter-sodium-defer"))
+
+    def test_unknown_field(self):
+        self.assert_invalid("unknown field(s) v1", with_fixes(fix(v1=False)))
+        self.assert_invalid("unknown field(s) text", with_fixes(fix(text="t")))
+
+    def test_unknown_field_in_set(self):
+        self.assert_invalid("set: unknown field(s) when", with_fixes(fix(set={"key": "vanilla.renderDistance", "step": -2, "min": 6, "when": {}})))
+
+    def test_null(self):
+        self.assert_invalid("null isn't allowed", with_fixes(fix(evidence={"stutterShareAtLeast": {"chunkBuild": None}})))
+        self.assert_invalid("null isn't allowed", with_fixes(fix(set={"key": "sodium.performance.chunk_build_defer_mode", "value": None})))
+
+    def test_missing_advice_id(self):
+        self.assert_invalid("needs an adviceId", with_fixes(without(fix(), "adviceId")))
+
+    def test_duplicate_advice_id(self):
+        self.assert_invalid("duplicate adviceId", with_fixes(fix(), fix()))
+
+    def test_unknown_advice_id(self):
+        self.assert_invalid("isn't a stutterAdvice id", with_fixes(fix(adviceId="ram-stutter-gc-heap")))
+        self.assert_invalid("isn't a stutterAdvice id", with_fixes(fix(adviceId="vsync-cap"), stutterAdvice=[]))
+
+    def test_needs_the_stutter_fix_feature(self):
+        self.assert_invalid('needs "requires": ["stutter-fix"]', with_fixes(without(fix(), "requires")))
+        self.assert_invalid('needs "requires": ["stutter-fix"]', with_fixes(fix(requires=["stutter-doctor"])))
+
+    def test_features_that_would_make_0_5_skip_it(self):
+        for feature in ("stutter-doctor", "jvm-flags"):
+            self.assert_invalid(f"{feature} would make RigTune 0.5 skip this fix", with_fixes(fix(requires=["stutter-fix", feature])))
+
+    def test_needs_evidence(self):
+        self.assert_invalid("needs an evidence condition", with_fixes(without(fix(), "evidence")))
+
+    def test_evidence_is_a_condition(self):
+        self.assert_invalid("evidence.tierAtLeest: unknown condition key", with_fixes(fix(evidence={"tierAtLeest": 3})))
+        self.assert_invalid("evidence must be an object", with_fixes(fix(evidence=[{"always": True}])))
+
+    def test_no_jvm_flag_in_evidence(self):
+        self.assert_invalid("doesn't evaluate jvm- flags", with_fixes(fix(evidence={"flags": ["jvm-gc-g1"], "stutterShareAtLeast": {"gc": 30}})))
+
+    def test_cause_spikes_only_in_fix_evidence(self):
+        cause = {"causeSpikesAtLeast": {"chunkBuild": 5}}
+        self.assert_invalid("allowed only inside stutterFixes[].evidence", sample_knowledge(stutterAdvice=[stutter_advice(when=dict(cause))]))
+        self.assert_invalid("allowed only inside stutterFixes[].evidence",
+                            sample_knowledge(stutterAdvice=[stutter_advice(when={"not": {"anyOf": [dict(cause)]}})]))
+        knowledge = sample_knowledge()
+        knowledge["advice"].append({"id": "x", "when": dict(cause), "title": "T", "text": "t", "kind": "info"})
+        self.assert_invalid("allowed only inside stutterFixes[].evidence", knowledge)
+        knowledge = sample_knowledge()
+        knowledge["settings"].append({"key": "vanilla.renderDistance", "value": 8, "when": dict(cause), "v1": False})
+        self.assert_invalid("allowed only inside stutterFixes[].evidence", knowledge)
+        self.assert_invalid("allowed only inside stutterFixes[].evidence", sample_knowledge(profileTemplates={"templates": [
+            {"id": "battery", "goal": "performance", "settings": [{"key": "vanilla.renderDistance", "max": 8, "when": dict(cause)}]}]}))
+
+    def test_cause_spikes_values(self):
+        for value, fragment in (([5], "must map causes to whole spike counts"), ({}, "must map causes to whole spike counts"),
+                                ({"chunksLoading": 5}, "chunksLoading: not one of"), ({"chunkBuild": -1}, "whole number of spikes"),
+                                ({"chunkBuild": 2.5}, "whole number of spikes"), ({"chunkBuild": "5.0"}, "whole number of spikes"),
+                                ({"chunkBuild": True}, "whole number of spikes"), ({"chunkBuild": 2 ** 31}, "whole number of spikes")):
+            self.assert_invalid(fragment, with_fixes(fix(evidence={"causeSpikesAtLeast": value})))
+
+    def test_needs_a_set(self):
+        self.assert_invalid("needs a set", with_fixes(without(fix(), "set")))
+        self.assert_invalid("set must be an object", with_fixes(fix(set=["vanilla.renderDistance", -2])))
+
+    def test_a_key_outside_the_allowlist(self):
+        for key in ("vanilla.simulationDistance", "sodium.performance.chunk_builder_threads", "mods/sodium.jar", 5):
+            self.assert_invalid("set.key must be one of", with_fixes(fix(set={"key": key, "value": 8})))
+        self.assert_invalid("set.key must be one of", with_fixes(fix(set={"value": 8})))
+
+    def test_value_and_step_together_or_neither(self):
+        self.assert_invalid("needs exactly one of value or step", with_fixes(fix(set={"key": "vanilla.renderDistance", "value": 8, "step": -2, "min": 6})))
+        self.assert_invalid("needs exactly one of value or step", with_fixes(fix(set={"key": "vanilla.renderDistance", "min": 6})))
+
+    def test_an_enum_value_outside_the_list(self):
+        for value in ("DEFERRED", "always", 0, True):
+            self.assert_invalid("set.value must be one of ALWAYS, ONE_FRAME, ZERO_FRAMES",
+                                with_fixes(fix(set={"key": "sodium.performance.chunk_build_defer_mode", "value": value})))
+
+    def test_an_int_value_out_of_range_or_of_the_wrong_type(self):
+        for key, value in (("vanilla.renderDistance", 1), ("vanilla.renderDistance", 33), ("vanilla.renderDistance", "8"),
+                           ("vanilla.renderDistance", 8.5), ("vanilla.renderDistance", True), ("dh.common.multiThreading.numberOfThreads", 0)):
+            self.assert_invalid("set.value must be a whole number from", with_fixes(fix(set={"key": key, "value": value})))
+
+    def test_bounds_only_go_with_a_step(self):
+        self.assert_invalid("set.min only goes with a step", with_fixes(fix(set={"key": "vanilla.renderDistance", "value": 8, "min": 6})))
+        self.assert_invalid("set.max only goes with a step", with_fixes(fix(set={"key": "vanilla.renderDistance", "value": 8, "max": 12})))
+
+    def test_step_shape(self):
+        for step in (0, 9, -9, 1.5, "-2", True):
+            self.assert_invalid("set.step must be a whole number from -8 to 8, not 0",
+                                with_fixes(fix(set={"key": "vanilla.renderDistance", "step": step, "min": 6, "max": 12})))
+
+    def test_a_step_on_an_enum_key(self):
+        self.assert_invalid("set.step only works on a number setting",
+                            with_fixes(fix(set={"key": "sodium.performance.chunk_build_defer_mode", "step": 1, "max": 2})))
+
+    def test_a_negative_step_needs_min_and_a_positive_one_max(self):
+        self.assert_invalid("a negative step needs a min", with_fixes(fix(set={"key": "vanilla.renderDistance", "step": -2, "max": 12})))
+        self.assert_invalid("a positive step needs a max", with_fixes(fix(set={"key": "vanilla.renderDistance", "step": 2, "min": 6})))
+
+    def test_bounds_shape(self):
+        for bounds, fragment in (({"min": 1}, "set.min must be a whole number from 2 to 32"),
+                                 ({"min": "6"}, "set.min must be a whole number from 2 to 32"),
+                                 ({"min": 6, "max": 40}, "set.max must be a whole number from 2 to 32"),
+                                 ({"min": 12, "max": 6}, "min is above max")):
+            self.assert_invalid(fragment, with_fixes(fix(set={"key": "vanilla.renderDistance", "step": -2, **bounds})))
+
+    def test_the_section_never_reaches_rules_v1(self):
+        knowledge = with_fixes(fix())
+        self.assert_valid(knowledge)
+        content = ur.assemble_content(knowledge, knowledge["mods"], {}, {})
+        self.assertEqual(ur.v2_content(content)["stutterFixes"], [fix()])
+        with_section, _ = ur.v1_projection(content)
+        without_section, _ = ur.v1_projection(ur.assemble_content(without(knowledge, "stutterFixes"), knowledge["mods"], {}, {}))
+        self.assertNotIn("stutterFixes", with_section)
+        self.assertEqual(with_section, without_section)
+
+
 # The generated files as the release revision R carries them (v0.5 content; docs/v0.5/design/ws-r.md).
 class GeneratedV05Tests(unittest.TestCase):
     @classmethod
@@ -219,6 +377,27 @@ class GeneratedV05Tests(unittest.TestCase):
             expected = [i for i, before in enumerate(old["settings"]) if "entry-level" in before.get("reason", "")]
             self.assertEqual(changed, expected, name)
             self.assertEqual(len(expected), 7 if name == "rules-v2.json" else 4, name)
+
+    # C20 (SPEC 5, sf §2.2): the three seeds with their UNVERIFIED starting thresholds (AC5.14 calibrates them), DH last so
+    # it can be cut first; the section is v2-only and rules-v1.json is the same with and without it (AC5.1).
+    def test_the_c20_seeds(self):
+        self.assertEqual(self.v2["stutterFixes"], [
+            {"adviceId": "stutter-sodium-defer", "requires": ["stutter-fix"],
+             "evidence": {"stutterShareAtLeast": {"chunkBuild": 40}, "causeSpikesAtLeast": {"chunkBuild": 5}},
+             "set": {"key": "sodium.performance.chunk_build_defer_mode", "value": "ALWAYS"}},
+            {"adviceId": "stutter-chunk-loading", "requires": ["stutter-fix"],
+             "evidence": {"stutterShareAtLeast": {"chunkLoad": 40}, "causeSpikesAtLeast": {"chunkLoad": 5}},
+             "set": {"key": "vanilla.renderDistance", "step": -2, "min": 6}},
+            {"adviceId": "stutter-dh-threads", "requires": ["stutter-fix"],
+             "evidence": {"stutterTaggedShareAtLeast": {"dh": 60}, "cpuContentionShareAtLeast": 50, "spikesPerMinuteAtLeast": 20},
+             "set": {"key": "dh.common.multiThreading.numberOfThreads", "step": -2, "min": 1}},
+        ])
+        self.assertNotIn("stutterFixes", self.v1)
+        knowledge = repo_json("rules", "source", "knowledge.json")
+        with_fixes_v1, _ = ur.v1_projection(repo_content(knowledge))
+        without_v1, _ = ur.v1_projection(repo_content(without(knowledge, "stutterFixes")))
+        self.assertEqual(with_fixes_v1, without_v1)
+        self.assertEqual(ur.strip_meta(self.v1), with_fixes_v1)
 
     # L2 (SPEC 2S): one info entry on the tag, calibrated on P5C-F1's re-runs and AC5.8's A control (ChunksLoadingSeedTest).
     def test_the_l2_seed(self):
