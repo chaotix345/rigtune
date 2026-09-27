@@ -84,7 +84,44 @@ class GcKindTest {
 		assertEquals(new TreeSet<>(List.of("CYCLE", "EXPLICIT", "MAJOR")), new TreeSet<>(GcKind.describe(GcKind.CYCLE | GcKind.EXPLICIT | GcKind.MAJOR)));
 	}
 
-	// The live set is read from the old generation's pool when there is one, else from every pool together.
+	// docs/v0.5/SPEC.md 2S NEW-1 (AC2S.11): the strings generational Shenandoah sent in the code-deciding run
+	// (docs/v0.5/verification/stutter/new1-generational-shenandoah): young cycles, old markings and global cycles alike, so
+	// none of them is a live-set sample there (the live set stays unmeasured); every other flag is unchanged. Without the
+	// generational mode Shenandoah's cycles stay live-set samples.
+	@Test
+	void generationalShenandoahIsNeverALiveSetSample() {
+		String[][] recorded = {
+				{"Shenandoah Cycles", "end of GC cycle", "Concurrent GC"},
+				{"Shenandoah Cycles", "end of GC cycle", "System.gc()"},
+				{"Shenandoah Pauses", "Init Mark", "Concurrent GC"},
+				{"Shenandoah Pauses", "Final Mark", "Concurrent GC"},
+				{"Shenandoah Pauses", "Init Update Refs", "Concurrent GC"},
+				{"Shenandoah Pauses", "Final Update Refs", "Concurrent GC"},
+				{"Shenandoah Pauses", "Init Mark", "System.gc()"},
+				{"Shenandoah Pauses", "Final Mark", "System.gc()"},
+				{"Shenandoah Pauses", "Init Update Refs", "System.gc()"},
+				{"Shenandoah Pauses", "Final Update Refs", "System.gc()"},
+				// Not seen in the run (no allocation failure), the same collector's whole-heap pauses: still full pauses.
+				{"Shenandoah Pauses", "Degenerated GC", "Allocation Failure"},
+				{"Shenandoah Pauses", "Full GC", "Allocation Failure"}};
+		for (String[] r : recorded) {
+			int single = GcKind.classify(r[0], r[1], r[2]);
+			int generational = GcKind.classify(r[0], r[1], r[2], true);
+			assertEquals(0, generational & GcKind.MAJOR, String.join(" | ", r));
+			assertEquals(single & ~GcKind.MAJOR, generational, String.join(" | ", r) + ": the other flags as without the mode");
+			assertEquals(single, GcKind.classify(r[0], r[1], r[2], false));
+		}
+		assertTrue((GcKind.classify("Shenandoah Cycles", "end of GC cycle", "Concurrent GC", false) & GcKind.MAJOR) != 0);
+		assertTrue((GcKind.classify("G1 Old Generation", "end of major GC", "G1 Compaction Pause", true) & GcKind.MAJOR) != 0, "only Shenandoah's");
+
+		assertTrue(GcKind.shenandoahGenerational(List.of("Shenandoah Young Gen", "Shenandoah Old Gen")));
+		assertFalse(GcKind.shenandoahGenerational(List.of("Shenandoah")));
+		assertFalse(GcKind.shenandoahGenerational(List.of("G1 Eden Space", "G1 Old Gen", "G1 Survivor Space")));
+		assertFalse(GcKind.shenandoahGenerational(List.of("ZGC Old Generation", "ZGC Young Generation")));
+		assertFalse(GcKind.shenandoahGenerational(List.of()));
+	}
+
+	// The live set is read from the old generation's pool when there is one, else from the heap pools (GcListener).
 	@Test
 	void oldGenerationPools() {
 		assertTrue(GcKind.oldPool("G1 Old Gen"));

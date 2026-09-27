@@ -1,0 +1,883 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "baseline-7d226e52-56e8-454c-9d4b-9a63a2731c20",
+      "at": "2026-09-22T09:00:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "360052a0-a38c-4bc5-be83-726d580f4ac7",
+          "type": "setting",
+          "key": "vanilla.biomeBlendRadius",
+          "before": "2",
+          "after": "1",
+          "status": "APPLIED"
+        },
+        {
+          "id": "73b9f3c9-e0bc-4de9-9b42-594e7631251f",
+          "type": "setting",
+          "key": "vanilla.particles",
+          "before": "0",
+          "after": "2",
+          "status": "APPLIED"
+        }
+      ],
+      "foldedEntryIds": [
+        "9f039d32-5456-4972-a851-eee90b25870d",
+        "ac70e7f0-6812-4bbb-b888-da253724da0b"
+      ]
+    },
+    {
+      "id": "df6517f4-2f43-3c72-9037-a2fade31e4b7",
+      "at": "2026-09-22T10:00:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "195c0036-0c8d-3aec-8f3b-aa754652386c",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "8e53b48e-a7dd-3c5e-a642-443987bc95ac",
+      "at": "2026-09-22T10:01:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "098c3232-c9c4-34c3-bef8-7047982cf85a",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "952c88d6-d942-3569-8921-4707941116ca",
+      "at": "2026-09-22T10:02:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "591ca6ba-db4b-3f43-bb6f-cd13a04b1fd1",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "f00cad87-7265-3f91-b58d-52be41b15f55",
+      "at": "2026-09-22T10:03:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "f4f55638-aed9-392c-bac1-80ab4a2e73ec",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "ec66a33e-474e-38ac-a1ce-d339b56cdb91",
+      "at": "2026-09-22T10:04:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "0b1b1e98-c038-31b4-9e3f-fe432e36f129",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "71167b1f-0e6c-3177-bebf-10cdf42fc9e4",
+      "at": "2026-09-22T10:05:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "c87e0317-605c-3562-a492-9de64d5acc29",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "ff3f70d8-cee5-3545-98ea-e1b58c018a92",
+      "at": "2026-09-22T10:06:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "0ffd7ffe-b56c-31c3-80fd-0f42212bc108",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "136a34a1-923f-367a-a469-d0bd92dace14",
+      "at": "2026-09-22T10:07:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "5f99e39f-0be4-3ad1-a824-9292ce791fba",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "b87012ee-bfe6-35f7-bea1-43d21d9da93b",
+      "at": "2026-09-22T10:08:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "3bdb2638-3e98-3d39-b2a2-07dec56cd6e3",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "5cd35c66-da58-335b-86d2-c6fc6b4a5d3a",
+      "at": "2026-09-22T10:09:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "1d937116-67e6-3f78-bdc1-f998c69537e9",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "b8383853-c537-3e65-9fa1-162d61868b70",
+      "at": "2026-09-22T10:10:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "22186cf5-a15d-3752-bf2c-1d4a6759c11e",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "742fceae-fdf0-352d-b6b3-e61efb794231",
+      "at": "2026-09-22T10:11:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "2ccf8a6a-55e4-3622-8748-e47a10ac3652",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "3fc0410f-bad5-3fff-b696-2a9e72dc3d32",
+      "at": "2026-09-22T10:12:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "f5f3ba5f-5dd7-39c0-b4ec-930984ffb048",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "0158586b-18a4-322a-8cbf-8267cd342f3d",
+      "at": "2026-09-22T10:13:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "217fd07e-eb59-3a38-bb55-28998a2676ab",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "d2b02996-aa42-3160-b148-ce6379186cc6",
+      "at": "2026-09-22T10:14:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "fb44b1a9-5143-3c49-aa6f-afc3d16f68ba",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "43386cf5-309e-3a1e-ab7e-84c7234e7f39",
+      "at": "2026-09-22T10:15:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "003d493c-0e1b-328d-8f68-7c679b7166c3",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "63c83a5e-a330-33b9-b488-ffb58f462c66",
+      "at": "2026-09-22T10:16:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "34f4fea8-7972-3821-a15d-a2a1c863f564",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "ad2cc7d7-d42e-3a13-ad95-5ee4dd47ce70",
+      "at": "2026-09-22T10:17:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "66dda7f6-ac6a-326d-8498-657ec361059c",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "1e84a17e-c18e-39c1-857b-cccd4ff47f2b",
+      "at": "2026-09-22T10:18:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "3d7f5ab5-86a5-30d2-ac4d-f7b892493f1b",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "e9c75504-b99b-3f23-bde6-548c7846391c",
+      "at": "2026-09-22T10:19:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "a089a867-1d6c-38ce-acbe-68f6ed80270d",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "3228afc0-380a-32dd-a730-552d328ca61d",
+      "at": "2026-09-22T10:20:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "f1c7e056-b249-3bde-ad50-49328dcbb5de",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "e157be46-3220-3a59-824b-05637e475d29",
+      "at": "2026-09-22T10:21:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "def7abd7-77fe-36f6-a401-f26a275ffb7e",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "e90a7bd8-a879-3b61-9715-ac3cfe19f560",
+      "at": "2026-09-22T10:22:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "b2fc8d62-a2c3-3d7c-8b99-1ab135b8de2c",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "6a97f4b9-983a-3f50-be8b-3e2d5b8d3238",
+      "at": "2026-09-22T10:23:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "d48fd6fe-cfdc-3a83-a722-dbce68a919cb",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "4e8ba788-9128-3c83-aee8-3596c7e8391b",
+      "at": "2026-09-22T10:24:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "a9123288-677a-3007-acbe-0c8b194448d4",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "1d587e74-99a3-3b8c-971b-33d7e114de6d",
+      "at": "2026-09-22T10:25:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "413842bc-ae5d-369a-afaa-484051d248da",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "6c503c2f-8d7b-3a9f-8d2a-efc17d7380eb",
+      "at": "2026-09-22T10:26:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "07faf9f5-4ba7-3ccd-90c7-8f814db449d8",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "da1c76da-5535-38b6-a48c-b11137afda98",
+      "at": "2026-09-22T10:27:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "2720a0bc-ef26-3830-8987-6b6ca0a70c88",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "8df8a7e4-5e9a-3e3a-88e4-65bbec9b85d8",
+      "at": "2026-09-22T10:28:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "61bd2a44-a712-3626-b1d1-036b9d3561eb",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "963b6584-c508-34a5-a25e-4428a1ea9d1f",
+      "at": "2026-09-22T10:29:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "048db5da-dc9a-3371-ab0f-d4e353e6995c",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "f5c8588a-ba98-352c-b1cc-f4aa11ffdb62",
+      "at": "2026-09-22T10:30:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "4932c792-594b-39ee-8d02-f4221f0a3b04",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "885b10c8-ec36-39bc-bcc1-39f21bab1131",
+      "at": "2026-09-22T10:31:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "e196059d-a853-3aad-9e29-38cae79c0636",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "91837134-0626-36bd-8d18-0e040e076604",
+      "at": "2026-09-22T10:32:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "192f55a1-f278-3fbe-b882-cdf15a31294f",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "ec326d5e-2df7-34a1-bc17-f2f2ab40dcaa",
+      "at": "2026-09-22T10:33:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "55a993a7-ff05-36bd-85f9-aa87703c99e1",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "b6315ee6-d545-3aa2-adf0-adc6551ddc8d",
+      "at": "2026-09-22T10:34:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "4a578d53-9e28-3e4a-94e7-297142f019a7",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "816b0260-3b42-3a3d-b180-926766465a80",
+      "at": "2026-09-22T10:35:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "2a336d46-6b16-3e64-a4a8-0b6b2a4ab5ae",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "1430528d-7c5e-3411-bec8-99b94865da30",
+      "at": "2026-09-22T10:36:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "f5fbe8eb-db08-3009-96b2-3ab053f01056",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "989a1e0d-4f09-3e00-bd8b-5a8b0cc3cdd9",
+      "at": "2026-09-22T10:37:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "1ca52a2e-ba03-3279-b52e-485b75dce0b9",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "9d90103e-17d9-36fa-9171-5c8c86feb52c",
+      "at": "2026-09-22T10:38:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "d1b460f5-0c86-39b0-a8d0-c2ce7e942081",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "19eb8a1e-9d64-3716-8c7b-8dab5f6ea26e",
+      "at": "2026-09-22T10:39:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "fc1aba74-4332-3d5c-8d7d-0b7d5193cbe7",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "b9d1d505-3884-3c99-8004-bab4dcaf888f",
+      "at": "2026-09-22T10:40:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "5b580532-dde9-3d2b-92c6-51e51a66a99e",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "315153c1-4afc-3a09-82db-f5f885560a02",
+      "at": "2026-09-22T10:41:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "22c75161-8533-3009-b78d-dba8941b8786",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "11832db3-51ae-32f4-af9d-485be7fc92e6",
+      "at": "2026-09-22T10:42:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "0b844ee0-17e6-33cf-ab3c-ff2f93974cb5",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "04019a69-5456-3666-a71b-ac2a77013e59",
+      "at": "2026-09-22T10:43:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "4431b2a5-e2dc-34da-a99c-9ae2ff273d66",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "5eace9f8-d32e-33d7-a7bf-722d78717897",
+      "at": "2026-09-22T10:44:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "decc93f2-3619-3206-945d-54c672f40aa5",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "07a81136-9909-3cb7-92b6-826163d68381",
+      "at": "2026-09-22T10:45:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "204b0e73-9ab8-32d7-8936-538b3c303866",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "9b912548-e5ab-32fa-8aa8-4650252c9764",
+      "at": "2026-09-22T10:46:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "2a60435c-70a5-375e-80e5-65010cc77b9b",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "10",
+          "after": "9",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "14e880e4-40dc-3b6f-8376-3ea0bd6e9aa5",
+      "at": "2026-09-22T10:47:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "bc732a08-7646-3645-9672-5a64cc8a7743",
+          "type": "setting",
+          "key": "vanilla.weatherRadius",
+          "before": "9",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "8ee686e5-f831-4836-80a2-33551c9bbe31",
+      "at": "2026-09-23T10:00:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "c79c115a-d6ae-4a9c-afa8-f7973b343755",
+          "type": "setting",
+          "key": "vanilla.simulationDistance",
+          "before": "12",
+          "after": "8",
+          "status": "APPLIED"
+        },
+        {
+          "id": "6385d72a-5a85-4134-a52a-342f0deceb1b",
+          "type": "setting",
+          "key": "vanilla.renderClouds",
+          "before": "true",
+          "after": "false",
+          "status": "APPLIED"
+        },
+        {
+          "id": "e469bda9-a192-401a-887d-3db753112418",
+          "type": "setting",
+          "key": "vanilla.entityShadows",
+          "before": "true",
+          "after": "false",
+          "status": "APPLIED"
+        }
+      ]
+    }
+  ]
+}

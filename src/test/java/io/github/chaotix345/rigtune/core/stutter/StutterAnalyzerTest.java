@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.core.stutter;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -25,6 +26,8 @@ class StutterAnalyzerTest {
 	static final class Capture {
 		final FrameRing ring = new FrameRing(FrameRing.SESSION_FRAMES, FrameRing.SESSION_CANDIDATES);
 		final StutterRings rings = new StutterRings(ANCHOR);
+		// Where each spike frame started, by its second mark.
+		final Map<Integer, Long> spikeStarts = new java.util.HashMap<>();
 		long now = T0;
 
 		Capture frames(double seconds, Map<Integer, Long> spikesAtSecond, boolean excluded) {
@@ -36,6 +39,7 @@ class StutterAnalyzerTest {
 				Long spike = spikesAtSecond.get(second);
 				if (spike != null && done.add(second)) {
 					d = spike;
+					spikeStarts.put(second, now);
 				}
 				now += d;
 				ring.frame(now, d, excluded, 300_000, MS, 14 * MS, 0);
@@ -244,6 +248,169 @@ class StutterAnalyzerTest {
 		assertEquals(1, report.histogramCounts()[4], "the 40 ms frame");
 		assertEquals(report.frames(), frames + 1);
 		assertArrayEquals(new long[]{0, 0, frames * 16, 0, 40, 0, 0, 0, 0}, report.histogramTimeMs());
+	}
+
+	// docs/v0.5/SPEC.md 2S SD-1 (AC2S.5; audit-verify's sd1FullGcSurvivesTheGcRingWrapping): a full GC early in a long
+	// session is still counted, and its live-set sample still read, after 2048 later GC records wrapped the GC ring.
+	@Test
+	void sd1FullGcSurvivesTheGcRingWrapping() {
+		Capture c = new Capture();
+		c.frames(1200, Map.of(), false);
+		c.gc(T0 + 60 * S, 40, GcKind.PAUSE | GcKind.FULL | GcKind.MAJOR, 3072);
+		for (int i = 0; i < StutterRings.GC_CAPACITY; i++) {
+			c.gc(T0 + 100 * S + i * 500 * MS, 3, GcKind.PAUSE, 0);
+		}
+		StutterAnalyzer.Result r = c.analyze(true);
+		assertEquals(1, r.facts().gcFullPauses(), "the session had one full GC");
+		assertEquals(1, r.report().facts().fullGcs());
+		assertEquals(75.0, r.facts().liveSetPercent(), 0.01, "its live-set sample: 3 GB of 4");
+	}
+
+	// SD-1 (AC2S.5; audit-verify's sd1DhTagShareCoversTheWholeSession): 60 minutes at 62.5 FPS, 358 spikes, every one during
+	// saturated DH work. The sampler ring holds only the newest ~17 minutes, so the dh share is taken over the spikes it
+	// covers (not diluted by the older ones), and dh stays measured.
+	@Test
+	void sd1DhShareCountsTheCoveredSpikes() {
+		Capture c = new Capture();
+		Map<Integer, Long> spikes = new java.util.HashMap<>();
+		for (int s = 20; s < 3600; s += 10) {
+			spikes.put(s, 80 * MS);
+		}
+		c.frames(3600, spikes, false);
+		long window = 250 * MS;
+		long[] rec = new long[StutterRings.SAMPLE_STRIDE];
+		for (long t = T0 + window; t <= c.now; t += window) {
+			fill(rec, t, window, 4 * window, 15 * window);
+			c.rings.sample(rec);
+		}
+		StutterAnalyzer.Result r = c.analyze(true);
+		assertEquals(358, r.report().spikes().total());
+		assertFalse(r.facts().unmeasured().contains(Attributor.DH));
+		assertTrue(r.facts().taggedShares().get(Attributor.DH) >= 40, "dh share " + r.facts().taggedShares());
+		assertEquals(100.0, r.facts().taggedShares().get(Attributor.DH), 0.01, "every covered spike was during DH work");
+	}
+
+	// SD-1: the GC claim share is taken over the spikes newer than the oldest GC record the ring still holds.
+	@Test
+	void sd1GcShareCountsTheSpikesTheGcRingCovers() {
+		Capture c = new Capture();
+		Map<Integer, Long> spikes = new java.util.HashMap<>();
+		for (int s = 20; s < 3600; s += 20) {
+			spikes.put(s, 80 * MS);
+		}
+		c.frames(3600, spikes, false);
+		// A 50 ms pause inside every spike of the first half (forgotten once the ring wraps) and of the second half (held).
+		for (int s = 20; s < 1800; s += 20) {
+			c.gc(spikeStart(c, s) + 20 * MS, 50, GcKind.PAUSE, 0);
+		}
+		List<Long> late = new java.util.ArrayList<>();
+		for (int s = 1800; s < 3600; s += 20) {
+			late.add(spikeStart(c, s) + 20 * MS);
+		}
+		// Short pauses between the spikes fill the ring, all in the second half, in time order.
+		java.util.TreeMap<Long, Long> second = new java.util.TreeMap<>();
+		late.forEach(t -> second.put(t, 50L));
+		for (int i = 0; second.size() < StutterRings.GC_CAPACITY; i++) {
+			second.putIfAbsent(T0 + 1805 * S + i * 800 * MS, 0L);
+		}
+		second.forEach((t, ms) -> c.gc(t, ms, GcKind.PAUSE, 0));
+		StutterAnalyzer.Result r = c.analyze(true);
+		double lost = 80 - 16;
+		assertEquals(100.0 * 51 / lost, r.facts().claimedShares().get(Attributor.GC), 1.0, "over the covered spikes: 51 of each 64 lost ms");
+		assertFalse(r.facts().unmeasured().contains(Attributor.GC));
+	}
+
+	private static long spikeStart(Capture c, int second) {
+		return c.spikeStarts.get(second);
+	}
+
+	// Recording a GC notification, the whole-capture counters and the live-set samples included, allocates nothing.
+	@Test
+	void aGcRecordAllocatesNothing() {
+		org.junit.jupiter.api.Assumptions.assumeTrue(java.lang.management.ManagementFactory.getThreadMXBean() instanceof com.sun.management.ThreadMXBean bean
+				&& bean.isThreadAllocatedMemorySupported());
+		StutterRings rings = new StutterRings(ANCHOR);
+		for (int i = 0; i < 20_000; i++) {
+			rings.gc(T0 + i, i, i + 1, GcKind.PAUSE | (i % 7 == 0 ? GcKind.FULL | GcKind.MAJOR : 0) | (i % 11 == 0 ? GcKind.EXPLICIT : 0), 1L << 30);
+		}
+		com.sun.management.ThreadMXBean threads = (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
+		long before = threads.getCurrentThreadAllocatedBytes();
+		for (int i = 0; i < 20_000; i++) {
+			rings.gc(T0 + i, i, i + 1, GcKind.PAUSE | (i % 7 == 0 ? GcKind.FULL | GcKind.MAJOR : 0) | (i % 11 == 0 ? GcKind.EXPLICIT : 0), 1L << 30);
+		}
+		long allocated = threads.getCurrentThreadAllocatedBytes() - before;
+		assertTrue(allocated < 64 * 1024, "20,000 GC records allocated " + allocated + " bytes");
+	}
+
+	// docs/v0.5/SPEC.md 2S SD-2 (AC2S.6; audit-verify's sd2OnePercentLowIsNeverAboveTheAverage): once the frame ring wrapped,
+	// frames, average and 1 % low all cover its window (the newest frames), and the report says how long that window is.
+	@Test
+	void sd2OnePercentLowIsNeverAboveTheAverage() {
+		FrameRing ring = new FrameRing(FrameRing.SESSION_FRAMES, FrameRing.SESSION_CANDIDATES);
+		long now = T0;
+		for (int i = 0; i < FrameRing.SESSION_FRAMES; i++) {
+			now += 20 * MS;
+			ring.frame(now, 20 * MS, false, 0, 0, 0, 0);
+		}
+		for (int i = 0; i < FrameRing.SESSION_FRAMES; i++) {
+			now += 5 * MS;
+			ring.frame(now, 5 * MS, false, 0, 0, 0, 0);
+		}
+		StutterReport report = StutterAnalyzer.analyze(new StutterAnalyzer.Input(ring.snapshot(), new StutterRings(ANCHOR).snapshot(), T0, now, STARTED,
+				StutterReport.MONITOR, "26.2", "g1", 4096, 32768L, 16, false, false)).report();
+		assertTrue(report.onePercentLowFps() <= report.avgFps(), "1% low " + report.onePercentLowFps() + " > average " + report.avgFps());
+		assertEquals(200.0, report.avgFps(), 0.1, "the window's own average");
+		assertEquals(FrameRing.SESSION_FRAMES - 1, report.frames(), "the window's frames (the first held one has no duration)");
+		assertEquals(3276.8, report.gameplaySeconds(), 0.1, "gameplay time is still the whole capture's");
+		assertEquals(655.4, report.windowSeconds(), 0.5, "the window: its frames at its average");
+
+		// A window of excluded frames only (a long stay in a menu): the whole capture's numbers, no window.
+		FrameRing menu = new FrameRing(FrameRing.SESSION_FRAMES, FrameRing.SESSION_CANDIDATES);
+		long at = T0;
+		for (int i = 0; i < 2 * FrameRing.SESSION_FRAMES; i++) {
+			at += 5 * MS;
+			menu.frame(at, 5 * MS, i >= 1000, 0, 0, 0, 0);
+		}
+		StutterReport inMenu = StutterAnalyzer.analyze(new StutterAnalyzer.Input(menu.snapshot(), new StutterRings(ANCHOR).snapshot(), T0, at, STARTED,
+				StutterReport.MONITOR, "26.2", "g1", 4096, 32768L, 16, false, false)).report();
+		assertEquals(1000, inMenu.frames());
+		assertEquals(200.0, inMenu.avgFps(), 0.1);
+		assertNull(inMenu.windowSeconds());
+
+		Capture shortCapture = new Capture().frames(180, Map.of(20, 80 * MS), false);
+		StutterReport whole = shortCapture.analyze(true).report();
+		assertNull(whole.windowSeconds(), "a capture shorter than the ring has no window to name");
+		assertEquals(Arrays.stream(whole.histogramCounts()).sum(), whole.frames());
+	}
+
+	// docs/v0.5/SPEC.md 2S RW-11 (AC2S.13): a settings change or resource reload at t tags the spikes ending in (t, t + 10 s]
+	// settingsChanged, a tag that claims nothing and that the rules never see.
+	@Test
+	void rw11AReloadTagsTheNextTenSecondsAndClaimsNothing() {
+		Map<Integer, Long> spikes = Map.of(20, 80 * MS, 32, 80 * MS, 38, 90 * MS, 45, 80 * MS);
+		Capture plain = new Capture().frames(150, spikes, false);
+		plain.gc(T0 + 32 * S + 20 * MS, 40, GcKind.PAUSE, 0);
+		Capture changed = new Capture().frames(150, spikes, false);
+		changed.gc(T0 + 32 * S + 20 * MS, 40, GcKind.PAUSE, 0);
+		changed.rings.event(StutterRings.SETTINGS_CHANGED, T0 + 30 * S, 16);
+		StutterAnalyzer.Result before = plain.analyze(true);
+		StutterAnalyzer.Result after = changed.analyze(true);
+
+		assertEquals(Map.of(Attributor.SETTINGS_CHANGED, 2), after.report().tags(), "the spikes at 32 s and 38 s, not those at 20 s and 45 s");
+		assertEquals(before.report().causes(), after.report().causes(), "claims nothing");
+		assertEquals(before.report().lostMs(), after.report().lostMs());
+		assertEquals(before.facts().claimedShares(), after.facts().claimedShares());
+		assertEquals(Map.of(Attributor.SETTINGS_CHANGED, 50.0), after.facts().taggedShares(), "a share for the rules, like afterTeleport");
+		assertTrue(after.report().worst().stream().filter(w -> w.ms() == 90.0).findFirst().orElseThrow().causes().contains("settingsChanged:context"));
+
+		// An event whose change was seen 900 ms after its time: the window reaches 10 s after that, so the 80 ms spike
+		// starting 10.1 s after the event's time (ending before 10.9 s) is tagged too.
+		Capture late = new Capture().frames(150, Map.of(40, 80 * MS), false);
+		late.rings.event(StutterRings.SETTINGS_CHANGED, late.spikeStarts.get(40) - 10_100 * MS, 1 | 900L << StutterRings.SETTINGS_LEAD_SHIFT);
+		assertEquals(Map.of(Attributor.SETTINGS_CHANGED, 1), late.analyze(true).report().tags());
+		Capture early = new Capture().frames(150, Map.of(40, 80 * MS), false);
+		early.rings.event(StutterRings.SETTINGS_CHANGED, early.spikeStarts.get(40) - 10_100 * MS, 1);
+		assertEquals(Map.of(), early.analyze(true).report().tags(), "without the lead, 10 s had passed");
 	}
 
 	// Review finding 2: what the capture couldn't measure stays UNKNOWN for the rules (also under `not`).

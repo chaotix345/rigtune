@@ -6,6 +6,7 @@ import io.github.chaotix345.rigtune.core.stutter.StutterRings;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
+import java.util.Map;
 
 // The render thread's side of the Stutter Doctor (docs/v0.4/SPEC.md 5; research §2): the one call in
 // DebugScreenOverlayMixin (onFrame), the optional phase timers (MinecraftFrameMixin), the chunk-load counter and the
@@ -35,6 +36,8 @@ public final class StutterMonitor {
 		volatile boolean paused;
 		// A benchmark run started while this session ran (review-8 P5A-F3).
 		volatile boolean aroundBenchmark;
+		// v0.5 RW-11: a session's settings when it started (SettingsWatch); null for a benchmark's capture.
+		volatile @Nullable Map<String, String> settingsAtStart;
 		private boolean skipNext = true;
 
 		Capture(FrameRing ring, long startNanos, Instant startedAt, String source) {

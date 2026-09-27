@@ -50,7 +50,9 @@ class StutterFixesModelTest {
 
 	@Test
 	void absentIsNull() throws IOException {
-		assertNull(RulesLoader.parse(bundled()).stutterFixes);
+		JsonObject root = JsonParser.parseString(bundled()).getAsJsonObject();
+		root.remove("stutterFixes");
+		assertNull(RulesLoader.parse(root.toString()).stutterFixes);
 	}
 
 	@Test

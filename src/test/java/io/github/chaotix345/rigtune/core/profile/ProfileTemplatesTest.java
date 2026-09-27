@@ -5,6 +5,7 @@ import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
+import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
@@ -225,6 +226,49 @@ class ProfileTemplatesTest {
 		// A key the profile doesn't hold is never added by a clamp.
 		assertFalse(ProfileTemplates.clamp(Map.of(FPS, "120"), rules(), hw.build(), List.of(), snapshot, Goal.BALANCED).values()
 				.containsKey(RD));
+	}
+
+	// docs/v0.5/SPEC.md PF-5 (AC2P.5): a saved profile's switch goes through clamp(), which keeps a DH radius inside DH's own
+	// range (a fourth gate beside the three the audit found) and drops one outside it.
+	@Test
+	void pf5ClampKeepsA1024Radius() {
+		String radius = "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius";
+		Fixtures.Hw hw = rigs().get("userRig180Hz");
+		SettingsSnapshot snapshot = ProfileFixtures.snapshot(List.of("sodium", "distanthorizons"), false);
+		List<InstalledMod> mods = Fixtures.mods("sodium", "distanthorizons");
+		assertEquals("1024", ProfileTemplates.clamp(Map.of(radius, "1024"), rules(), hw.build(), mods, snapshot, Goal.BALANCED).values().get(radius));
+		assertFalse(ProfileTemplates.clamp(Map.of(radius, "5000"), rules(), hw.build(), mods, snapshot, Goal.BALANCED).values().containsKey(radius));
+	}
+
+	// docs/v0.5/SPEC.md PF-5 (AC2P.5; the coordinator's approval of profileCodeLeftOut): every template computed over a
+	// baseline holding a 1024 radius gives a code that carries at most 512 for key 22 and counts in ShareCode.leftOut exactly
+	// the radius it can't carry. With these rules every template sets the radius itself (their DH entries), so none keeps
+	// 1024; with those entries removed, a template keeps the baseline's 1024, leaves it out of its code and counts it.
+	@Test
+	void pf5ATemplateOverA1024BaselineCountsWhatItsCodeLeavesOut() throws ShareCodeException, IOException {
+		String radius = "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius";
+		Fixtures.Hw hw = rigs().get("userRig180Hz");
+		List<String> mods = List.of("sodium", "distanthorizons");
+		SettingsSnapshot snapshot = ProfileFixtures.snapshot(mods, false);
+		Map<String, String> baseline = new LinkedHashMap<>(snapshot.values());
+		baseline.put(radius, "1024");
+		RulesDocument noRadiusRule = RulesLoader.parse(new String(ProfileTemplatesTest.class.getResourceAsStream("/recommend/golden/rules-v2-r13.json")
+				.readAllBytes(), StandardCharsets.UTF_8));
+		noRadiusRule.settings.removeIf(rule -> radius.equals(rule.key));
+		int keptFar = 0;
+		for (RulesDocument rules : List.of(rules(), noRadiusRule)) {
+			for (TemplateId id : TemplateId.values()) {
+				Map<String, String> values = ProfileTemplates.compute(id, rules, null, hw.build(), Fixtures.mods(mods.toArray(String[]::new)), snapshot,
+						baseline).values();
+				String value = values.get(radius);
+				boolean far = value != null && Integer.parseInt(value) > 512;
+				keptFar += far ? 1 : 0;
+				assertEquals(far ? 1 : 0, ShareCode.leftOut(values), id.id() + " " + value);
+				String carried = ShareCode.decode(ShareCode.encode(id.id(), values, 144)).values(144).get(radius);
+				assertEquals(far ? null : value, carried, id.id() + ": the code carries the radius only within 32..512");
+			}
+		}
+		assertTrue(keptFar > 0, "a template kept the baseline's 1024, so the left-out case was exercised");
 	}
 
 	private static RulesDocument rulesWithSection() throws IOException {

@@ -83,7 +83,7 @@ public class StutterGameTest implements FabricClientGameTest {
 		context.runOnClient(mc -> controller.setStutterMonitor(true));
 		check(ClientSettings.shared(configDir).stutterMonitor, "the monitor setting is on");
 		int before = new StutterStore(configDir).sessions().size();
-		try (TestSingleplayerContext singleplayer = context.worldBuilder().create()) {
+		try (TestSingleplayerContext singleplayer = GameTestWorlds.create(context)) {
 			context.waitTicks(100);
 			check(StutterMonitor.session() != null, "a session capture started with the world");
 			check(StutterHooks.gcListenerActive(), "the GC listener is registered while capturing");
@@ -100,6 +100,19 @@ public class StutterGameTest implements FabricClientGameTest {
 			singleplayer.getServer().runOnServer(server -> server.saveEverything(false, true, true));
 			context.waitTicks(40);
 			checkCapture(gcCalled);
+
+			// docs/v0.5/SPEC.md 2S RW-11 (AC2S.13 in a real world): a render distance change while the session runs is a settings
+			// event, and the settings check (its own END_CLIENT_TICK listener) allocates nothing per tick.
+			int renderDistance = context.computeOnClient(mc -> mc.options.renderDistance().get());
+			context.runOnClient(mc -> mc.options.renderDistance().set(renderDistance + 2));
+			context.waitTicks(5);
+			check(settingsEvents() >= 1, "the render distance change is a settings event");
+			long[] cost = context.computeOnClient(mc -> StutterHooks.settingsCheckCost(mc, 5_000));
+			RigTune.LOGGER.info("StutterGameTest: the settings check took {} ns per call; {} bytes allocated over its {} checks (the empty control loop: {})",
+					String.format(Locale.ROOT, "%.1f", cost[0] / (double) cost[1]), cost[2], cost[1], cost[3]);
+			// X4.4, strict as the tick keys: the blocks' bytes summed after the warm-up (less what the empty control loop shows,
+			// the measurement's own) are 0.
+			check(cost[2] - cost[3] <= 0, "the settings check allocates nothing: " + cost[2] + " bytes over " + cost[1] + " checks, control " + cost[3]);
 
 			context.runOnClient(mc -> mc.gui.setScreen(new StutterScreen(null, controller)));
 			context.waitForScreen(StutterScreen.class);
@@ -129,6 +142,13 @@ public class StutterGameTest implements FabricClientGameTest {
 			check(!StutterHooks.samplerRunning() && !samplerThread(), "no thread named RigTune stutter sampler");
 			check(StutterMonitor.retainedBytes() == 0, "the buffers were released");
 			waitForSessions(context, configDir, before + 1);
+			StutterReport stopped = new StutterStore(configDir).latest();
+			check(stopped.settingChanges().equals(List.of(new StutterReport.SettingChange(StutterReport.RENDER_DISTANCE, Integer.toString(renderDistance),
+					Integer.toString(renderDistance + 2)))), "the saved session's settings at its start and end: " + stopped.settingsAtStart() + " -> "
+					+ stopped.settingsAtEnd());
+			RigTune.LOGGER.info("StutterGameTest: the saved session's tags {} ({} spikes; settingsChanged only when a spike ended within 10 s of the change)",
+					stopped.tags(), stopped.spikes().total());
+			context.runOnClient(mc -> mc.options.renderDistance().set(renderDistance));
 
 			// On again in the same world, then leave: leaving saves that session too.
 			context.runOnClient(mc -> {
@@ -202,6 +222,22 @@ public class StutterGameTest implements FabricClientGameTest {
 		check(begin && ended, "a save window with a begin and an end");
 		RigTune.LOGGER.info("StutterGameTest: capture checks passed ({} frames, {} GC records, phase timers {})", frames.frames(),
 				gc.length / StutterRings.GC_STRIDE, StutterMonitor.phaseTiming() ? "complete" : "incomplete");
+	}
+
+	// SETTINGS_CHANGED events in the running capture's rings.
+	private static int settingsEvents() {
+		StutterRings rings = StutterMonitor.rings();
+		if (rings == null) {
+			return 0;
+		}
+		long[] events = rings.snapshot().events();
+		int n = 0;
+		for (int i = 0; i + StutterRings.EVENT_STRIDE <= events.length; i += StutterRings.EVENT_STRIDE) {
+			if (events[i] == StutterRings.SETTINGS_CHANGED) {
+				n++;
+			}
+		}
+		return n;
 	}
 
 	private static void waitForSessions(ClientGameTestContext context, Path configDir, int count) {

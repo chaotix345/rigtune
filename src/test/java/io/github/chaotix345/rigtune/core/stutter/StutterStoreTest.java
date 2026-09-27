@@ -125,14 +125,51 @@ class StutterStoreTest {
 	void aHandEditedSessionWithNullsReadsSafely() throws IOException {
 		Path file = StutterStore.file(dir);
 		Files.createDirectories(file.getParent());
-		Files.writeString(file, "{\"formatVersion\": 1, \"sessions\": [{\"frames\": 5, \"worst\": [null, {\"ms\": 30, \"causes\": [null, \"gc:high\"]}], "
-				+ "\"advice\": [null], \"causes\": {\"gc\": null}}]}", StandardCharsets.UTF_8);
+		// v0.5 SD-5: with a spike, so Copy summary reaches the causes (a null "unknown" crashed the click handler in 0.4).
+		Files.writeString(file, "{\"formatVersion\": 1, \"sessions\": [{\"frames\": 5, \"spikes\": {\"minor\": 1}, "
+				+ "\"worst\": [null, {\"ms\": 30, \"causes\": [null, \"gc:high\"]}], \"advice\": [null], \"causes\": {\"gc\": null, \"unknown\": null}, "
+				+ "\"tags\": {\"dh\": null, \"worldSave\": 1}, \"settingsAtStart\": {\"renderDistance\": null, \"shaders\": \"true\"}}]}", StandardCharsets.UTF_8);
 		StutterReport r = new StutterStore(dir).latest();
 		assertEquals(5, r.frames());
 		assertEquals(1, r.worst().size());
 		assertEquals(List.of("gc:high"), r.worst().getFirst().causes());
 		assertEquals(List.of(), r.advice());
-		assertTrue(StutterSummary.text(r, List.of()).startsWith("**RigTune Stutter Doctor** · session"));
+		assertEquals(Map.of(), r.causes(), "null values are dropped");
+		assertEquals(Map.of(Attributor.WORLD_SAVE, 1), r.tags());
+		assertEquals(Map.of("shaders", "true"), r.settingsAtStart());
+		String text = StutterSummary.text(r, List.of());
+		assertTrue(text.startsWith("**RigTune Stutter Doctor** · session"));
+		assertTrue(text.contains("not explained 100 %"), text);
+	}
+
+	// docs/v0.5/SPEC.md 2S RW-11 (AC2S.13): a session with its settings at the start and end and the settingsChanged tag
+	// round-trips; a 0.4-shaped session (neither field) still reads, with no changes to report.
+	@Test
+	void theSettingsFieldsAndTagRoundTripAndA04SessionStillReads() throws IOException {
+		StutterReport r = report("2026-09-26T10:00:00Z", 3, 1);
+		StutterReport withTag = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(),
+				r.frames(), r.avgFps(), r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(),
+				Map.of(Attributor.MOVING_FAST, 2, Attributor.SETTINGS_CHANGED, 3), r.worst(), r.facts(), r.advice(), r.enoughData(), r.phaseTiming(), r.hitches())
+				.withSettings(Map.of(StutterReport.RENDER_DISTANCE, "32", StutterReport.SHADERS, "true"),
+						Map.of(StutterReport.RENDER_DISTANCE, "12", StutterReport.SHADERS, "true"));
+		StutterStore store = new StutterStore(dir);
+		store.add(withTag);
+		StutterReport back = new StutterStore(dir).latest();
+		assertEquals(withTag.settingsAtStart(), back.settingsAtStart());
+		assertEquals(withTag.settingsAtEnd(), back.settingsAtEnd());
+		assertEquals(3, back.tags().get(Attributor.SETTINGS_CHANGED));
+		assertEquals(List.of(new StutterReport.SettingChange(StutterReport.RENDER_DISTANCE, "32", "12")), back.settingChanges());
+
+		Path file = StutterStore.file(dir);
+		Files.writeString(file, "{\"formatVersion\": 1, \"sessions\": [{\"startedAt\": \"2026-09-20T10:00:00Z\", \"source\": \"monitor\", \"frames\": 90000, "
+				+ "\"avgFps\": 120.0, \"spikes\": {\"minor\": 4}, \"causes\": {\"gc\": 0.5, \"unknown\": 0.5}, \"tags\": {\"worldSave\": 1}}]}",
+				StandardCharsets.UTF_8);
+		StutterReport old = new StutterStore(dir).latest();
+		assertNull(old.settingsAtStart());
+		assertNull(old.settingsAtEnd());
+		assertEquals(List.of(), old.settingChanges());
+		assertNull(old.windowSeconds(), "0.4 sessions never get the SD-2 window label");
+		assertFalse(StutterSummary.text(old, List.of()).contains("Settings changed"));
 	}
 
 	// review-8 P5A-F3: a monitor session that a benchmark run interrupted (the benchmark world's settle frames) is saved only
