@@ -84,7 +84,8 @@ the guide; the confirmation, its History row functions, the restart logic and th
   `ListHeightProbeGameTest`, as the only entrypoint: RigTune's network switched off (0.4.0's own way: `ClientSettings`
   + `settingsChanged()`), then `new RigTuneScreen(new TitleScreen(), new StubController(RigTuneClient::hardware))` with no
   notice, the list's height read from the screen's `ContainerObjectSelectionList`. `./gradlew :26.2:runClientGameTest`
-  (26.2, Windows, GUI scale set per size).
+  (26.2, Windows, GUI scale set per size). The probe's source is commit d3d4b89c on that local branch; the worktree was
+  removed after the run and the branch is left for the coordinator to delete (a force delete is blocked by the hooks).
 - Result (log lines `ListHeightProbe v0.4.0 …`): 640×480 scale 2 (320×240 scaled): list y 76, **height 76**, 4 header
   lines, no notice; 854×480 scale 2: height 100; 1280×720 scale 2: height 220; 854×480 scale 3: height 100. The 640×480
   screenshot shows the header's 4 lines (CPU, GPU, tier + display/rules, "Offline (network off in settings)…"), one
@@ -160,6 +161,8 @@ the guide; the confirmation, its History row functions, the restart logic and th
   practice.
 - The guide's line is clipped at 854×480 when another notice brings a "+N more" button (see Deviations); the full text is
   in the tooltip, the narration and NoticeScreen.
+- ABANDONED ("Not applied") rows would be grouped under "Undone or cancelled" (review L5); they can't occur in the
+  session the confirmation opens in (the helper marks them at the next exit).
 - The seam's use in FirstApplyGameTest's Got it block means the in-game Got it is exercised on a player made new again
   after the first Apply (the fresh-player Got it path is the same code: `NoticeCenter.act` → `act(GOT_IT)` →
   `dismissNotice`).
@@ -207,6 +210,24 @@ the guide; the confirmation, its History row functions, the restart logic and th
   Apply for that entry."
 - **DESIGN.md, Accessibility**: both new screens are RowLists whose every row is a Tab stop (FirstApplyScreen's section
   headings too); the confirmation narrates its title, summary and restart outcome when it opens.
+
+## Self-review (code-reviewer subagent on `git diff origin/feat/v0.5.0 HEAD -- src` at 5ce05adb)
+No high findings; 3 medium, 5 low, sent to the coordinator with the dispositions below (2026-09-28). Two earlier
+reviewer runs ended without handing their report back; the third wrote it to the scratch dir.
+- M1 (the no-restart note after a partly failed Apply): reworded, see Deviations. Fixed in 4a2894f2.
+- M2 (the seam's NEW leaking to later classes after a mid-test failure): the finally forces RETURNING. Fixed.
+- M3 (Got it's dismissal left in awareness.json; a reused dev run dir): the finally takes out a dismissal the test
+  added, and the non-fresh path clears a leftover one. Fixed. (The dev `runClientGameTest` run dir did come back fresh
+  between the local runs here; the fix makes the class safe either way.)
+- L4 (the no-mod-files note re-read `modFiles()` on each reload): the policy is read once, when the screen opens right
+  after the Apply. Fixed.
+- L5 (ABANDONED rows under "Undone or cancelled"): not changed: ABANDONED needs a helper run at exit, and the
+  confirmation opens once, right after the Apply, in the same session. Residual below.
+- L6 (HowItWorksScreen reads the opt-in from `ClientSettings.shared(FabricLoader configDir)` while the notice reads
+  `controller.settings()`): not changed: in the game both are the one shared instance, and RigTuneScreen reads it the same
+  way (RigTuneController has no settings accessor).
+- L7 (A11yGameTest's high-contrast helper): try/finally. Fixed.
+- L8 (the game test's note check looser than the screen's rule): mirrors the rule now, read with the screen. Fixed.
 
 ## Footprint deltas (against ws-k.md's per-leg baseline, run 36310249248)
 From CI run 36322454300 (this branch, merged with `origin/feat/v0.5.0` at de597c28: WS-P2's, WS-L1's and WS-S's early
