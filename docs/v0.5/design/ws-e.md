@@ -120,7 +120,20 @@ convention. Research: docs/research/v0.5/verification-gaps.md (vg). Plan: docs/v
 | E3 fixture generations | ed97abac | `test_written_v05.py` 14; v0.4's two-set test rewritten | 13 errors + 1 failure | pass; CI 36295057958 green on every job |
 | E4 compat040 | 420f58b3 | `test_compat040.py` 7 | module missing, compat030 had no `parse_args` | local run on the released 0.4.0 jar: **PASS 14/14** (`docs/v0.5/verification/e2e/compat040-early.txt`); compat030 still PASS 9/9 |
 
-Harness suite: 260 tests (was 216 at the branch point).
+| E5 `e2e.yml` + E7 `release.yml` (coordinator's go, 2026-09-27) | 199bed3e | `test_e2e_workflows.py` 11 (a mutation check of 9 edits fails each), `test_release_verify.py` 8 | modules and workflow shape missing | actionlint + shellcheck clean. **Release dry run 36296717280: build → e2e release tier 16/16 PASS on the first attempt → publish (nothing published; verify of v0.4.0 incl. CDN bytes, all verified)**. Evidence: `docs/v0.5/verification/e2e/README.md` |
+
+Harness suite: 279 tests (was 216 at the branch point).
+
+E5/E7 notes:
+- A dispatch of release.yml is always a dry run.
+  - The tag is `v<mod_version>`; `gh release create` is only printed; Modrinth gets `-PmodrinthDryRun` with no token.
+  - The verify step reads an existing release (`verify-tag`).
+- `-x assemble` on the Modrinth task: Minotaur depends on `assemble`, but the upload is the staged file, so publish builds nothing (`-m`: only `:<mc>:modrinth` runs).
+- e2e.yml's own dispatch (it builds its jars) works only once the file is on the default branch. On the branch it runs through release.yml's `workflow_call`.
+- For E6 (build.yml): an `e2e` job `uses: ./.github/workflows/e2e.yml` with `jars-artifact: rigtune-jars`.
+  - The tier: `release` for a pull_request into main from `feat/v*`, else `push`.
+  - The compat040 and compat030 steps in the java job, and the new pins (restoring the equality test).
+  - ws-ci's offline/prefetch mechanism, if it lands, applies to e2e.yml's Gradle steps too.
 
 For WS-K's `v050-written/README.md`: compose deep-merges a file several sets provide:
 - objects are merged key by key;
