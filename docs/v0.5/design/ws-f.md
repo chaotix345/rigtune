@@ -204,3 +204,66 @@ the guide; the confirmation, its History row functions, the restart logic and th
   Apply for that entry."
 - **DESIGN.md, Accessibility**: both new screens are RowLists whose every row is a Tab stop (FirstApplyScreen's section
   headings too); the confirmation narrates its title, summary and restart outcome when it opens.
+
+## Footprint deltas (against ws-k.md's per-leg baseline, run 36310249248)
+From CI run 36322454300 (this branch, merged with `origin/feat/v0.5.0` at de597c28: WS-P2's, WS-L1's and WS-S's early
+merges are in it too), `footprint-<mc>-<backend>.json`:
+
+| leg | renderThreadInitCpuMs | clientStartedWallMs | workerCpuMs5s | tickHookOnVsReference | v05RenderThreadResolve / holder made on |
+|---|---|---|---|---|---|
+| 26.2 OpenGL | 108.45 (+26.3) | 61.96 (+25.6) | 182.98 (+47.5) | 1.579 (+0.098) | null / RigTune worker |
+| 26.3 OpenGL | 98.16 (+16.0) | 43.82 (+16.8) | 176.90 (+23.7) | 1.623 (−0.123) | null / RigTune worker |
+| 26.3 Vulkan | 109.11 (−10.9) | 31.13 (−8.8) | 184.99 (−15.7) | 1.599 (+0.064) | null / RigTune worker |
+
+Reading: every value is inside its budget (150 / 141 / 300 / 2.05) and inside the runner-to-runner spread ws-k.md records
+(renderThreadInitCpuMs 63.5-112.9 across runs of near-identical code; the deltas change sign between legs). WS-F adds no
+render-thread init work (FirstRunService is made by the start hook's worker task; the X4 flag stayed null on all three
+legs), no tick or frame work, and to `workerCpuMs5s` only `FirstRunService.load` (history.json read, two `Files.exists`).
+
+## CI runs and what was looked at
+- **36322454300** (a1e2f35f: F0-F8 + `origin/feat/v0.5.0` at de597c28): all 8 jobs green (java both nodes: 1997 tests,
+  2 skipped, 0 failures each; the 3 client game-test legs; python, rules, gametest-matrix). Downloaded
+  `gametest-screenshots-26.2-OpenGL` and `-26.3-Vulkan`, the three `gametest-logs-*` and `footprint-*`, `test-reports`.
+  Looked at: `firstapply-guide-{1280x720,854x480,640x480}-scale2` (the guide line, "…" at 640×480; the first title
+  screen's suggestions toast covered part of the 640×480 line, so the test now clears the toasts before the screenshots),
+  `firstapply-guide-noticescreen-640x480-scale2` (both actions), `firstapply-how-*` (paragraphs wrap, scroll bar at
+  640×480), `firstapply-confirmation-{1280x720,640x480,854x480}` (8 applied + 1 staged Sodium row, restart note,
+  undo hint; a focused button's tooltip covered a row at 640×480 and 854×480, so the layout screenshots now clear the
+  focus first), `firstapply-history-854x480-scale2` (the same 9 rows), `firstapply-list-{rigtune,launcher}-
+  {guide,dismissed}-640x480-scale2` (60 px with the guide, 76 px without), `firstapply-guide-optedin-640x480-scale2`
+  (network on; no opted-in line until WS-L1), `a11y-first-apply-focus`, `a11y-hc-first-apply`, `a11y-how-it-works-focus`,
+  `a11y-hc-how-it-works` (high-contrast colours). Logs: on every leg the fresh path (no seam WARN), the guide's message
+  262 px in 365/280/266 px rooms with 0 other notices, the first Apply's statuses `[APPLIED ×8, STAGED]`, History's rows
+  equal to the confirmation's, both undos done, the list heights, A11y's walks (7, 6 and 5 rows).
+
+- **36328625684** (43e73fbf: + the toast/focus screenshot fix, the reload fix and `origin/feat/v0.5.0` at 3a67ef64):
+  all 8 jobs green (java: 2171 tests, 2 skipped, 0 failures on each node). Looked at the 26.2 OpenGL
+  `firstapply-guide-640x480-scale2` (the guide line clear, "…" beside it) and `firstapply-confirmation-640x480-scale2`
+  (no tooltip over the rows now; the staged row scrolls below the fold at 320×240, the list's scroll bar shows it); logs
+  on all 3 legs: the fresh path, FirstApplyGameTest 11.1-11.6 s, A11yGameTest's walks. Footprint: renderThreadInitCpuMs
+  109.92 / 94.04 / 86.89, clientStartedWallMs 42.71 / 30.67 / 46.09, workerCpuMs5s 158.32 / 170.58 / 194.80,
+  tickHookOnVsReference 1.445 / 1.457 / 1.467 (26.2 GL / 26.3 GL / 26.3 VK), the X4 flag null, the holder made on the
+  RigTune worker.
+
+## AC table
+| AC | status | evidence |
+|---|---|---|
+| AC8.1 (fresh instance: the guide is the top notice with How it works and Got it) | verified | FirstApplyGameTest `newPlayer` + `guideAtEverySize` on 3 legs (fresh run dir → NEW, shownNotice = firstrun.guide at 3 sizes); FirstRunNoticeSourceTest.whenItShows/theGuide |
+| AC8.2 (any history entry, last-apply.json, pending.json, or an unreadable history: neither piece) | verified (unit) | FirstRunTest (each kind, CORRUPT/NEWER/UNREADABLE, 0.1.0 fixtures, every v040-written set); FirstRunServiceTest.aReturningPlayer; `shows()`/`firstApplyPending()` false for RETURNING |
+| AC8.3 (message not clipped at the 3 sizes; "…" + NoticeScreen below 400 px; screenshots) | verified; the opted-in-line screenshot closes with WS-L1 | FirstApplyGameTest: `font.width` 262 px within 365/280/266 px rooms on 3 legs; "…" at 640×480; NoticeScreen lists both actions; screenshots `firstapply-guide-*`, `firstapply-guide-noticescreen-640x480-scale2`; `firstapply-guide-optedin-640x480-scale2` taken (no opted-in line until WS-L1's header line lands) |
+| AC8.4 (Got it hides it for good, in awareness.json, survives 0.4.0's AwarenessStore writing 10 more) | verified (unit + game); compat040 half UNVERIFIED | FirstRunNoticeSourceTest.gotItHidesTheGuideForGood/theStoredDismissalHidesIt/theDismissalSurvivesTenMore; FirstApplyGameTest `gotIt` (awareness.json `dismissed` has firstrun.guide; still hidden on the next screen); set ws-f + expect.json (compat040 not merged) |
+| AC8.5 (after the first Apply by any path the guide is gone, in the session and after a restart) | verified | FirstApplyGameTest: after the Apply, back on the RigTune screen, no guide and no stored dismissal; `directApplyRetiresNew`; FirstRunServiceTest (applied → RETURNING; a late load stays RETURNING); FirstRunTest (an apply entry → returning after a restart) |
+| AC8.6 (the Apply button opens the confirmation for the entry Apply journaled; rows = History's rows at the same size) | verified | FirstApplyGameTest `confirmation`: the entry id is the newest history entry's; statuses grouped from the entry; `changeRowText()` equal to HistoryScreen's for that entry at 854×480 on 3 legs; FirstApplyScreenTest (row functions are HistoryScreen's) |
+| AC8.7 (restart note iff STAGED; no-restart iff none and no download; downloading note, reload) | verified (unit; game for CI's branch) | FirstApplyScreenTest (all branches incl. downloads and downloads-only); FirstApplyGameTest on 3 legs: 1 STAGED row → restart note, no no-restart note. See Deviations (nothing undone) |
+| AC8.8 (Undo this Apply → UndoScreen for the entry; History… with the entry selected; Done/Esc → RigTuneScreen with Apply's status line) | verified | FirstApplyGameTest `confirmation` on 3 legs |
+| AC8.9 (at most once per session, never for RETURNING; profile switch, stutter fix, Try it, direct apply never open it but retire the guide) | verified | FirstApplyScreenTest.onlyTheApplyButtonOpensIt (source check: only RigTuneScreen.applySelected constructs it, after reading firstApplyPending before apply(chosen, entryId)); FirstApplyGameTest `secondApplyOpensNothing`, `directApplyRetiresNew`; the after-apply hook runs for every Apply path (V05HooksTest, ws-k.md 11c) |
+| AC8.10 (no settings.json field, no new file under config/rigtune/) | verified (review + unit) | `git diff origin/feat/v0.5.0 HEAD` on ClientSettings/StartupNotices empty; FirstRun reads only; the one write is a notice dismissal in awareness.json |
+| AC8.11 (entry missing / history unreadable: Apply's status + the matching message) | verified (unit) | FirstApplyScreenTest.withoutTheEntry |
+| AC8.12 (Tab stops that narrate, Tab after the last row leaves; the guide narrates message + detail; open narration; PaletteTest) | verified | A11yGameTest.walkFirstApply (7 rows) / walkHowItWorks (6 and 5 rows) on 3 legs; FirstApplyGameTest `tabUntilNarrates` (message + detail); FirstApplyScreenTest.theOpenNarration + the walk's open-narration check; PaletteTest green |
+| AC8.13 (keys under rigtune.firstrun.*; LangCheckTest, WordingTest, PseudoLocaleTest) | verified | CI java job both nodes |
+| AC8.14 (guide detail, explainer rows, confirmation note follow modFiles(); nothing about mod files under PENDING) | verified with stub policies; the real policy closes with WS-L1 | FirstRunNoticeSourceTest.theDetailFollowsWhoChangesModFiles, HowItWorksScreenTest, FirstApplyScreenTest.theLauncherManagesTheMods; A11yGameTest.walkHowItWorks (RIGTUNE vs PENDING) |
+| AC8.15 (FootprintGameTest unchanged budgets; onTick unchanged; load and the history read on Probes.EXECUTOR) | verified | footprint on 3 legs (flag null, holder made on RigTune worker); FirstApplyGameTest checks `loadedOn()` starts with "RigTune worker"; FirstApplyScreenTest.theHistoryIsReadOnTheExecutor (queued executor); FirstRunServiceTest.theLoadRecordsItsThread; RigTuneClient untouched |
+| AC8.16 (first entrypoint, fresh dir, network off on 3 legs, cleanup with undo) | verified | FirstApplyGameTest on 3 legs (GameTestNet off; both applies undone through `undo(undoPlanFor(id))`); first in fabric.mod.json (WS-K) |
+| AC8.17 (dev-PC fresh-instance run, Narrator pass, 26.3 Apply half, real-instance copy) | UNVERIFIED (Phase 5, P5 agent) | — |
+| AC8.18 (640×480@2 list ≥ 0.4.0's height − 16 with the guide, ≥ 0.4.0's once dismissed, RIGTUNE and LAUNCHER) | verified | 0.4.0's 76 px measured on the throwaway branch (above); FirstApplyGameTest `listHeight` on 3 legs: 60 / 76 / 60 / 76 px |
+| AC4b.6's C02 half (the real `status()`) | ready for WS-L1 | FirstRunService.status() is live (UNKNOWN → NEW/RETURNING) |
