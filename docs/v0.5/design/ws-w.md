@@ -92,7 +92,8 @@ shared game-test files got only imports besides those bodies and their helpers.
   line "A setting was changed outside the game sinc…" with Apply RigTune's values again / Keep / +1 more; at 640 the
   "…" button), `footprint-tools-*` and `ui-tools-*` (the 0.4 checks on the relaid screen: startup line and advice as
   rows, Done clear). CI's own measured line: "Minecraft's crash-report setup took 0.3 s at this launch" (Linux: the
-  mixin applies in the production client there too).
+  mixin applies in the production client there too). The 4h block's log in CI (36325022781, 26.2 OpenGL): both rounds
+  flagged exactly `[vanilla.entityShadows]`, so no other game-test class's in-memory change was a false positive.
 - **W13, the code-deciding real run** (2026-09-28 00:33, this PC, Windows 11, 26.2 production client,
   `runProductionClientGameTest -PgametestClasses=AwarenessGameTest,A11yGameTest`, under the game-test lock, released in
   the same script; evidence in `<scratch>/ws-w/realrun/`): the worker logged `Windows performance counters: off
@@ -102,6 +103,11 @@ shared game-test files got only imports besides those bodies and their helpers.
   OSHI block ran 00:33:31 → 00:33:32 (the paging-file PDH/WMI failures as in rw §12.1). The Perflib key exported before
   and after the run (`reg export`, read-only) is byte-identical (sha256 5d38f626…ab308c). Both classes passed locally
   (AwarenessGameTest 7.7 s: AW-2, AW-1, 4h Apply again + Undo and Keep; A11yGameTest 27.1 s).
+  **Again after the code review** (2026-09-28 02:50, the same setup, head 618c6eb2 + this doc): both classes passed
+  (AwarenessGameTest 7.8 s incl. the reworked L3 path; A11yGameTest 31.1 s incl. the Tab order and the rebuild on the
+  probe's result); `crash-report setup 1986 ms` (a warmer launch) and the 5 advice rows on this PC; the Perflib export
+  byte-identical again (same sha256). A first attempt with the review's first L3 version failed in `awarenessFixes`
+  (awareness.json kept the old driver), which led to the rework (618c6eb2).
 - **Fixtures**: compat030 (`tools/e2e/compat030.py` with the released `rigtune-0.3.0+mc26.2.jar`, v040-written with this
   set's `optionsAtExit` merged into its awareness.json): all 9 checks PASS, "0.3.0 reading them changed no file". The
   released `rigtune-0.4.0+mc26.2.jar`'s own `AwarenessStore` rewriting this set's awareness.json (a dismissal) keeps
@@ -137,20 +143,38 @@ which reads as runner spread; the first streak after merging gives the medians. 
   the five buttons stay screen widgets (a button in a list row isn't found by UiGameTest's and ProductionSmoke's
   by-key presses, which are frozen). The 0.4 look (centred text) is kept. 2L's advice is shown for Perflib's switch
   only; a service's own switch needs none (OSHI skips those counters itself) and is logged with any unusual type.
-- **X12's 854×480 at GUI scale 3** renders at scale 2 (the game keeps the GUI at least 320×240), so it is no extra
-  size; the AW-2 block counts what fits rather than assuming two notices.
-- **4h**: the snapshot's keys are the journal's (`vanilla.renderClouds`); an undo stops a key's watch; this session's
-  Applies add theirs; "Apply RigTune's values again" asks the shared busy check (C8) first. The notice isn't
-  dismissible (Keep is its answer) and stores nothing. `V05HooksTest`'s line for the 4h stub (WS-K's test) now checks
-  the filled step's launcher condition (its other lines unchanged).
+- **X12's 854×480 at GUI scale 3** renders at scale 2 (the game keeps the GUI at least 320×240). After the review the
+  scrolling size is 1280×720 at GUI scale 3 (the coordinator's X12 amendment) in walkToolsStartup and the AW-2 block;
+  the AW-2 block counts what fits rather than assuming a number of notices.
+- **W8's two-column button fallback** (planned for a height where one column leaves the list under 40 px) was not built:
+  the game keeps the GUI at least 240 px high, where one column leaves the list 60 px (about 5 lines), so it could never
+  trigger.
+- **4h**: the snapshot's keys are the journal's (`vanilla.renderClouds`), with the exit time under `$exitAt`; RigTune's
+  value for a key is its latest APPLIED change (an undo's own changes skipped); this session's Applies add theirs;
+  "Apply RigTune's values again" asks the shared busy check (C8) first. The notice isn't dismissible (Keep is its answer)
+  and stores nothing. `V05HooksTest`'s line for the 4h stub (WS-K's test) now checks the filled step's launcher condition
+  (its other lines unchanged).
 - **BenchmarkMenuScreen**: the "one marked line" is the call plus its comment and import.
 - New core files `core/hardware/PerfCounters`, `PerfCounterAdvice`, `core/awareness/OutsideOptions` hold the pure parts;
   `client/probe/WindowsRegistry`, `PreloadTimer` the client parts (all new, WS-W's).
 
+## Code review (0 H, 2 M, 8 L; the coordinator's decisions: fix all)
+| # | finding | fix | commit |
+|---|---|---|---|
+| M1 | A fingerprint 0.4 stored from a failed probe ("unknown") still compared as a real GPU | `Fingerprint.read` maps the placeholder too; `ChangeDetectorTest.aStoredUnknownFingerprintIsNoChangeAndIsReseededSilently` (red before) | 7145ed80 |
+| M2 | The Modrinth App line on any Apply/Preview that wrote settings, though the app syncs options.txt only | `OutsideChanges.applyLine` (a vanilla SetSetting written now) and `previewLine` (an options.txt row under "Written now"); two tests | 892948f9 |
+| L3 | The same change reported again before a seen notice's commit was written started it over as unseen | kept as seen, and the fingerprint written again (the first version kept it without writing, which the local AwarenessGameTest run showed leaves awareness.json on the old value: reworked in 618c6eb2); `AwarenessServiceTest.theSameChangeReportedAgainKeepsTheCommittedNotice` | 7145ed80, 618c6eb2 |
+| L4 | `applied` updated by the worker and the render thread without atomicity | an `AtomicReference` with `updateAndGet` | 892948f9 |
+| L5 | An undo's change removed the key, though an earlier Apply may still be in effect | the latest APPLIED change wins; an undo's own changes skipped; `undoingALaterApplyWatchesTheEarlierValue` | 892948f9 |
+| L6 | 0.5 → 0.4.0 → 0.5: in-game changes under 0.4 looked changed outside | the snapshot is stamped (`$exitAt`); a launch of another RigTune version recorded in startup-times.json since then (0.4 writes it at every launch) skips the compare; `aSessionOfAnotherVersionSinceTheExitSkipsTheComparison` | 892948f9 |
+| L7 | A key back at RigTune's value gave a notice whose one action does nothing | `compare` skips it; `aChangeBackToRigTunesValueIsNothing` | 892948f9 |
+| L8 | No Tab-order check over the tool buttons and Done; an impossible 854×480@3 size | `checkToolsTabOrder` (five buttons in order, every row, Done last); 1280×720@3 | f9919dc8 |
+| L9 | Tools opened before the probe finished never showed the advice | `ToolsScreen.tick()` rebuilds when `HardwareProbe.perfCounters()` changes; checked in the walk | f9919dc8 |
+| L10 | This file | this section, the deviations, the evidence | this commit |
+
 ## Residuals (not fixed, with why)
-- After a downgrade to 0.4.0 and back, the last 0.5 exit's snapshot is compared with options.txt after the 0.4 sessions,
-  so an in-game change under 0.4 of a key RigTune applied shows once as changed outside (Keep retires it). 0.4.0 keeps
-  the field and never consumes it.
+- A snapshot written by a 0.5 build before the exit stamp (a pre-release) has no `$exitAt`, so the 0.4-in-between check
+  can't tell and compares as before.
 - A key RigTune applied that the game changed in memory without saving options.txt before a clean exit would be flagged
   at the next start (vanilla saves when a settings screen closes; RigTune's own Apply saves; a benchmark or Try it skips
   the snapshot).
@@ -197,7 +221,7 @@ which reads as runner spread; the first streak after merging gives the medians. 
 | AC | status | evidence |
 |---|---|---|
 | AC2W.1 | verified | `AwarenessServiceTest` (unit); `AwarenessGameTest.awarenessFixes`: a rescan keeps the committed notice, its own Re-scan removes it (CI 3 legs, runs 36321500954 → 36326382550; local W13) |
-| AC2W.2 | verified | `awarenessFixes` at 854×480 (scale 3 requested, rendered at 2) with 6 notices: dismissing the top one lists the driver notice and awareness.json holds the new driver (3 legs; screenshots); `tickHookAllocBytes` 0 on every leg |
+| AC2W.2 | verified | `awarenessFixes` with as many canned notices as fit above the driver notice (first at 854×480, which the game renders at scale 2; after the review at 1280×720@3): dismissing the top one lists the driver notice and awareness.json holds the new driver (3 legs; screenshots); `tickHookAllocBytes` 0 on every leg |
 | AC2W.3 | verified | `ChangeDetectorTest.latentUnknownGpuIsNoChange`, `.aFirstRunSeedFromAnUnknownProbeThenARealGpuRaisesNothing` |
 | AC2D.1 | verified | R1, R2 UNKNOWN, R4 23.1.1; DriverVersionParserTest, ConditionEvaluatorDriverVersionTest, ChangeDetectorTest pass (CI java job, both nodes) |
 | AC2D.2 | verified | `DriverStringsTest` (38 rows, each with a source; every row's family and version hold) |
@@ -210,4 +234,4 @@ which reads as runner spread; the first streak after merging gives the medians. 
 | AC4h.1 | verified | `OutsideChangesTest` |
 | AC4h.2 | verified | `AwarenessGameTest.settingsChangedOutside` under brand theseus (3 legs; local W13) |
 | AC4h.3 | verified (compat040 closes with WS-E's interpreter) | `V050WrittenWsWTest` (round trip), `OutsideChangesClientTest.theStopHandlerDoesOneUpdateAndNothingElse`; compat030 PASS; the released 0.4.0 AwarenessStore keeps the field (manual) |
-| AC4h.4 | verified | `OutsideChangesClientTest.theFanOutLineIsOnlyForTheModrinthAppAndOnlyWhenSettingsWereWrittenNow`; `settingsChangedOutside` finds it in the Apply status under theseus |
+| AC4h.4 | verified | `OutsideChangesClientTest.theFanOutLineIsOnlyForTheModrinthAppAndOnlyWhenSettingsWereWrittenNow`, `.theApplyStatusLineNeedsAVanillaSettingWrittenNow`, `.thePreviewLineNeedsOptionsTxtWrittenNow`; `settingsChangedOutside` finds it in the Apply status under theseus |
