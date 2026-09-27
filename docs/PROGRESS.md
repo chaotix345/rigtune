@@ -30,7 +30,7 @@ Brief: the user's v0.5.0 prompt (full autonomy: research -> release incl. GitHub
 - [x] Phase 1: research DONE except launcher-managed-mods (r-launchers finishing): ci-robustness, verification-gaps, v04-leftovers, audit-v040-features + verification, real-world-2026-09-27, brainstorm, feature-{stutter-fixes,try-it,server-profiles,launch-alerts,first-apply}.
 - [ ] Phase 2 RUNNING: spec5 writes docs/v0.5/SPEC.md from the coordinator's brief (scratchpad/spec/brief.md: P0.1 CI, P0.2 leftovers + audit + real-world defects, P0.3 verification, P0.4 never fight the launcher, P1 C20/C09/C16/C02/C18 (C18 first cut), P2 C07/C08/controller/a11y sweep/perf-counter advice).
 - [ ] Phase 2 (rest): coordinator review of SPEC -> PLAN.md (file ownership, hotspots, waves) -> independent plan review -> Amendments -> contracts commit.
-- [ ] Phase 3: foundation = P0.1 CI robustness, alone.
+- [ ] Phase 3 STARTED EARLY (in parallel with the SPEC; its scope is fully decided): ws-ci (the r-ci agent, resumed) implements P0.1 on feat/v05-ci in C:/Dev/Worktrees/rigtune-ci; proofs required: a live call fails under the namespace, a 2x slowdown fails the new gate, head green twice on every job; docs/v0.5/design/ws-ci.md. Merge alone before Wave A.
 - [ ] Phase 4: features and fixes (Wave A/B).
 - [ ] Phase 5: verification.
 - [ ] Phase 6: review rounds (review-11.md onwards).
