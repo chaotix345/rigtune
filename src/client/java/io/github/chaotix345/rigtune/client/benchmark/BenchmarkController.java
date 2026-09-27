@@ -15,6 +15,7 @@ import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecords;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRun;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkSession;
+import io.github.chaotix345.rigtune.core.benchmark.DhGeneration;
 import io.github.chaotix345.rigtune.core.benchmark.FrameStats;
 import io.github.chaotix345.rigtune.core.benchmark.KnobGuard;
 import io.github.chaotix345.rigtune.core.benchmark.Knobs;
@@ -702,9 +703,15 @@ public final class BenchmarkController {
 		BenchmarkRecord.World world = request.scene() == BenchmarkRequest.Scene.BENCHMARK_WORLD
 				? new BenchmarkRecord.World(BenchmarkWorld.LEVEL_ID, BenchmarkWorld.SEED) : null;
 		BenchmarkRecord record = BenchmarkRecords.of(result, request, phase, id, createdAt, rigtuneVersion(), HardwareProbe.minecraftVersion(), world,
-				context);
+				storedContext());
 		BenchmarkStore.add(record);
 		return new Outcome(request, result, false, record, before, restoreOk, false, List.copyOf(settles), serverLimit);
+	}
+
+	// docs/v0.5/SPEC.md RW-6: whether Distant Horizons generated terrain during the sweeps, known once the benchmark capture
+	// was analysed (StutterHooks.benchmarkFinished runs before this).
+	private BenchmarkRecord.Context storedContext() {
+		return context.withDhGenerating(DhGeneration.generating(StutterHooks.lastBenchmarkDhWorldGenCores(), OptionalMods.dhLoaded()));
 	}
 
 	private static String rigtuneVersion() {
