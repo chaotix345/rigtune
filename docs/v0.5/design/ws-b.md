@@ -143,3 +143,70 @@ RW-7/RW-9/RW-6's line, 511c896b L3, 52c866be RW-6 detection, 58986e31 the unmeas
   `worldFresh` and left out of the trend anyway.
 - RW-6's "no stutter advice on benchmark-world captures" is WS-S's (StutterService.analyze).
 - The narration checked is what vanilla's pipeline collects (CI has no TTS), as in 0.4.
+
+## CI evidence, screenshots, footprint
+- Part 1: run 36317805129 (head 949a9422): every job and all 3 legs green. Part 2: run 36324863949 (52c866be) red on
+  26.2 GL only (BenchmarkHistoryGameTest: a clipped status line at 854×480@2, Deviations 2; both 26.3 legs green,
+  A11yGameTest's new walk included), then run 36325935349 (58986e31): every job and all 3 legs green; unit tests 2093
+  per version (2 skipped, 0 failures; the `test-reports` artifact).
+- **Screenshots looked at** (`gametest-screenshots-26.2-OpenGL` of 36325935349 against the same artifact of 36311670542,
+  the WS-K merge a7613410: AC2A.2's baseline; and `-26.3-OpenGL` of 36324863949): `bench-result-wrapped-{1280x720,
+  854x480,640x480}-scale2` show every status line, header label, table value and chart of the baseline, the only
+  differences being the `?` mark and the unmeasured line where the baseline had `✘*` and "Some of the terrain hadn't
+  loaded…"; `bench-history-*` unchanged apart from the BH-1 wording; `bench-world-before` shows "Left out of the trend: the
+  first run in a new benchmark world" (the run that created the world); `a11y-bench-result-row-focus-*` show the focus
+  frame on the suggested row at the 3 sizes with the columns aligned under the painted header; `a11y-hc-bench-result`
+  the yellow high-contrast frame and the darker header backing; `a11y-bench-history-chart-focus-*` the frame over the
+  chart; `a11y-bench-result-scrolled-854x480-scale3` is at scale 2 (Deviations 6).
+- **Footprint** (per leg, run 36325935349 against WS-K's baseline 36310249248; no v0.5 class is touched at init: the
+  benchmark code runs only when a benchmark or its screens do): 26.2 GL renderThreadInitCpuMs 90.3 (82.2), clientStartedWallMs
+  34.1 (36.4), workerCpuMs5s 146.9 (135.5), tickHookOnVsReference 1.521 (1.481); 26.3 GL 96.3 (82.2), 36.3 (27.0), 178.3
+  (153.2), 1.611 (1.746); 26.3 Vulkan 96.6 (120.0), 51.4 (39.9), 136.0 (200.7), 1.481 (1.535); `v05RenderThreadResolve`
+  null on every leg. All inside the runner spread ws-k.md records (e.g. 26.2 renderThreadInitCpuMs 63.5-112.9 across
+  near-identical code) and every budget.
+
+## Docs (for the docs workstream)
+- **CHANGELOG [0.5.0]**: "Benchmark: a render distance whose terrain hadn't loaded in time is measured again once after
+  the lower ones instead of counting as a fail (a first run could suggest 31 over your 32); a step whose terrain hadn't
+  loaded stays out of the benchmark's stutter check, and the result says how many; the first run in a new benchmark
+  world, and a run while Distant Horizons was generating terrain, are left out of your usual and never raise a
+  regression; the result names Distant Horizons generating terrain, measuring with its rendering off, and what noisy
+  results went with; Benchmark history's counts say 'earlier runs'; a change still staged when a run started is no
+  longer listed as a change since then for it. Accessibility: the benchmark result's table rows, its lines and both
+  charts are reached with Tab and read by the Narrator."
+- **README "Known limits"**: remove "The benchmark result's table and the benchmark charts can't be reached with the
+  keyboard or read by the Narrator yet" (AC2A.3). Keep: Distant Horizons' own world generation isn't paused during a
+  benchmark (it's detected and named, and such a run is left out of the trend).
+- **DESIGN.md "Benchmark v2"** step 2: "a step that timed out with more than 2% of those chunks missing is not measured:
+  neither a pass nor a fail; once the search is done, the lowest such distance that could still change the answer is
+  measured once more (outside the 6 steps) while the deadline allows, else the result says it couldn't be measured. Such a
+  step stays out of the benchmark's stutter capture." Step 5 / context: "0.5 adds `worldFresh` (this run created the
+  benchmark world), `dhGenerating` (Distant Horizons' world-generation threads used at least half a core over the
+  sweeps, from the Stutter Doctor's sampler) and `stagedAtStart` (the ids of history.json changes still staged, at most
+  64), all optional."
+- **DESIGN.md "Benchmark history and regression alerts"**: "A run with `worldFresh` or `dhGenerating` is left out of
+  every baseline and comparison and is never a regression ('Left out of the trend: …'). The change window leaves a run's
+  `stagedAtStart` changes out of its own window and carries exactly them into the next; for 0.4 runs, mod-file rows are
+  left out when both mod-set hashes are known and equal."
+- **DESIGN.md "Accessibility"**: replace "Not covered: the painted benchmark table and charts (v0.5)" with "The
+  benchmark result's table is a RowList whose rows narrate distance, average FPS, 1% low, P99 and pass/fail/not measured;
+  its status lines are Tab stops; each chart keeps its pixels with a Tab stop over it narrating its runs' numbers, your
+  usual and the trend line."
+
+## AC table
+
+| AC | status | evidence |
+|---|---|---|
+| AC2B.1 (BH-1) | verified | `TrendTextTest.bh1NoteAndTrendAgree` (the audit's test), CI 36325935349 java (both nodes) |
+| AC2B.2 (BH-2; readers) | verified (compat040 half closes with WS-E's interpreter; `expect.json` landed) | `ChangeWindowTest.bh2*` (with and without the field; the next window carries it); `BenchmarkWrittenV050Test` (pinned 0.2.0/0.3.0 readers, no `.bad`); compat030 PASS above |
+| AC2B.3 (RW-5) | verified | `RenderDistancePlannerTest.rw5*`, `BenchmarkSessionTest.rw5*`, `ResultNotesTest.rw5*`; screenshot `bench-result-wrapped-*` |
+| AC2B.4 (RW-6: excluded, line, no stutter advice) | verified for WS-B's parts (the "no stutter advice" part is WS-S's) | `BenchmarkTrendTest.rw6ADhGeneratingRunIsLeftOutToo`, `.rw8AFreshLatestRunIsNeverARegression`, `ResultNotesTest.rw6LineExactlyWhenSet`, `DhGenerationTest.rw6ThresholdTruthTable` (detection on WS-S's merged bucket) |
+| AC2B.5 (RW-6 real run) | not verified here: rolling Phase 5 (P5 agent, dev PC, DH 3.3.2) | — (threshold UNVERIFIED) |
+| AC2B.6 (RW-7) | verified | `ResultNotesTest.rw7TruthTable` |
+| AC2B.7 (RW-8) | verified | `BenchmarkTrendTest.rw8*`, `TrendTextTest.rw8TheExcludedLineNamesWhy`; BenchmarkGameTest: `worldFresh` true on the run that created the world, false on the next, 3 legs (36317805129, 36325935349) |
+| AC2B.8 (RW-9) | verified | `ResultNotesTest.rw9TruthTable` |
+| AC2B.9 (RW-15) | WS-B half verified; closes with the later of WS-B/WS-S (WS-S implements the seam) | `StutterStepsTest.rw15*` (the excluded step never sweeps), `BenchmarkControllerOutcomeTest.rw15StepsLeftOutCountsTheTimedOutSettles`, `ResultNotesTest.rw15TheLineNamesTheStepsLeftOut` |
+| AC2A.1 (Tab reaches every row and chart summary; narration) | verified | `A11yGameTest.walkBenchmarkScreens`, 3 legs (36325935349; 26.3 also 36324863949) |
+| AC2A.2 (no content lost; X12 layout; high contrast) | verified | the walk's `textContent()` checks every table value and header at the 3 sizes, its layout check (no widget outside, none overlapping), the screenshots compared above, `a11y-hc-bench-*` |
+| AC2A.3 (README known limits) | docs workstream | text in "Docs" above |
+
