@@ -208,22 +208,22 @@ WS-S adds no init work: SettingsWatch loads and registers when the first session
 classes on their existing paths. `monitorOnRetainedBytes` grows by 38,912 bytes by design (the DH slot 32,768, the live
 ring 6,144): 2,545,808 of 2,621,440.
 
-| leg | key | baseline | 36319389803 (6496f2cd, S1) | 36328669112 (f9aada54, S1-S12) |
-|---|---|---|---|---|
-| 26.2 OpenGL | renderThreadInitCpuMs | 82.2 | 109.3 | 97.9 |
-| 26.2 OpenGL | clientStartedWallMs | 36.4 | 53.1 | 37.7 |
-| 26.2 OpenGL | workerCpuMs5s | 135.5 | 208.9 | 173.6 |
-| 26.2 OpenGL | tickHookOnVsReference | 1.481 | 1.712 | 1.604 |
-| 26.3 OpenGL | renderThreadInitCpuMs | 82.2 | 85.0 | 105.0 |
-| 26.3 OpenGL | clientStartedWallMs | 27.0 | 24.4 | 45.7 |
-| 26.3 OpenGL | workerCpuMs5s | 153.2 | 138.6 | 174.1 |
-| 26.3 OpenGL | tickHookOnVsReference | 1.746 | 1.348 | 1.591 |
-| 26.3 Vulkan | renderThreadInitCpuMs | 120.0 | 82.7 | 101.7 |
-| 26.3 Vulkan | clientStartedWallMs | 39.9 | 11.7 | 33.0 |
-| 26.3 Vulkan | workerCpuMs5s | 200.7 | 141.4 | 180.1 |
-| 26.3 Vulkan | tickHookOnVsReference | 1.535 | 1.451 | 1.570 |
-| all | monitorOnRetainedBytes | 2,506,896 | 2,539,664 | 2,545,808 |
-| all | RW-11 settings check (StutterGameTest) | (new) | | 50.7 / 89.8 / 48.2 ns per call; 32 bytes per 100,000 calls |
+| leg | key | baseline | 36319389803 (6496f2cd, S1) | 36328669112 (f9aada54, S1-S12) | 36336531220 (d6fe1bd5, final) |
+|---|---|---|---|---|---|
+| 26.2 OpenGL | renderThreadInitCpuMs | 82.2 | 109.3 | 97.9 | 98.9 |
+| 26.2 OpenGL | clientStartedWallMs | 36.4 | 53.1 | 37.7 | 25.4 |
+| 26.2 OpenGL | workerCpuMs5s | 135.5 | 208.9 | 173.6 | 208.2 |
+| 26.2 OpenGL | tickHookOnVsReference | 1.481 | 1.712 | 1.604 | 1.707 |
+| 26.3 OpenGL | renderThreadInitCpuMs | 82.2 | 85.0 | 105.0 | 70.4 |
+| 26.3 OpenGL | clientStartedWallMs | 27.0 | 24.4 | 45.7 | 24.2 |
+| 26.3 OpenGL | workerCpuMs5s | 153.2 | 138.6 | 174.1 | 144.9 |
+| 26.3 OpenGL | tickHookOnVsReference | 1.746 | 1.348 | 1.591 | 1.309 |
+| 26.3 Vulkan | renderThreadInitCpuMs | 120.0 | 82.7 | 101.7 | 89.6 |
+| 26.3 Vulkan | clientStartedWallMs | 39.9 | 11.7 | 33.0 | 34.7 |
+| 26.3 Vulkan | workerCpuMs5s | 200.7 | 141.4 | 180.1 | 160.8 |
+| 26.3 Vulkan | tickHookOnVsReference | 1.535 | 1.451 | 1.570 | 1.501 |
+| all | monitorOnRetainedBytes | 2,506,896 | 2,539,664 | 2,545,808 | 2,545,808 |
+| 26.2 / 26.3 GL / Vulkan | RW-11 settings check (StutterGameTest) | (new) | | 50.7 / 89.8 / 48.2 ns per call | 64.3 / 39.4 / 50.3 ns per call; 32 bytes per 100,000 calls |
 
 Every value moves inside ws-k.md's runner-to-runner spread (e.g. 26.2 renderThreadInitCpuMs 63.5-112.9 on 0.4's code)
 in both directions, and every budget keeps its margin; `v05RenderThreadResolve` null on every leg.
@@ -250,6 +250,6 @@ screen) and of 36328669112 (`stutter-640x480-scale2`: the new "Settings changed 
 | AC2S.14 (DH bucket) | verified | ThreadSamplerTest.dhWorldGenThreadsGetTheirOwnBucket, .aSteadyStateSampleAllocatesNothing (DH names), StutterAnalyzerTest.dhWorldGenCpuOverTheRecordedSweepsOnly, .worldGenCpuStillCountsAsDh, StutterServiceTest.aFinishedBenchmarkReportsItsDhWorldGenCpu; merged early (cc3f52e0) |
 | AC2B.9 (RW-15) | WS-S part verified; closes with WS-B | StutterServiceTest.anExcludedStepRecordsNoFrames, StutterScreenTextTest.theBenchmarkLineNamesExcludedSteps |
 
-CI: run 36319389803 (S1, 6496f2cd), 36325283747 (S1-S8, 8bd62a8d), 36328669112 (S1-S12, f9aada54) and 36333351347
-(36994bb8, after merging WS-R's r17): every job green on all three legs; unit tests 2179 per version (26.2 and 26.3,
-0 failures, 2 skipped) on 36333351347.
+CI: run 36319389803 (S1, 6496f2cd), 36325283747 (S1-S8, 8bd62a8d), 36328669112 (S1-S12, f9aada54), 36333351347
+(36994bb8, after merging WS-R's r17) and 36336531220 (d6fe1bd5: the review fixes, after merging WS-P): every job green
+on all three legs; unit tests 2216 per version (26.2 and 26.3, 0 failures, 2 skipped) on 36336531220.
