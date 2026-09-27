@@ -236,5 +236,6 @@ screen) and of 36328669112 (`stutter-640x480-scale2`: the new "Settings changed 
 | AC2S.14 (DH bucket) | verified | ThreadSamplerTest.dhWorldGenThreadsGetTheirOwnBucket, .aSteadyStateSampleAllocatesNothing (DH names), StutterAnalyzerTest.dhWorldGenCpuOverTheRecordedSweepsOnly, .worldGenCpuStillCountsAsDh, StutterServiceTest.aFinishedBenchmarkReportsItsDhWorldGenCpu; merged early (cc3f52e0) |
 | AC2B.9 (RW-15) | WS-S part verified; closes with WS-B | StutterServiceTest.anExcludedStepRecordsNoFrames, StutterScreenTextTest.theBenchmarkLineNamesExcludedSteps |
 
-CI: run 36319389803 (S1, 6496f2cd) and 36325283747 (S1-S8, 8bd62a8d) and 36328669112 (S1-S12, f9aada54): every job
-green on all three legs.
+CI: run 36319389803 (S1, 6496f2cd), 36325283747 (S1-S8, 8bd62a8d), 36328669112 (S1-S12, f9aada54) and 36333351347
+(36994bb8, after merging WS-R's r17): every job green on all three legs; unit tests 2179 per version (26.2 and 26.3,
+0 failures, 2 skipped) on 36333351347.
