@@ -67,6 +67,25 @@ No new `//? if` block expected (ti §4). Code-deciding run: T12 only.
   of the try's entry, with at least one change that isn't DISCARDED or ABANDONED (a change that never took effect can't
   have moved the numbers; a STAGED one counts, so a verdict doesn't flip after the restart that applies it).
 
+## Phase 1 as landed
+
+All in `core/tryit/` (pure: core model + Gson, no Minecraft import). Tests red first (compile failures: the API didn't
+exist), then green in a build slot (`:26.2:test --tests 'io.github.chaotix345.rigtune.core.tryit.*'`: 67 tests), plus
+WS-K's `V05StubsTest`, `V05StoreShellsTest`, `V05ServicesTest`, `RigTuneControllerDefaultsTest`, `LangCheckTest` and
+`WordingTest` unchanged and green.
+
+| task | commit | API (as the client part will call it) | tests |
+|---|---|---|---|
+| T1 | 16745790 | `TryIt(id, pairId, entryId, recommendationId, key, from, to, Kind kind, Scene scene, startedAt, session, rigtuneVersion, mcVersion, settingsBefore, settingsAfter, afterSession, afterRunId)`; `TryIt.of(entryId, recommendationId, key, from, to, kind, scene, startedAt, session, rigtuneVersion, mcVersion, settingsBefore)` mints `t-<uuid>` / `tryit-<uuid>`; `withAfter(settings, session)`, `withAfterRun(runId)`; `TryIt.Kind {NOW, RESTART}`, `TryIt.Decision {KEPT, REVERTED, CANCELLED, FAILED}`, `TryIt.Closed.of(t, decision, verdict, low, avg, floor, at)`; `TryItStore.current()`, `recent()`, `open(t)`, `change(id, f)`, `close(id, closed)`, `MAX_RECENT` 10 | `TryItStoreTest` (13) |
+| T2 | 36832873 | `Triable.check(rec, Context[, scene])`, `selection(List, Context)` -> `Result(kind, scene, refusal)`; `Refusal {ONE, KIND, UNMEASURABLE, PRESET, UNSUPPORTED, NO_FILE, REMOTE_SD, PENDING, BUSY, SCENE, OPEN, HISTORY, STORAGE}`; `Context(hasConfigFile, inWorld, remoteServer, pending, busy, sceneUnavailable, tryOpen, journalWritable, benchmarksReadable, storeWritable)`; `scenes(kind)`, `defaultScene(kind, inWorld)`, `allowed(key)`, `sceneContent(key)`, `LIFTED` | `TriableTest` (13) |
+| T3 | 88553045 | `TryItVerdict.of(t, before, after, runs, entries)` -> `Verdict(kind, lowPercent, avgPercent, floorPercent, causes, caveats)`; `Kind {BETTER, WORSE, NO_CLEAR_CHANGE, NOT_COMPARABLE, NO_NUMBERS}`; `Cause` = `Condition(Difference)` / `Mods()` / `Entry(entryId, kind)` / `Setting(key)`; `Caveat {NOISY, WORLD_CONTENT, DH, SESSIONS, SCENE}`; `MIN_CV` 0.025 | `TryItVerdictTest` (16) |
+| T4 | 78ea6944 | `TryItFlow.derive(t, runs, History(state, entries, failuresByOpId), Live(session, measuring, applying))` -> `TryItView(stage, tryIt, before, after, verdict, changeStatus, failure, sameSession)`; `TryItView.actions()` (`Action {MEASURE_NOW, MEASURE_AGAIN, KEEP, REVERT, CANCEL_TRY, LATER, DECIDE_LATER, DONE}`), `closing()`, `Stage.chainRunning()`, `Stage.HISTORY_UNREADABLE`; `TryItView(Stage)` and `EMPTY`/`UNAVAILABLE` as WS-K landed them | `TryItFlowTest` (25) |
+
+What the client part must honour (from the derivation's contract): `Live.measuring` stays true from the moment a run of
+the pair is queued until its outcome has been handled (else a derive between the run's save and the handler reads
+STOPPED_BEFORE); `settingsAfter`/`afterSession` are taken only when an after run starts; a closing stage's `closing()`
+is written with `TryItStore.close` once the player has seen it.
+
 ## Footprint deltas
 (phase 2: `workerCpuMs5s`, `renderThreadInitCpuMs`, `clientStartedWallMs`, `tickHookOnVsReference` against ws-k.md's
 per-leg baseline, run 36310249248.) Phase 1 adds no client code.
@@ -75,4 +94,11 @@ per-leg baseline, run 36310249248.) Phase 1 adds no client code.
 (phase 2)
 
 ## AC table
-(filled as tasks land)
+
+| AC | status | evidence |
+|---|---|---|
+| AC6.1 | unit part verified; the game-test part (the Preview button's refusals) is phase 2 | `TriableTest` (every ti §2.2 row, the order, 16 vanilla + 30 rule keys decided) |
+| AC6.5 | unit verified (the verdict line's words are phase 2's TryItText) | `TryItVerdictTest` |
+| AC6.8 | unit verified; TryItGameTest block 6 is phase 2 | `TryItFlowTest` |
+| AC6.10 | unit verified ("no Try It state lives in any other file" is a review item for phase 2) | `TryItStoreTest`, `V05StoreShellsTest` |
+| AC6.2-AC6.4, AC6.6, AC6.7, AC6.9, AC6.11-AC6.17 | phase 2 | |
