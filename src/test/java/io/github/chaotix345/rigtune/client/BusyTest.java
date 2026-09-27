@@ -18,6 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // docs/v0.5/SPEC.md C8 (AC-X.1): the shared busy refusal. Each condition alone refuses with its own text, the first in
 // C8's order wins, none refuses nothing; the callers delegate and no second copy of the checks remains.
 class BusyTest {
+	// The callers, under client/: C20's StutterFixService and C09's Triable add themselves when they land.
+	private static final List<String> CALLERS = List.of("profile/ProfileService.java");
+
 	private static String key(Text text) {
 		return ((Text.Translatable) text).key();
 	}
@@ -43,13 +46,12 @@ class BusyTest {
 		assertFalse(Busy.tryItRunning.getAsBoolean());
 	}
 
-	// A caller delegates to Busy and keeps no copy of its checks (ProfileService now; C20's StutterFixService.apply and
-	// C09's Triable add themselves to CALLERS when they land).
+	// A caller delegates to Busy and keeps no copy of its checks.
 	@Test
 	void theCallersDelegateAndNoCopyOfTheChecksRemains() throws IOException {
 		Path client = RepoFiles.resolve("src/client/java/io/github/chaotix345/rigtune/client");
-		List<Path> callers = List.of(client.resolve("profile/ProfileService.java"));
-		for (Path caller : callers) {
+		for (String name : CALLERS) {
+			Path caller = client.resolve(name);
 			String source = Files.readString(caller);
 			assertTrue(source.contains("Busy.refusal(controller)"), caller + " delegates");
 			assertFalse(source.contains("\"rigtune.profile.status.benchmark\""), caller + " has its own benchmark refusal");
