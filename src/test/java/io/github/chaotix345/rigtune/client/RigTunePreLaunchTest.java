@@ -91,7 +91,7 @@ class RigTunePreLaunchTest {
 				.save(PendingActions.defaultPath(config()));
 		List<String> lines = new ArrayList<>();
 
-		RigTunePreLaunch.readState(config(), false, null, lines::add);
+		RigTunePreLaunch.readState(config(), false, null, null, lines::add);
 
 		assertEquals(3, RigTunePreLaunch.takeLeftoverOps());
 		assertEquals(2, RigTunePreLaunch.takeLeftoverFileOps());
@@ -106,7 +106,7 @@ class RigTunePreLaunchTest {
 				.save(PendingActions.defaultPath(config()));
 		List<String> lines = new ArrayList<>();
 
-		RigTunePreLaunch.readState(config(), false, null, lines::add);
+		RigTunePreLaunch.readState(config(), false, null, null, lines::add);
 
 		assertEquals(1, RigTunePreLaunch.takeLeftoverOps());
 		assertEquals(0, RigTunePreLaunch.takeLeftoverFileOps());
