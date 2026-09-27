@@ -72,6 +72,105 @@ No code-deciding run (PLAN names none for WS-L1). No new `//? if` block expected
   RETURNING only; action "Settings…" opens RigTuneSettingsScreen at the mod-files row; dismissible.
 
 ### Questions sent to the coordinator (2026-09-27)
-1. UiGameTest's `findCycle` (frozen file) must see list rows for milestone 1 (about 6 lines).
+1. UiGameTest's `findCycle` (frozen file) must see list rows for milestone 1 (about 6 lines). Included in milestone 1,
+   which the coordinator merged (e01e70dc).
 2. The late detection needs RealController to record the answer before its one rebuild: (a) ~4 lines in
-   `RealController.launcherDetected`, or (b) `controller.rescan()` from ModFilesService.
+   `RealController.launcherDetected`, or (b) `controller.rescan()` from ModFilesService. Then also the share line
+   (`RealController.shareReport` passing `ModFilesService.shareLine()`). See "Open with the coordinator" below.
+
+---
+
+# What landed
+
+Paths: `client/…` = `src/client/java/io/github/chaotix345/rigtune/client/…`, `core/…` = `src/main/java/io/github/
+chaotix345/rigtune/core/…`, `gametest/…` = `src/gametest/java/io/github/chaotix345/rigtune/gametest/…`.
+
+| # | commit | what |
+|---|---|---|
+| M1 | c757a2ff (merged e01e70dc) | `client/ui/RigTuneSettingsScreen`: `SettingsList extends RowList` (a `WidgetRow` per switch, the switch its Tab stop; a `NoteRow` with a `RowFocus` for the note, now the last row so it scrolls in view instead of being dropped when there's no room); WS-P's insertion point above `stutterMonitorRow(rows, column)`, WS-L1's after it. `gametest/A11yGameTest.walkModFilesRowAndNews` (walk + layout at the three sizes and 854x480@3), `gametest/UiGameTest.findCycle` looks inside list rows. |
+| L1 | aedf6ce9 | `core/launcher/ModFilesPolicy.of` (the table; `launcherManages()`), `core/launcher/InstanceEvidence.list/listAsync/scan` (the bounded `.index/` listing). |
+| L2 | db567a7a | `client/probe/LauncherProbe`: one session = detection + listing (both on `Probes.EXECUTOR`, the mods folder resolved there); a probe answers when both have, else `NOT_YET` at the 3 s cap; `answer()`, `evidence()`, `onLateAnswer`. `client/launcher/ModFilesService.policy()/withoutOptIn()/optedIn()`. |
+| L3 | 0bc99252 | `core/report/LauncherModAdvice.apply/guard/kindOf/advised`, `core/launcher/LauncherModText` (`launcherName`, `nameOrYours`, `guideLine`, `previewLine`, `shareLine`), `LauncherInfo.MOD_KINDS/modStepsKey`, `client/ui/LauncherLines.modStepsLine` (and `adviceLine` calls it first), en_us.json `rigtune.launcher.mod_files.*`/`mod_steps.*`, `V05LangFamilies.launcherPolicy`. |
+| L4 | 8633b5e7 | `client/ui/PreviewScreen.launcherLines`, `core/report/ShareReport` (the `modFiles` overload), `ModFilesService.shareLine()`. |
+| L5 | 4315cd0f | `core/history/UndoPlanner` (the launcher skip, RW-14, `State.launcher()`, `launcherStepsKind`), `client/undo/GameState.launcher()`, `client/ui/UndoScreen` (steps after the reason), `LauncherLines.undoStepsLine`, en_us.json `rigtune.undo.reason.launcher_managed*`/`not_disabled_by_rigtune`. |
+| L6 | 61c026d3, a6ed4359 | `src/test/resources/realworld/2026-09-27/**` + README, `core/history/RealWorldFixtures` (test loader, for WS-L2 too), `RealWorldUndoTest`, `RealWorldFixturesTest`. |
+| L7 | 09b8e60d | the Settings "Mod files" row, RigTuneScreen's opted-in line, `v050-written/ws-l1/{settings.json,expect.json}`, `ModFilesOptInFixtureTest`, `ModFilesRowTest`. |
+| L8 | 2c58b210 | `ModFilesService.news/newsNotice`, `client/notice/ModFilesNewsNoticeSource`. |
+| L9 | 20e1b922 | `LauncherDesyncTest` (the Modrinth App and GDLauncher models), `ModFileOpsSourceTest`. |
+| L10 | 2a8bfbec | `gametest/LauncherManagedGameTest.policyAndAdvice`, the A11y walk of the Mod files row and MOD_FILES_NEWS; `LauncherProbe.onLateAnswer` as a standing listener (once per detection, only after a probe hit the cap), set by `ModFilesService` (a rescan on the render thread; interim, see "Open with the coordinator"). |
+| merge | e7e33b18 | `origin/feat/v0.5.0` (WS-P's battery-offer row next to the Mod files row in RigTuneSettingsScreen; both kept). |
+
+Red first: M1's walk failed on the old screen (no list), and on the first run of the new one (Tab skipped the greyed-out
+switches: the walk now expects exactly the active rows, as vanilla gives an inactive widget no Tab stop); L1-L9's tests
+failed to compile against the WS-K stubs or failed on their identity answers (the LauncherModAdvice cells, the policy
+table, UndoPlannerPolicyTest, RW-14's UndoPlannerTest case, the desync model under LAUNCHER); the real-world tests failed in
+CI run 36328216699 because `.gitignore` drops `config/` folders (fixed in a6ed4359); L10's first local run hung on a
+test-thread `undoPlan` (the harness runs the test thread and the render thread one at a time; now planned on the render
+thread) and then caught the late-detection race below.
+
+## Tests (unit, per class)
+
+| class | cases | AC |
+|---|---|---|
+| `core/launcher/ModFilesPolicyTest` | 8 (every Launcher x .index/ {absent, present, not listed} x opt-in x detection) | AC4a.1 |
+| `core/launcher/InstanceEvidenceTest` | 11 (missing, empty, a directory named x.pw.toml, a symlink, a symlinked .index/, 10,000 entries stop at 256, first match, a file or unreadable .index/, the given executor, a refusing executor) | AC4a.2 |
+| `client/probe/LauncherProbeTest` | +7 (NOT_YET, the listing, nothing answered, the late answer once, in time isn't late, a listener set after the answer, a reset) | AC4a.3 (unit) |
+| `client/launcher/ModFilesServiceTest` | 6 | AC4a.3 (unit), 4e, AC4b.4 |
+| `core/report/LauncherModAdviceTest` | 7 (3 policies x 7 rows x Modrinth {on, off, network off}, composed with ModrinthOffAdvice; RIGTUNE the same object; English; unnamed; blank reason; the guard; advised) | AC4b.1, AC4b.2 (unit) |
+| `core/launcher/LauncherModTextTest` | 6 (guideLine, who is named, preview line, share line, a steps key per launcher and kind, the labels pinned) | AC4b.3, AC4b.4, AC4b.5 |
+| `client/ui/LauncherLinesModStepsTest` | 4 | 4b, 4c |
+| `core/report/ShareReportModFilesTest` | 2 | AC4b.4 |
+| `client/launcher/ModFilesNewsTest` | 4 | AC4b.6 (unit) |
+| `core/launcher/ModFileOpsSourceTest` | 1 | AC4b.7 |
+| `core/history/UndoPlannerPolicyTest` | 7 | AC4c.1, AC4c.3 (unit) |
+| `core/history/UndoPlannerTest` | the fallback case now RW-14's | AC4c.3 |
+| `core/history/RealWorldUndoTest`, `RealWorldFixturesTest` | 4, 2 | AC4c.2, AC4c.3, PLAN-11 |
+| `client/ui/ModFilesRowTest` | 1 | AC4e.1 (unit) |
+| `client/ModFilesOptInFixtureTest` | 2 | AC4e.3, the `ws-l1` set |
+| `core/launcher/LauncherDesyncTest` | 3 | AC4j.1 |
+| `core/launcher/LauncherScenarioTest`, `core/V05StubsTest`, `client/V05HooksTest`, `client/V05ServicesTest` | updated: the new launcher keys counted; the stubs' RIGTUNE-everywhere pins narrowed to what stays 0.4 | - |
+
+Full 26.2 unit suite locally before the L1-L6 push: 1976 tests, 0 failures, 2 skipped (the pre-existing one and
+InstanceEvidenceTest's POSIX-permission half on Windows).
+
+## Deviations
+
+1. **Wording, not meaning.** SPEC 4b's "<launcher> manages this instance's mods: ..." reads "This instance's mods are
+   managed by <launcher>: ..." (and "your launcher" when none is named): en_us.json's launcher names carry their article
+   ("the Modrinth App"), so they can't start a sentence. Same for the Undo reason and the opted-in sentence
+   ("RigTune changes mod files here; <launcher>'s own list may go out of date.").
+2. **`ModFilesPolicy.of` takes a nullable evidence** (the `.index/` listing not answered yet): a launcher that would be
+   RIGTUNE stays PENDING until the listing has answered, so a packwiz instance is never briefly RIGTUNE. The probe waits
+   for both (the 3 s cap covers both).
+3. **Who is named.** A packwiz index under the official launcher or an unknown one is "your launcher", with no steps (the
+   index isn't the official launcher's record); PolyMC is named MultiMC with MultiMC's labels, as 0.4 does (UNVERIFIED
+   for PolyMC's own UI).
+4. **A fifth steps kind, `enable`** (and `self_update`, the Modrinth App only): the Undo screen needs the launcher's
+   "turn it back on" steps for a skipped disable. Keys `rigtune.launcher.mod_steps.<launcher>.{add,update,disable,enable}`
+   plus `modrinth_app.self_update`.
+5. **Preview's heading** is `rigtune.launcher.mod_files.preview.heading` ("Mod files"), in WS-L1's block, not a new
+   `rigtune.preview.section.*` key in a block that isn't WS-L1's.
+6. **Undo last under LAUNCHER** keeps its rule "the newest entry with anything left to revert": an entry with only mod
+   files has nothing RigTune can revert there, so Undo last goes on to an older entry with settings; Undo all and Undo
+   this list the skipped changes with the launcher's reason and steps.
+7. **RW-14 also in `waitingFile`**: an applied disable without a `resultFile` no longer guesses `<file>.disabled` when it
+   checks for staged moves either (the change is skipped anyway).
+8. **The opted-in header line** shows whenever the opt-in is on (RigTuneScreen talks to `RigTuneController`, which has no
+   "would be LAUNCHER" question); the Settings row, the only way to turn it on, shows only where it matters, and
+   `ModFilesService.optedIn()` (the share line; C02's `guideLine` argument) counts it only where it matters.
+9. **The settings note** is the list's last row (always reachable by scrolling and Tab) instead of a line drawn under
+   the switches only when there was room (it wasn't drawn at 640x480 or 854x480 before).
+10. **RigTune's own update row** under LAUNCHER shows as advice even where the helper can't swap RigTune's jar
+    (`selfFileActions` false): `withoutStaged` hides only an appliable UpdateMod/DisableMod of RigTune.
+11. **UiGameTest** (frozen): `findCycle` also searches a list's rows (the coordinator merged it with milestone 1).
+
+## Open with the coordinator
+
+- **The late detection (AC4a.3).** A probe past the 3 s cap answers NOT_YET; the report is PENDING until the answer.
+  Interim (my files only): `ModFilesService` sets `LauncherProbe.onLateAnswer(answer -> rescan on the render thread)`.
+  The local game test showed its race: the late rescan recorded the Modrinth App and, milliseconds later, the stale chain
+  that had got NOT_YET recorded it over (RealController.launcherDetected takes whatever a chain hands it). The fix needs
+  RealController: `launcherDetected` keeps an answer already in over a NOT_YET and registers the late answer (`launcherDetected(late);
+  rebuild();`). Asked 2026-09-27 (three messages); not answered yet.
+- **The share line (AC4b.4).** `ShareReport.format(..., modFiles)` and `ModFilesService.shareLine()` exist and are
+  tested; `RealController.shareReport` must pass it (one line). Asked with the above.
