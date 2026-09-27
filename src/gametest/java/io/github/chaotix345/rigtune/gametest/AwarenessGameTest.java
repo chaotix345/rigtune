@@ -117,6 +117,13 @@ public class AwarenessGameTest implements FabricClientGameTest {
 		ClientGameTestContext context = v05.context();
 		RealController real = v05.realController();
 		Path file = real.awarenessService().file();
+		// The 0.4 block's driver notice was seen (committed) this session, and the same change reported again stays seen
+		// (review L3): retire it through its own Re-scan first, so the one seeded next is fresh.
+		Notice seen = context.computeOnClient(mc -> real.awarenessService().hardwareNotice());
+		if (seen != null) {
+			context.runOnClient(mc -> real.noticeAction(seen.key(), AwarenessService.RESCAN));
+			context.waitFor(mc -> real.report() != null && real.awarenessService().hardwareNotice() == null, 1200);
+		}
 		String current = seedOlderDriver(file);
 		rescan(context, real);
 		Notice hardware = context.computeOnClient(mc -> real.awarenessService().hardwareNotice());

@@ -91,7 +91,8 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 	// v0.5 AW-1 (docs/v0.5/SPEC.md 2W): a NONE against the committed fingerprint keeps a committed notice for the session:
 	// the hardware is still what it shows, within the detector's tolerances (no fingerprint equality test, which RAM noise
 	// would break). A changed-back or new change replaces it; an uncommitted one goes with a NONE as before. The same change
-	// reported again (its asynchronous commit not written yet) keeps the committed notice (review L3).
+	// reported again while committed (its asynchronous commit not written yet, or lost) keeps the notice as seen and
+	// writes the fingerprint again (review L3).
 	public void afterProbe(@Nullable HardwareProfile hw) {
 		if (hw == null) {
 			return;
@@ -102,7 +103,9 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 			Pending shown = hardware;
 			String key = HARDWARE_KEY_PREFIX + now.id();
 			if (change.changed()) {
-				if (shown == null || !shown.committed().get() || !shown.key().equals(key)) {
+				if (shown != null && shown.committed().get() && shown.key().equals(key)) {
+					ChangeDetector.commit(store, shown.now());
+				} else {
 					hardware = new Pending(change, now, key, new AtomicBoolean());
 				}
 			} else if (shown == null || !shown.committed().get()) {

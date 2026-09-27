@@ -99,8 +99,8 @@ class AwarenessServiceTest {
 		assertEquals("Your GPU driver changed since last time (25.10.1 → 25.9.1)", back.message().english());
 	}
 
-	// Review L3: the same change reported again before the shown notice's asynchronous commit is written keeps the committed
-	// notice (it doesn't start over as unseen).
+	// Review L3: the same change reported again before the shown notice's asynchronous commit is written (or after it was
+	// lost) keeps the committed notice (it doesn't start over as unseen) and writes the fingerprint again.
 	@Test
 	void theSameChangeReportedAgainKeepsTheCommittedNotice() throws InterruptedException {
 		AwarenessService service = withShownDriverNotice();
@@ -109,6 +109,7 @@ class AwarenessServiceTest {
 		service.afterProbe(rig(NEW));
 		assertEquals(key, service.hardwareNotice().key());
 		assertTrue(service.hardwareCommitted(), "still counted as seen");
+		assertEquals(Fingerprint.of(rig(NEW)), Fingerprint.read(AwarenessStore.shared(dir).read()), "committed again");
 	}
 
 	@Test
