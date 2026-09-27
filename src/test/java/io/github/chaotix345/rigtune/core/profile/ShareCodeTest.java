@@ -103,6 +103,22 @@ class ShareCodeTest {
 		assertEquals("170", ShareCode.decode(ShareCode.encode("Mine", Map.of("vanilla.maxFps", "170"), -1)).values(60).get("vanilla.maxFps"));
 	}
 
+	// docs/v0.5/SPEC.md PF-4 (AC2P.4): a fixed 60 FPS cap (Recording, Battery) sent from a 60 Hz display is the number 60,
+	// never "match the display" (which a 144 Hz importer would read as 140).
+	@Test
+	void pf4SixtyFromASixtyHzSenderStaysSixty() throws ShareCodeException {
+		String code = ShareCode.encode("Recording", Map.of("vanilla.maxFps", "60"), 60);
+		assertEquals("60", ShareCode.decode(code).values(144).get("vanilla.maxFps"));
+		assertEquals("60", ShareCode.decode(ShareCode.encode("Battery", Map.of("vanilla.maxFps", "60"), 65)).values(144).get("vanilla.maxFps"));
+	}
+
+	@Test
+	void pf4TheSixtyHzWireValueIsFive() throws ShareCodeException {
+		assertEquals(5, ShareCode.decode(ShareCode.encode("Recording", Map.of("vanilla.maxFps", "60"), 60)).entries().getFirst().wire());
+		// A 75 Hz display's cap (70) is still sent as "match the display".
+		assertEquals(ShareKeys.MATCH_DISPLAY, ShareCode.decode(ShareCode.encode("Mine", Map.of("vanilla.maxFps", "70"), 75)).entries().getFirst().wire());
+	}
+
 	@Test
 	void unshareableAndUnrepresentableValuesAreLeftOut() throws ShareCodeException {
 		assertNull(ShareCode.encode("x", Map.of("sodium.performance.chunk_builder_threads", "4", "vanilla.graphicsPreset", "fancy",
