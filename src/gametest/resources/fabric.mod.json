@@ -22,6 +22,9 @@
 			"io.github.chaotix345.rigtune.gametest.AwarenessGameTest",
 			"io.github.chaotix345.rigtune.gametest.FootprintGameTest",
 			"io.github.chaotix345.rigtune.gametest.A11yGameTest"
+		],
+		"preLaunch": [
+			"io.github.chaotix345.rigtune.gametest.HangWatchdog"
 		]
 	},
 	"depends": {

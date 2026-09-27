@@ -1,0 +1,178 @@
+# RESEARCH ONLY (r-ci, branch research/v05-ci): CI robustness experiments for docs/research/v0.5/ci-robustness.md.
+# Never merged. timing: the tick-hook estimators, many runners; hang: BenchmarkGameTest repeated on 26.3 OpenGL with a
+# thread-dump watchdog; offline: the game tests, unit tests and Python tests with no network but loopback.
+name: ci-experiment
+
+on:
+  push:
+    branches: [research/v05-ci]
+
+permissions:
+  contents: read
+
+jobs:
+  timing:
+    name: timing (${{ matrix.mc }}, ${{ matrix.idx }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        mc: ['26.2', '26.3']
+        idx: [1, 2, 3, 4, 5, 6, 7, 8]
+    env:
+      SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER: skip
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: true
+      - name: Only the timing probe
+        run: |
+          python3 - <<'EOF'
+          import json
+          p = 'src/gametest/resources/fabric.mod.json'
+          d = json.load(open(p))
+          d['entrypoints']['fabric-client-gametest'] = ['io.github.chaotix345.rigtune.gametest.TimingProbeGameTest']
+          json.dump(d, open(p, 'w'), indent=2)
+          EOF
+          grep -A3 fabric-client-gametest src/gametest/resources/fabric.mod.json
+      - name: Timing probe, 2 JVMs x 3 reps
+        run: |
+          mkdir -p timing-out
+          lscpu | grep -E 'Model name|MHz|^CPU\(s\)' | tee timing-out/lscpu-${{ matrix.mc }}-${{ matrix.idx }}.txt
+          cat /sys/devices/system/clocksource/clocksource0/current_clocksource | tee -a timing-out/lscpu-${{ matrix.mc }}-${{ matrix.idx }}.txt
+          for jvm in 1 2; do
+            ./gradlew ":${{ matrix.mc }}:runProductionClientGameTest" "-PgametestJvmArgs=-Drigtune.test.timingReps=3 -Drigtune.test.watchdogMinutes=15" || echo "jvm $jvm failed"
+            cp versions/${{ matrix.mc }}/build/run/productionClientGameTest/footprint/*.json timing-out/ 2>/dev/null || true
+          done
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: timing-${{ matrix.mc }}-${{ matrix.idx }}
+          path: timing-out/
+
+  hang:
+    name: hang (26.3 OpenGL, ${{ matrix.idx }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        idx: [1, 2, 3, 4, 5, 6]
+    env:
+      SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER: skip
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: true
+      - name: Only RigTuneClientGameTest + BenchmarkGameTest
+        run: |
+          python3 - <<'EOF'
+          import json
+          p = 'src/gametest/resources/fabric.mod.json'
+          d = json.load(open(p))
+          d['entrypoints']['fabric-client-gametest'] = ['io.github.chaotix345.rigtune.gametest.RigTuneClientGameTest', 'io.github.chaotix345.rigtune.gametest.BenchmarkGameTest']
+          json.dump(d, open(p, 'w'), indent=2)
+          EOF
+      - name: BenchmarkGameTest x 4 JVMs, watchdog 9 min
+        run: |
+          mkdir -p hang-out
+          for jvm in 1 2 3 4; do
+            start=$(date +%s)
+            if ./gradlew ":26.3:runProductionClientGameTest" "-PgametestJvmArgs=-Drigtune.test.watchdogMinutes=9"; then r=ok; else r=FAILED; fi
+            echo "jvm $jvm: $r in $(( $(date +%s) - start )) s" | tee -a hang-out/summary.txt
+            d=hang-out/jvm$jvm; mkdir -p $d
+            cp -r versions/26.3/build/run/productionClientGameTest/logs $d/ 2>/dev/null || true
+            cp versions/26.3/build/run/productionClientGameTest/footprint/watchdog-threads.txt $d/ 2>/dev/null || true
+          done
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: hang-${{ matrix.idx }}
+          path: hang-out/
+
+  offline-gametest:
+    name: offline game tests (${{ matrix.mc }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        mc: ['26.2', '26.3']
+    env:
+      SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER: skip
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: true
+      - name: Prefetch (network)
+        run: ./gradlew --no-daemon ":${{ matrix.mc }}:downloadAssets" ":${{ matrix.mc }}:jar" ":${{ matrix.mc }}:gametestJar"
+      - name: Game tests in a network namespace (loopback only), --offline
+        run: |
+          set -o pipefail
+          start=$(date +%s)
+          sudo unshare --net -- env "P=$PATH" "J=$JAVA_HOME" "G=${GRADLE_USER_HOME:-/home/runner/.gradle}" "W=$PWD" "S=$SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER" "MC=${{ matrix.mc }}" bash -c '
+            ip link set lo up
+            ip addr show lo
+            cd "$W"
+            exec sudo -u runner env PATH="$P" HOME=/home/runner JAVA_HOME="$J" GRADLE_USER_HOME="$G" CI=true SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER="$S" \
+              ./gradlew --offline ":$MC:runProductionClientGameTest" --stacktrace' 2>&1 | tee offline-gametest.log
+          echo "took $(( $(date +%s) - start )) s"
+      - name: Summary
+        if: always()
+        run: |
+          logs="versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs"
+          grep -hE "Modrinth lookups failed|Could not check|UnknownHost|No route|Connection refused|passed|GameTest" "$logs/latest.log" | head -80 || true
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: offline-gametest-${{ matrix.mc }}
+          path: |
+            offline-gametest.log
+            versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs/
+            versions/${{ matrix.mc }}/build/run/productionClientGameTest/footprint/
+          if-no-files-found: ignore
+
+  offline-unit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25'
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - name: Prefetch (network, no cache as in build.yml's java job)
+        run: |
+          start=$(date +%s)
+          ./gradlew --no-daemon assemble testClasses gametestClasses
+          echo "prefetch took $(( $(date +%s) - start )) s"
+      - name: Unit tests and Python tests with no network but loopback
+        run: |
+          start=$(date +%s)
+          sudo unshare --net -- env "P=$PATH" "J=$JAVA_HOME" "W=$PWD" bash -c '
+            ip link set lo up
+            cd "$W"
+            exec sudo -u runner env PATH="$P" HOME=/home/runner JAVA_HOME="$J" CI=true bash -c "
+              ./gradlew --offline build --stacktrace; echo gradle-exit=\$?
+              python -m unittest discover -s tools/tests 2>&1 | tail -3; echo py-exit=\$?
+              python -m unittest discover -s tools/e2e/tests 2>&1 | tail -3; echo py-e2e-exit=\$?"'
+          echo "took $(( $(date +%s) - start )) s"
