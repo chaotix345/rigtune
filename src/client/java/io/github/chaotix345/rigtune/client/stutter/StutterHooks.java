@@ -202,6 +202,12 @@ public final class StutterHooks {
 		return StutterCapture.SAMPLER.running();
 	}
 
+	// For StutterGameTest (RW-11, X4.4): the settings check's own cost with a session running (render thread): the nanos
+	// `calls` checks took and the bytes they allocated.
+	public static long[] settingsCheckCost(Minecraft minecraft, int calls) {
+		return SettingsWatch.cost(minecraft, calls);
+	}
+
 	// For BenchmarkGameTest (review-8 P5A-F3): monitor sessions whose end was handled, saved or not.
 	public static int sessionsEnded() {
 		StutterService s = service;

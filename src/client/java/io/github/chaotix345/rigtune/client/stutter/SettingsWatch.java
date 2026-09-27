@@ -93,6 +93,21 @@ final class SettingsWatch {
 		}
 	}
 
+	// For StutterGameTest: `calls` checks in a row after a warm-up, as the listener runs them (render thread, a session on).
+	static long[] cost(Minecraft minecraft, int calls) {
+		com.sun.management.ThreadMXBean threads = (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
+		for (int i = 0; i < calls / 10; i++) {
+			tick(minecraft);
+		}
+		long bytes = threads.getCurrentThreadAllocatedBytes();
+		long start = System.nanoTime();
+		for (int i = 0; i < calls; i++) {
+			tick(minecraft);
+		}
+		long nanos = System.nanoTime() - start;
+		return new long[]{nanos, threads.getCurrentThreadAllocatedBytes() - bytes};
+	}
+
 	// The comparison, free of Minecraft types (SettingsWatchTest). The first check of a session only takes the values; a
 	// change's event is dated when the old value was last seen (the tick before, or the last Iris/DH read), so the 10 s
 	// window also covers what happened between the two looks.
