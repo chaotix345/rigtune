@@ -58,13 +58,69 @@ agent, under the game-test lock, after this workstream merges). No code-deciding
   and re-checked inside the update (a server that vanished in between leaves the content as it was).
 - **The salt**: missing or malformed → nothing is keyed (no entries, `keyOf` null); the first `remember` makes a new one
   and drops the entries the old one keyed (ServerLimitsStore's rule). `forgetAll` keeps the salt.
+- **Times are kept to the second** (`setAt`, `lastSeen`), as sp §2.4's example shows: a smaller file and no sub-second
+  noise in a player-edited file.
+- **A null entry value** (`"<key>": null`) is dropped by the next write (JsonStateFile's Gson leaves null members out);
+  every other unreadable entry stays until Forget all.
+
+## Phase A as landed
+
+| task | commit | tests (26.2 and 26.3, local) |
+|---|---|---|
+| A1 ServerProfileStore | 33e8ab83 | ServerProfileStoreTest 17; V05StoreShellsTest, ServerLimitsStoreTest unchanged and green |
+| A2 ServerProfilePrompt.decide | dc1331c3 | ServerProfilePromptTest 4 (the order test runs all 64 combinations) |
+| A3 notice and toast texts | 47a0c6db | ServerProfileNoticeTest 5; LangCheckTest, WordingTest, PseudoLocaleTest, AwarenessDismissTest |
+| A4 ServerProfilesView | f2cb97e9 | ServerProfilesViewTest 11; V05StubsTest |
+| A5 AC7.18 pin | 6715b714 | ServerProfileSwitchTest 1 |
+| A6 fixture set ws-p2 | e9e43815 | V050WrittenWsP2Test 1 |
+
+Red first for each: A1-A4 and A6 failed before their code (A1-A4: the API didn't exist; A6: no committed set,
+`NoSuchFileException`); A5 is a pin (see the table above). The targeted run (core server/profile/store/notice,
+V05StubsTest, LangCheckTest, WordingTest, PseudoLocaleTest, PaletteTest, client awareness, ServerLimitNoticeSourceTest,
+RigTuneControllerDefaultsTest, V05ServicesTest) passed on both nodes: 189 tests each, 0 failures.
+
+**compat030 against the set** (PLAN "Fixtures"): the released 0.3.0 jar (sha256-checked by the tool) on the v040-written
+instance with ws-p2's `server-profiles.json` added (compat030's `written.py` doesn't know the v0.5 sets yet, so the file
+went into a copy of the ws-w folder): `RESULT PASS`, "0.3.0 reading them changed no file: 10 file(s) unchanged", and
+`cmp` shows `server-profiles.json` byte-identical. compat040 isn't on the integration branch yet (WS-E): AC7.14 closes
+when its interpreter runs `expect.json`. No `placeholder/ws-p2/` exists on the branch, so none was deleted.
+
+### Deviations (Phase A)
+- `ServerProfileNoticeTest`, `ServerProfilePromptTest` and `ServerProfilesViewTest` are in `core/profile` (sp §7 put
+  the notice test in `client/server`): the builders are core (Decisions).
+- The This-server line has a seventh text, `rigtune.profile.server.here.missing` ("This server: set to %s, so RigTune
+  offers nothing here."), for a server whose profile was deleted (outside 0.5) or is a template this version doesn't
+  know: "RigTune offers a deleted profile when you join" would be untrue (MISSING_PROFILE fails closed; X3).
+- Not in Phase A (client, Phase B): the keys only the screen and ProfilesScreen use (`rigtune.profile.servers*`,
+  title, subtitle, remember, stop, privacy, forget buttons, the confirm screen, `row.current`, `empty`).
 
 ## Footprint deltas
-(filled in from the Phase A CI run: `workerCpuMs5s`, `renderThreadInitCpuMs`, `clientStartedWallMs`,
-`tickHookOnVsReference` per leg against ws-k.md's baseline, run 36310249248)
+Phase A adds no client code: nothing runs on the render thread, at startup or per tick (the core classes load only when
+Phase B's client code calls them). The Phase A CI run's footprint JSON per leg against ws-k.md's baseline (run
+36310249248): (filled in from the CI run)
 
 ## Docs (for the docs workstream)
 (filled in at the end of Phase B; sp §2.4's privacy wording for README's "What the tools keep on your PC")
 
 ## AC table
-(filled in as tasks land)
+
+| AC | status | evidence |
+|---|---|---|
+| AC7.1 (the file's shape, no plaintext) | unit half verified; game-test half Phase B | ServerProfileStoreTest.theFirstRememberCreatesTheSaltAndOneEntry, theFileHoldsNoPlaintextAndItsKeysDifferFromServerLimits |
+| AC7.2 (keys, normalisation, X7 rules, bad salt, joined writes nothing) | verified (unit) | ServerProfileStoreTest (17 cases) |
+| AC7.3 (32 cap, FULL, in place, ≤ 16 KiB) | verified (unit); the "Forget one first" status text in ServerProfilesViewTest.theStatusLines | ServerProfileStoreTest.aNewThirtyThirdServerIsFullAndTheFileUnchanged, reRememberingReplacesInPlace |
+| AC7.4 (the 7 reasons in order) | verified (unit) | ServerProfilePromptTest |
+| AC7.5 (one notice, key, actions, before SERVER_LIMIT, "+1 more") | unit part verified; game test Phase B | ServerProfileNoticeTest |
+| AC7.6 (one toast per server per session) | wording only; Phase B | ServerProfileNoticeTest.theToastWording |
+| AC7.7 (switch → one apply entry, Undo) | Phase B | |
+| AC7.8 (benchmark/busy refusals; no offer while benchmarking) | decision half verified (BENCHMARK); refusals Phase B | ServerProfilePromptTest |
+| AC7.9 (deleted profile: no offer; delete forgets; rename) | decision + `forgetProfile` verified (unit); wiring Phase B | ServerProfilePromptTest (MISSING_PROFILE), ServerProfileStoreTest.forgetForgetKeyForgetProfileForgetAll |
+| AC7.10 (forget removes; × session-only) | store + key half verified; game test Phase B | ServerProfileStoreTest, ServerProfileNoticeTest.theKeyIsHiddenForTheSessionOnly |
+| AC7.11 (screen lines, rows, no address, fit, Tab) | text half verified (unit); screen Phase B | ServerProfilesViewTest |
+| AC7.12 (NoticeBoardTest pin) | verified (WS-K) | NoticeBoardTest; ServerProfileNoticeTest.itSortsAfterTheBatteryOfferAndBeforeTheServerLimit |
+| AC7.13 (no tick/frame hook; lookup on the executor) | Phase B | |
+| AC7.14 (0.4.0 leaves the file byte-identical) | fixture + expect.json landed; compat030 PASS; closes with WS-E's compat040 | V050WrittenWsP2Test; compat030 run above |
+| AC7.15 (ServerProfilesGameTest, 3 legs) | Phase B | |
+| AC7.16 (real JOIN on the dev PC) | rolling Phase 5 | |
+| AC7.17 (on battery with Battery active: held, the line says why) | verified (unit) | ServerProfilePromptTest, ServerProfilesViewTest.heldOnBatteryOnlyWithBatteryActive, theThisServerLines |
+| AC7.18 (SetSetting only under every policy) | verified (unit; pins WS-L1's guard) | ServerProfileSwitchTest |
