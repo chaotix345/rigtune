@@ -64,8 +64,9 @@ public final class HttpModrinthClient implements ModrinthClient {
 	// this client in onInitializeClient, where java.net.http's classes and threads cost the render thread tens of ms
 	// (docs/v0.4/SPEC.md 10). With Modrinth or the network off, GatedModrinthClient stops every call first, so neither
 	// is ever built. Both speak HTTP/1.1: on 2026-09-26 every lookup of whole CI sessions failed with "Stream N cancelled"
-	// on one HTTP/2 connection the JDK had marked for shutdown (docs/v0.5/design/ws-ci.md). A failure without an HTTP
-	// response drops the client that had it (dropClient), so the next request starts on a fresh connection pool.
+	// on one HTTP/2 connection the JDK had marked for shutdown (docs/v0.5/design/ws-ci.md). An I/O failure other than a
+	// timeout or an interrupt (no HTTP response, or a body that broke off or ran over its cap) drops the client that had
+	// it (dropClient), so the next request starts on a fresh connection pool.
 	private volatile HttpClient http;
 	// Downloads follow redirects by hand, so every hop is checked against the allowlist before it is requested.
 	private volatile HttpClient downloads;
@@ -156,8 +157,8 @@ public final class HttpModrinthClient implements ModrinthClient {
 		return HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(CONNECT_TIMEOUT).followRedirects(redirects).build();
 	}
 
-	// After a failure without an HTTP response: the next request builds a fresh client. Requests still running on the old
-	// one finish; it accepts no new ones.
+	// After an I/O failure (see http): the next request builds a fresh client. Requests still running on the old one
+	// finish; it accepts no new ones (a lookup that got it just before is retried on the fresh one).
 	private void dropClient(HttpClient client) {
 		synchronized (this) {
 			if (http == client) {
@@ -411,9 +412,9 @@ public final class HttpModrinthClient implements ModrinthClient {
 		return HttpRequest.newBuilder(uri).timeout(REQUEST_TIMEOUT).header("User-Agent", userAgent);
 	}
 
-	// A lookup is a read, so a failure without an HTTP response is tried once more, on the fresh client exchange() switched
-	// to, with the same stall and deadline limits: a reset connection, or "Stream N cancelled" when the JDK had marked its
-	// HTTP/2 connection for shutdown (2026-09-26). A timeout or an interrupt isn't retried.
+	// A lookup is a read, so an I/O failure is tried once more, on the fresh client exchange() switched to, with the same
+	// stall and deadline limits: a reset connection, or "Stream N cancelled" when the JDK had marked its HTTP/2 connection
+	// for shutdown (2026-09-26). An HTTP status (429 has its own retry in exchange), a timeout or an interrupt isn't retried.
 	private String sendForString(HttpRequest request) throws IOException {
 		HttpResponse<byte[]> response;
 		try {

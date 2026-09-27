@@ -215,6 +215,29 @@ def gametestJar = tasks.register("gametestJar", Jar) {
 	archiveClassifier = "gametest"
 }
 
+// v0.5 (ws-ci, SPEC 1g): which game-test classes a run gets, and their wall times. -PgametestClasses=A,B (simple names;
+// build.yml passes a split part's slice from tools/gametest_matrix.py; empty or unset = every class) keeps those, in
+// fabric.mod.json's order. Every class kept runs through TimedGameTests, which logs its wall time.
+def gametestClasses = providers.gradleProperty("gametestClasses").map { it.split(",")*.trim().findAll { !it.isEmpty() } }.orElse([])
+tasks.named("processGametestResources") {
+	inputs.property("gametestClasses", gametestClasses)
+	doLast {
+		File file = new File(destinationDir, "fabric.mod.json")
+		def mod = new groovy.json.JsonSlurper().parse(file)
+		List<String> entries = mod.entrypoints["fabric-client-gametest"]
+		List<String> wanted = gametestClasses.get()
+		def unknown = wanted - entries.collect { it.substring(it.lastIndexOf('.') + 1) }
+		if (!unknown.isEmpty()) {
+			throw new GradleException("-PgametestClasses: no game-test class named " + unknown.join(", "))
+		}
+		mod.entrypoints["fabric-client-gametest"] = entries
+				.findAll { wanted.isEmpty() || it.substring(it.lastIndexOf('.') + 1) in wanted }
+				.collect { [adapter: "rigtune-timed", value: it] }
+		mod.languageAdapters = ["rigtune-timed": "io.github.chaotix345.rigtune.gametest.TimedGameTests"]
+		file.setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(mod)) + "\n", "UTF-8")
+	}
+}
+
 interface InjectedFs {
 	@javax.inject.Inject
 	FileSystemOperations getFs()
@@ -271,8 +294,12 @@ interface ModrinthFixtureParams extends BuildServiceParameters {
 abstract class ModrinthFixture implements BuildService<ModrinthFixtureParams>, AutoCloseable {
 	private Process process
 	private String url
+	private GradleException failure
 
 	synchronized String baseUrl() {
+		if (failure != null) {
+			throw failure
+		}
 		if (process == null) {
 			File dir = parameters.dir.get().asFile
 			File output = new File(dir, "fake-modrinth.out")
@@ -290,7 +317,9 @@ abstract class ModrinthFixture implements BuildService<ModrinthFixtureParams>, A
 					url = found.group(1)
 				} else if (!process.alive || System.nanoTime() > deadline) {
 					process.destroyForcibly()
-					throw new GradleException("The game tests' fake Modrinth didn't start: " + (output.exists() ? output.getText("UTF-8") : "no output"))
+					// Kept, so a later run task in this build fails too instead of getting no URL (and so live Modrinth).
+					failure = new GradleException("The game tests' fake Modrinth didn't start: " + (output.exists() ? output.getText("UTF-8") : "no output"))
+					throw failure
 				} else {
 					Thread.sleep(100)
 				}
@@ -301,7 +330,7 @@ abstract class ModrinthFixture implements BuildService<ModrinthFixtureParams>, A
 
 	// FakeModrinth serves until its standard input ends.
 	@Override
-	void close() {
+	synchronized void close() {
 		if (process != null) {
 			process.outputStream.close()
 			if (!process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) {
@@ -487,26 +516,38 @@ tasks.named("runProductionClientGameTest") {
 	dependsOn gametestModrinthCatalog
 	usesService(modrinthFixture)
 	jvmArgs.add(modrinthFixture.map { "-Drigtune.modrinth.baseUrl=" + it.baseUrl() })
-	// RigTune's post-exit apply helper can still be writing into the run folder after the game has exited (a pending apply
-	// is left only when a subset of the classes runs): wait for its lock, so the next run's wipe and the artifacts see a
-	// finished folder.
-	def applyLock = productionGameTestRunDir.map { it.file("config/rigtune/apply.lock").asFile }
+	finalizedBy "awaitApplyHelper"
+}
+
+// RigTune's post-exit apply helper can still be writing into the run folder after the game has exited (a pending apply is
+// left only when a subset of the classes runs). It starts at exit, settles 2 s (ApplyHelper.SETTLE_MILLIS), then holds
+// config/rigtune/apply.lock while it applies, and deletes pending.json once everything is applied. A finalizer, so a failed
+// run waits too: the next run's wipe and the uploaded artifacts see a finished folder.
+tasks.register("awaitApplyHelper") {
+	def rigtuneDir = productionGameTestRunDir.map { it.dir("config/rigtune").asFile }
 	doLast {
-		File lock = applyLock.get()
-		long deadline = System.nanoTime() + 60_000_000_000L
-		while (lock.exists() && System.nanoTime() < deadline) {
-			def channel = java.nio.channels.FileChannel.open(lock.toPath(), java.nio.file.StandardOpenOption.WRITE)
-			try {
-				def held = channel.tryLock()
-				if (held != null) {
-					held.release()
-					break
+		File pending = new File(rigtuneDir.get(), "pending.json")
+		File lock = new File(rigtuneDir.get(), "apply.lock")
+		long start = System.nanoTime()
+		while (pending.exists() && System.nanoTime() - start < 60_000_000_000L) {
+			// Past the settle delay, with room for the helper's JVM start, a free lock means the helper is done (or never ran).
+			if (System.nanoTime() - start > 10_000_000_000L && lock.exists()) {
+				def channel = java.nio.channels.FileChannel.open(lock.toPath(), java.nio.file.StandardOpenOption.WRITE)
+				try {
+					def held = channel.tryLock()
+					if (held != null) {
+						held.release()
+						break
+					}
+				} catch (java.nio.channels.OverlappingFileLockException ignored) {
+				} finally {
+					channel.close()
 				}
-			} catch (java.nio.channels.OverlappingFileLockException ignored) {
-			} finally {
-				channel.close()
 			}
 			Thread.sleep(250)
+		}
+		if (System.nanoTime() - start > 250_000_000L) {
+			logger.lifecycle("awaitApplyHelper: waited ${(System.nanoTime() - start).intdiv(1_000_000L)} ms; pending.json ${pending.exists() ? 'still there' : 'applied'}")
 		}
 	}
 }
@@ -516,15 +557,20 @@ tasks.named("runProductionClientGameTest") {
 tasks.register("prefetchDependencies") {
 	doLast {
 		int resolved = 0
+		List<String> failed = []
 		configurations.findAll { it.canBeResolved }.each { c ->
 			try {
 				c.resolve()
 				resolved++
 			} catch (Exception e) {
-				logger.warn("prefetchDependencies: ${project.path}:${c.name}: ${e.message?.readLines()?.first()}")
+				failed << "${c.name}: ${e.message?.readLines()?.find() ?: e.class.simpleName}".toString()
 			}
 		}
 		logger.lifecycle("prefetchDependencies: ${project.path}: ${resolved} configurations resolved")
+		// Fails the step, so tools/ci/retry.sh tries again, instead of a later --offline step failing on a missing download.
+		if (!failed.isEmpty()) {
+			throw new GradleException("prefetchDependencies: ${project.path}: not resolved:\n" + failed.join("\n"))
+		}
 	}
 }
 

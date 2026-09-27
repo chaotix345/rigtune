@@ -7,6 +7,11 @@ on:
   # default GITHUB_TOKEN does not fire other workflows' `pull_request`/`push` events, so
   # update-rules.yml calls `gh workflow run build.yml` explicitly. See the comment there.
   workflow_dispatch:
+    inputs:
+      gametest_parts:
+        description: "JVMs per game-test leg (the dormant split, docs/v0.5/SPEC.md 1g); empty = tools/gametest_matrix.py's PARTS"
+        required: false
+        type: string
 
 # No job here writes to the repository; checkout persists this token next to the game and its mods.
 permissions:
@@ -118,16 +123,19 @@ jobs:
       - uses: actions/checkout@v7
       - id: matrix
         name: List the game-test legs
+        env:
+          PARTS: ${{ inputs.gametest_parts }}
         run: |
-          matrix=$(python3 tools/gametest_matrix.py)
+          matrix=$(python3 tools/gametest_matrix.py ${PARTS:+--parts "$PARTS"})
           echo "$matrix"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   # The client game tests (src/gametest) against the built jar in a production client, under Xvfb with Mesa llvmpipe
   # (lavapipe for Vulkan). Loom's ClientProductionRunTask wraps the game in xvfb-run by itself when CI is set on Linux.
   # No automatic retry: a flake is re-run by hand ("Re-run failed jobs"), so an intermittent regression isn't hidden.
+  # With the split on (tools/gametest_matrix.py), each leg is one job per part, named "…, part 1/2", running its classes.
   client-gametest:
-    name: client game tests (${{ matrix.mc }}, ${{ matrix.backend }})
+    name: client game tests (${{ matrix.mc }}, ${{ matrix.backend }}${{ matrix.part && format(', part {0}', matrix.part) || '' }})
     needs: gametest-matrix
     runs-on: ubuntu-24.04
     timeout-minutes: 25
@@ -139,6 +147,7 @@ jobs:
       # leaves that attribute out. Left empty (unset for SDL) on the Vulkan leg: OpenGL then fails and 26.3 falls back
       # to Vulkan on lavapipe. 26.2 (GLFW) ignores it.
       SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER: ${{ matrix.backend == 'OpenGL' && 'skip' || '' }}
+      GAMETEST_CLASSES: ${{ matrix.classes }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -178,21 +187,26 @@ jobs:
       - name: Resolve dependencies (network)
         run: >-
           tools/ci/retry.sh ./gradlew --no-daemon ":${{ matrix.mc }}:prefetchDependencies" ":${{ matrix.mc }}:downloadAssets"
-          ":${{ matrix.mc }}:gametestModrinthCatalog" ":${{ matrix.mc }}:jar" ":${{ matrix.mc }}:gametestJar"
+          ":${{ matrix.mc }}:gametestModrinthCatalog" ":${{ matrix.mc }}:jar" ":${{ matrix.mc }}:gametestJar" "-PgametestClasses=$GAMETEST_CLASSES"
+      # AC1a.3: in the namespace loopback carries multicast (tools/ci/offline.sh), so vanilla's LAN discovery works there.
+      - name: Check loopback multicast
+        run: tools/ci/offline.sh java tools/ci/MulticastCheck.java
       # With no network but loopback: RigTune gets Modrinth and its rules from local fixtures, and Minecraft's own
       # services (accounts, Realms) fail at once, the same way every run. If the game finds no graphics backend it opens a
-      # blocking error dialog, so a hang means a timeout here; at 13 min the game's JVM prints every thread's stack and
-      # locks into this log first (run 36235561444 hung with none).
+      # blocking error dialog, so a hang means a timeout here; at 13 min the game's JVM (the java process whose command line
+      # has KnotClient; Gradle's and the fake Modrinth's are java too) prints every thread's stack and locks into this log
+      # first (run 36235561444 hung with none). The whole /proc/<pid>/cmdline is searched: KnotClient comes after a long
+      # classpath.
       - name: Client game tests
         timeout-minutes: 15
         run: |
           set -eu
-          ( sleep 780; for p in $(pgrep -f fabric.client.gametest || true); do
-              if [ "$(cat "/proc/$p/comm" 2>/dev/null)" = java ]; then kill -QUIT "$p" || true; fi
+          ( sleep 780; for p in $(pgrep -x java || true); do
+              if tr '\0' '\n' < "/proc/$p/cmdline" 2>/dev/null | grep -qF KnotClient; then kill -QUIT "$p" || true; fi
             done ) >/dev/null 2>&1 &
           watcher=$!
           trap 'kill "$watcher" 2>/dev/null || true' EXIT
-          tools/ci/offline.sh ./gradlew --no-daemon --offline ":${{ matrix.mc }}:runProductionClientGameTest" --stacktrace
+          tools/ci/offline.sh ./gradlew --no-daemon --offline ":${{ matrix.mc }}:runProductionClientGameTest" "-PgametestClasses=$GAMETEST_CLASSES" --stacktrace
       # A leg whose backend fails falls back to the other one and would still pass: fail it instead.
       # The line is written at start-up; a run that crosses midnight UTC has it in the rotated
       # log (logs/<date>-<n>.log.gz), not latest.log, so both are searched.
@@ -210,14 +224,14 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: gametest-screenshots-${{ matrix.mc }}-${{ matrix.backend }}
+          name: gametest-screenshots-${{ matrix.mc }}-${{ matrix.backend }}${{ matrix.suffix }}
           path: versions/${{ matrix.mc }}/build/run/productionClientGameTest/screenshots/
           if-no-files-found: ignore
       - name: Upload logs and crash reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: gametest-logs-${{ matrix.mc }}-${{ matrix.backend }}
+          name: gametest-logs-${{ matrix.mc }}-${{ matrix.backend }}${{ matrix.suffix }}
           path: |
             versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs/
             versions/${{ matrix.mc }}/build/run/productionClientGameTest/crash-reports/
@@ -230,7 +244,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: footprint-${{ matrix.mc }}-${{ matrix.backend }}
+          name: footprint-${{ matrix.mc }}-${{ matrix.backend }}${{ matrix.suffix }}
           path: versions/${{ matrix.mc }}/build/run/productionClientGameTest/footprint/
           if-no-files-found: ignore
 

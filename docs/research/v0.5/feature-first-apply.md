@@ -6,11 +6,11 @@ Summary (research agent f-firstapply, 2026-09-27, branch feat/v0.5.0 at 3e97cbec
 2. The post-Apply confirmation is a new `FirstApplyScreen`. It opens once, after the first press of the RigTune screen's Apply button, and it lists that journal entry's `HistoryModel` rows through `HistoryScreen.describe`/`failureText`, the same static functions History draws with. It shows two sections, "In effect now" and "At the next restart", and a restart note only when a row is waiting for a restart. Its buttons are **Undo this Apply**, **History…** and **Done**.
 3. Whether a player is new comes from what's on disk, with no flags: history.json is missing or has no entries, and there is no last-apply.json and no pending.json. Anyone who applied with 0.1 to 0.4 is RETURNING and sees neither the guide nor the confirmation. **Got it** is stored as a notice dismissal in awareness.json, which 0.4.0 keeps. **settings.json does not change at all.**
 4. New code: `core/history/FirstRun` (a pure check), `client/FirstRunService` (UNKNOWN/NEW/RETURNING, loaded once on `Probes.EXECUTOR`), `client/notice/FirstRunNoticeSource`, `client/ui/HowItWorksScreen` and `client/ui/FirstApplyScreen`. Hotspot edits are small: RigTuneController gets 3 default methods, RealController about 10 lines, RigTuneScreen.applySelected about 6 lines, plus en_us.json (about 25 keys) and the gametest fabric.mod.json (1 line).
-5. P0.4 (launcher-managed mods): neither feature adds header widgets to RigTuneScreen. Both use the notice slot through their own NoticeSources. C02 reads one P0.4 signal to switch its launcher-mode wording (`modFilesManagedBy()`, UNVERIFIED: P0.4's design isn't written yet). P0.4 can read C02's `FirstRunService.status()` to show its "RigTune now leaves mod files to your launcher" notice to RETURNING players only.
+5. P0.4 (launcher-managed mods, agreed with r-launchers): C02 reads P0.4's `RigTuneController.modFiles()` (a `ModFilesPolicy`: RIGTUNE, LAUNCHER, UPDATES_IN_LAUNCHER or PENDING) and appends P0.4's own sentence, `LauncherModText.guideLine(policy, launcher)`, to the guide's detail. So there is one source for the launcher wording. PENDING never promises anything about mod files, in either direction. P0.4 reads C02's `FirstRunService.status()` so its "RigTune now leaves mod files to your launcher" notice goes to RETURNING players only. Both features add notices only through their own NoticeSources. In LAUNCHER mode P0.4 adds no header line, so a new player's list at 640x480 loses only the guide's 16 px. P0.4's opted-in warning reuses the existing "Offline" / "Modrinth is off" slot (launcher-managed-mods.md §4.3).
 6. Compatibility: C02 adds no file formats, rules, pending ops or settings fields. history.json is only read. The only write is one string in awareness.json's `dismissed` array. 0.4.0's AwarenessStore/StateStore are byte-identical to HEAD (`git diff v0.4.0 HEAD` is empty), and 0.4.0 keeps unknown keys there.
 7. 26.2 vs 26.3: C02 uses only APIs javap shows identical on both versions. Pitfalls to avoid: the InputConstants codes (MOUSE_BUTTON_LEFT is 0 on 26.2 and 1 on 26.3; KEY_TAB is 258 on 26.2 and 43 on 26.3), `Screen.scheduleNarration`/`updateNarratorStatus` (26.3 only), and the `fill(RenderPipeline…)` overloads (the package moved). The feature needs no `//? if` block.
 8. Effort: about 3 agent-days (the pitch said 2.5). The two extra pieces are live reload while downloads finish and the explainer screen.
-9. Riskiest part: the end-to-end game test. It must be the first entrypoint so it sees a fresh state, and it depends on the report CI's llvmpipe produces. Second risk: the P0.4 interface isn't settled yet.
+9. Riskiest part: the end-to-end game test. It must be the first entrypoint so it sees a fresh state, and it depends on the report CI's llvmpipe produces. Second risk: P0.4's interface. The API is agreed in messages, but its final doc (launcher-managed-mods.md §4) wasn't there when I checked.
 10. Cut order if time runs short: the explainer screen (HowItWorksScreen), then live reload for downloads, then the guide notice. The confirmation is never cut.
 
 ---
@@ -116,7 +116,7 @@ Known edge cases (documented, not fixed):
   - (not dismissed: NoticeCenter already filters dismissed keys, `client/notice/NoticeCenter.java:56`).
 - The notice:
   - message: `rigtune.firstrun.notice`;
-  - detail: `rigtune.firstrun.notice.detail`, or `…detail.launcher` in launcher-managed mode;
+  - detail: `Text.join(" ", base, LauncherModText.guideLine(policy, launcher))`, where `policy = controller.modFiles()`. The base is `rigtune.firstrun.notice.detail` for RIGTUNE and UPDATES_IN_LAUNCHER (adding and disabling mods are still one click there), and `rigtune.firstrun.notice.detail.settings` for LAUNCHER and PENDING (no claim about mod files). The appended line is P0.4's and null for plain RIGTUNE and for PENDING (§2.5). `Text.join` drops a null or blank part (`core/model/Text.java` `join`);
   - actions: `how` "How it works" and `got_it` "Got it";
   - `dismissible = false`. "Got it" is the dismissal, as in `RegressionNoticeSource` (`client/notice/RegressionNoticeSource.java:31-49`), because it reads better to a new player than "×".
 - `act("how")` opens `HowItWorksScreen(minecraft.gui.screen(), controller)`. It works from the RigTune screen and from NoticeScreen (the 640x480 path), and Done returns to whichever screen opened it, as `RegressionNoticeSource.act` does.
@@ -144,7 +144,10 @@ A static, read-only page with no I/O, built like NoticeScreen/ToolsScreen:
 - One button: Done (`gui.done`) → the parent.
 - Colours: `COLOR_LABEL 0xFFA8A8A8`, body white, only existing literals.
 - Fit at 320x240: title at y 8, list y 24 to 212, footer 1 row. The 6 paragraphs wrap to about 18 lines at 288 px and scroll.
-- In launcher-managed mode the mods row names the launcher with `Component.translatable(launcher.nameKey())`, keys already in LauncherInfo's table (`core/launcher/LauncherInfo.java:24-35`) and in LangCheckTest's (b) set.
+- The rows follow `controller.modFiles()`, read at `init()`:
+  - RIGTUNE and UPDATES_IN_LAUNCHER: `how.ticked` and `how.mods`, then P0.4's guideLine as its own row when non-null (the opt-in warning, or GDLauncher's "updates in the launcher").
+  - LAUNCHER: `how.ticked.settings`, then P0.4's guideLine as the mods row ("<launcher> manages this instance's mods: RigTune changes settings only."). One source for the sentence, so C02 has no launcher-name key of its own.
+  - PENDING: `how.ticked.settings` and no mods row.
 
 ### 2.4 The post-Apply confirmation: FirstApplyScreen
 
@@ -199,7 +202,7 @@ default boolean downloading() { return false; }
 | note | `…restart` | ≥1 STAGED row |
 | note | `…no_restart` | no STAGED row and `!downloading()` |
 | note | `…downloading` | `downloading()` |
-| note | `…launcher` | launcher-managed mode (P0.4) |
+| note | `…no_mod_files` "This Apply didn't change any mod files." | `modFiles()` is LAUNCHER or PENDING (P0.4): true by construction, since both make every mod-file action advice |
 | note | `…undo_hint` | always, last |
 | message instead of rows | `rigtune.history.loading` / `.error` / `.corrupt` / `.newer` / `rigtune.firstrun.applied.nothing` | while loading; controller.history() null/threw; state CORRUPT/NEWER/UNREADABLE; entry not found with state OK |
 
@@ -224,42 +227,73 @@ default boolean downloading() { return false; }
 
 ### 2.5 Launcher-managed mode (P0.4) and sharing RigTuneScreen
 
-P0.4's design (docs/research/v0.5/launcher-managed-mods.md) did not exist at 12:25. r-launchers was still researching launcher internals (its scratch progress.log), and I messaged it the proposal below. **Everything named for P0.4 here is UNVERIFIED.**
+This is agreed with r-launchers by message (2026-09-27). Its final doc, docs/research/v0.5/launcher-managed-mods.md §4, was "shortly" and not there when I checked. **P0.4 names and behaviours below are as r-launchers stated them, not yet checked against its doc.**
 
-- **One signal from P0.4.** `RigTuneController.modFilesManagedBy()` returns `@Nullable LauncherInfo`: null when RigTune still changes mod files (today) or while unknown, and the detected launcher when it manages them. C02 only reads it (render thread, no I/O).
-  - It is read by: the guide's detail choice (`…detail` / `…detail.launcher`), the explainer's mods row, and the confirmation's launcher note.
-  - If P0.4 names it differently, C02 renames its three call sites. If P0.4 slips, C02 ships the null branch, today's wording, which is true for today's behaviour.
-- **One signal from C02.** `RealController.firstRunService().status()`. P0.4's "What's new: RigTune leaves mod files to your launcher" notice should show only to RETURNING players, since new players learn it from the guide's detail and the explainer.
-- **One slot, several sources.** Neither feature adds header lines, panels or banners to RigTuneScreen.
-  - Each owns its own `NoticeSource` file and its own `NoticePriority` constant(s).
-  - Proposed order: `LAUNCHER_REPAIR` (P0.4: this instance is in a state its launcher can't update), then `FIRST_RUN`, then the existing constants, then `LAUNCHER_WHATS_NEW` near `WHATS_NEW`.
-  - They rarely meet: FIRST_RUN needs an empty history, and the repair notice needs an earlier RigTune change.
-- **Rows are P0.4's.** In launcher mode, mod recommendations become advice with the launcher's steps (like `LauncherLines.adviceLine`, `RigTuneScreen.java:785-786`). C02 doesn't touch recommendation rows. Advice isn't appliable, so it never reaches Apply or the confirmation.
+**What P0.4 provides.** A pure core function `ModFilesPolicy.of(LauncherInfo, InstanceEvidence, boolean optIn)`, exposed to screens as `RigTuneController.modFiles()`:
+
+| Policy | Mod-file actions | Launchers |
+|---|---|---|
+| RIGTUNE | one click, as in 0.4 | official launcher, MultiMC, Unknown without metadata; any LAUNCHER instance the player opted back in (`settings.json` `modFilesByRigTune`, P0.4's own field) |
+| LAUNCHER | add, update, disable, self-update and Undo of applied mod-file changes are advice with the launcher's steps | Modrinth App (brand `theseus`), CurseForge (`minecraftinstance.json`), ATLauncher, and any launcher whose mods folder has `.index/*.pw.toml` (Prism, PolyMC, Unknown) |
+| UPDATES_IN_LAUNCHER | updates, self-update and Undo of an update pair are advice; add and disable stay one click | GDLauncher |
+| PENDING | as LAUNCHER | LauncherProbe hasn't finished (async, 3 s cap; a timeout stays PENDING, never becomes RIGTUNE) |
+
+P0.4 also provides `LauncherModText.guideLine(policy, launcher)`, one sentence such as "Your launcher manages this instance's mods: RigTune changes settings only.", or, opted in, "RigTune changes mod files here; <launcher>'s own list may go out of date."
+
+**How C02 uses it.** Read on the render thread with no I/O. When detection finishes, RigTuneScreen already rebuilds (the `!controller.launcher().equals(shownLauncher)` check, `RigTuneScreen.java:607`), so the notice is re-evaluated and its detail moves from the PENDING wording to the final one.
+
+| `modFiles()` | Guide detail | Explainer (§2.3) | Confirmation note |
+|---|---|---|---|
+| RIGTUNE | `notice.detail` + guideLine if non-null (the opt-in warning) | `how.ticked`, `how.mods` (+ guideLine row) | none |
+| UPDATES_IN_LAUNCHER | `notice.detail` + guideLine | `how.ticked`, `how.mods` + guideLine row | none |
+| LAUNCHER | `notice.detail.settings` + guideLine | `how.ticked.settings`, guideLine row | `applied.no_mod_files` |
+| PENDING | `notice.detail.settings` only | `how.ticked.settings`, no mods row | `applied.no_mod_files` |
+
+- Under PENDING, C02 treats the instance like LAUNCHER, as r-launchers asked: it never promises RigTune will change mod files. It also doesn't yet claim the launcher manages them, because that isn't known until detection finishes.
+- **guideLine contract, agreed and recorded in launcher-managed-mods.md §4.3, "Guide text" row:**
+  - It lives at `core/launcher/LauncherModText.guideLine(policy, launcher)` and returns a core `@Nullable Text`, which C02 `Text.join`s into the Notice detail.
+  - It returns null for plain RIGTUNE (not opted in) and for PENDING.
+  - Non-null values: LAUNCHER "<launcher> manages this instance's mods: RigTune changes settings only."; UPDATES_IN_LAUNCHER, the GDLauncher variant; RIGTUNE opted in, "RigTune changes mod files here; <launcher>'s own list may go out of date."
+- If P0.4 slips entirely, `modFiles()` doesn't exist. C02 ships the RIGTUNE column only, which is true for 0.4's behaviour.
+
+**What C02 provides.** `RealController.firstRunService().status()`. P0.4's "what's new: RigTune leaves mod files to your launcher" notice shows only to RETURNING players. New players learn the same thing from the guide's detail, which carries P0.4's own guideLine.
+
+**Sharing RigTuneScreen:**
+- **Notices:** each feature owns its own `NoticeSource` files and `NoticePriority` constants. P0.4 has several: repair of older RigTune changes, held pending mod changes, options changed outside the game, and what's new.
+  - Proposed order: P0.4's repair notice (the instance is in a state its launcher can't update) first, then `FIRST_RUN`, then the existing constants. P0.4's what's-new goes next to `WHATS_NEW`, and its options-changed notice next to `HARDWARE_CHANGED`.
+  - FIRST_RUN and the repair notice rarely meet: one needs an empty history, the other an earlier RigTune change.
+- **Rows:** P0.4's per-row advice lines under Add, Update and Disable go through LauncherLines, like the RAM steps (`RigTuneScreen.java:785-786`). C02 doesn't touch rows. Advice isn't appliable, so it never reaches Apply or the confirmation.
+- **Header, agreed (launcher-managed-mods.md §4.3):**
+  - P0.4 adds no header line in LAUNCHER mode. The guide (new players), P0.4's what's-new notice (RETURNING players) and its per-row steps carry the message.
+  - The one header line P0.4 adds is the opted-in warning. It reuses the single "Offline" / "Modrinth is off" slot (`RigTuneScreen.java:308-312`), with precedence network off > Modrinth off > mod files opted in.
+  - So a screen never gets two warning lines, and a new player's list at 640x480 is today's 76-86 px minus only the guide's 16 px (about 60-70 px).
+  - C02 adds no header line.
+  - AC5.3's 640x480 screenshots run with P0.4 merged.
+- **Settings:** P0.4's opt-in row lives on RigTuneSettingsScreen. C02 doesn't touch Settings.
 - **Hotspot contact:**
-  - `RigTuneScreen` gets C02's 6-line `applySelected` hook and whatever P0.4 needs in rows or the header; the changes are in different places.
-  - `NoticePriority` gets one enum line from each feature.
-  - `RealController`'s NoticeCenter list gets one element from each.
-  - `RigTuneController` gets separate default methods.
-  - Whichever lands second rebases, and the conflicts stay local to a line.
+  - `RigTuneScreen`: C02's `applySelected` hook (`:561-571`) versus P0.4's warning slot (`:308-312`) and row advice lines; different methods.
+  - `NoticePriority`: one enum line per notice.
+  - `RealController`'s NoticeCenter list: one element per source.
+  - `RigTuneController`: separate default methods (C02's three; P0.4's `modFiles()`).
+  - Whichever lands second rebases; conflicts stay local to a line.
 
 ### 2.6 Wording: draft en_us.json keys (area `rigtune.firstrun`)
 
-Honesty rules applied: nothing claims a restart that isn't needed; "undo" means per Apply; no "always"; no "bottleneck/limited by" (WordingTest); launcher text doesn't name a launcher inside core `Text` (LangCheckTest (e) needs literal keys in `Text.of`, and a launcher name key is dynamic). `%s` only (LangCheckTest (d)).
+Honesty rules applied: nothing claims a restart that isn't needed; "undo" means per Apply; no "always"; no "bottleneck/limited by" (WordingTest); PENDING claims nothing about who manages mods. C02's core `Text` never names a launcher: LangCheckTest (e) needs literal keys in `Text.of`, and a launcher name key is dynamic. The launcher sentence in the guide is P0.4's `guideLine`, and its keys are P0.4's to write. `%s` only (LangCheckTest (d)).
 
 | Key | English |
 |---|---|
 | `rigtune.firstrun.notice` | New to RigTune? History… can undo any Apply. |
 | `rigtune.firstrun.notice.detail` | Only the ticked items change, with any mods they need. Game settings change when you press Apply; Sodium, Distant Horizons and Iris settings and mod changes take effect at the next restart. Preview shows each change first. |
-| `rigtune.firstrun.notice.detail.launcher` | Only the ticked settings change. Your launcher manages this instance's mods: RigTune leaves mod files alone and lists mod suggestions as steps for your launcher. Game settings change when you press Apply; Sodium, Distant Horizons and Iris settings at the next restart. Preview shows each change first. |
+| `rigtune.firstrun.notice.detail.settings` | Only the ticked settings change. Game settings change when you press Apply; Sodium, Distant Horizons and Iris settings at the next restart. Preview shows each change first. |
 | `rigtune.firstrun.action.how` | How it works |
 | `rigtune.firstrun.action.got_it` | Got it |
 | `rigtune.firstrun.how.title` | How Apply works |
 | `rigtune.firstrun.how.ticked` | Nothing changes until you press Apply, and only the ticked items change, with any mods they need. Untick anything you don't want. |
-| `rigtune.firstrun.how.ticked.launcher` | Nothing changes until you press Apply, and only the ticked settings change. Untick anything you don't want. |
+| `rigtune.firstrun.how.ticked.settings` | Nothing changes until you press Apply, and only the ticked settings change. Untick anything you don't want. |
 | `rigtune.firstrun.how.now` | Minecraft's own settings change as soon as you press Apply. |
 | `rigtune.firstrun.how.restart` | Sodium, Distant Horizons and Iris settings are written after you close Minecraft, and take effect the next time it starts. |
 | `rigtune.firstrun.how.mods` | Mods are downloaded when you press Apply and added at the next restart. A mod RigTune turns off is renamed to .jar.disabled, never deleted. |
-| `rigtune.firstrun.how.mods.launcher` | %s manages this instance's mods, so RigTune doesn't add, update or turn off mod files here. Mod suggestions come with the steps to follow in it. |
 | `rigtune.firstrun.how.preview` | Preview shows every change, file by file, before anything happens. |
 | `rigtune.firstrun.how.undo` | History… lists everything RigTune changed. Undo this reverts one Apply, Undo last the most recent one, and Undo all everything; each shows what it will put back first. |
 | `rigtune.firstrun.applied.title` | Your first Apply |
@@ -269,7 +303,7 @@ Honesty rules applied: nothing claims a restart that isn't needed; "undo" means 
 | `rigtune.firstrun.applied.no_restart` | All of it is in effect now. No restart needed. |
 | `rigtune.firstrun.applied.restart` | Restart Minecraft to finish: RigTune writes these files after you close the game. |
 | `rigtune.firstrun.applied.downloading` | Mod downloads are still running; they're added to this list when they finish. |
-| `rigtune.firstrun.applied.launcher` | Your launcher manages this instance's mods, so RigTune didn't change any mod files. |
+| `rigtune.firstrun.applied.no_mod_files` | This Apply didn't change any mod files. |
 | `rigtune.firstrun.applied.nothing` | Nothing was recorded for this Apply. |
 | `rigtune.firstrun.applied.undo_hint` | Changed your mind? Undo this Apply shows what it would put back before it changes anything. History… keeps this list for later. |
 | `rigtune.firstrun.applied.undo` | Undo this Apply |
@@ -305,7 +339,7 @@ Honesty rules applied: nothing claims a restart that isn't needed; "undo" means 
 
 ## 3. Compatibility (0.1.x to 0.4.x, and a downgrade to 0.4.0)
 
-- **settings.json:** unchanged, with no new field. 0.1.x to 0.4.x keep reading and writing it exactly as before. The `ClientSettingsTest` partial-file and default tests are untouched.
+- **settings.json:** C02 adds no field. 0.1.x to 0.4.x keep reading and writing it exactly as before, and the `ClientSettingsTest` partial-file and default tests are untouched by C02. P0.4 adds `modFilesByRigTune`; its compatibility is P0.4's to show.
 - **history.json:** read-only for C02 (`Journal.state()`/`entries()`). The first Apply writes the same entry it writes today, and there is no format change.
 - **awareness.json:** one string, `"firstrun.guide"`, may be appended to `dismissed`.
   - 0.4.0 reads `dismissed` as a set of strings (`AwarenessStore.java:84-94`) and keeps unknown ones on its own writes: `StateStore.update` deep-copies the whole object (`core/store/StateStore.java:40-55`), and `dismiss` only appends or evicts beyond 256 (`AwarenessStore.java:96-110`).
@@ -370,7 +404,7 @@ Checked with javap (JDK `C:/Dev/Tools/jdk/jdk-25.0.4.1+1`) on `~/.gradle/caches/
   - Null unless NEW, a report exists, and ≥1 appliable recommendation.
   - Key and priority are right.
   - Two actions, with the english of each `Text` equal to en_us.json.
-  - The launcher detail is used when `modFilesManagedBy()` is non-null.
+  - The detail follows `modFiles()` for all four policies, per §2.5's table. PENDING includes no guideLine and no "manages" claim. Tested with a stub `modFiles()`/`guideLine`, and with P0.4's real ones once merged.
   - `got_it` stores `firstrun.guide` in awareness.json, and a new NoticeCenter over the same file hides it.
   - After `applied()`, `current()` is null.
 - `client/ui/FirstApplyScreenTest` (static text functions, English via the `HistoryScreenTest` helper):
@@ -428,7 +462,9 @@ The user's real Modrinth App instance stays untouched.
    - Do one pass with Narrator on (Ctrl+B) to hear the guide and the confirmation's open narration.
 2. **26.3 check.** Repeat step 1's Apply half once on 26.3.
 3. **Upgrade check.** Copy the real instance's `config/rigtune` (read-only copy, history from 0.4.0) into a scratch instance. No guide, no confirmation.
-4. **Launcher mode (only once P0.4 lands).** A throwaway Modrinth App instance shows the launcher wording.
+4. **Launcher mode (only once P0.4 lands).**
+   - A throwaway Modrinth App instance (LAUNCHER) shows the settings-only detail plus P0.4's guideLine, and the confirmation's "didn't change any mod files" note.
+   - A 640x480 screenshot with the guide showing and no second warning line.
 
 Record results in `docs/smoke/` like earlier releases.
 
@@ -458,7 +494,7 @@ Record results in `docs/smoke/` like earlier releases.
   - FirstApplyScreen's open narration includes its title, summary and restart outcome.
   - PaletteTest passes, with no new colour literal.
 - **AC5.13** Every new string is an en_us.json key under `rigtune.firstrun.*`, and `LangCheckTest`, `WordingTest` and `PseudoLocaleTest` pass.
-- **AC5.14** With `modFilesManagedBy()` non-null, the guide detail, the explainer's mods row and the confirmation's launcher note use the launcher variants; with it null, today's wording. This depends on P0.4; unit-tested with a stub either way.
+- **AC5.14** The guide detail, the explainer rows and the confirmation note follow `controller.modFiles()` exactly as §2.5's table says, for RIGTUNE, UPDATES_IN_LAUNCHER, LAUNCHER and PENDING. Under PENDING no text says RigTune will change mod files or that the launcher manages them. After detection finishes, the next RigTune screen rebuild shows the final wording. This depends on P0.4; unit-tested with a stub policy either way.
 - **AC5.15** FootprintGameTest passes with `tools/footprint-budgets.json` unchanged. `RigTuneClient.onTick` is unchanged.
 - **AC5.16** FirstApplyGameTest's main case passes with the network off on 26.2 OpenGL, 26.3 OpenGL and 26.3 Vulkan.
 - **AC5.17** No new render-thread file I/O: `FirstRunService.load` and FirstApplyScreen's history read run on `Probes.EXECUTOR` (asserted with a queued executor in unit tests).
@@ -482,7 +518,7 @@ HOTSPOT marks files other v0.5 features also edit.
 
 | File | Change | Note |
 |---|---|---|
-| `client/ui/RigTuneController.java` | +3 default methods: `firstApplyPending`, `apply(selected, entryId)`, `downloading` | **HOTSPOT**; P0.4 adds `modFilesManagedBy` |
+| `client/ui/RigTuneController.java` | +3 default methods: `firstApplyPending`, `apply(selected, entryId)`, `downloading` | **HOTSPOT**; P0.4 adds `modFiles()` |
 | `client/RealController.java` | `@Override` on `apply(List,String)` and `downloading()`; `firstRun.applied()` at the end of `apply(List,String)`; `firstApplyPending()`; `firstRunService()` getter; `load()` scheduled in `start()`; one more NoticeCenter source | **HOTSPOT**, about 10 lines; C20/C09/C16 are consumers of `apply` and don't change its body |
 | `client/ui/RigTuneScreen.java` | `applySelected` only, about 6 lines, plus the `ChangeRecorder` import | **HOTSPOT** |
 | `core/notice/NoticePriority.java` | `FIRST_RUN` first | shared with P0.4 (one line each) |
@@ -515,7 +551,9 @@ HOTSPOT marks files other v0.5 features also edit.
 - The assertion is written to hold either way (the note matches the rows), and the unit tests pin both branches.
 - If the Apply button can't be driven by `clickScreenButton("rigtune.screen.apply.count")` (UNVERIFIED for a translatable with arguments), press it through `screen.children()` on the client thread.
 
-**Second risk:** P0.4's interface. Its doc doesn't exist yet. Mitigation: C02's only dependency on it is one nullable getter with a working null branch.
+**Second risk:** P0.4's interface is agreed by message, but its doc isn't final. C02 depends on it in only two places, `modFiles()` and `guideLine`. Without P0.4, C02 ships the RIGTUNE column, which is true for 0.4's behaviour.
+
+**The 640x480 layout risk is resolved.** P0.4 adds no header line in LAUNCHER mode, and its opted-in warning reuses the existing warning slot (§2.5).
 
 ---
 
@@ -523,7 +561,7 @@ HOTSPOT marks files other v0.5 features also edit.
 
 1. **`HowItWorksScreen`:** drop the "How it works" action. The notice detail (tooltip, narration, NoticeScreen) carries the same content. Saves about 0.4 day.
 2. **Live reload while downloads finish:** show the downloading note plus "History… shows them when they're done" instead of reloading on status change. Saves about 0.2 day. This never happens in launcher-managed or network-off instances.
-3. **The launcher-mode variants:** moot anyway if P0.4 slips.
+3. **The launcher-mode variants beyond the minimum.** Keep only the PENDING/LAUNCHER switch to `notice.detail.settings` and the "didn't change any mod files" note. Drop the guideLine rows in the explainer. Moot anyway if P0.4 slips.
 4. **The guide notice as a whole:** ship only the confirmation, the higher-value half per the brainstorm.
 
 Never cut: the confirmation's rows coming from HistoryModel/HistoryScreen functions, the restart logic, and the a11y walk.
@@ -532,7 +570,7 @@ Never cut: the confirmation's rows coming from HistoryModel/HistoryScreen functi
 
 ## UNVERIFIED
 
-- P0.4's signal (`modFilesManagedBy()`), its NoticePriority names, and whether its mod rows are non-appliable advice. docs/research/v0.5/launcher-managed-mods.md didn't exist when this was written. I sent the proposal in §2.5 to r-launchers and got no answer yet.
+- P0.4's `RigTuneController.modFiles()` / `ModFilesPolicy`, `core/launcher/LauncherModText.guideLine` (a core `@Nullable Text`, null for plain RIGTUNE and PENDING) and the header-slot reuse are checked against launcher-managed-mods.md §4.3, "Guide text" row. That is a design doc, not code: none of it exists in the source yet.
 - The exact pixel widths of the English guide message and buttons. They are estimates from vanilla glyph advances, and AC5.3 measures `font.width` in the game test.
 - `ClientGameTestContext.clickScreenButton` matching a button whose message is `rigtune.screen.apply.count` with an argument (fallback in §8).
 - That CI's network-off report always has ≥1 appliable recommendation on all three legs. `UiGameTest.java:477` relies on `set-vanilla.renderDistance` today, which is strong evidence but not a guarantee for Vulkan. If there is none, the test fails with a clear message rather than skipping.

@@ -119,6 +119,56 @@ class GametestMatrixTests(unittest.TestCase):
         self.assertEqual(text.count("\n"), 1)
         self.assertEqual(json.loads(text), {"include": gm.legs(self.root)})
 
+    def add_classes(self, *names):
+        mod = self.root / gm.GAMETEST_MOD
+        mod.parent.mkdir(parents=True)
+        entries = ["io.github.chaotix345.rigtune.gametest." + name for name in names]
+        mod.write_text(json.dumps({"entrypoints": {"fabric-client-gametest": entries}}), encoding="utf-8")
+
+    # SPEC 1g: the dormant split. With one part (the default) the matrix is the legs, unchanged.
+    def test_one_part_is_the_legs_unchanged(self):
+        self.add_node("26.2")
+        self.add_node("26.3")
+        self.assertEqual(1, gm.PARTS)
+        self.assertEqual(gm.legs(self.root), gm.matrix(self.root))
+        self.assertEqual(gm.legs(self.root), gm.matrix(self.root, 1))
+
+    # AC1g.4: two parts run every class exactly once per leg, the first class in part 1, in fabric.mod.json's order.
+    def test_two_parts_run_every_class_once_per_leg(self):
+        self.add_node("26.2")
+        self.add_node("26.3")
+        self.add_classes("FirstApplyGameTest", "RigTuneClientGameTest", "BenchmarkGameTest", "UiGameTest", "A11yGameTest")
+        entries = gm.matrix(self.root, 2)
+        self.assertEqual(6, len(entries))
+        for mc, backend in (("26.2", "OpenGL"), ("26.3", "OpenGL"), ("26.3", "Vulkan")):
+            parts = [e for e in entries if e["mc"] == mc and e["backend"] == backend]
+            self.assertEqual(["1/2", "2/2"], [e["part"] for e in parts])
+            self.assertEqual(["-part1", "-part2"], [e["suffix"] for e in parts])
+            self.assertEqual(["FirstApplyGameTest,RigTuneClientGameTest", "BenchmarkGameTest,UiGameTest,A11yGameTest"],
+                             [e["classes"] for e in parts])
+
+    def test_parts_must_fit_the_classes(self):
+        self.add_node("26.2")
+        self.add_classes("A", "B")
+        self.assertEqual([["A"], ["B"]], gm.split(["A", "B"], 2))
+        for parts in (0, 3):
+            with self.assertRaises(SystemExit):
+                gm.matrix(self.root, parts)
+
+    def test_cli_takes_the_parts(self):
+        self.add_node("26.2")
+        self.add_classes("A", "B", "C")
+        out = io.StringIO()
+        with redirect_stdout(out):
+            gm.main(["--root", str(self.root), "--parts", "3"])
+        self.assertEqual(["A", "B", "C"], [e["classes"] for e in json.loads(out.getvalue())["include"]])
+
+    def test_repository_classes_split_in_two(self):
+        repo = Path(__file__).resolve().parent.parent.parent
+        classes = gm.game_test_classes(repo)
+        halves = gm.split(classes, 2)
+        self.assertEqual(classes, halves[0] + halves[1])
+
     def test_repository_nodes_all_listed(self):
         repo = Path(__file__).resolve().parent.parent.parent
         on_disk = sorted(p.name for p in (repo / "versions").iterdir() if p.is_dir() and not p.name.startswith("."))
