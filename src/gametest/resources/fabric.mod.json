@@ -6,6 +6,7 @@
 	"environment": "client",
 	"entrypoints": {
 		"fabric-client-gametest": [
+			"io.github.chaotix345.rigtune.gametest.HaltRaceGameTest",
 			"io.github.chaotix345.rigtune.gametest.FirstApplyGameTest",
 			"io.github.chaotix345.rigtune.gametest.RigTuneClientGameTest",
 			"io.github.chaotix345.rigtune.gametest.BenchmarkGameTest",
