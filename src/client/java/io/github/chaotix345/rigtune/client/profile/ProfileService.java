@@ -75,7 +75,8 @@ public final class ProfileService {
 	public static final String NOTICE_BACK = "battery-back:";
 	public static final String ACTION_SWITCH = "switch";
 	public static final String ACTION_SNOOZE = "snooze";
-	private static final SystemToast.SystemToastId TOAST_ID = new SystemToast.SystemToastId(6000L);
+	// The battery offer's toast (public for BatteryFlowGameTest: toastManager().getToast(SystemToast.class, id)).
+	public static final SystemToast.SystemToastId BATTERY_TOAST_ID = new SystemToast.SystemToastId(6000L);
 	// Whether a benchmark runs (BenchmarkController.running); ProfilesGameTest stands one in without starting a world.
 	private static volatile BooleanSupplier benchmarkRunning = BenchmarkController::running;
 
@@ -269,30 +270,32 @@ public final class ProfileService {
 		}
 		minecraft.execute(() -> {
 			if (next != null) {
-				SystemToast.addOrUpdate(minecraft.gui.toastManager(), TOAST_ID, Component.translatable("rigtune.battery.toast.title"),
+				SystemToast.addOrUpdate(minecraft.gui.toastManager(), BATTERY_TOAST_ID, Component.translatable("rigtune.battery.toast.title"),
 						Texts.component(message(next)));
 			}
 			controller.rescan();
 		});
 	}
 
-	// BatteryNoticeSource's notice: the pending offer, while it still applies.
+	// BatteryNoticeSource's notice: the pending offer, while it still applies (v0.5 PF-3: its target still resolves). Only
+	// the unplug offer has "Don't offer again" (PF-2); both keep their ×.
 	public @Nullable Notice batteryNotice() {
 		Offer current = offer.get();
 		if (current == null) {
 			return null;
 		}
-		String target = current.decision().target();
-		if (target == null || target.equals(active())) {
+		if (!BatteryPrompt.stillOffered(current.decision(), active(), this::resolves)) {
 			retire(offer, current);
 			return null;
 		}
-		Text switchLabel = current.decision().offer() == BatteryPrompt.Offer.BATTERY
-				? Text.of("rigtune.battery.action.switch", "Switch to Battery")
-				: Text.of("rigtune.battery.action.back", "Switch back");
-		return new Notice(current.key(), NoticePriority.BATTERY_OFFER, message(current), null,
-				List.of(new NoticeAction(ACTION_SWITCH, switchLabel), new NoticeAction(ACTION_SNOOZE, Text.of("rigtune.battery.action.snooze", "Don't offer again"))),
-				true);
+		boolean unplug = current.decision().offer() == BatteryPrompt.Offer.BATTERY;
+		List<NoticeAction> actions = new ArrayList<>();
+		actions.add(new NoticeAction(ACTION_SWITCH, unplug ? Text.of("rigtune.battery.action.switch", "Switch to Battery")
+				: Text.of("rigtune.battery.action.back", "Switch back")));
+		if (BatteryPrompt.offersSnooze(current.decision().offer())) {
+			actions.add(new NoticeAction(ACTION_SNOOZE, Text.of("rigtune.battery.action.snooze", "Don't offer again")));
+		}
+		return new Notice(current.key(), NoticePriority.BATTERY_OFFER, message(current), null, actions, true);
 	}
 
 	public void batteryAction(String actionId) {
@@ -309,7 +312,7 @@ public final class ProfileService {
 			Component result = switchProfile(current.decision().target(), null);
 			Minecraft minecraft = controller.minecraft();
 			if (minecraft != null) {
-				SystemToast.addOrUpdate(minecraft.gui.toastManager(), TOAST_ID, Component.translatable("rigtune.profile.title"), result);
+				SystemToast.addOrUpdate(minecraft.gui.toastManager(), BATTERY_TOAST_ID, Component.translatable("rigtune.profile.title"), result);
 			}
 		}
 	}
@@ -366,7 +369,9 @@ public final class ProfileService {
 				: target.templateId() != null ? ProfileStore.TEMPLATE_PREFIX + target.templateId() : null;
 		store().setActive(id, entryId);
 		if (BatteryPrompt.BATTERY.equals(id) && !BatteryPrompt.BATTERY.equals(previous)) {
-			store().rememberPrevious(previous);
+			// v0.5 PF-1: with no profile active, "My settings" (saved by ensureBaseline before this switch) is the way back.
+			Profile baseline = store().baseline();
+			store().rememberPrevious(BatteryPrompt.previousFor(previous, baseline == null ? null : baseline.id()));
 		}
 	}
 
@@ -466,6 +471,12 @@ public final class ProfileService {
 			RigTune.LOGGER.warn("Could not read RigTune's history", e);
 			return active;
 		}
+	}
+
+	// Whether a profile id still names something to switch to (a template, or a profile still in profiles.json).
+	private boolean resolves(String id) {
+		return id.startsWith(ProfileStore.TEMPLATE_PREFIX) ? TemplateId.of(id.substring(ProfileStore.TEMPLATE_PREFIX.length())) != null
+				: store().profile(id) != null;
 	}
 
 	// A profile id's name without computing it (the battery offer's text).

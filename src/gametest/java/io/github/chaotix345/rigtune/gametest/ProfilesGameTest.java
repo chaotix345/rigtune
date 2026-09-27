@@ -54,6 +54,7 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -120,6 +121,8 @@ public class ProfilesGameTest implements FabricClientGameTest {
 			aToBToABeforeARestart(context, controller);
 			importAndMalformed(context, controller);
 			batteryOffer(context, controller);
+			pf1BatteryOfferFromAFreshStart(context, controller);
+			pf3DeletingTheBackOffersTargetRetiresIt(context, controller);
 			refusedDuringABenchmark(context, controller);
 		} finally {
 			ProfileService.overrideBenchmarkCheck(null);
@@ -341,7 +344,8 @@ public class ProfilesGameTest implements FabricClientGameTest {
 
 	// The laptop hook (SPEC 4, AC4.9's notice half): a debounced AC -> battery edge offers Battery as a notice and never
 	// switches; the offer's action switches; battery -> AC offers the previous profile; "Don't offer again" snoozes. The edge
-	// is fed to ProfileService as PowerWatcher would (CI has no battery).
+	// is fed to ProfileService as PowerWatcher would (CI has no battery). v0.5 PF-2 (AC2P.2): the plug-in offer has no
+	// "Don't offer again" (only its ×), so the snooze is taken from the unplug offer.
 	private void batteryOffer(ClientGameTestContext context, RigTuneController controller) {
 		reset(context);
 		ProfileService service = ((RealController) controller).profileService();
@@ -376,13 +380,119 @@ public class ProfilesGameTest implements FabricClientGameTest {
 			context.waitFor(mc -> controller.report() != null, 1200);
 			Notice back = batteryNotice(context, controller);
 			check(back != null && back.key().startsWith(ProfileService.NOTICE_BACK), "battery -> AC offers the previous profile: " + back);
+			check(back.actions().stream().map(a -> a.id()).toList().equals(List.of(ProfileService.ACTION_SWITCH)) && back.dismissible(),
+					"PF-2: the plug-in offer is [switch] plus its ×, no \"Don't offer again\": " + back);
 			check(mine.equals(ProfileStore.shared(configDir).battery().previousProfile()), "the previous profile is My settings");
-			context.runOnClient(mc -> controller.noticeAction(back.key(), ProfileService.ACTION_SNOOZE));
+			context.runOnClient(mc -> controller.noticeAction(back.key(), ProfileService.ACTION_SWITCH));
+			context.waitTicks(2);
+			check(mine.equals(ProfileStore.shared(configDir).active()), "the plug-in offer switched back to My settings");
+			checkSeed(context, "switching back from Battery");
+
+			// "Don't offer again" from the unplug offer (the cooldown moved out of the way).
+			Notice again = offerOnUnplug(context, controller, service);
+			context.runOnClient(mc -> controller.noticeAction(again.key(), ProfileService.ACTION_SNOOZE));
 			check(ProfileStore.shared(configDir).battery().snoozed(), "Don't offer again is kept in profiles.json");
+			check(ProfileStore.shared(configDir).battery().prompt(), "only the snooze changed");
+			service.powerChanged(false);
+			ProfileStore.shared(configDir).batteryOffered(Instant.now().minus(Duration.ofMinutes(11)).toString());
 			service.powerChanged(true);
 			context.waitTicks(3);
 			context.waitFor(mc -> controller.report() != null, 1200);
 			check(batteryNotice(context, controller) == null, "no offer once snoozed");
+		} finally {
+			HardwareProbe.setOnBattery(onBattery);
+			context.runOnClient(mc -> {
+				mc.gui.setScreen(new TitleScreen());
+				controller.rescan();
+			});
+			context.waitFor(mc -> controller.report() != null, 1200);
+		}
+	}
+
+	// An AC -> battery edge past the cooldown: the unplug offer, checked to be there.
+	private Notice offerOnUnplug(ClientGameTestContext context, RigTuneController controller, ProfileService service) {
+		service.powerChanged(false);
+		ProfileStore.shared(configDir).batteryOffered(Instant.now().minus(Duration.ofMinutes(11)).toString());
+		service.powerChanged(true);
+		context.waitTicks(3);
+		context.waitFor(mc -> controller.report() != null, 1200);
+		Notice offer = batteryNotice(context, controller);
+		check(offer != null && offer.key().startsWith(ProfileService.NOTICE_BATTERY), "an AC -> battery edge offers Battery: " + offer);
+		return offer;
+	}
+
+	// docs/v0.5/SPEC.md PF-1 (AC2P.1): the laptop's first use. profiles.json doesn't exist and no profile was ever switched to;
+	// taking the unplug offer saves "My settings" first, and plugging back in offers it; taking that makes it active.
+	private void pf1BatteryOfferFromAFreshStart(ClientGameTestContext context, RigTuneController controller) {
+		reset(context);
+		try {
+			Files.deleteIfExists(profilesFile);
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+		ProfileService service = ((RealController) controller).profileService();
+		boolean onBattery = context.computeOnClient(mc -> controller.report()).hardware().onBattery();
+		try {
+			Notice offer = offerOnUnplug(context, controller, service);
+			check(ProfileStore.shared(configDir).active() == null, "no profile active before the offer is taken");
+			context.runOnClient(mc -> controller.noticeAction(offer.key(), ProfileService.ACTION_SWITCH));
+			context.waitTicks(2);
+			check(BATTERY.equals(ProfileStore.shared(configDir).active()), "the offer switched to Battery");
+			ProfileStore.Profile mine = ProfileStore.shared(configDir).baseline();
+			check(mine != null, "My settings was saved before the switch");
+			check(mine.id().equals(ProfileStore.shared(configDir).battery().previousProfile()), "PF-1: My settings is remembered as the way back: "
+					+ ProfileStore.shared(configDir).battery());
+
+			service.powerChanged(false);
+			context.waitTicks(3);
+			context.waitFor(mc -> controller.report() != null, 1200);
+			Notice back = batteryNotice(context, controller);
+			check(back != null && back.key().startsWith(ProfileService.NOTICE_BACK) && back.message().english().contains("My settings"),
+					"PF-1: battery -> AC offers My settings back: " + (back == null ? null : back.message().english()));
+			context.runOnClient(mc -> mc.gui.setScreen(new RigTuneScreen(new TitleScreen(), controller)));
+			context.waitForScreen(RigTuneScreen.class);
+			screenshotAt(context, 854, 480, 2, "profiles-battery-back-fresh-854x480-scale2");
+			context.runOnClient(mc -> controller.noticeAction(back.key(), ProfileService.ACTION_SWITCH));
+			context.waitTicks(2);
+			check(mine.id().equals(ProfileStore.shared(configDir).active()), "taking it makes My settings active");
+			checkSeed(context, "Battery taken from a fresh start, then My settings back");
+		} finally {
+			HardwareProbe.setOnBattery(onBattery);
+			context.runOnClient(mc -> {
+				mc.gui.setScreen(new TitleScreen());
+				controller.rescan();
+			});
+			context.waitFor(mc -> controller.report() != null, 1200);
+		}
+	}
+
+	// docs/v0.5/SPEC.md PF-3 (AC2P.3): deleting the profile the plug-in offer targets retires the offer, so no "Switch back
+	// to ?" is ever shown.
+	private void pf3DeletingTheBackOffersTargetRetiresIt(ClientGameTestContext context, RigTuneController controller) {
+		reset(context);
+		ProfileService service = ((RealController) controller).profileService();
+		boolean onBattery = context.computeOnClient(mc -> controller.report()).hardware().onBattery();
+		try {
+			context.runOnClient(mc -> controller.saveCurrentProfile("Evening"));
+			String evening = ProfileStore.shared(configDir).profiles().stream().filter(p -> "Evening".equals(p.name())).findFirst().orElseThrow().id();
+			context.runOnClient(mc -> controller.switchProfile(evening));
+			check(evening.equals(ProfileStore.shared(configDir).active()), "Evening is active");
+			Notice offer = offerOnUnplug(context, controller, service);
+			context.runOnClient(mc -> controller.noticeAction(offer.key(), ProfileService.ACTION_SWITCH));
+			context.waitTicks(2);
+			service.powerChanged(false);
+			context.waitTicks(3);
+			context.waitFor(mc -> controller.report() != null, 1200);
+			Notice back = batteryNotice(context, controller);
+			check(back != null && back.message().english().contains("Evening"), "the plug-in offer names Evening: " + back);
+			context.runOnClient(mc -> controller.deleteProfile(evening));
+			check(ProfileStore.shared(configDir).profile(evening) == null, "Evening deleted");
+			check(batteryNotice(context, controller) == null, "PF-3: the offer for a deleted profile is retired");
+			check(context.computeOnClient(mc -> controller.notices()).stream().noneMatch(n -> n.message().english().contains("Switch back to ?")),
+					"no notice says \"Switch back to ?\"");
+			context.runOnClient(mc -> mc.gui.setScreen(new RigTuneScreen(new TitleScreen(), controller)));
+			context.waitForScreen(RigTuneScreen.class);
+			screenshotAt(context, 854, 480, 2, "profiles-battery-back-deleted-854x480-scale2");
 		} finally {
 			HardwareProbe.setOnBattery(onBattery);
 			context.runOnClient(mc -> {
