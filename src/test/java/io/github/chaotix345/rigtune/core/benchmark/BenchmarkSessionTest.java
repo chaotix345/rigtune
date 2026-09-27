@@ -399,6 +399,57 @@ class BenchmarkSessionTest {
 		assertFalse(session.result().notMeasured().containsKey(BenchmarkRecord.SHADERS), "shaders weren't on");
 	}
 
+	// docs/v0.5/SPEC.md RW-5 (AC2B.3): the first run started at 32 on terrain still generating; that step is measured again
+	// after the search below it, outside the 6-step limit, while the deadline allows. Steps take their real durations.
+	private static List<Integer> tuneFrom32(BenchmarkSession session) {
+		List<Integer> rds = new ArrayList<>();
+		long now = 0;
+		java.util.Optional<Step> next;
+		while ((next = session.next(now)).isPresent()) {
+			Step step = next.get();
+			now += (long) ((step.protocol().settleMinSeconds() + 1 + step.protocol().warmupSeconds() + step.protocol().measuredSeconds()) * FakeRig.NANOS);
+			int rd = step.knobs().renderDistance();
+			boolean firstAt32 = step.kind() == Kind.RENDER_DISTANCE && rd == 32 && !rds.contains(32);
+			if (step.kind() == Kind.RENDER_DISTANCE) {
+				rds.add(rd);
+			}
+			session.record(step, low(firstAt32 ? 36 : 300), !firstAt32);
+		}
+		return rds;
+	}
+
+	@Test
+	void rw5TheRemeasureRunsOutsideTheStepLimit() {
+		BenchmarkSession session = BenchmarkSession.tune(new Knobs(32, 12, false, false), new TuneLimits(4, 32, 170, false, 5), Timing.DEFAULT, 0);
+		assertEquals(List.of(32, 17, 24, 28, 30, 31, 32), tuneFrom32(session));
+		assertEquals(32, session.result().chosen().renderDistance());
+		assertTrue(session.result().targetMet());
+		assertFalse(session.result().deadlineHit());
+	}
+
+	// Review (part 1 M2): the second try only starts when a full repeat still fits after it, so it never costs the result.
+	@Test
+	void rw5ARemeasureNeverCostsTheRepeat() {
+		// Six steps end at 123 s; the re-measure (37.5 s) would still fit before 200 - 10, but not with a repeat after it.
+		Timing timing = new Timing(6, 8.0, 2.0, 20.0, 1.5, 6.0, 2.0, 2, 200.0);
+		BenchmarkSession session = BenchmarkSession.tune(new Knobs(32, 12, false, false), new TuneLimits(4, 32, 170, false, 5), timing, 0);
+		assertEquals(List.of(32, 17, 24, 28, 30, 31), tuneFrom32(session));
+		assertTrue(session.result().measurements().stream().anyMatch(m -> m.step().kind() == Kind.REPEAT), "the repeat ran");
+		assertNotNull(session.result().result());
+		assertTrue(session.result().renderDistance().reason().contains("32 couldn't be measured"), session.result().renderDistance().reason());
+	}
+
+	@Test
+	void rw5NoRemeasurePastTheDeadline() {
+		// Six 20.5 s steps end at 123 s; a seventh (worst case 37.5 s) would end past 160 - 10.
+		Timing tight = new Timing(6, 8.0, 2.0, 20.0, 1.5, 6.0, 2.0, 2, 160.0);
+		BenchmarkSession session = BenchmarkSession.tune(new Knobs(32, 12, false, false), new TuneLimits(4, 32, 170, false, 5), tight, 0);
+		assertEquals(List.of(32, 17, 24, 28, 30, 31), tuneFrom32(session));
+		assertEquals(31, session.result().chosen().renderDistance());
+		assertTrue(session.result().deadlineHit());
+		assertTrue(session.result().renderDistance().reason().contains("32 couldn't be measured"), session.result().renderDistance().reason());
+	}
+
 	@Test
 	void worstCaseRdAndSdFitTheBudgetWithSlack() {
 		assertTrue(6 * Timing.DEFAULT.full().worstCaseSeconds() + Timing.DEFAULT.quickSettled().worstCaseSeconds()

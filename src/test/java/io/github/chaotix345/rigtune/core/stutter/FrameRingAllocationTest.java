@@ -129,7 +129,7 @@ class FrameRingAllocationTest {
 		FrameRing session = new FrameRing(FrameRing.SESSION_FRAMES, FrameRing.SESSION_CANDIDATES);
 		assertEquals((131_072 + 40_960 + 18) * 8L + 131_072 * 4L, session.retainedBytes(), "the frame ring's ends and phase words, candidates, histogram");
 		StutterRings shared = new StutterRings(0);
-		assertEquals((4096 * 3 + 2048 * 5 + 4096 * 14) * 8L, shared.retainedBytes(), "v0.5: 14 longs per sample (the DH world generation slot)");
+		assertEquals((4096 * 3 + 2048 * 5 + 4096 * 14 + 256 * 3) * 8L, shared.retainedBytes(), "v0.5: 14 longs per sample (the DH world generation slot), the live-set samples");
 		assertTrue(session.retainedBytes() + shared.retainedBytes() <= 2_621_440L, "within SPEC 10's 2.5 MiB monitor-on allowance (monitorOnRetainedBytes)");
 		FrameRing bench = new FrameRing(FrameRing.BENCHMARK_FRAMES, FrameRing.BENCHMARK_CANDIDATES);
 		assertEquals((32_768 + 10_240 + 18) * 8L + 32_768 * 4L, bench.retainedBytes());

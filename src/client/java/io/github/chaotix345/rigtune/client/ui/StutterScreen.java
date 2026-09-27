@@ -55,7 +55,11 @@ public class StutterScreen extends Screen {
 	private static final Map<String, String> TAGS = Map.of(Attributor.WORLD_SAVE, "rigtune.stutter.tag.world_save", Attributor.DH,
 			"rigtune.stutter.tag.dh", Attributor.CPU_CONTENTION, "rigtune.stutter.tag.cpu_contention", Attributor.AFTER_TELEPORT,
 			"rigtune.stutter.tag.after_teleport", Attributor.CHUNKS_LOADING, "rigtune.stutter.tag.chunks_loading", Attributor.MOVING_FAST,
-			"rigtune.stutter.tag.moving_fast");
+			"rigtune.stutter.tag.moving_fast", Attributor.SETTINGS_CHANGED, "rigtune.stutter.tag.settings_changed");
+	// v0.5 RW-11: the four settings' names.
+	private static final Map<String, String> SETTINGS = Map.of(StutterReport.RENDER_DISTANCE, "rigtune.stutter.settings.render_distance",
+			StutterReport.SIMULATION_DISTANCE, "rigtune.stutter.settings.simulation_distance", StutterReport.SHADERS, "rigtune.stutter.settings.shaders",
+			StutterReport.DH_RENDERING, "rigtune.stutter.settings.dh_rendering");
 
 	private final @Nullable Screen parent;
 	protected final RigTuneController controller;
@@ -183,7 +187,7 @@ public class StutterScreen extends Screen {
 		histogram(l, r, width);
 		causes(l, r, width);
 		worst(l, r, width);
-		advice(l, view.advice(), width);
+		advice(l, r, view.advice(), width);
 	}
 
 	private void header(StutterList l, StutterReport r, int width) {
@@ -191,9 +195,12 @@ public class StutterScreen extends Screen {
 				? Component.translatable("rigtune.stutter.header.time.benchmark", clock(r.gameplaySeconds()))
 				: Component.translatable("rigtune.stutter.header.time.monitor", clock(r.sessionSeconds()), clock(r.gameplaySeconds()));
 		text(l, time, COLOR_TEXT, width, ROW_GAP);
-		text(l, Component.translatable("rigtune.stutter.header.frames", number(r.frames()), number(r.avgFps()), number(r.onePercentLowFps())), COLOR_TEXT,
-				width, 0);
+		text(l, framesLine(r), COLOR_TEXT, width, 0);
 		text(l, spikesLine(r), COLOR_TEXT, width, 0);
+		Component settings = settingsLine(r);
+		if (settings != null) {
+			text(l, settings, COLOR_NOTE, width, 0);
+		}
 		if (!r.enoughData()) {
 			text(l, Component.translatable("rigtune.stutter.not_enough"), COLOR_NOTE, width, 0);
 		}
@@ -203,6 +210,38 @@ public class StutterScreen extends Screen {
 		if (!r.phaseTiming()) {
 			text(l, Component.translatable("rigtune.stutter.phase_unavailable"), COLOR_LABEL, width, 0);
 		}
+	}
+
+	// "97,000 frames · average 119 FPS · 1% low 61 FPS", and when those cover only the frame ring's window (v0.5 SD-2)
+	// "... over the last 13:15 of gameplay".
+	static Component framesLine(StutterReport r) {
+		Double window = r.windowSeconds();
+		return window == null
+				? Component.translatable("rigtune.stutter.header.frames", number(r.frames()), number(r.avgFps()), number(r.onePercentLowFps()))
+				: Component.translatable("rigtune.stutter.window.frames", number(r.frames()), number(r.avgFps()), number(r.onePercentLowFps()), clock(window));
+	}
+
+	// v0.5 RW-11: "Settings changed during this session (render distance 32 → 12, shaders on → off)", or null.
+	static @Nullable Component settingsLine(StutterReport r) {
+		List<StutterReport.SettingChange> changes = r.settingChanges();
+		if (changes.isEmpty()) {
+			return null;
+		}
+		MutableComponent list = Component.empty();
+		for (int i = 0; i < changes.size(); i++) {
+			StutterReport.SettingChange c = changes.get(i);
+			if (i > 0) {
+				list.append(Component.literal(", "));
+			}
+			list.append(Component.translatable("rigtune.stutter.settings.change", Component.translatable(SETTINGS.get(c.key())), settingValue(c.from()),
+					settingValue(c.to())));
+		}
+		return Component.translatable("rigtune.stutter.settings.changed", list);
+	}
+
+	private static Component settingValue(String value) {
+		Boolean on = StutterReport.onOff(value);
+		return on == null ? Component.literal(value) : Component.translatable(on ? "rigtune.stutter.settings.on" : "rigtune.stutter.settings.off");
 	}
 
 	// "12 spikes (9 minor, 2 major, 1 severe, 0 freezes) in 9 hitches, 1.8 s lost", singular where the count is 1 (review-8
@@ -259,19 +298,22 @@ public class StutterScreen extends Screen {
 			text(l, Component.translatable("rigtune.stutter.causes.none"), COLOR_LABEL, width, 0);
 			return;
 		}
-		for (String cause : Attributor.CAUSES) {
-			Double share = r.causes().get(cause);
-			if (share == null) {
-				continue;
-			}
-			bar(l, Component.translatable(CAUSES.get(cause)), share, cause.equals(Attributor.UNKNOWN) ? COLOR_LABEL : COLOR_AMBER, Component.literal(percent(share)));
-		}
+		// v0.5 RW-10: no 0 % row, and the whole percentages never total more than 100 (StutterSummary.percentages).
+		StutterSummary.percentages(r.causes()).forEach((cause, percent) -> bar(l, Component.translatable(CAUSES.get(cause)), percent / 100.0,
+				cause.equals(Attributor.UNKNOWN) ? COLOR_LABEL : COLOR_AMBER, Component.literal(percent + " %")));
 		for (String tag : Attributor.TAGS) {
 			Integer n = r.tags().get(tag);
 			if (n != null && n > 0 && TAGS.containsKey(tag)) {
 				text(l, tagLine(tag, n, r.spikes().total()), COLOR_LABEL, width, 0);
 			}
 		}
+	}
+
+	// The cause rows' text as shown ("Garbage collection 59 %"), for the tests.
+	static List<Component> causeRows(StutterReport r) {
+		List<Component> out = new ArrayList<>();
+		StutterSummary.percentages(r.causes()).forEach((cause, percent) -> out.add(Component.translatable(CAUSES.get(cause)).append(" " + percent + " %")));
+		return out;
 	}
 
 	private void worst(StutterList l, StutterReport r, int width) {
@@ -320,8 +362,11 @@ public class StutterScreen extends Screen {
 		}
 	}
 
-	private void advice(StutterList l, List<StutterAdvisor.Fired> advice, int width) {
+	private void advice(StutterList l, StutterReport r, List<StutterAdvisor.Fired> advice, int width) {
 		heading(l, "rigtune.stutter.advice", width);
+		if (!r.settingChanges().isEmpty()) {
+			text(l, Component.translatable(view.live() ? "rigtune.stutter.settings.advice.live" : "rigtune.stutter.settings.advice"), COLOR_LABEL, width, 0);
+		}
 		if (advice.isEmpty()) {
 			text(l, Component.translatable("rigtune.stutter.advice.none"), COLOR_LABEL, width, 0);
 			return;
@@ -382,13 +427,12 @@ public class StutterScreen extends Screen {
 		}
 		MutableComponent causes = Component.empty();
 		boolean any = false;
-		for (String cause : Attributor.CAUSES) {
-			Double share = r.causes().get(cause);
-			if (share != null && share > 0 && !cause.equals(Attributor.UNKNOWN)) {
+		for (Map.Entry<String, Integer> e : StutterSummary.percentages(r.causes()).entrySet()) {
+			if (!e.getKey().equals(Attributor.UNKNOWN)) {
 				if (any) {
 					causes.append(Component.literal(", "));
 				}
-				causes.append(Component.translatable(CAUSES.get(cause))).append(Component.literal(" " + percent(share)));
+				causes.append(Component.translatable(CAUSES.get(e.getKey()))).append(Component.literal(" " + e.getValue() + " %"));
 				any = true;
 			}
 		}

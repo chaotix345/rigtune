@@ -159,10 +159,20 @@ public final class StutterHooks {
 		}
 	}
 
-	// docs/v0.5/SPEC.md 2B RW-15 (PLAN contracts item 12): true while a benchmark step that ran out of time is measured
-	// again, false after it; that step's frames stay out of the benchmark's capture. BenchmarkController calls it (WS-B).
-	// Contracts seam (WS-K): a no-op until WS-S implements it.
+	// docs/v0.5/SPEC.md 2B RW-15 (PLAN contracts item 12): BenchmarkController (WS-B) calls it on the render thread with true
+	// INSTEAD of benchmarkSweep(true) for a step whose settle timed out incomplete, and with false at that step's end (or when
+	// the run ends inside it) instead of benchmarkSweep(false). The benchmark capture stays paused through such a step (it
+	// may not have started yet, when it is the first step), so the step's frames stay out of the capture; RW-5's second try
+	// of that distance, once settled, records through benchmarkSweep as usual.
 	public static void benchmarkStepExcluded(boolean excluded) {
+		StutterService s = service;
+		if (s != null) {
+			try {
+				s.benchmarkStepExcluded(excluded);
+			} catch (RuntimeException e) {
+				RigTune.LOGGER.warn("Stutter Doctor: could not leave a benchmark step out of the capture", e);
+			}
+		}
 	}
 
 	// The last finished benchmark's capture summary (BenchmarkResultScreen's line), or null.
@@ -186,6 +196,12 @@ public final class StutterHooks {
 
 	public static boolean samplerRunning() {
 		return StutterCapture.SAMPLER.running();
+	}
+
+	// For StutterGameTest (RW-11, X4.4): the settings check's own cost with a session running (render thread), as
+	// SettingsWatch.cost measures it: {nanos, checks timed, bytes allocated, the empty control loop's bytes}.
+	public static long[] settingsCheckCost(Minecraft minecraft, int calls) {
+		return SettingsWatch.cost(minecraft, calls);
 	}
 
 	// For BenchmarkGameTest (review-8 P5A-F3): monitor sessions whose end was handled, saved or not.

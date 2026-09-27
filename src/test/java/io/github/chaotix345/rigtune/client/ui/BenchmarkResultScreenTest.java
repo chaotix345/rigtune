@@ -144,12 +144,12 @@ class BenchmarkResultScreenTest {
 
 	@Test
 	void inLineImprovementAndTooFew() {
-		assertEquals(List.of("NORMAL 1% lows in line with your usual 500 FPS (3 comparable runs)"),
+		assertEquals(List.of("NORMAL 1% lows in line with your usual 500 FPS (from 3 earlier runs)"),
 				english(view(usual(500, 500, 500), run("latest", "2026-09-25T10:00:00Z", 490.0, 12, 2560, "hash-a", "0.4.0"))));
 		// An improvement is never an alert: it is shown, in the "good" colour.
-		assertEquals(List.of("GOOD 1% lows 20% above your usual 500 FPS (3 comparable runs)"),
+		assertEquals(List.of("GOOD 1% lows 20% above your usual 500 FPS (from 3 earlier runs)"),
 				english(view(usual(500, 500, 500), run("latest", "2026-09-25T10:00:00Z", 600.0, 12, 2560, "hash-a", "0.4.0"))));
-		assertEquals(List.of("NORMAL Not enough comparable runs for a trend yet (2 of 3)"),
+		assertEquals(List.of("NORMAL Not enough earlier comparable runs for a trend yet (2 of 3)"),
 				english(view(usual(500, 500), run("latest", "2026-09-25T10:00:00Z", 100.0, 12, 2560, "hash-a", "0.4.0"))));
 	}
 
