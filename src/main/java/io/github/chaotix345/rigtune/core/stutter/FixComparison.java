@@ -39,6 +39,11 @@ public final class FixComparison {
 	// Both rates always go with the kind (SPEC X3: numbers next to every verdict).
 	public record Verdict(Kind kind, double beforePerMinute, double afterPerMinute, double lostBeforePerMinute, double lostAfterPerMinute, double phi,
 			double pLess, double pMore) {
+		// A verdict with its rates from the two sides (as stutter-fixes.json keeps it: the kind, φ and the p-values).
+		public static Verdict of(Kind kind, SessionOutcome before, SessionOutcome after, double phi, double pLess, double pMore) {
+			return new Verdict(kind, perMinute(before.hitches(), before.gameplaySeconds()), perMinute(after.hitches(), after.gameplaySeconds()),
+					perMinute(before.lostMs(), before.gameplaySeconds()), perMinute(after.lostMs(), after.gameplaySeconds()), phi, pLess, pMore);
+		}
 	}
 
 	private FixComparison() {
@@ -50,13 +55,9 @@ public final class FixComparison {
 
 	// guard false: φ = 1 (the plain Poisson test the dispersion guard corrects; for the tests).
 	static Verdict compare(SessionOutcome before, SessionOutcome after, boolean guard) {
-		double beforeRate = perMinute(before.hitches(), before.gameplaySeconds());
-		double afterRate = perMinute(after.hitches(), after.gameplaySeconds());
-		double lostBefore = perMinute(before.lostMs(), before.gameplaySeconds());
-		double lostAfter = perMinute(after.lostMs(), after.gameplaySeconds());
 		double phi = guard ? dispersion(before, after) : 1;
 		if (before.gameplaySeconds() <= 0 || after.gameplaySeconds() <= 0) {
-			return new Verdict(Kind.SAME, beforeRate, afterRate, lostBefore, lostAfter, phi, 1, 1);
+			return Verdict.of(Kind.SAME, before, after, phi, 1, 1);
 		}
 		int e0 = effective(before.hitches(), phi);
 		int e1 = effective(after.hitches(), phi);
@@ -72,13 +73,14 @@ public final class FixComparison {
 		double pLess = cdf(e1, n, logP, logQ);
 		// P(X >= e1) = P(n - X <= n - e1), n - X ~ Bin(n, 1 - p0): the upper tail without cancellation.
 		double pMore = cdf(n - e1, n, logQ, logP);
-		Kind kind = Kind.SAME;
-		if (afterRate * 3 <= beforeRate * 2 && pLess <= ALPHA && lostAfter <= lostBefore) {
-			kind = Kind.LESS;
-		} else if (afterRate * 2 >= beforeRate * 3 && pMore <= ALPHA) {
-			kind = Kind.MORE;
+		Verdict rates = Verdict.of(Kind.SAME, before, after, phi, pLess, pMore);
+		if (rates.afterPerMinute() * 3 <= rates.beforePerMinute() * 2 && pLess <= ALPHA && rates.lostAfterPerMinute() <= rates.lostBeforePerMinute()) {
+			return Verdict.of(Kind.LESS, before, after, phi, pLess, pMore);
 		}
-		return new Verdict(kind, beforeRate, afterRate, lostBefore, lostAfter, phi, pLess, pMore);
+		if (rates.afterPerMinute() * 2 >= rates.beforePerMinute() * 3 && pMore <= ALPHA) {
+			return Verdict.of(Kind.MORE, before, after, phi, pLess, pMore);
+		}
+		return rates;
 	}
 
 	private static double perMinute(double count, double gameplaySeconds) {
