@@ -171,6 +171,14 @@ public final class StutterHooks {
 		return s == null ? null : s.lastBenchmark();
 	}
 
+	// docs/v0.5/SPEC.md 2S/2B (RW-6): the core-equivalents Distant Horizons' world generation threads used during the last
+	// finished benchmark's sweeps (averaged over the sampler's windows), or null (no capture, a cancelled run, no sampler).
+	// Set before BenchmarkController builds the run's record, for its Context.dhGenerating.
+	public static @Nullable Double lastBenchmarkDhWorldGenCores() {
+		StutterService s = service;
+		return s == null ? null : s.lastBenchmarkDhWorldGenCores();
+	}
+
 	// For StutterGameTest (AC5.7).
 	public static boolean gcListenerActive() {
 		return StutterCapture.GC.active();

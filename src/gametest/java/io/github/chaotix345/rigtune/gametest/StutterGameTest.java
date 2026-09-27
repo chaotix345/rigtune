@@ -83,7 +83,7 @@ public class StutterGameTest implements FabricClientGameTest {
 		context.runOnClient(mc -> controller.setStutterMonitor(true));
 		check(ClientSettings.shared(configDir).stutterMonitor, "the monitor setting is on");
 		int before = new StutterStore(configDir).sessions().size();
-		try (TestSingleplayerContext singleplayer = context.worldBuilder().create()) {
+		try (TestSingleplayerContext singleplayer = GameTestWorlds.create(context)) {
 			context.waitTicks(100);
 			check(StutterMonitor.session() != null, "a session capture started with the world");
 			check(StutterHooks.gcListenerActive(), "the GC listener is registered while capturing");

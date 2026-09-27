@@ -280,6 +280,46 @@ class RulesV1DifferentialTest {
 		assertEquals(List.of(), differences(baselineJson(), doc.toString()));
 	}
 
+	// v0.5 4i (AC4i.2): over the whole matrix, the one recommendation rules-v1.json gains over r16's (what 0.1.x got before
+	// v0.5) is the old-client warning, an advice (no action, never ticked), and nothing appliable or ticked changes against
+	// r16 either; repoRulesV1AddsNoTickedActionAndLosesNoWarning checks the same against the rules 0.1.0 shipped.
+	@Test
+	void rulesV1GainsOnlyTheOldClientWarning() throws IOException {
+		String r16 = LegacyRulesParseTest.resource("/rules/r16/rules-v1.json");
+		assertEquals(Set.of("advice:" + OldClientWarningTest.ID), gainedWarnings(r16, repoJson("rules-v1.json")));
+		assertEquals(List.of(), differences(r16, repoJson("rules-v1.json")));
+	}
+
+	static Set<String> gainedWarnings(String oldJson, String newJson) {
+		io.github.chaotix345.rigtune.v010.core.rules.RulesDocument oldRules = v010(oldJson);
+		io.github.chaotix345.rigtune.v010.core.rules.RulesDocument newRules = v010(newJson);
+		Set<String> modIds = new TreeSet<>();
+		Set<String> settingKeys = new TreeSet<>();
+		Map<String, Boolean> available = new LinkedHashMap<>();
+		for (io.github.chaotix345.rigtune.v010.core.rules.RulesDocument rules : List.of(oldRules, newRules)) {
+			rules.mods.forEach(m -> {
+				available.put(m.slug, true);
+				modIds.addAll(m.modIds);
+			});
+			rules.obsolete.forEach(o -> modIds.addAll(o.modIds));
+			rules.settings.forEach(s -> settingKeys.add(s.key));
+		}
+		OnlineData online = new OnlineData(true, available, Map.of());
+		Set<String> gained = new TreeSet<>();
+		for (HardwareProfile hw : hardware().values()) {
+			for (List<String> mods : modSets(modIds).values()) {
+				List<InstalledMod> installed = mods.stream().map(RulesV1DifferentialTest::mod).toList();
+				for (Map<String, String> settings : snapshots(settingKeys, mods.contains("sodium")).values()) {
+					for (Goal goal : Goal.values()) {
+						Set<String> before = outcome(oldRules, hw, installed, settings, online, goal).warnings();
+						outcome(newRules, hw, installed, settings, online, goal).warnings().stream().filter(w -> !before.contains(w)).forEach(gained::add);
+					}
+				}
+			}
+		}
+		return gained;
+	}
+
 	// For each matrix point: "added <action>" for an appliable recommendation the old rules didn't give, "ticked <action>"
 	// for one they gave unticked, and "lost <id>" for a conflict, advice or disable the new rules no longer give.
 	static List<String> differences(String oldJson, String newJson) {

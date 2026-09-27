@@ -1,0 +1,41 @@
+id=  1 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Global+Old   GC[0] | old 0->0 MB | young 414->54 MB
+id=  2 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Global+Old   GC[1] | old 0->0 MB | young 396->112 MB
+id=  3 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Global+Old   GC[2] | old 0->6 MB | young 740->122 MB
+id=  4 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Global+Old   GC[3] | old 6->32 MB | young 946->150 MB
+id=  5 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[4] | old 32->70 MB | young 1954->284 MB
+id=  6 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[5] | old 70->98 MB | young 1919->304 MB
+id=  7 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[6] | old 98->140 MB | young 1887->348 MB
+id=  8 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[7] | old 140->222 MB | young 1849->290 MB
+id=  9 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[8] | old 222->260 MB | young 1765->271 MB
+id= 10 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[9] | old 260->309 MB | young 6512->322 MB
+id= 11 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[10] | old 309->344 MB | young 6458->322 MB
+id= 12 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[11] | old 344->370 MB | young 6404->488 MB
+id= 13 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[12] | old 370->474 MB | young 6186->504 MB
+id= 14 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[13] | old 474->532 MB | young 6306->566 MB
+id= 15 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[14] | old 532->670 MB | young 6248->594 MB
+id= 16 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[15] | old 670->757 MB | young 6120->468 MB
+id= 17 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[16] | old 757->910 MB | young 6038->536 MB
+id= 18 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[17] | old 910->912 MB | young 544->596 MB
+id= 19 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Old+Young    GC[17, 18] | old 912->912 MB | young 596->826 MB
+id= 20 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Old+Young    GC[17, 18] | old 912->1029 MB | young 826->406 MB
+id= 21 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Old+Young    GC[18, 19] | old 1029->1029 MB | young 406->434 MB
+id= 22 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[20, 21] | old 1029->1030 MB | young 5784->461 MB
+id= 23 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[20, 21] | old 1030->1032 MB | young 461->473 MB
+id= 24 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Old+Young    GC[21, 22] | old 1032->1032 MB | young 473->604 MB
+id= 25 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Old+Young    GC[21, 22] | old 1032->1032 MB | young 604->428 MB
+id= 26 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Old+Young    GC[22, 23] | old 1032->1032 MB | young 430->436 MB
+id= 27 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[24, 25] | old 1032->1032 MB | young 5776->450 MB
+id= 28 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[25] | old 1032->1032 MB | young 450->450 MB
+id= 29 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Old+Young    GC[25, 26] | old 1032->1030 MB | young 450->610 MB
+id= 30 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Old+Young    GC[25, 26] | old 1030->1088 MB | young 616->347 MB
+id= 31 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Old+Young    GC[26, 27] | old 1088->1088 MB | young 351->361 MB
+id= 32 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[28, 29] | old 1088->1194 MB | young 5725->94 MB
+id= 33 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Young        GC[28, 29] | old 1194->1194 MB | young 94->86 MB
+id= 34 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Old+Young    GC[29, 30] | old 1194->1194 MB | young 86->116 MB
+id= 35 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Old+Young    GC[29, 30] | old 1194->1186 MB | young 116->73 MB
+id= 36 | Shenandoah Cycles | end of GC cycle | Concurrent GC | log: Old+Young    GC[30, 31] | old 1186->1186 MB | young 73->75 MB
+id= 37 | Shenandoah Cycles | end of GC cycle | System.gc() | log: Global+Old   GC[32] | old 1186->1092 MB | young 301->194 MB
+
+Global+Old: Shenandoah Cycles | end of GC cycle | Concurrent GC x4; Shenandoah Cycles | end of GC cycle | System.gc() x1
+Young: Shenandoah Cycles | end of GC cycle | Concurrent GC x20
+Old+Young: Shenandoah Cycles | end of GC cycle | Concurrent GC x12

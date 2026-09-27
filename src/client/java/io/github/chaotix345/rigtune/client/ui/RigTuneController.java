@@ -188,6 +188,11 @@ public interface RigTuneController {
 		return null;
 	}
 
+	/** v0.5 PF-5 (WS-P, coordinator-approved): how many of the profile's values its code leaves out, for Copy code's status. */
+	default int profileCodeLeftOut(String id) {
+		return 0;
+	}
+
 	default void renameProfile(String id, String name) {
 	}
 

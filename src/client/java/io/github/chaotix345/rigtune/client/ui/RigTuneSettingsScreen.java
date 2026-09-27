@@ -7,6 +7,7 @@ import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.launcher.LauncherModText;
 import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Goal;
+import io.github.chaotix345.rigtune.core.profile.ProfileStore;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -101,6 +102,7 @@ public class RigTuneSettingsScreen extends Screen {
 					save();
 				}));
 		// ---- WS-P (docs/v0.5/SPEC.md 2P, PF-2): the battery-offer row, from its own method, is added on the line below.
+		batteryOfferRow(rows, column);
 		stutterMonitorRow(rows, column);
 		// ---- WS-L1 (docs/v0.5/SPEC.md 4e): the mod-files row.
 		modFilesRow(rows, column);
@@ -154,6 +156,17 @@ public class RigTuneSettingsScreen extends Screen {
 	// The mod-files row's rule: the policy says the launcher keeps the mods (LAUNCHER, PENDING), or the opt-in is on.
 	static boolean showModFilesRow(ModFilesPolicy policy, boolean optIn) {
 		return optIn || policy.launcherManages();
+	}
+
+	// v0.5 PF-2 (WS-P): the battery offer on or off, so "Don't offer again" can be undone in game. It is profiles.json's
+	// battery.snoozed (read here at init, written on a click, like the Profiles screen's own file); greyed out when a newer
+	// RigTune wrote profiles.json.
+	private void batteryOfferRow(SettingsList rows, int column) {
+		ProfileStore store = ProfileStore.shared(configDir);
+		CycleButton<Boolean> row = rows.add(CycleButton.onOffBuilder(!store.battery().snoozed())
+				.withTooltip(v -> Tooltip.create(Component.translatable("rigtune.settings.battery_offer.tooltip")))
+				.create(0, 0, column, ROW, Component.translatable("rigtune.settings.battery_offer"), (b, v) -> store.snoozeBattery(!v)));
+		row.active = store.writable();
 	}
 
 	// Written on the settings thread (SettingsSaver), never behind the worker pool; each save writes the current values.
