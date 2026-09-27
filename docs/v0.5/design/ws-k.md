@@ -68,7 +68,8 @@ BENCHMARK_STALE`. `NoticeBoardTest.declarationOrderIsTheSpecsPriorityOrder` pins
   `ServerProfileService serverProfiles()` (WS-P2), `StutterFixService stutterFixes()` (WS-S2). The constructor and every
   getter call `FootprintStats.lazyResolved(<what>)`.
 - `client/FootprintStats` (never references V05Services): the startup window is the render thread while it runs
-  `preLaunchStart`..`preLaunchEnd`, `initStart`..`initEnd` or `clientStarted(Runnable)`'s runnable.
+  `preLaunchStart`..`preLaunchEnd`, `initStart`..`initEnd` (the launch's own calls only: a later call, like a game test's
+  second onPreLaunch(), opens no window) or `clientStarted(Runnable)`'s runnable.
   `public static boolean inStartupWindow()` (true only on that thread, inside); `public static void lazyResolved(String
   what)` (sets the flag to "<what> during <window>" only on that thread inside the window; the first one is kept);
   `public static @Nullable String renderThreadResolve()` (null = never). A worker resolving meanwhile, or the render
@@ -84,13 +85,14 @@ BENCHMARK_STALE`. `NoticeBoardTest.declarationOrderIsTheSpecsPriorityOrder` pins
 | `client/launcher/LauncherRepairService` | WS-L2 | (constructor only) |
 | `client/FirstRunService` | WS-F | `FirstRun.Status status()` (UNKNOWN), `boolean firstApplyPending()` (false), `void load()` (start hook), `void applied(V05Hooks.ApplyFacts)` (after-apply hook, last) |
 | `client/tryit/TryItService` | WS-T | `TryItView view()` (EMPTY), `@Nullable Text refusal(Recommendation)` (`TryItView.UNAVAILABLE`), `Component start(Recommendation, BenchmarkRequest.Scene)`, `void measureNow()`, `Component keep()`, `void cancel()`, `void derive()` (start hook), `void titleToast(Minecraft)` (title-screen hook) |
-| `client/server/ServerProfileService` | WS-P2 | `ServerProfilesView view()` (EMPTY), `Component remember(@Nullable String profileId)`, `Component forget(String key)`, `Component forgetAll()` (Component.empty()), `void onJoin(ClientPacketListener, Minecraft)`, `void onDisconnect()` (event hooks) |
+| `client/server/ServerProfileService` | WS-P2 | `ServerProfilesView view()` (EMPTY), `Component remember(@Nullable String profileId)`, `Component forget(String key)`, `Component forgetAll()` ("rigtune.status.nothing"), `void onJoin(ClientPacketListener, Minecraft)`, `void onDisconnect()` (event hooks) |
 | `client/stutter/StutterFixService` | WS-S2 | `ApplyPreview preview(FixOffer.Offer)` (EMPTY), `Component apply(FixOffer.Offer)` ("rigtune.status.nothing"), `void dismiss(String entryId)`, `List<FixHold.Hold> holds()` (empty; the post-step reads it) |
 
 ## 4. The lazy notice list and the 8 skeleton sources (C3, X4)
-- `client/notice/NoticeCenter`: new constructor `NoticeCenter(Supplier<List<NoticeSource>> sources, Dismissals)`,
-  resolved once (synchronized) on the first `notices()` or `act()`; the old `NoticeCenter(List<NoticeSource>, Dismissals)`
-  is kept. `NoticeCenterLazyTest`.
+- `client/notice/NoticeCenter`: new constructor `NoticeCenter(Supplier<List<NoticeSource>> sources, List<NoticeSource>
+  fallback, Dismissals)`, resolved once (synchronized) on the first `notices()` or `act()`; a supplier that throws is
+  logged once and the fallback (RealController passes the six 0.4 sources) is used from then on; the old
+  `NoticeCenter(List<NoticeSource>, Dismissals)` is kept. `NoticeCenterLazyTest`.
 - RealController builds the v0.4 sources in its constructor as before and passes a supplier that makes the v0.5 ones and
   returns all 14 in C3 order: battery, **ServerProfile**, **HeldModChanges**, **LauncherRepair**, **FirstRun**,
   serverLimit, **TryIt**, regression, **StartupRegression**, hardwareChange, **OutsideChanges**, **ModFilesNews**,
@@ -122,13 +124,14 @@ alone, the order, none → null, and a source check that the callers (`CALLERS` 
 | `Component applyStutterFix(FixOffer.Offer)` | `rigtune.status.nothing` | `…stutterFixes().apply(offer)` |
 | `void dismissStutterFix(String entryId)` | no-op | `…stutterFixes().dismiss(entryId)` |
 | `TryItView tryIt()` | `TryItView.EMPTY` | `v05().tryIt().view()` |
-| `@Nullable Text tryItRefusal(Recommendation)` | `TryItView.UNAVAILABLE` (`rigtune.status.nothing`) | `…tryIt().refusal(rec)` |
+| `@Nullable Text tryItRefusal(Recommendation)` | `TryItView.UNAVAILABLE` (`rigtune.tryit.refused.unavailable`) | `…tryIt().refusal(rec)` |
 | `Component startTryIt(Recommendation, BenchmarkRequest.Scene)` | `rigtune.status.nothing` | `…tryIt().start(rec, scene)` |
 | `void tryItMeasureNow()` / `Component tryItKeep()` / `void tryItCancel()` | no-op / nothing / no-op | `…tryIt().measureNow()/keep()/cancel()` |
 | `ServerProfilesView serverProfiles()` | `ServerProfilesView.EMPTY` | `v05().serverProfiles().view()` |
-| `Component rememberServerProfile(@Nullable String profileId)` / `forgetServerProfile(String key)` / `forgetAllServerProfiles()` | `Component.empty()` | `…serverProfiles().remember/forget/forgetAll` |
+| `Component rememberServerProfile(@Nullable String profileId)` / `forgetServerProfile(String key)` / `forgetAllServerProfiles()` | `rigtune.status.nothing` | `…serverProfiles().remember/forget/forgetAll` |
 
-StubController compiles unchanged. `RigTuneControllerDefaultsTest`.
+StubController compiles unchanged. One convention: a default that answers a status answers `rigtune.status.nothing`.
+`RigTuneControllerDefaultsTest`.
 
 ## 7. Type stubs (core)
 - `core/launcher/ModFilesPolicy` enum `RIGTUNE, LAUNCHER, PENDING`; `static ModFilesPolicy of(@Nullable LauncherInfo
@@ -147,7 +150,8 @@ StubController compiles unchanged. `RigTuneControllerDefaultsTest`.
   value, step, min, max`).
 - `core/stutter/FixHold`: `record Hold(String key, String from, String to, String appliedOn)`; `static Report
   apply(Report, List<Hold>)` → the report (post-step stub).
-- `core/tryit/TryItView(Stage stage)`, `EMPTY` (NONE), `UNAVAILABLE` (a Text), `enum Stage { NONE, MEASURING_BEFORE,
+- `core/tryit/TryItView(Stage stage)`, `EMPTY` (NONE), `UNAVAILABLE` (`rigtune.tryit.refused.unavailable`, "Try it
+  (measured) isn't available here."), `enum Stage { NONE, MEASURING_BEFORE,
   STOPPED_BEFORE, APPLYING, AWAITING_RESTART, RETRYING, NOT_APPLIED, CANCELLED, MEASURING_AFTER, READY, INTERRUPTED,
   RESULT, REVERT_PENDING, REVERTED, NO_BEFORE, NO_ENTRY }` (ti §2.5). WS-T adds fields.
 - `core/profile/ServerProfilesView(State state, ServerLimits.@Nullable Kind kind, @Nullable String currentKey, @Nullable
@@ -175,13 +179,20 @@ kept).
 
 ## 9. Optional fields (C1; absent = null/false, a null isn't written, old constructors kept)
 - `core/history/JournalEntry`: trailing `@Nullable List<String> foldedEntryIds` (nulls in it dropped); the 7-arg
-  constructor kept; `withFoldedEntryIds(List<String>)`.
+  constructor kept; `withFoldedEntryIds(List<String>)`. The two places that rebuild an entry with new changes keep it:
+  `HistoryUpdates.map` (status updates) and `Journal.withChanges` (changes added to an Apply); `Journal`'s fold (the
+  baseline) is L8's (WS-P) to fill. `FoldedEntryIdsKeptTest`.
 - `core/benchmark/BenchmarkRecord.Context`: trailing `@Nullable Boolean worldFresh, @Nullable Boolean dhGenerating,
   @Nullable List<String> stagedAtStart`; the 7- and 9-arg constructors kept; `withWorldFresh`, `withDhGenerating`,
   `withStagedAtStart`; `withModSet` keeps them; `sameConditions` unchanged (they aren't conditions; WS-B decides).
 - `core/stutter/StutterReport`: trailing `@Nullable Map<String, String> settingsAtStart, settingsAtEnd`; the 22-arg
   constructor kept; `withSettings(Map, Map)`; `withAdvice` and `StutterStore`'s trimming keep them.
-- `client/ClientSettings`: `public volatile boolean modFilesByRigTune = false`.
+- `client/ClientSettings`: `public volatile boolean modFilesByRigTune = false`. Every settings.json 0.5 writes now holds
+  `"modFilesByRigTune": false` (a primitive, as `stutterMonitor` in 0.4). Checked: nothing compares settings.json bytes
+  (compat030/compat040 compare 0.4's own fields, `StutterWrittenFixtureTest` compares stutter.json only, the E2E's
+  `KEPT` has no settings.json). Caution for Phase 5: `RIGTUNE_REGENERATE_FIXTURES=1` also rewrites
+  `v040-written/ws-s/settings.json` through `StutterWrittenFixtureTest`, which would then carry the 0.5 field; don't
+  regenerate the v040 sets from 0.5 code.
 - `core/awareness/AwarenessStore`: `ACKNOWLEDGED_STARTUP_REGRESSIONS` ("acknowledgedStartupRegressions", absent until the
   first one), `Set<String> acknowledgedStartupRegressions()`, `boolean acknowledgeStartupRegression(String key)` (newest
   `MAX_ACKNOWLEDGED` = 64 kept); `OPTIONS_AT_EXIT` ("optionsAtExit"), `MAX_OPTIONS_AT_EXIT` = 64, `Map<String, String>
@@ -219,6 +230,13 @@ kept).
   changes nothing. WS-R extends it for R.
 
 ## 11. Extension points (PLAN contracts 13a-13g)
+Every step runs contained, so no feature can break what 0.4 did: `V05Hooks.postStep` (a post-step that throws or answers
+null leaves the report it was given, so the rebuild finishes, `droppedQueuedUpdates`/`recountStaged` included),
+`V05Hooks.guarded` (the apply guard fails closed: if it throws or answers null, only the `SetSetting` items go through,
+never a mod file), `V05Hooks.applyStep` (an after-apply step that throws is logged; the status and the next steps are
+unaffected), `V05Services.step` (the start hook's steps, the event lambdas and the title-screen hook: any Throwable is
+logged, as in RigTunePreLaunch; the afterStart future also logs through `exceptionally`). The stale-group step catches
+Throwable in both halves. Tests: `V05HooksTest`, `V05ServicesTest.aStepThatThrowsIsContained`.
 - **a. Report post-steps**: in `RealController.rebuild()`'s worker task, `ServerCap.apply(...)`'s result goes through
   `V05Hooks.afterRecommend(Report, V05Hooks.StepContext)`: `FixHold.apply(report, controller.v05().stutterFixes().holds())`
   (WS-S2), then `LauncherModAdvice.apply(held, controller.modFiles(), controller.launcher())` (WS-L1).
@@ -237,8 +255,8 @@ kept).
   Set<String> disablesAllowed, int settingsOk, int settingsFailed, int staged, boolean stageFailed, int downloads)`.
   The downloading refusal returns before both hooks (nothing applied).
 - **d. Start hook**: `V05Services.afterStart(this)` at the end of `RealController.start()`: one `Probes.EXECUTOR` task
-  that resolves the holder there and runs `firstRun().load()` (WS-F), `tryIt().derive()` (WS-T),
-  `OutsideChanges.compareAtStart(RealController)` (WS-W); each step logged and skipped if it throws.
+  running, each in its own step (resolving the holder inside the step), `controller.v05().firstRun().load()` (WS-F),
+  `controller.v05().tryIt().derive()` (WS-T), `OutsideChanges.compareAtStart(RealController)` (WS-W).
 - **e. Event registration**: `V05Services.registerEvents(real)`, one line in `onInitializeClient` right after
   `registerAwareness(real)` (so JOIN runs after ServerLimitsTracker's): JOIN → `v05().serverProfiles().onJoin(listener,
   minecraft)`, DISCONNECT → `onDisconnect()` (WS-P2), and a CLIENT_STOPPING listener →
@@ -246,7 +264,8 @@ kept).
   Fabric's default phase, so it runs before RigTune's own exit work (the benchmark cancel, the helper launch) and sees
   whether a benchmark was running. Each lambda resolves its service only when its event fires.
 - **f. Title-screen hook**: `V05Services.titleScreen(minecraft, controller)` at the end of `RigTuneClient.showNotices`
-  (once per launch at the first title screen; also RigTuneClientGameTest's direct call) → `tryIt().titleToast(minecraft)`
+  (once per launch in play, but RigTuneClientGameTest calls showNotices again, so `titleToast` must be safe to call
+  twice) → `tryIt().titleToast(minecraft)`
   (WS-T) when the controller is RealController.
 - **g. PreviewScreen**: `populate()` calls, per owner (empty until filled): `settingsSyncLine(PreviewList, ApplyPreview,
   int width)` inside "Written now" (WS-W, 4h), `downloadChecks(...)` after the downloads' notes (WS-H, L5),
@@ -267,8 +286,10 @@ kept).
   may not contain "fixed the", "proves" or "guarantee"; `theV05WordsAreRefusedWhereTheyWouldClaimTooMuch` pins both.
 
 ## 13. en_us.json: the one key and every block's anchor (C5)
-WS-K added only `rigtune.tryit.refused.running` ("A Try it (measured) is still in progress. Finish or cancel it first.",
-used by `Busy`), right after `rigtune.preview.value.none`: it opens the `rigtune.tryit.*` block. Each new block starts
+WS-K added `rigtune.tryit.refused.running` ("A Try it (measured) is still in progress. Finish or cancel it first.", used
+by `Busy`) and `rigtune.tryit.refused.unavailable` ("Try it (measured) isn't available here.", used by
+`TryItView.UNAVAILABLE`), right after `rigtune.tools.title`, their alphabetical neighbour: they open the `rigtune.tryit.*`
+block. Each new block starts
 right after its anchor and is alphabetical inside; no two owners share an anchor. Edits inside an existing block go next
 to the related keys (that block's owner only). Never at the end of the file.
 
@@ -284,7 +305,7 @@ to the related keys (that block's owner only). Never at the end of the file.
 | `rigtune.startup.perf_counters.*` | WS-W | `rigtune.startup.advice` |
 | `rigtune.startup.notice.*`, `rigtune.startup.regression*` | WS-W2 | `rigtune.startup.mod_set_changed` (`last`, `last_median` stay between WS-W's and WS-W2's blocks) |
 | `rigtune.firstrun.*` | WS-F | `rigtune.header.offline` |
-| `rigtune.tryit.*` | WS-T | `rigtune.preview.value.none` (already holds `rigtune.tryit.refused.running`; keep it sorted) |
+| `rigtune.tryit.*` | WS-T | `rigtune.tools.title` (already holds the two `rigtune.tryit.refused.*` keys; keep the block sorted) |
 | `rigtune.profile.servers*`, `rigtune.profile.server.*` | WS-P2 | `rigtune.profile.unnamed` |
 | `rigtune.stutter.fix.*` | WS-S2 | `rigtune.stutter.count.spikes.one` |
 | `rigtune.stutter.window.*` | WS-S | `rigtune.stutter.title` |
@@ -320,7 +341,10 @@ An en_us.json merge conflict is resolved by the merging agent, keeping both side
 - `gametest/ForwardingController` (abstract): `ForwardingController(RigTuneController delegate)`,
   `RigTuneController delegate()`, and an `@Override` forwarding every RigTuneController method (v0.5's included); its
   class initialiser fails (AssertionError) if one is missing, and the unit test
-  `V05GameTestContractsTest.forwardingControllerForwardsEveryMethod` checks the source.
+  `V05GameTestContractsTest.forwardingControllerForwardsEveryMethod` checks the source. **A wrapper that overrides one
+  `apply` overload must override the other** (`apply(selected, entryId)` forwards to the delegate's own, so faking only
+  `apply(selected)` would still apply through the delegate): the constructor throws otherwise, and
+  `V05GameTestContractsTest.everyWrapperOverridesBothApplyOverloadsOrNeither` checks the sources.
 - `gametest/CannedViews`: static `tryIt()`/`tryIt(TryItView)`, `serverProfiles()`/`serverProfiles(ServerProfilesView)`,
   `modFiles()`/`modFiles(ModFilesPolicy)`, `stutter()`/`stutter(StutterView)`, `firstApplyPending()`/
   `firstApplyPending(Boolean)` (null = not canned), `clear()`. An owner sets its views inside its own skeleton method and
@@ -372,9 +396,18 @@ part, the first streak on the ws-ci + WS-K SHA) replace this single sample.
 ## 17. Deviations, residuals, UNVERIFIED
 - `LauncherModText.guideLine` takes `optedIn` (a third parameter): see 7.
 - `RulesDocument.stutterFixes` uses the new `LenientEntries`, not `LenientSection`: see 10.
-- `TryItView.UNAVAILABLE` reuses `rigtune.status.nothing` ("Nothing to apply.") as the default Try it refusal (the plan
-  allows WS-K only `rigtune.tryit.refused.running`, and client/ui may not hold English). WS-T replaces the service's
-  answer with its real refusals.
+- A second key, `rigtune.tryit.refused.unavailable`, for `TryItView.UNAVAILABLE` (the default Try it refusal; the
+  coordinator's review #8: not the misleading "Nothing to apply."). It has a user (`TryItView`), so it isn't a placeholder.
+- The coordinator's review of 054cc882..ed1a3d9c (0 blockers, 3 medium, 8 low), all fixed in the next commit: the
+  containment of every hook step (#1), foldedEntryIds kept by HistoryUpdates.map and Journal.withChanges (#2), this
+  section (#3), the tryit anchor (#4), Throwable in `step` and the afterStart future (#5), the startup window on the
+  launch's own calls only (#6), NoticeCenter's fallback (#7), one default convention and the unavailable key (#8), stale
+  comments (#9), the apply-overload rule (#10), the settings.json note (#11).
+- Tests folded into others than the plan table names: `NoticeBoardTest.theFourteenSlotsInC3Order` is the existing
+  `declarationOrderIsTheSpecsPriorityOrder`, extended; `CauseSpikesStubTest` is in `StutterFixesModelTest`; the stutter
+  part of `V05OptionalFieldsTest` is `StutterReportSettingsTest` (it needs StutterStoreTest's package-private fixture);
+  `ForwardingControllerTest` and `GameTestRegistrationTest` are `V05GameTestContractsTest` (source checks: the unit tests
+  can't load src/gametest's classes); the render-thread flag is tested in `FootprintStatsTest` and `V05ServicesTest`.
 - `StutterStore`'s trimming passes the two new stutter fields through (one line, so a trimmed session keeps them).
 - The CLIENT_STOPPING listener runs in its own phase before Fabric's default (see 11e): an ordering decision the plan
   left open.

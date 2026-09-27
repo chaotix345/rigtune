@@ -63,4 +63,43 @@ class V05HooksTest {
 		int firstRun = hooks.indexOf("firstRun().applied(");
 		assertTrue(refused > 0 && refused < outside && outside < firstRun, hooks);
 	}
+
+	// A step that throws can't break what 0.4 did (the coordinator's review #1).
+	@Test
+	void aFailingPostStepLeavesTheReportItWasGiven() {
+		Report report = new Report(null, null, null, null, List.of(ADD), 16, "bundled", false, Instant.parse("2026-09-27T00:00:00Z"));
+		assertSame(report, V05Hooks.postStep("throws", report, r -> {
+			throw new IllegalStateException("boom");
+		}));
+		assertSame(report, V05Hooks.postStep("an error", report, r -> {
+			throw new LinkageError("boom");
+		}));
+		assertSame(report, V05Hooks.postStep("null", report, r -> null));
+		Report other = new Report(null, null, null, null, List.of(), 16, "bundled", false, Instant.parse("2026-09-27T00:00:00Z"));
+		assertSame(other, V05Hooks.postStep("works", report, r -> other));
+	}
+
+	@Test
+	void aFailingGuardFailsClosed() {
+		Recommendation setting = new Recommendation("setting:vanilla.renderDistance", Category.SETTING, Impact.MEDIUM, "Render distance", "r",
+				new Action.SetSetting("vanilla.renderDistance", "12", "10"), true);
+		List<Recommendation> selected = List.of(ADD, setting);
+		assertEquals(List.of(setting), V05Hooks.guarded(selected, s -> {
+			throw new IllegalStateException("boom");
+		}), "only the settings changes go through");
+		assertEquals(List.of(setting), V05Hooks.guarded(selected, s -> null));
+		assertSame(selected, V05Hooks.guarded(selected, s -> s));
+	}
+
+	@Test
+	void aFailingAfterApplyStepLeavesTheStatusAndTheNextSteps() {
+		List<Component> parts = new ArrayList<>(List.of(Component.literal("1 setting applied.")));
+		List<String> ran = new ArrayList<>();
+		V05Hooks.applyStep("throws", () -> {
+			throw new IllegalStateException("boom");
+		});
+		V05Hooks.applyStep("next", () -> ran.add("next"));
+		assertEquals(List.of("next"), ran);
+		assertEquals(1, parts.size());
+	}
 }

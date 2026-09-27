@@ -33,7 +33,10 @@ import java.util.List;
 // docs/v0.5/PLAN.md contracts item 13i: a game-test controller wrapper forwards every RigTuneController method, the
 // v0.5 defaults included, to its delegate, and overrides only what it fakes, so a wrapper around RealController never
 // silently answers an interface default. A new RigTuneController method must be added here too: the class check below
-// fails every game test that uses a wrapper until it is (ForwardingControllerSourceTest checks it in the unit tests).
+// fails every game test that uses a wrapper until it is (V05GameTestContractsTest checks the source in the unit tests).
+// A wrapper that overrides one apply overload must override the other too: apply(selected, entryId) forwards to the
+// delegate's own, so a wrapper faking only apply(selected) would still apply through its delegate (a profile switch, a
+// stutter fix or Try it call the two-argument one). The constructor refuses such a wrapper.
 abstract class ForwardingController implements RigTuneController {
 	static {
 		for (Method method : RigTuneController.class.getMethods()) {
@@ -49,6 +52,25 @@ abstract class ForwardingController implements RigTuneController {
 
 	ForwardingController(RigTuneController delegate) {
 		this.delegate = delegate;
+		boolean one = overrides(getClass(), List.class);
+		boolean two = overrides(getClass(), List.class, String.class);
+		if (one != two) {
+			throw new AssertionError(getClass().getSimpleName() + " overrides apply(" + (one ? "selected" : "selected, entryId")
+					+ ") but not apply(" + (one ? "selected, entryId" : "selected") + ")");
+		}
+	}
+
+	// Whether a wrapper class (or a wrapper between it and this class) declares apply with these parameters.
+	private static boolean overrides(Class<?> type, Class<?>... parameters) {
+		for (Class<?> c = type; c != null && c != ForwardingController.class; c = c.getSuperclass()) {
+			try {
+				c.getDeclaredMethod("apply", parameters);
+				return true;
+			} catch (NoSuchMethodException e) {
+				// not in this class
+			}
+		}
+		return false;
 	}
 
 	RigTuneController delegate() {

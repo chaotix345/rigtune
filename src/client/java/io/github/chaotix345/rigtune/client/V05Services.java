@@ -24,8 +24,9 @@ import java.util.concurrent.CompletableFuture;
 // resolution tells FootprintStats, which flags one made on the render thread inside those windows (FootprintGameTest);
 // a worker resolving it meanwhile is allowed. Each service's constructor only stores the controller.
 // The statics are the hooks the startup code calls: registerEvents (onInitializeClient: registrations only), afterStart
-// (the end of RealController.start: one Probes.EXECUTOR task) and titleScreen (RigTuneClient.showNotices, once). This
-// class is frozen after the contracts commit: a new entry goes through the coordinator.
+// (the end of RealController.start: one Probes.EXECUTOR task) and titleScreen (RigTuneClient.showNotices). Every step runs
+// inside step(...): one that throws is logged and never stops the others or the caller. This class is frozen after the
+// contracts commit: a new entry goes through the coordinator.
 public final class V05Services {
 	// Before Fabric's default phase, so the exit snapshot sees the session as it was, before RigTune's own exit work
 	// (a benchmark cancelled, the helper started).
@@ -46,7 +47,7 @@ public final class V05Services {
 		FootprintStats.lazyResolved("the v0.5 services");
 	}
 
-	// The thread that made the holder (for the footprint logs).
+	// The thread that made the holder (X4.3: the holder records it; FootprintGameTest writes it to its JSON).
 	public String createdOn() {
 		return createdOn;
 	}
@@ -108,35 +109,42 @@ public final class V05Services {
 	// One line in onInitializeClient, after the v0.4 registrations (JOIN after ServerLimitsTracker's). One lambda each; a
 	// lambda resolves its service when its event first fires (X4.2).
 	public static void registerEvents(RealController controller) {
-		ClientPlayConnectionEvents.JOIN.register((listener, sender, minecraft) -> controller.v05().serverProfiles().onJoin(listener, minecraft));
-		ClientPlayConnectionEvents.DISCONNECT.register((listener, minecraft) -> controller.v05().serverProfiles().onDisconnect());
+		ClientPlayConnectionEvents.JOIN.register((listener, sender, minecraft) ->
+				step("ServerProfileService.onJoin", () -> controller.v05().serverProfiles().onJoin(listener, minecraft)));
+		ClientPlayConnectionEvents.DISCONNECT.register((listener, minecraft) ->
+				step("ServerProfileService.onDisconnect", () -> controller.v05().serverProfiles().onDisconnect()));
 		ClientLifecycleEvents.CLIENT_STOPPING.addPhaseOrdering(BEFORE_EXIT, Event.DEFAULT_PHASE);
-		ClientLifecycleEvents.CLIENT_STOPPING.register(BEFORE_EXIT, minecraft -> OutsideChanges.snapshotAtStop(controller, minecraft));
+		ClientLifecycleEvents.CLIENT_STOPPING.register(BEFORE_EXIT, minecraft ->
+				step("OutsideChanges.snapshotAtStop", () -> OutsideChanges.snapshotAtStop(controller, minecraft)));
 	}
 
 	// The end of RealController.start (inside the CLIENT_STARTED handler): one short task on Probes.EXECUTOR, which
 	// resolves the holder there. Each step runs even if an earlier one threw.
 	public static void afterStart(RealController controller) {
 		CompletableFuture.runAsync(() -> {
-			V05Services services = controller.v05();
-			step("FirstRunService.load", () -> services.firstRun().load());
-			step("TryItService.derive", () -> services.tryIt().derive());
+			step("FirstRunService.load", () -> controller.v05().firstRun().load());
+			step("TryItService.derive", () -> controller.v05().tryIt().derive());
 			step("OutsideChanges.compareAtStart", () -> OutsideChanges.compareAtStart(controller));
-		}, Probes.EXECUTOR);
+		}, Probes.EXECUTOR).exceptionally(t -> {
+			RigTune.LOGGER.error("RigTune: the start-time work failed", t);
+			return null;
+		});
 	}
 
-	// Once per launch, from RigTuneClient.showNotices at the first title screen (render thread).
+	// From RigTuneClient.showNotices at the first title screen (render thread): once per launch in play, but a game test
+	// may call showNotices again, so titleToast must be safe to call twice.
 	public static void titleScreen(Minecraft minecraft, RigTuneController controller) {
 		if (controller instanceof RealController real) {
 			step("TryItService.titleToast", () -> real.v05().tryIt().titleToast(minecraft));
 		}
 	}
 
-	private static void step(String what, Runnable step) {
+	// Runs one feature's step: whatever it throws is logged (as RigTunePreLaunch does) and goes no further.
+	static void step(String what, Runnable step) {
 		try {
 			step.run();
-		} catch (RuntimeException e) {
-			RigTune.LOGGER.warn("RigTune: {} failed", what, e);
+		} catch (Throwable t) {
+			RigTune.LOGGER.error("RigTune: {} failed", what, t);
 		}
 	}
 }

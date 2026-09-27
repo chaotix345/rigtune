@@ -205,7 +205,7 @@ public final class RealController implements RigTuneController {
 			return List.of(battery, new ServerProfileNoticeSource(this), new HeldModChangesNoticeSource(this), new LauncherRepairNoticeSource(this),
 					new FirstRunNoticeSource(this), serverLimit, new TryItNoticeSource(this), regression, new StartupRegressionNoticeSource(this),
 					hardwareChange, new OutsideChangesNoticeSource(this), new ModFilesNewsNoticeSource(this), whatsNew, stale);
-		}, awarenessService);
+		}, List.of(battery, serverLimit, regression, hardwareChange, whatsNew, stale), awarenessService);
 	}
 
 	private Map<String, RulesDocument.SettingLabel> rulesSettingLabels() {
@@ -417,21 +417,26 @@ public final class RealController implements RigTuneController {
 	}
 
 	// v0.5 (docs/v0.5/SPEC.md 2H RW-3, PLAN contracts 13b): a staged group that can never run is unstaged next to the
-	// queued updates (StaleGroups); a failure leaves it for the next rebuild.
+	// queued updates (StaleGroups); a failure leaves it for the next rebuild and never stops the rebuild.
 	private List<Op> dropStaleGroups(Set<String> loaded) {
 		try {
-			return StaleGroups.drop(staging, loaded);
-		} catch (IOException | RuntimeException e) {
-			RigTune.LOGGER.warn("Could not check RigTune's staged changes for stale groups", e);
+			List<Op> dropped = StaleGroups.drop(staging, loaded);
+			return dropped == null ? List.of() : dropped;
+		} catch (Throwable t) {
+			RigTune.LOGGER.warn("Could not check RigTune's staged changes for stale groups", t);
 			return List.of();
 		}
 	}
 
 	private void droppedStaleGroups(List<Op> dropped, List<InstalledMod> scanned) {
 		recountStaged();
-		Component dropStatus = StaleGroups.status(dropped, scanned);
-		if (dropStatus != null) {
-			status = dropStatus;
+		try {
+			Component dropStatus = StaleGroups.status(dropped, scanned);
+			if (dropStatus != null) {
+				status = dropStatus;
+			}
+		} catch (Throwable t) {
+			RigTune.LOGGER.warn("Could not describe the stale RigTune changes that were dropped", t);
 		}
 	}
 

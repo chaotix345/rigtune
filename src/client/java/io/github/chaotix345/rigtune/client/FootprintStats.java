@@ -60,7 +60,9 @@ public final class FootprintStats {
 	// The wall clock starts first, so the instrumentation's own cost (the first ThreadMXBean call) counts in wall time.
 	public static long preLaunchStart() {
 		long wall = System.nanoTime();
-		openStartupWindow("preLaunch");
+		if (preLaunchWallNs == UNSET) {
+			openStartupWindow("preLaunch");
+		}
 		preLaunchCpuStart = cpu();
 		return wall;
 	}
@@ -76,7 +78,9 @@ public final class FootprintStats {
 
 	public static long initStart() {
 		long wall = System.nanoTime();
-		openStartupWindow("onInitializeClient");
+		if (initWallNs == UNSET) {
+			openStartupWindow("onInitializeClient");
+		}
 		initCpuStart = cpu();
 		return wall;
 	}
@@ -116,7 +120,9 @@ public final class FootprintStats {
 	}
 
 	private static void closeStartupWindow() {
-		startupWindow = null;
+		if (startupWindow == Thread.currentThread()) {
+			startupWindow = null;
+		}
 	}
 
 	// True on the render thread while it runs preLaunch, onInitializeClient or the CLIENT_STARTED handler.
@@ -139,6 +145,16 @@ public final class FootprintStats {
 
 	// For the unit tests only.
 	static void clearRenderThreadResolve() {
+		renderThreadResolve = null;
+	}
+
+	// For the unit tests only: as before the launch's preLaunch and init.
+	static void resetStartupForTests() {
+		preLaunchWallNs = UNSET;
+		preLaunchCpuNs = UNSET;
+		initWallNs = UNSET;
+		initCpuNs = UNSET;
+		startupWindow = null;
 		renderThreadResolve = null;
 	}
 

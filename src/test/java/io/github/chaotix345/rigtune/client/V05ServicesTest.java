@@ -6,6 +6,7 @@ import io.github.chaotix345.rigtune.core.profile.ServerProfilesView;
 import io.github.chaotix345.rigtune.core.tryit.TryItView;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -67,5 +68,19 @@ class V05ServicesTest {
 		FootprintStats.clearRenderThreadResolve();
 		new V05Services(null).stutterFixes().holds();
 		assertNull(FootprintStats.renderThreadResolve());
+	}
+
+	// Every hook step runs inside step(...): whatever it throws, errors included, is logged and goes no further.
+	@Test
+	void aStepThatThrowsIsContained() {
+		List<String> ran = new ArrayList<>();
+		V05Services.step("throws", () -> {
+			throw new IllegalStateException("boom");
+		});
+		V05Services.step("an error", () -> {
+			throw new NoClassDefFoundError("boom");
+		});
+		V05Services.step("next", () -> ran.add("next"));
+		assertEquals(List.of("next"), ran);
 	}
 }

@@ -14,10 +14,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.4/SPEC.md 10: FootprintStats keeps the launch's own timings (a game test calls onPreLaunch() again later), and
-// times the CLIENT_STARTED handler even when it throws. Nothing else in the unit tests touches these statics.
+// times the CLIENT_STARTED handler even when it throws. Only this test and V05ServicesTest (the startup window and its
+// flag) touch these statics; a test that needs the launch's first calls resets them first.
 class FootprintStatsTest {
 	@Test
 	void onlyTheFirstInitCallCounts() throws InterruptedException {
+		FootprintStats.resetStartupForTests();
 		long start = FootprintStats.initStart();
 		FootprintStats.initEnd(start);
 		FootprintStats.Snapshot first = FootprintStats.snapshot();
@@ -97,13 +99,28 @@ class FootprintStatsTest {
 	}
 
 	@Test
-	void initIsAWindowToo() {
-		FootprintStats.clearRenderThreadResolve();
-		long start = FootprintStats.initStart();
+	void theLaunchsPreLaunchAndInitAreWindowsLaterCallsAreNot() {
+		FootprintStats.resetStartupForTests();
+		long pre = FootprintStats.preLaunchStart();
 		FootprintStats.lazyResolved("holder");
-		FootprintStats.initEnd(start);
+		FootprintStats.preLaunchEnd(pre);
+		assertEquals("holder during preLaunch", FootprintStats.renderThreadResolve());
+		FootprintStats.clearRenderThreadResolve();
+		long init = FootprintStats.initStart();
+		FootprintStats.lazyResolved("holder");
+		FootprintStats.initEnd(init);
 		assertFalse(FootprintStats.inStartupWindow());
 		assertEquals("holder during onInitializeClient", FootprintStats.renderThreadResolve());
 		FootprintStats.clearRenderThreadResolve();
+
+		// A game test calls onPreLaunch() again later: no window then.
+		long again = FootprintStats.preLaunchStart();
+		assertFalse(FootprintStats.inStartupWindow());
+		FootprintStats.lazyResolved("holder");
+		FootprintStats.preLaunchEnd(again);
+		long initAgain = FootprintStats.initStart();
+		FootprintStats.lazyResolved("holder");
+		FootprintStats.initEnd(initAgain);
+		assertNull(FootprintStats.renderThreadResolve());
 	}
 }

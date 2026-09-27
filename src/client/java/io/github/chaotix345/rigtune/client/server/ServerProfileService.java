@@ -22,15 +22,15 @@ public final class ServerProfileService {
 	}
 
 	public Component remember(@Nullable String profileId) {
-		return Component.empty();
+		return Component.translatable("rigtune.status.nothing");
 	}
 
 	public Component forget(String key) {
-		return Component.empty();
+		return Component.translatable("rigtune.status.nothing");
 	}
 
 	public Component forgetAll() {
-		return Component.empty();
+		return Component.translatable("rigtune.status.nothing");
 	}
 
 	public void onJoin(ClientPacketListener listener, Minecraft minecraft) {

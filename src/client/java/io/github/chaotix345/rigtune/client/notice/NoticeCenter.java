@@ -15,7 +15,8 @@ import java.util.function.Supplier;
 // dismissed ones and orders the rest by priority (NoticeBoard). A source that throws is skipped (logged), never the
 // screen's problem. Dismissals go to Dismissals: AwarenessService, through AwarenessStore (awareness.json).
 // v0.5 (docs/v0.5/SPEC.md X4, C3): the sources can come from one supplier, resolved on the first notices() or act() call
-// (never at construction, so no source class loads during startup), in NoticePriority order.
+// (never at construction, so no source class loads during startup), in NoticePriority order. A supplier that throws is
+// logged once and the fallback list (0.4's sources) is used from then on.
 public final class NoticeCenter {
 	public interface Dismissals {
 		Set<String> dismissed();
@@ -24,17 +25,20 @@ public final class NoticeCenter {
 	}
 
 	private final Supplier<List<NoticeSource>> supplier;
+	private final List<NoticeSource> fallback;
 	private final Dismissals dismissals;
 	private volatile @Nullable List<NoticeSource> sources;
 
 	public NoticeCenter(List<NoticeSource> sources, Dismissals dismissals) {
 		this.sources = List.copyOf(sources);
 		this.supplier = () -> this.sources;
+		this.fallback = this.sources;
 		this.dismissals = dismissals;
 	}
 
-	public NoticeCenter(Supplier<List<NoticeSource>> sources, Dismissals dismissals) {
+	public NoticeCenter(Supplier<List<NoticeSource>> sources, List<NoticeSource> fallback, Dismissals dismissals) {
 		this.supplier = sources;
+		this.fallback = List.copyOf(fallback);
 		this.dismissals = dismissals;
 	}
 
@@ -44,12 +48,21 @@ public final class NoticeCenter {
 			synchronized (this) {
 				resolved = sources;
 				if (resolved == null) {
-					resolved = List.copyOf(supplier.get());
+					resolved = resolve();
 					sources = resolved;
 				}
 			}
 		}
 		return resolved;
+	}
+
+	private List<NoticeSource> resolve() {
+		try {
+			return List.copyOf(supplier.get());
+		} catch (Throwable t) {
+			RigTune.LOGGER.error("RigTune: the notice sources couldn't be made; only the 0.4 notices show", t);
+			return fallback;
+		}
 	}
 
 	// Kept in memory only.

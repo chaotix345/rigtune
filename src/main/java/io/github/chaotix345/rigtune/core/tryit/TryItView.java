@@ -8,7 +8,7 @@ import io.github.chaotix345.rigtune.core.model.Text;
 public record TryItView(Stage stage) {
 	public static final TryItView EMPTY = new TryItView(Stage.NONE);
 	// RigTuneController.tryItRefusal's default (a controller without Try it): nothing can be tried.
-	public static final Text UNAVAILABLE = Text.of("rigtune.status.nothing", "Nothing to apply.");
+	public static final Text UNAVAILABLE = Text.of("rigtune.tryit.refused.unavailable", "Try it (measured) isn't available here.");
 
 	// NONE: no try open. The others are ti §2.5's table.
 	public enum Stage {

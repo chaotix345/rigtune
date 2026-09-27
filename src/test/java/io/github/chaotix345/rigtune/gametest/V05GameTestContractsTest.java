@@ -73,4 +73,43 @@ class V05GameTestContractsTest {
 	private static int arity(String parameters) {
 		return parameters.isBlank() ? 0 : parameters.split(",(?![^<]*>)").length;
 	}
+
+	// ForwardingController's constructor refuses a wrapper overriding one apply overload only; the same rule on the sources,
+	// so a unit run catches it too.
+	@Test
+	void everyWrapperOverridesBothApplyOverloadsOrNeither() throws IOException {
+		try (var files = Files.list(GAMETEST)) {
+			for (Path file : files.filter(f -> f.toString().endsWith(".java")).toList()) {
+				String source = Files.readString(file);
+				if (source.contains("extends ForwardingController")) {
+					assertEquals(List.of(), applyProblems(source), file.getFileName().toString());
+				}
+			}
+		}
+		assertEquals(List.of("apply(selected) without apply(selected, entryId)"), applyProblems("""
+				private static final class Half extends ForwardingController {
+					@Override
+					public Component apply(List<Recommendation> selected) {
+						return Component.empty();
+					}
+				}
+				"""));
+	}
+
+	private static List<String> applyProblems(String source) {
+		int one = count(source, "public Component apply(List<Recommendation> selected) {");
+		int two = count(source, "public Component apply(List<Recommendation> selected, String entryId) {");
+		if (one > two) {
+			return List.of("apply(selected) without apply(selected, entryId)");
+		}
+		return one < two ? List.of("apply(selected, entryId) without apply(selected)") : List.of();
+	}
+
+	private static int count(String source, String what) {
+		int n = 0;
+		for (int i = source.indexOf(what); i >= 0; i = source.indexOf(what, i + 1)) {
+			n++;
+		}
+		return n;
+	}
 }

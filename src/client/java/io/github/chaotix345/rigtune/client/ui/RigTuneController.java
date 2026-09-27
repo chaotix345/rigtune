@@ -314,14 +314,14 @@ public interface RigTuneController {
 
 	/** Offers this profile (null: the active one) on the connected server. */
 	default Component rememberServerProfile(@Nullable String profileId) {
-		return Component.empty();
+		return Component.translatable("rigtune.status.nothing");
 	}
 
 	default Component forgetServerProfile(String key) {
-		return Component.empty();
+		return Component.translatable("rigtune.status.nothing");
 	}
 
 	default Component forgetAllServerProfiles() {
-		return Component.empty();
+		return Component.translatable("rigtune.status.nothing");
 	}
 }

@@ -8,6 +8,7 @@ import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.profile.ServerProfilesView;
 import io.github.chaotix345.rigtune.core.stutter.FixOffer;
@@ -81,15 +82,16 @@ class RigTuneControllerDefaultsTest {
 
 		assertSame(TryItView.EMPTY, controller.tryIt());
 		assertSame(TryItView.UNAVAILABLE, controller.tryItRefusal(rec));
+		assertEquals("rigtune.tryit.refused.unavailable", ((Text.Translatable) TryItView.UNAVAILABLE).key());
 		assertEquals("rigtune.status.nothing", key(controller.startTryIt(rec, BenchmarkRequest.Scene.CURRENT)));
 		controller.tryItMeasureNow();
 		assertEquals("rigtune.status.nothing", key(controller.tryItKeep()));
 		controller.tryItCancel();
 
 		assertSame(ServerProfilesView.EMPTY, controller.serverProfiles());
-		assertEquals("", controller.rememberServerProfile(null).getString());
-		assertEquals("", controller.forgetServerProfile("k").getString());
-		assertEquals("", controller.forgetAllServerProfiles().getString());
+		assertEquals("rigtune.status.nothing", key(controller.rememberServerProfile(null)));
+		assertEquals("rigtune.status.nothing", key(controller.forgetServerProfile("k")));
+		assertEquals("rigtune.status.nothing", key(controller.forgetAllServerProfiles()));
 		assertEquals(1, controller.applied.size(), "no default applies anything");
 	}
 }

@@ -46,7 +46,7 @@ class NoticeCenterLazyTest {
 		NoticeCenter center = new NoticeCenter(() -> {
 			resolved.incrementAndGet();
 			return List.of(battery, server, new Fixed(null), new Fixed(notice("whats-new:1", NoticePriority.WHATS_NEW)));
-		}, NoticeCenter.inMemory());
+		}, List.of(battery), NoticeCenter.inMemory());
 		assertEquals(0, resolved.get(), "nothing is made at construction");
 		assertEquals(List.of("battery", "server-profile:1", "whats-new:1"), center.notices().stream().map(Notice::key).toList());
 		center.notices();
@@ -62,9 +62,24 @@ class NoticeCenterLazyTest {
 		NoticeCenter center = new NoticeCenter(() -> {
 			resolved.incrementAndGet();
 			return List.of(battery);
-		}, NoticeCenter.inMemory());
+		}, List.of(), NoticeCenter.inMemory());
 		center.act("battery", "snooze");
 		assertEquals(List.of("snooze"), battery.actions);
 		assertEquals(1, resolved.get());
+	}
+
+	// A supplier that throws costs only the v0.5 notices: the 0.4 sources (the fallback) show, and it isn't asked again.
+	@Test
+	void aThrowingSupplierFallsBackToThe04Sources() {
+		AtomicInteger asked = new AtomicInteger();
+		Fixed battery = new Fixed(notice("battery", NoticePriority.BATTERY_OFFER));
+		NoticeCenter center = new NoticeCenter(() -> {
+			asked.incrementAndGet();
+			throw new IllegalStateException("a v0.5 source couldn't be made");
+		}, List.of(battery), NoticeCenter.inMemory());
+		assertEquals(List.of("battery"), center.notices().stream().map(Notice::key).toList());
+		center.act("battery", "switch");
+		assertEquals(List.of("switch"), battery.actions);
+		assertEquals(1, asked.get(), "logged and resolved once");
 	}
 }
