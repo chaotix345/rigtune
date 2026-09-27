@@ -424,3 +424,18 @@ Sources: docs/v0.5/plan-review-plan.md (PLAN-1..25: 4 high, 15 medium, 6 low) an
 | SPEC-20 | `client/undo/Staging.java` in Hotspots (WS-H only, serialised). |
 | SPEC-21 | WS-B's AC2A.2 baseline and text extraction. |
 | SPEC-18, SPEC-23 to SPEC-27, SPEC-29, SPEC-30, SPEC-32 to SPEC-34 | Item text only; owners unchanged (WS-R: AC2R.1, AC2S.3; X9 for everyone; WS-S2's rounding and new `ButtonRow`; WS-T's AC6.13 sizes; WS-W's 2L wording; ws-ci's SIGQUIT; WS-H's preLaunch count; the first streak's SHA; WS-F's message). |
+
+## Amendments (Wave A, 2026-09-28): approved frozen-file exceptions
+Each is marked with its workstream id in the code and recorded in that workstream's design doc.
+
+| owner | file(s) | exception |
+|---|---|---|
+| r-ci (deadlock fix, merge 36679c56) | gametest `GameTestWorlds`, `GameTestSourcesTest`, every game-test class's world create/leave | the Fabric client-gametest harness deadlock workaround (docs/v0.5/design/gametest-deadlock.md); every game test uses `GameTestWorlds.create/leave` |
+| WS-P | `RigTuneController`, `ForwardingController`, `RealController`, `ProfilesScreen.copySelected` | `profileCodeLeftOut(String)` default + forward + delegation + 3 lines (PF-5, AC2P.5); inherited by WS-P2 |
+| WS-L1 | `UiGameTest.findCycle` | searches RowList entry children (~6 lines) |
+| WS-L1 | `RealController.launcherDetected`, `LauncherProbe` | `NOT_YET` timeout value + one late-answer `rebuild()` (~4 lines) |
+| WS-L1 | `RealController.shareReport` | passes `modFiles().shareLine()` to the new `ShareReport.format` overload (+1 line) |
+| WS-L1 | `RigTuneController` | a default method gating the opted-in warning on the live policy (review M2) |
+| WS-L2 | `RealController` | public `stagedChanged() { recountStaged(); rebuild(); }` (held groups' "Cancel them"); WS-H may reuse it |
+| WS-W | `BenchmarkMenuScreen` | L6: the raw settings save goes through `SettingsSaver` (85a3d0c8) |
+| WS-R | `FixSpecTest.noSectionNoFixes`, `StutterFixesModelTest.absentIsNull` | strip / expect the bundled `stutterFixes` section (rules r17, merge 610b07b9) |

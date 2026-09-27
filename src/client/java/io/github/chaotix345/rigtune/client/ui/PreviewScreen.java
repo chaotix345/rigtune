@@ -254,9 +254,6 @@ public class PreviewScreen extends Screen {
 			for (ApplyPreview.Download download : shown.downloads()) {
 				target.row(download(download), COLOR_TEXT, INDENT, width);
 			}
-			if (shown.downloads().stream().anyMatch(d -> d.fileName() != null)) {
-				target.row(Component.translatable("rigtune.preview.note.downloads"), COLOR_NOTE, INDENT, width);
-			}
 			if (!shown.resolved()) {
 				target.row(Component.translatable("rigtune.preview.note.unresolved"), COLOR_NOTE, INDENT, width);
 			}
@@ -293,8 +290,19 @@ public class PreviewScreen extends Screen {
 		}
 	}
 
-	// L5 (docs/v0.5/SPEC.md 2H, WS-H), under the downloads: what the in-memory fabric.mod.json checks found.
+	// L5 (docs/v0.5/SPEC.md 2H, WS-H), under the downloads: what the in-memory fabric.mod.json checks found. A download Apply
+	// would refuse is under "Not changed" with Apply's own line; while a listed download couldn't be read (Modrinth off, the
+	// CDN refused Range, a cap or a deadline), the disclosure that Apply checks each one again stands in for the check.
 	private void downloadChecks(PreviewList target, ApplyPreview shown, int width) {
+		Component note = downloadsNote(shown);
+		if (note != null) {
+			target.row(note, COLOR_NOTE, INDENT, width);
+		}
+	}
+
+	static @Nullable Component downloadsNote(ApplyPreview shown) {
+		return !shown.downloadsChecked() && shown.downloads().stream().anyMatch(d -> d.fileName() != null)
+				? Component.translatable("rigtune.preview.note.downloads") : null;
 	}
 
 	// v0.4 (WS-P): the preview's notes (a profile's clamps and left-out keys, plan review P-L2).

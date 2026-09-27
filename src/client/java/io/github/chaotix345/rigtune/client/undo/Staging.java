@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client.undo;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ConfigTargets;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
+import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
 import io.github.chaotix345.rigtune.core.apply.LogSafe;
 import io.github.chaotix345.rigtune.core.apply.ModJars;
@@ -16,6 +17,8 @@ import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.PartlyApplied;
 import io.github.chaotix345.rigtune.core.history.StagedChanges;
+import io.github.chaotix345.rigtune.core.history.StaleOps;
+import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -32,6 +35,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 // Staging into config/rigtune/pending.json, and the journal records that go with it, under the apply lock: the
@@ -187,6 +191,12 @@ public final class Staging {
 	// The caller holds the lock. Drops these ops and every op in their groups from pending.json (deleting it when
 	// nothing is left), retires their downloads and marks their journal changes DISCARDED. Returns the dropped ops.
 	public List<Op> unstageLocked(Collection<String> opIds) throws IOException {
+		return unstageLocked(opIds, op -> false);
+	}
+
+	// As above; the dropped ops `abandoned` accepts are journaled ABANDONED instead (docs/v0.5/SPEC.md 2H RW-3: the mod was
+	// installed another way).
+	private List<Op> unstageLocked(Collection<String> opIds, Predicate<Op> abandoned) throws IOException {
 		if (opIds.isEmpty() || !Files.exists(pendingFile)) {
 			return List.of();
 		}
@@ -205,8 +215,54 @@ public final class Staging {
 				PendingActions.retireDownload(op, planMods);
 			}
 		});
-		markDiscarded(removed.removed());
+		markDiscarded(removed.removed().stream().filter(op -> op != null && !abandoned.test(op)).toList());
+		markAbandoned(removed.removed().stream().filter(op -> op != null && abandoned.test(op)).toList());
 		return removed.removed();
+	}
+
+	// docs/v0.5/SPEC.md 2H RW-3: unstages, with its group, every staged group that can never run (StaleOps: an enable's
+	// download is gone, or its mod is already loaded from another jar), retiring its downloads; a mod installed another way
+	// makes the group ABANDONED in History, a download that's gone DISCARDED. Never a group the helper left half done, and
+	// never an op for another instance's folders (the helper refuses those itself). loadedFrom: a loaded mod id -> the
+	// file names of the top-level jars it was loaded from. Null when the lock is busy.
+	public @Nullable StaleDrop dropStale(Map<String, Set<String>> loadedFrom) throws IOException {
+		if (!Files.exists(pendingFile)) {
+			return StaleDrop.NONE;
+		}
+		try (ApplyLock lock = lock()) {
+			if (lock == null) {
+				return null;
+			}
+			if (!Files.exists(pendingFile)) {
+				return StaleDrop.NONE;
+			}
+			PendingActions here = PendingActions.load(pendingFile).relocated(InstanceDirs.modsDirOf(pendingFile), InstanceDirs.configDirOf(pendingFile));
+			// Never drop what might be a half-done group: without the folder's names, nothing is dropped this time.
+			Set<String> halfDone = halfDoneGroupsOrNull(here);
+			if (halfDone == null) {
+				return StaleDrop.NONE;
+			}
+			List<StaleOps.Stale> stale = StaleOps.find(here.ops(), Files::exists, loadedFrom, Staging::modIdOf, halfDone);
+			if (stale.isEmpty()) {
+				return StaleDrop.NONE;
+			}
+			Set<String> installed = new HashSet<>();
+			for (StaleOps.Stale s : stale) {
+				if (s.why() == StaleOps.Why.INSTALLED) {
+					here.ops().stream().filter(op -> op != null && s.opId().equals(op.id())).findFirst()
+							.ifPresent(op -> installed.add(op.group() != null ? op.group() : "op:" + op.id()));
+				}
+			}
+			List<Op> dropped = unstageLocked(stale.stream().map(StaleOps.Stale::opId).toList(),
+					op -> installed.contains(op.group() != null ? op.group() : "op:" + op.id()));
+			RigTune.LOGGER.info("Unstaged {} RigTune change(s) that can never run: {}", dropped.size(), stale);
+			return new StaleDrop(dropped, stale);
+		}
+	}
+
+	// dropped: the ops unstaged; stale: what StaleOps found, one per dropped group.
+	public record StaleDrop(List<Op> dropped, List<StaleOps.Stale> stale) {
+		public static final StaleDrop NONE = new StaleDrop(List.of(), List.of());
 	}
 
 	// Unstages (as unstageLocked), with its group, every staged enable of a loaded mod that has an update of its own
@@ -266,6 +322,20 @@ public final class Staging {
 	// last exit (a failed rollback, or a kill between two renames), which the next exit finishes or rolls back (audit M2,
 	// review-8 AH-1; PartlyApplied). Returns the dropped ops; null when the lock is busy.
 	public List<Op> discard() throws IOException {
+		Discard discard = discardPending();
+		return discard == null ? null : discard.dropped();
+	}
+
+	// docs/v0.5/SPEC.md 2H L7: Discard pending's outcome. keptGroup: a group the helper left half done stayed staged.
+	public record Discard(List<Op> dropped, boolean keptGroup) {
+		// The RigTune screen's status line, which says so when a change already under way was kept.
+		public Component status() {
+			return Component.translatable(keptGroup ? "rigtune.status.discarded_with_kept" : "rigtune.status.discarded", dropped.size());
+		}
+	}
+
+	// As discard(), saying whether a half-done group was kept; null when the lock is busy.
+	public @Nullable Discard discardPending() throws IOException {
 		try (ApplyLock lock = lock()) {
 			if (lock == null) {
 				return null;
@@ -273,13 +343,14 @@ public final class Staging {
 			PendingActions plan = readable();
 			Set<String> halfDone = plan == null ? Set.of() : halfDoneGroups(plan);
 			if (!halfDone.isEmpty()) {
-				return discardExcept(plan, halfDone);
+				return new Discard(discardExcept(plan, halfDone), true);
 			}
 			List<Op> dropped = PendingActions.discard(pendingFile, Duration.ZERO);
-			if (dropped != null) {
-				markDiscarded(dropped);
+			if (dropped == null) {
+				return null;
 			}
-			return dropped;
+			markDiscarded(dropped);
+			return new Discard(dropped, false);
 		}
 	}
 
@@ -292,12 +363,18 @@ public final class Staging {
 	}
 
 	private Set<String> halfDoneGroups(PendingActions plan) {
+		Set<String> groups = halfDoneGroupsOrNull(plan);
+		return groups == null ? Set.of() : groups;
+	}
+
+	// Null when the mods folder can't be listed (then nobody can tell which groups are half done).
+	private @Nullable Set<String> halfDoneGroupsOrNull(PendingActions plan) {
 		Set<String> names = new HashSet<>();
 		try (Stream<Path> files = Files.list(InstanceDirs.modsDirOf(pendingFile))) {
 			files.forEach(f -> names.add(f.getFileName().toString()));
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.warn("Could not list the mods folder to check for half-applied changes", e);
-			return Set.of();
+			return null;
 		}
 		return PartlyApplied.groups(plan.ops(), names, unfinishedRenames());
 	}
@@ -329,6 +406,19 @@ public final class Staging {
 		RigTune.LOGGER.info("Kept {} staged change(s) the helper left half done; the next exit finishes them", kept.size());
 		markDiscarded(dropped);
 		return dropped;
+	}
+
+	private void markAbandoned(List<Op> ops) {
+		List<ApplyResult.OpResult> results = ops.stream().filter(op -> op.id() != null)
+				.map(op -> new ApplyResult.OpResult(op, ApplyResult.Status.ABANDONED, "installed another way")).toList();
+		if (results.isEmpty() || !journal.exists()) {
+			return;
+		}
+		try {
+			journal.updateExisting(entries -> HistoryUpdates.applyResults(entries, results));
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.warn("Could not mark abandoned changes in {}", Journal.file(configDir), e);
+		}
 	}
 
 	private void markDiscarded(List<Op> ops) {
