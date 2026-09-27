@@ -409,7 +409,7 @@ class Run:
     def prepare_downgrade(self):
         """The instance as 0.4 left it: the "written by 0.4" sets in config/rigtune/ (written.py), the jars and options.txt
         values their journal implies, and a test mod for 0.3.0's own Apply."""
-        sets = written.resolve(self.args.written)
+        sets = written.resolve_all(self.args.written)
         sources = written.compose(sets, self.instance)
         state = written.instance_state(self.instance)
         for path, mod_id in state["jars"].items():
@@ -426,7 +426,7 @@ class Run:
         if state["iris"]:
             (self.instance / "config" / "iris.properties").write_text("".join("{}={}\n".format(k, v) for k, v in state["iris"].items()),
                                                                      encoding="utf-8", newline=LF)
-        self.seeded = seeded_state(self.instance)
+        self.seeded = seeded_state(self.instance, written.new_files_for(self.facts["old"]["version"]), written.kept_for(sets))
         self.facts["writtenSets"] = [{"name": s.name, "placeholder": s.placeholder, "folder": self.scrub(str(s.folder))} for s in sets]
         (self.out / "seeded.json").write_text(json.dumps({"sets": self.facts["writtenSets"], "files": sources, "jars": state["jars"],
                                                           "options": state["options"], "newFiles": self.seeded["newFiles"],
@@ -452,7 +452,7 @@ class Run:
         self.snapshot("downgrade-new")
         checks = [e2e_checks.Check("the relaunched client exited normally", code == 0, "gradle exit {}".format(code))]
         checks += e2e_checks.after_downgrade_new(self.instance, self.driver("downgrade-new"), self.new_jar, self.seeded,
-                                                 session_log(self.instance, self.started["downgrade-new"]))
+                                                 session_log(self.instance, self.started["downgrade-new"]), kept=self.seeded["kept"])
         self.checks["downgrade-new"] = checks
         return all(c.ok for c in checks)
 
@@ -1010,7 +1010,13 @@ def load_seed(folder):
     return seed
 
 
-def seeded_state(instance):
+def default_written(repo):
+    """The fixture roots a downgrade composes by default: v040-written, plus v050-written once it exists."""
+    resources = Path(repo) / "src" / "test" / "resources"
+    return [resources / g.name for g in written.GENERATIONS if g is written.V040 or (resources / g.name).is_dir()]
+
+
+def seeded_state(instance, new_files=written.NEW_FILES, kept=written.KEPT):
     """What 0.4 left in config/rigtune/ (after written.compose), for the downgrade checks: the journal entries, the
     staged ops, the sha256 of the 0.4-only files, their content where 0.4 must keep items (written.KEPT), profiles.json,
     and the entry Undo last should pick (the newest non-undo entry with a change still applied or staged)."""
@@ -1018,8 +1024,8 @@ def seeded_state(instance):
     entries = e2e_checks.history_entries(instance) or []
     pending = e2e_checks._load(config / "pending.json") or {}
     return {"entries": entries, "pendingOps": pending.get("ops") or [],
-            "newFiles": {n: e2e_checks.digest(config / n, "sha256") for n in written.NEW_FILES if (config / n).is_file()},
-            "json": {n: e2e_checks._load(config / n) for n in written.KEPT if (config / n).is_file()},
+            "newFiles": {n: e2e_checks.digest(config / n, "sha256") for n in new_files if (config / n).is_file()},
+            "json": {n: e2e_checks._load(config / n) for n in kept if (config / n).is_file()}, "kept": dict(kept),
             "profiles": e2e_checks._load(config / "profiles.json"), "undoLast": undo_last_entry(entries)}
 
 
@@ -1136,8 +1142,9 @@ def parse_args(argv):
     parser.add_argument("--old-jar", help="self-update: the installed RigTune jar (a released one: 0.1.0, 0.2.0 or 0.3.0)")
     parser.add_argument("--old-sha256", help="expected sha256 of --old-jar")
     parser.add_argument("--new-jar", required=True, help="self-update: the update the fake Modrinth serves; undo: the installed jar")
-    parser.add_argument("--written", default=str(REPO / "src" / "test" / "resources" / "v040-written"),
-                        help="downgrade: the \"written by 0.4\" fixture sets (plan review H-M1)")
+    parser.add_argument("--written", action="append",
+                        help="downgrade: a \"written by\" fixture root (plan review H-M1); repeat it for several generations "
+                             "(default: v040-written, plus v050-written when it exists)")
     parser.add_argument("--seed", help="self-update: seed the instance from a folder like tools/e2e/seeds/v010-dh (H-M2)")
     parser.add_argument("--legacy-disable", action="store_true",
                         help="self-update: the old version also disables a test mod in the same apply, so the journal check has a change that isn't RigTune's")
@@ -1163,6 +1170,7 @@ def parse_args(argv):
     parser.add_argument("--java-home", default=os.environ.get("JAVA_HOME"))
     parser.add_argument("--jvm-arg", action="append", help="extra JVM argument for both launches")
     args = parser.parse_args(argv)
+    args.written = args.written or [str(p) for p in default_written(REPO)]
     if not args.java_home:
         parser.error("set JAVA_HOME or pass --java-home")
     if args.seed and args.scenario != "self-update":

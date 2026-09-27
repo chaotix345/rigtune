@@ -1,0 +1,146 @@
+"""Fixture generations (docs/v0.5/SPEC.md 3b, X11): "written by 0.4" and "written by 0.5" sets composed into one 0.5
+instance, the files an older version never reads, and the harness's default fixture roots."""
+
+import json
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import self_update_e2e  # noqa: E402
+import written  # noqa: E402
+
+REPO = Path(__file__).resolve().parents[3]
+V040 = REPO / "src" / "test" / "resources" / "v040-written"
+
+
+def write(folder, name, data):
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / name).write_text(json.dumps(data), encoding="utf-8")
+
+
+def entry(entry_id, at):
+    return {"id": entry_id, "at": at, "kind": "apply", "changes": []}
+
+
+class GenerationTest(unittest.TestCase):
+    def test_the_generation_follows_the_root_folder_name(self):
+        self.assertIs(written.V040, written.generation_of(V040))
+        self.assertIs(written.V050, written.generation_of(Path(tempfile.mkdtemp()) / "v050-written"))
+        self.assertIs(written.V040, written.generation_of(Path(tempfile.mkdtemp())), "an unnamed root reads as v0.4's")
+
+    def test_the_0_5_sets_and_new_files(self):
+        self.assertEqual(("ws-l1", "ws-l2", "ws-s", "ws-s2", "ws-p2", "ws-b", "ws-t", "ws-h", "ws-w2", "ws-f"), written.V050.sets)
+        self.assertEqual(("stutter-fixes.json", "tryit.json", "server-profiles.json"), written.V050.new_files)
+        self.assertEqual((written.SETS, written.NEW_FILES, written.KEPT), (written.V040.sets, written.V040.new_files, written.V040.kept))
+
+    def test_what_an_older_version_never_reads(self):
+        self.assertEqual(written.V050.new_files, written.new_files_for("0.4.0+mc26.2"))
+        self.assertEqual(written.V040.new_files + written.V050.new_files, written.new_files_for("0.3.0+mc26.3"))
+        self.assertEqual((), written.new_files_for("0.5.0+mc26.2"))
+
+    def test_kept_is_every_present_generation_s(self):
+        root = Path(tempfile.mkdtemp())
+        write(root / "v050-written" / "ws-t", "benchmarks.json", {"schemaVersion": 1, "runs": []})
+        sets = written.resolve_all([V040, root / "v050-written"])
+        self.assertEqual(written.KEPT, {k: v for k, v in written.kept_for(sets).items() if k in written.KEPT})
+
+
+class ResolveAllTest(unittest.TestCase):
+    def test_older_generation_first_each_in_its_set_order(self):
+        root = Path(tempfile.mkdtemp()) / "v050-written"
+        write(root / "ws-f", "awareness.json", {})
+        write(root / "placeholder" / "ws-l1", "settings.json", {})
+        sets = written.resolve_all([V040, root])
+        self.assertEqual(list(written.SETS) + ["ws-l1", "ws-f"], [s.name for s in sets])
+        self.assertEqual(["v040-written"] * len(written.SETS) + ["v050-written"] * 2, [s.generation for s in sets])
+        self.assertEqual([True, False], [s.placeholder for s in sets[-2:]])
+
+    def test_a_missing_root_is_skipped(self):
+        self.assertEqual(written.resolve(V040), written.resolve_all([V040, Path(tempfile.mkdtemp()) / "v050-written"]))
+
+
+class MergeTest(unittest.TestCase):
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.v4, self.v5 = self.root / "v040-written", self.root / "v050-written"
+        self.instance = self.root / "instance"
+
+    def compose(self, conflicts=None):
+        written.compose(written.resolve_all([self.v4, self.v5]), self.instance, conflicts=conflicts)
+        return json.loads((self.instance / "config" / "rigtune" / "awareness.json").read_text(encoding="utf-8"))
+
+    def test_objects_merge_key_by_key_and_lists_without_exact_duplicates(self):
+        write(self.v4 / "ws-w", "awareness.json", {"formatVersion": 1, "dismissed": ["a", "b"], "fingerprint": {"gpu": "x"}})
+        write(self.v5 / "ws-f", "awareness.json", {"formatVersion": 1, "dismissed": ["b", "firstrun.guide"], "fingerprint": {"cpu": "y"}})
+        write(self.v5 / "ws-w2", "awareness.json", {"formatVersion": 1, "acknowledgedStartupRegressions": ["r1"]})
+        merged = self.compose()
+        self.assertEqual({"formatVersion": 1, "dismissed": ["a", "b", "firstrun.guide"], "fingerprint": {"gpu": "x", "cpu": "y"},
+                          "acknowledgedStartupRegressions": ["r1"]}, merged)
+
+    def test_a_scalar_both_sets_hold_takes_the_later_set_s_value_and_is_reported(self):
+        write(self.v4 / "ws-w", "awareness.json", {"lastSeenVersion": "0.4.0"})
+        write(self.v5 / "ws-w2", "awareness.json", {"lastSeenVersion": "0.5.0"})
+        write(self.v5 / "ws-f", "awareness.json", {"lastSeenVersion": "0.5.0-dev"})
+        conflicts = []
+        # v0.5's set order is ws-l1 … ws-w2, ws-f: ws-f comes last.
+        self.assertEqual({"lastSeenVersion": "0.5.0-dev"}, self.compose(conflicts))
+        self.assertEqual([("awareness.json", "lastSeenVersion", "ws-w", "ws-w2"), ("awareness.json", "lastSeenVersion", "ws-w2", "ws-f")],
+                         conflicts)
+
+    def test_history_across_generations_is_sorted_by_time_and_ids_stay_unique(self):
+        write(self.v4 / "ws-a", "history.json", {"formatVersion": 1, "entries": [entry("old", "2026-09-01T00:00:00Z")]})
+        write(self.v5 / "ws-h", "history.json", {"formatVersion": 1, "entries": [entry("new", "2026-09-20T00:00:00Z"),
+                                                                                  entry("mid", "2026-09-10T00:00:00Z")]})
+        written.compose(written.resolve_all([self.v4, self.v5]), self.instance)
+        history = json.loads((self.instance / "config" / "rigtune" / "history.json").read_text(encoding="utf-8"))
+        self.assertEqual(["old", "mid", "new"], [e["id"] for e in history["entries"]])
+        write(self.v5 / "ws-t", "history.json", {"formatVersion": 1, "entries": [entry("old", "2026-09-21T00:00:00Z")]})
+        with self.assertRaises(ValueError):
+            written.compose(written.resolve_all([self.v4, self.v5]), self.instance)
+
+    def test_a_file_one_set_provides_keeps_its_bytes(self):
+        (self.v5 / "ws-t").mkdir(parents=True)
+        raw = b'{"formatVersion":1,  "pairs": []}\n'
+        (self.v5 / "ws-t" / "tryit.json").write_bytes(raw)
+        written.compose(written.resolve_all([self.v4, self.v5]), self.instance)
+        self.assertEqual(raw, (self.instance / "config" / "rigtune" / "tryit.json").read_bytes())
+
+    def test_instance_paths_in_a_merged_file_are_filled_in(self):
+        write(self.v4 / "ws-s", "settings.json", {"a": "${INSTANCE}/mods"})
+        write(self.v5 / "ws-l1", "settings.json", {"modFilesByRigTune": True})
+        written.compose(written.resolve_all([self.v4, self.v5]), self.instance)
+        settings = json.loads((self.instance / "config" / "rigtune" / "settings.json").read_text(encoding="utf-8"))
+        self.assertEqual({"a": str(self.instance / "mods").replace("\\", "/"), "modFilesByRigTune": True},
+                         {k: v.replace("\\", "/") if isinstance(v, str) else v for k, v in settings.items()})
+
+
+class HarnessRootsTest(unittest.TestCase):
+    def test_the_default_roots_are_v040_plus_v050_when_it_exists(self):
+        repo = Path(tempfile.mkdtemp())
+        resources = repo / "src" / "test" / "resources"
+        (resources / "v040-written").mkdir(parents=True)
+        self.assertEqual([resources / "v040-written"], self_update_e2e.default_written(repo))
+        (resources / "v050-written").mkdir()
+        self.assertEqual([resources / "v040-written", resources / "v050-written"], self_update_e2e.default_written(repo))
+
+    def test_written_may_repeat(self):
+        args = self_update_e2e.parse_args(["--name", "n", "--scenario", "downgrade", "--old-jar", "a.jar", "--new-jar", "b.jar",
+                                           "--work", "w", "--java-home", "jdk", "--written", "x", "--written", "y"])
+        self.assertEqual(["x", "y"], args.written)
+        args = self_update_e2e.parse_args(["--name", "n", "--new-jar", "b.jar", "--old-jar", "a.jar", "--work", "w", "--java-home", "jdk"])
+        self.assertEqual([str(p) for p in self_update_e2e.default_written(self_update_e2e.REPO)], args.written)
+
+    def test_seeded_state_uses_the_old_version_s_new_files_and_the_sets_kept(self):
+        instance = Path(tempfile.mkdtemp()) / "instance"
+        written.compose(written.resolve(V040), instance)
+        seeded = self_update_e2e.seeded_state(instance, new_files=("profiles.json",), kept={"stutter.json": ("sessions",)})
+        self.assertEqual(["profiles.json"], sorted(seeded["newFiles"]))
+        self.assertEqual(["stutter.json"], sorted(seeded["json"]))
+        self.assertEqual({"stutter.json": ["sessions"]}, {k: list(v) for k, v in seeded["kept"].items()})
+
+
+if __name__ == "__main__":
+    unittest.main()

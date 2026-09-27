@@ -1,11 +1,14 @@
-"""The "written by 0.4" fixture sets (docs/v0.4/SPEC.md amendment H-M1): files 0.4 writes, committed by each feature
-workstream under src/test/resources/v040-written/<set>/ (placeholders in placeholder/<set>/ until then; see the README
-there). The released-jar compatibility harness (compat030.py) and the downgrade-040-to-030 run compose them into one
-instance's config/rigtune/."""
+"""The "written by" fixture sets (docs/v0.4/SPEC.md amendment H-M1; docs/v0.5/SPEC.md 3b, X11): files a version writes,
+committed by each feature workstream under src/test/resources/v0N0-written/<set>/ (placeholders in placeholder/<set>/
+until then; see the README there). One generation per root: v040-written (0.4) and v050-written (0.5). The released-jar
+compatibility harnesses (compat030.py, compat040.py) and the downgrade runs compose them into one instance's
+config/rigtune/: a 0.5 instance holds what 0.4 wrote too, so the roots are composed oldest first."""
 
+import copy
 import json
+import re
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import fixtures
@@ -23,28 +26,81 @@ KEPT = {"stutter.json": ("sessions",), "startup-times.json": ("runs",), "server-
 
 
 @dataclass(frozen=True)
+class Generation:
+    """One fixture root: its folder name, the version that writes it, its sets (PLAN), the files that version was the
+    first to write (an older version never reads them, so a downgrade must leave them byte-identical) and what that
+    version must still hold when it starts again after a downgrade (see KEPT)."""
+    name: str
+    release: tuple
+    sets: tuple
+    new_files: tuple
+    kept: dict = field(default_factory=dict)
+
+
+V040 = Generation("v040-written", (0, 4), SETS, NEW_FILES, KEPT)
+# The contracts commit's set names (docs/v0.5/PLAN.md, item 15). 0.5's new files join `kept` as their formats land.
+V050 = Generation("v050-written", (0, 5), ("ws-l1", "ws-l2", "ws-s", "ws-s2", "ws-p2", "ws-b", "ws-t", "ws-h", "ws-w2", "ws-f"),
+                  ("stutter-fixes.json", "tryit.json", "server-profiles.json"))
+GENERATIONS = (V040, V050)
+# A differing value of these is a format bump, never a merge.
+FORMAT_KEYS = ("formatVersion", "schemaVersion")
+
+
+@dataclass(frozen=True)
 class FixtureSet:
     name: str
     folder: Path
     placeholder: bool
+    generation: str = V040.name
 
 
-def resolve(root):
+def generation_of(root):
+    """The generation a root holds, by its folder name; any other name reads as v0.4's (the v0.4 tests' temp roots)."""
+    return next((g for g in GENERATIONS if Path(root).name == g.name), V040)
+
+
+def resolve(root, generation=None):
     """Each owner's set: the real one (root/<set>) when it exists, else the placeholder (root/placeholder/<set>)."""
     root = Path(root)
+    generation = generation or generation_of(root)
     out = []
-    for name in SETS:
+    for name in generation.sets:
         if (root / name).is_dir():
-            out.append(FixtureSet(name, root / name, False))
+            out.append(FixtureSet(name, root / name, False, generation.name))
         elif (root / "placeholder" / name).is_dir():
-            out.append(FixtureSet(name, root / "placeholder" / name, True))
+            out.append(FixtureSet(name, root / "placeholder" / name, True, generation.name))
     return out
 
 
-def compose(sets, instance):
+def resolve_all(roots):
+    """Every root's sets, oldest generation first (a later set's value wins a merge); a missing root adds nothing."""
+    ordered = sorted((Path(r) for r in roots), key=lambda r: GENERATIONS.index(generation_of(r)))
+    return [s for root in ordered if root.is_dir() for s in resolve(root)]
+
+
+def new_files_for(old_version):
+    """The files every generation newer than old_version ("0.4.0+mc26.2") introduced: that version never reads them."""
+    release = tuple(int(p) for p in re.findall(r"\d+", old_version.split("+", 1)[0])[:2])
+    return tuple(name for g in GENERATIONS if g.release > release for name in g.new_files)
+
+
+def kept_for(sets):
+    """What the newer version must still hold after a downgrade: every present generation's KEPT."""
+    present = {s.generation for s in sets}
+    out = {}
+    for g in GENERATIONS:
+        if g.name in present:
+            out.update(g.kept)
+    return out
+
+
+def compose(sets, instance, conflicts=None):
     """Writes every set's files into instance/config/rigtune: history.json's entries merged from every set by `at`,
-    every other file from exactly one set, ${INSTANCE} paths filled in (other files keep their bytes). Returns file
-    name -> the sets it came from."""
+    pending.json's ops from every set, any other file several sets provide deep-merged (objects key by key, lists
+    without exact duplicates, a scalar from the later set, each such override appended to `conflicts` as (file, key
+    path, earlier set, later set)); a file one set provides keeps its bytes. ${INSTANCE} paths are filled in. Returns
+    file name -> the sets it came from."""
+    conflicts = [] if conflicts is None else conflicts
     config = Path(instance) / "config" / "rigtune"
     config.mkdir(parents=True, exist_ok=True)
     sources = {}
@@ -79,7 +135,14 @@ def compose(sets, instance):
             (config / name).write_text(fixtures.instantiate_json(text, instance) if fixtures.TOKEN in text else text,
                                        encoding="utf-8", newline="\n")
         elif len(provided) > 1:
-            raise ValueError("{} comes from more than one set: {}".format(name, [s for s, _ in provided]))
+            owners = {}
+            merged = None
+            for set_name, path in provided:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                merged = _claim("", data, set_name, owners) if merged is None else _merge(name, "", merged, data, set_name, conflicts, owners)
+            text = json.dumps(merged, indent=2) + "\n"
+            (config / name).write_text(fixtures.instantiate_json(text, instance) if fixtures.TOKEN in text else text,
+                                       encoding="utf-8", newline="\n")
         else:
             path = provided[0][1]
             text = path.read_text(encoding="utf-8")
@@ -88,6 +151,32 @@ def compose(sets, instance):
             else:
                 shutil.copyfile(path, config / name)
     return {name: [s for s, _ in provided] for name, provided in sorted(sources.items())}
+
+
+def _claim(path, value, owner, owners):
+    """A value one set brought in: every scalar in it belongs to that set."""
+    if isinstance(value, dict):
+        return {k: _claim(path + "." + k if path else k, v, owner, owners) for k, v in value.items()}
+    if not isinstance(value, list):
+        owners[path] = owner
+    return copy.deepcopy(value)
+
+
+def _merge(file, path, old, new, owner, conflicts, owners):
+    if isinstance(old, dict) and isinstance(new, dict):
+        out = dict(old)
+        for key, value in new.items():
+            sub = path + "." + key if path else key
+            out[key] = _merge(file, sub, old[key], value, owner, conflicts, owners) if key in old else _claim(sub, value, owner, owners)
+        return out
+    if isinstance(old, list) and isinstance(new, list):
+        return old + [copy.deepcopy(item) for item in new if item not in old]
+    if old != new:
+        if path in FORMAT_KEYS:
+            raise ValueError("{} {} differs across sets {} and {}: {} vs {}".format(file, path, owners.get(path), owner, old, new))
+        conflicts.append((file, path, owners.get(path), owner))
+    owners[path] = owner
+    return copy.deepcopy(new)
 
 
 def instance_state(instance):
