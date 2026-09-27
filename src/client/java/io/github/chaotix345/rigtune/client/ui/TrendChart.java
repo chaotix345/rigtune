@@ -14,8 +14,8 @@ import java.util.Objects;
 
 // The benchmark chart (docs/v0.4/SPEC.md 7): comparable runs only, oldest first, at most BenchmarkTrend.MAX_RUNS; two
 // bars per run (average and 1 % low) scaled to the highest value shown, a thin polyline through each series, the flat
-// median line ("your usual") when there is one, and the first and last run's day. Painted, not a widget (like the
-// v0.3 chart; its accessibility rebuild is deferred to v0.5).
+// median line ("your usual") when there is one, and the first and last run's day. Painted, not a widget; since v0.5 (L3)
+// each screen puts a Tab stop over it that narrates its textual equivalent (TrendText.chartSummary).
 final class TrendChart {
 	static final int COLOR_AVG = 0xFF5B8DD6;
 	static final int COLOR_LOW = 0xFF7FE07F;
@@ -28,13 +28,18 @@ final class TrendChart {
 	private TrendChart() {
 	}
 
+	// Whether draw() has room and something to draw.
+	static boolean fits(List<BenchmarkRecord> runs, int top, int chartWidth, int bottom) {
+		return runs.stream().anyMatch(r -> r.result() != null) && bottom - top >= 44 && chartWidth >= 60;
+	}
+
 	// Returns false when there's no room (or nothing) to draw.
 	static boolean draw(GuiGraphicsExtractor graphics, Font font, Component title, List<BenchmarkRecord> runs, @Nullable Double median,
 			@Nullable String highlightId, int left, int top, int chartWidth, int bottom) {
-		List<BenchmarkRecord> shown = runs.stream().filter(r -> r.result() != null).toList();
-		if (shown.isEmpty() || bottom - top < 44 || chartWidth < 60) {
+		if (!fits(runs, top, chartWidth, bottom)) {
 			return false;
 		}
+		List<BenchmarkRecord> shown = runs.stream().filter(r -> r.result() != null).toList();
 		double max = 1;
 		for (BenchmarkRecord run : shown) {
 			max = Math.max(max, Math.max(run.result().avgFps(), run.result().onePercentLowFps()));
