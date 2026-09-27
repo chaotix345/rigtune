@@ -27,7 +27,7 @@ class RefusedDisablesTest {
 
 	private static List<Component> afterApply(List<Recommendation> selected, Set<String> allowed) {
 		List<Component> parts = new ArrayList<>(List.of(Component.literal("Applied 1 setting(s).")));
-		RefusedDisables.afterApply(new V05Hooks.ApplyFacts("e1", selected, allowed, 1, 0, 1, false, 0), parts);
+		RefusedDisables.afterApply(new V05Hooks.ApplyFacts("e1", selected, allowed, 1, 0, 1, false, 0), parts, () -> MODS);
 		return parts;
 	}
 
@@ -41,9 +41,11 @@ class RefusedDisablesTest {
 		assertEquals(List.of(1), List.of(refused.getArgs()));
 	}
 
+	// Allowed ones, and one outside the mods folder (never DisableGuard's: Apply leaves it out, Preview says so), add nothing.
 	@Test
 	void nothingRefusedAddsNothing() {
 		assertEquals(1, afterApply(List.of(disable("x", MODS.resolve("x.jar"))), Set.of("disable:x")).size());
 		assertEquals(1, afterApply(List.of(), Set.of()).size());
+		assertEquals(1, afterApply(List.of(disable("y", Path.of("elsewhere", "y.jar").toAbsolutePath())), Set.of()).size());
 	}
 }

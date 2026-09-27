@@ -237,7 +237,12 @@ public final class Staging {
 				return StaleDrop.NONE;
 			}
 			PendingActions here = PendingActions.load(pendingFile).relocated(InstanceDirs.modsDirOf(pendingFile), InstanceDirs.configDirOf(pendingFile));
-			List<StaleOps.Stale> stale = StaleOps.find(here.ops(), Files::exists, loadedFrom, Staging::modIdOf, halfDoneGroups(here));
+			// Never drop what might be a half-done group: without the folder's names, nothing is dropped this time.
+			Set<String> halfDone = halfDoneGroupsOrNull(here);
+			if (halfDone == null) {
+				return StaleDrop.NONE;
+			}
+			List<StaleOps.Stale> stale = StaleOps.find(here.ops(), Files::exists, loadedFrom, Staging::modIdOf, halfDone);
 			if (stale.isEmpty()) {
 				return StaleDrop.NONE;
 			}
@@ -358,12 +363,18 @@ public final class Staging {
 	}
 
 	private Set<String> halfDoneGroups(PendingActions plan) {
+		Set<String> groups = halfDoneGroupsOrNull(plan);
+		return groups == null ? Set.of() : groups;
+	}
+
+	// Null when the mods folder can't be listed (then nobody can tell which groups are half done).
+	private @Nullable Set<String> halfDoneGroupsOrNull(PendingActions plan) {
 		Set<String> names = new HashSet<>();
 		try (Stream<Path> files = Files.list(InstanceDirs.modsDirOf(pendingFile))) {
 			files.forEach(f -> names.add(f.getFileName().toString()));
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.warn("Could not list the mods folder to check for half-applied changes", e);
-			return Set.of();
+			return null;
 		}
 		return PartlyApplied.groups(plan.ops(), names, unfinishedRenames());
 	}

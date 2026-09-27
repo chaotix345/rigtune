@@ -367,10 +367,12 @@ public class HistoryScreen extends Screen {
 	// v0.5 (docs/v0.5/SPEC.md 2V, ws-g3 L6): a change failed at the capped attempt belongs to a group the helper left half
 	// applied (only such a group fails that often without being abandoned; its attempts stay at the cap), which is retried at
 	// every exit: it says so instead of repeating "try 3 of 3".
+	// An abandoned change the helper's last run doesn't know (RW-3 dropped it at launch, or its op was lost) says so in a
+	// fixed line: history.json keeps no reason (docs/v0.5/SPEC.md 2H RW-3; no new field).
 	public static @Nullable Component failureText(HistoryModel.Change change) {
 		ApplyFailures.Failure f = change.failure();
 		if (f == null) {
-			return null;
+			return JournalChange.ABANDONED.equals(change.status()) ? Component.translatable("rigtune.history.not_applied_dropped") : null;
 		}
 		if (f.abandoned()) {
 			return Component.translatable("rigtune.history.not_applied", f.reason());

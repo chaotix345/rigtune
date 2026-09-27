@@ -69,6 +69,7 @@ final class PreviewDownloads {
 			}
 		}
 		DownloadPlanner.Result result = planned.result();
+		out.unchecked |= !planned.complete();
 
 		Map<String, Recommendation> owner = new HashMap<>();
 		for (Recommendation r : ordered) {

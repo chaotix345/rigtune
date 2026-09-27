@@ -240,6 +240,11 @@ public final class RangeReader implements AutoCloseable {
 			}
 			at = next;
 		}
+		// "Missing" only when every entry was seen: an end record whose 16-bit count wrapped (a large archive not written
+		// as ZIP64) lists fewer entries than the central directory holds.
+		if (found == null && at != directory.capacity()) {
+			throw new IOException("the central directory holds more than its end record counts");
+		}
 		return found;
 	}
 

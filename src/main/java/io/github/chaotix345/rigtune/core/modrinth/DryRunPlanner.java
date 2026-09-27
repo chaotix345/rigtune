@@ -7,6 +7,7 @@ import io.github.chaotix345.rigtune.core.model.Recommendation;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -35,7 +36,9 @@ public final class DryRunPlanner {
 	}
 
 	// checkedFiles: the file names whose fabric.mod.json was read, or found missing (Apply refuses those as well).
-	public record Planned(DownloadPlanner.Result result, Set<String> checkedFiles) {
+	// complete: false when a read jar's range names a nested or provided id while some jar's nesting isn't known (it nests
+	// jars, or couldn't be read): that range is left to Apply, so the preview can't say it checked everything.
+	public record Planned(DownloadPlanner.Result result, Set<String> checkedFiles, boolean complete) {
 	}
 
 	public static DownloadPlanner.Result plan(DependencyResolver resolver, Path modsDir, BiPredicate<String, String> conflicts,
@@ -60,19 +63,33 @@ public final class DryRunPlanner {
 		// What was read of each fetched file (absent: nothing could be).
 		Map<Path, FabricModJson> read = new HashMap<>();
 		Set<String> checked = new HashSet<>();
+		Set<Path> unknown = new HashSet<>();
 		AtomicInteger next = new AtomicInteger();
 		// The same file fetched again (after an item that failed) is the same jar, so it keeps its id.
 		DownloadPlanner.Fetcher fetcher = file -> {
 			Path path = SafeFileNames.resolveJar(modsDir, file.filename(), never);
 			if (!modIds.containsKey(path)) {
 				modIds.put(path, modIdOf(file, path, checks, modIdsByFile, read, checked, "rigtune-preview-" + next.incrementAndGet() + never));
+				if (checks != null && modIds.get(path) != null && !read.containsKey(path)) {
+					unknown.add(path);
+				}
 			}
 			return path;
 		};
 		DownloadPlanner.DryJars jars = checks == null ? null : (path, modId, replaces) -> jar(read.get(path), modId, replaces, checks.nestedOrProvided());
 		DownloadPlanner planner = new DownloadPlanner(resolver, modsDir, fetcher, conflicts, updateVersions, modIds::get, jars,
 				checks == null ? VersionPins.NONE : checks.pins());
-		return new Planned(planner.lookedUp(lookups, online).plan(recs, installedProjects, loadedIds, stagedJars), Set.copyOf(checked));
+		DownloadPlanner.Result result = planner.lookedUp(lookups, online).plan(recs, installedProjects, loadedIds, stagedJars);
+		return new Planned(result, Set.copyOf(checked), checks == null || complete(read.values(), unknown, checks.nestedOrProvided()));
+	}
+
+	// Whether no range was left unjudged for want of a jar's nesting (see jar()).
+	private static boolean complete(Collection<FabricModJson> read, Set<Path> unknown, Set<String> nestedOrProvided) {
+		if (unknown.isEmpty() && read.stream().noneMatch(FabricModJson::nestsJars)) {
+			return true;
+		}
+		return read.stream().noneMatch(json -> json.depends().keySet().stream().anyMatch(nestedOrProvided::contains)
+				|| json.breaks().keySet().stream().anyMatch(nestedOrProvided::contains));
 	}
 
 	// Apply's mod id for the file: its fabric.mod.json's (null, "not a Fabric mod jar", where Apply reads none). An update's

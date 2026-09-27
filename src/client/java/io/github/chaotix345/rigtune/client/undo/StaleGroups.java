@@ -28,7 +28,8 @@ import java.util.concurrent.ConcurrentHashMap;
 // (file)" or "…: its download is gone".
 public final class StaleGroups {
 	// What drop() found, by the op id it names, until status() says it: drop runs on the rebuild's worker, status on the
-	// render thread right after.
+	// render thread right after (RealController calls it for every non-empty drop, so entries don't pile up). Not cleared
+	// by a later drop: two rebuilds at launch can overlap, and the first one's line must still be said.
 	private static final Map<String, StaleOps.Stale> FOUND = new ConcurrentHashMap<>();
 
 	private StaleGroups() {

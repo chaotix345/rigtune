@@ -76,4 +76,18 @@ class HistoryHeldGroupTest {
 		assertEquals(List.of("Last attempt failed: Rolled back, but dh-3.3.0.jar.disabled couldn't be renamed back (try 2 of 3 at restart)"),
 				failureLines(1));
 	}
+
+	// docs/v0.5/SPEC.md 2H RW-3 (review L7): a change RigTune dropped at launch is ABANDONED in the journal only (no
+	// last-apply.json result, and history.json keeps no reason): a fixed line says why in general terms.
+	@Test
+	void anAbandonedChangeWithoutAHelperResultSaysItWasDropped() throws IOException {
+		HistoryModel.Change dropped = new HistoryModel.Change(HistoryModel.Row.ADDED, List.of("c"), JournalChange.ABANDONED, null, null, null, "dh.jar",
+				null, "dh", null, null);
+		HistoryModel.Change applied = new HistoryModel.Change(HistoryModel.Row.ADDED, List.of("c"), JournalChange.APPLIED, null, null, null, "dh.jar",
+				null, "dh", null, null);
+
+		assertEquals("Not applied: dropped before it could run (for example, the mod was installed another way)",
+				english(HistoryScreen.failureText(dropped)));
+		assertEquals(null, HistoryScreen.failureText(applied));
+	}
 }

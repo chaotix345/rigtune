@@ -51,7 +51,7 @@ class RangeReaderTest {
 			Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(30));
 
 	enum Mode {
-		RANGES, WHOLE, STATUS_416, STATUS_500, WRONG_RANGE, STALL
+		RANGES, WHOLE, STATUS_416, STATUS_500, WRONG_RANGE, WRONG_HEADER, STALL
 	}
 
 	private HttpServer server;
@@ -143,7 +143,9 @@ class RangeReaderTest {
 				}
 				return;
 			}
-			send(exchange, 206, part, "bytes " + from + "-" + to + "/" + size);
+			// WRONG_HEADER: the right bytes, labelled as another range of the same length.
+			String label = mode == Mode.WRONG_HEADER ? "bytes " + (from - 1) + "-" + (to - 1) + "/" + size : "bytes " + from + "-" + to + "/" + size;
+			send(exchange, 206, part, label);
 		}
 	}
 
@@ -302,6 +304,38 @@ class RangeReaderTest {
 				assertNotNull(read.failure(), bad.toString());
 				assertEquals(1, read.requests(), bad.toString());
 			}
+		}
+	}
+
+	// A body of the size asked for whose Content-Range names another range isn't taken.
+	@Test
+	void aCorrectlySizedBodyWithAWrongContentRangeFails() throws IOException {
+		mode = Mode.WRONG_HEADER;
+		try (RangeReader reader = reader(SMALL)) {
+			RangeReader.Read read = reader.read(file("wrong-header.jar", jar(300, 5, false, FABRIC_MOD_JSON)));
+
+			assertFalse(read.ok());
+			assertTrue(read.failure().contains("isn't the bytes=-4096 asked for"), read.failure());
+			assertEquals(4096, read.bytesRead());
+		}
+	}
+
+	// An end record whose entry count is lower than the central directory's (a 16-bit count that wrapped): fabric.mod.json
+	// past the counted entries isn't reported missing, the read fails instead.
+	@Test
+	void aWrappedEntryCountIsAFailureNotAMissingEntry() throws IOException {
+		byte[] jar = jar(300, 300, false, FABRIC_MOD_JSON);
+		int end = jar.length - 22;
+		jar[end + 8] = 1;
+		jar[end + 9] = 0;
+		jar[end + 10] = 1;
+		jar[end + 11] = 0;
+		try (RangeReader reader = reader(SMALL)) {
+			RangeReader.Read read = reader.read(file("wrapped.jar", jar));
+
+			assertFalse(read.ok());
+			assertFalse(read.missing());
+			assertTrue(read.failure().contains("more than its end record counts"), read.failure());
 		}
 	}
 

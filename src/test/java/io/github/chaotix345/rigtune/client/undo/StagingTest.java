@@ -441,6 +441,21 @@ class StagingTest {
 		assertFalse(Files.exists(mods.resolve(DH + PendingActions.PENDING_SUFFIX)));
 	}
 
+	// Without the mods folder's names nobody can tell a half-done group from a stale one: nothing is dropped (review L3).
+	@Test
+	void anUnlistableModsFolderDropsNothing() throws IOException {
+		stageTheDhGroup();
+		String before = Files.readString(pending);
+		for (Path file : Files.list(mods).toList()) {
+			Files.delete(file);
+		}
+		Files.delete(mods);
+
+		assertEquals(Staging.StaleDrop.NONE, staging.dropStale(Map.of("distanthorizons", Set.of(DH))));
+		assertEquals(before, Files.readString(pending));
+		assertTrue(changesOf("e1").stream().allMatch(c -> JournalChange.STAGED.equals(c.status())));
+	}
+
 	// A group the helper left half done (killed between two renames) is never dropped, whatever StaleOps would say; an
 	// ordinary update isn't stale; a busy lock drops nothing.
 	@Test

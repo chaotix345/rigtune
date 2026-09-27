@@ -1333,6 +1333,21 @@ class DownloadPlannerTest {
 		assertEquals(List.of("aV.jar"), targets(result.ops()));
 	}
 
+	// An earlier Apply's staged update of lib (its enable carries lib's Modrinth project; its download here unreadable, so
+	// its mod id can't be read): lib isn't going away (review L4).
+	@Test
+	void aProjectAStagedEnableBringsIsNeverTurnedOff() throws Exception {
+		Path lib = installedLib();
+		Path next = Files.writeString(mods.resolve("lib-2.jar" + PendingActions.PENDING_SUFFIX), "not readable as a jar");
+		staged = pendingWith(PendingActions.group(Op.disableFile(lib), Op.enableFile(next, mods.resolve("lib-2.jar")).withProjectId("LIB")
+				.withVersionId("lib2")));
+		put("a", version("aV", "A", "1", T, required("LIB")));
+
+		DownloadPlanner.Result result = plan(Set.of("LIB"), add("a", "A"));
+
+		assertEquals(List.of("add-a"), result.ids());
+	}
+
 	// L10 (SPEC "Not fixed"): for the incompatibility checks a mod staged for disabling is still present (over-blocking,
 	// the safe side: an Undo of the disable would otherwise leave both mods active).
 	@Test

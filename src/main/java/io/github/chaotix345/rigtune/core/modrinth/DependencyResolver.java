@@ -223,6 +223,8 @@ public final class DependencyResolver {
 						out.add(version.projectId());
 					}
 				}
+				// A project a staged enable brings (an update of it, staged by an earlier Apply) isn't going away.
+				out.removeAll(staged.projects());
 			}
 			disabledProjects = out;
 		}

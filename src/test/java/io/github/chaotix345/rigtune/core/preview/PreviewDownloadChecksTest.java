@@ -207,7 +207,8 @@ class PreviewDownloadChecksTest {
 
 	// A read covers the outer fabric.mod.json only. Nesting jars, a download may carry the library its range names (Fabric
 	// then picks that copy), so an older copy nested in an installed mod doesn't refuse it; Apply, reading the whole jar,
-	// can. Without nested jars the same range is refused, as Apply refuses it.
+	// can, so the preview doesn't count it as checked (the disclosure line shows; review M1). Without nested jars the same
+	// range is refused, as Apply refuses it.
 	@Test
 	void aDownloadThatNestsJarsIsNotRefusedOverALibraryItMayCarry() {
 		modrinth.put("b", version("bV", "B", "b-1.0.jar"), "b");
@@ -218,13 +219,25 @@ class PreviewDownloadChecksTest {
 		ApplyPreview nesting = preview(add("b", "B", "B"));
 
 		assertEquals(List.of("b-1.0.jar"), nesting.downloads().stream().map(ApplyPreview.Download::fileName).toList());
-		assertTrue(nesting.downloadsChecked());
+		assertFalse(nesting.downloadsChecked());
 
 		jars.put("b-1.0.jar", json("b", "1.0", ",\"depends\":{\"lib\":\"2.x\"}"));
 		ApplyPreview plain = preview(add("b", "B", "B"));
 
 		assertEquals(List.of(), plain.downloads());
 		assertEquals("B Mod needs Lib 2.x, not the installed 1.0", plain.skipped().getFirst().detail());
+	}
+
+	// A jar that nests others but whose ranges (and every other read jar's) name nothing loaded as nested or provided leaves
+	// no range unjudged: still checked.
+	@Test
+	void aNestingDownloadWhoseRangesNameNoNestedIdIsChecked() {
+		modrinth.put("b", version("bV", "B", "b-1.0.jar"), "b");
+		pins = loaded(List.of(), mod("sodium", "Sodium", "0.9.3"), new VersionPins.Loaded("lib", "Lib", "1.0", "distanthorizons"));
+		nestedOrProvided = Set.of("lib");
+		jars.put("b-1.0.jar", json("b", "1.0", ",\"depends\":{\"sodium\":\"0.9.x\"},\"jars\":[{\"file\":\"META-INF/jars/x.jar\"}]"));
+
+		assertTrue(preview(add("b", "B", "B")).downloadsChecked());
 	}
 
 	// A failed read's jar counts as nesting anything too: another download's range on a nested library isn't judged.
