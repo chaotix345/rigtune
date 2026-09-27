@@ -202,8 +202,9 @@ jobs:
       # blocking error dialog, so a hang means a timeout here; at 13 min the game's JVM (the java process whose command line
       # has KnotClient as an argument; Gradle's and the fake Modrinth's are java too) prints every thread's stack and locks
       # into this log first (run 36235561444 hung with none). The whole /proc/<pid>/cmdline is read: KnotClient comes after
-      # a long classpath. At 14 min timeout (as root, in offline.sh) ends Gradle, xvfb-run and the game; the step's 15-min
-      # limit is the backstop. A failed run lists any java process left.
+      # a long classpath. At 14 min timeout (as root, in offline.sh) sends TERM to the run's process group and returns once
+      # Gradle's launcher has exited; the step then gives every java process (they run as this user) 30 s to end and kills
+      # what is left, before the step's 15-min limit (which can't signal the root-owned sudo).
       - name: Client game tests
         timeout-minutes: 15
         run: |
@@ -217,7 +218,15 @@ jobs:
           tools/ci/offline.sh --timeout 14m ./gradlew --no-daemon --offline ":${{ matrix.mc }}:runProductionClientGameTest" "-PgametestClasses=$GAMETEST_CLASSES" --stacktrace || code=$?
           if [ "$code" -ne 0 ]; then
             echo "The game-test run exited $code (124: stopped by the 14-min timeout)"
-            ps -o pid,user,etime,comm -C java || echo "No java process left"
+            waited=0
+            while pgrep -x java >/dev/null && [ "$waited" -lt 30 ]; do sleep 1; waited=$((waited + 1)); done
+            if pgrep -x java >/dev/null; then
+              echo "java still running after $waited s; killing it:"
+              ps -o pid,user,etime,comm -C java || true
+              pkill -KILL -x java || true
+            else
+              echo "No java process left ($waited s after the run exited)"
+            fi
             exit "$code"
           fi
       # A leg whose backend fails falls back to the other one and would still pass: fail it instead.
