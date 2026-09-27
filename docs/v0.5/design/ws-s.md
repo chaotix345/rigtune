@@ -51,7 +51,7 @@ API difference: none expected); the full build and the game tests are CI's.
 | S7 | SD-2: frames, average and 1 % low over the frame ring's window; "over the last %s" when the capture is longer | `StutterAnalyzer`, `StutterScreen` header, `StutterSummary`, lang `rigtune.stutter.window.*` | `StutterAnalyzerTest.sd2OnePercentLowIsNeverAboveTheAverage`, `StutterSummaryTest.theWindowIsNamedOnlyWhenTheCaptureIsLonger`, `StutterScreenTextTest.windowLine` | AC2S.6 |
 | S8 | RW-10: no 0 % cause rows; shown whole percentages total ≤ 100 | `StutterScreen` (a static text function) | `StutterScreenTextTest.rw10NoZeroRowAndAtMostOneHundred` (gc 0.60, tick 0.18, chunkLoad 0.0, unknown 0.23) | AC2S.12 |
 | S9 | RW-11: settings changes and resource reloads tag the next 10 s `settingsChanged` (never claims); `settingsAtStart`/`settingsAtEnd`; the report and advice say so | `StutterRings` (event kind), `Attributor` (the tag, outside the rules' `TAGS`), `StutterAnalyzer`, new `client/stutter/SettingsWatch` (its own END_CLIENT_TICK listener, registered when the first session starts), `StutterCapture`/`StutterService` (the maps), `StutterScreen`, `StutterSummary`, lang `rigtune.stutter.tag.settings_changed`, `rigtune.stutter.settings.*` | `StutterAnalyzerTest.rw11AReloadTagsTheNextTenSecondsAndClaimsNothing`, `StutterStoreTest.theSettingsFieldsRoundTripAndA04SessionStillReads`, `SettingsWatchTest` (a change → one event; unchanged → none; 0 bytes per tick; Iris/DH read at most once a second), `StutterScreenTextTest.settingsChangedLine` | AC2S.13 (unit parts) |
-| S10 | RW-15 capture side: `benchmarkStepExcluded(true)` keeps that step's frames out of the benchmark capture (combined with the sweep flag), counts the steps; the benchmark line names them | `StutterService`, `StutterHooks`, `StutterScreen.benchmarkLine`, lang `rigtune.stutter.benchmark.excluded*` | `StutterServiceTest.anExcludedStepRecordsNoFrames`, `StutterScreenTextTest.theBenchmarkLineNamesExcludedSteps` | AC2B.9 (WS-S part; closes with the later of WS-B/WS-S) |
+| S10 | RW-15 capture side: `benchmarkStepExcluded(true)` keeps that step's frames out of the benchmark capture (planned: also count the steps and name them in the benchmark line; the coordinator gave the count and its text to WS-B, see section 4) | `StutterService`, `StutterHooks` | `StutterServiceTest.anExcludedStepRecordsNoFrames` | AC2B.9 (WS-S part; closes with the later of WS-B/WS-S) |
 | S11 | Fixtures: `v050-written/ws-s/stutter.json` (a session with the RW-11 fields and tag) + `expect.json`, written by a test | `src/test/resources/v050-written/ws-s/`, `StutterWrittenV050Test` | the test compares (regenerates under `RIGTUNE_REGENERATE_FIXTURES=1`) | AC2S.13 (compat040 part, once WS-E's interpreter merges) |
 | S12 | StutterGameTest: RW-11 in a real world (render distance changed mid-session → the event, the maps), the window/settings lines at the X12 sizes | `gametest/StutterGameTest` | (game test, 3 legs) | AC2S.13 (in game), X12 |
 
@@ -79,12 +79,13 @@ API difference: none expected); the full build and the game tests are CI's.
   A resource reload = vanilla's loading overlay appearing (`Minecraft.getOverlay()`, a field read) while a session runs:
   no mixin and no reload listener. The listener is registered once, on the first session start (never at init), and
   returns at once without a session; per tick it compares two cached ints and the overlay reference; Iris and DH are read
-  on `settingsChanged()` and at most once a second. `settingsChanged` is not in `Attributor.TAGS` (the rules' tag
-  vocabulary, SchemaConsistencyTest's tie to the updater), so no rule can condition on it and 0.4.0's screen, which shows
-  only its own tags, ignores it.
-- **S10 semantics.** `benchmarkStepExcluded(true)` from BenchmarkController when a step's settle timed out (before its
-  sweeps), `false` when the next step starts or the re-measure runs; the capture is paused while excluded whatever the
-  sweep flag says; each false → true counts one step; the count resets when a run starts.
+  on `settingsChanged()` and at most once a second. 0.4.0's screen, which shows only its own tags, ignores the new tag.
+  (Planned here: keep `settingsChanged` out of `Attributor.TAGS`; the coordinator's rule put it in, section 4.)
+- **S10 semantics** (as the coordinator decided with WS-B, replacing the plan's): BenchmarkController calls
+  `benchmarkStepExcluded(true)` instead of `benchmarkSweep(true)` for a step whose settle timed out, and `(false)` at that
+  step's end (or when the run ends inside it) instead of `benchmarkSweep(false)`; the seam never starts or resumes the
+  capture (it stays paused, or doesn't exist yet when the first step is left out); RW-5's second try records through
+  `benchmarkSweep` as usual.
 
 ## 3. As landed: what changed where
 
@@ -115,17 +116,24 @@ API difference: none expected); the full build and the game tests are CI's.
   the largest; used by the screen's cause rows (`StutterScreen.causeRows` for the tests), Copy summary and the benchmark
   line.
 - **S9 RW-11.** `StutterRings.SETTINGS_CHANGED` (9, value = what changed, and from bit `SETTINGS_LEAD_SHIFT` (16) up the ms
-  between the event's time and the check that saw the change); `Attributor.SETTINGS_CHANGED`
-  (`"settingsChanged"`, in `REPORT_TAGS`, not in `TAGS`), `Context.settingsChanged` (a spike ending in (t, t + 10 s]);
+  between the event's time and the check that saw the change); `Attributor.SETTINGS_CHANGED` (`"settingsChanged"`, in
+  `TAGS`, and so a share in the rules' facts like `afterTeleport`), `tools/update_rules.py`'s one word in
+  `STUTTER_MAP_KEYS["stutterTaggedShareAtLeast"]` (the coordinator's rule: WS-S merges after WS-R, so it adds the word;
+  SchemaConsistencyTest ties the two; 0.4.0 doesn't know the tag, so a condition on it fails closed there),
+  `Context.settingsChanged` (a spike ending in (t, t + lead + 10 s]);
   `StutterReport.RENDER_DISTANCE`/`SIMULATION_DISTANCE`/`SHADERS`/`DH_RENDERING`, `settingChanges()`, `onOff()`;
   `client/stutter/SettingsWatch` (the listener, `State` for the tests, `values()` for the maps, `cost()` for the game
-  test); `StutterMonitor.Capture.settingsAtStart`, `StutterCapture.Copy.settingsAtStart`, `Machine.settingsNow`; the
+  test: JIT-settled blocks and an empty control loop; a check that throws is off for that session after one warning);
+  `OptionalMods.shadersInUseQuietly()`/`dhRenderingQuietly()` (an approved exception to that frozen file, marked WS-S:
+  a failing Iris/DH API warns once and answers null for the rest of the game; SettingsWatch then stops asking); `StutterMonitor.Capture.settingsAtStart`, `StutterCapture.Copy.settingsAtStart`, `Machine.settingsNow`; the
   screen's settings line (`StutterScreen.settingsLine`) and advice note, Copy summary's two lines; lang
   `rigtune.stutter.settings.*` and `rigtune.stutter.tag.settings_changed`.
-- **S10 RW-15.** `StutterService.benchmarkStepExcluded` / `StutterHooks.benchmarkStepExcluded` (the WS-K seam, filled),
-  `lastBenchmarkExcludedSteps()`; `StutterScreen.benchmarkLine(r)` = `benchmarkLine(r, StutterHooks.lastBenchmarkExcludedSteps())`
-  with `rigtune.stutter.benchmark.excluded.one`/`.many`. BenchmarkResultScreen needs no change for the line; WS-B's
-  BenchmarkController only has to call the seam.
+- **S10 RW-15.** `StutterService.benchmarkStepExcluded` / `StutterHooks.benchmarkStepExcluded` (the WS-K seam, filled;
+  its comment is WS-B's text): true marks the step and keeps the capture paused, false only clears the mark. The count
+  of steps left out and its result-screen line are WS-B's (`outcome.stepsLeftOut()`, `rigtune.benchmark.stutter_left_out*`).
+  RW-6: WS-B reads `StutterHooks.lastBenchmarkDhWorldGenCores()` (DH world-gen CPU ms per ms of recorded sweep windows).
+- **Also.** `RecordRing.held()` reads a ring's records and count in one call (the samples ring's snapshot); L1's guard
+  around every `StutterCapture.stop` (end, Clear, benchmarkFinished, quit).
 - **S11.** `src/test/resources/v050-written/ws-s/` (`stutter.json`, `expect.json`) from `V050WrittenWsSTest` (the
   26.3 node compares the same bytes). compat030 against the set: the released 0.3.0 jar (sha256 5717f65c…, as pinned in
   build.yml) on the v040-written instance with ws-s's `stutter.json` in place of 0.4's (compat030's `written.py` doesn't
@@ -153,8 +161,14 @@ API difference: none expected); the full build and the game tests are CI's.
   (the tick before, or the last Iris/DH read up to 1 s before), so a pipeline rebuild's own spike falls in the window,
   and the window ends 10 s after the change was seen (the lead rides in the event's value); a reload that lasts repeats
   its event every 5 s while the loading overlay is up, so its window stays open.
-- RW-11's listener cost is measured in StutterGameTest (logged, 0 bytes asserted), not under FootprintGameTest keys
-  (ws-ci/WS-K's file; asked the coordinator).
+- RW-11's listener cost is measured in StutterGameTest, strict like the tick keys (the blocks' bytes summed after the
+  warm-up, less an empty control loop's, must be 0; the ns per call logged); the FootprintGameTest keys
+  `settingsCheckNsPerCall`/`settingsCheckAllocBytes` come with the post-Wave-B footprint checkpoint (SPEC 1h, a ws-ci
+  follow-up), as the coordinator decided.
+- RW-15: the planned step count and "left out" text in StutterScreen.benchmarkLine were dropped (WS-B owns both).
+- RW-11's tag is in `Attributor.TAGS` and the updater's vocabulary (the coordinator's rule), not kept out of the rules as
+  first planned.
+- OptionalMods (frozen) got the two quiet reads (approved exception).
 - TDD: the tasks that added an API (S1, S9, S10, S11) went red by not compiling; SD-2's assertion red is the audit's run
   on this code (avg 80, 1 % low 200); every bug fix (L1, SD-1, SD-3..SD-6, NEW-1, RW-10) was run red first with today's
   behaviour.
@@ -165,10 +179,15 @@ API difference: none expected); the full build and the game tests are CI's.
   SD-1's scope.
 - `DH-World Gen` is DH 3.3.2's world-generation prefix (javap); other DH versions UNVERIFIED.
 - Pre-existing: Copy summary's `%n` gives CRLF on Windows for some lines and LF for others; the histogram's "(1 frames)".
+- A change is dated when the old value was last seen, so its window opens up to one check early (a tick for the
+  distances, up to 1 s for Iris/DH); it closes 10 s after the change was seen.
+- SD-2 on 0.4.0: a 0.5 session whose frame ring wrapped shows the window's numbers there without the "over the last"
+  label (0.4.0 doesn't know it).
 
 **UNVERIFIED.**
 - AC2S.13's compat040 part (0.4.0's StutterStore and StutterSummary read the ws-s set): `expect.json` has the
-  StutterStore check; a StutterSummary check kind needs WS-E's interpreter (asked the coordinator).
+  StutterStore check; the StutterSummary check kind is being added to the interpreter by WS-E (r-verify), and closes
+  with WS-E: the check goes into `expect.json` once its name exists.
 - RW-11 with Iris or Distant Horizons loaded (the shaders and DH bits): unit-tested only; CI loads neither.
 - AC2B.9 closes with WS-B's BenchmarkController call.
 
@@ -178,10 +197,11 @@ the pause wiring (now exact: 1.5 cores from two sweeps, the gap's 6 left out); (
 logged every tick (now off for that session, one warning); (L) a hand-edited huge share looped the trimming ~1e9 times
 (clamped to [0, 1]); bars drawn at the shown percentage; a long reload's window; the window's end after a late-seen
 change; the live view's advice note ("the current settings"); L1's guard in Clear; one walk over the world-gen pauses.
-Fixed before the review's report: the samples ring's wrap by capacity (d4dc6662). Waiting for the coordinator: (M)
-RW-11's cost under FootprintGameTest keys (recorded above as a deviation); (L) OptionalMods (frozen) logs a WARN with a
-stack on every failing Iris/DH call, which SettingsWatch makes once a second (a broken Iris/DH API would flood the log);
-(L) a compat040 StutterSummary check kind (WS-E).
+Fixed before the review's report: the samples ring's wrap by capacity (d4dc6662). The coordinator's decisions
+(COORDINATOR-DECISIONS.md), fixed after: the RW-11 check's byte gate made strict (JIT-settled blocks, an empty control
+loop); OptionalMods' quiet reads (approved exception); the samples ring's records and count read in one call; L1's guard
+at benchmarkFinished and at quit too; RW-15 as WS-B calls it (above); `settingsChanged` in `TAGS` and the updater's
+word; WS-B's comment for the seam. The compat040 StutterSummary check closes with WS-E.
 
 ## 5. Docs (for the docs workstream)
 
@@ -225,6 +245,10 @@ ring 6,144): 2,545,808 of 2,621,440.
 | all | monitorOnRetainedBytes | 2,506,896 | 2,539,664 | 2,545,808 | 2,545,808 |
 | 26.2 / 26.3 GL / Vulkan | RW-11 settings check (StutterGameTest) | (new) | | 50.7 / 89.8 / 48.2 ns per call | 64.3 / 39.4 / 50.3 ns per call; 32 bytes per 100,000 calls |
 
+The strict gate's method (JIT-settled blocks, an empty control loop) was checked locally first: StutterGameTest alone on
+26.2 (Windows, under the game-test lock, 2026-09-28): 19.9 ns per check, 0 bytes over 100,000 checks, control 0. The 32
+bytes the first method logged on CI came from timing one long loop in the measuring method itself (JIT), not the check.
+
 Every value moves inside ws-k.md's runner-to-runner spread (e.g. 26.2 renderThreadInitCpuMs 63.5-112.9 on 0.4's code)
 in both directions, and every budget keeps its margin; `v05RenderThreadResolve` null on every leg.
 
@@ -246,9 +270,9 @@ screen) and of 36328669112 (`stutter-640x480-scale2`: the new "Settings changed 
 | AC2S.10 (SD-6) | verified | GcListenerTest.oldGenerationUsedSumsOnlyTheHeapPools (red: 1546 MB instead of 1024) |
 | AC2S.11 (NEW-1) | verified | real runs: docs/v0.5/verification/stutter/new1-generational-shenandoah/; GcKindTest.generationalShenandoahIsNeverALiveSetSample |
 | AC2S.12 (RW-10) | verified | StutterScreenTextTest.rw10NoZeroRowAndAtMostOneHundred (red: "Chunk loading 0 %", 101 %), StutterSummaryTest.rw10PercentagesNeverTotalOverOneHundred |
-| AC2S.13 (RW-11) | unit + game test verified; compat040 part closes with WS-E's interpreter | StutterAnalyzerTest.rw11AReloadTagsTheNextTenSecondsAndClaimsNothing, StutterStoreTest.theSettingsFieldsAndTagRoundTripAndA04SessionStillReads, SettingsWatchTest (4), StutterScreenTextTest.settingsChangedLines, StutterSummaryTest.rw11SettingsChangesAreNamed; StutterGameTest on 3 legs (run 36328669112); v050-written/ws-s + expect.json |
+| AC2S.13 (RW-11) | unit + game test verified; compat040 part (StutterSummary check kind) closes with WS-E | StutterAnalyzerTest.rw11AReloadTagsTheNextTenSecondsAndClaimsNothing, StutterStoreTest.theSettingsFieldsAndTagRoundTripAndA04SessionStillReads, SettingsWatchTest (4), StutterScreenTextTest.settingsChangedLines, StutterSummaryTest.rw11SettingsChangesAreNamed; StutterGameTest on 3 legs (run 36328669112); v050-written/ws-s + expect.json |
 | AC2S.14 (DH bucket) | verified | ThreadSamplerTest.dhWorldGenThreadsGetTheirOwnBucket, .aSteadyStateSampleAllocatesNothing (DH names), StutterAnalyzerTest.dhWorldGenCpuOverTheRecordedSweepsOnly, .worldGenCpuStillCountsAsDh, StutterServiceTest.aFinishedBenchmarkReportsItsDhWorldGenCpu; merged early (cc3f52e0) |
-| AC2B.9 (RW-15) | WS-S part verified; closes with WS-B | StutterServiceTest.anExcludedStepRecordsNoFrames, StutterScreenTextTest.theBenchmarkLineNamesExcludedSteps |
+| AC2B.9 (RW-15) | WS-S part verified; closes with WS-B (its count, its line, its call) | StutterServiceTest.anExcludedStepRecordsNoFrames (called as BenchmarkController calls it; the seam never starts or resumes the capture) |
 
 CI: run 36319389803 (S1, 6496f2cd), 36325283747 (S1-S8, 8bd62a8d), 36328669112 (S1-S12, f9aada54), 36333351347
 (36994bb8, after merging WS-R's r17) and 36336531220 (d6fe1bd5: the review fixes, after merging WS-P): every job green
