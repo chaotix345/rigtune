@@ -8,6 +8,9 @@ Brief: the user's v0.5.0 prompt (full autonomy: research -> release incl. GitHub
 - The user APPROVED (2026-09-27, in the v0.5 prompt) changing the per-call ns budgets in tools/footprint-budgets.json (e.g. min(ceiling, 4 x max observed)) and/or redesigning how those timings are measured. Ceilings, CPU-ms, bytes, 0-allocation and leak checks stay strict.
 - The user's other Claude session is running an independent read-only audit of v0.4.0's new features (-> C:/Dev/Worktrees/handoff/audit-v040-features.md); the user pastes its output here. Verify every finding before acting.
 
+- NEW P0.4 (real-world, 2026-09-27): "RigTune never fights the launcher". In the user's Modrinth App instance, the app's Update / Update all failed with "The updated filename belongs to another content item" for the 4 mods RigTune 0.1.0 updated on 2026-09-25. Verified (DB copy + modrinth/code content_mutation.rs:266-278): the app tracks files in its own SQLite DB; RigTune's update left the old jar `.jar.disabled` (still the app's linked entry, update pending) and the new jar as an unlinked row at exactly the filename the app's update wants -> refused. Every jar RigTune added is unlinked in the app (no app updates for them); rows for missing files are never pruned. The user fixed the instance by hand (removed colliding copies in the app, deleted RigTune's DH .rigtune-pending + mods/update/, reinstalled DH 3.3.2 + Entity Culling through the app); modmenu/YACL/zoomify still have no content entry. RigTune 0.4.0 is now in the instance (installed 2026-09-27 10:15, not yet launched); its pending.json still holds 0.1.0's DH group, which the 0.4 helper will abandon harmlessly (both source files gone; DH already present). Research: r-launchers -> docs/research/v0.5/launcher-managed-mods.md (design: mod-file changes become launcher advice in launcher-managed instances, repair notice, the app's options sync, other launchers, what rules can do for 0.1.x-0.4.x).
+- The other session's audit of v0.4.0's features ARRIVED (docs/research/v0.5/audit-v040-features.md: 0 H, 2 M (PF-1 battery offer without an active profile, SD-1 long stutter sessions dilute GC/CPU causes), 13 L, 2 latent); being verified by audit-verify -> docs/research/v0.5/audit-v040-verification.md.
+
 ### Environment (verified 2026-09-27)
 - Integration branch `feat/v0.5.0` from main @ 987179e4; mod_version 0.5.0-dev.
 - MC (Mojang manifest 2026-09-27): latest release 26.3, snapshot 26.4-snapshot-1 -> no new node.
@@ -35,7 +38,9 @@ Brief: the user's v0.5.0 prompt (full autonomy: research -> release incl. GitHub
 | brainstorm (Workflow wf_8b239ca5-6ea) | - | - | RUNNING: 6 angle generators -> merge -> 7 judges -> synthesis + critic -> docs/research/v0.5/brainstorm.md |
 | r-ci (opus) | research/v05-ci (optional) | rigtune-r-ci (optional) | RUNNING -> docs/research/v0.5/ci-robustness.md |
 | r-verify (opus) | research/v05-verify (optional) | rigtune-r-verify (optional) | RUNNING -> docs/research/v0.5/verification-gaps.md |
-| r-leftovers (sonnet) | - | - | RUNNING -> docs/research/v0.5/v04-leftovers.md |
+| r-leftovers (sonnet) | - | - | DONE: docs/research/v0.5/v04-leftovers.md (9 FIX, 2 NEEDS A DECISION, 5 NOT WORTH IT, + L14-20 feature-level; 1 new: a baseline fold drops the "Profile: X" label) |
+| r-launchers (opus) | - | - | RUNNING -> docs/research/v0.5/launcher-managed-mods.md (P0.4) |
+| audit-verify (opus) | research/v05-audit-verify (throwaway tests, not pushed) | rigtune-audit-verify | RUNNING -> docs/research/v0.5/audit-v040-verification.md |
 
 ### REMAINING PLAN
 1. Phase 1: launch r-ci, r-leftovers, r-verify research agents + the brainstorm Workflow; then one research agent per picked feature; fold in the other session's audit (verified).
