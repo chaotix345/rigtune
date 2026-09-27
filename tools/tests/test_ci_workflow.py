@@ -146,9 +146,11 @@ class BuildWorkflowTests(unittest.TestCase):
         self.assertGreaterEqual(int(game["timeout-minutes"]), 15)
         self.assertGreater(int(job["keys"]["timeout-minutes"]), int(game["timeout-minutes"]))
         self.assertIn("kill -QUIT", game["run"])
-        # The game's JVM runs KnotClient; Gradle's and the fake Modrinth's JVMs are java too (SPEC 1e).
-        self.assertIn("pgrep -f KnotClient", game["run"])
-        self.assertIn("/proc/$p/comm", game["run"])
+        # The game's JVM runs KnotClient; Gradle's and the fake Modrinth's JVMs are java too (SPEC 1e). KnotClient comes
+        # after the classpath, so the whole cmdline is searched, not pgrep -f's view of it.
+        self.assertIn("pgrep -x java", game["run"])
+        self.assertIn('/proc/$p/cmdline" 2>/dev/null | grep -qF KnotClient', game["run"])
+        self.assertNotIn("pgrep -f", game["run"])
 
     # SPEC 1g: the dormant split. A part's classes reach both Gradle steps, and its artifacts and job name say which part.
     def test_a_split_part_reaches_gradle_and_names_its_artifacts(self):

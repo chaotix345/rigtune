@@ -89,20 +89,31 @@ class StreakTests(unittest.TestCase):
 
     def test_a_legs_log_gives_class_times_requests_and_ratios(self):
         log = "\n".join([
-            "2026-09-27T05:30:01Z [16:00:01] [Test thread/INFO]: Game-test class RigTuneClientGameTest passed in 12345 ms",
+            "2026-09-27T05:30:01Z [16:00:01] [Test thread/INFO]: Game-test class RigTuneClientGameTest finished in 12345 ms",
             "2026-09-27T05:33:01Z [16:03:01] [Test thread/INFO]: Game-test class BenchmarkGameTest failed in 180000 ms",
             '2026-09-27T05:34:01Z     "tickHookOnVsReference": 1.311,',
             '2026-09-27T05:34:01Z     "tickHookOnTwinVsReference": 2.643,',
             "2026-09-27T05:36:01Z 820 requests to the fake Modrinth, the start-up lookups answered, every answer 2xx or a lookup's 404",
         ])
         details = cs.leg_details(log)
-        self.assertEqual([("RigTuneClientGameTest", "passed", 12345), ("BenchmarkGameTest", "failed", 180000)], details["classes"])
+        self.assertEqual([("RigTuneClientGameTest", "finished", 12345), ("BenchmarkGameTest", "failed", 180000)], details["classes"])
         self.assertEqual(820, details["requests"])
         self.assertEqual({"tickHookOnVsReference": 1.311, "tickHookOnTwinVsReference": 2.643}, details["ratios"])
         line = cs.describe_leg("26.2, OpenGL", details)
         self.assertIn("820 requests", line)
         self.assertIn("tickHookOnVsReference 1.311 (twin 2.643)", line)
         self.assertIn("RigTuneClientGameTest 12.3 s, BenchmarkGameTest 180.0 s FAILED", line)
+
+    # Review: a log GitHub won't give (expired, rate-limited) leaves that leg "no log" instead of ending the script.
+    def test_a_missing_log_is_none(self):
+        def fail(*args, **kwargs):
+            raise cs.subprocess.CalledProcessError(1, "gh")
+        original = cs.gh_text
+        cs.gh_text = fail
+        try:
+            self.assertIsNone(cs.job_log(123))
+        finally:
+            cs.gh_text = original
 
     def test_runs_are_taken_oldest_first_whatever_the_listing_order(self):
         ids, _ = self.count([run(3, 3), run(1, 1, conclusion="failure"), run(2, 2)])
@@ -117,7 +128,7 @@ class StreakTests(unittest.TestCase):
         self.assertIn("2 `abc123` workflow_dispatch: ignore (cancelled)", text)
         self.assertIn("26.2, OpenGL 480 s", text)
         jobs = [dict(j, databaseId=i) for i, j in enumerate(GREEN_JOBS)]
-        details = {5: cs.leg_details("Game-test class UiGameTest passed in 2000 ms\n7 requests to the fake Modrinth")}
+        details = {5: cs.leg_details("Game-test class UiGameTest finished in 2000 ms\n7 requests to the fake Modrinth")}
         text = cs.markdown("feat/v0.5.0", None, 5, [(runs[0], jobs)], looked, details)
         self.assertIn("- 26.2, OpenGL: 7 requests to the fake Modrinth; classes: UiGameTest 2.0 s", text)
         self.assertIn("- 26.3, OpenGL: no log", text)

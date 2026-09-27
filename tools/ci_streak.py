@@ -28,7 +28,7 @@ REQUIRED_JOBS = ("java", "python", "gametest-matrix", "rules-consistency", "rule
 REQUIRED_LEGS = ("26.2, OpenGL", "26.3, OpenGL", "26.3, Vulkan")
 GAME_TEST_PREFIX = "client game tests ("
 COUNTED_EVENTS = ("push", "workflow_dispatch")
-CLASS_LINE = re.compile(r"Game-test class (\w+) (passed|failed) in (\d+) ms")
+CLASS_LINE = re.compile(r"Game-test class (\w+) (finished|failed) in (\d+) ms")
 REQUESTS_LINE = re.compile(r"(\d+) requests to the fake Modrinth")
 RATIO_LINE = re.compile(r'"(tickHookOnVsReference|tickHookOnTwinVsReference)": ([0-9.]+)')
 
@@ -57,7 +57,11 @@ def list_jobs(run_id, repo=None):
 
 
 def job_log(job_id, repo=None):
-    return gh_text(["api", "repos/{}/actions/jobs/{}/logs".format(repo or "{owner}/{repo}", job_id)])
+    """The job's log, or None when GitHub doesn't give it (expired, rate-limited): the report then says "no log"."""
+    try:
+        return gh_text(["api", "repos/{}/actions/jobs/{}/logs".format(repo or "{owner}/{repo}", job_id)])
+    except subprocess.CalledProcessError:
+        return None
 
 
 def leg_of(name):
@@ -134,7 +138,7 @@ def describe_leg(name, details):
     if ratio is not None:
         parts.append("tickHookOnVsReference %.3f (twin %.3f)" % (ratio, details["ratios"].get("tickHookOnTwinVsReference", float("nan"))))
     if details["classes"]:
-        parts.append("classes: " + ", ".join("%s %.1f s%s" % (c, ms / 1000, "" if outcome == "passed" else " FAILED")
+        parts.append("classes: " + ", ".join("%s %.1f s%s" % (c, ms / 1000, "" if outcome == "finished" else " FAILED")
                                              for c, outcome, ms in details["classes"]))
     return name + ": " + ("; ".join(parts) if parts else "nothing recorded")
 
@@ -157,8 +161,8 @@ def markdown(branch, sha, need, current, looked, details=None):
                                                                run.get("event"), run.get("attempt"), run.get("conclusion"),
                                                                "%d s" % total if total is not None else "?", "; ".join(legs)))
     if details:
-        lines += ["", "Per leg (from the job logs):"]
-        for run, jobs in current:
+        lines += ["", "Per leg (from the job logs of the last %d runs):" % need]
+        for run, jobs in current[-need:]:
             lines += ["", "Run %s:" % run["databaseId"]]
             for job in jobs:
                 if leg_of(job.get("name", "")) is not None:
@@ -181,10 +185,12 @@ def main(argv=None):
     runs = list_runs(args.branch, args.repo)
     current, looked = streak(runs, lambda run_id: list_jobs(run_id, args.repo), args.sha, args.require)
     details = {}
-    for _, jobs in current:
+    for _, jobs in current[-args.need:]:
         for job in jobs:
             if leg_of(job.get("name", "")) is not None and job.get("databaseId"):
-                details[job["databaseId"]] = leg_details(job_log(job["databaseId"], args.repo))
+                log = job_log(job["databaseId"], args.repo)
+                if log is not None:
+                    details[job["databaseId"]] = leg_details(log)
     report = markdown(args.branch, args.sha, args.need, current, looked, details)
     if args.write:
         Path(args.write).write_text(report, encoding="utf-8", newline="\n")

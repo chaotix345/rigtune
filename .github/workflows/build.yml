@@ -193,15 +193,16 @@ jobs:
         run: tools/ci/offline.sh java tools/ci/MulticastCheck.java
       # With no network but loopback: RigTune gets Modrinth and its rules from local fixtures, and Minecraft's own
       # services (accounts, Realms) fail at once, the same way every run. If the game finds no graphics backend it opens a
-      # blocking error dialog, so a hang means a timeout here; at 13 min the game's JVM (the java process running KnotClient;
-      # Gradle's and the fake Modrinth's are java too) prints every thread's stack and locks into this log first (run
-      # 36235561444 hung with none).
+      # blocking error dialog, so a hang means a timeout here; at 13 min the game's JVM (the java process whose command line
+      # has KnotClient; Gradle's and the fake Modrinth's are java too) prints every thread's stack and locks into this log
+      # first (run 36235561444 hung with none). The whole /proc/<pid>/cmdline is searched: KnotClient comes after a long
+      # classpath.
       - name: Client game tests
         timeout-minutes: 15
         run: |
           set -eu
-          ( sleep 780; for p in $(pgrep -f KnotClient || true); do
-              if [ "$(cat "/proc/$p/comm" 2>/dev/null)" = java ]; then kill -QUIT "$p" || true; fi
+          ( sleep 780; for p in $(pgrep -x java || true); do
+              if tr '\0' '\n' < "/proc/$p/cmdline" 2>/dev/null | grep -qF KnotClient; then kill -QUIT "$p" || true; fi
             done ) >/dev/null 2>&1 &
           watcher=$!
           trap 'kill "$watcher" 2>/dev/null || true' EXIT
