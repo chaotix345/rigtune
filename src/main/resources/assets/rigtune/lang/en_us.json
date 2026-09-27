@@ -421,6 +421,8 @@
 	"rigtune.stutter.advice": "Advice",
 	"rigtune.stutter.advice.none": "No advice for this session.",
 	"rigtune.stutter.analysing": "Analysing…",
+	"rigtune.stutter.benchmark.excluded.many": "%s. %s steps were left out: their terrain hadn't finished loading.",
+	"rigtune.stutter.benchmark.excluded.one": "%s. 1 step was left out: its terrain hadn't finished loading.",
 	"rigtune.stutter.benchmark.none": "Stutter Doctor: no spikes during the sweeps",
 	"rigtune.stutter.benchmark.spikes": "Stutter Doctor: %s spikes during the sweeps; likely causes: %s",
 	"rigtune.stutter.benchmark.spikes.one": "Stutter Doctor: 1 spike during the sweeps; likely causes: %s",

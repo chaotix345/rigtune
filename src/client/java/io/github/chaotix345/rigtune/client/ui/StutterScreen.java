@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.client.ui;
 
+import io.github.chaotix345.rigtune.client.stutter.StutterHooks;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
@@ -416,8 +417,22 @@ public class StutterScreen extends Screen {
 		return StutterSummary.clock(seconds);
 	}
 
-	// BenchmarkResultScreen's line (SPEC 5: "2 spikes; likely causes: garbage collection"); null without a capture.
+	// BenchmarkResultScreen's line (SPEC 5: "2 spikes; likely causes: garbage collection"); null without a capture. It names
+	// the steps the last run left out of its capture (v0.5 RW-15).
 	public static @Nullable Component benchmarkLine(@Nullable StutterReport r) {
+		return benchmarkLine(r, StutterHooks.lastBenchmarkExcludedSteps());
+	}
+
+	static @Nullable Component benchmarkLine(@Nullable StutterReport r, int excludedSteps) {
+		Component line = spikesDuringSweeps(r);
+		if (line == null || excludedSteps <= 0) {
+			return line;
+		}
+		return excludedSteps == 1 ? Component.translatable("rigtune.stutter.benchmark.excluded.one", line)
+				: Component.translatable("rigtune.stutter.benchmark.excluded.many", line, excludedSteps);
+	}
+
+	private static @Nullable Component spikesDuringSweeps(@Nullable StutterReport r) {
 		if (r == null) {
 			return null;
 		}

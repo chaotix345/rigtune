@@ -159,10 +159,24 @@ public final class StutterHooks {
 		}
 	}
 
-	// docs/v0.5/SPEC.md 2B RW-15 (PLAN contracts item 12): true while a benchmark step that ran out of time is measured
-	// again, false after it; that step's frames stay out of the benchmark's capture. BenchmarkController calls it (WS-B).
-	// Contracts seam (WS-K): a no-op until WS-S implements it.
+	// docs/v0.5/SPEC.md 2B RW-15 (PLAN contracts item 12): BenchmarkController (WS-B) calls it with true when a step's
+	// settle ran out of time, before that step's sweeps, and with false when the next step starts (RW-5's re-measure records
+	// normally); the excluded step's frames stay out of the benchmark's capture, and the run counts it.
 	public static void benchmarkStepExcluded(boolean excluded) {
+		StutterService s = service;
+		if (s != null) {
+			try {
+				s.benchmarkStepExcluded(excluded);
+			} catch (RuntimeException e) {
+				RigTune.LOGGER.warn("Stutter Doctor: could not leave a benchmark step out of the capture", e);
+			}
+		}
+	}
+
+	// How many steps the last finished benchmark left out of its capture (RW-15), for its result line.
+	public static int lastBenchmarkExcludedSteps() {
+		StutterService s = service;
+		return s == null ? 0 : s.lastBenchmarkExcludedSteps();
 	}
 
 	// The last finished benchmark's capture summary (BenchmarkResultScreen's line), or null.

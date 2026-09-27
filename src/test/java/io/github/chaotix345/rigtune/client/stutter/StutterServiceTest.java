@@ -4,6 +4,7 @@ import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.core.LogCapture;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
+import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import io.github.chaotix345.rigtune.core.stutter.StutterRings;
 import io.github.chaotix345.rigtune.core.stutter.StutterStore;
 import org.junit.jupiter.api.AfterEach;
@@ -146,6 +147,53 @@ class StutterServiceTest {
 		StutterMonitor.Capture next = StutterCapture.startSession();
 		assertSame(next, StutterMonitor.session(), "the next session starts normally");
 		assertTrue(StutterCapture.GC.active());
+	}
+
+	// docs/v0.5/SPEC.md 2B RW-15 (AC2B.9, the capture side): the frames of a step whose settle ran out of time stay out of
+	// the benchmark's capture, even across that step's sweeps; the run counts the steps left out.
+	@Test
+	void anExcludedStepRecordsNoFrames(@TempDir Path dir) throws ReflectiveOperationException {
+		Queue io = new Queue();
+		StutterService service = service(dir, io);
+		service.benchmarkStarted(null);
+		service.benchmarkSweep(null, true);
+		frames(100);
+		service.benchmarkSweep(null, false);
+		service.benchmarkStepExcluded(true);
+		service.benchmarkSweep(null, true);
+		frames(300);
+		service.benchmarkSweep(null, false);
+		service.benchmarkSweep(null, true);
+		frames(300);
+		service.benchmarkSweep(null, false);
+		service.benchmarkStepExcluded(false);
+		service.benchmarkSweep(null, true);
+		frames(50);
+		service.benchmarkFinished(null, true);
+		io.runAll();
+		StutterReport report = service.lastBenchmark();
+		assertNotNull(report);
+		assertEquals(99 + 49, report.frames(), "the two recorded sweeps (each one's first frame spans the pause); the excluded step's 600 frames left out");
+		assertEquals(1, service.lastBenchmarkExcludedSteps());
+
+		service.benchmarkStarted(null);
+		service.benchmarkStepExcluded(true);
+		service.benchmarkSweep(null, true);
+		frames(100);
+		service.benchmarkStepExcluded(false);
+		service.benchmarkStepExcluded(true);
+		service.benchmarkSweep(null, true);
+		frames(100);
+		service.benchmarkFinished(null, true);
+		io.runAll();
+		assertEquals(0, service.lastBenchmark().frames(), "the first step already excluded when the capture started");
+		assertEquals(2, service.lastBenchmarkExcludedSteps());
+	}
+
+	private static void frames(int n) {
+		for (int i = 0; i < n; i++) {
+			StutterMonitor.onFrame(5_000_000L);
+		}
 	}
 
 	// AC2S.14 (for 2B's RW-6): a finished benchmark run reports the CPU DH's world generation used during its sweeps; a

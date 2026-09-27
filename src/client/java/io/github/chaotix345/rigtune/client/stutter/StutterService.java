@@ -68,6 +68,11 @@ public final class StutterService {
 	private long lastAnalysis;
 	private boolean benchmarkRunning;
 	private boolean resumePaused;
+	// v0.5 RW-15: the sweep's recording flag, whether the current step is left out, and how many steps this run left out.
+	private boolean sweepRecording;
+	private boolean stepExcluded;
+	private int excludedSteps;
+	private volatile int lastBenchmarkExcludedSteps;
 	private volatile @Nullable Analysis live;
 	private volatile @Nullable Analysis saved;
 	private volatile Saved savedState = Saved.UNKNOWN;
@@ -256,6 +261,9 @@ public final class StutterService {
 	// run's sweeps aren't play either).
 	void benchmarkStarted(Minecraft minecraft) {
 		benchmarkRunning = true;
+		sweepRecording = false;
+		stepExcluded = false;
+		excludedSteps = 0;
 		endSessionForBenchmark(minecraft);
 	}
 
@@ -263,13 +271,29 @@ public final class StutterService {
 	// ended, so only one capture's rings are ever held.
 	void benchmarkSweep(Minecraft minecraft, boolean recording) {
 		StutterMonitor.Capture bench = StutterMonitor.benchmark();
+		sweepRecording = recording;
 		if (bench == null && recording) {
 			benchmarkRunning = true;
 			endSessionForBenchmark(minecraft);
 			bench = StutterCapture.startBenchmark();
+			// Created paused, like every gap between sweeps.
+			StutterMonitor.event(StutterRings.PAUSE_BEGIN, System.nanoTime(), 0);
 		}
 		if (bench != null) {
-			pauseBenchmark(bench, !recording);
+			pauseBenchmark(bench, !recording || stepExcluded);
+		}
+	}
+
+	// docs/v0.5/SPEC.md 2B RW-15 (the contracts' seam, BenchmarkController calls it): true when a step's settle ran out of
+	// time, before its sweeps; false when the next step starts. Its frames stay out of the capture whatever the sweeps say.
+	void benchmarkStepExcluded(boolean excluded) {
+		if (excluded && !stepExcluded) {
+			excludedSteps++;
+		}
+		stepExcluded = excluded;
+		StutterMonitor.Capture bench = StutterMonitor.benchmark();
+		if (bench != null) {
+			pauseBenchmark(bench, !sweepRecording || excluded);
 		}
 	}
 
@@ -300,6 +324,9 @@ public final class StutterService {
 		StutterMonitor.Capture bench = StutterMonitor.benchmark();
 		lastBenchmark = null;
 		lastBenchmarkDhWorldGen = null;
+		lastBenchmarkExcludedSteps = excludedSteps;
+		stepExcluded = false;
+		excludedSteps = 0;
 		StutterCapture.Copy copy = bench == null ? null : StutterCapture.stop(bench);
 		boolean paused = resumePaused;
 		resumePaused = false;
@@ -335,6 +362,10 @@ public final class StutterService {
 
 	@Nullable Double lastBenchmarkDhWorldGenCores() {
 		return lastBenchmarkDhWorldGen;
+	}
+
+	int lastBenchmarkExcludedSteps() {
+		return lastBenchmarkExcludedSteps;
 	}
 
 	int sessionsEnded() {
