@@ -111,8 +111,30 @@ convention. Research: docs/research/v0.5/verification-gaps.md (vg). Plan: docs/v
 - E11 the high-contrast A11y method (AC3f.3); the snapshot-canary fixture test (AC3f.8).
 - E12 docs/v0.5/verification/{e2e,server,battery}/.
 
+## Early part: status (2026-09-27)
+
+| task | commit | tests | red first | result |
+|---|---|---|---|---|
+| E1 Linux path | 2a495093 | `test_e2e_linux.py` 12 | 11 of 12 fail against the base harness (9 missing functions, 2 Xvfb lines reported) | pass; research CI runs 36288269972 / 36288792339 / 36289370916 ran this code on Linux (61-272 s per scenario, vg §1.3) |
+| E2 `e2e_matrix.py` | 99e59018 | `test_e2e_matrix.py` 11 | module missing | push tier: 0.4.0 → new on 26.2 and 26.3; release tier: 16 rows |
+| E3 fixture generations | ed97abac | `test_written_v05.py` 14; v0.4's two-set test rewritten | 13 errors + 1 failure | pass; CI 36295057958 green on every job |
+| E4 compat040 | 420f58b3 | `test_compat040.py` 7 | module missing, compat030 had no `parse_args` | local run on the released 0.4.0 jar: **PASS 14/14** (`docs/v0.5/verification/e2e/compat040-early.txt`); compat030 still PASS 9/9 |
+
+Harness suite: 260 tests (was 216 at the branch point).
+
+For WS-K's `v050-written/README.md`: compose deep-merges a file several sets provide:
+- objects are merged key by key;
+- lists are merged without exact duplicates;
+- a scalar two sets both hold takes the later set's value (set order: `ws-l1 … ws-f`, after all of v0.4's sets) and is listed as "merged: …" in compat040's output;
+- a different `formatVersion`/`schemaVersion` is refused.
+
+So each set may commit the whole file its own test writes.
+
 ## Residuals (early part)
-- E1's pins test is a subset check until E6.
+- E1's pins test checks a subset until E6.
+- compat040 runs in CI only once E6 adds its step. Until then it's the local run above.
+- The downgrade checks' names still say "0.4"/"0.3.0" (e2e_checks `after_downgrade_*`). They are generalised with the downgrade-to-0.4.0 rows' first real run (E8).
+- 0.5's new files join `V050.kept` when their owners' formats land (WS-S2, WS-T, WS-P2).
 
 ## Docs (for the docs workstream)
 - (filled at the end)
