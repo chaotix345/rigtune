@@ -156,6 +156,9 @@ class BuildWorkflowTests(unittest.TestCase):
         script = (ROOT / "tools" / "ci" / "offline.sh").read_text(encoding="utf-8")
         self.assertIn("timeout --kill-after=30s", script)
         self.assertLess(script.index('"${limit[@]}"'), script.index("setpriv"), "the timeout runs as root, outside setpriv")
+        # What the timeout's TERM leaves (it returns once Gradle's launcher has exited) is killed within the step.
+        self.assertIn("pkill -KILL -x java", game["run"])
+        self.assertLessEqual(int(limit.group(1)) * 60 + 30 + 30, int(game["timeout-minutes"]) * 60)
         self.assertIn("kill -QUIT", game["run"])
         # The game's JVM runs KnotClient; Gradle's and the fake Modrinth's JVMs are java too (SPEC 1e). KnotClient comes
         # after the classpath, so the whole cmdline is searched, not pgrep -f's view of it.
