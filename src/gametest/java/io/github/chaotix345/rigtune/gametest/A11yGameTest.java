@@ -529,6 +529,12 @@ public class A11yGameTest implements FabricClientGameTest {
 		ClientGameTestContext context = v05.context();
 		Screen found = context.computeOnClient(mc -> mc.gui.screen());
 		ToolsTrend tools = new ToolsTrend(v05.stub(), new StartupTimes.View(15_125L, 14_517L, 12, true));
+		// This machine's own result first (none on CI's Linux; the advice on a PC with the counters off), for the record.
+		v05.resize(1280, 720, 2);
+		openTools(context, tools);
+		RigTune.LOGGER.info("A11yGameTest: this machine: {}; crash-report setup {} ms; Tools shows {} advice row(s)", HardwareProbe.perfCounters().describe(),
+				PreloadTimer.preloadMs(), context.computeOnClient(mc -> ((ToolsScreen) mc.gui.screen()).perfCounterLines().size()));
+		context.takeScreenshot("a11y-tools-startup-this-machine-1280x720-scale2");
 		PerfCounters off = new PerfCounters(true, true, List.of(), List.of("PerfOS"));
 		HardwareProbe.seedPerfCounters(off);
 		try {
