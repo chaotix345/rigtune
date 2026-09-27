@@ -123,8 +123,9 @@ The script stops (exit code 2, nothing written) and lists every problem when
   `v1` field);
 - (0.5) a bad `stutterFixes` entry (docs/RULES_SCHEMA.md "stutterFixes"): an unknown field or a
   null; a missing, repeated or unknown `adviceId` (it must be a `stutterAdvice` id); no
-  `"requires": ["stutter-fix"]`, or `stutter-doctor`/`jvm-flags` next to it; no `evidence`, or a
-  bad condition or a `jvm-` fact in it; a `set.key` outside the three allowlisted settings; both or
+  `"requires": ["stutter-fix"]`, or `stutter-doctor`/`jvm-flags` next to it; no `evidence`, a bad
+  condition or a `jvm-` fact in it, or no Stutter Doctor key at its top level (it must test the
+  session); a `set.key` outside the three allowlisted settings; both or
   neither of `value` and `step`; a value the key's share-code entry doesn't hold; a step that is 0,
   over 8 either way, not a whole number or on an enum key; a negative step without `min` or a
   positive one without `max`; `min`/`max` with a value, outside the key's range, or `min` above
@@ -140,6 +141,7 @@ python tools/update_rules.py --mc-versions 26.2,26.3
 python tools/update_rules.py --knowledge path/to/knowledge.json --out-dir path/to/scratch
 python tools/update_rules.py --offline-fixtures path/to/fixtures   # no network; see below
 python tools/update_rules.py --revision 17          # write revision 17 if anything changed (one release, one revision)
+python tools/update_rules.py --revision 17 --skip-main-check   # the same without comparing with main (offline; check main yourself)
 python tools/check_rules_v1.py                     # offline: is rules-v1.json safe and in sync?
 ```
 
@@ -147,8 +149,11 @@ python tools/check_rules_v1.py                     # offline: is rules-v1.json s
 Every regeneration for a release lands in one revision, R = main's revision at release time + 1, so
 pass `--revision <R>` while preparing it: when the content changed, both files get exactly R (a
 second regeneration inside R keeps R); an R below the files' current revision is refused, also when
-nothing changed (it means R is out of date, for example because main moved). Without the option the
-updater writes the current revision + 1, as the weekly bot does.
+nothing changed. R must also be above main's revision: the updater runs `git fetch origin main` and
+reads `origin/main:rules/rules-v2.json`, and refuses R if it isn't higher (merge main into the
+branch first and use main's revision + 1) or if origin can't be reached (unless `--skip-main-check`,
+after checking main yourself). Without `--revision` the updater writes the current revision + 1, as
+the weekly bot does, and never looks at main.
 
 After regenerating, run `./gradlew build` (both MC versions): the scenario tests read the
 bundled rules, and `RulesV1DifferentialTest` checks `rules/rules-v1.json`.

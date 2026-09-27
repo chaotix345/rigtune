@@ -71,24 +71,28 @@ then a commit. Pushes batched, never during a streak.
 | R1 `--revision`, r16 baseline, first fold at r17 | 894817cb | `RevisionPinTests` (9); `LegacyRulesParseTest`/`LegacyParserTest` relative counts; the fold: Moonrise has a Fabric 26.3 build (availability 26.3 + `moonrise-opt`), Fabulously Optimized 26.3 added controlify, debugify, skyboxify, yacl, zoomify (debugify's rule is now upstream in FO), zoomify triaged into `reviewIgnore` (a zoom key, not performance) |
 | R2 L2 | 350f6216 | red: 3 Python + 6 Java failures (run log `r2-red.log`); green: `ChunksLoadingTagTests` (7), `ChunksLoadingSeedV1Tests`, `SchemaConsistencyTest.stutterVocabulariesMatchTheAttributor`, `ChunksLoadingSeedTest` (4) |
 | R3 L4 | 74bc986d | red: `test_no_entry_level_wording`, `test_l4_changed_only_reasons`; green after the rewording; `RulesV1DifferentialTest` (15) and `check_rules_v1.py` untouched |
-| R4 C20 rules side | e5d9ea47 | red: 28 Python validator tests + `test_the_c20_seeds` + 4 Java failures; green: `StutterFixesTests` (28), `test_the_c20_seeds`, `SchemaConsistencyTest.stutterFixValuesMatchShareKeys`, `StutterFixSeedsTest` (3) |
+| R4 C20 rules side | e5d9ea47 | red: 28 Python validator tests + `test_the_c20_seeds` + 4 Java failures; green: `StutterFixesTests` (30 after the review), `test_the_c20_seeds`, `SchemaConsistencyTest.stutterFixValuesMatchShareKeys`, `StutterFixSeedsTest` (3) |
 | R5 4i | 65ba0fd6 | the deciding test `OldClientWarningTest.theConditionReachesExactlyTheReleasedOldClients` passed before the rule existed (so it ships); red then green: the bundled-rule tests, `RulesV1DifferentialTest.rulesV1GainsOnlyTheOldClientWarning`, `test_the_old_client_warning`, the relative-count tests |
 | R6 2T tool | 2d266d35 | `UpstreamDiffTests` (6); `python tools/rules_upstream_diff.py src/test/resources/rules/r16/rules-v2.json rules/rules-v2.json` lists exactly R1's fold |
 | merge of feat/v0.5.0 (WS-L1 m1, WS-P2 A, WS-S2's early core) | 6ebc52ea, 76c3f2a4 | WS-S2's `FixSpecTest.noSectionNoFixes` assumed no bundled section (true until R): it now strips the section; new `StutterFixSeedsTest.theClientAcceptsEverySeed` (the client's `FixSpec.of` accepts all three seeds with the same targets); `MAX_FIX_STEP` tied to `FixSpec.MAX_STEP` |
+| the code review's fixes (0 H, 1 M, 6 L; coordinator's decisions) | 35d5cdf2 | M1 `test_evidence_must_test_the_session`; L2 `test_an_advice_id_that_isnt_a_string`; L3 `test_a_pinned_revision_at_or_below_mains_is_refused`, `test_mains_revision_unavailable_refuses_unless_skipped`, `test_main_revision_reads_origin_main` (and a live `--revision 16` run refused: "isn't above main's revision 16"); L4 the warning's last sentence; L5 in 76c3f2a4; L6 `LegacyParserTest.unknownKeys` walks not/anyOf and settings/mods/templates conditions (+ `theUnknownKeyWalkReachesNestedConditions`); L7 `ChunksLoadingSeedTest.theSpikeRateKeepsTheStillControlOut` |
 
 Every regeneration ran `python tools/update_rules.py --revision 17` live (Modrinth/GitHub), then `check_rules_v1.py`, the
-Python suite from the repository root (413 tests, 1 skipped) and `:26.2:test` over `core.*` and `v0*` in a build slot
+Python suite from the repository root (418 tests after the review, 1 skipped) and `:26.2:test` over `core.*` and `v0*` in a build slot
 (1569-1901 tests, 0 failures after each task's fix). rules-v1.json's content changed only for L4 (the four vanilla reasons)
 and 4i (the warning), plus `revision`/`generatedAt`.
 
 CI (every job, every leg green): 36321718784 (c526ca81: R1-R4 + feat/v0.5.0 with WS-S's early merge), 36324314978
-(2d266d35: + R5, R6). Looked at (run 36324314978, `gametest-screenshots-26.2-OpenGL`): `0051_ui-main-1280x720-scale2`
+(2d266d35: + R5, R6), 36328564937 (ee88e2d0: + the merge of feat/v0.5.0 with WS-S2's core, this doc); the head with the
+review's fixes (35d5cdf2 and the next merge) is reported with its run in the final report. Looked at (run 36324314978, `gametest-screenshots-26.2-OpenGL`): `0051_ui-main-1280x720-scale2`
 (header "Rules r17 (bundled…)"; Warnings 1, the llvmpipe one: no old-client warning on 0.5.0-dev), `0135_stutter-1280x720-
 scale2`, `0138_stutter-saved` (unchanged layout; no session there has enough data for advice).
 
 ## Deviations
-- **`--revision`** is a new updater option (the plan fixed one R but no mechanism). It refuses an R below the files'
-  revision even when nothing changed, so a stale R after main moves fails loudly.
+- **`--revision`** is a new updater option (the plan fixed one R but no mechanism; the coordinator approved it). It
+  refuses an R below the files' revision even when nothing changed, and (review L3) an R not above main's revision
+  (`git fetch origin main`, `origin/main:rules/rules-v2.json`), or any R when origin can't be read, unless
+  `--skip-main-check`.
 - **The L2 seed has two conditions**, the tag share (>= 60 %) and the spike rate (>= 2 a minute): the tag share alone
   can't separate the A control's worst case from C1r (both 75 %). The re-runs are 52 s captures, under the enough-data
   gate, so their facts are checked through `StutterAdvisor.evaluate(rules, ctx)`; the A control (enough data) through the
@@ -98,8 +102,10 @@ scale2`, `0138_stutter-saved` (unchanged layout; no session there has enough dat
 - **The validator refuses `stutter-doctor` and `jvm-flags` next to `stutter-fix`** (0.5 would skip such a fix silently),
   and an INT key's `value` must be a JSON integer (a digit string is refused; `causeSpikesAtLeast` counts take digit
   strings like the share maps).
-- **4i's text** ends "RigTune 0.5 does this for you; update RigTune itself in the launcher too." (lm §6's text plus the
-  last clause: an old client's own "Update RigTune" item is a mod-file change too).
+- **4i's text** ends "RigTune 0.5 leaves mod files to your launcher." (the coordinator's wording, review L4: never
+  implying RigTune deletes or moves the old copies), instead of lm §6's "RigTune 0.5 does this for you."
+- **A fix's evidence must test the session** (review M1): at least one Stutter Doctor key or `causeSpikesAtLeast` at its
+  top level, so `{}`, `always` or machine-only facts are refused.
 - **L4's DH radius reasons** keep the guide's audience as "lower-end PCs" (was "entry-level PCs") and say "on this PC's
   estimated tier" for RigTune's cap.
 - **Other owners' tests adjusted** because the bundled rules changed: `StutterFixesModelTest.absentIsNull` (WS-K's) and
@@ -155,7 +161,7 @@ workerCpuMs5s 132.8-214.1 on near-identical code); every value keeps its budget 
 | AC2S.3 (the seed fires on C1r/C3r facts, not on the A control; v1 identical with and without it) | verified | `ChunksLoadingSeedTest` (recorded sessions in src/test/resources/stutter/l2-calibration); `ChunksLoadingSeedV1Tests` |
 | AC2S.4 (0.4.0 parses R: stutterAdvice r16 + 1, advice r16 + 1, no section dropped) | pinned-parser half verified; compat040 half closes with WS-E | `v040.LegacyParserTest.theReleasedParserReadsRWithR16sCountsPlusTheAdditions` |
 | AC2R.1 (only `reason` changes for L4; no "entry-level" in reason/text/title; ids unchanged; v1 checks untouched) | verified | `test_l4_changed_only_reasons` (7 in v2, 4 in v1, vs r16), `test_no_entry_level_wording`; `RulesV1DifferentialTest` and `check_rules_v1.py` green unchanged |
-| AC5.1 (stutterFixes documented; a Python test per refusal; absent from rules-v1.json, whose content doesn't change for C20) | verified | RULES_SCHEMA.md "stutterFixes"; `StutterFixesTests` (28); `test_the_c20_seeds`; `test_the_section_never_reaches_rules_v1` |
+| AC5.1 (stutterFixes documented; a Python test per refusal; absent from rules-v1.json, whose content doesn't change for C20) | verified | RULES_SCHEMA.md "stutterFixes"; `StutterFixesTests` (30 after the review); `test_the_c20_seeds`; `test_the_section_never_reaches_rules_v1` |
 | AC5.2 (0.4.0's and 0.3.0's parsers read R with r16's counts plus the 2S and 4i additions) | pinned halves verified; compat040 half closes with WS-E | `v040.LegacyParserTest`, `LegacyRulesParseTest.legacyParserReadsRWithR16sCountsPlusTheAdditions`, `LegacyParserTest.aStutterFixesSectionInAnyShapeChangesNothing` |
 | AC5.15 (no fix can name a key outside the allowlist) | updater half verified; `FixSpec` half is WS-S2's | `StutterFixesTests.test_a_key_outside_the_allowlist`; `SchemaConsistencyTest.stutterFixKeysMatchTheUpdater` / `stutterFixValuesMatchShareKeys` |
 | AC4i.1 (TRUE on 0.2.0/0.3.0/0.4.0 through their pinned code, FALSE on 0.5.0 and its pre-releases; ships only then) | verified; the warning ships | `OldClientWarningTest` (3), `v040.client.probe.ModScannerPinTest` |

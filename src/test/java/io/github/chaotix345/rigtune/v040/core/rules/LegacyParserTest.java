@@ -58,8 +58,46 @@ class LegacyParserTest {
 		assertNotNull(old.stutterAdvice, what);
 		assertEquals(current.stutterAdvice.size(), old.stutterAdvice.size(), what);
 		assertEquals(current.profileTemplates.templates.size(), old.profileTemplates.templates.size(), what);
-		assertTrue(old.advice.stream().allMatch(a -> a.when == null || a.when.unknownFields == null || a.when.unknownFields.isEmpty()), what);
-		assertTrue(old.stutterAdvice.stream().allMatch(a -> a.when == null || a.when.unknownFields == null || a.when.unknownFields.isEmpty()), what);
+		assertEquals(List.of(), unknownKeys(old), what);
+	}
+
+	// Every condition key 0.4.0 doesn't know, anywhere in the document (nested not/anyOf included): one would make its
+	// whole condition UNKNOWN on 0.4.0, so the rule would silently stop firing there.
+	static List<String> unknownKeys(RulesDocument doc) {
+		List<String> out = new java.util.ArrayList<>();
+		doc.advice.forEach(a -> collect(a.when, "advice[" + a.id + "]", out));
+		if (doc.stutterAdvice != null) {
+			doc.stutterAdvice.forEach(a -> collect(a.when, "stutterAdvice[" + a.id + "]", out));
+		}
+		doc.settings.forEach(s -> collect(s.when, "settings[" + s.key + "]", out));
+		doc.mods.forEach(m -> {
+			collect(m.recommendWhen, "mods[" + m.slug + "].recommendWhen", out);
+			collect(m.avoidWhen, "mods[" + m.slug + "].avoidWhen", out);
+			collect(m.skipUpdateWhen, "mods[" + m.slug + "].skipUpdateWhen", out);
+		});
+		if (doc.profileTemplates != null) {
+			doc.profileTemplates.templates.forEach(t -> {
+				if (t.settings != null) {
+					t.settings.forEach(s -> collect(s.when, "profileTemplates[" + t.id + "][" + s.key + "]", out));
+				}
+			});
+		}
+		return out;
+	}
+
+	private static void collect(Condition c, String where, List<String> out) {
+		if (c == null) {
+			return;
+		}
+		if (c.unknownFields != null && !c.unknownFields.isEmpty()) {
+			out.add(where + ": " + c.unknownFields);
+		}
+		collect(c.not, where + ".not", out);
+		if (c.anyOf != null) {
+			for (int i = 0; i < c.anyOf.size(); i++) {
+				collect(c.anyOf.get(i), where + ".anyOf[" + i + "]", out);
+			}
+		}
 	}
 
 	@Test
@@ -81,8 +119,15 @@ class LegacyParserTest {
 				r.stutterAdvice.stream().map(a -> a.id).toList());
 		assertNotNull(r.profileTemplates);
 		assertEquals(r16.profileTemplates.templates.size(), r.profileTemplates.templates.size());
-		assertTrue(r.stutterAdvice.stream().allMatch(a -> a.when == null || a.when.unknownFields == null || a.when.unknownFields.isEmpty()));
-		assertTrue(r.advice.stream().allMatch(a -> a.when == null || a.when.unknownFields == null || a.when.unknownFields.isEmpty()));
+		assertEquals(List.of(), unknownKeys(r));
+	}
+
+	// The walk reaches nested conditions: a key 0.4.0 doesn't know inside not/anyOf of a setting's when is found.
+	@Test
+	void theUnknownKeyWalkReachesNestedConditions() {
+		RulesDocument doc = parse040("{\"schemaVersion\": 2, \"revision\": 1, \"settings\": [{\"key\": \"vanilla.renderDistance\", \"max\": 8,"
+				+ " \"when\": {\"not\": {\"anyOf\": [{\"always\": true}, {\"causeSpikesAtLeast\": {\"gc\": 1}}]}}}]}");
+		assertEquals(List.of("settings[vanilla.renderDistance].not.anyOf[1]: [causeSpikesAtLeast]"), unknownKeys(doc));
 	}
 
 	@Test

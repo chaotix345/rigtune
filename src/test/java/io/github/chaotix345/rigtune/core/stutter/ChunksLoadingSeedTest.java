@@ -86,8 +86,10 @@ class ChunksLoadingSeedTest {
 		}
 	}
 
+	// This proves the spike-rate threshold, not the tag share: the control's share is unknown (the run predates the tag), so
+	// it is also tried at 75 % (its worst case, 3 of 4 spikes) and 100 %; its 0.68 spikes a minute keep the seed off.
 	@Test
-	void theStillControlNeverFiresIt() throws IOException {
+	void theSpikeRateKeepsTheStillControlOut() throws IOException {
 		JsonObject a = session("A");
 		assertTrue(a.get("enoughData").getAsBoolean());
 		assertEquals(4, spikes(a));

@@ -307,7 +307,7 @@ The Stutter Doctor's "Try this fix…" offers (docs/v0.5/SPEC.md item 5). RigTun
 |---|---|
 | adviceId | required; the `id` of a `stutterAdvice` entry in the same document; unique in the section |
 | requires | required; must contain `stutter-fix`. A feature the client doesn't know skips the entry (future fix types); `stutter-doctor` and `jvm-flags` are refused (0.5 would skip the fix) |
-| evidence | required Condition: every v2 key, every [stutterAdvice](#stutteradvice-v2-04) key, and `causeSpikesAtLeast`; no jvm- facts. Only TRUE offers the fix (FALSE and UNKNOWN don't) |
+| evidence | required Condition: every v2 key, every [stutterAdvice](#stutteradvice-v2-04) key, and `causeSpikesAtLeast`; no jvm- facts; at least one Stutter Doctor key (or `causeSpikesAtLeast`) at its top level, so it tests the session. Only TRUE offers the fix (FALSE and UNKNOWN don't) |
 | set.key | required; one of `vanilla.renderDistance`, `sodium.performance.chunk_build_defer_mode`, `dh.common.multiThreading.numberOfThreads` (the client's `FixSpec.KEYS`): no fix changes another setting or a mod file |
 | set.value | xor `step`; a value the key's share-code entry holds (`chunk_build_defer_mode`: `ALWAYS`, `ONE_FRAME`, `ZERO_FRAMES`; `renderDistance`: a whole number 2-32; `numberOfThreads`: 1-32). No `min`/`max` with a value |
 | set.step | xor `value`; a number key only; a whole number from -8 to 8, not 0; a negative step needs `min`, a positive one `max` (whole numbers in the key's range, `min` ≤ `max`). The target is the current value plus the step, clamped to the bound and the key's range |

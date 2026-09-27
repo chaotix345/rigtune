@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import tomllib
@@ -621,7 +622,7 @@ def validate_knowledge(knowledge):
         problems += stutter_advice_problems(knowledge["stutterAdvice"])
     if "stutterFixes" in knowledge:
         advice = knowledge.get("stutterAdvice")
-        advice_ids = {a.get("id") for a in advice if isinstance(a, dict)} if isinstance(advice, list) else set()
+        advice_ids = {a["id"] for a in advice if isinstance(a, dict) and isinstance(a.get("id"), str)} if isinstance(advice, list) else set()
         problems += stutter_fix_problems(knowledge["stutterFixes"], advice_ids)
     if problems:
         raise KnowledgeError("invalid knowledge:\n  " + "\n  ".join(problems))
@@ -784,6 +785,9 @@ def stutter_fix_problems(section, advice_ids):
             problems.append(f"{label}: needs an evidence condition")
         else:
             problems += [f"{label}: {p}" for p in condition_problems(fix["evidence"], allowed, "evidence")]
+            if isinstance(fix["evidence"], dict) and not set(fix["evidence"]) & (STUTTER_CONDITION_KEYS | STUTTER_FIX_CONDITION_KEYS):
+                problems.append(f"{label}: evidence must test the session: at least one Stutter Doctor key (or causeSpikesAtLeast) "
+                                "at its top level, or the fix is offered on every session where its advice fired")
             if uses_jvm_flag(fix["evidence"]):
                 problems.append(f"{label}: the Stutter Doctor doesn't evaluate jvm- flags (the main list's {JVM_FEATURE} feature)")
         problems += fix_set_problems(label, fix.get("set", MISSING))
@@ -1414,6 +1418,27 @@ def finalize_document(content, old_doc):
     return None if finals is None else finals[0]
 
 
+def main_revision(repo_root):
+    """The revision of main's rules-v2.json (`git fetch origin main`, then `git show origin/main:...`). A release's pinned
+    revision must be above it, so the release never ships a revision main already has."""
+    def git(*args):
+        try:
+            return subprocess.run(["git", *args], cwd=repo_root, capture_output=True, text=True, encoding="utf-8", timeout=120)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise UpdateRulesError(f"git {' '.join(args)} failed: {e}")
+
+    fetched = git("fetch", "--quiet", "origin", "main")
+    if fetched.returncode != 0:
+        raise UpdateRulesError(f"git fetch origin main failed: {fetched.stderr.strip()}")
+    shown = git("show", "origin/main:rules/rules-v2.json")
+    if shown.returncode != 0:
+        raise UpdateRulesError(f"git show origin/main:rules/rules-v2.json failed: {shown.stderr.strip()}")
+    try:
+        return int(json.loads(shown.stdout)["revision"])
+    except (ValueError, KeyError, TypeError) as e:
+        raise UpdateRulesError(f"main's rules-v2.json has no readable revision: {e}")
+
+
 def load_json_if_exists(path):
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
 
@@ -1478,7 +1503,9 @@ def parse_args(argv=None):
     parser.add_argument("--dry-run", action="store_true", help="Compute everything and print a summary, without writing files")
     parser.add_argument("--offline-fixtures", help="Directory of canned HTTP responses keyed by sha256(url).json, for offline runs")
     parser.add_argument("--revision", type=int, help="Write this revision when the content changed (a release's one revision; "
-                        "never below the current one) instead of the current revision + 1")
+                        "never below the current one, and above main's) instead of the current revision + 1")
+    parser.add_argument("--skip-main-check", action="store_true", help="With --revision: don't compare it with main's revision "
+                        "(only when origin can't be reached and you've checked main yourself)")
     return parser.parse_args(argv)
 
 
@@ -1493,6 +1520,16 @@ def main(argv=None):
     except KnowledgeError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
+    if args.revision is not None and not args.skip_main_check:
+        try:
+            on_main = main_revision(repo_root)
+        except UpdateRulesError as e:
+            print(f"error: {e}; --revision needs main's revision to check against (or --skip-main-check)", file=sys.stderr)
+            return 1
+        if args.revision <= on_main:
+            print(f"error: --revision {args.revision} isn't above main's revision {on_main}; merge main first and use "
+                  f"--revision {on_main + 1}", file=sys.stderr)
+            return 1
     nodes = None
     if not args.mc_versions:
         try:

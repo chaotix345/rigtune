@@ -99,6 +99,54 @@ class RevisionPinTests(unittest.TestCase):
         with self.assertRaises(ur.UpdateRulesError):
             self.changed(16, ur.MAX_SAFE_REVISION)
 
+    # Review L3: a pinned R must be above main's revision (git show origin/main:rules/rules-v2.json after a fetch), so a
+    # release never ships a revision main already has; merge main first when it moved.
+    def run_main_against_main(self, revision, main_revision=None, error=None, extra=()):
+        def fake_main_revision(repo_root):
+            if error:
+                raise ur.UpdateRulesError(error)
+            return main_revision
+
+        def no_pipeline(*args, **kwargs):
+            raise AssertionError("the pipeline ran")
+
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(ur, "main_revision", fake_main_revision), \
+                mock.patch.object(ur, "run_pipeline", no_pipeline) as pipeline:
+            argv = ["--knowledge", str(FIXTURES / "knowledge_sample.json"), "--out-dir", tmp, "--mc-versions", "26.2",
+                    "--revision", str(revision)] + list(extra)
+            try:
+                return ur.main(argv)
+            except AssertionError:
+                return "ran"
+
+    def test_a_pinned_revision_at_or_below_mains_is_refused(self):
+        self.assertEqual(self.run_main_against_main(16, main_revision=16), 1)
+        self.assertEqual(self.run_main_against_main(15, main_revision=16), 1)
+        self.assertEqual(self.run_main_against_main(17, main_revision=16), "ran")
+
+    def test_mains_revision_unavailable_refuses_unless_skipped(self):
+        self.assertEqual(self.run_main_against_main(17, error="git fetch origin main failed"), 1)
+        self.assertEqual(self.run_main_against_main(17, error="git fetch origin main failed", extra=["--skip-main-check"]), "ran")
+
+    def test_main_revision_reads_origin_main(self):
+        calls = []
+
+        def fake_run(command, **kwargs):
+            calls.append(command)
+            stdout = json.dumps(v2_doc(16)) if command[:2] == ["git", "show"] else ""
+            return mock.Mock(returncode=0, stdout=stdout, stderr="")
+
+        with mock.patch.object(ur.subprocess, "run", fake_run):
+            self.assertEqual(ur.main_revision(Path(".")), 16)
+        self.assertEqual(calls, [["git", "fetch", "--quiet", "origin", "main"], ["git", "show", "origin/main:rules/rules-v2.json"]])
+
+        def failing_fetch(command, **kwargs):
+            return mock.Mock(returncode=128, stdout="", stderr="fatal: unable to access")
+
+        with mock.patch.object(ur.subprocess, "run", failing_fetch):
+            with self.assertRaises(ur.UpdateRulesError):
+                ur.main_revision(Path("."))
+
     def test_main_writes_the_pinned_revision(self):
         knowledge = json.loads((FIXTURES / "knowledge_sample.json").read_text(encoding="utf-8"))
         content = ur.assemble_content(knowledge, knowledge["mods"], {}, {})
@@ -106,7 +154,8 @@ class RevisionPinTests(unittest.TestCase):
         def fake_pipeline(knowledge, client, override, old_doc, nodes=None):
             return content, "# review\n", {}, ["26.2"], {"fabulouslyOptimized": None, "additive": None}, set(), set()
 
-        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(ur, "run_pipeline", fake_pipeline):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(ur, "run_pipeline", fake_pipeline), \
+                mock.patch.object(ur, "main_revision", lambda repo_root: 16):
             rules = Path(tmp) / "rules"
             rules.mkdir()
             (rules / "rules-v2.json").write_text(json.dumps(v2_doc(16)), encoding="utf-8")
@@ -234,6 +283,13 @@ class StutterFixesTests(Base):
         self.assert_invalid("isn't a stutterAdvice id", with_fixes(fix(adviceId="ram-stutter-gc-heap")))
         self.assert_invalid("isn't a stutterAdvice id", with_fixes(fix(adviceId="vsync-cap"), stutterAdvice=[]))
 
+    # Review L2: an advice id of the wrong type is reported as a problem (exit 2), never a traceback.
+    def test_an_advice_id_that_isnt_a_string(self):
+        knowledge = with_fixes(fix(), stutterAdvice=[stutter_advice(id=["stutter-sodium-defer"]), stutter_advice(id="stutter-sodium-defer")])
+        self.assert_invalid("stutterAdvice", knowledge)
+        knowledge = with_fixes(fix(), stutterAdvice=[stutter_advice(id={"x": 1})])
+        self.assert_invalid("isn't a stutterAdvice id", knowledge)
+
     def test_needs_the_stutter_fix_feature(self):
         self.assert_invalid('needs "requires": ["stutter-fix"]', with_fixes(without(fix(), "requires")))
         self.assert_invalid('needs "requires": ["stutter-fix"]', with_fixes(fix(requires=["stutter-doctor"])))
@@ -248,6 +304,16 @@ class StutterFixesTests(Base):
     def test_evidence_is_a_condition(self):
         self.assert_invalid("evidence.tierAtLeest: unknown condition key", with_fixes(fix(evidence={"tierAtLeest": 3})))
         self.assert_invalid("evidence must be an object", with_fixes(fix(evidence=[{"always": True}])))
+
+    # Review M1: evidence that doesn't test the session ({}, always, only machine facts) would offer the fix on every
+    # session where the advice fired, so at least one stutter key must sit at the top level of the condition.
+    def test_evidence_must_test_the_session(self):
+        for evidence in ({}, {"always": True}, {"modPresent": ["sodium"]}, {"tierAtMost": 3, "heapMbAtLeast": 2048},
+                         {"anyOf": [{"stutterShareAtLeast": {"chunkBuild": 40}}, {"always": True}]},
+                         {"not": {"stutterShareAtLeast": {"chunkBuild": 40}}}):
+            self.assert_invalid("evidence must test the session", with_fixes(fix(evidence=evidence)))
+        self.assert_valid(with_fixes(fix(evidence={"causeSpikesAtLeast": {"chunkBuild": 5}})))
+        self.assert_valid(with_fixes(fix(evidence={"spikesPerMinuteAtLeast": 20, "modPresent": ["sodium"]})))
 
     def test_no_jvm_flag_in_evidence(self):
         self.assert_invalid("doesn't evaluate jvm- flags", with_fixes(fix(evidence={"flags": ["jvm-gc-g1"], "stutterShareAtLeast": {"gc": 30}})))
@@ -467,7 +533,7 @@ class GeneratedV05Tests(unittest.TestCase):
         v1_rule = next(a for a in self.v1["advice"] if a["id"] == "old-client-launcher-mods")
         self.assertEqual(v1_rule, dict(rule, when={"always": True}))
         for text in ("Modrinth App", "CurseForge", "ATLauncher", "GDLauncher", "Prism", "Install, Update and Disable",
-                     "Content → Disabled", "RigTune 0.5"):
+                     "Content → Disabled", "RigTune 0.5 leaves mod files to your launcher."):
             self.assertIn(text, rule["text"])
         r16_v1 = repo_json("src", "test", "resources", "rules", "r16", "rules-v1.json")
         for new, old in ((self.v2, self.r16), (self.v1, r16_v1)):
