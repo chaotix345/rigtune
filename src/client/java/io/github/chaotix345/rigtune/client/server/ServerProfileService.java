@@ -83,6 +83,7 @@ public final class ServerProfileService {
 		}
 		Text name = controller.profileService().nameOf(entry.profile());
 		Reason reason = decide(connection, entry.profile(), name);
+		RigTune.LOGGER.info("RigTune: this server has a profile set ({}): {}", entry.profile(), reason);
 		if (reason != Reason.OFFER && reason != Reason.BENCHMARK && reason != Reason.ON_BATTERY) {
 			return;
 		}

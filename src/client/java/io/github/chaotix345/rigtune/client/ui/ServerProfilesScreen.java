@@ -34,10 +34,10 @@ public class ServerProfilesScreen extends Screen {
 	private static final int COLOR_LABEL = 0xFFA8A8A8;
 	private static final int COLOR_ACTIVE = 0xFF7BE07B;
 	private static final int COLOR_STATUS = 0xFFFFD166;
-	private static final int HERE_Y = 32;
-	private static final int BUTTONS_Y = 46;
-	private static final int PRIVACY_Y = 70;
-	private static final int LIST_TOP = 84;
+	// The subtitle (or status), the This-server line and the privacy line wrap onto at most this many lines each, the
+	// last one ending in "…" (the whole text is its tooltip and its narration).
+	private static final int MAX_LINES = 2;
+	private static final Component ELLIPSIS = Component.literal("…");
 
 	private final @Nullable Screen parent;
 	private final RigTuneController controller;
@@ -54,6 +54,19 @@ public class ServerProfilesScreen extends Screen {
 	private @Nullable ServerList list;
 	private int column;
 	private int left;
+	private Block head = Block.EMPTY;
+	private Block here = Block.EMPTY;
+	private Block privacy = Block.EMPTY;
+	private int listTop;
+
+	// A wrapped text: its lines, where the first is drawn, and whether some of it didn't fit.
+	private record Block(Component text, List<FormattedCharSequence> lines, int y, boolean cut) {
+		static final Block EMPTY = new Block(Component.empty(), List.of(), 0, false);
+
+		int bottom() {
+			return y + lines.size() * LINE;
+		}
+	}
 	// docs/v0.4/SPEC.md 11: the row that had the keyboard focus before a rebuild, which gets it back.
 	private int focusedRow = -1;
 
@@ -107,22 +120,27 @@ public class ServerProfilesScreen extends Screen {
 		column = Math.min(width - 16, 372);
 		left = (width - column) / 2;
 		actions.clear();
-		addRenderableWidget(RowFocus.standalone(Texts.component(view.here()), left, HERE_Y - 1, column, LINE));
+		head = block(status != null ? status : Component.translatable("rigtune.profile.server.subtitle"), width - 16, 20);
+		here = block(Texts.component(view.here()), column, head.bottom() + 2);
+		addRenderableWidget(RowFocus.standalone(here.text(), left, here.y() - 1, column, here.lines().size() * LINE));
+		int buttonsY = here.bottom() + 4;
 		int half = (column - 4) / 2;
 		Component profile = offerName();
 		offerButton = action(profile == null ? Component.translatable("rigtune.profile.server.remember.generic")
-				: Component.translatable("rigtune.profile.server.remember", profile), b -> remember(), left, BUTTONS_Y, half,
+				: Component.translatable("rigtune.profile.server.remember", profile), b -> remember(), left, buttonsY, half,
 				profile == null ? "rigtune.profile.server.remember.none" : "rigtune.profile.server.remember.tooltip");
-		stopButton = action(Component.translatable("rigtune.profile.server.stop"), b -> stop(), left + half + 4, BUTTONS_Y, column - half - 4, null);
-		addRenderableWidget(RowFocus.standalone(Component.translatable("rigtune.profile.server.privacy"), left, PRIVACY_Y - 1, column, LINE));
+		stopButton = action(Component.translatable("rigtune.profile.server.stop"), b -> stop(), left + half + 4, buttonsY, column - half - 4, null);
+		privacy = block(Component.translatable("rigtune.profile.server.privacy"), column, buttonsY + 24);
+		addRenderableWidget(RowFocus.standalone(privacy.text(), left, privacy.y() - 1, column, privacy.lines().size() * LINE));
+		listTop = privacy.bottom() + 4;
 		int bottom = height - 24;
-		list = new ServerList(LIST_TOP, Math.max(ROW, bottom - 4 - LIST_TOP), column);
+		list = new ServerList(listTop, Math.max(ROW, bottom - 4 - listTop), column);
 		for (ServerProfilesView.Row row : view.rows()) {
 			list.addRow(new ServerRow(row));
 		}
 		addRenderableWidget(list);
 		if (view.rows().isEmpty()) {
-			addRenderableWidget(RowFocus.standalone(Component.translatable("rigtune.profile.server.empty"), left, LIST_TOP + 7, column, LINE));
+			addRenderableWidget(RowFocus.standalone(Component.translatable("rigtune.profile.server.empty"), left, listTop + 7, column, LINE));
 		}
 		int third = (column - 8) / 3;
 		forgetButton = action(Component.translatable("rigtune.profile.server.forget"), b -> forgetSelected(), left, bottom, third, null);
@@ -212,24 +230,34 @@ public class ServerProfilesScreen extends Screen {
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
-		Component line = status != null ? status : Component.translatable("rigtune.profile.server.subtitle");
-		graphics.centeredText(font, clip(line, width - 16), width / 2, 20, Palette.of(status != null ? COLOR_STATUS : COLOR_LABEL));
-		tooltipIfClipped(graphics, line, width - 16, 18, mouseX, mouseY);
-		Component here = Texts.component(view.here());
-		graphics.text(font, clip(here, column), left, HERE_Y, 0xFFFFFFFF, true);
-		tooltipIfClipped(graphics, here, column, HERE_Y - 2, mouseX, mouseY);
-		Component privacy = Component.translatable("rigtune.profile.server.privacy");
-		graphics.text(font, clip(privacy, column), left, PRIVACY_Y, Palette.of(COLOR_LABEL), false);
-		tooltipIfClipped(graphics, privacy, column, PRIVACY_Y - 2, mouseX, mouseY);
+		int headColor = Palette.of(status != null ? COLOR_STATUS : COLOR_LABEL);
+		for (int i = 0; i < head.lines().size(); i++) {
+			graphics.centeredText(font, head.lines().get(i), width / 2, head.y() + i * LINE, headColor);
+		}
+		for (int i = 0; i < here.lines().size(); i++) {
+			graphics.text(font, here.lines().get(i), left, here.y() + i * LINE, 0xFFFFFFFF, true);
+		}
+		for (int i = 0; i < privacy.lines().size(); i++) {
+			graphics.text(font, privacy.lines().get(i), left, privacy.y() + i * LINE, Palette.of(COLOR_LABEL), false);
+		}
+		for (Block block : List.of(head, here, privacy)) {
+			if (block.cut() && mouseY >= block.y() - 2 && mouseY < block.bottom()) {
+				graphics.setTooltipForNextFrame(font, font.split(block.text(), Math.max(120, width / 2)), mouseX, mouseY);
+			}
+		}
 		if (view.rows().isEmpty()) {
-			graphics.centeredText(font, Component.translatable("rigtune.profile.server.empty"), width / 2, LIST_TOP + 8, Palette.of(COLOR_LABEL));
+			graphics.centeredText(font, Component.translatable("rigtune.profile.server.empty"), width / 2, listTop + 8, Palette.of(COLOR_LABEL));
 		}
 	}
 
-	private void tooltipIfClipped(GuiGraphicsExtractor graphics, Component text, int maxWidth, int top, int mouseX, int mouseY) {
-		if (font.width(text) > maxWidth && mouseY >= top && mouseY < top + 12) {
-			graphics.setTooltipForNextFrame(font, font.split(text, Math.max(120, width / 2)), mouseX, mouseY);
+	// text wrapped at maxWidth onto at most MAX_LINES lines, the first at y.
+	private Block block(Component text, int maxWidth, int y) {
+		List<FormattedCharSequence> lines = font.split(text, maxWidth);
+		if (lines.size() <= MAX_LINES) {
+			return new Block(text, lines, y, false);
 		}
+		List<FormattedCharSequence> tight = font.split(text, maxWidth - font.width(ELLIPSIS));
+		return new Block(text, List.of(tight.get(0), FormattedCharSequence.composite(tight.get(1), ELLIPSIS.getVisualOrderText())), y, true);
 	}
 
 	private FormattedCharSequence clip(Component text, int maxWidth) {

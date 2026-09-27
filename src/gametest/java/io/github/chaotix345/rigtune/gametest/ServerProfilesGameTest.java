@@ -155,8 +155,7 @@ public class ServerProfilesGameTest implements FabricClientGameTest {
 	// Connection 1: nothing set, so no offer; Quality is switched to, and Max FPS set for this server from Profiles.
 	private void setMaxFpsForThisServer(ClientGameTestContext context, RealController real, TestDedicatedServerContext server) {
 		try (TestDedicatedServerConnection connection = server.connect()) {
-			connection.waitForChunksRender();
-			context.waitFor(mc -> real.serverProfiles().state() == ServerProfilesView.State.SERVER, 200);
+			inTheWorld(context, real);
 			context.waitTicks(20);
 			check(offer(context, real) == null, "nothing set for this server: no offer");
 			check(toast(context) == null, "nothing set for this server: no toast");
@@ -194,13 +193,15 @@ public class ServerProfilesGameTest implements FabricClientGameTest {
 	private void offerSwitchAndUndo(ClientGameTestContext context, RealController real, TestDedicatedServerContext server) {
 		context.runOnClient(mc -> mc.gui.toastManager().clear());
 		try (TestDedicatedServerConnection connection = server.connect()) {
-			connection.waitForChunksRender();
-			context.waitFor(mc -> offer(real) != null, 400);
+			inTheWorld(context, real);
+			waitForOffer(context, real);
 			Notice offer = offer(context, real);
 			check(offer.message().english().equals("You set Max FPS for this server. Switch to it?"), offer.message().english());
 			check(offer.key().startsWith(ServerProfilePrompt.KEY_PREFIX) && offer.dismissible(), "key and ×: " + offer.key());
 			check(offer.actions().stream().map(NoticeAction::id).toList().equals(List.of("switch", "forget")), "actions: " + offer.actions());
 			context.waitFor(mc -> toast(mc) != null, 100);
+			// Fully slid in (it stays 8 s).
+			context.waitTicks(20);
 			context.getInput().setCursorPos(1, 1);
 			context.takeScreenshot("server-profiles-toast");
 			List<Notice> notices = context.computeOnClient(mc -> real.notices());
@@ -282,8 +283,8 @@ public class ServerProfilesGameTest implements FabricClientGameTest {
 	private void offerAgainDismissForgetAndTheScreen(ClientGameTestContext context, RealController real, TestDedicatedServerContext server) {
 		context.runOnClient(mc -> mc.gui.toastManager().clear());
 		try (TestDedicatedServerConnection connection = server.connect()) {
-			connection.waitForChunksRender();
-			context.waitFor(mc -> offer(real) != null, 400);
+			inTheWorld(context, real);
+			waitForOffer(context, real);
 			Notice offer = offer(context, real);
 			context.waitTicks(20);
 			check(toast(context) == null, "no second toast for this server in this game session");
@@ -437,6 +438,27 @@ public class ServerProfilesGameTest implements FabricClientGameTest {
 	// On the render thread, where the notice sources run.
 	private static @Nullable Notice offer(RealController real) {
 		return real.notices().stream().filter(n -> n.priority() == NoticePriority.SERVER_PROFILE).findFirst().orElse(null);
+	}
+
+	// Joined and in the world. Not waitForChunksRender: a profile switch raises the render distance above what the server
+	// sends, and the chunks beyond it never come.
+	private static void inTheWorld(ClientGameTestContext context, RealController real) {
+		context.waitFor(mc -> mc.player != null && mc.level != null && mc.gui.screen() == null
+				&& real.serverProfiles().state() == ServerProfilesView.State.SERVER, 600);
+		context.waitTicks(5);
+	}
+
+	// The join lookup runs on Probes.EXECUTOR: up to 20 s for its offer; on a timeout, what there was instead.
+	private void waitForOffer(ClientGameTestContext context, RealController real) {
+		for (int i = 0; i < 40; i++) {
+			if (offer(context, real) != null) {
+				return;
+			}
+			context.waitTicks(10);
+		}
+		String state = context.computeOnClient(mc -> real.serverProfiles() + " | notices " + real.notices() + " | active "
+				+ real.profileService().activeProfileId());
+		throw new AssertionError("Check failed: no offer on joining a server set to Max FPS: " + state + " | " + read(serverProfilesFile));
 	}
 
 	private static @Nullable SystemToast toast(ClientGameTestContext context) {

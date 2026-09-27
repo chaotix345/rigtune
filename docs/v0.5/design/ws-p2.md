@@ -137,7 +137,34 @@ game; `v05RenderThreadResolve` null and `v05HolderCreatedOn` "RigTune worker" on
 budget (150 / 141 / 300, 2.05). No screenshots are WS-P2's in Phase A (no UI yet).
 
 ## Docs (for the docs workstream)
-(filled in at the end of Phase B; sp §2.4's privacy wording for README's "What the tools keep on your PC")
+- **README, Profiles** (a paragraph after the share codes): "**Profiles for servers.** Profiles → Servers… lets you
+  have RigTune offer a profile when you join a server, a LAN game or a Realm: RigTune shows a toast (once per server
+  per game session) and a notice with **Switch** and **Don't offer here**. It never switches by itself. Switch is an
+  ordinary profile switch, so History can undo it; only the Minecraft settings change right away on the server, while
+  Sodium, Iris and Distant Horizons values apply after a restart, as for any switch. Your own worlds, a world you open
+  to LAN and the benchmark world never get offers. There's no offer on battery power while the Battery profile is on,
+  and none while a benchmark runs."
+- **README, "What the tools keep on your PC"** (next to `server-limits.json`), sp §2.4's wording: "`server-profiles.json`:
+  the profile you asked RigTune to offer per server. Server addresses aren't stored in readable form: each entry is
+  keyed by an HMAC-SHA256 of the address, with its own random key created once and kept in the same file, so someone
+  who has the file could still check whether it holds a server they already know. It never goes into a report."
+- **README, key areas**: `profile.server` for Profiles for servers.
+- **README, known limits**: a LAN game is remembered by its host only (a new DHCP address loses it, and every world that
+  host opens counts as one place); a Realm by its world name (renaming it loses the match, two Realms with the same name
+  share one; untested with a real Realm); a proxy's backend switch or a reconfiguration may fire a join again
+  (untested; at most one toast per server per session either way); a profile deleted by an older RigTune stays listed as
+  "a deleted profile" until you forget it.
+- **DESIGN.md**, a new "Per-server profile offers (0.5)" section: `ServerProfileStore` (server-profiles.json, its own
+  16-byte salt, entries keyed by ServerLimitsStore's HMAC-SHA256 over the normalised address, ≤ 32 servers with a 33rd
+  refused, nothing written for a server that isn't remembered); `ServerProfilePrompt.decide` (NO_SERVER, NO_MAPPING,
+  MISSING_PROFILE, ALREADY_ACTIVE, BENCHMARK, ON_BATTERY, OFFER, in that order); `ServerProfileOffers` (a repeated JOIN
+  with the same identity is the same connection; a lookup finishing after its connection ended offers nothing; one
+  toast per server per session); `ServerProfileService` (JOIN: two field writes and one Probes.EXECUTOR task; the notice
+  re-decided on every screen init and read-free while none is pending; Switch through `ProfileService.switchProfile`);
+  the SERVER_PROFILE slot right after BATTERY_OFFER and before SERVER_LIMIT, which fires on every remote connection;
+  the × is session-only (`AwarenessService.SESSION_ONLY_PREFIXES`); deleting a profile in Profiles forgets its servers.
+- **CHANGELOG** (Added): "Profiles for servers: RigTune can offer a profile you choose when you join a server (Profiles
+  → Servers…). It never switches by itself."
 
 ## AC table
 
