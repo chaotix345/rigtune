@@ -60,6 +60,15 @@ class ProfileSwitchTest {
 		assertEquals(3, ProfileSwitch.build(target, all, Set.of("sodium", "iris", "distanthorizons"), Map.of(), "x").size());
 	}
 
+	// docs/v0.5/SPEC.md PF-5 (AC2P.5): a switch carries a DH LOD radius inside DH's own range and refuses one outside it.
+	@Test
+	void pf5ASwitchCarriesA1024RadiusAndRefuses5000() {
+		String radius = "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius";
+		SettingsSnapshot snapshot = ProfileFixtures.snapshot(List.of("distanthorizons"), false);
+		assertEquals(Map.of(radius, "1024"), values(ProfileSwitch.build(Map.of(radius, "1024"), snapshot, Set.of("distanthorizons"), Map.of(), "x")));
+		assertEquals(Map.of(), values(ProfileSwitch.build(Map.of(radius, "5000"), snapshot, Set.of("distanthorizons"), Map.of(), "x")));
+	}
+
 	private static Map<String, String> values(List<Recommendation> recs) {
 		Map<String, String> out = new LinkedHashMap<>();
 		recs.forEach(r -> {

@@ -1,6 +1,6 @@
-package io.github.chaotix345.rigtune.core.profile;
+package io.github.chaotix345.rigtune.v040.core.profile;
 
-import io.github.chaotix345.rigtune.core.profile.ShareCodeException.Reason;
+import io.github.chaotix345.rigtune.v040.core.profile.ShareCodeException.Reason;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import org.jspecify.annotations.Nullable;
 
@@ -63,12 +63,9 @@ public final class ShareCode {
 	}
 
 	// The code for a profile's values, or null when none of them can be shared. Keys go in table order; a value a key can't
-	// carry is left out. maxFps equal to this display's $refreshRateCap (refreshRate known) is sent as "match the display",
-	// except a cap of 60 (v0.5 PF-4): that is also the common fixed cap (Recording, Battery), which a faster importer would
-	// otherwise read as its own refresh cap, so it goes as the number.
+	// carry is left out. maxFps equal to this display's $refreshRateCap (refreshRate known) is sent as "match the display".
 	public static @Nullable String encode(@Nullable String name, Map<String, String> values, int refreshRate) {
 		List<int[]> pairs = new ArrayList<>();
-		int cap = SettingValues.refreshRateCap(refreshRate);
 		for (ShareKeys.Key key : ShareKeys.V1) {
 			if (!key.shareable() || !values.containsKey(key.key())) {
 				continue;
@@ -77,7 +74,8 @@ public final class ShareCode {
 			if (wire == null) {
 				continue;
 			}
-			if (key.kind() == ShareKeys.Kind.INT10 && refreshRate > 0 && cap != 60 && wire.equals(key.encode(Integer.toString(cap)))) {
+			if (key.kind() == ShareKeys.Kind.INT10 && refreshRate > 0
+					&& wire.equals(key.encode(Integer.toString(SettingValues.refreshRateCap(refreshRate))))) {
 				wire = ShareKeys.MATCH_DISPLAY;
 			}
 			pairs.add(new int[] {key.index(), wire});
@@ -97,18 +95,6 @@ public final class ShareCode {
 			writeVarint(body, pair[1]);
 		}
 		return PREFIX + base64(withCrc(body.toByteArray()));
-	}
-
-	// v0.5 PF-5: how many of a profile's values a code leaves out because the wire can't carry them (a DH radius above 512).
-	// The local-only thread counts aren't counted: they're never shared.
-	public static int leftOut(Map<String, String> values) {
-		int out = 0;
-		for (ShareKeys.Key key : ShareKeys.V1) {
-			if (key.shareable() && values.containsKey(key.key()) && key.encode(values.get(key.key())) == null) {
-				out++;
-			}
-		}
-		return out;
 	}
 
 	public static Decoded decode(@Nullable String input) throws ShareCodeException {

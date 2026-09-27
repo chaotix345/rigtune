@@ -248,4 +248,31 @@ class HistoryModelTest {
 				.reverting(entries.getFirst().changes().getFirst().id()));
 		assertFalse(HistoryModel.anyUndoable(view(Map.of())));
 	}
+
+	// docs/v0.5/SPEC.md L8 (AC2H.3): profile switches folded past MAX_ENTRIES keep their labels on the baseline row, newest
+	// first; the switches still in the journal keep theirs; an entry without folded ids gets none.
+	@Test
+	void l8TheBaselineRowIncludesTheFoldedSwitchLabels() {
+		for (int i = 0; i < 53; i++) {
+			add("e" + i, JournalEntry.APPLY, null, setting("vanilla.maxFps", String.valueOf(i), String.valueOf(i + 1), JournalChange.APPLIED));
+		}
+		List<JournalEntry> capped = Journal.cap(new ArrayList<>(entries));
+		Map<String, String> labels = Map.of("e1", "Battery", "e3", "Max FPS", "e50", "Quality", "gone", "Recording");
+
+		HistoryModel.View view = HistoryModel.withProfiles(HistoryModel.build(Journal.State.OK, capped, Map.of(), HistoryModel.Labels.RAW), labels);
+
+		Entry baseline = view.entries().getLast();
+		assertTrue(Journal.isBaseline(capped.getFirst()) && baseline.id().equals(capped.getFirst().id()), baseline.id());
+		assertEquals(List.of("e0", "e1", "e2", "e3"), baseline.folded());
+		assertEquals(List.of("Max FPS", "Battery"), baseline.includes());
+		assertNull(baseline.profile(), "the baseline is an Apply, not itself a switch");
+		Entry quality = view.entries().stream().filter(e -> e.id().equals("e50")).findFirst().orElseThrow();
+		assertEquals("Quality", quality.profile());
+		assertEquals(List.of(), quality.includes());
+		assertEquals(List.of(), quality.folded());
+		// Built without labels: the folded ids are there, nothing is included yet.
+		Entry plain = HistoryModel.build(Journal.State.OK, capped, Map.of(), HistoryModel.Labels.RAW).entries().getLast();
+		assertEquals(List.of("e0", "e1", "e2", "e3"), plain.folded());
+		assertEquals(List.of(), plain.includes());
+	}
 }
