@@ -48,10 +48,11 @@ Two more modes (Phase 5):
   - Old jars, tags and sha256 come from `RELEASED`; the nodes from `versions/*/`.
   - Push: each node's newest release → new.
   - Release: every released jar → new; the `v010-dh` seed; undo with `--profile-switch profile` and `settings`; downgrades to 0.4.0 and 0.3.0.
-- **`.github/workflows/e2e.yml`** (reusable) runs one job per row on the jars artifact the caller names; nothing is rebuilt.
-  - The old jar is downloaded with `gh release download` and checked with `sha256sum -c`.
-  - `tools/e2e/resolve-deps.gradle` puts fabric-api and Sodium into the Gradle cache.
-  - The evidence is uploaded as `e2e-<id>-<mc>`. There is no automatic retry.
+- **`.github/workflows/e2e.yml`** (reusable) runs one job per row (at most 6 at once) on the jars artifact the caller names; nothing is rebuilt.
+  - Its one "(network)" step runs ws-ci's `prefetchDependencies` and `downloadAssets` (the Gradle cache gets fabric-api and Sodium, which the harness copies into its instances). It also downloads the old jar on a cache miss (`gh release download`, retried), and checks the jar with `sha256sum -c` either way.
+  - The harness then runs its own Gradle calls `--offline` (`--gradle-arg=--offline`).
+  - The evidence is uploaded as `e2e-<id>-<mc>`. A scenario is never retried.
+  - build.yml runs the push tier on every push (`rigtune-jars`), and the release tier on the release PR (into main from `feat/v*`).
   - release.yml calls it on the staged release files (build → e2e → publish).
   - `tools/e2e/release_verify.py` then checks Modrinth's metadata and CDN bytes against the GitHub assets.
 - **Fixtures.** `written.py` composes `v040-written` and then `v050-written` (a 0.5 instance holds both).

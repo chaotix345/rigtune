@@ -33,13 +33,12 @@ class ReleasedJarTest(unittest.TestCase):
                          self_update_e2e.RELEASED["0.3.0+mc26.2"])
 
     def test_ci_pins_the_same_jars(self):
-        # A subset until WS-E may edit build.yml (docs/v0.5/design/ws-e.md E6, which restores equality): every jar CI pins
-        # is a RELEASED one with the same digest.
         workflow = (REPO / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8").replace("\r\n", "\n")
         pinned = dict((name, sha) for sha, name in re.findall(r"^\s*([0-9a-f]{64})  \$old/(\S+)$", workflow, re.MULTILINE))
-        released = {name: sha for name, sha in self_update_e2e.RELEASED.values()}
-        self.assertTrue(pinned)
-        self.assertEqual(pinned, {name: released.get(name) for name in pinned})
+        self.assertEqual({name: sha for name, sha in self_update_e2e.RELEASED.values()}, pinned)
+        # The cache key names every pinned digest (its first 16 hex digits), so a new pin never reuses an old cache.
+        key = re.search(r"key: (e2e-old-\S+)", workflow).group(1)
+        self.assertEqual(sorted(sha[:16] for sha in pinned.values()), sorted(key.split("-")[2:]))
         for name in pinned:
             self.assertIn('"-Pe2e.oldJar=$old/{}"'.format(name), workflow)
 

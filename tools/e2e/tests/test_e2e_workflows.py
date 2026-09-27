@@ -57,31 +57,77 @@ class E2eWorkflowTest(unittest.TestCase):
         self.assertIn("\n  workflow_dispatch:\n", self.workflow)
         self.assertIn('python3 tools/e2e/e2e_matrix.py --tier "$TIER"', self.jobs["matrix"])
 
-    def test_no_automatic_retry(self):
-        self.assertNotRegex(self.workflow.lower(), r"retry|retries|max[_-]attempts|continue-on-error")
+    def test_no_automatic_retry_of_a_scenario(self):
+        self.assertNotRegex(self.workflow.lower(), r"continue-on-error|max[_-]attempts|nick-fields/retry")
         self.assertEqual(1, self.workflow.count("tools/e2e/self_update_e2e.py"), "the harness runs once per job")
+        for job in self.jobs.values():
+            for step in steps(job):
+                if "retry.sh" in step:
+                    self.assertIn("(network)", step.split("\n", 1)[0], "only a download step retries: " + step[:80])
         self.assertIn("fail-fast: false", self.jobs["e2e"])
         self.assertIn("timeout-minutes: 20", self.jobs["e2e"])
+        self.assertIn("max-parallel: 6", self.jobs["e2e"])
 
-    def test_no_network_but_the_pinned_old_jar(self):
+    def test_network_only_in_the_network_steps_and_gradle_offline_after_them(self):
         script = scripts(self.workflow)
         for forbidden in ("curl", "wget", "pip install", "apt-get", "git clone", "http://", "https://", "Invoke-WebRequest"):
             self.assertNotIn(forbidden, script, forbidden)
-        download = next(s for s in steps(self.jobs["e2e"]) if "gh release download" in s)
-        self.assertRegex(download, r'echo "\$OLD_SHA256  \$RUNNER_TEMP/old/\$OLD_ASSET" \| sha256sum -c -')
-        self.assertIn("set -eu", download)
+        for name, job in self.jobs.items():
+            seen_network = False
+            for step in steps(job):
+                network = "(network)" in step.split("\n", 1)[0]
+                for command in re.findall(r"\./gradlew[^\n]*", step):
+                    if not network:
+                        self.assertTrue(seen_network, "{}: Gradle before the network step: {}".format(name, command))
+                        self.assertIn("--offline", command, name)
+                seen_network |= network
+        run = next(s for s in steps(self.jobs["e2e"]) if "self_update_e2e.py" in s)
+        self.assertIn("--gradle-arg=--offline", run, "the harness's own Gradle calls run --offline")
+
+    def test_the_old_jar_is_cached_downloaded_only_on_a_miss_and_checked_every_time(self):
+        e2e = self.jobs["e2e"]
+        cache = next(s for s in steps(e2e) if "actions/cache" in s)
+        self.assertIn("key: e2e-old-${{ matrix.asset }}-${{ matrix.sha256 }}", cache)
+        network = next(s for s in steps(e2e) if "(network)" in s.split("\n", 1)[0])
+        self.assertIn('tools/ci/retry.sh ./gradlew --no-daemon ":$MC:prefetchDependencies" ":$MC:downloadAssets"', network)
+        self.assertRegex(network, r'\[ -s "\$RUNNER_TEMP/old/\$OLD_ASSET" \] \\\n\s+\|\| tools/ci/retry\.sh gh release download')
+        self.assertRegex(network, r'echo "\$OLD_SHA256  \$RUNNER_TEMP/old/\$OLD_ASSET" \| sha256sum -c -')
+        self.assertIn("set -eu", network)
 
     def test_the_e2e_job_tests_the_caller_s_jars_and_never_builds_them(self):
         e2e = self.jobs["e2e"]
         self.assertIn("actions/download-artifact", e2e)
         self.assertIn("inputs.jars-artifact", e2e)
-        self.assertNotRegex(e2e, r"gradlew\s+(build|assemble|jar)\b")
+        self.assertNotRegex(e2e, r"gradlew[^\n]*\s(build|assemble|jar)\b")
         self.assertIn("if: ${{ !inputs.jars-artifact }}", self.jobs["jars"])
 
     def test_the_evidence_is_uploaded_on_success_and_failure(self):
         upload = next(s for s in steps(self.jobs["e2e"]) if "upload-artifact" in s)
         self.assertIn("if: always()", upload)
         self.assertIn("evidence/", upload)
+
+
+class BuildWorkflowTest(unittest.TestCase):
+    """build.yml's WS-E parts (docs/v0.5/SPEC.md 3a, 3b; AC3a.3, AC3b.1)."""
+
+    def setUp(self):
+        self.workflow = text("build.yml")
+        self.jobs = jobs(self.workflow)
+
+    def test_every_push_runs_the_e2e_push_tier_on_this_run_s_jars(self):
+        e2e = self.jobs["e2e"]
+        self.assertIn("needs: java", e2e)
+        self.assertIn("uses: ./.github/workflows/e2e.yml", e2e)
+        self.assertIn("jars-artifact: rigtune-jars", e2e)
+        self.assertIn("tier: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' && startsWith(github.head_ref, 'feat/v') "
+                      "&& 'release' || 'push' }}", e2e)
+        self.assertIn("name: rigtune-jars", self.jobs["java"])
+
+    def test_the_java_job_runs_both_compat_harnesses_on_the_pinned_jars(self):
+        compat = next(s for s in steps(self.jobs["java"]) if "compat040.py" in s)
+        self.assertIn('python3 tools/e2e/compat040.py --old-jar "$old/rigtune-0.4.0+mc26.2.jar"', compat)
+        self.assertIn('python3 tools/e2e/compat030.py --old-jar "$old/rigtune-0.3.0+mc26.2.jar"', compat)
+        self.assertNotIn("retry", compat)
 
 
 class ReleaseWorkflowTest(unittest.TestCase):
@@ -100,7 +146,8 @@ class ReleaseWorkflowTest(unittest.TestCase):
     def test_the_build_job_keeps_the_tag_guard_and_stages_the_files(self):
         build = self.jobs["build"]
         self.assertIn('grep -qxF "mod_version=${TAG#v}" gradle.properties', build)
-        self.assertIn("./gradlew build", build)
+        self.assertIn("tools/ci/retry.sh ./gradlew --no-daemon prefetchDependencies", build)
+        self.assertIn("tools/ci/offline.sh ./gradlew --no-daemon --offline build", build)
         self.assertIn("name: release-files", build)
 
     def test_publish_uploads_the_downloaded_files_and_never_rebuilds(self):

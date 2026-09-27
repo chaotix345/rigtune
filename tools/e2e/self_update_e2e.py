@@ -172,7 +172,8 @@ class Run:
             print(line.encode("ascii", "backslashreplace").decode("ascii"), flush=True)
 
     def gradle(self, log_name, *arguments):
-        command = (["cmd", "/c", str(REPO / "gradlew.bat")] if os.name == "nt" else [str(REPO / "gradlew")]) + list(arguments)
+        arguments = list(self.args.gradle_arg or []) + list(arguments)
+        command = (["cmd", "/c", str(REPO / "gradlew.bat")] if os.name == "nt" else [str(REPO / "gradlew")]) + arguments
         self.log("gradle " + " ".join(arguments))
         env = dict(os.environ, JAVA_HOME=str(self.java_home))
         with open(self.run_dir / log_name, "w", encoding="utf-8") as out:
@@ -1169,6 +1170,8 @@ def parse_args(argv):
     parser.add_argument("--agent", default="ws-h", help="the agent named in the lock's owner.txt")
     parser.add_argument("--java-home", default=os.environ.get("JAVA_HOME"))
     parser.add_argument("--jvm-arg", action="append", help="extra JVM argument for both launches")
+    parser.add_argument("--gradle-arg", action="append",
+                        help="extra argument for every Gradle call, e.g. --gradle-arg=--offline (CI, after its network step)")
     args = parser.parse_args(argv)
     args.written = args.written or [str(p) for p in default_written(REPO)]
     if not args.java_home:

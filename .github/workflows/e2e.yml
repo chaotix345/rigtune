@@ -2,10 +2,11 @@ name: e2e
 
 # The self-update, undo and downgrade E2E (docs/v0.5/SPEC.md 3a; tools/e2e/README.md): one job per scenario of
 # tools/e2e/e2e_matrix.py's tier, each a production client under Xvfb (Loom wraps the game in xvfb-run when CI is set)
-# talking to the harness's own fake Modrinth on 127.0.0.1:443. The new jars are the calling run's (never rebuilt here);
-# the old ones are GitHub release assets, sha256-pinned in tools/e2e/self_update_e2e.py's RELEASED. That download is the
-# only network use besides Gradle's dependency cache. No automatic retry: a flake is re-run by hand, so an intermittent
-# regression isn't hidden.
+# talking to the harness's own fake Modrinth on 127.0.0.1:443 (the game resolves no other host: -Djdk.net.hosts.file).
+# The new jars are the calling run's (never rebuilt here); the old one is a GitHub release asset, sha256-pinned in
+# tools/e2e/self_update_e2e.py's RELEASED and cached. Network (SPEC 1a, AC3a.6): one "(network)" step per job downloads
+# (retried: tools/ci/retry.sh); every Gradle call after it runs --offline, the harness's too. The scenario itself is
+# never retried: a flake is re-run by hand, so an intermittent regression isn't hidden.
 on:
   workflow_call:
     inputs:
@@ -17,7 +18,8 @@ on:
         description: the calling run's artifact holding rigtune-<version>+mc<node>.jar for every node
         type: string
         required: true
-  # Also by hand, on jars this workflow builds itself (only once the file is on the default branch).
+  # The release tier by hand, on jars this workflow builds (SPEC 3a: its own dispatch, never build.yml's; scheduled by the
+  # coordinator outside CI streaks). Only once the file is on the default branch.
   workflow_dispatch:
     inputs:
       tier:
@@ -49,6 +51,7 @@ jobs:
   jars:
     if: ${{ !inputs.jars-artifact }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -56,7 +59,12 @@ jobs:
           distribution: microsoft
           java-version: '25.0.3'
       - uses: gradle/actions/setup-gradle@v6
-      - run: ./gradlew assemble
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feat/v0.5.0' }}
+      - name: Resolve dependencies (network)
+        run: tools/ci/retry.sh ./gradlew --no-daemon prefetchDependencies
+      - name: Build the jars
+        run: ./gradlew --no-daemon --offline assemble
       - uses: actions/upload-artifact@v7
         with:
           name: e2e-new-jars
@@ -72,6 +80,8 @@ jobs:
     timeout-minutes: 20
     strategy:
       fail-fast: false
+      # The release tier's jobs share the account's runners with every other workflow.
+      max-parallel: 6
       matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
     env:
       # 26.3 creates its window with SDL3, which asks GLX for an sRGB-capable visual that Xvfb doesn't have (build.yml).
@@ -89,21 +99,33 @@ jobs:
           distribution: microsoft
           java-version: '25.0.3'
       - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feat/v0.5.0' }}
       - name: The new jars (the calling run's, never rebuilt)
         uses: actions/download-artifact@v7
         with:
           name: ${{ inputs.jars-artifact || 'e2e-new-jars' }}
           path: ${{ runner.temp }}/new
-      - name: The released old jar (sha256-pinned)
+      # The released old jar, kept under its pinned sha256.
+      - uses: actions/cache@v6
         if: matrix.old != ''
+        with:
+          path: ${{ runner.temp }}/old
+          key: e2e-old-${{ matrix.asset }}-${{ matrix.sha256 }}
+      # Gradle's dependencies and Minecraft's assets for the drivers and the client (the harness's Gradle runs
+      # --offline), and the old jar on a cache miss; then its sha256 is checked either way.
+      - name: Resolve dependencies (network)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          gh release download "$OLD_TAG" -R "$GITHUB_REPOSITORY" -p "$OLD_ASSET" -D "$RUNNER_TEMP/old" --clobber
-          echo "$OLD_SHA256  $RUNNER_TEMP/old/$OLD_ASSET" | sha256sum -c -
-      - name: fabric-api and Sodium into the Gradle cache (the harness takes them from there)
-        run: ./gradlew -I tools/e2e/resolve-deps.gradle ":$MC:e2eResolveDeps"
+          tools/ci/retry.sh ./gradlew --no-daemon ":$MC:prefetchDependencies" ":$MC:downloadAssets"
+          if [ -n "$OLD_ASSET" ]; then
+            mkdir -p "$RUNNER_TEMP/old"
+            [ -s "$RUNNER_TEMP/old/$OLD_ASSET" ] \
+              || tools/ci/retry.sh gh release download "$OLD_TAG" -R "$GITHUB_REPOSITORY" -p "$OLD_ASSET" -D "$RUNNER_TEMP/old" --clobber
+            echo "$OLD_SHA256  $RUNNER_TEMP/old/$OLD_ASSET" | sha256sum -c -
+          fi
       - name: Let the fake Modrinth bind 443
         run: sudo sysctl -w net.ipv4.ip_unprivileged_port_start=443
       - name: Run the scenario
@@ -120,8 +142,8 @@ jobs:
           fi
           # HARNESS_ARGS is e2e_matrix.py's shlex.join of the row's arguments (its own table, not user input).
           eval "set -- $HARNESS_ARGS"
-          python3 tools/e2e/self_update_e2e.py --lock none --mc "$MC" --name "$SCENARIO" --new-jar "${found[0]}" "${old[@]}" \
-            --work "$RUNNER_TEMP/e2e" --evidence "$RUNNER_TEMP/evidence/$SCENARIO-$MC" "$@"
+          python3 tools/e2e/self_update_e2e.py --lock none --gradle-arg=--offline --mc "$MC" --name "$SCENARIO" \
+            --new-jar "${found[0]}" "${old[@]}" --work "$RUNNER_TEMP/e2e" --evidence "$RUNNER_TEMP/evidence/$SCENARIO-$MC" "$@"
       - name: Upload the evidence
         if: always()
         uses: actions/upload-artifact@v7
