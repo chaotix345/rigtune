@@ -58,7 +58,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -600,13 +599,13 @@ public final class ProfileService {
 		}
 	}
 
+	// The ids a switch label may still name: every entry's, and (v0.5 L8) those a baseline folded, whose labels its
+	// "Includes" line shows.
 	private static @Nullable Set<String> journalIds() {
 		Journal journal = ClientJournal.get();
 		if (journal.state() != Journal.State.OK) {
 			return null;
 		}
-		Set<String> ids = new HashSet<>();
-		journal.entries().forEach(e -> ids.add(e.id()));
-		return ids;
+		return Journal.idsWithFolded(journal.entries());
 	}
 }

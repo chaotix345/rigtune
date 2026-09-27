@@ -258,6 +258,8 @@
 	"rigtune.history.undo_this.tooltip": "Revert the selected entry's changes that nothing has changed since. You see exactly what changes before anything happens.",
 	"rigtune.history.versions": "RigTune %s · Minecraft %s",
 	"rigtune.history.versions.mc": "Minecraft %s",
+	"rigtune.history.includes": "Includes: %s",
+	"rigtune.history.includes.more": "Includes: %s +%s",
 	"rigtune.tools.benchmark_history": "Benchmark history…",
 	"rigtune.tools.jvm": "JVM & memory…",
 	"rigtune.tools.open": "Tools…",
