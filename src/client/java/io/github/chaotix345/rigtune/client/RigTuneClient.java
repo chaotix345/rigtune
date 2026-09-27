@@ -214,22 +214,10 @@ public final class RigTuneClient implements ClientModInitializer {
 	public static void showNotices(Minecraft minecraft) {
 		ApplyResult result = RigTunePreLaunch.takeUnseenResult();
 		if (result != null) {
-			int total = result.results().size();
-			int failed = result.failedOps().size();
-			if (failed == 0) {
-				SystemToast.add(minecraft.gui.toastManager(), NOTICE_ID,
-						Component.translatable("rigtune.toast.applied.title", total),
-						Component.translatable("rigtune.toast.applied.body"));
-			} else {
-				SystemToast.add(minecraft.gui.toastManager(), NOTICE_ID,
-						Component.translatable("rigtune.toast.failed.title", failed, total),
-						Component.translatable("rigtune.toast.failed.body"));
-			}
-			int abandoned = result.abandonedOps().size();
-			if (abandoned > 0) {
-				SystemToast.add(minecraft.gui.toastManager(), new SystemToast.SystemToastId(10000L),
-						Component.translatable("rigtune.toast.abandoned.title", abandoned),
-						Component.translatable("rigtune.toast.abandoned.body"));
+			// v0.5 (docs/v0.5/SPEC.md 4f): failed counts FAILED ops only; dropped ones only in their own toast.
+			for (HelperToasts.Toast toast : HelperToasts.result(result)) {
+				SystemToast.add(minecraft.gui.toastManager(), toast.kind() == HelperToasts.Kind.RESULT ? NOTICE_ID : new SystemToast.SystemToastId(10000L),
+						toast.title(), toast.body());
 			}
 			Path configDir = FabricLoader.getInstance().getConfigDir();
 			ClientState state = ClientState.shared(configDir);
