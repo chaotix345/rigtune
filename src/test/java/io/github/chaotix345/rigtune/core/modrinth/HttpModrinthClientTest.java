@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -635,13 +636,70 @@ class HttpModrinthClientTest {
 			HttpModrinthClient broken = new HttpModrinthClient("1.2.3", "http://127.0.0.1:" + closer.getLocalPort(), FAST);
 			IOException first = assertThrows(IOException.class, () -> broken.projects(List.of("a")));
 			assertFalse(first instanceof ModrinthException, first.toString());
-			assertEquals(1, broken.clientsBuilt());
+			assertEquals(2, broken.clientsBuilt(), "the one retry ran on a fresh HttpClient");
 			assertThrows(IOException.class, () -> broken.projects(List.of("a")));
-			assertEquals(2, broken.clientsBuilt(), "a fresh HttpClient after the transport failure");
+			assertEquals(4, broken.clientsBuilt(), "and so did the next lookup");
 		}
 
 		assertThrows(ModrinthException.class, () -> client.projects(List.of("missing")));
 		assertThrows(ModrinthException.class, () -> client.projects(List.of("missing")));
 		assertEquals(1, client.clientsBuilt(), "an HTTP 404 keeps the client");
+	}
+
+	// SPEC AC1f.1: a lookup whose request fails once without an HTTP response (as every lookup did for 3 hours on 2026-09-26:
+	// "Stream N cancelled") gets its data from the one retry, sent on a fresh client.
+	@Test
+	void aLookupThatFailsOnceIsRetriedOnAFreshClient() throws IOException {
+		respond("/v2/projects", 200, """
+				[{"id":"AANobbMI","slug":"sodium","title":"Sodium","status":"approved","game_versions":["26.2"],"loaders":["fabric"]}]""");
+		FlakyTransport transport = new FlakyTransport(1);
+		HttpModrinthClient flaky = new HttpModrinthClient("1.2.3", url("/"), FAST, transport);
+
+		List<ModrinthProject> projects = flaky.projects(List.of("sodium"));
+
+		assertEquals("sodium", projects.getFirst().slug());
+		assertEquals(2, transport.calls.get());
+		assertEquals(1, hits("/v2/projects"), "the failed attempt never reached the server");
+		assertEquals(2, flaky.clientsBuilt(), "the retry ran on a fresh HttpClient");
+	}
+
+	// SPEC AC1f.1: two failures in a row give up; OnlineDataFetcher falls back to offline data with one warning that names
+	// the cause chain.
+	@Test
+	void twoFailuresInARowFallBackToOfflineDataWithOneWarning() {
+		FlakyTransport transport = new FlakyTransport(Integer.MAX_VALUE);
+		HttpModrinthClient flaky = new HttpModrinthClient("1.2.3", url("/"), FAST, transport);
+		InstalledMod sodium = new InstalledMod("sodium", "Sodium", "0.9.2", null, "62a7");
+
+		OnlineDataFetcher.Result result;
+		List<String> warnings;
+		try (io.github.chaotix345.rigtune.core.LogCapture log = new io.github.chaotix345.rigtune.core.LogCapture()) {
+			result = new OnlineDataFetcher(flaky).fetchAll(List.of(sodium), List.of("lithium"), "26.2");
+			warnings = log.lines().stream().filter(line -> line.startsWith("Modrinth lookups failed")).toList();
+		}
+
+		assertFalse(result.data().online());
+		assertEquals(2, transport.calls.get(), "one request and one retry, then no more requests");
+		assertEquals(1, warnings.size(), warnings.toString());
+		assertTrue(warnings.getFirst().contains("Stream 5 cancelled") && warnings.getFirst().contains("ClosedChannelException"), warnings.getFirst());
+	}
+
+	// Fails the first `failures` sends like the JDK did on 2026-09-26, then sends for real.
+	private static final class FlakyTransport implements HttpModrinthClient.Transport {
+		final AtomicInteger calls = new AtomicInteger();
+		private final int failures;
+
+		FlakyTransport(int failures) {
+			this.failures = failures;
+		}
+
+		@Override
+		public <T> java.net.http.HttpResponse<T> send(HttpClient http, java.net.http.HttpRequest request, java.net.http.HttpResponse.BodyHandler<T> handler,
+				io.github.chaotix345.rigtune.core.net.BoundedHttp.Progress progress, Duration stall, Duration deadline) throws IOException {
+			if (calls.incrementAndGet() <= failures) {
+				throw new IOException("Stream 5 cancelled", new java.nio.channels.ClosedChannelException());
+			}
+			return io.github.chaotix345.rigtune.core.net.BoundedHttp.send(http, request, handler, progress, stall, deadline);
+		}
 	}
 }

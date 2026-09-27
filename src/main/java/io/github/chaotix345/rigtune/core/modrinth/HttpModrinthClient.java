@@ -18,6 +18,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -72,6 +73,13 @@ public final class HttpModrinthClient implements ModrinthClient {
 	private final String baseUrl;
 	private final String userAgent;
 	private final Limits limits;
+	private final Transport transport;
+
+	// How a request is sent: BoundedHttp.send (tests put a failing transport in front of it).
+	interface Transport {
+		<T> HttpResponse<T> send(HttpClient http, HttpRequest request, HttpResponse.BodyHandler<T> handler, BoundedHttp.Progress progress,
+				Duration stall, Duration deadline) throws IOException;
+	}
 
 	public HttpModrinthClient(String modVersion) {
 		this(modVersion, baseUrlOrDefault(System.getProperty(BASE_URL_PROPERTY)));
@@ -106,9 +114,14 @@ public final class HttpModrinthClient implements ModrinthClient {
 	}
 
 	HttpModrinthClient(String modVersion, String baseUrl, Limits limits) {
+		this(modVersion, baseUrl, limits, BoundedHttp::send);
+	}
+
+	HttpModrinthClient(String modVersion, String baseUrl, Limits limits, Transport transport) {
 		this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
 		this.userAgent = userAgent(modVersion);
 		this.limits = limits;
+		this.transport = transport;
 	}
 
 	private HttpClient http() {
@@ -398,15 +411,29 @@ public final class HttpModrinthClient implements ModrinthClient {
 		return HttpRequest.newBuilder(uri).timeout(REQUEST_TIMEOUT).header("User-Agent", userAgent);
 	}
 
+	// A lookup is a read, so a failure without an HTTP response is tried once more, on the fresh client exchange() switched
+	// to, with the same stall and deadline limits: a reset connection, or "Stream N cancelled" when the JDK had marked its
+	// HTTP/2 connection for shutdown (2026-09-26). A timeout or an interrupt isn't retried.
 	private String sendForString(HttpRequest request) throws IOException {
-		HttpResponse<byte[]> response = exchange(http(), request, (info, progress) -> info.statusCode() / 100 == 2
-				? BoundedHttp.bytes(limits.maxJsonBytes(), false, progress)
-				: BoundedHttp.bytes(ERROR_BODY_BYTES, true, progress), limits.jsonStall(), limits.jsonDeadline());
+		HttpResponse<byte[]> response;
+		try {
+			response = sendJson(request);
+		} catch (HttpTimeoutException | InterruptedIOException e) {
+			throw e;
+		} catch (IOException e) {
+			response = sendJson(request);
+		}
 		String body = new String(response.body(), StandardCharsets.UTF_8);
 		if (response.statusCode() / 100 != 2) {
 			throw error(request, response.statusCode(), body);
 		}
 		return body;
+	}
+
+	private HttpResponse<byte[]> sendJson(HttpRequest request) throws IOException {
+		return exchange(http(), request, (info, progress) -> info.statusCode() / 100 == 2
+				? BoundedHttp.bytes(limits.maxJsonBytes(), false, progress)
+				: BoundedHttp.bytes(ERROR_BODY_BYTES, true, progress), limits.jsonStall(), limits.jsonDeadline());
 	}
 
 	private interface Handler<T> {
@@ -420,7 +447,7 @@ public final class HttpModrinthClient implements ModrinthClient {
 			BoundedHttp.Progress progress = new BoundedHttp.Progress();
 			HttpResponse<T> response;
 			try {
-				response = BoundedHttp.send(client, request, info -> handler.apply(info, progress), progress, stall, deadline);
+				response = transport.send(client, request, info -> handler.apply(info, progress), progress, stall, deadline);
 			} catch (InterruptedIOException e) {
 				throw e;
 			} catch (IOException e) {
