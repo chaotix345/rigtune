@@ -18,12 +18,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SettingsSaverTest {
+	// v0.5 SPEC AC1e.1: with both worker threads and both network threads stuck (a Modrinth outage; runs 36240897813 to
+	// 36243402401), a settings save still lands, and SettingsSaver.flush (what UiGameTest waits on) returns.
 	@Test
-	void aSaveIsNotBlockedByABusyWorkerPool(@TempDir Path configDir) throws Exception {
+	void aSaveIsNotBlockedByBusyWorkerAndNetworkPools(@TempDir Path configDir) throws Exception {
 		CountDownLatch release = new CountDownLatch(1);
-		CountDownLatch busy = new CountDownLatch(2);
-		for (int i = 0; i < 2; i++) {
-			Probes.EXECUTOR.execute(() -> {
+		CountDownLatch busy = new CountDownLatch(4);
+		for (ExecutorService pool : new ExecutorService[] {Probes.EXECUTOR, Probes.EXECUTOR, Probes.NETWORK, Probes.NETWORK}) {
+			pool.execute(() -> {
 				busy.countDown();
 				try {
 					release.await(30, TimeUnit.SECONDS);
@@ -33,7 +35,12 @@ class SettingsSaverTest {
 			});
 		}
 		try {
-			assertTrue(busy.await(5, TimeUnit.SECONDS), "both worker threads busy");
+			assertTrue(busy.await(5, TimeUnit.SECONDS), "both worker threads and both network threads busy");
+			ClientSettings flushed = new ClientSettings();
+			flushed.startupToast = false;
+			SettingsSaver.shared().save(flushed, configDir);
+			assertTrue(SettingsSaver.shared().flush(2_000), "flush returned with the save written");
+			assertFalse(ClientSettings.load(configDir).startupToast);
 			ClientSettings settings = new ClientSettings();
 			settings.modrinth = false;
 			SettingsSaver.shared().save(settings, configDir).get(2, TimeUnit.SECONDS);

@@ -21,7 +21,10 @@ final class GameTestNet {
 
 	// Returns the switch as it was, for the restore.
 	static boolean set(ClientGameTestContext context, RigTuneController controller, boolean on) {
-		Path configDir = FabricLoader.getInstance().getConfigDir();
+		return set(context, controller, FabricLoader.getInstance().getConfigDir(), on);
+	}
+
+	static boolean set(ClientGameTestContext context, RigTuneController controller, Path configDir, boolean on) {
 		boolean before = context.computeOnClient(mc -> ClientSettings.shared(configDir).networkEnabled);
 		boolean online = context.computeOnClient(mc -> {
 			ClientSettings settings = ClientSettings.shared(configDir);

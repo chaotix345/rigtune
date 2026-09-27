@@ -397,19 +397,17 @@ public class UiGameTest implements FabricClientGameTest {
 	private static void restoreDefaults(ClientGameTestContext context, Path configDir, RigTuneController controller, Goal goal) {
 		context.runOnClient(mc -> {
 			ClientSettings settings = ClientSettings.shared(configDir);
-			settings.networkEnabled = true;
 			settings.remoteRules = true;
 			settings.modrinth = true;
 			settings.startupToast = true;
 			settings.benchmarkScene = "CURRENT";
-			settings.save(configDir);
 			controller.setGoal(goal);
-			controller.settingsChanged();
 		});
+		// The network switch last, through the shared helper: it saves them all, rescans and waits for the online report (the
+		// fake Modrinth's), so later classes don't start from whichever report the rescan published first.
+		GameTestNet.set(context, controller, true);
 		ClientSettings saved = ClientSettings.load(configDir);
 		check(saved.networkEnabled && saved.remoteRules && saved.modrinth && saved.startupToast && "CURRENT".equals(saved.benchmarkScene), "defaults restored");
-		// Later classes start from the online report (the fake Modrinth's), not whichever report the rescan published first.
-		context.waitFor(mc -> controller.report() != null && controller.report().online(), 1200);
 	}
 
 	// The click queued the save on SettingsSaver's own thread (RigTuneSettingsScreen.save): wait for that write, then read the
