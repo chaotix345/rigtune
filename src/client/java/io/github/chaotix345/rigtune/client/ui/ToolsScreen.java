@@ -6,6 +6,7 @@ import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.PreloadTimer;
 import io.github.chaotix345.rigtune.core.footprint.StartupTimesStore;
 import io.github.chaotix345.rigtune.core.hardware.PerfCounterAdvice;
+import io.github.chaotix345.rigtune.core.hardware.PerfCounters;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -49,6 +50,7 @@ public class ToolsScreen extends Screen {
 	private @Nullable Component startupLine;
 	private List<FormattedCharSequence> startupDetail = new ArrayList<>();
 	private List<Component> perfCounterLines = List.of();
+	private PerfCounters shownPerfCounters = PerfCounters.NOT_READ;
 	private @Nullable ToolsList list;
 	private double scroll;
 	// docs/v0.4/SPEC.md 11: the row that had the keyboard focus before a rebuild, which gets it back.
@@ -84,6 +86,14 @@ public class ToolsScreen extends Screen {
 		list.setScrollAmount(scroll);
 		addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose())
 				.bounds(x, footerTop, buttonWidth, 20).build());
+	}
+
+	// The probe's slow part finishes off the render thread: show its performance-counter result when it arrives (review L9).
+	@Override
+	public void tick() {
+		if (HardwareProbe.perfCounters() != shownPerfCounters) {
+			rebuildWidgets();
+		}
 	}
 
 	@Override
@@ -123,7 +133,8 @@ public class ToolsScreen extends Screen {
 	// this launch's crash-report setup time when it was measured.
 	private void perfCounterLines(ToolsList target) {
 		List<Component> shown = new ArrayList<>();
-		for (PerfCounterAdvice.Line line : PerfCounterAdvice.lines(HardwareProbe.perfCounters(), PreloadTimer.preloadMs())) {
+		shownPerfCounters = HardwareProbe.perfCounters();
+		for (PerfCounterAdvice.Line line : PerfCounterAdvice.lines(shownPerfCounters, PreloadTimer.preloadMs())) {
 			Component text = Texts.component(line.text());
 			URI link = line.url() == null ? null : URI.create(line.url());
 			boolean first = shown.isEmpty();

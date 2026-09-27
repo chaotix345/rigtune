@@ -108,11 +108,11 @@ public class AwarenessGameTest implements FabricClientGameTest {
 
 	// ---- WS-W (AW-1, AW-2).
 
-	// AW-2 (AC2W.2): NoticeScreen at 854x480 GUI scale 3 (which the game caps at 2 for that window) lists as many canned
-	// notices as fit, above a fresh driver notice that then doesn't fit; dismissing the top one rebuilds it, the driver
-	// notice is listed and awareness.json holds the new driver. AW-1 (AC2W.1): a rescan keeps the shown, committed notice;
-	// its own Re-scan retires it. The 0.4 block dismissed the same key for this session, so the notice line never shows
-	// it: a wrapper lists it on NoticeScreen under the canned ones.
+	// AW-2 (AC2W.2): NoticeScreen at 1280x720 GUI scale 3 (SPEC X12 as amended: the game caps 854x480 at scale 2) lists
+	// as many canned notices as fit, above a fresh driver notice that then doesn't fit; dismissing the top one rebuilds
+	// it, the driver notice is listed and awareness.json holds the new driver. AW-1 (AC2W.1): a rescan keeps the shown,
+	// committed notice; its own Re-scan retires it. The 0.4 block dismissed the same key for this session, so the notice
+	// line never shows it: a wrapper lists it on NoticeScreen under the canned ones.
 	private static void awarenessFixes(V05TestContext v05) {
 		ClientGameTestContext context = v05.context();
 		RealController real = v05.realController();
@@ -124,7 +124,7 @@ public class AwarenessGameTest implements FabricClientGameTest {
 		check(!current.equals(storedDriver(file)), "not shown yet, so not committed");
 		ListedNotices listed = new ListedNotices(real, 12);
 		try {
-			v05.resize(V05TestContext.SCROLLING[0], V05TestContext.SCROLLING[1], V05TestContext.SCROLLING[2]);
+			v05.resize(1280, 720, 3);
 			// How many rows fit, with canned notices only (so the driver notice is never listed before the dismissal).
 			int fits = openNotices(context, listed).size();
 			check(fits >= 2 && fits < 12, "some canned notices fit, not all: " + fits);
@@ -133,14 +133,14 @@ public class AwarenessGameTest implements FabricClientGameTest {
 			check(context.computeOnClient(mc -> listed.notices().size()) >= 3, "at least three notices");
 			check(before.size() == fits && before.stream().noneMatch(n -> n.key().equals(hardware.key())),
 					"the driver notice doesn't fit below the " + fits + " canned ones: " + before);
-			screenshot(context, "awareness-aw2-before-854x480-scale3");
+			screenshot(context, "awareness-aw2-before-1280x720-scale3");
 			check(!current.equals(storedDriver(file)), "not listed, so not committed");
 
 			press(context, "rigtune.notice.dismiss");
 			List<Notice> after = context.computeOnClient(mc -> ((NoticeScreen) mc.gui.screen()).shown());
 			check(after.stream().anyMatch(n -> n.key().equals(hardware.key())), "listed after the rebuild: " + after);
 			context.waitFor(mc -> current.equals(storedDriver(file)), 100);
-			screenshot(context, "awareness-aw2-after-854x480-scale3");
+			screenshot(context, "awareness-aw2-after-1280x720-scale3");
 			RigTune.LOGGER.info("AwarenessGameTest: AW-2: the driver notice listed after a NoticeScreen rebuild committed {}", current);
 
 			context.runOnClient(mc -> real.rescan());
@@ -152,7 +152,7 @@ public class AwarenessGameTest implements FabricClientGameTest {
 			context.waitFor(mc -> real.report() != null && real.awarenessService().hardwareNotice() == null, 1200);
 			check(context.computeOnClient(mc -> ((NoticeScreen) mc.gui.screen()).shown()).stream().noneMatch(n -> n.key().equals(hardware.key())),
 					"its own Re-scan retired it");
-			screenshot(context, "awareness-aw1-retired-854x480-scale3");
+			screenshot(context, "awareness-aw1-retired-1280x720-scale3");
 			RigTune.LOGGER.info("AwarenessGameTest: AW-1: the committed driver notice survived a rescan; its own Re-scan retired it");
 		} finally {
 			v05.resize(1280, 720, 2);

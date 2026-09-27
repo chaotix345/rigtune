@@ -545,7 +545,8 @@ public class A11yGameTest implements FabricClientGameTest {
 				expected.add(Texts.component(line.text()).getString());
 			}
 			check(expected.size() >= 4, "the advice lines: " + expected);
-			int[][] sizes = {SIZES[0], SIZES[1], SIZES[2], V05TestContext.SCROLLING};
+			// X12 as amended: 1280x720 at GUI scale 3 for the scrolling list (the game caps 854x480 at scale 2).
+			int[][] sizes = {SIZES[0], SIZES[1], SIZES[2], {1280, 720, 3}};
 			for (int[] size : sizes) {
 				v05.resize(size[0], size[1], size[2]);
 				String where = size[0] + "x" + size[1] + "@" + size[2];
@@ -565,6 +566,7 @@ public class A11yGameTest implements FabricClientGameTest {
 			List<String> walked = new ArrayList<>(expected);
 			walked.add(Component.translatable("rigtune.startup.advice").getString());
 			walk(context, "tools startup", walked);
+			checkToolsTabOrder(context);
 			String entryRow = expected.get(expected.size() - 2);
 			int linkRow = context.computeOnClient(mc -> ((ToolsScreen) mc.gui.screen()).rowText().indexOf(entryRow));
 			focusRow(context, linkRow);
@@ -578,7 +580,11 @@ public class A11yGameTest implements FabricClientGameTest {
 
 			HardwareProbe.seedPerfCounters(new PerfCounters(true, false, List.of("PerfProc"), List.of()));
 			openTools(context, tools);
-			check(context.computeOnClient(mc -> ((ToolsScreen) mc.gui.screen()).perfCounterLines()).isEmpty(), "no advice while the counters are on");
+			ToolsScreen open = context.computeOnClient(mc -> (ToolsScreen) mc.gui.screen());
+			check(context.computeOnClient(mc -> open.perfCounterLines()).isEmpty(), "no advice while the counters are on");
+			// Review L9: the probe's result arriving while Tools is open shows at once (the same screen rebuilds).
+			HardwareProbe.seedPerfCounters(off);
+			context.waitFor(mc -> mc.gui.screen() == open && open.perfCounterLines().size() == expected.size(), 20);
 		} finally {
 			HardwareProbe.seedPerfCounters(null);
 			v05.resize(854, 480, 2);
@@ -592,6 +598,34 @@ public class A11yGameTest implements FabricClientGameTest {
 		context.waitForScreen(ToolsScreen.class);
 		context.getInput().setCursorPos(1, 1);
 		context.waitTicks(3);
+	}
+
+	// X6: Tab from nothing focused goes through the five tool buttons in order, then the list's rows, then Done.
+	private static void checkToolsTabOrder(ClientGameTestContext context) {
+		context.getInput().setCursorPos(1, 1);
+		context.runOnClient(mc -> mc.gui.screen().clearFocus());
+		List<String> stops = new ArrayList<>();
+		Object first = null;
+		for (int i = 0; i < 60; i++) {
+			tab(context);
+			Object leaf = context.computeOnClient(mc -> {
+				ComponentPath path = mc.gui.screen().getCurrentFocusPath();
+				return path == null ? null : path.leafComponent();
+			});
+			if (leaf == null || leaf == first) {
+				break;
+			}
+			if (first == null) {
+				first = leaf;
+			}
+			stops.add(context.computeOnClient(A11yGameTest::leafText));
+		}
+		List<String> buttons = List.of("rigtune.screen.benchmark_menu", "rigtune.tools.profiles", "rigtune.tools.stutter", "rigtune.tools.jvm",
+				"rigtune.tools.benchmark_history").stream().map(key -> Component.translatable(key).getString()).toList();
+		int rows = context.computeOnClient(A11yGameTest::rows);
+		check(stops.size() == buttons.size() + rows + 1, "Tools: every button, row and Done is one Tab stop: " + stops);
+		check(stops.subList(0, buttons.size()).equals(buttons), "Tools: the tool buttons first, in order: " + stops);
+		check(stops.getLast().equals(Component.translatable("gui.done").getString()), "Tools: Done last: " + stops);
 	}
 
 	// X12: every widget inside the screen and no two overlapping.
