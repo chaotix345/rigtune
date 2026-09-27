@@ -370,6 +370,28 @@ class StutterAnalyzerTest {
 		assertEquals(Arrays.stream(whole.histogramCounts()).sum(), whole.frames());
 	}
 
+	// docs/v0.5/SPEC.md 2S RW-11 (AC2S.13): a settings change or resource reload at t tags the spikes ending in (t, t + 10 s]
+	// settingsChanged, a tag that claims nothing and that the rules never see.
+	@Test
+	void rw11AReloadTagsTheNextTenSecondsAndClaimsNothing() {
+		Map<Integer, Long> spikes = Map.of(20, 80 * MS, 32, 80 * MS, 38, 90 * MS, 45, 80 * MS);
+		Capture plain = new Capture().frames(150, spikes, false);
+		plain.gc(T0 + 32 * S + 20 * MS, 40, GcKind.PAUSE, 0);
+		Capture changed = new Capture().frames(150, spikes, false);
+		changed.gc(T0 + 32 * S + 20 * MS, 40, GcKind.PAUSE, 0);
+		changed.rings.event(StutterRings.SETTINGS_CHANGED, T0 + 30 * S, 16);
+		StutterAnalyzer.Result before = plain.analyze(true);
+		StutterAnalyzer.Result after = changed.analyze(true);
+
+		assertEquals(Map.of(Attributor.SETTINGS_CHANGED, 2), after.report().tags(), "the spikes at 32 s and 38 s, not those at 20 s and 45 s");
+		assertEquals(before.report().causes(), after.report().causes(), "claims nothing");
+		assertEquals(before.report().lostMs(), after.report().lostMs());
+		assertEquals(before.facts().claimedShares(), after.facts().claimedShares());
+		assertEquals(Map.of(), after.facts().taggedShares(), "not a rules tag");
+		assertTrue(after.report().worst().stream().filter(w -> w.ms() == 90.0).findFirst().orElseThrow().causes().contains("settingsChanged:context"));
+		assertFalse(Attributor.TAGS.contains(Attributor.SETTINGS_CHANGED));
+	}
+
 	// Review finding 2: what the capture couldn't measure stays UNKNOWN for the rules (also under `not`).
 	@Test
 	void unmeasuredCausesAndTags() {

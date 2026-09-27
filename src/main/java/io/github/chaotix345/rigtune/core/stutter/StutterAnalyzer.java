@@ -25,6 +25,7 @@ public final class StutterAnalyzer {
 	public static final double MIN_GAMEPLAY_SECONDS = 120;
 	static final long SAVE_TIMEOUT = 10 * SECOND;
 	static final long TELEPORT_WINDOW = 10 * SECOND;
+	static final long SETTINGS_WINDOW = 10 * SECOND;
 	static final double CONTENTION = 0.85;
 	static final int VANILLA_BACKLOG = 8;
 	// The tags whose evidence is the sampler's (SD-1).
@@ -70,7 +71,7 @@ public final class StutterAnalyzer {
 		GcSummary gc = gc(in);
 		List<Attributor.Sample> samples = samples(in);
 		Attributor.Context ctx = new Attributor.Context(gc.events(), saves(in), teleports(in), movingFast(in), samples, Math.max(1, in.cores()),
-				in.phaseTiming(), in.deferModeWaits(), chunkLoading(f, ringStart));
+				in.phaseTiming(), in.deferModeWaits(), chunkLoading(f, ringStart), settingsChanged(in));
 		List<Attributor.Attribution> attributions = new ArrayList<>();
 		for (SpikeDetector.Spike s : spikes) {
 			Attributor.Phases p = phases.get(s.end());
@@ -123,10 +124,13 @@ public final class StutterAnalyzer {
 		}
 		Map<String, Double> taggedShares = new LinkedHashMap<>();
 		Map<String, Integer> tags = new LinkedHashMap<>();
-		for (String tag : Attributor.TAGS) {
+		for (String tag : Attributor.REPORT_TAGS) {
 			Integer n = tagCounts.get(tag);
 			if (n != null) {
 				tags.put(tag, n);
+				if (!Attributor.TAGS.contains(tag)) {
+					continue;
+				}
 				if (SAMPLE_TAGS.contains(tag)) {
 					int covered = sampleTagCounts.getOrDefault(tag, 0);
 					taggedShares.put(tag, sampleSpikes > 0 ? 100.0 * covered / sampleSpikes : 0);
@@ -392,6 +396,11 @@ public final class StutterAnalyzer {
 
 	private static List<Attributor.Interval> teleports(Input in) {
 		return events(in, StutterRings.TELEPORT).stream().map(t -> new Attributor.Interval(t[0], t[0] + TELEPORT_WINDOW)).toList();
+	}
+
+	// v0.5 RW-11: after each settings change or resource reload, the next 10 s.
+	private static List<Attributor.Interval> settingsChanged(Input in) {
+		return events(in, StutterRings.SETTINGS_CHANGED).stream().map(t -> new Attributor.Interval(t[0], t[0] + SETTINGS_WINDOW)).toList();
 	}
 
 	public static List<Attributor.Sample> samples(Input in) {

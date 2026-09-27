@@ -58,9 +58,9 @@ public final class StutterService {
 
 	private enum Saved { UNKNOWN, LOADING, DONE }
 
-	// What the analysis needs about the machine, taken on the render thread.
+	// What the analysis needs about the machine, taken on the render thread; settingsNow: the four RW-11 values.
 	private record Machine(@Nullable RulesDocument rules, @Nullable HardwareProfile hardware, @Nullable List<InstalledMod> mods, SettingsSnapshot settings,
-			Goal goal) {
+			Goal goal, @Nullable Map<String, String> settingsNow) {
 	}
 
 	// Render thread.
@@ -145,7 +145,7 @@ public final class StutterService {
 		StutterMonitor.Capture session = StutterMonitor.session();
 		if (session != null) {
 			StutterCapture.stop(session);
-			StutterCapture.startSession();
+			startSession(controller.minecraft());
 		}
 		live = null;
 		saved = null;
@@ -169,11 +169,18 @@ public final class StutterService {
 		boolean want = controller.settings().stutterMonitor && minecraft.level != null;
 		StutterMonitor.Capture session = StutterMonitor.session();
 		if (want && session == null && !benchmarkRunning && StutterMonitor.benchmark() == null) {
-			StutterCapture.startSession();
+			startSession(minecraft);
 			live = null;
 		} else if (!want && session != null) {
 			end(session, minecraft, false);
 		}
+	}
+
+	// v0.5 RW-11: a session starts with the settings it starts with (SettingsWatch registers its listener the first time).
+	private static StutterMonitor.Capture startSession(@Nullable Minecraft minecraft) {
+		StutterMonitor.Capture session = StutterCapture.startSession();
+		session.settingsAtStart = SettingsWatch.sessionStarted(minecraft);
+		return session;
 	}
 
 	// CLIENT_STOPPING: the running session is saved right away, on this thread, after any save still queued (leaving the
@@ -299,7 +306,7 @@ public final class StutterService {
 		// Not after a failed tick: StutterHooks.tick, which ends a session on leaving the world, is off until the monitor is
 		// turned on again.
 		if (!StutterHooks.failed() && controller.settings().stutterMonitor && minecraft.level != null && StutterMonitor.session() == null) {
-			StutterCapture.startSession().aroundBenchmark = true;
+			startSession(minecraft).aroundBenchmark = true;
 			live = null;
 			if (paused) {
 				pause(true);
@@ -397,7 +404,7 @@ public final class StutterService {
 		} catch (RuntimeException e) {
 			settings = new SettingsSnapshot(Map.of());
 		}
-		return new Machine(controller.rules(), controller.hardwareProfile(), controller.mods(), settings, controller.goal());
+		return new Machine(controller.rules(), controller.hardwareProfile(), controller.mods(), settings, controller.goal(), SettingsWatch.values(minecraft));
 	}
 
 	private static Analysis analyze(StutterCapture.Copy c, Machine m) {
@@ -412,6 +419,11 @@ public final class StutterService {
 				: StutterAdvisor.evaluate(m.rules(), StutterAdvisor.context(m.rules(), hw, m.mods(), m.settings(), m.goal(), result.facts()),
 						result.report().enoughData());
 		StutterReport report = result.report().withAdvice(advice.stream().map(StutterAdvisor.Fired::id).toList());
+		// v0.5 RW-11: a session's settings at its start and now (its end, or the live view's moment); the advice above used
+		// the ones now.
+		if (c.settingsAtStart() != null) {
+			report = report.withSettings(c.settingsAtStart(), m.settingsNow());
+		}
 		return new Analysis(null, report, advice, result.dhWorldGenCores());
 	}
 

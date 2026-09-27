@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.core.stutter;
 
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +26,13 @@ public record StutterReport(String startedAt, String source, @Nullable String mc
 	public static final String MONITOR = "monitor";
 	public static final String BENCHMARK = "benchmark";
 	public static final int MAX_WORST = 10;
+	// v0.5 RW-11: settingsAtStart/settingsAtEnd's keys (the values as text: a distance in chunks, "true"/"false"); shaders
+	// only with Iris loaded, dhRendering only with Distant Horizons loaded.
+	public static final String RENDER_DISTANCE = "renderDistance";
+	public static final String SIMULATION_DISTANCE = "simulationDistance";
+	public static final String SHADERS = "shaders";
+	public static final String DH_RENDERING = "dhRendering";
+	public static final List<String> SETTINGS = List.of(RENDER_DISTANCE, SIMULATION_DISTANCE, SHADERS, DH_RENDERING);
 
 	public StutterReport {
 		histogramCounts = histogramCounts == null ? new long[FrameRing.BUCKETS] : histogramCounts;
@@ -87,6 +95,35 @@ public record StutterReport(String startedAt, String source, @Nullable String mc
 			all += n;
 		}
 		return all > frames && avgFps > 0 ? frames / avgFps : null;
+	}
+
+	// A setting's value as on/off ("true"/"false"), or null for a number.
+	public static @Nullable Boolean onOff(String value) {
+		return switch (value) {
+			case "true" -> Boolean.TRUE;
+			case "false" -> Boolean.FALSE;
+			default -> null;
+		};
+	}
+
+	// One of the four settings with a different value at the session's end than at its start.
+	public record SettingChange(String key, String from, String to) {
+	}
+
+	// v0.5 RW-11: the settings (SETTINGS' order) that differ between the session's start and end; empty without both maps.
+	public List<SettingChange> settingChanges() {
+		if (settingsAtStart == null || settingsAtEnd == null) {
+			return List.of();
+		}
+		List<SettingChange> out = new ArrayList<>();
+		for (String key : SETTINGS) {
+			String from = settingsAtStart.get(key);
+			String to = settingsAtEnd.get(key);
+			if (from != null && to != null && !from.equals(to)) {
+				out.add(new SettingChange(key, from, to));
+			}
+		}
+		return out;
 	}
 
 	public StutterReport withAdvice(List<String> ids) {

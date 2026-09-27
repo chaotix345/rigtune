@@ -100,6 +100,22 @@ class StutterSummaryTest {
 				StutterSummary.text(real, List.of()));
 	}
 
+	// docs/v0.5/SPEC.md 2S RW-11: Copy summary names the settings that changed and says the advice used the ones at the end.
+	@Test
+	void rw11SettingsChangesAreNamed() {
+		StutterReport r = report(true, true, 21.7);
+		StutterReport tagged = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(),
+				r.frames(), r.avgFps(), r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(),
+				Map.of(Attributor.SETTINGS_CHANGED, 4), r.worst(), r.facts(), r.advice(), true, true, r.hitches())
+				.withSettings(Map.of(StutterReport.RENDER_DISTANCE, "32", StutterReport.DH_RENDERING, "false"),
+						Map.of(StutterReport.RENDER_DISTANCE, "12", StutterReport.DH_RENDERING, "true"));
+		String text = StutterSummary.text(tagged, List.of(new StutterAdvisor.Fired("a", "info", Impact.LOW, "Try this", "x")));
+		assertTrue(text.contains("Settings changed during this session (render distance 32 → 12, Distant Horizons rendering off → on)"), text);
+		assertTrue(text.contains("4 of 12 spikes happened during the 10 s after a settings change or resource reload (not measured)"), text);
+		assertTrue(text.contains("The advice uses the settings at the end of the session"), text);
+		assertFalse(StutterSummary.text(r, List.of()).contains("settings at the end"));
+	}
+
 	@Test
 	void caveatsAreSpelledOut() {
 		String text = StutterSummary.text(report(false, false, null), List.of());

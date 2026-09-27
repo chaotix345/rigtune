@@ -24,7 +24,11 @@ public final class StutterSummary {
 			Map.entry(Attributor.CPU_CONTENTION, "a busy CPU"),
 			Map.entry(Attributor.AFTER_TELEPORT, "the 10 s after a teleport"),
 			Map.entry(Attributor.CHUNKS_LOADING, "chunks loading"),
-			Map.entry(Attributor.MOVING_FAST, "fast movement"));
+			Map.entry(Attributor.MOVING_FAST, "fast movement"),
+			Map.entry(Attributor.SETTINGS_CHANGED, "the 10 s after a settings change or resource reload"));
+	// v0.5 RW-11: the four settings' names, for "Settings changed during this session (render distance 32 → 12)".
+	private static final Map<String, String> SETTING_NAMES = Map.of(StutterReport.RENDER_DISTANCE, "render distance", StutterReport.SIMULATION_DISTANCE,
+			"simulation distance", StutterReport.SHADERS, "shaders", StutterReport.DH_RENDERING, "Distant Horizons rendering");
 
 	private StutterSummary() {
 	}
@@ -52,6 +56,10 @@ public final class StutterSummary {
 		if (!r.enoughData()) {
 			out.append("Not enough data yet (at least 3 spikes and 2 minutes of gameplay)\n");
 		}
+		List<StutterReport.SettingChange> changes = r.settingChanges();
+		if (!changes.isEmpty()) {
+			out.append("Settings changed during this session (").append(String.join(", ", changes.stream().map(StutterSummary::change).toList())).append(")\n");
+		}
 		if (s.total() > 0) {
 			List<String> causes = new ArrayList<>();
 			Map<String, Integer> shown = percentages(r.causes());
@@ -63,7 +71,7 @@ public final class StutterSummary {
 			int unexplained = shown.getOrDefault(Attributor.UNKNOWN, causes.isEmpty() ? 100 : 0);
 			out.append("Likely causes (share of the lost time): ").append(causes.isEmpty() ? "none measured" : String.join(", ", causes))
 					.append(String.format(Locale.ROOT, "; not explained %d %%%n", unexplained));
-			for (String tag : Attributor.TAGS) {
+			for (String tag : Attributor.REPORT_TAGS) {
 				Integer n = r.tags().get(tag);
 				if (n != null && n > 0) {
 					String when = Attributor.CHUNKS_LOADING.equals(tag) ? "while chunks were loading" : "during " + name(tag);
@@ -85,6 +93,9 @@ public final class StutterSummary {
 		}
 		if (!advice.isEmpty()) {
 			out.append("Advice: ").append(String.join("; ", advice.stream().map(a -> MarkdownSafe.field(a.title())).toList())).append('\n');
+		}
+		if (!changes.isEmpty()) {
+			out.append("The advice uses the settings at the end of the session\n");
 		}
 		String text = out.toString();
 		return text.length() <= LIMIT ? text : text.substring(0, LIMIT - 1) + "…";
@@ -114,6 +125,16 @@ public final class StutterSummary {
 			out.merge(largest, -1, Integer::sum);
 		}
 		return out;
+	}
+
+	// "render distance 32 → 12", "shaders on → off".
+	static String change(StutterReport.SettingChange c) {
+		return SETTING_NAMES.getOrDefault(c.key(), c.key()) + " " + onOff(c.from()) + " → " + onOff(c.to());
+	}
+
+	private static String onOff(String value) {
+		Boolean on = StutterReport.onOff(value);
+		return on == null ? value : on ? "on" : "off";
 	}
 
 	// "1 spike", "2 spikes".

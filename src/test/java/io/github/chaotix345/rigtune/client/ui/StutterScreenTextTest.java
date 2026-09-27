@@ -80,6 +80,21 @@ class StutterScreenTextTest {
 				"shares that add up are shown as they are");
 	}
 
+	// docs/v0.5/SPEC.md 2S RW-11: the session's settings changes and the tag, at the text the screen shows.
+	@Test
+	void settingsChangedLines() {
+		StutterReport r = report(new StutterReport.Spikes(9, 2, 1, 0), 9, Map.of(Attributor.SETTINGS_CHANGED, 3), Map.of());
+		assertEquals(null, StutterScreen.settingsLine(r), "no settings recorded (a 0.4 session, a benchmark)");
+		StutterReport changed = r.withSettings(Map.of(StutterReport.RENDER_DISTANCE, "32", StutterReport.SIMULATION_DISTANCE, "12", StutterReport.SHADERS, "true"),
+				Map.of(StutterReport.RENDER_DISTANCE, "12", StutterReport.SIMULATION_DISTANCE, "12", StutterReport.SHADERS, "false"));
+		assertEquals("Settings changed during this session (render distance 32 → 12, shaders on → off)", StutterScreen.settingsLine(changed).getString());
+		assertEquals(null, StutterScreen.settingsLine(r.withSettings(Map.of(StutterReport.RENDER_DISTANCE, "12"), Map.of(StutterReport.RENDER_DISTANCE, "12"))));
+		assertEquals("3 of 12 spikes happened during the 10 s after a settings change or resource reload (not measured)",
+				StutterScreen.tagLine(Attributor.SETTINGS_CHANGED, 3, 12).getString());
+		assertEquals("Game ticks ●● · the 10 s after a settings change or resource reload",
+				StutterScreen.notes(List.of("tick:medium", "settingsChanged:context")).getString());
+	}
+
 	@Test
 	void theBenchmarkLineCountsOneSpike() {
 		assertEquals("Stutter Doctor: 1 spike during the sweeps; no cause measured",
