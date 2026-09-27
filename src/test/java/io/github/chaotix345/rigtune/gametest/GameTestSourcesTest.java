@@ -35,7 +35,6 @@ class GameTestSourcesTest {
 		assertTrue(write.matcher(read(GAMETEST.resolve("GameTestNet.java"))).find(), "GameTestNet itself writes it");
 	}
 
-	// AC1e.1: UiGameTest's settings checks (waitForSaved) wait for the save on SettingsSaver, not by polling settings.json.
 	// The tick hooks' 0-allocation keys are the sum over every timed block (FootprintBudgets.allocatedBytes), never the
 	// fewest-allocating block (coordinator: the 0-allocation checks stay strict).
 	@Test
@@ -45,6 +44,24 @@ class GameTestSourcesTest {
 		assertFalse(Pattern.compile("Math\\.min\\(\\s*bytes").matcher(footprint).find(), "no fewest-allocating block");
 	}
 
+	// Singleplayer worlds are opened and left through GameTestWorlds, which holds the integrated server while the render
+	// thread halts it, so the halt can't deadlock the harness's tick phases (run 36314730108).
+	@Test
+	void singleplayerWorldsAreLeftThroughGameTestWorlds() throws IOException {
+		List<String> offenders;
+		try (Stream<Path> files = Files.list(GAMETEST)) {
+			offenders = files.filter(f -> f.toString().endsWith(".java") && !f.getFileName().toString().equals("GameTestWorlds.java"))
+					.filter(f -> {
+						String source = read(f);
+						return source.contains("worldBuilder().create()") || source.contains("runOnClient(BenchmarkWorld::exitNow)");
+					})
+					.map(f -> f.getFileName().toString())
+					.toList();
+		}
+		assertEquals(List.of(), offenders);
+	}
+
+	// AC1e.1: UiGameTest's settings checks (waitForSaved) wait for the save on SettingsSaver, not by polling settings.json.
 	@Test
 	void uiGameTestWaitsOnSettingsSaverNotAPoll() {
 		String ui = read(GAMETEST.resolve("UiGameTest.java"));

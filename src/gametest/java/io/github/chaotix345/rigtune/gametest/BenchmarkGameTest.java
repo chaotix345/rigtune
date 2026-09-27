@@ -258,7 +258,7 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 			check(world.cameraY() == world.floor() + BenchmarkWorld.CAMERA_ABOVE_FLOOR, "camera 16 above the terrain floor: " + world);
 			check(world.cameraClear(), "the camera block and the one above are air: " + world);
 
-			context.runOnClient(BenchmarkWorld::exitNow);
+			GameTestWorlds.leave(context, BenchmarkWorld::exitNow);
 			context.waitForScreen(BenchmarkResultScreen.class);
 			context.waitTicks(3);
 			context.takeScreenshot("bench-world-tune-result");
@@ -402,7 +402,7 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		BenchmarkController.Outcome outcome = context.computeOnClient(mc -> BenchmarkController.lastOutcome());
 		check(outcome != null && outcome.cancelled() && outcome.record() == null, "Esc cancels the world run: " + outcome);
 		checkRequestedViewDistance(context, settings.rd(), "after the cancelled Tune");
-		context.runOnClient(BenchmarkWorld::exitNow);
+		GameTestWorlds.leave(context, BenchmarkWorld::exitNow);
 		context.waitForScreen(TitleScreen.class);
 		context.waitFor(mc -> BenchmarkWorld.state() == BenchmarkWorld.State.IDLE, WORLD_TIMEOUT_TICKS);
 		check(context.computeOnClient(Settings::of).equals(settings), "settings restored after the cancelled world run");
@@ -424,7 +424,7 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		check(outcome.request().scene() == BenchmarkRequest.Scene.BENCHMARK_WORLD, "scene " + outcome.request());
 		check(outcome.record().world() != null && BenchmarkWorld.LEVEL_ID.equals(outcome.record().world().levelId()), "world recorded");
 		check(outcome.record().result() != null && outcome.record().result().repeats() == 2, "two repeats: " + outcome.record());
-		context.runOnClient(BenchmarkWorld::exitNow);
+		GameTestWorlds.leave(context, BenchmarkWorld::exitNow);
 		context.waitForScreen(BenchmarkResultScreen.class);
 		check(context.computeOnClient(mc -> mc.level == null), "back from the benchmark world");
 		context.waitTicks(3);
@@ -435,7 +435,7 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 	// The Tune run of AC6.2 in a harness world, and the benchmark "Keep" journaled through ChangeRecorder.
 	private static String currentWorldTune(ClientGameTestContext context) {
 		setScene(context, BenchmarkRequest.Scene.CURRENT);
-		try (TestSingleplayerContext singleplayer = context.worldBuilder().create()) {
+		try (TestSingleplayerContext singleplayer = GameTestWorlds.create(context)) {
 			singleplayer.getConnection().waitForChunksRender();
 			openMenu(context);
 			context.takeScreenshot("bench-menu-world");
