@@ -76,7 +76,7 @@ class FirstRunNoticeSourceTest {
 		Notice notice = FirstRunNoticeSource.notice(ModFilesPolicy.RIGTUNE, null);
 		assertEquals("firstrun.guide", notice.key());
 		assertEquals(NoticePriority.FIRST_RUN, notice.priority());
-		assertEquals("New to RigTune? History… lets you undo each Apply.", notice.message().english());
+		assertEquals("New? History… lets you undo each Apply.", notice.message().english());
 		assertEquals(DETAIL, notice.detail().english());
 		assertEquals(List.of("how", "got_it"), notice.actions().stream().map(NoticeAction::id).toList());
 		assertEquals(List.of("How it works", "Got it"), notice.actions().stream().map(a -> a.label().english()).toList());
@@ -94,7 +94,7 @@ class FirstRunNoticeSourceTest {
 		assertEquals(DETAIL_SETTINGS, pending);
 		assertFalse(pending.contains("manage") || pending.contains("mod"), pending);
 		for (ModFilesPolicy policy : ModFilesPolicy.values()) {
-			assertEquals("New to RigTune? History… lets you undo each Apply.", FirstRunNoticeSource.notice(policy, null).message().english());
+			assertEquals("New? History… lets you undo each Apply.", FirstRunNoticeSource.notice(policy, null).message().english());
 		}
 	}
 

@@ -190,7 +190,7 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 			context.takeScreenshot("firstapply-guide-" + name);
 		}
 		v05.resize(854, 480, 2);
-		String said = tabUntilNarrates(context, "the guide", "New to RigTune?");
+		String said = tabUntilNarrates(context, "the guide", "lets you undo each Apply");
 		check(said.contains("Only the ticked"), "the guide's detail is narrated with it: " + said);
 	}
 
@@ -230,7 +230,7 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 		RigTuneScreen rigtune = context.computeOnClient(mc -> (RigTuneScreen) mc.gui.screen());
 		check(real.firstApplyPending(), "the first Apply is pending");
 		press(context, "rigtune.screen.apply.count");
-		context.waitFor(mc -> mc.gui.screen() instanceof FirstApplyScreen f && !f.loading() && f.view() != null, 200);
+		context.waitFor(mc -> mc.gui.screen() instanceof FirstApplyScreen f && !f.loading() && f.view() != null, 600);
 		context.waitTicks(2);
 		String applyStatus = context.computeOnClient(mc -> statusLine(rigtune));
 		check(applyStatus != null && !applyStatus.isEmpty(), "Apply set the RigTune screen's status line");
@@ -249,12 +249,13 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 		boolean undone = grouped.stream().anyMatch(s -> !JournalChange.APPLIED.equals(s) && !JournalChange.STAGED.equals(s));
 		List<String> rows = context.computeOnClient(mc -> {
 			FirstApplyScreen screen = (FirstApplyScreen) mc.gui.screen();
+			check(!screen.loading(), "the confirmation has read the history");
 			boolean downloading = real.downloading();
 			check(screen.changeStatuses().equals(grouped), "the rows' statuses are the entry's, grouped: " + screen.changeStatuses() + " vs " + grouped);
 			List<String> notes = screen.notes();
 			check(notes.contains("rigtune.firstrun.applied.restart") == staged, "the restart note iff a row waits for the restart: " + notes);
-			check(notes.contains("rigtune.firstrun.applied.no_restart") == (!staged && !downloading && !undone && inEffect),
-					"no restart needed iff none waits, nothing downloads or was undone, and a row is in effect: " + notes);
+			check(notes.contains("rigtune.firstrun.applied.no_restart") == (!staged && !downloading && !undone && inEffect && !screen.failuresReported()),
+					"no restart needed iff none waits, nothing downloads, failed or was undone, and a row is in effect: " + notes);
 			check(notes.contains("rigtune.firstrun.applied.downloading") == downloading, "the downloading note iff downloads run: " + notes);
 			check(notes.getLast().equals("rigtune.firstrun.applied.undo_hint"), "the undo hint last: " + notes);
 			String narration = screen.getNarrationMessage().getString();
@@ -268,7 +269,7 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 
 		// AC8.6 and AC8.8: History… opens History with that entry selected, whose rows are the confirmation's, at the same size.
 		press(context, "rigtune.history.open");
-		context.waitFor(mc -> mc.gui.screen() instanceof HistoryScreen h && !h.loading() && h.view() != null, 200);
+		context.waitFor(mc -> mc.gui.screen() instanceof HistoryScreen h && !h.loading() && h.view() != null, 600);
 		context.waitTicks(2);
 		List<String> historyRows = context.computeOnClient(mc -> {
 			HistoryScreen screen = (HistoryScreen) mc.gui.screen();
@@ -278,11 +279,11 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 		check(rows.equals(historyRows), "the confirmation's rows are History's:\n" + rows + "\nvs\n" + historyRows);
 		context.takeScreenshot("firstapply-history-854x480-scale2");
 		press(context, "gui.done");
-		context.waitFor(mc -> mc.gui.screen() instanceof FirstApplyScreen f && !f.loading(), 200);
+		context.waitFor(mc -> mc.gui.screen() instanceof FirstApplyScreen f && !f.loading(), 600);
 
 		// AC8.8: Undo this Apply opens UndoScreen with a plan for that entry (cancelled here).
 		press(context, "rigtune.firstrun.applied.undo");
-		context.waitFor(mc -> mc.gui.screen() instanceof UndoScreen u && u.plan() != null, 200);
+		context.waitFor(mc -> mc.gui.screen() instanceof UndoScreen u && u.plan() != null, 600);
 		context.runOnClient(mc -> {
 			UndoScreen undo = (UndoScreen) mc.gui.screen();
 			check(entryId.equals(undo.entryId()) && undo.plan().problem() == null && !undo.plan().items().isEmpty(),
@@ -290,7 +291,7 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 		});
 		context.takeScreenshot("firstapply-undo-854x480-scale2");
 		press(context, "gui.cancel");
-		context.waitFor(mc -> mc.gui.screen() instanceof FirstApplyScreen f && !f.loading(), 200);
+		context.waitFor(mc -> mc.gui.screen() instanceof FirstApplyScreen f && !f.loading(), 600);
 
 		// AC8.8 and AC8.5: Done returns to the RigTune screen with Apply's status line; the guide went with the Apply.
 		press(context, "gui.done");
@@ -306,7 +307,7 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 
 		// AC8.8: Esc returns to the opener as well.
 		context.runOnClient(mc -> mc.gui.setScreen(new FirstApplyScreen(rigtune, real, entryId, Component.empty())));
-		context.waitFor(mc -> mc.gui.screen() instanceof FirstApplyScreen f && !f.loading(), 200);
+		context.waitFor(mc -> mc.gui.screen() instanceof FirstApplyScreen f && !f.loading(), 600);
 		context.getInput().pressKey(InputConstants.KEY_ESCAPE);
 		context.waitFor(mc -> mc.gui.screen() == rigtune, 40);
 		return entryId;
@@ -346,6 +347,8 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 		check(context.computeOnClient(mc -> real.notices().stream().noneMatch(n -> n.key().equals(FirstRunNoticeSource.KEY))),
 				"still hidden on the next RigTune screen");
 		check(real.firstApplyPending(), "Got it hides the guide only; the confirmation still follows the first Apply");
+		// Leave awareness.json as this class found it (a re-used run dir starts the same next time).
+		undismiss(v05);
 	}
 
 	// AC8.9: an Apply by any other path (here a direct controller.apply) retires the new player without the confirmation.

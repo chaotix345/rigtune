@@ -27,10 +27,9 @@ public final class FirstRun {
 		return noHistory && !lastApplyExists && !pendingExists;
 	}
 
-	// Reads only: the journal's state and entries, and whether the helper's two files exist.
+	// Reads only: history.json once (Journal.holdsNoEntries, the same rule as above), and whether the helper's two files
+	// exist.
 	public static boolean isNew(Journal journal, Path configDir) {
-		Journal.State state = journal.state();
-		List<JournalEntry> entries = state == Journal.State.OK ? journal.entries() : List.of();
-		return isNew(state, entries, Files.exists(ApplyResult.defaultPath(configDir)), Files.exists(PendingActions.defaultPath(configDir)));
+		return journal.holdsNoEntries() && !Files.exists(ApplyResult.defaultPath(configDir)) && !Files.exists(PendingActions.defaultPath(configDir));
 	}
 }

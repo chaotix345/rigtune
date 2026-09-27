@@ -16,11 +16,13 @@ import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.util.FormattedCharSequence;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Supplier;
@@ -50,10 +52,15 @@ public class FirstApplyScreen extends Screen {
 	private static final String DOWNLOADING = "rigtune.firstrun.applied.downloading";
 	// The notes that say when the Apply takes effect (the open narration's outcome).
 	private static final List<String> OUTCOMES = List.of(RESTART, NO_RESTART, DOWNLOADING);
+	// Status pieces RealController.apply and its downloads use when something wasn't done: nothing then claims the rows are
+	// all of it.
+	private static final Set<String> FAILURES = Set.of("rigtune.status.some_failed", "rigtune.status.download_failed", "rigtune.status.busy",
+			"rigtune.status.scan_failed");
 
 	// One row of the list, in order.
 	sealed interface Item {
-		record Status(Component text) implements Item {
+		// failure: the status reports something Apply didn't do (drawn plain, not in the applied colour).
+		record Status(Component text, boolean failure) implements Item {
 		}
 
 		record Section(String key, int color, int count) implements Item {
@@ -77,6 +84,8 @@ public class FirstApplyScreen extends Screen {
 	private final ModFilesPolicy policy;
 	private @Nullable Component status;
 	private @Nullable Component seenStatus;
+	// downloading() as last seen, and as it was when the shown history was read (the notes go with the rows they're about).
+	private boolean seenDownloading;
 	private boolean shownDownloading;
 	private HistoryModel.@Nullable View view;
 	private boolean stale = true;
@@ -97,7 +106,8 @@ public class FirstApplyScreen extends Screen {
 		this.entryId = entryId;
 		this.status = status;
 		this.seenStatus = controller.status();
-		this.shownDownloading = controller.downloading();
+		this.seenDownloading = controller.downloading();
+		this.shownDownloading = seenDownloading;
 		this.policy = controller.modFiles();
 	}
 
@@ -106,8 +116,9 @@ public class FirstApplyScreen extends Screen {
 	static List<Item> items(@Nullable Component status, HistoryModel.@Nullable View view, boolean failed, boolean loading, String entryId,
 			boolean downloading, ModFilesPolicy policy) {
 		List<Item> out = new ArrayList<>();
+		boolean failures = reportsFailure(status);
 		if (status != null) {
-			out.add(new Item.Status(status));
+			out.add(new Item.Status(status, failures));
 		}
 		String problem = loading ? "rigtune.history.loading" : failed || view == null ? "rigtune.history.error" : switch (view.state()) {
 			case CORRUPT -> "rigtune.history.corrupt";
@@ -136,18 +147,32 @@ public class FirstApplyScreen extends Screen {
 		section(out, "rigtune.firstrun.applied.section.undone", COLOR_REVERTED, undone);
 		if (!restart.isEmpty()) {
 			out.add(new Item.Note(RESTART, COLOR_STAGED));
-		} else if (!downloading && undone.isEmpty() && !now.isEmpty()) {
+		} else if (!downloading && !failures && undone.isEmpty() && !now.isEmpty()) {
 			out.add(new Item.Note(NO_RESTART, COLOR_APPLIED));
 		}
 		if (downloading) {
 			out.add(new Item.Note(DOWNLOADING, COLOR_LABEL));
 		}
-		// P0.4: under LAUNCHER or PENDING every mod-file item was advice, so this Apply changed no mod file.
-		if (policy != ModFilesPolicy.RIGTUNE) {
+		// P0.4: under LAUNCHER or PENDING every mod-file item was advice, so this Apply changed no mod file (said only when
+		// its rows agree).
+		if (policy != ModFilesPolicy.RIGTUNE && entry.changes().stream().allMatch(c -> c.row() == HistoryModel.Row.SETTING)) {
 			out.add(new Item.Note("rigtune.firstrun.applied.no_mod_files", COLOR_LABEL));
 		}
-		out.add(new Item.Note("rigtune.firstrun.applied.undo_hint", COLOR_LABEL));
+		if (entry.undoable()) {
+			out.add(new Item.Note("rigtune.firstrun.applied.undo_hint", COLOR_LABEL));
+		}
 		return out;
+	}
+
+	// Whether the status (Apply's own, or the one downloads left) says something wasn't done.
+	static boolean reportsFailure(@Nullable Component status) {
+		if (status == null) {
+			return false;
+		}
+		if (status.getContents() instanceof TranslatableContents t && FAILURES.contains(t.getKey())) {
+			return true;
+		}
+		return status.getSiblings().stream().anyMatch(FirstApplyScreen::reportsFailure);
 	}
 
 	private static void section(List<Item> out, String key, int color, List<HistoryModel.Change> changes) {
@@ -201,6 +226,11 @@ public class FirstApplyScreen extends Screen {
 
 	public HistoryModel.@Nullable View view() {
 		return view;
+	}
+
+	// Whether the status shown reports something Apply didn't do.
+	public boolean failuresReported() {
+		return reportsFailure(status);
 	}
 
 	// The notes shown, by key.
@@ -304,11 +334,13 @@ public class FirstApplyScreen extends Screen {
 
 	private void load() {
 		int gen = ++generation;
+		boolean downloadingAtRead = seenDownloading;
 		loading = true;
 		read(controller::history, Probes.EXECUTOR).whenComplete((result, error) -> minecraft.execute(() -> {
 			if (gen != generation) {
 				return;
 			}
+			shownDownloading = downloadingAtRead;
 			if (error != null) {
 				RigTune.LOGGER.error("Could not read RigTune's history", error);
 			}
@@ -335,21 +367,23 @@ public class FirstApplyScreen extends Screen {
 		minecraft.gui.setScreen(screen);
 	}
 
-	// Downloads that finish add their changes to this entry: a new controller status, or downloads stopping, reloads it.
+	// Downloads that finish add their changes to this entry: when downloads start or stop, the entry is read again, and
+	// when they stop, the status they leave (RealController.finishDownloads) replaces Apply's. Other status changes (a
+	// rebuild's own notes) aren't this Apply's.
 	@Override
 	public void tick() {
-		Component latest = controller.status();
 		boolean downloading = controller.downloading();
-		boolean newStatus = latest != null && latest != seenStatus;
-		if (newStatus) {
-			seenStatus = latest;
+		if (downloading == seenDownloading) {
+			return;
+		}
+		Component latest = controller.status();
+		if (!downloading && latest != null && latest != seenStatus) {
 			status = latest;
 		}
-		if (newStatus || downloading != shownDownloading) {
-			shownDownloading = downloading;
-			stale = true;
-			rebuildWidgets();
-		}
+		seenStatus = latest;
+		seenDownloading = downloading;
+		stale = true;
+		rebuildWidgets();
 	}
 
 	@Override
@@ -409,7 +443,7 @@ public class FirstApplyScreen extends Screen {
 
 		void add(Item item) {
 			switch (item) {
-				case Item.Status s -> addText(s.text(), COLOR_APPLIED);
+				case Item.Status s -> addText(s.text(), s.failure() ? 0xFFFFFFFF : COLOR_APPLIED);
 				case Item.Section s -> addEntry(new SectionRow(s), 16);
 				case Item.Change c -> {
 					// History's own row width, so the text wraps exactly as History draws it (AC8.6).

@@ -115,6 +115,19 @@ public final class Journal implements ChangeRecorder {
 		}
 	}
 
+	// v0.5 (docs/v0.5/SPEC.md 8, C02; WS-F, an additive edit): from ONE read, whether history.json holds no entry at all
+	// (missing, or OK and empty). A corrupt, newer or unreadable file isn't "no entries". FirstRun.isNew uses it, so a file
+	// read as OK once and failing a second read can't make a returning player new.
+	boolean holdsNoEntries() {
+		try {
+			Read read = read();
+			return read.state() == State.MISSING || read.state() == State.OK && read.entries().isEmpty();
+		} catch (IOException e) {
+			log.warn("Could not read " + file, e);
+			return false;
+		}
+	}
+
 	public boolean readOnly() {
 		try {
 			return read().state() == State.NEWER;

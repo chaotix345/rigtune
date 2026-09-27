@@ -71,6 +71,22 @@ class FirstRunTest {
 		assertFalse(FirstRun.isNew(journal, configDir), "an Apply recorded");
 	}
 
+	// One read decides (review): the journal answers "no entries" only for a missing file or an OK, empty one.
+	@Test
+	void oneReadOfTheHistory(@TempDir Path configDir) throws IOException {
+		Journal journal = new Journal(configDir, "0.5.0", "26.2", QUIET);
+		assertTrue(journal.holdsNoEntries(), "missing");
+		Files.createDirectories(Journal.file(configDir).getParent());
+		for (String content : List.of("{not json", "{\"formatVersion\": 99, \"entries\": []}", "[]")) {
+			Files.writeString(Journal.file(configDir), content);
+			assertFalse(journal.holdsNoEntries(), content);
+		}
+		Files.writeString(Journal.file(configDir), "{\"formatVersion\": 1, \"entries\": []}");
+		assertTrue(journal.holdsNoEntries(), "OK and empty");
+		assertTrue(journal.update(entries -> List.of(entry("a", JournalEntry.APPLY))));
+		assertFalse(journal.holdsNoEntries(), "an entry");
+	}
+
 	// 0.1.0 left a last-apply.json or pending.json and, when preLaunch couldn't take the apply lock, no history.json yet.
 	@Test
 	void aV010InstanceIsReturning(@TempDir Path game) throws IOException {

@@ -98,11 +98,15 @@ the guide; the confirmation, its History row functions, the restart logic and th
 
 ## What landed (files)
 - `core/history/FirstRun` (`isNew(state, entries, lastApplyExists, pendingExists)`, `isNew(Journal, configDir)`).
+- `core/history/Journal`: one additive, marked package-private method, `holdsNoEntries()` (the coordinator's approved
+  review L4): history.json read once for `FirstRun.isNew`, so a file that reads OK once and fails a second read can't
+  make a returning player new.
 - `client/FirstRunService` (fills WS-K's skeleton: `status()`, `firstApplyPending()`, `load()`, `applied(ApplyFacts)`;
   new `loadedOn()` and the test seam `forceStatusForTests(Status)`).
 - `client/notice/FirstRunNoticeSource` (fills WS-K's skeleton; public `KEY`, `HOW`, `GOT_IT`, `notice(policy,
   guideLine)`; package-private `shows(...)`, `current(...)`).
-- New `client/ui/FirstApplyScreen`, `client/ui/HowItWorksScreen`.
+- New `client/ui/FirstApplyScreen`, `client/ui/HowItWorksScreen` (its constructor takes the opt-in the guide read, so
+  the guide and the page can't disagree).
 - `client/ui/RigTuneScreen`: `applySelected` (6 lines) and the `ChangeRecorder` import, nothing else.
 - en_us.json: 25 keys `rigtune.firstrun.*` after the anchor `rigtune.header.offline`, alphabetical.
 - Tests: `FirstRunTest`, `FirstRunServiceTest`, `FirstRunNoticeSourceTest`, `FirstApplyScreenTest`, `HowItWorksScreenTest`;
@@ -115,8 +119,11 @@ the guide; the confirmation, its History row functions, the restart logic and th
 - `V05LangFamilies.firstRun`: stays empty: every `rigtune.firstrun.*` key is written out literally, so LangCheckTest needs
   no family.
 - Untouched (AC8.10, hotspot rules): `ClientSettings`, `StartupNotices`, `RealController`, `RigTuneClient`,
-  `RigTuneController`, `V05Services`, `V05Hooks`, `HistoryScreen`, `HistoryModel`, `Journal`, `UndoScreen`, `NoticeScreen`,
-  `tools/footprint-budgets.json` (`git diff origin/feat/v0.5.0 HEAD` on them is empty).
+  `RigTuneController`, `V05Services`, `V05Hooks`, `HistoryScreen`, `HistoryModel`, `UndoScreen`, `NoticeScreen`,
+  `tools/footprint-budgets.json` (`git diff origin/feat/v0.5.0 HEAD` on them is empty); `Journal` gets only the method
+  above.
+- One `//? if >=26.3` block (X9): `FirstApplyGameTest.focusedNarration`, A11yGameTest's own idiom for
+  `ScreenNarrationCollector.update`, which takes a `NarrationTrigger` only on 26.3. The mod's code has none.
 
 ## Deviations
 - **"No restart needed" also needs nothing undone and one row in effect.** AC8.7 says the note shows iff no row is STAGED
@@ -124,8 +131,15 @@ the guide; the confirmation, its History row functions, the restart logic and th
   effect would then be false (X3), so the note also needs every row still applied (and at least one). Before an Undo (the
   case the AC describes) the two rules agree; `FirstApplyScreenTest.undoneOrCancelled` pins the difference.
 - **The no-restart note's wording** is "Everything listed here is in effect now. No restart needed." instead of SPEC 8's
-  "All of it is in effect now. No restart needed." (review M1): a setting Apply couldn't write isn't journaled, so after a
-  partly failed Apply "all of it" would claim too much (X3); the status row above the list keeps Apply's failure count.
+  "All of it is in effect now. No restart needed." (review M1, accepted by the coordinator): a setting Apply couldn't
+  write isn't journaled, so after a partly failed Apply "all of it" would claim too much (X3). The note also stays away
+  when the status reports something wasn't done (`FirstApplyScreen.reportsFailure`: `rigtune.status.some_failed`,
+  `download_failed`, `busy`, `scan_failed` anywhere in the joined status), and that status row is drawn white instead of
+  the applied green. So the full rule is: no row waiting for the restart, no download running, no failure reported,
+  nothing undone, at least one row in effect.
+- **The notes follow the rows**: "This Apply didn't change any mod files." only when every row is a setting row (review
+  L5); the undo hint only when the entry is undoable (L7); the downloading note's text is "Mod downloads are still
+  running; the ones that finish are added to this list." (a failed download adds nothing).
 - **Downloads only, nothing recorded yet**: with the entry not in history.json while downloads run (an Apply of only
   AddMod/UpdateMod: nothing is journaled until they finish), the confirmation shows the downloading note instead of
   "Nothing was recorded for this Apply." (which would be false), then reloads when they finish.
@@ -134,11 +148,13 @@ the guide; the confirmation, its History row functions, the restart logic and th
   the guide out once `firstrun.guide` is in awareness.json's `dismissed`. It reads that set (the same small file
   NoticeCenter reads on every `notices()` call) only when everything else says the guide would show, i.e. for a new player
   at a screen init; a returning player's `current()` does no I/O (`FirstRunNoticeSourceTest.theStoredDismissalHidesIt`).
-- **The guide message is SPEC-33's "History… lets you undo each Apply."**, 262 px in vanilla's font (measured on all
-  three legs), in a 266 px room at 640×480 scale 2 (the "…" button's width plus a gap), 280 px at 854×480 and 365 px at
-  1280×720 with no other notice. A "+N more" button (another notice at the same time) takes about 50 px and would clip it
-  at 854×480: the full text stays in the tooltip, the narration and NoticeScreen (0.4's behaviour for every notice). A
-  longer translation clips the same way.
+- **The guide message is shortened** to "New? History… lets you undo each Apply." (the coordinator's decision, review
+  L10: at least 20 % margin at 640×480 scale 2). SPEC-33's "New to RigTune? History… lets you undo each Apply." is 262 px
+  in vanilla's font, 4 px under its 266 px room there (measured on all three legs); the new one is 206 px (22.6 % margin;
+  measured locally on 26.2 and computed from the font's glyph advances, which gave 262 for the old one too), in rooms of
+  266 / 280 / 365 px at 640×480 / 854×480 / 1280×720 scale 2 with no other notice. A "+N more" button (another notice at
+  the same time) takes about 50 px, so 854×480 still fits (230 px left). A longer translation clips as every notice does:
+  the full text stays in the tooltip, the narration and NoticeScreen.
 - **The test seam** `FirstRunService.forceStatusForTests(Status)` is public production API, used only by
   FirstApplyGameTest (SPEC C6/SPEC-19's "restores the fresh state it needs through a test seam if it isn't first"), and
   a second time inside the test to exercise Got it after the first Apply (a fresh player's guide is gone once they apply).
@@ -224,10 +240,27 @@ reviewer runs ended without handing their report back; the third wrote it to the
 - L5 (ABANDONED rows under "Undone or cancelled"): not changed: ABANDONED needs a helper run at exit, and the
   confirmation opens once, right after the Apply, in the same session. Residual below.
 - L6 (HowItWorksScreen reads the opt-in from `ClientSettings.shared(FabricLoader configDir)` while the notice reads
-  `controller.settings()`): not changed: in the game both are the one shared instance, and RigTuneScreen reads it the same
-  way (RigTuneController has no settings accessor).
+  `controller.settings()`): proposed to leave; the coordinator's decisions asked for one source, so the page now takes the
+  opt-in from the guide that opens it (`controller.settings().modFilesByRigTune`).
 - L7 (A11yGameTest's high-contrast helper): try/finally. Fixed.
 - L8 (the game test's note check looser than the screen's rule): mirrors the rule now, read with the screen. Fixed.
+
+## The coordinator's decisions (COORDINATOR-DECISIONS.md, two review rounds) and what was done
+- First round (0 H, 3 M, 9 L): M1 reworded + the note kept away on a reported failure (above); M2 the seam path and the end
+  of `gotIt()` take `firstrun.guide` back out of awareness.json through `AwarenessStore.update`, and the finally does too if
+  the test added it (passes on a re-used run dir); M3 this file and the verification README section; L4 `Journal.holdsNoEntries`
+  (one read); L5 the no-mod-files note only with setting rows; L6 the status row white when it reports a failure; L7 the undo
+  hint only when undoable; L8 a reload keeps the old rows, scroll and focused row while `view != null`; L9 the game test
+  reads `downloading()` and the notes in one `computeOnClient`, checks `!screen.loading()` and mirrors the full no-restart
+  rule; L10 the shorter guide message; L11 below; L12 HowItWorksScreen's opt-in from the guide, `Palette.of(0xFFFFFFFF)`
+  for its text, the downloading wording, the `//? if` note above.
+- Second round (0 H, 1 M, 5 L): M1 the finally forces RETURNING; L2 as M2 above; L3 the notes keep the `downloading()` value
+  of the read they go with until the new read arrives (no brief false "No restart needed" or "Nothing was recorded"); L4 a new
+  controller status replaces Apply's only when downloads were running and just stopped (a rebuild's own status notes aren't
+  this Apply's); L5 the high-contrast helper's try/finally; L6 the history-load waits are 600 ticks.
+- L11, the 26.3 Vulkan leg's time: the client game-test step took 464 s (run 36333050582) and 460 s (36334013962), jobs
+  9m42s / 9m39s; FirstApplyGameTest's share 12.3 s. 26.2 OpenGL: 512 / 557 s; 26.3 OpenGL: 481 / 513 s. All well under the
+  14-minute cap: no need for the split.
 
 ## Footprint deltas (against ws-k.md's per-leg baseline, run 36310249248)
 From CI run 36322454300 (this branch, merged with `origin/feat/v0.5.0` at de597c28: WS-P2's, WS-L1's and WS-S's early
@@ -283,7 +316,7 @@ legs), no tick or frame work, and to `workerCpuMs5s` only `FirstRunService.load`
 |---|---|---|
 | AC8.1 (fresh instance: the guide is the top notice with How it works and Got it) | verified | FirstApplyGameTest `newPlayer` + `guideAtEverySize` on 3 legs (fresh run dir → NEW, shownNotice = firstrun.guide at 3 sizes); FirstRunNoticeSourceTest.whenItShows/theGuide |
 | AC8.2 (any history entry, last-apply.json, pending.json, or an unreadable history: neither piece) | verified (unit) | FirstRunTest (each kind, CORRUPT/NEWER/UNREADABLE, 0.1.0 fixtures, every v040-written set); FirstRunServiceTest.aReturningPlayer; `shows()`/`firstApplyPending()` false for RETURNING |
-| AC8.3 (message not clipped at the 3 sizes; "…" + NoticeScreen below 400 px; screenshots) | verified; the opted-in-line screenshot closes with WS-L1 | FirstApplyGameTest: `font.width` 262 px within 365/280/266 px rooms on 3 legs; "…" at 640×480; NoticeScreen lists both actions; screenshots `firstapply-guide-*`, `firstapply-guide-noticescreen-640x480-scale2`; `firstapply-guide-optedin-640x480-scale2` taken (no opted-in line until WS-L1's header line lands) |
+| AC8.3 (message not clipped at the 3 sizes; "…" + NoticeScreen below 400 px; screenshots) | verified; the opted-in-line screenshot closes with WS-L1 | FirstApplyGameTest: `font.width` of the message within its room at each size on 3 legs (262 px in 365/280/266 px before the review's shortening; 206 px after it, final run); "…" at 640×480; NoticeScreen lists both actions; screenshots `firstapply-guide-*`, `firstapply-guide-noticescreen-640x480-scale2`; `firstapply-guide-optedin-640x480-scale2` taken (no opted-in line until WS-L1's header line lands) |
 | AC8.4 (Got it hides it for good, in awareness.json, survives 0.4.0's AwarenessStore writing 10 more) | verified (unit + game); compat040 half UNVERIFIED | FirstRunNoticeSourceTest.gotItHidesTheGuideForGood/theStoredDismissalHidesIt/theDismissalSurvivesTenMore; FirstApplyGameTest `gotIt` (awareness.json `dismissed` has firstrun.guide; still hidden on the next screen); set ws-f + expect.json (compat040 not merged) |
 | AC8.5 (after the first Apply by any path the guide is gone, in the session and after a restart) | verified | FirstApplyGameTest: after the Apply, back on the RigTune screen, no guide and no stored dismissal; `directApplyRetiresNew`; FirstRunServiceTest (applied → RETURNING; a late load stays RETURNING); FirstRunTest (an apply entry → returning after a restart) |
 | AC8.6 (the Apply button opens the confirmation for the entry Apply journaled; rows = History's rows at the same size) | verified | FirstApplyGameTest `confirmation`: the entry id is the newest history entry's; statuses grouped from the entry; `changeRowText()` equal to HistoryScreen's for that entry at 854×480 on 3 legs; FirstApplyScreenTest (row functions are HistoryScreen's) |

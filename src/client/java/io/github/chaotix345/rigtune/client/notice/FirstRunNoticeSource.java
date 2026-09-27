@@ -57,7 +57,7 @@ public final class FirstRunNoticeSource implements NoticeSource {
 		}
 		Minecraft minecraft = controller.minecraft();
 		if (HOW.equals(actionId) && minecraft != null) {
-			minecraft.gui.setScreen(new HowItWorksScreen(minecraft.gui.screen(), controller));
+			minecraft.gui.setScreen(new HowItWorksScreen(minecraft.gui.screen(), controller, controller.settings().modFilesByRigTune));
 		}
 	}
 
@@ -75,7 +75,7 @@ public final class FirstRunNoticeSource implements NoticeSource {
 				: Text.of("rigtune.firstrun.notice.detail.settings", "Only the ticked settings change. Game settings change when you press Apply; "
 						+ "Sodium, Distant Horizons and Iris settings at the next restart. Preview shows each change first.");
 		Text detail = policy == ModFilesPolicy.PENDING || guideLine == null ? base : Text.join(" ", base, guideLine);
-		return new Notice(KEY, NoticePriority.FIRST_RUN, Text.of("rigtune.firstrun.notice", "New to RigTune? History… lets you undo each Apply."), detail,
+		return new Notice(KEY, NoticePriority.FIRST_RUN, Text.of("rigtune.firstrun.notice", "New? History… lets you undo each Apply."), detail,
 				List.of(new NoticeAction(HOW, Text.of("rigtune.firstrun.action.how", "How it works")),
 						new NoticeAction(GOT_IT, Text.of("rigtune.firstrun.action.got_it", "Got it"))), false);
 	}

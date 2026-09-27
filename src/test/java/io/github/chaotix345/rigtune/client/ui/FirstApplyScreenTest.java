@@ -117,6 +117,35 @@ class FirstApplyScreenTest {
 		}
 	}
 
+	// Review M1/L6: a status that reports something Apply didn't do (a failed setting or stage, a failed download) keeps the
+	// "in effect" note away and isn't drawn in the applied colour; the pieces may sit anywhere in the joined status.
+	@Test
+	void anApplyThatReportsFailures() {
+		Component partly = Component.empty().append(Component.translatable("rigtune.status.settings_applied", 1)).append(" ")
+				.append(Component.translatable("rigtune.status.some_failed", 1));
+		assertTrue(FirstApplyScreen.reportsFailure(partly));
+		assertTrue(FirstApplyScreen.reportsFailure(Component.translatable("rigtune.status.download_failed", "timeout")));
+		assertFalse(FirstApplyScreen.reportsFailure(STATUS));
+		assertFalse(FirstApplyScreen.reportsFailure(Component.translatable("rigtune.status.settings_applied", 2)));
+		assertFalse(FirstApplyScreen.reportsFailure(null));
+		List<FirstApplyScreen.Item> items = FirstApplyScreen.items(partly, view(setting("c1", JournalChange.APPLIED)), false, false, "e2", false,
+				ModFilesPolicy.RIGTUNE);
+		assertEquals(List.of("status", "section section.now 1", "change c1", "note undo_hint"), names(items));
+		assertTrue(((FirstApplyScreen.Item.Status) items.getFirst()).failure());
+		assertFalse(((FirstApplyScreen.Item.Status) FirstApplyScreen.items(STATUS, view(setting("c1", JournalChange.APPLIED)), false, false, "e2", false,
+				ModFilesPolicy.RIGTUNE).getFirst()).failure());
+	}
+
+	// Review L5/L7: "didn't change any mod files" only when the rows agree; the undo hint only when Undo this Apply can act.
+	@Test
+	void notesTheRowsBackUp() {
+		assertEquals(List.of("status", "section section.restart 1", "change c1", "note restart", "note undo_hint"),
+				items(view(mod("c1", JournalChange.STAGED)), false, ModFilesPolicy.LAUNCHER), "a mod row: no no-mod-files note");
+		HistoryModel.View notUndoable = new HistoryModel.View(Journal.State.OK, List.of(new HistoryModel.Entry("e2", JournalEntry.APPLY,
+				"2026-09-27T10:00:00Z", "0.5.0", "26.2", null, null, false, List.of(setting("c1", JournalChange.REVERTED)))));
+		assertEquals(List.of("status", "section section.undone 1", "change c1"), items(notUndoable, false, ModFilesPolicy.RIGTUNE));
+	}
+
 	// AC8.11: never an empty list without a reason.
 	@Test
 	void withoutTheEntry() {

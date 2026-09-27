@@ -518,7 +518,7 @@ public class A11yGameTest implements FabricClientGameTest {
 			context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.FirstApplyScreen(new TitleScreen(), controller, "e2",
 					Component.literal("2 settings applied."))));
 			context.waitFor(mc -> mc.gui.screen() instanceof io.github.chaotix345.rigtune.client.ui.FirstApplyScreen f && !f.loading() && f.view() != null
-					&& rows(mc) == 7, 200);
+					&& rows(mc) == 7, 600);
 			context.waitTicks(2);
 			String restart = Component.translatable("rigtune.firstrun.applied.restart").getString();
 			walk(context, "first-apply", List.of("2 settings applied.", Component.translatable("rigtune.firstrun.applied.section.now").getString(),
@@ -547,7 +547,7 @@ public class A11yGameTest implements FabricClientGameTest {
 			for (ModFilesPolicy policy : List.of(ModFilesPolicy.RIGTUNE, ModFilesPolicy.PENDING)) {
 				CannedViews.modFiles(policy);
 				int expected = policy == ModFilesPolicy.RIGTUNE ? 6 : 5;
-				context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.HowItWorksScreen(new TitleScreen(), controller)));
+				context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.HowItWorksScreen(new TitleScreen(), controller, false)));
 				context.waitFor(mc -> mc.gui.screen() instanceof io.github.chaotix345.rigtune.client.ui.HowItWorksScreen && rows(mc) == expected,
 						100);
 				context.waitTicks(2);

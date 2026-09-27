@@ -1,10 +1,8 @@
 package io.github.chaotix345.rigtune.client.ui;
 
-import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.core.launcher.LauncherModText;
 import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Text;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -31,13 +29,16 @@ public class HowItWorksScreen extends Screen {
 
 	private final @Nullable Screen parent;
 	private final RigTuneController controller;
+	private final boolean optedIn;
 	private @Nullable Paragraphs list;
 	private int focusedRow = -1;
 
-	public HowItWorksScreen(@Nullable Screen parent, RigTuneController controller) {
+	// optedIn: settings.json modFilesByRigTune, as the guide that opens this page read it (so the two can't disagree).
+	public HowItWorksScreen(@Nullable Screen parent, RigTuneController controller, boolean optedIn) {
 		super(Component.translatable("rigtune.firstrun.how.title"));
 		this.parent = parent;
 		this.controller = controller;
+		this.optedIn = optedIn;
 	}
 
 	// The paragraphs, in order. guideLine: P0.4's sentence for this policy (null for plain RIGTUNE); never shown while the
@@ -62,8 +63,7 @@ public class HowItWorksScreen extends Screen {
 	@Override
 	protected void init() {
 		ModFilesPolicy policy = controller.modFiles();
-		Text guideLine = LauncherModText.guideLine(policy, controller.launcher(),
-				ClientSettings.shared(FabricLoader.getInstance().getConfigDir()).modFilesByRigTune);
+		Text guideLine = LauncherModText.guideLine(policy, controller.launcher(), optedIn);
 		int column = Math.min(width - 32, 480);
 		int buttonWidth = Math.min(200, width - 16);
 		int buttonY = height - 26;
@@ -138,7 +138,7 @@ public class HowItWorksScreen extends Screen {
 				int x = getContentX() + 4;
 				int y = getContentY() + 1;
 				for (FormattedCharSequence line : lines) {
-					graphics.text(font, line, x, y, 0xFFFFFFFF, false);
+					graphics.text(font, line, x, y, Palette.of(0xFFFFFFFF), false);
 					y += LINE;
 				}
 			}
