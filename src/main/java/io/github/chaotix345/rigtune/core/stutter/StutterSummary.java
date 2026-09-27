@@ -71,7 +71,7 @@ public final class StutterSummary {
 			int unexplained = shown.getOrDefault(Attributor.UNKNOWN, causes.isEmpty() ? 100 : 0);
 			out.append("Likely causes (share of the lost time): ").append(causes.isEmpty() ? "none measured" : String.join(", ", causes))
 					.append(String.format(Locale.ROOT, "; not explained %d %%%n", unexplained));
-			for (String tag : Attributor.REPORT_TAGS) {
+			for (String tag : Attributor.TAGS) {
 				Integer n = r.tags().get(tag);
 				if (n != null && n > 0) {
 					String when = Attributor.CHUNKS_LOADING.equals(tag) ? "while chunks were loading" : "during " + name(tag);

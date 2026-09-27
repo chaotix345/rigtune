@@ -63,11 +63,13 @@ final class SettingsWatch {
 			Map<String, String> out = new LinkedHashMap<>();
 			out.put(StutterReport.RENDER_DISTANCE, Integer.toString(minecraft.options.renderDistance().get()));
 			out.put(StutterReport.SIMULATION_DISTANCE, Integer.toString(minecraft.options.simulationDistance().get()));
-			if (OptionalMods.irisLoaded()) {
-				out.put(StutterReport.SHADERS, Boolean.toString(OptionalMods.shadersInUse()));
+			Boolean shaders = OptionalMods.irisLoaded() ? OptionalMods.shadersInUseQuietly() : null;
+			if (shaders != null) {
+				out.put(StutterReport.SHADERS, shaders.toString());
 			}
-			if (OptionalMods.dhLoaded()) {
-				out.put(StutterReport.DH_RENDERING, Boolean.toString(OptionalMods.dhRendering()));
+			Boolean dhRendering = OptionalMods.dhLoaded() ? OptionalMods.dhRenderingQuietly() : null;
+			if (dhRendering != null) {
+				out.put(StutterReport.DH_RENDERING, dhRendering.toString());
 			}
 			return out;
 		} catch (RuntimeException e) {
@@ -88,7 +90,12 @@ final class SettingsWatch {
 			int changed = STATE.check(minecraft.options.renderDistance().get(), minecraft.options.simulationDistance().get(), minecraft.gui.overlay() != null,
 					now);
 			if ((iris || dh) && STATE.optionalDue(changed)) {
-				changed |= STATE.checkOptional(iris && OptionalMods.shadersInUse(), dh && OptionalMods.dhRendering(), now);
+				// null: that API failed (it warned once); it isn't asked again.
+				Boolean shaders = iris ? OptionalMods.shadersInUseQuietly() : null;
+				Boolean dhRendering = dh ? OptionalMods.dhRenderingQuietly() : null;
+				iris &= shaders != null;
+				dh &= dhRendering != null;
+				changed |= STATE.checkOptional(shaders, dhRendering, now);
 			}
 			if (changed != 0) {
 				StutterMonitor.event(StutterRings.SETTINGS_CHANGED, STATE.since(), changed | STATE.leadMillis(now) << StutterRings.SETTINGS_LEAD_SHIFT);
@@ -100,19 +107,62 @@ final class SettingsWatch {
 		}
 	}
 
-	// For StutterGameTest: `calls` checks in a row after a warm-up, as the listener runs them (render thread, a session on).
+	// For StutterGameTest (render thread, a session on): the check's own cost measured as FootprintGameTest times the tick
+	// listeners. The loop is a small method of its own, warmed up in short calls and left until the JIT has been quiet for
+	// 200 ms (at most 3 s); then COST_BLOCKS blocks of `calls` checks, and the same blocks of an empty loop as the control.
+	// Returns {nanos over every block, checks timed, bytes allocated summed over the blocks, the control's bytes}.
+	static final int COST_BLOCKS = 20;
+
 	static long[] cost(Minecraft minecraft, int calls) {
 		com.sun.management.ThreadMXBean threads = (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
-		for (int i = 0; i < calls / 10; i++) {
-			tick(minecraft);
+		java.lang.management.CompilationMXBean jit = java.lang.management.ManagementFactory.getCompilationMXBean();
+		for (int round = 0; round < 20; round++) {
+			checks(minecraft, 2_000);
+			control(2_000);
 		}
-		long bytes = threads.getCurrentThreadAllocatedBytes();
-		long start = System.nanoTime();
+		long waitStart = System.nanoTime();
+		long quietSince = waitStart;
+		long compiled = jit.getTotalCompilationTime();
+		while (System.nanoTime() - quietSince < 200_000_000L && System.nanoTime() - waitStart < 3_000_000_000L) {
+			checks(minecraft, 2_000);
+			control(2_000);
+			long now = jit.getTotalCompilationTime();
+			if (now != compiled) {
+				compiled = now;
+				quietSince = System.nanoTime();
+			}
+		}
+		long nanos = 0;
+		long bytes = 0;
+		long controlBytes = 0;
+		for (int block = 0; block < COST_BLOCKS; block++) {
+			long before = threads.getCurrentThreadAllocatedBytes();
+			long start = System.nanoTime();
+			checks(minecraft, calls);
+			nanos += System.nanoTime() - start;
+			long after = threads.getCurrentThreadAllocatedBytes();
+			control(calls);
+			long controlAfter = threads.getCurrentThreadAllocatedBytes();
+			bytes += after - before;
+			controlBytes += controlAfter - after;
+		}
+		return new long[]{nanos, (long) COST_BLOCKS * calls, bytes, controlBytes};
+	}
+
+	private static void checks(Minecraft minecraft, int calls) {
 		for (int i = 0; i < calls; i++) {
 			tick(minecraft);
 		}
-		long nanos = System.nanoTime() - start;
-		return new long[]{nanos, threads.getCurrentThreadAllocatedBytes() - bytes};
+	}
+
+	private static int controlSink;
+
+	private static void control(int calls) {
+		int sink = 0;
+		for (int i = 0; i < calls; i++) {
+			sink += i;
+		}
+		controlSink += sink;
 	}
 
 	// The comparison, free of Minecraft types (SettingsWatchTest). The first check of a session only takes the values; a
@@ -171,14 +221,15 @@ final class SettingsWatch {
 			return (changed & RELOAD) != 0 || ++sinceOptional >= OPTIONAL_EVERY_TICKS;
 		}
 
-		int checkOptional(boolean shaders, boolean dhRendering, long now) {
+		// null: not known (its mod isn't there, or its API failed): no change, the last value kept.
+		int checkOptional(@Nullable Boolean shaders, @Nullable Boolean dhRendering, long now) {
 			sinceOptional = 0;
 			int changed = 0;
 			if (optionalArmed) {
-				if (shaders != this.shaders) {
+				if (shaders != null && shaders != this.shaders) {
 					changed |= SHADERS;
 				}
-				if (dhRendering != this.dhRendering) {
+				if (dhRendering != null && dhRendering != this.dhRendering) {
 					changed |= DH_RENDERING;
 				}
 				if (changed != 0) {
@@ -186,8 +237,12 @@ final class SettingsWatch {
 				}
 			}
 			optionalArmed = true;
-			this.shaders = shaders;
-			this.dhRendering = dhRendering;
+			if (shaders != null) {
+				this.shaders = shaders;
+			}
+			if (dhRendering != null) {
+				this.dhRendering = dhRendering;
+			}
 			lastOptional = now;
 			return changed;
 		}

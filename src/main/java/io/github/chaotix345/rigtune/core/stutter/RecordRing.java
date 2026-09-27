@@ -43,6 +43,14 @@ public final class RecordRing {
 		return data.length * 8L;
 	}
 
+	// The held records and how many were ever added, read together.
+	public record Held(long[] records, long added) {
+	}
+
+	public synchronized Held held() {
+		return new Held(snapshot(), added);
+	}
+
 	// The held records, oldest first, stride longs each.
 	public synchronized long[] snapshot() {
 		int held = (int) Math.min(added, capacity);

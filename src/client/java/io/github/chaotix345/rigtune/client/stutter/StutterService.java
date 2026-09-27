@@ -68,11 +68,8 @@ public final class StutterService {
 	private long lastAnalysis;
 	private boolean benchmarkRunning;
 	private boolean resumePaused;
-	// v0.5 RW-15: the sweep's recording flag, whether the current step is left out, and how many steps this run left out.
-	private boolean sweepRecording;
+	// v0.5 RW-15: the current benchmark step is left out of the capture.
 	private boolean stepExcluded;
-	private int excludedSteps;
-	private volatile int lastBenchmarkExcludedSteps;
 	private volatile @Nullable Analysis live;
 	private volatile @Nullable Analysis saved;
 	private volatile Saved savedState = Saved.UNKNOWN;
@@ -152,8 +149,8 @@ public final class StutterService {
 			try {
 				StutterCapture.stop(session);
 			} catch (RuntimeException e) {
-				// L1: detached anyway (stop's finally); Clear drops this session's data in any case.
-				RigTune.LOGGER.debug("Stutter Doctor: the cleared session's capture couldn't be copied", e);
+				// L1's guard: detached anyway (stop's finally); Clear drops this session's data in any case.
+				RigTune.LOGGER.warn("Stutter Doctor: the cleared session's capture couldn't be copied", e);
 			}
 			startSession(controller.minecraft());
 		}
@@ -213,7 +210,11 @@ public final class StutterService {
 		}
 		StutterMonitor.Capture bench = StutterMonitor.benchmark();
 		if (bench != null) {
-			StutterCapture.stop(bench);
+			try {
+				StutterCapture.stop(bench);
+			} catch (RuntimeException e) {
+				RigTune.LOGGER.warn("Stutter Doctor: the benchmark's capture couldn't be copied at quit", e);
+			}
 		}
 	}
 
@@ -266,9 +267,7 @@ public final class StutterService {
 	// run's sweeps aren't play either).
 	void benchmarkStarted(Minecraft minecraft) {
 		benchmarkRunning = true;
-		sweepRecording = false;
 		stepExcluded = false;
-		excludedSteps = 0;
 		endSessionForBenchmark(minecraft);
 	}
 
@@ -276,7 +275,6 @@ public final class StutterService {
 	// ended, so only one capture's rings are ever held.
 	void benchmarkSweep(Minecraft minecraft, boolean recording) {
 		StutterMonitor.Capture bench = StutterMonitor.benchmark();
-		sweepRecording = recording;
 		if (bench == null && recording) {
 			benchmarkRunning = true;
 			endSessionForBenchmark(minecraft);
@@ -289,16 +287,14 @@ public final class StutterService {
 		}
 	}
 
-	// docs/v0.5/SPEC.md 2B RW-15 (the contracts' seam, BenchmarkController calls it): true when a step's settle ran out of
-	// time, before its sweeps; false when the next step starts. Its frames stay out of the capture whatever the sweeps say.
+	// docs/v0.5/SPEC.md 2B RW-15 (the contracts' seam; StutterHooks.benchmarkStepExcluded says how BenchmarkController calls
+	// it): true for a step left out, false at its end. It never starts or resumes the capture: the capture stays paused
+	// through the step, and the next benchmarkSweep(true) records again.
 	void benchmarkStepExcluded(boolean excluded) {
-		if (excluded && !stepExcluded) {
-			excludedSteps++;
-		}
 		stepExcluded = excluded;
 		StutterMonitor.Capture bench = StutterMonitor.benchmark();
-		if (bench != null) {
-			pauseBenchmark(bench, !sweepRecording || excluded);
+		if (bench != null && excluded) {
+			pauseBenchmark(bench, true);
 		}
 	}
 
@@ -329,10 +325,16 @@ public final class StutterService {
 		StutterMonitor.Capture bench = StutterMonitor.benchmark();
 		lastBenchmark = null;
 		lastBenchmarkDhWorldGen = null;
-		lastBenchmarkExcludedSteps = excludedSteps;
 		stepExcluded = false;
-		excludedSteps = 0;
-		StutterCapture.Copy copy = bench == null ? null : StutterCapture.stop(bench);
+		StutterCapture.Copy copy = null;
+		if (bench != null) {
+			try {
+				copy = StutterCapture.stop(bench);
+			} catch (RuntimeException e) {
+				// L1's guard: detached anyway; only the run's stutter line is lost, and a session can still start.
+				RigTune.LOGGER.warn("Stutter Doctor: the benchmark's capture couldn't be copied; its summary is lost", e);
+			}
+		}
 		boolean paused = resumePaused;
 		resumePaused = false;
 		// Not after a failed tick: StutterHooks.tick, which ends a session on leaving the world, is off until the monitor is
@@ -369,9 +371,7 @@ public final class StutterService {
 		return lastBenchmarkDhWorldGen;
 	}
 
-	int lastBenchmarkExcludedSteps() {
-		return lastBenchmarkExcludedSteps;
-	}
+
 
 	int sessionsEnded() {
 		return sessionsEnded.get();

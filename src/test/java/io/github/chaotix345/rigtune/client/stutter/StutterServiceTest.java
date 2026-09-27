@@ -149,8 +149,9 @@ class StutterServiceTest {
 		assertTrue(StutterCapture.GC.active());
 	}
 
-	// docs/v0.5/SPEC.md 2B RW-15 (AC2B.9, the capture side): the frames of a step whose settle ran out of time stay out of
-	// the benchmark's capture, even across that step's sweeps; the run counts the steps left out.
+	// docs/v0.5/SPEC.md 2B RW-15 (AC2B.9, the capture side), called as BenchmarkController does: a step whose settle timed
+	// out gets benchmarkStepExcluded(true/false) instead of benchmarkSweep(true/false), and its frames stay out of the
+	// benchmark's capture; the seam never starts or resumes the capture.
 	@Test
 	void anExcludedStepRecordsNoFrames(@TempDir Path dir) throws ReflectiveOperationException {
 		Queue io = new Queue();
@@ -160,34 +161,34 @@ class StutterServiceTest {
 		frames(100);
 		service.benchmarkSweep(null, false);
 		service.benchmarkStepExcluded(true);
-		service.benchmarkSweep(null, true);
 		frames(300);
-		service.benchmarkSweep(null, false);
-		service.benchmarkSweep(null, true);
-		frames(300);
-		service.benchmarkSweep(null, false);
 		service.benchmarkStepExcluded(false);
+		assertTrue(StutterMonitor.benchmark().paused(), "false at the step's end doesn't resume the capture");
+		frames(300);
 		service.benchmarkSweep(null, true);
 		frames(50);
+		service.benchmarkSweep(null, false);
 		service.benchmarkFinished(null, true);
 		io.runAll();
 		StutterReport report = service.lastBenchmark();
 		assertNotNull(report);
-		assertEquals(99 + 49, report.frames(), "the two recorded sweeps (each one's first frame spans the pause); the excluded step's 600 frames left out");
-		assertEquals(1, service.lastBenchmarkExcludedSteps());
+		assertEquals(99 + 49, report.frames(), "the two recorded steps (each one's first frame spans the pause); the left-out step and the gap left out");
 
+		// The first step left out: no capture yet, and the seam doesn't start one; the run ending inside such a step.
 		service.benchmarkStarted(null);
 		service.benchmarkStepExcluded(true);
-		service.benchmarkSweep(null, true);
+		assertNull(StutterMonitor.benchmark(), "the seam doesn't start the capture");
 		frames(100);
 		service.benchmarkStepExcluded(false);
-		service.benchmarkStepExcluded(true);
 		service.benchmarkSweep(null, true);
+		frames(40);
+		service.benchmarkSweep(null, false);
+		service.benchmarkStepExcluded(true);
 		frames(100);
+		service.benchmarkStepExcluded(false);
 		service.benchmarkFinished(null, true);
 		io.runAll();
-		assertEquals(0, service.lastBenchmark().frames(), "the first step already excluded when the capture started");
-		assertEquals(2, service.lastBenchmarkExcludedSteps());
+		assertEquals(39, service.lastBenchmark().frames(), "only the settled step's sweep");
 	}
 
 	// A 1 ms sampler window with `cores` of DH world generation, all of it after the last call (it ends 1 ms from now).
@@ -243,14 +244,18 @@ class StutterServiceTest {
 		worldGen(rings, 2);
 		service.benchmarkSweep(null, false);
 		worldGen(rings, 6);
+		service.benchmarkStepExcluded(true);
+		worldGen(rings, 8);
+		service.benchmarkStepExcluded(false);
 		service.benchmarkSweep(null, true);
 		worldGen(rings, 1);
+		service.benchmarkSweep(null, false);
 		service.benchmarkFinished(null, true);
 		Double cores = service.lastBenchmarkDhWorldGenCores();
 		assertNotNull(cores);
 		// The capture's own sampler adds a 250 ms window of its own after about half a second; a slower run can't be exact.
 		org.junit.jupiter.api.Assumptions.assumeTrue(System.nanoTime() - started < 400 * MS, "the run took under 400 ms");
-		assertEquals(1.5, cores, 1e-9, "the two sweeps' windows (2 and 1 cores), not the one between them (6)");
+		assertEquals(1.5, cores, 1e-9, "the two sweeps' windows (2 and 1 cores), not the gap's (6) or the left-out step's (8)");
 
 		service.benchmarkStarted(null);
 		service.benchmarkSweep(null, true);

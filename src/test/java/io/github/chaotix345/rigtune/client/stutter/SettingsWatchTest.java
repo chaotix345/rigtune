@@ -71,6 +71,17 @@ class SettingsWatchTest {
 		assertEquals(1000, s.leadMillis(20 * TICK), "seen 1 s later");
 	}
 
+	// An Iris or DH API that failed answers null (unknown): no change reported, the last value kept.
+	@Test
+	void anUnknownOptionalValueIsNoChange() {
+		SettingsWatch.State s = new SettingsWatch.State();
+		s.check(12, 12, false, 0);
+		s.checkOptional(true, true, 0);
+		assertEquals(0, s.checkOptional(null, null, TICK));
+		assertEquals(SettingsWatch.DH_RENDERING, s.checkOptional(null, false, 2 * TICK));
+		assertEquals(0, s.checkOptional(true, null, 3 * TICK), "shaders were on all along");
+	}
+
 	// Review fix (M3): a check that throws is off for the rest of that session (one warning), and tries again in the next.
 	@Test
 	void aFailingCheckStaysOffForThatSession() {

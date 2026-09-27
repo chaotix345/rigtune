@@ -124,13 +124,10 @@ public final class StutterAnalyzer {
 		}
 		Map<String, Double> taggedShares = new LinkedHashMap<>();
 		Map<String, Integer> tags = new LinkedHashMap<>();
-		for (String tag : Attributor.REPORT_TAGS) {
+		for (String tag : Attributor.TAGS) {
 			Integer n = tagCounts.get(tag);
 			if (n != null) {
 				tags.put(tag, n);
-				if (!Attributor.TAGS.contains(tag)) {
-					continue;
-				}
 				if (SAMPLE_TAGS.contains(tag)) {
 					int covered = sampleTagCounts.getOrDefault(tag, 0);
 					taggedShares.put(tag, sampleSpikes > 0 ? 100.0 * covered / sampleSpikes : 0);

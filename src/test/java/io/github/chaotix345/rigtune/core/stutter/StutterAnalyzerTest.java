@@ -400,9 +400,8 @@ class StutterAnalyzerTest {
 		assertEquals(before.report().causes(), after.report().causes(), "claims nothing");
 		assertEquals(before.report().lostMs(), after.report().lostMs());
 		assertEquals(before.facts().claimedShares(), after.facts().claimedShares());
-		assertEquals(Map.of(), after.facts().taggedShares(), "not a rules tag");
+		assertEquals(Map.of(Attributor.SETTINGS_CHANGED, 50.0), after.facts().taggedShares(), "a share for the rules, like afterTeleport");
 		assertTrue(after.report().worst().stream().filter(w -> w.ms() == 90.0).findFirst().orElseThrow().causes().contains("settingsChanged:context"));
-		assertFalse(Attributor.TAGS.contains(Attributor.SETTINGS_CHANGED));
 
 		// An event whose change was seen 900 ms after its time: the window reaches 10 s after that, so the 80 ms spike
 		// starting 10.1 s after the event's time (ending before 10.9 s) is tagged too.

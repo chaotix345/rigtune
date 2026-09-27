@@ -118,8 +118,10 @@ public final class StutterRings {
 	}
 
 	public synchronized Snapshot snapshot() {
-		return new Snapshot(events.snapshot(), gc.snapshot(), samples.snapshot(), clock.calibration(),
-				new Totals(gc.added(), samples.added(), fullGcs, explicitGcs, stalls, live.snapshot()));
+		// The sampler writes under the samples ring's own lock, so its records and count are read in one call.
+		RecordRing.Held held = samples.held();
+		return new Snapshot(events.snapshot(), gc.snapshot(), held.records(), clock.calibration(),
+				new Totals(gc.added(), held.added(), fullGcs, explicitGcs, stalls, live.snapshot()));
 	}
 
 	public synchronized GcClock.Calibration calibration() {

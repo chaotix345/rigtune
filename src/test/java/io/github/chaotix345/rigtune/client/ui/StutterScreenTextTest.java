@@ -95,17 +95,6 @@ class StutterScreenTextTest {
 				StutterScreen.notes(List.of("tick:medium", "settingsChanged:context")).getString());
 	}
 
-	// docs/v0.5/SPEC.md 2B RW-15: the result's stutter line says how many steps were left out of the capture.
-	@Test
-	void theBenchmarkLineNamesExcludedSteps() {
-		StutterReport r = report(new StutterReport.Spikes(3, 0, 0, 0), 2, Map.of(), Map.of(Attributor.GC, 0.5, Attributor.UNKNOWN, 0.5));
-		assertEquals("Stutter Doctor: 3 spikes during the sweeps; likely causes: Garbage collection 50 %", StutterScreen.benchmarkLine(r, 0).getString());
-		assertEquals("Stutter Doctor: 3 spikes during the sweeps; likely causes: Garbage collection 50 %. 1 step was left out: its terrain hadn't finished loading.",
-				StutterScreen.benchmarkLine(r, 1).getString());
-		assertEquals("Stutter Doctor: no spikes during the sweeps. 2 steps were left out: their terrain hadn't finished loading.",
-				StutterScreen.benchmarkLine(report(new StutterReport.Spikes(0, 0, 0, 0), 0, Map.of(), Map.of()), 2).getString());
-	}
-
 	@Test
 	void theBenchmarkLineCountsOneSpike() {
 		assertEquals("Stutter Doctor: 1 spike during the sweeps; no cause measured",

@@ -107,10 +107,12 @@ public class StutterGameTest implements FabricClientGameTest {
 			context.runOnClient(mc -> mc.options.renderDistance().set(renderDistance + 2));
 			context.waitTicks(5);
 			check(settingsEvents() >= 1, "the render distance change is a settings event");
-			long[] cost = context.computeOnClient(mc -> StutterHooks.settingsCheckCost(mc, 100_000));
-			RigTune.LOGGER.info("StutterGameTest: the settings check took {} ns per call and allocated {} bytes over 100,000 calls",
-					String.format(Locale.ROOT, "%.1f", cost[0] / 100_000.0), cost[1]);
-			check(cost[1] < 64 * 1024, "the settings check allocates nothing per tick: " + cost[1] + " bytes over 100,000 calls");
+			long[] cost = context.computeOnClient(mc -> StutterHooks.settingsCheckCost(mc, 5_000));
+			RigTune.LOGGER.info("StutterGameTest: the settings check took {} ns per call; {} bytes allocated over its {} checks (the empty control loop: {})",
+					String.format(Locale.ROOT, "%.1f", cost[0] / (double) cost[1]), cost[2], cost[1], cost[3]);
+			// X4.4, strict as the tick keys: the blocks' bytes summed after the warm-up (less what the empty control loop shows,
+			// the measurement's own) are 0.
+			check(cost[2] - cost[3] <= 0, "the settings check allocates nothing: " + cost[2] + " bytes over " + cost[1] + " checks, control " + cost[3]);
 
 			context.runOnClient(mc -> mc.gui.setScreen(new StutterScreen(null, controller)));
 			context.waitForScreen(StutterScreen.class);

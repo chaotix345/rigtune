@@ -36,12 +36,11 @@ public final class Attributor {
 	// review-8 P5A-F2: chunks loaded within CHUNK_NEAR of the spike (the client's CHUNK_LOAD count, not a measurement of
 	// what they cost).
 	public static final String CHUNKS_LOADING = "chunksLoading";
-	public static final List<String> TAGS = List.of(WORLD_SAVE, DH, CPU_CONTENTION, AFTER_TELEPORT, CHUNKS_LOADING, MOVING_FAST);
 	// v0.5 RW-11 (docs/v0.5/SPEC.md 2S): the spikes ending in the 10 s after a setting changed (render or simulation
-	// distance, shaders, Distant Horizons rendering) or resources reloaded. Like afterTeleport it never claims. It isn't in
-	// TAGS, the rules' tag vocabulary (no rule can condition on it), only in the report's tags (REPORT_TAGS).
+	// distance, shaders, Distant Horizons rendering) or resources reloaded. Like afterTeleport it never claims. In the rules'
+	// vocabulary too (tools/update_rules.py); 0.4.0 doesn't know it, so a condition on it fails closed there.
 	public static final String SETTINGS_CHANGED = "settingsChanged";
-	public static final List<String> REPORT_TAGS = List.of(WORLD_SAVE, DH, CPU_CONTENTION, AFTER_TELEPORT, CHUNKS_LOADING, MOVING_FAST, SETTINGS_CHANGED);
+	public static final List<String> TAGS = List.of(WORLD_SAVE, DH, CPU_CONTENTION, AFTER_TELEPORT, CHUNKS_LOADING, MOVING_FAST, SETTINGS_CHANGED);
 
 	static final long STALL_NEAR = 100 * MS;
 	static final long SAVE_NEAR = 50 * MS;

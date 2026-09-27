@@ -159,9 +159,11 @@ public final class StutterHooks {
 		}
 	}
 
-	// docs/v0.5/SPEC.md 2B RW-15 (PLAN contracts item 12): BenchmarkController (WS-B) calls it with true when a step's
-	// settle ran out of time, before that step's sweeps, and with false when the next step starts (RW-5's re-measure records
-	// normally); the excluded step's frames stay out of the benchmark's capture, and the run counts it.
+	// docs/v0.5/SPEC.md 2B RW-15 (PLAN contracts item 12): BenchmarkController (WS-B) calls it on the render thread with true
+	// INSTEAD of benchmarkSweep(true) for a step whose settle timed out incomplete, and with false at that step's end (or when
+	// the run ends inside it) instead of benchmarkSweep(false). The benchmark capture stays paused through such a step (it
+	// may not have started yet, when it is the first step), so the step's frames stay out of the capture; RW-5's second try
+	// of that distance, once settled, records through benchmarkSweep as usual.
 	public static void benchmarkStepExcluded(boolean excluded) {
 		StutterService s = service;
 		if (s != null) {
@@ -171,12 +173,6 @@ public final class StutterHooks {
 				RigTune.LOGGER.warn("Stutter Doctor: could not leave a benchmark step out of the capture", e);
 			}
 		}
-	}
-
-	// How many steps the last finished benchmark left out of its capture (RW-15), for its result line.
-	public static int lastBenchmarkExcludedSteps() {
-		StutterService s = service;
-		return s == null ? 0 : s.lastBenchmarkExcludedSteps();
 	}
 
 	// The last finished benchmark's capture summary (BenchmarkResultScreen's line), or null.
@@ -202,8 +198,8 @@ public final class StutterHooks {
 		return StutterCapture.SAMPLER.running();
 	}
 
-	// For StutterGameTest (RW-11, X4.4): the settings check's own cost with a session running (render thread): the nanos
-	// `calls` checks took and the bytes they allocated.
+	// For StutterGameTest (RW-11, X4.4): the settings check's own cost with a session running (render thread), as
+	// SettingsWatch.cost measures it: {nanos, checks timed, bytes allocated, the empty control loop's bytes}.
 	public static long[] settingsCheckCost(Minecraft minecraft, int calls) {
 		return SettingsWatch.cost(minecraft, calls);
 	}
