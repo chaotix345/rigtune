@@ -22,10 +22,14 @@ class NoticeBoardTest {
 		return selection.visible().stream().map(Notice::key).toList();
 	}
 
+	// docs/v0.5/SPEC.md C3 (AC-X.3, AC7.12): the 14 slots, pinned as a whole.
 	@Test
 	void declarationOrderIsTheSpecsPriorityOrder() {
-		assertEquals(List.of(NoticePriority.BATTERY_OFFER, NoticePriority.SERVER_LIMIT, NoticePriority.BENCHMARK_REGRESSION,
-				NoticePriority.HARDWARE_CHANGED, NoticePriority.WHATS_NEW, NoticePriority.BENCHMARK_STALE), Arrays.asList(NoticePriority.values()));
+		assertEquals(List.of(NoticePriority.BATTERY_OFFER, NoticePriority.SERVER_PROFILE, NoticePriority.HELD_MOD_CHANGES,
+				NoticePriority.LAUNCHER_REPAIR, NoticePriority.FIRST_RUN, NoticePriority.SERVER_LIMIT, NoticePriority.TRY_IT,
+				NoticePriority.BENCHMARK_REGRESSION, NoticePriority.STARTUP_REGRESSION, NoticePriority.HARDWARE_CHANGED,
+				NoticePriority.SETTINGS_CHANGED_OUTSIDE, NoticePriority.MOD_FILES_NEWS, NoticePriority.WHATS_NEW, NoticePriority.BENCHMARK_STALE),
+				Arrays.asList(NoticePriority.values()));
 	}
 
 	@Test
@@ -50,7 +54,7 @@ class NoticeBoardTest {
 			rotated.addAll(all.subList(0, shift));
 			NoticeBoard.Selection selection = NoticeBoard.select(rotated, Set.of());
 			assertEquals("BATTERY_OFFER", selection.top().key());
-			assertEquals(5, selection.others());
+			assertEquals(NoticePriority.values().length - 1, selection.others());
 			assertEquals(Arrays.stream(NoticePriority.values()).map(Enum::name).toList(), keys(selection));
 		}
 	}
