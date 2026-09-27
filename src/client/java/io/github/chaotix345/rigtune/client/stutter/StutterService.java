@@ -193,7 +193,17 @@ public final class StutterService {
 	}
 
 	private void end(StutterMonitor.Capture session, Minecraft minecraft, boolean now) {
-		StutterCapture.Copy copy = StutterCapture.stop(session);
+		StutterCapture.Copy copy;
+		try {
+			copy = StutterCapture.stop(session);
+		} catch (RuntimeException e) {
+			// docs/v0.5/SPEC.md 2S L1 (review-10 R10-1): the capture is detached anyway (stop's finally); only this session's
+			// summary is lost, and a benchmark starting or the world being left goes on.
+			live = null;
+			sessionsEnded.incrementAndGet();
+			RigTune.LOGGER.warn("Stutter Doctor: the running session's summary was lost: its capture couldn't be copied", e);
+			return;
+		}
 		live = null;
 		savedState = Saved.DONE;
 		Machine machine = machine(minecraft);

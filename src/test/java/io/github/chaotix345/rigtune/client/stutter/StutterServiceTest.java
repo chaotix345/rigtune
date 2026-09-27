@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.client.stutter;
 
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RealController;
+import io.github.chaotix345.rigtune.core.LogCapture;
 import io.github.chaotix345.rigtune.core.stutter.StutterRings;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -9,10 +10,14 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.lang.reflect.Field;
 import java.nio.file.Path;
+import java.util.function.Function;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // StutterService's own logic (docs/v0.5/SPEC.md 2S) without a running game: the controller is an unconstructed
@@ -43,6 +48,33 @@ class StutterServiceTest {
 		settings.setAccessible(true);
 		settings.set(controller, new ClientSettings());
 		return new StutterService(controller, dir);
+	}
+
+	// AC2S.1 (L1, review-10 R10-1): a benchmark run ends the running session; when copying its capture fails, the benchmark
+	// still starts, the log says specifically that the session's summary was lost, no capture is left behind and the next
+	// session starts normally.
+	@Test
+	void aFailingCopyLosesOnlyThatSummaryAndSaysSo(@TempDir Path dir) throws ReflectiveOperationException {
+		StutterService service = service(dir);
+		StutterCapture.startSession();
+		Function<StutterMonitor.Capture, StutterCapture.Copy> copier = StutterCapture.copier;
+		StutterCapture.copier = c -> {
+			throw new IllegalStateException("copy failed (test)");
+		};
+		try (LogCapture log = new LogCapture()) {
+			assertDoesNotThrow(() -> service.benchmarkStarted(null));
+			assertEquals(1, log.lines().stream().filter(l -> l.contains("the running session's summary was lost")).count(), String.join(" | ", log.lines()));
+		} finally {
+			StutterCapture.copier = copier;
+		}
+		assertNull(StutterMonitor.session());
+		assertNull(StutterMonitor.rings());
+		assertFalse(StutterMonitor.active());
+		assertFalse(StutterCapture.GC.active(), "the GC listener went with the capture");
+
+		StutterMonitor.Capture next = StutterCapture.startSession();
+		assertSame(next, StutterMonitor.session(), "the next session starts normally");
+		assertTrue(StutterCapture.GC.active());
 	}
 
 	// AC2S.14 (for 2B's RW-6): a finished benchmark run reports the CPU DH's world generation used during its sweeps; a
