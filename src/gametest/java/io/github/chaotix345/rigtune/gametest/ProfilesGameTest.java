@@ -13,6 +13,7 @@ import io.github.chaotix345.rigtune.client.ui.ProfileImportScreen;
 import io.github.chaotix345.rigtune.client.ui.ProfilesScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
+import io.github.chaotix345.rigtune.client.ui.RigTuneSettingsScreen;
 import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
 import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
@@ -36,9 +37,14 @@ import io.github.chaotix345.rigtune.core.profile.ShareCode;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Options;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.ContainerObjectSelectionList;
+import net.minecraft.client.gui.components.CycleButton;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
@@ -400,6 +406,20 @@ public class ProfilesGameTest implements FabricClientGameTest {
 			context.waitTicks(3);
 			context.waitFor(mc -> controller.report() != null, 1200);
 			check(batteryNotice(context, controller) == null, "no offer once snoozed");
+
+			// PF-2 (AC2P.2): the Settings row turns the offer back on, and the next unplug offers Battery again.
+			context.runOnClient(mc -> mc.gui.setScreen(new RigTuneSettingsScreen(new TitleScreen(), controller)));
+			context.waitForScreen(RigTuneSettingsScreen.class);
+			context.waitTicks(2);
+			check(context.computeOnClient(mc -> !(Boolean) batteryOfferRow(mc.gui.screen()).getValue()), "the row shows the offer off after the snooze");
+			context.runOnClient(mc -> {
+				CycleButton<?> row = batteryOfferRow(mc.gui.screen());
+				row.onPress(new MouseButtonEvent(row.getX() + 1, row.getY() + 1, new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0)));
+			});
+			context.waitTicks(1);
+			check(!ProfileStore.shared(configDir).battery().snoozed(), "PF-2: the row turned the offer back on in profiles.json");
+			context.takeScreenshot("profiles-settings-battery-offer-on");
+			offerOnUnplug(context, controller, service);
 		} finally {
 			HardwareProbe.setOnBattery(onBattery);
 			context.runOnClient(mc -> {
@@ -408,6 +428,19 @@ public class ProfilesGameTest implements FabricClientGameTest {
 			});
 			context.waitFor(mc -> controller.report() != null, 1200);
 		}
+	}
+
+	// RigTuneSettingsScreen's battery-offer switch (a row of its list).
+	private static CycleButton<?> batteryOfferRow(Screen screen) {
+		return Screens.getWidgets(screen).stream()
+				.flatMap(w -> w instanceof ContainerObjectSelectionList<?> list ? list.children().stream()
+						.flatMap(row -> row.children().stream()).filter(AbstractWidget.class::isInstance).map(AbstractWidget.class::cast) : Stream.of(w))
+				.filter(w -> w instanceof CycleButton<?> && w.getMessage().getContents() instanceof TranslatableContents t
+						&& t.getArgs().length > 0 && t.getArgs()[0] instanceof Component name
+						&& name.getContents() instanceof TranslatableContents n && n.getKey().equals("rigtune.settings.battery_offer"))
+				.map(w -> (CycleButton<?>) w)
+				.findFirst()
+				.orElseThrow(() -> new AssertionError("No battery-offer switch on " + screen));
 	}
 
 	// An AC -> battery edge past the cooldown: the unplug offer, checked to be there.

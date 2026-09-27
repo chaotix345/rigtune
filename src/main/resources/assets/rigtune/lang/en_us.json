@@ -53,6 +53,8 @@
 	"rigtune.screen.undo_all.tooltip": "Revert every change RigTune has made. You see the full list before anything changes.",
 	"rigtune.screen.undo_last": "Undo last",
 	"rigtune.screen.undo_last.tooltip": "Revert RigTune's most recent Apply. You see exactly what changes before anything happens.",
+	"rigtune.settings.battery_offer": "Battery offer",
+	"rigtune.settings.battery_offer.tooltip": "On a laptop: when you unplug, RigTune offers to switch to the Battery profile, and when you plug back in, to switch back. It never switches by itself. \"Don't offer again\" turns this off.",
 	"rigtune.settings.goal": "Default goal",
 	"rigtune.settings.modrinth": "Modrinth",
 	"rigtune.settings.modrinth.tooltip": "Sends the SHA-1 hashes of your mod jars and the ids of mods RigTune might suggest (to find updates and check availability), and downloads the mods you choose to install. Off: installs and updates become advice for your launcher.",
