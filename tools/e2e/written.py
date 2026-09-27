@@ -40,10 +40,10 @@ class Generation:
 
 V040 = Generation("v040-written", (0, 4), SETS, NEW_FILES, KEPT)
 # The sets in src/test/resources/v050-written/README.md's order (docs/v0.5/PLAN.md contracts item 17, plan review PLAN-20).
-# 0.5's new files join `kept` as their formats land.
+# 0.5's new files join `kept` as their formats land (server-profiles.json: WS-P2's ws-p2 set).
 V050 = Generation("v050-written", (0, 5), ("ws-l1", "ws-l2", "ws-s", "ws-s2", "ws-p", "ws-p2", "ws-b", "ws-t", "ws-w", "ws-w2",
                                            "ws-f", "ws-h"),
-                  ("stutter-fixes.json", "tryit.json", "server-profiles.json"))
+                  ("stutter-fixes.json", "tryit.json", "server-profiles.json"), {"server-profiles.json": ("servers",)})
 GENERATIONS = (V040, V050)
 # A set's compat040 expectations (the v050-written README): never composed into the instance.
 EXPECT = "expect.json"

@@ -48,6 +48,8 @@ class GenerationTest(unittest.TestCase):
         write(root / "v050-written" / "ws-t", "benchmarks.json", {"schemaVersion": 1, "runs": []})
         sets = written.resolve_all([V040, root / "v050-written"])
         self.assertEqual(written.KEPT, {k: v for k, v in written.kept_for(sets).items() if k in written.KEPT})
+        self.assertEqual(("servers",), written.kept_for(sets)["server-profiles.json"])
+        self.assertNotIn("server-profiles.json", written.kept_for(written.resolve_all([V040])))
 
 
 class ResolveAllTest(unittest.TestCase):
