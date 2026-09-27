@@ -215,7 +215,8 @@ Sent to the coordinator with proposed dispositions; fixed in 03c46c37 (red tests
   the lower ones instead of counting as a fail (a first run could suggest 31 over your 32); a step whose terrain hadn't
   loaded stays out of the benchmark's stutter check, and the result says how many; the first run in a new benchmark
   world, and a run while Distant Horizons was generating terrain, are left out of your usual and never raise a
-  regression; the result names Distant Horizons generating terrain, measuring with its rendering off, and what noisy
+  regression, and a Measure before/after pair with such a run shows both runs' numbers without a percentage ("Measure
+  before again"); the result names Distant Horizons generating terrain, measuring with its rendering off, and what noisy
   results went with; Benchmark history's counts say 'earlier runs'; a change still staged when a run started is no
   longer listed as a change since then for it. Accessibility: the benchmark result's table rows, its lines and both
   charts are reached with Tab and read by the Narrator."
