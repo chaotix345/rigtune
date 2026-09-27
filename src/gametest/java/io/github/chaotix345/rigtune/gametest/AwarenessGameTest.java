@@ -10,14 +10,20 @@ import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.awareness.AwarenessService;
 import io.github.chaotix345.rigtune.client.awareness.OutsideChanges;
+import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
+import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.LauncherProbe;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkMenuScreen;
 import io.github.chaotix345.rigtune.client.ui.NoticeScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
+import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.awareness.WhatsNew;
+import io.github.chaotix345.rigtune.core.footprint.StartupTimesStore;
+import io.github.chaotix345.rigtune.core.footprint.StartupTrend;
+import io.github.chaotix345.rigtune.core.hardware.PerfCounters;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
@@ -37,6 +43,7 @@ import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -227,7 +234,125 @@ public class AwarenessGameTest implements FabricClientGameTest {
 
 	// ---- WS-W2 (C18, AC9.2-AC9.3): a seeded startup-times.json and the STARTUP_REGRESSION notice.
 
+	// startup-times.json seeded behind the real StartupTimes, which then recomputes (as its worker does after recording a
+	// launch). From 4 comparable launches: no notice, no Tools row. From 5 of 10 s and one of 14.5 s with 12 more mods: the
+	// notice with the numbers and exactly the mod-count line (screenshots at the three sizes); Tools… opens ToolsScreen with
+	// the same two rows and leaves the notice; with Windows' performance counters off (seeded) the detail adds 2L's advice;
+	// Got it: gone on the rebuild, on reopening and after a rescan, the key in awareness.json, and a new StartupTimes (the
+	// next launch's) reads it as acknowledged; a later slower launch fires with its own key. startup-times.json and the view
+	// are put back (FootprintGameTest checks this launch's one run later); awareness.json by runTest.
 	private static void startupRegression(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		RealController real = v05.realController();
+		Path file = StartupTimesStore.file(real.configDir());
+		context.waitFor(mc -> Files.isRegularFile(file), 200);
+		String original = read(file);
+		String mcVersion = FabricLoader.getInstance().getRawGameVersion();
+		PerfCounters on = new PerfCounters(true, false, List.of(), List.of());
+		try {
+			HardwareProbe.seedPerfCounters(on);
+			seedLaunches(real, file, mcVersion, 4, "2026-09-20T10:30:00Z", 14_500, 82);
+			check(findStartup(context, real) == null, "no notice from 4 comparable launches: " + notices(context, real));
+			openTools(context, real);
+			check(context.computeOnClient(mc -> ((ToolsScreen) mc.gui.screen()).regressionLines()).isEmpty(), "no Tools row from 4 comparable launches");
+
+			String key = seedLaunches(real, file, mcVersion, 5, "2026-09-20T10:30:00Z", 14_500, 82);
+			Notice notice = findStartup(context, real);
+			check(notice != null && notice.key().equals(key) && notice.priority() == NoticePriority.STARTUP_REGRESSION, "the notice: " + notices(context, real));
+			check(notice.message().english().equals("Launch time 45% higher than usual (14.5 s vs your usual ~10.0 s)"), notice.message().english());
+			check(notice.detail() != null && notice.detail().english().equals("May be related to your mod set changing (70 → 82 mods) since your last launch"),
+					"exactly one cause line: " + notice.detail());
+			check(!notice.dismissible() && notice.actions().stream().map(a -> a.label().english()).toList().equals(List.of("Tools…", "Got it")),
+					"Tools… and Got it: " + notice);
+			openRigTune(context);
+			for (int[] size : SIZES) {
+				resize(context, size[0], size[1], size[2]);
+				cycleTo(context, key);
+				screenshot(context, "awareness-startup-regression-" + name(size));
+			}
+
+			resize(context, 1280, 720, 2);
+			cycleTo(context, key);
+			press(context, "rigtune.startup.notice.tools");
+			context.waitForScreen(ToolsScreen.class);
+			context.waitTicks(2);
+			List<String> rows = context.computeOnClient(mc -> ((ToolsScreen) mc.gui.screen()).regressionLines().stream().map(Component::getString).toList());
+			check(rows.equals(List.of(notice.message().english(), notice.detail().english())), "Tools… shows the same two lines: " + rows);
+			screenshot(context, "awareness-startup-tools-1280x720-scale2");
+			context.runOnClient(mc -> mc.gui.screen().onClose());
+			context.waitForScreen(RigTuneScreen.class);
+			context.waitTicks(2);
+			check(findStartup(context, real) != null, "Tools… doesn't acknowledge it");
+
+			HardwareProbe.seedPerfCounters(new PerfCounters(true, true, List.of(), List.of("PerfOS")));
+			Notice withAdvice = findStartup(context, real);
+			check(withAdvice != null && withAdvice.detail() != null && withAdvice.detail().english().startsWith(notice.detail().english() + "\n")
+					&& withAdvice.detail().english().contains("Windows performance counters are turned off on this PC."), "2L's advice in the detail: " + withAdvice);
+			HardwareProbe.seedPerfCounters(on);
+
+			cycleTo(context, key);
+			press(context, "rigtune.startup.notice.acknowledge");
+			context.waitTicks(2);
+			check(findStartup(context, real) == null, "Got it: gone");
+			Notice shown = context.computeOnClient(mc -> ((RigTuneScreen) mc.gui.screen()).shownNotice());
+			check(shown == null || !shown.key().equals(key), "not on the rebuilt notice line: " + shown);
+			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
+			openRigTune(context);
+			check(findStartup(context, real) == null, "not after reopening");
+			context.runOnClient(mc -> real.rescan());
+			context.waitFor(mc -> real.report() != null, 1200);
+			check(findStartup(context, real) == null, "not after a rescan (the notice list rebuilt)");
+			JsonObject root = JsonParser.parseString(read(real.awarenessService().file())).getAsJsonObject();
+			check(root.get("acknowledgedStartupRegressions") instanceof JsonArray keys && keys.toString().contains("\"" + key + "\""),
+					"awareness.json keeps it: " + root);
+			StartupTimes next = new StartupTimes(real, real.configDir());
+			next.refresh();
+			check(next.acknowledged(key), "the next launch's StartupTimes reads it back");
+
+			String later = appendLaunch(real, mcVersion, "2026-09-20T10:31:00Z", 15_000, 82);
+			Notice again = findStartup(context, real);
+			check(again != null && again.key().equals(later) && !later.equals(key), "a later slower launch has its own key: " + again);
+			check(again.detail() != null && again.detail().english().startsWith("No change recorded since your last launch"), "nothing changed since the one before: "
+					+ again.detail());
+			RigTune.LOGGER.info("AwarenessGameTest: C18: none from 4 launches; the notice, Tools…, 2L's line, Got it (kept in awareness.json), a later launch's own key");
+		} finally {
+			write(file, original);
+			real.startupTimesService().refresh();
+			HardwareProbe.seedPerfCounters(null);
+			resize(context, 1280, 720, 2);
+			openRigTune(context);
+		}
+	}
+
+	// `comparable` launches of 10 s with 70 mods (this Minecraft and RigTune version), then the latest at `at`; the real
+	// StartupTimes recomputes. Returns the latest launch's notice key.
+	private static String seedLaunches(RealController real, Path file, String mcVersion, int comparable, String at, long ms, int mods) {
+		try {
+			Files.deleteIfExists(file);
+		} catch (IOException e) {
+			throw new AssertionError("Could not remove " + file, e);
+		}
+		StartupTimesStore store = new StartupTimesStore(real.configDir());
+		for (int i = 0; i < comparable; i++) {
+			store.record(new StartupTimesStore.Run("2026-09-20T10:0" + i + ":00Z", 10_000, mcVersion, real.modVersion(), 70, "seeded-70"));
+		}
+		return appendLaunch(real, mcVersion, at, ms, mods);
+	}
+
+	private static String appendLaunch(RealController real, String mcVersion, String at, long ms, int mods) {
+		new StartupTimesStore(real.configDir()).record(new StartupTimesStore.Run(at, ms, mcVersion, real.modVersion(), mods, "seeded-" + mods));
+		real.startupTimesService().refresh();
+		return StartupTrend.KEY_PREFIX + at;
+	}
+
+	private static @Nullable Notice findStartup(ClientGameTestContext context, RealController real) {
+		return find(notices(context, real), StartupTrend.KEY_PREFIX);
+	}
+
+	private static void openTools(ClientGameTestContext context, RealController real) {
+		context.runOnClient(mc -> mc.gui.setScreen(new ToolsScreen(new TitleScreen(), real)));
+		context.waitForScreen(ToolsScreen.class);
+		context.waitTicks(2);
 	}
 
 	// ---- WS-W (4h, AC4h.2): the options snapshot and SETTINGS_CHANGED_OUTSIDE.
