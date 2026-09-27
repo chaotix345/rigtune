@@ -12,6 +12,7 @@ import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
 import io.github.chaotix345.rigtune.core.benchmark.Knobs;
 import io.github.chaotix345.rigtune.core.benchmark.PlannerResult;
+import io.github.chaotix345.rigtune.core.benchmark.ResultNotes;
 import io.github.chaotix345.rigtune.core.benchmark.SessionResult;
 import io.github.chaotix345.rigtune.core.benchmark.ShaderAdvice;
 import io.github.chaotix345.rigtune.core.benchmark.Step;
@@ -212,11 +213,16 @@ public class BenchmarkResultScreen extends Screen {
 		return (int) shownRows.stream().filter(r -> r.full() != null).count();
 	}
 
-	// v0.4 (docs/v0.4/SPEC.md 5): the Stutter Doctor's line for the benchmark's sweeps ("2 spikes; likely causes: ...").
-	private static void stutterLine(List<Line> out) {
+	// v0.4 (docs/v0.4/SPEC.md 5): the Stutter Doctor's line for the benchmark's sweeps ("2 spikes; likely causes: ..."), and
+	// (docs/v0.5/SPEC.md RW-15) how many steps it left out.
+	private void stutterLine(List<Line> out) {
 		Component line = StutterScreen.benchmarkLine(StutterHooks.lastBenchmark());
 		if (line != null) {
 			out.add(new Line(line, COLOR_LABEL));
+		}
+		Text leftOut = ResultNotes.stutterStepsLeftOut(outcome.stepsLeftOut());
+		if (leftOut != null) {
+			out.add(new Line(Texts.component(leftOut), COLOR_LABEL));
 		}
 	}
 
@@ -293,9 +299,11 @@ public class BenchmarkResultScreen extends Screen {
 			out.add(new Line(Component.translatable("rigtune.benchmark.cost.shaders.not_measured",
 					reason(session.notMeasured().get(BenchmarkRecord.SHADERS))), COLOR_WARN));
 		}
-		// docs/v0.3/SPEC.md E-M1: a step measured before its terrain had loaded doesn't count, whatever its FPS.
-		if (tune() && rows.stream().anyMatch(m -> !m.complete())) {
-			out.add(new Line(Component.translatable("rigtune.benchmark.incomplete"), COLOR_WARN));
+		// docs/v0.5/SPEC.md RW-5: a distance whose terrain hadn't loaded (on the second try too) isn't measured: not a pass,
+		// not a fail.
+		Text unmeasured = tune() ? ResultNotes.unmeasured(rows) : null;
+		if (unmeasured != null) {
+			out.add(new Line(Texts.component(unmeasured), COLOR_WARN));
 		}
 		if (session.deadlineHit()) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.deadline"), COLOR_WARN));
@@ -367,8 +375,8 @@ public class BenchmarkResultScreen extends Screen {
 			if (p99) {
 				graphics.text(font, String.format(Locale.ROOT, "%.1f", m.stats().p99FrameMs()), left + columns[3], y, color, false);
 			}
-			graphics.text(font, m.passed() ? "✔" : m.complete() ? "✘" : "✘*", left + columns[columns.length - 1], y,
-					Palette.of(m.passed() ? COLOR_PASS : COLOR_FAIL), false);
+			graphics.text(font, ResultNotes.mark(m), left + columns[columns.length - 1], y,
+					Palette.of(m.passed() ? COLOR_PASS : m.complete() ? COLOR_FAIL : COLOR_WARN), false);
 			y += ROW;
 		}
 	}

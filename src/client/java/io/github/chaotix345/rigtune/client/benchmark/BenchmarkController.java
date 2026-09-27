@@ -126,6 +126,11 @@ public final class BenchmarkController {
 		public BenchmarkMath.@Nullable Gain gain() {
 			return record == null || before == null ? null : BenchmarkRecords.gain(before, record);
 		}
+
+		// docs/v0.5/SPEC.md RW-15: the steps the benchmark's stutter capture left out (their settle timed out incomplete).
+		public int stepsLeftOut() {
+			return (int) settles.stream().filter(s -> !s.settle().complete()).count();
+		}
 	}
 
 	private enum Phase { SETTLE, WARMUP, SWEEP }
@@ -170,6 +175,7 @@ public final class BenchmarkController {
 	private boolean environmentRestored = true;
 	private final Throttle throttle = new Throttle();
 	private boolean throttled;
+	private final StutterSteps stutterSteps = new StutterSteps(StutterSteps.STUTTER_HOOKS);
 
 	private BenchmarkController(Minecraft minecraft, LocalPlayer player, ClientLevel level, BenchmarkRequest request, Config config) {
 		this.minecraft = minecraft;
@@ -499,7 +505,7 @@ public final class BenchmarkController {
 						listener.accept(step);
 					}
 					FrameTimes.start();
-					stutterSweep(true);
+					stutterSteps.begin(lastSettle == null || lastSettle.complete());
 					throttle.reset();
 					sweep = 0;
 					enter(Phase.SWEEP);
@@ -517,7 +523,7 @@ public final class BenchmarkController {
 						enter(Phase.SWEEP);
 					} else {
 						FrameStats stats = FrameTimes.stop();
-						stutterSweep(false);
+						stutterSteps.end();
 						RigTune.LOGGER.info("Benchmark {} {}: {} frames, avg {} FPS, 1% low {} FPS, client chunks {} (frame limit {}, {})",
 								step.kind(), step.knobs(), stats.frames(), Math.round(stats.avgFps()), Math.round(stats.onePercentLowFps()),
 								level.getChunkSource().getLoadedChunksCount(), minecraft.getFramerateLimitTracker().getFramerateLimit(),
@@ -538,11 +544,6 @@ public final class BenchmarkController {
 		}
 	}
 
-	// v0.4 (docs/v0.4/SPEC.md 5): the Stutter Doctor records the benchmark's sweeps (and only those) into its analyser.
-	private static void stutterSweep(boolean recording) {
-		StutterHooks.benchmarkSweep(recording);
-	}
-
 	private void settled(SettleCheck.Result result) {
 		lastSettle = result;
 		int loaded = level.getChunkSource().getLoadedChunksCount();
@@ -550,7 +551,8 @@ public final class BenchmarkController {
 		String seconds = String.format(Locale.ROOT, "%.1f", result.seconds());
 		if (!result.complete()) {
 			RigTune.LOGGER.warn("Benchmark settle {} {}: timed out after {} s with {} of {} chunks within {} missing (client holds {}); "
-					+ "this step can't count as a pass", step.kind(), step.knobs(), seconds, result.missing(), result.inRange(), result.radius(), loaded);
+					+ "this step is not measured (neither a pass nor a fail) and stays out of the stutter capture", step.kind(), step.knobs(), seconds,
+					result.missing(), result.inRange(), result.radius(), loaded);
 			return;
 		}
 		RigTune.LOGGER.info("Benchmark settle {} {}: {} of {} chunks within {} present, client holds {}, {} s{}", step.kind(), step.knobs(),
@@ -607,6 +609,7 @@ public final class BenchmarkController {
 				FrameTimes.stop();
 			}
 		});
+		stutterSteps.close();
 		StutterHooks.benchmarkFinished(!run.cancelled());
 		safely("show the HUD", () -> {
 			if (minecraft.gui.hud.isHidden() != hudWasHidden) {
