@@ -286,6 +286,22 @@ class TryItVerdictTest {
 				"after the conditions, before the mods");
 	}
 
+	// The coordinator's SPEC decision (WS-B review M4): a run left out of the trend (a fresh benchmark world, Distant
+	// Horizons generating) makes the pair incomparable, as the Benchmark menu's pair.
+	@Test
+	void aRunLeftOutOfTheTrendMeansNoVerdict() {
+		assertEquals(List.of(new Cause.Excluded(Cause.Excluded.Why.FRESH_WORLD)), verdict(restart(), before().worldFresh(true), after()).causes());
+		assertEquals(List.of(new Cause.Excluded(Cause.Excluded.Why.DH_GENERATING)), verdict(restart(), before(), after().dhGenerating(true)).causes());
+		assertEquals(List.of(new Cause.Excluded(Cause.Excluded.Why.FRESH_WORLD), new Cause.Excluded(Cause.Excluded.Why.DH_GENERATING)),
+				verdict(restart(), before().worldFresh(true), after().worldFresh(true).dhGenerating(true)).causes(), "each reason once");
+		assertEquals(Kind.NOT_COMPARABLE, verdict(restart(), before().worldFresh(true).low(1000), after().low(2000)).kind());
+		assertEquals(List.of(), verdict(restart(), before().worldFresh(false), after().dhGenerating(false)).causes());
+		TryIt here = TryItFixtures.tryOf("vanilla.particles", TryIt.Kind.NOW, BenchmarkRequest.Scene.CURRENT);
+		assertEquals(List.of(new Cause.Condition(Difference.RESOLUTION), new Cause.Excluded(Cause.Excluded.Why.DH_GENERATING), new Cause.Moved()),
+				verdict(here, before().scene("CURRENT"), after().scene("CURRENT").size(1920, 1080).dhGenerating(true)).causes(),
+				"after the conditions, before the spot");
+	}
+
 	@Test
 	void numbersAHandEditBrokeAreNoNumbers() {
 		for (double bad : new double[] {Double.NaN, Double.POSITIVE_INFINITY, 0, -5}) {

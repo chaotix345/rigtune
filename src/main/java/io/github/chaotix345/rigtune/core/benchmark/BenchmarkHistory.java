@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 // config/rigtune/benchmarks.json: the last 50 finished runs, oldest first. Nothing in it is ever destroyed silently:
 // - a corrupt file is moved to benchmarks.json.bad (then .bad.1, .bad.2...), and a new history starts;
@@ -155,9 +156,27 @@ public final class BenchmarkHistory {
 
 	/** The newest "before" of this scene and MC version that has no "after" yet. */
 	public Optional<BenchmarkRecord> openBefore(String scene, String mcVersion) {
+		return openBefore(scene, mcVersion, id -> true);
+	}
+
+	/**
+	 * As openBefore(scene, mcVersion), among the pairs whose id pairFilter accepts (docs/v0.5/SPEC.md 6: the Benchmark
+	 * menu's "Measure after" skips Try it's "tryit-" pairs).
+	 */
+	public Optional<BenchmarkRecord> openBefore(String scene, String mcVersion, Predicate<String> pairFilter) {
 		for (BenchmarkRecord r : runs.reversed()) {
 			if (BenchmarkRecord.BEFORE.equals(r.phase()) && scene.equals(r.scene()) && mcVersion.equals(r.mcVersion())
-					&& r.pairId() != null && !paired(r.pairId())) {
+					&& r.pairId() != null && pairFilter.test(r.pairId()) && !paired(r.pairId())) {
+				return Optional.of(r);
+			}
+		}
+		return Optional.empty();
+	}
+
+	/** The newest "after" of the pair. */
+	public Optional<BenchmarkRecord> after(String pairId) {
+		for (BenchmarkRecord r : runs.reversed()) {
+			if (BenchmarkRecord.AFTER.equals(r.phase()) && pairId.equals(r.pairId())) {
 				return Optional.of(r);
 			}
 		}

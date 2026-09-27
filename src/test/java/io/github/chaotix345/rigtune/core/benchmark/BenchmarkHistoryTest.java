@@ -198,6 +198,30 @@ class BenchmarkHistoryTest {
 		assertEquals("b3", history.openBefore("CURRENT", "26.3").orElseThrow().id());
 	}
 
+	// docs/v0.5/SPEC.md AC6.9: the Benchmark menu's "Measure after" never continues a Try it pair.
+	@Test
+	void openBeforeWithAFilterSkipsThePairsItRefuses() {
+		BenchmarkHistory history = BenchmarkHistory.empty()
+				.with(record("b1", "MEASURE", "CURRENT", BenchmarkRecord.BEFORE, "p1", "26.2"))
+				.with(record("t1", "MEASURE", "CURRENT", BenchmarkRecord.BEFORE, "tryit-1", "26.2"));
+		assertEquals("t1", history.openBefore("CURRENT", "26.2").orElseThrow().id(), "the old overload takes any pair");
+		assertEquals("b1", history.openBefore("CURRENT", "26.2", id -> !id.startsWith("tryit-")).orElseThrow().id());
+		BenchmarkHistory onlyTryIt = BenchmarkHistory.empty().with(record("t1", "MEASURE", "CURRENT", BenchmarkRecord.BEFORE, "tryit-1", "26.2"));
+		assertEquals(Optional.empty(), onlyTryIt.openBefore("CURRENT", "26.2", id -> !id.startsWith("tryit-")));
+	}
+
+	@Test
+	void afterIsThePairsNewestAfter() {
+		BenchmarkHistory history = BenchmarkHistory.empty()
+				.with(record("b1", "MEASURE", "CURRENT", BenchmarkRecord.BEFORE, "p1", "26.2"))
+				.with(record("a1", "MEASURE", "CURRENT", BenchmarkRecord.AFTER, "p1", "26.2"))
+				.with(record("a2", "MEASURE", "CURRENT", BenchmarkRecord.AFTER, "p2", "26.2"))
+				.with(record("a3", "MEASURE", "CURRENT", BenchmarkRecord.AFTER, "p1", "26.2"));
+		assertEquals("a3", history.after("p1").orElseThrow().id());
+		assertEquals("a2", history.after("p2").orElseThrow().id());
+		assertEquals(Optional.empty(), history.after("p3"));
+	}
+
 	@Test
 	void chartReturnsNewestOfSceneOldestFirst() {
 		BenchmarkHistory history = BenchmarkHistory.empty();
