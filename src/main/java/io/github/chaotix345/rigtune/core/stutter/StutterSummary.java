@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.core.stutter;
 import io.github.chaotix345.rigtune.core.report.MarkdownSafe;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -53,15 +54,15 @@ public final class StutterSummary {
 		}
 		if (s.total() > 0) {
 			List<String> causes = new ArrayList<>();
-			for (String cause : Attributor.CAUSES) {
-				Double share = r.causes().get(cause);
-				if (share != null && share > 0 && !cause.equals(Attributor.UNKNOWN)) {
-					causes.add(String.format(Locale.ROOT, "%s %.0f %%", name(cause), share * 100));
+			Map<String, Integer> shown = percentages(r.causes());
+			shown.forEach((cause, percent) -> {
+				if (!cause.equals(Attributor.UNKNOWN)) {
+					causes.add(String.format(Locale.ROOT, "%s %d %%", name(cause), percent));
 				}
-			}
-			double unexplained = r.causes().getOrDefault(Attributor.UNKNOWN, causes.isEmpty() ? 1.0 : 0.0);
+			});
+			int unexplained = shown.getOrDefault(Attributor.UNKNOWN, causes.isEmpty() ? 100 : 0);
 			out.append("Likely causes (share of the lost time): ").append(causes.isEmpty() ? "none measured" : String.join(", ", causes))
-					.append(String.format(Locale.ROOT, "; not explained %.0f %%%n", unexplained * 100));
+					.append(String.format(Locale.ROOT, "; not explained %d %%%n", unexplained));
 			for (String tag : Attributor.TAGS) {
 				Integer n = r.tags().get(tag);
 				if (n != null && n > 0) {
@@ -87,6 +88,32 @@ public final class StutterSummary {
 		}
 		String text = out.toString();
 		return text.length() <= LIMIT ? text : text.substring(0, LIMIT - 1) + "…";
+	}
+
+	// v0.5 RW-10 (docs/v0.5/SPEC.md 2S): the causes' shares as the whole percentages shown, in Attributor.CAUSES order. A share
+	// that rounds to 0 isn't shown, and the shown ones never total more than 100 (the shares are rounded to two decimals, so
+	// they can add up to 1.01): the excess comes off the largest.
+	public static Map<String, Integer> percentages(Map<String, Double> causes) {
+		Map<String, Integer> out = new LinkedHashMap<>();
+		int total = 0;
+		for (String cause : Attributor.CAUSES) {
+			Double share = causes.get(cause);
+			int percent = share == null ? 0 : (int) Math.round(share * 100);
+			if (percent > 0) {
+				out.put(cause, percent);
+				total += percent;
+			}
+		}
+		for (; total > 100; total--) {
+			String largest = null;
+			for (Map.Entry<String, Integer> e : out.entrySet()) {
+				if (largest == null || e.getValue() > out.get(largest)) {
+					largest = e.getKey();
+				}
+			}
+			out.merge(largest, -1, Integer::sum);
+		}
+		return out;
 	}
 
 	// "1 spike", "2 spikes".

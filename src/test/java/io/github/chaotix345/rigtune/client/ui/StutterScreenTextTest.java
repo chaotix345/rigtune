@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client.ui;
 import io.github.chaotix345.rigtune.core.stutter.Attributor;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import net.minecraft.locale.Language;
+import net.minecraft.network.chat.Component;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,6 +61,23 @@ class StutterScreenTextTest {
 				r.advice(), true, true, r.hitches());
 		assertEquals("131,071 frames · average 200 FPS · 1% low 200 FPS over the last 10:55 of gameplay", StutterScreen.framesLine(windowed).getString());
 		assertEquals("10,000 frames · average 60 FPS · 1% low 30 FPS", StutterScreen.framesLine(r).getString());
+	}
+
+	// docs/v0.5/SPEC.md 2S RW-10 (AC2S.12): the real-world session's causes (gc 0.60, tick 0.18, chunkLoad 0.0, unknown 0.23)
+	// show no "Chunk loading 0 %" row, and the shown whole percentages total at most 100.
+	@Test
+	void rw10NoZeroRowAndAtMostOneHundred() {
+		Map<String, Double> causes = new java.util.LinkedHashMap<>();
+		causes.put(Attributor.GC, 0.60);
+		causes.put(Attributor.CHUNK_LOAD, 0.0);
+		causes.put(Attributor.TICK, 0.18);
+		causes.put(Attributor.UNKNOWN, 0.23);
+		List<String> rows = StutterScreen.causeRows(report(new StutterReport.Spikes(126, 3, 3, 0), 104, Map.of(), causes)).stream().map(Component::getString)
+				.toList();
+		assertEquals(List.of("Garbage collection 59 %", "Game ticks 18 %", "Not explained 23 %"), rows);
+		assertEquals(List.of("Garbage collection 44 %", "Chunk loading 12 %", "Not explained 44 %"), StutterScreen.causeRows(report(new StutterReport.Spikes(9, 2,
+				1, 0), 9, Map.of(), Map.of(Attributor.GC, 0.44, Attributor.CHUNK_LOAD, 0.12, Attributor.UNKNOWN, 0.44))).stream().map(Component::getString).toList(),
+				"shares that add up are shown as they are");
 	}
 
 	@Test

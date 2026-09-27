@@ -83,6 +83,23 @@ class StutterSummaryTest {
 		assertFalse(StutterSummary.text(r, List.of()).contains("over the last"), "a 0.4 session: never");
 	}
 
+	// RW-10 (AC2S.12): Copy summary shows the same whole percentages as the screen: none at 0, at most 100 in total.
+	@Test
+	void rw10PercentagesNeverTotalOverOneHundred() {
+		Map<String, Double> causes = new java.util.LinkedHashMap<>();
+		causes.put(Attributor.GC, 0.60);
+		causes.put(Attributor.CHUNK_LOAD, 0.0);
+		causes.put(Attributor.TICK, 0.18);
+		causes.put(Attributor.UNKNOWN, 0.23);
+		assertEquals(Map.of(Attributor.GC, 59, Attributor.TICK, 18, Attributor.UNKNOWN, 23), StutterSummary.percentages(causes));
+		StutterReport r = report(true, true, 21.7);
+		StutterReport real = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(),
+				r.frames(), r.avgFps(), r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), causes, r.tags(), r.worst(),
+				r.facts(), r.advice(), true, true, r.hitches());
+		assertTrue(StutterSummary.text(real, List.of()).contains("Likely causes (share of the lost time): garbage collection 59 %, game ticks 18 %; not explained 23 %"),
+				StutterSummary.text(real, List.of()));
+	}
+
 	@Test
 	void caveatsAreSpelledOut() {
 		String text = StutterSummary.text(report(false, false, null), List.of());

@@ -267,19 +267,22 @@ public class StutterScreen extends Screen {
 			text(l, Component.translatable("rigtune.stutter.causes.none"), COLOR_LABEL, width, 0);
 			return;
 		}
-		for (String cause : Attributor.CAUSES) {
-			Double share = r.causes().get(cause);
-			if (share == null) {
-				continue;
-			}
-			bar(l, Component.translatable(CAUSES.get(cause)), share, cause.equals(Attributor.UNKNOWN) ? COLOR_LABEL : COLOR_AMBER, Component.literal(percent(share)));
-		}
+		// v0.5 RW-10: no 0 % row, and the whole percentages never total more than 100 (StutterSummary.percentages).
+		StutterSummary.percentages(r.causes()).forEach((cause, percent) -> bar(l, Component.translatable(CAUSES.get(cause)), r.causes().get(cause),
+				cause.equals(Attributor.UNKNOWN) ? COLOR_LABEL : COLOR_AMBER, Component.literal(percent + " %")));
 		for (String tag : Attributor.TAGS) {
 			Integer n = r.tags().get(tag);
 			if (n != null && n > 0 && TAGS.containsKey(tag)) {
 				text(l, tagLine(tag, n, r.spikes().total()), COLOR_LABEL, width, 0);
 			}
 		}
+	}
+
+	// The cause rows' text as shown ("Garbage collection 59 %"), for the tests.
+	static List<Component> causeRows(StutterReport r) {
+		List<Component> out = new ArrayList<>();
+		StutterSummary.percentages(r.causes()).forEach((cause, percent) -> out.add(Component.translatable(CAUSES.get(cause)).append(" " + percent + " %")));
+		return out;
 	}
 
 	private void worst(StutterList l, StutterReport r, int width) {
@@ -390,13 +393,12 @@ public class StutterScreen extends Screen {
 		}
 		MutableComponent causes = Component.empty();
 		boolean any = false;
-		for (String cause : Attributor.CAUSES) {
-			Double share = r.causes().get(cause);
-			if (share != null && share > 0 && !cause.equals(Attributor.UNKNOWN)) {
+		for (Map.Entry<String, Integer> e : StutterSummary.percentages(r.causes()).entrySet()) {
+			if (!e.getKey().equals(Attributor.UNKNOWN)) {
 				if (any) {
 					causes.append(Component.literal(", "));
 				}
-				causes.append(Component.translatable(CAUSES.get(cause))).append(Component.literal(" " + percent(share)));
+				causes.append(Component.translatable(CAUSES.get(e.getKey()))).append(Component.literal(" " + e.getValue() + " %"));
 				any = true;
 			}
 		}
