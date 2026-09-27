@@ -202,8 +202,9 @@ public class PreviewGameTest implements FabricClientGameTest {
 				mc.gui.setScreen(new PreviewScreen(mc.gui.screen(), real, report.recommendations().stream().filter(Recommendation::appliable).toList()));
 			});
 		}
-		// Five minutes: the ticked additions are looked up on the live Modrinth API, one after another.
-		PreviewScreen screen = waitForPreview(context, 6000);
+		// The ticked additions are looked up one after another, on the local fake Modrinth (build.gradle's ModrinthFixture;
+		// a minute is ample; it was five against the live API).
+		PreviewScreen screen = waitForPreview(context, 1200);
 		ApplyPreview preview = context.computeOnClient(mc -> screen.preview());
 		check(preview != null, "the real preview finished");
 		List<String> rows = context.computeOnClient(mc -> screen.rowText());

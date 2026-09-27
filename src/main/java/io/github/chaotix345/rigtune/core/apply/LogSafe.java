@@ -32,7 +32,8 @@ public final class LogSafe {
 
 	// "Type: message" for a log line instead of the exception itself (whose message and stack trace print full paths),
 	// plus "(caused by Type: message)" for its root cause, with the folders of `files` and the home folder cut out of the
-	// messages (ignoring letter case on Windows).
+	// messages (ignoring letter case on Windows). Each part is capped on its own, so a long message (a URL) never cuts
+	// the cause off.
 	public static String error(Throwable e, Path... files) {
 		if (e == null) {
 			return "null";
@@ -41,8 +42,8 @@ public final class LogSafe {
 		for (int depth = 0; root.getCause() != null && root.getCause() != root && depth < 20; depth++) {
 			root = root.getCause();
 		}
-		String out = describe(e, files);
-		return text(root == e ? out : out + " (caused by " + describe(root, files) + ")");
+		String out = text(describe(e, files));
+		return root == e ? out : out + " (caused by " + text(describe(root, files)) + ")";
 	}
 
 	private static String describe(Throwable e, Path... files) {

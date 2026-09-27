@@ -192,6 +192,22 @@ class FakeModrinthTest {
 		assertEquals(404, get("/v2/nothing-here").statusCode());
 	}
 
+	// GET /v2/versions?ids=[...]: the versions with those ids, unknown ids left out (DependencyResolver's staged-version check,
+	// docs/v0.4/SPEC.md 2d; the game tests' fake Modrinth, v0.5 ws-ci).
+	@Test
+	void versionsByIdReturnsKnownVersionsOnly() throws Exception {
+		start(false);
+
+		JsonArray found = JsonParser.parseString(get("/v2/versions?ids=" + query("[\"" + NEW_ID + "\",\"nope\",\"" + OLD_ID + "\"]")).body())
+				.getAsJsonArray();
+		assertEquals(List.of(NEW_ID, OLD_ID), found.asList().stream().map(v -> v.getAsJsonObject().get("id").getAsString()).toList());
+		assertEquals(PROJECT, found.get(0).getAsJsonObject().get("project_id").getAsString());
+		assertEquals("[]", get("/v2/versions?ids=" + query("[]")).body());
+
+		HttpModrinthClient client = new HttpModrinthClient("0.4.0", base());
+		assertEquals(java.util.Set.of(OLD_ID), client.versions(List.of(OLD_ID, "nope")).keySet());
+	}
+
 	@Test
 	void cdnServesTheJarWithTheAdvertisedHashes() throws Exception {
 		start(false);

@@ -2,7 +2,6 @@ package io.github.chaotix345.rigtune.gametest;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkConditions;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
@@ -43,6 +42,7 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -86,10 +86,9 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 		byte[] benchmarks = read(benchmarksFile);
 		byte[] history = read(historyFile);
 		byte[] awareness = read(awarenessFile);
-		boolean network = context.computeOnClient(mc -> ClientSettings.shared(configDir).networkEnabled);
 		int guiScale = context.computeOnClient(mc -> mc.options.guiScale().get());
+		boolean network = GameTestNet.set(context, controller, false);
 		try {
-			context.runOnClient(mc -> ClientSettings.shared(configDir).networkEnabled = false);
 			resize(context, 854, 480, 2);
 			run(context, controller, benchmarksFile);
 		} finally {
@@ -97,10 +96,8 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 			restore(benchmarksFile, benchmarks);
 			restore(historyFile, history);
 			restore(awarenessFile, awareness);
-			context.runOnClient(mc -> {
-				ClientSettings.shared(configDir).networkEnabled = network;
-				mc.gui.setScreen(new TitleScreen());
-			});
+			GameTestNet.set(context, controller, network);
+			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
 			resize(context, 854, 480, guiScale);
 		}
 		RigTune.LOGGER.info("BenchmarkHistoryGameTest: passed");
@@ -133,14 +130,14 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 		check(regression.detail() != null && regression.detail().english().contains("may be related")
 				&& regression.detail().english().contains("fake-mod-1.1.jar"), "its detail names the update: " + regression.detail());
 		check(notice(context, controller, STALE_KEY) == null, "no stale notice under the seeded conditions");
-		context.takeScreenshot("bench-history-notice-854x480-scale2");
+		screenshot(context, controller, "bench-history-notice-854x480-scale2");
 		// Seeded again at each size, so the screenshots show the seeded case without a "needs a rerun" marker.
 		resize(context, 1280, 720, 2);
 		reseed(context, benchmarksFile);
 		context.runOnClient(mc -> RigTuneClient.open(new TitleScreen()));
 		context.waitForScreen(RigTuneScreen.class);
 		context.waitTicks(3);
-		context.takeScreenshot("bench-history-notice-1280x720-scale2");
+		screenshot(context, controller, "bench-history-notice-1280x720-scale2");
 		resize(context, 854, 480, 2);
 		reseed(context, benchmarksFile);
 
@@ -175,7 +172,7 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 			check(shown.size() == 5 && has(shown, "Changes since then (may be related):") && !has(shown, "Needs a rerun"),
 					"lines at " + size[0] + "x" + size[1] + ": " + shown);
 			check(context.computeOnClient(mc -> ((BenchmarkHistoryScreen) mc.gui.screen()).chartDrawn()), "the chart is drawn at " + size[0] + "x" + size[1]);
-			context.takeScreenshot("bench-history-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			screenshot(context, controller, "bench-history-" + size[0] + "x" + size[1] + "-scale" + size[2]);
 		}
 
 		// The result screen of a Tune with many lines at 640x480@2 (review M3): the changes are counted in one line, and
@@ -191,7 +188,7 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 		int top = context.computeOnClient(mc -> ((BenchmarkResultScreen) mc.gui.screen()).contentTop());
 		int bottom = context.computeOnClient(mc -> ((BenchmarkResultScreen) mc.gui.screen()).contentBottom());
 		check(top + 12 * 4 + 2 <= bottom, "room for the table at 640x480@2: " + top + " to " + bottom);
-		context.takeScreenshot("bench-history-result-640x480-scale2");
+		screenshot(context, controller, "bench-history-result-640x480-scale2");
 		// review-8 P5B-F4: the status lines wrap to the width at every size; a line folds back to one clipped row (its text
 		// a tooltip) only where the table would otherwise lose its header and 3 rows.
 		for (int[] size : SIZES) {
@@ -207,7 +204,7 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 			check(fit[4] + 12 * 4 + 2 <= fit[5], where + ": room for the table: " + fit[4] + " to " + fit[5]);
 			check(size[0] == 640 || fit[2] == 0, where + ": no status line clipped: " + fit[2] + " of " + fit[3]);
 			RigTune.LOGGER.info("BenchmarkHistoryGameTest: result screen at {}: {} status rows, {} clipped", where, fit[3], fit[2]);
-			context.takeScreenshot("bench-result-wrapped-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			screenshot(context, controller, "bench-result-wrapped-" + size[0] + "x" + size[1] + "-scale" + size[2]);
 		}
 		resize(context, 854, 480, 2);
 		reseed(context, benchmarksFile);
@@ -221,7 +218,7 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 		BenchmarkTrend.View other = context.computeOnClient(mc -> ((BenchmarkHistoryScreen) mc.gui.screen()).view());
 		check(!selected.equals(other.contextKey()) && other.comparableRuns() == 1 && other.otherRuns() == 5, "the other context: " + other);
 		check(has(lines(context), "1 comparable run; 5 with different conditions not shown"), "its note: " + lines(context));
-		context.takeScreenshot("bench-history-other-context");
+		screenshot(context, controller, "bench-history-other-context");
 		cycleSelector(context);
 		check(selected.equals(context.computeOnClient(mc -> ((BenchmarkHistoryScreen) mc.gui.screen()).view().contextKey())), "back to the latest's");
 
@@ -251,7 +248,7 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 				"the tier tooltip's line: " + tooltipText);
 		String report = context.computeOnClient(mc -> controller.shareReport());
 		check(report.contains("- Needs a rerun (changed since: resolution)\n") && report.contains("- conditions: RD "), "the share report: " + report);
-		context.takeScreenshot("bench-history-stale-notice");
+		screenshot(context, controller, "bench-history-stale-notice");
 		context.runOnClient(mc -> mc.gui.setScreen(new BenchmarkHistoryScreen(mc.gui.screen(), controller)));
 		context.waitForScreen(BenchmarkHistoryScreen.class);
 		context.waitTicks(3);
@@ -260,7 +257,7 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 		check(has(rerun, "Needs a rerun (changed since: resolution)"), "the marker on Benchmark history: " + rerun);
 		for (int[] size : SIZES) {
 			resize(context, size[0], size[1], size[2]);
-			context.takeScreenshot("bench-history-rerun-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			screenshot(context, controller, "bench-history-rerun-" + size[0] + "x" + size[1] + "-scale" + size[2]);
 		}
 		resize(context, 854, 480, 2);
 		context.runOnClient(mc -> mc.gui.screen().onClose());
@@ -398,6 +395,18 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 			mc.resizeGui();
 		});
 		context.waitTicks(3);
+	}
+
+	// Every screenshot here is taken with the network off (X1): the report on screen must be the offline one, checked first
+	// and logged with the Apply button's label when RigTune's screen is open, so two runs' images compare (v0.5 SPEC 1e).
+	private static void screenshot(ClientGameTestContext context, RigTuneController controller, String name) {
+		boolean online = context.computeOnClient(mc -> controller.report() != null && controller.report().online());
+		check(!online, name + ": the offline report is on screen");
+		String apply = context.computeOnClient(mc -> mc.gui.screen() instanceof RigTuneScreen screen ? Screens.getWidgets(screen).stream()
+				.filter(w -> w.getMessage().getContents() instanceof TranslatableContents t && t.getKey().startsWith("rigtune.screen.apply"))
+				.map(w -> w.getMessage().getString()).findFirst().orElse("(none)") : "-");
+		RigTune.LOGGER.info("BenchmarkHistoryGameTest: {}: report offline, Apply button {}", name, apply);
+		context.takeScreenshot(name);
 	}
 
 	private static void check(boolean condition, String message) {

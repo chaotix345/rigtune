@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,8 +15,11 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URI;
 import java.net.URLDecoder;
+import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -337,6 +341,7 @@ class HttpModrinthClientTest {
 		IOException e = assertThrows(IOException.class, () -> capped.projects(List.of("sodium")));
 
 		assertTrue(e.getMessage().contains("larger than 100 bytes"), e.getMessage());
+		assertEquals(1, capped.clientsBuilt(), "a body over its cap says nothing about the connection: the client stays");
 	}
 
 	@Test
@@ -578,5 +583,219 @@ class HttpModrinthClientTest {
 		assertTrue(e.getMessage().contains("redirects"), e.getMessage());
 		assertEquals(HttpModrinthClient.MAX_DOWNLOAD_REDIRECTS + 1, hits("/cdn/loop.jar"));
 		assertEquals(List.of(), listing(dir));
+	}
+
+	// v0.5 ws-ci: -Drigtune.modrinth.baseUrl is honoured only as https, or as plain http on this machine (a local test
+	// server), like -Drigtune.rules.baseUrl; anything else leaves the client on Modrinth.
+	@Test
+	void baseUrlPropertyTakesOnlyHttpsOrHttpOnThisMachine() {
+		for (String refused : List.of("http://example.com", "http://192.168.1.10:8080/", "http://localhost.example.com/",
+				"ftp://127.0.0.1/", "https://", "not a url", "  ")) {
+			assertEquals(HttpModrinthClient.DEFAULT_BASE_URL, viaProperty(refused).baseUrl(), refused);
+		}
+		assertEquals("https://staging-api.modrinth.com", viaProperty("https://staging-api.modrinth.com/").baseUrl());
+		for (String local : List.of("http://127.0.0.1:8080", "http://localhost:9", "http://[::1]:8080", "http://127.1.2.3")) {
+			assertEquals(local, viaProperty(local + "/").baseUrl(), local);
+		}
+	}
+
+	private static HttpModrinthClient viaProperty(String value) {
+		System.setProperty(HttpModrinthClient.BASE_URL_PROPERTY, value);
+		try {
+			return new HttpModrinthClient("1.2.3");
+		} finally {
+			System.clearProperty(HttpModrinthClient.BASE_URL_PROPERTY);
+		}
+	}
+
+	// CI, 2026-09-26: for 3 hours every lookup failed with "IOException: Stream N cancelled", streams 1, 3, 5 ... 17 of
+	// one HTTP/2 connection in one session: the JDK cancels a new stream on a connection it has marked for shutdown
+	// (Http2Connection.putStream). The Modrinth clients speak HTTP/1.1, so no multiplexed connection is shared.
+	@Test
+	void theClientsSpeakHttp11() throws IOException {
+		respond("/v2/projects", 200, "[]");
+		client.projects(List.of("sodium"));
+		assertEquals(HttpClient.Version.HTTP_1_1, client.httpVersions().get(0));
+		assertEquals(HttpClient.Version.HTTP_1_1, client.httpVersions().get(1));
+	}
+
+	// A failure without an HTTP response drops the HttpClient, so one broken connection pool can't fail every later lookup of
+	// the session; an HTTP error status keeps the client.
+	@Test
+	void aTransportFailureStartsAFreshClientButAnHttpErrorDoesNot() throws Exception {
+		try (ServerSocket closer = new ServerSocket(0, 50, InetAddress.getLoopbackAddress())) {
+			Thread acceptor = new Thread(() -> {
+				while (!closer.isClosed()) {
+					try (Socket socket = closer.accept()) {
+						socket.setSoLinger(true, 0);
+					} catch (IOException ignored) {
+					}
+				}
+			});
+			acceptor.setDaemon(true);
+			acceptor.start();
+			HttpModrinthClient broken = new HttpModrinthClient("1.2.3", "http://127.0.0.1:" + closer.getLocalPort(), FAST);
+			IOException first = assertThrows(IOException.class, () -> broken.projects(List.of("a")));
+			assertFalse(first instanceof ModrinthException, first.toString());
+			assertEquals(2, broken.clientsBuilt(), "the one retry ran on a fresh HttpClient");
+			assertThrows(IOException.class, () -> broken.projects(List.of("a")));
+			assertEquals(4, broken.clientsBuilt(), "and so did the next lookup");
+		}
+
+		assertThrows(ModrinthException.class, () -> client.projects(List.of("missing")));
+		assertThrows(ModrinthException.class, () -> client.projects(List.of("missing")));
+		assertEquals(1, client.clientsBuilt(), "an HTTP 404 keeps the client");
+	}
+
+	// SPEC AC1f.1: a lookup whose request fails once without an HTTP response (as every lookup did for 3 hours on 2026-09-26:
+	// "Stream N cancelled") gets its data from the one retry, sent on a fresh client.
+	@Test
+	void aLookupThatFailsOnceIsRetriedOnAFreshClient() throws IOException {
+		respond("/v2/projects", 200, """
+				[{"id":"AANobbMI","slug":"sodium","title":"Sodium","status":"approved","game_versions":["26.2"],"loaders":["fabric"]}]""");
+		FlakyTransport transport = new FlakyTransport(1);
+		HttpModrinthClient flaky = new HttpModrinthClient("1.2.3", url("/"), FAST, transport);
+
+		List<ModrinthProject> projects = flaky.projects(List.of("sodium"));
+
+		assertEquals("sodium", projects.getFirst().slug());
+		assertEquals(2, transport.calls.get());
+		assertEquals(1, hits("/v2/projects"), "the failed attempt never reached the server");
+		assertEquals(2, flaky.clientsBuilt(), "the retry ran on a fresh HttpClient");
+	}
+
+	// SPEC AC1f.1: two failures in a row give up; OnlineDataFetcher falls back to offline data with one warning that names
+	// the cause chain.
+	@Test
+	void twoFailuresInARowFallBackToOfflineDataWithOneWarning() {
+		FlakyTransport transport = new FlakyTransport(Integer.MAX_VALUE);
+		HttpModrinthClient flaky = new HttpModrinthClient("1.2.3", url("/"), FAST, transport);
+		InstalledMod sodium = new InstalledMod("sodium", "Sodium", "0.9.2", null, "62a7");
+
+		OnlineDataFetcher.Result result;
+		List<String> warnings;
+		try (io.github.chaotix345.rigtune.core.LogCapture log = new io.github.chaotix345.rigtune.core.LogCapture()) {
+			result = new OnlineDataFetcher(flaky).fetchAll(List.of(sodium), List.of("lithium"), "26.2");
+			warnings = log.lines().stream().filter(line -> line.startsWith("Modrinth lookups failed")).toList();
+		}
+
+		assertFalse(result.data().online());
+		assertEquals(2, transport.calls.get(), "one request and one retry, then no more requests");
+		assertEquals(1, warnings.size(), warnings.toString());
+		assertTrue(warnings.getFirst().contains("Stream 5 cancelled") && warnings.getFirst().contains("ClosedChannelException"), warnings.getFirst());
+	}
+
+	// ws-ci review: a request that got a client just before another thread's failure dropped it fails (the JDK refuses new
+	// requests on a client that is shutting down); it is sent once more on the fresh client. A download, which has no retry
+	// of its own.
+	@Test
+	void aRequestOnAClientAnotherFailureJustDroppedIsSentOnTheFreshOne(@TempDir Path dir) throws Exception {
+		byte[] jar = "pretend jar".getBytes(StandardCharsets.UTF_8);
+		ModFile file = new ModFile(url("/cdn/mod.jar"), "mod.jar", sha512(jar), jar.length);
+		responses.put("/cdn/mod.jar", new Response(200, jar));
+		AtomicInteger calls = new AtomicInteger();
+		HttpModrinthClient[] owner = new HttpModrinthClient[1];
+		HttpModrinthClient.Transport transport = new HttpModrinthClient.Transport() {
+			@Override
+			public <T> java.net.http.HttpResponse<T> send(HttpClient http, java.net.http.HttpRequest request,
+					java.net.http.HttpResponse.BodyHandler<T> handler, io.github.chaotix345.rigtune.core.net.BoundedHttp.Progress progress,
+					Duration stall, Duration deadline) throws IOException {
+				int call = calls.incrementAndGet();
+				if (call == 1) {
+					// Meanwhile another download on the same client fails on its connection and drops the client.
+					assertThrows(IOException.class, () -> owner[0].download(file, dir.resolve("other.jar.rigtune-pending")));
+					throw new IOException("closed");
+				}
+				if (call == 2) {
+					throw new IOException("Connection reset");
+				}
+				return io.github.chaotix345.rigtune.core.net.BoundedHttp.send(http, request, handler, progress, stall, deadline);
+			}
+		};
+		owner[0] = new HttpModrinthClient("1.2.3", url("/"), FAST, transport);
+
+		owner[0].download(file, dir.resolve("mod.jar.rigtune-pending"));
+
+		assertEquals("pretend jar", Files.readString(dir.resolve("mod.jar.rigtune-pending")));
+		assertEquals(3, calls.get(), "the first download was sent once more");
+		assertEquals(2, owner[0].clientsBuilt(), "on the client built after the drop");
+	}
+
+	// Third review: a download whose body had started arriving isn't sent again (its bytes are already in the temp file and
+	// the digest), even when another thread dropped its client meanwhile: it fails with its own connection error.
+	@Test
+	void aDownloadWhoseBodyHadStartedIsNotSentAgain(@TempDir Path dir) throws Exception {
+		byte[] jar = "pretend jar".getBytes(StandardCharsets.UTF_8);
+		ModFile file = new ModFile(url("/cdn/mod.jar"), "mod.jar", sha512(jar), jar.length);
+		responses.put("/cdn/mod.jar", new Response(200, jar));
+		AtomicInteger calls = new AtomicInteger();
+		HttpModrinthClient[] owner = new HttpModrinthClient[1];
+		HttpModrinthClient.Transport transport = new HttpModrinthClient.Transport() {
+			@Override
+			public <T> java.net.http.HttpResponse<T> send(HttpClient http, java.net.http.HttpRequest request,
+					java.net.http.HttpResponse.BodyHandler<T> handler, io.github.chaotix345.rigtune.core.net.BoundedHttp.Progress progress,
+					Duration stall, Duration deadline) throws IOException {
+				if (calls.incrementAndGet() == 1) {
+					java.net.http.HttpResponse.BodySubscriber<T> body = handler.apply(new java.net.http.HttpResponse.ResponseInfo() {
+						@Override
+						public int statusCode() {
+							return 200;
+						}
+
+						@Override
+						public HttpHeaders headers() {
+							return HttpHeaders.of(Map.of(), (name, value) -> true);
+						}
+
+						@Override
+						public HttpClient.Version version() {
+							return HttpClient.Version.HTTP_1_1;
+						}
+					});
+					body.onSubscribe(new java.util.concurrent.Flow.Subscription() {
+						@Override
+						public void request(long n) {
+						}
+
+						@Override
+						public void cancel() {
+						}
+					});
+					body.onNext(List.of(java.nio.ByteBuffer.wrap("pretend".getBytes(StandardCharsets.UTF_8))));
+					// Meanwhile another download on the same client fails on its connection and drops the client.
+					assertThrows(IOException.class, () -> owner[0].download(file, dir.resolve("other.jar.rigtune-pending")));
+					throw new IOException("Connection reset");
+				}
+				if (calls.get() == 2) {
+					throw new IOException("Connection reset");
+				}
+				return io.github.chaotix345.rigtune.core.net.BoundedHttp.send(http, request, handler, progress, stall, deadline);
+			}
+		};
+		owner[0] = new HttpModrinthClient("1.2.3", url("/"), FAST, transport);
+
+		IOException e = assertThrows(IOException.class, () -> owner[0].download(file, dir.resolve("mod.jar.rigtune-pending")));
+
+		assertEquals("Connection reset", e.getMessage(), "its own error, not a hash mismatch from a resent body");
+		assertEquals(2, calls.get(), "not sent again");
+	}
+
+	// Fails the first `failures` sends like the JDK did on 2026-09-26, then sends for real.
+	private static final class FlakyTransport implements HttpModrinthClient.Transport {
+		final AtomicInteger calls = new AtomicInteger();
+		private final int failures;
+
+		FlakyTransport(int failures) {
+			this.failures = failures;
+		}
+
+		@Override
+		public <T> java.net.http.HttpResponse<T> send(HttpClient http, java.net.http.HttpRequest request, java.net.http.HttpResponse.BodyHandler<T> handler,
+				io.github.chaotix345.rigtune.core.net.BoundedHttp.Progress progress, Duration stall, Duration deadline) throws IOException {
+			if (calls.incrementAndGet() <= failures) {
+				throw new IOException("Stream 5 cancelled", new java.nio.channels.ClosedChannelException());
+			}
+			return io.github.chaotix345.rigtune.core.net.BoundedHttp.send(http, request, handler, progress, stall, deadline);
+		}
 	}
 }

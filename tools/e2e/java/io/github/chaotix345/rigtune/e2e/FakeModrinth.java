@@ -41,7 +41,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * A stand-in for api.modrinth.com and cdn.modrinth.com (plus static files, e.g. the rules on raw.githubusercontent.com)
- * for the self-update end-to-end test. See tools/e2e/README.md. It answers the endpoints RigTune calls, with versions
+ * for the self-update end-to-end test (see tools/e2e/README.md) and the production client game tests (build.gradle's
+ * ModrinthFixture). It answers the endpoints RigTune calls, with versions
  * and hashes computed from real jar files listed in a catalog. JDK only, so it runs as
  * {@code java FakeModrinth.java --catalog <file> [--port 443] [--keystore <p12> --storepass <pw>] [--log <jsonl>]}.
  *
@@ -248,6 +249,14 @@ public final class FakeModrinth implements AutoCloseable {
 				if (project != null && !out.contains(catalog.projectJson(project))) {
 					out.add(catalog.projectJson(project));
 				}
+			}
+			return Response.json(out);
+		}
+		// /v2/versions?ids=[...]: the known ones, in the order asked
+		if (path.equals("/v2/versions")) {
+			List<Object> out = new ArrayList<>();
+			for (String id : Json.strings(params.containsKey("ids") ? Json.parse(params.get("ids")) : null)) {
+				catalog.versions.stream().filter(v -> v.id().equals(id)).findFirst().ifPresent(v -> out.add(catalog.versionJson(v)));
 			}
 			return Response.json(out);
 		}
