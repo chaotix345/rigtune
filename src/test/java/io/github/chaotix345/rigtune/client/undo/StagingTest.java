@@ -501,4 +501,26 @@ class StagingTest {
 			assertNull(staging.discardPending());
 		}
 	}
+
+	// --- docs/v0.5/SPEC.md 2V (ws-g2): dropQueuedUpdates never unstages a group the helper left half done
+
+	// A failed rollback left DH's group half done (its disable done after a helper attempt, its enable not); DH's own updater
+	// then queued a build in mods/update/. The group stays for the next exit to finish or roll back; another mod's staged
+	// update with a queued build of its own is still dropped.
+	@Test
+	void aHalfDoneGroupWithAQueuedBuildStaysWhileOthersAreDropped() throws IOException {
+		List<Op> dh = stageTheDhGroup();
+		List<Op> y = update("y-1.jar", "y-2.jar", "y");
+		assertNotNull(staging.stage(y, "e2"));
+		Files.move(mods.resolve("fabric-26.2.jar"), mods.resolve("fabric-26.2.jar.disabled"));
+		PendingActions plan = PendingActions.load(pending);
+		plan.withOps(plan.ops().stream().map(op -> op.id().equals(dh.getFirst().id()) ? op.withAttempts(1) : op).toList()).save(pending);
+
+		List<Op> dropped = staging.dropQueuedUpdates(Set.of("distanthorizons", "y"), Set.of("distanthorizons", "y"));
+
+		assertEquals(y.stream().map(Op::id).toList(), dropped.stream().map(Op::id).toList());
+		assertEquals(dh.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+		assertTrue(Files.exists(mods.resolve(DH + PendingActions.PENDING_SUFFIX)), "the half-done group's download stays");
+		assertTrue(changesOf("e1").stream().allMatch(c -> JournalChange.STAGED.equals(c.status())));
+	}
 }
