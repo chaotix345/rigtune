@@ -1346,4 +1346,31 @@ class DownloadPlannerTest {
 		assertEquals(List.of(), result.ids());
 		assertEquals(List.of("Add a: Modrinth marks A as incompatible with LIB, which is installed"), result.errors());
 	}
+
+	// --- docs/v0.5/SPEC.md 2V (ws-a, AC2V.5): checkUpdate against earlier batch versions, alone. An update whose new
+	// version needs a project only a ticked addition brings waits for it (H1-A), so it is judged with the addition's
+	// version in the batch; the pairwise pre-check (refusedTogether) never pairs an update with an addition, so only
+	// checkUpdate's batch branch can refuse it, whichever of the two declares the incompatibility.
+
+	@Test
+	void anUpdateThatWaitedIsRefusedWhenTheAdditionsVersionDeclaresItIncompatible() throws Exception {
+		Recommendation update = updateOf("a", "A", required("P"));
+		put("p", version("pV", "P", "1", T, new Dependency(null, "aV", "incompatible")));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update, add("p", "P"));
+
+		assertEquals(List.of("add-p"), result.ids());
+		assertEquals(List.of("Update a: Modrinth marks P and A as incompatible, and both would be installed"), result.errors());
+	}
+
+	@Test
+	void anUpdateThatWaitedIsRefusedWhenItsVersionDeclaresTheAdditionsIncompatible() throws Exception {
+		Recommendation update = updateOf("a", "A", required("P"), new Dependency(null, "pV", "incompatible"));
+		put("p", version("pV", "P", "1", T));
+
+		DownloadPlanner.Result result = plan(Set.of("A"), update, add("p", "P"));
+
+		assertEquals(List.of("add-p"), result.ids());
+		assertEquals(List.of("Update a: Modrinth marks A and P as incompatible, and both would be installed"), result.errors());
+	}
 }
