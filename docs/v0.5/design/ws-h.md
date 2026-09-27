@@ -86,19 +86,123 @@ fabric-resource-loader-v0=[*], minecraft=[~26.2], …}, breaks={embeddium=[*], �
 the 1 KiB slack.
 
 ## What landed
-(filled in per task)
+
+| task | commit | change | tests |
+|---|---|---|---|
+| H1 (L5 part 1) | 9fa3c9fb | `core/modrinth/RangeReader`: one single range per request (`bytes=-65536`, then the central directory before the tail if the tail doesn't hold it, then fabric.mod.json's local header and data, reusing whatever the tail already holds); a 206 counts only with the exact `Content-Range` asked for and the same total every time; any other status (200, 3xx, 416, 500) fails the read and its body is dropped at once (`BoundedHttp.bytes(0, true, …)`); `Content-Encoding` other than identity fails; ZIP64, split and encrypted archives, two fabric.mod.json entries, an entry past the central directory, a size or CRC-32 mismatch fail. Caps: tail 64 KiB, central directory 2 MiB, entry 1 MiB compressed and inflated (`ModJars.MAX_FABRIC_MOD_JSON_BYTES`), 16 MiB and 30 s per reader (one preview), BoundedHttp's stall 10 s and deadline 20 s per request. Only `HttpModrinthClient.allowedDownload`'s origins (the same `-Drigtune.modrinth.baseUrl` rule), only while the gate (RigTune's `modrinthAllowed`) says so, checked before every request. HTTP/1.1 client built on the first read, `shutdownNow()` on close. `core/modrinth/FabricModJson`: the entry as Apply's `ModJars`/`JarInfo` read the jar (id, sanitised name, version, own `provides`, `depends`/`breaks` ranges, whether it nests jars); null where Apply reads no id. | `RangeReaderTest` (14: deflated and stored entries, the entry inside the tail (1 request), a jar without fabric.mod.json (missing, not failed), truncated / text / CRC-corrupt files, a 200 with the whole body (0 bytes read), 416, 500, a wrong Content-Range, a stall (fails at the stall limit), a disallowed origin / plain http / not a URL (no request), the gate off (no request), central directory and entry over their caps (not asked for), the per-preview budget, a source check that the class has no file API; the live check, skipped in CI), `FabricModJsonTest` (3: equal to `ModJars`'/`JarInfo`'s reads of the same jar; no id → null) |
+| H2 (L5 part 2) | 298ba527 | `DryRunPlanner.Checks(pins, nestedOrProvided, read, close)` and `plan(…, checks)` → `Planned(result, checkedFiles)`: the fetcher reads each file once; a read jar gets Apply's mod id (an update's file keeps the updated mod's id unless the jar says the same) and a `VersionPins.Jar` from its fabric.mod.json; a jar Apply finds no id in is refused as Apply refuses it (`not_a_mod`); a failed read keeps today's stand-in, judged on nothing. A jar whose nesting a read can't know (it nests jars, or wasn't read) gets `nestedOrProvided` (every loaded id that isn't a top-level jar: nested mods and provided ids) as `provides`, which only ever makes VersionPins skip a judgement, so the preview never refuses what Apply's full read lets through. `DownloadPlanner`'s dry-run constructor takes the dry jars and pins; `checkVersions` judges dry jars by their reads. `DownloadInputs.checks` (+ `withJarChecks`, old constructors kept), used only while lookups are on, closed when the plan is done; `ApplyPreview.downloadsChecked` (every listed download read; old constructors kept). `client/probe/PreviewJarChecks.of(modVersion, allowed)`: `FabricPins.of(mods)`, `nestedOrProvided(mods)`, a `RangeReader`; `RealController.preview` passes it (one line). | `PreviewDownloadChecksTest` (9: Apply's own refusal line, compared with the real `DownloadPlanner` over the real jar, for an addition that breaks an installed mod and an update an installed mod pins; `not_a_mod`; a failed read → today's preview, unchecked; Modrinth off → nothing read; nesting jars aren't refused over a nested library, the same jar without nesting is; a failed read may carry a library another download needs; no checks → today's preview; nothing written), `client/probe/PreviewJarChecksTest` (nested and provided ids, never a top-level mod's own); `DownloadPlannerTest`'s H2 cases and `PreviewDifferentialTest` unchanged |
+| H3 (L5 part 3) | 563d0a8c | `PreviewScreen.downloadChecks`: the disclosure `rigtune.preview.note.downloads` moved there from `populate()` and shows only while a listed download wasn't checked (`downloadsNote`); its English now also names the version-range case. FakeModrinth's marked `ranged(HttpExchange, Response)` + one call in `handle`: a CDN file (200, `application/java-archive`) asked for with `bytes=a-b`, `a-` or `-n` → 206 with `Content-Range` (cut at the end), a start past the end → 416, anything else (several ranges) → the whole file. PreviewGameTest `downloadChecks`: network on, the real `HttpModrinthClient` and `RangeReader` against the fake, a temp mods folder, an update of Mod Menu (the real jar the fake serves) that a test pin rules out and an addition of Fabric API: Mod Menu under "Not changed" with exactly the line Apply's own planner gives after downloading the whole jar, Fabric API listed, `downloadsChecked`, no disclosure row; network off (GameTestNet): nothing read, the update listed, the addition unresolved, the disclosure row shown; the real preview (text-file candidates, not zips) shows the disclosure whenever a file is listed; game folder hashes unchanged. | `PreviewDownloadsNoteTest` (2), `FakeModrinthRangeTest` (3, incl. `RangeReader` against the fake), PreviewGameTest on 3 legs (+ one local 26.2 run, `-PgametestClasses=PreviewGameTest`, green) |
+| H4 (RW-3) | 6b058427, 4c8a27f0, 47e7b477 | `core/history/StaleOps.find(ops, exists, loadedFrom, modIdOf, halfDone)`: per group, an enable whose download is gone is INSTALLED when its target exists (and no staged disable turns that jar off) or its mod is loaded from another jar, else GONE; an enable whose download is there but whose mod is loaded from a jar that is neither its target nor turned off by any staged disable is INSTALLED; never a half-done group; one entry per group, INSTALLED first. `Staging.dropStale(loadedFrom)` (under the lock, on the relocated plan so another instance's ops are left to the helper): unstages whole groups, retires their downloads, journals ABANDONED (installed another way) or DISCARDED (gone) → `StaleDrop(dropped, stale)`; `unstageLocked` gained an ABANDONED predicate (its public signature unchanged). `StaleGroups.drop` (nothing while pending.json is absent; origins from FabricLoader, top-level PATH origins only) / `status` ("RigTune dropped its pending change to %s: it is already installed (%s)." / "…: its download is gone.", one sentence per group, names sanitised). `RigTunePreLaunch.readState` counts only runnable ops (WARN only when some are) and logs one INFO for the stale ones; `warnOnce` skips their old failures and still marks that run logged (so they aren't replayed once the group is gone); from `Files.exists` and FabricLoader's origins; only when something looks stale does it list the mods folder and read `unfinished-groups.json` for the half-done groups (never a jar); a failure counts every op, as before. | `StaleOpsTest` (8), `StagingTest` (+5: the real DH group → ABANDONED ×2, the app's jar untouched, an unrelated group kept; the disabled-in-the-app leg; download gone → DISCARDED; loaded from another jar → download retired; half-done and runnable groups kept, busy lock → null), `StaleGroupsTest` (2), `PreLaunchStaleOpsTest` (3: the real instance → count 0, no replayed WARN, then or at the next start; a runnable group still counted and logged; a failed check counts everything) |
+| H5 (L7) | 3f012d7c | `Staging.discardPending()` → `Discard(dropped, keptGroup)` with `status()`; `discard()` delegates; `RealController.discardPending` returns `discard.status()`: `rigtune.status.discarded_with_kept` when a half-done group was kept. | `StagingTest` (+2: kept group → the new key with the dropped count; clean → today's key; busy → null) |
+| H6 (2V, ws-g2) | 23dfdbde | Test only: the rule (`halfDoneGroups` in `dropQueuedUpdates`) is 0.4's. | `StagingTest.aHalfDoneGroupWithAQueuedBuildStaysWhileOthersAreDropped` (failed-rollback state); fails with the rule removed (hand mutation, below) |
+| H7 (L9) | 4bede50f | `StagedProjects` + `disabledSha1s`, `enabledMods` (old 2-arg constructor kept), `withEnables`, `withDisabled`: `read()` folds every staged DISABLE_FILE whose jar is there and whose mod no staged enable brings back, by SHA-1. `DependencyResolver.disabledProjects()` (the installed versions whose file SHA-1 matches; no Modrinth call); `resolve` refuses a required dependency among them, `refuseDisabledRequirements(update)` an update's (`rigtune.download.needs_disabled`: "it needs %s, which is being turned off at the next restart"); `DownloadPlanner.updateMod` calls it after `checkUpdate`. `PreviewDownloads` folds the preview's own Disable items (Apply stages them before its downloads). | `DownloadPlannerTest` (+4: an addition and a transitive one refused; an update refused before downloading; a disable an enable brings back doesn't count; L10: an addition incompatible with the disabled mod still refused), `PreviewDisablesTest` (same batch: refused; without the disable: listed). Red first: with the four main files at HEAD the three refusal tests failed (`[add-a, add-b]`, `[update-a]`, the download listed) |
+| H8 (2V, ws-a) | c6bd8ea7 | Test only. | `DownloadPlannerTest` (+2: an update that waited for a ticked addition refused when either version declares the other incompatible); both fail, and nothing else, when `checkUpdate` is given an empty batch (hand mutation, below) |
+| H9 (RW-4) | b8ae3cf4 | `StagedChanges.pairUpdates`: a disable change without a mod id and with a group takes the mod id of the single enable in its group; used by `StagedChanges.of` (the staged path, incl. the legacy import's leftover ops) and `LegacyImport.applied`. | `LegacyImportRealUpdatesTest` (the real 0.1.0 last-apply.json + the seed's pending.json, old jars gone: UPDATED rows entityculling, modmenu, YACL, zoomify, distanthorizons, no DISABLED row, 12 rows; red first: only entityculling paired; a group with two enables keeps the disable without an id) |
+| H10 (2V, ws-g3 L6) | ddb47719 | `HistoryScreen.failureText`: a staged change failed at `attempt >= MAX_ATTEMPTS` (only a half-applied group gets there without being abandoned) → `rigtune.history.failed_held`. | `HistoryHeldGroupTest` (a failed-rollback DH group through `HistoryModel.build` + `ApplyFailures.byOpId`: the new line, never "try 3 of 3"; red first; under the cap: "try 2 of 3") |
+| H11 (2V, ws-g2) | e87c4f11 | `PreviewPlanner.withDisableRefusals(files → file name → why)`: all of one Apply's direct-child Disable items asked together, a refused one under "Not changed" (REFUSED, DisableGuard's text) and not folded as a staged disable. `RefusedDisables.previewRefusals(pendingFile, modsDir)` (DisableGuard.refusals over `ModsFolder.current`; none on an error, as Apply then disables) from `RealController.preview` (one line); `RefusedDisables.afterApply`: "%s mod(s) not disabled: another mod needs them, or another change of them is staged." (`rigtune.status.disables_refused`). | `PreviewDisablesTest` (+2), `RefusedDisablesTest` (2); `V05HooksTest`'s stub check still holds (nothing refused adds nothing) |
+
+Hand mutations (the "test first" evidence for items whose rule already existed): removing the half-done filter from
+`Staging.dropQueuedUpdates` fails `aHalfDoneGroupWithAQueuedBuildStaysWhileOthersAreDropped`; giving `checkUpdate` an
+empty batch fails exactly the two H8 tests. Both restored from a copy, never committed.
 
 ## Deviations, residuals, UNVERIFIED
-(filled in)
+- **Files outside the PLAN's WS-H list** (the coordinator was told first, 2026-09-27): `core/preview/{DownloadInputs,
+  PreviewDownloads, ApplyPreview}` (L5's own preview plumbing: one optional component each, old constructors kept),
+  `RealController.preview` (two expressions: `.withJarChecks(PreviewJarChecks.of(...))`, `.withDisableRefusals(...)`),
+  `PreviewScreen.populate` (the disclosure row moved into `downloadChecks`, so it now comes after the "Modrinth is off"
+  note), FakeModrinth's marked `ranged` method (+ its call and two imports), the `rigtune.download.needs_disabled` key
+  (L9's refusal lives in the `rigtune.download.*` refusal family, which nobody else edits). New files: `RangeReader`,
+  `FabricModJson`, `StaleOps`, `client/probe/PreviewJarChecks` and the tests.
+- **Nested jars aren't read** (L5): a read covers the outer fabric.mod.json only. A declaration whose judgement depends on
+  what a download nests is left to Apply (the conservative `provides`, above). So a download can still pass Preview and be
+  refused by Apply on a nested library's range; the disclosure line isn't shown then (every listed download was read).
+  Apply stays authoritative; README's known-limits text below says so.
+- **Preview doesn't verify the SHA-512** (Apply does, on the whole file); a CDN answering a different file than the
+  Modrinth metadata names would be judged on that file. The CDN files are immutable.
+- **A range past the end is a 500 on cdn.modrinth.com, a 416 on FakeModrinth**: both are a failed read; the reader never
+  asks one (it computes ranges from the total the first answer names).
+- **RW-3's ABANDONED rows carry no reason text in History**: History's reasons come from `last-apply.json`, which RigTune
+  doesn't write at launch (no format change allowed); the status line says why, History says "Not applied".
+- **RW-3's preLaunch count vs the rebuild**: preLaunch judges an enable staged without a mod id (0.1.0-era, an undo of an
+  unreadable jar) by its files only; the rebuild may read its jar's id (`Staging.modIdOf`) and drop it for being loaded
+  elsewhere. Then preLaunch counts it once more than the rebuild drops (the leftover toast says "1 change not applied" and
+  the next rebuild's status line says it was dropped). Rare: 0.1.0 staged mod ids (the real seed has them).
+- **RW-3 compares file names**, not full paths, for "loaded from the op's own target": a jar of the same name loaded from
+  outside the mods folder counts as the target (the group is kept; the helper decides at exit): the safe direction.
+- **RW-3 treats a jar any staged disable turns off** (not only the group's own) as going away, so a re-enable next to a
+  separately staged disable of the loaded copy is kept (the helper's own duplicate check then decides, by group order).
+- **L9 needs Modrinth's data for the disabled jar**: a disabled jar Modrinth doesn't know (not found by SHA-1 among the
+  installed versions) can't be a Modrinth dependency and is ignored; `fabric.mod.json` `depends` on such a mod stay Apply's
+  VersionPins' (which still counts the mod as present: unchanged).
+- **2V's Apply count** counts every selected "Disable" item DisableGuard didn't allow; one outside the mods folder (never
+  offered: the recommender gives no file to such a jar) would be counted too.
+- Local Windows only: `StutterServiceTest.aFinishedBenchmarkReportsItsDhWorldGenCpu` failed once in a full local
+  `:26.2:test` ("Failed to delete temp directory", a Windows file lock; WS-S's test, green in CI). Not debugged (PLAN "Local
+  runs").
+- UNVERIFIED: the L5 read against cdn.modrinth.com inside a running game (the live check ran the same class from a unit
+  test on this PC; the game path is proven against FakeModrinth in CI). AC2H.6 (the seeded E2E `v010-dh-app-reinstalled`)
+  is WS-E's release-tier scenario; it closes there.
 
 ## Docs (for the docs workstream)
-(filled in)
+- README privacy text: "With Modrinth on, Preview reads the start of each listed download's metadata (fabric.mod.json)
+  from Modrinth's CDN (cdn.modrinth.com only, a few hundred KiB at most per file, nothing saved), to show what Apply would
+  refuse. Nothing is downloaded until you press Apply."
+- README known limits: "Preview checks a download's own fabric.mod.json against your installed mods as Apply does; a
+  requirement of a library nested inside a download is only checked by Apply, and when Preview couldn't read a file (Modrinth
+  off, the CDN or a network problem) it says each download is checked again when it arrives."
+- CHANGELOG [0.5.0] Fixed: Preview shows a download Apply would refuse over another mod's version range, with Apply's own
+  reason (L5); Discard pending says when it kept a change already under way (L7); an addition or update that needs a mod
+  being turned off at the next restart is refused (L9); RigTune drops a pending change that can never run (its download
+  gone, or the mod installed another way) at launch, instead of saying it'll be retried (RW-3); History pairs 0.1.0's
+  updates as "Updated <mod>" (RW-4); a change the helper left half done no longer repeats "try 3 of 3" (2V); a refused
+  "Disable" shows in Preview and in Apply's status (2V).
+- DESIGN.md "Preview (0.3)": replace the download-time limit with the L5 paragraph (RangeReader: tail, central directory,
+  entry; caps; allowed origin; Modrinth on; the conservative nesting rule; the disclosure as fallback). "Apply pipeline":
+  the stale-group drop at rebuild (StaleOps) next to `dropQueuedUpdates`; "What earlier Applies staged": staged disables
+  now count as absent for dependencies (L9), not for incompatibilities (L10). "History screen": the held-group wording.
 
 ## Footprint deltas
-(filled in from this branch's CI run against ws-k.md's per-leg baseline)
+Against ws-k.md's per-leg baseline (run 36310249248), from this branch's final CI run 36329157419 (which also carries
+what feat/v0.5.0 merged meanwhile: WS-L1 m1, WS-S early, WS-P2 and WS-T cores, the harness deadlock fix):
+
+| leg | renderThreadInitCpuMs | clientStartedWallMs | workerCpuMs5s | tickHookOnVsReference | v05RenderThreadResolve |
+|---|---|---|---|---|---|
+| 26.2 OpenGL | 110.8 (+28.6) | 41.2 (+4.8) | 181.0 (+45.5) | 1.558 (+0.077) | null |
+| 26.3 OpenGL | 78.6 (−3.6) | 44.4 (+17.4) | 146.0 (−7.2) | 1.441 (−0.305) | null |
+| 26.3 Vulkan | 109.8 (−10.2) | 41.3 (+1.4) | 171.7 (−29.0) | 1.574 (+0.039) | null |
+
+The first push (36322609327, L5 only, before those merges): 89.5 / 33.3 / 150.2 / 1.526, 109.6 / 44.6 / 169.3 / 1.496,
+103.0 / 40.7 / 199.8 / 1.537. Mixed signs within ws-k.md's recorded runner spread (26.2 renderThreadInitCpuMs 63.5-112.9);
+every value inside its budget. WS-H adds no init work: its preLaunch code runs only when `pending.json` exists (never at a
+game test's launch), the L5 classes load on the first preview, and nothing new ticks.
 
 ## CI runs and screenshots looked at
-(filled in)
+- 36322609327 (H1-H3 + a merge): 8/8 jobs green. Downloaded `gametest-screenshots-26.2-OpenGL`, `-26.3-OpenGL`,
+  `-26.3-Vulkan`; looked at `preview-l5-checked` (26.3 Vulkan: Fabric API listed, Mod Menu 21.0.0 refused with the
+  pin's line, no disclosure), `preview-l5-modrinth-off` (26.3 OpenGL: the update listed, the unresolved addition, both
+  notes), `preview-real` (26.2). Footprint JSON of all three legs.
+- 36327062537 (H4-H8): `java` red: `V05HooksTest.theStubsAreIdentityAndNoOps` (the contracts' stub check called
+  `StaleGroups.drop(null, …)`, which now reached FabricLoader); fixed in 4c8a27f0 (nothing is asked while nothing is
+  staged). The game-test legs were green.
+- 36329157419 (H4-H11 + a merge): 8/8 jobs green; 2205 unit tests on each node (3 skipped, 0 failed; `test-reports`).
+  Looked at `preview-l5-checked` (26.2: Mod Menu 20.0.2), `preview-1280x720-scale2` (the canned preview: the disclosure now
+  after the "Modrinth is off" note, fits), and the footprint JSON of the three legs.
+- Local: `:26.2:runProductionClientGameTest -PgametestClasses=PreviewGameTest` under the game-test lock (2026-09-27
+  23:18): green; its `preview-l5-*` screenshots looked at.
 
 ## AC table
-(filled in)
+
+| AC | status | evidence |
+|---|---|---|
+| AC2H.1 (Range reader over fixture jars; right bytes or a fallback; never over the caps; nothing on disk) | verified | `RangeReaderTest` (14), `FabricModJsonTest`; CI 36329157419 java job, both nodes |
+| AC2H.1b (Apply's refusal line in Preview, a clean one without; the disclosure with Modrinth off / Range refused whenever downloads are listed, never otherwise; game-dir hash unchanged; H2 cases unchanged) | verified | `PreviewDownloadChecksTest`, `PreviewDownloadsNoteTest`, `DownloadPlannerTest` H2 cases unchanged; PreviewGameTest `downloadChecks` + `realPreviewWritesNothing` on 3 legs (36329157419) and locally; screenshots above |
+| AC2H.1c (live Range check recorded; requests only to the allowed origin) | verified | "Code-deciding check" and "H1 live run" above (2026-09-27); `RangeReaderTest.anotherOriginIsNeverAsked` |
+| AC2H.2 (L7: the kept group reported; the message differs; a clean discard keeps today's) | verified | `StagingTest.aDiscardThatKeepsAHalfDoneGroupSaysSo`, `aCleanDiscardKeepsTodaysMessage` |
+| AC2H.4 (L9: an addition requiring a mod staged for disabling, pending.json and the same batch, refused with the message; L10 unchanged) | verified | `DownloadPlannerTest` L9 cases (red first), `PreviewDisablesTest` |
+| AC2H.5 (RW-3: both triggers, the half-done group kept, unrelated groups kept; preLaunch counts only runnable ops) | verified | `StaleOpsTest`, `StagingTest` RW-3 cases, `StaleGroupsTest`, `PreLaunchStaleOpsTest` |
+| AC2H.6 (the seeded E2E `v010-dh-app-reinstalled`) | closes in WS-E (release tier) | WS-H's side: the drop, its status line and the History rows are unit-tested on the same instance shape |
+| AC2H.7 (RW-4: four Updated rows instead of eight on the real legacy import) | verified | `LegacyImportRealUpdatesTest` (red first) |
+| AC2V.1 (the held line, never "try 3 of 3") | verified | `HistoryHeldGroupTest` (red first) |
+| AC2V.3 (Preview lists a refused Disable under Not changed; Apply's status counts it) | verified | `PreviewDisablesTest` (refusal cases), `RefusedDisablesTest` |
+| AC2V.4 (a half-done group with a queued build stays; others dropped) | verified (rule from 0.4) | `StagingTest.aHalfDoneGroupWithAQueuedBuildStaysWhileOthersAreDropped`; hand mutation |
+| AC2V.5 (checkUpdate's batch branch alone) | verified | `DownloadPlannerTest` (2); hand mutation |
