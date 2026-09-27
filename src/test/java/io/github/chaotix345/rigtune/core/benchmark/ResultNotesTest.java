@@ -93,6 +93,18 @@ class ResultNotesTest {
 				english(ResultNotes.row(row(32, false, false), false)));
 	}
 
+	// Review (part 1 M4): a Measure pair whose "before" is left out of the trend keeps its numbers with a caveat.
+	@Test
+	void m4AComparisonWithAnExcludedBeforeSaysSo() {
+		BenchmarkRecord plain = TrendFixtures.run("before").build();
+		assertNull(ResultNotes.gainCaveat(plain));
+		assertNull(ResultNotes.gainCaveat(null));
+		assertEquals("The “before” run was the first in a new benchmark world, so this comparison may be off.",
+				english(ResultNotes.gainCaveat(TrendFixtures.run("before").fresh().build())));
+		assertEquals("Distant Horizons was generating terrain during the “before” run, so this comparison may be off.",
+				english(ResultNotes.gainCaveat(TrendFixtures.run("before").dhGenerating().build())));
+	}
+
 	// The table's last column: a pass, a fail, or not measured (no ✘ for a distance that couldn't be measured).
 	@Test
 	void rw5TheTableMarksAnUnmeasuredDistanceWithoutAFail() {

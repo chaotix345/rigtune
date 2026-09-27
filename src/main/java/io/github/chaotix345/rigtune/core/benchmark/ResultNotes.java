@@ -74,6 +74,18 @@ public final class ResultNotes {
 		return suggested ? Text.join(". ", text, Text.of("rigtune.benchmark.row.suggested", "Suggested")) : text;
 	}
 
+	// Review M4: a Measure pair keeps its comparison when its "before" is left out of the trend (a fresh-world or
+	// DH-generating run), with this caveat under it; null when the before counts.
+	public static @Nullable Text gainCaveat(@Nullable BenchmarkRecord before) {
+		if (before == null || !BenchmarkTrend.excluded(before)) {
+			return null;
+		}
+		return Boolean.TRUE.equals(before.context().worldFresh())
+				? Text.of("rigtune.benchmark.gain.caveat.world_fresh", "The “before” run was the first in a new benchmark world, so this comparison may be off.")
+				: Text.of("rigtune.benchmark.gain.caveat.dh_generating",
+						"Distant Horizons was generating terrain during the “before” run, so this comparison may be off.");
+	}
+
 	// The table's last column.
 	public static String mark(PlannerResult.Measurement row) {
 		return row.passed() ? "✔" : row.complete() ? "✘" : "?";

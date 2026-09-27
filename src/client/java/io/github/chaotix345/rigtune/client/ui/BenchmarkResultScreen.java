@@ -381,6 +381,10 @@ public class BenchmarkResultScreen extends Screen {
 					? new Line(Component.translatable("rigtune.benchmark.gain", BenchmarkMath.percent(gain.lowPercent()), BenchmarkMath.percent(gain.avgPercent())),
 							gain.lowPercent() >= 0 ? COLOR_PASS : COLOR_FAIL)
 					: new Line(Component.translatable("rigtune.benchmark.gain.none"), COLOR_LABEL));
+			Text caveat = ResultNotes.gainCaveat(outcome.before());
+			if (caveat != null) {
+				out.add(new Line(Texts.component(caveat), COLOR_WARN));
+			}
 		} else if (outcome.record() != null && BenchmarkRecord.BEFORE.equals(outcome.record().phase())) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.saved_before"), COLOR_LABEL));
 		}

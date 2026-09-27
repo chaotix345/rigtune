@@ -590,6 +590,8 @@
 	"rigtune.benchmark.dh_generating": "Distant Horizons was generating terrain during this run, so these numbers may be low.",
 	"rigtune.benchmark.dh_off": "Measured with Distant Horizons rendering off",
 	"rigtune.benchmark.gain": "Compared with before: 1%% lows %s (avg %s)",
+	"rigtune.benchmark.gain.caveat.dh_generating": "Distant Horizons was generating terrain during the “before” run, so this comparison may be off.",
+	"rigtune.benchmark.gain.caveat.world_fresh": "The “before” run was the first in a new benchmark world, so this comparison may be off.",
 	"rigtune.benchmark.gain.none": "Compared with before: no significant change",
 	"rigtune.benchmark.measured": "Current settings: %s FPS average, %s FPS 1%% low",
 	"rigtune.benchmark.menu.duration": "Tune takes up to 5 minutes, Measure about a minute. Esc cancels.",
