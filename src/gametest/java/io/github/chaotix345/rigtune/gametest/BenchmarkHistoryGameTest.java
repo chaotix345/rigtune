@@ -2,7 +2,6 @@ package io.github.chaotix345.rigtune.gametest;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkConditions;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
@@ -86,10 +85,9 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 		byte[] benchmarks = read(benchmarksFile);
 		byte[] history = read(historyFile);
 		byte[] awareness = read(awarenessFile);
-		boolean network = context.computeOnClient(mc -> ClientSettings.shared(configDir).networkEnabled);
 		int guiScale = context.computeOnClient(mc -> mc.options.guiScale().get());
+		boolean network = GameTestNet.set(context, controller, false);
 		try {
-			context.runOnClient(mc -> ClientSettings.shared(configDir).networkEnabled = false);
 			resize(context, 854, 480, 2);
 			run(context, controller, benchmarksFile);
 		} finally {
@@ -97,10 +95,8 @@ public class BenchmarkHistoryGameTest implements FabricClientGameTest {
 			restore(benchmarksFile, benchmarks);
 			restore(historyFile, history);
 			restore(awarenessFile, awareness);
-			context.runOnClient(mc -> {
-				ClientSettings.shared(configDir).networkEnabled = network;
-				mc.gui.setScreen(new TitleScreen());
-			});
+			GameTestNet.set(context, controller, network);
+			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
 			resize(context, 854, 480, guiScale);
 		}
 		RigTune.LOGGER.info("BenchmarkHistoryGameTest: passed");

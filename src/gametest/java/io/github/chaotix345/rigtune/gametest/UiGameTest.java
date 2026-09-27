@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.gametest;
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ClientSettings;
+import io.github.chaotix345.rigtune.client.SettingsSaver;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.compat.ModMenuIntegration;
 import io.github.chaotix345.rigtune.client.ui.RowFocus;
@@ -407,10 +408,16 @@ public class UiGameTest implements FabricClientGameTest {
 		});
 		ClientSettings saved = ClientSettings.load(configDir);
 		check(saved.networkEnabled && saved.remoteRules && saved.modrinth && saved.startupToast && "CURRENT".equals(saved.benchmarkScene), "defaults restored");
+		// Later classes start from the online report (the fake Modrinth's), not whichever report the rescan published first.
+		context.waitFor(mc -> controller.report() != null && controller.report().online(), 1200);
 	}
 
+	// The click queued the save on SettingsSaver's own thread (RigTuneSettingsScreen.save): wait for that write, then read the
+	// file once. v0.5 ws-ci: a 100-tick poll of the file timed out when a Modrinth outage starved a shared pool (7 attempts,
+	// runs 36240897813 to 36243402401), and a poll's bound is a guess either way.
 	private static void waitForSaved(ClientGameTestContext context, Path configDir, Predicate<ClientSettings> saved, String what) {
-		context.waitFor(mc -> saved.test(ClientSettings.load(configDir)), 100);
+		check(SettingsSaver.shared().flush(10_000), "the settings save finished (" + what + ")");
+		check(saved.test(ClientSettings.load(configDir)), what);
 		RigTune.LOGGER.info("UiGameTest: {}", what);
 	}
 
