@@ -71,7 +71,7 @@ public class ServerLimitsGameTest implements FabricClientGameTest {
 	}
 
 	private static void singleplayer(ClientGameTestContext context, RealController real) {
-		try (TestSingleplayerContext world = context.worldBuilder().create()) {
+		try (TestSingleplayerContext world = GameTestWorlds.create(context)) {
 			world.getConnection().waitForChunksRender();
 			context.waitFor(mc -> real.serverLimits() != null, 200);
 			ServerLimits limits = real.serverLimits();
