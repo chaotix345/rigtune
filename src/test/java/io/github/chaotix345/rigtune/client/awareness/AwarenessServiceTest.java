@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.5/SPEC.md 2W: AW-1 (AC2W.1's unit part; av's test first) and AW-2's listener. A shown hardware notice commits
 // the fingerprint; a later rescan of the same hardware (a power edge, the network toggle, the main Re-scan) keeps it for
@@ -96,6 +97,18 @@ class AwarenessServiceTest {
 		assertNotNull(back, "the driver changed back: a new notice");
 		assertNotEquals(shown, back.key());
 		assertEquals("Your GPU driver changed since last time (25.10.1 → 25.9.1)", back.message().english());
+	}
+
+	// Review L3: the same change reported again before the shown notice's asynchronous commit is written keeps the committed
+	// notice (it doesn't start over as unseen).
+	@Test
+	void theSameChangeReportedAgainKeepsTheCommittedNotice() throws InterruptedException {
+		AwarenessService service = withShownDriverNotice();
+		String key = service.hardwareNotice().key();
+		AwarenessStore.shared(dir).update(Fingerprint.of(rig(OLD))::writeTo);
+		service.afterProbe(rig(NEW));
+		assertEquals(key, service.hardwareNotice().key());
+		assertTrue(service.hardwareCommitted(), "still counted as seen");
 	}
 
 	@Test

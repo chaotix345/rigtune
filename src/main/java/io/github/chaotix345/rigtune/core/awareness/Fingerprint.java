@@ -56,7 +56,8 @@ public record Fingerprint(String gpuVendor, String gpuRenderer, String gpuDriver
 			return null;
 		}
 		long ram = f.get(AwarenessStore.FINGERPRINT_TOTAL_RAM_MB) instanceof JsonPrimitive p && p.isNumber() ? safeLong(p) : -1;
-		return new Fingerprint(vendor, renderer, driver, backend, cpu, ram);
+		// v0.5 Latent 2 (review M1): a fingerprint 0.4 stored from a failed probe holds the placeholder too.
+		return new Fingerprint(vendor, known(renderer), known(driver), backend, known(cpu), ram);
 	}
 
 	// Replaces the fingerprint in awareness.json's root (unknown fields inside it are kept).

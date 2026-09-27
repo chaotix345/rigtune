@@ -195,6 +195,23 @@ class ChangeDetectorTest {
 		assertEquals(NONE, ChangeDetector.compare(unknownCpu, AMD).kind());
 	}
 
+	// Review M1: a fingerprint 0.4 already stored from a failed probe ("unknown" values) reads as no GPU and no CPU, so the
+	// first good 0.5 probe is no change and moves the stored one on silently.
+	@Test
+	void aStoredUnknownFingerprintIsNoChangeAndIsReseededSilently() throws IOException {
+		Path dir = Files.createDirectories(config.resolve("rigtune"));
+		Files.writeString(dir.resolve(AwarenessStore.FILE_NAME), "{\"formatVersion\": 1, \"dismissed\": [], \"acknowledgedRegressions\": [], "
+				+ "\"fingerprint\": {\"gpuVendor\": \"OTHER\", \"gpuRenderer\": \"unknown\", \"gpuDriverRaw\": \"unknown\", \"backend\": \"UNKNOWN\", "
+				+ "\"cpuName\": \"unknown\", \"totalRamMb\": 32768}}", StandardCharsets.UTF_8);
+		AwarenessStore store = AwarenessStore.shared(config);
+		Fingerprint stored = Fingerprint.read(store.read());
+		assertEquals("", stored.gpuRenderer());
+		assertEquals("", stored.gpuDriverRaw());
+		assertEquals("", stored.cpuName());
+		assertEquals(NONE, ChangeDetector.check(store, AMD).kind());
+		assertEquals(AMD, Fingerprint.read(store.read()), "re-seeded from the good probe");
+	}
+
 	@Test
 	void firstRunSeedsSilentlyThenDetects() {
 		AwarenessStore store = AwarenessStore.shared(config);

@@ -90,7 +90,8 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 	// After every hardware probe (RealController.rescan, off the render thread).
 	// v0.5 AW-1 (docs/v0.5/SPEC.md 2W): a NONE against the committed fingerprint keeps a committed notice for the session:
 	// the hardware is still what it shows, within the detector's tolerances (no fingerprint equality test, which RAM noise
-	// would break). A changed-back or new change replaces it; an uncommitted one goes with a NONE as before.
+	// would break). A changed-back or new change replaces it; an uncommitted one goes with a NONE as before. The same change
+	// reported again (its asynchronous commit not written yet) keeps the committed notice (review L3).
 	public void afterProbe(@Nullable HardwareProfile hw) {
 		if (hw == null) {
 			return;
@@ -99,8 +100,11 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 			Fingerprint now = Fingerprint.of(hw);
 			ChangeDetector.Change change = ChangeDetector.check(store, now);
 			Pending shown = hardware;
+			String key = HARDWARE_KEY_PREFIX + now.id();
 			if (change.changed()) {
-				hardware = new Pending(change, now, HARDWARE_KEY_PREFIX + now.id(), new AtomicBoolean());
+				if (shown == null || !shown.committed().get() || !shown.key().equals(key)) {
+					hardware = new Pending(change, now, key, new AtomicBoolean());
+				}
 			} else if (shown == null || !shown.committed().get()) {
 				hardware = null;
 			}
@@ -187,6 +191,12 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 		p.committed().set(true);
 		ChangeDetector.commit(store, p.now());
 		hardware = null;
+	}
+
+	// For the unit tests: whether the current hardware notice counts as seen.
+	boolean hardwareCommitted() {
+		Pending p = hardware;
+		return p != null && p.committed().get();
 	}
 
 	// AW-2: the notices NoticeScreen listed (each init, rebuilds included).
