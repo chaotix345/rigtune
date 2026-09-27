@@ -54,6 +54,10 @@ class LauncherRepairServiceTest {
 	final AtomicReference<Launcher> launcher = new AtomicReference<>(Launcher.MODRINTH_APP);
 	final AtomicInteger rebuilds = new AtomicInteger();
 	final AtomicInteger optIns = new AtomicInteger();
+	final AtomicInteger stagedChanges = new AtomicInteger();
+	// The worker: run in place, or queued until the test runs it (a real worker's timing).
+	final java.util.ArrayDeque<Runnable> queued = new java.util.ArrayDeque<>();
+	volatile boolean queue;
 	final List<String> clipboard = new ArrayList<>();
 	final List<HelperToasts.Toast> toasts = new ArrayList<>();
 	final List<String> warnings = new ArrayList<>();
@@ -102,7 +106,13 @@ class LauncherRepairServiceTest {
 			throw new AssertionError(message, error);
 		});
 		service = new LauncherRepairService(new LauncherRepairService.Env(config, policy::get, launcher::get, () -> journal, this::folder,
-				rebuilds::incrementAndGet, optIns::incrementAndGet, Runnable::run, clipboard::add, toasts::addAll, warnings::add));
+				rebuilds::incrementAndGet, stagedChanges::incrementAndGet, optIns::incrementAndGet, task -> {
+					if (queue) {
+						queued.add(task);
+					} else {
+						task.run();
+					}
+				}, clipboard::add, toasts::addAll, warnings::add));
 	}
 
 	// What a 0.4 Apply staged: the update and a Sodium patch, journaled STAGED.
@@ -169,7 +179,37 @@ class LauncherRepairServiceTest {
 		assertFalse(Files.exists(download));
 		assertEquals(List.of(JournalChange.DISCARDED, JournalChange.DISCARDED),
 				journal.entries().getFirst().changes().stream().map(JournalChange::status).toList());
+		assertEquals(1, stagedChanges.get(), "the controller recounts its staged changes");
 		assertNull(held());
+	}
+
+	// A group RigTune's records show started (here a 0.1.0-0.3.0 failed rollback: the old jar disabled after an attempt,
+	// the download still there) isn't held, so Cancel them leaves it for the next exit to finish; an op staged without an
+	// id (0.1.0's first builds) is cancelled all the same (sameOp).
+	@Test
+	void cancelSkipsAStartedGroupAndMatchesOpsWithoutIds() throws IOException {
+		Path started = TestJars.modJar(mods.resolve("lithium-1.jar"), "lithium");
+		Path startedDownload = TestJars.modJar(mods.resolve("lithium-2.jar" + PendingActions.PENDING_SUFFIX), "lithium");
+		List<Op> startedGroup = PendingActions.group(Op.disableFile(started), Op.enableFile(startedDownload, mods.resolve("lithium-2.jar")))
+				.stream().map(op -> op.withAttempts(1)).toList();
+		Files.move(started, mods.resolve("lithium-1.jar.disabled"));
+		Path idless = TestJars.modJar(mods.resolve("iris.jar" + PendingActions.PENDING_SUFFIX), "iris");
+		Op noId = new Op(PendingActions.Type.ENABLE_FILE, idless.toString(), mods.resolve("iris.jar").toString(), null, null);
+		List<Op> ops = new ArrayList<>(update);
+		ops.addAll(startedGroup);
+		ops.add(noId);
+		ops.add(patch);
+		PendingActions.create(1, mods, config, ops).save(pending);
+		assertNotNull(held());
+		assertEquals("2 mod change(s) from an earlier Apply are waiting: Modrinth App manages this instance's mods.", held().message().english());
+
+		service.heldAction(LauncherRepairService.CANCEL);
+
+		List<Op> left = PendingActions.load(pending).ops();
+		assertEquals(startedGroup.size() + 1, left.size(), left.toString());
+		assertTrue(left.containsAll(startedGroup) && left.contains(patch), left.toString());
+		assertTrue(Files.exists(startedDownload), "the started group's download stays");
+		assertTrue(Files.exists(mods.resolve("iris.jar" + PendingActions.SUPERSEDED_SUFFIX)));
 	}
 
 	@Test
@@ -202,6 +242,15 @@ class LauncherRepairServiceTest {
 				JournalChange.file(JournalChange.DISABLE, "sodium", "sodium-0.7.0.jar", JournalChange.APPLIED, "d", "g").withResultFile("sodium-0.7.0.jar.disabled"),
 				JournalChange.file(JournalChange.ENABLE, "sodium", "sodium-0.7.1.jar", JournalChange.APPLIED, "e", "g"),
 				JournalChange.file(JournalChange.ENABLE, "fastquit", "fastquit.jar", JournalChange.APPLIED, "f", "g2")));
+	}
+
+	// An applied update of another mod still in effect, next to what staged() holds.
+	private void anotherAppliedPair() throws IOException {
+		TestJars.modJar(mods.resolve("lithium-1.jar.disabled"), "lithium");
+		TestJars.modJar(mods.resolve("lithium-2.jar"), "lithium");
+		journal.record("e2", JournalEntry.APPLY, List.of(
+				JournalChange.file(JournalChange.DISABLE, "lithium", "lithium-1.jar", JournalChange.APPLIED, "ld", "lg").withResultFile("lithium-1.jar.disabled"),
+				JournalChange.file(JournalChange.ENABLE, "lithium", "lithium-2.jar", JournalChange.APPLIED, "le", "lg")));
 	}
 
 	// AC4g.2's unit half: only under LAUNCHER and with a finding; Copy list puts the file names only on the clipboard.
@@ -244,6 +293,58 @@ class LauncherRepairServiceTest {
 
 	private static String key(HelperToasts.Toast toast) {
 		return ((TranslatableContents) toast.title().getContents()).getKey() + List.of(((TranslatableContents) toast.title().getContents()).getArgs());
+	}
+
+	// The first screen asks for the held notice first and the repair notice next, with the read on a real worker: the
+	// findings are read by that first read, and the rebuild it asks for shows the repair notice (review item 6).
+	@Test
+	void theFirstAskReadsTheFindingsWithAWorkerThatRunsLater() throws IOException {
+		staged();
+		anotherAppliedPair();
+		queue = true;
+
+		assertNull(service.heldNotice());
+		assertNull(service.repairNotice());
+		assertEquals(1, queued.size(), "one read at a time");
+		queued.poll().run();
+
+		assertEquals(1, rebuilds.get());
+		assertNotNull(service.heldNotice());
+		assertNotNull(service.repairNotice());
+		assertTrue(queued.isEmpty(), "nothing stale, nothing read again: " + queued.size());
+	}
+
+	// Findings not read under PENDING are read once the policy is LAUNCHER, and the rebuild shows the notice.
+	@Test
+	void findingsNotReadUnderPendingAreReadUnderLauncher() throws IOException {
+		staged();
+		anotherAppliedPair();
+		queue = true;
+		policy.set(ModFilesPolicy.PENDING);
+		service.heldNotice();
+		queued.poll().run();
+		assertNotNull(service.heldNotice());
+
+		policy.set(ModFilesPolicy.LAUNCHER);
+		assertNull(service.repairNotice());
+		queued.poll().run();
+
+		assertEquals(2, rebuilds.get());
+		assertNotNull(service.repairNotice());
+	}
+
+	// A jar added, renamed or removed in the mods folder (the player in the launcher) makes the findings stale.
+	@Test
+	void aChangedModsFolderIsReadAgain() throws IOException {
+		appliedPair();
+		assertNull(service.repairNotice());
+		assertNotNull(service.repairNotice());
+
+		Files.delete(mods.resolve("sodium-0.7.0.jar.disabled"));
+		Files.setLastModifiedTime(mods, java.nio.file.attribute.FileTime.fromMillis(Files.getLastModifiedTime(mods).toMillis() + 5_000));
+		service.repairNotice();
+
+		assertNull(service.repairNotice());
 	}
 
 	// AC4d.4's unit half: the leftover toast and WARN wait for the policy; under LAUNCHER the held mod changes get their own.

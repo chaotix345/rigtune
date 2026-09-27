@@ -21,6 +21,8 @@ import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -63,7 +65,9 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 	// (LauncherRepairService.overridePolicy) until WS-L1's detection answers here. Seeded as a 0.4 instance would have
 	// them: an applied update pair still in effect and an added jar (history.json + mods/), and a staged 0.4 file group
 	// (pending.json, its download, its STAGED journal changes). Everything is put back afterwards: pending.json,
-	// history.json, awareness.json, the opt-in, the fixture jars, the network switch.
+	// history.json, awareness.json, the opt-in (then a rebuild), the fixture jars, the toasts, the GUI scale, the network
+	// switch. The fixture jars' names are new at every run, so the repair notice's key, which Dismiss also keeps in
+	// AwarenessService's in-memory session set (no API clears it), can never match anything else.
 	private static void heldAndRepair(V05TestContext v05) {
 		ClientGameTestContext context = v05.context();
 		RealController real = v05.realController();
@@ -78,12 +82,18 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 		byte[] historyBefore = read(history);
 		byte[] awarenessBefore = read(awareness);
 		boolean optIn = real.settings().modFilesByRigTune;
+		int guiScale = context.computeOnClient(mc -> mc.options.guiScale().get());
+		String run = UUID.randomUUID().toString().substring(0, 8);
 		List<Path> made = new ArrayList<>();
 		boolean network = GameTestNet.set(context, real, false);
 		LauncherRepairService.overridePolicy(ModFilesPolicy.LAUNCHER);
 		try {
-			String repairKey = seedRepairRecords(real, made);
+			String repairKey = seedRepairRecords(real, made, run);
 			List<Op> held = seedHeldGroup(real, made, "a");
+			// The staged ops RigTune counts for "restart to apply N" include the seeded group, as after a start with it.
+			context.runOnClient(mc -> real.stagedChanged());
+			context.waitTicks(2);
+			check(restartCount(context, real) == 2, "the seeded group counts in the restart count");
 			openRigTune(context);
 			Notice heldNotice = waitForNotice(context, real, LauncherRepairService.HELD_KEY);
 			check(heldNotice.priority() == NoticePriority.HELD_MOD_CHANGES && !heldNotice.dismissible(), "the held notice: " + heldNotice);
@@ -99,11 +109,11 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 			Notice repair = waitForNotice(context, real, repairKey);
 			check(repair.priority() == NoticePriority.LAUNCHER_REPAIR && repair.dismissible(), "the repair notice: " + repair);
 			String detail = Objects.requireNonNull(repair.detail()).english();
-			check(detail.contains("rigtunetestpair-1.0.jar.disabled") && detail.contains("rigtunetestadded-1.0.jar"), detail);
+			check(detail.contains("rigtunetestpair-" + run + "-1.0.jar.disabled") && detail.contains("rigtunetestadded-" + run + "-1.0.jar"), detail);
 			context.runOnClient(mc -> mc.keyboardHandler.setClipboard(""));
 			context.runOnClient(mc -> real.noticeAction(repairKey, LauncherRepairService.COPY));
 			String copied = context.computeOnClient(mc -> mc.keyboardHandler.getClipboard());
-			check(copied.equals("rigtunetestpair-1.0.jar.disabled"), "Copy list puts the file names only on the clipboard: '" + copied + "'");
+			check(copied.equals("rigtunetestpair-" + run + "-1.0.jar.disabled"), "Copy list puts the file names only on the clipboard: '" + copied + "'");
 			context.runOnClient(mc -> real.dismissNotice(repairKey));
 			check(find(notices(context, real), repairKey) == null, "the repair notice is gone once dismissed");
 
@@ -116,6 +126,10 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 			List<String> statuses = statuses(held);
 			check(statuses.equals(List.of(JournalChange.DISCARDED, JournalChange.DISCARDED)), "the journal marks them DISCARDED: " + statuses);
 			context.waitFor(mc -> find(real.notices(), LauncherRepairService.HELD_KEY) == null, 200);
+			// The controller recounted (on the render thread, after Cancel's worker): an Apply now says nothing waits for a
+			// restart.
+			context.waitTicks(3);
+			check(restartCount(context, real) == 0, "after Cancel them, the restart count no longer counts the cancelled group");
 
 			// AC4d.4: the title screen's leftover toast waits for the policy and says "waiting for your choice"; under RIGTUNE it
 			// is today's.
@@ -134,37 +148,65 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 			RigTune.LOGGER.info("LauncherManagedGameTest: held changes (notice, Cancel them, Let RigTune apply them, the leftover toasts) and the"
 					+ " repair notice (text, Copy list, Dismiss) checked");
 		} finally {
-			LauncherRepairService.overridePolicy(null);
-			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
-			ClientSettings settings = real.settings();
-			settings.modFilesByRigTune = optIn;
-			SettingsSaver.shared().save(settings, config);
-			SettingsSaver.shared().flush(5_000);
+			// The files first: later classes must never see the seeds, whatever fails below.
 			restore(pending, pendingBefore);
 			restore(history, historyBefore);
 			restore(awareness, awarenessBefore);
 			made.forEach(LauncherManagedGameTest::delete);
+			LauncherRepairService.overridePolicy(null);
+			ClientSettings settings = real.settings();
+			settings.modFilesByRigTune = optIn;
+			SettingsSaver.shared().save(settings, config);
+			SettingsSaver.shared().flush(5_000);
+			context.runOnClient(mc -> {
+				mc.gui.toastManager().clear();
+				mc.gui.setScreen(new TitleScreen());
+				real.stagedChanged();
+			});
 			GameTestNet.set(context, real, network);
-			v05.resize(854, 480, 0);
+			v05.resize(854, 480, guiScale);
 		}
 	}
 
 	// An applied update of "rigtunetestpair" still in effect (its old copy disabled, its new one there) and an added
-	// "rigtunetestadded", as 0.1.0-0.4's journal records them. Returns the repair notice's key.
-	private static String seedRepairRecords(RealController real, List<Path> made) {
+	// "rigtunetestadded", as 0.1.0-0.4's journal records them, file names with this run's tag. Returns the repair notice's
+	// key.
+	private static String seedRepairRecords(RealController real, List<Path> made, String run) {
 		Path mods = real.modsDir();
-		jar(mods.resolve("rigtunetestpair-1.0.jar.disabled"), "rigtunetestpair", made);
-		jar(mods.resolve("rigtunetestpair-2.0.jar"), "rigtunetestpair", made);
-		jar(mods.resolve("rigtunetestadded-1.0.jar"), "rigtunetestadded", made);
+		String old = "rigtunetestpair-" + run + "-1.0.jar";
+		String updated = "rigtunetestpair-" + run + "-2.0.jar";
+		String added = "rigtunetestadded-" + run + "-1.0.jar";
+		jar(mods.resolve(old + ".disabled"), "rigtunetestpair", made);
+		jar(mods.resolve(updated), "rigtunetestpair", made);
+		jar(mods.resolve(added), "rigtunetestadded", made);
 		ClientJournal.get().record("gametest-l2-repair-" + UUID.randomUUID(), JournalEntry.APPLY, List.of(
-				JournalChange.file(JournalChange.DISABLE, "rigtunetestpair", "rigtunetestpair-1.0.jar", JournalChange.APPLIED, UUID.randomUUID().toString(),
-						"g-pair").withResultFile("rigtunetestpair-1.0.jar.disabled"),
-				JournalChange.file(JournalChange.ENABLE, "rigtunetestpair", "rigtunetestpair-2.0.jar", JournalChange.APPLIED, UUID.randomUUID().toString(),
-						"g-pair"),
-				JournalChange.file(JournalChange.ENABLE, "rigtunetestadded", "rigtunetestadded-1.0.jar", JournalChange.APPLIED, UUID.randomUUID().toString(),
-						"g-added")));
-		return new LauncherRepair.Findings(List.of(new LauncherRepair.Pair("rigtunetestpair", "rigtunetestpair-1.0.jar.disabled", "rigtunetestpair-2.0.jar")),
-				List.of("rigtunetestadded-1.0.jar"), List.of()).key();
+				JournalChange.file(JournalChange.DISABLE, "rigtunetestpair", old, JournalChange.APPLIED, UUID.randomUUID().toString(), "g-pair")
+						.withResultFile(old + ".disabled"),
+				JournalChange.file(JournalChange.ENABLE, "rigtunetestpair", updated, JournalChange.APPLIED, UUID.randomUUID().toString(), "g-pair"),
+				JournalChange.file(JournalChange.ENABLE, "rigtunetestadded", added, JournalChange.APPLIED, UUID.randomUUID().toString(), "g-added")));
+		return new LauncherRepair.Findings(List.of(new LauncherRepair.Pair("rigtunetestpair", old + ".disabled", updated)), List.of(added), List.of())
+				.key(real.launcher().launcher());
+	}
+
+	// N in the status an Apply of nothing gives ("Restart Minecraft to finish applying N change(s)"), 0 without that part:
+	// the staged changes RealController counts (recounted after pending.json changed: stagedChanged).
+	private static int restartCount(ClientGameTestContext context, RealController real) {
+		Component status = context.computeOnClient(mc -> real.apply(List.of()));
+		return restart(status);
+	}
+
+	private static int restart(Component component) {
+		if (component.getContents() instanceof TranslatableContents t && t.getKey().equals("rigtune.status.restart") && t.getArgs().length == 1
+				&& t.getArgs()[0] instanceof Number n) {
+			return n.intValue();
+		}
+		for (Component sibling : component.getSiblings()) {
+			int found = restart(sibling);
+			if (found > 0) {
+				return found;
+			}
+		}
+		return 0;
 	}
 
 	// A 0.4-staged update of "rigtunetestheld<tag>": pending.json, its download, and its STAGED journal changes.

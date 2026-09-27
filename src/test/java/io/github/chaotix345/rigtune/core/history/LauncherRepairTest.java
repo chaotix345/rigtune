@@ -136,18 +136,23 @@ class LauncherRepairTest {
 		assertEquals(List.of(), findings.disabledOnly());
 	}
 
-	// Dismiss hides the notice until the set of findings changes: the key follows the set, not its order.
+	// Dismiss hides the notice until the set of findings it asks a step for changes: the key follows that set, not its
+	// order, and not what needs nothing in that launcher (added jars; disabled copies outside ATLauncher, pairs in it).
 	@Test
-	void theKeyFollowsTheSetOfFindings() {
-		Findings one = new Findings(List.of(new Pair("a", "a-1.jar.disabled", "a-2.jar"), new Pair("b", "b-1.jar.disabled", "b-2.jar")),
-				List.of("x.jar"), List.of());
-		Findings reordered = new Findings(List.of(new Pair("b", "b-1.jar.disabled", "b-2.jar"), new Pair("a", "a-1.jar.disabled", "a-2.jar")),
-				List.of(), List.of());
-		Findings more = new Findings(List.of(new Pair("a", "a-1.jar.disabled", "a-2.jar")), List.of(), List.of("c.jar.disabled"));
+	void theKeyFollowsTheSetOfFindingsThatNeedAStep() {
+		Pair a = new Pair("a", "a-1.jar.disabled", "a-2.jar");
+		Pair b = new Pair("b", "b-1.jar.disabled", "b-2.jar");
+		Findings one = new Findings(List.of(a, b), List.of("x.jar"), List.of());
+		Findings reordered = new Findings(List.of(b, a), List.of(), List.of());
+		Findings moreDisabled = new Findings(List.of(a, b), List.of(), List.of("c.jar.disabled"));
+		Findings fewer = new Findings(List.of(a), List.of(), List.of());
 
-		assertTrue(one.key().startsWith(LauncherRepair.KEY_PREFIX), one.key());
-		assertEquals(one.key(), reordered.key());
-		assertNotEquals(one.key(), more.key());
+		assertTrue(one.key(Launcher.MODRINTH_APP).startsWith(LauncherRepair.KEY_PREFIX), one.key(Launcher.MODRINTH_APP));
+		assertEquals(one.key(Launcher.MODRINTH_APP), reordered.key(Launcher.MODRINTH_APP));
+		assertEquals(one.key(Launcher.MODRINTH_APP), moreDisabled.key(Launcher.MODRINTH_APP));
+		assertNotEquals(one.key(Launcher.MODRINTH_APP), fewer.key(Launcher.MODRINTH_APP));
+		assertNotEquals(one.key(Launcher.ATLAUNCHER), moreDisabled.key(Launcher.ATLAUNCHER));
+		assertEquals(one.key(Launcher.ATLAUNCHER), fewer.key(Launcher.ATLAUNCHER));
 	}
 
 	@Test

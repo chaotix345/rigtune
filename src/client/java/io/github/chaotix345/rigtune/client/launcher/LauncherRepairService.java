@@ -14,6 +14,7 @@ import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
+import io.github.chaotix345.rigtune.core.history.HistoryUpdates;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.LauncherRepair;
 import io.github.chaotix345.rigtune.core.history.UndoPlanner;
@@ -32,6 +33,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executor;
@@ -43,8 +45,9 @@ import java.util.function.Supplier;
 // docs/v0.5/SPEC.md 4d, 4g (P0.4): the held pending mod changes (HELD_MOD_CHANGES), the repair findings (LAUNCHER_REPAIR)
 // and the title screen's leftover toasts that wait for the policy. Reached only through RealController.v05() (X4); the
 // constructor only keeps references. Files are read on a worker (pending.json and RigTune's own records next to it,
-// history.json, the mods folder); the notices' current() read the last result and the policy, plus a stat of
-// pending.json while something is held. A new result asks for a rebuild, so the screens ask again.
+// history.json, the mods folder); the notices' current(), asked on screen init and rebuild only (never per frame), read
+// the last result, the policy and, under LAUNCHER or PENDING, three stats that tell whether it is stale (the coordinator's
+// X8 ruling). A new result that changes what shows asks for a rebuild, so the screens ask again.
 public final class LauncherRepairService {
 	public static final String HELD_KEY = "held-mod-changes";
 	public static final String CANCEL = "cancel";
@@ -57,19 +60,24 @@ public final class LauncherRepairService {
 	// Game tests only: the policy to use instead of the controller's (null: the controller's).
 	private static volatile @Nullable ModFilesPolicy policyOverride;
 
-	// Everything the service reaches; unit tests build their own.
+	// Everything the service reaches; unit tests build their own. stagedChanged: pending.json was changed here (the
+	// controller recounts its staged changes and rebuilds).
 	record Env(Path configDir, Supplier<ModFilesPolicy> policy, Supplier<Launcher> launcher, Supplier<Journal> journal,
-			Function<Path, UndoPlanner.Folder> folder, Runnable rebuild, Runnable optIn, Executor executor, Consumer<String> clipboard,
-			Consumer<List<HelperToasts.Toast>> toasts, Consumer<String> warn) {
+			Function<Path, UndoPlanner.Folder> folder, Runnable rebuild, Runnable stagedChanged, Runnable optIn, Executor executor,
+			Consumer<String> clipboard, Consumer<List<HelperToasts.Toast>> toasts, Consumer<String> warn) {
 		Path pendingFile() {
 			return PendingActions.defaultPath(configDir);
 		}
+
+		Path modsDir() {
+			return InstanceDirs.modsDirOf(pendingFile());
+		}
 	}
 
-	// held: what the next exit's helper would hold, as of pendingModified (null: no pending.json); findings: null until
-	// wanted (the repair notice is asked under LAUNCHER), as of historyModified.
-	private record State(List<Op> held, @Nullable FileTime pendingModified, LauncherRepair.@Nullable Findings findings,
-			@Nullable FileTime historyModified) {
+	// held: what the next exit's helper would hold; findings: null until wanted (the repair notice is asked under
+	// LAUNCHER). Each as of the modification times it was read at (null: the file isn't there).
+	private record State(List<Op> held, @Nullable FileTime pendingModified, @Nullable FileTime modsModified,
+			LauncherRepair.@Nullable Findings findings, @Nullable FileTime historyModified) {
 	}
 
 	private final @Nullable RealController controller;
@@ -90,26 +98,32 @@ public final class LauncherRepairService {
 		this.env = env;
 	}
 
-	// Made on first use, so the constructor only keeps the controller (contracts: V05Services' skeletons).
+	// Made on first use (after startup), so the constructor only keeps the controller (contracts: V05Services' skeletons).
+	// The policy is read through the ModFilesService resolved here, so a call is ModFilesService.policy() alone, never
+	// V05Services' synchronized getter (the leftover listener asks it each tick while it waits).
 	private Env env() {
 		Env made = env;
 		if (made == null) {
-			RealController real = Objects.requireNonNull(controller);
-			made = new Env(real.configDir(), () -> policy(real), () -> real.launcher().launcher(), ClientJournal::get, ModsFolder::current,
-					real::rebuild, () -> optIn(real), Probes.EXECUTOR, text -> Minecraft.getInstance().keyboardHandler.setClipboard(text),
-					LauncherRepairService::show, RigTune.LOGGER::warn);
-			env = made;
+			synchronized (this) {
+				made = env;
+				if (made == null) {
+					RealController real = Objects.requireNonNull(controller);
+					ModFilesService files = real.v05().modFiles();
+					made = new Env(real.configDir(), () -> {
+						ModFilesPolicy forced = policyOverride;
+						return forced != null ? forced : files.policy();
+					}, () -> real.launcher().launcher(), ClientJournal::get, ModsFolder::current, real::rebuild, real::stagedChanged,
+							() -> optIn(real), Probes.EXECUTOR, text -> Minecraft.getInstance().keyboardHandler.setClipboard(text),
+							LauncherRepairService::show, RigTune.LOGGER::warn);
+					env = made;
+				}
+			}
 		}
 		return made;
 	}
 
 	public static void overridePolicy(@Nullable ModFilesPolicy policy) {
 		policyOverride = policy;
-	}
-
-	private static ModFilesPolicy policy(RealController controller) {
-		ModFilesPolicy forced = policyOverride;
-		return forced != null ? forced : controller.modFiles();
 	}
 
 	// "Let RigTune apply them": what the settings row's "Let RigTune change them anyway" does (settings.json through
@@ -136,7 +150,7 @@ public final class LauncherRepairService {
 		if (policy == ModFilesPolicy.RIGTUNE) {
 			return null;
 		}
-		State current = current();
+		State current = current(policy);
 		if (current == null || current.held().isEmpty()) {
 			return null;
 		}
@@ -166,9 +180,10 @@ public final class LauncherRepairService {
 		}
 	}
 
-	// Under the apply lock, with what the helper would hold now: those ops leave pending.json with their groups, their
-	// downloads become .rigtune-superseded and their journal changes DISCARDED (Staging's unstage-by-op-id path). A group
-	// RigTune's records show half done isn't held (ApplyExecutor.held), so it is never cancelled here.
+	// Under the apply lock, with what the helper would hold now (ApplyExecutor.held: never a group RigTune's records show
+	// half done): those ops leave pending.json, matched by sameOp (an op 0.1.0 staged without an id included), their
+	// downloads become .rigtune-superseded unless a kept op still uses them, and their journal changes DISCARDED, as
+	// Staging's unstage path does. Then the controller recounts its staged changes and rebuilds.
 	void cancelHeld() {
 		Path pendingFile = env().pendingFile();
 		Staging staging = new Staging(env().configDir(), pendingFile, List.of(), env().journal().get());
@@ -178,35 +193,52 @@ public final class LauncherRepairService {
 				return;
 			}
 			if (Files.isRegularFile(pendingFile)) {
-				List<String> ids = ApplyExecutor.held(PendingActions.load(pendingFile), pendingFile).stream()
-						.filter(Objects::nonNull).map(Op::id).filter(Objects::nonNull).toList();
-				List<Op> dropped = staging.unstageLocked(ids);
+				PendingActions plan = PendingActions.load(pendingFile);
+				List<Op> held = ApplyExecutor.held(plan, pendingFile);
+				List<Op> kept = new ArrayList<>();
+				List<Op> dropped = new ArrayList<>();
+				for (Op op : plan.ops()) {
+					(op != null && held.stream().anyMatch(h -> h != null && h.sameOp(op)) ? dropped : kept).add(op);
+				}
+				if (!dropped.isEmpty()) {
+					if (kept.isEmpty()) {
+						Files.deleteIfExists(pendingFile);
+					} else {
+						plan.withOps(kept).save(pendingFile);
+					}
+					Path mods = env().modsDir();
+					for (Op op : dropped) {
+						if (kept.stream().noneMatch(k -> k != null && op.from() != null && op.from().equals(k.from()))) {
+							PendingActions.retireDownload(op, mods);
+						}
+					}
+					List<String> ids = dropped.stream().map(Op::id).filter(Objects::nonNull).toList();
+					Journal journal = env().journal().get();
+					if (!ids.isEmpty() && journal.exists()) {
+						journal.updateExisting(entries -> HistoryUpdates.discard(entries, ids));
+					}
+				}
 				RigTune.LOGGER.info("RigTune: cancelled {} held mod change operation(s)", dropped.size());
 			}
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.warn("RigTune: could not cancel the held mod changes", e);
 		}
 		refreshNow();
-		env().rebuild().run();
+		env().stagedChanged().run();
 	}
 
 	// ---- LAUNCHER_REPAIR (4g)
 
 	// Render thread: only under LAUNCHER, and only while a finding needs a step in this launcher. Dismissed by its key,
-	// which changes with the set of findings.
+	// which changes with the set of findings that need one.
 	public @Nullable Notice repairNotice() {
-		if (env().policy().get() != ModFilesPolicy.LAUNCHER) {
+		ModFilesPolicy policy = env().policy().get();
+		if (policy != ModFilesPolicy.LAUNCHER) {
 			return null;
 		}
-		findingsWanted = true;
-		State current = current();
-		if (current != null && current.findings() == null) {
-			refresh();
-			return null;
-		}
+		State current = current(policy);
 		LauncherRepair.Findings findings = current == null ? null : current.findings();
-		Launcher launcher = env().launcher().get();
-		return findings == null ? null : repairNotice(findings, launcher);
+		return findings == null ? null : repairNotice(findings, env().launcher().get());
 	}
 
 	// The notice itself, or null when nothing needs a step in this launcher (also the A11y walk's canned one).
@@ -214,8 +246,8 @@ public final class LauncherRepairService {
 		if (!LauncherRepair.actionable(findings, launcher)) {
 			return null;
 		}
-		return new Notice(findings.key(), NoticePriority.LAUNCHER_REPAIR, LauncherRepair.message(launcher), LauncherRepair.detail(findings, launcher),
-				List.of(new NoticeAction(COPY, Text.of("rigtune.repair.copy", "Copy list"))), true);
+		return new Notice(findings.key(launcher), NoticePriority.LAUNCHER_REPAIR, LauncherRepair.message(launcher),
+				LauncherRepair.detail(findings, launcher), List.of(new NoticeAction(COPY, Text.of("rigtune.repair.copy", "Copy list"))), true);
 	}
 
 	public void repairAction(String actionId) {
@@ -227,12 +259,18 @@ public final class LauncherRepairService {
 
 	// ---- The state, read on a worker
 
-	// The last result, or null while none is ready; a refresh starts when there's none, or when pending.json (Discard,
-	// Undo, a drop at a rebuild) or, for the findings, history.json changed since. Until it's done the last result stays
-	// (a refresh that changes what shows asks for a rebuild). Two stats, only under LAUNCHER or PENDING.
-	private @Nullable State current() {
+	// The last result, or null while none is ready. A refresh starts when there's none; when pending.json (Discard, Undo, a
+	// drop at a rebuild) or the mods folder changed since, or, for the findings, history.json; and under LAUNCHER while the
+	// findings haven't been read. Until it's done the last result stays (a refresh that changes what shows asks for a
+	// rebuild).
+	private @Nullable State current(ModFilesPolicy policy) {
+		if (policy == ModFilesPolicy.LAUNCHER) {
+			findingsWanted = true;
+		}
 		State current = state;
-		if (current == null || !Objects.equals(current.pendingModified(), modified(env().pendingFile()))
+		if (current == null || findingsWanted && current.findings() == null
+				|| !Objects.equals(current.pendingModified(), modified(env().pendingFile()))
+				|| !Objects.equals(current.modsModified(), modified(env().modsDir()))
 				|| current.findings() != null && !Objects.equals(current.historyModified(), modified(Journal.file(env().configDir())))) {
 			refresh();
 		}
@@ -245,6 +283,11 @@ public final class LauncherRepairService {
 				try {
 					State before = state;
 					State after = refreshNow();
+					// The findings were wanted while this read was already under way (the first screen asks for the held notice
+					// first): read again rather than leave them unread until the next ask.
+					if (after != null && findingsWanted && after.findings() == null) {
+						after = refreshNow();
+					}
 					boolean shows = after != null && (!after.held().isEmpty() || after.findings() != null && !after.findings().isEmpty());
 					if (after != null && (before == null ? shows
 							: !before.held().equals(after.held()) || !Objects.equals(before.findings(), after.findings()))) {
@@ -260,12 +303,13 @@ public final class LauncherRepairService {
 	private @Nullable State refreshNow() {
 		try {
 			Path pendingFile = env().pendingFile();
-			FileTime modified = modified(pendingFile);
-			List<Op> held = modified == null ? List.of() : ApplyExecutor.held(PendingActions.load(pendingFile), pendingFile);
+			boolean wanted = findingsWanted;
+			FileTime pending = modified(pendingFile);
+			FileTime mods = modified(env().modsDir());
 			FileTime history = modified(Journal.file(env().configDir()));
-			LauncherRepair.Findings findings = !findingsWanted ? null
-					: LauncherRepair.find(env().journal().get().entries(), env().folder().apply(InstanceDirs.modsDirOf(pendingFile)));
-			State fresh = new State(held, modified, findings, history);
+			List<Op> held = pending == null ? List.of() : ApplyExecutor.held(PendingActions.load(pendingFile), pendingFile);
+			LauncherRepair.Findings findings = !wanted ? null : LauncherRepair.find(env().journal().get().entries(), env().folder().apply(env().modsDir()));
+			State fresh = new State(held, pending, mods, findings, history);
 			state = fresh;
 			return fresh;
 		} catch (IOException | RuntimeException e) {
@@ -274,9 +318,9 @@ public final class LauncherRepairService {
 		}
 	}
 
-	private static @Nullable FileTime modified(Path file) {
+	private static @Nullable FileTime modified(Path path) {
 		try {
-			return Files.isRegularFile(file) ? Files.getLastModifiedTime(file) : null;
+			return Files.exists(path) ? Files.getLastModifiedTime(path) : null;
 		} catch (IOException e) {
 			return null;
 		}
@@ -287,8 +331,10 @@ public final class LauncherRepairService {
 	// leftoverOps: the staged ops preLaunch found, some in mod-file groups. Whether those are retried at the next exit or
 	// held for the player's choice depends on the policy, so the WARN and the toasts wait for it, in this service's own
 	// END_CLIENT_TICK listener: registered here on first need (never at init, never on RigTuneClient.onTick's timed path),
-	// returning at once while nothing waits (one volatile read, no allocation).
+	// returning at once while nothing waits (one volatile read, no allocation), and while the policy is PENDING reading
+	// ModFilesService.policy() alone. Its footprint keys come with the post-Wave-B checkpoint (SPEC 1h).
 	public void leftoverAtTitle(int leftoverOps) {
+		env();
 		waitForPolicy(leftoverOps);
 		if (listening.compareAndSet(false, true)) {
 			ClientTickEvents.END_CLIENT_TICK.register(minecraft -> tickLeftover());

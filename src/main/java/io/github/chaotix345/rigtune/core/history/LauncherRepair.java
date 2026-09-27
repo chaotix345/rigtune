@@ -41,12 +41,16 @@ public final class LauncherRepair {
 			return pairs.isEmpty() && added.isEmpty() && disabledOnly.isEmpty();
 		}
 
-		// The notice's key: Dismiss hides it until the set of pairs and disabled copies changes (awareness.json's dismissed
-		// ids). Added jars need nothing done, so they don't change it.
-		public String key() {
+		// The notice's key in this launcher: Dismiss hides it until the set of findings it asks a step for changes (what
+		// actionable() counts: the pairs, or ATLauncher's disabled copies; awareness.json's dismissed ids). Added jars need
+		// nothing done, so they don't change it.
+		public String key(Launcher launcher) {
 			TreeSet<String> parts = new TreeSet<>();
-			pairs.forEach(p -> parts.add("pair:" + p.oldFile() + ">" + p.newFile()));
-			disabledOnly.forEach(d -> parts.add("disabled:" + d));
+			if (launcher == Launcher.ATLAUNCHER) {
+				disabledOnly.forEach(d -> parts.add("disabled:" + d));
+			} else {
+				pairs.forEach(p -> parts.add("pair:" + p.oldFile() + ">" + p.newFile()));
+			}
 			try {
 				byte[] hash = MessageDigest.getInstance("SHA-256").digest(String.join("\n", parts).getBytes(StandardCharsets.UTF_8));
 				return KEY_PREFIX + HexFormat.of().formatHex(hash, 0, 8);

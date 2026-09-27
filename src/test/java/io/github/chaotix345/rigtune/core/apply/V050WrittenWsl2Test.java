@@ -11,6 +11,7 @@ import io.github.chaotix345.rigtune.core.RepoFiles;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.awareness.AwarenessStore;
 import io.github.chaotix345.rigtune.core.history.LauncherRepair;
+import io.github.chaotix345.rigtune.core.launcher.Launcher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -62,7 +63,7 @@ class V050WrittenWsl2Test {
 		assertEquals(1, held.results().size(), held.toString());
 		AwarenessStore awareness = AwarenessStore.shared(config);
 		String key = new LauncherRepair.Findings(List.of(new LauncherRepair.Pair("e2e-pair", "e2e-pair-1.0.0.jar.disabled", "e2e-pair-1.1.0.jar")),
-				List.of(), List.of()).key();
+				List.of(), List.of()).key(Launcher.MODRINTH_APP);
 		assertTrue(awareness.dismiss(key));
 
 		Map<String, String> uuids = new LinkedHashMap<>();

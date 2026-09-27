@@ -41,6 +41,20 @@ class UnfinishedGroupsDurableTest {
 		}
 	}
 
+	// A file that can't be forced is still moved into place (logged): the record matters more than the force.
+	@Test
+	void aFailedForceStillWritesTheRecord() throws IOException {
+		Path target = dir.resolve("rigtune").resolve("unfinished-groups.json");
+
+		UnfinishedGroups.writeDurably(target, "{\"groups\":[]}", (path, folder) -> {
+			if (!folder) {
+				throw new IOException("no fsync here");
+			}
+		});
+
+		assertEquals("{\"groups\":[]}", Files.readString(target));
+	}
+
 	// The real syncer on this OS: a folder that can't be opened as a channel (Windows) is no error.
 	@Test
 	void theRealSyncerWritesTheRecord() throws IOException {

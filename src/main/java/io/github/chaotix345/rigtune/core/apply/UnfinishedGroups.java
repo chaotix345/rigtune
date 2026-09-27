@@ -197,7 +197,13 @@ public final class UnfinishedGroups {
 		Path tmp = Files.createTempFile(dir, target.getFileName() + ".", ".tmp");
 		try {
 			Files.writeString(tmp, content, StandardCharsets.UTF_8);
-			syncer.force(tmp, false);
+			try {
+				syncer.force(tmp, false);
+			} catch (IOException e) {
+				// Still moved: a record that may not survive a power cut is better than none, and a kill then leaves the safe
+				// side (a group with no record is dropped as installed another way, never renamed again).
+				ApplyHelper.log("Could not force " + LogSafe.name(target) + " to disk: " + LogSafe.error(e, target));
+			}
 			for (int attempt = 1; ; attempt++) {
 				try {
 					replace(tmp, target);

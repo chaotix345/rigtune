@@ -437,6 +437,51 @@ class ApplyExecutorTest {
 		assertEquals(null, result.results().getFirst().resultPath());
 	}
 
+	// The moved file vanished after a failed rollback try: it says so, not the try's error.
+	@Test
+	void aRollbackWhoseFileVanishedAfterAFailedTrySaysSo() throws IOException {
+		Path old = Files.writeString(mods.resolve("sodium-0.7.0.jar"), "old");
+		Path download = TestJars.modJar(mods.resolve("sodium-0.7.1.jar.rigtune-pending"), "sodium");
+		Path disabled = mods.resolve("sodium-0.7.0.jar.disabled");
+		ApplyExecutor vanishing = new ApplyExecutor(1, 1, (from, to) -> {
+			if (from.equals(download)) {
+				throw new IOException("locked");
+			}
+			if (from.equals(disabled)) {
+				Files.delete(disabled);
+				throw new IOException("locked too");
+			}
+			Files.move(from, to);
+		});
+
+		ApplyResult result = vanishing.run(plan(PendingActions.group(Op.disableFile(old), Op.enableFile(download, mods.resolve("sodium-0.7.1.jar")))
+				.toArray(Op[]::new)), pending);
+
+		assertEquals("Rollback failed: sodium-0.7.0.jar.disabled was moved or deleted meanwhile, so it couldn't be put back after enabling"
+				+ " sodium-0.7.1.jar failed", result.results().getFirst().message());
+	}
+
+	// Someone put the old jar back themselves: nothing left to roll back, and the name isn't "taken".
+	@Test
+	void aRollbackOfAFileAlreadyBackSaysSo() throws IOException {
+		Path old = Files.writeString(mods.resolve("sodium-0.7.0.jar"), "old");
+		Path download = TestJars.modJar(mods.resolve("sodium-0.7.1.jar.rigtune-pending"), "sodium");
+		ApplyExecutor restored = new ApplyExecutor(1, 1, (from, to) -> {
+			if (from.equals(download)) {
+				Files.move(mods.resolve("sodium-0.7.0.jar.disabled"), old);
+				throw new IOException("locked");
+			}
+			Files.move(from, to);
+		});
+
+		ApplyResult result = restored.run(plan(PendingActions.group(Op.disableFile(old), Op.enableFile(download, mods.resolve("sodium-0.7.1.jar")))
+				.toArray(Op[]::new)), pending);
+
+		assertEquals("Not rolled back: sodium-0.7.0.jar was already back under its own name after enabling sodium-0.7.1.jar failed",
+				result.results().getFirst().message());
+		assertEquals(null, result.results().getFirst().resultPath());
+	}
+
 	@Test
 	void aRollbackOntoATakenNameKeepsItsMessage() throws IOException {
 		Path old = Files.writeString(mods.resolve("sodium-0.7.0.jar"), "old");

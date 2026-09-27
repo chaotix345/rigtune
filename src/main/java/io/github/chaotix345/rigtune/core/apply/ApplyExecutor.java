@@ -787,10 +787,11 @@ public final class ApplyExecutor {
 			}
 		}
 		boolean stuck = Files.exists(undo.moved());
-		if (!stuck && last == null) {
-			// docs/v0.5/SPEC.md 2V (ws-g3 L8): nothing is left to put back, and no retry failed.
-			return new OpResult(op, Status.FAILED, "Rollback failed: " + undo.moved().getFileName()
-					+ " was moved or deleted meanwhile, so it couldn't be put back after " + reason);
+		if (!stuck) {
+			// docs/v0.5/SPEC.md 2V (ws-g3 L8): nothing is left under the group's name, whether or not a try failed first.
+			return new OpResult(op, Status.FAILED, Files.exists(undo.back())
+					? "Not rolled back: " + undo.back().getFileName() + " was already back under its own name after " + reason
+					: "Rollback failed: " + undo.moved().getFileName() + " was moved or deleted meanwhile, so it couldn't be put back after " + reason);
 		}
 		return new OpResult(op, Status.FAILED, "Rollback failed (" + (last == null ? "the original name is taken" : last)
 				+ "); " + undo.moved().getFileName() + " was left as it is after " + reason
