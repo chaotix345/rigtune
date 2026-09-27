@@ -238,6 +238,11 @@ abstract class ForwardingController implements RigTuneController {
 	}
 
 	@Override
+	public int profileCodeLeftOut(String id) {
+		return delegate.profileCodeLeftOut(id);
+	}
+
+	@Override
 	public void renameProfile(String id, String name) {
 		delegate.renameProfile(id, name);
 	}

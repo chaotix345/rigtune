@@ -140,6 +140,21 @@ class ProfileStoreTest {
 				"vanilla.entityDistanceScaling", "1.0"), store().profile(id).settings());
 	}
 
+	// docs/v0.5/SPEC.md PF-5 (AC2P.5): a DH LOD radius inside DH's own range (up to 4096) survives a profiles.json round trip;
+	// one outside it doesn't.
+	@Test
+	void pf5ARadiusOf1024SurvivesARoundTripAnd5000DoesNot() {
+		String radius = "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius";
+		String far = ProfileStore.newProfileId();
+		String tooFar = ProfileStore.newProfileId();
+		assertTrue(store().saveProfile(new Profile(far, "Far", null, ProfileStore.SOURCE_SAVED, null, null, null, Map.of(radius, "1024",
+				"vanilla.renderDistance", "12"))));
+		assertTrue(store().saveProfile(new Profile(tooFar, "Too far", null, ProfileStore.SOURCE_SAVED, null, null, null, Map.of(radius, "5000",
+				"vanilla.renderDistance", "12"))));
+		assertEquals(Map.of(radius, "1024", "vanilla.renderDistance", "12"), store().profile(far).settings());
+		assertEquals(Map.of("vanilla.renderDistance", "12"), store().profile(tooFar).settings());
+	}
+
 	@Test
 	void theActiveProfileKeepsTheEntryThatMadeItActive() {
 		Profile saved = profile(ProfileStore.newProfileId(), "Evening", ProfileStore.SOURCE_SAVED);

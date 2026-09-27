@@ -19,6 +19,7 @@ import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.FormattedCharSequence;
 import org.jspecify.annotations.Nullable;
 
@@ -195,7 +196,11 @@ public class ProfilesScreen extends Screen {
 			status = Component.translatable("rigtune.profile.status.nothing_to_share");
 		} else {
 			minecraft.keyboardHandler.setClipboard(code);
-			status = Component.translatable("rigtune.profile.status.copied", Texts.component(view.name()), code.length());
+			MutableComponent copied = Component.translatable("rigtune.profile.status.copied", Texts.component(view.name()), code.length());
+			// v0.5 PF-5 (WS-P): a value a code can't carry (a DH radius above 512) is left out; the status says how many.
+			int leftOut = controller.profileCodeLeftOut(view.id());
+			status = leftOut == 0 ? copied : copied.append(" ").append(leftOut == 1 ? Component.translatable("rigtune.profile.status.not_carried_one")
+					: Component.translatable("rigtune.profile.status.not_carried", leftOut));
 		}
 	}
 

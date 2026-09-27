@@ -5,6 +5,7 @@ import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
+import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
@@ -225,6 +226,18 @@ class ProfileTemplatesTest {
 		// A key the profile doesn't hold is never added by a clamp.
 		assertFalse(ProfileTemplates.clamp(Map.of(FPS, "120"), rules(), hw.build(), List.of(), snapshot, Goal.BALANCED).values()
 				.containsKey(RD));
+	}
+
+	// docs/v0.5/SPEC.md PF-5 (AC2P.5): a saved profile's switch goes through clamp(), which keeps a DH radius inside DH's own
+	// range (a fourth gate beside the three the audit found) and drops one outside it.
+	@Test
+	void pf5ClampKeepsA1024Radius() {
+		String radius = "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius";
+		Fixtures.Hw hw = rigs().get("userRig180Hz");
+		SettingsSnapshot snapshot = ProfileFixtures.snapshot(List.of("sodium", "distanthorizons"), false);
+		List<InstalledMod> mods = Fixtures.mods("sodium", "distanthorizons");
+		assertEquals("1024", ProfileTemplates.clamp(Map.of(radius, "1024"), rules(), hw.build(), mods, snapshot, Goal.BALANCED).values().get(radius));
+		assertFalse(ProfileTemplates.clamp(Map.of(radius, "5000"), rules(), hw.build(), mods, snapshot, Goal.BALANCED).values().containsKey(radius));
 	}
 
 	private static RulesDocument rulesWithSection() throws IOException {
