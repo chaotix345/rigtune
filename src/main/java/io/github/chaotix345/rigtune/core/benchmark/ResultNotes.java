@@ -25,9 +25,9 @@ public final class ResultNotes {
 		String list = rds.stream().map(String::valueOf).collect(Collectors.joining(", "));
 		return rds.size() == 1
 				? Text.of("rigtune.benchmark.not_measured.distance",
-						"? Render distance %s couldn't be measured: its terrain hadn't loaded in time, so it counts as neither a pass nor a fail.", list)
+						"? Render distance %s couldn't be measured: its terrain hadn't loaded in time.", list)
 				: Text.of("rigtune.benchmark.not_measured.distances",
-						"? Render distances %s couldn't be measured: their terrain hadn't loaded in time, so they count as neither a pass nor a fail.", list);
+						"? Render distances %s couldn't be measured: their terrain hadn't loaded in time.", list);
 	}
 
 	// RW-9: the player plays with Distant Horizons rendering, the run measured without it (the rules cap vanilla render

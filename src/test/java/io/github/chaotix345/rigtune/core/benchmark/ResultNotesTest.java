@@ -26,11 +26,11 @@ class ResultNotesTest {
 	void rw5UnmeasuredDistancesAreNamed() {
 		assertNull(ResultNotes.unmeasured(List.of(row(17, true, true), row(24, false, true))));
 		String one = english(ResultNotes.unmeasured(List.of(row(17, true, true), row(31, true, true), row(32, false, false))));
-		assertEquals("? Render distance 32 couldn't be measured: its terrain hadn't loaded in time, so it counts as neither a pass nor a fail.", one);
+		assertEquals("? Render distance 32 couldn't be measured: its terrain hadn't loaded in time.", one);
 		String two = english(ResultNotes.unmeasured(List.of(row(20, false, false), row(12, true, true), row(16, false, false))));
-		assertEquals("? Render distances 16, 20 couldn't be measured: their terrain hadn't loaded in time, so they count as neither a pass nor a fail.",
+		assertEquals("? Render distances 16, 20 couldn't be measured: their terrain hadn't loaded in time.",
 				two);
-		assertFalse(one.contains("fail.") && one.contains("✘"), one);
+		assertFalse(one.contains("fail") || one.contains("✘"), one);
 	}
 
 	// RW-15 (AC2B.9): the stutter line's companion says how many steps the capture left out.
