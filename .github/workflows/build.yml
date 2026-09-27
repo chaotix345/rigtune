@@ -17,9 +17,15 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 
+# Network (docs/v0.5/design/ws-ci.md): in the java job and the game-test legs one "Resolve dependencies" step downloads
+# everything, retried (tools/ci/retry.sh); every later Gradle step runs --offline, and the tests run with no network but
+# loopback (tools/ci/offline.sh). The game tests' Modrinth is a local fake (build.gradle's ModrinthFixture), their rules a
+# local fixture (RulesFixtureServer). Runner images are pinned: ubuntu-latest moves to 26.04 (another Mesa and Xvfb) in
+# November 2026.
 jobs:
   java:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: gradle/actions/wrapper-validation@v6
@@ -27,6 +33,33 @@ jobs:
         with:
           distribution: microsoft
           java-version: '25'
+      # The Gradle home (distribution, dependencies, Loom's Minecraft files) is cached; main and the integration branch
+      # write it, every other ref reads theirs or main's.
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feat/v0.5.0' }}
+      # The released jars the E2E drivers compile against, kept under their pinned sha256s.
+      - uses: actions/cache@v6
+        with:
+          path: build/e2e-old
+          key: e2e-old-8294d04a6b67e76d-67275e232fe4de9f-5717f65cb90c71ae
+      - name: Resolve dependencies (network)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          tools/ci/retry.sh ./gradlew --no-daemon prefetchDependencies
+          old=build/e2e-old
+          mkdir -p "$old"
+          for spec in 'v0.1.0 rigtune-0.1.0.jar' 'v0.2.0 rigtune-0.2.0+mc26.2.jar' 'v0.3.0 rigtune-0.3.0+mc26.2.jar'; do
+            set -- $spec
+            [ -s "$old/$2" ] || tools/ci/retry.sh gh release download "$1" -R "$GITHUB_REPOSITORY" -p "$2" -D "$old" --clobber
+          done
+          sha256sum -c - <<EOF
+          8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950  $old/rigtune-0.1.0.jar
+          67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9  $old/rigtune-0.2.0+mc26.2.jar
+          5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9  $old/rigtune-0.3.0+mc26.2.jar
+          EOF
       # Stonecutter rewrites src/ when the active Minecraft version is switched. Commits must be in the state
       # of the VCS version, 26.2 (settings.gradle vcsVersion, stonecutter.gradle active), with canonical comments.
       - name: Check sources are in the committed 26.2 state
@@ -36,34 +69,26 @@ jobs:
           set -eu
           grep -qF "vcsVersion = '$VCS_MC'" settings.gradle || { echo "settings.gradle: vcsVersion must be '$VCS_MC'"; exit 1; }
           grep -qxF "stonecutter.active '$VCS_MC'" stonecutter.gradle || { echo "stonecutter.gradle: active version must be '$VCS_MC'; run ./gradlew \"Reset active project\" and commit"; exit 1; }
-          ./gradlew "Reset active project"
+          # No daemon before the no-network step: a daemon left running keeps Gradle cache locks it could only be asked
+          # over loopback to release, which a build in another network namespace can't reach.
+          ./gradlew --no-daemon --offline "Reset active project"
           git diff --exit-code || { echo "Sources are in a switched state; run ./gradlew \"Reset active project\" and commit"; exit 1; }
-      # Builds and unit-tests every Minecraft version (versions/<mc>/); check also compiles each version's game tests.
+      # Builds and unit-tests every Minecraft version (versions/<mc>/), with no network; check also compiles each
+      # version's game tests.
       - name: Build and test
-        run: ./gradlew build
+        run: tools/ci/offline.sh ./gradlew --no-daemon --offline build
       # The self-update E2E drivers (tools/e2e) aren't part of `build`: compile them here so an API change that breaks
       # them shows up on the push, not in Phase 5. The undo driver compiles against these sources; the self-update driver
-      # against each released jar it drives on the E2E's version, 26.2 (downloaded from the GitHub release, sha256-pinned).
+      # against each released jar it drives on the E2E's version, 26.2 (from the GitHub releases, sha256-pinned above).
       - name: Compile the E2E drivers
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
           old=build/e2e-old
-          mkdir -p "$old"
-          gh release download v0.1.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.1.0.jar' -D "$old" --clobber
-          gh release download v0.2.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.2.0+mc26.2.jar' -D "$old" --clobber
-          gh release download v0.3.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.3.0+mc26.2.jar' -D "$old" --clobber
-          sha256sum -c - <<EOF
-          8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950  $old/rigtune-0.1.0.jar
-          67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9  $old/rigtune-0.2.0+mc26.2.jar
-          5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9  $old/rigtune-0.3.0+mc26.2.jar
-          EOF
-          ./gradlew compileE2eUndoJava
-          ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.1.0.jar"
-          ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.2.0+mc26.2.jar"
-          ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.2.jar"
-          ./gradlew :26.2:compileE2eDowngradeJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.2.jar"
+          ./gradlew --offline compileE2eUndoJava
+          ./gradlew --offline :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.1.0.jar"
+          ./gradlew --offline :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.2.0+mc26.2.jar"
+          ./gradlew --offline :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.2.jar"
+          ./gradlew --offline :26.2:compileE2eDowngradeJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.2.jar"
           # The released-jar compatibility harness (docs/v0.4/SPEC.md AC3.3): 0.3.0's own classes read the files 0.4 writes.
           python3 tools/e2e/compat030.py --old-jar "$old/rigtune-0.3.0+mc26.2.jar"
       - name: Upload jars
@@ -104,9 +129,8 @@ jobs:
   client-gametest:
     name: client game tests (${{ matrix.mc }}, ${{ matrix.backend }})
     needs: gametest-matrix
-    # Pinned: ubuntu-latest moves to 26.04 (another Mesa and Xvfb) in November 2026.
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.gametest-matrix.outputs.matrix) }}
@@ -122,13 +146,52 @@ jobs:
           distribution: microsoft
           java-version: '25'
       - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feat/v0.5.0' }}
+      - name: Runner
+        id: runner
+        run: |
+          echo "image $ImageOS $ImageVersion; $(lscpu | sed -n 's/^Model name: *//p'); $(nproc) CPUs" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "lavapipe-key=lavapipe-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+      # lavapipe: the .debs are cached per runner image, so a warm leg installs without the Ubuntu archive.
+      - uses: actions/cache@v6
+        if: matrix.backend == 'Vulkan'
+        with:
+          path: ~/lavapipe-debs
+          key: ${{ steps.runner.outputs.lavapipe-key }}
       - name: Install the Mesa Vulkan driver (lavapipe)
         if: matrix.backend == 'Vulkan'
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers
-      # If the game finds no graphics backend it opens a blocking error dialog, so a hang means a timeout here.
+        run: |
+          set -eu
+          debs=~/lavapipe-debs
+          if ls "$debs"/*.deb >/dev/null 2>&1; then
+            sudo dpkg -i "$debs"/*.deb
+          else
+            tools/ci/retry.sh sudo apt-get -o Acquire::Retries=3 update
+            tools/ci/retry.sh sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends --download-only mesa-vulkan-drivers
+            sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers
+            mkdir -p "$debs"
+            cp /var/cache/apt/archives/*.deb "$debs"/ 2>/dev/null || true
+          fi
+          dpkg-query -W mesa-vulkan-drivers
+      - name: Resolve dependencies (network)
+        run: >-
+          tools/ci/retry.sh ./gradlew --no-daemon ":${{ matrix.mc }}:prefetchDependencies" ":${{ matrix.mc }}:downloadAssets"
+          ":${{ matrix.mc }}:gametestModrinthCatalog" ":${{ matrix.mc }}:jar" ":${{ matrix.mc }}:gametestJar"
+      # With no network but loopback: RigTune gets Modrinth and its rules from local fixtures, and Minecraft's own
+      # services (accounts, Realms) fail at once, the same way every run. If the game finds no graphics backend it opens a
+      # blocking error dialog, so a hang means a timeout here; at 13 min the game's JVM prints every thread's stack and
+      # locks into this log first (run 36235561444 hung with none).
       - name: Client game tests
-        timeout-minutes: 20
-        run: ./gradlew ":${{ matrix.mc }}:runProductionClientGameTest" --stacktrace
+        timeout-minutes: 15
+        run: |
+          set -eu
+          ( sleep 780; for p in $(pgrep -f fabric.client.gametest || true); do
+              if [ "$(cat "/proc/$p/comm" 2>/dev/null)" = java ]; then kill -QUIT "$p" || true; fi
+            done ) >/dev/null 2>&1 &
+          watcher=$!
+          trap 'kill "$watcher" 2>/dev/null || true' EXIT
+          tools/ci/offline.sh ./gradlew --no-daemon --offline ":${{ matrix.mc }}:runProductionClientGameTest" --stacktrace
       # A leg whose backend fails falls back to the other one and would still pass: fail it instead.
       # The line is written at start-up; a run that crosses midnight UTC has it in the rotated
       # log (logs/<date>-<n>.log.gz), not latest.log, so both are searched.
@@ -138,6 +201,13 @@ jobs:
           { cat "$logs/latest.log"; for f in "$logs"/*.log.gz; do [ -e "$f" ] && zcat "$f"; done; } \
             | grep -F "Using graphics backend ${{ matrix.backend }}" \
             || { echo "::error::the game's logs don't name the ${{ matrix.backend }} backend"; exit 1; }
+      # The game's Modrinth lookups went to the local fake, and it answered every one.
+      - name: Check the fake Modrinth
+        run: |
+          log="versions/${{ matrix.mc }}/build/gametest-modrinth/requests.jsonl"
+          [ -s "$log" ] || { echo "::error::the fake Modrinth logged no request"; exit 1; }
+          echo "$(wc -l < "$log") requests to the fake Modrinth"
+          if grep -E '"status": ?5[0-9][0-9]' "$log"; then echo "::error::the fake Modrinth answered with a server error"; exit 1; fi
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v7
@@ -154,6 +224,8 @@ jobs:
             versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs/
             versions/${{ matrix.mc }}/build/run/productionClientGameTest/crash-reports/
             versions/${{ matrix.mc }}/build/run/productionClientGameTest/hs_err_pid*.log
+            versions/${{ matrix.mc }}/build/gametest-modrinth/requests.jsonl
+            versions/${{ matrix.mc }}/build/gametest-modrinth/fake-modrinth.out
           if-no-files-found: ignore
       # The footprint guard's numbers (docs/v0.4/SPEC.md 10): FootprintGameTest's footprint-<mc>-<backend>.json.
       - name: Upload footprint numbers
@@ -165,19 +237,19 @@ jobs:
           if-no-files-found: ignore
 
   python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - name: Run rules updater tests
-        run: python -m unittest discover -s tools/tests -v
+        run: tools/ci/offline.sh python -m unittest discover -s tools/tests -v
       - name: Run self-update E2E harness tests
-        run: python -m unittest discover -s tools/e2e/tests -v
+        run: tools/ci/offline.sh python -m unittest discover -s tools/e2e/tests -v
 
   rules-consistency:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - name: Compare generated rules files
@@ -192,7 +264,7 @@ jobs:
 
   # rules-v1.json is what 0.1.x clients download: it must stay the safe v1 projection of the v2 rules.
   rules-v1-compat:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
