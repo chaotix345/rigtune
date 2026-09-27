@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -48,6 +49,7 @@ public final class StutterService {
 
 	private final RealController controller;
 	private final Path configDir;
+	private final Executor ioExecutor;
 	private @Nullable StutterStore store;
 
 	private record Analysis(StutterMonitor.@Nullable Capture capture, StutterReport report, List<StutterAdvisor.Fired> advice,
@@ -79,8 +81,14 @@ public final class StutterService {
 	private final AtomicInteger sessionsEnded = new AtomicInteger();
 
 	public StutterService(RealController controller, Path configDir) {
+		this(controller, configDir, Probes.EXECUTOR);
+	}
+
+	// ioExecutor: where stutter.json's ordered chain runs (StutterServiceTest drains its own).
+	StutterService(RealController controller, Path configDir, Executor ioExecutor) {
 		this.controller = controller;
 		this.configDir = configDir;
+		this.ioExecutor = ioExecutor;
 	}
 
 	private synchronized StutterStore store() {
@@ -147,7 +155,7 @@ public final class StutterService {
 	}
 
 	private synchronized void io(Runnable task) {
-		io = io.handle((ignored, error) -> null).thenRunAsync(() -> safely(task), Probes.EXECUTOR);
+		io = io.handle((ignored, error) -> null).thenRunAsync(() -> safely(task), ioExecutor);
 	}
 
 	public String summary() {
@@ -205,7 +213,6 @@ public final class StutterService {
 			return;
 		}
 		live = null;
-		savedState = Saved.DONE;
 		Machine machine = machine(minecraft);
 		int gen = generation;
 		boolean aroundBenchmark = session.aroundBenchmark;
@@ -218,8 +225,10 @@ public final class StutterService {
 					return;
 				}
 				JsonStateFile.Saved result = store().add(a.report());
+				// SD-3: known only once this session is in `saved`; an unsaved one leaves the saved summaries to loadSaved().
 				if (result == JsonStateFile.Saved.OK && gen == generation) {
 					saved = a;
+					savedState = Saved.DONE;
 				}
 				RigTune.LOGGER.info("Stutter Doctor: session saved ({}): {} spikes in {} s of gameplay, {}, GC offset {} ms", result,
 						a.report().spikes().total(), Math.round(a.report().gameplaySeconds()), phases(copy), a.report().facts().gcOffsetMs());
@@ -352,10 +361,14 @@ public final class StutterService {
 			return;
 		}
 		savedState = Saved.LOADING;
+		// SD-4: a Clear pressed while this load waits in the queue wins.
+		int gen = generation;
 		io(() -> {
 			try {
 				StutterReport latest = store().latest();
-				saved = latest == null ? null : new Analysis(null, latest, adviceFor(latest.advice(), controller.rules()), null);
+				if (gen == generation) {
+					saved = latest == null ? null : new Analysis(null, latest, adviceFor(latest.advice(), controller.rules()), null);
+				}
 			} catch (RuntimeException e) {
 				RigTune.LOGGER.warn("Stutter Doctor: could not read the saved sessions", e);
 			} finally {
