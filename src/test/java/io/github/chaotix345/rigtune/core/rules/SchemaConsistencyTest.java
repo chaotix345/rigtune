@@ -56,6 +56,9 @@ class SchemaConsistencyTest {
 			    "profileTemplateFields": u.PROFILE_TEMPLATE_FIELDS, "profileTemplateFacts": u.PROFILE_TEMPLATE_FACTS,
 			    "jvmFeature": u.JVM_FEATURE, "stutterFeature": u.STUTTER_FEATURE, "jvmFlagPrefix": u.JVM_FLAG_PREFIX,
 			    "managedProfileKeys": u.MANAGED_PROFILE_KEYS, "profileTemplateIds": u.PROFILE_TEMPLATE_IDS,
+			    "stutterFixFeature": u.STUTTER_FIX_FEATURE, "stutterFixFields": u.STUTTER_FIX_FIELDS,
+			    "stutterFixSetFields": u.STUTTER_FIX_SET_FIELDS, "stutterFixKeys": u.STUTTER_FIX_KEYS,
+			    "stutterFixConditionKeys": u.STUTTER_FIX_CONDITION_KEYS,
 			})))
 			""";
 	private static final Map<String, Class<?>> V1_RULES = Map.of(
@@ -144,9 +147,11 @@ class SchemaConsistencyTest {
 	@Test
 	void conditionKeysMatch() {
 		assertEquals(fields(io.github.chaotix345.rigtune.v010.core.rules.Condition.class), set("v1ConditionKeys"));
-		// v0.4: the stutter keys are Condition fields too, but the updater allows them only inside stutterAdvice.
+		// v0.4: the stutter keys are Condition fields too, but the updater allows them only inside stutterAdvice; v0.5's
+		// causeSpikesAtLeast only inside stutterFixes[].evidence.
 		Set<String> v2AndStutter = new TreeSet<>(set("v2ConditionKeys"));
 		v2AndStutter.addAll(set("stutterConditionKeys"));
+		v2AndStutter.addAll(set("stutterFixConditionKeys"));
 		assertEquals(new TreeSet<>(ConditionAdapterFactory.KNOWN_KEYS.keySet()), v2AndStutter);
 		Set<String> overlap = new TreeSet<>(set("v2ConditionKeys"));
 		overlap.retainAll(set("stutterConditionKeys"));
@@ -240,6 +245,20 @@ class SchemaConsistencyTest {
 				ShareKeys.V1.stream().filter(k -> !k.shareable()).map(ShareKeys.Key::key).collect(java.util.stream.Collectors.toSet()));
 		assertEquals(Arrays.stream(ProfileTemplates.TemplateId.values()).map(ProfileTemplates.TemplateId::id)
 				.collect(java.util.stream.Collectors.toSet()), set("profileTemplateIds"));
+	}
+
+	// v0.5 C20 (SPEC C2): the updater's stutterFixes shape is FixSpec's and RulesDocument.StutterFix/FixSet's, and
+	// causeSpikesAtLeast is in no other key set.
+	@Test
+	void stutterFixKeysMatchTheUpdater() {
+		assertEquals(io.github.chaotix345.rigtune.core.stutter.FixSpec.FEATURE, python.get("stutterFixFeature").getAsString());
+		assertEquals(io.github.chaotix345.rigtune.core.stutter.FixSpec.KEYS, set("stutterFixKeys"));
+		assertEquals(fields(RulesDocument.StutterFix.class), set("stutterFixFields"));
+		assertEquals(fields(RulesDocument.FixSet.class), set("stutterFixSetFields"));
+		assertEquals(Set.of("causeSpikesAtLeast"), set("stutterFixConditionKeys"));
+		for (String other : List.of("v1ConditionKeys", "v2ConditionKeys", "stutterConditionKeys")) {
+			Assertions.assertFalse(set(other).contains("causeSpikesAtLeast"), other);
+		}
 	}
 
 	@Test
