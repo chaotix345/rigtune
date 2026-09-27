@@ -5,8 +5,11 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.UnfinishedGroups.Rename;
 import io.github.chaotix345.rigtune.core.history.UndoPlan.Action;
 import io.github.chaotix345.rigtune.core.history.UndoPlan.Item;
+import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
+import io.github.chaotix345.rigtune.core.launcher.LauncherModText;
 import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Text;
+import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -39,6 +42,9 @@ import java.util.function.Supplier;
 // - A change whose file a still-staged op moves at the next exit (the first of two Undo last in one start brings it
 //   back) waits for the restart, and Undo last stops at its entry rather than undoing an older one (audit M3).
 // - RigTune's own jar is never undone, nor is a staged update of it dropped (review L3).
+// - v0.5 (docs/v0.5/SPEC.md 4c): where the launcher keeps its own record of the mods (State.modFiles LAUNCHER or PENDING),
+//   no applied mod file is changed back: the launcher's steps say how to do it there. Staged ones are still cancelled.
+//   RW-14: an applied disable without a resultFile was no rename of RigTune's; it is skipped, never guessed.
 public final class UndoPlanner {
 	public static final String ALL = "all";
 	static final String RIGTUNE = "rigtune";
@@ -73,6 +79,9 @@ public final class UndoPlanner {
 	static final String WAITS_STAGED = "It needs changes that are still waiting for a restart; restart once, then undo it";
 	static final String WAITS_ENTRY = "Part of this apply waits for a restart, so none of it is undone yet; restart once, then undo it";
 	static final String WAITS_PARTLY = "It was partly applied at the last exit; restart once so it finishes, then undo it";
+	static final String LAUNCHER_MANAGED = "This instance's mods are managed by %s: change it there";
+	static final String LAUNCHER_PENDING = "Checking which launcher manages this instance's mods; undo it once that's known";
+	static final String NOT_DISABLED_BY_RIGTUNE = "RigTune didn't disable %s (it was already gone)";
 	private static final Set<String> WAITING = Set.of("rigtune.undo.reason.waits_restart", "rigtune.undo.reason.waits_staged",
 			"rigtune.undo.reason.waits_entry", "rigtune.undo.reason.waits_partly");
 	// The Undo screen's text as rigtune.undo.item.* / rigtune.undo.reason.* keys with the English above (docs/v0.3/SPEC.md
@@ -109,10 +118,15 @@ public final class UndoPlanner {
 			return null;
 		}
 
-		// v0.5 (docs/v0.5/SPEC.md 4c): who changes the instance's mod files. RIGTUNE is 0.4's behaviour; WS-L1's policy
-		// skip reads it.
+		// v0.5 (docs/v0.5/SPEC.md 4c): who changes the instance's mod files. RIGTUNE is 0.4's behaviour; under LAUNCHER and
+		// PENDING applied mod-file changes are left to the launcher.
 		default ModFilesPolicy modFiles() {
 			return ModFilesPolicy.RIGTUNE;
+		}
+
+		// The launcher the skip reason names (null: not known yet).
+		default @Nullable LauncherInfo launcher() {
+			return null;
 		}
 	}
 
@@ -660,6 +674,14 @@ public final class UndoPlanner {
 		if (byGroup.isEmpty()) {
 			return;
 		}
+		// v0.5 (docs/v0.5/SPEC.md 4c, RW-2): the launcher keeps its own record of the mods, so none of them is renamed back.
+		ModFilesPolicy policy = b.state.modFiles();
+		if (policy.launcherManages()) {
+			Text reason = policy == ModFilesPolicy.PENDING ? Text.of("rigtune.undo.reason.launcher_managed.pending", LAUNCHER_PENDING)
+					: Text.of("rigtune.undo.reason.launcher_managed", LAUNCHER_MANAGED, LauncherModText.nameOrYours(b.state.launcher()));
+			byGroup.values().forEach(group -> group.forEach(l -> b.skip(l, reason)));
+			return;
+		}
 		List<Content> contents = new ArrayList<>();
 		Map<String, Content> sim = new LinkedHashMap<>();
 		for (String name : new TreeSet<>(folder.files())) {
@@ -739,6 +761,21 @@ public final class UndoPlanner {
 		netOps(contents, sim, accepted, folder.dir(), group, b);
 	}
 
+	// v0.5 (docs/v0.5/SPEC.md 4c): for an item skipped because the launcher keeps the mods, the kind of that launcher's steps
+	// that change it back there (LauncherInfo.modStepsKey): "disable" for a jar RigTune enabled, "enable" for one it turned
+	// off. Null for any other item, and under PENDING (no launcher to give steps for yet).
+	public static @Nullable String launcherStepsKind(UndoPlan.Item item) {
+		if (!(item.reasonText() instanceof Text.Translatable reason) || !"rigtune.undo.reason.launcher_managed".equals(reason.key())
+				|| !(item.descriptionText() instanceof Text.Translatable what)) {
+			return null;
+		}
+		return switch (what.key()) {
+			case "rigtune.undo.item.enable" -> "disable";
+			case "rigtune.undo.item.disable" -> "enable";
+			default -> null;
+		};
+	}
+
 	// The staged mod-file ops this undo leaves in pending.json.
 	private static List<Op> liveFileOps(List<Op> pending, Set<String> discarded) {
 		return pending.stream()
@@ -766,11 +803,8 @@ public final class UndoPlanner {
 	private static String waitingFile(List<Located> group, Set<String> moving) {
 		for (Located l : group) {
 			JournalChange c = l.change();
-			if (!JournalChange.ENABLE.equals(c.action())) {
-				String disabled = c.resultFile() != null ? c.resultFile() : c.file() + DISABLED_SUFFIX;
-				if (moving.contains(disabled)) {
-					return disabled;
-				}
+			if (!JournalChange.ENABLE.equals(c.action()) && c.resultFile() != null && moving.contains(c.resultFile())) {
+				return c.resultFile();
 			}
 			if (moving.contains(c.file())) {
 				return c.file();
@@ -821,7 +855,12 @@ public final class UndoPlanner {
 			moved.put(l, content);
 			return null;
 		}
-		String disabled = c.resultFile() != null ? c.resultFile() : file + DISABLED_SUFFIX;
+		// RW-14: 0.2+ helpers record the result of every rename and the legacy import works out 0.1.0's, so a disable without
+		// one was no rename of RigTune's (the jar was already gone); a <file>.disabled now is someone else's.
+		if (c.resultFile() == null) {
+			return Text.of("rigtune.undo.reason.not_disabled_by_rigtune", NOT_DISABLED_BY_RIGTUNE, file);
+		}
+		String disabled = c.resultFile();
 		if (!sim.containsKey(disabled)) {
 			return Text.of("rigtune.undo.reason.file_gone", FILE_GONE, disabled);
 		}

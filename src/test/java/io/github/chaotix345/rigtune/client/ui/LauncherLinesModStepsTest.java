@@ -1,9 +1,11 @@
 package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.core.Fixtures;
+import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.jvm.JvmReport;
 import io.github.chaotix345.rigtune.core.launcher.Launcher;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
+import io.github.chaotix345.rigtune.core.launcher.LauncherModText;
 import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
@@ -13,6 +15,7 @@ import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.model.TierResult;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
 import io.github.chaotix345.rigtune.core.report.LauncherModAdvice;
@@ -82,6 +85,25 @@ class LauncherLinesModStepsTest {
 		List<Recommendation> rows = advised(ModFilesPolicy.LAUNCHER, prism);
 		assertEquals("In Prism Launcher: right-click this instance → Edit... → Mods → select it → Check for Updates.", line(rows.get(2), prism),
 				"RigTune's own update is an ordinary update there");
+	}
+
+	// 4c: an Undo item the launcher keeps gets the launcher's own steps to change it back there.
+	@Test
+	void undoStepsForASkippedItem() {
+		LauncherInfo app = LauncherInfo.of(Launcher.MODRINTH_APP);
+		Text reason = Text.of("rigtune.undo.reason.launcher_managed", "This instance's mods are managed by %s: change it there",
+				LauncherModText.nameOrYours(app));
+		UndoPlan.Item added = UndoPlan.Item.of(Text.of("rigtune.undo.item.enable", "Enable %s", "lithium.jar"), UndoPlan.Action.SKIP, reason, false,
+				List.of("c1"), List.of());
+		UndoPlan.Item turnedOff = UndoPlan.Item.of(Text.of("rigtune.undo.item.disable", "Disable %s", "indium.jar"), UndoPlan.Action.SKIP, reason, false,
+				List.of("c2"), List.of());
+		assertEquals("In the Modrinth App: this instance → Content → select it → Disable.", LauncherLines.undoStepsLine(added, app).getString());
+		assertEquals("In the Modrinth App: this instance → Content → filter Disabled → select it → Enable.",
+				LauncherLines.undoStepsLine(turnedOff, app).getString());
+		assertNull(LauncherLines.undoStepsLine(added, LauncherInfo.UNKNOWN));
+		UndoPlan.Item gone = UndoPlan.Item.of(Text.of("rigtune.undo.item.enable", "Enable %s", "x.jar"), UndoPlan.Action.SKIP,
+				Text.of("rigtune.undo.reason.file_gone", "%s is no longer in the mods folder", "x.jar"), false, List.of("c3"), List.of());
+		assertNull(LauncherLines.undoStepsLine(gone, app));
 	}
 
 	@Test

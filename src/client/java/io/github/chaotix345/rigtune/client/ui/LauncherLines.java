@@ -1,5 +1,7 @@
 package io.github.chaotix345.rigtune.client.ui;
 
+import io.github.chaotix345.rigtune.core.history.UndoPlan;
+import io.github.chaotix345.rigtune.core.history.UndoPlanner;
 import io.github.chaotix345.rigtune.core.jvm.JvmReport;
 import io.github.chaotix345.rigtune.core.launcher.LauncherAdvice;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
@@ -48,6 +50,19 @@ final class LauncherLines {
 	// or an unknown one).
 	static @Nullable Component modStepsLine(Recommendation recommendation, LauncherInfo launcher) {
 		String kind = LauncherModAdvice.kindOf(recommendation);
+		String steps = kind == null ? null : launcher.modStepsKey(kind);
+		Text name = LauncherModText.launcherName(launcher);
+		if (steps == null || name == null) {
+			return null;
+		}
+		return Component.translatable("rigtune.launcher.advice", Texts.component(name), Component.translatable(steps));
+	}
+
+	// v0.5 (docs/v0.5/SPEC.md 4c): for an Undo item skipped because the launcher keeps the mod files, "In <launcher>: <steps>"
+	// to change it back there (its disable steps for a jar RigTune enabled, its enable steps for one it turned off). Null
+	// for any other item, and where no launcher is named.
+	static @Nullable Component undoStepsLine(UndoPlan.Item item, LauncherInfo launcher) {
+		String kind = UndoPlanner.launcherStepsKind(item);
 		String steps = kind == null ? null : launcher.modStepsKey(kind);
 		Text name = LauncherModText.launcherName(launcher);
 		if (steps == null || name == null) {
