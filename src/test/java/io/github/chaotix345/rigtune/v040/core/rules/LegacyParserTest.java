@@ -29,7 +29,7 @@ class LegacyParserTest {
 	// docs/v0.5/SPEC.md "Compatibility promise" (0.4.x), AC2S.4, AC5.2: what the release revision R adds over r16 for 0.4.0.
 	// (The same list as LegacyRulesParseTest's.)
 	static final List<String> ADVICE_ADDED_SINCE_R16 = List.of();
-	static final List<String> STUTTER_ADVICE_ADDED_SINCE_R16 = List.of();
+	static final List<String> STUTTER_ADVICE_ADDED_SINCE_R16 = List.of("stutter-chunks-loading-tag");
 
 	private static String bundled() throws IOException {
 		try (InputStream in = RulesLoader.class.getResourceAsStream(RulesLoader.BUNDLED_RESOURCE)) {

@@ -58,7 +58,7 @@ class SchemaConsistencyTest {
 			    "managedProfileKeys": u.MANAGED_PROFILE_KEYS, "profileTemplateIds": u.PROFILE_TEMPLATE_IDS,
 			    "stutterFixFeature": u.STUTTER_FIX_FEATURE, "stutterFixFields": u.STUTTER_FIX_FIELDS,
 			    "stutterFixSetFields": u.STUTTER_FIX_SET_FIELDS, "stutterFixKeys": u.STUTTER_FIX_KEYS,
-			    "stutterFixConditionKeys": u.STUTTER_FIX_CONDITION_KEYS,
+			    "stutterFixConditionKeys": u.STUTTER_FIX_CONDITION_KEYS, "stutterMapKeys": u.STUTTER_MAP_KEYS,
 			})))
 			""";
 	private static final Map<String, Class<?>> V1_RULES = Map.of(
@@ -259,6 +259,16 @@ class SchemaConsistencyTest {
 		for (String other : List.of("v1ConditionKeys", "v2ConditionKeys", "stutterConditionKeys")) {
 			Assertions.assertFalse(set(other).contains("causeSpikesAtLeast"), other);
 		}
+	}
+
+	// v0.5 L2 (AC2S.2): the updater's cause and tag vocabularies are exactly the Attributor's, so a tag the client already
+	// evaluates (0.4.0's chunksLoading) can't be missing from the rules again, and the rules can't name one it doesn't know.
+	@Test
+	void stutterVocabulariesMatchTheAttributor() {
+		JsonObject maps = python.getAsJsonObject("stutterMapKeys");
+		assertEquals(new TreeSet<>(io.github.chaotix345.rigtune.core.stutter.Attributor.CAUSES), strings(maps.get("stutterShareAtLeast")));
+		assertEquals(new TreeSet<>(io.github.chaotix345.rigtune.core.stutter.Attributor.TAGS), strings(maps.get("stutterTaggedShareAtLeast")));
+		assertEquals(Set.of("stutterShareAtLeast", "stutterTaggedShareAtLeast"), maps.keySet());
 	}
 
 	@Test

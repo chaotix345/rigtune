@@ -50,8 +50,8 @@ class LegacyRulesParseTest {
 		RulesDocument rules = RulesLoader.loadBundled();
 		assertEquals(List.of("max_fps", "balanced", "quality", "battery", "recording"),
 				rules.profileTemplates.templates.stream().map(t -> t.id).toList());
-		assertEquals(List.of("ram-stutter-gc-heap", "stutter-gc-explicit", "stutter-sodium-defer", "stutter-dh-threads", "stutter-chunk-loading"),
-				rules.stutterAdvice.stream().map(a -> a.id).toList());
+		assertEquals(List.of("ram-stutter-gc-heap", "stutter-gc-explicit", "stutter-sodium-defer", "stutter-dh-threads", "stutter-chunk-loading",
+				"stutter-chunks-loading-tag"), rules.stutterAdvice.stream().map(a -> a.id).toList());
 		rules.stutterAdvice.forEach(a -> assertEquals(List.of("stutter-doctor"), a.requires, a.id));
 	}
 

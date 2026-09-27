@@ -278,7 +278,7 @@ AdviceRules the Stutter Doctor evaluates against a session's measured facts (doc
 | field | type | meaning |
 |---|---|---|
 | stutterShareAtLeast | object: cause → whole percent | the share of the lost time each cause claimed: `gc`, `chunkLoad`, `chunkBuild`, `tick`, `render`, `unknown` |
-| stutterTaggedShareAtLeast | object: tag → whole percent | the share of spikes carrying each tag (claims no time): `worldSave`, `dh`, `cpuContention`, `afterTeleport`, `movingFast` |
+| stutterTaggedShareAtLeast | object: tag → whole percent | the share of spikes carrying each tag (claims no time): `worldSave`, `dh`, `cpuContention`, `afterTeleport`, `chunksLoading`, `movingFast`. `chunksLoading` (chunks loaded within 250 ms of the spike) is evaluated from 0.4.0 on and accepted by the updater from v0.5 |
 | gcFullPausesAtLeast / gcStallsAtLeast / gcExplicitPausesAtLeast | int ≥ 0 | full collections (not System.gc()), allocation stalls, System.gc() pauses in the session |
 | liveSetPercentAtLeast | int 0-100 | live data after an old/full collection, as a share of the maximum heap |
 | heapRaiseRoomMbAtLeast | int ≥ 0 | room to raise the heap: min(RAM/2, RAM − 4096) − heap, in MB |

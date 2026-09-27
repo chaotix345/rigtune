@@ -12,6 +12,42 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import update_rules as ur
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
+REPO = Path(__file__).resolve().parent.parent.parent
+
+
+def sample_knowledge(**sections):
+    knowledge = json.loads((FIXTURES / "knowledge_sample.json").read_text(encoding="utf-8"))
+    knowledge.update(sections)
+    return knowledge
+
+
+def repo_json(*parts):
+    return json.loads(REPO.joinpath(*parts).read_text(encoding="utf-8"))
+
+
+def repo_content(knowledge):
+    """knowledge's full content with the repository's generated data (as check_rules_v1 rebuilds it offline)."""
+    v2 = repo_json("rules", "rules-v2.json")
+    upstream = {m["slug"]: m["upstream"] for m in v2["mods"]}
+    mods = [dict(m, upstream=upstream[m["slug"]]) for m in knowledge["mods"]]
+    return ur.assemble_content(knowledge, mods, v2["availability"], v2["upstream"])
+
+
+def stutter_advice(**fields):
+    rule = {"id": "s", "requires": ["stutter-doctor"], "kind": "info", "impact": "low", "title": "T", "text": "t",
+            "when": {"stutterTaggedShareAtLeast": {"chunksLoading": 60}}}
+    rule.update(fields)
+    return rule
+
+
+class Base(unittest.TestCase):
+    def assert_valid(self, knowledge):
+        ur.validate_knowledge(knowledge)
+
+    def assert_invalid(self, fragment, knowledge):
+        with self.assertRaises(ur.KnowledgeError) as e:
+            ur.validate_knowledge(knowledge)
+        self.assertIn(fragment, str(e.exception))
 
 
 def v2_doc(revision, mods=()):
@@ -82,6 +118,82 @@ class RevisionPinTests(unittest.TestCase):
             self.assertEqual(written + [bundled["revision"]], [18, 18, 18])
             self.assertEqual(ur.main(argv + ["--revision", "17"]), 1, "below the files' revision")
             self.assertEqual(json.loads((rules / "rules-v2.json").read_text(encoding="utf-8"))["revision"], 18)
+
+
+# L2 (AC2S.2): the "chunks loading" tag, which 0.4.0 already evaluates (Attributor.TAGS), is rules vocabulary inside the
+# Stutter Doctor's sections and refused everywhere else.
+class ChunksLoadingTagTests(Base):
+    TAG = {"stutterTaggedShareAtLeast": {"chunksLoading": 60}}
+
+    def test_accepted_in_stutter_advice(self):
+        self.assert_valid(sample_knowledge(stutterAdvice=[stutter_advice()]))
+        self.assert_valid(sample_knowledge(stutterAdvice=[stutter_advice(when={"stutterTaggedShareAtLeast": {"chunksLoading": "60"},
+                                                                               "spikesPerMinuteAtLeast": 20})]))
+
+    def test_its_share_is_a_whole_percentage(self):
+        self.assert_invalid("chunksLoading must be a whole percentage",
+                            sample_knowledge(stutterAdvice=[stutter_advice(when={"stutterTaggedShareAtLeast": {"chunksLoading": 101}})]))
+
+    def test_refused_in_main_list_advice(self):
+        knowledge = sample_knowledge()
+        knowledge["advice"].append({"id": "x", "when": dict(self.TAG), "title": "T", "text": "t", "kind": "info"})
+        self.assert_invalid("a Stutter Doctor key, allowed only inside stutterAdvice", knowledge)
+
+    def test_refused_in_a_setting(self):
+        knowledge = sample_knowledge()
+        knowledge["settings"].append({"key": "vanilla.renderDistance", "max": 8, "when": dict(self.TAG), "requires": ["x"], "v1": False})
+        self.assert_invalid("a Stutter Doctor key, allowed only inside stutterAdvice", knowledge)
+
+    def test_refused_in_a_mod_rule(self):
+        knowledge = sample_knowledge()
+        knowledge["mods"][0]["recommendWhen"] = dict(self.TAG)
+        self.assert_invalid("a Stutter Doctor key, allowed only inside stutterAdvice", knowledge)
+
+    def test_refused_in_a_template(self):
+        knowledge = sample_knowledge(profileTemplates={"templates": [
+            {"id": "battery", "goal": "performance", "settings": [{"key": "vanilla.renderDistance", "max": 8, "when": dict(self.TAG)}]}]})
+        self.assert_invalid("a Stutter Doctor key, allowed only inside stutterAdvice", knowledge)
+
+    def test_an_unknown_tag_is_still_refused(self):
+        self.assert_invalid("chunkLoading: not one of",
+                            sample_knowledge(stutterAdvice=[stutter_advice(when={"stutterTaggedShareAtLeast": {"chunkLoading": 60}})]))
+
+
+# AC2S.3 (python): the seed is v2-only, so rules-v1.json is the same with and without it.
+class ChunksLoadingSeedV1Tests(unittest.TestCase):
+    SEED = "stutter-chunks-loading-tag"
+
+    def test_rules_v1_is_identical_with_and_without_the_l2_seed(self):
+        knowledge = repo_json("rules", "source", "knowledge.json")
+        self.assertIn(self.SEED, [a["id"] for a in knowledge["stutterAdvice"]])
+        without = dict(knowledge, stutterAdvice=[a for a in knowledge["stutterAdvice"] if a["id"] != self.SEED])
+        with_seed, _ = ur.v1_projection(repo_content(knowledge))
+        without_seed, _ = ur.v1_projection(repo_content(without))
+        self.assertEqual(with_seed, without_seed)
+        self.assertEqual(ur.strip_meta(repo_json("rules", "rules-v1.json")), with_seed)
+
+
+# The generated files as the release revision R carries them (v0.5 content; docs/v0.5/design/ws-r.md).
+class GeneratedV05Tests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.v2 = repo_json("rules", "rules-v2.json")
+        cls.v1 = repo_json("rules", "rules-v1.json")
+        cls.r16 = repo_json("src", "test", "resources", "rules", "r16", "rules-v2.json")
+
+    def stutter(self, advice_id):
+        return next(a for a in self.v2["stutterAdvice"] if a["id"] == advice_id)
+
+    # L2 (SPEC 2S): one info entry on the tag, calibrated on P5C-F1's re-runs and AC5.8's A control (ChunksLoadingSeedTest).
+    def test_the_l2_seed(self):
+        seed = self.stutter("stutter-chunks-loading-tag")
+        self.assertEqual(seed["requires"], ["stutter-doctor"])
+        self.assertEqual((seed["kind"], seed["impact"]), ("info", "low"))
+        self.assertEqual(seed["when"], {"stutterTaggedShareAtLeast": {"chunksLoading": 60}, "spikesPerMinuteAtLeast": 20})
+        self.assertIn("happened while chunks were loading", seed["text"])
+        self.assertIn("may reduce them", seed["text"])
+        self.assertNotIn("v1", seed)
+        self.assertNotIn("stutterAdvice", self.v1)
 
 
 if __name__ == "__main__":

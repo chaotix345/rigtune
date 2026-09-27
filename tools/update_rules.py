@@ -78,10 +78,11 @@ STUTTER_CONDITION_KEYS = frozenset({
     "liveSetPercentAtLeast", "heapRaiseRoomMbAtLeast", "cpuContentionShareAtLeast", "spikesPerMinuteAtLeast", "gcCollector",
 })
 # The share maps' keys (core/stutter/StutterFacts): causes that claim lost milliseconds, and tags that only count spikes.
-# Values are whole percent (0-100), as numbers or digit strings (plan review K-M1).
+# Values are whole percent (0-100), as numbers or digit strings (plan review K-M1). Both equal Attributor.CAUSES and
+# Attributor.TAGS (SchemaConsistencyTest); chunksLoading (v0.5 L2) is a tag 0.4.0 already evaluates.
 STUTTER_MAP_KEYS = {
     "stutterShareAtLeast": frozenset({"gc", "chunkLoad", "chunkBuild", "tick", "render", "unknown"}),
-    "stutterTaggedShareAtLeast": frozenset({"worldSave", "dh", "cpuContention", "afterTeleport", "movingFast"}),
+    "stutterTaggedShareAtLeast": frozenset({"worldSave", "dh", "cpuContention", "afterTeleport", "chunksLoading", "movingFast"}),
 }
 STUTTER_PERCENT_KEYS = frozenset({"liveSetPercentAtLeast", "cpuContentionShareAtLeast"})
 # v0.5 C20 (docs/v0.5/SPEC.md 5, C2): the stutterFixes section's shape, mirroring core/stutter/FixSpec and

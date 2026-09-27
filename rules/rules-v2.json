@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "revision": 17,
-  "generatedAt": "2026-09-27T11:47:48Z",
+  "generatedAt": "2026-09-27T12:18:46Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -2602,6 +2602,22 @@
       "impact": "low",
       "title": "Stutter while loading chunks",
       "text": "Loading new chunks likely took part in a large share of the stutter. A render distance 2 to 4 chunks shorter loads fewer chunks at a time. If you fly or teleport a lot in singleplayer, pre-generating the world (for example with the Chunky mod) means the game no longer has to generate new terrain while you play."
+    },
+    {
+      "id": "stutter-chunks-loading-tag",
+      "requires": [
+        "stutter-doctor"
+      ],
+      "when": {
+        "stutterTaggedShareAtLeast": {
+          "chunksLoading": 60
+        },
+        "spikesPerMinuteAtLeast": 20
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "Hitches while chunks were loading",
+      "text": "Most of the hitches happened while chunks were loading nearby (RigTune notes this, it doesn't measure it), so the two may be related. A render distance 2 to 4 chunks shorter, or Sodium's Chunk Updates set to Deferred (Sodium's default, on the Performance page of its video settings), may reduce them."
     }
   ],
   "availability": {
