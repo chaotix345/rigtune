@@ -34,7 +34,7 @@ Run [36296717280](https://github.com/chaotix345/rigtune/actions/runs/36296717280
 Times are whole jobs, from checkout to the evidence upload. Each job's evidence (RESULT.md, checks.json, screenshots,
 logs) is its `e2e-<scenario>-<mc>` artifact of the run.
 - The downgrades composed `v040-written` only: `v050-written` doesn't exist yet. They prove the harness path on both nodes and both targets, not 0.5's files.
-- The check names still say "0.4"/"0.3.0" (residual, E8).
+- The check names said "0.4"/"0.3.0" then; they name the versions they run since 4c3b6696.
 
 **publish:**
 - The staged files match SHA256SUMS (4 OK).
@@ -44,6 +44,22 @@ logs) is its `e2e-<scenario>-<mc>` artifact of the run.
   - the asset's sha512 matches Modrinth's metadata;
   - the CDN url (`…/versions/zeNyTOnF/rigtune-0.4.0%2Bmc26.2.jar`, `…/SzbFiyYW/…mc26.3.jar`) serves the GitHub asset's bytes;
   - `version_number`, `game_versions`, `loaders` and `version_type` are as expected.
+
+## Local runs, Windows 11, 26.2 (2026-09-28)
+
+Evidence in `local-windows-26.2/` (RESULT.md per run, scrubbed).
+- **helper-kill** (AC3f.5): PASS, 3 starts.
+  - The helper (0.5's) was killed 1.5 s after it recorded the group, while op 2 retried the held file; mods/ held 1.0.0 again then (op 1 rolled back before the pause).
+  - The next exit's helper applied both ops (`OK`, `OK`), and `unfinished-groups.json` dropped the group.
+  - The third start loaded e2e-kill 1.1.0, and History shows "Updated e2e-kill … Applied" (`helper-kill-check-history.png`).
+- **The undo scenario with `guard-apply`** (AC3f.7): PASS, first run.
+  - The pinned update was refused: "RigTune E2E test mod e2e-pinner, which is installed, needs RigTune E2E test mod e2e-pin-target 1.0.x, not 2.0.0".
+  - The addition was staged and applied at exit.
+  - The reverse check refused the other update: "Modrinth marks e2e-rev-add, which is waiting for a restart, as incompatible with e2e-rev-target". The fake Modrinth logged the `GET /v2/versions` naming the staged version.
+- **Downgrade to 0.4.0 and to 0.3.0 with `v050-written`** (AC3b.3): PASS.
+  - The sets: WS-E's placeholders, plus WS-P2's real `ws-p2`.
+  - The first run failed on ws-t's placeholder (its try's patch target already held the value): fixed in the placeholder.
+  - 0.5 reads its files back, `server-profiles.json`'s servers included.
 
 ## Static checks
 

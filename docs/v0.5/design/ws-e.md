@@ -3,8 +3,8 @@
 Branch `test/v05-e2e`, worktree `rigtune-e2e5`. SPEC 3a-3f and 3h's release.yml, AC4j.3's E2E leg, the `v050-written`
 convention. Research: docs/research/v0.5/verification-gaps.md (vg). Plan: docs/v0.5/PLAN.md "WS-E".
 
-**Status: early part only** (PLAN "Phase 3 detail"): files under `tools/e2e/` and their tests. `.github/workflows/*`,
-`build.gradle`, `gradle.properties` and `src/` wait for ws-ci and WS-K; the coordinator says when.
+**Status (2026-09-28):** the early part (E1-E4), E5/E7 and most of the later part are done; see "Later part: status".
+The battery work waits for WS-P's PF-1 on a local branch.
 
 ## Early part: tasks (TDD; each ends with `python -m unittest discover -s tools/e2e/tests` green and a commit)
 
@@ -143,11 +143,95 @@ For WS-K's `v050-written/README.md`: compose deep-merges a file several sets pro
 
 So each set may commit the whole file its own test writes.
 
-## Residuals (early part)
-- E1's pins test checks a subset until E6.
-- compat040 runs in CI only once E6 adds its step. Until then it's the local run above.
-- The downgrade checks' names still say "0.4"/"0.3.0" (e2e_checks `after_downgrade_*`). They are generalised with the downgrade-to-0.4.0 rows' first real run (E8).
-- 0.5's new files join `V050.kept` when their owners' formats land (WS-S2, WS-T, WS-P2).
+## Later part: status (2026-09-28)
+
+Held locally during the coordinator's first CI streak. CI evidence for everything below comes with the batched push (the
+table's last column says what ran where until then).
+
+| task | commits | tests | result |
+|---|---|---|---|
+| Merges of `origin/feat/v0.5.0` (ws-ci + WS-K; then Wave A's early merges) | 2f67875a, a60c9048 | full suites | release.yml conflict with ws-ci's JDK/runner pins (ours, then JDK 25.0.3); WS-P2's real `ws-p2` set replaced its placeholder |
+| E6 build.yml + SPEC-4 | b97bcd86 | `test_e2e_workflows.py` (BuildWorkflowTest), `test_e2e_v04.py` (pins = build.yml), `tools/tests/test_ci_workflow.py` (e2e.yml `--offline` rule) | build.yml's `e2e` job runs e2e.yml on the java job's `rigtune-jars`: push tier on every push, release tier on a PR into main from `feat/v*`. e2e.yml: one "(network)" step per job (prefetchDependencies + downloadAssets, the released jar on a cache miss, sha256-checked), every later Gradle call `--offline`. The java job pins 7 released jars and runs compat040 + compat030. The pins test caught a cache-key typo in ws-ci's build.yml (`…71ae` → `…71aa`) |
+| compat040 data-driven + v050 placeholders (3b, PLAN-20) | 85763ec4, c001ddcd, 4c3b6696, be56b00b, e1de5575 | `test_compat040.py` 10, `test_written_v05.py` 16 | each set's `expect.json` interpreted by `Compat040.java` on that set alone (spare copy for writes); a check of a file the set doesn't hold fails (found on WS-P2's `ws-p2`, routed). Local: compat040 PASS, compat030 PASS on v040 + v050 |
+| Downgrade E2E with v050 (AC3b.3) | 4c3b6696, e1de5575 | `test_e2e_downgrade.py` | local Windows 26.2, to 0.4.0 and to 0.3.0: PASS with the placeholders + real `ws-p2` (`docs/v0.5/verification/e2e/local-windows-26.2/`). The first run failed on ws-t's placeholder try (its PATCH target already held the value 0.4's switch left): fixed in the placeholder, 2 → 4. Check names now name the versions they run |
+| E9 LanGuestGameTest + Realms (3d) | 5a2066b7 | game test | local Windows 26.2: PASS in 17 s (the LAN list join, the restart's "(was 6)", Realms through `RealmsConnect`). Realms is tested as far as the client path goes, not UNVERIFIED. javap: every class used is identical on 26.2 and 26.3. Evidence `docs/v0.5/verification/server/` |
+| E11a A11yGameTest high contrast (AC3f.3) | 5a2066b7 | game test | local: PASS (the option's own pack reload; label pixels 0 / 2144 on, 2784 / 0 off) |
+| E10 BatteryFlowGameTest + the OSHI leg (3e) | local branch `local/v05-battery` (c88bb117, 4e3f9d53) | game test; `test_e2e_workflows.py` battery leg; `test_e2e_matrix.py` `--nodes`; BatteryPromptTest skew boundary | **Lands after WS-P's PF-1** (it needs `BATTERY_TOAST_ID` and PF-1's back-offer): built on a local merge of `origin/fix/v05-profiles`, never pushed. Local 26.2: PASS, the offer and its toast about 2 s after each unplug. e2e.yml's release tier gains `battery-oshi` per node (tools/e2e/fake_battery.sh, `-PgametestJvmArgs` with the two properties) |
+| AC3e.3 PowerWatcher unit cases | 1a1cdb32 | PowerWatcherTest +4 (6 on both nodes) | unreadable polls aren't AC, one of two batteries discharging, a wiggle, stop before the probe |
+| E11b snapshot canary (AC3f.8) | 43e34cbb | `tools/tests/test_snapshot_canary.py` 6, two fixture manifests | `tools/snapshot_canary.py` = the workflow's resolve step. The workflow's one edit (calling it) waits for the first scheduled run (2026-09-30) |
+| E8 helper-kill (AC3f.5) | a08645d2 | `test_e2e_helper_kill.py` 12 | local Windows 26.2: PASS. The helper was killed 1.5 s after it recorded the group (its op 2 retrying a held file); the next exit's helper applied both ops; History shows "Updated e2e-kill" Applied. Release tier, both nodes |
+| E8 reverse check + version pin (AC3f.7) | 6ee35ee6 | `test_e2e_guard.py` 5 | local Windows 26.2: the whole undo scenario PASS, `guard-apply` included, first run (`docs/v0.5/verification/e2e/local-windows-26.2/undo-guard-*`). Release tier: both undo rows, both nodes |
+
+**AC3f.7 (`guard-apply`).** It runs after entry-check on the undo scenario's instance, in one start:
+- The update of `e2e-pin-target` 1.0.0 → 2.0.0 is refused. The installed `e2e-pinner` pins the target to `1.0.x` in its fabric.mod.json.
+- The addition `e2e-rev-add` is staged, then applied at exit.
+- The update of `e2e-rev-target` 1.0.0 → 1.1.0 is refused. The staged addition's Modrinth version declares that version incompatible, by version id.
+  - RigTune can know this only by reading the staged version back through FakeModrinth's `GET /v2/versions?ids=`; the check requires that request.
+
+Each Apply's outcome is the status line its downloads leave (`pinStatus`/`addStatus`/`reverseStatus` in the driver's JSON).
+
+**helper-kill design notes.**
+- When op 2 fails, the executor rolls op 1 back before it pauses (ApplyExecutor.runGroup). So a kill "during the back-off" leaves the group recorded but not half-applied, and the next run starts it again cleanly.
+- The half-applied path (a kill between op 1's rename and its rollback) is a timing window of milliseconds that the harness doesn't aim for. `after_helper_kill` accepts either state; the next exit's result is checked either way.
+- On Linux, `chattr +i` gives EPERM. Files.move reports it as an AccessDeniedException, which the executor treats as a sharing violation. So Linux gets the same ~30 s retry budget as Windows' held handle.
+
+**javap (SPEC X9 / SPEC-17), 26.2 vs 26.3 (Loom's mapped client jars):** identical signatures for:
+- `LanServerPinger`, `LanServer`, `ServerSelectionList` and `NetworkServerEntry`, `JoinMultiplayerScreen`;
+- `RealmsConnect`, `RealmsServer`;
+- `ToastManager.getToast`;
+- `Gui.overlay()`;
+- `Options`' high-contrast callback (the `high_contrast` pack add/remove plus `updateResourcePacks` → `reloadResourcePacks`).
+
+The fabric client gametest API is the same too: `createServer(Properties)`, `clickScreenButton`, `setScreen` in 6.0.2 (26.2) and 6.0.7/6.0.8 (26.3).
+
+## Acceptance criteria (WS-E's)
+
+| AC | how | status |
+|---|---|---|
+| AC3a.1-3a.3 | the Linux harness, e2e_matrix, e2e.yml | early part; release tier 16/16 on the dry run 36296717280; build.yml hookup in CI with the push |
+| AC3a.4 | the release tier on the release PR | Phase 5 (the coordinator schedules it) |
+| AC3a.5 | the Windows RC set (seeded run with a real handle, 0.4.0 → RC, undo, downgrade) | Phase 5 |
+| AC3a.6 | `test_e2e_workflows.py` + `test_ci_workflow.py` | local green |
+| AC3b.1, AC3b.2 | compat040 / compat030 in the java job | local PASS; CI with the push |
+| AC3b.3 | the downgrade rows (both targets, both nodes) | local 26.2 PASS with v050 sets; the "back on 0.5" part checks the placeholders' files (and ws-p2's servers) are read back. The tracked fix, the open try and the profile labels need WS-S2/WS-T/WS-P's real sets and code |
+| AC3c.1, AC3c.2 | release.yml build → e2e → publish | dry run 36296717280; AC3c.2 at the v0.5.0 release |
+| AC3d.1, AC3d.2 | LanGuestGameTest | local PASS; CI with the push |
+| AC3d.3 | README "Known limits" | docs workstream (text in "Docs" below) |
+| AC3e.1, AC3e.2 | BatteryFlowGameTest, `battery-oshi` | built and locally green; lands after PF-1 |
+| AC3e.3 | PowerWatcherTest, BatteryPromptTest | PowerWatcher cases in; the skew boundary lands with the battery branch (BatteryPromptTest is WS-P's hotspot now) |
+| AC3e.4 | README battery line | docs (below) |
+| AC3f.1 | the 26.3 stutter-script CI run | open |
+| AC3f.3 | A11yGameTest high contrast | local PASS; CI with the push |
+| AC3f.4 | the DH server-note run | open (code-deciding, under the lock) |
+| AC3f.5 | helper-kill | local Windows PASS; Linux release tier with the push |
+| AC3f.7 | guard-apply | local Windows PASS; Linux release tier with the push |
+| AC3f.8 | snapshot_canary.py + fixture test | test in; the workflow edit after 2026-09-30 |
+| AC4j.3 | the launcher-brand leg | after WS-L1/L2 |
+| AC2H.6 | `v010-dh-app-reinstalled` | after WS-H |
+
+## Residuals
+- **Fixed since the early part:**
+  - the pins test covers all 7 released jars (E6);
+  - compat040 has its CI step (E6);
+  - the downgrade checks name the versions they run (4c3b6696);
+  - `server-profiles.json` is in `V050.kept` (e1de5575).
+- **Open:**
+  - `stutter-fixes.json` and `tryit.json` join `V050.kept` when WS-S2's and WS-T's real sets land. Until then their placeholders are only checked byte-identical after a downgrade.
+  - WS-P2's `ws-p2/expect.json` has a ServerLimitsStore check on a file the set doesn't hold; compat040 fails it (routed to the coordinator on 2026-09-28). Until WS-P2 fixes it, CI's java job fails on compat040.
+  - The battery branch (`local/v05-battery`: BatteryFlowGameTest, `battery-oshi`, fake_battery.sh, `e2e_matrix --nodes`, the BatteryPromptTest skew case) is cherry-picked onto `test/v05-e2e` once PF-1 is on `feat/v0.5.0`.
+  - The snapshot-canary workflow edit (its resolve step calls `tools/snapshot_canary.py`) is made after the scheduled run on 2026-09-30.
+  - Still to do: AC3f.1 (26.3 stutter-script CI run), AC3f.4 (the DH server-note run), E8's generated seeds (26.2 from 0.4.0, 26.3 from 0.2.0+mc26.3), `v010-dh-app-reinstalled` (after WS-H) and the launcher-brand leg (after WS-L1/L2).
+- **A note for the docs workstream:** in BatteryFlowGameTest's screenshot at 854×480 the battery notice's text is cut ("You're on battery power. Switch t…") by its two buttons. That is v0.4's notice layout (WS-P's).
+
+## Stays UNVERIFIED (WS-E's part)
+- **A second PC's Open-to-LAN host:** its integrated server authenticates guests; one-client rule.
+- **The real Realms service:** no subscription. The client's Realms connection path is tested (RealmsConnect with a REALM-typed ServerData).
+- **Windows Firewall's multicast prompt and networks that block multicast.** The local LAN run passed unattended; this PC's firewall rules weren't inspected.
+- **Windows OSHI on a real laptop battery:** the user's laptop run (3g).
+- **A helper killed between op 1's rename and its rollback** (the half-applied state): a millisecond window the E2E doesn't aim for. ApplyGroupsTest's `aHelperKilledBetweenTheRenamesIsFinishedByTheNextRun` and `…IsRolledBackWhenTheNextRunCantFinish` cover it in unit.
+- **A physical power cut** (3f): needs a VM with a lossy disk.
 
 ## Docs (for the docs workstream)
-- (filled at the end)
+- **README "Known limits", LAN and Realms (AC3d.3):** "Server limits were tested with a dedicated server joined through Minecraft's own LAN discovery (Multiplayer → the LAN list) and through the Realms connection path against a local server. Not tested: an Open to LAN game hosted on a second PC, and the real Realms service."
+- **README battery line (AC3e.4):** "The battery offer was tested with a simulated battery through RigTune's real power watcher, and on Linux CI with a simulated battery read by the same hardware library the game uses; [the user's laptop run, if it happened]." Keep "real Windows laptop: not yet" until 3g.
+- **PROGRESS / verification index:** `docs/v0.5/verification/server/README.md`, `docs/v0.5/verification/e2e/README.md` (+ `local-windows-26.2/`), and `battery/` once the battery branch lands.
