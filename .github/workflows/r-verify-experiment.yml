@@ -18,12 +18,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { mc: '26.2', name: linux-v040-to-dev, tag: v0.4.0, old: 'rigtune-0.4.0+mc26.2.jar', args: '--expect-history auto' }
-          - { mc: '26.3', name: linux-v040-to-dev, tag: v0.4.0, old: 'rigtune-0.4.0+mc26.3.jar', args: '--expect-history auto' }
-          - { mc: '26.2', name: linux-v010-seeded-to-dev, tag: v0.1.0, old: 'rigtune-0.1.0.jar', args: '--seed tools/e2e/seeds/v010-dh --expect-history auto' }
-          - { mc: '26.3', name: linux-undo-after-restart, tag: '', old: '', args: '--scenario undo' }
-          - { mc: '26.2', name: linux-undo-after-restart-profiles, tag: '', old: '', args: "--scenario undo --profile-switch profile --profile-names 'Battery,Max FPS'" }
-          - { mc: '26.2', name: linux-downgrade-dev-to-030, tag: v0.3.0, old: 'rigtune-0.3.0+mc26.2.jar', args: '--scenario downgrade' }
+          - { mc: '26.2', name: linux-downgrade-dev-to-030, tag: v0.3.0, old: 'rigtune-0.3.0+mc26.2.jar', args: '--scenario downgrade', battery: '' }
+          - { mc: '26.2', name: linux-v040-to-dev-fake-battery, tag: v0.4.0, old: 'rigtune-0.4.0+mc26.2.jar', args: '--expect-history auto --jvm-arg=-Doshi.os.linux.allowudev=false', battery: 'Discharging' }
     env:
       SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER: skip
       GH_TOKEN: ${{ github.token }}
@@ -44,6 +40,13 @@ jobs:
       - name: Download the released old jar
         if: matrix.old != ''
         run: gh release download "${{ matrix.tag }}" -R "$GITHUB_REPOSITORY" -p '${{ matrix.old }}' -D "$RUNNER_TEMP/jars" --clobber
+      - name: A fake battery in /sys/class/power_supply (tmpfs; OSHI reads it with udev off)
+        if: matrix.battery != ''
+        run: |
+          sudo mount -t tmpfs -o mode=0777 tmpfs /sys/class/power_supply
+          mkdir -p /sys/class/power_supply/BAT0
+          printf 'POWER_SUPPLY_NAME=BAT0\nPOWER_SUPPLY_TYPE=Battery\nPOWER_SUPPLY_STATUS=${{ matrix.battery }}\nPOWER_SUPPLY_PRESENT=1\nPOWER_SUPPLY_TECHNOLOGY=Li-ion\nPOWER_SUPPLY_CHARGE_FULL_DESIGN=5000000\nPOWER_SUPPLY_CHARGE_FULL=4000000\nPOWER_SUPPLY_CHARGE_NOW=2000000\nPOWER_SUPPLY_CAPACITY=50\nPOWER_SUPPLY_MODEL_NAME=RigTune fake battery\n' > /sys/class/power_supply/BAT0/uevent
+          cat /sys/class/power_supply/BAT0/uevent
       - name: Let the fake Modrinth bind 443
         run: sudo sysctl -w net.ipv4.ip_unprivileged_port_start=443
       - name: Run the E2E scenario
@@ -61,6 +64,10 @@ jobs:
           rc=$?
           echo "wall seconds: $(( $(date +%s) - start )), exit $rc"
           exit $rc
+      - name: What the game's startup probe saw (Hardware line)
+        if: always()
+        run: |
+          for f in "$RUNNER_TEMP"/e2e/*/instance*/logs/latest.log; do grep -a -o 'hasBattery=[a-z]*, onBattery=[a-z]*' "$f" || true; grep -a 'RigTune power\|battery' "$f" | head -5 || true; done
       - name: Upload the evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -73,101 +80,3 @@ jobs:
             ${{ runner.temp }}/e2e/*/instance*/logs/
             ${{ runner.temp }}/e2e/*/instance*/crash-reports/
           if-no-files-found: ignore
-
-  probes:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/setup-java@v6
-        with:
-          distribution: microsoft
-          java-version: '25'
-      - name: LAN discovery on the runner (vanilla's multicast group and port)
-        continue-on-error: true
-        run: |
-          cd "$RUNNER_TEMP"
-          cat > LanProbe.java <<'JAVA'
-          import java.net.*;
-          import java.nio.charset.StandardCharsets;
-
-          public class LanProbe {
-              public static void main(String[] args) throws Exception {
-                  InetAddress group = InetAddress.getByName("224.0.2.60");
-                  try (MulticastSocket in = new MulticastSocket(4445); DatagramSocket out = new DatagramSocket()) {
-                      in.setSoTimeout(5000);
-                      in.joinGroup(group);
-                      byte[] ping = "[MOTD]RigTune LAN test[/MOTD][AD]25570[/AD]".getBytes(StandardCharsets.UTF_8);
-                      out.send(new DatagramPacket(ping, ping.length, group, 4445));
-                      byte[] buffer = new byte[1024];
-                      DatagramPacket got = new DatagramPacket(buffer, buffer.length);
-                      in.receive(got);
-                      System.out.println("received from " + got.getAddress().getHostAddress() + ": "
-                              + new String(got.getData(), got.getOffset(), got.getLength(), StandardCharsets.UTF_8));
-                  }
-              }
-          }
-          JAVA
-          java LanProbe.java
-      - name: A fake battery in /sys/class/power_supply (tmpfs), read by OSHI 6.9.0 (the game's version)
-        continue-on-error: true
-        run: |
-          set -eux
-          uname -r
-          ls -la /sys/class/power_supply || true
-          sudo mount -t tmpfs -o mode=0777 tmpfs /sys/class/power_supply
-          ps=/sys/class/power_supply
-          mkdir -p $ps/AC $ps/BAT0
-          printf 'POWER_SUPPLY_NAME=AC\nPOWER_SUPPLY_TYPE=Mains\nPOWER_SUPPLY_ONLINE=1\n' > $ps/AC/uevent
-          printf 'POWER_SUPPLY_NAME=BAT0\nPOWER_SUPPLY_TYPE=Battery\nPOWER_SUPPLY_STATUS=Charging\nPOWER_SUPPLY_PRESENT=1\nPOWER_SUPPLY_TECHNOLOGY=Li-ion\nPOWER_SUPPLY_CYCLE_COUNT=12\nPOWER_SUPPLY_VOLTAGE_NOW=12000000\nPOWER_SUPPLY_CURRENT_NOW=1500000\nPOWER_SUPPLY_CHARGE_FULL_DESIGN=5000000\nPOWER_SUPPLY_CHARGE_FULL=4000000\nPOWER_SUPPLY_CHARGE_NOW=2000000\nPOWER_SUPPLY_CAPACITY=50\nPOWER_SUPPLY_MODEL_NAME=RigTune fake battery\nPOWER_SUPPLY_MANUFACTURER=RigTune\nPOWER_SUPPLY_SERIAL_NUMBER=0\n' > $ps/BAT0/uevent
-          ls -laR $ps
-          cd "$RUNNER_TEMP"
-          m=https://repo1.maven.org/maven2
-          curl -sfLO $m/com/github/oshi/oshi-core/6.9.0/oshi-core-6.9.0.jar
-          curl -sfLO $m/net/java/dev/jna/jna/5.17.0/jna-5.17.0.jar
-          curl -sfLO $m/net/java/dev/jna/jna-platform/5.17.0/jna-platform-5.17.0.jar
-          curl -sfLO $m/org/slf4j/slf4j-api/2.0.17/slf4j-api-2.0.17.jar
-          cat > PowerProbe.java <<'JAVA'
-          import oshi.SystemInfo;
-          import oshi.hardware.PowerSource;
-          import java.nio.file.Files;
-          import java.nio.file.Path;
-          import java.util.List;
-
-          public class PowerProbe {
-              static final Path BAT = Path.of("/sys/class/power_supply/BAT0/uevent");
-              static final Path AC = Path.of("/sys/class/power_supply/AC/uevent");
-
-              public static void main(String[] args) throws Exception {
-                  List<PowerSource> sources = new SystemInfo().getHardware().getPowerSources();
-                  print("initial (AC online, Charging)", sources);
-                  Files.writeString(AC, Files.readString(AC).replace("ONLINE=1", "ONLINE=0"));
-                  Files.writeString(BAT, Files.readString(BAT).replace("STATUS=Charging", "STATUS=Discharging"));
-                  print("after unplug (AC offline, Discharging), same objects, updateAttributes()", sources);
-                  print("after unplug, a fresh SystemInfo", new SystemInfo().getHardware().getPowerSources());
-                  Files.writeString(AC, Files.readString(AC).replace("ONLINE=0", "ONLINE=1"));
-                  Files.writeString(BAT, Files.readString(BAT).replace("STATUS=Discharging", "STATUS=Charging"));
-                  print("after plug-in, same objects, updateAttributes()", sources);
-              }
-
-              static void print(String title, List<PowerSource> sources) {
-                  System.out.println("== " + title + " (" + sources.size() + " sources)");
-                  for (PowerSource s : sources) {
-                      boolean updated = s.updateAttributes();
-                      boolean real = !((s.getDeviceName() == null || s.getDeviceName().equalsIgnoreCase("unknown"))
-                              && (s.getChemistry() == null || s.getChemistry().equalsIgnoreCase("unknown")))
-                              && Math.max(s.getMaxCapacity(), s.getDesignCapacity()) > 1;
-                      System.out.println(s.getName() + " | device=" + s.getDeviceName() + " chemistry=" + s.getChemistry()
-                              + " max=" + s.getMaxCapacity() + " design=" + s.getDesignCapacity() + " powerOnLine=" + s.isPowerOnLine()
-                              + " discharging=" + s.isDischarging() + " charging=" + s.isCharging() + " updated=" + updated
-                              + " -> RigTune realBattery=" + real + ", onBattery=" + (real && !s.isPowerOnLine() && s.isDischarging()));
-                  }
-              }
-          }
-          JAVA
-          cp="oshi-core-6.9.0.jar:jna-5.17.0.jar:jna-platform-5.17.0.jar:slf4j-api-2.0.17.jar"
-          echo "### OSHI defaults (udev allowed)"
-          java -cp "$cp" PowerProbe.java || true
-          printf 'POWER_SUPPLY_NAME=AC\nPOWER_SUPPLY_TYPE=Mains\nPOWER_SUPPLY_ONLINE=1\n' > $ps/AC/uevent
-          sed -i 's/STATUS=Discharging/STATUS=Charging/' $ps/BAT0/uevent
-          echo "### -Doshi.os.linux.allowudev=false"
-          java -Doshi.os.linux.allowudev=false -cp "$cp" PowerProbe.java || true
