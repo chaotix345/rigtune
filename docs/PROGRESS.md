@@ -2,6 +2,37 @@
 
 Source of truth for resuming after context compaction. Update and commit after every milestone. After a compaction, reread this file before acting.
 
+## v0.5.0 working log (started 2026-09-27)
+
+Brief: the user's v0.5.0 prompt (full autonomy: research -> release incl. GitHub merges/tags/releases and Modrinth publishing). Theme: rock-solid (zero flaky CI, every v0.4 leftover fixed, verification gaps closed) + 4-6 new features picked by a judged brainstorm. MC 26.4 is OUT of scope (the weekly canary keeps running). Scope: P0.1 rock-solid CI (no live Modrinth in game tests/CI, cached jars, robust footprint ns gates, known flakes fixed; acceptance = 5 consecutive full CI runs green on feat/v0.5.0 with no re-runs), P0.2 every deferred v0.4 issue/low with a test, P0.3 verification gaps (self-update E2E on 26.2 AND 26.3 incl. downgrade 0.5 -> 0.4, LAN guest, PowerWatcher with a simulated battery, more driver strings, byte-identical publish); P1 = brainstorm picks; P2 = next-ranked + controller polish + per-screen a11y sweep. docs/v0.5/SPEC.md once written.
+- The user APPROVED (2026-09-27, in the v0.5 prompt) changing the per-call ns budgets in tools/footprint-budgets.json (e.g. min(ceiling, 4 x max observed)) and/or redesigning how those timings are measured. Ceilings, CPU-ms, bytes, 0-allocation and leak checks stay strict.
+- The user's other Claude session is running an independent read-only audit of v0.4.0's new features (-> C:/Dev/Worktrees/handoff/audit-v040-features.md); the user pastes its output here. Verify every finding before acting.
+
+### Environment (verified 2026-09-27)
+- Integration branch `feat/v0.5.0` from main @ 987179e4; mod_version 0.5.0-dev.
+- MC (Mojang manifest 2026-09-27): latest release 26.3, snapshot 26.4-snapshot-1 -> no new node.
+- gh: chaotix345 (gist/project/read:org/repo). MODRINTH_TOKEN (len 64) and MODRINTH_CI_TOKEN set in the USER env; GitHub secret MODRINTH_TOKEN present.
+- Modrinth `status`: processing (requested approved), 7 versions listed (0.1.0 .. 0.4.0 x2). Still in review -> installed older versions aren't offered 0.4.0 in the wild. Moderator messages can't be read with the token (no thread scopes): ask the user to forward any.
+- No open PRs; issues: #9 (canary, closed), #7/#8 (accidental, closed). Next scheduled: update-rules Mon 2026-09-28 03:00 UTC, snapshot-canary Wed 2026-09-30 05:00 UTC.
+- Stray local branches still present: research/ci-gametest, scratch/ws-f-proof-cpu, scratch/ws-f-proof-sleep-alloc, scratch/ws-h-history, scratch/ws-h-history-2, tmp/ws-j-try-rules (the hook blocks force-deleting them: the user's `!` commands).
+- Real instance (read-only): not played since 2026-09-25 09:08 (still 0.1.0; DH group pending; DH 3.3.2 queued in mods/update) -> no new real-world feedback yet; re-check before Phase 5.
+- Watchdog: scratchpad/run_watchdog.sh (re-reads scratchpad/agents.txt; `name=<dir>;<dir>@<branch>` per line; --stall-min 25 --lock-min 12). Scratchpad: C:/Users/Admin/AppData/Local/Temp/claude/C--Dev-Minecraft-Setting-Optimisation-Mod/590d2d3e-58b4-418a-a809-0e625214088f/scratchpad
+
+### Status
+- [ ] Phase 0: orient (in progress).
+- [ ] Phase 1: research (docs/research/v0.5/: ci-robustness, v04-leftovers, verification-gaps, brainstorm + one file per picked feature).
+- [ ] Phase 2: SPEC + contracts + PLAN + plan review.
+- [ ] Phase 3: foundation = P0.1 CI robustness, alone.
+- [ ] Phase 4: features and fixes (Wave A/B).
+- [ ] Phase 5: verification.
+- [ ] Phase 6: review rounds (review-11.md onwards).
+- [ ] Phase 7: release.
+- [ ] Phase 8: wrap-up.
+
+### REMAINING PLAN
+1. Phase 1: launch r-ci, r-leftovers, r-verify research agents + the brainstorm Workflow; then one research agent per picked feature; fold in the other session's audit (verified).
+2. Phases 2-8 as in the brief (see Status).
+
 ## v0.4.0: RELEASED 2026-09-26 (UTC)
 - PR #10 merged to main (01839d70); main CI 36263433380 green on attempt 2 (attempt 1: the flaky footprint gate, tickHookNsPerCallOn 116 > 101 on one leg while the same code read 32-50 ns everywhere else; the failed job was re-run by hand, budgets unchanged). Tag v0.4.0 on 01839d70. GitHub release: https://github.com/chaotix345/rigtune/releases/tag/v0.4.0 (rigtune-0.4.0+mc26.2.jar sha256 801cd3b8..., +mc26.3.jar 2d8328d7..., + sources; notes from docs/v0.4/github-release-notes.md). Release run 36264629570 green; "Verify Modrinth files match" confirmed both sha512s.
 - Modrinth oBN6pcGa: 0.4.0+mc26.2 (zeNyTOnF), 0.4.0+mc26.3 (SzbFiyYW) listed; submit + sync-body (docs/modrinth/body-0.4.md) + gallery (5 new images, 12 total) done. Project status still processing (in moderator review) -> installed 0.1.0-0.3.0 aren't offered the update in the wild yet; the user's real instance (0.1.0) hasn't been played since 2026-09-25 09:08.
