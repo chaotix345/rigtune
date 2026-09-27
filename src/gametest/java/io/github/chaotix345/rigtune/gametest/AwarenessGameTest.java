@@ -91,10 +91,11 @@ public class AwarenessGameTest implements FabricClientGameTest {
 
 	// ---- WS-W (AW-1, AW-2).
 
-	// AW-2 (AC2W.2): NoticeScreen at 854x480 GUI scale 3 lists two notices above a fresh driver notice that doesn't fit;
-	// dismissing the top one rebuilds it, the driver notice is listed and awareness.json holds the new driver. AW-1
-	// (AC2W.1): a rescan keeps the shown, committed notice; its own Re-scan retires it. The 0.4 block dismissed the same
-	// key for this session, so the notice line never shows it: a wrapper lists it on NoticeScreen under the two canned ones.
+	// AW-2 (AC2W.2): NoticeScreen at 854x480 GUI scale 3 (which the game caps at 2 for that window) lists as many canned
+	// notices as fit, above a fresh driver notice that then doesn't fit; dismissing the top one rebuilds it, the driver
+	// notice is listed and awareness.json holds the new driver. AW-1 (AC2W.1): a rescan keeps the shown, committed notice;
+	// its own Re-scan retires it. The 0.4 block dismissed the same key for this session, so the notice line never shows
+	// it: a wrapper lists it on NoticeScreen under the canned ones.
 	private static void awarenessFixes(V05TestContext v05) {
 		ClientGameTestContext context = v05.context();
 		RealController real = v05.realController();
@@ -104,15 +105,17 @@ public class AwarenessGameTest implements FabricClientGameTest {
 		Notice hardware = context.computeOnClient(mc -> real.awarenessService().hardwareNotice());
 		check(hardware != null && hardware.message().english().startsWith("Your GPU driver changed since last time ("), "a fresh driver notice: " + hardware);
 		check(!current.equals(storedDriver(file)), "not shown yet, so not committed");
-		ListedNotices listed = new ListedNotices(real);
+		ListedNotices listed = new ListedNotices(real, 12);
 		try {
 			v05.resize(V05TestContext.SCROLLING[0], V05TestContext.SCROLLING[1], V05TestContext.SCROLLING[2]);
-			context.runOnClient(mc -> mc.gui.setScreen(new NoticeScreen(new TitleScreen(), listed)));
-			context.waitForScreen(NoticeScreen.class);
-			context.waitTicks(3);
-			List<Notice> before = context.computeOnClient(mc -> ((NoticeScreen) mc.gui.screen()).shown());
-			check(context.computeOnClient(mc -> listed.notices().size()) >= 3, "three notices");
-			check(before.stream().noneMatch(n -> n.key().equals(hardware.key())), "the driver notice doesn't fit below the other two: " + before);
+			// How many rows fit, with canned notices only (so the driver notice is never listed before the dismissal).
+			int fits = openNotices(context, listed).size();
+			check(fits >= 2 && fits < 12, "some canned notices fit, not all: " + fits);
+			listed.keep(fits);
+			List<Notice> before = openNotices(context, listed);
+			check(context.computeOnClient(mc -> listed.notices().size()) >= 3, "at least three notices");
+			check(before.size() == fits && before.stream().noneMatch(n -> n.key().equals(hardware.key())),
+					"the driver notice doesn't fit below the " + fits + " canned ones: " + before);
 			screenshot(context, "awareness-aw2-before-854x480-scale3");
 			check(!current.equals(storedDriver(file)), "not listed, so not committed");
 
@@ -150,24 +153,41 @@ public class AwarenessGameTest implements FabricClientGameTest {
 		return current;
 	}
 
-	// The real controller with two canned, dismissible notices listed above the hardware notice (the source's own, not
-	// filtered by this session's dismissals); their dismissals stay here.
+	// A fresh NoticeScreen over `controller`; what it lists.
+	private static List<Notice> openNotices(ClientGameTestContext context, ListedNotices controller) {
+		context.runOnClient(mc -> mc.gui.setScreen(new NoticeScreen(new TitleScreen(), controller)));
+		context.waitForScreen(NoticeScreen.class);
+		context.waitTicks(3);
+		return context.computeOnClient(mc -> ((NoticeScreen) mc.gui.screen()).shown());
+	}
+
+	// The real controller with canned, dismissible notices listed above the hardware notice (the source's own, not
+	// filtered by this session's dismissals; only once keep() has cut the canned ones to what fits); their dismissals stay
+	// here.
 	private static final class ListedNotices extends ForwardingController {
 		private final RealController real;
-		private final List<Notice> canned = new ArrayList<>(List.of(
-				new Notice("test-aw2-first", NoticePriority.BENCHMARK_REGRESSION, Text.literal("A notice listed first"), null, List.of(), true),
-				new Notice("test-aw2-second", NoticePriority.BENCHMARK_REGRESSION, Text.literal("A notice listed second"), null, List.of(), true)));
+		private final List<Notice> canned = new ArrayList<>();
+		private volatile boolean withHardware;
 
-		ListedNotices(RealController real) {
+		ListedNotices(RealController real, int count) {
 			super(real);
 			this.real = real;
+			for (int i = 1; i <= count; i++) {
+				canned.add(new Notice("test-aw2-" + i, NoticePriority.BENCHMARK_REGRESSION, Text.literal("A notice listed above the driver notice (" + i + ")"),
+						null, List.of(), true));
+			}
+		}
+
+		void keep(int count) {
+			canned.subList(count, canned.size()).clear();
+			withHardware = true;
 		}
 
 		@Override
 		public List<Notice> notices() {
 			List<Notice> out = new ArrayList<>(canned);
 			Notice hardware = real.awarenessService().hardwareNotice();
-			if (hardware != null) {
+			if (withHardware && hardware != null) {
 				out.add(hardware);
 			}
 			return out;
