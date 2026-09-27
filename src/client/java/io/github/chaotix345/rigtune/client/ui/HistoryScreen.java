@@ -251,7 +251,8 @@ public class HistoryScreen extends Screen {
 		}
 		for (HistoryModel.Entry entry : view.entries()) {
 			boolean open = entry.id().equals(selected);
-			target.addRow(new EntryRow(entry, open), 26);
+			EntryRow entryRow = new EntryRow(entry, open, target.getRowWidth() - 16);
+			target.addRow(entryRow, entryRow.preferredHeight());
 			if (open) {
 				for (HistoryModel.Change change : entry.changes()) {
 					ChangeRow row = new ChangeRow(change, target.getRowWidth() - 16);
@@ -317,6 +318,24 @@ public class HistoryScreen extends Screen {
 	static Component kind(HistoryModel.Entry entry) {
 		return entry.profile() != null ? Component.translatable("rigtune.profile.history_kind", SafeLiteral.of(entry.profile()))
 				: Component.translatable(entry.kindKey());
+	}
+
+	// v0.5 L8 (WS-P): a baseline's folded profile switches, newest first: "Includes: Profile: Battery, Profile: Max FPS", at
+	// most 3 and then "+N"; null when it folded none.
+	static @Nullable Component includes(HistoryModel.Entry entry) {
+		List<String> names = entry.includes();
+		if (names.isEmpty()) {
+			return null;
+		}
+		MutableComponent shown = Component.empty();
+		for (int i = 0; i < Math.min(3, names.size()); i++) {
+			if (i > 0) {
+				shown.append(Component.literal(", "));
+			}
+			shown.append(Component.translatable("rigtune.profile.history_kind", SafeLiteral.of(names.get(i))));
+		}
+		return names.size() > 3 ? Component.translatable("rigtune.history.includes.more", shown, names.size() - 3)
+				: Component.translatable("rigtune.history.includes", shown);
 	}
 
 	static Component summary(HistoryModel.Entry entry) {
@@ -435,9 +454,11 @@ public class HistoryScreen extends Screen {
 		private final Component heading;
 		private final Component summary;
 		private final Component details;
+		// v0.5 L8: a baseline's "Includes" line, wrapped below the details.
+		private final List<FormattedCharSequence> includes;
 		private final RowFocus focus;
 
-		EntryRow(HistoryModel.Entry entry, boolean open) {
+		EntryRow(HistoryModel.Entry entry, boolean open, int width) {
 			this.entry = entry;
 			this.open = open;
 			MutableComponent heading = kind(entry).copy().withStyle(ChatFormatting.BOLD);
@@ -447,8 +468,10 @@ public class HistoryScreen extends Screen {
 			this.heading = heading;
 			this.summary = summary(entry);
 			this.details = details(entry);
+			Component included = includes(entry);
+			this.includes = included == null ? List.of() : font.split(included, Math.max(40, width));
 			// Enter/Space selects the entry as a click does (in the next tick), and the focus stays on its row.
-			this.focus = new RowFocus(this, RowFocus.join(heading, summary, details), () -> {
+			this.focus = new RowFocus(this, RowFocus.join(heading, summary, details, included), () -> {
 				refocus = entry.id();
 				clicked = entry.id();
 			}, () -> open);
@@ -457,6 +480,10 @@ public class HistoryScreen extends Screen {
 		@Override
 		RowFocus focus() {
 			return focus;
+		}
+
+		int preferredHeight() {
+			return 26 + includes.size() * LINE;
 		}
 
 		@Override
@@ -475,6 +502,9 @@ public class HistoryScreen extends Screen {
 			graphics.text(font, clip(heading, Math.max(20, right - textX - summaryWidth - 6)), textX, y, 0xFFFFFFFF, true);
 			graphics.text(font, summary, right - summaryWidth, y, Palette.of(COLOR_LABEL), false);
 			graphics.text(font, clip(details, Math.max(20, right - textX)), textX, y + 11, Palette.of(COLOR_LABEL), false);
+			for (int i = 0; i < includes.size(); i++) {
+				graphics.text(font, includes.get(i), textX, y + 22 + i * LINE, Palette.of(COLOR_LABEL), false);
+			}
 		}
 
 		@Override
