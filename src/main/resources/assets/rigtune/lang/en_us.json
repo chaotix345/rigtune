@@ -294,6 +294,7 @@
 	"rigtune.preview.subtitle": "Nothing has been changed or downloaded yet.",
 	"rigtune.preview.title": "Preview of Apply",
 	"rigtune.preview.value.none": "not set",
+	"rigtune.tryit.refused.running": "A Try it (measured) is still in progress. Finish or cancel it first.",
 	"rigtune.profile.active": "Active",
 	"rigtune.profile.baseline": "My settings",
 	"rigtune.profile.code.error.damaged": "That code is damaged or incomplete. Copy the whole code again.",
