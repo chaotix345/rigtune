@@ -154,6 +154,11 @@ public final class Compat040 {
 						: "unknown expectation(s) " + unknown + " for " + kind);
 				continue;
 			}
+			// Each set's checks run on that set alone: a check of a file the set doesn't hold would pass on nothing.
+			if (!Files.isRegularFile(dir.resolve(file))) {
+				check(name, false, file + " isn't in the set");
+				continue;
+			}
 			if (kind.equals("Unread")) {
 				unread.add(new String[]{name, file});
 				continue;

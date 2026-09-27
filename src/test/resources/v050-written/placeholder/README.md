@@ -16,7 +16,6 @@ unchanged, and the downgrade E2E checks they are byte-identical.
 | `ws-s` | stutter.json | a session with `settingsAtStart`/`settingsAtEnd` and the `settingsChanged` tag |
 | `ws-s2` | history.json, pending.json, stutter-fixes.json | an applied stutter fix (`vanilla.renderDistance`) and a staged one (a Sodium PATCH_JSON op) |
 | `ws-p` | history.json, profiles.json | a `baseline-` entry with `foldedEntryIds`; a profile with a 1024 DH radius; `battery.previousProfile` |
-| `ws-p2` | server-profiles.json | one entry per kind (REMOTE, LAN_GUEST, REALM) |
 | `ws-b` | benchmarks.json | runs with `worldFresh`, `dhGenerating`, `stagedAtStart` |
 | `ws-t` | benchmarks.json, history.json, pending.json, tryit.json | a `tryit-` pair, the try's staged Apply and its PATCH_JSON op, the open try |
 | `ws-w` | awareness.json | `optionsAtExit` |

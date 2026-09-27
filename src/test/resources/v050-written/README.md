@@ -66,8 +66,8 @@ byte-identical, and what 0.4 must still hold (sessions, runs, servers, dismissal
 ## `expect.json`: what 0.4.0's own classes must do with the set
 
 compat040 (WS-E's `tools/e2e/compat/Compat040.java`) is a data-driven interpreter: it runs each check with the released
-0.4.0 jar's own class on the composed instance and fails on any mismatch or on a check kind it doesn't know. One file
-per set:
+0.4.0 jar's own class on that set's files alone (a spare copy for the checks that write), and fails on any mismatch, on a
+check kind it doesn't know, or on a check of a file the set doesn't hold. One file per set:
 
 ```json
 {
