@@ -120,6 +120,38 @@ class HistoryScreenTest {
 		assertEquals("Updated Sodium: s-1.jar → s-2.jar", english(HistoryScreen.describe(update)));
 	}
 
+	// docs/v0.5/SPEC.md L8 (AC2H.3): the baseline row's "Includes" line, newest first, at most 3 names and then "+N".
+	@Test
+	void l8IncludesLine() throws IOException {
+		assertNull(HistoryScreen.includes(includes()));
+		assertEquals("Includes: Profile: Battery", render(HistoryScreen.includes(includes("Battery"))));
+		assertEquals("Includes: Profile: C, Profile: B, Profile: A", render(HistoryScreen.includes(includes("C", "B", "A"))));
+		assertEquals("Includes: Profile: E, Profile: D, Profile: C +2", render(HistoryScreen.includes(includes("E", "D", "C", "B", "A"))));
+	}
+
+	private static HistoryModel.Entry includes(String... names) {
+		return new HistoryModel.Entry("baseline-x", JournalEntry.APPLY, null, null, null, null, null, true, List.of(), null, List.of("a", "b"),
+				List.of(names));
+	}
+
+	// A component's English: a translation from en_us.json with its arguments rendered, a literal as it is, then its siblings.
+	private static String render(Component text) throws IOException {
+		StringBuilder out = new StringBuilder();
+		if (text.getContents() instanceof TranslatableContents t) {
+			List<Object> args = new ArrayList<>();
+			for (Object arg : t.getArgs()) {
+				args.add(arg instanceof Component c ? render(c) : arg);
+			}
+			out.append(lang().get(t.getKey()).getAsString().formatted(args.toArray()));
+		} else {
+			out.append(net.minecraft.network.chat.MutableComponent.create(text.getContents()).getString());
+		}
+		for (Component sibling : text.getSiblings()) {
+			out.append(render(sibling));
+		}
+		return out.toString();
+	}
+
 	private static HistoryModel.Entry entry(Row... rows) {
 		List<Change> changes = new ArrayList<>();
 		for (Row row : rows) {

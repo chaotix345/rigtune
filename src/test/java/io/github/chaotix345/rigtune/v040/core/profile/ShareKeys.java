@@ -1,4 +1,4 @@
-package io.github.chaotix345.rigtune.core.profile;
+package io.github.chaotix345.rigtune.v040.core.profile;
 
 import org.jspecify.annotations.Nullable;
 
@@ -11,9 +11,8 @@ import java.util.Map;
 import java.util.Set;
 
 // The v1 share-code key table (docs/v0.4/SPEC.md 4, docs/research/v0.4/profiles.md §5.2): FROZEN and APPEND-ONLY. A key's
-// index is its wire id, and an enum's value order is its wire values, so neither ever changes. A later RigTune only adds
-// keys at the end, each a varint type: never extend an existing key's range or enum; add a new key index (older decoders
-// skip unknown indices). A 0.4.0 decoder rejects the whole code on an out-of-range known key (docs/v0.5/SPEC.md Latent 1).
+// index is its wire id, and an enum's value order is its wire values, so neither ever changes; a later RigTune only adds
+// keys at the end (and values at the end of an enum), each a varint type, so older decoders can skip what they don't know.
 // Every value is an integer on the wire (no strings, paths, mod ids or floats). The two thread counts are local-only:
 // profiles keep them, share codes never carry them (a decoder drops them). This table is also the profiles' managed
 // keyset: a profile never holds another key (never vanilla.graphicsPreset or iris.shaderPack).
@@ -95,21 +94,6 @@ public final class ShareKeys {
 			};
 		}
 
-		// The value as a profile holds it (v0.5 PF-5): the table's own spelling of a value the wire can carry, else a whole
-		// number inside the key's local range (LOCAL_MAX), else null. Every profile gate uses it (what "My settings" and Save
-		// current keep, what profiles.json reads back, what a switch and a clamp may set); a share code still carries only
-		// what encode() accepts.
-		public @Nullable String local(@Nullable String value) {
-			Integer wire = encode(value);
-			if (wire != null) {
-				return decode(wire, 60);
-			}
-			Integer localMax = LOCAL_MAX.get(key);
-			String v = normalise(value);
-			Integer n = localMax == null || kind != Kind.INT || v == null ? null : whole(v);
-			return n == null || n < min || n > localMax ? null : Integer.toString(n);
-		}
-
 		private @Nullable Integer enumIndex(String v) {
 			for (int i = 0; i < values.size(); i++) {
 				if (values.get(i).equals(v)) {
@@ -161,11 +145,6 @@ public final class ShareKeys {
 			new Key(27, "dh.client.advanced.debugging.rendererMode", Kind.ENUM, 0, 0, List.of("DEFAULT", "DISABLED"), true),
 			new Key(28, "iris.maxShadowRenderDistance", Kind.INT, 0, 32, List.of(), true),
 			new Key(29, "iris.enableShaders", Kind.BOOL, 0, 1, List.of(), true));
-
-	// v0.5 PF-5: keys whose game range is wider than their wire range, with the game's maximum. Distant Horizons 3.3.2 allows
-	// an LOD radius of 32..4096 (`setMinDefaultMax(32, 256, 4096)`, javap; docs/research/v0.5/audit-v040-verification.md
-	// PF-5), the wire only 32..512. Profiles hold the game's range; a share code leaves out what the wire can't carry.
-	private static final Map<String, Integer> LOCAL_MAX = Map.of("dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", 4096);
 
 	private static final Map<String, Key> BY_KEY = new LinkedHashMap<>();
 
