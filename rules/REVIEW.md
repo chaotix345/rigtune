@@ -6,7 +6,7 @@ Target MC versions: 26.3, 26.2. Newest: 26.3.
 - New upstream mods to triage: 0
 - Rule mods with a status or removal concern: 0
 - Rule mods missing a Fabric build for 26.3: 3
-- Rules changed or omitted in rules-v1.json: 44
+- Rules changed or omitted in rules-v1.json: 45
 
 ## (a) Upstream mods not yet tracked in knowledge.json
 None found.
@@ -70,3 +70,4 @@ None found.
 | advice[jvm-xmx-duplicate] | omitted ("v1": false) |
 | advice[driver-nvidia-threaded-optimization] | omitted ("v1": false) |
 | advice[driver-intel-gen7-old] | omitted ("v1": false) |
+| advice[old-client-launcher-mods] | v1 override: when |

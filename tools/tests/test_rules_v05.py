@@ -399,6 +399,22 @@ class GeneratedV05Tests(unittest.TestCase):
         self.assertEqual(with_fixes_v1, without_v1)
         self.assertEqual(ur.strip_meta(self.v1), with_fixes_v1)
 
+    # 4i (AC4i.1, AC4i.2): one warning, only for clients below 0.5.0 (0.2.0-0.4.0 through modVersion, 0.1.x through the v1
+    # override), after the last r16 advice; minModVersion unchanged; no other advice added since r16.
+    def test_the_old_client_warning(self):
+        rule = next(a for a in self.v2["advice"] if a["id"] == "old-client-launcher-mods")
+        self.assertEqual(rule["when"], {"modVersion": {"rigtune": "<0.5.0-"}})
+        self.assertEqual((rule["kind"], sorted(rule)), ("warning", ["id", "impact", "kind", "text", "title", "when"]))
+        v1_rule = next(a for a in self.v1["advice"] if a["id"] == "old-client-launcher-mods")
+        self.assertEqual(v1_rule, dict(rule, when={"always": True}))
+        for text in ("Modrinth App", "CurseForge", "ATLauncher", "GDLauncher", "Prism", "Install, Update and Disable",
+                     "Content → Disabled", "RigTune 0.5"):
+            self.assertIn(text, rule["text"])
+        r16_v1 = repo_json("src", "test", "resources", "rules", "r16", "rules-v1.json")
+        for new, old in ((self.v2, self.r16), (self.v1, r16_v1)):
+            self.assertEqual([a["id"] for a in new["advice"]], [a["id"] for a in old["advice"]] + ["old-client-launcher-mods"])
+            self.assertEqual(new.get("minModVersion"), old.get("minModVersion"))
+
     # L2 (SPEC 2S): one info entry on the tag, calibrated on P5C-F1's re-runs and AC5.8's A control (ChunksLoadingSeedTest).
     def test_the_l2_seed(self):
         seed = self.stutter("stutter-chunks-loading-tag")

@@ -31,7 +31,7 @@ class LegacyRulesParseTest {
 	}
 
 	// docs/v0.5/SPEC.md "Compatibility promise" (0.2.x/0.3.x), AC5.2: the main-list advice the release revision R adds over r16.
-	static final List<String> ADVICE_ADDED_SINCE_R16 = List.of();
+	static final List<String> ADVICE_ADDED_SINCE_R16 = List.of(OldClientWarningTest.ID);
 	static final String R16 = "/rules/r16/rules-v2.json";
 
 	static String resource(String name) throws IOException {
