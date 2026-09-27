@@ -4,6 +4,7 @@ import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore;
 import io.github.chaotix345.rigtune.client.benchmark.KeepSettings;
+import io.github.chaotix345.rigtune.client.compat.OptionalMods;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.stutter.StutterHooks;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkMath;
@@ -19,6 +20,8 @@ import io.github.chaotix345.rigtune.core.benchmark.Step;
 import io.github.chaotix345.rigtune.core.benchmark.TrendText;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.model.Text;
+import io.github.chaotix345.rigtune.core.stutter.Attributor;
+import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
@@ -213,6 +216,30 @@ public class BenchmarkResultScreen extends Screen {
 		return (int) shownRows.stream().filter(r -> r.full() != null).count();
 	}
 
+	// docs/v0.5/SPEC.md 2B: the noise warning with what it went with (RW-7), Distant Horizons generating terrain during the
+	// run (RW-6) and measured with its rendering off (RW-9).
+	private void noteLines(List<Line> out, BenchmarkMath.Aggregate result) {
+		StutterReport capture = StutterHooks.lastBenchmark();
+		int spikes = capture == null ? 0 : capture.spikes().total();
+		Text noisy = ResultNotes.noisy(result.cv(), spikes, tagged(capture, Attributor.DH), tagged(capture, Attributor.CHUNKS_LOADING));
+		if (noisy != null) {
+			out.add(new Line(Texts.component(noisy), COLOR_WARN));
+		}
+		Text generating = ResultNotes.dhGenerating(outcome.record() == null ? null : outcome.record().context());
+		if (generating != null) {
+			out.add(new Line(Texts.component(generating), COLOR_WARN));
+		}
+		Text dhOff = ResultNotes.dhOff(OptionalMods.dhLoaded(), outcome.session().original().dhRendering());
+		if (dhOff != null) {
+			out.add(new Line(Texts.component(dhOff), COLOR_LABEL));
+		}
+	}
+
+	private static int tagged(@Nullable StutterReport capture, String tag) {
+		Integer n = capture == null ? null : capture.tags().get(tag);
+		return n == null ? 0 : n;
+	}
+
 	// v0.4 (docs/v0.4/SPEC.md 5): the Stutter Doctor's line for the benchmark's sweeps ("2 spikes; likely causes: ..."), and
 	// (docs/v0.5/SPEC.md RW-15) how many steps it left out.
 	private void stutterLine(List<Line> out) {
@@ -246,10 +273,7 @@ public class BenchmarkResultScreen extends Screen {
 			out.add(new Line(tune()
 					? Component.translatable("rigtune.benchmark.result", fps(result.avgFps()), fps(result.onePercentLowFps()), p99, result.repeats())
 					: Component.translatable("rigtune.benchmark.result.detail", p99, result.repeats()), COLOR_LABEL));
-			if (BenchmarkMath.noisy(result.cv())) {
-				out.add(new Line(Component.translatable("rigtune.benchmark.noisy",
-						String.format(Locale.ROOT, "%.0f%%", result.cv() * 100)), COLOR_WARN));
-			}
+			noteLines(out, result);
 			stutterLine(out);
 		}
 		boolean sdMeasured = session.measurements().stream().anyMatch(m -> m.step().kind() == Step.Kind.SIMULATION_DISTANCE);

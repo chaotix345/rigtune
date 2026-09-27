@@ -4,10 +4,13 @@ import io.github.chaotix345.rigtune.core.model.Text;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 
 // The benchmark result screen's lines about how the run was measured (docs/v0.5/SPEC.md 2B), pure so their truth tables
-// are unit-tested: the distances that couldn't be measured (RW-5) and the steps the stutter check left out (RW-15).
+// are unit-tested: the distances that couldn't be measured (RW-5), the steps the stutter check left out (RW-15), Distant
+// Horizons generating terrain (RW-6), what the noise went with (RW-7) and Distant Horizons rendering off (RW-9). Each
+// names what was measured; none claims a cause.
 public final class ResultNotes {
 	private ResultNotes() {
 	}
@@ -25,6 +28,38 @@ public final class ResultNotes {
 						"? Render distance %s couldn't be measured: its terrain hadn't loaded in time, so it counts as neither a pass nor a fail.", list)
 				: Text.of("rigtune.benchmark.not_measured.distances",
 						"? Render distances %s couldn't be measured: their terrain hadn't loaded in time, so they count as neither a pass nor a fail.", list);
+	}
+
+	// RW-9: the player plays with Distant Horizons rendering, the run measured without it (the rules cap vanilla render
+	// distance while it renders, so the tune doesn't carry over).
+	public static @Nullable Text dhOff(boolean dhInstalled, boolean dhRendering) {
+		return dhInstalled && !dhRendering ? Text.of("rigtune.benchmark.dh_off", "Measured with Distant Horizons rendering off") : null;
+	}
+
+	// RW-6: the run's context says Distant Horizons generated terrain while it ran.
+	public static @Nullable Text dhGenerating(BenchmarkRecord.@Nullable Context context) {
+		return context != null && Boolean.TRUE.equals(context.dhGenerating())
+				? Text.of("rigtune.benchmark.dh_generating", "Distant Horizons was generating terrain during this run, so these numbers may be low.")
+				: null;
+	}
+
+	// RW-7: the noise warning (cv above BenchmarkMath.NOISY_CV), naming Distant Horizons building terrain or new terrain
+	// being generated when those tags are on at least half of the benchmark capture's spikes (Distant Horizons first);
+	// otherwise the generic line. Null when the run wasn't noisy.
+	public static @Nullable Text noisy(@Nullable Double cv, int spikes, int dhTagged, int chunksLoadingTagged) {
+		if (!BenchmarkMath.noisy(cv)) {
+			return null;
+		}
+		String spread = String.format(Locale.ROOT, "%.0f%%", cv * 100);
+		if (spikes > 0 && 2 * dhTagged >= spikes) {
+			return Text.of("rigtune.benchmark.noisy.dh", "Results were noisy (%s spread) while Distant Horizons was building terrain; a later run may be steadier.",
+					spread);
+		}
+		if (spikes > 0 && 2 * chunksLoadingTagged >= spikes) {
+			return Text.of("rigtune.benchmark.noisy.terrain",
+					"Results were noisy (%s spread) while new terrain was still being generated; a later run may be steadier.", spread);
+		}
+		return Text.of("rigtune.benchmark.noisy", "Results were noisy (%s spread): close background apps and retry.", spread);
 	}
 
 	// The table's last column.
