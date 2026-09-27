@@ -39,6 +39,15 @@ Owner: WS-P2, the P5 agent (AC7.16's real JOIN against a vanilla server on a non
 
 ## first-apply
 Owner: WS-F, the P5 agent (AC8.17's fresh-instance run at three sizes, the 26.3 Apply half).
+- WS-F (CI, every push): `FirstApplyGameTest` on the three legs drives the real flow from a fresh run dir (the guide at
+  1280×720/854×480/640×480 scale 2, How it works, NoticeScreen, the first Apply's confirmation against History's rows,
+  Undo this Apply, History…, Done/Esc, Got it, the list-height check against 0.4.0's measured 76 px); `A11yGameTest`'s
+  `walkFirstApply`/`walkHowItWorks`. Screenshots: `firstapply-*` and `a11y-*first-apply*`/`a11y-*how-it-works*` in each
+  leg's `gametest-screenshots-*` artifact. Details, run ids and what was looked at: docs/v0.5/design/ws-f.md.
+- The 0.4.0 list-height baseline (AC8.18): measured once locally on a throwaway branch from `v0.4.0` (ws-f.md, "The 0.4.0
+  list-height baseline").
+- AC8.17 (the dev-PC fresh-instance run, one Narrator pass, the 26.3 Apply half, the read-only copy of the real
+  instance's config/rigtune): Phase 5's P5 agent, results in docs/smoke/first-apply/.
 
 ## startup
 Owner: WS-W (2L's performance-counter advice, AC2L.5), WS-W2 (AC9.8's launches).

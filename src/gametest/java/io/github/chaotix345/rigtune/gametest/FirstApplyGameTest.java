@@ -145,6 +145,8 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 		context.waitForScreen(TitleScreen.class);
 		context.clickScreenButton("rigtune.button");
 		context.waitForScreen(RigTuneScreen.class);
+		// The first title screen's own toasts (the suggestions count, the privacy note) would cover the notice line.
+		context.runOnClient(mc -> mc.gui.toastManager().clear());
 		context.getInput().setCursorPos(1, 1);
 		context.waitTicks(3);
 	}
@@ -454,6 +456,9 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 					}
 				}
 			});
+			// No keyboard focus, so no button's tooltip covers the rows in the screenshot.
+			context.runOnClient(mc -> mc.gui.screen().clearFocus());
+			context.waitTicks(1);
 			context.takeScreenshot(at);
 		}
 		v05.resize(854, 480, 2);

@@ -94,3 +94,25 @@ the guide; the confirmation, its History row functions, the restart logic and th
   holds for the RIGTUNE layout today; the check guards what C02 and P0.4 add.
 - Constant: `FirstApplyGameTest.V040_LIST_HEIGHT_640X480 = 76`; the guide may cost one notice line (16 px): ≥ 60 with the
   guide, ≥ 76 once it's dismissed, under RIGTUNE and LAUNCHER.
+
+## What landed (files)
+- `core/history/FirstRun` (`isNew(state, entries, lastApplyExists, pendingExists)`, `isNew(Journal, configDir)`).
+- `client/FirstRunService` (fills WS-K's skeleton: `status()`, `firstApplyPending()`, `load()`, `applied(ApplyFacts)`;
+  new `loadedOn()` and the test seam `forceStatusForTests(Status)`).
+- `client/notice/FirstRunNoticeSource` (fills WS-K's skeleton; public `KEY`, `HOW`, `GOT_IT`, `notice(policy,
+  guideLine)`; package-private `shows(...)`, `current(...)`).
+- New `client/ui/FirstApplyScreen`, `client/ui/HowItWorksScreen`.
+- `client/ui/RigTuneScreen`: `applySelected` (6 lines) and the `ChangeRecorder` import, nothing else.
+- en_us.json: 25 keys `rigtune.firstrun.*` after the anchor `rigtune.header.offline`, alphabetical.
+- Tests: `FirstRunTest`, `FirstRunServiceTest`, `FirstRunNoticeSourceTest`, `FirstApplyScreenTest`, `HowItWorksScreenTest`;
+  game tests `FirstApplyGameTest`, `A11yGameTest.walkFirstApply`/`walkHowItWorks` (+ the helper
+  `highContrastScreenshot` below them; qualified class names instead of new imports, so the shared import block is
+  untouched).
+- Fixture set `src/test/resources/v050-written/ws-f/`: `awareness.json` (`dismissed: ["firstrun.guide"]`, written by
+  `FirstRunNoticeSourceTest.theFixtureSetIsWhatThisVersionWrites` through `AwarenessStore.dismiss`), `expect.json`
+  (`AwarenessStore` keeps `dismissed`, no `.bad`).
+- `V05LangFamilies.firstRun`: stays empty: every `rigtune.firstrun.*` key is written out literally, so LangCheckTest needs
+  no family.
+- Untouched (AC8.10, hotspot rules): `ClientSettings`, `StartupNotices`, `RealController`, `RigTuneClient`,
+  `RigTuneController`, `V05Services`, `V05Hooks`, `HistoryScreen`, `HistoryModel`, `Journal`, `UndoScreen`, `NoticeScreen`,
+  `tools/footprint-budgets.json` (`git diff origin/feat/v0.5.0 HEAD` on them is empty).
