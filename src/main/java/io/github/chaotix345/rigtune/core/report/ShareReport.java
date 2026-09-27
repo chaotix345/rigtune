@@ -56,10 +56,22 @@ public final class ShareReport {
 
 	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, int maxChars, @Nullable String launcher,
 			@Nullable JvmReport jvm) {
+		return format(report, versions, benchmark, maxChars, launcher, jvm, null);
+	}
+
+	// v0.5 (docs/v0.5/SPEC.md 4b): modFiles is the "- Mod files: ..." line under the launcher's (LauncherModText.shareLine),
+	// or null for none (RigTune changes mod files, as in 0.4).
+	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, @Nullable String launcher, @Nullable JvmReport jvm,
+			@Nullable String modFiles) {
+		return format(report, versions, benchmark, DISCORD_LIMIT, launcher, jvm, modFiles);
+	}
+
+	public static String format(Report report, Versions versions, BenchmarkSummary benchmark, int maxChars, @Nullable String launcher,
+			@Nullable JvmReport jvm, @Nullable String modFiles) {
 		StringBuilder fixed = new StringBuilder();
 		fixed.append("**RigTune ").append(field(versions.rigtune())).append("** · Minecraft ").append(field(versions.minecraft()))
 				.append(" · Fabric Loader ").append(field(versions.loader())).append('\n');
-		hardware(fixed, report, launcher, jvm);
+		hardware(fixed, report, launcher, jvm, modFiles);
 		benchmark(fixed, benchmark);
 
 		List<String> items = items(report.recommendations());
@@ -78,7 +90,7 @@ public final class ShareReport {
 		return hardCut(text, maxChars);
 	}
 
-	private static void hardware(StringBuilder out, Report report, @Nullable String launcher, @Nullable JvmReport jvm) {
+	private static void hardware(StringBuilder out, Report report, @Nullable String launcher, @Nullable JvmReport jvm, @Nullable String modFiles) {
 		HardwareProfile hw = report.hardware();
 		CpuInfo cpu = hw.cpu();
 		out.append("**Hardware**\n");
@@ -116,6 +128,9 @@ public final class ShareReport {
 		out.append('\n');
 		if (!blank(launcher)) {
 			out.append("- Launcher: ").append(field(launcher)).append('\n');
+		}
+		if (!blank(modFiles)) {
+			out.append(modFiles).append('\n');
 		}
 		java(out, jvm);
 

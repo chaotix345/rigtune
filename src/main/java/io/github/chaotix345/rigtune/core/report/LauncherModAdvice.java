@@ -60,6 +60,19 @@ public final class LauncherModAdvice {
 		return selected.stream().filter(r -> kind(r.action()) == null).toList();
 	}
 
+	// Whether this class turned the row into advice (under LAUNCHER or PENDING): Preview counts them (4b).
+	public static boolean advised(Recommendation r) {
+		return noteIn(r.reasonText());
+	}
+
+	private static boolean noteIn(Text text) {
+		return switch (text) {
+			case Text.Translatable t -> t.key().startsWith(NOTE_PREFIX);
+			case Text.Joined joined -> joined.parts().stream().anyMatch(LauncherModAdvice::noteIn);
+			default -> false;
+		};
+	}
+
 	// The kind of launcher steps a row this class turned into advice gets ("add", "update", "disable", "self_update": the
 	// LauncherInfo.modStepsKey kinds), read back from its note; null for any other row, a PENDING one included.
 	public static @Nullable String kindOf(Recommendation r) {

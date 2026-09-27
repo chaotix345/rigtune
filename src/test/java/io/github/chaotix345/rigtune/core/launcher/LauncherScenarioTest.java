@@ -156,6 +156,7 @@ class LauncherScenarioTest {
 		keys.put("rigtune.launcher.mod_files.note.update", 1);
 		keys.put("rigtune.launcher.mod_files.opted_in", 1);
 		keys.put("rigtune.launcher.mod_files.preview", 2);
+		keys.put("rigtune.launcher.mod_files.preview.heading", 0);
 		keys.put("rigtune.launcher.mod_files.preview.pending", 1);
 		keys.put("rigtune.launcher.mod_files.your_launcher", 0);
 		for (Launcher launcher : Launcher.values()) {

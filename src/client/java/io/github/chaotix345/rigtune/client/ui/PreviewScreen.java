@@ -3,10 +3,13 @@ package io.github.chaotix345.rigtune.client.ui;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ConfigTargets;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
+import io.github.chaotix345.rigtune.core.launcher.LauncherModText;
 import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
+import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
+import io.github.chaotix345.rigtune.core.report.LauncherModAdvice;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.ComponentPath;
@@ -280,8 +283,16 @@ public class PreviewScreen extends Screen {
 
 	// v0.5 per-owner rows (PLAN contracts 13g); each adds nothing until its owner fills it in.
 
-	// P0.4 (docs/v0.5/SPEC.md 4b, WS-L1): "Mod changes to make in <launcher>: N (listed on the main screen)".
+	// P0.4 (docs/v0.5/SPEC.md 4b, WS-L1): "Mod changes to make in <launcher>: N (listed on the main screen)": the report's
+	// mod-file rows the launcher took over (none of them is in this preview, which lists what Apply does).
 	private void launcherLines(PreviewList target, ApplyPreview shown, int width) {
+		Report report = controller.report();
+		int count = report == null ? 0 : (int) report.recommendations().stream().filter(LauncherModAdvice::advised).count();
+		Text line = LauncherModText.previewLine(controller.modFiles(), controller.launcher(), count);
+		if (line != null) {
+			target.heading("rigtune.launcher.mod_files.preview.heading", width);
+			target.row(Texts.component(line), COLOR_NOTE, INDENT, width);
+		}
 	}
 
 	// 4h (WS-W), under "Written now": the Modrinth App's game-settings sync line.

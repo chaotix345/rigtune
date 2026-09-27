@@ -151,6 +151,17 @@ class LauncherModAdviceTest {
 		}
 	}
 
+	// Preview counts the rows the launcher took over (PENDING's too); a row Modrinth-off made advice isn't one.
+	@Test
+	void advisedRowsAreTheOnesThisStepMade() {
+		for (ModFilesPolicy policy : List.of(ModFilesPolicy.LAUNCHER, ModFilesPolicy.PENDING)) {
+			long advised = LauncherModAdvice.apply(report(ALL), policy, MODRINTH_APP).recommendations().stream().filter(LauncherModAdvice::advised).count();
+			assertEquals(KIND.size(), advised, policy.name());
+		}
+		assertEquals(0, ModrinthOffAdvice.apply(report(ALL), true).recommendations().stream().filter(LauncherModAdvice::advised).count());
+		assertEquals(0, ALL.stream().filter(LauncherModAdvice::advised).count());
+	}
+
 	@Test
 	void theNotesInEnglish() {
 		Report out = LauncherModAdvice.apply(report(List.of(ADD, UPDATE, DISABLE)), ModFilesPolicy.LAUNCHER, MODRINTH_APP);

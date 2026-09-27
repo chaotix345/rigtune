@@ -123,6 +123,7 @@
 	"rigtune.launcher.mod_files.note.update": "This instance's mods are managed by %s: update it there.",
 	"rigtune.launcher.mod_files.opted_in": "RigTune changes mod files here; %s's own list may go out of date.",
 	"rigtune.launcher.mod_files.preview": "Mod changes to make in %s: %s (listed on the main screen)",
+	"rigtune.launcher.mod_files.preview.heading": "Mod files",
 	"rigtune.launcher.mod_files.preview.pending": "Mod changes waiting until RigTune knows which launcher manages this instance's mods: %s (listed on the main screen)",
 	"rigtune.launcher.mod_files.your_launcher": "your launcher",
 	"rigtune.launcher.mod_steps.atlauncher.add": "this instance's Edit Mods button → Browse Mods.",

@@ -4,6 +4,7 @@ import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.probe.LauncherProbe;
 import io.github.chaotix345.rigtune.core.launcher.InstanceEvidence;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
+import io.github.chaotix345.rigtune.core.launcher.LauncherModText;
 import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import org.jspecify.annotations.Nullable;
 
@@ -43,7 +44,14 @@ public final class ModFilesService {
 		return ModFilesPolicy.of(launcher.get(), evidence.get(), false);
 	}
 
+	// The opt-in is on and is what makes the policy RIGTUNE (the instance would otherwise be LAUNCHER or PENDING): the
+	// opted-in header line, the share line, C02's guide (LauncherModText.guideLine's optedIn).
 	public boolean optedIn() {
-		return optIn.getAsBoolean();
+		return optIn.getAsBoolean() && withoutOptIn().launcherManages();
+	}
+
+	// The share report's "- Mod files:" line, or null (LauncherModText.shareLine).
+	public @Nullable String shareLine() {
+		return LauncherModText.shareLine(policy(), launcher.get(), optedIn());
 	}
 }

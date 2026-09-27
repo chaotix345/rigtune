@@ -52,5 +52,25 @@ class ModFilesServiceTest {
 		assertEquals(ModFilesPolicy.RIGTUNE, service.policy());
 		assertEquals(ModFilesPolicy.LAUNCHER, service.withoutOptIn());
 		assertEquals(true, service.optedIn());
+		assertEquals("- Mod files: RigTune (opted in)", service.shareLine());
+	}
+
+	// An opt-in left on in an instance whose launcher keeps no record changes nothing and isn't reported.
+	@Test
+	void anOptInThatDoesntMatterIsNotOptedIn() {
+		launcher.set(LauncherInfo.of(Launcher.OFFICIAL));
+		evidence.set(InstanceEvidence.NONE);
+		optIn.set(true);
+		assertEquals(ModFilesPolicy.RIGTUNE, service.policy());
+		assertEquals(false, service.optedIn());
+		assertEquals(null, service.shareLine());
+	}
+
+	@Test
+	void theShareLineFollowsThePolicy() {
+		assertEquals("- Mod files: waiting for the launcher check", service.shareLine());
+		launcher.set(LauncherInfo.of(Launcher.GDLAUNCHER));
+		evidence.set(InstanceEvidence.NONE);
+		assertEquals("- Mod files: changed in GDLauncher", service.shareLine());
 	}
 }
