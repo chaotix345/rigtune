@@ -175,7 +175,7 @@ class LegacyConditionFailClosedTest {
 		asAdvice.addProperty("revision", 1);
 		asAdvice.add("advice", bundled.getAsJsonArray("stutterAdvice"));
 		var legacy = io.github.chaotix345.rigtune.v030.core.rules.RulesLoader.parse(asAdvice.toString());
-		assertEquals(5, legacy.advice.size());
+		assertEquals(bundled.getAsJsonArray("stutterAdvice").size(), legacy.advice.size());
 		for (var rule : legacy.advice) {
 			assertFalse(Recommender.supported(rule.requires), rule.id);
 			assertFalse(io.github.chaotix345.rigtune.core.recommend.Recommender.SUPPORTED_FEATURES.contains("stutter-doctor"));
