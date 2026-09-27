@@ -504,12 +504,71 @@ public class A11yGameTest implements FabricClientGameTest {
 
 	// ---- WS-F (C02, AC8.12): FirstApplyScreen.
 
+	// Over the canned history's entry e2 (Render distance applied, Lithium waiting for the restart): Tab reaches every row in
+	// order and each narrates its text, the Tab after the last row leaves the list, the open narration says the title, the
+	// summary and the restart outcome; a focused row and high contrast in the screenshots.
 	private static void walkFirstApply(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		net.minecraft.client.gui.screens.Screen found = context.computeOnClient(mc -> mc.gui.screen());
+		A11yController controller = new A11yController(v05.stub(), v05.real(), v05.configDir());
+		try {
+			context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.FirstApplyScreen(new TitleScreen(), controller, "e2",
+					Component.literal("2 settings applied."))));
+			context.waitFor(mc -> mc.gui.screen() instanceof io.github.chaotix345.rigtune.client.ui.FirstApplyScreen f && !f.loading() && f.view() != null
+					&& rows(mc) == 7, 200);
+			context.waitTicks(2);
+			String restart = Component.translatable("rigtune.firstrun.applied.restart").getString();
+			walk(context, "first-apply", List.of("2 settings applied.", Component.translatable("rigtune.firstrun.applied.section.now").getString(),
+					"Render distance", Component.translatable("rigtune.firstrun.applied.section.restart").getString(), "Lithium", restart,
+					Component.translatable("rigtune.firstrun.applied.undo_hint").getString()));
+			String opening = context.computeOnClient(mc -> mc.gui.screen().getNarrationMessage().getString());
+			check(opening.contains(Component.translatable("rigtune.firstrun.applied.title").getString()) && opening.contains("1 setting, 1 mod")
+					&& opening.contains(restart), "first-apply: the open narration has the title, the summary and the restart outcome: " + opening);
+			focusRow(context, 2);
+			context.takeScreenshot("a11y-first-apply-focus-854x480-scale2");
+			highContrastScreenshot(context, "a11y-hc-first-apply-854x480-scale2");
+		} finally {
+			context.runOnClient(mc -> mc.gui.setScreen(found));
+		}
 	}
 
 	// ---- WS-F (C02, AC8.12): HowItWorksScreen.
 
+	// Each paragraph is a Tab stop that narrates it, in order, for RigTune's own mod files and while the launcher is being
+	// checked (no mods paragraph then).
 	private static void walkHowItWorks(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		net.minecraft.client.gui.screens.Screen found = context.computeOnClient(mc -> mc.gui.screen());
+		A11yController controller = new A11yController(v05.stub(), v05.real(), v05.configDir());
+		try {
+			for (ModFilesPolicy policy : List.of(ModFilesPolicy.RIGTUNE, ModFilesPolicy.PENDING)) {
+				CannedViews.modFiles(policy);
+				int expected = policy == ModFilesPolicy.RIGTUNE ? 6 : 5;
+				context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.HowItWorksScreen(new TitleScreen(), controller)));
+				context.waitFor(mc -> mc.gui.screen() instanceof io.github.chaotix345.rigtune.client.ui.HowItWorksScreen && rows(mc) == expected,
+						100);
+				context.waitTicks(2);
+				String all = walk(context, "how-it-works " + policy, List.of(Component.translatable("rigtune.firstrun.how.now").getString(),
+						Component.translatable("rigtune.firstrun.how.restart").getString(), Component.translatable("rigtune.firstrun.how.undo").getString()));
+				String mods = Component.translatable("rigtune.firstrun.how.mods").getString();
+				check(all.contains(mods) == (policy == ModFilesPolicy.RIGTUNE), "how-it-works " + policy + ": the mods paragraph only with RigTune's own");
+			}
+			focusRow(context, 1);
+			context.takeScreenshot("a11y-how-it-works-focus-854x480-scale2");
+			highContrastScreenshot(context, "a11y-hc-how-it-works-854x480-scale2");
+		} finally {
+			CannedViews.clear();
+			context.runOnClient(mc -> mc.gui.setScreen(found));
+		}
+	}
+
+	// The screen as it is, with High Contrast Block Outline on (Palette reads it when drawing), then the option as it was.
+	private static void highContrastScreenshot(ClientGameTestContext context, String name) {
+		boolean outline = context.computeOnClient(mc -> mc.options.highContrastBlockOutline().get());
+		context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(true));
+		context.waitTicks(2);
+		context.takeScreenshot(name);
+		context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(outline));
 	}
 
 	// ---- WS-W, then WS-W2 (2L, C18 AC9.5): ToolsScreen's startup lines.

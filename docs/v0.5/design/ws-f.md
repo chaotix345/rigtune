@@ -73,3 +73,24 @@ the line as soon as WS-L1 lands. AC4b.6 (never for a NEW player) reads this work
 
 Cut order if time runs short (SPEC 8): the explainer, then live reload during downloads, then the launcher wording, then
 the guide; the confirmation, its History row functions, the restart logic and the a11y walk are never cut.
+
+---
+
+# As built
+
+## The 0.4.0 list-height baseline (AC8.18's code-deciding run)
+- 2026-09-27, local, under the game-test lock: a throwaway worktree (in the scratch dir) on the local branch
+  `throwaway/ws-f-v040-listheight` from the `v0.4.0` tag (01839d70), never pushed, with one game-test class,
+  `ListHeightProbeGameTest`, as the only entrypoint: RigTune's network switched off (0.4.0's own way: `ClientSettings`
+  + `settingsChanged()`), then `new RigTuneScreen(new TitleScreen(), new StubController(RigTuneClient::hardware))` with no
+  notice, the list's height read from the screen's `ContainerObjectSelectionList`. `./gradlew :26.2:runClientGameTest`
+  (26.2, Windows, GUI scale set per size).
+- Result (log lines `ListHeightProbe v0.4.0 …`): 640×480 scale 2 (320×240 scaled): list y 76, **height 76**, 4 header
+  lines, no notice; 854×480 scale 2: height 100; 1280×720 scale 2: height 220; 854×480 scale 3: height 100. The 640×480
+  screenshot shows the header's 4 lines (CPU, GPU, tier + display/rules, "Offline (network off in settings)…"), one
+  recommendation visible, the 8-button footer in 3 rows. The arithmetic agrees (fa §1.5: footer top 168, status 156, list
+  bottom 152; header bottom 30 + 4 × 10 + 2 = 72, list top 76).
+- `RigTuneScreen.java` at `v0.4.0` and at this branch's base (a7613410) are identical (`diff` empty), so the constant
+  holds for the RIGTUNE layout today; the check guards what C02 and P0.4 add.
+- Constant: `FirstApplyGameTest.V040_LIST_HEIGHT_640X480 = 76`; the guide may cost one notice line (16 px): ≥ 60 with the
+  guide, ≥ 76 once it's dismissed, under RIGTUNE and LAUNCHER.
