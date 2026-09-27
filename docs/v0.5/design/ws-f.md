@@ -116,3 +116,91 @@ the guide; the confirmation, its History row functions, the restart logic and th
 - Untouched (AC8.10, hotspot rules): `ClientSettings`, `StartupNotices`, `RealController`, `RigTuneClient`,
   `RigTuneController`, `V05Services`, `V05Hooks`, `HistoryScreen`, `HistoryModel`, `Journal`, `UndoScreen`, `NoticeScreen`,
   `tools/footprint-budgets.json` (`git diff origin/feat/v0.5.0 HEAD` on them is empty).
+
+## Deviations
+- **"No restart needed" also needs nothing undone and one row in effect.** AC8.7 says the note shows iff no row is STAGED
+  and no download runs. After Undo this Apply from the confirmation the rows read Undone/Cancelled, and "All of it is in
+  effect now" would then be false (X3), so the note also needs every row still applied (and at least one). Before an
+  Undo (the case the AC describes) the two rules agree; `FirstApplyScreenTest.undoneOrCancelled` pins the difference.
+- **Downloads only, nothing recorded yet**: with the entry not in history.json while downloads run (an Apply of only
+  AddMod/UpdateMod: nothing is journaled until they finish), the confirmation shows the downloading note instead of
+  "Nothing was recorded for this Apply." (which would be false), then reloads when they finish.
+- **Got it is checked by the source.** `NoticeBoard.select` always shows a notice that isn't dismissible (0.4's rule, for
+  notices like the regression alert whose Got it is their own acknowledgement), so `FirstRunNoticeSource.current()` leaves
+  the guide out once `firstrun.guide` is in awareness.json's `dismissed`. It reads that set (the same small file
+  NoticeCenter reads on every `notices()` call) only when everything else says the guide would show, i.e. for a new player
+  at a screen init; a returning player's `current()` does no I/O (`FirstRunNoticeSourceTest.theStoredDismissalHidesIt`).
+- **The guide message is SPEC-33's "History… lets you undo each Apply."**, 262 px in vanilla's font (measured on all
+  three legs), in a 266 px room at 640×480 scale 2 (the "…" button's width plus a gap), 280 px at 854×480 and 365 px at
+  1280×720 with no other notice. A "+N more" button (another notice at the same time) takes about 50 px and would clip it
+  at 854×480: the full text stays in the tooltip, the narration and NoticeScreen (0.4's behaviour for every notice). A
+  longer translation clips the same way.
+- **The test seam** `FirstRunService.forceStatusForTests(Status)` is public production API, used only by
+  FirstApplyGameTest (SPEC C6/SPEC-19's "restores the fresh state it needs through a test seam if it isn't first"), and
+  a second time inside the test to exercise Got it after the first Apply (a fresh player's guide is gone once they apply).
+- **AC8.16 and the entrypoint position**: SPEC-19 (amendment) says no class may depend on its position, while AC8.16 says a
+  non-fresh dir fails under CI. FirstApplyGameTest does both: it fails a non-fresh dir only when it's the first
+  `fabric-client-gametest` entrypoint under `CI` (`EntrypointContainer.getDefinition()`, fabric-loader 0.19.5, javap);
+  anywhere else it logs a WARN and restores a new player through the seam.
+- **The status line in the game test** is read reflectively from `RigTuneScreen.status` (a private field), since the
+  hotspot rules leave RigTuneScreen's API as 0.4 had it (no getter added).
+- **A11yGameTest**: the two walks use fully qualified class names for `FirstApplyScreen`, `HowItWorksScreen` and `Screen`
+  instead of new imports, so WS-F's edit stays inside its own methods and the helper below them.
+
+## Residuals (known, not fixed)
+- A benchmark "Keep" records a journal entry without going through `apply`, so after it the guide stays until the next
+  launch and the next Apply press still opens the confirmation (fa §2.1; harmless: the entry is real and the next launch
+  reads it as returning).
+- A player who deletes history.json (and has no last-apply.json or pending.json) is new again (fa §2.1).
+- An Apply refused because downloads are still running would leave the player NEW; a new player can't have downloads
+  running (they only start from an Apply, which retires NEW), so the button's confirmation can't open on a refusal in
+  practice.
+- The guide's line is clipped at 854×480 when another notice brings a "+N more" button (see Deviations); the full text is
+  in the tooltip, the narration and NoticeScreen.
+- The seam's use in FirstApplyGameTest's Got it block means the in-game Got it is exercised on a player made new again
+  after the first Apply (the fresh-player Got it path is the same code: `NoticeCenter.act` → `act(GOT_IT)` →
+  `dismissNotice`).
+
+## UNVERIFIED
+- AC8.17 (the dev-PC fresh-instance run at the three sizes, one Narrator pass, the 26.3 Apply half, the read-only copy of
+  the real instance's config/rigtune): Phase 5's rolling P5 run after WS-F merges (PLAN "Phase 5").
+- AC8.14 with P0.4's real policy and wording, and AC8.3's 640×480 screenshot with the opted-in line: WS-L1's
+  `LauncherModText.guideLine` and header line aren't merged yet (the stubs answer null/RIGTUNE). Tested here with stub
+  policies and canned sentences; FirstApplyGameTest's `firstapply-guide-optedin-640x480-scale2` and `firstapply-list-*`
+  screenshots pick the real ones up when WS-L1 lands. Closes in the later of WS-F/WS-L1 (PLAN "Cross-workstream ACs").
+- AC8.4's compat040 half: WS-E's `compat040` interpreter isn't merged; the `ws-f` set's `expect.json` asks it for
+  `AwarenessStore` keeping `dismissed` and no `.bad`. There is no check kind yet for "`dismissed` still contains
+  `firstrun.guide` after 0.4.0 writes 10 more"; the unit half (`FirstRunNoticeSourceTest.theDismissalSurvivesTenMore`)
+  runs that on `AwarenessStore.dismiss`, which `git diff v0.4.0` shows unchanged (only accessors were added). A
+  `dismissedContains` check kind would close it in compat040 (WS-E, through the coordinator).
+- compat030: run locally 2026-09-28 over the `v040-written` sets with `firstrun.guide` merged into `ws-w`'s awareness.json
+  (the v0.5 union rule): RESULT PASS, "0.3.0 reading them changed no file: 9 file(s) unchanged" (0.3.0 never reads
+  awareness.json).
+
+## Docs (for the docs workstream)
+- **README, Usage** (next to the Apply/Preview/History paragraph): "The first time you use RigTune, a notice above the
+  list explains what Apply changes and how to undo it (How it works…; Got it hides it). After your first Apply, RigTune
+  shows that Apply's changes: what's in effect now, what waits for the next restart (and only then does it ask for one),
+  with Undo this Apply and History… right there. Neither shows again once you've applied anything, and neither shows if
+  you used RigTune before."
+- **README, key areas**: add `firstrun` (the first-run guide, How Apply works, Your first Apply).
+- **CHANGELOG [0.5.0], Added**: "First-time Apply guide and confirmation (C02): a one-time notice for new players before
+  their first Apply (How it works, Got it), and after the first press of Apply a screen listing that Apply's changes as
+  History shows them, grouped into in effect now / at the next restart, with Undo this Apply. Nothing new is stored: new
+  players are those with no RigTune history; Got it is an ordinary notice dismissal."
+- **DESIGN.md, new section "First-time Apply (0.5)"**: Who is new comes from disk, not a flag (`core/history/FirstRun`:
+  history.json missing or empty and no last-apply.json or pending.json; an unreadable history counts as returning).
+  `client/FirstRunService` keeps UNKNOWN/NEW/RETURNING in memory: read once on `Probes.EXECUTOR` by the v0.5 start hook
+  (`compareAndSet`, so a slow read can't undo an Apply), set RETURNING by the after-apply hook on every Apply by any path;
+  settings.json gets nothing. The guide is `FirstRunNoticeSource` at `NoticePriority.FIRST_RUN` (5th): shown while NEW with
+  something appliable, not dismissible except by Got it (an awareness.json dismissal the source checks itself, since the
+  notice line always shows a notice that can't be dismissed); its detail follows `modFiles()` and joins P0.4's
+  `LauncherModText.guideLine`, never under PENDING. `HowItWorksScreen` is a static RowList page. `FirstApplyScreen` is
+  opened only by RigTuneScreen's Apply button (`firstApplyPending()` read before `apply(chosen, entryId)` with a pre-minted
+  entry id), never by `RealController.apply`, so profile switches, Try it and stutter fixes retire NEW without it. It
+  lists the entry's `HistoryModel` changes with HistoryScreen's own row functions at History's widths, grouped by status,
+  with notes that never imply an unneeded restart, reads the history off-thread and reloads when downloads finish or the
+  player comes back from Undo/History. Data flow step 4 (Apply): "…and a new player's first Apply press opens Your first
+  Apply for that entry."
+- **DESIGN.md, Accessibility**: both new screens are RowLists whose every row is a Tab stop (FirstApplyScreen's section
+  headings too); the confirmation narrates its title, summary and restart outcome when it opens.
