@@ -37,14 +37,17 @@ legs `Full thread dump OpenJDK 64-Bit Server VM (25.0.3+9-LTS …)` with
 (07:00:49 / 07:00:58 / 07:00:56 for steps started 06:47:49 / 06:47:58 / 06:47:56), then "timed out after 15 minutes"
 (07:03:02 / 07:03:11 / 07:03:08), each job over 2-6 s later.
 
-The final wiring (the exact `net.fabricmc.loader.impl.launch.knot.KnotClient` argument; offline.sh's `--timeout 14m`,
-GNU timeout as root inside the sudo; the step's 30-s wait and kill): run
+The wiring of df3a64f7 (the exact `net.fabricmc.loader.impl.launch.knot.KnotClient` argument; offline.sh's
+`--timeout 14m`, GNU timeout as root inside the sudo, KILL 30 s after TERM; the step's 30-s wait and kill): run
 [36304837319](https://github.com/chaotix345/rigtune/actions/runs/36304837319) (df3a64f7): on all 3 legs the dump naming
 `HangProbeGameTest.sleepsForever` 13:00 into the step, "The game-test run exited 124 (124: stopped by the 14-min
 timeout)" at 14:00, "No java process left (1 s after the run exited)", the step over at 14:01 (08:15:31 / 08:15:40 /
 08:15:36 for steps started 08:01:30 / 08:01:38 / 08:01:35), each job 4-6 s later. The run before it,
 [36303866869](https://github.com/chaotix345/rigtune/actions/runs/36303866869) (2f6ee87c, without the wait), listed three
-java processes still shutting down 0.1 s after timeout returned.
+java processes still shutting down 0.1 s after timeout returned. With the final constants (KILL 15 s after TERM, the
+step's wait 20 s): [36306689929](https://github.com/chaotix345/rigtune/actions/runs/36306689929) (11cfc25d): on all 3
+legs the dump at 13:00, "exited 124" at 14:00, "No java process left (1 s after the run exited)", the step over at 14:01
+(08:50:58 / 08:51:00 / 08:51:14 for steps started 08:36:57 / 08:36:59 / 08:37:12).
 
 ## The apply-helper wait on Linux
 
