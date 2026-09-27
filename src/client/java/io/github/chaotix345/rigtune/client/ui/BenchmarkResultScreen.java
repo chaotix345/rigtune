@@ -349,8 +349,10 @@ public class BenchmarkResultScreen extends Screen {
 		if (tune()) {
 			PlannerResult rd = outcome.result();
 			Component value = Component.literal(Integer.toString(session.chosen().renderDistance())).withStyle(ChatFormatting.BOLD);
-			out.add(new Line(Component.translatable(rd.targetMet() ? "rigtune.benchmark.met" : "rigtune.benchmark.missed", value),
-					rd.targetMet() ? COLOR_PASS : COLOR_WARN));
+			Text nothing = ResultNotes.nothingMeasured(rows, outcome.originalRd());
+			out.add(nothing != null ? new Line(Texts.component(nothing), COLOR_WARN)
+					: new Line(Component.translatable(rd.targetMet() ? "rigtune.benchmark.met" : "rigtune.benchmark.missed", value),
+							rd.targetMet() ? COLOR_PASS : COLOR_WARN));
 		} else if (result != null) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.measured", fps(result.avgFps()), fps(result.onePercentLowFps())), 0xFFFFFFFF));
 		}
@@ -381,10 +383,13 @@ public class BenchmarkResultScreen extends Screen {
 					? new Line(Component.translatable("rigtune.benchmark.gain", BenchmarkMath.percent(gain.lowPercent()), BenchmarkMath.percent(gain.avgPercent())),
 							gain.lowPercent() >= 0 ? COLOR_PASS : COLOR_FAIL)
 					: new Line(Component.translatable("rigtune.benchmark.gain.none"), COLOR_LABEL));
-			Text caveat = ResultNotes.gainCaveat(outcome.before());
-			if (caveat != null) {
-				out.add(new Line(Texts.component(caveat), COLOR_WARN));
+		} else if (ResultNotes.pairCaveat(outcome.before(), outcome.record()) != null) {
+			// No verdict (review M4): both runs' numbers and why they can't be compared.
+			Text before = ResultNotes.before(outcome.before());
+			if (before != null) {
+				out.add(new Line(Texts.component(before), COLOR_LABEL));
 			}
+			out.add(new Line(Texts.component(ResultNotes.pairCaveat(outcome.before(), outcome.record())), COLOR_WARN));
 		} else if (outcome.record() != null && BenchmarkRecord.BEFORE.equals(outcome.record().phase())) {
 			out.add(new Line(Component.translatable("rigtune.benchmark.saved_before"), COLOR_LABEL));
 		}

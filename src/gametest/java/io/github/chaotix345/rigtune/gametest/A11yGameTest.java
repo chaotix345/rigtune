@@ -547,6 +547,8 @@ public class A11yGameTest implements FabricClientGameTest {
 				benchOpenResult(context, outcome);
 				benchLayout(context, "bench result " + where);
 				List<String> text = context.computeOnClient(mc -> ((io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen) mc.gui.screen()).textContent());
+				// The Stutter Doctor line is the game's last real benchmark capture's, so it varies between runs (review L5).
+				RigTune.LOGGER.info("A11yGameTest: bench result {} text: {}", where, text);
 				for (String row : cells) {
 					check(text.contains(row), "bench result " + where + ": the table row \"" + row + "\" is shown: " + text);
 				}

@@ -21,6 +21,7 @@ import io.github.chaotix345.rigtune.core.benchmark.KnobGuard;
 import io.github.chaotix345.rigtune.core.benchmark.Knobs;
 import io.github.chaotix345.rigtune.core.benchmark.PlannerResult;
 import io.github.chaotix345.rigtune.core.benchmark.Protocol;
+import io.github.chaotix345.rigtune.core.benchmark.ResultNotes;
 import io.github.chaotix345.rigtune.core.benchmark.SessionResult;
 import io.github.chaotix345.rigtune.core.benchmark.SettleCheck;
 import io.github.chaotix345.rigtune.core.benchmark.Step;
@@ -124,8 +125,9 @@ public final class BenchmarkController {
 			return session.targetFps();
 		}
 
+		// Null when either run of the pair is left out of the trend (docs/v0.5/SPEC.md RW-8/RW-6, review M4: no verdict).
 		public BenchmarkMath.@Nullable Gain gain() {
-			return record == null || before == null ? null : BenchmarkRecords.gain(before, record);
+			return record == null || before == null || ResultNotes.pairCaveat(before, record) != null ? null : BenchmarkRecords.gain(before, record);
 		}
 
 		// docs/v0.5/SPEC.md RW-15: the steps the benchmark's stutter capture left out (their settle timed out incomplete).
@@ -214,8 +216,7 @@ public final class BenchmarkController {
 		this.yaw = player.getYRot();
 		this.pitch = player.getXRot();
 		this.wasFlying = player.getAbilities().flying;
-		this.context = withModSet(context(minecraft, original)).withWorldFresh(worldFresh(request))
-				.withStagedAtStart(BenchmarkConditions.stagedAtStart());
+		this.context = withJournal(context(minecraft, original)).withWorldFresh(worldFresh(request));
 	}
 
 	// What else shapes the numbers, as the run starts (docs/v0.3/SPEC.md 8, the `context` of a benchmarks.json run).
@@ -226,9 +227,10 @@ public final class BenchmarkController {
 	}
 
 	// v0.4 (docs/v0.4/SPEC.md 7): the mod-set hash and the newest history.json entry, for the trend's change window and the
-	// "needs a rerun" marker.
-	private static BenchmarkRecord.Context withModSet(BenchmarkRecord.Context context) {
-		return context.withModSet(BenchmarkConditions.modSetHash(), BenchmarkConditions.journalCursor());
+	// "needs a rerun" marker; v0.5 (BH-2): the changes still staged, from the same journal snapshot.
+	private static BenchmarkRecord.Context withJournal(BenchmarkRecord.Context context) {
+		BenchmarkConditions.JournalAtStart journal = BenchmarkConditions.JournalAtStart.current();
+		return context.withModSet(BenchmarkConditions.modSetHash(), journal.cursor()).withStagedAtStart(journal.staged());
 	}
 
 	// docs/v0.5/SPEC.md RW-8: in the benchmark world, whether this run's open created it; null in the player's own world.

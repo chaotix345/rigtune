@@ -17,6 +17,7 @@ import io.github.chaotix345.rigtune.client.ui.BenchmarkMenuScreen;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
+import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
 import io.github.chaotix345.rigtune.core.benchmark.FrameStats;
 import io.github.chaotix345.rigtune.core.benchmark.Knobs;
 import io.github.chaotix345.rigtune.core.benchmark.PlannerResult;
@@ -172,6 +173,9 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		check(BenchmarkRecord.BEFORE.equals(before.phase()), "first run is the before: " + before);
 		// docs/v0.5/SPEC.md RW-8 (AC2B.7): the first run in a fresh run dir created the benchmark world; BH-2: the staged
 		// changes at its start are recorded (none here).
+		if (worldExisted && System.getenv("CI") != null) {
+			RigTune.LOGGER.warn("Benchmark game test: the benchmark world already existed in CI's run dir; worldFresh true isn't exercised");
+		}
 		RigTune.LOGGER.info("Benchmark game test: the benchmark world existed before the first run: {}; worldFresh {}", worldExisted,
 				before.context().worldFresh());
 		check(Boolean.valueOf(!worldExisted).equals(before.context().worldFresh()), "worldFresh on the run that created the world: " + before.context());
@@ -214,7 +218,14 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 				+ sinceOn.stream().map(r -> r.source() + " " + r.spikes().total() + " spikes in " + r.gameplaySeconds() + " s").toList());
 		check(BenchmarkRecord.AFTER.equals(after.phase()) && before.pairId().equals(after.pairId()), "after pairs with before: " + after);
 		check(Boolean.FALSE.equals(after.context().worldFresh()), "the next run reuses the world: worldFresh false: " + after.context());
-		check(context.computeOnClient(mc -> BenchmarkController.lastOutcome().gain()) != null, "gain computed for the pair");
+		// docs/v0.5/SPEC.md RW-8 (review M4): a pair whose before (or after) is left out of the trend gets no gain verdict: both
+		// runs' numbers and the caveat instead. In a fresh run dir the before created the world.
+		boolean comparable = !BenchmarkTrend.excluded(before) && !BenchmarkTrend.excluded(after);
+		List<String> shown = context.computeOnClient(mc -> ((BenchmarkResultScreen) mc.gui.screen()).textContent());
+		check((context.computeOnClient(mc -> BenchmarkController.lastOutcome().gain()) != null) == comparable, "a gain only for a comparable pair");
+		check(shown.stream().anyMatch(l -> l.startsWith("Compared with before")) == comparable, "the gain line only for a comparable pair: " + shown);
+		check(shown.stream().anyMatch(l -> l.endsWith("Measure before again.")) == !comparable
+				&& shown.stream().anyMatch(l -> l.startsWith("Before: ")) == !comparable, "the caveat and the before's numbers otherwise: " + shown);
 		check(modified(marker).equals(created), "benchmark world reused, not recreated");
 		pressByKey(context, "gui.done");
 		context.waitForScreen(TitleScreen.class);

@@ -39,6 +39,19 @@ class BenchmarkConditionsTest {
 		assertNull(BenchmarkConditions.stagedIds(List.of(sixtyFour, staged)), "65 staged: left out");
 	}
 
+	// Review (part 1 M3): one journal snapshot gives the run both its cursor and its staged ids.
+	@Test
+	void bh2OneJournalSnapshotGivesTheCursorAndTheStagedIds() {
+		JournalEntry first = new JournalEntry("e1", "2026-09-20T10:00:00Z", JournalEntry.APPLY, "0.5.0", "26.2", null,
+				List.of(change("c1", JournalChange.APPLIED)));
+		JournalEntry staged = new JournalEntry("e2", "2026-09-21T10:00:00Z", JournalEntry.APPLY, "0.5.0", "26.2", null,
+				List.of(change("c3", JournalChange.STAGED)));
+		assertEquals(new BenchmarkConditions.JournalAtStart("e2", List.of("c3")),
+				BenchmarkConditions.JournalAtStart.of(Journal.State.OK, List.of(first, staged)));
+		assertEquals(new BenchmarkConditions.JournalAtStart(null, List.of()), BenchmarkConditions.JournalAtStart.of(Journal.State.MISSING, List.of()));
+		assertEquals(new BenchmarkConditions.JournalAtStart(null, null), BenchmarkConditions.JournalAtStart.of(Journal.State.CORRUPT, List.of()));
+	}
+
 	// Review (part 1 M3): an unreadable history.json isn't "nothing staged" (the journal answers no entries then): left out.
 	@Test
 	void bh2AnUnreadableHistoryLeavesTheFieldOut() {

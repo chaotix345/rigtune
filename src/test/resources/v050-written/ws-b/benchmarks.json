@@ -156,7 +156,7 @@
       "scene": "CURRENT",
       "phase": "single",
       "targetFps": 170,
-      "targetMet": false,
+      "targetMet": true,
       "knobs": {
         "renderDistance": {
           "value": 16,

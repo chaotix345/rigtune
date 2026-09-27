@@ -245,7 +245,7 @@ class ChangeWindowTest {
 		BenchmarkRecord b = TrendFixtures.run("b").at("2026-09-22T13:00:00Z").cursor("e2").hash("hash-b").build();
 		assertEquals(List.of("e2 ADDED lithium-0.18.jar"),
 				described(ChangeWindow.between(null, base(), b, history(BEFORE, STAGED_THEN_APPLIED), java.util.Set.of())));
-		// An unknown hash proves nothing: listed as before (possibly related).
+		// An unknown hash tells nothing about what was loaded: listed as before (possibly related).
 		BenchmarkRecord unknown = TrendFixtures.run("b").at("2026-09-22T13:00:00Z").cursor("e2").hash(null).build();
 		assertEquals(List.of("e2 ADDED lithium-0.18.jar"),
 				described(ChangeWindow.between(null, base(), unknown, history(BEFORE, STAGED_THEN_APPLIED), java.util.Set.of())));

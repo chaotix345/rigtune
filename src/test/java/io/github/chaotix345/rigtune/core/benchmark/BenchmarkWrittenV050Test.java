@@ -58,7 +58,7 @@ class BenchmarkWrittenV050Test {
 				Map.of(), Map.of(), world, false, plain.withModSet(HASH, "7e3a1c5b-9d2f-4b68-8a14-c6e0f2d4b9a1").withWorldFresh(false)
 						.withDhGenerating(true).withStagedAtStart(List.of()));
 		BenchmarkRecord current = new BenchmarkRecord("2026-09-26T21:03:29Z-c8d5", "2026-09-26T21:03:29Z", "0.5.0+mc26.2", "26.2", "TUNE", "CURRENT",
-				BenchmarkRecord.SINGLE, null, 170, false, knobs(16, 12), new BenchmarkRecord.Result(701.0, 330.75, 3.3, 2, 0.031), Map.of(), Map.of(),
+				BenchmarkRecord.SINGLE, null, 170, true, knobs(16, 12), new BenchmarkRecord.Result(701.0, 330.75, 3.3, 2, 0.031), Map.of(), Map.of(),
 				null, false, new BenchmarkRecord.Context(true, false, null, 2560, 1440, true, BenchmarkRecord.Context.PROTOCOL)
 						.withModSet(HASH, "7e3a1c5b-9d2f-4b68-8a14-c6e0f2d4b9a1").withStagedAtStart(List.of()));
 		return List.of(fresh, staged, generating, current);

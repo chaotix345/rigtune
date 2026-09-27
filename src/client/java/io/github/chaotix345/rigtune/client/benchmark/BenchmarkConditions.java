@@ -47,26 +47,23 @@ public final class BenchmarkConditions {
 		return hash;
 	}
 
-	// The id of history.json's newest entry; null when there is none (or it can't be read).
-	public static @Nullable String journalCursor() {
-		try {
-			List<JournalEntry> entries = ClientJournal.get().entries();
-			return entries.isEmpty() ? null : entries.getLast().id();
-		} catch (RuntimeException e) {
-			RigTune.LOGGER.warn("Could not read the history for the benchmark's journal cursor", e);
-			return null;
+	// What a new run records from history.json, from one snapshot: cursor, the id of its newest entry (null when there is
+	// none or it can't be read); staged (BH-2), the ids of its changes still staged for the next start (they don't run
+	// during the run): [] with no history.json, null (left out) when it can't be read or more than MAX_STAGED are staged.
+	public record JournalAtStart(@Nullable String cursor, @Nullable List<String> staged) {
+		public static JournalAtStart current() {
+			try {
+				Journal journal = ClientJournal.get();
+				return of(journal.state(), journal.entries());
+			} catch (RuntimeException e) {
+				RigTune.LOGGER.warn("Could not read the history for the benchmark's journal cursor and staged changes", e);
+				return new JournalAtStart(null, null);
+			}
 		}
-	}
 
-	// BH-2: the ids of history.json's changes still staged for the next start when a run starts (they don't run during it);
-	// null when history.json can't be read or more than MAX_STAGED are staged.
-	public static @Nullable List<String> stagedAtStart() {
-		try {
-			Journal journal = ClientJournal.get();
-			return stagedIds(journal.state(), journal.entries());
-		} catch (RuntimeException e) {
-			RigTune.LOGGER.warn("Could not read the history for the benchmark's staged changes", e);
-			return null;
+		static JournalAtStart of(Journal.State state, List<JournalEntry> entries) {
+			String cursor = state == Journal.State.OK && !entries.isEmpty() ? entries.getLast().id() : null;
+			return new JournalAtStart(cursor, stagedIds(state, entries));
 		}
 	}
 

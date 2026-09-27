@@ -93,16 +93,33 @@ class ResultNotesTest {
 				english(ResultNotes.row(row(32, false, false), false)));
 	}
 
-	// Review (part 1 M4): a Measure pair whose "before" is left out of the trend keeps its numbers with a caveat.
+	// Review (part 1 M4, the coordinator's decision): a Measure pair with either run left out of the trend gets no gain
+	// verdict; the screen shows both runs' numbers and this caveat instead.
 	@Test
-	void m4AComparisonWithAnExcludedBeforeSaysSo() {
-		BenchmarkRecord plain = TrendFixtures.run("before").build();
-		assertNull(ResultNotes.gainCaveat(plain));
-		assertNull(ResultNotes.gainCaveat(null));
-		assertEquals("The “before” run was the first in a new benchmark world, so this comparison may be off.",
-				english(ResultNotes.gainCaveat(TrendFixtures.run("before").fresh().build())));
-		assertEquals("Distant Horizons was generating terrain during the “before” run, so this comparison may be off.",
-				english(ResultNotes.gainCaveat(TrendFixtures.run("before").dhGenerating().build())));
+	void m4APairWithAnExcludedRunGetsNoVerdictButACaveat() {
+		BenchmarkRecord plain = TrendFixtures.run("plain").build();
+		BenchmarkRecord fresh = TrendFixtures.run("fresh").fresh().build();
+		BenchmarkRecord generating = TrendFixtures.run("dh").dhGenerating().build();
+		String world = "The first run generated the benchmark world's terrain, so these two runs can't be compared. Measure before again.";
+		String dh = "Distant Horizons was generating terrain during one of these runs, so they can't be compared. Measure before again.";
+		assertNull(ResultNotes.pairCaveat(plain, plain), "neither: the verdict as before");
+		assertNull(ResultNotes.pairCaveat(null, plain), "not a pair");
+		assertNull(ResultNotes.pairCaveat(plain, null));
+		assertEquals(world, english(ResultNotes.pairCaveat(fresh, plain)), "the before");
+		assertEquals(world, english(ResultNotes.pairCaveat(plain, fresh)), "the after");
+		assertEquals(dh, english(ResultNotes.pairCaveat(generating, plain)));
+		assertEquals(dh, english(ResultNotes.pairCaveat(plain, generating)));
+		assertEquals(world, english(ResultNotes.pairCaveat(fresh, generating)), "the new world named first");
+		assertEquals("Before: 800 FPS average, 500 FPS 1% low", english(ResultNotes.before(plain)));
+	}
+
+	// Review (part 1 M1): no distance measured on loaded terrain: the headline says so and keeps the render distance.
+	@Test
+	void m1NothingMeasuredIsTheHeadline() {
+		assertEquals("Nothing could be measured: the terrain hadn't loaded in time. Your render distance stays at 12.",
+				english(ResultNotes.nothingMeasured(List.of(row(12, false, false), row(6, false, false)), 12)));
+		assertNull(ResultNotes.nothingMeasured(List.of(row(12, false, false), row(6, true, true)), 12));
+		assertNull(ResultNotes.nothingMeasured(List.of(), 12), "no table: the screen says no measurements were taken");
 	}
 
 	// The table's last column: a pass, a fail, or not measured (no ✘ for a distance that couldn't be measured).

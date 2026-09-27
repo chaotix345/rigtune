@@ -138,11 +138,14 @@ RW-7/RW-9/RW-6's line, 511c896b L3, 52c866be RW-6 detection, 58986e31 the unmeas
 7. **Keyboard initial focus stays on the first button** (Use, or Done) as in 0.4, not the first status line: the
    result screen overrides `setInitialFocus` (the focused table row and the scroll come back after a rebuild, the
    JvmScreen pattern).
-8. **A Measure pair whose "before" is left out of the trend** (a fresh-world or DH-generating run) keeps "Compared with
-   before" with a caveat line under it ("The “before” run was the first in a new benchmark world, so this comparison may
-   be off." / the DH-generating equivalent; `ResultNotes.gainCaveat`, 69f8f550): the option proposed to the coordinator
-   for the review's SPEC question (part 1 M4), landed while the decision is pending; one commit to revert if the answer is
-   "withhold" or "leave".
+8. **SPEC decision (coordinator, 2026-09-28; review part 1 M4; to be added to SPEC's Amendments): a Measure pair with
+   either run left out of the trend** (worldFresh or DH-generating) **gets no gain verdict**: a new world's first run is
+   systematically slower, so a percentage would show a change that isn't there (X3). `Outcome.gain()` is null then, and the
+   result screen shows "Before: X FPS average, Y FPS 1% low" (the after's numbers are the headline) and "The first run
+   generated the benchmark world's terrain, so these two runs can't be compared. Measure before again." (or "Distant
+   Horizons was generating terrain during one of these runs, …"; `ResultNotes.pairCaveat`). BenchmarkGameTest's pair
+   asserts the gain line only for a comparable pair and the caveat and the before's numbers otherwise (in a fresh run dir
+   the before created the world). The first proposal (a caveat under the verdict, 69f8f550) was replaced.
 
 ## Self-review (code-reviewer subagents; reports in the WS-B scratch dir, review-part1.md and review-part2.md)
 Part 1 (a7613410..829809dd): 0 high, 4 medium, 7 low, 2 nits. Part 2 (829809dd..58986e31): 0 high, 4 medium, 7 low.
@@ -154,7 +157,14 @@ Sent to the coordinator with proposed dispositions; fixed in 03c46c37 (red tests
 - part 1 M1 (a distance that couldn't be measured suggested / "Use best tested" for it), M2 (the second try could cost
   the repeats), M3 (an unreadable history.json recorded as "nothing staged"), L5-L7 (reason wording, "In progress", the
   climb after a passing second try), L8 (left-out line without a capture), L9-L10 (BenchmarkGameTest robustness): fixed.
-- part 1 M4: the SPEC question above (Deviations 8; the proposed caveat landed, `ResultNotesTest.m4AComparisonWithAnExcludedBeforeSaysSo`). L11 (the note counts excluded runs): left; the trend's "earlier"
+- part 1 M4: the SPEC decision above (Deviations 8: withhold; `ResultNotesTest.m4APairWithAnExcludedRunGetsNoVerdictButACaveat`).
+  Also from the coordinator's list: M1's "nothing could be measured" headline ("Nothing could be measured: the terrain
+  hadn't loaded in time. Your render distance stays at 12.", `m1NothingMeasuredIsTheHeadline`); M3's single journal
+  snapshot for the cursor and the staged ids (`BenchmarkConditions.JournalAtStart`, two reads of history.json through
+  Journal's public `state()`/`entries()`, since `Journal` (WS-P's) exposes no read of both at once;
+  `bh2OneJournalSnapshotGivesTheCursorAndTheStagedIds`); L9's CI warning when the world already existed; N13 (the
+  fixture's CURRENT Tune now met the target at 16; `ws-b/benchmarks.json` regenerated with the switch); part 2 L5 (the
+  walk logs each screen's `textContent()`: the Stutter Doctor line is the game's last real capture's). L11 (the note counts excluded runs): left; the trend's "earlier"
   count and the "Left out of the trend" line explain it. N12 (StutterHooks' seam comment) is WS-S's file: passed on.
   N13 (a fixture Tune with targetMet false and a best-effort 16): realistic, left.
 - part 2 M1-M2 (carried-in rows escaped the latest's staged / equal-hash exclusion), M3 (focus and scroll lost on a
