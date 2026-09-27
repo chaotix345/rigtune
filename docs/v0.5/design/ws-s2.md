@@ -153,6 +153,15 @@ Signatures (package `core/stutter`; everything pure, no Minecraft type):
 - `FixHold.apply(Report, List<Hold>)` filled; en_us.json `rigtune.stutter.fix.hold_reason` ("The Stutter Doctor's fix set
   this on %s; changing it back may bring the stutter back.").
 
+CI on the pushed head 437a9655 (Wave A + a merge of origin/feat/v0.5.0 @ 1de15adf, docs only): run 36318487663, all 8
+jobs green; unit tests 2001 per node (26.2 and 26.3), 0 failures, 2 ignored (as before). Footprint on that run against
+ws-k.md's per-leg baseline (36310249248), `renderThreadInitCpuMs` / `clientStartedWallMs` / `workerCpuMs5s` /
+`tickHookOnVsReference`: 26.2 GL 103.66 / 41.4 / 175.47 / 1.508 (baseline 82.2 / 36.4 / 135.5 / 1.481); 26.3 GL 91.83 /
+29.02 / 142.81 / 1.46 (82.2 / 27.0 / 153.2 / 1.746); 26.3 Vulkan 88.59 / 10.89 / 145.6 / 1.604 (120.0 / 39.9 / 200.7 /
+1.535); `v05RenderThreadResolve` null on all three. Wave A adds no code on any of these paths, so the differences are the
+runner spread ws-k.md describes (26.2's 63.5-112.9 across near-identical code). No screen changed, so no screenshot to
+look at in this phase.
+
 Deviations from the plan text: `FixOffers.evaluate` landed in Wave A (pure, a new file; the PLAN's early list didn't name
 it); `FixEvidence` is a new `Fix*` file holding `causeSpikesAtLeast`'s logic until Wave B can touch `StutterFacts` and
 `ConditionEvaluator` (WS-S owns `StutterFacts` until it merges); `FixSpec` is now a record (WS-K's note allowed it).
