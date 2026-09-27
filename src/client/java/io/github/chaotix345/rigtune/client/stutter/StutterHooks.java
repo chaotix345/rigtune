@@ -57,7 +57,16 @@ public final class StutterHooks {
 		});
 	}
 
+	// PROOF (ws-ci; reverted in the next commit): the monitor-on tick work runs twice, a 2x regression the
+	// tickHookOnVsReference gate must catch.
 	private static void tick(Minecraft minecraft) {
+		tickOnce(minecraft);
+		if (StutterMonitor.active()) {
+			tickOnce(minecraft);
+		}
+	}
+
+	private static void tickOnce(Minecraft minecraft) {
 		StutterService s = service;
 		if (s == null || failed) {
 			return;
