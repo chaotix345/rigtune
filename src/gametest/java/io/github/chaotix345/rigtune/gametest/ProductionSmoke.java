@@ -102,7 +102,7 @@ final class ProductionSmoke {
 			return;
 		}
 
-		try (TestSingleplayerContext singleplayer = context.worldBuilder().create()) {
+		try (TestSingleplayerContext singleplayer = GameTestWorlds.create(context)) {
 			// At render distance 12 the harness's chunk download check never passes in production, even with fabric-api
 			// alone; the screenshot doesn't need it.
 			try {

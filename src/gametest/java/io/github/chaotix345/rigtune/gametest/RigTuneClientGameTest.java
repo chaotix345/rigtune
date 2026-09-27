@@ -112,7 +112,7 @@ public class RigTuneClientGameTest implements FabricClientGameTest {
 		check(snapshot.has("vanilla.renderDistance"), "snapshot has renderDistance");
 		check(snapshot.has("vanilla.graphicsPreset") && !snapshot.get("vanilla.graphicsPreset").contains("\""), "graphicsPreset is unquoted");
 
-		try (TestSingleplayerContext singleplayer = context.worldBuilder().create()) {
+		try (TestSingleplayerContext singleplayer = GameTestWorlds.create(context)) {
 			singleplayer.getConnection().waitForChunksRender();
 			context.getInput().pressKey(RigTuneClient.openKey());
 			context.waitForScreen(RigTuneScreen.class);
