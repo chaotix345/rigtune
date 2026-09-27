@@ -1,9 +1,14 @@
 package io.github.chaotix345.rigtune.core.apply;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -23,6 +28,22 @@ import java.util.Set;
 // change), never a rename.
 public final class UnfinishedGroups {
 	static final String FILE_NAME = "unfinished-groups.json";
+	static final int MOVE_ATTEMPTS = 10;
+	static final long MOVE_RETRY_MILLIS = 100;
+
+	// How the record is written (tests record it).
+	interface Writer {
+		void write(Path file, String content) throws IOException;
+	}
+
+	// Forces a file's content (folder false) or a folder's entries (folder true) to the disk.
+	interface Syncer {
+		void force(Path path, boolean folder) throws IOException;
+	}
+
+	// docs/v0.5/SPEC.md 3f: the record must be on the disk, not only in the OS's cache, before the first rename it names,
+	// so a power cut between the two can't leave a rename without its record.
+	static final Writer DURABLE = (file, content) -> writeDurably(file, content, UnfinishedGroups::force);
 
 	// op: the op's id; from/to: the rename's absolute paths (a disable's `to` is the .disabled name it was given).
 	public record Rename(String op, String from, String to) {
@@ -36,14 +57,16 @@ public final class UnfinishedGroups {
 
 	private final Path file;
 	private final Path legacy;
+	private final Writer writer;
 	private final Map<String, List<Rename>> groups = new LinkedHashMap<>();
 	private final Set<String> finished = new HashSet<>();
 	// The file doesn't hold `groups`: it was unreadable, a write failed, or the record is still at the legacy place.
 	private boolean dirty;
 
-	private UnfinishedGroups(Path file, Path legacy) {
+	private UnfinishedGroups(Path file, Path legacy, Writer writer) {
 		this.file = file;
 		this.legacy = legacy;
+		this.writer = writer;
 	}
 
 	static Path file(Path configDir) {
@@ -56,7 +79,11 @@ public final class UnfinishedGroups {
 	}
 
 	static UnfinishedGroups load(Path configDir) {
-		UnfinishedGroups out = new UnfinishedGroups(file(configDir), legacyFile(configDir));
+		return load(configDir, DURABLE);
+	}
+
+	static UnfinishedGroups load(Path configDir, Writer writer) {
+		UnfinishedGroups out = new UnfinishedGroups(file(configDir), legacyFile(configDir), writer);
 		boolean hasLegacy = Files.isRegularFile(out.legacy);
 		// Written again at the next change (put or prune), so the legacy copy goes.
 		out.dirty = hasLegacy;
@@ -152,13 +179,68 @@ public final class UnfinishedGroups {
 			} else {
 				List<Entry> entries = new ArrayList<>();
 				groups.forEach((group, renames) -> entries.add(new Entry(group, renames)));
-				AtomicFiles.writeString(file, PendingActions.GSON.toJson(new Doc(entries)));
+				writer.write(file, PendingActions.GSON.toJson(new Doc(entries)));
 			}
 			Files.deleteIfExists(legacy);
 			dirty = false;
 		} catch (IOException | RuntimeException e) {
 			ApplyHelper.log("Could not update " + LogSafe.name(file) + ": " + LogSafe.error(e, file, legacy));
 			dirty = true;
+		}
+	}
+
+	// As AtomicFiles.writeString (a temp file moved over the target, the move retried while Windows denies it), with the
+	// temp file's content forced before the move and the folder's entries after it.
+	static void writeDurably(Path target, String content, Syncer syncer) throws IOException {
+		Path dir = target.toAbsolutePath().getParent();
+		Files.createDirectories(dir);
+		Path tmp = Files.createTempFile(dir, target.getFileName() + ".", ".tmp");
+		try {
+			Files.writeString(tmp, content, StandardCharsets.UTF_8);
+			syncer.force(tmp, false);
+			for (int attempt = 1; ; attempt++) {
+				try {
+					replace(tmp, target);
+					break;
+				} catch (AccessDeniedException e) {
+					if (attempt >= MOVE_ATTEMPTS) {
+						throw e;
+					}
+					try {
+						Thread.sleep(MOVE_RETRY_MILLIS);
+					} catch (InterruptedException interrupted) {
+						Thread.currentThread().interrupt();
+						throw e;
+					}
+				}
+			}
+			syncer.force(dir, true);
+		} finally {
+			Files.deleteIfExists(tmp);
+		}
+	}
+
+	private static void replace(Path from, Path to) throws IOException {
+		try {
+			Files.move(from, to, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+		} catch (AtomicMoveNotSupportedException e) {
+			Files.move(from, to, StandardCopyOption.REPLACE_EXISTING);
+		}
+	}
+
+	// A folder is forced where the OS lets it be opened as a channel (Linux, macOS); Windows can't, and NTFS journals the
+	// rename itself, so that is no error.
+	private static void force(Path path, boolean folder) throws IOException {
+		if (folder) {
+			try (FileChannel channel = FileChannel.open(path, StandardOpenOption.READ)) {
+				channel.force(true);
+			} catch (IOException e) {
+				// Not supported for folders here.
+			}
+			return;
+		}
+		try (FileChannel channel = FileChannel.open(path, StandardOpenOption.WRITE)) {
+			channel.force(true);
 		}
 	}
 }

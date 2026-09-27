@@ -391,6 +391,30 @@ class ApplyExecutorTest {
 		assertEquals(List.of(JournalChange.STAGED, JournalChange.ABANDONED), reconciled().stream().map(JournalChange::status).toList());
 	}
 
+	// docs/v0.5/SPEC.md 3f (AC3f.6): the group's record is written through the durable writer, and is on disk with the
+	// rename in it, before the first rename.
+	@Test
+	void theRecordIsForcedToDiskBeforeTheFirstRename() throws IOException {
+		Path old = Files.writeString(mods.resolve("sodium-0.7.0.jar"), "old");
+		Path download = TestJars.modJar(mods.resolve("sodium-0.7.1.jar.rigtune-pending"), "sodium");
+		List<String> events = new ArrayList<>();
+		UnfinishedGroups.Writer recording = (file, content) -> {
+			events.add("record");
+			UnfinishedGroups.DURABLE.write(file, content);
+		};
+		ApplyExecutor recorded = new ApplyExecutor(2, 1, (from, to) -> {
+			if (events.stream().noneMatch(e -> e.startsWith("move"))) {
+				assertTrue(Files.readString(UnfinishedGroups.file(config)).contains("sodium-0.7.0.jar.disabled"));
+			}
+			events.add("move " + from.getFileName());
+			Files.move(from, to);
+		}, millis -> true, ModJars::readModId, recording);
+
+		recorded.run(plan(PendingActions.group(Op.disableFile(old), Op.enableFile(download, mods.resolve("sodium-0.7.1.jar"))).toArray(Op[]::new)), pending);
+
+		assertEquals(List.of("record", "move sodium-0.7.0.jar", "move sodium-0.7.1.jar.rigtune-pending"), events.subList(0, 3));
+	}
+
 	// docs/v0.5/SPEC.md 2V (ws-g3 L8, AC2V.2): a rollback whose moved file vanished meanwhile says so, not that the original
 	// name is taken.
 	@Test

@@ -62,6 +62,7 @@ public final class ApplyExecutor {
 	private final Mover mover;
 	private final Sleeper sleeper;
 	private final ModIdReader modIds;
+	private final UnfinishedGroups.Writer recordWriter;
 
 	public ApplyExecutor() {
 		this(DEFAULT_ATTEMPTS, DEFAULT_RETRY_DELAY_MILLIS);
@@ -80,11 +81,20 @@ public final class ApplyExecutor {
 	}
 
 	ApplyExecutor(int attempts, long retryDelayMillis, Mover mover, Sleeper sleeper, ModIdReader modIds) {
+		this(attempts, retryDelayMillis, mover, sleeper, modIds, UnfinishedGroups.DURABLE);
+	}
+
+	ApplyExecutor(int attempts, long retryDelayMillis, Mover mover, Sleeper sleeper, ModIdReader modIds, UnfinishedGroups.Writer recordWriter) {
 		this.attempts = Math.max(1, attempts);
 		this.retryDelayMillis = retryDelayMillis;
 		this.mover = mover;
 		this.sleeper = sleeper;
 		this.modIds = modIds;
+		this.recordWriter = recordWriter;
+	}
+
+	UnfinishedGroups.Writer recordWriter() {
+		return recordWriter;
 	}
 
 	private static boolean realSleep(long millis) {
@@ -164,7 +174,7 @@ public final class ApplyExecutor {
 	public ApplyResult run(PendingActions plan, Path pendingFile) throws IOException {
 		Path configDir = InstanceDirs.configDirOf(pendingFile);
 		Path modsDir = InstanceDirs.modsDirOf(pendingFile);
-		UnfinishedGroups unfinished = UnfinishedGroups.load(configDir);
+		UnfinishedGroups unfinished = UnfinishedGroups.load(configDir, recordWriter);
 		Map<String, OpResult> doneBefore = doneBefore(ApplyResult.defaultPath(configDir));
 		ApplyResult result = new ApplyResult(Instant.now().toString(),
 				giveUpOnRepeatFailures(execute(plan, modsDir, configDir, unfinished, doneBefore)));
