@@ -26,8 +26,9 @@ import java.util.Map;
 // The templates Max FPS, Balanced, Quality, Battery and Recording (docs/v0.4/SPEC.md 4, research profiles.md §4), computed
 // on demand in layers: the baseline ("My settings") -> the rules' value entries evaluated with the template's goal and
 // forced facts -> the template's own entries (rules-v2 `profileTemplates`; `$recordingFps` resolved only here) -> every
-// clamp (the rules' and the template's) last -> only managed keys with a value inside the share table's bounds. The section
-// comes from the active rules, else the bundled rules (a v1 document or an old cache lacks it), else the copy below.
+// clamp (the rules' and the template's) last -> only managed keys with a value inside each key's local range (the share
+// table's bounds, but a DH radius up to 4096: v0.5 PF-5). The section comes from the active rules, else the bundled rules
+// (a v1 document or an old cache lacks it), else the copy below.
 // Templates never use server limits (plan review X-M3).
 public final class ProfileTemplates {
 	public enum TemplateId {
@@ -237,7 +238,7 @@ public final class ProfileTemplates {
 		Map<String, String> out = new LinkedHashMap<>();
 		for (ShareKeys.Key key : ShareKeys.V1) {
 			SettingTarget target = targets.get(key.key());
-			if (target != null && key.encode(target.value()) != null) {
+			if (target != null && key.local(target.value()) != null) {
 				out.put(key.key(), target.value());
 			}
 		}
