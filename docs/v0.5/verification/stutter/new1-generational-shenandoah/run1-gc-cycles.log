@@ -1,0 +1,110 @@
+[0.008s] Heuristics ergonomically sets -XX:GCTimeRatio=70
+[0.008s] Heuristics ergonomically sets -XX:+ExplicitGCInvokesConcurrent
+[0.008s] Heuristics ergonomically sets -XX:+ShenandoahImplicitGCInvokesConcurrent
+[0.008s] Heuristics ergonomically sets -XX:+UseCondCardMark
+[0.008s] Using Shenandoah
+[2.903s] Trigger (Global): Metadata GC Threshold
+[2.907s] GC(0) Concurrent reset (Global) (unload classes) 4.030ms
+[2.943s] GC(0) Coalescing and filling old regions 0.072ms
+[2.943s] GC(0) Concurrent reset after collect (Global) (unload classes) 0.364ms
+[8.213s] Trigger (Global): Metadata GC Threshold
+[8.217s] GC(1) Concurrent reset (Global) (unload classes) 3.399ms
+[8.285s] GC(1) Coalescing and filling old regions 0.087ms
+[8.285s] GC(1) Concurrent reset after collect (Global) (unload classes) 0.376ms
+[10.795s] Trigger (Global): Metadata GC Threshold
+[10.796s] GC(2) Concurrent reset (Global) (unload classes) 0.575ms
+[10.904s] GC(2) Coalescing and filling old regions 0.133ms
+[10.904s] GC(2) Concurrent reset after collect (Global) (unload classes) 0.661ms
+[16.065s] Trigger (Global): Metadata GC Threshold
+[16.066s] GC(3) Concurrent reset (Global) (unload classes) 0.592ms
+[16.185s] GC(3) Coalescing and filling old regions 0.879ms
+[16.186s] GC(3) Concurrent reset after collect (Global) (unload classes) 0.909ms
+[21.481s] Trigger (Young): Learning 1 of 5. Free (5574M) is below initial threshold (5574M)
+[21.482s] GC(4) Concurrent reset (Young) 1.042ms
+[21.667s] GC(4) Concurrent reset after collect (Young) 1.576ms
+[27.119s] Trigger (Young): Learning 2 of 5. Free (5574M) is below initial threshold (5574M)
+[27.120s] GC(5) Concurrent reset (Young) 0.948ms
+[27.291s] GC(5) Concurrent reset after collect (Young) 1.610ms
+[30.079s] Trigger (Young): Learning 3 of 5. Free (5574M) is below initial threshold (5574M)
+[30.080s] GC(6) Concurrent reset (Young) 0.738ms
+[30.257s] GC(6) Concurrent reset after collect (Young) 1.712ms
+[32.555s] Trigger (Young): Learning 4 of 5. Free (5574M) is below initial threshold (5574M)
+[32.556s] GC(7) Concurrent reset (Young) 0.607ms
+[32.702s] GC(7) Concurrent reset after collect (Young) 1.508ms
+[34.786s] Trigger (Young): Learning 5 of 5. Free (5574M) is below initial threshold (5574M)
+[34.786s] GC(8) Concurrent reset (Young) 0.597ms
+[34.908s] GC(8) Concurrent reset after collect (Young) 1.607ms
+[48.659s] Trigger (Young): Free (796M) is below minimum threshold (796M)
+[48.661s] GC(9) Concurrent reset (Young) 1.776ms
+[49.187s] GC(9) Concurrent reset after collect (Young) 4.613ms
+[69.201s] Trigger (Young): Free (796M) is below minimum threshold (796M)
+[69.224s] GC(10) Concurrent reset (Young) 22.549ms
+[69.397s] GC(10) Concurrent reset after collect (Young) 3.024ms
+[81.847s] Trigger (Young): Average GC time (541.89 ms) is above the time for average allocation rate (788 MB/s) to deplete free headroom (425M) (margin of error = 1.80)
+[81.848s] GC(11) Concurrent reset (Young) 0.599ms
+[82.079s] GC(11) Concurrent reset after collect (Young) 4.489ms
+[98.839s] Trigger (Young): Average GC time (450.00 ms) is above the time for average allocation rate (1370 MB/s) to deplete free headroom (615M) (margin of error = 1.83)
+[98.840s] GC(12) Concurrent reset (Young) 0.617ms
+[99.054s] GC(12) Concurrent reset after collect (Young) 2.893ms
+[106.952s] Trigger (Young): Free (796M) is below minimum threshold (796M)
+[106.953s] GC(13) Concurrent reset (Young) 0.639ms
+[107.176s] GC(13) Concurrent reset after collect (Young) 5.454ms
+[114.259s] Trigger (Young): Free (795M) is below minimum threshold (796M)
+[114.259s] GC(14) Concurrent reset (Young) 0.574ms
+[114.500s] GC(14) Concurrent reset after collect (Young) 5.219ms
+[124.917s] Trigger (Young): Free (796M) is below minimum threshold (796M)
+[124.917s] GC(15) Concurrent reset (Young) 0.641ms
+[125.135s] GC(15) Concurrent reset after collect (Young) 4.662ms
+[136.464s] Trigger (Young): Free (796M) is below minimum threshold (796M)
+[136.464s] GC(16) Concurrent reset (Young) 0.597ms
+[136.710s] GC(16) Concurrent reset after collect (Young) 4.644ms
+[136.711s] Trigger (Old): Old has overgrown, live at end of previous OLD marking: 5411K, current usage: 910M, percent growth: 17119.8%
+[136.716s] GC(17) Concurrent reset (Young) 4.018ms
+[136.912s] GC(17) Concurrent reset after collect (Young) 0.001ms
+[137.226s] GC(17) Concurrent marking (Old) 313.124ms
+[137.227s] Trigger (Young): Expedite mixed evacuation of 120 regions
+[137.228s] GC(18) Concurrent reset (Young) 1.002ms
+[137.484s] GC(18) Concurrent reset after collect (Young) 0.859ms
+[137.485s] Trigger (Old): Resume preparing to mark old
+[137.507s] GC(19) Coalescing and filling (Old) 22.102ms
+[143.851s] Trigger (Young): Free (792M) is below minimum threshold (796M)
+[143.851s] GC(20) Concurrent reset (Young) 0.620ms
+[144.060s] GC(20) Concurrent reset after collect (Young) 4.978ms
+[144.060s] Trigger (Old): Old has overgrown, live at end of previous OLD marking: 752M, current usage: 1030M, percent growth: 36.8%
+[144.062s] GC(21) Concurrent reset (Young) 1.719ms
+[144.194s] GC(21) Concurrent reset after collect (Young) 0.001ms
+[144.406s] GC(21) Concurrent marking (Old) 211.466ms
+[144.408s] Trigger (Young): Expedite mixed evacuation of 181 regions
+[144.409s] GC(22) Concurrent reset (Young) 0.984ms
+[144.661s] GC(22) Concurrent reset after collect (Young) 0.790ms
+[144.662s] Trigger (Old): Resume preparing to mark old
+[144.683s] GC(23) Coalescing and filling (Old) 20.092ms
+[150.806s] Trigger (Young): Free (796M) is below minimum threshold (796M)
+[150.807s] GC(24) Concurrent reset (Young) 0.670ms
+[151.004s] GC(24) Concurrent reset after collect (Young) 5.372ms
+[151.005s] Trigger (Old): Old has overgrown, live at end of previous OLD marking: 809M, current usage: 1032M, percent growth: 27.5%
+[151.006s] GC(25) Concurrent reset (Young) 1.447ms
+[151.140s] GC(25) Concurrent reset after collect (Young) 0.001ms
+[151.354s] GC(25) Concurrent marking (Old) 213.656ms
+[151.355s] Trigger (Young): Expedite mixed evacuation of 100 regions
+[151.357s] Trigger (Young): GC start is already pending
+[151.358s] GC(26) Concurrent reset (Young) 0.935ms
+[151.569s] GC(26) Concurrent reset after collect (Young) 0.662ms
+[151.570s] Trigger (Old): Resume preparing to mark old
+[151.595s] GC(27) Coalescing and filling (Old) 24.666ms
+[187.478s] Trigger (Young): Free (796M) is below minimum threshold (796M)
+[187.479s] GC(28) Concurrent reset (Young) 0.577ms
+[187.572s] GC(28) Concurrent reset after collect (Young) 1.339ms
+[187.572s] Trigger (Old): Old has overgrown, live at end of previous OLD marking: 873M, current usage: 1196M, percent growth: 36.9%
+[187.574s] GC(29) Concurrent reset (Young) 1.667ms
+[187.640s] GC(29) Concurrent reset after collect (Young) 0.002ms
+[187.920s] GC(29) Concurrent marking (Old) 279.339ms
+[187.921s] Trigger (Young): Expedite mixed evacuation of 42 regions
+[187.922s] GC(30) Concurrent reset (Young) 0.630ms
+[188.065s] GC(30) Concurrent reset after collect (Young) 0.186ms
+[188.065s] Trigger (Old): Resume preparing to mark old
+[188.097s] GC(31) Coalescing and filling (Old) 31.236ms
+[189.998s] Trigger (Global): GC request (System.gc())
+[189.999s] GC(32) Concurrent reset (Global) (unload classes) 1.604ms
+[191.133s] GC(32) Coalescing and filling old regions 25.537ms
+[191.134s] GC(32) Concurrent reset after collect (Global) (unload classes) 0.372ms
