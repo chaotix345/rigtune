@@ -732,9 +732,13 @@ def after_profile_check(instance, driver, entry_ids, originals, mods_before, sta
 # The released 0.3.0 starts on files 0.4 wrote (the v040-written fixture sets, composed by written.py), undoes the last
 # entry, applies a change of its own; then 0.4 starts again on what 0.3.0 left.
 
-# ERROR lines every offline E2E client logs (Mojang's services don't resolve; OSHI's Windows performance counters).
+# ERROR lines every offline E2E client logs (Mojang's services don't resolve; OSHI's Windows performance counters; on
+# Linux CI under Xvfb: no narrator library, no audio device).
 HARMLESS_ERRORS = re.compile(r"Failed to fetch user properties|Failed to request yggdrasil public key|Failed to fetch Realms "
-                             r"feature flags|Couldn't connect to realms|Error reading performance data from registry")
+                             r"feature flags|Couldn't connect to realms|Error reading performance data from registry|"
+                             r"Error while loading the narrator|Error starting SoundSystem")
+# GLFW's three-line report when Xvfb has no cursor theme ("########## GL ERROR ##########", "@ <where>", the message).
+XVFB_CURSOR = "X11: Standard cursor shape unavailable"
 # WARN lines about RigTune's own files that mean a file wasn't read or kept.
 FILE_WARNINGS = re.compile(r"written by a newer RigTune|Could not (read|record|parse|load)|\.bad\b|unreadable", re.IGNORECASE)
 
@@ -743,7 +747,14 @@ def rigtune_log_problems(text):
     """Any ERROR line but the offline client's usual ones (the production log has no logger names), a stack frame in
     RigTune's code (not the E2E drivers'), and any WARN line saying a file wasn't read, kept or accepted."""
     out = []
-    for line in text.splitlines():
+    lines = text.splitlines()
+    skip = set()
+    for index, line in enumerate(lines):
+        if XVFB_CURSOR in line and index >= 2 and "GL ERROR" in lines[index - 2]:
+            skip.update((index - 2, index - 1, index))
+    for index, line in enumerate(lines):
+        if index in skip:
+            continue
         if "/ERROR]" in line and not HARMLESS_ERRORS.search(line):
             out.append(line)
         elif "at io.github.chaotix345.rigtune." in line and ".rigtune.e2e." not in line:

@@ -9,15 +9,18 @@ Launches a real Minecraft client twice (./gradlew :<mc>:e2eClient), holding the 
 tools/e2e/README.md."""
 
 import argparse
+import contextlib
 import datetime
 import gzip
 import json
 import os
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -50,6 +53,10 @@ RELEASED = {
     "0.1.0": ("rigtune-0.1.0.jar", "8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950"),
     "0.2.0+mc26.2": ("rigtune-0.2.0+mc26.2.jar", "67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9"),
     "0.3.0+mc26.2": ("rigtune-0.3.0+mc26.2.jar", "5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9"),
+    "0.2.0+mc26.3": ("rigtune-0.2.0+mc26.3.jar", "98a2a2e14d7cc49fcaa1fde087d40d1ace277b721ee6bc9d1ba94ced29a0a7d9"),
+    "0.3.0+mc26.3": ("rigtune-0.3.0+mc26.3.jar", "cc43ebdf6b92666e5cf380004252fa59a81fa72b90f44cb280e45063cbf28084"),
+    "0.4.0+mc26.2": ("rigtune-0.4.0+mc26.2.jar", "801cd3b8e91c6a27b819d64c5b433bea6d7ac99d4776cb853c873a9cafdd868a"),
+    "0.4.0+mc26.3": ("rigtune-0.4.0+mc26.3.jar", "2d8328d73cb4789142036325eed11d1cd4ce6678fff7ca539cab9c09781499a7"),
 }
 UNDO_PHASES = ("mod-apply", "mod-undo", "mod-check")
 # Plan review B-M3, on the same instance after UNDO_PHASES: Undo this on an older Apply.
@@ -180,7 +187,7 @@ class Run:
 
     def java_processes(self):
         if os.name != "nt":
-            return []
+            return posix_java_processes()
         script = ("Get-CimInstance Win32_Process -Filter \"Name='java.exe' OR Name='javaw.exe'\" | "
                   "ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }")
         output = subprocess.run(["pwsh", "-NoProfile", "-Command", script], capture_output=True, text=True).stdout
@@ -199,7 +206,7 @@ class Run:
     def kill_own(self, predicate):
         for pid, command_line in self.own(predicate):
             self.log("killing own process {}: {}".format(pid, command_line[:160]))
-            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+            kill_process(pid)
 
     def ensure_no_client(self):
         """Before the lock goes: none of this run's clients may be running, or start shortly after (a cancelled build)."""
@@ -489,11 +496,22 @@ class Run:
         if result.returncode != 0:
             raise SystemExit("the redirect probe failed:\n" + result.stdout + result.stderr)
 
-    def start_watcher(self, phase):
+    def start_watcher(self, phase, posix=None):
         """Records the command line of every ApplyHelper JVM of this run while it lives (it lives a few seconds)."""
-        if os.name != "nt":
-            return
         self.watched = self.run_dir / "helper-cmdlines-{}.txt".format(phase)
+        if os.name != "nt" if posix is None else posix:
+            stop = threading.Event()
+
+            def watch():
+                while not stop.wait(0.2):
+                    lines = ["{}\t{}".format(pid, cl) for pid, cl in self.own(lambda cl: "ApplyHelper" in cl)]
+                    if lines:
+                        with open(self.watched, "a", encoding="utf-8") as out:
+                            out.write("\n".join(lines) + "\n")
+            thread = threading.Thread(target=watch, daemon=True)
+            thread.start()
+            self.watcher = (stop, thread)
+            return
         target = str(self.watched).replace("\\", "/")
         script = ("$out = '" + target + "'; while ($true) { Get-CimInstance Win32_Process -Filter \"Name='java.exe' OR Name='javaw.exe'\" | "
                   "Where-Object { $_.CommandLine -like '*ApplyHelper*' -and $_.CommandLine -like '*" + self.run_dir.name + "*' } | "
@@ -502,7 +520,11 @@ class Run:
         self.watcher = subprocess.Popen(["pwsh", "-NoProfile", "-Command", script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def stop_watcher(self):
-        if self.watcher is not None:
+        if isinstance(self.watcher, tuple):
+            self.watcher[0].set()
+            self.watcher[1].join()
+            self.watcher = None
+        elif self.watcher is not None:
             self.watcher.kill()
             self.watcher.wait()
             self.watcher = None
@@ -576,15 +598,13 @@ class Run:
         (self.out / "mods-after-{}.json".format(phase)).write_text(json.dumps(e2e_checks.listing(self.mods), indent=1), encoding="utf-8")
 
     def run_update(self):
-        # The seed's held-open files stay open from the launch until the helper is done (seed.json holdOpenWhy).
-        held = [open(self.instance / p, "rb") for p in (self.seed or {}).get("holdOpenAtOldExit", [])]
-        if held:
-            self.log("holding open during the old version's exit: {}".format([Path(h.name).name for h in held]))
-        try:
+        # The seed's held files stay held from the launch until the helper is done (seed.json holdOpenWhy; held()).
+        paths = [self.instance / p for p in (self.seed or {}).get("holdOpenAtOldExit", [])]
+        if paths:
+            self.log("holding during the old version's exit ({}): {}".format("open" if os.name == "nt" else "chattr +i",
+                                                                                [p.name for p in paths]))
+        with held(paths):
             code, helper_ok, cmdlines = self.launch_and_apply("update")
-        finally:
-            for handle in held:
-                handle.close()
         raw = self.run_dir / "captured-raw"
         raw.mkdir()
         fixtures.copy_evidence(self.out / "pending-before-exit.json", raw / "pending.json")
@@ -594,7 +614,7 @@ class Run:
         driver = self.driver("update")
         extra = [self.legacy_jar.name] if self.legacy_jar is not None else []
         checks = e2e_checks.after_update(self.instance, self.old_jar, self.new_jar, driver, self.server_log(), cmdlines,
-                                         extra_disables=extra, carried=self.carried)
+                                         separator=os.pathsep, extra_disables=extra, carried=self.carried)
         checks.insert(0, e2e_checks.Check("the client exited normally and the helper finished", code == 0 and helper_ok,
                                           "gradle exit {}, helper finished: {}".format(code, helper_ok)))
         self.checks["update"] = checks
@@ -883,11 +903,12 @@ class Run:
 
     # --- main -----------------------------------------------------------------------------------------------------
 
-    def preflight(self):
-        """Fail before touching anything: the process watching and cleanup need Windows and PowerShell 7."""
-        if os.name != "nt":
-            raise SystemExit("the harness runs on Windows only (process checks use Win32_Process)")
-        if shutil.which("pwsh") is None:
+    def preflight(self, posix=None, proc=Path("/proc")):
+        """Fail before touching anything: the process watching and cleanup need Windows and PowerShell 7, or Linux's /proc."""
+        posix = os.name != "nt" if posix is None else posix
+        if posix and not (proc / "self" / "cmdline").is_file():
+            raise SystemExit("the harness runs on Windows (Win32_Process) or Linux (/proc) only")
+        if not posix and shutil.which("pwsh") is None:
             raise SystemExit("pwsh (PowerShell 7) isn't on PATH")
         if self.lock is not None and not self.lock.parent.is_dir():
             raise SystemExit("the lock's folder {} doesn't exist; pass --lock <path> or --lock none".format(self.lock.parent))
@@ -930,6 +951,55 @@ class Run:
         elif self.args.capture_fixtures:
             self.log("fixtures not captured: the run didn't pass (--capture-anyway overrides)")
         return 0 if verdict == "PASS" else 1
+
+
+def posix_java_processes(proc=Path("/proc")):
+    """(pid, command line) of every java process, from /proc (Linux)."""
+    processes = []
+    for entry in Path(proc).iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            args = (entry / "cmdline").read_bytes().split(b"\0")
+        except OSError:
+            continue
+        if args and os.path.basename(args[0].decode("utf-8", "replace")) in ("java", "javaw"):
+            processes.append((int(entry.name), " ".join(a.decode("utf-8", "replace") for a in args if a)))
+    return processes
+
+
+def kill_process(pid, posix=None, kill=os.kill, run=subprocess.run):
+    """One process, never its tree: taskkill /F on Windows, SIGKILL elsewhere (a process already gone is fine)."""
+    if not (os.name != "nt" if posix is None else posix):
+        run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+        return
+    try:
+        kill(pid, getattr(signal, "SIGKILL", 9))
+    except ProcessLookupError:
+        pass
+
+
+@contextlib.contextmanager
+def held(paths, posix=None, run=subprocess.run):
+    """Holds the seed's files for the block, so a rename of them fails as when another process has them (seed.json
+    holdOpenWhy). Windows: each file is open (no FILE_SHARE_DELETE, a sharing violation). Linux has no such thing, so the
+    file is made immutable instead (chattr +i, needs sudo): the rename fails with EPERM, also a FileSystemException.
+    Yields the open handles (Windows)."""
+    posix = os.name != "nt" if posix is None else posix
+    handles, immutable = [], []
+    try:
+        for path in paths:
+            if posix:
+                run(["sudo", "-n", "chattr", "+i", str(path)], check=True)
+                immutable.append(path)
+            else:
+                handles.append(open(path, "rb"))
+        yield handles
+    finally:
+        for handle in handles:
+            handle.close()
+        for path in immutable:
+            run(["sudo", "-n", "chattr", "-i", str(path)], check=False)
 
 
 def load_seed(folder):
