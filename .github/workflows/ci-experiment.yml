@@ -12,6 +12,7 @@ permissions:
 
 jobs:
   timing:
+    if: false
     name: timing (${{ matrix.mc }}, ${{ matrix.idx }})
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -186,3 +187,34 @@ jobs:
               python -m unittest discover -s tools/tests > py.log 2>&1; echo py-exit=\$?; tail -4 py.log
               python -m unittest discover -s tools/e2e/tests > py-e2e.log 2>&1; echo py-e2e-exit=\$?; tail -4 py-e2e.log"'
           echo "took $(( $(date +%s) - start )) s"
+
+  frame-timing:
+    name: frame timing (${{ matrix.idx }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        idx: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: true
+      - name: FrameHookBudgetTest x 3
+        run: |
+          mkdir -p out
+          lscpu | sed -n 's/^Model name: *//p' > out/cpu.txt
+          for i in 1 2 3; do
+            ./gradlew :26.2:test --tests '*FrameHookBudgetTest' --rerun -q || echo "run $i failed"
+            cp versions/26.2/build/test-results/test/TEST-*FrameHookBudgetTest.xml "out/fh-$i.xml" || true
+          done
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: frame-timing-${{ matrix.idx }}
+          path: out/
