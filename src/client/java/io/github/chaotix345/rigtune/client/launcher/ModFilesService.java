@@ -11,6 +11,7 @@ import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.notice.NoticeAction;
 import io.github.chaotix345.rigtune.core.notice.NoticePriority;
+import net.minecraft.client.Minecraft;
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -28,6 +29,7 @@ public final class ModFilesService {
 	private final Supplier<@Nullable LauncherInfo> launcher;
 	private final Supplier<@Nullable InstanceEvidence> evidence;
 	private final BooleanSupplier optIn;
+	private volatile boolean watchingLateAnswer;
 
 	public ModFilesService(RealController controller) {
 		this(controller, LauncherProbe::answer, LauncherProbe::evidence, () -> controller.settings().modFilesByRigTune);
@@ -44,7 +46,25 @@ public final class ModFilesService {
 
 	// Render thread, no I/O (screens and RealController.modFiles()); also the rebuild's worker (the report post-step).
 	public ModFilesPolicy policy() {
+		watchLateAnswer();
 		return ModFilesPolicy.of(launcher.get(), evidence.get(), optIn.getAsBoolean());
+	}
+
+	// AC4a.3: a detection that answers after the probe's 3 s cap (the report was built PENDING) is picked up with one
+	// rescan, on the render thread: the probe answers it at once, RealController records the launcher and rebuilds the
+	// report with the final policy. Set up once, on the first policy() call.
+	private void watchLateAnswer() {
+		RealController real = controller;
+		if (watchingLateAnswer || real == null) {
+			return;
+		}
+		watchingLateAnswer = true;
+		LauncherProbe.onLateAnswer(answer -> {
+			Minecraft minecraft = real.minecraft();
+			if (minecraft != null) {
+				minecraft.execute(real::rescan);
+			}
+		});
 	}
 
 	// What the instance would be without the opt-in: whether a launcher keeps its own record (the Settings row, the
@@ -66,8 +86,13 @@ public final class ModFilesService {
 		if (status != FirstRun.Status.RETURNING || policy() != ModFilesPolicy.LAUNCHER) {
 			return null;
 		}
+		return newsNotice(launcher.get());
+	}
+
+	// The notice itself (also the A11y walk's canned one).
+	public static Notice newsNotice(@Nullable LauncherInfo launcher) {
 		return new Notice(NEWS_KEY, NoticePriority.MOD_FILES_NEWS,
-				Text.of("rigtune.launcher.mod_files.news", "RigTune now leaves this instance's mod files to %s", LauncherModText.nameOrYours(launcher.get())),
+				Text.of("rigtune.launcher.mod_files.news", "RigTune now leaves this instance's mod files to %s", LauncherModText.nameOrYours(launcher)),
 				Text.of("rigtune.launcher.mod_files.news.detail",
 						"Installing, updating and turning off mods now come with the launcher's own steps. Settings → Mod files lets RigTune change them anyway."),
 				List.of(new NoticeAction(NEWS_SETTINGS, Text.of("rigtune.launcher.mod_files.news.settings", "Settings…"))), true);

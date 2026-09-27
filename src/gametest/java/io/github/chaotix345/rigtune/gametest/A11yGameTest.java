@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
+import io.github.chaotix345.rigtune.client.launcher.ModFilesService;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkHistoryScreen;
 import io.github.chaotix345.rigtune.client.ui.HistoryScreen;
 import io.github.chaotix345.rigtune.client.ui.JvmScreen;
@@ -25,6 +26,8 @@ import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.jvm.JvmReport;
+import io.github.chaotix345.rigtune.core.launcher.Launcher;
+import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Text;
@@ -538,12 +541,34 @@ public class A11yGameTest implements FabricClientGameTest {
 		// narrates its label; at every size each widget is inside the screen and its label fits, and where the rows don't all
 		// fit the list scrolls to its last one.
 		try {
-			openSettings(v05);
+			openSettings(v05, v05.stub(), 8);
 			walkSettings(context);
 			for (int[] size : V05TestContext.SIZES) {
 				settingsLayout(v05, size, false);
 			}
 			settingsLayout(v05, V05TestContext.SCROLLING, true);
+
+			// 4e (AC4e.1): where a launcher keeps the mods, the Mod files row is one more Tab stop that narrates its choice.
+			LauncherKeepsMods kept = new LauncherKeepsMods(v05.stub());
+			v05.resize(854, 480, 2);
+			openSettings(v05, kept, 9);
+			String narrated = walkSettings(context);
+			check(narrated.contains("Mod files: Change them in the Modrinth App"), "settings: the Mod files row narrates its choice: " + narrated);
+			for (int[] size : V05TestContext.SIZES) {
+				settingsLayout(v05, size, false);
+			}
+			v05.resize(854, 480, 2);
+			tabUntilNarrates(context, "the Mod files row", "Mod files: Change them in the Modrinth App");
+			context.takeScreenshot("a11y-settings-mod-files-854x480-scale2");
+
+			// 4b (AC4b.6): MOD_FILES_NEWS on NoticeScreen, its message and detail narrated.
+			kept.notices = List.of(ModFilesService.newsNotice(LauncherInfo.of(Launcher.MODRINTH_APP)));
+			context.runOnClient(mc -> mc.gui.setScreen(new NoticeScreen(new TitleScreen(), kept)));
+			context.waitForScreen(NoticeScreen.class);
+			context.waitTicks(2);
+			String news = tabUntilNarrates(context, "the mod-files news", "RigTune now leaves this instance's mod files to the Modrinth App");
+			check(news.contains("the launcher's own steps"), "the news' detail is narrated with it: " + news);
+			context.takeScreenshot("a11y-mod-files-news-854x480-scale2");
 		} finally {
 			v05.resize(854, 480, 2);
 			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
@@ -551,17 +576,41 @@ public class A11yGameTest implements FabricClientGameTest {
 		}
 	}
 
-	private static void openSettings(V05TestContext v05) {
-		v05.context().runOnClient(mc -> mc.gui.setScreen(new RigTuneSettingsScreen(new TitleScreen(), v05.stub())));
-		v05.context().waitFor(mc -> mc.gui.screen() instanceof RigTuneSettingsScreen && rows(mc) >= 8, 200);
+	private static void openSettings(V05TestContext v05, RigTuneController controller, int rows) {
+		v05.context().runOnClient(mc -> mc.gui.setScreen(new RigTuneSettingsScreen(new TitleScreen(), controller)));
+		v05.context().waitFor(mc -> mc.gui.screen() instanceof RigTuneSettingsScreen && rows(mc) >= rows, 200);
 		v05.context().getInput().setCursorPos(1, 1);
 		v05.context().waitTicks(2);
+	}
+
+	// The canned world with a launcher that keeps the mods (the Modrinth App), and the notices the walk shows.
+	private static final class LauncherKeepsMods extends ForwardingController {
+		List<Notice> notices = List.of();
+
+		LauncherKeepsMods(RigTuneController delegate) {
+			super(delegate);
+		}
+
+		@Override
+		public ModFilesPolicy modFiles() {
+			return ModFilesPolicy.LAUNCHER;
+		}
+
+		@Override
+		public LauncherInfo launcher() {
+			return LauncherInfo.of(Launcher.MODRINTH_APP);
+		}
+
+		@Override
+		public List<Notice> notices() {
+			return notices;
+		}
 	}
 
 	// As walk(), for a list whose switches can be inactive: this class runs with the network off, which greys out the Rules
 	// updates and Modrinth switches, and vanilla gives an inactive widget no Tab stop (as before the list). Tab visits
 	// exactly the rows whose switch is active (and the note), in order, each narrating its label, then leaves the list.
-	private static void walkSettings(ClientGameTestContext context) {
+	private static String walkSettings(ClientGameTestContext context) {
 		context.runOnClient(mc -> mc.gui.screen().clearFocus());
 		List<Integer> stops = context.computeOnClient(mc -> {
 			List<Integer> out = new ArrayList<>();
@@ -595,6 +644,7 @@ public class A11yGameTest implements FabricClientGameTest {
 			check(narrated.toString().contains(text), "settings: \"" + text + "\" is narrated: " + narrated);
 		}
 		RigTune.LOGGER.info("A11yGameTest: settings: Tab reached the {} active rows of {} in order", stops.size(), context.computeOnClient(A11yGameTest::rows));
+		return narrated.toString();
 	}
 
 	// The screen's own widgets inside it and apart, every row's switch label fitting its width, and the last row inside the

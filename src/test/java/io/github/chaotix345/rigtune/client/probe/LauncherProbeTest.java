@@ -171,54 +171,77 @@ class LauncherProbeTest {
 		assertNull(LauncherProbe.evidence());
 	}
 
-	// AC4a.3: when the answer comes after a caller's cap, the late-answer callback gets it exactly once per detection,
-	// however many callers timed out and registered.
+	// AC4a.3: when the answer comes after a probe's cap, the late-answer listener gets it exactly once per detection,
+	// however many probes timed out.
 	@Test
 	void aLateAnswerIsHandedOnOnce() throws Exception {
 		CompletableFuture<LauncherInfo> detection = new CompletableFuture<>();
+		List<LauncherInfo> late = new CopyOnWriteArrayList<>();
+		LauncherProbe.onLateAnswer(late::add);
 		LauncherProbe.begin(detection, CompletableFuture.completedFuture(InstanceEvidence.NONE));
 		try {
 			assertSame(LauncherProbe.NOT_YET, await(LauncherProbe.probe(50)));
 			assertNull(LauncherProbe.answer());
-			List<LauncherInfo> late = new CopyOnWriteArrayList<>();
-			LauncherProbe.onLateAnswer(late::add);
 			assertSame(LauncherProbe.NOT_YET, await(LauncherProbe.probe(50)));
-			LauncherProbe.onLateAnswer(late::add);
 			assertEquals(List.of(), late);
 			detection.complete(LauncherInfo.of(Launcher.MODRINTH_APP));
 			assertEquals(List.of(LauncherInfo.of(Launcher.MODRINTH_APP)), late);
 			LauncherProbe.onLateAnswer(late::add);
-			assertEquals(1, late.size());
+			assertEquals(1, late.size(), "once per detection");
 			assertEquals(LauncherInfo.of(Launcher.MODRINTH_APP), await(LauncherProbe.probe(50)));
 		} finally {
+			LauncherProbe.onLateAnswer(ignored -> {});
 			LauncherProbe.reset();
 		}
 	}
 
-	// A caller that timed out registers after the answer already came in (the rest of its scan took longer): it still gets
-	// the answer, at once.
+	// A detection that answers within the cap never calls the listener.
 	@Test
-	void anAnswerThatCameMeanwhileIsHandedOnAtOnce() {
+	void anAnswerInTimeIsNotLate() throws Exception {
+		List<LauncherInfo> late = new ArrayList<>();
+		LauncherProbe.onLateAnswer(late::add);
 		LauncherProbe.begin(CompletableFuture.completedFuture(LauncherInfo.of(Launcher.ATLAUNCHER)), CompletableFuture.completedFuture(InstanceEvidence.NONE));
 		try {
+			assertEquals(LauncherInfo.of(Launcher.ATLAUNCHER), await(LauncherProbe.probe(1000)));
+			assertEquals(List.of(), late);
+		} finally {
+			LauncherProbe.onLateAnswer(ignored -> {});
+			LauncherProbe.reset();
+		}
+	}
+
+	// The listener set after the timeout and after the answer came (the report's first rebuild made it): it gets the
+	// answer at once.
+	@Test
+	void aListenerSetAfterTheAnswerCameGetsItAtOnce() throws Exception {
+		CompletableFuture<LauncherInfo> detection = new CompletableFuture<>();
+		LauncherProbe.onLateAnswer(ignored -> {});
+		LauncherProbe.begin(detection, CompletableFuture.completedFuture(InstanceEvidence.NONE));
+		try {
+			LauncherProbe.onLateAnswer(null);
+			assertSame(LauncherProbe.NOT_YET, await(LauncherProbe.probe(10)));
+			detection.complete(LauncherInfo.of(Launcher.ATLAUNCHER));
 			List<LauncherInfo> late = new ArrayList<>();
 			LauncherProbe.onLateAnswer(late::add);
 			assertEquals(List.of(LauncherInfo.of(Launcher.ATLAUNCHER)), late);
 		} finally {
+			LauncherProbe.onLateAnswer(ignored -> {});
 			LauncherProbe.reset();
 		}
 	}
 
-	// A game test's reset() starts a new detection: the old one's answer no longer reaches the callback.
+	// A game test's reset() starts a new detection: the old one's answer no longer reaches the listener.
 	@Test
-	void aResetDropsTheOldDetectionsLateAnswer() {
+	void aResetDropsTheOldDetectionsLateAnswer() throws Exception {
 		CompletableFuture<LauncherInfo> old = new CompletableFuture<>();
-		LauncherProbe.begin(old, CompletableFuture.completedFuture(InstanceEvidence.NONE));
 		List<LauncherInfo> late = new ArrayList<>();
 		LauncherProbe.onLateAnswer(late::add);
+		LauncherProbe.begin(old, CompletableFuture.completedFuture(InstanceEvidence.NONE));
+		assertSame(LauncherProbe.NOT_YET, await(LauncherProbe.probe(10)));
 		LauncherProbe.reset();
 		old.complete(LauncherInfo.of(Launcher.PRISM));
 		assertEquals(List.of(), late);
+		LauncherProbe.onLateAnswer(ignored -> {});
 	}
 
 	@Test

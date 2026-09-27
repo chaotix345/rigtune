@@ -26,8 +26,8 @@ import java.util.function.Supplier;
 // used by the next rescan.
 // v0.5 (docs/v0.5/SPEC.md 4a): the same session also lists <mods>/.index/ (InstanceEvidence), on its own, so the
 // mod-files policy can use that evidence before detection answers. A probe answers once both have; at the cap it answers
-// NOT_YET (PENDING for the policy, never the Unknown that would make it RIGTUNE), and whoever got NOT_YET can take the
-// real answer when it comes (onLateAnswer: once per detection).
+// NOT_YET (PENDING for the policy, never the Unknown that would make it RIGTUNE). When a probe hit the cap, the answer
+// that comes later goes to the late-answer listener, once per detection (onLateAnswer), so the report can follow it.
 public final class LauncherProbe {
 	public static final long TIMEOUT_MS = 3000;
 	// Reads as Unknown everywhere (equals LauncherInfo.UNKNOWN); only its identity says "not answered yet".
@@ -35,7 +35,10 @@ public final class LauncherProbe {
 	private static @Nullable CompletableFuture<LauncherInfo> detection;
 	private static @Nullable CompletableFuture<InstanceEvidence> evidence;
 	private static @Nullable CompletableFuture<LauncherInfo> answered;
+	// This detection: a probe answered NOT_YET; the listener was attached to its answer.
+	private static boolean timedOut;
 	private static boolean lateWatched;
+	private static @Nullable Consumer<LauncherInfo> lateListener;
 
 	private LauncherProbe() {
 	}
@@ -54,6 +57,7 @@ public final class LauncherProbe {
 		detection = null;
 		evidence = null;
 		answered = null;
+		timedOut = false;
 		lateWatched = false;
 	}
 
@@ -67,22 +71,42 @@ public final class LauncherProbe {
 		return evidence == null ? null : evidence.getNow(null);
 	}
 
-	// For a caller whose probe answered NOT_YET: callback gets the detection's answer once both it and the listing are in,
-	// at once if they already are. Once per detection (later registrations are ignored), and never after a reset().
-	public static void onLateAnswer(Consumer<LauncherInfo> callback) {
-		CompletableFuture<LauncherInfo> watched;
+	// The late-answer listener (the latest one set): once a probe of this detection has answered NOT_YET, it gets the
+	// detection's answer when both it and the listing are in (at once if they already are), once per detection, never
+	// after a reset(). A detection that answers within the cap never calls it.
+	public static void onLateAnswer(@Nullable Consumer<LauncherInfo> listener) {
 		synchronized (LauncherProbe.class) {
-			if (answered == null || lateWatched) {
+			lateListener = listener;
+		}
+		watchLate();
+	}
+
+	private static void watchLate() {
+		CompletableFuture<LauncherInfo> watched;
+		Consumer<LauncherInfo> listener;
+		synchronized (LauncherProbe.class) {
+			if (answered == null || !timedOut || lateWatched || lateListener == null) {
 				return;
 			}
 			lateWatched = true;
 			watched = answered;
+			listener = lateListener;
 		}
 		watched.thenAccept(info -> {
 			if (current(watched)) {
-				callback.accept(info);
+				listener.accept(info);
 			}
 		});
+	}
+
+	private static void timedOut(CompletableFuture<LauncherInfo> session) {
+		synchronized (LauncherProbe.class) {
+			if (answered != session) {
+				return;
+			}
+			timedOut = true;
+		}
+		watchLate();
 	}
 
 	private static synchronized boolean current(CompletableFuture<LauncherInfo> watched) {
@@ -98,11 +122,24 @@ public final class LauncherProbe {
 		detection = detected;
 		evidence = listed;
 		answered = detected.thenCombine(listed, (info, ignored) -> info);
+		timedOut = false;
 		lateWatched = false;
 	}
 
-	static synchronized CompletableFuture<LauncherInfo> probe(long timeoutMs) {
-		return answered == null ? CompletableFuture.completedFuture(NOT_YET) : withTimeout(answered, timeoutMs);
+	static CompletableFuture<LauncherInfo> probe(long timeoutMs) {
+		CompletableFuture<LauncherInfo> session;
+		synchronized (LauncherProbe.class) {
+			session = answered;
+		}
+		if (session == null) {
+			return CompletableFuture.completedFuture(NOT_YET);
+		}
+		return withTimeout(session, timeoutMs).thenApply(info -> {
+			if (info == NOT_YET) {
+				timedOut(session);
+			}
+			return info;
+		});
 	}
 
 	static CompletableFuture<LauncherInfo> start(Supplier<LauncherInfo> detect, Executor executor) {
