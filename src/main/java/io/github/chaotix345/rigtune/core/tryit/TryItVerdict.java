@@ -39,10 +39,14 @@ public final class TryItVerdict {
 		NO_NUMBERS
 	}
 
-	// Why the runs can't be compared, in the order they're named: conditions (BenchmarkTrend's, in its order), the loaded
-	// mods, History entries between the try's change and the after run (oldest first), managed settings (ShareKeys order).
+	// Why the runs can't be compared, in the order they're named: conditions (BenchmarkTrend's, in its order), the player
+	// moved (a CURRENT-scene try whose after run started elsewhere, or where either spot is unknown), the loaded mods,
+	// History entries between the try's change and the after run (oldest first), managed settings (ShareKeys order).
 	public sealed interface Cause {
 		record Condition(Difference difference) implements Cause {
+		}
+
+		record Moved() implements Cause {
 		}
 
 		record Mods() implements Cause {
@@ -62,7 +66,8 @@ public final class TryItVerdict {
 		NOISY, WORLD_CONTENT, DH, SESSIONS, SCENE
 	}
 
-	// lowPercent/avgPercent: null only for NO_NUMBERS.
+	// lowPercent/avgPercent: null only for NO_NUMBERS (a run without a result, or with a 1 % low or average that isn't a
+	// positive number: a hand edit).
 	public record Verdict(Kind kind, @Nullable Double lowPercent, @Nullable Double avgPercent, double floorPercent, List<Cause> causes,
 			List<Caveat> caveats) {
 		public Verdict {
@@ -81,7 +86,7 @@ public final class TryItVerdict {
 		BenchmarkRecord.Result a = after.result();
 		double floor = floorPercent(before, after, runs);
 		List<Caveat> caveats = caveats(t, before, after);
-		if (b == null || a == null) {
+		if (!usable(b) || !usable(a)) {
 			return new Verdict(Kind.NO_NUMBERS, null, null, floor, List.of(), caveats);
 		}
 		double low = BenchmarkMath.gainPercent(b.onePercentLowFps(), a.onePercentLowFps());
@@ -93,17 +98,30 @@ public final class TryItVerdict {
 	}
 
 	// max(2 x max(cvBefore or 5 %, cvAfter or 5 %, MIN_CV), the trend's floor of the runs before `before` when there are
-	// at least BenchmarkTrend.MIN_RUNS comparable ones), in percent.
+	// at least BenchmarkTrend.MIN_RUNS comparable ones with a usable 1 % low), in percent. A CV that isn't a finite
+	// number counts as missing.
 	static double floorPercent(BenchmarkRecord before, BenchmarkRecord after, List<BenchmarkRecord> runs) {
-		Double cvBefore = before.result() == null ? null : before.result().cv();
-		Double cvAfter = after.result() == null ? null : after.result().cv();
+		Double cvBefore = cv(before);
+		Double cvAfter = cv(after);
 		double floor = 2 * Math.max(Math.max(cvOrNoisy(cvBefore), cvOrNoisy(cvAfter)), MIN_CV) * 100;
-		List<BenchmarkRecord> baseline = BenchmarkTrend.baseline(before, runs);
-		if (baseline.size() >= BenchmarkTrend.MIN_RUNS) {
-			double[] lows = baseline.stream().mapToDouble(r -> r.result().onePercentLowFps()).toArray();
-			floor = Math.max(floor, BenchmarkTrend.noiseFloorPercent(cvBefore, lows));
+		double[] lows = BenchmarkTrend.baseline(before, runs).stream().mapToDouble(r -> r.result().onePercentLowFps())
+				.filter(low -> Double.isFinite(low) && low > 0).toArray();
+		if (lows.length >= BenchmarkTrend.MIN_RUNS) {
+			double trend = BenchmarkTrend.noiseFloorPercent(cvBefore, lows);
+			if (Double.isFinite(trend)) {
+				floor = Math.max(floor, trend);
+			}
 		}
 		return floor;
+	}
+
+	private static boolean usable(BenchmarkRecord.@Nullable Result r) {
+		return r != null && Double.isFinite(r.onePercentLowFps()) && r.onePercentLowFps() > 0 && Double.isFinite(r.avgFps()) && r.avgFps() > 0;
+	}
+
+	private static @Nullable Double cv(BenchmarkRecord run) {
+		Double cv = run.result() == null ? null : run.result().cv();
+		return cv != null && Double.isFinite(cv) ? cv : null;
 	}
 
 	private static double cvOrNoisy(@Nullable Double cv) {
@@ -117,6 +135,9 @@ public final class TryItVerdict {
 			if (!allowed.contains(d)) {
 				out.add(new Cause.Condition(d));
 			}
+		}
+		if (t.scene() == BenchmarkRequest.Scene.CURRENT && (t.beforeSpot() == null || !t.beforeSpot().equals(t.afterSpot()))) {
+			out.add(new Cause.Moved());
 		}
 		String hashBefore = before.context() == null ? null : before.context().modSetHash();
 		String hashAfter = after.context() == null ? null : after.context().modSetHash();
@@ -147,7 +168,8 @@ public final class TryItVerdict {
 	}
 
 	// The entries after the try's own, up to the after run's journalCursor; by time (no later than the after run) when the
-	// cursor is missing or no longer before it in the journal. Empty when the try's entry isn't there.
+	// cursor is missing or no longer after it in the journal, failing closed: an entry or a run whose time can't be read
+	// counts. Empty when the try's entry isn't there.
 	private static List<JournalEntry> between(String entryId, BenchmarkRecord after, List<JournalEntry> entries) {
 		int from = indexOf(entries, entryId);
 		if (from < 0) {
@@ -162,7 +184,7 @@ public final class TryItVerdict {
 		List<JournalEntry> out = new ArrayList<>();
 		for (JournalEntry e : entries.subList(from + 1, entries.size())) {
 			Instant at = instant(e.at());
-			if (until != null && at != null && !at.isAfter(until)) {
+			if (until == null || at == null || !at.isAfter(until)) {
 				out.add(e);
 			}
 		}
@@ -208,7 +230,7 @@ public final class TryItVerdict {
 	}
 
 	private static boolean noisy(BenchmarkRecord run) {
-		return run.result() != null && BenchmarkMath.noisy(run.result().cv());
+		return BenchmarkMath.noisy(cv(run));
 	}
 
 	private static boolean distantHorizons(BenchmarkRecord run) {

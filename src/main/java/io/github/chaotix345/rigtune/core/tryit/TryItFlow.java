@@ -1,13 +1,11 @@
 package io.github.chaotix345.rigtune.core.tryit;
 
-import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.history.ApplyFailures;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
-import io.github.chaotix345.rigtune.core.history.UndoPlanner;
 import io.github.chaotix345.rigtune.core.tryit.TryItView.Stage;
 import org.jspecify.annotations.Nullable;
 
@@ -62,13 +60,7 @@ public final class TryItFlow {
 		List<JournalEntry> entries = history.state() == Journal.State.OK ? history.entries() : List.of();
 		int at = indexOf(entries, t.entryId());
 		if (at < 0) {
-			// Nothing journaled under the try's entry: the apply hasn't happened (or took nothing), unless the entry was
-			// folded into a baseline or something shows the change was in effect (an after run; an after snapshot, taken
-			// only when an after run starts).
-			Stage stage = folded(entries, t.entryId()) || after != null || t.settingsAfter() != null ? Stage.NO_ENTRY
-					: before == null ? (live.measuring() ? Stage.MEASURING_BEFORE : Stage.STOPPED_BEFORE)
-					: live.applying() ? Stage.APPLYING : Stage.STOPPED_BEFORE;
-			return new TryItView(stage, t, before, after, null, null, null, same);
+			return new TryItView(missing(t, before, after, entries, live), t, before, after, null, null, null, same);
 		}
 		JournalChange change = change(entries.get(at), t.key());
 		if (change == null) {
@@ -81,9 +73,13 @@ public final class TryItFlow {
 		if (JournalChange.REVERTED.equals(status)) {
 			stage = Stage.REVERTED;
 		} else if (JournalChange.STAGED.equals(status)) {
-			stage = failure != null && failure.status() == ApplyResult.Status.FAILED ? Stage.RETRYING : Stage.AWAITING_RESTART;
+			// The helper's last run: FAILED is retried at the next exit; ABANDONED means it gave up (the journal says so at
+			// the next start).
+			stage = failure == null ? Stage.AWAITING_RESTART : failure.abandoned() ? Stage.NOT_APPLIED : Stage.RETRYING;
 		} else if (JournalChange.DISCARDED.equals(status)) {
-			stage = cancelled(entries, at, t.entryId()) ? Stage.CANCELLED : Stage.NOT_APPLIED;
+			// Taken out of pending.json by the player (Cancel try, Undo this or all, Discard), whether or not the undo's own
+			// entry was written.
+			stage = Stage.CANCELLED;
 		} else if (!JournalChange.APPLIED.equals(status)) {
 			// ABANDONED (the helper gave up, or the op was lost), or a status a hand edit left.
 			stage = Stage.NOT_APPLIED;
@@ -137,14 +133,52 @@ public final class TryItFlow {
 		return false;
 	}
 
-	// Undo this on the entry (or Undo all) after it discarded the staged change: the player cancelled the try.
-	private static boolean cancelled(List<JournalEntry> entries, int at, String entryId) {
-		for (JournalEntry e : entries.subList(at + 1, entries.size())) {
-			if (JournalEntry.UNDO.equals(e.kind()) && (entryId.equals(e.undoOf()) || UndoPlanner.ALL.equals(e.undoOf()))) {
-				return true;
+	// Nothing journaled under the try's entry. In order: an undo of it is (the journal's cap drops a reverted or cancelled
+	// entry before its undo); it was folded into a baseline (L8's foldedEntryIds); no before run yet; the chain is between
+	// the before run and the apply; the apply never happened, proven only when nothing shows it did (an after run or an
+	// after snapshot, both taken once the entry existed) and the journal never reached its cap (a cap leaves exactly
+	// MAX_ENTRIES, so fewer means nothing was ever dropped); else the change may be in effect and the entry lost.
+	private static Stage missing(TryIt t, @Nullable BenchmarkRecord before, @Nullable BenchmarkRecord after, List<JournalEntry> entries, Live live) {
+		Stage undone = undone(entries, t);
+		if (undone != null) {
+			return undone;
+		}
+		if (folded(entries, t.entryId())) {
+			return Stage.NO_ENTRY;
+		}
+		if (before == null) {
+			return live.measuring() ? Stage.MEASURING_BEFORE : Stage.STOPPED_BEFORE;
+		}
+		if (live.measuring() || live.applying()) {
+			return Stage.APPLYING;
+		}
+		boolean neverApplied = after == null && t.settingsAfter() == null && entries.size() < Journal.MAX_ENTRIES;
+		return neverApplied ? Stage.STOPPED_BEFORE : Stage.ENTRY_MISSING;
+	}
+
+	// An undo of the try's entry: its change of the key applied -> REVERTED, staged -> REVERT_PENDING, else (nothing of
+	// the key, or dropped) the try was cancelled.
+	private static @Nullable Stage undone(List<JournalEntry> entries, TryIt t) {
+		Stage out = null;
+		for (JournalEntry e : entries) {
+			if (!JournalEntry.UNDO.equals(e.kind()) || !t.entryId().equals(e.undoOf())) {
+				continue;
+			}
+			for (JournalChange c : e.changes()) {
+				if (c.isSetting() && t.key().equals(c.key())) {
+					if (JournalChange.APPLIED.equals(c.status())) {
+						return Stage.REVERTED;
+					}
+					if (JournalChange.STAGED.equals(c.status())) {
+						out = Stage.REVERT_PENDING;
+					}
+				}
+			}
+			if (out == null) {
+				out = Stage.CANCELLED;
 			}
 		}
-		return false;
+		return out;
 	}
 
 	// An undo's change that reverts the try's change is staged for the next restart.

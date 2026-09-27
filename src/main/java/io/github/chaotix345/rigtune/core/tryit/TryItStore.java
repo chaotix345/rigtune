@@ -7,12 +7,16 @@ import io.github.chaotix345.rigtune.core.store.JsonStateFile;
 import io.github.chaotix345.rigtune.core.store.StateStore;
 import org.jspecify.annotations.Nullable;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.UnaryOperator;
 
 // config/rigtune/tryit.json, docs/v0.5/SPEC.md 6 (C09): the open try (`current`, a TryIt) and the recent closed ones
@@ -54,13 +58,23 @@ public final class TryItStore {
 		return store.read();
 	}
 
-	public boolean update(UnaryOperator<JsonObject> change) {
+	// The raw read-modify-write (V05StoreShellsTest's file contract). Try it itself writes only through open, change and
+	// close, which check the open try inside the same write; this takes the same lock, so they never interleave.
+	public synchronized boolean update(UnaryOperator<JsonObject> change) {
 		return store.update(change);
 	}
 
-	// False when the file is from a newer RigTune or can't be read: update() then writes nothing.
-	public boolean writable() {
-		return store.writable();
+	// False when the file is from a newer RigTune, can't be read, or is over the cap (a hand edit): a try couldn't be
+	// recorded.
+	public synchronized boolean writable() {
+		if (!store.writable()) {
+			return false;
+		}
+		try {
+			return !Files.isRegularFile(file()) || Files.size(file()) <= MAX_BYTES;
+		} catch (IOException e) {
+			return false;
+		}
 	}
 
 	// The open try, or null (none, or one a hand edit made unusable).
@@ -87,10 +101,7 @@ public final class TryItStore {
 		if (current() != null) {
 			return false;
 		}
-		return store.update(root -> {
-			root.add(CURRENT, t.toJson(new JsonObject()));
-			return fit(root);
-		});
+		return write((open, root) -> open == null ? t.toJson(new JsonObject()) : null, (root, next) -> root.add(CURRENT, next));
 	}
 
 	// Changes the open try when it's the one with this id; false otherwise or when nothing could be written.
@@ -99,33 +110,50 @@ public final class TryItStore {
 		if (open == null || !open.id().equals(id)) {
 			return false;
 		}
-		TryIt next = change.apply(open);
-		return store.update(root -> {
-			root.add(CURRENT, next.toJson(root.get(CURRENT) instanceof JsonObject o ? o : new JsonObject()));
-			return fit(root);
-		});
+		return write((now, root) -> now == null || !now.id().equals(id) ? null
+				: change.apply(now).toJson(root.get(CURRENT) instanceof JsonObject o ? o : new JsonObject()), (root, next) -> root.add(CURRENT, next));
 	}
 
-	// Closes the open try with this id: it leaves `current` and becomes the newest `recent` row. One write.
+	// Closes the open try with this id: it leaves `current` and becomes the newest `recent` row, followed by the
+	// MAX_RECENT - 1 newest valid older ones (rows a hand edit made unusable stay where they are but don't count). One write.
 	public synchronized boolean close(String id, TryIt.Closed closed) {
 		TryIt open = current();
 		if (open == null || !open.id().equals(id)) {
 			return false;
 		}
-		return store.update(root -> {
+		return write((now, root) -> now == null || !now.id().equals(id) ? null : closed.toJson(), (root, row) -> {
 			root.remove(CURRENT);
 			JsonArray rows = new JsonArray();
-			rows.add(closed.toJson());
+			rows.add(row);
+			int valid = 1;
 			if (root.get(RECENT) instanceof JsonArray old) {
-				for (JsonElement row : old) {
-					if (rows.size() < MAX_RECENT) {
-						rows.add(row);
+				for (JsonElement r : old) {
+					boolean counts = TryIt.Closed.fromJson(r) != null;
+					if (!counts || valid < MAX_RECENT) {
+						rows.add(r);
+						valid += counts ? 1 : 0;
 					}
 				}
 			}
 			root.add(RECENT, rows);
+		});
+	}
+
+	// One write that decides, inside the store's read-modify-write, from the open try as it is on disk then: next(open,
+	// root) answers what to put (null: nothing, and false). The oldest `recent` rows go while the file would be over the
+	// cap.
+	private boolean write(BiFunction<@Nullable TryIt, JsonObject, @Nullable JsonObject> next, BiConsumer<JsonObject, JsonObject> put) {
+		boolean[] done = {false};
+		boolean written = store.update(root -> {
+			JsonObject value = next.apply(TryIt.fromJson(root.get(CURRENT)), root);
+			if (value == null) {
+				return root;
+			}
+			put.accept(root, value);
+			done[0] = true;
 			return fit(root);
 		});
+		return written && done[0];
 	}
 
 	// Drops the oldest `recent` rows while the file would be over the cap (the newest one stays).

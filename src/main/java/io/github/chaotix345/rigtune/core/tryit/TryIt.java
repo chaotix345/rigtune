@@ -18,14 +18,14 @@ import java.util.UUID;
 // identity only. The stage is never stored: TryItFlow derives it from this, the pair in benchmarks.json and the entry
 // in history.json. id: "t-<uuid>"; pairId: "tryit-<uuid>", the Measure pair's id (BenchmarkMenuScreen's "Measure after"
 // skips that prefix); entryId: the History entry the change is journaled under; key/from/to: the setting and its values;
-// session: the game session that started it; settingsBefore: the managed settings at Start; settingsAfter and
-// afterSession: the managed settings and the session when the newest after run started (null before one has);
-// afterRunId: the after run whose verdict was shown (its regression notice acknowledged). A try that's closed moves to
-// `recent` as a Closed row.
+// session: the game session that started it; settingsBefore and beforeSpot: the managed settings and where the player
+// stood at Start; settingsAfter, afterSession and afterSpot: the same when the newest after run started (null before
+// one has; the client takes them only once the try's History entry exists); afterRunId: the after run whose verdict was
+// shown (its regression notice acknowledged). A try that's closed moves to `recent` as a Closed row.
 public record TryIt(String id, String pairId, String entryId, @Nullable String recommendationId, String key, @Nullable String from,
 		@Nullable String to, Kind kind, BenchmarkRequest.Scene scene, @Nullable String startedAt, String session, @Nullable String rigtuneVersion,
-		@Nullable String mcVersion, Map<String, String> settingsBefore, @Nullable Map<String, String> settingsAfter, @Nullable String afterSession,
-		@Nullable String afterRunId) {
+		@Nullable String mcVersion, Map<String, String> settingsBefore, @Nullable Spot beforeSpot, @Nullable Map<String, String> settingsAfter,
+		@Nullable String afterSession, @Nullable Spot afterSpot, @Nullable String afterRunId) {
 	public static final String ID_PREFIX = "t-";
 	public static final String PAIR_PREFIX = "tryit-";
 
@@ -44,6 +44,31 @@ public record TryIt(String id, String pairId, String entryId, @Nullable String r
 
 		String json() {
 			return name().toLowerCase(Locale.ROOT);
+		}
+	}
+
+	// Where the player stood when a run in the CURRENT scene started (coordinator's SPEC decision, plan review of WS-T
+	// phase 1): the block, the dimension and the server's key (the client's; null when unknown). A run is never moved
+	// back to it: an after run somewhere else gets no verdict (TryItVerdict's MOVED cause).
+	public record Spot(int x, int y, int z, @Nullable String dimension, @Nullable String server) {
+		JsonObject toJson(@Nullable JsonElement previous) {
+			JsonObject out = previous instanceof JsonObject o ? o.deepCopy() : new JsonObject();
+			out.addProperty("x", x);
+			out.addProperty("y", y);
+			out.addProperty("z", z);
+			put(out, "dimension", dimension);
+			put(out, "server", server);
+			return out;
+		}
+
+		static @Nullable Spot fromJson(@Nullable JsonElement element) {
+			if (!(element instanceof JsonObject o)) {
+				return null;
+			}
+			Integer x = integer(o, "x");
+			Integer y = integer(o, "y");
+			Integer z = integer(o, "z");
+			return x == null || y == null || z == null ? null : new Spot(x, y, z, text(o, "dimension"), text(o, "server"));
 		}
 	}
 
@@ -92,27 +117,28 @@ public record TryIt(String id, String pairId, String entryId, @Nullable String r
 		settingsAfter = settingsAfter == null ? null : managed(settingsAfter);
 	}
 
-	// A new try for the setting key (from -> to), with new ids.
+	// A new try for the setting key (from -> to), with new ids. spot: where the player stands (a CURRENT-scene try), else
+	// null.
 	public static TryIt of(String entryId, @Nullable String recommendationId, String key, @Nullable String from, @Nullable String to, Kind kind,
 			BenchmarkRequest.Scene scene, @Nullable String startedAt, String session, @Nullable String rigtuneVersion, @Nullable String mcVersion,
-			Map<String, String> settingsBefore) {
+			Map<String, String> settingsBefore, @Nullable Spot spot) {
 		return new TryIt(ID_PREFIX + UUID.randomUUID(), PAIR_PREFIX + UUID.randomUUID(), entryId, recommendationId, key, from, to, kind, scene,
-				startedAt, session, rigtuneVersion, mcVersion, settingsBefore, null, null, null);
+				startedAt, session, rigtuneVersion, mcVersion, settingsBefore, spot, null, null, null, null);
 	}
 
-	// When an after run starts: the managed settings then and that session.
-	public TryIt withAfter(Map<String, String> settings, String session) {
+	// When an after run starts: the managed settings, the session and the spot then.
+	public TryIt withAfter(Map<String, String> settings, String session, @Nullable Spot spot) {
 		return new TryIt(id, pairId, entryId, recommendationId, key, from, to, kind, scene, startedAt, this.session, rigtuneVersion, mcVersion,
-				settingsBefore, settings, session, afterRunId);
+				settingsBefore, beforeSpot, settings, session, spot, afterRunId);
 	}
 
 	public TryIt withAfterRun(String runId) {
 		return new TryIt(id, pairId, entryId, recommendationId, key, from, to, kind, scene, startedAt, session, rigtuneVersion, mcVersion,
-				settingsBefore, settingsAfter, afterSession, runId);
+				settingsBefore, beforeSpot, settingsAfter, afterSession, afterSpot, runId);
 	}
 
-	// previous: this try's object as it is in the file, whose fields (and snapshot entries) this version doesn't know are
-	// kept. A managed key missing from a snapshot is removed from it.
+	// previous: this try's object as it is in the file, whose fields (and snapshot and spot entries) this version doesn't
+	// know are kept. A managed key missing from a snapshot is removed from it.
 	JsonObject toJson(JsonObject previous) {
 		JsonObject out = previous.deepCopy();
 		put(out, "id", id);
@@ -129,12 +155,14 @@ public record TryIt(String id, String pairId, String entryId, @Nullable String r
 		put(out, "rigtuneVersion", rigtuneVersion);
 		put(out, "mcVersion", mcVersion);
 		out.add("settingsBefore", snapshot(out.get("settingsBefore"), settingsBefore));
+		spot(out, "beforeSpot", beforeSpot);
 		if (settingsAfter == null) {
 			out.remove("settingsAfter");
 		} else {
 			out.add("settingsAfter", snapshot(out.get("settingsAfter"), settingsAfter));
 		}
 		put(out, "afterSession", afterSession);
+		spot(out, "afterSpot", afterSpot);
 		put(out, "afterRunId", afterRunId);
 		return out;
 	}
@@ -158,8 +186,8 @@ public record TryIt(String id, String pairId, String entryId, @Nullable String r
 		}
 		Map<String, String> after = o.get("settingsAfter") instanceof JsonObject ? strings(o.get("settingsAfter")) : null;
 		return new TryIt(id, pairId, entryId, text(o, "recommendationId"), key, text(o, "from"), text(o, "to"), kind, scene, text(o, "startedAt"),
-				session, text(o, "rigtuneVersion"), text(o, "mcVersion"), strings(o.get("settingsBefore")), after, text(o, "afterSession"),
-				text(o, "afterRunId"));
+				session, text(o, "rigtuneVersion"), text(o, "mcVersion"), strings(o.get("settingsBefore")), Spot.fromJson(o.get("beforeSpot")), after,
+				text(o, "afterSession"), Spot.fromJson(o.get("afterSpot")), text(o, "afterRunId"));
 	}
 
 	// Only ShareKeys.MANAGED keys with a value a setting can have (docs/v0.5/SPEC.md 6: the snapshots are limited to them).
@@ -186,6 +214,14 @@ public record TryIt(String id, String pairId, String entryId, @Nullable String r
 		return out;
 	}
 
+	private static void spot(JsonObject out, String name, @Nullable Spot spot) {
+		if (spot == null) {
+			out.remove(name);
+		} else {
+			out.add(name, spot.toJson(out.get(name)));
+		}
+	}
+
 	private static Map<String, String> strings(@Nullable JsonElement element) {
 		Map<String, String> out = new LinkedHashMap<>();
 		if (element instanceof JsonObject o) {
@@ -206,6 +242,15 @@ public record TryIt(String id, String pairId, String entryId, @Nullable String r
 		if (o.get(name) instanceof JsonPrimitive p && p.isNumber()) {
 			double value = p.getAsDouble();
 			return Double.isFinite(value) ? value : null;
+		}
+		return null;
+	}
+
+	// A whole number in int range, else null.
+	private static @Nullable Integer integer(JsonObject o, String name) {
+		if (o.get(name) instanceof JsonPrimitive p && p.isNumber()) {
+			double value = p.getAsDouble();
+			return value == Math.rint(value) && value >= Integer.MIN_VALUE && value <= Integer.MAX_VALUE ? (int) value : null;
 		}
 		return null;
 	}

@@ -16,6 +16,8 @@ final class TryItFixtures {
 	static final String KEY = "sodium.performance.chunk_build_defer_mode";
 	static final String ENTRY = "e-try";
 	static final String SESSION = "session-a";
+	// Where a CURRENT-scene try starts.
+	static final TryIt.Spot HERE = new TryIt.Spot(100, 64, -200, "minecraft:overworld", "sp:World");
 
 	private TryItFixtures() {
 	}
@@ -30,7 +32,8 @@ final class TryItFixtures {
 		before.put("vanilla.particles", "0");
 		before.put("vanilla.maxFps", "120");
 		before.put(KEY, "ALWAYS");
-		return TryIt.of(ENTRY, "setting:" + key, key, "ALWAYS", "ONE_FRAME", kind, scene, "2026-09-20T10:00:00Z", SESSION, "0.5.0", "26.2", before);
+		return TryIt.of(ENTRY, "setting:" + key, key, "ALWAYS", "ONE_FRAME", kind, scene, "2026-09-20T10:00:00Z", SESSION, "0.5.0", "26.2", before,
+				scene == BenchmarkRequest.Scene.CURRENT ? HERE : null);
 	}
 
 	static Run run(String id) {

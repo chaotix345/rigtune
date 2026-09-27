@@ -18,8 +18,10 @@ public record TryItView(Stage stage, @Nullable TryIt tryIt, @Nullable BenchmarkR
 	// RigTuneController.tryItRefusal's default (a controller without Try it): nothing can be tried.
 	public static final Text UNAVAILABLE = Text.of("rigtune.tryit.refused.unavailable", "Try it (measured) isn't available here.");
 
-	// NONE: no try open. The others are ti §2.5's table, plus HISTORY_UNREADABLE: history.json can't be read (unreadable,
-	// corrupt, or from a newer RigTune), so the try's change can't be seen and nothing is closed.
+	// NONE: no try open. The others are ti §2.5's table, plus two that close nothing on their own: ENTRY_MISSING, the try's
+	// History entry is gone while its change may have been applied (not proven folded into a baseline, which is NO_ENTRY:
+	// the journal's cap can drop an entry too), so only the player's Keep ends the try; HISTORY_UNREADABLE, history.json
+	// can't be read (unreadable, corrupt, or from a newer RigTune), so the change can't be seen.
 	public enum Stage {
 		NONE,
 		MEASURING_BEFORE,
@@ -37,6 +39,7 @@ public record TryItView(Stage stage, @Nullable TryIt tryIt, @Nullable BenchmarkR
 		REVERTED,
 		NO_BEFORE,
 		NO_ENTRY,
+		ENTRY_MISSING,
 		HISTORY_UNREADABLE;
 
 		// Inside or between the chained runs: the shared busy check (C8) refuses other settings changes meanwhile.
@@ -67,6 +70,7 @@ public record TryItView(Stage stage, @Nullable TryIt tryIt, @Nullable BenchmarkR
 			case READY -> sameSession ? List.of(Action.MEASURE_AGAIN, Action.KEEP, Action.REVERT)
 					: List.of(Action.MEASURE_NOW, Action.CANCEL_TRY, Action.LATER);
 			case INTERRUPTED, NO_BEFORE -> List.of(Action.KEEP, Action.REVERT);
+			case ENTRY_MISSING -> List.of(Action.KEEP);
 			case RESULT -> List.of(Action.KEEP, Action.REVERT, Action.DECIDE_LATER);
 		};
 	}

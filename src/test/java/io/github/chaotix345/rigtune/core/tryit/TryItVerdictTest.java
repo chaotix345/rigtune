@@ -33,7 +33,7 @@ class TryItVerdictTest {
 	private static final List<JournalEntry> JOURNAL = List.of(TryItFixtures.apply(ENTRY, "2026-09-20T10:05:00Z", JournalChange.APPLIED));
 
 	private static TryIt restart() {
-		return TryItFixtures.restartTry().withAfter(TryItFixtures.restartTry().settingsBefore(), "session-b");
+		return TryItFixtures.restartTry().withAfter(TryItFixtures.restartTry().settingsBefore(), "session-b", null);
 	}
 
 	private static TryItFixtures.Run before() {
@@ -160,7 +160,7 @@ class TryItVerdictTest {
 				TryItFixtures.setting("vanilla.particles", JournalChange.APPLIED)));
 		assertEquals(List.of(new Cause.Entry("e-2", JournalEntry.APPLY)), verdict(restart(), before(), after().cursor("e-2"), later).causes());
 
-		TryIt t = restart().withAfter(with(restart().settingsBefore(), "vanilla.particles", "2"), "session-b");
+		TryIt t = restart().withAfter(with(restart().settingsBefore(), "vanilla.particles", "2"), "session-b", null);
 		Verdict v = verdict(t, before(), after());
 		assertEquals(Kind.NOT_COMPARABLE, v.kind());
 		assertEquals(List.of(new Cause.Setting("vanilla.particles")), v.causes());
@@ -172,7 +172,7 @@ class TryItVerdictTest {
 				TryItFixtures.entry("e-2", "2026-09-20T11:00:00Z", JournalEntry.BENCHMARK, null, TryItFixtures.setting("vanilla.renderDistance", JournalChange.APPLIED)),
 				TryItFixtures.entry("e-3", "2026-09-20T12:00:00Z", JournalEntry.UNDO, "e-2", TryItFixtures.setting("vanilla.renderDistance", JournalChange.APPLIED)));
 		Map<String, String> after = with(with(restart().settingsBefore(), "vanilla.particles", "2"), "vanilla.renderDistance", "10");
-		TryIt t = restart().withAfter(after, "session-b");
+		TryIt t = restart().withAfter(after, "session-b", null);
 		Verdict v = verdict(t, before(), after().size(1920, 1080).rd(10).hash("hash-b").cursor("e-3"), journal);
 		assertEquals(List.of(new Cause.Condition(Difference.RENDER_DISTANCE), new Cause.Condition(Difference.RESOLUTION), new Cause.Mods(),
 				new Cause.Entry("e-2", JournalEntry.BENCHMARK), new Cause.Entry("e-3", JournalEntry.UNDO), new Cause.Setting("vanilla.renderDistance"),
@@ -183,7 +183,8 @@ class TryItVerdictTest {
 	void theTriedKeysOwnDifferencesAreAllowed() {
 		TryIt shaders = TryItFixtures.tryOf("iris.enableShaders", TryIt.Kind.RESTART, BenchmarkRequest.Scene.BENCHMARK_WORLD);
 		assertEquals(Kind.NO_CLEAR_CHANGE, verdict(shaders, before(), after().shaders(true, "Complementary.zip")).kind());
-		TryIt rd = TryItFixtures.tryOf("vanilla.renderDistance", TryIt.Kind.NOW, BenchmarkRequest.Scene.CURRENT);
+		TryIt rdTry = TryItFixtures.tryOf("vanilla.renderDistance", TryIt.Kind.NOW, BenchmarkRequest.Scene.CURRENT);
+		TryIt rd = rdTry.withAfter(rdTry.settingsBefore(), TryItFixtures.SESSION, TryItFixtures.HERE);
 		assertEquals(Kind.NO_CLEAR_CHANGE, verdict(rd, before().scene("CURRENT"), after().scene("CURRENT").rd(10)).kind());
 		assertEquals(List.of(new Cause.Condition(Difference.SIMULATION_DISTANCE)),
 				verdict(rd, before().scene("CURRENT"), after().scene("CURRENT").rd(10).sd(6)).causes(), "RD allows only RD");
@@ -193,11 +194,11 @@ class TryItVerdictTest {
 	@Test
 	void theTriedKeyAndTheLiftedKeysArentSettingCauses() {
 		Map<String, String> after = with(with(restart().settingsBefore(), KEY, "ONE_FRAME"), "vanilla.maxFps", "260");
-		assertEquals(Kind.NO_CLEAR_CHANGE, verdict(restart().withAfter(after, "session-b"), before(), after()).kind());
+		assertEquals(Kind.NO_CLEAR_CHANGE, verdict(restart().withAfter(after, "session-b", null), before(), after()).kind());
 		assertEquals(Kind.NO_CLEAR_CHANGE, verdict(TryItFixtures.restartTry(), before(), after()).kind(), "no after snapshot: nothing to compare");
 		Map<String, String> gone = new LinkedHashMap<>(restart().settingsBefore());
 		gone.remove("vanilla.particles");
-		assertEquals(List.of(new Cause.Setting("vanilla.particles")), verdict(restart().withAfter(gone, "session-b"), before(), after()).causes(),
+		assertEquals(List.of(new Cause.Setting("vanilla.particles")), verdict(restart().withAfter(gone, "session-b", null), before(), after()).causes(),
 				"a key missing on one side differs");
 	}
 
@@ -242,13 +243,13 @@ class TryItVerdictTest {
 				"a restart try without an after session: different sessions");
 
 		TryIt nowHere = TryItFixtures.tryOf("vanilla.particles", TryIt.Kind.NOW, BenchmarkRequest.Scene.CURRENT);
-		TryIt nowHereAfter = nowHere.withAfter(nowHere.settingsBefore(), TryItFixtures.SESSION);
+		TryIt nowHereAfter = nowHere.withAfter(nowHere.settingsBefore(), TryItFixtures.SESSION, TryItFixtures.HERE);
 		assertEquals(List.of(Caveat.SCENE), verdict(nowHereAfter, before().scene("CURRENT"), after().scene("CURRENT")).caveats());
 		assertEquals(List.of(Caveat.SCENE), verdict(nowHere, before().scene("CURRENT"), after().scene("CURRENT")).caveats(), "NOW without one: same session");
 		TryIt nowWorld = TryItFixtures.tryOf("vanilla.particles", TryIt.Kind.NOW, BenchmarkRequest.Scene.BENCHMARK_WORLD);
-		assertEquals(List.of(Caveat.WORLD_CONTENT, Caveat.SCENE), verdict(nowWorld.withAfter(nowWorld.settingsBefore(), TryItFixtures.SESSION), before(),
+		assertEquals(List.of(Caveat.WORLD_CONTENT, Caveat.SCENE), verdict(nowWorld.withAfter(nowWorld.settingsBefore(), TryItFixtures.SESSION, null), before(),
 				after()).caveats());
-		assertEquals(List.of(Caveat.WORLD_CONTENT, Caveat.SESSIONS, Caveat.SCENE), verdict(nowWorld.withAfter(nowWorld.settingsBefore(), "session-c"),
+		assertEquals(List.of(Caveat.WORLD_CONTENT, Caveat.SESSIONS, Caveat.SCENE), verdict(nowWorld.withAfter(nowWorld.settingsBefore(), "session-c", null),
 				before(), after()).caveats(), "resumed after a restart");
 	}
 
@@ -258,6 +259,63 @@ class TryItVerdictTest {
 		assertNotNull(v);
 		assertTrue(v.causes().isEmpty());
 		assertEquals(0.0, v.lowPercent(), 1e-12);
+	}
+
+	@Test
+	void anAfterRunElsewhereInTheCurrentSceneHasNoVerdict() {
+		TryIt here = TryItFixtures.tryOf("vanilla.particles", TryIt.Kind.NOW, BenchmarkRequest.Scene.CURRENT);
+		TryItFixtures.Run b = before().scene("CURRENT");
+		TryItFixtures.Run a = after().scene("CURRENT");
+		TryIt.Spot spot = TryItFixtures.HERE;
+		assertEquals(List.of(), verdict(here.withAfter(here.settingsBefore(), TryItFixtures.SESSION, spot), b, a).causes());
+		for (TryIt.Spot moved : List.of(new TryIt.Spot(101, 64, -200, spot.dimension(), spot.server()),
+				new TryIt.Spot(100, 65, -200, spot.dimension(), spot.server()), new TryIt.Spot(100, 64, -200, "minecraft:the_nether", spot.server()),
+				new TryIt.Spot(100, 64, -200, spot.dimension(), "sp:Other World"))) {
+			Verdict v = verdict(here.withAfter(here.settingsBefore(), TryItFixtures.SESSION, moved), b, a);
+			assertEquals(Kind.NOT_COMPARABLE, v.kind(), moved.toString());
+			assertEquals(List.of(new Cause.Moved()), v.causes());
+		}
+		assertEquals(List.of(new Cause.Moved()), verdict(here.withAfter(here.settingsBefore(), TryItFixtures.SESSION, null), b, a).causes(),
+				"an unknown after spot fails closed");
+		assertEquals(List.of(new Cause.Moved()), verdict(here, b, a).causes(), "no after spot yet");
+		TryIt world = TryItFixtures.tryOf("vanilla.particles", TryIt.Kind.NOW, BenchmarkRequest.Scene.BENCHMARK_WORLD);
+		assertEquals(List.of(), verdict(world.withAfter(world.settingsBefore(), TryItFixtures.SESSION, null), before(), after()).causes(),
+				"the benchmark world is always the same spot");
+		assertEquals(List.of(new Cause.Condition(Difference.RESOLUTION), new Cause.Moved(), new Cause.Mods()),
+				verdict(here.withAfter(here.settingsBefore(), TryItFixtures.SESSION, null), b, a.size(1920, 1080).hash("hash-b")).causes(),
+				"after the conditions, before the mods");
+	}
+
+	@Test
+	void numbersAHandEditBrokeAreNoNumbers() {
+		for (double bad : new double[] {Double.NaN, Double.POSITIVE_INFINITY, 0, -5}) {
+			assertEquals(Kind.NO_NUMBERS, verdict(restart(), before().low(bad), after()).kind(), "low " + bad);
+			assertEquals(Kind.NO_NUMBERS, verdict(restart(), before(), after().avg(bad)).kind(), "avg " + bad);
+		}
+		Verdict nanCv = low(1000, 1000, Double.NaN, 0.01);
+		assertEquals(10.0, nanCv.floorPercent(), 1e-9, "a CV that isn't a number counts as missing");
+		assertEquals(List.of(Caveat.SESSIONS, Caveat.SCENE), nanCv.caveats());
+		assertEquals(10.0, low(1000, 1000, Double.POSITIVE_INFINITY, 0.01).floorPercent(), 1e-9);
+
+		List<BenchmarkRecord> runs = new ArrayList<>();
+		runs.add(run("old1").low(1000).build());
+		runs.add(run("old2").low(1000).build());
+		runs.add(run("old3").low(Double.NaN).build());
+		BenchmarkRecord b = before().build();
+		BenchmarkRecord a = after().build();
+		runs.add(b);
+		runs.add(a);
+		assertEquals(5.0, TryItVerdict.of(restart(), b, a, runs, JOURNAL).floorPercent(), 1e-9, "only 2 usable earlier lows: no trend floor");
+	}
+
+	@Test
+	void timesThatCantBeReadCountAsChanges() {
+		List<JournalEntry> journal = List.of(JOURNAL.getFirst(),
+				TryItFixtures.entry("e-2", "yesterday", JournalEntry.APPLY, null, TryItFixtures.setting("vanilla.particles", JournalChange.APPLIED)),
+				TryItFixtures.entry("e-3", "2026-09-23T10:00:00Z", JournalEntry.APPLY, null, TryItFixtures.setting("vanilla.particles", JournalChange.APPLIED)));
+		assertEquals(List.of(new Cause.Entry("e-2", JournalEntry.APPLY)), verdict(restart(), before(), after().cursor(null), journal).causes());
+		assertEquals(List.of(new Cause.Entry("e-2", JournalEntry.APPLY), new Cause.Entry("e-3", JournalEntry.APPLY)),
+				verdict(restart(), before(), after().cursor(null).at("not a time"), journal).causes(), "without the run's time, every later entry");
 	}
 
 	private static Map<String, String> with(Map<String, String> map, String key, String value) {

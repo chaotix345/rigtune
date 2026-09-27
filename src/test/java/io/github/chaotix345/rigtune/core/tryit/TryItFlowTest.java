@@ -5,14 +5,19 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.history.ApplyFailures;
+import io.github.chaotix345.rigtune.core.history.HistoryUpdates;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.tryit.TryItView.Action;
 import io.github.chaotix345.rigtune.core.tryit.TryItView.Stage;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -107,6 +112,9 @@ class TryItFlowTest {
 	@Test
 	void applyingBetweenTheRuns() {
 		assertEquals(Stage.APPLYING, derive(NOW_HERE, List.of(before(NOW_HERE)), ok(), APPLYING).stage());
+		TryItView handling = derive(NOW_HERE, List.of(before(NOW_HERE)), ok(), MEASURING);
+		assertEquals(Stage.APPLYING, handling.stage(), "the before run is saved and its outcome not handled yet: never a stop");
+		assertNull(handling.closing());
 	}
 
 	@Test
@@ -124,9 +132,6 @@ class TryItFlowTest {
 		assertEquals(JournalChange.STAGED, v.changeStatus());
 		assertEquals(List.of(Action.CANCEL_TRY, Action.DONE), v.actions());
 		assertNull(v.closing());
-		assertEquals(Stage.AWAITING_RESTART, derive(RESTART, List.of(before(RESTART)),
-				ok(Map.of("op-try", failure(ApplyResult.Status.ABANDONED, 3)), applied(RESTART, JournalChange.STAGED)), IDLE).stage(),
-				"only a FAILED op is retried");
 	}
 
 	@Test
@@ -151,12 +156,16 @@ class TryItFlowTest {
 		assertEquals(TryIt.Decision.FAILED, v.closing());
 		assertNull(derive(RESTART, List.of(before(RESTART)), ok(applied(RESTART, JournalChange.ABANDONED)), IDLE_LATER).failure(),
 				"lost without a helper run: no reason");
+		TryItView notYetReconciled = derive(RESTART, List.of(before(RESTART)), ok(Map.of("op-try", failure(ApplyResult.Status.ABANDONED, 3)),
+				applied(RESTART, JournalChange.STAGED)), IDLE_LATER);
+		assertEquals(Stage.NOT_APPLIED, notYetReconciled.stage(), "still STAGED in the journal, but the helper gave up");
+		assertNotNull(notYetReconciled.failure());
 	}
 
 	@Test
-	void notAppliedWhenThePendingChangesWereDiscarded() {
+	void cancelledWhenThePendingChangesWereDiscarded() {
 		TryItView v = derive(RESTART, List.of(before(RESTART)), ok(applied(RESTART, JournalChange.DISCARDED)), IDLE);
-		assertEquals(Stage.NOT_APPLIED, v.stage());
+		assertEquals(Stage.CANCELLED, v.stage(), "the player took it out of pending.json, with or without an undo entry");
 		assertEquals(JournalChange.DISCARDED, v.changeStatus());
 		assertNull(v.failure());
 	}
@@ -171,9 +180,6 @@ class TryItFlowTest {
 		JournalEntry undoAll = TryItFixtures.entry("e-undo", "2026-09-20T10:10:00Z", JournalEntry.UNDO, "all");
 		assertEquals(Stage.CANCELLED, derive(RESTART, List.of(before(RESTART)), ok(applied(RESTART, JournalChange.DISCARDED), undoAll), IDLE).stage(),
 				"Undo all cancels it too");
-		JournalEntry earlierUndoAll = TryItFixtures.entry("e-old-undo", "2026-09-19T10:10:00Z", JournalEntry.UNDO, "all");
-		assertEquals(Stage.NOT_APPLIED, derive(RESTART, List.of(before(RESTART)), ok(earlierUndoAll, applied(RESTART, JournalChange.DISCARDED)),
-				IDLE).stage(), "an undo before the try's entry isn't its cancel");
 	}
 
 	@Test
@@ -286,10 +292,72 @@ class TryItFlowTest {
 		assertEquals(List.of(Action.DONE), v.actions());
 		assertEquals(TryIt.Decision.KEPT, v.closing());
 		assertEquals(Stage.NO_ENTRY, derive(RESTART, List.of(), ok(baseline), IDLE_LATER).stage(), "whatever the runs");
-		assertEquals(Stage.NO_ENTRY, derive(RESTART, List.of(before(RESTART), after(RESTART, "after", 500)), ok(), IDLE_LATER).stage(),
-				"an after run proves the change was applied");
-		TryIt measured = RESTART.withAfter(RESTART.settingsBefore(), OTHER_SESSION);
-		assertEquals(Stage.NO_ENTRY, derive(measured, List.of(before(RESTART)), ok(), IDLE_LATER).stage(), "so does an after snapshot");
+	}
+
+	@Test
+	void aMissingEntryThatMayHaveBeenAppliedClosesNothing() {
+		TryItView afterRun = derive(RESTART, List.of(before(RESTART), after(RESTART, "after", 500)), ok(), IDLE_LATER);
+		assertEquals(Stage.ENTRY_MISSING, afterRun.stage(), "an after run shows the change was applied; no fold is proven");
+		assertNull(afterRun.closing());
+		assertEquals(List.of(Action.KEEP), afterRun.actions(), "only the player's Keep ends it");
+		TryIt measured = RESTART.withAfter(RESTART.settingsBefore(), OTHER_SESSION, null);
+		assertEquals(Stage.ENTRY_MISSING, derive(measured, List.of(before(RESTART)), ok(), IDLE_LATER).stage(), "so does an after snapshot");
+
+		JournalEntry[] full = new JournalEntry[Journal.MAX_ENTRIES];
+		for (int i = 0; i < full.length; i++) {
+			full[i] = TryItFixtures.entry("e-" + i, "2026-09-20T11:00:00Z", JournalEntry.APPLY, null,
+					TryItFixtures.setting("vanilla.particles", JournalChange.APPLIED));
+		}
+		assertEquals(Stage.ENTRY_MISSING, derive(RESTART, List.of(before(RESTART)), ok(full), IDLE_LATER).stage(),
+				"a journal at its cap may have dropped the entry");
+		assertEquals(Stage.STOPPED_BEFORE, derive(RESTART, List.of(before(RESTART)), ok(Arrays.copyOf(full, Journal.MAX_ENTRIES - 1)),
+				IDLE_LATER).stage(), "below the cap nothing was ever dropped: the apply never happened");
+	}
+
+	@Test
+	void anUndoOfAMissingEntryTellsHowItEnded() {
+		JournalChange revert = JournalChange.setting(KEY, "ONE_FRAME", "ALWAYS", JournalChange.APPLIED, null).reverting("c-try");
+		JournalEntry reverted = TryItFixtures.entry("e-undo", "2026-09-22T10:10:00Z", JournalEntry.UNDO, ENTRY, revert);
+		TryItView v = derive(RESTART, List.of(before(RESTART), after(RESTART, "after", 500)), ok(reverted), IDLE_LATER);
+		assertEquals(Stage.REVERTED, v.stage());
+		assertEquals(TryIt.Decision.REVERTED, v.closing());
+		JournalEntry staged = TryItFixtures.entry("e-undo", "2026-09-22T10:10:00Z", JournalEntry.UNDO, ENTRY,
+				revert.withStatus(JournalChange.STAGED));
+		assertEquals(Stage.REVERT_PENDING, derive(RESTART, List.of(before(RESTART)), ok(staged), IDLE_LATER).stage());
+		JournalEntry cancelled = TryItFixtures.entry("e-undo", "2026-09-20T10:10:00Z", JournalEntry.UNDO, ENTRY);
+		assertEquals(Stage.CANCELLED, derive(RESTART, List.of(before(RESTART)), ok(cancelled), IDLE).stage(), "Cancel try: the staged change was discarded");
+		JournalEntry dropped = TryItFixtures.entry("e-undo", "2026-09-22T10:10:00Z", JournalEntry.UNDO, ENTRY,
+				revert.withStatus(JournalChange.DISCARDED));
+		assertEquals(Stage.CANCELLED, derive(RESTART, List.of(before(RESTART)), ok(dropped), IDLE_LATER).stage());
+		assertEquals(Stage.REVERTED, derive(RESTART, List.of(before(RESTART)), ok(dropped, reverted), IDLE_LATER).stage(), "an applied revert wins");
+	}
+
+	@Test
+	void aRevertAtTheJournalsCapDropsTheEntryAndTheTryStillEndsReverted(@TempDir Path config) throws IOException {
+		Journal journal = new Journal(config, "0.5.0", "26.2", (message, error) -> {
+		});
+		assertTrue(journal.update(entries -> {
+			List<JournalEntry> out = new ArrayList<>(entries);
+			out.add(applied(NOW_HERE, JournalChange.APPLIED));
+			for (int i = 1; i < Journal.MAX_ENTRIES; i++) {
+				out.add(TryItFixtures.entry("e-" + i, "2026-09-20T11:00:00Z", JournalEntry.APPLY, null,
+						TryItFixtures.setting("vanilla.particles", JournalChange.APPLIED)));
+			}
+			return out;
+		}));
+		List<BenchmarkRecord> runs = List.of(before(NOW_HERE), after(NOW_HERE, "after", 500));
+		assertEquals(Stage.RESULT, derive(NOW_HERE, runs, new TryItFlow.History(journal.state(), journal.entries(), Map.of()), IDLE).stage());
+
+		// What UndoService does for a vanilla Revert: the change REVERTED and an undo entry, in one (capped) write.
+		JournalChange undo = JournalChange.setting(NOW_HERE.key(), NOW_HERE.to(), NOW_HERE.from(), JournalChange.APPLIED, null).reverting("c-try");
+		assertTrue(journal.update(entries -> HistoryUpdates.append(HistoryUpdates.revert(entries, Set.of("c-try")),
+				journal.newEntry(JournalEntry.UNDO, ENTRY, List.of(undo)))));
+		List<JournalEntry> capped = journal.entries();
+		assertEquals(Journal.MAX_ENTRIES, capped.size());
+		assertTrue(capped.stream().noneMatch(e -> ENTRY.equals(e.id())), "the cap dropped the finished entry");
+		TryItView v = derive(NOW_HERE, runs, new TryItFlow.History(journal.state(), capped, Map.of()), IDLE);
+		assertEquals(Stage.REVERTED, v.stage());
+		assertEquals(TryIt.Decision.REVERTED, v.closing());
 	}
 
 	@Test
@@ -343,6 +411,7 @@ class TryItFlowTest {
 				"REVERTED [DONE] REVERTED",
 				"NO_BEFORE [KEEP, REVERT] null",
 				"NO_ENTRY [DONE] KEPT",
+				"ENTRY_MISSING [KEEP] null",
 				"HISTORY_UNREADABLE [DONE] null"), rows);
 	}
 

@@ -35,7 +35,7 @@ class TryItStoreTest {
 		before.put("sodium.performance.chunk_build_defer_mode", "ALWAYS");
 		return TryIt.of(entryId, "setting:sodium.performance.chunk_build_defer_mode", "sodium.performance.chunk_build_defer_mode", "ALWAYS",
 				"ONE_FRAME", TryIt.Kind.RESTART, BenchmarkRequest.Scene.BENCHMARK_WORLD, "2026-09-20T10:00:00Z", "session-a", "0.5.0", "26.2",
-				before);
+				before, null);
 	}
 
 	private TryItStore store() {
@@ -81,7 +81,7 @@ class TryItStoreTest {
 
 	@Test
 	void everyFieldRoundTrips() throws IOException {
-		TryIt t = sample("e-1").withAfter(Map.of("vanilla.renderDistance", "12"), "session-b").withAfterRun("run-7");
+		TryIt t = sample("e-1").withAfter(Map.of("vanilla.renderDistance", "12"), "session-b", null).withAfterRun("run-7");
 		assertTrue(store().open(t));
 		assertEquals(t, store().current());
 		JsonObject current = onDisk().getAsJsonObject("current");
@@ -91,12 +91,18 @@ class TryItStoreTest {
 		assertEquals("12", current.getAsJsonObject("settingsBefore").get("vanilla.renderDistance").getAsString());
 		assertEquals("session-b", current.get("afterSession").getAsString());
 
+		TryIt.Spot here = new TryIt.Spot(-120, 64, 2048, "minecraft:overworld", "sp:New World");
 		TryIt now = TryIt.of("e-2", "setting:vanilla.renderDistance", "vanilla.renderDistance", "16", "12", TryIt.Kind.NOW,
-				BenchmarkRequest.Scene.CURRENT, "2026-09-20T10:00:00Z", "session-a", "0.5.0", "26.2", Map.of());
+				BenchmarkRequest.Scene.CURRENT, "2026-09-20T10:00:00Z", "session-a", "0.5.0", "26.2", Map.of(), here)
+				.withAfter(Map.of(), "session-a", new TryIt.Spot(-120, 64, 2049, null, null));
 		assertTrue(store().close(t.id(), closed(t, TryIt.Decision.KEPT, "2026-09-21T10:00:00Z")));
 		assertTrue(store().open(now));
 		assertEquals(now, store().current());
-		assertEquals("now", onDisk().getAsJsonObject("current").get("kind").getAsString());
+		JsonObject current2 = onDisk().getAsJsonObject("current");
+		assertEquals("now", current2.get("kind").getAsString());
+		assertEquals(-120, current2.getAsJsonObject("beforeSpot").get("x").getAsInt());
+		assertEquals("sp:New World", current2.getAsJsonObject("beforeSpot").get("server").getAsString());
+		assertFalse(current2.getAsJsonObject("afterSpot").has("dimension"));
 	}
 
 	@Test
@@ -115,7 +121,7 @@ class TryItStoreTest {
 		assertFalse(store().change(a.id(), t -> t.withAfterRun("x")), "no try open");
 		assertTrue(store().open(a));
 		assertFalse(store().change("t-other", t -> t.withAfterRun("x")));
-		assertTrue(store().change(a.id(), t -> t.withAfter(Map.of("vanilla.renderDistance", "10"), "session-b")));
+		assertTrue(store().change(a.id(), t -> t.withAfter(Map.of("vanilla.renderDistance", "10"), "session-b", null)));
 		TryIt changed = store().current();
 		assertNotNull(changed);
 		assertEquals(Map.of("vanilla.renderDistance", "10"), changed.settingsAfter());
@@ -153,14 +159,57 @@ class TryItStoreTest {
 
 	@Test
 	void recentKeepsTheNewestTen() {
+		List<String> ids = new java.util.ArrayList<>();
 		for (int i = 0; i < 12; i++) {
 			TryIt t = sample("e-" + i);
+			ids.addFirst(t.id());
 			assertTrue(store().open(t));
 			assertTrue(store().close(t.id(), closed(t, TryIt.Decision.KEPT, "2026-09-2" + (i % 10) + "T10:00:00Z")));
 		}
-		List<TryIt.Closed> recent = store().recent();
-		assertEquals(TryItStore.MAX_RECENT, recent.size());
 		assertEquals(10, TryItStore.MAX_RECENT);
+		assertEquals(ids.subList(0, 10), store().recent().stream().map(TryIt.Closed::id).toList(), "the ten newest, newest first");
+	}
+
+	@Test
+	void unusableRowsDontCountTowardsTheTen() throws IOException {
+		JsonArray recent = new JsonArray();
+		recent.add(3);
+		for (int i = 0; i < 10; i++) {
+			JsonObject row = new JsonObject();
+			row.addProperty("id", "t-old" + i);
+			row.addProperty("key", "vanilla.renderDistance");
+			row.addProperty("decision", "kept");
+			row.addProperty("at", "2026-09-1" + i + "T10:00:00Z");
+			recent.add(row);
+			if (i == 4) {
+				recent.add("junk");
+			}
+		}
+		JsonObject root = new JsonObject();
+		root.addProperty("formatVersion", 1);
+		root.add("recent", recent);
+		write(root.toString());
+		TryIt t = sample("e-1");
+		assertTrue(store().open(t));
+		assertTrue(store().close(t.id(), closed(t, TryIt.Decision.KEPT, "2026-09-25T10:00:00Z")));
+		List<String> ids = store().recent().stream().map(TryIt.Closed::id).toList();
+		assertEquals(10, ids.size());
+		assertEquals(t.id(), ids.getFirst());
+		assertEquals("t-old8", ids.getLast(), "nine older valid rows kept, the oldest one dropped");
+		JsonArray disk = onDisk().getAsJsonArray("recent");
+		assertEquals(3, disk.get(1).getAsInt(), "an unusable row stays where it was");
+		assertEquals("junk", disk.get(7).getAsString());
+	}
+
+	@Test
+	void aFileOverTheCapIsNotWritable() throws IOException {
+		JsonObject root = new JsonObject();
+		root.addProperty("formatVersion", 1);
+		root.addProperty("note", "x".repeat((int) TryItStore.MAX_BYTES));
+		write(root.toString());
+		assertTrue(Files.size(file()) > TryItStore.MAX_BYTES);
+		assertFalse(store().writable());
+		assertFalse(store().open(sample("e-1")), "nothing to prune: it can't be written");
 	}
 
 	@Test
@@ -237,6 +286,8 @@ class TryItStoreTest {
 		current.addProperty("settingsAfter", "x");
 		current.addProperty("afterRunId", 5);
 		current.add("from", JsonParser.parseString("[\"a\"]"));
+		current.add("beforeSpot", JsonParser.parseString("{\"x\": 1.5, \"y\": 64, \"z\": 3}"));
+		current.add("afterSpot", JsonParser.parseString("{\"x\": 1, \"y\": 64, \"z\": 3, \"dimension\": 7}"));
 		write("{\"formatVersion\": 1, \"current\": " + current + ", \"recent\": [3, \"x\", {\"id\": \"t-1\"}, {\"id\": \"t-2\", \"key\": \"vanilla.renderDistance\","
 				+ " \"decision\": \"kept\", \"at\": \"2026-09-20T10:00:00Z\", \"lowPercent\": \"high\", \"verdict\": 2}, {\"id\": \"t-3\","
 				+ " \"key\": \"vanilla.renderDistance\", \"decision\": \"sometimes\", \"at\": \"2026-09-20T10:00:00Z\"}]}");
@@ -244,8 +295,10 @@ class TryItStoreTest {
 		assertNotNull(read);
 		assertEquals(Map.of("vanilla.particles", "1"), read.settingsBefore());
 		assertNull(read.settingsAfter());
+		assertEquals(new TryIt.Spot(1, 64, 3, null, null), read.afterSpot(), "a wrong-typed dimension reads as absent");
 		assertNull(read.afterRunId());
 		assertNull(read.from());
+		assertNull(read.beforeSpot());
 		List<TryIt.Closed> recent = store().recent();
 		assertEquals(List.of("t-2"), recent.stream().map(TryIt.Closed::id).toList());
 		assertNull(recent.getFirst().lowPercent());
@@ -273,7 +326,7 @@ class TryItStoreTest {
 		root.add("topLevel", JsonParser.parseString("{\"z\": true}"));
 		write(root.toString());
 
-		assertTrue(store().change(a.id(), t -> t.withAfter(Map.of("vanilla.renderDistance", "10"), "session-b")));
+		assertTrue(store().change(a.id(), t -> t.withAfter(Map.of("vanilla.renderDistance", "10"), "session-b", null)));
 		JsonObject disk = onDisk();
 		assertEquals(1, disk.getAsJsonObject("current").getAsJsonObject("future").getAsJsonObject("deep").get("x").getAsInt());
 		assertEquals("7", disk.getAsJsonObject("current").getAsJsonObject("settingsBefore").get("mod.future.key").getAsString());
@@ -296,9 +349,9 @@ class TryItStoreTest {
 		before.put("vanilla.maxFps", "260\n");
 		before.put("iris.enableShaders", "true");
 		TryIt t = TryIt.of("e-1", null, "vanilla.renderDistance", "12", "10", TryIt.Kind.NOW, BenchmarkRequest.Scene.CURRENT, null, "s", null,
-				null, before);
+				null, before, null);
 		assertEquals(Map.of("vanilla.renderDistance", "12", "iris.enableShaders", "true"), t.settingsBefore());
-		assertEquals(Map.of("vanilla.renderDistance", "12"), t.withAfter(Map.of("vanilla.renderDistance", "12", "vanilla.fov", "80"), "s")
+		assertEquals(Map.of("vanilla.renderDistance", "12"), t.withAfter(Map.of("vanilla.renderDistance", "12", "vanilla.fov", "80"), "s", null)
 				.settingsAfter());
 		assertEquals(List.of("vanilla.renderDistance", "iris.enableShaders"), List.copyOf(t.settingsBefore().keySet()), "order kept");
 	}

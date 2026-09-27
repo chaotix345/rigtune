@@ -56,35 +56,59 @@ No new `//? if` block expected (ti §4). Code-deciding run: T12 only.
 - **HISTORY_UNREADABLE** (a stage ti §2.5 doesn't have): history.json unreadable, corrupt or from a newer RigTune. The
   try's entry can't be seen then, and the table would say STOPPED_BEFORE ("Nothing was changed") and close the try, which
   can be false; this stage closes nothing and waits for the next derive.
-- **NO_ENTRY** (the entry folded into a baseline) is recognised by the baseline's `foldedEntryIds` (L8, WS-P fills it) or
-  by proof that the apply happened (an after run, or `settingsAfter`, which the service takes only when an after run
-  starts); without either, a missing entry is the "apply never happened" row (STOPPED_BEFORE or APPLYING).
+- **A missing entry** (review round, H1/M2/M3): in order, an undo of the entry says how it ended (the journal's cap drops
+  a reverted or cancelled entry before its undo: its change of the key APPLIED -> REVERTED, STAGED -> REVERT_PENDING,
+  else CANCELLED); NO_ENTRY (closes as kept) only when a baseline's `foldedEntryIds` (L8, WS-P) proves the fold; no
+  before run -> MEASURING_BEFORE / STOPPED_BEFORE; the chain between the before and the apply (`measuring` or
+  `applying`) -> APPLYING; STOPPED_BEFORE only when nothing shows the apply happened (no after run, no after snapshot)
+  and the journal never reached its cap (a cap always leaves exactly `Journal.MAX_ENTRIES`, so fewer entries means none
+  was ever dropped); otherwise **ENTRY_MISSING** (a new stage): the change may be in effect and the entry lost, nothing
+  closes it but the player's Keep.
+- **DISCARDED is CANCELLED** whether or not an undo entry exists (UndoService writes the discard and its undo entry
+  separately; Discard pending writes none): only the player takes a staged change out of pending.json. A STAGED change
+  whose op the helper ABANDONED at the last exit is NOT_APPLIED with that failure before the journal is reconciled.
+- **Where the player stood** (coordinator's SPEC decision in the review round): a CURRENT-scene try records the block,
+  dimension and server key at Start (`beforeSpot`) and when each after run starts (`afterSpot`); an after run
+  elsewhere, or either spot unknown, gives no verdict (the MOVED cause, after the conditions). The player is never moved
+  back. The benchmark world is always the same spot.
 - **`afterSession`** in `current`: the session the newest after run started in (taken with `settingsAfter`), so the
   "different sessions" caveat is right for a NOW try in the benchmark world resumed after a restart, not only RESTART.
 - **Triable answers enums** (`Refusal`, `Kind`): the client passes the shared busy check's and the benchmark's own
   refusal texts through (BUSY, SCENE), and TryItText words the rest in phase 2.
 - **Verdict: which History entries count** between the try's entry and the after run's cursor: any entry except an undo
   of the try's entry, with at least one change that isn't DISCARDED or ABANDONED (a change that never took effect can't
-  have moved the numbers; a STAGED one counts, so a verdict doesn't flip after the restart that applies it).
+  have moved the numbers; a STAGED one counts, so a verdict doesn't flip after the restart that applies it). Without the
+  cursor the window is by time and fails closed: an entry whose time can't be read counts, and without the run's own
+  time every later entry does.
+- **Numbers a hand edit broke**: a 1 % low or average that isn't a positive finite number is NO_NUMBERS; a CV that isn't
+  finite counts as missing (5 %); the trend's floor uses only usable lows, and needs 3 of them.
+- **tryit.json writes** (review round): open, change and close decide from the open try as it is on disk inside the
+  store's own read-modify-write (a check outside first spares a write when nothing matches); the raw `update()` stays
+  public for WS-K's `V05StoreShellsTest` but takes the same lock; `recent` keeps the 10 newest usable rows (unusable ones
+  stay where they are and don't count); `writable()` is false for a file over the 16 KiB cap.
 
 ## Phase 1 as landed
 
 All in `core/tryit/` (pure: core model + Gson, no Minecraft import). Tests red first (compile failures: the API didn't
-exist), then green in a build slot (`:26.2:test --tests 'io.github.chaotix345.rigtune.core.tryit.*'`: 67 tests), plus
+exist), then green in a build slot (`:26.2:test --tests 'io.github.chaotix345.rigtune.core.tryit.*'`: 75 tests), plus
 WS-K's `V05StubsTest`, `V05StoreShellsTest`, `V05ServicesTest`, `RigTuneControllerDefaultsTest`, `LangCheckTest` and
 `WordingTest` unchanged and green.
 
 | task | commit | API (as the client part will call it) | tests |
 |---|---|---|---|
-| T1 | 16745790 | `TryIt(id, pairId, entryId, recommendationId, key, from, to, Kind kind, Scene scene, startedAt, session, rigtuneVersion, mcVersion, settingsBefore, settingsAfter, afterSession, afterRunId)`; `TryIt.of(entryId, recommendationId, key, from, to, kind, scene, startedAt, session, rigtuneVersion, mcVersion, settingsBefore)` mints `t-<uuid>` / `tryit-<uuid>`; `withAfter(settings, session)`, `withAfterRun(runId)`; `TryIt.Kind {NOW, RESTART}`, `TryIt.Decision {KEPT, REVERTED, CANCELLED, FAILED}`, `TryIt.Closed.of(t, decision, verdict, low, avg, floor, at)`; `TryItStore.current()`, `recent()`, `open(t)`, `change(id, f)`, `close(id, closed)`, `MAX_RECENT` 10 | `TryItStoreTest` (13) |
+| T1 | 16745790 | `TryIt(id, pairId, entryId, recommendationId, key, from, to, Kind kind, Scene scene, startedAt, session, rigtuneVersion, mcVersion, settingsBefore, beforeSpot, settingsAfter, afterSession, afterSpot, afterRunId)`; `TryIt.of(entryId, recommendationId, key, from, to, kind, scene, startedAt, session, rigtuneVersion, mcVersion, settingsBefore, spot)` mints `t-<uuid>` / `tryit-<uuid>`; `withAfter(settings, session, spot)`, `withAfterRun(runId)`; `TryIt.Spot(x, y, z, dimension, server)`; `TryIt.Kind {NOW, RESTART}`, `TryIt.Decision {KEPT, REVERTED, CANCELLED, FAILED}`, `TryIt.Closed.of(t, decision, verdict, low, avg, floor, at)`; `TryItStore.current()`, `recent()`, `open(t)`, `change(id, f)`, `close(id, closed)`, `MAX_RECENT` 10 | `TryItStoreTest` (13) |
 | T2 | 36832873 | `Triable.check(rec, Context[, scene])`, `selection(List, Context)` -> `Result(kind, scene, refusal)`; `Refusal {ONE, KIND, UNMEASURABLE, PRESET, UNSUPPORTED, NO_FILE, REMOTE_SD, PENDING, BUSY, SCENE, OPEN, HISTORY, STORAGE}`; `Context(hasConfigFile, inWorld, remoteServer, pending, busy, sceneUnavailable, tryOpen, journalWritable, benchmarksReadable, storeWritable)`; `scenes(kind)`, `defaultScene(kind, inWorld)`, `allowed(key)`, `sceneContent(key)`, `LIFTED` | `TriableTest` (13) |
-| T3 | 88553045 | `TryItVerdict.of(t, before, after, runs, entries)` -> `Verdict(kind, lowPercent, avgPercent, floorPercent, causes, caveats)`; `Kind {BETTER, WORSE, NO_CLEAR_CHANGE, NOT_COMPARABLE, NO_NUMBERS}`; `Cause` = `Condition(Difference)` / `Mods()` / `Entry(entryId, kind)` / `Setting(key)`; `Caveat {NOISY, WORLD_CONTENT, DH, SESSIONS, SCENE}`; `MIN_CV` 0.025 | `TryItVerdictTest` (16) |
-| T4 | 78ea6944 | `TryItFlow.derive(t, runs, History(state, entries, failuresByOpId), Live(session, measuring, applying))` -> `TryItView(stage, tryIt, before, after, verdict, changeStatus, failure, sameSession)`; `TryItView.actions()` (`Action {MEASURE_NOW, MEASURE_AGAIN, KEEP, REVERT, CANCEL_TRY, LATER, DECIDE_LATER, DONE}`), `closing()`, `Stage.chainRunning()`, `Stage.HISTORY_UNREADABLE`; `TryItView(Stage)` and `EMPTY`/`UNAVAILABLE` as WS-K landed them | `TryItFlowTest` (25) |
+| T3 | 88553045 | `TryItVerdict.of(t, before, after, runs, entries)` -> `Verdict(kind, lowPercent, avgPercent, floorPercent, causes, caveats)`; `Kind {BETTER, WORSE, NO_CLEAR_CHANGE, NOT_COMPARABLE, NO_NUMBERS}`; `Cause` = `Condition(Difference)` / `Moved()` / `Mods()` / `Entry(entryId, kind)` / `Setting(key)`; `Caveat {NOISY, WORLD_CONTENT, DH, SESSIONS, SCENE}`; `MIN_CV` 0.025 | `TryItVerdictTest` (16) |
+| T4 | 78ea6944 | `TryItFlow.derive(t, runs, History(state, entries, failuresByOpId), Live(session, measuring, applying))` -> `TryItView(stage, tryIt, before, after, verdict, changeStatus, failure, sameSession)`; `TryItView.actions()` (`Action {MEASURE_NOW, MEASURE_AGAIN, KEEP, REVERT, CANCEL_TRY, LATER, DECIDE_LATER, DONE}`), `closing()`, `Stage.chainRunning()`, `Stage.ENTRY_MISSING`, `Stage.HISTORY_UNREADABLE`; `TryItView(Stage)` and `EMPTY`/`UNAVAILABLE` as WS-K landed them | `TryItFlowTest` (25) |
+| review | (next) | the review round's fixes above (1 H, 4 M, 5 L; coordinator's decisions) | `TryItFlowTest` (28), `TryItStoreTest` (15), `TryItVerdictTest` (19); 8 of the new or changed tests fail against the pre-review TryItFlow/TryItStore (checked by restoring them): the cap test, the missing-entry, undo, discarded, applying-while-measuring and abandoned rows, the unusable rows and the over-cap file |
 
-What the client part must honour (from the derivation's contract): `Live.measuring` stays true from the moment a run of
-the pair is queued until its outcome has been handled (else a derive between the run's save and the handler reads
-STOPPED_BEFORE); `settingsAfter`/`afterSession` are taken only when an after run starts; a closing stage's `closing()`
-is written with `TryItStore.close` once the player has seen it.
+What the client part must honour (phase B contracts of the derivation): `Live.measuring` stays true from the moment a
+run of the pair is queued until its outcome has been handled (else a derive between the run's save and the handler
+reads a stop); `settingsAfter`/`afterSession`/`afterSpot` are taken only when an after run starts **and only once the
+try's History entry exists** (they are the proof the apply happened); `beforeSpot`/`afterSpot` are the player's block,
+dimension and server key in the CURRENT scene (null in the benchmark world), and the player is never moved back; a
+closing stage's `closing()` is written with `TryItStore.close` once the player has seen it; ENTRY_MISSING closes only
+through the player's Keep.
 
 ## Footprint deltas
 (phase 2: `workerCpuMs5s`, `renderThreadInitCpuMs`, `clientStartedWallMs`, `tickHookOnVsReference` against ws-k.md's
