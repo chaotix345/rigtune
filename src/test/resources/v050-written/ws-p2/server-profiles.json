@@ -1,0 +1,24 @@
+{
+  "formatVersion": 1,
+  "salt": "7c1e9a4b2d6f80351ace9b7d3f5c2e18",
+  "servers": {
+    "e5bbaacce34ec7b1eeea3c0d93629ee6c737370b361c29fdb49fb7c5b2bb7bf4": {
+      "profile": "template:max_fps",
+      "kind": "REMOTE",
+      "setAt": "2026-09-21T19:40:00Z",
+      "lastSeen": "2026-09-24T21:05:00Z"
+    },
+    "d4db7bf79716832da0221dacd4664da59155dfb41cd63b80a704cb05ca154832": {
+      "profile": "template:quality",
+      "kind": "LAN_GUEST",
+      "setAt": "2026-09-22T17:12:30Z",
+      "lastSeen": "2026-09-22T17:12:30Z"
+    },
+    "cf0631434bec757def8cc7b6b05056f854d4b43434beb1c799f4672a3f07e4ad": {
+      "profile": "template:recording",
+      "kind": "REALM",
+      "setAt": "2026-09-23T20:00:00Z",
+      "lastSeen": "2026-09-23T20:00:00Z"
+    }
+  }
+}

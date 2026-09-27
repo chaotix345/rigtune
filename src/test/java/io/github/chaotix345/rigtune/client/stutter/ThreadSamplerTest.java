@@ -24,9 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // the sampler's original loop (a HashMap<Long, Long> and a getThreadInfo for every thread in every sample, kept below as
 // the reference), names read once per thread, and nothing allocated per sample in steady state.
 class ThreadSamplerTest {
-	private static final int GROUP_FIRST = StutterRings.S_RENDER;
-	private static final int GROUP_LAST = StutterRings.S_OTHER;
-
 	// A scripted set of threads: ids, names and CPU times the test changes between samples.
 	private static final class FakeSource implements ThreadSampler.Source {
 		final Map<Long, String> names = new LinkedHashMap<>();
@@ -116,7 +113,7 @@ class ThreadSamplerTest {
 
 	@Test
 	void sameAttributionAndCensusAsTheOriginalLoop() {
-		assertEquals(12 + 64, equivalence(new ThreadSampler.Tally()), "each thread's name read once: 10 at the start, 2 later, a burst of 64");
+		assertEquals(13 + 64, equivalence(new ThreadSampler.Tally()), "each thread's name read once: 11 at the start, 2 later, a burst of 64");
 	}
 
 	// A table that starts at 8 slots: it grows mid-run with live entries in it, and ids that share hash slots probe past
@@ -124,7 +121,7 @@ class ThreadSamplerTest {
 	@Test
 	void sameAttributionFromATinyTableThatGrowsWithLiveEntries() {
 		ThreadSampler.Tally tally = new ThreadSampler.Tally(4);
-		assertEquals(12 + 64, equivalence(tally));
+		assertEquals(13 + 64, equivalence(tally));
 		assertTrue(tally.capacity() >= 128, "grew: " + tally.capacity());
 	}
 
@@ -132,7 +129,7 @@ class ThreadSamplerTest {
 	private static int equivalence(ThreadSampler.Tally tally) {
 		FakeSource source = new FakeSource();
 		String[] names = {"Render thread", "Server thread", "Worker-Main-1", "Worker-Main-2", "IO-Worker-7", "Chunk Render Task Executor #3",
-				"DH-Render-1", "Netty Local IO #0", "Signal Dispatcher", "RigTune worker"};
+				"DH-Render-1", "Netty Local IO #0", "Signal Dispatcher", "RigTune worker", "DH-World Gen Thread-1"};
 		for (int i = 0; i < names.length; i++) {
 			source.thread(10 + i, names[i]);
 		}
@@ -175,8 +172,7 @@ class ThreadSamplerTest {
 			Map<String, Integer> actualCensus = tally.first() ? new TreeMap<>() : null;
 			assertEquals(reference.add(ids, times, allNames(source, ids), expected, expectedCensus), tally.add(ids, times, source, actual, actualCensus),
 					"sample " + sample + " counted");
-			assertArrayEquals(Arrays.copyOfRange(expected, GROUP_FIRST, GROUP_LAST + 1), Arrays.copyOfRange(actual, GROUP_FIRST, GROUP_LAST + 1),
-					"sample " + sample + ": CPU per group");
+			assertArrayEquals(expected, actual, "sample " + sample + ": CPU per group");
 			assertEquals(expectedCensus, actualCensus, "sample " + sample + ": census");
 		}
 		return source.nameLookups;
@@ -208,6 +204,33 @@ class ThreadSamplerTest {
 		assertEquals(2_000_000L, record[StutterRings.S_RENDER]);
 		assertEquals(1_000_000L, record[StutterRings.S_DH]);
 		assertEquals(4_000_000L, record[StutterRings.S_SERVER], "a new thread counts from 0");
+	}
+
+	// docs/v0.5/SPEC.md 2S (AC2S.14, RW-6): Distant Horizons' world generation threads get their own bucket; every other DH
+	// thread stays in the DH one. DH 3.3.2 names its pool threads "DH-" + pool + " Thread..." (DhThreadFactory).
+	@Test
+	void dhWorldGenThreadsGetTheirOwnBucket() {
+		assertEquals(StutterRings.S_DH_WORLD_GEN, ThreadSampler.group("DH-World Gen Thread-3"));
+		assertEquals(StutterRings.S_DH_WORLD_GEN, ThreadSampler.group("DH-World Gen Thread[12]"));
+		assertEquals(StutterRings.S_DH, ThreadSampler.group("DH-Render"));
+		assertEquals(StutterRings.S_DH, ThreadSampler.group("DH-Render Loader Thread-1"));
+		assertEquals(StutterRings.S_DH, ThreadSampler.group("DH-LOD Builder Thread-2"));
+		assertEquals(StutterRings.S_DH, ThreadSampler.group("DH-Update Propagator Thread-1"));
+		assertEquals(StutterRings.S_OTHER, ThreadSampler.group("World Gen Thread-1"), "not a DH thread");
+
+		FakeSource source = new FakeSource();
+		source.thread(1, "DH-World Gen Thread-1");
+		source.thread(2, "DH-World Gen Thread-2");
+		source.thread(3, "DH-Render Loader Thread-1");
+		ThreadSampler.Tally tally = new ThreadSampler.Tally();
+		long[] record = new long[StutterRings.SAMPLE_STRIDE];
+		tally.add(source.threadIds(), source.cpuTimes(source.threadIds()), source, record, null);
+		source.cpu.put(1L, 3_000_000L);
+		source.cpu.put(2L, 2_000_000L);
+		source.cpu.put(3L, 1_000_000L);
+		assertTrue(tally.add(source.threadIds(), source.cpuTimes(source.threadIds()), source, record, null));
+		assertEquals(5_000_000L, record[StutterRings.S_DH_WORLD_GEN]);
+		assertEquals(1_000_000L, record[StutterRings.S_DH]);
 	}
 
 	@Test
@@ -246,7 +269,12 @@ class ThreadSamplerTest {
 		Assumptions.assumeTrue(ManagementFactory.getThreadMXBean() instanceof com.sun.management.ThreadMXBean bean && bean.isThreadAllocatedMemorySupported());
 		FakeSource source = new FakeSource();
 		for (int i = 0; i < 90; i++) {
-			source.thread(1 + i, i % 2 == 0 ? "Worker-Main-" + i : "Chunk Render Task Executor #" + i);
+			source.thread(1 + i, switch (i % 4) {
+				case 0 -> "Worker-Main-" + i;
+				case 1 -> "Chunk Render Task Executor #" + i;
+				case 2 -> "DH-World Gen Thread-" + i;
+				default -> "DH-Render Loader Thread-" + i;
+			});
 		}
 		long[] ids = source.threadIds();
 		long[] times = source.cpuTimes(ids);

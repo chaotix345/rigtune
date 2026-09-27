@@ -1,0 +1,10 @@
+# pid 53736 args [see README]
+# pool CodeHeap 'non-nmethods' type=NON_HEAP
+# pool Metaspace type=NON_HEAP
+# pool CodeHeap 'profiled nmethods' type=NON_HEAP
+# pool Compressed Class Space type=NON_HEAP
+# pool CodeHeap 'non-profiled nmethods' type=NON_HEAP
+# pool Shenandoah Young Gen type=HEAP
+# pool Shenandoah Old Gen type=HEAP
+# bean Shenandoah Pauses pools=[Shenandoah Young Gen, Shenandoah Old Gen]
+# bean Shenandoah Cycles pools=[Shenandoah Young Gen, Shenandoah Old Gen]
