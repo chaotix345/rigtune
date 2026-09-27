@@ -38,10 +38,14 @@ class Generation:
 
 
 V040 = Generation("v040-written", (0, 4), SETS, NEW_FILES, KEPT)
-# The contracts commit's set names (docs/v0.5/PLAN.md, item 15). 0.5's new files join `kept` as their formats land.
-V050 = Generation("v050-written", (0, 5), ("ws-l1", "ws-l2", "ws-s", "ws-s2", "ws-p2", "ws-b", "ws-t", "ws-h", "ws-w2", "ws-f"),
+# The sets in src/test/resources/v050-written/README.md's order (docs/v0.5/PLAN.md contracts item 17, plan review PLAN-20).
+# 0.5's new files join `kept` as their formats land.
+V050 = Generation("v050-written", (0, 5), ("ws-l1", "ws-l2", "ws-s", "ws-s2", "ws-p", "ws-p2", "ws-b", "ws-t", "ws-w", "ws-w2",
+                                           "ws-f", "ws-h"),
                   ("stutter-fixes.json", "tryit.json", "server-profiles.json"))
 GENERATIONS = (V040, V050)
+# A set's compat040 expectations (the v050-written README): never composed into the instance.
+EXPECT = "expect.json"
 # A differing value of these is a format bump, never a merge.
 FORMAT_KEYS = ("formatVersion", "schemaVersion")
 
@@ -94,9 +98,22 @@ def kept_for(sets):
     return out
 
 
+def expectations(sets):
+    """Set name -> its expect.json, for the sets that have one."""
+    out = {}
+    for fixture in sets:
+        path = fixture.folder / EXPECT
+        if path.is_file():
+            if fixture.name in out:
+                raise ValueError("two sets named {} have an {}".format(fixture.name, EXPECT))
+            out[fixture.name] = path
+    return out
+
+
 def compose(sets, instance, conflicts=None):
     """Writes every set's files into instance/config/rigtune: history.json's entries merged from every set by `at`,
-    pending.json's ops from every set, any other file several sets provide deep-merged (objects key by key, lists
+    pending.json's ops from every set, benchmarks.json's runs from every set (run ids unique), any other file several
+    sets provide deep-merged (objects key by key, lists
     without exact duplicates, a scalar from the later set, each such override appended to `conflicts` as (file, key
     path, earlier set, later set)); a file one set provides keeps its bytes. ${INSTANCE} paths are filled in. Returns
     file name -> the sets it came from."""
@@ -105,7 +122,7 @@ def compose(sets, instance, conflicts=None):
     config.mkdir(parents=True, exist_ok=True)
     sources = {}
     for fixture in sets:
-        for path in sorted(p for p in fixture.folder.iterdir() if p.is_file() and p.suffix == ".json"):
+        for path in sorted(p for p in fixture.folder.iterdir() if p.is_file() and p.suffix == ".json" and p.name != EXPECT):
             sources.setdefault(path.name, []).append((fixture.name, path))
     for name, provided in sources.items():
         if name == HISTORY:
@@ -132,6 +149,18 @@ def compose(sets, instance, conflicts=None):
             if len(set(ids)) != len(ids):
                 raise ValueError("pending.json op ids repeat across sets {}: {}".format([s for s, _ in provided], ids))
             text = json.dumps(merged, indent=2) + "\n"
+            (config / name).write_text(fixtures.instantiate_json(text, instance) if fixtures.TOKEN in text else text,
+                                       encoding="utf-8", newline="\n")
+        elif name == "benchmarks.json" and len(provided) > 1:
+            runs = [run for _, path in provided for run in json.loads(path.read_text(encoding="utf-8")).get("runs") or []]
+            ids = [run.get("id") for run in runs]
+            if len(set(ids)) != len(ids):
+                raise ValueError("benchmarks.json run ids repeat across sets {}: {}".format([s for s, _ in provided], ids))
+            owners, merged = {}, None
+            for set_name, path in provided:
+                data = {k: v for k, v in json.loads(path.read_text(encoding="utf-8")).items() if k != "runs"}
+                merged = _claim("", data, set_name, owners) if merged is None else _merge(name, "", merged, data, set_name, conflicts, owners)
+            text = json.dumps(dict(merged, runs=runs), indent=2) + "\n"
             (config / name).write_text(fixtures.instantiate_json(text, instance) if fixtures.TOKEN in text else text,
                                        encoding="utf-8", newline="\n")
         elif len(provided) > 1:

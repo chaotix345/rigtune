@@ -32,7 +32,9 @@ class GenerationTest(unittest.TestCase):
         self.assertIs(written.V040, written.generation_of(Path(tempfile.mkdtemp())), "an unnamed root reads as v0.4's")
 
     def test_the_0_5_sets_and_new_files(self):
-        self.assertEqual(("ws-l1", "ws-l2", "ws-s", "ws-s2", "ws-p2", "ws-b", "ws-t", "ws-h", "ws-w2", "ws-f"), written.V050.sets)
+        # The v050-written README's table order (docs/v0.5/PLAN.md contracts item 17; plan review PLAN-20).
+        self.assertEqual(("ws-l1", "ws-l2", "ws-s", "ws-s2", "ws-p", "ws-p2", "ws-b", "ws-t", "ws-w", "ws-w2", "ws-f", "ws-h"),
+                         written.V050.sets)
         self.assertEqual(("stutter-fixes.json", "tryit.json", "server-profiles.json"), written.V050.new_files)
         self.assertEqual((written.SETS, written.NEW_FILES, written.KEPT), (written.V040.sets, written.V040.new_files, written.V040.kept))
 
@@ -100,6 +102,25 @@ class MergeTest(unittest.TestCase):
         write(self.v5 / "ws-t", "history.json", {"formatVersion": 1, "entries": [entry("old", "2026-09-21T00:00:00Z")]})
         with self.assertRaises(ValueError):
             written.compose(written.resolve_all([self.v4, self.v5]), self.instance)
+
+    def test_benchmark_runs_are_concatenated_and_their_ids_stay_unique(self):
+        write(self.v4 / "ws-b", "benchmarks.json", {"schemaVersion": 1, "runs": [{"id": "r1", "x": 1}]})
+        write(self.v5 / "ws-b", "benchmarks.json", {"schemaVersion": 1, "runs": [{"id": "r2", "x": 1}]})
+        write(self.v5 / "ws-t", "benchmarks.json", {"schemaVersion": 1, "runs": [{"id": "r3", "x": 1}]})
+        written.compose(written.resolve_all([self.v4, self.v5]), self.instance)
+        runs = json.loads((self.instance / "config" / "rigtune" / "benchmarks.json").read_text(encoding="utf-8"))["runs"]
+        self.assertEqual(["r1", "r2", "r3"], [r["id"] for r in runs])
+        write(self.v5 / "ws-t", "benchmarks.json", {"schemaVersion": 1, "runs": [{"id": "r1", "x": 2}]})
+        with self.assertRaises(ValueError):
+            written.compose(written.resolve_all([self.v4, self.v5]), self.instance)
+
+    def test_a_set_s_expect_json_is_never_composed(self):
+        write(self.v5 / "ws-t", "expect.json", {"set": "ws-t", "checks": []})
+        write(self.v5 / "ws-t", "tryit.json", {"formatVersion": 1})
+        report = written.compose(written.resolve_all([self.v4, self.v5]), self.instance)
+        self.assertNotIn("expect.json", report)
+        self.assertFalse((self.instance / "config" / "rigtune" / "expect.json").exists())
+        self.assertEqual({"ws-t": self.v5 / "ws-t" / "expect.json"}, written.expectations(written.resolve_all([self.v4, self.v5])))
 
     def test_a_file_one_set_provides_keeps_its_bytes(self):
         (self.v5 / "ws-t").mkdir(parents=True)
