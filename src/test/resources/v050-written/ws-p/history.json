@@ -1,0 +1,67 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "baseline-7d226e52-56e8-454c-9d4b-9a63a2731c20",
+      "at": "2026-09-22T09:00:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "360052a0-a38c-4bc5-be83-726d580f4ac7",
+          "type": "setting",
+          "key": "vanilla.biomeBlendRadius",
+          "before": "2",
+          "after": "1",
+          "status": "APPLIED"
+        },
+        {
+          "id": "73b9f3c9-e0bc-4de9-9b42-594e7631251f",
+          "type": "setting",
+          "key": "vanilla.particles",
+          "before": "0",
+          "after": "2",
+          "status": "APPLIED"
+        }
+      ],
+      "foldedEntryIds": [
+        "9f039d32-5456-4972-a851-eee90b25870d",
+        "ac70e7f0-6812-4bbb-b888-da253724da0b"
+      ]
+    },
+    {
+      "id": "8ee686e5-f831-4836-80a2-33551c9bbe31",
+      "at": "2026-09-23T10:00:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "c79c115a-d6ae-4a9c-afa8-f7973b343755",
+          "type": "setting",
+          "key": "vanilla.simulationDistance",
+          "before": "12",
+          "after": "8",
+          "status": "APPLIED"
+        },
+        {
+          "id": "6385d72a-5a85-4134-a52a-342f0deceb1b",
+          "type": "setting",
+          "key": "vanilla.renderClouds",
+          "before": "true",
+          "after": "false",
+          "status": "APPLIED"
+        },
+        {
+          "id": "e469bda9-a192-401a-887d-3db753112418",
+          "type": "setting",
+          "key": "vanilla.entityShadows",
+          "before": "true",
+          "after": "false",
+          "status": "APPLIED"
+        }
+      ]
+    }
+  ]
+}

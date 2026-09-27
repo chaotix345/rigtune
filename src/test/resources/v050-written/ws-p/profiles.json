@@ -1,0 +1,41 @@
+{
+  "formatVersion": 1,
+  "profiles": [
+    {
+      "id": "p-1f1d0f06-4e25-4d0b-a6a3-febe72a9e3c5",
+      "name": "My settings",
+      "source": "baseline",
+      "createdAt": "2026-09-22T09:29:59Z",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "settings": {
+        "vanilla.simulationDistance": "12",
+        "vanilla.particles": "0",
+        "vanilla.biomeBlendRadius": "1",
+        "vanilla.renderClouds": "true",
+        "vanilla.entityShadows": "true",
+        "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius": "1024"
+      }
+    }
+  ],
+  "switches": [
+    {
+      "entryId": "ac70e7f0-6812-4bbb-b888-da253724da0b",
+      "templateId": "max_fps",
+      "name": "Max FPS"
+    },
+    {
+      "entryId": "8ee686e5-f831-4836-80a2-33551c9bbe31",
+      "templateId": "battery",
+      "name": "Battery"
+    }
+  ],
+  "battery": {
+    "prompt": true,
+    "snoozed": false,
+    "lastPromptAt": "2026-09-23T09:59:00Z",
+    "previousProfile": "p-1f1d0f06-4e25-4d0b-a6a3-febe72a9e3c5"
+  },
+  "active": "template:battery",
+  "activeEntry": "8ee686e5-f831-4836-80a2-33551c9bbe31"
+}

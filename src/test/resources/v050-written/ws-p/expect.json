@@ -1,0 +1,35 @@
+{
+  "set": "ws-p",
+  "checks": [
+    {
+      "class": "Journal",
+      "file": "history.json",
+      "state": "OK",
+      "entries": 2
+    },
+    {
+      "class": "HistoryModel",
+      "file": "history.json",
+      "entries": 2,
+      "unknownKinds": 0
+    },
+    {
+      "class": "UndoPlanner",
+      "file": "history.json",
+      "undoThis": "8ee686e5-f831-4836-80a2-33551c9bbe31",
+      "problems": 0
+    },
+    {
+      "class": "ProfileStore",
+      "file": "profiles.json",
+      "noBad": true,
+      "keeps": [
+        "profiles",
+        "switches",
+        "battery",
+        "active",
+        "activeEntry"
+      ]
+    }
+  ]
+}
