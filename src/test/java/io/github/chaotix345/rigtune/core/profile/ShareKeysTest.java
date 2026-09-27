@@ -97,6 +97,33 @@ class ShareKeysTest {
 		}
 	}
 
+	// docs/v0.5/SPEC.md PF-5 (AC2P.5): DH 3.3.2 allows an LOD radius of 32..4096, the wire only 32..512 (key 22 is never
+	// widened). A profile holds the game's range; a code carries only the wire's.
+	@Test
+	void pf5TheDhRadiusHasALocalRangeWiderThanTheWire() {
+		ShareKeys.Key radius = ShareKeys.byKey("dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius");
+		assertEquals("1024", radius.local("1024"));
+		assertEquals("4096", radius.local(" \"4096\" "));
+		assertEquals("512", radius.local("512"));
+		assertEquals("32", radius.local("32"));
+		assertNull(radius.encode("1024"), "the wire never carries it");
+		assertNull(radius.local("5000"));
+		assertNull(radius.local("31"));
+		assertNull(radius.local("1024.5"));
+		assertNull(radius.local("far"));
+		// Every other key's local range is its wire range, in the table's spelling.
+		ShareKeys.Key rd = ShareKeys.byKey("vanilla.renderDistance");
+		assertNull(rd.local("33"));
+		assertEquals("10", rd.local("1e1"));
+		assertEquals("ALWAYS", ShareKeys.byKey("sodium.performance.chunk_build_defer_mode").local("always"));
+		assertNull(ShareKeys.byKey("vanilla.maxFps").local("144"));
+		for (ShareKeys.Key key : ShareKeys.V1) {
+			for (int wire = 0; wire <= key.maxWire(); wire++) {
+				assertEquals(key.decode(wire, 60), key.local(key.decode(wire, 60)), key.key());
+			}
+		}
+	}
+
 	@Test
 	void everyKeyIsChangeableAndTheExcludedOnesAreNotShareable() {
 		for (ShareKeys.Key key : ShareKeys.V1) {

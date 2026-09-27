@@ -34,12 +34,12 @@ public final class ProfileSwitch {
 		for (ShareKeys.Key tableKey : ShareKeys.V1) {
 			String key = tableKey.key();
 			String raw = values.get(key);
-			Integer wire = raw == null || !SettingKeys.safeValue(raw) ? null : tableKey.encode(raw);
-			if (wire == null || !takesPart(key, snapshot, loadedMods)) {
+			// The table's own spelling, whatever the profile or rule wrote ("always" -> ALWAYS, "12.0" -> 12), inside the key's
+			// local range (v0.5 PF-5: a DH radius up to 4096).
+			String target = raw == null || !SettingKeys.safeValue(raw) ? null : tableKey.local(raw);
+			if (target == null || !takesPart(key, snapshot, loadedMods)) {
 				continue;
 			}
-			// The table's own spelling, whatever the profile or rule wrote ("always" -> ALWAYS, "12.0" -> 12).
-			String target = tableKey.decode(wire, 60);
 			String current = snapshot.get(key);
 			if (SettingValues.same(current, target)) {
 				continue;

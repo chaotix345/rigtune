@@ -95,6 +95,21 @@ public final class ShareKeys {
 			};
 		}
 
+		// The value as a profile holds it (v0.5 PF-5): the table's own spelling of a value the wire can carry, else a whole
+		// number inside the key's local range (LOCAL_MAX), else null. Every profile gate uses it (what "My settings" and Save
+		// current keep, what profiles.json reads back, what a switch and a clamp may set); a share code still carries only
+		// what encode() accepts.
+		public @Nullable String local(@Nullable String value) {
+			Integer wire = encode(value);
+			if (wire != null) {
+				return decode(wire, 60);
+			}
+			Integer localMax = LOCAL_MAX.get(key);
+			String v = normalise(value);
+			Integer n = localMax == null || kind != Kind.INT || v == null ? null : whole(v);
+			return n == null || n < min || n > localMax ? null : Integer.toString(n);
+		}
+
 		private @Nullable Integer enumIndex(String v) {
 			for (int i = 0; i < values.size(); i++) {
 				if (values.get(i).equals(v)) {
@@ -146,6 +161,11 @@ public final class ShareKeys {
 			new Key(27, "dh.client.advanced.debugging.rendererMode", Kind.ENUM, 0, 0, List.of("DEFAULT", "DISABLED"), true),
 			new Key(28, "iris.maxShadowRenderDistance", Kind.INT, 0, 32, List.of(), true),
 			new Key(29, "iris.enableShaders", Kind.BOOL, 0, 1, List.of(), true));
+
+	// v0.5 PF-5: keys whose game range is wider than their wire range, with the game's maximum. Distant Horizons 3.3.2 allows
+	// an LOD radius of 32..4096 (`setMinDefaultMax(32, 256, 4096)`, javap; docs/research/v0.5/audit-v040-verification.md
+	// PF-5), the wire only 32..512. Profiles hold the game's range; a share code leaves out what the wire can't carry.
+	private static final Map<String, Integer> LOCAL_MAX = Map.of("dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius", 4096);
 
 	private static final Map<String, Key> BY_KEY = new LinkedHashMap<>();
 

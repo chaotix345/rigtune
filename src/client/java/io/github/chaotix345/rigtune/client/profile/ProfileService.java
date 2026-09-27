@@ -493,7 +493,7 @@ public final class ProfileService {
 		return name(profile).english();
 	}
 
-	// The managed keys' current values (inside the share table's bounds).
+	// The managed keys' current values (inside each key's local range: v0.5 PF-5 keeps a DH radius up to 4096).
 	private Map<String, String> current() {
 		return controller.minecraft() == null ? Map.of() : managed(snapshot());
 	}
@@ -502,7 +502,7 @@ public final class ProfileService {
 		Map<String, String> out = new LinkedHashMap<>();
 		for (ShareKeys.Key key : ShareKeys.V1) {
 			String value = snapshot.get(key.key());
-			if (value != null && key.encode(value) != null) {
+			if (value != null && key.local(value) != null) {
 				out.put(key.key(), value);
 			}
 		}

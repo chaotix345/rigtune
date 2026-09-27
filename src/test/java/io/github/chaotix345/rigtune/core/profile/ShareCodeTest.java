@@ -128,6 +128,18 @@ class ShareCodeTest {
 		assertEquals(Map.of("vanilla.renderDistance", "12"), decoded.values(-1));
 	}
 
+	// docs/v0.5/SPEC.md PF-5 (AC2P.5): a DH radius above the wire's 512 is left out of the code (key 22 is never widened), and
+	// leftOut counts what a code can't carry (the local-only thread counts aren't among them: they're never shared).
+	@Test
+	void pf5ACodeLeavesOutA1024RadiusAndCountsIt() throws ShareCodeException {
+		String radius = "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius";
+		Map<String, String> values = ordered("vanilla.renderDistance", "12", radius, "1024", "dh.common.multiThreading.numberOfThreads", "4");
+		assertEquals(Map.of("vanilla.renderDistance", "12"), ShareCode.decode(ShareCode.encode("Far", values, -1)).values(60));
+		assertEquals(1, ShareCode.leftOut(values));
+		assertEquals(0, ShareCode.leftOut(ordered("vanilla.renderDistance", "12", radius, "512")));
+		assertEquals(0, ShareCode.leftOut(Map.of()));
+	}
+
 	@Test
 	void namesAreSanitisedAndFitTheBody() throws ShareCodeException {
 		String code = ShareCode.encode("  ‮evil​ name\n=#\"  ", Map.of("vanilla.renderDistance", "8"), -1);

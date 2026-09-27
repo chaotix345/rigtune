@@ -99,6 +99,18 @@ public final class ShareCode {
 		return PREFIX + base64(withCrc(body.toByteArray()));
 	}
 
+	// v0.5 PF-5: how many of a profile's values a code leaves out because the wire can't carry them (a DH radius above 512).
+	// The local-only thread counts aren't counted: they're never shared.
+	public static int leftOut(Map<String, String> values) {
+		int out = 0;
+		for (ShareKeys.Key key : ShareKeys.V1) {
+			if (key.shareable() && values.containsKey(key.key()) && key.encode(values.get(key.key())) == null) {
+				out++;
+			}
+		}
+		return out;
+	}
+
 	public static Decoded decode(@Nullable String input) throws ShareCodeException {
 		if (input == null) {
 			throw new ShareCodeException(Reason.NOT_A_CODE, "no input");

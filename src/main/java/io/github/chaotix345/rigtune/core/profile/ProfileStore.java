@@ -388,10 +388,11 @@ public final class ProfileStore {
 				ShareKeys.Key key = ShareKeys.byKey(entry.getKey());
 				if (key != null && entry.getValue() instanceof JsonPrimitive primitive) {
 					String value = primitive.getAsString();
-					Integer wire = value.length() <= 64 && SettingKeys.safeValue(value) ? key.encode(value) : null;
-					if (wire != null) {
-						// The table's own spelling ("always" -> ALWAYS, " true" -> true): what reaches the writers.
-						out.put(entry.getKey(), key.decode(wire, 60));
+					// The table's own spelling ("always" -> ALWAYS, " true" -> true), inside the key's local range (v0.5 PF-5): what
+					// reaches the writers.
+					String local = value.length() <= 64 && SettingKeys.safeValue(value) ? key.local(value) : null;
+					if (local != null) {
+						out.put(entry.getKey(), local);
 					}
 				}
 			}
