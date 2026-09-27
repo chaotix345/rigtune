@@ -350,12 +350,29 @@ An en_us.json merge conflict is resolved by the merging agent, keeping both side
   `firstApplyPending(Boolean)` (null = not canned), `clear()`. An owner sets its views inside its own skeleton method and
   clears them in a `finally`.
 - `V05GameTestContractsTest` (unit): the entrypoint order, the smoke return of every new class, ForwardingController.
-- **Held until ws-ci merges (H1-H3):** the skeleton methods in `A11yGameTest` (`walkStutterFix` WS-S2, `walkTryIt` WS-T,
-  `walkServerProfiles` WS-P2, `walkFirstApply` and `walkHowItWorks` WS-F, `walkToolsStartup` WS-W then WS-W2,
-  `walkBenchmarkScreens` WS-B, `walkBatteryOfferRow` WS-P, `walkModFilesRowAndNews` WS-L1, `walkLauncherNotices` WS-L2,
-  `highContrastRunningGame` WS-E) and `AwarenessGameTest` (`awarenessFixes` WS-W, `startupRegression` WS-W2,
-  `settingsChangedOutside` WS-W); FootprintGameTest's flag assertion; the six wrappers → `ForwardingController` and
-  A11yController reading `CannedViews`. This file lists them as landed once they are.
+- **H1-H3, landed after ws-ci merged (a38950ed):**
+  - `A11yGameTest.runTest`, inside its try (network off through GameTestNet), after the 0.4 walks, builds
+    `new V05TestContext(context, stub, real, configDir)` and calls once each, in this order, `private static void
+    <walk>(V05TestContext v05)`: `walkStutterFix` (WS-S2), `walkTryIt` (WS-T), `walkServerProfiles` (WS-P2),
+    `walkFirstApply` and `walkHowItWorks` (WS-F), `walkToolsStartup` (WS-W, then WS-W2), `walkBenchmarkScreens` (WS-B),
+    `walkBatteryOfferRow` (WS-P), `walkModFilesRowAndNews` (WS-L1), `walkLauncherNotices` (WS-L2),
+    `highContrastRunningGame` (WS-E). They sit in a "v0.5 walks" block before the helpers, one comment line per owner;
+    an owner edits only its method's body and adds its own helpers right below it; a walk leaves the screen, the size
+    and CannedViews as it found them.
+  - `AwarenessGameTest.runTest`, inside its try, after the 0.4 checks: `V05TestContext.of(context)`, then
+    `awarenessFixes` (WS-W), `startupRegression` (WS-W2), `settingsChangedOutside` (WS-W), same rules.
+  - `FootprintGameTest`: `startup()` fails the leg when `FootprintStats.renderThreadResolve()` isn't null (a v0.5 service
+    resolved on the render thread inside preLaunch, onInitializeClient or the CLIENT_STARTED handler; a worker's
+    resolution never sets it) and writes it as `v05RenderThreadResolve`; the JSON also gets `v05HolderCreatedOn` (the
+    thread that made the holder, normally "RigTune worker").
+  - The six wrappers extend `ForwardingController`: `A11yController` (delegate: the StubController, the walks' canned
+    world; the real-backed overrides stay explicit; `tryIt()`, `serverProfiles()`, `modFiles()`, `stutter()`,
+    `firstApplyPending()` answer from `CannedViews` when set), `PreviewGameTest.CannedController` (the stub; canned
+    preview, pending flag, the real labels), `UiGameTest.PendingStub` (the stub; changes pending),
+    `ProfilesGameTest.NotReady` (a class now, delegate: the real controller; only the import is refused),
+    `JvmGameTest.CannedController` and `LauncherGameTest.RamAdviceController` (delegate: the real controller, so the
+    launcher, the JVM report and every v0.5 answer are real; a fixed report; both apply overloads apply nothing; no
+    notice, status or pending-changes line on their screen, as before).
 
 ## 15. Fixtures and verification READMEs (items 17-18)
 - `src/test/resources/v050-written/README.md`: the set folders (`ws-l1, ws-l2, ws-s, ws-s2, ws-p, ws-p2, ws-b, ws-t,
@@ -424,7 +441,7 @@ section 11, and the shared busy refusal (`Busy`, C8).
 | AC | status | evidence |
 |---|---|---|
 | AC-X.1 (BusyTest; callers delegate; no second copy) | verified for ProfileService (the other two callers land with C20/C09 and add themselves to BusyTest's list) | BusyTest (unit, CI run 36302121033 java job) |
-| AC-X.2 (the flag unset at initEnd/after CLIENT_STARTED on 3 legs; unit for worker vs render thread) | unit half verified; the FootprintGameTest half is held part H2 | FootprintStatsTest, V05ServicesTest |
+| AC-X.2 (the flag unset at initEnd/after CLIENT_STARTED on 3 legs; unit for worker vs render thread) | see §16's run | FootprintStatsTest, V05ServicesTest; FootprintGameTest on 3 legs |
 | AC-X.3 (NoticeBoardTest pins 14 slots; LangCheckTest, WordingTest, PseudoLocaleTest, PaletteTest pass on both nodes) | verified on this branch (release-candidate check is the RC's) | CI 36302121033: java job (both nodes) green |
 | AC7.12 (SERVER_PROFILE pinned after BATTERY_OFFER, before SERVER_LIMIT) | verified | NoticeBoardTest |
 | Behaviour unchanged (every unit test and game test green on both nodes and all three legs) | verified | CI 36302121033: all 8 jobs green |

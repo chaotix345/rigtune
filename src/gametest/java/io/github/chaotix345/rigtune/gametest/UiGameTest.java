@@ -606,61 +606,15 @@ public class UiGameTest implements FabricClientGameTest {
 	}
 
 	// The stub's report with changes waiting for a restart, so the footer has all eight buttons.
-	private static final class PendingStub implements RigTuneController {
-		private final StubController stub;
-
+	// The stub (ForwardingController) with changes waiting for a restart.
+	private static final class PendingStub extends ForwardingController {
 		PendingStub(StubController stub) {
-			this.stub = stub;
-		}
-
-		@Override
-		public @Nullable Report report() {
-			return stub.report();
-		}
-
-		@Override
-		public Goal goal() {
-			return stub.goal();
-		}
-
-		@Override
-		public void setGoal(Goal goal) {
-			stub.setGoal(goal);
-		}
-
-		@Override
-		public Component apply(List<Recommendation> selected) {
-			return stub.apply(selected);
-		}
-
-		@Override
-		public void startBenchmark() {
-			stub.startBenchmark();
-		}
-
-		@Override
-		public void rescan() {
-			stub.rescan();
+			super(stub);
 		}
 
 		@Override
 		public boolean hasPendingChanges() {
 			return true;
-		}
-
-		@Override
-		public List<Notice> notices() {
-			return stub.notices();
-		}
-
-		@Override
-		public void noticeAction(String key, String actionId) {
-			stub.noticeAction(key, actionId);
-		}
-
-		@Override
-		public void dismissNotice(String key) {
-			stub.dismissNotice(key);
 		}
 	}
 }

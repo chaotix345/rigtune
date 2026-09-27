@@ -136,6 +136,8 @@ public class FootprintGameTest implements FabricClientGameTest {
 		out.put("java", Runtime.version().toString());
 		out.put("os", System.getProperty("os.name") + " " + System.getProperty("os.arch"));
 		out.put("processors", Runtime.getRuntime().availableProcessors());
+		// v0.5 X4.3: the thread that made the lazy holder (normally the start hook's worker).
+		out.put("v05HolderCreatedOn", ((RealController) controller).v05().createdOn());
 
 		boolean complete = false;
 		try {
@@ -199,6 +201,12 @@ public class FootprintGameTest implements FabricClientGameTest {
 		measured.put("renderThreadInitCpuMs", s.preLaunchCpuNs() < 0 || s.initCpuNs() < 0 ? null : ms(s.preLaunchCpuNs() + s.initCpuNs()));
 		measured.put("clientStartedWallMs", ms(s.clientStartedWallNs()));
 		measured.put("workerCpuMs5s", ms(s.windowCpuTotalNs()));
+		// v0.5 X4.3 (AC-X.2): nothing resolved the v0.5 services on the render thread inside preLaunch, onInitializeClient or
+		// the CLIENT_STARTED handler, so the flag was unset at initEnd and when the handler returned (it can only be set
+		// inside them). A worker resolving them meanwhile (the start hook's task) is allowed and counts in workerCpuMs5s.
+		String resolved = FootprintStats.renderThreadResolve();
+		out.put("v05RenderThreadResolve", resolved);
+		check(resolved == null, "no v0.5 service resolved on the render thread during startup: " + resolved);
 	}
 
 	// SPEC X5 / AC10.6: the always-on threads that must not exist here: PowerWatcher without a battery (AC4.9) and the
