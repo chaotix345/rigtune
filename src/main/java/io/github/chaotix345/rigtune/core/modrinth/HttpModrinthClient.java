@@ -4,6 +4,8 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.core.apply.LogSafe;
 import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.net.BoundedHttp;
@@ -60,10 +62,13 @@ public final class HttpModrinthClient implements ModrinthClient {
 	// Both built on first use (a request, always off the render thread), never in the constructor: RealController makes
 	// this client in onInitializeClient, where java.net.http's classes and threads cost the render thread tens of ms
 	// (docs/v0.4/SPEC.md 10). With Modrinth or the network off, GatedModrinthClient stops every call first, so neither
-	// is ever built.
+	// is ever built. Both speak HTTP/1.1: on 2026-09-26 every lookup of whole CI sessions failed with "Stream N cancelled"
+	// on one HTTP/2 connection the JDK had marked for shutdown (docs/v0.5/design/ws-ci.md). A failure without an HTTP
+	// response drops the client that had it (dropClient), so the next request starts on a fresh connection pool.
 	private volatile HttpClient http;
 	// Downloads follow redirects by hand, so every hop is checked against the allowlist before it is requested.
 	private volatile HttpClient downloads;
+	private int clientsBuilt;
 	private final String baseUrl;
 	private final String userAgent;
 	private final Limits limits;
@@ -72,8 +77,28 @@ public final class HttpModrinthClient implements ModrinthClient {
 		this(modVersion, baseUrlOrDefault(System.getProperty(BASE_URL_PROPERTY)));
 	}
 
+	// The -Drigtune.modrinth.baseUrl override counts only as https, or as plain http on this machine (a local test server),
+	// like -Drigtune.rules.baseUrl; anything else is ignored with a warning.
 	private static String baseUrlOrDefault(String configured) {
-		return configured == null || configured.isBlank() ? DEFAULT_BASE_URL : configured.trim();
+		if (configured == null || configured.isBlank()) {
+			return DEFAULT_BASE_URL;
+		}
+		String text = configured.trim();
+		if (extraDownloadOrigin(text) == null && !isDefault(text)) {
+			RigTune.LOGGER.warn("Ignoring -D{}={}: not an https URL (or http on localhost)", BASE_URL_PROPERTY, LogSafe.text(configured));
+			return DEFAULT_BASE_URL;
+		}
+		RigTune.LOGGER.info("Modrinth requests go to {} (-D{})", LogSafe.text(text), BASE_URL_PROPERTY);
+		return text;
+	}
+
+	private static boolean isDefault(String baseUrl) {
+		try {
+			URI uri = URI.create(baseUrl);
+			return uri.getScheme() != null && uri.getHost() != null && sameOrigin(uri, URI.create(DEFAULT_BASE_URL));
+		} catch (IllegalArgumentException e) {
+			return false;
+		}
 	}
 
 	public HttpModrinthClient(String modVersion, String baseUrl) {
@@ -92,7 +117,7 @@ public final class HttpModrinthClient implements ModrinthClient {
 			synchronized (this) {
 				client = http;
 				if (client == null) {
-					http = client = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).followRedirects(HttpClient.Redirect.NORMAL).build();
+					http = client = build(HttpClient.Redirect.NORMAL);
 				}
 			}
 		}
@@ -105,16 +130,52 @@ public final class HttpModrinthClient implements ModrinthClient {
 			synchronized (this) {
 				client = downloads;
 				if (client == null) {
-					downloads = client = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).followRedirects(HttpClient.Redirect.NEVER).build();
+					downloads = client = build(HttpClient.Redirect.NEVER);
 				}
 			}
 		}
 		return client;
 	}
 
+	// Called with the lock held.
+	private HttpClient build(HttpClient.Redirect redirects) {
+		clientsBuilt++;
+		return HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(CONNECT_TIMEOUT).followRedirects(redirects).build();
+	}
+
+	// After a failure without an HTTP response: the next request builds a fresh client. Requests still running on the old
+	// one finish; it accepts no new ones.
+	private void dropClient(HttpClient client) {
+		synchronized (this) {
+			if (http == client) {
+				http = null;
+			} else if (downloads == client) {
+				downloads = null;
+			} else {
+				return;
+			}
+		}
+		client.shutdown();
+	}
+
 	// For tests: whether either HttpClient exists yet.
 	boolean httpClientsBuilt() {
 		return http != null || downloads != null;
+	}
+
+	// For tests.
+	synchronized int clientsBuilt() {
+		return clientsBuilt;
+	}
+
+	// For tests: the protocol of the lookup client and of the download client.
+	List<HttpClient.Version> httpVersions() {
+		return List.of(http().version(), downloads().version());
+	}
+
+	// For tests.
+	String baseUrl() {
+		return baseUrl;
 	}
 
 	public static String userAgent(String modVersion) {
@@ -357,7 +418,15 @@ public final class HttpModrinthClient implements ModrinthClient {
 			throws IOException {
 		for (int attempt = 1; ; attempt++) {
 			BoundedHttp.Progress progress = new BoundedHttp.Progress();
-			HttpResponse<T> response = BoundedHttp.send(client, request, info -> handler.apply(info, progress), progress, stall, deadline);
+			HttpResponse<T> response;
+			try {
+				response = BoundedHttp.send(client, request, info -> handler.apply(info, progress), progress, stall, deadline);
+			} catch (InterruptedIOException e) {
+				throw e;
+			} catch (IOException e) {
+				dropClient(client);
+				throw e;
+			}
 			if (response.statusCode() != 429 || attempt > 1) {
 				return response;
 			}

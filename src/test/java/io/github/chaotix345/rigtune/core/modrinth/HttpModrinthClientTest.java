@@ -14,8 +14,11 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URI;
 import java.net.URLDecoder;
+import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -578,5 +581,67 @@ class HttpModrinthClientTest {
 		assertTrue(e.getMessage().contains("redirects"), e.getMessage());
 		assertEquals(HttpModrinthClient.MAX_DOWNLOAD_REDIRECTS + 1, hits("/cdn/loop.jar"));
 		assertEquals(List.of(), listing(dir));
+	}
+
+	// v0.5 ws-ci: -Drigtune.modrinth.baseUrl is honoured only as https, or as plain http on this machine (a local test
+	// server), like -Drigtune.rules.baseUrl; anything else leaves the client on Modrinth.
+	@Test
+	void baseUrlPropertyTakesOnlyHttpsOrHttpOnThisMachine() {
+		for (String refused : List.of("http://example.com", "http://192.168.1.10:8080/", "http://localhost.example.com/",
+				"ftp://127.0.0.1/", "https://", "not a url", "  ")) {
+			assertEquals(HttpModrinthClient.DEFAULT_BASE_URL, viaProperty(refused).baseUrl(), refused);
+		}
+		assertEquals("https://staging-api.modrinth.com", viaProperty("https://staging-api.modrinth.com/").baseUrl());
+		for (String local : List.of("http://127.0.0.1:8080", "http://localhost:9", "http://[::1]:8080", "http://127.1.2.3")) {
+			assertEquals(local, viaProperty(local + "/").baseUrl(), local);
+		}
+	}
+
+	private static HttpModrinthClient viaProperty(String value) {
+		System.setProperty(HttpModrinthClient.BASE_URL_PROPERTY, value);
+		try {
+			return new HttpModrinthClient("1.2.3");
+		} finally {
+			System.clearProperty(HttpModrinthClient.BASE_URL_PROPERTY);
+		}
+	}
+
+	// CI, 2026-09-26: for 3 hours every lookup failed with "IOException: Stream N cancelled", streams 1, 3, 5 ... 17 of
+	// one HTTP/2 connection in one session: the JDK cancels a new stream on a connection it has marked for shutdown
+	// (Http2Connection.putStream). The Modrinth clients speak HTTP/1.1, so no multiplexed connection is shared.
+	@Test
+	void theClientsSpeakHttp11() throws IOException {
+		respond("/v2/projects", 200, "[]");
+		client.projects(List.of("sodium"));
+		assertEquals(HttpClient.Version.HTTP_1_1, client.httpVersions().get(0));
+		assertEquals(HttpClient.Version.HTTP_1_1, client.httpVersions().get(1));
+	}
+
+	// A failure without an HTTP response drops the HttpClient, so one broken connection pool can't fail every later lookup of
+	// the session; an HTTP error status keeps the client.
+	@Test
+	void aTransportFailureStartsAFreshClientButAnHttpErrorDoesNot() throws Exception {
+		try (ServerSocket closer = new ServerSocket(0, 50, InetAddress.getLoopbackAddress())) {
+			Thread acceptor = new Thread(() -> {
+				while (!closer.isClosed()) {
+					try (Socket socket = closer.accept()) {
+						socket.setSoLinger(true, 0);
+					} catch (IOException ignored) {
+					}
+				}
+			});
+			acceptor.setDaemon(true);
+			acceptor.start();
+			HttpModrinthClient broken = new HttpModrinthClient("1.2.3", "http://127.0.0.1:" + closer.getLocalPort(), FAST);
+			IOException first = assertThrows(IOException.class, () -> broken.projects(List.of("a")));
+			assertFalse(first instanceof ModrinthException, first.toString());
+			assertEquals(1, broken.clientsBuilt());
+			assertThrows(IOException.class, () -> broken.projects(List.of("a")));
+			assertEquals(2, broken.clientsBuilt(), "a fresh HttpClient after the transport failure");
+		}
+
+		assertThrows(ModrinthException.class, () -> client.projects(List.of("missing")));
+		assertThrows(ModrinthException.class, () -> client.projects(List.of("missing")));
+		assertEquals(1, client.clientsBuilt(), "an HTTP 404 keeps the client");
 	}
 }
