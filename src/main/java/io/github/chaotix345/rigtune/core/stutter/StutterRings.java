@@ -32,7 +32,10 @@ public final class StutterRings {
 	// Sample records: the thread CPU (ns) each group used in the window ending at S_TIME, the whole process's CPU, and the
 	// chunk-build backlog at that moment (Sodium: scheduled jobs, busy and total builder threads; vanilla: the compile
 	// queue in S_BACKLOG and -1 in the other two; -1 everywhere when unknown).
-	public static final int SAMPLE_STRIDE = 13;
+	// v0.5 (docs/v0.5/SPEC.md 2S, RW-6): S_DH_WORLD_GEN holds Distant Horizons' world generation threads, apart from the
+	// other DH threads in S_DH; it comes last so every older slot keeps its index. As evidence of DH work (the dh tag, the
+	// busiest group) the two count together.
+	public static final int SAMPLE_STRIDE = 14;
 	public static final int S_TIME = 0;
 	public static final int S_WINDOW = 1;
 	public static final int S_RENDER = 2;
@@ -46,6 +49,7 @@ public final class StutterRings {
 	public static final int S_BACKLOG = 10;
 	public static final int S_BUSY = 11;
 	public static final int S_TOTAL = 12;
+	public static final int S_DH_WORLD_GEN = 13;
 	public static final String[] GROUPS = {"render", "server", "worker", "io", "builder", "dh", "other"};
 
 	private final RecordRing events = new RecordRing(EVENT_CAPACITY, EVENT_STRIDE);
