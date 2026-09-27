@@ -49,6 +49,26 @@ class TrendTextTest {
 		assertEquals("RD 12 · SD 8", TrendText.conditions(TrendFixtures.run("c").context(null).build()).english());
 	}
 
+	// docs/v0.5/SPEC.md RW-8/RW-6: a run left out of the trend says why, and claims nothing about its numbers.
+	@Test
+	void rw8TheExcludedLineNamesWhy() {
+		List<BenchmarkRecord> runs = new java.util.ArrayList<>();
+		for (int i = 0; i < 4; i++) {
+			runs.add(TrendFixtures.run("r" + i).at("2026-09-2" + i + "T10:00:00Z").low(540).build());
+		}
+		runs.add(TrendFixtures.run("fresh").at("2026-09-25T10:00:00Z").low(300).fresh().build());
+		assertEquals(List.of("NORMAL Left out of the trend: the first run in a new benchmark world"), lines(runs));
+		runs.add(TrendFixtures.run("dh").at("2026-09-26T10:00:00Z").low(300).dhGenerating().build());
+		assertEquals(List.of("NORMAL Left out of the trend: Distant Horizons was generating terrain"), lines(runs));
+		runs.add(TrendFixtures.run("both").at("2026-09-27T10:00:00Z").low(300).fresh().dhGenerating().build());
+		assertEquals(List.of("NORMAL Left out of the trend: the first run in a new benchmark world"), lines(runs));
+	}
+
+	private static List<String> lines(List<BenchmarkRecord> runs) {
+		return TrendText.assessment(BenchmarkTrend.view(runs, null, null), ZoneOffset.UTC, c -> io.github.chaotix345.rigtune.core.model.Text.literal("?"), 3)
+				.stream().map(l -> l.tone() + " " + l.text().english()).toList();
+	}
+
 	// Review L3: a very steady history has a tiny floor; a drop is never shown as "0%".
 	@Test
 	void smallPercentagesKeepADecimal() {

@@ -622,6 +622,8 @@
 	"rigtune.benchmark.trend.context.version": "Minecraft %s",
 	"rigtune.benchmark.trend.different": "Performance changed under different conditions (%s); cause unknown.",
 	"rigtune.benchmark.trend.empty": "No benchmark runs yet. Run one from Tools → Benchmark…",
+	"rigtune.benchmark.trend.excluded.dh_generating": "Left out of the trend: Distant Horizons was generating terrain",
+	"rigtune.benchmark.trend.excluded.world_fresh": "Left out of the trend: the first run in a new benchmark world",
 	"rigtune.benchmark.trend.improvement": "1%% lows %s%% above your usual %s FPS (%s comparable runs)",
 	"rigtune.benchmark.trend.in_line": "1%% lows in line with your usual %s FPS (%s comparable runs)",
 	"rigtune.benchmark.trend.key.distant_horizons": "Distant Horizons",

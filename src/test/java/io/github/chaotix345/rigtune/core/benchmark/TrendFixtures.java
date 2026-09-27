@@ -106,6 +106,18 @@ final class TrendFixtures {
 			return this;
 		}
 
+		// docs/v0.5/SPEC.md RW-8: the run created the benchmark world.
+		Run fresh() {
+			context = context.withWorldFresh(true);
+			return this;
+		}
+
+		// docs/v0.5/SPEC.md RW-6: Distant Horizons generated terrain during the run.
+		Run dhGenerating() {
+			context = context.withDhGenerating(true);
+			return this;
+		}
+
 		BenchmarkRecord build() {
 			Map<String, BenchmarkRecord.KnobResult> knobs = new LinkedHashMap<>();
 			knobs.put(BenchmarkRecord.RENDER_DISTANCE, new BenchmarkRecord.KnobResult(rd, rd, null, null, null));

@@ -55,7 +55,16 @@ public final class TrendText {
 			}
 			case DIFFERENT_CONDITIONS -> List.of(new Line(Text.of("rigtune.benchmark.trend.different",
 					"Performance changed under different conditions (%s); cause unknown.", differences(a.differences())), Tone.WARNING));
+			case EXCLUDED -> List.of(new Line(excluded(view.latest()), Tone.NORMAL));
 		};
+	}
+
+	// docs/v0.5/SPEC.md RW-8/RW-6: why a run is left out of the trend (a first run in a new world also generated it).
+	public static Text excluded(@Nullable BenchmarkRecord run) {
+		BenchmarkRecord.Context c = run == null ? null : run.context();
+		return c != null && !Boolean.TRUE.equals(c.worldFresh()) && Boolean.TRUE.equals(c.dhGenerating())
+				? Text.of("rigtune.benchmark.trend.excluded.dh_generating", "Left out of the trend: Distant Horizons was generating terrain")
+				: Text.of("rigtune.benchmark.trend.excluded.world_fresh", "Left out of the trend: the first run in a new benchmark world");
 	}
 
 	// The regression line (also the notice's message): "1% lows 18% below your usual 543 FPS since 2026-09-24".

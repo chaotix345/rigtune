@@ -213,7 +213,8 @@ public final class BenchmarkController {
 		this.yaw = player.getYRot();
 		this.pitch = player.getXRot();
 		this.wasFlying = player.getAbilities().flying;
-		this.context = withModSet(context(minecraft, original));
+		this.context = withModSet(context(minecraft, original)).withWorldFresh(worldFresh(request))
+				.withStagedAtStart(BenchmarkConditions.stagedAtStart());
 	}
 
 	// What else shapes the numbers, as the run starts (docs/v0.3/SPEC.md 8, the `context` of a benchmarks.json run).
@@ -227,6 +228,11 @@ public final class BenchmarkController {
 	// "needs a rerun" marker.
 	private static BenchmarkRecord.Context withModSet(BenchmarkRecord.Context context) {
 		return context.withModSet(BenchmarkConditions.modSetHash(), BenchmarkConditions.journalCursor());
+	}
+
+	// docs/v0.5/SPEC.md RW-8: in the benchmark world, whether this run's open created it; null in the player's own world.
+	private static @Nullable Boolean worldFresh(BenchmarkRequest request) {
+		return request.scene() == BenchmarkRequest.Scene.BENCHMARK_WORLD ? BenchmarkWorld.createdThisOpen() : null;
 	}
 
 	// The pack's file name from Iris' own settings file; null when unknown.

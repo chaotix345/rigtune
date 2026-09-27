@@ -156,10 +156,17 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		context.takeScreenshot("bench-menu-title");
 		check(!buttonActive(context, "rigtune.benchmark.menu.measure_after"), "Measure after needs a before first");
 		Settings settings = context.computeOnClient(Settings::of);
+		boolean worldExisted = context.computeOnClient(mc -> Files.exists(BenchmarkWorld.markerPath(mc).getParent()));
 
 		pressByKey(context, "rigtune.benchmark.menu.measure_before");
 		BenchmarkRecord before = runInBenchmarkWorld(context, "bench-world-running", "bench-world-before");
 		check(BenchmarkRecord.BEFORE.equals(before.phase()), "first run is the before: " + before);
+		// docs/v0.5/SPEC.md RW-8 (AC2B.7): the first run in a fresh run dir created the benchmark world; BH-2: the staged
+		// changes at its start are recorded (none here).
+		RigTune.LOGGER.info("Benchmark game test: the benchmark world existed before the first run: {}; worldFresh {}", worldExisted,
+				before.context().worldFresh());
+		check(Boolean.valueOf(!worldExisted).equals(before.context().worldFresh()), "worldFresh on the run that created the world: " + before.context());
+		check(before.context().stagedAtStart() != null && before.context().dhGenerating() == null, "stagedAtStart recorded: " + before.context());
 		check(context.computeOnClient(Settings::of).equals(settings), "settings restored after the world run");
 		Path marker = context.computeOnClient(BenchmarkWorld::markerPath);
 		check(Files.isRegularFile(marker), "benchmark world marker written");
@@ -191,6 +198,7 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 		check(sinceOn.stream().noneMatch(r -> StutterReport.MONITOR.equals(r.source())), "no settle-frames session saved around the benchmark: "
 				+ sinceOn.stream().map(r -> r.source() + " " + r.spikes().total() + " spikes in " + r.gameplaySeconds() + " s").toList());
 		check(BenchmarkRecord.AFTER.equals(after.phase()) && before.pairId().equals(after.pairId()), "after pairs with before: " + after);
+		check(Boolean.FALSE.equals(after.context().worldFresh()), "the next run reuses the world: worldFresh false: " + after.context());
 		check(context.computeOnClient(mc -> BenchmarkController.lastOutcome().gain()) != null, "gain computed for the pair");
 		check(modified(marker).equals(created), "benchmark world reused, not recreated");
 		pressByKey(context, "gui.done");
@@ -504,6 +512,10 @@ public class BenchmarkGameTest implements FabricClientGameTest {
 						&& c.has("dhRendering") && c.has("shaders") && c.has("fullscreen"), "context recorded: " + run);
 				// docs/v0.4/SPEC.md 7: and the loaded mods' hash (the journal cursor only once history.json has an entry).
 				check(c.has("modSetHash") && c.get("modSetHash").getAsString().matches("[0-9a-f]{64}"), "modSetHash recorded: " + run);
+				// docs/v0.5/SPEC.md BH-2 and RW-8: the staged changes at the start (a list, here empty); worldFresh only in the
+				// benchmark world.
+				check(c.has("stagedAtStart") && c.get("stagedAtStart").isJsonArray(), "stagedAtStart recorded: " + run);
+				check(c.has("worldFresh") == "BENCHMARK_WORLD".equals(run.get("scene").getAsString()), "worldFresh only in the benchmark world: " + run);
 			});
 			RigTune.LOGGER.info("Benchmark game test: benchmarks.json has {} runs", runs.size());
 		} catch (IOException | RuntimeException e) {
