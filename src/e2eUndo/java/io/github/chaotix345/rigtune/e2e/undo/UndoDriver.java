@@ -67,6 +67,8 @@ import java.util.TreeMap;
  * {@code profile-undo-all}: Undo all once. Both record each plan; quit (the helper writes the staged reverts).</li>
  * <li>{@code profile-check}, {@code profile-check-all}: records every setting and what is left to undo on each entry of
  * -Drigtune.e2e.entryIds; screenshots History; quits.</li>
+ * <li>{@code kill-first}, {@code kill-second}, {@code kill-check} (v0.5 helper-kill, docs/v0.5/SPEC.md AC3f.5): screenshots
+ * History with the harness's staged group; quits (the helper, if any, runs at the exit).</li>
  * </ul>
  * Results go to -Drigtune.e2e.out as driver-&lt;phase&gt;.json; screenshots to the instance's screenshots folder.
  */
@@ -111,7 +113,8 @@ public final class UndoDriver implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
 		if (phase == null || !List.of("mod-apply", "mod-undo", "mod-check", "entry-apply", "entry-undo", "entry-check",
-				"profile-apply", "profile-undo", "profile-check", "profile-undo-all", "profile-check-all").contains(phase)) {
+				"profile-apply", "profile-undo", "profile-check", "profile-undo-all", "profile-check-all", "kill-first", "kill-second",
+				"kill-check").contains(phase)) {
 			return;
 		}
 		out = Path.of(System.getProperty("rigtune.e2e.out", "e2e-out")).toAbsolutePath();
@@ -384,6 +387,15 @@ public final class UndoDriver implements ClientModInitializer {
 					}
 					result.put("entryUndoable", undoable);
 					result.put("entryProblems", problems);
+					minecraft.gui.setScreen(new HistoryScreen(minecraft.gui.screen(), controller));
+				} else if (stepTicks == 2 * SECOND) {
+					screenshot(minecraft, "e2e-" + phase + "-1-history.png");
+				} else if (stepTicks == 3 * SECOND) {
+					next(Step.QUIT);
+				}
+			}
+			case "kill-first", "kill-second", "kill-check" -> {
+				if (stepTicks == 1) {
 					minecraft.gui.setScreen(new HistoryScreen(minecraft.gui.screen(), controller));
 				} else if (stepTicks == 2 * SECOND) {
 					screenshot(minecraft, "e2e-" + phase + "-1-history.png");

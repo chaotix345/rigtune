@@ -1,0 +1,19 @@
+{
+  "groups": [
+    {
+      "group": "7d1f3a52-0c4e-4b6a-9e21-00000000c001",
+      "renames": [
+        {
+          "op": "7d1f3a52-0c4e-4b6a-9e21-00000000c002",
+          "from": "<instance>\\mods\\e2e-kill-1.0.0.jar",
+          "to": "<instance>\\mods\\e2e-kill-1.0.0.jar.disabled"
+        },
+        {
+          "op": "7d1f3a52-0c4e-4b6a-9e21-00000000c003",
+          "from": "<instance>\\mods\\e2e-kill-1.1.0.jar.rigtune-pending",
+          "to": "<instance>\\mods\\e2e-kill-1.1.0.jar"
+        }
+      ]
+    }
+  ]
+}

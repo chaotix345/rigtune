@@ -45,10 +45,11 @@ class MatrixTest(unittest.TestCase):
         rows = e2e_matrix.rows(REPO, "release")
         by_node = {mc: sorted(r["id"] for r in rows if r["mc"] == mc) for mc in ("26.2", "26.3")}
         self.assertEqual(sorted(["upgrade-from-0.4.0", "upgrade-from-0.3.0", "upgrade-from-0.2.0", "upgrade-from-0.1.0",
-                                 "seeded-v010-dh", "undo-profiles", "undo-settings", "downgrade-to-0.4.0", "downgrade-to-0.3.0"]),
+                                 "seeded-v010-dh", "undo-profiles", "undo-settings", "helper-kill", "downgrade-to-0.4.0",
+                                 "downgrade-to-0.3.0"]),
                          by_node["26.2"])
         self.assertEqual(sorted(["upgrade-from-0.4.0", "upgrade-from-0.3.0", "upgrade-from-0.2.0", "undo-profiles", "undo-settings",
-                                 "downgrade-to-0.4.0", "downgrade-to-0.3.0"]), by_node["26.3"])
+                                 "helper-kill", "downgrade-to-0.4.0", "downgrade-to-0.3.0"]), by_node["26.3"])
 
     def test_old_jars_tags_and_digests_come_from_released(self):
         for row in e2e_matrix.rows(REPO, "release"):
@@ -65,7 +66,7 @@ class MatrixTest(unittest.TestCase):
 
     def test_nodes_follow_the_versions_folder(self):
         rows = e2e_matrix.rows(repo_with("26.2", "26.3", "26.9"), "release")
-        self.assertEqual(["undo-profiles", "undo-settings"], sorted(r["id"] for r in rows if r["mc"] == "26.9"))
+        self.assertEqual(["helper-kill", "undo-profiles", "undo-settings"], sorted(r["id"] for r in rows if r["mc"] == "26.9"))
         self.assertEqual([], [r for r in e2e_matrix.rows(repo_with("26.2", "26.3", "26.9"), "push") if r["mc"] == "26.9"])
         self.assertEqual({"26.2"}, {r["mc"] for r in e2e_matrix.rows(repo_with("26.2"), "release")})
 

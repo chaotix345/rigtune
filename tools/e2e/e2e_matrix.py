@@ -32,7 +32,8 @@ DEFAULT_NODE = "26.2"
 SEEDS = {"v010-dh": "0.1.0"}
 # The release tier's rows with no old jar, and the downgrade targets, per node.
 UNDO = (("undo-profiles", ["--scenario", "undo", "--profile-switch", "profile", "--profile-names", "Battery,Max FPS"]),
-        ("undo-settings", ["--scenario", "undo", "--profile-switch", "settings"]))
+        ("undo-settings", ["--scenario", "undo", "--profile-switch", "settings"]),
+        ("helper-kill", ["--scenario", "helper-kill"]))
 DOWNGRADE_TO = ("0.4.0", "0.3.0")
 
 

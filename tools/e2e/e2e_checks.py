@@ -912,3 +912,64 @@ def after_downgrade_new(instance, driver, new_jar, seeded, log_text, kept=None):
     checks.append(Check("{} read its own files back (none reset or moved to .bad)".format(version.split("+")[0]), not lost,
                         "lost: {}".format(lost) if lost else "{} file(s) kept their items".format(len(seeded.get("json", {})))))
     return checks
+
+
+# --- helper-kill (docs/v0.5/SPEC.md 3f, AC3f.5; vg §6) ---------------------------------------------------------------
+# A staged two-op group (disable the old jar, enable the new one), op 2 blocked, the helper killed during its retries;
+# then the next exit's helper finishes the group from unfinished-groups.json, and the next start loads the result.
+# kill: what self_update_e2e's kill_helper_in_backoff saw (helpers it killed, the record, last-apply.json before/after).
+
+
+def _record(instance):
+    path = Path(instance) / "config" / "rigtune" / "unfinished-groups.json"
+    return path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
+
+
+def _pending_ids(instance):
+    plan = _load(Path(instance) / "config" / "rigtune" / "pending.json") or {}
+    return [op.get("id") for op in plan.get("ops") or []]
+
+
+def after_helper_kill(instance, kill, group, op_ids, new_name):
+    mods = Path(instance) / "mods"
+    kill = kill or {}
+    checks = [Check("the helper was killed during its retries (it wrote no results)",
+                    bool(kill.get("helpers")) and kill.get("recordHadGroup") is True and kill.get("goneAfterKill") is True
+                    and not kill.get("lastApplyAfter"),
+                    "killed {}; the group in unfinished-groups.json when killed: {}; gone after: {}; last-apply.json after: {}".format(
+                        kill.get("helpers"), kill.get("recordHadGroup"), kill.get("goneAfterKill"), kill.get("lastApplyAfter")))]
+    pending = _pending_ids(instance)
+    checks.append(Check("unfinished-groups.json and pending.json still hold the group", group in _record(instance)
+                        and all(i in pending for i in op_ids), "record holds it: {}; pending ops {}".format(group in _record(instance), pending)))
+    checks.append(Check("the blocked op didn't happen", not (mods / new_name).exists(),
+                        "mods/: {}".format(sorted(listing(mods)))))
+    return checks
+
+
+def after_kill_second(instance, driver, group, op_ids, old_name, new_name):
+    mods = Path(instance) / "mods"
+    driver = driver or {}
+    status = {(r.get("op") or {}).get("id"): r.get("status") for r in _results(instance)}
+    checks = [Check("the game started on what the killed helper left", driver.get("ok") is True,
+                    "error: {}; loaded {}".format(driver.get("error"), driver.get("loadedMods")))]
+    checks.append(Check("the next helper applied the whole group", all(status.get(i) in ("OK", "SKIPPED_ALREADY_DONE") for i in op_ids),
+                        "last-apply: {}".format({i: status.get(i) for i in op_ids})))
+    checks.append(Check("mods/ holds the group's result", (mods / (old_name + ".disabled")).is_file() and not (mods / old_name).exists()
+                        and (mods / new_name).is_file() and not (mods / (new_name + ".rigtune-pending")).exists(),
+                        "mods/: {}".format(sorted(listing(mods)))))
+    checks.append(Check("unfinished-groups.json no longer holds the group, pending.json is done", group not in _record(instance)
+                        and not any(i in _pending_ids(instance) for i in op_ids),
+                        "record holds it: {}; pending ops {}".format(group in _record(instance), _pending_ids(instance))))
+    return checks
+
+
+def after_kill_check(instance, driver, change_ids, mod_id):
+    driver = driver or {}
+    statuses = history_statuses(instance)
+    got = [statuses.get(i) for i in change_ids]
+    checks = [Check("the next start loads the updated mod", driver.get("ok") is True and mod_id in (driver.get("loadedMods") or []),
+                    "error: {}; {} loaded: {}".format(driver.get("error"), mod_id, mod_id in (driver.get("loadedMods") or [])))]
+    checks.append(Check("History shows the group applied as a whole", got == ["APPLIED"] * len(change_ids),
+                        "the entry's changes: {}".format(dict(zip(change_ids, got)))))
+    checks.append(_bad_or_crash(instance))
+    return checks

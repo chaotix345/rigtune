@@ -85,6 +85,20 @@ PROFILE_SWITCHES = [
 # own Apply disables.
 DOWNGRADE_PHASES = ("downgrade-old", "downgrade-new")
 OFF_ID = "e2e-downgrade-off"
+# helper-kill (docs/v0.5/SPEC.md 3f, AC3f.5; vg §6): a staged update group of the test mod KILL_ID (disable 1.0.0, enable
+# the downloaded 1.1.0) in the new version's instance, its second op blocked (held()), the helper killed during that
+# op's retries (a held file is a sharing violation to it: up to ~30 s); then two more starts: the second's exit finishes
+# the group from unfinished-groups.json, the third loads the result. Fixed ids (kill_group()).
+KILL_PHASES = ("kill-first", "kill-second", "kill-check")
+KILL_ID = "e2e-kill"
+KILL_OLD, KILL_NEW = "e2e-kill-1.0.0.jar", "e2e-kill-1.1.0.jar"
+KILL_GROUP = "7d1f3a52-0c4e-4b6a-9e21-00000000c001"
+KILL_OPS = ("7d1f3a52-0c4e-4b6a-9e21-00000000c002", "7d1f3a52-0c4e-4b6a-9e21-00000000c003")
+KILL_ENTRY = "7d1f3a52-0c4e-4b6a-9e21-00000000c010"
+KILL_CHANGES = ("7d1f3a52-0c4e-4b6a-9e21-00000000c011", "7d1f3a52-0c4e-4b6a-9e21-00000000c012")
+# How long after the helper has recorded the group (just before its first rename) it is killed: inside the blocked op's
+# retries, well short of their ~30 s budget.
+KILL_AFTER = 1.5
 ADDED_ID = "e2e-added"
 ADDED_PROJECT = "E2EAddMd"
 OTHER_ID = "e2e-disable-me"
@@ -106,6 +120,9 @@ PHASE_TITLES = {
     "profile-check": "Profiles: after the next start",
     "profile-undo-all": "Profiles, on a copy from after the switches: after Undo all (helper done)",
     "profile-check-all": "Profiles, on that copy: after the next start",
+    "kill-first": "helper-kill: after a start and quit with the group staged, op 2 blocked, the helper killed during its retries",
+    "kill-second": "helper-kill: after the next start and quit (the next helper, op 2 unblocked)",
+    "kill-check": "helper-kill: after the next start",
 }
 
 
@@ -129,6 +146,7 @@ class Run:
         self.rigtune_dir = self.instance / "config" / "rigtune"
         self.undo = args.scenario == "undo"
         self.downgrade = args.scenario == "downgrade"
+        self.kill = args.scenario == "helper-kill"
         # self-update: old_jar is installed and new_jar served as its update. undo: new_jar is installed, nothing to update.
         self.old_jar = Path(args.old_jar).resolve() if args.old_jar else None
         self.new_jar = Path(args.new_jar).resolve()
@@ -139,7 +157,7 @@ class Run:
         self.profile = args.profile_switch
         self.profile_instance = self.run_dir / "instance-profile"
         phases = UNDO_PHASES + ENTRY_PHASES + (PROFILE_PHASES if self.profile else ()) if self.undo \
-            else DOWNGRADE_PHASES if self.downgrade else ("update", "verify")
+            else DOWNGRADE_PHASES if self.downgrade else KILL_PHASES if self.kill else ("update", "verify")
         self.checks = {p: [] for p in phases}
         self.facts = {}
         self.jars = self.run_dir / "jars"
@@ -270,8 +288,8 @@ class Run:
         self.run_dir.mkdir(parents=True)
         self.out.mkdir()
         self.log("run folder " + str(self.run_dir))
-        installed = self.new_jar if self.undo else self.old_jar
-        if installed is None or not self.undo and self.api_jar is None:
+        installed = self.new_jar if self.undo or self.kill else self.old_jar
+        if installed is None or not (self.undo or self.kill) and self.api_jar is None:
             raise SystemExit("--old-jar is required for the self-update scenario")
         for jar in [j for j in (self.old_jar, self.new_jar, self.api_jar) if j is not None]:
             if e2e_env.mod_json(jar).get("id") != "rigtune":
@@ -316,6 +334,8 @@ class Run:
             self.prepare_profile_instance()
         if self.downgrade:
             self.prepare_downgrade()
+        if self.kill:
+            self.prepare_kill()
         self.facts["fabricApi"] = api.name
         self.log("instance mods: " + ", ".join(sorted(p.name for p in self.mods.iterdir())))
 
@@ -397,11 +417,11 @@ class Run:
                                                                          [j["path"] for j in self.seed["jars"]]))
 
     def driver_jar_task(self):
-        return "e2eUndoDriverJar" if self.undo else "e2eDowngradeDriverJar" if self.downgrade else "e2eDriverJar"
+        return "e2eUndoDriverJar" if self.undo or self.kill else "e2eDowngradeDriverJar" if self.downgrade else "e2eDriverJar"
 
     def driver_args(self, task):
         """The Gradle task plus the properties that pick and build this scenario's driver."""
-        if self.undo:
+        if self.undo or self.kill:
             return [task, "-Pe2e.driver=undo"]
         if self.downgrade:
             return [task, "-Pe2e.driver=downgrade", "-Pe2e.oldJar=" + str(self.api_jar)]
@@ -436,6 +456,80 @@ class Run:
                                                           "undoLast": self.seeded["undoLast"]}, indent=1) + LF, encoding="utf-8", newline=LF)
         self.log("composed from {}; jars {}; options {}".format(
             ", ".join(s.name + (" (placeholder)" if s.placeholder else "") for s in sets), sorted(state["jars"]), state["options"]))
+
+    def prepare_kill(self):
+        """helper-kill: the test mod's two jars, and its update group staged as the new version's Apply leaves it."""
+        e2e_env.test_mod_jar(self.mods / KILL_OLD, KILL_ID, "1.0.0")
+        e2e_env.test_mod_jar(self.mods / (KILL_NEW + ".rigtune-pending"), KILL_ID, "1.1.0")
+        self.rigtune_dir.mkdir(parents=True, exist_ok=True)
+        for name, data in zip(("pending.json", "history.json"), kill_group(self.instance, self.facts["new"]["version"], self.mc)):
+            (self.rigtune_dir / name).write_text(json.dumps(data, indent=2) + LF, encoding="utf-8", newline=LF)
+            (self.out / ("seeded-" + name)).write_text(json.dumps(data, indent=2) + LF, encoding="utf-8", newline=LF)
+        self.log("staged the update group of {} ({} -> {}), group {}".format(KILL_ID, KILL_OLD, KILL_NEW, KILL_GROUP))
+
+    def kill_helper_in_backoff(self):
+        """Once the helper has recorded the group in unfinished-groups.json (just before its first rename), waits KILL_AFTER
+        and kills it (SIGKILL / taskkill /F) while op 2 is still retrying. Returns what it saw, for after_helper_kill."""
+        record = self.rigtune_dir / "unfinished-groups.json"
+        last_apply = self.rigtune_dir / "last-apply.json"
+        deadline = time.time() + HELPER_TIMEOUT
+        while time.time() < deadline:
+            helpers = self.own(lambda cl: "ApplyHelper" in cl)
+            if helpers and record.is_file() and KILL_GROUP in record.read_text(encoding="utf-8", errors="replace"):
+                time.sleep(KILL_AFTER)
+                helpers = self.own(lambda cl: "ApplyHelper" in cl)
+                seen = {"helpers": [pid for pid, _ in helpers], "recordHadGroup": KILL_GROUP in record.read_text(encoding="utf-8", errors="replace"),
+                        "lastApplyBefore": last_apply.is_file(), "modsWhenKilled": sorted(e2e_checks.listing(self.mods))}
+                for pid, _ in helpers:
+                    self.log("killing the helper {} during its retries".format(pid))
+                    kill_process(pid)
+                gone = time.time() + 20
+                while self.own(lambda cl: "ApplyHelper" in cl) and time.time() < gone:
+                    time.sleep(0.5)
+                seen["goneAfterKill"] = not self.own(lambda cl: "ApplyHelper" in cl)
+                seen["lastApplyAfter"] = last_apply.is_file()
+                self.log("after the kill: " + json.dumps(seen))
+                return seen
+            if not helpers and last_apply.is_file():
+                self.log("the helper finished before it could be killed")
+                break
+            time.sleep(0.2)
+        return {"helpers": [], "lastApplyAfter": last_apply.is_file()}
+
+    def run_helper_kill(self):
+        """AC3f.5: the group staged, op 2 held from the first start until the helper at its exit is killed; the next exit's
+        helper finishes the group; the start after that loads it and History shows it applied."""
+        blocked = self.mods / (KILL_NEW + ".rigtune-pending")
+        self.log("holding {} ({}) until the helper is killed".format(blocked.name, "open" if os.name == "nt" else "chattr +i"))
+        self.start_watcher("kill-first")
+        try:
+            with held([blocked]):
+                code = self.launch("kill-first")
+                kill = self.kill_helper_in_backoff()
+        finally:
+            self.stop_watcher()
+        (self.out / "helper-cmdlines-kill-first.txt").write_text(LF.join(self.helper_cmdlines()) + LF, encoding="utf-8")
+        self.snapshot("kill-first")
+        (self.out / "kill.json").write_text(json.dumps(kill, indent=1) + LF, encoding="utf-8", newline=LF)
+        fixtures.copy_evidence(self.rigtune_dir / "unfinished-groups.json", self.out / "unfinished-groups-after-kill.json")
+        checks = [e2e_checks.Check("the first client exited normally", code == 0, "gradle exit {}".format(code))]
+        checks += e2e_checks.after_helper_kill(self.instance, kill, KILL_GROUP, KILL_OPS, KILL_NEW)
+        self.checks["kill-first"] = checks
+        if not all(c.ok for c in checks):
+            return False
+        code, helper_ok, _ = self.launch_and_apply("kill-second")
+        checks = [e2e_checks.Check("the client exited normally and the helper finished", code == 0 and helper_ok,
+                                   "gradle exit {}, helper finished: {}".format(code, helper_ok))]
+        checks += e2e_checks.after_kill_second(self.instance, self.driver("kill-second"), KILL_GROUP, KILL_OPS, KILL_OLD, KILL_NEW)
+        self.checks["kill-second"] = checks
+        if not all(c.ok for c in checks):
+            return False
+        code = self.launch("kill-check")
+        self.snapshot("kill-check")
+        checks = [e2e_checks.Check("the relaunched client exited normally", code == 0, "gradle exit {}".format(code))]
+        checks += e2e_checks.after_kill_check(self.instance, self.driver("kill-check"), KILL_CHANGES, KILL_ID)
+        self.checks["kill-check"] = checks
+        return all(c.ok for c in checks)
 
     def run_downgrade(self):
         """SPEC AC3.2: the released 0.3.0 on 0.4's files (History, Undo last, its own Apply; its helper at exit), then the
@@ -793,8 +887,9 @@ class Run:
             else:
                 shutil.rmtree(dest)
         dest.mkdir(parents=True)
-        texts = [self.out / n for n in ("redirect-probe.txt", "helper-dir.txt", "pending-before-exit.json", "seeded.json")]
-        texts += [self.out / ("seeded-" + n) for n in SEEDED]
+        texts = [self.out / n for n in ("redirect-probe.txt", "helper-dir.txt", "pending-before-exit.json", "seeded.json", "kill.json",
+                                        "unfinished-groups-after-kill.json")]
+        texts += [self.out / ("seeded-" + n) for n in SEEDED + ("history.json",)]
         for phase in self.checks:
             texts += [self.out / n.format(phase) for n in ("driver-{}.json", "report-{}.txt", "helper-cmdlines-{}.txt",
                                                             "mods-after-{}.json", "history-after-{}.json", "last-apply-after-{}.json",
@@ -821,9 +916,9 @@ class Run:
         self.log("evidence in " + str(dest))
 
     def result_markdown(self, verdict, files):
-        installed = self.facts["new"] if self.undo else self.facts["old"]
-        if self.downgrade:
+        if self.downgrade or self.kill:
             return self.downgrade_markdown(verdict, files)
+        installed = self.facts["new"] if self.undo else self.facts["old"]
         lines = ["# {} E2E: {}".format("Undo after restart" if self.undo else "Self-update", self.name), "",
                  "- Verdict: **{}**".format(verdict),
                  "- Run: {} UTC, MC {}, {} + {}{} in a fresh scratch instance".format(
@@ -875,14 +970,24 @@ class Run:
         return "\n".join(lines)
 
     def downgrade_markdown(self, verdict, files):
-        lines = ["# Downgrade E2E: " + self.name, "", "- Verdict: **{}**".format(verdict),
-                 "- Run: {} UTC, MC {}, a fresh scratch instance with {} + {} + `{}` (for 0.3.0's own Apply)".format(
-                     self.run_dir.name.rsplit("-", 2)[-2], self.mc, self.facts["old"]["file"], self.facts.get("fabricApi"), self.off_jar.name),
-                 "- Old (started on 0.4's files): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["old"]),
-                 "- New (reinstalled after it): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"]),
-                 "- \"Written by 0.4\" sets (plan review H-M1; `seeded.json`): " + ", ".join(
-                     "`{}`{}".format(s["name"], " (**placeholder**)" if s["placeholder"] else "") for s in self.facts.get("writtenSets", [])),
-                 "- Client time: " + ", ".join("{} {} s".format(p, self.facts.get("{}Seconds".format(p))) for p in self.checks), ""]
+        if self.kill:
+            lines = ["# Helper-kill E2E: " + self.name, "", "- Verdict: **{}**".format(verdict),
+                     "- Run: {} UTC, MC {}, a fresh scratch instance with {} + {} + `{}`, and `{}` staged to replace it (group {})".format(
+                         self.run_dir.name.rsplit("-", 2)[-2], self.mc, self.facts["new"]["file"], self.facts.get("fabricApi"), KILL_OLD,
+                         KILL_NEW, KILL_GROUP),
+                     "- RigTune: `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"]),
+                     "- Op 2 (`{}.rigtune-pending`) held ({}) until the helper was killed {} s after it recorded the group (`kill.json`)".format(
+                         KILL_NEW, "an open handle" if os.name == "nt" else "chattr +i", KILL_AFTER),
+                     "- Client time: " + ", ".join("{} {} s".format(p, self.facts.get("{}Seconds".format(p))) for p in self.checks), ""]
+        else:
+            lines = ["# Downgrade E2E: " + self.name, "", "- Verdict: **{}**".format(verdict),
+                     "- Run: {} UTC, MC {}, a fresh scratch instance with {} + {} + `{}` (for 0.3.0's own Apply)".format(
+                         self.run_dir.name.rsplit("-", 2)[-2], self.mc, self.facts["old"]["file"], self.facts.get("fabricApi"), self.off_jar.name),
+                     "- Old (started on 0.4's files): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["old"]),
+                     "- New (reinstalled after it): `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"]),
+                     "- \"Written by 0.4\" sets (plan review H-M1; `seeded.json`): " + ", ".join(
+                         "`{}`{}".format(s["name"], " (**placeholder**)" if s["placeholder"] else "") for s in self.facts.get("writtenSets", [])),
+                     "- Client time: " + ", ".join("{} {} s".format(p, self.facts.get("{}Seconds".format(p))) for p in self.checks), ""]
         for phase in self.checks:
             lines += ["## " + PHASE_TITLES[phase], "", "| check | result | detail |", "|---|---|---|"]
             if not self.checks[phase]:
@@ -931,6 +1036,9 @@ class Run:
             if self.undo:
                 if self.run_undo_scenario():
                     verdict = "PASS"
+            elif self.kill:
+                if self.run_helper_kill():
+                    verdict = "PASS"
             elif self.downgrade:
                 if self.run_downgrade():
                     verdict = "PASS"
@@ -949,7 +1057,7 @@ class Run:
                     self.log("{} [{}] {}: {}".format(phase, "PASS" if c.ok else "FAIL", c.name, c.detail))
             self.log("VERDICT " + verdict)
             self.evidence(verdict)
-        if self.args.capture_fixtures and not self.undo and (verdict == "PASS" or self.args.capture_anyway and self.checks["update"]):
+        if self.args.capture_fixtures and not self.undo and not self.kill and (verdict == "PASS" or self.args.capture_anyway and self.checks["update"]):
             self.capture_fixtures(verdict)
         elif self.args.capture_fixtures:
             self.log("fixtures not captured: the run didn't pass (--capture-anyway overrides)")
@@ -1003,6 +1111,24 @@ def held(paths, posix=None, run=subprocess.run):
             handle.close()
         for path in immutable:
             run(["sudo", "-n", "chattr", "-i", str(path)], check=False)
+
+
+def kill_group(instance, version, mc):
+    """helper-kill's pending.json and history.json: the update group of KILL_ID (disable KILL_OLD, enable the downloaded
+    KILL_NEW) staged by one Apply of the new version, the shape its DownloadPlanner and journal write."""
+    mods = Path(instance) / "mods"
+    ops = [{"type": "DISABLE_FILE", "path": str(mods / KILL_OLD), "id": KILL_OPS[0], "group": KILL_GROUP, "modId": KILL_ID, "attempts": 0},
+           {"type": "ENABLE_FILE", "from": str(mods / (KILL_NEW + ".rigtune-pending")), "to": str(mods / KILL_NEW), "id": KILL_OPS[1],
+            "group": KILL_GROUP, "modId": KILL_ID, "attempts": 0, "projectId": "E2EKill1", "versionId": "E2EKillV"}]
+    pending = {"createdAt": "2026-09-27T10:00:00Z", "gamePid": 4242, "modsDir": str(mods), "configDir": str(Path(instance) / "config"),
+               "ops": ops}
+    changes = [{"id": KILL_CHANGES[0], "type": "file", "action": "disable", "modId": KILL_ID, "file": KILL_OLD, "status": "STAGED",
+                "opId": KILL_OPS[0], "group": KILL_GROUP},
+               {"id": KILL_CHANGES[1], "type": "file", "action": "enable", "modId": KILL_ID, "file": KILL_NEW, "status": "STAGED",
+                "opId": KILL_OPS[1], "group": KILL_GROUP}]
+    history = {"formatVersion": 1, "entries": [{"id": KILL_ENTRY, "at": "2026-09-27T10:00:00Z", "kind": "apply", "rigtuneVersion": version,
+                                                "mcVersion": mc, "changes": changes}]}
+    return pending, history
 
 
 def load_seed(folder):
@@ -1140,8 +1266,9 @@ def filtered_log(path):
 def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--name", required=True, help="scenario name, e.g. v010-to-dev")
-    parser.add_argument("--scenario", choices=("self-update", "undo", "downgrade"), default="self-update",
-                        help="self-update (default), or undo: the new version applies mod changes and undoes them after a restart (M14, B-M3)")
+    parser.add_argument("--scenario", choices=("self-update", "undo", "downgrade", "helper-kill"), default="self-update",
+                        help="self-update (default), or undo: the new version applies mod changes and undoes them after a restart (M14, "
+                             "B-M3); downgrade (AC3.2, AC3b.3); helper-kill: a killed helper's group is finished at the next exit (AC3f.5)")
     parser.add_argument("--old-jar", help="self-update: the installed RigTune jar (a released one: 0.1.0, 0.2.0 or 0.3.0)")
     parser.add_argument("--old-sha256", help="expected sha256 of --old-jar")
     parser.add_argument("--new-jar", required=True, help="self-update: the update the fake Modrinth serves; undo: the installed jar")
