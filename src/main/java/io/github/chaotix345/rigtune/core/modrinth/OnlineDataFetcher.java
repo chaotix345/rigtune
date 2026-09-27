@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.core.modrinth;
 
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.core.apply.LogSafe;
 import io.github.chaotix345.rigtune.core.model.InstalledMod;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.OnlineData;
@@ -123,7 +124,8 @@ public final class OnlineDataFetcher {
 				Thread.currentThread().interrupt();
 			}
 			if (e instanceof IOException) {
-				RigTune.LOGGER.warn("Modrinth lookups failed; using offline data: {}", e.toString());
+				// The cause chain too: "Stream N cancelled" hid its cause (ws-ci).
+				RigTune.LOGGER.warn("Modrinth lookups failed; using offline data: {}", LogSafe.error(e));
 			} else {
 				RigTune.LOGGER.warn("Modrinth lookups failed; using offline data", e);
 			}
@@ -166,7 +168,7 @@ public final class OnlineDataFetcher {
 						out.put(check.getKey(), result);
 					}
 				} catch (ExecutionException e) {
-					RigTune.LOGGER.warn("Could not check {} versions of {}: {}", LOADER, check.getKey(), e.getCause().toString());
+					RigTune.LOGGER.warn("Could not check {} versions of {}: {}", LOADER, LogSafe.text(check.getKey()), LogSafe.error(e.getCause()));
 				}
 			}
 			return out;

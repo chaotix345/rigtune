@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.client.profile;
 
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.client.Busy;
 import io.github.chaotix345.rigtune.client.ConfigTargets;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
@@ -372,19 +373,13 @@ public final class ProfileService {
 	// For ProfilesGameTest only: null puts the real check back.
 	public static void overrideBenchmarkCheck(@Nullable BooleanSupplier running) {
 		benchmarkRunning = running == null ? BenchmarkController::running : running;
+		Busy.overrideBenchmarkCheck(running);
 	}
 
+	// docs/v0.5/SPEC.md C8: the shared busy check.
 	private @Nullable Component refusal() {
-		if (benchmarkRunning.getAsBoolean()) {
-			return Component.translatable("rigtune.profile.status.benchmark");
-		}
-		if (controller.downloading()) {
-			return Component.translatable("rigtune.status.busy");
-		}
-		if (controller.rules() == null || controller.hardwareProfile() == null) {
-			return Component.translatable("rigtune.profile.code.error.not_ready");
-		}
-		return null;
+		Text refused = Busy.refusal(controller);
+		return refused == null ? null : Texts.component(refused);
 	}
 
 	private @Nullable Target resolve(@Nullable String id) {

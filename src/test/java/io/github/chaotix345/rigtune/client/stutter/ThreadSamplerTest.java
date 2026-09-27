@@ -340,7 +340,10 @@ class ThreadSamplerTest {
 		long before = System.nanoTime();
 		sampler.stop();
 		long stopMs = (System.nanoTime() - before) / 1_000_000;
-		assertTrue(stopMs < 100, "stop() returned after " + stopMs + " ms");
+		// The regression this catches is a join (the old stop() waited up to 1000 ms for the worker); 500 ms leaves a shared
+		// runner's pauses (GC, descheduling) far more room than the old 100 ms bound did (v0.5 ws-ci).
+		assertTrue(stopMs < 500, "stop() returned after " + stopMs + " ms");
+		assertTrue(hung.release.getCount() == 1 && hung.caller.isAlive(), "stop() returned while the worker was still stuck");
 		assertFalse(sampler.running(), "no sampler for this capture any more");
 
 		sampler.start(second);

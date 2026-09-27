@@ -339,7 +339,7 @@ public final class ConditionEvaluator {
 		return c.stutterShareAtLeast != null || c.stutterTaggedShareAtLeast != null || c.gcFullPausesAtLeast != null
 				|| c.gcStallsAtLeast != null || c.gcExplicitPausesAtLeast != null || c.liveSetPercentAtLeast != null
 				|| c.heapRaiseRoomMbAtLeast != null || c.cpuContentionShareAtLeast != null || c.spikesPerMinuteAtLeast != null
-				|| c.gcCollector != null;
+				|| c.gcCollector != null || c.causeSpikesAtLeast != null;
 	}
 
 	// v0.4 (docs/v0.4/SPEC.md 5): the stutter keys against the Stutter Doctor's session facts. Without facts (the main
@@ -362,7 +362,14 @@ public final class ConditionEvaluator {
 		t = and(t, () -> c.cpuContentionShareAtLeast == null ? TRUE : atLeast(facts.cpuContentionShare(), c.cpuContentionShareAtLeast));
 		t = and(t, () -> c.spikesPerMinuteAtLeast == null ? TRUE : Truth.of(facts.spikesPerMinute() * 10 >= c.spikesPerMinuteAtLeast));
 		String collector = facts.gcCollector() == null ? "" : facts.gcCollector().toLowerCase(Locale.ROOT);
-		return and(t, () -> c.gcCollector == null ? TRUE : anyEntry(c.gcCollector, GC_COLLECTORS::contains, collector::equals, !collector.isEmpty()));
+		t = and(t, () -> c.gcCollector == null ? TRUE : anyEntry(c.gcCollector, GC_COLLECTORS::contains, collector::equals, !collector.isEmpty()));
+		return and(t, () -> c.causeSpikesAtLeast == null ? TRUE : causeSpikes(c.causeSpikesAtLeast, facts));
+	}
+
+	// v0.5 (docs/v0.5/SPEC.md 5): causeSpikesAtLeast. Contracts stub (WS-K): UNKNOWN, so a fix's evidence never offers,
+	// until WS-S2 counts the spikes each cause dominated (StutterFacts) and evaluates it here.
+	private static Truth causeSpikes(Map<String, String> wanted, StutterFacts facts) {
+		return UNKNOWN;
 	}
 
 	private static Truth gcCount(StutterFacts facts, int count, int threshold) {

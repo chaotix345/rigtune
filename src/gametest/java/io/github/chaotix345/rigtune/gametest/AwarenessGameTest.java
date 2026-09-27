@@ -6,7 +6,6 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.awareness.AwarenessService;
@@ -21,7 +20,6 @@ import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
@@ -57,12 +55,11 @@ public class AwarenessGameTest implements FabricClientGameTest {
 		if (!(RigTuneClient.controller() instanceof RealController real)) {
 			throw new AssertionError("AwarenessGameTest needs the real controller");
 		}
-		Path configDir = FabricLoader.getInstance().getConfigDir();
 		Path file = real.awarenessService().file();
 		context.waitFor(mc -> Files.isRegularFile(file), 200);
 		String original = read(file);
 		try {
-			setNetwork(context, configDir, real, false);
+			GameTestNet.set(context, real, false);
 			String currentDriver = seed(context, real, file);
 			rescan(context, real);
 			openRigTune(context);
@@ -72,12 +69,35 @@ public class AwarenessGameTest implements FabricClientGameTest {
 			checkRebenchmark(context, real, hardwareKey);
 			checkDismissals(context, real, file, hardwareKey);
 			RigTune.LOGGER.info("AwarenessGameTest: driver notice (shown -> committed), Re-benchmark, what's new and dismissals checked");
+			// v0.5 (docs/v0.5/SPEC.md C6; PLAN contracts item 16): one block per owner, with the contracts' context record.
+			V05TestContext v05 = V05TestContext.of(context);
+			awarenessFixes(v05);
+			startupRegression(v05);
+			settingsChangedOutside(v05);
 		} finally {
 			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
 			write(file, original);
-			setNetwork(context, configDir, real, true);
+			GameTestNet.set(context, real, true);
 			resize(context, 854, 480, 0);
 		}
+	}
+
+	// --- v0.5 blocks (docs/v0.5/SPEC.md C6): one method per owner; an owner edits only its own method's body and adds its
+	// own private helpers right below it. Each block puts back what it changed.
+
+	// ---- WS-W (AW-1, AW-2).
+
+	private static void awarenessFixes(V05TestContext v05) {
+	}
+
+	// ---- WS-W2 (C18, AC9.2-AC9.3): a seeded startup-times.json and the STARTUP_REGRESSION notice.
+
+	private static void startupRegression(V05TestContext v05) {
+	}
+
+	// ---- WS-W (4h, AC4h.2): the options snapshot and SETTINGS_CHANGED_OUTSIDE.
+
+	private static void settingsChangedOutside(V05TestContext v05) {
 	}
 
 	// An older driver string in the fingerprint, and a baseline one rules revision back whose ids lack the report's
@@ -244,16 +264,6 @@ public class AwarenessGameTest implements FabricClientGameTest {
 		context.runOnClient(mc -> RigTuneClient.open(new TitleScreen()));
 		context.waitForScreen(RigTuneScreen.class);
 		context.waitTicks(3);
-	}
-
-	private static void setNetwork(ClientGameTestContext context, Path configDir, RealController real, boolean on) {
-		context.runOnClient(mc -> {
-			ClientSettings settings = ClientSettings.shared(configDir);
-			settings.networkEnabled = on;
-			settings.save(configDir);
-			real.settingsChanged();
-		});
-		context.waitFor(mc -> real.report() != null, 1200);
 	}
 
 	private static String read(Path file) {

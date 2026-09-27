@@ -2,7 +2,6 @@ package io.github.chaotix345.rigtune.gametest;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
@@ -28,9 +27,6 @@ import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.notice.NoticePriority;
-import io.github.chaotix345.rigtune.core.model.Goal;
-import io.github.chaotix345.rigtune.core.model.Recommendation;
-import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.profile.ProfileImport;
@@ -113,12 +109,10 @@ public class ProfilesGameTest implements FabricClientGameTest {
 		context.waitFor(mc -> RigTuneClient.controller().report() != null, 1200);
 		RigTuneController controller = RigTuneClient.controller();
 		check(controller instanceof RealController, "the real controller");
-		ClientSettings settings = ClientSettings.shared(configDir);
-		boolean network = settings.networkEnabled;
 		Map<Path, byte[]> saved = backup(historyFile, profilesFile, pendingFile, sodiumFile, lastApplyFile);
 		Map<String, String> original = context.computeOnClient(mc -> vanilla(mc.options));
+		boolean network = GameTestNet.set(context, controller, false);
 		try {
-			settings.networkEnabled = false;
 			context.runOnClient(mc -> controller.discardPending());
 			batterySwitchAndUndoThis(context, controller);
 			twoSwitchesThenUndo(context, controller, false);
@@ -129,7 +123,7 @@ public class ProfilesGameTest implements FabricClientGameTest {
 			refusedDuringABenchmark(context, controller);
 		} finally {
 			ProfileService.overrideBenchmarkCheck(null);
-			settings.networkEnabled = network;
+			GameTestNet.set(context, controller, network);
 			context.runOnClient(mc -> {
 				controller.discardPending();
 				SettingsBridge.applyVanilla(mc.options, original);
@@ -324,26 +318,11 @@ public class ProfilesGameTest implements FabricClientGameTest {
 		context.waitForScreen(ProfilesScreen.class);
 	}
 
-	// RigTune before its first scan finished: an import is refused as not ready (ProfileService's own guard).
-	private record NotReady(RigTuneController real) implements RigTuneController {
-		@Override
-		public @Nullable Report report() {
-			return real.report();
-		}
-
-		@Override
-		public Goal goal() {
-			return real.goal();
-		}
-
-		@Override
-		public void setGoal(Goal goal) {
-			real.setGoal(goal);
-		}
-
-		@Override
-		public Component apply(List<Recommendation> selected) {
-			return real.apply(selected);
+	// RigTune before its first scan finished: an import is refused as not ready (ProfileService's own guard). Everything
+	// else is the real controller's (ForwardingController).
+	private static final class NotReady extends ForwardingController {
+		NotReady(RigTuneController real) {
+			super(real);
 		}
 
 		@Override

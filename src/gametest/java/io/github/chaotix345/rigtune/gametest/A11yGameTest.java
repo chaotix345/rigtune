@@ -2,7 +2,6 @@ package io.github.chaotix345.rigtune.gametest;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkHistoryScreen;
@@ -24,9 +23,8 @@ import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.jvm.JvmReport;
-import io.github.chaotix345.rigtune.core.model.Goal;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
-import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.notice.NoticeAction;
@@ -35,12 +33,14 @@ import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.profile.ProfileStore;
 import io.github.chaotix345.rigtune.core.profile.ProfileTemplates.TemplateId;
 import io.github.chaotix345.rigtune.core.profile.ProfileView;
+import io.github.chaotix345.rigtune.core.profile.ServerProfilesView;
 import io.github.chaotix345.rigtune.core.stutter.FrameRing;
 import io.github.chaotix345.rigtune.core.stutter.GcKind;
 import io.github.chaotix345.rigtune.core.stutter.StutterAnalyzer;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import io.github.chaotix345.rigtune.core.stutter.StutterRings;
 import io.github.chaotix345.rigtune.core.stutter.StutterView;
+import io.github.chaotix345.rigtune.core.tryit.TryItView;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
@@ -58,13 +58,13 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
-import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
+import javax.imageio.ImageIO;
 
 // docs/v0.4/SPEC.md 11 (AC11.1-AC11.3). Per list screen (RigTune, History, Preview, Undo, JVM, Profiles, Stutter): Tab
 // from nothing focused reaches the list, then each press lands on the next row's own child, none skipped, and the press
@@ -87,11 +87,11 @@ public class A11yGameTest implements FabricClientGameTest {
 		RigTuneController real = RigTuneClient.controller();
 		context.waitFor(mc -> real.report() != null, 1200);
 		Path configDir = FabricLoader.getInstance().getConfigDir();
-		boolean network = context.computeOnClient(mc -> ClientSettings.shared(configDir).networkEnabled);
 		boolean outline = context.computeOnClient(mc -> mc.options.highContrastBlockOutline().get());
-		setNetwork(context, real, configDir, false);
+		boolean network = GameTestNet.set(context, real, false);
 		try {
-			A11yController controller = new A11yController(new StubController(RigTuneClient::hardware), real, configDir);
+			StubController stub = new StubController(RigTuneClient::hardware);
+			A11yController controller = new A11yController(stub, real, configDir);
 			resize(context, 854, 480, 2);
 			rigTune(context, controller);
 			history(context, controller);
@@ -102,12 +102,26 @@ public class A11yGameTest implements FabricClientGameTest {
 			stutter(context, controller);
 			standaloneText(context, controller);
 			highContrast(context, controller);
+			// v0.5 (docs/v0.5/SPEC.md C6, X6; PLAN contracts item 16): one walk per owner, each with the contracts' context
+			// record; canned views through CannedViews, cleared by the walk.
+			V05TestContext v05 = new V05TestContext(context, stub, real, configDir);
+			walkStutterFix(v05);
+			walkTryIt(v05);
+			walkServerProfiles(v05);
+			walkFirstApply(v05);
+			walkHowItWorks(v05);
+			walkToolsStartup(v05);
+			walkBenchmarkScreens(v05);
+			walkBatteryOfferRow(v05);
+			walkModFilesRowAndNews(v05);
+			walkLauncherNotices(v05);
+			highContrastRunningGame(v05);
 		} finally {
 			context.runOnClient(mc -> {
 				mc.options.highContrastBlockOutline().set(outline);
 				mc.setLastInputType(InputType.MOUSE);
 			});
-			setNetwork(context, real, configDir, network);
+			GameTestNet.set(context, real, network);
 			resize(context, 854, 480, 0);
 			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
 		}
@@ -470,6 +484,64 @@ public class A11yGameTest implements FabricClientGameTest {
 		return collector.collectNarrationText(false);
 	}
 
+	// --- v0.5 walks (docs/v0.5/SPEC.md C6): one method per owner; an owner edits only its own method's body and adds its
+	// own private helpers right below it. Each walk leaves the screen, the size and CannedViews as it found them.
+
+	// ---- WS-S2 (C20, AC5.11): StutterScreen's fix rows, the ButtonRow and the "Your stutter fix" block.
+
+	private static void walkStutterFix(V05TestContext v05) {
+	}
+
+	// ---- WS-T (C09, AC6.13): TryItScreen and the plain Preview's footer.
+
+	private static void walkTryIt(V05TestContext v05) {
+	}
+
+	// ---- WS-P2 (C16, AC7.11): ServerProfilesScreen with a canned view.
+
+	private static void walkServerProfiles(V05TestContext v05) {
+	}
+
+	// ---- WS-F (C02, AC8.12): FirstApplyScreen.
+
+	private static void walkFirstApply(V05TestContext v05) {
+	}
+
+	// ---- WS-F (C02, AC8.12): HowItWorksScreen.
+
+	private static void walkHowItWorks(V05TestContext v05) {
+	}
+
+	// ---- WS-W, then WS-W2 (2L, C18 AC9.5): ToolsScreen's startup lines.
+
+	private static void walkToolsStartup(V05TestContext v05) {
+	}
+
+	// ---- WS-B (L3, AC2A.1-AC2A.2): BenchmarkResultScreen and BenchmarkHistoryScreen.
+
+	private static void walkBenchmarkScreens(V05TestContext v05) {
+	}
+
+	// ---- WS-P (PF-2): RigTuneSettingsScreen's battery-offer row.
+
+	private static void walkBatteryOfferRow(V05TestContext v05) {
+	}
+
+	// ---- WS-L1 (4e, 4b): RigTuneSettingsScreen's mod-files row and MOD_FILES_NEWS on NoticeScreen.
+
+	private static void walkModFilesRowAndNews(V05TestContext v05) {
+	}
+
+	// ---- WS-L2 (4d, 4g): NoticeScreen with the held-changes and repair notices.
+
+	private static void walkLauncherNotices(V05TestContext v05) {
+	}
+
+	// ---- WS-E (3f): high contrast in a running game.
+
+	private static void highContrastRunningGame(V05TestContext v05) {
+	}
+
 	// --- helpers
 
 	// How many pixels of each RGB colour the screenshot has.
@@ -491,16 +563,6 @@ public class A11yGameTest implements FabricClientGameTest {
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}
-	}
-
-	private static void setNetwork(ClientGameTestContext context, RigTuneController real, Path configDir, boolean on) {
-		context.runOnClient(mc -> {
-			ClientSettings settings = ClientSettings.shared(configDir);
-			settings.networkEnabled = on;
-			settings.save(configDir);
-			real.settingsChanged();
-		});
-		context.waitFor(mc -> ClientSettings.load(configDir).networkEnabled == on && real.report() != null, 1200);
 	}
 
 	private static void resize(ClientGameTestContext context, int width, int height, int guiScale) {
@@ -547,7 +609,9 @@ public class A11yGameTest implements FabricClientGameTest {
 	}
 
 	// The stub's report plus a canned history, undo plan, preview, profiles and stutter session; the real JVM report, read once.
-	private static final class A11yController implements RigTuneController {
+	// The walks' canned world: it forwards to the stub (ForwardingController), answers the few real-backed methods from the
+	// game's controller, and the v0.5 views from CannedViews when an owner's walk set them.
+	private static final class A11yController extends ForwardingController {
 		private final StubController stub;
 		private final RigTuneController real;
 		private final Path configDir;
@@ -559,6 +623,7 @@ public class A11yGameTest implements FabricClientGameTest {
 		volatile List<Notice> notices = List.of();
 
 		A11yController(StubController stub, RigTuneController real, Path configDir) {
+			super(stub);
 			this.stub = stub;
 			this.real = real;
 			this.configDir = configDir;
@@ -581,26 +646,6 @@ public class A11yGameTest implements FabricClientGameTest {
 					new ProfileView(ProfileStore.TEMPLATE_PREFIX + TemplateId.MAX_FPS.id(), TemplateId.MAX_FPS.displayName(), ProfileView.TEMPLATE, true),
 					new ProfileView("p-a11y", Text.literal("My settings"), ProfileStore.SOURCE_SAVED, false));
 			this.stutter = new StutterView(false, false, false, false, false, stutterReport(), List.of());
-		}
-
-		@Override
-		public @Nullable Report report() {
-			return stub.report();
-		}
-
-		@Override
-		public Goal goal() {
-			return stub.goal();
-		}
-
-		@Override
-		public void setGoal(Goal goal) {
-			stub.setGoal(goal);
-		}
-
-		@Override
-		public Component apply(List<Recommendation> selected) {
-			return stub.apply(selected);
 		}
 
 		@Override
@@ -647,7 +692,32 @@ public class A11yGameTest implements FabricClientGameTest {
 
 		@Override
 		public StutterView stutter() {
-			return stutter;
+			StutterView canned = CannedViews.stutter();
+			return canned != null ? canned : stutter;
+		}
+
+		@Override
+		public TryItView tryIt() {
+			TryItView canned = CannedViews.tryIt();
+			return canned != null ? canned : super.tryIt();
+		}
+
+		@Override
+		public ServerProfilesView serverProfiles() {
+			ServerProfilesView canned = CannedViews.serverProfiles();
+			return canned != null ? canned : super.serverProfiles();
+		}
+
+		@Override
+		public ModFilesPolicy modFiles() {
+			ModFilesPolicy canned = CannedViews.modFiles();
+			return canned != null ? canned : super.modFiles();
+		}
+
+		@Override
+		public boolean firstApplyPending() {
+			Boolean canned = CannedViews.firstApplyPending();
+			return canned != null ? canned : super.firstApplyPending();
 		}
 
 		@Override

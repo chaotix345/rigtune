@@ -132,6 +132,16 @@ public final class FootprintBudgets {
 		return out;
 	}
 
+	// A 0-allocation key's value for a measurement taken in blocks: every block's bytes, summed. The fewest-allocating block
+	// would let a hook that allocates in some blocks only pass; the 0-allocation checks are strict (v0.5 ws-ci).
+	public static long allocatedBytes(long[] perBlock) {
+		long sum = 0;
+		for (long bytes : perBlock) {
+			sum += bytes;
+		}
+		return sum;
+	}
+
 	// FAIL: one AssertionError naming every violation. WARN: each goes to warn.
 	public void enforce(List<Violation> violations, Consumer<String> warn) {
 		if (violations.isEmpty()) {

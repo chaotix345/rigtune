@@ -160,8 +160,7 @@ public class PreviewScreen extends Screen {
 		if (confirm != null) {
 			confirmButtons(column, footerTop);
 		} else {
-			int buttonWidth = Math.min(150, column);
-			addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose()).bounds((width - buttonWidth) / 2, footerTop, buttonWidth, 20).build());
+			plainFooter(column, footerTop);
 		}
 		// Start the preview only once this screen's widgets exist: a preview that is ready at once completes on the render
 		// thread and rebuilds the screen, which inside this init() would add every widget a second time.
@@ -169,6 +168,12 @@ public class PreviewScreen extends Screen {
 			started = true;
 			load();
 		}
+	}
+
+	// The plain Preview's footer: Done. v0.5 (docs/v0.5/SPEC.md 6): C09's [Try it (measured)] [Done] goes here (WS-T).
+	private void plainFooter(int column, int top) {
+		int buttonWidth = Math.min(150, column);
+		addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose()).bounds((width - buttonWidth) / 2, top, buttonWidth, 20).build());
 	}
 
 	// Apply (only once there's something to apply) / Save only / Cancel, in one row.
@@ -237,6 +242,7 @@ public class PreviewScreen extends Screen {
 		if (!shown.now().isEmpty()) {
 			target.heading("rigtune.preview.section.now", width);
 			settings(target, shown.now(), width);
+			settingsSyncLine(target, shown, width);
 		}
 		if (!shown.atRestart().isEmpty()) {
 			target.heading("rigtune.preview.section.restart", width);
@@ -253,6 +259,7 @@ public class PreviewScreen extends Screen {
 			if (!shown.resolved()) {
 				target.row(Component.translatable("rigtune.preview.note.unresolved"), COLOR_NOTE, INDENT, width);
 			}
+			downloadChecks(target, shown, width);
 		}
 		if (!shown.disables().isEmpty()) {
 			target.heading("rigtune.preview.section.disables", width);
@@ -267,7 +274,22 @@ public class PreviewScreen extends Screen {
 				target.row(skipped(skipped), COLOR_NOTE, INDENT, width);
 			}
 		}
+		launcherLines(target, shown, width);
 		notes(target, shown, width);
+	}
+
+	// v0.5 per-owner rows (PLAN contracts 13g); each adds nothing until its owner fills it in.
+
+	// P0.4 (docs/v0.5/SPEC.md 4b, WS-L1): "Mod changes to make in <launcher>: N (listed on the main screen)".
+	private void launcherLines(PreviewList target, ApplyPreview shown, int width) {
+	}
+
+	// 4h (WS-W), under "Written now": the Modrinth App's game-settings sync line.
+	private void settingsSyncLine(PreviewList target, ApplyPreview shown, int width) {
+	}
+
+	// L5 (docs/v0.5/SPEC.md 2H, WS-H), under the downloads: what the in-memory fabric.mod.json checks found.
+	private void downloadChecks(PreviewList target, ApplyPreview shown, int width) {
 	}
 
 	// v0.4 (WS-P): the preview's notes (a profile's clamps and left-out keys, plan review P-L2).

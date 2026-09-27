@@ -52,6 +52,18 @@ class LogSafeTest {
 		assertFalse(error.contains(System.getProperty("user.home")), error);
 	}
 
+	// ws-ci review: a long outer message (a request URL) must not cut the root cause off the line.
+	@Test
+	void aLongMessageKeepsItsRootCause() {
+		IOException e = new IOException("GET https://api.modrinth.com/v2/" + "x".repeat(400) + " failed",
+				new java.nio.channels.ClosedChannelException());
+
+		String error = LogSafe.error(e);
+
+		assertTrue(error.endsWith(" (caused by ClosedChannelException)"), error);
+		assertTrue(error.length() <= 2 * (LogSafe.MAX_TEXT + 1) + " (caused by )".length(), error);
+	}
+
 	@Test
 	void onWindowsTheHomeFolderIsCutWhateverItsLetterCase() {
 		assumeTrue(java.io.File.separatorChar == '\\');

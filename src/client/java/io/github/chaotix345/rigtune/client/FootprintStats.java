@@ -17,6 +17,8 @@ import java.util.concurrent.TimeUnit;
 // whenever it runs: wall and render-thread CPU time of RigTunePreLaunch, onInitializeClient and the CLIENT_STARTED
 // handler, and the CPU every "RigTune..." thread used in the first WINDOW_MILLIS after CLIENT_STARTED. One INFO line
 // when the window closes. No Minecraft types here: this class loads during preLaunch.
+// v0.5 (docs/v0.5/SPEC.md X4.3): the startup window, the render thread while it runs one of those three, and the flag the
+// lazy v0.5 holder sets when it is resolved on that thread then. This class never refers to the holder.
 public final class FootprintStats {
 	public static final String THREAD_PREFIX = "RigTune";
 	public static final long WINDOW_MILLIS = 5_000;
@@ -35,6 +37,9 @@ public final class FootprintStats {
 	private static long initCpuStart;
 	private static @Nullable Map<Long, Long> windowBaseline;
 	private static @Nullable ThreadMXBean threads;
+	private static volatile @Nullable Thread startupWindow;
+	private static volatile String startupWindowName = "";
+	private static volatile @Nullable String renderThreadResolve;
 
 	private FootprintStats() {
 	}
@@ -55,12 +60,16 @@ public final class FootprintStats {
 	// The wall clock starts first, so the instrumentation's own cost (the first ThreadMXBean call) counts in wall time.
 	public static long preLaunchStart() {
 		long wall = System.nanoTime();
+		if (preLaunchWallNs == UNSET) {
+			openStartupWindow("preLaunch");
+		}
 		preLaunchCpuStart = cpu();
 		return wall;
 	}
 
 	// Only the launch's own call counts: a game test calls onPreLaunch() again later (with the apply lock held).
 	public static void preLaunchEnd(long start) {
+		closeStartupWindow();
 		if (preLaunchWallNs == UNSET) {
 			preLaunchWallNs = System.nanoTime() - start;
 			preLaunchCpuNs = singleThreadCpu(since(preLaunchCpuStart), preLaunchWallNs);
@@ -69,11 +78,15 @@ public final class FootprintStats {
 
 	public static long initStart() {
 		long wall = System.nanoTime();
+		if (initWallNs == UNSET) {
+			openStartupWindow("onInitializeClient");
+		}
 		initCpuStart = cpu();
 		return wall;
 	}
 
 	public static void initEnd(long start) {
+		closeStartupWindow();
 		if (initWallNs == UNSET) {
 			initWallNs = System.nanoTime() - start;
 			initCpuNs = singleThreadCpu(since(initCpuStart), initWallNs);
@@ -91,12 +104,58 @@ public final class FootprintStats {
 			RigTune.LOGGER.debug("RigTune's startup footprint window is off", e);
 		}
 		long cpuStart = cpu();
+		openStartupWindow("the CLIENT_STARTED handler");
 		try {
 			start.run();
 		} finally {
+			closeStartupWindow();
 			clientStartedWallNs = System.nanoTime() - wallStart;
 			clientStartedCpuNs = singleThreadCpu(since(cpuStart), clientStartedWallNs);
 		}
+	}
+
+	private static void openStartupWindow(String name) {
+		startupWindowName = name;
+		startupWindow = Thread.currentThread();
+	}
+
+	private static void closeStartupWindow() {
+		if (startupWindow == Thread.currentThread()) {
+			startupWindow = null;
+		}
+	}
+
+	// True on the render thread while it runs preLaunch, onInitializeClient or the CLIENT_STARTED handler.
+	public static boolean inStartupWindow() {
+		return Thread.currentThread() == startupWindow;
+	}
+
+	// The v0.5 holder calls this on every resolution. Only the render thread inside the window sets the flag (the first
+	// resolution is kept); a worker resolving meanwhile, or the render thread later, leaves it as it is.
+	public static void lazyResolved(String what) {
+		if (Thread.currentThread() == startupWindow && renderThreadResolve == null) {
+			renderThreadResolve = what + " during " + startupWindowName;
+		}
+	}
+
+	// What was resolved on the render thread inside the window, and in which part; null when nothing was (FootprintGameTest).
+	public static @Nullable String renderThreadResolve() {
+		return renderThreadResolve;
+	}
+
+	// For the unit tests only.
+	static void clearRenderThreadResolve() {
+		renderThreadResolve = null;
+	}
+
+	// For the unit tests only: as before the launch's preLaunch and init.
+	static void resetStartupForTests() {
+		preLaunchWallNs = UNSET;
+		preLaunchCpuNs = UNSET;
+		initWallNs = UNSET;
+		initCpuNs = UNSET;
+		startupWindow = null;
+		renderThreadResolve = null;
 	}
 
 	private static void closeWindow() {

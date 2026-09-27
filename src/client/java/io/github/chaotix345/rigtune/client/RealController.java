@@ -8,10 +8,19 @@ import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
 import io.github.chaotix345.rigtune.client.jvm.JvmService;
 import io.github.chaotix345.rigtune.client.notice.BatteryNoticeSource;
 import io.github.chaotix345.rigtune.client.notice.BenchmarkStaleNoticeSource;
+import io.github.chaotix345.rigtune.client.notice.FirstRunNoticeSource;
 import io.github.chaotix345.rigtune.client.notice.HardwareChangeNoticeSource;
+import io.github.chaotix345.rigtune.client.notice.HeldModChangesNoticeSource;
+import io.github.chaotix345.rigtune.client.notice.LauncherRepairNoticeSource;
+import io.github.chaotix345.rigtune.client.notice.ModFilesNewsNoticeSource;
 import io.github.chaotix345.rigtune.client.notice.NoticeCenter;
+import io.github.chaotix345.rigtune.client.notice.NoticeSource;
+import io.github.chaotix345.rigtune.client.notice.OutsideChangesNoticeSource;
 import io.github.chaotix345.rigtune.client.notice.RegressionNoticeSource;
 import io.github.chaotix345.rigtune.client.notice.ServerLimitNoticeSource;
+import io.github.chaotix345.rigtune.client.notice.ServerProfileNoticeSource;
+import io.github.chaotix345.rigtune.client.notice.StartupRegressionNoticeSource;
+import io.github.chaotix345.rigtune.client.notice.TryItNoticeSource;
 import io.github.chaotix345.rigtune.client.notice.WhatsNewNoticeSource;
 import io.github.chaotix345.rigtune.client.probe.FabricPins;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
@@ -27,6 +36,7 @@ import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.client.undo.DisableGuard;
 import io.github.chaotix345.rigtune.client.undo.GameState;
+import io.github.chaotix345.rigtune.client.undo.StaleGroups;
 import io.github.chaotix345.rigtune.client.undo.Staging;
 import io.github.chaotix345.rigtune.client.undo.UndoService;
 import io.github.chaotix345.rigtune.client.undo.VanillaChanges;
@@ -44,6 +54,7 @@ import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.jvm.JvmReport;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.BenchmarkSummary;
 import io.github.chaotix345.rigtune.core.model.Goal;
@@ -70,6 +81,7 @@ import io.github.chaotix345.rigtune.core.preview.DownloadInputs;
 import io.github.chaotix345.rigtune.core.preview.PreviewPlanner;
 import io.github.chaotix345.rigtune.core.profile.ProfileImport;
 import io.github.chaotix345.rigtune.core.profile.ProfileView;
+import io.github.chaotix345.rigtune.core.profile.ServerProfilesView;
 import io.github.chaotix345.rigtune.core.recommend.ModConflicts;
 import io.github.chaotix345.rigtune.core.recommend.Recommender;
 import io.github.chaotix345.rigtune.core.recommend.ServerCap;
@@ -77,7 +89,9 @@ import io.github.chaotix345.rigtune.core.report.ModrinthOffAdvice;
 import io.github.chaotix345.rigtune.core.report.ShareReport;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.rules.RulesSources;
+import io.github.chaotix345.rigtune.core.stutter.FixOffer;
 import io.github.chaotix345.rigtune.core.stutter.StutterView;
+import io.github.chaotix345.rigtune.core.tryit.TryItView;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -131,6 +145,9 @@ public final class RealController implements RigTuneController {
 	private final AwarenessService awarenessService;
 	private final StartupTimes startupTimes;
 	private final NoticeCenter noticeCenter;
+	// v0.5 (docs/v0.5/SPEC.md X4, C4): the feature services, made on the first v05() call, never here.
+	private volatile @Nullable V05Services v05;
+	private final Object v05Lock = new Object();
 
 	private volatile @Nullable RulesDocument rules;
 	private volatile @Nullable HardwareProfile hardware;
@@ -160,8 +177,8 @@ public final class RealController implements RigTuneController {
 		this.staging = new Staging(configDir, pendingFile, ConfigTargets.all(configDir), ClientJournal.get());
 		// The Undo screen plans off the render thread; the options are still read on it.
 		this.undoService = new UndoService(staging, ClientJournal.get(),
-				() -> minecraft.isSameThread() ? new GameState(minecraft.options, staging.targets(), modsDir, rulesSettingLabels())
-						: minecraft.submit(() -> new GameState(minecraft.options, staging.targets(), modsDir, rulesSettingLabels())).join(),
+				() -> minecraft.isSameThread() ? new GameState(minecraft.options, staging.targets(), modsDir, rulesSettingLabels(), this::modFiles)
+						: minecraft.submit(() -> new GameState(minecraft.options, staging.targets(), modsDir, rulesSettingLabels(), this::modFiles)).join(),
 				values -> {
 					Map<String, Boolean> written = new LinkedHashMap<>();
 					SettingsBridge.applyVanilla(minecraft.options, values).forEach((key, result) -> written.put(key, result.ok()));
@@ -176,9 +193,19 @@ public final class RealController implements RigTuneController {
 		this.awarenessService = new AwarenessService(this, configDir);
 		this.startupTimes = new StartupTimes(this, configDir);
 		// C3: one source per notice priority, in NoticePriority order; each reaches its service through this controller.
-		this.noticeCenter = new NoticeCenter(List.of(new BatteryNoticeSource(this), new ServerLimitNoticeSource(this),
-				new RegressionNoticeSource(this), new HardwareChangeNoticeSource(this), new WhatsNewNoticeSource(this),
-				new BenchmarkStaleNoticeSource(this)), awarenessService);
+		// v0.5 (X4): the list is resolved on the first notices() call, which makes the v0.5 sources then, never here.
+		NoticeSource battery = new BatteryNoticeSource(this);
+		NoticeSource serverLimit = new ServerLimitNoticeSource(this);
+		NoticeSource regression = new RegressionNoticeSource(this);
+		NoticeSource hardwareChange = new HardwareChangeNoticeSource(this);
+		NoticeSource whatsNew = new WhatsNewNoticeSource(this);
+		NoticeSource stale = new BenchmarkStaleNoticeSource(this);
+		this.noticeCenter = new NoticeCenter(() -> {
+			FootprintStats.lazyResolved("the v0.5 notice sources");
+			return List.of(battery, new ServerProfileNoticeSource(this), new HeldModChangesNoticeSource(this), new LauncherRepairNoticeSource(this),
+					new FirstRunNoticeSource(this), serverLimit, new TryItNoticeSource(this), regression, new StartupRegressionNoticeSource(this),
+					hardwareChange, new OutsideChangesNoticeSource(this), new ModFilesNewsNoticeSource(this), whatsNew, stale);
+		}, List.of(battery, serverLimit, regression, hardwareChange, whatsNew, stale), awarenessService);
 	}
 
 	private Map<String, RulesDocument.SettingLabel> rulesSettingLabels() {
@@ -190,6 +217,8 @@ public final class RealController implements RigTuneController {
 		this.minecraft = minecraft;
 		reloadRules();
 		rescan();
+		// v0.5 (PLAN contracts 13d): the features' start-time work, one Probes.EXECUTOR task.
+		V05Services.afterStart(this);
 	}
 
 	// Re-runnable: a newer load (settingsChanged) makes an older one stale, whether it is still queued or fetching.
@@ -332,7 +361,10 @@ public final class RealController implements RigTuneController {
 						Set<String> queued = ModScanner.queuedUpdates();
 						Set<String> loaded = ModScanner.loadedIds();
 						List<Op> dropped = dropQueuedUpdates(queued, loaded);
-						return new Rebuilt(ServerCap.apply(Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion, queued), live, doc), dropped, queued, loaded);
+						List<Op> stale = dropStaleGroups(loaded);
+						Report built = ServerCap.apply(Recommender.recommend(doc, hw, scanned, settings, data, g, modVersion, queued), live, doc);
+						// v0.5 (PLAN contracts 13a): the report post-steps, after ServerCap; ModrinthOffAdvice stays last.
+						return new Rebuilt(V05Hooks.afterRecommend(built, new V05Hooks.StepContext(this, doc, live)), dropped, stale, queued, loaded);
 					}, Probes.EXECUTOR)
 					.whenComplete((rebuilt, error) -> minecraft.execute(() -> {
 						if (error != null) {
@@ -343,6 +375,9 @@ public final class RealController implements RigTuneController {
 						if (!rebuilt.dropped().isEmpty()) {
 							droppedQueuedUpdates(rebuilt.dropped(), rebuilt.queued(), rebuilt.loaded(), scanned);
 						}
+						if (!rebuilt.stale().isEmpty()) {
+							droppedStaleGroups(rebuilt.stale(), scanned);
+						}
 						if (gen == generation) {
 							report = this.settings.modrinthAllowed() ? withoutStaged(rebuilt.report())
 									: ModrinthOffAdvice.apply(withoutStaged(rebuilt.report()), !this.settings.networkEnabled);
@@ -351,7 +386,7 @@ public final class RealController implements RigTuneController {
 		});
 	}
 
-	private record Rebuilt(Report report, List<Op> dropped, Set<String> queued, Set<String> loaded) {
+	private record Rebuilt(Report report, List<Op> dropped, List<Op> stale, Set<String> queued, Set<String> loaded) {
 	}
 
 	// Also at exit: an updater can have queued its build since the last rebuild.
@@ -379,6 +414,30 @@ public final class RealController implements RigTuneController {
 		recountStaged();
 		status = Component.translatable("rigtune.status.queued_update_dropped",
 				String.join(", ", StagedRecommendations.droppedModNames(dropped, queued, loaded, scanned)));
+	}
+
+	// v0.5 (docs/v0.5/SPEC.md 2H RW-3, PLAN contracts 13b): a staged group that can never run is unstaged next to the
+	// queued updates (StaleGroups); a failure leaves it for the next rebuild and never stops the rebuild.
+	private List<Op> dropStaleGroups(Set<String> loaded) {
+		try {
+			List<Op> dropped = StaleGroups.drop(staging, loaded);
+			return dropped == null ? List.of() : dropped;
+		} catch (Throwable t) {
+			RigTune.LOGGER.warn("Could not check RigTune's staged changes for stale groups", t);
+			return List.of();
+		}
+	}
+
+	private void droppedStaleGroups(List<Op> dropped, List<InstalledMod> scanned) {
+		recountStaged();
+		try {
+			Component dropStatus = StaleGroups.status(dropped, scanned);
+			if (dropStatus != null) {
+				status = dropStatus;
+			}
+		} catch (Throwable t) {
+			RigTune.LOGGER.warn("Could not describe the stale RigTune changes that were dropped", t);
+		}
 	}
 
 	// After a drop, an undo or a discard: a recommendation stays staged only while its ops are still in pending.json,
@@ -419,10 +478,13 @@ public final class RealController implements RigTuneController {
 
 	// v0.4 (docs/v0.4/SPEC.md 4, C4): the same Apply, journaled under a given entry id (a profile switch labels it in
 	// profiles.json). One journal entry per Apply, downloads that finish later included (review H4).
+	@Override
 	public Component apply(List<Recommendation> selected, String entryId) {
 		if (downloading) {
 			return Component.translatable("rigtune.status.busy");
 		}
+		// v0.5 (PLAN contracts 13c): the apply guard.
+		selected = V05Hooks.beforeApply(this, selected);
 		Map<String, String> vanilla = new LinkedHashMap<>();
 		List<ConfigTargets.Target> targets = ConfigTargets.all(configDir);
 		Map<ConfigTargets.Target, Map<String, String>> configPatches = new LinkedHashMap<>();
@@ -495,6 +557,9 @@ public final class RealController implements RigTuneController {
 		} else if (pendingChanges() > 0) {
 			parts.add(Component.translatable("rigtune.status.restart", pendingChanges()));
 		}
+		// v0.5 (PLAN contracts 13c): the after-apply hooks.
+		V05Hooks.afterApply(this, new V05Hooks.ApplyFacts(entryId, selected, disablesAllowed, settingsOk, settingsFailed, immediateOps.size(),
+				stageFailed, downloads.size()), parts);
 		return join(parts);
 	}
 
@@ -735,7 +800,7 @@ public final class RealController implements RigTuneController {
 	// v0.4 (docs/v0.4/SPEC.md 2b): History's labels, for the Preview.
 	@Override
 	public HistoryModel.Labels settingLabels() {
-		return HistoryModel.Labels.of(new GameState(minecraft.options, staging.targets(), modsDir, rulesSettingLabels()));
+		return HistoryModel.Labels.of(new GameState(minecraft.options, staging.targets(), modsDir, rulesSettingLabels(), this::modFiles));
 	}
 
 	@Override
@@ -824,6 +889,7 @@ public final class RealController implements RigTuneController {
 		return mods;
 	}
 
+	@Override
 	public boolean downloading() {
 		return downloading;
 	}
@@ -978,5 +1044,106 @@ public final class RealController implements RigTuneController {
 	@Override
 	public StartupTimes.View startupTimes() {
 		return startupTimes.view();
+	}
+
+	// v0.5 (docs/v0.5/SPEC.md X4, C4): the lazy holder of the feature services. Made on the first call, which may be on a
+	// worker (the start hook's task) or on the render thread after startup (FootprintStats flags one inside startup).
+	public V05Services v05() {
+		V05Services services = v05;
+		if (services == null) {
+			synchronized (v05Lock) {
+				services = v05;
+				if (services == null) {
+					services = new V05Services(this);
+					v05 = services;
+				}
+			}
+		}
+		return services;
+	}
+
+	// v0.5 (C4): one-line delegations. C02 (WS-F).
+
+	@Override
+	public boolean firstApplyPending() {
+		return v05().firstRun().firstApplyPending();
+	}
+
+	// P0.4 (WS-L1).
+
+	@Override
+	public ModFilesPolicy modFiles() {
+		return v05().modFiles().policy();
+	}
+
+	// C20 (WS-S2).
+
+	@Override
+	public ApplyPreview previewStutterFix(FixOffer.Offer offer) {
+		return v05().stutterFixes().preview(offer);
+	}
+
+	@Override
+	public Component applyStutterFix(FixOffer.Offer offer) {
+		return v05().stutterFixes().apply(offer);
+	}
+
+	@Override
+	public void dismissStutterFix(String entryId) {
+		v05().stutterFixes().dismiss(entryId);
+	}
+
+	// C09 (WS-T).
+
+	@Override
+	public TryItView tryIt() {
+		return v05().tryIt().view();
+	}
+
+	@Override
+	public @Nullable Text tryItRefusal(Recommendation rec) {
+		return v05().tryIt().refusal(rec);
+	}
+
+	@Override
+	public Component startTryIt(Recommendation rec, BenchmarkRequest.Scene scene) {
+		return v05().tryIt().start(rec, scene);
+	}
+
+	@Override
+	public void tryItMeasureNow() {
+		v05().tryIt().measureNow();
+	}
+
+	@Override
+	public Component tryItKeep() {
+		return v05().tryIt().keep();
+	}
+
+	@Override
+	public void tryItCancel() {
+		v05().tryIt().cancel();
+	}
+
+	// C16 (WS-P2).
+
+	@Override
+	public ServerProfilesView serverProfiles() {
+		return v05().serverProfiles().view();
+	}
+
+	@Override
+	public Component rememberServerProfile(@Nullable String profileId) {
+		return v05().serverProfiles().remember(profileId);
+	}
+
+	@Override
+	public Component forgetServerProfile(String key) {
+		return v05().serverProfiles().forget(key);
+	}
+
+	@Override
+	public Component forgetAllServerProfiles() {
+		return v05().serverProfiles().forgetAll();
 	}
 }

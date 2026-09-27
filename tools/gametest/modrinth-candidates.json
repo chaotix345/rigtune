@@ -1,0 +1,13 @@
+{
+  "about": "The game tests' fake Modrinth (build.gradle's gametestModrinthCatalog; docs/v0.5/design/ws-ci.md). Every mod the rules can recommend that the production game test doesn't load gets one fixture version for the node's Minecraft version and Fabric, with an id and date fixed by the task, requiring fabric-api; a mod listed under dependencies gets these relations instead. Entity Culling marked incompatible with Sodium exercises the resolver's conflict path deterministically (it isn't Modrinth's real metadata).",
+  "dependencies": {
+    "entityculling": [
+      {"project_id": "P7dR8mSH", "dependency_type": "required"},
+      {"project_id": "AANobbMI", "dependency_type": "incompatible"}
+    ],
+    "sodium-extra": [
+      {"project_id": "P7dR8mSH", "dependency_type": "required"},
+      {"project_id": "AANobbMI", "dependency_type": "required"}
+    ]
+  }
+}

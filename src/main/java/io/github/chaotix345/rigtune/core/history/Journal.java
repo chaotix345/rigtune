@@ -245,7 +245,7 @@ public final class Journal implements ChangeRecorder {
 			if (Objects.equals(e.id(), entryId)) {
 				List<JournalChange> all = new ArrayList<>(e.changes());
 				all.addAll(changes);
-				out.set(i, new JournalEntry(e.id(), e.at(), e.kind(), e.rigtuneVersion(), e.mcVersion(), e.undoOf(), all));
+				out.set(i, new JournalEntry(e.id(), e.at(), e.kind(), e.rigtuneVersion(), e.mcVersion(), e.undoOf(), all, e.foldedEntryIds()));
 				return out;
 			}
 		}

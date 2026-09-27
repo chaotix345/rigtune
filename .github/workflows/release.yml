@@ -63,7 +63,7 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: microsoft
-          java-version: '25'
+          java-version: '25.0.3'
 
       - name: Build
         run: ./gradlew build
@@ -121,7 +121,7 @@ jobs:
       - uses: actions/setup-java@v6
         with:
           distribution: microsoft
-          java-version: '25'
+          java-version: '25.0.3'
 
       - name: The staged release files (the jars the E2E tested)
         uses: actions/download-artifact@v7

@@ -5,6 +5,7 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.UnfinishedGroups.Rename;
 import io.github.chaotix345.rigtune.core.history.UndoPlan.Action;
 import io.github.chaotix345.rigtune.core.history.UndoPlan.Item;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Text;
 
 import java.nio.file.Path;
@@ -106,6 +107,12 @@ public final class UndoPlanner {
 		// the op's file isn't one RigTune knows (docs/v0.4/SPEC.md 2n).
 		default String keyOf(Op op, String keyInFile) {
 			return null;
+		}
+
+		// v0.5 (docs/v0.5/SPEC.md 4c): who changes the instance's mod files. RIGTUNE is 0.4's behaviour; WS-L1's policy
+		// skip reads it.
+		default ModFilesPolicy modFiles() {
+			return ModFilesPolicy.RIGTUNE;
 		}
 	}
 

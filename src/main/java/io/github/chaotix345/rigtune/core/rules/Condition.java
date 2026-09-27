@@ -64,6 +64,10 @@ public final class Condition {
 	public Integer cpuContentionShareAtLeast;
 	public Integer spikesPerMinuteAtLeast;
 	public List<String> gcCollector;
+	// v0.5, allowed only inside stutterFixes[].evidence (docs/v0.5/SPEC.md 5, C2): cause -> at least that many spikes in
+	// which the cause claimed at least half of the spike's lost time (a whole number, parsed by the evaluator). UNKNOWN
+	// without facts, like the other stutter keys; 0.4.0 doesn't know it and would poison a stutterAdvice `when` with it.
+	public Map<String, String> causeSpikesAtLeast;
 
 	// Keys of this object that this client doesn't know, filled in while parsing. Any unknown key anywhere in a
 	// condition tree makes the whole top-level condition false (fail closed).

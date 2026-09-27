@@ -584,6 +584,8 @@ class LangCheckTest {
 						"rigtune.benchmark.throttled.body")));
 		// Minecraft names a key-mapping category key.category.<namespace>.<path>: RigTuneClient registers (MOD_ID, "rigtune").
 		out.add(new Family("rigtune", List.of(), Set.of("key.category." + RigTune.MOD_ID + ".rigtune")));
+		// v0.5: each feature's own families (docs/v0.5/PLAN.md contracts item 13h).
+		V05LangFamilies.add(out);
 		return out;
 	}
 

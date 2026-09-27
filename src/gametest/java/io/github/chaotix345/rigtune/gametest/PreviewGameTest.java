@@ -14,7 +14,6 @@ import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
-import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
@@ -202,8 +201,9 @@ public class PreviewGameTest implements FabricClientGameTest {
 				mc.gui.setScreen(new PreviewScreen(mc.gui.screen(), real, report.recommendations().stream().filter(Recommendation::appliable).toList()));
 			});
 		}
-		// Five minutes: the ticked additions are looked up on the live Modrinth API, one after another.
-		PreviewScreen screen = waitForPreview(context, 6000);
+		// The ticked additions are looked up one after another, on the local fake Modrinth (build.gradle's ModrinthFixture;
+		// a minute is ample; it was five against the live API).
+		PreviewScreen screen = waitForPreview(context, 1200);
 		ApplyPreview preview = context.computeOnClient(mc -> screen.preview());
 		check(preview != null, "the real preview finished");
 		List<String> rows = context.computeOnClient(mc -> screen.rowText());
@@ -505,46 +505,15 @@ public class PreviewGameTest implements FabricClientGameTest {
 	}
 
 	// The stub's report and a canned preview; remembers which items it was asked to preview.
-	private static final class CannedController implements RigTuneController {
-		private final StubController stub;
+	private static final class CannedController extends ForwardingController {
 		private final boolean pending;
 		private final ApplyPreview preview;
 		private volatile List<String> asked = List.of();
 
 		CannedController(StubController stub, boolean pending, ApplyPreview preview) {
-			this.stub = stub;
+			super(stub);
 			this.pending = pending;
 			this.preview = preview;
-		}
-
-		@Override
-		public @Nullable Report report() {
-			return stub.report();
-		}
-
-		@Override
-		public Goal goal() {
-			return stub.goal();
-		}
-
-		@Override
-		public void setGoal(Goal goal) {
-			stub.setGoal(goal);
-		}
-
-		@Override
-		public Component apply(List<Recommendation> selected) {
-			return stub.apply(selected);
-		}
-
-		@Override
-		public void startBenchmark() {
-			stub.startBenchmark();
-		}
-
-		@Override
-		public void rescan() {
-			stub.rescan();
 		}
 
 		@Override
