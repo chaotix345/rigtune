@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": 16,
-  "generatedAt": "2026-09-26T14:45:07Z",
+  "revision": 17,
+  "generatedAt": "2026-09-27T15:26:22Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -882,7 +882,7 @@
       "conflictsWith": [],
       "defaultSelected": false,
       "upstream": {
-        "fabulouslyOptimized": false,
+        "fabulouslyOptimized": true,
         "additive": false
       }
     },
@@ -973,7 +973,7 @@
         "tierAtMost": 2
       },
       "impact": "high",
-      "reason": "8 chunks is a good balance of view distance and frame rate for entry-level hardware."
+      "reason": "On this PC's estimated tier, 8 chunks is a good balance of view distance and frame rate."
     },
     {
       "key": "vanilla.renderDistance",
@@ -1049,7 +1049,7 @@
         ],
         "tierAtMost": 2
       },
-      "reason": "On entry-level hardware, stay at the low end of the 8 to 12 vanilla chunks Distant Horizons' FAQ recommends; Distant Horizons draws the terrain beyond that."
+      "reason": "On this PC's estimated tier, stay at the low end of the 8 to 12 vanilla chunks Distant Horizons' FAQ recommends; Distant Horizons draws the terrain beyond that."
     },
     {
       "key": "vanilla.simulationDistance",
@@ -1068,7 +1068,7 @@
         "tierAtMost": 2
       },
       "impact": "medium",
-      "reason": "Simulating up to 6 chunks keeps nearby farms working without overloading an entry-level CPU."
+      "reason": "On this PC's estimated tier, simulating up to 6 chunks keeps nearby farms working while keeping the game's tick load down."
     },
     {
       "key": "vanilla.simulationDistance",
@@ -1215,7 +1215,7 @@
         "tierAtMost": 2
       },
       "impact": "low",
-      "reason": "Turning clouds off saves GPU time on entry-level graphics."
+      "reason": "On this PC's estimated tier, turning clouds off saves some GPU time."
     },
     {
       "key": "vanilla.cutoutLeaves",
@@ -1599,6 +1599,16 @@
       "impact": "low",
       "title": "OpenGL setting adjusted by Sodium",
       "text": "Your system doesn't support one of OpenGL's faster error-checking modes (common on Linux with Wayland), so Sodium turned it off to avoid a crash at start-up. You don't need to do anything."
+    },
+    {
+      "id": "old-client-launcher-mods",
+      "when": {
+        "always": true
+      },
+      "kind": "warning",
+      "impact": "medium",
+      "title": "If a launcher manages your mods",
+      "text": "Using the Modrinth App, CurseForge, ATLauncher, GDLauncher, or Prism with mod updates? Untick RigTune's Install, Update and Disable items and make those changes in the launcher: RigTune's mod-file changes can make the launcher's updates fail. Already happened? In the Modrinth App: Content → Disabled → delete the old copies. RigTune 0.5 leaves mod files to your launcher."
     }
   ],
   "availability": {
@@ -1618,6 +1628,7 @@
       "lambdynamiclights",
       "lithium",
       "modernfix-mvus",
+      "moonrise-opt",
       "moreculling",
       "nvidium",
       "renderscale",
@@ -1670,7 +1681,9 @@
         "cloth-config",
         "configmanager",
         "continuity",
+        "controlify",
         "crash-assistant",
+        "debugify",
         "dynamic-fps",
         "e4mc",
         "entity-model-features",
@@ -1697,9 +1710,12 @@
         "reeses-sodium-options",
         "renice-shot",
         "rrls",
+        "skyboxify",
         "sodium",
         "sodium-extra",
-        "sodium-shadowy-path-blocks"
+        "sodium-shadowy-path-blocks",
+        "yacl",
+        "zoomify"
       ]
     },
     "additive": {
