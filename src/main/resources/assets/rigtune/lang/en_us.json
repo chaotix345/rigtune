@@ -103,7 +103,7 @@
 	"rigtune.firstrun.action.how": "How it works",
 	"rigtune.firstrun.applied.downloading": "Mod downloads are still running; they're added to this list when they finish.",
 	"rigtune.firstrun.applied.no_mod_files": "This Apply didn't change any mod files.",
-	"rigtune.firstrun.applied.no_restart": "All of it is in effect now. No restart needed.",
+	"rigtune.firstrun.applied.no_restart": "Everything listed here is in effect now. No restart needed.",
 	"rigtune.firstrun.applied.nothing": "Nothing was recorded for this Apply.",
 	"rigtune.firstrun.applied.restart": "Restart Minecraft to finish: RigTune makes the changes waiting for a restart after you close the game.",
 	"rigtune.firstrun.applied.section.now": "In effect now",

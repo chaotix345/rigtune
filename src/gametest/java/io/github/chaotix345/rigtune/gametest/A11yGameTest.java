@@ -568,10 +568,13 @@ public class A11yGameTest implements FabricClientGameTest {
 	// The screen as it is, with High Contrast Block Outline on (Palette reads it when drawing), then the option as it was.
 	private static void highContrastScreenshot(ClientGameTestContext context, String name) {
 		boolean outline = context.computeOnClient(mc -> mc.options.highContrastBlockOutline().get());
-		context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(true));
-		context.waitTicks(2);
-		context.takeScreenshot(name);
-		context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(outline));
+		try {
+			context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(true));
+			context.waitTicks(2);
+			context.takeScreenshot(name);
+		} finally {
+			context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(outline));
+		}
 	}
 
 	// ---- WS-W, then WS-W2 (2L, C18 AC9.5): ToolsScreen's startup lines.

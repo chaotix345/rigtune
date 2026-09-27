@@ -29,7 +29,8 @@ import java.util.function.Supplier;
 // first Apply. It lists that Apply's journal entry as History does (HistoryModel's changes, drawn with HistoryScreen's own
 // describe/failureText/statusColor at History's widths), grouped "In effect now" / "At the next restart" / "Undone or
 // cancelled", under Apply's status line. The notes never imply a restart that isn't needed: the restart note only with a
-// row waiting for the restart, "No restart needed" only with none, no download running and nothing undone. Downloads
+// row waiting for the restart, "No restart needed" only with none, no download running and nothing undone (and it speaks
+// of the rows listed: a change Apply couldn't make isn't journaled, and the status line above counts it). Downloads
 // join the entry when they finish, so the list reloads when the controller's status changes or its downloads stop; it
 // also reloads when it comes back from Undo or History. The history is read off the render thread, as History does.
 // Undo this Apply, History… (that entry selected) and Done (and Esc) back to the RigTune screen.
@@ -72,6 +73,8 @@ public class FirstApplyScreen extends Screen {
 	private final @Nullable Screen parent;
 	private final RigTuneController controller;
 	private final String entryId;
+	// Who changed mod files when this Apply ran (P0.4), for the no-mod-files note; read once, as the Apply saw it.
+	private final ModFilesPolicy policy;
 	private @Nullable Component status;
 	private @Nullable Component seenStatus;
 	private boolean shownDownloading;
@@ -95,6 +98,7 @@ public class FirstApplyScreen extends Screen {
 		this.status = status;
 		this.seenStatus = controller.status();
 		this.shownDownloading = controller.downloading();
+		this.policy = controller.modFiles();
 	}
 
 	// --- what the list shows (static, for the unit tests)
@@ -259,7 +263,7 @@ public class FirstApplyScreen extends Screen {
 	private void layout() {
 		int column = Math.min(width - 32, 480);
 		// A reload (downloads finished, back from Undo or History) keeps the rows it has until the new ones arrive.
-		items = items(status, view, failed, loading && view == null, entryId, shownDownloading, controller.modFiles());
+		items = items(status, view, failed, loading && view == null, entryId, shownDownloading, policy);
 		HistoryModel.Entry entry = shownEntry();
 		List<Button> buttons = new ArrayList<>();
 		Button undo = Button.builder(Component.translatable("rigtune.firstrun.applied.undo"), b -> open(new UndoScreen(this, controller, entryId)))

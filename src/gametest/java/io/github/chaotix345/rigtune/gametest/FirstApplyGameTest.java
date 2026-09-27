@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.gametest;
 
+import com.google.gson.JsonArray;
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ClientSettings;
@@ -82,6 +83,7 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 		// AC8.15: the start hook read the disk on Probes.EXECUTOR, never on the render thread.
 		check(firstRun.loadedOn() != null && firstRun.loadedOn().startsWith("RigTune worker"), "FirstRunService.load ran on " + firstRun.loadedOn());
 		boolean network = GameTestNet.set(context, real, false);
+		boolean dismissedBefore = dismissed(v05);
 		List<String> toUndo = new ArrayList<>();
 		try {
 			newPlayer(context, v05, firstRun);
@@ -112,6 +114,12 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 					RigTune.LOGGER.error("FirstApplyGameTest: couldn't undo {}", id, t);
 				}
 			}
+			// Later classes see a returning player (as a passing run leaves it, also after a failure part-way) and
+			// awareness.json's dismissals as this class found them.
+			firstRun.forceStatusForTests(FirstRun.Status.RETURNING);
+			if (!dismissedBefore && dismissed(v05)) {
+				undismiss(v05);
+			}
 			GameTestNet.set(context, real, network);
 			v05.resize(854, 480, 0);
 			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
@@ -137,7 +145,10 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 		RigTune.LOGGER.warn("FirstApplyGameTest: not a fresh run dir (first entrypoint: {}); restoring a new player through the test seam",
 				firstEntrypoint);
 		firstRun.forceStatusForTests(FirstRun.Status.NEW);
-		check(!AwarenessStore.shared(v05.configDir()).dismissed().contains(FirstRunNoticeSource.KEY), "the guide wasn't dismissed in this run dir");
+		// A reused dev run dir can hold an earlier run's Got it: part of the fresh state the seam restores.
+		if (dismissed(v05)) {
+			undismiss(v05);
+		}
 	}
 
 	private static void openRigTuneFromTheTitleScreen(ClientGameTestContext context) {
@@ -234,13 +245,17 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 		statuses.stream().filter(JournalChange.STAGED::equals).forEach(grouped::add);
 		statuses.stream().filter(s -> !JournalChange.APPLIED.equals(s) && !JournalChange.STAGED.equals(s)).forEach(grouped::add);
 		boolean staged = grouped.contains(JournalChange.STAGED);
-		boolean downloading = real.downloading();
+		boolean inEffect = grouped.contains(JournalChange.APPLIED);
+		boolean undone = grouped.stream().anyMatch(s -> !JournalChange.APPLIED.equals(s) && !JournalChange.STAGED.equals(s));
 		List<String> rows = context.computeOnClient(mc -> {
 			FirstApplyScreen screen = (FirstApplyScreen) mc.gui.screen();
+			boolean downloading = real.downloading();
 			check(screen.changeStatuses().equals(grouped), "the rows' statuses are the entry's, grouped: " + screen.changeStatuses() + " vs " + grouped);
 			List<String> notes = screen.notes();
 			check(notes.contains("rigtune.firstrun.applied.restart") == staged, "the restart note iff a row waits for the restart: " + notes);
-			check(notes.contains("rigtune.firstrun.applied.no_restart") == (!staged && !downloading), "no restart needed iff none waits: " + notes);
+			check(notes.contains("rigtune.firstrun.applied.no_restart") == (!staged && !downloading && !undone && inEffect),
+					"no restart needed iff none waits, nothing downloads or was undone, and a row is in effect: " + notes);
+			check(notes.contains("rigtune.firstrun.applied.downloading") == downloading, "the downloading note iff downloads run: " + notes);
 			check(notes.getLast().equals("rigtune.firstrun.applied.undo_hint"), "the undo hint last: " + notes);
 			String narration = screen.getNarrationMessage().getString();
 			String outcome = Component.translatable(staged ? "rigtune.firstrun.applied.restart" : "rigtune.firstrun.applied.no_restart").getString();
@@ -248,8 +263,7 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 					"the open narration has the title and the restart outcome: " + narration);
 			return screen.changeRowText();
 		});
-		RigTune.LOGGER.info("FirstApplyGameTest: the first Apply ({}): statuses {}, downloading {}, rows:\n{}", entryId, grouped, downloading,
-				String.join("\n", rows));
+		RigTune.LOGGER.info("FirstApplyGameTest: the first Apply ({}): statuses {}, rows:\n{}", entryId, grouped, String.join("\n", rows));
 		layoutAtEverySize(context, v05, "firstapply-confirmation");
 
 		// AC8.6 and AC8.8: History… opens History with that entry selected, whose rows are the confirmation's, at the same size.
@@ -287,7 +301,7 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 			Notice shown = rigtune.shownNotice();
 			check(shown == null || !shown.key().equals(FirstRunNoticeSource.KEY), "the guide is gone after the first Apply: " + shown);
 		});
-		check(!AwarenessStore.shared(v05.configDir()).dismissed().contains(FirstRunNoticeSource.KEY), "gone without Got it");
+		check(!dismissed(v05), "gone without Got it");
 		context.takeScreenshot("firstapply-after-854x480-scale2");
 
 		// AC8.8: Esc returns to the opener as well.
@@ -325,7 +339,7 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 			Notice shown = ((RigTuneScreen) mc.gui.screen()).shownNotice();
 			check(shown == null || !shown.key().equals(FirstRunNoticeSource.KEY), "Got it hid the guide: " + shown);
 		});
-		check(AwarenessStore.shared(v05.configDir()).dismissed().contains(FirstRunNoticeSource.KEY), "Got it is stored in awareness.json");
+		check(dismissed(v05), "Got it is stored in awareness.json");
 		context.runOnClient(mc -> mc.gui.setScreen(new RigTuneScreen(new TitleScreen(), real)));
 		context.waitForScreen(RigTuneScreen.class);
 		context.waitTicks(2);
@@ -410,6 +424,26 @@ public class FirstApplyGameTest implements FabricClientGameTest {
 		Component done = context.computeOnClient(mc -> real.undo(plan));
 		RigTune.LOGGER.info("FirstApplyGameTest: undid {}: {}", entryId, done.getString());
 		context.waitFor(mc -> real.report() != null, 1200);
+	}
+
+	private static boolean dismissed(V05TestContext v05) {
+		return AwarenessStore.shared(v05.configDir()).dismissed().contains(FirstRunNoticeSource.KEY);
+	}
+
+	// Takes the guide's key back out of awareness.json's dismissals (no RigTune code does: a dismissal is for good).
+	private static void undismiss(V05TestContext v05) {
+		check(AwarenessStore.shared(v05.configDir()).update(root -> {
+			if (root.get(AwarenessStore.DISMISSED) instanceof JsonArray keys) {
+				JsonArray kept = new JsonArray();
+				keys.forEach(key -> {
+					if (!(key.isJsonPrimitive() && FirstRunNoticeSource.KEY.equals(key.getAsString()))) {
+						kept.add(key);
+					}
+				});
+				root.add(AwarenessStore.DISMISSED, kept);
+			}
+			return root;
+		}), "took firstrun.guide out of awareness.json's dismissals");
 	}
 
 	private static @Nullable String newestEntry(ClientGameTestContext context, RealController real) {

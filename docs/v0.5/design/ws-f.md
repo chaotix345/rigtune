@@ -119,9 +119,12 @@ the guide; the confirmation, its History row functions, the restart logic and th
 
 ## Deviations
 - **"No restart needed" also needs nothing undone and one row in effect.** AC8.7 says the note shows iff no row is STAGED
-  and no download runs. After Undo this Apply from the confirmation the rows read Undone/Cancelled, and "All of it is in
-  effect now" would then be false (X3), so the note also needs every row still applied (and at least one). Before an
-  Undo (the case the AC describes) the two rules agree; `FirstApplyScreenTest.undoneOrCancelled` pins the difference.
+  and no download runs. After Undo this Apply from the confirmation the rows read Undone/Cancelled, and saying they're in
+  effect would then be false (X3), so the note also needs every row still applied (and at least one). Before an Undo (the
+  case the AC describes) the two rules agree; `FirstApplyScreenTest.undoneOrCancelled` pins the difference.
+- **The no-restart note's wording** is "Everything listed here is in effect now. No restart needed." instead of SPEC 8's
+  "All of it is in effect now. No restart needed." (review M1): a setting Apply couldn't write isn't journaled, so after a
+  partly failed Apply "all of it" would claim too much (X3); the status row above the list keeps Apply's failure count.
 - **Downloads only, nothing recorded yet**: with the entry not in history.json while downloads run (an Apply of only
   AddMod/UpdateMod: nothing is journaled until they finish), the confirmation shows the downloading note instead of
   "Nothing was recorded for this Apply." (which would be false), then reloads when they finish.
