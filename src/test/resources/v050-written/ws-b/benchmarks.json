@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "runs": [
+    {
+      "id": "2026-09-24T18:02:13Z-3b7e",
+      "createdAt": "2026-09-24T18:02:13Z",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "mode": "MEASURE",
+      "scene": "BENCHMARK_WORLD",
+      "phase": "single",
+      "targetFps": 170,
+      "targetMet": true,
+      "knobs": {
+        "renderDistance": {
+          "value": 12,
+          "original": 12
+        },
+        "simulationDistance": {
+          "value": 8,
+          "original": 8
+        }
+      },
+      "result": {
+        "avgFps": 866.0,
+        "onePercentLowFps": 402.5,
+        "p99FrameMs": 4.9,
+        "repeats": 2,
+        "cv": 0.061
+      },
+      "costs": {},
+      "notMeasured": {},
+      "world": {
+        "levelId": "rigtune-benchmark",
+        "seed": 8675309
+      },
+      "deadlineHit": false,
+      "context": {
+        "dhRendering": false,
+        "shaders": false,
+        "width": 2560,
+        "height": 1440,
+        "fullscreen": true,
+        "protocol": 1,
+        "modSetHash": "9c2e4f6a8b0d1c3e5f7a9b1d3c5e7f9a0b2c4d6e8f0a1b3c5d7e9f1a2b4c6d8e",
+        "worldFresh": true,
+        "stagedAtStart": []
+      }
+    },
+    {
+      "id": "2026-09-25T19:40:07Z-a41c",
+      "createdAt": "2026-09-25T19:40:07Z",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "mode": "MEASURE",
+      "scene": "BENCHMARK_WORLD",
+      "phase": "single",
+      "targetFps": 170,
+      "targetMet": true,
+      "knobs": {
+        "renderDistance": {
+          "value": 12,
+          "original": 12
+        },
+        "simulationDistance": {
+          "value": 8,
+          "original": 8
+        }
+      },
+      "result": {
+        "avgFps": 912.5,
+        "onePercentLowFps": 540.25,
+        "p99FrameMs": 2.6,
+        "repeats": 2,
+        "cv": 0.022
+      },
+      "costs": {},
+      "notMeasured": {},
+      "world": {
+        "levelId": "rigtune-benchmark",
+        "seed": 8675309
+      },
+      "deadlineHit": false,
+      "context": {
+        "dhRendering": false,
+        "shaders": false,
+        "width": 2560,
+        "height": 1440,
+        "fullscreen": true,
+        "protocol": 1,
+        "modSetHash": "9c2e4f6a8b0d1c3e5f7a9b1d3c5e7f9a0b2c4d6e8f0a1b3c5d7e9f1a2b4c6d8e",
+        "journalCursor": "7e3a1c5b-9d2f-4b68-8a14-c6e0f2d4b9a1",
+        "worldFresh": false,
+        "stagedAtStart": [
+          "0b9d7f15-3e6c-4a82-b1d4-5f7e9a3c2b60"
+        ]
+      }
+    },
+    {
+      "id": "2026-09-26T09:15:44Z-6f02",
+      "createdAt": "2026-09-26T09:15:44Z",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "mode": "TUNE",
+      "scene": "BENCHMARK_WORLD",
+      "phase": "single",
+      "targetFps": 170,
+      "targetMet": true,
+      "knobs": {
+        "renderDistance": {
+          "value": 24,
+          "original": 32,
+          "avgFps": 702.5,
+          "onePercentLowFps": 331.0,
+          "p99FrameMs": 3.4
+        },
+        "simulationDistance": {
+          "value": 8,
+          "original": 8
+        }
+      },
+      "result": {
+        "avgFps": 757.5,
+        "onePercentLowFps": 318.5,
+        "p99FrameMs": 2.36,
+        "repeats": 2,
+        "cv": 0.0707
+      },
+      "costs": {},
+      "notMeasured": {},
+      "world": {
+        "levelId": "rigtune-benchmark",
+        "seed": 8675309
+      },
+      "deadlineHit": false,
+      "context": {
+        "dhRendering": false,
+        "shaders": false,
+        "width": 2560,
+        "height": 1440,
+        "fullscreen": true,
+        "protocol": 1,
+        "modSetHash": "9c2e4f6a8b0d1c3e5f7a9b1d3c5e7f9a0b2c4d6e8f0a1b3c5d7e9f1a2b4c6d8e",
+        "journalCursor": "7e3a1c5b-9d2f-4b68-8a14-c6e0f2d4b9a1",
+        "worldFresh": false,
+        "dhGenerating": true,
+        "stagedAtStart": []
+      }
+    },
+    {
+      "id": "2026-09-26T21:03:29Z-c8d5",
+      "createdAt": "2026-09-26T21:03:29Z",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "mode": "TUNE",
+      "scene": "CURRENT",
+      "phase": "single",
+      "targetFps": 170,
+      "targetMet": false,
+      "knobs": {
+        "renderDistance": {
+          "value": 16,
+          "original": 12,
+          "avgFps": 702.5,
+          "onePercentLowFps": 331.0,
+          "p99FrameMs": 3.4
+        },
+        "simulationDistance": {
+          "value": 8,
+          "original": 8
+        }
+      },
+      "result": {
+        "avgFps": 701.0,
+        "onePercentLowFps": 330.75,
+        "p99FrameMs": 3.3,
+        "repeats": 2,
+        "cv": 0.031
+      },
+      "costs": {},
+      "notMeasured": {},
+      "deadlineHit": false,
+      "context": {
+        "dhRendering": true,
+        "shaders": false,
+        "width": 2560,
+        "height": 1440,
+        "fullscreen": true,
+        "protocol": 1,
+        "modSetHash": "9c2e4f6a8b0d1c3e5f7a9b1d3c5e7f9a0b2c4d6e8f0a1b3c5d7e9f1a2b4c6d8e",
+        "journalCursor": "7e3a1c5b-9d2f-4b68-8a14-c6e0f2d4b9a1",
+        "stagedAtStart": []
+      }
+    }
+  ]
+}
