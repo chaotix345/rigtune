@@ -312,7 +312,7 @@ public final class StutterAnalyzer {
 		}
 		// SD-1: the whole capture's counts once the GC ring wrapped, and the live-set samples from their own ring.
 		StutterRings.Totals totals = in.rings().totals();
-		boolean wrapped = totals != null && totals.gcAdded() > records.length / StutterRings.GC_STRIDE;
+		boolean wrapped = totals != null && totals.gcAdded() > StutterRings.GC_CAPACITY;
 		if (wrapped) {
 			full = totals.fullGcs();
 			stalls = totals.stalls();
@@ -342,7 +342,8 @@ public final class StutterAnalyzer {
 	static long sampleCoverStart(Input in) {
 		StutterRings.Totals totals = in.rings().totals();
 		long[] s = in.rings().samples();
-		if (totals == null || s.length == 0 || totals.samplesAdded() <= s.length / StutterRings.SAMPLE_STRIDE) {
+		// By the capacity: a sample added between the snapshot's two reads mustn't look like a wrap.
+		if (totals == null || s.length == 0 || totals.samplesAdded() <= StutterRings.SAMPLE_CAPACITY) {
 			return Long.MIN_VALUE;
 		}
 		return s[StutterRings.S_TIME] - s[StutterRings.S_WINDOW];
