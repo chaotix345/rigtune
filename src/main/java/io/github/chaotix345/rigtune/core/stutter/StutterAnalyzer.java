@@ -27,6 +27,8 @@ public final class StutterAnalyzer {
 	static final long TELEPORT_WINDOW = 10 * SECOND;
 	static final double CONTENTION = 0.85;
 	static final int VANILLA_BACKLOG = 8;
+	// The tags whose evidence is the sampler's (SD-1).
+	static final List<String> SAMPLE_TAGS = List.of(Attributor.DH, Attributor.CPU_CONTENTION);
 
 	// The capture: its frame ring, the shared rings (filtered to [startNanos, endNanos]), and what the report needs about
 	// the machine. collector: the family (g1, zgc, ...); totalRamMb null when unknown. phaseTiming: the phase timers were
@@ -88,13 +90,35 @@ public final class StutterAnalyzer {
 			}
 			severity[a.spike().severity().ordinal()]++;
 		}
+		// SD-1: the rules' GC share is taken over the spikes the GC ring still covers, and the dh and cpuContention shares
+		// over those the sample ring covers (both are every spike until a ring wrapped); the screen's shares and counts stay
+		// over the whole capture.
+		long sampleCover = sampleCoverStart(in);
+		long gcLost = 0;
+		long gcClaimed = 0;
+		int sampleSpikes = 0;
+		Map<String, Integer> sampleTagCounts = new LinkedHashMap<>();
+		for (Attributor.Attribution a : attributions) {
+			if (a.spike().end() >= gc.coverStart()) {
+				gcLost += a.spike().lost();
+				gcClaimed += a.claims().getOrDefault(Attributor.GC, 0L);
+			}
+			if (a.spike().end() >= sampleCover) {
+				sampleSpikes++;
+				for (String tag : SAMPLE_TAGS) {
+					if (a.tags().contains(tag)) {
+						sampleTagCounts.merge(tag, 1, Integer::sum);
+					}
+				}
+			}
+		}
 		Map<String, Double> causes = new LinkedHashMap<>();
 		Map<String, Double> claimedShares = new LinkedHashMap<>();
 		for (String cause : Attributor.CAUSES) {
 			Long ns = claimed.get(cause);
 			if (ns != null && lost > 0) {
 				causes.put(cause, round((double) ns / lost, 2));
-				claimedShares.put(cause, 100.0 * ns / lost);
+				claimedShares.put(cause, !Attributor.GC.equals(cause) ? 100.0 * ns / lost : gcLost > 0 ? 100.0 * gcClaimed / gcLost : 0);
 			}
 		}
 		Map<String, Double> taggedShares = new LinkedHashMap<>();
@@ -103,7 +127,12 @@ public final class StutterAnalyzer {
 			Integer n = tagCounts.get(tag);
 			if (n != null) {
 				tags.put(tag, n);
-				taggedShares.put(tag, 100.0 * n / spikes.size());
+				if (SAMPLE_TAGS.contains(tag)) {
+					int covered = sampleTagCounts.getOrDefault(tag, 0);
+					taggedShares.put(tag, sampleSpikes > 0 ? 100.0 * covered / sampleSpikes : 0);
+				} else {
+					taggedShares.put(tag, 100.0 * n / spikes.size());
+				}
 			}
 		}
 
@@ -235,7 +264,9 @@ public final class StutterAnalyzer {
 		return Arrays.copyOf(out, n);
 	}
 
-	private record GcSummary(List<Attributor.GcEvent> events, int fullPauses, int stalls, int explicit, @Nullable Double liveSetPercent) {
+	// coverStart: the oldest GC record the ring still holds once it wrapped (Long.MIN_VALUE: it covers the whole capture).
+	private record GcSummary(List<Attributor.GcEvent> events, int fullPauses, int stalls, int explicit, @Nullable Double liveSetPercent,
+			long coverStart) {
 	}
 
 	private static GcSummary gc(Input in) {
@@ -270,12 +301,42 @@ public final class StutterAnalyzer {
 				live.add(records[i + StutterRings.G_USED_AFTER]);
 			}
 		}
+		// SD-1: the whole capture's counts once the GC ring wrapped, and the live-set samples from their own ring.
+		StutterRings.Totals totals = in.rings().totals();
+		boolean wrapped = totals != null && totals.gcAdded() > records.length / StutterRings.GC_STRIDE;
+		if (wrapped) {
+			full = totals.fullGcs();
+			stalls = totals.stalls();
+			explicit = totals.explicitGcs();
+		}
+		if (totals != null) {
+			live.clear();
+			long[] samples = totals.liveSamples();
+			for (int i = 0; i + StutterRings.LIVE_STRIDE <= samples.length; i += StutterRings.LIVE_STRIDE) {
+				long received = samples[i];
+				if (received >= in.startNanos() && received <= in.endNanos() + SECOND) {
+					live.add(samples[i + 1]);
+				}
+			}
+		}
+		long coverStart = !wrapped || records.length == 0 ? Long.MIN_VALUE
+				: clock.calibrated() ? clock.pauseStart(records[StutterRings.G_START_MS]) : records[StutterRings.G_RECEIVED];
 		Double liveSet = null;
 		if (!live.isEmpty() && in.heapMaxMb() > 0) {
 			live.sort(null);
 			liveSet = 100.0 * live.get(live.size() / 2) / (in.heapMaxMb() * 1024.0 * 1024.0);
 		}
-		return new GcSummary(events, full, stalls, explicit, liveSet);
+		return new GcSummary(events, full, stalls, explicit, liveSet, coverStart);
+	}
+
+	// SD-1: the start of the oldest sample the ring still holds once it wrapped (Long.MIN_VALUE: it covers the whole capture).
+	static long sampleCoverStart(Input in) {
+		StutterRings.Totals totals = in.rings().totals();
+		long[] s = in.rings().samples();
+		if (totals == null || s.length == 0 || totals.samplesAdded() <= s.length / StutterRings.SAMPLE_STRIDE) {
+			return Long.MIN_VALUE;
+		}
+		return s[StutterRings.S_TIME] - s[StutterRings.S_WINDOW];
 	}
 
 	private static List<long[]> events(Input in, int kind) {

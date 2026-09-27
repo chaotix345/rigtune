@@ -25,6 +25,8 @@ class StutterAnalyzerTest {
 	static final class Capture {
 		final FrameRing ring = new FrameRing(FrameRing.SESSION_FRAMES, FrameRing.SESSION_CANDIDATES);
 		final StutterRings rings = new StutterRings(ANCHOR);
+		// Where each spike frame started, by its second mark.
+		final Map<Integer, Long> spikeStarts = new java.util.HashMap<>();
 		long now = T0;
 
 		Capture frames(double seconds, Map<Integer, Long> spikesAtSecond, boolean excluded) {
@@ -36,6 +38,7 @@ class StutterAnalyzerTest {
 				Long spike = spikesAtSecond.get(second);
 				if (spike != null && done.add(second)) {
 					d = spike;
+					spikeStarts.put(second, now);
 				}
 				now += d;
 				ring.frame(now, d, excluded, 300_000, MS, 14 * MS, 0);
@@ -244,6 +247,98 @@ class StutterAnalyzerTest {
 		assertEquals(1, report.histogramCounts()[4], "the 40 ms frame");
 		assertEquals(report.frames(), frames + 1);
 		assertArrayEquals(new long[]{0, 0, frames * 16, 0, 40, 0, 0, 0, 0}, report.histogramTimeMs());
+	}
+
+	// docs/v0.5/SPEC.md 2S SD-1 (AC2S.5; audit-verify's sd1FullGcSurvivesTheGcRingWrapping): a full GC early in a long
+	// session is still counted, and its live-set sample still read, after 2048 later GC records wrapped the GC ring.
+	@Test
+	void sd1FullGcSurvivesTheGcRingWrapping() {
+		Capture c = new Capture();
+		c.frames(1200, Map.of(), false);
+		c.gc(T0 + 60 * S, 40, GcKind.PAUSE | GcKind.FULL | GcKind.MAJOR, 3072);
+		for (int i = 0; i < StutterRings.GC_CAPACITY; i++) {
+			c.gc(T0 + 100 * S + i * 500 * MS, 3, GcKind.PAUSE, 0);
+		}
+		StutterAnalyzer.Result r = c.analyze(true);
+		assertEquals(1, r.facts().gcFullPauses(), "the session had one full GC");
+		assertEquals(1, r.report().facts().fullGcs());
+		assertEquals(75.0, r.facts().liveSetPercent(), 0.01, "its live-set sample: 3 GB of 4");
+	}
+
+	// SD-1 (AC2S.5; audit-verify's sd1DhTagShareCoversTheWholeSession): 60 minutes at 62.5 FPS, 358 spikes, every one during
+	// saturated DH work. The sampler ring holds only the newest ~17 minutes, so the dh share is taken over the spikes it
+	// covers (not diluted by the older ones), and dh stays measured.
+	@Test
+	void sd1DhShareCountsTheCoveredSpikes() {
+		Capture c = new Capture();
+		Map<Integer, Long> spikes = new java.util.HashMap<>();
+		for (int s = 20; s < 3600; s += 10) {
+			spikes.put(s, 80 * MS);
+		}
+		c.frames(3600, spikes, false);
+		long window = 250 * MS;
+		long[] rec = new long[StutterRings.SAMPLE_STRIDE];
+		for (long t = T0 + window; t <= c.now; t += window) {
+			fill(rec, t, window, 4 * window, 15 * window);
+			c.rings.sample(rec);
+		}
+		StutterAnalyzer.Result r = c.analyze(true);
+		assertEquals(358, r.report().spikes().total());
+		assertFalse(r.facts().unmeasured().contains(Attributor.DH));
+		assertTrue(r.facts().taggedShares().get(Attributor.DH) >= 40, "dh share " + r.facts().taggedShares());
+		assertEquals(100.0, r.facts().taggedShares().get(Attributor.DH), 0.01, "every covered spike was during DH work");
+	}
+
+	// SD-1: the GC claim share is taken over the spikes newer than the oldest GC record the ring still holds.
+	@Test
+	void sd1GcShareCountsTheSpikesTheGcRingCovers() {
+		Capture c = new Capture();
+		Map<Integer, Long> spikes = new java.util.HashMap<>();
+		for (int s = 20; s < 3600; s += 20) {
+			spikes.put(s, 80 * MS);
+		}
+		c.frames(3600, spikes, false);
+		// A 50 ms pause inside every spike of the first half (forgotten once the ring wraps) and of the second half (held).
+		for (int s = 20; s < 1800; s += 20) {
+			c.gc(spikeStart(c, s) + 20 * MS, 50, GcKind.PAUSE, 0);
+		}
+		List<Long> late = new java.util.ArrayList<>();
+		for (int s = 1800; s < 3600; s += 20) {
+			late.add(spikeStart(c, s) + 20 * MS);
+		}
+		// Short pauses between the spikes fill the ring, all in the second half, in time order.
+		java.util.TreeMap<Long, Long> second = new java.util.TreeMap<>();
+		late.forEach(t -> second.put(t, 50L));
+		for (int i = 0; second.size() < StutterRings.GC_CAPACITY; i++) {
+			second.putIfAbsent(T0 + 1805 * S + i * 800 * MS, 0L);
+		}
+		second.forEach((t, ms) -> c.gc(t, ms, GcKind.PAUSE, 0));
+		StutterAnalyzer.Result r = c.analyze(true);
+		double lost = 80 - 16;
+		assertEquals(100.0 * 51 / lost, r.facts().claimedShares().get(Attributor.GC), 1.0, "over the covered spikes: 51 of each 64 lost ms");
+		assertFalse(r.facts().unmeasured().contains(Attributor.GC));
+	}
+
+	private static long spikeStart(Capture c, int second) {
+		return c.spikeStarts.get(second);
+	}
+
+	// Recording a GC notification, the whole-capture counters and the live-set samples included, allocates nothing.
+	@Test
+	void aGcRecordAllocatesNothing() {
+		org.junit.jupiter.api.Assumptions.assumeTrue(java.lang.management.ManagementFactory.getThreadMXBean() instanceof com.sun.management.ThreadMXBean bean
+				&& bean.isThreadAllocatedMemorySupported());
+		StutterRings rings = new StutterRings(ANCHOR);
+		for (int i = 0; i < 20_000; i++) {
+			rings.gc(T0 + i, i, i + 1, GcKind.PAUSE | (i % 7 == 0 ? GcKind.FULL | GcKind.MAJOR : 0) | (i % 11 == 0 ? GcKind.EXPLICIT : 0), 1L << 30);
+		}
+		com.sun.management.ThreadMXBean threads = (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
+		long before = threads.getCurrentThreadAllocatedBytes();
+		for (int i = 0; i < 20_000; i++) {
+			rings.gc(T0 + i, i, i + 1, GcKind.PAUSE | (i % 7 == 0 ? GcKind.FULL | GcKind.MAJOR : 0) | (i % 11 == 0 ? GcKind.EXPLICIT : 0), 1L << 30);
+		}
+		long allocated = threads.getCurrentThreadAllocatedBytes() - before;
+		assertTrue(allocated < 64 * 1024, "20,000 GC records allocated " + allocated + " bytes");
 	}
 
 	// Review finding 2: what the capture couldn't measure stays UNKNOWN for the rules (also under `not`).
