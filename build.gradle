@@ -259,6 +259,58 @@ abstract class RulesFixtureServer implements BuildService<RulesFixtureParams>, A
 	}
 }
 
+// v0.5 (docs/v0.5/design/ws-ci.md): the production game tests' Modrinth, so no game test reaches api.modrinth.com. The E2E's
+// FakeModrinth (tools/e2e, JDK only) runs as a single-file program, `java FakeModrinth.java`, on 127.0.0.1 with a free
+// port, answering from the catalog gametestModrinthCatalog writes; it starts when a task first asks for its URL and stops
+// at the end of the build. Its request log lands next to the catalog.
+interface ModrinthFixtureParams extends BuildServiceParameters {
+	RegularFileProperty getSource()
+	DirectoryProperty getDir()
+}
+
+abstract class ModrinthFixture implements BuildService<ModrinthFixtureParams>, AutoCloseable {
+	private Process process
+	private String url
+
+	synchronized String baseUrl() {
+		if (process == null) {
+			File dir = parameters.dir.get().asFile
+			File output = new File(dir, "fake-modrinth.out")
+			File requests = new File(dir, "requests.jsonl")
+			output.delete()
+			requests.delete()
+			String java = new File(System.getProperty("java.home"), "bin/java").absolutePath
+			process = new ProcessBuilder(java, parameters.source.get().asFile.absolutePath, "--catalog", new File(dir, "catalog.json").absolutePath,
+					"--bind", "127.0.0.1", "--port", "0", "--log", requests.absolutePath)
+					.redirectErrorStream(true).redirectOutput(output).start()
+			long deadline = System.nanoTime() + 60_000_000_000L
+			while (url == null) {
+				def found = output.exists() ? (output.getText("UTF-8") =~ /FakeModrinth listening on (http:\/\/127\.0\.0\.1:\d+)/) : null
+				if (found != null && found.find()) {
+					url = found.group(1)
+				} else if (!process.alive || System.nanoTime() > deadline) {
+					process.destroyForcibly()
+					throw new GradleException("The game tests' fake Modrinth didn't start: " + (output.exists() ? output.getText("UTF-8") : "no output"))
+				} else {
+					Thread.sleep(100)
+				}
+			}
+		}
+		return url
+	}
+
+	// FakeModrinth serves until its standard input ends.
+	@Override
+	void close() {
+		if (process != null) {
+			process.outputStream.close()
+			if (!process.waitFor(10, java.util.concurrent.TimeUnit.SECONDS)) {
+				process.destroyForcibly()
+			}
+		}
+	}
+}
+
 def smokeRunDir = layout.projectDirectory.dir("run")
 def extraModsDir = providers.gradleProperty("extraModsDir").map { rootProject.layout.projectDirectory.dir(it).asFile }
 def userOptions = providers.gradleProperty("userOptions").map { rootProject.layout.projectDirectory.file(it).asFile }
@@ -365,6 +417,111 @@ tasks.named("runProductionClientGameTest") {
 	usesService(rulesFixture)
 	jvmArgs.add("-Drigtune.footprint.budgetsFile=" + footprintBudgets.absolutePath)
 	jvmArgs.add(rulesFixture.map { "-Drigtune.rules.baseUrl=" + it.baseUrl() })
+}
+
+// The fake Modrinth's catalog for this node: the jars the production game test loads (fabric-api, Mod Menu, Sodium; their
+// real bytes, so RigTune's hash lookups find them) and one version for this Minecraft version of every other mod the rules
+// can recommend, each a small generated file that requires fabric-api. Fixed ids and dates: the same answers every run.
+def modrinthFixtureDir = layout.buildDirectory.dir("gametest-modrinth")
+def gametestModrinthCatalog = tasks.register("gametestModrinthCatalog") {
+	def mods = configurations.productionGameTestMods
+	def rulesFile = rootProject.file("rules/rules-v2.json")
+	def outDir = modrinthFixtureDir
+	def installed = [
+			"fabric-api-": [id: "P7dR8mSH", slug: "fabric-api", title: "Fabric API", version: project.fabric_api_version],
+			"modmenu-"   : [id: "mOgUt4GM", slug: "modmenu", title: "Mod Menu", version: project.modmenu_version],
+			"sodium-"    : [id: "AANobbMI", slug: "sodium", title: "Sodium", version: project.findProperty("sodium_version") ?: ""]]
+	def mc = mcVersion
+	inputs.files(mods).withPropertyName("mods")
+	inputs.file(rulesFile).withPropertyName("rules")
+	inputs.property("mc", mc)
+	inputs.property("installed", installed.toString())
+	outputs.dir(outDir)
+	doLast {
+		File dir = outDir.get().asFile
+		dir.deleteDir()
+		new File(dir, "files").mkdirs()
+		def fixedId = { String text -> java.security.MessageDigest.getInstance("SHA-256").digest(text.getBytes("UTF-8")).encodeHex().toString().substring(0, 8) }
+		def version = { String id, String number, File file, List deps ->
+			[id: id, version_number: number, version_type: "release", date_published: "2026-09-01T00:00:00Z", game_versions: [mc],
+			 loaders: ["fabric"], file: file.absolutePath.replace('\\', '/'), dependencies: deps]
+		}
+		def projects = [:]
+		mods.files.sort { it.name }.each { File jar ->
+			def match = installed.find { prefix, p -> jar.name.startsWith(prefix) && !jar.name.contains("gametest") }
+			if (match != null) {
+				def p = match.value
+				projects[p.slug] = [id: p.id, slug: p.slug, title: p.title, versions: [version(fixedId("installed:" + p.slug + ":" + mc), p.version, jar, [])]]
+			}
+		}
+		def requiresFabricApi = [[project_id: "P7dR8mSH", dependency_type: "required"]]
+		new groovy.json.JsonSlurper().parse(rulesFile, "UTF-8").mods.each { rule ->
+			if (!projects.containsKey(rule.slug)) {
+				File file = new File(dir, "files/${rule.slug}-fixture+mc${mc}.jar")
+				file.setText("RigTune game-test fixture: ${rule.slug} for Minecraft ${mc}\n", "UTF-8")
+				projects[rule.slug] = [id: rule.projectId, slug: rule.slug, title: rule.title,
+									   versions: [version(fixedId("candidate:" + rule.slug + ":" + mc), "1.0.0-fixture+mc" + mc, file, requiresFabricApi)]]
+			}
+		}
+		new File(dir, "catalog.json").setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([cdnBase: null, projects: projects.values().toList()])), "UTF-8")
+	}
+}
+
+def modrinthFixture = gradle.sharedServices.registerIfAbsent("rigtuneModrinthFixture" + project.path.replace(':', '-'), ModrinthFixture) {
+	parameters.source = rootProject.layout.projectDirectory.file("tools/e2e/java/io/github/chaotix345/rigtune/e2e/FakeModrinth.java")
+	parameters.dir = modrinthFixtureDir
+}
+
+// The dev game-test run too (its mods aren't these jars, so installed mods go unrecognised; the candidates are there).
+tasks.matching { it.name == "runClientGameTest" }.configureEach {
+	dependsOn gametestModrinthCatalog
+	usesService(modrinthFixture)
+	jvmArgumentProviders.add({ ["-Drigtune.modrinth.baseUrl=" + modrinthFixture.get().baseUrl()] } as CommandLineArgumentProvider)
+}
+
+tasks.named("runProductionClientGameTest") {
+	dependsOn gametestModrinthCatalog
+	usesService(modrinthFixture)
+	jvmArgs.add(modrinthFixture.map { "-Drigtune.modrinth.baseUrl=" + it.baseUrl() })
+	// RigTune's post-exit apply helper can still be writing into the run folder after the game has exited (a pending apply
+	// is left only when a subset of the classes runs): wait for its lock, so the next run's wipe and the artifacts see a
+	// finished folder.
+	def applyLock = productionGameTestRunDir.map { it.file("config/rigtune/apply.lock").asFile }
+	doLast {
+		File lock = applyLock.get()
+		long deadline = System.nanoTime() + 60_000_000_000L
+		while (lock.exists() && System.nanoTime() < deadline) {
+			def channel = java.nio.channels.FileChannel.open(lock.toPath(), java.nio.file.StandardOpenOption.WRITE)
+			try {
+				def held = channel.tryLock()
+				if (held != null) {
+					held.release()
+					break
+				}
+			} catch (java.nio.channels.OverlappingFileLockException ignored) {
+			} finally {
+				channel.close()
+			}
+			Thread.sleep(250)
+		}
+	}
+}
+
+// v0.5 (ws-ci): resolves every resolvable configuration of this node, so the steps after build.yml's prefetch run --offline
+// (and the game tests with no network at all).
+tasks.register("prefetchDependencies") {
+	doLast {
+		int resolved = 0
+		configurations.findAll { it.canBeResolved }.each { c ->
+			try {
+				c.resolve()
+				resolved++
+			} catch (Exception e) {
+				logger.warn("prefetchDependencies: ${project.path}:${c.name}: ${e.message?.readLines()?.first()}")
+			}
+		}
+		logger.lifecycle("prefetchDependencies: ${project.path}: ${resolved} configurations resolved")
+	}
 }
 
 // Self-update end-to-end harness (tools/e2e/README.md), never part of the shipped jar or of `build`. The fake Modrinth
