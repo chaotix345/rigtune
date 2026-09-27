@@ -120,6 +120,19 @@ other three new tests pin behaviour that was already right.
 - Not in Phase A (client, Phase B): the keys only the screen and ProfilesScreen use (`rigtune.profile.servers*`,
   title, subtitle, remember, stop, privacy, forget buttons, the confirm screen, `row.current`, `empty`).
 
+## Phase B: frozen-file exceptions and additions (coordinator-approved)
+- `src/test/java/io/github/chaotix345/rigtune/client/V05ServicesTest.java` (WS-K's, frozen): the skeleton contract line
+  `assertEquals(ServerProfilesView.EMPTY, services.serverProfiles().view())` now reads
+  `assertNull(services.serverProfiles().notice(), "no offer pending: notice() reads nothing")`, marked WS-P2 (its
+  now-unused `ServerProfilesView` import goes with it): the filled `view()` reads server-profiles.json through the
+  controller, which the test passes as null; `notice()` with no offer pending reads nothing (AC7.13). Approved
+  2026-09-28; the coordinator records the rule for every Wave B owner in PLAN's Amendments.
+- `client/profile/ProfileService.effective` (ProfileService is WS-P2's after WS-P): the rebuilt profile preview kept
+  every field but `downloadsChecked` (WS-H's L5 field), which the 7-argument constructor sets false; it now passes the
+  preview's own. Red first: `ProfileServicePreviewTest.aCheckedPreviewStaysChecked` (expected true, was false). Nothing
+  changes on screen today (a profile preview lists no download).
+- Inherited and kept: WS-P's exception (`RigTuneController.profileCodeLeftOut` + its forwards, ProfilesScreen.copySelected).
+
 ## Footprint deltas
 Phase A adds no client code: nothing runs on the render thread, at startup or per tick (the core classes load only when
 Phase B's client code calls them). The Phase A CI run 36318167902 (head 9cf12c19, all 8 jobs green; unit tests 1952 per

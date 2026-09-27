@@ -614,7 +614,8 @@ public final class ProfileService {
 				skipped.add(skip);
 			}
 		}
-		return new ApplyPreview(preview.now(), atRestart, preview.downloads(), preview.disables(), skipped, preview.resolved(), preview.notes());
+		return new ApplyPreview(preview.now(), atRestart, preview.downloads(), preview.disables(), skipped, preview.resolved(), preview.notes(),
+				preview.downloadsChecked());
 	}
 
 	private List<InstalledMod> mods() {
