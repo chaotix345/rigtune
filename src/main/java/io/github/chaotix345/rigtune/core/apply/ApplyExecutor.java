@@ -695,6 +695,11 @@ public final class ApplyExecutor {
 			}
 		}
 		boolean stuck = Files.exists(undo.moved());
+		if (!stuck && last == null) {
+			// docs/v0.5/SPEC.md 2V (ws-g3 L8): nothing is left to put back, and no retry failed.
+			return new OpResult(op, Status.FAILED, "Rollback failed: " + undo.moved().getFileName()
+					+ " was moved or deleted meanwhile, so it couldn't be put back after " + reason);
+		}
 		return new OpResult(op, Status.FAILED, "Rollback failed (" + (last == null ? "the original name is taken" : last)
 				+ "); " + undo.moved().getFileName() + " was left as it is after " + reason
 				+ (stuck ? "; the next exit finishes or rolls back this change" : ""), stuck ? undo.moved().toString() : null);

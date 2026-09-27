@@ -391,6 +391,47 @@ class ApplyExecutorTest {
 		assertEquals(List.of(JournalChange.STAGED, JournalChange.ABANDONED), reconciled().stream().map(JournalChange::status).toList());
 	}
 
+	// docs/v0.5/SPEC.md 2V (ws-g3 L8, AC2V.2): a rollback whose moved file vanished meanwhile says so, not that the original
+	// name is taken.
+	@Test
+	void aRollbackWhoseFileVanishedSaysSo() throws IOException {
+		Path old = Files.writeString(mods.resolve("sodium-0.7.0.jar"), "old");
+		Path download = TestJars.modJar(mods.resolve("sodium-0.7.1.jar.rigtune-pending"), "sodium");
+		ApplyExecutor vanishing = new ApplyExecutor(1, 1, (from, to) -> {
+			if (from.equals(download)) {
+				Files.delete(mods.resolve("sodium-0.7.0.jar.disabled"));
+				throw new IOException("locked");
+			}
+			Files.move(from, to);
+		});
+
+		ApplyResult result = vanishing.run(plan(PendingActions.group(Op.disableFile(old), Op.enableFile(download, mods.resolve("sodium-0.7.1.jar")))
+				.toArray(Op[]::new)), pending);
+
+		assertEquals("Rollback failed: sodium-0.7.0.jar.disabled was moved or deleted meanwhile, so it couldn't be put back after enabling"
+				+ " sodium-0.7.1.jar failed", result.results().getFirst().message());
+		assertEquals(null, result.results().getFirst().resultPath());
+	}
+
+	@Test
+	void aRollbackOntoATakenNameKeepsItsMessage() throws IOException {
+		Path old = Files.writeString(mods.resolve("sodium-0.7.0.jar"), "old");
+		Path download = TestJars.modJar(mods.resolve("sodium-0.7.1.jar.rigtune-pending"), "sodium");
+		ApplyExecutor taken = new ApplyExecutor(1, 1, (from, to) -> {
+			if (from.equals(download)) {
+				Files.writeString(old, "someone else's copy");
+				throw new IOException("locked");
+			}
+			Files.move(from, to);
+		});
+
+		ApplyResult result = taken.run(plan(PendingActions.group(Op.disableFile(old), Op.enableFile(download, mods.resolve("sodium-0.7.1.jar")))
+				.toArray(Op[]::new)), pending);
+
+		assertEquals("Rollback failed (the original name is taken); sodium-0.7.0.jar.disabled was left as it is after enabling sodium-0.7.1.jar"
+				+ " failed; the next exit finishes or rolls back this change", result.results().getFirst().message());
+	}
+
 	// A sharing violation (Windows denying the rename because an AV scanner or the Modrinth App briefly has the jar
 	// open) gets exponential backoff instead of the fast fixed-delay policy, so a few extra seconds of contention
 	// right after the game exits doesn't fail the op.
