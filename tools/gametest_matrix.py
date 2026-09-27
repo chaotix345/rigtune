@@ -8,8 +8,9 @@ with or without a Sodium build (sodium_version is optional; the game tests don't
 
 The dormant two-JVM split (docs/v0.5/SPEC.md 1g): with --parts N > 1 every leg becomes N legs, each running a contiguous
 slice of the game-test classes in fabric.mod.json's order (so the first class stays in part 1): "part" ("1/2") for the job
-name, "suffix" ("-part1") for artifact names, "classes" (simple names) for build.gradle's -PgametestClasses. PARTS is the
-switch; build.yml's workflow_dispatch input overrides it for one run. With one part the legs are exactly as before.
+name, "suffix" ("-part1") for artifact names, "classes" (simple names) for build.gradle's -PgametestClasses. The switch
+is build.yml's GAMETEST_PARTS (a dispatch's gametest_parts input overrides it for one run); PARTS is only this script's
+default. With one part the legs are exactly as before.
 """
 import argparse
 import json

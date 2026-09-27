@@ -447,9 +447,9 @@ public final class HttpModrinthClient implements ModrinthClient {
 		HttpResponse.BodySubscriber<T> apply(HttpResponse.ResponseInfo info, BoundedHttp.Progress progress);
 	}
 
-	// A 429 is retried once, after its Retry-After (capped at limits.maxRetryWait()). A request that failed on a client
-	// another thread had dropped meanwhile (the JDK refuses new requests on a client that is shutting down) is sent once
-	// more, on the fresh client.
+	// A 429 is retried once, after its Retry-After (capped at limits.maxRetryWait()). A request that failed before any
+	// response on a client another thread had dropped meanwhile (the JDK refuses new requests on a client that is shutting
+	// down) is sent once more, on the fresh client; once a body has begun, a download's sink already holds some of it.
 	private <T> HttpResponse<T> exchange(Supplier<HttpClient> clients, HttpRequest request, Handler<T> handler, Duration stall,
 			Duration deadline) throws IOException {
 		HttpClient client = clients.get();
@@ -463,7 +463,7 @@ public final class HttpModrinthClient implements ModrinthClient {
 				throw e;
 			} catch (IOException e) {
 				boolean connection = !progress.failedInBody();
-				if (connection && !resent && !(e instanceof HttpTimeoutException) && dropped(client)) {
+				if (connection && !resent && !progress.started() && !(e instanceof HttpTimeoutException) && dropped(client)) {
 					resent = true;
 					client = clients.get();
 					attempt--;

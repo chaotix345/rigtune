@@ -721,6 +721,65 @@ class HttpModrinthClientTest {
 		assertEquals(2, owner[0].clientsBuilt(), "on the client built after the drop");
 	}
 
+	// Third review: a download whose body had started arriving isn't sent again (its bytes are already in the temp file and
+	// the digest), even when another thread dropped its client meanwhile: it fails with its own connection error.
+	@Test
+	void aDownloadWhoseBodyHadStartedIsNotSentAgain(@TempDir Path dir) throws Exception {
+		byte[] jar = "pretend jar".getBytes(StandardCharsets.UTF_8);
+		ModFile file = new ModFile(url("/cdn/mod.jar"), "mod.jar", sha512(jar), jar.length);
+		responses.put("/cdn/mod.jar", new Response(200, jar));
+		AtomicInteger calls = new AtomicInteger();
+		HttpModrinthClient[] owner = new HttpModrinthClient[1];
+		HttpModrinthClient.Transport transport = new HttpModrinthClient.Transport() {
+			@Override
+			public <T> java.net.http.HttpResponse<T> send(HttpClient http, java.net.http.HttpRequest request,
+					java.net.http.HttpResponse.BodyHandler<T> handler, io.github.chaotix345.rigtune.core.net.BoundedHttp.Progress progress,
+					Duration stall, Duration deadline) throws IOException {
+				if (calls.incrementAndGet() == 1) {
+					java.net.http.HttpResponse.BodySubscriber<T> body = handler.apply(new java.net.http.HttpResponse.ResponseInfo() {
+						@Override
+						public int statusCode() {
+							return 200;
+						}
+
+						@Override
+						public HttpHeaders headers() {
+							return HttpHeaders.of(Map.of(), (name, value) -> true);
+						}
+
+						@Override
+						public HttpClient.Version version() {
+							return HttpClient.Version.HTTP_1_1;
+						}
+					});
+					body.onSubscribe(new java.util.concurrent.Flow.Subscription() {
+						@Override
+						public void request(long n) {
+						}
+
+						@Override
+						public void cancel() {
+						}
+					});
+					body.onNext(List.of(java.nio.ByteBuffer.wrap("pretend".getBytes(StandardCharsets.UTF_8))));
+					// Meanwhile another download on the same client fails on its connection and drops the client.
+					assertThrows(IOException.class, () -> owner[0].download(file, dir.resolve("other.jar.rigtune-pending")));
+					throw new IOException("Connection reset");
+				}
+				if (calls.get() == 2) {
+					throw new IOException("Connection reset");
+				}
+				return io.github.chaotix345.rigtune.core.net.BoundedHttp.send(http, request, handler, progress, stall, deadline);
+			}
+		};
+		owner[0] = new HttpModrinthClient("1.2.3", url("/"), FAST, transport);
+
+		IOException e = assertThrows(IOException.class, () -> owner[0].download(file, dir.resolve("mod.jar.rigtune-pending")));
+
+		assertEquals("Connection reset", e.getMessage(), "its own error, not a hash mismatch from a resent body");
+		assertEquals(2, calls.get(), "not sent again");
+	}
+
 	// Fails the first `failures` sends like the JDK did on 2026-09-26, then sends for real.
 	private static final class FlakyTransport implements HttpModrinthClient.Transport {
 		final AtomicInteger calls = new AtomicInteger();
