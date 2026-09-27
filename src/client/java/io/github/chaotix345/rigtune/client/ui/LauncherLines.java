@@ -3,7 +3,10 @@ package io.github.chaotix345.rigtune.client.ui;
 import io.github.chaotix345.rigtune.core.jvm.JvmReport;
 import io.github.chaotix345.rigtune.core.launcher.LauncherAdvice;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
+import io.github.chaotix345.rigtune.core.launcher.LauncherModText;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
+import io.github.chaotix345.rigtune.core.model.Text;
+import io.github.chaotix345.rigtune.core.report.LauncherModAdvice;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -40,10 +43,27 @@ final class LauncherLines {
 		return Component.translatable("rigtune.launcher.advice", Component.translatable(name), Component.translatable(steps));
 	}
 
+	// v0.5 (docs/v0.5/SPEC.md 4b): under a mod-file row LauncherModAdvice turned into advice, "In <launcher>: <steps>" for
+	// its kind. Null for any other row, and where no launcher is named (PENDING, a packwiz index under the official launcher
+	// or an unknown one).
+	static @Nullable Component modStepsLine(Recommendation recommendation, LauncherInfo launcher) {
+		String kind = LauncherModAdvice.kindOf(recommendation);
+		String steps = kind == null ? null : launcher.modStepsKey(kind);
+		Text name = LauncherModText.launcherName(launcher);
+		if (steps == null || name == null) {
+			return null;
+		}
+		return Component.translatable("rigtune.launcher.advice", Texts.component(name), Component.translatable(steps));
+	}
+
 	// v0.4 (docs/v0.4/SPEC.md 6): under a jvm-* advice, "Found in your Java arguments: <flags>." and the launcher's
 	// Java-arguments steps (either can be missing: no matching flag names, an unknown launcher); under a ram-* advice the
 	// memory steps, plus the typed -Xmx note where that -Xmx wins over the memory slider. Null when there's nothing to add.
 	static @Nullable Component adviceLine(Recommendation recommendation, LauncherInfo launcher, JvmReport jvm) {
+		Component modSteps = modStepsLine(recommendation, launcher);
+		if (modSteps != null) {
+			return modSteps;
+		}
 		if (!LauncherAdvice.isJvmAdvice(recommendation)) {
 			Component memory = adviceLine(recommendation, launcher);
 			String name = launcher.nameKey();
