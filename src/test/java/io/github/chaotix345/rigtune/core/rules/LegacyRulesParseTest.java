@@ -30,6 +30,17 @@ class LegacyRulesParseTest {
 		}
 	}
 
+	// docs/v0.5/SPEC.md "Compatibility promise" (0.2.x/0.3.x), AC5.2: the main-list advice the release revision R adds over r16.
+	static final List<String> ADVICE_ADDED_SINCE_R16 = List.of(OldClientWarningTest.ID);
+	static final String R16 = "/rules/r16/rules-v2.json";
+
+	static String resource(String name) throws IOException {
+		try (InputStream in = LegacyRulesParseTest.class.getResourceAsStream(name)) {
+			assertNotNull(in, name);
+			return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+		}
+	}
+
 	private static io.github.chaotix345.rigtune.v030.core.rules.RulesDocument legacy(String json) {
 		return io.github.chaotix345.rigtune.v030.core.rules.RulesLoader.parse(json);
 	}
@@ -39,8 +50,8 @@ class LegacyRulesParseTest {
 		RulesDocument rules = RulesLoader.loadBundled();
 		assertEquals(List.of("max_fps", "balanced", "quality", "battery", "recording"),
 				rules.profileTemplates.templates.stream().map(t -> t.id).toList());
-		assertEquals(List.of("ram-stutter-gc-heap", "stutter-gc-explicit", "stutter-sodium-defer", "stutter-dh-threads", "stutter-chunk-loading"),
-				rules.stutterAdvice.stream().map(a -> a.id).toList());
+		assertEquals(List.of("ram-stutter-gc-heap", "stutter-gc-explicit", "stutter-sodium-defer", "stutter-dh-threads", "stutter-chunk-loading",
+				"stutter-chunks-loading-tag"), rules.stutterAdvice.stream().map(a -> a.id).toList());
 		rules.stutterAdvice.forEach(a -> assertEquals(List.of("stutter-doctor"), a.requires, a.id));
 	}
 
@@ -72,6 +83,27 @@ class LegacyRulesParseTest {
 		Set<String> legacyFields = Arrays.stream(io.github.chaotix345.rigtune.v030.core.rules.RulesDocument.class.getFields())
 				.map(java.lang.reflect.Field::getName).collect(Collectors.toSet());
 		assertFalse(legacyFields.contains("profileTemplates") || legacyFields.contains("stutterAdvice"), legacyFields.toString());
+	}
+
+	// v0.5 AC5.2: 0.2.0/0.3.0 read R with r16's settings and advice (plus only the additions listed above), in r16's order,
+	// and every v0.5 section (stutterFixes) changes nothing for them.
+	@Test
+	void legacyParserReadsRWithR16sCountsPlusTheAdditions() throws IOException {
+		var r = legacy(bundledJson());
+		var r16 = legacy(resource(R16));
+		assertEquals(r16.settings.stream().map(s -> s.key).toList(), r.settings.stream().map(s -> s.key).toList());
+		List<String> advice = new java.util.ArrayList<>(r16.advice.stream().map(a -> a.id).toList());
+		advice.addAll(ADVICE_ADDED_SINCE_R16);
+		assertEquals(advice, r.advice.stream().map(a -> a.id).toList());
+		assertEquals(r16.gpuTiers.size(), r.gpuTiers.size());
+		assertEquals(r16.cpuTiers.size(), r.cpuTiers.size());
+		assertEquals(r16.heapTiers.size(), r.heapTiers.size());
+		JsonObject stripped = JsonParser.parseString(bundledJson()).getAsJsonObject();
+		stripped.remove("stutterFixes");
+		var without = legacy(stripped.toString());
+		assertEquals(r.advice.size(), without.advice.size());
+		assertEquals(r.settings.size(), without.settings.size());
+		assertEquals(r.mods.size(), without.mods.size());
 	}
 
 	// AC2k.2: the VSync-off entry reaches 0.2.0/0.3.0 unticked (and 0.4 too).

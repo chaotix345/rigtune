@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import tomllib
@@ -78,21 +79,30 @@ STUTTER_CONDITION_KEYS = frozenset({
     "liveSetPercentAtLeast", "heapRaiseRoomMbAtLeast", "cpuContentionShareAtLeast", "spikesPerMinuteAtLeast", "gcCollector",
 })
 # The share maps' keys (core/stutter/StutterFacts): causes that claim lost milliseconds, and tags that only count spikes.
-# Values are whole percent (0-100), as numbers or digit strings (plan review K-M1).
+# Values are whole percent (0-100), as numbers or digit strings (plan review K-M1). Both equal Attributor.CAUSES and
+# Attributor.TAGS (SchemaConsistencyTest); chunksLoading (v0.5 L2) is a tag 0.4.0 already evaluates.
 STUTTER_MAP_KEYS = {
     "stutterShareAtLeast": frozenset({"gc", "chunkLoad", "chunkBuild", "tick", "render", "unknown"}),
-    "stutterTaggedShareAtLeast": frozenset({"worldSave", "dh", "cpuContention", "afterTeleport", "movingFast"}),
+    "stutterTaggedShareAtLeast": frozenset({"worldSave", "dh", "cpuContention", "afterTeleport", "chunksLoading", "movingFast"}),
 }
 STUTTER_PERCENT_KEYS = frozenset({"liveSetPercentAtLeast", "cpuContentionShareAtLeast"})
 # v0.5 C20 (docs/v0.5/SPEC.md 5, C2): the stutterFixes section's shape, mirroring core/stutter/FixSpec and
-# RulesDocument.StutterFix/FixSet (SchemaConsistencyTest). Constants only: nothing accepts the section or the key yet, so
-# causeSpikesAtLeast is refused as an unknown key everywhere until the rules workstream adds the validator.
+# RulesDocument.StutterFix/FixSet (SchemaConsistencyTest). causeSpikesAtLeast is allowed only in stutterFixes[].evidence:
+# 0.4.0 doesn't know it, so in stutterAdvice it would poison the whole `when` there and the advice would vanish.
 STUTTER_FIX_FEATURE = "stutter-fix"
 STUTTER_FIX_FIELDS = frozenset({"requires", "adviceId", "evidence", "set"})
 STUTTER_FIX_SET_FIELDS = frozenset({"key", "value", "step", "min", "max"})
 STUTTER_FIX_KEYS = frozenset({"vanilla.renderDistance", "sodium.performance.chunk_build_defer_mode",
                               "dh.common.multiThreading.numberOfThreads"})
 STUTTER_FIX_CONDITION_KEYS = frozenset({"causeSpikesAtLeast"})
+# What a fix may set each key to: its ShareKeys entry (an ENUM's values, an INT's range; SchemaConsistencyTest), so the
+# client can decode every target. A step moves an INT key by at most MAX_FIX_STEP.
+STUTTER_FIX_KEY_VALUES = {
+    "vanilla.renderDistance": {"kind": "INT", "min": 2, "max": 32},
+    "sodium.performance.chunk_build_defer_mode": {"kind": "ENUM", "values": ("ALWAYS", "ONE_FRAME", "ZERO_FRAMES")},
+    "dh.common.multiThreading.numberOfThreads": {"kind": "INT", "min": 1, "max": 32},
+}
+MAX_FIX_STEP = 8
 # docs/v0.4/SPEC.md 9: {"vendor": <gpuVendor>, "atLeast": "526.47", "atMost": "536.22"}, compared on the parsed ints.
 DRIVER_VERSION_FIELDS = frozenset({"vendor", "atLeast", "atMost"})
 DRIVER_VERSION_RE = re.compile(r"[0-9]{1,9}(?:\.[0-9]{1,9})*")
@@ -147,10 +157,10 @@ LEGACY_V2_VOCABULARIES = {k: v for k, v in V2_VOCABULARIES.items() if k not in (
 SODIUM_WORKAROUND_FLAG = "sodium-workaround:"
 KNOWLEDGE_TOP_LEVEL = frozenset({
     "minModVersion", "gpuTiers", "gpuVendorFallback", "cpuTiers", "heapTiers", "mods", "obsolete", "settings", "advice",
-    "settingLabels", "profileTemplates", "stutterAdvice", "reviewIgnore",
+    "settingLabels", "profileTemplates", "stutterAdvice", "stutterFixes", "reviewIgnore",
 })
-# v0.4 rules-v2 sections (docs/v0.4/SPEC.md C2): never written to rules-v1.json.
-V2_ONLY_SECTIONS = ("settingLabels", "profileTemplates", "stutterAdvice")
+# v0.4 rules-v2 sections (docs/v0.4/SPEC.md C2) and v0.5's stutterFixes: never written to rules-v1.json.
+V2_ONLY_SECTIONS = ("settingLabels", "profileTemplates", "stutterAdvice", "stutterFixes")
 # profileTemplates (docs/v0.4/SPEC.md 4, docs/research/v0.4/profiles.md §4.2).
 PROFILE_TEMPLATE_IDS = ("max_fps", "balanced", "quality", "battery", "recording")
 PROFILE_TEMPLATE_FIELDS = frozenset({"requires", "id", "goal", "facts", "settings"})
@@ -230,6 +240,14 @@ def whole_percent(value):
     return isinstance(value, str) and value.isascii() and value.isdigit() and int(value) <= 100
 
 
+def whole_count(value):
+    """A spike count inside causeSpikesAtLeast: a whole number from 0 that fits a Java int, as a JSON integer or a digit
+    string (the Java field is a Map<String, String>, like the share maps)."""
+    if is_integer(value):
+        return 0 <= value <= 2 ** 31 - 1
+    return isinstance(value, str) and value.isascii() and value.isdigit() and int(value) <= 2 ** 31 - 1
+
+
 def driver_version_parts(text):
     return [int(p) for p in text.split(".")] if isinstance(text, str) and DRIVER_VERSION_RE.fullmatch(text) else None
 
@@ -268,7 +286,9 @@ def condition_problems(cond, allowed_keys=V2_CONDITION_KEYS, path="condition", v
     for key, value in cond.items():
         where = f"{path}.{key}"
         if key not in allowed_keys:
-            if key in STUTTER_CONDITION_KEYS and allowed_keys is V2_CONDITION_KEYS:
+            if key in STUTTER_FIX_CONDITION_KEYS:
+                problems.append(f"{where}: allowed only inside stutterFixes[].evidence")
+            elif key in STUTTER_CONDITION_KEYS and allowed_keys is V2_CONDITION_KEYS:
                 problems.append(f"{where}: a Stutter Doctor key, allowed only inside stutterAdvice")
             else:
                 problems.append(f"{where}: unknown condition key")
@@ -307,6 +327,15 @@ def condition_problems(cond, allowed_keys=V2_CONDITION_KEYS, path="condition", v
                         problems.append(f"{where}.{name}: not one of {', '.join(sorted(STUTTER_MAP_KEYS[key]))}")
                     elif not whole_percent(share):
                         problems.append(f"{where}.{name} must be a whole percentage (0-100)")
+        elif key == "causeSpikesAtLeast":
+            if not isinstance(value, dict) or not value:
+                problems.append(f"{where} must map causes to whole spike counts")
+            else:
+                for name, count in value.items():
+                    if name not in STUTTER_MAP_KEYS["stutterShareAtLeast"]:
+                        problems.append(f"{where}.{name}: not one of {', '.join(sorted(STUTTER_MAP_KEYS['stutterShareAtLeast']))}")
+                    elif not whole_count(count):
+                        problems.append(f"{where}.{name} must be a whole number of spikes (0 or more)")
         elif key in STUTTER_PERCENT_KEYS and is_integer(value) and not 0 <= value <= 100:
             problems.append(f"{where} must be a whole percentage (0-100)")
         elif key in STUTTER_CONDITION_KEYS and is_integer(value) and value < 0:
@@ -591,6 +620,10 @@ def validate_knowledge(knowledge):
         problems += profile_template_problems(knowledge["profileTemplates"])
     if "stutterAdvice" in knowledge:
         problems += stutter_advice_problems(knowledge["stutterAdvice"])
+    if "stutterFixes" in knowledge:
+        advice = knowledge.get("stutterAdvice")
+        advice_ids = {a["id"] for a in advice if isinstance(a, dict) and isinstance(a.get("id"), str)} if isinstance(advice, list) else set()
+        problems += stutter_fix_problems(knowledge["stutterFixes"], advice_ids)
     if problems:
         raise KnowledgeError("invalid knowledge:\n  " + "\n  ".join(problems))
 
@@ -710,6 +743,96 @@ def stutter_advice_problems(section):
             problems += [f"{label}: {p}" for p in condition_problems(rule["when"], allowed, "when")]
             if uses_jvm_flag(rule["when"]):
                 problems.append(f"{label}: the Stutter Doctor doesn't evaluate jvm- flags (the main list's {JVM_FEATURE} feature)")
+    return problems
+
+
+def stutter_fix_problems(section, advice_ids):
+    """stutterFixes (v0.5 C20, rules-v2 only): one-click fixes for three allowlisted settings, each tied to a stutterAdvice
+    entry, gated by an evidence condition (every v2 and stutter key plus causeSpikesAtLeast) and setting a value or a
+    bounded step (docs/RULES_SCHEMA.md "stutterFixes")."""
+    if not isinstance(section, list):
+        return ["stutterFixes must be an array"]
+    problems = []
+    seen = set()
+    allowed = V2_CONDITION_KEYS | STUTTER_CONDITION_KEYS | STUTTER_FIX_CONDITION_KEYS
+    for i, fix in enumerate(section):
+        if not isinstance(fix, dict):
+            problems.append(f"stutterFixes[{i}] must be an object")
+            continue
+        label = f"stutterFixes[{fix.get('adviceId', i)}]"
+        unknown = sorted(set(fix) - STUTTER_FIX_FIELDS)
+        if unknown:
+            problems.append(f"{label}: unknown field(s) {', '.join(unknown)} (the section never reaches rules-v1.json, so no v1)")
+        if contains_null(fix):
+            problems.append(f"{label}: null isn't allowed in a fix")
+        advice_id = fix.get("adviceId")
+        if not isinstance(advice_id, str) or not advice_id.strip():
+            problems.append(f"{label}: needs an adviceId")
+        elif advice_id not in advice_ids:
+            problems.append(f"{label}: adviceId {advice_id!r} isn't a stutterAdvice id")
+        elif advice_id in seen:
+            problems.append(f"{label}: duplicate adviceId")
+        else:
+            seen.add(advice_id)
+        requires = fix.get("requires")
+        if not string_list(requires) or STUTTER_FIX_FEATURE not in requires:
+            problems.append(f'{label}: needs "requires": ["{STUTTER_FIX_FEATURE}"]')
+        else:
+            for feature in (STUTTER_FEATURE, JVM_FEATURE):
+                if feature in requires:
+                    problems.append(f"{label}: {feature} would make RigTune 0.5 skip this fix (its fixes know only {STUTTER_FIX_FEATURE})")
+        if "evidence" not in fix:
+            problems.append(f"{label}: needs an evidence condition")
+        else:
+            problems += [f"{label}: {p}" for p in condition_problems(fix["evidence"], allowed, "evidence")]
+            if isinstance(fix["evidence"], dict) and not set(fix["evidence"]) & (STUTTER_CONDITION_KEYS | STUTTER_FIX_CONDITION_KEYS):
+                problems.append(f"{label}: evidence must test the session: at least one Stutter Doctor key (or causeSpikesAtLeast) "
+                                "at its top level, or the fix is offered on every session where its advice fired")
+            if uses_jvm_flag(fix["evidence"]):
+                problems.append(f"{label}: the Stutter Doctor doesn't evaluate jvm- flags (the main list's {JVM_FEATURE} feature)")
+        problems += fix_set_problems(label, fix.get("set", MISSING))
+    return problems
+
+
+def fix_set_problems(label, fix_set):
+    """A fix's `set`: an allowlisted key and either a value its ShareKeys entry decodes, or an INT key's non-zero step of at
+    most MAX_FIX_STEP with the bound on its side (min for a negative step, max for a positive one) inside the key's range."""
+    where = f"{label}.set"
+    if fix_set is MISSING:
+        return [f"{label}: needs a set"]
+    if not isinstance(fix_set, dict):
+        return [f'{where} must be an object like {{"key": "vanilla.renderDistance", "step": -2, "min": 6}}']
+    problems = [f"{where}: unknown field(s) {', '.join(sorted(set(fix_set) - STUTTER_FIX_SET_FIELDS))}"] if set(fix_set) - STUTTER_FIX_SET_FIELDS else []
+    key = fix_set.get("key")
+    if not isinstance(key, str) or key not in STUTTER_FIX_KEYS:
+        return problems + [f"{where}.key must be one of {', '.join(sorted(STUTTER_FIX_KEYS))} (a fix never changes another setting or a mod file)"]
+    spec = STUTTER_FIX_KEY_VALUES[key]
+    if ("value" in fix_set) == ("step" in fix_set):
+        return problems + [f"{where}: needs exactly one of value or step"]
+    int_range = f"{spec.get('min')} to {spec.get('max')}"
+    in_range = lambda v: is_integer(v) and spec["min"] <= v <= spec["max"]
+    if "value" in fix_set:
+        problems += [f"{where}.{bound} only goes with a step" for bound in ("min", "max") if bound in fix_set]
+        value = fix_set["value"]
+        if spec["kind"] == "ENUM":
+            if not isinstance(value, str) or value not in spec["values"]:
+                problems.append(f"{where}.value must be one of {', '.join(spec['values'])}")
+        elif not in_range(value):
+            problems.append(f"{where}.value must be a whole number from {int_range}")
+        return problems
+    if spec["kind"] != "INT":
+        return problems + [f"{where}.step only works on a number setting; {key} takes a value"]
+    step = fix_set["step"]
+    if not is_integer(step) or step == 0 or abs(step) > MAX_FIX_STEP:
+        problems.append(f"{where}.step must be a whole number from -{MAX_FIX_STEP} to {MAX_FIX_STEP}, not 0")
+    problems += [f"{where}.{bound} must be a whole number from {int_range}" for bound in ("min", "max")
+                 if bound in fix_set and not in_range(fix_set[bound])]
+    if is_integer(step) and step < 0 and "min" not in fix_set:
+        problems.append(f"{where}: a negative step needs a min")
+    if is_integer(step) and step > 0 and "max" not in fix_set:
+        problems.append(f"{where}: a positive step needs a max")
+    if in_range(fix_set.get("min")) and in_range(fix_set.get("max")) and fix_set["min"] > fix_set["max"]:
+        problems.append(f"{where}: min is above max")
     return problems
 
 
@@ -1261,13 +1384,19 @@ def now_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def finalize_documents(pairs):
+def finalize_documents(pairs, revision=None):
     """pairs: [(content, old_doc)]. If any content differs from its old document (ignoring revision and
-    generatedAt), every document gets revision max(old revisions) + 1 and one generatedAt; otherwise None."""
+    generatedAt), every document gets revision max(old revisions) + 1 and one generatedAt; otherwise None.
+    `revision` pins the new revision instead (v0.5: every regeneration of a release lands in one revision R), which may
+    equal the old one but never goes below it (refused even when nothing changed: the release's R is out of date)."""
+    old_revision = max((old.get("revision", 0) if old else 0) for _, old in pairs)
+    if revision is not None and revision < max(old_revision, 1):
+        raise UpdateRulesError(f"--revision {revision} is below the rules' current revision {old_revision} (or 1); "
+                               "a revision never goes down")
     changed = any(old is None or not deep_equal(strip_meta(old), content) for content, old in pairs)
     if not changed:
         return None
-    new_revision = max((old.get("revision", 0) if old else 0) for _, old in pairs) + 1
+    new_revision = old_revision + 1 if revision is None else revision
     if new_revision >= MAX_SAFE_REVISION:
         raise UpdateRulesError(
             f"revision {new_revision} would be at or above {MAX_SAFE_REVISION} (2**31-2); "
@@ -1287,6 +1416,27 @@ def finalize_documents(pairs):
 def finalize_document(content, old_doc):
     finals = finalize_documents([(content, old_doc)])
     return None if finals is None else finals[0]
+
+
+def main_revision(repo_root):
+    """The revision of main's rules-v2.json (`git fetch origin main`, then `git show origin/main:...`). A release's pinned
+    revision must be above it, so the release never ships a revision main already has."""
+    def git(*args):
+        try:
+            return subprocess.run(["git", *args], cwd=repo_root, capture_output=True, text=True, encoding="utf-8", timeout=120)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise UpdateRulesError(f"git {' '.join(args)} failed: {e}")
+
+    fetched = git("fetch", "--quiet", "origin", "main")
+    if fetched.returncode != 0:
+        raise UpdateRulesError(f"git fetch origin main failed: {fetched.stderr.strip()}")
+    shown = git("show", "origin/main:rules/rules-v2.json")
+    if shown.returncode != 0:
+        raise UpdateRulesError(f"git show origin/main:rules/rules-v2.json failed: {shown.stderr.strip()}")
+    try:
+        return int(json.loads(shown.stdout)["revision"])
+    except (ValueError, KeyError, TypeError) as e:
+        raise UpdateRulesError(f"main's rules-v2.json has no readable revision: {e}")
 
 
 def load_json_if_exists(path):
@@ -1352,6 +1502,10 @@ def parse_args(argv=None):
     parser.add_argument("--mc-versions", help="Comma-separated MC versions, overriding the Stonecutter nodes and their hotfix releases")
     parser.add_argument("--dry-run", action="store_true", help="Compute everything and print a summary, without writing files")
     parser.add_argument("--offline-fixtures", help="Directory of canned HTTP responses keyed by sha256(url).json, for offline runs")
+    parser.add_argument("--revision", type=int, help="Write this revision when the content changed (a release's one revision; "
+                        "never below the current one, and above main's) instead of the current revision + 1")
+    parser.add_argument("--skip-main-check", action="store_true", help="With --revision: don't compare it with main's revision "
+                        "(only when origin can't be reached and you've checked main yourself)")
     return parser.parse_args(argv)
 
 
@@ -1366,6 +1520,16 @@ def main(argv=None):
     except KnowledgeError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
+    if args.revision is not None and not args.skip_main_check:
+        try:
+            on_main = main_revision(repo_root)
+        except UpdateRulesError as e:
+            print(f"error: {e}; --revision needs main's revision to check against (or --skip-main-check)", file=sys.stderr)
+            return 1
+        if args.revision <= on_main:
+            print(f"error: --revision {args.revision} isn't above main's revision {on_main}; merge main first and use "
+                  f"--revision {on_main + 1}", file=sys.stderr)
+            return 1
     nodes = None
     if not args.mc_versions:
         try:
@@ -1390,7 +1554,7 @@ def main(argv=None):
             knowledge, client, args.mc_versions, old_doc, nodes=nodes,
         )
         v1_content, _ = v1_projection(content)
-        finals = finalize_documents([(v2_content(content), old_v2), (v1_content, old_v1)])
+        finals = finalize_documents([(v2_content(content), old_v2), (v1_content, old_v1)], revision=args.revision)
     except UpdateRulesError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
