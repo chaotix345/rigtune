@@ -2,14 +2,16 @@ package io.github.chaotix345.rigtune.gametest;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
-import io.github.chaotix345.rigtune.client.ui.RowFocus;
 import io.github.chaotix345.rigtune.client.ui.PreviewScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
+import io.github.chaotix345.rigtune.client.ui.RowFocus;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
+import io.github.chaotix345.rigtune.core.apply.SafeFileNames;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.model.Action;
@@ -17,7 +19,19 @@ import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.UpdateInfo;
+import io.github.chaotix345.rigtune.core.modrinth.DependencyResolver;
+import io.github.chaotix345.rigtune.core.modrinth.DownloadPlanner;
+import io.github.chaotix345.rigtune.core.modrinth.DryRunPlanner;
+import io.github.chaotix345.rigtune.core.modrinth.HttpModrinthClient;
+import io.github.chaotix345.rigtune.core.modrinth.ModrinthClient;
+import io.github.chaotix345.rigtune.core.modrinth.ModrinthVersion;
+import io.github.chaotix345.rigtune.core.modrinth.RangeReader;
+import io.github.chaotix345.rigtune.core.modrinth.StagedProjects;
+import io.github.chaotix345.rigtune.core.modrinth.VersionPins;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
+import io.github.chaotix345.rigtune.core.preview.DownloadInputs;
+import io.github.chaotix345.rigtune.core.preview.PreviewPlanner;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
@@ -42,6 +56,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -81,6 +97,7 @@ public class PreviewGameTest implements FabricClientGameTest {
 			canned(context, false);
 			canned(context, true);
 			realPreviewWritesNothing(context, real);
+			downloadChecks(context, real);
 			vanillaAsPreviewed(context, real);
 			stagedAsPreviewed(context, real);
 		} finally {
@@ -213,8 +230,131 @@ public class PreviewGameTest implements FabricClientGameTest {
 		checkPreviewLayout(context, "real preview");
 		context.takeScreenshot("preview-real");
 		check(before.equals(snapshot()), "the preview wrote nothing: " + difference(before, snapshot()));
+		// v0.5 L5: the candidates the fake Modrinth serves are text files, not jars, so their reads fail and the disclosure
+		// line stands in for the check whenever a file is listed.
+		boolean listed = preview.downloads().stream().anyMatch(d -> d.fileName() != null);
+		check(hasNote(context, rows) == (listed && !preview.downloadsChecked()), "the disclosure line with unchecked downloads only: " + rows);
 		press(context, "gui.done");
 		context.waitForScreen(RigTuneScreen.class);
+	}
+
+	// docs/v0.5/SPEC.md 2H L5 (AC2H.1b): with Modrinth on, the preview reads each download's fabric.mod.json from the fake
+	// Modrinth through Range requests (FakeModrinth's `ranged`) and runs Apply's fabric.mod.json checks: Mod Menu's update,
+	// which a test pin rules out, is under "Not changed" with Apply's own line, Fabric API is listed, and the disclosure
+	// line isn't shown. With Modrinth off nothing is read, and the disclosure line shows with the listed update. A temporary
+	// mods folder, so nothing of the game's is touched.
+	private void downloadChecks(ClientGameTestContext context, RigTuneController real) {
+		TreeMap<String, String> before = snapshot();
+		boolean network = GameTestNet.set(context, real, true);
+		Path temp = null;
+		try {
+			temp = Files.createTempDirectory("rigtune-preview-l5");
+			Path mods = Files.createDirectories(temp.resolve("mods"));
+			String mc = real.report().hardware().mcVersion();
+			HttpModrinthClient modrinth = new HttpModrinthClient("gametest");
+			ModrinthVersion modMenu = modrinth.latestVersion("mOgUt4GM", "fabric", mc).orElseThrow(() -> new AssertionError("the fake Modrinth serves Mod Menu"));
+			Path oldModMenu = Files.writeString(mods.resolve("modmenu-old.jar"), "an older Mod Menu");
+			Recommendation update = new Recommendation("l5:update-modmenu", Category.UPDATE_MOD, Impact.LOW, "Update Mod Menu", "",
+					new Action.UpdateMod("modmenu", oldModMenu, new UpdateInfo("modmenu", modMenu.projectId(), "old", modMenu.id(), modMenu.versionNumber(),
+							modMenu.primaryFile())), true);
+			Recommendation fabricApi = new Recommendation("l5:add-fabric-api", Category.ADD_MOD, Impact.LOW, "Install Fabric API", "",
+					new Action.AddMod("fabric-api", "P7dR8mSH", "Fabric API"), true);
+			List<Recommendation> recs = List.of(update, fabricApi);
+			VersionPins pins = new VersionPins(List.of(new VersionPins.Pin("l5-test", "L5 test mod", "l5-test", "modmenu", "Mod Menu",
+					VersionPins.Kind.DEPENDS, () -> "99.x", v -> false)));
+			List<String> reads = Collections.synchronizedList(new ArrayList<>());
+
+			ApplyPreview checked = l5Preview(temp, mods, modrinth, mc, modMenu, pins, reads, recs);
+			RigTune.LOGGER.info("PreviewGameTest: L5 preview with Modrinth on: {} (read {})", checked, reads);
+			check(reads.size() == 2 && reads.getFirst().equals(modMenu.primaryFile().filename()), "both downloads read, Mod Menu's first: " + reads);
+			check(checked.downloads().size() == 1 && checked.downloads().getFirst().recommendationId().equals(fabricApi.id()), "Fabric API listed: " + checked);
+			check(checked.skipped().size() == 1 && checked.skipped().getFirst().recommendationId().equals(update.id())
+					&& checked.skipped().getFirst().reason() == ApplyPreview.Reason.DOWNLOAD_FAILED, "Mod Menu's update refused: " + checked);
+			String refusal = checked.skipped().getFirst().detail();
+			check(refusal.startsWith("L5 test mod, which is installed, needs Mod Menu 99.x, not "), "the pin's line: " + refusal);
+			check(refusal.equals(applysRefusal(mods, modrinth, mc, modMenu, pins, update)), "Apply's own line: " + refusal);
+			check(checked.downloadsChecked(), "every listed download was checked");
+			List<String> rows = showPreview(context, checked, recs, "preview-l5-checked");
+			check(rows.stream().anyMatch(r -> r.equals("Update Mod Menu: " + refusal)), "the refusal under Not changed: " + rows);
+			check(!hasNote(context, rows), "no disclosure line once every download was checked: " + rows);
+
+			GameTestNet.set(context, real, false);
+			reads.clear();
+			ApplyPreview off = l5Preview(temp, mods, modrinth, mc, modMenu, pins, reads, recs);
+			RigTune.LOGGER.info("PreviewGameTest: L5 preview with Modrinth off: {}", off);
+			check(reads.isEmpty(), "nothing read with Modrinth off: " + reads);
+			check(off.downloads().stream().map(ApplyPreview.Download::fileName).toList().equals(Arrays.asList(modMenu.primaryFile().filename(), null)),
+					"the update listed, the addition unresolved: " + off);
+			check(!off.downloadsChecked() && off.skipped().isEmpty(), "unchecked, nothing refused: " + off);
+			List<String> offRows = showPreview(context, off, recs, "preview-l5-modrinth-off");
+			check(hasNote(context, offRows), "the disclosure line with the listed update: " + offRows);
+		} catch (IOException e) {
+			throw new AssertionError(e);
+		} finally {
+			GameTestNet.set(context, real, network);
+			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
+			deleteTree(temp);
+		}
+		check(before.equals(snapshot()), "the L5 previews wrote nothing in the game folder: " + difference(before, snapshot()));
+	}
+
+	// The preview's own inputs, as RealController.preview builds them, over a temporary mods folder and a test pin; Modrinth
+	// is on or off as RigTune's settings say.
+	private ApplyPreview l5Preview(Path temp, Path mods, ModrinthClient modrinth, String mc, ModrinthVersion modMenu, VersionPins pins, List<String> reads,
+			List<Recommendation> recs) {
+		boolean lookups = ClientSettings.shared(configDir).modrinthAllowed();
+		RangeReader reader = new RangeReader("gametest", () -> ClientSettings.shared(configDir).modrinthAllowed());
+		DryRunPlanner.Checks checks = new DryRunPlanner.Checks(pins, Set.of(), file -> {
+			reads.add(file.filename());
+			return reader.read(file);
+		}, reader::close);
+		DownloadInputs inputs = new DownloadInputs(modrinth, lookups, "fabric", mc, Map.of(), Map.of(modMenu.id(), modMenu), Set.of(), Set.of(), Map.of(),
+				(a, b) -> false, StagedProjects.NONE, true).withJarChecks(checks);
+		return new PreviewPlanner(temp.resolve("options.txt"), Map.of(), Map.of(), List.of(), mods, inputs).preview(recs);
+	}
+
+	// What Apply's own planner says of Mod Menu's update once it has downloaded the whole jar (RealController.download's
+	// DownloadPlanner, the same pin): its refusal's cause, as the preview shows it.
+	private static String applysRefusal(Path mods, HttpModrinthClient modrinth, String mc, ModrinthVersion modMenu, VersionPins pins, Recommendation update) {
+		DownloadPlanner.Result result = new DownloadPlanner(new DependencyResolver(modrinth, "fabric", mc, Map.of()), mods, file -> {
+			Path pending = SafeFileNames.resolveJar(mods, file.filename(), PendingActions.PENDING_SUFFIX);
+			modrinth.download(file, pending);
+			return pending;
+		}, (a, b) -> false, Map.of(modMenu.id(), modMenu), pins).plan(List.of(update), Set.of(), Set.of(), Map.of());
+		check(result.errors().size() == 1, "Apply refuses the update: " + result.errors());
+		String error = result.errors().getFirst();
+		return error.substring(error.indexOf(": ") + 2);
+	}
+
+	private List<String> showPreview(ClientGameTestContext context, ApplyPreview preview, List<Recommendation> recs, String screenshot) {
+		CannedController canned = new CannedController(new StubController(RigTuneClient::hardware), false, preview);
+		context.runOnClient(mc -> mc.gui.setScreen(new PreviewScreen(new TitleScreen(), canned, recs)));
+		resize(context, 854, 480, 2);
+		PreviewScreen screen = waitForPreview(context, 100);
+		checkPreviewLayout(context, screenshot);
+		context.takeScreenshot(screenshot);
+		List<String> rows = context.computeOnClient(mc -> screen.rowText());
+		RigTune.LOGGER.info("PreviewGameTest: {} rows:\n{}", screenshot, String.join("\n", rows));
+		return rows;
+	}
+
+	// A row reading the disclosure (a wrapped row's lines are joined with spaces).
+	private static boolean hasNote(ClientGameTestContext context, List<String> rows) {
+		String note = context.computeOnClient(mc -> Component.translatable("rigtune.preview.note.downloads").getString());
+		return rows.stream().anyMatch(r -> r.replace(" ", "").equals(note.replace(" ", "")));
+	}
+
+	private static void deleteTree(@Nullable Path root) {
+		if (root == null) {
+			return;
+		}
+		try (Stream<Path> files = Files.walk(root)) {
+			for (Path file : files.sorted(Comparator.reverseOrder()).toList()) {
+				Files.deleteIfExists(file);
+			}
+		} catch (IOException e) {
+			RigTune.LOGGER.warn("PreviewGameTest: could not delete {}", root, e);
+		}
 	}
 
 	// options.txt, mods/ and config/ (RigTune's own caches aside; its apply files included), by SHA-256.
