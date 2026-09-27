@@ -125,7 +125,11 @@ API difference: none expected); the full build and the game tests are CI's.
   `lastBenchmarkExcludedSteps()`; `StutterScreen.benchmarkLine(r)` = `benchmarkLine(r, StutterHooks.lastBenchmarkExcludedSteps())`
   with `rigtune.stutter.benchmark.excluded.one`/`.many`. BenchmarkResultScreen needs no change for the line; WS-B's
   BenchmarkController only has to call the seam.
-- **S11.** `src/test/resources/v050-written/ws-s/` (`stutter.json`, `expect.json`) from `V050WrittenWsSTest`.
+- **S11.** `src/test/resources/v050-written/ws-s/` (`stutter.json`, `expect.json`) from `V050WrittenWsSTest` (the
+  26.3 node compares the same bytes). compat030 against the set: the released 0.3.0 jar (sha256 5717f65c…, as pinned in
+  build.yml) on the v040-written instance with ws-s's `stutter.json` in place of 0.4's (compat030's `written.py` doesn't
+  know the v0.5 sets yet): `RESULT PASS`, "0.3.0 reading them changed no file: 9 file(s) unchanged". No
+  `placeholder/ws-s/` exists, so none was deleted.
 - **S12.** StutterGameTest: after the capture checks, the render distance +2 → a SETTINGS_CHANGED event; the settings
   check's cost (`StutterHooks.settingsCheckCost`); after Stop the saved session's `settingChanges()` is exactly that
   change; the render distance is put back.
