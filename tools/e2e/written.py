@@ -113,7 +113,8 @@ def expectations(sets):
 
 def compose(sets, instance, conflicts=None):
     """Writes every set's files into instance/config/rigtune: history.json's entries merged from every set by `at`,
-    pending.json's ops from every set, benchmarks.json's runs from every set (run ids unique), any other file several
+    pending.json's ops from every set, benchmarks.json's runs from every set (run ids unique), profiles.json's profiles
+    by id with only the latest set's baseline (ProfileStore keeps one), any other file several
     sets provide deep-merged (objects key by key, lists
     without exact duplicates, a scalar from the later set, each such override appended to `conflicts` as (file, key
     path, earlier set, later set)); a file one set provides keeps its bytes. ${INSTANCE} paths are filled in. Returns
@@ -162,6 +163,22 @@ def compose(sets, instance, conflicts=None):
                 data = {k: v for k, v in json.loads(path.read_text(encoding="utf-8")).items() if k != "runs"}
                 merged = _claim("", data, set_name, owners) if merged is None else _merge(name, "", merged, data, set_name, conflicts, owners)
             text = json.dumps(dict(merged, runs=runs), indent=2) + "\n"
+            (config / name).write_text(fixtures.instantiate_json(text, instance) if fixtures.TOKEN in text else text,
+                                       encoding="utf-8", newline="\n")
+        elif name == "profiles.json" and len(provided) > 1:
+            # ProfileStore keeps one baseline (a new one replaces the older): a later set's baseline replaces an earlier
+            # set's, and the other profiles are merged by id (the later set's copy wins). The rest is deep-merged.
+            profiles, owners, merged = [], {}, None
+            for set_name, path in provided:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                mine = data.get("profiles") or []
+                if any(p.get("source") == "baseline" for p in mine):
+                    profiles = [p for p in profiles if p.get("source") != "baseline"]
+                ids = {p.get("id") for p in mine}
+                profiles = [p for p in profiles if p.get("id") not in ids] + mine
+                rest = {k: v for k, v in data.items() if k != "profiles"}
+                merged = _claim("", rest, set_name, owners) if merged is None else _merge(name, "", merged, rest, set_name, conflicts, owners)
+            text = json.dumps(dict(merged, profiles=profiles), indent=2) + "\n"
             (config / name).write_text(fixtures.instantiate_json(text, instance) if fixtures.TOKEN in text else text,
                                        encoding="utf-8", newline="\n")
         elif len(provided) > 1:

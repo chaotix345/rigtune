@@ -13,14 +13,9 @@ unchanged, and the downgrade E2E checks they are byte-identical.
 |---|---|---|
 | `ws-l1` | settings.json | `modFilesByRigTune: true` |
 | `ws-l2` | pending.json, history.json, awareness.json | a two-op file group (0.4.0's helper applies it at its exit, AC4d.3) with its STAGED journal entry; two P0.4 notice keys in `dismissed` |
-| `ws-s` | stutter.json | a session with `settingsAtStart`/`settingsAtEnd` and the `settingsChanged` tag |
 | `ws-s2` | history.json, pending.json, stutter-fixes.json | an applied stutter fix (`vanilla.renderDistance`) and a staged one (a Sodium PATCH_JSON op) |
-| `ws-p` | history.json, profiles.json | a `baseline-` entry with `foldedEntryIds`; a profile with a 1024 DH radius; `battery.previousProfile` |
-| `ws-b` | benchmarks.json | runs with `worldFresh`, `dhGenerating`, `stagedAtStart` |
 | `ws-t` | benchmarks.json, history.json, pending.json, tryit.json | a `tryit-` pair, the try's staged Apply and its PATCH_JSON op, the open try |
-| `ws-w` | awareness.json | `optionsAtExit` |
 | `ws-w2` | awareness.json | `acknowledgedStartupRegressions` |
-| `ws-f` | awareness.json | `firstrun.guide` in `dismissed` |
 
 A few details:
 - Every entry is newer than the v0.4 sets'. The newest (ws-s2's staged fix) is the one a downgraded 0.4.0's Undo last picks.

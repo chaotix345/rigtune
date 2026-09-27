@@ -102,7 +102,8 @@ public final class Compat040 {
 	// kind or an expectation this interpreter doesn't know fails; a check with no expectation fails.
 
 	private static final Set<String> CLASSES = Set.of("Journal", "HistoryModel", "UndoPlanner", "BenchmarkHistory", "PendingActions",
-			"ApplyHelper", "ClientSettings", "StutterStore", "AwarenessStore", "ProfileStore", "ServerLimitsStore", "RestoreMarker", "Unread");
+			"ApplyHelper", "ClientSettings", "StutterStore", "StutterSummary", "AwarenessStore", "ProfileStore", "ServerLimitsStore", "RestoreMarker",
+			"Unread");
 	private static final Map<String, Set<String>> EXPECTATIONS = Map.ofEntries(
 			Map.entry("Journal", Set.of("state", "entries", "noBad")),
 			Map.entry("HistoryModel", Set.of("entries", "unknownKinds")),
@@ -112,6 +113,7 @@ public final class Compat040 {
 			Map.entry("ApplyHelper", Set.of("appliesGroup")),
 			Map.entry("ClientSettings", Set.of("state", "noBad")),
 			Map.entry("StutterStore", Set.of("state", "sessions", "noBad")),
+			Map.entry("StutterSummary", Set.of("state", "sessions")),
 			Map.entry("AwarenessStore", Set.of("state", "keeps", "noBad")),
 			Map.entry("ProfileStore", Set.of("state", "keeps", "noBad")),
 			Map.entry("ServerLimitsStore", Set.of("state", "keeps", "noBad")),
@@ -242,6 +244,22 @@ public final class Compat040 {
 				}
 				ok &= expectState(c, sessions.size() == inFile, sessions.size() + " of " + inFile + " session(s) loaded", seen);
 				ok &= expectInt(c, "sessions", sessions.size(), seen);
+			}
+			// AC2S.13: 0.4.0's Copy summary renders every session it loads, without an exception (state OK).
+			case "StutterSummary" -> {
+				List<StutterReport> sessions = new StutterStore(config).sessions();
+				int rendered = 0;
+				String error = null;
+				for (StutterReport session : sessions) {
+					try {
+						rendered += StutterSummary.text(session, List.of()).isBlank() ? 0 : 1;
+					} catch (RuntimeException e) {
+						error = e.toString();
+					}
+				}
+				boolean all = error == null && rendered > 0 && rendered == sessions.size();
+				ok &= expectState(c, all, error != null ? "threw " + error : rendered + " of " + sessions.size() + " session(s) rendered", seen);
+				ok &= expectInt(c, "sessions", rendered, seen);
 			}
 			case "AwarenessStore", "ProfileStore", "ServerLimitsStore" -> {
 				boolean writable = switch (kind) {

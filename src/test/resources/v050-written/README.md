@@ -56,6 +56,8 @@ Contracts WS-K landed for these (docs/v0.5/design/ws-k.md): the optional fields 
 - **`awareness.json`**: the union: `dismissed`, `acknowledgedRegressions`, `acknowledgedStartupRegressions` and every
   other array as the union of the sets' values (exact duplicates once); objects merged key by key.
 - **`benchmarks.json`**: `runs` concatenated (run ids unique across sets).
+- **`profiles.json`**: one baseline, the latest set's: ProfileStore keeps only one, and a new baseline replaces the
+  older. The other `profiles` are merged by `id` (the later set's copy wins); the rest is deep-merged as below.
 - **Any other file two sets provide**: deep-merged (objects key by key, lists without exact duplicates, a scalar from the
   later set, each such override reported as a conflict). A differing `formatVersion` or `schemaVersion` stops the run.
 - **A file only one set provides** keeps its bytes (the `${INSTANCE}` token filled in).
@@ -86,7 +88,8 @@ check kind it doesn't know, or on a check of a file the set doesn't hold. One fi
 ```
 
 - `class`: 0.4.0's class that reads the file (Journal, HistoryModel, UndoPlanner, BenchmarkHistory, PendingActions,
-  ApplyHelper, ClientSettings, StutterStore, AwarenessStore, ProfileStore, ServerLimitsStore, RestoreMarker), or
+  ApplyHelper, ClientSettings, StutterStore, StutterSummary (the Copy summary renders every session), AwarenessStore,
+  ProfileStore, ServerLimitsStore, RestoreMarker), or
   `Unread` for a file 0.4.0 never opens.
 - `file`: the file under `config/rigtune/` it reads.
 - Expectations (each optional; at least one per check): `state` (the load state, `OK`), `entries`/`runs`/`ops`/

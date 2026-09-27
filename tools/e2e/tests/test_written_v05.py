@@ -116,6 +116,20 @@ class MergeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             written.compose(written.resolve_all([self.v4, self.v5]), self.instance)
 
+    def test_profiles_keep_one_baseline_the_latest_set_s_and_merge_by_id(self):
+        base = lambda pid, at: {"id": pid, "name": "My settings", "source": "baseline", "createdAt": at}
+        write(self.v4 / "ws-p", "profiles.json", {"formatVersion": 1, "profiles": [base("b4", "2026-09-21T00:00:00Z"),
+                                                                                    {"id": "s1", "name": "Evening", "source": "saved"}],
+                                                  "active": "template:battery", "battery": {"previousProfile": "b4"}})
+        write(self.v5 / "ws-p", "profiles.json", {"formatVersion": 1, "profiles": [base("b5", "2026-09-22T00:00:00Z"),
+                                                                                    {"id": "s1", "name": "Evening 2", "source": "saved"}],
+                                                  "battery": {"previousProfile": "b5"}})
+        written.compose(written.resolve_all([self.v4, self.v5]), self.instance)
+        profiles = json.loads((self.instance / "config" / "rigtune" / "profiles.json").read_text(encoding="utf-8"))
+        self.assertEqual([("b5", "baseline"), ("s1", "saved")], [(p["id"], p["source"]) for p in profiles["profiles"]])
+        self.assertEqual("Evening 2", profiles["profiles"][1]["name"])
+        self.assertEqual(("template:battery", "b5"), (profiles["active"], profiles["battery"]["previousProfile"]))
+
     def test_a_set_s_expect_json_is_never_composed(self):
         write(self.v5 / "ws-t", "expect.json", {"set": "ws-t", "checks": []})
         write(self.v5 / "ws-t", "tryit.json", {"formatVersion": 1})
