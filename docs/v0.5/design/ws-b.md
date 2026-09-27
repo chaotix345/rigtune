@@ -175,7 +175,10 @@ Sent to the coordinator with proposed dispositions; fixed in 03c46c37 (red tests
 - Part 1: run 36317805129 (head 949a9422): every job and all 3 legs green. Part 2: run 36324863949 (52c866be) red on
   26.2 GL only (BenchmarkHistoryGameTest: a clipped status line at 854×480@2, Deviations 2; both 26.3 legs green,
   A11yGameTest's new walk included), then run 36325935349 (58986e31): every job and all 3 legs green; unit tests 2093
-  per version (2 skipped, 0 failures; the `test-reports` artifact).
+  per version (2 skipped, 0 failures; the `test-reports` artifact). After the self-review's fixes and the merge of
+  origin/feat/v0.5.0 (3a67ef64): run 36332367908 (head 0553e104): every job and all 3 legs green, unit tests 2176 per
+  version (2 skipped, 0 failures); `a11y-bench-result-scrolled-640x480-scale2` shows the 12-row table scrolled with the
+  focused last row framed and the scrollbar inside the table's edge.
 - **Screenshots looked at** (`gametest-screenshots-26.2-OpenGL` of 36325935349 against the same artifact of 36311670542,
   the WS-K merge a7613410: AC2A.2's baseline; and `-26.3-OpenGL` of 36324863949): `bench-result-wrapped-{1280x720,
   854x480,640x480}-scale2` show every status line, header label, table value and chart of the baseline, the only
@@ -190,7 +193,10 @@ Sent to the coordinator with proposed dispositions; fixed in 03c46c37 (red tests
   34.1 (36.4), workerCpuMs5s 146.9 (135.5), tickHookOnVsReference 1.521 (1.481); 26.3 GL 96.3 (82.2), 36.3 (27.0), 178.3
   (153.2), 1.611 (1.746); 26.3 Vulkan 96.6 (120.0), 51.4 (39.9), 136.0 (200.7), 1.481 (1.535); `v05RenderThreadResolve`
   null on every leg. All inside the runner spread ws-k.md records (e.g. 26.2 renderThreadInitCpuMs 63.5-112.9 across
-  near-identical code) and every budget.
+  near-identical code) and every budget. Run 36332367908 (with the other merged workstreams): 26.2 GL 108.7 / 93.2 / 184.1 / 1.439, 26.3 GL
+  84.4 / 29.0 / 145.5 / 1.612, Vulkan 98.3 / 47.6 / 178.1 / 1.485, `v05RenderThreadResolve` null; the 26.2
+  clientStartedWallMs of 93.2 (budget 141) is in the CLIENT_STARTED handler, where WS-B adds nothing (runner spread or
+  another workstream's start work).
 
 ## Docs (for the docs workstream)
 - **CHANGELOG [0.5.0]**: "Benchmark: a render distance whose terrain hadn't loaded in time is measured again once after
