@@ -80,7 +80,9 @@ class FixSpecTest {
 	@Test
 	void noSectionNoFixes() throws IOException {
 		assertEquals(List.of(), FixSpec.of(null));
-		assertEquals(List.of(), FixSpec.of(RulesLoader.parse(bundled())));
+		JsonObject withoutSection = JsonParser.parseString(bundled()).getAsJsonObject();
+		withoutSection.remove("stutterFixes");
+		assertEquals(List.of(), FixSpec.of(RulesLoader.parse(withoutSection.toString())));
 	}
 
 	@Test

@@ -48,8 +48,8 @@ class StutterSeedScenarioTest {
 
 	@Test
 	void theBundledSeeds() {
-		assertEquals(List.of("ram-stutter-gc-heap", "stutter-gc-explicit", "stutter-sodium-defer", "stutter-dh-threads", "stutter-chunk-loading"),
-				RULES.stutterAdvice.stream().map(a -> a.id).toList());
+		assertEquals(List.of("ram-stutter-gc-heap", "stutter-gc-explicit", "stutter-sodium-defer", "stutter-dh-threads", "stutter-chunk-loading",
+				"stutter-chunks-loading-tag"), RULES.stutterAdvice.stream().map(a -> a.id).toList());
 		RULES.stutterAdvice.forEach(a -> assertTrue(StutterAdvisor.supported(a.requires), a.id));
 		assertEquals(List.of(), fired(calm()), "a calm session fires nothing");
 	}

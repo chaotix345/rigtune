@@ -124,7 +124,8 @@ class GeneratedRulesTests(unittest.TestCase):
     def test_stutter_advice(self):
         rules = self.v2["stutterAdvice"]
         self.assertEqual([r["id"] for r in rules],
-                         ["ram-stutter-gc-heap", "stutter-gc-explicit", "stutter-sodium-defer", "stutter-dh-threads", "stutter-chunk-loading"])
+                         ["ram-stutter-gc-heap", "stutter-gc-explicit", "stutter-sodium-defer", "stutter-dh-threads", "stutter-chunk-loading",
+                          "stutter-chunks-loading-tag"])
         for rule in rules:
             self.assertEqual(rule["requires"], ["stutter-doctor"], rule["id"])
             if "heapRaiseRoomMbAtLeast" in json.dumps(rule["when"]):
