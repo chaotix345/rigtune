@@ -421,11 +421,13 @@ tasks.named("runProductionClientGameTest") {
 
 // The fake Modrinth's catalog for this node: the jars the production game test loads (fabric-api, Mod Menu, Sodium; their
 // real bytes, so RigTune's hash lookups find them) and one version for this Minecraft version of every other mod the rules
-// can recommend, each a small generated file that requires fabric-api. Fixed ids and dates: the same answers every run.
+// can recommend, each a small generated file that requires fabric-api unless tools/gametest/modrinth-candidates.json lists
+// its relations. Fixed ids and dates: the same answers every run.
 def modrinthFixtureDir = layout.buildDirectory.dir("gametest-modrinth")
 def gametestModrinthCatalog = tasks.register("gametestModrinthCatalog") {
 	def mods = configurations.productionGameTestMods
 	def rulesFile = rootProject.file("rules/rules-v2.json")
+	def candidatesFile = rootProject.file("tools/gametest/modrinth-candidates.json")
 	def outDir = modrinthFixtureDir
 	def installed = [
 			"fabric-api-": [id: "P7dR8mSH", slug: "fabric-api", title: "Fabric API", version: project.fabric_api_version],
@@ -434,6 +436,7 @@ def gametestModrinthCatalog = tasks.register("gametestModrinthCatalog") {
 	def mc = mcVersion
 	inputs.files(mods).withPropertyName("mods")
 	inputs.file(rulesFile).withPropertyName("rules")
+	inputs.file(candidatesFile).withPropertyName("candidates")
 	inputs.property("mc", mc)
 	inputs.property("installed", installed.toString())
 	outputs.dir(outDir)
@@ -455,12 +458,13 @@ def gametestModrinthCatalog = tasks.register("gametestModrinthCatalog") {
 			}
 		}
 		def requiresFabricApi = [[project_id: "P7dR8mSH", dependency_type: "required"]]
+		def relations = new groovy.json.JsonSlurper().parse(candidatesFile, "UTF-8").dependencies
 		new groovy.json.JsonSlurper().parse(rulesFile, "UTF-8").mods.each { rule ->
 			if (!projects.containsKey(rule.slug)) {
 				File file = new File(dir, "files/${rule.slug}-fixture+mc${mc}.jar")
 				file.setText("RigTune game-test fixture: ${rule.slug} for Minecraft ${mc}\n", "UTF-8")
 				projects[rule.slug] = [id: rule.projectId, slug: rule.slug, title: rule.title,
-									   versions: [version(fixedId("candidate:" + rule.slug + ":" + mc), "1.0.0-fixture+mc" + mc, file, requiresFabricApi)]]
+									   versions: [version(fixedId("candidate:" + rule.slug + ":" + mc), "1.0.0-fixture+mc" + mc, file, relations[rule.slug] ?: requiresFabricApi)]]
 			}
 		}
 		new File(dir, "catalog.json").setText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([cdnBase: null, projects: projects.values().toList()])), "UTF-8")
