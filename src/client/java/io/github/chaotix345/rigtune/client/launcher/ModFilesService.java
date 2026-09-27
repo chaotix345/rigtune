@@ -2,12 +2,18 @@ package io.github.chaotix345.rigtune.client.launcher;
 
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.probe.LauncherProbe;
+import io.github.chaotix345.rigtune.core.history.FirstRun;
 import io.github.chaotix345.rigtune.core.launcher.InstanceEvidence;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.launcher.LauncherModText;
 import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
+import io.github.chaotix345.rigtune.core.model.Text;
+import io.github.chaotix345.rigtune.core.notice.Notice;
+import io.github.chaotix345.rigtune.core.notice.NoticeAction;
+import io.github.chaotix345.rigtune.core.notice.NoticePriority;
 import org.jspecify.annotations.Nullable;
 
+import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
@@ -15,6 +21,9 @@ import java.util.function.Supplier;
 // RealController.v05() (X4); nothing happens in the constructor. The policy is read live from LauncherProbe's answers
 // (the detection, the .index/ listing: both in memory once in) and settings.json's opt-in: no I/O, any thread.
 public final class ModFilesService {
+	// MOD_FILES_NEWS (4b): its key (dismissed in awareness.json like any notice, so once per instance) and its action.
+	public static final String NEWS_KEY = "launcher.mod_files_news";
+	public static final String NEWS_SETTINGS = "settings";
 	private final @Nullable RealController controller;
 	private final Supplier<@Nullable LauncherInfo> launcher;
 	private final Supplier<@Nullable InstanceEvidence> evidence;
@@ -48,6 +57,20 @@ public final class ModFilesService {
 	// opted-in header line, the share line, C02's guide (LauncherModText.guideLine's optedIn).
 	public boolean optedIn() {
 		return optIn.getAsBoolean() && withoutOptIn().launcherManages();
+	}
+
+	// MOD_FILES_NEWS (4b): what changed for a player who used RigTune before, under LAUNCHER only (never PENDING: nothing is
+	// claimed before detection answers); a new player learns it from C02's guide instead. Null otherwise. The notice line
+	// asks on screen init/rebuild; this reads memory only.
+	public @Nullable Notice news(FirstRun.Status status) {
+		if (status != FirstRun.Status.RETURNING || policy() != ModFilesPolicy.LAUNCHER) {
+			return null;
+		}
+		return new Notice(NEWS_KEY, NoticePriority.MOD_FILES_NEWS,
+				Text.of("rigtune.launcher.mod_files.news", "RigTune now leaves this instance's mod files to %s", LauncherModText.nameOrYours(launcher.get())),
+				Text.of("rigtune.launcher.mod_files.news.detail",
+						"Installing, updating and turning off mods now come with the launcher's own steps. Settings → Mod files lets RigTune change them anyway."),
+				List.of(new NoticeAction(NEWS_SETTINGS, Text.of("rigtune.launcher.mod_files.news.settings", "Settings…"))), true);
 	}
 
 	// The share report's "- Mod files:" line, or null (LauncherModText.shareLine).

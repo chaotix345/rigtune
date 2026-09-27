@@ -150,6 +150,9 @@ class LauncherScenarioTest {
 		}
 		// v0.5 (docs/v0.5/SPEC.md 4b): the mod-file wording (LauncherModText, LauncherModAdvice) and every launcher's mod steps.
 		keys.put("rigtune.launcher.mod_files.guide", 1);
+		keys.put("rigtune.launcher.mod_files.news", 1);
+		keys.put("rigtune.launcher.mod_files.news.detail", 0);
+		keys.put("rigtune.launcher.mod_files.news.settings", 0);
 		keys.put("rigtune.launcher.mod_files.note.add", 1);
 		keys.put("rigtune.launcher.mod_files.note.disable", 1);
 		keys.put("rigtune.launcher.mod_files.note.pending", 0);
