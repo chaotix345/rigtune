@@ -92,11 +92,13 @@ class StutterFixesModelTest {
 	}
 
 	@Test
-	void causeSpikesAtLeastIsAStutterKeyAndUnknownUntilEvaluated() {
+	void causeSpikesAtLeastIsAStutterKeyAndEvaluatedAgainstTheFacts() {
 		assertTrue(ConditionEvaluator.hasStutterKey(RulesLoader.condition("{\"causeSpikesAtLeast\": {\"gc\": 1}}")));
-		assertEquals(UNKNOWN, StutterConditionTest.eval("{\"causeSpikesAtLeast\": {\"gc\": 1}}"), "the contracts stub");
+		// WS-S2 filled the contracts stub (it answered UNKNOWN): facts without dominated spikes count 0 for a measured cause.
+		assertEquals(FALSE, StutterConditionTest.eval("{\"causeSpikesAtLeast\": {\"gc\": 1}}"), "evaluated (StutterConditionTest.causeSpikes)");
 		assertEquals(UNKNOWN, StutterConditionTest.eval("{\"causeSpikesAtLeast\": {\"gc\": 1}}", null), "no facts (the main list)");
-		assertEquals(UNKNOWN, StutterConditionTest.eval("{\"not\": {\"causeSpikesAtLeast\": {\"gc\": 1}}}"), "a not over it is never TRUE");
+		assertEquals(UNKNOWN, StutterConditionTest.eval("{\"not\": {\"causeSpikesAtLeast\": {\"shaderCompile\": 1}}}"),
+				"a not over an unknown cause is never TRUE");
 		assertEquals(FALSE, StutterConditionTest.eval("{\"causeSpikesAtLeast\": {\"gc\": 1}, \"stutterShareAtLeast\": {\"gc\": 99}}"),
 				"a FALSE elsewhere still decides");
 	}

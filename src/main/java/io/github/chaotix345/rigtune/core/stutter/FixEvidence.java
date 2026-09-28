@@ -13,7 +13,8 @@ import java.util.Set;
 // huge spike can carry a share; it can't carry a count). A spike counts for a cause when that cause claimed at least half of
 // the spike's lost time; "unknown" counts the spikes whose unexplained part was at least half. The vocabulary is
 // stutterShareAtLeast's (Attributor.CAUSES). Under SD-1's ring limits a cause whose evidence rotated out simply doesn't
-// count: an undercount, the conservative direction.
+// count: an undercount, the conservative direction. A spike tagged settingsChanged (RW-11: right after a settings change
+// or a resource reload) never counts: it follows the change, not the cause a fix would address.
 public final class FixEvidence {
 	private FixEvidence() {
 	}
@@ -23,7 +24,7 @@ public final class FixEvidence {
 		Map<String, Integer> out = new LinkedHashMap<>();
 		for (Attributor.Attribution a : attributions) {
 			long lost = a.spike().lost();
-			if (lost <= 0) {
+			if (lost <= 0 || a.tags().contains(Attributor.SETTINGS_CHANGED)) {
 				continue;
 			}
 			a.claims().forEach((cause, ns) -> {

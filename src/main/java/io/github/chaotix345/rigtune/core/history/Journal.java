@@ -54,6 +54,11 @@ public final class Journal implements ChangeRecorder {
 	private record Read(State state, List<JournalEntry> entries) {
 	}
 
+	// v0.5 (docs/v0.5/SPEC.md 5, C20; WS-S2, an additive edit): the state and the entries of ONE read of history.json (the
+	// entries empty unless OK), so a read that fails after an OK one can't pass for an empty history.
+	public record Snapshot(State state, List<JournalEntry> entries) {
+	}
+
 	private final Path configDir;
 	private final Path file;
 	private final String rigtuneVersion;
@@ -115,6 +120,16 @@ public final class Journal implements ChangeRecorder {
 		} catch (IOException e) {
 			log.warn("Could not read " + file, e);
 			return State.UNREADABLE;
+		}
+	}
+
+	public Snapshot snapshot() {
+		try {
+			Read read = read();
+			return new Snapshot(read.state(), read.entries());
+		} catch (IOException e) {
+			log.warn("Could not read " + file, e);
+			return new Snapshot(State.UNREADABLE, List.of());
 		}
 	}
 

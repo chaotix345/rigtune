@@ -39,9 +39,11 @@ class FixOffersTest {
 		StutterReport report = FixGateTest.report(StutterReport.MONITOR, 400, 20);
 		Map<String, Double> claimed = new HashMap<>(Map.of("chunkBuild", 50.0, "chunkLoad", 45.0));
 		Set<String> unmeasured = new HashSet<>(Set.of(Attributor.RENDER));
+		Map<String, Integer> dominated = new HashMap<>();
 		Map<String, String> settings = new LinkedHashMap<>(Map.of(RD, "12", DEFER, "ZERO_FRAMES"));
 		Set<String> mods = new HashSet<>(Set.of("sodium"));
 		ServerLimits live;
+		boolean excluded;
 		boolean busy;
 		boolean writable = true;
 
@@ -54,11 +56,30 @@ class FixOffersTest {
 		}
 
 		Map<String, FixOffer> run(SettingsSnapshot effective) {
-			StutterFacts facts = new StutterFacts(claimed, Map.of(), 0, 0, 0, null, null, null, 4.0, "g1", true, unmeasured);
+			StutterFacts facts = new StutterFacts(claimed, Map.of(), 0, 0, 0, null, null, null, 4.0, "g1", true, unmeasured, dominated);
 			EvalContext ctx = StutterAdvisor.context(rules, Fixtures.userRig().build(), Fixtures.mods(mods.toArray(String[]::new)), effective, Goal.BALANCED,
 					facts);
-			return FixOffers.evaluate(FixSpec.of(rules), fired, report, ctx, effective, mods, live, busy, writable);
+			return FixOffers.evaluate(FixSpec.of(rules), fired, report, excluded, ctx, effective, mods, live, busy, writable);
 		}
+	}
+
+	// The bundled rules (r17's seeds): the Sodium fix needs 40 % of the lost time claimed as chunk building AND 5 spikes it
+	// dominated; the render-distance fix the same for chunk loading.
+	@Test
+	void theBundledSeedsNeedTheDominatedSpikesToo() throws IOException {
+		Case c = new Case();
+		c.rules = io.github.chaotix345.rigtune.core.rules.RulesLoader.loadBundled();
+		c.claimed.put("chunkBuild", 40.0);
+		c.dominated.put("chunkBuild", 5);
+		c.dominated.put("chunkLoad", 4);
+		Map<String, FixOffer> offers = c.run();
+		assertEquals(new FixOffer.Offer("stutter-sodium-defer", DEFER, "ZERO_FRAMES", "ALWAYS", false), offers.get("stutter-sodium-defer"));
+		assertEquals(notYet(FixOffer.Reason.EVIDENCE, "stutter-chunk-loading"), offers.get("stutter-chunk-loading"), "4 dominated spikes");
+		c.dominated.put("chunkBuild", 4);
+		assertEquals(notYet(FixOffer.Reason.EVIDENCE, "stutter-sodium-defer"), c.run().get("stutter-sodium-defer"));
+		c.dominated.put("chunkBuild", 9);
+		c.claimed.put("chunkBuild", 39.0);
+		assertEquals(notYet(FixOffer.Reason.EVIDENCE, "stutter-sodium-defer"), c.run().get("stutter-sodium-defer"), "39 %");
 	}
 
 	private static FixOffer.NotYet notYet(FixOffer.Reason reason, String adviceId, String... args) {
@@ -122,6 +143,9 @@ class FixOffersTest {
 		c = new Case();
 		c.report = FixGateTest.report(StutterReport.BENCHMARK, 400, 20);
 		assertEquals(notYet(FixOffer.Reason.BENCHMARK, "stutter-sodium-defer"), c.run().get("stutter-sodium-defer"));
+		c = new Case();
+		c.excluded = true;
+		assertEquals(notYet(FixOffer.Reason.EXCLUDED, "stutter-chunk-loading"), c.run().get("stutter-chunk-loading"));
 		c = new Case();
 		c.busy = true;
 		assertEquals(notYet(FixOffer.Reason.BUSY, "stutter-sodium-defer"), c.run().get("stutter-sodium-defer"));

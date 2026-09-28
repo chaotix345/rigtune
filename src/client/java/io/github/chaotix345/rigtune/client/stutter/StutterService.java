@@ -15,6 +15,7 @@ import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.store.JsonStateFile;
+import io.github.chaotix345.rigtune.core.stutter.FixConditions;
 import io.github.chaotix345.rigtune.core.stutter.StutterAdvisor;
 import io.github.chaotix345.rigtune.core.stutter.StutterAnalyzer;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
@@ -35,6 +36,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 
 // Stutter Doctor (docs/v0.4/SPEC.md 5): the opt-in session monitor (settings.json stutterMonitor), stutter.json and the
 // analysis behind StutterScreen. RealController delegates every C4 stutter method here in one line; StutterHooks calls
@@ -52,16 +54,21 @@ public final class StutterService {
 	private final Executor ioExecutor;
 	private @Nullable StutterStore store;
 
+	// fixes: C20's side of it (the offers, the session's outcome and conditions), null when it couldn't be worked out.
 	private record Analysis(StutterMonitor.@Nullable Capture capture, StutterReport report, List<StutterAdvisor.Fired> advice,
-			@Nullable Double dhWorldGenCores) {
+			@Nullable Double dhWorldGenCores, StutterFixService.@Nullable Fixes fixes) {
 	}
 
 	private enum Saved { UNKNOWN, LOADING, DONE }
 
-	// What the analysis needs about the machine, taken on the render thread; settingsNow: the four RW-11 values.
+	// What the analysis needs about the machine, taken on the render thread; settingsNow: the four RW-11 values; fixes: what
+	// C20's offers need (null without a game or when it couldn't be read).
 	private record Machine(@Nullable RulesDocument rules, @Nullable HardwareProfile hardware, @Nullable List<InstalledMod> mods, SettingsSnapshot settings,
-			Goal goal, @Nullable Map<String, String> settingsNow) {
+			Goal goal, @Nullable Map<String, String> settingsNow, StutterFixService.@Nullable Inputs fixes) {
 	}
+
+	// For StutterFixGameTest (AC5.12): the analysis the game test stands in for the capture's (null: the capture's own).
+	static volatile @Nullable BiFunction<StutterAnalyzer.Result, Long, StutterAnalyzer.Result> analysisProbe;
 
 	// Render thread.
 	private boolean analysing;
@@ -117,8 +124,29 @@ public final class StutterService {
 			loadSaved();
 			shown = saved;
 		}
+		StutterFixService fixes = fixes();
+		if (fixes != null) {
+			fixes.refresh();
+		}
 		return new StutterView(settings.stutterMonitor, session != null, session != null && session.paused(), session != null && shown == null && analysing,
-				isLive, shown == null ? null : shown.report(), shown == null ? List.of() : shown.advice(), session == null ? savedShortSince : List.of());
+				isLive, shown == null ? null : shown.report(), shown == null ? List.of() : shown.advice(), session == null ? savedShortSince : List.of(),
+				shown == null || shown.fixes() == null ? Map.of() : shown.fixes().offers(), fixes == null ? null : fixes.tracked());
+	}
+
+	// C20 (render thread): the fix side of the analysis StutterScreen shows, or null.
+	StutterFixService.@Nullable Fixes shownFixes() {
+		Analysis a = StutterMonitor.session() != null ? live : saved;
+		return a == null ? null : a.fixes();
+	}
+
+	// C20's service, or null where there is none (StutterServiceTest's controller has no configuration).
+	private @Nullable StutterFixService fixes() {
+		try {
+			return controller.configDir() == null ? null : controller.v05().stutterFixes();
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.warn("Stutter Doctor: the stutter fixes aren't available", e);
+			return null;
+		}
 	}
 
 	public void setMonitor(boolean on) {
@@ -164,7 +192,7 @@ public final class StutterService {
 		io(() -> store().clear());
 	}
 
-	private synchronized void io(Runnable task) {
+	synchronized void io(Runnable task) {
 		io = io.handle((ignored, error) -> null).thenRunAsync(() -> safely(task), ioExecutor);
 	}
 
@@ -187,10 +215,36 @@ public final class StutterService {
 	}
 
 	// v0.5 RW-11: a session starts with the settings it starts with (SettingsWatch registers its listener the first time).
-	private static StutterMonitor.Capture startSession(@Nullable Minecraft minecraft) {
+	// C20: and with the kind of world and the conditions a stutter fix's sessions are compared under.
+	private StutterMonitor.Capture startSession(@Nullable Minecraft minecraft) {
 		StutterMonitor.Capture session = StutterCapture.startSession();
 		session.settingsAtStart = SettingsWatch.sessionStarted(minecraft);
+		if (minecraft != null && fixes() != null) {
+			try {
+				session.worldKind = StutterFixService.worldKind(controller, minecraft);
+				session.fixAtStart = StutterFixService.conditions(minecraft, session.worldKind, SettingsBridge.read(minecraft));
+			} catch (RuntimeException e) {
+				RigTune.LOGGER.warn("Stutter Doctor: could not read the session's conditions for the stutter fixes", e);
+			}
+		}
 		return session;
+	}
+
+	// C20: an immediate fix restarts the session (render thread, after the settings write), so its sessions start with the
+	// new value; the new one's first 10 s are excluded like a level change's (the chunks reload).
+	void restartSession(Minecraft minecraft) {
+		StutterMonitor.Capture session = StutterMonitor.session();
+		if (session == null) {
+			return;
+		}
+		boolean paused = session.paused();
+		end(session, minecraft, false);
+		startSession(minecraft);
+		live = null;
+		StutterMonitor.levelChanged(System.nanoTime());
+		if (paused) {
+			pause(true);
+		}
 	}
 
 	// CLIENT_STOPPING: the running session is saved right away, on this thread, after any save still queued (leaving the
@@ -210,6 +264,17 @@ public final class StutterService {
 		StutterMonitor.Capture session = StutterMonitor.session();
 		if (session != null) {
 			end(session, minecraft, true);
+			// C20: the session's fix tracking was queued on the io chain; it gets the same bounded wait.
+			synchronized (this) {
+				pending = io;
+			}
+			try {
+				pending.get(2, TimeUnit.SECONDS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			} catch (ExecutionException | TimeoutException e) {
+				RigTune.LOGGER.warn("Stutter Doctor: the stutter fix's tracking didn't finish before quitting", e);
+			}
 		}
 		StutterMonitor.Capture bench = StutterMonitor.benchmark();
 		if (bench != null) {
@@ -234,11 +299,22 @@ public final class StutterService {
 			return;
 		}
 		live = null;
-		Machine machine = machine(minecraft);
+		Machine machine = machine(minecraft, session, true);
 		int gen = generation;
 		boolean aroundBenchmark = session.aroundBenchmark;
+		// Not the capture itself: the save may wait on the io chain, and the capture holds its frame ring.
+		FixConditions fixAtStart = session.fixAtStart;
 		Runnable save = () -> {
 			Analysis a = analyze(copy, machine);
+			// C20: the tracked fix sees every monitor session that ends, saved or not (in its own guard).
+			StutterFixService fixes = a.fixes() == null ? null : fixes();
+			if (fixes != null) {
+				try {
+					fixes.sessionEnded(a.fixes(), fixAtStart);
+				} catch (RuntimeException e) {
+					RigTune.LOGGER.warn("Stutter Doctor: the stutter fix's tracking failed for this session", e);
+				}
+			}
 			try {
 				if (!StutterStore.worthSaving(a.report(), aroundBenchmark)) {
 					RigTune.LOGGER.info("Stutter Doctor: session not saved: {} spikes in {} s of gameplay around a benchmark run (the run's own capture is saved)",
@@ -352,7 +428,9 @@ public final class StutterService {
 		if (copy == null || !keep) {
 			return;
 		}
-		Analysis a = analyze(copy, machine(minecraft));
+		// Analysed here, on the render thread: without the fixes' inputs (a benchmark capture is never offered a fix, and
+		// working that out would read pending.json).
+		Analysis a = analyze(copy, machine(minecraft, bench, false));
 		lastBenchmark = a.report();
 		lastBenchmarkDhWorldGen = a.dhWorldGenCores();
 		RigTune.LOGGER.info("Stutter Doctor: benchmark: {} spikes, causes {}, {}", a.report().spikes().total(), a.report().causes(), phases(copy));
@@ -391,13 +469,13 @@ public final class StutterService {
 		analysing = true;
 		lastAnalysis = now;
 		StutterCapture.Copy copy = StutterCapture.copy(session);
-		Machine machine = machine(minecraft);
+		Machine machine = machine(minecraft, session, true);
 		CompletableFuture.supplyAsync(() -> analyze(copy, machine), Probes.EXECUTOR).whenComplete((result, error) -> minecraft.execute(() -> {
 			analysing = false;
 			if (error != null) {
 				RigTune.LOGGER.warn("Stutter Doctor: analysis failed", error);
 			} else if (StutterMonitor.session() == session) {
-				live = new Analysis(session, result.report(), result.advice(), result.dhWorldGenCores());
+				live = new Analysis(session, result.report(), result.advice(), result.dhWorldGenCores(), result.fixes());
 			}
 		}));
 	}
@@ -429,7 +507,7 @@ public final class StutterService {
 		StutterReport r = shown.report();
 		saved = r == null ? null
 				: justSaved != null && r.startedAt().equals(justSaved.report().startedAt()) && r.source().equals(justSaved.report().source()) ? justSaved
-				: new Analysis(null, r, adviceFor(r.advice(), controller.rules()), null);
+				: new Analysis(null, r, adviceFor(r.advice(), controller.rules()), null, null);
 		savedShortSince = shown.shortSince().stream().map(StutterReport::sessionSeconds).toList();
 	}
 
@@ -446,14 +524,24 @@ public final class StutterService {
 		return out;
 	}
 
-	private Machine machine(Minecraft minecraft) {
+	private Machine machine(Minecraft minecraft, StutterMonitor.@Nullable Capture capture, boolean withFixes) {
 		SettingsSnapshot settings;
 		try {
 			settings = SettingsBridge.read(minecraft);
 		} catch (RuntimeException e) {
 			settings = new SettingsSnapshot(Map.of());
 		}
-		return new Machine(controller.rules(), controller.hardwareProfile(), controller.mods(), settings, controller.goal(), SettingsWatch.values(minecraft));
+		StutterFixService.Inputs fixInputs = null;
+		StutterFixService fixes = minecraft == null || !withFixes ? null : fixes();
+		if (fixes != null) {
+			try {
+				fixInputs = fixes.inputs(minecraft, capture, settings);
+			} catch (RuntimeException e) {
+				RigTune.LOGGER.warn("Stutter Doctor: could not read what the stutter fixes need", e);
+			}
+		}
+		return new Machine(controller.rules(), controller.hardwareProfile(), controller.mods(), settings, controller.goal(), SettingsWatch.values(minecraft),
+				fixInputs);
 	}
 
 	private static Analysis analyze(StutterCapture.Copy c, Machine m) {
@@ -464,6 +552,10 @@ public final class StutterService {
 				c.source(), HardwareProbe.minecraftVersion(), c.collector(), Runtime.getRuntime().maxMemory() / MIB,
 				hw == null || hw.totalRamMb() <= 0 ? null : hw.totalRamMb(), Runtime.getRuntime().availableProcessors(), c.phaseTiming(), waits,
 				c.gcMeasured(), c.idleNanos()));
+		BiFunction<StutterAnalyzer.Result, Long, StutterAnalyzer.Result> probe = analysisProbe;
+		if (probe != null) {
+			result = probe.apply(result, c.startNanos());
+		}
 		List<StutterAdvisor.Fired> advice = m.rules() == null || hw == null ? List.of()
 				: StutterAdvisor.evaluate(m.rules(), StutterAdvisor.context(m.rules(), hw, m.mods(), m.settings(), m.goal(), result.facts()),
 						result.report().enoughData());
@@ -473,7 +565,16 @@ public final class StutterService {
 		if (c.settingsAtStart() != null) {
 			report = report.withSettings(c.settingsAtStart(), m.settingsNow());
 		}
-		return new Analysis(null, report, advice, result.dhWorldGenCores());
+		// C20 (docs/v0.5/SPEC.md 5): the fixes under the advice, in their own guard (the advice is shown whatever happens here).
+		StutterFixService.Fixes fixes = null;
+		if (m.fixes() != null) {
+			try {
+				fixes = StutterFixService.evaluate(result, report, advice, c, m.rules(), hw, m.mods(), m.settings(), m.goal(), m.fixes());
+			} catch (RuntimeException e) {
+				RigTune.LOGGER.warn("Stutter Doctor: could not work out the stutter fixes", e);
+			}
+		}
+		return new Analysis(null, report, advice, result.dhWorldGenCores(), fixes);
 	}
 
 	// "phase timing ok (per-frame baselines: packets 12.0 us, ticks 8.1 us, render 450.2 us; timers seen 11111)", for the

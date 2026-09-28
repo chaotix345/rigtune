@@ -11,6 +11,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -23,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -282,5 +284,43 @@ class StutterServiceTest {
 		io.runAll();
 		assertNull(StutterMonitor.benchmark());
 		assertEquals(0, StutterMonitor.retainedBytes());
+	}
+
+	// C20 review M4: the save queued at a session's end keeps the start conditions it needs, never the session's capture
+	// (its frame ring): the capture is released while the save still waits on the io chain.
+	@Test
+	void m4AQueuedSaveDoesNotHoldTheEndedCapture(@TempDir Path dir) throws ReflectiveOperationException {
+		Queue io = new Queue();
+		StutterService service = service(dir, io);
+		WeakReference<StutterMonitor.Capture> capture = new WeakReference<>(StutterCapture.startSession());
+		service.benchmarkStarted(null);
+		assertNull(StutterMonitor.session());
+		assertEquals(1, io.tasks.size(), "the session's save waits on the io chain");
+		for (int i = 0; i < 50 && capture.get() != null; i++) {
+			System.gc();
+			byte[][] churn = new byte[64][];
+			for (int j = 0; j < churn.length; j++) {
+				churn[j] = new byte[64 * 1024];
+			}
+		}
+		assertNull(capture.get(), "nothing holds the ended session's capture while its save waits");
+		io.runAll();
+	}
+
+	// C20 review L7: an immediate fix restarts the session; a paused one stays paused (the new capture starts paused).
+	@Test
+	void l7ARestartedSessionStaysPaused(@TempDir Path dir) throws ReflectiveOperationException {
+		Queue io = new Queue();
+		StutterService service = service(dir, io);
+		StutterMonitor.Capture first = StutterCapture.startSession();
+		service.pause(true);
+		service.restartSession(null);
+		StutterMonitor.Capture next = StutterMonitor.session();
+		assertNotNull(next);
+		assertNotSame(first, next);
+		assertTrue(next.paused(), "the restarted session is paused like the one it replaced");
+		io.runAll();
+		// The restart's 10 s of world loading would leave out the next test's frames.
+		StutterMonitor.levelChanged(System.nanoTime() - StutterMonitor.LOADING_NANOS);
 	}
 }

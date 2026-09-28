@@ -507,6 +507,70 @@ public class A11yGameTest implements FabricClientGameTest {
 	// ---- WS-S2 (C20, AC5.11): StutterScreen's fix rows, the ButtonRow and the "Your stutter fix" block.
 
 	private static void walkStutterFix(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		A11yController controller = new A11yController(v05.stub(), v05.real(), v05.configDir());
+		io.github.chaotix345.rigtune.core.stutter.FixOffer.Offer offer = new io.github.chaotix345.rigtune.core.stutter.FixOffer.Offer("stutter-chunk-loading",
+				"vanilla.renderDistance", "12", "10", true);
+		CannedViews.stutter(new StutterView(false, false, false, false, false, stutterReport(), List.of(new io.github.chaotix345.rigtune.core.stutter.StutterAdvisor.Fired(
+				"stutter-chunk-loading", "info", io.github.chaotix345.rigtune.core.model.Impact.LOW, "Stutter while loading chunks", "Try a shorter render distance.")),
+				java.util.Map.of("stutter-chunk-loading", offer), comparedFix()));
+		try {
+			context.runOnClient(mc -> mc.gui.setScreen(new StutterScreen(new TitleScreen(), controller)));
+			context.waitFor(mc -> mc.gui.screen() instanceof StutterScreen s && s.fixButtons().size() == 3, 200);
+			context.getInput().setCursorPos(1, 1);
+			context.waitTicks(2);
+			context.runOnClient(mc -> mc.gui.screen().clearFocus());
+			// Every fix button is a Tab stop, in the list's order: the block's (at the top) and then the offer's.
+			List<String> order = new ArrayList<>();
+			String tryNarration = "";
+			for (int i = 0; i < 200 && order.size() < 3; i++) {
+				tab(context);
+				String[] focused = context.computeOnClient(mc -> {
+					ComponentPath path = mc.gui.screen().getCurrentFocusPath();
+					return path != null && path.leafComponent() instanceof net.minecraft.client.gui.components.Button b
+							&& b.getMessage().getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents t
+							&& t.getKey().startsWith("rigtune.stutter.fix.") ? new String[]{t.getKey(), focusedNarration(mc)} : null;
+				});
+				if (focused != null && !order.contains(focused[0])) {
+					order.add(focused[0]);
+					if (focused[0].equals("rigtune.stutter.fix.try")) {
+						tryNarration = focused[1];
+					}
+				}
+			}
+			check(order.equals(List.of("rigtune.stutter.fix.undo", "rigtune.stutter.fix.dismiss", "rigtune.stutter.fix.try")), "stutter fix: Tab order " + order);
+			check(tryNarration.contains("Try this fix: Render Distance: 12 → 10. Opens a preview first."), "stutter fix: the Try narration: " + tryNarration);
+			for (int[] size : V05TestContext.SIZES) {
+				v05.resize(size[0], size[1], size[2]);
+				context.takeScreenshot("a11y-stutterfix-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			}
+			v05.resize(854, 480, 2);
+			context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(true));
+			context.runOnClient(mc -> mc.gui.setScreen(new StutterScreen(new TitleScreen(), controller)));
+			context.waitTicks(3);
+			context.takeScreenshot("a11y-hc-stutterfix-854x480-scale2");
+			RigTune.LOGGER.info("A11yGameTest: stutter fix: Tab order {}; Try narrates \"{}\"", order, tryNarration);
+		} finally {
+			CannedViews.stutter(null);
+			context.runOnClient(mc -> {
+				mc.options.highContrastBlockOutline().set(false);
+				mc.gui.setScreen(new TitleScreen());
+			});
+			v05.resize(854, 480, 2);
+		}
+	}
+
+	// A fix compared as "less": its block has Undo this change… and Dismiss.
+	private static io.github.chaotix345.rigtune.core.stutter.FixTracker.Record comparedFix() {
+		io.github.chaotix345.rigtune.core.stutter.SessionOutcome before = new io.github.chaotix345.rigtune.core.stutter.SessionOutcome(1, 400, 20, 1280, 7,
+				20 / 7.0, 0.2);
+		io.github.chaotix345.rigtune.core.stutter.SessionOutcome after = new io.github.chaotix345.rigtune.core.stutter.SessionOutcome(1, 400, 4, 256, 7, 4 / 7.0,
+				0.3);
+		io.github.chaotix345.rigtune.core.stutter.FixConditions conditions = new io.github.chaotix345.rigtune.core.stutter.FixConditions("26.2", "hash", 4096,
+				"g1", 854, 480, false, "SINGLEPLAYER", true, true, java.util.Map.of("vanilla.renderDistance", "12"));
+		return new io.github.chaotix345.rigtune.core.stutter.FixTracker.Record("a11y-fix", "stutter-chunk-loading", "vanilla.renderDistance", "12", "10",
+				java.time.Instant.parse("2026-09-20T10:00:00Z"), 17, true, io.github.chaotix345.rigtune.core.stutter.FixTracker.State.COMPARED, before, conditions,
+				after, 0, null, io.github.chaotix345.rigtune.core.stutter.FixComparison.compare(before, after), false);
 	}
 
 	// ---- WS-T (C09, AC6.13): TryItScreen and the plain Preview's footer.

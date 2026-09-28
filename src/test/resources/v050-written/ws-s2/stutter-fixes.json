@@ -1,0 +1,96 @@
+{
+  "formatVersion": 1,
+  "fixes": [
+    {
+      "entryId": "5c20f1a0-7d3e-4b2a-9c61-0000000000a1",
+      "adviceId": "stutter-chunk-loading",
+      "key": "vanilla.renderDistance",
+      "from": "12",
+      "to": "10",
+      "appliedAt": "2026-09-20T18:00:00Z",
+      "rulesRevision": 17,
+      "now": true,
+      "state": "measuring",
+      "before": {
+        "sessions": 1,
+        "gameplaySeconds": 612.5,
+        "hitches": 41,
+        "lostMs": 3120.5,
+        "bins": 11,
+        "binMean": 3.727272727272727,
+        "binVariance": 6.1
+      },
+      "conditions": {
+        "mc": "26.2",
+        "modSetHash": "3a91c0e4d2b7",
+        "heapMaxMb": 4096,
+        "collector": "g1",
+        "width": 1920,
+        "height": 1080,
+        "fullscreen": true,
+        "world": "SINGLEPLAYER",
+        "phaseTiming": true,
+        "gcMeasured": true,
+        "settings": {
+          "vanilla.renderDistance": "12",
+          "vanilla.simulationDistance": "10",
+          "sodium.performance.chunk_build_defer_mode": "ZERO_FRAMES"
+        }
+      },
+      "after": {
+        "sessions": 1,
+        "gameplaySeconds": 250.0,
+        "hitches": 6,
+        "lostMs": 410.0,
+        "bins": 5,
+        "binMean": 1.2,
+        "binVariance": 0.7
+      },
+      "skipped": 1,
+      "lastSkip": {
+        "reason": "short",
+        "args": []
+      },
+      "dismissed": false
+    },
+    {
+      "entryId": "5c20f1a0-7d3e-4b2a-9c61-0000000000a2",
+      "adviceId": "stutter-sodium-defer",
+      "key": "sodium.performance.chunk_build_defer_mode",
+      "from": "ZERO_FRAMES",
+      "to": "ALWAYS",
+      "appliedAt": "2026-09-21T18:00:00Z",
+      "rulesRevision": 17,
+      "now": false,
+      "state": "staged",
+      "before": {
+        "sessions": 1,
+        "gameplaySeconds": 612.5,
+        "hitches": 41,
+        "lostMs": 3120.5,
+        "bins": 11,
+        "binMean": 3.727272727272727,
+        "binVariance": 6.1
+      },
+      "conditions": {
+        "mc": "26.2",
+        "modSetHash": "3a91c0e4d2b7",
+        "heapMaxMb": 4096,
+        "collector": "g1",
+        "width": 1920,
+        "height": 1080,
+        "fullscreen": true,
+        "world": "SINGLEPLAYER",
+        "phaseTiming": true,
+        "gcMeasured": true,
+        "settings": {
+          "vanilla.renderDistance": "12",
+          "vanilla.simulationDistance": "10",
+          "sodium.performance.chunk_build_defer_mode": "ZERO_FRAMES"
+        }
+      },
+      "skipped": 0,
+      "dismissed": false
+    }
+  ]
+}
