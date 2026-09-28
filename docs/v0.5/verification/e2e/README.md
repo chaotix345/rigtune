@@ -76,6 +76,7 @@ Evidence in `local-windows-26.2/` (RESULT.md per run, scrubbed).
 | brand theseus (AC4j.3) | PASS | Apply everything held the 0.4 file group ("Held 1 operation(s)") with mods/ unchanged and maxFps applied; the next start's held notice → Cancel them: download superseded, change DISCARDED (`2026-09-28-brand-held-notice.png`) |
 | downgrades again, with WS-L2's ws-l2 | PASS, PASS | its held group has no journal entry; the check expects none |
 | after review round 2 (r8): brand, stale-seed `v010-dh-app-reinstalled`, both downgrades | PASS ×4 | brand: the staged Sodium patch applied ("OK PATCH_JSON", `chunk_builder_threads` 3, APPLIED) while the file group held; stale-seed with `expectStatus` ABANDONED; the downgrades trimmed to 46 entries plus baselines and profile-referenced ones (`2026-09-28-r8-*`) |
+| downgrades with WS-W2's real ws-w2 set (r9, the CI jar of a470a489) | PASS, PASS | startup-times.json composed from ws-f's 3 runs and ws-w2's 6 (with `preloadMs`); 0.5 reads its runs back after 0.4.0, and 0.3.0 leaves it byte-identical (`2026-09-28-r9-*`) |
 
 ## Static checks
 

@@ -4,8 +4,8 @@ Branch `test/v05-e2e`, worktree `rigtune-e2e5`. SPEC 3a-3f and 3h's release.yml,
 convention. Research: docs/research/v0.5/verification-gaps.md (vg). Plan: docs/v0.5/PLAN.md "WS-E".
 
 **Status (2026-09-28):** the early part (E1-E4), E5/E7 and the later part are done except the items under "Residuals"
-(the DH server-note run, the generated seeds, and the legs that wait for WS-H and WS-L1/L2). CI run 36363179808 is green on
-every job. See "Later part: status".
+(the DH server-note run, the generated seeds, and the first Linux release-tier run of this round's rows). CI run 36374398890 is
+green on every job. See "Later part: status".
 
 ## Early part: tasks (TDD; each ends with `python -m unittest discover -s tools/e2e/tests` green and a commit)
 
@@ -177,7 +177,7 @@ Held locally during the coordinator's first CI streak, then pushed in batches.
 | AC4j.3 the launcher-brand leg | 0dd69766 | `test_e2e_brand.py` 5 | `--scenario brand`: the new jar, fabric-api, Sodium and v040-written's ws-a set (0.4's own staged file group), with `-Dminecraft.launcher.brand=theseus`. Apply everything, then quit: the helper holds the group ("Held 1 operation(s)", now in HELPER_DONE), mods/ is byte-identical, and the applied settings are APPLIED in the journal and in options.txt. On the next start the held notice appears with [Cancel them, Let RigTune apply them]. Cancel them leaves no file op, the download becomes `.rigtune-superseded`, the change is DISCARDED, and no helper runs at exit. Local Windows 26.2: PASS. Release tier, 26.2 |
 | Downgrade with WS-L2's ws-l2 | 0dd69766, fc22d701 | | ws-l2 is pending.json alone (no journal). The staged-ops check now expects no journal record for an op the sets journal nowhere. Both targets PASS locally |
 | Review round 2 (0 H, 4 M, 4 L; the coordinator's decisions) | (this round) | `test_stutter_run.py` +1, `test_written_v05.py` +2, `test_e2e_brand.py` +2, `test_e2e_stale_seed.py` +1 | M1: the stutter check reads the window as the log's whole seconds allow. Spikes surely inside it (tp + 1 .. tp + 9) must be tagged, one tagged spike must lie near the tp, and no tagged spike may lie outside the tp's and the world entry's windows. The world entry is a teleport to the product, so "none before the tp" would fail on C1r and on every CI run. M2: the brand settings check compares each change's `after` with the files (`setting_values`). M3: the brand leg stages a Sodium patch with its STAGED change next to ws-a's group, so the helper's OK PATCH_JSON, All operations done and the APPLIED change are required. M4: the trim always keeps baseline entries and the entries profiles.json names, tested on the real sets. L5: stale-seed requires `stale_installed`, the mod's name, every change and the seed's `expectStatus`. L6: brand-cancel times out from the Cancel tick. L7: `stand_in_id` makes a valid Fabric id. L8: docs. Local Windows 26.2 after the fixes: brand, stale-seed and both downgrades PASS (`2026-09-28-r8-*`) |
-| Merge of WS-W2 and WS-S's RW-17/18 (feat 85f8d39d) | (this merge) | `test_compat040.py` (the README's kinds) | compat040's `StartupTimesStore` kind, for WS-W2's ws-w2 set (`state`, `runs`, `noBad`): 0.4.0's StartupTimesStore loads every run of the set's file. ws-w2's placeholder is deleted. compat040 PASS locally on every set (ws-w2: 6 of 6 runs, its awareness.json keeps `acknowledgedStartupRegressions`); compat030 PASS. The composed startup-times.json holds ws-f's 3 runs and ws-w2's 6; the downgrade's kept-items check keys runs by `at`, so 0.4.0 dropping `preloadMs` on a rewrite (WS-W2's residual) isn't a loss |
+| Merge of WS-W2 and WS-S's RW-17/18 (feat 85f8d39d) | (this merge) | `test_compat040.py` (the README's kinds) | compat040's `StartupTimesStore` kind, for WS-W2's ws-w2 set (`state`, `runs`, `noBad`): 0.4.0's StartupTimesStore loads every run of the set's file. ws-w2's placeholder is deleted. compat040 PASS locally on every set (ws-w2: 6 of 6 runs, its awareness.json keeps `acknowledgedStartupRegressions`); compat030 PASS. The composed startup-times.json holds ws-f's 3 runs and ws-w2's 6; the downgrade's kept-items check keys runs by `at`, so 0.4.0 dropping `preloadMs` on a rewrite (WS-W2's residual) isn't a loss. Both downgrades PASS locally on the CI jar of a470a489 (`2026-09-28-r9-*`); CI 36374398890 is green on every job |
 
 **AC3f.7 (`guard-apply`).** It runs after entry-check on the undo scenario's instance, in one start:
 - The update of `e2e-pin-target` 1.0.0 → 2.0.0 is refused. The installed `e2e-pinner` pins the target to `1.0.x` in its fabric.mod.json.
@@ -231,11 +231,11 @@ The fabric client gametest API is the same too: `createServer(Properties)`, `cli
   - the pins test covers all 7 released jars (E6);
   - compat040 has its CI step (E6);
   - the downgrade checks name the versions they run (4c3b6696);
-  - `server-profiles.json` is in `V050.kept` (e1de5575).
+  - `server-profiles.json` is in `V050.kept` (e1de5575);
+  - the local Windows reruns after both review rounds: all PASS (`docs/v0.5/verification/e2e/local-windows-26.2/2026-09-28-*`).
 - **Open:**
   - `stutter-fixes.json` and `tryit.json` join `V050.kept` when WS-S2's and WS-T's real sets land. Until then their placeholders are only checked byte-identical after a downgrade.
   - The LAN source address in CI is 0.0.0.0 (offline.sh's multicast route has no `src`). Sent to ws-ci; LanGuestGameTest accepts a loopback or wildcard address until then.
-  - Local Windows reruns after this round's changes (helper-kill with L9, undo with L4, the downgrade with the real Wave A sets) wait for the game-test lock (the user is playing).
   - The snapshot-canary workflow edit (its resolve step calls `tools/snapshot_canary.py`) is made after the scheduled run on 2026-09-30.
   - Still to do:
     - AC3f.4 (the DH server-note run): the coordinator decides the approach.
