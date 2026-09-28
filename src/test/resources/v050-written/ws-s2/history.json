@@ -1,0 +1,40 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "5c20f1a0-7d3e-4b2a-9c61-0000000000a1",
+      "at": "2026-09-20T18:00:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "5c20f1a0-7d3e-4b2a-9c61-0000000000d1",
+          "type": "setting",
+          "key": "vanilla.renderDistance",
+          "before": "12",
+          "after": "10",
+          "status": "APPLIED"
+        }
+      ]
+    },
+    {
+      "id": "5c20f1a0-7d3e-4b2a-9c61-0000000000a2",
+      "at": "2026-09-21T18:00:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "5c20f1a0-7d3e-4b2a-9c61-0000000000d2",
+          "type": "setting",
+          "key": "sodium.performance.chunk_build_defer_mode",
+          "before": "ZERO_FRAMES",
+          "after": "ALWAYS",
+          "status": "STAGED",
+          "opId": "5c20f1a0-7d3e-4b2a-9c61-0000000000b2"
+        }
+      ]
+    }
+  ]
+}
