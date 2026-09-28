@@ -1,0 +1,50 @@
+(b) session-start burst: before unwrapped includes a join burst over its first 3 min; after is a wrapped tail (no start) or a restarted session
+mu=2 burst=(8, 8, 6) before= 5m after= 5m  after w/o start: LESS 0.515   after with its own start: LESS 0.003
+mu=2 burst=(8, 8, 6) before= 8m after= 8m  after w/o start: LESS 0.350   after with its own start: LESS 0.000
+mu=2 burst=(8, 8, 6) before=10m after=10m  after w/o start: LESS 0.307   after with its own start: LESS 0.002
+mu=2 burst=(8, 8, 6) before=15m after=15m  after w/o start: LESS 0.259   after with its own start: LESS 0.002
+mu=2 burst=(8, 8, 6) before=20m after=20m  after w/o start: LESS 0.234   after with its own start: LESS 0.004
+mu=2 burst=(12, 10, 6) before= 5m after= 5m  after w/o start: LESS 0.509   after with its own start: LESS 0.000
+mu=2 burst=(12, 10, 6) before= 8m after= 8m  after w/o start: LESS 0.330   after with its own start: LESS 0.000
+mu=2 burst=(12, 10, 6) before=10m after=10m  after w/o start: LESS 0.310   after with its own start: LESS 0.000
+mu=2 burst=(12, 10, 6) before=15m after=15m  after w/o start: LESS 0.276   after with its own start: LESS 0.000
+mu=2 burst=(12, 10, 6) before=20m after=20m  after w/o start: LESS 0.256   after with its own start: LESS 0.000
+mu=2 burst=(20, 10, 5) before= 5m after= 5m  after w/o start: LESS 0.274   after with its own start: LESS 0.000
+mu=2 burst=(20, 10, 5) before= 8m after= 8m  after w/o start: LESS 0.168   after with its own start: LESS 0.000
+mu=2 burst=(20, 10, 5) before=10m after=10m  after w/o start: LESS 0.160   after with its own start: LESS 0.000
+mu=2 burst=(20, 10, 5) before=15m after=15m  after w/o start: LESS 0.179   after with its own start: LESS 0.000
+mu=2 burst=(20, 10, 5) before=20m after=20m  after w/o start: LESS 0.186   after with its own start: LESS 0.000
+mu=3 burst=(8, 8, 6) before= 5m after= 5m  after w/o start: LESS 0.482   after with its own start: LESS 0.003
+mu=3 burst=(8, 8, 6) before= 8m after= 8m  after w/o start: LESS 0.328   after with its own start: LESS 0.003
+mu=3 burst=(8, 8, 6) before=10m after=10m  after w/o start: LESS 0.284   after with its own start: LESS 0.002
+mu=3 burst=(8, 8, 6) before=15m after=15m  after w/o start: LESS 0.254   after with its own start: LESS 0.004
+mu=3 burst=(8, 8, 6) before=20m after=20m  after w/o start: LESS 0.224   after with its own start: LESS 0.006
+mu=3 burst=(12, 10, 6) before= 5m after= 5m  after w/o start: LESS 0.511   after with its own start: LESS 0.000
+mu=3 burst=(12, 10, 6) before= 8m after= 8m  after w/o start: LESS 0.346   after with its own start: LESS 0.000
+mu=3 burst=(12, 10, 6) before=10m after=10m  after w/o start: LESS 0.314   after with its own start: LESS 0.001
+mu=3 burst=(12, 10, 6) before=15m after=15m  after w/o start: LESS 0.259   after with its own start: LESS 0.001
+mu=3 burst=(12, 10, 6) before=20m after=20m  after w/o start: LESS 0.253   after with its own start: LESS 0.002
+mu=3 burst=(20, 10, 5) before= 5m after= 5m  after w/o start: LESS 0.319   after with its own start: LESS 0.000
+mu=3 burst=(20, 10, 5) before= 8m after= 8m  after w/o start: LESS 0.222   after with its own start: LESS 0.000
+mu=3 burst=(20, 10, 5) before=10m after=10m  after w/o start: LESS 0.213   after with its own start: LESS 0.000
+mu=3 burst=(20, 10, 5) before=15m after=15m  after w/o start: LESS 0.204   after with its own start: LESS 0.000
+mu=3 burst=(20, 10, 5) before=20m after=20m  after w/o start: LESS 0.207   after with its own start: LESS 0.000
+mu=5 burst=(8, 8, 6) before= 5m after= 5m  after w/o start: LESS 0.437   after with its own start: LESS 0.009
+mu=5 burst=(8, 8, 6) before= 8m after= 8m  after w/o start: LESS 0.288   after with its own start: LESS 0.006
+mu=5 burst=(8, 8, 6) before=10m after=10m  after w/o start: LESS 0.257   after with its own start: LESS 0.005
+mu=5 burst=(8, 8, 6) before=15m after=15m  after w/o start: LESS 0.170   after with its own start: LESS 0.007
+mu=5 burst=(8, 8, 6) before=20m after=20m  after w/o start: LESS 0.102   after with its own start: LESS 0.004
+mu=5 burst=(12, 10, 6) before= 5m after= 5m  after w/o start: LESS 0.476   after with its own start: LESS 0.002
+mu=5 burst=(12, 10, 6) before= 8m after= 8m  after w/o start: LESS 0.329   after with its own start: LESS 0.001
+mu=5 burst=(12, 10, 6) before=10m after=10m  after w/o start: LESS 0.291   after with its own start: LESS 0.002
+mu=5 burst=(12, 10, 6) before=15m after=15m  after w/o start: LESS 0.230   after with its own start: LESS 0.003
+mu=5 burst=(12, 10, 6) before=20m after=20m  after w/o start: LESS 0.144   after with its own start: LESS 0.002
+mu=5 burst=(20, 10, 5) before= 5m after= 5m  after w/o start: LESS 0.370   after with its own start: LESS 0.000
+mu=5 burst=(20, 10, 5) before= 8m after= 8m  after w/o start: LESS 0.281   after with its own start: LESS 0.000
+mu=5 burst=(20, 10, 5) before=10m after=10m  after w/o start: LESS 0.245   after with its own start: LESS 0.000
+mu=5 burst=(20, 10, 5) before=15m after=15m  after w/o start: LESS 0.198   after with its own start: LESS 0.000
+mu=5 burst=(20, 10, 5) before=20m after=20m  after w/o start: LESS 0.172   after with its own start: LESS 0.000
+
+real	0m22.466s
+user	0m0.000s
+sys	0m0.359s

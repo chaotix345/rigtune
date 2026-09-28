@@ -505,3 +505,60 @@ old code for the stated reason first.
   released 0.4.0: ws-s's and ws-s2's checks pass (stutter-fixes.json byte-identical, unread).
 - New keys: `rigtune.stutter.fix.not_yet.changed`, `.skip.unread`, `.verdict.same_more_lost`, `.verdict.same_small`; the
   two excluded lines reworded.
+
+## Review-12 fixes (branch fix/v05-r12-ws-s2 from ec370f3e)
+Findings in reviews/r12-R12STUTTER.md (C20 can still claim "less stutter" falsely). The acceptance test is the reviewer's
+own FixComparison model in Python (docs/v0.5/verification/stutter-fixes/sims/: sim.py, sim2.py, sim3.py, and sim4.py /
+sim4b.py, the model of these fixes on the same grids): false LESS under no real change at most about 5 % in each scenario.
+
+| scenario (the reviewer's grid) | false LESS before | after (sim4 / sim4b) |
+|---|---|---|
+| H0, sim.py (rates 2-30/min, phi 1-4, sides 5-20 min) | up to 7.2 % | up to 5.3 % (mean 2.4 %) |
+| a join burst on the before side only, sim2.py (3-min bursts) | 10.2-51.5 % | up to 4.9 % (a restarted or wrapped after side); 4.8 % with its own join |
+| the triggering session chosen for being bad, sim3.py (rate >= 1.0 / 1.3 / 1.6 x usual) | 1.9-10.2 / 12.6-28.1 / 19.8-65.8 % | up to 5.3 % in every cell (sim4b, 4,000 pairs a cell; the H0 level) |
+| a burst that lasts into the 4th minute (my stress case, beyond the settle cut) | - | up to 7.7 % (a residual below) |
+
+- **R12STUTTER-1 (M), FIXED 4da1146b** (data f9180629): a session capture's first `SessionOutcome.SETTLE_NANOS` (180 s:
+  its world join's chunk streaming, or the reload after an immediate fix's restart) never count, on either side: the
+  monitor marks the frame ring there (`FrameRing.markGameplayAt`, one boolean check per frame; the gameplay before the mark
+  in the snapshot), and `StutterAnalyzer.Compared` (was Covered) starts at the mark. Red: SessionOutcomeTest
+  `aJoinBurstNeverCounts` (a joined session against a restarted one of the same steady play read LESS).
+- **R12STUTTER-2 (M), FIXED 4da1146b**: each candidate record carries the capture's running gameplay (`FrameRing.C_GAMEPLAY`,
+  STRIDE 11, +32 KiB per session capture, monitorOnRetainedBytes 2,578,576 of 2,621,440); once both rings wrapped, the
+  compared play reaches back to the oldest candidate still held (total gameplay minus its stamp) before falling back to
+  the frame ring's window. Candidates are gameplay frames only, so menus, AFK and a high frame rate no longer shrink it
+  to minutes. The lines say what counts: "A one-click fix needs more play to compare: at least %s and %s hitches after a
+  session's first 3 minutes (this one: %s, %s)."; "it had less than 2 minutes of play after its first 3 minutes". Red:
+  SessionOutcomeTest `theComparedPlayReachesBackToTheOldestCandidate` (16.8 s compared of ~330 s the candidates held).
+- **R12STUTTER-6 (treated as M), FIXED a1f9c064**: the before side is never the session that led to the offer (it was
+  chosen for being bad). Try this fix… changes nothing: the fix is chosen (`FixTracker.State.BASELINE`, the running
+  session restarts), the next monitor session with the key still at its old value, not excluded, idle or changed, and with
+  5:00 of compared play is measured as it is (`READY`, its outcome and start conditions kept), and the player applies the
+  change from the block (Apply the fix…, through the preview), with that session as the before side. Trade-off: one more
+  session (8 minutes with the settle span) before the change; the offer says why: "First RigTune measures one more
+  session as it is (a bad one alone would make any change look good); then you apply the change here." BASELINE/READY
+  hold nothing, have nothing to undo, need no journal, block other offers (one fix at a time) and expire after 14 days or 5
+  skipped sessions. `RigTuneController.startStutterFix`; StutterScreen's block (Apply the fix… / Dismiss; the advice row's
+  own busy line hidden); DevFixCalibration's steps (trigger + baseline, apply, after); StutterFixGameTest's flows (the
+  baseline and ready blocks, their screenshots). The red is the reviewer's sim3.py (up to 65.8 %); FixTrackerTest
+  `aChosenFixMeasuresOneSessionAsItIsFirst`, `aBaselineSessionMustBeANewFullOneAtTheOldValue`, FixStoreTest
+  `baselineAndReadyRoundTrip`, FixTextTest `theBaselineLines`.
+- **R12STUTTER-3 (L), FIXED 97f6ed9a** (with ws-s2c's JournalCache, on feat since f173846d): history.json is read only while
+  some fix can still change with it (`FixTracker.Record.followsJournal`); StutterFixServiceTest `finishedFixesReadNoHistory`
+  (red: 2 parses for a dismissed compared and an expired record).
+- **R12STUTTER-4 (L), FIXED aa02e35e**: SettingsWatch keeps the failed session weakly (SettingsWatchTest
+  `aFailedSessionReplacedWithoutATickIsReleased`, red).
+- **R12STUTTER-5 (L), FIXED de4d34d3**: StutterRings counts the non-reload SETTINGS_CHANGED events from the capture's start
+  over the whole capture (an immediate fix's own change is dated before its restarted session); the before side reads
+  CHANGED, a baseline or after session is skipped ("a setting changed while it ran"; for an after session a start/end
+  difference still names the setting). StutterAnalyzerTest `settingChangesDuringTheCaptureAreCounted`, FixTrackerTest
+  `aSessionWithASettingChangeDoesNotCount`.
+- **R12STUTTER-7 (L), FIXED 7dbcfaaa**: a key missing at both ends reads as the session's own reason (MODS), not UNREAD
+  (FixTrackerTest `aRemovedModIsTheModsNotAnUnreadKey`, red).
+- **R12STUTTER-8 (L)**: ws-b's GPU normaliser; FixConditions calls it when ws-b's helper lands (not on feat yet).
+- **AC5.14** was run before these fixes (the trigger session as the before side, no settle span); its offer and thresholds
+  stand (the evidence side is unchanged), and DevFixCalibration now plays 540 s per step with the baseline step; the run
+  isn't repeated (UNVERIFIED under the new flow on real hardware; the game test covers it).
+- Residuals: a join burst longer than 3 minutes still leaks into a before side with a join against an after side without
+  one (7.7 % in the stress case); regression to the mean across sessions of *different* play (the player explores before
+  and builds after) isn't modelled (the settle and baseline rules make each side one ordinary session, not one activity).
