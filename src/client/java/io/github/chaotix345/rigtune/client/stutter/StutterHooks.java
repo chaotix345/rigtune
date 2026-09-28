@@ -78,7 +78,8 @@ public final class StutterHooks {
 			if (!active) {
 				return;
 			}
-			StutterMonitor.setExcluded(minecraft.gui.screen() != null || !minecraft.isWindowActive());
+			// v0.5 RW-17: idle (a throttled frame rate) is excluded too; SettingsWatch's own listener decides it.
+			StutterMonitor.setExcluded(minecraft.gui.screen() != null || !minecraft.isWindowActive() || StutterMonitor.idle());
 			movement(minecraft.player);
 			if (++ticks % 5 == 0) {
 				BuildBacklog.refresh(minecraft, sodium);

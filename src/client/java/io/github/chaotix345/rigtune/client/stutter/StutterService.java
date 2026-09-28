@@ -78,6 +78,8 @@ public final class StutterService {
 	private boolean stepExcluded;
 	private volatile @Nullable Analysis live;
 	private volatile @Nullable Analysis saved;
+	// v0.5 RW-18: the lengths (s) of the short sessions saved after `saved`.
+	private volatile List<Double> savedShortSince = List.of();
 	private volatile Saved savedState = Saved.UNKNOWN;
 	private volatile @Nullable StutterReport lastBenchmark;
 	private volatile @Nullable Double lastBenchmarkDhWorldGen;
@@ -126,7 +128,7 @@ public final class StutterService {
 			fixes.refresh();
 		}
 		return new StutterView(settings.stutterMonitor, session != null, session != null && session.paused(), session != null && shown == null && analysing,
-				isLive, shown == null ? null : shown.report(), shown == null ? List.of() : shown.advice(),
+				isLive, shown == null ? null : shown.report(), shown == null ? List.of() : shown.advice(), session == null ? savedShortSince : List.of(),
 				shown == null || shown.fixes() == null ? Map.of() : shown.fixes().offers(), fixes == null ? null : fixes.tracked());
 	}
 
@@ -183,6 +185,7 @@ public final class StutterService {
 		}
 		live = null;
 		saved = null;
+		savedShortSince = List.of();
 		savedState = Saved.DONE;
 		generation++;
 		io(() -> store().clear());
@@ -314,7 +317,7 @@ public final class StutterService {
 				JsonStateFile.Saved result = store().add(a.report());
 				// SD-3: known only once this session is in `saved`; an unsaved one leaves the saved summaries to loadSaved().
 				if (result == JsonStateFile.Saved.OK && gen == generation) {
-					saved = a;
+					showSaved(a);
 					savedState = Saved.DONE;
 				}
 				RigTune.LOGGER.info("Stutter Doctor: session saved ({}): {} spikes in {} s of gameplay, {}, GC offset {} ms", result,
@@ -426,7 +429,7 @@ public final class StutterService {
 		// The newest saved summary is what StutterScreen shows when no session runs (review-8 P5A-F3).
 		io(() -> {
 			if (store().add(a.report()) == JsonStateFile.Saved.OK && gen == generation) {
-				saved = a;
+				showSaved(a);
 				savedState = Saved.DONE;
 			}
 		});
@@ -477,9 +480,8 @@ public final class StutterService {
 		int gen = generation;
 		io(() -> {
 			try {
-				StutterReport latest = store().latest();
 				if (gen == generation) {
-					saved = latest == null ? null : new Analysis(null, latest, adviceFor(latest.advice(), controller.rules()), null, null);
+					showSaved(null);
 				}
 			} catch (RuntimeException e) {
 				RigTune.LOGGER.warn("Stutter Doctor: could not read the saved sessions", e);
@@ -487,6 +489,17 @@ public final class StutterService {
 				savedState = Saved.DONE;
 			}
 		});
+	}
+
+	// v0.5 RW-18 (the io chain): the saved summary to show (StutterStore.shown: the newest with enough data, so a quick
+	// re-join doesn't hide the last real session) and the short sessions since it. justSaved: the analysis just written.
+	private void showSaved(@Nullable Analysis justSaved) {
+		StutterStore.Shown shown = StutterStore.shown(store().sessions());
+		StutterReport r = shown.report();
+		saved = r == null ? null
+				: justSaved != null && r.startedAt().equals(justSaved.report().startedAt()) && r.source().equals(justSaved.report().source()) ? justSaved
+				: new Analysis(null, r, adviceFor(r.advice(), controller.rules()), null, null);
+		savedShortSince = shown.shortSince().stream().map(StutterReport::sessionSeconds).toList();
 	}
 
 	// A saved session keeps only advice ids; their titles and texts come from the current rules.
@@ -529,7 +542,7 @@ public final class StutterService {
 		StutterAnalyzer.Result result = StutterAnalyzer.analyze(new StutterAnalyzer.Input(c.frames(), c.rings(), c.startNanos(), c.endNanos(), c.startedAt(),
 				c.source(), HardwareProbe.minecraftVersion(), c.collector(), Runtime.getRuntime().maxMemory() / MIB,
 				hw == null || hw.totalRamMb() <= 0 ? null : hw.totalRamMb(), Runtime.getRuntime().availableProcessors(), c.phaseTiming(), waits,
-				c.gcMeasured()));
+				c.gcMeasured(), c.idleNanos()));
 		BiFunction<StutterAnalyzer.Result, Long, StutterAnalyzer.Result> probe = analysisProbe;
 		if (probe != null) {
 			result = probe.apply(result, c.startNanos());

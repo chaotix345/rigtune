@@ -20,8 +20,13 @@ public final class StartupTimesStore {
 	public static final long MAX_BYTES = 16 * 1024;
 
 	// at: ISO-8601 UTC; ms: JVM start to the first title screen; mods: the loaded non-builtin mods; modSetHash: ModSetHash.
+	// v0.5 (docs/v0.5/SPEC.md 9, RW-19): preloadMs, optional: vanilla's crash-report setup at that launch (2L's timer), which
+	// StartupTrend leaves out of the comparison; absent (not written) when it wasn't measured or 0.4 wrote the run.
 	public record Run(String at, long ms, @Nullable String mcVersion, @Nullable String rigtuneVersion, int mods,
-			@Nullable String modSetHash) {
+			@Nullable String modSetHash, @Nullable Long preloadMs) {
+		public Run(String at, long ms, @Nullable String mcVersion, @Nullable String rigtuneVersion, int mods, @Nullable String modSetHash) {
+			this(at, ms, mcVersion, rigtuneVersion, mods, modSetHash, null);
+		}
 	}
 
 	record Doc(@Nullable List<Run> runs) {

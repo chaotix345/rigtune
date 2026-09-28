@@ -428,6 +428,16 @@ class StutterAnalyzerTest {
 		assertEquals(Map.of(Attributor.GC, 1, Attributor.UNKNOWN, 1), r.facts().causeSpikes(), "the 41 % spike's rest is unexplained");
 	}
 
+	// v0.5 RW-17: the capture's idle (throttled) time goes into the report; none is null.
+	@Test
+	void theIdleTimeIsReported() {
+		Capture c = new Capture().frames(150, Map.of(), false);
+		StutterAnalyzer.Input in = new StutterAnalyzer.Input(c.ring.snapshot(), c.rings.snapshot(), T0, c.now, STARTED, StutterReport.MONITOR, "26.2", "g1",
+				4096, 32768L, 16, true, false, true, 3_723_450 * MS);
+		assertEquals(3723.5, StutterAnalyzer.analyze(in).report().idleSeconds());
+		assertNull(c.analyze(true).report().idleSeconds());
+	}
+
 	// Review finding 2: what the capture couldn't measure stays UNKNOWN for the rules (also under `not`).
 	@Test
 	void unmeasuredCausesAndTags() {

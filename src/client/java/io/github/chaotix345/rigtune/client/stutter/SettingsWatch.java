@@ -1,10 +1,13 @@
 package io.github.chaotix345.rigtune.client.stutter;
 
+import com.mojang.blaze3d.platform.FramerateLimitTracker;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.compat.OptionalMods;
+import io.github.chaotix345.rigtune.core.benchmark.Throttle;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import io.github.chaotix345.rigtune.core.stutter.StutterRings;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import org.jspecify.annotations.Nullable;
 
@@ -19,6 +22,8 @@ import java.util.Map;
 // read; with one it compares two cached ints and the loading overlay's reference (a resource reload shows vanilla's
 // loading overlay), allocation-free. Iris and Distant Horizons are asked only after a reload and at most once a second.
 // Iris' API has no pack name, so switching packs with shaders on isn't seen (a residual, docs/v0.5/design/ws-s.md).
+// v0.5 RW-17: the same listener decides whether the game throttles its frame rate (idle), twice a second; StutterHooks
+// excludes the idle frames by reading StutterMonitor.idle(), so the timed tick path gains only that read.
 final class SettingsWatch {
 	static final int RENDER_DISTANCE = 1;
 	static final int SIMULATION_DISTANCE = 1 << 1;
@@ -29,9 +34,16 @@ final class SettingsWatch {
 	// A reload that lasts keeps its window open: its RELOAD bit repeats every 5 s while the loading overlay is up.
 	static final int RELOAD_REPEAT_TICKS = 100;
 
+	// v0.5 RW-17: the throttle (idle) check runs in this listener too, every THROTTLE_EVERY_TICKS ticks (0.5 s) while a
+	// session runs; StutterHooks only reads the result (StutterMonitor.idle) for the exclusion.
+	static final int THROTTLE_EVERY_TICKS = 10;
+	private static final Throttle THROTTLE = new Throttle();
+	private static int throttleTicks;
+
 	private static boolean registered;
 	private static boolean iris;
 	private static boolean dh;
+	private static boolean dynamicFps;
 	private static final State STATE = new State();
 	// The session whose check threw: no more checks (or warnings) until another session starts.
 	private static StutterMonitor.@Nullable Capture failed;
@@ -49,6 +61,7 @@ final class SettingsWatch {
 			registered = true;
 			iris = OptionalMods.irisLoaded();
 			dh = OptionalMods.dhLoaded();
+			dynamicFps = FabricLoader.getInstance().isModLoaded("dynamic_fps");
 			ClientTickEvents.END_CLIENT_TICK.register(SettingsWatch::tick);
 		}
 		return values(minecraft);
@@ -83,10 +96,18 @@ final class SettingsWatch {
 		StutterMonitor.Capture session = StutterMonitor.session();
 		if (session == null || session == failed) {
 			STATE.disarm();
+			throttleTicks = THROTTLE_EVERY_TICKS;
+			if (StutterMonitor.idle()) {
+				StutterMonitor.setIdle(false, System.nanoTime());
+			}
 			return;
 		}
 		try {
 			long now = System.nanoTime();
+			if (++throttleTicks >= THROTTLE_EVERY_TICKS) {
+				throttleTicks = 0;
+				StutterMonitor.setIdle(throttled(minecraft), now);
+			}
 			int changed = STATE.check(minecraft.options.renderDistance().get(), minecraft.options.simulationDistance().get(), minecraft.gui.overlay() != null,
 					now);
 			if ((iris || dh) && STATE.optionalDue(changed)) {
@@ -105,6 +126,24 @@ final class SettingsWatch {
 			STATE.disarm();
 			RigTune.LOGGER.warn("Stutter Doctor: the settings check failed; settings changes aren't tagged in this session", e);
 		}
+	}
+
+	// v0.5 RW-17: the game throttles its frame rate: vanilla's limiter gives a reason (AFK after 60 s without input,
+	// minimised, a menu outside a level), or the limit in effect is below the player's own, which is how Dynamic FPS shows
+	// (the benchmark's own Throttle check, reused). Every value read is a field or an enum constant: nothing allocated.
+	static boolean throttled(Minecraft minecraft) {
+		FramerateLimitTracker tracker = minecraft.getFramerateLimitTracker();
+		return throttled(tracker.getThrottleReason(), tracker.getFramerateLimit(), minecraft.options.framerateLimit().get(), minecraft.isWindowActive());
+	}
+
+	// The seam StutterIdleTest drives.
+	static boolean throttled(FramerateLimitTracker.FramerateThrottleReason reason, int limitInEffect, int playersLimit, boolean windowActive) {
+		if (reason != FramerateLimitTracker.FramerateThrottleReason.NONE) {
+			return true;
+		}
+		THROTTLE.reset();
+		THROTTLE.sample(windowActive, limitInEffect);
+		return THROTTLE.throttled(playersLimit, dynamicFps);
 	}
 
 	// For StutterGameTest (render thread, a session on): the check's own cost measured as FootprintGameTest times the tick
