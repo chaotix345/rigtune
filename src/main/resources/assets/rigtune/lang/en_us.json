@@ -423,6 +423,8 @@
 	"rigtune.tryit.refused.unsupported": "RigTune doesn't change this setting, so it can't be tried.",
 	"rigtune.tryit.scene.current": "Measured here, where you stand. The screen and controls are taken over while it measures; Esc stops it.",
 	"rigtune.tryit.scene.world": "Measured in the benchmark world: same spot, time and weather every time.",
+	"rigtune.tryit.settle.refused": "Try It measures better once the world has settled. Play for about a minute first (%s s left).",
+	"rigtune.tryit.settle.waiting": "Waiting about a minute for the game to settle before measuring.",
 	"rigtune.tryit.stage.cancelled": "Cancelled: the change was taken back before it was applied. Nothing was changed.",
 	"rigtune.tryit.stage.entry_missing": "History no longer lists this change, so RigTune can't tell whether it's in effect or revert it from here.",
 	"rigtune.tryit.stage.history_unreadable": "History can't be read right now, so this Try it waits. Try again in a moment.",

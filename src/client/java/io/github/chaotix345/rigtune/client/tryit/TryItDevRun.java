@@ -237,6 +237,10 @@ final class TryItDevRun {
 				}
 			}
 			case 2 -> {
+				// The cold-start rule: Start waits until the player has been in the world a minute.
+				if (controller.tryItSettling(Scene.CURRENT) != null) {
+					return;
+				}
 				rd = minecraft.options.renderDistance().get();
 				Recommendation rec = rec("vanilla.renderDistance", Integer.toString(rd), Integer.toString(rd - 2));
 				Component answer = controller.startTryIt(rec, Scene.CURRENT);

@@ -18,6 +18,7 @@ import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.tryit.Triable;
 import io.github.chaotix345.rigtune.core.tryit.TryIt;
 import io.github.chaotix345.rigtune.core.tryit.TryItStore;
+import io.github.chaotix345.rigtune.core.tryit.TryItText;
 import io.github.chaotix345.rigtune.core.tryit.TryItVerdict;
 import io.github.chaotix345.rigtune.core.tryit.TryItView;
 import io.github.chaotix345.rigtune.core.tryit.TryItView.Stage;
@@ -51,7 +52,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // noise; one object per call would be megabytes), and it never needs the game or the lazy holder then. The TryItGameTest
 // times it strictly in a running game. Nothing hooks Busy before a try's first run is queued.
 // The chain against a fake game (FakeGame: the files are real, in a temporary config folder; the executor and the render
-// thread are queues that drain() runs): the code review's M1-M6.
+// thread are queues that drain() runs): the code review's M1-M6, and the cold-start rule (the coordinator's amendment).
 class TryItServiceTest {
 	private static final long NOISE_BYTES = 64 * 1024;
 	private static final String KEY = "vanilla.cutoutLeaves";
@@ -219,6 +220,66 @@ class TryItServiceTest {
 		assertTrue(causes(service).stream().anyMatch(c -> c instanceof TryItVerdict.Cause.Moved), "causes: " + causes(service));
 	}
 
+	// The cold-start rule: in the player's own world, Start waits until they've been there a minute (their time in this
+	// world and dimension); the status line says how long is left.
+	@Test
+	void startInThePlayersWorldRefusesUntilItHasSettled() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		game.playerTicks = 20 * 10 + 5;
+		Text settling = service.settling(Scene.CURRENT);
+		assertNotNull(settling);
+		assertEquals("Try It measures better once the world has settled. Play for about a minute first (50 s left).", settling.english());
+		assertFalse(service.start(rec(), Scene.CURRENT).getString().isEmpty(), "Start answers with the status line");
+		game.drain();
+		assertNull(store().current(), "no try opened");
+		assertTrue(game.started.isEmpty());
+		assertFalse(service.running());
+		game.playerTicks = 20 * TryItService.SETTLE_SECONDS;
+		assertNull(service.settling(Scene.CURRENT));
+		start(game, Scene.CURRENT);
+	}
+
+	// The benchmark world (every RESTART try) isn't refused: its runs wait until a minute after this launch's first title
+	// screen (a restart's world load), with a note, then start.
+	@Test
+	void benchmarkWorldRunsWaitForTheGameToSettleInsteadOfRefusing() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		game.nanos = 1_000_000_000L;
+		service.titleToast(null);
+		game.nanos += 10_000_000_000L;
+		assertNull(service.settling(Scene.BENCHMARK_WORLD), "never refused");
+		start(game, Scene.BENCHMARK_WORLD);
+		for (int i = 0; i < 40; i++) {
+			TryItService.tick(null);
+		}
+		assertTrue(game.started.isEmpty(), "the before run waits");
+		assertEquals(Stage.MEASURING_BEFORE, service.view().stage());
+		assertEquals(TryItText.settleWaiting(), service.view().note());
+		game.nanos += 50_000_000_000L;
+		TryItService.tick(null);
+		assertEquals(1, game.started.size(), "the before run starts once the game has settled");
+		assertNull(service.view().note());
+	}
+
+	// A settled game, the seam at 0 (game tests) and the benchmark world never refuse.
+	@Test
+	void onlyAnUnsettledOwnWorldRefuses() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		assertNull(service.settling(Scene.CURRENT), "two minutes in the world");
+		game.playerTicks = 0;
+		assertNotNull(service.settling(Scene.CURRENT));
+		assertNull(service.settling(Scene.BENCHMARK_WORLD));
+		TryItService.settleSeconds(0);
+		try {
+			assertNull(service.settling(Scene.CURRENT));
+		} finally {
+			TryItService.settleSeconds(TryItService.SETTLE_SECONDS);
+		}
+	}
+
 	private TryItStore store() {
 		return TryItStore.shared(dir);
 	}
@@ -290,6 +351,8 @@ class TryItServiceTest {
 		Function<BenchmarkRequest, @Nullable String> onStart = request -> null;
 		boolean applyThrows;
 		TryIt.Spot spot = HERE;
+		int playerTicks = 20 * 120;
+		long nanos;
 		int screens;
 		int journalReads;
 
@@ -316,6 +379,16 @@ class TryItServiceTest {
 		@Override
 		public boolean ready() {
 			return true;
+		}
+
+		@Override
+		public int playerTicks() {
+			return playerTicks;
+		}
+
+		@Override
+		public long nanos() {
+			return nanos;
 		}
 
 		@Override
