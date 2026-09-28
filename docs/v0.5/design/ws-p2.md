@@ -120,6 +120,36 @@ other three new tests pin behaviour that was already right.
 - Not in Phase A (client, Phase B): the keys only the screen and ProfilesScreen use (`rigtune.profile.servers*`,
   title, subtitle, remember, stop, privacy, forget buttons, the confirm screen, `row.current`, `empty`).
 
+## Phase B as landed
+
+| task | commits | tests |
+|---|---|---|
+| B1 ServerProfileOffers | c4fb8509 | ServerProfileOffersTest 7 (red first: no API) |
+| B2 service, notice source, ProfileService's two read-only methods, the tracker's visibility, RealController's `deleteProfile` line | 86617f70, 642b09da | ServerProfilesGameTest; unit: B1's |
+| B3 ServerProfilesScreen, ProfilesScreen row 3, the client keys | 86617f70, 642b09da (the three text blocks wrap onto two lines) | ServerProfilesGameTest's screen steps, `walkServerProfiles`; LangCheckTest, PaletteTest, WordingTest, PseudoLocaleTest |
+| B4 ServerProfilesGameTest, `A11yGameTest.walkServerProfiles` | 86617f70, 642b09da | 3 CI legs |
+| extra: `ProfileService.effective` keeps `downloadsChecked`; V05ServicesTest's line | 0d4f61ce | ProfileServicePreviewTest (red first) |
+
+The game test's red was the missing API (it didn't compile against the skeleton), not a behavioural run. **Local
+runs** (26.2, Windows, under `.gametest-lock`): run 1 failed in connection 2 with no offer; the diagnostic (run 2)
+showed the lookup deciding OFFER and the wait itself timing out in `waitForChunksRender`, since the Quality switch
+raised the render distance above what the server sends, so those chunks never come: the dedicated-server connections
+now wait for the player in the world (`inTheWorld`). Run 3: ServerProfilesGameTest passed; run 4 (ServerProfilesGameTest,
+FootprintGameTest, A11yGameTest): all passed, FootprintGameTest "26 budget(s), 0 over", `v05RenderThreadResolve` null.
+**CI** 36359905608 (head 0d4f61ce, after merging c59b8b93): 8/8 jobs green on the first attempt; unit tests 2482 per node
+(3 skipped, 0 failed).
+
+**Screenshots looked at** (the local runs 3-4 and CI 36359905608's `gametest-screenshots-26.2-OpenGL`, `-26.3-OpenGL`
+and `-26.3-Vulkan`, 25 WS-P2 shots per leg): the own world (Offer "Offer a profile here" inactive, the line says
+profiles are for servers), the screen before and after "Offer Max FPS here" at 1280x720@2, 640x480@2, 854x480@2 and
+1280x720@3 (nothing clipped once the three text blocks wrap, the "This server" marker and green bar on the row), the
+toast ("Profile for this server" / "Max FPS is set for this server. Press F8 to switch.", fully in after 20 ticks),
+RigTuneScreen's notice line with Switch / Don't offer here / × / +1 more at the wide sizes and the "…" layout at
+640x480@2, NoticeScreen listing the offer above the server limit, the Forget all confirmation, the empty list, the
+not-connected line; the A11y walk's seven canned rows at the three sizes, scrolled to the last row at 1280x720@3, the
+selected current row after Enter, and high contrast (the focus frame on the This-server line, the label grey
+recoloured). One run-1 finding fixed from them: the subtitle and the privacy line were clipped at every size.
+
 ## Phase B: frozen-file exceptions and additions (coordinator-approved)
 - `src/test/java/io/github/chaotix345/rigtune/client/V05ServicesTest.java` (WS-K's, frozen): the skeleton contract line
   `assertEquals(ServerProfilesView.EMPTY, services.serverProfiles().view())` now reads
@@ -148,6 +178,22 @@ Reading: mixed signs across legs, inside the runner-to-runner spread ws-k.md rec
 63.5-112.9 on near-identical code), and `rigtuneClassBytesIdle` unchanged, so none of the new classes load in an idle
 game; `v05RenderThreadResolve` null and `v05HolderCreatedOn` "RigTune worker" on all three legs; every key inside its
 budget (150 / 141 / 300, 2.05). No screenshots are WS-P2's in Phase A (no UI yet).
+
+**Phase B** (CI 36359905608, head 0d4f61ce) against the integration head it merged (c59b8b93, run 36359299550), which
+isolates WS-P2's change from the Wave A merges in between (ms; bytes):
+
+| leg | renderThreadInitCpuMs | clientStartedWallMs | workerCpuMs5s | tickHookOnVsReference | rigtuneClassBytesIdle |
+|---|---|---|---|---|---|
+| 26.2 OpenGL | 116.8 (+15.1) | 48.1 (+2.9) | 202.1 (-4.2) | 1.443 (-0.255) | 80448 (+1080) |
+| 26.3 OpenGL | 113.5 (+0.1) | 29.6 (-10.2) | 195.3 (-13.7) | 1.595 (-0.021) | 79976 (+616) |
+| 26.3 Vulkan | 111.8 (+0.8) | 37.3 (-18.9) | 228.0 (+27.1) | 1.559 (-0.008) | 80008 (+888) |
+
+Against ws-k.md's baseline (run 36310249248) the same run is +34.6/+31.3/-8.2 renderThreadInitCpuMs, most of it the
+Wave A merges. Reading: the timings move both ways inside the runner spread; nothing of C16 runs at startup (the
+service is made on the first JOIN or screen, the notice source's `current()` reads a volatile while nothing is pending)
+and no tick or frame hook was added. `rigtuneClassBytesIdle` grows by 0.6-1.1 KB on every leg, most likely the slightly larger
+RealController and ProfileService, both loaded at startup (well inside the 109,296 budget). `v05RenderThreadResolve` null
+and `v05HolderCreatedOn` "RigTune worker" on all three legs.
 
 ## Docs (for the docs workstream)
 - **README, Profiles** (a paragraph after the share codes): "**Profiles for servers.** Profiles → Servers… lets you
@@ -181,23 +227,29 @@ budget (150 / 141 / 300, 2.05). No screenshots are WS-P2's in Phase A (no UI yet
 
 ## AC table
 
+Evidence: unit tests on both nodes; game tests on CI 36359905608's three legs (26.2 OpenGL, 26.3 OpenGL, 26.3 Vulkan),
+with the screenshots listed in "Phase B as landed".
+
 | AC | status | evidence |
 |---|---|---|
-| AC7.1 (the file's shape, no plaintext) | unit half verified; game-test half Phase B | ServerProfileStoreTest.theFirstRememberCreatesTheSaltAndOneEntry, theFileHoldsNoPlaintextAndItsKeysDifferFromServerLimits |
-| AC7.2 (keys, normalisation, X7 rules, bad salt, joined writes nothing) | verified (unit) | ServerProfileStoreTest (17 cases) |
-| AC7.3 (32 cap, FULL, in place, ≤ 16 KiB) | verified (unit); the "Forget one first" status text in ServerProfilesViewTest.theStatusLines. "Unchanged file" = unchanged content; the bytes may be rewritten by a concurrent update (the race test) | ServerProfileStoreTest.aNewThirtyThirdServerIsFullAndTheFileUnchanged, reRememberingReplacesInPlace, twoRemembersRacingForTheLastPlaceGiveOneOkAndOneFull |
+| AC7.1 (the file's shape, no plaintext) | verified | ServerProfileStoreTest.theFirstRememberCreatesTheSaltAndOneEntry, theFileHoldsNoPlaintextAndItsKeysDifferFromServerLimits; ServerProfilesGameTest.checkFile (formatVersion 1, 32-hex salt, 64-hex keys, no localhost/127.0.0.1/port) |
+| AC7.2 (keys, normalisation, X7 rules, bad salt, joined writes nothing) | verified (unit) | ServerProfileStoreTest (22 cases) |
+| AC7.3 (32 cap, FULL, in place, ≤ 16 KiB) | verified (unit); "unchanged file" = unchanged content, the bytes may be rewritten by a concurrent update | ServerProfileStoreTest.aNewThirtyThirdServerIsFullAndTheFileUnchanged, reRememberingReplacesInPlace, twoRemembersRacingForTheLastPlaceGiveOneOkAndOneFull; ServerProfilesViewTest.theStatusLines |
 | AC7.4 (the 7 reasons in order) | verified (unit) | ServerProfilePromptTest |
-| AC7.5 (one notice, key, actions, before SERVER_LIMIT, "+1 more") | unit part verified; game test Phase B | ServerProfileNoticeTest |
-| AC7.6 (one toast per server per session) | wording only; Phase B | ServerProfileNoticeTest.theToastWording |
-| AC7.7 (switch → one apply entry, Undo) | Phase B | |
-| AC7.8 (benchmark/busy refusals; no offer while benchmarking) | decision half verified (BENCHMARK); refusals Phase B | ServerProfilePromptTest |
-| AC7.9 (deleted profile: no offer; delete forgets; rename) | decision + `forgetProfile` verified (unit); wiring Phase B | ServerProfilePromptTest (MISSING_PROFILE), ServerProfileStoreTest.forgetForgetKeyForgetProfileForgetAll |
-| AC7.10 (forget removes; × session-only) | store + key half verified; game test Phase B | ServerProfileStoreTest, ServerProfileNoticeTest.theKeyIsHiddenForTheSessionOnly |
-| AC7.11 (screen lines, rows, no address, fit, Tab) | text half verified (unit); screen Phase B | ServerProfilesViewTest |
-| AC7.12 (NoticeBoardTest pin) | verified (WS-K) | NoticeBoardTest; ServerProfileNoticeTest.itSortsAfterTheBatteryOfferAndBeforeTheServerLimit |
-| AC7.13 (no tick/frame hook; lookup on the executor) | Phase B | |
-| AC7.14 (0.4.0 leaves the file byte-identical) | fixture + expect.json landed; compat030 PASS; closes with WS-E's compat040 | V050WrittenWsP2Test; compat030 run above |
-| AC7.15 (ServerProfilesGameTest, 3 legs) | Phase B | |
-| AC7.16 (real JOIN on the dev PC) | rolling Phase 5 | |
-| AC7.17 (on battery with Battery active: held, the line says why) | verified (unit) | ServerProfilePromptTest, ServerProfilesViewTest.heldOnBatteryOnlyWithBatteryActive, theThisServerLines |
-| AC7.18 (SetSetting only under every policy) | verified (unit; pins WS-L1's guard) | ServerProfileSwitchTest |
+| AC7.5 (one notice, key, actions, dismissible, before SERVER_LIMIT, shown with "+1 more") | verified | ServerProfileNoticeTest; ServerProfilesGameTest.offerSwitchAndUndo (real.notices(): the offer first and SERVER_LIMIT after it; RigTuneScreen's shownNotice at 4 sizes with otherNotices ≥ 1) |
+| AC7.6 (at most one toast per server per session; none in the own world or when active) | verified | ServerProfileOffersTest.oneToastPerServerPerSession; ServerProfilesGameTest (no toast in the own world or with nothing set, the toast on connection 2, none on connection 3); the Open-to-LAN host and the benchmark world are SINGLEPLAYER (ServerProfileOffersTest.theOwnWorld…, ServerProfilePromptTest) |
+| AC7.7 (Switch → one apply entry "Profile: X", Undo this, no return in the connection) | verified | ServerProfilesGameTest.offerSwitchAndUndo |
+| AC7.8 (a benchmark: no offer, Switch refused, nothing changes, the offer stays; downloading: "busy") | verified for the benchmark (game test); downloading through the shared Busy check (BusyTest), not forced in the game test | ServerProfilesGameTest; ServerProfilePromptTest; BusyTest (the switch is ProfileService.switchProfile, a listed Busy caller) |
+| AC7.9 (a deleted profile: no offer; delete forgets; rename) | verified | ServerProfilePromptTest (MISSING_PROFILE); ServerProfilesGameTest (Evening set, renamed "Night" and shown, deleted → 0 entries); ServerProfilesViewTest |
+| AC7.10 (Don't offer here / Stop offering here remove; × session-only) | verified | ServerProfilesGameTest (×: hidden after reopening, key not in awareness.json; Don't offer here and Stop offering here → 0 entries); ServerProfileNoticeTest.theKeyIsHiddenForTheSessionOnly |
+| AC7.11 (screen states, rows, no address, fit, Tab order, "Selected") | verified | ServerProfilesViewTest; ServerProfilesGameTest.checkScreen at 1280x720@2, 640x480@2, 854x480@2, 1280x720@3 (the amended scroll size); A11yGameTest.walkServerProfiles |
+| AC7.12 (NoticeBoardTest pin) | verified (WS-K) | NoticeBoardTest; ServerProfileNoticeTest |
+| AC7.13 (no tick/frame hook; notice() reads nothing while none is pending; the lookup on Probes.EXECUTOR with a connection guard; FootprintGameTest) | verified | code (ServerProfileService.onJoin/lookup/notice); ServerProfileOffersTest.aLookupThatFinishesAfterADisconnectOffersNothing; V05ServicesTest (notice() with no controller); FootprintGameTest green on 3 legs, `v05RenderThreadResolve` null |
+| AC7.14 (0.4.0 leaves the file byte-identical) | fixture + expect.json landed; compat030 PASS; closes with WS-E's compat040 | V050WrittenWsP2Test; compat030 run (Phase A) |
+| AC7.15 (ServerProfilesGameTest, 3 legs, network off) | verified | CI 36359905608 (3 legs green); GameTestNet.set(false) |
+| AC7.16 (real JOIN on the dev PC) | rolling Phase 5 (P5 agent) | the join lookup logs "this server has a profile set (<id>): <reason>" for that run |
+| AC7.17 (on battery with Battery active: held, the line says why) | verified (unit); a real laptop check is the user's optional 3g step | ServerProfilePromptTest, ServerProfilesViewTest.heldOnBatteryOnlyWithBatteryActive, theThisServerLines |
+| AC7.18 (SetSetting only under every policy) | verified | ServerProfileSwitchTest (unit, pins the guard); ServerProfilesGameTest (the offer's real switch journals settings only; Preview of a template and a saved profile has no download or disable) |
+
+Stays UNVERIFIED (SPEC 7): whether proxies or reconfiguration fire JOIN again (at most one toast per server per session
+either way; ServerProfileOffers treats a same-identity JOIN as the same connection); a real Realm.
