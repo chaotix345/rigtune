@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.gametest;
 
+import com.google.gson.JsonArray;
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ClientSettings;
@@ -16,6 +17,7 @@ import io.github.chaotix345.rigtune.client.ui.UndoScreen;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
+import io.github.chaotix345.rigtune.core.awareness.AwarenessStore;
 import io.github.chaotix345.rigtune.core.history.FirstRun;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
@@ -110,7 +112,7 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 			launcherAdvice(context, real);
 			refusedApply(context, real, v05.configDir());
 			undoSkipsAppliedModFiles(context, real);
-			modFilesNews(context, real);
+			modFilesNews(context, real, v05.configDir());
 
 			// AC4e.2: the opt-in brings 0.4's behaviour back, with its line in the header's one warning slot (network on, so the
 			// offline line doesn't take the slot).
@@ -293,12 +295,22 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 
 	// AC4b.6 (game): MOD_FILES_NEWS under LAUNCHER for a returning player only (each status forced through WS-F's seam, then
 	// put back); its Settings… opens the settings on the Mod files row (review L15, through the real notice source).
-	private static void modFilesNews(ClientGameTestContext context, RealController real) {
+	// Review-11 FEAT-1: a new player's load stored the news' dismissal, and their first Apply doesn't bring the news. The
+	// stored dismissal is taken out for the RETURNING check and put back.
+	private static void modFilesNews(ClientGameTestContext context, RealController real, Path configDir) {
 		FirstRunService firstRun = real.v05().firstRun();
 		FirstRun.Status status = firstRun.status();
+		FirstRun.Status loaded = firstRun.loadedStatus();
+		boolean dismissed = newsDismissed(configDir);
+		check(loaded != FirstRun.Status.NEW || dismissed, "a NEW load stored MOD_FILES_NEWS's dismissal in awareness.json");
 		try {
+			if (dismissed) {
+				undismissNews(configDir);
+			}
 			firstRun.forceStatusForTests(FirstRun.Status.NEW);
 			check(news(context, real).isEmpty(), "no MOD_FILES_NEWS for a new player");
+			firstRun.applied(null);
+			check(firstRun.status() == FirstRun.Status.RETURNING && news(context, real).isEmpty(), "no MOD_FILES_NEWS after a new player's first Apply");
 			firstRun.forceStatusForTests(FirstRun.Status.RETURNING);
 			List<Notice> shown = news(context, real);
 			check(shown.size() == 1 && shown.getFirst().message().english().equals("RigTune now leaves this instance's mod files to the Modrinth App"),
@@ -315,8 +327,31 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 			context.takeScreenshot("launcher-managed-news-settings-854x480-scale2");
 		} finally {
 			firstRun.forceStatusForTests(status);
+			if (dismissed) {
+				AwarenessStore.shared(configDir).dismiss(ModFilesService.NEWS_KEY);
+			}
 		}
-		RigTune.LOGGER.info("LauncherManagedGameTest: MOD_FILES_NEWS for RETURNING only (this instance: {}); Settings… focuses the Mod files row", status);
+		RigTune.LOGGER.info("LauncherManagedGameTest: MOD_FILES_NEWS for RETURNING only (this instance: {}, read {} at load, dismissed {}); Settings… focuses the Mod files row",
+				status, loaded, dismissed);
+	}
+
+	private static boolean newsDismissed(Path configDir) {
+		return AwarenessStore.shared(configDir).dismissed().contains(ModFilesService.NEWS_KEY);
+	}
+
+	private static void undismissNews(Path configDir) {
+		check(AwarenessStore.shared(configDir).update(root -> {
+			if (root.get(AwarenessStore.DISMISSED) instanceof JsonArray keys) {
+				JsonArray kept = new JsonArray();
+				keys.forEach(key -> {
+					if (!(key.isJsonPrimitive() && ModFilesService.NEWS_KEY.equals(key.getAsString()))) {
+						kept.add(key);
+					}
+				});
+				root.add(AwarenessStore.DISMISSED, kept);
+			}
+			return root;
+		}), "took the news' key out of awareness.json's dismissals");
 	}
 
 	private static List<Notice> news(ClientGameTestContext context, RealController real) {
