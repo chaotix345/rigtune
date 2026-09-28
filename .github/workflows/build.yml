@@ -1,7 +1,7 @@
 name: build
 
 on:
-  push:
+  # SCRATCH (WS-E, review M3): not on this branch's pushes; scratch-battery.yml runs the release-tier legs instead.
   pull_request:
   # Allows the update-rules workflow to trigger a build for the PR it opens: a PR opened with the
   # default GITHUB_TOKEN does not fire other workflows' `pull_request`/`push` events, so
