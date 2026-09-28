@@ -74,6 +74,9 @@ import java.util.TreeMap;
  * report's update of -Drigtune.e2e.pinTarget (an installed mod pins it), the addition -Drigtune.e2e.reverseAdd (slug:project),
  * then the report's update of -Drigtune.e2e.reverseTarget (the staged addition's version declares that update incompatible).
  * Records each outcome (the status line); quits.</li>
+ * <li>{@code stale-check} (v0.5, AC2H.6): the new version's first start on a seeded state whose staged group can never run;
+ * waits 5 s after the report, screenshots History, quits. Every phase records each status line RigTune shows (statuses:
+ * the text and every translation key in it).</li>
  * </ul>
  * Results go to -Drigtune.e2e.out as driver-&lt;phase&gt;.json; screenshots to the instance's screenshots folder.
  */
@@ -106,6 +109,8 @@ public final class UndoDriver implements ClientModInitializer {
 	private final String reverseAdd = System.getProperty("rigtune.e2e.reverseAdd", "");
 	private int guardStep;
 	private Component statusBefore;
+	private final List<Map<String, Object>> statuses = new ArrayList<>();
+	private String lastStatus;
 	private final List<Map<String, Object>> undoPlans = new ArrayList<>();
 	private JsonObject plan;
 	private int undone;
@@ -125,7 +130,7 @@ public final class UndoDriver implements ClientModInitializer {
 	public void onInitializeClient() {
 		if (phase == null || !List.of("mod-apply", "mod-undo", "mod-check", "entry-apply", "entry-undo", "entry-check",
 				"profile-apply", "profile-undo", "profile-check", "profile-undo-all", "profile-check-all", "kill-first", "kill-second",
-				"kill-check", "guard-apply").contains(phase)) {
+				"kill-check", "guard-apply", "stale-check").contains(phase)) {
 			return;
 		}
 		out = Path.of(System.getProperty("rigtune.e2e.out", "e2e-out")).toAbsolutePath();
@@ -133,6 +138,7 @@ public final class UndoDriver implements ClientModInitializer {
 		result.put("ok", false);
 		result.put("error", null);
 		result.put("events", events);
+		result.put("statuses", statuses);
 		event("undo driver loaded, phase " + phase + ", output " + out);
 		ClientTickEvents.END_CLIENT_TICK.register(this::tick);
 	}
@@ -149,6 +155,7 @@ public final class UndoDriver implements ClientModInitializer {
 				return;
 			}
 			RigTuneController controller = RigTuneClient.controller();
+			recordStatus(controller);
 			switch (step) {
 				case WAIT_TITLE -> {
 					if (minecraft.gui.screen() instanceof TitleScreen && minecraft.gui.overlay() == null) {
@@ -419,6 +426,15 @@ public final class UndoDriver implements ClientModInitializer {
 				}
 			}
 			case "guard-apply" -> guard(minecraft, controller);
+			case "stale-check" -> {
+				if (stepTicks == 5 * SECOND) {
+					minecraft.gui.setScreen(new HistoryScreen(minecraft.gui.screen(), controller));
+				} else if (stepTicks == 7 * SECOND) {
+					screenshot(minecraft, "e2e-stale-check-1-history.png");
+				} else if (stepTicks == 8 * SECOND) {
+					next(Step.QUIT);
+				}
+			}
 			default -> fail(minecraft, "unknown phase " + phase);
 		}
 	}
@@ -504,6 +520,22 @@ public final class UndoDriver implements ClientModInitializer {
 		}
 		event(name + " outcome: " + status.getString());
 		return true;
+	}
+
+	// Every status line RigTune shows, as it changes: its text and every translation key in it.
+	private void recordStatus(RigTuneController controller) {
+		Component status = controller == null ? null : controller.status();
+		String text = status == null ? null : status.getString();
+		if (text == null || text.equals(lastStatus)) {
+			return;
+		}
+		lastStatus = text;
+		Map<String, Object> seen = new LinkedHashMap<>();
+		seen.put("t", String.format(Locale.ROOT, "%.1f", ticks / (double) SECOND));
+		seen.put("keys", keys(status));
+		seen.put("text", text);
+		statuses.add(seen);
+		event("status: " + text);
 	}
 
 	private static List<String> keys(Component component) {

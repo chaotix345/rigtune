@@ -304,6 +304,44 @@ def after_seeded_verify(instance, carried, mod_names, driver, log_text, failed_o
     return checks
 
 
+STALE_KEYS = ("rigtune.status.stale_installed", "rigtune.status.stale_gone")
+NEVER_RUN = "can never run"
+RETRIED = "they will be retried at the next exit"
+
+
+def after_stale_start(instance, carried, mod_names, driver, log_text, helper_cmdlines, mods_before):
+    """AC2H.6 (WS-H's RW-3), the new version's first start on a seeded state whose staged group can never run: the group
+    leaves pending.json with a status line naming the mod, History marks its changes ABANDONED or DISCARDED, latest.log
+    counts it as never runnable (not "will be retried"), and at exit no helper runs and mods/ stays as it was."""
+    instance = Path(instance)
+    driver = driver or {}
+    ids = {op.get("id") for op in carried}
+    plan = _load(instance / "config" / "rigtune" / "pending.json")
+    left = sorted(op.get("id") for op in (plan or {}).get("ops") or [] if op.get("id") in ids)
+    checks = [Check("the stale group is dropped", driver.get("ok") is True and bool(ids) and not left,
+                    "driver ok: {}; carried-over ops still in pending.json: {}".format(driver.get("ok"), left))]
+    wanted = [n.lower() for n in mod_names]
+    statuses = driver.get("statuses") or []
+    said = [s for s in statuses if any(k in STALE_KEYS for k in s.get("keys") or []) and any(n in (s.get("text") or "").lower() for n in wanted)]
+    checks.append(Check("the drop is announced (status line)", bool(said), "statuses seen: {}".format([(s.get("keys"), s.get("text")) for s in statuses])))
+    journaled = {}
+    for c in (c for e in history_entries(instance) or [] for c in e.get("changes", []) if c.get("opId") in ids):
+        journaled.setdefault(c.get("opId"), []).append(c.get("status"))
+    checks.append(Check("History marks the dropped changes ABANDONED or DISCARDED", bool(journaled)
+                        and all(s in ("ABANDONED", "DISCARDED") for statuses_ in journaled.values() for s in statuses_),
+                        "statuses by op id: {}".format(journaled)))
+    lines = log_text.splitlines()
+    never = [line for line in lines if NEVER_RUN in line]
+    retried = [line for line in lines if RETRIED in line]
+    checks.append(Check("latest.log: counted as never runnable, not as leftover to retry", bool(never) and not retried,
+                        "never-run lines: {}; will-be-retried lines: {}".format(never[:2], retried[:2])))
+    after = listing(instance / "mods", recursive=True)
+    checks.append(Check("no helper at exit, mods/ unchanged", not helper_cmdlines and after == mods_before,
+                        "helper runs: {}; mods/: {}".format(len(helper_cmdlines), "unchanged" if after == mods_before else _diff(mods_before, after))))
+    checks.append(_bad_or_crash(instance))
+    return checks
+
+
 def _distinct_matches(candidates):
     """candidates[i]: the line numbers op i may use. How many ops get a line of their own (bipartite matching)."""
     owner = {}

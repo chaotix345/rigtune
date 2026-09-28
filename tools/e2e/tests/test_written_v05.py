@@ -105,6 +105,23 @@ class MergeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             written.compose(written.resolve_all([self.v4, self.v5]), self.instance)
 
+    def test_history_can_keep_only_the_newest_entries(self):
+        write(self.v4 / "ws-a", "history.json", {"formatVersion": 1, "entries": [entry("old", "2026-09-20T00:00:00Z")]})
+        write(self.v5 / "ws-s2", "history.json", {"formatVersion": 1, "entries": [entry("new", "2026-09-26T00:00:00Z"),
+                                                                                   entry("mid", "2026-09-22T00:00:00Z")]})
+        dropped = []
+        written.compose(written.resolve_all([self.v4, self.v5]), self.instance, newest=2, dropped=dropped)
+        history = json.loads((self.instance / "config" / "rigtune" / "history.json").read_text(encoding="utf-8"))
+        self.assertEqual((["mid", "new"], ["old"]), ([e["id"] for e in history["entries"]], dropped))
+        # An entry a staged op belongs to stays however old.
+        staged = dict(entry("old", "2026-09-20T00:00:00Z"), changes=[{"id": "c1", "opId": "op-1", "status": "STAGED"}])
+        write(self.v4 / "ws-a", "history.json", {"formatVersion": 1, "entries": [staged]})
+        write(self.v4 / "ws-a", "pending.json", {"ops": [{"id": "op-1", "type": "PATCH_JSON"}]})
+        dropped = []
+        written.compose(written.resolve_all([self.v4, self.v5]), self.instance, newest=2, dropped=dropped)
+        history = json.loads((self.instance / "config" / "rigtune" / "history.json").read_text(encoding="utf-8"))
+        self.assertEqual((["old", "new"], ["mid"]), ([e["id"] for e in history["entries"]], dropped))
+
     def test_benchmark_runs_are_concatenated_and_their_ids_stay_unique(self):
         write(self.v4 / "ws-b", "benchmarks.json", {"schemaVersion": 1, "runs": [{"id": "r1", "x": 1}]})
         write(self.v5 / "ws-b", "benchmarks.json", {"schemaVersion": 1, "runs": [{"id": "r2", "x": 1}]})

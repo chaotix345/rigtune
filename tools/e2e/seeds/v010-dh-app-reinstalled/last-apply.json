@@ -1,0 +1,216 @@
+{
+  "finishedAt": "2026-09-24T23:09:01.530708800Z",
+  "results": [
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "${INSTANCE}/mods/bbe-fabric-1.3.7+mc26.2.jar.rigtune-pending",
+        "to": "${INSTANCE}/mods/bbe-fabric-1.3.7+mc26.2.jar",
+        "id": "02b0560e-bce5-42d6-8044-542ce68b7c7b",
+        "group": "a4d1dcc3-e568-4ff0-bb25-dd057ef2002d",
+        "modId": "betterblockentities",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled bbe-fabric-1.3.7+mc26.2.jar"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "${INSTANCE}/mods/moreculling-fabric-26.2-1.8.1.jar.rigtune-pending",
+        "to": "${INSTANCE}/mods/moreculling-fabric-26.2-1.8.1.jar",
+        "id": "eb5fe8da-f322-4f0f-8adf-ba3d40266b0c",
+        "group": "775f0b29-e128-4450-b25e-21a37af1afd2",
+        "modId": "moreculling",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled moreculling-fabric-26.2-1.8.1.jar"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "${INSTANCE}/mods/asynclogger-2.2.2+26.1.2-fabric.jar.rigtune-pending",
+        "to": "${INSTANCE}/mods/asynclogger-2.2.2+26.1.2-fabric.jar",
+        "id": "99fc81f3-8174-45d8-af10-6dc4f43fa171",
+        "group": "314e04f9-06dd-4ce3-bfb9-2069d4bb2257",
+        "modId": "asynclogger",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled asynclogger-2.2.2+26.1.2-fabric.jar"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "${INSTANCE}/mods/fastquit-3.1.5+mc26.2.jar.rigtune-pending",
+        "to": "${INSTANCE}/mods/fastquit-3.1.5+mc26.2.jar",
+        "id": "09ef6fe0-9914-4c35-9dc6-e01ef1d473f6",
+        "group": "88f82849-72af-4b89-9df2-9d70569fc300",
+        "modId": "fastquit",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled fastquit-3.1.5+mc26.2.jar"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "${INSTANCE}/mods/Ixeris-4.6.8+26.2-fabric.jar.rigtune-pending",
+        "to": "${INSTANCE}/mods/Ixeris-4.6.8+26.2-fabric.jar",
+        "id": "6dc050e7-e6a0-4d4d-9c9c-c8ce83820567",
+        "group": "77cd1e78-d057-404c-b95c-fc700ef41ec6",
+        "modId": "ixeris",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled Ixeris-4.6.8+26.2-fabric.jar"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "${INSTANCE}/mods/structure_layout_optimizer-1.1.4+26.1-fabric.jar.rigtune-pending",
+        "to": "${INSTANCE}/mods/structure_layout_optimizer-1.1.4+26.1-fabric.jar",
+        "id": "1514593c-575d-4c02-a601-57d8850825dc",
+        "group": "e3250138-a30d-44a2-ac9d-a6d5f8e0a9ce",
+        "modId": "structure_layout_optimizer",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled structure_layout_optimizer-1.1.4+26.1-fabric.jar"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "${INSTANCE}/mods/ResourcefulConfig-5.0.0.jar.rigtune-pending",
+        "to": "${INSTANCE}/mods/ResourcefulConfig-5.0.0.jar",
+        "id": "452126b2-e2f6-4940-89cc-df3d180777aa",
+        "group": "e3250138-a30d-44a2-ac9d-a6d5f8e0a9ce",
+        "modId": "resourcefulconfig",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled ResourcefulConfig-5.0.0.jar"
+    },
+    {
+      "op": {
+        "type": "DISABLE_FILE",
+        "path": "${INSTANCE}/mods/fabric-26.2.jar",
+        "id": "041919d9-18c9-4b04-89c4-f15e4e4a80c5",
+        "group": "7b8043de-f5c3-4881-8309-27265240f39e",
+        "attempts": 0
+      },
+      "status": "FAILED",
+      "message": "Gave up after 10 attempt(s): java.nio.file.FileSystemException: ${INSTANCE}/mods/fabric-26.2.jar -> ${INSTANCE}/mods/fabric-26.2.jar.disabled: The process cannot access the file because it is being used by another process"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "${INSTANCE}/mods/DistantHorizons-3.3.2-26.2-fabric-neoforge.jar.rigtune-pending",
+        "to": "${INSTANCE}/mods/DistantHorizons-3.3.2-26.2-fabric-neoforge.jar",
+        "id": "db7f487d-6371-43c5-944e-c053428ad70d",
+        "group": "7b8043de-f5c3-4881-8309-27265240f39e",
+        "modId": "distanthorizons",
+        "attempts": 0
+      },
+      "status": "FAILED",
+      "message": "Not applied because disabling fabric-26.2.jar failed"
+    },
+    {
+      "op": {
+        "type": "DISABLE_FILE",
+        "path": "${INSTANCE}/mods/entityculling-fabric-1.11.1-mc26.2.jar",
+        "id": "21b618a7-dd7b-4a63-af48-3ce20b18171b",
+        "group": "292fec58-2fd3-4b86-84e6-12b0e2fd29bd",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Disabled entityculling-fabric-1.11.1-mc26.2.jar -> entityculling-fabric-1.11.1-mc26.2.jar.disabled"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "${INSTANCE}/mods/entityculling-fabric-1.11.2-mc26.2.jar.rigtune-pending",
+        "to": "${INSTANCE}/mods/entityculling-fabric-1.11.2-mc26.2.jar",
+        "id": "689814c9-e9f5-449f-834e-ea250f9847c3",
+        "group": "292fec58-2fd3-4b86-84e6-12b0e2fd29bd",
+        "modId": "entityculling",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled entityculling-fabric-1.11.2-mc26.2.jar"
+    },
+    {
+      "op": {
+        "type": "DISABLE_FILE",
+        "path": "${INSTANCE}/mods/modmenu-20.0.2.jar",
+        "id": "ddbbfe35-b9f2-4dd1-b9a1-00eff0839ce1",
+        "group": "2e3c9779-1f7e-4392-bc2e-b44a3687373d",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Disabled modmenu-20.0.2.jar -> modmenu-20.0.2.jar.disabled"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "${INSTANCE}/mods/modmenu-20.0.3.jar.rigtune-pending",
+        "to": "${INSTANCE}/mods/modmenu-20.0.3.jar",
+        "id": "8fe44793-99dd-4585-a496-ccd6554b3164",
+        "group": "2e3c9779-1f7e-4392-bc2e-b44a3687373d",
+        "modId": "modmenu",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled modmenu-20.0.3.jar"
+    },
+    {
+      "op": {
+        "type": "DISABLE_FILE",
+        "path": "${INSTANCE}/mods/yet_another_config_lib_v3-3.9.6+26.2-fabric.jar",
+        "id": "6530a016-39e2-4560-8f1e-5f80020ee4a4",
+        "group": "c599a742-56b1-4bf3-a290-739ba4020819",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Disabled yet_another_config_lib_v3-3.9.6+26.2-fabric.jar -> yet_another_config_lib_v3-3.9.6+26.2-fabric.jar.disabled"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "${INSTANCE}/mods/yet_another_config_lib_v3-3.9.7+26.2-fabric.jar.rigtune-pending",
+        "to": "${INSTANCE}/mods/yet_another_config_lib_v3-3.9.7+26.2-fabric.jar",
+        "id": "988aa126-bcde-4ada-8b8d-048912a7701f",
+        "group": "c599a742-56b1-4bf3-a290-739ba4020819",
+        "modId": "yet_another_config_lib_v3",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled yet_another_config_lib_v3-3.9.7+26.2-fabric.jar"
+    },
+    {
+      "op": {
+        "type": "DISABLE_FILE",
+        "path": "${INSTANCE}/mods/zoomify-2.16.1+26.2.jar",
+        "id": "1c0dfcc9-f279-42a8-8a1f-efc5cec0ce14",
+        "group": "e82a8f20-6120-4d93-834d-0968c8fc9068",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Disabled zoomify-2.16.1+26.2.jar -> zoomify-2.16.1+26.2.jar.disabled"
+    },
+    {
+      "op": {
+        "type": "ENABLE_FILE",
+        "from": "${INSTANCE}/mods/zoomify-2.16.3+26.2.jar.rigtune-pending",
+        "to": "${INSTANCE}/mods/zoomify-2.16.3+26.2.jar",
+        "id": "d135df2f-46ef-4bbf-a9c6-7889e64ec6f8",
+        "group": "e82a8f20-6120-4d93-834d-0968c8fc9068",
+        "modId": "zoomify",
+        "attempts": 0
+      },
+      "status": "OK",
+      "message": "Enabled zoomify-2.16.3+26.2.jar"
+    }
+  ]
+}
