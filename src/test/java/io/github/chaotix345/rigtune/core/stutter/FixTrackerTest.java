@@ -119,6 +119,26 @@ class FixTrackerTest {
 		assertFalse(measuring().withState(FixTracker.State.NOT_APPLIED).undoable());
 	}
 
+	// review-11 COMPAT-2: an after session on another graphics backend than the fix's (OpenGL before, Vulkan after) doesn't
+	// count; it's skipped with the graphics reason.
+	@Test
+	void anotherGraphicsBackendIsSkipped() {
+		FixTracker.Record m = measuring();
+		FixConditions c = m.conditions();
+		FixTracker.Record gl = new FixTracker.Record(m.entryId(), m.adviceId(), m.key(), m.from(), m.to(), m.appliedAt(), m.rulesRevision(), m.now(), m.state(),
+				m.before(), new FixConditions(c.mc(), c.modSetHash(), c.heapMaxMb(), c.collector(), c.width(), c.height(), c.fullscreen(), c.world(),
+						c.phaseTiming(), c.gcMeasured(), c.settings(), "OPENGL", "AMD Radeon RX 7800 XT"), m.after(), m.skipped(), m.lastSkip(), m.verdict(),
+				m.dismissed());
+		FixTracker.SessionEnd s = session(60, 400, 10, RD, "10");
+		FixConditions start = s.atStart();
+		FixConditions vulkan = new FixConditions(start.mc(), start.modSetHash(), start.heapMaxMb(), start.collector(), start.width(), start.height(),
+				start.fullscreen(), start.world(), start.phaseTiming(), start.gcMeasured(), start.settings(), "VULKAN", "AMD Radeon RX 7800 XT");
+		FixTracker.Record r = advance(gl, journal(RD, JournalChange.APPLIED), new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), vulkan, vulkan,
+				false), at(60));
+		assertNull(r.after(), "not counted: " + r);
+		assertEquals(new FixTracker.Skip(FixConditions.Reason.GRAPHICS.id(), List.of()), r.lastSkip());
+	}
+
 	@Test
 	void aStagedFixWaitsForTheRestart() {
 		FixTracker.Record r = staged();

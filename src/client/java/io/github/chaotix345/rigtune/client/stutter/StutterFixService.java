@@ -237,11 +237,13 @@ public final class StutterFixService {
 		return specs;
 	}
 
-	// Render thread: the conditions a fix's sessions are compared under (FixConditions), the measurement flags left false.
+	// Render thread: the conditions a fix's sessions are compared under (FixConditions), the measurement flags left false; the
+	// graphics backend and GPU from the same probe the benchmark's context uses (review-11 COMPAT-2).
 	static FixConditions conditions(Minecraft minecraft, @Nullable String worldKind, SettingsSnapshot settings) {
+		BenchmarkConditions.Graphics graphics = BenchmarkConditions.Graphics.current();
 		return new FixConditions(HardwareProbe.minecraftVersion(), BenchmarkConditions.modSetHash(), Runtime.getRuntime().maxMemory() / MIB,
 				StutterCapture.GC.collector(), minecraft.getWindow().getWidth(), minecraft.getWindow().getHeight(), minecraft.options.fullscreen().get(), worldKind,
-				false, false, FixConditions.settingsOf(settings.values()));
+				false, false, FixConditions.settingsOf(settings.values()), graphics.backend(), graphics.gpu());
 	}
 
 	// Render thread, at a session's start: the kind of world (ServerLimits.Kind's name), or null outside one.

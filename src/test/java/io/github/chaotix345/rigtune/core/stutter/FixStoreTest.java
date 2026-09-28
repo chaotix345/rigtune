@@ -97,6 +97,21 @@ class FixStoreTest {
 		assertFalse(back.undoable());
 	}
 
+	// review-11 COMPAT-2: the backend and GPU round-trip, and a record without them (0.5 before the fix) reads them as unknown.
+	@Test
+	void theGraphicsRoundTrip() throws IOException {
+		FixTracker.Record m = FixTrackerTest.measuring();
+		FixConditions c = m.conditions();
+		FixConditions graphics = new FixConditions(c.mc(), c.modSetHash(), c.heapMaxMb(), c.collector(), c.width(), c.height(), c.fullscreen(), c.world(),
+				c.phaseTiming(), c.gcMeasured(), c.settings(), "VULKAN", "AMD Radeon RX 7800 XT");
+		FixTracker.Record withGraphics = new FixTracker.Record("entry-g", m.adviceId(), m.key(), m.from(), m.to(), m.appliedAt(), m.rulesRevision(), m.now(),
+				m.state(), m.before(), graphics, m.after(), m.skipped(), m.lastSkip(), m.verdict(), m.dismissed());
+		assertTrue(store().add(m));
+		assertTrue(store().add(withGraphics));
+		assertEquals(List.of(m, withGraphics), FixStore.shared(dir).records());
+		assertFalse(onDisk().getAsJsonArray("fixes").get(0).getAsJsonObject().getAsJsonObject("conditions").has("backend"), "not written when unknown");
+	}
+
 	@Test
 	void theActiveOneIsStagedOrMeasuringAndNotDismissed() {
 		store().add(finished("a", FixTracker.State.COMPARED));

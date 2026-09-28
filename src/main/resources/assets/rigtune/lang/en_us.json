@@ -694,6 +694,7 @@
 	"rigtune.stutter.fix.reason": "Stutter Doctor: %s",
 	"rigtune.stutter.fix.skip.display": "the window size or fullscreen changed",
 	"rigtune.stutter.fix.skip.excluded": "it ran around a benchmark, or Distant Horizons generated terrain in it (or RigTune couldn't tell)",
+	"rigtune.stutter.fix.skip.graphics": "it ran on another graphics API (OpenGL or Vulkan) or GPU",
 	"rigtune.stutter.fix.skip.idle": "it was idle (throttled) longer than it was played",
 	"rigtune.stutter.fix.skip.measurement": "the Stutter Doctor could measure less than before",
 	"rigtune.stutter.fix.skip.memory": "the memory or the garbage collector changed",

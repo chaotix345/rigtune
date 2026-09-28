@@ -178,6 +178,7 @@ public final class FixText {
 			case MODS -> Text.of("rigtune.stutter.fix.skip.mods", "the mods changed");
 			case MEMORY -> Text.of("rigtune.stutter.fix.skip.memory", "the memory or the garbage collector changed");
 			case DISPLAY -> Text.of("rigtune.stutter.fix.skip.display", "the window size or fullscreen changed");
+			case GRAPHICS -> Text.of("rigtune.stutter.fix.skip.graphics", "it ran on another graphics API (OpenGL or Vulkan) or GPU");
 			case WORLD -> Text.of("rigtune.stutter.fix.skip.world", "it was in another kind of world (singleplayer, LAN, Realm or server)");
 			case MEASUREMENT -> Text.of("rigtune.stutter.fix.skip.measurement", "the Stutter Doctor could measure less than before");
 			case SETTING -> {
