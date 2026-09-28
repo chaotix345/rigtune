@@ -109,13 +109,22 @@ public final class ApplyHelper {
 		}
 		try {
 			PendingActions plan = PendingActions.load(pending);
-			log("Applying " + plan.ops().size() + " operation(s) from " + pending);
-			ApplyResult result = executor.run(plan, pending);
+			// docs/v0.5/SPEC.md 4d: set by the 0.5 game in an instance whose launcher keeps its own list of mods.
+			boolean hold = Boolean.getBoolean(HelperLauncher.HOLD_FILE_OPS_PROPERTY);
+			log("Applying " + plan.ops().size() + " operation(s) from " + pending + (hold ? " (mod-file changes held)" : ""));
+			ApplyResult result = executor.run(plan, pending, hold);
 			for (ApplyResult.OpResult r : result.results()) {
 				log(r.status() + " " + (r.op() == null ? "?" : r.op().type()) + ": " + r.message());
 			}
-			log(result.allSucceeded() ? "All operations done"
-					: "Some operations were not applied; failed ones remain in " + pending + ", abandoned ones were dropped");
+			int held = plan.ops().size() - result.results().size();
+			if (hold && held > 0) {
+				log("Held " + held + " operation(s) of mod-file changes for the player's choice (this instance's launcher keeps its own list"
+						+ " of mods); they stay in " + pending);
+			}
+			if (!result.results().isEmpty()) {
+				log(result.allSucceeded() ? "All operations done"
+						: "Some operations were not applied; failed ones remain in " + pending + ", abandoned ones were dropped");
+			}
 			return result.allSucceeded() ? 0 : 1;
 		} catch (Throwable t) {
 			// An Error too (review 4, security-1): logged, and pending.json stays for the next exit.

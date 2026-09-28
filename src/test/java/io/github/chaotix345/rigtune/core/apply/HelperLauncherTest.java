@@ -5,6 +5,7 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -51,6 +52,24 @@ class HelperLauncherTest {
 
 		assertEquals(List.of("java", "-Dfabric.modsFolder=" + mods, "-cp", "rigtune.jar",
 				"io.github.chaotix345.rigtune.core.apply.ApplyHelper", "7", "pending.json"), command);
+	}
+
+	// docs/v0.5/SPEC.md 4d (AC4d.1): the hold is on the helper's command line exactly under LAUNCHER and PENDING, and the
+	// classpath is still our jar and Gson.
+	@Test
+	void theHoldIsOnTheCommandLineExactlyWhereALauncherManagesTheMods() {
+		Path ours = Path.of("mods", "rigtune.jar");
+		Path gson = Path.of("libs", "gson.jar");
+		for (ModFilesPolicy policy : ModFilesPolicy.values()) {
+			List<String> command = HelperLauncher.buildCommand(Path.of("java"), List.of(ours, gson), 7, Path.of("pending.json"), null,
+					HelperLauncher.holds(policy));
+
+			boolean held = policy == ModFilesPolicy.LAUNCHER || policy == ModFilesPolicy.PENDING;
+			assertEquals(held, command.contains("-Drigtune.helper.holdFileOps=true"), policy.name());
+			assertEquals(ours + File.pathSeparator + gson, command.get(command.indexOf("-cp") + 1), policy.name());
+			assertEquals(List.of("io.github.chaotix345.rigtune.core.apply.ApplyHelper", "7", "pending.json"),
+					command.subList(command.size() - 3, command.size()), policy.name());
+		}
 	}
 
 	@Test
@@ -291,6 +310,32 @@ class HelperLauncherTest {
 			assertTrue(Files.exists(update.mods().resolve("rigtune-2.0.jar" + PendingActions.PENDING_SUFFIX)));
 			assertEquals(update.ops().stream().map(op -> op.withAttempts(1)).toList(), PendingActions.load(update.pending()).ops());
 		}
+	}
+
+	// docs/v0.5/SPEC.md 4d (AC4d.1): a helper with only our jar and Gson on its classpath, started with the hold, leaves the
+	// mod-file group in pending.json as it was and applies the config patch.
+	@Test
+	void aHelperWithOnlyRigTuneAndGsonHoldsTheModFileGroup(@TempDir Path dir) throws Exception {
+		Path mods = Files.createDirectories(dir.resolve("mods"));
+		Path config = Files.createDirectories(dir.resolve("config"));
+		Path ours = jarOf(HelperLauncher.codeSourceOf(ApplyHelper.class), dir.resolve("rigtune.jar"));
+		Path old = TestJars.modJar(mods.resolve("sodium-0.7.0.jar"), "sodium");
+		Path download = TestJars.modJar(mods.resolve("sodium-0.7.1.jar" + PendingActions.PENDING_SUFFIX), "sodium");
+		Path sodium = Files.writeString(config.resolve("sodium-options.json"), "{\"performance\":{\"chunk_builder_threads\":0}}");
+		List<Op> group = PendingActions.group(Op.disableFile(old), Op.enableFile(download, mods.resolve("sodium-0.7.1.jar")).withModId("sodium"));
+		Op patch = Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4"));
+		Path pending = PendingActions.defaultPath(config);
+		PendingActions.create(1, mods, config, List.of(group.get(0), group.get(1), patch)).save(pending);
+
+		Process helper = HelperLauncher.launch(config, pending, List.of(ours, HelperLauncher.codeSourceOf(Gson.class)), ApplyLockTest.deadPid(), null, true);
+
+		String output = awaitHelper(helper, HelperLauncher.helperLog(config));
+		assertEquals(0, helper.exitValue(), output);
+		assertTrue(output.contains("Held 2 operation(s) of mod-file changes"), output);
+		assertEquals(group, PendingActions.load(pending).ops());
+		assertEquals(List.of(patch.id()), ApplyResult.load(ApplyResult.defaultPath(config)).results().stream().map(r -> r.op().id()).toList());
+		assertTrue(Files.readString(sodium).contains("\"chunk_builder_threads\": 4"), output);
+		assertTrue(Files.exists(old) && Files.exists(download), output);
 	}
 
 	@Test

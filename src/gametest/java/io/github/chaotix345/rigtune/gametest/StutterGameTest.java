@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.gametest;
 
+import com.mojang.blaze3d.platform.FramerateLimitTracker;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
@@ -20,6 +21,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.InactivityFpsLimit;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -114,6 +116,8 @@ public class StutterGameTest implements FabricClientGameTest {
 			// the measurement's own) are 0.
 			check(cost[2] - cost[3] <= 0, "the settings check allocates nothing: " + cost[2] + " bytes over " + cost[1] + " checks, control " + cost[3]);
 
+			boolean afk = idleUntilAfk(context);
+
 			context.runOnClient(mc -> mc.gui.setScreen(new StutterScreen(null, controller)));
 			context.waitForScreen(StutterScreen.class);
 			context.waitFor(mc -> mc.gui.screen() instanceof StutterScreen s && s.shownView().report() != null, 400);
@@ -148,6 +152,7 @@ public class StutterGameTest implements FabricClientGameTest {
 					+ stopped.settingsAtEnd());
 			RigTune.LOGGER.info("StutterGameTest: the saved session's tags {} ({} spikes; settingsChanged only when a spike ended within 10 s of the change)",
 					stopped.tags(), stopped.spikes().total());
+			check(!afk || stopped.idleSeconds() != null && stopped.idleSeconds() >= 4, "the saved session counts the AFK time apart: " + stopped.idleSeconds());
 			context.runOnClient(mc -> mc.options.renderDistance().set(renderDistance));
 
 			// On again in the same world, then leave: leaving saves that session too.
@@ -222,6 +227,47 @@ public class StutterGameTest implements FabricClientGameTest {
 		check(begin && ended, "a save window with a begin and an end");
 		RigTune.LOGGER.info("StutterGameTest: capture checks passed ({} frames, {} GC records, phase timers {})", frames.frames(),
 				gc.length / StutterRings.GC_STRIDE, StutterMonitor.phaseTiming() ? "complete" : "incomplete");
+	}
+
+	// v0.5 RW-17: idle in the world, with no input, until vanilla's frame-rate limiter reports AFK (60 s without input, with
+	// "Reduce FPS when" set to AFK); from then on the session gains no gameplay time. Returns false (logged) when the limiter
+	// didn't engage within 80 s under the harness.
+	private static boolean idleUntilAfk(ClientGameTestContext context) {
+		InactivityFpsLimit before = context.computeOnClient(mc -> {
+			mc.gui.setScreen(null);
+			InactivityFpsLimit limit = mc.options.inactivityFpsLimit().get();
+			mc.options.inactivityFpsLimit().set(InactivityFpsLimit.AFK);
+			return limit;
+		});
+		try {
+			long start = System.nanoTime();
+			boolean afk = false;
+			while (!afk && System.nanoTime() - start < 80_000_000_000L) {
+				context.waitTicks(20);
+				afk = context.computeOnClient(mc -> mc.getFramerateLimitTracker().getThrottleReason() != FramerateLimitTracker.FramerateThrottleReason.NONE
+						&& StutterMonitor.idle());
+			}
+			long waited = (System.nanoTime() - start) / 1_000_000_000L;
+			if (!afk) {
+				RigTune.LOGGER.warn("StutterGameTest: SKIPPED the AFK block: vanilla's frame-rate limiter didn't report AFK after {} s under the harness", waited);
+				return false;
+			}
+			long gameplay = context.computeOnClient(mc -> StutterMonitor.session().snapshot().gameplayNanos());
+			long frames = context.computeOnClient(mc -> StutterMonitor.session().snapshot().frames());
+			long idleStart = System.nanoTime();
+			while (System.nanoTime() - idleStart < 5_000_000_000L) {
+				context.waitTicks(20);
+			}
+			long gameplayAfter = context.computeOnClient(mc -> StutterMonitor.session().snapshot().gameplayNanos());
+			long framesAfter = context.computeOnClient(mc -> StutterMonitor.session().snapshot().frames());
+			RigTune.LOGGER.info("StutterGameTest: AFK after {} s ({}); over the next 5 s {} frames, {} ms more gameplay",
+					waited, context.computeOnClient(mc -> mc.getFramerateLimitTracker().getThrottleReason()), framesAfter - frames, (gameplayAfter - gameplay) / 1_000_000);
+			check(framesAfter > frames, "frames were still drawn while AFK");
+			check(gameplayAfter == gameplay, "no gameplay time while AFK: " + (gameplayAfter - gameplay) / 1_000_000 + " ms more");
+			return true;
+		} finally {
+			context.runOnClient(mc -> mc.options.inactivityFpsLimit().set(before));
+		}
 	}
 
 	// SETTINGS_CHANGED events in the running capture's rings.

@@ -20,9 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.5/SPEC.md 2S RW-11 (AC2S.13), 3b and X11: the "written by 0.5" set src/test/resources/v050-written/ws-s/ is what
 // this version's StutterStore writes for a session that spanned a settings change: stutter.json with settingsAtStart and
-// settingsAtEnd and the settingsChanged tag, from a capture run through StutterAnalyzer. Its expect.json has compat040
-// read it with 0.4.0's StutterStore. RIGTUNE_REGENERATE_FIXTURES=1 rewrites the set; otherwise the committed file must be
-// exactly what the code writes now.
+// settingsAtEnd, the settingsChanged tag and (RW-17) idleSeconds, from a capture run through StutterAnalyzer. Its
+// expect.json has compat040 read it with 0.4.0's StutterStore. RIGTUNE_REGENERATE_FIXTURES=1 rewrites the set; otherwise
+// the committed file must be exactly what the code writes now.
 class V050WrittenWsSTest {
 	private static final String SET = "src/test/resources/v050-written/ws-s/";
 	private static final long MS = 1_000_000L;
@@ -49,8 +49,9 @@ class V050WrittenWsSTest {
 		}
 		// The render distance went from 32 to 12 at 70 s (RW-11: the next 10 s of spikes are tagged).
 		rings.event(StutterRings.SETTINGS_CHANGED, t0 + 70 * S, 1);
+		// RW-17: and 25 minutes of AFK-throttled idling, not counted as gameplay (idleSeconds).
 		StutterAnalyzer.Result r = StutterAnalyzer.analyze(new StutterAnalyzer.Input(ring.snapshot(), rings.snapshot(), t0, now,
-				Instant.parse("2026-09-24T20:15:00Z"), StutterReport.MONITOR, "26.2", "g1", 4096, 32768L, 16, true, false));
+				Instant.parse("2026-09-24T20:15:00Z"), StutterReport.MONITOR, "26.2", "g1", 4096, 32768L, 16, true, false, true, 1_500 * S));
 		return r.report().withAdvice(List.of()).withSettings(settings("32"), settings("12"));
 	}
 
@@ -84,6 +85,7 @@ class V050WrittenWsSTest {
 		StutterReport back = new StutterStore(reread).latest();
 		assertTrue(back.tags().getOrDefault(Attributor.SETTINGS_CHANGED, 0) > 0, "the set carries the tag: " + back.tags());
 		assertEquals(List.of(new StutterReport.SettingChange(StutterReport.RENDER_DISTANCE, "32", "12")), back.settingChanges());
+		assertEquals(1500.0, back.idleSeconds(), "RW-17's idleSeconds");
 		String expect = Files.readString(committed.resolve("expect.json"), StandardCharsets.UTF_8);
 		assertTrue(expect.contains("\"set\": \"ws-s\""), expect);
 	}

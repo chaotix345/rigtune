@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.core.apply;
 
 import com.google.gson.Gson;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 
 import java.io.File;
 import java.io.IOException;
@@ -16,7 +17,18 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public final class HelperLauncher {
+	// docs/v0.5/SPEC.md 4d: groups with a mod-file op wait in pending.json for the player's choice (ApplyExecutor.held).
+	// Only the 0.5 helper reads it, and the helper always runs from a copy of the current jar (launch); 0.4.0 and older
+	// apply such groups at their next exit (their behaviour after a downgrade).
+	public static final String HOLD_FILE_OPS_PROPERTY = "rigtune.helper.holdFileOps";
+
 	private HelperLauncher() {
+	}
+
+	// Whether the helper holds mod-file changes under this policy: in an instance whose launcher keeps its own list of
+	// mods, and while that isn't known yet (PENDING, or no answer at all).
+	public static boolean holds(ModFilesPolicy policy) {
+		return policy != ModFilesPolicy.RIGTUNE;
 	}
 
 	public static List<String> buildCommand(Path javaExecutable, List<Path> classpath, long gamePid, Path pendingJson) {
@@ -25,32 +37,45 @@ public final class HelperLauncher {
 
 	// modsFolder: the game's resolved -Dfabric.modsFolder (null when unset), handed on so the helper sees the same folder.
 	public static List<String> buildCommand(Path javaExecutable, List<Path> classpath, long gamePid, Path pendingJson, Path modsFolder) {
+		return buildCommand(javaExecutable, classpath, gamePid, pendingJson, modsFolder, false);
+	}
+
+	public static List<String> buildCommand(Path javaExecutable, List<Path> classpath, long gamePid, Path pendingJson, Path modsFolder,
+			boolean holdFileOps) {
 		String cp = classpath.stream().map(Path::toString).distinct().collect(Collectors.joining(File.pathSeparator));
 		List<String> command = new ArrayList<>();
 		command.add(javaExecutable.toString());
 		if (modsFolder != null) {
 			command.add("-D" + InstanceDirs.MODS_FOLDER_PROPERTY + "=" + modsFolder);
 		}
+		if (holdFileOps) {
+			command.add("-D" + HOLD_FILE_OPS_PROPERTY + "=true");
+		}
 		command.addAll(List.of("-cp", cp, ApplyHelper.class.getName(), Long.toString(gamePid), pendingJson.toString()));
 		return List.copyOf(command);
 	}
 
 	public static Process launch(Path configDir, Path pendingJson) throws IOException {
+		return launch(configDir, pendingJson, ModFilesPolicy.RIGTUNE);
+	}
+
+	// policy: who changes this instance's mod files (docs/v0.5/SPEC.md 4a); decides the hold (holds).
+	public static Process launch(Path configDir, Path pendingJson, ModFilesPolicy policy) throws IOException {
 		Path modsFolder = System.getProperty(InstanceDirs.MODS_FOLDER_PROPERTY) == null ? null
 				: InstanceDirs.modsDir(configDir.toAbsolutePath().getParent());
 		return launch(configDir, pendingJson, List.of(codeSourceOf(ApplyHelper.class), codeSourceOf(Gson.class)), ProcessHandle.current().pid(),
-				modsFolder);
+				modsFolder, holds(policy));
 	}
 
 	static Process launch(Path configDir, Path pendingJson, List<Path> sources, long gamePid) throws IOException {
-		return launch(configDir, pendingJson, sources, gamePid, null);
+		return launch(configDir, pendingJson, sources, gamePid, null, false);
 	}
 
 	// The helper runs from copies in config/rigtune/helper/, never from mods/: a JVM keeps its classpath jars open,
 	// and on Windows an open jar can't be renamed, so running from mods/ would block RigTune's own update.
-	static Process launch(Path configDir, Path pendingJson, List<Path> sources, long gamePid, Path modsFolder) throws IOException {
+	static Process launch(Path configDir, Path pendingJson, List<Path> sources, long gamePid, Path modsFolder, boolean holdFileOps) throws IOException {
 		List<Path> classpath = helperClasspath(helperDir(configDir), sources);
-		List<String> command = buildCommand(currentJava(), classpath, gamePid, pendingJson, modsFolder);
+		List<String> command = buildCommand(currentJava(), classpath, gamePid, pendingJson, modsFolder, holdFileOps);
 		Path log = helperLog(configDir);
 		Files.createDirectories(log.getParent());
 		return new ProcessBuilder(command)

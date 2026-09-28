@@ -22,10 +22,10 @@ final class StutterCapture {
 	// How stop() copies a capture (a test seam: StutterServiceTest makes it fail, docs/v0.5/SPEC.md 2S L1).
 	static volatile Function<StutterMonitor.Capture, Copy> copier = StutterCapture::copy;
 
-	// A stopped (or, for a live analysis, copied) capture: everything StutterAnalyzer needs from the render thread, and a
-	// session's settings when it started (v0.5 RW-11).
+	// A stopped (or, for a live analysis, copied) capture: everything StutterAnalyzer needs from the render thread, a
+	// session's settings when it started (v0.5 RW-11) and its idle time (RW-17).
 	record Copy(FrameRing.Snapshot frames, StutterRings.Snapshot rings, long startNanos, long endNanos, Instant startedAt, String source,
-			boolean phaseTiming, @Nullable String collector, boolean gcMeasured, @Nullable Map<String, String> settingsAtStart) {
+			boolean phaseTiming, @Nullable String collector, boolean gcMeasured, @Nullable Map<String, String> settingsAtStart, long idleNanos) {
 	}
 
 	private StutterCapture() {
@@ -55,8 +55,10 @@ final class StutterCapture {
 
 	static Copy copy(StutterMonitor.Capture capture) {
 		StutterRings rings = StutterMonitor.rings();
-		return new Copy(capture.snapshot(), rings == null ? StutterRings.Snapshot.EMPTY : rings.snapshot(), capture.startNanos(), System.nanoTime(),
-				capture.startedAt(), capture.source(), StutterMonitor.phaseTiming(), GC.collector(), GC.active(), capture.settingsAtStart);
+		long now = System.nanoTime();
+		return new Copy(capture.snapshot(), rings == null ? StutterRings.Snapshot.EMPTY : rings.snapshot(), capture.startNanos(), now,
+				capture.startedAt(), capture.source(), StutterMonitor.phaseTiming(), GC.collector(), GC.active(), capture.settingsAtStart,
+				capture.idleNanos(now));
 	}
 
 	private static StutterRings shared() {
