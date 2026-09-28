@@ -291,10 +291,16 @@ public class UndoScreen extends Screen {
 
 			ItemEntry(UndoPlan.Item item, int width) {
 				this.lines = font.split(Texts.component(item.descriptionText()), Math.max(40, width));
-				this.reason = item.reason() == null || item.reason().isBlank() ? List.of()
-						: font.split(Texts.component(item.reasonText()), Math.max(40, width - 8));
+				Component why = item.reason() == null || item.reason().isBlank() ? null : reason(item);
+				this.reason = why == null ? List.of() : font.split(why, Math.max(40, width - 8));
 				this.skipped = item.action() == UndoPlan.Action.SKIP;
-				this.focus = new RowFocus(this, RowFocus.join(Texts.component(item.descriptionText()), reason.isEmpty() ? null : Texts.component(item.reasonText())));
+				this.focus = new RowFocus(this, RowFocus.join(Texts.component(item.descriptionText()), why));
+			}
+
+			// v0.5 (docs/v0.5/SPEC.md 4c): an item the launcher keeps gets its steps after the reason.
+			private Component reason(UndoPlan.Item item) {
+				Component steps = LauncherLines.undoStepsLine(item);
+				return steps == null ? Texts.component(item.reasonText()) : Texts.component(item.reasonText()).append(". ").append(steps);
 			}
 
 			@Override

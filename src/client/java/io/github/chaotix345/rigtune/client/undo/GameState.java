@@ -2,15 +2,18 @@ package io.github.chaotix345.rigtune.client.undo;
 
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ConfigTargets;
+import io.github.chaotix345.rigtune.client.probe.LauncherProbe;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.history.UndoPlanner;
+import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument.SettingLabel;
 import net.minecraft.client.Options;
 import net.minecraft.network.chat.CommonComponents;
+import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -56,6 +59,13 @@ public final class GameState implements UndoPlanner.State {
 	@Override
 	public ModFilesPolicy modFiles() {
 		return modFiles.get();
+	}
+
+	// The launcher the launcher-managed skip names: the one RealController recorded (the policy's own source), null until
+	// an answer is.
+	@Override
+	public @Nullable LauncherInfo launcher() {
+		return LauncherProbe.recorded();
 	}
 
 	// As the RigTune screen shows settings: a vanilla option's caption, a mod's key as its recommendation names it, and
