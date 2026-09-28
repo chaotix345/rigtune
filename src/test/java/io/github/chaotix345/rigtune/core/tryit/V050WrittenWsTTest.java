@@ -145,7 +145,7 @@ class V050WrittenWsTTest {
 		assertNotNull(view.before());
 		assertTrue(history.openBefore("BENCHMARK_WORLD", "26.2").isPresent(), "an open before (0.4.0's menu would offer it: harmless)");
 		assertFalse(history.openBefore("BENCHMARK_WORLD", "26.2", id -> !id.startsWith(TryIt.PAIR_PREFIX)).isPresent(), "0.5's menu skips it");
-		assertTrue(history.after(CLOSED.pairId()).isPresent());
+		assertTrue(history.runs().stream().anyMatch(r -> BenchmarkRecord.AFTER.equals(r.phase()) && CLOSED.pairId().equals(r.pairId())));
 		List<PendingActions.Op> ops = PendingActions.load(PendingActions.defaultPath(config)).ops();
 		assertEquals(List.of(OP), ops.stream().map(PendingActions.Op::id).toList());
 	}

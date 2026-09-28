@@ -211,18 +211,6 @@ class BenchmarkHistoryTest {
 	}
 
 	@Test
-	void afterIsThePairsNewestAfter() {
-		BenchmarkHistory history = BenchmarkHistory.empty()
-				.with(record("b1", "MEASURE", "CURRENT", BenchmarkRecord.BEFORE, "p1", "26.2"))
-				.with(record("a1", "MEASURE", "CURRENT", BenchmarkRecord.AFTER, "p1", "26.2"))
-				.with(record("a2", "MEASURE", "CURRENT", BenchmarkRecord.AFTER, "p2", "26.2"))
-				.with(record("a3", "MEASURE", "CURRENT", BenchmarkRecord.AFTER, "p1", "26.2"));
-		assertEquals("a3", history.after("p1").orElseThrow().id());
-		assertEquals("a2", history.after("p2").orElseThrow().id());
-		assertEquals(Optional.empty(), history.after("p3"));
-	}
-
-	@Test
 	void chartReturnsNewestOfSceneOldestFirst() {
 		BenchmarkHistory history = BenchmarkHistory.empty();
 		for (int i = 0; i < 14; i++) {

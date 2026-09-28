@@ -173,16 +173,6 @@ public final class BenchmarkHistory {
 		return Optional.empty();
 	}
 
-	/** The newest "after" of the pair. */
-	public Optional<BenchmarkRecord> after(String pairId) {
-		for (BenchmarkRecord r : runs.reversed()) {
-			if (BenchmarkRecord.AFTER.equals(r.phase()) && pairId.equals(r.pairId())) {
-				return Optional.of(r);
-			}
-		}
-		return Optional.empty();
-	}
-
 	private boolean paired(String pairId) {
 		return runs.stream().anyMatch(r -> BenchmarkRecord.AFTER.equals(r.phase()) && pairId.equals(r.pairId()));
 	}
