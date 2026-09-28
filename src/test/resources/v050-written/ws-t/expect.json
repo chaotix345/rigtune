@@ -34,6 +34,11 @@
       "class": "Unread",
       "file": "tryit.json",
       "unchanged": true
+    },
+    {
+      "class": "ApplyHelper",
+      "file": "pending.json",
+      "appliesGroup": "3f0c6a8e-4b1d-4e7a-9c2f-5a6b7c8d9e03"
     }
   ]
 }

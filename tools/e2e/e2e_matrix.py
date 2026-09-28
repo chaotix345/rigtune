@@ -37,7 +37,12 @@ STALE_SEEDS = {"v010-dh-app-reinstalled": DEFAULT_NODE, "v010-dh-app-reinstalled
 UNDO = (("undo-profiles", ["--scenario", "undo", "--profile-switch", "profile", "--profile-names", "Battery,Max FPS"]),
         ("undo-settings", ["--scenario", "undo", "--profile-switch", "settings"]),
         ("helper-kill", ["--scenario", "helper-kill"]))
+# A node with no Sodium build yet (add_mc_version.py leaves sodium_version out): the undo scenario without its profile
+# part, which stages Sodium config (review-11 CI-4).
+NO_SODIUM_UNDO = (("undo", ["--scenario", "undo"]), ("helper-kill", ["--scenario", "helper-kill"]))
 DOWNGRADE_TO = ("0.4.0", "0.3.0")
+# vg §1.5's generated seed as the hand-over 0.2.0+ keep (--scenario handover): the released version it starts from, on its node.
+HANDOVER_FROM = "0.4.0+mc26.3"
 
 
 def node_of(version):
@@ -50,6 +55,11 @@ def core(version):
 
 def _key(version):
     return tuple(int(part) for part in re.findall(r"\d+", core(version)))
+
+
+def has_sodium(root, mc):
+    props = Path(root) / "versions" / mc / "gradle.properties"
+    return props.is_file() and re.search(r"^sodium_version=\S", props.read_text(encoding="utf-8"), re.M) is not None
 
 
 def _row(row_id, mc, args, old=None):
@@ -77,7 +87,9 @@ def rows(root, tier):
                 out.append(_row("seeded-" + seed, mc, ["--seed", "tools/e2e/seeds/" + seed, "--expect-history", "auto"], version))
         out += [_row("seeded-" + seed, mc, ["--scenario", "stale-seed", "--seed", "tools/e2e/seeds/" + seed])
                 for seed, node in STALE_SEEDS.items() if node == mc]
-        out += [_row(row_id, mc, args) for row_id, args in UNDO]
+        if HANDOVER_FROM in releases:
+            out.append(_row("handover-from-" + core(HANDOVER_FROM) + "-dh", mc, ["--scenario", "handover"], HANDOVER_FROM))
+        out += [_row(row_id, mc, args) for row_id, args in (UNDO if has_sodium(root, mc) else NO_SODIUM_UNDO)]
         if mc == DEFAULT_NODE:
             # AC4j.3: the launcher-brand leg, 26.2 only (SPEC 3a's release tier).
             out.append(_row("brand-theseus", mc, ["--scenario", "brand"]))

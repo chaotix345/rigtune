@@ -43,10 +43,13 @@ Game test: `src/gametest/java/io/github/chaotix345/rigtune/gametest/LanGuestGame
 
 On Windows the LAN detector saw the host at its LAN interface address (`192.168.4.71:<port>`), not 127.0.0.1. This is Windows' multicast loopback. The key follows the detected host (`lan:192.168.4.71`). CI detects it differently (below).
 
-**In CI the detected address is `0.0.0.0:<port>`, not 127.0.0.1.**
-- The game runs in `tools/ci/offline.sh`'s namespace, where the multicast route `224.0.0.0/4 dev lo` names no source address, so the pinger's packets leave with source 0.0.0.0.
-- The join works either way. The product keys the host as `lan:0.0.0.0`.
-- The first CI run (36361989137) asserted 127.0.0.1 (SPEC 1a's wording) and failed on this alone. The CI check is now "a loopback or wildcard address", and the finding went to ws-ci: a `src 127.0.0.1` on that route would presumably give 127.0.0.1, unverified.
+**In CI the detected address is `127.0.0.1:<port>`** (since 5078fb90).
+- The game runs in `tools/ci/offline.sh`'s namespace. While its multicast route `224.0.0.0/4 dev lo` named no source address, the pinger's packets left with source 0.0.0.0, the product keyed the host as `lan:0.0.0.0`, and the first CI run (36361989137), which asserted 127.0.0.1 (SPEC 1a's wording), failed on this alone.
+- The route now names `src 127.0.0.1` (the coordinator's decision): run [36377856700](https://github.com/chaotix345/rigtune/actions/runs/36377856700) detected `127.0.0.1:<port>` on all 3 legs, both joins each, with MulticastCheck "received from 127.0.0.1". The CI check is 127.0.0.1 again.
+
+## The Distant Horizons note (AC3f.4)
+
+One local run with a Fabric server on a free port and DH on the client, then on the server too: `dh-note/README.md`. Both claims were confirmed, and the note lost its two "may"s.
 
 ## Stays UNVERIFIED
 

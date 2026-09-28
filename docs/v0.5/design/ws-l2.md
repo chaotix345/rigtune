@@ -109,6 +109,9 @@ repair steps are a dynamic family registered in `V05LangFamilies.launcherRepair`
   stand-in id from the file name instead, then revert this. At the final merge that change hadn't landed:
   origin/test/v05-e2e's `materialize()` still takes the op's `modId` or a constant `e2e-unknown`. So the `modId` stays,
   as the coordinator said to do in that case.
+  - Reverted by WS-E in fb8a36a3 (a recorded cross-owner edit, the coordinator's decision): `materialize()` names a
+    stand-in jar from the file name when an op has no `modId` (`written.stand_in_id`), and the disable carries none
+    again, as 0.4 and 0.5 write it. compat040's ApplyHelper check and `V050WrittenWsl2Test` stay green.
 - `LauncherManagedGameTest` can't clear the in-memory dismissal (`AwarenessService`'s session set has no API). Its fixture
   names are new at every run instead, so that key can never match another notice. awareness.json is restored by bytes.
 - `heldAndRepair` runs under the real policy: the Modrinth App's brand (`theseus`) through the real probe and WS-L1's
@@ -216,7 +219,7 @@ tick listener exists only after a leftover with mod-file ops. Every value stays 
   `launcher-held-notice-1280x720-scale2` under the real Modrinth App policy (the held notice, then WS-L1's steps in the
   rows).
 - The revert of the disable's `modId` in ws-l2's set moves to WS-E (`r-verify`), in the same commit as its
-  `materialize()` file-name fallback (the coordinator's decision, 2026-09-28).
+  `materialize()` file-name fallback (the coordinator's decision, 2026-09-28). Done in fb8a36a3.
 - `gametest-screenshots-26.2-OpenGL` of 36325285181 and `-26.3-Vulkan` of 36327592019: `launcher-held-notice-*` (the
   notice line at 1280×720, 640×480 (the "..." button) and 854×480, message cut with "..." and the detail as tooltip,
   inside the screen); `launcher-leftover-toast-launcher` / `-rigtune` (36325285181 caught the toast mid-slide-in; b6bf6e6a

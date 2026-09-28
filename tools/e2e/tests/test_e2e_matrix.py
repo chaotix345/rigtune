@@ -19,10 +19,12 @@ import self_update_e2e  # noqa: E402
 REPO = Path(__file__).resolve().parents[3]
 
 
-def repo_with(*nodes):
+def repo_with(*nodes, sodium=True):
     root = Path(tempfile.mkdtemp())
     for mc in nodes:
         (root / "versions" / mc).mkdir(parents=True)
+        sodium_line = "sodium_version=mc{}-1-fabric\n".format(mc) if sodium else ""
+        (root / "versions" / mc / "gradle.properties").write_text("fabric_api_version=1\n" + sodium_line, encoding="utf-8")
     return root
 
 
@@ -48,8 +50,8 @@ class MatrixTest(unittest.TestCase):
                                  "seeded-v010-dh", "seeded-v010-dh-app-reinstalled", "seeded-v010-dh-app-reinstalled-disabled",
                                  "undo-profiles", "undo-settings", "helper-kill", "brand-theseus", "downgrade-to-0.4.0", "downgrade-to-0.3.0"]),
                          by_node["26.2"])
-        self.assertEqual(sorted(["upgrade-from-0.4.0", "upgrade-from-0.3.0", "upgrade-from-0.2.0", "undo-profiles", "undo-settings",
-                                 "helper-kill", "downgrade-to-0.4.0", "downgrade-to-0.3.0"]), by_node["26.3"])
+        self.assertEqual(sorted(["upgrade-from-0.4.0", "upgrade-from-0.3.0", "upgrade-from-0.2.0", "handover-from-0.4.0-dh", "undo-profiles",
+                                 "undo-settings", "helper-kill", "downgrade-to-0.4.0", "downgrade-to-0.3.0"]), by_node["26.3"])
 
     def test_old_jars_tags_and_digests_come_from_released(self):
         for row in e2e_matrix.rows(REPO, "release"):
@@ -69,6 +71,13 @@ class MatrixTest(unittest.TestCase):
         self.assertEqual(["helper-kill", "undo-profiles", "undo-settings"], sorted(r["id"] for r in rows if r["mc"] == "26.9"))
         self.assertEqual([], [r for r in e2e_matrix.rows(repo_with("26.2", "26.3", "26.9"), "push") if r["mc"] == "26.9"])
         self.assertEqual({"26.2"}, {r["mc"] for r in e2e_matrix.rows(repo_with("26.2"), "release")})
+
+    def test_a_node_without_sodium_gets_the_undo_scenario_without_the_profile_part(self):
+        # review-11 CI-4: add_mc_version.py leaves sodium_version out when Sodium has no build yet; the profile part needs
+        # Sodium (a staged config target), so such a node runs the undo scenario without it, never crashing the tier.
+        root = repo_with("26.9", sodium=False)
+        self.assertEqual([("helper-kill", "--scenario helper-kill"), ("undo", "--scenario undo")],
+                         sorted((r["id"], r["args"]) for r in e2e_matrix.rows(root, "release")))
 
     def test_ids_are_unique_per_node_and_shell_safe(self):
         rows = e2e_matrix.rows(REPO, "release")

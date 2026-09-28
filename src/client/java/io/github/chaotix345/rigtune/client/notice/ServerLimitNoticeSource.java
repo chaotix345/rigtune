@@ -60,8 +60,8 @@ public final class ServerLimitNoticeSource implements NoticeSource {
 			detail.add(Text.of("rigtune.server.detail.changed", "This server's limit changed since last time (was %s).", was));
 		}
 		if (distantHorizons) {
-			detail.add(Text.of("rigtune.server.detail.dh", "Distant Horizons may still show terrain you've already explored beyond it; "
-					+ "generating new distant terrain may need Distant Horizons on the server."));
+			detail.add(Text.of("rigtune.server.detail.dh", "Distant Horizons still shows terrain you've already explored beyond it; "
+					+ "generating new distant terrain needs Distant Horizons on the server."));
 		}
 		return new Notice(KEY_PREFIX + view + (above ? ":above" : ""), NoticePriority.SERVER_LIMIT, message,
 				detail.isEmpty() ? null : Text.join(" ", detail), List.of(), true);

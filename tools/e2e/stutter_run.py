@@ -17,6 +17,7 @@ Millisecond numbers aren't judged: llvmpipe frames aren't a GPU's. It ports the 
 
 import argparse
 import datetime
+import gzip
 import json
 import os
 import re
@@ -47,6 +48,25 @@ def wall(line):
     return None if not m else int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
 
 
+def since(t, start):
+    """Seconds from start to t, both seconds of the day: a run crossing local midnight wraps (review-11 CI-3)."""
+    d = t - start
+    return d + 86400 if d < -12 * 3600 else d
+
+
+def client_log(logs):
+    """The client log's lines: what log4j rolled over during the run (at local midnight), then latest.log. The instance
+    is fresh, so every rotated file is this run's."""
+    logs = Path(logs)
+    rotated = sorted(logs.glob("*.log.gz"), key=lambda p: (p.stat().st_mtime, p.name)) if logs.is_dir() else []
+    lines = []
+    for path in rotated:
+        with gzip.open(path, "rt", encoding="utf-8", errors="replace") as f:
+            lines += f.read().splitlines()
+    latest = logs / "latest.log"
+    return lines + (latest.read_text(encoding="utf-8", errors="replace").splitlines() if latest.is_file() else [])
+
+
 def first(lines, text):
     return next((wall(line) for line in lines if text in line), None)
 
@@ -72,10 +92,10 @@ def evaluate(lines, stutter, gc_text):
         return checks, {}
     session = sessions[-1]
     cap, tp = first(lines, "Stutter Doctor: capture on"), first(lines, "Dev stutter: tp @a")
-    tp_s = None if cap is None or tp is None else tp - cap
+    tp_s = None if cap is None or tp is None else since(tp, cap)
     # Entering the world is a teleport to the product too (its first spikes carry the tag, v0.4's C1r as well).
     entered = first(lines, "Dev stutter: in the benchmark world")
-    entry_s = None if cap is None or entered is None else entered - cap
+    entry_s = None if cap is None or entered is None else since(entered, cap)
     pauses = gc_pauses(gc_text)
     worst = session.get("worst", [])
 
@@ -83,7 +103,7 @@ def evaluate(lines, stutter, gc_text):
     # most GC-noted spikes [t - ms, t] (t rounded to 0.1 s: +-50 ms) overlap a pause [end - dur, end].
     def overlapping(delta, w):
         lo, hi = w["t"] - w["ms"] / 1000 - 0.05, w["t"] + 0.05
-        return [p for p in pauses if cap is not None and p[0] - cap - delta - p[1] / 1000 <= hi and p[0] - cap - delta >= lo]
+        return [p for p in pauses if cap is not None and since(p[0], cap) - delta - p[1] / 1000 <= hi and since(p[0], cap) - delta >= lo]
     gc_noted = [w for w in worst if any(n.startswith("gc:") for n in w.get("causes", []))]
     delta = max((d / 100 for d in range(0, 121)), key=lambda d: (sum(1 for w in gc_noted if overlapping(d, w)), -abs(d - 0.5))) \
         if gc_noted else 0.0
@@ -168,6 +188,16 @@ def parse_args(argv):
     return args
 
 
+def mod_coordinates(props):
+    """(group, artifact, version) of the mods next to RigTune: fabric-api, and Sodium when the node has a build of it
+    (add_mc_version.py leaves sodium_version out otherwise; never-generated terrain doesn't need it: review-11 CI-4)."""
+    found = lambda key: (re.search(r"^{}=(.+)$".format(key), props, re.M) or [None, None])[1]
+    out = [("net.fabricmc.fabric-api", "fabric-api", found("fabric_api_version").strip())]
+    if found("sodium_version"):
+        out.append(("maven.modrinth", "sodium", found("sodium_version").strip()))
+    return out
+
+
 def main(argv=None):
     args = parse_args(argv)
     name = "stutter-script-{}-{}".format(args.mc, uuid.uuid4().hex[:6])
@@ -176,10 +206,8 @@ def main(argv=None):
     (instance / "mods").mkdir(parents=True)
     out.mkdir(parents=True, exist_ok=True)
     props = (REPO / "versions" / args.mc / "gradle.properties").read_text(encoding="utf-8")
-    cache = Path.home() / ".gradle" / "caches" / "modules-2" / "files-2.1"
-    jars = [Path(args.new_jar).resolve(),
-            e2e_env.gradle_jar(cache, "net.fabricmc.fabric-api", "fabric-api", re.search(r"^fabric_api_version=(.+)$", props, re.M).group(1).strip()),
-            e2e_env.gradle_jar(cache, "maven.modrinth", "sodium", re.search(r"^sodium_version=(.+)$", props, re.M).group(1).strip())]
+    jars = [Path(args.new_jar).resolve()] + [e2e_env.gradle_jar(Path.home() / ".gradle" / "caches" / "modules-2" / "files-2.1", *m)
+                                             for m in mod_coordinates(props)]
     for jar in jars:
         shutil.copyfile(jar, instance / "mods" / jar.name)
     (instance / "options.txt").write_text(LF.join(OPTIONS) + LF, encoding="utf-8")
@@ -195,8 +223,7 @@ def main(argv=None):
                                   timeout=TIMEOUT).returncode
         except subprocess.TimeoutExpired:
             code = -1
-    latest = instance / "logs" / "latest.log"
-    lines = latest.read_text(encoding="utf-8", errors="replace").splitlines() if latest.is_file() else []
+    lines = client_log(instance / "logs")
     stutter = stutter_json(lines)
     gc_text = gc_log.read_text(encoding="utf-8", errors="replace") if gc_log.is_file() else ""
     checks, facts = evaluate(lines, stutter, gc_text)

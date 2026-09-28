@@ -274,5 +274,18 @@ class DowngradeScenarioTest(unittest.TestCase):
             self_update_e2e.parse_args(["--name", "n", "--scenario", "downgrade", "--new-jar", "b.jar", "--work", "w", "--java-home", "jdk"])
 
 
+
+class LostTest(unittest.TestCase):
+    """The read-back check's item identity (review round 3, M4)."""
+
+    def test_a_record_is_kept_by_its_id_a_map_by_its_keys_a_list_by_item(self):
+        lost = e2e_checks._lost
+        self.assertEqual({}, lost({"current": {"id": "t-1", "key": "a"}}, {"current": {"id": "t-1", "key": "b"}}, ("current",)))
+        self.assertEqual({"current": ["t-1"]}, lost({"current": {"id": "t-1", "key": "a"}}, {"current": {"id": "t-2", "key": "a"}}, ("current",)))
+        self.assertEqual({"current": ["t-1"]}, lost({"current": {"id": "t-1"}}, {}, ("current",)))
+        self.assertEqual({"servers": ["h2"]}, lost({"servers": {"h1": {}, "h2": {}}}, {"servers": {"h1": {}}}, ("servers",)))
+        self.assertEqual({"fixes": ["e2"]}, lost({"fixes": [{"entryId": "e1"}, {"entryId": "e2"}]}, {"fixes": [{"entryId": "e1", "state": "done"}]},
+                                                  ("fixes",)))
+
 if __name__ == "__main__":
     unittest.main()
