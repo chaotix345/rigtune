@@ -38,6 +38,8 @@ UNDO = (("undo-profiles", ["--scenario", "undo", "--profile-switch", "profile", 
         ("undo-settings", ["--scenario", "undo", "--profile-switch", "settings"]),
         ("helper-kill", ["--scenario", "helper-kill"]))
 DOWNGRADE_TO = ("0.4.0", "0.3.0")
+# vg §1.5's generated seed as the hand-over 0.2.0+ keep (--scenario handover): the released version it starts from, on its node.
+HANDOVER_FROM = "0.4.0+mc26.3"
 
 
 def node_of(version):
@@ -77,6 +79,8 @@ def rows(root, tier):
                 out.append(_row("seeded-" + seed, mc, ["--seed", "tools/e2e/seeds/" + seed, "--expect-history", "auto"], version))
         out += [_row("seeded-" + seed, mc, ["--scenario", "stale-seed", "--seed", "tools/e2e/seeds/" + seed])
                 for seed, node in STALE_SEEDS.items() if node == mc]
+        if HANDOVER_FROM in releases:
+            out.append(_row("handover-from-" + core(HANDOVER_FROM) + "-dh", mc, ["--scenario", "handover"], HANDOVER_FROM))
         out += [_row(row_id, mc, args) for row_id, args in UNDO]
         if mc == DEFAULT_NODE:
             # AC4j.3: the launcher-brand leg, 26.2 only (SPEC 3a's release tier).

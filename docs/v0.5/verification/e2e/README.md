@@ -77,6 +77,7 @@ Evidence in `local-windows-26.2/` (RESULT.md per run, scrubbed).
 | downgrades again, with WS-L2's ws-l2 | PASS, PASS | its held group has no journal entry; the check expects none |
 | after review round 2 (r8): brand, stale-seed `v010-dh-app-reinstalled`, both downgrades | PASS ×4 | brand: the staged Sodium patch applied ("OK PATCH_JSON", `chunk_builder_threads` 3, APPLIED) while the file group held; stale-seed with `expectStatus` ABANDONED; the downgrades trimmed to 46 entries plus baselines and profile-referenced ones (`2026-09-28-r8-*`) |
 | downgrades with WS-W2's real ws-w2 set (r9, the CI jar of a470a489) | PASS, PASS | startup-times.json composed from ws-f's 3 runs and ws-w2's 6 (with `preloadMs`); 0.5 reads its runs back after 0.4.0, and 0.3.0 leaves it byte-identical (`2026-09-28-r9-*`) |
+| held-group hand-over from 0.4.0 (`--scenario handover`, vg §1.5; dev run on 26.2, the release row is 26.3's) | PASS | stage: 0.4.0 staged the DH 3.3.0 → 3.3.2 group, its helper failed it on the held jar ("Gave up after 10 tries", attempts 1); update: the self-update swapped RigTune, the group failed again (attempts 2); verify: 0.5's exit finished it (both ops OK, 3.3.2 enabled, journal APPLIED). 0.4.0 leaves the journal's changes STAGED through both failures (`2026-09-28-handover-*`) |
 
 ## Static checks
 

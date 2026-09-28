@@ -124,6 +124,14 @@ BRAND_SET = "ws-a"
 BRAND_PATCH = {"op": "7d1f3a52-0c4e-4b6a-9e21-00000000b001", "group": "7d1f3a52-0c4e-4b6a-9e21-00000000b002",
                "entry": "7d1f3a52-0c4e-4b6a-9e21-00000000b010", "change": "7d1f3a52-0c4e-4b6a-9e21-00000000b011",
                "key": "sodium.performance.chunk_builder_threads", "before": "0", "after": "3"}
+# handover (the coordinator's decision (b), 2026-09-28; vg §1.5): the released old version stages its update of an installed
+# Distant Horizons (a fake jar the fake Modrinth knows, with a newer build) while held() keeps the installed jar, so the group
+# fails at its exit (first run) and again at its self-update's exit (second run); the new version receives the carried
+# group and its helper finishes it at the new version's first exit, the hold gone. vg §1.5's generated seed can't give
+# v010-dh's shape: 0.2.0 and later cancel their own update of a mod whose build waits in mods/update
+# (rigtune.status.queued_update_dropped), so the old side drops the group itself; this is the hand-over they do keep.
+HANDOVER_PHASES = ("stage", "update", "verify")
+HANDOVER_MOD = {"id": "distanthorizons", "name": "Distant Horizons", "project": "uCdwusMi", "installed": "3.3.0", "update": "3.3.2"}
 KILL_ID = "e2e-kill"
 KILL_OLD, KILL_NEW = "e2e-kill-1.0.0.jar", "e2e-kill-1.1.0.jar"
 KILL_GROUP = "7d1f3a52-0c4e-4b6a-9e21-00000000c001"
@@ -139,6 +147,7 @@ OTHER_ID = "e2e-disable-me"
 FIRST_ID, FIRST_PROJECT = "e2e-first", "E2EFrst1"
 SECOND_ID, SECOND_PROJECT = "e2e-second", "E2EScnd1"
 PHASE_TITLES = {
+    "stage": "Hand-over: after the old version staged its " + HANDOVER_MOD["name"] + " update, the installed jar held, and quit (helper done)",
     "update": "After the old version applied the update and quit (helper done)",
     "verify": "After the new version started on the same instance",
     "mod-apply": "After RigTune applied {add " + ADDED_ID + " from Modrinth, disable " + OTHER_ID + "} and quit (helper done)",
@@ -187,6 +196,7 @@ class Run:
         self.kill = args.scenario == "helper-kill"
         self.stale = args.scenario == "stale-seed"
         self.brand = args.scenario == "brand"
+        self.handover = args.scenario == "handover"
         # self-update: old_jar is installed and new_jar served as its update. undo: new_jar is installed, nothing to update.
         self.old_jar = Path(args.old_jar).resolve() if args.old_jar else None
         self.new_jar = Path(args.new_jar).resolve()
@@ -198,7 +208,7 @@ class Run:
         self.profile_instance = self.run_dir / "instance-profile"
         phases = UNDO_PHASES + ENTRY_PHASES + GUARD_PHASES + (PROFILE_PHASES if self.profile else ()) if self.undo \
             else DOWNGRADE_PHASES if self.downgrade else KILL_PHASES if self.kill else STALE_PHASES if self.stale \
-            else BRAND_PHASES if self.brand else ("update", "verify")
+            else BRAND_PHASES if self.brand else HANDOVER_PHASES if self.handover else ("update", "verify")
         self.checks = {p: [] for p in phases}
         self.facts = {}
         self.jars = self.run_dir / "jars"
@@ -213,6 +223,8 @@ class Run:
         # --expect-history resolved against the old jar's version (prepare).
         self.expect_history = None
         self.carried = []
+        # handover: the installed and the served build of HANDOVER_MOD (prepare_handover).
+        self.handover_jars = {}
         self.added_jar = self.jars / "{}-1.0.0.jar".format(ADDED_ID)
         self.other_jar = self.jars / "{}-1.0.0.jar".format(OTHER_ID)
         self.first_jar = self.jars / "{}-1.0.0.jar".format(FIRST_ID)
@@ -373,6 +385,8 @@ class Run:
                 e2e_env.test_mod_jar(jar, mod_id)
                 extra_projects.append((project, mod_id, jar))
             more_projects = self.guard_catalog()
+        if self.handover:
+            more_projects = self.prepare_handover()
         if self.seed is not None:
             self.seed_instance()
         (self.instance / "options.txt").write_text(OPTIONS, encoding="utf-8")
@@ -414,6 +428,8 @@ class Run:
                 lines.append("-Drigtune.e2e.profilePlan=" + str(self.run_dir / "profile-plan.json"))
             if phase in BRAND_PHASES:
                 lines.append("-Dminecraft.launcher.brand=" + BRAND)
+            if self.handover and phase == "stage":
+                lines.append("-Drigtune.e2e.updateId=update:" + HANDOVER_MOD["id"])
             (self.run_dir / "jvm-{}.txt".format(phase)).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
         code = self.gradle("gradle-driver.log", *self.driver_args(":{}:{}".format(self.mc, self.driver_jar_task())))
@@ -467,6 +483,23 @@ class Run:
         """For values known only after an earlier launch (the entry id of B-M3's older Apply)."""
         with open(self.run_dir / "jvm-{}.txt".format(phase), "a", encoding="utf-8") as out:
             out.write("\n".join(lines) + "\n")
+
+    def prepare_handover(self):
+        """The installed build of HANDOVER_MOD in mods/ and its update in the fake Modrinth's project; returns more_projects."""
+        now = datetime.datetime.now(datetime.timezone.utc)
+        for key in ("installed", "update"):
+            jar = self.jars / "DistantHorizons-{}-{}-fabric-neoforge.jar".format(HANDOVER_MOD[key], self.mc)
+            e2e_env.test_mod_jar(jar, HANDOVER_MOD["id"], HANDOVER_MOD[key], name=HANDOVER_MOD["name"])
+            self.handover_jars[key] = jar
+        shutil.copyfile(self.handover_jars["installed"], self.mods / self.handover_jars["installed"].name)
+        return [(HANDOVER_MOD["project"], HANDOVER_MOD["id"],
+                 [e2e_env.version("E2EDhOld", self.handover_jars["installed"], now - datetime.timedelta(days=2), self.mc),
+                  e2e_env.version("E2EDhNew", self.handover_jars["update"], now - datetime.timedelta(hours=1), self.mc)])]
+
+    def held_paths(self):
+        """What held() keeps during the old version's starts: the seed's holdOpenAtOldExit, or the hand-over's installed jar."""
+        paths = [self.instance / p for p in (self.seed or {}).get("holdOpenAtOldExit", [])]
+        return paths + ([self.mods / self.handover_jars["installed"].name] if self.handover else [])
 
     def seed_instance(self):
         """The seed's fake jars, and its templated files with this instance's folder put in."""
@@ -827,9 +860,29 @@ class Run:
             fixtures.copy_evidence(self.rigtune_dir / "profiles.json", self.out / "profiles-after-{}.json".format(phase))
         (self.out / "mods-after-{}.json".format(phase)).write_text(json.dumps(e2e_checks.listing(self.mods), indent=1), encoding="utf-8")
 
+    def run_handover(self):
+        """The hand-over (HANDOVER_PHASES): the old version stages HANDOVER_MOD's update with its installed jar held, the
+        group fails at the exit; then the self-update (run_update: the group fails again, still held) and the new version's
+        first start (run_verify: its exit finishes the group)."""
+        paths = self.held_paths()
+        self.log("holding during the old version's first start and exit ({}): {}".format("open" if os.name == "nt" else "chattr +i",
+                                                                                           [p.name for p in paths]))
+        with held(paths):
+            code, helper_ok, cmdlines = self.launch_and_apply("stage")
+        checks = e2e_checks.after_handover_stage(self.instance, self.driver("stage"), self.handover_jars, cmdlines)
+        checks.insert(0, e2e_checks.Check("the client exited normally and the helper finished", code == 0 and helper_ok,
+                                          "gradle exit {}, helper finished: {}".format(code, helper_ok)))
+        self.checks["stage"] = checks
+        if not all(c.ok for c in checks):
+            self.log("the staged group didn't fail held as planned; the self-update is skipped")
+            return False
+        self.carried = (e2e_checks._load(self.rigtune_dir / "pending.json") or {}).get("ops") or []
+        self.log("carried into the self-update: {} op(s) of group(s) {}".format(len(self.carried), sorted({op.get("group") for op in self.carried})))
+        return self.run_update() and self.run_verify()
+
     def run_update(self):
         # The seed's held files stay held from the launch until the helper is done (seed.json holdOpenWhy; held()).
-        paths = [self.instance / p for p in (self.seed or {}).get("holdOpenAtOldExit", [])]
+        paths = self.held_paths()
         if paths:
             self.log("holding during the old version's exit ({}): {}".format("open" if os.name == "nt" else "chattr +i",
                                                                                 [p.name for p in paths]))
@@ -854,8 +907,9 @@ class Run:
         mods_before = e2e_checks.listing(self.mods)
         statuses_before = e2e_checks.history_statuses(self.instance)
         last_apply = e2e_checks._load(self.rigtune_dir / "last-apply.json") or {}
-        if self.seed is not None:
-            # Watched like a staging launch: the check is that no helper runs at exit and mods/ stays as it was.
+        if self.seed is not None or self.handover:
+            # Watched like a staging launch: a seed's check is that no helper runs at exit and mods/ stays as it was; the
+            # hand-over's, that the helper at exit finishes the carried group.
             tree_before = e2e_checks.listing(self.mods, recursive=True)
             code, _, cmdlines = self.launch_and_apply("verify")
         else:
@@ -863,7 +917,7 @@ class Run:
             self.snapshot("verify")
         legacy = [self.legacy_jar.name] if self.legacy_jar is not None else []
         checks = e2e_checks.after_verify(self.instance, self.new_jar, self.driver("verify"), last_apply.get("finishedAt"),
-                                         None if self.seed else mods_before, self.expect_history,
+                                         None if self.seed or self.handover else mods_before, self.expect_history,
                                          legacy_disables=legacy, old_jar=self.old_jar, statuses_before=statuses_before)
         if self.seed is not None:
             log = self.out / "latest-verify.log"
@@ -872,6 +926,8 @@ class Run:
                                                      self.driver("verify"),
                                                      log.read_text(encoding="utf-8", errors="replace") if log.is_file() else "",
                                                      failed, cmdlines, tree_before)
+        if self.handover:
+            checks += e2e_checks.after_handover_verify(self.instance, self.carried, self.old_jar, self.new_jar, cmdlines, statuses_before)
         checks.insert(0, e2e_checks.Check("the relaunched client exited normally", code == 0, "gradle exit {}".format(code)))
         self.checks["verify"] = checks
         return all(c.ok for c in checks)
@@ -1033,7 +1089,8 @@ class Run:
             else:
                 shutil.rmtree(dest)
         dest.mkdir(parents=True)
-        texts = [self.out / n for n in ("redirect-probe.txt", "helper-dir.txt", "pending-before-exit.json", "seeded.json", "kill.json",
+        texts = [self.out / n for n in ("redirect-probe.txt", "helper-dir.txt", "pending-before-exit.json", "pending-before-exit-stage.json",
+                                        "seeded.json", "kill.json",
                                         "unfinished-groups-after-kill.json")]
         texts += [self.out / ("seeded-" + n) for n in SEEDED + ("history.json",)]
         for phase in self.checks:
@@ -1065,7 +1122,8 @@ class Run:
         if self.downgrade or self.kill or self.stale or self.brand:
             return self.downgrade_markdown(verdict, files)
         installed = self.facts["new"] if self.undo else self.facts["old"]
-        lines = ["# {} E2E: {}".format("Undo after restart" if self.undo else "Self-update", self.name), "",
+        lines = ["# {} E2E: {}".format("Undo after restart" if self.undo else "Held-group hand-over" if self.handover else "Self-update",
+                                       self.name), "",
                  "- Verdict: **{}**".format(verdict),
                  "- Run: {} UTC, MC {}, {} + {}{} in a fresh scratch instance".format(
                      self.run_dir.name.rsplit("-", 2)[-2], self.mc, installed["file"], self.facts.get("fabricApi"),
@@ -1095,6 +1153,11 @@ class Run:
             if self.legacy_jar is not None:
                 lines.append("- The old version also disabled `{}` in the same apply (a change that isn't RigTune's own, for "
                              "the journal check)".format(self.legacy_jar.name))
+            if self.handover:
+                lines += ["- Hand-over (vg §1.5, the coordinator's decision (b)): `{}` installed ({} {}), the fake Modrinth serves `{}`; "
+                          "the installed jar is held ({}) through both starts of the old version and released for the new one's".format(
+                              self.handover_jars["installed"].name, HANDOVER_MOD["id"], HANDOVER_MOD["installed"],
+                              self.handover_jars["update"].name, "open, no FILE_SHARE_DELETE" if os.name == "nt" else "chattr +i")]
             if self.seed is not None:
                 lines += ["- Seeded (plan review H-M2) from `{}`: {}".format(self.scrub(str(self.seed["dir"])), self.seed.get("description", "")),
                           "- Fake jars: " + ", ".join("`{path}` ({id} {version})".format(**j) for j in self.seed["jars"]),
@@ -1209,6 +1272,9 @@ class Run:
                     verdict = "PASS"
             elif self.downgrade:
                 if self.run_downgrade():
+                    verdict = "PASS"
+            elif self.handover:
+                if self.run_handover():
                     verdict = "PASS"
             elif self.run_update():
                 if self.run_verify():
@@ -1448,11 +1514,13 @@ def filtered_log(path):
 def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--name", required=True, help="scenario name, e.g. v010-to-dev")
-    parser.add_argument("--scenario", choices=("self-update", "undo", "downgrade", "helper-kill", "stale-seed", "brand"), default="self-update",
+    parser.add_argument("--scenario", choices=("self-update", "undo", "downgrade", "helper-kill", "stale-seed", "brand", "handover"),
+                        default="self-update",
                         help="self-update (default), or undo: the new version applies mod changes and undoes them after a restart (M14, "
                              "B-M3); downgrade (AC3.2, AC3b.3); helper-kill: a killed helper's group is finished at the next exit (AC3f.5); "
                              "stale-seed: the new version starts on --seed's state, whose staged group can never run (AC2H.6); "
-                             "brand: Apply everything under the Modrinth App's brand, then Cancel the held file group (AC4j.3)")
+                             "brand: Apply everything under the Modrinth App's brand, then Cancel the held file group (AC4j.3); "
+                             "handover: --old-jar stages a held mod update that fails at two exits, then the new version finishes it (vg §1.5)")
     parser.add_argument("--old-jar", help="self-update: the installed RigTune jar (a released one: 0.1.0, 0.2.0 or 0.3.0)")
     parser.add_argument("--old-sha256", help="expected sha256 of --old-jar")
     parser.add_argument("--new-jar", required=True, help="self-update: the update the fake Modrinth serves; undo: the installed jar")
@@ -1493,6 +1561,8 @@ def parse_args(argv):
         parser.error("--seed is for the self-update and stale-seed scenarios")
     if args.scenario == "stale-seed" and not args.seed:
         parser.error("--scenario stale-seed needs --seed")
+    if args.scenario == "handover" and not args.old_jar:
+        parser.error("--scenario handover needs --old-jar (a released 0.2.0 or later jar)")
     if args.scenario == "downgrade" and not args.old_jar:
         parser.error("--scenario downgrade needs --old-jar (the released 0.3.0 jar) and --new-jar (0.4)")
     if args.profile_switch and args.scenario != "undo":

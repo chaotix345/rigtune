@@ -82,6 +82,18 @@ Two more modes (Phase 5):
   - Apply everything, then quit: the helper holds the file group, mods/ stays byte-identical, and the settings apply.
   - On the next start, the held notice's Cancel them drops the group: the download becomes `.rigtune-superseded`, the
     journal change DISCARDED, and no helper runs at exit.
+- **`--scenario handover`** (vg §1.5, generated from a released old version; release tier: `handover-from-0.4.0-dh` on
+  26.3): a fake Distant Horizons 3.3.0 is installed and the fake Modrinth serves 3.3.2. The installed jar is held
+  (`held()`) through both of the old version's starts.
+  - `stage`: the old version applies the DH update only (`-Drigtune.e2e.updateId=update:distanthorizons`); at its exit the
+    helper fails the group on the held jar, which stays in pending.json with one failed run counted.
+  - `update`: the old version's self-update; its helper swaps RigTune and fails the group again (`after_update` with the
+    group as carried ops).
+  - `verify`: the new version's first start, the hold gone; its exit finishes the group: both ops OK, 3.3.2 enabled,
+    3.3.0 disabled, the journal's changes APPLIED.
+  - Why not vg §1.5's generated seed of v010-dh's shape: 0.2.0 and later cancel their own update of a mod whose build
+    waits in mods/update (`queued_update_dropped`), so the old side drops that group itself. The held group is the
+    hand-over they do keep.
 - **Downgrade and a full journal.** The downgrade instance keeps the newest 46 composed journal entries, plus every entry
   a staged op belongs to. The old versions keep 50 and add up to 2 of their own. Over the cap they evict the entries with
   nothing left to undo first, which would take the checked Undo-last pair with them. compat040 reads each set's journal

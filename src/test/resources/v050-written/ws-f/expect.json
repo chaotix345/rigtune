@@ -1,6 +1,6 @@
 {
   "set": "ws-f",
   "checks": [
-    {"class": "AwarenessStore", "file": "awareness.json", "keeps": ["dismissed"], "noBad": true}
+    {"class": "AwarenessStore", "file": "awareness.json", "keeps": ["dismissed"], "dismissedContains": ["firstrun.guide"], "noBad": true}
   ]
 }
