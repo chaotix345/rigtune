@@ -50,6 +50,8 @@ import java.util.stream.Stream;
  * <ul>
  * <li>{@code update}: sets the goal to QUALITY, waits for the "Update RigTune" recommendation, applies only it, waits
  * until it is staged in pending.json (copied out, since the helper deletes it), and quits like the Quit button.</li>
+ * <li>{@code stage}: the same with another mod's update, -Drigtune.e2e.updateId (e.g. {@code update:distanthorizons}): the
+ * held-group hand-over's first start (tools/e2e/README.md).</li>
  * <li>{@code verify}: records what the (updated) RigTune reports, with screenshots of the title screen (apply toast)
  * and the RigTune screen, and quits.</li>
  * </ul>
@@ -83,6 +85,8 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 	private boolean rescanned;
 	// A test mod to disable in the same apply as the update (phase update).
 	private final String alsoDisable = System.getProperty("rigtune.e2e.alsoDisable");
+	// The recommendation the update and stage phases apply.
+	private final String updateId = System.getProperty("rigtune.e2e.updateId", UPDATE_ID);
 
 	@Override
 	public void onInitializeClient() {
@@ -111,7 +115,7 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 				fail(minecraft, "watchdog: still in step " + step + " after " + WATCHDOG / SECOND + " s");
 				return;
 			}
-			if (phase.equals("update")) {
+			if (phase.equals("update") || phase.equals("stage")) {
 				updatePhase(minecraft);
 			} else if (phase.equals("verify")) {
 				verifyPhase(minecraft);
@@ -141,7 +145,7 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 				}
 				Report report = controller.report();
 				Recommendation found = report == null ? null : report.recommendations().stream()
-						.filter(r -> r.id().equals(UPDATE_ID) && r.action() instanceof Action.UpdateMod)
+						.filter(r -> r.id().equals(updateId) && r.action() instanceof Action.UpdateMod)
 						.findFirst().orElse(null);
 				if (found == null) {
 					rescanIfStillOffline(controller, report);
@@ -169,15 +173,15 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 					if (report != null) {
 						writeReport(report);
 					}
-					fail(minecraft, "no " + UPDATE_ID + " recommendation within " + REPORT_TIMEOUT / SECOND + " s (report "
+					fail(minecraft, "no " + updateId + " recommendation within " + REPORT_TIMEOUT / SECOND + " s (report "
 							+ (report == null ? "missing" : "online=" + report.online()) + ")");
 				}
 			}
 			case SHOT_REPORT -> {
 				if (stepTicks == SECOND / 2) {
-					scrollTo(minecraft, controller.report(), UPDATE_ID);
+					scrollTo(minecraft, controller.report(), updateId);
 				} else if (stepTicks == SECOND) {
-					screenshot(minecraft, "e2e-update-1-report.png");
+					screenshot(minecraft, "e2e-" + phase + "-1-report.png");
 				} else if (stepTicks == 2 * SECOND) {
 					List<Recommendation> chosen = new ArrayList<>(List.of(update));
 					Path other = alsoDisable == null ? null : modJar(alsoDisable);
@@ -210,7 +214,8 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 						&& op.get("path") instanceof String path && Path.of(path).getFileName().equals(other.getFileName())));
 				if (staged) {
 					Files.createDirectories(out);
-					Files.copy(pending, out.resolve("pending-before-exit.json"), StandardCopyOption.REPLACE_EXISTING);
+					Files.copy(pending, out.resolve(phase.equals("update") ? "pending-before-exit.json" : "pending-before-exit-" + phase + ".json"),
+							StandardCopyOption.REPLACE_EXISTING);
 					result.put("pendingOps", ops);
 					event("staged: " + ops.size() + " op(s) in pending.json");
 					next(Step.SHOT_STAGED);
@@ -222,7 +227,7 @@ public final class SelfUpdateDriver implements ClientModInitializer {
 				Component status = controller.status();
 				if (stepTicks == 2 * SECOND) {
 					result.put("status", status == null ? null : status.getString());
-					screenshot(minecraft, "e2e-update-2-staged.png");
+					screenshot(minecraft, "e2e-" + phase + "-2-staged.png");
 				} else if (stepTicks == 4 * SECOND) {
 					next(Step.QUIT);
 				}

@@ -304,6 +304,90 @@ def after_seeded_verify(instance, carried, mod_names, driver, log_text, failed_o
     return checks
 
 
+def _op_statuses(instance, ids):
+    """Op id -> status in last-apply.json, for these op ids."""
+    last = _load(Path(instance) / "config" / "rigtune" / "last-apply.json") or {}
+    return {(r.get("op") or {}).get("id"): r.get("status") for r in last.get("results") or [] if (r.get("op") or {}).get("id") in ids}
+
+
+def _journaled(instance, ids):
+    """Op id -> the statuses of the journal changes that name it."""
+    out = {}
+    for c in (c for e in history_entries(instance) or [] for c in e.get("changes", []) if c.get("opId") in ids):
+        out.setdefault(c.get("opId"), []).append(c.get("status"))
+    return out
+
+
+def after_handover_stage(instance, driver, jars, helper_cmdlines):
+    """The hand-over's first start (vg §1.5): the old version staged its update of the installed mod (jars: "installed" and
+    "update", the served build), and at its exit the helper failed the group on the held jar: it stays in pending.json with
+    one failed run counted, last-apply.json has its ops FAILED, and mods/ still has the installed jar and the download."""
+    instance = Path(instance)
+    mods = instance / "mods"
+    installed, update = Path(jars["installed"]).name, Path(jars["update"]).name
+    driver = driver or {}
+    offered = driver.get("update") or {}
+    checks = [Check("the driver staged the mod's update", driver.get("ok") is True and offered.get("filename") == update,
+                    "error: {}; offered: {} -> {}".format(driver.get("error"), offered.get("currentFile"), offered.get("filename")))]
+    checks.append(Check("a helper ran at exit", bool(helper_cmdlines), "helper command lines: {}".format(len(helper_cmdlines))))
+    ops = (_load(instance / "config" / "rigtune" / "pending.json") or {}).get("ops") or []
+    group = [op for op in ops if op.get("type") in FILE_OPS and (_name(op.get("path")) == installed or _name(op.get("to")) == update)]
+    shape = sorted((op.get("type"), _name(op.get("path") or op.get("to")), op.get("attempts")) for op in group)
+    checks.append(Check("pending.json keeps the group, one failed run counted",
+                        shape == [("DISABLE_FILE", installed, 1), ("ENABLE_FILE", update, 1)] and len({op.get("group") for op in group}) == 1,
+                        "group ops (type, file, attempts): {}; all ops: {}".format(shape, len(ops))))
+    ids = {op.get("id") for op in group}
+    results = _op_statuses(instance, ids)
+    checks.append(Check("last-apply.json: the group's ops FAILED (the installed jar held)",
+                        bool(ids) and set(results) == ids and all(v == "FAILED" for v in results.values()),
+                        "statuses by op id: {}".format(results)))
+    state = {installed: (mods / installed).is_file(), update + ".rigtune-pending": (mods / (update + ".rigtune-pending")).is_file(),
+             update: (mods / update).exists(), installed + ".disabled": (mods / (installed + ".disabled")).exists()}
+    checks.append(Check("mods/: the installed build in place, the download still pending",
+                        state == {installed: True, update + ".rigtune-pending": True, update: False, installed + ".disabled": False},
+                        "exists: {}".format(state)))
+    journaled = _journaled(instance, ids)
+    checks.append(Check("history.json journals the group's changes", set(journaled) == ids,
+                        "statuses by op id: {}".format(journaled)))
+    return checks
+
+
+def after_handover_verify(instance, carried, old_jar, new_jar, helper_cmdlines, statuses_before):
+    """The hand-over's end (vg §1.5): the new version received the group the old one staged and failed twice (carried), and
+    its helper finished it at the new version's first exit: its ops OK, the served build enabled and the installed one
+    disabled, the journal's changes of the group APPLIED, and nothing else in the journal changed by that start."""
+    instance = Path(instance)
+    mods = instance / "mods"
+    ids = {op.get("id") for op in carried}
+    checks = [Check("a helper ran at the new version's exit", bool(helper_cmdlines), "helper command lines: {}".format(len(helper_cmdlines)))]
+    results = _op_statuses(instance, ids)
+    checks.append(Check("last-apply.json: the carried-over group's ops OK",
+                        bool(ids) and set(results) == ids and all(v == "OK" for v in results.values()),
+                        "statuses by op id: {}".format(results)))
+    state = {}
+    for op in carried:
+        if op.get("type") == "ENABLE_FILE":
+            state[_name(op.get("to"))] = ((mods / _name(op.get("to"))).is_file(), (mods / _name(op.get("from"))).exists())
+        elif op.get("type") == "DISABLE_FILE":
+            state[_name(op.get("path"))] = ((mods / (_name(op.get("path")) + ".disabled")).is_file(), (mods / _name(op.get("path"))).exists())
+    checks.append(Check("the served build is enabled, the installed one disabled",
+                        bool(state) and all(done and not left for done, left in state.values()),
+                        "(done, source still there): {}".format(state)))
+    journaled = _journaled(instance, ids)
+    after = history_statuses(instance)
+    moved = {k: (statuses_before.get(k), v) for k, v in after.items() if statuses_before.get(k) != v}
+    group_changes = {c.get("id") for e in history_entries(instance) or [] for c in e.get("changes", []) if c.get("opId") in ids}
+    own = sorted((c.get("action"), c.get("file"), c.get("status")) for e in history_entries(instance) or [] for c in e.get("changes", [])
+                 if c.get("file") in (Path(old_jar).name, Path(new_jar).name))
+    checks.append(Check("history.json: the group's changes APPLIED, RigTune's own update APPLIED, nothing else changed",
+                        set(journaled) == ids and all(s == "APPLIED" for v in journaled.values() for s in v)
+                        and own == [("disable", Path(old_jar).name, "APPLIED"), ("enable", Path(new_jar).name, "APPLIED")]
+                        and set(moved) <= group_changes,
+                        "group statuses by op id: {}; RigTune's own: {}; changed by this start: {}".format(journaled, own, moved)))
+    checks.append(_bad_or_crash(instance))
+    return checks
+
+
 HELD_LINE = re.compile(r"Held (\d+) operation\(s\) of mod-file changes")
 FILE_OPS = ("ENABLE_FILE", "DISABLE_FILE")
 
