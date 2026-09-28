@@ -72,6 +72,8 @@ final class TryItFixtures {
 		private @Nullable String pack;
 		private @Nullable String hash = "hash-a";
 		private @Nullable String cursor;
+		private @Nullable String backend;
+		private @Nullable String gpu;
 
 		private Run(String id) {
 			this.id = id;
@@ -161,6 +163,12 @@ final class TryItFixtures {
 			return this;
 		}
 
+		Run graphics(@Nullable String backendName, @Nullable String gpuName) {
+			backend = backendName;
+			gpu = gpuName;
+			return this;
+		}
+
 		Run cursor(@Nullable String value) {
 			cursor = value;
 			return this;
@@ -172,7 +180,7 @@ final class TryItFixtures {
 			knobs.put(BenchmarkRecord.SIMULATION_DISTANCE, new BenchmarkRecord.KnobResult(sd, sd, null, null, null));
 			BenchmarkRecord.Result result = low == null ? null : new BenchmarkRecord.Result(avg, low, 1000 / low, 2, cv);
 			BenchmarkRecord.Context context = new BenchmarkRecord.Context(dh, shaders, pack, width, height, false, BenchmarkRecord.Context.PROTOCOL,
-					hash, cursor).withDhGenerating(dhGenerating).withWorldFresh(worldFresh);
+					hash, cursor).withDhGenerating(dhGenerating).withWorldFresh(worldFresh).withGraphics(backend, gpu);
 			return new BenchmarkRecord(id, at, "0.5.0+mc26.2", "26.2", "MEASURE", scene, phase, pairId, 144, true, knobs, result, Map.of(), Map.of(),
 					null, false, context);
 		}
