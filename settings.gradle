@@ -6,6 +6,16 @@ pluginManagement {
 		}
 		mavenCentral()
 		gradlePluginPortal()
+		// Stonecutter's own Maven as a fallback for its plugin marker (CI runs 36383257100 and 36410439134 failed
+		// resolving dev.kikugie.stonecutter 0.9.8 from the plugin portal, "not found", after 3 tries).
+		maven {
+			name = 'Kikugie'
+			url = 'https://maven.kikugie.dev/releases'
+			content {
+				includeGroup 'dev.kikugie'
+				includeGroup 'dev.kikugie.stonecutter'
+			}
+		}
 	}
 }
 
