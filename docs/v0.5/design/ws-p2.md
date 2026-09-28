@@ -300,3 +300,11 @@ either way; ServerProfileOffers treats a same-identity JOIN as the same connecti
 Local 26.2 runs under the lock: ProfilesGameTest passed (AC4.11 and the review-11 case); ServerProfilesGameTest,
 FootprintGameTest ("26 budget(s), 0 over") and A11yGameTest passed. ServerProfilesGameTest's layout check now lets a
 text stop start at y 18, the status line's place under the title.
+
+## Review-12 fix (branch fix/v05-r12-ws-p2)
+- **R12FEAT-9 (LOW)** FIXED: "…before switching" is added only when the switch recorded an entry; when "My settings" was
+  refreshed but nothing was switched ("Already on Battery", a switch whose changes all failed, an unavailable target),
+  the status adds "My settings was updated to your current settings." (`rigtune.profile.status.baseline_updated`).
+  Failed first: `ProfilesGameTest.r12NoSwitchNoBeforeSwitching` (Battery's values, its active marker cleared, a stale My
+  settings: the status read "Already on Battery: nothing to change. My settings was updated to your current settings
+  before switching."; local 26.2 run), green after.
