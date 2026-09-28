@@ -371,6 +371,18 @@ class TryItFlowTest {
 		}
 	}
 
+	// Review BENCH-4: benchmarks.json unreadable (or from a newer RigTune): the runs are unknown, not gone, so nothing
+	// closes (not NO_BEFORE, and not STOPPED_BEFORE for a missing entry).
+	@Test
+	void unreadableBenchmarkResultsCloseNothing() {
+		TryItView v = TryItFlow.derive(RESTART, List.of(), false, new TryItFlow.History(Journal.State.OK, List.of(applied(RESTART, JournalChange.APPLIED)),
+				Map.of()), IDLE_LATER);
+		assertEquals(Stage.HISTORY_UNREADABLE, v.stage());
+		assertNull(v.closing());
+		TryItView missing = TryItFlow.derive(RESTART, List.of(), false, new TryItFlow.History(Journal.State.OK, List.of(), Map.of()), IDLE_LATER);
+		assertEquals(Stage.HISTORY_UNREADABLE, missing.stage());
+	}
+
 	@Test
 	void anEntryWithoutTheKeysChangeWasntApplied() {
 		JournalEntry other = TryItFixtures.entry(ENTRY, "2026-09-20T10:05:00Z", JournalEntry.APPLY, null,

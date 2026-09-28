@@ -66,10 +66,10 @@ better. The floor held it: 2 x the before run's CV gives 65.5 %, so the verdict 
 caveat, not "better". What this decides:
 - **No code change to the verdict.** The CV-based floor is what keeps a cold before run from reading as a gain, and it
   did.
-- **A residual (for the coordinator):** a cold start whose before run is slow but *steady* (a low CV) would not be caught
-  by the CV. Nothing in 0.5 checks how long the player has been in the world before Start. The README's known limits
-  should say "play a minute first" (the Docs text in docs/v0.5/design/ws-t.md); a later version could wait for the world
-  to settle, or run a warm-up pass, before a CURRENT-scene before run.
+- **The cold-start rule (the coordinator's decision, branch `fix/v05-try-it-2`):** a cold start whose before run is
+  slow but *steady* (a low CV) would not be caught by the CV, so Start and Measure now in the player's own world now wait
+  until they've been in that world and dimension for 60 s (a status line counts down), and the benchmark world's runs
+  wait until 60 s after the game's first title screen. docs/v0.5/design/ws-t.md, "Follow-up: the cold-start rule".
 - The benchmark world is the fairer scene (the A/A above: every pair within the floor).
 
 ## RESTART: a Sodium key across real restarts, Revert, a second restart (13:54-14:05)
