@@ -64,12 +64,20 @@ class EvaluateTest(unittest.TestCase):
         self.assertEqual(["\"chunks loading\" from the first chunk load after the teleport on", "the spikes after the teleport carry \"after teleport\"",
                           "the unexplained remainder is shown"], failing(stutter_run.evaluate(self.lines, stutter, self.gc)[0]))
 
-    def test_an_untagged_spike_after_the_first_chunk_load_fails(self):
+    # C1r's spikes with chunk loads after the tp run from 22.3 s to 28.7 s.
+    def test_an_untagged_spike_while_chunks_load_fails(self):
+        stutter = copy.deepcopy(self.stutter)
+        session = [s for s in stutter["sessions"] if s["source"] == "monitor"][-1]
+        session["worst"].append({"t": 27.5, "ms": 30.0, "baseMs": 8.3, "causes": ["render:low", "afterTeleport:context"]})
+        self.assertEqual(["\"chunks loading\" from the first chunk load after the teleport on"],
+                         failing(stutter_run.evaluate(self.lines, stutter, self.gc)[0]))
+
+    def test_an_untagged_spike_after_the_loading_ended_passes(self):
+        # Run 36431601035's 26.2 leg: loading ended before the teleport window's last spike.
         stutter = copy.deepcopy(self.stutter)
         session = [s for s in stutter["sessions"] if s["source"] == "monitor"][-1]
         session["worst"].append({"t": 30.0, "ms": 30.0, "baseMs": 8.3, "causes": ["render:low", "afterTeleport:context"]})
-        self.assertEqual(["\"chunks loading\" from the first chunk load after the teleport on"],
-                         failing(stutter_run.evaluate(self.lines, stutter, self.gc)[0]))
+        self.assertEqual([], failing(stutter_run.evaluate(self.lines, stutter, self.gc)[0]))
 
     # C1r: capture on at 02:12:36, world entry at +2 s, tp at +22 s; the product's window is 10 s.
     def test_the_teleport_window_s_edges(self):

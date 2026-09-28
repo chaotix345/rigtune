@@ -113,8 +113,9 @@ def evaluate(lines, stutter, gc_text):
     # The product's own teleport window (StutterAnalyzer.TELEPORT_WINDOW, 10 s from the position jump). The log stamps
     # whole seconds (+-1 s), so: every listed spike surely inside it (tp + 1 .. tp + 9) carries "after teleport"; at least one
     # tagged spike lies in its widest reading (tp - 1 .. tp + 11); no tagged spike lies outside that and the world entry's
-    # own window. "Chunks loading": in the widest reading, every spike from the first one with chunk loads on (P5C-F1:
-    # nothing arrives in the first moments to tag).
+    # own window. "Chunks loading": in the widest reading, every spike from the first one with chunk loads to the last one
+    # (the product tags a spike only when chunks loaded within Attributor.CHUNK_NEAR of it, so loading starts after the tp,
+    # P5C-F1, and may end inside the window: run 36431601035's 26.2 leg, the last spike at tp + 10.7 s).
     def within(w, start, low, high):
         return start is not None and start + low <= w["t"] <= start + high
 
@@ -127,14 +128,16 @@ def evaluate(lines, stutter, gc_text):
     untagged = [w["t"] for w in sure if not tagged(w)]
     loading = [w for w in wide if any(n.startswith(("chunksLoading:", "chunkLoad:")) for n in w.get("causes", []))]
     first_loading = loading[0]["t"] if loading else None
-    late_untagged = [w["t"] for w in wide if first_loading is not None and w["t"] >= first_loading and w not in loading]
+    last_loading = loading[-1]["t"] if loading else None
+    late_untagged = [w["t"] for w in wide if first_loading is not None and first_loading <= w["t"] <= last_loading and w not in loading]
     checks += [
         ("the spikes after the teleport carry \"after teleport\"", tags.get("afterTeleport", 0) > 0 and any(tagged(w) for w in wide)
          and not untagged and not stray,
          "tp at session {} s (world entry {} s); tagged near the tp: {}; untagged inside its window: {}; tagged outside both windows: {}"
          .format(tp_s, entry_s, [w["t"] for w in wide if tagged(w)], untagged, stray)),
         ("\"chunks loading\" from the first chunk load after the teleport on", tags.get("chunksLoading", 0) > 0 and first_loading is not None
-         and not late_untagged, "tagged: {}; first at {} s; untagged after it: {}".format(tags.get("chunksLoading", 0), first_loading, late_untagged)),
+         and not late_untagged, "tagged: {}; first at {} s, last at {} s; untagged between them: {}".format(
+             tags.get("chunksLoading", 0), first_loading, last_loading, late_untagged)),
         ("no GC milliseconds claimed without an overlapping pause", bool(pauses) and not unmatched,
          "{} GC pauses in the JVM log; GC-noted spikes {}; without a pause: {} (capture start = its log line + {:.2f} s)".format(
              len(pauses), [w["t"] for w in gc_noted], unmatched, delta)),
