@@ -31,7 +31,8 @@ import java.util.function.Supplier;
 
 // Works out what "Undo last apply" or "Undo everything" does (docs/v0.2/SPEC.md item 3), without touching anything.
 // - STAGED changes: their whole group is dropped from pending.json (changes of other applies in that group too), unless
-//   the helper left that group half done at the last exit: then it waits for the restart that finishes it (audit M2).
+//   the helper left that group half done at the last exit, or its records show it started (review 12): then it waits for
+//   the restart that finishes it (audit M2), or, when that exit holds it (docs/v0.5/SPEC.md 4d), for the player's choice.
 // - Settings: put back when the current value is still the latest `after`; chained newest to oldest, stopping where
 //   the user changed the value between two applies.
 // - Mod files: newest group first, each group all-or-nothing against a simulated mods folder, so every step is checked
@@ -80,6 +81,8 @@ public final class UndoPlanner {
 	static final String WAITS_STAGED = "It needs changes that are still waiting for a restart; restart once, then undo it";
 	static final String WAITS_ENTRY = "Part of this apply waits for a restart, so none of it is undone yet; restart once, then undo it";
 	static final String WAITS_PARTLY = "It was partly applied at the last exit; restart once so it finishes, then undo it";
+	static final String HELD_PARTLY = "It's already under way, and RigTune holds it for your choice on RigTune's screen (Cancel them or Let RigTune "
+			+ "apply them), not for a restart";
 	static final String LAUNCHER_MANAGED = "This instance's mods are managed by %s: change it there";
 	static final String LAUNCHER_PENDING = "Checking which launcher manages this instance's mods; undo it once that's known";
 	static final String NOT_DISABLED_BY_RIGTUNE = "RigTune didn't disable %s (it was already gone)";
@@ -162,6 +165,20 @@ public final class UndoPlanner {
 	public record Result(UndoPlan plan, Script script) {
 	}
 
+	// review 12 (R12APPLY-1, -3): RigTune's records about its staged groups, keyed by group id ("op:<id>" for an op without
+	// one). started: ApplyExecutor.startedGroups, done by a helper that died before last-apply.json, which an unheld exit
+	// reports done earlier; held: the groups the next exit's helper holds (ApplyExecutor.held, empty unless the mods
+	// policy holds them: HelperLauncher.holds). A staged change in a started or half-done group is never cancelled: it
+	// waits for the restart that finishes it, or, held, for the player's choice, without holding up the rest of its entry.
+	public record StagedGroups(Set<String> started, Set<String> held) {
+		public static final StagedGroups NONE = new StagedGroups(Set.of(), Set.of());
+
+		public StagedGroups {
+			started = Set.copyOf(started);
+			held = Set.copyOf(held);
+		}
+	}
+
 	public static Result plan(List<JournalEntry> entries, List<Op> pending, State state, boolean all) {
 		return plan(entries, pending, List.of(), state, all);
 	}
@@ -169,7 +186,12 @@ public final class UndoPlanner {
 	// unfinished: the helper's record of the renames it started (UnfinishedGroups.recorded), which shows a group it was
 	// killed in the middle of (review-8 AH-1).
 	public static Result plan(List<JournalEntry> entries, List<Op> pending, Collection<Rename> unfinished, State state, boolean all) {
-		Context ctx = new Context(entries, unfinished);
+		return plan(entries, pending, unfinished, StagedGroups.NONE, state, all);
+	}
+
+	public static Result plan(List<JournalEntry> entries, List<Op> pending, Collection<Rename> unfinished, StagedGroups groups, State state,
+			boolean all) {
+		Context ctx = new Context(entries, unfinished, groups);
 		if (all) {
 			return build(ctx, ctx.candidates(l -> true), pending, state, null, null, true, ALL, null);
 		}
@@ -199,7 +221,12 @@ public final class UndoPlanner {
 	}
 
 	public static Result planEntry(List<JournalEntry> entries, List<Op> pending, Collection<Rename> unfinished, State state, String entryId) {
-		Context ctx = new Context(entries, unfinished);
+		return planEntry(entries, pending, unfinished, StagedGroups.NONE, state, entryId);
+	}
+
+	public static Result planEntry(List<JournalEntry> entries, List<Op> pending, Collection<Rename> unfinished, StagedGroups groups, State state,
+			String entryId) {
+		Context ctx = new Context(entries, unfinished, groups);
 		for (int i = 0; i < entries.size(); i++) {
 			JournalEntry entry = entries.get(i);
 			if (entryId == null || !entryId.equals(entry.id()) || JournalEntry.UNDO.equals(entry.kind())) {
@@ -230,7 +257,12 @@ public final class UndoPlanner {
 	}
 
 	public static Result recheck(UndoPlan shown, List<JournalEntry> entries, List<Op> pending, Collection<Rename> unfinished, State state) {
-		Context ctx = new Context(entries, unfinished);
+		return recheck(shown, entries, pending, unfinished, StagedGroups.NONE, state);
+	}
+
+	public static Result recheck(UndoPlan shown, List<JournalEntry> entries, List<Op> pending, Collection<Rename> unfinished, StagedGroups groups,
+			State state) {
+		Context ctx = new Context(entries, unfinished, groups);
 		Set<String> wanted = new LinkedHashSet<>();
 		Set<String> shownOps = new HashSet<>();
 		Set<String> shownIds = new HashSet<>();
@@ -272,14 +304,16 @@ public final class UndoPlanner {
 		final Set<String> beingReverted = new HashSet<>();
 		final Set<Integer> undone = new HashSet<>();
 		final Collection<Rename> unfinished;
+		final StagedGroups groups;
 
 		Context(List<JournalEntry> entries) {
-			this(entries, List.of());
+			this(entries, List.of(), StagedGroups.NONE);
 		}
 
-		Context(List<JournalEntry> entries, Collection<Rename> unfinished) {
+		Context(List<JournalEntry> entries, Collection<Rename> unfinished, StagedGroups groups) {
 			this.entries = entries;
 			this.unfinished = unfinished == null ? List.of() : unfinished;
+			this.groups = groups == null ? StagedGroups.NONE : groups;
 			Map<String, Integer> indexById = new HashMap<>();
 			for (int i = 0; i < entries.size(); i++) {
 				JournalEntry entry = entries.get(i);
@@ -485,9 +519,16 @@ public final class UndoPlanner {
 				group.getValue().forEach(l -> b.skip(l, Text.of("rigtune.undo.reason.rigtune_staged", RIGTUNE_STAGED)));
 				continue;
 			}
-			if (ops.stream().anyMatch(op -> op.group() != null && partly.contains(op.group()))) {
-				group.getValue().forEach(l -> b.skip(l, Text.of("rigtune.undo.reason.waits_partly", WAITS_PARTLY)));
-				b.waits = true;
+			Op first = ops.getFirst();
+			String key = first.group() != null ? first.group() : "op:" + first.id();
+			if (ops.stream().anyMatch(op -> op.group() != null && partly.contains(op.group())) || ctx.groups.started().contains(key)) {
+				if (ctx.groups.held().contains(key)) {
+					// Held at every exit (docs/v0.5/SPEC.md 4d): no restart finishes it, so it doesn't hold up its entry.
+					group.getValue().forEach(l -> b.skip(l, Text.of("rigtune.undo.reason.held_partly", HELD_PARTLY)));
+				} else {
+					group.getValue().forEach(l -> b.skip(l, Text.of("rigtune.undo.reason.waits_partly", WAITS_PARTLY)));
+					b.waits = true;
+				}
 				continue;
 			}
 			if (shownOps != null && !shownOps.containsAll(opIds)) {

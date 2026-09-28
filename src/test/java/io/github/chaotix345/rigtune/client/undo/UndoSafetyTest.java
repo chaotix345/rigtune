@@ -6,13 +6,16 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
 import io.github.chaotix345.rigtune.core.apply.TestExecutors;
+import io.github.chaotix345.rigtune.core.apply.TestJars;
 import io.github.chaotix345.rigtune.core.history.JarInfo;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.history.UndoPlanner;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Text;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -54,6 +57,7 @@ class UndoSafetyTest {
 	Journal journal;
 	Staging staging;
 	UndoService service;
+	ModFilesPolicy policy = ModFilesPolicy.RIGTUNE;
 
 	@BeforeEach
 	void setUp() throws IOException {
@@ -88,6 +92,11 @@ class UndoSafetyTest {
 			@Override
 			public boolean changeable(String key) {
 				return true;
+			}
+
+			@Override
+			public ModFilesPolicy modFiles() {
+				return policy;
 			}
 
 			@Override
@@ -149,6 +158,86 @@ class UndoSafetyTest {
 		assertEquals(expectedTarget, plan.undoOf(), plan.toString());
 		assertTrue(plan.items().stream().noneMatch(i -> i.action() == UndoPlan.Action.SKIP), plan.toString());
 		assertFalse(service.undo(plan).busy());
+	}
+
+	// --- review 12: groups the helper started, and the ones it holds (R12APPLY-1, R12APPLY-3)
+
+	private List<Op> stageUpdate(String entryId, Op... more) throws IOException {
+		TestJars.modJar(mods.resolve("x-1.jar"), "x");
+		Path download = TestJars.modJar(mods.resolve("x-2.jar" + PendingActions.PENDING_SUFFIX), "x");
+		List<Op> ops = new java.util.ArrayList<>(PendingActions.group(Op.disableFile(mods.resolve("x-1.jar")),
+				Op.enableFile(download, mods.resolve("x-2.jar")).withModId("x")));
+		ops.addAll(List.of(more));
+		assertNotNull(staging.stage(ops, entryId));
+		return PendingActions.load(pending).ops();
+	}
+
+	private static Set<String> reasonKeys(UndoPlan plan, UndoPlan.Action action) {
+		Set<String> keys = new java.util.HashSet<>();
+		plan.items().stream().filter(i -> i.action() == action)
+				.forEach(i -> keys.add(i.reasonText() instanceof Text.Translatable t ? t.key() : String.valueOf(i.reasonText())));
+		return keys;
+	}
+
+	// R12APPLY-1: the helper finished both renames of an update and was killed before last-apply.json (review 11 APPLY-1's
+	// case 1). Undo can't cancel that group (it is in effect, and a DISCARDED change could never be undone): it waits for
+	// the restart whose helper reports it done earlier, and then it's an applied update.
+	@Test
+	void undoWaitsForAnUpdateTheKilledHelperFinished() throws IOException {
+		List<Op> staged = stageUpdate("e1");
+		Path download = Path.of(staged.get(1).from());
+		assertThrows(TestExecutors.Killed.class, () -> TestExecutors.killedAfterMarking(staged.get(1).id()).run(PendingActions.load(pending), pending));
+		assertEquals(List.of("x-1.jar.disabled", "x-2.jar"), listing());
+		assertFalse(Files.exists(download));
+
+		UndoPlan plan = service.plan(false);
+
+		assertEquals(Set.of(), reasonKeys(plan, UndoPlan.Action.DISCARD_STAGED), plan.toString());
+		assertEquals(Set.of("rigtune.undo.reason.waits_partly"), reasonKeys(plan, UndoPlan.Action.SKIP), plan.toString());
+		assertFalse(service.undo(plan).busy());
+		assertEquals(2, PendingActions.load(pending).ops().size());
+		assertTrue(journal.entries().getFirst().changes().stream().allMatch(c -> JournalChange.STAGED.equals(c.status())));
+
+		helperRuns();
+
+		assertTrue(journal.entries().getFirst().changes().stream().allMatch(c -> JournalChange.APPLIED.equals(c.status())), journal.entries().toString());
+	}
+
+	// R12APPLY-3: where the launcher keeps its own list of mods, a half-done group (killed right after its first rename,
+	// before the record could mark it) is held at every exit, so no restart finishes it: Undo says it waits for the
+	// player's choice on RigTune's screen, and the rest of the entry (a staged setting) is still undone.
+	@Test
+	void aHeldHalfDoneGroupNeverBlocksTheRestOfItsEntry() throws IOException {
+		List<Op> staged = stageUpdate("e1", SodiumConfigPatcher.stage(sodium, Map.of(IN_FILE, "4")).ops().toArray(Op[]::new));
+		assertThrows(TestExecutors.Killed.class, () -> TestExecutors.killedAfter(Path.of(staged.getFirst().path())::equals)
+				.run(PendingActions.load(pending), pending));
+		assertEquals(List.of("x-1.jar.disabled", "x-2.jar" + PendingActions.PENDING_SUFFIX), listing());
+		policy = ModFilesPolicy.LAUNCHER;
+		assertEquals(2, ApplyExecutor.held(PendingActions.load(pending), pending).size());
+
+		UndoPlan plan = service.plan(false);
+
+		assertEquals(Set.of("rigtune.undo.reason.held_partly"), reasonKeys(plan, UndoPlan.Action.SKIP), plan.toString());
+		assertEquals(1, plan.items().stream().filter(i -> i.action() == UndoPlan.Action.DISCARD_STAGED).count(), plan.toString());
+		assertFalse(service.undo(plan).busy());
+		assertEquals(staged.subList(0, 2).stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+	}
+
+	// R12APPLY-3, Discard pending: the held half-done group is kept, and the status says it waits for the player's choice,
+	// not for a restart.
+	@Test
+	void discardKeepsAHeldHalfDoneGroupAndSaysItWaitsForAChoice() throws IOException {
+		List<Op> staged = stageUpdate("e1");
+		assertThrows(TestExecutors.Killed.class, () -> TestExecutors.killedAfter(Path.of(staged.getFirst().path())::equals)
+				.run(PendingActions.load(pending), pending));
+
+		Staging.Discard discard = staging.discardPending(true);
+
+		assertEquals(List.of(), discard.dropped());
+		assertEquals("rigtune.status.discarded_with_held", ((TranslatableContents) discard.status().getContents()).getKey());
+		assertEquals(2, PendingActions.load(pending).ops().size());
+		assertEquals("rigtune.status.discarded_with_kept",
+				((TranslatableContents) staging.discardPending(false).status().getContents()).getKey());
 	}
 
 	// --- audit M1 x 2n (docs/v0.4/audit-verification.md M1, "Interaction with 2n"): three alternating Undo last in one start

@@ -210,6 +210,31 @@ class ApplyExecutorCrashReplayTest {
 		assertTheGroupIsDoneAsRigTunes(run(executor()));
 	}
 
+	// review 12 R12APPLY-2: an ungrouped "Disable Foo" the helper did before it was killed in a later group ("op:<id>" in
+	// startedGroups) survives Discard pending while the rest is dropped, and the next exit reports it done earlier.
+	@Test
+	void aDiscardKeepsAnUngroupedDisableTheHelperDid() throws IOException {
+		Path foo = TestJars.modJar(mods.resolve("foo-1.0.jar"), "foo");
+		Op disableFoo = Op.disableFile(foo);
+		PendingActions.create(1, mods, config, List.of(disableFoo, disable, enable)).save(pending);
+		journal().record("e1", JournalEntry.APPLY, List.of(
+				JournalChange.file(JournalChange.DISABLE, "foo", "foo-1.0.jar", JournalChange.STAGED, disableFoo.id(), null),
+				JournalChange.file(JournalChange.DISABLE, "sodium", oldJar.getFileName().toString(), JournalChange.STAGED, disable.id(), disable.group()),
+				JournalChange.file(JournalChange.ENABLE, "sodium", newJar.getFileName().toString(), JournalChange.STAGED, enable.id(), enable.group())));
+		assertThrows(TestExecutors.Killed.class, () -> run(TestExecutors.killedAt(oldJar::equals)));
+		assertTrue(Files.exists(mods.resolve("foo-1.0.jar.disabled")));
+
+		Staging.Discard discard = new Staging(config, pending, List.of(), journal()).discardPending();
+
+		assertEquals(List.of(disable.id(), enable.id()), discard.dropped().stream().map(Op::id).toList());
+		assertTrue(discard.keptGroup());
+		assertEquals(List.of(disableFoo.id()), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+		ApplyResult next = run(executor());
+		assertEquals(List.of(Status.SKIPPED_ALREADY_DONE), statuses(next));
+		assertEquals(mods.resolve("foo-1.0.jar.disabled").toString(), next.results().getFirst().resultPath());
+		assertEquals(List.of(JournalChange.APPLIED, JournalChange.DISCARDED, JournalChange.DISCARDED), journalStatuses());
+	}
+
 	// (2) Killed after last-apply.json, before the record's prune: both records prove it.
 	@Test
 	void killedAfterTheResultBeforeThePrune() throws IOException {

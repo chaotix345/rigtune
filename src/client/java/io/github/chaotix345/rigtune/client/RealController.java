@@ -773,7 +773,8 @@ public final class RealController implements RigTuneController {
 		}
 		try {
 			// docs/v0.5/SPEC.md 2H L7: the status says so when a change already under way was kept.
-			Staging.Discard discard = staging.discardPending();
+			// review 12 R12APPLY-3: kept groups the next exit holds wait for the player's choice, and the status says so.
+			Staging.Discard discard = staging.discardPending(HelperLauncher.holds(modFiles()));
 			if (discard == null) {
 				return Component.translatable("rigtune.status.discard_busy");
 			}
