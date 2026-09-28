@@ -2,8 +2,13 @@
 verdict PASS there), and on that run with each criterion broken."""
 
 import copy
+import datetime
+import gzip
 import json
+import re
+import shutil
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -78,6 +83,39 @@ class EvaluateTest(unittest.TestCase):
         self.assertEqual([], failing_with(dict(chunks, t=32.5)))
         self.assertEqual([name], failing_with({"t": 50.0, "ms": 30.0, "baseMs": 8.3, "causes": ["afterTeleport:context"]}))
         self.assertEqual([], failing_with({"t": 12.5, "ms": 30.0, "baseMs": 8.3, "causes": ["afterTeleport:context"]}))
+
+    def test_a_run_across_midnight_passes_too(self):
+        # review-11 CI-3: the capture starts 10 s before local midnight; the tp, the world entry and the GC pauses come after.
+        shift = (23 * 3600 + 59 * 60 + 50) - (2 * 3600 + 12 * 60 + 36)
+
+        def moved(line):
+            m = re.match(r"\[(\d\d):(\d\d):(\d\d)\]", line)
+            if not m:
+                return line
+            t = (int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3)) + shift) % 86400
+            return "[{:02d}:{:02d}:{:02d}]".format(t // 3600, t // 60 % 60, t % 60) + line[10:]
+
+        def moved_gc(line):
+            m = stutter_run.GC_LINE.match(line) or re.match(r"\[(\d{4}-\d\d-\d\dT[\d:.]+)", line)
+            if not m:
+                return line
+            stamp = m.group(1)
+            return line.replace(stamp, (datetime.datetime.fromisoformat(stamp) + datetime.timedelta(seconds=shift)).isoformat(timespec="milliseconds"), 1)
+        lines = [moved(line) for line in self.lines]
+        gc = "\n".join(moved_gc(line) for line in self.gc.splitlines())
+        self.assertIn("[23:59:50] [Render thread/INFO]: Stutter Doctor: capture on", "\n".join(lines))
+        checks, facts = stutter_run.evaluate(lines, self.stutter, gc)
+        self.assertEqual([], failing(checks))
+        self.assertEqual(22, facts["tpSession"])
+
+    def test_the_client_log_includes_what_rolled_over_during_the_run(self):
+        # review-11 CI-3: log4j rolls latest.log over at local midnight; the rotated part comes first.
+        logs = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, logs)
+        with gzip.open(logs / "2026-09-27-1.log.gz", "wt", encoding="utf-8") as f:
+            f.write("[23:59:59] a\n")
+        (logs / "latest.log").write_text("[00:00:01] b\n", encoding="utf-8")
+        self.assertEqual(["[23:59:59] a", "[00:00:01] b"], stutter_run.client_log(logs))
 
     def test_gc_pauses_are_read_with_their_end_time(self):
         pauses = stutter_run.gc_pauses(self.gc)
