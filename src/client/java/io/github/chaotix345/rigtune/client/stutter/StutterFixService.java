@@ -253,7 +253,7 @@ public final class StutterFixService {
 			@Nullable RulesDocument rules, @Nullable HardwareProfile hardware, @Nullable List<InstalledMod> mods, SettingsSnapshot settings, Goal goal,
 			Inputs in) {
 		SessionOutcome outcome = SessionOutcome.of(result, copy.startNanos());
-		boolean excluded = in.aroundBenchmark() || Boolean.TRUE.equals(DhGeneration.generating(result.dhWorldGenCores(), OptionalMods.dhLoaded()));
+		boolean excluded = excluded(result, in.aroundBenchmark(), OptionalMods.dhLoaded());
 		FixConditions conditions = in.conditionsNow().withMeasurement(copy.phaseTiming(), copy.gcMeasured());
 		Map<String, FixOffer> offers = Map.of();
 		if (rules != null && hardware != null && !advice.isEmpty() && !in.specs().isEmpty()) {
@@ -269,6 +269,13 @@ public final class StutterFixService {
 					offers);
 		}
 		return new Fixes(offers, outcome, conditions, excluded, FixGate.idle(report), copy.startedAt(), copy.source());
+	}
+
+	// WS-B's M4 rule for C20: a session around a benchmark run, or one in which Distant Horizons generated terrain, is no
+	// comparison side: any sustained minute of the whole capture counts (review-11 STUTTER-4), and with Distant Horizons
+	// loaded but nothing sampled it fails closed.
+	static boolean excluded(StutterAnalyzer.Result result, boolean aroundBenchmark, boolean dhLoaded) {
+		return aroundBenchmark || dhLoaded && !Boolean.FALSE.equals(DhGeneration.generating(result.dhWorldGenPeakCores(), true));
 	}
 
 	// sf §1.7: an offer row names the active saved profile when it also sets the key.

@@ -15,8 +15,11 @@ import io.github.chaotix345.rigtune.core.stutter.FixConditions;
 import io.github.chaotix345.rigtune.core.stutter.FixOffer;
 import io.github.chaotix345.rigtune.core.stutter.FixStore;
 import io.github.chaotix345.rigtune.core.stutter.FixTracker;
+import io.github.chaotix345.rigtune.core.stutter.FrameRing;
 import io.github.chaotix345.rigtune.core.stutter.SessionOutcome;
+import io.github.chaotix345.rigtune.core.stutter.StutterAnalyzer;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
+import io.github.chaotix345.rigtune.core.stutter.StutterRings;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -142,6 +145,42 @@ class StutterFixServiceTest {
 		service.history = () -> new Journal.Snapshot(Journal.State.OK, List.of());
 		service.advanceAll(null);
 		assertEquals(FixTracker.State.EXPIRED, stored(config, id), "the entry is gone from a good read");
+	}
+
+	// A 60-minute monitor capture sampled at 4 Hz (more samples than the sample ring holds), Distant Horizons' world
+	// generation at `cores` for the minutes [genFrom, genTo).
+	private static StutterAnalyzer.Result dhSession(double cores, int genFrom, int genTo, boolean sampled) {
+		long s = StutterAnalyzer.SECOND;
+		long t0 = 50 * s;
+		StutterRings rings = new StutterRings(10 * s);
+		long window = s / 4;
+		for (long t = t0 + window; sampled && t <= t0 + 3600 * s; t += window) {
+			long[] record = new long[StutterRings.SAMPLE_STRIDE];
+			record[StutterRings.S_TIME] = t;
+			record[StutterRings.S_WINDOW] = window;
+			long minute = (t - t0) / (60 * s);
+			record[StutterRings.S_DH_WORLD_GEN] = minute >= genFrom && minute < genTo ? (long) (cores * window) : 0;
+			rings.sample(record);
+		}
+		FrameRing ring = new FrameRing(1024, 16);
+		for (int i = 1; i <= 100; i++) {
+			ring.frame(t0 + i * 16 * StutterAnalyzer.MS, 16 * StutterAnalyzer.MS, false, 300_000, StutterAnalyzer.MS, 14 * StutterAnalyzer.MS, 0);
+		}
+		return StutterAnalyzer.analyze(new StutterAnalyzer.Input(ring.snapshot(), rings.snapshot(), t0, t0 + 3600 * s, Instant.parse("2026-09-26T10:00:00Z"),
+				StutterReport.MONITOR, "26.2", "g1", 4096, 32768L, 16, true, false));
+	}
+
+	// review-11 STUTTER-4: WS-B's rule looks at the whole capture, not the sample ring's last ~17 minutes averaged: 40 minutes
+	// of Distant Horizons generating terrain early in an hour excludes the session; and with Distant Horizons loaded but no
+	// sample at all, it fails closed.
+	@Test
+	void distantHorizonsGeneratingAnywhereInTheSessionExcludesIt() {
+		assertTrue(StutterFixService.excluded(dhSession(3, 0, 40, true), false, true), "generated for the first 40 of 60 minutes");
+		assertTrue(StutterFixService.excluded(dhSession(3, 50, 60, true), false, true), "generated for the last 10 minutes");
+		assertFalse(StutterFixService.excluded(dhSession(3, 0, 40, true), false, false), "Distant Horizons isn't loaded");
+		assertFalse(StutterFixService.excluded(dhSession(0, 0, 60, true), false, true), "loaded, never generating");
+		assertTrue(StutterFixService.excluded(dhSession(0, 0, 0, false), false, true), "loaded, not sampled: can't tell");
+		assertTrue(StutterFixService.excluded(dhSession(0, 0, 60, true), true, false), "around a benchmark");
 	}
 
 	// V05ServicesTest's rule: without a controller, holds() reads no file and holds nothing.

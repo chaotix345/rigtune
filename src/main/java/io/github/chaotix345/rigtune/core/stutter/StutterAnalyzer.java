@@ -55,11 +55,13 @@ public final class StutterAnalyzer {
 	// dhWorldGenCores (v0.5, docs/v0.5/SPEC.md 2S for 2B's RW-6): the core-equivalents Distant Horizons' world generation
 	// used over the sampler windows the capture recorded (dhWorldGenCores(Input)); null without such a window.
 	// covered (review-11 STUTTER-2, for C20's comparison): null when every spike of the capture is known; else the part
-	// that is (Covered).
+	// that is (Covered). dhWorldGenPeakCores (review-11 STUTTER-4, C20's WS-B rule): the busiest minute of Distant Horizons'
+	// world generation over the whole capture (StutterRings.Totals), or over the held samples for a hand-built snapshot;
+	// null when nothing was sampled.
 	public record Result(StutterReport report, StutterFacts facts, List<Attributor.Attribution> attributions, @Nullable Double dhWorldGenCores,
-			@Nullable Covered covered) {
+			@Nullable Covered covered, @Nullable Double dhWorldGenPeakCores) {
 		public Result(StutterReport report, StutterFacts facts, List<Attributor.Attribution> attributions, @Nullable Double dhWorldGenCores) {
-			this(report, facts, attributions, dhWorldGenCores, null);
+			this(report, facts, attributions, dhWorldGenCores, null, dhWorldGenCores);
 		}
 	}
 
@@ -196,7 +198,10 @@ public final class StutterAnalyzer {
 		StutterFacts stutterFacts = new StutterFacts(claimedShares, taggedShares, gc.fullPauses(), gc.stalls(), gc.explicit(), gc.liveSetPercent(), room,
 				contentionShare(in, samples), gameplaySeconds > 0 ? spikes.size() / (gameplaySeconds / 60) : 0, in.collector(), in.gcMeasured(),
 				unmeasured, FixEvidence.dominatedSpikes(attributions));
-		return new Result(report, stutterFacts, attributions, dhWorldGenCores(in), covered(f, ringStart, in.endNanos()));
+		Double dhWorldGen = dhWorldGenCores(in);
+		StutterRings.Totals totals = in.rings().totals();
+		Double dhPeak = totals == null ? dhWorldGen : Double.isNaN(totals.dhWorldGenPeakCores()) ? null : totals.dhWorldGenPeakCores();
+		return new Result(report, stutterFacts, attributions, dhWorldGen, covered(f, ringStart, in.endNanos()), dhPeak);
 	}
 
 	static @Nullable Covered covered(FrameRing.Snapshot f, long ringStart, long endNanos) {

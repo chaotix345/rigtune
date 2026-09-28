@@ -59,7 +59,8 @@ public final class FixText {
 					"The measurements don't point at this clearly enough for a one-click fix; the advice above still applies.");
 			case BENCHMARK -> Text.of("rigtune.stutter.fix.not_yet.benchmark", "One-click fixes are offered for your own play sessions, not for benchmark runs.");
 			case EXCLUDED -> Text.of("rigtune.stutter.fix.not_yet.excluded",
-					"This session ran around a benchmark or while Distant Horizons generated terrain, so it can't be compared. Play a session without either.");
+					"This session ran around a benchmark, or Distant Horizons generated terrain in it (or RigTune couldn't tell), so it can't be compared."
+							+ " Play a session without either.");
 			case IDLE -> Text.of("rigtune.stutter.fix.not_yet.idle",
 					"This session was idle (throttled) longer than it was played, so it can't be compared. Play a session without long breaks.");
 			case SERVER -> Text.of("rigtune.stutter.fix.not_yet.server", "This server sends at most %s chunks, so a shorter render distance would change nothing here.",
@@ -158,7 +159,7 @@ public final class FixText {
 			return Text.of("rigtune.stutter.fix.skip.short", "it was shorter than 2 minutes");
 		}
 		if (FixTracker.EXCLUDED.equals(skip.reason())) {
-			return Text.of("rigtune.stutter.fix.skip.excluded", "it ran around a benchmark or while Distant Horizons generated terrain");
+			return Text.of("rigtune.stutter.fix.skip.excluded", "it ran around a benchmark, or Distant Horizons generated terrain in it (or RigTune couldn't tell)");
 		}
 		if (FixTracker.IDLE.equals(skip.reason())) {
 			return Text.of("rigtune.stutter.fix.skip.idle", "it was idle (throttled) longer than it was played");

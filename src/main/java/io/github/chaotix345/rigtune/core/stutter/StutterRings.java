@@ -75,6 +75,14 @@ public final class StutterRings {
 	private int fullGcs;
 	private int explicitGcs;
 	private int stalls;
+	// review-11 STUTTER-4 (C20, WS-B's M4 rule): Distant Horizons' world generation over the whole capture, not only the
+	// samples the ring still holds: the busiest DH_BLOCK_NANOS block of sampled time outside pauses, in cores (NaN before
+	// one), and the block being filled. The pause state follows this ring's own PAUSE events.
+	static final long DH_BLOCK_NANOS = 60_000_000_000L;
+	private volatile boolean paused;
+	private long dhBlockCpu;
+	private long dhBlockTime;
+	private double dhPeakCores = Double.NaN;
 
 	public StutterRings(long nanosAtUptimeZero) {
 		this.clock = new GcClock(nanosAtUptimeZero);
@@ -82,6 +90,9 @@ public final class StutterRings {
 
 	public void event(int kind, long nanos, long value) {
 		events.add(kind, nanos, value);
+		if (kind == PAUSE_BEGIN || kind == PAUSE_END) {
+			paused = kind == PAUSE_BEGIN;
+		}
 	}
 
 	public synchronized void gc(long receivedNanos, long startMs, long endMs, int flags, long usedAfterBytes) {
@@ -111,6 +122,22 @@ public final class StutterRings {
 
 	public void sample(long[] record) {
 		samples.add(record);
+		if (!paused && record.length > S_DH_WORLD_GEN && record[S_WINDOW] > 0) {
+			synchronized (this) {
+				dhBlockCpu += Math.max(0, record[S_DH_WORLD_GEN]);
+				dhBlockTime += record[S_WINDOW];
+				if (dhBlockTime >= DH_BLOCK_NANOS) {
+					dhPeakCores = peak(dhPeakCores, dhBlockCpu, dhBlockTime);
+					dhBlockCpu = 0;
+					dhBlockTime = 0;
+				}
+			}
+		}
+	}
+
+	private static double peak(double peak, long cpu, long time) {
+		double cores = (double) cpu / time;
+		return Double.isNaN(peak) ? cores : Math.max(peak, cores);
 	}
 
 	public long retainedBytes() {
@@ -121,7 +148,8 @@ public final class StutterRings {
 		// The sampler writes under the samples ring's own lock, so its records and count are read in one call.
 		RecordRing.Held held = samples.held();
 		return new Snapshot(events.snapshot(), gc.snapshot(), held.records(), clock.calibration(),
-				new Totals(gc.added(), held.added(), fullGcs, explicitGcs, stalls, live.snapshot()));
+				new Totals(gc.added(), held.added(), fullGcs, explicitGcs, stalls, live.snapshot(),
+						dhBlockTime >= DH_BLOCK_NANOS / 2 ? peak(dhPeakCores, dhBlockCpu, dhBlockTime) : dhPeakCores));
 	}
 
 	public synchronized GcClock.Calibration calibration() {
@@ -138,7 +166,11 @@ public final class StutterRings {
 	}
 
 	// The whole capture's GC counts, how many GC and sample records the rings ever took (more than they hold: they wrapped),
-	// and the live-set samples (LIVE_STRIDE longs each, oldest first).
-	public record Totals(long gcAdded, long samplesAdded, int fullGcs, int explicitGcs, int stalls, long[] liveSamples) {
+	// and the live-set samples (LIVE_STRIDE longs each, oldest first). dhWorldGenPeakCores (review-11 STUTTER-4): the busiest
+	// block of Distant Horizons' world generation (a half-filled last block counts), NaN when no block was sampled.
+	public record Totals(long gcAdded, long samplesAdded, int fullGcs, int explicitGcs, int stalls, long[] liveSamples, double dhWorldGenPeakCores) {
+		public Totals(long gcAdded, long samplesAdded, int fullGcs, int explicitGcs, int stalls, long[] liveSamples) {
+			this(gcAdded, samplesAdded, fullGcs, explicitGcs, stalls, liveSamples, Double.NaN);
+		}
 	}
 }
