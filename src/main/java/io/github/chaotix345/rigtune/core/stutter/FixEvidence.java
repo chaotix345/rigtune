@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.core.stutter;
 
+import io.github.chaotix345.rigtune.core.rules.ConditionEvaluator;
 import io.github.chaotix345.rigtune.core.rules.Truth;
 import org.jspecify.annotations.Nullable;
 
@@ -57,7 +58,8 @@ public final class FixEvidence {
 	}
 
 	private static @Nullable Integer wholeNumber(@Nullable String text) {
-		if (text == null) {
+		// review-11 SEC-5 (WS-R): no parsing of an overlong (untrusted) threshold.
+		if (text == null || text.length() > ConditionEvaluator.MAX_NUMBER_CHARS) {
 			return null;
 		}
 		try {
