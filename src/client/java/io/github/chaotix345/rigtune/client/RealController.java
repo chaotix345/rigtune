@@ -1182,6 +1182,11 @@ public final class RealController implements RigTuneController {
 		v05().tryIt().refresh();
 	}
 
+	@Override
+	public @Nullable Text tryItSettling(BenchmarkRequest.Scene scene) {
+		return v05().tryIt().settling(scene);
+	}
+
 	// C16 (WS-P2).
 
 	@Override
