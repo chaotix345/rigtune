@@ -95,6 +95,10 @@ final class SettingsWatch {
 	static void tick(Minecraft minecraft) {
 		StutterMonitor.Capture session = StutterMonitor.session();
 		if (session == null || session == failed) {
+			if (session == null) {
+				// review-11 PERF-4: the failed session's capture (its frame ring) isn't kept once it ended.
+				failed = null;
+			}
 			STATE.disarm();
 			throttleTicks = THROTTLE_EVERY_TICKS;
 			if (StutterMonitor.idle()) {

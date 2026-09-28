@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.client.benchmark;
 
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.compat.OptionalMods;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
@@ -8,6 +9,9 @@ import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
+import io.github.chaotix345.rigtune.core.model.GpuInfo;
+import io.github.chaotix345.rigtune.core.model.GraphicsBackend;
+import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.ModSetHash;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
@@ -93,12 +97,31 @@ public final class BenchmarkConditions {
 		return List.copyOf(ids);
 	}
 
+	// Review-11 COMPAT-2: this session's graphics backend ("OPENGL" / "VULKAN") and the GPU's renderer string, from the
+	// hardware probe (both fixed until a restart); null each when unknown (not probed yet, or the probe couldn't tell).
+	public record Graphics(@Nullable String backend, @Nullable String gpu) {
+		public static Graphics current() {
+			HardwareProfile hardware = RigTuneClient.hardware();
+			return of(hardware == null ? null : hardware.gpu());
+		}
+
+		static Graphics of(@Nullable GpuInfo gpu) {
+			if (gpu == null) {
+				return new Graphics(null, null);
+			}
+			String backend = gpu.backend() == null || gpu.backend() == GraphicsBackend.UNKNOWN ? null : gpu.backend().name();
+			String renderer = gpu.renderer();
+			return new Graphics(backend, renderer == null || renderer.isBlank() || "unknown".equalsIgnoreCase(renderer.strip()) ? null : renderer.strip());
+		}
+	}
+
 	// On the render thread: the same sources as the context of a new run (BenchmarkController.context).
 	public static BenchmarkTrend.Current current(Minecraft minecraft) {
 		boolean shaders = OptionalMods.shadersInUse();
+		Graphics graphics = Graphics.current();
 		return new BenchmarkTrend.Current(HardwareProbe.minecraftVersion(), minecraft.options.renderDistance().get(),
 				minecraft.options.simulationDistance().get(), minecraft.getWindow().getWidth(), minecraft.getWindow().getHeight(),
 				minecraft.options.fullscreen().get(), shaders, shaders ? BenchmarkController.shaderPack() : null, OptionalMods.dhRendering(),
-				modSetHash());
+				modSetHash(), graphics.backend(), graphics.gpu());
 	}
 }

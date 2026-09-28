@@ -15,10 +15,14 @@ public final class FixGate {
 	private FixGate() {
 	}
 
-	// The first reason that blocks, in this order: BENCHMARK, EXCLUDED, IDLE, STORE, BUSY, LENGTH; null when the floor holds.
-	// excluded: the session ran around a benchmark run or while Distant Horizons generated terrain (WS-B's M4 rule: no
-	// comparison across such a session). IDLE: idle() below. busy: another fix is staged or being measured.
-	public static FixOffer.@Nullable Reason check(StutterReport report, boolean excluded, boolean busy, boolean storeWritable) {
+	// The first reason that blocks, in this order: BENCHMARK, EXCLUDED, IDLE, CHANGED, STORE, BUSY, LENGTH; null when the
+	// floor holds. outcome: what the comparison would take from the session (review-11 STUTTER-2/STUTTER-6: the covered
+	// window, settingsChanged spikes left out), so the floor holds for the before side itself. excluded: the session ran
+	// around a benchmark run or while Distant Horizons generated terrain (WS-B's M4 rule: no comparison across such a
+	// session). IDLE: idle() below. changed: FixConditions moved between the session's start and the analysis; RW-11's
+	// start and end settings count too (STUTTER-3). busy: another fix is staged or being measured.
+	public static FixOffer.@Nullable Reason check(StutterReport report, SessionOutcome outcome, boolean excluded, boolean changed, boolean busy,
+			boolean storeWritable) {
 		if (!StutterReport.MONITOR.equals(report.source())) {
 			return FixOffer.Reason.BENCHMARK;
 		}
@@ -28,16 +32,28 @@ public final class FixGate {
 		if (idle(report)) {
 			return FixOffer.Reason.IDLE;
 		}
+		if (changed || !report.settingChanges().isEmpty()) {
+			return FixOffer.Reason.CHANGED;
+		}
 		if (!storeWritable) {
 			return FixOffer.Reason.STORE;
 		}
 		if (busy) {
 			return FixOffer.Reason.BUSY;
 		}
-		if (report.hitches() < MIN_HITCHES || report.gameplaySeconds() < MIN_GAMEPLAY_SECONDS) {
+		if (outcome.hitches() < MIN_HITCHES || outcome.gameplaySeconds() < MIN_GAMEPLAY_SECONDS) {
 			return FixOffer.Reason.LENGTH;
 		}
 		return null;
+	}
+
+	// The report's own numbers as the outcome (no conditions known beyond the report).
+	public static FixOffer.@Nullable Reason check(StutterReport report, boolean excluded, boolean busy, boolean storeWritable) {
+		return check(report, outcome(report), excluded, false, busy, storeWritable);
+	}
+
+	static SessionOutcome outcome(StutterReport report) {
+		return new SessionOutcome(1, report.gameplaySeconds(), report.hitches(), report.lostMs(), 0, 0, 0);
 	}
 
 	// RW-17 (the coordinator's rule for C20): the game throttled its frame rate (AFK, minimised, Dynamic FPS) for longer

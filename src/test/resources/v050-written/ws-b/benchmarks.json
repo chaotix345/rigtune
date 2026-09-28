@@ -44,7 +44,9 @@
         "protocol": 1,
         "modSetHash": "9c2e4f6a8b0d1c3e5f7a9b1d3c5e7f9a0b2c4d6e8f0a1b3c5d7e9f1a2b4c6d8e",
         "worldFresh": true,
-        "stagedAtStart": []
+        "stagedAtStart": [],
+        "backend": "OPENGL",
+        "gpu": "AMD Radeon RX 7800 XT"
       }
     },
     {
@@ -93,7 +95,9 @@
         "worldFresh": false,
         "stagedAtStart": [
           "0b9d7f15-3e6c-4a82-b1d4-5f7e9a3c2b60"
-        ]
+        ],
+        "backend": "OPENGL",
+        "gpu": "AMD Radeon RX 7800 XT"
       }
     },
     {
@@ -144,7 +148,9 @@
         "journalCursor": "7e3a1c5b-9d2f-4b68-8a14-c6e0f2d4b9a1",
         "worldFresh": false,
         "dhGenerating": true,
-        "stagedAtStart": []
+        "stagedAtStart": [],
+        "backend": "VULKAN",
+        "gpu": "AMD Radeon RX 7800 XT"
       }
     },
     {

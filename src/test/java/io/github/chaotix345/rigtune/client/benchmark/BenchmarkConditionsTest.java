@@ -3,6 +3,8 @@ package io.github.chaotix345.rigtune.client.benchmark;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
+import io.github.chaotix345.rigtune.core.model.GpuInfo;
+import io.github.chaotix345.rigtune.core.model.GraphicsBackend;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -40,6 +42,16 @@ class BenchmarkConditionsTest {
 		JournalEntry sixtyFour = new JournalEntry("e3", "2026-09-22T10:00:00Z", JournalEntry.APPLY, "0.5.0", "26.2", null, many);
 		assertEquals(64, BenchmarkConditions.stagedIds(List.of(sixtyFour)).size());
 		assertNull(BenchmarkConditions.stagedIds(List.of(sixtyFour, staged)), "65 staged: left out");
+	}
+
+	// Review-11 COMPAT-2: the session's backend and GPU for a new run's context, from the probe's GpuInfo.
+	@Test
+	void compat2TheBackendAndGpuComeFromTheProbe() {
+		assertEquals(new BenchmarkConditions.Graphics("VULKAN", "NVIDIA GeForce RTX 3050 Laptop GPU"), BenchmarkConditions.Graphics.of(
+				new GpuInfo("NVIDIA", " NVIDIA GeForce RTX 3050 Laptop GPU ", "580.1", GraphicsBackend.VULKAN, 4096)));
+		assertEquals(new BenchmarkConditions.Graphics(null, null), BenchmarkConditions.Graphics.of(
+				new GpuInfo("unknown", "unknown", "unknown", GraphicsBackend.UNKNOWN, 0)), "the probe's placeholders are unknowns");
+		assertEquals(new BenchmarkConditions.Graphics(null, null), BenchmarkConditions.Graphics.of(null), "not probed yet");
 	}
 
 	// Review (part 1 M3): one journal snapshot gives the run both its cursor and its staged ids.

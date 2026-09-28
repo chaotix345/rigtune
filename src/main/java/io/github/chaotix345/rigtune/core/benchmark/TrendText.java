@@ -140,6 +140,8 @@ public final class TrendText {
 			case SHADERS -> Text.of("rigtune.benchmark.trend.key.shaders", "shaders");
 			case SHADER_PACK -> Text.of("rigtune.benchmark.trend.key.shader_pack", "shader pack");
 			case DISTANT_HORIZONS -> Text.of("rigtune.benchmark.trend.key.distant_horizons", "Distant Horizons");
+			case BACKEND -> Text.of("rigtune.benchmark.trend.key.backend", "graphics backend");
+			case GPU -> Text.of("rigtune.benchmark.trend.key.gpu", "GPU");
 			case PROTOCOL -> Text.of("rigtune.benchmark.trend.key.protocol", "benchmark version");
 			case NOT_RECORDED -> Text.of("rigtune.benchmark.trend.key.not_recorded", "conditions not recorded");
 			case MOD_SET -> Text.of("rigtune.benchmark.trend.key.mod_set", "mod set");

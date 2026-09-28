@@ -46,6 +46,16 @@ public final class FixComparison {
 			return new Verdict(kind, perMinute(before.hitches(), before.gameplaySeconds()), perMinute(after.hitches(), after.gameplaySeconds()),
 					perMinute(before.lostMs(), before.gameplaySeconds()), perMinute(after.lostMs(), after.gameplaySeconds()), phi, pLess, pMore);
 		}
+
+		// Why a SAME verdict is one (review-11 STUTTER-5, X3): fewer hitches by LESS's own measure, but more time lost.
+		public boolean fewerHitchesMoreLost() {
+			return afterPerMinute * 3 <= beforePerMinute * 2 && pLess <= ALPHA && lostAfterPerMinute > lostBeforePerMinute;
+		}
+
+		// Or a difference the test finds, but between 2/3 and 3/2 of before: too small to call.
+		public boolean clearButSmall() {
+			return pLess <= ALPHA || pMore <= ALPHA;
+		}
 	}
 
 	private FixComparison() {

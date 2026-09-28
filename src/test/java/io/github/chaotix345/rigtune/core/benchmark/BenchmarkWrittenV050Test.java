@@ -20,13 +20,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // The "written by 0.5" set ws-b (docs/v0.5/SPEC.md 3b and X11, src/test/resources/v050-written/README.md): benchmarks.json
-// as 0.5 writes it, with the optional context fields RW-8 (worldFresh), RW-6 (dhGenerating) and BH-2 (stagedAtStart).
+// as 0.5 writes it, with the optional context fields RW-8 (worldFresh), RW-6 (dhGenerating), BH-2 (stagedAtStart) and
+// review-11 COMPAT-2 (backend, gpu).
 // The file comes from this test; RIGTUNE_REGENERATE_FIXTURES=1 rewrites it, otherwise the committed file must be exactly
 // what the code writes now. The pinned 0.2.0/0.3.0 readers load it without a .bad (compat040 does the same with 0.4.0's
 // own classes through expect.json), and a 0.3.0 rewrite drops only the fields it doesn't know.
 class BenchmarkWrittenV050Test {
 	private static final String SET = "src/test/resources/v050-written/ws-b/";
 	private static final Gson GSON = new Gson();
+	private static final String GPU_GL = "AMD Radeon RX 7800 XT";
+	private static final String GPU_VK = "AMD Radeon RX 7800 XT";
 	private static final String HASH = "9c2e4f6a8b0d1c3e5f7a9b1d3c5e7f9a0b2c4d6e8f0a1b3c5d7e9f1a2b4c6d8e";
 
 	@TempDir
@@ -48,15 +51,16 @@ class BenchmarkWrittenV050Test {
 		BenchmarkRecord.World world = new BenchmarkRecord.World("rigtune-benchmark", 8675309L);
 		BenchmarkRecord fresh = new BenchmarkRecord("2026-09-24T18:02:13Z-3b7e", "2026-09-24T18:02:13Z", "0.5.0+mc26.2", "26.2", "MEASURE",
 				"BENCHMARK_WORLD", BenchmarkRecord.SINGLE, null, 170, true, knobs(12, 12), new BenchmarkRecord.Result(866.0, 402.5, 4.9, 2, 0.061),
-				Map.of(), Map.of(), world, false, plain.withModSet(HASH, null).withWorldFresh(true).withStagedAtStart(List.of()));
+				Map.of(), Map.of(), world, false, plain.withModSet(HASH, null).withWorldFresh(true).withStagedAtStart(List.of())
+						.withGraphics("OPENGL", GPU_GL));
 		BenchmarkRecord staged = new BenchmarkRecord("2026-09-25T19:40:07Z-a41c", "2026-09-25T19:40:07Z", "0.5.0+mc26.2", "26.2", "MEASURE",
 				"BENCHMARK_WORLD", BenchmarkRecord.SINGLE, null, 170, true, knobs(12, 12), new BenchmarkRecord.Result(912.5, 540.25, 2.6, 2, 0.022),
 				Map.of(), Map.of(), world, false, plain.withModSet(HASH, "7e3a1c5b-9d2f-4b68-8a14-c6e0f2d4b9a1").withWorldFresh(false)
-						.withStagedAtStart(List.of("0b9d7f15-3e6c-4a82-b1d4-5f7e9a3c2b60")));
+						.withStagedAtStart(List.of("0b9d7f15-3e6c-4a82-b1d4-5f7e9a3c2b60")).withGraphics("OPENGL", GPU_GL));
 		BenchmarkRecord generating = new BenchmarkRecord("2026-09-26T09:15:44Z-6f02", "2026-09-26T09:15:44Z", "0.5.0+mc26.2", "26.2", "TUNE",
 				"BENCHMARK_WORLD", BenchmarkRecord.SINGLE, null, 170, true, knobs(24, 32), new BenchmarkRecord.Result(757.5, 318.5, 2.36, 2, 0.0707),
 				Map.of(), Map.of(), world, false, plain.withModSet(HASH, "7e3a1c5b-9d2f-4b68-8a14-c6e0f2d4b9a1").withWorldFresh(false)
-						.withDhGenerating(true).withStagedAtStart(List.of()));
+						.withDhGenerating(true).withStagedAtStart(List.of()).withGraphics("VULKAN", GPU_VK));
 		BenchmarkRecord current = new BenchmarkRecord("2026-09-26T21:03:29Z-c8d5", "2026-09-26T21:03:29Z", "0.5.0+mc26.2", "26.2", "TUNE", "CURRENT",
 				BenchmarkRecord.SINGLE, null, 170, true, knobs(16, 12), new BenchmarkRecord.Result(701.0, 330.75, 3.3, 2, 0.031), Map.of(), Map.of(),
 				null, false, new BenchmarkRecord.Context(true, false, null, 2560, 1440, true, BenchmarkRecord.Context.PROTOCOL)
@@ -83,7 +87,8 @@ class BenchmarkWrittenV050Test {
 			Files.copy(file, committed.resolve("benchmarks.json"), StandardCopyOption.REPLACE_EXISTING);
 		}
 		String text = Files.readString(file, StandardCharsets.UTF_8);
-		assertTrue(text.contains("\"worldFresh\": ") && text.contains("\"dhGenerating\": ") && text.contains("\"stagedAtStart\": "), text);
+		assertTrue(text.contains("\"worldFresh\": ") && text.contains("\"dhGenerating\": ") && text.contains("\"stagedAtStart\": ")
+				&& text.contains("\"backend\": ") && text.contains("\"gpu\": "), text);
 		assertEquals(text, Files.readString(committed.resolve("benchmarks.json"), StandardCharsets.UTF_8).replace("\r\n", "\n"),
 				"regenerate with RIGTUNE_REGENERATE_FIXTURES=1");
 		assertEquals(v050Written(), BenchmarkHistory.load(committed.resolve("benchmarks.json")).runs());
@@ -94,7 +99,7 @@ class BenchmarkWrittenV050Test {
 	private static JsonObject withoutNewFields(BenchmarkRecord run, String... also) {
 		JsonObject json = GSON.toJsonTree(run).getAsJsonObject();
 		JsonObject context = json.getAsJsonObject("context");
-		for (String field : List.of("worldFresh", "dhGenerating", "stagedAtStart")) {
+		for (String field : List.of("worldFresh", "dhGenerating", "stagedAtStart", "backend", "gpu")) {
 			context.remove(field);
 		}
 		for (String field : also) {

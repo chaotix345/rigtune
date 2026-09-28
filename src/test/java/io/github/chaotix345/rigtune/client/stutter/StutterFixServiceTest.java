@@ -15,8 +15,11 @@ import io.github.chaotix345.rigtune.core.stutter.FixConditions;
 import io.github.chaotix345.rigtune.core.stutter.FixOffer;
 import io.github.chaotix345.rigtune.core.stutter.FixStore;
 import io.github.chaotix345.rigtune.core.stutter.FixTracker;
+import io.github.chaotix345.rigtune.core.stutter.FrameRing;
 import io.github.chaotix345.rigtune.core.stutter.SessionOutcome;
+import io.github.chaotix345.rigtune.core.stutter.StutterAnalyzer;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
+import io.github.chaotix345.rigtune.core.stutter.StutterRings;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -142,6 +145,77 @@ class StutterFixServiceTest {
 		service.history = () -> new Journal.Snapshot(Journal.State.OK, List.of());
 		service.advanceAll(null);
 		assertEquals(FixTracker.State.EXPIRED, stored(config, id), "the entry is gone from a good read");
+	}
+
+	// A 60-minute monitor capture sampled at 4 Hz (more samples than the sample ring holds), Distant Horizons' world
+	// generation at `cores` for the minutes [genFrom, genTo).
+	private static StutterAnalyzer.Result dhSession(double cores, int genFrom, int genTo, boolean sampled) {
+		long s = StutterAnalyzer.SECOND;
+		long t0 = 50 * s;
+		StutterRings rings = new StutterRings(10 * s);
+		long window = s / 4;
+		for (long t = t0 + window; sampled && t <= t0 + 3600 * s; t += window) {
+			long[] record = new long[StutterRings.SAMPLE_STRIDE];
+			record[StutterRings.S_TIME] = t;
+			record[StutterRings.S_WINDOW] = window;
+			long minute = (t - t0) / (60 * s);
+			record[StutterRings.S_DH_WORLD_GEN] = minute >= genFrom && minute < genTo ? (long) (cores * window) : 0;
+			rings.sample(record);
+		}
+		FrameRing ring = new FrameRing(1024, 16);
+		for (int i = 1; i <= 100; i++) {
+			ring.frame(t0 + i * 16 * StutterAnalyzer.MS, 16 * StutterAnalyzer.MS, false, 300_000, StutterAnalyzer.MS, 14 * StutterAnalyzer.MS, 0);
+		}
+		return StutterAnalyzer.analyze(new StutterAnalyzer.Input(ring.snapshot(), rings.snapshot(), t0, t0 + 3600 * s, Instant.parse("2026-09-26T10:00:00Z"),
+				StutterReport.MONITOR, "26.2", "g1", 4096, 32768L, 16, true, false));
+	}
+
+	// review-11 STUTTER-4: WS-B's rule looks at the whole capture, not the sample ring's last ~17 minutes averaged: 40 minutes
+	// of Distant Horizons generating terrain early in an hour excludes the session; and with Distant Horizons loaded but no
+	// sample at all, it fails closed.
+	@Test
+	void distantHorizonsGeneratingAnywhereInTheSessionExcludesIt() {
+		assertTrue(StutterFixService.excluded(dhSession(3, 0, 40, true), false, true), "generated for the first 40 of 60 minutes");
+		assertTrue(StutterFixService.excluded(dhSession(3, 50, 60, true), false, true), "generated for the last 10 minutes");
+		assertFalse(StutterFixService.excluded(dhSession(3, 0, 40, true), false, false), "Distant Horizons isn't loaded");
+		assertFalse(StutterFixService.excluded(dhSession(0, 0, 60, true), false, true), "loaded, never generating");
+		assertTrue(StutterFixService.excluded(dhSession(0, 0, 0, false), false, true), "loaded, not sampled: can't tell");
+		assertTrue(StutterFixService.excluded(dhSession(0, 0, 60, true), true, false), "around a benchmark");
+	}
+
+	// review-11 STUTTER-3: the client's half of "the before side is one setup": the window (F11 to fullscreen), a managed
+	// setting or the mod set moved between the capture's start and the analysis. A key read on one side only (a config file
+	// mid-write) isn't a change; unknown start conditions can't tell (fail closed).
+	@Test
+	void theBeforeSideIsOneSetup() {
+		FixConditions start = new FixConditions("26.2", "mods", 4096, "g1", 1280, 720, false, "SINGLEPLAYER", false, false, Map.of(RD, "20", DEFER, "ALWAYS"));
+		assertFalse(StutterFixService.changedDuring(start, start));
+		assertTrue(StutterFixService.changedDuring(start, new FixConditions("26.2", "mods", 4096, "g1", 2560, 1440, true, "SINGLEPLAYER", false, false,
+				Map.of(RD, "20", DEFER, "ALWAYS"))), "F11 to 2560x1440 fullscreen");
+		assertTrue(StutterFixService.changedDuring(start, new FixConditions("26.2", "mods", 4096, "g1", 1280, 720, false, "SINGLEPLAYER", false, false,
+				Map.of(RD, "12", DEFER, "ALWAYS"))), "render distance 20 -> 12");
+		assertFalse(StutterFixService.changedDuring(start, new FixConditions("26.2", "mods", 4096, "g1", 1280, 720, false, "SINGLEPLAYER", false, false,
+				Map.of(RD, "20"))), "Sodium's file unreadable at the analysis: unknown, not a change");
+		assertTrue(StutterFixService.changedDuring(null, start), "no start conditions: can't tell");
+	}
+
+	// review-11 PERF-2: a player without a tracked fix pays no history.json parse, neither on every rebuild (holds) nor every
+	// 5 s while the Stutter Doctor is open (advanceAll), with or without a session that just ended.
+	@Test
+	void withoutAFixHistoryIsNeverRead(@TempDir Path config) throws ReflectiveOperationException {
+		StutterFixService service = service(config);
+		AtomicInteger reads = new AtomicInteger();
+		service.history = () -> {
+			reads.incrementAndGet();
+			return new Journal.Snapshot(Journal.State.OK, List.of());
+		};
+		assertEquals(List.of(), service.holds());
+		service.advanceAll(null);
+		assertEquals(0, reads.get(), "no fix, no parse");
+		String id = "5c20f1a0-7d3e-4b2a-9c61-0000000000e1";
+		assertTrue(FixStore.shared(config).add(measuring(id)));
+		service.advanceAll(null);
+		assertEquals(1, reads.get(), "one fix: one read");
 	}
 
 	// V05ServicesTest's rule: without a controller, holds() reads no file and holds nothing.

@@ -8,7 +8,7 @@ import net.minecraft.client.Minecraft;
 import org.jspecify.annotations.Nullable;
 
 // NoticePriority.MOD_FILES_NEWS, docs/v0.5/SPEC.md 4b (P0.4): what changed for players who used RigTune before (FirstRun
-// RETURNING), under LAUNCHER: "RigTune now leaves this instance's mod files to <launcher>", once per instance (dismissed
+// RETURNING at load, review-11 FEAT-1: an Apply makes a new player RETURNING, not a 0.4 upgrader), under LAUNCHER: "RigTune now leaves this instance's mod files to <launcher>", once per instance (dismissed
 // by its key in awareness.json); Settings… opens the settings on the Mod files row. Constructed by the lazy notice
 // list on the first notices() call, never during startup (X4); reads memory only (ModFilesService.news).
 public final class ModFilesNewsNoticeSource implements NoticeSource {
@@ -20,7 +20,7 @@ public final class ModFilesNewsNoticeSource implements NoticeSource {
 
 	@Override
 	public @Nullable Notice current() {
-		return controller.v05().modFiles().news(controller.v05().firstRun().status());
+		return controller.v05().modFiles().news(controller.v05().firstRun().loadedStatus());
 	}
 
 	@Override
