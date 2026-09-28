@@ -10,7 +10,7 @@ import java.util.List;
 // 4f), and the WARN lines that go with the leftovers. Pure: RigTuneClient.showNotices shows them.
 public final class HelperToasts {
 	public enum Kind {
-		RESULT, DROPPED, LEFTOVER, HELD
+		RESULT, DROPPED, LEFTOVER, HELD, BUSY
 	}
 
 	public record Toast(Kind kind, Component title, Component body) {
@@ -48,6 +48,11 @@ public final class HelperToasts {
 			out.add(new Toast(Kind.HELD, Component.translatable("rigtune.toast.held.title", held), Component.translatable("rigtune.toast.held.body")));
 		}
 		return out;
+	}
+
+	// Cancel them found the apply lock busy (the last session's helper still running): nothing changed yet.
+	public static Toast cancelBusy() {
+		return new Toast(Kind.BUSY, Component.translatable("rigtune.toast.held.busy.title"), Component.translatable("rigtune.toast.held.busy.body"));
 	}
 
 	public static List<String> warnLines(int retried, int held) {

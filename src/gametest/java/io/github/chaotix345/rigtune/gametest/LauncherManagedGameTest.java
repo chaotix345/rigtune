@@ -495,12 +495,15 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 			redetect(context, real, ModFilesPolicy.LAUNCHER);
 			String repairKey = seedRepairRecords(real, made, run);
 			List<Op> held = seedHeldGroup(real, made, "a");
-			// The staged ops RigTune counts for "restart to apply N" include the seeded group, as after a start with it.
+			// The seeded group is carried over, as after a start with it.
 			context.runOnClient(mc -> real.stagedChanged());
 			context.waitTicks(2);
-			check(restartCount(context, real) == 2, "the seeded group counts in the restart count");
 			openRigTune(context);
 			Notice heldNotice = waitForNotice(context, real, LauncherRepairService.HELD_KEY);
+			// review-11 APPLY-3: a restart never applies what the helper holds, so an Apply says it apart from the restart.
+			Component status = context.computeOnClient(mc -> real.apply(List.of()));
+			check(count(status, "rigtune.status.restart") == 0 && count(status, "rigtune.repair.held.status") == 1,
+					"the held group is said apart, never as 'restart to apply': " + status.getString());
 			check(heldNotice.priority() == NoticePriority.HELD_MOD_CHANGES && !heldNotice.dismissible(), "the held notice: " + heldNotice);
 			check(heldNotice.message().english().equals("1 mod change(s) from an earlier Apply are waiting: Modrinth App manages this instance's mods."),
 					heldNotice.message().english());
@@ -535,7 +538,9 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 			// The controller recounted (on the render thread, after Cancel's worker): an Apply now says nothing waits for a
 			// restart.
 			context.waitTicks(3);
-			check(restartCount(context, real) == 0, "after Cancel them, the restart count no longer counts the cancelled group");
+			Component after = context.computeOnClient(mc -> real.apply(List.of()));
+			check(count(after, "rigtune.status.restart") == 0 && count(after, "rigtune.repair.held.status") == 0,
+					"after Cancel them nothing waits: " + after.getString());
 
 			// AC4d.4: the title screen's leftover toast waits for the policy and says "waiting for your choice"; under RIGTUNE it
 			// is today's.
@@ -597,20 +602,15 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 				.key(real.launcher().launcher());
 	}
 
-	// N in the status an Apply of nothing gives ("Restart Minecraft to finish applying N change(s)"), 0 without that part:
-	// the staged changes RealController counts (recounted after pending.json changed: stagedChanged).
-	private static int restartCount(ClientGameTestContext context, RealController real) {
-		Component status = context.computeOnClient(mc -> real.apply(List.of()));
-		return restart(status);
-	}
-
-	private static int restart(Component component) {
-		if (component.getContents() instanceof TranslatableContents t && t.getKey().equals("rigtune.status.restart") && t.getArgs().length == 1
+	// N in the part of a status with this key (e.g. "rigtune.status.restart": "Restart Minecraft to finish applying N
+	// change(s)"), 0 without that part.
+	private static int count(Component component, String key) {
+		if (component.getContents() instanceof TranslatableContents t && t.getKey().equals(key) && t.getArgs().length == 1
 				&& t.getArgs()[0] instanceof Number n) {
 			return n.intValue();
 		}
 		for (Component sibling : component.getSiblings()) {
-			int found = restart(sibling);
+			int found = count(sibling, key);
 			if (found > 0) {
 				return found;
 			}

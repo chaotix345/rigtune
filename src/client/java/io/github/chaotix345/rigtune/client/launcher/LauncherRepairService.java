@@ -9,6 +9,7 @@ import io.github.chaotix345.rigtune.client.undo.ModsFolder;
 import io.github.chaotix345.rigtune.client.undo.Staging;
 import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
+import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
@@ -54,6 +55,7 @@ public final class LauncherRepairService {
 	// The title screen's leftover toasts (the game test finds them by these).
 	public static final SystemToast.SystemToastId LEFTOVER_TOAST = new SystemToast.SystemToastId(10000L);
 	public static final SystemToast.SystemToastId HELD_TOAST = new SystemToast.SystemToastId(10000L);
+	public static final SystemToast.SystemToastId BUSY_TOAST = new SystemToast.SystemToastId(8000L);
 
 	// Game tests only: the policy to use instead of the controller's (null: the controller's).
 	private static volatile @Nullable ModFilesPolicy policyOverride;
@@ -132,8 +134,11 @@ public final class LauncherRepairService {
 
 	private static void show(List<HelperToasts.Toast> toasts) {
 		Minecraft minecraft = Minecraft.getInstance();
-		minecraft.execute(() -> toasts.forEach(t -> SystemToast.add(minecraft.gui.toastManager(), t.kind() == HelperToasts.Kind.HELD ? HELD_TOAST
-				: LEFTOVER_TOAST, t.title(), t.body())));
+		minecraft.execute(() -> toasts.forEach(t -> SystemToast.add(minecraft.gui.toastManager(), switch (t.kind()) {
+			case HELD -> HELD_TOAST;
+			case BUSY -> BUSY_TOAST;
+			default -> LEFTOVER_TOAST;
+		}, t.title(), t.body())));
 	}
 
 	// ---- HELD_MOD_CHANGES (4d)
@@ -150,6 +155,17 @@ public final class LauncherRepairService {
 			return null;
 		}
 		return heldNotice(LauncherRepair.modChanges(current.held()), policy, env().launcher().get());
+	}
+
+	// The ops the next exit's helper holds, as last read, while the policy holds them; none before the first read. For
+	// RealController's "restart to apply N" (review-11 APPLY-3): a restart never applies these.
+	public List<Op> heldOps() {
+		State current = state;
+		return current == null || !HelperLauncher.holds(env().policy().get()) ? List.of() : current.held();
+	}
+
+	public int heldChanges() {
+		return LauncherRepair.modChanges(heldOps());
 	}
 
 	// The notice itself (also the A11y walk's canned one).
@@ -169,31 +185,41 @@ public final class LauncherRepairService {
 
 	public void heldAction(String actionId) {
 		if (CANCEL.equals(actionId)) {
-			env().executor().execute(this::cancelHeld);
+			// Only what the notice counted (review-11 APPLY-6): a group staged since, or no longer held, stays.
+			State shown = state;
+			List<Op> counted = shown == null ? List.of() : shown.held();
+			env().executor().execute(() -> cancelHeld(counted));
 		} else if (APPLY.equals(actionId)) {
 			env().optIn().run();
 		}
 	}
 
-	// Under the apply lock, with what the helper would hold now (ApplyExecutor.held: never a group RigTune's records show
-	// half done): those ops leave pending.json, matched by sameOp (an op 0.1.0 staged without an id included), their
-	// downloads become .rigtune-superseded unless a kept op still uses them, and their journal changes DISCARDED, as
-	// Staging's unstage path does. Then the controller recounts its staged changes and rebuilds.
-	void cancelHeld() {
+	// Under the apply lock, while the policy still holds, the ops the notice counted that the helper would still hold now
+	// (ApplyExecutor.held: never a group RigTune's records prove started) leave pending.json, matched by sameOp (an op
+	// 0.1.0 staged without an id included); their downloads become .rigtune-superseded unless a kept op still uses them,
+	// and their journal changes DISCARDED, as Staging's unstage path does. Then the controller recounts its staged changes
+	// and rebuilds. A busy lock (the last session's helper still running) says so in a toast.
+	void cancelHeld(List<Op> counted) {
+		if (!HelperLauncher.holds(env().policy().get())) {
+			RigTune.LOGGER.info("RigTune: nothing cancelled; RigTune changes this instance's mod files now");
+			return;
+		}
 		Path pendingFile = env().pendingFile();
 		Staging staging = new Staging(env().configDir(), pendingFile, List.of(), env().journal().get());
 		try (ApplyLock lock = staging.lock()) {
 			if (lock == null) {
 				RigTune.LOGGER.warn("RigTune: the held mod changes weren't cancelled; the apply lock is busy");
+				env().toasts().accept(List.of(HelperToasts.cancelBusy()));
 				return;
 			}
 			if (Files.isRegularFile(pendingFile)) {
 				PendingActions plan = PendingActions.load(pendingFile);
-				List<Op> held = ApplyExecutor.held(plan, pendingFile);
+				List<Op> held = ApplyExecutor.held(plan, pendingFile).stream()
+						.filter(h -> h != null && counted.stream().anyMatch(c -> c != null && c.sameOp(h))).toList();
 				List<Op> kept = new ArrayList<>();
 				List<Op> dropped = new ArrayList<>();
 				for (Op op : plan.ops()) {
-					(op != null && held.stream().anyMatch(h -> h != null && h.sameOp(op)) ? dropped : kept).add(op);
+					(op != null && held.stream().anyMatch(h -> h.sameOp(op)) ? dropped : kept).add(op);
 				}
 				if (!dropped.isEmpty()) {
 					if (kept.isEmpty()) {

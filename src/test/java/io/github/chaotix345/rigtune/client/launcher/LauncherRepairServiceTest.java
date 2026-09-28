@@ -183,16 +183,16 @@ class LauncherRepairServiceTest {
 		assertNull(held());
 	}
 
-	// A group RigTune's records show started (here a 0.1.0-0.3.0 failed rollback: the old jar disabled after an attempt,
-	// the download still there) isn't held, so Cancel them leaves it for the next exit to finish; an op staged without an
-	// id (0.1.0's first builds) is cancelled all the same (sameOp).
+	// A group RigTune's records prove started (here a killed helper's record: the disable done, the enable not reached)
+	// isn't held, so Cancel them leaves it for the next exit to finish; an op staged without an id (0.1.0's first builds)
+	// is cancelled all the same (sameOp).
 	@Test
 	void cancelSkipsAStartedGroupAndMatchesOpsWithoutIds() throws IOException {
 		Path started = TestJars.modJar(mods.resolve("lithium-1.jar"), "lithium");
 		Path startedDownload = TestJars.modJar(mods.resolve("lithium-2.jar" + PendingActions.PENDING_SUFFIX), "lithium");
-		List<Op> startedGroup = PendingActions.group(Op.disableFile(started), Op.enableFile(startedDownload, mods.resolve("lithium-2.jar")))
-				.stream().map(op -> op.withAttempts(1)).toList();
+		List<Op> startedGroup = PendingActions.group(Op.disableFile(started), Op.enableFile(startedDownload, mods.resolve("lithium-2.jar")));
 		Files.move(started, mods.resolve("lithium-1.jar.disabled"));
+		record(startedGroup.getFirst(), started, mods.resolve("lithium-1.jar.disabled"), true);
 		Path idless = TestJars.modJar(mods.resolve("iris.jar" + PendingActions.PENDING_SUFFIX), "iris");
 		Op noId = new Op(PendingActions.Type.ENABLE_FILE, idless.toString(), mods.resolve("iris.jar").toString(), null, null);
 		List<Op> ops = new ArrayList<>(update);
@@ -210,6 +210,88 @@ class LauncherRepairServiceTest {
 		assertTrue(left.containsAll(startedGroup) && left.contains(patch), left.toString());
 		assertTrue(Files.exists(startedDownload), "the started group's download stays");
 		assertTrue(Files.exists(mods.resolve("iris.jar" + PendingActions.SUPERSEDED_SUFFIX)));
+	}
+
+	// unfinished-groups.json as a 0.5 helper writes it: one rename of `op`, done or not.
+	private void record(Op op, Path from, Path to, boolean done) throws IOException {
+		com.google.gson.JsonObject rename = new com.google.gson.JsonObject();
+		rename.addProperty("op", op.id());
+		rename.addProperty("from", from.toString());
+		rename.addProperty("to", to.toString());
+		rename.addProperty("done", done);
+		com.google.gson.JsonArray renames = new com.google.gson.JsonArray();
+		renames.add(rename);
+		com.google.gson.JsonObject group = new com.google.gson.JsonObject();
+		group.addProperty("group", op.group());
+		group.add("renames", renames);
+		com.google.gson.JsonArray groups = new com.google.gson.JsonArray();
+		groups.add(group);
+		com.google.gson.JsonObject doc = new com.google.gson.JsonObject();
+		doc.add("groups", groups);
+		Files.createDirectories(config.resolve("rigtune"));
+		Files.writeString(config.resolve("rigtune").resolve("unfinished-groups.json"), doc.toString());
+	}
+
+	// review-11 APPLY-6: a notice shown under PENDING and clicked after the policy answered RIGTUNE cancels nothing.
+	@Test
+	void cancelUnderAPolicyThatNoLongerHoldsCancelsNothing() throws IOException {
+		staged();
+		assertNotNull(held());
+		policy.set(ModFilesPolicy.RIGTUNE);
+
+		service.heldAction(LauncherRepairService.CANCEL);
+
+		assertEquals(update.size() + 1, PendingActions.load(pending).ops().size());
+		assertTrue(Files.exists(download));
+	}
+
+	// review-11 APPLY-6: Cancel them cancels what the notice counted; a group held since stays.
+	@Test
+	void cancelTakesOnlyWhatTheNoticeCounted() throws IOException {
+		staged();
+		assertNotNull(held());
+		Path later = TestJars.modJar(mods.resolve("lithium-2.jar" + PendingActions.PENDING_SUFFIX), "lithium");
+		List<Op> laterGroup = PendingActions.group(Op.enableFile(later, mods.resolve("lithium-2.jar")));
+		List<Op> ops = new ArrayList<>(PendingActions.load(pending).ops());
+		ops.addAll(laterGroup);
+		PendingActions.create(1, mods, config, ops).save(pending);
+
+		service.heldAction(LauncherRepairService.CANCEL);
+
+		assertEquals(List.of(patch, laterGroup.getFirst()), PendingActions.load(pending).ops());
+		assertTrue(Files.exists(later));
+	}
+
+	// review-11 APPLY-6: with the apply lock busy (the last session's helper still running) nothing changes, and a toast
+	// says so.
+	@Test
+	void cancelWithTheLockBusySaysSo() throws Exception {
+		staged();
+		assertNotNull(held());
+
+		try (io.github.chaotix345.rigtune.core.apply.HeldLock ignored = io.github.chaotix345.rigtune.core.apply.HeldLock.hold(
+				io.github.chaotix345.rigtune.core.apply.ApplyLock.defaultPath(config))) {
+			service.heldAction(LauncherRepairService.CANCEL);
+		}
+
+		assertEquals(update.size() + 1, PendingActions.load(pending).ops().size());
+		assertEquals(List.of("rigtune.toast.held.busy.title[]"), toasts.stream().map(LauncherRepairServiceTest::key).toList());
+	}
+
+	// review-11 APPLY-3: the ops a restart never applies (held under LAUNCHER or PENDING), for RealController's count.
+	@Test
+	void theHeldOpsAreTheOnesARestartNeverApplies() throws IOException {
+		staged();
+		assertEquals(List.of(), service.heldOps(), "none before the first read");
+		assertNotNull(held());
+
+		assertEquals(update, service.heldOps());
+		assertEquals(1, service.heldChanges());
+		policy.set(ModFilesPolicy.PENDING);
+		assertEquals(update, service.heldOps());
+		policy.set(ModFilesPolicy.RIGTUNE);
+		assertEquals(List.of(), service.heldOps());
+		assertEquals(0, service.heldChanges());
 	}
 
 	@Test
