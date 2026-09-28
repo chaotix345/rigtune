@@ -22,8 +22,33 @@ public record ApplyResult(String finishedAt, List<OpResult> results) {
 		}
 	}
 
+	// docs/v0.5/SPEC.md 4f: what the next start's toasts count. applied: OK or done already; failed: FAILED (still pending,
+	// retried at exit); dropped: ABANDONED.
+	public record Counts(int applied, int failed, int dropped) {
+		public int total() {
+			return applied + failed + dropped;
+		}
+	}
+
 	public ApplyResult {
 		results = results == null ? List.of() : List.copyOf(results);
+	}
+
+	public Counts counts() {
+		int applied = 0;
+		int failed = 0;
+		int dropped = 0;
+		for (OpResult r : results) {
+			if (r == null) {
+				continue;
+			}
+			switch (r.status() == null ? Status.FAILED : r.status()) {
+				case OK, SKIPPED_ALREADY_DONE -> applied++;
+				case FAILED -> failed++;
+				case ABANDONED -> dropped++;
+			}
+		}
+		return new Counts(applied, failed, dropped);
 	}
 
 	public boolean allSucceeded() {

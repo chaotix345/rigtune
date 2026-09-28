@@ -1,0 +1,8 @@
+{
+  "set": "ws-l2",
+  "checks": [
+    {"class": "PendingActions", "file": "pending.json", "ops": 2},
+    {"class": "ApplyHelper", "file": "pending.json", "appliesGroup": "a1b2c3d4-5e6f-4a0b-8c1d-2e3f4a5b6c02"},
+    {"class": "AwarenessStore", "file": "awareness.json", "keeps": ["dismissed"]}
+  ]
+}

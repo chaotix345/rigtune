@@ -1392,7 +1392,65 @@ public class A11yGameTest implements FabricClientGameTest {
 
 	// ---- WS-L2 (4d, 4g): NoticeScreen with the held-changes and repair notices.
 
+	// X6: both P0.4 notices, as their service builds them, on RigTuneScreen's notice line (the held one comes first: its
+	// priority is higher) and on NoticeScreen, at X12's sizes: each is a Tab stop that narrates its message and detail.
 	private static void walkLauncherNotices(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		var modrinthApp = io.github.chaotix345.rigtune.core.launcher.Launcher.MODRINTH_APP;
+		Notice held = io.github.chaotix345.rigtune.client.launcher.LauncherRepairService.heldNotice(2, ModFilesPolicy.LAUNCHER, modrinthApp);
+		var findings = new io.github.chaotix345.rigtune.core.history.LauncherRepair.Findings(List.of(
+				new io.github.chaotix345.rigtune.core.history.LauncherRepair.Pair("sodium", "sodium-fabric-0.9.1+mc26.2.jar.disabled",
+						"sodium-fabric-0.9.2+mc26.2.jar")), List.of("fastquit-3.1.5+mc26.2.jar"), List.of());
+		Notice repair = io.github.chaotix345.rigtune.client.launcher.LauncherRepairService.repairNotice(findings, modrinthApp);
+		check(repair != null, "the repair notice for a pair in the Modrinth App");
+		LauncherNotices controller = new LauncherNotices(v05.stub(), List.of(held, repair));
+		String heldMessage = Texts.component(held.message()).getString();
+		String repairMessage = Texts.component(repair.message()).getString();
+		try {
+			for (int[] size : V05TestContext.SIZES) {
+				v05.resize(size[0], size[1], size[2]);
+				String name = size[0] + "x" + size[1] + "-scale" + size[2];
+				context.runOnClient(mc -> mc.gui.setScreen(new RigTuneScreen(new TitleScreen(), controller)));
+				context.waitForScreen(RigTuneScreen.class);
+				context.waitTicks(3);
+				String said = tabUntilNarrates(context, "held notice line " + name, heldMessage);
+				check(said.contains("holds these at exit"), "the held notice's detail is narrated with it: " + said);
+				context.takeScreenshot("a11y-launcher-held-" + name);
+				context.runOnClient(mc -> mc.gui.setScreen(new NoticeScreen(new TitleScreen(), controller)));
+				context.waitForScreen(NoticeScreen.class);
+				context.waitTicks(3);
+				tabUntilNarrates(context, "notice screen, held " + name, heldMessage);
+				String repairSaid = tabUntilNarrates(context, "notice screen, repair " + name, repairMessage);
+				check(repairSaid.contains("select the old copy"), "the repair notice's steps are narrated with it: " + repairSaid);
+				context.takeScreenshot("a11y-launcher-notices-" + name);
+			}
+		} finally {
+			v05.resize(854, 480, 2);
+			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
+		}
+	}
+
+	// The stub's canned world with these notices (the walk never acts on them).
+	private static final class LauncherNotices extends ForwardingController {
+		private final List<Notice> notices;
+
+		LauncherNotices(RigTuneController delegate, List<Notice> notices) {
+			super(delegate);
+			this.notices = notices;
+		}
+
+		@Override
+		public List<Notice> notices() {
+			return notices;
+		}
+
+		@Override
+		public void noticeAction(String key, String actionId) {
+		}
+
+		@Override
+		public void dismissNotice(String key) {
+		}
 	}
 
 	// ---- WS-E (3f): high contrast in a running game.
