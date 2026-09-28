@@ -201,7 +201,7 @@ public final class FixText {
 				whole(v.lostAfterPerMinute()));
 	}
 
-	// Every verdict names both rates; "more" leaves the Undo to the player.
+	// Every verdict names both rates; "more" leaves the Undo to the player. "No clear change" says why (STUTTER-5).
 	public static Text verdict(FixComparison.Verdict v) {
 		String after = decimal(v.afterPerMinute());
 		String before = decimal(v.beforePerMinute());
@@ -209,9 +209,17 @@ public final class FixText {
 			case LESS -> Text.of("rigtune.stutter.fix.verdict.less",
 					"Less stutter after the change: %s hitches a minute (was %s). Play sessions differ, so this is a measured comparison, not proof.", after,
 					before);
-			case SAME -> Text.of("rigtune.stutter.fix.verdict.same",
-					"No clear change: %s hitches a minute (was %s). The difference is within how much play sessions vary. Keep the change or undo it.", after,
-					before);
+			case SAME -> v.fewerHitchesMoreLost()
+					? Text.of("rigtune.stutter.fix.verdict.same_more_lost",
+							"No clear improvement: %s hitches a minute (was %s), but more time lost to stutter (%s ms a minute, was %s). Keep the change or undo it.",
+							after, before, whole(v.lostAfterPerMinute()), whole(v.lostBeforePerMinute()))
+					: v.clearButSmall()
+					? Text.of("rigtune.stutter.fix.verdict.same_small",
+							"A small change: %s hitches a minute (was %s). Measurable, but too small to call better or worse. Keep the change or undo it.", after,
+							before)
+					: Text.of("rigtune.stutter.fix.verdict.same",
+							"No clear change: %s hitches a minute (was %s). The difference is within how much play sessions vary. Keep the change or undo it.",
+							after, before);
 			case MORE -> Text.of("rigtune.stutter.fix.verdict.more",
 					"More stutter after the change: %s hitches a minute (was %s). It may be unrelated, since sessions vary; if it stays worse, undo the change.",
 					after, before);

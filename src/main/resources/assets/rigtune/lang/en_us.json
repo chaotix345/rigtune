@@ -712,6 +712,8 @@
 	"rigtune.stutter.fix.verdict.less": "Less stutter after the change: %s hitches a minute (was %s). Play sessions differ, so this is a measured comparison, not proof.",
 	"rigtune.stutter.fix.verdict.more": "More stutter after the change: %s hitches a minute (was %s). It may be unrelated, since sessions vary; if it stays worse, undo the change.",
 	"rigtune.stutter.fix.verdict.same": "No clear change: %s hitches a minute (was %s). The difference is within how much play sessions vary. Keep the change or undo it.",
+	"rigtune.stutter.fix.verdict.same_more_lost": "No clear improvement: %s hitches a minute (was %s), but more time lost to stutter (%s ms a minute, was %s). Keep the change or undo it.",
+	"rigtune.stutter.fix.verdict.same_small": "A small change: %s hitches a minute (was %s). Measurable, but too small to call better or worse. Keep the change or undo it.",
 	"rigtune.stutter.flag.explicit": "System.gc()",
 	"rigtune.stutter.flag.full": "full GC",
 	"rigtune.stutter.flag.stall": "allocation stall",

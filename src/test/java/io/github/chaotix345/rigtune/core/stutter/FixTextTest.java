@@ -9,6 +9,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -73,6 +74,34 @@ class FixTextTest {
 		assertEquals("4.8 hitches a minute", FixText.rate(4.84).english());
 		assertEquals("Time lost to stutter: 1,310 ms a minute before, 80 ms after.",
 				FixText.lost(new FixComparison.Verdict(FixComparison.Kind.LESS, 4.84, 1.2, 1310.4, 80.2, 1, 0.01, 0.99)).english());
+	}
+
+	// review-11 STUTTER-5 (X3): "no clear change" says why. Fewer hitches by "less"'s own measure but more time lost, or a
+	// difference the test finds but too small to call, isn't "within how much play sessions vary"; only a difference
+	// neither p-value finds is.
+	@Test
+	void noClearChangeSaysWhy() {
+		FixComparison.Verdict moreLost = FixComparison.compare(FixComparisonTest.side(20, 600, 1000, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2),
+				FixComparisonTest.side(4, 600, 3000, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0));
+		assertEquals(FixComparison.Kind.SAME, moreLost.kind());
+		String line = FixText.verdict(moreLost).english();
+		assertFalse(line.contains("within how much play sessions vary"), line);
+		assertEquals("No clear improvement: 0.4 hitches a minute (was 2.0), but more time lost to stutter (300 ms a minute, was 100). Keep the change or"
+				+ " undo it.", line);
+
+		FixComparison.Verdict small = FixComparison.compare(new SessionOutcome(1, 3600, 3000, 90_000, 60, 50, 50),
+				new SessionOutcome(1, 3600, 2400, 72_000, 60, 40, 40));
+		assertEquals(FixComparison.Kind.SAME, small.kind());
+		assertTrue(small.pLess() <= FixComparison.ALPHA, "a clear difference: " + small);
+		line = FixText.verdict(small).english();
+		assertFalse(line.contains("within how much play sessions vary"), line);
+		assertEquals("A small change: 40.0 hitches a minute (was 50.0). Measurable, but too small to call better or worse. Keep the change or undo it.",
+				line);
+
+		FixComparison.Verdict noise = FixComparison.compare(FixComparisonTest.side(20, 600, 1000, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2),
+				FixComparisonTest.side(17, 600, 850, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1));
+		assertEquals(FixComparison.Kind.SAME, noise.kind());
+		assertTrue(FixText.verdict(noise).english().contains("within how much play sessions vary"));
 	}
 
 	@Test
