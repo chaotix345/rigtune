@@ -254,6 +254,11 @@ public final class StutterFixService {
 					in.writable());
 			offers = withProfiles(offers, in.configDir());
 		}
+		if (DevFixCalibration.ON) {
+			RigTune.LOGGER.info("Dev fix calibration: evidence: claimed {} %, dominated spikes {}, unmeasured {}, tags {}; outcome {}; excluded {}; offers {}",
+					result.facts().claimedShares(), result.facts().causeSpikes(), result.facts().unmeasured(), result.facts().taggedShares(), outcome, excluded,
+					offers);
+		}
 		return new Fixes(offers, outcome, conditions, excluded, copy.startedAt(), copy.source());
 	}
 

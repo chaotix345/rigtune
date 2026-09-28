@@ -68,6 +68,7 @@ public final class StutterHooks {
 		try {
 			s.tick(minecraft);
 			DevStutter.tick(minecraft, s);
+			DevFixCalibration.tick(minecraft, s);
 			boolean active = StutterMonitor.active();
 			if (active && !wasActive) {
 				hadPlayer = false;
