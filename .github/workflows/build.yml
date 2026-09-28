@@ -29,8 +29,10 @@ concurrency:
 # November 2026.
 env:
   # The game-test split (docs/v0.5/SPEC.md 1g): JVMs per leg, each running a contiguous slice of the classes
-  # (tools/gametest_matrix.py). 1 = off. A dispatch's gametest_parts input overrides it for that run.
-  GAMETEST_PARTS: 1
+  # (tools/gametest_matrix.py). 1 = off. A dispatch's gametest_parts input overrides it for that run. ON since 2026-09-28
+  # (PLAN-3's 12-minute rule): with C09 and C20 in, run 36378908079's 26.2 OpenGL leg ran 692 s of classes before
+  # A11yGameTest and hit the 14-min timeout (docs/v0.5/verification/ci/README.md).
+  GAMETEST_PARTS: 2
 
 jobs:
   java:

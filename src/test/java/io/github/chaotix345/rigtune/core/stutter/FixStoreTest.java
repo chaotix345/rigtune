@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.core.stutter;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import io.github.chaotix345.rigtune.core.history.Journal;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -84,6 +85,16 @@ class FixStoreTest {
 		assertEquals(List.of(compared, dismissed, measuring, staged), back);
 		assertEquals(compared.verdict().kind().id(), onDisk().getAsJsonArray("fixes").get(0).getAsJsonObject().get("verdict").getAsString());
 		assertEquals(1, onDisk().get("formatVersion").getAsInt());
+	}
+
+	// C20 review L12: the mark that a fix expired with its journal entry gone survives the file.
+	@Test
+	void anEntryGoneExpiryRoundTrips() {
+		FixTracker.Record gone = FixTracker.advance(FixTrackerTest.measuring(), Journal.State.OK, List.of(), null, Instant.parse("2026-09-03T09:00:00Z"));
+		assertTrue(store().add(gone));
+		FixTracker.Record back = FixStore.shared(dir).records().getFirst();
+		assertEquals(gone, back);
+		assertFalse(back.undoable());
 	}
 
 	@Test

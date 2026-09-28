@@ -87,4 +87,23 @@ class SessionOutcomeTest {
 		close(80, o.gameplaySeconds());
 		close(90, o.lostMs());
 	}
+
+	// A spike right after a settings change (RW-11's settingsChanged tag) is the change's, on either side: left out of the
+	// hitches and the lost time.
+	@Test
+	void spikesAfterASettingsChangeAreLeftOut() {
+		long start = 1_000 * S;
+		List<Attributor.Attribution> attributions = new ArrayList<>();
+		for (long end : new long[]{start + 5 * S, start + 30 * S, start + 70 * S}) {
+			SpikeDetector.Spike spike = new SpikeDetector.Spike(end, 40 * StutterAnalyzer.MS, 10 * StutterAnalyzer.MS);
+			Set<String> tags = end == start + 30 * S ? Set.of(Attributor.SETTINGS_CHANGED) : Set.of();
+			attributions.add(new Attributor.Attribution(spike, Map.of(), List.of(), tags, spike.lost()));
+		}
+		StutterReport report = new StutterReport(Instant.EPOCH.toString(), StutterReport.MONITOR, "26.2", "G1", 4096, 90, 80, 8000, 100, 50, null, null,
+				null, 90, Map.of(), Map.of(), List.of(), null, List.of(), false, true, 3);
+		SessionOutcome o = SessionOutcome.of(new StutterAnalyzer.Result(report, null, attributions, null), start);
+		assertEquals(2, o.hitches());
+		close(60, o.lostMs());
+		close(80, o.gameplaySeconds());
+	}
 }

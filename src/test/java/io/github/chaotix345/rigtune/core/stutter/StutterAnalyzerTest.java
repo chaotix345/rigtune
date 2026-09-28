@@ -413,6 +413,21 @@ class StutterAnalyzerTest {
 		assertEquals(Map.of(), early.analyze(true).report().tags(), "without the lead, 10 s had passed");
 	}
 
+	// docs/v0.5/SPEC.md 5, AC5.4: the facts count the spikes each cause dominated (at least half the lost time): a GC pause
+	// claiming 62 % of a spike counts, one claiming 41 % doesn't; a spike right after a settings change never counts.
+	@Test
+	void c20CountsTheSpikesEachCauseDominated() {
+		Capture c = new Capture().frames(150, Map.of(20, 80 * MS, 40, 80 * MS, 60, 80 * MS), false);
+		c.gc(c.spikeStarts.get(20) + 5 * MS, 39, GcKind.PAUSE, 0);
+		c.gc(c.spikeStarts.get(40) + 5 * MS, 25, GcKind.PAUSE, 0);
+		c.gc(c.spikeStarts.get(60) + 5 * MS, 39, GcKind.PAUSE, 0);
+		c.rings.event(StutterRings.SETTINGS_CHANGED, c.spikeStarts.get(60) - S, 16);
+		StutterAnalyzer.Result r = c.analyze(true);
+		List<Long> gcShares = r.attributions().stream().map(a -> 100 * a.claims().getOrDefault(Attributor.GC, 0L) / a.spike().lost()).toList();
+		assertTrue(gcShares.get(0) >= 60 && gcShares.get(1) >= 40 && gcShares.get(1) < 50 && gcShares.get(2) >= 60, "GC claimed " + gcShares + " %");
+		assertEquals(Map.of(Attributor.GC, 1, Attributor.UNKNOWN, 1), r.facts().causeSpikes(), "the 41 % spike's rest is unexplained");
+	}
+
 	// v0.5 RW-17: the capture's idle (throttled) time goes into the report; none is null.
 	@Test
 	void theIdleTimeIsReported() {

@@ -20,13 +20,24 @@ import java.util.Set;
 // gc* counts are unknown then), and `unmeasured` names the causes and tags this capture couldn't measure (gc without a
 // calibrated GC clock; chunkLoad/chunkBuild/tick without phase timing; render, which never claims; dh/cpuContention
 // without sampler data). A cause or tag that was measurable and is absent from its map is 0.
+// v0.5 (docs/v0.5/SPEC.md 5, C20): causeSpikes, cause -> the spikes in which it claimed at least half of the lost time
+// (FixEvidence.dominatedSpikes), for causeSpikesAtLeast, which only the rules' stutterFixes evidence uses. In memory only.
 public record StutterFacts(Map<String, Double> claimedShares, Map<String, Double> taggedShares, int gcFullPauses, int gcStalls,
 		int gcExplicitPauses, @Nullable Double liveSetPercent, @Nullable Long heapRaiseRoomMb, @Nullable Double cpuContentionShare,
-		double spikesPerMinute, @Nullable String gcCollector, boolean gcMeasured, Set<String> unmeasured) {
+		double spikesPerMinute, @Nullable String gcCollector, boolean gcMeasured, Set<String> unmeasured, Map<String, Integer> causeSpikes) {
 	public StutterFacts {
 		claimedShares = claimedShares == null ? Map.of() : Map.copyOf(claimedShares);
 		taggedShares = taggedShares == null ? Map.of() : Map.copyOf(taggedShares);
 		unmeasured = unmeasured == null ? Set.of() : Set.copyOf(unmeasured);
+		causeSpikes = causeSpikes == null ? Map.of() : Map.copyOf(causeSpikes);
+	}
+
+	// Without the dominated-spike counts (0.4's shape).
+	public StutterFacts(Map<String, Double> claimedShares, Map<String, Double> taggedShares, int gcFullPauses, int gcStalls, int gcExplicitPauses,
+			@Nullable Double liveSetPercent, @Nullable Long heapRaiseRoomMb, @Nullable Double cpuContentionShare, double spikesPerMinute,
+			@Nullable String gcCollector, boolean gcMeasured, Set<String> unmeasured) {
+		this(claimedShares, taggedShares, gcFullPauses, gcStalls, gcExplicitPauses, liveSetPercent, heapRaiseRoomMb, cpuContentionShare, spikesPerMinute,
+				gcCollector, gcMeasured, unmeasured, Map.of());
 	}
 
 	// Everything measured (the contracts' shape).

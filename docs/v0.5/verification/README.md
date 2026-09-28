@@ -14,6 +14,7 @@ Owner: ws-ci, WS-K (the X4 render-thread flag), the 1h checkpoint after Wave B. 
 ## stutter
 Owner: WS-S (NEW-1's measurement, SD-*, RW-10/11, the DH bucket), WS-S2 (AC5.14's calibration run: `stutter-fixes/`).
 - `new1-generational-shenandoah/`: NEW-1's code-deciding run (AC2S.11): generational Shenandoah's notifications don't tell young from global/old cycles, so its live set is unmeasured (WS-S, 2026-09-27).
+- `stutter-fixes/`: AC5.14's calibration run (real, 26.2, RX 7800 XT, the teleport driver): the Sodium fix was offered from real stutter (chunk building 92 %, 235 spikes it dominated), applied, restarted, compared and undone; verdict "no clear change" (34.08 → 30.55 hitches a minute, φ 1.930, p 0.230); the r17 thresholds stand (WS-S2, 2026-09-28).
 
 ## benchmark
 Owner: WS-B (RW-5..RW-9, RW-15, BH-1/2, L3; AC2B.5's DH run with the P5 agent).
@@ -44,8 +45,8 @@ Owner: WS-T (AC6.16's A/A pairs, NOW and RESTART tries).
   the game-test lock, the player's game not running; `try-it/`): 5 A/A Measure pairs in the benchmark world all within
   the floor, so `MIN_CV` stays 0.025; a NOW try (render distance 12 -> 10 where the player stands) after a warm-up run
   matched a manual Measure pair's sign (-1.9 % against -0.9 %, floor 24.7 %), while one started 20 s after joining did
-  not (a slow, uneven before run: +59 %, held to "no clear change" by its 65.5 % floor; a residual and a known-limit
-  line); a RESTART try of Sodium's defer mode across real restarts, Revert and a second restart left the old value in
+  not (a slow, uneven before run: +59 %, held to "no clear change" by its 65.5 % floor; since
+  then Try It waits a minute for the world to settle: the cold-start rule, ws-t.md); a RESTART try of Sodium's defer mode across real restarts, Revert and a second restart left the old value in
   `sodium-options.json` and History with the apply, the undo and REVERTED. The driver is `client/tryit/TryItDevRun`
   (`RIGTUNE_DEV_TRYIT`); details and logs in `try-it/README.md`.
 - WS-T (CI, every push): `TryItGameTest` blocks 1-7 on the three legs (network off; no FPS number or live verdict kind

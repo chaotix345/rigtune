@@ -14,6 +14,7 @@ import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.model.TierResult;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import io.github.chaotix345.rigtune.core.stutter.Attributor;
+import io.github.chaotix345.rigtune.core.stutter.FixEvidence;
 import io.github.chaotix345.rigtune.core.stutter.StutterFacts;
 import net.fabricmc.loader.api.SemanticVersion;
 import net.fabricmc.loader.api.Version;
@@ -366,10 +367,9 @@ public final class ConditionEvaluator {
 		return and(t, () -> c.causeSpikesAtLeast == null ? TRUE : causeSpikes(c.causeSpikesAtLeast, facts));
 	}
 
-	// v0.5 (docs/v0.5/SPEC.md 5): causeSpikesAtLeast. Contracts stub (WS-K): UNKNOWN, so a fix's evidence never offers,
-	// until WS-S2 counts the spikes each cause dominated (StutterFacts) and evaluates it here.
+	// v0.5 (docs/v0.5/SPEC.md 5): causeSpikesAtLeast, against the spikes each cause dominated (FixEvidence).
 	private static Truth causeSpikes(Map<String, String> wanted, StutterFacts facts) {
-		return UNKNOWN;
+		return FixEvidence.causeSpikesAtLeast(wanted, facts.causeSpikes(), facts.unmeasured());
 	}
 
 	private static Truth gcCount(StutterFacts facts, int count, int threshold) {
