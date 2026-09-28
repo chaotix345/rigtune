@@ -131,6 +131,29 @@ class FootprintBudgetsTest {
 		}
 	}
 
+	// Every per-call ns budget: v0.5's six, and the per-tick listeners' own keys (X4.4).
+	private static final List<String> PER_CALL_KEYS = List.of("frameHookNsPerCallOff", "frameHookNsPerCallOn", "frameHookNsPerCallOnPhases",
+			"tickHookNsPerCall", "tickHookNsPerCallWorld", "tickHookNsPerCallOn", "settingsCheckNsPerCall", "tryItTickNsPerCall",
+			"serverProfileTickNsPerCall", "launcherLeftoverTickNsPerCall");
+
+	// v0.5 SPEC 1h (AC1h.1): the post-Wave-B checkpoint re-applied min(ceiling, 4 x max observed) to every per-call ns budget,
+	// the new listeners' keys included, each from at least 20 CI runs (their count and the run with the maximum recorded, the
+	// checkpoint named in the file's about); nothing else changed.
+	@Test
+	void everyPerCallBudgetComesFromTheCheckpoint() throws IOException {
+		JsonObject file = JsonParser.parseString(Files.readString(RepoFiles.resolve(FootprintBudgets.REPO_PATH), StandardCharsets.UTF_8))
+				.getAsJsonObject();
+		JsonObject budgets = file.getAsJsonObject("budgets");
+		assertEquals(PER_CALL_KEYS.stream().sorted().toList(), budgets.keySet().stream().filter(k -> k.contains("NsPerCall")).sorted().toList());
+		for (String key : PER_CALL_KEYS) {
+			JsonObject b = budgets.getAsJsonObject(key);
+			assertEquals("4x", b.get("rule").getAsString(), key);
+			assertTrue(b.get("observedRuns").getAsInt() >= 20, key + ": " + b.get("observedRuns") + " runs");
+			assertTrue(b.get("observedMaxRun").getAsLong() > 0, key + ": the run with the maximum");
+		}
+		assertTrue(file.get("about").getAsString().contains("post-Wave-B checkpoint"), "the about names the checkpoint");
+	}
+
 	// v0.5 SPEC AC1d.1: the six per-call ns limits are min(ceiling, 4 x the recorded max observed) (user-approved, ws-ci);
 	// every other timing limit stays min(ceiling, 2 x its recorded max) (docs/v0.4/verification/footprint/README.md).
 	@Test
@@ -157,8 +180,7 @@ class FootprintBudgetsTest {
 			rules.put(entry.getKey(), rule);
 		});
 		Map<String, String> expected = new TreeMap<>();
-		for (String key : List.of("frameHookNsPerCallOff", "frameHookNsPerCallOn", "frameHookNsPerCallOnPhases", "tickHookNsPerCall",
-				"tickHookNsPerCallWorld", "tickHookNsPerCallOn")) {
+		for (String key : PER_CALL_KEYS) {
 			expected.put(key, "4x");
 		}
 		for (String key : List.of("renderThreadInitWallMs", "renderThreadInitCpuMs", "clientStartedWallMs", "workerCpuMs5s", "samplerCpuMsPer60s")) {
