@@ -44,7 +44,7 @@ public final class FixHold {
 				case COMPARED -> r.verdict() == null || r.verdict().kind() != FixComparison.Kind.MORE;
 				case UNDONE, NOT_APPLIED, REPLACED -> false;
 			};
-			if (inEffect) {
+			if (inEffect && !r.neverApplied()) {
 				out.add(new Hold(r.key(), r.from(), r.to(), FixText.day(r.appliedAt(), zone), r.state() == FixTracker.State.STAGED));
 			}
 		}

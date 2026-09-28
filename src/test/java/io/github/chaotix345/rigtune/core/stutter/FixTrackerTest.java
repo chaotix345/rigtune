@@ -206,6 +206,24 @@ class FixTrackerTest {
 		assertEquals(16, ready.before().hitches());
 	}
 
+	// review-13 R13-1: a fix chosen but never applied that expires (14 days, or 5 skipped baseline sessions) or whose key the
+	// player changed meanwhile has nothing to undo and holds nothing: no history.json entry was ever made for it.
+	@Test
+	void aChosenFixThatWasNeverAppliedHasNothingToUndoOrHold() {
+		FixTracker.Record r = baseline();
+		FixTracker.Record old = FixTracker.advance(r, Journal.State.OK, List.of(), null, r.appliedAt().plus(FixTracker.MAX_AGE).plusSeconds(1));
+		FixTracker.Record skipped = r;
+		for (int i = 0; i < FixTracker.MAX_SKIPPED; i++) {
+			skipped = FixTracker.advance(skipped, Journal.State.OK, List.of(), session(10 + i * 10, 200, 18, RD, "12"), at(10 + i * 10));
+		}
+		FixTracker.Record replaced = FixTracker.advance(r, Journal.State.OK, List.of(), session(10, 400, 18, RD, "16"), at(10));
+		for (FixTracker.Record x : List.of(old, skipped, replaced)) {
+			assertTrue(x.state() == FixTracker.State.EXPIRED || x.state() == FixTracker.State.REPLACED, x.toString());
+			assertFalse(x.undoable(), "nothing to undo: " + x);
+			assertEquals(List.of(), FixHold.holds(List.of(x), java.time.ZoneOffset.UTC), "nothing held: " + x);
+		}
+	}
+
 	// A baseline session that started before the choice (the one that led to the offer) never counts; a short one, an
 	// excluded or idle one is skipped with its reason; the key changed by hand meanwhile ends it (replaced).
 	@Test
