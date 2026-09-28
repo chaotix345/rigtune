@@ -226,6 +226,11 @@ class BuildWorkflowTests(unittest.TestCase):
         keep = run.index("build/footprint-fresh.json")
         self.assertLess(keep, run.index(":runProductionClientGameTest"))
         self.assertIn("-Drigtune.footprint.returning=true -Drigtune.footprint.fresh=$PWD/build/footprint-fresh.json", run)
+        # One re-measure in a new JVM, only when the first run failed a returningAdded* budget (run 36435655998).
+        self.assertIn("set -euo pipefail", run)
+        self.assertEqual(1, run.count(":runProductionClientGameTest"))
+        self.assertIn('grep -q "footprint budget returningAdded" build/returning-1.log || exit 1', run)
+        self.assertEqual(["returning 1", "returning 2"], re.findall(r"returning \d", run))
 
 
 class StreakWorkflowsTests(unittest.TestCase):
