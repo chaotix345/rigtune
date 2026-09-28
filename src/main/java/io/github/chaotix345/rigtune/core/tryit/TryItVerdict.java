@@ -48,8 +48,9 @@ public final class TryItVerdict {
 		}
 
 		record Excluded(Why why) implements Cause {
+			// TERRAIN_LOADING: a run's settle timed out on terrain that hadn't loaded (TryIt.unsettledRuns, review BENCH-2).
 			public enum Why {
-				FRESH_WORLD, DH_GENERATING
+				FRESH_WORLD, DH_GENERATING, TERRAIN_LOADING
 			}
 		}
 
@@ -148,6 +149,9 @@ public final class TryItVerdict {
 		}
 		if (generating(before) || generating(after)) {
 			out.add(new Cause.Excluded(Cause.Excluded.Why.DH_GENERATING));
+		}
+		if (t.unsettledRuns().contains(before.id()) || t.unsettledRuns().contains(after.id())) {
+			out.add(new Cause.Excluded(Cause.Excluded.Why.TERRAIN_LOADING));
 		}
 		if (t.scene() == BenchmarkRequest.Scene.CURRENT && (t.beforeSpot() == null || !t.beforeSpot().equals(t.afterSpot()))) {
 			out.add(new Cause.Moved());
