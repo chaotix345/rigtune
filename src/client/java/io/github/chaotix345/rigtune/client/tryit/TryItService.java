@@ -106,6 +106,9 @@ public final class TryItService {
 		// Which local player that is (its identity hash; a new one after a join, a dimension change or a respawn).
 		int playerId();
 
+		// A RigTune screen pauses this game: singleplayer not opened to LAN (the integrated server stops then too).
+		boolean pausesWithScreens();
+
 		// System.nanoTime().
 		long nanos();
 
@@ -189,6 +192,7 @@ public final class TryItService {
 	// pending.json's answer (review APPLY-4) and the stamp it was read at.
 	private volatile @Nullable Object pendingStamp;
 	private volatile boolean pendingRunsAtExit;
+	private volatile boolean pendingServedStale;
 	private final AtomicBoolean pendingReading = new AtomicBoolean();
 	// This launch's first title screen (Game.nanos()), -1 before it: the benchmark world's settle counts from it.
 	private volatile long readyNanos = -1;
@@ -226,6 +230,7 @@ public final class TryItService {
 		if (stamp.equals(pendingStamp)) {
 			return pendingRunsAtExit;
 		}
+		pendingServedStale = true;
 		if (pendingReading.compareAndSet(false, true)) {
 			io(this::readPending);
 		}
@@ -240,6 +245,13 @@ public final class TryItService {
 				pendingRunsAtExit = stamp != null && game.pendingRunsAtExit();
 				pendingStamp = stamp;
 			}
+			// Review R12FEAT-8: "waiting" was answered for the changed file, and nothing waits: a new view, so an open
+			// TryItScreen or Preview rebuilds without the stale line.
+			if (pendingServedStale && !pendingRunsAtExit) {
+				TryItView shown = view;
+				view = shown.withNote(shown.note());
+			}
+			pendingServedStale = false;
 		} finally {
 			pendingReading.set(false);
 		}
@@ -273,7 +285,10 @@ public final class TryItService {
 				settleSince = now - ticks * 50_000_000L;
 			}
 			settlePlayerTicks = ticks;
-			return Math.min(seconds(need * 1_000_000_000L - ticks * 50_000_000L), seconds(need * 1_000_000_000L - (now - settleSince)));
+			int byTicks = seconds(need * 1_000_000_000L - ticks * 50_000_000L);
+			// Review R12FEAT-4: in singleplayer a RigTune screen pauses the integrated server too (no chunk is sent), so
+			// only the player's unpaused ticks count there.
+			return game.pausesWithScreens() ? byTicks : Math.min(byTicks, seconds(need * 1_000_000_000L - (now - settleSince)));
 		}
 		long ready = readyNanos;
 		return ready < 0 ? 0 : seconds(need * 1_000_000_000L - (now - ready));
@@ -575,6 +590,13 @@ public final class TryItService {
 					game.openScreen();
 					return true;
 				}
+				if (unsettled && t.kind() == TryIt.Kind.RESTART) {
+					// Review R12FEAT-5: likewise for a before run whose settle timed out on terrain that hadn't loaded.
+					closeHere(t, TryIt.Decision.CANCELLED, new TryItView(Stage.STOPPED_BEFORE, t, record, null, null, null, null, true,
+							TryItText.terrainLoadingBefore()));
+					game.openScreen();
+					return true;
+				}
 				if (unsettled) {
 					unsettled(t, record);
 				}
@@ -639,10 +661,11 @@ public final class TryItService {
 			Map<String, String> settings = game.snapshot();
 			if (t.to().equals(settings.get(t.key()))) {
 				// Review BENCH-5: nothing journaled, but the option changed (History's write failed and only logged): the
-				// after snapshot is the proof, so the try stays open as ENTRY_MISSING (Keep only), with a note.
+				// after snapshot is the proof, so the try stays open as ENTRY_MISSING (Keep only), marked unrecorded.
 				io(() -> {
-					TryItStore.shared(game.configDir()).change(t.id(), x -> x.withAfter(settings, SESSION, null));
-					view = deriveNow().withNote(TryItText.unrecorded());
+					// Review R12FEAT-7: recorded on the try, so the screen says so in any session (TryItText's ENTRY_MISSING line).
+					TryItStore.shared(game.configDir()).change(t.id(), x -> x.withAfter(settings, SESSION, null).withUnrecorded());
+					deriveNow();
 					game.later(game::openScreen);
 				});
 				return;
@@ -851,6 +874,12 @@ public final class TryItService {
 		public int playerTicks() {
 			Minecraft minecraft = minecraft();
 			return minecraft.player == null ? -1 : minecraft.player.tickCount;
+		}
+
+		@Override
+		public boolean pausesWithScreens() {
+			Minecraft minecraft = minecraft();
+			return minecraft.getSingleplayerServer() != null && !minecraft.getSingleplayerServer().isPublished();
 		}
 
 		@Override

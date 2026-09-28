@@ -682,16 +682,18 @@ public final class BenchmarkController {
 			return;
 		}
 		if (outcome.cancelled()) {
-			// WS-T, review r11 BENCH-6: a failed restore is said before Try It may claim the run (as show() puts its toast
-			// before the hook).
-			if (!outcome.restoreOk() && minecraft.player != null) {
-				minecraft.player.sendOverlayMessage(Component.translatable("rigtune.benchmark.cancelled.restore_failed"));
-			}
 			if (claimed(outcome)) {
+				// WS-T, reviews r11 BENCH-6 and r12 R12FEAT-3: Try It's screen opens over the action bar at once, so a failed
+				// restore is said with show()'s toast, which draws above screens.
+				if (!outcome.restoreOk()) {
+					SystemToast.add(minecraft.gui.toastManager(), TOAST_ID, Component.translatable("rigtune.benchmark.restore_failed.title"),
+							Component.translatable("rigtune.benchmark.restore_failed"));
+				}
 				return;
 			}
-			if (outcome.restoreOk() && minecraft.player != null) {
-				minecraft.player.sendOverlayMessage(Component.translatable(outcome.throttled() ? "rigtune.benchmark.throttled" : "rigtune.benchmark.cancelled"));
+			if (minecraft.player != null) {
+				minecraft.player.sendOverlayMessage(Component.translatable(!outcome.restoreOk() ? "rigtune.benchmark.cancelled.restore_failed"
+						: outcome.throttled() ? "rigtune.benchmark.throttled" : "rigtune.benchmark.cancelled"));
 			}
 			return;
 		}

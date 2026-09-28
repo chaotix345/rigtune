@@ -25,12 +25,13 @@ import java.util.UUID;
 // stood at Start; settingsAfter, afterSession and afterSpot: the same when the newest after run started (null before
 // one has; the client takes them only once the try's History entry exists); afterRunId: the after run whose verdict was
 // shown (its regression notice acknowledged); unsettledRuns: the pair's runs whose settle timed out on terrain that hadn't
-// loaded (review BENCH-2: no verdict with one of them; benchmarks.json has no field for it). A try that's closed moves to
-// `recent` as a Closed row.
+// loaded (review BENCH-2: no verdict with one of them; benchmarks.json has no field for it); unrecorded: the change is in
+// effect but History's write failed, so there's no entry to revert (review BENCH-5, R12FEAT-7). A try that's closed moves
+// to `recent` as a Closed row.
 public record TryIt(String id, String pairId, String entryId, @Nullable String recommendationId, String key, @Nullable String from,
 		@Nullable String to, Kind kind, BenchmarkRequest.Scene scene, @Nullable String startedAt, String session, @Nullable String rigtuneVersion,
 		@Nullable String mcVersion, Map<String, String> settingsBefore, @Nullable Spot beforeSpot, @Nullable Map<String, String> settingsAfter,
-		@Nullable String afterSession, @Nullable Spot afterSpot, @Nullable String afterRunId, List<String> unsettledRuns) {
+		@Nullable String afterSession, @Nullable Spot afterSpot, @Nullable String afterRunId, List<String> unsettledRuns, boolean unrecorded) {
 	public static final String ID_PREFIX = "t-";
 	public static final String PAIR_PREFIX = "tryit-";
 
@@ -128,7 +129,7 @@ public record TryIt(String id, String pairId, String entryId, @Nullable String r
 			@Nullable String mcVersion, Map<String, String> settingsBefore, @Nullable Spot beforeSpot, @Nullable Map<String, String> settingsAfter,
 			@Nullable String afterSession, @Nullable Spot afterSpot, @Nullable String afterRunId) {
 		this(id, pairId, entryId, recommendationId, key, from, to, kind, scene, startedAt, session, rigtuneVersion, mcVersion, settingsBefore,
-				beforeSpot, settingsAfter, afterSession, afterSpot, afterRunId, List.of());
+				beforeSpot, settingsAfter, afterSession, afterSpot, afterRunId, List.of(), false);
 	}
 
 	// A new try for the setting key (from -> to), with new ids. spot: where the player stands (a CURRENT-scene try), else
@@ -143,24 +144,30 @@ public record TryIt(String id, String pairId, String entryId, @Nullable String r
 	// When an after run is queued: the managed settings and the session (the spot: withAfterSpot, as the run starts).
 	public TryIt withAfter(Map<String, String> settings, String session, @Nullable Spot spot) {
 		return new TryIt(id, pairId, entryId, recommendationId, key, from, to, kind, scene, startedAt, this.session, rigtuneVersion, mcVersion,
-				settingsBefore, beforeSpot, settings, session, spot, afterRunId, unsettledRuns);
+				settingsBefore, beforeSpot, settings, session, spot, afterRunId, unsettledRuns, unrecorded);
 	}
 
 	// Where the player stood right before the before run started (a CURRENT-scene try).
 	public TryIt withBeforeSpot(@Nullable Spot spot) {
 		return new TryIt(id, pairId, entryId, recommendationId, key, from, to, kind, scene, startedAt, session, rigtuneVersion, mcVersion,
-				settingsBefore, spot, settingsAfter, afterSession, afterSpot, afterRunId, unsettledRuns);
+				settingsBefore, spot, settingsAfter, afterSession, afterSpot, afterRunId, unsettledRuns, unrecorded);
 	}
 
 	// Where the player stood right before the after run started.
 	public TryIt withAfterSpot(@Nullable Spot spot) {
 		return new TryIt(id, pairId, entryId, recommendationId, key, from, to, kind, scene, startedAt, session, rigtuneVersion, mcVersion,
-				settingsBefore, beforeSpot, settingsAfter, afterSession, spot, afterRunId, unsettledRuns);
+				settingsBefore, beforeSpot, settingsAfter, afterSession, spot, afterRunId, unsettledRuns, unrecorded);
 	}
 
 	public TryIt withAfterRun(String runId) {
 		return new TryIt(id, pairId, entryId, recommendationId, key, from, to, kind, scene, startedAt, session, rigtuneVersion, mcVersion,
-				settingsBefore, beforeSpot, settingsAfter, afterSession, afterSpot, runId, unsettledRuns);
+				settingsBefore, beforeSpot, settingsAfter, afterSession, afterSpot, runId, unsettledRuns, unrecorded);
+	}
+
+	// The change is in effect, but History's write failed (review BENCH-5).
+	public TryIt withUnrecorded() {
+		return new TryIt(id, pairId, entryId, recommendationId, key, from, to, kind, scene, startedAt, session, rigtuneVersion, mcVersion,
+				settingsBefore, beforeSpot, settingsAfter, afterSession, afterSpot, afterRunId, unsettledRuns, true);
 	}
 
 	// A run of the pair whose settle timed out on terrain that hadn't loaded.
@@ -171,7 +178,7 @@ public record TryIt(String id, String pairId, String entryId, @Nullable String r
 		List<String> runs = new ArrayList<>(unsettledRuns);
 		runs.add(runId);
 		return new TryIt(id, pairId, entryId, recommendationId, key, from, to, kind, scene, startedAt, session, rigtuneVersion, mcVersion,
-				settingsBefore, beforeSpot, settingsAfter, afterSession, afterSpot, afterRunId, runs);
+				settingsBefore, beforeSpot, settingsAfter, afterSession, afterSpot, afterRunId, runs, unrecorded);
 	}
 
 	// previous: this try's object as it is in the file, whose fields (and snapshot and spot entries) this version doesn't
@@ -201,6 +208,11 @@ public record TryIt(String id, String pairId, String entryId, @Nullable String r
 		put(out, "afterSession", afterSession);
 		spot(out, "afterSpot", afterSpot);
 		put(out, "afterRunId", afterRunId);
+		if (unrecorded) {
+			out.addProperty("unrecorded", true);
+		} else {
+			out.remove("unrecorded");
+		}
 		if (unsettledRuns.isEmpty()) {
 			out.remove("unsettledRuns");
 		} else {
@@ -231,7 +243,8 @@ public record TryIt(String id, String pairId, String entryId, @Nullable String r
 		Map<String, String> after = o.get("settingsAfter") instanceof JsonObject ? strings(o.get("settingsAfter")) : null;
 		return new TryIt(id, pairId, entryId, text(o, "recommendationId"), key, text(o, "from"), text(o, "to"), kind, scene, text(o, "startedAt"),
 				session, text(o, "rigtuneVersion"), text(o, "mcVersion"), strings(o.get("settingsBefore")), Spot.fromJson(o.get("beforeSpot")), after,
-				text(o, "afterSession"), Spot.fromJson(o.get("afterSpot")), text(o, "afterRunId"), texts(o.get("unsettledRuns")));
+				text(o, "afterSession"), Spot.fromJson(o.get("afterSpot")), text(o, "afterRunId"), texts(o.get("unsettledRuns")),
+				o.get("unrecorded") instanceof JsonPrimitive p && p.isBoolean() && p.getAsBoolean());
 	}
 
 	private static List<String> texts(@Nullable JsonElement element) {

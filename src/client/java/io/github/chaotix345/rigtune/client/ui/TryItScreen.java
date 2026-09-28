@@ -57,9 +57,16 @@ public class TryItScreen extends Screen {
 	// itself derives first anyway).
 	private boolean deriving;
 	private int derivingTicks;
-	// Start or Measure now waits for the player's world to settle: the status line shown, and the ticks since it was.
+	// Start or Measure now waits for the player's world to settle: the status line shown, its scene, and the ticks since
+	// it was last asked.
 	private @Nullable Text settle;
+	private @Nullable Scene settleScene;
 	private int settleTicks;
+	// Kept across a rebuild (review R12FEAT-2: the countdown's): the list's scroll and a focused button (X6, X12).
+	private double scroll;
+	private int focusedFooter = -1;
+	private boolean focusedScene;
+	private @Nullable CycleButton<Scene> sceneButton;
 	private final List<Button> footer = new ArrayList<>();
 
 	// rec: the Preview's ticked setting (the intro), or null to show the open try.
@@ -102,7 +109,9 @@ public class TryItScreen extends Screen {
 	protected void init() {
 		shown = controller.tryIt();
 		settle = null;
+		settleScene = null;
 		settleTicks = 0;
+		sceneButton = null;
 		footer.clear();
 		int column = Math.min(width - 32, 480);
 		int top = TOP;
@@ -119,7 +128,7 @@ public class TryItScreen extends Screen {
 			if (tried == TryIt.Kind.NOW) {
 				int buttonWidth = Math.min(200, width - 16);
 				top += 4;
-				addRenderableWidget(CycleButton.builder((Scene s) -> Component.translatable(s == Scene.CURRENT ? "rigtune.benchmark.scene.current"
+				sceneButton = addRenderableWidget(CycleButton.builder((Scene s) -> Component.translatable(s == Scene.CURRENT ? "rigtune.benchmark.scene.current"
 								: "rigtune.benchmark.scene.benchmark_world"), scene)
 						.withValues(Triable.scenes(tried))
 						.create((width - buttonWidth) / 2, TOP, buttonWidth, 20, Component.translatable("rigtune.benchmark.menu.scene"), (button, value) -> {
@@ -155,6 +164,7 @@ public class TryItScreen extends Screen {
 			list.add(Texts.component(line.text()), color(line.tone()));
 		}
 		addRenderableWidget(list);
+		list.setScrollAmount(scroll);
 		layoutFooter(footerTop);
 		if (deriving) {
 			controller.tryItRefresh();
@@ -165,6 +175,7 @@ public class TryItScreen extends Screen {
 		Text refused = controller.tryItRefusal(rec);
 		String unavailable = refused == null ? BenchmarkController.unavailable(minecraft, scene) : null;
 		settle = refused == null && unavailable == null ? controller.tryItSettling(scene) : null;
+		settleScene = scene;
 		Button start = button(Component.translatable("rigtune.tryit.action.start"), b -> {
 			Component answer = controller.startTryIt(rec, scene);
 			status = answer.getString().isEmpty() ? null : answer;
@@ -186,6 +197,7 @@ public class TryItScreen extends Screen {
 							: "rigtune.tryit.action.measure_again"), b -> controller.tryItMeasureNow());
 					String unavailable = t == null ? null : BenchmarkController.unavailable(minecraft, t.scene());
 					settle = t == null || unavailable != null ? null : controller.tryItSettling(t.scene());
+					settleScene = t == null ? null : t.scene();
 					measure.active = unavailable == null && settle == null;
 					if (unavailable != null) {
 						measure.setTooltip(Tooltip.create(Texts.component(TryItText.sceneRefusal(unavailable))));
@@ -251,22 +263,40 @@ public class TryItScreen extends Screen {
 	@Override
 	public void tick() {
 		super.tick();
-		if (!intro() && controller.tryIt() != shown || intro() && controller.tryIt().tryIt() != null || deriving && ++derivingTicks > 40) {
+		// Any new view (a try appearing over the intro included, or review R12FEAT-8's changed pending answer).
+		if (controller.tryIt() != shown || deriving && ++derivingTicks > 40) {
 			deriving = false;
 			rebuildWidgets();
 		} else if (settle != null && ++settleTicks >= 20) {
-			rebuildWidgets();
+			// Once a second: rebuilt only when the count changed (a paused singleplayer game's doesn't), focus and scroll kept.
+			settleTicks = 0;
+			if (settleScene == null || !settle.equals(controller.tryItSettling(settleScene))) {
+				rebuildWidgets();
+			}
 		}
 	}
 
 	@Override
 	protected void rebuildWidgets() {
 		focusedRow = list == null ? -1 : list.focusedRow();
+		scroll = list == null ? 0 : list.scrollAmount();
+		GuiEventListener focused = getFocused();
+		focusedFooter = focused instanceof Button button ? footer.indexOf(button) : -1;
+		focusedScene = focused != null && focused == sceneButton;
 		super.rebuildWidgets();
 	}
 
 	@Override
 	protected void setInitialFocus() {
+		GuiEventListener kept = focusedFooter >= 0 && focusedFooter < footer.size() && footer.get(focusedFooter).active ? footer.get(focusedFooter)
+				: focusedScene ? sceneButton : null;
+		focusedFooter = -1;
+		focusedScene = false;
+		if (kept != null) {
+			focusedRow = -1;
+			changeFocus(ComponentPath.path(this, ComponentPath.leaf(kept)));
+			return;
+		}
 		ComponentPath path = RowList.initialFocus(this, list, focusedRow, minecraft.getLastInputType().isKeyboard());
 		focusedRow = -1;
 		if (path != null) {

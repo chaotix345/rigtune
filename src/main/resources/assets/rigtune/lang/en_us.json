@@ -402,6 +402,7 @@
 	"rigtune.tryit.lost.start": "The measurement couldn't start: %s",
 	"rigtune.tryit.note.dh_generating": "Distant Horizons was generating terrain during the first measurement, so nothing was changed. Start the try again once it has finished.",
 	"rigtune.tryit.note.fresh_world": "The benchmark world was just created, and its first run can't be compared, so nothing was changed. Start the try again for a verdict.",
+	"rigtune.tryit.note.terrain_loading": "The terrain hadn't finished loading during the first measurement, so nothing was changed. Start the try again.",
 	"rigtune.tryit.note.unrecorded": "History couldn't record this change (see the log), so it can't be reverted from here. It is applied.",
 	"rigtune.tryit.notice.decide": "Try it: %s needs your decision.",
 	"rigtune.tryit.notice.ended": "Try it: your try of %s has ended. Open it to see how.",
