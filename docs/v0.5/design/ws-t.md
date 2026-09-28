@@ -236,19 +236,15 @@ AC6.12's own keys (`tryItTickNsPerCall`, `tryItTickAllocBytes`) go to the post-W
 - **`RigTuneController.tryItRefresh()`** (a default no-op; ForwardingController forwards): TryItScreen asks for a derive
   when it comes back from Undo this (review M5).
 - **Keep's toast** from the notice (L11): the notice line has no status row.
-- **`TryItDevRun`** (434 lines, `client/tryit/`): AC6.16's driver ships in the jar, inert: it's loaded only when the
-  environment variable is set. The coordinator may prefer it removed before the RC (it's only needed to repeat
-  AC6.16); nothing else refers to it but that one guarded call.
+- **`TryItDevRun`** (`client/tryit/`): AC6.16's driver ships in the jar and stays (the coordinator's decision,
+  2026-09-28, as DevStutter and WS-S2's DevFixCalibration): inert unless `RIGTUNE_DEV_TRYIT` is set. Its one reference,
+  in `TryItService.derive`, checks the variable first (`System.getenv(TryItDevRun.ENV)`, a compile-time constant), so the
+  class never loads otherwise. The Phase 6 security review looks at the three development hooks together.
 - **Footprint keys** to the 1h checkpoint (above), as WS-S did for RW-11.
 
 ## Residuals and UNVERIFIED
 
-- **AC6.16's cold start (a residual for the coordinator):** a NOW try started 20 s after joining a world had a slow,
-  uneven before run (+59 % against the manual pair's -1.3 %); its CV held the verdict to "no clear change". A slow but
-  steady first run would not be caught: 0.5 doesn't check how long the player has been in the world before Start. The
-  README line "play a minute first" (Docs) covers it for 0.5; a later version could wait for the world to settle or run
-  a warm-up pass before a CURRENT-scene before run. docs/v0.5/verification/try-it/README.md has the numbers.
-- **`TryItDevRun` in the jar** (Deviations): the coordinator's call whether it stays for the RC.
+- **AC6.16's cold start**: fixed by the cold-start rule (below).
 - **UNVERIFIED by WS-T:** the real restart with a Distant Horizons or an Iris key (only Sodium ran for real; the other
   two are the same PATCH_JSON path in the tests); REMOTE_SD on a real server (unit only); AC6.16 ran in the 854x480
   development window, not full screen, and in the development client, not the release jar.
@@ -272,10 +268,15 @@ AC6.12's own keys (`tryItTickNsPerCall`, `tryItTickAllocBytes`) go to the post-W
 - **README** (features): "Try it (measured): one setting at a time, measured before and after, with a noise floor so a
   small wobble doesn't read as a gain." **Known limits**: "A try compares two runs about a minute apart; a change inside
   the noise floor (at least 5 %, more when the runs varied) says 'no clear change'. In your own world, time of day,
-  weather and mobs aren't controlled; the benchmark world is the fairer place. Right after joining a world the first
-  measurement can be slow and uneven (chunks still loading): play a minute before a try where you stand. The graphics
-  preset, the FPS limit, VSync and the inactivity limit can't be tried. One try at a time; a try that needs a restart
-  waits for it."
+  weather and mobs aren't controlled; the benchmark world is the fairer place. The graphics preset, the FPS limit, VSync
+  and the inactivity limit can't be tried. One try at a time; a try that needs a restart waits for it."
+- **Help / README (Try it, product behaviour)**: "Try it waits until the game has settled, because the first minute in
+  a world is slow and uneven (chunks still loading). Where you stand, Start and Measure now become available once
+  you've played about a minute in that world and dimension (the button says how long is left; changing dimension or
+  respawning starts the minute again). In the benchmark world nothing is refused: the measurement waits until about a
+  minute after the game started, then runs by itself."
+- **CHANGELOG [0.5.0]** (add to the Try it line): "Try it waits about a minute after you join a world, change dimension
+  or restart the game before it measures, so a cold start doesn't read as a gain."
 
 ## AC table
 
@@ -296,5 +297,60 @@ AC6.12's own keys (`tryItTickNsPerCall`, `tryItTickAllocBytes`) go to the post-W
 | AC6.13 | verified | block 5 (the verdict screens at 640x480, 854x480, 1280x720 at scale 2 and 1280x720@3), `A11yGameTest.walkTryIt`; colours through `Palette.of` |
 | AC6.14 | verified | TryItGameTest on 3 legs, network off, no FPS number or live verdict kind asserted |
 | AC6.15 | verified | block 4 (the after run's regression acknowledged when the verdict is first shown) |
-| AC6.16 | verified (the NOW part by the warm run; the cold one is a residual) | docs/v0.5/verification/try-it/: A/A 5 of 5 within the floor (`MIN_CV` stays 0.025); NOW -1.9 % against the manual pair's -0.9 % (floor 24.7 %); RESTART: the old value back in sodium-options.json, History apply/undo/REVERTED |
+| AC6.16 | verified (the NOW part by the warm run; the cold run's finding became the cold-start rule, below) | docs/v0.5/verification/try-it/: A/A 5 of 5 within the floor (`MIN_CV` stays 0.025); NOW -1.9 % against the manual pair's -0.9 % (floor 24.7 %); RESTART: the old value back in sodium-options.json, History apply/undo/REVERTED |
 | AC6.17 | text ready (review) | Docs, above |
+
+## Follow-up: the cold-start rule (branch `fix/v05-try-it-2`, the coordinator's decision of 2026-09-28)
+
+AC6.16's first NOW run (a try 20 s after joining: +59 % against the manual pair's -1.3 %, held to "no clear change"
+only by its CV) showed that a slow but steady first run would read as a gain. The coordinator's decision (a SPEC
+amendment): Try It measures only in a settled game.
+
+- **The player's own world (CURRENT):** Start (TryItScreen's intro) and Measure now (TryItScreen's footer and the
+  TRY_IT notice's action) refuse until the player has been in this world and dimension for 60 s, with the status line
+  "Try It measures better once the world has settled. Play for about a minute first (N s left)." The time is the local
+  player's age: a join, a dimension change or a respawn creates a new `LocalPlayer` (checked in 26.2's
+  `ClientPacketListener.handleRespawn`), so each starts the minute again. It counts by the player's ticks or by the
+  clock since RigTune first saw that player (back-dated by its ticks then), whichever is further: a RigTune screen pauses
+  a singleplayer game (no entity ticks while paused, checked in `Minecraft.tick`) while the world keeps loading behind
+  it, so the count goes on with the screen open. No listener and no per-tick work: it's read when a screen asks. TryItScreen shows the line above the steps with Start or Measure now inactive (the line
+  is also the button's tooltip) and rebuilds once a second while it's shown, so the count goes down and the button comes
+  back by itself; the notice's Measure now answers with the line as a toast. Preview's [Try it (measured)] isn't refused
+  for it: the intro says why and how long.
+- **The benchmark world (every RESTART try, and NOW tries there):** never refused. Each run loads the benchmark world
+  afresh (with its own warm-up sweep and settle), so what can be cold is the game itself after a restart: a queued run
+  waits until 60 s after this launch's first title screen (the "RESTART flow's world load"), with the note "Waiting about
+  a minute for the game to settle before measuring." on the screen, then starts by itself. The same wait covers a
+  CURRENT-scene run the chain queues itself (the after run following the apply, if the player changed dimension in
+  between). The chain's 20-minute cap still holds.
+- **The seam:** `TryItService.settleSeconds(int)` (default `SETTLE_SECONDS` 60). TryItGameTest proves the refusal right
+  after joining (block 1's start: the status line, Start inactive, a Start anyway refused with no try opened, the
+  screenshot `tryit-intro-settling`), with the settle time counted from that moment so a slow runner can't flake it;
+  then sets the seam to 0 for the rest (restored in its finally). `TryItDevRun`'s NOW mode waits for the settle like a
+  player would.
+- **Words:** `rigtune.tryit.settle.refused`, `rigtune.tryit.settle.waiting` (88 keys in the block now).
+
+| what | commit | tests (red first) |
+|---|---|---|
+| the rule, the screen, the notice, the seam | 52a901a1, 83b2350f (the clock) | `TryItServiceTest.startInThePlayersWorldRefusesUntilItHasSettled` (the status line with 50 s left after 10.25 s; no try opened; Start works at 60 s), `theCountGoesOnWhileAScreenPausesTheGameAndRestartsWithANewPlayer` (30 s paused by the clock: 20 s left; the ticks when further; a new player: 60 s again), `benchmarkWorldRunsWaitForTheGameToSettleInsteadOfRefusing` (never refused; the before run waits 40 ticks with the note, starts at 61 s, the note gone), `onlyAnUnsettledOwnWorldRefuses` (the benchmark world and the seam at 0 never refuse). Red against the skeleton (`settling` answering null): "expected: not <null>" twice, "the before run waits"; then green. TryItGameTest block 1 (CI) |
+
+Before the push, TryItGameTest ran locally on 26.2 (Windows, under the game-test lock, 83b2350f): passed in 106 s; the
+screenshot `tryit-intro-settling` shows the status line "... (60 s left)." in the warning colour above the intro and
+Start inactive; idle tick 0.26 ns per call, 0 bytes.
+
+## Review r11 (BENCH, round 1): 2 M and 4 L for Try It (the coordinator's decisions: fix all on `fix/v05-try-it-2`)
+
+(BENCH-6 and BENCH-8 are WS-B's BenchmarkController and BenchmarkConditions.) Commit f1de45ea; the 7 new tests failed
+first against skeletons that compiled but didn't act (the red messages below), then green.
+
+| item | fix | test (the red failure) |
+|---|---|---|
+| BENCH-1 (M) two reads of history.json per derive | the Game seam gives `Journal.Snapshot history()` (WS-S2's `Journal.snapshot()`), read once: a failed read is UNREADABLE, so HISTORY_UNREADABLE and nothing closes | `TryItServiceTest.aHistoryReadThatFailsAfterTheApplyClosesNothing` (the try was closed as FAILED) |
+| BENCH-2 (M) a verdict on a run whose settle timed out | `claim` passes `stepsLeftOut() > 0`; the run's id goes to the try's `unsettledRuns` (tryit.json, optional, written only when not empty; benchmarks.json keeps its schema), on the chain before the verdict's derive; `TryItVerdict` names `Excluded(TERRAIN_LOADING)` after the fresh world and DH: NOT_COMPARABLE, "the terrain hadn't finished loading" | `TryItVerdictTest.aRunOnTerrainThatHadntLoadedMeansNoVerdict` (no cause), `TryItServiceTest.anAfterRunOnTerrainThatHadntLoadedGetsNoVerdict` (nothing recorded); `TryItStoreTest.everyFieldRoundTrips` covers the field |
+| BENCH-3 (L) a queued derive emptying a new try | a derive that finds no try while this session's chain runs a try doesn't replace its view | `aDeriveQueuedBeforeStartKeepsTheNewTry` (NONE instead of MEASURING_BEFORE) |
+| BENCH-4 (L) unreadable or newer benchmarks.json read as "no runs" | `TryItFlow.derive(t, runs, runsReadable, history, live)` (the old overload passes true): HISTORY_UNREADABLE, nothing closes; the stage line and the notice now say "History or the benchmark results can't be read right now"; `BenchmarkHistory.newerOnDisk()` (an accessor, WS-B's class) | `TryItFlowTest.unreadableBenchmarkResultsCloseNothing` (NO_BEFORE) |
+| BENCH-5 (L) "wasn't applied" when History's write failed | a NOW try with no entry after the apply whose option now holds the tried value: the after snapshot is written as the proof (the one exception to "settingsAfter only once the entry exists": the entry can't exist), so the stage is ENTRY_MISSING (Keep only) with the note "History couldn't record this change (see the log), so it can't be reverted from here. It is applied." | `aChangeHistoryCouldntRecordIsntCalledNotApplied` (closed as FAILED) |
+| BENCH-7 (L) a first RESTART try in a new benchmark world | a RESTART try whose before run is left out of the trend (it created the benchmark world, or DH generated) stops before the change (CANCELLED, nothing applied, no restart needed), with a note saying why and to start it again | `aRestartTryWhoseBeforeRunCreatedTheWorldStopsBeforeTheChange` (applied anyway) |
+
+Words: `rigtune.tryit.cause.terrain_loading`, `rigtune.tryit.note.unrecorded`, `.note.fresh_world`, `.note.dh_generating`;
+`stage.history_unreadable` and `notice.history` reworded (92 keys in the block now).

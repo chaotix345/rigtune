@@ -38,6 +38,12 @@ public final class TryItFlow {
 
 	// runs: benchmarks.json, oldest first.
 	public static TryItView derive(@Nullable TryIt t, List<BenchmarkRecord> runs, History history, Live live) {
+		return derive(t, runs, true, history, live);
+	}
+
+	// runsReadable: false while benchmarks.json can't be read (or is from a newer RigTune): its runs are unknown, not
+	// gone, so nothing closes (as with an unreadable History; review BENCH-4).
+	public static TryItView derive(@Nullable TryIt t, List<BenchmarkRecord> runs, boolean runsReadable, History history, Live live) {
 		if (t == null) {
 			return TryItView.EMPTY;
 		}
@@ -54,7 +60,7 @@ public final class TryItFlow {
 				after = r;
 			}
 		}
-		if (history.state() != Journal.State.OK && history.state() != Journal.State.MISSING) {
+		if (!runsReadable || history.state() != Journal.State.OK && history.state() != Journal.State.MISSING) {
 			return new TryItView(Stage.HISTORY_UNREADABLE, t, before, after, null, null, null, same);
 		}
 		List<JournalEntry> entries = history.state() == Journal.State.OK ? history.entries() : List.of();

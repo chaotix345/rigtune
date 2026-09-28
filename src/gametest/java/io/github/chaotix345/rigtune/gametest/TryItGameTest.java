@@ -80,8 +80,8 @@ import java.util.stream.Stream;
 
 // docs/v0.5/SPEC.md 6 (C09; AC6.1-AC6.4, AC6.6-AC6.9, AC6.12-AC6.15): Measured Try It in a running game, network off
 // (X1). Numbers and live verdict kinds are never asserted (the harness's tick sync makes 1% lows meaningless): the verdict
-// screenshots come from seeded views. Blocks: 1 NOW here (no result screen, the pair, the entry, Revert through Undo
-// this), 6 Esc before and during the after, 2 NOW in the benchmark world (the apply at the title between two opens of the
+// screenshots come from seeded views. Blocks: 1 NOW here (first the cold-start rule's refusal right after joining, then
+// the seam at 0 for the rest; no result screen, the pair, the entry, Revert through Undo this), 6 Esc before and during the after, 2 NOW in the benchmark world (the apply at the title between two opens of the
 // same world; Keep writes only tryit.json), 3 RESTART with Sodium (staged, the file untouched, the notice, the menu's
 // filter, Cancel try), 4 RESTART after a seeded restart (READY, the toast due, Measure now, Revert stages the reverse op),
 // 7 the Preview button's refusals, 5 the verdict screens at X12's sizes, and the idle tick's cost (AC6.12).
@@ -128,6 +128,7 @@ public class TryItGameTest implements FabricClientGameTest {
 			verdictScreens(context, real);
 			idleTick(context);
 		} finally {
+			TryItService.settleSeconds(TryItService.SETTLE_SECONDS);
 			watching = false;
 			context.runOnClient(mc -> {
 				BenchmarkController.setDefaultConfig(BenchmarkController.Config.DEFAULT);
@@ -152,9 +153,11 @@ public class TryItGameTest implements FabricClientGameTest {
 			context.runOnClient(mc -> mc.options.save());
 			byte[] optionsBefore = read(gameDir.resolve("options.txt"));
 
+			int tried = rd > 2 ? rd - 1 : rd + 1;
+			settling(context, real, set(RD, Integer.toString(rd), Integer.toString(tried)));
+
 			// Block 1: render distance one lower, measured here; the player presses nothing until the verdict.
 			resultScreenSeen = false;
-			int tried = rd > 2 ? rd - 1 : rd + 1;
 			startFromPreview(context, real, set(RD, Integer.toString(rd), Integer.toString(tried)));
 			TryItView result = awaitStage(context, RUN_TIMEOUT_TICKS, Stage.RESULT);
 			TryIt t = result.tryIt();
@@ -600,6 +603,32 @@ public class TryItGameTest implements FabricClientGameTest {
 	}
 
 	// Preview -> Try it (measured) -> the intro (its default scene: here in a world, else the benchmark world) -> Start.
+	// The cold-start rule, right after joining: Start in the player's own world is inactive under a status line that counts
+	// down, and a Start anyway opens no try. The settle time is counted from now (a slow runner may have spent a while
+	// joining); then the seam goes to 0 for the rest of the test and Start comes back within a second.
+	private static void settling(ClientGameTestContext context, RigTuneController real, Recommendation rec) {
+		int ticks = context.computeOnClient(mc -> mc.player.tickCount);
+		TryItService.settleSeconds(ticks / 20 + TryItService.SETTLE_SECONDS);
+		context.runOnClient(mc -> mc.gui.setScreen(new PreviewScreen(mc.gui.screen(), real, List.of(rec))));
+		context.waitForScreen(PreviewScreen.class);
+		context.waitTicks(2);
+		pressByKey(context, "rigtune.tryit.button");
+		context.waitForScreen(TryItScreen.class);
+		context.waitTicks(2);
+		check(rowStartsWith(context, "Try It measures better once the world has settled. Play for about a minute first ("),
+				"the status line: " + context.computeOnClient(mc -> ((TryItScreen) mc.gui.screen()).rowText()));
+		check(!context.computeOnClient(mc -> ((TryItScreen) mc.gui.screen()).footer().getFirst().active), "Start is inactive");
+		Component answer = context.computeOnClient(mc -> real.startTryIt(rec, BenchmarkRequest.Scene.CURRENT));
+		check(answer.getString().startsWith("Try It measures better"), "a Start anyway is refused: " + answer.getString());
+		context.waitTicks(5);
+		check(real.tryIt().tryIt() == null && TryItStore.shared(configDir()).current() == null, "no try opened");
+		context.takeScreenshot("tryit-intro-settling");
+		TryItService.settleSeconds(0);
+		context.waitFor(mc -> mc.gui.screen() instanceof TryItScreen screen && screen.footer().getFirst().active, 60);
+		check(!rowStartsWith(context, "Try It measures better"), "the status line goes once settled");
+		context.runOnClient(mc -> mc.gui.setScreen(null));
+	}
+
 	private static void startFromPreview(ClientGameTestContext context, RigTuneController real, Recommendation rec) {
 		context.runOnClient(mc -> mc.gui.setScreen(new PreviewScreen(mc.gui.screen(), real, List.of(rec))));
 		context.waitForScreen(PreviewScreen.class);

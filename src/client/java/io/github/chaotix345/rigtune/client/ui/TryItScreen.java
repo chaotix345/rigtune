@@ -32,8 +32,9 @@ import java.util.List;
 // the verdict with its causes and caveats, and at most 3 buttons (TryItView.actions()). Every line wraps (none is cut). A RowList whose rows are Tab stops that narrate their
 // text (X6). Revert and Cancel try open History's Undo this for the try's entry; coming back derives the stage again, and
 // the buttons stay inactive until it's done (review M5: no Keep on a view from before the undo; the screen rebuilds
-// whenever the view changes). A Start that couldn't be recorded shows why (the view's note). Esc goes back to where it
-// was opened from; the try stays open.
+// whenever the view changes). A Start that couldn't be recorded shows why (the view's note). Start and Measure now in
+// the player's own world wait for it to settle (the cold-start rule): the button is inactive under a status line that
+// counts down, rebuilt every second. Esc goes back to where it was opened from; the try stays open.
 public class TryItScreen extends Screen {
 	private static final int LINE = 9;
 	private static final int TOP = 22;
@@ -56,6 +57,9 @@ public class TryItScreen extends Screen {
 	// itself derives first anyway).
 	private boolean deriving;
 	private int derivingTicks;
+	// Start or Measure now waits for the player's world to settle: the status line shown, and the ticks since it was.
+	private @Nullable Text settle;
+	private int settleTicks;
 	private final List<Button> footer = new ArrayList<>();
 
 	// rec: the Preview's ticked setting (the intro), or null to show the open try.
@@ -97,6 +101,8 @@ public class TryItScreen extends Screen {
 	@Override
 	protected void init() {
 		shown = controller.tryIt();
+		settle = null;
+		settleTicks = 0;
 		footer.clear();
 		int column = Math.min(width - 32, 480);
 		int top = TOP;
@@ -142,6 +148,9 @@ public class TryItScreen extends Screen {
 		if (status != null) {
 			list.add(status, COLOR_WARNING);
 		}
+		if (settle != null) {
+			list.add(Texts.component(settle), COLOR_WARNING);
+		}
 		for (TryItText.Line line : lines) {
 			list.add(Texts.component(line.text()), color(line.tone()));
 		}
@@ -155,13 +164,15 @@ public class TryItScreen extends Screen {
 	private void introFooter() {
 		Text refused = controller.tryItRefusal(rec);
 		String unavailable = refused == null ? BenchmarkController.unavailable(minecraft, scene) : null;
+		settle = refused == null && unavailable == null ? controller.tryItSettling(scene) : null;
 		Button start = button(Component.translatable("rigtune.tryit.action.start"), b -> {
 			Component answer = controller.startTryIt(rec, scene);
 			status = answer.getString().isEmpty() ? null : answer;
 			rebuildWidgets();
 		});
-		start.active = refused == null && unavailable == null;
-		Component why = refused != null ? Texts.component(refused) : unavailable != null ? Texts.component(TryItText.sceneRefusal(unavailable)) : null;
+		start.active = refused == null && unavailable == null && settle == null;
+		Component why = refused != null ? Texts.component(refused) : unavailable != null ? Texts.component(TryItText.sceneRefusal(unavailable))
+				: settle != null ? Texts.component(settle) : null;
 		start.setTooltip(Tooltip.create(why != null ? why : Texts.component(TryItText.explain())));
 		button(Component.translatable("gui.cancel"), b -> onClose());
 	}
@@ -174,9 +185,12 @@ public class TryItScreen extends Screen {
 					Button measure = button(Component.translatable(action == TryItView.Action.MEASURE_NOW ? "rigtune.tryit.action.measure_now"
 							: "rigtune.tryit.action.measure_again"), b -> controller.tryItMeasureNow());
 					String unavailable = t == null ? null : BenchmarkController.unavailable(minecraft, t.scene());
-					measure.active = unavailable == null;
+					settle = t == null || unavailable != null ? null : controller.tryItSettling(t.scene());
+					measure.active = unavailable == null && settle == null;
 					if (unavailable != null) {
 						measure.setTooltip(Tooltip.create(Texts.component(TryItText.sceneRefusal(unavailable))));
+					} else if (settle != null) {
+						measure.setTooltip(Tooltip.create(Texts.component(settle)));
 					}
 				}
 				case KEEP -> button(Component.translatable("rigtune.tryit.action.keep"), b -> {
@@ -239,6 +253,8 @@ public class TryItScreen extends Screen {
 		super.tick();
 		if (!intro() && controller.tryIt() != shown || intro() && controller.tryIt().tryIt() != null || deriving && ++derivingTicks > 40) {
 			deriving = false;
+			rebuildWidgets();
+		} else if (settle != null && ++settleTicks >= 20) {
 			rebuildWidgets();
 		}
 	}
