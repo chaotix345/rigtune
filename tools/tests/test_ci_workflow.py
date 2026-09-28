@@ -206,7 +206,7 @@ class BuildWorkflowTests(unittest.TestCase):
             if s.get("name") in ("Resolve dependencies (network)", "Client game tests"):
                 self.assertIn('"-PgametestClasses=$GAMETEST_CLASSES"', s["run"], s["name"])
         artifacts = re.findall(r"^\s+name: ((?:gametest|footprint)-.*)$", self.text.split("  client-gametest:")[1].split("\n  python:")[0], re.M)
-        self.assertEqual(3, len(artifacts))
+        self.assertEqual(4, len(artifacts))
         for name in artifacts:
             self.assertTrue(name.endswith("${{ matrix.suffix }}"), name)
         # One flag in build.yml switches the split (1 = off; 2 since 2026-09-28); a dispatch input overrides it for one run.

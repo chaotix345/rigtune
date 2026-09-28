@@ -125,6 +125,10 @@ public class FootprintGameTest implements FabricClientGameTest {
 		context.waitForScreen(TitleScreen.class);
 		context.waitFor(mc -> RigTuneClient.hardware() != null && RigTuneClient.controller().report() != null, 1200);
 		context.waitFor(mc -> FootprintStats.snapshot().windowCpuNs() != null, 400);
+		if (Boolean.getBoolean(RETURNING)) {
+			returningPlayer();
+			return;
+		}
 		RigTuneController controller = RigTuneClient.controller();
 		check(controller instanceof RealController, "the real controller is back after the earlier tests: " + controller);
 		HardwareProfile hardware = RigTuneClient.hardware();
@@ -185,6 +189,53 @@ public class FootprintGameTest implements FabricClientGameTest {
 			RigTune.LOGGER.warn("WARN-ONLY {}", blind);
 		}
 		RigTune.LOGGER.info("FootprintGameTest: {} budget(s), {} over (mode {})", budgets.budgets().size(), violations.size(), budgets.mode());
+	}
+
+	// review-11 PERF-3: a returning player's startup. build.yml starts one more JVM with only this class, a seeded
+	// config/rigtune (tools/gametest/returning_seed.py through -PgametestSeedConfig: 0.4's and 0.5's written files, a history
+	// of 50+ entries, nothing staged) and -Drigtune.footprint.returning=true. Only the startup keys are measured, against
+	// the same budgets; the seed must be what the game started with. Written to footprint-<mc>-<backend>-returning.json.
+	private static final String RETURNING = "rigtune.footprint.returning";
+
+	private static void returningPlayer() {
+		Path configDir = FabricLoader.getInstance().getConfigDir();
+		Map<String, Object> out = new LinkedHashMap<>();
+		Map<String, Number> measured = new LinkedHashMap<>();
+		String mc = FabricLoader.getInstance().getRawGameVersion();
+		String backend = backendName(RigTuneClient.hardware().gpu().backend()) + "-returning";
+		out.put("mcVersion", mc);
+		out.put("backend", backend);
+		List<String> seeded = new ArrayList<>();
+		try (var files = Files.list(configDir.resolve("rigtune"))) {
+			files.map(p -> p.getFileName().toString()).filter(n -> n.endsWith(".json")).sorted().forEach(seeded::add);
+		} catch (IOException e) {
+			throw new AssertionError("config/rigtune of the returning player", e);
+		}
+		out.put("configFiles", seeded);
+		int historyEntries;
+		try {
+			historyEntries = com.google.gson.JsonParser.parseString(Files.readString(configDir.resolve("rigtune").resolve("history.json")))
+					.getAsJsonObject().getAsJsonArray("entries").size();
+		} catch (IOException | RuntimeException e) {
+			throw new AssertionError("the seeded history.json", e);
+		}
+		out.put("historyEntries", historyEntries);
+		check(historyEntries >= 50 && seeded.containsAll(List.of("last-apply.json", "awareness.json", "stutter-fixes.json", "tryit.json")),
+				"started as a returning player (history " + historyEntries + " entries): " + seeded);
+		startup(out, measured);
+		FootprintBudgets budgets;
+		try {
+			budgets = FootprintBudgets.load().forCompressedOops(!Boolean.FALSE.equals(compressedOops()));
+		} catch (IOException e) {
+			throw new AssertionError("Could not read the footprint budgets", e);
+		}
+		List<FootprintBudgets.Violation> violations = budgets.check(measured);
+		out.put("measured", measured);
+		out.put("budgetMode", budgets.mode().name().toLowerCase(Locale.ROOT));
+		out.put("violations", violations.stream().map(FootprintBudgets.Violation::message).toList());
+		write(mc, backend, out);
+		budgets.enforce(violations, RigTune.LOGGER::warn);
+		RigTune.LOGGER.info("FootprintGameTest (returning player, {} history entries): {}", historyEntries, measured);
 	}
 
 	// What RigTune measured about its own startup (FootprintStats).
