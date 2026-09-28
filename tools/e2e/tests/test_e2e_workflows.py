@@ -192,7 +192,6 @@ class ReleaseWorkflowTest(unittest.TestCase):
         self.assertIn("name: release-files", publish)
         self.assertIn("sha256sum -c SHA256SUMS", publish)
         self.assertNotRegex(publish, r"gradlew\s+(build|assemble|jar)\b")
-        self.assertIn('"-PmodrinthFile=${found[0]}" -x assemble', publish)
         create = next(s for s in steps(publish) if "gh release create" in s)
         self.assertIn('staged="$RUNNER_TEMP/release-files"', create)
         self.assertIn('"${files[@]}"', create)
@@ -202,11 +201,32 @@ class ReleaseWorkflowTest(unittest.TestCase):
         self.assertIn("DRY_RUN: ${{ github.event_name != 'push' }}", publish)
         create = next(s for s in steps(publish) if "gh release create" in s)
         self.assertLess(create.index('if [ "$DRY_RUN" = true ]'), create.index('gh release create "$TAG"'))
-        modrinth = next(s for s in steps(publish) if ":modrinth" in s)
+        modrinth = next(s for s in steps(publish) if "Publish to Modrinth" in s)
         self.assertIn("MODRINTH_TOKEN: ${{ github.event_name == 'push' && secrets.MODRINTH_TOKEN || '' }}", modrinth)
-        self.assertIn("dry=(-PmodrinthDryRun)", modrinth)
+        self.assertIn('dry=(--dry-run)', modrinth)
         verify = next(s for s in steps(publish) if "release_verify.py" in s)
         self.assertIn("VERIFY_TAG: ${{ github.event_name == 'push' && needs.build.outputs.tag || inputs.verify-tag }}", verify)
+
+    def test_modrinth_gets_the_staged_files_through_the_stdlib_tool_retried(self):
+        # review-11 CI-2: no Gradle in publish (a cold runner resolving plugins and Minecraft files online, after the GitHub
+        # release is public, with the token in its configuration); the idempotent upload, retried per node.
+        publish = self.jobs["publish"]
+        modrinth = next(s for s in steps(publish) if "Publish to Modrinth" in s)
+        self.assertNotIn("gradlew", publish)
+        self.assertIn('python3 tools/e2e/modrinth_publish.py --staged "$RUNNER_TEMP/release-files" --tag "$TAG"', modrinth)
+
+    def test_publish_s_checkout_keeps_no_git_credentials(self):
+        # review-11 SEC-6: nothing in publish pushes; gh takes GITHUB_TOKEN from the environment.
+        checkout = next(s for s in steps(self.jobs["publish"]) if "actions/checkout" in s)
+        self.assertIn("persist-credentials: false", checkout)
+
+    def test_a_tag_push_without_the_token_fails_before_the_github_release(self):
+        # review-11 CI-5: never a GitHub-only release by accident.
+        publish = steps(self.jobs["publish"])
+        guard = next(i for i, s in enumerate(publish) if "MODRINTH_TOKEN" in s and "exit 1" in s)
+        create = next(i for i, s in enumerate(publish) if "gh release create" in s)
+        self.assertLess(guard, create)
+        self.assertIn("github.event_name == 'push'", publish[guard])
 
     def test_only_publish_may_write(self):
         self.assertIn("\npermissions:\n  contents: read\n", self.workflow)
