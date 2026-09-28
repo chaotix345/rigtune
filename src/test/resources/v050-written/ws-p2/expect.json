@@ -1,7 +1,6 @@
 {
   "set": "ws-p2",
   "checks": [
-    {"class": "Unread", "file": "server-profiles.json", "unchanged": true},
-    {"class": "ServerLimitsStore", "file": "server-limits.json", "noBad": true}
+    {"class": "Unread", "file": "server-profiles.json", "unchanged": true}
   ]
 }

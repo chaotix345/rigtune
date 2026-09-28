@@ -113,9 +113,11 @@ public class ProfilesScreen extends Screen {
 		action(Component.translatable("rigtune.profile.save_current"), b -> saveCurrent(), left, row2, buttonWidth, "rigtune.profile.save_current.tooltip");
 		renameButton = action(Component.translatable("rigtune.profile.rename"), b -> renameSelected(), left + buttonWidth + gap, row2, buttonWidth, null);
 		deleteButton = action(Component.translatable("rigtune.profile.delete"), b -> deleteSelected(), left + 2 * (buttonWidth + gap), row2, buttonWidth, null);
-		int wide = (column - gap) / 2;
-		action(Component.translatable("rigtune.profile.import"), b -> openImport(), left, row3, wide, "rigtune.profile.import.tooltip");
-		action(Component.translatable("gui.done"), b -> onClose(), left + wide + gap, row3, column - wide - gap, null);
+		action(Component.translatable("rigtune.profile.import"), b -> openImport(), left, row3, buttonWidth, "rigtune.profile.import.tooltip");
+		// v0.5 C16 (WS-P2): the per-server offers.
+		action(Component.translatable("rigtune.profile.servers"), b -> openServers(), left + buttonWidth + gap, row3, buttonWidth,
+				"rigtune.profile.servers.tooltip");
+		action(Component.translatable("gui.done"), b -> onClose(), left + 2 * (buttonWidth + gap), row3, column - 2 * (buttonWidth + gap), null);
 		updateButtons();
 	}
 
@@ -206,6 +208,11 @@ public class ProfilesScreen extends Screen {
 
 	public void openImport() {
 		minecraft.gui.setScreen(new ProfileImportScreen(this, controller));
+	}
+
+	// v0.5 C16 (WS-P2): Offer takes the selected profile.
+	public void openServers() {
+		minecraft.gui.setScreen(new ServerProfilesScreen(this, controller, selectedView()));
 	}
 
 	private void saveCurrent() {
