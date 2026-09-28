@@ -30,6 +30,7 @@ import org.jspecify.annotations.Nullable;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 
 // docs/v0.5/SPEC.md 7 (C16), sp §2.1: per-server profile offers. Reached only through RealController.v05() (X4); the
@@ -53,6 +54,7 @@ public final class ServerProfileService {
 	private boolean tickRegistered;
 	// The last toast's text, for ServerProfilesGameTest (a toast may be gone by the time a test looks).
 	private volatile @Nullable Component lastToast;
+	private final AtomicInteger lookups = new AtomicInteger();
 
 	private record WaitingToast(Offer offer, Text name) {
 	}
@@ -72,7 +74,7 @@ public final class ServerProfileService {
 		CompletableFuture.runAsync(() -> lookup(connection), Probes.EXECUTOR).exceptionally(e -> {
 			RigTune.LOGGER.warn("Could not look up the profile set for this server", e);
 			return null;
-		});
+		}).thenRun(lookups::incrementAndGet);
 	}
 
 	public void onDisconnect() {
@@ -165,6 +167,11 @@ public final class ServerProfileService {
 	// The last toast's text (ServerProfilesGameTest).
 	public @Nullable Component lastToast() {
 		return lastToast;
+	}
+
+	// r12 flake (FL-5): join lookups finished, offer or not (ServerProfilesGameTest: a lookup that finds nothing shows nothing).
+	public int lookups() {
+		return lookups.get();
 	}
 
 	// ServerProfilesScreen's model (render thread): one read of server-profiles.json and one of profiles.json.

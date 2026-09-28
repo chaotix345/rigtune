@@ -248,9 +248,12 @@ public class BatteryFlowGameTest implements FabricClientGameTest {
 	private Notice unplug(ClientGameTestContext context, RealController real, Watch watch) {
 		long start = System.nanoTime();
 		watch.battery.onBattery.set(true);
-		context.waitFor(mc -> batteryNotice(real) != null && toast(mc) != null, TICKS);
-		long millis = (System.nanoTime() - start) / 1_000_000;
-		RigTune.LOGGER.info("BatteryFlowGameTest: the offer and its toast {} ms after the unplug", millis);
+		context.waitFor(mc -> watch.handledNanos > start && batteryNotice(real) != null && toast(mc) != null, TICKS);
+		// r12 flake (FL-6): the 5 s bound is the product's part, the unplug to the offer set and its toast queued; how soon the
+		// harness's next tick shows them isn't.
+		long millis = (watch.handledNanos - start) / 1_000_000;
+		RigTune.LOGGER.info("BatteryFlowGameTest: the offer set and its toast queued {} ms after the unplug (shown after {} ms)", millis,
+				(System.nanoTime() - start) / 1_000_000);
 		check(millis <= EDGE_MILLIS, "the offer within 5 s: " + millis + " ms");
 		check(watch.edges.getLast(), "the edge was AC -> battery");
 		return context.computeOnClient(mc -> batteryNotice(real));
@@ -374,6 +377,8 @@ public class BatteryFlowGameTest implements FabricClientGameTest {
 	private static final class Watch implements AutoCloseable {
 		final FakeBattery battery = new FakeBattery();
 		final List<Boolean> edges = new CopyOnWriteArrayList<>();
+		// r12 flake (FL-6): when the listener last returned.
+		volatile long handledNanos;
 		private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
 			Thread thread = new Thread(runnable, "BatteryFlowGameTest power");
 			thread.setDaemon(true);
@@ -384,6 +389,7 @@ public class BatteryFlowGameTest implements FabricClientGameTest {
 			PowerWatcher watcher = PowerWatcher.start(List.of(battery), false, edge -> {
 				edges.add(edge);
 				listener.accept(edge);
+				handledNanos = System.nanoTime();
 			}, executor, 1);
 			check(watcher != null, "the fake battery counts as a real one");
 		}
