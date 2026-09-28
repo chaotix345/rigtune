@@ -169,7 +169,9 @@ public final class RigTuneClient implements ClientModInitializer {
 		ModFilesPolicy policy;
 		try {
 			policy = controller == null ? ModFilesPolicy.PENDING : controller.modFiles();
-		} catch (RuntimeException e) {
+		} catch (Throwable t) {
+			// An Error too (review-11 APPLY-8): the first call can make the v0.5 services here, and the helper must still start.
+			RigTune.LOGGER.warn("Could not read who changes this instance's mod files; the helper holds mod-file changes", t);
 			policy = ModFilesPolicy.PENDING;
 		}
 		try {
