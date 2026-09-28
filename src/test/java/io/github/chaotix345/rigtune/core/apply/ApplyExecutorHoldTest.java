@@ -220,6 +220,74 @@ class ApplyExecutorHoldTest {
 		assertFalse(result.results().getFirst().message().startsWith("Already done earlier"), result.results().getFirst().message());
 	}
 
+	private List<Boolean> disableMarks(List<Op> ops) {
+		return UnfinishedGroups.recorded(config).stream().filter(r -> ops.getFirst().id().equals(r.op())).map(UnfinishedGroups.Rename::done).toList();
+	}
+
+	// review-12 R12APPLY-4: a helper killed while rolling back its disable, just before or just after the move back. The
+	// record already says the disable isn't done, so neither the rename still in effect nor the launcher's own later
+	// disable of the jar that's back proves the group started.
+	private List<Op> killedDuringTheRollback(boolean afterTheMove) throws IOException {
+		List<Op> ops = update();
+		ApplyExecutor killed = new ApplyExecutor(2, 1, (from, to) -> {
+			if (from.equals(download)) {
+				throw new IOException("locked");
+			}
+			if (to.equals(oldJar) && !afterTheMove) {
+				throw new Killed();
+			}
+			Files.move(from, to);
+			if (to.equals(oldJar)) {
+				throw new Killed();
+			}
+		});
+		assertThrows(Killed.class, () -> killed.run(plan(ops), pending));
+		assertEquals(List.of(false), disableMarks(ops));
+		return ops;
+	}
+
+	@Test
+	void aKillBeforeARollbackMovesTheJarBackIsHeld() throws IOException {
+		List<Op> ops = killedDuringTheRollback(false);
+
+		ApplyResult result = hold(PendingActions.load(pending));
+
+		assertTrue(result.results().isEmpty(), result.toString());
+		assertEquals(List.of("sodium-0.7.0.jar.disabled", "sodium-0.7.1.jar.rigtune-pending"), modsListing());
+		assertEquals(ops.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+	}
+
+	@Test
+	void aKillRightAfterARollbackMovesTheJarBackStaysHeld() throws IOException {
+		List<Op> ops = killedDuringTheRollback(true);
+		Files.move(oldJar, mods.resolve("sodium-0.7.0.jar.disabled"));
+
+		ApplyResult result = hold(PendingActions.load(pending));
+
+		assertTrue(result.results().isEmpty(), result.toString());
+		assertEquals(List.of("sodium-0.7.0.jar.disabled", "sodium-0.7.1.jar.rigtune-pending"), modsListing());
+		assertEquals(ops.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+	}
+
+	// A rollback that can't move the jar back leaves its rename marked done: RigTune's own, finished at the next exit.
+	@Test
+	void aStuckRollbackStaysDoneAndIsFinished() throws IOException {
+		List<Op> ops = update();
+		ApplyExecutor stuck = new ApplyExecutor(2, 1, (from, to) -> {
+			if (from.equals(download) || to.equals(oldJar)) {
+				throw new IOException("locked");
+			}
+			Files.move(from, to);
+		});
+		stuck.run(plan(ops), pending);
+		assertEquals(List.of(true), disableMarks(ops));
+
+		ApplyResult result = hold(PendingActions.load(pending));
+
+		assertEquals(List.of(Status.SKIPPED_ALREADY_DONE, Status.OK), statuses(result));
+		assertEquals(List.of("sodium-0.7.0.jar.disabled", "sodium-0.7.1.jar"), modsListing());
+	}
+
 	// A record 0.4 wrote (no mark of which renames happened) proves nothing under the hold: held.
 	@Test
 	void a04RecordIsNoProofUnderTheHold() throws IOException {
