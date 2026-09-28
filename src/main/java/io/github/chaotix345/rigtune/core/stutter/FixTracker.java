@@ -234,11 +234,13 @@ public final class FixTracker {
 	// review-12 R12STUTTER-6: a chosen fix measures one session as it is first. The first monitor session that started after
 	// the choice, with the key at its old value at both ends, not excluded or idle and with at least
 	// FixGate.MIN_GAMEPLAY_SECONDS of compared play, is the before side (READY). The key changed meanwhile: replaced.
+	// review-13: a chosen fix's appliedAt is the triggering session's start, and only a session that started strictly after it
+	// counts, so the triggering session's own end (saved after the restart) never does, even from the same second.
 	private static Record baseline(Record r, @Nullable SessionEnd session, Instant now) {
 		if (Duration.between(r.appliedAt(), now).compareTo(MAX_AGE) > 0) {
 			return r.withState(State.EXPIRED);
 		}
-		if (r.state() == State.READY || session == null || session.startedAt().isBefore(r.appliedAt()) || !StutterReport.MONITOR.equals(session.source())) {
+		if (r.state() == State.READY || session == null || !session.startedAt().isAfter(r.appliedAt()) || !StutterReport.MONITOR.equals(session.source())) {
 			return r;
 		}
 		String atStart = session.atStart().settings().get(r.key());

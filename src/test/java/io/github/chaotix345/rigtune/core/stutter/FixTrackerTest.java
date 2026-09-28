@@ -190,6 +190,22 @@ class FixTrackerTest {
 		assertEquals(List.of(), FixHold.holds(List.of(r, ready), java.time.ZoneOffset.UTC), "nothing held before the Apply");
 	}
 
+	// review-13: a chosen fix's appliedAt is the triggering session's start; that session's end, arriving late (its save runs
+	// after the restart), never counts, even when the baseline session started in the same second: only a session that
+	// started strictly after it does.
+	@Test
+	void theTriggeringSessionArrivingLateNeverCounts() {
+		FixTracker.Record r = baseline();
+		FixTracker.SessionEnd trigger = new FixTracker.SessionEnd(r.appliedAt(), StutterReport.MONITOR, session(0, 400, 20, RD, "12").outcome(),
+				conditions(RD, "12"), conditions(RD, "12"), false);
+		assertSame(r, FixTracker.advance(r, Journal.State.OK, List.of(), trigger, at(1)));
+		FixTracker.SessionEnd next = new FixTracker.SessionEnd(r.appliedAt().plusSeconds(1), StutterReport.MONITOR, session(0, 400, 16, RD, "12").outcome(),
+				conditions(RD, "12"), conditions(RD, "12"), false);
+		FixTracker.Record ready = FixTracker.advance(r, Journal.State.OK, List.of(), next, at(10));
+		assertEquals(FixTracker.State.READY, ready.state());
+		assertEquals(16, ready.before().hitches());
+	}
+
 	// A baseline session that started before the choice (the one that led to the offer) never counts; a short one, an
 	// excluded or idle one is skipped with its reason; the key changed by hand meanwhile ends it (replaced).
 	@Test
