@@ -44,7 +44,8 @@ jobs:
           TIER: ${{ inputs.tier }}
         run: |
           set -eu
-          matrix=$(python3 tools/e2e/e2e_matrix.py --tier "$TIER")
+          # SCRATCH (WS-E, decision (b)): only the hand-over row.
+          matrix=$(python3 tools/e2e/e2e_matrix.py --tier "$TIER" | python3 -c 'import json,sys; d=json.load(sys.stdin); d["include"]=[r for r in d["include"] if r["id"].startswith("handover")]; print(json.dumps(d, separators=(",", ":")))')
           echo "$matrix"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "nodes=$(python3 tools/e2e/e2e_matrix.py --nodes)" >> "$GITHUB_OUTPUT"
@@ -190,7 +191,8 @@ jobs:
   stutter-script:
     name: stutter script (${{ matrix.mc }})
     needs: [matrix, jars]
-    if: ${{ !cancelled() && inputs.tier == 'release' && needs.matrix.result == 'success' && (needs.jars.result == 'success' || needs.jars.result == 'skipped') }}
+    # SCRATCH (WS-E, decision (b)): this leg ran in 36376567978.
+    if: false
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -256,7 +258,8 @@ jobs:
   battery-oshi:
     name: battery OSHI leg (${{ matrix.mc }})
     needs: [matrix, jars]
-    if: ${{ !cancelled() && inputs.tier == 'release' && needs.matrix.result == 'success' && (needs.jars.result == 'success' || needs.jars.result == 'skipped') }}
+    # SCRATCH (WS-E, decision (b)): this leg ran in 36376567978.
+    if: false
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     strategy:
