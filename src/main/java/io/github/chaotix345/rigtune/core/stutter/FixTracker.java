@@ -29,6 +29,7 @@ public final class FixTracker {
 	// that still reads the old value this soon after the apply is ignored, never taken as "replaced".
 	public static final Duration SETTLE = Duration.ofSeconds(5);
 	public static final String SHORT = "short";
+	public static final String EXCLUDED = "excluded";
 
 	public enum State {
 		STAGED, MEASURING, COMPARED, UNDONE, NOT_APPLIED, REPLACED, EXPIRED;
@@ -99,9 +100,10 @@ public final class FixTracker {
 		}
 	}
 
-	// A finished session: when it started, its source (StutterReport.MONITOR or BENCHMARK), its outcome, and the
-	// conditions at its start and end.
-	public record SessionEnd(Instant startedAt, String source, SessionOutcome outcome, FixConditions atStart, FixConditions atEnd) {
+	// A finished session: when it started, its source (StutterReport.MONITOR or BENCHMARK), its outcome, the conditions at
+	// its start and end, and whether it's excluded (around a benchmark run, or Distant Horizons generated terrain in it: WS-B's
+	// M4 rule, no comparison across such a session).
+	public record SessionEnd(Instant startedAt, String source, SessionOutcome outcome, FixConditions atStart, FixConditions atEnd, boolean excluded) {
 	}
 
 	private FixTracker() {
@@ -171,8 +173,12 @@ public final class FixTracker {
 		return found;
 	}
 
-	// Why a session doesn't count, or null: too short, or the first condition that differs at its start, else at its end.
+	// Why a session doesn't count, or null: excluded, too short, or the first condition that differs at its start, else at
+	// its end.
 	private static @Nullable Skip skip(Record r, SessionEnd session) {
+		if (session.excluded()) {
+			return new Skip(EXCLUDED, List.of());
+		}
 		if (session.outcome().gameplaySeconds() < MIN_SESSION_SECONDS) {
 			return new Skip(SHORT, List.of());
 		}

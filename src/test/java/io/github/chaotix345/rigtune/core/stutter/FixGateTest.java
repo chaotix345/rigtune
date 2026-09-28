@@ -20,25 +20,30 @@ class FixGateTest {
 	void theFloorHoldsAtEightHitchesAndFiveMinutes() {
 		assertEquals(8, FixGate.MIN_HITCHES);
 		assertEquals(300, FixGate.MIN_GAMEPLAY_SECONDS);
-		assertNull(FixGate.check(report(StutterReport.MONITOR, 300, 8), false, true));
-		assertNull(FixGate.check(report(StutterReport.MONITOR, 1200, 40), false, true));
+		assertNull(FixGate.check(report(StutterReport.MONITOR, 300, 8), false, false, true));
+		assertNull(FixGate.check(report(StutterReport.MONITOR, 1200, 40), false, false, true));
 	}
 
 	@Test
 	void eachConditionAloneBlocks() {
-		assertEquals(FixOffer.Reason.LENGTH, FixGate.check(report(StutterReport.MONITOR, 300, 7), false, true));
-		assertEquals(FixOffer.Reason.LENGTH, FixGate.check(report(StutterReport.MONITOR, 299.9, 8), false, true));
-		assertEquals(FixOffer.Reason.BENCHMARK, FixGate.check(report(StutterReport.BENCHMARK, 600, 30), false, true));
-		assertEquals(FixOffer.Reason.BENCHMARK, FixGate.check(report("something-else", 600, 30), false, true));
-		assertEquals(FixOffer.Reason.BUSY, FixGate.check(report(StutterReport.MONITOR, 600, 30), true, true));
-		assertEquals(FixOffer.Reason.STORE, FixGate.check(report(StutterReport.MONITOR, 600, 30), false, false));
+		assertEquals(FixOffer.Reason.LENGTH, FixGate.check(report(StutterReport.MONITOR, 300, 7), false, false, true));
+		assertEquals(FixOffer.Reason.LENGTH, FixGate.check(report(StutterReport.MONITOR, 299.9, 8), false, false, true));
+		assertEquals(FixOffer.Reason.BENCHMARK, FixGate.check(report(StutterReport.BENCHMARK, 600, 30), false, false, true));
+		assertEquals(FixOffer.Reason.BENCHMARK, FixGate.check(report("something-else", 600, 30), false, false, true));
+		assertEquals(FixOffer.Reason.BUSY, FixGate.check(report(StutterReport.MONITOR, 600, 30), false, true, true));
+		assertEquals(FixOffer.Reason.STORE, FixGate.check(report(StutterReport.MONITOR, 600, 30), false, false, false));
+		// WS-B's M4 rule for C20: a session around a benchmark run or while Distant Horizons generated terrain can't be a
+		// comparison's before side.
+		assertEquals(FixOffer.Reason.EXCLUDED, FixGate.check(report(StutterReport.MONITOR, 600, 30), true, false, true));
 	}
 
-	// When several fail, the first of benchmark, store, busy, length.
+	// When several fail, the first of benchmark, excluded, store, busy, length.
 	@Test
 	void theOrderOfReasons() {
-		assertEquals(FixOffer.Reason.BENCHMARK, FixGate.check(report(StutterReport.BENCHMARK, 10, 1), true, false));
-		assertEquals(FixOffer.Reason.STORE, FixGate.check(report(StutterReport.MONITOR, 10, 1), true, false));
-		assertEquals(FixOffer.Reason.BUSY, FixGate.check(report(StutterReport.MONITOR, 10, 1), true, true));
+		assertEquals(FixOffer.Reason.BENCHMARK, FixGate.check(report(StutterReport.BENCHMARK, 10, 1), true, true, false));
+		assertEquals(FixOffer.Reason.EXCLUDED, FixGate.check(report(StutterReport.MONITOR, 10, 1), true, true, false));
+		assertEquals(FixOffer.Reason.BENCHMARK, FixGate.check(report(StutterReport.BENCHMARK, 10, 1), false, true, false));
+		assertEquals(FixOffer.Reason.STORE, FixGate.check(report(StutterReport.MONITOR, 10, 1), false, true, false));
+		assertEquals(FixOffer.Reason.BUSY, FixGate.check(report(StutterReport.MONITOR, 10, 1), false, true, true));
 	}
 }

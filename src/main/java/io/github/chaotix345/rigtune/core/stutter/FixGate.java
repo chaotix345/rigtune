@@ -15,11 +15,15 @@ public final class FixGate {
 	private FixGate() {
 	}
 
-	// The first reason that blocks, in this order: BENCHMARK, STORE, BUSY, LENGTH; null when the floor holds. busy: another
-	// fix is staged or being measured.
-	public static FixOffer.@Nullable Reason check(StutterReport report, boolean busy, boolean storeWritable) {
+	// The first reason that blocks, in this order: BENCHMARK, EXCLUDED, STORE, BUSY, LENGTH; null when the floor holds.
+	// excluded: the session ran around a benchmark run or while Distant Horizons generated terrain (WS-B's M4 rule: no
+	// comparison across such a session). busy: another fix is staged or being measured.
+	public static FixOffer.@Nullable Reason check(StutterReport report, boolean excluded, boolean busy, boolean storeWritable) {
 		if (!StutterReport.MONITOR.equals(report.source())) {
 			return FixOffer.Reason.BENCHMARK;
+		}
+		if (excluded) {
+			return FixOffer.Reason.EXCLUDED;
 		}
 		if (!storeWritable) {
 			return FixOffer.Reason.STORE;

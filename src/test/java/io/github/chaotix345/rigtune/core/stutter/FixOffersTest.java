@@ -43,6 +43,7 @@ class FixOffersTest {
 		Map<String, String> settings = new LinkedHashMap<>(Map.of(RD, "12", DEFER, "ZERO_FRAMES"));
 		Set<String> mods = new HashSet<>(Set.of("sodium"));
 		ServerLimits live;
+		boolean excluded;
 		boolean busy;
 		boolean writable = true;
 
@@ -58,7 +59,7 @@ class FixOffersTest {
 			StutterFacts facts = new StutterFacts(claimed, Map.of(), 0, 0, 0, null, null, null, 4.0, "g1", true, unmeasured, dominated);
 			EvalContext ctx = StutterAdvisor.context(rules, Fixtures.userRig().build(), Fixtures.mods(mods.toArray(String[]::new)), effective, Goal.BALANCED,
 					facts);
-			return FixOffers.evaluate(FixSpec.of(rules), fired, report, ctx, effective, mods, live, busy, writable);
+			return FixOffers.evaluate(FixSpec.of(rules), fired, report, excluded, ctx, effective, mods, live, busy, writable);
 		}
 	}
 
@@ -142,6 +143,9 @@ class FixOffersTest {
 		c = new Case();
 		c.report = FixGateTest.report(StutterReport.BENCHMARK, 400, 20);
 		assertEquals(notYet(FixOffer.Reason.BENCHMARK, "stutter-sodium-defer"), c.run().get("stutter-sodium-defer"));
+		c = new Case();
+		c.excluded = true;
+		assertEquals(notYet(FixOffer.Reason.EXCLUDED, "stutter-chunk-loading"), c.run().get("stutter-chunk-loading"));
 		c = new Case();
 		c.busy = true;
 		assertEquals(notYet(FixOffer.Reason.BUSY, "stutter-sodium-defer"), c.run().get("stutter-sodium-defer"));

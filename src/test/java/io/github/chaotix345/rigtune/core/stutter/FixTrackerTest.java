@@ -54,7 +54,7 @@ class FixTrackerTest {
 	private static FixTracker.SessionEnd session(long minutesAfter, double gameplay, int hitches, String key, String value) {
 		SessionOutcome outcome = new SessionOutcome(1, gameplay, hitches, 50.0 * hitches, 4, hitches / 4.0, 0);
 		return new FixTracker.SessionEnd(APPLIED_AT.plus(Duration.ofMinutes(minutesAfter)), StutterReport.MONITOR, outcome, conditions(key, value),
-				conditions(key, value));
+				conditions(key, value), false);
 	}
 
 	private static Instant at(long minutesAfter) {
@@ -130,7 +130,7 @@ class FixTrackerTest {
 		FixConditions resized = new FixConditions(b.mc(), b.modSetHash(), b.heapMaxMb(), b.collector(), 1280, 720, false, b.world(), b.phaseTiming(),
 				b.gcMeasured(), b.settings());
 		FixTracker.Record r = advance(measuring(), journal(RD, JournalChange.APPLIED),
-				new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), resized, s.atEnd()), at(1));
+				new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), resized, s.atEnd(), false), at(1));
 		assertEquals(new FixTracker.Skip("display", List.of()), r.lastSkip());
 		assertNull(r.after());
 		// The end of the session is checked too (a setting changed while playing).
@@ -138,9 +138,21 @@ class FixTrackerTest {
 		changed.put("vanilla.simulationDistance", "12");
 		FixConditions atEnd = new FixConditions(b.mc(), b.modSetHash(), b.heapMaxMb(), b.collector(), b.width(), b.height(), b.fullscreen(), b.world(),
 				b.phaseTiming(), b.gcMeasured(), changed);
-		r = advance(measuring(), journal(RD, JournalChange.APPLIED), new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), b, atEnd), at(1));
+		r = advance(measuring(), journal(RD, JournalChange.APPLIED), new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), b, atEnd, false), at(1));
 		assertEquals(new FixTracker.Skip("setting", List.of("vanilla.simulationDistance", "8", "12")), r.lastSkip());
 		assertEquals(1, r.skipped());
+	}
+
+	// WS-B's M4 rule for C20: a session around a benchmark run or while Distant Horizons generated terrain never counts,
+	// so no verdict is computed across one.
+	@Test
+	void anExcludedSessionDoesntCount() {
+		FixTracker.SessionEnd s = session(1, 500, 2, RD, "10");
+		FixTracker.Record r = advance(measuring(), journal(RD, JournalChange.APPLIED),
+				new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), s.atStart(), s.atEnd(), true), at(1));
+		assertEquals(new FixTracker.Skip("excluded", List.of()), r.lastSkip());
+		assertNull(r.after());
+		assertEquals(FixTracker.State.MEASURING, r.state());
 	}
 
 	@Test
@@ -220,7 +232,7 @@ class FixTrackerTest {
 		FixTracker.SessionEnd before = session(-10, 600, 20, RD, "12");
 		assertSame(r, advance(r, journal(RD, JournalChange.APPLIED), before, at(0)));
 		FixTracker.SessionEnd s = session(1, 500, 2, RD, "10");
-		FixTracker.SessionEnd benchmark = new FixTracker.SessionEnd(s.startedAt(), StutterReport.BENCHMARK, s.outcome(), s.atStart(), s.atEnd());
+		FixTracker.SessionEnd benchmark = new FixTracker.SessionEnd(s.startedAt(), StutterReport.BENCHMARK, s.outcome(), s.atStart(), s.atEnd(), false);
 		assertSame(r, advance(r, journal(RD, JournalChange.APPLIED), benchmark, at(1)));
 	}
 
@@ -229,7 +241,7 @@ class FixTrackerTest {
 	void theKeyChangedAgainReplacesIt() {
 		assertEquals(FixTracker.State.REPLACED, advance(measuring(), journal(RD, JournalChange.APPLIED), session(1, 500, 2, RD, "16"), at(1)).state());
 		FixTracker.SessionEnd s = session(1, 500, 2, RD, "10");
-		FixTracker.SessionEnd changedWhilePlaying = new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), s.atStart(), conditions(RD, "8"));
+		FixTracker.SessionEnd changedWhilePlaying = new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), s.atStart(), conditions(RD, "8"), false);
 		assertEquals(FixTracker.State.REPLACED, advance(measuring(), journal(RD, JournalChange.APPLIED), changedWhilePlaying, at(1)).state());
 	}
 
@@ -240,13 +252,13 @@ class FixTrackerTest {
 		FixTracker.Record r = measuring();
 		List<JournalEntry> journal = journal(RD, JournalChange.APPLIED);
 		FixTracker.SessionEnd s = session(0, 500, 2, RD, "12");
-		FixTracker.SessionEnd early = new FixTracker.SessionEnd(APPLIED_AT.plusSeconds(3), s.source(), s.outcome(), s.atStart(), conditions(RD, "10"));
+		FixTracker.SessionEnd early = new FixTracker.SessionEnd(APPLIED_AT.plusSeconds(3), s.source(), s.outcome(), s.atStart(), conditions(RD, "10"), false);
 		assertSame(r, advance(r, journal, early, at(1)));
-		FixTracker.SessionEnd late = new FixTracker.SessionEnd(APPLIED_AT.plusSeconds(6), s.source(), s.outcome(), s.atStart(), conditions(RD, "10"));
+		FixTracker.SessionEnd late = new FixTracker.SessionEnd(APPLIED_AT.plusSeconds(6), s.source(), s.outcome(), s.atStart(), conditions(RD, "10"), false);
 		assertEquals(FixTracker.State.REPLACED, advance(r, journal, late, at(1)).state());
 		// Anything other than the old value right after the apply is still "replaced".
 		FixTracker.SessionEnd other = new FixTracker.SessionEnd(APPLIED_AT.plusSeconds(3), s.source(), s.outcome(), conditions(RD, "16"),
-				conditions(RD, "16"));
+				conditions(RD, "16"), false);
 		assertEquals(FixTracker.State.REPLACED, advance(r, journal, other, at(1)).state());
 	}
 

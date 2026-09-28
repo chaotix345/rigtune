@@ -17,11 +17,13 @@ public sealed interface FixOffer permits FixOffer.Offer, FixOffer.NotYet {
 		}
 	}
 
-	// sf §2.7's rigtune.stutter.fix.not_yet.* reasons.
+	// sf §2.7's rigtune.stutter.fix.not_yet.* reasons. EXCLUDED (WS-B's M4 rule): the session ran around a benchmark run or
+	// while Distant Horizons generated terrain, so it can't be a comparison's before side.
 	enum Reason {
 		LENGTH,
 		EVIDENCE,
 		BENCHMARK,
+		EXCLUDED,
 		SERVER,
 		BUSY,
 		STORE
