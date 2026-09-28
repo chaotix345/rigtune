@@ -682,6 +682,12 @@ public final class BenchmarkController {
 			return;
 		}
 		if (outcome.cancelled()) {
+			// Review-11 BENCH-6: a failed restore is said before anything takes the outcome (Try It's hook opens its screen),
+			// as show() does in the benchmark world; the overlay below stays for an outcome nothing takes.
+			if (!outcome.restoreOk()) {
+				SystemToast.add(minecraft.gui.toastManager(), TOAST_ID, Component.translatable("rigtune.benchmark.restore_failed.title"),
+						Component.translatable("rigtune.benchmark.restore_failed"));
+			}
 			if (claimed(outcome)) {
 				return;
 			}

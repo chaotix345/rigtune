@@ -57,12 +57,16 @@ public final class BenchmarkConditions {
 	public record JournalAtStart(@Nullable String cursor, @Nullable List<String> staged) {
 		public static JournalAtStart current() {
 			try {
-				Journal journal = ClientJournal.get();
-				return of(journal.state(), journal.entries());
+				return of(ClientJournal.get().snapshot());
 			} catch (RuntimeException e) {
 				RigTune.LOGGER.warn("Could not read the history for the benchmark's journal cursor and staged changes", e);
 				return new JournalAtStart(null, null);
 			}
+		}
+
+		// Review-11 BENCH-8: the state and the entries of one read, so a read failing after an OK one can't record [].
+		static JournalAtStart of(Journal.Snapshot snapshot) {
+			return of(snapshot.state(), snapshot.entries());
 		}
 
 		static JournalAtStart of(Journal.State state, List<JournalEntry> entries) {

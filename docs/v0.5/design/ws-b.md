@@ -160,8 +160,8 @@ Sent to the coordinator with proposed dispositions; fixed in 03c46c37 (red tests
 - part 1 M4: the SPEC decision above (Deviations 8: withhold; `ResultNotesTest.m4APairWithAnExcludedRunGetsNoVerdictButACaveat`).
   Also from the coordinator's list: M1's "nothing could be measured" headline ("Nothing could be measured: the terrain
   hadn't loaded in time. Your render distance stays at 12.", `m1NothingMeasuredIsTheHeadline`); M3's single journal
-  snapshot for the cursor and the staged ids (`BenchmarkConditions.JournalAtStart`, two reads of history.json through
-  Journal's public `state()`/`entries()`, since `Journal` (WS-P's) exposes no read of both at once;
+  snapshot for the cursor and the staged ids (`BenchmarkConditions.JournalAtStart`; one read of history.json through
+  `Journal.snapshot()` since review-11 BENCH-8;
   `bh2OneJournalSnapshotGivesTheCursorAndTheStagedIds`); L9's CI warning when the world already existed; N13 (the
   fixture's CURRENT Tune now met the target at 16; `ws-b/benchmarks.json` regenerated with the switch); part 2 L5 (the
   walk logs each screen's `textContent()`: the Stutter Doctor line is the game's last real capture's). L11 (the note counts excluded runs): left; the trend's "earlier"
@@ -281,4 +281,11 @@ Sent to the coordinator with proposed dispositions; fixed in 03c46c37 (red tests
   - Told ws-t (Try It: nothing to change, `Difference.BACKEND/GPU` arrive through `differences()` unless `Triable.allowed`
     lists them) and ws-s2 (C20's `FixConditions` should compare the backend the same way). C18's startup trend is a
     residual (the coordinator's call).
-
+- **BENCH-6 (LOW): FIXED.** In the player's own world, a cancelled run whose restore failed gave Try It's hook the outcome
+  before the "some settings couldn't be restored" overlay, so the message was lost under TryItScreen. BenchmarkController
+  now shows the restore_failed toast before the hook, as `show()` does in the benchmark world; the overlay stays for an
+  outcome nothing takes. No unit test (the path needs a running client; a LOW); covered by reading `finish()`'s order.
+- **BENCH-8 (LOW): FIXED.** `JournalAtStart.current()` read history.json twice (`state()`, then `entries()`), so a second
+  read failing after an OK first one recorded `stagedAtStart = []`. It now takes both from `Journal.snapshot()`
+  (`JournalAtStart.of(Snapshot)`); `BenchmarkConditionsTest.bh2OneJournalSnapshotGivesTheCursorAndTheStagedIds` gained the
+  snapshot cases (red first: `of(Snapshot)` didn't exist).

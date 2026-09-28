@@ -62,6 +62,12 @@ class BenchmarkConditionsTest {
 				BenchmarkConditions.JournalAtStart.of(Journal.State.OK, List.of(first, staged)));
 		assertEquals(new BenchmarkConditions.JournalAtStart(null, List.of()), BenchmarkConditions.JournalAtStart.of(Journal.State.MISSING, List.of()));
 		assertEquals(new BenchmarkConditions.JournalAtStart(null, null), BenchmarkConditions.JournalAtStart.of(Journal.State.CORRUPT, List.of()));
+		// Review-11 BENCH-8: the state and the entries come from one read (Journal.snapshot); an unreadable one records
+		// neither, never "nothing staged".
+		assertEquals(new BenchmarkConditions.JournalAtStart("e2", List.of("c3")),
+				BenchmarkConditions.JournalAtStart.of(new Journal.Snapshot(Journal.State.OK, List.of(first, staged))));
+		assertEquals(new BenchmarkConditions.JournalAtStart(null, null),
+				BenchmarkConditions.JournalAtStart.of(new Journal.Snapshot(Journal.State.UNREADABLE, List.of())));
 	}
 
 	// Review (part 1 M3): an unreadable history.json isn't "nothing staged" (the journal answers no entries then): left out.
