@@ -644,15 +644,17 @@ public class TryItGameTest implements FabricClientGameTest {
 				.map(b -> b.getMessage().getContents() instanceof TranslatableContents tc ? tc.getKey() : b.getMessage().getString()).toList());
 	}
 
+	// At X12's sizes; then the window and GUI scale as they were (options.txt keeps its guiScale line).
 	private static void screenshots(ClientGameTestContext context, String name) {
 		V05TestContext v05 = V05TestContext.of(context);
+		int scale = context.computeOnClient(mc -> mc.options.guiScale().get());
 		for (int[] size : V05TestContext.SIZES) {
 			v05.resize(size[0], size[1], size[2]);
 			context.waitTicks(3);
 			layout(context, name + " " + size[0] + "x" + size[1]);
 			context.takeScreenshot(name + "-" + size[0] + "x" + size[1] + "-scale" + size[2]);
 		}
-		v05.resize(854, 480, 2);
+		v05.resize(854, 480, scale);
 		context.waitTicks(2);
 	}
 

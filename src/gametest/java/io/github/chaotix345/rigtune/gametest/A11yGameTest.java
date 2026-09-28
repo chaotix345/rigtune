@@ -530,7 +530,8 @@ public class A11yGameTest implements FabricClientGameTest {
 			context.takeScreenshot("a11y-tryit-focus-854x480-scale2");
 			highContrastScreenshot(context, "a11y-hc-tryit-854x480-scale2");
 
-			context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.PreviewScreen(new TitleScreen(), controller, List.of(
+			TryItAvailable available = new TryItAvailable(controller);
+			context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.PreviewScreen(new TitleScreen(), available, List.of(
 					new io.github.chaotix345.rigtune.core.model.Recommendation("a11y:rd", io.github.chaotix345.rigtune.core.model.Category.SETTING,
 							io.github.chaotix345.rigtune.core.model.Impact.LOW, "Render distance", "", new io.github.chaotix345.rigtune.core.model.Action.SetSetting(
 									"vanilla.renderDistance", "12", "10"), true)))));
@@ -541,6 +542,19 @@ public class A11yGameTest implements FabricClientGameTest {
 		} finally {
 			CannedViews.clear();
 			context.runOnClient(mc -> mc.gui.setScreen(found));
+		}
+	}
+
+	// The canned world with Try it available (an inactive button is no Tab stop).
+	private static final class TryItAvailable extends ForwardingController {
+		TryItAvailable(io.github.chaotix345.rigtune.client.ui.RigTuneController delegate) {
+			super(delegate);
+		}
+
+		@Override
+		public io.github.chaotix345.rigtune.core.model.@org.jspecify.annotations.Nullable Text tryItRefusal(
+				io.github.chaotix345.rigtune.core.model.Recommendation rec) {
+			return null;
 		}
 	}
 

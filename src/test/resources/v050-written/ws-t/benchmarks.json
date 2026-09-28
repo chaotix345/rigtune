@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "runs": [
+    {
+      "id": "2026-09-24T10:02:58Z-1a2b",
+      "createdAt": "2026-09-24T10:02:58Z",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "mode": "MEASURE",
+      "scene": "CURRENT",
+      "phase": "before",
+      "pairId": "tryit-1b2c3d4e-5f60-4718-8a9b-0c1d2e3f4052",
+      "targetFps": 144,
+      "targetMet": true,
+      "knobs": {
+        "renderDistance": {
+          "value": 12,
+          "original": 12
+        },
+        "simulationDistance": {
+          "value": 8,
+          "original": 8
+        }
+      },
+      "result": {
+        "avgFps": 142.0,
+        "onePercentLowFps": 84.2,
+        "p99FrameMs": 11.876484560570072,
+        "repeats": 2,
+        "cv": 0.021
+      },
+      "costs": {},
+      "notMeasured": {},
+      "deadlineHit": false,
+      "context": {
+        "dhRendering": false,
+        "shaders": false,
+        "width": 2560,
+        "height": 1440,
+        "fullscreen": false,
+        "protocol": 1,
+        "modSetHash": "6c652939928ad17df74ccf1ed644093099c9bef2f396af02a52986a103d1713b",
+        "stagedAtStart": []
+      }
+    },
+    {
+      "id": "2026-09-24T10:09:40Z-2b3c",
+      "createdAt": "2026-09-24T10:09:40Z",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "mode": "MEASURE",
+      "scene": "CURRENT",
+      "phase": "after",
+      "pairId": "tryit-1b2c3d4e-5f60-4718-8a9b-0c1d2e3f4052",
+      "targetFps": 144,
+      "targetMet": true,
+      "knobs": {
+        "renderDistance": {
+          "value": 12,
+          "original": 12
+        },
+        "simulationDistance": {
+          "value": 8,
+          "original": 8
+        }
+      },
+      "result": {
+        "avgFps": 148.8,
+        "onePercentLowFps": 85.2,
+        "p99FrameMs": 11.737089201877934,
+        "repeats": 2,
+        "cv": 0.021
+      },
+      "costs": {},
+      "notMeasured": {},
+      "deadlineHit": false,
+      "context": {
+        "dhRendering": false,
+        "shaders": false,
+        "width": 2560,
+        "height": 1440,
+        "fullscreen": false,
+        "protocol": 1,
+        "modSetHash": "6c652939928ad17df74ccf1ed644093099c9bef2f396af02a52986a103d1713b",
+        "stagedAtStart": []
+      }
+    },
+    {
+      "id": "2026-09-25T10:03:02Z-3c4d",
+      "createdAt": "2026-09-25T10:03:02Z",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "mode": "MEASURE",
+      "scene": "BENCHMARK_WORLD",
+      "phase": "before",
+      "pairId": "tryit-9e8d7c6b-5a49-4382-9170-6f5e4d3c2b1b",
+      "targetFps": 144,
+      "targetMet": true,
+      "knobs": {
+        "renderDistance": {
+          "value": 12,
+          "original": 12
+        },
+        "simulationDistance": {
+          "value": 8,
+          "original": 8
+        }
+      },
+      "result": {
+        "avgFps": 171.9,
+        "onePercentLowFps": 96.4,
+        "p99FrameMs": 10.373443983402488,
+        "repeats": 2,
+        "cv": 0.021
+      },
+      "costs": {},
+      "notMeasured": {},
+      "world": {
+        "levelId": "rigtune-benchmark",
+        "seed": 8675309
+      },
+      "deadlineHit": false,
+      "context": {
+        "dhRendering": false,
+        "shaders": false,
+        "width": 2560,
+        "height": 1440,
+        "fullscreen": false,
+        "protocol": 1,
+        "modSetHash": "6c652939928ad17df74ccf1ed644093099c9bef2f396af02a52986a103d1713b",
+        "worldFresh": false,
+        "stagedAtStart": []
+      }
+    }
+  ]
+}
