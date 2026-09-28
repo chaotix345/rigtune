@@ -5,6 +5,8 @@ import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.server.ServerProfileStore;
 import org.jspecify.annotations.Nullable;
 
+import java.time.DateTimeException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -61,14 +63,26 @@ public record ServerProfilesView(State state, ServerLimits.@Nullable Kind kind, 
 			if (current) {
 				currentProfile = entry.profile();
 			}
-			String day = entry.lastSeen() == null ? null : LocalDate.ofInstant(entry.lastSeen(), zone).toString();
-			rows.add(new Row(entry.key(), entry.kind(), entry.profile(), names.apply(entry.profile()), day, current));
+			rows.add(new Row(entry.key(), entry.kind(), entry.profile(), names.apply(entry.profile()), day(entry.lastSeen(), zone), current));
 		}
 		Text currentName = currentProfile == null ? null : names.apply(currentProfile);
 		boolean held = currentProfile != null
 				&& ServerProfilePrompt.decide(kind, currentProfile, currentName != null, active, false, onBattery) == ServerProfilePrompt.Reason.ON_BATTERY;
 		return new ServerProfilesView(state, kind, here, currentProfile, currentName, held, active, active == null ? null : names.apply(active), rows,
 				writable);
+	}
+
+	// The local day of `at`, or null when there's none, or no calendar day can hold it (review-11 SEC-2: the store bounds
+	// the times it reads; a view built from elsewhere must not throw on screen init either).
+	private static @Nullable String day(@Nullable Instant at, ZoneId zone) {
+		if (at == null) {
+			return null;
+		}
+		try {
+			return LocalDate.ofInstant(at, zone).toString();
+		} catch (DateTimeException e) {
+			return null;
+		}
 	}
 
 	// The This-server line.

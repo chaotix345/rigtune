@@ -98,6 +98,17 @@ class ServerProfilesViewTest {
 				.rows().getFirst().lastJoined());
 	}
 
+	// review-11 SEC-2: a date no calendar day can hold (a hand-edited lastSeen at Instant's ends) shows no day, and the
+	// screen still opens (it used to throw DateTimeException in Screen.init on every open).
+	@Test
+	void aDateNoDayCanHoldShowsNoDay() {
+		List<Entry> entries = List.of(new Entry(KEY_A, MAX_FPS, ServerLimits.Kind.REMOTE, Instant.MIN, Instant.MAX),
+				new Entry(KEY_B, QUALITY, ServerLimits.Kind.REMOTE, null, Instant.MIN));
+		ServerProfilesView view = ServerProfilesView.of(State.NOT_CONNECTED, null, null, entries, NAME, null, false, true, UTC);
+		assertEquals(List.of("Server · Max FPS", "Server · Quality"), view.rows().stream().map(row -> row.text().english()).toList());
+		assertNull(view.rows().getFirst().lastJoined());
+	}
+
 	@Test
 	void deletedAndUnknownProfilesReadAsSuch() {
 		List<Entry> entries = List.of(entry(KEY_A, "p-gone", ServerLimits.Kind.REMOTE, "2026-09-20T10:00:00Z"),
