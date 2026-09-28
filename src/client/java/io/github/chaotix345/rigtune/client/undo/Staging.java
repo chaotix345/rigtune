@@ -292,7 +292,7 @@ public final class Staging {
 			Map<String, String> readIds = new HashMap<>();
 			PendingActions plan = PendingActions.load(pendingFile);
 			// As for Discard pending: the next exit finishes such a group or rolls it back.
-			Set<String> halfDone = halfDoneGroups(plan);
+			Set<String> halfDone = halfDoneGroups(here(plan));
 			for (Op op : plan.ops()) {
 				if (op != null && op.type() == PendingActions.Type.ENABLE_FILE && op.id() != null && !halfDone.contains(key(op))) {
 					String modId = modIdOf(op);
@@ -361,9 +361,9 @@ public final class Staging {
 				return null;
 			}
 			PendingActions plan = readable();
-			Set<String> halfDone = plan == null ? Set.of() : halfDoneGroups(plan);
+			Set<String> halfDone = plan == null ? Set.of() : halfDoneGroups(here(plan));
 			if (plan != null && plan.ops().stream().anyMatch(op -> op != null && halfDone.contains(key(op)))) {
-				Set<String> held = holds ? keys(ApplyExecutor.held(plan, pendingFile)) : Set.of();
+				Set<String> held = holds ? keys(ApplyExecutor.held(here(plan), pendingFile)) : Set.of();
 				return discardExcept(plan, halfDone, held);
 			}
 			List<Op> dropped = PendingActions.discard(pendingFile, Duration.ZERO);
@@ -438,6 +438,12 @@ public final class Staging {
 		return new Discard(dropped, keptRun, keptHeld);
 	}
 
+	// The plan with its paths moved to this pending.json's folders (a moved instance), as dropStale and the helper see it;
+	// for judging groups only, never saved.
+	private PendingActions here(PendingActions plan) {
+		return plan.relocated(InstanceDirs.modsDirOf(pendingFile), InstanceDirs.configDirOf(pendingFile));
+	}
+
 	// review 12: a staged op's group key, as ApplyExecutor.startedGroups and StaleOps give it ("op:<id>" without a group).
 	private static String key(Op op) {
 		return op.group() != null ? op.group() : "op:" + op.id();
@@ -456,7 +462,7 @@ public final class Staging {
 			if (!Files.isRegularFile(pendingFile)) {
 				return UndoPlanner.StagedGroups.NONE;
 			}
-			PendingActions plan = PendingActions.load(pendingFile);
+			PendingActions plan = here(PendingActions.load(pendingFile));
 			return new UndoPlanner.StagedGroups(ApplyExecutor.startedGroups(plan, pendingFile),
 					holds ? keys(ApplyExecutor.held(plan, pendingFile)) : Set.of());
 		} catch (IOException | RuntimeException e) {

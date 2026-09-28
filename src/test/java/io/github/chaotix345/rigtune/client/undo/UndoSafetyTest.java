@@ -205,9 +205,9 @@ class UndoSafetyTest {
 
 	// R12APPLY-3: where the launcher keeps its own list of mods, a half-done group (killed right after its first rename,
 	// before the record could mark it) is held at every exit, so no restart finishes it: Undo says it waits for the
-	// player's choice on RigTune's screen, and the rest of the entry (a staged setting) is still undone.
+	// player's choice in the held mod changes notice, and, as for a restart (audit M3), the whole entry waits with it.
 	@Test
-	void aHeldHalfDoneGroupNeverBlocksTheRestOfItsEntry() throws IOException {
+	void aHeldHalfDoneGroupMakesItsEntryWaitForTheChoice() throws IOException {
 		List<Op> staged = stageUpdate("e1", SodiumConfigPatcher.stage(sodium, Map.of(IN_FILE, "4")).ops().toArray(Op[]::new));
 		assertThrows(TestExecutors.Killed.class, () -> TestExecutors.killedAfter(Path.of(staged.getFirst().path())::equals)
 				.run(PendingActions.load(pending), pending));
@@ -217,10 +217,13 @@ class UndoSafetyTest {
 
 		UndoPlan plan = service.plan(false);
 
-		assertEquals(Set.of("rigtune.undo.reason.held_partly"), reasonKeys(plan, UndoPlan.Action.SKIP), plan.toString());
-		assertEquals(1, plan.items().stream().filter(i -> i.action() == UndoPlan.Action.DISCARD_STAGED).count(), plan.toString());
+		assertEquals("e1", plan.undoOf());
+		assertEquals(Set.of("rigtune.undo.reason.held_partly", "rigtune.undo.reason.held_entry"), reasonKeys(plan, UndoPlan.Action.SKIP), plan.toString());
+		assertTrue(plan.items().stream().allMatch(i -> i.action() == UndoPlan.Action.SKIP), plan.toString());
 		assertFalse(service.undo(plan).busy());
-		assertEquals(staged.subList(0, 2).stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+		assertEquals(staged.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+		assertTrue(journal.entries().stream().filter(e -> JournalEntry.UNDO.equals(e.kind())).allMatch(e -> e.changes().isEmpty()));
+		assertTrue(UndoPlanner.undoable(journal.entries()).contains("e1"), "nothing of e1 counts as undone");
 	}
 
 	// R12APPLY-3, Discard pending: the held half-done group is kept, and the status says it waits for the player's choice,

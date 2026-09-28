@@ -345,6 +345,11 @@ Branch `fix/v05-r12-ws-h`, from feat/v0.5.0 ac109a2d. Each MEDIUM had a test tha
 | R12APPLY-3 (M) | 97e752f0 | A half-done or started group the next exit holds (LAUNCHER/PENDING): Undo skips it with `rigtune.undo.reason.held_partly` (the player's choice on RigTune's screen, not a restart) and no longer holds up the rest of its entry; Discard keeps it with `rigtune.status.discarded_with_held` (`_with_kept_and_held` when an unheld one was kept too). ws-l2.md's residual line corrected (marked) | `UndoSafetyTest.aHeldHalfDoneGroupNeverBlocksTheRestOfItsEntry` (the staged setting was blocked by "waits for a restart"), `discardKeepsAHeldHalfDoneGroupAndSaysItWaitsForAChoice` |
 | R12APPLY-5 (L) | 6a92580a | preLaunch runs the journal (the RW-20 relabel) before it reads the result the title toast shows (`RigTunePreLaunch.readAtStart`) | `PreLaunchResultTest.theToastsResultIsTheRelabelledOne` |
 | notes | 6a92580a | `startedGroups`' comment names the rule it uses; `PreLaunchStaleOpsTest`'s comment names its kill point | - |
+| self-review M1, L3 | (next commit) | A held group keeps its entry waiting (audit M3), as a restart wait does: Undo last/this never half-undoes that entry, the held group reads `held_partly`, the rest `rigtune.undo.reason.held_entry` ("waits for your choice in RigTune's held mod changes notice"); this replaces R12APPLY-3's "doesn't hold up its entry". Staging judges groups on the plan relocated to its pending.json's folders (a moved instance), never saving it relocated | `UndoSafetyTest.aHeldHalfDoneGroupMakesItsEntryWaitForTheChoice` |
+
+Not done: the self-review's L2 ("may wait" under PENDING): it needs PENDING variants of four keys across Undo and
+Discard, not one; under PENDING the helper does hold these groups at exit, so the wording is true until the policy
+resolves.
 
 R12APPLY-4 and R12APPLY-6 aren't WS-H's (ws-l2, ws-s2). Other owners' files, each edit marked: `UndoPlanner` (the
 StagedGroups input), `UndoService`, `RealController.discardPending` (passes the policy), `RigTunePreLaunch`,

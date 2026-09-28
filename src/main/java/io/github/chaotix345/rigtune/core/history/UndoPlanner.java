@@ -81,13 +81,15 @@ public final class UndoPlanner {
 	static final String WAITS_STAGED = "It needs changes that are still waiting for a restart; restart once, then undo it";
 	static final String WAITS_ENTRY = "Part of this apply waits for a restart, so none of it is undone yet; restart once, then undo it";
 	static final String WAITS_PARTLY = "It was partly applied at the last exit; restart once so it finishes, then undo it";
-	static final String HELD_PARTLY = "It's already under way, and RigTune holds it for your choice on RigTune's screen (Cancel them or Let RigTune "
-			+ "apply them), not for a restart";
+	static final String HELD_PARTLY = "It's already under way and waits for your choice in RigTune's held mod changes notice (Cancel them or Let "
+			+ "RigTune apply them), not for a restart";
+	static final String HELD_ENTRY = "Part of this apply waits for your choice in RigTune's held mod changes notice, so none of it is undone yet";
 	static final String LAUNCHER_MANAGED = "This instance's mods are managed by %s: change it there";
 	static final String LAUNCHER_PENDING = "Checking which launcher manages this instance's mods; undo it once that's known";
 	static final String NOT_DISABLED_BY_RIGTUNE = "RigTune didn't disable %s (it was already gone)";
 	static final String NOT_DISABLED_TOGETHER = "Changed together with %s, which RigTune didn't disable (it was already gone)";
-	private static final Set<String> WAITING = Set.of("rigtune.undo.reason.waits_restart", "rigtune.undo.reason.waits_staged",
+	private static final Set<String> WAITING = Set.of("rigtune.undo.reason.held_partly", "rigtune.undo.reason.held_entry", "rigtune.undo.reason.waits_restart",
+			"rigtune.undo.reason.waits_staged",
 			"rigtune.undo.reason.waits_entry", "rigtune.undo.reason.waits_partly");
 	// The Undo screen's text as rigtune.undo.item.* / rigtune.undo.reason.* keys with the English above (docs/v0.3/SPEC.md
 	// item 9, G-M2); file names, mod ids, labels and values are arguments.
@@ -377,6 +379,8 @@ public final class UndoPlanner {
 		final Set<String> discardOpIds = new LinkedHashSet<>();
 		final List<Revert> revertList = new ArrayList<>();
 		boolean waits;
+		// review 12: part of the plan waits for the player's choice (a held group already under way), not for a restart.
+		boolean waitsForChoice;
 
 		final State state;
 
@@ -398,8 +402,8 @@ public final class UndoPlanner {
 		planStaged(ctx, kept, pending, folder, shownOps, b);
 		planSettings(kept, state, trackedKeys(ctx), pending, b);
 		planFiles(kept, folder, pending, b);
-		if (!all && b.waits) {
-			waitWhole(b);
+		if (!all && (b.waits || b.waitsForChoice)) {
+			waitWhole(b, b.waits ? Text.of("rigtune.undo.reason.waits_entry", WAITS_ENTRY) : Text.of("rigtune.undo.reason.held_entry", HELD_ENTRY));
 		}
 		List<Item> items = new ArrayList<>(b.discards);
 		items.addAll(b.reverts);
@@ -415,8 +419,7 @@ public final class UndoPlanner {
 
 	// Undo last / Undo this on an entry part of which waits for the restart: none of it is undone now, since undoing the
 	// rest would leave the entry half undone, and Undo last passes over an entry once it was undone (audit M3).
-	private static void waitWhole(Builder b) {
-		Text reason = Text.of("rigtune.undo.reason.waits_entry", WAITS_ENTRY);
+	private static void waitWhole(Builder b, Text reason) {
 		List<Item> held = new ArrayList<>(b.discards);
 		held.addAll(b.reverts);
 		b.discards.clear();
@@ -523,8 +526,9 @@ public final class UndoPlanner {
 			String key = first.group() != null ? first.group() : "op:" + first.id();
 			if (ops.stream().anyMatch(op -> op.group() != null && partly.contains(op.group())) || ctx.groups.started().contains(key)) {
 				if (ctx.groups.held().contains(key)) {
-					// Held at every exit (docs/v0.5/SPEC.md 4d): no restart finishes it, so it doesn't hold up its entry.
+					// Held at every exit (docs/v0.5/SPEC.md 4d): no restart finishes it; its entry waits for the player's choice.
 					group.getValue().forEach(l -> b.skip(l, Text.of("rigtune.undo.reason.held_partly", HELD_PARTLY)));
+					b.waitsForChoice = true;
 				} else {
 					group.getValue().forEach(l -> b.skip(l, Text.of("rigtune.undo.reason.waits_partly", WAITS_PARTLY)));
 					b.waits = true;
