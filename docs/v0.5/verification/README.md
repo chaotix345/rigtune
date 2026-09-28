@@ -21,12 +21,19 @@ Owner: WS-B (RW-5..RW-9, RW-15, BH-1/2, L3; AC2B.5's DH run with the P5 agent).
 
 ## e2e
 Owner: WS-E (3a-3c: self-update, undo and downgrade E2E per tier, compat040/compat030, tested bytes = published bytes).
+`e2e/README.md`: the release dry run 36296717280 (16/16) and the local Windows runs (helper-kill, the undo scenario with
+guard-apply, the downgrades with v050 sets; `e2e/local-windows-26.2/`). compat040/compat030 run in build.yml's java job
+(green in 36363179808). The Stutter Doctor dev-script leg (AC3f.1) is recorded under `stutter/ac3f1-stutter-script/`.
 
 ## server
 Owner: WS-E (3d LAN guest and Realms; AC3f.4's DH server note).
+`server/README.md`: LanGuestGameTest (LAN list join, restart, Realms via RealmsConnect), local and CI 36363179808 on 3
+legs; what the Realms block proves; UNVERIFIED items. AC3f.4 (the DH note): not run yet.
 
 ## battery
 Owner: WS-E (3e: the battery flow with a simulated battery, the tmpfs OSHI leg).
+`battery/README.md`: BatteryFlowGameTest on 3 legs (36363179808) and locally; battery-oshi on both nodes (scratch runs
+36362848495, 36363923151); AC3e.3's unit cases.
 
 ## launcher
 Owner: WS-L1, WS-L2, the P5 agent (4j: the simulated brand and `.index/` runs, the read-only repair-list check, AC4j.5's

@@ -419,13 +419,24 @@ tasks.register("runProductionClientGameTest", net.fabricmc.loom.task.prod.Client
 
 // v0.4 (docs/v0.4/SPEC.md 6, AC6.6): extra JVM arguments for a LOCAL game-test run, split on whitespace, e.g.
 // ./gradlew :26.2:runProductionClientGameTest -PgametestJvmArgs="-XX:+UseZGC -XX:+ZGenerational -Dusing.aikars.flags=x"
-// (JvmGameTest then checks that the notes come from the running JVM). CI never passes it.
+// (JvmGameTest then checks that the notes come from the running JVM). CI passes it only on e2e.yml's battery-oshi leg
+// (two -D properties for BatteryFlowGameTest).
 def gametestJvmArgs = providers.gradleProperty("gametestJvmArgs").map { it.trim().split(/\s+/).findAll { !it.isEmpty() } }.orElse([])
 tasks.named("runProductionClientGameTest") {
 	jvmArgs.addAll(gametestJvmArgs)
 }
 tasks.matching { it.name == "runClientGameTest" }.configureEach {
 	jvmArgumentProviders.add({ gametestJvmArgs.get() } as CommandLineArgumentProvider)
+}
+
+// v0.5 WS-E (review M2): -PgametestModJar=<path> runs the production game tests on that RigTune jar (a release run's staged
+// bytes, e2e.yml's battery-oshi leg) in place of this build's own jar, which is then not built; the gametest jar and the
+// other mods are the same.
+def gametestModJar = providers.gradleProperty("gametestModJar")
+if (gametestModJar.present) {
+	tasks.named("runProductionClientGameTest") {
+		mods.setFrom(files(gametestModJar.get()), gametestJar, configurations.productionGameTestMods)
+	}
 }
 
 // Footprint guard (docs/v0.4/SPEC.md 10): FrameHookBudgetTest and FootprintGameTest read the budgets from

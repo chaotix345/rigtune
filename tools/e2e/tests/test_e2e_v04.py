@@ -27,7 +27,8 @@ def failing(checks):
 
 class ReleasedJarTest(unittest.TestCase):
     def test_every_released_old_side_is_pinned(self):
-        self.assertEqual({"0.1.0", "0.2.0+mc26.2", "0.3.0+mc26.2"}, set(self_update_e2e.RELEASED))
+        self.assertEqual({"0.1.0", "0.2.0+mc26.2", "0.3.0+mc26.2", "0.2.0+mc26.3", "0.3.0+mc26.3", "0.4.0+mc26.2", "0.4.0+mc26.3"},
+                         set(self_update_e2e.RELEASED))
         self.assertEqual(("rigtune-0.3.0+mc26.2.jar", "5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9"),
                          self_update_e2e.RELEASED["0.3.0+mc26.2"])
 
@@ -35,6 +36,9 @@ class ReleasedJarTest(unittest.TestCase):
         workflow = (REPO / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8").replace("\r\n", "\n")
         pinned = dict((name, sha) for sha, name in re.findall(r"^\s*([0-9a-f]{64})  \$old/(\S+)$", workflow, re.MULTILINE))
         self.assertEqual({name: sha for name, sha in self_update_e2e.RELEASED.values()}, pinned)
+        # The cache key names every pinned digest (its first 16 hex digits), so a new pin never reuses an old cache.
+        key = re.search(r"key: (e2e-old-\S+)", workflow).group(1)
+        self.assertEqual(sorted(sha[:16] for sha in pinned.values()), sorted(key.split("-")[2:]))
         for name in pinned:
             self.assertIn('"-Pe2e.oldJar=$old/{}"'.format(name), workflow)
 
