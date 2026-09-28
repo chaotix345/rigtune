@@ -34,6 +34,13 @@ public final class FixOffers {
 	// connected server's limits (null when none). busy: another fix is staged or being measured.
 	public static Map<String, FixOffer> evaluate(List<FixSpec> specs, Collection<String> fired, StutterReport report, boolean excluded, EvalContext ctx,
 			SettingsSnapshot effective, Set<String> loadedMods, @Nullable ServerLimits live, boolean busy, boolean storeWritable) {
+		return evaluate(specs, fired, report, FixGate.outcome(report), excluded, false, ctx, effective, loadedMods, live, busy, storeWritable);
+	}
+
+	// outcome and changed: FixGate.check's (the comparison's view of the session; the setup moved during it).
+	public static Map<String, FixOffer> evaluate(List<FixSpec> specs, Collection<String> fired, StutterReport report, SessionOutcome outcome,
+			boolean excluded, boolean changed, EvalContext ctx, SettingsSnapshot effective, Set<String> loadedMods, @Nullable ServerLimits live, boolean busy,
+			boolean storeWritable) {
 		Map<String, FixOffer> out = new LinkedHashMap<>();
 		for (FixSpec spec : specs) {
 			if (!fired.contains(spec.adviceId()) || !ProfileSwitch.takesPart(spec.key(), effective, loadedMods)) {
@@ -44,17 +51,17 @@ public final class FixOffers {
 			if (to == null) {
 				continue;
 			}
-			out.put(spec.adviceId(), offer(spec, from, to, report, excluded, ctx, live, busy, storeWritable));
+			out.put(spec.adviceId(), offer(spec, from, to, report, outcome, excluded, changed, ctx, live, busy, storeWritable));
 		}
 		return out;
 	}
 
-	private static FixOffer offer(FixSpec spec, String from, String to, StutterReport report, boolean excluded, EvalContext ctx,
-			@Nullable ServerLimits live, boolean busy, boolean storeWritable) {
-		FixOffer.Reason reason = FixGate.check(report, excluded, busy, storeWritable);
+	private static FixOffer offer(FixSpec spec, String from, String to, StutterReport report, SessionOutcome outcome, boolean excluded, boolean changed,
+			EvalContext ctx, @Nullable ServerLimits live, boolean busy, boolean storeWritable) {
+		FixOffer.Reason reason = FixGate.check(report, outcome, excluded, changed, busy, storeWritable);
 		if (reason == FixOffer.Reason.LENGTH) {
 			return new FixOffer.NotYet(spec.adviceId(), reason, List.of(StutterSummary.clock(FixGate.MIN_GAMEPLAY_SECONDS),
-					Integer.toString(FixGate.MIN_HITCHES), StutterSummary.clock(report.gameplaySeconds()), Integer.toString(report.hitches())));
+					Integer.toString(FixGate.MIN_HITCHES), StutterSummary.clock(outcome.gameplaySeconds()), Integer.toString(outcome.hitches())));
 		}
 		if (reason != null) {
 			return new FixOffer.NotYet(spec.adviceId(), reason, List.of());

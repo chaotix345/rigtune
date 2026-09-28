@@ -61,6 +61,8 @@ public final class FixText {
 			case EXCLUDED -> Text.of("rigtune.stutter.fix.not_yet.excluded",
 					"This session ran around a benchmark, or Distant Horizons generated terrain in it (or RigTune couldn't tell), so it can't be compared."
 							+ " Play a session without either.");
+			case CHANGED -> Text.of("rigtune.stutter.fix.not_yet.changed",
+					"Settings or the window changed during this session (or RigTune couldn't tell), so it can't be compared. Play a session without changes.");
 			case IDLE -> Text.of("rigtune.stutter.fix.not_yet.idle",
 					"This session was idle (throttled) longer than it was played, so it can't be compared. Play a session without long breaks.");
 			case SERVER -> Text.of("rigtune.stutter.fix.not_yet.server", "This server sends at most %s chunks, so a shorter render distance would change nothing here.",

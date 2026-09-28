@@ -669,6 +669,7 @@
 	"rigtune.stutter.fix.lost": "Time lost to stutter: %s ms a minute before, %s ms after.",
 	"rigtune.stutter.fix.not_yet.benchmark": "One-click fixes are offered for your own play sessions, not for benchmark runs.",
 	"rigtune.stutter.fix.not_yet.busy": "Another fix is still being measured. Wait for its comparison or dismiss it first.",
+	"rigtune.stutter.fix.not_yet.changed": "Settings or the window changed during this session (or RigTune couldn't tell), so it can't be compared. Play a session without changes.",
 	"rigtune.stutter.fix.not_yet.evidence": "The measurements don't point at this clearly enough for a one-click fix; the advice above still applies.",
 	"rigtune.stutter.fix.not_yet.excluded": "This session ran around a benchmark, or Distant Horizons generated terrain in it (or RigTune couldn't tell), so it can't be compared. Play a session without either.",
 	"rigtune.stutter.fix.not_yet.idle": "This session was idle (throttled) longer than it was played, so it can't be compared. Play a session without long breaks.",

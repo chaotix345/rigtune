@@ -126,13 +126,20 @@ public class StutterFixGameTest implements FabricClientGameTest {
 		FixOffer.Offer offer = (FixOffer.Offer) waitForFix(context, CHUNKS, FixOffer.Offer.class);
 		check(offer.key().equals(RD) && offer.from().equals("12") && offer.to().equals("10") && offer.now(), "the RD offer 12 -> 10, now: " + offer);
 		check(shown(context).contains("Try it in one click: Render Distance: 12 → 10"), "the offer row: " + shown(context));
+		// A session is one setup (review-11 STUTTER-3): after a resize the offer needs a session that started at that size.
 		for (int[] size : V05TestContext.SIZES) {
 			v05.resize(size[0], size[1], size[2]);
+			freshSession(context, controller);
+			openStutter(context, controller);
+			waitForFix(context, CHUNKS, FixOffer.Offer.class);
 			checkLayout(context, "offer " + size[0] + "x" + size[1] + "@" + size[2]);
 			context.takeScreenshot("stutterfix-offer-" + size[0] + "x" + size[1] + "-scale" + size[2]);
 		}
 		// X12: at 1280x720@3 the list scrolls to its last row.
 		v05.resize(1280, 720, 3);
+		freshSession(context, controller);
+		openStutter(context, controller);
+		waitForFix(context, CHUNKS, FixOffer.Offer.class);
 		context.runOnClient(mc -> ((StutterScreen) mc.gui.screen()).list().setScrollAmount(Double.MAX_VALUE));
 		context.waitTicks(2);
 		context.takeScreenshot("stutterfix-offer-1280x720-scale3-bottom");

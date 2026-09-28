@@ -183,6 +183,22 @@ class StutterFixServiceTest {
 		assertTrue(StutterFixService.excluded(dhSession(0, 0, 60, true), true, false), "around a benchmark");
 	}
 
+	// review-11 STUTTER-3: the client's half of "the before side is one setup": the window (F11 to fullscreen), a managed
+	// setting or the mod set moved between the capture's start and the analysis. A key read on one side only (a config file
+	// mid-write) isn't a change; unknown start conditions can't tell (fail closed).
+	@Test
+	void theBeforeSideIsOneSetup() {
+		FixConditions start = new FixConditions("26.2", "mods", 4096, "g1", 1280, 720, false, "SINGLEPLAYER", false, false, Map.of(RD, "20", DEFER, "ALWAYS"));
+		assertFalse(StutterFixService.changedDuring(start, start));
+		assertTrue(StutterFixService.changedDuring(start, new FixConditions("26.2", "mods", 4096, "g1", 2560, 1440, true, "SINGLEPLAYER", false, false,
+				Map.of(RD, "20", DEFER, "ALWAYS"))), "F11 to 2560x1440 fullscreen");
+		assertTrue(StutterFixService.changedDuring(start, new FixConditions("26.2", "mods", 4096, "g1", 1280, 720, false, "SINGLEPLAYER", false, false,
+				Map.of(RD, "12", DEFER, "ALWAYS"))), "render distance 20 -> 12");
+		assertFalse(StutterFixService.changedDuring(start, new FixConditions("26.2", "mods", 4096, "g1", 1280, 720, false, "SINGLEPLAYER", false, false,
+				Map.of(RD, "20"))), "Sodium's file unreadable at the analysis: unknown, not a change");
+		assertTrue(StutterFixService.changedDuring(null, start), "no start conditions: can't tell");
+	}
+
 	// V05ServicesTest's rule: without a controller, holds() reads no file and holds nothing.
 	@Test
 	void withoutAControllerNothingIsReadOrHeld() {

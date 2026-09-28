@@ -66,6 +66,20 @@ class FixGateTest {
 		assertFalse(FixGate.idle(report(StutterReport.MONITOR, 67_209, 96)));
 	}
 
+	// review-11 STUTTER-3: a setup that changed during the session (the client's check, or RW-11's start and end settings)
+	// blocks after IDLE and before the store; STUTTER-6: LENGTH goes by the outcome the comparison would take.
+	@Test
+	void aChangedSetupAndTheOutcomesLength() {
+		StutterReport r = report(StutterReport.MONITOR, 600, 30);
+		assertEquals(FixOffer.Reason.CHANGED, FixGate.check(r, FixGate.outcome(r), false, true, true, false));
+		assertEquals(FixOffer.Reason.CHANGED, FixGate.check(r.withSettings(Map.of(StutterReport.SHADERS, "true"), Map.of(StutterReport.SHADERS, "false")),
+				false, false, true));
+		assertNull(FixGate.check(r.withSettings(Map.of(StutterReport.SHADERS, "true"), Map.of(StutterReport.SHADERS, "true")), false, false, true));
+		assertEquals(FixOffer.Reason.IDLE, FixGate.check(idle(r, 700), FixGate.outcome(r), false, true, false, true));
+		assertEquals(FixOffer.Reason.LENGTH, FixGate.check(r, new SessionOutcome(1, 600, 7, 100, 10, 0.7, 1), false, false, false, true));
+		assertEquals(FixOffer.Reason.LENGTH, FixGate.check(r, new SessionOutcome(1, 299, 30, 100, 5, 6, 1), false, false, false, true));
+	}
+
 	// When several fail, the first of benchmark, excluded, store, busy, length.
 	@Test
 	void theOrderOfReasons() {
