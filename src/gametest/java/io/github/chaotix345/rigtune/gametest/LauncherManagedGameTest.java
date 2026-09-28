@@ -575,7 +575,10 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 			context.waitFor(mc -> find(real.notices(), LauncherRepairService.HELD_KEY) == null, 200);
 			// The controller recounted (on the render thread, after Cancel's worker): an Apply now says nothing waits for a
 			// restart.
-			context.waitTicks(3);
+			// r12 flake (FL-2): the notice can go (a refresh on the other pool thread) before Cancel's worker queues its recount,
+			// so the test recounts itself, as above; pending.json and the held state are already gone.
+			context.runOnClient(mc -> real.stagedChanged());
+			context.waitTicks(2);
 			Component after = context.computeOnClient(mc -> real.apply(List.of()));
 			check(count(after, "rigtune.status.restart") == 0 && count(after, "rigtune.repair.held.status") == 0,
 					"after Cancel them nothing waits: " + after.getString());

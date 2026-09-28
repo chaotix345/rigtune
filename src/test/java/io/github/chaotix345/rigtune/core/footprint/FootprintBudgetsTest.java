@@ -34,6 +34,10 @@ class FootprintBudgetsTest {
 			Map.entry("renderThreadInitWallMs", 400.0),
 			Map.entry("renderThreadInitCpuMs", 150.0),
 			Map.entry("workerCpuMs5s", 300.0),
+			// review-11 PERF-3 (coordinator, 2026-09-28): a returning player's startup adds at most 80 ms of render-thread
+			// CPU and of worker CPU over the same CI leg's fresh start (0.4.0 already added about 49 ms, run 36397897941).
+			Map.entry("returningAddedRenderThreadInitCpuMs", 80.0),
+			Map.entry("returningAddedWorkerCpuMs5s", 80.0),
 			Map.entry("frameHookNsPerCallOff", 20.0),
 			Map.entry("frameHookAllocBytesOff", 0.0),
 			Map.entry("frameHookNsPerCallOn", 200.0),

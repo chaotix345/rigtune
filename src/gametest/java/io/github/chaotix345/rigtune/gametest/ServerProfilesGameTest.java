@@ -160,8 +160,11 @@ public class ServerProfilesGameTest implements FabricClientGameTest {
 
 	// Connection 1: nothing set, so no offer; Quality is switched to, and Max FPS set for this server from Profiles.
 	private void setMaxFpsForThisServer(ClientGameTestContext context, RealController real, TestDedicatedServerContext server) {
+		int lookups = real.v05().serverProfiles().lookups();
 		try (TestDedicatedServerConnection connection = server.connect()) {
 			inTheWorld(context, real);
+			// r12 flake (FL-5): the join's lookup has finished, so it can't raise an offer after remember() below.
+			context.waitFor(mc -> real.v05().serverProfiles().lookups() > lookups, 200);
 			context.waitTicks(20);
 			check(offer(context, real) == null, "nothing set for this server: no offer");
 			check(toast(context) == null, "nothing set for this server: no toast");

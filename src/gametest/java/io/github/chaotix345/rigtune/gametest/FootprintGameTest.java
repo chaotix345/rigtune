@@ -193,12 +193,16 @@ public class FootprintGameTest implements FabricClientGameTest {
 
 	// review-11 PERF-3: a returning player's startup. build.yml starts one more JVM with only this class, a seeded
 	// config/rigtune (tools/gametest/returning_seed.py through -PgametestSeedConfig: 0.4's and 0.5's written files, a history
-	// of 50+ entries, nothing staged) and -Drigtune.footprint.returning=true. Only the startup keys are measured, against
-	// the same budgets; the seed must be what the game started with. Written to footprint-<mc>-<backend>-returning.json.
+	// of 50+ entries, nothing staged), -Drigtune.footprint.returning=true and -Drigtune.footprint.fresh=<the same leg's
+	// footprint JSON from its main run>. Only the startup keys are measured; the seed must be what the game started with.
+	// The render-thread and worker CPU are gated on what they add over that fresh start (coordinator, 2026-09-28: 0.4.0
+	// already paid most of it, and moving preLaunch's history reconcile off the render thread is a v0.6 item), the wall
+	// times against their usual budgets. Written to footprint-<mc>-<backend>-returning.json.
 	private static final String RETURNING = "rigtune.footprint.returning";
-	// Warn-only for the returning player's budgets alone (the tracker item below); build.yml greps the tag into ::warning::.
-	private static final String RETURNING_WARN_ONLY = "rigtune.footprint.returningWarnOnly";
-	private static final String RETURNING_WARN_TAG = "RETURNING-PLAYER GATE IN WARN MODE (tracker: returning-player gate back to FAIL before the RC streak):";
+	private static final String RETURNING_FRESH = "rigtune.footprint.fresh";
+	// {measured key, the budget key of the returning value minus the fresh one}
+	private static final String[][] RETURNING_ADDED = {{"renderThreadInitCpuMs", "returningAddedRenderThreadInitCpuMs"},
+			{"workerCpuMs5s", "returningAddedWorkerCpuMs5s"}};
 
 	private static void returningPlayer() {
 		Path configDir = FabricLoader.getInstance().getConfigDir();
@@ -226,25 +230,38 @@ public class FootprintGameTest implements FabricClientGameTest {
 		check(historyEntries >= 50 && seeded.containsAll(List.of("last-apply.json", "awareness.json", "stutter-fixes.json", "tryit.json")),
 				"started as a returning player (history " + historyEntries + " entries): " + seeded);
 		startup(out, measured);
+		String freshPath = System.getProperty(RETURNING_FRESH);
+		check(freshPath != null, "-D" + RETURNING_FRESH + " names the same leg's fresh footprint JSON");
+		Map<String, Number> gated = new LinkedHashMap<>(measured);
+		Map<String, Object> fresh = new LinkedHashMap<>();
+		try {
+			com.google.gson.JsonObject freshMeasured = com.google.gson.JsonParser.parseString(Files.readString(Path.of(freshPath)))
+					.getAsJsonObject().getAsJsonObject("measured");
+			for (String[] added : RETURNING_ADDED) {
+				double before = freshMeasured.get(added[0]).getAsDouble();
+				Number now = gated.remove(added[0]);
+				check(now != null, "measured " + added[0] + ": " + measured);
+				fresh.put(added[0], before);
+				gated.put(added[1], round2(now.doubleValue() - before));
+			}
+		} catch (IOException | RuntimeException e) {
+			throw new AssertionError("the fresh start's footprint " + freshPath, e);
+		}
 		FootprintBudgets budgets;
 		try {
 			budgets = FootprintBudgets.load().forCompressedOops(!Boolean.FALSE.equals(compressedOops()));
 		} catch (IOException e) {
 			throw new AssertionError("Could not read the footprint budgets", e);
 		}
-		List<FootprintBudgets.Violation> violations = budgets.check(measured);
+		List<FootprintBudgets.Violation> violations = budgets.check(gated);
 		out.put("measured", measured);
+		out.put("fresh", fresh);
+		out.put("gated", gated);
 		out.put("budgetMode", budgets.mode().name().toLowerCase(Locale.ROOT));
 		out.put("violations", violations.stream().map(FootprintBudgets.Violation::message).toList());
 		write(mc, backend, out);
-		if (Boolean.getBoolean(RETURNING_WARN_ONLY)) {
-			// Tracker: "returning-player gate back to FAIL" (coordinator, 2026-09-28), a hard blocker before the RC streak.
-			// build.yml sets this until ws-h moves preLaunch's history reconcile off the render thread; nothing else is warn-only.
-			violations.forEach(v -> RigTune.LOGGER.warn("{} {}", RETURNING_WARN_TAG, v.message()));
-		} else {
-			budgets.enforce(violations, RigTune.LOGGER::warn);
-		}
-		RigTune.LOGGER.info("FootprintGameTest (returning player, {} history entries): {}", historyEntries, measured);
+		budgets.enforce(violations, RigTune.LOGGER::warn);
+		RigTune.LOGGER.info("FootprintGameTest (returning player, {} history entries): {}", historyEntries, gated);
 	}
 
 	// What RigTune measured about its own startup (FootprintStats).

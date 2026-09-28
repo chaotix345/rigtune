@@ -307,7 +307,12 @@ comparison and the listener inventory: docs/v0.5/verification/footprint/README.m
   the same budgets. Chosen over the unit-level read counter: it measures the real startup on every leg and catches work
   added anywhere, including static startup code outside the lazy holder (the finding's case b). The failing-first evidence
   is the finding's own: PERF-1/PERF-2 passed green with the empty folder; the returning run is what now measures that path
-  (footprint README "A returning player's startup").
+  (footprint README "A returning player's startup"). Its first run put `renderThreadInitCpuMs` at 165-178 ms, over 150; the
+  0.4.0 baseline (run 36397897941) showed 0.4.0 already paid most of it (+49 ms over a fresh start, 0.5 +61 ms), so the
+  coordinator replaced the absolute check with a gate on the added cost, in fail mode: the returning `renderThreadInitCpuMs`
+  and `workerCpuMs5s` minus the same leg's fresh values, at most 80 ms each (`returningAdded…` budgets; the worker key too
+  because its returning value reached 298 of 300 ms); the wall-time keys keep their budgets. Moving preLaunch's history
+  reconcile off the render thread is a v0.6 item.
 - PERF-6 FIXED: the C16 toast-wait and WS-L2 leftover listeners have their own keys (above).
 - PERF-7 UNVERIFIED: whether Distant Horizons' `graphics().renderingEnabled()` allocates. The repository has only DH's API
   jar (interfaces, compileOnly); the implementation that would allocate isn't in it, and CI runs without DH (X9).
