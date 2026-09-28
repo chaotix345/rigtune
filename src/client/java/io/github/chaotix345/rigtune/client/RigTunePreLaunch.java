@@ -12,6 +12,7 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.UnfinishedGroups;
 import io.github.chaotix345.rigtune.core.history.ApplyFailures;
+import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.PartlyApplied;
 import io.github.chaotix345.rigtune.core.history.StaleOps;
 import net.fabricmc.loader.api.FabricLoader;
@@ -60,14 +61,8 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 			RigTune.LOGGER.warn("Could not check {}", lockFile, e);
 		}
 		try {
-			readState(configDir, busy && lock == null);
-			// The journal's legacy import and reconciliation need the lock the helper held (reentrant: review M4). The
-			// journal must never stop the game from starting.
-			try {
-				HistoryStartup.run(configDir, ClientJournal.get(), lock != null);
-			} catch (Throwable t) {
-				RigTune.LOGGER.warn("Could not update RigTune's change history", t);
-			}
+			readAtStart(configDir, ClientJournal.get(), lock != null, busy && lock == null, ClientState.shared(configDir).lastShownApply,
+					() -> StaleGroups.loadedFrom(FabricLoader.getInstance().getAllMods()));
 		} finally {
 			if (lock != null) {
 				lock.close();
@@ -123,9 +118,18 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 		state.save(configDir);
 	}
 
-	private static void readState(Path configDir, boolean stillRunning) {
-		readState(configDir, stillRunning, ClientState.shared(configDir).lastShownApply,
-				() -> StaleGroups.loadedFrom(FabricLoader.getInstance().getAllMods()), line -> RigTune.LOGGER.warn(line));
+	// preLaunch's reads of RigTune's records, holding the apply lock when lockHeld: the journal first, then the result the
+	// title toast shows and pending.json, so the toast reads last-apply.json after RW-20's relabel (review 12 R12APPLY-5).
+	static void readAtStart(Path configDir, Journal journal, boolean lockHeld, boolean stillRunning, @Nullable String lastShownApply,
+			@Nullable Supplier<Map<String, Set<String>>> loadedFrom) {
+		// The journal's legacy import and reconciliation need the lock the helper held (reentrant: review M4). The
+		// journal must never stop the game from starting.
+		try {
+			HistoryStartup.run(configDir, journal, lockHeld);
+		} catch (Throwable t) {
+			RigTune.LOGGER.warn("Could not update RigTune's change history", t);
+		}
+		readState(configDir, stillRunning, lastShownApply, loadedFrom);
 	}
 
 	// Every staged op counted, stale or not (0.4's count).

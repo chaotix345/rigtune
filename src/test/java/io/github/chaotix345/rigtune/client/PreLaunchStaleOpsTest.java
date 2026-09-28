@@ -99,8 +99,8 @@ class PreLaunchStaleOpsTest {
 		assertEquals(2, RigTunePreLaunch.takeLeftoverOps());
 	}
 
-	// review 11 APPLY-1: a 0.5 helper killed after both renames of an update, before last-apply.json. Its record shows the
-	// group started, so it is counted (the next exit reports it done earlier) and never taken for one installed another way.
+	// review 11 APPLY-1: a 0.5 helper killed right after the second rename of an update, before it could mark it. Its record
+	// shows the group started (the disable marked done), so it is counted and never taken for one installed another way.
 	@Test
 	void aGroupTheHelperStartedIsNeverStale() throws IOException {
 		Path old = TestJars.modJar(mods().resolve("lithium-0.20.jar"), "lithium");
