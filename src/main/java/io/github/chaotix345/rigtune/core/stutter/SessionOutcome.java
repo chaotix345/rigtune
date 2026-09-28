@@ -10,6 +10,9 @@ import java.util.List;
 // read from stutter-fixes.json can be anything, so a negative or non-finite one reads as 0.
 public record SessionOutcome(int sessions, double gameplaySeconds, int hitches, double lostMs, int bins, double binMean, double binVariance) {
 	public static final long BIN_NANOS = 60 * StutterAnalyzer.SECOND;
+	// review-12 R12STUTTER-1: a session capture's first minutes (its world join's chunk streaming, or the reload of an
+	// immediate fix's restart) never count, on either side; the monitor marks the frame ring there (FrameRing.markGameplayAt).
+	public static final long SETTLE_NANOS = 180 * StutterAnalyzer.SECOND;
 	public static final SessionOutcome NONE = new SessionOutcome(0, 0, 0, 0, 0, 0, 0);
 
 	public SessionOutcome {
