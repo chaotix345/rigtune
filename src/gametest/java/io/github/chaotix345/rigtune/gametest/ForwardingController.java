@@ -371,6 +371,11 @@ abstract class ForwardingController implements RigTuneController {
 	}
 
 	@Override
+	public void tryItRefresh() {
+		delegate.tryItRefresh();
+	}
+
+	@Override
 	public ServerProfilesView serverProfiles() {
 		return delegate.serverProfiles();
 	}

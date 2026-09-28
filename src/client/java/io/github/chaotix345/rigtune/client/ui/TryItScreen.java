@@ -30,8 +30,10 @@ import java.util.List;
 // Preview (rec set, no try open) it's the intro: the change, what happens, where (a NOW key offers here or the benchmark
 // world), and [Start] [Cancel]. Otherwise it shows controller.tryIt(): the change, the steps so far, the stage's line or
 // the verdict with its causes and caveats, and at most 3 buttons (TryItView.actions()). Every line wraps (none is cut). A RowList whose rows are Tab stops that narrate their
-// text (X6). Revert and Cancel try open History's Undo this for the try's entry; coming back shows the stage derived again
-// (the screen rebuilds whenever the view changes). Esc goes back to where it was opened from; the try stays open.
+// text (X6). Revert and Cancel try open History's Undo this for the try's entry; coming back derives the stage again, and
+// the buttons stay inactive until it's done (review M5: no Keep on a view from before the undo; the screen rebuilds
+// whenever the view changes). A Start that couldn't be recorded shows why (the view's note). Esc goes back to where it
+// was opened from; the try stays open.
 public class TryItScreen extends Screen {
 	private static final int LINE = 9;
 	private static final int TOP = 22;
@@ -50,6 +52,8 @@ public class TryItScreen extends Screen {
 	private @Nullable Component change;
 	private @Nullable Lines list;
 	private int focusedRow = -1;
+	// Back from Undo this: the view shown predates it until the derive asked for in init() replaces it.
+	private boolean deriving;
 	private final List<Button> footer = new ArrayList<>();
 
 	// rec: the Preview's ticked setting (the intro), or null to show the open try.
@@ -113,6 +117,9 @@ public class TryItScreen extends Screen {
 				top += 24;
 			}
 			lines = new ArrayList<>(TryItText.intro(tried, scene, set.key()));
+			if (shown.note() != null) {
+				lines.addFirst(new TryItText.Line(shown.note(), TryItText.Tone.WARNING));
+			}
 			introFooter();
 		} else {
 			TryIt t = shown.tryIt();
@@ -133,6 +140,9 @@ public class TryItScreen extends Screen {
 		}
 		addRenderableWidget(list);
 		layoutFooter(footerTop);
+		if (deriving) {
+			controller.tryItRefresh();
+		}
 	}
 
 	private void introFooter() {
@@ -163,7 +173,8 @@ public class TryItScreen extends Screen {
 					}
 				}
 				case KEEP -> button(Component.translatable("rigtune.tryit.action.keep"), b -> {
-					status = controller.tryItKeep();
+					Component answer = controller.tryItKeep();
+					status = answer.getString().isEmpty() ? null : answer;
 					rebuildWidgets();
 				}).setTooltip(Tooltip.create(Component.translatable("rigtune.tryit.action.keep.tooltip")));
 				case REVERT -> button(Component.translatable("rigtune.tryit.action.revert"), b -> undo(t))
@@ -181,10 +192,14 @@ public class TryItScreen extends Screen {
 		if (footer.isEmpty() && !shown.stage().chainRunning()) {
 			button(Component.translatable("gui.done"), b -> onClose());
 		}
+		if (deriving) {
+			footer.forEach(b -> b.active = false);
+		}
 	}
 
 	private void undo(@Nullable TryIt t) {
 		if (t != null) {
+			deriving = true;
 			minecraft.gui.setScreen(new UndoScreen(this, controller, t.entryId()));
 		}
 	}
@@ -215,6 +230,7 @@ public class TryItScreen extends Screen {
 	public void tick() {
 		super.tick();
 		if (!intro() && controller.tryIt() != shown || intro() && controller.tryIt().tryIt() != null) {
+			deriving = false;
 			rebuildWidgets();
 		}
 	}

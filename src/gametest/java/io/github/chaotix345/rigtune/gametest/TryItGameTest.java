@@ -174,7 +174,7 @@ public class TryItGameTest implements FabricClientGameTest {
 			awaitStage(context, 400, Stage.REVERTED);
 			context.takeScreenshot("tryit-now-here-reverted");
 			pressByKey(context, "gui.done");
-			check(decision() == TryIt.Decision.REVERTED, "closed as reverted: " + TryItStore.shared(configDir()).recent());
+			awaitDecision(context, TryIt.Decision.REVERTED, "closed as reverted: " + TryItStore.shared(configDir()).recent());
 			Map<String, String> vanillaAfter = context.computeOnClient(TryItGameTest::vanilla);
 			check(vanillaAfter.equals(vanillaBefore), "every allowed vanilla setting is back: " + vanillaAfter + " vs " + vanillaBefore);
 			context.runOnClient(mc -> mc.options.save());
@@ -194,7 +194,7 @@ public class TryItGameTest implements FabricClientGameTest {
 			check(change(stopped.tryIt()) == null, "nothing journaled when the before stops");
 			context.takeScreenshot("tryit-stopped-before");
 			pressByKey(context, "gui.done");
-			check(decision() == TryIt.Decision.CANCELLED, "closed as cancelled");
+			awaitDecision(context, TryIt.Decision.CANCELLED, "closed as cancelled");
 
 			// Block 6: Esc during the after: READY with Measure again, Keep, Revert.
 			startFromPreview(context, real, set(PARTICLES, particles, otherParticles));
@@ -209,7 +209,7 @@ public class TryItGameTest implements FabricClientGameTest {
 			context.takeScreenshot("tryit-stopped-after");
 			pressByKey(context, "rigtune.tryit.action.keep");
 			context.waitFor(mc -> real.tryIt().tryIt() == null, 200);
-			check(decision() == TryIt.Decision.KEPT, "closed as kept");
+			awaitDecision(context, TryIt.Decision.KEPT, "closed as kept");
 			context.runOnClient(mc -> {
 				SettingsBridge.applyVanilla(mc.options, Map.of(PARTICLES, particles), true);
 				mc.gui.setScreen(null);
@@ -259,7 +259,7 @@ public class TryItGameTest implements FabricClientGameTest {
 		});
 		before.keySet().stream().filter(k -> !after.containsKey(k)).forEach(changed::add);
 		check(changed.equals(List.of("config/rigtune/tryit.json")), "Keep changed only tryit.json: " + changed);
-		check(decision() == TryIt.Decision.KEPT, "closed as kept");
+		awaitDecision(context, TryIt.Decision.KEPT, "closed as kept");
 		context.runOnClient(mc -> {
 			mc.options.renderDistance().set(rd);
 			mc.options.save();
@@ -313,7 +313,7 @@ public class TryItGameTest implements FabricClientGameTest {
 		check(JournalChange.DISCARDED.equals(change(t).status()), "the change is DISCARDED");
 		check(Arrays.equals(sodiumBefore, read(sodium)), "sodium-options.json never changed");
 		pressByKey(context, "gui.done");
-		check(decision() == TryIt.Decision.CANCELLED, "closed as cancelled");
+		awaitDecision(context, TryIt.Decision.CANCELLED, "closed as cancelled");
 		context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
 	}
 
@@ -371,7 +371,7 @@ public class TryItGameTest implements FabricClientGameTest {
 				"the reverse PATCH_JSON is staged: " + ops);
 		context.takeScreenshot("tryit-restart-revert-pending");
 		pressByKey(context, "gui.done");
-		check(decision() == TryIt.Decision.REVERTED, "closed as reverted");
+		awaitDecision(context, TryIt.Decision.REVERTED, "closed as reverted");
 		context.runOnClient(mc -> {
 			real.discardPending();
 			mc.gui.setScreen(new TitleScreen());
@@ -534,6 +534,7 @@ public class TryItGameTest implements FabricClientGameTest {
 	// warm-up and a wait for the JIT to go quiet (as FootprintGameTest's tick keys and StutterGameTest's settings check).
 
 	private static void idleTick(ClientGameTestContext context) {
+		check(context.computeOnClient(mc -> TryItService.idle()), "no try is between or inside its runs (review L13)");
 		long[] measured = context.computeOnClient(TryItGameTest::idleTickCost);
 		double nsPerCall = (double) measured[2] / (TICK_BLOCKS * (long) TICK_BLOCK_CALLS);
 		RigTune.LOGGER.info("TryItGameTest: the idle Try it tick: {} ns per call, {} bytes over {} x {} calls (an empty loop: {} bytes)",
@@ -669,6 +670,12 @@ public class TryItGameTest implements FabricClientGameTest {
 	private static @Nullable JournalChange change(@Nullable TryIt t) {
 		JournalEntry e = entry(t);
 		return e == null ? null : e.changes().stream().filter(c -> t.key().equals(c.key())).findFirst().orElse(null);
+	}
+
+	// Review L12: the close is written on the chain; wait for it.
+	private static void awaitDecision(ClientGameTestContext context, TryIt.Decision wanted, String what) {
+		context.waitFor(mc -> decision() == wanted, 200);
+		check(decision() == wanted, what);
 	}
 
 	private static TryIt.@Nullable Decision decision() {
