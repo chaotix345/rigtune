@@ -299,11 +299,34 @@ interprets the set's `expect.json` once it lands.
 - The reason is corrected in last-apply.json as well as the journal (the only place History reads reasons from, and the
   journal gets no new field). `finishedAt` stays, so neither the result toast nor preLaunch's WARN lines replay.
 - `client/undo/HistoryStartup.run` (not in the PLAN's WS-H list) gets one call; the logic is the new core class.
-- A 0.1.0-0.3.0 helper killed after its rename but before `pending.json` was rewritten, whose next run then reported the
-  op `SKIPPED_ALREADY_DONE` without a record, is relabelled too although RigTune did rename it: History then says "Not
-  applied" and Undo doesn't offer it (the safe side; the folder is right). The same residual as RW-1's (rw §2.4).
+- A 0.1.0-0.4.0 helper killed after its rename but before `pending.json` was rewritten (for 0.4.0: between the record's
+  prune and the `pending.json` rewrite, a window of milliseconds), whose next run then reported the op
+  `SKIPPED_ALREADY_DONE` without a record, is relabelled too although RigTune did rename it: History then says "Not
+  applied" and Undo doesn't offer it (the safe side; the folder is right). The same residual as RW-1's (rw §2.4); 0.4.0
+  added by review 11 COMPAT-7.
 - Also relabelled: a 0.1.0 last-apply.json's `SKIPPED_ALREADY_DONE` changes imported by the legacy import (0.1.0 had no
   records, so none of its "already done" claims is proven).
 - Docs (CHANGELOG [0.5.0] Fixed): "History no longer claims a mod change RigTune's helper only found already in place
   (for example a mod the launcher installed): at the first start of 0.5 such an entry shows as 'Not applied: installed
   another way'." DESIGN "Journal": the one-time relabel.
+
+## review-11 fixes
+
+Branch `fix/v05-r11-ws-h`, from feat/v0.5.0 111cb2be. Every MEDIUM had a test that failed on the old code first.
+
+| id | commit | fix | the test that failed first |
+|---|---|---|---|
+| APPLY-1 (M) | aa57ec4e | `ApplyExecutor.startedGroups(plan, pendingFile)` (heldIndexes' own rule, shared: a recorded rename in effect, or an op the last run did) joins the half-done groups in `Staging.dropStale` and `RigTunePreLaunch.staleGroups`; `StaleOps` checks an ungrouped op by `op:<id>` | `ApplyExecutorCrashReplayTest`: the next start now runs the real `Staging.dropStale` (cases 1, 2, 3 and 3-twice dropped RigTune's own group as installed another way); `PreLaunchStaleOpsTest.aGroupTheHelperStartedIsNeverStale` (counted 0, now 2) |
+| APPLY-2 = COMPAT-1 (M) | a0a69956 | RW-20 relabels only RW-1's claim shape: a bare-SKIPPED enable, plus a bare-SKIPPED disable only when an enable of its group is relabelled in the same pass (the DH pair). 0.5's own "already gone" disable stays APPLIED | `HistoryStartupRw20Test.aV050DisableOfAJarAlreadyGoneStaysApplied` (a real 0.5 `ApplyExecutor.run`, then two starts: APPLIED became ABANDONED); `SkippedClaimsTest.aLoneDisableAlreadyGoneStays`, `aDisableStaysWhenItsGroupsEnableIsRigTunes`; `anUndoChangeStays` now expects no relabel |
+| PERF-1 (M) | 45772061 | The relabel runs inside the reconcile's own `updateExisting`: one read of history.json per start, at most one write; a relabel failure never costs the reconcile. `Journal.reads()` counts reads (a marked edit) | `HistoryStartupRw20Test.everyStartReadsTheJournalOnce` (2 reads, now 1) |
+| PERF-2, WS-H part (M) | 29af7134 | `JournalCache.snapshot(journal)`: one parsed `Journal.Snapshot` per Journal, reused while history.json keeps its size, modified time and file key and nothing was written through that Journal (a write counter in Journal); kept only when the file didn't change during the read; missing or unreadable never kept; worker threads only. Callers switch in their owners' branches (ws-s2, ws-t, ws-w) | `JournalCacheTest` (5, new API) |
+| BENCH-8 (L) | 3c31e1b8 | `JournalAtStart` reads once (`journal.snapshot()`) | `BenchmarkConditionsTest.bh2TheJournalIsReadOnce` (2 reads) |
+| SEC-4 (L) | d3eeeb53 | `RangeReader.get` reserves the request's length before sending and refunds the unused part on an answer | `RangeReaderTest.aFailedRequestCostsTheBudgetItsLength` (5 requests past a 10 000-byte budget, now 2) |
+| COMPAT-4 (L) | 1eeaa946 | `HistoryModel.rows` applies `StagedChanges.pairUpdates` as it displays (no file change), so 0.2.x-0.4.x legacy imports show 0.1.0's updates as Updated rows | `HistoryModelTest.legacyUpdatesImportedWithoutAModIdAreShownAsUpdates` over the ws-h set (1 Updated row, now 5) |
+| COMPAT-7 (L) | this doc | The RW-20 residual now names 0.4.0's window too (above) | doc only |
+
+Other owners' files, each edit marked in the code: `ApplyExecutor` (WS-L2: `startedGroups` and the shared rule),
+`RigTunePreLaunch` (WS-L2: `staleGroups` adds the started groups), `Journal` (read and write counters, `path()`),
+`BenchmarkConditions` (one snapshot), `HistoryModel` (the display pairing), `TestExecutors` (`killedAfter`).
+With PERF-1, "WS-H adds no init work" holds again: preLaunch's history.json read is the reconcile's, as before RW-20.
+
