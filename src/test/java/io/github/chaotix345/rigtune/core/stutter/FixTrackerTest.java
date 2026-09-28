@@ -157,6 +157,56 @@ class FixTrackerTest {
 		assertEquals(new FixTracker.Skip(FixConditions.Reason.GRAPHICS.id(), List.of()), r.lastSkip());
 	}
 
+	// A chosen render-distance fix measuring its baseline (nothing applied yet): 12 -> 10, chosen at APPLIED_AT.
+	static FixTracker.Record baseline() {
+		FixTracker.Record m = measuring();
+		return new FixTracker.Record(m.entryId(), m.adviceId(), m.key(), m.from(), m.to(), m.appliedAt(), m.rulesRevision(), m.now(),
+				FixTracker.State.BASELINE, SessionOutcome.NONE, m.conditions(), null, 0, null, null, false);
+	}
+
+	// review-12 R12STUTTER-6: the before side is never the session that led to the offer (chosen for being bad). The first
+	// monitor session after the player chose the fix, with the key still at its old value and enough compared play, is
+	// measured as it is: READY, its outcome and start conditions kept. It needs no journal (no entry exists yet).
+	@Test
+	void aChosenFixMeasuresOneSessionAsItIsFirst() {
+		FixTracker.Record r = baseline();
+		FixTracker.SessionEnd s = session(10, 400, 18, RD, "12");
+		FixTracker.Record ready = FixTracker.advance(r, Journal.State.UNREADABLE, List.of(), s, at(10));
+		assertEquals(FixTracker.State.READY, ready.state());
+		assertEquals(s.outcome(), ready.before());
+		assertEquals(s.atStart(), ready.conditions());
+		assertEquals(0, ready.skipped());
+		assertSame(ready, FixTracker.advance(ready, Journal.State.OK, List.of(), session(30, 400, 5, RD, "12"), at(30)), "ready waits for the Apply");
+		assertEquals(FixTracker.State.EXPIRED, FixTracker.advance(ready, Journal.State.OK, List.of(), null, APPLIED_AT.plus(FixTracker.MAX_AGE).plusSeconds(1))
+				.state());
+		// The Apply: the change applied now, the measured before side kept.
+		Instant applyAt = at(40);
+		FixTracker.Record applied = ready.applied(applyAt, FixTracker.State.MEASURING);
+		assertEquals(FixTracker.State.MEASURING, applied.state());
+		assertEquals(applyAt, applied.appliedAt());
+		assertEquals(s.outcome(), applied.before());
+		assertTrue(r.active() && ready.active(), "one fix at a time from the choice on");
+		assertFalse(r.undoable() || ready.undoable(), "nothing to undo before the Apply");
+		assertEquals(List.of(), FixHold.holds(List.of(r, ready), java.time.ZoneOffset.UTC), "nothing held before the Apply");
+	}
+
+	// A baseline session that started before the choice (the one that led to the offer) never counts; a short one, an
+	// excluded or idle one is skipped with its reason; the key changed by hand meanwhile ends it (replaced).
+	@Test
+	void aBaselineSessionMustBeANewFullOneAtTheOldValue() {
+		FixTracker.Record r = baseline();
+		FixTracker.SessionEnd earlier = new FixTracker.SessionEnd(APPLIED_AT.minusSeconds(60), StutterReport.MONITOR, session(0, 400, 18, RD, "12").outcome(),
+				conditions(RD, "12"), conditions(RD, "12"), false);
+		assertSame(r, FixTracker.advance(r, Journal.State.OK, List.of(), earlier, at(10)));
+		FixTracker.Record short_ = FixTracker.advance(r, Journal.State.OK, List.of(), session(10, 299, 18, RD, "12"), at(10));
+		assertEquals(new FixTracker.Skip(FixTracker.SHORT_BEFORE, List.of()), short_.lastSkip());
+		assertEquals(FixTracker.State.BASELINE, short_.state());
+		FixTracker.SessionEnd s = session(10, 400, 18, RD, "12");
+		FixTracker.SessionEnd excluded = new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), s.atStart(), s.atEnd(), true);
+		assertEquals(new FixTracker.Skip(FixTracker.EXCLUDED, List.of()), FixTracker.advance(r, Journal.State.OK, List.of(), excluded, at(10)).lastSkip());
+		assertEquals(FixTracker.State.REPLACED, FixTracker.advance(r, Journal.State.OK, List.of(), session(10, 400, 18, RD, "16"), at(10)).state());
+	}
+
 	@Test
 	void aStagedFixWaitsForTheRestart() {
 		FixTracker.Record r = staged();

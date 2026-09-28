@@ -51,14 +51,16 @@ class FixTextTest {
 		String change = FixText.change(LABELS, "vanilla.renderDistance", "12", "10").english();
 		assertEquals("Render Distance: 12 → 10", change);
 		assertEquals("Try it in one click: Render Distance: 12 → 10", FixText.offer(FixText.change(LABELS, "vanilla.renderDistance", "12", "10")).english());
-		assertEquals("Try this fix: Render Distance: 12 → 10. Opens a preview first.",
+		assertEquals("Try this fix: Render Distance: 12 → 10. RigTune measures one more session as it is first.",
 				FixText.tryNarration(FixText.change(LABELS, "vanilla.renderDistance", "12", "10")).english());
-		assertTrue(FixText.takesEffect(true).english().startsWith("Takes effect now."));
-		assertTrue(FixText.takesEffect(false).english().startsWith("Takes effect after you restart Minecraft."));
-		assertEquals("Fix applied. Keep the Stutter Doctor on and play at least 6:40; RigTune then compares that play with this session.",
-				FixText.applied(true, 400).english());
-		assertEquals("Fix staged: it takes effect after you restart Minecraft. Then play at least 5:00 with the Stutter Doctor on.",
-				FixText.applied(false, 300).english());
+		assertEquals("Apply the fix: Render Distance: 12 → 10. Opens a preview first.",
+				FixText.applyNarration(FixText.change(LABELS, "vanilla.renderDistance", "12", "10")).english());
+		assertTrue(FixText.takesEffect(true).english().contains("It takes effect at once"));
+		assertTrue(FixText.takesEffect(false).english().contains("It takes effect after you restart Minecraft"));
+		assertEquals("Fix applied. Keep the Stutter Doctor on and play at least 6:40 after a session's first 3 minutes; RigTune then compares that play"
+				+ " with your play before.", FixText.applied(true, 400).english());
+		assertEquals("Fix staged: it takes effect after you restart Minecraft. Then play at least 5:00 with the Stutter Doctor on (a session's first 3"
+				+ " minutes don't count).", FixText.applied(false, 300).english());
 	}
 
 	// AC5.7: both rates in every verdict line; "more" names the Undo.
@@ -108,7 +110,8 @@ class FixTextTest {
 	void theBlocksLines() {
 		FixTracker.Record m = FixTrackerTest.measuring();
 		assertEquals("Render Distance: 12 → 10, applied 2026-09-02", FixText.applied(LABELS, m, ZoneOffset.UTC).english());
-		assertEquals("Measuring: 0:00 of 6:40 played with the Stutter Doctor on.", FixText.state(LABELS, m, true).english());
+		assertEquals("Measuring: 0:00 of 6:40 played with the Stutter Doctor on (a session's first 3 minutes don't count).",
+				FixText.state(LABELS, m, true).english());
 		assertEquals("Turn the Stutter Doctor on and play to compare.", FixText.state(LABELS, m, false).english());
 		assertEquals("Waiting for a restart: the change takes effect when Minecraft starts again.",
 				FixText.state(LABELS, FixTrackerTest.staged(), true).english());
@@ -146,6 +149,23 @@ class FixTextTest {
 			assertEquals("?", FixText.day(Instant.MAX, zone));
 			assertEquals("2026-09-28", FixText.day(Instant.parse("2026-09-28T02:00:00Z"), ZoneOffset.UTC));
 		}
+	}
+
+	// review-12 R12STUTTER-6: the offer names both steps and why; the chosen fix's block says nothing changed yet, then what
+	// the baseline measured.
+	@Test
+	void theBaselineLines() {
+		assertTrue(FixText.takesEffect(true).english().startsWith("First RigTune measures one more session as it is"));
+		assertTrue(FixText.takesEffect(false).english().contains("after you restart Minecraft"));
+		FixTracker.Record b = FixTrackerTest.baseline();
+		assertTrue(FixText.state(LABELS, b, true).english().startsWith("Nothing has changed yet"));
+		assertEquals("Render Distance: 12 → 10, chosen 2026-09-02", FixText.applied(LABELS, b, ZoneOffset.UTC).english());
+		FixTracker.Record ready = new FixTracker.Record(b.entryId(), b.adviceId(), b.key(), b.from(), b.to(), b.appliedAt(), b.rulesRevision(), b.now(),
+				FixTracker.State.READY, new SessionOutcome(1, 400, 20, 900, 7, 20 / 7.0, 2), b.conditions(), null, 0, null, null, false);
+		assertEquals("Your play as it is: 3.0 hitches a minute over 6:40. Apply the change to compare it with your play after.",
+				FixText.state(LABELS, ready, true).english());
+		assertEquals("Your last session didn't count: it had less than 5:00 of play after its first 3 minutes.",
+				skipped(b, new FixTracker.Skip(FixTracker.SHORT_BEFORE, List.of())));
 	}
 
 	private static String skipped(FixTracker.Record m, FixTracker.Skip skip) {

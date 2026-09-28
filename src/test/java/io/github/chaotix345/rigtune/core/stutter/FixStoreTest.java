@@ -112,6 +112,20 @@ class FixStoreTest {
 		assertFalse(onDisk().getAsJsonArray("fixes").get(0).getAsJsonObject().getAsJsonObject("conditions").has("backend"), "not written when unknown");
 	}
 
+	// review-12 R12STUTTER-6: a chosen fix's baseline and ready records round-trip, and count as the active one.
+	@Test
+	void baselineAndReadyRoundTrip() {
+		FixTracker.Record b = FixTrackerTest.baseline();
+		assertTrue(store().add(b));
+		assertEquals(List.of(b), FixStore.shared(dir).records());
+		assertEquals(b.entryId(), store().active().entryId());
+		FixTracker.Record ready = FixTracker.advance(b, Journal.State.OK, List.of(), new FixTracker.SessionEnd(b.appliedAt().plusSeconds(60),
+				StutterReport.MONITOR, new SessionOutcome(1, 400, 18, 900, 7, 18 / 7.0, 2), b.conditions(), b.conditions(), false), b.appliedAt().plusSeconds(600));
+		assertEquals(FixTracker.State.READY, ready.state());
+		assertTrue(store().update(b.entryId(), x -> ready));
+		assertEquals(List.of(ready), FixStore.shared(dir).records());
+	}
+
 	@Test
 	void theActiveOneIsStagedOrMeasuringAndNotDismissed() {
 		store().add(finished("a", FixTracker.State.COMPARED));

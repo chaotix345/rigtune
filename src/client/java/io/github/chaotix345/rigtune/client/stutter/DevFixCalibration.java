@@ -26,7 +26,11 @@ import java.util.concurrent.ThreadLocalRandom;
 // -Drigtune.dev.stutterScript=fixcalibrate is set. Each launch plays one step, decided by stutter-fixes.json:
 // - no Sodium fix tracked ("before"): the session monitor on, RigTune's benchmark world, a teleport into never-generated
 //   terrain every 20 s for PLAY_SECONDS, then the Stutter Doctor: the analysis, the evidence and the offer are logged, and
-//   the Sodium fix is applied if it's offered (it's staged: the helper patches Sodium's file at the exit); quit.
+//   Try this fix… is pressed if it's offered (review-12: nothing changes, the session restarts as the baseline); the same
+//   play again for the baseline, leave the world (it's measured); quit.
+// - the fix chosen, its baseline not measured yet ("baseline"): the same play, leave; quit.
+// - the fix ready ("apply"): Apply the fix at the title screen (it's staged: the helper patches Sodium's file at the exit);
+//   quit.
 // - the fix staged or measuring ("after"): the same play with fresh terrain, leave the world (the session ends and is
 //   compared), log the record (the verdict, φ, p, both sides), then Undo this on its entry; quit. It plays
 //   AFTER_EXTRA_SECONDS longer, so its gameplay never ends below FixTracker.afterTarget(before); while the record still
@@ -40,11 +44,12 @@ final class DevFixCalibration {
 	private static final String SODIUM = "stutter-sodium-defer";
 	private static final String DEFER = "sodium.performance.chunk_build_defer_mode";
 	private static final int TICKS_PER_SECOND = 20;
-	private static final int PLAY_SECONDS = 390;
+	// A session's first 3 minutes don't count (SessionOutcome.SETTLE_NANOS), and the before side needs 5 more.
+	private static final int PLAY_SECONDS = 540;
 	private static final int AFTER_EXTRA_SECONDS = 60;
 	private static final int TELEPORT_EVERY_SECONDS = 20;
 
-	private enum Step { BEFORE, AFTER, CHECK }
+	private enum Step { BEFORE, BASELINE, APPLY, AFTER, CHECK }
 
 	private enum Stage { WAIT_FOR_TITLE, READING, OPENING, PLAYING, REPORT, LEAVING, TRACKING, UNDOING, QUITTING, DONE }
 
@@ -80,10 +85,16 @@ final class DevFixCalibration {
 			case READING -> {
 				if (reading != null && reading.isDone()) {
 					fix = reading.join().stream().filter(r -> SODIUM.equals(r.adviceId())).reduce((a, b) -> b).orElse(null);
-					step = fix == null ? Step.BEFORE : fix.state().tracking() ? Step.AFTER : Step.CHECK;
+					step = fix == null ? Step.BEFORE : fix.state() == FixTracker.State.BASELINE ? Step.BASELINE
+							: fix.state() == FixTracker.State.READY ? Step.APPLY : fix.state().tracking() ? Step.AFTER : Step.CHECK;
 					log("step " + step + "; Sodium's Chunk Updates " + SettingsBridge.read(minecraft).get(DEFER) + "; record " + fix);
 					if (step == Step.CHECK) {
 						quit(minecraft, "check done");
+						return;
+					}
+					if (step == Step.APPLY) {
+						FixOffer.Offer offer = new FixOffer.Offer(fix.adviceId(), fix.key(), fix.from(), fix.to(), fix.now());
+						quit(minecraft, "apply step: " + controller.applyStutterFix(offer).getString());
 						return;
 					}
 					minecraft.options.pauseOnLostFocus = false;
@@ -124,11 +135,15 @@ final class DevFixCalibration {
 					FixOffer offer = view.fixes().get(SODIUM);
 					log("advice " + view.advice().stream().map(a -> a.id()).toList() + "; fixes " + view.fixes());
 					if (offer instanceof FixOffer.Offer o) {
-						log("applying the offered fix: " + controller.applyStutterFix(o).getString());
+						log("trying the offered fix: " + controller.startStutterFix(o).getString());
+						minecraft.gui.setScreen(null);
+						step = Step.BASELINE;
+						log("the baseline session: " + playSeconds() + " s more of the same play");
+						next(Stage.PLAYING);
 					} else {
 						log("no Sodium fix offered: " + offer);
+						leave(minecraft);
 					}
-					leave(minecraft);
 				}
 			}
 			case LEAVING -> {
@@ -136,7 +151,7 @@ final class DevFixCalibration {
 					if (step == Step.AFTER) {
 						next(Stage.TRACKING);
 					} else {
-						quit(minecraft, "before step done");
+						quit(minecraft, step == Step.BASELINE ? "baseline step done" : "before step done");
 					}
 				}
 			}

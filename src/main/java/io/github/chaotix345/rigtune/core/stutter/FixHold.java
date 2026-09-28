@@ -40,6 +40,7 @@ public final class FixHold {
 		for (FixTracker.Record r : records) {
 			boolean inEffect = switch (r.state()) {
 				case STAGED, MEASURING, EXPIRED -> true;
+				case BASELINE, READY -> false;
 				case COMPARED -> r.verdict() == null || r.verdict().kind() != FixComparison.Kind.MORE;
 				case UNDONE, NOT_APPLIED, REPLACED -> false;
 			};

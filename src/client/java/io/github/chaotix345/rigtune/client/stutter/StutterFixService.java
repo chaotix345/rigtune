@@ -142,7 +142,8 @@ public final class StutterFixService {
 		}
 	}
 
-	// Render thread: the cached records with the one being added, or null while they haven't been read (a read is queued).
+	// Render thread: the cached records with the one being written (added, or a ready one applied), or null while they
+	// haven't been read (a read is queued).
 	private @Nullable List<FixTracker.Record> cached() {
 		// `adding` first: the io chain reloads the records before it clears `adding`, so the record is in one of them.
 		FixTracker.Record a = adding;
@@ -154,12 +155,20 @@ public final class StutterFixService {
 			}
 			return null;
 		}
-		if (a == null || r.stream().anyMatch(x -> x.entryId().equals(a.entryId()))) {
-			return r;
+		return a == null ? r : with(r, a);
+	}
+
+	// The records with `a` in place of the one with its entry id, or last.
+	private static List<FixTracker.Record> with(List<FixTracker.Record> r, FixTracker.Record a) {
+		List<FixTracker.Record> out = new ArrayList<>(r);
+		for (int i = 0; i < out.size(); i++) {
+			if (out.get(i).entryId().equals(a.entryId())) {
+				out.set(i, a);
+				return out;
+			}
 		}
-		List<FixTracker.Record> with = new ArrayList<>(r);
-		with.add(a);
-		return with;
+		out.add(a);
+		return out;
 	}
 
 	private static boolean anyActive(@Nullable List<FixTracker.Record> records) {
@@ -192,21 +201,19 @@ public final class StutterFixService {
 	}
 
 	// io chain: every record that can still change follows the journal and, if one just ended, the session. The state and
-	// the entries come from one read of history.json; a read that fails changes nothing (a fix never expires because the
-	// file couldn't be read for a moment).
-	// Without a record, history.json isn't read at all (review-11 PERF-2).
+	// the entries come from one read of history.json; a read that fails changes no applied fix (a fix never expires because
+	// the file couldn't be read for a moment; FixTracker.advance). Without a record that can still change, nothing is read
+	// (review-11 PERF-2); history.json only while some applied one can (review-12 R12STUTTER-3: a chosen fix's baseline
+	// needs no journal).
 	void advanceAll(FixTracker.@Nullable SessionEnd session) {
 		try {
 			FixStore store = store();
 			List<FixTracker.Record> all = store.records();
-			// review-12 R12STUTTER-3: history.json only while some record can still change with it.
-			if (all.stream().noneMatch(FixTracker.Record::followsJournal)) {
+			if (all.stream().noneMatch(FixTracker.Record::open)) {
 				return;
 			}
-			Journal.Snapshot read = history.get();
-			if (read.state() != Journal.State.OK && read.state() != Journal.State.MISSING) {
-				return;
-			}
+			Journal.Snapshot read = all.stream().anyMatch(FixTracker.Record::followsJournal) ? history.get()
+					: new Journal.Snapshot(Journal.State.OK, List.of());
 			Instant now = Instant.now();
 			for (FixTracker.Record r : all) {
 				FixTracker.Record next = FixTracker.advance(r, read.state(), read.entries(), session, now);
@@ -347,10 +354,11 @@ public final class StutterFixService {
 		return effectivePreview(controller.preview(List.of(rec)), rec, controller.configDir());
 	}
 
-	// Render thread (PreviewScreen's Apply), like a profile switch: the shared busy check first (C8), then C20's own
-	// refusals; appliedAt is stamped before anything changes, and a vanilla fix restarts the session only after that and
-	// after the settings write, so the next session starts at the target and after appliedAt (M4's contract).
-	public Component apply(FixOffer.Offer offer) {
+	// Render thread (Try this fix…, review-12 R12STUTTER-6): the fix is chosen, nothing changes yet. The session that led to
+	// the offer was chosen for being bad, so it's never a side of the comparison: RigTune measures one session as it is
+	// first (BASELINE, FixTracker), and the change is applied from the block once that session was measured (apply). The
+	// running session restarts, so the baseline starts now. The same refusals as the Apply's.
+	public Component start(FixOffer.Offer offer) {
 		RealController c = controller;
 		Minecraft minecraft = c == null ? null : c.minecraft();
 		if (c == null || minecraft == null) {
@@ -375,12 +383,65 @@ public final class StutterFixService {
 			return Texts.component(FixText.gone());
 		}
 		RulesDocument rules = c.rules();
-		String entryId = ChangeRecorder.newEntryId();
+		// To the second, as a session's startedAt is (StutterCapture): the session restarted below starts no earlier.
+		Instant chosenAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+		FixTracker.Record record = new FixTracker.Record(ChangeRecorder.newEntryId(), offer.adviceId(), offer.key(), offer.from(), offer.to(), chosenAt,
+				rules == null ? 0 : rules.revision, offer.now(), FixTracker.State.BASELINE, SessionOutcome.NONE, shown.conditions(), null, 0, null, null, false);
+		adding = record;
+		stutter().io(() -> {
+			try {
+				if (!store().add(record)) {
+					RigTune.LOGGER.warn("Stutter Doctor: stutter-fixes.json couldn't be written; the chosen fix isn't tracked");
+				}
+			} finally {
+				reload();
+				adding = null;
+			}
+		});
+		try {
+			stutter().restartSession(minecraft);
+		} catch (RuntimeException e) {
+			// The record stands; the running session goes on and won't count, so the next one is the baseline.
+			RigTune.LOGGER.warn("Stutter Doctor: the session couldn't restart for the baseline", e);
+		}
+		return Texts.component(FixText.baselineStarted());
+	}
+
+	// Render thread (the block's Apply the fix…, through PreviewScreen), like a profile switch: the shared busy check first
+	// (C8), then C20's own refusals. Only a READY record's change (its baseline measured, review-12 R12STUTTER-6) is applied,
+	// with that baseline as the before side; appliedAt is stamped before anything changes, and a vanilla fix restarts the
+	// session only after that and after the settings write, so the next session starts at the target and after appliedAt
+	// (M4's contract).
+	public Component apply(FixOffer.Offer offer) {
+		RealController c = controller;
+		Minecraft minecraft = c == null ? null : c.minecraft();
+		if (c == null || minecraft == null) {
+			return Component.translatable("rigtune.status.nothing");
+		}
+		Text refused = Busy.refusal(controller);
+		if (refused != null) {
+			return Texts.component(refused);
+		}
+		List<FixTracker.Record> recs = cached();
+		if (recs == null) {
+			return Texts.component(FixText.later());
+		}
+		FixTracker.Record ready = recs.stream().filter(r -> !r.dismissed() && r.state() == FixTracker.State.READY && r.adviceId().equals(offer.adviceId())
+				&& r.key().equals(offer.key()) && r.from().equals(offer.from()) && r.to().equals(offer.to())).findFirst().orElse(null);
+		if (ready == null || adding != null) {
+			return Texts.component(FixText.later());
+		}
+		if (!writable) {
+			return Texts.component(FixText.notYet(new FixOffer.NotYet(offer.adviceId(), FixOffer.Reason.STORE, List.of())));
+		}
+		if (!stillAt(offer.key(), offer.from(), () -> effective(SettingsBridge.read(minecraft), c.configDir()))) {
+			return Texts.component(FixText.gone());
+		}
+		RulesDocument rules = c.rules();
+		String entryId = ready.entryId();
 		// To the second, as a session's startedAt is (StutterCapture): the session restarted below starts no earlier.
 		Instant appliedAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
-		FixTracker.Record record = new FixTracker.Record(entryId, offer.adviceId(), offer.key(), offer.from(), offer.to(), appliedAt,
-				rules == null ? 0 : rules.revision, offer.now(), offer.now() ? FixTracker.State.MEASURING : FixTracker.State.STAGED, shown.outcome(),
-				shown.conditions(), null, 0, null, null, false);
+		FixTracker.Record record = ready.applied(appliedAt, offer.now() ? FixTracker.State.MEASURING : FixTracker.State.STAGED);
 		adding = record;
 		FixTracker.Record stored;
 		boolean queued = false;
@@ -390,7 +451,7 @@ public final class StutterFixService {
 			if (change == null) {
 				return result;
 			}
-			stored = record.withState(JournalChange.APPLIED.equals(change.status()) ? FixTracker.State.MEASURING : FixTracker.State.STAGED);
+			stored = ready.applied(appliedAt, JournalChange.APPLIED.equals(change.status()) ? FixTracker.State.MEASURING : FixTracker.State.STAGED);
 			adding = stored;
 			stutter().io(() -> {
 				try {
@@ -442,10 +503,7 @@ public final class StutterFixService {
 			return List.of();
 		}
 		FixTracker.Record a = adding;
-		List<FixTracker.Record> r = new ArrayList<>(loaded());
-		if (a != null && r.stream().noneMatch(x -> x.entryId().equals(a.entryId()))) {
-			r.add(a);
-		}
+		List<FixTracker.Record> r = a == null ? new ArrayList<>(loaded()) : with(loaded(), a);
 		if (r.stream().noneMatch(FixTracker.Record::followsJournal)) {
 			return FixHold.holds(r, ZoneId.systemDefault());
 		}
@@ -461,17 +519,22 @@ public final class StutterFixService {
 
 	// ---- Helpers ----
 
-	// Apply's last check: the offer is still one the Stutter Doctor shows, and the setting, as the next restart leaves it,
-	// still at its "from". A read that fails (a config file mid-write) refuses the fix the same way; it never throws.
+	// Try this fix…'s last check: the offer is still one the Stutter Doctor shows, and the setting, as the next restart leaves
+	// it, still at its "from". A read that fails (a config file mid-write) refuses the fix the same way; it never throws.
 	static boolean gone(FixOffer.Offer offer, @Nullable Fixes shown, Supplier<SettingsSnapshot> effective) {
 		if (shown == null || shown.offers().values().stream().noneMatch(o -> o instanceof FixOffer.Offer same && same.sameChange(offer))) {
 			return true;
 		}
+		return !stillAt(offer.key(), offer.from(), effective);
+	}
+
+	// The setting, as the next restart leaves it, is still `from`; false when it can't be read.
+	static boolean stillAt(String key, String from, Supplier<SettingsSnapshot> effective) {
 		try {
-			return !SettingValues.same(effective.get().get(offer.key()), offer.from());
+			return SettingValues.same(effective.get().get(key), from);
 		} catch (RuntimeException e) {
 			RigTune.LOGGER.warn("Stutter Doctor: could not read the settings for the fix", e);
-			return true;
+			return false;
 		}
 	}
 

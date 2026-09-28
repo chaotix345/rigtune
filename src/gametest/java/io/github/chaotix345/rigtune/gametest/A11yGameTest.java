@@ -539,7 +539,8 @@ public class A11yGameTest implements FabricClientGameTest {
 				}
 			}
 			check(order.equals(List.of("rigtune.stutter.fix.undo", "rigtune.stutter.fix.dismiss", "rigtune.stutter.fix.try")), "stutter fix: Tab order " + order);
-			check(tryNarration.contains("Try this fix: Render Distance: 12 → 10. Opens a preview first."), "stutter fix: the Try narration: " + tryNarration);
+			check(tryNarration.contains("Try this fix: Render Distance: 12 → 10. RigTune measures one more session as it is first."),
+					"stutter fix: the Try narration: " + tryNarration);
 			for (int[] size : V05TestContext.SIZES) {
 				v05.resize(size[0], size[1], size[2]);
 				context.takeScreenshot("a11y-stutterfix-" + size[0] + "x" + size[1] + "-scale" + size[2]);
