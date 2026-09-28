@@ -9,6 +9,7 @@ import io.github.chaotix345.rigtune.core.model.Text;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,6 +32,18 @@ class FixHoldTest {
 
 	private static Report report(Recommendation... recs) {
 		return new Report(null, null, null, null, List.of(recs), 16, "bundled", false, Instant.parse("2026-10-04T00:00:00Z"));
+	}
+
+	// review-11 STUTTER-1: a record whose appliedAt has no local date (a hand edit; FixStore skips it on read, this is the
+	// second guard) still holds, dated "?", and never throws on the rebuild worker (where it would drop every hold).
+	@Test
+	void aDateOutsideTheZonesRangeStillHolds() {
+		FixTracker.Record m = FixTrackerTest.measuring();
+		FixTracker.Record odd = new FixTracker.Record("odd", m.adviceId(), m.key(), m.from(), m.to(), Instant.MIN, m.rulesRevision(), m.now(), m.state(),
+				m.before(), m.conditions(), m.after(), m.skipped(), m.lastSkip(), m.verdict(), m.dismissed());
+		List<FixHold.Hold> holds = FixHold.holds(List.of(odd, m), ZoneId.of("Australia/Sydney"));
+		assertEquals(2, holds.size());
+		assertEquals("?", holds.getFirst().appliedOn());
 	}
 
 	@Test

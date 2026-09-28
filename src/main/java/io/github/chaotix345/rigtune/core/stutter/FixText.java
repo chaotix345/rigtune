@@ -4,6 +4,7 @@ import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.model.Text;
 import org.jspecify.annotations.Nullable;
 
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
@@ -114,8 +115,13 @@ public final class FixText {
 		return Text.of("rigtune.stutter.fix.change", "%s, applied %s", change(labels, r.key(), r.from(), r.to()), day(r.appliedAt(), zone));
 	}
 
+	// The local day; "?" for an instant outside the zone's range (a hand edit), as TrendText.date does.
 	static String day(Instant at, ZoneId zone) {
-		return at.atZone(zone).toLocalDate().toString();
+		try {
+			return at.atZone(zone).toLocalDate().toString();
+		} catch (DateTimeException e) {
+			return "?";
+		}
 	}
 
 	// Where the fix is: waiting for a restart, measuring (play so far of the play needed), or how it ended. A compared fix's

@@ -39,7 +39,7 @@ public final class FixHold {
 				case UNDONE, NOT_APPLIED, REPLACED -> false;
 			};
 			if (inEffect) {
-				out.add(new Hold(r.key(), r.from(), r.to(), r.appliedAt().atZone(zone).toLocalDate().toString()));
+				out.add(new Hold(r.key(), r.from(), r.to(), FixText.day(r.appliedAt(), zone)));
 			}
 		}
 		return out;

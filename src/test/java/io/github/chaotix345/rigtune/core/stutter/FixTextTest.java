@@ -3,6 +3,8 @@ package io.github.chaotix345.rigtune.core.stutter;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 
@@ -102,6 +104,16 @@ class FixTextTest {
 			assertTrue(!skipped(m, new FixTracker.Skip(reason.id(), List.of("k", "a", "b"))).contains("null"), reason.name());
 		}
 		assertTrue(skipped(m, new FixTracker.Skip("weather", List.of())).contains("other conditions"));
+	}
+
+	// review-11 STUTTER-1: a date outside the zone's range (Instant.MIN, Instant.MAX) never throws; it reads "?".
+	@Test
+	void aDateOutsideTheZonesRangeReadsAsUnknown() {
+		for (ZoneId zone : List.of(ZoneOffset.UTC, ZoneId.of("Australia/Sydney"), ZoneId.of("America/Los_Angeles"))) {
+			assertEquals("?", FixText.day(Instant.MIN, zone));
+			assertEquals("?", FixText.day(Instant.MAX, zone));
+			assertEquals("2026-09-28", FixText.day(Instant.parse("2026-09-28T02:00:00Z"), ZoneOffset.UTC));
+		}
 	}
 
 	private static String skipped(FixTracker.Record m, FixTracker.Skip skip) {
