@@ -1047,7 +1047,7 @@ def after_downgrade_old(instance, driver, seeded, old_version, off_name, log_tex
 
 def _item_key(item):
     if isinstance(item, dict):
-        return item.get("id") or item.get("at") or item.get("startedAt") or json.dumps(item, sort_keys=True)
+        return item.get("id") or item.get("entryId") or item.get("at") or item.get("startedAt") or json.dumps(item, sort_keys=True)
     return json.dumps(item, sort_keys=True)
 
 

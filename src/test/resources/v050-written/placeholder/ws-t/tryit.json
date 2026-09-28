@@ -1,9 +1,0 @@
-{
-  "formatVersion": 1,
-  "placeholder": "hand-written by WS-E; the real set comes from WS-T's tests",
-  "open": {
-    "pairId": "tryit-9e6a1c54-5f71-4092-ad04-000000000900",
-    "entryId": "9e6a1c54-5f71-4092-ad04-000000000901",
-    "key": "sodium.performance.chunk_builder_threads"
-  }
-}
