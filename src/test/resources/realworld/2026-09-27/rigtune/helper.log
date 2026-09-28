@@ -1,0 +1,5 @@
+[2026-09-27T01:08:44.428858Z] [RigTune apply] Waiting for game process 36744 to exit
+[2026-09-27T01:08:48.289778800Z] [RigTune apply] Applying 2 operation(s) from ${INSTANCE}/config/rigtune/pending.json
+[2026-09-27T01:08:48.443882200Z] [RigTune apply] SKIPPED_ALREADY_DONE DISABLE_FILE: fabric-26.2.jar is already gone
+[2026-09-27T01:08:48.443882200Z] [RigTune apply] SKIPPED_ALREADY_DONE ENABLE_FILE: DistantHorizons-3.3.2-26.2-fabric-neoforge.jar is already enabled
+[2026-09-27T01:08:48.444401Z] [RigTune apply] All operations done

@@ -1,0 +1,6 @@
+{
+  "set": "ws-l1",
+  "checks": [
+    {"class": "ClientSettings", "file": "settings.json", "noBad": true, "keeps": ["networkEnabled", "remoteRules", "modrinth", "privacyNoticeShown", "stutterMonitor"]}
+  ]
+}
