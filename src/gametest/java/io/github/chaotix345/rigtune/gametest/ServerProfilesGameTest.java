@@ -439,7 +439,8 @@ public class ServerProfilesGameTest implements FabricClientGameTest {
 				}
 				for (AbstractWidget w : Screens.getWidgets(screen)) {
 					if (w instanceof RowFocus) {
-						check(w.getX() >= 0 && w.getY() >= 26 && w.getRight() <= screen.width && w.getBottom() <= screen.list().getY(), at + ": text line: "
+						// Below the title (y 8): the status (or subtitle) stop starts at 19 (review-11 FEAT-4).
+						check(w.getX() >= 0 && w.getY() >= 18 && w.getRight() <= screen.width && w.getBottom() <= screen.list().getY(), at + ": text line: "
 								+ w.getMessage().getString());
 					}
 				}
