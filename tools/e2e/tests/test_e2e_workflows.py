@@ -156,8 +156,9 @@ class BuildWorkflowTest(unittest.TestCase):
         self.assertIn("needs: java", e2e)
         self.assertIn("uses: ./.github/workflows/e2e.yml", e2e)
         self.assertIn("jars-artifact: rigtune-jars", e2e)
+        # review-11 SEC-7: never for a fork's pull request, whatever its branch is called.
         self.assertIn("tier: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' && startsWith(github.head_ref, 'feat/v') "
-                      "&& 'release' || 'push' }}", e2e)
+                      "&& github.event.pull_request.head.repo.full_name == github.repository && 'release' || 'push' }}", e2e)
         self.assertIn("name: rigtune-jars", self.jobs["java"])
 
     def test_the_java_job_runs_both_compat_harnesses_on_the_pinned_jars(self):

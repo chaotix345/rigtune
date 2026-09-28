@@ -162,7 +162,8 @@ jobs:
     needs: java
     uses: ./.github/workflows/e2e.yml
     with:
-      tier: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' && startsWith(github.head_ref, 'feat/v') && 'release' || 'push' }}
+      # Never for a fork's pull request, whatever its branch is called (review-11 SEC-7).
+      tier: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' && startsWith(github.head_ref, 'feat/v') && github.event.pull_request.head.repo.full_name == github.repository && 'release' || 'push' }}
       jars-artifact: rigtune-jars
 
   # The client-gametest legs, one per Minecraft node in versions/*/: OpenGL for every node, plus Vulkan from 26.3 on.
