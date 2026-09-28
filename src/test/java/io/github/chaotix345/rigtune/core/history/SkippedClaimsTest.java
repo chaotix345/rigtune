@@ -137,17 +137,33 @@ class SkippedClaimsTest {
 				new UnfinishedGroups.Rename(ENABLE_DH, "c", "d"))));
 	}
 
-	// An undo's change keeps the change it reverted consistent (REVERTED), so it isn't relabelled.
+	// An undo's change keeps the change it reverted consistent (REVERTED), so it isn't relabelled, and neither is its
+	// group's disable (review 11 APPLY-2: a disable goes only with its group's relabelled enable).
 	@Test
 	void anUndoChangeStays() {
 		List<JournalEntry> undone = HistoryUpdates.map(entries, c -> ENABLE_DH.equals(c.opId()) ? c.reverting("some-change") : c);
 
-		SkippedClaims.Relabel relabel = SkippedClaims.of(undone, lastApply, List::of);
+		assertNull(SkippedClaims.of(undone, lastApply, List::of));
+	}
 
-		assertEquals(List.of(DISABLE_DH), statuses(relabel.entries(), JournalChange.ABANDONED));
-		assertEquals(List.of(DISABLE_DH), relabel.opIds());
-		assertEquals(List.of(ApplyResult.Status.ABANDONED, ApplyResult.Status.SKIPPED_ALREADY_DONE),
-				relabel.lastApply().results().stream().map(ApplyResult.OpResult::status).toList());
+	// review 11 APPLY-2: 0.5's own helper still reports a disable whose jar is already gone as a bare SKIPPED (a jar the
+	// player removed by hand). That is no claim of RW-1's shape (an enable found in place): it stays APPLIED, at every start.
+	@Test
+	void aLoneDisableAlreadyGoneStays() {
+		ApplyResult gone = new ApplyResult(lastApply.finishedAt(), List.of(lastApply.results().getFirst()));
+		assertEquals(PendingActions.Type.DISABLE_FILE, gone.results().getFirst().op().type());
+
+		assertNull(SkippedClaims.of(entries, gone, List::of));
+	}
+
+	// The DH shape with the enable proven RigTune's (a resultPath): its group's bare "already gone" disable stays too.
+	@Test
+	void aDisableStaysWhenItsGroupsEnableIsRigTunes() {
+		List<ApplyResult.OpResult> withPath = new ArrayList<>(lastApply.results());
+		ApplyResult.OpResult enable = withPath.get(1);
+		withPath.set(1, new ApplyResult.OpResult(enable.op(), enable.status(), enable.message(), enable.op().to()));
+
+		assertNull(SkippedClaims.of(entries, new ApplyResult(lastApply.finishedAt(), withPath), List::of));
 	}
 
 	// A start that died between the journal and last-apply.json: the journal already says ABANDONED, the results still

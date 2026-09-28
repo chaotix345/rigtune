@@ -2,11 +2,15 @@ package io.github.chaotix345.rigtune.client.undo;
 
 import io.github.chaotix345.rigtune.client.ui.HistoryScreen;
 import io.github.chaotix345.rigtune.core.RepoFiles;
+import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
+import io.github.chaotix345.rigtune.core.apply.PendingActions;
+import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.history.ApplyFailures;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
+import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -73,6 +77,29 @@ class HistoryStartupRw20Test {
 
 		assertArrayEquals(history, Files.readAllBytes(Journal.file(config)), "a second start writes nothing");
 		assertArrayEquals(last, Files.readAllBytes(ApplyResult.defaultPath(config)));
+	}
+
+	// review 11 APPLY-2: 0.5's own helper reports a disable whose jar the player removed by hand as a bare SKIPPED "already
+	// gone"; the starts after it leave that change APPLIED (not "Not applied: installed another way") and its result as is.
+	@Test
+	void aV050DisableOfAJarAlreadyGoneStaysApplied() throws IOException {
+		Path mods = Files.createDirectories(instance.resolve("mods"));
+		Path config = Files.createDirectories(instance.resolve("config"));
+		Path pending = PendingActions.defaultPath(config);
+		Op disable = Op.disableFile(mods.resolve("foo-1.0.jar"));
+		PendingActions.create(1, mods, config, List.of(disable)).save(pending);
+		journal(config).record("e1", JournalEntry.APPLY,
+				List.of(JournalChange.file(JournalChange.DISABLE, "foo", "foo-1.0.jar", JournalChange.STAGED, disable.id(), disable.group())));
+		ApplyResult run = new ApplyExecutor(2, 1).run(PendingActions.load(pending), pending);
+		assertEquals(ApplyResult.Status.SKIPPED_ALREADY_DONE, run.results().getFirst().status());
+		assertEquals(null, run.results().getFirst().resultPath());
+		assertEquals(JournalChange.APPLIED, journal(config).entries().getLast().changes().getFirst().status());
+
+		HistoryStartup.run(config, journal(config), true);
+		HistoryStartup.run(config, journal(config), true);
+
+		assertEquals(JournalChange.APPLIED, journal(config).entries().getLast().changes().getFirst().status());
+		assertEquals(ApplyResult.Status.SKIPPED_ALREADY_DONE, ApplyResult.load(ApplyResult.defaultPath(config)).results().getFirst().status());
 	}
 
 	// preLaunch without the lock (the helper may still be running): nothing is done.
