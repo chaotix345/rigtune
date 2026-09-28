@@ -18,6 +18,7 @@ import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.tryit.Triable;
 import io.github.chaotix345.rigtune.core.tryit.TryIt;
 import io.github.chaotix345.rigtune.core.tryit.TryItStore;
+import io.github.chaotix345.rigtune.core.tryit.TryItText;
 import io.github.chaotix345.rigtune.core.tryit.TryItVerdict;
 import io.github.chaotix345.rigtune.core.tryit.TryItView;
 import io.github.chaotix345.rigtune.core.tryit.TryItView.Stage;
@@ -51,7 +52,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // noise; one object per call would be megabytes), and it never needs the game or the lazy holder then. The TryItGameTest
 // times it strictly in a running game. Nothing hooks Busy before a try's first run is queued.
 // The chain against a fake game (FakeGame: the files are real, in a temporary config folder; the executor and the render
-// thread are queues that drain() runs): the code review's M1-M6.
+// thread are queues that drain() runs): the code review's M1-M6, and the cold-start rule (the coordinator's amendment).
 class TryItServiceTest {
 	private static final long NOISE_BYTES = 64 * 1024;
 	private static final String KEY = "vanilla.cutoutLeaves";
@@ -102,7 +103,7 @@ class TryItServiceTest {
 		FakeGame game = new FakeGame(dir);
 		TryItService service = game.service;
 		game.onStart = request -> {
-			service.onOutcome(request, null);
+			service.onOutcome(request, null, false);
 			return "rigtune.benchmark.refused.running";
 		};
 		TryIt t = start(game, Scene.BENCHMARK_WORLD);
@@ -160,9 +161,9 @@ class TryItServiceTest {
 	void theStartHooksDeriveRunsOnTheChain() {
 		FakeGame game = new FakeGame(dir);
 		game.service.derive();
-		assertEquals(0, game.journalReads, "nothing read before the chain runs it");
+		assertEquals(0, game.historyReads, "nothing read before the chain runs it");
 		game.drain();
-		assertEquals(1, game.journalReads);
+		assertEquals(1, game.historyReads);
 	}
 
 	// Review M5: Revert -> Undo this -> Keep on the view from before the undo: the chain derives first, so the try isn't
@@ -219,6 +220,175 @@ class TryItServiceTest {
 		assertTrue(causes(service).stream().anyMatch(c -> c instanceof TryItVerdict.Cause.Moved), "causes: " + causes(service));
 	}
 
+	// Review BENCH-1: history.json is read once per derive: a read that fails right after the apply can't make the try's
+	// entry look missing (which closed the try as "wasn't applied").
+	@Test
+	void aHistoryReadThatFailsAfterTheApplyClosesNothing() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		TryIt t = start(game, Scene.BENCHMARK_WORLD);
+		runBefore(game, t);
+		game.failRead = game.historyReads + 2;
+		TryItService.tick(null);
+		game.drain();
+		assertNotNull(store().current(), "the try stays open: " + store().recent());
+		assertEquals(0, game.screens);
+		assertEquals(Stage.MEASURING_AFTER, service.view().stage());
+	}
+
+	// Review BENCH-2: a run whose settle timed out on terrain that hadn't loaded is recorded on the try, and the verdict is
+	// withheld.
+	@Test
+	void anAfterRunOnTerrainThatHadntLoadedGetsNoVerdict() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		TryIt t = start(game, Scene.BENCHMARK_WORLD);
+		runBefore(game, t);
+		applyAndQueueAfter(game);
+		runAfter(game, t, true);
+		assertEquals(Stage.RESULT, service.view().stage());
+		assertEquals(List.of("after"), store().current().unsettledRuns());
+		assertEquals(TryItVerdict.Kind.NOT_COMPARABLE, service.view().verdict().kind());
+		assertEquals(List.of(new TryItVerdict.Cause.Excluded(TryItVerdict.Cause.Excluded.Why.TERRAIN_LOADING)), causes(service));
+	}
+
+	// Review BENCH-3: a derive already queued when Start is pressed (it reads tryit.json before the try is written) doesn't
+	// replace the new try's view.
+	@Test
+	void aDeriveQueuedBeforeStartKeepsTheNewTry() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		service.derive();
+		assertEquals("", service.start(rec(), Scene.BENCHMARK_WORLD).getString());
+		game.drain();
+		assertEquals(Stage.MEASURING_BEFORE, service.view().stage());
+		assertNotNull(service.view().tryIt());
+	}
+
+	// Review BENCH-5: the option changed but History couldn't record it: not "wasn't applied" (FAILED) but ENTRY_MISSING
+	// (Keep only), with a note, and it stays so.
+	@Test
+	void aChangeHistoryCouldntRecordIsntCalledNotApplied() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		game.journals = false;
+		TryIt t = start(game, Scene.BENCHMARK_WORLD);
+		runBefore(game, t);
+		TryItService.tick(null);
+		game.drain();
+		assertNotNull(store().current(), "not closed: " + store().recent());
+		assertEquals(Stage.ENTRY_MISSING, service.view().stage());
+		assertNotNull(service.view().note());
+		service.refresh();
+		game.drain();
+		assertEquals(Stage.ENTRY_MISSING, service.view().stage(), "a later derive agrees");
+	}
+
+	// Review BENCH-7: a RESTART try whose before run created the benchmark world (no verdict could follow) stops before
+	// anything changes, and says why.
+	@Test
+	void aRestartTryWhoseBeforeRunCreatedTheWorldStopsBeforeTheChange() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		String key = "sodium.performance.chunk_build_defer_mode";
+		Recommendation sodium = new Recommendation("setting:" + key, Category.SETTING, Impact.MEDIUM, "t", "r", new Action.SetSetting(key, "ALWAYS",
+				"ONE_FRAME"), true);
+		TryIt t = start(game, sodium, Scene.BENCHMARK_WORLD);
+		assertEquals(TryIt.Kind.RESTART, t.kind());
+		TryItService.tick(null);
+		game.drain();
+		BenchmarkRecord before = run("before", BenchmarkRecord.BEFORE, t, true);
+		game.runs.add(before);
+		assertTrue(service.onOutcome(game.started.getLast(), before, false));
+		game.drain();
+		TryItService.tick(null);
+		game.drain();
+		assertEquals(0, game.applies, "nothing applied");
+		assertNull(store().current());
+		assertEquals(TryIt.Decision.CANCELLED, store().recent().getFirst().decision());
+		assertEquals(Stage.STOPPED_BEFORE, service.view().stage());
+		assertNotNull(service.view().note());
+	}
+
+	// The cold-start rule: in the player's own world, Start waits until they've been there a minute (their time in this
+	// world and dimension); the status line says how long is left.
+	@Test
+	void startInThePlayersWorldRefusesUntilItHasSettled() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		game.playerTicks = 20 * 10 + 5;
+		Text settling = service.settling(Scene.CURRENT);
+		assertNotNull(settling);
+		assertEquals("Try It measures better once the world has settled. Play for about a minute first (50 s left).", settling.english());
+		assertFalse(service.start(rec(), Scene.CURRENT).getString().isEmpty(), "Start answers with the status line");
+		game.drain();
+		assertNull(store().current(), "no try opened");
+		assertTrue(game.started.isEmpty());
+		assertFalse(service.running());
+		game.playerTicks = 20 * TryItService.SETTLE_SECONDS;
+		assertNull(service.settling(Scene.CURRENT));
+		start(game, Scene.CURRENT);
+	}
+
+	// The count goes on by the clock while a RigTune screen pauses a singleplayer game (no ticks); a new local player (a
+	// dimension change, a respawn) starts it again.
+	@Test
+	void theCountGoesOnWhileAScreenPausesTheGameAndRestartsWithANewPlayer() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		game.playerTicks = 20 * 10 + 5;
+		assertEquals(50, service.settleLeft(Scene.CURRENT));
+		game.nanos += 30_000_000_000L;
+		assertEquals(20, service.settleLeft(Scene.CURRENT), "paused: no ticks, 30 s by the clock");
+		game.playerTicks = 20 * 55;
+		assertEquals(5, service.settleLeft(Scene.CURRENT), "the ticks are further");
+		game.playerId = 2;
+		game.playerTicks = 0;
+		assertEquals(TryItService.SETTLE_SECONDS, service.settleLeft(Scene.CURRENT), "a new dimension");
+		game.nanos += 60_000_000_000L;
+		assertEquals(0, service.settleLeft(Scene.CURRENT));
+	}
+
+	// The benchmark world (every RESTART try) isn't refused: its runs wait until a minute after this launch's first title
+	// screen (a restart's world load), with a note, then start.
+	@Test
+	void benchmarkWorldRunsWaitForTheGameToSettleInsteadOfRefusing() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		game.nanos = 1_000_000_000L;
+		service.titleToast(null);
+		game.nanos += 10_000_000_000L;
+		assertNull(service.settling(Scene.BENCHMARK_WORLD), "never refused");
+		start(game, Scene.BENCHMARK_WORLD);
+		for (int i = 0; i < 40; i++) {
+			TryItService.tick(null);
+		}
+		assertTrue(game.started.isEmpty(), "the before run waits");
+		assertEquals(Stage.MEASURING_BEFORE, service.view().stage());
+		assertEquals(TryItText.settleWaiting(), service.view().note());
+		game.nanos += 50_000_000_000L;
+		TryItService.tick(null);
+		assertEquals(1, game.started.size(), "the before run starts once the game has settled");
+		assertNull(service.view().note());
+	}
+
+	// A settled game, the seam at 0 (game tests) and the benchmark world never refuse.
+	@Test
+	void onlyAnUnsettledOwnWorldRefuses() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		assertNull(service.settling(Scene.CURRENT), "two minutes in the world");
+		game.playerTicks = 0;
+		assertNotNull(service.settling(Scene.CURRENT));
+		assertNull(service.settling(Scene.BENCHMARK_WORLD));
+		TryItService.settleSeconds(0);
+		try {
+			assertNull(service.settling(Scene.CURRENT));
+		} finally {
+			TryItService.settleSeconds(TryItService.SETTLE_SECONDS);
+		}
+	}
+
 	private TryItStore store() {
 		return TryItStore.shared(dir);
 	}
@@ -231,7 +401,11 @@ class TryItServiceTest {
 
 	// Start, and the before run queued.
 	private TryIt start(FakeGame game, Scene scene) {
-		assertEquals("", game.service.start(rec(), scene).getString());
+		return start(game, rec(), scene);
+	}
+
+	private TryIt start(FakeGame game, Recommendation rec, Scene scene) {
+		assertEquals("", game.service.start(rec, scene).getString());
 		game.drain();
 		TryIt t = store().current();
 		assertNotNull(t);
@@ -244,7 +418,7 @@ class TryItServiceTest {
 		game.drain();
 		BenchmarkRecord before = run("before", BenchmarkRecord.BEFORE, t);
 		game.runs.add(before);
-		assertTrue(game.service.onOutcome(game.started.getLast(), before));
+		assertTrue(game.service.onOutcome(game.started.getLast(), before, false));
 		game.drain();
 	}
 
@@ -256,11 +430,15 @@ class TryItServiceTest {
 	}
 
 	private static void runAfter(FakeGame game, TryIt t) {
+		runAfter(game, t, false);
+	}
+
+	private static void runAfter(FakeGame game, TryIt t, boolean unsettled) {
 		TryItService.tick(null);
 		game.drain();
 		BenchmarkRecord after = run("after", BenchmarkRecord.AFTER, t);
 		game.runs.add(after);
-		assertTrue(game.service.onOutcome(game.started.getLast(), after));
+		assertTrue(game.service.onOutcome(game.started.getLast(), after, unsettled));
 		game.drain();
 	}
 
@@ -269,11 +447,15 @@ class TryItServiceTest {
 	}
 
 	private static BenchmarkRecord run(String id, String phase, TryIt t) {
+		return run(id, phase, t, null);
+	}
+
+	private static BenchmarkRecord run(String id, String phase, TryIt t, @Nullable Boolean worldFresh) {
 		Map<String, BenchmarkRecord.KnobResult> knobs = new LinkedHashMap<>();
 		knobs.put(BenchmarkRecord.RENDER_DISTANCE, new BenchmarkRecord.KnobResult(12, 12, null, null, null));
 		knobs.put(BenchmarkRecord.SIMULATION_DISTANCE, new BenchmarkRecord.KnobResult(8, 8, null, null, null));
 		BenchmarkRecord.Context context = new BenchmarkRecord.Context(false, false, null, 2560, 1440, false, BenchmarkRecord.Context.PROTOCOL,
-				"hash-a", null);
+				"hash-a", null).withWorldFresh(worldFresh);
 		return new BenchmarkRecord(id, Instant.now().toString(), "0.5.0+mc26.2", "26.2", "MEASURE", t.scene().name(), phase, t.pairId(), 144, true,
 				knobs, new BenchmarkRecord.Result(800, 500, 2, 2, 0.01), Map.of(), Map.of(), null, false, context);
 	}
@@ -289,9 +471,19 @@ class TryItServiceTest {
 		Executor executor = io::add;
 		Function<BenchmarkRequest, @Nullable String> onStart = request -> null;
 		boolean applyThrows;
+		// false: the apply changes the option but History's write fails (review BENCH-5).
+		boolean journals = true;
+		int applies;
+		// Which history() read fails (as a failed read of history.json does: UNREADABLE), 0: none.
+		int failRead;
+		boolean runsReadable = true;
+		final Map<String, String> settings = new LinkedHashMap<>(Map.of("vanilla.renderDistance", "12"));
 		TryIt.Spot spot = HERE;
+		int playerTicks = 20 * 120;
+		int playerId = 1;
+		long nanos;
 		int screens;
-		int journalReads;
+		int historyReads;
 
 		FakeGame(Path configDir) {
 			this.configDir = configDir;
@@ -316,6 +508,21 @@ class TryItServiceTest {
 		@Override
 		public boolean ready() {
 			return true;
+		}
+
+		@Override
+		public int playerTicks() {
+			return playerTicks;
+		}
+
+		@Override
+		public int playerId() {
+			return playerId;
+		}
+
+		@Override
+		public long nanos() {
+			return nanos;
 		}
 
 		@Override
@@ -361,7 +568,7 @@ class TryItServiceTest {
 
 		@Override
 		public Map<String, String> snapshot() {
-			return Map.of("vanilla.renderDistance", "12");
+			return Map.copyOf(settings);
 		}
 
 		@Override
@@ -372,22 +579,30 @@ class TryItServiceTest {
 		@Override
 		public void apply(Recommendation rec, String entryId) {
 			Action.SetSetting set = (Action.SetSetting) rec.action();
-			journal.record(entryId, JournalEntry.APPLY, List.of(JournalChange.setting(set.key(), set.currentValue(), set.newValue(), JournalChange.APPLIED,
-					null)));
+			applies++;
+			settings.put(set.key(), set.newValue());
+			if (journals) {
+				journal.record(entryId, JournalEntry.APPLY, List.of(JournalChange.setting(set.key(), set.currentValue(), set.newValue(),
+						JournalChange.APPLIED, null)));
+			}
 			if (applyThrows) {
 				throw new IllegalStateException("the apply failed after journaling");
 			}
 		}
 
 		@Override
-		public Journal journal() {
-			journalReads++;
-			return journal;
+		public Journal.Snapshot history() {
+			return ++historyReads == failRead ? new Journal.Snapshot(Journal.State.UNREADABLE, List.of()) : journal.snapshot();
 		}
 
 		@Override
 		public List<BenchmarkRecord> runs() {
 			return List.copyOf(runs);
+		}
+
+		@Override
+		public boolean runsReadable() {
+			return runsReadable;
 		}
 
 		@Override

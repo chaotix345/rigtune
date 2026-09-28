@@ -122,6 +122,11 @@ public final class BenchmarkHistory {
 		return unreadable;
 	}
 
+	/** The file is from a newer RigTune: its runs weren't read (the next save keeps it as .newer). */
+	public boolean newerOnDisk() {
+		return newerOnDisk;
+	}
+
 	/** Writes the file; returns the history as it now is on disk. */
 	public BenchmarkHistory save(Path file) throws IOException {
 		if (unreadable) {

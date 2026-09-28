@@ -14,9 +14,11 @@ import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.ui.TryItScreen;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
+import io.github.chaotix345.rigtune.core.benchmark.BenchmarkHistory;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest.Scene;
+import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
 import io.github.chaotix345.rigtune.core.history.ApplyFailures;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
@@ -78,6 +80,9 @@ public final class TryItService {
 	// However busy the benchmark (or its world) stays, a run that hasn't answered in this long is given up (review L8).
 	static final int RUN_CAP_TICKS = 20 * 60 * 20;
 	private static final long REFRESH_NANOS = 1_000_000_000L;
+	// The cold-start rule: how long the game must have settled before Try It measures.
+	public static final int SETTLE_SECONDS = 60;
+	private static volatile int settleSeconds = SETTLE_SECONDS;
 
 	// The tick listener's flag: false, it returns after this one read (0 bytes, AC6.12).
 	private static volatile boolean active;
@@ -88,6 +93,16 @@ public final class TryItService {
 	interface Game {
 		// The game is up (false only before the client exists).
 		boolean ready();
+
+		// How long the player has been in the current world and dimension, in client ticks (the local player's age: a join,
+		// a dimension change or a respawn starts it again; paused time doesn't count); -1 without a world.
+		int playerTicks();
+
+		// Which local player that is (its identity hash; a new one after a join, a dimension change or a respawn).
+		int playerId();
+
+		// System.nanoTime().
+		long nanos();
 
 		Path configDir();
 
@@ -112,9 +127,13 @@ public final class TryItService {
 
 		void apply(Recommendation rec, String entryId);
 
-		Journal journal();
+		// history.json, read once.
+		Journal.Snapshot history();
 
 		List<BenchmarkRecord> runs();
+
+		// benchmarks.json could be read (and isn't from a newer RigTune).
+		boolean runsReadable();
 
 		Map<String, ApplyFailures.Failure> failures();
 
@@ -153,6 +172,12 @@ public final class TryItService {
 	private volatile boolean storeWritable = true;
 	private volatile @Nullable Object historyStamp;
 	private volatile long lastStaleCheck;
+	// This launch's first title screen (Game.nanos()), -1 before it: the benchmark world's settle counts from it.
+	private volatile long readyNanos = -1;
+	// The local player the settle last saw, its ticks then, and when it arrived by the clock (its ticks back from then).
+	private int settlePlayer;
+	private int settlePlayerTicks;
+	private long settleSince;
 	private int waitTicks;
 	private int runTicks;
 	private CompletableFuture<Void> io = CompletableFuture.completedFuture(null);
@@ -165,6 +190,49 @@ public final class TryItService {
 	TryItService(Game game) {
 		this.controller = null;
 		this.game = game;
+	}
+
+	// Game tests only: the settle time (0: none), back to SETTLE_SECONDS afterwards.
+	public static void settleSeconds(int seconds) {
+		settleSeconds = seconds;
+	}
+
+	// The status line while Start or Measure now in the player's own world waits for it to settle; null otherwise (the
+	// benchmark world is never refused: its runs wait instead, see onTick).
+	public @Nullable Text settling(Scene scene) {
+		int left = scene == Scene.CURRENT ? settleLeft(scene) : 0;
+		return left > 0 ? TryItText.settleRefusal(left) : null;
+	}
+
+	// Seconds before the scene has settled (0: settled, or nothing to wait for). The player's own world: their time in
+	// this world and dimension, by their ticks or by the clock since they arrived (whichever is further: a RigTune screen
+	// pauses a singleplayer game, and the world keeps loading behind it). The benchmark world, which each run loads
+	// afresh: the time since this launch's first title screen (after a restart, the game itself is cold). Render thread.
+	int settleLeft(Scene scene) {
+		int need = settleSeconds;
+		if (need <= 0) {
+			return 0;
+		}
+		long now = game.nanos();
+		if (scene == Scene.CURRENT) {
+			int ticks = game.playerTicks();
+			if (ticks < 0) {
+				return 0;
+			}
+			int id = game.playerId();
+			if (id != settlePlayer || ticks < settlePlayerTicks) {
+				settlePlayer = id;
+				settleSince = now - ticks * 50_000_000L;
+			}
+			settlePlayerTicks = ticks;
+			return Math.min(seconds(need * 1_000_000_000L - ticks * 50_000_000L), seconds(need * 1_000_000_000L - (now - settleSince)));
+		}
+		long ready = readyNanos;
+		return ready < 0 ? 0 : seconds(need * 1_000_000_000L - (now - ready));
+	}
+
+	private static int seconds(long nanos) {
+		return nanos <= 0 ? 0 : (int) ((nanos + 999_999_999L) / 1_000_000_000L);
 	}
 
 	// The open try's view, in memory. A History change seen by its file's time starts a new derive (at most once a second).
@@ -206,6 +274,10 @@ public final class TryItService {
 		}
 		Action.SetSetting set = (Action.SetSetting) rec.action();
 		Triable.Result result = Triable.check(rec, game.context(false, null, journalState, storeWritable), scene);
+		Text unsettled = settling(result.scene());
+		if (unsettled != null) {
+			return Texts.component(unsettled);
+		}
 		TryIt t = TryIt.of(ChangeRecorder.newEntryId(), rec.id(), set.key(), set.currentValue(), set.newValue(), result.kind(), result.scene(), now(),
 				SESSION, game.modVersion(), game.mcVersion(), game.snapshot(), null);
 		this.rec = rec;
@@ -238,7 +310,8 @@ public final class TryItService {
 	public void measureNow() {
 		TryItView v = view;
 		TryIt t = v.tryIt();
-		if (t == null || v.stage() != Stage.READY || !game.ready() || game.busy() != null || game.unavailable(t.scene()) != null) {
+		if (t == null || v.stage() != Stage.READY || !game.ready() || game.busy() != null || game.unavailable(t.scene()) != null
+				|| settling(t.scene()) != null) {
 			return;
 		}
 		hook();
@@ -303,6 +376,9 @@ public final class TryItService {
 	// The title-screen hook (V05Services.titleScreen), on the render thread: once per launch, and only for a try that a
 	// restart left READY, RETRYING or NOT_APPLIED, whatever the startupToast switch says (it continues the player's action).
 	public void titleToast(Minecraft minecraft) {
+		if (readyNanos < 0) {
+			readyNanos = game.nanos();
+		}
 		if (toastShown) {
 			return;
 		}
@@ -331,20 +407,24 @@ public final class TryItService {
 			TryItStore store = TryItStore.shared(configDir);
 			TryIt t = store.current();
 			storeWritable = store.writable();
-			Journal journal = game.journal();
 			historyStamp = stamp(Journal.file(configDir));
-			Journal.State state = journal.state();
+			// Review BENCH-1: one read of history.json (a second one that failed would make the entry look missing).
+			Journal.Snapshot history = game.history();
+			Journal.State state = history.state();
 			journalState = state;
 			TryItView derivedView;
 			if (t == null) {
 				// No try open (the usual case, e.g. at the start hook): nothing more to read.
 				derivedView = TryItView.EMPTY;
 			} else {
-				List<JournalEntry> entries = state == Journal.State.OK ? journal.entries() : List.of();
-				derivedView = TryItFlow.derive(t, game.runs(), new TryItFlow.History(state, entries, game.failures()),
+				List<JournalEntry> entries = state == Journal.State.OK ? history.entries() : List.of();
+				derivedView = TryItFlow.derive(t, game.runs(), game.runsReadable(), new TryItFlow.History(state, entries, game.failures()),
 						new TryItFlow.Live(SESSION, measuring, applying || applyDue));
 			}
-			if (!(closedHere && derivedView.tryIt() == null)) {
+			// Review BENCH-3: a derive queued before Start read tryit.json before the new try was written; it doesn't replace
+			// the try this session is starting.
+			boolean starting = derivedView.tryIt() == null && running() && view.tryIt() != null;
+			if (!(closedHere && derivedView.tryIt() == null) && !starting) {
 				closedHere = false;
 				TryItView shown = view;
 				view = shown.note() != null && derivedView.tryIt() != null && shown.tryIt() != null && shown.tryIt().id().equals(derivedView.tryIt().id())
@@ -422,11 +502,12 @@ public final class TryItService {
 	// BenchmarkController's outcome hook: only this try's runs (its pair id) are claimed.
 	static boolean claim(BenchmarkController.Outcome outcome) {
 		TryItService service = ticking;
-		return service != null && service.onOutcome(outcome.request(), outcome.cancelled() ? null : outcome.record());
+		return service != null && service.onOutcome(outcome.request(), outcome.cancelled() ? null : outcome.record(), outcome.stepsLeftOut() > 0);
 	}
 
-	// record: the stored run, null when it was cancelled or throttled.
-	boolean onOutcome(BenchmarkRequest request, @Nullable BenchmarkRecord record) {
+	// record: the stored run, null when it was cancelled or throttled. unsettled: a step's settle timed out on terrain that
+	// hadn't loaded (review BENCH-2).
+	boolean onOutcome(BenchmarkRequest request, @Nullable BenchmarkRecord record, boolean unsettled) {
 		TryItView v = view;
 		TryIt t = v.tryIt();
 		if (t == null || !measuring || !t.pairId().equals(request.pairId())) {
@@ -435,6 +516,18 @@ public final class TryItService {
 		measuring = false;
 		if (!afterRun) {
 			if (record != null && BenchmarkRecord.BEFORE.equals(record.phase()) && record.result() != null) {
+				if (t.kind() == TryIt.Kind.RESTART && BenchmarkTrend.excluded(record)) {
+					// Review BENCH-7: a before run left out of the trend (it created the benchmark world, or DH generated)
+					// can't give a verdict after the restart: stop now, before anything changes, and say why.
+					boolean fresh = record.context() != null && Boolean.TRUE.equals(record.context().worldFresh());
+					closeHere(t, TryIt.Decision.CANCELLED, new TryItView(Stage.STOPPED_BEFORE, t, record, null, null, null, null, true,
+							TryItText.excludedBefore(fresh)));
+					game.openScreen();
+					return true;
+				}
+				if (unsettled) {
+					unsettled(t, record);
+				}
 				// The before is saved: apply on the next tick, then measure again.
 				applyDue = true;
 				view = new TryItView(Stage.APPLYING, t, record, null, null, null, null, true);
@@ -447,11 +540,20 @@ public final class TryItService {
 			game.openScreen();
 			return true;
 		}
+		if (unsettled && record != null) {
+			unsettled(t, record);
+		}
 		io(() -> {
 			deriveNow();
 			game.later(game::openScreen);
 		});
 		return true;
+	}
+
+	// Review BENCH-2: the run's settle timed out on terrain that hadn't loaded: the try lists it (no verdict with it).
+	private void unsettled(TryIt t, BenchmarkRecord record) {
+		String runId = record.id();
+		io(() -> TryItStore.shared(game.configDir()).change(t.id(), x -> x.withUnsettled(runId)));
 	}
 
 	// Review M2: whatever the apply does (an exception included, maybe after journaling), the entry decides: derived again.
@@ -482,6 +584,19 @@ public final class TryItService {
 		rec = null;
 		if (t == null) {
 			return;
+		}
+		if (v.stage() == Stage.APPLYING && t.kind() == TryIt.Kind.NOW && t.to() != null) {
+			Map<String, String> settings = game.snapshot();
+			if (t.to().equals(settings.get(t.key()))) {
+				// Review BENCH-5: nothing journaled, but the option changed (History's write failed and only logged): the
+				// after snapshot is the proof, so the try stays open as ENTRY_MISSING (Keep only), with a note.
+				io(() -> {
+					TryItStore.shared(game.configDir()).change(t.id(), x -> x.withAfter(settings, SESSION, null));
+					view = deriveNow().withNote(TryItText.unrecorded());
+					game.later(game::openScreen);
+				});
+				return;
+			}
 		}
 		if (v.stage() == Stage.APPLYING || v.stage() == Stage.NOT_APPLIED) {
 			// Nothing was journaled for the key: the apply took nothing (review L7: only these; HISTORY_UNREADABLE keeps
@@ -582,9 +697,22 @@ public final class TryItService {
 		BenchmarkRequest queued = next;
 		if (queued != null) {
 			String unavailable = game.unavailable(queued.scene());
-			if (unavailable == null) {
+			if (unavailable == null && settleLeft(queued.scene()) > 0) {
+				// The cold-start rule: a queued run (the benchmark world after a restart, or the player's world after a
+				// dimension change) waits for the game to settle instead of refusing; the chain's cap still holds.
+				waitTicks = 0;
+				if (view.note() == null) {
+					view = view.withNote(TryItText.settleWaiting());
+				}
+				if (++runTicks > RUN_CAP_TICKS) {
+					lost(null);
+				}
+			} else if (unavailable == null) {
 				next = null;
 				waitTicks = 0;
+				if (TryItText.settleWaiting().equals(view.note())) {
+					view = view.withNote(null);
+				}
 				// Review M6: where the player stands right before the run starts (in the player's own world).
 				recordSpot(queued);
 				String refused = game.tryStart(queued);
@@ -670,6 +798,23 @@ public final class TryItService {
 		}
 
 		@Override
+		public int playerTicks() {
+			Minecraft minecraft = minecraft();
+			return minecraft.player == null ? -1 : minecraft.player.tickCount;
+		}
+
+		@Override
+		public int playerId() {
+			Minecraft minecraft = minecraft();
+			return minecraft.player == null ? 0 : System.identityHashCode(minecraft.player);
+		}
+
+		@Override
+		public long nanos() {
+			return System.nanoTime();
+		}
+
+		@Override
 		public Path configDir() {
 			return controller.configDir();
 		}
@@ -748,13 +893,19 @@ public final class TryItService {
 		}
 
 		@Override
-		public Journal journal() {
-			return ClientJournal.get();
+		public Journal.Snapshot history() {
+			return ClientJournal.get().snapshot();
 		}
 
 		@Override
 		public List<BenchmarkRecord> runs() {
 			return BenchmarkStore.history().runs();
+		}
+
+		@Override
+		public boolean runsReadable() {
+			BenchmarkHistory history = BenchmarkStore.history();
+			return !history.unreadable() && !history.newerOnDisk();
 		}
 
 		@Override

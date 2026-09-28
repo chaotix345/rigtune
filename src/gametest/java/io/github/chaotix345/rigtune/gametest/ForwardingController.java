@@ -376,6 +376,11 @@ abstract class ForwardingController implements RigTuneController {
 	}
 
 	@Override
+	public @Nullable Text tryItSettling(BenchmarkRequest.Scene scene) {
+		return delegate.tryItSettling(scene);
+	}
+
+	@Override
 	public ServerProfilesView serverProfiles() {
 		return delegate.serverProfiles();
 	}
