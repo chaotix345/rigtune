@@ -1,0 +1,178 @@
+{
+ "formatVersion": 1,
+ "sessions": [
+  {
+   "startedAt": "2026-09-28T00:40:28Z",
+   "source": "monitor",
+   "mc": "26.3",
+   "collector": "G1",
+   "heapMaxMb": 4096,
+   "sessionSeconds": 65.3,
+   "gameplaySeconds": 54.4,
+   "frames": 947,
+   "avgFps": 17.4,
+   "onePercentLowFps": 2.7,
+   "histogramCounts": [
+    0,
+    0,
+    0,
+    223,
+    404,
+    241,
+    63,
+    16,
+    0
+   ],
+   "histogramTimeMs": [
+    0,
+    0,
+    0,
+    7409,
+    15137,
+    14271,
+    12389,
+    5168,
+    0
+   ],
+   "spikes": {
+    "minor": 0,
+    "major": 0,
+    "severe": 11,
+    "freeze": 1
+   },
+   "lostMs": 2845.0,
+   "causes": {
+    "gc": 0.85,
+    "chunkBuild": 0.01,
+    "unknown": 0.14
+   },
+   "tags": {
+    "cpuContention": 9,
+    "afterTeleport": 3,
+    "chunksLoading": 9
+   },
+   "worst": [
+    {
+     "t": 12.4,
+     "ms": 501.3,
+     "baseMs": 169.3,
+     "causes": [
+      "render:low",
+      "cpuContention:low:worker",
+      "afterTeleport:context",
+      "chunksLoading:context"
+     ]
+    },
+    {
+     "t": 21.0,
+     "ms": 487.5,
+     "baseMs": 195.5,
+     "causes": [
+      "gc:high:FULL:EXPLICIT",
+      "render:low",
+      "cpuContention:low:worker",
+      "chunksLoading:context"
+     ]
+    },
+    {
+     "t": 15.8,
+     "ms": 420.1,
+     "baseMs": 183.0,
+     "causes": [
+      "gc:high:FULL:EXPLICIT",
+      "cpuContention:low:worker",
+      "chunksLoading:context"
+     ]
+    },
+    {
+     "t": 10.6,
+     "ms": 387.0,
+     "baseMs": 159.4,
+     "causes": [
+      "gc:high:FULL:EXPLICIT",
+      "render:low",
+      "cpuContention:low:worker",
+      "afterTeleport:context",
+      "chunksLoading:context"
+     ]
+    },
+    {
+     "t": 31.6,
+     "ms": 351.9,
+     "baseMs": 50.9,
+     "causes": [
+      "gc:high:FULL:EXPLICIT",
+      "cpuContention:low:worker",
+      "afterTeleport:context",
+      "chunksLoading:context"
+     ]
+    },
+    {
+     "t": 47.4,
+     "ms": 302.7,
+     "baseMs": 49.5,
+     "causes": [
+      "gc:high:FULL:EXPLICIT",
+      "cpuContention:low:worker",
+      "chunksLoading:context"
+     ]
+    },
+    {
+     "t": 42.1,
+     "ms": 292.4,
+     "baseMs": 52.6,
+     "causes": [
+      "gc:high:FULL:EXPLICIT",
+      "cpuContention:low:worker",
+      "chunksLoading:context"
+     ]
+    },
+    {
+     "t": 52.6,
+     "ms": 272.6,
+     "baseMs": 33.3,
+     "causes": [
+      "gc:high:FULL:EXPLICIT"
+     ]
+    },
+    {
+     "t": 36.9,
+     "ms": 268.1,
+     "baseMs": 53.3,
+     "causes": [
+      "gc:high:FULL:EXPLICIT",
+      "cpuContention:low:worker",
+      "chunksLoading:context"
+     ]
+    },
+    {
+     "t": 63.1,
+     "ms": 262.9,
+     "baseMs": 33.3,
+     "causes": [
+      "gc:high:FULL:EXPLICIT"
+     ]
+    }
+   ],
+   "facts": {
+    "liveSetPct": 9,
+    "fullGcs": 0,
+    "stalls": 0,
+    "explicitGcs": 12,
+    "gcOffsetMs": 15.6
+   },
+   "advice": [],
+   "enoughData": false,
+   "phaseTiming": true,
+   "hitches": 12,
+   "settingsAtStart": {
+    "renderDistance": "12",
+    "simulationDistance": "8"
+   },
+   "settingsAtEnd": {
+    "renderDistance": "12",
+    "simulationDistance": "8"
+   }
+  }
+ ]
+}

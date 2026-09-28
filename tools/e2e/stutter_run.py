@@ -5,8 +5,8 @@ own -Drigtune.dev.stutterScript=teleport (monitor on, benchmark world, 20 s stil
 Doctor, leave, quit) with -Drigtune.dev.forceGcEverySec=5 and -Xlog:gc, one start through Loom's e2eClient (the undo
 driver, inert without a phase). Then evaluate() on latest.log, stutter.json and the GC log:
 - the script finished;
-- the spikes after the teleport carry "after teleport";
-- from the first chunk load after it on, "chunks loading";
+- the spikes in the product's 10 s teleport window carry "after teleport", and from the first chunk load in it on,
+  "chunks loading";
 - no GC milliseconds claimed without an overlapping JVM pause;
 - the unexplained remainder shown.
 Millisecond numbers aren't judged: llvmpipe frames aren't a GPU's. It ports the v0.4 local runs' evaluator
@@ -34,6 +34,8 @@ import e2e_env  # noqa: E402
 
 LF = chr(10)
 TIMEOUT = 12 * 60
+# StutterAnalyzer.TELEPORT_WINDOW: the seconds after a teleport whose spikes the product tags.
+TELEPORT_WINDOW = 10
 OPTIONS = ("onboardAccessibility:false", "pauseOnLostFocus:false", "tutorialStep:none", "skipMultiplayerWarning:true",
            "joinedFirstServer:true", "soundCategory_master:0.0", "renderDistance:12", "simulationDistance:8", "fullscreen:false")
 GC_LINE = re.compile(r"\[(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+)[+-]\d{4}\]\[([\d.]+)s\]\[\w+\s*\]\[gc\s*\] GC\(\d+\) (Pause [^0-9]*?) .*? ([\d.]+)ms$")
@@ -85,13 +87,18 @@ def evaluate(lines, stutter, gc_text):
     unmatched = [w["t"] for w in gc_noted if not overlapping(delta, w)]
 
     tags, causes = session.get("tags", {}), session.get("causes", {})
-    post = sorted((w for w in worst if tp_s is not None and tp_s - 1 <= w["t"] <= tp_s + 31), key=lambda w: w["t"])
+    # The product's own teleport window (StutterAnalyzer.TELEPORT_WINDOW, 10 s from the position jump) from the logged
+    # second of the tp on, +1 s for the log's resolution: every listed spike in it carries "after teleport", and from the
+    # first one with chunk loads on, "chunks loading" (P5C-F1: nothing arrives in the first moments to tag).
+    post = sorted((w for w in worst if tp_s is not None and tp_s <= w["t"] <= tp_s + TELEPORT_WINDOW + 1), key=lambda w: w["t"])
+    after = [w for w in post if "afterTeleport:context" in w.get("causes", [])]
     loading = [w for w in post if any(n.startswith(("chunksLoading:", "chunkLoad:")) for n in w.get("causes", []))]
     first_loading = loading[0]["t"] if loading else None
     late_untagged = [w["t"] for w in post if first_loading is not None and w["t"] >= first_loading and w not in loading]
     checks += [
-        ("the spikes after the teleport carry \"after teleport\"", tp_s is not None and tags.get("afterTeleport", 0) >= len(post) > 0,
-         "tp at session {} s; listed spikes in the 30 s after it: {}; tagged after teleport: {}".format(tp_s, len(post), tags.get("afterTeleport", 0))),
+        ("the spikes after the teleport carry \"after teleport\"", tags.get("afterTeleport", 0) > 0 and len(after) == len(post) > 0,
+         "tp at session {} s; listed spikes in its window: {}; tagged after teleport: {} (session total {})".format(
+             tp_s, [w["t"] for w in post], [w["t"] for w in after], tags.get("afterTeleport", 0))),
         ("\"chunks loading\" from the first chunk load after the teleport on", tags.get("chunksLoading", 0) > 0 and first_loading is not None
          and not late_untagged, "tagged: {}; first at {} s; untagged after it: {}".format(tags.get("chunksLoading", 0), first_loading, late_untagged)),
         ("no GC milliseconds claimed without an overlapping pause", bool(pauses) and not unmatched,
