@@ -126,6 +126,26 @@ class OutsideChangesTest {
 				"the stamp is never a setting");
 	}
 
+	// Review-11 COMPAT-3: 0.3.0 (and 0.2.x, or a 0.4 launch that never reached the title screen) records no startup run.
+	// Every launch leaves a signal whatever its RigTune version: vanilla's log config archives the previous session's
+	// latest.log as logs/<date>-<n>.log.gz when a game starts. This launch archives the snapshot session's log (one archive
+	// newer than the exit); a launch in between made one more.
+	@Test
+	void anotherLaunchSinceTheExitSkipsTheComparisonWhateverItsVersion() {
+		Map<String, String> stamped = OutsideOptions.stamped(Map.of("vanilla.renderDistance", "12"), Instant.parse("2026-09-27T10:00:00Z"));
+		Instant before = Instant.parse("2026-09-27T09:00:05Z");
+		Instant thisLaunch = Instant.parse("2026-09-27T20:00:03Z");
+		Instant between = Instant.parse("2026-09-27T15:00:02Z");
+		assertFalse(OutsideOptions.anotherLaunchSince(stamped, List.of(before, thisLaunch)), "only this launch's archive of the exit session's log");
+		assertTrue(OutsideOptions.anotherLaunchSince(stamped, List.of(before, between, thisLaunch)), "0.5 -> 0.3.0 -> 0.5");
+		StartupTimesStore.Run wrote = new StartupTimesStore.Run("2026-09-27T09:00:00Z", 15000, "26.2", "0.5.0+mc26.2", 7, null);
+		assertFalse(OutsideOptions.anotherVersionSince(stamped, List.of(wrote), "0.5.0+mc26.2"), "the startup-run guard alone misses 0.3.0");
+		assertTrue(OutsideOptions.anotherLaunchSince(stamped, List.of(between, thisLaunch, Instant.parse("2026-09-27T20:00:04Z"))));
+		assertFalse(OutsideOptions.anotherLaunchSince(stamped, List.of(before)), "no archive (another log config, or not written yet): can't tell");
+		assertFalse(OutsideOptions.anotherLaunchSince(stamped, List.of()), "no logs folder");
+		assertFalse(OutsideOptions.anotherLaunchSince(Map.of("vanilla.renderDistance", "12"), List.of(between, thisLaunch)), "no stamp: can't tell");
+	}
+
 	@Test
 	void noSnapshotNoComparison() {
 		assertEquals(List.of(), OutsideOptions.compare(null, OutsideOptions.parseOptions(options("renderClouds:\"fancy\"")), OutsideOptions.applied(JOURNAL)));

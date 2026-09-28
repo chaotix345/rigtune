@@ -47,6 +47,21 @@ class PreloadTimerTest {
 		assertEquals(ms, PreloadTimer.preloadMs(), "kept");
 	}
 
+	// Review-11 COMPAT-6: a dedicated server's Main in the same JVM (the game tests' in-process server) runs preload() again;
+	// the launch's own measurement is the one kept ("at this launch"), not the later call's.
+	@Test
+	void aLaterPreloadInTheSameJvmKeepsTheLaunchsMeasurement() throws InterruptedException {
+		PreloadTimer.reset();
+		PreloadTimer.start();
+		Thread.sleep(30);
+		PreloadTimer.end();
+		Long launch = PreloadTimer.preloadMs();
+		PreloadTimer.start();
+		PreloadTimer.end();
+		assertEquals(launch, PreloadTimer.preloadMs());
+		assertTrue(launch >= 25, "the launch's: " + launch);
+	}
+
 	// Optional: a missing target only leaves the number out (require = 0 on every injector), and the mixin is registered.
 	@Test
 	void theMixinIsRegisteredAndOptional() throws IOException {
