@@ -693,6 +693,7 @@
 	"rigtune.stutter.fix.skip.other": "it was played under other conditions",
 	"rigtune.stutter.fix.skip.setting": "%s changed (%s → %s)",
 	"rigtune.stutter.fix.skip.short": "it was shorter than 2 minutes",
+	"rigtune.stutter.fix.skip.unread": "RigTune couldn't read %s at its start or end",
 	"rigtune.stutter.fix.skip.version": "the Minecraft version changed",
 	"rigtune.stutter.fix.skip.world": "it was in another kind of world (singleplayer, LAN, Realm or server)",
 	"rigtune.stutter.fix.state.expired": "No comparable play in time, so there's no comparison.",

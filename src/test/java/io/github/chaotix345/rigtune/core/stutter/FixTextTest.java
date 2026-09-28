@@ -129,6 +129,8 @@ class FixTextTest {
 		assertEquals("Your last session didn't count: the window size or fullscreen changed.", skipped(m, new FixTracker.Skip("display", List.of())));
 		assertTrue(skipped(m, new FixTracker.Skip("excluded", List.of())).contains("benchmark"));
 		assertEquals("Your last session didn't count: it was idle (throttled) longer than it was played.", skipped(m, new FixTracker.Skip("idle", List.of())));
+		assertEquals("Your last session didn't count: RigTune couldn't read Render Distance at its start or end.",
+				skipped(m, new FixTracker.Skip("unread", List.of("vanilla.renderDistance"))));
 		for (FixConditions.Reason reason : FixConditions.Reason.values()) {
 			assertTrue(!skipped(m, new FixTracker.Skip(reason.id(), List.of("k", "a", "b"))).contains("null"), reason.name());
 		}

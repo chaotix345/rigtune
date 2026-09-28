@@ -163,6 +163,9 @@ public final class FixText {
 		if (FixTracker.EXCLUDED.equals(skip.reason())) {
 			return Text.of("rigtune.stutter.fix.skip.excluded", "it ran around a benchmark, or Distant Horizons generated terrain in it (or RigTune couldn't tell)");
 		}
+		if (FixTracker.UNREAD.equals(skip.reason())) {
+			return Text.of("rigtune.stutter.fix.skip.unread", "RigTune couldn't read %s at its start or end", labels.label(arg(a, 0)));
+		}
 		if (FixTracker.IDLE.equals(skip.reason())) {
 			return Text.of("rigtune.stutter.fix.skip.idle", "it was idle (throttled) longer than it was played");
 		}

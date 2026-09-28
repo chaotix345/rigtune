@@ -62,6 +62,16 @@ class FixHoldTest {
 		assertFalse(FixHold.apply(report(set(RD, "10", "16")), List.of(RD_HOLD)).recommendations().getFirst().selectedByDefault());
 	}
 
+	// review-11 STUTTER-8: a hold stands only while the fix's value is in effect. The player set render distance to 14 by hand
+	// after a measured 12 -> 10 fix: the main list's 14 -> 16 isn't "undoing that fix" and stays ticked.
+	@Test
+	void noHoldOnceTheValueChangedByHand() {
+		Report byHand = report(set(RD, "14", "16"));
+		assertSame(byHand, FixHold.apply(byHand, List.of(RD_HOLD)));
+		Report chunks = report(set(DEFER, "ONE_FRAME", "ZERO_FRAMES"));
+		assertSame(chunks, FixHold.apply(chunks, List.of(DEFER_HOLD)));
+	}
+
 	@Test
 	void anyOtherValueOfAnEnumIsHeld() {
 		assertFalse(FixHold.apply(report(set(DEFER, "ALWAYS", "ONE_FRAME")), List.of(DEFER_HOLD)).recommendations().getFirst().selectedByDefault());
@@ -118,7 +128,8 @@ class FixHoldTest {
 		assertEquals(FixComparison.Kind.MORE, records.get(3).verdict().kind());
 		List<FixHold.Hold> holds = FixHold.holds(records, java.time.ZoneOffset.UTC);
 		assertEquals(5, holds.size());
-		assertEquals(new FixHold.Hold(RD, "12", "10", "2026-10-02"), holds.getFirst());
+		assertEquals(new FixHold.Hold(RD, "12", "10", "2026-10-02", true), holds.getFirst());
+		assertEquals(new FixHold.Hold(RD, "12", "10", "2026-10-02"), holds.get(1));
 		assertEquals("2026-10-03", FixHold.holds(records.subList(0, 1), java.time.ZoneOffset.ofHours(2)).getFirst().appliedOn());
 		assertEquals(List.of(), FixHold.holds(records.subList(3, 4), java.time.ZoneOffset.UTC));
 	}
