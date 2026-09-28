@@ -69,13 +69,20 @@ class AfterStaleStartTest(unittest.TestCase):
     def test_dropped_announced_marked_and_quiet_at_exit(self):
         self.assertEqual([], failing(self.check()))
 
+    def test_the_other_reason_or_a_half_marked_group_fails(self):
+        self.driver["statuses"] = [{"keys": ["rigtune.status.stale_gone"], "text": "RigTune dropped its pending change to Distant Horizons: its download is gone."}]
+        self.history(["ABANDONED", "DISCARDED"])
+        self.assertEqual(["History marks the dropped changes ABANDONED", "the drop is announced (status line)"], failing(self.check()))
+        self.history(["ABANDONED"])
+        self.assertIn("History marks the dropped changes ABANDONED", failing(self.check()))
+
     def test_a_kept_group_a_retry_line_and_a_helper_fail(self):
         (self.config / "pending.json").write_text(json.dumps({"ops": self.OPS}), encoding="utf-8")
         self.history(["STAGED", "STAGED"])
         self.driver["statuses"] = []
         self.log = "[10:00:00] [main/WARN]: 2 staged RigTune change(s) were not applied; they will be retried at the next exit\n"
         (self.root / "mods" / "dh.jar").rename(self.root / "mods" / "dh.jar.disabled")
-        self.assertEqual(["History marks the dropped changes ABANDONED or DISCARDED", "latest.log: counted as never runnable, not as leftover to retry",
+        self.assertEqual(["History marks the dropped changes ABANDONED", "latest.log: counted as never runnable, not as leftover to retry",
                           "no helper at exit, mods/ unchanged", "the drop is announced (status line)", "the stale group is dropped"],
                          failing(self.check(["java ApplyHelper"])))
 

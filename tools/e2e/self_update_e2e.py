@@ -119,6 +119,11 @@ STALE_PHASES = ("stale-check",)
 BRAND_PHASES = ("brand-apply", "brand-cancel")
 BRAND = "theseus"
 BRAND_SET = "ws-a"
+# Staged next to ws-a's file group: a Sodium settings patch (a config file, which the helper applies under the launcher's
+# brand too) with its STAGED journal change, so "the settings changed" never depends on what the report offers.
+BRAND_PATCH = {"op": "7d1f3a52-0c4e-4b6a-9e21-00000000b001", "group": "7d1f3a52-0c4e-4b6a-9e21-00000000b002",
+               "entry": "7d1f3a52-0c4e-4b6a-9e21-00000000b010", "change": "7d1f3a52-0c4e-4b6a-9e21-00000000b011",
+               "key": "sodium.performance.chunk_builder_threads", "before": "0", "after": "3"}
 KILL_ID = "e2e-kill"
 KILL_OLD, KILL_NEW = "e2e-kill-1.0.0.jar", "e2e-kill-1.1.0.jar"
 KILL_GROUP = "7d1f3a52-0c4e-4b6a-9e21-00000000c001"
@@ -607,6 +612,9 @@ class Run:
         self.facts["sodium"] = self.sodium().name
         sets = [s for s in written.resolve_all([REPO / "src" / "test" / "resources" / "v040-written"]) if s.name == BRAND_SET]
         written.compose(sets, self.instance)
+        plan, history = brand_patch(self.instance, self.rigtune_dir, self.facts["new"]["version"], self.mc)
+        (self.rigtune_dir / "pending.json").write_text(json.dumps(plan, indent=2) + LF, encoding="utf-8", newline=LF)
+        (self.rigtune_dir / "history.json").write_text(json.dumps(history, indent=2) + LF, encoding="utf-8", newline=LF)
         written.materialize(self.instance)
         self.carried = (e2e_checks._load(self.rigtune_dir / "pending.json") or {}).get("ops") or []
         self.log("brand {}: staged from v040-written/{}: {}".format(BRAND, BRAND_SET, [op.get("id") for op in self.carried]))
@@ -614,11 +622,10 @@ class Run:
     def run_brand(self):
         """AC4j.3: Apply everything under the launcher's brand, the helper at exit; then the held notice's Cancel them."""
         mods_before = e2e_checks.listing(self.mods, recursive=True)
-        options_before = (self.instance / "options.txt").read_text(encoding="utf-8")
         code, helper_ok, _ = self.launch_and_apply("brand-apply")
         checks = [e2e_checks.Check("the client exited normally and the helper finished", code == 0 and helper_ok,
                                    "gradle exit {}, helper finished: {}".format(code, helper_ok))]
-        checks += e2e_checks.after_brand_apply(self.instance, self.driver("brand-apply"), mods_before, options_before, self.carried)
+        checks += e2e_checks.after_brand_apply(self.instance, self.driver("brand-apply"), mods_before, self.carried, BRAND_PATCH["change"])
         self.checks["brand-apply"] = checks
         if not all(c.ok for c in checks):
             return False
@@ -652,7 +659,8 @@ class Run:
         self.snapshot("stale-check")
         checks = [e2e_checks.Check("the client exited normally", code == 0, "gradle exit {}".format(code))]
         checks += e2e_checks.after_stale_start(self.instance, self.carried, (self.seed["modId"], self.seed["modName"]), self.driver("stale-check"),
-                                               session_log(self.instance, self.started["stale-check"]), cmdlines, mods_before)
+                                               session_log(self.instance, self.started["stale-check"]), cmdlines, mods_before,
+                                               self.seed.get("expectStatus", "ABANDONED"))
         self.checks["stale-check"] = checks
         return all(c.ok for c in checks)
 
@@ -1271,6 +1279,20 @@ def held(paths, posix=None, run=subprocess.run):
             handle.close()
         for path in immutable:
             run(["sudo", "-n", "chattr", "-i", str(path)], check=False)
+
+
+def brand_patch(instance, rigtune_dir, version, mc):
+    """The brand leg's pending.json and history.json with BRAND_PATCH added to what the composed set staged."""
+    plan = json.loads((Path(rigtune_dir) / "pending.json").read_text(encoding="utf-8"))
+    history = json.loads((Path(rigtune_dir) / "history.json").read_text(encoding="utf-8"))
+    path = Path(instance) / "config" / "sodium-options.json"
+    plan["ops"] = list(plan.get("ops") or []) + [{"type": "PATCH_JSON", "path": str(path), "id": BRAND_PATCH["op"], "group": BRAND_PATCH["group"],
+                                                   "patches": {BRAND_PATCH["key"][len("sodium."):]: BRAND_PATCH["after"]}, "attempts": 0}]
+    history["entries"] = list(history.get("entries") or []) + [{
+        "id": BRAND_PATCH["entry"], "at": "2026-09-27T12:00:00Z", "kind": "apply", "rigtuneVersion": version, "mcVersion": mc,
+        "changes": [{"id": BRAND_PATCH["change"], "type": "setting", "key": BRAND_PATCH["key"], "before": BRAND_PATCH["before"],
+                     "after": BRAND_PATCH["after"], "status": "STAGED", "opId": BRAND_PATCH["op"]}]}]
+    return plan, history
 
 
 def kill_group(instance, version, mc):

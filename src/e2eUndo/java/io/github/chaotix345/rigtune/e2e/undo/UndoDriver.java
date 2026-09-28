@@ -116,6 +116,8 @@ public final class UndoDriver implements ClientModInitializer {
 	private final String reverseTarget = System.getProperty("rigtune.e2e.reverseTarget", "");
 	private final String reverseAdd = System.getProperty("rigtune.e2e.reverseAdd", "");
 	private int guardStep;
+	// brand-cancel: the step tick Cancel them was taken at.
+	private int cancelTick;
 	private Component statusBefore;
 	private final List<Map<String, Object>> statuses = new ArrayList<>();
 	private String lastStatus;
@@ -467,12 +469,13 @@ public final class UndoDriver implements ClientModInitializer {
 					screenshot(minecraft, "e2e-brand-cancel-1-notice.png");
 					controller.noticeAction(HELD_KEY, "cancel");
 					result.put("cancelled", true);
+					cancelTick = stepTicks;
 					event("took Cancel them");
 				} else if (ops().stream().noneMatch(op -> "ENABLE_FILE".equals(op.get("type")) || "DISABLE_FILE".equals(op.get("type")))) {
 					result.put("pendingOps", ops());
 					event("no mod-file op left in pending.json");
 					next(Step.SHOT);
-				} else if (stepTicks > STAGE_TIMEOUT) {
+				} else if (stepTicks - cancelTick > STAGE_TIMEOUT) {
 					fail(minecraft, "mod-file ops still in pending.json " + STAGE_TIMEOUT / SECOND + " s after Cancel them: " + ops());
 				}
 			}

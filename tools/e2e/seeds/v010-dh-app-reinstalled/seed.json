@@ -11,5 +11,6 @@
    "version": "3.3.2"
   }
  ],
- "holdOpenWhy": "Nothing is held: the group can never run, so the new version drops it at launch (AC2H.6)."
+ "holdOpenWhy": "Nothing is held: the group can never run, so the new version drops it at launch (AC2H.6).",
+ "expectStatus": "ABANDONED"
 }

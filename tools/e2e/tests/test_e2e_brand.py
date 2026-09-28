@@ -43,21 +43,39 @@ class AfterBrandApplyTest(unittest.TestCase):
         self.driver = {"ok": True, "applied": ["set:vanilla.renderDistance"], "applyMessage": "Applied 1 setting(s)."}
 
     def check(self):
-        return e2e_checks.after_brand_apply(self.i.root, self.driver, self.before, "renderDistance:12\n", OPS)
+        return e2e_checks.after_brand_apply(self.i.root, self.driver, self.before, OPS, "patch")
+
+    def journal(self, patch_status="APPLIED"):
+        self.i.write("history.json", {"formatVersion": 1, "entries": [{"id": "e", "changes": [
+            {"id": "c", "type": "setting", "key": "vanilla.renderDistance", "before": "12", "after": "8", "status": "APPLIED"},
+            {"id": "patch", "type": "setting", "key": "sodium.performance.chunk_builder_threads", "before": "0", "after": "3",
+             "status": patch_status, "opId": "op-p"}]}]})
+
+    def files(self, render_distance):
+        (self.i.root / "options.txt").write_text("renderDistance:{}\n".format(render_distance), encoding="utf-8")
+        (self.i.root / "config" / "sodium-options.json").write_text(json.dumps({"performance": {"chunk_builder_threads": 3}}), encoding="utf-8")
 
     def test_settings_applied_files_held(self):
-        (self.i.root / "options.txt").write_text("renderDistance:8\n", encoding="utf-8")
-        self.i.write("history.json", {"formatVersion": 1, "entries": [{"id": "e", "changes": [
-            {"id": "c", "type": "setting", "key": "vanilla.renderDistance", "before": "12", "after": "8", "status": "APPLIED"}]}]})
+        self.files(8)
+        self.journal()
         self.i.write("pending.json", {"ops": OPS})
-        self.i.write("helper.log", "[t] [RigTune apply] Held 1 operation(s) of mod-file changes for the player's choice\n")
+        self.i.write("helper.log", "[t] [RigTune apply] OK PATCH_JSON: Patched sodium-options.json\n"
+                     "[t] [RigTune apply] Held 1 operation(s) of mod-file changes for the player's choice\n[t] [RigTune apply] All operations done\n")
         self.assertEqual([], failing(self.check()))
 
-    def test_a_renamed_jar_unchanged_settings_or_no_hold_fail(self):
+    def test_a_value_the_files_don_t_hold_or_a_staged_patch_fails(self):
+        self.files(12)
+        self.journal()
+        self.assertIn("the settings changed", failing(self.check()))
+        self.files(8)
+        self.journal(patch_status="STAGED")
+        self.assertIn("the settings changed", failing(self.check()))
+
+    def test_a_renamed_jar_no_patch_or_no_hold_fail(self):
         (self.i.root / "mods" / "e2e-seed-1.0.0.jar.rigtune-pending").rename(self.i.root / "mods" / "e2e-seed-1.0.0.jar")
         self.i.write("helper.log", "[t] [RigTune apply] OK ENABLE_FILE: Enabled e2e-seed-1.0.0.jar\n")
-        self.driver = {"ok": True, "applied": []}
-        self.assertEqual(["mods/ byte-identical", "the driver applied everything the report selects", "the settings changed",
+        self.driver = {"ok": True, "applied": [], "applyMessage": "Nothing to apply."}
+        self.assertEqual(["mods/ byte-identical", "the helper applied the settings patch", "the settings changed",
                           "the staged file group is held (helper.log, pending.json)"], failing(self.check()))
 
 

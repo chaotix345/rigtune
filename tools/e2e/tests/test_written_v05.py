@@ -3,6 +3,7 @@ instance, the files an older version never reads, and the harness's default fixt
 
 import json
 import sys
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -152,6 +153,10 @@ class MergeTest(unittest.TestCase):
         self.assertEqual("e2e-held", written.stand_in_id("e2e-held-1.1.0.jar.rigtune-pending"))
         self.assertEqual("sodium-fabric", written.stand_in_id("sodium-fabric-0.9.2+mc26.2.jar.disabled"))
         self.assertEqual("fabric", written.stand_in_id("fabric-26.2.jar"))
+        self.assertEqual("sodium-fabric-mc26-2", written.stand_in_id("sodium-fabric-mc26.2-0.9.2.jar"))
+        self.assertEqual("e2e-1-0", written.stand_in_id("1.0.jar"))
+        self.assertEqual("e2e-", written.stand_in_id(".jar"))
+        self.assertEqual(64, len(written.stand_in_id("a" * 80 + ".jar")))
 
     def test_a_set_s_expect_json_is_never_composed(self):
         write(self.v5 / "ws-t", "expect.json", {"set": "ws-t", "checks": []})
@@ -200,6 +205,23 @@ class HarnessRootsTest(unittest.TestCase):
         self.assertEqual(["profiles.json"], sorted(seeded["newFiles"]))
         self.assertEqual(["stutter.json"], sorted(seeded["json"]))
         self.assertEqual({"stutter.json": ["sessions"]}, {k: list(v) for k, v in seeded["kept"].items()})
+
+
+
+class DowngradeTrimTest(unittest.TestCase):
+    """The downgrade instance's journal over the real sets (self_update_e2e.DOWNGRADE_HISTORY): the trim keeps the fold
+    entries and what profiles.json and pending.json name."""
+
+    def test_the_real_sets_keep_their_baselines_switches_and_staged_entries(self):
+        instance = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, instance)
+        dropped = []
+        written.compose(written.resolve_all([V040, REPO / "src" / "test" / "resources" / "v050-written"]), instance, newest=46, dropped=dropped)
+        ids = [e["id"] for e in json.loads((instance / "config" / "rigtune" / "history.json").read_text(encoding="utf-8"))["entries"]]
+        self.assertTrue(dropped, "the real sets are over the cap")
+        for kept in ("baseline-7d226e52-56e8-454c-9d4b-9a63a2731c20", "c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17", "8ee686e5-f831-4836-80a2-33551c9bbe31"):
+            self.assertIn(kept, ids)
+        self.assertLessEqual(len(ids), 46 + 8)
 
 
 if __name__ == "__main__":

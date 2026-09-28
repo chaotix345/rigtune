@@ -142,10 +142,16 @@ def compose(sets, instance, conflicts=None, newest=None, dropped=None):
                 raise ValueError("history.json formatVersion differs across sets {}: {}".format([s for s, _ in provided], versions))
             entries = sorted(entries, key=lambda e: e.get("at") or "")
             if newest is not None and len(entries) > newest:
-                # An entry a staged op still belongs to stays; the oldest of the others go.
+                # Always kept: an entry a staged op still belongs to, a baseline (fold) entry, and an entry profiles.json
+                # names (a switch's entry, the active one). The oldest of the others go.
                 staged = {op.get("id") for _, path in sources.get("pending.json", [])
                           for op in json.loads(path.read_text(encoding="utf-8")).get("ops") or []}
-                keep = {e.get("id") for e in entries if any(c.get("opId") in staged for c in e.get("changes") or [])}
+                named = set()
+                for _, path in sources.get("profiles.json", []):
+                    profiles = json.loads(path.read_text(encoding="utf-8"))
+                    named |= {s.get("entryId") for s in profiles.get("switches") or [] if isinstance(s, dict)} | {profiles.get("activeEntry")}
+                keep = {e.get("id") for e in entries if any(c.get("opId") in staged for c in e.get("changes") or [])
+                        or str(e.get("id") or "").startswith("baseline-") or e.get("id") in named}
                 others = [e for e in entries if e.get("id") not in keep]
                 gone = {e.get("id") for e in others[:max(0, len(entries) - newest)]}
                 if dropped is not None:
@@ -240,10 +246,14 @@ def _merge(file, path, old, new, owner, conflicts, owners):
 
 def stand_in_id(file_name):
     """A stand-in jar's mod id from its file name, for an op without one (0.4's own disables carry no modId): the name
-    without RigTune's suffixes and .jar, cut before its version (the first '-' followed by a digit), in lower case."""
+    without RigTune's suffixes and .jar, cut before its version (the first '-' followed by a digit), in lower case, as a valid
+    Fabric mod id: other characters become '-', "e2e-" goes in front unless it starts with a letter, at most 64 long."""
     base = re.sub(r"(\.disabled|\.rigtune-pending|\.rigtune-superseded)+$", "", file_name.lower())
     base = re.sub(r"\.jar$", "", base)
-    return re.split(r"-(?=\d)", base, maxsplit=1)[0] or "e2e-unknown"
+    base = re.sub(r"[^a-z0-9_-]", "-", re.split(r"-(?=\d)", base, maxsplit=1)[0])
+    if not base[:1].isalpha():
+        base = "e2e-" + base
+    return base[:64]
 
 
 def materialize(instance):

@@ -308,27 +308,29 @@ HELD_LINE = re.compile(r"Held (\d+) operation\(s\) of mod-file changes")
 FILE_OPS = ("ENABLE_FILE", "DISABLE_FILE")
 
 
-def after_brand_apply(instance, driver, mods_before, options_before, carried):
+def after_brand_apply(instance, driver, mods_before, carried, staged_change):
     """AC4j.3, Apply everything under the Modrinth App's brand and the helper at exit: mods/ byte-identical, the settings
-    changed, the staged file group held (still in pending.json, helper.log says so)."""
+    changed (the staged settings patch staged_change and every row the Apply took: APPLIED, and the files hold their
+    `after`), the staged file group held (still in pending.json, helper.log says so)."""
     instance = Path(instance)
     driver = driver or {}
     applied = driver.get("applied") or []
-    checks = [Check("the driver applied everything the report selects", driver.get("ok") is True and bool(applied),
+    checks = [Check("the driver ran Apply everything", driver.get("ok") is True and driver.get("applyMessage") is not None,
                     "error: {}; {} rows: {}; message: {}".format(driver.get("error"), len(applied), applied[:8], driver.get("applyMessage")))]
     after = listing(instance / "mods", recursive=True)
     checks.append(Check("mods/ byte-identical", after == mods_before, "unchanged" if after == mods_before else _diff(mods_before, after)))
-    # Each applied setting row: its journal change APPLIED, and a vanilla one's options.txt line changed.
-    keys = [i[len("set:"):] for i in applied if i.startswith("set:")]
-    statuses = {c.get("key"): c.get("status") for e in history_entries(instance) or [] for c in e.get("changes", []) if c.get("key") in keys}
-    options = (instance / "options.txt").read_text(encoding="utf-8") if (instance / "options.txt").is_file() else ""
-    line = lambda text, name: next((l for l in text.splitlines() if l.startswith(name + ":")), None)
-    moved = {k: (line(options_before, k[len(VANILLA):]), line(options, k[len(VANILLA):])) for k in keys if k.startswith(VANILLA)}
-    checks.append(Check("the settings changed", bool(keys) and all(statuses.get(k) == "APPLIED" for k in keys)
-                        and all(before != now for before, now in moved.values()),
-                        "journal {}; options.txt {}".format(statuses, moved)))
+    keys = {i[len("set:"):] for i in applied if i.startswith("set:")}
+    changes = [c for e in history_entries(instance) or [] for c in _settings(e) if c.get("id") == staged_change or c.get("key") in keys]
+    values = setting_values(instance)
+    wrong = {c.get("key"): (c.get("status"), c.get("after"), values.get(c.get("key"))) for c in changes
+             if c.get("status") != "APPLIED" or str(values.get(c.get("key"))) != str(c.get("after"))}
+    checks.append(Check("the settings changed", any(c.get("id") == staged_change for c in changes) and not wrong,
+                        "{} change(s) checked; not APPLIED or not holding their value (status, after, now): {}".format(len(changes), wrong)))
     helper = (instance / "config" / "rigtune" / "helper.log")
-    held = HELD_LINE.search(helper.read_text(encoding="utf-8", errors="replace")) if helper.is_file() else None
+    text = helper.read_text(encoding="utf-8", errors="replace") if helper.is_file() else ""
+    checks.append(Check("the helper applied the settings patch", "OK PATCH_JSON" in text and "All operations done" in text,
+                        "helper.log: {}".format([line[line.find("]") + 1:].strip()[:100] for line in text.splitlines()][-4:])))
+    held = HELD_LINE.search(text)
     ids = [op.get("id") for op in carried if op.get("type") in FILE_OPS]
     pending = _pending_ids(instance)
     checks.append(Check("the staged file group is held (helper.log, pending.json)", held is not None and bool(ids) and all(i in pending for i in ids),
@@ -365,15 +367,16 @@ def after_brand_cancel(instance, driver, mods_before, carried, helper_cmdlines):
     return checks
 
 
-STALE_KEYS = ("rigtune.status.stale_installed", "rigtune.status.stale_gone")
+STALE_KEY = {"ABANDONED": "rigtune.status.stale_installed", "DISCARDED": "rigtune.status.stale_gone"}
 NEVER_RUN = "can never run"
 RETRIED = "they will be retried at the next exit"
 
 
-def after_stale_start(instance, carried, mod_names, driver, log_text, helper_cmdlines, mods_before):
+def after_stale_start(instance, carried, mod_names, driver, log_text, helper_cmdlines, mods_before, expect_status="ABANDONED"):
     """AC2H.6 (WS-H's RW-3), the new version's first start on a seeded state whose staged group can never run: the group
-    leaves pending.json with a status line naming the mod, History marks its changes ABANDONED or DISCARDED, latest.log
-    counts it as never runnable (not "will be retried"), and at exit no helper runs and mods/ stays as it was."""
+    leaves pending.json with the status line for why (expect_status: ABANDONED, installed another way; DISCARDED, its
+    download gone) naming the mod, History marks each of its changes so, latest.log counts it as never runnable (not
+    "will be retried"), and at exit no helper runs and mods/ stays as it was. mod_names: the mod's id and its name."""
     instance = Path(instance)
     driver = driver or {}
     ids = {op.get("id") for op in carried}
@@ -381,15 +384,14 @@ def after_stale_start(instance, carried, mod_names, driver, log_text, helper_cmd
     left = sorted(op.get("id") for op in (plan or {}).get("ops") or [] if op.get("id") in ids)
     checks = [Check("the stale group is dropped", driver.get("ok") is True and bool(ids) and not left,
                     "driver ok: {}; carried-over ops still in pending.json: {}".format(driver.get("ok"), left))]
-    wanted = [n.lower() for n in mod_names]
     statuses = driver.get("statuses") or []
-    said = [s for s in statuses if any(k in STALE_KEYS for k in s.get("keys") or []) and any(n in (s.get("text") or "").lower() for n in wanted)]
+    said = [s for s in statuses if STALE_KEY[expect_status] in (s.get("keys") or []) and mod_names[1] in (s.get("text") or "")]
     checks.append(Check("the drop is announced (status line)", bool(said), "statuses seen: {}".format([(s.get("keys"), s.get("text")) for s in statuses])))
     journaled = {}
     for c in (c for e in history_entries(instance) or [] for c in e.get("changes", []) if c.get("opId") in ids):
         journaled.setdefault(c.get("opId"), []).append(c.get("status"))
-    checks.append(Check("History marks the dropped changes ABANDONED or DISCARDED", bool(journaled)
-                        and all(s in ("ABANDONED", "DISCARDED") for statuses_ in journaled.values() for s in statuses_),
+    checks.append(Check("History marks the dropped changes {}".format(expect_status), set(journaled) == ids
+                        and all(s == expect_status for statuses_ in journaled.values() for s in statuses_),
                         "statuses by op id: {}".format(journaled)))
     lines = log_text.splitlines()
     never = [line for line in lines if NEVER_RUN in line]

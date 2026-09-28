@@ -66,6 +66,19 @@ class EvaluateTest(unittest.TestCase):
         self.assertEqual(["\"chunks loading\" from the first chunk load after the teleport on"],
                          failing(stutter_run.evaluate(self.lines, stutter, self.gc)[0]))
 
+    # C1r: capture on at 02:12:36, world entry at +2 s, tp at +22 s; the product's window is 10 s.
+    def test_the_teleport_window_s_edges(self):
+        def failing_with(*extra):
+            stutter = copy.deepcopy(self.stutter)
+            [s for s in stutter["sessions"] if s["source"] == "monitor"][-1]["worst"].extend(extra)
+            return failing(stutter_run.evaluate(self.lines, stutter, self.gc)[0])
+        name = "the spikes after the teleport carry \"after teleport\""
+        chunks = {"causes": ["render:low", "chunksLoading:context"], "ms": 30.0, "baseMs": 8.3}
+        self.assertEqual([name], failing_with(dict(chunks, t=27.0)))
+        self.assertEqual([], failing_with(dict(chunks, t=32.5)))
+        self.assertEqual([name], failing_with({"t": 50.0, "ms": 30.0, "baseMs": 8.3, "causes": ["afterTeleport:context"]}))
+        self.assertEqual([], failing_with({"t": 12.5, "ms": 30.0, "baseMs": 8.3, "causes": ["afterTeleport:context"]}))
+
     def test_gc_pauses_are_read_with_their_end_time(self):
         pauses = stutter_run.gc_pauses(self.gc)
         self.assertEqual((2 * 3600 + 12 * 60 + 21.020, 1.896, "Pause Young"), pauses[0])
