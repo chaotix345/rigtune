@@ -67,28 +67,36 @@ public class LanGuestGameTest implements FabricClientGameTest {
 		context.waitFor(mc -> RigTuneClient.controller().report() != null, JOIN_TICKS);
 		RealController real = V05TestContext.of(context).realController();
 		int rdBefore = context.computeOnClient(mc -> mc.options.renderDistance().get());
+		// The entries this test adds (a LAN host, a Realm) don't stay in the store the later classes read.
+		byte[] store = readBytes(real.serverLimitsTracker().storeFile());
+		boolean network = GameTestNet.set(context, real, false);
 		try {
-			GameTestNet.set(context, real, false);
 			context.runOnClient(mc -> mc.options.renderDistance().set(5));
 			deleteStore(real);
 			int first = freePort();
 			String host;
 			try (TestDedicatedServerContext server = context.worldBuilder().createServer(properties(6, first))) {
-				host = joinFromLanList(context, first);
-				firstJoin(context, real, host, first);
-				disconnect(context);
+				try {
+					host = joinFromLanList(context, first);
+					firstJoin(context, real, host, first);
+				} finally {
+					leave(context);
+				}
 			}
 			int second = freePort();
 			while (second == first) {
 				second = freePort();
 			}
 			try (TestDedicatedServerContext server = context.worldBuilder().createServer(properties(4, second))) {
-				context.runOnClient(mc -> mc.options.renderDistance().set(2));
-				check(joinFromLanList(context, second).equals(host), "the same host after the restart");
-				rejoin(context, real, host);
-				disconnect(context);
-				realm(context, real, host, second);
-				disconnect(context);
+				try {
+					context.runOnClient(mc -> mc.options.renderDistance().set(2));
+					check(joinFromLanList(context, second).equals(host), "the same host after the restart");
+					rejoin(context, real, host);
+					disconnect(context);
+					realm(context, real, host, second);
+				} finally {
+					leave(context);
+				}
 			}
 			RigTune.LOGGER.info("LanGuestGameTest: LAN guest (joined from the LAN list, restart, was 6) and the Realms block checked");
 		} finally {
@@ -96,7 +104,8 @@ public class LanGuestGameTest implements FabricClientGameTest {
 				mc.options.renderDistance().set(rdBefore);
 				mc.gui.setScreen(new TitleScreen());
 			});
-			GameTestNet.set(context, real, true);
+			GameTestNet.set(context, real, network);
+			writeBytes(real.serverLimitsTracker().storeFile(), store);
 		}
 	}
 
@@ -117,7 +126,7 @@ public class LanGuestGameTest implements FabricClientGameTest {
 	private static String joinFromLanList(ClientGameTestContext context, int port) {
 		LanServerPinger pinger;
 		try {
-			pinger = new LanServerPinger(MOTD, Integer.toString(port));
+			pinger = new LanServerPinger(MOTD + " " + port, Integer.toString(port));
 		} catch (IOException e) {
 			throw new AssertionError("LanServerPinger could not open its socket", e);
 		}
@@ -125,8 +134,8 @@ public class LanGuestGameTest implements FabricClientGameTest {
 		try {
 			context.setScreen(() -> new JoinMultiplayerScreen(new TitleScreen()));
 			context.waitForScreen(JoinMultiplayerScreen.class);
-			context.waitFor(mc -> lanEntry(mc) != null, 600);
-			context.runOnClient(mc -> list(mc).setSelected(lanEntry(mc)));
+			context.waitFor(mc -> lanEntry(mc, port) != null, 600);
+			context.runOnClient(mc -> list(mc).setSelected(lanEntry(mc, port)));
 			screenshot(context, "lan-guest-list-" + port);
 			context.clickScreenButton("selectServer.select");
 			waitForWorld(context);
@@ -137,6 +146,8 @@ public class LanGuestGameTest implements FabricClientGameTest {
 		check(data != null && data.isLan(), "getCurrentServer().isLan(): " + (data == null ? null : data.ip));
 		ServerAddress address = ServerAddress.parseString(data.ip);
 		check(address.getPort() == port, "the LAN entry is this server's (" + port + "): " + data.ip);
+		// In CI the game runs in a namespace with only loopback (tools/ci/offline.sh), so the pinger's packets come from there.
+		check(System.getenv("CI") == null || data.ip.equals("127.0.0.1:" + port), "detected as 127.0.0.1:" + port + " in CI: " + data.ip);
 		RigTune.LOGGER.info("LanGuestGameTest: joined {} ('{}') from the LAN list", data.ip, data.name);
 		return address.getHost();
 	}
@@ -218,6 +229,12 @@ public class LanGuestGameTest implements FabricClientGameTest {
 		return mc.level != null && mc.player != null && mc.gui.screen() == null;
 	}
 
+	private static void leave(ClientGameTestContext context) {
+		if (context.computeOnClient(mc -> mc.level != null)) {
+			disconnect(context);
+		}
+	}
+
 	// As the fabric API's own connection close does: the guest leaves, the saving screen goes, back to the title.
 	private static void disconnect(ClientGameTestContext context) {
 		context.runOnClient(mc -> {
@@ -236,10 +253,12 @@ public class LanGuestGameTest implements FabricClientGameTest {
 				.filter(ServerSelectionList.class::isInstance).map(ServerSelectionList.class::cast).findFirst().orElse(null) : null;
 	}
 
-	private static ServerSelectionList.@Nullable NetworkServerEntry lanEntry(Minecraft mc) {
+	// The entry of the server announced as "MOTD <port>" (the narration ends with the MOTD).
+	private static ServerSelectionList.@Nullable NetworkServerEntry lanEntry(Minecraft mc, int port) {
 		ServerSelectionList list = list(mc);
 		return list == null ? null : list.children().stream().filter(ServerSelectionList.NetworkServerEntry.class::isInstance)
-				.map(ServerSelectionList.NetworkServerEntry.class::cast).findFirst().orElse(null);
+				.map(ServerSelectionList.NetworkServerEntry.class::cast).filter(e -> e.getServerNarration().getString().endsWith(MOTD + " " + port))
+				.findFirst().orElse(null);
 	}
 
 	// The report with the live limit: an increase the rules alone would propose above the server's view is capped to it,
@@ -345,6 +364,26 @@ public class LanGuestGameTest implements FabricClientGameTest {
 			Files.writeString(file, text, StandardCharsets.UTF_8);
 		} catch (IOException e) {
 			throw new AssertionError("Could not write " + file, e);
+		}
+	}
+
+	private static byte @Nullable [] readBytes(Path file) {
+		try {
+			return Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
+		} catch (IOException e) {
+			throw new AssertionError(e);
+		}
+	}
+
+	private static void writeBytes(Path file, byte @Nullable [] bytes) {
+		try {
+			if (bytes == null) {
+				Files.deleteIfExists(file);
+			} else {
+				Files.write(file, bytes);
+			}
+		} catch (IOException e) {
+			throw new AssertionError(e);
 		}
 	}
 

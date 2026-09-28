@@ -963,12 +963,13 @@ def after_kill_second(instance, driver, group, op_ids, old_name, new_name):
     return checks
 
 
-def after_kill_check(instance, driver, change_ids, mod_id):
+def after_kill_check(instance, driver, change_ids, mod_id, version):
     driver = driver or {}
     statuses = history_statuses(instance)
     got = [statuses.get(i) for i in change_ids]
-    checks = [Check("the next start loads the updated mod", driver.get("ok") is True and mod_id in (driver.get("loadedMods") or []),
-                    "error: {}; {} loaded: {}".format(driver.get("error"), mod_id, mod_id in (driver.get("loadedMods") or [])))]
+    loaded = (driver.get("modVersions") or {}).get(mod_id)
+    checks = [Check("the next start loads the updated mod", driver.get("ok") is True and loaded == version,
+                    "error: {}; {} loaded: {} (expected {})".format(driver.get("error"), mod_id, loaded, version))]
     checks.append(Check("History shows the group applied as a whole", got == ["APPLIED"] * len(change_ids),
                         "the entry's changes: {}".format(dict(zip(change_ids, got)))))
     checks.append(_bad_or_crash(instance))

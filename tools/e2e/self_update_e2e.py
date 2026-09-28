@@ -562,7 +562,7 @@ class Run:
         code = self.launch("kill-check")
         self.snapshot("kill-check")
         checks = [e2e_checks.Check("the relaunched client exited normally", code == 0, "gradle exit {}".format(code))]
-        checks += e2e_checks.after_kill_check(self.instance, self.driver("kill-check"), KILL_CHANGES, KILL_ID)
+        checks += e2e_checks.after_kill_check(self.instance, self.driver("kill-check"), KILL_CHANGES, KILL_ID, "1.1.0")
         self.checks["kill-check"] = checks
         return all(c.ok for c in checks)
 

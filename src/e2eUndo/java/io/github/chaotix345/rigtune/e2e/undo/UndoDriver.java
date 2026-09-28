@@ -155,6 +155,10 @@ public final class UndoDriver implements ClientModInitializer {
 						ModContainer rigtune = FabricLoader.getInstance().getModContainer("rigtune").orElseThrow();
 						result.put("rigtuneVersion", rigtune.getMetadata().getVersion().getFriendlyString());
 						result.put("loadedMods", FabricLoader.getInstance().getAllMods().stream().map(m -> m.getMetadata().getId()).sorted().toList());
+						Map<String, String> versions = new TreeMap<>();
+						FabricLoader.getInstance().getAllMods().forEach(m -> versions.put(m.getMetadata().getId(),
+								m.getMetadata().getVersion().getFriendlyString()));
+						result.put("modVersions", versions);
 						event("title screen");
 						next(Step.WAIT_READY);
 					}
@@ -436,7 +440,7 @@ public final class UndoDriver implements ClientModInitializer {
 				}
 			}
 			case 1 -> {
-				if (outcome(controller, "pin")) {
+				if (outcome(controller, "pin", "rigtune.status.download_failed")) {
 					String[] add = reverseAdd.split(":", 2);
 					guardApply(controller, new Recommendation("add:" + add[0], Category.ADD_MOD, Impact.LOW, "Install " + add[0], "E2E test mod",
 							new Action.AddMod(add[0], add[1], add[0]), true), "add");
@@ -444,12 +448,12 @@ public final class UndoDriver implements ClientModInitializer {
 			}
 			case 2 -> {
 				String[] add = reverseAdd.split(":", 2);
-				if (outcome(controller, "add") && ops().stream().anyMatch(op -> "ENABLE_FILE".equals(op.get("type")) && add[0].equals(op.get("modId")))) {
+				if (outcome(controller, "add", "rigtune.status.restart") && ops().stream().anyMatch(op -> "ENABLE_FILE".equals(op.get("type")) && add[0].equals(op.get("modId")))) {
 					guardApply(controller, updateRow(controller, reverseTarget), "reverse");
 				}
 			}
 			case 3 -> {
-				if (outcome(controller, "reverse")) {
+				if (outcome(controller, "reverse", "rigtune.status.download_failed")) {
 					result.put("pendingOps", ops());
 					RigTuneClient.open(minecraft.gui.screen());
 					next(Step.SHOT);
@@ -458,8 +462,9 @@ public final class UndoDriver implements ClientModInitializer {
 			default -> {
 			}
 		}
-		if (guardStep < 3 && stepTicks > STAGE_TIMEOUT) {
-			fail(minecraft, "guard-apply step " + guardStep + " had no outcome within " + STAGE_TIMEOUT / SECOND + " s");
+		int timeout = guardStep == 0 ? READY_TIMEOUT : STAGE_TIMEOUT;
+		if (guardStep < 4 && step == Step.ACT && stepTicks > timeout) {
+			fail(minecraft, "guard-apply step " + guardStep + " had no outcome within " + timeout / SECOND + " s");
 		}
 	}
 
@@ -485,15 +490,29 @@ public final class UndoDriver implements ClientModInitializer {
 		stepTicks = 0;
 	}
 
-	// A new status line once the Apply's downloads are done (finishDownloads sets a new one, refused or staged).
-	private boolean outcome(RigTuneController controller, String name) {
+	// The Apply's outcome: a new status line holding `expectedKey` (finishDownloads sets one when the downloads are done:
+	// rigtune.status.download_failed for a refusal, rigtune.status.restart for a staged change). Any other new line is
+	// recorded and waited past, so the step fails on its timeout with what it saw.
+	private boolean outcome(RigTuneController controller, String name, String expectedKey) {
 		Component status = controller.status();
 		if (status == null || status == statusBefore) {
 			return false;
 		}
 		result.put(name + "Status", status.getString());
+		if (!keys(status).contains(expectedKey)) {
+			return false;
+		}
 		event(name + " outcome: " + status.getString());
 		return true;
+	}
+
+	private static List<String> keys(Component component) {
+		List<String> out = new ArrayList<>();
+		if (component.getContents() instanceof TranslatableContents t) {
+			out.add(t.getKey());
+		}
+		component.getSiblings().forEach(c -> out.addAll(keys(c)));
+		return out;
 	}
 
 	// Switches to the profile `name` (a template or saved profile, matched by its shown name or id) the way the Profiles

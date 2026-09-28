@@ -52,8 +52,8 @@ public class ServerLimitsGameTest implements FabricClientGameTest {
 			throw new AssertionError("ServerLimitsGameTest needs the real controller");
 		}
 		int rdBefore = context.computeOnClient(mc -> mc.options.renderDistance().get());
+		boolean network = GameTestNet.set(context, real, false);
 		try {
-			GameTestNet.set(context, real, false);
 			context.runOnClient(mc -> mc.options.renderDistance().set(5));
 			deleteStore(real);
 			singleplayer(context, real);
@@ -65,7 +65,7 @@ public class ServerLimitsGameTest implements FabricClientGameTest {
 				mc.options.renderDistance().set(rdBefore);
 				mc.gui.setScreen(new TitleScreen());
 			});
-			GameTestNet.set(context, real, true);
+			GameTestNet.set(context, real, network);
 			resize(context, 854, 480, 0);
 		}
 	}

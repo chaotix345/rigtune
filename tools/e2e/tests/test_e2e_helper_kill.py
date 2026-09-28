@@ -155,13 +155,13 @@ class AfterKillCheckTest(unittest.TestCase):
 
     def test_history_shows_the_group_applied_and_the_mod_loads(self):
         self.i.statuses("APPLIED", "APPLIED")
-        checks = e2e_checks.after_kill_check(self.i.root, {"ok": True, "loadedMods": ["e2e-kill"]}, su.KILL_CHANGES, su.KILL_ID)
+        checks = e2e_checks.after_kill_check(self.i.root, {"ok": True, "modVersions": {"e2e-kill": "1.1.0"}}, su.KILL_CHANGES, su.KILL_ID, "1.1.0")
         self.assertEqual([], failing(checks))
 
     def test_a_half_applied_group_or_a_missing_mod_fails(self):
         self.i.statuses("APPLIED", "FAILED")
         (self.i.config / "history.json.bad").write_text("{}", encoding="utf-8")
-        checks = e2e_checks.after_kill_check(self.i.root, {"ok": True, "loadedMods": ["rigtune"]}, su.KILL_CHANGES, su.KILL_ID)
+        checks = e2e_checks.after_kill_check(self.i.root, {"ok": True, "modVersions": {"e2e-kill": "1.0.0"}}, su.KILL_CHANGES, su.KILL_ID, "1.1.0")
         self.assertEqual(["History shows the group applied as a whole", "no .bad file, no crash report", "the next start loads the updated mod"],
                          failing(checks))
 
