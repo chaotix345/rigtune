@@ -215,6 +215,18 @@ class BuildWorkflowTests(unittest.TestCase):
         self.assertIn('--parts "$PARTS"', matrix["run"])
         self.assertIn("PARTS: ${{ inputs.gametest_parts || env.GAMETEST_PARTS }}", self.text)
 
+    # review-11 PERF-3 (coordinator, 2026-09-28): the returning player's run fails on a violation, gated on what it adds
+    # over the same leg's fresh footprint, which is kept before its run wipes the run folder.
+    def test_the_returning_player_step_fails_against_the_legs_fresh_start(self):
+        step = [s for s in self.jobs["client-gametest"]["steps"] if s.get("name") == "Returning-player footprint"]
+        self.assertEqual(1, len(step))
+        run = step[0]["run"]
+        self.assertNotIn("WarnOnly", run)
+        self.assertNotIn("|| true", run)
+        keep = run.index("build/footprint-fresh.json")
+        self.assertLess(keep, run.index(":runProductionClientGameTest"))
+        self.assertIn("-Drigtune.footprint.returning=true -Drigtune.footprint.fresh=$PWD/build/footprint-fresh.json", run)
+
 
 class StreakWorkflowsTests(unittest.TestCase):
     # The workflows in the 5-run acceptance (build.yml, and WS-E's e2e.yml once it exists) and release.yml.

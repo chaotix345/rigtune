@@ -115,7 +115,46 @@ that class, `-Drigtune.footprint.returning=true` and a seeded config/rigtune: `t
 history entries, of which RigTune keeps 50 (Journal.MAX_ENTRIES); last-apply.json, awareness.json with `optionsAtExit`, stutter.json,
 stutter-fixes.json, tryit.json with an open try, startup-times.json, profiles, benchmarks, server profiles), nothing staged;
 build.gradle's `-PgametestSeedConfig` copies it in after the run-folder wipe. The class checks the seed is what the game
-started with and gates the four startup keys with the existing budgets (`footprint-<mc>-<backend>-returning.json`, artifact
-`footprint-returning-…`). Chosen over a unit-level read counter: it measures the real startup, on every leg, with the same
-budgets, and catches work added anywhere (PERF-3's case (b): static startup code outside the lazy holder). Local 26.2
-(Windows): render-thread CPU 94 ms, worker CPU 188 ms, client started 39 ms. The CI values of the branch's own run are in the handoff (a commit can't name its own run).
+started with and gates the startup keys: the two CPU keys on what they add over the same leg's fresh start, the wall times
+with the existing budgets (below; `footprint-<mc>-<backend>-returning.json`, artifact `footprint-returning-…`). Chosen over a
+unit-level read counter: it measures the real startup, on every leg, and catches work added anywhere (PERF-3's case (b):
+static startup code outside the lazy holder). Local 26.2 (Windows): render-thread CPU 94 ms, worker CPU 188 ms, client
+started 39 ms.
+
+### The gate on the added cost (coordinator, 2026-09-28)
+
+The first CI run with the step (36395661205) measured the returning player's `renderThreadInitCpuMs` at 165-178 ms on all
+three part-2 legs, over the 150 ms ceiling (fresh: 113-127 ms); the extra time is in preLaunch (106-115 ms of CPU against
+57-63 ms fresh). The step warned instead of failing (266a5e9d, run 36397545828) while a baseline ran.
+
+The 0.4.0 baseline, run 36397897941 (branch scratch/baseline-040, one runner, AMD EPYC 7763): the released 0.4.0 jar and the
+0.5 build, both launched through the e2eClient harness on a scratch instance, with an empty config and with the same
+returning-player seed, 3 repeats each, read from RigTune's own startup-footprint log line. Render-thread CPU (preLaunch +
+init) and the CPU of RigTune's threads in the first 5 s, in ms:
+
+| Jar | Render CPU, fresh | Render CPU, returning | Added (medians) | Worker CPU, fresh | Worker CPU, returning |
+|---|---|---|---|---|---|
+| 0.4.0 | 141 / 145 / 144 | 199 / 180 / 193 | +49 | 233 / 232 / 233 | 217 / 217 / 234 |
+| 0.5 | 147 / 138 / 143 | 204 / 198 / 207 | +61 | 263 / 277 / 267 | 298 / 316 / 299 |
+
+So 0.4.0 already paid most of the returning player's render-thread cost; v0.5 adds about 12 ms at the median, within the
+spread of the repeats. That launch path is online (live Modrinth lookups on RigTune's workers), so its worker CPU isn't the
+CI gate's figure, but it went over 300 ms once.
+
+The CI legs, each returning run against the same job's fresh FootprintGameTest (runs 36395661205, 36397545828 and 36399444441,
+3 part-2 legs each, 9 pairs): the added render-thread CPU was +38 to +64 ms, the added worker CPU +0 to +60 ms (the
+returning value itself 187-298 ms, against the 300 ms budget), `clientStartedWallMs` 21-69 ms (budget 141) and
+`renderThreadInitWallMs` 134-230 ms (budget 368).
+
+The gate, in fail mode (`-Drigtune.footprint.returningWarnOnly` is gone): build.yml keeps the leg's fresh footprint JSON
+before the returning run wipes the run folder and passes it as `-Drigtune.footprint.fresh`; FootprintGameTest gates
+`returningAddedRenderThreadInitCpuMs` (returning minus fresh `renderThreadInitCpuMs`) at 80 ms, so a new cost of about 20 ms
+or more over v0.5's +61 ms fails. `workerCpuMs5s` passed its 300 ms budget on CI but came within 2 ms of it, so it gets the
+same rule: `returningAddedWorkerCpuMs5s` at 80 ms. `clientStartedWallMs` and `renderThreadInitWallMs` keep their existing
+budgets. The absolute 150 ms and 300 ms budgets still gate the fresh start.
+
+SPEC note (SPEC 10's startup budgets, review-11 PERF-3): "A returning player's startup (a config folder with 0.4's and 0.5's
+files and a full history) costs about 50 ms more render-thread CPU than a fresh one, inherited from 0.4 (0.4.0 +49 ms, 0.5
++61 ms with the same seed, run 36397897941). v0.5 gates the added cost, not the absolute 150 ms ceiling: the returning
+player's `renderThreadInitCpuMs` and `workerCpuMs5s` minus the same CI leg's fresh values, at most 80 ms each. Moving
+preLaunch's history reconcile off the render thread is a v0.6 item."
