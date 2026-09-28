@@ -218,6 +218,24 @@ class StutterFixServiceTest {
 		assertEquals(1, reads.get(), "one fix: one read");
 	}
 
+	// review-12 R12STUTTER-3: records that can't change any more (dismissed, expired, undone) need no history.json: a player
+	// who once tried a fix pays no parse for good. A dismissed compared record and an expired one: no read, and the
+	// expired one (its value still in effect) still holds.
+	@Test
+	void finishedFixesReadNoHistory(@TempDir Path config) throws ReflectiveOperationException {
+		StutterFixService service = service(config);
+		AtomicInteger reads = new AtomicInteger();
+		service.history = () -> {
+			reads.incrementAndGet();
+			return new Journal.Snapshot(Journal.State.OK, List.of());
+		};
+		assertTrue(FixStore.shared(config).add(measuring("5c20f1a0-7d3e-4b2a-9c61-0000000000f1").withState(FixTracker.State.COMPARED).dismiss()));
+		assertTrue(FixStore.shared(config).add(measuring("5c20f1a0-7d3e-4b2a-9c61-0000000000f2").withState(FixTracker.State.EXPIRED)));
+		assertEquals(2, service.holds().size());
+		service.advanceAll(null);
+		assertEquals(0, reads.get(), "nothing left to follow in the journal");
+	}
+
 	// V05ServicesTest's rule: without a controller, holds() reads no file and holds nothing.
 	@Test
 	void withoutAControllerNothingIsReadOrHeld() {

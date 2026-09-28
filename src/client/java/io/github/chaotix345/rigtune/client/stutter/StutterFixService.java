@@ -199,7 +199,8 @@ public final class StutterFixService {
 		try {
 			FixStore store = store();
 			List<FixTracker.Record> all = store.records();
-			if (all.isEmpty()) {
+			// review-12 R12STUTTER-3: history.json only while some record can still change with it.
+			if (all.stream().noneMatch(FixTracker.Record::followsJournal)) {
 				return;
 			}
 			Journal.Snapshot read = history.get();
@@ -445,8 +446,8 @@ public final class StutterFixService {
 		if (a != null && r.stream().noneMatch(x -> x.entryId().equals(a.entryId()))) {
 			r.add(a);
 		}
-		if (r.isEmpty()) {
-			return List.of();
+		if (r.stream().noneMatch(FixTracker.Record::followsJournal)) {
+			return FixHold.holds(r, ZoneId.systemDefault());
 		}
 		try {
 			Journal.Snapshot read = history.get();

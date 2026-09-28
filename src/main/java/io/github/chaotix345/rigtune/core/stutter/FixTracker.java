@@ -79,6 +79,11 @@ public final class FixTracker {
 			return state.tracking() && !dismissed;
 		}
 
+		// It can still change with the journal (advance): not dismissed, and staged, measuring or compared (an undo).
+		public boolean followsJournal() {
+			return !dismissed && (state.tracking() || state == State.COMPARED);
+		}
+
 		// Its change can still be undone from the block: not undone or not applied, and not expired with its entry gone.
 		public boolean undoable() {
 			return state != State.UNDONE && state != State.NOT_APPLIED && !(state == State.EXPIRED && lastSkip != null && GONE.equals(lastSkip.reason()));
@@ -137,7 +142,7 @@ public final class FixTracker {
 	// and entries; one that couldn't be read (not OK and not MISSING) decides nothing. A dismissed or finished record is
 	// returned as it is (a compared one can still become undone).
 	public static Record advance(Record r, Journal.State journal, List<JournalEntry> entries, @Nullable SessionEnd session, Instant now) {
-		if (r.dismissed() || !r.state().tracking() && r.state() != State.COMPARED || journal != Journal.State.OK && journal != Journal.State.MISSING) {
+		if (!r.followsJournal() || journal != Journal.State.OK && journal != Journal.State.MISSING) {
 			return r;
 		}
 		JournalEntry entry = entries.stream().filter(e -> r.entryId().equals(e.id())).findFirst().orElse(null);
