@@ -19,8 +19,9 @@ import org.jspecify.annotations.Nullable;
 import java.util.List;
 
 // NoticePriority.TRY_IT, docs/v0.5/SPEC.md 6 (C09): the open try's next step, not dismissible (it continues the player's
-// own measurement). READY: [Measure now] [Open…] (no Measure now while its scene can't start); RESULT: [Keep] [Open…], a
-// toast saying what Keep did; any other stage between the runs: [Open…].
+// own measurement). READY: [Measure now] [Open…] (no Measure now while its scene can't start; while the player's own world
+// hasn't settled, Measure now answers with the status line as a toast); RESULT: [Keep] [Open…], a toast saying what Keep
+// did; any other stage between the runs: [Open…].
 // Nothing while no try is open or its runs are under way. Constructed by the lazy notice list on the first notices()
 // call, never during startup (X4); it reads the service's in-memory view (X8: no file content read here).
 public final class TryItNoticeSource implements NoticeSource {
@@ -62,7 +63,16 @@ public final class TryItNoticeSource implements NoticeSource {
 	@Override
 	public void act(String actionId) {
 		switch (actionId) {
-			case MEASURE -> controller.tryItMeasureNow();
+			case MEASURE -> {
+				TryIt t = controller.tryIt().tryIt();
+				Text settling = t == null ? null : controller.tryItSettling(t.scene());
+				Minecraft minecraft = controller.minecraft();
+				if (settling != null && minecraft != null) {
+					SystemToast.add(minecraft.gui.toastManager(), TOAST_ID, Texts.component(TryItText.toastTitle()), Texts.component(settling));
+				} else {
+					controller.tryItMeasureNow();
+				}
+			}
 			case KEEP -> {
 				Component kept = controller.tryItKeep();
 				Minecraft minecraft = controller.minecraft();

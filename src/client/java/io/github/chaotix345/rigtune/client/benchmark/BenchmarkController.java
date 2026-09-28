@@ -219,7 +219,8 @@ public final class BenchmarkController {
 		this.yaw = player.getYRot();
 		this.pitch = player.getXRot();
 		this.wasFlying = player.getAbilities().flying;
-		this.context = withJournal(context(minecraft, original)).withWorldFresh(worldFresh(request));
+		BenchmarkConditions.Graphics graphics = BenchmarkConditions.Graphics.current();
+		this.context = withJournal(context(minecraft, original)).withWorldFresh(worldFresh(request)).withGraphics(graphics.backend(), graphics.gpu());
 	}
 
 	// What else shapes the numbers, as the run starts (docs/v0.3/SPEC.md 8, the `context` of a benchmarks.json run).

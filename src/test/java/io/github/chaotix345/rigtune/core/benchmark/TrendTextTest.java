@@ -130,6 +130,7 @@ class TrendTextTest {
 		for (Difference d : Difference.values()) {
 			assertFalse(TrendText.difference(d).english().isBlank(), d.name());
 		}
+		assertEquals("graphics backend, GPU", TrendText.differences(List.of(Difference.BACKEND, Difference.GPU)).english());
 	}
 
 	// X4: a trend describes, never explains.

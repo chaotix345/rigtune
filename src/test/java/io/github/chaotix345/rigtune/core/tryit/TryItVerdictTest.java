@@ -302,6 +302,18 @@ class TryItVerdictTest {
 				"after the conditions, before the spot");
 	}
 
+	// Review BENCH-2: a run whose settle timed out on terrain that hadn't loaded (the try lists it) gets no verdict.
+	@Test
+	void aRunOnTerrainThatHadntLoadedMeansNoVerdict() {
+		Cause loading = new Cause.Excluded(Cause.Excluded.Why.TERRAIN_LOADING);
+		assertEquals(List.of(loading), verdict(restart().withUnsettled("after"), before(), after().low(800)).causes());
+		assertEquals(Kind.NOT_COMPARABLE, verdict(restart().withUnsettled("after"), before(), after().low(800)).kind());
+		assertEquals(List.of(loading), verdict(restart().withUnsettled("before"), before(), after()).causes());
+		assertEquals(List.of(new Cause.Excluded(Cause.Excluded.Why.FRESH_WORLD), loading),
+				verdict(restart().withUnsettled("before"), before().worldFresh(true), after()).causes(), "after the fresh world");
+		assertEquals(List.of(), verdict(restart().withUnsettled("an older after"), before(), after()).causes(), "another run of the pair");
+	}
+
 	@Test
 	void numbersAHandEditBrokeAreNoNumbers() {
 		for (double bad : new double[] {Double.NaN, Double.POSITIVE_INFINITY, 0, -5}) {
