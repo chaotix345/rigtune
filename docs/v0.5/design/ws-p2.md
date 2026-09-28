@@ -137,7 +137,9 @@ raised the render distance above what the server sends, so those chunks never co
 now wait for the player in the world (`inTheWorld`). Run 3: ServerProfilesGameTest passed; run 4 (ServerProfilesGameTest,
 FootprintGameTest, A11yGameTest): all passed, FootprintGameTest "26 budget(s), 0 over", `v05RenderThreadResolve` null.
 **CI** 36359905608 (head 0d4f61ce, after merging c59b8b93): 8/8 jobs green on the first attempt; unit tests 2482 per node
-(3 skipped, 0 failed).
+(3 skipped, 0 failed). After the review fixes, **CI 36364641254** (head 10d54895, origin/feat/v0.5.0 3f42974f merged):
+8/8 green on the first attempt, unit tests 2491 per node (3 skipped, 0 failed); its 26.3 Vulkan screenshots looked at
+again (the toast fully in, the selected row's frame and the three wrapped text blocks).
 
 **Screenshots looked at** (the local runs 3-4 and CI 36359905608's `gametest-screenshots-26.2-OpenGL`, `-26.3-OpenGL`
 and `-26.3-Vulkan`, 25 WS-P2 shots per leg): the own world (Offer "Offer a profile here" inactive, the line says
@@ -209,19 +211,20 @@ Reading: mixed signs across legs, inside the runner-to-runner spread ws-k.md rec
 game; `v05RenderThreadResolve` null and `v05HolderCreatedOn` "RigTune worker" on all three legs; every key inside its
 budget (150 / 141 / 300, 2.05). No screenshots are WS-P2's in Phase A (no UI yet).
 
-**Phase B** (CI 36359905608, head 0d4f61ce) against the integration head it merged (c59b8b93, run 36359299550), which
-isolates WS-P2's change from the Wave A merges in between (ms; bytes):
+**Phase B, final** (CI 36364641254, head 10d54895, after the review fixes) against the integration head it merged
+(c59b8b93 + a docs commit; c59b8b93's run 36359299550), which isolates WS-P2's change from the Wave A merges (ms; bytes):
 
 | leg | renderThreadInitCpuMs | clientStartedWallMs | workerCpuMs5s | tickHookOnVsReference | rigtuneClassBytesIdle |
 |---|---|---|---|---|---|
-| 26.2 OpenGL | 116.8 (+15.1) | 48.1 (+2.9) | 202.1 (-4.2) | 1.443 (-0.255) | 80448 (+1080) |
-| 26.3 OpenGL | 113.5 (+0.1) | 29.6 (-10.2) | 195.3 (-13.7) | 1.595 (-0.021) | 79976 (+616) |
-| 26.3 Vulkan | 111.8 (+0.8) | 37.3 (-18.9) | 228.0 (+27.1) | 1.559 (-0.008) | 80008 (+888) |
+| 26.2 OpenGL | 88.4 (-13.3) | 39.7 (-5.5) | 174.4 (-32.0) | 1.293 (-0.405) | 80032 (+664) |
+| 26.3 OpenGL | 104.1 (-9.4) | 26.9 (-12.9) | 224.1 (+15.1) | 1.559 (-0.057) | 80040 (+680) |
+| 26.3 Vulkan | 107.2 (-3.8) | 43.6 (-12.5) | 216.0 (+15.1) | 1.573 (+0.006) | 80160 (+1040) |
 
-Against ws-k.md's baseline (run 36310249248) the same run is +34.6/+31.3/-8.2 renderThreadInitCpuMs, most of it the
-Wave A merges. Reading: the timings move both ways inside the runner spread; nothing of C16 runs at startup (the
+(The first Phase B run, 36359905608 at 0d4f61ce, had 116.8/113.5/111.8 renderThreadInitCpuMs and +616..+1080 bytes.)
+Against ws-k.md's baseline (run 36310249248) the final run is +6.2/+21.9/-12.8 renderThreadInitCpuMs, inside the
+spread and mostly the Wave A merges. Reading: the timings move both ways inside the runner spread; nothing of C16 runs at startup (the
 service is made on the first JOIN or screen, the notice source's `current()` reads a volatile while nothing is pending)
-and no tick or frame hook was added. `rigtuneClassBytesIdle` grows by 0.6-1.1 KB on every leg, most likely the slightly larger
+and no tick or frame hook was added. `rigtuneClassBytesIdle` grows by 0.7-1.0 KB on every leg, most likely the slightly larger
 RealController and ProfileService, both loaded at startup (well inside the 109,296 budget). `v05RenderThreadResolve` null
 and `v05HolderCreatedOn` "RigTune worker" on all three legs.
 
@@ -257,7 +260,7 @@ and `v05HolderCreatedOn` "RigTune worker" on all three legs.
 
 ## AC table
 
-Evidence: unit tests on both nodes; game tests on CI 36359905608's three legs (26.2 OpenGL, 26.3 OpenGL, 26.3 Vulkan),
+Evidence: unit tests on both nodes; game tests on CI 36364641254's (and 36359905608's) three legs (26.2 OpenGL, 26.3 OpenGL, 26.3 Vulkan),
 with the screenshots listed in "Phase B as landed".
 
 | AC | status | evidence |
