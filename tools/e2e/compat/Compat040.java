@@ -2,6 +2,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
@@ -309,20 +310,24 @@ public final class Compat040 {
 					ok &= wrote && lost.isEmpty();
 				}
 				// AC8.4: the listed dismissals survive 10 more of 0.4.0's own, in its view and in the file it wrote.
+				// The file half counts only when 0.4.0 wrote it: its digest changed and it holds the last extra dismissal (M3).
 				if (c.has("dismissedContains")) {
+					Path copied = spare.resolve("rigtune").resolve(file);
+					String was = digest(copied);
 					AwarenessStore store = AwarenessStore.shared(spare);
 					for (int i = 0; i < 10; i++) {
 						store.dismiss("compat040.more-" + i);
 					}
-					JsonArray inFile = json(spare.resolve("rigtune").resolve(file)).getAsJsonArray("dismissed");
+					JsonArray inFile = json(copied).getAsJsonArray("dismissed");
+					boolean wrote = !was.equals(digest(copied)) && inFile != null && inFile.contains(new JsonPrimitive("compat040.more-9"));
 					List<String> missing = new ArrayList<>();
 					c.getAsJsonArray("dismissedContains").forEach(k -> {
 						if (!store.dismissed().contains(k.getAsString()) || inFile == null || !inFile.contains(k)) {
 							missing.add(k.getAsString());
 						}
 					});
-					seen.add("after 10 more 0.4.0 dismissals on a copy, missing " + missing);
-					ok &= missing.isEmpty();
+					seen.add("after 10 more 0.4.0 dismissals on a copy (" + (wrote ? "written" : "NOT written") + "), missing " + missing);
+					ok &= wrote && missing.isEmpty();
 				}
 			}
 			case "StartupTimesStore" -> {

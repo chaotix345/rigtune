@@ -428,8 +428,7 @@ class Run:
                 lines.append("-Drigtune.e2e.profilePlan=" + str(self.run_dir / "profile-plan.json"))
             if phase in BRAND_PHASES:
                 lines.append("-Dminecraft.launcher.brand=" + BRAND)
-            if self.handover and phase == "stage":
-                lines.append("-Drigtune.e2e.updateId=update:" + HANDOVER_MOD["id"])
+            lines += self.phase_jvm_lines(phase)
             (self.run_dir / "jvm-{}.txt".format(phase)).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
         code = self.gradle("gradle-driver.log", *self.driver_args(":{}:{}".format(self.mc, self.driver_jar_task())))
@@ -495,6 +494,10 @@ class Run:
         return [(HANDOVER_MOD["project"], HANDOVER_MOD["id"],
                  [e2e_env.version("E2EDhOld", self.handover_jars["installed"], now - datetime.timedelta(days=2), self.mc),
                   e2e_env.version("E2EDhNew", self.handover_jars["update"], now - datetime.timedelta(hours=1), self.mc)])]
+
+    def phase_jvm_lines(self, phase):
+        """The hand-over's per-start JVM arguments: its stage start applies HANDOVER_MOD's update, not RigTune's."""
+        return ["-Drigtune.e2e.updateId=update:" + HANDOVER_MOD["id"]] if self.handover and phase == "stage" else []
 
     def held_paths(self):
         """What held() keeps during the old version's starts: the seed's holdOpenAtOldExit, or the hand-over's installed jar."""
@@ -927,7 +930,8 @@ class Run:
                                                      log.read_text(encoding="utf-8", errors="replace") if log.is_file() else "",
                                                      failed, cmdlines, tree_before)
         if self.handover:
-            checks += e2e_checks.after_handover_verify(self.instance, self.carried, self.old_jar, self.new_jar, cmdlines, statuses_before)
+            checks += e2e_checks.after_handover_verify(self.instance, self.carried, self.old_jar, self.new_jar, self.handover_jars["update"],
+                                                       cmdlines, statuses_before)
         checks.insert(0, e2e_checks.Check("the relaunched client exited normally", code == 0, "gradle exit {}".format(code)))
         self.checks["verify"] = checks
         return all(c.ok for c in checks)
@@ -1163,9 +1167,8 @@ class Run:
                           "- Fake jars: " + ", ".join("`{path}` ({id} {version})".format(**j) for j in self.seed["jars"]),
                           "- Held open during the old version's exit: {}. {}".format(
                               ", ".join("`{}`".format(p) for p in self.seed.get("holdOpenAtOldExit", [])), self.seed.get("holdOpenWhy", ""))]
-            lines.append("- Rescan pressed because the report stayed offline (the startup lookup race, docs/v0.2/design/ws-g.md): "
-                         "update phase {}, verify phase {}".format(*("yes" if (self.driver(p) or {}).get("rescanned") else "no"
-                                                                     for p in ("update", "verify"))))
+            lines.append("- Rescan pressed because the report stayed offline (the startup lookup race, docs/v0.2/design/ws-g.md): " + ", ".join(
+                "{} phase {}".format(p, "yes" if (self.driver(p) or {}).get("rescanned") else "no") for p in self.checks))
         lines.append("- Client time: " + ", ".join("{} {} s".format(p, self.facts.get("{}Seconds".format(p))) for p in self.checks))
         lines.append("")
         for phase, title in ((p, PHASE_TITLES[p]) for p in self.checks):

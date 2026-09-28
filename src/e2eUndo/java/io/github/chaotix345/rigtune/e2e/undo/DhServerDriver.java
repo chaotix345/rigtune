@@ -120,10 +120,17 @@ public final class DhServerDriver implements ClientModInitializer {
 					next(Step.WAIT_WORLD);
 				}
 				case WAIT_WORLD -> {
+					// On any screen (a connect screen that hangs too).
+					if (phaseTicks > JOIN_TIMEOUT) {
+						fail(minecraft, "phase " + name() + ": no join within " + JOIN_TIMEOUT / SECOND + " s");
+						return;
+					}
 					if (minecraft.level != null && minecraft.player != null && minecraft.gui.screen() == null) {
 						Map<String, Object> join = new LinkedHashMap<>();
 						join.put("phase", name());
 						join.put("afterSeconds", phaseTicks / SECOND);
+						// The server's view distance as the client applies it (render distance 16 is the cap).
+						join.put("viewDistance", minecraft.options.getEffectiveRenderDistance());
 						joins.add(join);
 						for (String command : List.of("gamemode creative", "time set noon", "weather clear", "tp @s ~ " + HEIGHT + " ~")) {
 							minecraft.player.connection.sendCommand(command);
@@ -132,10 +139,6 @@ public final class DhServerDriver implements ClientModInitializer {
 								+ ", server view distance as seen: " + minecraft.options.getEffectiveRenderDistance());
 						next(Step.IN_WORLD);
 					} else if (minecraft.gui.screen() instanceof DisconnectedScreen || minecraft.gui.screen() instanceof TitleScreen) {
-						if (phaseTicks > JOIN_TIMEOUT) {
-							fail(minecraft, "phase " + name() + ": no join within " + JOIN_TIMEOUT / SECOND + " s");
-							return;
-						}
 						minecraft.gui.setScreen(new TitleScreen());
 						connectDelay = RETRY;
 						next(Step.CONNECT);
