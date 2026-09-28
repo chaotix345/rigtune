@@ -19,7 +19,8 @@ import java.util.function.Predicate;
 // anyway (at the op's target, unless a staged disable turns that jar off, or loaded from another jar) it was installed
 // another way, else the download is simply gone. Or its download is there but its mod is loaded from a jar that is
 // neither the op's target nor one a staged disable turns off: installed another way too. A group the helper left half
-// done (PartlyApplied) never counts: the next exit finishes it or rolls it back. Pure: preLaunch runs it with Files.exists
+// done (PartlyApplied) or its records show it started (ApplyExecutor.startedGroups, review 11 APPLY-1) never counts: the
+// next exit finishes it or rolls it back. Pure: preLaunch runs it with Files.exists
 // and FabricLoader's origins only (no jar opened), the rebuild's worker with the same.
 public final class StaleOps {
 	public enum Why {
@@ -38,8 +39,8 @@ public final class StaleOps {
 	}
 
 	// exists: whether a file is there now. loadedFrom: a loaded mod id -> the file names of the top-level jars it was loaded
-	// from. modIdOf: an enable's mod id. halfDone: the groups the helper left half done. One entry per group (an INSTALLED
-	// enable before a GONE one), in pending.json's order.
+	// from. modIdOf: an enable's mod id. halfDone: the groups (an op without one: "op:<id>") the helper left half done or
+	// its records show it started. One entry per group (an INSTALLED enable before a GONE one), in pending.json's order.
 	public static List<Stale> find(List<Op> ops, Predicate<Path> exists, Map<String, Set<String>> loadedFrom, Function<Op, String> modIdOf,
 			Set<String> halfDone) {
 		// Jars some staged disable turns off at the next exit, whatever its group.
@@ -52,7 +53,7 @@ public final class StaleOps {
 		Map<String, Stale> byGroup = new LinkedHashMap<>();
 		for (Op op : ops) {
 			if (op == null || op.type() != PendingActions.Type.ENABLE_FILE || op.id() == null || op.from() == null || op.to() == null
-					|| op.group() != null && halfDone.contains(op.group())) {
+					|| halfDone.contains(op.group() != null ? op.group() : "op:" + op.id())) {
 				continue;
 			}
 			Path from;

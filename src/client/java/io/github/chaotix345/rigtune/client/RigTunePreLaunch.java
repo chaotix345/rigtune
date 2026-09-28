@@ -189,8 +189,8 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 
 	// The groups (an ungrouped op: "op:<id>") StaleOps finds, as Staging.dropStale will at the first rebuild: from
 	// Files.exists and FabricLoader's origins, no jar opened (an enable staged without a mod id is judged by its files
-	// alone). Only when something looks stale are the mods folder's names and the helper's record read, for the groups it
-	// left half done (never stale). Nothing on an error: every op is then counted, as before.
+	// alone). Only when something looks stale are the mods folder's names and the helper's records read, for the groups it
+	// left half done or started (never stale; review 11 APPLY-1). Nothing on an error: every op is then counted, as before.
 	private static Set<String> staleGroups(PendingActions plan, Path pending, Supplier<Map<String, Set<String>>> loadedFrom) {
 		try {
 			PendingActions here = plan.relocated(InstanceDirs.modsDirOf(pending), InstanceDirs.configDirOf(pending));
@@ -201,7 +201,8 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 				try (Stream<Path> files = Files.list(InstanceDirs.modsDirOf(pending))) {
 					files.forEach(f -> names.add(f.getFileName().toString()));
 				}
-				Set<String> halfDone = PartlyApplied.groups(here.ops(), names, UnfinishedGroups.recorded(InstanceDirs.configDirOf(pending)));
+				Set<String> halfDone = new HashSet<>(PartlyApplied.groups(here.ops(), names, UnfinishedGroups.recorded(InstanceDirs.configDirOf(pending))));
+				halfDone.addAll(ApplyExecutor.startedGroups(here, pending));
 				found = StaleOps.find(here.ops(), Files::exists, origins, Op::modId, halfDone);
 			}
 			Set<String> out = new HashSet<>();

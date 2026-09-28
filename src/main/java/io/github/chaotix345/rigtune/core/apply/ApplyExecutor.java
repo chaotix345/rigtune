@@ -396,10 +396,35 @@ public final class ApplyExecutor {
 			}
 			Op first = ops.get(members.getFirst());
 			boolean started = first != null && first.group() != null && partly.contains(first.group())
-					|| !earlierRenames(ops, members, modsDir, recorded).isEmpty()
-					|| members.stream().anyMatch(i -> isFileOp(ops.get(i)) && doneByLastRun(ops.get(i), doneBefore) != null);
+					|| startedByRecords(ops, members, modsDir, recorded, doneBefore);
 			if (!started) {
 				out.addAll(members);
+			}
+		}
+		return out;
+	}
+
+	// review 11 APPLY-1 (WS-H, a marked edit): heldIndexes' rule for a group RigTune's own records show it started (a
+	// recorded rename in effect, or an op the last run did), shared with startedGroups.
+	private static boolean startedByRecords(List<Op> ops, List<Integer> members, Path modsDir, List<Rename> recorded, Map<String, OpResult> doneBefore) {
+		return !earlierRenames(ops, members, modsDir, recorded).isEmpty()
+				|| members.stream().anyMatch(i -> isFileOp(ops.get(i)) && doneByLastRun(ops.get(i), doneBefore) != null);
+	}
+
+	// review 11 APPLY-1 (WS-H, a marked edit): the groups (an op without one: "op:<id>") the records next to pendingFile
+	// show started, by heldIndexes' rule, so the start-up's stale check (StaleOps) never drops them: the next exit reports
+	// them "Already done earlier". plan: as the helper sees it (relocated to pendingFile's folders).
+	public static Set<String> startedGroups(PendingActions plan, Path pendingFile) {
+		Path configDir = InstanceDirs.configDirOf(pendingFile);
+		List<Op> ops = plan.ops();
+		List<Rename> recorded = UnfinishedGroups.recorded(configDir);
+		Map<String, OpResult> doneBefore = doneBefore(ApplyResult.defaultPath(configDir));
+		Set<String> out = new HashSet<>();
+		for (List<Integer> members : groups(ops).values()) {
+			Op first = ops.get(members.getFirst());
+			if (first != null && (first.group() != null || first.id() != null)
+					&& startedByRecords(ops, members, InstanceDirs.modsDirOf(pendingFile), recorded, doneBefore)) {
+				out.add(first.group() != null ? first.group() : "op:" + first.id());
 			}
 		}
 		return out;
