@@ -48,8 +48,11 @@ class GenerationTest(unittest.TestCase):
         root = Path(tempfile.mkdtemp())
         write(root / "v050-written" / "ws-t", "benchmarks.json", {"schemaVersion": 1, "runs": []})
         sets = written.resolve_all([V040, root / "v050-written"])
-        self.assertEqual(written.KEPT, {k: v for k, v in written.kept_for(sets).items() if k in written.KEPT})
-        self.assertEqual(("servers",), written.kept_for(sets)["server-profiles.json"])
+        kept = written.kept_for(sets)
+        # A newer generation may only add fields to what an older one keeps (awareness.json: WS-W2's field, COMPAT-5).
+        self.assertEqual({k: set(v) for k, v in written.KEPT.items()}, {k: set(v) & set(written.KEPT[k]) for k, v in kept.items() if k in written.KEPT})
+        self.assertIn("acknowledgedStartupRegressions", kept["awareness.json"])
+        self.assertEqual(("servers",), kept["server-profiles.json"])
         self.assertNotIn("server-profiles.json", written.kept_for(written.resolve_all([V040])))
 
 

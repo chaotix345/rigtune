@@ -11,7 +11,9 @@ import io.github.chaotix345.rigtune.core.benchmark.BenchmarkHistory;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.RestoreMarker;
 import io.github.chaotix345.rigtune.core.footprint.StartupTimesStore;
+import io.github.chaotix345.rigtune.core.history.ApplyFailures;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
+import io.github.chaotix345.rigtune.core.history.HistoryUpdates;
 import io.github.chaotix345.rigtune.core.history.JarInfo;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
@@ -104,7 +106,7 @@ public final class Compat040 {
 
 	private static final Set<String> CLASSES = Set.of("Journal", "HistoryModel", "UndoPlanner", "BenchmarkHistory", "PendingActions",
 			"ApplyHelper", "ClientSettings", "StutterStore", "StutterSummary", "AwarenessStore", "ProfileStore", "ServerLimitsStore", "RestoreMarker",
-			"StartupTimesStore", "Unread");
+			"StartupTimesStore", "ApplyResult", "Unread");
 	private static final Map<String, Set<String>> EXPECTATIONS = Map.ofEntries(
 			Map.entry("Journal", Set.of("state", "entries", "noBad")),
 			Map.entry("HistoryModel", Set.of("entries", "unknownKinds")),
@@ -120,6 +122,7 @@ public final class Compat040 {
 			Map.entry("ServerLimitsStore", Set.of("state", "keeps", "noBad")),
 			Map.entry("RestoreMarker", Set.of("state")),
 			Map.entry("StartupTimesStore", Set.of("state", "runs", "noBad")),
+			Map.entry("ApplyResult", Set.of("state", "results", "unchanged", "reasons")),
 			Map.entry("Unread", Set.of("unchanged")));
 
 	void runSet(String set, Path config, Path expectFile, Path spare, Path scratch) throws Exception {
@@ -328,6 +331,32 @@ public final class Compat040 {
 				ok &= expectState(c, runs == inFile, runs + " of " + inFile + " run(s) loaded", seen);
 				ok &= expectInt(c, "runs", runs, seen);
 			}
+			// Review-11 COMPAT-5: 0.4.0 reads a last-apply.json 0.5 wrote (RW-20's relabel): it loads, its restart reconcile
+			// (HistoryUpdates.reconcile, nothing pending) moves no journal status, and History built with the file's failures
+			// shows each one's reason.
+			case "ApplyResult" -> {
+				ApplyResult result = ApplyResult.load(dir.resolve(file));
+				ok &= expectState(c, result != null, result == null ? "unreadable" : "OK", seen);
+				ok &= expectInt(c, "results", result == null ? 0 : result.results().size(), seen);
+				Journal journal = new Journal(config, VERSION, MC, (message, error) -> { });
+				List<JournalEntry> entries = journal.entries();
+				if (c.has("unchanged") && result != null) {
+					Map<String, String> before = statuses(entries);
+					Map<String, String> after = statuses(HistoryUpdates.reconcile(entries, Set.of(), result.results()));
+					List<String> moved = before.keySet().stream().filter(k -> !before.get(k).equals(after.get(k))).toList();
+					seen.add("journal statuses moved by 0.4.0's reconcile: " + moved);
+					ok &= moved.isEmpty() == c.get("unchanged").getAsBoolean();
+				}
+				if (c.has("reasons") && result != null) {
+					HistoryModel.View view = HistoryModel.build(journal.state(), entries, ApplyFailures.byOpId(result, List.of()),
+							HistoryModel.Labels.of(plannerState(config, entries)));
+					List<String> reasons = view.entries().stream().flatMap(e -> e.changes().stream())
+							.filter(ch -> ch.failure() != null && ch.failure().reason() != null && !ch.failure().reason().isBlank())
+							.map(ch -> ch.failure().reason()).toList();
+					seen.add("History's failure reasons " + reasons);
+					ok &= expectInt(c, "reasons", reasons.size(), seen);
+				}
+			}
 			case "RestoreMarker" -> {
 				Path copy = scratch.resolve("marker").resolve(file);
 				Files.createDirectories(copy.getParent());
@@ -348,6 +377,12 @@ public final class Compat040 {
 			seen.add(".bad files " + bad);
 		}
 		check(name, ok, String.join("; ", seen));
+	}
+
+	private static Map<String, String> statuses(List<JournalEntry> entries) {
+		Map<String, String> out = new TreeMap<>();
+		entries.forEach(e -> e.changes().forEach(ch -> out.put(ch.id(), String.valueOf(ch.status()))));
+		return out;
 	}
 
 	private static boolean expectState(JsonObject c, boolean ok, String actual, List<String> seen) {

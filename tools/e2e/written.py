@@ -45,7 +45,8 @@ V040 = Generation("v040-written", (0, 4), SETS, NEW_FILES, KEPT)
 V050 = Generation("v050-written", (0, 5), ("ws-l1", "ws-l2", "ws-s", "ws-s2", "ws-p", "ws-p2", "ws-b", "ws-t", "ws-w", "ws-w2",
                                            "ws-f", "ws-h"),
                   ("stutter-fixes.json", "tryit.json", "server-profiles.json"),
-                  {"server-profiles.json": ("servers",), "stutter-fixes.json": ("fixes",), "tryit.json": ("recent", "current")})
+                  {"server-profiles.json": ("servers",), "stutter-fixes.json": ("fixes",), "tryit.json": ("recent", "current"),
+                   "awareness.json": ("dismissed", "acknowledgedRegressions", "acknowledgedStartupRegressions")})
 GENERATIONS = (V040, V050)
 # A set's compat040 expectations (the v050-written README): never composed into the instance.
 EXPECT = "expect.json"
