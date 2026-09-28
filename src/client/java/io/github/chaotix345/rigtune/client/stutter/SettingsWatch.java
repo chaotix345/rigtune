@@ -11,6 +11,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import org.jspecify.annotations.Nullable;
 
+import java.lang.ref.WeakReference;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -46,7 +47,9 @@ final class SettingsWatch {
 	private static boolean dynamicFps;
 	private static final State STATE = new State();
 	// The session whose check threw: no more checks (or warnings) until another session starts.
-	private static StutterMonitor.@Nullable Capture failed;
+	// Weakly (review-12 R12STUTTER-4): a session replaced without a tick in between (an immediate stutter fix's restart,
+	// Clear) must not keep its capture and frame ring.
+	private static WeakReference<StutterMonitor.Capture> failed = new WeakReference<>(null);
 
 	private SettingsWatch() {
 	}
@@ -94,11 +97,7 @@ final class SettingsWatch {
 	// The listener (package-private for SettingsWatchTest).
 	static void tick(Minecraft minecraft) {
 		StutterMonitor.Capture session = StutterMonitor.session();
-		if (session == null || session == failed) {
-			if (session == null) {
-				// review-11 PERF-4: the failed session's capture (its frame ring) isn't kept once it ended.
-				failed = null;
-			}
+		if (session == null || session == failed.get()) {
 			STATE.disarm();
 			throttleTicks = THROTTLE_EVERY_TICKS;
 			if (StutterMonitor.idle()) {
@@ -126,7 +125,7 @@ final class SettingsWatch {
 				StutterMonitor.event(StutterRings.SETTINGS_CHANGED, STATE.since(), changed | STATE.leadMillis(now) << StutterRings.SETTINGS_LEAD_SHIFT);
 			}
 		} catch (RuntimeException e) {
-			failed = session;
+			failed = new WeakReference<>(session);
 			STATE.disarm();
 			RigTune.LOGGER.warn("Stutter Doctor: the settings check failed; settings changes aren't tagged in this session", e);
 		}
