@@ -42,11 +42,16 @@ public record SessionOutcome(int sessions, double gameplaySeconds, int hitches, 
 		return new SessionOutcome(1, gameplaySeconds, hitchStarts.length, lostMs, bins, mean, bins > 1 ? m2 / (bins - 1) : 0);
 	}
 
-	// A finished analysis of a capture that started at startNanos.
+	// A finished analysis of a capture that started at startNanos. A spike right after a settings change (the settingsChanged
+	// tag, RW-11) is the change's, not play's: it is left out of the hitches and the lost time, on both sides alike.
 	public static SessionOutcome of(StutterAnalyzer.Result result, long startNanos) {
 		List<SpikeDetector.Spike> spikes = new ArrayList<>();
+		long lostNanos = 0;
 		for (Attributor.Attribution a : result.attributions()) {
-			spikes.add(a.spike());
+			if (!a.tags().contains(Attributor.SETTINGS_CHANGED)) {
+				spikes.add(a.spike());
+				lostNanos += Math.max(0, a.spike().lost());
+			}
 		}
 		List<SpikeDetector.Hitch> hitches = SpikeDetector.hitches(spikes);
 		long[] starts = new long[hitches.size()];
@@ -54,7 +59,7 @@ public record SessionOutcome(int sessions, double gameplaySeconds, int hitches, 
 			starts[i] = hitches.get(i).start() - startNanos;
 		}
 		StutterReport report = result.report();
-		return of(report.gameplaySeconds(), report.sessionSeconds(), report.lostMs(), starts);
+		return of(report.gameplaySeconds(), report.sessionSeconds(), lostNanos / 1e6, starts);
 	}
 
 	// Both sides' sessions together; the bins' statistics pooled as if all their bins were one list (Chan et al.).

@@ -62,6 +62,28 @@ public record FixConditions(@Nullable String mc, @Nullable String modSetHash, lo
 		settings = Collections.unmodifiableMap(copy);
 	}
 
+	// The same conditions with what the session could measure (known only once its capture is copied).
+	public FixConditions withMeasurement(boolean phases, boolean gc) {
+		return new FixConditions(mc, modSetHash, heapMaxMb, collector, width, height, fullscreen, world, phases, gc, settings);
+	}
+
+	// The settings the conditions compare, from a settings snapshot's values: every share-key table key present, and the
+	// shader pack.
+	public static Map<String, String> settingsOf(Map<String, String> snapshot) {
+		Map<String, String> out = new LinkedHashMap<>();
+		for (ShareKeys.Key key : ShareKeys.V1) {
+			String value = snapshot.get(key.key());
+			if (value != null) {
+				out.put(key.key(), value);
+			}
+		}
+		String pack = snapshot.get(SHADER_PACK);
+		if (pack != null) {
+			out.put(SHADER_PACK, pack);
+		}
+		return out;
+	}
+
 	// What differs between the fix's conditions (this) and a session's (other), in Reason's order, then the settings in
 	// the share-key table's order and any others alphabetically. The fixed key isn't compared: the tracker checks that it
 	// equals the fix's target.

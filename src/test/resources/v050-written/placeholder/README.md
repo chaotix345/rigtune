@@ -11,10 +11,9 @@ unchanged, and the downgrade E2E checks they are byte-identical.
 
 | set | files | what it stands in for |
 |---|---|---|
-| `ws-s2` | history.json, pending.json, stutter-fixes.json | an applied stutter fix (`vanilla.renderDistance`) and a staged one (a Sodium PATCH_JSON op) |
 | `ws-t` | benchmarks.json, history.json, pending.json, tryit.json | a `tryit-` pair, the try's staged Apply and its PATCH_JSON op, the open try |
 
 A few details:
-- Every entry is newer than the v0.4 sets'. The newest (ws-s2's staged fix) is the one a downgraded 0.4.0's Undo last picks.
-- Two keys the v0.4 ws-p switch set are changed again here: `vanilla.renderDistance` and Sodium's chunk builder threads. So compat030 also sees the planner skip changes that a later Apply changed again.
+- Every entry is newer than the v0.4 sets'.
+- A key the v0.4 ws-p switch set is changed again here: Sodium's chunk builder threads. So compat030 also sees the planner skip a change that a later Apply changed again.
 - Ids are fixed UUIDs, unique across both generations.

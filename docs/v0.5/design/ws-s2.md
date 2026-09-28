@@ -219,24 +219,217 @@ the commit after 2aa200a6 with tests:
   FixTrackerTest 21, the rest as above); locally `core.stutter.*`, `core.store.*`, `core.rules.*`, `client.V05*`,
   LangCheckTest, WordingTest, PseudoLocaleTest: 50 suites, 432 tests, 0 failures.
 
-## Wave B: task plan (after WS-S merges; outline, detailed when resumed)
-- C1 `StutterFacts.causeSpikes` (optional, old constructors kept) + `StutterAnalyzer` fills it through
-  `FixEvidence.dominatedSpikes` + `ConditionEvaluator.causeSpikes` → `FixEvidence.causeSpikesAtLeast` (AC5.4's
-  `StutterConditionTest`/`StutterAnalyzerTest` cases).
-- C2 `StutterView` fields (offers, tracked block model), old constructor kept.
-- C3 `StutterFixService` (preview, apply with the busy check (C8, added to `BusyTest.CALLERS`) and C20's own refusals,
-  `appliedAt` stamped before `restartSession` and the next `atStart` captured after the write (M4's contract, pinned by a
-  test), `holds()` = `FixHold.holds(store records, zone)`, the
-  record on StutterService's io chain, `restartSession` for a vanilla fix, `onSessionStart`/`onSessionEnded`, `holds()`,
-  `dismiss`).
-- C4 the C20 hook lines in StutterService / StutterMonitor (Capture: live limits, conditions at start) / StutterHooks
-  (the game-test probe).
-- C5 the UI: new `ButtonRow`, StutterScreen's offer rows and "Your stutter fix" block, the `rigtune.stutter.fix.*` keys
-  (sf §2.7) and their `V05LangFamilies` method, the core text mapper for reasons, skips, states and verdicts (AC5.3's
-  one-line texts, unit).
-- C6 `StutterFixGameTest` (AC5.5, AC5.6, AC5.7's UI half, AC5.10's real main list, AC5.11, AC5.12) and `walkStutterFix`.
-- C7 the `v050-written/ws-s2/` set + `expect.json` (AC5.13 through compat040).
-- C8 HistoryModel/HistoryScreen "Stutter fix: %s" (cut 2nd; after WS-P and WS-H merge).
-- C9 AC5.14's calibration run on the dev PC under the game-test lock (Sodium Chunk Updates = IMMEDIATE, the teleport
-  driver for 6 minutes), recorded in docs/v0.5/verification/stutter-fixes/; new thresholds go back as a WS-R follow-up.
-- Cut order if needed: the DH threads fix first, then SPEC 5's list (MVP: Sodium Chunk Updates + RD −2 with the comparison).
+## Wave B: TDD task plan (client part; after WS-S merged, c59b8b93)
+
+Resumed 2026-09-28 on feat/v05-stutter-fixes fast-forwarded to origin/feat/v0.5.0 @ c59b8b93 (WS-S, WS-R r17 with the three
+`stutterFixes` seeds, WS-P, WS-H, WS-W, WS-B, WS-F merged). The coordinator's decisions for this phase
+(`<scratch>/ws-s2/COORDINATOR-DECISIONS.md`) are folded in: WS-S's StutterService API and the `settingsChanged` tag, WS-B's
+M4 rule (no verdict when either side is excluded), `GameTestWorlds.create/leave` only, the V05ServicesTest line rule, X12's
+1280x720@3 scroll check, X8, the one shared busy check, AC5.14 as the code-deciding run. Each task: red test first, then the
+code, then a commit; targeted tests in a build slot (`:26.2:test --tests ...`); game tests in CI (the user is playing: the
+coordinator holds the game-test lock until their client exits).
+
+| # | task | files | tests (red first) | closes |
+|---|---|---|---|---|
+| B1 | Wire `causeSpikesAtLeast`: `StutterFacts.causeSpikes` (optional, the 10- and 12-argument constructors kept); `StutterAnalyzer` fills it through `FixEvidence.dominatedSpikes`; `ConditionEvaluator.causeSpikes` (the stub) → `FixEvidence.causeSpikesAtLeast(wanted, facts.causeSpikes(), facts.unmeasured())`. A spike tagged `settingsChanged` (WS-S's RW-11) never counts as dominated: it follows a settings change, not the fix's cause | `core/stutter/StutterFacts`, `StutterAnalyzer`, `FixEvidence`, `core/rules/ConditionEvaluator` (the one method) | `FixEvidenceTest` + a condition test (TRUE/FALSE; UNKNOWN unmeasured, unknown cause, fraction; a `not` over it never TRUE; UNKNOWN in the main list), `StutterAnalyzerTest` (40 % doesn't count, 60 % does; a settingsChanged spike doesn't), a scenario on the bundled r17 seeds (the Sodium seed offers at chunkBuild 40 % and 5 dominated spikes, not at 4) | AC5.4 |
+| B2 | WS-B's M4 rule for C20 and the settingsChanged rule for outcomes: a session is *excluded* when it ran around a benchmark (`aroundBenchmark`) or Distant Horizons generated terrain in it (`DhGeneration.generating`); an excluded before side gets `NotYet(EXCLUDED)`, an excluded after session is skipped ("excluded"), so no verdict is ever computed across one. `SessionOutcome.of` leaves spikes tagged settingsChanged out of the hitches and the lost time, on both sides alike | `FixOffer` (+ `Reason.EXCLUDED`), `FixGate`, `FixOffers`, `FixTracker` (`SessionEnd.excluded`), `SessionOutcome` | `FixGateTest`, `FixOffersTest`, `FixTrackerTest`, `SessionOutcomeTest` cases | AC5.3, AC5.8 |
+| B3 | The player-visible texts in core: `FixText` (offer line, now/restart line, profile note, the NotYet reasons with their args, the status lines, the block's heading/change/state/skip lines, Before/After rates, the three verdict lines with both rates, the Try narration) with the `rigtune.stutter.fix.*` keys (sf §2.7; the M1 hold wording already in) and their `V05LangFamilies.stutterFixes` family | new `core/stutter/FixText`, en_us.json, `V05LangFamilies` (its method) | `FixTextTest` (each reason's one line with its numbers; every verdict line shows both rates; LangCheckTest, WordingTest, PseudoLocaleTest) | AC5.3 (texts), AC5.7 (lines) |
+| B4 | `StutterView` + `Map<String, FixOffer> fixes` and `FixTracker.@Nullable Record tracked` (the 7-argument constructor kept) | `core/stutter/StutterView` | `FixTextTest`/view cases (the old constructor has no fixes and no block) | |
+| B5 | The service: `StutterFixService` (a cache of stutter-fixes.json read off the render thread; `preview`; `apply` (Busy.refusal first, then another fix staged or measuring, the store not writable, the effective value no longer `from`; `appliedAt` stamped before anything changes and before the session restarts, M4's contract; one `apply` entry; the record added on StutterService's io chain; a vanilla fix restarts the session, whose first 10 s are excluded like a level change); `dismiss`; `holds()` (the rebuild's worker; without a controller empty and no file read, so V05ServicesTest stays as it is); the session-end tracking and a throttled journal refresh). StutterService's C20 lines (Machine, Analysis, view, end, `restartSession`, the capture's world kind and conditions at start) and a game-test probe that injects an analysis (`StutterHooks.injectAnalysis`); `BusyTest.CALLERS` gains StutterFixService | `client/stutter/StutterFixService`, `StutterService`, `StutterMonitor.Capture`, `StutterHooks`, `BusyTest` | `StutterFixServiceTest` (StutterServiceTest's unconstructed controller: holds() without a controller; the recommendation an offer makes; the refusals in order), BusyTest | AC5.5, AC5.6 (service side), X4, X8 |
+| B6 | The UI: new `ButtonRow` (its buttons are the Tab stops), StutterScreen's offer rows under each advice ("Try this fix…" whose narration names the change, opening PreviewScreen's Confirm), the NotYet line, and the "Your stutter fix" block at the top (change and date, state, Before/After `BarRow`s, the verdict, Undo this change… → `UndoScreen(this, controller, entryId)`, Dismiss) | new `client/ui/ButtonRow`, `client/ui/StutterScreen` | the game tests (B7) | AC5.7 (UI), AC5.11 |
+| B7 | `StutterFixGameTest` (network off, bundled r17, injected analyses): the RD fix now (offer → Preview with one "now" row → Cancel writes nothing → Apply: one entry, RD 12 → 10, one measuring record, the session restarted after `appliedAt` with RD 10 at its start), the comparison (a mismatching session "didn't count", a matching one → "less" with both rates), Undo this change… → undone; the Sodium fix staged (one PATCH_JSON op, STAGED, record staged) → Discard pending → not applied; the negatives with their lines; the main list's hold; layout at 1280x720, 640x480, 854x480 @2 (+1280x720@3 scroll) with screenshots; `walkStutterFix` in A11yGameTest (Tab order Try → Undo → Dismiss, narration) | `gametest/StutterFixGameTest`, `A11yGameTest.walkStutterFix` | CI, 3 legs | AC5.5, AC5.6, AC5.7, AC5.10, AC5.11, AC5.12, AC5.16 |
+| B8 | The `v050-written/ws-s2/` set from a test (a staged and an applied fix, their entries, the staged op) and its `expect.json` | new `V050WrittenWsS2Test`, `src/test/resources/v050-written/ws-s2/` | the set compares (regenerates with `RIGTUNE_REGENERATE_FIXTURES=1`) | AC5.13 (fixture half) |
+| B9 | (cut 2nd) History's "Stutter fix: %s" label | `core/history/HistoryModel` (its own method), `client/ui/HistoryScreen` (one branch) | a HistoryModel test | |
+| B10 | AC5.14's calibration run on the dev PC under the game-test lock (Sodium Chunk Updates = Immediate, the teleport driver, 6 minutes; offered, applied, restarted, compared, undone), recorded in docs/v0.5/verification/stutter-fixes/; new thresholds go back as a WS-R follow-up | docs | the real run | AC5.14 |
+
+Cut order if needed (SPEC 5): the DH threads fix first (its seed stays in the rules; the client drops its key from
+`FixSpec.KEYS`), then B9, then multi-session accumulation.
+
+## Wave B as landed
+
+Commits (each task red first, then green): a3f2f27e plan; 7ab76d81 B1; 029745ee B2; a9d6c73f B3; c580b30c B4; de6cb21f B5;
+42165800 B6; b13a3cad B7; 1da8d2fe (the first CI run's findings: bars, status, the not-yet check); 097f9fd9 B8; b569d471
+(footprint: the specs cache held a replaced RulesDocument); 043bea9b B10's driver; merges of origin/feat/v0.5.0 (WS-L1,
+WS-H RW-20, WS-L2, WS-P2) in between, then d1623b1e (WS-S's RW-17/RW-18, WS-W2); f749ee53 the code review's fixes (below). Local: the full `:26.2:test` 2723 tests, 0 failures (after the review's fixes);
+`:26.2`/`:26.3` client, test and game-test sources compile.
+
+What landed, by file:
+- core: `StutterFacts.causeSpikes` (13th component, the 10- and 12-argument constructors kept) filled by `StutterAnalyzer`
+  through `FixEvidence.dominatedSpikes`; `ConditionEvaluator.causeSpikes` evaluates through `FixEvidence.causeSpikesAtLeast`;
+  `FixOffer.Reason.EXCLUDED`, `FixOffer.Offer.profile` (5-argument constructor kept), `sameChange`, `withProfile`;
+  `FixGate.check(report, excluded, busy, writable)`; `FixOffers.evaluate(..., excluded, ...)`; `FixTracker.SessionEnd.excluded`
+  and the "excluded" skip; `SessionOutcome.of` leaves settingsChanged spikes out; `FixConditions.withMeasurement`,
+  `settingsOf`; new `FixText` (every player-visible line, 50 `rigtune.stutter.fix.*` keys); `StutterView.fixes`/`tracked`.
+- client: `StutterFixService` filled (the cache, `inputs`/`evaluate` on the analysis, `apply`, `preview`, `dismiss`, `holds`,
+  `tracked`, `refresh`, `sessionEnded`); StutterService's C20 lines (`Machine.fixes`, `Analysis.fixes`, `view()`'s offers and
+  block, `shownFixes()`, `startSession`'s world kind and start conditions, `restartSession`, `end()`'s tracking call in its own
+  guard, `shutdown`'s bounded wait, the `analysisProbe`); `StutterMonitor.Capture.worldKind`/`fixAtStart`;
+  `StutterHooks.injectAnalysis`; new `ButtonRow`; StutterScreen's offer rows, block, `fixButtons()`/`status()` for the
+  tests; new dev-only `DevFixCalibration` (inert unless `-Drigtune.dev.stutterScript=fixcalibrate`).
+- tests: FixTextTest, StutterViewFixesTest, StutterFixServiceTest, V050WrittenWsS2Test, cases in FixEvidenceTest,
+  StutterAnalyzerTest, StutterConditionTest, FixOffersTest (the bundled r17 seeds), FixGateTest, FixTrackerTest,
+  SessionOutcomeTest; BusyTest's CALLERS gains StutterFixService; StutterFixGameTest; A11yGameTest.walkStutterFix.
+- fixtures: `src/test/resources/v050-written/ws-s2/` (history.json with the two `apply` entries, pending.json with the
+  staged PATCH_JSON op, stutter-fixes.json with a measuring and a staged record) and its expect.json (Journal, HistoryModel,
+  UndoPlanner on the applied entry, PendingActions, stutter-fixes.json unread).
+
+### Decisions and deviations (Wave B)
+1. **WS-B's M4 rule for C20** (coordinator): a session is *excluded* when it ran around a benchmark run (`aroundBenchmark`)
+   or Distant Horizons generated terrain in it (`DhGeneration.generating`, the benchmark's own threshold): an excluded
+   before side gets NotYet(EXCLUDED) ("…so it can't be compared. Play a session without either."), an excluded after
+   session is skipped, so no verdict is computed across one. This also keeps the DH-threads fix from being offered while
+   DH is generating terrain (the case its advice often sees); that fix is first in the cut order anyway.
+2. **settingsChanged** (WS-S's RW-11 tag): such a spike never counts as dominated by a cause, and `SessionOutcome` leaves it
+   out of the hitches and the lost time on both sides.
+3. **Labels**: FixText names settings through `RigTuneController.settingLabels()` (History's labels, `HistoryModel.Labels`);
+   the change line reuses `rigtune.rec.setting.title` ("%s: %s → %s").
+4. WS-K's `StutterFixesModelTest` pinned the contracts stub (causeSpikesAtLeast always UNKNOWN); its assertion now pins the
+   evaluation (FALSE for a measured cause that dominated nothing; UNKNOWN without facts and for an unknown cause).
+5. **appliedAt is stamped to the second**, as a capture's `startedAt` is (StutterCapture), so the session restarted right
+   after an immediate fix never reads as started before the apply (the M4 contract; StutterFixGameTest checks it).
+6. **Tab order follows the visual order (X6)** (the coordinator's decision L10; the coordinator amends AC5.11's text): the
+   block sits at the top of the list (sf §2.6), so with both on screen the stops are Undo this change…, Dismiss, then Try
+   this fix…; walkStutterFix pins that order and the Try narration.
+7. **A status too wide for the line under the title** (a fix's) opens the list as a wrapped row instead (seen truncated in
+   run 36365859147's 854x480 screenshot); Copy summary's short status stays where it was.
+8. **The Before/After bars' value is the hitch rate**; the lost time is its own line under them ("Time lost to stutter: %s
+   ms a minute before, %s ms after."), since both numbers didn't fit the bar's value column at 640x480 (run 36365859147).
+9. **Apply before returning to StutterScreen** (PreviewScreen's Confirm runnable), so its init already shows the new block.
+10. **Offers from a just-ended session**: the saved analysis made at a session's end has its facts and gets offers too (sf
+    §2.4.2 "live or just ended"); the before side's world kind comes from the capture's start, so leaving the world first
+    doesn't lose it.
+11. **The profile note** names the active *saved* profile when its settings contain the key and its switch is still in
+    effect (`ActiveProfile.inEffect`); an active template isn't named (its values come from the rules).
+12. **At quit** the last session's tracking is queued on the io chain like any other and `shutdown` waits for it (2 s,
+    bounded), so stutter-fixes.json is never read or written on the render thread (X8).
+13. **Footprint**: the fix service's specs cache holds the rules document weakly (run 36368258712 caught a replaced
+    RulesDocument kept alive: `rigtuneClassBytesIdle` 127,344 > 109,296, all of it a second copy of the rules). The service
+    is resolved from StutterService on the render thread at the first session start or view, never inside the startup
+    window (`v05RenderThreadResolve` null on all legs). A session start reads the settings (SettingsBridge, mtime-cached)
+    once for the start conditions.
+14. **V05ServicesTest** unchanged: `holds()` without a controller answers empty and reads no file.
+15. **B9 cut** (the cut order's 2nd): History's "Stutter fix: %s" label needs a line in RealController's history(), which
+    isn't a contracts extension point; History still shows the entry's row ("Render Distance: 12 → 10") with the reason
+    "Stutter Doctor: <advice title>".
+16. The DH threads fix stays (not cut): its seed is in r17 and the client handles it like the others.
+
+### The Wave B code review (coordinator's decisions, 2026-09-28 13:20)
+The coordinator's reviewer read c59b8b93..HEAD (0 high, 5 medium, 9 low); all fixed in f749ee53 except the optional L14,
+each medium with a test seen failing first (the failure named):
+- **M1** Apply never crashes the game: `StutterFixService.gone(offer, shown, effective)` is the last check, and a settings
+  read that throws (`SettingsBridge.read`, `effective()`, `ConfigTargets.all`) refuses the fix with "This fix can't be
+  applied now…" instead; `adding` is cleared in a `finally` unless its write was queued; a session restart that throws
+  only logs (the setting and the record stand; the next session is the first measured). StutterFixServiceTest
+  `m1ASettingThatCantBeReadRefusesTheFix` (red: the IllegalStateException escaped). A malformed sodium-options.json reads
+  as no value (`readSodium` never threw), so it refuses through the same line.
+- **M2** `holds()` reads history.json once per call (StutterFixServiceTest `m2HoldsReadHistoryOnce`, red: 6 reads for 3
+  fixes) through the `history` seam.
+- **M3** State and entries come from ONE read: `Journal.snapshot()` (an additive edit to Journal, WS-F's pattern:
+  `Snapshot(state, entries)`); `advanceAll` changes nothing when the read isn't OK or MISSING, so a fix never expires
+  because history.json failed a moment (StutterFixServiceTest `m3AFailedHistoryReadNeverExpiresAFix`, red: EXPIRED;
+  JournalTest `aSnapshotIsOneRead`).
+- **M4** `end()`'s queued save keeps `session.fixAtStart` in a local, never the capture (StutterServiceTest
+  `m4AQueuedSaveDoesNotHoldTheEndedCapture`: a weak reference to the ended capture clears while the save still waits on
+  a hand-drained io queue; red before).
+- **M5** StutterFixGameTest waits (bounded, 400 ticks) for the report the apply's rebuild makes, not 40 ticks.
+- **L6** `cached()` and `holds()` read `adding` before `records` (the io chain reloads before it clears `adding`).
+- **L7** `restartSession` keeps a paused session paused (`pause(true)`: the flag and PAUSE_BEGIN) (StutterServiceTest
+  `l7ARestartedSessionStaysPaused`).
+- **L8** The benchmark's capture, analysed on the render thread, gets no fix inputs (`machine(…, false)`): no pending.json
+  read there.
+- **L9** A new neutral line while the analysis or the records aren't there yet: "The Stutter Doctor isn't ready for this
+  yet. Try again in a moment." (`rigtune.stutter.fix.status.later`); a refusal shows in the label color, the green only
+  when the block now shows a new fix (`StutterScreen.statusColor()`).
+- **L10** Decision: Tab order follows the visual order (X6): Undo this change…, Dismiss, Try this fix… (decision 6
+  above); the coordinator amends AC5.11's text.
+- **L11** StutterFixGameTest's `finally` dismisses the fixes it made, puts stutter-fixes.json back as it was, clears
+  stutter.json (Clear) and writes back the sessions from before the test.
+- **L12** No Undo for a fix that expired with its journal entry gone: `FixTracker.advance` marks it (`lastSkip` =
+  `FixTracker.GONE`, never shown: only a tracking record shows its last skip) and `Record.undoable()` says so (FixTrackerTest
+  `aFixWhoseEntryIsGoneHasNothingToUndo`, FixStoreTest `anEntryGoneExpiryRoundTrips`).
+- **L13** DevFixCalibration's after step plays 60 s longer than the before step (450 s); while the record still measures
+  it quits without the Undo and the next launch plays on (found in the first AC5.14 attempt, below).
+- **L14** (optional) not done: the cached specs are replaced at the next analysis' `inputs()`; until then they hold three
+  entries' conditions, and FootprintGameTest's idle budget passes with them.
+- **RW-17 for C20** (the coordinator): a session the game throttled (idle) for longer than it was played is no comparison
+  side: as the before side `FixGate` answers `FixOffer.Reason.IDLE` ("This session was idle (throttled) longer than it
+  was played, so it can't be compared. Play a session without long breaks.", after EXCLUDED, before STORE); as an after
+  session it is skipped with `FixTracker.IDLE` ("…it was idle (throttled) longer than it was played."). `Fixes.idle` and
+  `SessionEnd.idle` carry it (the 6-argument SessionEnd constructor kept); a session without `idleSeconds` (0.4's, older)
+  counts as no idle. FixGateTest `aMostlyIdleSessionIsNoBeforeSide` and `theRealAfkCaptureIsNoBeforeSide` (the shape of
+  the real 2026-09-28 capture: 17.4 h AFK in 19 h, 96 hitches; 62,640 s idle against 4,569 s played is refused, while
+  the same capture saved before RW-17 as 67,209 s of gameplay would pass), FixTrackerTest `aMostlyIdleSessionIsSkipped`
+  (the same shape as an after session: skipped, where counted it would have diluted the rate to 0.09 hitches a minute
+  and read as "less"), FixTextTest.
+- Local after the fixes: the full `:26.2:test` 323 suites, 2723 tests, 0 failures; `:26.3` client, test and game-test
+  sources compile.
+
+### AC5.14: the calibration run (real, 2026-09-28)
+Full record: docs/v0.5/verification/stutter-fixes/README.md (numbers, φ, p, the logs). On the dev PC (26.2, RX 7800 XT,
+Sodium 0.9.2 with Chunk Updates = Immediate, the teleport driver `DevFixCalibration`), the Sodium fix was offered from
+real stutter (chunk building 92 % claimed, 235 spikes it dominated, 216 hitches in 380 s), applied (staged), applied by the
+helper at the restart, compared over 442 s of play (hitches 34.08 → 30.55 a minute, lost 1,057 → 941 ms a minute, φ 1.930,
+pLess 0.230, pMore 0.808: **no clear change**) and undone. The r17 thresholds stand (the offer fired with a wide margin
+both times; no WS-R follow-up). With Deferred no spike waits on chunk building any more (0.8 %, 2 spikes), but the
+teleport stutter stays, now unexplained: why the comparison uses outcomes, never cause shares. A first attempt was lost to
+a stale jar in the calibration instance and a window that lost focus (127 s of gameplay): fixed in the driver (L13).
+
+### Docs (for the docs workstream)
+- **README, features (Stutter Doctor)**: "One-click fixes: when the Stutter Doctor's advice points clearly at Sodium's Chunk
+  Updates, render distance or Distant Horizons' thread count, it can offer *Try this fix…*: a preview, then an ordinary
+  Apply you can undo in History. RigTune then compares your next play sessions under the same conditions (hitches and
+  time lost a minute, never cause shares) and says *less stutter*, *no clear change* or *more stutter*, always with both
+  numbers: a measured comparison, not proof. Everything stays on this PC; the fix is tracked in
+  `config/rigtune/stutter-fixes.json`."
+- **README, known limits**: the thresholds that decide when a fix is offered were checked on one PC (see
+  docs/v0.5/verification/stutter-fixes/: there the Sodium fix moved the stutter's cause but gave no clear change under
+  teleport play); a comparison needs the Stutter Doctor's monitor on and about 5-20 minutes of play under the same
+  conditions (same mods, window, world kind and settings); a session around a benchmark run, while Distant Horizons
+  generates terrain, or idle (throttled) longer than it was played doesn't count; History labels the entry as a plain
+  Apply ("Stutter Doctor: …").
+- **CHANGELOG [0.5.0], Added**: "Stutter Doctor: one-click fixes for three settings (Sodium's Chunk Updates, render distance,
+  Distant Horizons' threads), each behind a three-part evidence check, previewed, undoable, and followed by an honest
+  before/after comparison of your next play." **Compatibility**: "A fix is an ordinary Apply entry; after a downgrade to
+  0.4.0 it shows as one, a staged fix is applied by 0.4.0's helper, and Undo this works. stutter-fixes.json is new and
+  ignored by older versions."
+- **DESIGN.md, Stutter Doctor (0.5)**: the three-layer gate (the advice fired; `FixGate`'s floor: a monitor session, not
+  excluded, not mostly idle, ≥ 8 hitches, ≥ 300 s, one fix at a time, the store writable; the rules' fail-closed
+  `evidence` with `causeSpikesAtLeast`); `FixSpec`'s allowlist; the fix as `RealController.apply` of one SetSetting
+  (journal, Undo this, a staged PATCH op for Sodium/DH); `FixTracker`'s states (staged → measuring → compared; undone, not
+  applied, replaced, expired) and "same conditions" (`FixConditions`); `FixComparison`'s quasi-Poisson test (φ over 60-s
+  bins, h/φ rounded half up, one-sided exact binomial, LESS ≤ 2/3 and p ≤ 0.05 with lost time not higher, MORE ≥ 3/2 and
+  p ≤ 0.05); WS-B's rule that an excluded session (around a benchmark, DH generating) never counts, and RW-17's for a
+  mostly idle one; settingsChanged spikes left out; `FixHold` on the main list (none after "more"); threading
+  (stutter-fixes.json only off the render thread, writes on StutterService's io chain; history.json read once per use
+  with `Journal.snapshot`, a failed read changes no record); appliedAt stamped before the session restart.
+
+### Residuals
+- B9 cut: History shows a fix as a plain Apply entry (reason "Stutter Doctor: <advice title>").
+- The render-distance and DH fixes have no real run (CI's StutterFixGameTest covers the render-distance path on 3 legs;
+  the DH path is unit-tested only).
+- L14 not done (see the review above).
+- Only a fix that expires *because* its journal entry is gone loses its Undo button; a fix that expired by age or skips,
+  or a compared one, whose entry History's 50-entry cap drops later keeps the button (UndoScreen then finds nothing).
+
+### UNVERIFIED
+- The thresholds on other PCs (one real run, one driver; AC5.14's README).
+- Real 26.3 / Vulkan play (CI covers the flow with injected analyses on 26.2 GL, 26.3 GL and 26.3 Vulkan).
+
+### AC status (Wave B)
+| AC | status | evidence |
+|---|---|---|
+| AC5.3 | verified: each condition alone (unit), the one-line blocks on the real screen, the idle block (RW-17) | FixGateTest, FixOffersTest, FixTextTest, StutterFixGameTest `negatives`/`notYet` |
+| AC5.4 | verified | StutterConditionTest, StutterAnalyzerTest, FixEvidenceTest |
+| AC5.5 | verified (3 legs): the preview lists one change, Cancel writes nothing, Apply makes one entry and one record; Sodium: one staged PATCH_JSON op | StutterFixGameTest |
+| AC5.6 | verified: the block's Undo → undone, Discard pending → not applied | StutterFixGameTest, FixTrackerTest |
+| AC5.7 | verified: unit; the verdict line with both rates and the Undo button on screen | FixComparisonTest, FixTextTest, StutterFixGameTest |
+| AC5.8 | verified (the idle skip added) | FixConditionsTest, FixTrackerTest |
+| AC5.9 | verified | FixStoreTest, V05StoreShellsTest |
+| AC5.10 | verified (unit); on the real main list when the stub tier proposes a longer render distance (the count is logged) | FixHoldTest, V05HooksTest, StutterFixGameTest `holdOnTheMainList` |
+| AC5.11 | verified: 3 sizes + 1280x720@3 scrolled, the Tab order Undo, Dismiss, Try (L10: the visual order), the Try narration | StutterFixGameTest `checkLayout`, A11yGameTest `walkStutterFix` |
+| AC5.12 | verified: network off, the bundled r17, the analyses injected through `StutterHooks.injectAnalysis` | StutterFixGameTest |
+| AC5.13 | the `v050-written/ws-s2/` set and its expect.json (compat040 in CI); the E2E downgrade run is WS-E's | V050WrittenWsS2Test |
+| AC5.14 | verified (real run): offered, applied, restarted, compared (no clear change), undone; thresholds stand | docs/v0.5/verification/stutter-fixes/ |
+| AC5.15 | verified (client side); the updater's side is WS-R's | FixSpecTest, FixStoreTest |
+| AC5.16 | FootprintGameTest and FrameHookBudgetTest pass with no budget change (CI, all legs) | CI |
+| AC5.1, AC5.2 | WS-R | |
