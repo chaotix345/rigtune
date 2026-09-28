@@ -1,0 +1,20 @@
+// Local only (docs/v0.5/SPEC.md AC3f.4; tools/e2e/dhnote/dh_server_note.py): adds to the node project named by
+// -PdhServer.node (e.g. 26.2) a Loom production server task, dhServer, run in -PdhServer.dir with the mod jars of
+// -PdhServer.mods (paths joined by File.pathSeparator), and gives e2eClient the fixed user name -PdhServer.username, so the
+// server's ops.json can name it. Never in build.gradle or CI. The script writes server.properties (a free ephemeral port,
+// never 25565) before each start.
+allprojects { project ->
+	project.afterEvaluate {
+		if (project.path != ":" + project.findProperty("dhServer.node")) {
+			return
+		}
+		def type = project.plugins.findPlugin("net.fabricmc.fabric-loom").class.classLoader.loadClass("net.fabricmc.loom.task.prod.ServerProductionRunTask")
+		project.tasks.register("dhServer", type) { task ->
+			task.runDir.set(new File(project.property("dhServer.dir").toString()))
+			task.mods.setFrom(project.property("dhServer.mods").toString().split(File.pathSeparator).findAll { !it.isEmpty() }.collect { new File(it) })
+		}
+		project.tasks.named("e2eClient") { task ->
+			task.programArgs.addAll("--username", project.property("dhServer.username").toString())
+		}
+	}
+}

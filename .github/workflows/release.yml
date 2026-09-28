@@ -7,8 +7,8 @@ name: release
 # docs/research/v0.5/verification-gaps.md §5), so nothing is rebuilt after `build` (docs/v0.5/SPEC.md 3c).
 #
 # A workflow_dispatch is a dry run and publishes nothing: the tag is v<mod_version>, the same guard, build, staging and
-# E2E run, `gh release create` is only printed, Modrinth gets Minotaur's debug mode (-PmodrinthDryRun: the payload is
-# logged, no API call, no token), and the verify step checks an existing release (`verify-tag`), reading only.
+# E2E run, `gh release create` is only printed, Modrinth gets tools/modrinth_project.py's --dry-run (the payload is
+# printed, no API call, no token), and the verify step checks an existing release (`verify-tag`), reading only.
 on:
   push:
     tags:
@@ -139,25 +139,20 @@ jobs:
       # that use it, so the build (Gradle, its plugins, dependencies and tests) never sees it
       # (review 6, security-1).
       MODRINTH_TOKEN_SET: ${{ secrets.MODRINTH_TOKEN != '' }}
+    # No JDK and no Gradle here (review-11 CI-2): the Modrinth upload is tools/modrinth_project.py (stdlib Python).
     steps:
+      # Nothing here pushes, and gh takes GITHUB_TOKEN from its step's environment (review-11 SEC-6).
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
-      - name: Set up the JDK (network)
-        id: jdk
-        uses: actions/setup-java@v6
-        continue-on-error: true
-        with:
-          distribution: microsoft
-          java-version: '25.0.3'
-      - name: Wait before the JDK retry (network)
-        if: steps.jdk.outcome == 'failure'
-        run: sleep 30
-      - name: Set up the JDK, retry (network)
-        if: steps.jdk.outcome == 'failure'
-        uses: actions/setup-java@v6
-        with:
-          distribution: microsoft
-          java-version: '25.0.3'
+      # A release publishes to Modrinth too (SPEC 3c): a tag push without the token fails before anything is public,
+      # never a GitHub-only release (review-11 CI-5). A fork's tag push only gets the notice below.
+      - name: A tag push needs the Modrinth token
+        if: ${{ github.event_name == 'push' && env.MODRINTH_TOKEN_SET != 'true' && !github.event.repository.fork }}
+        run: |
+          echo "::error::The MODRINTH_TOKEN repo secret isn't set; a release publishes to Modrinth too, so nothing is published."
+          exit 1
 
       - name: The staged release files (the jars the E2E tested)
         uses: actions/download-artifact@v7
@@ -201,12 +196,14 @@ jobs:
             "${files[@]}"
 
       # --- Modrinth publishing ---
-      # One Modrinth version per Minecraft version (build.gradle's `modrinth {}` block; versionType
-      # release only for a plain release id), for every versions/*/ node, so a new node needs no
-      # edit here. Each node uploads the exact file the release step attached (the staged copy,
-      # passed as -PmodrinthFile). A failure is recorded as an error and the loop carries on with
-      # the others; the step fails at the end if any node failed. A dry run passes -PmodrinthDryRun
-      # and no token: Minotaur logs the payload and calls nothing.
+      # One Modrinth version per Minecraft version (the payload build.gradle's `modrinth {}` block
+      # sent; versionType release only for a plain release id), for every versions/*/ node, so a new
+      # node needs no edit here. tools/e2e/modrinth_publish.py uploads the exact staged file the
+      # release step attached, through tools/modrinth_project.py upload-version (stdlib Python, no
+      # Gradle: review-11 CI-2) with its SHA256SUMS digest, each node wrapped in tools/ci/retry.sh;
+      # the upload is idempotent (an existing version_number is left alone), so a retry is safe. A
+      # failure is recorded as an error and the others still go; the step fails at the end if any
+      # node failed. A dry run passes --dry-run and no token: the payload is printed, nothing called.
       # `if: !cancelled()` (rather than the default `if: success()`) lets the verify step below run
       # even when this one failed.
       #
@@ -230,30 +227,13 @@ jobs:
           MODRINTH_TOKEN: ${{ github.event_name == 'push' && secrets.MODRINTH_TOKEN || '' }}
         run: |
           set -u
-          staged="$RUNNER_TEMP/release-files"
           dry=()
           if [ "$DRY_RUN" = true ]; then
-            dry=(-PmodrinthDryRun)
+            dry=(--dry-run)
           fi
-          status=0
-          for dir in versions/*/; do
-            mc=$(basename "$dir")
-            mapfile -t found < <(find "$staged" -maxdepth 1 -name "rigtune-*+mc${mc}.jar" 2>/dev/null)
-            if [ "${#found[@]}" -ne 1 ]; then
-              echo "::error::expected exactly one rigtune-*+mc${mc}.jar to publish, found: ${found[*]:-none}"
-              status=1
-              continue
-            fi
-            # -x assemble: Minotaur's task depends on it, but the upload is the staged file, so nothing is built here.
-            if ./gradlew ":$mc:modrinth" "-PmodrinthFile=${found[0]}" -x assemble "${dry[@]}"; then
-              echo "published: $mc (${found[0]})${dry[*]:+ (dry run: payload only)}"
-            else
-              echo "::error::Modrinth publish failed for $mc"
-              status=1
-            fi
-          done
-          exit "$status"
+          python3 tools/e2e/modrinth_publish.py --staged "$RUNNER_TEMP/release-files" --tag "$TAG" --work "$RUNNER_TEMP" "${dry[@]}"
 
+      # Only a fork's tag push gets here without the token (a real one failed above).
       - name: Notice if Modrinth publishing was skipped
         if: ${{ env.MODRINTH_TOKEN_SET != 'true' && env.DRY_RUN != 'true' }}
         run: echo "::notice::MODRINTH_TOKEN repo secret is not set; skipped publishing to Modrinth. GitHub release only."

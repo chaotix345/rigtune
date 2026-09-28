@@ -4,6 +4,7 @@ import io.github.chaotix345.rigtune.core.RepoFiles;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
+import io.github.chaotix345.rigtune.core.apply.TestExecutors;
 import io.github.chaotix345.rigtune.core.apply.TestJars;
 import io.github.chaotix345.rigtune.core.history.V010Fixtures;
 import org.junit.jupiter.api.AfterEach;
@@ -19,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 // docs/v0.5/SPEC.md 2H RW-3 (AC2H.5, preLaunch's half): at the first 0.4.0 start the player got "2 staged RigTune
 // change(s) were not applied; they will be retried at the next exit", two WARNs replaying a three-day-old lock failure and
@@ -95,6 +97,23 @@ class PreLaunchStaleOpsTest {
 		RigTunePreLaunch.readState(config(), false, null, () -> Map.of("distanthorizons", Set.of(DH), "lithium", Set.of("lithium-0.20.jar")));
 
 		assertEquals(2, RigTunePreLaunch.takeLeftoverOps());
+	}
+
+	// review 11 APPLY-1: a 0.5 helper killed after both renames of an update, before last-apply.json. Its record shows the
+	// group started, so it is counted (the next exit reports it done earlier) and never taken for one installed another way.
+	@Test
+	void aGroupTheHelperStartedIsNeverStale() throws IOException {
+		Path old = TestJars.modJar(mods().resolve("lithium-0.20.jar"), "lithium");
+		Path download = TestJars.modJar(mods().resolve("lithium-0.21.jar" + PendingActions.PENDING_SUFFIX), "lithium");
+		Path pending = PendingActions.defaultPath(config());
+		PendingActions.create(1, mods(), config(), PendingActions.group(Op.disableFile(old),
+				Op.enableFile(download, mods().resolve("lithium-0.21.jar")).withModId("lithium"))).save(pending);
+		assertThrows(TestExecutors.Killed.class, () -> TestExecutors.killedAfter(download::equals).run(PendingActions.load(pending), pending));
+
+		RigTunePreLaunch.readState(config(), false, null, () -> Map.of("lithium", Set.of("lithium-0.21.jar")));
+
+		assertEquals(2, RigTunePreLaunch.takeLeftoverOps());
+		assertEquals(Set.of(), RigTunePreLaunch.staleOps);
 	}
 
 	// No jar is opened: an enable staged without a mod id is judged by its files alone, and a check that fails counts

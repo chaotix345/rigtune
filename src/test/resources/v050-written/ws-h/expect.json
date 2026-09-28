@@ -12,6 +12,14 @@
       "file": "history.json",
       "entries": 1,
       "unknownKinds": 0
+    },
+    {
+      "class": "ApplyResult",
+      "file": "last-apply.json",
+      "state": "OK",
+      "results": 2,
+      "unchanged": true,
+      "reasons": 2
     }
   ]
 }

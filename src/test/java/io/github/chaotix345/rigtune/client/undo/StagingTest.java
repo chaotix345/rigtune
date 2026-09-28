@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client.undo;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.client.ConfigTargets;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
+import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.HeldLock;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
@@ -454,6 +455,21 @@ class StagingTest {
 		assertEquals(Staging.StaleDrop.NONE, staging.dropStale(Map.of("distanthorizons", Set.of(DH))));
 		assertEquals(before, Files.readString(pending));
 		assertTrue(changesOf("e1").stream().allMatch(c -> JournalChange.STAGED.equals(c.status())));
+	}
+
+	// review 11 APPLY-1: an ungrouped enable the last run did (its rename in effect, OK in last-apply.json) is RigTune's own,
+	// keyed "op:<id>": never taken for one installed another way.
+	@Test
+	void anUngroupedEnableTheLastRunDidIsNeverStale() throws IOException {
+		Op add = Op.enableFile(pendingJar("a.jar", "a"), mods.resolve("a.jar")).withModId("a");
+		assertNull(add.group());
+		PendingActions.create(1, mods, config, List.of(add)).save(pending);
+		Files.move(mods.resolve("a.jar" + PendingActions.PENDING_SUFFIX), mods.resolve("a.jar"));
+		new ApplyResult("2026-09-28T10:00:00Z", List.of(new ApplyResult.OpResult(add, ApplyResult.Status.OK, "Enabled a.jar",
+				mods.resolve("a.jar").toString()))).save(ApplyResult.defaultPath(config));
+
+		assertEquals(Staging.StaleDrop.NONE, staging.dropStale(Map.of("a", Set.of("a.jar"))));
+		assertEquals(List.of(add.id()), PendingActions.load(pending).ops().stream().map(Op::id).toList());
 	}
 
 	// A group the helper left half done (killed between two renames) is never dropped, whatever StaleOps would say; an

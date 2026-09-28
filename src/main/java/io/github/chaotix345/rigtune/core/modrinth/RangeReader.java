@@ -306,12 +306,14 @@ public final class RangeReader implements AutoCloseable {
 				.GET().build();
 		BoundedHttp.Progress progress = new BoundedHttp.Progress();
 		x.requests++;
+		// Reserved first (review 11 SEC-4): a request that fails, over its cap or cut off, costs what it may have taken.
+		bytesLeft -= length;
 		HttpResponse<byte[]> response = BoundedHttp.send(http(), request,
 				info -> info.statusCode() == 206 ? BoundedHttp.bytes(length, false, progress) : BoundedHttp.bytes(0, true, progress), progress,
 				limits.stall(), left.compareTo(limits.requestDeadline()) < 0 ? left : limits.requestDeadline());
 		byte[] body = response.body();
 		x.bytes += body.length;
-		bytesLeft -= body.length;
+		bytesLeft += length - body.length;
 		if (response.statusCode() != 206) {
 			throw new IOException("HTTP " + response.statusCode() + " to " + range);
 		}

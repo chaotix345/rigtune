@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -66,6 +68,10 @@ public final class Journal implements ChangeRecorder {
 	private final Log log;
 	private final Duration lockWait;
 	private final Supplier<JournalEntry> firstEntry;
+	// review 11 PERF-1/PERF-2 (WS-H, a marked edit): how many times this Journal read history.json, for the tests that
+	// count reads; and changed it, for JournalCache (a write here makes a cached snapshot stale whatever the timestamps say).
+	private final AtomicInteger reads = new AtomicInteger();
+	private final AtomicLong writes = new AtomicLong();
 
 	public Journal(Path configDir, String rigtuneVersion, String mcVersion, Log log) {
 		this(configDir, rigtuneVersion, mcVersion, log, LOCK_WAIT, null);
@@ -100,6 +106,18 @@ public final class Journal implements ChangeRecorder {
 
 	public String mcVersion() {
 		return mcVersion;
+	}
+
+	public int reads() {
+		return reads.get();
+	}
+
+	long writes() {
+		return writes.get();
+	}
+
+	Path path() {
+		return file;
 	}
 
 	// Empty when the file is missing, corrupt or from a newer RigTune.
@@ -182,7 +200,10 @@ public final class Journal implements ChangeRecorder {
 				case NEWER -> {
 					return false;
 				}
-				case CORRUPT -> Files.move(file, backupName());
+				case CORRUPT -> {
+					Files.move(file, backupName());
+					writes.incrementAndGet();
+				}
 				case UNREADABLE -> {
 					return false;
 				}
@@ -194,6 +215,7 @@ public final class Journal implements ChangeRecorder {
 				return true;
 			}
 			AtomicFiles.writeString(file, GSON.toJson(new HistoryFile(FORMAT_VERSION, next)));
+			writes.incrementAndGet();
 			return true;
 		}
 	}
@@ -224,6 +246,7 @@ public final class Journal implements ChangeRecorder {
 		if (!Files.exists(file)) {
 			return new Read(State.MISSING, List.of());
 		}
+		reads.incrementAndGet();
 		String json;
 		try {
 			json = Files.readString(file, StandardCharsets.UTF_8);

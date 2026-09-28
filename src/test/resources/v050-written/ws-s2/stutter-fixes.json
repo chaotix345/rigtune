@@ -35,7 +35,9 @@
           "vanilla.renderDistance": "12",
           "vanilla.simulationDistance": "10",
           "sodium.performance.chunk_build_defer_mode": "ZERO_FRAMES"
-        }
+        },
+        "backend": "OPENGL",
+        "gpu": "AMD Radeon RX 7800 XT"
       },
       "after": {
         "sessions": 1,
@@ -87,7 +89,9 @@
           "vanilla.renderDistance": "12",
           "vanilla.simulationDistance": "10",
           "sodium.performance.chunk_build_defer_mode": "ZERO_FRAMES"
-        }
+        },
+        "backend": "OPENGL",
+        "gpu": "AMD Radeon RX 7800 XT"
       },
       "skipped": 0,
       "dismissed": false

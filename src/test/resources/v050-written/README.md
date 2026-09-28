@@ -89,14 +89,15 @@ check kind it doesn't know, or on a check of a file the set doesn't hold. One fi
 
 - `class`: 0.4.0's class that reads the file (Journal, HistoryModel, UndoPlanner, BenchmarkHistory, PendingActions,
   ApplyHelper, ClientSettings, StutterStore, StutterSummary (the Copy summary renders every session), AwarenessStore,
-  ProfileStore, ServerLimitsStore, RestoreMarker, StartupTimesStore), or
+  ProfileStore, ServerLimitsStore, RestoreMarker, StartupTimesStore, ApplyResult (last-apply.json: `results`, `unchanged`
+  (0.4.0's restart reconcile moves no journal status), `reasons` (History's failures with a reason))), or
   `Unread` for a file 0.4.0 never opens.
 - `file`: the file under `config/rigtune/` it reads.
 - Expectations (each optional; at least one per check): `state` (the load state, `OK`), `entries`/`runs`/`ops`/
   `sessions` (counts after loading), `unknownKinds` (HistoryModel rows of a kind 0.4.0 doesn't know), `noBad` (no
   `<file>.bad` appears), `undoThis` (Undo this on that entry id plans without a problem) with `problems` (the plan's
   problem count), `appliesGroup` (0.4.0's helper applies that group at its exit, as it does a held group, AC4d.3),
-  `keeps` (top-level fields a 0.4.0 rewrite of the file keeps; for ClientSettings, a 0.4.0 save keeps them with their values), `unchanged` (the file is byte-identical after 0.4.0 ran).
+  `keeps` (top-level fields a 0.4.0 rewrite of the file keeps; for ClientSettings, a 0.4.0 save keeps them with their values), `dismissedContains` (AwarenessStore: these keys are still dismissed, in 0.4.0's view and in the file, after 0.4.0 dismisses 10 more on a copy), `unchanged` (the file is byte-identical after 0.4.0 ran).
 - A new check kind is added to the interpreter by WS-E first (through the coordinator after WS-E has merged).
 
 ## One regeneration switch

@@ -2,11 +2,15 @@ package io.github.chaotix345.rigtune.client.undo;
 
 import io.github.chaotix345.rigtune.client.ui.HistoryScreen;
 import io.github.chaotix345.rigtune.core.RepoFiles;
+import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
+import io.github.chaotix345.rigtune.core.apply.PendingActions;
+import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.history.ApplyFailures;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
+import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -56,7 +60,11 @@ class HistoryStartupRw20Test {
 		HistoryModel.View view = HistoryModel.build(journal.state(), journal.entries(), ApplyFailures.byOpId(lastApply, List.of(instance.resolve("mods"), config)),
 				HistoryModel.Labels.RAW);
 		List<HistoryModel.Change> abandoned = view.entries().getFirst().changes().stream().filter(c -> JournalChange.ABANDONED.equals(c.status())).toList();
-		assertEquals(List.of("fabric-26.2.jar", "DistantHorizons-3.3.2-26.2-fabric-neoforge.jar"), abandoned.stream().map(HistoryModel.Change::file).toList());
+		// One "Updated" row (review 11 COMPAT-4: History pairs 0.1.0's update although its disable has no mod id).
+		assertEquals(List.of(HistoryModel.Row.UPDATED), abandoned.stream().map(HistoryModel.Change::row).toList());
+		assertEquals(List.of("fabric-26.2.jar"), abandoned.stream().map(HistoryModel.Change::file).toList());
+		assertEquals(List.of("DistantHorizons-3.3.2-26.2-fabric-neoforge.jar"), abandoned.stream().map(HistoryModel.Change::newFile).toList());
+		assertEquals(2, abandoned.getFirst().changeIds().size());
 		for (HistoryModel.Change change : abandoned) {
 			assertEquals("installed another way", change.failure().reason());
 			TranslatableContents text = (TranslatableContents) HistoryScreen.failureText(change).getContents();
@@ -73,6 +81,43 @@ class HistoryStartupRw20Test {
 
 		assertArrayEquals(history, Files.readAllBytes(Journal.file(config)), "a second start writes nothing");
 		assertArrayEquals(last, Files.readAllBytes(ApplyResult.defaultPath(config)));
+	}
+
+	// review 11 PERF-1: preLaunch runs on the render thread, and last-apply.json stays until the next helper run, so every
+	// start reads history.json once (the reconcile's), whether or not it relabels a claim.
+	@Test
+	void everyStartReadsTheJournalOnce() throws IOException {
+		Path config = install();
+		Journal first = journal(config);
+		HistoryStartup.run(config, first, true);
+		assertEquals(1, first.reads());
+
+		Journal next = journal(config);
+		HistoryStartup.run(config, next, true);
+		assertEquals(1, next.reads());
+	}
+
+	// review 11 APPLY-2: 0.5's own helper reports a disable whose jar the player removed by hand as a bare SKIPPED "already
+	// gone"; the starts after it leave that change APPLIED (not "Not applied: installed another way") and its result as is.
+	@Test
+	void aV050DisableOfAJarAlreadyGoneStaysApplied() throws IOException {
+		Path mods = Files.createDirectories(instance.resolve("mods"));
+		Path config = Files.createDirectories(instance.resolve("config"));
+		Path pending = PendingActions.defaultPath(config);
+		Op disable = Op.disableFile(mods.resolve("foo-1.0.jar"));
+		PendingActions.create(1, mods, config, List.of(disable)).save(pending);
+		journal(config).record("e1", JournalEntry.APPLY,
+				List.of(JournalChange.file(JournalChange.DISABLE, "foo", "foo-1.0.jar", JournalChange.STAGED, disable.id(), disable.group())));
+		ApplyResult run = new ApplyExecutor(2, 1).run(PendingActions.load(pending), pending);
+		assertEquals(ApplyResult.Status.SKIPPED_ALREADY_DONE, run.results().getFirst().status());
+		assertEquals(null, run.results().getFirst().resultPath());
+		assertEquals(JournalChange.APPLIED, journal(config).entries().getLast().changes().getFirst().status());
+
+		HistoryStartup.run(config, journal(config), true);
+		HistoryStartup.run(config, journal(config), true);
+
+		assertEquals(JournalChange.APPLIED, journal(config).entries().getLast().changes().getFirst().status());
+		assertEquals(ApplyResult.Status.SKIPPED_ALREADY_DONE, ApplyResult.load(ApplyResult.defaultPath(config)).results().getFirst().status());
 	}
 
 	// preLaunch without the lock (the helper may still be running): nothing is done.

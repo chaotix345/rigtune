@@ -6,7 +6,6 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.UnfinishedGroups.Rename;
 import io.github.chaotix345.rigtune.core.history.HistoryUpdates;
 import io.github.chaotix345.rigtune.core.history.Journal;
-import io.github.chaotix345.rigtune.core.history.PartlyApplied;
 
 import java.io.IOException;
 import java.nio.file.DirectoryNotEmptyException;
@@ -377,29 +376,52 @@ public final class ApplyExecutor {
 		return indexes.stream().map(plan.ops()::get).toList();
 	}
 
-	// Every op of a group with a mod-file op, except a group RigTune's own records show half done or done already (a
-	// recorded rename in effect, a failed rollback PartlyApplied finds, an op the last run did): holding one would leave a
-	// mod missing (its old jar disabled, its replacement never enabled) until the player chose, and Discard can't drop it
-	// either, so it is finished (or rolled back) as in 0.4.
+	// Every op of a group with a mod-file op, except a group RigTune's own records prove it started: a rename recorded as
+	// done (Rename.done) and still in effect, or an op the last run did (last-apply.json). Holding one would leave a mod
+	// missing (its old jar disabled, its replacement never enabled) until the player chose, so it is finished (or rolled
+	// back) as in 0.4. Files that only look half done prove nothing (review-11 APPLY-5): the launcher's own disable gives the
+	// same .disabled name as RigTune's, so a record 0.4 wrote (no done mark), a rename recorded but put back, and 0.1-0.3's
+	// failed rollbacks (no record at all) are held, where the notice offers them.
+	// Discard and the start-up's stale check keep a broader set (startedGroups, review-11 APPLY-1): for them keeping a group
+	// is the safe side.
 	private static Set<Integer> heldIndexes(List<Op> ops, Path modsDir, List<Rename> recorded, Map<String, OpResult> doneBefore) {
-		Set<String> files = new HashSet<>();
-		try (Stream<Path> listing = Files.list(modsDir)) {
-			listing.forEach(f -> files.add(f.getFileName().toString()));
-		} catch (IOException | RuntimeException e) {
-			// Nothing is known to be half done: every file group is held.
-		}
-		Set<String> partly = PartlyApplied.groups(ops, files, recorded);
 		Set<Integer> out = new HashSet<>();
 		for (List<Integer> members : groups(ops).values()) {
 			if (members.stream().noneMatch(i -> isFileOp(ops.get(i)))) {
 				continue;
 			}
-			Op first = ops.get(members.getFirst());
-			boolean started = first != null && first.group() != null && partly.contains(first.group())
-					|| !earlierRenames(ops, members, modsDir, recorded).isEmpty()
+			boolean started = !earlierRenames(ops, members, modsDir, recorded, true).isEmpty()
 					|| members.stream().anyMatch(i -> isFileOp(ops.get(i)) && doneByLastRun(ops.get(i), doneBefore) != null);
 			if (!started) {
 				out.addAll(members);
+			}
+		}
+		return out;
+	}
+
+	// review 11 APPLY-1 (WS-H, a marked edit): a group RigTune's own records show it started (a recorded rename in effect
+	// that isn't recorded as put back, whether or not 0.5 marked it done, or an op the last run did), for startedGroups.
+	// Broader than the hold's rule (heldIndexes counts only done-marked renames, APPLY-5): for Discard and the stale check,
+	// keeping a group is the safe side.
+	private static boolean startedByRecords(List<Op> ops, List<Integer> members, Path modsDir, List<Rename> recorded, Map<String, OpResult> doneBefore) {
+		return !earlierRenames(ops, members, modsDir, recorded, false).isEmpty()
+				|| members.stream().anyMatch(i -> isFileOp(ops.get(i)) && doneByLastRun(ops.get(i), doneBefore) != null);
+	}
+
+	// review 11 APPLY-1 (WS-H, a marked edit): the groups (an op without one: "op:<id>") the records next to pendingFile
+	// show started, by heldIndexes' rule, so neither the start-up's stale check (StaleOps) nor Discard drops them: the next
+	// exit reports them "Already done earlier".
+	public static Set<String> startedGroups(PendingActions plan, Path pendingFile) {
+		Path configDir = InstanceDirs.configDirOf(pendingFile);
+		List<Op> ops = plan.ops();
+		List<Rename> recorded = UnfinishedGroups.recorded(configDir);
+		Map<String, OpResult> doneBefore = doneBefore(ApplyResult.defaultPath(configDir));
+		Set<String> out = new HashSet<>();
+		for (List<Integer> members : groups(ops).values()) {
+			Op first = ops.get(members.getFirst());
+			if (first != null && (first.group() != null || first.id() != null)
+					&& startedByRecords(ops, members, InstanceDirs.modsDirOf(pendingFile), recorded, doneBefore)) {
+				out.add(first.group() != null ? first.group() : "op:" + first.id());
 			}
 		}
 		return out;
@@ -547,7 +569,7 @@ public final class ApplyExecutor {
 		order.sort(Comparator.comparingInt(i -> rank(ops.get(i))));
 		Op first = ops.get(order.getFirst());
 		String group = first == null ? null : first.group() != null ? first.group() : first.id() != null ? "op:" + first.id() : null;
-		Map<Integer, Undo> earlier = earlierRenames(ops, order, modsDir, unfinished.all());
+		Map<Integer, Undo> earlier = earlierRenames(ops, order, modsDir, unfinished.all(), false);
 
 		String[] problems = new String[ops.size()];
 		String[] modIds = new String[ops.size()];
@@ -572,7 +594,7 @@ public final class ApplyExecutor {
 				out[i] = new OpResult(ops.get(i), Status.FAILED,
 						problems[i] != null ? "Refused: " + problems[i] : "Not applied: another change in its group was refused");
 			}
-			if (rollBack(ops, new ArrayList<>(earlier.values()), "another change in its group was refused", out)) {
+			if (rollBack(ops, new ArrayList<>(earlier.values()), "another change in its group was refused", out, unfinished, group)) {
 				unfinished.finish(group);
 			}
 			return;
@@ -627,6 +649,9 @@ public final class ApplyExecutor {
 					failed = k;
 				} else if (applied.undo() != null) {
 					undos.add(applied.undo());
+					if (done == null) {
+						unfinished.mark(group, op.id(), true);
+					}
 				}
 			}
 			if (failed < 0) {
@@ -652,7 +677,7 @@ public final class ApplyExecutor {
 				}
 				another = false;
 			}
-			boolean putBack = rollBack(ops, undos, reason, out);
+			boolean putBack = rollBack(ops, undos, reason, out, unfinished, group);
 			halfApplied = !putBack;
 			earlier = byIndex(undos.stream().filter(u -> leftHalfApplied(out[u.index()])).toList());
 			if (another && state.pause()) {
@@ -670,11 +695,16 @@ public final class ApplyExecutor {
 
 	// The recorded renames of this group's ops that an earlier run didn't finish or undo: each still in effect (its new
 	// name exists, its old one doesn't), matched to the op by id and paths whichever group recorded it, both names directly
-	// in the mods folder, so a record can never make the helper rename anything the op itself wouldn't.
-	private static Map<Integer, Undo> earlierRenames(List<Op> ops, List<Integer> order, Path modsDir, List<Rename> recorded) {
+	// in the mods folder, so a record can never make the helper rename anything the op itself wouldn't. A rename recorded
+	// as put back (done = false) never counts (review-11 APPLY-5: the launcher's own disable leaves the same files);
+	// provenOnly counts only those recorded as done, not a record 0.4 wrote.
+	private static Map<Integer, Undo> earlierRenames(List<Op> ops, List<Integer> order, Path modsDir, List<Rename> recorded, boolean provenOnly) {
 		Map<Integer, Undo> out = new LinkedHashMap<>();
 		for (int i : order) {
 			for (Rename r : recorded) {
+				if (provenOnly ? !Boolean.TRUE.equals(r.done()) : Boolean.FALSE.equals(r.done())) {
+					continue;
+				}
 				Undo undo = inEffect(ops.get(i), i, r, modsDir);
 				if (undo != null) {
 					out.put(i, undo);
@@ -704,21 +734,22 @@ public final class ApplyExecutor {
 		}
 	}
 
-	// This pass's renames in order: the earlier run's still in effect, then each one this pass will do (an enable whose
-	// download is there and whose name is free, a disable whose jar is there, with the .disabled name it gets in `targets`).
+	// This pass's renames in order: the earlier run's still in effect (done), then each one this pass will do, not done
+	// yet (an enable whose download is there and whose name is free, a disable whose jar is there, with the .disabled name
+	// it gets in `targets`). Each is marked done in the record once it happens (runGroup).
 	private static List<Rename> renames(List<Op> ops, List<Integer> order, Map<Integer, Undo> earlier, Map<Integer, Path> targets) {
 		List<Rename> out = new ArrayList<>();
 		for (int i : order) {
 			Op op = ops.get(i);
 			Undo done = earlier.get(i);
 			if (done != null) {
-				out.add(new Rename(op.id(), done.back().toString(), done.moved().toString()));
+				out.add(new Rename(op.id(), done.back().toString(), done.moved().toString(), true));
 			} else if (op.type() == PendingActions.Type.ENABLE_FILE && Files.exists(Path.of(op.from())) && !Files.exists(Path.of(op.to()))) {
-				out.add(new Rename(op.id(), op.from(), op.to()));
+				out.add(new Rename(op.id(), op.from(), op.to(), false));
 			} else if (op.type() == PendingActions.Type.DISABLE_FILE && Files.exists(Path.of(op.path()))) {
 				Path target = disabledTarget(Path.of(op.path()));
 				targets.put(i, target);
-				out.add(new Rename(op.id(), op.path(), target.toString()));
+				out.add(new Rename(op.id(), op.path(), target.toString(), false));
 			}
 		}
 		return out;
@@ -734,13 +765,18 @@ public final class ApplyExecutor {
 		return new OpResult(op, Status.SKIPPED_ALREADY_DONE, "Already done earlier: " + done.moved().getFileName(), done.moved().toString());
 	}
 
-	// Undoes the renames, newest first, each with the full retry budget. False when one stays where the group put it.
-	private boolean rollBack(List<Op> ops, List<Undo> undos, String reason, OpResult[] out) {
+	// Undoes the renames, newest first, each with the full retry budget, and marks each one no longer in effect as not
+	// done in the record. False when one stays where the group put it.
+	private boolean rollBack(List<Op> ops, List<Undo> undos, String reason, OpResult[] out, UnfinishedGroups unfinished, String group) {
 		boolean all = true;
 		for (int u = undos.size() - 1; u >= 0; u--) {
 			Undo undo = undos.get(u);
 			out[undo.index()] = rollback(ops.get(undo.index()), undo, reason);
-			all &= !leftHalfApplied(out[undo.index()]);
+			boolean stuck = leftHalfApplied(out[undo.index()]);
+			if (!stuck) {
+				unfinished.mark(group, ops.get(undo.index()).id(), false);
+			}
+			all &= !stuck;
 		}
 		return all;
 	}

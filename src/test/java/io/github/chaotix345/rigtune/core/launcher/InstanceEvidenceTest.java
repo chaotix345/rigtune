@@ -103,8 +103,10 @@ class InstanceEvidenceTest {
 		assertEquals(1, scan.examined());
 	}
 
+	// An .index that is a file is no evidence; an .index folder that can't be listed fails closed (review-11 APPLY-7, a
+	// WS-L2 edit): it counts as packwiz metadata, so the policy never becomes RIGTUNE on an unreadable listing.
 	@Test
-	void anIndexThatIsAFileOrUnreadableIsNoEvidenceAndNoException() throws IOException {
+	void anIndexThatIsAFileIsNoEvidenceAndAnUnreadableOneFailsClosed() throws IOException {
 		Files.createDirectories(dir.resolve("mods"));
 		Files.writeString(dir.resolve("mods").resolve(".index"), "not a folder");
 		assertFalse(scan().found());
@@ -115,7 +117,7 @@ class InstanceEvidenceTest {
 		Files.setPosixFilePermissions(other, PosixFilePermissions.fromString("---------"));
 		try {
 			assumeTrue(!Files.isReadable(other), "running as a user who reads everything");
-			assertFalse(InstanceEvidence.scan(dir.resolve("other")).found());
+			assertTrue(InstanceEvidence.scan(dir.resolve("other")).found());
 		} finally {
 			Files.setPosixFilePermissions(other, PosixFilePermissions.fromString("rwx------"));
 		}

@@ -75,6 +75,12 @@ nothing off the machine answers: [36303836102](https://github.com/chaotix345/rig
 (c890b1ea): "Nothing off the machine is reachable: 1.1.1.1:443 gave java.net.SocketException: Network is unreachable" on
 all 3 legs.
 
+The route names its source since 5078fb90 (WS-E, the coordinator's decision; ws-ci had finished): `ip route add 224.0.0.0/4
+dev lo src 127.0.0.1`. Run [36377856700](https://github.com/chaotix345/rigtune/actions/runs/36377856700) (7013cf15, test/v05-e2e):
+"Loopback multicast works: 224.0.2.60:4445 received from 127.0.0.1" on all 3 legs, and LanGuestGameTest's LAN list
+detected its servers at `127.0.0.1:<port>` on all 3 legs (both joins each, the `gametest-logs-*` artifacts), where it saw
+0.0.0.0 before (36361989137). LanGuestGameTest checks 127.0.0.1 in CI again.
+
 ## AC1g.4: the dormant split, proven once
 
 Two runs of 24235857:

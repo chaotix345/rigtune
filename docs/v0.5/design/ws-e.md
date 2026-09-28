@@ -3,9 +3,9 @@
 Branch `test/v05-e2e`, worktree `rigtune-e2e5`. SPEC 3a-3f and 3h's release.yml, AC4j.3's E2E leg, the `v050-written`
 convention. Research: docs/research/v0.5/verification-gaps.md (vg). Plan: docs/v0.5/PLAN.md "WS-E".
 
-**Status (2026-09-28):** the early part (E1-E4), E5/E7 and the later part are done except the items under "Residuals"
-(the DH server-note run, the generated seeds, and the first Linux release-tier run of this round's rows). CI run 36374398890 is
-green on every job. See "Later part: status".
+**Status (2026-09-28):** the early part (E1-E4), E5/E7 and the later part are done; "Residuals" lists what waits on a date
+(the snapshot canary). The release tier ran on Linux once, green on every job (36376567978); the branch's latest CI run
+is green. See "Later part: status".
 
 ## Early part: tasks (TDD; each ends with `python -m unittest discover -s tools/e2e/tests` green and a commit)
 
@@ -178,6 +178,10 @@ Held locally during the coordinator's first CI streak, then pushed in batches.
 | Downgrade with WS-L2's ws-l2 | 0dd69766, fc22d701 | | ws-l2 is pending.json alone (no journal). The staged-ops check now expects no journal record for an op the sets journal nowhere. Both targets PASS locally |
 | Review round 2 (0 H, 4 M, 4 L; the coordinator's decisions) | (this round) | `test_stutter_run.py` +1, `test_written_v05.py` +2, `test_e2e_brand.py` +2, `test_e2e_stale_seed.py` +1 | M1: the stutter check reads the window as the log's whole seconds allow. Spikes surely inside it (tp + 1 .. tp + 9) must be tagged, one tagged spike must lie near the tp, and no tagged spike may lie outside the tp's and the world entry's windows. The world entry is a teleport to the product, so "none before the tp" would fail on C1r and on every CI run. M2: the brand settings check compares each change's `after` with the files (`setting_values`). M3: the brand leg stages a Sodium patch with its STAGED change next to ws-a's group, so the helper's OK PATCH_JSON, All operations done and the APPLIED change are required. M4: the trim always keeps baseline entries and the entries profiles.json names, tested on the real sets. L5: stale-seed requires `stale_installed`, the mod's name, every change and the seed's `expectStatus`. L6: brand-cancel times out from the Cancel tick. L7: `stand_in_id` makes a valid Fabric id. L8: docs. Local Windows 26.2 after the fixes: brand, stale-seed and both downgrades PASS (`2026-09-28-r8-*`) |
 | Merge of WS-W2 and WS-S's RW-17/18 (feat 85f8d39d) | (this merge) | `test_compat040.py` (the README's kinds) | compat040's `StartupTimesStore` kind, for WS-W2's ws-w2 set (`state`, `runs`, `noBad`): 0.4.0's StartupTimesStore loads every run of the set's file. ws-w2's placeholder is deleted. compat040 PASS locally on every set (ws-w2: 6 of 6 runs, its awareness.json keeps `acknowledgedStartupRegressions`); compat030 PASS. The composed startup-times.json holds ws-f's 3 runs and ws-w2's 6; the downgrade's kept-items check keys runs by `at`, so 0.4.0 dropping `preloadMs` on a rewrite (WS-W2's residual) isn't a loss. Both downgrades PASS locally on the CI jar of a470a489 (`2026-09-28-r9-*`); CI 36374398890 is green on every job |
+| vg §1.5 generated seed → the held-group hand-over (the coordinator's decision (b)) | (this commit) | `test_e2e_handover.py` 7, `test_e2e_matrix.py` | vg §1.5's generated seed can't reproduce v010-dh's shape: 0.2.0 and later cancel their own pending update once the mod's build is queued in mods/update (`rigtune.status.queued_update_dropped` is in 0.2.0+mc26.3's, 0.3.0's and 0.4.0's lang files), so the old side drops the group itself. The honest equivalent, `--scenario handover`: the released old version stages its DH update while the installed jar is held, the group fails at that exit and again at the self-update's exit, and the new version's first exit finishes it (APPLIED, 3.3.2 enabled). SelfUpdateDriver gains a `stage` phase with `-Drigtune.e2e.updateId`. Release row `handover-from-0.4.0-dh` on 26.3. Local dev run on 26.2 (26.3 crashes natively here): PASS (`docs/v0.5/verification/e2e/local-windows-26.2/2026-09-28-handover-*`). The release row on Linux CI, 26.3 from 0.4.0+mc26.3: PASS (scratch [36378065305](https://github.com/chaotix345/rigtune/actions/runs/36378065305), `docs/v0.5/verification/e2e/linux-ci/`). 0.4.0 leaves the group's journal changes STAGED through both failures; 0.5 marks them APPLIED |
+| AC3f.4 the DH server-note run (the coordinator's decision (c)) | (this commit) | `test_dh_note.py` 4; `ServerLimitNoticeSourceTest` | `tools/e2e/dhnote/`: a local-only init script adds a Loom production server task (`dhServer`, fabric-api, DH for the last phase) on 127.0.0.1 with a free ephemeral port (never 25565; the player's own server holds it), and gives `e2eClient` a fixed user that the server's `ops.json` names. The client (RigTune, fabric-api, Sodium, DH 3.3.2 copied from the player's instance, only read) is driven by `src/e2eUndo`'s `DhServerDriver`: one start, three server starts on one world (16 without DH on the server, then 6, then 6 with DH on the server), flying at Y=330, screenshots straight down and toward the horizon, /stop per phase. Only processes whose command line names the run's folder are ever killed. Confirmed from the screenshots: at 6, DH still shows the whole 16-chunk patch explored before and nothing past it; with DH on the server, new terrain fills the view. `rigtune.server.detail.dh` loses both "may"s (lang, the fallback, `ServerLimitNoticeSourceTest`; the key is WS-E's, ws-k.md). Three earlier runs didn't decide: DH's SQLite failed under the long scratch path (MAX_PATH), then a view blocked by a hill, then the game menu of a lost focus. After review round 3 (copies for the server, view distances asserted, `limited` 240 s like `dhserver`) the run was repeated: the same pictures (the committed evidence) |
+| Merge of WS-T and WS-S2 (feat ce8b1a8b) | 9c5651df | `test_written_v05.py` | the last v050 placeholder (ws-t) is deleted; `stutter-fixes.json` (`fixes`) and `tryit.json` (`recent`, `current`) join `V050.kept`, and the read-back check keys a fix by its `entryId` and the open try (`current`, a record) by its `id` (review round 3, M4; field names alone before). compat040 and compat030 PASS on every real set. Both downgrades PASS locally on 26.2 with every real set (r10, `2026-09-28-r10-*`) |
+| AC8.4's compat040 half (WS-F) | (this commit) | compat040 runs | AwarenessStore gains `dismissedContains`: on the spare copy 0.4.0 dismisses 10 more keys, and each listed key must still be in its `dismissed()` and in the file it wrote. ws-f's check lists `firstrun.guide` (a recorded cross-owner edit of WS-F's expect.json, the coordinator's decision). Proven both ways with the released 0.4.0: the real sets PASS; a copy of v050-written with ws-f's `dismissed` holding another key fails ("missing [firstrun.guide]"), and one with a ws-w2 run's `ms` at -1 fails StartupTimesStore ("5 of 6 run(s) loaded"). ws-s's StutterSummary check (AC2S.13) came with WS-S's own set (9b1400f3). ws-l2.md records the `modId` revert of fb8a36a3 (a recorded cross-owner edit) |
 
 **AC3f.7 (`guard-apply`).** It runs after entry-check on the undo scenario's instance, in one start:
 - The update of `e2e-pin-target` 1.0.0 → 2.0.0 is refused. The installed `e2e-pinner` pins the target to `1.0.x` in its fabric.mod.json.
@@ -201,6 +205,39 @@ Each Apply's outcome is the status line its downloads leave (`pinStatus`/`addSta
 
 The fabric client gametest API is the same too: `createServer(Properties)`, `clickScreenButton`, `setScreen` in 6.0.2 (26.2) and 6.0.7/6.0.8 (26.3).
 
+## Review round 3 (test/v05-e2e-2: 0 H, 4 M, 8 L; the coordinator's decisions): all fixed in ee6c9470
+
+- **M2** (first): the DH run's server loads only copies in the run's folder (`server-mods/`), never a jar handed in from a
+  player's instance, so `kill_own` matches the server too. The committed runs' jars were scratch copies anyway: the
+  player's instance was only read, once, to make them.
+- **M1:** the client quitting after the last phase's /stop isn't an error; the server gets `SERVER_STOP`.
+- **M3:** `dismissedContains` needs 0.4.0 to have written the file: its digest changed and it holds `compat040.more-9`.
+  Proven both ways: a copy too large for 0.4.0 to write now fails, where the file half used to pass on the unchanged file.
+- **M4:** the read-back check compares a record (tryit.json's `current`) by its id.
+- **L5-L7:** the hand-over's stage checks the journal's changes STAGED, the FAILED cause naming the installed jar, and the
+  download's sha512 against the served jar; verify checks the enabled jar's. A local 26.2 run passed with them
+  (`2026-09-28-handover-26.2-r3-RESULT.md`).
+- **L8:** tests for prepare_handover, held_paths, the stage's updateId, and the DH run's copies, kill_own, last phase and
+  lock.
+- **L9:** the driver's join timeout applies on any screen.
+- **L10:** the view distances (16/6/6) are recorded and checked; the F3 shots are committed; `limited` got 240 s like
+  `dhserver`, and the rerun showed the same pictures.
+- **L11:** dh_server_note takes the game-test lock itself.
+- **L12:** RESULT's Rescan line lists every phase; the ws-e.md fixes; DESIGN.md:370 is in the docs hand-off.
+
+## Review-11 fixes (reviews/r11-CI.md, r11-SEC.md, r11-COMPAT.md; on test/v05-e2e-2)
+
+| id | outcome | commit | the test that failed first |
+|---|---|---|---|
+| CI-2 (M) | FIXED. `publish` has no JDK and no Gradle: `tools/e2e/modrinth_publish.py` sends build.gradle's Minotaur payload through `tools/modrinth_project.py upload-version`. That is stdlib Python and idempotent, gets the staged SHA256SUMS digest, and each node runs in `tools/ci/retry.sh`. The token never meets a Gradle configuration. A local `--dry-run` printed the payload for the CI jar | 20dabb91 | `test_e2e_workflows.py` `test_modrinth_gets_the_staged_files_through_the_stdlib_tool_retried` (release.yml ran `./gradlew :$mc:modrinth`); `test_modrinth_publish.py` 6 |
+| SEC-6 (L) | FIXED: `persist-credentials: false` on publish's checkout | 20dabb91 | `test_publish_s_checkout_keeps_no_git_credentials` |
+| CI-5 (L) | FIXED: a tag push without MODRINTH_TOKEN fails before "Create GitHub release"; a fork's gets the notice | 20dabb91 | `test_a_tag_push_without_the_token_fails_before_the_github_release` |
+| CI-3 (L) | FIXED: stutter_run reads what log4j rolled over during the run, then latest.log, and unwraps times across midnight (log and GC pauses) | 906a271f | C1r shifted to start 10 s before midnight failed ("after teleport", "chunks loading"); `client_log` with a rotated .gz |
+| CI-4 (L) | FIXED: a node without `sodium_version` gets `undo` (no profile part) and `helper-kill`; the stutter leg runs without Sodium there | 7fceff0b | `test_a_node_without_sodium_gets_the_undo_scenario_without_the_profile_part`; `test_sodium_only_when_the_node_has_a_build_of_it` |
+| CI-6 (L) | FIXED at merge time: rules-consistency, on a pull request into main, fetches main's rules-v2.json; changed content needs a higher revision, unchanged content the same revision (`tools/rules_revision_check.py`). NOT done: `finalize_documents` requiring a higher revision under `--skip-main-check`. A release's repeated regenerations land in one R by design (SPEC 2T), so that guard would refuse them, and the merge-time check already catches the same-revision re-emission | e4c5df2c | `test_rules_revision_check.py` 5 |
+| SEC-7 (L) | FIXED: the release tier also needs `github.event.pull_request.head.repo.full_name == github.repository` | 0804c342 | `test_every_push_runs_the_e2e_push_tier_on_this_run_s_jars` |
+| COMPAT-5 (L) | FIXED. compat040 has an `ApplyResult` kind (0.4.0 loads last-apply.json, its restart reconcile moves no journal status, and History built with the file's failures shows each reason), checked on ws-h. `ApplyHelper appliesGroup` was added to ws-s2 and ws-t (recorded cross-owner edits, the coordinator's request). awareness.json joins `V050.kept` with `acknowledgedStartupRegressions`. Proven both ways with the released 0.4.0: without the messages, reasons 0; with the ABANDONED changes STAGED, 2 statuses moved | 4e92bda3 | the broken copies above; `test_written_v05.py` |
+
 ## Acceptance criteria (WS-E's)
 
 | AC | how | status |
@@ -210,7 +247,7 @@ The fabric client gametest API is the same too: `createServer(Properties)`, `cli
 | AC3a.5 | the Windows RC set (seeded run with a real handle, 0.4.0 → RC, undo, downgrade) | Phase 5 |
 | AC3a.6 | `test_e2e_workflows.py` + `test_ci_workflow.py` | CI python job green (36363179808) |
 | AC3b.1, AC3b.2 | compat040 / compat030 in the java job | CI java job green (36363179808) |
-| AC3b.3 | the downgrade rows (both targets, both nodes) | local 26.2 PASS with v050 sets; the "back on 0.5" part checks the placeholders' files (and ws-p2's servers) are read back. The tracked fix, the open try and the profile labels need WS-S2/WS-T/WS-P's real sets and code |
+| AC3b.3 | the downgrade rows (both targets, both nodes) | local 26.2 PASS with v050 sets; Linux release tier PASS, both targets on both nodes ([36376567978](https://github.com/chaotix345/rigtune/actions/runs/36376567978)); the "back on 0.5" part checks 0.5's own files are read back (V050.kept). With every real set and the merged code (r10, the CI jar of 9c5651df, local 26.2): `stutter-fixes.json` and `tryit.json` byte-identical after the old version, and back on 0.5 the tracked fixes, the recent and open try, the server mappings and the profile labels read back (`V050.kept`: fixes by entryId, the recent tries by id, the open try by its id; servers; the profiles.json labels check) |
 | AC3c.1, AC3c.2 | release.yml build → e2e → publish | dry run 36296717280; AC3c.2 at the v0.5.0 release |
 | AC3d.1, AC3d.2 | LanGuestGameTest | CI PASS on 3 legs (36363179808) |
 | AC3d.3 | README "Known limits" | docs workstream (text in "Docs" below) |
@@ -219,12 +256,12 @@ The fabric client gametest API is the same too: `createServer(Properties)`, `cli
 | AC3e.4 | README battery line | docs (below) |
 | AC3f.1 | the 26.3 stutter-script CI run | scratch 36362848495 (both nodes): PASS in the product's teleport window; record in `docs/v0.5/verification/stutter/ac3f1-stutter-script/` |
 | AC3f.3 | A11yGameTest high contrast | CI PASS on 3 legs (36363179808) |
-| AC3f.4 | the DH server-note run | open (code-deciding, under the lock) |
-| AC3f.5 | helper-kill | local Windows PASS; Linux release tier with the push |
-| AC3f.7 | guard-apply | local Windows PASS; Linux release tier with the push |
+| AC3f.4 | the DH server-note run | local runs 2026-09-28 (26.2, under the lock; the second after review round 3): both claims confirmed from the screenshots, view distances 16/6/6 asserted; the note loses both "may"s (`docs/v0.5/verification/server/dh-note/`) |
+| AC3f.5 | helper-kill | local Windows PASS; Linux release tier PASS on both nodes ([36376567978](https://github.com/chaotix345/rigtune/actions/runs/36376567978)) |
+| AC3f.7 | guard-apply | local Windows PASS; Linux release tier PASS in undo-profiles/-settings on both nodes ([36376567978](https://github.com/chaotix345/rigtune/actions/runs/36376567978)) |
 | AC3f.8 | snapshot_canary.py + fixture test | test in; the workflow edit after 2026-09-30 |
-| AC4j.3 | the launcher-brand leg (`--scenario brand`) | local Windows PASS; Linux release tier to run |
-| AC2H.6 | `v010-dh-app-reinstalled`, both legs (`--scenario stale-seed`) | local Windows PASS; Linux release tier to run |
+| AC4j.3 | the launcher-brand leg (`--scenario brand`) | local Windows PASS; Linux release tier PASS ([36376567978](https://github.com/chaotix345/rigtune/actions/runs/36376567978)) |
+| AC2H.6 | `v010-dh-app-reinstalled`, both legs (`--scenario stale-seed`) | local Windows PASS; Linux release tier PASS ([36376567978](https://github.com/chaotix345/rigtune/actions/runs/36376567978)) |
 
 ## Residuals
 - **Fixed since the early part:**
@@ -232,17 +269,12 @@ The fabric client gametest API is the same too: `createServer(Properties)`, `cli
   - compat040 has its CI step (E6);
   - the downgrade checks name the versions they run (4c3b6696);
   - `server-profiles.json` is in `V050.kept` (e1de5575);
-  - the local Windows reruns after both review rounds: all PASS (`docs/v0.5/verification/e2e/local-windows-26.2/2026-09-28-*`).
+  - the LAN source address in CI: offline.sh's multicast route names `src 127.0.0.1` (5078fb90, the coordinator's decision), run 36377856700 detected `127.0.0.1:<port>` on all 3 legs, and LanGuestGameTest checks 127.0.0.1 in CI again;
+  - the local Windows reruns after both review rounds: all PASS (`docs/v0.5/verification/e2e/local-windows-26.2/2026-09-28-*`);
+  - AC3f.4, the DH server-note run (the coordinator's decision (c)): `docs/v0.5/verification/server/dh-note/`;
+  - the release tier's first Linux run (the coordinator's decision (a)): [36376567978](https://github.com/chaotix345/rigtune/actions/runs/36376567978) on `scratch/ws-e-battery-oshi` @ 112f3a41 (test/v05-e2e @ 46da5e9c with the e2e rows on, max-parallel 6), green on every job: the 21 rows (every upgrade, seeded-v010-dh and both stale-seed legs, undo-profiles/-settings and helper-kill on both nodes, brand-theseus, both downgrades on both nodes), battery-oshi and stutter-script on both nodes.
 - **Open:**
-  - `stutter-fixes.json` and `tryit.json` join `V050.kept` when WS-S2's and WS-T's real sets land. Until then their placeholders are only checked byte-identical after a downgrade.
-  - The LAN source address in CI is 0.0.0.0 (offline.sh's multicast route has no `src`). Sent to ws-ci; LanGuestGameTest accepts a loopback or wildcard address until then.
   - The snapshot-canary workflow edit (its resolve step calls `tools/snapshot_canary.py`) is made after the scheduled run on 2026-09-30.
-  - Still to do:
-    - AC3f.4 (the DH server-note run): the coordinator decides the approach.
-    - The first Linux run of the release tier with this round's rows (helper-kill on both nodes, guard-apply, stale-seed, the downgrades with v050 sets): the coordinator schedules it.
-  - **The generated seeds (vg §1.5) as designed can't reproduce v010-dh's shape.** 0.2.0 and later cancel their own pending update once the mod's build is queued in mods/update (`rigtune.status.queued_update_dropped` is in 0.2.0+mc26.3's, 0.3.0's and 0.4.0's lang files). So the old side of a generated seed drops the group itself.
-    - The proposed honest equivalent: the old version's held DH group is carried across the self-update and finished by 0.5 at its exit.
-    - This is waiting for the coordinator's decision.
 - **A note for the docs workstream:** in BatteryFlowGameTest's screenshot at 854×480 the battery notice's text is cut ("You're on battery power. Switch t…") by its two buttons. That is v0.4's notice layout (WS-P's).
 
 ## Stays UNVERIFIED (WS-E's part)
@@ -260,8 +292,11 @@ The fabric client gametest API is the same too: `createServer(Properties)`, `cli
 - **Windows OSHI on a real laptop battery:** the user's laptop run (3g).
 - **A helper killed between op 1's rename and its rollback** (the half-applied state): a millisecond window the E2E doesn't aim for. ApplyGroupsTest's `aHelperKilledBetweenTheRenamesIsFinishedByTheNextRun` and `…IsRolledBackWhenTheNextRunCantFinish` cover it in unit.
 - **A physical power cut** (3f): needs a VM with a lossy disk.
+- **The DH note beyond the one run:** other DH versions, a server with DH's distant generation off, a remote server's bandwidth, and 26.3 (the local 26.3 client crashes natively, X9).
 
 ## Docs (for the docs workstream)
 - **README "Known limits", LAN and Realms (AC3d.3):** "Server limits were tested with a dedicated server joined through Minecraft's own LAN discovery (Multiplayer → the LAN list) and through the Realms connection path against a local server. Not tested: an Open to LAN game hosted on a second PC, and the real Realms service."
 - **README battery line (AC3e.4):** "The battery offer was tested with a simulated battery through RigTune's real power watcher, and on Linux CI with a simulated battery read by the same hardware library the game uses; [the user's laptop run, if it happened]." Keep "real Windows laptop: not yet" until 3g.
+- **The DH server note (AC3f.4):** the detail now reads "Distant Horizons still shows terrain you've already explored beyond it; generating new distant terrain needs Distant Horizons on the server." CHANGELOG's v0.5 entry can say the note was checked in game (one local run, `docs/v0.5/verification/server/dh-note/`).
+- **DESIGN.md:370** still quotes the DH note with its two "may"s (v0.4's ws-w line); it should read as the lang string now does.
 - **PROGRESS / verification index:** `docs/v0.5/verification/server/README.md`, `docs/v0.5/verification/e2e/README.md` (+ `local-windows-26.2/`), and `battery/` once the battery branch lands.

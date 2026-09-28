@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.client.undo;
 
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ConfigTargets;
+import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
@@ -222,9 +223,9 @@ public final class Staging {
 
 	// docs/v0.5/SPEC.md 2H RW-3: unstages, with its group, every staged group that can never run (StaleOps: an enable's
 	// download is gone, or its mod is already loaded from another jar), retiring its downloads; a mod installed another way
-	// makes the group ABANDONED in History, a download that's gone DISCARDED. Never a group the helper left half done, and
-	// never an op for another instance's folders (the helper refuses those itself). loadedFrom: a loaded mod id -> the
-	// file names of the top-level jars it was loaded from. Null when the lock is busy.
+	// makes the group ABANDONED in History, a download that's gone DISCARDED. Never a group the helper left half done or
+	// its records show started, and never an op for another instance's folders (the helper refuses those itself).
+	// loadedFrom: a loaded mod id -> the file names of the top-level jars it was loaded from. Null when the lock is busy.
 	public @Nullable StaleDrop dropStale(Map<String, Set<String>> loadedFrom) throws IOException {
 		if (!Files.exists(pendingFile)) {
 			return StaleDrop.NONE;
@@ -237,12 +238,17 @@ public final class Staging {
 				return StaleDrop.NONE;
 			}
 			PendingActions here = PendingActions.load(pendingFile).relocated(InstanceDirs.modsDirOf(pendingFile), InstanceDirs.configDirOf(pendingFile));
-			// Never drop what might be a half-done group: without the folder's names, nothing is dropped this time.
+			List<StaleOps.Stale> stale = StaleOps.find(here.ops(), Files::exists, loadedFrom, Staging::modIdOf, Set.of());
+			if (stale.isEmpty()) {
+				return StaleDrop.NONE;
+			}
+			// Only then the folder's names and the helper's records: never drop what might be a half-done group, or one
+			// RigTune's records show started (review 11 APPLY-1); without the names, nothing is dropped this time.
 			Set<String> halfDone = halfDoneGroupsOrNull(here);
 			if (halfDone == null) {
 				return StaleDrop.NONE;
 			}
-			List<StaleOps.Stale> stale = StaleOps.find(here.ops(), Files::exists, loadedFrom, Staging::modIdOf, halfDone);
+			stale = StaleOps.find(here.ops(), Files::exists, loadedFrom, Staging::modIdOf, halfDone);
 			if (stale.isEmpty()) {
 				return StaleDrop.NONE;
 			}
@@ -367,7 +373,10 @@ public final class Staging {
 		return groups == null ? Set.of() : groups;
 	}
 
-	// Null when the mods folder can't be listed (then nobody can tell which groups are half done).
+	// The groups the helper left half done (PartlyApplied) or RigTune's records show started (ApplyExecutor.startedGroups,
+	// review 11 APPLY-1: both renames done, the helper killed before last-apply.json): the next exit finishes them, so
+	// Discard, the queued-update drop and the stale drop keep them. Null when the mods folder can't be listed (then nobody
+	// can tell which groups are half done).
 	private @Nullable Set<String> halfDoneGroupsOrNull(PendingActions plan) {
 		Set<String> names = new HashSet<>();
 		try (Stream<Path> files = Files.list(InstanceDirs.modsDirOf(pendingFile))) {
@@ -376,7 +385,9 @@ public final class Staging {
 			RigTune.LOGGER.warn("Could not list the mods folder to check for half-applied changes", e);
 			return null;
 		}
-		return PartlyApplied.groups(plan.ops(), names, unfinishedRenames());
+		Set<String> groups = new HashSet<>(PartlyApplied.groups(plan.ops(), names, unfinishedRenames()));
+		groups.addAll(ApplyExecutor.startedGroups(plan, pendingFile));
+		return groups;
 	}
 
 	// The helper's record of the renames it started and hasn't finished (review-8 AH-1: a helper killed mid-group leaves

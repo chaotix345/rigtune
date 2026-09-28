@@ -174,7 +174,9 @@ public final class HistoryModel {
 	}
 
 	private static List<Change> rows(JournalEntry entry, Map<String, Failure> failures, Labels labels) {
-		List<JournalChange> changes = entry.changes();
+		// RW-4's pairing as shown (review 11 COMPAT-4, a marked WS-H edit): 0.2.x-0.4.x imported 0.1.0's updates without
+		// the disable's mod id, and history.json isn't rewritten for it.
+		List<JournalChange> changes = StagedChanges.pairUpdates(entry.changes());
 		Set<JournalChange> paired = new HashSet<>();
 		List<Change> out = new ArrayList<>();
 		for (JournalChange c : changes) {

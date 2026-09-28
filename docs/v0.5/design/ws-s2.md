@@ -492,5 +492,16 @@ old code for the stated reason first.
   other owners' files.
 - **PERF-4 (L), FIXED 9b7a909c**: SettingsWatch forgets the failed session once it ended (a minimal edit to WS-S's file)
   (SettingsWatchTest `aFailedSessionIsReleasedWhenItEnds`, red: the capture stayed reachable).
+- **COMPAT-2 (M), FIXED on fix/v05-r11-ws-s2b**: C20 compares the graphics backend and GPU as the benchmark does (ws-b's
+  BenchmarkTrend BACKEND/GPU rule): `FixConditions.backend`/`gpu` (optional, null when unknown and in older records; the
+  11-argument constructor kept) are taken at the capture's start and at each analysis from `BenchmarkConditions.Graphics`
+  (the same hardware probe), kept in stutter-fixes.json's conditions (not written when null; stutter.json is unchanged),
+  and `FixConditions.Reason.GRAPHICS` ("it ran on another graphics API (OpenGL or Vulkan) or GPU") differs when both
+  backends are known and differ, or both GPUs are known and differ (case and outer spaces aside) on the same or an
+  unknown backend; unknown claims nothing. An after session on another backend is skipped; a before session whose
+  backend moved (it can't within a game run) would read CHANGED. Red: FixConditionsTest
+  `anotherGraphicsBackendOrGpuDiffers` (OpenGL vs Vulkan: no difference) and FixTrackerTest `anotherGraphicsBackendIsSkipped`
+  (the Vulkan session was counted and compared). The ws-s2 set now carries the fields (regenerated); compat040 against the
+  released 0.4.0: ws-s's and ws-s2's checks pass (stutter-fixes.json byte-identical, unread).
 - New keys: `rigtune.stutter.fix.not_yet.changed`, `.skip.unread`, `.verdict.same_more_lost`, `.verdict.same_small`; the
   two excluded lines reworded.

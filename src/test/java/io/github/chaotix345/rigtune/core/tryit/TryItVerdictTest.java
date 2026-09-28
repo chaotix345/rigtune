@@ -20,6 +20,7 @@ import static io.github.chaotix345.rigtune.core.tryit.TryItFixtures.ENTRY;
 import static io.github.chaotix345.rigtune.core.tryit.TryItFixtures.KEY;
 import static io.github.chaotix345.rigtune.core.tryit.TryItFixtures.run;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -300,6 +301,24 @@ class TryItVerdictTest {
 		assertEquals(List.of(new Cause.Condition(Difference.RESOLUTION), new Cause.Excluded(Cause.Excluded.Why.DH_GENERATING), new Cause.Moved()),
 				verdict(here, before().scene("CURRENT"), after().scene("CURRENT").size(1920, 1080).dhGenerating(true)).causes(),
 				"after the conditions, before the spot");
+	}
+
+	// Review-11 COMPAT-2 (ws-b's BenchmarkTrend differences): a before on OpenGL and the iGPU and an after on Vulkan and the
+	// dGPU get no verdict, and no setting's allowed differences include the backend or the GPU.
+	@Test
+	void anotherGraphicsBackendOrGpuMeansNoVerdict() {
+		String igpu = "Intel(R) UHD Graphics 620";
+		String dgpu = "NVIDIA GeForce RTX 3050 Laptop GPU";
+		Verdict switched = verdict(restart(), before().graphics("OPENGL", igpu), after().graphics("VULKAN", dgpu).low(1500));
+		assertEquals(List.of(new Cause.Condition(Difference.BACKEND)), switched.causes());
+		assertEquals(Kind.NOT_COMPARABLE, switched.kind());
+		assertEquals(List.of(new Cause.Condition(Difference.GPU)), verdict(restart(), before().graphics("OPENGL", igpu), after().graphics("OPENGL", dgpu))
+				.causes());
+		assertEquals(List.of(), verdict(restart(), before(), after().graphics("VULKAN", dgpu)).causes(), "a run that didn't record them");
+		for (String key : List.of("vanilla.renderDistance", "vanilla.simulationDistance", "iris.enableShaders", "dh.client.advanced.debugging.rendererMode",
+				TryItFixtures.KEY)) {
+			assertFalse(Triable.allowed(key).contains(Difference.BACKEND) || Triable.allowed(key).contains(Difference.GPU), key);
+		}
 	}
 
 	// Review BENCH-2: a run whose settle timed out on terrain that hadn't loaded (the try lists it) gets no verdict.
