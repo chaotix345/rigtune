@@ -1,0 +1,24 @@
+{
+  "createdAt": "2026-09-24T23:08:50.954378200Z",
+  "gamePid": 12228,
+  "modsDir": "${INSTANCE}/mods",
+  "configDir": "${INSTANCE}/config",
+  "ops": [
+    {
+      "type": "DISABLE_FILE",
+      "path": "${INSTANCE}/mods/fabric-26.2.jar",
+      "id": "041919d9-18c9-4b04-89c4-f15e4e4a80c5",
+      "group": "7b8043de-f5c3-4881-8309-27265240f39e",
+      "attempts": 1
+    },
+    {
+      "type": "ENABLE_FILE",
+      "from": "${INSTANCE}/mods/DistantHorizons-3.3.2-26.2-fabric-neoforge.jar.rigtune-pending",
+      "to": "${INSTANCE}/mods/DistantHorizons-3.3.2-26.2-fabric-neoforge.jar",
+      "id": "db7f487d-6371-43c5-944e-c053428ad70d",
+      "group": "7b8043de-f5c3-4881-8309-27265240f39e",
+      "modId": "distanthorizons",
+      "attempts": 1
+    }
+  ]
+}

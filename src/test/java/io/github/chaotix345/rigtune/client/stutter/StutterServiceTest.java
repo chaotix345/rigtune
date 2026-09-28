@@ -108,6 +108,24 @@ class StutterServiceTest {
 		assertEquals("2026-09-26T10:00:00Z", service.view().report().startedAt());
 	}
 
+	// RW-18 (real world 2026-09-28): a 14 s re-join saved after a real session doesn't hide it: the screen shows the newest
+	// session with enough data.
+	@Test
+	void rw18AShortSessionDoesNotHideTheLastRealOne(@TempDir Path dir) throws ReflectiveOperationException {
+		StutterStore store = new StutterStore(dir);
+		store.add(seeded());
+		StutterReport s = seeded();
+		store.add(new StutterReport("2026-09-26T11:00:00Z", s.source(), s.mc(), s.collector(), s.heapMaxMb(), 13.6, 12.0, 700, 58.3, 40.0, null, null,
+				new StutterReport.Spikes(1, 0, 0, 0), 30.0, Map.of("unknown", 1.0), Map.of(), List.of(), null, List.of(), false, true, 1));
+		Queue io = new Queue();
+		StutterService service = service(dir, io);
+		service.view();
+		io.runAll();
+		assertEquals("2026-09-26T10:00:00Z", service.view().report().startedAt(), "the last session with enough data");
+		assertEquals(List.of(13.6), service.view().shortSince(), "and the short one saved since");
+		assertTrue(service.summary().contains("97,000 frames"), "Copy summary copies what's shown: " + service.summary());
+	}
+
 	// AC2S.8 (SD-4): Clear pressed while the saved summary's load is still queued keeps it cleared.
 	@Test
 	void sd4ClearWhileTheSavedLoadIsQueuedKeepsItCleared(@TempDir Path dir) throws ReflectiveOperationException {

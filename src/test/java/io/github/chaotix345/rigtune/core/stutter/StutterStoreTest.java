@@ -172,6 +172,40 @@ class StutterStoreTest {
 		assertFalse(StutterSummary.text(old, List.of()).contains("Settings changed"));
 	}
 
+	// v0.5 RW-17: idleSeconds round-trips, isn't written when there was no idle time, and a 0.4 session reads it as null.
+	@Test
+	void idleSecondsRoundTripsAndIsOptional() throws IOException {
+		StutterReport r = report("2026-09-28T00:00:00Z", 2, 1);
+		StutterReport idle = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(),
+				r.frames(), r.avgFps(), r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(), r.tags(), r.worst(),
+				r.facts(), r.advice(), r.enoughData(), r.phaseTiming(), r.hitches(), null, null, 62735.4);
+		StutterStore store = new StutterStore(dir);
+		store.add(r);
+		assertFalse(Files.readString(StutterStore.file(dir)).contains("idleSeconds"), "not written when there was none");
+		store.add(idle.withAdvice(List.of("x")).withSettings(Map.of(StutterReport.RENDER_DISTANCE, "12"), Map.of(StutterReport.RENDER_DISTANCE, "12")));
+		StutterReport back = new StutterStore(dir).latest();
+		assertEquals(62735.4, back.idleSeconds(), "kept by withAdvice, withSettings and the store");
+		assertNull(new StutterStore(dir).sessions().getFirst().idleSeconds());
+		assertNull(new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(), r.frames(),
+				r.avgFps(), r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(), r.tags(), r.worst(), r.facts(),
+				r.advice(), r.enoughData(), r.phaseTiming(), r.hitches(), null, null, 0.0).idleSeconds(), "0 means none");
+	}
+
+	// v0.5 RW-18: the summary shown when no session runs is the newest one with enough data (or a benchmark's capture);
+	// newer short sessions are listed.
+	@Test
+	void rw18TheShownSummarySkipsShortSessions() {
+		StutterReport real = report("2026-09-28T00:00:00Z", 2, 1);
+		StutterReport shortOne = new StutterReport("2026-09-28T01:00:00Z", StutterReport.MONITOR, "26.2", "G1", 4096, 13.6, 12.0, 700, 58.3, 40.0, null, null,
+				new StutterReport.Spikes(1, 0, 0, 0), 30.0, Map.of(), Map.of(), List.of(), null, List.of(), false, true, 1);
+		StutterReport bench = new StutterReport("2026-09-28T02:00:00Z", StutterReport.BENCHMARK, "26.2", "G1", 4096, 60, 45, 90000, 2000, 900, null, null,
+				new StutterReport.Spikes(1, 0, 0, 0), 30.0, Map.of(), Map.of(), List.of(), null, List.of(), false, true, 1);
+		assertEquals(new StutterStore.Shown(real, List.of(shortOne)), StutterStore.shown(List.of(real, shortOne)));
+		assertEquals(new StutterStore.Shown(bench, List.of(shortOne)), StutterStore.shown(List.of(real, bench, shortOne)), "a benchmark's capture is shown");
+		assertEquals(new StutterStore.Shown(shortOne, List.of()), StutterStore.shown(List.of(shortOne)), "nothing better: the newest");
+		assertEquals(new StutterStore.Shown(null, List.of()), StutterStore.shown(List.of()));
+	}
+
 	// review-8 P5A-F3: a monitor session that a benchmark run interrupted (the benchmark world's settle frames) is saved only
 	// with enough data; the benchmark's own capture is saved as source "benchmark". Other sessions are always saved (AC5.7).
 	@Test

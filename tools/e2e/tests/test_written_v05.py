@@ -3,6 +3,7 @@ instance, the files an older version never reads, and the harness's default fixt
 
 import json
 import sys
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -105,6 +106,23 @@ class MergeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             written.compose(written.resolve_all([self.v4, self.v5]), self.instance)
 
+    def test_history_can_keep_only_the_newest_entries(self):
+        write(self.v4 / "ws-a", "history.json", {"formatVersion": 1, "entries": [entry("old", "2026-09-20T00:00:00Z")]})
+        write(self.v5 / "ws-s2", "history.json", {"formatVersion": 1, "entries": [entry("new", "2026-09-26T00:00:00Z"),
+                                                                                   entry("mid", "2026-09-22T00:00:00Z")]})
+        dropped = []
+        written.compose(written.resolve_all([self.v4, self.v5]), self.instance, newest=2, dropped=dropped)
+        history = json.loads((self.instance / "config" / "rigtune" / "history.json").read_text(encoding="utf-8"))
+        self.assertEqual((["mid", "new"], ["old"]), ([e["id"] for e in history["entries"]], dropped))
+        # An entry a staged op belongs to stays however old.
+        staged = dict(entry("old", "2026-09-20T00:00:00Z"), changes=[{"id": "c1", "opId": "op-1", "status": "STAGED"}])
+        write(self.v4 / "ws-a", "history.json", {"formatVersion": 1, "entries": [staged]})
+        write(self.v4 / "ws-a", "pending.json", {"ops": [{"id": "op-1", "type": "PATCH_JSON"}]})
+        dropped = []
+        written.compose(written.resolve_all([self.v4, self.v5]), self.instance, newest=2, dropped=dropped)
+        history = json.loads((self.instance / "config" / "rigtune" / "history.json").read_text(encoding="utf-8"))
+        self.assertEqual((["old", "new"], ["mid"]), ([e["id"] for e in history["entries"]], dropped))
+
     def test_benchmark_runs_are_concatenated_and_their_ids_stay_unique(self):
         write(self.v4 / "ws-b", "benchmarks.json", {"schemaVersion": 1, "runs": [{"id": "r1", "x": 1}]})
         write(self.v5 / "ws-b", "benchmarks.json", {"schemaVersion": 1, "runs": [{"id": "r2", "x": 1}]})
@@ -129,6 +147,16 @@ class MergeTest(unittest.TestCase):
         self.assertEqual([("b5", "baseline"), ("s1", "saved")], [(p["id"], p["source"]) for p in profiles["profiles"]])
         self.assertEqual("Evening 2", profiles["profiles"][1]["name"])
         self.assertEqual(("template:battery", "b5"), (profiles["active"], profiles["battery"]["previousProfile"]))
+
+    def test_a_stand_in_id_comes_from_the_file_name(self):
+        self.assertEqual("e2e-held", written.stand_in_id("e2e-held-1.0.0.jar"))
+        self.assertEqual("e2e-held", written.stand_in_id("e2e-held-1.1.0.jar.rigtune-pending"))
+        self.assertEqual("sodium-fabric", written.stand_in_id("sodium-fabric-0.9.2+mc26.2.jar.disabled"))
+        self.assertEqual("fabric", written.stand_in_id("fabric-26.2.jar"))
+        self.assertEqual("sodium-fabric-mc26-2", written.stand_in_id("sodium-fabric-mc26.2-0.9.2.jar"))
+        self.assertEqual("e2e-1-0", written.stand_in_id("1.0.jar"))
+        self.assertEqual("e2e-", written.stand_in_id(".jar"))
+        self.assertEqual(64, len(written.stand_in_id("a" * 80 + ".jar")))
 
     def test_a_set_s_expect_json_is_never_composed(self):
         write(self.v5 / "ws-t", "expect.json", {"set": "ws-t", "checks": []})
@@ -177,6 +205,23 @@ class HarnessRootsTest(unittest.TestCase):
         self.assertEqual(["profiles.json"], sorted(seeded["newFiles"]))
         self.assertEqual(["stutter.json"], sorted(seeded["json"]))
         self.assertEqual({"stutter.json": ["sessions"]}, {k: list(v) for k, v in seeded["kept"].items()})
+
+
+
+class DowngradeTrimTest(unittest.TestCase):
+    """The downgrade instance's journal over the real sets (self_update_e2e.DOWNGRADE_HISTORY): the trim keeps the fold
+    entries and what profiles.json and pending.json name."""
+
+    def test_the_real_sets_keep_their_baselines_switches_and_staged_entries(self):
+        instance = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, instance)
+        dropped = []
+        written.compose(written.resolve_all([V040, REPO / "src" / "test" / "resources" / "v050-written"]), instance, newest=46, dropped=dropped)
+        ids = [e["id"] for e in json.loads((instance / "config" / "rigtune" / "history.json").read_text(encoding="utf-8"))["entries"]]
+        self.assertTrue(dropped, "the real sets are over the cap")
+        for kept in ("baseline-7d226e52-56e8-454c-9d4b-9a63a2731c20", "c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17", "8ee686e5-f831-4836-80a2-33551c9bbe31"):
+            self.assertIn(kept, ids)
+        self.assertLessEqual(len(ids), 46 + 8)
 
 
 if __name__ == "__main__":

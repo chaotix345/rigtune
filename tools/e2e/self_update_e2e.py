@@ -39,7 +39,9 @@ JAVA_SOURCES = HERE / "java" / "io" / "github" / "chaotix345" / "rigtune" / "e2e
 DEFAULT_LOCK = "C:/Dev/Worktrees/.gametest-lock"
 PHASE_TIMEOUT = 20 * 60
 HELPER_TIMEOUT = 120
-HELPER_DONE = ("All operations done", "Some operations were not applied", "Nothing to apply", "Apply failed")
+# The helper's last line; with every op held (v0.5 4d) that is its "Held N operation(s)" line.
+HELPER_DONE = ("All operations done", "Some operations were not applied", "Nothing to apply", "Apply failed",
+               "of mod-file changes for the player's choice")
 # A fresh instance: no accessibility onboarding (it would sit in front of the title screen), windowed, muted.
 OPTIONS = "onboardAccessibility:false\nfullscreen:false\nskipMultiplayerWarning:true\ntutorialStep:none\n" \
           "joinedFirstServer:true\nsoundCategory_master:0.0\n"
@@ -95,11 +97,33 @@ PROFILE_SWITCHES = [
 # own Apply disables.
 DOWNGRADE_PHASES = ("downgrade-old", "downgrade-new")
 OFF_ID = "e2e-downgrade-off"
+# The downgrade instance keeps the newest 46 composed journal entries: the old versions keep 50 (Journal.MAX_ENTRIES) and
+# write up to 2 of their own here (the Undo last, their own Apply). Over the cap they drop entries with nothing left to
+# undo first, which would take the checked undo pair with them. Composed sets can exceed what one 0.5 journal holds (WS-P's
+# ws-p alone is at the cap); each set's own journal is read in full by compat040.
+DOWNGRADE_HISTORY = 46
 # helper-kill (docs/v0.5/SPEC.md 3f, AC3f.5; vg §6): a staged update group of the test mod KILL_ID (disable 1.0.0, enable
 # the downloaded 1.1.0) in the new version's instance, its second op blocked (held()), the helper killed during that
 # op's retries (a held file is a sharing violation to it: up to ~30 s); then two more starts: the second's exit finishes
 # the group from unfinished-groups.json, the third loads the result. Fixed ids (kill_group()).
 KILL_PHASES = ("kill-first", "kill-second", "kill-check")
+# stale-seed (docs/v0.5/SPEC.md AC2H.6, WS-H's RW-3): the new version's first start on a seeded state whose staged group can
+# never run (tools/e2e/seeds/v010-dh-app-reinstalled*: the Modrinth App reinstalled the mod at the group's target name and
+# RigTune's download is gone). The new version is installed directly: 0.1.0's own helper would mark that group done at its
+# exit (SKIPPED_ALREADY_DONE, the first local run), so the state only reaches a version that starts on it.
+STALE_PHASES = ("stale-check",)
+# brand (docs/v0.5/SPEC.md AC4j.3): the new version under the Modrinth App's brand (-Dminecraft.launcher.brand=theseus,
+# the LAUNCHER policy) with Sodium and a staged 0.4-written file group (v040-written's ws-a set). Apply everything and quit:
+# the helper applies the settings and holds the file group, and mods/ stays byte-identical; the next start shows the held
+# notice and its Cancel them drops the group (download superseded, journal DISCARDED).
+BRAND_PHASES = ("brand-apply", "brand-cancel")
+BRAND = "theseus"
+BRAND_SET = "ws-a"
+# Staged next to ws-a's file group: a Sodium settings patch (a config file, which the helper applies under the launcher's
+# brand too) with its STAGED journal change, so "the settings changed" never depends on what the report offers.
+BRAND_PATCH = {"op": "7d1f3a52-0c4e-4b6a-9e21-00000000b001", "group": "7d1f3a52-0c4e-4b6a-9e21-00000000b002",
+               "entry": "7d1f3a52-0c4e-4b6a-9e21-00000000b010", "change": "7d1f3a52-0c4e-4b6a-9e21-00000000b011",
+               "key": "sodium.performance.chunk_builder_threads", "before": "0", "after": "3"}
 KILL_ID = "e2e-kill"
 KILL_OLD, KILL_NEW = "e2e-kill-1.0.0.jar", "e2e-kill-1.1.0.jar"
 KILL_GROUP = "7d1f3a52-0c4e-4b6a-9e21-00000000c001"
@@ -134,6 +158,9 @@ PHASE_TITLES = {
     "kill-first": "helper-kill: after a start and quit with the group staged, op 2 blocked, the helper killed during its retries",
     "kill-second": "helper-kill: after the next start and quit (the next helper, op 2 unblocked)",
     "kill-check": "helper-kill: after the next start",
+    "stale-check": "AC2H.6: the new version's first start on the seeded state, and its exit",
+    "brand-apply": "AC4j.3, brand theseus: after Apply everything and quit (helper done)",
+    "brand-cancel": "AC4j.3: after the held notice's Cancel them in the next start",
 }
 
 
@@ -158,6 +185,8 @@ class Run:
         self.undo = args.scenario == "undo"
         self.downgrade = args.scenario == "downgrade"
         self.kill = args.scenario == "helper-kill"
+        self.stale = args.scenario == "stale-seed"
+        self.brand = args.scenario == "brand"
         # self-update: old_jar is installed and new_jar served as its update. undo: new_jar is installed, nothing to update.
         self.old_jar = Path(args.old_jar).resolve() if args.old_jar else None
         self.new_jar = Path(args.new_jar).resolve()
@@ -168,7 +197,8 @@ class Run:
         self.profile = args.profile_switch
         self.profile_instance = self.run_dir / "instance-profile"
         phases = UNDO_PHASES + ENTRY_PHASES + GUARD_PHASES + (PROFILE_PHASES if self.profile else ()) if self.undo \
-            else DOWNGRADE_PHASES if self.downgrade else KILL_PHASES if self.kill else ("update", "verify")
+            else DOWNGRADE_PHASES if self.downgrade else KILL_PHASES if self.kill else STALE_PHASES if self.stale \
+            else BRAND_PHASES if self.brand else ("update", "verify")
         self.checks = {p: [] for p in phases}
         self.facts = {}
         self.jars = self.run_dir / "jars"
@@ -303,8 +333,8 @@ class Run:
         self.run_dir.mkdir(parents=True)
         self.out.mkdir()
         self.log("run folder " + str(self.run_dir))
-        installed = self.new_jar if self.undo or self.kill else self.old_jar
-        if installed is None or not (self.undo or self.kill) and self.api_jar is None:
+        installed = self.new_jar if self.undo or self.kill or self.stale or self.brand else self.old_jar
+        if installed is None or not (self.undo or self.kill or self.stale or self.brand) and self.api_jar is None:
             raise SystemExit("--old-jar is required for the self-update scenario")
         for jar in [j for j in (self.old_jar, self.new_jar, self.api_jar) if j is not None]:
             if e2e_env.mod_json(jar).get("id") != "rigtune":
@@ -352,6 +382,8 @@ class Run:
             self.prepare_downgrade()
         if self.kill:
             self.prepare_kill()
+        if self.brand:
+            self.prepare_brand()
         self.facts["fabricApi"] = api.name
         self.log("instance mods: " + ", ".join(sorted(p.name for p in self.mods.iterdir())))
 
@@ -380,6 +412,8 @@ class Run:
                           "-Drigtune.e2e.reverseAdd={}:{}".format(REV_ADD, REV_ADD_PROJECT)]
             if phase in PROFILE_PHASES:
                 lines.append("-Drigtune.e2e.profilePlan=" + str(self.run_dir / "profile-plan.json"))
+            if phase in BRAND_PHASES:
+                lines.append("-Dminecraft.launcher.brand=" + BRAND)
             (self.run_dir / "jvm-{}.txt".format(phase)).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
         code = self.gradle("gradle-driver.log", *self.driver_args(":{}:{}".format(self.mc, self.driver_jar_task())))
@@ -452,11 +486,12 @@ class Run:
                                                                          [j["path"] for j in self.seed["jars"]]))
 
     def driver_jar_task(self):
-        return "e2eUndoDriverJar" if self.undo or self.kill else "e2eDowngradeDriverJar" if self.downgrade else "e2eDriverJar"
+        return "e2eUndoDriverJar" if self.undo or self.kill or self.stale or self.brand else "e2eDowngradeDriverJar" if self.downgrade \
+            else "e2eDriverJar"
 
     def driver_args(self, task):
         """The Gradle task plus the properties that pick and build this scenario's driver."""
-        if self.undo or self.kill:
+        if self.undo or self.kill or self.stale or self.brand:
             return [task, "-Pe2e.driver=undo"]
         if self.downgrade:
             return [task, "-Pe2e.driver=downgrade", "-Pe2e.oldJar=" + str(self.api_jar)]
@@ -466,7 +501,8 @@ class Run:
         """The instance as 0.4 left it: the "written by 0.4" sets in config/rigtune/ (written.py), the jars and options.txt
         values their journal implies, and a test mod for 0.3.0's own Apply."""
         sets = written.resolve_all(self.args.written)
-        sources = written.compose(sets, self.instance)
+        trimmed = []
+        sources = written.compose(sets, self.instance, newest=DOWNGRADE_HISTORY, dropped=trimmed)
         state = written.instance_state(self.instance)
         for path, mod_id in state["jars"].items():
             target = self.instance / path
@@ -486,7 +522,10 @@ class Run:
                                                                      encoding="utf-8", newline=LF)
         self.seeded = seeded_state(self.instance, written.new_files_for(self.facts["old"]["version"]), written.kept_for(sets))
         self.facts["writtenSets"] = [{"name": s.name, "placeholder": s.placeholder, "folder": self.scrub(str(s.folder))} for s in sets]
-        (self.out / "seeded.json").write_text(json.dumps({"sets": self.facts["writtenSets"], "files": sources, "jars": state["jars"],
+        if trimmed:
+            self.log("history.json: kept the newest {} composed entries, left out {}".format(DOWNGRADE_HISTORY, len(trimmed)))
+        (self.out / "seeded.json").write_text(json.dumps({"sets": self.facts["writtenSets"], "files": sources, "historyLeftOut": trimmed,
+                                                          "jars": state["jars"],
                                                           "options": state["options"], "newFiles": self.seeded["newFiles"],
                                                           "undoLast": self.seeded["undoLast"]}, indent=1) + LF, encoding="utf-8", newline=LF)
         self.log("composed from {}; jars {}; options {}".format(
@@ -564,6 +603,65 @@ class Run:
         checks = [e2e_checks.Check("the relaunched client exited normally", code == 0, "gradle exit {}".format(code))]
         checks += e2e_checks.after_kill_check(self.instance, self.driver("kill-check"), KILL_CHANGES, KILL_ID, "1.1.0")
         self.checks["kill-check"] = checks
+        return all(c.ok for c in checks)
+
+    def prepare_brand(self):
+        """brand: Sodium (settings it stages are config patches, which the helper still applies) and v040-written's ws-a
+        set, whose pending.json stages a file group of 0.4's own (and its jars)."""
+        shutil.copyfile(self.sodium(), self.mods / self.sodium().name)
+        self.facts["sodium"] = self.sodium().name
+        sets = [s for s in written.resolve_all([REPO / "src" / "test" / "resources" / "v040-written"]) if s.name == BRAND_SET]
+        written.compose(sets, self.instance)
+        plan, history = brand_patch(self.instance, self.rigtune_dir, self.facts["new"]["version"], self.mc)
+        (self.rigtune_dir / "pending.json").write_text(json.dumps(plan, indent=2) + LF, encoding="utf-8", newline=LF)
+        (self.rigtune_dir / "history.json").write_text(json.dumps(history, indent=2) + LF, encoding="utf-8", newline=LF)
+        written.materialize(self.instance)
+        self.carried = (e2e_checks._load(self.rigtune_dir / "pending.json") or {}).get("ops") or []
+        self.log("brand {}: staged from v040-written/{}: {}".format(BRAND, BRAND_SET, [op.get("id") for op in self.carried]))
+
+    def run_brand(self):
+        """AC4j.3: Apply everything under the launcher's brand, the helper at exit; then the held notice's Cancel them."""
+        mods_before = e2e_checks.listing(self.mods, recursive=True)
+        code, helper_ok, _ = self.launch_and_apply("brand-apply")
+        checks = [e2e_checks.Check("the client exited normally and the helper finished", code == 0 and helper_ok,
+                                   "gradle exit {}, helper finished: {}".format(code, helper_ok))]
+        checks += e2e_checks.after_brand_apply(self.instance, self.driver("brand-apply"), mods_before, self.carried, BRAND_PATCH["change"])
+        self.checks["brand-apply"] = checks
+        if not all(c.ok for c in checks):
+            return False
+        mods_before = e2e_checks.listing(self.mods, recursive=True)
+        self.start_watcher("brand-cancel")
+        try:
+            code = self.launch("brand-cancel")
+            time.sleep(5)
+        finally:
+            self.stop_watcher()
+        cmdlines = self.helper_cmdlines()
+        self.snapshot("brand-cancel")
+        checks = [e2e_checks.Check("the client exited normally", code == 0, "gradle exit {}".format(code))]
+        checks += e2e_checks.after_brand_cancel(self.instance, self.driver("brand-cancel"), mods_before, self.carried, cmdlines)
+        self.checks["brand-cancel"] = checks
+        return all(c.ok for c in checks)
+
+    def run_stale_seed(self):
+        """AC2H.6: one start of the new version on the seeded state, then its exit: the group is dropped with its status
+        line, History marks its changes, latest.log counts none of it as leftover, and nothing renames at exit."""
+        mods_before = e2e_checks.listing(self.mods, recursive=True)
+        self.start_watcher("stale-check")
+        try:
+            code = self.launch("stale-check")
+            # A helper the exit would start is up within its settle time (ApplyHelper.SETTLE_MILLIS = 2 s).
+            time.sleep(5)
+        finally:
+            self.stop_watcher()
+        cmdlines = self.helper_cmdlines()
+        (self.out / "helper-cmdlines-stale-check.txt").write_text(LF.join(cmdlines) + LF, encoding="utf-8")
+        self.snapshot("stale-check")
+        checks = [e2e_checks.Check("the client exited normally", code == 0, "gradle exit {}".format(code))]
+        checks += e2e_checks.after_stale_start(self.instance, self.carried, (self.seed["modId"], self.seed["modName"]), self.driver("stale-check"),
+                                               session_log(self.instance, self.started["stale-check"]), cmdlines, mods_before,
+                                               self.seed.get("expectStatus", "ABANDONED"))
+        self.checks["stale-check"] = checks
         return all(c.ok for c in checks)
 
     def run_downgrade(self):
@@ -964,7 +1062,7 @@ class Run:
         self.log("evidence in " + str(dest))
 
     def result_markdown(self, verdict, files):
-        if self.downgrade or self.kill:
+        if self.downgrade or self.kill or self.stale or self.brand:
             return self.downgrade_markdown(verdict, files)
         installed = self.facts["new"] if self.undo else self.facts["old"]
         lines = ["# {} E2E: {}".format("Undo after restart" if self.undo else "Self-update", self.name), "",
@@ -1018,7 +1116,23 @@ class Run:
         return "\n".join(lines)
 
     def downgrade_markdown(self, verdict, files):
-        if self.kill:
+        if self.brand:
+            lines = ["# Launcher-brand E2E (AC4j.3): " + self.name, "", "- Verdict: **{}**".format(verdict),
+                     "- Run: {} UTC, MC {}, a fresh scratch instance with {} + {} + {}, `-Dminecraft.launcher.brand={}`".format(
+                         self.run_dir.name.rsplit("-", 2)[-2], self.mc, self.facts["new"]["file"], self.facts.get("fabricApi"),
+                         self.facts.get("sodium"), BRAND),
+                     "- RigTune: `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"]),
+                     "- Staged before the first start: v040-written's `{}` set (0.4's own file group)".format(BRAND_SET),
+                     "- Client time: " + ", ".join("{} {} s".format(p, self.facts.get("{}Seconds".format(p))) for p in self.checks), ""]
+        elif self.stale:
+            lines = ["# Stale-group E2E (AC2H.6): " + self.name, "", "- Verdict: **{}**".format(verdict),
+                     "- Run: {} UTC, MC {}, a fresh scratch instance with {} + {}, seeded".format(
+                         self.run_dir.name.rsplit("-", 2)[-2], self.mc, self.facts["new"]["file"], self.facts.get("fabricApi")),
+                     "- RigTune: `{file}` version {version}, sha256 `{sha256}`".format(**self.facts["new"]),
+                     "- Seeded from `{}`: {}".format(self.scrub(str(self.seed["dir"])), self.seed.get("description", "")),
+                     "- Fake jars: " + ", ".join("`{path}` ({id} {version})".format(**j) for j in self.seed["jars"]),
+                     "- Client time: " + ", ".join("{} {} s".format(p, self.facts.get("{}Seconds".format(p))) for p in self.checks), ""]
+        elif self.kill:
             lines = ["# Helper-kill E2E: " + self.name, "", "- Verdict: **{}**".format(verdict),
                      "- Run: {} UTC, MC {}, a fresh scratch instance with {} + {} + `{}`, and `{}` staged to replace it (group {})".format(
                          self.run_dir.name.rsplit("-", 2)[-2], self.mc, self.facts["new"]["file"], self.facts.get("fabricApi"), KILL_OLD,
@@ -1086,6 +1200,12 @@ class Run:
                     verdict = "PASS"
             elif self.kill:
                 if self.run_helper_kill():
+                    verdict = "PASS"
+            elif self.stale:
+                if self.run_stale_seed():
+                    verdict = "PASS"
+            elif self.brand:
+                if self.run_brand():
                     verdict = "PASS"
             elif self.downgrade:
                 if self.run_downgrade():
@@ -1159,6 +1279,20 @@ def held(paths, posix=None, run=subprocess.run):
             handle.close()
         for path in immutable:
             run(["sudo", "-n", "chattr", "-i", str(path)], check=False)
+
+
+def brand_patch(instance, rigtune_dir, version, mc):
+    """The brand leg's pending.json and history.json with BRAND_PATCH added to what the composed set staged."""
+    plan = json.loads((Path(rigtune_dir) / "pending.json").read_text(encoding="utf-8"))
+    history = json.loads((Path(rigtune_dir) / "history.json").read_text(encoding="utf-8"))
+    path = Path(instance) / "config" / "sodium-options.json"
+    plan["ops"] = list(plan.get("ops") or []) + [{"type": "PATCH_JSON", "path": str(path), "id": BRAND_PATCH["op"], "group": BRAND_PATCH["group"],
+                                                   "patches": {BRAND_PATCH["key"][len("sodium."):]: BRAND_PATCH["after"]}, "attempts": 0}]
+    history["entries"] = list(history.get("entries") or []) + [{
+        "id": BRAND_PATCH["entry"], "at": "2026-09-27T12:00:00Z", "kind": "apply", "rigtuneVersion": version, "mcVersion": mc,
+        "changes": [{"id": BRAND_PATCH["change"], "type": "setting", "key": BRAND_PATCH["key"], "before": BRAND_PATCH["before"],
+                     "after": BRAND_PATCH["after"], "status": "STAGED", "opId": BRAND_PATCH["op"]}]}]
+    return plan, history
 
 
 def kill_group(instance, version, mc):
@@ -1314,9 +1448,11 @@ def filtered_log(path):
 def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--name", required=True, help="scenario name, e.g. v010-to-dev")
-    parser.add_argument("--scenario", choices=("self-update", "undo", "downgrade", "helper-kill"), default="self-update",
+    parser.add_argument("--scenario", choices=("self-update", "undo", "downgrade", "helper-kill", "stale-seed", "brand"), default="self-update",
                         help="self-update (default), or undo: the new version applies mod changes and undoes them after a restart (M14, "
-                             "B-M3); downgrade (AC3.2, AC3b.3); helper-kill: a killed helper's group is finished at the next exit (AC3f.5)")
+                             "B-M3); downgrade (AC3.2, AC3b.3); helper-kill: a killed helper's group is finished at the next exit (AC3f.5); "
+                             "stale-seed: the new version starts on --seed's state, whose staged group can never run (AC2H.6); "
+                             "brand: Apply everything under the Modrinth App's brand, then Cancel the held file group (AC4j.3)")
     parser.add_argument("--old-jar", help="self-update: the installed RigTune jar (a released one: 0.1.0, 0.2.0 or 0.3.0)")
     parser.add_argument("--old-sha256", help="expected sha256 of --old-jar")
     parser.add_argument("--new-jar", required=True, help="self-update: the update the fake Modrinth serves; undo: the installed jar")
@@ -1353,8 +1489,10 @@ def parse_args(argv):
     args.written = args.written or [str(p) for p in default_written(REPO)]
     if not args.java_home:
         parser.error("set JAVA_HOME or pass --java-home")
-    if args.seed and args.scenario != "self-update":
-        parser.error("--seed is for the self-update scenario")
+    if args.seed and args.scenario not in ("self-update", "stale-seed"):
+        parser.error("--seed is for the self-update and stale-seed scenarios")
+    if args.scenario == "stale-seed" and not args.seed:
+        parser.error("--scenario stale-seed needs --seed")
     if args.scenario == "downgrade" and not args.old_jar:
         parser.error("--scenario downgrade needs --old-jar (the released 0.3.0 jar) and --new-jar (0.4)")
     if args.profile_switch and args.scenario != "undo":

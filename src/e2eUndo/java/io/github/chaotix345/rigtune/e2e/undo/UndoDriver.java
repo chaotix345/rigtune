@@ -17,6 +17,8 @@ import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
+import io.github.chaotix345.rigtune.core.notice.Notice;
+import io.github.chaotix345.rigtune.core.notice.NoticeAction;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.loader.api.FabricLoader;
@@ -74,6 +76,13 @@ import java.util.TreeMap;
  * report's update of -Drigtune.e2e.pinTarget (an installed mod pins it), the addition -Drigtune.e2e.reverseAdd (slug:project),
  * then the report's update of -Drigtune.e2e.reverseTarget (the staged addition's version declares that update incompatible).
  * Records each outcome (the status line); quits.</li>
+ * <li>{@code stale-check} (v0.5, AC2H.6): the new version's first start on a seeded state whose staged group can never run;
+ * waits 5 s after the report, screenshots History, quits. Every phase records each status line RigTune shows (statuses:
+ * the text and every translation key in it).</li>
+ * <li>{@code brand-apply} (v0.5, AC4j.3; the harness sets -Dminecraft.launcher.brand=theseus): Apply everything (every row
+ * the report selects by default), records what it applied and the Apply's message, screenshots RigTune, quits.</li>
+ * <li>{@code brand-cancel}: waits for the "held-mod-changes" notice, records it, screenshots RigTune, takes its Cancel them,
+ * waits until pending.json holds no mod-file op, quits.</li>
  * </ul>
  * Results go to -Drigtune.e2e.out as driver-&lt;phase&gt;.json; screenshots to the instance's screenshots folder.
  */
@@ -84,6 +93,8 @@ public final class UndoDriver implements ClientModInitializer {
 	private static final int READY_TIMEOUT = 180 * SECOND;
 	private static final int STAGE_TIMEOUT = 120 * SECOND;
 	private static final int WATCHDOG = 360 * SECOND;
+	// LauncherRepairService.HELD_KEY (the held mod changes' notice).
+	private static final String HELD_KEY = "held-mod-changes";
 
 	private enum Step {
 		WAIT_TITLE, WAIT_READY, ACT, WAIT_STAGED, WAIT_UNDONE, SHOT, QUIT, DONE
@@ -105,7 +116,11 @@ public final class UndoDriver implements ClientModInitializer {
 	private final String reverseTarget = System.getProperty("rigtune.e2e.reverseTarget", "");
 	private final String reverseAdd = System.getProperty("rigtune.e2e.reverseAdd", "");
 	private int guardStep;
+	// brand-cancel: the step tick Cancel them was taken at.
+	private int cancelTick;
 	private Component statusBefore;
+	private final List<Map<String, Object>> statuses = new ArrayList<>();
+	private String lastStatus;
 	private final List<Map<String, Object>> undoPlans = new ArrayList<>();
 	private JsonObject plan;
 	private int undone;
@@ -125,7 +140,7 @@ public final class UndoDriver implements ClientModInitializer {
 	public void onInitializeClient() {
 		if (phase == null || !List.of("mod-apply", "mod-undo", "mod-check", "entry-apply", "entry-undo", "entry-check",
 				"profile-apply", "profile-undo", "profile-check", "profile-undo-all", "profile-check-all", "kill-first", "kill-second",
-				"kill-check", "guard-apply").contains(phase)) {
+				"kill-check", "guard-apply", "stale-check", "brand-apply", "brand-cancel").contains(phase)) {
 			return;
 		}
 		out = Path.of(System.getProperty("rigtune.e2e.out", "e2e-out")).toAbsolutePath();
@@ -133,6 +148,7 @@ public final class UndoDriver implements ClientModInitializer {
 		result.put("ok", false);
 		result.put("error", null);
 		result.put("events", events);
+		result.put("statuses", statuses);
 		event("undo driver loaded, phase " + phase + ", output " + out);
 		ClientTickEvents.END_CLIENT_TICK.register(this::tick);
 	}
@@ -149,6 +165,7 @@ public final class UndoDriver implements ClientModInitializer {
 				return;
 			}
 			RigTuneController controller = RigTuneClient.controller();
+			recordStatus(controller);
 			switch (step) {
 				case WAIT_TITLE -> {
 					if (minecraft.gui.screen() instanceof TitleScreen && minecraft.gui.overlay() == null) {
@@ -419,6 +436,58 @@ public final class UndoDriver implements ClientModInitializer {
 				}
 			}
 			case "guard-apply" -> guard(minecraft, controller);
+			case "brand-apply" -> {
+				if (stepTicks == 1) {
+					List<Recommendation> chosen = controller.report().recommendations().stream().filter(Recommendation::selectedByDefault).toList();
+					result.put("applied", chosen.stream().map(Recommendation::id).toList());
+					Component message = controller.apply(chosen);
+					result.put("applyMessage", message.getString());
+					event("apply everything (" + chosen.size() + " rows): " + message.getString());
+					RigTuneClient.open(minecraft.gui.screen());
+				} else if (stepTicks == 5 * SECOND) {
+					screenshot(minecraft, "e2e-brand-apply-1-rigtune.png");
+				} else if (stepTicks == 6 * SECOND) {
+					next(Step.QUIT);
+				}
+			}
+			case "brand-cancel" -> {
+				if (stepTicks % 10 != 0) {
+					return;
+				}
+				Notice held = controller.notices().stream().filter(n -> n.key().equals(HELD_KEY)).findFirst().orElse(null);
+				if (!result.containsKey("heldNotice")) {
+					if (held != null) {
+						result.put("heldNotice", held.message().english());
+						result.put("heldActions", held.actions().stream().map(NoticeAction::id).toList());
+						RigTuneClient.open(minecraft.gui.screen());
+						event("held notice: " + held.message().english());
+					} else if (stepTicks > READY_TIMEOUT) {
+						fail(minecraft, "no " + HELD_KEY + " notice within " + READY_TIMEOUT / SECOND + " s: "
+								+ controller.notices().stream().map(Notice::key).toList());
+					}
+				} else if (!result.containsKey("cancelled")) {
+					screenshot(minecraft, "e2e-brand-cancel-1-notice.png");
+					controller.noticeAction(HELD_KEY, "cancel");
+					result.put("cancelled", true);
+					cancelTick = stepTicks;
+					event("took Cancel them");
+				} else if (ops().stream().noneMatch(op -> "ENABLE_FILE".equals(op.get("type")) || "DISABLE_FILE".equals(op.get("type")))) {
+					result.put("pendingOps", ops());
+					event("no mod-file op left in pending.json");
+					next(Step.SHOT);
+				} else if (stepTicks - cancelTick > STAGE_TIMEOUT) {
+					fail(minecraft, "mod-file ops still in pending.json " + STAGE_TIMEOUT / SECOND + " s after Cancel them: " + ops());
+				}
+			}
+			case "stale-check" -> {
+				if (stepTicks == 5 * SECOND) {
+					minecraft.gui.setScreen(new HistoryScreen(minecraft.gui.screen(), controller));
+				} else if (stepTicks == 7 * SECOND) {
+					screenshot(minecraft, "e2e-stale-check-1-history.png");
+				} else if (stepTicks == 8 * SECOND) {
+					next(Step.QUIT);
+				}
+			}
 			default -> fail(minecraft, "unknown phase " + phase);
 		}
 	}
@@ -504,6 +573,22 @@ public final class UndoDriver implements ClientModInitializer {
 		}
 		event(name + " outcome: " + status.getString());
 		return true;
+	}
+
+	// Every status line RigTune shows, as it changes: its text and every translation key in it.
+	private void recordStatus(RigTuneController controller) {
+		Component status = controller == null ? null : controller.status();
+		String text = status == null ? null : status.getString();
+		if (text == null || text.equals(lastStatus)) {
+			return;
+		}
+		lastStatus = text;
+		Map<String, Object> seen = new LinkedHashMap<>();
+		seen.put("t", String.format(Locale.ROOT, "%.1f", ticks / (double) SECOND));
+		seen.put("keys", keys(status));
+		seen.put("text", text);
+		statuses.add(seen);
+		event("status: " + text);
 	}
 
 	private static List<String> keys(Component component) {

@@ -70,6 +70,22 @@ Two more modes (Phase 5):
   - The next exit's helper applies the whole group. The start after that loads 1.1.0, and History shows the group
     APPLIED.
   - Evidence: `kill.json`, `unfinished-groups-after-kill.json`.
+- **`--scenario stale-seed --seed <folder>`** (AC2H.6), for `tools/e2e/seeds/v010-dh-app-reinstalled` and `-disabled`.
+  The new version starts directly on a seeded state whose staged group can never run: the mod was reinstalled at the
+  group's target name, and RigTune's download is gone. A 0.1.0 helper would mark that group done at its own exit, so the
+  seeded self-update path never hands the state on.
+  - The checks: the group leaves pending.json; the `stale_installed` status line names the mod; History shows the
+    changes ABANDONED or DISCARDED; latest.log has "can never run" and no "will be retried"; no helper runs at exit;
+    mods/ doesn't change.
+- **`--scenario brand`** (AC4j.3): the new version under the Modrinth App's brand (`-Dminecraft.launcher.brand=theseus`)
+  with Sodium and v040-written's ws-a set staged.
+  - Apply everything, then quit: the helper holds the file group, mods/ stays byte-identical, and the settings apply.
+  - On the next start, the held notice's Cancel them drops the group: the download becomes `.rigtune-superseded`, the
+    journal change DISCARDED, and no helper runs at exit.
+- **Downgrade and a full journal.** The downgrade instance keeps the newest 46 composed journal entries, plus every entry
+  a staged op belongs to. The old versions keep 50 and add up to 2 of their own. Over the cap they evict the entries with
+  nothing left to undo first, which would take the checked Undo-last pair with them. compat040 reads each set's journal
+  in full.
 - **`guard-apply`** (AC3f.7), the undo scenario's last phase on its main instance: one start with three Applies through
   the report's own update rows.
   - A pinned update is refused with the pin message: the installed `e2e-pinner` needs `e2e-pin-target` 1.0.x.

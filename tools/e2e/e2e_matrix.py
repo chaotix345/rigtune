@@ -31,6 +31,8 @@ TIERS = ("push", "release")
 DEFAULT_NODE = "26.2"
 # Seeds (tools/e2e/seeds/<name>): the released version whose state they are, and its node.
 SEEDS = {"v010-dh": "0.1.0"}
+# AC2H.6: seeds the new version starts on directly (--scenario stale-seed), on the node their state comes from.
+STALE_SEEDS = {"v010-dh-app-reinstalled": DEFAULT_NODE, "v010-dh-app-reinstalled-disabled": DEFAULT_NODE}
 # The release tier's rows with no old jar, and the downgrade targets, per node.
 UNDO = (("undo-profiles", ["--scenario", "undo", "--profile-switch", "profile", "--profile-names", "Battery,Max FPS"]),
         ("undo-settings", ["--scenario", "undo", "--profile-switch", "settings"]),
@@ -73,7 +75,12 @@ def rows(root, tier):
         for seed, version in SEEDS.items():
             if version in releases:
                 out.append(_row("seeded-" + seed, mc, ["--seed", "tools/e2e/seeds/" + seed, "--expect-history", "auto"], version))
+        out += [_row("seeded-" + seed, mc, ["--scenario", "stale-seed", "--seed", "tools/e2e/seeds/" + seed])
+                for seed, node in STALE_SEEDS.items() if node == mc]
         out += [_row(row_id, mc, args) for row_id, args in UNDO]
+        if mc == DEFAULT_NODE:
+            # AC4j.3: the launcher-brand leg, 26.2 only (SPEC 3a's release tier).
+            out.append(_row("brand-theseus", mc, ["--scenario", "brand"]))
         for target in DOWNGRADE_TO:
             old = next((v for v in releases if core(v) == target), None)
             if old:

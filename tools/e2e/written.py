@@ -111,14 +111,16 @@ def expectations(sets):
     return out
 
 
-def compose(sets, instance, conflicts=None):
+def compose(sets, instance, conflicts=None, newest=None, dropped=None):
     """Writes every set's files into instance/config/rigtune: history.json's entries merged from every set by `at`,
     pending.json's ops from every set, benchmarks.json's runs from every set (run ids unique), profiles.json's profiles
     by id with only the latest set's baseline (ProfileStore keeps one), any other file several
     sets provide deep-merged (objects key by key, lists
     without exact duplicates, a scalar from the later set, each such override appended to `conflicts` as (file, key
-    path, earlier set, later set)); a file one set provides keeps its bytes. ${INSTANCE} paths are filled in. Returns
-    file name -> the sets it came from."""
+    path, earlier set, later set)); a file one set provides keeps its bytes. ${INSTANCE} paths are filled in. newest:
+    keep only that many history entries: the newest by `at`, and every entry a composed pending op belongs to (the
+    ids left out are appended to `dropped`). Returns file
+    name -> the sets it came from."""
     conflicts = [] if conflicts is None else conflicts
     config = Path(instance) / "config" / "rigtune"
     config.mkdir(parents=True, exist_ok=True)
@@ -138,9 +140,25 @@ def compose(sets, instance, conflicts=None):
                 raise ValueError("history.json entry ids repeat across sets {}: {}".format([s for s, _ in provided], ids))
             if len(versions) != 1:
                 raise ValueError("history.json formatVersion differs across sets {}: {}".format([s for s, _ in provided], versions))
+            entries = sorted(entries, key=lambda e: e.get("at") or "")
+            if newest is not None and len(entries) > newest:
+                # Always kept: an entry a staged op still belongs to, a baseline (fold) entry, and an entry profiles.json
+                # names (a switch's entry, the active one). The oldest of the others go.
+                staged = {op.get("id") for _, path in sources.get("pending.json", [])
+                          for op in json.loads(path.read_text(encoding="utf-8")).get("ops") or []}
+                named = set()
+                for _, path in sources.get("profiles.json", []):
+                    profiles = json.loads(path.read_text(encoding="utf-8"))
+                    named |= {s.get("entryId") for s in profiles.get("switches") or [] if isinstance(s, dict)} | {profiles.get("activeEntry")}
+                keep = {e.get("id") for e in entries if any(c.get("opId") in staged for c in e.get("changes") or [])
+                        or str(e.get("id") or "").startswith("baseline-") or e.get("id") in named}
+                others = [e for e in entries if e.get("id") not in keep]
+                gone = {e.get("id") for e in others[:max(0, len(entries) - newest)]}
+                if dropped is not None:
+                    dropped += [e.get("id") for e in entries if e.get("id") in gone]
+                entries = [e for e in entries if e.get("id") not in gone]
             # A set's formatVersion is kept, so a bump reaches 0.3.0 (which must then refuse, and the check fails).
-            text = json.dumps({"formatVersion": versions.pop(), "entries": sorted(entries, key=lambda e: e.get("at") or "")},
-                              indent=2) + "\n"
+            text = json.dumps({"formatVersion": versions.pop(), "entries": entries}, indent=2) + "\n"
             (config / name).write_text(fixtures.instantiate_json(text, instance) if fixtures.TOKEN in text else text,
                                        encoding="utf-8", newline="\n")
         elif name == "pending.json" and len(provided) > 1:
@@ -226,10 +244,22 @@ def _merge(file, path, old, new, owner, conflicts, owners):
     return copy.deepcopy(new)
 
 
+def stand_in_id(file_name):
+    """A stand-in jar's mod id from its file name, for an op without one (0.4's own disables carry no modId): the name
+    without RigTune's suffixes and .jar, cut before its version (the first '-' followed by a digit), in lower case, as a valid
+    Fabric mod id: other characters become '-', "e2e-" goes in front unless it starts with a letter, at most 64 long."""
+    base = re.sub(r"(\.disabled|\.rigtune-pending|\.rigtune-superseded)+$", "", file_name.lower())
+    base = re.sub(r"\.jar$", "", base)
+    base = re.sub(r"[^a-z0-9_-]", "-", re.split(r"-(?=\d)", base, maxsplit=1)[0])
+    if not base[:1].isalpha():
+        base = "e2e-" + base
+    return base[:64]
+
+
 def materialize(instance):
     """The files the composed pending.json's ops act on, so a helper can apply them: a minimal mod jar (fabric.mod.json
-    only, the op's mod id) for every DISABLE_FILE path and ENABLE_FILE source, and an empty config file for every
-    PATCH_* target. Files already there are left alone."""
+    only, the op's mod id, else stand_in_id of its file name) for every DISABLE_FILE path and ENABLE_FILE source, and an
+    empty config file for every PATCH_* target. Files already there are left alone."""
     instance = Path(instance)
     pending = instance / "config" / "rigtune" / "pending.json"
     for op in (json.loads(pending.read_text(encoding="utf-8")).get("ops") or []) if pending.is_file() else []:
@@ -244,7 +274,7 @@ def materialize(instance):
         elif kind.startswith("PATCH_"):
             target.write_text("", encoding="utf-8")
         else:
-            e2e_env.test_mod_jar(target, op.get("modId") or "e2e-unknown")
+            e2e_env.test_mod_jar(target, op.get("modId") or stand_in_id(target.name))
 
 
 def instance_state(instance):

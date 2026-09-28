@@ -95,6 +95,16 @@ class StutterScreenTextTest {
 				StutterScreen.notes(List.of("tick:medium", "settingsChanged:context")).getString());
 	}
 
+	// v0.5 RW-17/RW-18: the idle line and the short sessions saved since the one shown.
+	@Test
+	void idleAndShortSessionLines() {
+		assertEquals("Not counted: 17:25:00 while the game throttled its frame rate (away from the keyboard or minimised).",
+				net.minecraft.network.chat.Component.translatable("rigtune.stutter.header.idle", "17:25:00").getString());
+		assertEquals(null, StutterScreen.shortSinceLine(List.of()));
+		assertEquals("Saved since: a short session (0:14), too little data to show.", StutterScreen.shortSinceLine(List.of(13.6)).getString());
+		assertEquals("Saved since: 2 short sessions (0:14, 0:31), too little data to show.", StutterScreen.shortSinceLine(List.of(13.6, 31.0)).getString());
+	}
+
 	@Test
 	void theBenchmarkLineCountsOneSpike() {
 		assertEquals("Stutter Doctor: 1 spike during the sweeps; no cause measured",

@@ -73,6 +73,9 @@ def evaluate(lines, stutter, gc_text):
     session = sessions[-1]
     cap, tp = first(lines, "Stutter Doctor: capture on"), first(lines, "Dev stutter: tp @a")
     tp_s = None if cap is None or tp is None else tp - cap
+    # Entering the world is a teleport to the product too (its first spikes carry the tag, v0.4's C1r as well).
+    entered = first(lines, "Dev stutter: in the benchmark world")
+    entry_s = None if cap is None or entered is None else entered - cap
     pauses = gc_pauses(gc_text)
     worst = session.get("worst", [])
 
@@ -87,18 +90,29 @@ def evaluate(lines, stutter, gc_text):
     unmatched = [w["t"] for w in gc_noted if not overlapping(delta, w)]
 
     tags, causes = session.get("tags", {}), session.get("causes", {})
-    # The product's own teleport window (StutterAnalyzer.TELEPORT_WINDOW, 10 s from the position jump) from the logged
-    # second of the tp on, +1 s for the log's resolution: every listed spike in it carries "after teleport", and from the
-    # first one with chunk loads on, "chunks loading" (P5C-F1: nothing arrives in the first moments to tag).
-    post = sorted((w for w in worst if tp_s is not None and tp_s <= w["t"] <= tp_s + TELEPORT_WINDOW + 1), key=lambda w: w["t"])
-    after = [w for w in post if "afterTeleport:context" in w.get("causes", [])]
-    loading = [w for w in post if any(n.startswith(("chunksLoading:", "chunkLoad:")) for n in w.get("causes", []))]
+    # The product's own teleport window (StutterAnalyzer.TELEPORT_WINDOW, 10 s from the position jump). The log stamps
+    # whole seconds (+-1 s), so: every listed spike surely inside it (tp + 1 .. tp + 9) carries "after teleport"; at least one
+    # tagged spike lies in its widest reading (tp - 1 .. tp + 11); no tagged spike lies outside that and the world entry's
+    # own window. "Chunks loading": in the widest reading, every spike from the first one with chunk loads on (P5C-F1:
+    # nothing arrives in the first moments to tag).
+    def within(w, start, low, high):
+        return start is not None and start + low <= w["t"] <= start + high
+
+    def tagged(w):
+        return "afterTeleport:context" in w.get("causes", [])
+    sure = [w for w in worst if within(w, tp_s, 1, TELEPORT_WINDOW - 1)]
+    wide = sorted((w for w in worst if within(w, tp_s, -1, TELEPORT_WINDOW + 1)), key=lambda w: w["t"])
+    stray = [w["t"] for w in worst if tagged(w) and not within(w, tp_s, -1, TELEPORT_WINDOW + 1)
+             and not within(w, entry_s, -1, TELEPORT_WINDOW + 1)]
+    untagged = [w["t"] for w in sure if not tagged(w)]
+    loading = [w for w in wide if any(n.startswith(("chunksLoading:", "chunkLoad:")) for n in w.get("causes", []))]
     first_loading = loading[0]["t"] if loading else None
-    late_untagged = [w["t"] for w in post if first_loading is not None and w["t"] >= first_loading and w not in loading]
+    late_untagged = [w["t"] for w in wide if first_loading is not None and w["t"] >= first_loading and w not in loading]
     checks += [
-        ("the spikes after the teleport carry \"after teleport\"", tags.get("afterTeleport", 0) > 0 and len(after) == len(post) > 0,
-         "tp at session {} s; listed spikes in its window: {}; tagged after teleport: {} (session total {})".format(
-             tp_s, [w["t"] for w in post], [w["t"] for w in after], tags.get("afterTeleport", 0))),
+        ("the spikes after the teleport carry \"after teleport\"", tags.get("afterTeleport", 0) > 0 and any(tagged(w) for w in wide)
+         and not untagged and not stray,
+         "tp at session {} s (world entry {} s); tagged near the tp: {}; untagged inside its window: {}; tagged outside both windows: {}"
+         .format(tp_s, entry_s, [w["t"] for w in wide if tagged(w)], untagged, stray)),
         ("\"chunks loading\" from the first chunk load after the teleport on", tags.get("chunksLoading", 0) > 0 and first_loading is not None
          and not late_untagged, "tagged: {}; first at {} s; untagged after it: {}".format(tags.get("chunksLoading", 0), first_loading, late_untagged)),
         ("no GC milliseconds claimed without an overlapping pause", bool(pauses) and not unmatched,

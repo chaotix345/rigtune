@@ -319,6 +319,12 @@ abstract class ForwardingController implements RigTuneController {
 		return delegate.modFiles();
 	}
 
+	// v0.5 WS-L1 (review M2; approved frozen-file exception).
+	@Override
+	public boolean modFilesOptedIn() {
+		return delegate.modFilesOptedIn();
+	}
+
 	@Override
 	public ApplyPreview previewStutterFix(FixOffer.Offer offer) {
 		return delegate.previewStutterFix(offer);
