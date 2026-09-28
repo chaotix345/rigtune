@@ -511,7 +511,66 @@ public class A11yGameTest implements FabricClientGameTest {
 
 	// ---- WS-T (C09, AC6.13): TryItScreen and the plain Preview's footer.
 
+	// Over a canned result (the change, the two runs, the apply, the verdict and its caveat) every line is a Tab stop that
+	// narrates its text, in order, and the Tab after the last line reaches the footer's buttons; a focused line and high
+	// contrast in the screenshots. Preview's plain footer: [Try it (measured)] is a Tab stop that narrates its label.
 	private static void walkTryIt(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		Screen found = context.computeOnClient(mc -> mc.gui.screen());
+		A11yController controller = new A11yController(v05.stub(), v05.real(), v05.configDir());
+		try {
+			io.github.chaotix345.rigtune.core.tryit.TryIt t = io.github.chaotix345.rigtune.core.tryit.TryIt.of("e-a11y", "setting:vanilla.renderDistance",
+					"vanilla.renderDistance", "12", "10", io.github.chaotix345.rigtune.core.tryit.TryIt.Kind.NOW,
+					io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest.Scene.CURRENT, "2026-09-20T10:00:00Z", "a11y", "0.5.0", "26.2", java.util.Map.of(), null);
+			io.github.chaotix345.rigtune.core.tryit.TryItVerdict.Verdict verdict = new io.github.chaotix345.rigtune.core.tryit.TryItVerdict.Verdict(
+					io.github.chaotix345.rigtune.core.tryit.TryItVerdict.Kind.BETTER, 12.6, 6.6, 6.2, List.of(),
+					List.of(io.github.chaotix345.rigtune.core.tryit.TryItVerdict.Caveat.SCENE));
+			CannedViews.tryIt(new TryItView(TryItView.Stage.RESULT, t, tryItRun("b", 84.2, 142.0, t.pairId(), true), tryItRun("a", 94.8, 151.3, t.pairId(), false),
+					verdict, JournalChange.APPLIED, null, true));
+			context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.TryItScreen(new TitleScreen(), controller, null)));
+			context.waitFor(mc -> mc.gui.screen() instanceof io.github.chaotix345.rigtune.client.ui.TryItScreen && rows(mc) == 6, 100);
+			context.waitTicks(2);
+			walk(context, "try-it result", List.of("Measured before: 1% lows 84 FPS, average 142 FPS", "Measured after: 1% lows 95 FPS, average 151 FPS",
+					"Better: 1% lows +12.6% (average +6.6%), more than the ±6.2% these runs vary by.",
+					"A measured comparison in one scene, not proof: busier places may differ."));
+			tabUntilNarrates(context, "try-it footer", Component.translatable("rigtune.tryit.action.revert").getString());
+			focusRow(context, 4);
+			context.takeScreenshot("a11y-tryit-focus-854x480-scale2");
+			highContrastScreenshot(context, "a11y-hc-tryit-854x480-scale2");
+
+			TryItAvailable available = new TryItAvailable(controller);
+			context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.PreviewScreen(new TitleScreen(), available, List.of(
+					new io.github.chaotix345.rigtune.core.model.Recommendation("a11y:rd", io.github.chaotix345.rigtune.core.model.Category.SETTING,
+							io.github.chaotix345.rigtune.core.model.Impact.LOW, "Render distance", "", new io.github.chaotix345.rigtune.core.model.Action.SetSetting(
+									"vanilla.renderDistance", "12", "10"), true)))));
+			context.waitForScreen(io.github.chaotix345.rigtune.client.ui.PreviewScreen.class);
+			context.waitTicks(3);
+			tabUntilNarrates(context, "preview footer", Component.translatable("rigtune.tryit.button").getString());
+			context.takeScreenshot("a11y-tryit-preview-footer-854x480-scale2");
+		} finally {
+			CannedViews.clear();
+			context.runOnClient(mc -> mc.gui.setScreen(found));
+		}
+	}
+
+	// The canned world with Try it available (an inactive button is no Tab stop).
+	private static final class TryItAvailable extends ForwardingController {
+		TryItAvailable(io.github.chaotix345.rigtune.client.ui.RigTuneController delegate) {
+			super(delegate);
+		}
+
+		@Override
+		public io.github.chaotix345.rigtune.core.model.@org.jspecify.annotations.Nullable Text tryItRefusal(
+				io.github.chaotix345.rigtune.core.model.Recommendation rec) {
+			return null;
+		}
+	}
+
+	private static io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord tryItRun(String id, double low, double avg, String pairId, boolean before) {
+		return new io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord(id, "2026-09-20T10:01:00Z", "0.5.0", "26.2", "MEASURE", "CURRENT",
+				before ? io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord.BEFORE : io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord.AFTER,
+				pairId, 60, true, java.util.Map.of(), new io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord.Result(avg, low, 1000 / low, 2, 0.03), java.util.Map.of(),
+				java.util.Map.of(), null, false, null);
 	}
 
 	// ---- WS-P2 (C16, AC7.11): ServerProfilesScreen with a canned view.

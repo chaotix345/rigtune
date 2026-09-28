@@ -126,10 +126,22 @@ public record TryIt(String id, String pairId, String entryId, @Nullable String r
 				startedAt, session, rigtuneVersion, mcVersion, settingsBefore, spot, null, null, null, null);
 	}
 
-	// When an after run starts: the managed settings, the session and the spot then.
+	// When an after run is queued: the managed settings and the session (the spot: withAfterSpot, as the run starts).
 	public TryIt withAfter(Map<String, String> settings, String session, @Nullable Spot spot) {
 		return new TryIt(id, pairId, entryId, recommendationId, key, from, to, kind, scene, startedAt, this.session, rigtuneVersion, mcVersion,
 				settingsBefore, beforeSpot, settings, session, spot, afterRunId);
+	}
+
+	// Where the player stood right before the before run started (a CURRENT-scene try).
+	public TryIt withBeforeSpot(@Nullable Spot spot) {
+		return new TryIt(id, pairId, entryId, recommendationId, key, from, to, kind, scene, startedAt, session, rigtuneVersion, mcVersion,
+				settingsBefore, spot, settingsAfter, afterSession, afterSpot, afterRunId);
+	}
+
+	// Where the player stood right before the after run started.
+	public TryIt withAfterSpot(@Nullable Spot spot) {
+		return new TryIt(id, pairId, entryId, recommendationId, key, from, to, kind, scene, startedAt, session, rigtuneVersion, mcVersion,
+				settingsBefore, beforeSpot, settingsAfter, afterSession, spot, afterRunId);
 	}
 
 	public TryIt withAfterRun(String runId) {

@@ -1160,6 +1160,11 @@ public final class RealController implements RigTuneController {
 		v05().tryIt().cancel();
 	}
 
+	@Override
+	public void tryItRefresh() {
+		v05().tryIt().refresh();
+	}
+
 	// C16 (WS-P2).
 
 	@Override

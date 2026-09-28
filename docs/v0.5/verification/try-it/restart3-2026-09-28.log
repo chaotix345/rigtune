@@ -1,0 +1,8 @@
+[14:05:21] [RigTune worker/INFO] (RigTune) Try it dev: mode restart3
+[14:05:26] [Render thread/INFO] (RigTune) Try it dev: sodium.performance.chunk_build_defer_mode = ALWAYS; try NONE
+[14:05:26] [Render thread/INFO] (RigTune) Try it dev: History: apply 47411548-517a-43cb-b499-39fba954d6a1 undoOf null: [vanilla.renderDistance 12 -> 10 REVERTED]
+[14:05:26] [Render thread/INFO] (RigTune) Try it dev: History: undo c6faa5b1-86ea-4d76-a536-7b59e22d61f3 undoOf 47411548-517a-43cb-b499-39fba954d6a1: [vanilla.renderDistance 10 -> 12 APPLIED]
+[14:05:26] [Render thread/INFO] (RigTune) Try it dev: History: apply e8a61f72-edd2-4bc8-9934-22f85fce81e5 undoOf null: [sodium.performance.chunk_build_defer_mode ALWAYS -> ONE_FRAME REVERTED]
+[14:05:26] [Render thread/INFO] (RigTune) Try it dev: History: undo 1ed27612-63e4-4c11-ab83-52d0dcb3e8de undoOf e8a61f72-edd2-4bc8-9934-22f85fce81e5: [sodium.performance.chunk_build_defer_mode ONE_FRAME -> ALWAYS APPLIED]
+[14:05:26] [Render thread/INFO] (RigTune) Try it dev: recent: [sodium.performance.chunk_build_defer_mode REVERTED, vanilla.renderDistance REVERTED, vanilla.renderDistance REVERTED]
+[14:05:26] [Render thread/INFO] (RigTune) Try it dev: RESULT restart3: done

@@ -10,6 +10,7 @@ import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest.Mode;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest.Scene;
+import io.github.chaotix345.rigtune.core.tryit.TryIt;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -80,7 +81,9 @@ public class BenchmarkMenuScreen extends Screen {
 		y += (scene == Scene.CURRENT ? 3 : 2) * LINE + 4;
 
 		String refusal = BenchmarkController.unavailable(minecraft, scene);
-		Optional<BenchmarkRecord> before = BenchmarkStore.history().openBefore(scene.name(), HardwareProbe.minecraftVersion());
+		// v0.5 (docs/v0.5/SPEC.md 6, AC6.9): never a Try it pair's before (it would take the try's "after" over).
+		Optional<BenchmarkRecord> before = BenchmarkStore.history().openBefore(scene.name(), HardwareProbe.minecraftVersion(),
+				id -> !id.startsWith(TryIt.PAIR_PREFIX));
 		addAction(Component.translatable("rigtune.benchmark.menu.tune"), new BenchmarkRequest(Mode.TUNE, scene, null), refusal, null, x, y);
 		y += 24;
 		addAction(Component.translatable("rigtune.benchmark.menu.measure_before"), new BenchmarkRequest(Mode.MEASURE, scene, UUID.randomUUID().toString()),
