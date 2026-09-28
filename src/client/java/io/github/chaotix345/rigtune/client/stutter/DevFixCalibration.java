@@ -28,7 +28,9 @@ import java.util.concurrent.ThreadLocalRandom;
 //   terrain every 20 s for PLAY_SECONDS, then the Stutter Doctor: the analysis, the evidence and the offer are logged, and
 //   the Sodium fix is applied if it's offered (it's staged: the helper patches Sodium's file at the exit); quit.
 // - the fix staged or measuring ("after"): the same play with fresh terrain, leave the world (the session ends and is
-//   compared), log the record (the verdict, φ, p, both sides), then Undo this on its entry; quit.
+//   compared), log the record (the verdict, φ, p, both sides), then Undo this on its entry; quit. It plays
+//   AFTER_EXTRA_SECONDS longer, so its gameplay never ends below FixTracker.afterTarget(before); while the record still
+//   measures (too little gameplay, e.g. the window lost focus), it quits without the Undo and the next launch plays on.
 // - otherwise ("check"): log the record and Sodium's Chunk Updates value; quit.
 // Every step is logged with the prefix "Dev fix calibration:". Run it in a plain client with Sodium's Chunk Updates set
 // to Immediate (ZERO_FRAMES), e.g. JAVA_TOOL_OPTIONS=-Drigtune.dev.stutterScript=fixcalibrate.
@@ -39,6 +41,7 @@ final class DevFixCalibration {
 	private static final String DEFER = "sodium.performance.chunk_build_defer_mode";
 	private static final int TICKS_PER_SECOND = 20;
 	private static final int PLAY_SECONDS = 390;
+	private static final int AFTER_EXTRA_SECONDS = 60;
 	private static final int TELEPORT_EVERY_SECONDS = 20;
 
 	private enum Step { BEFORE, AFTER, CHECK }
@@ -55,6 +58,10 @@ final class DevFixCalibration {
 	private static @Nullable CompletableFuture<@Nullable UndoPlan> planning;
 
 	private DevFixCalibration() {
+	}
+
+	private static int playSeconds() {
+		return step == Step.AFTER ? PLAY_SECONDS + AFTER_EXTRA_SECONDS : PLAY_SECONDS;
 	}
 
 	static void tick(Minecraft minecraft, StutterService service) {
@@ -89,7 +96,7 @@ final class DevFixCalibration {
 			}
 			case OPENING -> {
 				if (BenchmarkWorld.state() == BenchmarkWorld.State.READY && minecraft.level != null) {
-					log("in the benchmark world; " + PLAY_SECONDS + " s of play, a teleport into new terrain every " + TELEPORT_EVERY_SECONDS + " s");
+					log("in the benchmark world; " + playSeconds() + " s of play, a teleport into new terrain every " + TELEPORT_EVERY_SECONDS + " s");
 					next(Stage.PLAYING);
 				} else if (BenchmarkWorld.state() == BenchmarkWorld.State.FAILED) {
 					quit(minecraft, "FAILED: the benchmark world didn't open");
@@ -100,7 +107,7 @@ final class DevFixCalibration {
 					long offset = base + 3_000L * teleports++;
 					command(minecraft, "tp @a " + offset + " 200 " + offset);
 				}
-				if (ticks >= PLAY_SECONDS * TICKS_PER_SECOND) {
+				if (ticks >= playSeconds() * TICKS_PER_SECOND) {
 					if (step == Step.BEFORE) {
 						minecraft.gui.setScreen(new StutterScreen(null, controller));
 						log("opened the Stutter Doctor");
@@ -145,6 +152,12 @@ final class DevFixCalibration {
 							log(String.format(java.util.Locale.ROOT, "verdict %s: before %.2f hitches/min (%.0f ms lost/min), after %.2f (%.0f); phi %.3f, pLess %.6g, pMore %.6g",
 									now.verdict().kind(), now.verdict().beforePerMinute(), now.verdict().lostBeforePerMinute(), now.verdict().afterPerMinute(),
 									now.verdict().lostAfterPerMinute(), now.verdict().phi(), now.verdict().pLess(), now.verdict().pMore()));
+						}
+						if (now != null && now.state() == FixTracker.State.MEASURING) {
+							// Not enough gameplay yet (e.g. the window lost focus): the next launch plays on with the fix in place.
+							quit(minecraft, "after step: still measuring (" + (now.after() == null ? 0 : Math.round(now.after().gameplaySeconds())) + " of "
+									+ Math.round(FixTracker.afterTarget(now.before())) + " s); the next launch plays on");
+							return;
 						}
 						String entryId = fix.entryId();
 						planning = CompletableFuture.supplyAsync(() -> controller.undoPlanFor(entryId), Probes.EXECUTOR);

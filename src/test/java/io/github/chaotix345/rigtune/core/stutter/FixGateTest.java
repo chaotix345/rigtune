@@ -37,6 +37,22 @@ class FixGateTest {
 		assertEquals(FixOffer.Reason.EXCLUDED, FixGate.check(report(StutterReport.MONITOR, 600, 30), true, false, true));
 	}
 
+	static StutterReport idle(StutterReport r, double idleSeconds) {
+		return new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(), r.frames(),
+				r.avgFps(), r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(), r.tags(), r.worst(), r.facts(),
+				r.advice(), r.enoughData(), r.phaseTiming(), r.hitches(), r.settingsAtStart(), r.settingsAtEnd(), idleSeconds);
+	}
+
+	// RW-17 for C20 (the coordinator): a session the game throttled (idle) for longer than it was played can't be a
+	// comparison's before side; after excluded, before the store.
+	@Test
+	void aMostlyIdleSessionIsNoBeforeSide() {
+		assertEquals(FixOffer.Reason.IDLE, FixGate.check(idle(report(StutterReport.MONITOR, 600, 30), 600.5), false, false, true));
+		assertNull(FixGate.check(idle(report(StutterReport.MONITOR, 600, 30), 600), false, false, true));
+		assertEquals(FixOffer.Reason.EXCLUDED, FixGate.check(idle(report(StutterReport.MONITOR, 600, 30), 900), true, false, true));
+		assertEquals(FixOffer.Reason.IDLE, FixGate.check(idle(report(StutterReport.MONITOR, 10, 1), 900), false, true, false));
+	}
+
 	// When several fail, the first of benchmark, excluded, store, busy, length.
 	@Test
 	void theOrderOfReasons() {

@@ -12,9 +12,11 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // AC5.8 (FixTrackerTest): the record follows the journal (staged -> measuring -> compared; undone, not applied, replaced,
 // expired), sessions count only under the fix's conditions, and the after side accumulates to its target.
@@ -63,6 +65,35 @@ class FixTrackerTest {
 
 	private static FixTracker.Record advance(FixTracker.Record r, List<JournalEntry> journal, FixTracker.SessionEnd session, Instant now) {
 		return FixTracker.advance(r, Journal.State.OK, journal, session, now);
+	}
+
+	// RW-17 for C20: an after session the game throttled (idle) for longer than it was played doesn't count.
+	@Test
+	void aMostlyIdleSessionIsSkipped() {
+		FixTracker.SessionEnd s = session(60, 400, 10, RD, "10");
+		FixTracker.SessionEnd idle = new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), s.atStart(), s.atEnd(), false, true);
+		FixTracker.Record r = advance(measuring(), journal(RD, JournalChange.APPLIED), idle, at(60));
+		assertEquals(FixTracker.State.MEASURING, r.state());
+		assertNull(r.after());
+		assertEquals(new FixTracker.Skip(FixTracker.IDLE, List.of()), r.lastSkip());
+		assertEquals(1, r.skipped());
+		assertEquals(s, new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), s.atStart(), s.atEnd(), false), "not idle by default");
+	}
+
+	// C20 review L12: a fix that expired because its journal entry is gone has nothing left to undo; one that expired by
+	// age keeps its Undo; undone and not-applied fixes have none.
+	@Test
+	void aFixWhoseEntryIsGoneHasNothingToUndo() {
+		FixTracker.Record gone = FixTracker.advance(measuring(), Journal.State.OK, List.of(), null, at(5));
+		assertEquals(FixTracker.State.EXPIRED, gone.state());
+		assertFalse(gone.undoable());
+		FixTracker.Record old = advance(measuring(), journal(RD, JournalChange.APPLIED), null, APPLIED_AT.plus(FixTracker.MAX_AGE).plusSeconds(1));
+		assertEquals(FixTracker.State.EXPIRED, old.state());
+		assertTrue(old.undoable());
+		assertTrue(measuring().undoable());
+		assertTrue(staged().undoable());
+		assertFalse(measuring().withState(FixTracker.State.UNDONE).undoable());
+		assertFalse(measuring().withState(FixTracker.State.NOT_APPLIED).undoable());
 	}
 
 	@Test

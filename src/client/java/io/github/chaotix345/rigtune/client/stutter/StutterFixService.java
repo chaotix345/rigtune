@@ -36,6 +36,7 @@ import io.github.chaotix345.rigtune.core.profile.ProfileStore;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.stutter.FixConditions;
+import io.github.chaotix345.rigtune.core.stutter.FixGate;
 import io.github.chaotix345.rigtune.core.stutter.FixHold;
 import io.github.chaotix345.rigtune.core.stutter.FixOffer;
 import io.github.chaotix345.rigtune.core.stutter.FixOffers;
@@ -63,6 +64,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 // docs/v0.5/SPEC.md 5 (C20): the Stutter Doctor's one-click fixes. Reached only through RealController.v05() (X4); nothing
 // happens in the constructor. The offers are worked out with each analysis (StutterService, on its worker: evaluate); a
@@ -84,6 +86,8 @@ public final class StutterFixService {
 	private volatile List<FixSpec> specs = List.of();
 	// Render thread.
 	private long lastRefresh;
+	// history.json (the tests stand in for it).
+	volatile Supplier<Journal.Snapshot> history = () -> ClientJournal.get().snapshot();
 
 	// What an analysis needs from the render thread for the fixes: the rules' fix entries, whether another fix is staged
 	// or measuring, whether the store can be written, the live server limits, whether the capture ran around a benchmark,
@@ -93,9 +97,10 @@ public final class StutterFixService {
 	}
 
 	// An analysis' fix side: per fired advice its offer (or why not yet), the session's outcome and conditions (the before
-	// side if the player applies one), whether it's excluded (WS-B's M4 rule), and the session's start and source.
-	public record Fixes(Map<String, FixOffer> offers, SessionOutcome outcome, FixConditions conditions, boolean excluded, Instant startedAt,
-			String source) {
+	// side if the player applies one), whether it's excluded (WS-B's M4 rule) or mostly idle (RW-17), and the session's start
+	// and source.
+	public record Fixes(Map<String, FixOffer> offers, SessionOutcome outcome, FixConditions conditions, boolean excluded, boolean idle,
+			Instant startedAt, String source) {
 	}
 
 	public StutterFixService(RealController controller) {
@@ -137,6 +142,8 @@ public final class StutterFixService {
 
 	// Render thread: the cached records with the one being added, or null while they haven't been read (a read is queued).
 	private @Nullable List<FixTracker.Record> cached() {
+		// `adding` first: the io chain reloads the records before it clears `adding`, so the record is in one of them.
+		FixTracker.Record a = adding;
 		List<FixTracker.Record> r = records;
 		if (r == null) {
 			if (!loadQueued && controller != null) {
@@ -145,7 +152,6 @@ public final class StutterFixService {
 			}
 			return null;
 		}
-		FixTracker.Record a = adding;
 		if (a == null || r.stream().anyMatch(x -> x.entryId().equals(a.entryId()))) {
 			return r;
 		}
@@ -183,16 +189,19 @@ public final class StutterFixService {
 		stutter().io(() -> advanceAll(null));
 	}
 
-	// io chain: every record that can still change follows the journal and, if one just ended, the session.
-	private void advanceAll(FixTracker.@Nullable SessionEnd session) {
+	// io chain: every record that can still change follows the journal and, if one just ended, the session. The state and
+	// the entries come from one read of history.json; a read that fails changes nothing (a fix never expires because the
+	// file couldn't be read for a moment).
+	void advanceAll(FixTracker.@Nullable SessionEnd session) {
 		try {
-			Journal journal = ClientJournal.get();
-			Journal.State state = journal.state();
-			List<JournalEntry> entries = journal.entries();
+			Journal.Snapshot read = history.get();
+			if (read.state() != Journal.State.OK && read.state() != Journal.State.MISSING) {
+				return;
+			}
 			Instant now = Instant.now();
 			FixStore store = store();
 			for (FixTracker.Record r : store.records()) {
-				FixTracker.Record next = FixTracker.advance(r, state, entries, session, now);
+				FixTracker.Record next = FixTracker.advance(r, read.state(), read.entries(), session, now);
 				if (!next.equals(r)) {
 					store.update(r.entryId(), x -> next);
 				}
@@ -259,7 +268,7 @@ public final class StutterFixService {
 					result.facts().claimedShares(), result.facts().causeSpikes(), result.facts().unmeasured(), result.facts().taggedShares(), outcome, excluded,
 					offers);
 		}
-		return new Fixes(offers, outcome, conditions, excluded, copy.startedAt(), copy.source());
+		return new Fixes(offers, outcome, conditions, excluded, FixGate.idle(report), copy.startedAt(), copy.source());
 	}
 
 	// sf §1.7: an offer row names the active saved profile when it also sets the key.
@@ -290,14 +299,13 @@ public final class StutterFixService {
 	// ---- A session ended (StutterService's save: on the io chain, or at quit on the render thread, which then waits for
 	// the io chain) ----
 
-	void sessionEnded(Fixes fixes, StutterMonitor.Capture session) {
-		FixConditions atStart = session.fixAtStart;
+	void sessionEnded(Fixes fixes, @Nullable FixConditions atStart) {
 		if (controller == null || atStart == null) {
 			return;
 		}
 		FixConditions start = atStart.withMeasurement(fixes.conditions().phaseTiming(), fixes.conditions().gcMeasured());
 		FixTracker.SessionEnd end = new FixTracker.SessionEnd(fixes.startedAt(), fixes.source(), fixes.outcome(), start, fixes.conditions(),
-				fixes.excluded());
+				fixes.excluded(), fixes.idle());
 		stutter().io(() -> advanceAll(end));
 	}
 
@@ -326,8 +334,9 @@ public final class StutterFixService {
 			return Texts.component(refused);
 		}
 		List<FixTracker.Record> recs = cached();
-		if (recs == null) {
-			return Texts.component(FixText.gone());
+		Fixes shown = stutter().shownFixes();
+		if (recs == null || shown == null) {
+			return Texts.component(FixText.later());
 		}
 		if (adding != null || anyActive(recs)) {
 			return Texts.component(FixText.notYet(new FixOffer.NotYet(offer.adviceId(), FixOffer.Reason.BUSY, List.of())));
@@ -335,10 +344,7 @@ public final class StutterFixService {
 		if (!writable) {
 			return Texts.component(FixText.notYet(new FixOffer.NotYet(offer.adviceId(), FixOffer.Reason.STORE, List.of())));
 		}
-		Fixes shown = stutter().shownFixes();
-		SettingsSnapshot effective = effective(SettingsBridge.read(minecraft), c.configDir());
-		if (shown == null || shown.offers().values().stream().noneMatch(o -> o instanceof FixOffer.Offer same && same.sameChange(offer))
-				|| !SettingValues.same(effective.get(offer.key()), offer.from())) {
+		if (gone(offer, shown, () -> effective(SettingsBridge.read(minecraft), c.configDir()))) {
 			return Texts.component(FixText.gone());
 		}
 		RulesDocument rules = c.rules();
@@ -349,26 +355,39 @@ public final class StutterFixService {
 				rules == null ? 0 : rules.revision, offer.now(), offer.now() ? FixTracker.State.MEASURING : FixTracker.State.STAGED, shown.outcome(),
 				shown.conditions(), null, 0, null, null, false);
 		adding = record;
-		Component result = c.apply(List.of(recommendation(offer, rules)), entryId);
-		JournalChange change = change(entryId, offer.key());
-		if (change == null) {
-			adding = null;
-			return result;
-		}
-		FixTracker.Record stored = record.withState(JournalChange.APPLIED.equals(change.status()) ? FixTracker.State.MEASURING : FixTracker.State.STAGED);
-		adding = stored;
-		stutter().io(() -> {
-			try {
-				if (!store().add(stored)) {
-					RigTune.LOGGER.warn("Stutter Doctor: the fix was applied but stutter-fixes.json couldn't be written; it isn't tracked");
+		FixTracker.Record stored;
+		boolean queued = false;
+		try {
+			Component result = c.apply(List.of(recommendation(offer, rules)), entryId);
+			JournalChange change = change(entryId, offer.key());
+			if (change == null) {
+				return result;
+			}
+			stored = record.withState(JournalChange.APPLIED.equals(change.status()) ? FixTracker.State.MEASURING : FixTracker.State.STAGED);
+			adding = stored;
+			stutter().io(() -> {
+				try {
+					if (!store().add(stored)) {
+						RigTune.LOGGER.warn("Stutter Doctor: the fix was applied but stutter-fixes.json couldn't be written; it isn't tracked");
+					}
+				} finally {
+					reload();
+					adding = null;
 				}
-			} finally {
-				reload();
+			});
+			queued = true;
+		} finally {
+			if (!queued) {
 				adding = null;
 			}
-		});
+		}
 		if (stored.state() == FixTracker.State.MEASURING) {
-			stutter().restartSession(minecraft);
+			try {
+				stutter().restartSession(minecraft);
+			} catch (RuntimeException e) {
+				// The setting and the record stand; only this session goes on, so the next one is the first measured.
+				RigTune.LOGGER.warn("Stutter Doctor: the session couldn't restart after the fix", e);
+			}
 		}
 		return Texts.component(FixText.applied(stored.state() == FixTracker.State.MEASURING, FixTracker.afterTarget(stored.before())));
 	}
@@ -395,15 +414,15 @@ public final class StutterFixService {
 		if (controller == null) {
 			return List.of();
 		}
-		List<FixTracker.Record> r = new ArrayList<>(loaded());
 		FixTracker.Record a = adding;
+		List<FixTracker.Record> r = new ArrayList<>(loaded());
 		if (a != null && r.stream().noneMatch(x -> x.entryId().equals(a.entryId()))) {
 			r.add(a);
 		}
 		try {
-			Journal journal = ClientJournal.get();
+			Journal.Snapshot read = history.get();
 			Instant now = Instant.now();
-			r.replaceAll(x -> FixTracker.advance(x, journal.state(), journal.entries(), null, now));
+			r.replaceAll(x -> FixTracker.advance(x, read.state(), read.entries(), null, now));
 		} catch (RuntimeException e) {
 			RigTune.LOGGER.warn("Stutter Doctor: could not read History for the fixes' holds", e);
 		}
@@ -411,6 +430,20 @@ public final class StutterFixService {
 	}
 
 	// ---- Helpers ----
+
+	// Apply's last check: the offer is still one the Stutter Doctor shows, and the setting, as the next restart leaves it,
+	// still at its "from". A read that fails (a config file mid-write) refuses the fix the same way; it never throws.
+	static boolean gone(FixOffer.Offer offer, @Nullable Fixes shown, Supplier<SettingsSnapshot> effective) {
+		if (shown == null || shown.offers().values().stream().noneMatch(o -> o instanceof FixOffer.Offer same && same.sameChange(offer))) {
+			return true;
+		}
+		try {
+			return !SettingValues.same(effective.get().get(offer.key()), offer.from());
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.warn("Stutter Doctor: could not read the settings for the fix", e);
+			return true;
+		}
+	}
 
 	// The change an offer makes: one SetSetting, its reason naming the advice.
 	static Recommendation recommendation(FixOffer.Offer offer, @Nullable RulesDocument rules) {

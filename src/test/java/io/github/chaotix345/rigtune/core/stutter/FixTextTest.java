@@ -35,6 +35,9 @@ class FixTextTest {
 		assertEquals("Another fix is still being measured. Wait for its comparison or dismiss it first.", notYet(FixOffer.Reason.BUSY));
 		assertTrue(notYet(FixOffer.Reason.STORE).contains("stutter-fixes.json"));
 		assertTrue(notYet(FixOffer.Reason.EXCLUDED).contains("can't be compared"));
+		assertEquals("This session was idle (throttled) longer than it was played, so it can't be compared. Play a session without long breaks.",
+				notYet(FixOffer.Reason.IDLE));
+		assertEquals("The Stutter Doctor isn't ready for this yet. Try again in a moment.", FixText.later().english());
 		for (FixOffer.Reason reason : FixOffer.Reason.values()) {
 			assertTrue(!notYet(reason).isBlank(), reason.name());
 		}
@@ -94,6 +97,7 @@ class FixTextTest {
 				skipped(m, new FixTracker.Skip("setting", List.of("vanilla.renderDistance", "10", "12"))));
 		assertEquals("Your last session didn't count: the window size or fullscreen changed.", skipped(m, new FixTracker.Skip("display", List.of())));
 		assertTrue(skipped(m, new FixTracker.Skip("excluded", List.of())).contains("benchmark"));
+		assertEquals("Your last session didn't count: it was idle (throttled) longer than it was played.", skipped(m, new FixTracker.Skip("idle", List.of())));
 		for (FixConditions.Reason reason : FixConditions.Reason.values()) {
 			assertTrue(!skipped(m, new FixTracker.Skip(reason.id(), List.of("k", "a", "b"))).contains("null"), reason.name());
 		}

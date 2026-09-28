@@ -15,6 +15,7 @@ import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import io.github.chaotix345.rigtune.core.store.JsonStateFile;
+import io.github.chaotix345.rigtune.core.stutter.FixConditions;
 import io.github.chaotix345.rigtune.core.stutter.StutterAdvisor;
 import io.github.chaotix345.rigtune.core.stutter.StutterAnalyzer;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
@@ -236,10 +237,14 @@ public final class StutterService {
 		if (session == null) {
 			return;
 		}
+		boolean paused = session.paused();
 		end(session, minecraft, false);
 		startSession(minecraft);
 		live = null;
 		StutterMonitor.levelChanged(System.nanoTime());
+		if (paused) {
+			pause(true);
+		}
 	}
 
 	// CLIENT_STOPPING: the running session is saved right away, on this thread, after any save still queued (leaving the
@@ -294,16 +299,18 @@ public final class StutterService {
 			return;
 		}
 		live = null;
-		Machine machine = machine(minecraft, session);
+		Machine machine = machine(minecraft, session, true);
 		int gen = generation;
 		boolean aroundBenchmark = session.aroundBenchmark;
+		// Not the capture itself: the save may wait on the io chain, and the capture holds its frame ring.
+		FixConditions fixAtStart = session.fixAtStart;
 		Runnable save = () -> {
 			Analysis a = analyze(copy, machine);
 			// C20: the tracked fix sees every monitor session that ends, saved or not (in its own guard).
 			StutterFixService fixes = a.fixes() == null ? null : fixes();
 			if (fixes != null) {
 				try {
-					fixes.sessionEnded(a.fixes(), session);
+					fixes.sessionEnded(a.fixes(), fixAtStart);
 				} catch (RuntimeException e) {
 					RigTune.LOGGER.warn("Stutter Doctor: the stutter fix's tracking failed for this session", e);
 				}
@@ -421,7 +428,9 @@ public final class StutterService {
 		if (copy == null || !keep) {
 			return;
 		}
-		Analysis a = analyze(copy, machine(minecraft, bench));
+		// Analysed here, on the render thread: without the fixes' inputs (a benchmark capture is never offered a fix, and
+		// working that out would read pending.json).
+		Analysis a = analyze(copy, machine(minecraft, bench, false));
 		lastBenchmark = a.report();
 		lastBenchmarkDhWorldGen = a.dhWorldGenCores();
 		RigTune.LOGGER.info("Stutter Doctor: benchmark: {} spikes, causes {}, {}", a.report().spikes().total(), a.report().causes(), phases(copy));
@@ -460,7 +469,7 @@ public final class StutterService {
 		analysing = true;
 		lastAnalysis = now;
 		StutterCapture.Copy copy = StutterCapture.copy(session);
-		Machine machine = machine(minecraft, session);
+		Machine machine = machine(minecraft, session, true);
 		CompletableFuture.supplyAsync(() -> analyze(copy, machine), Probes.EXECUTOR).whenComplete((result, error) -> minecraft.execute(() -> {
 			analysing = false;
 			if (error != null) {
@@ -515,7 +524,7 @@ public final class StutterService {
 		return out;
 	}
 
-	private Machine machine(Minecraft minecraft, StutterMonitor.@Nullable Capture capture) {
+	private Machine machine(Minecraft minecraft, StutterMonitor.@Nullable Capture capture, boolean withFixes) {
 		SettingsSnapshot settings;
 		try {
 			settings = SettingsBridge.read(minecraft);
@@ -523,7 +532,7 @@ public final class StutterService {
 			settings = new SettingsSnapshot(Map.of());
 		}
 		StutterFixService.Inputs fixInputs = null;
-		StutterFixService fixes = minecraft == null ? null : fixes();
+		StutterFixService fixes = minecraft == null || !withFixes ? null : fixes();
 		if (fixes != null) {
 			try {
 				fixInputs = fixes.inputs(minecraft, capture, settings);

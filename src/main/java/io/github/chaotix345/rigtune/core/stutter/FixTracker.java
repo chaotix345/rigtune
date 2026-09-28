@@ -30,6 +30,9 @@ public final class FixTracker {
 	public static final Duration SETTLE = Duration.ofSeconds(5);
 	public static final String SHORT = "short";
 	public static final String EXCLUDED = "excluded";
+	public static final String IDLE = "idle";
+	// Not a session's skip: an expired record's mark that its journal entry is gone (nothing left to undo).
+	public static final String GONE = "gone";
 
 	public enum State {
 		STAGED, MEASURING, COMPARED, UNDONE, NOT_APPLIED, REPLACED, EXPIRED;
@@ -74,6 +77,11 @@ public final class FixTracker {
 			return state.tracking() && !dismissed;
 		}
 
+		// Its change can still be undone from the block: not undone or not applied, and not expired with its entry gone.
+		public boolean undoable() {
+			return state != State.UNDONE && state != State.NOT_APPLIED && !(state == State.EXPIRED && lastSkip != null && GONE.equals(lastSkip.reason()));
+		}
+
 		public Record withState(State next) {
 			return new Record(entryId, adviceId, key, from, to, appliedAt, rulesRevision, now, next, before, conditions, after, skipped, lastSkip, verdict,
 					dismissed);
@@ -89,6 +97,11 @@ public final class FixTracker {
 					dismissed);
 		}
 
+		Record entryGone() {
+			return new Record(entryId, adviceId, key, from, to, appliedAt, rulesRevision, now, State.EXPIRED, before, conditions, after, skipped,
+					new Skip(GONE, List.of()), verdict, dismissed);
+		}
+
 		Record count(SessionOutcome next) {
 			return new Record(entryId, adviceId, key, from, to, appliedAt, rulesRevision, now, state, before, conditions, next, skipped, null, verdict,
 					dismissed);
@@ -101,9 +114,13 @@ public final class FixTracker {
 	}
 
 	// A finished session: when it started, its source (StutterReport.MONITOR or BENCHMARK), its outcome, the conditions at
-	// its start and end, and whether it's excluded (around a benchmark run, or Distant Horizons generated terrain in it: WS-B's
-	// M4 rule, no comparison across such a session).
-	public record SessionEnd(Instant startedAt, String source, SessionOutcome outcome, FixConditions atStart, FixConditions atEnd, boolean excluded) {
+	// its start and end, whether it's excluded (around a benchmark run, or Distant Horizons generated terrain in it: WS-B's
+	// M4 rule, no comparison across such a session) and whether it was mostly idle (FixGate.idle, RW-17).
+	public record SessionEnd(Instant startedAt, String source, SessionOutcome outcome, FixConditions atStart, FixConditions atEnd, boolean excluded,
+			boolean idle) {
+		public SessionEnd(Instant startedAt, String source, SessionOutcome outcome, FixConditions atStart, FixConditions atEnd, boolean excluded) {
+			this(startedAt, source, outcome, atStart, atEnd, excluded, false);
+		}
 	}
 
 	private FixTracker() {
@@ -123,7 +140,7 @@ public final class FixTracker {
 		}
 		JournalEntry entry = entries.stream().filter(e -> r.entryId().equals(e.id())).findFirst().orElse(null);
 		if (entry == null) {
-			return r.state() == State.COMPARED ? r : r.withState(State.EXPIRED);
+			return r.state() == State.COMPARED ? r : r.entryGone();
 		}
 		JournalChange change = change(entry, r.key());
 		String status = change == null ? null : change.status();
@@ -178,6 +195,9 @@ public final class FixTracker {
 	private static @Nullable Skip skip(Record r, SessionEnd session) {
 		if (session.excluded()) {
 			return new Skip(EXCLUDED, List.of());
+		}
+		if (session.idle()) {
+			return new Skip(IDLE, List.of());
 		}
 		if (session.outcome().gameplaySeconds() < MIN_SESSION_SECONDS) {
 			return new Skip(SHORT, List.of());

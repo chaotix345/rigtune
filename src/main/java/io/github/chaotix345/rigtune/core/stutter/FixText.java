@@ -59,6 +59,8 @@ public final class FixText {
 			case BENCHMARK -> Text.of("rigtune.stutter.fix.not_yet.benchmark", "One-click fixes are offered for your own play sessions, not for benchmark runs.");
 			case EXCLUDED -> Text.of("rigtune.stutter.fix.not_yet.excluded",
 					"This session ran around a benchmark or while Distant Horizons generated terrain, so it can't be compared. Play a session without either.");
+			case IDLE -> Text.of("rigtune.stutter.fix.not_yet.idle",
+					"This session was idle (throttled) longer than it was played, so it can't be compared. Play a session without long breaks.");
 			case SERVER -> Text.of("rigtune.stutter.fix.not_yet.server", "This server sends at most %s chunks, so a shorter render distance would change nothing here.",
 					arg(a, 0));
 			case BUSY -> Text.of("rigtune.stutter.fix.not_yet.busy", "Another fix is still being measured. Wait for its comparison or dismiss it first.");
@@ -92,6 +94,11 @@ public final class FixText {
 						"Fix applied. Keep the Stutter Doctor on and play at least %s; RigTune then compares that play with this session.", play)
 				: Text.of("rigtune.stutter.fix.status.staged",
 						"Fix staged: it takes effect after you restart Minecraft. Then play at least %s with the Stutter Doctor on.", play);
+	}
+
+	// Apply while the analysis the offer came from or the tracked fixes aren't there (yet).
+	public static Text later() {
+		return Text.of("rigtune.stutter.fix.status.later", "The Stutter Doctor isn't ready for this yet. Try again in a moment.");
 	}
 
 	public static Text gone() {
@@ -146,6 +153,9 @@ public final class FixText {
 		}
 		if (FixTracker.EXCLUDED.equals(skip.reason())) {
 			return Text.of("rigtune.stutter.fix.skip.excluded", "it ran around a benchmark or while Distant Horizons generated terrain");
+		}
+		if (FixTracker.IDLE.equals(skip.reason())) {
+			return Text.of("rigtune.stutter.fix.skip.idle", "it was idle (throttled) longer than it was played");
 		}
 		FixConditions.Reason reason = FixConditions.Reason.of(skip.reason());
 		if (reason == null) {

@@ -27,6 +27,7 @@ import io.github.chaotix345.rigtune.core.stutter.SpikeDetector;
 import io.github.chaotix345.rigtune.core.stutter.StutterAnalyzer;
 import io.github.chaotix345.rigtune.core.stutter.StutterFacts;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
+import io.github.chaotix345.rigtune.core.stutter.StutterStore;
 import io.github.chaotix345.rigtune.core.stutter.StutterView;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -79,6 +80,10 @@ public class StutterFixGameTest implements FabricClientGameTest {
 		int simulationDistance = context.computeOnClient(mc -> mc.options.simulationDistance().get());
 		Path sodiumFile = configDir.resolve("sodium-options.json");
 		String defer = SettingsBridge.readSodium(sodiumFile).get(DEFER);
+		// What the test leaves behind goes (review L11): its tracked fixes and its sessions' fake summaries.
+		List<String> fixesBefore = FixStore.shared(configDir).records().stream().map(FixTracker.Record::entryId).toList();
+		byte[] fixesFile = read(FixStore.file(configDir));
+		List<StutterReport> sessionsBefore = new StutterStore(configDir).sessions();
 		try {
 			check(controller.rules() != null && controller.rules().stutterFixes != null && controller.rules().stutterFixes.size() >= 2,
 					"the bundled rules carry the stutterFixes seeds (revision " + (controller.rules() == null ? "?" : controller.rules().revision) + ")");
@@ -105,6 +110,7 @@ public class StutterFixGameTest implements FabricClientGameTest {
 			if (defer != null) {
 				patchSodium(sodiumFile, defer);
 			}
+			cleanUp(context, controller, configDir, fixesBefore, fixesFile, sessionsBefore);
 			GameTestNet.set(context, controller, networkBefore);
 			v05.resize(854, 480, 0);
 		}
@@ -152,7 +158,11 @@ public class StutterFixGameTest implements FabricClientGameTest {
 		StutterMonitor.Capture before = StutterMonitor.session();
 		pressFix(context, "rigtune.stutter.fix.try");
 		waitForPreview(context);
-		context.runOnClient(mc -> press(((PreviewScreen) mc.gui.screen()).applyButton()));
+		Object reportBefore = context.computeOnClient(mc -> {
+			Object report = controller.report();
+			press(((PreviewScreen) mc.gui.screen()).applyButton());
+			return report;
+		});
 		context.waitForScreen(StutterScreen.class);
 		check(context.computeOnClient(mc -> mc.options.renderDistance().get()) == 10, "Apply set render distance 10");
 		String status = context.computeOnClient(mc -> {
@@ -168,7 +178,7 @@ public class StutterFixGameTest implements FabricClientGameTest {
 		StutterMonitor.Capture after = StutterMonitor.session();
 		check(after != null && after != before && !after.startedAt().isBefore(record.appliedAt()),
 				"the session restarted after appliedAt: " + (after == null ? null : after.startedAt()) + " vs " + record.appliedAt());
-		holdOnTheMainList(context, controller);
+		holdOnTheMainList(context, controller, reportBefore);
 
 		// The first session after: a setting changed while it ran, so it doesn't count.
 		StutterHooks.injectAnalysis(session(4, 400, Map.of("chunkLoad", 20.0, "unknown", 80.0), Map.of(), StutterReport.MONITOR));
@@ -269,8 +279,9 @@ public class StutterFixGameTest implements FabricClientGameTest {
 
 	// AC5.10 on the real main list: a render-distance recommendation that would move the fixed key back up is unticked with
 	// the hold's reason (only when this machine's tier proposes one).
-	private static void holdOnTheMainList(ClientGameTestContext context, RealController controller) {
-		context.waitTicks(40);
+	private static void holdOnTheMainList(ClientGameTestContext context, RealController controller, Object reportBefore) {
+		// The apply rebuilds the report (RealController.apply); its post-step reads the fix.
+		context.waitFor(mc -> controller.report() != reportBefore, 400);
 		List<Recommendation> recs = context.computeOnClient(mc -> controller.report().recommendations());
 		int held = 0;
 		for (Recommendation r : recs) {
@@ -416,6 +427,37 @@ public class StutterFixGameTest implements FabricClientGameTest {
 				check(b.getWidth() <= stutter.list().getRowWidth(), name + ": " + b.getMessage().getString() + " fits the row");
 			}
 		});
+	}
+
+	// The test's fixes are dismissed (so the service's cache shows none), then stutter-fixes.json is put back as it was; its
+	// sessions' fake summaries leave stutter.json (Clear, then the sessions from before the test are written back).
+	private static void cleanUp(ClientGameTestContext context, RealController controller, Path configDir, List<String> fixesBefore,
+			byte @Nullable [] fixesFile, List<StutterReport> sessionsBefore) {
+		List<String> made = FixStore.shared(configDir).records().stream().map(FixTracker.Record::entryId).filter(id -> !fixesBefore.contains(id)).toList();
+		context.runOnClient(mc -> made.forEach(controller::dismissStutterFix));
+		context.waitFor(mc -> FixStore.shared(configDir).records().stream().filter(r -> made.contains(r.entryId())).allMatch(FixTracker.Record::dismissed), 200);
+		context.runOnClient(mc -> controller.clearStutter());
+		context.waitFor(mc -> new StutterStore(configDir).sessions().isEmpty(), 200);
+		try {
+			if (fixesFile == null) {
+				Files.deleteIfExists(FixStore.file(configDir));
+			} else {
+				Files.write(FixStore.file(configDir), fixesFile);
+			}
+		} catch (IOException e) {
+			throw new AssertionError(e);
+		}
+		StutterStore store = new StutterStore(configDir);
+		sessionsBefore.forEach(store::add);
+		check(new StutterStore(configDir).sessions().size() == sessionsBefore.size(), "stutter.json holds the sessions from before the test again");
+	}
+
+	private static byte @Nullable [] read(Path file) {
+		try {
+			return Files.isRegularFile(file) ? Files.readAllBytes(file) : null;
+		} catch (IOException e) {
+			throw new AssertionError(e);
+		}
 	}
 
 	private static void patchSodium(Path file, String value) {

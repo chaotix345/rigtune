@@ -72,6 +72,8 @@ public class StutterScreen extends Screen {
 	protected final RigTuneController controller;
 	private StutterView view = StutterView.EMPTY;
 	private @Nullable Component status;
+	// Good news in green; a fix's refusal ("not now", "try again in a moment") as a label.
+	private int statusColor = COLOR_GOOD;
 	private @Nullable StutterList list;
 	// docs/v0.4/SPEC.md 11: the row that had the keyboard focus before a rebuild, which gets it back.
 	private int focusedRow = -1;
@@ -158,6 +160,7 @@ public class StutterScreen extends Screen {
 		if (!text.isEmpty()) {
 			minecraft.keyboardHandler.setClipboard(text);
 			status = Component.translatable("rigtune.stutter.copied");
+			statusColor = COLOR_GOOD;
 		}
 	}
 
@@ -191,6 +194,10 @@ public class StutterScreen extends Screen {
 		return status;
 	}
 
+	public int statusColor() {
+		return statusColor;
+	}
+
 	// The status line under the title ("Copied."); one that doesn't fit there (a stutter fix's) opens the list instead.
 	private boolean statusFitsHeader() {
 		return status != null && font.width(status) <= width - 16;
@@ -201,7 +208,7 @@ public class StutterScreen extends Screen {
 		String statusKey = view.recording() ? (view.paused() ? "rigtune.stutter.status.paused" : "rigtune.stutter.status.recording")
 				: view.monitorOn() ? "rigtune.stutter.status.waiting" : "rigtune.stutter.status.off";
 		if (status != null && !statusFitsHeader()) {
-			text(l, status, COLOR_GOOD, width, 0);
+			text(l, status, statusColor, width, 0);
 		}
 		text(l, Component.translatable(statusKey), COLOR_LABEL, width, 0);
 		if (!view.recording() && view.report() != null) {
@@ -468,7 +475,11 @@ public class StutterScreen extends Screen {
 	private void tryFix(StutterAdvisor.Fired advice, FixOffer.Offer offer) {
 		minecraft.gui.setScreen(new PreviewScreen(this, controller, c -> c.previewStutterFix(offer), new PreviewScreen.Confirm(
 				Texts.component(FixText.previewSubtitle(advice.title())), Texts.component(FixText.previewApply()), () -> {
+					FixTracker.Record was = controller.stutter().tracked();
 					status = controller.applyStutterFix(offer);
+					FixTracker.Record now = controller.stutter().tracked();
+					// Applied when the block now shows a new fix; anything else was a refusal.
+					statusColor = now != null && (was == null || !was.entryId().equals(now.entryId())) ? COLOR_GOOD : COLOR_LABEL;
 					minecraft.gui.setScreen(this);
 				}, null)));
 	}
@@ -500,7 +511,7 @@ public class StutterScreen extends Screen {
 		}
 		List<Button> buttons = new ArrayList<>();
 		int half = Math.min(160, (width - ButtonRow.GAP) / 2);
-		boolean inEffect = fix.state() != FixTracker.State.UNDONE && fix.state() != FixTracker.State.NOT_APPLIED;
+		boolean inEffect = fix.undoable();
 		if (inEffect) {
 			buttons.add(Button.builder(Texts.component(FixText.undo()), b -> minecraft.gui.setScreen(new UndoScreen(this, controller, fix.entryId())))
 					.size(half, 20).build());
@@ -581,7 +592,7 @@ public class StutterScreen extends Screen {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
 		if (status != null && statusFitsHeader()) {
-			graphics.centeredText(font, status, width / 2, 20, Palette.of(COLOR_GOOD));
+			graphics.centeredText(font, status, width / 2, 20, Palette.of(statusColor));
 		}
 	}
 
