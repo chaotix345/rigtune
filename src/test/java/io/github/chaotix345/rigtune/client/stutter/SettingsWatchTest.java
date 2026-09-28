@@ -82,6 +82,28 @@ class SettingsWatchTest {
 		assertEquals(0, s.checkOptional(true, null, 3 * TICK), "shaders were on all along");
 	}
 
+	// review-11 PERF-4: the session whose check threw isn't kept once it ended (its capture holds the frame ring).
+	@Test
+	void aFailedSessionIsReleasedWhenItEnds() {
+		StutterMonitorAccess.startSession();
+		java.lang.ref.WeakReference<StutterMonitor.Capture> capture = new java.lang.ref.WeakReference<>(StutterMonitor.session());
+		try (io.github.chaotix345.rigtune.core.LogCapture ignored = new io.github.chaotix345.rigtune.core.LogCapture()) {
+			SettingsWatch.tick(null);
+			StutterMonitorAccess.stopAll();
+			SettingsWatch.tick(null);
+		} finally {
+			StutterMonitorAccess.stopAll();
+		}
+		for (int i = 0; i < 50 && capture.get() != null; i++) {
+			System.gc();
+			byte[][] churn = new byte[64][];
+			for (int j = 0; j < churn.length; j++) {
+				churn[j] = new byte[64 * 1024];
+			}
+		}
+		assertTrue(capture.get() == null, "nothing keeps the ended session's capture");
+	}
+
 	// Review fix (M3): a check that throws is off for the rest of that session (one warning), and tries again in the next.
 	@Test
 	void aFailingCheckStaysOffForThatSession() {

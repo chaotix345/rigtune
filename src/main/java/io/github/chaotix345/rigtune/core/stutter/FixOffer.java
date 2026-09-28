@@ -34,13 +34,14 @@ public sealed interface FixOffer permits FixOffer.Offer, FixOffer.NotYet {
 
 	// sf §2.7's rigtune.stutter.fix.not_yet.* reasons. EXCLUDED (WS-B's M4 rule): the session ran around a benchmark run or
 	// while Distant Horizons generated terrain, so it can't be a comparison's before side. IDLE (RW-17): the game throttled
-	// its frame rate for longer than the session was played.
+	// its frame rate for longer than the session was played. CHANGED (review-11 STUTTER-3): the setup changed during it.
 	enum Reason {
 		LENGTH,
 		EVIDENCE,
 		BENCHMARK,
 		EXCLUDED,
 		IDLE,
+		CHANGED,
 		SERVER,
 		BUSY,
 		STORE

@@ -39,6 +39,9 @@ public final class FixStore {
 	static final String FIXES = "fixes";
 	// How far ahead of the clock an appliedAt may be (a clock corrected meanwhile), not more.
 	static final Duration FUTURE = Duration.ofDays(1);
+	// The earliest appliedAt read (review-11 STUTTER-1): 0.5 can't have applied a fix before it, and a far-past instant
+	// (Instant.MIN) has no local date.
+	static final Instant PAST = Instant.parse("2000-01-01T00:00:00Z");
 
 	private static final Map<Path, FixStore> SHARED = new HashMap<>();
 
@@ -285,7 +288,8 @@ public final class FixStore {
 		SessionOutcome before = outcome(o.get("before"));
 		FixConditions conditions = conditions(o.get("conditions"));
 		if (entryId == null || adviceId == null || key == null || !FixSpec.KEYS.contains(key) || !valueOf(key, from) || !valueOf(key, to)
-				|| appliedAt == null || appliedAt.isAfter(now.plus(FUTURE)) || state == null || before == null || conditions == null) {
+				|| appliedAt == null || appliedAt.isAfter(now.plus(FUTURE)) || appliedAt.isBefore(PAST) || state == null || before == null
+				|| conditions == null) {
 			return null;
 		}
 		SessionOutcome after = outcome(o.get("after"));

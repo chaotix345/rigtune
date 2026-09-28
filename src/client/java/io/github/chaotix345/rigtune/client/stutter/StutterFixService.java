@@ -91,9 +91,10 @@ public final class StutterFixService {
 
 	// What an analysis needs from the render thread for the fixes: the rules' fix entries, whether another fix is staged
 	// or measuring, whether the store can be written, the live server limits, whether the capture ran around a benchmark,
-	// the conditions now (without the measurement flags, which come with the capture's copy), where the config lives.
+	// the conditions now and at the capture's start (both without the measurement flags, which come with the capture's
+	// copy), where the config lives.
 	record Inputs(List<FixSpec> specs, boolean busy, boolean writable, @Nullable ServerLimits live, boolean aroundBenchmark, FixConditions conditionsNow,
-			Path configDir) {
+			@Nullable FixConditions atStart, Path configDir) {
 	}
 
 	// An analysis' fix side: per fired advice its offer (or why not yet), the session's outcome and conditions (the before
@@ -192,15 +193,20 @@ public final class StutterFixService {
 	// io chain: every record that can still change follows the journal and, if one just ended, the session. The state and
 	// the entries come from one read of history.json; a read that fails changes nothing (a fix never expires because the
 	// file couldn't be read for a moment).
+	// Without a record, history.json isn't read at all (review-11 PERF-2).
 	void advanceAll(FixTracker.@Nullable SessionEnd session) {
 		try {
+			FixStore store = store();
+			List<FixTracker.Record> all = store.records();
+			if (all.isEmpty()) {
+				return;
+			}
 			Journal.Snapshot read = history.get();
 			if (read.state() != Journal.State.OK && read.state() != Journal.State.MISSING) {
 				return;
 			}
 			Instant now = Instant.now();
-			FixStore store = store();
-			for (FixTracker.Record r : store.records()) {
+			for (FixTracker.Record r : all) {
 				FixTracker.Record next = FixTracker.advance(r, read.state(), read.entries(), session, now);
 				if (!next.equals(r)) {
 					store.update(r.entryId(), x -> next);
@@ -220,7 +226,7 @@ public final class StutterFixService {
 		RealController c = Objects.requireNonNull(controller);
 		List<FixTracker.Record> r = cached();
 		return new Inputs(specs(c.rules()), adding != null || anyActive(r), writable, c.serverLimits(), capture != null && capture.aroundBenchmark,
-				conditions(minecraft, capture == null ? null : capture.worldKind, settings), c.configDir());
+				conditions(minecraft, capture == null ? null : capture.worldKind, settings), capture == null ? null : capture.fixAtStart, c.configDir());
 	}
 
 	private List<FixSpec> specs(@Nullable RulesDocument rules) {
@@ -253,14 +259,14 @@ public final class StutterFixService {
 			@Nullable RulesDocument rules, @Nullable HardwareProfile hardware, @Nullable List<InstalledMod> mods, SettingsSnapshot settings, Goal goal,
 			Inputs in) {
 		SessionOutcome outcome = SessionOutcome.of(result, copy.startNanos());
-		boolean excluded = in.aroundBenchmark() || Boolean.TRUE.equals(DhGeneration.generating(result.dhWorldGenCores(), OptionalMods.dhLoaded()));
+		boolean excluded = excluded(result, in.aroundBenchmark(), OptionalMods.dhLoaded());
 		FixConditions conditions = in.conditionsNow().withMeasurement(copy.phaseTiming(), copy.gcMeasured());
 		Map<String, FixOffer> offers = Map.of();
 		if (rules != null && hardware != null && !advice.isEmpty() && !in.specs().isEmpty()) {
 			SettingsSnapshot effective = effective(settings, in.configDir());
-			offers = FixOffers.evaluate(in.specs(), advice.stream().map(StutterAdvisor.Fired::id).toList(), report, excluded,
-					StutterAdvisor.context(rules, hardware, mods, settings, goal, result.facts()), effective, ModScanner.loadedIds(), in.live(), in.busy(),
-					in.writable());
+			offers = FixOffers.evaluate(in.specs(), advice.stream().map(StutterAdvisor.Fired::id).toList(), report, outcome, excluded,
+					changedDuring(in.atStart(), in.conditionsNow()), StutterAdvisor.context(rules, hardware, mods, settings, goal, result.facts()), effective,
+					ModScanner.loadedIds(), in.live(), in.busy(), in.writable());
 			offers = withProfiles(offers, in.configDir());
 		}
 		if (DevFixCalibration.ON) {
@@ -269,6 +275,23 @@ public final class StutterFixService {
 					offers);
 		}
 		return new Fixes(offers, outcome, conditions, excluded, FixGate.idle(report), copy.startedAt(), copy.source());
+	}
+
+	// review-11 STUTTER-3: the before side is one setup: nothing FixConditions compares moved between the capture's start and
+	// the analysis. A key read on one side only (a config file mid-write) isn't a change; unknown start conditions can't tell.
+	static boolean changedDuring(@Nullable FixConditions atStart, FixConditions now) {
+		if (atStart == null) {
+			return true;
+		}
+		return atStart.differences(now, "").stream().anyMatch(d -> d.reason() != FixConditions.Reason.SETTING || !d.args().get(1).isEmpty()
+				&& !d.args().get(2).isEmpty());
+	}
+
+	// WS-B's M4 rule for C20: a session around a benchmark run, or one in which Distant Horizons generated terrain, is no
+	// comparison side: any sustained minute of the whole capture counts (review-11 STUTTER-4), and with Distant Horizons
+	// loaded but nothing sampled it fails closed.
+	static boolean excluded(StutterAnalyzer.Result result, boolean aroundBenchmark, boolean dhLoaded) {
+		return aroundBenchmark || dhLoaded && !Boolean.FALSE.equals(DhGeneration.generating(result.dhWorldGenPeakCores(), true));
 	}
 
 	// sf §1.7: an offer row names the active saved profile when it also sets the key.
@@ -418,6 +441,9 @@ public final class StutterFixService {
 		List<FixTracker.Record> r = new ArrayList<>(loaded());
 		if (a != null && r.stream().noneMatch(x -> x.entryId().equals(a.entryId()))) {
 			r.add(a);
+		}
+		if (r.isEmpty()) {
+			return List.of();
 		}
 		try {
 			Journal.Snapshot read = history.get();
