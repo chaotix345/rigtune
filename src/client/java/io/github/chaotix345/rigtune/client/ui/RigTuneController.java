@@ -272,6 +272,14 @@ public interface RigTuneController {
 		return ModFilesPolicy.RIGTUNE;
 	}
 
+	/**
+	 * v0.5 WS-L1 (docs/v0.5/SPEC.md 4e, review M2; approved frozen-file exception): the per-instance opt-in is on where a
+	 * launcher keeps its own record of the mods (RigTuneScreen's warning line). No I/O.
+	 */
+	default boolean modFilesOptedIn() {
+		return false;
+	}
+
 	// C20 Stutter Doctor fixes (WS-S2).
 
 	/** What the fix would change, writing nothing. Off the render thread. */
