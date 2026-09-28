@@ -39,7 +39,7 @@ public final class FirstRunNoticeSource implements NoticeSource {
 	public @Nullable Notice current() {
 		ModFilesPolicy policy = controller.modFiles();
 		return current(controller.v05().firstRun().status(), controller.report(), () -> controller.awarenessService().dismissed(), policy,
-				LauncherModText.guideLine(policy, controller.launcher(), controller.settings().modFilesByRigTune));
+				LauncherModText.guideLine(policy, controller.launcher(), controller.modFilesOptedIn()));
 	}
 
 	// The notice line can't hide a notice that isn't dismissible (NoticeBoard), so Got it's stored dismissal is checked
@@ -57,7 +57,7 @@ public final class FirstRunNoticeSource implements NoticeSource {
 		}
 		Minecraft minecraft = controller.minecraft();
 		if (HOW.equals(actionId) && minecraft != null) {
-			minecraft.gui.setScreen(new HowItWorksScreen(minecraft.gui.screen(), controller, controller.settings().modFilesByRigTune));
+			minecraft.gui.setScreen(new HowItWorksScreen(minecraft.gui.screen(), controller, controller.modFilesOptedIn()));
 		}
 	}
 

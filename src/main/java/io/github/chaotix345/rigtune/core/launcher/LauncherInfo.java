@@ -2,12 +2,15 @@ package io.github.chaotix345.rigtune.core.launcher;
 
 import org.jspecify.annotations.Nullable;
 
+import java.util.List;
 import java.util.Objects;
 
 // What RigTune knows about the launcher: which one, and for CurseForge whether this pack overrides the app's memory
 // setting (null when that isn't known). Nothing else: no instance name, path or raw property value.
 public record LauncherInfo(Launcher launcher, @Nullable Boolean memoryOverride) {
 	public static final LauncherInfo UNKNOWN = new LauncherInfo(Launcher.UNKNOWN, null);
+	// v0.5 (docs/v0.5/SPEC.md 4b-4c): the mod-file changes a launcher's steps are given for (modStepsKey).
+	public static final List<String> MOD_KINDS = List.of("add", "update", "disable", "enable", "self_update");
 
 	public LauncherInfo {
 		Objects.requireNonNull(launcher, "launcher");
@@ -66,6 +69,27 @@ public record LauncherInfo(Launcher launcher, @Nullable Boolean memoryOverride) 
 			case OFFICIAL -> "rigtune.launcher.jvm_steps.official";
 			case UNKNOWN -> null;
 		};
+	}
+
+	// v0.5 (docs/v0.5/SPEC.md 4b-4c): where this launcher adds, updates, turns off or back on a mod (kind: one of
+	// MOD_KINDS), with the labels from its own source or locale files (docs/v0.5/design/ws-l1.md; CurseForge's from its
+	// support pages, UNVERIFIED). RigTune's own update has its own steps only in the Modrinth App; elsewhere it's an update.
+	// Null for the official launcher and Unknown, which keep no record of the mods (LauncherModText names neither).
+	public @Nullable String modStepsKey(String kind) {
+		String name = switch (launcher) {
+			case PRISM -> "prism";
+			case MULTIMC -> "multimc";
+			case GDLAUNCHER -> "gdlauncher";
+			case MODRINTH_APP -> "modrinth_app";
+			case ATLAUNCHER -> "atlauncher";
+			case CURSEFORGE -> "curseforge";
+			case OFFICIAL, UNKNOWN -> null;
+		};
+		if (name == null || !MOD_KINDS.contains(kind)) {
+			return null;
+		}
+		String steps = "self_update".equals(kind) && launcher != Launcher.MODRINTH_APP ? "update" : kind;
+		return "rigtune.launcher.mod_steps." + name + "." + steps;
 	}
 
 	// A -Xmx typed in the Java arguments overrides the memory slider (Modrinth App: args.rs:162,205; GDLauncher Carbon:

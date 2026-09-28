@@ -78,5 +78,7 @@ class ServerProfileNoticeTest {
 		assertEquals("Profile for this server", ServerProfilePrompt.toastTitle().english());
 		assertEquals("Max FPS is set for this server. Press F8 to switch.", ServerProfilePrompt.toastBody(MAX_FPS, Text.literal("F8")).english());
 		assertEquals("50% is set for this server. Press %s to switch.", ServerProfilePrompt.toastBody(Text.literal("50%"), Text.literal("%s")).english());
+		assertEquals("Max FPS is set for this server. Open RigTune to switch.", ServerProfilePrompt.toastBody(MAX_FPS, null).english(),
+				"no key bound to RigTune");
 	}
 }

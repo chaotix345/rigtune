@@ -38,11 +38,10 @@ class V05HooksTest {
 	void theStubsAreIdentityAndNoOps() throws IOException {
 		Report report = new Report(null, null, null, null, List.of(ADD), 16, "bundled", false, Instant.parse("2026-09-27T00:00:00Z"));
 		assertSame(report, FixHold.apply(report, List.of(new FixHold.Hold("vanilla.renderDistance", "12", "10", "2026-09-27"))));
-		for (ModFilesPolicy policy : ModFilesPolicy.values()) {
-			assertSame(report, LauncherModAdvice.apply(report, policy, LauncherInfo.UNKNOWN));
-			List<Recommendation> selected = List.of(ADD);
-			assertSame(selected, LauncherModAdvice.guard(selected, policy));
-		}
+		// P0.4's post-step and guard (WS-L1) change nothing under RIGTUNE, 0.4's behaviour; LauncherModAdviceTest has the rest.
+		assertSame(report, LauncherModAdvice.apply(report, ModFilesPolicy.RIGTUNE, LauncherInfo.UNKNOWN));
+		List<Recommendation> selected = List.of(ADD);
+		assertSame(selected, LauncherModAdvice.guard(selected, ModFilesPolicy.RIGTUNE));
 		List<Component> parts = new ArrayList<>(List.of(Component.literal("1 setting applied.")));
 		V05Hooks.ApplyFacts facts = new V05Hooks.ApplyFacts("entry-1", List.of(ADD), Set.of(), 1, 0, 0, false, 1);
 		RefusedDisables.afterApply(facts, parts);

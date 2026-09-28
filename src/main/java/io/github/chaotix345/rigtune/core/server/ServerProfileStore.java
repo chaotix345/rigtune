@@ -64,7 +64,8 @@ public final class ServerProfileStore {
 	static volatile @Nullable Runnable beforeUpdate;
 
 	private final StateStore store;
-	// Asked only once the store isn't writable, to tell a newer file (READ_ONLY) from an unreadable one (FAILED).
+	// Asked once the store isn't writable, to tell a newer file (READ_ONLY) from an unreadable one (FAILED), and for a
+	// screen's one-read snapshot.
 	private final JsonStateFile probe;
 
 	private ServerProfileStore(Path file) {
@@ -103,6 +104,35 @@ public final class ServerProfileStore {
 		JsonObject root = store.read();
 		String key = key(root, address);
 		return key == null ? null : entry(key, servers(root).get(key));
+	}
+
+	// The entry with this key (a pending offer's), or null when it's gone or unreadable.
+	public @Nullable Entry entry(@Nullable String key) {
+		return key == null ? null : entry(key, servers(store.read()).get(key));
+	}
+
+	// One read of the file for a screen: what it holds and whether it can be written.
+	public Snapshot snapshot() {
+		JsonStateFile.Loaded<JsonObject> loaded = probe.load(JsonObject.class);
+		JsonObject root = loaded.value() == null ? new JsonObject() : loaded.value().deepCopy();
+		root.remove(JsonStateFile.FORMAT_VERSION_KEY);
+		return new Snapshot(root, loaded.writable());
+	}
+
+	// The file as one read saw it, with the same answers as the store's own methods.
+	public record Snapshot(JsonObject root, boolean writable) {
+		public @Nullable Entry get(String address) {
+			String key = key(root, address);
+			return key == null ? null : entry(key, servers(root).get(key));
+		}
+
+		public List<Entry> entries() {
+			return ServerProfileStore.entries(root);
+		}
+
+		public @Nullable String keyOf(String address) {
+			return key(root, address);
+		}
 	}
 
 	// The join lookup: the remembered entry with lastSeen now (written only for a remembered server; a newer file still
