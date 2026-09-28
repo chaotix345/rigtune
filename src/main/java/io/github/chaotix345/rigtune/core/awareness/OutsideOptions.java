@@ -111,6 +111,18 @@ public final class OutsideOptions {
 		return false;
 	}
 
+	// Review-11 COMPAT-3: true when another game launch happened since the snapshot's exit, whatever its RigTune version
+	// (0.3.0 and older record no startup run). logArchives: the modification times of logs/*.log.gz; vanilla's log config
+	// archives the previous session's latest.log when a game starts, so this launch made one archive newer than the exit
+	// and each launch in between one more. No stamp, or fewer archives (another log config): can't tell, false.
+	public static boolean anotherLaunchSince(Map<String, String> snapshot, List<Instant> logArchives) {
+		Instant exitAt = instant(snapshot.get(EXIT_AT));
+		if (exitAt == null) {
+			return false;
+		}
+		return logArchives.stream().filter(at -> at.isAfter(exitAt)).count() >= 2;
+	}
+
 	private static @Nullable Instant instant(@Nullable String value) {
 		try {
 			return value == null ? null : Instant.parse(value);
