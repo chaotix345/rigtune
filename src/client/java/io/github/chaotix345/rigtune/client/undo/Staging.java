@@ -19,6 +19,7 @@ import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.PartlyApplied;
 import io.github.chaotix345.rigtune.core.history.StagedChanges;
 import io.github.chaotix345.rigtune.core.history.StaleOps;
+import io.github.chaotix345.rigtune.core.history.UndoPlanner;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
@@ -291,9 +292,9 @@ public final class Staging {
 			Map<String, String> readIds = new HashMap<>();
 			PendingActions plan = PendingActions.load(pendingFile);
 			// As for Discard pending: the next exit finishes such a group or rolls it back.
-			Set<String> halfDone = halfDoneGroups(plan);
+			Set<String> halfDone = halfDoneGroups(here(plan));
 			for (Op op : plan.ops()) {
-				if (op != null && op.type() == PendingActions.Type.ENABLE_FILE && op.id() != null && (op.group() == null || !halfDone.contains(op.group()))) {
+				if (op != null && op.type() == PendingActions.Type.ENABLE_FILE && op.id() != null && !halfDone.contains(key(op))) {
 					String modId = modIdOf(op);
 					if (modId != null && queuedModIds.contains(modId) && loadedModIds.contains(modId)) {
 						ids.add(op.id());
@@ -332,24 +333,38 @@ public final class Staging {
 		return discard == null ? null : discard.dropped();
 	}
 
-	// docs/v0.5/SPEC.md 2H L7: Discard pending's outcome. keptGroup: a group the helper left half done stayed staged.
-	public record Discard(List<Op> dropped, boolean keptGroup) {
+	// docs/v0.5/SPEC.md 2H L7: Discard pending's outcome. keptGroup: a change already under way stayed staged, which the
+	// next exit finishes; keptHeld (review 12 R12APPLY-3): one stayed that the next exit holds (docs/v0.5/SPEC.md 4d), so
+	// it waits for the player's choice, not for a restart.
+	public record Discard(List<Op> dropped, boolean keptGroup, boolean keptHeld) {
+		public Discard(List<Op> dropped, boolean keptGroup) {
+			this(dropped, keptGroup, false);
+		}
+
 		// The RigTune screen's status line, which says so when a change already under way was kept.
 		public Component status() {
-			return Component.translatable(keptGroup ? "rigtune.status.discarded_with_kept" : "rigtune.status.discarded", dropped.size());
+			String key = keptHeld ? keptGroup ? "rigtune.status.discarded_with_kept_and_held" : "rigtune.status.discarded_with_held"
+					: keptGroup ? "rigtune.status.discarded_with_kept" : "rigtune.status.discarded";
+			return Component.translatable(key, dropped.size());
 		}
 	}
 
 	// As discard(), saying whether a half-done group was kept; null when the lock is busy.
 	public @Nullable Discard discardPending() throws IOException {
+		return discardPending(false);
+	}
+
+	// holds: whether the next exit's helper holds mod-file groups (HelperLauncher.holds of the mods policy).
+	public @Nullable Discard discardPending(boolean holds) throws IOException {
 		try (ApplyLock lock = lock()) {
 			if (lock == null) {
 				return null;
 			}
 			PendingActions plan = readable();
-			Set<String> halfDone = plan == null ? Set.of() : halfDoneGroups(plan);
-			if (!halfDone.isEmpty()) {
-				return new Discard(discardExcept(plan, halfDone), true);
+			Set<String> halfDone = plan == null ? Set.of() : halfDoneGroups(here(plan));
+			if (plan != null && plan.ops().stream().anyMatch(op -> op != null && halfDone.contains(key(op)))) {
+				Set<String> held = holds ? keys(ApplyExecutor.held(here(plan), pendingFile)) : Set.of();
+				return discardExcept(plan, halfDone, held);
 			}
 			List<Op> dropped = PendingActions.discard(pendingFile, Duration.ZERO);
 			if (dropped == null) {
@@ -400,12 +415,13 @@ public final class Staging {
 		}
 	}
 
-	// The caller holds the lock. Drops every op outside the half-done groups, as unstageLocked does.
-	private List<Op> discardExcept(PendingActions plan, Set<String> halfDone) throws IOException {
+	// The caller holds the lock. Drops every op outside the half-done groups (keyed as halfDoneGroupsOrNull keys them), as
+	// unstageLocked does; held: the groups the next exit holds.
+	private Discard discardExcept(PendingActions plan, Set<String> halfDone, Set<String> held) throws IOException {
 		List<Op> kept = new ArrayList<>();
 		List<Op> dropped = new ArrayList<>();
 		for (Op op : plan.ops()) {
-			(op != null && op.group() != null && halfDone.contains(op.group()) ? kept : dropped).add(op);
+			(op != null && halfDone.contains(key(op)) ? kept : dropped).add(op);
 		}
 		plan.withOps(kept).save(pendingFile);
 		Path planMods = InstanceDirs.modsDirOf(pendingFile);
@@ -414,9 +430,45 @@ public final class Staging {
 				PendingActions.retireDownload(op, planMods);
 			}
 		}
-		RigTune.LOGGER.info("Kept {} staged change(s) the helper left half done; the next exit finishes them", kept.size());
+		boolean keptHeld = kept.stream().anyMatch(op -> held.contains(key(op)));
+		boolean keptRun = kept.stream().anyMatch(op -> !held.contains(key(op)));
+		RigTune.LOGGER.info("Kept {} staged change(s) already under way; {}", kept.size(), keptHeld
+				? "the next exit holds the mod changes among them for the player's choice" : "the next exit finishes them");
 		markDiscarded(dropped);
-		return dropped;
+		return new Discard(dropped, keptRun, keptHeld);
+	}
+
+	// The plan with its paths moved to this pending.json's folders (a moved instance), as dropStale and the helper see it;
+	// for judging groups only, never saved.
+	private PendingActions here(PendingActions plan) {
+		return plan.relocated(InstanceDirs.modsDirOf(pendingFile), InstanceDirs.configDirOf(pendingFile));
+	}
+
+	// review 12: a staged op's group key, as ApplyExecutor.startedGroups and StaleOps give it ("op:<id>" without a group).
+	private static String key(Op op) {
+		return op.group() != null ? op.group() : "op:" + op.id();
+	}
+
+	private static Set<String> keys(List<Op> ops) {
+		Set<String> out = new HashSet<>();
+		ops.stream().filter(Objects::nonNull).forEach(op -> out.add(key(op)));
+		return out;
+	}
+
+	// review 12 (R12APPLY-1, -3): for Undo's plan of staged changes, the groups RigTune's records show started and, when
+	// holds, the ones the next exit's helper holds. None when pending.json can't be read (Undo then plans without it).
+	public UndoPlanner.StagedGroups stagedGroups(boolean holds) {
+		try {
+			if (!Files.isRegularFile(pendingFile)) {
+				return UndoPlanner.StagedGroups.NONE;
+			}
+			PendingActions plan = here(PendingActions.load(pendingFile));
+			return new UndoPlanner.StagedGroups(ApplyExecutor.startedGroups(plan, pendingFile),
+					holds ? keys(ApplyExecutor.held(plan, pendingFile)) : Set.of());
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.warn("Could not read {} for the groups already under way", pendingFile, e);
+			return UndoPlanner.StagedGroups.NONE;
+		}
 	}
 
 	private void markAbandoned(List<Op> ops) {

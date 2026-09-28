@@ -1,5 +1,9 @@
 package io.github.chaotix345.rigtune.core.apply;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -32,6 +36,22 @@ public final class TestExecutors {
 				throw new Killed();
 			}
 		}, millis -> true);
+	}
+
+	// Killed once unfinished-groups.json durably says `opId`'s rename happened (review 12: the helper that finished a group's
+	// renames and died before last-apply.json).
+	public static ApplyExecutor killedAfterMarking(String opId) {
+		return new ApplyExecutor(2, 1, Files::move, millis -> true, ModJars::readModId, (file, content) -> {
+			UnfinishedGroups.DURABLE.write(file, content);
+			for (JsonElement group : JsonParser.parseString(content).getAsJsonObject().getAsJsonArray("groups")) {
+				for (JsonElement rename : group.getAsJsonObject().getAsJsonArray("renames")) {
+					JsonObject r = rename.getAsJsonObject();
+					if (opId.equals(r.get("op").getAsString()) && r.has("done") && r.get("done").getAsBoolean()) {
+						throw new Killed();
+					}
+				}
+			}
+		});
 	}
 
 	public static ApplyExecutor failingMovesOf(Predicate<Path> fails) {

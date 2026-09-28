@@ -409,8 +409,8 @@ public final class ApplyExecutor {
 	}
 
 	// review 11 APPLY-1 (WS-H, a marked edit): the groups (an op without one: "op:<id>") the records next to pendingFile
-	// show started, by heldIndexes' rule, so neither the start-up's stale check (StaleOps) nor Discard drops them: the next
-	// exit reports them "Already done earlier".
+	// show started, by runGroup's own "done earlier" rule (startedByRecords), so neither the start-up's stale check
+	// (StaleOps), Discard nor Undo drops them: an unheld exit reports them "Already done earlier".
 	public static Set<String> startedGroups(PendingActions plan, Path pendingFile) {
 		Path configDir = InstanceDirs.configDirOf(pendingFile);
 		List<Op> ops = plan.ops();

@@ -127,8 +127,9 @@ repair steps are a dynamic family registered in `V05LangFamilies.launcherRepair`
   enabled), but History says "Not applied" and Undo won't offer it. This is the documented residual of AC4f.2 and the
   safe side: RigTune never claims a jar it can't prove.
 - **A group half done without a record that proves it** is held under LAUNCHER/PENDING, with the mod missing until the
-  player chooses; Cancel them then makes it permanent, which looks the same as the launcher disabling the mod (Discard
-  pending does the same in 0.4). Since review-11 (APPLY-5) this covers a 0.1-0.3 failed rollback (`PartlyApplied`'s
+  player chooses; Cancel them then makes it permanent, which looks the same as the launcher disabling the mod. Discard
+  pending and Undo keep such a group and say it waits for the player's choice on RigTune's screen, not for a restart
+  (review 12 R12APPLY-3, WS-H's marked edit of this line). Since review-11 (APPLY-5) this covers a 0.1-0.3 failed rollback (`PartlyApplied`'s
   inference from the files), a record 0.4 wrote (no `done` mark), and a 0.5 helper killed between a rename and the
   record's `done` mark. The files alone can't tell RigTune's disable from the launcher's own, so only a rename the
   record marks done (or an op the last run did) counts as started. Under RIGTUNE such a group still runs: its enable is
