@@ -1,11 +1,14 @@
 package io.github.chaotix345.rigtune.client.probe;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -189,11 +192,27 @@ class PowerWatcherTest {
 		}
 	}
 
-	// The client stopping while the startup probe still runs: the probe's late startIfBattery (a battery found) starts nothing.
+	// The client stopping while the startup probe still runs: the probe's late startIfBattery (a battery found) reads no
+	// battery and starts nothing; without the stop it would start.
 	@Test
 	void stopBeforeTheProbeFinishesStartsNothing() {
+		AtomicInteger reads = new AtomicInteger();
+		Supplier<List<PowerWatcher.Battery>> laptop = () -> {
+			reads.incrementAndGet();
+			return List.of(new FakeBattery("BAT0", "Li-ion", 50000));
+		};
 		PowerWatcher.stop();
-		PowerWatcher.startIfBattery(true, true, on -> { });
+		PowerWatcher.startIfBattery(true, true, on -> { }, laptop);
 		assertFalse(PowerWatcher.isRunning());
+		assertEquals(0, reads.get(), "the batteries weren't read after stop()");
+		PowerWatcher.resetForTest();
+		PowerWatcher.startIfBattery(true, true, on -> { }, laptop);
+		assertTrue(PowerWatcher.isRunning(), "the same call starts the watcher when nothing stopped it");
+		assertEquals(1, reads.get());
+	}
+
+	@AfterEach
+	void resetTheStaticWatcher() {
+		PowerWatcher.resetForTest();
 	}
 }
