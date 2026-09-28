@@ -19,6 +19,7 @@ import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.FormattedCharSequence;
 import org.jspecify.annotations.Nullable;
 
@@ -112,9 +113,11 @@ public class ProfilesScreen extends Screen {
 		action(Component.translatable("rigtune.profile.save_current"), b -> saveCurrent(), left, row2, buttonWidth, "rigtune.profile.save_current.tooltip");
 		renameButton = action(Component.translatable("rigtune.profile.rename"), b -> renameSelected(), left + buttonWidth + gap, row2, buttonWidth, null);
 		deleteButton = action(Component.translatable("rigtune.profile.delete"), b -> deleteSelected(), left + 2 * (buttonWidth + gap), row2, buttonWidth, null);
-		int wide = (column - gap) / 2;
-		action(Component.translatable("rigtune.profile.import"), b -> openImport(), left, row3, wide, "rigtune.profile.import.tooltip");
-		action(Component.translatable("gui.done"), b -> onClose(), left + wide + gap, row3, column - wide - gap, null);
+		action(Component.translatable("rigtune.profile.import"), b -> openImport(), left, row3, buttonWidth, "rigtune.profile.import.tooltip");
+		// v0.5 C16 (WS-P2): the per-server offers.
+		action(Component.translatable("rigtune.profile.servers"), b -> openServers(), left + buttonWidth + gap, row3, buttonWidth,
+				"rigtune.profile.servers.tooltip");
+		action(Component.translatable("gui.done"), b -> onClose(), left + 2 * (buttonWidth + gap), row3, column - 2 * (buttonWidth + gap), null);
 		updateButtons();
 	}
 
@@ -195,12 +198,21 @@ public class ProfilesScreen extends Screen {
 			status = Component.translatable("rigtune.profile.status.nothing_to_share");
 		} else {
 			minecraft.keyboardHandler.setClipboard(code);
-			status = Component.translatable("rigtune.profile.status.copied", Texts.component(view.name()), code.length());
+			MutableComponent copied = Component.translatable("rigtune.profile.status.copied", Texts.component(view.name()), code.length());
+			// v0.5 PF-5 (WS-P): a value a code can't carry (a DH radius above 512) is left out; the status says how many.
+			int leftOut = controller.profileCodeLeftOut(view.id());
+			status = leftOut == 0 ? copied : copied.append(" ").append(leftOut == 1 ? Component.translatable("rigtune.profile.status.not_carried_one")
+					: Component.translatable("rigtune.profile.status.not_carried", leftOut));
 		}
 	}
 
 	public void openImport() {
 		minecraft.gui.setScreen(new ProfileImportScreen(this, controller));
+	}
+
+	// v0.5 C16 (WS-P2): Offer takes the selected profile.
+	public void openServers() {
+		minecraft.gui.setScreen(new ServerProfilesScreen(this, controller, selectedView()));
 	}
 
 	private void saveCurrent() {

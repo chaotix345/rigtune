@@ -1,0 +1,10 @@
+[13:49:49] [main/INFO] (FabricLoader) Loading 54 mods:
+	- sodium 0.9.2+mc26.2
+[13:49:58] [RigTune worker/INFO] (RigTune) Try it dev: mode now:tryit-now:warm
+[13:50:01] [Render thread/INFO] (RigTune) Try it dev: opening tryit-now
+[13:50:03] [Render thread/INFO] (RigTune) Try it dev: a warm-up Measure run here first
+[13:51:08] [Render thread/INFO] (RigTune) Try it dev: NOW try: render distance 12 -> 10 here: 
+[13:52:26] [Render thread/INFO] (RigTune) Try it dev: NOW try RESULT: NO_CLEAR_CHANGE: low -1.9%, avg +4.1%, floor 24.7%, causes [], caveats [NOISY, SCENE]; before 1% low 554.0 avg 2938.7 cv 0.004024756800546139, after 1% low 543.3 avg 3058.3 cv 0.06360628090551865
+[13:52:31] [Render thread/INFO] (RigTune) Try it dev: reverted: render distance 12; the manual pair next
+[13:54:04] [Render thread/INFO] (RigTune) Try it dev: manual pair: 1% low 550.1 -> 545.0, avg 3047.4 -> 3033.7: low -0.9%, avg -0.4% (cv 0.007075512577424396 / 0.015240434518808006)
+[13:54:04] [Render thread/INFO] (RigTune) Try it dev: RESULT NOW: done

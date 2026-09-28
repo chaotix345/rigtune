@@ -3,7 +3,6 @@ package io.github.chaotix345.rigtune.gametest;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
@@ -22,7 +21,6 @@ import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerConnection;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestDedicatedServerContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.screens.TitleScreen;
 import org.jspecify.annotations.Nullable;
 
@@ -53,10 +51,9 @@ public class ServerLimitsGameTest implements FabricClientGameTest {
 		if (!(RigTuneClient.controller() instanceof RealController real)) {
 			throw new AssertionError("ServerLimitsGameTest needs the real controller");
 		}
-		Path configDir = FabricLoader.getInstance().getConfigDir();
 		int rdBefore = context.computeOnClient(mc -> mc.options.renderDistance().get());
+		boolean network = GameTestNet.set(context, real, false);
 		try {
-			setNetwork(context, configDir, real, false);
 			context.runOnClient(mc -> mc.options.renderDistance().set(5));
 			deleteStore(real);
 			singleplayer(context, real);
@@ -68,13 +65,13 @@ public class ServerLimitsGameTest implements FabricClientGameTest {
 				mc.options.renderDistance().set(rdBefore);
 				mc.gui.setScreen(new TitleScreen());
 			});
-			setNetwork(context, configDir, real, true);
+			GameTestNet.set(context, real, network);
 			resize(context, 854, 480, 0);
 		}
 	}
 
 	private static void singleplayer(ClientGameTestContext context, RealController real) {
-		try (TestSingleplayerContext world = context.worldBuilder().create()) {
+		try (TestSingleplayerContext world = GameTestWorlds.create(context)) {
 			world.getConnection().waitForChunksRender();
 			context.waitFor(mc -> real.serverLimits() != null, 200);
 			ServerLimits limits = real.serverLimits();
@@ -271,16 +268,6 @@ public class ServerLimitsGameTest implements FabricClientGameTest {
 		} catch (IOException e) {
 			throw new AssertionError(e);
 		}
-	}
-
-	private static void setNetwork(ClientGameTestContext context, Path configDir, RealController real, boolean on) {
-		context.runOnClient(mc -> {
-			ClientSettings settings = ClientSettings.shared(configDir);
-			settings.networkEnabled = on;
-			settings.save(configDir);
-			real.settingsChanged();
-		});
-		context.waitFor(mc -> real.report() != null, 1200);
 	}
 
 	// No toast (chat verification, social interactions) over the notice line; the cursor in a corner.

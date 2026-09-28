@@ -29,9 +29,21 @@ public final class BoundedHttp {
 
 	public static final class Progress {
 		private volatile long lastNanos = System.nanoTime();
+		private volatile boolean started;
+		private volatile boolean failedInBody;
 
 		void touch() {
 			lastNanos = System.nanoTime();
+		}
+
+		// Whether a response arrived and its body began (the sink may already hold some of it).
+		public boolean started() {
+			return started;
+		}
+
+		// Whether the body handling itself failed (over its cap, or the sink's write), not the connection.
+		public boolean failedInBody() {
+			return failedInBody;
 		}
 	}
 
@@ -110,6 +122,7 @@ public final class BoundedHttp {
 		@Override
 		public void onSubscribe(Flow.Subscription s) {
 			subscription = s;
+			progress.started = true;
 			progress.touch();
 			s.request(1);
 		}
@@ -145,6 +158,7 @@ public final class BoundedHttp {
 		}
 
 		private void fail(Throwable error) {
+			progress.failedInBody = true;
 			subscription.cancel();
 			body.completeExceptionally(error);
 		}

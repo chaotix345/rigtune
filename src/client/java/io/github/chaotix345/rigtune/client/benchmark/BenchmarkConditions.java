@@ -1,24 +1,34 @@
 package io.github.chaotix345.rigtune.client.benchmark;
 
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.compat.OptionalMods;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
+import io.github.chaotix345.rigtune.core.benchmark.GpuName;
+import io.github.chaotix345.rigtune.core.history.Journal;
+import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
+import io.github.chaotix345.rigtune.core.model.GpuInfo;
+import io.github.chaotix345.rigtune.core.model.GraphicsBackend;
+import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.ModSetHash;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.client.Minecraft;
 import org.jspecify.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
-// Benchmark history (docs/v0.4/SPEC.md 7): the optional context fields of a new run (modSetHash, journalCursor) and the
-// conditions the game is in now, for the "needs a rerun" marker.
+// Benchmark history (docs/v0.4/SPEC.md 7): the optional context fields of a new run (modSetHash, journalCursor; since
+// 0.5 stagedAtStart, docs/v0.5/SPEC.md BH-2) and the conditions the game is in now, for the "needs a rerun" marker.
 public final class BenchmarkConditions {
+	// BH-2 (amendment SPEC-28): more staged changes than this and the field is left out.
+	static final int MAX_STAGED = 64;
 	private static volatile @Nullable String modSetHash;
 
 	private BenchmarkConditions() {
@@ -42,23 +52,77 @@ public final class BenchmarkConditions {
 		return hash;
 	}
 
-	// The id of history.json's newest entry; null when there is none (or it can't be read).
-	public static @Nullable String journalCursor() {
-		try {
-			List<JournalEntry> entries = ClientJournal.get().entries();
-			return entries.isEmpty() ? null : entries.getLast().id();
-		} catch (RuntimeException e) {
-			RigTune.LOGGER.warn("Could not read the history for the benchmark's journal cursor", e);
-			return null;
+	// What a new run records from history.json, from one snapshot: cursor, the id of its newest entry (null when there is
+	// none or it can't be read); staged (BH-2), the ids of its changes still staged for the next start (they don't run
+	// during the run): [] with no history.json, null (left out) when it can't be read or more than MAX_STAGED are staged.
+	public record JournalAtStart(@Nullable String cursor, @Nullable List<String> staged) {
+		public static JournalAtStart current() {
+			try {
+				return of(ClientJournal.get());
+			} catch (RuntimeException e) {
+				RigTune.LOGGER.warn("Could not read the history for the benchmark's journal cursor and staged changes", e);
+				return new JournalAtStart(null, null);
+			}
+		}
+
+		// One read (review 11 BENCH-8, a marked WS-H edit): a second read failing after an OK first one gave [] for "nothing
+		// staged".
+		static JournalAtStart of(Journal journal) {
+			Journal.Snapshot snapshot = journal.snapshot();
+			return of(snapshot.state(), snapshot.entries());
+		}
+
+		static JournalAtStart of(Journal.State state, List<JournalEntry> entries) {
+			String cursor = state == Journal.State.OK && !entries.isEmpty() ? entries.getLast().id() : null;
+			return new JournalAtStart(cursor, stagedIds(state, entries));
+		}
+	}
+
+	// The journal answers no entries for a corrupt, newer or unreadable history.json: that isn't "nothing staged" (review M3).
+	static @Nullable List<String> stagedIds(Journal.State state, List<JournalEntry> entries) {
+		return state == Journal.State.OK ? stagedIds(entries) : state == Journal.State.MISSING ? List.of() : null;
+	}
+
+	static @Nullable List<String> stagedIds(List<JournalEntry> entries) {
+		List<String> ids = new ArrayList<>();
+		for (JournalEntry entry : entries) {
+			for (JournalChange change : entry.changes()) {
+				if (JournalChange.STAGED.equals(change.status()) && change.id() != null) {
+					if (ids.size() == MAX_STAGED) {
+						return null;
+					}
+					ids.add(change.id());
+				}
+			}
+		}
+		return List.copyOf(ids);
+	}
+
+	// Review-11 COMPAT-2: this session's graphics backend ("OPENGL" / "VULKAN") and the GPU's renderer string, from the
+	// hardware probe (both fixed until a restart); null each when unknown (not probed yet, or the probe couldn't tell).
+	public record Graphics(@Nullable String backend, @Nullable String gpu) {
+		public static Graphics current() {
+			HardwareProfile hardware = RigTuneClient.hardware();
+			return of(hardware == null ? null : hardware.gpu());
+		}
+
+		static Graphics of(@Nullable GpuInfo gpu) {
+			if (gpu == null) {
+				return new Graphics(null, null);
+			}
+			String backend = gpu.backend() == null || gpu.backend() == GraphicsBackend.UNKNOWN ? null : gpu.backend().name();
+			String renderer = GpuName.clean(gpu.renderer());
+			return new Graphics(backend, renderer == null || "unknown".equalsIgnoreCase(renderer) ? null : renderer);
 		}
 	}
 
 	// On the render thread: the same sources as the context of a new run (BenchmarkController.context).
 	public static BenchmarkTrend.Current current(Minecraft minecraft) {
 		boolean shaders = OptionalMods.shadersInUse();
+		Graphics graphics = Graphics.current();
 		return new BenchmarkTrend.Current(HardwareProbe.minecraftVersion(), minecraft.options.renderDistance().get(),
 				minecraft.options.simulationDistance().get(), minecraft.getWindow().getWidth(), minecraft.getWindow().getHeight(),
 				minecraft.options.fullscreen().get(), shaders, shaders ? BenchmarkController.shaderPack() : null, OptionalMods.dhRendering(),
-				modSetHash());
+				modSetHash(), graphics.backend(), graphics.gpu());
 	}
 }

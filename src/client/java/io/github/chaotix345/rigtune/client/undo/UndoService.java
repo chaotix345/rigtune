@@ -4,6 +4,7 @@ import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ConfigTargets;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
+import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
@@ -61,7 +62,8 @@ public final class UndoService {
 		if (journal.readOnly()) {
 			return null;
 		}
-		return UndoPlanner.plan(journal.entries(), pendingOps(), staging.unfinishedRenames(), state.get(), all).plan();
+		UndoPlanner.State now = state.get();
+		return UndoPlanner.plan(journal.entries(), pendingOps(), staging.unfinishedRenames(), stagedGroups(now), now, all).plan();
 	}
 
 	// "Undo this" on one history entry (docs/v0.3/SPEC.md item 6); carried out by undo() like the others. Null as plan().
@@ -69,7 +71,8 @@ public final class UndoService {
 		if (journal.readOnly()) {
 			return null;
 		}
-		return UndoPlanner.planEntry(journal.entries(), pendingOps(), staging.unfinishedRenames(), state.get(), entryId).plan();
+		UndoPlanner.State now = state.get();
+		return UndoPlanner.planEntry(journal.entries(), pendingOps(), staging.unfinishedRenames(), stagedGroups(now), now, entryId).plan();
 	}
 
 	// The History screen's model: history.json, with the reasons of the ops lastApply (last-apply.json, or null) says
@@ -86,7 +89,7 @@ public final class UndoService {
 				return Outcome.BUSY;
 			}
 			UndoPlanner.State now = state.get();
-			UndoPlanner.Result result = UndoPlanner.recheck(shown, journal.entries(), pendingOps(), staging.unfinishedRenames(), now);
+			UndoPlanner.Result result = UndoPlanner.recheck(shown, journal.entries(), pendingOps(), staging.unfinishedRenames(), stagedGroups(now), now);
 			UndoPlanner.Script script = result.script();
 			// Items the screen already listed as skipped, plus the ones that became skips since.
 			int skipped = (int) (shown.items().stream().filter(i -> i.action() == UndoPlan.Action.SKIP).count()
@@ -184,6 +187,11 @@ public final class UndoService {
 			}
 		}
 		return out;
+	}
+
+	// review 12 (R12APPLY-1, -3): the staged groups RigTune's records show started, and the ones the next exit holds.
+	private UndoPlanner.StagedGroups stagedGroups(UndoPlanner.State now) {
+		return staging.stagedGroups(HelperLauncher.holds(now.modFiles()));
 	}
 
 	private List<Op> pendingOps() {

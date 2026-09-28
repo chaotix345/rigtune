@@ -43,8 +43,8 @@ class ServerLimitNoticeSourceTest {
 		Notice notice = ServerLimitNoticeSource.notice(remote(8, 0), 12, 8, true);
 		String detail = notice.detail().english();
 		assertTrue(detail.startsWith("This server's limit changed since last time (was 12)."), detail);
-		assertTrue(detail.endsWith("Distant Horizons may still show terrain you've already explored beyond it; generating new distant terrain "
-				+ "may need Distant Horizons on the server."), detail);
+		assertTrue(detail.endsWith("Distant Horizons still shows terrain you've already explored beyond it; generating new distant terrain "
+				+ "needs Distant Horizons on the server."), detail);
 		assertFalse(detail.contains("Simulation"), "no simulation distance sent");
 		assertFalse(ServerLimitNoticeSource.notice(remote(8, 6), 8, 8, false).detail().english().contains("changed"));
 	}

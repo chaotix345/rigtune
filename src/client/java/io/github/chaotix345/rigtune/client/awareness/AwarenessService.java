@@ -44,6 +44,9 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 	public static final String WHATS_NEW_KEY_PREFIX = "whats-new:";
 	public static final String RESCAN = "rescan";
 	public static final String REBENCHMARK = "rebenchmark";
+	// v0.5 (docs/v0.5/SPEC.md 7, C16): notice keys whose × hides the notice for this session only, never stored: a
+	// server-profile offer's key is per join and could never match again.
+	public static final List<String> SESSION_ONLY_PREFIXES = List.of("server-profile:");
 	// Names the what's-new detail lists before "…".
 	private static final int MAX_NAMES = 8;
 
@@ -71,18 +74,25 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 	}
 
 	// Once, from RigTuneClient: the W-L3 "shown" signal. A per-screen tick listener (it goes with the screen) compares one
-	// key; nothing is allocated per tick.
+	// key; nothing is allocated per tick. v0.5 AW-2 (docs/v0.5/SPEC.md 2W): AFTER_INIT doesn't fire on rebuildWidgets, so
+	// NoticeScreen also reports what it lists at the end of every init() to the listener set here (no tick work).
 	public void register() {
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> {
 			if (screen instanceof RigTuneScreen rigtune) {
 				ScreenEvents.afterTick(screen).register(s -> shown(rigtune.shownNotice()));
 			} else if (screen instanceof NoticeScreen notices) {
-				notices.shown().forEach(this::shown);
+				notices.onListed(this::listed);
+				listed(notices.shown());
 			}
 		});
 	}
 
 	// After every hardware probe (RealController.rescan, off the render thread).
+	// v0.5 AW-1 (docs/v0.5/SPEC.md 2W): a NONE against the committed fingerprint keeps a committed notice for the session:
+	// the hardware is still what it shows, within the detector's tolerances (no fingerprint equality test, which RAM noise
+	// would break). A changed-back or new change replaces it; an uncommitted one goes with a NONE as before. The same change
+	// reported again while committed (its asynchronous commit not written yet, or lost) keeps the notice as seen and
+	// writes the fingerprint again (review L3).
 	public void afterProbe(@Nullable HardwareProfile hw) {
 		if (hw == null) {
 			return;
@@ -90,7 +100,17 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 		try {
 			Fingerprint now = Fingerprint.of(hw);
 			ChangeDetector.Change change = ChangeDetector.check(store, now);
-			hardware = change.changed() ? new Pending(change, now, HARDWARE_KEY_PREFIX + now.id(), new AtomicBoolean()) : null;
+			Pending shown = hardware;
+			String key = HARDWARE_KEY_PREFIX + now.id();
+			if (change.changed()) {
+				if (shown != null && shown.committed().get() && shown.key().equals(key)) {
+					ChangeDetector.commit(store, shown.now());
+				} else {
+					hardware = new Pending(change, now, key, new AtomicBoolean());
+				}
+			} else if (shown == null || !shown.committed().get()) {
+				hardware = null;
+			}
 		} catch (RuntimeException e) {
 			RigTune.LOGGER.warn("Could not compare the hardware with {}", AwarenessStore.FILE_NAME, e);
 		}
@@ -123,6 +143,7 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 			return;
 		}
 		if (RESCAN.equals(actionId)) {
+			retire();
 			controller.rescan();
 		} else if (REBENCHMARK.equals(actionId)) {
 			minecraft.gui.setScreen(new BenchmarkMenuScreen(minecraft.gui.screen(), controller));
@@ -163,6 +184,29 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 				Text.of("rigtune.awareness.whats_new.detail", "New in rules revision %s: %s", w.revision(), Text.join(", ", listed)), List.of(), true);
 	}
 
+	// v0.5 AW-1 (Open question 4): the notice's own Re-scan has done its job, so it retires the notice. The fingerprint is
+	// committed here, before the rescan starts (shown()'s commit is asynchronous), so the rescan compares with it.
+	void retire() {
+		Pending p = hardware;
+		if (p == null) {
+			return;
+		}
+		p.committed().set(true);
+		ChangeDetector.commit(store, p.now());
+		hardware = null;
+	}
+
+	// For the unit tests: whether the current hardware notice counts as seen.
+	boolean hardwareCommitted() {
+		Pending p = hardware;
+		return p != null && p.committed().get();
+	}
+
+	// AW-2: the notices NoticeScreen listed (each init, rebuilds included).
+	void listed(List<Notice> notices) {
+		notices.forEach(this::shown);
+	}
+
 	// W-L3: the hardware notice was the notice line's current notice or listed on NoticeScreen.
 	void shown(@Nullable Notice notice) {
 		Pending p = hardware;
@@ -201,8 +245,12 @@ public final class AwarenessService implements NoticeCenter.Dismissals {
 		} else if (w != null && key.equals(w.key())) {
 			WhatsNew.acknowledge(store, w.revision(), w.potential());
 			whatsNew = null;
-		} else if (!key.startsWith(HARDWARE_KEY_PREFIX) && !key.startsWith(WHATS_NEW_KEY_PREFIX)) {
+		} else if (!key.startsWith(HARDWARE_KEY_PREFIX) && !key.startsWith(WHATS_NEW_KEY_PREFIX) && !sessionOnly(key)) {
 			store.dismiss(key);
 		}
+	}
+
+	static boolean sessionOnly(String key) {
+		return SESSION_ONLY_PREFIXES.stream().anyMatch(key::startsWith);
 	}
 }

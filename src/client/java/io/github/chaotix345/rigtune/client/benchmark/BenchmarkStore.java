@@ -19,6 +19,7 @@ import java.util.Objects;
 public final class BenchmarkStore {
 	private static @Nullable BenchmarkHistory history;
 	private static @Nullable Object stamp;
+	private static long loadedAt;
 
 	private BenchmarkStore() {
 	}
@@ -29,11 +30,13 @@ public final class BenchmarkStore {
 
 	public static synchronized BenchmarkHistory history() {
 		Object now = stamp(file());
-		if (history == null || !Objects.equals(stamp, now)) {
+		// WS-T, review R12FEAT-6: an unreadable load (a scanner's lock) isn't kept: read again, at most once a second.
+		if (history == null || !Objects.equals(stamp, now) || history.unreadable() && System.nanoTime() - loadedAt >= 1_000_000_000L) {
 			// Taken before the read, so a write during it is seen next time (review L6); a corrupt file moved aside is
 			// "missing" next time and read once more (empty).
 			history = BenchmarkHistory.load(file());
 			stamp = now;
+			loadedAt = System.nanoTime();
 		}
 		return history;
 	}

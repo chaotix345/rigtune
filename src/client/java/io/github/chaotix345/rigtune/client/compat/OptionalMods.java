@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client.compat;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.core.benchmark.RestoreMarker;
 import net.fabricmc.loader.api.FabricLoader;
+import org.jspecify.annotations.Nullable;
 
 // Distant Horizons and Iris are optional. DhCompat and IrisCompat are only loaded after FabricLoader says the mod is
 // present, and an API that doesn't match (LinkageError) counts as "not available".
@@ -96,6 +97,38 @@ public final class OptionalMods {
 			return value == null ? "none" : value.toString();
 		} catch (RuntimeException | LinkageError e) {
 			return "? (" + e + ")";
+		}
+	}
+
+	// WS-S (docs/v0.5/SPEC.md 2S RW-11; an approved exception to this frozen file): the Stutter Doctor's settings check asks
+	// once a second, so a failing Iris or Distant Horizons API warns once and then answers null (unknown) for the rest of the
+	// game instead of a warning every second.
+	private static volatile boolean irisQuietFailed;
+	private static volatile boolean dhQuietFailed;
+
+	public static @Nullable Boolean shadersInUseQuietly() {
+		if (irisQuietFailed) {
+			return null;
+		}
+		try {
+			return irisLoaded() && IrisCompat.ready() && IrisCompat.shaderPackInUse();
+		} catch (RuntimeException | LinkageError e) {
+			irisQuietFailed = true;
+			RigTune.LOGGER.warn("Could not read Iris' shader state; the Stutter Doctor stops asking", e);
+			return null;
+		}
+	}
+
+	public static @Nullable Boolean dhRenderingQuietly() {
+		if (dhQuietFailed) {
+			return null;
+		}
+		try {
+			return dhLoaded() && DhCompat.ready() && DhCompat.renderingEnabled();
+		} catch (RuntimeException | LinkageError e) {
+			dhQuietFailed = true;
+			RigTune.LOGGER.warn("Could not read Distant Horizons' renderingEnabled; the Stutter Doctor stops asking", e);
+			return null;
 		}
 	}
 

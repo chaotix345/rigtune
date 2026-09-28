@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.gametest;
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ClientSettings;
+import io.github.chaotix345.rigtune.client.SettingsSaver;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.compat.ModMenuIntegration;
 import io.github.chaotix345.rigtune.client.ui.RowFocus;
@@ -51,6 +52,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 // WS-E (docs/v0.2/SPEC.md items 8 and 10): the RigTune screen's buttons, the settings screen, the network switches'
 // header and report effects, Mod Menu, and Copy report. Every screen is checked for fit at the three reference sizes.
@@ -396,21 +398,25 @@ public class UiGameTest implements FabricClientGameTest {
 	private static void restoreDefaults(ClientGameTestContext context, Path configDir, RigTuneController controller, Goal goal) {
 		context.runOnClient(mc -> {
 			ClientSettings settings = ClientSettings.shared(configDir);
-			settings.networkEnabled = true;
 			settings.remoteRules = true;
 			settings.modrinth = true;
 			settings.startupToast = true;
 			settings.benchmarkScene = "CURRENT";
-			settings.save(configDir);
 			controller.setGoal(goal);
-			controller.settingsChanged();
 		});
+		// The network switch last, through the shared helper: it saves them all, rescans and waits for the online report (the
+		// fake Modrinth's), so later classes don't start from whichever report the rescan published first.
+		GameTestNet.set(context, controller, true);
 		ClientSettings saved = ClientSettings.load(configDir);
 		check(saved.networkEnabled && saved.remoteRules && saved.modrinth && saved.startupToast && "CURRENT".equals(saved.benchmarkScene), "defaults restored");
 	}
 
+	// The click queued the save on SettingsSaver's own thread (RigTuneSettingsScreen.save): wait for that write, then read the
+	// file once. v0.5 ws-ci: a 100-tick poll of the file timed out when a Modrinth outage starved a shared pool (7 attempts,
+	// runs 36240897813 to 36243402401), and a poll's bound is a guess either way.
 	private static void waitForSaved(ClientGameTestContext context, Path configDir, Predicate<ClientSettings> saved, String what) {
-		context.waitFor(mc -> saved.test(ClientSettings.load(configDir)), 100);
+		check(SettingsSaver.shared().flush(10_000), "the settings save finished (" + what + ")");
+		check(saved.test(ClientSettings.load(configDir)), what);
 		RigTune.LOGGER.info("UiGameTest: {}", what);
 	}
 
@@ -566,8 +572,11 @@ public class UiGameTest implements FabricClientGameTest {
 		context.waitTicks(1);
 	}
 
+	// v0.5 (WS-L1 milestone 1): the settings' switches are a RowList's rows, so a list's row widgets are searched too.
 	private static CycleButton<?> findCycle(Screen screen, String nameKey) {
 		return Screens.getWidgets(screen).stream()
+				.flatMap(w -> w instanceof ContainerObjectSelectionList<?> list ? list.children().stream()
+						.flatMap(row -> row.children().stream()).filter(AbstractWidget.class::isInstance).map(AbstractWidget.class::cast) : Stream.of(w))
 				.filter(w -> w instanceof CycleButton<?> && w.getMessage().getContents() instanceof TranslatableContents t
 						&& t.getArgs().length > 0 && t.getArgs()[0] instanceof Component name
 						&& name.getContents() instanceof TranslatableContents n && n.getKey().equals(nameKey))
@@ -601,61 +610,15 @@ public class UiGameTest implements FabricClientGameTest {
 	}
 
 	// The stub's report with changes waiting for a restart, so the footer has all eight buttons.
-	private static final class PendingStub implements RigTuneController {
-		private final StubController stub;
-
+	// The stub (ForwardingController) with changes waiting for a restart.
+	private static final class PendingStub extends ForwardingController {
 		PendingStub(StubController stub) {
-			this.stub = stub;
-		}
-
-		@Override
-		public @Nullable Report report() {
-			return stub.report();
-		}
-
-		@Override
-		public Goal goal() {
-			return stub.goal();
-		}
-
-		@Override
-		public void setGoal(Goal goal) {
-			stub.setGoal(goal);
-		}
-
-		@Override
-		public Component apply(List<Recommendation> selected) {
-			return stub.apply(selected);
-		}
-
-		@Override
-		public void startBenchmark() {
-			stub.startBenchmark();
-		}
-
-		@Override
-		public void rescan() {
-			stub.rescan();
+			super(stub);
 		}
 
 		@Override
 		public boolean hasPendingChanges() {
 			return true;
-		}
-
-		@Override
-		public List<Notice> notices() {
-			return stub.notices();
-		}
-
-		@Override
-		public void noticeAction(String key, String actionId) {
-			stub.noticeAction(key, actionId);
-		}
-
-		@Override
-		public void dismissNotice(String key) {
-			stub.dismissNotice(key);
 		}
 	}
 }

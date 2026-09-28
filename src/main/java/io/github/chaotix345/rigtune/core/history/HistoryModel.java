@@ -83,10 +83,19 @@ public final class HistoryModel {
 
 	// undoOf/undoOfAt: for an undo entry, the undone entry's id (or "all") and when it was. undoable: Undo this is offered.
 	// profile (v0.4, WS-P): the profile this entry switched to ("Profile: Battery"), from profiles.json; null otherwise.
+	// folded (v0.5 L8): a baseline's foldedEntryIds, oldest first (empty otherwise). includes: the profiles its folded
+	// switches switched to, newest first, from profiles.json (withProfiles fills it; empty otherwise).
 	public record Entry(String id, String kind, String at, String rigtuneVersion, String mcVersion, String undoOf, String undoOfAt, boolean undoable,
-			List<Change> changes, String profile) {
+			List<Change> changes, String profile, List<String> folded, List<String> includes) {
 		public Entry {
 			changes = List.copyOf(changes);
+			folded = folded == null ? List.of() : List.copyOf(folded);
+			includes = includes == null ? List.of() : List.copyOf(includes);
+		}
+
+		public Entry(String id, String kind, String at, String rigtuneVersion, String mcVersion, String undoOf, String undoOfAt, boolean undoable,
+				List<Change> changes, String profile) {
+			this(id, kind, at, rigtuneVersion, mcVersion, undoOf, undoOfAt, undoable, changes, profile, List.of(), List.of());
 		}
 
 		public Entry(String id, String kind, String at, String rigtuneVersion, String mcVersion, String undoOf, String undoOfAt, boolean undoable,
@@ -127,7 +136,8 @@ public final class HistoryModel {
 		return PREFIX + "kind." + (kind == null ? "unknown" : KINDS.getOrDefault(kind, "unknown"));
 	}
 
-	// v0.4 (WS-P): the view with each profile switch's label (journal entry id -> profile name; only apply entries).
+	// v0.4 (WS-P): the view with each profile switch's label (journal entry id -> profile name; only apply entries), and
+	// (v0.5 L8) each baseline's folded switches' labels, newest first.
 	public static View withProfiles(View view, Map<String, String> labels) {
 		if (labels.isEmpty()) {
 			return view;
@@ -135,8 +145,15 @@ public final class HistoryModel {
 		List<Entry> out = new ArrayList<>();
 		for (Entry e : view.entries()) {
 			String label = JournalEntry.APPLY.equals(e.kind()) ? labels.get(e.id()) : null;
-			out.add(label == null ? e : new Entry(e.id(), e.kind(), e.at(), e.rigtuneVersion(), e.mcVersion(), e.undoOf(), e.undoOfAt(), e.undoable(),
-					e.changes(), label));
+			List<String> includes = new ArrayList<>();
+			for (int i = e.folded().size() - 1; i >= 0; i--) {
+				String folded = labels.get(e.folded().get(i));
+				if (folded != null) {
+					includes.add(folded);
+				}
+			}
+			out.add(label == null && includes.isEmpty() ? e : new Entry(e.id(), e.kind(), e.at(), e.rigtuneVersion(), e.mcVersion(), e.undoOf(),
+					e.undoOfAt(), e.undoable(), e.changes(), label != null ? label : e.profile(), e.folded(), includes));
 		}
 		return new View(view.state(), out);
 	}
@@ -151,13 +168,15 @@ public final class HistoryModel {
 			JournalEntry e = entries.get(i);
 			String undoOfAt = e.undoOf() == null || UndoPlanner.ALL.equals(e.undoOf()) ? null : atById.get(e.undoOf());
 			out.add(new Entry(e.id(), e.kind(), e.at(), e.rigtuneVersion(), e.mcVersion(), e.undoOf(), undoOfAt, undoable.contains(e.id()),
-					rows(e, failures, labels)));
+					rows(e, failures, labels), null, Journal.folded(e), List.of()));
 		}
 		return new View(state, out);
 	}
 
 	private static List<Change> rows(JournalEntry entry, Map<String, Failure> failures, Labels labels) {
-		List<JournalChange> changes = entry.changes();
+		// RW-4's pairing as shown (review 11 COMPAT-4, a marked WS-H edit): 0.2.x-0.4.x imported 0.1.0's updates without
+		// the disable's mod id, and history.json isn't rewritten for it.
+		List<JournalChange> changes = StagedChanges.pairUpdates(entry.changes());
 		Set<JournalChange> paired = new HashSet<>();
 		List<Change> out = new ArrayList<>();
 		for (JournalChange c : changes) {

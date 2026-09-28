@@ -54,6 +54,26 @@ public final class GcKind {
 		return flags;
 	}
 
+	// v0.5 NEW-1 (docs/v0.5/verification/stutter/new1-generational-shenandoah): under generational Shenandoah a young cycle,
+	// an old marking and a global cycle notify alike ("Shenandoah Cycles | end of GC cycle | Concurrent GC"), and the old
+	// generation after a young cycle holds floating garbage, so none of its notifications is a live-set sample: the live
+	// set stays unmeasured there (fail closed). Every other flag is as classify's.
+	public static int classify(@Nullable String bean, @Nullable String action, @Nullable String cause, boolean shenandoahGenerational) {
+		int flags = classify(bean, action, cause);
+		return shenandoahGenerational && bean != null && bean.startsWith("Shenandoah") ? flags & ~MAJOR : flags;
+	}
+
+	// Generational Shenandoah, from the heap pools' names: "Shenandoah Young Gen" and "Shenandoah Old Gen" (JDK 25), where
+	// the single-generation mode has one pool, "Shenandoah".
+	public static boolean shenandoahGenerational(Collection<String> heapPools) {
+		for (String pool : heapPools) {
+			if (pool != null && pool.startsWith("Shenandoah ") && pool.endsWith(" Gen")) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	// One collection: a concurrent cycle, or a pause that isn't a phase of one.
 	public static boolean collection(int flags) {
 		return (flags & CYCLE) != 0 || (flags & PAUSE) != 0 && (flags & PHASE) == 0;

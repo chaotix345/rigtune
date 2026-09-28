@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.client.stutter;
 
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.core.stutter.StutterAnalyzer;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import io.github.chaotix345.rigtune.core.stutter.StutterRings;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
@@ -12,6 +13,8 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import org.jspecify.annotations.Nullable;
+
+import java.util.function.BiFunction;
 
 // The Stutter Doctor's Minecraft side (docs/v0.4/SPEC.md 5): the Fabric events it listens to, registered once by
 // RigTuneClient (StutterMonitor.install), and the per-tick work. Every listener returns at once while nothing captures.
@@ -65,6 +68,7 @@ public final class StutterHooks {
 		try {
 			s.tick(minecraft);
 			DevStutter.tick(minecraft, s);
+			DevFixCalibration.tick(minecraft, s);
 			boolean active = StutterMonitor.active();
 			if (active && !wasActive) {
 				hadPlayer = false;
@@ -74,7 +78,8 @@ public final class StutterHooks {
 			if (!active) {
 				return;
 			}
-			StutterMonitor.setExcluded(minecraft.gui.screen() != null || !minecraft.isWindowActive());
+			// v0.5 RW-17: idle (a throttled frame rate) is excluded too; SettingsWatch's own listener decides it.
+			StutterMonitor.setExcluded(minecraft.gui.screen() != null || !minecraft.isWindowActive() || StutterMonitor.idle());
 			movement(minecraft.player);
 			if (++ticks % 5 == 0) {
 				BuildBacklog.refresh(minecraft, sodium);
@@ -159,10 +164,34 @@ public final class StutterHooks {
 		}
 	}
 
+	// docs/v0.5/SPEC.md 2B RW-15 (PLAN contracts item 12): BenchmarkController (WS-B) calls it on the render thread with true
+	// INSTEAD of benchmarkSweep(true) for a step whose settle timed out incomplete, and with false at that step's end (or when
+	// the run ends inside it) instead of benchmarkSweep(false). The benchmark capture stays paused through such a step (it
+	// may not have started yet, when it is the first step), so the step's frames stay out of the capture; RW-5's second try
+	// of that distance, once settled, records through benchmarkSweep as usual.
+	public static void benchmarkStepExcluded(boolean excluded) {
+		StutterService s = service;
+		if (s != null) {
+			try {
+				s.benchmarkStepExcluded(excluded);
+			} catch (RuntimeException e) {
+				RigTune.LOGGER.warn("Stutter Doctor: could not leave a benchmark step out of the capture", e);
+			}
+		}
+	}
+
 	// The last finished benchmark's capture summary (BenchmarkResultScreen's line), or null.
 	public static @Nullable StutterReport lastBenchmark() {
 		StutterService s = service;
 		return s == null ? null : s.lastBenchmark();
+	}
+
+	// docs/v0.5/SPEC.md 2S/2B (RW-6): the core-equivalents Distant Horizons' world generation threads used during the last
+	// finished benchmark's sweeps (averaged over the sampler's windows), or null (no capture, a cancelled run, no sampler).
+	// Set before BenchmarkController builds the run's record, for its Context.dhGenerating.
+	public static @Nullable Double lastBenchmarkDhWorldGenCores() {
+		StutterService s = service;
+		return s == null ? null : s.lastBenchmarkDhWorldGenCores();
 	}
 
 	// For StutterGameTest (AC5.7).
@@ -172,6 +201,19 @@ public final class StutterHooks {
 
 	public static boolean samplerRunning() {
 		return StutterCapture.SAMPLER.running();
+	}
+
+	// For StutterGameTest (RW-11, X4.4): the settings check's own cost with a session running (render thread), as
+	// SettingsWatch.cost measures it: {nanos, checks timed, bytes allocated, the empty control loop's bytes}.
+	public static long[] settingsCheckCost(Minecraft minecraft, int calls) {
+		return SettingsWatch.cost(minecraft, calls);
+	}
+
+	// For StutterFixGameTest (docs/v0.5/SPEC.md 5, AC5.12): stands the given analysis in for the capture's own (given the
+	// real one and the capture's start, System.nanoTime); null puts the real analysis back. Everything after the analysis
+	// (the advice, the offers, Apply, the tracking) runs as in play.
+	public static void injectAnalysis(@Nullable BiFunction<StutterAnalyzer.Result, Long, StutterAnalyzer.Result> probe) {
+		StutterService.analysisProbe = probe;
 	}
 
 	// For BenchmarkGameTest (review-8 P5A-F3): monitor sessions whose end was handled, saved or not.

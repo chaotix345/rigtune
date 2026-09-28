@@ -1,6 +1,7 @@
 package io.github.chaotix345.rigtune.client.profile;
 
 import io.github.chaotix345.rigtune.RigTune;
+import io.github.chaotix345.rigtune.client.Busy;
 import io.github.chaotix345.rigtune.client.ConfigTargets;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkController;
@@ -57,7 +58,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -65,6 +65,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 
 // Performance Profiles and share codes (docs/v0.4/SPEC.md 4): profiles.json, switching (an ordinary Apply through
 // RealController.apply(selected, entryId), labelled in profiles.json by the journal entry id), templates, share codes and
@@ -74,7 +75,8 @@ public final class ProfileService {
 	public static final String NOTICE_BACK = "battery-back:";
 	public static final String ACTION_SWITCH = "switch";
 	public static final String ACTION_SNOOZE = "snooze";
-	private static final SystemToast.SystemToastId TOAST_ID = new SystemToast.SystemToastId(6000L);
+	// The battery offer's toast (public for BatteryFlowGameTest: toastManager().getToast(SystemToast.class, id)).
+	public static final SystemToast.SystemToastId BATTERY_TOAST_ID = new SystemToast.SystemToastId(6000L);
 	// Whether a benchmark runs (BenchmarkController.running); ProfilesGameTest stands one in without starting a world.
 	private static volatile BooleanSupplier benchmarkRunning = BenchmarkController::running;
 
@@ -131,8 +133,15 @@ public final class ProfileService {
 		if (refused != null) {
 			return refused;
 		}
+		// v0.5 PF-1 (coordinator decision): a switch to Battery with no profile in effect first refreshes "My settings" to
+		// the current values, as the plug-in offer switches back to it. Before Battery is built over it (review-11 FEAT-2),
+		// and said in the status when that changed it (FEAT-3).
+		boolean refreshed = active() == null && BatteryPrompt.BATTERY.equals(id) && refreshBaseline();
 		Target target = resolve(id);
-		return target == null ? Component.translatable("rigtune.profile.status.unavailable") : switchTo(target, answered);
+		if (target == null) {
+			return withRefresh(Component.translatable("rigtune.profile.status.unavailable"), refreshed, false);
+		}
+		return switchTo(target, answered, refreshed);
 	}
 
 	// Off the render thread (Preview loads in the background).
@@ -199,7 +208,8 @@ public final class ProfileService {
 		boolean saved = store().saveProfile(profile);
 		ProfileTemplates.Result clamped = ProfileTemplates.clamp(imported.values(), controller.rules(), controller.hardwareProfile(), mods(), snapshot(),
 				controller.goal());
-		return switchTo(new Target(name(profile), english(profile), saved ? profile.id() : null, null, clamped.values(), clamped.clamps(), true), offer.get());
+		return switchTo(new Target(name(profile), english(profile), saved ? profile.id() : null, null, clamped.values(), clamped.clamps(), true), offer.get(),
+				false);
 	}
 
 	// Preview's Save only for a code.
@@ -221,6 +231,17 @@ public final class ProfileService {
 		}
 		Target target = resolve(id);
 		return target == null ? null : ShareCode.encode(target.english(), target.values(), refresh);
+	}
+
+	// v0.5 PF-5: how many of the profile's values its code leaves out (a DH LOD radius beyond what share codes carry), for
+	// Copy code's status. The same profile resolution as exportProfileCode.
+	public int profileCodeLeftOut(String id) {
+		Profile own = id.startsWith(ProfileStore.TEMPLATE_PREFIX) ? null : store().profile(id);
+		if (own != null) {
+			return ShareCode.leftOut(own.settings());
+		}
+		Target target = resolve(id);
+		return target == null ? 0 : ShareCode.leftOut(target.values());
 	}
 
 	public void renameProfile(String id, String name) {
@@ -252,7 +273,8 @@ public final class ProfileService {
 	public void powerChanged(boolean onBattery) {
 		HardwareProbe.setOnBattery(onBattery);
 		Instant now = Instant.now();
-		BatteryPrompt.Decision decision = BatteryPrompt.onEdge(onBattery, store().battery(), active(), benchmarkRunning.getAsBoolean(), now);
+		ProfileStore.Snapshot profiles = store().snapshot();
+		BatteryPrompt.Decision decision = BatteryPrompt.onEdge(onBattery, profiles.battery(), active(profiles), benchmarkRunning.getAsBoolean(), now);
 		Offer next = switch (decision.offer()) {
 			case BATTERY -> new Offer(NOTICE_BATTERY + now.getEpochSecond(), decision);
 			case PREVIOUS -> new Offer(NOTICE_BACK + now.getEpochSecond(), decision);
@@ -268,30 +290,34 @@ public final class ProfileService {
 		}
 		minecraft.execute(() -> {
 			if (next != null) {
-				SystemToast.addOrUpdate(minecraft.gui.toastManager(), TOAST_ID, Component.translatable("rigtune.battery.toast.title"),
-						Texts.component(message(next)));
+				SystemToast.addOrUpdate(minecraft.gui.toastManager(), BATTERY_TOAST_ID, Component.translatable("rigtune.battery.toast.title"),
+						Texts.component(message(next, profiles)));
 			}
 			controller.rescan();
 		});
 	}
 
-	// BatteryNoticeSource's notice: the pending offer, while it still applies.
+	// BatteryNoticeSource's notice: the pending offer, while it still applies (v0.5 PF-3: its target still resolves). Only
+	// the unplug offer has "Don't offer again" (PF-2); both keep their ×. profiles.json is read once (this is asked on
+	// every screen init).
 	public @Nullable Notice batteryNotice() {
 		Offer current = offer.get();
 		if (current == null) {
 			return null;
 		}
-		String target = current.decision().target();
-		if (target == null || target.equals(active())) {
+		ProfileStore.Snapshot profiles = store().snapshot();
+		if (!BatteryPrompt.stillOffered(current.decision(), active(profiles), id -> resolvedName(id, profiles) != null)) {
 			retire(offer, current);
 			return null;
 		}
-		Text switchLabel = current.decision().offer() == BatteryPrompt.Offer.BATTERY
-				? Text.of("rigtune.battery.action.switch", "Switch to Battery")
-				: Text.of("rigtune.battery.action.back", "Switch back");
-		return new Notice(current.key(), NoticePriority.BATTERY_OFFER, message(current), null,
-				List.of(new NoticeAction(ACTION_SWITCH, switchLabel), new NoticeAction(ACTION_SNOOZE, Text.of("rigtune.battery.action.snooze", "Don't offer again"))),
-				true);
+		boolean unplug = current.decision().offer() == BatteryPrompt.Offer.BATTERY;
+		List<NoticeAction> actions = new ArrayList<>();
+		actions.add(new NoticeAction(ACTION_SWITCH, unplug ? Text.of("rigtune.battery.action.switch", "Switch to Battery")
+				: Text.of("rigtune.battery.action.back", "Switch back")));
+		if (BatteryPrompt.offersSnooze(current.decision().offer())) {
+			actions.add(new NoticeAction(ACTION_SNOOZE, Text.of("rigtune.battery.action.snooze", "Don't offer again")));
+		}
+		return new Notice(current.key(), NoticePriority.BATTERY_OFFER, message(current, profiles), null, actions, true);
 	}
 
 	public void batteryAction(String actionId) {
@@ -301,14 +327,17 @@ public final class ProfileService {
 		}
 		retire(offer, current);
 		if (ACTION_SNOOZE.equals(actionId)) {
-			store().snoozeBattery(true);
+			// Only the unplug offer has it (PF-2): on the plug-in offer it would also stop the unplug offer.
+			if (BatteryPrompt.offersSnooze(current.decision().offer())) {
+				store().snoozeBattery(true);
+			}
 			return;
 		}
 		if (ACTION_SWITCH.equals(actionId) && current.decision().target() != null) {
 			Component result = switchProfile(current.decision().target(), null);
 			Minecraft minecraft = controller.minecraft();
 			if (minecraft != null) {
-				SystemToast.addOrUpdate(minecraft.gui.toastManager(), TOAST_ID, Component.translatable("rigtune.profile.title"), result);
+				SystemToast.addOrUpdate(minecraft.gui.toastManager(), BATTERY_TOAST_ID, Component.translatable("rigtune.profile.title"), result);
 			}
 		}
 	}
@@ -318,30 +347,32 @@ public final class ProfileService {
 		return seen != null && slot.compareAndSet(seen, null);
 	}
 
-	private Text message(Offer offer) {
+	private Text message(Offer offer, ProfileStore.Snapshot profiles) {
 		if (offer.decision().offer() == BatteryPrompt.Offer.BATTERY) {
 			return Text.of("rigtune.battery.offer", "You're on battery power. Switch to the Battery profile to make it last longer?");
 		}
-		return Text.of("rigtune.battery.back", "You're plugged in again. Switch back to %s?", displayName(offer.decision().target()));
+		Text name = resolvedName(offer.decision().target(), profiles);
+		return Text.of("rigtune.battery.back", "You're plugged in again. Switch back to %s?", name == null ? Text.literal("?") : name);
 	}
 
-	// The switch itself: one journal entry of kind apply, labelled in profiles.json.
-	private Component switchTo(Target target, @Nullable Offer answered) {
+	// The switch itself: one journal entry of kind apply, labelled in profiles.json. refreshed: switchProfile refreshed "My
+	// settings" just before.
+	private Component switchTo(Target target, @Nullable Offer answered, boolean refreshed) {
+		String previous = active();
 		// The way back: "My settings" exists before the first switch, even one made from the battery offer.
 		ensureBaseline();
 		SettingsSnapshot snapshot = snapshot();
 		List<Recommendation> recs = ProfileSwitch.build(target.values(), snapshot, ModScanner.loadedIds(), labels(), target.english());
-		String previous = active();
 		Component name = Texts.component(target.name());
 		if (recs.isEmpty()) {
 			markActive(target, previous, null);
-			return Component.translatable("rigtune.profile.status.already", name);
+			return withRefresh(Component.translatable("rigtune.profile.status.already", name), refreshed, false);
 		}
 		String entryId = ChangeRecorder.newEntryId();
 		Component result = controller.apply(recs, entryId);
 		JournalEntry entry = entry(entryId);
 		if (entry == null || entry.changes().isEmpty()) {
-			return result;
+			return withRefresh(result, refreshed, false);
 		}
 		store().recordSwitch(new ProfileStore.Switch(entryId, target.profileId(), target.templateId(), target.english()), journalIds());
 		markActive(target, previous, entryId);
@@ -357,34 +388,43 @@ public final class ProfileService {
 		if (!target.clamps().isEmpty()) {
 			message.append(" ").append(Component.translatable("rigtune.profile.status.clamped", target.clamps().size()));
 		}
-		return message;
+		return withRefresh(message, refreshed, true);
+	}
+
+	// A refreshed "My settings" is said (review-11 FEAT-3); "before switching" only when a switch was recorded (review-12
+	// R12FEAT-9: not after "Already on…", a refusal or a switch that changed nothing).
+	private static Component withRefresh(Component message, boolean refreshed, boolean switched) {
+		return !refreshed ? message : message.copy().append(" ").append(Component.translatable(switched ? "rigtune.profile.status.baseline_refreshed"
+				: "rigtune.profile.status.baseline_updated"));
 	}
 
 	private void markActive(Target target, @Nullable String previous, @Nullable String entryId) {
-		String id = target.profileId() != null ? target.profileId()
-				: target.templateId() != null ? ProfileStore.TEMPLATE_PREFIX + target.templateId() : null;
+		String id = activeId(target);
 		store().setActive(id, entryId);
 		if (BatteryPrompt.BATTERY.equals(id) && !BatteryPrompt.BATTERY.equals(previous)) {
-			store().rememberPrevious(previous);
+			// v0.5 PF-1: with no profile in effect, "My settings" (refreshed to the current values by switchProfile just before
+			// this switch) is the way back.
+			Profile baseline = store().baseline();
+			store().rememberPrevious(BatteryPrompt.previousFor(previous, baseline == null ? null : baseline.id()));
 		}
+	}
+
+	// What profiles.json's "active" holds once this target is switched to.
+	private static @Nullable String activeId(Target target) {
+		return target.profileId() != null ? target.profileId()
+				: target.templateId() != null ? ProfileStore.TEMPLATE_PREFIX + target.templateId() : null;
 	}
 
 	// For ProfilesGameTest only: null puts the real check back.
 	public static void overrideBenchmarkCheck(@Nullable BooleanSupplier running) {
 		benchmarkRunning = running == null ? BenchmarkController::running : running;
+		Busy.overrideBenchmarkCheck(running);
 	}
 
+	// docs/v0.5/SPEC.md C8: the shared busy check.
 	private @Nullable Component refusal() {
-		if (benchmarkRunning.getAsBoolean()) {
-			return Component.translatable("rigtune.profile.status.benchmark");
-		}
-		if (controller.downloading()) {
-			return Component.translatable("rigtune.status.busy");
-		}
-		if (controller.rules() == null || controller.hardwareProfile() == null) {
-			return Component.translatable("rigtune.profile.code.error.not_ready");
-		}
-		return null;
+		Text refused = Busy.refusal(controller);
+		return refused == null ? null : Texts.component(refused);
 	}
 
 	private @Nullable Target resolve(@Nullable String id) {
@@ -430,6 +470,22 @@ public final class ProfileService {
 		return ProfileNotes.of(target.clamps(), newerKeys, notHere, labels());
 	}
 
+	// "My settings" set to the current values (saved when there is none yet), its id, name and creation time kept. True
+	// when an existing "My settings" changed.
+	private boolean refreshBaseline() {
+		Profile baseline = store().baseline();
+		Map<String, String> values = baseline == null ? Map.of() : current();
+		if (baseline == null || values.isEmpty() || !store().writable()) {
+			ensureBaseline();
+			return false;
+		}
+		if (values.equals(baseline.settings())) {
+			return false;
+		}
+		return store().saveProfile(new Profile(baseline.id(), baseline.name(), baseline.templateId(), ProfileStore.SOURCE_BASELINE, baseline.createdAt(),
+				controller.modVersion(), HardwareProbe.minecraftVersion(), values));
+	}
+
 	private void ensureBaseline() {
 		if (store().baseline() != null || !store().writable()) {
 			return;
@@ -460,30 +516,35 @@ public final class ProfileService {
 
 	// The active profile, while the switch that made it active still stands (not undone: ActiveProfile).
 	private @Nullable String active() {
-		String active = store().active();
+		return active(store().snapshot());
+	}
+
+	private @Nullable String active(ProfileStore.Snapshot profiles) {
+		String active = profiles.active();
 		if (active == null) {
 			return null;
 		}
 		try {
 			Journal journal = ClientJournal.get();
-			return ActiveProfile.inEffect(store().activeEntry(), journal.state(), journal.entries()) ? active : null;
+			return ActiveProfile.inEffect(profiles.activeEntry(), journal.state(), journal.entries()) ? active : null;
 		} catch (RuntimeException e) {
 			RigTune.LOGGER.warn("Could not read RigTune's history", e);
 			return active;
 		}
 	}
 
-	// A profile id's name without computing it (the battery offer's text).
-	private Text displayName(@Nullable String id) {
+	// A profile id's name without computing it (the battery offer's text), or null when it no longer names anything to
+	// switch to (an unknown template, or a profile gone from profiles.json).
+	private static @Nullable Text resolvedName(@Nullable String id, ProfileStore.Snapshot profiles) {
 		if (id == null) {
-			return Text.literal("?");
+			return null;
 		}
 		if (id.startsWith(ProfileStore.TEMPLATE_PREFIX)) {
 			TemplateId template = TemplateId.of(id.substring(ProfileStore.TEMPLATE_PREFIX.length()));
-			return template == null ? Text.literal("?") : template.displayName();
+			return template == null ? null : template.displayName();
 		}
-		Profile profile = store().profile(id);
-		return profile == null ? Text.literal("?") : name(profile);
+		Profile profile = profiles.profile(id);
+		return profile == null ? null : name(profile);
 	}
 
 	private static Text name(Profile profile) {
@@ -498,7 +559,7 @@ public final class ProfileService {
 		return name(profile).english();
 	}
 
-	// The managed keys' current values (inside the share table's bounds).
+	// The managed keys' current values (inside each key's local range: v0.5 PF-5 keeps a DH radius up to 4096).
 	private Map<String, String> current() {
 		return controller.minecraft() == null ? Map.of() : managed(snapshot());
 	}
@@ -507,7 +568,7 @@ public final class ProfileService {
 		Map<String, String> out = new LinkedHashMap<>();
 		for (ShareKeys.Key key : ShareKeys.V1) {
 			String value = snapshot.get(key.key());
-			if (value != null && key.encode(value) != null) {
+			if (value != null && key.local(value) != null) {
 				out.put(key.key(), value);
 			}
 		}
@@ -543,7 +604,7 @@ public final class ProfileService {
 	// PreviewPlanner compares a staged key with its file. When an earlier Apply in this start already staged that key, the
 	// file isn't what the restart starts from, so a change the switch does stage would show as unchanged: those rows (and
 	// the "from" values of the staged ones) come from the switch's own effective values.
-	private ApplyPreview effective(ApplyPreview preview, List<Recommendation> recs) {
+	ApplyPreview effective(ApplyPreview preview, List<Recommendation> recs) {
 		Map<String, Action.SetSetting> byId = new LinkedHashMap<>();
 		recs.forEach(r -> {
 			if (r.action() instanceof Action.SetSetting set) {
@@ -568,7 +629,8 @@ public final class ProfileService {
 				skipped.add(skip);
 			}
 		}
-		return new ApplyPreview(preview.now(), atRestart, preview.downloads(), preview.disables(), skipped, preview.resolved(), preview.notes());
+		return new ApplyPreview(preview.now(), atRestart, preview.downloads(), preview.disables(), skipped, preview.resolved(), preview.notes(),
+				preview.downloadsChecked());
 	}
 
 	private List<InstalledMod> mods() {
@@ -594,13 +656,36 @@ public final class ProfileService {
 		}
 	}
 
+	// The ids a switch label may still name: every entry's, and (v0.5 L8) those a baseline folded, whose labels its
+	// "Includes" line shows.
 	private static @Nullable Set<String> journalIds() {
 		Journal journal = ClientJournal.get();
 		if (journal.state() != Journal.State.OK) {
 			return null;
 		}
-		Set<String> ids = new HashSet<>();
-		journal.entries().forEach(e -> ids.add(e.id()));
-		return ids;
+		return Journal.idsWithFolded(journal.entries());
+	}
+
+	// v0.5 C16 (WS-P2, read-only): the active profile's id, while the switch that made it active still stands.
+	public @Nullable String activeProfileId() {
+		return active();
+	}
+
+	// v0.5 C16 (WS-P2, read-only): a profile id's name, or null when it no longer names anything to switch to (a deleted
+	// profile, a template this version doesn't know).
+	public @Nullable Text nameOf(@Nullable String id) {
+		return resolvedName(id, store().snapshot());
+	}
+
+	// v0.5 C16 (WS-P2, read-only): the active profile and every id's name (as nameOf) from one read of profiles.json.
+	public Names names() {
+		ProfileStore.Snapshot profiles = store().snapshot();
+		return new Names(active(profiles), id -> resolvedName(id, profiles));
+	}
+
+	public record Names(@Nullable String active, Function<String, @Nullable Text> names) {
+		public @Nullable Text name(@Nullable String id) {
+			return id == null ? null : names.apply(id);
+		}
 	}
 }

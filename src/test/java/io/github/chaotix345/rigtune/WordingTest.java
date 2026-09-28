@@ -27,10 +27,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 // docs/v0.4/SPEC.md X4 (AC2j.2, external review §1 and §3): honest wording. No UI text or share report calls a component
 // a bottleneck or says the game is "limited by" it (RigTune estimates tiers; it doesn't measure a limit), and what the
 // stutter doctor, benchmark trends, change awareness and startup times say is a correlation, never a cause.
+// v0.5 (docs/v0.5/SPEC.md X3, X5): Try it's verdicts are correlations too, and a stutter fix's comparison never claims a
+// fix ("fixed the"), a proof or a guarantee.
 class WordingTest {
 	private static final List<String> BOTTLENECK = List.of("limited by", "bottleneck");
 	private static final List<String> CAUSAL = List.of("caused", "because of");
-	private static final List<String> CORRELATION_PREFIXES = List.of("rigtune.stutter.", "rigtune.benchmark.trend.", "rigtune.awareness.", "rigtune.startup.");
+	private static final List<String> CORRELATION_PREFIXES = List.of("rigtune.stutter.", "rigtune.benchmark.trend.", "rigtune.awareness.", "rigtune.startup.",
+			"rigtune.tryit.");
+	private static final String STUTTER_FIX_PREFIX = "rigtune.stutter.fix.";
+	private static final List<String> STUTTER_FIX_CLAIMS = List.of("fixed the", "proves", "guarantee");
 
 	private static List<String> found(String text, List<String> words) {
 		String lower = text.toLowerCase(Locale.ROOT);
@@ -40,6 +45,10 @@ class WordingTest {
 	@Test
 	void noLanguageValueNamesABottleneckOrACause() throws IOException {
 		JsonObject lang = JsonParser.parseString(Files.readString(RepoFiles.resolve("src/main/resources/assets/rigtune/lang/en_us.json"))).getAsJsonObject();
+		assertEquals(List.of(), problems(lang));
+	}
+
+	static List<String> problems(JsonObject lang) {
 		List<String> problems = new ArrayList<>();
 		for (Map.Entry<String, JsonElement> entry : lang.entrySet()) {
 			String value = entry.getValue().getAsString();
@@ -47,8 +56,25 @@ class WordingTest {
 			if (CORRELATION_PREFIXES.stream().anyMatch(entry.getKey()::startsWith)) {
 				found(value, CAUSAL).forEach(word -> problems.add(entry.getKey() + " says \"" + word + "\": " + value));
 			}
+			if (entry.getKey().startsWith(STUTTER_FIX_PREFIX)) {
+				found(value, STUTTER_FIX_CLAIMS).forEach(word -> problems.add(entry.getKey() + " says \"" + word + "\": " + value));
+			}
 		}
-		assertEquals(List.of(), problems);
+		return problems;
+	}
+
+	// The v0.5 rules on made-up values (the real keys arrive with their features).
+	@Test
+	void theV05WordsAreRefusedWhereTheyWouldClaimTooMuch() {
+		JsonObject lang = JsonParser.parseString("""
+				{"rigtune.tryit.verdict.better": "Faster because of the change",
+				 "rigtune.stutter.fix.verdict.less": "This proves the fix fixed the stutter, guaranteed",
+				 "rigtune.history.note": "It proves nothing"}
+				""").getAsJsonObject();
+		assertEquals(List.of("rigtune.tryit.verdict.better says \"because of\": Faster because of the change",
+				"rigtune.stutter.fix.verdict.less says \"fixed the\": This proves the fix fixed the stutter, guaranteed",
+				"rigtune.stutter.fix.verdict.less says \"proves\": This proves the fix fixed the stutter, guaranteed",
+				"rigtune.stutter.fix.verdict.less says \"guarantee\": This proves the fix fixed the stutter, guaranteed"), problems(lang));
 	}
 
 	@Test

@@ -49,6 +49,59 @@ class TrendTextTest {
 		assertEquals("RD 12 · SD 8", TrendText.conditions(TrendFixtures.run("c").context(null).build()).english());
 	}
 
+	// docs/v0.5/SPEC.md BH-1 (AC2B.1; the audit's AuditVerifyBenchmarkTest.bh1NoteAndTrendAgree): the note counts every
+	// comparable run, the trend the earlier ones, and says so: "3 comparable runs" next to "(2 of 3)" read as a contradiction.
+	@Test
+	void bh1NoteAndTrendAgree() {
+		List<BenchmarkRecord> runs = List.of(TrendFixtures.run("a").at("2026-09-20T10:00:00Z").build(),
+				TrendFixtures.run("b").at("2026-09-21T10:00:00Z").build(), TrendFixtures.run("c").at("2026-09-22T10:00:00Z").build());
+		BenchmarkTrend.View view = BenchmarkTrend.view(runs, null, null);
+		assertEquals("3 comparable runs; 0 with different conditions not shown", TrendText.note(view.comparableRuns(), view.otherRuns()).english());
+		assertEquals(List.of("NORMAL Not enough earlier comparable runs for a trend yet (2 of 3)"), lines(runs));
+		List<BenchmarkRecord> four = new java.util.ArrayList<>(runs);
+		four.add(TrendFixtures.run("d").at("2026-09-23T10:00:00Z").build());
+		assertEquals(List.of("NORMAL 1% lows in line with your usual 500 FPS (from 3 earlier runs)"), lines(four));
+		four.add(TrendFixtures.run("e").at("2026-09-24T10:00:00Z").low(600).build());
+		assertEquals(List.of("GOOD 1% lows 20% above your usual 500 FPS (from 4 earlier runs)"), lines(four));
+	}
+
+	// docs/v0.5/SPEC.md RW-8/RW-6: a run left out of the trend says why, and claims nothing about its numbers.
+	@Test
+	void rw8TheExcludedLineNamesWhy() {
+		List<BenchmarkRecord> runs = new java.util.ArrayList<>();
+		for (int i = 0; i < 4; i++) {
+			runs.add(TrendFixtures.run("r" + i).at("2026-09-2" + i + "T10:00:00Z").low(540).build());
+		}
+		runs.add(TrendFixtures.run("fresh").at("2026-09-25T10:00:00Z").low(300).fresh().build());
+		assertEquals(List.of("NORMAL Left out of the trend: the first run in a new benchmark world"), lines(runs));
+		runs.add(TrendFixtures.run("dh").at("2026-09-26T10:00:00Z").low(300).dhGenerating().build());
+		assertEquals(List.of("NORMAL Left out of the trend: Distant Horizons was generating terrain"), lines(runs));
+		runs.add(TrendFixtures.run("both").at("2026-09-27T10:00:00Z").low(300).fresh().dhGenerating().build());
+		assertEquals(List.of("NORMAL Left out of the trend: the first run in a new benchmark world"), lines(runs));
+	}
+
+	private static List<String> lines(List<BenchmarkRecord> runs) {
+		return TrendText.assessment(BenchmarkTrend.view(runs, null, null), ZoneOffset.UTC, c -> io.github.chaotix345.rigtune.core.model.Text.literal("?"), 3)
+				.stream().map(l -> l.tone() + " " + l.text().english()).toList();
+	}
+
+	// docs/v0.5/SPEC.md 2A (L3, AC2A.1): the chart's textual equivalent names its runs' days and numbers, oldest first, and
+	// "your usual"; the screens add the chart's title and the trend line.
+	@Test
+	void l3ChartSummaryNamesTheNumbers() {
+		List<BenchmarkRecord> runs = new java.util.ArrayList<>();
+		double[] lows = {540, 545.4, 538, 550, 440};
+		for (int i = 0; i < lows.length; i++) {
+			runs.add(TrendFixtures.run("r" + i).at("2026-09-2" + i + "T10:00:00Z").low(lows[i]).avg(800 + i).build());
+		}
+		assertEquals("5 comparable runs from 2026-09-20 to 2026-09-24: 1% lows 540, 545, 538, 550, 440 FPS; averages 800, 801, 802, 803, 804 FPS. "
+				+ "Your usual: 543 FPS", TrendText.chartSummary(runs, 542.5, ZoneOffset.UTC).english());
+		assertEquals("1 comparable run on 2026-09-20: 1% low 540 FPS, average 800 FPS",
+				TrendText.chartSummary(runs.subList(0, 1), null, ZoneOffset.UTC).english());
+		assertNull(TrendText.chartSummary(List.of(TrendFixtures.run("x").noResult().build()), null, ZoneOffset.UTC));
+		assertNull(TrendText.chartSummary(List.of(), 500.0, ZoneOffset.UTC));
+	}
+
 	// Review L3: a very steady history has a tiny floor; a drop is never shown as "0%".
 	@Test
 	void smallPercentagesKeepADecimal() {
@@ -77,6 +130,7 @@ class TrendTextTest {
 		for (Difference d : Difference.values()) {
 			assertFalse(TrendText.difference(d).english().isBlank(), d.name());
 		}
+		assertEquals("graphics backend, GPU", TrendText.differences(List.of(Difference.BACKEND, Difference.GPU)).english());
 	}
 
 	// X4: a trend describes, never explains.

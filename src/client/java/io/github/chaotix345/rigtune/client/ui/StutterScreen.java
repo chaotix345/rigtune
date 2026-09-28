@@ -1,11 +1,16 @@
 package io.github.chaotix345.rigtune.client.ui;
 
+import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.stutter.Attributor;
+import io.github.chaotix345.rigtune.core.stutter.FixComparison;
+import io.github.chaotix345.rigtune.core.stutter.FixOffer;
+import io.github.chaotix345.rigtune.core.stutter.FixText;
+import io.github.chaotix345.rigtune.core.stutter.FixTracker;
 import io.github.chaotix345.rigtune.core.stutter.FrameRing;
 import io.github.chaotix345.rigtune.core.stutter.StutterAdvisor;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
@@ -25,10 +30,12 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.FormattedCharSequence;
 import org.jspecify.annotations.Nullable;
 
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 // Stutter Doctor (docs/v0.4/SPEC.md 5), opened from ToolsScreen: the session monitor's controls and the latest analysis
 // (the running session's, refreshed every few seconds, or the last saved summary): a header (session length, gameplay
@@ -55,12 +62,18 @@ public class StutterScreen extends Screen {
 	private static final Map<String, String> TAGS = Map.of(Attributor.WORLD_SAVE, "rigtune.stutter.tag.world_save", Attributor.DH,
 			"rigtune.stutter.tag.dh", Attributor.CPU_CONTENTION, "rigtune.stutter.tag.cpu_contention", Attributor.AFTER_TELEPORT,
 			"rigtune.stutter.tag.after_teleport", Attributor.CHUNKS_LOADING, "rigtune.stutter.tag.chunks_loading", Attributor.MOVING_FAST,
-			"rigtune.stutter.tag.moving_fast");
+			"rigtune.stutter.tag.moving_fast", Attributor.SETTINGS_CHANGED, "rigtune.stutter.tag.settings_changed");
+	// v0.5 RW-11: the four settings' names.
+	private static final Map<String, String> SETTINGS = Map.of(StutterReport.RENDER_DISTANCE, "rigtune.stutter.settings.render_distance",
+			StutterReport.SIMULATION_DISTANCE, "rigtune.stutter.settings.simulation_distance", StutterReport.SHADERS, "rigtune.stutter.settings.shaders",
+			StutterReport.DH_RENDERING, "rigtune.stutter.settings.dh_rendering");
 
 	private final @Nullable Screen parent;
 	protected final RigTuneController controller;
 	private StutterView view = StutterView.EMPTY;
 	private @Nullable Component status;
+	// Good news in green; a fix's refusal ("not now", "try again in a moment") as a label.
+	private int statusColor = COLOR_GOOD;
 	private @Nullable StutterList list;
 	// docs/v0.4/SPEC.md 11: the row that had the keyboard focus before a rebuild, which gets it back.
 	private int focusedRow = -1;
@@ -139,7 +152,7 @@ public class StutterScreen extends Screen {
 
 	private static boolean same(StutterView a, StutterView b) {
 		return a.monitorOn() == b.monitorOn() && a.recording() == b.recording() && a.paused() == b.paused() && a.analysing() == b.analysing()
-				&& a.live() == b.live() && a.report() == b.report();
+				&& a.live() == b.live() && a.report() == b.report() && a.fixes().equals(b.fixes()) && Objects.equals(a.tracked(), b.tracked());
 	}
 
 	private void copySummary() {
@@ -147,6 +160,7 @@ public class StutterScreen extends Screen {
 		if (!text.isEmpty()) {
 			minecraft.keyboardHandler.setClipboard(text);
 			status = Component.translatable("rigtune.stutter.copied");
+			statusColor = COLOR_GOOD;
 		}
 	}
 
@@ -163,13 +177,49 @@ public class StutterScreen extends Screen {
 		return list;
 	}
 
+	// The fix rows' buttons in list order ("Try this fix…"; "Undo this change…", "Dismiss"), for the game tests.
+	public List<Button> fixButtons() {
+		List<Button> out = new ArrayList<>();
+		if (list != null) {
+			for (Row row : list.children()) {
+				if (row instanceof ButtonRow b) {
+					out.addAll(b.buttons());
+				}
+			}
+		}
+		return out;
+	}
+
+	public @Nullable Component status() {
+		return status;
+	}
+
+	public int statusColor() {
+		return statusColor;
+	}
+
+	// The status line under the title ("Copied."); one that doesn't fit there (a stutter fix's) opens the list instead.
+	private boolean statusFitsHeader() {
+		return status != null && font.width(status) <= width - 16;
+	}
+
 	private void populate(StutterList l, int width) {
 		shownText.clear();
 		String statusKey = view.recording() ? (view.paused() ? "rigtune.stutter.status.paused" : "rigtune.stutter.status.recording")
 				: view.monitorOn() ? "rigtune.stutter.status.waiting" : "rigtune.stutter.status.off";
+		if (status != null && !statusFitsHeader()) {
+			text(l, status, statusColor, width, 0);
+		}
 		text(l, Component.translatable(statusKey), COLOR_LABEL, width, 0);
 		if (!view.recording() && view.report() != null) {
 			text(l, Component.translatable("rigtune.stutter.status.saved"), COLOR_LABEL, width, 0);
+			Component shortSince = shortSinceLine(view.shortSince());
+			if (shortSince != null) {
+				text(l, shortSince, COLOR_LABEL, width, 0);
+			}
+		}
+		if (view.tracked() != null) {
+			trackedFix(l, view.tracked(), width);
 		}
 		StutterReport r = view.report();
 		if (r == null) {
@@ -183,7 +233,7 @@ public class StutterScreen extends Screen {
 		histogram(l, r, width);
 		causes(l, r, width);
 		worst(l, r, width);
-		advice(l, view.advice(), width);
+		advice(l, r, view.advice(), width);
 	}
 
 	private void header(StutterList l, StutterReport r, int width) {
@@ -191,9 +241,15 @@ public class StutterScreen extends Screen {
 				? Component.translatable("rigtune.stutter.header.time.benchmark", clock(r.gameplaySeconds()))
 				: Component.translatable("rigtune.stutter.header.time.monitor", clock(r.sessionSeconds()), clock(r.gameplaySeconds()));
 		text(l, time, COLOR_TEXT, width, ROW_GAP);
-		text(l, Component.translatable("rigtune.stutter.header.frames", number(r.frames()), number(r.avgFps()), number(r.onePercentLowFps())), COLOR_TEXT,
-				width, 0);
+		text(l, framesLine(r), COLOR_TEXT, width, 0);
+		if (r.idleSeconds() != null) {
+			text(l, Component.translatable("rigtune.stutter.header.idle", clock(r.idleSeconds())), COLOR_LABEL, width, 0);
+		}
 		text(l, spikesLine(r), COLOR_TEXT, width, 0);
+		Component settings = settingsLine(r);
+		if (settings != null) {
+			text(l, settings, COLOR_NOTE, width, 0);
+		}
 		if (!r.enoughData()) {
 			text(l, Component.translatable("rigtune.stutter.not_enough"), COLOR_NOTE, width, 0);
 		}
@@ -203,6 +259,48 @@ public class StutterScreen extends Screen {
 		if (!r.phaseTiming()) {
 			text(l, Component.translatable("rigtune.stutter.phase_unavailable"), COLOR_LABEL, width, 0);
 		}
+	}
+
+	// "97,000 frames · average 119 FPS · 1% low 61 FPS", and when those cover only the frame ring's window (v0.5 SD-2)
+	// "... over the last 13:15 of gameplay".
+	static Component framesLine(StutterReport r) {
+		Double window = r.windowSeconds();
+		return window == null
+				? Component.translatable("rigtune.stutter.header.frames", number(r.frames()), number(r.avgFps()), number(r.onePercentLowFps()))
+				: Component.translatable("rigtune.stutter.window.frames", number(r.frames()), number(r.avgFps()), number(r.onePercentLowFps()), clock(window));
+	}
+
+	// v0.5 RW-18: "Saved since: a short session (0:14), too little data to show.", or null.
+	static @Nullable Component shortSinceLine(List<Double> shortSince) {
+		if (shortSince.isEmpty()) {
+			return null;
+		}
+		String lengths = String.join(", ", shortSince.stream().map(StutterScreen::clock).toList());
+		return shortSince.size() == 1 ? Component.translatable("rigtune.stutter.status.short_since.one", lengths)
+				: Component.translatable("rigtune.stutter.status.short_since.many", shortSince.size(), lengths);
+	}
+
+	// v0.5 RW-11: "Settings changed during this session (render distance 32 → 12, shaders on → off)", or null.
+	static @Nullable Component settingsLine(StutterReport r) {
+		List<StutterReport.SettingChange> changes = r.settingChanges();
+		if (changes.isEmpty()) {
+			return null;
+		}
+		MutableComponent list = Component.empty();
+		for (int i = 0; i < changes.size(); i++) {
+			StutterReport.SettingChange c = changes.get(i);
+			if (i > 0) {
+				list.append(Component.literal(", "));
+			}
+			list.append(Component.translatable("rigtune.stutter.settings.change", Component.translatable(SETTINGS.get(c.key())), settingValue(c.from()),
+					settingValue(c.to())));
+		}
+		return Component.translatable("rigtune.stutter.settings.changed", list);
+	}
+
+	private static Component settingValue(String value) {
+		Boolean on = StutterReport.onOff(value);
+		return on == null ? Component.literal(value) : Component.translatable(on ? "rigtune.stutter.settings.on" : "rigtune.stutter.settings.off");
 	}
 
 	// "12 spikes (9 minor, 2 major, 1 severe, 0 freezes) in 9 hitches, 1.8 s lost", singular where the count is 1 (review-8
@@ -259,19 +357,22 @@ public class StutterScreen extends Screen {
 			text(l, Component.translatable("rigtune.stutter.causes.none"), COLOR_LABEL, width, 0);
 			return;
 		}
-		for (String cause : Attributor.CAUSES) {
-			Double share = r.causes().get(cause);
-			if (share == null) {
-				continue;
-			}
-			bar(l, Component.translatable(CAUSES.get(cause)), share, cause.equals(Attributor.UNKNOWN) ? COLOR_LABEL : COLOR_AMBER, Component.literal(percent(share)));
-		}
+		// v0.5 RW-10: no 0 % row, and the whole percentages never total more than 100 (StutterSummary.percentages).
+		StutterSummary.percentages(r.causes()).forEach((cause, percent) -> bar(l, Component.translatable(CAUSES.get(cause)), percent / 100.0,
+				cause.equals(Attributor.UNKNOWN) ? COLOR_LABEL : COLOR_AMBER, Component.literal(percent + " %")));
 		for (String tag : Attributor.TAGS) {
 			Integer n = r.tags().get(tag);
 			if (n != null && n > 0 && TAGS.containsKey(tag)) {
 				text(l, tagLine(tag, n, r.spikes().total()), COLOR_LABEL, width, 0);
 			}
 		}
+	}
+
+	// The cause rows' text as shown ("Garbage collection 59 %"), for the tests.
+	static List<Component> causeRows(StutterReport r) {
+		List<Component> out = new ArrayList<>();
+		StutterSummary.percentages(r.causes()).forEach((cause, percent) -> out.add(Component.translatable(CAUSES.get(cause)).append(" " + percent + " %")));
+		return out;
 	}
 
 	private void worst(StutterList l, StutterReport r, int width) {
@@ -320,8 +421,11 @@ public class StutterScreen extends Screen {
 		}
 	}
 
-	private void advice(StutterList l, List<StutterAdvisor.Fired> advice, int width) {
+	private void advice(StutterList l, StutterReport r, List<StutterAdvisor.Fired> advice, int width) {
 		heading(l, "rigtune.stutter.advice", width);
+		if (!r.settingChanges().isEmpty()) {
+			text(l, Component.translatable(view.live() ? "rigtune.stutter.settings.advice.live" : "rigtune.stutter.settings.advice"), COLOR_LABEL, width, 0);
+		}
 		if (advice.isEmpty()) {
 			text(l, Component.translatable("rigtune.stutter.advice.none"), COLOR_LABEL, width, 0);
 			return;
@@ -340,11 +444,119 @@ public class StutterScreen extends Screen {
 					text(l, steps, COLOR_LABEL, width, 0);
 				}
 			}
+			FixOffer fix = view.fixes().get(f.id());
+			if (fix != null) {
+				fixRows(l, f, fix, width);
+			}
 		}
 	}
 
+	// docs/v0.5/SPEC.md 5 (C20): under an advice, its one-click fix ("Try it in one click: ...", the two steps and when it
+	// takes effect, an active profile that also sets it, and "Try this fix…", whose narration names the change), or the one
+	// line why not (yet). The advice's own fix, already chosen or applied, is the block's business (no "another fix" line).
+	private void fixRows(StutterList l, StutterAdvisor.Fired advice, FixOffer fix, int width) {
+		FixTracker.Record tracked = view.tracked();
+		if (fix instanceof FixOffer.NotYet && tracked != null && tracked.active() && tracked.adviceId().equals(advice.id())) {
+			return;
+		}
+		switch (fix) {
+			case FixOffer.NotYet n -> text(l, Texts.component(FixText.notYet(n)), COLOR_LABEL, width, 2);
+			case FixOffer.Offer o -> {
+				HistoryModel.Labels labels = controller.settingLabels();
+				Text change = FixText.change(labels, o.key(), o.from(), o.to());
+				text(l, Texts.component(FixText.offer(change)), COLOR_TEXT, width, 2);
+				text(l, Texts.component(FixText.takesEffect(o.now())), COLOR_LABEL, width, 0);
+				if (o.profile() != null) {
+					text(l, Texts.component(FixText.profileNote(Text.literal(o.profile()))), COLOR_LABEL, width, 0);
+				}
+				Component narration = Texts.component(FixText.tryNarration(change));
+				Button tryIt = Button.builder(Texts.component(FixText.tryButton()), b -> startFix(o)).size(Math.min(width, 160), 20)
+						.createNarration(message -> narration.copy()).build();
+				buttons(l, List.of(tryIt));
+			}
+		}
+	}
+
+	// Try this fix… (review-12 R12STUTTER-6): nothing changes yet, the baseline session starts.
+	private void startFix(FixOffer.Offer offer) {
+		FixTracker.Record was = controller.stutter().tracked();
+		status = controller.startStutterFix(offer);
+		FixTracker.Record now = controller.stutter().tracked();
+		// Chosen when the block now shows a new fix; anything else was a refusal.
+		statusColor = now != null && (was == null || !was.entryId().equals(now.entryId())) ? COLOR_GOOD : COLOR_LABEL;
+		rebuildWidgets();
+	}
+
+	// Apply the fix… on a ready fix: its preview, then the Apply.
+	private void applyFix(FixTracker.Record fix) {
+		FixOffer.Offer offer = new FixOffer.Offer(fix.adviceId(), fix.key(), fix.from(), fix.to(), fix.now());
+		String title = view.advice().stream().filter(a -> a.id().equals(fix.adviceId())).map(StutterAdvisor.Fired::title).findFirst()
+				.orElse(Texts.component(FixText.change(controller.settingLabels(), fix.key(), fix.from(), fix.to())).getString());
+		minecraft.gui.setScreen(new PreviewScreen(this, controller, c -> c.previewStutterFix(offer), new PreviewScreen.Confirm(
+				Texts.component(FixText.previewSubtitle(title)), Texts.component(FixText.previewApply()), () -> {
+					status = controller.applyStutterFix(offer);
+					FixTracker.Record now = controller.stutter().tracked();
+					// Applied when the block's fix left READY; anything else was a refusal.
+					statusColor = now != null && now.entryId().equals(fix.entryId()) && !now.state().beforeApply() ? COLOR_GOOD : COLOR_LABEL;
+					minecraft.gui.setScreen(this);
+				}, null)));
+	}
+
+	// docs/v0.5/SPEC.md 5 (C20): "Your stutter fix": the change and its date, where it is (or the verdict with both rates),
+	// why the last session didn't count, the Before/After bars once compared, and Undo this change… / Dismiss.
+	private void trackedFix(StutterList l, FixTracker.Record fix, int width) {
+		HistoryModel.Labels labels = controller.settingLabels();
+		heading(l, Texts.component(FixText.heading()), width);
+		text(l, Texts.component(FixText.applied(labels, fix, ZoneId.systemDefault())), COLOR_TEXT, width, 0);
+		FixComparison.Verdict verdict = fix.state() == FixTracker.State.COMPARED ? fix.verdict() : null;
+		int color = verdict == null ? COLOR_LABEL : switch (verdict.kind()) {
+			case LESS -> COLOR_GOOD;
+			case SAME -> COLOR_LABEL;
+			case MORE -> COLOR_BAD;
+		};
+		text(l, Texts.component(FixText.state(labels, fix, view.monitorOn())), color, width, 0);
+		Text skipped = FixText.skipped(labels, fix);
+		if (skipped != null) {
+			text(l, Texts.component(skipped), COLOR_LABEL, width, 0);
+		}
+		if (verdict != null) {
+			double top = Math.max(verdict.beforePerMinute(), verdict.afterPerMinute());
+			bar(l, Texts.component(FixText.before()), top <= 0 ? 0 : verdict.beforePerMinute() / top, COLOR_LABEL,
+					Texts.component(FixText.rate(verdict.beforePerMinute())));
+			bar(l, Texts.component(FixText.after()), top <= 0 ? 0 : verdict.afterPerMinute() / top, color == COLOR_LABEL ? COLOR_AMBER : color,
+					Texts.component(FixText.rate(verdict.afterPerMinute())));
+			text(l, Texts.component(FixText.lost(verdict)), COLOR_LABEL, width, 0);
+		}
+		List<Button> buttons = new ArrayList<>();
+		int half = Math.min(160, (width - ButtonRow.GAP) / 2);
+		if (fix.state() == FixTracker.State.READY) {
+			Component narration = Texts.component(FixText.applyNarration(FixText.change(labels, fix.key(), fix.from(), fix.to())));
+			buttons.add(Button.builder(Texts.component(FixText.applyButton()), b -> applyFix(fix)).size(half, 20)
+					.createNarration(message -> narration.copy()).build());
+		}
+		boolean inEffect = fix.undoable();
+		if (inEffect) {
+			buttons.add(Button.builder(Texts.component(FixText.undo()), b -> minecraft.gui.setScreen(new UndoScreen(this, controller, fix.entryId())))
+					.size(half, 20).build());
+		}
+		buttons.add(Button.builder(Texts.component(FixText.dismiss()), b -> {
+			controller.dismissStutterFix(fix.entryId());
+			rebuildWidgets();
+		}).tooltip(Tooltip.create(Texts.component(FixText.dismissTooltip()))).size(half, 20).build());
+		buttons(l, buttons);
+	}
+
+	private void buttons(StutterList l, List<Button> buttons) {
+		buttons.forEach(b -> shownText.add(b.getMessage()));
+		l.add(new ButtonRow(buttons));
+	}
+
 	private void heading(StutterList l, String key, int width) {
-		text(l, Component.translatable(key).withStyle(ChatFormatting.BOLD), COLOR_HEADING, width, 7);
+		heading(l, Component.translatable(key), width);
+	}
+
+	private void heading(StutterList l, MutableComponent title, int width) {
+		text(l, title.withStyle(ChatFormatting.BOLD), COLOR_HEADING, width, 7);
 	}
 
 	private void text(StutterList l, Component text, int color, int width, int top) {
@@ -382,13 +594,12 @@ public class StutterScreen extends Screen {
 		}
 		MutableComponent causes = Component.empty();
 		boolean any = false;
-		for (String cause : Attributor.CAUSES) {
-			Double share = r.causes().get(cause);
-			if (share != null && share > 0 && !cause.equals(Attributor.UNKNOWN)) {
+		for (Map.Entry<String, Integer> e : StutterSummary.percentages(r.causes()).entrySet()) {
+			if (!e.getKey().equals(Attributor.UNKNOWN)) {
 				if (any) {
 					causes.append(Component.literal(", "));
 				}
-				causes.append(Component.translatable(CAUSES.get(cause))).append(Component.literal(" " + percent(share)));
+				causes.append(Component.translatable(CAUSES.get(e.getKey()))).append(Component.literal(" " + e.getValue() + " %"));
 				any = true;
 			}
 		}
@@ -403,8 +614,8 @@ public class StutterScreen extends Screen {
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
-		if (status != null) {
-			graphics.centeredText(font, status, width / 2, 20, Palette.of(COLOR_GOOD));
+		if (status != null && statusFitsHeader()) {
+			graphics.centeredText(font, status, width / 2, 20, Palette.of(statusColor));
 		}
 	}
 

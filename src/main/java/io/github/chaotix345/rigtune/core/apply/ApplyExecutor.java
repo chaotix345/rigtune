@@ -62,6 +62,7 @@ public final class ApplyExecutor {
 	private final Mover mover;
 	private final Sleeper sleeper;
 	private final ModIdReader modIds;
+	private final UnfinishedGroups.Writer recordWriter;
 
 	public ApplyExecutor() {
 		this(DEFAULT_ATTEMPTS, DEFAULT_RETRY_DELAY_MILLIS);
@@ -80,11 +81,20 @@ public final class ApplyExecutor {
 	}
 
 	ApplyExecutor(int attempts, long retryDelayMillis, Mover mover, Sleeper sleeper, ModIdReader modIds) {
+		this(attempts, retryDelayMillis, mover, sleeper, modIds, UnfinishedGroups.DURABLE);
+	}
+
+	ApplyExecutor(int attempts, long retryDelayMillis, Mover mover, Sleeper sleeper, ModIdReader modIds, UnfinishedGroups.Writer recordWriter) {
 		this.attempts = Math.max(1, attempts);
 		this.retryDelayMillis = retryDelayMillis;
 		this.mover = mover;
 		this.sleeper = sleeper;
 		this.modIds = modIds;
+		this.recordWriter = recordWriter;
+	}
+
+	UnfinishedGroups.Writer recordWriter() {
+		return recordWriter;
 	}
 
 	private static boolean realSleep(long millis) {
@@ -159,11 +169,26 @@ public final class ApplyExecutor {
 	// replays last-apply.json. An abandoned op is never still in pending.json once last-apply.json says so, where a later
 	// run could apply it after History has called it abandoned. The record of the groups' renames (UnfinishedGroups) is
 	// pruned only once last-apply.json is written, so a redo still reports where each file went.
+	// The last-apply.json this run replaces is read first: its done ops prove the renames of a run that died after writing
+	// it and before rewriting pending.json (docs/v0.5/SPEC.md 4f, RW-1).
 	public ApplyResult run(PendingActions plan, Path pendingFile) throws IOException {
+		return run(plan, pendingFile, false);
+	}
+
+	// holdFileOps (docs/v0.5/SPEC.md 4d; the 0.5 helper's -Drigtune.helper.holdFileOps, HelperLauncher): the held groups
+	// (held(...)) don't run. They stay in pending.json as they are, attempts unchanged, and aren't in the result, so
+	// last-apply.json never names them (no new status). A run that ran nothing writes nothing.
+	public ApplyResult run(PendingActions plan, Path pendingFile, boolean holdFileOps) throws IOException {
 		Path configDir = InstanceDirs.configDirOf(pendingFile);
 		Path modsDir = InstanceDirs.modsDirOf(pendingFile);
-		UnfinishedGroups unfinished = UnfinishedGroups.load(configDir);
-		ApplyResult result = new ApplyResult(Instant.now().toString(), giveUpOnRepeatFailures(execute(plan, modsDir, configDir, unfinished)));
+		UnfinishedGroups unfinished = UnfinishedGroups.load(configDir, recordWriter);
+		Map<String, OpResult> doneBefore = doneBefore(ApplyResult.defaultPath(configDir));
+		Set<Integer> held = holdFileOps ? heldIndexes(plan.ops(), modsDir, unfinished.all(), doneBefore) : Set.of();
+		List<OpResult> ran = execute(plan, modsDir, configDir, unfinished, doneBefore, held).stream().filter(Objects::nonNull).toList();
+		if (ran.isEmpty() && !held.isEmpty()) {
+			return new ApplyResult(Instant.now().toString(), List.of());
+		}
+		ApplyResult result = new ApplyResult(Instant.now().toString(), giveUpOnRepeatFailures(ran));
 		writeRemaining(plan, pendingFile, result, modsDir, EnumSet.of(Status.ABANDONED), true);
 		result.save(ApplyResult.defaultPath(configDir));
 		unfinished.prune(plan.ops().stream().filter(Objects::nonNull).map(Op::id).filter(Objects::nonNull).toList());
@@ -268,21 +293,138 @@ public final class ApplyExecutor {
 		}
 	}
 
+	// The ops the last run renamed itself, by op id: OK, or done earlier with its resultPath (never a bare "already
+	// done", which proves nothing). Empty when there is no readable last-apply.json: the safe side.
+	static Map<String, OpResult> doneBefore(Path lastApply) {
+		if (!Files.isRegularFile(lastApply)) {
+			return Map.of();
+		}
+		try {
+			Map<String, OpResult> out = new HashMap<>();
+			for (OpResult r : ApplyResult.load(lastApply).results()) {
+				if (r != null && r.op() != null && r.op().id() != null
+						&& (r.status() == Status.OK || r.status() == Status.SKIPPED_ALREADY_DONE && r.resultPath() != null)) {
+					out.put(r.op().id(), r);
+				}
+			}
+			return out;
+		} catch (IOException | RuntimeException e) {
+			ApplyHelper.log("Could not read " + LogSafe.name(lastApply) + "; no op counts as done by the last run: " + LogSafe.error(e, lastApply));
+			return Map.of();
+		}
+	}
+
 	List<OpResult> execute(PendingActions plan, Path modsDir, Path configDir, UnfinishedGroups unfinished) {
+		return execute(plan, modsDir, configDir, unfinished, Map.of());
+	}
+
+	List<OpResult> execute(PendingActions plan, Path modsDir, Path configDir, UnfinishedGroups unfinished, Map<String, OpResult> doneBefore) {
+		return execute(plan, modsDir, configDir, unfinished, doneBefore, Set.of());
+	}
+
+	// held: the indexes of ops that don't run (their result stays null).
+	List<OpResult> execute(PendingActions plan, Path modsDir, Path configDir, UnfinishedGroups unfinished, Map<String, OpResult> doneBefore,
+			Set<Integer> held) {
 		List<Op> ops = plan.ops();
+		OpResult[] out = new OpResult[ops.size()];
+		InstalledJars installed = new InstalledJars(modsDir, this::jarModId);
+		for (List<Integer> members : groups(ops).values()) {
+			if (held.containsAll(members)) {
+				continue;
+			}
+			runGroup(ops, members, modsDir, configDir, installed, unfinished, doneBefore, out);
+			members.forEach(i -> installed.forget(ops.get(i)));
+		}
+		return Arrays.asList(out);
+	}
+
+	// The plan's groups in order: each group's op indexes; an op without a group is one alone.
+	private static Map<String, List<Integer>> groups(List<Op> ops) {
 		Map<String, List<Integer>> groups = new LinkedHashMap<>();
 		for (int i = 0; i < ops.size(); i++) {
 			Op op = ops.get(i);
 			String key = op != null && op.group() != null ? "group:" + op.group() : "op:" + i;
 			groups.computeIfAbsent(key, k -> new ArrayList<>()).add(i);
 		}
-		OpResult[] out = new OpResult[ops.size()];
-		InstalledJars installed = new InstalledJars(modsDir, this::jarModId);
-		for (List<Integer> members : groups.values()) {
-			runGroup(ops, members, modsDir, configDir, installed, unfinished, out);
-			members.forEach(i -> installed.forget(ops.get(i)));
+		return groups;
+	}
+
+	private static boolean isFileOp(Op op) {
+		return op != null && (op.type() == PendingActions.Type.ENABLE_FILE || op.type() == PendingActions.Type.DISABLE_FILE);
+	}
+
+	// docs/v0.5/SPEC.md 4d: the ops of every group with a mod-file op, the ones an advice instance's helper can hold.
+	public static List<Op> fileGroupOps(List<Op> ops) {
+		List<Integer> indexes = new ArrayList<>();
+		for (List<Integer> members : groups(ops).values()) {
+			if (members.stream().anyMatch(i -> isFileOp(ops.get(i)))) {
+				indexes.addAll(members);
+			}
 		}
-		return Arrays.asList(out);
+		indexes.sort(Comparator.naturalOrder());
+		return indexes.stream().map(ops::get).toList();
+	}
+
+	// docs/v0.5/SPEC.md 4d: what the helper holds with holdFileOps, in plan order, from RigTune's own records next to
+	// pendingFile (unfinished-groups.json, last-apply.json) and its mods folder, as the helper will see them. The notice and
+	// the start-up counts use this, so they name what the helper leaves.
+	public static List<Op> held(PendingActions plan, Path pendingFile) {
+		Path configDir = InstanceDirs.configDirOf(pendingFile);
+		List<Integer> indexes = new ArrayList<>(heldIndexes(plan.ops(), InstanceDirs.modsDirOf(pendingFile), UnfinishedGroups.recorded(configDir),
+				doneBefore(ApplyResult.defaultPath(configDir))));
+		indexes.sort(Comparator.naturalOrder());
+		return indexes.stream().map(plan.ops()::get).toList();
+	}
+
+	// Every op of a group with a mod-file op, except a group RigTune's own records prove it started: a rename recorded as
+	// done (Rename.done) and still in effect, or an op the last run did (last-apply.json). Holding one would leave a mod
+	// missing (its old jar disabled, its replacement never enabled) until the player chose, so it is finished (or rolled
+	// back) as in 0.4. Files that only look half done prove nothing (review-11 APPLY-5): the launcher's own disable gives the
+	// same .disabled name as RigTune's, so a record 0.4 wrote (no done mark), a rename recorded but put back, and 0.1-0.3's
+	// failed rollbacks (no record at all) are held, where the notice offers them.
+	// Discard and the start-up's stale check keep a broader set (startedGroups, review-11 APPLY-1): for them keeping a group
+	// is the safe side.
+	private static Set<Integer> heldIndexes(List<Op> ops, Path modsDir, List<Rename> recorded, Map<String, OpResult> doneBefore) {
+		Set<Integer> out = new HashSet<>();
+		for (List<Integer> members : groups(ops).values()) {
+			if (members.stream().noneMatch(i -> isFileOp(ops.get(i)))) {
+				continue;
+			}
+			boolean started = !earlierRenames(ops, members, modsDir, recorded, true).isEmpty()
+					|| members.stream().anyMatch(i -> isFileOp(ops.get(i)) && doneByLastRun(ops.get(i), doneBefore) != null);
+			if (!started) {
+				out.addAll(members);
+			}
+		}
+		return out;
+	}
+
+	// review 11 APPLY-1 (WS-H, a marked edit): a group RigTune's own records show it started (a recorded rename in effect
+	// that isn't recorded as put back, whether or not 0.5 marked it done, or an op the last run did), for startedGroups.
+	// Broader than the hold's rule (heldIndexes counts only done-marked renames, APPLY-5): for Discard and the stale check,
+	// keeping a group is the safe side.
+	private static boolean startedByRecords(List<Op> ops, List<Integer> members, Path modsDir, List<Rename> recorded, Map<String, OpResult> doneBefore) {
+		return !earlierRenames(ops, members, modsDir, recorded, false).isEmpty()
+				|| members.stream().anyMatch(i -> isFileOp(ops.get(i)) && doneByLastRun(ops.get(i), doneBefore) != null);
+	}
+
+	// review 11 APPLY-1 (WS-H, a marked edit): the groups (an op without one: "op:<id>") the records next to pendingFile
+	// show started, by runGroup's own "done earlier" rule (startedByRecords), so neither the start-up's stale check
+	// (StaleOps), Discard nor Undo drops them: an unheld exit reports them "Already done earlier".
+	public static Set<String> startedGroups(PendingActions plan, Path pendingFile) {
+		Path configDir = InstanceDirs.configDirOf(pendingFile);
+		List<Op> ops = plan.ops();
+		List<Rename> recorded = UnfinishedGroups.recorded(configDir);
+		Map<String, OpResult> doneBefore = doneBefore(ApplyResult.defaultPath(configDir));
+		Set<String> out = new HashSet<>();
+		for (List<Integer> members : groups(ops).values()) {
+			Op first = ops.get(members.getFirst());
+			if (first != null && (first.group() != null || first.id() != null)
+					&& startedByRecords(ops, members, InstanceDirs.modsDirOf(pendingFile), recorded, doneBefore)) {
+				out.add(first.group() != null ? first.group() : "op:" + first.id());
+			}
+		}
+		return out;
 	}
 
 	// The mod ids of the jars in the mods folder, each read once; forget() drops the names a group may have renamed.
@@ -351,6 +493,50 @@ public final class ApplyExecutor {
 		return null;
 	}
 
+	// docs/v0.5/SPEC.md 4f (RW-1): an enable whose download is gone while its jar is there, with no record of RigTune doing
+	// that rename (a recorded rename still in effect, or the last run's own result), was put there by the launcher or the
+	// player (the real-world run of 2026-09-27), so the group is dropped as installed another way instead of being reported
+	// done and journaled as RigTune's change.
+	private static String installedElsewhere(List<Op> ops, List<Integer> order, Map<Integer, Undo> earlier, Map<String, OpResult> doneBefore) {
+		for (int i : order) {
+			Op op = ops.get(i);
+			if (op.type() != PendingActions.Type.ENABLE_FILE || earlier.containsKey(i) || doneByLastRun(op, doneBefore) != null) {
+				continue;
+			}
+			if (!Files.exists(Path.of(op.from())) && Files.exists(Path.of(op.to()))) {
+				return fileName(op.to()) + " is already in the mods folder and RigTune has no record of putting it there, so it was installed another way";
+			}
+		}
+		return null;
+	}
+
+	// The op's rename as the last run did it, still in effect, reported with where the file went (so a redo of this redo
+	// still finds it proven); null when last-apply.json doesn't prove it.
+	private static OpResult doneByLastRun(Op op, Map<String, OpResult> doneBefore) {
+		OpResult before = op.id() == null ? null : doneBefore.get(op.id());
+		if (before == null || before.op() == null || before.op().type() != op.type()) {
+			return null;
+		}
+		try {
+			return switch (op.type()) {
+				case ENABLE_FILE -> before.op().to() != null && fileName(before.op().to()).equals(fileName(op.to()))
+						&& !Files.exists(Path.of(op.from())) && Files.exists(Path.of(op.to()))
+						? new OpResult(op, Status.SKIPPED_ALREADY_DONE, "Already done earlier: " + fileName(op.to()), Path.of(op.to()).toString()) : null;
+				case DISABLE_FILE -> {
+					Path path = Path.of(op.path());
+					Path moved = before.resultPath() == null ? null : path.resolveSibling(fileName(before.resultPath()));
+					yield moved != null && moved.getFileName().toString().startsWith(path.getFileName() + ".disabled")
+							&& !Files.exists(path) && Files.exists(moved)
+							? new OpResult(op, Status.SKIPPED_ALREADY_DONE, "Already done earlier: " + moved.getFileName(), moved.toString()) : null;
+				}
+				case PATCH_JSON, PATCH_TOML, PATCH_PROPERTIES -> null;
+			};
+		} catch (RuntimeException e) {
+			// A missing or invalid path proves nothing.
+			return null;
+		}
+	}
+
 	// Every enable is checked with the id its jar declares: one staged without a mod id (by 0.1.0, or an Undo of a jar it
 	// couldn't read; review 3, apply-safety-1) and one staged with an id alike (review 4, apply-safety-1). Null when
 	// there is none, also after an Error (review 4, security-1): one bad jar must fail only its own check, never the helper.
@@ -378,12 +564,12 @@ public final class ApplyExecutor {
 	// as done, and if the group fails again they're rolled back with the rest. So no group ends half-applied unless a
 	// rollback fails for good, and then it stays recorded and pending.
 	private void runGroup(List<Op> ops, List<Integer> members, Path modsDir, Path configDir, InstalledJars installed,
-			UnfinishedGroups unfinished, OpResult[] out) {
+			UnfinishedGroups unfinished, Map<String, OpResult> doneBefore, OpResult[] out) {
 		List<Integer> order = new ArrayList<>(members);
 		order.sort(Comparator.comparingInt(i -> rank(ops.get(i))));
 		Op first = ops.get(order.getFirst());
 		String group = first == null ? null : first.group() != null ? first.group() : first.id() != null ? "op:" + first.id() : null;
-		Map<Integer, Undo> earlier = earlierRenames(ops, order, modsDir, unfinished.all());
+		Map<Integer, Undo> earlier = earlierRenames(ops, order, modsDir, unfinished.all(), false);
 
 		String[] problems = new String[ops.size()];
 		String[] modIds = new String[ops.size()];
@@ -408,17 +594,20 @@ public final class ApplyExecutor {
 				out[i] = new OpResult(ops.get(i), Status.FAILED,
 						problems[i] != null ? "Refused: " + problems[i] : "Not applied: another change in its group was refused");
 			}
-			if (rollBack(ops, new ArrayList<>(earlier.values()), "another change in its group was refused", out)) {
+			if (rollBack(ops, new ArrayList<>(earlier.values()), "another change in its group was refused", out, unfinished, group)) {
 				unfinished.finish(group);
 			}
 			return;
 		}
-		String duplicate = duplicateProblem(ops, order, modIds, installed);
+		String elsewhere = installedElsewhere(ops, order, earlier, doneBefore);
+		String duplicate = elsewhere != null ? elsewhere : duplicateProblem(ops, order, modIds, installed);
 		if (duplicate != null) {
 			// What an earlier run did stays: the mod is installed another way, so putting the old jar back would load it twice.
 			for (int i : order) {
 				Undo done = earlier.get(i);
-				out[i] = done != null ? doneEarlier(ops.get(i), done) : new OpResult(ops.get(i), Status.ABANDONED, "Dropped: " + duplicate);
+				OpResult lastRun = done == null ? doneByLastRun(ops.get(i), doneBefore) : null;
+				out[i] = done != null ? doneEarlier(ops.get(i), done) : lastRun != null ? lastRun
+						: new OpResult(ops.get(i), Status.ABANDONED, "Dropped: " + duplicate);
 			}
 			unfinished.finish(group);
 			return;
@@ -439,9 +628,13 @@ public final class ApplyExecutor {
 				int i = order.get(k);
 				Op op = ops.get(i);
 				Undo done = earlier.get(i);
+				OpResult lastRun = done == null ? doneByLastRun(op, doneBefore) : null;
 				Applied applied;
 				if (done != null) {
 					applied = new Applied(doneEarlier(op, done), done);
+				} else if (lastRun != null) {
+					// Done by the last run, which finished the group: never rolled back with this pass.
+					applied = new Applied(lastRun, null);
 				} else {
 					try {
 						applied = tryOnce(op, i, targets.get(i));
@@ -456,6 +649,9 @@ public final class ApplyExecutor {
 					failed = k;
 				} else if (applied.undo() != null) {
 					undos.add(applied.undo());
+					if (done == null) {
+						unfinished.mark(group, op.id(), true);
+					}
 				}
 			}
 			if (failed < 0) {
@@ -481,7 +677,7 @@ public final class ApplyExecutor {
 				}
 				another = false;
 			}
-			boolean putBack = rollBack(ops, undos, reason, out);
+			boolean putBack = rollBack(ops, undos, reason, out, unfinished, group);
 			halfApplied = !putBack;
 			earlier = byIndex(undos.stream().filter(u -> leftHalfApplied(out[u.index()])).toList());
 			if (another && state.pause()) {
@@ -499,11 +695,16 @@ public final class ApplyExecutor {
 
 	// The recorded renames of this group's ops that an earlier run didn't finish or undo: each still in effect (its new
 	// name exists, its old one doesn't), matched to the op by id and paths whichever group recorded it, both names directly
-	// in the mods folder, so a record can never make the helper rename anything the op itself wouldn't.
-	private static Map<Integer, Undo> earlierRenames(List<Op> ops, List<Integer> order, Path modsDir, List<Rename> recorded) {
+	// in the mods folder, so a record can never make the helper rename anything the op itself wouldn't. A rename recorded
+	// as put back (done = false) never counts (review-11 APPLY-5: the launcher's own disable leaves the same files);
+	// provenOnly counts only those recorded as done, not a record 0.4 wrote.
+	private static Map<Integer, Undo> earlierRenames(List<Op> ops, List<Integer> order, Path modsDir, List<Rename> recorded, boolean provenOnly) {
 		Map<Integer, Undo> out = new LinkedHashMap<>();
 		for (int i : order) {
 			for (Rename r : recorded) {
+				if (provenOnly ? !Boolean.TRUE.equals(r.done()) : Boolean.FALSE.equals(r.done())) {
+					continue;
+				}
 				Undo undo = inEffect(ops.get(i), i, r, modsDir);
 				if (undo != null) {
 					out.put(i, undo);
@@ -533,21 +734,22 @@ public final class ApplyExecutor {
 		}
 	}
 
-	// This pass's renames in order: the earlier run's still in effect, then each one this pass will do (an enable whose
-	// download is there and whose name is free, a disable whose jar is there, with the .disabled name it gets in `targets`).
+	// This pass's renames in order: the earlier run's still in effect (done), then each one this pass will do, not done
+	// yet (an enable whose download is there and whose name is free, a disable whose jar is there, with the .disabled name
+	// it gets in `targets`). Each is marked done in the record once it happens (runGroup).
 	private static List<Rename> renames(List<Op> ops, List<Integer> order, Map<Integer, Undo> earlier, Map<Integer, Path> targets) {
 		List<Rename> out = new ArrayList<>();
 		for (int i : order) {
 			Op op = ops.get(i);
 			Undo done = earlier.get(i);
 			if (done != null) {
-				out.add(new Rename(op.id(), done.back().toString(), done.moved().toString()));
+				out.add(new Rename(op.id(), done.back().toString(), done.moved().toString(), true));
 			} else if (op.type() == PendingActions.Type.ENABLE_FILE && Files.exists(Path.of(op.from())) && !Files.exists(Path.of(op.to()))) {
-				out.add(new Rename(op.id(), op.from(), op.to()));
+				out.add(new Rename(op.id(), op.from(), op.to(), false));
 			} else if (op.type() == PendingActions.Type.DISABLE_FILE && Files.exists(Path.of(op.path()))) {
 				Path target = disabledTarget(Path.of(op.path()));
 				targets.put(i, target);
-				out.add(new Rename(op.id(), op.path(), target.toString()));
+				out.add(new Rename(op.id(), op.path(), target.toString(), false));
 			}
 		}
 		return out;
@@ -563,13 +765,21 @@ public final class ApplyExecutor {
 		return new OpResult(op, Status.SKIPPED_ALREADY_DONE, "Already done earlier: " + done.moved().getFileName(), done.moved().toString());
 	}
 
-	// Undoes the renames, newest first, each with the full retry budget. False when one stays where the group put it.
-	private boolean rollBack(List<Op> ops, List<Undo> undos, String reason, OpResult[] out) {
+	// Undoes the renames, newest first, each with the full retry budget. Each is marked not done in the record before it's
+	// moved back, so a kill in between leaves it unproven (held), never done over a file that's back (review-12
+	// R12APPLY-4), and marked done again if it stays where the group put it. False when one does.
+	private boolean rollBack(List<Op> ops, List<Undo> undos, String reason, OpResult[] out, UnfinishedGroups unfinished, String group) {
 		boolean all = true;
 		for (int u = undos.size() - 1; u >= 0; u--) {
 			Undo undo = undos.get(u);
+			String op = ops.get(undo.index()).id();
+			unfinished.mark(group, op, false);
 			out[undo.index()] = rollback(ops.get(undo.index()), undo, reason);
-			all &= !leftHalfApplied(out[undo.index()]);
+			boolean stuck = leftHalfApplied(out[undo.index()]);
+			if (stuck) {
+				unfinished.mark(group, op, true);
+			}
+			all &= !stuck;
 		}
 		return all;
 	}
@@ -616,6 +826,12 @@ public final class ApplyExecutor {
 			}
 		}
 		boolean stuck = Files.exists(undo.moved());
+		if (!stuck) {
+			// docs/v0.5/SPEC.md 2V (ws-g3 L8): nothing is left under the group's name, whether or not a try failed first.
+			return new OpResult(op, Status.FAILED, Files.exists(undo.back())
+					? "Not rolled back: " + undo.back().getFileName() + " was already back under its own name after " + reason
+					: "Rollback failed: " + undo.moved().getFileName() + " was moved or deleted meanwhile, so it couldn't be put back after " + reason);
+		}
 		return new OpResult(op, Status.FAILED, "Rollback failed (" + (last == null ? "the original name is taken" : last)
 				+ "); " + undo.moved().getFileName() + " was left as it is after " + reason
 				+ (stuck ? "; the next exit finishes or rolls back this change" : ""), stuck ? undo.moved().toString() : null);

@@ -1,0 +1,6 @@
+{
+  "set": "ws-p2",
+  "checks": [
+    {"class": "Unread", "file": "server-profiles.json", "unchanged": true}
+  ]
+}

@@ -48,6 +48,7 @@ Both files come from one run and share `revision` and `generatedAt`. See tools/R
 | settingLabels | map settings key → SettingLabel | **v2 only**, optional (below) |
 | profileTemplates | object | **v2 only, 0.4+**, optional: the Profiles templates ([profileTemplates](#profiletemplates-v2-04)) |
 | stutterAdvice | AdviceRule[] | **v2 only, 0.4+**, optional: the Stutter Doctor's advice ([stutterAdvice](#stutteradvice-v2-04)) |
+| stutterFixes | StutterFix[] | **v2 only, 0.5+**, optional: the Stutter Doctor's one-click fixes ([stutterFixes](#stutterfixes-v2-05)) |
 | availability | map mcVersion → slug[] | **generated**: slugs with a Fabric release for that MC version. The offline fallback |
 | upstream | object | **generated**: `{ "fabulouslyOptimized": {"mcVersion": "26.2", "slugs": [...]}, "additive": {...} }` |
 
@@ -144,6 +145,8 @@ If it's installed, recommend disabling it (impact high). May carry `requires`.
 
 `kind` is one of info, warning or critical. Advice is informational only: it has no action. May carry `requires`.
 
+**Advice for older clients only.** `old-client-launcher-mods` (v0.5, docs/v0.5/SPEC.md 4i) is for RigTune 0.1-0.4: rules-v2.json gates it on `modVersion` (`rigtune` below `0.5.0-`), and rules-v1.json gives it to 0.1.x unconditionally. RigTune 0.5+ drops these ids (`RulesLoader.OLD_CLIENT_ADVICE`) from every document it reads, v1 included, since it still falls back to remote rules-v1.json and reads 0.1.x's `rules-cache.json`.
+
 **The `ram-` id prefix** marks advice whose fix is changing the memory (heap) allocation: RigTune 0.3+ shows the detected launcher's steps for that ("In the Modrinth App: …") under every advice whose id starts with `ram-`. Use the prefix only for such advice, and give every such advice the prefix (in `stutterAdvice` too). Older clients ignore it (it's only an id).
 
 **The `jvm-` id prefix** (0.4+) marks advice about the Java arguments. RigTune 0.4 adds "Found in your Java arguments: <flag names>" (from its own flag table, never the raw arguments) and the detected launcher's Java-arguments steps under every advice whose id starts with `jvm-`. Such advice tests the [jvm- facts](#jvm--facts-v2-04) and carries `"requires": ["jvm-flags"]` and `"v1": false`. Heap advice stays `ram-` (it points at the launcher's memory setting, which for Prism overrides an `-Xmx` typed in the Java arguments).
@@ -160,6 +163,7 @@ Human-readable names for recommendation titles (and the share report). `name` re
 |---|---|---|
 | `jvm-flags` | the main list from 0.4 (`Recommender.SUPPORTED_FEATURES`) | every rule that tests a [jvm- fact](#jvm--facts-v2-04) (the updater enforces it) |
 | `stutter-doctor` | only the Stutter Doctor (0.4+), never the main list | every [stutterAdvice](#stutteradvice-v2-04) entry (the updater enforces it, and refuses it on a main-list rule, which the main list would skip) |
+| `stutter-fix` | only the Stutter Doctor's fix offers (0.5+, `FixOffers`), never the main list or the Stutter Doctor's advice | every [stutterFixes](#stutterfixes-v2-05) entry (the updater enforces it) |
 
 RigTune 0.2.0 and 0.3.0 know no features, so they skip every rule with a non-empty `requires`.
 
@@ -219,7 +223,7 @@ A condition evaluates to TRUE, FALSE or UNKNOWN. Only a top-level TRUE fires; UN
 
 v1 (0.1.x) evaluates the same fields two-valued: unknown RAM/VRAM/refresh are false, and unknown keys are ignored. That's why rules-v1.json may only contain v1 keys and v1 values (below).
 
-The Stutter Doctor's keys (0.4+) are Condition fields too, but the updater allows them only inside [stutterAdvice](#stutteradvice-v2-04); in the main list they are always UNKNOWN.
+The Stutter Doctor's keys (0.4+) are Condition fields too, but the updater allows them only inside [stutterAdvice](#stutteradvice-v2-04) and (0.5) a fix's evidence ([stutterFixes](#stutterfixes-v2-05)); in the main list they are always UNKNOWN.
 
 ### driverVersion (v2, 0.4+)
 `{"driverVersion": {"vendor": "nvidia", "atLeast": "526.47", "atMost": "536.22"}}`
@@ -278,7 +282,7 @@ AdviceRules the Stutter Doctor evaluates against a session's measured facts (doc
 | field | type | meaning |
 |---|---|---|
 | stutterShareAtLeast | object: cause → whole percent | the share of the lost time each cause claimed: `gc`, `chunkLoad`, `chunkBuild`, `tick`, `render`, `unknown` |
-| stutterTaggedShareAtLeast | object: tag → whole percent | the share of spikes carrying each tag (claims no time): `worldSave`, `dh`, `cpuContention`, `afterTeleport`, `movingFast` |
+| stutterTaggedShareAtLeast | object: tag → whole percent | the share of spikes carrying each tag (claims no time): `worldSave`, `dh`, `cpuContention`, `afterTeleport`, `chunksLoading`, `movingFast`. `chunksLoading` (chunks loaded within 250 ms of the spike) is evaluated from 0.4.0 on and accepted by the updater from v0.5 |
 | gcFullPausesAtLeast / gcStallsAtLeast / gcExplicitPausesAtLeast | int ≥ 0 | full collections (not System.gc()), allocation stalls, System.gc() pauses in the session |
 | liveSetPercentAtLeast | int 0-100 | live data after an old/full collection, as a share of the maximum heap |
 | heapRaiseRoomMbAtLeast | int ≥ 0 | room to raise the heap: min(RAM/2, RAM − 4096) − heap, in MB |
@@ -287,6 +291,34 @@ AdviceRules the Stutter Doctor evaluates against a session's measured facts (doc
 | gcCollector | string[] | `g1`, `zgc`, `shenandoah`, `parallel`, `serial` |
 
 The percentages are whole numbers, as JSON integers or digit strings (the map values are strings in the client; plan review K-M1). A malformed value poisons only its own condition. The jvm- facts aren't available here (the Stutter Doctor doesn't know `jvm-flags`), so the updater refuses them in this section. The whole section is left out of rules-v1.json, and its entries take no `v1`.
+
+## stutterFixes (v2, 0.5+)
+```json
+"stutterFixes": [
+  { "adviceId": "stutter-sodium-defer", "requires": ["stutter-fix"],
+    "evidence": { "stutterShareAtLeast": { "chunkBuild": 40 }, "causeSpikesAtLeast": { "chunkBuild": 5 } },
+    "set": { "key": "sodium.performance.chunk_build_defer_mode", "value": "ALWAYS" } },
+  { "adviceId": "stutter-chunk-loading", "requires": ["stutter-fix"],
+    "evidence": { "stutterShareAtLeast": { "chunkLoad": 40 }, "causeSpikesAtLeast": { "chunkLoad": 5 } },
+    "set": { "key": "vanilla.renderDistance", "step": -2, "min": 6 } }
+]
+```
+The Stutter Doctor's "Try this fix…" offers (docs/v0.5/SPEC.md item 5). RigTune 0.5 offers a fix only when its advice fired for the session, its own floor passed (a monitor session with at least 8 hitches and 300 s of gameplay, the setting present and changeable and not already at the target, no other fix staged or measured) and `evidence` is TRUE; a fix is then an ordinary Apply of one setting (journaled, undoable). 0.2.0-0.4.0 never read the section (Gson skips an unknown top-level name in any JSON shape), and it is left out of rules-v1.json. The client reads it leniently: a malformed entry drops only itself, an unreadable section is null and costs no advice.
+
+| field | notes |
+|---|---|
+| adviceId | required; the `id` of a `stutterAdvice` entry in the same document; unique in the section |
+| requires | required; must contain `stutter-fix`. A feature the client doesn't know skips the entry (future fix types); `stutter-doctor` and `jvm-flags` are refused (0.5 would skip the fix) |
+| evidence | required Condition: every v2 key, every [stutterAdvice](#stutteradvice-v2-04) key, and `causeSpikesAtLeast`; no jvm- facts; at least one Stutter Doctor key (or `causeSpikesAtLeast`) at its top level, so it tests the session. Only TRUE offers the fix (FALSE and UNKNOWN don't) |
+| set.key | required; one of `vanilla.renderDistance`, `sodium.performance.chunk_build_defer_mode`, `dh.common.multiThreading.numberOfThreads` (the client's `FixSpec.KEYS`): no fix changes another setting or a mod file |
+| set.value | xor `step`; a value the key's share-code entry holds (`chunk_build_defer_mode`: `ALWAYS`, `ONE_FRAME`, `ZERO_FRAMES`; `renderDistance`: a whole number 2-32; `numberOfThreads`: 1-32). No `min`/`max` with a value |
+| set.step | xor `value`; a number key only; a whole number from -8 to 8, not 0; a negative step needs `min`, a positive one `max` (whole numbers in the key's range, `min` ≤ `max`). The target is the current value plus the step, clamped to the bound and the key's range |
+
+| condition field | type | meaning |
+|---|---|---|
+| causeSpikesAtLeast | object: cause → whole count ≥ 0 | at least that many spikes in which the cause claimed at least half of the spike's lost time (causes as `stutterShareAtLeast`'s). UNKNOWN when the cause wasn't measured, isn't known or the count isn't a whole number, and everywhere outside a fix's evidence |
+
+The updater allows `causeSpikesAtLeast` only inside `stutterFixes[].evidence`: 0.4.0 doesn't know the key, so in `stutterAdvice` it would poison the whole `when` there and the advice would disappear. The seeds' thresholds are starting values, calibrated on real play (docs/v0.5/SPEC.md AC5.14).
 
 ## Settings keys
 - `vanilla.<options.txt key>`, e.g. `vanilla.renderDistance`, `vanilla.simulationDistance`, `vanilla.maxFps`, `vanilla.enableVsync`, `vanilla.particles`, `vanilla.biomeBlendRadius`. Values are strings as they appear in options.txt, **without surrounding quotes**.
@@ -309,7 +341,7 @@ The percentages are whole numbers, as JSON integers or digit strings (the map va
   - a rule field outside the v1 whitelist (`requires`, `avoidSelected`, `skipUpdateWhen`) without an explicit `v1`. With an override the field is left out only if that is exactly as safe: `requires` only when empty, `avoidSelected` only when true or when the v1 rule has no `avoidWhen`, `skipUpdateWhen` always (0.1.x offers every available update whatever its rules say, and the field only ever takes one away). Otherwise use `"v1": false`;
   - unknown fields (including unknown top-level fields), unknown condition keys, nulls, values outside the vocabularies, out-of-range integers, regexes over 200 characters and malformed `settingLabels` anywhere in knowledge.json.
 - When a ModRule is left out, the other rules' `conflictsWith` references to its slug become its `modIds` (0.1.x resolves a slug only through a rule it has, but matches a mod id directly), so 0.1.x still sees the conflict. REVIEW.md (d) lists each rewrite.
-- `settingLabels`, `profileTemplates` and `stutterAdvice` are left out of rules-v1.json (0.1.x rejects nothing, but none of them is for it). Tier rules are copied as they are, except `gpuTiers`/`cpuTiers` rows with `"v1": false`, which are left out ([v1 on tier rows](#v1-on-tier-rows-source-only)).
+- `settingLabels`, `profileTemplates`, `stutterAdvice` and `stutterFixes` are left out of rules-v1.json (0.1.x rejects nothing, but none of them is for it). Tier rules are copied as they are, except `gpuTiers`/`cpuTiers` rows with `"v1": false`, which are left out ([v1 on tier rows](#v1-on-tier-rows-source-only)).
 - 0.4's new advice (`jvm-*`, the driver seeds) carries `"v1": false`: its keys and facts are v2-only, and 0.1.x must not get a warning it can't evaluate.
 - Every omission and field change is listed in `rules/REVIEW.md` section (d).
 - `tools/check_rules_v1.py` (CI job `rules-v1-compat`) checks the result. The pinned-v0.1.0 differential test (`RulesV1DifferentialTest`) checks that, compared with the baseline `src/test/resources/v010/rules-v1-baseline.json` (the rules 0.1.0 shipped), rules-v1.json gives 0.1.x no new appliable recommendation (ticked or not), ticks none that was unticked, and loses no conflict or advice. `SchemaConsistencyTest` checks the updater's field lists and vocabularies against the Java code and the pinned v0.1.0 copy.

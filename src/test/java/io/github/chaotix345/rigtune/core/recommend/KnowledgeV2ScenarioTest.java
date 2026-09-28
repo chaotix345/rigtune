@@ -514,7 +514,7 @@ class KnowledgeV2ScenarioTest {
 		Set<String> drivers = rules.advice.stream().map(a -> a.id).filter(id -> id.startsWith("driver-")).collect(Collectors.toSet());
 		Set<String> stutter = rules.stutterAdvice.stream().map(a -> a.id).collect(Collectors.toSet());
 		assertEquals(9, jvm.size(), jvm.toString());
-		assertEquals(5, stutter.size());
+		assertEquals(6, stutter.size(), "r16's five and v0.5's L2 seed");
 		assertEquals(Set.of("driver-nvidia-threaded-optimization", "driver-intel-gen7-old"), drivers);
 
 		Fixtures.Hw oldNvidia = Fixtures.userRig();

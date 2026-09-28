@@ -14,6 +14,7 @@ import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.HardwareProfile;
 import io.github.chaotix345.rigtune.core.model.Impact;
@@ -91,6 +92,8 @@ public final class RigTuneClient implements ClientModInitializer {
 		ClientTickEvents.END_CLIENT_TICK.register(RigTuneClient::onTick);
 		StutterHooks.install(real.stutterService());
 		registerAwareness(real);
+		// v0.5 (docs/v0.5/SPEC.md X4.2, PLAN contracts 13e): the features' event listeners, registrations only.
+		V05Services.registerEvents(real);
 		ScreenEvents.AFTER_INIT.register((client, screen, width, height) -> addEntryButton(screen, width, height));
 		// The sleep overlay is the one vanilla HUD layer drawn while the GUI is hidden, which the benchmark does.
 		HudElementRegistry.attachElementAfter(VanillaHudElements.SLEEP, HUD_ID, (graphics, delta) -> {
@@ -161,9 +164,19 @@ public final class RigTuneClient implements ClientModInitializer {
 		if (!Files.isRegularFile(pending)) {
 			return;
 		}
+		// v0.5 (docs/v0.5/SPEC.md 4d): in an instance whose launcher keeps its own list of mods (or while that isn't known),
+		// the helper holds mod-file changes for the player's choice; a policy that can't be read holds them too.
+		ModFilesPolicy policy;
 		try {
-			HelperLauncher.launch(configDir, pending);
-			RigTune.LOGGER.info("Started the RigTune apply helper for {}", pending);
+			policy = controller == null ? ModFilesPolicy.PENDING : controller.modFiles();
+		} catch (Throwable t) {
+			// An Error too (review-11 APPLY-8): the first call can make the v0.5 services here, and the helper must still start.
+			RigTune.LOGGER.warn("Could not read who changes this instance's mod files; the helper holds mod-file changes", t);
+			policy = ModFilesPolicy.PENDING;
+		}
+		try {
+			HelperLauncher.launch(configDir, pending, policy);
+			RigTune.LOGGER.info("Started the RigTune apply helper for {}{}", pending, HelperLauncher.holds(policy) ? " (mod-file changes held)" : "");
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.error("Could not start the RigTune apply helper; staged changes stay in {}", pending, e);
 		}
@@ -189,7 +202,8 @@ public final class RigTuneClient implements ClientModInitializer {
 		if (!noticesShown) {
 			noticesShown = true;
 			showNotices(minecraft);
-			PRIVACY_TOAST.take(StartupNotices.takePrivacyNotice(settings, configDir, Probes.EXECUTOR));
+			// v0.5 L6 (X8): the flag is saved through SettingsSaver.
+			PRIVACY_TOAST.take(StartupNotices.takePrivacyNotice(settings, configDir));
 		}
 		if (PRIVACY_TOAST.onTitleScreen()) {
 			SystemToast.add(minecraft.gui.toastManager(), PRIVACY_ID, Component.translatable("rigtune.settings.privacy_toast.title"),
@@ -203,7 +217,9 @@ public final class RigTuneClient implements ClientModInitializer {
 				if (StartupNotices.showSuggestionsToast(settings, important)) {
 					SystemToast.add(minecraft.gui.toastManager(), TOAST_ID,
 							Component.translatable("rigtune.toast.title", report.recommendations().size()),
-							Component.translatable("rigtune.toast.body", openKey.getTranslatedKeyMessage()));
+							// WS-P2 (review L6, approved): no key bound to RigTune, no "Press  or".
+							openKey.isUnbound() ? Component.translatable("rigtune.toast.body.no_key")
+									: Component.translatable("rigtune.toast.body", openKey.getTranslatedKeyMessage()));
 				}
 			}
 		}
@@ -212,22 +228,10 @@ public final class RigTuneClient implements ClientModInitializer {
 	public static void showNotices(Minecraft minecraft) {
 		ApplyResult result = RigTunePreLaunch.takeUnseenResult();
 		if (result != null) {
-			int total = result.results().size();
-			int failed = result.failedOps().size();
-			if (failed == 0) {
-				SystemToast.add(minecraft.gui.toastManager(), NOTICE_ID,
-						Component.translatable("rigtune.toast.applied.title", total),
-						Component.translatable("rigtune.toast.applied.body"));
-			} else {
-				SystemToast.add(minecraft.gui.toastManager(), NOTICE_ID,
-						Component.translatable("rigtune.toast.failed.title", failed, total),
-						Component.translatable("rigtune.toast.failed.body"));
-			}
-			int abandoned = result.abandonedOps().size();
-			if (abandoned > 0) {
-				SystemToast.add(minecraft.gui.toastManager(), new SystemToast.SystemToastId(10000L),
-						Component.translatable("rigtune.toast.abandoned.title", abandoned),
-						Component.translatable("rigtune.toast.abandoned.body"));
+			// v0.5 (docs/v0.5/SPEC.md 4f): failed counts FAILED ops only; dropped ones only in their own toast.
+			for (HelperToasts.Toast toast : HelperToasts.result(result)) {
+				SystemToast.add(minecraft.gui.toastManager(), toast.kind() == HelperToasts.Kind.RESULT ? NOTICE_ID : new SystemToast.SystemToastId(10000L),
+						toast.title(), toast.body());
 			}
 			Path configDir = FabricLoader.getInstance().getConfigDir();
 			ClientState state = ClientState.shared(configDir);
@@ -240,11 +244,21 @@ public final class RigTuneClient implements ClientModInitializer {
 					Component.translatable("rigtune.toast.busy.body"));
 		}
 		int leftover = RigTunePreLaunch.takeLeftoverOps();
-		if (leftover > 0) {
-			SystemToast.add(minecraft.gui.toastManager(), new SystemToast.SystemToastId(10000L),
-					Component.translatable("rigtune.toast.leftover.title", leftover),
-					Component.translatable("rigtune.toast.leftover.body"));
+		int leftoverFileOps = RigTunePreLaunch.takeLeftoverFileOps();
+		if (leftover > 0 && leftoverFileOps > 0 && controller instanceof RealController real) {
+			// v0.5 (docs/v0.5/SPEC.md 4d): retried at the next exit, or held for the player's choice? The WARN and the toasts
+			// wait until the policy is known.
+			real.v05().launcherRepair().leftoverAtTitle(leftover);
+		} else if (leftover > 0) {
+			if (leftoverFileOps > 0) {
+				HelperToasts.warnLines(leftover, 0).forEach(RigTune.LOGGER::warn);
+			}
+			for (HelperToasts.Toast toast : HelperToasts.leftover(leftover, 0)) {
+				SystemToast.add(minecraft.gui.toastManager(), new SystemToast.SystemToastId(10000L), toast.title(), toast.body());
+			}
 		}
+		// v0.5 (PLAN contracts 13f): the features' title-screen toasts.
+		V05Services.titleScreen(minecraft, controller);
 	}
 
 	static boolean important(Recommendation r) {

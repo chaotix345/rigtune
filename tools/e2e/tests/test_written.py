@@ -81,11 +81,17 @@ class ComposeTest(unittest.TestCase):
         self.assertEqual(["o1", "o2"], [op["id"] for op in pending["ops"]])
         self.assertEqual(["ws-a", "ws-p"], report["pending.json"])
 
-    def test_only_history_may_come_from_two_sets(self):
+    def test_a_file_from_two_sets_is_merged_but_never_across_a_format_bump(self):
+        # v0.4 refused any file but history.json and pending.json from two sets; v0.5's sets share files (awareness.json,
+        # benchmarks.json), so they're merged (test_written_v05.MergeTest) and only a format bump is refused.
         root = Path(tempfile.mkdtemp())
-        for name in ("ws-a", "ws-b"):
+        for name, version in (("ws-a", 1), ("ws-b", 1)):
             (root / name).mkdir()
-            (root / name / "stutter.json").write_text("{}", encoding="utf-8")
+            (root / name / "stutter.json").write_text(json.dumps({"formatVersion": version, "sessions": [name]}), encoding="utf-8")
+        written.compose(written.resolve(root), self.instance)
+        stutter = json.loads((self.instance / "config" / "rigtune" / "stutter.json").read_text(encoding="utf-8"))
+        self.assertEqual({"formatVersion": 1, "sessions": ["ws-a", "ws-b"]}, stutter)
+        (root / "ws-b" / "stutter.json").write_text(json.dumps({"formatVersion": 2, "sessions": []}), encoding="utf-8")
         with self.assertRaises(ValueError):
             written.compose(written.resolve(root), self.instance)
 

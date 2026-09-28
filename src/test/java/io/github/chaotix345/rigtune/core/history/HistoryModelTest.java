@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.core.history;
 
+import io.github.chaotix345.rigtune.core.RepoFiles;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.Status;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.history.ApplyFailures.Failure;
@@ -7,7 +8,11 @@ import io.github.chaotix345.rigtune.core.history.HistoryModel.Change;
 import io.github.chaotix345.rigtune.core.history.HistoryModel.Entry;
 import io.github.chaotix345.rigtune.core.history.HistoryModel.Row;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -43,6 +48,25 @@ class HistoryModelTest {
 
 	private static JournalChange file(String action, String modId, String file, String status, String group) {
 		return JournalChange.file(action, modId, file, status, "op-" + file, group);
+	}
+
+	// review 11 COMPAT-4: 0.2.x-0.4.x imported 0.1.0's updates with no mod id on the disable (the user's instance: 0.4.0
+	// did, 2026-09-27), and 0.5 doesn't import again. History pairs them as it displays them (RW-4's rule, no file change):
+	// the ws-h set, what 0.5 writes over the real capture, shows its updates as Updated rows, with no lone Disabled one.
+	@Test
+	void legacyUpdatesImportedWithoutAModIdAreShownAsUpdates(@TempDir Path config) throws IOException {
+		Files.createDirectories(Journal.file(config).getParent());
+		Files.copy(RepoFiles.resolve("src/test/resources/v050-written/ws-h/history.json"), Journal.file(config));
+		List<JournalEntry> real = new Journal(config, "0.5.0", "26.2", (message, error) -> {
+			throw new AssertionError(message, error);
+		}).entries();
+
+		List<Change> rows = HistoryModel.build(Journal.State.OK, real, Map.of(), HistoryModel.Labels.RAW).entries().getLast().changes();
+
+		assertEquals(List.of("entityculling-fabric-1.11.2-mc26.2.jar", "modmenu-20.0.3.jar", "yet_another_config_lib_v3-3.9.7+26.2-fabric.jar",
+						"zoomify-2.16.3+26.2.jar", "DistantHorizons-3.3.2-26.2-fabric-neoforge.jar"),
+				rows.stream().filter(c -> c.row() == Row.UPDATED).map(Change::newFile).toList());
+		assertEquals(List.of(), rows.stream().filter(c -> c.row() == Row.DISABLED).map(Change::file).toList());
 	}
 
 	@Test
@@ -247,5 +271,32 @@ class HistoryModelTest {
 		add("undo", JournalEntry.UNDO, "apply", setting("vanilla.renderDistance", "8", "12", JournalChange.APPLIED)
 				.reverting(entries.getFirst().changes().getFirst().id()));
 		assertFalse(HistoryModel.anyUndoable(view(Map.of())));
+	}
+
+	// docs/v0.5/SPEC.md L8 (AC2H.3): profile switches folded past MAX_ENTRIES keep their labels on the baseline row, newest
+	// first; the switches still in the journal keep theirs; an entry without folded ids gets none.
+	@Test
+	void l8TheBaselineRowIncludesTheFoldedSwitchLabels() {
+		for (int i = 0; i < 53; i++) {
+			add("e" + i, JournalEntry.APPLY, null, setting("vanilla.maxFps", String.valueOf(i), String.valueOf(i + 1), JournalChange.APPLIED));
+		}
+		List<JournalEntry> capped = Journal.cap(new ArrayList<>(entries));
+		Map<String, String> labels = Map.of("e1", "Battery", "e3", "Max FPS", "e50", "Quality", "gone", "Recording");
+
+		HistoryModel.View view = HistoryModel.withProfiles(HistoryModel.build(Journal.State.OK, capped, Map.of(), HistoryModel.Labels.RAW), labels);
+
+		Entry baseline = view.entries().getLast();
+		assertTrue(Journal.isBaseline(capped.getFirst()) && baseline.id().equals(capped.getFirst().id()), baseline.id());
+		assertEquals(List.of("e0", "e1", "e2", "e3"), baseline.folded());
+		assertEquals(List.of("Max FPS", "Battery"), baseline.includes());
+		assertNull(baseline.profile(), "the baseline is an Apply, not itself a switch");
+		Entry quality = view.entries().stream().filter(e -> e.id().equals("e50")).findFirst().orElseThrow();
+		assertEquals("Quality", quality.profile());
+		assertEquals(List.of(), quality.includes());
+		assertEquals(List.of(), quality.folded());
+		// Built without labels: the folded ids are there, nothing is included yet.
+		Entry plain = HistoryModel.build(Journal.State.OK, capped, Map.of(), HistoryModel.Labels.RAW).entries().getLast();
+		assertEquals(List.of("e0", "e1", "e2", "e3"), plain.folded());
+		assertEquals(List.of(), plain.includes());
 	}
 }

@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.gametest;
 
+import com.mojang.blaze3d.platform.FramerateLimitTracker;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
@@ -20,6 +21,7 @@ import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.gametest.v1.context.TestSingleplayerContext;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.InactivityFpsLimit;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
@@ -49,23 +51,13 @@ public class StutterGameTest implements FabricClientGameTest {
 		RigTuneController controller = RigTuneClient.controller();
 		context.waitForScreen(TitleScreen.class);
 		context.waitFor(mc -> controller.report() != null, 1200);
-		ClientSettings settings = ClientSettings.shared(configDir);
-		boolean networkBefore = settings.networkEnabled;
+		boolean networkBefore = GameTestNet.set(context, controller, false);
 		try {
-			context.runOnClient(mc -> {
-				settings.networkEnabled = false;
-				settings.save(configDir);
-				controller.settingsChanged();
-			});
 			hubAndEmptyScreen(context, controller);
 			inAWorld(context, controller, configDir);
 		} finally {
-			context.runOnClient(mc -> {
-				controller.setStutterMonitor(false);
-				settings.networkEnabled = networkBefore;
-				settings.save(configDir);
-				controller.settingsChanged();
-			});
+			context.runOnClient(mc -> controller.setStutterMonitor(false));
+			GameTestNet.set(context, controller, networkBefore);
 			resize(context, 854, 480, 0);
 		}
 		RigTune.LOGGER.info("StutterGameTest: passed");
@@ -92,8 +84,8 @@ public class StutterGameTest implements FabricClientGameTest {
 	private static void inAWorld(ClientGameTestContext context, RigTuneController controller, Path configDir) {
 		context.runOnClient(mc -> controller.setStutterMonitor(true));
 		check(ClientSettings.shared(configDir).stutterMonitor, "the monitor setting is on");
-		int before = new StutterStore(configDir).sessions().size();
-		try (TestSingleplayerContext singleplayer = context.worldBuilder().create()) {
+		String secondStart;
+		try (TestSingleplayerContext singleplayer = GameTestWorlds.create(context)) {
 			context.waitTicks(100);
 			check(StutterMonitor.session() != null, "a session capture started with the world");
 			check(StutterHooks.gcListenerActive(), "the GC listener is registered while capturing");
@@ -109,7 +101,24 @@ public class StutterGameTest implements FabricClientGameTest {
 			// saveAllChunks, which Fabric's BEFORE_SAVE/AFTER_SAVE wrap.
 			singleplayer.getServer().runOnServer(server -> server.saveEverything(false, true, true));
 			context.waitTicks(40);
+			// r12 flake (FL-4): the GC notification comes on the JDK's own thread, so its record is waited for.
+			context.waitFor(mc -> explicitGc(gcCalled), 200);
 			checkCapture(gcCalled);
+
+			// docs/v0.5/SPEC.md 2S RW-11 (AC2S.13 in a real world): a render distance change while the session runs is a settings
+			// event, and the settings check (its own END_CLIENT_TICK listener) allocates nothing per tick.
+			int renderDistance = context.computeOnClient(mc -> mc.options.renderDistance().get());
+			context.runOnClient(mc -> mc.options.renderDistance().set(renderDistance + 2));
+			context.waitTicks(5);
+			check(settingsEvents() >= 1, "the render distance change is a settings event");
+			long[] cost = context.computeOnClient(mc -> StutterHooks.settingsCheckCost(mc, 5_000));
+			RigTune.LOGGER.info("StutterGameTest: the settings check took {} ns per call; {} bytes allocated over its {} checks (the empty control loop: {})",
+					String.format(Locale.ROOT, "%.1f", cost[0] / (double) cost[1]), cost[2], cost[1], cost[3]);
+			// X4.4, strict as the tick keys: the blocks' bytes summed after the warm-up (less what the empty control loop shows,
+			// the measurement's own) are 0.
+			check(cost[2] - cost[3] <= 0, "the settings check allocates nothing: " + cost[2] + " bytes over " + cost[1] + " checks, control " + cost[3]);
+
+			boolean afk = idleUntilAfk(context);
 
 			context.runOnClient(mc -> mc.gui.setScreen(new StutterScreen(null, controller)));
 			context.waitForScreen(StutterScreen.class);
@@ -130,6 +139,7 @@ public class StutterGameTest implements FabricClientGameTest {
 			resize(context, 854, 480, 0);
 
 			// Stop: the listener goes, the sampler stops, the buffers are released, the session is saved.
+			String stopStart = StutterMonitor.session().startedAt().toString();
 			context.runOnClient(mc -> controller.setStutterMonitor(false));
 			context.waitTicks(5);
 			check(StutterMonitor.session() == null && !StutterMonitor.active(), "no capture after Stop");
@@ -138,7 +148,14 @@ public class StutterGameTest implements FabricClientGameTest {
 			context.waitFor(mc -> !StutterHooks.samplerRunning() && !samplerThread(), 100);
 			check(!StutterHooks.samplerRunning() && !samplerThread(), "no thread named RigTune stutter sampler");
 			check(StutterMonitor.retainedBytes() == 0, "the buffers were released");
-			waitForSessions(context, configDir, before + 1);
+			StutterReport stopped = waitForSession(context, configDir, stopStart);
+			check(stopped.settingChanges().equals(List.of(new StutterReport.SettingChange(StutterReport.RENDER_DISTANCE, Integer.toString(renderDistance),
+					Integer.toString(renderDistance + 2)))), "the saved session's settings at its start and end: " + stopped.settingsAtStart() + " -> "
+					+ stopped.settingsAtEnd());
+			RigTune.LOGGER.info("StutterGameTest: the saved session's tags {} ({} spikes; settingsChanged only when a spike ended within 10 s of the change)",
+					stopped.tags(), stopped.spikes().total());
+			check(!afk || stopped.idleSeconds() != null && stopped.idleSeconds() >= 4, "the saved session counts the AFK time apart: " + stopped.idleSeconds());
+			context.runOnClient(mc -> mc.options.renderDistance().set(renderDistance));
 
 			// On again in the same world, then leave: leaving saves that session too.
 			context.runOnClient(mc -> {
@@ -147,15 +164,14 @@ public class StutterGameTest implements FabricClientGameTest {
 			});
 			context.waitTicks(40);
 			check(StutterMonitor.session() != null, "a new session in the same world");
+			secondStart = StutterMonitor.session().startedAt().toString();
 		}
 		context.waitForScreen(TitleScreen.class);
 		context.waitTicks(5);
 		check(StutterMonitor.session() == null && StutterMonitor.retainedBytes() == 0, "leaving the world ended the session and released the buffers");
 		context.waitFor(mc -> !samplerThread(), 100);
 		check(!samplerThread(), "no sampler thread after leaving");
-		waitForSessions(context, configDir, before + 2);
-		List<StutterReport> sessions = new StutterStore(configDir).sessions();
-		check(StutterReport.MONITOR.equals(sessions.getLast().source()), "the last saved session is the monitor's");
+		check(StutterReport.MONITOR.equals(waitForSession(context, configDir, secondStart).source()), "the session left with the world is the monitor's");
 
 		// With no world the screen shows the saved summary.
 		context.runOnClient(mc -> mc.gui.setScreen(new StutterScreen(new TitleScreen(), controller)));
@@ -214,8 +230,83 @@ public class StutterGameTest implements FabricClientGameTest {
 				gc.length / StutterRings.GC_STRIDE, StutterMonitor.phaseTiming() ? "complete" : "incomplete");
 	}
 
-	private static void waitForSessions(ClientGameTestContext context, Path configDir, int count) {
-		context.waitFor(mc -> new StutterStore(configDir).sessions().size() >= Math.min(count, StutterStore.MAX_SESSIONS), 400);
+	// v0.5 RW-17: idle in the world, with no input, until vanilla's frame-rate limiter reports AFK (60 s without input, with
+	// "Reduce FPS when" set to AFK); from then on the session gains no gameplay time. Returns false (logged) when the limiter
+	// didn't engage within 80 s under the harness.
+	private static boolean idleUntilAfk(ClientGameTestContext context) {
+		InactivityFpsLimit before = context.computeOnClient(mc -> {
+			mc.gui.setScreen(null);
+			InactivityFpsLimit limit = mc.options.inactivityFpsLimit().get();
+			mc.options.inactivityFpsLimit().set(InactivityFpsLimit.AFK);
+			return limit;
+		});
+		try {
+			long start = System.nanoTime();
+			boolean afk = false;
+			while (!afk && System.nanoTime() - start < 80_000_000_000L) {
+				context.waitTicks(20);
+				afk = context.computeOnClient(mc -> mc.getFramerateLimitTracker().getThrottleReason() != FramerateLimitTracker.FramerateThrottleReason.NONE
+						&& StutterMonitor.idle());
+			}
+			long waited = (System.nanoTime() - start) / 1_000_000_000L;
+			if (!afk) {
+				RigTune.LOGGER.warn("StutterGameTest: SKIPPED the AFK block: vanilla's frame-rate limiter didn't report AFK after {} s under the harness", waited);
+				return false;
+			}
+			long gameplay = context.computeOnClient(mc -> StutterMonitor.session().snapshot().gameplayNanos());
+			long frames = context.computeOnClient(mc -> StutterMonitor.session().snapshot().frames());
+			long idleStart = System.nanoTime();
+			while (System.nanoTime() - idleStart < 5_000_000_000L) {
+				context.waitTicks(20);
+			}
+			long gameplayAfter = context.computeOnClient(mc -> StutterMonitor.session().snapshot().gameplayNanos());
+			long framesAfter = context.computeOnClient(mc -> StutterMonitor.session().snapshot().frames());
+			RigTune.LOGGER.info("StutterGameTest: AFK after {} s ({}); over the next 5 s {} frames, {} ms more gameplay",
+					waited, context.computeOnClient(mc -> mc.getFramerateLimitTracker().getThrottleReason()), framesAfter - frames, (gameplayAfter - gameplay) / 1_000_000);
+			check(framesAfter > frames, "frames were still drawn while AFK");
+			check(gameplayAfter == gameplay, "no gameplay time while AFK: " + (gameplayAfter - gameplay) / 1_000_000 + " ms more");
+			return true;
+		} finally {
+			context.runOnClient(mc -> mc.options.inactivityFpsLimit().set(before));
+		}
+	}
+
+	// SETTINGS_CHANGED events in the running capture's rings.
+	private static int settingsEvents() {
+		StutterRings rings = StutterMonitor.rings();
+		if (rings == null) {
+			return 0;
+		}
+		long[] events = rings.snapshot().events();
+		int n = 0;
+		for (int i = 0; i + StutterRings.EVENT_STRIDE <= events.length; i += StutterRings.EVENT_STRIDE) {
+			if (events[i] == StutterRings.SETTINGS_CHANGED) {
+				n++;
+			}
+		}
+		return n;
+	}
+
+	// r12 flake (FL-3): the session by its start, as FootprintGameTest does. A count can't show it: stutter.json may already
+	// hold MAX_SESSIONS from the benchmark runs earlier in the part.
+	private static StutterReport waitForSession(ClientGameTestContext context, Path configDir, String startedAt) {
+		context.waitFor(mc -> new StutterStore(configDir).sessions().stream().anyMatch(r -> startedAt.equals(r.startedAt())), 400);
+		return new StutterStore(configDir).sessions().stream().filter(r -> startedAt.equals(r.startedAt())).findFirst().orElseThrow();
+	}
+
+	private static boolean explicitGc(long gcCalled) {
+		StutterRings rings = StutterMonitor.rings();
+		if (rings == null) {
+			return false;
+		}
+		long[] gc = rings.snapshot().gc();
+		for (int i = 0; i + StutterRings.GC_STRIDE <= gc.length; i += StutterRings.GC_STRIDE) {
+			int flags = (int) gc[i + StutterRings.G_FLAGS];
+			if ((flags & GcKind.EXPLICIT) != 0 && GcKind.pause(flags) && gc[i + StutterRings.G_RECEIVED] >= gcCalled) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static boolean samplerThread() {

@@ -391,6 +391,117 @@ class ApplyExecutorTest {
 		assertEquals(List.of(JournalChange.STAGED, JournalChange.ABANDONED), reconciled().stream().map(JournalChange::status).toList());
 	}
 
+	// docs/v0.5/SPEC.md 3f (AC3f.6): the group's record is written through the durable writer, and is on disk with the
+	// rename in it, before the first rename.
+	@Test
+	void theRecordIsForcedToDiskBeforeTheFirstRename() throws IOException {
+		Path old = Files.writeString(mods.resolve("sodium-0.7.0.jar"), "old");
+		Path download = TestJars.modJar(mods.resolve("sodium-0.7.1.jar.rigtune-pending"), "sodium");
+		List<String> events = new ArrayList<>();
+		UnfinishedGroups.Writer recording = (file, content) -> {
+			events.add("record");
+			UnfinishedGroups.DURABLE.write(file, content);
+		};
+		ApplyExecutor recorded = new ApplyExecutor(2, 1, (from, to) -> {
+			if (events.stream().noneMatch(e -> e.startsWith("move"))) {
+				assertTrue(Files.readString(UnfinishedGroups.file(config)).contains("sodium-0.7.0.jar.disabled"));
+			}
+			events.add("move " + from.getFileName());
+			Files.move(from, to);
+		}, millis -> true, ModJars::readModId, recording);
+
+		recorded.run(plan(PendingActions.group(Op.disableFile(old), Op.enableFile(download, mods.resolve("sodium-0.7.1.jar"))).toArray(Op[]::new)), pending);
+
+		// Then each rename is marked done in the record right after it (review-11 APPLY-5).
+		assertEquals(List.of("record", "move sodium-0.7.0.jar", "record", "move sodium-0.7.1.jar.rigtune-pending", "record"), events.subList(0, 5));
+	}
+
+	// docs/v0.5/SPEC.md 2V (ws-g3 L8, AC2V.2): a rollback whose moved file vanished meanwhile says so, not that the original
+	// name is taken.
+	@Test
+	void aRollbackWhoseFileVanishedSaysSo() throws IOException {
+		Path old = Files.writeString(mods.resolve("sodium-0.7.0.jar"), "old");
+		Path download = TestJars.modJar(mods.resolve("sodium-0.7.1.jar.rigtune-pending"), "sodium");
+		ApplyExecutor vanishing = new ApplyExecutor(1, 1, (from, to) -> {
+			if (from.equals(download)) {
+				Files.delete(mods.resolve("sodium-0.7.0.jar.disabled"));
+				throw new IOException("locked");
+			}
+			Files.move(from, to);
+		});
+
+		ApplyResult result = vanishing.run(plan(PendingActions.group(Op.disableFile(old), Op.enableFile(download, mods.resolve("sodium-0.7.1.jar")))
+				.toArray(Op[]::new)), pending);
+
+		assertEquals("Rollback failed: sodium-0.7.0.jar.disabled was moved or deleted meanwhile, so it couldn't be put back after enabling"
+				+ " sodium-0.7.1.jar failed", result.results().getFirst().message());
+		assertEquals(null, result.results().getFirst().resultPath());
+	}
+
+	// The moved file vanished after a failed rollback try: it says so, not the try's error.
+	@Test
+	void aRollbackWhoseFileVanishedAfterAFailedTrySaysSo() throws IOException {
+		Path old = Files.writeString(mods.resolve("sodium-0.7.0.jar"), "old");
+		Path download = TestJars.modJar(mods.resolve("sodium-0.7.1.jar.rigtune-pending"), "sodium");
+		Path disabled = mods.resolve("sodium-0.7.0.jar.disabled");
+		ApplyExecutor vanishing = new ApplyExecutor(1, 1, (from, to) -> {
+			if (from.equals(download)) {
+				throw new IOException("locked");
+			}
+			if (from.equals(disabled)) {
+				Files.delete(disabled);
+				throw new IOException("locked too");
+			}
+			Files.move(from, to);
+		});
+
+		ApplyResult result = vanishing.run(plan(PendingActions.group(Op.disableFile(old), Op.enableFile(download, mods.resolve("sodium-0.7.1.jar")))
+				.toArray(Op[]::new)), pending);
+
+		assertEquals("Rollback failed: sodium-0.7.0.jar.disabled was moved or deleted meanwhile, so it couldn't be put back after enabling"
+				+ " sodium-0.7.1.jar failed", result.results().getFirst().message());
+	}
+
+	// Someone put the old jar back themselves: nothing left to roll back, and the name isn't "taken".
+	@Test
+	void aRollbackOfAFileAlreadyBackSaysSo() throws IOException {
+		Path old = Files.writeString(mods.resolve("sodium-0.7.0.jar"), "old");
+		Path download = TestJars.modJar(mods.resolve("sodium-0.7.1.jar.rigtune-pending"), "sodium");
+		ApplyExecutor restored = new ApplyExecutor(1, 1, (from, to) -> {
+			if (from.equals(download)) {
+				Files.move(mods.resolve("sodium-0.7.0.jar.disabled"), old);
+				throw new IOException("locked");
+			}
+			Files.move(from, to);
+		});
+
+		ApplyResult result = restored.run(plan(PendingActions.group(Op.disableFile(old), Op.enableFile(download, mods.resolve("sodium-0.7.1.jar")))
+				.toArray(Op[]::new)), pending);
+
+		assertEquals("Not rolled back: sodium-0.7.0.jar was already back under its own name after enabling sodium-0.7.1.jar failed",
+				result.results().getFirst().message());
+		assertEquals(null, result.results().getFirst().resultPath());
+	}
+
+	@Test
+	void aRollbackOntoATakenNameKeepsItsMessage() throws IOException {
+		Path old = Files.writeString(mods.resolve("sodium-0.7.0.jar"), "old");
+		Path download = TestJars.modJar(mods.resolve("sodium-0.7.1.jar.rigtune-pending"), "sodium");
+		ApplyExecutor taken = new ApplyExecutor(1, 1, (from, to) -> {
+			if (from.equals(download)) {
+				Files.writeString(old, "someone else's copy");
+				throw new IOException("locked");
+			}
+			Files.move(from, to);
+		});
+
+		ApplyResult result = taken.run(plan(PendingActions.group(Op.disableFile(old), Op.enableFile(download, mods.resolve("sodium-0.7.1.jar")))
+				.toArray(Op[]::new)), pending);
+
+		assertEquals("Rollback failed (the original name is taken); sodium-0.7.0.jar.disabled was left as it is after enabling sodium-0.7.1.jar"
+				+ " failed; the next exit finishes or rolls back this change", result.results().getFirst().message());
+	}
+
 	// A sharing violation (Windows denying the rename because an AV scanner or the Modrinth App briefly has the jar
 	// open) gets exponential backoff instead of the fast fixed-delay policy, so a few extra seconds of contention
 	// right after the game exits doesn't fail the op.

@@ -2,31 +2,43 @@ package io.github.chaotix345.rigtune.gametest;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
+import io.github.chaotix345.rigtune.client.launcher.ModFilesService;
+import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
+import io.github.chaotix345.rigtune.client.probe.PreloadTimer;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkHistoryScreen;
 import io.github.chaotix345.rigtune.client.ui.HistoryScreen;
 import io.github.chaotix345.rigtune.client.ui.JvmScreen;
 import io.github.chaotix345.rigtune.client.ui.NoticeScreen;
+import io.github.chaotix345.rigtune.client.ui.Palette;
 import io.github.chaotix345.rigtune.client.ui.PreviewScreen;
 import io.github.chaotix345.rigtune.client.ui.ProfilesScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
+import io.github.chaotix345.rigtune.client.ui.RigTuneSettingsScreen;
+import io.github.chaotix345.rigtune.client.ui.RowFocus;
+import io.github.chaotix345.rigtune.client.ui.ServerProfilesScreen;
 import io.github.chaotix345.rigtune.client.ui.StutterScreen;
 import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
 import io.github.chaotix345.rigtune.client.ui.UndoScreen;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
+import io.github.chaotix345.rigtune.core.footprint.StartupTimesStore;
+import io.github.chaotix345.rigtune.core.footprint.StartupTrend;
+import io.github.chaotix345.rigtune.core.hardware.PerfCounterAdvice;
+import io.github.chaotix345.rigtune.core.hardware.PerfCounters;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.jvm.JvmReport;
-import io.github.chaotix345.rigtune.core.model.Goal;
+import io.github.chaotix345.rigtune.core.launcher.Launcher;
+import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
-import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.ServerLimits;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.notice.NoticeAction;
@@ -35,12 +47,14 @@ import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.profile.ProfileStore;
 import io.github.chaotix345.rigtune.core.profile.ProfileTemplates.TemplateId;
 import io.github.chaotix345.rigtune.core.profile.ProfileView;
+import io.github.chaotix345.rigtune.core.profile.ServerProfilesView;
 import io.github.chaotix345.rigtune.core.stutter.FrameRing;
 import io.github.chaotix345.rigtune.core.stutter.GcKind;
 import io.github.chaotix345.rigtune.core.stutter.StutterAnalyzer;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import io.github.chaotix345.rigtune.core.stutter.StutterRings;
 import io.github.chaotix345.rigtune.core.stutter.StutterView;
+import io.github.chaotix345.rigtune.core.tryit.TryItView;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
@@ -54,17 +68,20 @@ import net.minecraft.client.gui.components.events.ContainerEventHandler;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.ScreenNarrationCollector;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
+import net.minecraft.client.gui.screens.ConfirmLinkScreen;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
-import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import javax.imageio.ImageIO;
 
 // docs/v0.4/SPEC.md 11 (AC11.1-AC11.3). Per list screen (RigTune, History, Preview, Undo, JVM, Profiles, Stutter): Tab
 // from nothing focused reaches the list, then each press lands on the next row's own child, none skipped, and the press
@@ -87,11 +104,11 @@ public class A11yGameTest implements FabricClientGameTest {
 		RigTuneController real = RigTuneClient.controller();
 		context.waitFor(mc -> real.report() != null, 1200);
 		Path configDir = FabricLoader.getInstance().getConfigDir();
-		boolean network = context.computeOnClient(mc -> ClientSettings.shared(configDir).networkEnabled);
 		boolean outline = context.computeOnClient(mc -> mc.options.highContrastBlockOutline().get());
-		setNetwork(context, real, configDir, false);
+		boolean network = GameTestNet.set(context, real, false);
 		try {
-			A11yController controller = new A11yController(new StubController(RigTuneClient::hardware), real, configDir);
+			StubController stub = new StubController(RigTuneClient::hardware);
+			A11yController controller = new A11yController(stub, real, configDir);
 			resize(context, 854, 480, 2);
 			rigTune(context, controller);
 			history(context, controller);
@@ -102,12 +119,26 @@ public class A11yGameTest implements FabricClientGameTest {
 			stutter(context, controller);
 			standaloneText(context, controller);
 			highContrast(context, controller);
+			// v0.5 (docs/v0.5/SPEC.md C6, X6; PLAN contracts item 16): one walk per owner, each with the contracts' context
+			// record; canned views through CannedViews, cleared by the walk.
+			V05TestContext v05 = new V05TestContext(context, stub, real, configDir);
+			walkStutterFix(v05);
+			walkTryIt(v05);
+			walkServerProfiles(v05);
+			walkFirstApply(v05);
+			walkHowItWorks(v05);
+			walkToolsStartup(v05);
+			walkBenchmarkScreens(v05);
+			walkBatteryOfferRow(v05);
+			walkModFilesRowAndNews(v05);
+			walkLauncherNotices(v05);
+			highContrastRunningGame(v05);
 		} finally {
 			context.runOnClient(mc -> {
 				mc.options.highContrastBlockOutline().set(outline);
 				mc.setLastInputType(InputType.MOUSE);
 			});
-			setNetwork(context, real, configDir, network);
+			GameTestNet.set(context, real, network);
 			resize(context, 854, 480, 0);
 			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
 		}
@@ -470,6 +501,1205 @@ public class A11yGameTest implements FabricClientGameTest {
 		return collector.collectNarrationText(false);
 	}
 
+	// --- v0.5 walks (docs/v0.5/SPEC.md C6): one method per owner; an owner edits only its own method's body and adds its
+	// own private helpers right below it. Each walk leaves the screen, the size and CannedViews as it found them.
+
+	// ---- WS-S2 (C20, AC5.11): StutterScreen's fix rows, the ButtonRow and the "Your stutter fix" block.
+
+	private static void walkStutterFix(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		A11yController controller = new A11yController(v05.stub(), v05.real(), v05.configDir());
+		io.github.chaotix345.rigtune.core.stutter.FixOffer.Offer offer = new io.github.chaotix345.rigtune.core.stutter.FixOffer.Offer("stutter-chunk-loading",
+				"vanilla.renderDistance", "12", "10", true);
+		CannedViews.stutter(new StutterView(false, false, false, false, false, stutterReport(), List.of(new io.github.chaotix345.rigtune.core.stutter.StutterAdvisor.Fired(
+				"stutter-chunk-loading", "info", io.github.chaotix345.rigtune.core.model.Impact.LOW, "Stutter while loading chunks", "Try a shorter render distance.")),
+				java.util.Map.of("stutter-chunk-loading", offer), comparedFix()));
+		try {
+			context.runOnClient(mc -> mc.gui.setScreen(new StutterScreen(new TitleScreen(), controller)));
+			context.waitFor(mc -> mc.gui.screen() instanceof StutterScreen s && s.fixButtons().size() == 3, 200);
+			context.getInput().setCursorPos(1, 1);
+			context.waitTicks(2);
+			context.runOnClient(mc -> mc.gui.screen().clearFocus());
+			// Every fix button is a Tab stop, in the list's order: the block's (at the top) and then the offer's.
+			List<String> order = new ArrayList<>();
+			String tryNarration = "";
+			for (int i = 0; i < 200 && order.size() < 3; i++) {
+				tab(context);
+				String[] focused = context.computeOnClient(mc -> {
+					ComponentPath path = mc.gui.screen().getCurrentFocusPath();
+					return path != null && path.leafComponent() instanceof net.minecraft.client.gui.components.Button b
+							&& b.getMessage().getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents t
+							&& t.getKey().startsWith("rigtune.stutter.fix.") ? new String[]{t.getKey(), focusedNarration(mc)} : null;
+				});
+				if (focused != null && !order.contains(focused[0])) {
+					order.add(focused[0]);
+					if (focused[0].equals("rigtune.stutter.fix.try")) {
+						tryNarration = focused[1];
+					}
+				}
+			}
+			check(order.equals(List.of("rigtune.stutter.fix.undo", "rigtune.stutter.fix.dismiss", "rigtune.stutter.fix.try")), "stutter fix: Tab order " + order);
+			check(tryNarration.contains("Try this fix: Render Distance: 12 → 10. RigTune measures one more session as it is first."),
+					"stutter fix: the Try narration: " + tryNarration);
+			for (int[] size : V05TestContext.SIZES) {
+				v05.resize(size[0], size[1], size[2]);
+				context.takeScreenshot("a11y-stutterfix-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			}
+			v05.resize(854, 480, 2);
+			context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(true));
+			context.runOnClient(mc -> mc.gui.setScreen(new StutterScreen(new TitleScreen(), controller)));
+			context.waitTicks(3);
+			context.takeScreenshot("a11y-hc-stutterfix-854x480-scale2");
+			RigTune.LOGGER.info("A11yGameTest: stutter fix: Tab order {}; Try narrates \"{}\"", order, tryNarration);
+		} finally {
+			CannedViews.stutter(null);
+			context.runOnClient(mc -> {
+				mc.options.highContrastBlockOutline().set(false);
+				mc.gui.setScreen(new TitleScreen());
+			});
+			v05.resize(854, 480, 2);
+		}
+	}
+
+	// A fix compared as "less": its block has Undo this change… and Dismiss.
+	private static io.github.chaotix345.rigtune.core.stutter.FixTracker.Record comparedFix() {
+		io.github.chaotix345.rigtune.core.stutter.SessionOutcome before = new io.github.chaotix345.rigtune.core.stutter.SessionOutcome(1, 400, 20, 1280, 7,
+				20 / 7.0, 0.2);
+		io.github.chaotix345.rigtune.core.stutter.SessionOutcome after = new io.github.chaotix345.rigtune.core.stutter.SessionOutcome(1, 400, 4, 256, 7, 4 / 7.0,
+				0.3);
+		io.github.chaotix345.rigtune.core.stutter.FixConditions conditions = new io.github.chaotix345.rigtune.core.stutter.FixConditions("26.2", "hash", 4096,
+				"g1", 854, 480, false, "SINGLEPLAYER", true, true, java.util.Map.of("vanilla.renderDistance", "12"));
+		return new io.github.chaotix345.rigtune.core.stutter.FixTracker.Record("a11y-fix", "stutter-chunk-loading", "vanilla.renderDistance", "12", "10",
+				java.time.Instant.parse("2026-09-20T10:00:00Z"), 17, true, io.github.chaotix345.rigtune.core.stutter.FixTracker.State.COMPARED, before, conditions,
+				after, 0, null, io.github.chaotix345.rigtune.core.stutter.FixComparison.compare(before, after), false);
+	}
+
+	// ---- WS-T (C09, AC6.13): TryItScreen and the plain Preview's footer.
+
+	// Over a canned result (the change, the two runs, the apply, the verdict and its caveat) every line is a Tab stop that
+	// narrates its text, in order, and the Tab after the last line reaches the footer's buttons; a focused line and high
+	// contrast in the screenshots. The intro while the world settles keeps focus through its countdown's rebuilds (review
+	// R12FEAT-2). Preview's plain footer: [Try it (measured)] is a Tab stop that narrates its label.
+	private static void walkTryIt(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		Screen found = context.computeOnClient(mc -> mc.gui.screen());
+		A11yController controller = new A11yController(v05.stub(), v05.real(), v05.configDir());
+		try {
+			io.github.chaotix345.rigtune.core.tryit.TryIt t = io.github.chaotix345.rigtune.core.tryit.TryIt.of("e-a11y", "setting:vanilla.renderDistance",
+					"vanilla.renderDistance", "12", "10", io.github.chaotix345.rigtune.core.tryit.TryIt.Kind.NOW,
+					io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest.Scene.CURRENT, "2026-09-20T10:00:00Z", "a11y", "0.5.0", "26.2", java.util.Map.of(), null);
+			io.github.chaotix345.rigtune.core.tryit.TryItVerdict.Verdict verdict = new io.github.chaotix345.rigtune.core.tryit.TryItVerdict.Verdict(
+					io.github.chaotix345.rigtune.core.tryit.TryItVerdict.Kind.BETTER, 12.6, 6.6, 6.2, List.of(),
+					List.of(io.github.chaotix345.rigtune.core.tryit.TryItVerdict.Caveat.SCENE));
+			CannedViews.tryIt(new TryItView(TryItView.Stage.RESULT, t, tryItRun("b", 84.2, 142.0, t.pairId(), true), tryItRun("a", 94.8, 151.3, t.pairId(), false),
+					verdict, JournalChange.APPLIED, null, true));
+			context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.TryItScreen(new TitleScreen(), controller, null)));
+			context.waitFor(mc -> mc.gui.screen() instanceof io.github.chaotix345.rigtune.client.ui.TryItScreen && rows(mc) == 6, 100);
+			context.waitTicks(2);
+			walk(context, "try-it result", List.of("Measured before: 1% lows 84 FPS, average 142 FPS", "Measured after: 1% lows 95 FPS, average 151 FPS",
+					"Better: 1% lows +12.6% (average +6.6%), more than the ±6.2% these runs vary by.",
+					"A measured comparison in one scene, not proof: busier places may differ."));
+			tabUntilNarrates(context, "try-it footer", Component.translatable("rigtune.tryit.action.revert").getString());
+			focusRow(context, 4);
+			context.takeScreenshot("a11y-tryit-focus-854x480-scale2");
+			highContrastScreenshot(context, "a11y-hc-tryit-854x480-scale2");
+
+			// Review R12FEAT-2: the intro while the world settles. Its countdown line changes every second (the screen is
+			// rebuilt), and focus stays on the button Tab reached (Cancel).
+			Settling settling = new Settling(controller);
+			io.github.chaotix345.rigtune.core.model.Recommendation rd = new io.github.chaotix345.rigtune.core.model.Recommendation("a11y:rd",
+					io.github.chaotix345.rigtune.core.model.Category.SETTING, io.github.chaotix345.rigtune.core.model.Impact.LOW, "Render distance", "",
+					new io.github.chaotix345.rigtune.core.model.Action.SetSetting("vanilla.renderDistance", "12", "10"), true);
+			context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.TryItScreen(new TitleScreen(), settling, rd)));
+			context.waitForScreen(io.github.chaotix345.rigtune.client.ui.TryItScreen.class);
+			context.waitTicks(2);
+			String countdown = settleRow(context);
+			tabUntilNarrates(context, "try-it intro", Component.translatable("gui.cancel").getString());
+			context.waitTicks(45);
+			String later = settleRow(context);
+			check(!later.equals(countdown), "the countdown moved (the screen was rebuilt): " + countdown + " / " + later);
+			String said = context.computeOnClient(A11yGameTest::focusedNarration);
+			check(said.contains(Component.translatable("gui.cancel").getString()), "focus stayed on Cancel through the rebuilds: " + said);
+			context.takeScreenshot("a11y-tryit-intro-settling-854x480-scale2");
+
+			TryItAvailable available = new TryItAvailable(controller);
+			context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.PreviewScreen(new TitleScreen(), available, List.of(
+					new io.github.chaotix345.rigtune.core.model.Recommendation("a11y:rd", io.github.chaotix345.rigtune.core.model.Category.SETTING,
+							io.github.chaotix345.rigtune.core.model.Impact.LOW, "Render distance", "", new io.github.chaotix345.rigtune.core.model.Action.SetSetting(
+									"vanilla.renderDistance", "12", "10"), true)))));
+			context.waitForScreen(io.github.chaotix345.rigtune.client.ui.PreviewScreen.class);
+			context.waitTicks(3);
+			tabUntilNarrates(context, "preview footer", Component.translatable("rigtune.tryit.button").getString());
+			context.takeScreenshot("a11y-tryit-preview-footer-854x480-scale2");
+		} finally {
+			CannedViews.clear();
+			context.runOnClient(mc -> mc.gui.setScreen(found));
+		}
+	}
+
+	// The canned world with Try it available (an inactive button is no Tab stop).
+	private static final class TryItAvailable extends ForwardingController {
+		TryItAvailable(io.github.chaotix345.rigtune.client.ui.RigTuneController delegate) {
+			super(delegate);
+		}
+
+		@Override
+		public io.github.chaotix345.rigtune.core.model.@org.jspecify.annotations.Nullable Text tryItRefusal(
+				io.github.chaotix345.rigtune.core.model.Recommendation rec) {
+			return null;
+		}
+	}
+
+	// No try open, Try it available, and a world that settles in 60 s from now (review R12FEAT-2's walk).
+	private static final class Settling extends ForwardingController {
+		private final long since = System.nanoTime();
+
+		Settling(io.github.chaotix345.rigtune.client.ui.RigTuneController delegate) {
+			super(delegate);
+		}
+
+		@Override
+		public TryItView tryIt() {
+			return TryItView.EMPTY;
+		}
+
+		@Override
+		public io.github.chaotix345.rigtune.core.model.@org.jspecify.annotations.Nullable Text tryItRefusal(
+				io.github.chaotix345.rigtune.core.model.Recommendation rec) {
+			return null;
+		}
+
+		@Override
+		public io.github.chaotix345.rigtune.core.model.@org.jspecify.annotations.Nullable Text tryItSettling(
+				io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest.Scene scene) {
+			return io.github.chaotix345.rigtune.core.tryit.TryItText.settleRefusal(Math.max(1, 60 - (int) ((System.nanoTime() - since) / 1_000_000_000L)));
+		}
+	}
+
+	private static String settleRow(ClientGameTestContext context) {
+		return context.computeOnClient(mc -> ((io.github.chaotix345.rigtune.client.ui.TryItScreen) mc.gui.screen()).rowText().stream()
+				.filter(line -> line.startsWith("Try It measures better once the world has settled")).findFirst()
+				.orElseThrow(() -> new AssertionError("no settle line: " + ((io.github.chaotix345.rigtune.client.ui.TryItScreen) mc.gui.screen()).rowText())));
+	}
+
+	private static io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord tryItRun(String id, double low, double avg, String pairId, boolean before) {
+		return new io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord(id, "2026-09-20T10:01:00Z", "0.5.0", "26.2", "MEASURE", "CURRENT",
+				before ? io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord.BEFORE : io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord.AFTER,
+				pairId, 60, true, java.util.Map.of(), new io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord.Result(avg, low, 1000 / low, 2, 0.03), java.util.Map.of(),
+				java.util.Map.of(), null, false, null);
+	}
+
+	// ---- WS-P2 (C16, AC7.11): ServerProfilesScreen with a canned view.
+
+	private static void walkServerProfiles(V05TestContext v05) {
+		// AC7.11 (X6): seven remembered servers, the third this one. Tab reaches, in order, the This-server line, Offer, Stop,
+		// the privacy line, every row (each narrating its text; the current one "This server"), Forget all and Done (Forget
+		// stays inactive, so no stop, until a row is selected); Enter on a row selects it ("Selected") and makes Forget
+		// active; the rows scroll at 1280x720@3 (X12's scroll size, amended); screenshots at X12's sizes and in high contrast.
+		ClientGameTestContext context = v05.context();
+		boolean outline = context.computeOnClient(mc -> mc.options.highContrastBlockOutline().get());
+		CannedViews.serverProfiles(cannedServerProfiles());
+		RigTuneController canned = new ForwardingController(v05.stub()) {
+			@Override
+			public ServerProfilesView serverProfiles() {
+				ServerProfilesView view = CannedViews.serverProfiles();
+				return view != null ? view : super.serverProfiles();
+			}
+
+			@Override
+			public Component rememberServerProfile(@Nullable String profileId) {
+				return Texts.component(ServerProfilesView.remembered(io.github.chaotix345.rigtune.core.server.ServerProfileStore.Result.OK,
+						TemplateId.MAX_FPS.displayName()));
+			}
+		};
+		try {
+			context.runOnClient(mc -> mc.gui.setScreen(new ServerProfilesScreen(new TitleScreen(), canned, null)));
+			context.waitFor(mc -> mc.gui.screen() instanceof ServerProfilesScreen && rows(mc) == 7, 200);
+			context.waitTicks(2);
+			List<String> texts = List.of("Server · Max FPS · last joined 2026-09-27", "LAN game · Evening · last joined 2026-09-26",
+					"Server · Quality · last joined 2026-09-25", "Realm · Battery · last joined 2026-09-24", "Server · a deleted profile · last joined 2026-09-20",
+					"Server · a profile this version doesn't know", "LAN game · Recording · last joined 2026-09-01");
+			List<String> order = new ArrayList<>(List.of("This server: RigTune offers Quality when you join.", "Offer Max FPS here", "Stop offering here",
+					Component.translatable("rigtune.profile.server.privacy").getString()));
+			order.addAll(texts);
+			order.addAll(List.of("Forget all…", Component.translatable("gui.done").getString()));
+			String stops = tabAll(context);
+			int at = -1;
+			for (String text : order) {
+				int next = stops.indexOf(text, at + 1);
+				check(next > at, "server profiles: \"" + text + "\" is a Tab stop after the one before it: " + stops);
+				at = next;
+			}
+			String rowsSaid = walk(context, "server-profiles", texts);
+			check(rowsSaid.contains("This server"), "server profiles: the current row says This server: " + rowsSaid);
+			focusRow(context, 2);
+			context.getInput().pressKey(InputConstants.KEY_RETURN);
+			context.waitTicks(2);
+			check("c".repeat(64).equals(context.computeOnClient(mc -> ((ServerProfilesScreen) mc.gui.screen()).selected())),
+					"server profiles: Enter selected the row");
+			String said = context.computeOnClient(A11yGameTest::narration);
+			check(said.contains(texts.get(2)) && said.contains("This server") && said.contains("Selected"), "server profiles: the selected row: " + said);
+			check(context.computeOnClient(mc -> ((ServerProfilesScreen) mc.gui.screen()).actions().stream()
+					.anyMatch(b -> b.getMessage().getString().equals("Forget") && b.active)), "server profiles: Forget is active once a row is selected");
+			context.takeScreenshot("a11y-server-profiles-enter-854x480-scale2");
+			// review-11 FEAT-4: Enter on Offer; its result is the focused stop and is what's read out.
+			tabUntilNarrates(context, "server profiles", "Offer Max FPS here");
+			context.getInput().pressKey(InputConstants.KEY_RETURN);
+			context.waitTicks(2);
+			String status = context.computeOnClient(A11yGameTest::focusedNarration);
+			check(status.contains("RigTune will offer Max FPS when you join this server."), "server profiles: the action's status has the focus: " + status);
+			check(tabAll(context).split("\n")[0].contains("RigTune will offer Max FPS"), "server profiles: the status is the first Tab stop");
+			List<String> lines = List.of(tabAll(context).split("\n"));
+			int last = -1;
+			for (int i = 0; i < lines.size(); i++) {
+				if (lines.get(i).contains(texts.getLast())) {
+					last = i;
+				}
+			}
+			check(last >= 0 && last + 2 < lines.size() && lines.get(last + 1).contains("Forget") && !lines.get(last + 1).contains("Forget all")
+					&& lines.get(last + 2).contains("Forget all…"), "server profiles: with a row selected, Forget is the stop after the last row: " + lines);
+			for (int[] size : V05TestContext.SIZES) {
+				v05.resize(size[0], size[1], size[2]);
+				context.takeScreenshot("a11y-server-profiles-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			}
+			serverProfilesScroll(v05);
+			context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(true));
+			v05.resize(854, 480, 2);
+			context.takeScreenshot("a11y-hc-server-profiles-854x480-scale2");
+			RigTune.LOGGER.info("A11yGameTest: server profiles: Tab order, row narration, Enter and scrolling checked");
+		} finally {
+			CannedViews.clear();
+			context.runOnClient(mc -> {
+				mc.options.highContrastBlockOutline().set(outline);
+				mc.gui.setScreen(new TitleScreen());
+			});
+			v05.resize(854, 480, 2);
+			context.waitForScreen(TitleScreen.class);
+		}
+	}
+
+	// At 1280x720@3 the seven rows don't fit: the list scrolls to its last row.
+	private static void serverProfilesScroll(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		v05.resize(1280, 720, 3);
+		context.runOnClient(mc -> mc.gui.screen().clearFocus());
+		context.waitTicks(1);
+		check(context.computeOnClient(mc -> ((ServerProfilesScreen) mc.gui.screen()).list().maxScrollAmount() > 0),
+				"server profiles: seven rows scroll at 1280x720@3");
+		context.runOnClient(mc -> {
+			ServerProfilesScreen.ServerList rows = ((ServerProfilesScreen) mc.gui.screen()).list();
+			rows.setScrollAmount(rows.maxScrollAmount());
+		});
+		context.waitTicks(2);
+		context.runOnClient(mc -> {
+			ServerProfilesScreen.ServerList rows = ((ServerProfilesScreen) mc.gui.screen()).list();
+			int last = rows.children().size() - 1;
+			check(rows.getRowTop(last) >= rows.getY() && rows.getRowBottom(last) <= rows.getBottom(), "server profiles: the last row shows once scrolled");
+		});
+		context.takeScreenshot("a11y-server-profiles-1280x720-scale3-scrolled");
+		context.runOnClient(mc -> ((ServerProfilesScreen) mc.gui.screen()).list().setScrollAmount(0));
+	}
+
+	// Seven servers of every kind, the third this server; a deleted and an unknown profile; one without a date.
+	private static ServerProfilesView cannedServerProfiles() {
+		ServerLimits.Kind remote = ServerLimits.Kind.REMOTE;
+		ServerLimits.Kind lan = ServerLimits.Kind.LAN_GUEST;
+		Text maxFps = TemplateId.MAX_FPS.displayName();
+		Text quality = TemplateId.QUALITY.displayName();
+		List<ServerProfilesView.Row> rows = List.of(
+				new ServerProfilesView.Row("a".repeat(64), remote, "template:max_fps", maxFps, "2026-09-27", false),
+				new ServerProfilesView.Row("b".repeat(64), lan, "p-evening", Text.literal("Evening"), "2026-09-26", false),
+				new ServerProfilesView.Row("c".repeat(64), remote, "template:quality", quality, "2026-09-25", true),
+				new ServerProfilesView.Row("d".repeat(64), ServerLimits.Kind.REALM, "template:battery", TemplateId.BATTERY.displayName(), "2026-09-24", false),
+				new ServerProfilesView.Row("e".repeat(64), remote, "p-gone", null, "2026-09-20", false),
+				new ServerProfilesView.Row("f".repeat(64), remote, "template:future_mode", null, null, false),
+				new ServerProfilesView.Row("0".repeat(64), lan, "template:recording", TemplateId.RECORDING.displayName(), "2026-09-01", false));
+		return new ServerProfilesView(ServerProfilesView.State.SERVER, remote, "c".repeat(64), "template:quality", quality, false, "template:max_fps", maxFps,
+				rows, true);
+	}
+
+	// ---- WS-F (C02, AC8.12): FirstApplyScreen.
+
+	// Over the canned history's entry e2 (Render distance applied, Lithium waiting for the restart): Tab reaches every row in
+	// order and each narrates its text, the Tab after the last row leaves the list, the open narration says the title, the
+	// summary and the restart outcome; a focused row and high contrast in the screenshots.
+	private static void walkFirstApply(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		net.minecraft.client.gui.screens.Screen found = context.computeOnClient(mc -> mc.gui.screen());
+		A11yController controller = new A11yController(v05.stub(), v05.real(), v05.configDir());
+		try {
+			context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.FirstApplyScreen(new TitleScreen(), controller, "e2",
+					Component.literal("2 settings applied."))));
+			context.waitFor(mc -> mc.gui.screen() instanceof io.github.chaotix345.rigtune.client.ui.FirstApplyScreen f && !f.loading() && f.view() != null
+					&& rows(mc) == 7, 600);
+			context.waitTicks(2);
+			String restart = Component.translatable("rigtune.firstrun.applied.restart").getString();
+			walk(context, "first-apply", List.of("2 settings applied.", Component.translatable("rigtune.firstrun.applied.section.now").getString(),
+					"Render distance", Component.translatable("rigtune.firstrun.applied.section.restart").getString(), "Lithium", restart,
+					Component.translatable("rigtune.firstrun.applied.undo_hint").getString()));
+			String opening = context.computeOnClient(mc -> mc.gui.screen().getNarrationMessage().getString());
+			check(opening.contains(Component.translatable("rigtune.firstrun.applied.title").getString()) && opening.contains("1 setting, 1 mod")
+					&& opening.contains(restart), "first-apply: the open narration has the title, the summary and the restart outcome: " + opening);
+			focusRow(context, 2);
+			context.takeScreenshot("a11y-first-apply-focus-854x480-scale2");
+			highContrastScreenshot(context, "a11y-hc-first-apply-854x480-scale2");
+		} finally {
+			context.runOnClient(mc -> mc.gui.setScreen(found));
+		}
+	}
+
+	// ---- WS-F (C02, AC8.12): HowItWorksScreen.
+
+	// Each paragraph is a Tab stop that narrates it, in order, for RigTune's own mod files and while the launcher is being
+	// checked (no mods paragraph then).
+	private static void walkHowItWorks(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		net.minecraft.client.gui.screens.Screen found = context.computeOnClient(mc -> mc.gui.screen());
+		A11yController controller = new A11yController(v05.stub(), v05.real(), v05.configDir());
+		try {
+			for (ModFilesPolicy policy : List.of(ModFilesPolicy.RIGTUNE, ModFilesPolicy.PENDING)) {
+				CannedViews.modFiles(policy);
+				int expected = policy == ModFilesPolicy.RIGTUNE ? 6 : 5;
+				context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.HowItWorksScreen(new TitleScreen(), controller, false)));
+				context.waitFor(mc -> mc.gui.screen() instanceof io.github.chaotix345.rigtune.client.ui.HowItWorksScreen && rows(mc) == expected,
+						100);
+				context.waitTicks(2);
+				String all = walk(context, "how-it-works " + policy, List.of(Component.translatable("rigtune.firstrun.how.now").getString(),
+						Component.translatable("rigtune.firstrun.how.restart").getString(), Component.translatable("rigtune.firstrun.how.undo").getString()));
+				String mods = Component.translatable("rigtune.firstrun.how.mods").getString();
+				check(all.contains(mods) == (policy == ModFilesPolicy.RIGTUNE), "how-it-works " + policy + ": the mods paragraph only with RigTune's own");
+			}
+			focusRow(context, 1);
+			context.takeScreenshot("a11y-how-it-works-focus-854x480-scale2");
+			highContrastScreenshot(context, "a11y-hc-how-it-works-854x480-scale2");
+		} finally {
+			CannedViews.clear();
+			context.runOnClient(mc -> mc.gui.setScreen(found));
+		}
+	}
+
+	// The screen as it is, with High Contrast Block Outline on (Palette reads it when drawing), then the option as it was.
+	private static void highContrastScreenshot(ClientGameTestContext context, String name) {
+		boolean outline = context.computeOnClient(mc -> mc.options.highContrastBlockOutline().get());
+		try {
+			context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(true));
+			context.waitTicks(2);
+			context.takeScreenshot(name);
+		} finally {
+			context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(outline));
+		}
+	}
+
+	// ---- WS-W, then WS-W2 (2L, C18 AC9.5): ToolsScreen's startup lines.
+
+	// 2L (AC2L.2, X6, X12): Tools' launch-time list with a seeded probe result (Windows' performance counters off, this PC's
+	// shape) and a canned startup trend: at every size the advice rows are there and fit, the widgets sit inside the screen
+	// without overlapping; Tab reaches every row and each narrates its text; a Microsoft page's row opens vanilla's link
+	// confirmation (cancelled). With the counters on, no advice row.
+	private static void walkToolsStartup(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		Screen found = context.computeOnClient(mc -> mc.gui.screen());
+		ToolsTrend tools = new ToolsTrend(v05.stub(), new StartupTimes.View(15_125L, 14_517L, 12, true));
+		// This machine's own result first (none on CI's Linux; the advice on a PC with the counters off), for the record.
+		v05.resize(1280, 720, 2);
+		openTools(context, tools);
+		RigTune.LOGGER.info("A11yGameTest: this machine: {}; crash-report setup {} ms; Tools shows {} advice row(s)", HardwareProbe.perfCounters().describe(),
+				PreloadTimer.preloadMs(), context.computeOnClient(mc -> ((ToolsScreen) mc.gui.screen()).perfCounterLines().size()));
+		context.takeScreenshot("a11y-tools-startup-this-machine-1280x720-scale2");
+		// Review-11 COMPAT-6: this is a production client on every leg, so CrashReportMixin must have timed Main's
+		// CrashReport.preload() (javap: the call is in client.main.Main on 26.2 and 26.3); C18's RW-19 subtraction needs it.
+		check(PreloadTimer.preloadMs() != null, "the crash-report setup was timed at this launch (CrashReportMixin applied)");
+		PerfCounters off = new PerfCounters(true, true, List.of(), List.of("PerfOS"));
+		HardwareProbe.seedPerfCounters(off);
+		try {
+			List<String> expected = new ArrayList<>();
+			for (PerfCounterAdvice.Line line : PerfCounterAdvice.lines(off, PreloadTimer.preloadMs())) {
+				expected.add(Texts.component(line.text()).getString());
+			}
+			check(expected.size() >= 4, "the advice lines: " + expected);
+			// X12 as amended: 1280x720 at GUI scale 3 for the scrolling list (the game caps 854x480 at scale 2).
+			int[][] sizes = {SIZES[0], SIZES[1], SIZES[2], {1280, 720, 3}};
+			for (int[] size : sizes) {
+				v05.resize(size[0], size[1], size[2]);
+				String where = size[0] + "x" + size[1] + "@" + size[2];
+				openTools(context, tools);
+				context.runOnClient(mc -> {
+					ToolsScreen screen = (ToolsScreen) mc.gui.screen();
+					List<String> shown = screen.perfCounterLines().stream().map(Component::getString).toList();
+					check(shown.equals(expected), where + ": the advice rows " + shown);
+					check(screen.rowText().containsAll(expected) && screen.rowText().contains(screen.startupLine().getString()), where + ": rows " + screen.rowText());
+					check(screen.rowsFit(), where + ": every row's lines fit");
+					checkToolsLayout(screen, where);
+				});
+				context.takeScreenshot("a11y-tools-startup-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			}
+			v05.resize(854, 480, 2);
+			openTools(context, tools);
+			List<String> walked = new ArrayList<>(expected);
+			walked.add(Component.translatable("rigtune.startup.advice").getString());
+			walk(context, "tools startup", walked);
+			checkToolsTabOrder(context);
+			String entryRow = expected.get(expected.size() - 2);
+			int linkRow = context.computeOnClient(mc -> ((ToolsScreen) mc.gui.screen()).rowText().indexOf(entryRow));
+			focusRow(context, linkRow);
+			context.takeScreenshot("a11y-tools-startup-link-focus-854x480-scale2");
+			context.getInput().pressKey(InputConstants.KEY_RETURN);
+			context.waitFor(mc -> mc.gui.screen() instanceof ConfirmLinkScreen, 40);
+			context.takeScreenshot("a11y-tools-startup-link-confirm-854x480-scale2");
+			context.getInput().pressKey(InputConstants.KEY_ESCAPE);
+			context.waitForScreen(ToolsScreen.class);
+			RigTune.LOGGER.info("A11yGameTest: Tools' launch-time advice: {} rows at every size, Tab and narration, the link confirmation", expected.size());
+
+			HardwareProbe.seedPerfCounters(new PerfCounters(true, false, List.of("PerfProc"), List.of()));
+			openTools(context, tools);
+			ToolsScreen open = context.computeOnClient(mc -> (ToolsScreen) mc.gui.screen());
+			check(context.computeOnClient(mc -> open.perfCounterLines()).isEmpty(), "no advice while the counters are on");
+			// Review L9: the probe's result arriving while Tools is open shows at once (the same screen rebuilds).
+			HardwareProbe.seedPerfCounters(off);
+			context.waitFor(mc -> mc.gui.screen() == open && open.perfCounterLines().size() == expected.size(), 20);
+		} finally {
+			HardwareProbe.seedPerfCounters(null);
+			v05.resize(854, 480, 2);
+			context.runOnClient(mc -> mc.gui.setScreen(found));
+			context.waitTicks(2);
+		}
+		startupRegressionRows(v05);
+	}
+
+	private static void openTools(ClientGameTestContext context, RigTuneController controller) {
+		context.runOnClient(mc -> mc.gui.setScreen(new ToolsScreen(new TitleScreen(), controller)));
+		context.waitForScreen(ToolsScreen.class);
+		context.getInput().setCursorPos(1, 1);
+		context.waitTicks(3);
+	}
+
+	// X6: Tab from nothing focused goes through the five tool buttons in order, then the list's rows, then Done.
+	private static void checkToolsTabOrder(ClientGameTestContext context) {
+		context.getInput().setCursorPos(1, 1);
+		context.runOnClient(mc -> mc.gui.screen().clearFocus());
+		List<String> stops = new ArrayList<>();
+		Object first = null;
+		for (int i = 0; i < 60; i++) {
+			tab(context);
+			Object leaf = context.computeOnClient(mc -> {
+				ComponentPath path = mc.gui.screen().getCurrentFocusPath();
+				return path == null ? null : path.leafComponent();
+			});
+			if (leaf == null || leaf == first) {
+				break;
+			}
+			if (first == null) {
+				first = leaf;
+			}
+			stops.add(context.computeOnClient(A11yGameTest::leafText));
+		}
+		List<String> buttons = List.of("rigtune.screen.benchmark_menu", "rigtune.tools.profiles", "rigtune.tools.stutter", "rigtune.tools.jvm",
+				"rigtune.tools.benchmark_history").stream().map(key -> Component.translatable(key).getString()).toList();
+		int rows = context.computeOnClient(A11yGameTest::rows);
+		check(stops.size() == buttons.size() + rows + 1, "Tools: every button, row and Done is one Tab stop: " + stops);
+		check(stops.subList(0, buttons.size()).equals(buttons), "Tools: the tool buttons first, in order: " + stops);
+		check(stops.getLast().equals(Component.translatable("gui.done").getString()), "Tools: Done last: " + stops);
+	}
+
+	// X12: every widget inside the screen and no two overlapping.
+	private static void checkToolsLayout(ToolsScreen screen, String where) {
+		List<AbstractWidget> widgets = Screens.getWidgets(screen);
+		for (AbstractWidget w : widgets) {
+			check(w.getX() >= 0 && w.getY() >= 0 && w.getX() + w.getWidth() <= screen.width && w.getY() + w.getHeight() <= screen.height,
+					where + ": " + w.getMessage().getString() + " inside the screen");
+		}
+		for (int i = 0; i < widgets.size(); i++) {
+			for (int j = i + 1; j < widgets.size(); j++) {
+				ScreenRectangle a = widgets.get(i).getRectangle();
+				ScreenRectangle b = widgets.get(j).getRectangle();
+				check(a.intersection(b) == null, where + ": " + widgets.get(i).getMessage().getString() + " and " + widgets.get(j).getMessage().getString()
+						+ " overlap");
+			}
+		}
+	}
+
+	// The stub with a canned startup trend (a changed mod set, so the note shows too).
+	private static final class ToolsTrend extends ForwardingController {
+		private final StartupTimes.View trend;
+
+		ToolsTrend(RigTuneController delegate, StartupTimes.View trend) {
+			super(delegate);
+			this.trend = trend;
+		}
+
+		@Override
+		public StartupTimes.View startupTimes() {
+			return trend;
+		}
+	}
+
+	// WS-W2, C18 (AC9.5, X6, X12): with a SLOWER launch (47 % over the usual, 80 → 95 mods) the notice's two lines are rows
+	// right under the startup line, whose median is the trend's usual (review L3), fit at every size (and 1280x720@3), keep
+	// the widgets apart, and are Tab stops that narrate their text; the generic mod-set note gives way to the cause line;
+	// high contrast screenshot; a slow streak's longer cause line fits at 640x480. From fewer than 5 comparable launches
+	// (TOO_FEW), or with no assessment (0.4's view), no row.
+	private static void startupRegressionRows(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		Screen found = context.computeOnClient(mc -> mc.gui.screen());
+		List<StartupTimesStore.Run> runs = new ArrayList<>();
+		for (int i = 0; i < 6; i++) {
+			runs.add(new StartupTimesStore.Run("2026-09-2" + i + "T10:00:00Z", 14_500, "26.2", "0.5.0", 80, "h"));
+		}
+		runs.add(new StartupTimesStore.Run("2026-09-27T10:00:00Z", 21_300, "26.2", "0.5.0", 95, "h2"));
+		StartupTrend.Assessment slower = StartupTrend.assess(runs);
+		ToolsTrend tools = new ToolsTrend(v05.stub(), new StartupTimes.View(21_300L, 14_500L, 7, true, slower));
+		List<String> expected = List.of(Texts.component(StartupTrend.regression(slower)).getString(), Texts.component(StartupTrend.cause(slower)).getString());
+		check(expected.equals(List.of("Launch time 47% higher than usual (21.3 s vs your usual ~14.5 s)",
+				"May be related to your mod set changing (80 → 95 mods) since your last launch")), "the regression lines: " + expected);
+		String note = Component.translatable("rigtune.startup.mod_set_changed").getString();
+		try {
+			int[][] sizes = {SIZES[0], SIZES[1], SIZES[2], {1280, 720, 3}};
+			for (int[] size : sizes) {
+				v05.resize(size[0], size[1], size[2]);
+				String where = size[0] + "x" + size[1] + "@" + size[2];
+				openTools(context, tools);
+				context.runOnClient(mc -> {
+					ToolsScreen screen = (ToolsScreen) mc.gui.screen();
+					check(screen.regressionLines().stream().map(Component::getString).toList().equals(expected), where + ": " + screen.regressionLines());
+					List<String> rows = screen.rowText();
+					check(screen.startupLine().getString().equals("Last launch 21.3 s · median of the last 6: 14.5 s"), where + ": " + screen.startupLine());
+					check(rows.indexOf(expected.get(0)) == 1 && rows.indexOf(expected.get(1)) == 2, where + ": under the startup line: " + rows);
+					check(!rows.contains(note), where + ": the cause line replaces the generic mod-set note: " + rows);
+					check(screen.rowsFit(), where + ": every row's lines fit");
+					checkToolsLayout(screen, where);
+				});
+				context.takeScreenshot("a11y-tools-regression-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			}
+			v05.resize(854, 480, 2);
+			openTools(context, tools);
+			walk(context, "tools regression", expected);
+			checkToolsTabOrder(context);
+			focusRow(context, 1);
+			context.takeScreenshot("a11y-tools-regression-focus-854x480-scale2");
+			focusRow(context, 2);
+			highContrastScreenshot(context, "a11y-tools-regression-hc-854x480-scale2");
+
+			List<StartupTimesStore.Run> streakRuns = new ArrayList<>(runs);
+			streakRuns.add(new StartupTimesStore.Run("2026-09-28T10:00:00Z", 21_900, "26.2", "0.5.0", 95, "h2"));
+			StartupTrend.Assessment streak = StartupTrend.assess(streakRuns);
+			check(streak.streak() == 2, "a slow streak: " + StartupTrend.describe(streak));
+			v05.resize(640, 480, 2);
+			openTools(context, new ToolsTrend(v05.stub(), new StartupTimes.View(21_900L, 14_500L, 8, true, streak)));
+			context.runOnClient(mc -> {
+				ToolsScreen screen = (ToolsScreen) mc.gui.screen();
+				check(screen.regressionLines().get(1).getString().startsWith("Slower for your last 2 launches;"), "the streak's line: " + screen.regressionLines());
+				check(screen.rowsFit(), "640x480@2: the streak's line fits");
+				checkToolsLayout(screen, "640x480@2 (streak)");
+			});
+			context.takeScreenshot("a11y-tools-regression-streak-640x480-scale2");
+			v05.resize(854, 480, 2);
+
+			ToolsTrend tooFew = new ToolsTrend(v05.stub(), new StartupTimes.View(21_300L, 14_500L, 5, true,
+					StartupTrend.assess(runs.subList(runs.size() - 5, runs.size()))));
+			check(tooFew.startupTimes().assessment().kind() == StartupTrend.Kind.TOO_FEW, "four comparable launches: " + tooFew.startupTimes().assessment());
+			for (ToolsTrend none : List.of(tooFew, new ToolsTrend(v05.stub(), new StartupTimes.View(21_300L, 14_500L, 7, true)))) {
+				openTools(context, none);
+				context.runOnClient(mc -> {
+					ToolsScreen screen = (ToolsScreen) mc.gui.screen();
+					check(screen.regressionLines().isEmpty() && screen.rowText().contains(note), "no regression row, the mod-set note: " + screen.rowText());
+				});
+			}
+			RigTune.LOGGER.info("A11yGameTest: Tools' launch-time regression rows at every size, Tab and narration; none from fewer than 5 launches");
+		} finally {
+			v05.resize(854, 480, 2);
+			context.runOnClient(mc -> mc.gui.setScreen(found));
+			context.waitTicks(2);
+		}
+	}
+
+	// ---- WS-B (L3, AC2A.1-AC2A.2): BenchmarkResultScreen and BenchmarkHistoryScreen.
+
+	// A seeded Tune result (5 distances: 3 pass, 1 fails, 1 couldn't be measured) over seeded comparable runs, then Benchmark
+	// history over them: Tab reaches every status line, each table row in order and the chart's textual equivalent, each
+	// narrates its text; every value of the painted table is in the screen's text (AC2A.2: nothing lost against the WS-K
+	// merge's screenshots); X12's layout at the 3 sizes; a 12-row table scrolls and Tab brings its last row into view;
+	// high contrast.
+	private static void walkBenchmarkScreens(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		Path file = io.github.chaotix345.rigtune.client.benchmark.BenchmarkStore.file();
+		byte[] saved = benchRead(file);
+		net.minecraft.client.gui.screens.Screen before = context.computeOnClient(mc -> mc.gui.screen());
+		boolean outline = context.computeOnClient(mc -> mc.options.highContrastBlockOutline().get());
+		try {
+			io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend.Current now = context.computeOnClient(
+					io.github.chaotix345.rigtune.client.benchmark.BenchmarkConditions::current);
+			io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord latest = benchSeed(file, now);
+			io.github.chaotix345.rigtune.client.benchmark.BenchmarkController.Outcome outcome = benchOutcome(now, latest, 0);
+			int rd = now.renderDistance();
+			List<String> cells = List.of(rd + " | 704 | 440 | ✔", (rd + 2) + " | 650 | 400 | ✔", (rd + 3) + " | 620 | 390 | ✔", (rd + 4) + " | 600 | 380 | ✘",
+					(rd + 6) + " | 500 | 300 | ?");
+			for (int[] size : V05TestContext.SIZES) {
+				v05.resize(size[0], size[1], size[2]);
+				String where = size[0] + "x" + size[1] + "@" + size[2];
+				benchOpenResult(context, outcome);
+				benchLayout(context, "bench result " + where);
+				List<String> text = context.computeOnClient(mc -> ((io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen) mc.gui.screen()).textContent());
+				// The Stutter Doctor line is the game's last real benchmark capture's, so it varies between runs (review L5).
+				RigTune.LOGGER.info("A11yGameTest: bench result {} text: {}", where, text);
+				for (String row : cells) {
+					check(text.contains(row), "bench result " + where + ": the table row \"" + row + "\" is shown: " + text);
+				}
+				for (String header : List.of("rigtune.benchmark.col.rd", "rigtune.benchmark.col.avg", "rigtune.benchmark.col.low", "rigtune.benchmark.col.ok")) {
+					check(text.contains(Component.translatable(header).getString()), "bench result " + where + ": the header " + header + ": " + text);
+				}
+				String all = tabAll(context);
+				check(all.contains("Render distance " + (rd + 3) + ": average 620 FPS, 1% low 390 FPS, P99 3.6 ms, meets the target") && all.contains("Suggested"),
+						"bench result " + where + ": the suggested row narrates its numbers: " + all);
+				check(all.contains("Render distance " + (rd + 6) + ": average 500 FPS, 1% low 300 FPS") && all.contains("not measured"),
+						"bench result " + where + ": the unmeasured row says so: " + all);
+				check(all.contains("comparable runs from") && all.contains("Your usual: 543 FPS"), "bench result " + where + ": the chart's summary: " + all);
+				check(all.contains("Result: avg 704 FPS"), "bench result " + where + ": the status lines are stops: " + all);
+				focusRow(context, 2);
+				context.takeScreenshot("a11y-bench-result-row-focus-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			}
+			v05.resize(854, 480, 2);
+			benchOpenResult(context, outcome);
+			walk(context, "bench result", List.of("meets the target", "misses the target", "not measured", "Suggested"));
+			// A long table scrolls (854x480 can't be GUI scale 3, so 12 distances at 640x480@2): Tab reaches the last row and the
+			// list brings it into view.
+			v05.resize(640, 480, 2);
+			benchOpenResult(context, benchOutcome(now, latest, 7));
+			benchLayout(context, "bench result, 12 rows, 640x480@2");
+			check(context.computeOnClient(mc -> list(mc).maxScrollAmount() > 0), "the 12-row table scrolls at 640x480@2");
+			focusRow(context, 11);
+			check(context.computeOnClient(mc -> list(mc).getRowTop(11) >= list(mc).getY() && list(mc).getRowBottom(11) <= list(mc).getBottom()),
+					"the focused last row is scrolled into view");
+			context.takeScreenshot("a11y-bench-result-scrolled-640x480-scale2");
+			v05.resize(854, 480, 2);
+			context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(true));
+			benchOpenResult(context, outcome);
+			focusRow(context, 2);
+			context.takeScreenshot("a11y-hc-bench-result-854x480-scale2");
+			context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(outline));
+
+			for (int[] size : V05TestContext.SIZES) {
+				v05.resize(size[0], size[1], size[2]);
+				String where = size[0] + "x" + size[1] + "@" + size[2];
+				context.runOnClient(mc -> mc.gui.setScreen(new BenchmarkHistoryScreen(new TitleScreen(), v05.real())));
+				context.waitForScreen(BenchmarkHistoryScreen.class);
+				context.waitTicks(2);
+				benchLayout(context, "bench history " + where);
+				Component chart = context.computeOnClient(mc -> ((BenchmarkHistoryScreen) mc.gui.screen()).chartSummary());
+				check(chart != null && chart.getString().contains("5 comparable runs from") && chart.getString().contains("540, 545, 538, 550, 440"),
+						"bench history " + where + ": the chart's textual equivalent: " + chart);
+				String all = tabAll(context);
+				check(all.contains(chart.getString()), "bench history " + where + ": the chart's stop narrates it: " + all);
+				check(all.contains("1% lows 19% below your usual 543 FPS"), "bench history " + where + ": the regression line: " + all);
+				context.takeScreenshot("a11y-bench-history-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+				tabUntilNarrates(context, "bench history chart " + where, "comparable runs from");
+				context.takeScreenshot("a11y-bench-history-chart-focus-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			}
+			v05.resize(854, 480, 2);
+			context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(true));
+			context.runOnClient(mc -> mc.gui.setScreen(new BenchmarkHistoryScreen(new TitleScreen(), v05.real())));
+			context.waitForScreen(BenchmarkHistoryScreen.class);
+			tabUntilNarrates(context, "bench history chart (high contrast)", "comparable runs from");
+			context.takeScreenshot("a11y-hc-bench-history-854x480-scale2");
+			RigTune.LOGGER.info("A11yGameTest: the benchmark result's status lines, 5 table rows and chart summary, and Benchmark history's chart summary "
+					+ "are Tab stops that narrate their text");
+		} finally {
+			benchRestore(file, saved);
+			context.runOnClient(mc -> {
+				mc.options.highContrastBlockOutline().set(outline);
+				mc.gui.setScreen(before);
+			});
+			v05.resize(854, 480, 2);
+		}
+	}
+
+	private static void benchOpenResult(ClientGameTestContext context, io.github.chaotix345.rigtune.client.benchmark.BenchmarkController.Outcome outcome) {
+		context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen(new TitleScreen(), outcome)));
+		context.waitForScreen(io.github.chaotix345.rigtune.client.ui.BenchmarkResultScreen.class);
+		context.getInput().setCursorPos(1, 1);
+		context.waitTicks(2);
+	}
+
+	// Under the game's current conditions: 4 comparable runs (1 % lows 540, 545, 538, 550: usual 542.5) and the latest at
+	// 440, 19 % below it (the result screen's run). Returns the latest.
+	private static io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord benchSeed(Path file,
+			io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend.Current now) {
+		io.github.chaotix345.rigtune.core.benchmark.BenchmarkHistory history = io.github.chaotix345.rigtune.core.benchmark.BenchmarkHistory.empty();
+		double[] lows = {540, 545, 538, 550, 440};
+		io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord last = null;
+		for (int i = 0; i < lows.length; i++) {
+			java.util.Map<String, io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord.KnobResult> knobs = new java.util.LinkedHashMap<>();
+			knobs.put(io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord.RENDER_DISTANCE,
+					new io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord.KnobResult(now.renderDistance(), now.renderDistance(), null, null, null));
+			knobs.put(io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord.SIMULATION_DISTANCE,
+					new io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord.KnobResult(now.simulationDistance(), now.simulationDistance(), null, null, null));
+			io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord.Context c = new io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord.Context(
+					now.dhRendering(), now.shaders(), now.shaderPack(), now.width(), now.height(), now.fullscreen(),
+					io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord.Context.PROTOCOL).withModSet(now.modSetHash(), null);
+			last = new io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord(i == 4 ? "a11y-bench-latest" : "a11y-bench-" + i,
+					"2026-09-2" + i + "T10:00:00Z", "0.5.0", now.mcVersion(), "TUNE", "CURRENT", io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord.SINGLE,
+					null, 60, true, knobs, new io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord.Result(lows[i] * 1.6, lows[i], 1000 / lows[i], 2, 0.02),
+					java.util.Map.of(), java.util.Map.of(), null, false, c);
+			history = history.with(last);
+		}
+		try {
+			history.save(file);
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+		return last;
+	}
+
+	// extra: more failing distances above the 5 (for the scrolling check).
+	private static io.github.chaotix345.rigtune.client.benchmark.BenchmarkController.Outcome benchOutcome(
+			io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend.Current now, io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord record,
+			int extra) {
+		int rd = now.renderDistance();
+		io.github.chaotix345.rigtune.core.benchmark.Knobs original = new io.github.chaotix345.rigtune.core.benchmark.Knobs(rd, now.simulationDistance(), false, false);
+		List<io.github.chaotix345.rigtune.core.benchmark.PlannerResult.Measurement> steps = new java.util.ArrayList<>(List.of(
+				benchStep(rd, 704, 440, 3.1, true, true), benchStep(rd + 2, 650, 400, 3.4, true, true), benchStep(rd + 3, 620, 390, 3.6, true, true),
+				benchStep(rd + 4, 600, 380, 3.8, false, true), benchStep(rd + 6, 500, 300, 4.4, false, false)));
+		for (int i = 0; i < extra; i++) {
+			steps.add(benchStep(rd + 7 + i, 480 - 10 * i, 290 - 10 * i, 4.6, false, true));
+		}
+		io.github.chaotix345.rigtune.core.benchmark.SessionResult session = new io.github.chaotix345.rigtune.core.benchmark.SessionResult(
+				io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest.Mode.TUNE, original, original.withRenderDistance(rd + 3), 60,
+				new io.github.chaotix345.rigtune.core.benchmark.PlannerResult(rd + 3, true, rd + 3, steps, "test"), List.of(),
+				new io.github.chaotix345.rigtune.core.benchmark.BenchmarkMath.Aggregate(704, 440, 3.1, 2, 0.02), null, null, java.util.Map.of(), false);
+		return new io.github.chaotix345.rigtune.client.benchmark.BenchmarkController.Outcome(new io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest(
+				io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest.Mode.TUNE, io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest.Scene.CURRENT,
+				null), session, false, record, null, true, false, List.of());
+	}
+
+	private static io.github.chaotix345.rigtune.core.benchmark.PlannerResult.Measurement benchStep(int rd, double avg, double low, double p99, boolean passed,
+			boolean complete) {
+		return new io.github.chaotix345.rigtune.core.benchmark.PlannerResult.Measurement(rd,
+				new io.github.chaotix345.rigtune.core.benchmark.FrameStats(900, avg, low, p99, p99 * 3), passed, complete);
+	}
+
+	// X12: every visible widget inside the screen, none overlapping.
+	private static void benchLayout(ClientGameTestContext context, String name) {
+		context.runOnClient(mc -> {
+			net.minecraft.client.gui.screens.Screen screen = mc.gui.screen();
+			List<AbstractWidget> widgets = Screens.getWidgets(screen).stream().filter(w -> w.visible).toList();
+			for (AbstractWidget w : widgets) {
+				check(w.getX() >= 0 && w.getY() >= 0 && w.getRight() <= screen.width && w.getBottom() <= screen.height,
+						name + ": " + w.getMessage().getString() + " outside " + screen.width + "x" + screen.height + " at " + w.getRectangle());
+			}
+			for (int i = 0; i < widgets.size(); i++) {
+				for (int j = i + 1; j < widgets.size(); j++) {
+					AbstractWidget a = widgets.get(i);
+					AbstractWidget b = widgets.get(j);
+					check(!(a.getX() < b.getRight() && b.getX() < a.getRight() && a.getY() < b.getBottom() && b.getY() < a.getBottom()),
+							name + ": " + a.getMessage().getString() + " " + a.getRectangle() + " overlaps " + b.getMessage().getString() + " " + b.getRectangle());
+				}
+			}
+		});
+	}
+
+	private static byte @Nullable [] benchRead(Path file) {
+		try {
+			return java.nio.file.Files.exists(file) ? java.nio.file.Files.readAllBytes(file) : null;
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
+
+	private static void benchRestore(Path file, byte @Nullable [] bytes) {
+		try {
+			if (bytes == null) {
+				java.nio.file.Files.deleteIfExists(file);
+			} else {
+				java.nio.file.Files.write(file, bytes);
+			}
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
+
+	// ---- WS-P (PF-2): RigTuneSettingsScreen's battery-offer row.
+
+	private static void walkBatteryOfferRow(V05TestContext v05) {
+		// PF-2 (AC2P.2): the "Battery offer" switch is a Tab stop that narrates its label and state; Enter turns the offer off
+		// (profiles.json's battery.snoozed, the same switch as "Don't offer again") and on again. profiles.json is put back.
+		ClientGameTestContext context = v05.context();
+		Path file = ProfileStore.file(v05.configDir());
+		byte[] saved = batteryOfferFileBytes(file);
+		try {
+			ProfileStore.shared(v05.configDir()).snoozeBattery(false);
+			context.runOnClient(mc -> mc.gui.setScreen(new RigTuneSettingsScreen(new TitleScreen(), v05.stub())));
+			context.waitFor(mc -> mc.gui.screen() instanceof RigTuneSettingsScreen, 200);
+			context.waitTicks(2);
+			int row = context.computeOnClient(A11yGameTest::batteryOfferRowIndex);
+			focusRow(context, row);
+			String label = Component.translatable("rigtune.settings.battery_offer").getString();
+			boolean[] states = {true, false, true};
+			for (int i = 0; i < states.length; i++) {
+				boolean on = states[i];
+				String state = Component.translatable(on ? "options.on" : "options.off").getString();
+				String[] seen = context.computeOnClient(mc -> new String[] {narration(mc), leafText(mc)});
+				check(seen[1].contains(label) && seen[1].contains(state), "battery offer: the focused switch says " + label + " " + state + ": " + seen[1]);
+				check(seen[0].contains(seen[1]), "battery offer: the row narrates " + seen[1] + ": " + seen[0]);
+				check(ProfileStore.shared(v05.configDir()).battery().snoozed() == !on, "battery offer: battery.snoozed is " + !on);
+				if (i == 0) {
+					context.takeScreenshot("a11y-settings-battery-offer-focused");
+				}
+				context.getInput().pressKey(InputConstants.KEY_RETURN);
+				context.waitTicks(2);
+			}
+			RigTune.LOGGER.info("A11yGameTest: settings: the battery-offer row is a Tab stop, narrates its state and switches the offer");
+		} finally {
+			batteryOfferFileRestore(file, saved);
+			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
+			context.waitForScreen(TitleScreen.class);
+		}
+	}
+
+	private static int batteryOfferRowIndex(Minecraft mc) {
+		String label = Component.translatable("rigtune.settings.battery_offer").getString();
+		List<?> rows = list(mc).children();
+		for (int i = 0; i < rows.size(); i++) {
+			for (GuiEventListener child : ((ContainerEventHandler) rows.get(i)).children()) {
+				if (child instanceof AbstractWidget w && w.getMessage().getString().startsWith(label)) {
+					return i;
+				}
+			}
+		}
+		throw new AssertionError("no battery-offer row on " + mc.gui.screen());
+	}
+
+	private static byte @Nullable [] batteryOfferFileBytes(Path file) {
+		try {
+			return java.nio.file.Files.exists(file) ? java.nio.file.Files.readAllBytes(file) : null;
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
+
+	private static void batteryOfferFileRestore(Path file, byte @Nullable [] bytes) {
+		try {
+			if (bytes == null) {
+				java.nio.file.Files.deleteIfExists(file);
+			} else {
+				java.nio.file.Files.write(file, bytes);
+			}
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
+
+	// ---- WS-L1 (4e, 4b): RigTuneSettingsScreen's mod-files row and MOD_FILES_NEWS on NoticeScreen.
+
+	private static void walkModFilesRowAndNews(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		// PLAN-4 (WS-L1 milestone 1), X6, X12: the settings are a scrolling RowList. Tab reaches every row in order and each
+		// narrates its label; at every size each widget is inside the screen and its label fits, and where the rows don't all
+		// fit the list scrolls to its last one.
+		try {
+			openSettings(v05, v05.stub(), 8);
+			walkSettings(context);
+			for (int[] size : V05TestContext.SIZES) {
+				settingsLayout(v05, size, false);
+			}
+			settingsLayout(v05, V05TestContext.SCROLLING, true);
+
+			// 4e (AC4e.1): where a launcher keeps the mods, the Mod files row is one more Tab stop that narrates its choice.
+			LauncherKeepsMods kept = new LauncherKeepsMods(v05.stub());
+			v05.resize(854, 480, 2);
+			openSettings(v05, kept, 9);
+			String narrated = walkSettings(context);
+			check(narrated.contains("Mod files: Change them in the Modrinth App"), "settings: the Mod files row narrates its choice: " + narrated);
+			for (int[] size : V05TestContext.SIZES) {
+				settingsLayout(v05, size, false);
+			}
+			v05.resize(854, 480, 2);
+			String row = tabUntilNarrates(context, "the Mod files row", "Mod files: Change them in the Modrinth App");
+			context.takeScreenshot("a11y-settings-mod-files-854x480-scale2");
+			// Review L16 (AC4e.1): the row's tooltip is the launcher-list warning, narrated with the row.
+			String tooltip = Component.translatable("rigtune.settings.mod_files.tooltip").getString();
+			check(tooltip.startsWith("Your launcher keeps its own list") && row.contains(tooltip), "the Mod files row's tooltip: " + row);
+
+			// Review L15: the news' Settings… opens the settings on the Mod files row, focused and inside the list, also where
+			// the list scrolls (the row is below the fold).
+			for (int[] size : List.of(new int[]{854, 480, 2}, V05TestContext.SCROLLING)) {
+				v05.resize(size[0], size[1], size[2]);
+				context.runOnClient(mc -> mc.gui.setScreen(new RigTuneSettingsScreen(new TitleScreen(), kept).showingModFiles()));
+				context.waitForScreen(RigTuneSettingsScreen.class);
+				context.waitTicks(2);
+				String shown = context.computeOnClient(mc -> {
+					RigTuneSettingsScreen.SettingsList rows = ((RigTuneSettingsScreen) mc.gui.screen()).list();
+					int focused = rows.focusedRow();
+					check(focused >= 0 && leafText(mc).startsWith("Mod files: "), "news → settings: the Mod files row has the focus: " + leafText(mc));
+					check(rows.getRowTop(focused) >= rows.getY() && rows.getRowBottom(focused) <= rows.getBottom(),
+							"news → settings: the Mod files row is inside the list at " + size[0] + "x" + size[1] + "@" + size[2]);
+					return "row " + focused + " of " + rows.children().size() + ", scroll " + rows.scrollAmount() + " of " + rows.maxScrollAmount()
+							+ ", GUI scale " + mc.getWindow().getGuiScale();
+				});
+				RigTune.LOGGER.info("A11yGameTest: news → settings at {}x{}@{}: {}", size[0], size[1], size[2], shown);
+				context.takeScreenshot("a11y-news-settings-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			}
+			v05.resize(854, 480, 2);
+
+			// 4b (AC4b.6): MOD_FILES_NEWS on NoticeScreen, its message and detail narrated.
+			kept.notices = List.of(ModFilesService.newsNotice(LauncherInfo.of(Launcher.MODRINTH_APP)));
+			context.runOnClient(mc -> mc.gui.setScreen(new NoticeScreen(new TitleScreen(), kept)));
+			context.waitForScreen(NoticeScreen.class);
+			context.waitTicks(2);
+			String news = tabUntilNarrates(context, "the mod-files news", "RigTune now leaves this instance's mod files to the Modrinth App");
+			check(news.contains("the launcher's own steps"), "the news' detail is narrated with it: " + news);
+			context.takeScreenshot("a11y-mod-files-news-854x480-scale2");
+		} finally {
+			v05.resize(854, 480, 2);
+			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
+			context.waitForScreen(TitleScreen.class);
+		}
+	}
+
+	private static void openSettings(V05TestContext v05, RigTuneController controller, int rows) {
+		v05.context().runOnClient(mc -> mc.gui.setScreen(new RigTuneSettingsScreen(new TitleScreen(), controller)));
+		v05.context().waitFor(mc -> mc.gui.screen() instanceof RigTuneSettingsScreen && rows(mc) >= rows, 200);
+		v05.context().getInput().setCursorPos(1, 1);
+		v05.context().waitTicks(2);
+	}
+
+	// The canned world with a launcher that keeps the mods (the Modrinth App), and the notices the walk shows.
+	private static final class LauncherKeepsMods extends ForwardingController {
+		List<Notice> notices = List.of();
+
+		LauncherKeepsMods(RigTuneController delegate) {
+			super(delegate);
+		}
+
+		@Override
+		public ModFilesPolicy modFiles() {
+			return ModFilesPolicy.LAUNCHER;
+		}
+
+		@Override
+		public LauncherInfo launcher() {
+			return LauncherInfo.of(Launcher.MODRINTH_APP);
+		}
+
+		@Override
+		public List<Notice> notices() {
+			return notices;
+		}
+	}
+
+	// As walk(), for a list whose switches can be inactive: this class runs with the network off, which greys out the Rules
+	// updates and Modrinth switches, and vanilla gives an inactive widget no Tab stop (as before the list). Tab visits
+	// exactly the rows whose switch is active (and the note), in order, each narrating its label, then leaves the list.
+	private static String walkSettings(ClientGameTestContext context) {
+		context.runOnClient(mc -> mc.gui.screen().clearFocus());
+		List<Integer> stops = context.computeOnClient(mc -> {
+			List<Integer> out = new ArrayList<>();
+			List<?> entries = list(mc).children();
+			for (int i = 0; i < entries.size(); i++) {
+				GuiEventListener child = ((ContainerEventHandler) entries.get(i)).children().getFirst();
+				if (!(child instanceof AbstractWidget w) || w.active) {
+					out.add(i);
+				}
+			}
+			return out;
+		});
+		check(stops.size() >= 6 && stops.getLast() == context.computeOnClient(A11yGameTest::rows) - 1, "settings: the active rows and the note: " + stops);
+		int presses = 0;
+		while (context.computeOnClient(A11yGameTest::rowIndex) == -1) {
+			check(presses++ < 40, "settings: Tab never reached the list");
+			tab(context);
+		}
+		StringBuilder narrated = new StringBuilder();
+		for (int stop : stops) {
+			String[] seen = context.computeOnClient(mc -> new String[]{Integer.toString(rowIndex(mc)), narration(mc), leafText(mc)});
+			check(Integer.parseInt(seen[0]) == stop, "settings: Tab focused row " + seen[0] + ", not row " + stop + " (stops " + stops + ")");
+			check(!seen[2].isEmpty() && seen[1].contains(seen[2]), "settings: row " + stop + " narrates its text (" + seen[2] + "): " + seen[1]);
+			narrated.append(seen[1]).append('\n');
+			tab(context);
+		}
+		check(context.computeOnClient(A11yGameTest::rowIndex) == -1, "settings: the Tab after the last row leaves the list");
+		for (String key : List.of("rigtune.settings.network", "rigtune.settings.startup_toast", "rigtune.settings.goal", "rigtune.settings.scene",
+				"rigtune.stutter.monitor", "rigtune.settings.note")) {
+			String text = Component.translatable(key).getString();
+			check(narrated.toString().contains(text), "settings: \"" + text + "\" is narrated: " + narrated);
+		}
+		RigTune.LOGGER.info("A11yGameTest: settings: Tab reached the {} active rows of {} in order", stops.size(), context.computeOnClient(A11yGameTest::rows));
+		return narrated.toString();
+	}
+
+	// The screen's own widgets inside it and apart, every row's switch label fitting its width, and the last row inside the
+	// list once scrolled to. scrolls: the rows must not all fit here.
+	private static void settingsLayout(V05TestContext v05, int[] size, boolean scrolls) {
+		ClientGameTestContext context = v05.context();
+		v05.resize(size[0], size[1], size[2]);
+		// After keyboard use the rebuilt screen focuses its first switch, whose tooltip would cover the rows.
+		context.runOnClient(mc -> mc.gui.screen().clearFocus());
+		context.waitTicks(1);
+		String name = "settings " + size[0] + "x" + size[1] + "@" + size[2];
+		String shot = "settings-" + size[0] + "x" + size[1] + "-scale" + size[2];
+		boolean scrollable = context.computeOnClient(mc -> {
+			RigTuneSettingsScreen screen = (RigTuneSettingsScreen) mc.gui.screen();
+			List<AbstractWidget> widgets = Screens.getWidgets(screen).stream().filter(w -> w.visible).toList();
+			for (AbstractWidget w : widgets) {
+				check(w.getX() >= 0 && w.getY() >= 0 && w.getRight() <= screen.width && w.getBottom() <= screen.height, name + ": " + w + " outside the screen");
+			}
+			for (int i = 0; i < widgets.size(); i++) {
+				for (int j = i + 1; j < widgets.size(); j++) {
+					AbstractWidget a = widgets.get(i);
+					AbstractWidget b = widgets.get(j);
+					check(!(a.getX() < b.getRight() && b.getX() < a.getRight() && a.getY() < b.getBottom() && b.getY() < a.getBottom()), name + ": " + a + " overlaps " + b);
+				}
+			}
+			RigTuneSettingsScreen.SettingsList rows = screen.list();
+			check(rows != null && rows.getY() >= 26, name + ": the list sits under the title");
+			for (RigTuneSettingsScreen.SettingsList.Row row : rows.children()) {
+				for (GuiEventListener child : row.children()) {
+					if (child instanceof AbstractWidget w && !(w instanceof RowFocus)) {
+						check(mc.font.width(w.getMessage()) <= w.getWidth() - 4, name + ": label doesn't fit " + w.getMessage().getString());
+					}
+				}
+			}
+			return rows.maxScrollAmount() > 0;
+		});
+		context.takeScreenshot(shot);
+		check(scrollable || !scrolls, name + ": the rows all fit, so this size doesn't show the scrolling list");
+		if (!scrollable) {
+			return;
+		}
+		context.runOnClient(mc -> {
+			RigTuneSettingsScreen.SettingsList rows = ((RigTuneSettingsScreen) mc.gui.screen()).list();
+			rows.setScrollAmount(rows.maxScrollAmount());
+		});
+		context.waitTicks(2);
+		context.runOnClient(mc -> {
+			RigTuneSettingsScreen.SettingsList rows = ((RigTuneSettingsScreen) mc.gui.screen()).list();
+			int last = rows.children().size() - 1;
+			check(rows.getRowTop(last) >= rows.getY() && rows.getRowBottom(last) <= rows.getBottom(), name + ": the last row is shown once scrolled");
+		});
+		context.takeScreenshot(shot + "-scrolled");
+		context.runOnClient(mc -> ((RigTuneSettingsScreen) mc.gui.screen()).list().setScrollAmount(0));
+		context.waitTicks(1);
+		if (!scrolls) {
+			return;
+		}
+		// X12 (WS-L1): at the scrolling size the list really scrolls, and the last row, once Tab focuses it, is fully shown.
+		int presses = 0;
+		int last = context.computeOnClient(A11yGameTest::rows) - 1;
+		while (context.computeOnClient(A11yGameTest::rowIndex) != last) {
+			check(presses++ < 40, name + ": Tab never reached the last row");
+			tab(context);
+		}
+		context.waitTicks(2);
+		String scale = context.computeOnClient(mc -> {
+			RigTuneSettingsScreen.SettingsList rows = ((RigTuneSettingsScreen) mc.gui.screen()).list();
+			check(rows.getRowTop(last) >= rows.getY() && rows.getRowBottom(last) <= rows.getBottom(), name + ": the focused last row is fully shown");
+			return "GUI scale " + mc.getWindow().getGuiScale() + ", max scroll " + rows.maxScrollAmount() + ", scroll " + rows.scrollAmount();
+		});
+		RigTune.LOGGER.info("A11yGameTest: {}: the list scrolls ({}); Tab to the last row shows it", name, scale);
+		context.takeScreenshot(shot + "-last-row-focused");
+		context.runOnClient(mc -> mc.gui.screen().clearFocus());
+		context.runOnClient(mc -> ((RigTuneSettingsScreen) mc.gui.screen()).list().setScrollAmount(0));
+		context.waitTicks(1);
+	}
+
+	// ---- WS-L2 (4d, 4g): NoticeScreen with the held-changes and repair notices.
+
+	// X6: both P0.4 notices, as their service builds them, on RigTuneScreen's notice line (the held one comes first: its
+	// priority is higher) and on NoticeScreen, at X12's sizes: each is a Tab stop that narrates its message and detail.
+	private static void walkLauncherNotices(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		var modrinthApp = io.github.chaotix345.rigtune.core.launcher.Launcher.MODRINTH_APP;
+		Notice held = io.github.chaotix345.rigtune.client.launcher.LauncherRepairService.heldNotice(2, ModFilesPolicy.LAUNCHER, modrinthApp);
+		var findings = new io.github.chaotix345.rigtune.core.history.LauncherRepair.Findings(List.of(
+				new io.github.chaotix345.rigtune.core.history.LauncherRepair.Pair("sodium", "sodium-fabric-0.9.1+mc26.2.jar.disabled",
+						"sodium-fabric-0.9.2+mc26.2.jar")), List.of("fastquit-3.1.5+mc26.2.jar"), List.of());
+		Notice repair = io.github.chaotix345.rigtune.client.launcher.LauncherRepairService.repairNotice(findings, modrinthApp);
+		check(repair != null, "the repair notice for a pair in the Modrinth App");
+		LauncherNotices controller = new LauncherNotices(v05.stub(), List.of(held, repair));
+		String heldMessage = Texts.component(held.message()).getString();
+		String repairMessage = Texts.component(repair.message()).getString();
+		try {
+			for (int[] size : V05TestContext.SIZES) {
+				v05.resize(size[0], size[1], size[2]);
+				String name = size[0] + "x" + size[1] + "-scale" + size[2];
+				context.runOnClient(mc -> mc.gui.setScreen(new RigTuneScreen(new TitleScreen(), controller)));
+				context.waitForScreen(RigTuneScreen.class);
+				context.waitTicks(3);
+				String said = tabUntilNarrates(context, "held notice line " + name, heldMessage);
+				check(said.contains("holds these at exit"), "the held notice's detail is narrated with it: " + said);
+				context.takeScreenshot("a11y-launcher-held-" + name);
+				context.runOnClient(mc -> mc.gui.setScreen(new NoticeScreen(new TitleScreen(), controller)));
+				context.waitForScreen(NoticeScreen.class);
+				context.waitTicks(3);
+				tabUntilNarrates(context, "notice screen, held " + name, heldMessage);
+				String repairSaid = tabUntilNarrates(context, "notice screen, repair " + name, repairMessage);
+				check(repairSaid.contains("select the old copy"), "the repair notice's steps are narrated with it: " + repairSaid);
+				context.takeScreenshot("a11y-launcher-notices-" + name);
+			}
+		} finally {
+			v05.resize(854, 480, 2);
+			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
+		}
+	}
+
+	// The stub's canned world with these notices (the walk never acts on them).
+	private static final class LauncherNotices extends ForwardingController {
+		private final List<Notice> notices;
+
+		LauncherNotices(RigTuneController delegate, List<Notice> notices) {
+			super(delegate);
+			this.notices = notices;
+		}
+
+		@Override
+		public List<Notice> notices() {
+			return notices;
+		}
+
+		@Override
+		public void noticeAction(String key, String actionId) {
+		}
+
+		@Override
+		public void dismissNotice(String key) {
+		}
+	}
+
+	// ---- WS-E (3f): high contrast in a running game.
+
+	// AC3f.3: the game's own High Contrast option, set as the Accessibility screen's button does (OptionInstance.set runs
+	// its callback: the high_contrast pack is added and the resource packs reload). Palette switches to its high-contrast
+	// set and RigTune's row labels are drawn in it; then off again (the pack removed, another reload) and back to grey.
+	private static void highContrastRunningGame(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		A11yController controller = new A11yController(v05.stub(), v05.real(), v05.configDir());
+		context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(false));
+		boolean before = context.computeOnClient(mc -> mc.options.highContrast().get());
+		try {
+			setHighContrast(context, true);
+			check(context.computeOnClient(mc -> mc.getResourcePackRepository().getSelectedIds().contains("high_contrast")), "the high_contrast pack is selected");
+			check(context.computeOnClient(mc -> Palette.enabled() && Palette.of(0xFFA8A8A8) == 0xFFE6E6E6 && Palette.focus() == 0xFFFFFF00),
+					"Palette's high-contrast set with High Contrast on");
+			openRigTune(context, controller);
+			int[] on = count(context.takeScreenshot("a11y-hc-game-on-854x480-scale2"), LABEL, LABEL_HIGH_CONTRAST);
+			setHighContrast(context, false);
+			check(context.computeOnClient(mc -> !mc.getResourcePackRepository().getSelectedIds().contains("high_contrast")), "the high_contrast pack is removed");
+			check(context.computeOnClient(mc -> !Palette.enabled() && Palette.of(0xFFA8A8A8) == 0xFFA8A8A8), "Palette's own colours with High Contrast off");
+			openRigTune(context, controller);
+			int[] off = count(context.takeScreenshot("a11y-hc-game-off-854x480-scale2"), LABEL, LABEL_HIGH_CONTRAST);
+			RigTune.LOGGER.info("A11yGameTest: High Contrast (pack reloaded) label grey / high-contrast pixels: on {} / {}, off {} / {}", on[0], on[1], off[0], off[1]);
+			check(on[1] >= 200, "High Contrast on: RigTune's row labels are drawn in the high-contrast grey: " + on[0] + " / " + on[1]);
+			check(off[0] >= 200 && off[1] == 0, "High Contrast off: the label grey again: " + off[0] + " / " + off[1]);
+		} finally {
+			setHighContrast(context, before);
+			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
+		}
+	}
+
+	private static void setHighContrast(ClientGameTestContext context, boolean on) {
+		context.runOnClient(mc -> mc.options.highContrast().set(on));
+		context.waitTick();
+		context.waitFor(mc -> mc.gui.overlay() == null, 1200);
+	}
+
 	// --- helpers
 
 	// How many pixels of each RGB colour the screenshot has.
@@ -491,16 +1721,6 @@ public class A11yGameTest implements FabricClientGameTest {
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}
-	}
-
-	private static void setNetwork(ClientGameTestContext context, RigTuneController real, Path configDir, boolean on) {
-		context.runOnClient(mc -> {
-			ClientSettings settings = ClientSettings.shared(configDir);
-			settings.networkEnabled = on;
-			settings.save(configDir);
-			real.settingsChanged();
-		});
-		context.waitFor(mc -> ClientSettings.load(configDir).networkEnabled == on && real.report() != null, 1200);
 	}
 
 	private static void resize(ClientGameTestContext context, int width, int height, int guiScale) {
@@ -547,7 +1767,9 @@ public class A11yGameTest implements FabricClientGameTest {
 	}
 
 	// The stub's report plus a canned history, undo plan, preview, profiles and stutter session; the real JVM report, read once.
-	private static final class A11yController implements RigTuneController {
+	// The walks' canned world: it forwards to the stub (ForwardingController), answers the few real-backed methods from the
+	// game's controller, and the v0.5 views from CannedViews when an owner's walk set them.
+	private static final class A11yController extends ForwardingController {
 		private final StubController stub;
 		private final RigTuneController real;
 		private final Path configDir;
@@ -559,6 +1781,7 @@ public class A11yGameTest implements FabricClientGameTest {
 		volatile List<Notice> notices = List.of();
 
 		A11yController(StubController stub, RigTuneController real, Path configDir) {
+			super(stub);
 			this.stub = stub;
 			this.real = real;
 			this.configDir = configDir;
@@ -581,26 +1804,6 @@ public class A11yGameTest implements FabricClientGameTest {
 					new ProfileView(ProfileStore.TEMPLATE_PREFIX + TemplateId.MAX_FPS.id(), TemplateId.MAX_FPS.displayName(), ProfileView.TEMPLATE, true),
 					new ProfileView("p-a11y", Text.literal("My settings"), ProfileStore.SOURCE_SAVED, false));
 			this.stutter = new StutterView(false, false, false, false, false, stutterReport(), List.of());
-		}
-
-		@Override
-		public @Nullable Report report() {
-			return stub.report();
-		}
-
-		@Override
-		public Goal goal() {
-			return stub.goal();
-		}
-
-		@Override
-		public void setGoal(Goal goal) {
-			stub.setGoal(goal);
-		}
-
-		@Override
-		public Component apply(List<Recommendation> selected) {
-			return stub.apply(selected);
 		}
 
 		@Override
@@ -647,7 +1850,32 @@ public class A11yGameTest implements FabricClientGameTest {
 
 		@Override
 		public StutterView stutter() {
-			return stutter;
+			StutterView canned = CannedViews.stutter();
+			return canned != null ? canned : stutter;
+		}
+
+		@Override
+		public TryItView tryIt() {
+			TryItView canned = CannedViews.tryIt();
+			return canned != null ? canned : super.tryIt();
+		}
+
+		@Override
+		public ServerProfilesView serverProfiles() {
+			ServerProfilesView canned = CannedViews.serverProfiles();
+			return canned != null ? canned : super.serverProfiles();
+		}
+
+		@Override
+		public ModFilesPolicy modFiles() {
+			ModFilesPolicy canned = CannedViews.modFiles();
+			return canned != null ? canned : super.modFiles();
+		}
+
+		@Override
+		public boolean firstApplyPending() {
+			Boolean canned = CannedViews.firstApplyPending();
+			return canned != null ? canned : super.firstApplyPending();
 		}
 
 		@Override

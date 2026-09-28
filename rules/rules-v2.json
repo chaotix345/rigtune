@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
-  "revision": 16,
-  "generatedAt": "2026-09-26T14:45:07Z",
+  "revision": 17,
+  "generatedAt": "2026-09-27T15:26:22Z",
   "gpuTiers": [
     {
       "pattern": "(?i)llvmpipe|softpipe|lavapipe|SwiftShader|Microsoft Basic Render|GDI Generic",
@@ -911,7 +911,7 @@
       "conflictsWith": [],
       "defaultSelected": false,
       "upstream": {
-        "fabulouslyOptimized": false,
+        "fabulouslyOptimized": true,
         "additive": false
       }
     },
@@ -1057,7 +1057,7 @@
         "tierAtMost": 2
       },
       "impact": "high",
-      "reason": "8 chunks is a good balance of view distance and frame rate for entry-level hardware."
+      "reason": "On this PC's estimated tier, 8 chunks is a good balance of view distance and frame rate."
     },
     {
       "key": "vanilla.renderDistance",
@@ -1143,7 +1143,7 @@
           }
         }
       },
-      "reason": "On entry-level hardware, stay at the low end of the 8 to 12 vanilla chunks Distant Horizons' FAQ recommends; Distant Horizons draws the terrain beyond that."
+      "reason": "On this PC's estimated tier, stay at the low end of the 8 to 12 vanilla chunks Distant Horizons' FAQ recommends; Distant Horizons draws the terrain beyond that."
     },
     {
       "key": "vanilla.simulationDistance",
@@ -1162,7 +1162,7 @@
         "tierAtMost": 2
       },
       "impact": "medium",
-      "reason": "Simulating up to 6 chunks keeps nearby farms working without overloading an entry-level CPU."
+      "reason": "On this PC's estimated tier, simulating up to 6 chunks keeps nearby farms working while keeping the game's tick load down."
     },
     {
       "key": "vanilla.simulationDistance",
@@ -1309,7 +1309,7 @@
         "tierAtMost": 2
       },
       "impact": "low",
-      "reason": "Turning clouds off saves GPU time on entry-level graphics."
+      "reason": "On this PC's estimated tier, turning clouds off saves some GPU time."
     },
     {
       "key": "vanilla.cutoutLeaves",
@@ -1445,7 +1445,7 @@
         "tierAtMost": 1
       },
       "impact": "high",
-      "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 64 to 96 chunks for entry-level PCs; on low-end hardware RigTune caps it lower, at 48."
+      "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 64 to 96 chunks for lower-end PCs; on this PC's estimated tier RigTune caps it lower, at 48."
     },
     {
       "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius",
@@ -1458,7 +1458,7 @@
         "tierAtMost": 2
       },
       "impact": "high",
-      "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 64 to 96 chunks for entry-level PCs; RigTune caps it at 64."
+      "reason": "Distant Horizons' far terrain still costs memory and GPU time, more so the further it reaches (its default is 256 chunks). A community Distant Horizons guide (distanthorizonsguide.com) suggests 64 to 96 chunks for lower-end PCs; on this PC's estimated tier RigTune caps it at 64."
     },
     {
       "key": "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius",
@@ -1641,7 +1641,7 @@
         "tierAtMost": 2
       },
       "impact": "medium",
-      "reason": "Iris's own description says lowering the shadow distance can significantly increase performance, since less terrain is drawn a second time for shadows. 6 chunks keeps shadows around you on entry-level hardware. Shader packs that set their own shadow distance ignore this."
+      "reason": "Iris's own description says lowering the shadow distance can significantly increase performance, since less terrain is drawn a second time for shadows. On this PC's estimated tier, 6 chunks keeps shadows around you at a lower cost. Shader packs that set their own shadow distance ignore this."
     },
     {
       "key": "iris.maxShadowRenderDistance",
@@ -2170,6 +2170,18 @@
       "impact": "high",
       "title": "Intel HD Graphics driver too old for Sodium",
       "text": "Intel HD Graphics drivers older than 10.18.10.5161 can freeze Minecraft at startup with Sodium (Sodium issue #899); update the driver."
+    },
+    {
+      "id": "old-client-launcher-mods",
+      "when": {
+        "modVersion": {
+          "rigtune": "<0.5.0-"
+        }
+      },
+      "kind": "warning",
+      "impact": "medium",
+      "title": "If a launcher manages your mods",
+      "text": "Using the Modrinth App, CurseForge, ATLauncher, GDLauncher, or Prism with mod updates? Untick RigTune's Install, Update and Disable items and make those changes in the launcher: RigTune's mod-file changes can make the launcher's updates fail. Already happened? In the Modrinth App: Content → Disabled → delete the old copies. RigTune 0.5 leaves mod files to your launcher."
     }
   ],
   "settingLabels": {
@@ -2602,6 +2614,79 @@
       "impact": "low",
       "title": "Stutter while loading chunks",
       "text": "Loading new chunks likely took part in a large share of the stutter. A render distance 2 to 4 chunks shorter loads fewer chunks at a time. If you fly or teleport a lot in singleplayer, pre-generating the world (for example with the Chunky mod) means the game no longer has to generate new terrain while you play."
+    },
+    {
+      "id": "stutter-chunks-loading-tag",
+      "requires": [
+        "stutter-doctor"
+      ],
+      "when": {
+        "stutterTaggedShareAtLeast": {
+          "chunksLoading": 60
+        },
+        "spikesPerMinuteAtLeast": 20
+      },
+      "kind": "info",
+      "impact": "low",
+      "title": "Hitches while chunks were loading",
+      "text": "Most of the hitches happened while chunks were loading nearby (RigTune notes this, it doesn't measure it), so the two may be related. A render distance 2 to 4 chunks shorter, or Sodium's Chunk Updates set to Deferred (Sodium's default, on the Performance page of its video settings), may reduce them."
+    }
+  ],
+  "stutterFixes": [
+    {
+      "adviceId": "stutter-sodium-defer",
+      "requires": [
+        "stutter-fix"
+      ],
+      "evidence": {
+        "stutterShareAtLeast": {
+          "chunkBuild": 40
+        },
+        "causeSpikesAtLeast": {
+          "chunkBuild": 5
+        }
+      },
+      "set": {
+        "key": "sodium.performance.chunk_build_defer_mode",
+        "value": "ALWAYS"
+      }
+    },
+    {
+      "adviceId": "stutter-chunk-loading",
+      "requires": [
+        "stutter-fix"
+      ],
+      "evidence": {
+        "stutterShareAtLeast": {
+          "chunkLoad": 40
+        },
+        "causeSpikesAtLeast": {
+          "chunkLoad": 5
+        }
+      },
+      "set": {
+        "key": "vanilla.renderDistance",
+        "step": -2,
+        "min": 6
+      }
+    },
+    {
+      "adviceId": "stutter-dh-threads",
+      "requires": [
+        "stutter-fix"
+      ],
+      "evidence": {
+        "stutterTaggedShareAtLeast": {
+          "dh": 60
+        },
+        "cpuContentionShareAtLeast": 50,
+        "spikesPerMinuteAtLeast": 20
+      },
+      "set": {
+        "key": "dh.common.multiThreading.numberOfThreads",
+        "step": -2,
+        "min": 1
+      }
     }
   ],
   "availability": {
@@ -2621,6 +2706,7 @@
       "lambdynamiclights",
       "lithium",
       "modernfix-mvus",
+      "moonrise-opt",
       "moreculling",
       "nvidium",
       "renderscale",
@@ -2673,7 +2759,9 @@
         "cloth-config",
         "configmanager",
         "continuity",
+        "controlify",
         "crash-assistant",
+        "debugify",
         "dynamic-fps",
         "e4mc",
         "entity-model-features",
@@ -2700,9 +2788,12 @@
         "reeses-sodium-options",
         "renice-shot",
         "rrls",
+        "skyboxify",
         "sodium",
         "sodium-extra",
-        "sodium-shadowy-path-blocks"
+        "sodium-shadowy-path-blocks",
+        "yacl",
+        "zoomify"
       ]
     },
     "additive": {

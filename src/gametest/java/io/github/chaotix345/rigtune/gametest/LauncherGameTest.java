@@ -7,7 +7,6 @@ import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.core.launcher.Launcher;
 import io.github.chaotix345.rigtune.core.launcher.LauncherAdvice;
-import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.launcher.LauncherSignals;
 import io.github.chaotix345.rigtune.core.model.CpuInfo;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
@@ -20,6 +19,7 @@ import io.github.chaotix345.rigtune.core.model.OnlineData;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
+import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.recommend.Recommender;
 import io.github.chaotix345.rigtune.core.rules.RulesLoader;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -226,14 +226,14 @@ public class LauncherGameTest implements FabricClientGameTest {
 		}
 	}
 
-	// The fixture report with the real controller's launcher.
-	private static final class RamAdviceController implements RigTuneController {
-		private final RigTuneController real;
+	// The fixture report around the real controller (ForwardingController: the launcher and the v0.5 answers are the real
+	// ones); Apply, the benchmark and a rescan do nothing, and its screen shows no notice, status or pending-changes line.
+	private static final class RamAdviceController extends ForwardingController {
 		private final Report report;
 		private Goal goal = Goal.BALANCED;
 
 		RamAdviceController(RigTuneController real, Report report) {
-			this.real = real;
+			super(real);
 			this.report = report;
 		}
 
@@ -258,6 +258,11 @@ public class LauncherGameTest implements FabricClientGameTest {
 		}
 
 		@Override
+		public Component apply(List<Recommendation> selected, String entryId) {
+			return Component.translatable("rigtune.status.nothing");
+		}
+
+		@Override
 		public void startBenchmark() {
 		}
 
@@ -266,8 +271,18 @@ public class LauncherGameTest implements FabricClientGameTest {
 		}
 
 		@Override
-		public LauncherInfo launcher() {
-			return real.launcher();
+		public @Nullable Component status() {
+			return null;
+		}
+
+		@Override
+		public boolean hasPendingChanges() {
+			return false;
+		}
+
+		@Override
+		public List<Notice> notices() {
+			return List.of();
 		}
 	}
 }

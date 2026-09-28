@@ -1,7 +1,6 @@
 package io.github.chaotix345.rigtune.gametest;
 
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.probe.JvmProbe;
 import io.github.chaotix345.rigtune.client.probe.LauncherProbe;
@@ -17,7 +16,6 @@ import io.github.chaotix345.rigtune.core.jvm.JvmSnapshot;
 import io.github.chaotix345.rigtune.core.jvm.VmOptions;
 import io.github.chaotix345.rigtune.core.launcher.Launcher;
 import io.github.chaotix345.rigtune.core.launcher.LauncherAdvice;
-import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.launcher.LauncherSignals;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
@@ -25,10 +23,10 @@ import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.notice.Notice;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.gui.components.AbstractSelectionList;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.screens.Screen;
@@ -37,7 +35,6 @@ import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
 import java.lang.management.ManagementFactory;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -61,10 +58,9 @@ public class JvmGameTest implements FabricClientGameTest {
 		}
 		context.waitForScreen(TitleScreen.class);
 		RigTuneController real = RigTuneClient.controller();
-		Path configDir = FabricLoader.getInstance().getConfigDir();
 		String startBrand = System.getProperty(LauncherSignals.BRAND);
-		boolean networkWas = context.computeOnClient(mc -> ClientSettings.shared(configDir).networkEnabled);
-		setNetwork(context, real, configDir, false);
+		boolean networkWas = GameTestNet.set(context, real, false);
+		RigTune.LOGGER.info("JvmGameTest: network off");
 		Throwable failure = null;
 		try {
 			runningJvm(context, real);
@@ -82,7 +78,7 @@ public class JvmGameTest implements FabricClientGameTest {
 					System.setProperty(LauncherSignals.BRAND, startBrand);
 				}
 				context.runOnClient(mc -> LauncherProbe.reset());
-				setNetwork(context, real, configDir, networkWas);
+				GameTestNet.set(context, real, networkWas);
 				context.waitFor(mc -> real.report() != null && real.jvmReport().javaVersion() != null
 						&& (runningHasAikar() || !real.jvmReport().findings().contains(AIKAR_NOTE)), 1200);
 			} catch (RuntimeException | AssertionError e) {
@@ -99,16 +95,6 @@ public class JvmGameTest implements FabricClientGameTest {
 	}
 
 	// settingsChanged() rescans, so the report (and the probe's facts in it) follow.
-	private static void setNetwork(ClientGameTestContext context, RigTuneController real, Path configDir, boolean on) {
-		context.runOnClient(mc -> {
-			ClientSettings settings = ClientSettings.shared(configDir);
-			settings.networkEnabled = on;
-			settings.save(configDir);
-			real.settingsChanged();
-		});
-		context.waitFor(mc -> ClientSettings.load(configDir).networkEnabled == on && real.report() != null, 1200);
-		RigTune.LOGGER.info("JvmGameTest: network {}", on ? "on" : "off");
-	}
 
 	private static boolean runningHasAikar() {
 		return ManagementFactory.getRuntimeMXBean().getInputArguments().stream().anyMatch(a -> a.startsWith("-Dusing.aikars.flags"));
@@ -294,14 +280,15 @@ public class JvmGameTest implements FabricClientGameTest {
 		}
 	}
 
-	// A fixed report with the real controller's launcher and JVM report.
-	private static final class CannedController implements RigTuneController {
-		private final RigTuneController real;
+	// A fixed report around the real controller (ForwardingController: the launcher, the JVM report and the v0.5 answers
+	// are the real ones); Apply, the benchmark and a rescan do nothing, and its screen shows no notice, status or pending-
+	// changes line.
+	private static final class CannedController extends ForwardingController {
 		private final Report report;
 		private Goal goal = Goal.BALANCED;
 
 		CannedController(RigTuneController real, Report report) {
-			this.real = real;
+			super(real);
 			this.report = report;
 		}
 
@@ -326,6 +313,11 @@ public class JvmGameTest implements FabricClientGameTest {
 		}
 
 		@Override
+		public Component apply(List<Recommendation> selected, String entryId) {
+			return Component.translatable("rigtune.status.nothing");
+		}
+
+		@Override
 		public void startBenchmark() {
 		}
 
@@ -334,13 +326,18 @@ public class JvmGameTest implements FabricClientGameTest {
 		}
 
 		@Override
-		public LauncherInfo launcher() {
-			return real.launcher();
+		public @Nullable Component status() {
+			return null;
 		}
 
 		@Override
-		public JvmReport jvmReport() {
-			return real.jvmReport();
+		public boolean hasPendingChanges() {
+			return false;
+		}
+
+		@Override
+		public List<Notice> notices() {
+			return List.of();
 		}
 	}
 }

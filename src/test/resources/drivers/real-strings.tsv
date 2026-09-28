@@ -1,0 +1,44 @@
+# docs/v0.5/SPEC.md 2D (vg §4.2): 38 real GPU driver strings as games and tools reported them, GPU model only.
+# Columns: id, backend, vendor name, renderer, raw driver string, detected vendor, family, comparable version (- = none),
+# confidence (quoted: a log line or tool output quoted in the source; composed: MC's Vulkan string composed from a
+# vulkaninfo dump's apiVersion + driverName + driverInfo, lower confidence), source. Row 30 (lavapipe) is a vector in
+# DriverVersionParserTest already.
+id	backend	vendorName	renderer	raw	vendor	family	comparable	confidence	source
+1	OPENGL	Intel	Intel(R) HD Graphics Gen11	3.3.0 - Build 31.0.101.2141	INTEL	intel-igpu	31.0.101.2141	quoted	https://github.com/CaffeineMC/sodium/issues/3627
+2	OPENGL	NVIDIA Corporation	NVIDIA GeForce RTX 3070 Ti/PCIe/SSE2	3.3.0 NVIDIA 576.02	NVIDIA	geforce	576.02	quoted	https://github.com/CaffeineMC/sodium/issues/3401
+3	OPENGL	Apple	Apple M1	4.1 Metal - 89.3	APPLE	unknown	-	quoted	https://github.com/CaffeineMC/sodium/issues/2831
+4	OPENGL	NVIDIA Corporation	NVIDIA GeForce GTX 1050/PCIe/SSE2	3.2.0 NVIDIA 580.95.05	NVIDIA	geforce	580.95.05	quoted	https://github.com/CaffeineMC/sodium/issues/3302
+5	OPENGL	NVIDIA Corporation	NVIDIA GeForce GTX 1660 Ti/PCIe/SSE2	3.2.0 NVIDIA 560.70	NVIDIA	geforce	560.70	quoted	https://github.com/CaffeineMC/sodium/issues/3122
+6	OPENGL	NVIDIA Corporation	NVIDIA GeForce RTX 4050 Laptop GPU/PCIe/SSE2	4.6.0 NVIDIA 610.62	NVIDIA	geforce	610.62	quoted	https://github.com/IrisShaders/Iris/issues/3227
+7	OPENGL	NVIDIA Corporation	NVIDIA GeForce RTX 5060 Laptop GPU/PCIe/SSE2	3.3.0 NVIDIA 591.91	NVIDIA	geforce	591.91	quoted	https://github.com/IrisShaders/Iris/issues/3314
+8	OPENGL	ATI Technologies Inc.	AMD Radeon(TM) Graphics	3.3.0 Core Profile Context 26.6.2.260608	AMD	adrenalin	26.6.2	quoted	https://github.com/IrisShaders/Iris/issues/3208
+9	OPENGL	NVIDIA Corporation	NVIDIA GeForce RTX 2060/PCIe/SSE2	3.2.0 NVIDIA 576.02	NVIDIA	geforce	576.02	quoted	https://github.com/IrisShaders/Iris/issues/2817
+10	OPENGL	NVIDIA Corporation	NVIDIA GeForce RTX 5060/PCIe/SSE2	3.3.0 NVIDIA 610.62	NVIDIA	geforce	610.62	quoted	https://github.com/IrisShaders/Iris/issues/3199
+11	OPENGL	AMD	AMD Radeon RX 9060 XT (radeonsi, gfx1200, LLVM 21.1.8, DRM 3.64)	4.6 (Core Profile) Mesa 25.3.6	AMD	mesa	25.3.6	quoted	https://github.com/IrisShaders/Iris/issues/3074
+12	OPENGL	AMD	AMD Radeon RX 6650 XT (radeonsi, navi23, LLVM 19.1.7, DRM 3.59)	4.6 (Core Profile) Mesa 25.0.5 (git-a89e404408)	AMD	mesa	25.0.5	quoted	https://github.com/IrisShaders/Iris/issues/2763
+13	OPENGL	AMD	AMD Radeon RX 9070 XT (radeonsi, gfx1201, LLVM 21.1.7, DRM 3.64)	4.6 (Core Profile) Mesa 25.2.6 (git-3f12436d80)	AMD	mesa	25.2.6	quoted	https://github.com/IrisShaders/Iris/issues/2995
+14	OPENGL	AMD	AMD Radeon RX 9070 XT (radeonsi, gfx1201, LLVM 21.1.7, DRM 3.64)	4.6 (Compatibility Profile) Mesa 25.2.6 (git-3f12436d80)	AMD	unknown	-	quoted	https://github.com/IrisShaders/Iris/issues/2995
+15	VULKAN	NVIDIA	NVIDIA GeForce RTX 3060	1.4.312 NVIDIA 580.173.02	NVIDIA	geforce	580.173.02	quoted	https://github.com/IrisShaders/Iris/issues/3365
+16	OPENGL	Microsoft Corporation	D3D12 (Qualcomm(R) Adreno(TM) X1-85 GPU)	4.6 (Core Profile) Mesa 26.1.0-devel (git-219807d38d)	QUALCOMM	mesa	26.1.0	quoted	https://github.com/IrisShaders/Iris/issues/3021
+17	VULKAN	NVIDIA	NVIDIA GeForce RTX 4060 Laptop GPU	1.4.341 NVIDIA 610.62	NVIDIA	geforce	610.62	quoted	https://github.com/neoforged/NeoForge/issues/3257
+18	VULKAN	0x10005	llvmpipe (LLVM 15.0.6, 256 bits)	1.3.230 llvmpipe Mesa 22.3.6 (LLVM 15.0.6)	SOFTWARE	mesa	22.3.6	quoted	https://github.com/Moulberry/PandoraLauncher/issues/384
+19	VULKAN	NVIDIA	NVIDIA GeForce RTX 4060 Ti	1.4.329 NVIDIA 595.58.03	NVIDIA	geforce	595.58.03	quoted	https://github.com/Moulberry/PandoraLauncher/issues/384
+20	VULKAN	NVIDIA	NVIDIA GeForce	1.4.351 NVIDIA 615.71.09	NVIDIA	geforce	615.71.09	quoted	https://github.com/maruohon/tweakeroo/issues/595
+21	VULKAN	APPLE	Apple M1	1.2.334 MoltenVK 1.4.2	APPLE	unknown	-	quoted	https://github.com/avpbynf/Vitrail-Shaders/issues/161
+22	VULKAN	INTEL	Intel(R) Arc(TM) B580 Graphics	1.4.348 Intel Corporation 101.8861	INTEL	unknown	-	quoted	https://github.com/IReallyWantToSleep/superresolution/issues/182
+23	VULKAN	INTEL	Intel(R) UHD Graphics	1.3.215 Intel Corporation Intel driver	INTEL	unknown	-	quoted	https://github.com/Luke100000/minecraft-comes-alive/issues/1380
+24	VULKAN	QUALCOMM	Turnip Adreno (TM) 619	1.3.318 turnip Mesa driver Mesa 25.2.1	QUALCOMM	mesa	25.2.1	quoted	https://github.com/AngelAuraMC/Amethyst-Android/issues/336
+25	VULKAN	AMD	AMD Radeon Graphics (RADV GFX1201)	1.4.305 radv Mesa 25.0.3-arch1.1	AMD	mesa	25.0.3	composed	https://bbs.archlinux.org/viewtopic.php?id=304912
+26	VULKAN	AMD	AMD Radeon Graphics	1.4.308 AMD open-source driver 2025.Q1.3 (LLPC)	AMD	unknown	-	composed	https://bbs.archlinux.org/viewtopic.php?id=304912
+27	VULKAN	INTEL	Intel(R) HD Graphics 2500 (IVB GT1)	1.2.354 Intel open-source Mesa driver Mesa 26.1.6-1	INTEL	mesa	26.1.6	composed	https://github.com/joske/yserver/issues/154
+28	VULKAN	INTEL	Intel(R) Graphics (RPL-P)	1.4.318 Intel open-source Mesa driver Mesa 25.2.8-0ubuntu0.24.04.2	INTEL	mesa	25.2.8	composed	https://github.com/pop-os/cosmic-comp/issues/2529
+29	VULKAN	NVIDIA	NVIDIA GeForce RTX 4050 Laptop GPU	1.4.329 NVIDIA 595.84	NVIDIA	geforce	595.84	composed	https://github.com/pop-os/cosmic-comp/issues/2529
+31	VULKAN	INTEL	Intel(R) Graphics (ARL)	1.4.335 Intel open-source Mesa driver Mesa 26.0.8-1ubuntu0.3	INTEL	mesa	26.0.8	composed	https://github.com/WiVRn/WiVRn/issues/1119
+32	VULKAN	NVIDIA	NVIDIA GeForce RTX 5070 Ti Laptop GPU	1.4.329 NVIDIA 595.91.07	NVIDIA	geforce	595.91.07	composed	https://github.com/WiVRn/WiVRn/issues/1119
+33	OPENGL	ATI Technologies Inc.	Radeon RX 570 Series	4.6.0 Compatibility Profile Context 26.1.1.251211	AMD	adrenalin	26.1.1	quoted	https://github.com/ValveSoftware/halflife/issues/3989
+34	OPENGL	ATI Technologies Inc.	AMD Radeon R5 220	4.5.13399 Core Profile Forward-Compatible Context 15.201.1151.1008	AMD	unknown	-	quoted	https://github.com/IReallyWantToSleep/superresolution/issues/190
+R1	OPENGL	ATI Technologies Inc.	AMD Radeon(TM) Graphics	4.6.0 Core Profile Context 22.20.24.220816	AMD	unknown	-	quoted	https://github.com/Creators-of-Aeronautics/Simulated-Project/issues/886
+R2	OPENGL	ATI Technologies Inc.	AMD Radeon(TM) Graphics	3.3.0 Core Profile Context 22.20.44.221025	AMD	unknown	-	quoted	https://github.com/godotengine/godot/issues/92092
+R3	OPENGL	ATI Technologies Inc.	AMD Radeon(TM) Graphics	4.6.0 Compatibility Profile Context 22.20.44.37.230215	AMD	unknown	-	quoted	https://github.com/FreeCAD/FreeCAD/issues/31986
+R4	OPENGL	ATI Technologies Inc.	AMD Radeon RX 7900 XTX	4.6.0 Compatibility Profile Context 23.1.1.230106	AMD	adrenalin	23.1.1	quoted	https://github.com/ZeroK-RTS/CrashReports/issues/59334
+R5	OPENGL	Mesa	llvmpipe (LLVM 20.1.2, 256 bits)	4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.2	SOFTWARE	mesa	25.2.8	quoted	https://github.com/chaotix345/rigtune/actions/runs/36284606444

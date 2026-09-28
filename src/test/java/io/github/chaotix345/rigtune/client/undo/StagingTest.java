@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.client.undo;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.client.ConfigTargets;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
+import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.HeldLock;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
@@ -12,6 +13,8 @@ import io.github.chaotix345.rigtune.core.apply.TestJars;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
+import io.github.chaotix345.rigtune.core.history.StaleOps;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -361,5 +364,194 @@ class StagingTest {
 		assertNotNull(staging.stage(List.of(Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4"))), "e1"));
 
 		assertEquals(JournalChange.DISCARDED, changesOf("e0").getFirst().status());
+	}
+
+	// --- docs/v0.5/SPEC.md 2H RW-3: groups that can never run are dropped at launch (Staging.dropStale)
+
+	private static final String DH = "DistantHorizons-3.3.2-26.2-fabric-neoforge.jar";
+
+	// The real 0.1.0 DH group (real-world-2026-09-27.md §3): DH 3.3.0 as fabric-26.2.jar, its 3.3.2 download staged.
+	private List<Op> stageTheDhGroup() throws IOException {
+		TestJars.modJar(mods.resolve("fabric-26.2.jar"), "distanthorizons");
+		List<Op> dh = PendingActions.group(Op.disableFile(mods.resolve("fabric-26.2.jar")),
+				Op.enableFile(pendingJar(DH, "distanthorizons"), mods.resolve(DH)).withModId("distanthorizons"));
+		assertNotNull(staging.stage(dh, "e1"));
+		return dh;
+	}
+
+	// The player's fix in the Modrinth App: the download and fabric-26.2.jar deleted, DH 3.3.2 installed at the staged name.
+	@Test
+	void theRealDhGroupIsDroppedAsInstalledAnotherWay() throws IOException {
+		List<Op> dh = stageTheDhGroup();
+		List<Op> other = update("y-1.jar", "y-2.jar", "y");
+		assertNotNull(staging.stage(other, "e2"));
+		Files.delete(mods.resolve(DH + PendingActions.PENDING_SUFFIX));
+		Files.delete(mods.resolve("fabric-26.2.jar"));
+		TestJars.modJar(mods.resolve(DH), "distanthorizons");
+
+		Staging.StaleDrop drop = staging.dropStale(Map.of("distanthorizons", Set.of(DH), "y", Set.of("y-1.jar")));
+
+		assertEquals(dh.stream().map(Op::id).toList(), drop.dropped().stream().map(Op::id).toList());
+		assertEquals(List.of(new StaleOps.Stale(dh.get(1).id(),
+				StaleOps.Why.INSTALLED, "distanthorizons", DH, DH)), drop.stale());
+		assertEquals(other.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+		assertEquals(List.of(JournalChange.ABANDONED, JournalChange.ABANDONED), changesOf("e1").stream().map(JournalChange::status).toList());
+		assertTrue(changesOf("e2").stream().allMatch(c -> JournalChange.STAGED.equals(c.status())));
+		assertTrue(Files.exists(mods.resolve(DH)), "the app's jar is left alone");
+	}
+
+	// The second leg: DH 3.3.0 disabled in the app (fabric-26.2.jar.disabled) instead of removed.
+	@Test
+	void theDhGroupWithTheOldJarDisabledInTheAppIsDroppedToo() throws IOException {
+		stageTheDhGroup();
+		Files.delete(mods.resolve(DH + PendingActions.PENDING_SUFFIX));
+		Files.move(mods.resolve("fabric-26.2.jar"), mods.resolve("fabric-26.2.jar.disabled"));
+		TestJars.modJar(mods.resolve(DH), "distanthorizons");
+
+		Staging.StaleDrop drop = staging.dropStale(Map.of("distanthorizons", Set.of(DH)));
+
+		assertEquals(2, drop.dropped().size());
+		assertFalse(Files.exists(pending));
+		assertEquals(List.of(JournalChange.ABANDONED, JournalChange.ABANDONED), changesOf("e1").stream().map(JournalChange::status).toList());
+		assertTrue(Files.exists(mods.resolve("fabric-26.2.jar.disabled")));
+	}
+
+	// The download deleted and DH not installed another way: it can never apply, so it's cancelled (DISCARDED).
+	@Test
+	void aGroupWhoseDownloadIsGoneIsDiscarded() throws IOException {
+		stageTheDhGroup();
+		Files.delete(mods.resolve(DH + PendingActions.PENDING_SUFFIX));
+
+		Staging.StaleDrop drop = staging.dropStale(Map.of("distanthorizons", Set.of("fabric-26.2.jar")));
+
+		assertEquals(StaleOps.Why.GONE, drop.stale().getFirst().why());
+		assertEquals(List.of(JournalChange.DISCARDED, JournalChange.DISCARDED), changesOf("e1").stream().map(JournalChange::status).toList());
+		assertTrue(Files.exists(mods.resolve("fabric-26.2.jar")), "the installed jar stays");
+	}
+
+	// The download still there, the mod installed through the launcher under another name: dropped, the download retired.
+	@Test
+	void aModLoadedFromAnotherJarIsDroppedAndItsDownloadRetired() throws IOException {
+		stageTheDhGroup();
+		TestJars.modJar(mods.resolve("DistantHorizons-3.3.2-from-the-app.jar"), "distanthorizons");
+
+		Staging.StaleDrop drop = staging.dropStale(Map.of("distanthorizons", Set.of("fabric-26.2.jar", "DistantHorizons-3.3.2-from-the-app.jar")));
+
+		assertEquals("DistantHorizons-3.3.2-from-the-app.jar", drop.stale().getFirst().installedAs());
+		assertTrue(Files.exists(mods.resolve(DH + PendingActions.SUPERSEDED_SUFFIX)));
+		assertFalse(Files.exists(mods.resolve(DH + PendingActions.PENDING_SUFFIX)));
+	}
+
+	// Without the mods folder's names nobody can tell a half-done group from a stale one: nothing is dropped (review L3).
+	@Test
+	void anUnlistableModsFolderDropsNothing() throws IOException {
+		stageTheDhGroup();
+		String before = Files.readString(pending);
+		for (Path file : Files.list(mods).toList()) {
+			Files.delete(file);
+		}
+		Files.delete(mods);
+
+		assertEquals(Staging.StaleDrop.NONE, staging.dropStale(Map.of("distanthorizons", Set.of(DH))));
+		assertEquals(before, Files.readString(pending));
+		assertTrue(changesOf("e1").stream().allMatch(c -> JournalChange.STAGED.equals(c.status())));
+	}
+
+	// review 11 APPLY-1: an ungrouped enable the last run did (its rename in effect, OK in last-apply.json) is RigTune's own,
+	// keyed "op:<id>": never taken for one installed another way.
+	@Test
+	void anUngroupedEnableTheLastRunDidIsNeverStale() throws IOException {
+		Op add = Op.enableFile(pendingJar("a.jar", "a"), mods.resolve("a.jar")).withModId("a");
+		assertNull(add.group());
+		PendingActions.create(1, mods, config, List.of(add)).save(pending);
+		Files.move(mods.resolve("a.jar" + PendingActions.PENDING_SUFFIX), mods.resolve("a.jar"));
+		new ApplyResult("2026-09-28T10:00:00Z", List.of(new ApplyResult.OpResult(add, ApplyResult.Status.OK, "Enabled a.jar",
+				mods.resolve("a.jar").toString()))).save(ApplyResult.defaultPath(config));
+
+		assertEquals(Staging.StaleDrop.NONE, staging.dropStale(Map.of("a", Set.of("a.jar"))));
+		assertEquals(List.of(add.id()), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+	}
+
+	// A group the helper left half done (killed between two renames) is never dropped, whatever StaleOps would say; an
+	// ordinary update isn't stale; a busy lock drops nothing.
+	@Test
+	void halfDoneAndRunnableGroupsStayAndABusyLockDropsNothing() throws Exception {
+		Path lib = pendingJar("lib.jar", "lib");
+		List<Op> addition = PendingActions.group(Op.enableFile(pendingJar("a.jar", "a"), mods.resolve("a.jar")).withModId("a"),
+				Op.enableFile(lib, mods.resolve("lib.jar")).withModId("lib"));
+		assertNotNull(staging.stage(addition, "e1"));
+		assertThrows(TestExecutors.Killed.class, () -> TestExecutors.killedAt(lib::equals).run(PendingActions.load(pending), pending));
+		assertTrue(Files.exists(mods.resolve("a.jar")));
+		List<Op> update = update("x-1.jar", "x-2.jar", "x");
+		assertNotNull(staging.stage(update, "e2"));
+		String before = Files.readString(pending);
+
+		assertEquals(Staging.StaleDrop.NONE, staging.dropStale(Map.of("a", Set.of("a-from-the-app.jar"), "x", Set.of("x-1.jar"))));
+		try (HeldLock helper = HeldLock.hold(ApplyLock.defaultPath(config))) {
+			Files.delete(mods.resolve("x-2.jar" + PendingActions.PENDING_SUFFIX));
+			assertNull(staging.dropStale(Map.of()));
+		}
+
+		assertEquals(before, Files.readString(pending));
+	}
+
+	// --- docs/v0.5/SPEC.md 2H L7: Discard pending says when it kept a group the helper left half done
+
+	@Test
+	void aDiscardThatKeepsAHalfDoneGroupSaysSo() throws IOException {
+		Path lib = pendingJar("lib.jar", "lib");
+		List<Op> addition = PendingActions.group(Op.enableFile(pendingJar("a.jar", "a"), mods.resolve("a.jar")).withModId("a"),
+				Op.enableFile(lib, mods.resolve("lib.jar")).withModId("lib"));
+		assertNotNull(staging.stage(addition, "e1"));
+		assertThrows(TestExecutors.Killed.class, () -> TestExecutors.killedAt(lib::equals).run(PendingActions.load(pending), pending));
+		List<Op> update = update("x-1.jar", "x-2.jar", "x");
+		assertNotNull(staging.stage(update, "e2"));
+
+		Staging.Discard discard = staging.discardPending();
+
+		assertTrue(discard.keptGroup());
+		assertEquals(update.stream().map(Op::id).toList(), discard.dropped().stream().map(Op::id).toList());
+		assertEquals(addition.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+		TranslatableContents status = (TranslatableContents) discard.status().getContents();
+		assertEquals("rigtune.status.discarded_with_kept", status.getKey());
+		assertEquals(List.of(2), List.of(status.getArgs()));
+	}
+
+	@Test
+	void aCleanDiscardKeepsTodaysMessage() throws Exception {
+		assertNotNull(staging.stage(update("x-1.jar", "x-2.jar", "x"), "e1"));
+
+		Staging.Discard discard = staging.discardPending();
+
+		assertFalse(discard.keptGroup());
+		assertFalse(Files.exists(pending));
+		TranslatableContents status = (TranslatableContents) discard.status().getContents();
+		assertEquals("rigtune.status.discarded", status.getKey());
+		assertEquals(List.of(2), List.of(status.getArgs()));
+		try (HeldLock helper = HeldLock.hold(ApplyLock.defaultPath(config))) {
+			assertNull(staging.discardPending());
+		}
+	}
+
+	// --- docs/v0.5/SPEC.md 2V (ws-g2): dropQueuedUpdates never unstages a group the helper left half done
+
+	// A failed rollback left DH's group half done (its disable done after a helper attempt, its enable not); DH's own updater
+	// then queued a build in mods/update/. The group stays for the next exit to finish or roll back; another mod's staged
+	// update with a queued build of its own is still dropped.
+	@Test
+	void aHalfDoneGroupWithAQueuedBuildStaysWhileOthersAreDropped() throws IOException {
+		List<Op> dh = stageTheDhGroup();
+		List<Op> y = update("y-1.jar", "y-2.jar", "y");
+		assertNotNull(staging.stage(y, "e2"));
+		Files.move(mods.resolve("fabric-26.2.jar"), mods.resolve("fabric-26.2.jar.disabled"));
+		PendingActions plan = PendingActions.load(pending);
+		plan.withOps(plan.ops().stream().map(op -> op.id().equals(dh.getFirst().id()) ? op.withAttempts(1) : op).toList()).save(pending);
+
+		List<Op> dropped = staging.dropQueuedUpdates(Set.of("distanthorizons", "y"), Set.of("distanthorizons", "y"));
+
+		assertEquals(y.stream().map(Op::id).toList(), dropped.stream().map(Op::id).toList());
+		assertEquals(dh.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+		assertTrue(Files.exists(mods.resolve(DH + PendingActions.PENDING_SUFFIX)), "the half-done group's download stays");
+		assertTrue(changesOf("e1").stream().allMatch(c -> JournalChange.STAGED.equals(c.status())));
 	}
 }

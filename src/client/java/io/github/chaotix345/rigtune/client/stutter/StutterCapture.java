@@ -10,6 +10,8 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.RuntimeMXBean;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Map;
+import java.util.function.Function;
 
 // Starts and stops captures (render thread) together with what they share: the rings, the GC listener, the sampler and
 // the dev GC thread exist exactly while a capture does. Stopping copies the capture's rings for the analysis and
@@ -17,10 +19,13 @@ import java.time.temporal.ChronoUnit;
 final class StutterCapture {
 	static final GcListener GC = new GcListener();
 	static final ThreadSampler SAMPLER = new ThreadSampler();
+	// How stop() copies a capture (a test seam: StutterServiceTest makes it fail, docs/v0.5/SPEC.md 2S L1).
+	static volatile Function<StutterMonitor.Capture, Copy> copier = StutterCapture::copy;
 
-	// A stopped (or, for a live analysis, copied) capture: everything StutterAnalyzer needs from the render thread.
+	// A stopped (or, for a live analysis, copied) capture: everything StutterAnalyzer needs from the render thread, a
+	// session's settings when it started (v0.5 RW-11) and its idle time (RW-17).
 	record Copy(FrameRing.Snapshot frames, StutterRings.Snapshot rings, long startNanos, long endNanos, Instant startedAt, String source,
-			boolean phaseTiming, @Nullable String collector, boolean gcMeasured) {
+			boolean phaseTiming, @Nullable String collector, boolean gcMeasured, @Nullable Map<String, String> settingsAtStart, long idleNanos) {
 	}
 
 	private StutterCapture() {
@@ -37,7 +42,7 @@ final class StutterCapture {
 	// The capture is detached even if its copy fails (a capture left behind would keep the other kind from starting).
 	static synchronized Copy stop(StutterMonitor.Capture capture) {
 		try {
-			return copy(capture);
+			return copier.apply(capture);
 		} finally {
 			if (StutterMonitor.stop(capture)) {
 				GC.stop();
@@ -50,8 +55,10 @@ final class StutterCapture {
 
 	static Copy copy(StutterMonitor.Capture capture) {
 		StutterRings rings = StutterMonitor.rings();
-		return new Copy(capture.snapshot(), rings == null ? StutterRings.Snapshot.EMPTY : rings.snapshot(), capture.startNanos(), System.nanoTime(),
-				capture.startedAt(), capture.source(), StutterMonitor.phaseTiming(), GC.collector(), GC.active());
+		long now = System.nanoTime();
+		return new Copy(capture.snapshot(), rings == null ? StutterRings.Snapshot.EMPTY : rings.snapshot(), capture.startNanos(), now,
+				capture.startedAt(), capture.source(), StutterMonitor.phaseTiming(), GC.collector(), GC.active(), capture.settingsAtStart,
+				capture.idleNanos(now));
 	}
 
 	private static StutterRings shared() {

@@ -1,0 +1,7 @@
+{
+  "latest": {"release": "26.3", "snapshot": "26.4-snapshot-1"},
+  "versions": [
+    {"id": "26.4-snapshot-1", "type": "snapshot", "url": "https://piston-meta.mojang.com/v1/packages/0002/26.4-snapshot-1.json", "time": "2026-09-23T10:00:00+00:00", "releaseTime": "2026-09-23T10:00:00+00:00", "sha1": "0000000000000000000000000000000000000002", "complianceLevel": 1},
+    {"id": "26.3", "type": "release", "url": "https://piston-meta.mojang.com/v1/packages/0000/26.3.json", "time": "2026-09-15T10:00:00+00:00", "releaseTime": "2026-09-15T10:00:00+00:00", "sha1": "0000000000000000000000000000000000000000", "complianceLevel": 1}
+  ]
+}

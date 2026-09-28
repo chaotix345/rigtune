@@ -1,11 +1,14 @@
 package io.github.chaotix345.rigtune.client.stutter;
 
+import io.github.chaotix345.rigtune.core.stutter.FixConditions;
 import io.github.chaotix345.rigtune.core.stutter.FrameRing;
+import io.github.chaotix345.rigtune.core.stutter.SessionOutcome;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import io.github.chaotix345.rigtune.core.stutter.StutterRings;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
+import java.util.Map;
 
 // The render thread's side of the Stutter Doctor (docs/v0.4/SPEC.md 5; research §2): the one call in
 // DebugScreenOverlayMixin (onFrame), the optional phase timers (MinecraftFrameMixin), the chunk-load counter and the
@@ -35,6 +38,15 @@ public final class StutterMonitor {
 		volatile boolean paused;
 		// A benchmark run started while this session ran (review-8 P5A-F3).
 		volatile boolean aroundBenchmark;
+		// v0.5 RW-11: a session's settings when it started (SettingsWatch); null for a benchmark's capture.
+		volatile @Nullable Map<String, String> settingsAtStart;
+		// v0.5 C20 (docs/v0.5/SPEC.md 5): the kind of world a session played (ServerLimits.Kind's name) and the conditions a
+		// stutter fix's sessions are compared under, both taken when it started; null for a benchmark's capture.
+		volatile @Nullable String worldKind;
+		volatile @Nullable FixConditions fixAtStart;
+		// v0.5 RW-17 (render thread): the throttled (idle) time so far, and when the current idle stretch began (0: none).
+		private long idleNanos;
+		private long idleSince;
 		private boolean skipNext = true;
 
 		Capture(FrameRing ring, long startNanos, Instant startedAt, String source) {
@@ -77,6 +89,20 @@ public final class StutterMonitor {
 		public long retainedBytes() {
 			return ring.retainedBytes();
 		}
+
+		void idle(boolean on, long now) {
+			if (on) {
+				idleSince = now;
+			} else if (idleSince != 0) {
+				idleNanos += now - idleSince;
+				idleSince = 0;
+			}
+		}
+
+		// The idle time up to `now`, an open stretch included.
+		long idleNanos(long now) {
+			return idleNanos + (idleSince != 0 ? now - idleSince : 0);
+		}
 	}
 
 	private static volatile boolean active;
@@ -86,6 +112,7 @@ public final class StutterMonitor {
 
 	// Render thread only.
 	private static boolean excludedNow;
+	private static boolean idleNow;
 	private static long loadingUntil;
 	private static long packetsStart;
 	private static long packets;
@@ -200,9 +227,30 @@ public final class StutterMonitor {
 		}
 	}
 
-	// END_CLIENT_TICK: a screen is open or the window isn't focused.
+	// END_CLIENT_TICK: a screen is open, the window isn't focused, or the game throttles its frame rate (idle).
 	public static void setExcluded(boolean excluded) {
 		excludedNow = excluded;
+	}
+
+	// v0.5 RW-17 (END_CLIENT_TICK, render thread): the game throttles its frame rate (vanilla's AFK or minimised limit,
+	// Dynamic FPS). Called on a change only; each capture counts the idle time apart from gameplay.
+	public static void setIdle(boolean idle, long now) {
+		if (idle == idleNow) {
+			return;
+		}
+		idleNow = idle;
+		Capture s = session;
+		if (s != null) {
+			s.idle(idle, now);
+		}
+		Capture b = benchmark;
+		if (b != null) {
+			b.idle(idle, now);
+		}
+	}
+
+	public static boolean idle() {
+		return idleNow;
 	}
 
 	// ClientLevelEvents.AFTER_CLIENT_LEVEL_CHANGE: the next 10 s are world loading (excluded), recorded as an event.
@@ -250,7 +298,12 @@ public final class StutterMonitor {
 			throw new IllegalStateException("a benchmark capture is running");
 		}
 		rings = shared;
+		shared.countSettingChangesFrom(now);
 		Capture c = new Capture(new FrameRing(FrameRing.SESSION_FRAMES, FrameRing.SESSION_CANDIDATES), now, startedAt, StutterReport.MONITOR);
+		c.ring.markGameplayAt(now + SessionOutcome.SETTLE_NANOS);
+		if (idleNow) {
+			c.idle(true, now);
+		}
 		session = c;
 		active = true;
 		return c;
@@ -263,6 +316,9 @@ public final class StutterMonitor {
 		rings = shared;
 		Capture c = new Capture(new FrameRing(FrameRing.BENCHMARK_FRAMES, FrameRing.BENCHMARK_CANDIDATES), now, startedAt, StutterReport.BENCHMARK);
 		c.paused = true;
+		if (idleNow) {
+			c.idle(true, now);
+		}
 		benchmark = c;
 		active = true;
 		return c;

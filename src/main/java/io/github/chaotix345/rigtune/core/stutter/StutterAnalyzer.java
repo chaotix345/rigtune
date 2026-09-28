@@ -25,16 +25,26 @@ public final class StutterAnalyzer {
 	public static final double MIN_GAMEPLAY_SECONDS = 120;
 	static final long SAVE_TIMEOUT = 10 * SECOND;
 	static final long TELEPORT_WINDOW = 10 * SECOND;
+	static final long SETTINGS_WINDOW = 10 * SECOND;
 	static final double CONTENTION = 0.85;
 	static final int VANILLA_BACKLOG = 8;
+	// The tags whose evidence is the sampler's (SD-1).
+	static final List<String> SAMPLE_TAGS = List.of(Attributor.DH, Attributor.CPU_CONTENTION);
 
 	// The capture: its frame ring, the shared rings (filtered to [startNanos, endNanos]), and what the report needs about
 	// the machine. collector: the family (g1, zgc, ...); totalRamMb null when unknown. phaseTiming: the phase timers were
 	// complete (S-M1). deferModeWaits: Sodium's Chunk Updates mode makes frames wait for builds. gcMeasured: a GC listener
-	// ran during the capture.
+	// ran during the capture. idleNanos (v0.5 RW-17): how long the game throttled its frame rate during the capture.
 	public record Input(FrameRing.Snapshot frames, StutterRings.Snapshot rings, long startNanos, long endNanos, Instant startedAt, String source,
 			@Nullable String mc, @Nullable String collector, long heapMaxMb, @Nullable Long totalRamMb, int cores, boolean phaseTiming,
-			boolean deferModeWaits, boolean gcMeasured) {
+			boolean deferModeWaits, boolean gcMeasured, long idleNanos) {
+		public Input(FrameRing.Snapshot frames, StutterRings.Snapshot rings, long startNanos, long endNanos, Instant startedAt, String source,
+				@Nullable String mc, @Nullable String collector, long heapMaxMb, @Nullable Long totalRamMb, int cores, boolean phaseTiming,
+				boolean deferModeWaits, boolean gcMeasured) {
+			this(frames, rings, startNanos, endNanos, startedAt, source, mc, collector, heapMaxMb, totalRamMb, cores, phaseTiming, deferModeWaits, gcMeasured,
+					0);
+		}
+
 		public Input(FrameRing.Snapshot frames, StutterRings.Snapshot rings, long startNanos, long endNanos, Instant startedAt, String source,
 				@Nullable String mc, @Nullable String collector, long heapMaxMb, @Nullable Long totalRamMb, int cores, boolean phaseTiming,
 				boolean deferModeWaits) {
@@ -42,7 +52,26 @@ public final class StutterAnalyzer {
 		}
 	}
 
-	public record Result(StutterReport report, StutterFacts facts, List<Attributor.Attribution> attributions) {
+	// dhWorldGenCores (v0.5, docs/v0.5/SPEC.md 2S for 2B's RW-6): the core-equivalents Distant Horizons' world generation
+	// used over the sampler windows the capture recorded (dhWorldGenCores(Input)); null without such a window.
+	// compared (C20's comparison, review-11 STUTTER-2 and review-12 R12STUTTER-1/2): the part of the capture a stutter fix's
+	// comparison takes (Compared); null only in a hand-built result (the whole capture then). dhWorldGenPeakCores (review-11 STUTTER-4, C20's WS-B rule): the busiest minute of Distant Horizons'
+	// world generation over the whole capture (StutterRings.Totals), or over the held samples for a hand-built snapshot;
+	// null when nothing was sampled. settingChanges (review-12 R12STUTTER-5): the setting changes during the capture (a
+	// change and back too), from the whole capture's count or the held events.
+	public record Result(StutterReport report, StutterFacts facts, List<Attributor.Attribution> attributions, @Nullable Double dhWorldGenCores,
+			@Nullable Compared compared, @Nullable Double dhWorldGenPeakCores, int settingChanges) {
+		public Result(StutterReport report, StutterFacts facts, List<Attributor.Attribution> attributions, @Nullable Double dhWorldGenCores) {
+			this(report, facts, attributions, dhWorldGenCores, null, dhWorldGenCores, 0);
+		}
+	}
+
+	// From fromNanos to the capture's end, with its gameplay and its wall length (seconds): spikes and gameplay always over
+	// the same span. It starts at the capture's settle mark (SessionOutcome.SETTLE_NANOS: a world join's chunk streaming
+	// never counts, on either side), or later where the rings no longer know every spike: once both the frame ring and the
+	// candidate ring wrapped, from the oldest candidate still held when it is older than the frame ring (its gameplay stamp
+	// says how much play follows it), else from the frame ring's first frame.
+	public record Compared(long fromNanos, double gameplaySeconds, double seconds) {
 	}
 
 	private StutterAnalyzer() {
@@ -66,7 +95,7 @@ public final class StutterAnalyzer {
 		GcSummary gc = gc(in);
 		List<Attributor.Sample> samples = samples(in);
 		Attributor.Context ctx = new Attributor.Context(gc.events(), saves(in), teleports(in), movingFast(in), samples, Math.max(1, in.cores()),
-				in.phaseTiming(), in.deferModeWaits(), chunkLoading(f, ringStart));
+				in.phaseTiming(), in.deferModeWaits(), chunkLoading(f, ringStart), settingsChanged(in));
 		List<Attributor.Attribution> attributions = new ArrayList<>();
 		for (SpikeDetector.Spike s : spikes) {
 			Attributor.Phases p = phases.get(s.end());
@@ -86,13 +115,35 @@ public final class StutterAnalyzer {
 			}
 			severity[a.spike().severity().ordinal()]++;
 		}
+		// SD-1: the rules' GC share is taken over the spikes the GC ring still covers, and the dh and cpuContention shares
+		// over those the sample ring covers (both are every spike until a ring wrapped); the screen's shares and counts stay
+		// over the whole capture.
+		long sampleCover = sampleCoverStart(in);
+		long gcLost = 0;
+		long gcClaimed = 0;
+		int sampleSpikes = 0;
+		Map<String, Integer> sampleTagCounts = new LinkedHashMap<>();
+		for (Attributor.Attribution a : attributions) {
+			if (a.spike().end() >= gc.coverStart()) {
+				gcLost += a.spike().lost();
+				gcClaimed += a.claims().getOrDefault(Attributor.GC, 0L);
+			}
+			if (a.spike().end() >= sampleCover) {
+				sampleSpikes++;
+				for (String tag : SAMPLE_TAGS) {
+					if (a.tags().contains(tag)) {
+						sampleTagCounts.merge(tag, 1, Integer::sum);
+					}
+				}
+			}
+		}
 		Map<String, Double> causes = new LinkedHashMap<>();
 		Map<String, Double> claimedShares = new LinkedHashMap<>();
 		for (String cause : Attributor.CAUSES) {
 			Long ns = claimed.get(cause);
 			if (ns != null && lost > 0) {
 				causes.put(cause, round((double) ns / lost, 2));
-				claimedShares.put(cause, 100.0 * ns / lost);
+				claimedShares.put(cause, !Attributor.GC.equals(cause) ? 100.0 * ns / lost : gcLost > 0 ? 100.0 * gcClaimed / gcLost : 0);
 			}
 		}
 		Map<String, Double> taggedShares = new LinkedHashMap<>();
@@ -101,7 +152,12 @@ public final class StutterAnalyzer {
 			Integer n = tagCounts.get(tag);
 			if (n != null) {
 				tags.put(tag, n);
-				taggedShares.put(tag, 100.0 * n / spikes.size());
+				if (SAMPLE_TAGS.contains(tag)) {
+					int covered = sampleTagCounts.getOrDefault(tag, 0);
+					taggedShares.put(tag, sampleSpikes > 0 ? 100.0 * covered / sampleSpikes : 0);
+				} else {
+					taggedShares.put(tag, 100.0 * n / spikes.size());
+				}
 			}
 		}
 
@@ -114,16 +170,21 @@ public final class StutterAnalyzer {
 
 		double gameplaySeconds = f.gameplayNanos() / 1e9;
 		FrameStats stats = FrameStats.of(gameplayDurations(ends));
+		// SD-2: once the frame ring wrapped, frames, average and 1 % low all describe its window (StutterReport.windowSeconds),
+		// unless the window holds no gameplay frame at all (a long stay in a menu): then as in 0.4.
+		boolean wrapped = f.frames() > ends.length && stats.frames() > 0;
+		long frames = wrapped ? stats.frames() : f.gameplayFrames();
+		double avgFps = wrapped ? stats.avgFps() : gameplaySeconds > 0 ? f.gameplayFrames() / gameplaySeconds : 0;
 		long[] histogramMs = Arrays.stream(f.histogramNanos()).map(ns -> Math.round(ns / 1e6)).toArray();
 		boolean enough = spikes.size() >= MIN_SPIKES && gameplaySeconds >= MIN_GAMEPLAY_SECONDS;
 		int hitches = SpikeDetector.hitches(spikes).size();
 		StutterReport.Facts facts = new StutterReport.Facts(gc.liveSetPercent() == null ? null : (int) Math.round(gc.liveSetPercent()), gc.fullPauses(),
 				gc.stalls(), gc.explicit(), in.rings().clock().calibrated() ? round(in.rings().clock().offsetMs(), 1) : null);
 		StutterReport report = new StutterReport(in.startedAt().toString(), in.source(), in.mc(), displayName(in.collector()), in.heapMaxMb(),
-				round((in.endNanos() - in.startNanos()) / 1e9, 1), round(gameplaySeconds, 1), f.gameplayFrames(),
-				round(gameplaySeconds > 0 ? f.gameplayFrames() / gameplaySeconds : 0, 1), round(stats.onePercentLowFps(), 1), f.histogramCounts().clone(),
+				round((in.endNanos() - in.startNanos()) / 1e9, 1), round(gameplaySeconds, 1), frames, round(avgFps, 1), round(stats.onePercentLowFps(), 1),
+				f.histogramCounts().clone(),
 				histogramMs, new StutterReport.Spikes(severity[0], severity[1], severity[2], severity[3]), round(lost / 1e6, 1), causes, tags, worst, facts,
-				List.of(), enough, in.phaseTiming(), hitches);
+				List.of(), enough, in.phaseTiming(), hitches, null, null, in.idleNanos() > 0 ? round(in.idleNanos() / 1e9, 1) : null);
 
 		Long room = in.totalRamMb() == null || in.totalRamMb() <= 0 ? null : Math.min(in.totalRamMb() / 2, in.totalRamMb() - 4096) - in.heapMaxMb();
 		Set<String> unmeasured = new HashSet<>(List.of(Attributor.RENDER));
@@ -138,8 +199,48 @@ public final class StutterAnalyzer {
 		}
 		StutterFacts stutterFacts = new StutterFacts(claimedShares, taggedShares, gc.fullPauses(), gc.stalls(), gc.explicit(), gc.liveSetPercent(), room,
 				contentionShare(in, samples), gameplaySeconds > 0 ? spikes.size() / (gameplaySeconds / 60) : 0, in.collector(), in.gcMeasured(),
-				unmeasured);
-		return new Result(report, stutterFacts, attributions);
+				unmeasured, FixEvidence.dominatedSpikes(attributions));
+		Double dhWorldGen = dhWorldGenCores(in);
+		StutterRings.Totals totals = in.rings().totals();
+		Double dhPeak = totals == null ? dhWorldGen : Double.isNaN(totals.dhWorldGenPeakCores()) ? null : totals.dhWorldGenPeakCores();
+		int settingChanges = totals != null ? totals.settingChanges() : heldSettingChanges(in);
+		return new Result(report, stutterFacts, attributions, dhWorldGen, compared(f, ringStart, in.startNanos(), in.endNanos()), dhPeak, settingChanges);
+	}
+
+	// A hand-built snapshot's setting changes: the held SETTINGS_CHANGED events from the capture's start on.
+	private static int heldSettingChanges(Input in) {
+		long[] e = in.rings().events();
+		int n = 0;
+		for (int i = 0; i + StutterRings.EVENT_STRIDE <= e.length; i += StutterRings.EVENT_STRIDE) {
+			if (e[i] == StutterRings.SETTINGS_CHANGED && (e[i + 2] & StutterRings.SETTING_BITS) != 0 && e[i + 1] - in.startNanos() >= 0) {
+				n++;
+			}
+		}
+		return n;
+	}
+
+	static Compared compared(FrameRing.Snapshot f, long ringStart, long startNanos, long endNanos) {
+		long total = f.gameplayNanos();
+		long from = startNanos;
+		long after = total;
+		if (f.frames() > f.ends().length && f.candidateCount() > f.candidateRecords()) {
+			long oldest = f.candidateRecords() > 0 ? f.candidate(0, FrameRing.C_END) & ~1L : ringStart;
+			if (oldest - ringStart < 0) {
+				from = oldest;
+				after = total - f.candidate(0, FrameRing.C_GAMEPLAY);
+			} else {
+				from = ringStart;
+				after = 0;
+				for (long d : gameplayDurations(f.ends())) {
+					after += d;
+				}
+			}
+		}
+		if (f.markNanos() != FrameRing.NO_MARK && f.markNanos() - from > 0) {
+			from = f.markNanos();
+			after = f.gameplayAtMark() < 0 ? 0 : total - f.gameplayAtMark();
+		}
+		return new Compared(from, Math.max(0, after) / 1e9, Math.max(0, endNanos - from) / 1e9);
 	}
 
 	// review-8 ST-2: the phases of a frame the frame ring still holds, from its own phase word (the excess over the
@@ -233,7 +334,9 @@ public final class StutterAnalyzer {
 		return Arrays.copyOf(out, n);
 	}
 
-	private record GcSummary(List<Attributor.GcEvent> events, int fullPauses, int stalls, int explicit, @Nullable Double liveSetPercent) {
+	// coverStart: the oldest GC record the ring still holds once it wrapped (Long.MIN_VALUE: it covers the whole capture).
+	private record GcSummary(List<Attributor.GcEvent> events, int fullPauses, int stalls, int explicit, @Nullable Double liveSetPercent,
+			long coverStart) {
 	}
 
 	private static GcSummary gc(Input in) {
@@ -268,12 +371,43 @@ public final class StutterAnalyzer {
 				live.add(records[i + StutterRings.G_USED_AFTER]);
 			}
 		}
+		// SD-1: the whole capture's counts once the GC ring wrapped, and the live-set samples from their own ring.
+		StutterRings.Totals totals = in.rings().totals();
+		boolean wrapped = totals != null && totals.gcAdded() > StutterRings.GC_CAPACITY;
+		if (wrapped) {
+			full = totals.fullGcs();
+			stalls = totals.stalls();
+			explicit = totals.explicitGcs();
+		}
+		if (totals != null) {
+			live.clear();
+			long[] samples = totals.liveSamples();
+			for (int i = 0; i + StutterRings.LIVE_STRIDE <= samples.length; i += StutterRings.LIVE_STRIDE) {
+				long received = samples[i];
+				if (received >= in.startNanos() && received <= in.endNanos() + SECOND) {
+					live.add(samples[i + 1]);
+				}
+			}
+		}
+		long coverStart = !wrapped || records.length == 0 ? Long.MIN_VALUE
+				: clock.calibrated() ? clock.pauseStart(records[StutterRings.G_START_MS]) : records[StutterRings.G_RECEIVED];
 		Double liveSet = null;
 		if (!live.isEmpty() && in.heapMaxMb() > 0) {
 			live.sort(null);
 			liveSet = 100.0 * live.get(live.size() / 2) / (in.heapMaxMb() * 1024.0 * 1024.0);
 		}
-		return new GcSummary(events, full, stalls, explicit, liveSet);
+		return new GcSummary(events, full, stalls, explicit, liveSet, coverStart);
+	}
+
+	// SD-1: the start of the oldest sample the ring still holds once it wrapped (Long.MIN_VALUE: it covers the whole capture).
+	static long sampleCoverStart(Input in) {
+		StutterRings.Totals totals = in.rings().totals();
+		long[] s = in.rings().samples();
+		// By the capacity: a sample added between the snapshot's two reads mustn't look like a wrap.
+		if (totals == null || s.length == 0 || totals.samplesAdded() <= StutterRings.SAMPLE_CAPACITY) {
+			return Long.MIN_VALUE;
+		}
+		return s[StutterRings.S_TIME] - s[StutterRings.S_WINDOW];
 	}
 
 	private static List<long[]> events(Input in, int kind) {
@@ -327,6 +461,14 @@ public final class StutterAnalyzer {
 		return events(in, StutterRings.TELEPORT).stream().map(t -> new Attributor.Interval(t[0], t[0] + TELEPORT_WINDOW)).toList();
 	}
 
+	// v0.5 RW-11: after each settings change or resource reload, the next 10 s. The event is dated when the old value was
+	// last seen; its value's bits from StutterRings.SETTINGS_LEAD_SHIFT say how many ms later the change was seen, so the window runs
+	// from the one to 10 s after the other.
+	private static List<Attributor.Interval> settingsChanged(Input in) {
+		return events(in, StutterRings.SETTINGS_CHANGED).stream()
+				.map(t -> new Attributor.Interval(t[0], t[0] + (t[1] >>> StutterRings.SETTINGS_LEAD_SHIFT) * MS + SETTINGS_WINDOW)).toList();
+	}
+
 	public static List<Attributor.Sample> samples(Input in) {
 		List<Attributor.Sample> out = new ArrayList<>();
 		long[] s = in.rings().samples();
@@ -336,11 +478,13 @@ public final class StutterAnalyzer {
 			if (window <= 0 || t < in.startNanos() || t - window > in.endNanos()) {
 				continue;
 			}
+			long dh = s[i + StutterRings.S_DH] + s[i + StutterRings.S_DH_WORLD_GEN];
 			String top = null;
 			long topCpu = -1;
 			for (int g = StutterRings.S_SERVER; g <= StutterRings.S_OTHER; g++) {
-				if (s[i + g] > topCpu) {
-					topCpu = s[i + g];
+				long cpu = g == StutterRings.S_DH ? dh : s[i + g];
+				if (cpu > topCpu) {
+					topCpu = cpu;
 					top = StutterRings.GROUPS[g - StutterRings.S_RENDER];
 				}
 			}
@@ -350,10 +494,36 @@ public final class StutterAnalyzer {
 			// Sodium: jobs waiting with every builder busy. Vanilla (no thread counts): a real queue, not the few sections that
 			// are always in flight while moving.
 			boolean backlog = total > 0 ? scheduled > 0 && busy >= total : busy < 0 && scheduled >= VANILLA_BACKLOG;
-			out.add(new Attributor.Sample(t - window, t, (double) s[i + StutterRings.S_DH] / window, (double) s[i + StutterRings.S_PROCESS] / window, top,
-					backlog));
+			out.add(new Attributor.Sample(t - window, t, (double) dh / window, (double) s[i + StutterRings.S_PROCESS] / window, top, backlog));
 		}
 		return out;
+	}
+
+	// Distant Horizons' world generation CPU per second of the sampler windows the capture recorded: a window counts when
+	// its midpoint lies outside every pause (PAUSE_BEGIN to PAUSE_END; a benchmark capture is paused between its sweeps and
+	// for an excluded step). Null when no window counts (no sampler, or nothing recorded).
+	static @Nullable Double dhWorldGenCores(Input in) {
+		List<Attributor.Interval> paused = pairs(in, StutterRings.PAUSE_BEGIN, StutterRings.PAUSE_END, Long.MAX_VALUE / 4);
+		long[] s = in.rings().samples();
+		long cpu = 0;
+		long time = 0;
+		int p = 0;
+		for (int i = 0; i + StutterRings.SAMPLE_STRIDE <= s.length; i += StutterRings.SAMPLE_STRIDE) {
+			long t = s[i + StutterRings.S_TIME];
+			long window = s[i + StutterRings.S_WINDOW];
+			if (window <= 0 || t < in.startNanos() || t - window > in.endNanos()) {
+				continue;
+			}
+			long mid = t - window / 2;
+			while (p < paused.size() && paused.get(p).end() < mid) {
+				p++;
+			}
+			if (p == paused.size() || paused.get(p).start() > mid) {
+				cpu += s[i + StutterRings.S_DH_WORLD_GEN];
+				time += window;
+			}
+		}
+		return time == 0 ? null : (double) cpu / time;
 	}
 
 	private static @Nullable Double contentionShare(Input in, List<Attributor.Sample> samples) {

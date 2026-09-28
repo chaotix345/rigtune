@@ -14,6 +14,7 @@ import io.github.chaotix345.rigtune.core.model.SettingsSnapshot;
 import io.github.chaotix345.rigtune.core.model.TierResult;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import io.github.chaotix345.rigtune.core.stutter.Attributor;
+import io.github.chaotix345.rigtune.core.stutter.FixEvidence;
 import io.github.chaotix345.rigtune.core.stutter.StutterFacts;
 import net.fabricmc.loader.api.SemanticVersion;
 import net.fabricmc.loader.api.Version;
@@ -339,7 +340,7 @@ public final class ConditionEvaluator {
 		return c.stutterShareAtLeast != null || c.stutterTaggedShareAtLeast != null || c.gcFullPausesAtLeast != null
 				|| c.gcStallsAtLeast != null || c.gcExplicitPausesAtLeast != null || c.liveSetPercentAtLeast != null
 				|| c.heapRaiseRoomMbAtLeast != null || c.cpuContentionShareAtLeast != null || c.spikesPerMinuteAtLeast != null
-				|| c.gcCollector != null;
+				|| c.gcCollector != null || c.causeSpikesAtLeast != null;
 	}
 
 	// v0.4 (docs/v0.4/SPEC.md 5): the stutter keys against the Stutter Doctor's session facts. Without facts (the main
@@ -362,7 +363,13 @@ public final class ConditionEvaluator {
 		t = and(t, () -> c.cpuContentionShareAtLeast == null ? TRUE : atLeast(facts.cpuContentionShare(), c.cpuContentionShareAtLeast));
 		t = and(t, () -> c.spikesPerMinuteAtLeast == null ? TRUE : Truth.of(facts.spikesPerMinute() * 10 >= c.spikesPerMinuteAtLeast));
 		String collector = facts.gcCollector() == null ? "" : facts.gcCollector().toLowerCase(Locale.ROOT);
-		return and(t, () -> c.gcCollector == null ? TRUE : anyEntry(c.gcCollector, GC_COLLECTORS::contains, collector::equals, !collector.isEmpty()));
+		t = and(t, () -> c.gcCollector == null ? TRUE : anyEntry(c.gcCollector, GC_COLLECTORS::contains, collector::equals, !collector.isEmpty()));
+		return and(t, () -> c.causeSpikesAtLeast == null ? TRUE : causeSpikes(c.causeSpikesAtLeast, facts));
+	}
+
+	// v0.5 (docs/v0.5/SPEC.md 5): causeSpikesAtLeast, against the spikes each cause dominated (FixEvidence).
+	private static Truth causeSpikes(Map<String, String> wanted, StutterFacts facts) {
+		return FixEvidence.causeSpikesAtLeast(wanted, facts.causeSpikes(), facts.unmeasured());
 	}
 
 	private static Truth gcCount(StutterFacts facts, int count, int threshold) {
@@ -388,8 +395,12 @@ public final class ConditionEvaluator {
 		return t;
 	}
 
+	// A threshold string longer than this is UNKNOWN before any parsing: remote rules are untrusted, and BigDecimal's cost
+	// grows with the length (review-11 SEC-5). Every real threshold is a whole number of at most 10 digits.
+	public static final int MAX_NUMBER_CHARS = 32;
+
 	private static @Nullable Integer wholeNumber(@Nullable String text) {
-		if (text == null) {
+		if (text == null || text.length() > MAX_NUMBER_CHARS) {
 			return null;
 		}
 		try {

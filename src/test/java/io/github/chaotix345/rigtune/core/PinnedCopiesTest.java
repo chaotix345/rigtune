@@ -36,7 +36,8 @@ class PinnedCopiesTest {
 		assertEquals(current.revision, old.revision);
 		assertEquals(current.mods.size(), old.mods.size());
 		assertEquals(current.settings.size(), old.settings.size());
-		assertEquals(current.advice.size(), old.advice.size());
+		// review-11 SEC-3 (WS-R): this client drops the advice meant only for clients below 0.5; 0.3.0 keeps it.
+		assertEquals(current.advice.size(), old.advice.stream().filter(a -> !RulesLoader.OLD_CLIENT_ADVICE.contains(a.id)).count());
 
 		String withSections = """
 				{"schemaVersion": 2, "revision": 1,

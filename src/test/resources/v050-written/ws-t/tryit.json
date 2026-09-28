@@ -1,0 +1,39 @@
+{
+  "formatVersion": 1,
+  "recent": [
+    {
+      "id": "t-1b2c3d4e-5f60-4718-8a9b-0c1d2e3f4051",
+      "key": "vanilla.cutoutLeaves",
+      "from": "true",
+      "to": "false",
+      "verdict": "no_clear_change",
+      "lowPercent": 1.2,
+      "avgPercent": 4.8,
+      "floorPercent": 5.0,
+      "decision": "reverted",
+      "at": "2026-09-24T10:12:00Z"
+    }
+  ],
+  "current": {
+    "id": "t-9e8d7c6b-5a49-4382-9170-6f5e4d3c2b1a",
+    "pairId": "tryit-9e8d7c6b-5a49-4382-9170-6f5e4d3c2b1b",
+    "entryId": "3f0c6a8e-4b1d-4e7a-9c2f-5a6b7c8d9e01",
+    "recommendationId": "setting:sodium.performance.chunk_build_defer_mode",
+    "key": "sodium.performance.chunk_build_defer_mode",
+    "from": "ALWAYS",
+    "to": "ONE_FRAME",
+    "kind": "restart",
+    "scene": "BENCHMARK_WORLD",
+    "startedAt": "2026-09-25T10:00:00Z",
+    "session": "5c1e8a90-2f7b-4f4e-9d0a-1b6c2d3e4f50",
+    "rigtuneVersion": "0.5.0+mc26.2",
+    "mcVersion": "26.2",
+    "settingsBefore": {
+      "vanilla.renderDistance": "12",
+      "vanilla.cutoutLeaves": "true",
+      "vanilla.simulationDistance": "8",
+      "vanilla.particles": "0",
+      "sodium.performance.chunk_build_defer_mode": "ALWAYS"
+    }
+  }
+}

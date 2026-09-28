@@ -98,6 +98,25 @@ class StutterConditionTest {
 				"measured counts decide");
 	}
 
+	// docs/v0.5/SPEC.md 5, AC5.4: causeSpikesAtLeast counts the spikes a cause dominated (StutterFacts.causeSpikes); UNKNOWN
+	// for an unmeasured or unknown cause and a value that isn't a whole number, also under `not`; UNKNOWN in the main list.
+	@Test
+	void causeSpikes() {
+		StutterFacts facts = new StutterFacts(Map.of("chunkBuild", 52.0), Map.of(), 0, 0, 0, null, null, null, 6.0, "g1", true, java.util.Set.of("render"),
+				Map.of("chunkBuild", 6, "unknown", 2));
+		assertEquals(TRUE, eval("{\"causeSpikesAtLeast\": {\"chunkBuild\": 5}}", facts));
+		assertEquals(TRUE, eval("{\"causeSpikesAtLeast\": {\"chunkBuild\": 6}, \"stutterShareAtLeast\": {\"chunkBuild\": 40}}", facts));
+		assertEquals(FALSE, eval("{\"causeSpikesAtLeast\": {\"chunkBuild\": 7}}", facts));
+		assertEquals(FALSE, eval("{\"causeSpikesAtLeast\": {\"gc\": 1}}", facts), "a measured cause that dominated nothing is 0");
+		assertEquals(UNKNOWN, eval("{\"causeSpikesAtLeast\": {\"render\": 0}}", facts), "unmeasured");
+		assertEquals(UNKNOWN, eval("{\"not\": {\"causeSpikesAtLeast\": {\"render\": 1}}}", facts), "not over unmeasured never TRUE");
+		assertEquals(UNKNOWN, eval("{\"causeSpikesAtLeast\": {\"shaderCompile\": 1}}", facts), "a cause this version doesn't know");
+		assertEquals(UNKNOWN, eval("{\"causeSpikesAtLeast\": {\"chunkBuild\": 2.5}}", facts), "a whole number only");
+		assertEquals(UNKNOWN, new EvalFixture().truth("{\"causeSpikesAtLeast\": {\"chunkBuild\": 0}}"), "the main list has no facts");
+		// The 12-argument facts (before C20) count nothing.
+		assertEquals(FALSE, eval("{\"causeSpikesAtLeast\": {\"gc\": 1}}"));
+	}
+
 	@Test
 	void collector() {
 		assertEquals(TRUE, eval("{\"gcCollector\": [\"g1\"]}"));

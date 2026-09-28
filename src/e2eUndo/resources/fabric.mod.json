@@ -3,12 +3,13 @@
 	"id": "rigtune-e2e-undo-driver",
 	"version": "1.0.0",
 	"name": "RigTune E2E undo driver",
-	"description": "Test-only driver for tools/e2e/self_update_e2e.py --scenario undo; inert without -Drigtune.e2e.phase. Never shipped.",
+	"description": "Test-only drivers for tools/e2e/self_update_e2e.py --scenario undo (inert without -Drigtune.e2e.phase) and tools/e2e/dhnote (inert without -Drigtune.e2e.dhServer). Never shipped.",
 	"license": "MIT",
 	"environment": "client",
 	"entrypoints": {
 		"client": [
-			"io.github.chaotix345.rigtune.e2e.undo.UndoDriver"
+			"io.github.chaotix345.rigtune.e2e.undo.UndoDriver",
+			"io.github.chaotix345.rigtune.e2e.undo.DhServerDriver"
 		]
 	},
 	"depends": {

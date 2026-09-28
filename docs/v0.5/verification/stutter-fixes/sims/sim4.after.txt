@@ -1,0 +1,152 @@
+H0 (sim.py's grid; the before side a fresh baseline, both sides cut by SETTLE)
+mu=  2 disp=1 before= 5m after= 5m -> LESS 0.028 MORE 0.023
+mu=  2 disp=1 before=10m after=10m -> LESS 0.031 MORE 0.029
+mu=  2 disp=1 before=20m after=20m -> LESS 0.036 MORE 0.031
+mu=  2 disp=1 before= 5m after=20m -> LESS 0.025 MORE 0.028
+mu=  2 disp=2 before= 5m after= 5m -> LESS 0.030 MORE 0.038
+mu=  2 disp=2 before=10m after=10m -> LESS 0.040 MORE 0.036
+mu=  2 disp=2 before=20m after=20m -> LESS 0.043 MORE 0.037
+mu=  2 disp=2 before= 5m after=20m -> LESS 0.041 MORE 0.027
+mu=  2 disp=4 before= 5m after= 5m -> LESS 0.023 MORE 0.029
+mu=  2 disp=4 before=10m after=10m -> LESS 0.032 MORE 0.033
+mu=  2 disp=4 before=20m after=20m -> LESS 0.034 MORE 0.032
+mu=  2 disp=4 before= 5m after=20m -> LESS 0.038 MORE 0.016
+mu=  5 disp=1 before= 5m after= 5m -> LESS 0.036 MORE 0.027
+mu=  5 disp=1 before=10m after=10m -> LESS 0.016 MORE 0.026
+mu=  5 disp=1 before=20m after=20m -> LESS 0.003 MORE 0.003
+mu=  5 disp=1 before= 5m after=20m -> LESS 0.024 MORE 0.037
+mu=  5 disp=2 before= 5m after= 5m -> LESS 0.045 MORE 0.051
+mu=  5 disp=2 before=10m after=10m -> LESS 0.043 MORE 0.045
+mu=  5 disp=2 before=20m after=20m -> LESS 0.028 MORE 0.021
+mu=  5 disp=2 before= 5m after=20m -> LESS 0.040 MORE 0.038
+mu=  5 disp=4 before= 5m after= 5m -> LESS 0.048 MORE 0.046
+mu=  5 disp=4 before=10m after=10m -> LESS 0.038 MORE 0.043
+mu=  5 disp=4 before=20m after=20m -> LESS 0.045 MORE 0.043
+mu=  5 disp=4 before= 5m after=20m -> LESS 0.050 MORE 0.022
+mu= 10 disp=1 before= 5m after= 5m -> LESS 0.017 MORE 0.022
+mu= 10 disp=1 before=10m after=10m -> LESS 0.002 MORE 0.002
+mu= 10 disp=1 before=20m after=20m -> LESS 0.000 MORE 0.000
+mu= 10 disp=1 before= 5m after=20m -> LESS 0.004 MORE 0.013
+mu= 10 disp=2 before= 5m after= 5m -> LESS 0.036 MORE 0.040
+mu= 10 disp=2 before=10m after=10m -> LESS 0.023 MORE 0.018
+mu= 10 disp=2 before=20m after=20m -> LESS 0.002 MORE 0.002
+mu= 10 disp=2 before= 5m after=20m -> LESS 0.022 MORE 0.032
+mu= 10 disp=4 before= 5m after= 5m -> LESS 0.053 MORE 0.055
+mu= 10 disp=4 before=10m after=10m -> LESS 0.047 MORE 0.047
+mu= 10 disp=4 before=20m after=20m -> LESS 0.023 MORE 0.020
+mu= 10 disp=4 before= 5m after=20m -> LESS 0.052 MORE 0.037
+mu= 30 disp=1 before= 5m after= 5m -> LESS 0.001 MORE 0.001
+mu= 30 disp=1 before=10m after=10m -> LESS 0.000 MORE 0.000
+mu= 30 disp=1 before=20m after=20m -> LESS 0.000 MORE 0.000
+mu= 30 disp=1 before= 5m after=20m -> LESS 0.000 MORE 0.000
+mu= 30 disp=2 before= 5m after= 5m -> LESS 0.008 MORE 0.007
+mu= 30 disp=2 before=10m after=10m -> LESS 0.000 MORE 0.000
+mu= 30 disp=2 before=20m after=20m -> LESS 0.000 MORE 0.000
+mu= 30 disp=2 before= 5m after=20m -> LESS 0.000 MORE 0.003
+mu= 30 disp=4 before= 5m after= 5m -> LESS 0.033 MORE 0.034
+mu= 30 disp=4 before=10m after=10m -> LESS 0.008 MORE 0.011
+mu= 30 disp=4 before=20m after=20m -> LESS 0.000 MORE 0.000
+mu= 30 disp=4 before= 5m after=20m -> LESS 0.007 MORE 0.020
+sim2's grid: the baseline has its join burst, the after side none (a restarted or wrapped session) or its own
+mu=2 burst=(8, 8, 6) before= 5m after= 5m  after w/o start: LESS 0.034   with its own: LESS 0.032
+mu=2 burst=(8, 8, 6) before= 8m after= 8m  after w/o start: LESS 0.041   with its own: LESS 0.037
+mu=2 burst=(8, 8, 6) before=10m after=10m  after w/o start: LESS 0.041   with its own: LESS 0.034
+mu=2 burst=(8, 8, 6) before=15m after=15m  after w/o start: LESS 0.038   with its own: LESS 0.039
+mu=2 burst=(8, 8, 6) before=20m after=20m  after w/o start: LESS 0.042   with its own: LESS 0.046
+mu=2 burst=(12, 10, 6) before= 5m after= 5m  after w/o start: LESS 0.034   with its own: LESS 0.038
+mu=2 burst=(12, 10, 6) before= 8m after= 8m  after w/o start: LESS 0.038   with its own: LESS 0.041
+mu=2 burst=(12, 10, 6) before=10m after=10m  after w/o start: LESS 0.039   with its own: LESS 0.036
+mu=2 burst=(12, 10, 6) before=15m after=15m  after w/o start: LESS 0.039   with its own: LESS 0.042
+mu=2 burst=(12, 10, 6) before=20m after=20m  after w/o start: LESS 0.043   with its own: LESS 0.037
+mu=2 burst=(20, 10, 5) before= 5m after= 5m  after w/o start: LESS 0.032   with its own: LESS 0.037
+mu=2 burst=(20, 10, 5) before= 8m after= 8m  after w/o start: LESS 0.040   with its own: LESS 0.038
+mu=2 burst=(20, 10, 5) before=10m after=10m  after w/o start: LESS 0.033   with its own: LESS 0.039
+mu=2 burst=(20, 10, 5) before=15m after=15m  after w/o start: LESS 0.040   with its own: LESS 0.048
+mu=2 burst=(20, 10, 5) before=20m after=20m  after w/o start: LESS 0.038   with its own: LESS 0.047
+mu=2 burst=(20, 10, 5, 3) before= 5m after= 5m  after w/o start: LESS 0.065   with its own: LESS 0.019
+mu=2 burst=(20, 10, 5, 3) before= 8m after= 8m  after w/o start: LESS 0.063   with its own: LESS 0.024
+mu=2 burst=(20, 10, 5, 3) before=10m after=10m  after w/o start: LESS 0.070   with its own: LESS 0.025
+mu=2 burst=(20, 10, 5, 3) before=15m after=15m  after w/o start: LESS 0.064   with its own: LESS 0.023
+mu=2 burst=(20, 10, 5, 3) before=20m after=20m  after w/o start: LESS 0.064   with its own: LESS 0.028
+mu=3 burst=(8, 8, 6) before= 5m after= 5m  after w/o start: LESS 0.040   with its own: LESS 0.037
+mu=3 burst=(8, 8, 6) before= 8m after= 8m  after w/o start: LESS 0.041   with its own: LESS 0.041
+mu=3 burst=(8, 8, 6) before=10m after=10m  after w/o start: LESS 0.042   with its own: LESS 0.043
+mu=3 burst=(8, 8, 6) before=15m after=15m  after w/o start: LESS 0.037   with its own: LESS 0.032
+mu=3 burst=(8, 8, 6) before=20m after=20m  after w/o start: LESS 0.030   with its own: LESS 0.030
+mu=3 burst=(12, 10, 6) before= 5m after= 5m  after w/o start: LESS 0.038   with its own: LESS 0.039
+mu=3 burst=(12, 10, 6) before= 8m after= 8m  after w/o start: LESS 0.042   with its own: LESS 0.043
+mu=3 burst=(12, 10, 6) before=10m after=10m  after w/o start: LESS 0.042   with its own: LESS 0.044
+mu=3 burst=(12, 10, 6) before=15m after=15m  after w/o start: LESS 0.049   with its own: LESS 0.044
+mu=3 burst=(12, 10, 6) before=20m after=20m  after w/o start: LESS 0.030   with its own: LESS 0.036
+mu=3 burst=(20, 10, 5) before= 5m after= 5m  after w/o start: LESS 0.041   with its own: LESS 0.043
+mu=3 burst=(20, 10, 5) before= 8m after= 8m  after w/o start: LESS 0.045   with its own: LESS 0.041
+mu=3 burst=(20, 10, 5) before=10m after=10m  after w/o start: LESS 0.040   with its own: LESS 0.042
+mu=3 burst=(20, 10, 5) before=15m after=15m  after w/o start: LESS 0.034   with its own: LESS 0.041
+mu=3 burst=(20, 10, 5) before=20m after=20m  after w/o start: LESS 0.034   with its own: LESS 0.031
+mu=3 burst=(20, 10, 5, 3) before= 5m after= 5m  after w/o start: LESS 0.070   with its own: LESS 0.023
+mu=3 burst=(20, 10, 5, 3) before= 8m after= 8m  after w/o start: LESS 0.072   with its own: LESS 0.031
+mu=3 burst=(20, 10, 5, 3) before=10m after=10m  after w/o start: LESS 0.062   with its own: LESS 0.029
+mu=3 burst=(20, 10, 5, 3) before=15m after=15m  after w/o start: LESS 0.054   with its own: LESS 0.036
+mu=3 burst=(20, 10, 5, 3) before=20m after=20m  after w/o start: LESS 0.048   with its own: LESS 0.023
+mu=5 burst=(8, 8, 6) before= 5m after= 5m  after w/o start: LESS 0.037   with its own: LESS 0.039
+mu=5 burst=(8, 8, 6) before= 8m after= 8m  after w/o start: LESS 0.033   with its own: LESS 0.042
+mu=5 burst=(8, 8, 6) before=10m after=10m  after w/o start: LESS 0.036   with its own: LESS 0.039
+mu=5 burst=(8, 8, 6) before=15m after=15m  after w/o start: LESS 0.022   with its own: LESS 0.022
+mu=5 burst=(8, 8, 6) before=20m after=20m  after w/o start: LESS 0.013   with its own: LESS 0.010
+mu=5 burst=(12, 10, 6) before= 5m after= 5m  after w/o start: LESS 0.039   with its own: LESS 0.042
+mu=5 burst=(12, 10, 6) before= 8m after= 8m  after w/o start: LESS 0.044   with its own: LESS 0.040
+mu=5 burst=(12, 10, 6) before=10m after=10m  after w/o start: LESS 0.044   with its own: LESS 0.038
+mu=5 burst=(12, 10, 6) before=15m after=15m  after w/o start: LESS 0.024   with its own: LESS 0.024
+mu=5 burst=(12, 10, 6) before=20m after=20m  after w/o start: LESS 0.008   with its own: LESS 0.012
+mu=5 burst=(20, 10, 5) before= 5m after= 5m  after w/o start: LESS 0.037   with its own: LESS 0.042
+mu=5 burst=(20, 10, 5) before= 8m after= 8m  after w/o start: LESS 0.044   with its own: LESS 0.042
+mu=5 burst=(20, 10, 5) before=10m after=10m  after w/o start: LESS 0.039   with its own: LESS 0.041
+mu=5 burst=(20, 10, 5) before=15m after=15m  after w/o start: LESS 0.023   with its own: LESS 0.024
+mu=5 burst=(20, 10, 5) before=20m after=20m  after w/o start: LESS 0.011   with its own: LESS 0.012
+mu=5 burst=(20, 10, 5, 3) before= 5m after= 5m  after w/o start: LESS 0.077   with its own: LESS 0.032
+mu=5 burst=(20, 10, 5, 3) before= 8m after= 8m  after w/o start: LESS 0.057   with its own: LESS 0.031
+mu=5 burst=(20, 10, 5, 3) before=10m after=10m  after w/o start: LESS 0.051   with its own: LESS 0.030
+mu=5 burst=(20, 10, 5, 3) before=15m after=15m  after w/o start: LESS 0.036   with its own: LESS 0.019
+mu=5 burst=(20, 10, 5, 3) before=20m after=20m  after w/o start: LESS 0.016   with its own: LESS 0.010
+sim3's grid: the trigger is selected (rate >= sel x mu, >= 8 hitches) and only decides the offer; the before side is the fresh baseline
+mu= 3 disp=1.5 sel>=1.0  5m vs  5m: LESS 0.037 (n=2000)
+mu= 3 disp=1.5 sel>=1.0 10m vs 10m: LESS 0.046 (n=2000)
+mu= 3 disp=1.5 sel>=1.3  5m vs  5m: LESS 0.042 (n=2000)
+mu= 3 disp=1.5 sel>=1.3 10m vs 10m: LESS 0.043 (n=2000)
+mu= 3 disp=1.5 sel>=1.6  5m vs  5m: LESS 0.038 (n=2000)
+mu= 3 disp=1.5 sel>=1.6 10m vs 10m: LESS 0.037 (n=2000)
+mu= 3 disp=3 sel>=1.0  5m vs  5m: LESS 0.048 (n=2000)
+mu= 3 disp=3 sel>=1.0 10m vs 10m: LESS 0.043 (n=2000)
+mu= 3 disp=3 sel>=1.3  5m vs  5m: LESS 0.038 (n=2000)
+mu= 3 disp=3 sel>=1.3 10m vs 10m: LESS 0.046 (n=2000)
+mu= 3 disp=3 sel>=1.6  5m vs  5m: LESS 0.042 (n=2000)
+mu= 3 disp=3 sel>=1.6 10m vs 10m: LESS 0.043 (n=2000)
+mu= 5 disp=1.5 sel>=1.0  5m vs  5m: LESS 0.041 (n=2000)
+mu= 5 disp=1.5 sel>=1.0 10m vs 10m: LESS 0.032 (n=2000)
+mu= 5 disp=1.5 sel>=1.3  5m vs  5m: LESS 0.035 (n=2000)
+mu= 5 disp=1.5 sel>=1.3 10m vs 10m: LESS 0.035 (n=2000)
+mu= 5 disp=1.5 sel>=1.6  5m vs  5m: LESS 0.044 (n=2000)
+mu= 5 disp=1.5 sel>=1.6 10m vs 10m: LESS 0.061 (n=394)
+mu= 5 disp=3 sel>=1.0  5m vs  5m: LESS 0.047 (n=2000)
+mu= 5 disp=3 sel>=1.0 10m vs 10m: LESS 0.035 (n=2000)
+mu= 5 disp=3 sel>=1.3  5m vs  5m: LESS 0.043 (n=2000)
+mu= 5 disp=3 sel>=1.3 10m vs 10m: LESS 0.045 (n=2000)
+mu= 5 disp=3 sel>=1.6  5m vs  5m: LESS 0.046 (n=2000)
+mu= 5 disp=3 sel>=1.6 10m vs 10m: LESS 0.050 (n=2000)
+mu=10 disp=1.5 sel>=1.0  5m vs  5m: LESS 0.034 (n=2000)
+mu=10 disp=1.5 sel>=1.0 10m vs 10m: LESS 0.010 (n=2000)
+mu=10 disp=1.5 sel>=1.3  5m vs  5m: LESS 0.049 (n=2000)
+mu=10 disp=1.5 sel>=1.3 10m vs 10m: LESS 0.015 (n=2000)
+mu=10 disp=1.5 sel>=1.6  5m vs  5m: LESS 0.066 (n=422)
+mu=10 disp=1.5 sel>=1.6 10m vs 10m: LESS 0.000 (n=2)
+mu=10 disp=3 sel>=1.0  5m vs  5m: LESS 0.052 (n=2000)
+mu=10 disp=3 sel>=1.0 10m vs 10m: LESS 0.040 (n=2000)
+mu=10 disp=3 sel>=1.3  5m vs  5m: LESS 0.051 (n=2000)
+mu=10 disp=3 sel>=1.3 10m vs 10m: LESS 0.042 (n=2000)
+mu=10 disp=3 sel>=1.6  5m vs  5m: LESS 0.053 (n=2000)
+mu=10 disp=3 sel>=1.6 10m vs 10m: LESS 0.029 (n=456)
+worst false LESS per scenario: {'H0': 0.053, 'sim2': 0.077, 'sim3': 0.066}
+
+real	2m13.082s
+user	0m0.000s
+sys	0m0.297s

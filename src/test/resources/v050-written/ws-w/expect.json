@@ -1,0 +1,6 @@
+{
+  "set": "ws-w",
+  "checks": [
+    {"class": "AwarenessStore", "file": "awareness.json", "keeps": ["optionsAtExit"], "noBad": true}
+  ]
+}

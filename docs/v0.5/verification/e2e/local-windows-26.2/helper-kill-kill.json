@@ -1,0 +1,15 @@
+{
+ "helpers": [
+  37836
+ ],
+ "recordHadGroup": true,
+ "lastApplyBefore": false,
+ "modsWhenKilled": [
+  "e2e-kill-1.0.0.jar",
+  "e2e-kill-1.1.0.jar.rigtune-pending",
+  "fabric-api-0.161.0+26.2.jar",
+  "rigtune-0.5.0-dev+mc26.2.jar"
+ ],
+ "goneAfterKill": true,
+ "lastApplyAfter": false
+}

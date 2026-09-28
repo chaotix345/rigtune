@@ -6,6 +6,7 @@
 	"environment": "client",
 	"entrypoints": {
 		"fabric-client-gametest": [
+			"io.github.chaotix345.rigtune.gametest.FirstApplyGameTest",
 			"io.github.chaotix345.rigtune.gametest.RigTuneClientGameTest",
 			"io.github.chaotix345.rigtune.gametest.BenchmarkGameTest",
 			"io.github.chaotix345.rigtune.gametest.LauncherGameTest",
@@ -16,10 +17,16 @@
 			"io.github.chaotix345.rigtune.gametest.PreviewGameTest",
 			"io.github.chaotix345.rigtune.gametest.ProfilesGameTest",
 			"io.github.chaotix345.rigtune.gametest.StutterGameTest",
+			"io.github.chaotix345.rigtune.gametest.StutterFixGameTest",
 			"io.github.chaotix345.rigtune.gametest.JvmGameTest",
 			"io.github.chaotix345.rigtune.gametest.BenchmarkHistoryGameTest",
+			"io.github.chaotix345.rigtune.gametest.TryItGameTest",
 			"io.github.chaotix345.rigtune.gametest.ServerLimitsGameTest",
+			"io.github.chaotix345.rigtune.gametest.LanGuestGameTest",
+			"io.github.chaotix345.rigtune.gametest.ServerProfilesGameTest",
 			"io.github.chaotix345.rigtune.gametest.AwarenessGameTest",
+			"io.github.chaotix345.rigtune.gametest.BatteryFlowGameTest",
+			"io.github.chaotix345.rigtune.gametest.LauncherManagedGameTest",
 			"io.github.chaotix345.rigtune.gametest.FootprintGameTest",
 			"io.github.chaotix345.rigtune.gametest.A11yGameTest"
 		]

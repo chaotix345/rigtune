@@ -159,6 +159,59 @@ class ChangeDetectorTest {
 		assertEquals(NONE, ChangeDetector.compare(AMD, Fingerprint.of(hw.build())).kind());
 	}
 
+	// v0.5 Latent 2 (docs/v0.5/SPEC.md 2W, AC2W.3; av's test): HardwareProbe's "unknown" placeholders (a probe that
+	// couldn't read the GPU or the CPU) are no GPU and no CPU, never a change.
+	@Test
+	void latentUnknownGpuIsNoChange() {
+		Fixtures.Hw failed = Fixtures.userRig();
+		failed.gpu = new GpuInfo("unknown", "unknown", "unknown", GraphicsBackend.UNKNOWN, -1);
+		Fingerprint unknown = Fingerprint.of(failed.build());
+		assertEquals(NONE, ChangeDetector.compare(AMD, unknown).kind());
+		assertEquals("", unknown.gpuRenderer());
+		assertEquals("", unknown.gpuDriverRaw());
+		assertEquals(NONE, ChangeDetector.compare(unknown, AMD).kind());
+	}
+
+	@Test
+	void aFirstRunSeedFromAnUnknownProbeThenARealGpuRaisesNothing() {
+		AwarenessStore store = AwarenessStore.shared(config);
+		Fixtures.Hw failed = Fixtures.userRig();
+		failed.gpu = new GpuInfo("unknown", "unknown", "unknown", GraphicsBackend.UNKNOWN, -1);
+		failed.cpu = new CpuInfo("unknown", -1, 16, -1);
+		assertEquals(NONE, ChangeDetector.check(store, Fingerprint.of(failed.build())).kind(), "seeded from a failed probe");
+		assertEquals(NONE, ChangeDetector.check(store, AMD).kind(), "the first good probe is no change");
+		assertEquals(AMD, Fingerprint.read(store.read()), "and becomes the fingerprint to compare with");
+		assertEquals(DRIVER, ChangeDetector.check(store, rig("3.3.0 Core Profile Context 26.9.1.260915")).kind());
+	}
+
+	@Test
+	void anUnknownCpuIsNoHardwareChange() {
+		Fixtures.Hw failed = Fixtures.userRig();
+		failed.gpu = new GpuInfo("ATI Technologies Inc.", "AMD Radeon RX 7800 XT", AMD.gpuDriverRaw(), GraphicsBackend.OPENGL, 16384);
+		failed.cpu = new CpuInfo("unknown", -1, 16, -1);
+		Fingerprint unknownCpu = Fingerprint.of(failed.build());
+		assertEquals("", unknownCpu.cpuName());
+		assertEquals(NONE, ChangeDetector.compare(AMD, unknownCpu).kind());
+		assertEquals(NONE, ChangeDetector.compare(unknownCpu, AMD).kind());
+	}
+
+	// Review M1: a fingerprint 0.4 already stored from a failed probe ("unknown" values) reads as no GPU and no CPU, so the
+	// first good 0.5 probe is no change and moves the stored one on silently.
+	@Test
+	void aStoredUnknownFingerprintIsNoChangeAndIsReseededSilently() throws IOException {
+		Path dir = Files.createDirectories(config.resolve("rigtune"));
+		Files.writeString(dir.resolve(AwarenessStore.FILE_NAME), "{\"formatVersion\": 1, \"dismissed\": [], \"acknowledgedRegressions\": [], "
+				+ "\"fingerprint\": {\"gpuVendor\": \"OTHER\", \"gpuRenderer\": \"unknown\", \"gpuDriverRaw\": \"unknown\", \"backend\": \"UNKNOWN\", "
+				+ "\"cpuName\": \"unknown\", \"totalRamMb\": 32768}}", StandardCharsets.UTF_8);
+		AwarenessStore store = AwarenessStore.shared(config);
+		Fingerprint stored = Fingerprint.read(store.read());
+		assertEquals("", stored.gpuRenderer());
+		assertEquals("", stored.gpuDriverRaw());
+		assertEquals("", stored.cpuName());
+		assertEquals(NONE, ChangeDetector.check(store, AMD).kind());
+		assertEquals(AMD, Fingerprint.read(store.read()), "re-seeded from the good probe");
+	}
+
 	@Test
 	void firstRunSeedsSilentlyThenDetects() {
 		AwarenessStore store = AwarenessStore.shared(config);

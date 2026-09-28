@@ -29,7 +29,9 @@ public final class TrendText {
 	private TrendText() {
 	}
 
-	// The lines under a run's result: the trend of the view's newest run. describe: History's own text for a change row.
+	// The lines under a run's result: the trend of the view's newest run. Its counts are of the earlier runs (the newest
+	// isn't in its own usual; docs/v0.5/SPEC.md BH-1), so they never contradict the note's count of every comparable
+	// run. describe: History's own text for a change row.
 	// maxChanges: how many change rows to list before "…and N more"; 0 = one line with their number (the result screen,
 	// where the full list would push the results off a small screen: review M3).
 	public static List<Line> assessment(BenchmarkTrend.View view, ZoneId zone, Function<HistoryModel.Change, Text> describe, int maxChanges) {
@@ -39,12 +41,12 @@ public final class TrendText {
 		}
 		return switch (a.kind()) {
 			case NO_RESULT -> List.of();
-			case TOO_FEW -> List.of(new Line(Text.of("rigtune.benchmark.trend.too_few", "Not enough comparable runs for a trend yet (%s of 3)",
+			case TOO_FEW -> List.of(new Line(Text.of("rigtune.benchmark.trend.too_few", "Not enough earlier comparable runs for a trend yet (%s of 3)",
 					a.baselineRuns()), Tone.NORMAL));
-			case IN_LINE -> List.of(new Line(Text.of("rigtune.benchmark.trend.in_line", "1%% lows in line with your usual %s FPS (%s comparable runs)",
+			case IN_LINE -> List.of(new Line(Text.of("rigtune.benchmark.trend.in_line", "1%% lows in line with your usual %s FPS (from %s earlier runs)",
 					fps(a.median()), a.baselineRuns()), Tone.NORMAL));
 			case IMPROVEMENT -> List.of(new Line(Text.of("rigtune.benchmark.trend.improvement",
-					"1%% lows %s%% above your usual %s FPS (%s comparable runs)", percent(a.deltaPercent()), fps(a.median()), a.baselineRuns()), Tone.GOOD));
+					"1%% lows %s%% above your usual %s FPS (from %s earlier runs)", percent(a.deltaPercent()), fps(a.median()), a.baselineRuns()), Tone.GOOD));
 			case REGRESSION -> {
 				List<Line> out = new ArrayList<>();
 				out.add(new Line(regression(a, since(view, a, zone)), Tone.BAD));
@@ -55,7 +57,16 @@ public final class TrendText {
 			}
 			case DIFFERENT_CONDITIONS -> List.of(new Line(Text.of("rigtune.benchmark.trend.different",
 					"Performance changed under different conditions (%s); cause unknown.", differences(a.differences())), Tone.WARNING));
+			case EXCLUDED -> List.of(new Line(excluded(view.latest()), Tone.NORMAL));
 		};
+	}
+
+	// docs/v0.5/SPEC.md RW-8/RW-6: why a run is left out of the trend (a first run in a new world also generated it).
+	public static Text excluded(@Nullable BenchmarkRecord run) {
+		BenchmarkRecord.Context c = run == null ? null : run.context();
+		return c != null && !Boolean.TRUE.equals(c.worldFresh()) && Boolean.TRUE.equals(c.dhGenerating())
+				? Text.of("rigtune.benchmark.trend.excluded.dh_generating", "Left out of the trend: Distant Horizons was generating terrain")
+				: Text.of("rigtune.benchmark.trend.excluded.world_fresh", "Left out of the trend: the first run in a new benchmark world");
 	}
 
 	// The regression line (also the notice's message): "1% lows 18% below your usual 543 FPS since 2026-09-24".
@@ -129,6 +140,8 @@ public final class TrendText {
 			case SHADERS -> Text.of("rigtune.benchmark.trend.key.shaders", "shaders");
 			case SHADER_PACK -> Text.of("rigtune.benchmark.trend.key.shader_pack", "shader pack");
 			case DISTANT_HORIZONS -> Text.of("rigtune.benchmark.trend.key.distant_horizons", "Distant Horizons");
+			case BACKEND -> Text.of("rigtune.benchmark.trend.key.backend", "graphics backend");
+			case GPU -> Text.of("rigtune.benchmark.trend.key.gpu", "GPU");
 			case PROTOCOL -> Text.of("rigtune.benchmark.trend.key.protocol", "benchmark version");
 			case NOT_RECORDED -> Text.of("rigtune.benchmark.trend.key.not_recorded", "conditions not recorded");
 			case MOD_SET -> Text.of("rigtune.benchmark.trend.key.mod_set", "mod set");
@@ -224,6 +237,25 @@ public final class TrendText {
 	// Benchmark history without a run.
 	public static Text empty() {
 		return Text.of("rigtune.benchmark.trend.empty", "No benchmark runs yet. Run one from Tools → Benchmark…");
+	}
+
+	// docs/v0.5/SPEC.md 2A (L3): the chart's textual equivalent, its runs oldest first ("5 comparable runs from 2026-09-20 to
+	// 2026-09-24: 1% lows 540, 545, 538, 550, 440 FPS; averages …. Your usual: 543 FPS"); the screens add its title and the
+	// trend line. Null when the chart has nothing to show.
+	public static @Nullable Text chartSummary(List<BenchmarkRecord> runs, @Nullable Double median, ZoneId zone) {
+		List<BenchmarkRecord> shown = runs.stream().filter(r -> r.result() != null).toList();
+		if (shown.isEmpty()) {
+			return null;
+		}
+		String lows = String.join(", ", shown.stream().map(r -> fps(r.result().onePercentLowFps())).toList());
+		String averages = String.join(", ", shown.stream().map(r -> fps(r.result().avgFps())).toList());
+		Text runsText = shown.size() == 1
+				? Text.of("rigtune.benchmark.trend.chart.summary.one", "1 comparable run on %s: 1%% low %s FPS, average %s FPS",
+						date(shown.getFirst().createdAt(), zone), lows, averages)
+				: Text.of("rigtune.benchmark.trend.chart.summary", "%s comparable runs from %s to %s: 1%% lows %s FPS; averages %s FPS", shown.size(),
+						date(shown.getFirst().createdAt(), zone), date(shown.getLast().createdAt(), zone), lows, averages);
+		return median == null ? runsText
+				: Text.join(". ", runsText, Text.of("rigtune.benchmark.trend.chart.usual", "Your usual: %s FPS", fps(median)));
 	}
 
 	// "N comparable runs; M with different conditions not shown".

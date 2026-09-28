@@ -24,7 +24,7 @@ ROOT = REPO / "src" / "test" / "resources" / "v040-written"
 OLD = "0.3.0+mc26.2"
 OFF = "e2e-downgrade-off-1.0.0.jar"
 SWITCH = "c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17"
-STAGED_CHECK = "0.4's staged ops (with projectId): applied by 0.3.0's helper, or dropped by its Undo last"
+STAGED_CHECK = "the newer versions' staged ops (with projectId): applied by 0.3.0's helper, or dropped by its Undo last"
 STAGED_OP = "0a4f3c1e-5b7d-4e2a-9c61-7d2f1b8e4a01"
 
 
@@ -164,7 +164,7 @@ class AfterDowngradeOldTest(unittest.TestCase):
 
     def test_history_missing_an_entry(self):
         self.fx.driver["history"]["entries"].pop()
-        self.assertEqual(["History lists every entry 0.4 wrote (state OK)"], failing(self.fx.old()))
+        self.assertEqual(["History lists every entry the newer versions wrote (state OK)"], failing(self.fx.old()))
 
     def test_undo_last_of_another_entry(self):
         self.fx.driver["undoPlan"]["undoOf"] = "5d1c7a90-2e4b-4f6a-8b3c-1a9e0d7f2c11"
@@ -172,7 +172,7 @@ class AfterDowngradeOldTest(unittest.TestCase):
 
     def test_a_new_file_changed(self):
         (self.fx.config / "stutter.json").write_text("{}", encoding="utf-8")
-        self.assertEqual(["the files only 0.4 writes are byte-identical"], failing(self.fx.old()))
+        self.assertEqual(["the files only the newer versions write are byte-identical"], failing(self.fx.old()))
 
     def test_own_apply_not_applied(self):
         (self.fx.mods / (OFF + ".disabled")).rename(self.fx.mods / OFF)
@@ -237,11 +237,11 @@ class AfterDowngradeNewTest(unittest.TestCase):
         profiles = json.loads((self.fx.config / "profiles.json").read_text(encoding="utf-8"))
         profiles["switches"] = []
         (self.fx.config / "profiles.json").write_text(json.dumps(profiles), encoding="utf-8")
-        self.assertEqual(["profiles.json still labels the switch entries 0.3.0 kept"], failing(self.check()))
+        self.assertEqual(["profiles.json still labels the switch entries the old version kept"], failing(self.check()))
 
     def test_a_new_file_reset(self):
         (self.fx.config / "startup-times.json").write_text(json.dumps({"formatVersion": 1, "runs": []}), encoding="utf-8")
-        self.assertEqual(["0.4 read its own files back (none reset or moved to .bad)"], failing(self.check()))
+        self.assertEqual(["0.4.0-dev read its own files back (none reset or moved to .bad)"], failing(self.check()))
 
     def test_a_rewritten_stutter_session_is_matched_by_its_start(self):
         stutter = json.loads((self.fx.config / "stutter.json").read_text(encoding="utf-8"))
@@ -273,6 +273,19 @@ class DowngradeScenarioTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self_update_e2e.parse_args(["--name", "n", "--scenario", "downgrade", "--new-jar", "b.jar", "--work", "w", "--java-home", "jdk"])
 
+
+
+class LostTest(unittest.TestCase):
+    """The read-back check's item identity (review round 3, M4)."""
+
+    def test_a_record_is_kept_by_its_id_a_map_by_its_keys_a_list_by_item(self):
+        lost = e2e_checks._lost
+        self.assertEqual({}, lost({"current": {"id": "t-1", "key": "a"}}, {"current": {"id": "t-1", "key": "b"}}, ("current",)))
+        self.assertEqual({"current": ["t-1"]}, lost({"current": {"id": "t-1", "key": "a"}}, {"current": {"id": "t-2", "key": "a"}}, ("current",)))
+        self.assertEqual({"current": ["t-1"]}, lost({"current": {"id": "t-1"}}, {}, ("current",)))
+        self.assertEqual({"servers": ["h2"]}, lost({"servers": {"h1": {}, "h2": {}}}, {"servers": {"h1": {}}}, ("servers",)))
+        self.assertEqual({"fixes": ["e2"]}, lost({"fixes": [{"entryId": "e1"}, {"entryId": "e2"}]}, {"fixes": [{"entryId": "e1", "state": "done"}]},
+                                                  ("fixes",)))
 
 if __name__ == "__main__":
     unittest.main()

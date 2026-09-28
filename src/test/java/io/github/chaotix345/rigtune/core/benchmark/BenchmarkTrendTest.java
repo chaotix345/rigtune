@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -34,6 +35,129 @@ class BenchmarkTrendTest {
 		BenchmarkRecord latest = TrendFixtures.run("latest").at("2026-09-29T10:00:00Z").low(latestLow).cv(latestCv).build();
 		runs.add(latest);
 		return BenchmarkTrend.assess(latest, runs);
+	}
+
+	// docs/v0.5/SPEC.md RW-8 (AC2B.7) and RW-6 (AC2B.4): a run in a benchmark world it created, or with Distant Horizons
+	// generating terrain, stays out of the baseline and "your usual", and as the latest run it is never a regression.
+	@Test
+	void rw8AFreshWorldRunIsLeftOutOfTheBaselineAndMedian() {
+		List<BenchmarkRecord> runs = new ArrayList<>();
+		runs.add(TrendFixtures.run("first").at("2026-09-19T10:00:00Z").low(300).fresh().build());
+		runs.addAll(history(500, 500, 500));
+		BenchmarkRecord latest = TrendFixtures.run("latest").at("2026-09-29T10:00:00Z").low(490).build();
+		runs.add(latest);
+		assertEquals(List.of("r0", "r1", "r2"), BenchmarkTrend.baseline(latest, runs).stream().map(BenchmarkRecord::id).toList());
+		Assessment a = BenchmarkTrend.assess(latest, runs);
+		assertEquals(Kind.IN_LINE, a.kind());
+		assertEquals(3, a.baselineRuns());
+		assertEquals(500, a.median());
+	}
+
+	@Test
+	void rw8AFreshLatestRunIsNeverARegression() {
+		List<BenchmarkRecord> runs = history(540, 545, 538, 550);
+		BenchmarkRecord latest = TrendFixtures.run("latest").at("2026-09-29T10:00:00Z").low(300).fresh().build();
+		runs.add(latest);
+		Assessment a = BenchmarkTrend.assess(latest, runs);
+		assertEquals(Kind.EXCLUDED, a.kind());
+		assertNull(a.regression());
+		assertNull(a.deltaPercent());
+		assertEquals(542.5, a.median(), "the chart keeps its usual line from the earlier runs");
+		assertEquals(Kind.EXCLUDED, BenchmarkTrend.view(runs, null, null).assessment().kind());
+	}
+
+	@Test
+	void rw6ADhGeneratingRunIsLeftOutToo() {
+		List<BenchmarkRecord> runs = new ArrayList<>(history(500, 500, 500));
+		runs.add(1, TrendFixtures.run("dh").at("2026-09-20T12:00:00Z").low(200).dhGenerating().build());
+		BenchmarkRecord latest = TrendFixtures.run("latest").at("2026-09-29T10:00:00Z").low(490).build();
+		runs.add(latest);
+		assertEquals(Kind.IN_LINE, BenchmarkTrend.assess(latest, runs).kind());
+		assertEquals(3, BenchmarkTrend.assess(latest, runs).baselineRuns());
+		BenchmarkRecord generating = TrendFixtures.run("latest-dh").at("2026-09-30T10:00:00Z").low(100).dhGenerating().build();
+		runs.add(generating);
+		assertEquals(Kind.EXCLUDED, BenchmarkTrend.assess(generating, runs).kind());
+		assertTrue(BenchmarkTrend.excluded(generating));
+		assertFalse(BenchmarkTrend.excluded(latest));
+		assertFalse(BenchmarkTrend.excluded(TrendFixtures.run("old").context(null).build()), "a 0.2 run has no context");
+	}
+
+	// Nor is an excluded run "the previous run of the scene" that a run under other conditions is compared with.
+	@Test
+	void excludedRunsAreNotThePreviousRunOfTheScene() {
+		List<BenchmarkRecord> runs = new ArrayList<>();
+		runs.add(TrendFixtures.run("first").at("2026-09-19T10:00:00Z").rd(16).low(300).fresh().build());
+		BenchmarkRecord latest = TrendFixtures.run("latest").at("2026-09-29T10:00:00Z").low(500).build();
+		runs.add(latest);
+		assertEquals(Kind.TOO_FEW, BenchmarkTrend.assess(latest, runs).kind());
+	}
+
+	// review-11 COMPAT-2: the graphics backend (26.3's OpenGL or Vulkan, chosen in Video Settings or by its own fallback)
+	// and the GPU (a hybrid laptop's iGPU or dGPU) are conditions: two runs that differ in either aren't compared. The GPU
+	// is named only on the same backend (a device's name reads differently under OpenGL and Vulkan); a run that didn't
+	// record them (0.4, or a probe that failed) claims nothing.
+	private static final String IGPU = "Intel(R) UHD Graphics 620";
+	private static final String DGPU_GL = "NVIDIA GeForce RTX 3050 Laptop GPU/PCIe/SSE2";
+	private static final String DGPU_VK = "NVIDIA GeForce RTX 3050 Laptop GPU";
+
+	@Test
+	void compat2AnotherBackendOrGpuIsNotComparable() {
+		BenchmarkRecord glIgpu = TrendFixtures.run("a").graphics("OPENGL", IGPU).build();
+		BenchmarkRecord vkDgpu = TrendFixtures.run("b").graphics("VULKAN", DGPU_VK).build();
+		BenchmarkRecord glDgpu = TrendFixtures.run("c").graphics("OPENGL", DGPU_GL).build();
+		assertEquals(List.of(Difference.BACKEND), BenchmarkTrend.differences(glIgpu, vkDgpu));
+		assertFalse(BenchmarkTrend.comparable(glIgpu, vkDgpu));
+		assertEquals(List.of(Difference.GPU), BenchmarkTrend.differences(glIgpu, glDgpu));
+		assertEquals(List.of(), BenchmarkTrend.differences(glDgpu, TrendFixtures.run("d").graphics("OPENGL", DGPU_GL.toLowerCase()).build()));
+		assertTrue(BenchmarkTrend.comparable(TrendFixtures.run("old").build(), vkDgpu), "a 0.4 run records neither");
+		assertTrue(BenchmarkTrend.comparable(TrendFixtures.run("e").graphics(null, null).build(), glIgpu));
+		assertEquals(List.of(Difference.GPU), BenchmarkTrend.differences(TrendFixtures.run("f").graphics(null, IGPU).build(), glDgpu),
+				"an unknown backend: the GPU still counts");
+	}
+
+	// review-12 R12FEAT-1: a Mesa/LLVM update changes the renderer's build versions, not the GPU; a run recorded before
+	// the key was cleaned (the raw string) still compares with one after.
+	@Test
+	void r12AMesaUpdateIsNotAnotherGpu() {
+		BenchmarkRecord before = TrendFixtures.run("a").graphics("OPENGL", "AMD Radeon RX 9070 XT (radeonsi, gfx1201, LLVM 20.1.8, DRM 3.64, 6.16.0-rc6-1-cachyos-rc)")
+				.build();
+		BenchmarkRecord after = TrendFixtures.run("b").graphics("OPENGL", "AMD Radeon RX 9070 XT (radeonsi, gfx1201, LLVM 21.1.7, DRM 3.64)").build();
+		assertEquals(List.of(), BenchmarkTrend.differences(before, after));
+		assertEquals(List.of(), BenchmarkTrend.differences(after, TrendFixtures.run("c").graphics("OPENGL", "AMD Radeon RX 9070 XT").build()));
+		assertEquals(List.of(Difference.GPU), BenchmarkTrend.differences(TrendFixtures.run("d").graphics("VULKAN", "Intel(R) Arc(TM) B580 Graphics").build(),
+				TrendFixtures.run("e").graphics("VULKAN", "NVIDIA GeForce RTX 3060").build()));
+		assertEquals(List.of(), BenchmarkTrend.stale(before, new Current("26.2", 12, 8, 2560, 1440, false, false, null, false, "hash-a", "OPENGL",
+				"AMD Radeon RX 9070 XT (radeonsi, gfx1201, LLVM 21.1.7, DRM 3.64)")), "no rerun marker for a driver update");
+	}
+
+	// The finding's scenario for the trend (and Try It, which reads differences): OpenGL runs, then one on Vulkan that is
+	// 40 % faster: no improvement is claimed, "different conditions (graphics backend)" is.
+	@Test
+	void compat2AVulkanRunAfterOpenGlRunsGetsNoVerdict() {
+		List<BenchmarkRecord> runs = new ArrayList<>();
+		for (int i = 0; i < 3; i++) {
+			runs.add(TrendFixtures.run("r" + i).at("2026-09-2" + i + "T10:00:00Z").low(500).graphics("OPENGL", IGPU).build());
+		}
+		BenchmarkRecord vulkan = TrendFixtures.run("latest").at("2026-09-29T10:00:00Z").low(700).graphics("VULKAN", DGPU_VK).build();
+		runs.add(vulkan);
+		Assessment a = BenchmarkTrend.assess(vulkan, runs);
+		assertEquals(Kind.DIFFERENT_CONDITIONS, a.kind());
+		assertEquals(List.of(Difference.BACKEND), a.differences());
+		// Benchmark history shows the runs comparable with the newest one: the others are "not shown".
+		BenchmarkTrend.View view = BenchmarkTrend.view(runs, null, null);
+		assertEquals(1, view.comparableRuns());
+		assertEquals(3, view.otherRuns());
+		assertEquals(List.of("latest"), view.points().stream().map(BenchmarkRecord::id).toList());
+	}
+
+	@Test
+	void compat2TheRerunMarkerNamesABackendOrGpuChange() {
+		BenchmarkRecord last = TrendFixtures.run("a").graphics("OPENGL", IGPU).build();
+		assertEquals(List.of(Difference.BACKEND), BenchmarkTrend.stale(last, new Current("26.2", 12, 8, 2560, 1440, false, false, null, false, "hash-a",
+				"VULKAN", DGPU_VK)));
+		assertEquals(List.of(Difference.GPU), BenchmarkTrend.stale(last, new Current("26.2", 12, 8, 2560, 1440, false, false, null, false, "hash-a",
+				"OPENGL", DGPU_GL)));
+		assertEquals(List.of(), BenchmarkTrend.stale(last, NOW), "unknown now: nothing claimed");
 	}
 
 	@Test

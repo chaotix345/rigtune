@@ -4,25 +4,40 @@ import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.SettingsSaver;
 import io.github.chaotix345.rigtune.client.benchmark.BenchmarkWorld;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
+import io.github.chaotix345.rigtune.core.launcher.LauncherModText;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Goal;
+import io.github.chaotix345.rigtune.core.profile.ProfileStore;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.ContainerObjectSelectionList;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Locale;
 
 // The v0.2 settings (docs/v0.2/SPEC.md item 8). Every change is saved at once; the network switches also make the
 // controller reload and rescan, so the report reflects them.
+// v0.5 (docs/v0.5/PLAN.md WS-L1 milestone 1, SPEC X6 and X12): the switches are the rows of a scrolling RowList, since more
+// rows don't fit at 640x480 (GUI scale 2); each row's switch is its Tab stop, and the note is the last row.
 public class RigTuneSettingsScreen extends Screen {
 	private static final int ROW = 20;
 	private static final int GAP = 4;
-	private static final int TOP = 36;
+	private static final int TOP = 32;
+	private static final int LINE = 9;
+	// A list row's content starts this far inside the row (vanilla's Entry.CONTENT_PADDING).
+	private static final int PAD = 2;
 	private static final int MAX_WIDTH = 310;
 	private static final int COLOR_NOTE = 0xFFA8A8A8;
 
@@ -32,7 +47,9 @@ public class RigTuneSettingsScreen extends Screen {
 	private final Path configDir;
 	private @Nullable CycleButton<Boolean> remoteRules;
 	private @Nullable CycleButton<Boolean> modrinth;
-	private int noteY;
+	private @Nullable SettingsList list;
+	private @Nullable CycleButton<Boolean> modFiles;
+	private boolean showModFiles;
 
 	public RigTuneSettingsScreen(@Nullable Screen parent, RigTuneController controller) {
 		super(Component.translatable("rigtune.settings.title"));
@@ -45,58 +62,57 @@ public class RigTuneSettingsScreen extends Screen {
 	@Override
 	protected void init() {
 		int column = Math.min(width - 32, MAX_WIDTH);
-		int x = (width - column) / 2;
-		int y = TOP;
+		int footer = height - 28;
+		SettingsList rows = new SettingsList(TOP, Math.max(ROW + GAP, footer - GAP - TOP), column);
+		list = rows;
 
-		addRenderableWidget(CycleButton.onOffBuilder(settings.networkEnabled)
+		rows.add(CycleButton.onOffBuilder(settings.networkEnabled)
 				.withTooltip(v -> Tooltip.create(Component.translatable("rigtune.settings.network.tooltip")))
-				.create(x, y, column, ROW, Component.translatable("rigtune.settings.network"), (b, v) -> {
+				.create(0, 0, column, ROW, Component.translatable("rigtune.settings.network"), (b, v) -> {
 					settings.networkEnabled = v;
 					networkChanged();
 				}));
-		y += ROW + GAP;
-		remoteRules = addRenderableWidget(CycleButton.onOffBuilder(settings.remoteRules)
+		remoteRules = rows.add(CycleButton.onOffBuilder(settings.remoteRules)
 				.withTooltip(v -> Tooltip.create(Component.translatable("rigtune.settings.remote_rules.tooltip")))
-				.create(x, y, column, ROW, Component.translatable("rigtune.settings.remote_rules"), (b, v) -> {
+				.create(0, 0, column, ROW, Component.translatable("rigtune.settings.remote_rules"), (b, v) -> {
 					settings.remoteRules = v;
 					networkChanged();
 				}));
-		y += ROW + GAP;
-		modrinth = addRenderableWidget(CycleButton.onOffBuilder(settings.modrinth)
+		modrinth = rows.add(CycleButton.onOffBuilder(settings.modrinth)
 				.withTooltip(v -> Tooltip.create(Component.translatable("rigtune.settings.modrinth.tooltip")))
-				.create(x, y, column, ROW, Component.translatable("rigtune.settings.modrinth"), (b, v) -> {
+				.create(0, 0, column, ROW, Component.translatable("rigtune.settings.modrinth"), (b, v) -> {
 					settings.modrinth = v;
 					networkChanged();
 				}));
-		y += ROW + GAP;
-		addRenderableWidget(CycleButton.onOffBuilder(settings.startupToast)
+		rows.add(CycleButton.onOffBuilder(settings.startupToast)
 				.withTooltip(v -> Tooltip.create(Component.translatable("rigtune.settings.startup_toast.tooltip")))
-				.create(x, y, column, ROW, Component.translatable("rigtune.settings.startup_toast"), (b, v) -> {
+				.create(0, 0, column, ROW, Component.translatable("rigtune.settings.startup_toast"), (b, v) -> {
 					settings.startupToast = v;
 					save();
 				}));
-		y += ROW + GAP;
-		addRenderableWidget(CycleButton.builder((Goal g) -> Component.translatable("rigtune.goal." + g.name().toLowerCase(Locale.ROOT)), controller.goal())
+		rows.add(CycleButton.builder((Goal g) -> Component.translatable("rigtune.goal." + g.name().toLowerCase(Locale.ROOT)), controller.goal())
 				.withValues(Goal.values())
 				.withTooltip(g -> Tooltip.create(Component.translatable("rigtune.goal." + g.name().toLowerCase(Locale.ROOT) + ".tooltip")))
-				.create(x, y, column, ROW, Component.translatable("rigtune.settings.goal"), (b, g) -> controller.setGoal(g)));
-		y += ROW + GAP;
+				.create(0, 0, column, ROW, Component.translatable("rigtune.settings.goal"), (b, g) -> controller.setGoal(g)));
 		// The same labels and availability as the benchmark menu, which reads this setting.
 		BenchmarkRequest.Scene[] scenes = BenchmarkWorld.supported() ? BenchmarkRequest.Scene.values() : new BenchmarkRequest.Scene[]{BenchmarkRequest.Scene.CURRENT};
 		BenchmarkRequest.Scene scene = BenchmarkWorld.supported() ? settings.benchmarkSceneOrDefault() : BenchmarkRequest.Scene.CURRENT;
-		addRenderableWidget(CycleButton.builder((BenchmarkRequest.Scene s) -> Component.translatable("rigtune.benchmark.scene." + s.name().toLowerCase(Locale.ROOT)), scene)
+		rows.add(CycleButton.builder((BenchmarkRequest.Scene s) -> Component.translatable("rigtune.benchmark.scene." + s.name().toLowerCase(Locale.ROOT)), scene)
 				.withValues(scenes)
 				.withTooltip(s -> Tooltip.create(Component.translatable("rigtune.settings.scene.tooltip")))
-				.create(x, y, column, ROW, Component.translatable("rigtune.settings.scene"), (b, s) -> {
+				.create(0, 0, column, ROW, Component.translatable("rigtune.settings.scene"), (b, s) -> {
 					settings.benchmarkScene = s.name();
 					save();
 				}));
-		y += ROW + GAP;
-		y = stutterMonitorRow(x, y, column);
-		noteY = y + 2;
+		// ---- WS-P (docs/v0.5/SPEC.md 2P, PF-2): the battery-offer row, from its own method, is added on the line below.
+		batteryOfferRow(rows, column);
+		stutterMonitorRow(rows, column);
+		// ---- WS-L1 (docs/v0.5/SPEC.md 4e): the mod-files row.
+		modFilesRow(rows, column);
+		rows.note(Component.translatable("rigtune.settings.note"));
+		addRenderableWidget(rows);
 		updateActive();
 
-		int footer = height - 28;
 		if (parent instanceof RigTuneScreen) {
 			addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose())
 					.bounds((width - Math.min(column, 150)) / 2, footer, Math.min(column, 150), ROW).build());
@@ -111,15 +127,81 @@ public class RigTuneSettingsScreen extends Screen {
 	}
 
 	// v0.4 (docs/v0.4/SPEC.md 5): the opt-in Stutter Doctor session monitor (also on StutterScreen).
-	private int stutterMonitorRow(int x, int y, int column) {
-		addRenderableWidget(CycleButton.onOffBuilder(settings.stutterMonitor)
+	private void stutterMonitorRow(SettingsList rows, int column) {
+		rows.add(CycleButton.onOffBuilder(settings.stutterMonitor)
 				.withTooltip(v -> Tooltip.create(Component.translatable("rigtune.stutter.monitor.tooltip")))
-				.create(x, y, column, ROW, Component.translatable("rigtune.stutter.monitor"), (b, v) -> {
+				.create(0, 0, column, ROW, Component.translatable("rigtune.stutter.monitor"), (b, v) -> {
 					settings.stutterMonitor = v;
 					save();
 					controller.setStutterMonitor(v);
 				}));
-		return y + ROW + GAP;
+	}
+
+	// v0.5 (docs/v0.5/SPEC.md 4e): who changes this instance's mod files. Shown where a launcher keeps its own record of
+	// them (or before that's known), and wherever the opt-in is on. Choosing saves settings.json (SettingsSaver) and
+	// rescans, so the report follows the policy.
+	private void modFilesRow(SettingsList rows, int column) {
+		if (!showModFilesRow(controller.modFiles(), settings.modFilesByRigTune)) {
+			return;
+		}
+		Component launcher = Texts.component(LauncherModText.nameOrYours(controller.launcher()));
+		Component tooltip = modFilesPending(controller.modFiles(), settings.modFilesByRigTune, controller.modFilesOptedIn())
+				? Component.translatable("rigtune.settings.mod_files.tooltip.pending") : Component.translatable("rigtune.settings.mod_files.tooltip");
+		modFiles = rows.add(CycleButton.builder((Boolean rigtune) -> rigtune ? Component.translatable("rigtune.settings.mod_files.rigtune")
+						: Component.translatable("rigtune.settings.mod_files.launcher", launcher), settings.modFilesByRigTune)
+				.withValues(false, true)
+				.withTooltip(v -> Tooltip.create(tooltip))
+				.create(0, 0, column, ROW, Component.translatable("rigtune.settings.mod_files"), (b, v) -> {
+					settings.modFilesByRigTune = v;
+					save();
+					controller.rescan();
+				}));
+	}
+
+	// v0.5 (docs/v0.5/SPEC.md 4b, review L15): MOD_FILES_NEWS's Settings… opens the screen on the Mod files row, focused and
+	// scrolled to (below the list's fold at 854x480).
+	public RigTuneSettingsScreen showingModFiles() {
+		showModFiles = true;
+		return this;
+	}
+
+	@Override
+	protected void setInitialFocus() {
+		SettingsList rows = list;
+		CycleButton<Boolean> row = modFiles;
+		if (showModFiles && rows != null && row != null) {
+			showModFiles = false;
+			for (SettingsList.Row entry : rows.children()) {
+				if (entry.children().contains(row)) {
+					changeFocus(ComponentPath.path(row, entry, rows, this));
+					rows.show(entry);
+					return;
+				}
+			}
+		}
+		super.setInitialFocus();
+	}
+
+	// The mod-files row's rule: the policy says the launcher keeps the mods (LAUNCHER, PENDING), or the opt-in is on.
+	static boolean showModFilesRow(ModFilesPolicy policy, boolean optIn) {
+		return optIn || policy.launcherManages();
+	}
+
+	// Review L9: while RigTune still checks which launcher it is (PENDING, or an opt-in not yet known to matter), the tooltip
+	// claims no launcher's list.
+	static boolean modFilesPending(ModFilesPolicy policy, boolean optIn, boolean optedIn) {
+		return optIn ? !optedIn : policy == ModFilesPolicy.PENDING;
+	}
+
+	// v0.5 PF-2 (WS-P): the battery offer on or off, so "Don't offer again" can be undone in game. It is profiles.json's
+	// battery.snoozed (read here at init, written on a click, like the Profiles screen's own file); greyed out when a newer
+	// RigTune wrote profiles.json.
+	private void batteryOfferRow(SettingsList rows, int column) {
+		ProfileStore store = ProfileStore.shared(configDir);
+		CycleButton<Boolean> row = rows.add(CycleButton.onOffBuilder(!store.battery().snoozed())
+				.withTooltip(v -> Tooltip.create(Component.translatable("rigtune.settings.battery_offer.tooltip")))
+				.create(0, 0, column, ROW, Component.translatable("rigtune.settings.battery_offer"), (b, v) -> store.snoozeBattery(!v)));
+		row.active = store.writable();
 	}
 
 	// Written on the settings thread (SettingsSaver), never behind the worker pool; each save writes the current values.
@@ -143,17 +225,108 @@ public class RigTuneSettingsScreen extends Screen {
 		}
 	}
 
+	/** v0.5 (WS-L1 milestone 1): the rows (for the game tests' layout checks). */
+	public @Nullable SettingsList list() {
+		return list;
+	}
+
 	@Override
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title, width / 2, 15, 0xFFFFFFFF);
-		if (noteY + 9 < height - 28 - GAP) {
-			graphics.centeredText(font, Component.translatable("rigtune.settings.note"), width / 2, noteY, Palette.of(COLOR_NOTE));
-		}
 	}
 
 	@Override
 	public void onClose() {
 		minecraft.gui.setScreen(parent);
+	}
+
+	// One row per switch (the switch is the row's Tab stop and narrates itself), and the note as a text row.
+	public final class SettingsList extends RowList<SettingsList.Row> {
+		private final int column;
+
+		SettingsList(int top, int listHeight, int column) {
+			super(RigTuneSettingsScreen.this.minecraft, RigTuneSettingsScreen.this.width, listHeight, top, ROW + GAP);
+			this.column = column;
+		}
+
+		@Override
+		public int getRowWidth() {
+			return column + 2 * PAD;
+		}
+
+		<W extends AbstractWidget> W add(W widget) {
+			addEntry(new WidgetRow(widget), ROW + GAP);
+			return widget;
+		}
+
+		void note(Component text) {
+			NoteRow row = new NoteRow(text, column);
+			addEntry(row, row.height());
+		}
+
+		void show(Row row) {
+			scrollToEntry(row);
+		}
+
+		public abstract static class Row extends ContainerObjectSelectionList.Entry<Row> {
+		}
+
+		final class WidgetRow extends Row {
+			private final AbstractWidget widget;
+
+			WidgetRow(AbstractWidget widget) {
+				this.widget = widget;
+			}
+
+			@Override
+			public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
+				widget.setPosition(getContentX(), getContentY());
+				widget.extractRenderState(graphics, mouseX, mouseY, partialTick);
+			}
+
+			@Override
+			public List<? extends GuiEventListener> children() {
+				return List.of(widget);
+			}
+
+			@Override
+			public List<? extends NarratableEntry> narratables() {
+				return List.of(widget);
+			}
+		}
+
+		final class NoteRow extends Row {
+			private final List<FormattedCharSequence> lines;
+			private final RowFocus focus;
+
+			NoteRow(Component text, int width) {
+				this.lines = font.split(text, width);
+				this.focus = new RowFocus(this, text);
+			}
+
+			int height() {
+				return lines.size() * LINE + GAP + 2 * PAD;
+			}
+
+			@Override
+			public void extractContent(GuiGraphicsExtractor graphics, int mouseX, int mouseY, boolean hovered, float partialTick) {
+				int y = getContentY() + 2;
+				for (FormattedCharSequence line : lines) {
+					graphics.centeredText(font, line, getContentXMiddle(), y, Palette.of(COLOR_NOTE));
+					y += LINE;
+				}
+			}
+
+			@Override
+			public List<? extends GuiEventListener> children() {
+				return List.of(focus);
+			}
+
+			@Override
+			public List<? extends NarratableEntry> narratables() {
+				return List.of(focus);
+			}
+		}
 	}
 }

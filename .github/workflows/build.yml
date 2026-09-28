@@ -7,6 +7,11 @@ on:
   # default GITHUB_TOKEN does not fire other workflows' `pull_request`/`push` events, so
   # update-rules.yml calls `gh workflow run build.yml` explicitly. See the comment there.
   workflow_dispatch:
+    inputs:
+      gametest_parts:
+        description: "JVMs per game-test leg (the split, docs/v0.5/SPEC.md 1g); empty = GAMETEST_PARTS below"
+        required: false
+        type: string
 
 # No job here writes to the repository; checkout persists this token next to the game and its mods.
 permissions:
@@ -17,16 +22,77 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 
+# Network (docs/v0.5/design/ws-ci.md): in the java job and the game-test legs one "Resolve dependencies" step downloads
+# everything, retried (tools/ci/retry.sh); every later Gradle step runs --offline, and the tests run with no network but
+# loopback (tools/ci/offline.sh). The game tests' Modrinth is a local fake (build.gradle's ModrinthFixture), their rules a
+# local fixture (RulesFixtureServer). Runner images are pinned: ubuntu-latest moves to 26.04 (another Mesa and Xvfb) in
+# November 2026.
+env:
+  # The game-test split (docs/v0.5/SPEC.md 1g): JVMs per leg, each running a contiguous slice of the classes
+  # (tools/gametest_matrix.py). 1 = off. A dispatch's gametest_parts input overrides it for that run. ON since 2026-09-28
+  # (PLAN-3's 12-minute rule): with C09 and C20 in, run 36378908079's 26.2 OpenGL leg ran 692 s of classes before
+  # A11yGameTest and hit the 14-min timeout (docs/v0.5/verification/ci/README.md).
+  GAMETEST_PARTS: 2
+
 jobs:
   java:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: gradle/actions/wrapper-validation@v6
-      - uses: actions/setup-java@v6
+      # The JDK download is the one step that can't go through tools/ci/retry.sh: a failed or corrupted download (run
+      # 36336797155: a checksum mismatch from Microsoft's CDN, fine a minute later) gets one more try after 30 s, and a
+      # second failure fails the job (test_ci_workflow.py: JdkRetryTests).
+      - name: Set up the JDK (network)
+        id: jdk
+        uses: actions/setup-java@v6
+        continue-on-error: true
         with:
           distribution: microsoft
-          java-version: '25'
+          java-version: '25.0.3'
+      - name: Wait before the JDK retry (network)
+        if: steps.jdk.outcome == 'failure'
+        run: sleep 30
+      - name: Set up the JDK, retry (network)
+        if: steps.jdk.outcome == 'failure'
+        uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
+      # The Gradle home (distribution, dependencies, Loom's Minecraft files) is cached; main and the integration branch
+      # write it, every other ref reads theirs or main's.
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feat/v0.5.0' }}
+      # The released jars the E2E drivers compile against, kept under their pinned sha256s.
+      - uses: actions/cache@v6
+        with:
+          path: build/e2e-old
+          key: e2e-old-8294d04a6b67e76d-67275e232fe4de9f-5717f65cb90c71aa-98a2a2e14d7cc49f-cc43ebdf6b92666e-801cd3b8e91c6a27-2d8328d73cb47891
+      - name: Resolve dependencies (network)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          tools/ci/retry.sh ./gradlew --no-daemon prefetchDependencies
+          old=build/e2e-old
+          mkdir -p "$old"
+          for spec in 'v0.1.0 rigtune-0.1.0.jar' 'v0.2.0 rigtune-0.2.0+mc26.2.jar' 'v0.3.0 rigtune-0.3.0+mc26.2.jar' \
+              'v0.2.0 rigtune-0.2.0+mc26.3.jar' 'v0.3.0 rigtune-0.3.0+mc26.3.jar' 'v0.4.0 rigtune-0.4.0+mc26.2.jar' \
+              'v0.4.0 rigtune-0.4.0+mc26.3.jar'; do
+            read -r tag asset <<< "$spec"
+            [ -s "$old/$asset" ] || tools/ci/retry.sh gh release download "$tag" -R "$GITHUB_REPOSITORY" -p "$asset" -D "$old" --clobber
+          done
+          sha256sum -c - <<EOF
+          8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950  $old/rigtune-0.1.0.jar
+          67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9  $old/rigtune-0.2.0+mc26.2.jar
+          5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9  $old/rigtune-0.3.0+mc26.2.jar
+          98a2a2e14d7cc49fcaa1fde087d40d1ace277b721ee6bc9d1ba94ced29a0a7d9  $old/rigtune-0.2.0+mc26.3.jar
+          cc43ebdf6b92666e5cf380004252fa59a81fa72b90f44cb280e45063cbf28084  $old/rigtune-0.3.0+mc26.3.jar
+          801cd3b8e91c6a27b819d64c5b433bea6d7ac99d4776cb853c873a9cafdd868a  $old/rigtune-0.4.0+mc26.2.jar
+          2d8328d73cb4789142036325eed11d1cd4ce6678fff7ca539cab9c09781499a7  $old/rigtune-0.4.0+mc26.3.jar
+          EOF
       # Stonecutter rewrites src/ when the active Minecraft version is switched. Commits must be in the state
       # of the VCS version, 26.2 (settings.gradle vcsVersion, stonecutter.gradle active), with canonical comments.
       - name: Check sources are in the committed 26.2 state
@@ -36,35 +102,42 @@ jobs:
           set -eu
           grep -qF "vcsVersion = '$VCS_MC'" settings.gradle || { echo "settings.gradle: vcsVersion must be '$VCS_MC'"; exit 1; }
           grep -qxF "stonecutter.active '$VCS_MC'" stonecutter.gradle || { echo "stonecutter.gradle: active version must be '$VCS_MC'; run ./gradlew \"Reset active project\" and commit"; exit 1; }
-          ./gradlew "Reset active project"
+          # No daemon before the no-network step: a daemon left running keeps Gradle cache locks it could only be asked
+          # over loopback to release, which a build in another network namespace can't reach.
+          ./gradlew --no-daemon --offline "Reset active project"
           git diff --exit-code || { echo "Sources are in a switched state; run ./gradlew \"Reset active project\" and commit"; exit 1; }
-      # Builds and unit-tests every Minecraft version (versions/<mc>/); check also compiles each version's game tests.
+      # Builds and unit-tests every Minecraft version (versions/<mc>/), with no network; check also compiles each
+      # version's game tests.
       - name: Build and test
-        run: ./gradlew build
+        run: tools/ci/offline.sh ./gradlew --no-daemon --offline build
       # The self-update E2E drivers (tools/e2e) aren't part of `build`: compile them here so an API change that breaks
-      # them shows up on the push, not in Phase 5. The undo driver compiles against these sources; the self-update driver
-      # against each released jar it drives on the E2E's version, 26.2 (downloaded from the GitHub release, sha256-pinned).
+      # them shows up on the push, not in Phase 5. The undo driver compiles against these sources; the self-update and
+      # downgrade drivers against each released jar they drive, on each node (from the GitHub releases, sha256-pinned
+      # above; tools/e2e/tests keep these pins equal to RELEASED).
       - name: Compile the E2E drivers
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
           old=build/e2e-old
-          mkdir -p "$old"
-          gh release download v0.1.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.1.0.jar' -D "$old" --clobber
-          gh release download v0.2.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.2.0+mc26.2.jar' -D "$old" --clobber
-          gh release download v0.3.0 -R "$GITHUB_REPOSITORY" -p 'rigtune-0.3.0+mc26.2.jar' -D "$old" --clobber
-          sha256sum -c - <<EOF
-          8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950  $old/rigtune-0.1.0.jar
-          67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9  $old/rigtune-0.2.0+mc26.2.jar
-          5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9  $old/rigtune-0.3.0+mc26.2.jar
-          EOF
-          ./gradlew compileE2eUndoJava
-          ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.1.0.jar"
-          ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.2.0+mc26.2.jar"
-          ./gradlew :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.2.jar"
-          ./gradlew :26.2:compileE2eDowngradeJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.2.jar"
-          # The released-jar compatibility harness (docs/v0.4/SPEC.md AC3.3): 0.3.0's own classes read the files 0.4 writes.
+          ./gradlew --offline compileE2eUndoJava
+          ./gradlew --offline :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.1.0.jar"
+          ./gradlew --offline :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.2.0+mc26.2.jar"
+          ./gradlew --offline :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.2.jar"
+          ./gradlew --offline :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.4.0+mc26.2.jar"
+          ./gradlew --offline :26.3:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.2.0+mc26.3.jar"
+          ./gradlew --offline :26.3:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.3.jar"
+          ./gradlew --offline :26.3:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.4.0+mc26.3.jar"
+          ./gradlew --offline :26.2:compileE2eDowngradeJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.2.jar"
+          ./gradlew --offline :26.2:compileE2eDowngradeJava "-Pe2e.oldJar=$old/rigtune-0.4.0+mc26.2.jar"
+          ./gradlew --offline :26.3:compileE2eDowngradeJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.3.jar"
+          ./gradlew --offline :26.3:compileE2eDowngradeJava "-Pe2e.oldJar=$old/rigtune-0.4.0+mc26.3.jar"
+      # The released-jar compatibility harnesses (docs/v0.5/SPEC.md 3b): the released 0.4.0's and 0.3.0's own classes read
+      # what 0.5 writes (the v040-written and v050-written fixture sets, composed as one instance; compat040 also runs each
+      # set's expect.json). No client, no network.
+      - name: Released-jar compatibility (compat040, compat030)
+        run: |
+          set -eu
+          old=build/e2e-old
+          python3 tools/e2e/compat040.py --old-jar "$old/rigtune-0.4.0+mc26.2.jar"
           python3 tools/e2e/compat030.py --old-jar "$old/rigtune-0.3.0+mc26.2.jar"
       - name: Upload jars
         if: always()
@@ -83,6 +156,16 @@ jobs:
             versions/*/build/test-results/**
           if-no-files-found: ignore
 
+  # The self-update E2E on this run's jars (docs/v0.5/SPEC.md 3a; .github/workflows/e2e.yml): the push tier, 0.4.0 → new
+  # on every node, on every push. A pull request into main from a feat/v* branch (the release PR) runs the release tier.
+  e2e:
+    needs: java
+    uses: ./.github/workflows/e2e.yml
+    with:
+      # Never for a fork's pull request, whatever its branch is called (review-11 SEC-7).
+      tier: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' && startsWith(github.head_ref, 'feat/v') && github.event.pull_request.head.repo.full_name == github.repository && 'release' || 'push' }}
+      jars-artifact: rigtune-jars
+
   # The client-gametest legs, one per Minecraft node in versions/*/: OpenGL for every node, plus Vulkan from 26.3 on.
   # A new node gets its legs without editing this file (tools/gametest_matrix.py, tested in tools/tests).
   gametest-matrix:
@@ -93,20 +176,23 @@ jobs:
       - uses: actions/checkout@v7
       - id: matrix
         name: List the game-test legs
+        env:
+          PARTS: ${{ inputs.gametest_parts || env.GAMETEST_PARTS }}
         run: |
-          matrix=$(python3 tools/gametest_matrix.py)
+          matrix=$(python3 tools/gametest_matrix.py --parts "$PARTS")
           echo "$matrix"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
   # The client game tests (src/gametest) against the built jar in a production client, under Xvfb with Mesa llvmpipe
   # (lavapipe for Vulkan). Loom's ClientProductionRunTask wraps the game in xvfb-run by itself when CI is set on Linux.
   # No automatic retry: a flake is re-run by hand ("Re-run failed jobs"), so an intermittent regression isn't hidden.
+  # With the split on (tools/gametest_matrix.py), each leg is one job per part, named "…, part 1/2", running its classes.
   client-gametest:
-    name: client game tests (${{ matrix.mc }}, ${{ matrix.backend }})
+    name: client game tests (${{ matrix.mc }}, ${{ matrix.backend }}${{ matrix.part && format(', part {0}', matrix.part) || '' }})
     needs: gametest-matrix
-    # Pinned: ubuntu-latest moves to 26.04 (another Mesa and Xvfb) in November 2026.
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    # The 15-min game-test step plus a cold cache and one retry cycle of the network step.
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.gametest-matrix.outputs.matrix) }}
@@ -115,20 +201,98 @@ jobs:
       # leaves that attribute out. Left empty (unset for SDL) on the Vulkan leg: OpenGL then fails and 26.3 falls back
       # to Vulkan on lavapipe. 26.2 (GLFW) ignores it.
       SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER: ${{ matrix.backend == 'OpenGL' && 'skip' || '' }}
+      GAMETEST_CLASSES: ${{ matrix.classes }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      # The JDK download is the one step that can't go through tools/ci/retry.sh: a failed or corrupted download (run
+      # 36336797155: a checksum mismatch from Microsoft's CDN, fine a minute later) gets one more try after 30 s, and a
+      # second failure fails the job (test_ci_workflow.py: JdkRetryTests).
+      - name: Set up the JDK (network)
+        id: jdk
+        uses: actions/setup-java@v6
+        continue-on-error: true
         with:
           distribution: microsoft
-          java-version: '25'
+          java-version: '25.0.3'
+      - name: Wait before the JDK retry (network)
+        if: steps.jdk.outcome == 'failure'
+        run: sleep 30
+      - name: Set up the JDK, retry (network)
+        if: steps.jdk.outcome == 'failure'
+        uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
       - uses: gradle/actions/setup-gradle@v6
-      - name: Install the Mesa Vulkan driver (lavapipe)
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feat/v0.5.0' }}
+      - name: Runner
+        id: runner
+        run: |
+          mesa=$(dpkg-query -W -f='${Version}' libgl1-mesa-dri 2>/dev/null || echo unknown)
+          echo "image $ImageOS $ImageVersion; Mesa $mesa; $(lscpu | sed -n 's/^Model name: *//p'); $(nproc) CPUs" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "lavapipe-key=lavapipe-$ImageOS-$ImageVersion" >> "$GITHUB_OUTPUT"
+      # lavapipe: the .debs are cached per runner image, so a warm leg installs without the Ubuntu archive.
+      - uses: actions/cache@v6
         if: matrix.backend == 'Vulkan'
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers
-      # If the game finds no graphics backend it opens a blocking error dialog, so a hang means a timeout here.
+        with:
+          path: ~/lavapipe-debs
+          key: ${{ steps.runner.outputs.lavapipe-key }}
+      - name: Install the Mesa Vulkan driver (lavapipe; network on a cache miss)
+        if: matrix.backend == 'Vulkan'
+        run: |
+          set -eu
+          debs=~/lavapipe-debs
+          if ls "$debs"/*.deb >/dev/null 2>&1; then
+            sudo dpkg -i "$debs"/*.deb
+          else
+            tools/ci/retry.sh sudo apt-get -o Acquire::Retries=3 update
+            tools/ci/retry.sh sudo apt-get -o Acquire::Retries=3 install -y --no-install-recommends --download-only mesa-vulkan-drivers
+            sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers
+            mkdir -p "$debs"
+            cp /var/cache/apt/archives/*.deb "$debs"/ 2>/dev/null || true
+          fi
+          dpkg-query -W mesa-vulkan-drivers
+      - name: Resolve dependencies (network)
+        run: >-
+          tools/ci/retry.sh ./gradlew --no-daemon ":${{ matrix.mc }}:prefetchDependencies" ":${{ matrix.mc }}:downloadAssets"
+          ":${{ matrix.mc }}:gametestModrinthCatalog" ":${{ matrix.mc }}:jar" ":${{ matrix.mc }}:gametestJar" "-PgametestClasses=$GAMETEST_CLASSES"
+      # AC1a.3: in the namespace loopback carries multicast (tools/ci/offline.sh), so vanilla's LAN discovery works there.
+      - name: Check loopback multicast
+        run: tools/ci/offline.sh java tools/ci/MulticastCheck.java
+      # With no network but loopback: RigTune gets Modrinth and its rules from local fixtures, and Minecraft's own
+      # services (accounts, Realms) fail at once, the same way every run. If the game finds no graphics backend it opens a
+      # blocking error dialog, so a hang means a timeout here; at 13 min the game's JVM (the java process whose command line
+      # has KnotClient as an argument; Gradle's and the fake Modrinth's are java too) prints every thread's stack and locks
+      # into this log first (run 36235561444 hung with none). The whole /proc/<pid>/cmdline is read: KnotClient comes after
+      # a long classpath. At 14 min timeout (as root, in offline.sh) sends TERM to the run's process group and returns once
+      # Gradle's launcher has exited (KILL 15 s after TERM if it hasn't); the step then gives every java process (they run
+      # as this user) 20 s to end and kills what is left, before the step's 15-min limit (which can't signal the root-owned
+      # sudo).
       - name: Client game tests
-        timeout-minutes: 20
-        run: ./gradlew ":${{ matrix.mc }}:runProductionClientGameTest" --stacktrace
+        timeout-minutes: 15
+        run: |
+          set -eu
+          ( sleep 780; for p in $(pgrep -x java || true); do
+              if tr '\0' '\n' < "/proc/$p/cmdline" 2>/dev/null | grep -qxF net.fabricmc.loader.impl.launch.knot.KnotClient; then kill -QUIT "$p" || true; fi
+            done ) >/dev/null 2>&1 &
+          watcher=$!
+          trap 'kill "$watcher" 2>/dev/null || true' EXIT
+          code=0
+          tools/ci/offline.sh --timeout 14m ./gradlew --no-daemon --offline ":${{ matrix.mc }}:runProductionClientGameTest" "-PgametestClasses=$GAMETEST_CLASSES" --stacktrace || code=$?
+          if [ "$code" -ne 0 ]; then
+            echo "The game-test run exited $code (124: stopped by the 14-min timeout)"
+            waited=0
+            while pgrep -x java >/dev/null && [ "$waited" -lt 20 ]; do sleep 1; waited=$((waited + 1)); done
+            if pgrep -x java >/dev/null; then
+              echo "java still running after $waited s; killing it:"
+              ps -o pid,user,etime,comm -C java || true
+              pkill -KILL -x java || true
+            else
+              echo "No java process left ($waited s after the run exited)"
+            fi
+            exit "$code"
+          fi
       # A leg whose backend fails falls back to the other one and would still pass: fail it instead.
       # The line is written at start-up; a run that crosses midnight UTC has it in the rotated
       # log (logs/<date>-<n>.log.gz), not latest.log, so both are searched.
@@ -138,48 +302,88 @@ jobs:
           { cat "$logs/latest.log"; for f in "$logs"/*.log.gz; do [ -e "$f" ] && zcat "$f"; done; } \
             | grep -F "Using graphics backend ${{ matrix.backend }}" \
             || { echo "::error::the game's logs don't name the ${{ matrix.backend }} backend"; exit 1; }
+      # The game's Modrinth lookups went to the local fake: each start-up request answered, no server error, and no lookup
+      # fell back to offline data except while a test had Modrinth off.
+      - name: Check the fake Modrinth
+        run: python3 tools/ci/check_fake_modrinth.py "versions/${{ matrix.mc }}/build/gametest-modrinth/requests.jsonl" "versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs"
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: gametest-screenshots-${{ matrix.mc }}-${{ matrix.backend }}
+          name: gametest-screenshots-${{ matrix.mc }}-${{ matrix.backend }}${{ matrix.suffix }}
           path: versions/${{ matrix.mc }}/build/run/productionClientGameTest/screenshots/
           if-no-files-found: ignore
       - name: Upload logs and crash reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: gametest-logs-${{ matrix.mc }}-${{ matrix.backend }}
+          name: gametest-logs-${{ matrix.mc }}-${{ matrix.backend }}${{ matrix.suffix }}
           path: |
             versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs/
             versions/${{ matrix.mc }}/build/run/productionClientGameTest/crash-reports/
             versions/${{ matrix.mc }}/build/run/productionClientGameTest/hs_err_pid*.log
+            versions/${{ matrix.mc }}/build/gametest-modrinth/requests.jsonl
+            versions/${{ matrix.mc }}/build/gametest-modrinth/fake-modrinth.out
           if-no-files-found: ignore
       # The footprint guard's numbers (docs/v0.4/SPEC.md 10): FootprintGameTest's footprint-<mc>-<backend>.json.
       - name: Upload footprint numbers
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: footprint-${{ matrix.mc }}-${{ matrix.backend }}
+          name: footprint-${{ matrix.mc }}-${{ matrix.backend }}${{ matrix.suffix }}
           path: versions/${{ matrix.mc }}/build/run/productionClientGameTest/footprint/
+          if-no-files-found: ignore
+      # review-11 PERF-3: a returning player's startup, in the part that runs FootprintGameTest, after that part's uploads
+      # (it starts a fresh run folder): one more JVM with only FootprintGameTest and a seeded config/rigtune
+      # (tools/gametest/returning_seed.py: 0.4's and 0.5's written files, 50+ history entries, nothing staged). Its render-thread
+      # and worker CPU are gated on what they add over this leg's fresh start (its footprint JSON, kept before the run folder
+      # is wiped), its wall times by the usual budgets. A startup is one sample per JVM (a JIT or GC hiccup on the render
+      # thread moved one by ~20 ms, run 36435655998: 80.42 > 80): a run that fails only a returningAdded* budget is measured
+      # once more in a new JVM from the same seed, and that run decides. Any other failure fails the step.
+      - name: Returning-player footprint
+        if: matrix.classes == '' || contains(format(',{0},', matrix.classes), ',FootprintGameTest,')
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          python3 tools/gametest/returning_seed.py --out build/returning-seed
+          cp "versions/${{ matrix.mc }}/build/run/productionClientGameTest/footprint/footprint-${{ matrix.mc }}-${{ matrix.backend }}.json" build/footprint-fresh.json
+          returning() {
+            tools/ci/offline.sh --timeout 6m ./gradlew --no-daemon --offline ":${{ matrix.mc }}:runProductionClientGameTest" "-PgametestClasses=FootprintGameTest" "-PgametestSeedConfig=build/returning-seed" "-PgametestJvmArgs=-Drigtune.footprint.returning=true -Drigtune.footprint.fresh=$PWD/build/footprint-fresh.json" --stacktrace 2>&1 | tee "build/returning-$1.log"
+          }
+          if ! returning 1; then
+            grep -q "footprint budget returningAdded" build/returning-1.log || exit 1
+            echo "::warning::returning-player footprint over a returningAdded budget once; measuring once more in a new JVM"
+            returning 2
+          fi
+      - name: Upload the returning-player footprint
+        if: always() && (matrix.classes == '' || contains(format(',{0},', matrix.classes), ',FootprintGameTest,'))
+        uses: actions/upload-artifact@v7
+        with:
+          name: footprint-returning-${{ matrix.mc }}-${{ matrix.backend }}${{ matrix.suffix }}
+          path: |
+            versions/${{ matrix.mc }}/build/run/productionClientGameTest/footprint/
+            versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs/
           if-no-files-found: ignore
 
   python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - name: Run rules updater tests
-        run: python -m unittest discover -s tools/tests -v
+        run: tools/ci/offline.sh python -m unittest discover -s tools/tests -v
       - name: Run self-update E2E harness tests
-        run: python -m unittest discover -s tools/e2e/tests -v
+        run: tools/ci/offline.sh python -m unittest discover -s tools/e2e/tests -v
 
   rules-consistency:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
+      # Two commits: on a pull request, HEAD is GitHub's merge commit and HEAD^1 the base it was built on.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
       - name: Compare generated rules files
         run: |
           set -eu
@@ -189,10 +393,20 @@ jobs:
             echo "src/main/resources/rigtune/rules-v1.json must not exist: 0.2 bundles rules-v2.json only."
             exit 1
           fi
+      # A pull request into main that changes the rules raises their revision; unchanged rules keep it (review-11 CI-6:
+      # two different files at one revision let an offline client prefer a cached one, RulesLoader's tie order). Compared
+      # with the merge commit's base side, not main's live tip, so a re-run of the same run gives the same answer
+      # (review-12 R12REL-5).
+      - name: A rules change into main raises the revision
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        run: |
+          set -eu
+          git show HEAD^1:rules/rules-v2.json > "$RUNNER_TEMP/main-rules-v2.json"
+          python3 tools/rules_revision_check.py --base "$RUNNER_TEMP/main-rules-v2.json" --head rules/rules-v2.json
 
   # rules-v1.json is what 0.1.x clients download: it must stay the safe v1 projection of the v2 rules.
   rules-v1-compat:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7

@@ -7,6 +7,7 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.AtomicFiles;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.charset.CharacterCodingException;
@@ -22,6 +23,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -36,6 +39,8 @@ public final class Journal implements ChangeRecorder {
 	public static final Duration LOCK_WAIT = Duration.ofSeconds(2);
 	// The id prefix of the entry the cap folds older entries into (docs/v0.4/SPEC.md 2o M6).
 	public static final String BASELINE = "baseline-";
+	// v0.5 L8: at most this many ids in a baseline's foldedEntryIds (the newest kept).
+	public static final int MAX_FOLDED_IDS = 50;
 	static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
 	public interface Log {
@@ -51,6 +56,11 @@ public final class Journal implements ChangeRecorder {
 	private record Read(State state, List<JournalEntry> entries) {
 	}
 
+	// v0.5 (docs/v0.5/SPEC.md 5, C20; WS-S2, an additive edit): the state and the entries of ONE read of history.json (the
+	// entries empty unless OK), so a read that fails after an OK one can't pass for an empty history.
+	public record Snapshot(State state, List<JournalEntry> entries) {
+	}
+
 	private final Path configDir;
 	private final Path file;
 	private final String rigtuneVersion;
@@ -58,6 +68,10 @@ public final class Journal implements ChangeRecorder {
 	private final Log log;
 	private final Duration lockWait;
 	private final Supplier<JournalEntry> firstEntry;
+	// review 11 PERF-1/PERF-2 (WS-H, a marked edit): how many times this Journal read history.json, for the tests that
+	// count reads; and changed it, for JournalCache (a write here makes a cached snapshot stale whatever the timestamps say).
+	private final AtomicInteger reads = new AtomicInteger();
+	private final AtomicLong writes = new AtomicLong();
 
 	public Journal(Path configDir, String rigtuneVersion, String mcVersion, Log log) {
 		this(configDir, rigtuneVersion, mcVersion, log, LOCK_WAIT, null);
@@ -94,6 +108,18 @@ public final class Journal implements ChangeRecorder {
 		return mcVersion;
 	}
 
+	public int reads() {
+		return reads.get();
+	}
+
+	long writes() {
+		return writes.get();
+	}
+
+	Path path() {
+		return file;
+	}
+
 	// Empty when the file is missing, corrupt or from a newer RigTune.
 	public List<JournalEntry> entries() {
 		try {
@@ -112,6 +138,29 @@ public final class Journal implements ChangeRecorder {
 		} catch (IOException e) {
 			log.warn("Could not read " + file, e);
 			return State.UNREADABLE;
+		}
+	}
+
+	public Snapshot snapshot() {
+		try {
+			Read read = read();
+			return new Snapshot(read.state(), read.entries());
+		} catch (IOException e) {
+			log.warn("Could not read " + file, e);
+			return new Snapshot(State.UNREADABLE, List.of());
+		}
+	}
+
+	// v0.5 (docs/v0.5/SPEC.md 8, C02; WS-F, an additive edit): from ONE read, whether history.json holds no entry at all
+	// (missing, or OK and empty). A corrupt, newer or unreadable file isn't "no entries". FirstRun.isNew uses it, so a file
+	// read as OK once and failing a second read can't make a returning player new.
+	boolean holdsNoEntries() {
+		try {
+			Read read = read();
+			return read.state() == State.MISSING || read.state() == State.OK && read.entries().isEmpty();
+		} catch (IOException e) {
+			log.warn("Could not read " + file, e);
+			return false;
 		}
 	}
 
@@ -151,7 +200,10 @@ public final class Journal implements ChangeRecorder {
 				case NEWER -> {
 					return false;
 				}
-				case CORRUPT -> Files.move(file, backupName());
+				case CORRUPT -> {
+					Files.move(file, backupName());
+					writes.incrementAndGet();
+				}
 				case UNREADABLE -> {
 					return false;
 				}
@@ -163,6 +215,7 @@ public final class Journal implements ChangeRecorder {
 				return true;
 			}
 			AtomicFiles.writeString(file, GSON.toJson(new HistoryFile(FORMAT_VERSION, next)));
+			writes.incrementAndGet();
 			return true;
 		}
 	}
@@ -193,6 +246,7 @@ public final class Journal implements ChangeRecorder {
 		if (!Files.exists(file)) {
 			return new Read(State.MISSING, List.of());
 		}
+		reads.incrementAndGet();
 		String json;
 		try {
 			json = Files.readString(file, StandardCharsets.UTF_8);
@@ -245,7 +299,7 @@ public final class Journal implements ChangeRecorder {
 			if (Objects.equals(e.id(), entryId)) {
 				List<JournalChange> all = new ArrayList<>(e.changes());
 				all.addAll(changes);
-				out.set(i, new JournalEntry(e.id(), e.at(), e.kind(), e.rigtuneVersion(), e.mcVersion(), e.undoOf(), all));
+				out.set(i, new JournalEntry(e.id(), e.at(), e.kind(), e.rigtuneVersion(), e.mcVersion(), e.undoOf(), all, e.foldedEntryIds()));
 				return out;
 			}
 		}
@@ -276,6 +330,42 @@ public final class Journal implements ChangeRecorder {
 	// An entry the cap folded (its id starts with BASELINE; 0.3.0 keeps ids when it rewrites the file).
 	public static boolean isBaseline(JournalEntry entry) {
 		return entry.id() != null && entry.id().startsWith(BASELINE) && JournalEntry.APPLY.equals(entry.kind());
+	}
+
+	// v0.5 L8: the ids an entry folded: a baseline's foldedEntryIds, at most the newest MAX_FOLDED_IDS (history.json is the
+	// player's file too, so another entry's list, or a longer one, isn't trusted), else none.
+	public static List<String> folded(JournalEntry entry) {
+		List<String> ids = entry.foldedEntryIds();
+		if (ids == null || !isBaseline(entry)) {
+			return List.of();
+		}
+		return ids.subList(Math.max(0, ids.size() - MAX_FOLDED_IDS), ids.size());
+	}
+
+	// v0.5 L8: the ids the journal still accounts for: every entry's own and the ids a baseline folded (their profile labels
+	// and the records that name them still resolve through it). ProfileService prunes the switch labels against these.
+	public static Set<String> idsWithFolded(List<JournalEntry> entries) {
+		Set<String> out = new HashSet<>();
+		for (JournalEntry entry : entries) {
+			out.add(entry.id());
+			out.addAll(folded(entry));
+		}
+		return out;
+	}
+
+	// v0.5 L8: the entry with this id, else the baseline that folded it (C09's and C20's records find a folded entry), else
+	// null.
+	public static @Nullable JournalEntry holding(List<JournalEntry> entries, String id) {
+		JournalEntry folded = null;
+		for (JournalEntry entry : entries) {
+			if (id.equals(entry.id())) {
+				return entry;
+			}
+			if (folded == null && folded(entry).contains(id)) {
+				folded = entry;
+			}
+		}
+		return folded;
 	}
 
 	private static void drop(List<JournalEntry> out, Predicate<JournalEntry> droppable) {
@@ -337,7 +427,8 @@ public final class Journal implements ChangeRecorder {
 	// from where UndoPlanner's chain would end (newest to oldest while each older change ended where the newer one
 	// started). When the player changed the value before that, the older changes become one change before it that ends
 	// elsewhere, so the chain still stops there rather than going on into an older entry. Every applied mod file change
-	// as it is.
+	// as it is. v0.5 L8: foldedEntryIds holds the ids it folded, oldest first (a folded baseline's own list, then its id),
+	// the newest MAX_FOLDED_IDS kept, so a folded switch keeps its profile label.
 	private static JournalEntry baseline(List<JournalEntry> run) {
 		Map<String, List<JournalChange>> byKey = new LinkedHashMap<>();
 		List<JournalChange> files = new ArrayList<>();
@@ -371,7 +462,15 @@ public final class Journal implements ChangeRecorder {
 		changes.addAll(files);
 		JournalEntry first = run.getFirst();
 		String id = isBaseline(first) ? first.id() : BASELINE + ChangeRecorder.newEntryId();
-		return new JournalEntry(id, first.at(), JournalEntry.APPLY, first.rigtuneVersion(), first.mcVersion(), null, changes);
+		List<String> folded = new ArrayList<>();
+		for (JournalEntry entry : run) {
+			folded.addAll(folded(entry));
+			if (!id.equals(entry.id())) {
+				folded.add(entry.id());
+			}
+		}
+		return new JournalEntry(id, first.at(), JournalEntry.APPLY, first.rigtuneVersion(), first.mcVersion(), null, changes,
+				List.copyOf(folded.subList(Math.max(0, folded.size() - MAX_FOLDED_IDS), folded.size())));
 	}
 
 	// The applied settings change c, starting from `before`.

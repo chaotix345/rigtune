@@ -2,7 +2,6 @@ package io.github.chaotix345.rigtune.gametest;
 
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
@@ -14,6 +13,8 @@ import io.github.chaotix345.rigtune.client.ui.ProfileImportScreen;
 import io.github.chaotix345.rigtune.client.ui.ProfilesScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
+import io.github.chaotix345.rigtune.client.ui.RigTuneSettingsScreen;
+import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
 import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
@@ -28,21 +29,24 @@ import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.notice.NoticePriority;
-import io.github.chaotix345.rigtune.core.model.Goal;
-import io.github.chaotix345.rigtune.core.model.Recommendation;
-import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.profile.ProfileImport;
 import io.github.chaotix345.rigtune.core.profile.ProfileStore;
 import io.github.chaotix345.rigtune.core.profile.ProfileView;
 import io.github.chaotix345.rigtune.core.profile.ShareCode;
+import io.github.chaotix345.rigtune.core.profile.ShareCodeException;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
+import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Options;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.ContainerObjectSelectionList;
+import net.minecraft.client.gui.components.CycleButton;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
@@ -58,6 +62,7 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -113,12 +118,10 @@ public class ProfilesGameTest implements FabricClientGameTest {
 		context.waitFor(mc -> RigTuneClient.controller().report() != null, 1200);
 		RigTuneController controller = RigTuneClient.controller();
 		check(controller instanceof RealController, "the real controller");
-		ClientSettings settings = ClientSettings.shared(configDir);
-		boolean network = settings.networkEnabled;
 		Map<Path, byte[]> saved = backup(historyFile, profilesFile, pendingFile, sodiumFile, lastApplyFile);
 		Map<String, String> original = context.computeOnClient(mc -> vanilla(mc.options));
+		boolean network = GameTestNet.set(context, controller, false);
 		try {
-			settings.networkEnabled = false;
 			context.runOnClient(mc -> controller.discardPending());
 			batterySwitchAndUndoThis(context, controller);
 			twoSwitchesThenUndo(context, controller, false);
@@ -126,10 +129,17 @@ public class ProfilesGameTest implements FabricClientGameTest {
 			aToBToABeforeARestart(context, controller);
 			importAndMalformed(context, controller);
 			batteryOffer(context, controller);
+			pf1BatteryOfferFromAFreshStart(context, controller);
+			pf3DeletingTheBackOffersTargetRetiresIt(context, controller);
+			pf1StaleMySettingsIsRefreshedFirst(context, controller);
+			r11BatteryIsBuiltOverTheRefreshedMySettings(context, controller);
+			r12NoSwitchNoBeforeSwitching(context, controller);
+			pf5CopyCodeSaysWhatItLeavesOut(context, controller);
+			l8HistoryIncludesTheFoldedSwitches(context, controller);
 			refusedDuringABenchmark(context, controller);
 		} finally {
 			ProfileService.overrideBenchmarkCheck(null);
-			settings.networkEnabled = network;
+			GameTestNet.set(context, controller, network);
 			context.runOnClient(mc -> {
 				controller.discardPending();
 				SettingsBridge.applyVanilla(mc.options, original);
@@ -324,26 +334,11 @@ public class ProfilesGameTest implements FabricClientGameTest {
 		context.waitForScreen(ProfilesScreen.class);
 	}
 
-	// RigTune before its first scan finished: an import is refused as not ready (ProfileService's own guard).
-	private record NotReady(RigTuneController real) implements RigTuneController {
-		@Override
-		public @Nullable Report report() {
-			return real.report();
-		}
-
-		@Override
-		public Goal goal() {
-			return real.goal();
-		}
-
-		@Override
-		public void setGoal(Goal goal) {
-			real.setGoal(goal);
-		}
-
-		@Override
-		public Component apply(List<Recommendation> selected) {
-			return real.apply(selected);
+	// RigTune before its first scan finished: an import is refused as not ready (ProfileService's own guard). Everything
+	// else is the real controller's (ForwardingController).
+	private static final class NotReady extends ForwardingController {
+		NotReady(RigTuneController real) {
+			super(real);
 		}
 
 		@Override
@@ -362,7 +357,8 @@ public class ProfilesGameTest implements FabricClientGameTest {
 
 	// The laptop hook (SPEC 4, AC4.9's notice half): a debounced AC -> battery edge offers Battery as a notice and never
 	// switches; the offer's action switches; battery -> AC offers the previous profile; "Don't offer again" snoozes. The edge
-	// is fed to ProfileService as PowerWatcher would (CI has no battery).
+	// is fed to ProfileService as PowerWatcher would (CI has no battery). v0.5 PF-2 (AC2P.2): the plug-in offer has no
+	// "Don't offer again" (only its ×), so the snooze is taken from the unplug offer.
 	private void batteryOffer(ClientGameTestContext context, RigTuneController controller) {
 		reset(context);
 		ProfileService service = ((RealController) controller).profileService();
@@ -397,13 +393,39 @@ public class ProfilesGameTest implements FabricClientGameTest {
 			context.waitFor(mc -> controller.report() != null, 1200);
 			Notice back = batteryNotice(context, controller);
 			check(back != null && back.key().startsWith(ProfileService.NOTICE_BACK), "battery -> AC offers the previous profile: " + back);
+			check(back.actions().stream().map(a -> a.id()).toList().equals(List.of(ProfileService.ACTION_SWITCH)) && back.dismissible(),
+					"PF-2: the plug-in offer is [switch] plus its ×, no \"Don't offer again\": " + back);
 			check(mine.equals(ProfileStore.shared(configDir).battery().previousProfile()), "the previous profile is My settings");
-			context.runOnClient(mc -> controller.noticeAction(back.key(), ProfileService.ACTION_SNOOZE));
+			context.runOnClient(mc -> controller.noticeAction(back.key(), ProfileService.ACTION_SWITCH));
+			context.waitTicks(2);
+			check(mine.equals(ProfileStore.shared(configDir).active()), "the plug-in offer switched back to My settings");
+			checkSeed(context, "switching back from Battery");
+
+			// "Don't offer again" from the unplug offer (the cooldown moved out of the way).
+			Notice again = offerOnUnplug(context, controller, service);
+			context.runOnClient(mc -> controller.noticeAction(again.key(), ProfileService.ACTION_SNOOZE));
 			check(ProfileStore.shared(configDir).battery().snoozed(), "Don't offer again is kept in profiles.json");
+			check(ProfileStore.shared(configDir).battery().prompt(), "only the snooze changed");
+			service.powerChanged(false);
+			ProfileStore.shared(configDir).batteryOffered(Instant.now().minus(Duration.ofMinutes(11)).toString());
 			service.powerChanged(true);
 			context.waitTicks(3);
 			context.waitFor(mc -> controller.report() != null, 1200);
 			check(batteryNotice(context, controller) == null, "no offer once snoozed");
+
+			// PF-2 (AC2P.2): the Settings row turns the offer back on, and the next unplug offers Battery again.
+			context.runOnClient(mc -> mc.gui.setScreen(new RigTuneSettingsScreen(new TitleScreen(), controller)));
+			context.waitForScreen(RigTuneSettingsScreen.class);
+			context.waitTicks(2);
+			check(context.computeOnClient(mc -> !(Boolean) batteryOfferRow(mc.gui.screen()).getValue()), "the row shows the offer off after the snooze");
+			context.runOnClient(mc -> {
+				CycleButton<?> row = batteryOfferRow(mc.gui.screen());
+				row.onPress(new MouseButtonEvent(row.getX() + 1, row.getY() + 1, new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0)));
+			});
+			context.waitTicks(1);
+			check(!ProfileStore.shared(configDir).battery().snoozed(), "PF-2: the row turned the offer back on in profiles.json");
+			context.takeScreenshot("profiles-settings-battery-offer-on");
+			offerOnUnplug(context, controller, service);
 		} finally {
 			HardwareProbe.setOnBattery(onBattery);
 			context.runOnClient(mc -> {
@@ -414,9 +436,279 @@ public class ProfilesGameTest implements FabricClientGameTest {
 		}
 	}
 
+	// RigTuneSettingsScreen's battery-offer switch (a row of its list).
+	private static CycleButton<?> batteryOfferRow(Screen screen) {
+		return Screens.getWidgets(screen).stream()
+				.flatMap(w -> w instanceof ContainerObjectSelectionList<?> list ? list.children().stream()
+						.flatMap(row -> row.children().stream()).filter(AbstractWidget.class::isInstance).map(AbstractWidget.class::cast) : Stream.of(w))
+				.filter(w -> w instanceof CycleButton<?> && w.getMessage().getContents() instanceof TranslatableContents t
+						&& t.getArgs().length > 0 && t.getArgs()[0] instanceof Component name
+						&& name.getContents() instanceof TranslatableContents n && n.getKey().equals("rigtune.settings.battery_offer"))
+				.map(w -> (CycleButton<?>) w)
+				.findFirst()
+				.orElseThrow(() -> new AssertionError("No battery-offer switch on " + screen));
+	}
+
+	// An AC -> battery edge past the cooldown: the unplug offer, checked to be there.
+	private Notice offerOnUnplug(ClientGameTestContext context, RigTuneController controller, ProfileService service) {
+		service.powerChanged(false);
+		ProfileStore.shared(configDir).batteryOffered(Instant.now().minus(Duration.ofMinutes(11)).toString());
+		service.powerChanged(true);
+		context.waitTicks(3);
+		context.waitFor(mc -> controller.report() != null, 1200);
+		Notice offer = batteryNotice(context, controller);
+		check(offer != null && offer.key().startsWith(ProfileService.NOTICE_BATTERY), "an AC -> battery edge offers Battery: " + offer);
+		return offer;
+	}
+
+	// docs/v0.5/SPEC.md PF-1 (AC2P.1): the laptop's first use. profiles.json doesn't exist and no profile was ever switched to;
+	// taking the unplug offer saves "My settings" first, and plugging back in offers it; taking that makes it active.
+	private void pf1BatteryOfferFromAFreshStart(ClientGameTestContext context, RigTuneController controller) {
+		reset(context);
+		try {
+			Files.deleteIfExists(profilesFile);
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+		ProfileService service = ((RealController) controller).profileService();
+		boolean onBattery = context.computeOnClient(mc -> controller.report()).hardware().onBattery();
+		try {
+			Notice offer = offerOnUnplug(context, controller, service);
+			check(ProfileStore.shared(configDir).active() == null, "no profile active before the offer is taken");
+			context.runOnClient(mc -> controller.noticeAction(offer.key(), ProfileService.ACTION_SWITCH));
+			context.waitTicks(2);
+			check(BATTERY.equals(ProfileStore.shared(configDir).active()), "the offer switched to Battery");
+			ProfileStore.Profile mine = ProfileStore.shared(configDir).baseline();
+			check(mine != null, "My settings was saved before the switch");
+			check(mine.id().equals(ProfileStore.shared(configDir).battery().previousProfile()), "PF-1: My settings is remembered as the way back: "
+					+ ProfileStore.shared(configDir).battery());
+
+			service.powerChanged(false);
+			context.waitTicks(3);
+			context.waitFor(mc -> controller.report() != null, 1200);
+			Notice back = batteryNotice(context, controller);
+			check(back != null && back.key().startsWith(ProfileService.NOTICE_BACK) && back.message().english().contains("My settings"),
+					"PF-1: battery -> AC offers My settings back: " + (back == null ? null : back.message().english()));
+			context.runOnClient(mc -> mc.gui.setScreen(new RigTuneScreen(new TitleScreen(), controller)));
+			context.waitForScreen(RigTuneScreen.class);
+			screenshotAt(context, 854, 480, 2, "profiles-battery-back-fresh-854x480-scale2");
+			context.runOnClient(mc -> controller.noticeAction(back.key(), ProfileService.ACTION_SWITCH));
+			context.waitTicks(2);
+			check(mine.id().equals(ProfileStore.shared(configDir).active()), "taking it makes My settings active");
+			checkSeed(context, "Battery taken from a fresh start, then My settings back");
+		} finally {
+			HardwareProbe.setOnBattery(onBattery);
+			context.runOnClient(mc -> {
+				mc.gui.setScreen(new TitleScreen());
+				controller.rescan();
+			});
+			context.waitFor(mc -> controller.report() != null, 1200);
+		}
+	}
+
+	// docs/v0.5/SPEC.md PF-3 (AC2P.3): deleting the profile the plug-in offer targets retires the offer, so no "Switch back
+	// to ?" is ever shown.
+	private void pf3DeletingTheBackOffersTargetRetiresIt(ClientGameTestContext context, RigTuneController controller) {
+		reset(context);
+		ProfileService service = ((RealController) controller).profileService();
+		boolean onBattery = context.computeOnClient(mc -> controller.report()).hardware().onBattery();
+		try {
+			context.runOnClient(mc -> controller.saveCurrentProfile("Evening"));
+			String evening = ProfileStore.shared(configDir).profiles().stream().filter(p -> "Evening".equals(p.name())).findFirst().orElseThrow().id();
+			context.runOnClient(mc -> controller.switchProfile(evening));
+			check(evening.equals(ProfileStore.shared(configDir).active()), "Evening is active");
+			Notice offer = offerOnUnplug(context, controller, service);
+			context.runOnClient(mc -> controller.noticeAction(offer.key(), ProfileService.ACTION_SWITCH));
+			context.waitTicks(2);
+			service.powerChanged(false);
+			context.waitTicks(3);
+			context.waitFor(mc -> controller.report() != null, 1200);
+			Notice back = batteryNotice(context, controller);
+			check(back != null && back.message().english().contains("Evening"), "the plug-in offer names Evening: " + back);
+			context.runOnClient(mc -> controller.deleteProfile(evening));
+			check(ProfileStore.shared(configDir).profile(evening) == null, "Evening deleted");
+			// The screen the player comes back to lists its notices at init: its notice line (the battery offer's slot is the
+			// first) must not offer the deleted profile as "Switch back to ?".
+			context.runOnClient(mc -> mc.gui.setScreen(new RigTuneScreen(new TitleScreen(), controller)));
+			context.waitForScreen(RigTuneScreen.class);
+			context.waitTicks(1);
+			String shown = context.computeOnClient(mc -> {
+				Notice notice = ((RigTuneScreen) mc.gui.screen()).shownNotice();
+				return notice == null ? "" : notice.key() + " | " + Texts.component(notice.message()).getString();
+			});
+			check(!shown.startsWith(ProfileService.NOTICE_BACK) && !shown.contains("Switch back to ?"),
+					"PF-3: the notice line doesn't offer the deleted profile: " + shown);
+			check(batteryNotice(context, controller) == null, "PF-3: the offer for a deleted profile is retired");
+			screenshotAt(context, 854, 480, 2, "profiles-battery-back-deleted-854x480-scale2");
+		} finally {
+			HardwareProbe.setOnBattery(onBattery);
+			context.runOnClient(mc -> {
+				mc.gui.setScreen(new TitleScreen());
+				controller.rescan();
+			});
+			context.waitFor(mc -> controller.report() != null, 1200);
+		}
+	}
+
+	// docs/v0.5/SPEC.md PF-1, coordinator decision (review L2): taking Battery with no profile in effect first refreshes "My
+	// settings" to the current values, so plugging back in returns to the settings the player had, not an older snapshot.
+	private void pf1StaleMySettingsIsRefreshedFirst(ClientGameTestContext context, RigTuneController controller) {
+		reset(context);
+		ProfileService service = ((RealController) controller).profileService();
+		boolean onBattery = context.computeOnClient(mc -> controller.report()).hardware().onBattery();
+		try {
+			check("12".equals(ProfileStore.shared(configDir).baseline().settings().get("vanilla.renderDistance")), "My settings holds the seed's 12");
+			// The player changes a value by hand afterwards; no profile is in effect.
+			context.runOnClient(mc -> SettingsBridge.applyVanilla(mc.options, Map.of("vanilla.renderDistance", "10")));
+			Notice offer = offerOnUnplug(context, controller, service);
+			context.runOnClient(mc -> controller.noticeAction(offer.key(), ProfileService.ACTION_SWITCH));
+			context.waitTicks(2);
+			check(BATTERY.equals(ProfileStore.shared(configDir).active()), "the offer switched to Battery");
+			ProfileStore.Profile mine = ProfileStore.shared(configDir).baseline();
+			check("10".equals(mine.settings().get("vanilla.renderDistance")), "My settings was refreshed to the current 10 first: " + mine.settings());
+			check(mine.id().equals(ProfileStore.shared(configDir).battery().previousProfile()), "and is the way back");
+			service.powerChanged(false);
+			context.waitTicks(3);
+			context.waitFor(mc -> controller.report() != null, 1200);
+			Notice back = batteryNotice(context, controller);
+			check(back != null && back.key().startsWith(ProfileService.NOTICE_BACK), "the plug-in offer: " + back);
+			context.runOnClient(mc -> controller.noticeAction(back.key(), ProfileService.ACTION_SWITCH));
+			context.waitTicks(2);
+			check("10".equals(context.computeOnClient(mc -> vanilla(mc.options)).get("vanilla.renderDistance")), "switching back restores the player's 10");
+		} finally {
+			HardwareProbe.setOnBattery(onBattery);
+			context.runOnClient(mc -> {
+				mc.gui.setScreen(new TitleScreen());
+				controller.rescan();
+			});
+			context.waitFor(mc -> controller.report() != null, 1200);
+		}
+	}
+
+	// review-11 FEAT-2/FEAT-3 (WS-P2): with no profile in effect, a switch to Battery refreshes "My settings" to the
+	// current values BEFORE Battery is built over it, and says so. Hand changes to keys Battery doesn't set would otherwise
+	// go back to the stale My settings: then a second switch to Battery would still find something to change.
+	private void r11BatteryIsBuiltOverTheRefreshedMySettings(ClientGameTestContext context, RigTuneController controller) {
+		reset(context);
+		Map<String, String> hand = new LinkedHashMap<>();
+		hand.put("vanilla.entityDistanceScaling", "1.5");
+		hand.put("vanilla.biomeBlendRadius", "3");
+		hand.put("vanilla.textureFiltering", "1");
+		hand.put("vanilla.entityShadows", "false");
+		hand.put("vanilla.cutoutLeaves", "false");
+		hand.put("vanilla.prioritizeChunkUpdates", "1");
+		context.runOnClient(mc -> SettingsBridge.applyVanilla(mc.options, hand));
+		check(ProfileStore.shared(configDir).active() == null, "no profile in effect");
+		Component first = context.computeOnClient(mc -> controller.switchProfile(BATTERY));
+		check(text(first).endsWith(Component.translatable("rigtune.profile.status.baseline_refreshed").getString()),
+				"FEAT-3: the status says My settings was updated: " + text(first));
+		Map<String, String> mine = ProfileStore.shared(configDir).baseline().settings();
+		for (Map.Entry<String, String> e : hand.entrySet()) {
+			check(SettingValues.same(e.getValue(), mine.get(e.getKey())), "My settings holds the hand-set " + e.getKey() + ": " + mine);
+		}
+		Component second = context.computeOnClient(mc -> controller.switchProfile(BATTERY));
+		check(key(second).equals("rigtune.profile.status.already"), "FEAT-2: Battery was built over the refreshed My settings, so a second switch "
+				+ "changes nothing: " + text(second));
+		check(!text(second).contains(Component.translatable("rigtune.profile.status.baseline_refreshed").getString()), "no refresh with Battery active");
+		context.runOnClient(mc -> controller.discardPending());
+	}
+
+	// review-12 R12FEAT-9 (WS-P2): when My settings is refreshed but nothing is switched ("Already on Battery"), the status
+	// says My settings was updated, never "before switching". The values are Battery's already, its active marker gone.
+	private void r12NoSwitchNoBeforeSwitching(ClientGameTestContext context, RigTuneController controller) {
+		reset(context);
+		Component switched = context.computeOnClient(mc -> controller.switchProfile(BATTERY));
+		check(key(switched).startsWith("rigtune.profile.status.switched"), "Battery switched to: " + text(switched));
+		check(ProfileStore.shared(configDir).setActive(null, null), "the active marker cleared");
+		check("120".equals(ProfileStore.shared(configDir).baseline().settings().get("vanilla.maxFps"))
+				&& "60".equals(context.computeOnClient(mc -> vanilla(mc.options)).get("vanilla.maxFps")), "My settings is stale (120), Battery's 60 now");
+		Component again = context.computeOnClient(mc -> controller.switchProfile(BATTERY));
+		check(key(again).equals("rigtune.profile.status.already"), "nothing to switch: " + text(again));
+		check(text(again).endsWith(Component.translatable("rigtune.profile.status.baseline_updated").getString())
+				&& !text(again).contains(Component.translatable("rigtune.profile.status.baseline_refreshed").getString()),
+				"My settings was updated, and no switch is claimed: " + text(again));
+		context.runOnClient(mc -> controller.discardPending());
+	}
+
+	// docs/v0.5/SPEC.md PF-5 (AC2P.5): a profile holding a DH LOD radius of 1024 (DH's own range) is copied without it (key
+	// 22 carries 32..512 only), and Copy code's status says one setting is left out.
+	private void pf5CopyCodeSaysWhatItLeavesOut(ClientGameTestContext context, RigTuneController controller) {
+		reset(context);
+		String radius = "dh.client.advanced.graphics.quality.lodChunkRenderDistanceRadius";
+		String id = ProfileStore.newProfileId();
+		Map<String, String> values = new LinkedHashMap<>();
+		values.put("vanilla.renderDistance", "12");
+		values.put(radius, "1024");
+		check(ProfileStore.shared(configDir).saveProfile(new ProfileStore.Profile(id, "Far LODs", null, ProfileStore.SOURCE_SAVED, Instant.now().toString(),
+				null, null, values)), "a profile with a 1024 radius saved");
+		check("1024".equals(ProfileStore.shared(configDir).profile(id).settings().get(radius)), "profiles.json keeps the 1024 radius");
+		check(context.computeOnClient(mc -> controller.profileCodeLeftOut(id)) == 1, "one value can't go in a code");
+		openProfiles(context, controller);
+		context.runOnClient(mc -> {
+			ProfilesScreen screen = (ProfilesScreen) mc.gui.screen();
+			screen.select(id);
+			screen.copySelected();
+		});
+		context.waitTicks(1);
+		String status = context.computeOnClient(mc -> text(((ProfilesScreen) mc.gui.screen()).status()));
+		check(status.contains(Component.translatable("rigtune.profile.status.not_carried_one").getString()), "the status says 1 setting is left out: " + status);
+		String code = context.computeOnClient(mc -> mc.keyboardHandler.getClipboard());
+		try {
+			Map<String, String> decoded = ShareCode.decode(code).values(60);
+			check(decoded.equals(Map.of("vanilla.renderDistance", "12")), "the code carries the rest, never the radius: " + decoded);
+		} catch (ShareCodeException e) {
+			throw new AssertionError("the copied code decodes: " + code, e);
+		}
+		context.runOnClient(mc -> mc.gui.toastManager().clear());
+		context.waitTicks(1);
+		context.takeScreenshot("profiles-copy-code-left-out");
+	}
+
 	private static @Nullable Notice batteryNotice(ClientGameTestContext context, RigTuneController controller) {
 		return context.computeOnClient(mc -> controller.notices()).stream().filter(n -> n.priority() == NoticePriority.BATTERY_OFFER).findFirst()
 				.orElse(null);
+	}
+
+	// docs/v0.5/SPEC.md L8 (AC2H.3): a baseline that folded five profile switches lists the newest three and "+2" on its
+	// History row (wrapped under the details), through the real controller's labels; screenshots at the three sizes.
+	private void l8HistoryIncludesTheFoldedSwitches(ClientGameTestContext context, RigTuneController controller) {
+		reset(context);
+		clearJournal();
+		List<String> names = List.of("Battery", "Max FPS", "Balanced", "Quality", "Recording");
+		List<String> folded = new ArrayList<>();
+		for (int i = 0; i < names.size(); i++) {
+			folded.add("l8-switch-" + i);
+		}
+		String baselineId = Journal.BASELINE + "l8-game-test";
+		JournalEntry baseline = new JournalEntry(baselineId, "2026-09-20T09:00:00Z", JournalEntry.APPLY, "0.5.0", "26.2", null,
+				List.of(JournalChange.setting("vanilla.particles", "0", "1", JournalChange.APPLIED, null))).withFoldedEntryIds(folded);
+		JournalEntry later = new JournalEntry("l8-later", "2026-09-21T09:00:00Z", JournalEntry.APPLY, "0.5.0", "26.2", null,
+				List.of(JournalChange.setting("vanilla.particles", "1", "0", JournalChange.APPLIED, null)));
+		try {
+			check(journal.update(entries -> List.of(baseline, later)), "history.json written");
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+		for (int i = 0; i < names.size(); i++) {
+			ProfileStore.shared(configDir).recordSwitch(new ProfileStore.Switch(folded.get(i), null, null, names.get(i)), Journal.idsWithFolded(journal.entries()));
+		}
+		HistoryModel.View view = context.computeOnClient(mc -> controller.history());
+		HistoryModel.Entry row = view.entries().stream().filter(e -> e.id().equals(baselineId)).findFirst().orElseThrow();
+		check(row.includes().equals(List.of("Recording", "Quality", "Balanced", "Max FPS", "Battery")), "the baseline includes its switches, newest first: "
+				+ row.includes());
+		context.runOnClient(mc -> mc.gui.setScreen(new HistoryScreen(new TitleScreen(), controller)));
+		context.waitForScreen(HistoryScreen.class);
+		context.waitFor(mc -> mc.gui.screen() instanceof HistoryScreen history && !history.loading(), 400);
+		context.runOnClient(mc -> {
+			((HistoryScreen) mc.gui.screen()).select(baselineId);
+			mc.gui.toastManager().clear();
+		});
+		context.waitTicks(2);
+		for (int[] size : SIZES) {
+			screenshotAt(context, size[0], size[1], size[2], "profiles-history-includes-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+		}
+		context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
+		clearJournal();
 	}
 
 	private void refusedDuringABenchmark(ClientGameTestContext context, RigTuneController controller) {

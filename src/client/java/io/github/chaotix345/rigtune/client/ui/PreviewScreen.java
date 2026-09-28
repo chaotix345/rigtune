@@ -2,11 +2,18 @@ package io.github.chaotix345.rigtune.client.ui;
 
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ConfigTargets;
+import io.github.chaotix345.rigtune.client.awareness.OutsideChanges;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
+import io.github.chaotix345.rigtune.core.launcher.LauncherModText;
 import io.github.chaotix345.rigtune.core.model.SettingKeys;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
+import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
+import io.github.chaotix345.rigtune.core.report.LauncherModAdvice;
+import io.github.chaotix345.rigtune.core.tryit.Triable;
+import io.github.chaotix345.rigtune.core.tryit.TryItText;
+import io.github.chaotix345.rigtune.core.tryit.TryItView;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.ComponentPath;
@@ -14,6 +21,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ComponentRenderUtils;
 import net.minecraft.client.gui.components.ContainerObjectSelectionList;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.Screen;
@@ -61,6 +69,10 @@ public class PreviewScreen extends Screen {
 	private @Nullable Button applyButton;
 	private @Nullable Button saveOnlyButton;
 	private @Nullable Button cancelButton;
+	private @Nullable Button tryItButton;
+	// The Try it view the button's refusal was worked out with (WS-T, review R12FEAT-8: a new view rebuilds).
+	private @Nullable TryItView tryItView;
+	private @Nullable Component tryItTip;
 	private final Path gameDir = FabricLoader.getInstance().getGameDir();
 	private @Nullable ApplyPreview preview;
 	private boolean started;
@@ -160,8 +172,7 @@ public class PreviewScreen extends Screen {
 		if (confirm != null) {
 			confirmButtons(column, footerTop);
 		} else {
-			int buttonWidth = Math.min(150, column);
-			addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose()).bounds((width - buttonWidth) / 2, footerTop, buttonWidth, 20).build());
+			plainFooter(column, footerTop);
 		}
 		// Start the preview only once this screen's widgets exist: a preview that is ready at once completes on the render
 		// thread and rebuilds the screen, which inside this init() would add every widget a second time.
@@ -169,6 +180,31 @@ public class PreviewScreen extends Screen {
 			started = true;
 			load();
 		}
+	}
+
+	// The plain Preview's footer. v0.5 (docs/v0.5/SPEC.md 6, C09, WS-T): [Try it (measured)] [Done]; Try it is active only
+	// with exactly one ticked item it can try, and its tooltip names the refusal or explains the flow.
+	private void plainFooter(int column, int top) {
+		int gap = 4;
+		int buttonWidth = Math.min(120, (column - gap) / 2);
+		int x = (width - (buttonWidth * 2 + gap)) / 2;
+		tryItView = controller.tryIt();
+		Text refused = selected.size() == 1 ? controller.tryItRefusal(selected.getFirst()) : TryItText.refusal(Triable.Refusal.ONE, null);
+		tryItButton = addRenderableWidget(Button.builder(Component.translatable("rigtune.tryit.button"),
+				b -> minecraft.gui.setScreen(new TryItScreen(this, controller, selected.getFirst()))).bounds(x, top, buttonWidth, 20).build());
+		tryItButton.active = refused == null;
+		tryItTip = Texts.component(refused != null ? refused : TryItText.explain());
+		tryItButton.setTooltip(Tooltip.create(tryItTip));
+		addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose()).bounds(x + buttonWidth + gap, top, buttonWidth, 20).build());
+	}
+
+	// v0.5 (C09): the plain Preview's Try it button (null in the Confirm mode) and its tooltip.
+	public @Nullable Button tryItButton() {
+		return tryItButton;
+	}
+
+	public @Nullable Component tryItTooltip() {
+		return tryItTip;
 	}
 
 	// Apply (only once there's something to apply) / Save only / Cancel, in one row.
@@ -210,6 +246,16 @@ public class PreviewScreen extends Screen {
 		}));
 	}
 
+	// WS-T, review R12FEAT-8: Try It's view changed (e.g. pending.json read again: nothing waits), so the button's refusal
+	// is worked out again.
+	@Override
+	public void tick() {
+		super.tick();
+		if (tryItButton != null && controller.tryIt() != tryItView) {
+			rebuildWidgets();
+		}
+	}
+
 	@Override
 	protected void rebuildWidgets() {
 		if (list != null) {
@@ -237,6 +283,7 @@ public class PreviewScreen extends Screen {
 		if (!shown.now().isEmpty()) {
 			target.heading("rigtune.preview.section.now", width);
 			settings(target, shown.now(), width);
+			settingsSyncLine(target, shown, width);
 		}
 		if (!shown.atRestart().isEmpty()) {
 			target.heading("rigtune.preview.section.restart", width);
@@ -247,12 +294,10 @@ public class PreviewScreen extends Screen {
 			for (ApplyPreview.Download download : shown.downloads()) {
 				target.row(download(download), COLOR_TEXT, INDENT, width);
 			}
-			if (shown.downloads().stream().anyMatch(d -> d.fileName() != null)) {
-				target.row(Component.translatable("rigtune.preview.note.downloads"), COLOR_NOTE, INDENT, width);
-			}
 			if (!shown.resolved()) {
 				target.row(Component.translatable("rigtune.preview.note.unresolved"), COLOR_NOTE, INDENT, width);
 			}
+			downloadChecks(target, shown, width);
 		}
 		if (!shown.disables().isEmpty()) {
 			target.heading("rigtune.preview.section.disables", width);
@@ -267,7 +312,45 @@ public class PreviewScreen extends Screen {
 				target.row(skipped(skipped), COLOR_NOTE, INDENT, width);
 			}
 		}
+		launcherLines(target, shown, width);
 		notes(target, shown, width);
+	}
+
+	// v0.5 per-owner rows (PLAN contracts 13g); each adds nothing until its owner fills it in.
+
+	// P0.4 (docs/v0.5/SPEC.md 4b, WS-L1): "Mod changes to make in <launcher>: N (listed on the main screen)": the report's
+	// mod-file rows the launcher took over (none of them is in this preview, which lists what Apply does).
+	private void launcherLines(PreviewList target, ApplyPreview shown, int width) {
+		Report report = controller.report();
+		int count = report == null ? 0 : (int) report.recommendations().stream().filter(LauncherModAdvice::advised).count();
+		Text line = LauncherModText.previewLine(controller.modFiles(), controller.launcher(), count);
+		if (line != null) {
+			target.heading("rigtune.launcher.mod_files.preview.heading", width);
+			target.row(Texts.component(line), COLOR_NOTE, INDENT, width);
+		}
+	}
+
+	// 4h (WS-W), under "Written now": the Modrinth App's game-settings sync line.
+	private void settingsSyncLine(PreviewList target, ApplyPreview shown, int width) {
+		Component line = OutsideChanges.previewLine(controller.launcher(), shown);
+		if (line != null) {
+			target.row(line, COLOR_NOTE, INDENT, width);
+		}
+	}
+
+	// L5 (docs/v0.5/SPEC.md 2H, WS-H), under the downloads: what the in-memory fabric.mod.json checks found. A download Apply
+	// would refuse is under "Not changed" with Apply's own line; while a listed download couldn't be read (Modrinth off, the
+	// CDN refused Range, a cap or a deadline), the disclosure that Apply checks each one again stands in for the check.
+	private void downloadChecks(PreviewList target, ApplyPreview shown, int width) {
+		Component note = downloadsNote(shown);
+		if (note != null) {
+			target.row(note, COLOR_NOTE, INDENT, width);
+		}
+	}
+
+	static @Nullable Component downloadsNote(ApplyPreview shown) {
+		return !shown.downloadsChecked() && shown.downloads().stream().anyMatch(d -> d.fileName() != null)
+				? Component.translatable("rigtune.preview.note.downloads") : null;
 	}
 
 	// v0.4 (WS-P): the preview's notes (a profile's clamps and left-out keys, plan review P-L2).

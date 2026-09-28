@@ -26,6 +26,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HexFormat;
@@ -38,10 +39,13 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * A stand-in for api.modrinth.com and cdn.modrinth.com (plus static files, e.g. the rules on raw.githubusercontent.com)
- * for the self-update end-to-end test. See tools/e2e/README.md. It answers the endpoints RigTune calls, with versions
+ * for the self-update end-to-end test (see tools/e2e/README.md) and the production client game tests (build.gradle's
+ * ModrinthFixture). It answers the endpoints RigTune calls, with versions
  * and hashes computed from real jar files listed in a catalog. JDK only, so it runs as
  * {@code java FakeModrinth.java --catalog <file> [--port 443] [--keystore <p12> --storepass <pw>] [--log <jsonl>]}.
  *
@@ -166,6 +170,7 @@ public final class FakeModrinth implements AutoCloseable {
 		try {
 			String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
 			response = route(host, method, path, query, body);
+			response = ranged(exchange, response);
 		} catch (RuntimeException e) {
 			response = new Response(400, "application/json; charset=utf-8",
 					Json.write(Map.of("error", "invalid_input", "description", String.valueOf(e))).getBytes(StandardCharsets.UTF_8));
@@ -181,6 +186,32 @@ public final class FakeModrinth implements AutoCloseable {
 		try (OutputStream out = exchange.getResponseBody()) {
 			out.write(response.body());
 		}
+	}
+
+	// v0.5 WS-H (docs/v0.5/SPEC.md 2H L5: RigTune's Preview reads a download's fabric.mod.json through Range requests;
+	// WS-H's one marked method in this file). A CDN file asked for with a Range header is answered as cdn.modrinth.com
+	// answers it (docs/v0.5/design/ws-h.md): one `bytes=a-b`, `a-` or `-n` range gets a 206 with its Content-Range (a range
+	// reaching past the end is cut there); a range starting past the end gets a 416 (the CDN: 500); anything else, several
+	// ranges included, the whole file.
+	private static Response ranged(HttpExchange exchange, Response full) {
+		String range = exchange.getRequestHeaders().getFirst("Range");
+		if (range == null || full.status() != 200 || !"application/java-archive".equals(full.contentType())) {
+			return full;
+		}
+		exchange.getResponseHeaders().set("Accept-Ranges", "bytes");
+		Matcher m = Pattern.compile("bytes=(\\d*)-(\\d*)").matcher(range.trim());
+		if (!m.matches() || m.group(1).isEmpty() && m.group(2).isEmpty()) {
+			return full;
+		}
+		long size = full.body().length;
+		long from = m.group(1).isEmpty() ? Math.max(0, size - Long.parseLong(m.group(2))) : Long.parseLong(m.group(1));
+		long to = m.group(1).isEmpty() || m.group(2).isEmpty() ? size - 1 : Math.min(size - 1, Long.parseLong(m.group(2)));
+		if (from >= size || to < from) {
+			exchange.getResponseHeaders().set("Content-Range", "bytes */" + size);
+			return new Response(416, full.contentType(), new byte[0]);
+		}
+		exchange.getResponseHeaders().set("Content-Range", "bytes " + from + "-" + to + "/" + size);
+		return new Response(206, full.contentType(), Arrays.copyOfRange(full.body(), (int) from, (int) to + 1));
 	}
 
 	private static String hostOf(String header) {
@@ -248,6 +279,14 @@ public final class FakeModrinth implements AutoCloseable {
 				if (project != null && !out.contains(catalog.projectJson(project))) {
 					out.add(catalog.projectJson(project));
 				}
+			}
+			return Response.json(out);
+		}
+		// /v2/versions?ids=[...]: the known ones, in the order asked
+		if (path.equals("/v2/versions")) {
+			List<Object> out = new ArrayList<>();
+			for (String id : Json.strings(params.containsKey("ids") ? Json.parse(params.get("ids")) : null)) {
+				catalog.versions.stream().filter(v -> v.id().equals(id)).findFirst().ifPresent(v -> out.add(catalog.versionJson(v)));
 			}
 			return Response.json(out);
 		}
