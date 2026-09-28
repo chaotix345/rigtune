@@ -205,6 +205,19 @@ Each Apply's outcome is the status line its downloads leave (`pinStatus`/`addSta
 
 The fabric client gametest API is the same too: `createServer(Properties)`, `clickScreenButton`, `setScreen` in 6.0.2 (26.2) and 6.0.7/6.0.8 (26.3).
 
+## Review-11 fixes (reviews/r11-CI.md, r11-SEC.md, r11-COMPAT.md; on test/v05-e2e-2)
+
+| id | outcome | commit | the test that failed first |
+|---|---|---|---|
+| CI-2 (M) | FIXED. `publish` has no JDK and no Gradle: `tools/e2e/modrinth_publish.py` sends build.gradle's Minotaur payload through `tools/modrinth_project.py upload-version`. That is stdlib Python and idempotent, gets the staged SHA256SUMS digest, and each node runs in `tools/ci/retry.sh`. The token never meets a Gradle configuration. A local `--dry-run` printed the payload for the CI jar | 20dabb91 | `test_e2e_workflows.py` `test_modrinth_gets_the_staged_files_through_the_stdlib_tool_retried` (release.yml ran `./gradlew :$mc:modrinth`); `test_modrinth_publish.py` 6 |
+| SEC-6 (L) | FIXED: `persist-credentials: false` on publish's checkout | 20dabb91 | `test_publish_s_checkout_keeps_no_git_credentials` |
+| CI-5 (L) | FIXED: a tag push without MODRINTH_TOKEN fails before "Create GitHub release"; a fork's gets the notice | 20dabb91 | `test_a_tag_push_without_the_token_fails_before_the_github_release` |
+| CI-3 (L) | FIXED: stutter_run reads what log4j rolled over during the run, then latest.log, and unwraps times across midnight (log and GC pauses) | 906a271f | C1r shifted to start 10 s before midnight failed ("after teleport", "chunks loading"); `client_log` with a rotated .gz |
+| CI-4 (L) | FIXED: a node without `sodium_version` gets `undo` (no profile part) and `helper-kill`; the stutter leg runs without Sodium there | 7fceff0b | `test_a_node_without_sodium_gets_the_undo_scenario_without_the_profile_part`; `test_sodium_only_when_the_node_has_a_build_of_it` |
+| CI-6 (L) | FIXED at merge time: rules-consistency, on a pull request into main, fetches main's rules-v2.json; changed content needs a higher revision, unchanged content the same revision (`tools/rules_revision_check.py`). NOT done: `finalize_documents` requiring a higher revision under `--skip-main-check`. A release's repeated regenerations land in one R by design (SPEC 2T), so that guard would refuse them, and the merge-time check already catches the same-revision re-emission | e4c5df2c | `test_rules_revision_check.py` 5 |
+| SEC-7 (L) | FIXED: the release tier also needs `github.event.pull_request.head.repo.full_name == github.repository` | 0804c342 | `test_every_push_runs_the_e2e_push_tier_on_this_run_s_jars` |
+| COMPAT-5 (L) | FIXED. compat040 has an `ApplyResult` kind (0.4.0 loads last-apply.json, its restart reconcile moves no journal status, and History built with the file's failures shows each reason), checked on ws-h. `ApplyHelper appliesGroup` was added to ws-s2 and ws-t (recorded cross-owner edits, the coordinator's request). awareness.json joins `V050.kept` with `acknowledgedStartupRegressions`. Proven both ways with the released 0.4.0: without the messages, reasons 0; with the ABANDONED changes STAGED, 2 statuses moved | 4e92bda3 | the broken copies above; `test_written_v05.py` |
+
 ## Acceptance criteria (WS-E's)
 
 | AC | how | status |
