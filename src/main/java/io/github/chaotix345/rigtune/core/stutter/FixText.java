@@ -194,6 +194,9 @@ public final class FixText {
 		if (FixTracker.EXCLUDED.equals(skip.reason())) {
 			return Text.of("rigtune.stutter.fix.skip.excluded", "it ran around a benchmark, or Distant Horizons generated terrain in it (or RigTune couldn't tell)");
 		}
+		if (FixTracker.CHANGED.equals(skip.reason())) {
+			return Text.of("rigtune.stutter.fix.skip.changed", "a setting changed while it ran");
+		}
 		if (FixTracker.SHORT_BEFORE.equals(skip.reason())) {
 			return Text.of("rigtune.stutter.fix.skip.short_before", "it had less than %s of play after its first 3 minutes",
 					StutterSummary.clock(FixGate.MIN_GAMEPLAY_SECONDS));

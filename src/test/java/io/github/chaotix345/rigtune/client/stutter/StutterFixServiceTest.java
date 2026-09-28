@@ -95,7 +95,7 @@ class StutterFixServiceTest {
 	void m1ASettingThatCantBeReadRefusesTheFix(@TempDir Path config) throws IOException {
 		FixOffer.Offer offer = new FixOffer.Offer("stutter-sodium-defer", DEFER, "ZERO_FRAMES", "ALWAYS", false);
 		StutterFixService.Fixes shown = new StutterFixService.Fixes(Map.of(offer.adviceId(), offer), new SessionOutcome(1, 400, 20, 1000, 7, 20 / 7.0, 3),
-				new FixConditions("26.2", "mods", 4096, "g1", 1280, 720, false, "SINGLEPLAYER", true, true, Map.of()), false, false, Instant.now(),
+				new FixConditions("26.2", "mods", 4096, "g1", 1280, 720, false, "SINGLEPLAYER", true, true, Map.of()), false, false, false, Instant.now(),
 				StutterReport.MONITOR);
 		Path sodium = config.resolve("sodium-options.json");
 		Files.writeString(sodium, "{\"performance\": {\"chunk_build_defer_mode\": ");

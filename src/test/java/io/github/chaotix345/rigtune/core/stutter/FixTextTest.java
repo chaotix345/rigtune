@@ -166,6 +166,7 @@ class FixTextTest {
 				FixText.state(LABELS, ready, true).english());
 		assertEquals("Your last session didn't count: it had less than 5:00 of play after its first 3 minutes.",
 				skipped(b, new FixTracker.Skip(FixTracker.SHORT_BEFORE, List.of())));
+		assertEquals("Your last session didn't count: a setting changed while it ran.", skipped(b, new FixTracker.Skip(FixTracker.CHANGED, List.of())));
 	}
 
 	private static String skipped(FixTracker.Record m, FixTracker.Skip skip) {

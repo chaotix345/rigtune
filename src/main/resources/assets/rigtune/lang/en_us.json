@@ -695,6 +695,7 @@
 	"rigtune.stutter.fix.preview.subtitle": "Stutter fix for: %s",
 	"rigtune.stutter.fix.rate": "%s hitches a minute",
 	"rigtune.stutter.fix.reason": "Stutter Doctor: %s",
+	"rigtune.stutter.fix.skip.changed": "a setting changed while it ran",
 	"rigtune.stutter.fix.skip.display": "the window size or fullscreen changed",
 	"rigtune.stutter.fix.skip.excluded": "it ran around a benchmark, or Distant Horizons generated terrain in it (or RigTune couldn't tell)",
 	"rigtune.stutter.fix.skip.graphics": "it ran on another graphics API (OpenGL or Vulkan) or GPU",

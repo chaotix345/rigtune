@@ -57,11 +57,12 @@ public final class StutterAnalyzer {
 	// compared (C20's comparison, review-11 STUTTER-2 and review-12 R12STUTTER-1/2): the part of the capture a stutter fix's
 	// comparison takes (Compared); null only in a hand-built result (the whole capture then). dhWorldGenPeakCores (review-11 STUTTER-4, C20's WS-B rule): the busiest minute of Distant Horizons'
 	// world generation over the whole capture (StutterRings.Totals), or over the held samples for a hand-built snapshot;
-	// null when nothing was sampled.
+	// null when nothing was sampled. settingChanges (review-12 R12STUTTER-5): the setting changes during the capture (a
+	// change and back too), from the whole capture's count or the held events.
 	public record Result(StutterReport report, StutterFacts facts, List<Attributor.Attribution> attributions, @Nullable Double dhWorldGenCores,
-			@Nullable Compared compared, @Nullable Double dhWorldGenPeakCores) {
+			@Nullable Compared compared, @Nullable Double dhWorldGenPeakCores, int settingChanges) {
 		public Result(StutterReport report, StutterFacts facts, List<Attributor.Attribution> attributions, @Nullable Double dhWorldGenCores) {
-			this(report, facts, attributions, dhWorldGenCores, null, dhWorldGenCores);
+			this(report, facts, attributions, dhWorldGenCores, null, dhWorldGenCores, 0);
 		}
 	}
 
@@ -202,7 +203,20 @@ public final class StutterAnalyzer {
 		Double dhWorldGen = dhWorldGenCores(in);
 		StutterRings.Totals totals = in.rings().totals();
 		Double dhPeak = totals == null ? dhWorldGen : Double.isNaN(totals.dhWorldGenPeakCores()) ? null : totals.dhWorldGenPeakCores();
-		return new Result(report, stutterFacts, attributions, dhWorldGen, compared(f, ringStart, in.startNanos(), in.endNanos()), dhPeak);
+		int settingChanges = totals != null ? totals.settingChanges() : heldSettingChanges(in);
+		return new Result(report, stutterFacts, attributions, dhWorldGen, compared(f, ringStart, in.startNanos(), in.endNanos()), dhPeak, settingChanges);
+	}
+
+	// A hand-built snapshot's setting changes: the held SETTINGS_CHANGED events from the capture's start on.
+	private static int heldSettingChanges(Input in) {
+		long[] e = in.rings().events();
+		int n = 0;
+		for (int i = 0; i + StutterRings.EVENT_STRIDE <= e.length; i += StutterRings.EVENT_STRIDE) {
+			if (e[i] == StutterRings.SETTINGS_CHANGED && (e[i + 2] & StutterRings.SETTING_BITS) != 0 && e[i + 1] - in.startNanos() >= 0) {
+				n++;
+			}
+		}
+		return n;
 	}
 
 	static Compared compared(FrameRing.Snapshot f, long ringStart, long startNanos, long endNanos) {

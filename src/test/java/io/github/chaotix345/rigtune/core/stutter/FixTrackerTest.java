@@ -207,6 +207,30 @@ class FixTrackerTest {
 		assertEquals(FixTracker.State.REPLACED, FixTracker.advance(r, Journal.State.OK, List.of(), session(10, 400, 18, RD, "16"), at(10)).state());
 	}
 
+	// review-12 R12STUTTER-5: a session in which a setting changed (and went back) doesn't count on either side; a baseline
+	// whose settings moved between its start and end doesn't either.
+	@Test
+	void aSessionWithASettingChangeDoesNotCount() {
+		FixTracker.SessionEnd s = session(60, 400, 10, RD, "10");
+		FixTracker.Record r = advance(measuring(), journal(RD, JournalChange.APPLIED), new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(),
+				s.atStart(), s.atEnd(), false, false, true), at(60));
+		assertNull(r.after());
+		assertEquals(new FixTracker.Skip(FixTracker.CHANGED, List.of()), r.lastSkip());
+		FixTracker.SessionEnd b = session(10, 400, 18, RD, "12");
+		FixTracker.Record base = FixTracker.advance(baseline(), Journal.State.OK, List.of(), new FixTracker.SessionEnd(b.startedAt(), b.source(), b.outcome(),
+				b.atStart(), b.atEnd(), false, false, true), at(10));
+		assertEquals(FixTracker.State.BASELINE, base.state());
+		assertEquals(new FixTracker.Skip(FixTracker.CHANGED, List.of()), base.lastSkip());
+		Map<String, String> moved = new LinkedHashMap<>(b.atEnd().settings());
+		moved.put("vanilla.simulationDistance", "12");
+		FixConditions e = b.atEnd();
+		FixConditions end = new FixConditions(e.mc(), e.modSetHash(), e.heapMaxMb(), e.collector(), e.width(), e.height(), e.fullscreen(), e.world(),
+				e.phaseTiming(), e.gcMeasured(), moved);
+		base = FixTracker.advance(baseline(), Journal.State.OK, List.of(), new FixTracker.SessionEnd(b.startedAt(), b.source(), b.outcome(), b.atStart(), end,
+				false), at(10));
+		assertEquals(new FixTracker.Skip(FixTracker.CHANGED, List.of()), base.lastSkip(), "simulation distance moved during the baseline");
+	}
+
 	@Test
 	void aStagedFixWaitsForTheRestart() {
 		FixTracker.Record r = staged();

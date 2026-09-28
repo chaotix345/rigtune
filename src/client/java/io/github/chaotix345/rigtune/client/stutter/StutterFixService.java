@@ -102,7 +102,7 @@ public final class StutterFixService {
 	// side if the player applies one), whether it's excluded (WS-B's M4 rule) or mostly idle (RW-17), and the session's start
 	// and source.
 	public record Fixes(Map<String, FixOffer> offers, SessionOutcome outcome, FixConditions conditions, boolean excluded, boolean idle,
-			Instant startedAt, String source) {
+			boolean changed, Instant startedAt, String source) {
 	}
 
 	public StutterFixService(RealController controller) {
@@ -272,12 +272,14 @@ public final class StutterFixService {
 		SessionOutcome outcome = SessionOutcome.of(result, copy.startNanos());
 		boolean excluded = excluded(result, in.aroundBenchmark(), OptionalMods.dhLoaded());
 		FixConditions conditions = in.conditionsNow().withMeasurement(copy.phaseTiming(), copy.gcMeasured());
+		// review-12 R12STUTTER-5: a setting changed during the session, and back or not.
+		boolean changed = result.settingChanges() > 0;
 		Map<String, FixOffer> offers = Map.of();
 		if (rules != null && hardware != null && !advice.isEmpty() && !in.specs().isEmpty()) {
 			SettingsSnapshot effective = effective(settings, in.configDir());
 			offers = FixOffers.evaluate(in.specs(), advice.stream().map(StutterAdvisor.Fired::id).toList(), report, outcome, excluded,
-					changedDuring(in.atStart(), in.conditionsNow()), StutterAdvisor.context(rules, hardware, mods, settings, goal, result.facts()), effective,
-					ModScanner.loadedIds(), in.live(), in.busy(), in.writable());
+					changed || changedDuring(in.atStart(), in.conditionsNow()), StutterAdvisor.context(rules, hardware, mods, settings, goal, result.facts()),
+					effective, ModScanner.loadedIds(), in.live(), in.busy(), in.writable());
 			offers = withProfiles(offers, in.configDir());
 		}
 		if (DevFixCalibration.ON) {
@@ -285,7 +287,7 @@ public final class StutterFixService {
 					result.facts().claimedShares(), result.facts().causeSpikes(), result.facts().unmeasured(), result.facts().taggedShares(), outcome, excluded,
 					offers);
 		}
-		return new Fixes(offers, outcome, conditions, excluded, FixGate.idle(report), copy.startedAt(), copy.source());
+		return new Fixes(offers, outcome, conditions, excluded, FixGate.idle(report), changed, copy.startedAt(), copy.source());
 	}
 
 	// review-11 STUTTER-3: the before side is one setup: nothing FixConditions compares moved between the capture's start and
@@ -339,7 +341,7 @@ public final class StutterFixService {
 		}
 		FixConditions start = atStart.withMeasurement(fixes.conditions().phaseTiming(), fixes.conditions().gcMeasured());
 		FixTracker.SessionEnd end = new FixTracker.SessionEnd(fixes.startedAt(), fixes.source(), fixes.outcome(), start, fixes.conditions(),
-				fixes.excluded(), fixes.idle());
+				fixes.excluded(), fixes.idle(), fixes.changed());
 		stutter().io(() -> advanceAll(end));
 	}
 

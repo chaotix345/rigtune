@@ -35,6 +35,8 @@ public final class FixTracker {
 	public static final String UNREAD = "unread";
 	// A baseline session with less than FixGate.MIN_GAMEPLAY_SECONDS of compared play.
 	public static final String SHORT_BEFORE = "short_before";
+	// review-12 R12STUTTER-5: a setting changed during the session (and back, or between its start and end).
+	public static final String CHANGED = "changed";
 	// Not a session's skip: an expired record's mark that its journal entry is gone (nothing left to undo).
 	public static final String GONE = "gone";
 
@@ -148,9 +150,15 @@ public final class FixTracker {
 
 	// A finished session: when it started, its source (StutterReport.MONITOR or BENCHMARK), its outcome, the conditions at
 	// its start and end, whether it's excluded (around a benchmark run, or Distant Horizons generated terrain in it: WS-B's
-	// M4 rule, no comparison across such a session) and whether it was mostly idle (FixGate.idle, RW-17).
+	// M4 rule, no comparison across such a session), whether it was mostly idle (FixGate.idle, RW-17) and whether a setting
+	// changed during it (review-12 R12STUTTER-5: StutterAnalyzer.Result.settingChanges, a change and back included).
 	public record SessionEnd(Instant startedAt, String source, SessionOutcome outcome, FixConditions atStart, FixConditions atEnd, boolean excluded,
-			boolean idle) {
+			boolean idle, boolean changed) {
+		public SessionEnd(Instant startedAt, String source, SessionOutcome outcome, FixConditions atStart, FixConditions atEnd, boolean excluded,
+				boolean idle) {
+			this(startedAt, source, outcome, atStart, atEnd, excluded, idle, false);
+		}
+
 		public SessionEnd(Instant startedAt, String source, SessionOutcome outcome, FixConditions atStart, FixConditions atEnd, boolean excluded) {
 			this(startedAt, source, outcome, atStart, atEnd, excluded, false);
 		}
@@ -244,6 +252,9 @@ public final class FixTracker {
 			skip = new Skip(EXCLUDED, List.of());
 		} else if (session.idle()) {
 			skip = new Skip(IDLE, List.of());
+		} else if (session.changed() || session.atStart().differences(session.atEnd(), "").stream().anyMatch(d -> d.reason() != FixConditions.Reason.SETTING
+				|| !d.args().get(1).isEmpty() && !d.args().get(2).isEmpty())) {
+			skip = new Skip(CHANGED, List.of());
 		} else if (session.outcome().gameplaySeconds() < FixGate.MIN_GAMEPLAY_SECONDS) {
 			skip = new Skip(SHORT_BEFORE, List.of());
 		}
@@ -281,6 +292,9 @@ public final class FixTracker {
 		if (d.isEmpty()) {
 			d = r.conditions().differences(session.atEnd(), r.key());
 		}
-		return d.isEmpty() ? null : new Skip(d.getFirst().reason().id(), d.getFirst().args());
+		if (!d.isEmpty()) {
+			return new Skip(d.getFirst().reason().id(), d.getFirst().args());
+		}
+		return session.changed() ? new Skip(CHANGED, List.of()) : null;
 	}
 }

@@ -298,6 +298,7 @@ public final class StutterMonitor {
 			throw new IllegalStateException("a benchmark capture is running");
 		}
 		rings = shared;
+		shared.countSettingChangesFrom(now);
 		Capture c = new Capture(new FrameRing(FrameRing.SESSION_FRAMES, FrameRing.SESSION_CANDIDATES), now, startedAt, StutterReport.MONITOR);
 		c.ring.markGameplayAt(now + SessionOutcome.SETTLE_NANOS);
 		if (idleNow) {

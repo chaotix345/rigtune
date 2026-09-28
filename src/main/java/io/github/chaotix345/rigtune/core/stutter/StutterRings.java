@@ -83,6 +83,13 @@ public final class StutterRings {
 	private long dhBlockCpu;
 	private long dhBlockTime;
 	private double dhPeakCores = Double.NaN;
+	// review-12 R12STUTTER-5 (C20): the setting changes over the whole capture (a SETTINGS_CHANGED event with one of the
+	// SETTING_BITS: render or simulation distance, shaders, Distant Horizons' rendering; not a resource reload), dated from
+	// the capture's start on (an immediate fix's own change, which restarts the session, is dated before it).
+	static final long SETTING_BITS = 0xF;
+	private volatile boolean countingSettings;
+	private volatile long settingsFrom;
+	private volatile int settingChanges;
 
 	public StutterRings(long nanosAtUptimeZero) {
 		this.clock = new GcClock(nanosAtUptimeZero);
@@ -92,7 +99,15 @@ public final class StutterRings {
 		events.add(kind, nanos, value);
 		if (kind == PAUSE_BEGIN || kind == PAUSE_END) {
 			paused = kind == PAUSE_BEGIN;
+		} else if (kind == SETTINGS_CHANGED && (value & SETTING_BITS) != 0 && countingSettings && nanos - settingsFrom >= 0) {
+			settingChanges++;
 		}
+	}
+
+	// The capture starts (render thread): setting changes count from `nanos` on.
+	public void countSettingChangesFrom(long nanos) {
+		settingsFrom = nanos;
+		countingSettings = true;
 	}
 
 	public synchronized void gc(long receivedNanos, long startMs, long endMs, int flags, long usedAfterBytes) {
@@ -149,7 +164,7 @@ public final class StutterRings {
 		RecordRing.Held held = samples.held();
 		return new Snapshot(events.snapshot(), gc.snapshot(), held.records(), clock.calibration(),
 				new Totals(gc.added(), held.added(), fullGcs, explicitGcs, stalls, live.snapshot(),
-						dhBlockTime >= DH_BLOCK_NANOS / 2 ? peak(dhPeakCores, dhBlockCpu, dhBlockTime) : dhPeakCores));
+						dhBlockTime >= DH_BLOCK_NANOS / 2 ? peak(dhPeakCores, dhBlockCpu, dhBlockTime) : dhPeakCores, settingChanges));
 	}
 
 	public synchronized GcClock.Calibration calibration() {
@@ -168,7 +183,13 @@ public final class StutterRings {
 	// The whole capture's GC counts, how many GC and sample records the rings ever took (more than they hold: they wrapped),
 	// and the live-set samples (LIVE_STRIDE longs each, oldest first). dhWorldGenPeakCores (review-11 STUTTER-4): the busiest
 	// block of Distant Horizons' world generation (a half-filled last block counts), NaN when no block was sampled.
-	public record Totals(long gcAdded, long samplesAdded, int fullGcs, int explicitGcs, int stalls, long[] liveSamples, double dhWorldGenPeakCores) {
+	// settingChanges (review-12 R12STUTTER-5): the setting changes since the capture's start.
+	public record Totals(long gcAdded, long samplesAdded, int fullGcs, int explicitGcs, int stalls, long[] liveSamples, double dhWorldGenPeakCores,
+			int settingChanges) {
+		public Totals(long gcAdded, long samplesAdded, int fullGcs, int explicitGcs, int stalls, long[] liveSamples, double dhWorldGenPeakCores) {
+			this(gcAdded, samplesAdded, fullGcs, explicitGcs, stalls, liveSamples, dhWorldGenPeakCores, 0);
+		}
+
 		public Totals(long gcAdded, long samplesAdded, int fullGcs, int explicitGcs, int stalls, long[] liveSamples) {
 			this(gcAdded, samplesAdded, fullGcs, explicitGcs, stalls, liveSamples, Double.NaN);
 		}
