@@ -15,6 +15,7 @@ import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.client.ui.RowFocus;
 import io.github.chaotix345.rigtune.client.ui.ServerProfilesScreen;
 import io.github.chaotix345.rigtune.client.ui.Texts;
+import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.awareness.AwarenessStore;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
@@ -29,6 +30,7 @@ import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.profile.ProfileStore;
 import io.github.chaotix345.rigtune.core.profile.ServerProfilePrompt;
 import io.github.chaotix345.rigtune.core.profile.ServerProfilesView;
+import io.github.chaotix345.rigtune.core.server.ServerLimitsStore;
 import io.github.chaotix345.rigtune.core.server.ServerProfileStore;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -70,8 +72,9 @@ import java.util.Properties;
 // (the notice before SERVER_LIMIT, one toast), holds it while a benchmark runs, refuses a Switch then and changes
 // nothing, then the Switch is one apply entry "Profile: Max FPS" of settings only, and after Undo this the offer doesn't
 // come back; connection 3 offers again with no second toast, × hides it without storing its key, Don't offer here
-// forgets the server, and the screen sets, renames (the name follows), deletes (its server is forgotten), stops offering
-// and forgets all; after the disconnect the screen says to join a server. Screenshots at X12's sizes (1280x720@3 for the
+// forgets the server, and Evening is set; connection 4 offers Evening, whose rename the offer and the screen follow and
+// whose deletion forgets the server; the screen stops offering and forgets all; after the disconnect it says to join a
+// server. Screenshots at X12's sizes (1280x720@3 for the
 // scroll size); server-profiles.json, profiles.json, the history, pending.json, awareness.json and the options are put back.
 public class ServerProfilesGameTest implements FabricClientGameTest {
 	private static final String MAX_FPS = "template:max_fps";
@@ -84,6 +87,8 @@ public class ServerProfilesGameTest implements FabricClientGameTest {
 	private final Path historyFile = Journal.file(configDir);
 	private final Path pendingFile = PendingActions.defaultPath(configDir);
 	private final Path awarenessFile = AwarenessStore.file(configDir);
+	private final Path serverLimitsFile = ServerLimitsStore.file(configDir);
+	private final Path lastApplyFile = ApplyResult.defaultPath(configDir);
 	private final Journal journal = new Journal(configDir, null, null, (message, error) -> {
 		throw new AssertionError(message, error);
 	});
@@ -97,7 +102,7 @@ public class ServerProfilesGameTest implements FabricClientGameTest {
 		context.waitForScreen(TitleScreen.class);
 		context.waitFor(mc -> RigTuneClient.controller().report() != null, 1200);
 		RealController real = V05TestContext.of(context).realController();
-		Map<Path, byte[]> saved = backup(serverProfilesFile, profilesFile, historyFile, pendingFile, awarenessFile);
+		Map<Path, byte[]> saved = backup(serverProfilesFile, profilesFile, historyFile, pendingFile, awarenessFile, serverLimitsFile, lastApplyFile);
 		Map<String, String> original = context.computeOnClient(mc -> vanilla(mc.options));
 		boolean network = GameTestNet.set(context, real, false);
 		try {
@@ -113,7 +118,8 @@ public class ServerProfilesGameTest implements FabricClientGameTest {
 			try (TestDedicatedServerContext server = context.worldBuilder().createServer(properties)) {
 				setMaxFpsForThisServer(context, real, server);
 				offerSwitchAndUndo(context, real, server);
-				offerAgainDismissForgetAndTheScreen(context, real, server);
+				offerAgainDismissAndForget(context, real, server);
+				renameDeleteAndTheScreen(context, real, server);
 			}
 			afterDisconnect(context, real);
 			RigTune.LOGGER.info("ServerProfilesGameTest: own world, set, offer, held and refused during a benchmark, switch + Undo, no second toast, "
@@ -199,10 +205,15 @@ public class ServerProfilesGameTest implements FabricClientGameTest {
 			check(offer.message().english().equals("You set Max FPS for this server. Switch to it?"), offer.message().english());
 			check(offer.key().startsWith(ServerProfilePrompt.KEY_PREFIX) && offer.dismissible(), "key and ×: " + offer.key());
 			check(offer.actions().stream().map(NoticeAction::id).toList().equals(List.of("switch", "forget")), "actions: " + offer.actions());
-			context.waitFor(mc -> toast(mc) != null, 100);
-			// Fully slid in (it stays 8 s).
+			// The toast waits for the world to show (no screen over it), then shows once for this server this session.
+			String key = servers().keySet().iterator().next();
+			context.waitFor(mc -> real.v05().serverProfiles().toasted(key), 200);
+			String body = context.computeOnClient(mc -> real.v05().serverProfiles().lastToast().getString());
+			check(body.startsWith("Max FPS is set for this server. ") && body.endsWith(" to switch."), "the toast's text: " + body);
+			// Best effort: the live toast, fully slid in (it stays 8 s).
 			context.waitTicks(20);
 			context.getInput().setCursorPos(1, 1);
+			RigTune.LOGGER.info("ServerProfilesGameTest: toast on screen for the screenshot: {}", toast(context) != null);
 			context.takeScreenshot("server-profiles-toast");
 			List<Notice> notices = context.computeOnClient(mc -> real.notices());
 			int limit = indexOf(notices, NoticePriority.SERVER_LIMIT);
@@ -231,11 +242,14 @@ public class ServerProfilesGameTest implements FabricClientGameTest {
 			ServerProfileService.overrideBenchmarkCheck(null);
 			check(offer(context, real) != null, "the held offer shows again once the benchmark is over");
 			int entries = journal.entries().size();
+			Map<String, String> beforeRefusal = context.computeOnClient(mc -> vanilla(mc.options));
 			ProfileService.overrideBenchmarkCheck(() -> true);
 			context.runOnClient(mc -> real.noticeAction(offer.key(), ServerProfilePrompt.ACTION_SWITCH));
 			ProfileService.overrideBenchmarkCheck(null);
 			check(journal.entries().size() == entries, "the refused Switch journals nothing");
-			check(!"260".equals(context.computeOnClient(mc -> vanilla(mc.options)).get("vanilla.maxFps")), "and changes nothing");
+			check(context.computeOnClient(mc -> vanilla(mc.options)).equals(beforeRefusal), "the refused Switch changes no option");
+			String refusal = context.computeOnClient(mc -> real.v05().serverProfiles().lastToast().getString());
+			check(refusal.equals("Profiles can't switch while a benchmark is running."), "the refusal is the toast: " + refusal);
 			check(offer(context, real) != null, "the offer stays after a refusal");
 
 			// AC7.7: the Switch is one apply entry "Profile: Max FPS" with Max FPS's vanilla values; settings only (AC7.18).
@@ -279,8 +293,8 @@ public class ServerProfilesGameTest implements FabricClientGameTest {
 	}
 
 	// Connection 3: the offer again with no second toast; × hides it for this connection only; Don't offer here forgets
-	// the server; then the screen: set, rename, delete, stop offering, forget all.
-	private void offerAgainDismissForgetAndTheScreen(ClientGameTestContext context, RealController real, TestDedicatedServerContext server) {
+	// the server; then Evening is set here from the screen.
+	private void offerAgainDismissAndForget(ClientGameTestContext context, RealController real, TestDedicatedServerContext server) {
 		context.runOnClient(mc -> mc.gui.toastManager().clear());
 		try (TestDedicatedServerConnection connection = server.connect()) {
 			inTheWorld(context, real);
@@ -303,7 +317,6 @@ public class ServerProfilesGameTest implements FabricClientGameTest {
 			context.runOnClient(mc -> real.v05().serverProfiles().act(ServerProfilePrompt.ACTION_FORGET));
 			checkFile(0);
 
-			// The screen: set Evening here, rename it (the name follows), delete it (its server is forgotten).
 			context.runOnClient(mc -> real.saveCurrentProfile("Evening"));
 			String evening = eveningId();
 			openServers(context, real, evening);
@@ -311,14 +324,28 @@ public class ServerProfilesGameTest implements FabricClientGameTest {
 			context.waitTicks(2);
 			checkFile(1);
 			check(evening.equals(servers().entrySet().iterator().next().getValue().getAsJsonObject().get("profile").getAsString()), "Evening set here");
+			context.runOnClient(mc -> mc.gui.setScreen(null));
+		}
+		context.waitFor(mc -> real.serverProfiles().state() == ServerProfilesView.State.NOT_CONNECTED, 200);
+	}
+
+	// Connection 4 (AC7.9): Evening is offered; renamed, the offer and the screen say its new name; deleted, its server is
+	// forgotten and the offer goes. Then the screen: Max FPS set, Stop offering here, set again, Forget all… (confirmed).
+	private void renameDeleteAndTheScreen(ClientGameTestContext context, RealController real, TestDedicatedServerContext server) {
+		try (TestDedicatedServerConnection connection = server.connect()) {
+			inTheWorld(context, real);
+			waitForOffer(context, real);
+			check(offer(context, real).message().english().equals("You set Evening for this server. Switch to it?"), offer(context, real).message().english());
+			String evening = eveningId();
 			context.runOnClient(mc -> real.renameProfile(evening, "Night"));
-			ServerProfilesView renamed = context.computeOnClient(mc -> real.serverProfiles());
-			check(renamed.here().english().equals("This server: RigTune offers Night when you join."), "a rename keeps the mapping: "
-					+ renamed.here().english());
+			Notice renamed = offer(context, real);
+			check(renamed != null && renamed.message().english().equals("You set Night for this server. Switch to it?"), "the offer says the new name: " + renamed);
+			ServerProfilesView view = context.computeOnClient(mc -> real.serverProfiles());
+			check(view.here().english().equals("This server: RigTune offers Night when you join."), "a rename keeps the mapping: " + view.here().english());
 			context.runOnClient(mc -> real.deleteProfile(evening));
 			checkFile(0);
+			check(offer(context, real) == null, "a deleted profile's offer goes");
 
-			// Max FPS again, then Stop offering here; then Max FPS again and Forget all… (confirmed).
 			openServers(context, real, MAX_FPS);
 			context.runOnClient(mc -> screen(mc).remember());
 			context.waitTicks(2);

@@ -206,7 +206,9 @@ public final class RigTuneClient implements ClientModInitializer {
 				if (StartupNotices.showSuggestionsToast(settings, important)) {
 					SystemToast.add(minecraft.gui.toastManager(), TOAST_ID,
 							Component.translatable("rigtune.toast.title", report.recommendations().size()),
-							Component.translatable("rigtune.toast.body", openKey.getTranslatedKeyMessage()));
+							// WS-P2 (review L6, approved): no key bound to RigTune, no "Press  or".
+							openKey.isUnbound() ? Component.translatable("rigtune.toast.body.no_key")
+									: Component.translatable("rigtune.toast.body", openKey.getTranslatedKeyMessage()));
 				}
 			}
 		}

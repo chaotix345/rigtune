@@ -241,7 +241,9 @@ public class ServerProfilesScreen extends Screen {
 			graphics.text(font, privacy.lines().get(i), left, privacy.y() + i * LINE, Palette.of(COLOR_LABEL), false);
 		}
 		for (Block block : List.of(head, here, privacy)) {
-			if (block.cut() && mouseY >= block.y() - 2 && mouseY < block.bottom()) {
+			int blockLeft = block == head ? 8 : left;
+			int blockWidth = block == head ? width - 16 : column;
+			if (block.cut() && mouseX >= blockLeft && mouseX < blockLeft + blockWidth && mouseY >= block.y() - 2 && mouseY < block.bottom()) {
 				graphics.setTooltipForNextFrame(font, font.split(block.text(), Math.max(120, width / 2)), mouseX, mouseY);
 			}
 		}

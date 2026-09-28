@@ -150,6 +150,33 @@ not-connected line; the A11y walk's seven canned rows at the three sizes, scroll
 selected current row after Enter, and high contrast (the focus frame on the This-server line, the label grey
 recoloured). One run-1 finding fixed from them: the subtitle and the privacy line were clipped at every size.
 
+### Review (Phase B)
+A code-reviewer pass on c4fb8509..0d4f61ce went to the coordinator: 0 high, 2 medium, 10 low; every one fixed.
+- **M1**: one read of profiles.json per call through the new read-only `ProfileService.names()` (the active profile and
+  every id's name from one `ProfileStore.snapshot()`), used by the lookup, `notice()`, `act()` and `view()`; the screen's
+  model reads server-profiles.json once (`ServerProfileStore.snapshot()`, one `JsonStateFile` load giving the content
+  and whether it can be written) and is built by `ServerProfileService.view(connection, snapshot, names, …)`. The
+  "count" is proven by invalidation: `ProfileServiceNamesTest`, `ServerProfileStoreTest.aSnapshotIsOneRead` and
+  `ServerProfileServiceViewTest` delete the files after the one read and get the same answers.
+- **M2** (product fix): the toast waits for the world to show. The lookup hands it to a waiting slot; the service's own
+  END_CLIENT_TICK listener, registered on the first offer (X4.4: one field read per tick unless a toast waits, no
+  allocation), shows it on the first tick with the level and player there and no screen over the world, so a slow join
+  never spends the 8 s behind the loading screen. ServerProfilesGameTest asserts it through
+  `ServerProfileService.toasted(key)` and `lastToast()`; the live toast's screenshot is best effort (logged).
+- **L3**: `notice()` re-checks the offer's entry (`ServerProfileStore.entry(key)`, the one server-profiles.json read
+  while an offer is pending): forgotten or set to another profile meanwhile retires it. **L9**: the show/hold/retire
+  choice moved into `ServerProfileOffers.kept/now/settle` (unit-tested per reason); AC7.9's rename is asserted on the
+  offer's own message in a fourth connection. **L4**: `Connection.toString()` leaves the address out (tested).
+- **L5**: the game test also backs up server-limits.json and last-apply.json. **L6**: with no key bound to RigTune, the
+  toast body is key-free (`rigtune.profile.server.toast.body.no_key`); the same fix in the suggestions toast
+  (RigTuneClient.java:209, approved, marked WS-P2; `rigtune.toast.body.no_key` next to `rigtune.toast.body`). **L7**:
+  the refused Switch compares every vanilla option with a before-snapshot and checks the refusal toast's text. **L8**:
+  after Enter selects a row, Tab goes from the last row to Forget, then Forget all. **L10**: the clipped lines' tooltip
+  only over the text's own column. **L11**: this file. **L12**: `ProfileService.effective` is package-private; the
+  preview test calls it directly.
+- Local run 5 (26.2, under the lock; ServerProfilesGameTest, FootprintGameTest, A11yGameTest) passed: the toast was
+  on screen for its screenshot, "26 budget(s), 0 over".
+
 ## Phase B: frozen-file exceptions and additions (coordinator-approved)
 - `src/test/java/io/github/chaotix345/rigtune/client/V05ServicesTest.java` (WS-K's, frozen): the skeleton contract line
   `assertEquals(ServerProfilesView.EMPTY, services.serverProfiles().view())` now reads
@@ -161,6 +188,9 @@ recoloured). One run-1 finding fixed from them: the subtitle and the privacy lin
   every field but `downloadsChecked` (WS-H's L5 field), which the 7-argument constructor sets false; it now passes the
   preview's own. Red first: `ProfileServicePreviewTest.aCheckedPreviewStaysChecked` (expected true, was false). Nothing
   changes on screen today (a profile preview lists no download).
+- `client/RigTuneClient.java:209` (a hotspot; review L6, approved as a 1-2 line edit, marked WS-P2): the suggestions
+  toast's body is key-free when no key is bound to RigTune.
+- `ProfileService` gained a third read-only method, `names()` (review M1, approved).
 - Inherited and kept: WS-P's exception (`RigTuneController.profileCodeLeftOut` + its forwards, ProfilesScreen.copySelected).
 
 ## Footprint deltas
@@ -244,7 +274,7 @@ with the screenshots listed in "Phase B as landed".
 | AC7.10 (Don't offer here / Stop offering here remove; × session-only) | verified | ServerProfilesGameTest (×: hidden after reopening, key not in awareness.json; Don't offer here and Stop offering here → 0 entries); ServerProfileNoticeTest.theKeyIsHiddenForTheSessionOnly |
 | AC7.11 (screen states, rows, no address, fit, Tab order, "Selected") | verified | ServerProfilesViewTest; ServerProfilesGameTest.checkScreen at 1280x720@2, 640x480@2, 854x480@2, 1280x720@3 (the amended scroll size); A11yGameTest.walkServerProfiles |
 | AC7.12 (NoticeBoardTest pin) | verified (WS-K) | NoticeBoardTest; ServerProfileNoticeTest |
-| AC7.13 (no tick/frame hook; notice() reads nothing while none is pending; the lookup on Probes.EXECUTOR with a connection guard; FootprintGameTest) | verified | code (ServerProfileService.onJoin/lookup/notice); ServerProfileOffersTest.aLookupThatFinishesAfterADisconnectOffersNothing; V05ServicesTest (notice() with no controller); FootprintGameTest green on 3 legs, `v05RenderThreadResolve` null |
+| AC7.13 (no tick/frame hook on the timed path; notice() reads nothing while none is pending; the lookup on Probes.EXECUTOR with a connection guard; FootprintGameTest) | verified | code (ServerProfileService.onJoin/lookup/notice); ServerProfileOffersTest.aLookupThatFinishesAfterADisconnectOffersNothing; V05ServicesTest (notice() with no controller); FootprintGameTest green on 3 legs, `v05RenderThreadResolve` null. The toast's wait (review M2) is its own END_CLIENT_TICK listener, registered on the first offer, never at init, off `tickHookOnVsReference`'s timed path: one field read per tick while no toast waits |
 | AC7.14 (0.4.0 leaves the file byte-identical) | fixture + expect.json landed; compat030 PASS; closes with WS-E's compat040 | V050WrittenWsP2Test; compat030 run (Phase A) |
 | AC7.15 (ServerProfilesGameTest, 3 legs, network off) | verified | CI 36359905608 (3 legs green); GameTestNet.set(false) |
 | AC7.16 (real JOIN on the dev PC) | rolling Phase 5 (P5 agent) | the join lookup logs "this server has a profile set (<id>): <reason>" for that run |

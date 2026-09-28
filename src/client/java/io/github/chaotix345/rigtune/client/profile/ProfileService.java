@@ -65,6 +65,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 
 // Performance Profiles and share codes (docs/v0.4/SPEC.md 4): profiles.json, switching (an ordinary Apply through
 // RealController.apply(selected, entryId), labelled in profiles.json by the journal entry id), templates, share codes and
@@ -589,7 +590,7 @@ public final class ProfileService {
 	// PreviewPlanner compares a staged key with its file. When an earlier Apply in this start already staged that key, the
 	// file isn't what the restart starts from, so a change the switch does stage would show as unchanged: those rows (and
 	// the "from" values of the staged ones) come from the switch's own effective values.
-	private ApplyPreview effective(ApplyPreview preview, List<Recommendation> recs) {
+	ApplyPreview effective(ApplyPreview preview, List<Recommendation> recs) {
 		Map<String, Action.SetSetting> byId = new LinkedHashMap<>();
 		recs.forEach(r -> {
 			if (r.action() instanceof Action.SetSetting set) {
@@ -660,5 +661,17 @@ public final class ProfileService {
 	// profile, a template this version doesn't know).
 	public @Nullable Text nameOf(@Nullable String id) {
 		return resolvedName(id, store().snapshot());
+	}
+
+	// v0.5 C16 (WS-P2, read-only): the active profile and every id's name (as nameOf) from one read of profiles.json.
+	public Names names() {
+		ProfileStore.Snapshot profiles = store().snapshot();
+		return new Names(active(profiles), id -> resolvedName(id, profiles));
+	}
+
+	public record Names(@Nullable String active, Function<String, @Nullable Text> names) {
+		public @Nullable Text name(@Nullable String id) {
+			return id == null ? null : names.apply(id);
+		}
 	}
 }

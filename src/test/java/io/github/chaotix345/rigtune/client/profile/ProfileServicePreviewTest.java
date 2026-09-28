@@ -5,7 +5,6 @@ import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.lang.reflect.Method;
 import java.nio.file.Path;
 import java.util.List;
 
@@ -19,14 +18,12 @@ class ProfileServicePreviewTest {
 	@TempDir
 	Path config;
 
-	private ApplyPreview effective(ApplyPreview preview) throws ReflectiveOperationException {
-		Method effective = ProfileService.class.getDeclaredMethod("effective", ApplyPreview.class, List.class);
-		effective.setAccessible(true);
-		return (ApplyPreview) effective.invoke(new ProfileService(null, config), preview, List.<Recommendation>of());
+	private ApplyPreview effective(ApplyPreview preview) {
+		return new ProfileService(null, config).effective(preview, List.<Recommendation>of());
 	}
 
 	@Test
-	void aCheckedPreviewStaysChecked() throws ReflectiveOperationException {
+	void aCheckedPreviewStaysChecked() {
 		assertTrue(effective(new ApplyPreview(List.of(), List.of(), List.of(), List.of(), List.of(), true, List.of(), true)).downloadsChecked());
 		assertFalse(effective(new ApplyPreview(List.of(), List.of(), List.of(), List.of(), List.of(), true, List.of(), false)).downloadsChecked());
 	}

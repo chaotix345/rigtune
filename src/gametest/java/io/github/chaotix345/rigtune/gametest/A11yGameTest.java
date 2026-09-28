@@ -555,6 +555,15 @@ public class A11yGameTest implements FabricClientGameTest {
 			check(context.computeOnClient(mc -> ((ServerProfilesScreen) mc.gui.screen()).actions().stream()
 					.anyMatch(b -> b.getMessage().getString().equals("Forget") && b.active)), "server profiles: Forget is active once a row is selected");
 			context.takeScreenshot("a11y-server-profiles-enter-854x480-scale2");
+			List<String> lines = List.of(tabAll(context).split("\n"));
+			int last = -1;
+			for (int i = 0; i < lines.size(); i++) {
+				if (lines.get(i).contains(texts.getLast())) {
+					last = i;
+				}
+			}
+			check(last >= 0 && last + 2 < lines.size() && lines.get(last + 1).contains("Forget") && !lines.get(last + 1).contains("Forget all")
+					&& lines.get(last + 2).contains("Forget all…"), "server profiles: with a row selected, Forget is the stop after the last row: " + lines);
 			for (int[] size : V05TestContext.SIZES) {
 				v05.resize(size[0], size[1], size[2]);
 				context.takeScreenshot("a11y-server-profiles-" + size[0] + "x" + size[1] + "-scale" + size[2]);
