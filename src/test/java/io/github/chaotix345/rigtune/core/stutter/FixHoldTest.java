@@ -9,6 +9,7 @@ import io.github.chaotix345.rigtune.core.model.Text;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -33,6 +34,18 @@ class FixHoldTest {
 		return new Report(null, null, null, null, List.of(recs), 16, "bundled", false, Instant.parse("2026-10-04T00:00:00Z"));
 	}
 
+	// review-11 STUTTER-1: a record whose appliedAt has no local date (a hand edit; FixStore skips it on read, this is the
+	// second guard) still holds, dated "?", and never throws on the rebuild worker (where it would drop every hold).
+	@Test
+	void aDateOutsideTheZonesRangeStillHolds() {
+		FixTracker.Record m = FixTrackerTest.measuring();
+		FixTracker.Record odd = new FixTracker.Record("odd", m.adviceId(), m.key(), m.from(), m.to(), Instant.MIN, m.rulesRevision(), m.now(), m.state(),
+				m.before(), m.conditions(), m.after(), m.skipped(), m.lastSkip(), m.verdict(), m.dismissed());
+		List<FixHold.Hold> holds = FixHold.holds(List.of(odd, m), ZoneId.of("Australia/Sydney"));
+		assertEquals(2, holds.size());
+		assertEquals("?", holds.getFirst().appliedOn());
+	}
+
 	@Test
 	void aChangeBackIsUntickedWithTheReason() {
 		Recommendation back = set(RD, "10", "12");
@@ -47,6 +60,16 @@ class FixHoldTest {
 		assertEquals(r.reasonText().english(), r.reason());
 		// Past where it was is away from the fix too.
 		assertFalse(FixHold.apply(report(set(RD, "10", "16")), List.of(RD_HOLD)).recommendations().getFirst().selectedByDefault());
+	}
+
+	// review-11 STUTTER-8: a hold stands only while the fix's value is in effect. The player set render distance to 14 by hand
+	// after a measured 12 -> 10 fix: the main list's 14 -> 16 isn't "undoing that fix" and stays ticked.
+	@Test
+	void noHoldOnceTheValueChangedByHand() {
+		Report byHand = report(set(RD, "14", "16"));
+		assertSame(byHand, FixHold.apply(byHand, List.of(RD_HOLD)));
+		Report chunks = report(set(DEFER, "ONE_FRAME", "ZERO_FRAMES"));
+		assertSame(chunks, FixHold.apply(chunks, List.of(DEFER_HOLD)));
 	}
 
 	@Test
@@ -105,7 +128,8 @@ class FixHoldTest {
 		assertEquals(FixComparison.Kind.MORE, records.get(3).verdict().kind());
 		List<FixHold.Hold> holds = FixHold.holds(records, java.time.ZoneOffset.UTC);
 		assertEquals(5, holds.size());
-		assertEquals(new FixHold.Hold(RD, "12", "10", "2026-10-02"), holds.getFirst());
+		assertEquals(new FixHold.Hold(RD, "12", "10", "2026-10-02", true), holds.getFirst());
+		assertEquals(new FixHold.Hold(RD, "12", "10", "2026-10-02"), holds.get(1));
 		assertEquals("2026-10-03", FixHold.holds(records.subList(0, 1), java.time.ZoneOffset.ofHours(2)).getFirst().appliedOn());
 		assertEquals(List.of(), FixHold.holds(records.subList(3, 4), java.time.ZoneOffset.UTC));
 	}

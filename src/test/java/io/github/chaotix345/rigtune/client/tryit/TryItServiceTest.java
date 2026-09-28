@@ -220,6 +220,28 @@ class TryItServiceTest {
 		assertTrue(causes(service).stream().anyMatch(c -> c instanceof TryItVerdict.Cause.Moved), "causes: " + causes(service));
 	}
 
+	// Review APPLY-4: a RESTART try waits for other staged changes only when the next exit would apply some: held
+	// mod-file groups (a launcher-managed instance) survive every restart, so they don't refuse it.
+	@Test
+	void onlyChangesTheNextExitAppliesMakeARestartTryWait() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		Recommendation sodium = sodium();
+		game.pendingOps = 2;
+		game.heldOps = 2;
+		service.derive();
+		game.drain();
+		assertNull(service.refusal(sodium), "only held mod changes: nothing runs at the restart");
+		game.heldOps = 1;
+		assertEquals("Other changes are waiting for a restart. Restart (or Discard them) first, so only this change is measured.",
+				service.refusal(sodium).english(),
+				"a changed pending.json counts as waiting until it's read again");
+		game.drain();
+		assertNotNull(service.refusal(sodium), "one op would run at the restart");
+		game.pendingOps = 0;
+		assertNull(service.refusal(sodium));
+	}
+
 	// Review BENCH-1: history.json is read once per derive: a read that fails right after the apply can't make the try's
 	// entry look missing (which closed the try as "wasn't applied").
 	@Test
@@ -290,10 +312,7 @@ class TryItServiceTest {
 	void aRestartTryWhoseBeforeRunCreatedTheWorldStopsBeforeTheChange() {
 		FakeGame game = new FakeGame(dir);
 		TryItService service = game.service;
-		String key = "sodium.performance.chunk_build_defer_mode";
-		Recommendation sodium = new Recommendation("setting:" + key, Category.SETTING, Impact.MEDIUM, "t", "r", new Action.SetSetting(key, "ALWAYS",
-				"ONE_FRAME"), true);
-		TryIt t = start(game, sodium, Scene.BENCHMARK_WORLD);
+		TryIt t = start(game, sodium(), Scene.BENCHMARK_WORLD);
 		assertEquals(TryIt.Kind.RESTART, t.kind());
 		TryItService.tick(null);
 		game.drain();
@@ -442,6 +461,11 @@ class TryItServiceTest {
 		game.drain();
 	}
 
+	private static Recommendation sodium() {
+		String key = "sodium.performance.chunk_build_defer_mode";
+		return new Recommendation("setting:" + key, Category.SETTING, Impact.MEDIUM, "t", "r", new Action.SetSetting(key, "ALWAYS", "ONE_FRAME"), true);
+	}
+
 	private static Recommendation rec() {
 		return new Recommendation("setting:" + KEY, Category.SETTING, Impact.MEDIUM, "t", "r", new Action.SetSetting(KEY, "true", "false"), true);
 	}
@@ -477,6 +501,10 @@ class TryItServiceTest {
 		// Which history() read fails (as a failed read of history.json does: UNREADABLE), 0: none.
 		int failRead;
 		boolean runsReadable = true;
+		// pending.json: its ops, and how many of them the helper holds (0 ops: no file).
+		int pendingOps;
+		int heldOps;
+		int pendingReads;
 		final Map<String, String> settings = new LinkedHashMap<>(Map.of("vanilla.renderDistance", "12"));
 		TryIt.Spot spot = HERE;
 		int playerTicks = 20 * 120;
@@ -546,8 +574,19 @@ class TryItServiceTest {
 		}
 
 		@Override
-		public Triable.Context context(boolean busy, @Nullable TryIt open, Journal.@Nullable State journal, boolean storeWritable) {
-			return new Triable.Context(key -> true, true, false, false, busy, scene -> false, open != null, true, true, storeWritable);
+		public Triable.Context context(boolean busy, boolean pending, @Nullable TryIt open, Journal.@Nullable State journal, boolean storeWritable) {
+			return new Triable.Context(key -> true, true, false, pending, busy, scene -> false, open != null, true, true, storeWritable);
+		}
+
+		@Override
+		public @Nullable Object pendingStamp() {
+			return pendingOps == 0 ? null : List.of(pendingOps, heldOps);
+		}
+
+		@Override
+		public boolean pendingRunsAtExit() {
+			pendingReads++;
+			return pendingOps > heldOps;
 		}
 
 		@Override

@@ -20,6 +20,8 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // AC5.3 (FixOffersTest): the three layers (the advice fired, the client floor, the rules' evidence) and the setting
 // precondition. Each failing condition alone blocks the offer; all passing gives exactly one Offer with the right
@@ -43,7 +45,9 @@ class FixOffersTest {
 		Map<String, String> settings = new LinkedHashMap<>(Map.of(RD, "12", DEFER, "ZERO_FRAMES"));
 		Set<String> mods = new HashSet<>(Set.of("sodium"));
 		ServerLimits live;
+		SessionOutcome outcome;
 		boolean excluded;
+		boolean changed;
 		boolean busy;
 		boolean writable = true;
 
@@ -59,7 +63,9 @@ class FixOffersTest {
 			StutterFacts facts = new StutterFacts(claimed, Map.of(), 0, 0, 0, null, null, null, 4.0, "g1", true, unmeasured, dominated);
 			EvalContext ctx = StutterAdvisor.context(rules, Fixtures.userRig().build(), Fixtures.mods(mods.toArray(String[]::new)), effective, Goal.BALANCED,
 					facts);
-			return FixOffers.evaluate(FixSpec.of(rules), fired, report, excluded, ctx, effective, mods, live, busy, writable);
+			return outcome == null && !changed ? FixOffers.evaluate(FixSpec.of(rules), fired, report, excluded, ctx, effective, mods, live, busy, writable)
+					: FixOffers.evaluate(FixSpec.of(rules), fired, report, outcome == null ? FixGate.outcome(report) : outcome, excluded, changed, ctx, effective,
+							mods, live, busy, writable);
 		}
 	}
 
@@ -80,6 +86,34 @@ class FixOffersTest {
 		c.dominated.put("chunkBuild", 9);
 		c.claimed.put("chunkBuild", 39.0);
 		assertEquals(notYet(FixOffer.Reason.EVIDENCE, "stutter-sodium-defer"), c.run().get("stutter-sodium-defer"), "39 %");
+	}
+
+	// review-11 STUTTER-3: the before side is one setup. A session in which render distance went from 20 to 12 (RW-11's
+	// start and end settings) is no before side for any fix: its chunk-loading stutter was played at 20.
+	@Test
+	void aSessionThatChangedItsSetupIsNoBeforeSide() throws IOException {
+		Case c = new Case();
+		c.report = c.report.withSettings(Map.of(StutterReport.RENDER_DISTANCE, "20"), Map.of(StutterReport.RENDER_DISTANCE, "12"));
+		Map<String, FixOffer> offers = c.run();
+		assertFalse(offers.get("stutter-chunk-loading") instanceof FixOffer.Offer, "offered from play at another render distance: " + offers);
+		assertFalse(offers.get("stutter-sodium-defer") instanceof FixOffer.Offer, offers.toString());
+		assertEquals(notYet(FixOffer.Reason.CHANGED, "stutter-chunk-loading"), offers.get("stutter-chunk-loading"));
+		// The client's own check (the window, the mod set, a managed setting between the capture's start and the analysis).
+		c = new Case();
+		c.changed = true;
+		assertEquals(notYet(FixOffer.Reason.CHANGED, "stutter-sodium-defer"), c.run().get("stutter-sodium-defer"));
+	}
+
+	// review-11 STUTTER-6: the floor holds for what the comparison would take (the outcome: settingsChanged spikes left out,
+	// the covered window), not the report's own count: 8 hitches of which 3 followed a settings change are 5.
+	@Test
+	void theFloorHoldsForTheOutcome() throws IOException {
+		Case c = new Case();
+		c.report = FixGateTest.report(StutterReport.MONITOR, 400, 8);
+		c.outcome = new SessionOutcome(1, 400, 5, 200, 7, 5 / 7.0, 1);
+		assertEquals(notYet(FixOffer.Reason.LENGTH, "stutter-sodium-defer", "5:00", "8", "6:40", "5"), c.run().get("stutter-sodium-defer"));
+		c.outcome = new SessionOutcome(1, 400, 8, 200, 7, 8 / 7.0, 1);
+		assertTrue(c.run().get("stutter-sodium-defer") instanceof FixOffer.Offer);
 	}
 
 	private static FixOffer.NotYet notYet(FixOffer.Reason reason, String adviceId, String... args) {

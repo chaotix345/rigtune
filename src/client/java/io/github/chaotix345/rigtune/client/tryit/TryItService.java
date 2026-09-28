@@ -13,7 +13,10 @@ import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.ui.TryItScreen;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
+import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
+import io.github.chaotix345.rigtune.core.apply.HelperLauncher;
+import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkHistory;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
@@ -58,6 +61,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 // docs/v0.5/SPEC.md 6 (C09): Measured Try It. Measure -> RealController.apply(List.of(rec), entryId) -> Measure again,
 // with the pair's id prefixed "tryit-", then Keep (tryit.json only) or Revert (TryItScreen opens History's Undo this).
@@ -113,7 +117,16 @@ public final class TryItService {
 
 		@Nullable Text busy();
 
-		Triable.Context context(boolean busy, @Nullable TryIt open, Journal.@Nullable State journal, boolean storeWritable);
+		// pending: other staged changes the next exit would apply (Triable's PENDING).
+		Triable.Context context(boolean busy, boolean pending, @Nullable TryIt open, Journal.@Nullable State journal, boolean storeWritable);
+
+		// pending.json's modification time and size with the mod-files policy (a stat; the render thread may ask), null
+		// without the file.
+		@Nullable Object pendingStamp();
+
+		// Whether the next exit's helper would apply any of pending.json's ops: not the mod-file groups it holds in a
+		// launcher-managed instance (they survive every restart). Reads the file: the chain only.
+		boolean pendingRunsAtExit();
 
 		@Nullable String unavailable(Scene scene);
 
@@ -172,6 +185,10 @@ public final class TryItService {
 	private volatile boolean storeWritable = true;
 	private volatile @Nullable Object historyStamp;
 	private volatile long lastStaleCheck;
+	// pending.json's answer (review APPLY-4) and the stamp it was read at.
+	private volatile @Nullable Object pendingStamp;
+	private volatile boolean pendingRunsAtExit;
+	private final AtomicBoolean pendingReading = new AtomicBoolean();
 	// This launch's first title screen (Game.nanos()), -1 before it: the benchmark world's settle counts from it.
 	private volatile long readyNanos = -1;
 	// The local player the settle last saw, its ticks then, and when it arrived by the clock (its ticks back from then).
@@ -195,6 +212,36 @@ public final class TryItService {
 	// Game tests only: the settle time (0: none), back to SETTLE_SECONDS afterwards.
 	public static void settleSeconds(int seconds) {
 		settleSeconds = seconds;
+	}
+
+	// Other staged changes the next exit would apply (review APPLY-4: not the mod-file groups a launcher-managed instance's
+	// helper holds; they survive every restart). A stat here; pending.json is read on the chain (at a derive, and when the
+	// stat shows it changed: until that read, its changes count as waiting).
+	boolean pendingRuns() {
+		Object stamp = game.pendingStamp();
+		if (stamp == null) {
+			return false;
+		}
+		if (stamp.equals(pendingStamp)) {
+			return pendingRunsAtExit;
+		}
+		if (pendingReading.compareAndSet(false, true)) {
+			io(this::readPending);
+		}
+		return true;
+	}
+
+	// The chain: pending.json read again when its stamp changed.
+	private void readPending() {
+		try {
+			Object stamp = game.pendingStamp();
+			if (stamp == null || !stamp.equals(pendingStamp)) {
+				pendingRunsAtExit = stamp != null && game.pendingRunsAtExit();
+				pendingStamp = stamp;
+			}
+		} finally {
+			pendingReading.set(false);
+		}
 	}
 
 	// The status line while Start or Measure now in the player's own world waits for it to settle; null otherwise (the
@@ -250,7 +297,7 @@ public final class TryItService {
 			return TryItView.UNAVAILABLE;
 		}
 		Text busy = game.busy();
-		Triable.Result result = Triable.check(rec, game.context(busy != null, view.tryIt(), journalState, storeWritable), scene);
+		Triable.Result result = Triable.check(rec, game.context(busy != null, pendingRuns(), view.tryIt(), journalState, storeWritable), scene);
 		if (result.refusal() == null) {
 			return null;
 		}
@@ -273,7 +320,7 @@ public final class TryItService {
 			return Texts.component(refused);
 		}
 		Action.SetSetting set = (Action.SetSetting) rec.action();
-		Triable.Result result = Triable.check(rec, game.context(false, null, journalState, storeWritable), scene);
+		Triable.Result result = Triable.check(rec, game.context(false, pendingRuns(), null, journalState, storeWritable), scene);
 		Text unsettled = settling(result.scene());
 		if (unsettled != null) {
 			return Texts.component(unsettled);
@@ -408,6 +455,8 @@ public final class TryItService {
 			TryIt t = store.current();
 			storeWritable = store.writable();
 			historyStamp = stamp(Journal.file(configDir));
+			pendingReading.set(true);
+			readPending();
 			// Review BENCH-1: one read of history.json (a second one that failed would make the entry look missing).
 			Journal.Snapshot history = game.history();
 			Journal.State state = history.state();
@@ -835,13 +884,13 @@ public final class TryItService {
 		}
 
 		@Override
-		public Triable.Context context(boolean busy, @Nullable TryIt open, Journal.@Nullable State journal, boolean storeWritable) {
+		public Triable.Context context(boolean busy, boolean pending, @Nullable TryIt open, Journal.@Nullable State journal, boolean storeWritable) {
 			Minecraft minecraft = minecraft();
 			List<ConfigTargets.Target> targets = ConfigTargets.all(controller.configDir());
 			return new Triable.Context(key -> {
 				ConfigTargets.Target target = ConfigTargets.forKey(targets, key);
 				return target != null && Files.isRegularFile(target.file());
-			}, minecraft.level != null, minecraft.level != null && !minecraft.hasSingleplayerServer(), controller.hasPendingChanges(), busy,
+			}, minecraft.level != null, minecraft.level != null && !minecraft.hasSingleplayerServer(), pending, busy,
 					scene -> BenchmarkController.unavailable(minecraft, scene) != null, open != null,
 					journal == null || journal == Journal.State.OK || journal == Journal.State.MISSING, !BenchmarkStore.history().unreadable(),
 					storeWritable);
@@ -900,6 +949,25 @@ public final class TryItService {
 		@Override
 		public List<BenchmarkRecord> runs() {
 			return BenchmarkStore.history().runs();
+		}
+
+		@Override
+		public @Nullable Object pendingStamp() {
+			Object file = stamp(PendingActions.defaultPath(configDir()));
+			return "missing".equals(file) ? null : List.of(file, controller.modFiles());
+		}
+
+		@Override
+		public boolean pendingRunsAtExit() {
+			Path file = PendingActions.defaultPath(configDir());
+			try {
+				PendingActions plan = PendingActions.load(file);
+				int held = HelperLauncher.holds(controller.modFiles()) ? ApplyExecutor.held(plan, file).size() : 0;
+				return plan.ops().size() > held;
+			} catch (IOException | RuntimeException e) {
+				RigTune.LOGGER.warn("Try it: could not read {}; counting its changes as waiting", file.getFileName(), e);
+				return true;
+			}
 		}
 
 		@Override

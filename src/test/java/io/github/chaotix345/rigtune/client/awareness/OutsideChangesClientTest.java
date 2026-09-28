@@ -18,10 +18,12 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -165,6 +167,38 @@ class OutsideChangesClientTest {
 		Action.SetSetting set = (Action.SetSetting) again.getFirst().action();
 		assertEquals(new Action.SetSetting("vanilla.renderClouds", "fancy", "fast"), set);
 		assertTrue(again.stream().allMatch(r -> r.category() == Category.SETTING && r.selectedByDefault()));
+	}
+
+	// Review-11 FEAT-5: RigTune applied 12, the player set 20 in game, the app's sync wrote 8. "Apply RigTune's values
+	// again" applies 12, so the notice shows 12 wherever the value before the outside change isn't RigTune's; the reason
+	// names the value RigTune last applied, not "the value before".
+	@Test
+	void theValueApplyAgainWillSetIsShownWhenItIsNotTheOneBefore() {
+		OutsideOptions.Change third = new OutsideOptions.Change("vanilla.renderDistance", "20", "8", "12");
+		Notice notice = OutsideChanges.notice("settings-changed-outside:1", List.of(third), Map.of(), LauncherInfo.UNKNOWN);
+		assertEquals("A setting was changed outside the game since you last played (Render distance: 20 → 8; RigTune's value: 12).",
+				notice.message().english());
+		assertTrue(notice.detail().english().startsWith("Changed: Render distance: 20 → 8; RigTune's value: 12."), notice.detail().english());
+		Notice usual = OutsideChanges.notice("settings-changed-outside:2", CHANGES.subList(0, 1), Map.of(), LauncherInfo.UNKNOWN);
+		assertFalse(usual.message().english().contains("RigTune's value:"), "the value before was RigTune's: " + usual.message().english());
+		Recommendation again = OutsideChanges.reapply(List.of(third), Map.of()).getFirst();
+		assertEquals(new Action.SetSetting("vanilla.renderDistance", "8", "12"), again.action());
+		assertEquals("The value RigTune last applied.", again.reasonText().english());
+	}
+
+	// Review-11 COMPAT-3: the log archives' times, read from logs/*.log.gz only (no other file, no subfolder).
+	@Test
+	void theLogArchivesAreTheGzippedLogs(@TempDir Path game) throws IOException {
+		Path logs = Files.createDirectories(game.resolve("logs"));
+		Instant first = Instant.parse("2026-09-27T09:00:05Z");
+		Instant second = Instant.parse("2026-09-27T20:00:03Z");
+		Files.setLastModifiedTime(Files.writeString(logs.resolve("2026-09-27-1.log.gz"), "x"), FileTime.from(first));
+		Files.setLastModifiedTime(Files.writeString(logs.resolve("2026-09-27-2.log.gz"), "x"), FileTime.from(second));
+		Files.writeString(logs.resolve("latest.log"), "x");
+		Files.writeString(logs.resolve("debug.log"), "x");
+		Files.createDirectories(logs.resolve("nested.log.gz.d"));
+		assertEquals(Set.of(first, second), Set.copyOf(OutsideChanges.logArchives(logs)));
+		assertEquals(List.of(), OutsideChanges.logArchives(game.resolve("missing")));
 	}
 
 	@Test
