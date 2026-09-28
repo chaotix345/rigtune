@@ -240,6 +240,25 @@ class TryItServiceTest {
 		start(game, Scene.CURRENT);
 	}
 
+	// The count goes on by the clock while a RigTune screen pauses a singleplayer game (no ticks); a new local player (a
+	// dimension change, a respawn) starts it again.
+	@Test
+	void theCountGoesOnWhileAScreenPausesTheGameAndRestartsWithANewPlayer() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		game.playerTicks = 20 * 10 + 5;
+		assertEquals(50, service.settleLeft(Scene.CURRENT));
+		game.nanos += 30_000_000_000L;
+		assertEquals(20, service.settleLeft(Scene.CURRENT), "paused: no ticks, 30 s by the clock");
+		game.playerTicks = 20 * 55;
+		assertEquals(5, service.settleLeft(Scene.CURRENT), "the ticks are further");
+		game.playerId = 2;
+		game.playerTicks = 0;
+		assertEquals(TryItService.SETTLE_SECONDS, service.settleLeft(Scene.CURRENT), "a new dimension");
+		game.nanos += 60_000_000_000L;
+		assertEquals(0, service.settleLeft(Scene.CURRENT));
+	}
+
 	// The benchmark world (every RESTART try) isn't refused: its runs wait until a minute after this launch's first title
 	// screen (a restart's world load), with a note, then start.
 	@Test
@@ -352,6 +371,7 @@ class TryItServiceTest {
 		boolean applyThrows;
 		TryIt.Spot spot = HERE;
 		int playerTicks = 20 * 120;
+		int playerId = 1;
 		long nanos;
 		int screens;
 		int journalReads;
@@ -384,6 +404,11 @@ class TryItServiceTest {
 		@Override
 		public int playerTicks() {
 			return playerTicks;
+		}
+
+		@Override
+		public int playerId() {
+			return playerId;
 		}
 
 		@Override

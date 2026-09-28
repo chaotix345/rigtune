@@ -96,6 +96,9 @@ public final class TryItService {
 		// a dimension change or a respawn starts it again; paused time doesn't count); -1 without a world.
 		int playerTicks();
 
+		// Which local player that is (its identity hash; a new one after a join, a dimension change or a respawn).
+		int playerId();
+
 		// System.nanoTime().
 		long nanos();
 
@@ -165,6 +168,10 @@ public final class TryItService {
 	private volatile long lastStaleCheck;
 	// This launch's first title screen (Game.nanos()), -1 before it: the benchmark world's settle counts from it.
 	private volatile long readyNanos = -1;
+	// The local player the settle last saw, its ticks then, and when it arrived by the clock (its ticks back from then).
+	private int settlePlayer;
+	private int settlePlayerTicks;
+	private long settleSince;
 	private int waitTicks;
 	private int runTicks;
 	private CompletableFuture<Void> io = CompletableFuture.completedFuture(null);
@@ -192,23 +199,34 @@ public final class TryItService {
 	}
 
 	// Seconds before the scene has settled (0: settled, or nothing to wait for). The player's own world: their time in
-	// this world and dimension. The benchmark world, which each run loads afresh: the time since this launch's first title
-	// screen (after a restart, the game itself is cold).
+	// this world and dimension, by their ticks or by the clock since they arrived (whichever is further: a RigTune screen
+	// pauses a singleplayer game, and the world keeps loading behind it). The benchmark world, which each run loads
+	// afresh: the time since this launch's first title screen (after a restart, the game itself is cold). Render thread.
 	int settleLeft(Scene scene) {
 		int need = settleSeconds;
 		if (need <= 0) {
 			return 0;
 		}
+		long now = game.nanos();
 		if (scene == Scene.CURRENT) {
 			int ticks = game.playerTicks();
-			return ticks < 0 ? 0 : Math.max(0, (need * 20 - ticks + 19) / 20);
+			if (ticks < 0) {
+				return 0;
+			}
+			int id = game.playerId();
+			if (id != settlePlayer || ticks < settlePlayerTicks) {
+				settlePlayer = id;
+				settleSince = now - ticks * 50_000_000L;
+			}
+			settlePlayerTicks = ticks;
+			return Math.min(seconds(need * 1_000_000_000L - ticks * 50_000_000L), seconds(need * 1_000_000_000L - (now - settleSince)));
 		}
 		long ready = readyNanos;
-		if (ready < 0) {
-			return 0;
-		}
-		long left = need * 1_000_000_000L - (game.nanos() - ready);
-		return left <= 0 ? 0 : (int) ((left + 999_999_999L) / 1_000_000_000L);
+		return ready < 0 ? 0 : seconds(need * 1_000_000_000L - (now - ready));
+	}
+
+	private static int seconds(long nanos) {
+		return nanos <= 0 ? 0 : (int) ((nanos + 999_999_999L) / 1_000_000_000L);
 	}
 
 	// The open try's view, in memory. A History change seen by its file's time starts a new derive (at most once a second).
@@ -738,6 +756,12 @@ public final class TryItService {
 		public int playerTicks() {
 			Minecraft minecraft = minecraft();
 			return minecraft.player == null ? -1 : minecraft.player.tickCount;
+		}
+
+		@Override
+		public int playerId() {
+			Minecraft minecraft = minecraft();
+			return minecraft.player == null ? 0 : System.identityHashCode(minecraft.player);
 		}
 
 		@Override
