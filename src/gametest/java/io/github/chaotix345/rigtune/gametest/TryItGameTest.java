@@ -178,8 +178,12 @@ public class TryItGameTest implements FabricClientGameTest {
 			Map<String, String> vanillaAfter = context.computeOnClient(TryItGameTest::vanilla);
 			check(vanillaAfter.equals(vanillaBefore), "every allowed vanilla setting is back: " + vanillaAfter + " vs " + vanillaBefore);
 			context.runOnClient(mc -> mc.options.save());
-			RigTune.LOGGER.info("TryItGameTest: options.txt byte-identical after the NOW revert: {} (AC6.7's fallback is value equality, checked)",
-					Arrays.equals(optionsBefore, read(gameDir.resolve("options.txt"))));
+			byte[] optionsAfter = read(gameDir.resolve("options.txt"));
+			List<String> linesBefore = new String(optionsBefore, StandardCharsets.UTF_8).lines().toList();
+			List<String> linesAfter = new String(optionsAfter, StandardCharsets.UTF_8).lines().toList();
+			RigTune.LOGGER.info("TryItGameTest: options.txt byte-identical after the NOW revert: {} (AC6.7's fallback is value equality, checked); "
+					+ "lines only before: {}; only after: {}", Arrays.equals(optionsBefore, optionsAfter),
+					linesBefore.stream().filter(l -> !linesAfter.contains(l)).limit(10).toList(), linesAfter.stream().filter(l -> !linesBefore.contains(l)).limit(10).toList());
 
 			// Block 6: Esc during the before: nothing journaled.
 			startFromPreview(context, real, set(PARTICLES, particles, otherParticles));
@@ -233,8 +237,9 @@ public class TryItGameTest implements FabricClientGameTest {
 		check(pair.size() == 2 && Boolean.FALSE.equals(pair.get(1).context().worldFresh()), "the after reused the world: " + pair);
 		check(modified(marker).equals(created), "the benchmark world was reused (its marker untouched)");
 		JournalEntry entry = entry(result.tryIt());
-		check(entry != null && entry.at().compareTo(pair.get(0).createdAt()) >= 0 && entry.at().compareTo(pair.get(1).createdAt()) <= 0,
-				"the apply is between the runs: " + entry + " / " + pair);
+		// createdAt is to the second: the apply is no earlier than the before's second and no later than the after's.
+		check(entry != null && !Instant.parse(entry.at()).isBefore(Instant.parse(pair.get(0).createdAt()))
+				&& Instant.parse(entry.at()).isBefore(Instant.parse(pair.get(1).createdAt()).plusSeconds(1)), "the apply is between the runs: " + entry + " / " + pair);
 		// A first run that created the world is left out of the trend: no verdict then (WS-B's M4 rule).
 		boolean excluded = BenchmarkTrend.excluded(pair.get(0)) || BenchmarkTrend.excluded(pair.get(1));
 		check(!excluded || result.verdict().causes().stream().anyMatch(c -> c instanceof TryItVerdict.Cause.Excluded),
@@ -525,38 +530,63 @@ public class TryItGameTest implements FabricClientGameTest {
 		}
 	}
 
-	// ---- AC6.12: the idle listener call costs nothing: 0 bytes summed over the timed blocks, less an empty loop's.
+	// ---- AC6.12: the idle listener call costs nothing: 0 bytes summed over the timed blocks, less an empty loop's, after a
+	// warm-up and a wait for the JIT to go quiet (as FootprintGameTest's tick keys and StutterGameTest's settings check).
 
 	private static void idleTick(ClientGameTestContext context) {
-		long[] measured = context.computeOnClient(mc -> {
-			com.sun.management.ThreadMXBean bean = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
-			for (int i = 0; i < TICK_BLOCK_CALLS * 5; i++) {
-				TryItService.tick(mc);
-			}
-			long bytes = 0;
-			long control = 0;
-			long nanos = 0;
-			for (int block = 0; block < TICK_BLOCKS; block++) {
-				long a = bean.getCurrentThreadAllocatedBytes();
-				long start = System.nanoTime();
-				for (int i = 0; i < TICK_BLOCK_CALLS; i++) {
-					TryItService.tick(mc);
-				}
-				nanos += System.nanoTime() - start;
-				long b = bean.getCurrentThreadAllocatedBytes();
-				for (int i = 0; i < TICK_BLOCK_CALLS; i++) {
-					Thread.onSpinWait();
-				}
-				long c = bean.getCurrentThreadAllocatedBytes();
-				bytes += b - a;
-				control += c - b;
-			}
-			return new long[]{bytes, control, nanos};
-		});
+		long[] measured = context.computeOnClient(TryItGameTest::idleTickCost);
 		double nsPerCall = (double) measured[2] / (TICK_BLOCKS * (long) TICK_BLOCK_CALLS);
 		RigTune.LOGGER.info("TryItGameTest: the idle Try it tick: {} ns per call, {} bytes over {} x {} calls (an empty loop: {} bytes)",
 				String.format(Locale.ROOT, "%.2f", nsPerCall), measured[0], TICK_BLOCKS, TICK_BLOCK_CALLS, measured[1]);
 		check(measured[0] - measured[1] <= 0, "the idle tick allocates nothing: " + measured[0] + " bytes (an empty loop " + measured[1] + ")");
+	}
+
+	private static long[] idleTickCost(Minecraft mc) {
+		com.sun.management.ThreadMXBean threads = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
+		java.lang.management.CompilationMXBean jit = ManagementFactory.getCompilationMXBean();
+		for (int round = 0; round < 50; round++) {
+			ticks(mc, 2_000);
+			control(2_000);
+		}
+		long waitStart = System.nanoTime();
+		long quietSince = waitStart;
+		long compiled = jit.getTotalCompilationTime();
+		while (System.nanoTime() - quietSince < 200_000_000L && System.nanoTime() - waitStart < 3_000_000_000L) {
+			ticks(mc, 2_000);
+			control(2_000);
+			long now = jit.getTotalCompilationTime();
+			if (now != compiled) {
+				compiled = now;
+				quietSince = System.nanoTime();
+			}
+		}
+		long bytes = 0;
+		long controlBytes = 0;
+		long nanos = 0;
+		for (int block = 0; block < TICK_BLOCKS; block++) {
+			long before = threads.getCurrentThreadAllocatedBytes();
+			long start = System.nanoTime();
+			ticks(mc, TICK_BLOCK_CALLS);
+			nanos += System.nanoTime() - start;
+			long after = threads.getCurrentThreadAllocatedBytes();
+			control(TICK_BLOCK_CALLS);
+			long controlAfter = threads.getCurrentThreadAllocatedBytes();
+			bytes += after - before;
+			controlBytes += controlAfter - after;
+		}
+		return new long[]{bytes, controlBytes, nanos};
+	}
+
+	private static void ticks(Minecraft mc, int calls) {
+		for (int i = 0; i < calls; i++) {
+			TryItService.tick(mc);
+		}
+	}
+
+	private static void control(int calls) {
+		for (int i = 0; i < calls; i++) {
+			Thread.onSpinWait();
+		}
 	}
 
 	// ---- helpers
