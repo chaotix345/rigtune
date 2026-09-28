@@ -50,22 +50,15 @@ Desktop. Take one wherever you see **[shot]**.
 1. In the app: **Content**, filter **Disabled**, select each old copy the notice named, and **Delete**.
 2. Press **Update all** again. What we expect: it works now. **[shot]**
 
-## 6. Optional: the app's "Sync game options"
-**Careful:** this is an app-wide setting. While it's on, the app may copy game options between your instances,
-including your usual one. Please skip this step unless you're happy with that.
-1. **App settings → Synced settings → Sync game options**: turn it on.
-2. **Play** `rigtune-test`, apply one game setting in RigTune (for example render distance), then quit.
-3. Close the Modrinth App completely, open it again, and **Play** `rigtune-test`.
-4. What we expect: RigTune says **"A setting was changed outside the game since you last played (…)"**, and its
-   details mention the Modrinth App's sync. **[shot]**
-5. Turn **Sync game options** off again.
-
-## 7. Send the files, then delete the instance
+## 6. Send the files, then delete the instance
 1. In the instance folder, select **`logs`**, **`config`** and **`screenshots`**.
 2. Right-click the selection and choose **Compress to ZIP file**. Name it `rigtune-modrinth-check.zip` and put it on
    your **Desktop**, next to your app screenshots.
 3. Delete the `rigtune-test` instance in the Modrinth App.
 
 ## What to tell us
-For each step: what you saw (the exact messages in steps 3 and 6), whether it matched "what we expect", and
-anything that was confusing. Send the ZIP and the screenshots over however is easiest.
+For each step: what you saw (the exact message in step 3), whether it matched "what we expect", and anything that was
+confusing. Send the ZIP and the screenshots over however is easiest.
+
+Not part of this check: the app's "Sync game options". It's an app-wide setting that could copy game options into
+your usual instance, so we never ask you to turn it on. Its effect stays unverified in the running app.
