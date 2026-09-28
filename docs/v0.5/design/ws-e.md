@@ -127,9 +127,9 @@ Harness suite: 279 tests (was 216 at the branch point).
 
 E5/E7 notes:
 - A dispatch of release.yml is always a dry run.
-  - The tag is `v<mod_version>`; `gh release create` is only printed; Modrinth gets `-PmodrinthDryRun` with no token.
+  - The tag is `v<mod_version>`; `gh release create` is only printed; Modrinth gets `-PmodrinthDryRun` with no token (since review-11/12: the read-only preflight with the token, then `modrinth_publish.py --dry-run`).
   - The verify step reads an existing release (`verify-tag`).
-- `-x assemble` on the Modrinth task: Minotaur depends on `assemble`, but the upload is the staged file, so publish builds nothing (`-m`: only `:<mc>:modrinth` runs).
+- `-x assemble` on the Modrinth task: Minotaur depends on `assemble`, but the upload is the staged file, so publish builds nothing (`-m`: only `:<mc>:modrinth` runs). Superseded: publish has no Gradle since review-11 CI-2, and build.gradle no Minotaur since review-12 R12REL-4.
 - e2e.yml's own dispatch (it builds its jars) works only once the file is on the default branch. On the branch it runs through release.yml's `workflow_call`.
 - For E6 (build.yml): an `e2e` job `uses: ./.github/workflows/e2e.yml` with `jars-artifact: rigtune-jars`.
   - The tier: `release` for a pull_request into main from `feat/v*`, else `push`.
@@ -225,11 +225,40 @@ The fabric client gametest API is the same too: `createServer(Properties)`, `cli
 - **L11:** dh_server_note takes the game-test lock itself.
 - **L12:** RESULT's Rescan line lists every phase; the ws-e.md fixes; DESIGN.md:370 is in the docs hand-off.
 
+## Review-12 release-path fixes (reviews/r12-R12REL.md: 0 H, 0 M, 7 L; on fix/v05-r12-release)
+
+- **R12REL-1:** a read-only "Modrinth preflight" step runs before `gh release create`. It checks, per node, that the
+  token reaches the project and that `<ver>+mc<node>` is free or already holds exactly the staged file
+  (`modrinth_project.py preflight`, retried). A failure leaves nothing public.
+- **R12REL-2:** `featured` is false by default, as 0.2-0.4 went up (`--featured` to change it).
+- **R12REL-3:** the preflight fails a tag push when CHANGELOG.md's `## [<ver>]` section is missing, empty or longer than
+  60,000 characters. That's the coordinator's conservative cap; labrinth's 65,536 is UNVERIFIED offline.
+- **R12REL-4:** build.gradle has no Minotaur plugin and no `modrinth {}` block, so no Gradle task can upload a local
+  rebuild. Its comment points at the tool and the recovery text.
+- **R12REL-5:** rules-consistency compares the rules with the merge commit's base side (`fetch-depth: 2`,
+  `HEAD^1`), not main's live tip. No network, and a re-run stays deterministic.
+- **R12REL-6:** a new `modrinth_project.py sides` command re-applies the sides, which sets every version's environment.
+  release.yml's recovery comment says to run it after every release, approved or not; this workflow's token can't write
+  the project. AC3h.1's step list should name `sides` (the coordinator's SPEC).
+- **R12REL-7:** before any POST, `existing_version` looks the version up by number and by the file's sha512. The same
+  file means "already on Modrinth", nothing is posted, and modrinth_publish reports "done". Other bytes under the number,
+  or these bytes under another number, are an error. The POST waits 180 s (past Cloudflare's ~100 s).
+- **The dry run:** a dispatch of release.yml is the dry run. It builds, runs the E2E, runs the preflight (read-only, with
+  the token when the secret is set; a changelog problem only warns there) and prints the release command and the
+  payload. It does everything but the Modrinth POST and `gh release create`. The coordinator dispatches it on the RC.
+- **Tests:**
+  - test_modrinth_project.py: 33 tests (the same file, other bytes, found by hash, featured, the POST timeout,
+    preflight, sides);
+  - test_modrinth_publish.py: 8 tests (the preflight's arguments, the changelog checks);
+  - test_e2e_workflows.py: the preflight before the release;
+  - test_rules_revision_check.py: `HEAD^1`, no fetch.
+  Both nodes compile and configure without Minotaur (no `modrinth` task left).
+
 ## Review-11 fixes (reviews/r11-CI.md, r11-SEC.md, r11-COMPAT.md; on test/v05-e2e-2)
 
 | id | outcome | commit | the test that failed first |
 |---|---|---|---|
-| CI-2 (M) | FIXED. `publish` has no JDK and no Gradle: `tools/e2e/modrinth_publish.py` sends build.gradle's Minotaur payload through `tools/modrinth_project.py upload-version`. That is stdlib Python and idempotent, gets the staged SHA256SUMS digest, and each node runs in `tools/ci/retry.sh`. The token never meets a Gradle configuration. A local `--dry-run` printed the payload for the CI jar | 20dabb91 | `test_e2e_workflows.py` `test_modrinth_gets_the_staged_files_through_the_stdlib_tool_retried` (release.yml ran `./gradlew :$mc:modrinth`); `test_modrinth_publish.py` 6 |
+| CI-2 (M) | FIXED. `publish` has no JDK and no Gradle: `tools/e2e/modrinth_publish.py` sends the payload 0.2-0.4's Minotaur upload sent (`featured` false since review-12 R12REL-2) through `tools/modrinth_project.py upload-version`. That is stdlib Python and idempotent, gets the staged SHA256SUMS digest, and each node runs in `tools/ci/retry.sh`. The token never meets a Gradle configuration. A local `--dry-run` printed the payload for the CI jar | 20dabb91 | `test_e2e_workflows.py` `test_modrinth_gets_the_staged_files_through_the_stdlib_tool_retried` (release.yml ran `./gradlew :$mc:modrinth`); `test_modrinth_publish.py` 6 |
 | SEC-6 (L) | FIXED: `persist-credentials: false` on publish's checkout | 20dabb91 | `test_publish_s_checkout_keeps_no_git_credentials` |
 | CI-5 (L) | FIXED: a tag push without MODRINTH_TOKEN fails before "Create GitHub release"; a fork's gets the notice | 20dabb91 | `test_a_tag_push_without_the_token_fails_before_the_github_release` |
 | CI-3 (L) | FIXED: stutter_run reads what log4j rolled over during the run, then latest.log, and unwraps times across midnight (log and GC pauses) | 906a271f | C1r shifted to start 10 s before midnight failed ("after teleport", "chunks loading"); `client_log` with a rotated .gz |

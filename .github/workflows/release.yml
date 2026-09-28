@@ -6,9 +6,11 @@ name: release
 # construction: a rebuild isn't byte-stable (one manifest entry's order differs between machines,
 # docs/research/v0.5/verification-gaps.md §5), so nothing is rebuilt after `build` (docs/v0.5/SPEC.md 3c).
 #
-# A workflow_dispatch is a dry run and publishes nothing: the tag is v<mod_version>, the same guard, build, staging and
-# E2E run, `gh release create` is only printed, Modrinth gets tools/modrinth_project.py's --dry-run (the payload is
-# printed, no API call, no token), and the verify step checks an existing release (`verify-tag`), reading only.
+# A workflow_dispatch is the dry run and publishes nothing: the tag is v<mod_version>, the same guard, build, staging and
+# E2E run, the Modrinth preflight (read-only, with the token when the secret is set; a changelog problem only warns),
+# `gh release create` is only printed, Modrinth's upload gets tools/modrinth_project.py's --dry-run (the payload is
+# printed, no API call, no token), and the verify step checks an existing release (`verify-tag`), reading only. It
+# exercises everything but the two writes, so it runs on the RC before the tag.
 on:
   push:
     tags:
@@ -166,6 +168,22 @@ jobs:
           cd "$RUNNER_TEMP/release-files"
           sha256sum -c SHA256SUMS
 
+      # Before anything is public (review-12 R12REL-1/3/7), read-only, per node: the CHANGELOG section is there and fits,
+      # the token reaches the project, and <ver>+mc<node> is free or already holds exactly the staged file. A failure here
+      # leaves nothing published, and the job can simply be re-run. The dry run (a dispatch) runs it too when the secret is
+      # set, so the RC exercises it; there a changelog problem is a warning.
+      - name: Modrinth preflight (network)
+        if: ${{ env.MODRINTH_TOKEN_SET == 'true' }}
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+        run: |
+          set -u
+          dry=()
+          if [ "$DRY_RUN" = true ]; then
+            dry=(--dry-run)
+          fi
+          python3 tools/e2e/modrinth_publish.py --staged "$RUNNER_TEMP/release-files" --tag "$TAG" --work "$RUNNER_TEMP" --preflight "${dry[@]}"
+
       # Exactly the staged files: one rigtune-*+mc<mc>.jar and one -sources.jar per node.
       - name: Create GitHub release
         id: release
@@ -196,14 +214,16 @@ jobs:
             "${files[@]}"
 
       # --- Modrinth publishing ---
-      # One Modrinth version per Minecraft version (the payload build.gradle's `modrinth {}` block
-      # sent; versionType release only for a plain release id), for every versions/*/ node, so a new
-      # node needs no edit here. tools/e2e/modrinth_publish.py uploads the exact staged file the
-      # release step attached, through tools/modrinth_project.py upload-version (stdlib Python, no
-      # Gradle: review-11 CI-2) with its SHA256SUMS digest, each node wrapped in tools/ci/retry.sh;
-      # the upload is idempotent (an existing version_number is left alone), so a retry is safe. A
-      # failure is recorded as an error and the others still go; the step fails at the end if any
-      # node failed. A dry run passes --dry-run and no token: the payload is printed, nothing called.
+      # One Modrinth version per Minecraft version (the payload 0.2.0-0.4.0's Minotaur upload sent,
+      # not featured; versionType release only for a plain release id), for every versions/*/ node,
+      # so a new node needs no edit here. tools/e2e/modrinth_publish.py uploads the exact staged file
+      # the release step attached, through tools/modrinth_project.py upload-version (stdlib Python, no
+      # Gradle: review-11 CI-2; build.gradle has no publish task any more, R12REL-4) with its SHA256SUMS
+      # digest, each node wrapped in tools/ci/retry.sh. A retry is safe: a version that already holds
+      # this file (found by number or by the file's sha512) is left alone, and one holding other bytes
+      # is an error, never "published" (R12REL-7). A failure is recorded as an error and the others
+      # still go; the step fails at the end if any node failed. A dry run passes --dry-run and no
+      # token: the payload is printed, nothing called.
       # `if: !cancelled()` (rather than the default `if: success()`) lets the verify step below run
       # even when this one failed.
       #
@@ -221,6 +241,10 @@ jobs:
       #     --version-type release --changelog-file recovery/changelog.md --sha256 "${digest#sha256:}"
       # (--version-type alpha for a node whose id isn't a plain release.) Then check it the way the
       # verify step does: `python tools/e2e/release_verify.py --tag "$tag"` (with MODRINTH_TOKEN set).
+      #
+      # After every release, approved project or not: `python tools/modrinth_project.py sides` from a
+      # machine whose token may write the project (this workflow's can't). It re-applies the sides,
+      # which sets the new versions' environment (AC3h.1; review-12 R12REL-6).
       - name: Publish to Modrinth (every Minecraft version)
         if: ${{ !cancelled() && steps.release.outcome == 'success' && (env.MODRINTH_TOKEN_SET == 'true' || env.DRY_RUN == 'true') }}
         env:

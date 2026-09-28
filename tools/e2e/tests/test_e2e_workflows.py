@@ -216,6 +216,18 @@ class ReleaseWorkflowTest(unittest.TestCase):
         self.assertNotIn("gradlew", publish)
         self.assertIn('python3 tools/e2e/modrinth_publish.py --staged "$RUNNER_TEMP/release-files" --tag "$TAG"', modrinth)
 
+    def test_a_read_only_modrinth_preflight_runs_before_the_github_release(self):
+        # Review-12 R12REL-1/3/7: the token, the project, the version's bytes and the changelog are checked while nothing is
+        # public; a dispatch (the dry run) runs it too when the secret is set.
+        publish = steps(self.jobs["publish"])
+        preflight = next(i for i, s in enumerate(publish) if "--preflight" in s)
+        create = next(i for i, s in enumerate(publish) if "gh release create" in s)
+        self.assertLess(preflight, create)
+        self.assertIn("if: ${{ env.MODRINTH_TOKEN_SET == 'true' }}", publish[preflight])
+        self.assertIn("MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}", publish[preflight])
+        self.assertIn('python3 tools/e2e/modrinth_publish.py --staged "$RUNNER_TEMP/release-files" --tag "$TAG" --work "$RUNNER_TEMP" '
+                      '--preflight "${dry[@]}"', publish[preflight])
+
     def test_publish_s_checkout_keeps_no_git_credentials(self):
         # review-11 SEC-6: nothing in publish pushes; gh takes GITHUB_TOKEN from the environment.
         checkout = next(s for s in steps(self.jobs["publish"]) if "actions/checkout" in s)

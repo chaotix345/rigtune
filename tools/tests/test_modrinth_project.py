@@ -30,18 +30,22 @@ class ScriptedOpener:
         base = url.split("?", 1)[0]
         return request.get_method(), base
 
-    def __call__(self, request):
+    def __call__(self, request, timeout=None):
         key = self._key(request)
         self.calls.append({
             "method": request.get_method(),
             "url": request.full_url,
             "headers": {k.lower(): v for k, v in request.headers.items()},
             "data": request.data,
+            "timeout": timeout,
         })
         if key not in self.responses:
             raise AssertionError(f"unscripted request: {key}")
         seq = self.responses[key]
         return seq.pop(0) if len(seq) > 1 else seq[0]
+
+
+SHA512_JAR = __import__("hashlib").sha512(b"jar-bytes").hexdigest()
 
 
 def json_response(obj, status=200):
@@ -309,12 +313,13 @@ class UploadVersionTests(unittest.TestCase):
             mp.cmd_upload_version(mp.Client(token="t", opener=lambda r: (_ for _ in ()).throw(AssertionError("no network"))),
                                    self._args(file=str(jar), sha256="0" * 64))
 
-    def test_skips_if_version_number_exists(self):
+    def test_skips_if_version_number_exists_with_the_same_file(self):
         jar = _tmp_file(b"jar-bytes")
         opener = ScriptedOpener({
             ("GET", f"{mp.API}/project/rigtune"): [json_response({"id": "abc"})],
             ("GET", f"{mp.API}/project/fabric-api"): [json_response({"id": "P7dR8mSH"})],
-            ("GET", f"{mp.API}/project/abc/version"): [json_response([{"id": "v1", "version_number": "0.1.0"}])],
+            ("GET", f"{mp.API}/project/abc/version"): [json_response([{"id": "v1", "version_number": "0.1.0",
+                                                                        "files": [{"hashes": {"sha512": SHA512_JAR}}]}])],
         })
         client = mp.Client(token="t", opener=opener)
         buf = io.StringIO()
@@ -322,7 +327,36 @@ class UploadVersionTests(unittest.TestCase):
             rc = mp.cmd_upload_version(client, self._args(file=str(jar)))
         self.assertEqual(rc, 0)
         self.assertNotIn(("POST", f"{mp.API}/version"), [(c["method"], c["url"].split("?")[0]) for c in opener.calls])
-        self.assertIn("already exists", buf.getvalue())
+        self.assertIn("already on Modrinth with the same file", buf.getvalue())
+
+    def test_an_existing_number_with_other_bytes_is_an_error(self):
+        # Review-12 R12REL-7 (b): never "published" over a version holding other bytes.
+        jar = _tmp_file(b"jar-bytes")
+        opener = ScriptedOpener({
+            ("GET", f"{mp.API}/project/rigtune"): [json_response({"id": "abc"})],
+            ("GET", f"{mp.API}/project/fabric-api"): [json_response({"id": "P7dR8mSH"})],
+            ("GET", f"{mp.API}/project/abc/version"): [json_response([{"id": "v1", "version_number": "0.1.0",
+                                                                        "files": [{"hashes": {"sha512": "other"}}]}])],
+        })
+        with self.assertRaises(mp.ModrinthError):
+            mp.cmd_upload_version(mp.Client(token="t", opener=opener), self._args(file=str(jar)))
+        self.assertNotIn("POST", [c["method"] for c in opener.calls])
+
+    def test_a_slow_first_post_found_by_hash_isn_t_posted_again(self):
+        # Review-12 R12REL-7 (a): the version list doesn't show it yet, the file lookup does.
+        jar = _tmp_file(b"jar-bytes")
+        opener = ScriptedOpener({
+            ("GET", f"{mp.API}/project/rigtune"): [json_response({"id": "abc"})],
+            ("GET", f"{mp.API}/project/fabric-api"): [json_response({"id": "P7dR8mSH"})],
+            ("GET", f"{mp.API}/project/abc/version"): [json_response([])],
+            ("GET", f"{mp.API}/version_file/{SHA512_JAR}"): [json_response({"id": "v1", "version_number": "0.1.0"})],
+        })
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(0, mp.cmd_upload_version(mp.Client(token="t", opener=opener), self._args(file=str(jar))))
+        self.assertNotIn("POST", [c["method"] for c in opener.calls])
+        opener.responses[("GET", f"{mp.API}/version_file/{SHA512_JAR}")] = [json_response({"id": "v0", "version_number": "0.0.9"})]
+        with self.assertRaises(mp.ModrinthError):
+            mp.cmd_upload_version(mp.Client(token="t", opener=opener), self._args(file=str(jar)))
 
     def test_uploads_with_named_file_part_and_dependency(self):
         jar = _tmp_file(b"jar-bytes")
@@ -330,6 +364,7 @@ class UploadVersionTests(unittest.TestCase):
             ("GET", f"{mp.API}/project/rigtune"): [json_response({"id": "abc"})],
             ("GET", f"{mp.API}/project/fabric-api"): [json_response({"id": "P7dR8mSH"})],
             ("GET", f"{mp.API}/project/abc/version"): [json_response([])],
+            ("GET", f"{mp.API}/version_file/{SHA512_JAR}"): [(404, b"{}", {})],
             ("POST", f"{mp.API}/version"): [json_response({"id": "verid", "version_number": "0.1.0"})],
         })
         client = mp.Client(token="t", opener=opener)
@@ -346,6 +381,9 @@ class UploadVersionTests(unittest.TestCase):
         # Modrinth wants the base62 project id, not the slug.
         self.assertEqual(payload["dependencies"][0]["project_id"], "P7dR8mSH")
         self.assertEqual(payload["dependencies"][0]["dependency_type"], "required")
+        # Review-12: not featured, as 0.2-0.4 (R12REL-2); the POST waits past Cloudflare's timeout (R12REL-7).
+        self.assertIs(payload["featured"], False)
+        self.assertEqual(mp.POST_TIMEOUT, post_call["timeout"])
 
     def test_dry_run_no_network(self):
         jar = _tmp_file(b"jar-bytes")
@@ -357,6 +395,53 @@ class UploadVersionTests(unittest.TestCase):
             rc = mp.cmd_upload_version(client, self._args(file=str(jar), dry_run=True))
         self.assertEqual(rc, 0)
         self.assertIn("would_upload_version", buf.getvalue())
+
+
+class PreflightAndSidesTests(unittest.TestCase):
+    """Review-12 R12REL-1 (read-only, before anything is public) and R12REL-6 (the sides, after every release)."""
+
+    def _args(self, **overrides):
+        base = dict(file=None, version_number="0.5.0+mc26.2", sha256=None)
+        base.update(overrides)
+        return _ns(**base)
+
+    def opener(self, versions, by_hash=None):
+        return ScriptedOpener({
+            ("GET", f"{mp.API}/project/rigtune"): [json_response({"id": "abc", "status": "approved"})],
+            ("GET", f"{mp.API}/project/abc/version"): [json_response(versions)],
+            ("GET", f"{mp.API}/version_file/{SHA512_JAR}"): [json_response(by_hash) if by_hash else (404, b"{}", {})],
+        })
+
+    def test_a_free_number_or_the_same_file_passes_read_only(self):
+        jar = _tmp_file(b"jar-bytes")
+        for versions in ([], [{"id": "v1", "version_number": "0.5.0+mc26.2", "files": [{"hashes": {"sha512": SHA512_JAR}}]}]):
+            opener = self.opener(versions)
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                self.assertEqual(0, mp.cmd_preflight(mp.Client(token="t", opener=opener), self._args(file=str(jar))))
+            self.assertIn("preflight OK", buf.getvalue())
+            self.assertEqual({"GET"}, {c["method"] for c in opener.calls})
+
+    def test_other_bytes_a_wrong_digest_or_no_project_fail(self):
+        jar = _tmp_file(b"jar-bytes")
+        other = [{"id": "v1", "version_number": "0.5.0+mc26.2", "files": [{"hashes": {"sha512": "other"}}]}]
+        with self.assertRaises(mp.ModrinthError):
+            mp.cmd_preflight(mp.Client(token="t", opener=self.opener(other)), self._args(file=str(jar)))
+        with self.assertRaises(mp.ModrinthError):
+            mp.cmd_preflight(mp.Client(token="t", opener=self.opener([])), self._args(file=str(jar), sha256="0" * 64))
+        missing = ScriptedOpener({("GET", f"{mp.API}/project/rigtune"): [(404, b"{}", {})]})
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(1, mp.cmd_preflight(mp.Client(token="t", opener=missing), self._args(file=str(jar))))
+
+    def test_sides_patches_both_sides(self):
+        opener = ScriptedOpener({
+            ("GET", f"{mp.API}/project/rigtune"): [json_response({"id": "abc"})],
+            ("PATCH", f"{mp.API}/project/abc"): [(204, b"", {})],
+        })
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(0, mp.cmd_sides(mp.Client(token="t", opener=opener), _ns(dry_run=False)))
+        patch = next(c for c in opener.calls if c["method"] == "PATCH")
+        self.assertEqual({"client_side": "required", "server_side": "unsupported"}, json.loads(patch["data"]))
 
 
 class SubmitTests(unittest.TestCase):
