@@ -209,8 +209,8 @@ class BuildWorkflowTests(unittest.TestCase):
         self.assertEqual(3, len(artifacts))
         for name in artifacts:
             self.assertTrue(name.endswith("${{ matrix.suffix }}"), name)
-        # One flag in build.yml switches the split (1 = off); a dispatch input overrides it for one run.
-        self.assertRegex(self.text, r"(?m)^env:\n(  #.*\n)*  GAMETEST_PARTS: 1$")
+        # One flag in build.yml switches the split (1 = off; 2 since 2026-09-28); a dispatch input overrides it for one run.
+        self.assertRegex(self.text, r"(?m)^env:\n(  #.*\n)*  GAMETEST_PARTS: [12]$")
         matrix = [s for s in self.jobs["gametest-matrix"]["steps"] if s.get("id") == "matrix"][0]
         self.assertIn('--parts "$PARTS"', matrix["run"])
         self.assertIn("PARTS: ${{ inputs.gametest_parts || env.GAMETEST_PARTS }}", self.text)
