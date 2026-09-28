@@ -131,11 +131,12 @@ class ApplyExecutorHoldTest {
 	@Test
 	void aHalfDoneGroupIsFinished() throws IOException {
 		List<Op> ops = update();
+		// Killed between the two renames: the disable done and recorded as done, the enable not reached.
 		ApplyExecutor killed = new ApplyExecutor(2, 1, (from, to) -> {
-			Files.move(from, to);
-			if (from.equals(oldJar)) {
+			if (from.equals(download)) {
 				throw new Killed();
 			}
+			Files.move(from, to);
 		});
 		assertThrows(Killed.class, () -> killed.run(plan(ops), pending));
 
@@ -161,17 +162,90 @@ class ApplyExecutorHoldTest {
 		assertFalse(Files.exists(pending));
 	}
 
-	// A failed rollback of a 0.1.0-0.3.0 helper (no record): the old jar disabled after an attempt, the download still
-	// there (PartlyApplied). Holding it would leave the mod missing until the player chose; it's finished.
+	// review-11 APPLY-5: what only looks like a failed rollback of a 0.1.0-0.3.0 helper (the old jar disabled after an
+	// attempt, the download still there) is no record of RigTune's: the launcher's own disable leaves the same files. Held.
 	@Test
-	void aFailedRollbackOfAnOldHelperIsFinished() throws IOException {
+	void aFailedRollbackOfAnOldHelperIsHeld() throws IOException {
 		List<Op> ops = update().stream().map(op -> op.withAttempts(1)).toList();
 		Files.move(oldJar, mods.resolve("sodium-0.7.0.jar.disabled"));
 
 		ApplyResult result = hold(plan(ops));
 
+		assertTrue(result.results().isEmpty(), result.toString());
+		assertEquals(ops, PendingActions.load(pending).ops());
+		assertEquals(List.of("sodium-0.7.0.jar.disabled", "sodium-0.7.1.jar.rigtune-pending"), modsListing());
+	}
+
+	// A helper killed during its retries: its disable was rolled back, the enable never ran. The record still names the
+	// disable's rename, so when the launcher itself later disables that jar (the same .disabled name), the files look like
+	// RigTune's half-done group. The record says the rename was undone.
+	private List<Op> killedDuringTheRetries() throws IOException {
+		List<Op> ops = update();
+		ApplyExecutor retrying = new ApplyExecutor(2, 1, (from, to) -> {
+			if (from.equals(download)) {
+				throw new IOException("locked");
+			}
+			Files.move(from, to);
+		}, millis -> {
+			throw new Killed();
+		});
+		assertThrows(Killed.class, () -> retrying.run(plan(ops), pending));
+		assertEquals(List.of("sodium-0.7.0.jar", "sodium-0.7.1.jar.rigtune-pending"), modsListing(), "rolled back before the kill");
+		assertTrue(Files.exists(UnfinishedGroups.file(config)), "the record is left");
+		Files.move(oldJar, mods.resolve("sodium-0.7.0.jar.disabled"));
+		return ops;
+	}
+
+	@Test
+	void aRolledBackRenameAndTheLaunchersOwnDisableStayHeld() throws IOException {
+		List<Op> ops = killedDuringTheRetries();
+
+		ApplyResult result = hold(PendingActions.load(pending));
+
+		assertTrue(result.results().isEmpty(), result.toString());
+		assertEquals(List.of("sodium-0.7.0.jar.disabled", "sodium-0.7.1.jar.rigtune-pending"), modsListing());
+		assertEquals(ops.stream().map(Op::id).toList(), PendingActions.load(pending).ops().stream().map(Op::id).toList());
+	}
+
+	// Without the hold the group runs, but the launcher's disable is never reported as RigTune's own ("already done
+	// earlier" with where the file went).
+	@Test
+	void aRolledBackRenameIsNeverClaimedAsDoneEarlier() throws IOException {
+		killedDuringTheRetries();
+
+		ApplyResult result = new ApplyExecutor(2, 1).run(PendingActions.load(pending), pending, false);
+
 		assertEquals(List.of(Status.SKIPPED_ALREADY_DONE, Status.OK), statuses(result));
-		assertEquals(List.of("sodium-0.7.0.jar.disabled", "sodium-0.7.1.jar"), modsListing());
+		assertEquals(null, result.results().getFirst().resultPath(), result.results().getFirst().message());
+		assertFalse(result.results().getFirst().message().startsWith("Already done earlier"), result.results().getFirst().message());
+	}
+
+	// A record 0.4 wrote (no mark of which renames happened) proves nothing under the hold: held.
+	@Test
+	void a04RecordIsNoProofUnderTheHold() throws IOException {
+		List<Op> ops = update();
+		plan(ops);
+		com.google.gson.JsonObject rename = new com.google.gson.JsonObject();
+		rename.addProperty("op", ops.getFirst().id());
+		rename.addProperty("from", oldJar.toString());
+		rename.addProperty("to", mods.resolve("sodium-0.7.0.jar.disabled").toString());
+		com.google.gson.JsonArray renames = new com.google.gson.JsonArray();
+		renames.add(rename);
+		com.google.gson.JsonObject group = new com.google.gson.JsonObject();
+		group.addProperty("group", ops.getFirst().group());
+		group.add("renames", renames);
+		com.google.gson.JsonArray groups = new com.google.gson.JsonArray();
+		groups.add(group);
+		com.google.gson.JsonObject doc = new com.google.gson.JsonObject();
+		doc.add("groups", groups);
+		Files.createDirectories(UnfinishedGroups.file(config).getParent());
+		Files.writeString(UnfinishedGroups.file(config), doc.toString());
+		Files.move(oldJar, mods.resolve("sodium-0.7.0.jar.disabled"));
+
+		ApplyResult result = hold(PendingActions.load(pending));
+
+		assertTrue(result.results().isEmpty(), result.toString());
+		assertEquals(List.of("sodium-0.7.0.jar.disabled", "sodium-0.7.1.jar.rigtune-pending"), modsListing());
 	}
 
 	@Test

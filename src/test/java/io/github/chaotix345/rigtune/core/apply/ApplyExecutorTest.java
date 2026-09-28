@@ -412,7 +412,8 @@ class ApplyExecutorTest {
 
 		recorded.run(plan(PendingActions.group(Op.disableFile(old), Op.enableFile(download, mods.resolve("sodium-0.7.1.jar"))).toArray(Op[]::new)), pending);
 
-		assertEquals(List.of("record", "move sodium-0.7.0.jar", "move sodium-0.7.1.jar.rigtune-pending"), events.subList(0, 3));
+		// Then each rename is marked done in the record right after it (review-11 APPLY-5).
+		assertEquals(List.of("record", "move sodium-0.7.0.jar", "record", "move sodium-0.7.1.jar.rigtune-pending", "record"), events.subList(0, 5));
 	}
 
 	// docs/v0.5/SPEC.md 2V (ws-g3 L8, AC2V.2): a rollback whose moved file vanished meanwhile says so, not that the original

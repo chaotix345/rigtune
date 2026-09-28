@@ -1,0 +1,21 @@
+{
+  "groups": [
+    {
+      "group": "a1b2c3d4-5e6f-4a0b-8c1d-2e3f4a5b6c02",
+      "renames": [
+        {
+          "op": "a1b2c3d4-5e6f-4a0b-8c1d-2e3f4a5b6c01",
+          "from": "${INSTANCE}/mods/e2e-held-1.0.0.jar",
+          "to": "${INSTANCE}/mods/e2e-held-1.0.0.jar.disabled",
+          "done": false
+        },
+        {
+          "op": "a1b2c3d4-5e6f-4a0b-8c1d-2e3f4a5b6c03",
+          "from": "${INSTANCE}/mods/e2e-held-1.1.0.jar.rigtune-pending",
+          "to": "${INSTANCE}/mods/e2e-held-1.1.0.jar",
+          "done": false
+        }
+      ]
+    }
+  ]
+}

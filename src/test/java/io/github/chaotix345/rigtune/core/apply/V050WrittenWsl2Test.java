@@ -27,6 +27,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.5/SPEC.md 3b and X11 (src/test/resources/v050-written/README.md): WS-L2's "written by 0.5" set ws-l2, produced
@@ -36,6 +38,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // must equal what the code writes now; RIGTUNE_REGENERATE_FIXTURES=1 writes them. expect.json (hand-written: what 0.4.0's
 // own classes must do with the set) must name this pending.json's group.
 class V050WrittenWsl2Test {
+	// A kill (PC shutdown, Task Manager): nothing after the throw runs.
+	private static final class Killed extends Error {
+	}
+
 	private static final String SET = "src/test/resources/v050-written/ws-l2/";
 	private static final String TOKEN = "${INSTANCE}";
 	private static final Pattern UUID = Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
@@ -62,6 +68,20 @@ class V050WrittenWsl2Test {
 		PendingActions.create(4242, mods, config, List.of(group.get(0), group.get(1),
 				Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4")))).save(pending);
 
+		// A 0.5 helper killed during its retries (review-11 APPLY-5): its disable rolled back, the enable never done, so its
+		// record names both renames marked done: false. The released helpers read that record too (0.4.0's own Rename has
+		// no done field): compat040's ApplyHelper check applies this group with the record in place.
+		ApplyExecutor retrying = new ApplyExecutor(2, 1, (from, to) -> {
+			if (from.equals(download)) {
+				throw new IOException("locked");
+			}
+			Files.move(from, to);
+		}, millis -> {
+			throw new Killed();
+		});
+		assertThrows(Killed.class, () -> retrying.run(PendingActions.load(pending), pending));
+		assertTrue(Files.exists(old) && Files.exists(download), "rolled back before the kill");
+
 		ApplyResult held = new ApplyExecutor(2, 1).run(PendingActions.load(pending), pending, true);
 		assertEquals(1, held.results().size(), held.toString());
 		AwarenessStore awareness = AwarenessStore.shared(config);
@@ -72,6 +92,8 @@ class V050WrittenWsl2Test {
 		Map<String, String> uuids = new LinkedHashMap<>();
 		Map<String, String> written = new LinkedHashMap<>();
 		written.put("pending.json", normalise(pending, instance, uuids, json -> json.addProperty("createdAt", "2026-09-20T10:00:05Z")));
+		written.put("unfinished-groups.json", normalise(UnfinishedGroups.file(config), instance, uuids, json -> {
+		}));
 		written.put("awareness.json", normalise(AwarenessStore.file(config), instance, uuids, json -> {
 		}));
 		Path committed = RepoFiles.resolve(SET);
@@ -99,7 +121,17 @@ class V050WrittenWsl2Test {
 				&& c.getAsJsonObject().get("appliesGroup").getAsString().equals(groupId)), expect.toString());
 		assertTrue(written.get("awareness.json").contains(key), written.get("awareness.json"));
 		try (var files = Files.list(committed)) {
-			assertEquals(Set.of("pending.json", "awareness.json", "expect.json"), Set.copyOf(files.map(p -> p.getFileName().toString()).toList()));
+			assertEquals(Set.of("pending.json", "unfinished-groups.json", "awareness.json", "expect.json"),
+					Set.copyOf(files.map(p -> p.getFileName().toString()).toList()));
+		}
+		// The record: the held group's two renames, both marked not done (the disable was rolled back).
+		JsonObject recorded = JsonParser.parseString(written.get("unfinished-groups.json")).getAsJsonObject().getAsJsonArray("groups").get(0)
+				.getAsJsonObject();
+		assertEquals(groupId, recorded.get("group").getAsString());
+		JsonArray renames = recorded.getAsJsonArray("renames");
+		assertEquals(2, renames.size(), renames.toString());
+		for (JsonElement rename : renames) {
+			assertFalse(rename.getAsJsonObject().get("done").getAsBoolean(), rename.toString());
 		}
 	}
 

@@ -12,7 +12,8 @@ import java.nio.file.attribute.BasicFileAttributes;
 // docs/v0.5/SPEC.md 4a: what the instance's own files say about who keeps a record of its mods. packwizIndex: <mods>/.index/
 // holds at least one regular *.pw.toml (Prism's and PolyMC's packwiz metadata, lm §3.1), from a bounded listing: the
 // first match or MAX_ENTRIES entries, whichever comes first; regular files only; no symbolic link followed (the folder
-// itself neither); names only, never a file's content; anything unexpected is no evidence, never an exception.
+// itself neither); names only, never a file's content; never an exception. A folder that is there but can't be listed
+// counts as evidence (it fails closed); anything else unexpected is no evidence.
 public record InstanceEvidence(boolean packwizIndex) {
 	public static final InstanceEvidence NONE = new InstanceEvidence(false);
 	static final String INDEX = ".index";
@@ -52,7 +53,9 @@ public record InstanceEvidence(boolean packwizIndex) {
 				}
 			}
 		} catch (IOException | RuntimeException e) {
-			return new Scan(false, examined);
+			// review-11 APPLY-7 (a WS-L2 edit in WS-L1's file): a .index/ folder that is there but can't be listed fails
+			// closed, counted as packwiz metadata (LAUNCHER), never as its absence (RIGTUNE, which renames the jars).
+			return new Scan(true, examined);
 		}
 		return new Scan(false, examined);
 	}

@@ -46,7 +46,17 @@ public final class UnfinishedGroups {
 	static final Writer DURABLE = (file, content) -> writeDurably(file, content, UnfinishedGroups::force);
 
 	// op: the op's id; from/to: the rename's absolute paths (a disable's `to` is the .disabled name it was given).
-	public record Rename(String op, String from, String to) {
+	// done (0.5, review-11 APPLY-5): whether the rename happened, rewritten after it and after its rollback; null in a
+	// record 0.4 wrote, which says only what a pass was about to do. The files alone can't tell RigTune's rename from the
+	// launcher's own (its disable gives the same .disabled name), so only done = true proves one.
+	public record Rename(String op, String from, String to, Boolean done) {
+		public Rename(String op, String from, String to) {
+			this(op, from, to, null);
+		}
+
+		Rename withDone(boolean now) {
+			return new Rename(op, from, to, now);
+		}
 	}
 
 	private record Entry(String group, List<Rename> renames) {
@@ -143,6 +153,19 @@ public final class UnfinishedGroups {
 		groups.values().removeIf(List::isEmpty);
 		groups.put(group, List.copyOf(renames));
 		if (changed || dirty) {
+			save();
+		}
+	}
+
+	// The rename of `op` in `group` happened (done) or was put back (not done): the record is rewritten at once.
+	void mark(String group, String op, boolean done) {
+		List<Rename> renames = group == null || op == null ? null : groups.get(group);
+		if (renames == null) {
+			return;
+		}
+		List<Rename> marked = renames.stream().map(r -> op.equals(r.op()) ? r.withDone(done) : r).toList();
+		if (!marked.equals(renames)) {
+			groups.put(group, marked);
 			save();
 		}
 	}

@@ -564,8 +564,8 @@ public final class RealController implements RigTuneController {
 		}
 		if (!downloads.isEmpty()) {
 			parts.add(Component.translatable("rigtune.status.downloading", downloads.size()));
-		} else if (pendingChanges() > 0) {
-			parts.add(Component.translatable("rigtune.status.restart", pendingChanges()));
+		} else {
+			restartParts(parts);
 		}
 		// v0.5 (PLAN contracts 13c): the after-apply hooks.
 		V05Hooks.afterApply(this, new V05Hooks.ApplyFacts(entryId, selected, disablesAllowed, settingsOk, settingsFailed, immediateOps.size(),
@@ -588,7 +588,26 @@ public final class RealController implements RigTuneController {
 	}
 
 	private int pendingChanges() {
-		return staged.size() + carriedOverOps;
+		return staged.size() + Math.max(0, carriedOverOps - staged.unowned(heldOps()));
+	}
+
+	// v0.5 (docs/v0.5/SPEC.md 4d; review-11 APPLY-3, an approved change to this file): what a restart applies, and apart
+	// from it the mod changes the next exit's helper holds for the player's choice in a launcher-managed instance, which
+	// a restart never applies. The held ops are the service's last read (in memory; none before it has read them).
+	private void restartParts(List<Component> parts) {
+		if (pendingChanges() > 0) {
+			parts.add(Component.translatable("rigtune.status.restart", pendingChanges()));
+		}
+		V05Services services = v05;
+		int held = services == null ? 0 : services.launcherRepair().heldChanges();
+		if (held > 0) {
+			parts.add(Component.translatable("rigtune.repair.held.status", held));
+		}
+	}
+
+	private List<Op> heldOps() {
+		V05Services services = v05;
+		return services == null ? List.of() : services.launcherRepair().heldOps();
 	}
 
 	private void startDownloads(List<Recommendation> downloads, String entryId) {
@@ -632,9 +651,7 @@ public final class RealController implements RigTuneController {
 		if (!ok) {
 			parts.add(Component.translatable("rigtune.status.some_failed", result.ids().size()));
 		}
-		if (pendingChanges() > 0) {
-			parts.add(Component.translatable("rigtune.status.restart", pendingChanges()));
-		}
+		restartParts(parts);
 		status = join(parts);
 		rebuild();
 	}
