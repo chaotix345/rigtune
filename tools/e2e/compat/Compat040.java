@@ -115,7 +115,7 @@ public final class Compat040 {
 			Map.entry("ClientSettings", Set.of("state", "keeps", "noBad")),
 			Map.entry("StutterStore", Set.of("state", "sessions", "noBad")),
 			Map.entry("StutterSummary", Set.of("state", "sessions")),
-			Map.entry("AwarenessStore", Set.of("state", "keeps", "noBad")),
+			Map.entry("AwarenessStore", Set.of("state", "keeps", "dismissedContains", "noBad")),
 			Map.entry("ProfileStore", Set.of("state", "keeps", "noBad")),
 			Map.entry("ServerLimitsStore", Set.of("state", "keeps", "noBad")),
 			Map.entry("RestoreMarker", Set.of("state")),
@@ -304,6 +304,22 @@ public final class Compat040 {
 					});
 					seen.add("a 0.4.0 write on a copy (" + (wrote ? "written" : "NOT written") + ") lost " + lost);
 					ok &= wrote && lost.isEmpty();
+				}
+				// AC8.4: the listed dismissals survive 10 more of 0.4.0's own, in its view and in the file it wrote.
+				if (c.has("dismissedContains")) {
+					AwarenessStore store = AwarenessStore.shared(spare);
+					for (int i = 0; i < 10; i++) {
+						store.dismiss("compat040.more-" + i);
+					}
+					JsonArray inFile = json(spare.resolve("rigtune").resolve(file)).getAsJsonArray("dismissed");
+					List<String> missing = new ArrayList<>();
+					c.getAsJsonArray("dismissedContains").forEach(k -> {
+						if (!store.dismissed().contains(k.getAsString()) || inFile == null || !inFile.contains(k)) {
+							missing.add(k.getAsString());
+						}
+					});
+					seen.add("after 10 more 0.4.0 dismissals on a copy, missing " + missing);
+					ok &= missing.isEmpty();
 				}
 			}
 			case "StartupTimesStore" -> {
