@@ -4,8 +4,8 @@ Branch `test/v05-e2e`, worktree `rigtune-e2e5`. SPEC 3a-3f and 3h's release.yml,
 convention. Research: docs/research/v0.5/verification-gaps.md (vg). Plan: docs/v0.5/PLAN.md "WS-E".
 
 **Status (2026-09-28):** the early part (E1-E4), E5/E7 and the later part are done except the items under "Residuals"
-(the DH server-note run, the generated seeds, and the first Linux release-tier run of this round's rows). CI run 36374398890 is
-green on every job. See "Later part: status".
+(the DH server-note run, AC3f.4). The release tier ran on Linux once, green on every job (36376567978); the branch's
+latest CI run is green. See "Later part: status".
 
 ## Early part: tasks (TDD; each ends with `python -m unittest discover -s tools/e2e/tests` green and a commit)
 
@@ -212,7 +212,7 @@ The fabric client gametest API is the same too: `createServer(Properties)`, `cli
 | AC3a.5 | the Windows RC set (seeded run with a real handle, 0.4.0 → RC, undo, downgrade) | Phase 5 |
 | AC3a.6 | `test_e2e_workflows.py` + `test_ci_workflow.py` | CI python job green (36363179808) |
 | AC3b.1, AC3b.2 | compat040 / compat030 in the java job | CI java job green (36363179808) |
-| AC3b.3 | the downgrade rows (both targets, both nodes) | local 26.2 PASS with v050 sets; the "back on 0.5" part checks the placeholders' files (and ws-p2's servers) are read back. The tracked fix, the open try and the profile labels need WS-S2/WS-T/WS-P's real sets and code |
+| AC3b.3 | the downgrade rows (both targets, both nodes) | local 26.2 PASS with v050 sets; Linux release tier PASS, both targets on both nodes ([36376567978](https://github.com/chaotix345/rigtune/actions/runs/36376567978)); the "back on 0.5" part checks the placeholders' files (and ws-p2's servers) are read back. The tracked fix, the open try and the profile labels need WS-S2/WS-T/WS-P's real sets and code |
 | AC3c.1, AC3c.2 | release.yml build → e2e → publish | dry run 36296717280; AC3c.2 at the v0.5.0 release |
 | AC3d.1, AC3d.2 | LanGuestGameTest | CI PASS on 3 legs (36363179808) |
 | AC3d.3 | README "Known limits" | docs workstream (text in "Docs" below) |
@@ -221,12 +221,12 @@ The fabric client gametest API is the same too: `createServer(Properties)`, `cli
 | AC3e.4 | README battery line | docs (below) |
 | AC3f.1 | the 26.3 stutter-script CI run | scratch 36362848495 (both nodes): PASS in the product's teleport window; record in `docs/v0.5/verification/stutter/ac3f1-stutter-script/` |
 | AC3f.3 | A11yGameTest high contrast | CI PASS on 3 legs (36363179808) |
-| AC3f.4 | the DH server-note run | open (code-deciding, under the lock) |
-| AC3f.5 | helper-kill | local Windows PASS; Linux release tier with the push |
-| AC3f.7 | guard-apply | local Windows PASS; Linux release tier with the push |
+| AC3f.4 | the DH server-note run | open: the coordinator's decision (c), under the lock |
+| AC3f.5 | helper-kill | local Windows PASS; Linux release tier PASS on both nodes ([36376567978](https://github.com/chaotix345/rigtune/actions/runs/36376567978)) |
+| AC3f.7 | guard-apply | local Windows PASS; Linux release tier PASS in undo-profiles/-settings on both nodes ([36376567978](https://github.com/chaotix345/rigtune/actions/runs/36376567978)) |
 | AC3f.8 | snapshot_canary.py + fixture test | test in; the workflow edit after 2026-09-30 |
-| AC4j.3 | the launcher-brand leg (`--scenario brand`) | local Windows PASS; Linux release tier to run |
-| AC2H.6 | `v010-dh-app-reinstalled`, both legs (`--scenario stale-seed`) | local Windows PASS; Linux release tier to run |
+| AC4j.3 | the launcher-brand leg (`--scenario brand`) | local Windows PASS; Linux release tier PASS ([36376567978](https://github.com/chaotix345/rigtune/actions/runs/36376567978)) |
+| AC2H.6 | `v010-dh-app-reinstalled`, both legs (`--scenario stale-seed`) | local Windows PASS; Linux release tier PASS ([36376567978](https://github.com/chaotix345/rigtune/actions/runs/36376567978)) |
 
 ## Residuals
 - **Fixed since the early part:**
@@ -234,14 +234,14 @@ The fabric client gametest API is the same too: `createServer(Properties)`, `cli
   - compat040 has its CI step (E6);
   - the downgrade checks name the versions they run (4c3b6696);
   - `server-profiles.json` is in `V050.kept` (e1de5575);
-  - the local Windows reruns after both review rounds: all PASS (`docs/v0.5/verification/e2e/local-windows-26.2/2026-09-28-*`).
+  - the local Windows reruns after both review rounds: all PASS (`docs/v0.5/verification/e2e/local-windows-26.2/2026-09-28-*`);
+  - the release tier's first Linux run (the coordinator's decision (a)): [36376567978](https://github.com/chaotix345/rigtune/actions/runs/36376567978) on `scratch/ws-e-battery-oshi` @ 112f3a41 (test/v05-e2e @ 46da5e9c with the e2e rows on, max-parallel 6), green on every job: the 21 rows (every upgrade, seeded-v010-dh and both stale-seed legs, undo-profiles/-settings and helper-kill on both nodes, brand-theseus, both downgrades on both nodes), battery-oshi and stutter-script on both nodes.
 - **Open:**
   - `stutter-fixes.json` and `tryit.json` join `V050.kept` when WS-S2's and WS-T's real sets land. Until then their placeholders are only checked byte-identical after a downgrade.
   - The LAN source address in CI is 0.0.0.0 (offline.sh's multicast route has no `src`). Sent to ws-ci; LanGuestGameTest accepts a loopback or wildcard address until then.
   - The snapshot-canary workflow edit (its resolve step calls `tools/snapshot_canary.py`) is made after the scheduled run on 2026-09-30.
   - Still to do:
-    - AC3f.4 (the DH server-note run): the coordinator decides the approach.
-    - The first Linux run of the release tier with this round's rows (helper-kill on both nodes, guard-apply, stale-seed, the downgrades with v050 sets): the coordinator schedules it.
+    - AC3f.4 (the DH server-note run): the coordinator's decision (c), after the hand-over: a local Loom server task through an init script, on a free ephemeral port.
 - **A note for the docs workstream:** in BatteryFlowGameTest's screenshot at 854×480 the battery notice's text is cut ("You're on battery power. Switch t…") by its two buttons. That is v0.4's notice layout (WS-P's).
 
 ## Stays UNVERIFIED (WS-E's part)
