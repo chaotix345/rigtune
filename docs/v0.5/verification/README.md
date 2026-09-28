@@ -33,6 +33,17 @@ user step).
 
 ## try-it
 Owner: WS-T (AC6.16's A/A pairs, NOW and RESTART tries).
+- WS-T's code-deciding run (AC6.16; 2026-09-28, this PC, the worktree's 26.2 development client with Sodium 0.9.2, under
+  the game-test lock, the player's game not running; `try-it/`): 5 A/A Measure pairs in the benchmark world all within
+  the floor, so `MIN_CV` stays 0.025; a NOW try (render distance 12 -> 10 where the player stands) after a warm-up run
+  matched a manual Measure pair's sign (-1.9 % against -0.9 %, floor 24.7 %), while one started 20 s after joining did
+  not (a slow, uneven before run: +59 %, held to "no clear change" by its 65.5 % floor; a residual and a known-limit
+  line); a RESTART try of Sodium's defer mode across real restarts, Revert and a second restart left the old value in
+  `sodium-options.json` and History with the apply, the undo and REVERTED. The driver is `client/tryit/TryItDevRun`
+  (`RIGTUNE_DEV_TRYIT`); details and logs in `try-it/README.md`.
+- WS-T (CI, every push): `TryItGameTest` blocks 1-7 on the three legs (network off; no FPS number or live verdict kind
+  asserted), `A11yGameTest.walkTryIt`; screenshots `tryit-*` and `a11y-*tryit*` in each leg's `gametest-screenshots-*`
+  artifact. Run ids and what was looked at: docs/v0.5/design/ws-t.md.
 
 ## server-profiles
 Owner: WS-P2, the P5 agent (AC7.16's real JOIN against a vanilla server on a non-default port).

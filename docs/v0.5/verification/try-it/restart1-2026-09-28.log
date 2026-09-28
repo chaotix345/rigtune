@@ -1,0 +1,5 @@
+[13:54:32] [RigTune worker/INFO] (RigTune) Try it dev: mode restart1
+[13:54:37] [Render thread/INFO] (RigTune) Try it dev: RESTART try: sodium.performance.chunk_build_defer_mode ALWAYS -> ONE_FRAME:
+[13:55:19] [Render thread/INFO] (RigTune) Try it dev: AWAITING_RESTART: staged under e8a61f72-edd2-4bc8-9934-22f85fce81e5; quitting (the helper applies it at the exit)
+[13:55:19] [Render thread/INFO] (RigTune) Try it dev: RESULT restart1: done
+[13:55:20] [Render thread/INFO] (RigTune) Started the RigTune apply helper for <run>\config\rigtune\pending.json
