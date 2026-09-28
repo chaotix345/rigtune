@@ -67,8 +67,9 @@ public final class ServerProfilePrompt {
 		return Text.of("rigtune.profile.server.toast.title", "Profile for this server");
 	}
 
-	// key: the name of RigTune's key (F8 unless the player changed it).
-	public static Text toastBody(Text name, Text key) {
-		return Text.of("rigtune.profile.server.toast.body", "%s is set for this server. Press %s to switch.", name, key);
+	// key: the name of RigTune's key (F8 unless the player changed it), null when none is bound.
+	public static Text toastBody(Text name, @Nullable Text key) {
+		return key == null ? Text.of("rigtune.profile.server.toast.body.no_key", "%s is set for this server. Open RigTune to switch.", name)
+				: Text.of("rigtune.profile.server.toast.body", "%s is set for this server. Press %s to switch.", name, key);
 	}
 }

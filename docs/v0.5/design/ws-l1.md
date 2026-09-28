@@ -105,7 +105,7 @@ chaotix345/rigtune/core/…`, `gametest/…` = `src/gametest/java/io/github/chao
 | R4 | e83dfa6c | Review M5, L10, L11, L12: tests that can fail (advised rows must exist, each with the app's note), a named-file allowlist that also sees a file-op type passed as an argument, case-insensitive fixture words (plus the account and user names), LauncherManagedGameTest's cleanup through SettingsSaver + flush, the window size and pending.json put back. |
 | merge | 16bd9f85 | `origin/feat/v0.5.0` at c59b8b93 (WS-B, WS-F, WS-S, the JDK retry). |
 | R5 | 97566dc6 | WS-F's two `guideLine`/HowItWorks callers pass `controller.modFilesOptedIn()` instead of the bare settings flag (review M2's rule, applied to C02's guide after the merge). |
-| R6 | the head of this push | LauncherManagedGameTest's MOD_FILES_NEWS check with WS-F merged: NEW and RETURNING forced through `FirstRunService.forceStatusForTests` (then put back): no news for NEW, the news naming the Modrinth App for RETURNING, and its Settings… (the real notice source) focuses the Mod files row. The old "never before WS-F" check failed locally once WS-F's status was real (the local run folder is a returning player's). |
+| R6 | 91db46e0 (pushed with merge 043fe436) | LauncherManagedGameTest's MOD_FILES_NEWS check with WS-F merged: NEW and RETURNING forced through `FirstRunService.forceStatusForTests` (then put back): no news for NEW, the news naming the Modrinth App for RETURNING, and its Settings… (the real notice source) focuses the Mod files row. The old "never before WS-F" check failed locally once WS-F's status was real (the local run folder is a returning player's). |
 
 Red first: M1's walk failed on the old screen (no list), and on the first run of the new one (Tab skipped the greyed-out
 switches: the walk now expects exactly the active rows, as vanilla gives an inactive widget no Tab stop); L1-L9's tests
@@ -241,6 +241,7 @@ M2-M5, L6-L16) and X12 landed in R1-R5.
 | 36328216699 | 61c026d3 (L1-L6) | java red: the real-world fixtures missing (`.gitignore`), fixed in a6ed4359 | the failing tests' log |
 | 36329802402 | 2c58b210 (L1-L8) | all 8 jobs green | the footprint JSON of the three legs |
 | 36336426845 | the L10 + merge + doc head | all 8 jobs green | `launcher-managed-rows-*` (26.2 GL, 26.3 Vulkan: the app's note in the reason and the green "In the Modrinth App: ..." line under every Add row), `launcher-managed-undo-854x480-scale2` (the fixture change skipped with the reason and the app's Disable steps), `launcher-managed-settings-854x480-scale2`, `launcher-managed-opted-in-*` (the opted-in line in the one warning slot, Apply counts the mod rows again), `a11y-settings-mod-files-854x480-scale2` (the row focused, the help as its tooltip), `a11y-mod-files-news-854x480-scale2`, `settings-*` with WS-P's battery row and the Mod files row |
+| 36364315401 | 043fe436 (R1-R6 + merge 3f42974f) | all 8 jobs green on attempt 1 | `launcher-managed-news-settings-854x480-scale2` (26.2 GL, 26.3 Vulkan: the news' Settings… lands on the Mod files row, focused, scrolled into the list; WS-W's "Settings changed outside the game" toast is over the title, as in the other launcher-managed shots), `a11y-news-settings-{854x480-scale2,1280x720-scale3}` (the row focused with its help as the tooltip, GUI scale 3 at 1280x720), `settings-1280x720-scale3(-scrolled,-last-row-focused)` (the note row framed and fully inside the list; on 26.3 the Benchmark scene switch also keeps a focus frame and its tooltip after the walk's clearFocus, the 26.3 list behaviour seen since M1: cosmetic in these shots, the checks pass), `launcher-managed-undo-854x480-scale2` (the fixture enable skipped with the app's reason and its Disable steps) |
 
 ## Footprint, local (review L7; 26.2 OpenGL, this Windows machine, `versions/26.2/build/run/clientGameTest`)
 
@@ -258,22 +259,23 @@ on `Probes.EXECUTOR`).
 
 ## Footprint (per leg, from `footprint-<mc>-<backend>.json`; baseline: ws-k.md's WS-K head run 36310249248)
 
-| leg | key | baseline | 36329802402 (L1-L8, before merging feat/v0.5.0) | 36336426845 (after the merge: other workstreams' code too) |
-|---|---|---|---|---|
-| 26.2 OpenGL | renderThreadInitCpuMs | 82.2 | 105.1 | 110.0 |
-| 26.2 OpenGL | clientStartedWallMs | 36.4 | 40.9 | 51.1 |
-| 26.2 OpenGL | workerCpuMs5s | 135.5 | 190.5 | 233.3 |
-| 26.2 OpenGL | tickHookOnVsReference | 1.481 | 1.571 | 1.582 |
-| 26.3 OpenGL | renderThreadInitCpuMs | 82.2 | 113.9 | 110.6 |
-| 26.3 OpenGL | clientStartedWallMs | 27.0 | 37.7 | 27.3 |
-| 26.3 OpenGL | workerCpuMs5s | 153.2 | 188.3 | 193.0 |
-| 26.3 OpenGL | tickHookOnVsReference | 1.746 | 1.603 | 1.544 |
-| 26.3 Vulkan | renderThreadInitCpuMs | 120.0 | 111.9 | 107.6 |
-| 26.3 Vulkan | clientStartedWallMs | 39.9 | 66.8 | 47.3 |
-| 26.3 Vulkan | workerCpuMs5s | 200.7 | 180.4 | 190.0 |
-| 26.3 Vulkan | tickHookOnVsReference | 1.535 | 1.580 | 1.430 |
+| leg | key | baseline | 36329802402 (L1-L8, before merging feat/v0.5.0) | 36336426845 (after the merge: other workstreams' code too) | 36364315401 (the review round, WS-B/F/S merged too) |
+|---|---|---|---|---|---|
+| 26.2 OpenGL | renderThreadInitCpuMs | 82.2 | 105.1 | 110.0 | 98.9 |
+| 26.2 OpenGL | clientStartedWallMs | 36.4 | 40.9 | 51.1 | 27.8 |
+| 26.2 OpenGL | workerCpuMs5s | 135.5 | 190.5 | 233.3 | 218.8 |
+| 26.2 OpenGL | tickHookOnVsReference | 1.481 | 1.571 | 1.582 | 1.563 |
+| 26.3 OpenGL | renderThreadInitCpuMs | 82.2 | 113.9 | 110.6 | 104.6 |
+| 26.3 OpenGL | clientStartedWallMs | 27.0 | 37.7 | 27.3 | 46.4 |
+| 26.3 OpenGL | workerCpuMs5s | 153.2 | 188.3 | 193.0 | 221.3 |
+| 26.3 OpenGL | tickHookOnVsReference | 1.746 | 1.603 | 1.544 | 1.582 |
+| 26.3 Vulkan | renderThreadInitCpuMs | 120.0 | 111.9 | 107.6 | 118.5 |
+| 26.3 Vulkan | clientStartedWallMs | 39.9 | 66.8 | 47.3 | 58.4 |
+| 26.3 Vulkan | workerCpuMs5s | 200.7 | 180.4 | 190.0 | 208.7 |
+| 26.3 Vulkan | tickHookOnVsReference | 1.535 | 1.580 | 1.430 | 1.614 |
 
-`v05RenderThreadResolve` null and `v05HolderCreatedOn` "RigTune worker" on every leg of both runs (X4). Reading: every
+`v05RenderThreadResolve` null and `v05HolderCreatedOn` "RigTune worker" on every leg of all three runs (X4), no budget
+violation in 36364315401. Reading: every
 value keeps its budget (150 / 141 / 300 / 2.05). WS-L1 adds no render-thread work at startup beyond one more future in
 `LauncherProbe.probeAsync` (the listing is a lambda that runs, and loads InstanceEvidence, on Probes.EXECUTOR) and no tick
 or frame work; its worker work is one bounded directory listing. The spread across runs of near-identical code (ws-k.md:
@@ -301,6 +303,6 @@ or frame work; its worker work is one bounded directory listing. The spread acro
 | AC4e.2 (opted in: report = RIGTUNE's, the warning line with its precedence, one line at the three sizes) | verified (Apply/Undo/helper as 0.4 follow from RIGTUNE: LauncherModAdvice identity, UndoPlanner's RIGTUNE path; the helper's hold is WS-L2's) | LauncherManagedGameTest.optIn, screenshots `launcher-managed-opted-in-*` |
 | AC4e.3 (settings.json round trip; a 0.4-shaped file reads false; compat040 reads it) | verified here; compat040 when WS-E's interpreter lands (the set's expect.json is committed) | ClientSettingsTest (WS-K), ModFilesOptInFixtureTest; compat030 PASS locally with the ws-l1 settings.json (0.3.0's ClientSettings, no .bad, no file changed) |
 | AC4j.1 (the Modrinth App / GDLauncher desync models) | verified | LauncherDesyncTest |
-| AC4j.2 (LauncherManagedGameTest on every leg) | verified | CI 36336426845, 3 legs (the theseus brand, the steps, the refused Apply, mods/ unchanged, Undo's reason, the opt-in, .index/ without a brand, restored) |
+| AC4j.2 (LauncherManagedGameTest on every leg) | verified | CI 36336426845 and 36364315401, 3 legs (the theseus brand, the steps, the refused Apply, mods/ unchanged, Undo's reason, the opt-in, .index/ without a brand, restored) |
 | RW-2, RW-14 | verified | as AC4c.1-AC4c.3 |
 | PLAN-11 (the templated real-world fixtures) | verified | src/test/resources/realworld/ + README; RealWorldFixturesTest |

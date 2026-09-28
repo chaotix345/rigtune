@@ -244,3 +244,66 @@ the run folder is fresh), the L5 classes load on the first preview, and nothing 
 | AC2V.3 (Preview lists a refused Disable under Not changed; Apply's status counts it) | verified | `PreviewDisablesTest` (refusal cases), `RefusedDisablesTest` |
 | AC2V.4 (a half-done group with a queued build stays; others dropped) | verified (rule from 0.4) | `StagingTest.aHalfDoneGroupWithAQueuedBuildStaysWhileOthersAreDropped`; hand mutation |
 | AC2V.5 (checkUpdate's batch branch alone) | verified | `DownloadPlannerTest` (2); hand mutation |
+
+---
+
+# Addendum: RW-20, the one-time relabel of a false "applied" claim (2026-09-28)
+
+Branch `fix/v05-history-2` from `origin/feat/v0.5.0` @ 3f42974f. Source: the read-only re-read of the user's instance
+(`<scratch>/realworld/2026-09-28/real-world-2026-09-28.md`, row RW-20; SPEC Amendments "real world RW-20", 4f). RW-1's
+helper fix (4f, WS-L2) stops future false "already done" claims, but the user's history.json still says 0.1.0's DH pair
+("Disabled fabric-26.2.jar" / "Added DistantHorizons-3.3.2-…jar") was APPLIED: 0.4.0's helper reported both
+`SKIPPED_ALREADY_DONE` after the Modrinth App had installed that jar itself, and last-apply.json is still that run.
+
+**Decision (coordinator):** at the first 0.5 start, once, under the apply lock, only while last-apply.json is still the run
+that produced the claim: an APPLIED file change whose op result there is `SKIPPED_ALREADY_DONE` with no `resultPath` and
+no `unfinished-groups.json` record becomes ABANDONED with the reason "installed another way". Idempotent. Only statuses
+and reasons 0.4.0 already knows, so a downgrade reads it.
+
+**Design.** A pure `core/history/SkippedClaims.of(entries, lastApply, recorded)` and one call at the end of
+`HistoryStartup.run` (preLaunch, after the reconcile, only with the lock held). History's reasons come from last-apply.json
+(history.json has no reason field, and gets no new one), so the claim is corrected in both files: the journal change goes
+APPLIED → ABANDONED, and that op's result in last-apply.json goes `SKIPPED_ALREADY_DONE` → `ABANDONED` with the message
+"installed another way" (the word Staging's RW-3 drop already uses); `finishedAt` stays, so no toast or WARN replays. The
+journal is written first, then last-apply.json: a death in between leaves the journal ABANDONED and the result still
+SKIPPED, which the next start completes (a change already ABANDONED with such a result counts too). After both, no
+result is `SKIPPED_ALREADY_DONE` any more, so later starts change nothing; a later helper run replaces last-apply.json,
+whose ops the old changes no longer match. Left alone: an undo's change (`reverts` set: its REVERTED original stays
+consistent), a result with a `resultPath` (a recorded rename, "already done earlier"), an op with a recorded rename in
+unfinished-groups.json, settings. The unfinished-groups record is read only when some result could be a claim.
+
+| # | task | files | tests (red first) |
+|---|---|---|---|
+| R1 | the real fixture: history.json and last-apply.json copied from the 2026-09-28 capture, paths templated `${INSTANCE}/…` as WS-L1's fixtures, checked with RealWorldFixturesTest's forbidden words | `src/test/resources/realworld/2026-09-28/` (README + `rigtune/`) | `SkippedClaimsTest.theFixtureHoldsNoMachinePathOrName` |
+| R2 | `SkippedClaims` + `HistoryStartup.run`'s call | new `core/history/SkippedClaims`, `client/undo/HistoryStartup` | `SkippedClaimsTest`: the two DH changes ABANDONED, the 15 others APPLIED, both results ABANDONED "installed another way", `finishedAt` kept; a second pass changes nothing; a later run (other op ids) changes nothing; a `resultPath`, a recorded rename, an undo change, a setting stay; the half-done resume. `HistoryStartupRw20Test`: through `HistoryStartup.run` on a temp instance (History then reads "Not applied: installed another way"), byte-identical on a second start, nothing without the lock |
+| R3 | compat: the `v050-written/ws-h` set (history.json + last-apply.json as 0.5 writes them from the real fixture, `expect.json` for WS-E's compat040), the pinned 0.3.0 classes reading it, and one local run of the released 0.4.0 jar's own Journal, HistoryModel and ApplyResult over it | `src/test/resources/v050-written/ws-h/`, `V050WrittenWsHTest` | `V050WrittenWsHTest` (the set is what 0.5 writes; 0.3.0's Journal reads it OK); the 0.4.0 run recorded below |
+
+## RW-20 as landed
+
+| task | commit | tests |
+|---|---|---|
+| R1 fixture | 7ae2c726 | `src/test/resources/realworld/2026-09-28/` (README + `rigtune/history.json`, `rigtune/last-apply.json`; paths `${INSTANCE}/…`; equal to the 2026-09-27 capture's); `SkippedClaimsTest.theFixtureHoldsNoMachinePathOrName` (RealWorldFixturesTest's forbidden words and path rule; WS-L1's own test covers the folder once it merges) |
+| R2 relabel | d52199a8 | `SkippedClaimsTest` (8, red first: no class): the DH pair ABANDONED, the other 15 changes APPLIED, both results ABANDONED "installed another way", `finishedAt` and ops kept; a second pass → nothing; a later run (other op ids) or no last-apply.json → nothing; a `resultPath` or a recorded rename → nothing; an undo's change stays; an interrupted relabel completed; the record read only for a candidate. `HistoryStartupRw20Test` (2): through `HistoryStartup.run` on a temp instance, History's DH rows read "Not applied: installed another way", 15 applied changes, a second start byte-identical, nothing without the lock |
+| R3 compat | 116af1e7 | `v050-written/ws-h/` (`history.json`, `last-apply.json` as `HistoryStartup.run` writes them over the capture, `${INSTANCE}` templated back; `expect.json`: Journal OK 1 entry, HistoryModel 1 entry, no unknown kind); `V050WrittenWsHTest` (the set is what 0.5 writes; the pinned 0.3.0 Journal, HistoryModel and ApplyResult read it). The README's `ws-h` row (WS-K's file) now names the set. |
+
+**compat040, local run of the released 0.4.0 jar** (2026-09-28; `rigtune-0.4.0+mc26.2.jar`, sha256 801cd3b8…868a,
+which `self_update_e2e.released_problem` accepts as the release): a single-file program compiled at launch against that
+jar, Gson 2.14.0, fabric-loader and slf4j (compat030.py's classpath), over the ws-h set: `PASS Journal: history.json
+state OK, 1 entry`, `PASS Journal: 2 ABANDONED, 15 APPLIED`, `PASS ApplyResult: last-apply.json loads, both ABANDONED
+('installed another way')`, `PASS HistoryModel: the entry listed, the DH rows 'Not applied' with the reason`, `PASS
+HistoryUpdates: 0.4.0's start-up reconcile keeps the relabel`, `PASS 0.4.0 reading them changed no file`. The program and
+its output are in the WS-H scratch folder (`Compat040Rw20.java`, `compat040-rw20/output.txt`); in CI, WS-E's compat040
+interprets the set's `expect.json` once it lands.
+
+**Deviations and residuals (RW-20).**
+- The reason is corrected in last-apply.json as well as the journal (the only place History reads reasons from, and the
+  journal gets no new field). `finishedAt` stays, so neither the result toast nor preLaunch's WARN lines replay.
+- `client/undo/HistoryStartup.run` (not in the PLAN's WS-H list) gets one call; the logic is the new core class.
+- A 0.1.0-0.3.0 helper killed after its rename but before `pending.json` was rewritten, whose next run then reported the
+  op `SKIPPED_ALREADY_DONE` without a record, is relabelled too although RigTune did rename it: History then says "Not
+  applied" and Undo doesn't offer it (the safe side; the folder is right). The same residual as RW-1's (rw §2.4).
+- Also relabelled: a 0.1.0 last-apply.json's `SKIPPED_ALREADY_DONE` changes imported by the legacy import (0.1.0 had no
+  records, so none of its "already done" claims is proven).
+- Docs (CHANGELOG [0.5.0] Fixed): "History no longer claims a mod change RigTune's helper only found already in place
+  (for example a mod the launcher installed): at the first start of 0.5 such an entry shows as 'Not applied: installed
+  another way'." DESIGN "Journal": the one-time relabel.

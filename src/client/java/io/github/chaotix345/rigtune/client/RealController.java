@@ -739,6 +739,16 @@ public final class RealController implements RigTuneController {
 		return Files.isRegularFile(pendingFile);
 	}
 
+	// v0.5 (docs/v0.5/SPEC.md 4d; a coordinator-approved exception to the frozen file): pending.json changed outside this
+	// class (HELD_MOD_CHANGES' Cancel them, on a worker), so the carried-over count and the report follow it, as after a
+	// discard: on the render thread, where the count is kept.
+	public void stagedChanged() {
+		minecraft.execute(() -> {
+			recountStaged();
+			rebuild();
+		});
+	}
+
 	@Override
 	public Component discardPending() {
 		if (downloading) {
@@ -997,6 +1007,7 @@ public final class RealController implements RigTuneController {
 	@Override
 	public void deleteProfile(String id) {
 		profileService.deleteProfile(id);
+		v05().serverProfiles().forgetProfile(id);
 	}
 
 	@Override
