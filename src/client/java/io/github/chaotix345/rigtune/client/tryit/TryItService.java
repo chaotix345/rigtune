@@ -14,9 +14,11 @@ import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.ui.TryItScreen;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
+import io.github.chaotix345.rigtune.core.benchmark.BenchmarkHistory;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest.Scene;
+import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
 import io.github.chaotix345.rigtune.core.history.ApplyFailures;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
@@ -125,9 +127,13 @@ public final class TryItService {
 
 		void apply(Recommendation rec, String entryId);
 
-		Journal journal();
+		// history.json, read once.
+		Journal.Snapshot history();
 
 		List<BenchmarkRecord> runs();
+
+		// benchmarks.json could be read (and isn't from a newer RigTune).
+		boolean runsReadable();
 
 		Map<String, ApplyFailures.Failure> failures();
 
@@ -401,20 +407,24 @@ public final class TryItService {
 			TryItStore store = TryItStore.shared(configDir);
 			TryIt t = store.current();
 			storeWritable = store.writable();
-			Journal journal = game.journal();
 			historyStamp = stamp(Journal.file(configDir));
-			Journal.State state = journal.state();
+			// Review BENCH-1: one read of history.json (a second one that failed would make the entry look missing).
+			Journal.Snapshot history = game.history();
+			Journal.State state = history.state();
 			journalState = state;
 			TryItView derivedView;
 			if (t == null) {
 				// No try open (the usual case, e.g. at the start hook): nothing more to read.
 				derivedView = TryItView.EMPTY;
 			} else {
-				List<JournalEntry> entries = state == Journal.State.OK ? journal.entries() : List.of();
-				derivedView = TryItFlow.derive(t, game.runs(), new TryItFlow.History(state, entries, game.failures()),
+				List<JournalEntry> entries = state == Journal.State.OK ? history.entries() : List.of();
+				derivedView = TryItFlow.derive(t, game.runs(), game.runsReadable(), new TryItFlow.History(state, entries, game.failures()),
 						new TryItFlow.Live(SESSION, measuring, applying || applyDue));
 			}
-			if (!(closedHere && derivedView.tryIt() == null)) {
+			// Review BENCH-3: a derive queued before Start read tryit.json before the new try was written; it doesn't replace
+			// the try this session is starting.
+			boolean starting = derivedView.tryIt() == null && running() && view.tryIt() != null;
+			if (!(closedHere && derivedView.tryIt() == null) && !starting) {
 				closedHere = false;
 				TryItView shown = view;
 				view = shown.note() != null && derivedView.tryIt() != null && shown.tryIt() != null && shown.tryIt().id().equals(derivedView.tryIt().id())
@@ -492,11 +502,12 @@ public final class TryItService {
 	// BenchmarkController's outcome hook: only this try's runs (its pair id) are claimed.
 	static boolean claim(BenchmarkController.Outcome outcome) {
 		TryItService service = ticking;
-		return service != null && service.onOutcome(outcome.request(), outcome.cancelled() ? null : outcome.record());
+		return service != null && service.onOutcome(outcome.request(), outcome.cancelled() ? null : outcome.record(), outcome.stepsLeftOut() > 0);
 	}
 
-	// record: the stored run, null when it was cancelled or throttled.
-	boolean onOutcome(BenchmarkRequest request, @Nullable BenchmarkRecord record) {
+	// record: the stored run, null when it was cancelled or throttled. unsettled: a step's settle timed out on terrain that
+	// hadn't loaded (review BENCH-2).
+	boolean onOutcome(BenchmarkRequest request, @Nullable BenchmarkRecord record, boolean unsettled) {
 		TryItView v = view;
 		TryIt t = v.tryIt();
 		if (t == null || !measuring || !t.pairId().equals(request.pairId())) {
@@ -505,6 +516,18 @@ public final class TryItService {
 		measuring = false;
 		if (!afterRun) {
 			if (record != null && BenchmarkRecord.BEFORE.equals(record.phase()) && record.result() != null) {
+				if (t.kind() == TryIt.Kind.RESTART && BenchmarkTrend.excluded(record)) {
+					// Review BENCH-7: a before run left out of the trend (it created the benchmark world, or DH generated)
+					// can't give a verdict after the restart: stop now, before anything changes, and say why.
+					boolean fresh = record.context() != null && Boolean.TRUE.equals(record.context().worldFresh());
+					closeHere(t, TryIt.Decision.CANCELLED, new TryItView(Stage.STOPPED_BEFORE, t, record, null, null, null, null, true,
+							TryItText.excludedBefore(fresh)));
+					game.openScreen();
+					return true;
+				}
+				if (unsettled) {
+					unsettled(t, record);
+				}
 				// The before is saved: apply on the next tick, then measure again.
 				applyDue = true;
 				view = new TryItView(Stage.APPLYING, t, record, null, null, null, null, true);
@@ -517,11 +540,20 @@ public final class TryItService {
 			game.openScreen();
 			return true;
 		}
+		if (unsettled && record != null) {
+			unsettled(t, record);
+		}
 		io(() -> {
 			deriveNow();
 			game.later(game::openScreen);
 		});
 		return true;
+	}
+
+	// Review BENCH-2: the run's settle timed out on terrain that hadn't loaded: the try lists it (no verdict with it).
+	private void unsettled(TryIt t, BenchmarkRecord record) {
+		String runId = record.id();
+		io(() -> TryItStore.shared(game.configDir()).change(t.id(), x -> x.withUnsettled(runId)));
 	}
 
 	// Review M2: whatever the apply does (an exception included, maybe after journaling), the entry decides: derived again.
@@ -552,6 +584,19 @@ public final class TryItService {
 		rec = null;
 		if (t == null) {
 			return;
+		}
+		if (v.stage() == Stage.APPLYING && t.kind() == TryIt.Kind.NOW && t.to() != null) {
+			Map<String, String> settings = game.snapshot();
+			if (t.to().equals(settings.get(t.key()))) {
+				// Review BENCH-5: nothing journaled, but the option changed (History's write failed and only logged): the
+				// after snapshot is the proof, so the try stays open as ENTRY_MISSING (Keep only), with a note.
+				io(() -> {
+					TryItStore.shared(game.configDir()).change(t.id(), x -> x.withAfter(settings, SESSION, null));
+					view = deriveNow().withNote(TryItText.unrecorded());
+					game.later(game::openScreen);
+				});
+				return;
+			}
 		}
 		if (v.stage() == Stage.APPLYING || v.stage() == Stage.NOT_APPLIED) {
 			// Nothing was journaled for the key: the apply took nothing (review L7: only these; HISTORY_UNREADABLE keeps
@@ -848,13 +893,19 @@ public final class TryItService {
 		}
 
 		@Override
-		public Journal journal() {
-			return ClientJournal.get();
+		public Journal.Snapshot history() {
+			return ClientJournal.get().snapshot();
 		}
 
 		@Override
 		public List<BenchmarkRecord> runs() {
 			return BenchmarkStore.history().runs();
+		}
+
+		@Override
+		public boolean runsReadable() {
+			BenchmarkHistory history = BenchmarkStore.history();
+			return !history.unreadable() && !history.newerOnDisk();
 		}
 
 		@Override

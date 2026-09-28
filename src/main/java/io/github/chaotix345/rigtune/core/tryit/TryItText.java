@@ -171,7 +171,7 @@ public final class TryItText {
 			case ENTRY_MISSING -> out.add(warning(Text.of("rigtune.tryit.stage.entry_missing",
 					"History no longer lists this change, so RigTune can't tell whether it's in effect or revert it from here.")));
 			case HISTORY_UNREADABLE -> out.add(warning(Text.of("rigtune.tryit.stage.history_unreadable",
-					"History can't be read right now, so this Try it waits. Try again in a moment.")));
+					"History or the benchmark results can't be read right now, so this Try it waits. Try again in a moment.")));
 		}
 		return out;
 	}
@@ -210,9 +210,11 @@ public final class TryItText {
 	public static Text cause(Cause cause, HistoryModel.Labels labels) {
 		return switch (cause) {
 			case Cause.Condition c -> TrendText.difference(c.difference());
-			case Cause.Excluded e -> e.why() == Cause.Excluded.Why.FRESH_WORLD
-					? Text.of("rigtune.tryit.cause.fresh_world", "the first run in a new benchmark world")
-					: Text.of("rigtune.tryit.cause.dh_generating", "Distant Horizons was generating terrain");
+			case Cause.Excluded e -> switch (e.why()) {
+				case FRESH_WORLD -> Text.of("rigtune.tryit.cause.fresh_world", "the first run in a new benchmark world");
+				case DH_GENERATING -> Text.of("rigtune.tryit.cause.dh_generating", "Distant Horizons was generating terrain");
+				case TERRAIN_LOADING -> Text.of("rigtune.tryit.cause.terrain_loading", "the terrain hadn't finished loading");
+			};
 			case Cause.Moved m -> Text.of("rigtune.tryit.cause.moved", "you moved");
 			case Cause.Mods m -> Text.of("rigtune.tryit.cause.mods", "the loaded mods");
 			case Cause.Entry e -> Text.of("rigtune.tryit.cause.history", "a later change in History (%s)", kind(e.kind()));
@@ -244,7 +246,8 @@ public final class TryItText {
 			case READY -> Text.of("rigtune.tryit.notice.ready", "Try it: %s is in effect. Measure again to see what it did.", label);
 			case RESULT -> Text.of("rigtune.tryit.notice.result", "Try it: your result for %s is ready.", label);
 			case INTERRUPTED, NO_BEFORE, ENTRY_MISSING -> Text.of("rigtune.tryit.notice.decide", "Try it: %s needs your decision.", label);
-			case HISTORY_UNREADABLE -> Text.of("rigtune.tryit.notice.history", "Try it: History can't be read right now, so your try of %s waits.", label);
+			case HISTORY_UNREADABLE -> Text.of("rigtune.tryit.notice.history", "Try it: History or the benchmark results can't be read right now, so your try of %s waits.",
+					label);
 			default -> Text.of("rigtune.tryit.notice.ended", "Try it: your try of %s has ended. Open it to see how.", label);
 		};
 	}
@@ -273,6 +276,18 @@ public final class TryItText {
 			case NOT_APPLIED -> Text.of("rigtune.tryit.toast.body.not_applied", "Open RigTune: the change wasn't applied.");
 			default -> null;
 		};
+	}
+
+	// Review BENCH-5: the option changed, but History's write failed.
+	public static Text unrecorded() {
+		return Text.of("rigtune.tryit.note.unrecorded", "History couldn't record this change (see the log), so it can't be reverted from here. It is applied.");
+	}
+
+	// Review BENCH-7: a RESTART try's before run was left out of the trend, so it stopped before the change.
+	public static Text excludedBefore(boolean freshWorld) {
+		return freshWorld
+				? Text.of("rigtune.tryit.note.fresh_world", "The benchmark world was just created, and its first run can't be compared, so nothing was changed. Start the try again for a verdict.")
+				: Text.of("rigtune.tryit.note.dh_generating", "Distant Horizons was generating terrain during the first measurement, so nothing was changed. Start the try again once it has finished.");
 	}
 
 	// Why the chain stopped before its run (a note): the benchmark's refusal, or a run that ended without its outcome.
