@@ -454,6 +454,27 @@ class ServerProfileStoreTest {
 		assertEquals(JsonParser.parseString("{\"z\": [\"w\"]}"), after.getAsJsonObject("servers").getAsJsonObject(store.keyOf(PLAY)).get("more"));
 	}
 
+	// review-11 SEC-2: players edit this file. A time before 2000 or more than a day ahead reads as unknown (no date),
+	// whatever Instant.parse accepts (up to year ±1,000,000,000); the entry itself stays readable and offered.
+	@Test
+	void timesOutsideTheSaneRangeReadAsUnknown() throws IOException {
+		ServerProfileStore store = store();
+		store.remember(PLAY, REMOTE, "p-1", T0);
+		JsonObject root = json();
+		JsonObject entry = root.getAsJsonObject("servers").getAsJsonObject(store.keyOf(PLAY));
+		for (String bad : new String[]{"+1000000000-12-31T23:59:59Z", "-1000000000-01-01T00:00:00Z", "1999-12-31T23:59:59Z",
+				Instant.now().plus(java.time.Duration.ofDays(2)).toString()}) {
+			entry.addProperty("lastSeen", bad);
+			entry.addProperty("setAt", bad);
+			write(root.toString());
+			assertEquals(new Entry(store.keyOf(PLAY), "p-1", REMOTE, null, null), store.get(PLAY), bad);
+			assertEquals(1, store.entries().size(), bad);
+		}
+		entry.addProperty("lastSeen", "2000-01-01T00:00:00Z");
+		write(root.toString());
+		assertEquals(Instant.parse("2000-01-01T00:00:00Z"), store.get(PLAY).lastSeen(), "2000 on is fine");
+	}
+
 	// ServerProfileService's notice re-check: the entry a pending offer came from, by its key.
 	@Test
 	void anEntryByItsKey() {
