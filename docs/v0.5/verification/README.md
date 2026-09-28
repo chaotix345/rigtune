@@ -55,6 +55,12 @@ Owner: WS-W (2L's performance-counter advice, AC2L.5), WS-W2 (AC9.8's launches).
   not yet the RC jar): the detection read Perflib off and PerfOS's REG_SZ as unusual; CrashReportMixin measured the
   crash-report setup at 3135 ms and Tools showed the advice with "3.1 s"; the Perflib key exported before and after is
   byte-identical. Details in docs/v0.5/design/ws-w.md, "Evidence" (W13). AC2L.5 itself is Phase 5's (RC jar).
+- WS-W2's AC9.8 (2026-09-28, this PC, the branch's 26.2 production client on the worktree's dev run dir, under the
+  game-test lock; `startup/ac9.8-launch-alerts/`): unchanged launches never raised the notice (runs A, B, E); after adding
+  the player's heavier mods, launch 9 of run E was SLOWER +46.8 % with the crash-report setup left out (RW-19) and the
+  mod-count cause (7 → 46 mods), shown on the notice line and in Tools; after its Got it, two more slow launches were the
+  same streak and raised no second notice. The player's 44 real launches: raw 0 SLOWER; with the setup left out, the 5
+  launches of the real 09-20..09-24 slowdown and nothing else (two notices with the streak rule).
 
 ## smoke
 Owner: the coordinator (3i's production smokes: AC3i.1-AC3i.3).

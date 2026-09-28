@@ -1,0 +1,12 @@
+launch	at	ms	preloadMs	mods	key	assessment
+1	2026-09-28T02:21:27Z	17577	8133	7	-	too few comparable launches (0 of 5)
+2	2026-09-28T02:22:33Z	12372	2865	7	-	too few comparable launches (1 of 5)
+3	2026-09-28T02:23:42Z	11240	3147	7	-	too few comparable launches (2 of 5)
+4	2026-09-28T02:24:36Z	9449	1711	7	-	too few comparable launches (3 of 5)
+5	2026-09-28T02:25:53Z	10555	2494	7	-	too few comparable launches (4 of 5)
+6	2026-09-28T02:27:08Z	11677	3772	7	-	IN_LINE: -2.3 % vs the median 8.1 s of 5 comparable launches, crash-report setup left out (floor 13.0 %)
+7	2026-09-28T02:28:12Z	9523	2659	7	-	IMPROVEMENT: -15.0 % vs the median 8.1 s of 6 comparable launches, crash-report setup left out (floor 10.0 %)
+8	2026-09-28T02:29:27Z	10761	2989	7	-	IN_LINE: -3.6 % vs the median 8.1 s of 7 comparable launches, crash-report setup left out (floor 11.9 %)
+9	2026-09-28T02:30:53Z	14791	3075	46	startup.regression.2026-09-28T02:30:53Z	SLOWER: +46.8 % vs the median 8.0 s of 8 comparable launches, crash-report setup left out (floor 10.0 %); cause: MOD_COUNT	Launch time 47% higher than usual, not counting Minecraft's crash-report setup (11.7 s vs your usual ~8.0 s) / May be related to your mod set changing (7 ? 46 mods) since your last launch
+10	2026-09-28T02:32:05Z	14354	3227	46	startup.regression.2026-09-28T02:30:53Z	SLOWER: +38.0 % vs the median 8.1 s of 9 comparable launches, crash-report setup left out (floor 11.9 %); slower 2 launches in a row, from 2026-09-28T02:30:53Z; cause: MOD_COUNT	Launch time 38% higher than usual, not counting Minecraft's crash-report setup (11.1 s vs your usual ~8.1 s) / Slower for your last 2 launches; may be related to your mod set changing (7 ? 46 mods) before the first of them
+11	2026-09-28T02:33:07Z	14225	2712	46	startup.regression.2026-09-28T02:30:53Z	SLOWER: +42.5 % vs the median 8.1 s of 10 comparable launches, crash-report setup left out (floor 28.5 %); slower 3 launches in a row, from 2026-09-28T02:30:53Z; cause: MOD_COUNT	Launch time 43% higher than usual, not counting Minecraft's crash-report setup (11.5 s vs your usual ~8.1 s) / Slower for your last 3 launches; may be related to your mod set changing (7 ? 46 mods) before the first of them

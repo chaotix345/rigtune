@@ -1,0 +1,16 @@
+# what this branch's StartupTrend (66c78c13) decides for each recorded launch; the "?" in the lines is an arrow the console couldn't print
+launch	at	ms	preloadMs	mods	key	assessment
+1	2026-09-27T18:07:10Z	11780	null	7	-	too few comparable launches (0 of 5)
+2	2026-09-27T18:08:04Z	11192	null	7	-	too few comparable launches (1 of 5)
+3	2026-09-27T18:09:00Z	10488	null	7	-	too few comparable launches (2 of 5)
+4	2026-09-27T18:10:00Z	12036	null	7	-	too few comparable launches (3 of 5)
+5	2026-09-27T18:11:02Z	10386	null	7	-	too few comparable launches (4 of 5)
+6	2026-09-27T18:12:03Z	11553	null	7	-	IN_LINE: +3.2 % vs the median 11.2 s of 5 comparable launches (floor 18.7 %)
+7	2026-09-27T18:13:01Z	10580	null	7	-	IN_LINE: -7.0 % vs the median 11.4 s of 6 comparable launches (floor 14.0 %)
+8	2026-09-28T01:04:41Z	11241	null	7	-	IN_LINE: +0.4 % vs the median 11.2 s of 7 comparable launches (floor 16.2 %)
+9	2026-09-28T01:05:45Z	9633	null	7	-	IN_LINE: -14.1 % vs the median 11.2 s of 8 comparable launches (floor 15.9 %)
+10	2026-09-28T01:06:43Z	11476	null	28	-	IN_LINE: +2.5 % vs the median 11.2 s of 9 comparable launches (floor 16.2 %); cause: MOD_COUNT
+11	2026-09-28T01:07:35Z	10461	null	28	-	IN_LINE: -6.7 % vs the median 11.2 s of 10 comparable launches (floor 15.9 %)
+12	2026-09-28T01:20:47Z	21194	null	46	startup.regression.2026-09-28T01:20:47Z	SLOWER: +94.7 % vs the median 10.9 s of 10 comparable launches (floor 12.6 %); cause: MOD_COUNT	Launch time 95% higher than usual (21.2 s vs your usual ~10.9 s) / May be related to your mod set changing (28 ? 46 mods) since your last launch
+13	2026-09-28T01:22:02Z	15527	null	46	startup.regression.2026-09-28T01:20:47Z	SLOWER: +42.3 % vs the median 10.9 s of 10 comparable launches (floor 14.8 %); slower 2 launches in a row, from 2026-09-28T01:20:47Z; cause: MOD_COUNT	Launch time 42% higher than usual (15.5 s vs your usual ~10.9 s) / Slower for your last 2 launches; may be related to your mod set changing (28 ? 46 mods) before the first of them
+14	2026-09-28T01:34:37Z	23709	null	46	startup.regression.2026-09-28T01:20:47Z	SLOWER: +108.7 % vs the median 11.4 s of 10 comparable launches (floor 21.9 %); slower 3 launches in a row, from 2026-09-28T01:20:47Z; cause: MOD_COUNT	Launch time 109% higher than usual (23.7 s vs your usual ~11.4 s) / Slower for your last 3 launches; may be related to your mod set changing (28 ? 46 mods) before the first of them
