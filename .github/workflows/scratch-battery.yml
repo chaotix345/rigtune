@@ -1,6 +1,6 @@
 name: scratch-battery
-# SCRATCH (WS-E, review M3 and AC3f.1): e2e.yml's release tier with only its battery-oshi and stutter-script legs (the e2e
-# rows are off on this branch), on jars its own jars job builds. Never merged.
+# SCRATCH (WS-E): e2e.yml's full release tier (the 21 e2e rows at max-parallel 6, battery-oshi, stutter-script), on jars
+# its own jars job builds (the coordinator's decision (a), 2026-09-28). Never merged.
 on:
   push:
     branches: [scratch/ws-e-battery-oshi]

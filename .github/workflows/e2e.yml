@@ -88,8 +88,7 @@ jobs:
   e2e:
     name: e2e ${{ matrix.id }} (${{ matrix.mc }})
     needs: [matrix, jars]
-    # SCRATCH (WS-E, review M3): only the battery-oshi and stutter-script legs run here.
-    if: false
+    if: ${{ !cancelled() && needs.matrix.result == 'success' && (needs.jars.result == 'success' || needs.jars.result == 'skipped') }}
     # Pinned like the game-test legs (another Mesa and Xvfb come with a newer image).
     runs-on: ubuntu-24.04
     timeout-minutes: 20
