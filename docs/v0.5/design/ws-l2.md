@@ -275,3 +275,28 @@ tick listener exists only after a leftover with mod-file ops. Every value stays 
 - APPLY-3's count: `RealController.pendingChanges()` leaves out `staged.unowned(heldOps())`, the service's last read of
   the held ops (in memory, live against the policy; none before its first read). `restartParts` adds
   `rigtune.repair.held.status` for them. RealController is WS-K's frozen file; the finding names these lines.
+
+### The downgrade gate for APPLY-5's `done` field (the coordinator's, before the merge)
+
+`unfinished-groups.json` is read by 0.4.0's helper after a downgrade, and 0.4.0 may rewrite it. 0.1.0-0.3.0 never touch
+it: the file is 0.4's, and no class of the released 0.1.0, 0.2.0 or 0.3.0 jars names it (a scan of their classes).
+
+1. **0.4.0 reads a record with the field, and acts as it does without it.**
+   - ws-l2's set now carries `unfinished-groups.json` as a 0.5 helper killed during its retries leaves it: the held
+     group's two renames, `done: false`. `V050WrittenWsl2Test` writes it.
+   - compat040 with the released 0.4.0 jar: `PASS ws-l2 #2 ApplyHelper pending.json: group a1b2…c02: … OK [c01, c03];
+     [OK Disabled e2e-held-1.0.0.jar -> e2e-held-1.0.0.jar.disabled, OK Enabled e2e-held-1.1.0.jar]`, and `ws-l2 0.4.0
+     reading the set changed no file: 3 file(s)`. 0.4.0's ApplyExecutor read that record on the spare copy and applied the
+     group. CI's compat040 step runs the same on every push.
+   - Direct check, `scratch/ws-l2/gate/RecordCompat.java` against the released jar and Gson 2.14.0 only: 0.4.0's own
+     `UnfinishedGroups.recorded()` reads the record with `done` and the same record without it to equal lists (2 renames;
+     Gson ignores the unknown field).
+2. **compat030 (the released 0.3.0 jar)** passes with the record in the composed instance: `0.3.0 reading them changed no
+   file: 10 file(s) unchanged`. 0.3.0 has no class that reads it; `RecordCompat.java` doesn't even compile against 0.3.0
+   or 0.2.0, because `UnfinishedGroups` doesn't exist there.
+3. **An old helper's rewrite drops the field.** Serialised by 0.4.0's own record type, the renames come out as
+   `{"op":…,"from":…,"to":…}` (RecordCompat prints it). 0.5 then reads `done` as null, a record 0.4 wrote, which under the
+   hold proves nothing: the group is held. `ApplyExecutorHoldTest.a04RecordIsNoProofUnderTheHold` pins exactly that
+   shape (a rename in effect, no `done`: no result, the files untouched). Without the hold, 0.5 takes such a rename in
+   effect as done earlier, as 0.4 does.
+
