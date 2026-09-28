@@ -117,6 +117,12 @@ class EvaluateTest(unittest.TestCase):
         (logs / "latest.log").write_text("[00:00:01] b\n", encoding="utf-8")
         self.assertEqual(["[23:59:59] a", "[00:00:01] b"], stutter_run.client_log(logs))
 
+    def test_sodium_only_when_the_node_has_a_build_of_it(self):
+        # review-11 CI-4
+        self.assertEqual([("net.fabricmc.fabric-api", "fabric-api", "0.161.0+26.2"), ("maven.modrinth", "sodium", "mc26.2-0.9.2-fabric")],
+                         stutter_run.mod_coordinates("fabric_api_version=0.161.0+26.2" + chr(10) + "sodium_version=mc26.2-0.9.2-fabric" + chr(10)))
+        self.assertEqual([("net.fabricmc.fabric-api", "fabric-api", "0.170.0+26.9")], stutter_run.mod_coordinates("fabric_api_version=0.170.0+26.9" + chr(10)))
+
     def test_gc_pauses_are_read_with_their_end_time(self):
         pauses = stutter_run.gc_pauses(self.gc)
         self.assertEqual((2 * 3600 + 12 * 60 + 21.020, 1.896, "Pause Young"), pauses[0])

@@ -188,6 +188,16 @@ def parse_args(argv):
     return args
 
 
+def mod_coordinates(props):
+    """(group, artifact, version) of the mods next to RigTune: fabric-api, and Sodium when the node has a build of it
+    (add_mc_version.py leaves sodium_version out otherwise; never-generated terrain doesn't need it: review-11 CI-4)."""
+    found = lambda key: (re.search(r"^{}=(.+)$".format(key), props, re.M) or [None, None])[1]
+    out = [("net.fabricmc.fabric-api", "fabric-api", found("fabric_api_version").strip())]
+    if found("sodium_version"):
+        out.append(("maven.modrinth", "sodium", found("sodium_version").strip()))
+    return out
+
+
 def main(argv=None):
     args = parse_args(argv)
     name = "stutter-script-{}-{}".format(args.mc, uuid.uuid4().hex[:6])
@@ -196,10 +206,8 @@ def main(argv=None):
     (instance / "mods").mkdir(parents=True)
     out.mkdir(parents=True, exist_ok=True)
     props = (REPO / "versions" / args.mc / "gradle.properties").read_text(encoding="utf-8")
-    cache = Path.home() / ".gradle" / "caches" / "modules-2" / "files-2.1"
-    jars = [Path(args.new_jar).resolve(),
-            e2e_env.gradle_jar(cache, "net.fabricmc.fabric-api", "fabric-api", re.search(r"^fabric_api_version=(.+)$", props, re.M).group(1).strip()),
-            e2e_env.gradle_jar(cache, "maven.modrinth", "sodium", re.search(r"^sodium_version=(.+)$", props, re.M).group(1).strip())]
+    jars = [Path(args.new_jar).resolve()] + [e2e_env.gradle_jar(Path.home() / ".gradle" / "caches" / "modules-2" / "files-2.1", *m)
+                                             for m in mod_coordinates(props)]
     for jar in jars:
         shutil.copyfile(jar, instance / "mods" / jar.name)
     (instance / "options.txt").write_text(LF.join(OPTIONS) + LF, encoding="utf-8")
