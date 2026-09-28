@@ -6,7 +6,7 @@ Game test: `src/gametest/java/io/github/chaotix345/rigtune/gametest/LanGuestGame
 
 - **LAN guest (AC3d.1).**
   - A dedicated server from `worldBuilder().createServer(props)`: `online-mode=false`, `view-distance=6`, `simulation-distance=5`, a free port (never 25565).
-  - Vanilla's own `new LanServerPinger("RigTune LAN test", "<port>")` announces it. These are the arguments `publishServer` passes.
+  - Vanilla's own `new LanServerPinger("RigTune LAN test <port>", "<port>")` announces it: a MOTD and the port, which is what `publishServer` passes. The port in the MOTD lets the test pick its own server's entry (review L5).
   - `JoinMultiplayerScreen` lists it under "Scanning for games on your local network". The test selects the `NetworkServerEntry` and presses **Join Server** (`selectServer.select`), as a player does. `NetworkServerEntry.join()` is what makes the `ServerData` a LAN one; the fabric API's `connect()` would give `Type.OTHER`.
   - Checks:
     - `getCurrentServer().isLan()`;
@@ -39,10 +39,14 @@ Game test: `src/gametest/java/io/github/chaotix345/rigtune/gametest/LanGuestGame
 | date | where | result | evidence |
 |---|---|---|---|
 | 2026-09-27 | local, Windows 11, 26.2 production client (`-PgametestClasses=LanGuestGameTest,A11yGameTest`) | PASS, 17.2 s | `local-windows-26.2/*.png` |
+| 2026-09-28 | CI [36363179808](https://github.com/chaotix345/rigtune/actions/runs/36363179808): 26.2 OpenGL, 26.3 OpenGL, 26.3 Vulkan | PASS, 13.4 / 14.9 / 14.5 s | the `gametest-screenshots-*` artifacts |
 
-On Windows the LAN detector saw the host at its LAN interface address (`192.168.4.71:<port>`), not 127.0.0.1. This is Windows' multicast loopback. The key follows the detected host (`lan:192.168.4.71`). In CI the game-test step runs in `tools/ci/offline.sh`'s namespace (only `lo`, multicast routed to it), so the detected address there is `127.0.0.1:<port>` (SPEC 1a).
+On Windows the LAN detector saw the host at its LAN interface address (`192.168.4.71:<port>`), not 127.0.0.1. This is Windows' multicast loopback. The key follows the detected host (`lan:192.168.4.71`). CI detects it differently (below).
 
-The CI runs (every leg, both nodes) are added here once the branch is pushed. They are held during the coordinator's streak.
+**In CI the detected address is `0.0.0.0:<port>`, not 127.0.0.1.**
+- The game runs in `tools/ci/offline.sh`'s namespace, where the multicast route `224.0.0.0/4 dev lo` names no source address, so the pinger's packets leave with source 0.0.0.0.
+- The join works either way. The product keys the host as `lan:0.0.0.0`.
+- The first CI run (36361989137) asserted 127.0.0.1 (SPEC 1a's wording) and failed on this alone. The CI check is now "a loopback or wildcard address", and the finding went to ws-ci: a `src 127.0.0.1` on that route would presumably give 127.0.0.1, unverified.
 
 ## Stays UNVERIFIED
 
