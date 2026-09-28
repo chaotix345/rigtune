@@ -211,6 +211,12 @@ tick listener exists only after a leftover with mod-file ops. Every value stays 
   with feat/v0.5.0): green on every job and all three legs, with 2207 unit tests per node, 3 skipped. One of the three was
   `LauncherRepairTest.theRealInstance`, which needed WS-L1's fixtures; it runs from the final merge on.
 - 36337663582 (merged with WS-H, WS-W and WS-P) and 36361148396 (ws-l2's set with the disable's `modId`): green.
+- The final run, 36366836591 (fee252a4, merged with feat/v0.5.0 @ b9916e39, WS-L1 included): 8/8 green on attempt 1, with
+  2633 unit tests per node (3 skipped, none of WS-L2's; `theRealInstance` runs). `gametest-screenshots-26.2-OpenGL`:
+  `launcher-held-notice-1280x720-scale2` under the real Modrinth App policy (the held notice, then WS-L1's steps in the
+  rows).
+- The revert of the disable's `modId` in ws-l2's set moves to WS-E (`r-verify`), in the same commit as its
+  `materialize()` file-name fallback (the coordinator's decision, 2026-09-28).
 - `gametest-screenshots-26.2-OpenGL` of 36325285181 and `-26.3-Vulkan` of 36327592019: `launcher-held-notice-*` (the
   notice line at 1280×720, 640×480 (the "..." button) and 854×480, message cut with "..." and the detail as tooltip,
   inside the screen); `launcher-leftover-toast-launcher` / `-rigtune` (36325285181 caught the toast mid-slide-in; b6bf6e6a
@@ -237,7 +243,7 @@ tick listener exists only after a leftover with mod-file ops. Every value stays 
 | AC4f.3 (failed/dropped toasts over ABANDONED-only, FAILED-only, mixed) | verified | `HelperToastsTest` |
 | AC4f.4 (E2E `v010-dh-app-reinstalled`) | UNVERIFIED here | WS-E's release tier |
 | AC4d.1 (hold: file groups stay, attempts unchanged, patches apply; the property exactly under LAUNCHER/PENDING, classpath our jar + Gson) | verified | `ApplyExecutorHoldTest` (8), `HelperLauncherTest` (the property per policy; a child-JVM helper with our jar and Gson) |
-| AC4d.2 (the notice; Cancel them: no file op, `.rigtune-superseded`, DISCARDED; Let RigTune apply them: opt-in) | verified with the real policy (closes here: WS-L1 merged first, Cross-workstream ACs) | `LauncherManagedGameTest.heldAndRepair` under the `theseus` brand (3 legs, the final run), earlier with the forced policy (36325285181, 36327592019); `LauncherRepairServiceTest` |
+| AC4d.2 (the notice; Cancel them: no file op, `.rigtune-superseded`, DISCARDED; Let RigTune apply them: opt-in) | verified with the real policy (closes here: WS-L1 merged first, Cross-workstream ACs) | `LauncherManagedGameTest.heldAndRepair` under the `theseus` brand (3 legs, the final run 36366836591), earlier with the forced policy (36325285181, 36327592019); `LauncherRepairServiceTest` |
 | AC4d.3 (compat040: 0.4.0's helper applies a held group) | set committed (`v050-written/ws-l2` + `expect.json`); closes when WS-E's interpreter merges | compat030 PASS on the set |
 | AC4d.4 (no "will be retried" WARN or toast for held groups, only the waiting wording; nothing in last-apply.json; today's toast under RIGTUNE) | verified | `RigTunePreLaunchTest` (+2), `HelperToastsTest`, `LauncherRepairServiceTest` (the listener), `ApplyExecutorHoldTest` (no result written), `heldAndRepair` (the toasts under LAUNCHER and RIGTUNE, screenshots) |
 | AC4g.1 (findings per kind and repaired; the real instance: 1 pair, 7 added) | verified | `LauncherRepairTest` (14), the real-instance case on WS-L1's `RealWorldFixtures` |
