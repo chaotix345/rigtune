@@ -22,6 +22,7 @@ import io.github.chaotix345.rigtune.core.model.Impact;
 import io.github.chaotix345.rigtune.core.model.ModFile;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
+import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
 import io.github.chaotix345.rigtune.core.report.LauncherModAdvice;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
@@ -46,10 +47,14 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 // docs/v0.5/SPEC.md 4j (AC4j.2 and the P0.4 game-test checks): RigTune in an instance whose launcher keeps its own
@@ -77,6 +82,8 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 		String brand = System.getProperty(BRAND);
 		Path index = real.modsDir().resolve(".index");
 		boolean indexWasThere = Files.exists(index);
+		int[] window = context.computeOnClient(mc -> new int[]{mc.getWindow().getScreenWidth(), mc.getWindow().getScreenHeight(), mc.options.guiScale().get()});
+		Set<String> pendingBefore = pendingIds(v05.configDir());
 		boolean network = GameTestNet.set(context, real, false);
 		Throwable failure = null;
 		try {
@@ -114,11 +121,15 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 			try {
 				restoreBrand(brand);
 				deleteIndexFixture(index, indexWasThere);
+				// Review L12: through SettingsSaver (X8), the window as it was, and no pending op of this block's left behind.
 				context.runOnClient(mc -> {
 					ClientSettings settings = real.settings();
 					settings.modFilesByRigTune = false;
-					settings.save(v05.configDir());
+					SettingsSaver.shared().save(settings, v05.configDir());
 				});
+				check(SettingsSaver.shared().flush(10_000), "settings.json saved");
+				dropCreatedPendingOps(context, real, v05.configDir(), pendingBefore);
+				resize(context, window);
 				context.runOnClient(mc -> LauncherProbe.reset());
 				GameTestNet.set(context, real, network);
 				context.waitFor(mc -> real.report() != null && real.modFiles() != ModFilesPolicy.PENDING, 1200);
@@ -181,7 +192,14 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 		check(report.recommendations().stream().noneMatch(LauncherManagedGameTest::modFileAction), "no Add/Update/Disable appliable: " + report.recommendations());
 		List<Recommendation> advised = report.recommendations().stream().filter(LauncherModAdvice::advised).toList();
 		RigTune.LOGGER.info("LauncherManagedGameTest: {} mod-file rows are the Modrinth App's: {}", advised.size(), advised.stream().map(Recommendation::id).toList());
+		// Review M5: the offline catalog's add rows are there in every run, so the checks below can fail; each advised row
+		// carries the app's note, never PENDING's.
+		check(!advised.isEmpty(), "the offline catalog's add rows became the app's advice");
 		check(advised.stream().allMatch(r -> !r.appliable() && !r.selectedByDefault()), "advised rows are unticked advice");
+		for (Recommendation r : advised) {
+			List<String> notes = keys(r.reasonText()).filter(k -> k.startsWith("rigtune.launcher.mod_files.note.")).toList();
+			check(notes.size() == 1 && NOTES.contains(notes.getFirst()), r.id() + "'s launcher note: " + notes);
+		}
 		context.getInput().setCursorPos(1, 1);
 		context.runOnClient(mc -> mc.gui.setScreen(new RigTuneScreen(new TitleScreen(), real)));
 		context.waitForScreen(RigTuneScreen.class);
@@ -196,6 +214,19 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 			context.takeScreenshot("launcher-managed-rows-" + size[0] + "x" + size[1] + "-scale" + size[2]);
 		}
 		resize(context, new int[]{854, 480, 2});
+	}
+
+	private static final Set<String> NOTES = Set.of("rigtune.launcher.mod_files.note.add", "rigtune.launcher.mod_files.note.update",
+			"rigtune.launcher.mod_files.note.disable");
+
+	// Every translation key in a Text, its arguments' too.
+	private static Stream<String> keys(@Nullable Text text) {
+		return switch (text) {
+			case null -> Stream.empty();
+			case Text.Translatable t -> Stream.concat(Stream.of(t.key()), t.args().stream().filter(a -> a instanceof Text).flatMap(a -> keys((Text) a)));
+			case Text.Joined j -> j.parts().stream().flatMap(LauncherManagedGameTest::keys);
+			case Text.Literal l -> Stream.empty();
+		};
 	}
 
 	// AC4b.2: Apply given a crafted add, update and disable under LAUNCHER stages nothing and leaves mods/ byte-identical.
@@ -329,6 +360,39 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 			throw new IllegalStateException(e);
 		}
 		return out;
+	}
+
+	private static Set<String> pendingIds(Path configDir) {
+		Path pending = PendingActions.defaultPath(configDir);
+		if (!Files.exists(pending)) {
+			return Set.of();
+		}
+		try {
+			return PendingActions.load(pending).ops().stream().map(PendingActions.Op::id).filter(Objects::nonNull).collect(Collectors.toSet());
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
+
+	// Review L12: whatever this block staged (nothing should be: the crafted Apply is refused) is dropped again; with nothing
+	// staged before, through the Discard path.
+	private static void dropCreatedPendingOps(ClientGameTestContext context, RealController real, Path configDir, Set<String> before) {
+		Set<String> created = new HashSet<>(pendingIds(configDir));
+		created.removeAll(before);
+		if (created.isEmpty()) {
+			return;
+		}
+		RigTune.LOGGER.warn("LauncherManagedGameTest: dropping {} pending op(s) it staged", created.size());
+		if (before.isEmpty()) {
+			context.runOnClient(mc -> real.discardPending());
+			return;
+		}
+		Path pending = PendingActions.defaultPath(configDir);
+		try {
+			PendingActions.load(pending).remove(created).plan().save(pending);
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
 	}
 
 	private static long fileOps(Path configDir) {
