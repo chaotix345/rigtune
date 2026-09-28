@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.client.stutter;
 
+import io.github.chaotix345.rigtune.core.stutter.FixConditions;
 import io.github.chaotix345.rigtune.core.stutter.FrameRing;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import io.github.chaotix345.rigtune.core.stutter.StutterRings;
@@ -38,6 +39,10 @@ public final class StutterMonitor {
 		volatile boolean aroundBenchmark;
 		// v0.5 RW-11: a session's settings when it started (SettingsWatch); null for a benchmark's capture.
 		volatile @Nullable Map<String, String> settingsAtStart;
+		// v0.5 C20 (docs/v0.5/SPEC.md 5): the kind of world a session played (ServerLimits.Kind's name) and the conditions a
+		// stutter fix's sessions are compared under, both taken when it started; null for a benchmark's capture.
+		volatile @Nullable String worldKind;
+		volatile @Nullable FixConditions fixAtStart;
 		private boolean skipNext = true;
 
 		Capture(FrameRing ring, long startNanos, Instant startedAt, String source) {

@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // C8's order wins, none refuses nothing; the callers delegate and no second copy of the checks remains.
 class BusyTest {
 	// The callers, under client/: C20's StutterFixService and C09's Triable add themselves when they land.
-	private static final List<String> CALLERS = List.of("profile/ProfileService.java");
+	private static final List<String> CALLERS = List.of("profile/ProfileService.java", "stutter/StutterFixService.java");
 
 	private static String key(Text text) {
 		return ((Text.Translatable) text).key();
