@@ -112,6 +112,12 @@ final class TrendFixtures {
 			return this;
 		}
 
+		// review-11 COMPAT-2: the graphics backend and the GPU the run rendered with (null = not recorded).
+		Run graphics(@Nullable String backend, @Nullable String gpu) {
+			context = context.withGraphics(backend, gpu);
+			return this;
+		}
+
 		// docs/v0.5/SPEC.md RW-8: the run created the benchmark world.
 		Run fresh() {
 			context = context.withWorldFresh(true);

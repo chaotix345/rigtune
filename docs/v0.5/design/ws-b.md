@@ -256,3 +256,29 @@ Sent to the coordinator with proposed dispositions; fixed in 03c46c37 (red tests
 | AC2A.2 (no content lost; X12 layout; high contrast) | verified | the walk's `textContent()` checks every table value and header at the 3 sizes, its layout check (no widget outside, none overlapping), the screenshots compared above, `a11y-hc-bench-*` |
 | AC2A.3 (README known limits) | docs workstream | text in "Docs" above |
 
+## Review-11 fixes (branch fix/v05-r11-ws-b)
+- **COMPAT-2 (MEDIUM): FIXED.** No v0.5 comparison recorded the active graphics backend or the GPU, so an OpenGL/iGPU
+  "before" and a Vulkan/dGPU "after" (26.3's Graphics API option, or its own fallback to Vulkan) were compared as equal.
+  Red first: `BenchmarkTrendTest.compat2AnotherBackendOrGpuIsNotComparable`, `.compat2AVulkanRunAfterOpenGlRunsGetsNoVerdict`,
+  `.compat2TheRerunMarkerNamesABackendOrGpuChange` and `BenchmarkConditionsTest.compat2TheBackendAndGpuComeFromTheProbe`
+  (compile failures on 111cb2be: nothing records or compares them). Now:
+  - `BenchmarkRecord.Context` has two optional fields, `backend` (`GraphicsBackend` name, "OPENGL" / "VULKAN") and `gpu`
+    (the probe's renderer string, at most 128 characters), null on older runs and not written then; the 7-, 9- and 12-arg
+    constructors are kept; `withGraphics(backend, gpu)`. (BenchmarkRecord is WS-K's frozen file: two fields, assigned by
+    the coordinator.)
+  - BenchmarkController records them at the run's start from `BenchmarkConditions.Graphics.current()` (the hardware
+    profile's `GpuInfo`; UNKNOWN / "unknown" → null).
+  - `BenchmarkTrend.Difference.BACKEND` (both known and different) and `Difference.GPU` (both known and different on the
+    same or an unknown backend; not across backends, where one device reads differently) join `differences()`, so
+    `comparable()`, the baseline, "different conditions (graphics backend)", Try It's NOT_COMPARABLE causes
+    (`TryItVerdict` reads `differences`) and the rerun marker (`Current` gained `backend`/`gpu`, old constructor kept)
+    all see them. Unknown on either side claims nothing (0.4 runs stay comparable). The context key leaves them out, and
+    a context shows the runs comparable with its newest one (so the note and chart match the verdict).
+  - Names: "graphics backend", "GPU" (`rigtune.benchmark.trend.key.backend/gpu`).
+  - Fixture `ws-b` regenerated with both fields on three runs; compat040 (the released 0.4.0 jar over every set): `ws-b #1
+    BenchmarkHistory: state OK; runs 4`, "0.4.0 reading the set changed no file", RESULT PASS; compat030 (0.3.0, ws-b's
+    runs appended to v040-written): runs 9 of 9, no file changed, RESULT PASS.
+  - Told ws-t (Try It: nothing to change, `Difference.BACKEND/GPU` arrive through `differences()` unless `Triable.allowed`
+    lists them) and ws-s2 (C20's `FixConditions` should compare the backend the same way). C18's startup trend is a
+    residual (the coordinator's call).
+
