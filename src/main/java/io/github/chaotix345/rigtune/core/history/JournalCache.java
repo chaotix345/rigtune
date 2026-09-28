@@ -14,7 +14,9 @@ import java.util.WeakHashMap;
 // Try It and outside-changes checks) share one parsed Journal.Snapshot per Journal, reused while the file is unchanged: the
 // same size, last-modified time and file key, and no write through that Journal since. A miss reads and parses as
 // Journal.snapshot() does, so this is for worker threads, never the render thread. The snapshot is shared: callers must not
-// change its entries. A missing or unreadable file is never kept (a missing one costs a Files.exists).
+// change its entries. A missing or unreadable file is never kept (a missing one costs a Files.exists). In the game, pass
+// ClientJournal.get(), never a new Journal: the cache is per Journal, and only that one's writes are seen whatever the
+// file's timestamps say.
 public final class JournalCache {
 	// Weak keys; a cache never refers to its Journal, so a Journal no one else holds goes with its cache.
 	private static final Map<Journal, JournalCache> CACHES = Collections.synchronizedMap(new WeakHashMap<>());

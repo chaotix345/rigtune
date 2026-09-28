@@ -168,6 +168,22 @@ class ApplyExecutorCrashReplayTest {
 		assertTrue(next.results().get(1).message().startsWith("Already done earlier"), next.results().get(1).message());
 	}
 
+	// (1), then the player presses Discard pending at the next start (review 11, APPLY-1's cause in Discard): the group the
+	// record shows started is kept (its renames are done) and the next exit reports it done, instead of History saying
+	// DISCARDED over renamed files and an orphaned record.
+	@Test
+	void aDiscardAtTheNextStartKeepsAStartedGroup() throws IOException {
+		staged();
+		assertThrows(Killed.class, () -> run(killedAfter(download)));
+		nextStart();
+
+		Staging.Discard discard = new Staging(config, pending, List.of(), journal()).discardPending();
+
+		assertEquals(new Staging.Discard(List.of(), true), discard);
+		assertEquals(List.of(JournalChange.STAGED, JournalChange.STAGED), journalStatuses());
+		assertTheGroupIsDoneAsRigTunes(run(executor()));
+	}
+
 	// (2) Killed after last-apply.json, before the record's prune: both records prove it.
 	@Test
 	void killedAfterTheResultBeforeThePrune() throws IOException {

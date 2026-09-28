@@ -378,9 +378,10 @@ public final class ApplyExecutor {
 	}
 
 	// Every op of a group with a mod-file op, except a group RigTune's own records show half done or done already (a
-	// recorded rename in effect, a failed rollback PartlyApplied finds, an op the last run did): holding one would leave a
-	// mod missing (its old jar disabled, its replacement never enabled) until the player chose, and Discard can't drop it
-	// either, so it is finished (or rolled back) as in 0.4.
+	// recorded rename in effect, a failed rollback PartlyApplied finds, an op the last run did): it is finished (or rolled
+	// back) as in 0.4. Holding a half-done one would leave a mod missing (its old jar disabled, its replacement never
+	// enabled) until the player chose, and a done one only needs its result reported; Discard keeps both (Staging's
+	// half-done groups take startedGroups, review 11), so the notice couldn't offer them either.
 	private static Set<Integer> heldIndexes(List<Op> ops, Path modsDir, List<Rename> recorded, Map<String, OpResult> doneBefore) {
 		Set<String> files = new HashSet<>();
 		try (Stream<Path> listing = Files.list(modsDir)) {
@@ -412,8 +413,8 @@ public final class ApplyExecutor {
 	}
 
 	// review 11 APPLY-1 (WS-H, a marked edit): the groups (an op without one: "op:<id>") the records next to pendingFile
-	// show started, by heldIndexes' rule, so the start-up's stale check (StaleOps) never drops them: the next exit reports
-	// them "Already done earlier". plan: as the helper sees it (relocated to pendingFile's folders).
+	// show started, by heldIndexes' rule, so neither the start-up's stale check (StaleOps) nor Discard drops them: the next
+	// exit reports them "Already done earlier".
 	public static Set<String> startedGroups(PendingActions plan, Path pendingFile) {
 		Path configDir = InstanceDirs.configDirOf(pendingFile);
 		List<Op> ops = plan.ops();
