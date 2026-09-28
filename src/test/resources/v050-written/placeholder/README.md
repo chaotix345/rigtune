@@ -11,8 +11,6 @@ unchanged, and the downgrade E2E checks they are byte-identical.
 
 | set | files | what it stands in for |
 |---|---|---|
-| `ws-l1` | settings.json | `modFilesByRigTune: true` |
-| `ws-l2` | pending.json, history.json, awareness.json | a two-op file group (0.4.0's helper applies it at its exit, AC4d.3) with its STAGED journal entry; two P0.4 notice keys in `dismissed` |
 | `ws-s2` | history.json, pending.json, stutter-fixes.json | an applied stutter fix (`vanilla.renderDistance`) and a staged one (a Sodium PATCH_JSON op) |
 | `ws-t` | benchmarks.json, history.json, pending.json, tryit.json | a `tryit-` pair, the try's staged Apply and its PATCH_JSON op, the open try |
 | `ws-w2` | awareness.json | `acknowledgedStartupRegressions` |

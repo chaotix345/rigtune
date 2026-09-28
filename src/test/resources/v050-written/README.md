@@ -96,7 +96,7 @@ check kind it doesn't know, or on a check of a file the set doesn't hold. One fi
   `sessions` (counts after loading), `unknownKinds` (HistoryModel rows of a kind 0.4.0 doesn't know), `noBad` (no
   `<file>.bad` appears), `undoThis` (Undo this on that entry id plans without a problem) with `problems` (the plan's
   problem count), `appliesGroup` (0.4.0's helper applies that group at its exit, as it does a held group, AC4d.3),
-  `keeps` (top-level fields a 0.4.0 rewrite of the file keeps), `unchanged` (the file is byte-identical after 0.4.0 ran).
+  `keeps` (top-level fields a 0.4.0 rewrite of the file keeps; for ClientSettings, a 0.4.0 save keeps them with their values), `unchanged` (the file is byte-identical after 0.4.0 ran).
 - A new check kind is added to the interpreter by WS-E first (through the coordinator after WS-E has merged).
 
 ## One regeneration switch

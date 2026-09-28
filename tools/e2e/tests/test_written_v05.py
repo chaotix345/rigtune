@@ -147,6 +147,12 @@ class MergeTest(unittest.TestCase):
         self.assertEqual("Evening 2", profiles["profiles"][1]["name"])
         self.assertEqual(("template:battery", "b5"), (profiles["active"], profiles["battery"]["previousProfile"]))
 
+    def test_a_stand_in_id_comes_from_the_file_name(self):
+        self.assertEqual("e2e-held", written.stand_in_id("e2e-held-1.0.0.jar"))
+        self.assertEqual("e2e-held", written.stand_in_id("e2e-held-1.1.0.jar.rigtune-pending"))
+        self.assertEqual("sodium-fabric", written.stand_in_id("sodium-fabric-0.9.2+mc26.2.jar.disabled"))
+        self.assertEqual("fabric", written.stand_in_id("fabric-26.2.jar"))
+
     def test_a_set_s_expect_json_is_never_composed(self):
         write(self.v5 / "ws-t", "expect.json", {"set": "ws-t", "checks": []})
         write(self.v5 / "ws-t", "tryit.json", {"formatVersion": 1})

@@ -111,7 +111,7 @@ public final class Compat040 {
 			Map.entry("BenchmarkHistory", Set.of("state", "runs", "noBad")),
 			Map.entry("PendingActions", Set.of("state", "ops")),
 			Map.entry("ApplyHelper", Set.of("appliesGroup")),
-			Map.entry("ClientSettings", Set.of("state", "noBad")),
+			Map.entry("ClientSettings", Set.of("state", "keeps", "noBad")),
 			Map.entry("StutterStore", Set.of("state", "sessions", "noBad")),
 			Map.entry("StutterSummary", Set.of("state", "sessions")),
 			Map.entry("AwarenessStore", Set.of("state", "keeps", "noBad")),
@@ -235,6 +235,21 @@ public final class Compat040 {
 				JsonObject read = JsonParser.parseString(new com.google.gson.Gson().toJson(settings)).getAsJsonObject();
 				List<String> differ = raw.keySet().stream().filter(read::has).filter(k -> !raw.get(k).equals(read.get(k))).toList();
 				ok &= expectState(c, differ.isEmpty(), differ.isEmpty() ? "OK" : "read differently: " + differ, seen);
+				// A 0.4.0 save of the settings (on the spare copy) keeps these fields with their values.
+				if (c.has("keeps")) {
+					Path copied = spare.resolve("rigtune").resolve(file);
+					JsonObject before = json(copied);
+					ClientSettings.load(spare).save(spare);
+					JsonObject after = json(copied);
+					List<String> lost = new ArrayList<>();
+					c.getAsJsonArray("keeps").forEach(k -> {
+						if (!after.has(k.getAsString()) || !after.get(k.getAsString()).equals(before.get(k.getAsString()))) {
+							lost.add(k.getAsString());
+						}
+					});
+					seen.add("a 0.4.0 save on a copy lost or changed " + lost);
+					ok &= lost.isEmpty();
+				}
 			}
 			case "StutterStore" -> {
 				int inFile = json(dir.resolve(file)).getAsJsonArray("sessions").size();

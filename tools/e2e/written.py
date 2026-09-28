@@ -238,10 +238,18 @@ def _merge(file, path, old, new, owner, conflicts, owners):
     return copy.deepcopy(new)
 
 
+def stand_in_id(file_name):
+    """A stand-in jar's mod id from its file name, for an op without one (0.4's own disables carry no modId): the name
+    without RigTune's suffixes and .jar, cut before its version (the first '-' followed by a digit), in lower case."""
+    base = re.sub(r"(\.disabled|\.rigtune-pending|\.rigtune-superseded)+$", "", file_name.lower())
+    base = re.sub(r"\.jar$", "", base)
+    return re.split(r"-(?=\d)", base, maxsplit=1)[0] or "e2e-unknown"
+
+
 def materialize(instance):
     """The files the composed pending.json's ops act on, so a helper can apply them: a minimal mod jar (fabric.mod.json
-    only, the op's mod id) for every DISABLE_FILE path and ENABLE_FILE source, and an empty config file for every
-    PATCH_* target. Files already there are left alone."""
+    only, the op's mod id, else stand_in_id of its file name) for every DISABLE_FILE path and ENABLE_FILE source, and an
+    empty config file for every PATCH_* target. Files already there are left alone."""
     instance = Path(instance)
     pending = instance / "config" / "rigtune" / "pending.json"
     for op in (json.loads(pending.read_text(encoding="utf-8")).get("ops") or []) if pending.is_file() else []:
@@ -256,7 +264,7 @@ def materialize(instance):
         elif kind.startswith("PATCH_"):
             target.write_text("", encoding="utf-8")
         else:
-            e2e_env.test_mod_jar(target, op.get("modId") or "e2e-unknown")
+            e2e_env.test_mod_jar(target, op.get("modId") or stand_in_id(target.name))
 
 
 def instance_state(instance):
