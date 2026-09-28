@@ -12,6 +12,7 @@ import net.minecraft.client.gui.components.ContainerObjectSelectionList;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
+import net.minecraft.client.gui.navigation.FocusNavigationEvent;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -26,8 +27,9 @@ import java.util.List;
 // offers, or why nothing can be set here), [Offer %s here] (the profile selected in Profiles, else the active one) and
 // [Stop offering here], the privacy line, the remembered servers (kind, profile, last joined, "This server" on the
 // current one), [Forget] [Forget all…] [Done]. Nothing here switches a profile. No address, host or port is drawn or
-// narrated: rows are the store's keyed hashes. Tab order: the This-server line, Offer, Stop, the privacy line, the rows,
-// Forget, Forget all, Done.
+// narrated: rows are the store's keyed hashes. Tab order: the subtitle (or an action's status), the This-server line,
+// Offer, Stop, the privacy line, the rows, Forget, Forget all, Done. After an action the status has the focus and is
+// read out (X6, review-11 FEAT-4).
 public class ServerProfilesScreen extends Screen {
 	private static final int ROW = 22;
 	private static final int LINE = 10;
@@ -58,6 +60,9 @@ public class ServerProfilesScreen extends Screen {
 	private Block here = Block.EMPTY;
 	private Block privacy = Block.EMPTY;
 	private int listTop;
+	private @Nullable RowFocus statusFocus;
+	// An action just set the status: the rebuilt screen focuses it, and it is read out.
+	private boolean announce;
 
 	// A wrapped text: its lines, where the first is drawn, and whether some of it didn't fit.
 	private record Block(Component text, List<FormattedCharSequence> lines, int y, boolean cut) {
@@ -121,6 +126,7 @@ public class ServerProfilesScreen extends Screen {
 		left = (width - column) / 2;
 		actions.clear();
 		head = block(status != null ? status : Component.translatable("rigtune.profile.server.subtitle"), width - 16, 20);
+		statusFocus = addRenderableWidget(RowFocus.standalone(head.text(), 8, head.y() - 1, width - 16, head.lines().size() * LINE));
 		here = block(Texts.component(view.here()), column, head.bottom() + 2);
 		addRenderableWidget(RowFocus.standalone(here.text(), left, here.y() - 1, column, here.lines().size() * LINE));
 		int buttonsY = here.bottom() + 4;
@@ -189,6 +195,13 @@ public class ServerProfilesScreen extends Screen {
 
 	@Override
 	protected void setInitialFocus() {
+		ComponentPath status = announce && statusFocus != null ? statusFocus.nextFocusPath(new FocusNavigationEvent.TabNavigation(true)) : null;
+		announce = false;
+		if (status != null) {
+			focusedRow = -1;
+			changeFocus(ComponentPath.path(this, status));
+			return;
+		}
 		ComponentPath path = RowList.initialFocus(this, list, focusedRow, minecraft.getLastInputType().isKeyboard());
 		focusedRow = -1;
 		if (path != null) {
@@ -197,23 +210,29 @@ public class ServerProfilesScreen extends Screen {
 	}
 
 	public void remember() {
-		status = controller.rememberServerProfile(offerProfile());
-		rebuildWidgets();
+		report(controller.rememberServerProfile(offerProfile()));
 	}
 
 	public void stop() {
 		if (view.currentKey() != null) {
-			status = controller.forgetServerProfile(view.currentKey());
-			rebuildWidgets();
+			report(controller.forgetServerProfile(view.currentKey()));
 		}
 	}
 
 	public void forgetSelected() {
 		if (selected != null) {
-			status = controller.forgetServerProfile(selected);
+			Component result = controller.forgetServerProfile(selected);
 			selected = null;
-			rebuildWidgets();
+			report(result);
 		}
+	}
+
+	// An action's result: the status line, focused and read out.
+	private void report(Component result) {
+		status = result;
+		announce = true;
+		rebuildWidgets();
+		triggerImmediateNarration(false);
 	}
 
 	public void confirmForgetAll() {
@@ -221,6 +240,8 @@ public class ServerProfilesScreen extends Screen {
 			if (yes) {
 				status = controller.forgetAllServerProfiles();
 				selected = null;
+				// Coming back, the screen opens with the status focused, and opening a screen reads its focus out.
+				announce = true;
 			}
 			minecraft.gui.setScreen(this);
 		}, Component.translatable("rigtune.profile.server.forget_all.title"), Component.translatable("rigtune.profile.server.forget_all.message")));

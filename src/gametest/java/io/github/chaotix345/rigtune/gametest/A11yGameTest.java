@@ -653,6 +653,12 @@ public class A11yGameTest implements FabricClientGameTest {
 				ServerProfilesView view = CannedViews.serverProfiles();
 				return view != null ? view : super.serverProfiles();
 			}
+
+			@Override
+			public Component rememberServerProfile(@Nullable String profileId) {
+				return Texts.component(ServerProfilesView.remembered(io.github.chaotix345.rigtune.core.server.ServerProfileStore.Result.OK,
+						TemplateId.MAX_FPS.displayName()));
+			}
 		};
 		try {
 			context.runOnClient(mc -> mc.gui.setScreen(new ServerProfilesScreen(new TitleScreen(), canned, null)));
@@ -684,6 +690,13 @@ public class A11yGameTest implements FabricClientGameTest {
 			check(context.computeOnClient(mc -> ((ServerProfilesScreen) mc.gui.screen()).actions().stream()
 					.anyMatch(b -> b.getMessage().getString().equals("Forget") && b.active)), "server profiles: Forget is active once a row is selected");
 			context.takeScreenshot("a11y-server-profiles-enter-854x480-scale2");
+			// review-11 FEAT-4: Enter on Offer; its result is the focused stop and is what's read out.
+			tabUntilNarrates(context, "server profiles", "Offer Max FPS here");
+			context.getInput().pressKey(InputConstants.KEY_RETURN);
+			context.waitTicks(2);
+			String status = context.computeOnClient(A11yGameTest::focusedNarration);
+			check(status.contains("RigTune will offer Max FPS when you join this server."), "server profiles: the action's status has the focus: " + status);
+			check(tabAll(context).split("\n")[0].contains("RigTune will offer Max FPS"), "server profiles: the status is the first Tab stop");
 			List<String> lines = List.of(tabAll(context).split("\n"));
 			int last = -1;
 			for (int i = 0; i < lines.size(); i++) {
