@@ -1,0 +1,21 @@
+[12:50:02] [main/INFO] (FabricLoader) Loading 54 mods:
+	- sodium 0.9.2+mc26.2
+[12:50:03] [main/INFO] (Sodium-GraphicsAdapterProbe) Found graphics adapter: AdapterInfo{vendor=AMD, description='AMD Radeon RX 7800 XT', adapterType=0x0000230B, openglIcdFilePath=…, openglIcdVersion=32.0.31041.1004}
+[12:50:22] [RigTune worker/INFO] (RigTune) Try it dev: mode aa
+[12:51:19] [Render thread/INFO] (RigTune) Try it dev: run 2026-09-28T02:51:18Z-3ed5 single null: 1% low 295.4, avg 2009.5, cv 0.12328251679000071
+[12:52:03] [Render thread/INFO] (RigTune) Try it dev: run 2026-09-28T02:52:02Z-dffd before aa-0-9319c747-f3aa-4c9e-832a-8636af650b4a: 1% low 344.6, avg 2263.3, cv 0.0027070717960987773
+[12:52:46] [Render thread/INFO] (RigTune) Try it dev: run 2026-09-28T02:52:46Z-2248 after aa-0-9319c747-f3aa-4c9e-832a-8636af650b4a: 1% low 349.8, avg 2232.2, cv 0.00843537972498662
+[12:53:29] [Render thread/INFO] (RigTune) Try it dev: run 2026-09-28T02:53:29Z-bb2a before aa-1-4bcc5d99-3047-4a6a-9150-190dda22c317: 1% low 331.0, avg 2125.1, cv 0.0733970047168858
+[12:54:13] [Render thread/INFO] (RigTune) Try it dev: run 2026-09-28T02:54:13Z-3204 after aa-1-4bcc5d99-3047-4a6a-9150-190dda22c317: 1% low 356.8, avg 2297.2, cv 0.03503161608921583
+[12:54:56] [Render thread/INFO] (RigTune) Try it dev: run 2026-09-28T02:54:56Z-c6ee before aa-2-81aaebe8-5349-4011-8515-fb2308ad2751: 1% low 794.4, avg 3072.7, cv 0.7056938237544961
+[12:55:40] [Render thread/INFO] (RigTune) Try it dev: run 2026-09-28T02:55:39Z-25fd after aa-2-81aaebe8-5349-4011-8515-fb2308ad2751: 1% low 1178.3, avg 3113.4, cv 0.0587531714586734
+[12:56:23] [Render thread/INFO] (RigTune) Try it dev: run 2026-09-28T02:56:23Z-d618 before aa-3-325a6ea3-c09b-4b7f-9c81-2ba7d3f5dce4: 1% low 1254.0, avg 3180.3, cv 0.0024060511450655357
+[12:57:07] [Render thread/INFO] (RigTune) Try it dev: run 2026-09-28T02:57:06Z-3c7d after aa-3-325a6ea3-c09b-4b7f-9c81-2ba7d3f5dce4: 1% low 1307.9, avg 3192.7, cv 0.018090993868934653
+[12:57:50] [Render thread/INFO] (RigTune) Try it dev: run 2026-09-28T02:57:50Z-8475 before aa-4-401b676a-0795-4a0a-a70c-1e0dd02ff1d6: 1% low 1398.8, avg 3206.2, cv 0.025022146673328204
+[12:58:33] [Render thread/INFO] (RigTune) Try it dev: run 2026-09-28T02:58:33Z-b7a8 after aa-4-401b676a-0795-4a0a-a70c-1e0dd02ff1d6: 1% low 1329.9, avg 3216.4, cv 0.037471710261290495
+[12:58:36] [Render thread/INFO] (RigTune) Try it dev: A/A pair aa-0-9319c747-f3aa-4c9e-832a-8636af650b4a: 1% low 344.6 -> 349.8 FPS (cv 0.0027070717960987773 / 0.00843537972498662), avg 2263.3 -> 2232.2: low +1.5%, avg -1.4%, floor 5.0%: NO_CLEAR_CHANGE []
+[12:58:36] [Render thread/INFO] (RigTune) Try it dev: A/A pair aa-1-4bcc5d99-3047-4a6a-9150-190dda22c317: 1% low 331.0 -> 356.8 FPS (cv 0.0733970047168858 / 0.03503161608921583), avg 2125.1 -> 2297.2: low +7.8%, avg +8.1%, floor 14.7%: NO_CLEAR_CHANGE []
+[12:58:36] [Render thread/INFO] (RigTune) Try it dev: A/A pair aa-2-81aaebe8-5349-4011-8515-fb2308ad2751: 1% low 794.4 -> 1178.3 FPS (cv 0.7056938237544961 / 0.0587531714586734), avg 3072.7 -> 3113.4: low +48.3%, avg +1.3%, floor 141.1%: NO_CLEAR_CHANGE []
+[12:58:36] [Render thread/INFO] (RigTune) Try it dev: A/A pair aa-3-325a6ea3-c09b-4b7f-9c81-2ba7d3f5dce4: 1% low 1254.0 -> 1307.9 FPS (cv 0.0024060511450655357 / 0.018090993868934653), avg 3180.3 -> 3192.7: low +4.3%, avg +0.4%, floor 13.1%: NO_CLEAR_CHANGE []
+[12:58:36] [Render thread/INFO] (RigTune) Try it dev: A/A pair aa-4-401b676a-0795-4a0a-a70c-1e0dd02ff1d6: 1% low 1398.8 -> 1329.9 FPS (cv 0.025022146673328204 / 0.037471710261290495), avg 3206.2 -> 3216.4: low -4.9%, avg +0.3%, floor 122.5%: NO_CLEAR_CHANGE []
+[12:58:36] [Render thread/INFO] (RigTune) Try it dev: RESULT A/A: 5 of 5 pairs within the floor (MIN_CV 0.025)

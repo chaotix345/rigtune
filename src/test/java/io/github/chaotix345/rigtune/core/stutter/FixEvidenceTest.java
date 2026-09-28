@@ -43,6 +43,15 @@ class FixEvidenceTest {
 		assertEquals(null, counts.get(Attributor.CHUNK_LOAD));
 	}
 
+	// A spike right after a settings change (WS-S's settingsChanged tag, RW-11) follows the change, not the fix's cause.
+	@Test
+	void aSpikeAfterASettingsChangeNeverCounts() {
+		Attributor.Attribution plain = spike(100, Map.of(Attributor.CHUNK_LOAD, 70L));
+		Attributor.Attribution changed = new Attributor.Attribution(plain.spike(), plain.claims(), List.of(), Set.of(Attributor.SETTINGS_CHANGED),
+				plain.unexplained());
+		assertEquals(Map.of(Attributor.CHUNK_LOAD, 1), FixEvidence.dominatedSpikes(List.of(plain, changed)));
+	}
+
 	@Test
 	void noSpikesCountNothing() {
 		assertEquals(Map.of(), FixEvidence.dominatedSpikes(List.of()));

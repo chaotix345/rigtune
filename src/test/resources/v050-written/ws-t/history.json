@@ -1,0 +1,60 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "7a3e9c10-6b2d-4c8f-a1e4-0d5f6a7b8c91",
+      "at": "2026-09-24T10:03:05Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "7a3e9c10-6b2d-4c8f-a1e4-0d5f6a7b8c93",
+          "type": "setting",
+          "key": "vanilla.cutoutLeaves",
+          "before": "true",
+          "after": "false",
+          "status": "REVERTED"
+        }
+      ]
+    },
+    {
+      "id": "7a3e9c10-6b2d-4c8f-a1e4-0d5f6a7b8c92",
+      "at": "2026-09-24T10:11:30Z",
+      "kind": "undo",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "undoOf": "7a3e9c10-6b2d-4c8f-a1e4-0d5f6a7b8c91",
+      "changes": [
+        {
+          "id": "7a3e9c10-6b2d-4c8f-a1e4-0d5f6a7b8c94",
+          "type": "setting",
+          "key": "vanilla.cutoutLeaves",
+          "before": "false",
+          "after": "true",
+          "status": "APPLIED",
+          "reverts": "7a3e9c10-6b2d-4c8f-a1e4-0d5f6a7b8c93"
+        }
+      ]
+    },
+    {
+      "id": "3f0c6a8e-4b1d-4e7a-9c2f-5a6b7c8d9e01",
+      "at": "2026-09-25T10:03:10Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "3f0c6a8e-4b1d-4e7a-9c2f-5a6b7c8d9e04",
+          "type": "setting",
+          "key": "sodium.performance.chunk_build_defer_mode",
+          "before": "ALWAYS",
+          "after": "ONE_FRAME",
+          "status": "STAGED",
+          "opId": "3f0c6a8e-4b1d-4e7a-9c2f-5a6b7c8d9e02",
+          "group": "3f0c6a8e-4b1d-4e7a-9c2f-5a6b7c8d9e03"
+        }
+      ]
+    }
+  ]
+}

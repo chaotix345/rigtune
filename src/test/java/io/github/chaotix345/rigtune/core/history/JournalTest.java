@@ -237,6 +237,24 @@ class JournalTest {
 		assertEquals(Journal.State.UNREADABLE, journal.state());
 	}
 
+	// C20 (WS-S2): one read gives the state and the entries together; the entries only when OK.
+	@Test
+	void aSnapshotIsOneRead() throws Exception {
+		Journal journal = journal();
+		assertEquals(new Journal.Snapshot(Journal.State.MISSING, List.of()), journal.snapshot());
+		journal.record("e1", JournalEntry.APPLY, List.of(vanilla("vanilla.renderDistance", "12", "16")));
+		Journal.Snapshot ok = journal.snapshot();
+		assertEquals(Journal.State.OK, ok.state());
+		assertEquals(List.of("e1"), ok.entries().stream().map(JournalEntry::id).toList());
+
+		Files.writeString(Journal.file(config), "{not json");
+		assertEquals(new Journal.Snapshot(Journal.State.CORRUPT, List.of()), journal.snapshot());
+
+		Files.delete(Journal.file(config));
+		Files.createDirectories(Journal.file(config));
+		assertEquals(new Journal.Snapshot(Journal.State.UNREADABLE, List.of()), journal.snapshot());
+	}
+
 	@Test
 	void updateExistingNeverCreatesTheFile() throws Exception {
 		assertFalse(journal().updateExisting(entries -> List.of(entry("e1"))));

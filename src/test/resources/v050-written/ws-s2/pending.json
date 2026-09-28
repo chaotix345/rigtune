@@ -1,0 +1,18 @@
+{
+  "createdAt": "2026-09-21T18:00:01Z",
+  "gamePid": 4242,
+  "modsDir": "${INSTANCE}/mods",
+  "configDir": "${INSTANCE}/config",
+  "ops": [
+    {
+      "type": "PATCH_JSON",
+      "path": "${INSTANCE}/config/sodium-options.json",
+      "patches": {
+        "performance.chunk_build_defer_mode": "ALWAYS"
+      },
+      "id": "5c20f1a0-7d3e-4b2a-9c61-0000000000b2",
+      "group": "5c20f1a0-7d3e-4b2a-9c61-0000000000c2",
+      "attempts": 0
+    }
+  ]
+}

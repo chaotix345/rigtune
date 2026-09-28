@@ -53,6 +53,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 // Runs a benchmark session from client ticks (docs/v0.2/SPEC.md item 6): for each core Step it sets the knobs, waits
 // until the chunks within the render distance have arrived and their sections compiled (SettleCheck, docs/v0.3/SPEC.md
@@ -146,6 +147,8 @@ public final class BenchmarkController {
 	private static @Nullable Pending pendingWorld;
 	private static Config defaultConfig = Config.DEFAULT;
 	private static @Nullable Consumer<Step> sweepListener;
+	// docs/v0.5/SPEC.md 6 (C09, WS-T): Try it claims its own runs' outcomes (their pair id), so they open no result screen.
+	private static volatile @Nullable Predicate<Outcome> outcomeHandler;
 
 	private final Minecraft minecraft;
 	private final BenchmarkRequest request;
@@ -330,6 +333,28 @@ public final class BenchmarkController {
 	/** Game tests use shorter runs. */
 	public static void setDefaultConfig(Config config) {
 		defaultConfig = config;
+	}
+
+	/**
+	 * docs/v0.5/SPEC.md 6 (C09): asked, on the render thread, before a finished or cancelled run shows anything (after the
+	 * restore-failed toast); true = the handler took it and nothing else is shown. Null: today's behaviour.
+	 */
+	public static void setOutcomeHandler(@Nullable Predicate<Outcome> handler) {
+		outcomeHandler = handler;
+	}
+
+	// Whether the handler took the outcome; one that throws is logged and the outcome is shown as before.
+	static boolean claimed(Outcome outcome) {
+		Predicate<Outcome> handler = outcomeHandler;
+		if (handler == null) {
+			return false;
+		}
+		try {
+			return handler.test(outcome);
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.error("Benchmark: the outcome handler failed; showing the result as usual", e);
+			return false;
+		}
 	}
 
 	/** Game tests: called on the render thread just before a step records its first frame. */
@@ -656,6 +681,9 @@ public final class BenchmarkController {
 			return;
 		}
 		if (outcome.cancelled()) {
+			if (claimed(outcome)) {
+				return;
+			}
 			if (minecraft.player != null) {
 				minecraft.player.sendOverlayMessage(Component.translatable(!outcome.restoreOk() ? "rigtune.benchmark.cancelled.restore_failed"
 						: outcome.throttled() ? "rigtune.benchmark.throttled" : "rigtune.benchmark.cancelled"));
@@ -679,6 +707,9 @@ public final class BenchmarkController {
 		if (!outcome.restoreOk()) {
 			SystemToast.add(minecraft.gui.toastManager(), TOAST_ID, Component.translatable("rigtune.benchmark.restore_failed.title"),
 					Component.translatable("rigtune.benchmark.restore_failed"));
+		}
+		if (claimed(outcome)) {
+			return;
 		}
 		if (outcome.cancelled()) {
 			if (outcome.restoreOk()) {

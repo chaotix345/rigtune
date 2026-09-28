@@ -39,11 +39,18 @@ public final class TryItVerdict {
 		NO_NUMBERS
 	}
 
-	// Why the runs can't be compared, in the order they're named: conditions (BenchmarkTrend's, in its order), the player
-	// moved (a CURRENT-scene try whose after run started elsewhere, or where either spot is unknown), the loaded mods,
+	// Why the runs can't be compared, in the order they're named: conditions (BenchmarkTrend's, in its order), a run left
+	// out of the trend (the coordinator's SPEC decision, WS-B's review M4: the first run in a new benchmark world, or
+	// Distant Horizons generating terrain, as the Benchmark menu's pair), the player moved (a CURRENT-scene try whose after run started elsewhere, or where either spot is unknown), the loaded mods,
 	// History entries between the try's change and the after run (oldest first), managed settings (ShareKeys order).
 	public sealed interface Cause {
 		record Condition(Difference difference) implements Cause {
+		}
+
+		record Excluded(Why why) implements Cause {
+			public enum Why {
+				FRESH_WORLD, DH_GENERATING
+			}
 		}
 
 		record Moved() implements Cause {
@@ -135,6 +142,12 @@ public final class TryItVerdict {
 			if (!allowed.contains(d)) {
 				out.add(new Cause.Condition(d));
 			}
+		}
+		if (fresh(before) || fresh(after)) {
+			out.add(new Cause.Excluded(Cause.Excluded.Why.FRESH_WORLD));
+		}
+		if (generating(before) || generating(after)) {
+			out.add(new Cause.Excluded(Cause.Excluded.Why.DH_GENERATING));
 		}
 		if (t.scene() == BenchmarkRequest.Scene.CURRENT && (t.beforeSpot() == null || !t.beforeSpot().equals(t.afterSpot()))) {
 			out.add(new Cause.Moved());
@@ -231,6 +244,15 @@ public final class TryItVerdict {
 
 	private static boolean noisy(BenchmarkRecord run) {
 		return BenchmarkMath.noisy(cv(run));
+	}
+
+	// BenchmarkTrend.excluded's two reasons, apart.
+	private static boolean fresh(BenchmarkRecord run) {
+		return run.context() != null && Boolean.TRUE.equals(run.context().worldFresh());
+	}
+
+	private static boolean generating(BenchmarkRecord run) {
+		return run.context() != null && Boolean.TRUE.equals(run.context().dhGenerating());
 	}
 
 	private static boolean distantHorizons(BenchmarkRecord run) {

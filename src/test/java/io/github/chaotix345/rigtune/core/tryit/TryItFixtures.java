@@ -67,6 +67,7 @@ final class TryItFixtures {
 		private int height = 1440;
 		private boolean dh;
 		private @Nullable Boolean dhGenerating;
+		private @Nullable Boolean worldFresh;
 		private boolean shaders;
 		private @Nullable String pack;
 		private @Nullable String hash = "hash-a";
@@ -144,6 +145,11 @@ final class TryItFixtures {
 			return this;
 		}
 
+		Run worldFresh(@Nullable Boolean value) {
+			worldFresh = value;
+			return this;
+		}
+
 		Run shaders(boolean on, @Nullable String value) {
 			shaders = on;
 			pack = value;
@@ -166,7 +172,7 @@ final class TryItFixtures {
 			knobs.put(BenchmarkRecord.SIMULATION_DISTANCE, new BenchmarkRecord.KnobResult(sd, sd, null, null, null));
 			BenchmarkRecord.Result result = low == null ? null : new BenchmarkRecord.Result(avg, low, 1000 / low, 2, cv);
 			BenchmarkRecord.Context context = new BenchmarkRecord.Context(dh, shaders, pack, width, height, false, BenchmarkRecord.Context.PROTOCOL,
-					hash, cursor).withDhGenerating(dhGenerating);
+					hash, cursor).withDhGenerating(dhGenerating).withWorldFresh(worldFresh);
 			return new BenchmarkRecord(id, at, "0.5.0+mc26.2", "26.2", "MEASURE", scene, phase, pairId, 144, true, knobs, result, Map.of(), Map.of(),
 					null, false, context);
 		}

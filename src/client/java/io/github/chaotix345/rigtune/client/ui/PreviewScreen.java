@@ -11,6 +11,8 @@ import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.report.LauncherModAdvice;
+import io.github.chaotix345.rigtune.core.tryit.Triable;
+import io.github.chaotix345.rigtune.core.tryit.TryItText;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.ComponentPath;
@@ -18,6 +20,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ComponentRenderUtils;
 import net.minecraft.client.gui.components.ContainerObjectSelectionList;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.narration.NarratableEntry;
 import net.minecraft.client.gui.screens.Screen;
@@ -65,6 +68,8 @@ public class PreviewScreen extends Screen {
 	private @Nullable Button applyButton;
 	private @Nullable Button saveOnlyButton;
 	private @Nullable Button cancelButton;
+	private @Nullable Button tryItButton;
+	private @Nullable Component tryItTip;
 	private final Path gameDir = FabricLoader.getInstance().getGameDir();
 	private @Nullable ApplyPreview preview;
 	private boolean started;
@@ -174,10 +179,28 @@ public class PreviewScreen extends Screen {
 		}
 	}
 
-	// The plain Preview's footer: Done. v0.5 (docs/v0.5/SPEC.md 6): C09's [Try it (measured)] [Done] goes here (WS-T).
+	// The plain Preview's footer. v0.5 (docs/v0.5/SPEC.md 6, C09, WS-T): [Try it (measured)] [Done]; Try it is active only
+	// with exactly one ticked item it can try, and its tooltip names the refusal or explains the flow.
 	private void plainFooter(int column, int top) {
-		int buttonWidth = Math.min(150, column);
-		addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose()).bounds((width - buttonWidth) / 2, top, buttonWidth, 20).build());
+		int gap = 4;
+		int buttonWidth = Math.min(120, (column - gap) / 2);
+		int x = (width - (buttonWidth * 2 + gap)) / 2;
+		Text refused = selected.size() == 1 ? controller.tryItRefusal(selected.getFirst()) : TryItText.refusal(Triable.Refusal.ONE, null);
+		tryItButton = addRenderableWidget(Button.builder(Component.translatable("rigtune.tryit.button"),
+				b -> minecraft.gui.setScreen(new TryItScreen(this, controller, selected.getFirst()))).bounds(x, top, buttonWidth, 20).build());
+		tryItButton.active = refused == null;
+		tryItTip = Texts.component(refused != null ? refused : TryItText.explain());
+		tryItButton.setTooltip(Tooltip.create(tryItTip));
+		addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose()).bounds(x + buttonWidth + gap, top, buttonWidth, 20).build());
+	}
+
+	// v0.5 (C09): the plain Preview's Try it button (null in the Confirm mode) and its tooltip.
+	public @Nullable Button tryItButton() {
+		return tryItButton;
+	}
+
+	public @Nullable Component tryItTooltip() {
+		return tryItTip;
 	}
 
 	// Apply (only once there's something to apply) / Save only / Cancel, in one row.

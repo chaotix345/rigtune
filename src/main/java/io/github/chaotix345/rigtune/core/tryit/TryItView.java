@@ -11,9 +11,11 @@ import java.util.List;
 // derived (never stored) from tryit.json, the benchmark pair and the History entry (TryItFlow.derive). tryIt: the open
 // try (null for NONE). before/after: the pair's runs (after: the newest). verdict: for RESULT. changeStatus: the try's
 // change in history.json (null when it has none there). failure: the helper's reason when the change failed or was
-// abandoned at the last exit. sameSession: this is the game session that started the try.
+// abandoned at the last exit. sameSession: this is the game session that started the try. note: what this session saw go
+// wrong (a run that couldn't start, a Start that couldn't be recorded), shown above the stage's lines; null otherwise.
 public record TryItView(Stage stage, @Nullable TryIt tryIt, @Nullable BenchmarkRecord before, @Nullable BenchmarkRecord after,
-		TryItVerdict.@Nullable Verdict verdict, @Nullable String changeStatus, ApplyFailures.@Nullable Failure failure, boolean sameSession) {
+		TryItVerdict.@Nullable Verdict verdict, @Nullable String changeStatus, ApplyFailures.@Nullable Failure failure, boolean sameSession,
+		@Nullable Text note) {
 	public static final TryItView EMPTY = new TryItView(Stage.NONE);
 	// RigTuneController.tryItRefusal's default (a controller without Try it): nothing can be tried.
 	public static final Text UNAVAILABLE = Text.of("rigtune.tryit.refused.unavailable", "Try it (measured) isn't available here.");
@@ -55,7 +57,16 @@ public record TryItView(Stage stage, @Nullable TryIt tryIt, @Nullable BenchmarkR
 	}
 
 	public TryItView(Stage stage) {
-		this(stage, null, null, null, null, null, null, false);
+		this(stage, null, null, null, null, null, null, false, null);
+	}
+
+	public TryItView(Stage stage, @Nullable TryIt tryIt, @Nullable BenchmarkRecord before, @Nullable BenchmarkRecord after,
+			TryItVerdict.@Nullable Verdict verdict, @Nullable String changeStatus, ApplyFailures.@Nullable Failure failure, boolean sameSession) {
+		this(stage, tryIt, before, after, verdict, changeStatus, failure, sameSession, null);
+	}
+
+	public TryItView withNote(@Nullable Text text) {
+		return new TryItView(stage, tryIt, before, after, verdict, changeStatus, failure, sameSession, text);
 	}
 
 	public TryItView {

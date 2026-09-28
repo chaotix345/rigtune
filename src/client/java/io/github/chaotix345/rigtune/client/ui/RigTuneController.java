@@ -319,6 +319,10 @@ public interface RigTuneController {
 	default void tryItCancel() {
 	}
 
+	/** Works out the open try's stage again (back from History's Undo this); tryIt() changes when it's done. */
+	default void tryItRefresh() {
+	}
+
 	// C16 per-server profile offers (WS-P2).
 
 	default ServerProfilesView serverProfiles() {
