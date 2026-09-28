@@ -4,7 +4,10 @@ import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -50,6 +53,23 @@ class BenchmarkConditionsTest {
 				BenchmarkConditions.JournalAtStart.of(Journal.State.OK, List.of(first, staged)));
 		assertEquals(new BenchmarkConditions.JournalAtStart(null, List.of()), BenchmarkConditions.JournalAtStart.of(Journal.State.MISSING, List.of()));
 		assertEquals(new BenchmarkConditions.JournalAtStart(null, null), BenchmarkConditions.JournalAtStart.of(Journal.State.CORRUPT, List.of()));
+	}
+
+	// review 11 BENCH-8: one read of history.json gives both (a second read that failed after an OK first one gave [],
+	// "nothing staged", for a history that has staged changes).
+	@Test
+	void bh2TheJournalIsReadOnce(@TempDir Path config) throws IOException {
+		Journal journal = new Journal(config, "0.5.0", "26.2", (message, error) -> {
+			throw new AssertionError(message, error);
+		});
+		journal.record("e1", JournalEntry.APPLY, List.of(change("c1", JournalChange.STAGED)));
+		int before = journal.reads();
+
+		BenchmarkConditions.JournalAtStart atStart = BenchmarkConditions.JournalAtStart.of(journal);
+
+		assertEquals(before + 1, journal.reads());
+		assertEquals("e1", atStart.cursor());
+		assertEquals(1, atStart.staged().size());
 	}
 
 	// Review (part 1 M3): an unreadable history.json isn't "nothing staged" (the journal answers no entries then): left out.
