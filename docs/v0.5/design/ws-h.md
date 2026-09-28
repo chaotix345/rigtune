@@ -323,10 +323,14 @@ Branch `fix/v05-r11-ws-h`, from feat/v0.5.0 111cb2be. Every MEDIUM had a test th
 | BENCH-8 (L) | 3c31e1b8 | `JournalAtStart` reads once (`journal.snapshot()`) | `BenchmarkConditionsTest.bh2TheJournalIsReadOnce` (2 reads) |
 | SEC-4 (L) | d3eeeb53 | `RangeReader.get` reserves the request's length before sending and refunds the unused part on an answer | `RangeReaderTest.aFailedRequestCostsTheBudgetItsLength` (5 requests past a 10 000-byte budget, now 2) |
 | COMPAT-4 (L) | 1eeaa946 | `HistoryModel.rows` applies `StagedChanges.pairUpdates` as it displays (no file change), so 0.2.x-0.4.x legacy imports show 0.1.0's updates as Updated rows | `HistoryModelTest.legacyUpdatesImportedWithoutAModIdAreShownAsUpdates` over the ws-h set (1 Updated row, now 5) |
-| COMPAT-7 (L) | this doc | The RW-20 residual now names 0.4.0's window too (above) | doc only |
+| COMPAT-7 (L) | cacc99ad | The RW-20 residual now names 0.4.0's window too (above) | doc only |
+| self-review M (APPLY-1's cause in Discard) | 142d0905 | `Staging.halfDoneGroupsOrNull` adds `ApplyExecutor.startedGroups`, so Discard pending, `dropQueuedUpdates` and `dropStale` all keep a group whose renames a killed helper finished (Discard marked both DISCARDED over renamed files and orphaned the record); heldIndexes' comment corrected | `ApplyExecutorCrashReplayTest.aDiscardAtTheNextStartKeepsAStartedGroup` |
+| self-review L x3 | 142d0905 | `dropStale` reads the folder and the records only once something looks stale (as preLaunch); an ungrouped op's `op:<id>` key tested; JournalCache's comment: pass `ClientJournal.get()`, never a new Journal | `StagingTest.anUngroupedEnableTheLastRunDidIsNeverStale` (fails with StaleOps' old group-only key) |
+| PERF-2 callers | 814f5a64 | Marked one-line edits, on the worker: `OutsideChanges.compareAtStart`, `FirstRunService.load` (FirstRun's rule over the shared snapshot), TryItService's `Game.history()` (deriveNow's one read) use `JournalCache.snapshot(ClientJournal.get())`; StutterFixService is ws-s2's | existing suites |
 
 Other owners' files, each edit marked in the code: `ApplyExecutor` (WS-L2: `startedGroups` and the shared rule),
 `RigTunePreLaunch` (WS-L2: `staleGroups` adds the started groups), `Journal` (read and write counters, `path()`),
-`BenchmarkConditions` (one snapshot), `HistoryModel` (the display pairing), `TestExecutors` (`killedAfter`).
+`BenchmarkConditions` (one snapshot), `HistoryModel` (the display pairing), `TestExecutors` (`killedAfter`),
+`OutsideChanges`, `FirstRunService`, `TryItService` (one JournalCache line each).
 With PERF-1, "WS-H adds no init work" holds again: preLaunch's history.json read is the reconcile's, as before RW-20.
 
