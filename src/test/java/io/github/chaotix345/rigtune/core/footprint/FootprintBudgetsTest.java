@@ -131,6 +131,9 @@ class FootprintBudgetsTest {
 		}
 	}
 
+	// The floor of a per-call limit whose observed maximum is under it (SPEC 1d(c)/1h).
+	private static final double SUB_10_NS = 10;
+
 	// Every per-call ns budget: v0.5's six, and the per-tick listeners' own keys (X4.4).
 	private static final List<String> PER_CALL_KEYS = List.of("frameHookNsPerCallOff", "frameHookNsPerCallOn", "frameHookNsPerCallOnPhases",
 			"tickHookNsPerCall", "tickHookNsPerCallWorld", "tickHookNsPerCallOn", "settingsCheckNsPerCall", "tryItTickNsPerCall",
@@ -172,9 +175,15 @@ class FootprintBudgetsTest {
 				case "2x" -> 2;
 				default -> throw new AssertionError(entry.getKey() + ": rule " + rule);
 			};
-			double expected = Math.ceil(factor * b.get("observedMax").getAsDouble() - 1e-9);
+			double observedMax = b.get("observedMax").getAsDouble();
+			double expected = Math.ceil(factor * observedMax - 1e-9);
 			if (!b.get("ceiling").isJsonNull()) {
 				expected = Math.min(expected, b.get("ceiling").getAsDouble());
+			}
+			// SPEC 1d(c)/1h (coordinator, 2026-09-28): a per-call key observed under 10 ns is a gross-regression backstop only,
+			// with a 10 ns floor, so a JIT deopt or a slow timer read can't fail it (flake safety).
+			if (rule.equals("4x") && observedMax < SUB_10_NS) {
+				expected = Math.max(SUB_10_NS, expected);
 			}
 			assertEquals(expected, b.get("limit").getAsDouble(), entry.getKey());
 			rules.put(entry.getKey(), rule);

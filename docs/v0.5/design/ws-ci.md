@@ -289,7 +289,7 @@ Loom 1.17.21's command line and the Actions expressions checked fine):
 
 Branch `fix/v05-footprint-checkpoint`. The formula re-applied to the ten per-call ns budgets (the six v0.5 keys and X4.4's
 four listener keys, added to FootprintGameTest: `settingsCheck…`, `tryItTick…`, `serverProfileTick…`,
-`launcherLeftoverTick…`, each with a strict 0-byte key). Limits: frameHookNsPerCallOff 2 (was 20), frameHookNsPerCallOn 164
+`launcherLeftoverTick…`, each with a strict 0-byte key). Limits: frameHookNsPerCallOff 10 (was 20; the 10 ns floor for keys observed under 10 ns), frameHookNsPerCallOn 164
 (157), OnPhases 400 (the ceiling), tickHookNsPerCall 27 (276), World 62 (393), On 201 (653), settingsCheck 185,
 tryItTick 19, serverProfileTick 32, launcherLeftoverTick 32. Nothing else changed. Data, run ids, the split/pre-split
 comparison and the listener inventory: docs/v0.5/verification/footprint/README.md "The post-Wave-B checkpoint".

@@ -48,7 +48,8 @@ user-approved formula re-applied to the per-call ns budgets only: limit = min(ce
 No ceiling raised; CPU-ms, wall-ms, bytes, 0-allocation, leak checks and `tickHookOnVsReference` (2.05) untouched.
 The budgets file records each key's `observedMax`, `observedRuns` and `observedMaxRun`, and its `about` names the checkpoint;
 `FootprintBudgetsTest.everyPerCallBudgetComesFromTheCheckpoint` requires all ten per-call keys to follow the 4x rule from at
-least 20 runs, and `timingLimitsFollowTheirRecordedRule` checks the arithmetic (both red on the pre-checkpoint file).
+least 20 runs, and `timingLimitsFollowTheirRecordedRule` checks the arithmetic, the 10 ns floor included (both red on the
+pre-checkpoint file; the floor check red on the 2 ns limit).
 
 **The data** (collected from the artifacts by a script, `cp_collect.py` in the r-ci scratch folder):
 - The six v0.5 keys: every completed, not cancelled build.yml run with the game-test split on (a head containing 111cb2be),
@@ -73,7 +74,7 @@ least 20 runs, and `timingLimitsFollowTheirRecordedRule` checks the arithmetic (
 
 | key | runs | values | max observed (run, branch, artifact) | 4 x max | ceiling | limit |
 |---|---|---|---|---|---|---|
-| frameHookNsPerCallOff | 27 | 54 | 0.328 (run 36385058472, fix/v05-r11-ws-w, test-reports) | 1.31 | 20 | 2 (was 20) |
+| frameHookNsPerCallOff | 27 | 54 | 0.328 (run 36385058472, fix/v05-r11-ws-w, test-reports) | 1.31 | 20 | 10 (was 20; the 10 ns floor) |
 | frameHookNsPerCallOn | 27 | 54 | 40.907 (run 36384669141, fix/v05-r11-ws-l2, test-reports) | 163.63 | 200 | 164 (was 157) |
 | frameHookNsPerCallOnPhases | 27 | 54 | 267.129 (run 36384669141, fix/v05-r11-ws-l2, test-reports) | 1068.52 | 400 | 400 (was 400) |
 | tickHookNsPerCall | 27 | 81 | 6.7 (run 36393661954, scratch/fp-cp-1, footprint-26.3-OpenGL-part2) | 26.80 | 2000 | 27 (was 276) |
@@ -84,9 +85,11 @@ least 20 runs, and `timingLimitsFollowTheirRecordedRule` checks the arithmetic (
 | serverProfileTickNsPerCall | 23 | 69 | 7.82 (run 36381145845, fix/v05-footprint-checkpoint, footprint-26.2-OpenGL) | 31.28 | 2000 | 32 (was 2000) |
 | launcherLeftoverTickNsPerCall | 23 | 69 | 7.91 (run 36379964103, scratch/fp-cp-1, footprint-26.3-Vulkan) | 31.64 | 2000 | 32 (was 2000) |
 
-`frameHookNsPerCallOff` drops to 2 ns (the monitor-off frame hook is a static read; its v0.4-era maximum of 7.4 ns came
-before the v0.5 runs). A local Windows run over a limit with CI green is recorded, not debugged (docs/v0.5/PLAN.md "Local
-runs"). The four new allocation keys are 0 over all 48 blocks in every run (strict).
+A per-call key observed under 10 ns keeps a 10 ns floor, limit = max(10, min(ceiling, ⌈4 × max⌉)), so a JIT deopt or a
+slow timer read can't fail a gross-regression backstop (the coordinator's SPEC 1d(c)/1h amendment, flake safety).
+It changes only `frameHookNsPerCallOff` (0.33 ns observed: 10, not 2); tickHookNsPerCall, tryItTick, serverProfileTick and
+launcherLeftoverTick are over 10 already. A local Windows run over a limit with CI green is recorded, not debugged
+(docs/v0.5/PLAN.md "Local runs"). The four new allocation keys are 0 over all 48 blocks in every run (strict).
 
 The new listeners' keys (FootprintGameTest; the same timing as the tick hooks: 48 blocks of 20,000 calls after warm-up, ns =
 the median block, bytes = the sum over all blocks):
