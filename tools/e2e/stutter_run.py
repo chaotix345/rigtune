@@ -37,6 +37,8 @@ LF = chr(10)
 TIMEOUT = 12 * 60
 # StutterAnalyzer.TELEPORT_WINDOW: the seconds after a teleport whose spikes the product tags.
 TELEPORT_WINDOW = 10
+# StutterReport.MAX_WORST: the spikes a session lists (its tags count them all).
+MAX_WORST = 10
 OPTIONS = ("onboardAccessibility:false", "pauseOnLostFocus:false", "tutorialStep:none", "skipMultiplayerWarning:true",
            "joinedFirstServer:true", "soundCategory_master:0.0", "renderDistance:12", "simulationDistance:8", "fullscreen:false")
 GC_LINE = re.compile(r"\[(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d+)[+-]\d{4}\]\[([\d.]+)s\]\[\w+\s*\]\[gc\s*\] GC\(\d+\) (Pause [^0-9]*?) .*? ([\d.]+)ms$")
@@ -113,31 +115,41 @@ def evaluate(lines, stutter, gc_text):
     # The product's own teleport window (StutterAnalyzer.TELEPORT_WINDOW, 10 s from the position jump). The log stamps
     # whole seconds (+-1 s), so: every listed spike surely inside it (tp + 1 .. tp + 9) carries "after teleport"; at least one
     # tagged spike lies in its widest reading (tp - 1 .. tp + 11); no tagged spike lies outside that and the world entry's
-    # own window. "Chunks loading": in the widest reading, every spike from the first one with chunk loads to the last one
-    # (the product tags a spike only when chunks loaded within Attributor.CHUNK_NEAR of it, so loading starts after the tp,
-    # P5C-F1, and may end inside the window: run 36431601035's 26.2 leg, the last spike at tp + 10.7 s).
+    # own window. "Chunks loading": among the listed spikes from the tp on, every one from the first with chunk loads to the
+    # last (the product tags a spike only when chunks loaded within Attributor.CHUNK_NEAR of it, so loading starts after the
+    # tp, P5C-F1, and may end: run 36431601035's 26.2 leg). The report lists only the MAX_WORST worst spikes: when the list
+    # is full, a tag with no listed spike to show it is judged by the session's count exceeding the listed ones (release
+    # run 36448687667: 31 spikes, 10 listed, none after the tp's first moment).
     def within(w, start, low, high):
         return start is not None and start + low <= w["t"] <= start + high
 
     def tagged(w):
         return "afterTeleport:context" in w.get("causes", [])
+
+    def loads(w):
+        return any(n.startswith(("chunksLoading:", "chunkLoad:")) for n in w.get("causes", []))
+    full = len(worst) >= MAX_WORST
     sure = [w for w in worst if within(w, tp_s, 1, TELEPORT_WINDOW - 1)]
     wide = sorted((w for w in worst if within(w, tp_s, -1, TELEPORT_WINDOW + 1)), key=lambda w: w["t"])
     stray = [w["t"] for w in worst if tagged(w) and not within(w, tp_s, -1, TELEPORT_WINDOW + 1)
              and not within(w, entry_s, -1, TELEPORT_WINDOW + 1)]
     untagged = [w["t"] for w in sure if not tagged(w)]
-    loading = [w for w in wide if any(n.startswith(("chunksLoading:", "chunkLoad:")) for n in w.get("causes", []))]
+    unlisted_tp = tags.get("afterTeleport", 0) - sum(1 for w in worst if tagged(w))
+    after = sorted((w for w in worst if tp_s is not None and w["t"] >= tp_s - 1), key=lambda w: w["t"])
+    loading = [w for w in after if loads(w)]
     first_loading = loading[0]["t"] if loading else None
     last_loading = loading[-1]["t"] if loading else None
-    late_untagged = [w["t"] for w in wide if first_loading is not None and first_loading <= w["t"] <= last_loading and w not in loading]
+    late_untagged = [w["t"] for w in after if first_loading is not None and first_loading <= w["t"] <= last_loading and not loads(w)]
+    unlisted_loading = tags.get("chunksLoading", 0) - sum(1 for w in worst if loads(w))
     checks += [
-        ("the spikes after the teleport carry \"after teleport\"", tags.get("afterTeleport", 0) > 0 and any(tagged(w) for w in wide)
-         and not untagged and not stray,
-         "tp at session {} s (world entry {} s); tagged near the tp: {}; untagged inside its window: {}; tagged outside both windows: {}"
-         .format(tp_s, entry_s, [w["t"] for w in wide if tagged(w)], untagged, stray)),
-        ("\"chunks loading\" from the first chunk load after the teleport on", tags.get("chunksLoading", 0) > 0 and first_loading is not None
-         and not late_untagged, "tagged: {}; first at {} s, last at {} s; untagged between them: {}".format(
-             tags.get("chunksLoading", 0), first_loading, last_loading, late_untagged)),
+        ("the spikes after the teleport carry \"after teleport\"", tags.get("afterTeleport", 0) > 0
+         and (any(tagged(w) for w in wide) or (full and unlisted_tp > 0)) and not untagged and not stray,
+         "tp at session {} s (world entry {} s); tagged near the tp: {}; untagged inside its window: {}; tagged outside both windows: {}; "
+         "listed {}, tagged but not listed {}".format(tp_s, entry_s, [w["t"] for w in wide if tagged(w)], untagged, stray, len(worst), unlisted_tp)),
+        ("\"chunks loading\" from the first chunk load after the teleport on", tags.get("chunksLoading", 0) > 0
+         and (first_loading is not None or (full and unlisted_loading > 0)) and not late_untagged,
+         "tagged: {}; first at {} s, last at {} s; untagged between them: {}; tagged but not listed {}".format(
+             tags.get("chunksLoading", 0), first_loading, last_loading, late_untagged, unlisted_loading)),
         ("no GC milliseconds claimed without an overlapping pause", bool(pauses) and not unmatched,
          "{} GC pauses in the JVM log; GC-noted spikes {}; without a pause: {} (capture start = its log line + {:.2f} s)".format(
              len(pauses), [w["t"] for w in gc_noted], unmatched, delta)),

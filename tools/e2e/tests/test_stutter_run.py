@@ -79,6 +79,19 @@ class EvaluateTest(unittest.TestCase):
         session["worst"].append({"t": 30.0, "ms": 30.0, "baseMs": 8.3, "causes": ["render:low", "afterTeleport:context"]})
         self.assertEqual([], failing(stutter_run.evaluate(self.lines, stutter, self.gc)[0]))
 
+    # Release run 36448687667's 26.2 leg: 31 spikes, 10 listed; after the tp only one early spike and later loading ones.
+    def test_a_full_list_is_judged_with_the_session_s_counts(self):
+        run = C1R.parents[3] / "v0.5" / "verification" / "stutter" / "ac3f1-stutter-script" / "run-36448687667" / "mc26.2"
+        lines = (run / "log-excerpt.txt").read_text(encoding="utf-8").splitlines()
+        stutter = json.loads((run / "stutter.json").read_text(encoding="utf-8"))
+        gc = (run / "gc.log").read_text(encoding="utf-8")
+        self.assertEqual([], failing(stutter_run.evaluate(lines, stutter, gc)[0]))
+        # The same session with its later loading spikes dropped: a list below the cap is complete, so nothing shows the tags.
+        session = [s for s in stutter["sessions"] if s["source"] == "monitor"][-1]
+        session["worst"] = [w for w in session["worst"] if w["t"] < 40]
+        self.assertEqual(["\"chunks loading\" from the first chunk load after the teleport on"],
+                         failing(stutter_run.evaluate(lines, stutter, gc)[0]))
+
     # C1r: capture on at 02:12:36, world entry at +2 s, tp at +22 s; the product's window is 10 s.
     def test_the_teleport_window_s_edges(self):
         def failing_with(*extra):

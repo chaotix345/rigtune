@@ -1,0 +1,238 @@
+[16:11:39] [Render thread/INFO]: Using graphics backend OpenGL, using drivers: 4.5 (Core Profile) Mesa 25.2.8-0ubuntu0.24.04.2
+[16:11:39] [Render thread/INFO]: Using graphics device: llvmpipe (LLVM 20.1.2, 256 bits) (Mesa)
+[16:11:39] [Render thread/INFO]: Using graphics device extensions: GL_ARB_multi_draw_indirect, GL_ARB_buffer_storage, GL_ARB_shader_draw_parameters, GL_ARB_base_instance, GL_KHR_debug, GL_ARB_draw_indirect, GL_ARB_clip_control, GL_ARB_vertex_attrib_binding, GL_ARB_direct_state_access, GL_EXT_texture_filter_anisotropic
+[16:11:56] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:overworld
+[16:11:56] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_nether
+[16:11:56] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_end
+[16:11:56] [Server thread/INFO]: ThreadedAnvilChunkStorage: All dimensions are saved
+[16:11:56] [Render thread/INFO]: Dev stutter: monitor on; opening the benchmark world: true
+[16:12:04] [Render thread/INFO]: Stutter Doctor: capture on (collector g1)
+[16:12:04] [RigTune stutter sampler/INFO]: Stutter Doctor: 33 threads {Chunk Render Task Executor #*=1, Common-Cleaner=1, Download-*=2, Finalizer=1, ForkJoinPool.commonPool-delayScheduler=1, ForkJoinPool.commonPool-worker-*=1, IO-Worker-*=4, JNA Cleaner=1, Netty Local IO #*=3, Notification Thread=1, Reference Handler=1, Render thread=1, RigTune dev GC=1, RigTune network=1, RigTune rules=1, RigTune stutter sampler=1, RigTune worker=2, Server thread=1, Signal Dispatcher=1, Sound engine=1, Timer hack thread=1, Worker-Main-*=3, Yggdrasil Key Fetcher=1, process reaper=1}
+[16:12:09] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[16:12:14] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[16:12:15] [Render thread/INFO]: Dev stutter: in the benchmark world; standing still for 20 s
+[16:12:20] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[16:12:25] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[16:12:30] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[16:12:35] [Render thread/INFO]: Dev stutter: tp @a 200000 200 200000
+[16:12:35] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[16:12:41] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[16:12:46] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[16:12:51] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[16:12:56] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[16:13:02] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[16:13:05] [Render thread/INFO]: Dev stutter: save-all (saveEverything with flush)
+[16:13:05] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:overworld
+[16:13:07] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_nether
+[16:13:07] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_end
+[16:13:07] [Server thread/INFO]: ThreadedAnvilChunkStorage: All dimensions are saved
+[16:13:07] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[16:13:12] [RigTune dev GC/INFO]: Dev stutter: System.gc() (rigtune.dev.forceGcEverySec = 5)
+[16:13:15] [Render thread/INFO]: Dev stutter: opened the Stutter Doctor
+[16:13:15] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:overworld
+[16:13:15] [Render thread/INFO]: Dev stutter: report:
+**RigTune Stutter Doctor** · session · Minecraft 26.2 · G1, 4096 MB heap
+1:11 (1:01 of gameplay) · 807 frames · avg 13 FPS · 1% low 3 FPS
+31 spikes (0 minor, 0 major, 30 severe, 1 freeze) in 24 hitches · 5.9 s lost
+Not enough data yet (at least 3 spikes and 2 minutes of gameplay)
+Likely causes (share of the lost time): garbage collection 53 %, game ticks 2 %; not explained 44 %
+31 of 31 spikes happened during a busy CPU (not measured)
+11 of 31 spikes happened during the 10 s after a teleport (not measured)
+30 of 31 spikes happened while chunks were loading (not measured)
+Worst: 517 ms at 0:27 (garbage collection (high), full GC, System.gc(), game ticks (medium), a busy CPU (low), worker, chunks loading); 460 ms at 0:21 (garbage collection (high), full GC, System.gc(), chunk loading (medium), rendering (low), a busy CPU (low), worker); 382 ms at 0:16 (garbage collection (high), full GC, System.gc(), rendering (low), a busy CPU (low), worker, the 10 s after a teleport, chunks loading)
+
+[16:13:15] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_nether
+[16:13:15] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_end
+[16:13:16] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:overworld
+[16:13:17] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_nether
+[16:13:17] [Server thread/INFO]: Saving chunks for level 'ServerLevel[RigTune Benchmark]'/minecraft:the_end
+[16:13:17] [Server thread/INFO]: ThreadedAnvilChunkStorage: All dimensions are saved
+[16:13:17] [Render thread/INFO]: Stutter Doctor: capture off; GC listener removed, sampler stopped
+[16:13:17] [RigTune worker/INFO]: Stutter Doctor: session saved (OK): 31 spikes in 61 s of gameplay, phase timing ok (per-frame baselines: packets 90.7 us, ticks 859.6 us, render 53595.5 us; timers seen 1111111), GC offset 22.3 ms
+[16:13:21] [Render thread/INFO]: Dev stutter: <run>/instance/config/rigtune/stutter.json:
+{
+  "formatVersion": 1,
+  "sessions": [
+    {
+      "startedAt": "2026-09-28T16:12:04Z",
+      "source": "monitor",
+      "mc": "26.2",
+      "collector": "G1",
+      "heapMaxMb": 4096,
+      "sessionSeconds": 73.1,
+      "gameplaySeconds": 61.1,
+      "frames": 807,
+      "avgFps": 13.2,
+      "onePercentLowFps": 2.6,
+      "histogramCounts": [
+        0,
+        0,
+        0,
+        40,
+        233,
+        421,
+        92,
+        21,
+        0
+      ],
+      "histogramTimeMs": [
+        0,
+        0,
+        0,
+        1218,
+        9828,
+        27698,
+        15534,
+        6789,
+        0
+      ],
+      "spikes": {
+        "minor": 0,
+        "major": 0,
+        "severe": 30,
+        "freeze": 1
+      },
+      "lostMs": 5902.1,
+      "causes": {
+        "gc": 0.53,
+        "chunkLoad": 0.0,
+        "tick": 0.02,
+        "unknown": 0.44
+      },
+      "tags": {
+        "cpuContention": 31,
+        "afterTeleport": 11,
+        "chunksLoading": 30
+      },
+      "worst": [
+        {
+          "t": 26.7,
+          "ms": 517.2,
+          "baseMs": 118.6,
+          "causes": [
+            "gc:high:FULL:EXPLICIT",
+            "tick:medium",
+            "cpuContention:low:worker",
+            "chunksLoading:context"
+          ]
+        },
+        {
+          "t": 21.2,
+          "ms": 459.8,
+          "baseMs": 107.2,
+          "causes": [
+            "gc:high:FULL:EXPLICIT",
+            "chunkLoad:medium",
+            "render:low",
+            "cpuContention:low:worker"
+          ]
+        },
+        {
+          "t": 15.9,
+          "ms": 381.5,
+          "baseMs": 97.0,
+          "causes": [
+            "gc:high:FULL:EXPLICIT",
+            "render:low",
+            "cpuContention:low:worker",
+            "afterTeleport:context",
+            "chunksLoading:context"
+          ]
+        },
+        {
+          "t": 22.0,
+          "ms": 363.4,
+          "baseMs": 107.2,
+          "causes": [
+            "render:low",
+            "cpuContention:low:worker",
+            "chunksLoading:context"
+          ]
+        },
+        {
+          "t": 58.1,
+          "ms": 358.7,
+          "baseMs": 59.5,
+          "causes": [
+            "gc:high:FULL:EXPLICIT",
+            "render:low",
+            "cpuContention:low:worker",
+            "chunksLoading:context"
+          ]
+        },
+        {
+          "t": 63.4,
+          "ms": 349.8,
+          "baseMs": 50.6,
+          "causes": [
+            "gc:high:FULL:EXPLICIT",
+            "render:low",
+            "cpuContention:low:worker",
+            "chunksLoading:context"
+          ]
+        },
+        {
+          "t": 68.7,
+          "ms": 343.6,
+          "baseMs": 51.7,
+          "causes": [
+            "gc:high:FULL:EXPLICIT",
+            "cpuContention:low:worker",
+            "chunksLoading:context"
+          ]
+        },
+        {
+          "t": 31.8,
+          "ms": 341.1,
+          "baseMs": 125.8,
+          "causes": [
+            "gc:high:FULL:EXPLICIT",
+            "cpuContention:low:worker",
+            "afterTeleport:context"
+          ]
+        },
+        {
+          "t": 47.5,
+          "ms": 324.3,
+          "baseMs": 56.2,
+          "causes": [
+            "gc:high:FULL:EXPLICIT",
+            "render:low",
+            "cpuContention:low:worker",
+            "chunksLoading:context"
+          ]
+        },
+        {
+          "t": 52.8,
+          "ms": 307.9,
+          "baseMs": 65.0,
+          "causes": [
+            "gc:high:FULL:EXPLICIT",
+            "cpuContention:low:worker",
+            "chunksLoading:context"
+          ]
+        }
+      ],
+      "facts": {
+        "liveSetPct": 9,
+        "fullGcs": 0,
+        "stalls": 0,
+        "explicitGcs": 13,
+        "gcOffsetMs": 22.3
+      },
+      "advice": [],
+      "enoughData": false,
+      "phaseTiming": true,
+      "hitches": 24,
+      "settingsAtStart": {
+        "renderDistance": "12",
+        "simulationDistance": "8"
+      },
+      "settingsAtEnd": {
+        "renderDistance": "12",
+        "simulationDistance": "8"
+      }
+    }
+  ]
+}
+[16:13:21] [Render thread/INFO]: Dev stutter: PASSED; stopping the client
