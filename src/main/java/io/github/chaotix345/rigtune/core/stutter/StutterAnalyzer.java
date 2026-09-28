@@ -54,7 +54,20 @@ public final class StutterAnalyzer {
 
 	// dhWorldGenCores (v0.5, docs/v0.5/SPEC.md 2S for 2B's RW-6): the core-equivalents Distant Horizons' world generation
 	// used over the sampler windows the capture recorded (dhWorldGenCores(Input)); null without such a window.
-	public record Result(StutterReport report, StutterFacts facts, List<Attributor.Attribution> attributions, @Nullable Double dhWorldGenCores) {
+	// covered (review-11 STUTTER-2, for C20's comparison): null when every spike of the capture is known; else the part
+	// that is (Covered).
+	public record Result(StutterReport report, StutterFacts facts, List<Attributor.Attribution> attributions, @Nullable Double dhWorldGenCores,
+			@Nullable Covered covered) {
+		public Result(StutterReport report, StutterFacts facts, List<Attributor.Attribution> attributions, @Nullable Double dhWorldGenCores) {
+			this(report, facts, attributions, dhWorldGenCores, null);
+		}
+	}
+
+	// Once both the frame ring and the candidate ring wrapped, the spikes before the frame ring's window are known only in
+	// part (the candidates that pushed them out were newer), so only that window is covered: from its first frame, with its
+	// gameplay and its wall length (seconds). Spikes and gameplay must come from the same span, or a long session's rate
+	// is its window's spikes over the whole session's gameplay.
+	public record Covered(long fromNanos, double gameplaySeconds, double seconds) {
 	}
 
 	private StutterAnalyzer() {
@@ -183,7 +196,18 @@ public final class StutterAnalyzer {
 		StutterFacts stutterFacts = new StutterFacts(claimedShares, taggedShares, gc.fullPauses(), gc.stalls(), gc.explicit(), gc.liveSetPercent(), room,
 				contentionShare(in, samples), gameplaySeconds > 0 ? spikes.size() / (gameplaySeconds / 60) : 0, in.collector(), in.gcMeasured(),
 				unmeasured, FixEvidence.dominatedSpikes(attributions));
-		return new Result(report, stutterFacts, attributions, dhWorldGenCores(in));
+		return new Result(report, stutterFacts, attributions, dhWorldGenCores(in), covered(f, ringStart, in.endNanos()));
+	}
+
+	static @Nullable Covered covered(FrameRing.Snapshot f, long ringStart, long endNanos) {
+		if (f.frames() <= f.ends().length || f.candidateCount() <= f.candidateRecords()) {
+			return null;
+		}
+		long gameplay = 0;
+		for (long d : gameplayDurations(f.ends())) {
+			gameplay += d;
+		}
+		return new Covered(ringStart, gameplay / 1e9, Math.max(0, endNanos - ringStart) / 1e9);
 	}
 
 	// review-8 ST-2: the phases of a frame the frame ring still holds, from its own phase word (the excess over the
