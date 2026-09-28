@@ -67,7 +67,7 @@ jobs:
       - uses: actions/cache@v6
         with:
           path: build/e2e-old
-          key: e2e-old-8294d04a6b67e76d-67275e232fe4de9f-5717f65cb90c71ae
+          key: e2e-old-8294d04a6b67e76d-67275e232fe4de9f-5717f65cb90c71aa-98a2a2e14d7cc49f-cc43ebdf6b92666e-801cd3b8e91c6a27-2d8328d73cb47891
       - name: Resolve dependencies (network)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -76,14 +76,20 @@ jobs:
           tools/ci/retry.sh ./gradlew --no-daemon prefetchDependencies
           old=build/e2e-old
           mkdir -p "$old"
-          for spec in 'v0.1.0 rigtune-0.1.0.jar' 'v0.2.0 rigtune-0.2.0+mc26.2.jar' 'v0.3.0 rigtune-0.3.0+mc26.2.jar'; do
-            set -- $spec
-            [ -s "$old/$2" ] || tools/ci/retry.sh gh release download "$1" -R "$GITHUB_REPOSITORY" -p "$2" -D "$old" --clobber
+          for spec in 'v0.1.0 rigtune-0.1.0.jar' 'v0.2.0 rigtune-0.2.0+mc26.2.jar' 'v0.3.0 rigtune-0.3.0+mc26.2.jar' \
+              'v0.2.0 rigtune-0.2.0+mc26.3.jar' 'v0.3.0 rigtune-0.3.0+mc26.3.jar' 'v0.4.0 rigtune-0.4.0+mc26.2.jar' \
+              'v0.4.0 rigtune-0.4.0+mc26.3.jar'; do
+            read -r tag asset <<< "$spec"
+            [ -s "$old/$asset" ] || tools/ci/retry.sh gh release download "$tag" -R "$GITHUB_REPOSITORY" -p "$asset" -D "$old" --clobber
           done
           sha256sum -c - <<EOF
           8294d04a6b67e76dcff298366be38f85048ebf19a120baa9e8ed5b08b2e4b950  $old/rigtune-0.1.0.jar
           67275e232fe4de9f806dd6496f479d8385d8afabf9a6b93ffe909ce42f657de9  $old/rigtune-0.2.0+mc26.2.jar
           5717f65cb90c71aaeda844b7bd56e3ce9255e83f44418af0cfc6a589050cd7e9  $old/rigtune-0.3.0+mc26.2.jar
+          98a2a2e14d7cc49fcaa1fde087d40d1ace277b721ee6bc9d1ba94ced29a0a7d9  $old/rigtune-0.2.0+mc26.3.jar
+          cc43ebdf6b92666e5cf380004252fa59a81fa72b90f44cb280e45063cbf28084  $old/rigtune-0.3.0+mc26.3.jar
+          801cd3b8e91c6a27b819d64c5b433bea6d7ac99d4776cb853c873a9cafdd868a  $old/rigtune-0.4.0+mc26.2.jar
+          2d8328d73cb4789142036325eed11d1cd4ce6678fff7ca539cab9c09781499a7  $old/rigtune-0.4.0+mc26.3.jar
           EOF
       # Stonecutter rewrites src/ when the active Minecraft version is switched. Commits must be in the state
       # of the VCS version, 26.2 (settings.gradle vcsVersion, stonecutter.gradle active), with canonical comments.
@@ -103,8 +109,9 @@ jobs:
       - name: Build and test
         run: tools/ci/offline.sh ./gradlew --no-daemon --offline build
       # The self-update E2E drivers (tools/e2e) aren't part of `build`: compile them here so an API change that breaks
-      # them shows up on the push, not in Phase 5. The undo driver compiles against these sources; the self-update driver
-      # against each released jar it drives on the E2E's version, 26.2 (from the GitHub releases, sha256-pinned above).
+      # them shows up on the push, not in Phase 5. The undo driver compiles against these sources; the self-update and
+      # downgrade drivers against each released jar they drive, on each node (from the GitHub releases, sha256-pinned
+      # above; tools/e2e/tests keep these pins equal to RELEASED).
       - name: Compile the E2E drivers
         run: |
           set -eu
@@ -113,8 +120,22 @@ jobs:
           ./gradlew --offline :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.1.0.jar"
           ./gradlew --offline :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.2.0+mc26.2.jar"
           ./gradlew --offline :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.2.jar"
+          ./gradlew --offline :26.2:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.4.0+mc26.2.jar"
+          ./gradlew --offline :26.3:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.2.0+mc26.3.jar"
+          ./gradlew --offline :26.3:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.3.jar"
+          ./gradlew --offline :26.3:compileE2eJava "-Pe2e.oldJar=$old/rigtune-0.4.0+mc26.3.jar"
           ./gradlew --offline :26.2:compileE2eDowngradeJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.2.jar"
-          # The released-jar compatibility harness (docs/v0.4/SPEC.md AC3.3): 0.3.0's own classes read the files 0.4 writes.
+          ./gradlew --offline :26.2:compileE2eDowngradeJava "-Pe2e.oldJar=$old/rigtune-0.4.0+mc26.2.jar"
+          ./gradlew --offline :26.3:compileE2eDowngradeJava "-Pe2e.oldJar=$old/rigtune-0.3.0+mc26.3.jar"
+          ./gradlew --offline :26.3:compileE2eDowngradeJava "-Pe2e.oldJar=$old/rigtune-0.4.0+mc26.3.jar"
+      # The released-jar compatibility harnesses (docs/v0.5/SPEC.md 3b): the released 0.4.0's and 0.3.0's own classes read
+      # what 0.5 writes (the v040-written and v050-written fixture sets, composed as one instance; compat040 also runs each
+      # set's expect.json). No client, no network.
+      - name: Released-jar compatibility (compat040, compat030)
+        run: |
+          set -eu
+          old=build/e2e-old
+          python3 tools/e2e/compat040.py --old-jar "$old/rigtune-0.4.0+mc26.2.jar"
           python3 tools/e2e/compat030.py --old-jar "$old/rigtune-0.3.0+mc26.2.jar"
       - name: Upload jars
         if: always()
@@ -132,6 +153,15 @@ jobs:
             versions/*/build/reports/tests/**
             versions/*/build/test-results/**
           if-no-files-found: ignore
+
+  # The self-update E2E on this run's jars (docs/v0.5/SPEC.md 3a; .github/workflows/e2e.yml): the push tier, 0.4.0 → new
+  # on every node, on every push. A pull request into main from a feat/v* branch (the release PR) runs the release tier.
+  e2e:
+    needs: java
+    uses: ./.github/workflows/e2e.yml
+    with:
+      tier: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' && startsWith(github.head_ref, 'feat/v') && 'release' || 'push' }}
+      jars-artifact: rigtune-jars
 
   # The client-gametest legs, one per Minecraft node in versions/*/: OpenGL for every node, plus Vulkan from 26.3 on.
   # A new node gets its legs without editing this file (tools/gametest_matrix.py, tested in tools/tests).

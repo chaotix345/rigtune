@@ -140,11 +140,21 @@ public final class Compat030 {
 			// (replaced by a later switch, P-H1) isn't a candidate.
 			List<String> want = sw.changes().stream().filter(c -> JournalChange.APPLIED.equals(c.status()) || JournalChange.STAGED.equals(c.status()))
 					.map(JournalChange::id).sorted().toList();
+			// A change a later entry changed again (0.5's fixtures touch the same keys) is skipped, which is right; every other
+			// change must be reverted or its op dropped.
+			List<JournalEntry> later = entries.subList(entries.indexOf(sw) + 1, entries.size());
+			Set<String> changedLater = later.stream().flatMap(e -> e.changes().stream()).map(c -> c.isSetting() ? c.key() : c.file())
+					.collect(java.util.stream.Collectors.toSet());
+			List<String> skippable = sw.changes().stream().filter(c -> want.contains(c.id()) && changedLater.contains(c.isSetting() ? c.key() : c.file()))
+					.map(JournalChange::id).toList();
+			List<String> mustRevert = want.stream().filter(id -> !skippable.contains(id)).toList();
 			List<String> reverted = plan.items().stream()
 					.filter(i -> i.action() == UndoPlan.Action.REVERT || i.action() == UndoPlan.Action.DISCARD_STAGED)
 					.flatMap(i -> i.changeIds().stream()).sorted().toList();
-			check("UndoPlanner: Undo this on the profile-switch entry reverts each change", plan.problem() == null && !plan.isEmpty()
-					&& reverted.equals(want) && JournalEntry.APPLY.equals(sw.kind()), "kind " + sw.kind() + ", problem " + plan.problem()
+			long skipped = plan.items().stream().filter(i -> i.action() == UndoPlan.Action.SKIP).count();
+			check("UndoPlanner: Undo this on the profile-switch entry reverts each change", plan.problem() == null
+					&& (!plan.isEmpty() || mustRevert.isEmpty()) && reverted.equals(mustRevert) && skipped == skippable.size() && JournalEntry.APPLY.equals(sw.kind()),
+					"changed again later " + skippable.size() + ", kind " + sw.kind() + ", problem " + plan.problem()
 					+ ", items " + plan.items().stream().map(i -> i.action() + " " + i.description()
 					+ (i.reason() == null ? "" : " (" + i.reason() + ")")).toList());
 		}

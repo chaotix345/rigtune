@@ -1,0 +1,323 @@
+name: e2e
+
+# The self-update, undo and downgrade E2E (docs/v0.5/SPEC.md 3a; tools/e2e/README.md): one job per scenario of
+# tools/e2e/e2e_matrix.py's tier, each a production client under Xvfb (Loom wraps the game in xvfb-run when CI is set)
+# talking to the harness's own fake Modrinth on 127.0.0.1:443 (the game resolves no other host: -Djdk.net.hosts.file).
+# The new jars are the calling run's (never rebuilt here); the old one is a GitHub release asset, sha256-pinned in
+# tools/e2e/self_update_e2e.py's RELEASED and cached. Network (SPEC 1a, AC3a.6): one "(network)" step per job downloads
+# (retried: tools/ci/retry.sh); every Gradle call after it runs --offline, the harness's too. The scenario itself is
+# never retried: a flake is re-run by hand, so an intermittent regression isn't hidden.
+on:
+  workflow_call:
+    inputs:
+      tier:
+        description: push (each node's newest release updating to the new jar) or release (every scenario)
+        type: string
+        required: true
+      jars-artifact:
+        description: the calling run's artifact holding rigtune-<version>+mc<node>.jar for every node
+        type: string
+        required: true
+  # The release tier by hand, on jars this workflow builds (SPEC 3a: its own dispatch, never build.yml's; scheduled by the
+  # coordinator outside CI streaks). Only once the file is on the default branch.
+  workflow_dispatch:
+    inputs:
+      tier:
+        type: choice
+        options: [push, release]
+        default: release
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      nodes: ${{ steps.matrix.outputs.nodes }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: matrix
+        name: List the E2E scenarios
+        env:
+          TIER: ${{ inputs.tier }}
+        run: |
+          set -eu
+          matrix=$(python3 tools/e2e/e2e_matrix.py --tier "$TIER")
+          echo "$matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "nodes=$(python3 tools/e2e/e2e_matrix.py --nodes)" >> "$GITHUB_OUTPUT"
+
+  # Only a dispatch builds jars; a caller passes the ones its run built (and, in release.yml, staged for publishing).
+  jars:
+    if: ${{ !inputs.jars-artifact }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up the JDK (network)
+        id: jdk
+        uses: actions/setup-java@v6
+        continue-on-error: true
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
+      - name: Wait before the JDK retry (network)
+        if: steps.jdk.outcome == 'failure'
+        run: sleep 30
+      - name: Set up the JDK, retry (network)
+        if: steps.jdk.outcome == 'failure'
+        uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feat/v0.5.0' }}
+      - name: Resolve dependencies (network)
+        run: tools/ci/retry.sh ./gradlew --no-daemon prefetchDependencies
+      - name: Build the jars
+        run: ./gradlew --no-daemon --offline assemble
+      - uses: actions/upload-artifact@v7
+        with:
+          name: e2e-new-jars
+          path: versions/*/build/libs/*.jar
+          if-no-files-found: error
+
+  e2e:
+    name: e2e ${{ matrix.id }} (${{ matrix.mc }})
+    needs: [matrix, jars]
+    if: ${{ !cancelled() && needs.matrix.result == 'success' && (needs.jars.result == 'success' || needs.jars.result == 'skipped') }}
+    # Pinned like the game-test legs (another Mesa and Xvfb come with a newer image).
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      # The release tier's jobs share the account's runners with every other workflow.
+      max-parallel: 6
+      matrix: ${{ fromJSON(needs.matrix.outputs.matrix) }}
+    env:
+      # 26.3 creates its window with SDL3, which asks GLX for an sRGB-capable visual that Xvfb doesn't have (build.yml).
+      SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER: skip
+      MC: ${{ matrix.mc }}
+      SCENARIO: ${{ matrix.id }}
+      OLD_TAG: ${{ matrix.tag }}
+      OLD_ASSET: ${{ matrix.asset }}
+      OLD_SHA256: ${{ matrix.sha256 }}
+      HARNESS_ARGS: ${{ matrix.args }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up the JDK (network)
+        id: jdk
+        uses: actions/setup-java@v6
+        continue-on-error: true
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
+      - name: Wait before the JDK retry (network)
+        if: steps.jdk.outcome == 'failure'
+        run: sleep 30
+      - name: Set up the JDK, retry (network)
+        if: steps.jdk.outcome == 'failure'
+        uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feat/v0.5.0' }}
+      - name: The new jars (the calling run's, never rebuilt)
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ inputs.jars-artifact || 'e2e-new-jars' }}
+          path: ${{ runner.temp }}/new
+      # The released old jar, kept under its pinned sha256.
+      - uses: actions/cache@v6
+        if: matrix.old != ''
+        with:
+          path: ${{ runner.temp }}/old
+          key: e2e-old-${{ matrix.asset }}-${{ matrix.sha256 }}
+      # Gradle's dependencies and Minecraft's assets for the drivers and the client (the harness's Gradle runs
+      # --offline), and the old jar on a cache miss; then its sha256 is checked either way.
+      - name: Resolve dependencies (network)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          tools/ci/retry.sh ./gradlew --no-daemon ":$MC:prefetchDependencies" ":$MC:downloadAssets"
+          if [ -n "$OLD_ASSET" ]; then
+            mkdir -p "$RUNNER_TEMP/old"
+            [ -s "$RUNNER_TEMP/old/$OLD_ASSET" ] \
+              || tools/ci/retry.sh gh release download "$OLD_TAG" -R "$GITHUB_REPOSITORY" -p "$OLD_ASSET" -D "$RUNNER_TEMP/old" --clobber
+            echo "$OLD_SHA256  $RUNNER_TEMP/old/$OLD_ASSET" | sha256sum -c -
+          fi
+      - name: Let the fake Modrinth bind 443
+        run: sudo sysctl -w net.ipv4.ip_unprivileged_port_start=443
+      - name: Run the scenario
+        run: |
+          set -eu
+          mapfile -t found < <(find "$RUNNER_TEMP/new" -name "rigtune-*+mc$MC.jar" ! -name "*-sources.jar")
+          if [ "${#found[@]}" -ne 1 ]; then
+            echo "::error::expected exactly one rigtune-*+mc$MC.jar in the jars artifact, found: ${found[*]:-none}"
+            exit 1
+          fi
+          old=()
+          if [ -n "$OLD_ASSET" ]; then
+            old=(--old-jar "$RUNNER_TEMP/old/$OLD_ASSET")
+          fi
+          # HARNESS_ARGS is e2e_matrix.py's shlex.join of the row's arguments (its own table, not user input).
+          eval "set -- $HARNESS_ARGS"
+          python3 tools/e2e/self_update_e2e.py --lock none --gradle-arg=--offline --mc "$MC" --name "$SCENARIO" \
+            --new-jar "${found[0]}" "${old[@]}" --work "$RUNNER_TEMP/e2e" --evidence "$RUNNER_TEMP/evidence/$SCENARIO-$MC" "$@"
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-${{ matrix.id }}-${{ matrix.mc }}
+          path: |
+            ${{ runner.temp }}/evidence/
+            ${{ runner.temp }}/e2e/*/e2e.log
+            ${{ runner.temp }}/e2e/*/gradle-*.log
+            ${{ runner.temp }}/e2e/*/instance*/logs/
+            ${{ runner.temp }}/e2e/*/instance*/crash-reports/
+          if-no-files-found: ignore
+
+  # AC3f.1, release tier only: the Stutter Doctor's dev script (tools/e2e/stutter_run.py: monitor on, benchmark world,
+  # teleport to never-generated terrain, save-all, forced GCs every 5 s) once per node in a production client on the
+  # caller's jar, in tools/ci/offline.sh's namespace (it needs no network). Its evaluation is qualitative (tags, GC claims
+  # against -Xlog:gc pauses, the remainder shown); llvmpipe's milliseconds aren't judged.
+  stutter-script:
+    name: stutter script (${{ matrix.mc }})
+    needs: [matrix, jars]
+    if: ${{ !cancelled() && inputs.tier == 'release' && needs.matrix.result == 'success' && (needs.jars.result == 'success' || needs.jars.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        mc: ${{ fromJSON(needs.matrix.outputs.nodes) }}
+    env:
+      SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER: skip
+      MC: ${{ matrix.mc }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up the JDK (network)
+        id: jdk
+        uses: actions/setup-java@v6
+        continue-on-error: true
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
+      - name: Wait before the JDK retry (network)
+        if: steps.jdk.outcome == 'failure'
+        run: sleep 30
+      - name: Set up the JDK, retry (network)
+        if: steps.jdk.outcome == 'failure'
+        uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feat/v0.5.0' }}
+      - name: The new jars (the calling run's, never rebuilt)
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ inputs.jars-artifact || 'e2e-new-jars' }}
+          path: ${{ runner.temp }}/new
+      - name: Resolve dependencies (network)
+        run: tools/ci/retry.sh ./gradlew --no-daemon ":$MC:prefetchDependencies" ":$MC:downloadAssets"
+      - name: The dev script in a production client
+        timeout-minutes: 16
+        run: |
+          set -eu
+          mapfile -t found < <(find "$RUNNER_TEMP/new" -name "rigtune-*+mc$MC.jar" ! -name "*-sources.jar")
+          if [ "${#found[@]}" -ne 1 ]; then
+            echo "::error::expected exactly one rigtune-*+mc$MC.jar in the jars artifact, found: ${found[*]:-none}"
+            exit 1
+          fi
+          tools/ci/offline.sh --timeout 14m python3 tools/e2e/stutter_run.py --mc "$MC" --new-jar "${found[0]}" \
+            --work "$RUNNER_TEMP/stutter" --evidence "$RUNNER_TEMP/evidence/stutter-$MC" --gradle-arg=--offline --gradle-arg=--no-daemon
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: stutter-script-${{ matrix.mc }}
+          path: ${{ runner.temp }}/evidence/
+          if-no-files-found: ignore
+
+  # AC3e.2, release tier only: BatteryFlowGameTest's OSHI block, one job per node, on the caller's RigTune jar
+  # (-PgametestModJar: the staged bytes, never a rebuild; only the gametest jar is built here). The runner's kernel has no
+  # test_power module, so tools/e2e/fake_battery.sh mounts a tmpfs over /sys/class/power_supply with a discharging BAT0; the
+  # game's own OSHI reads it with udev off, its startup probe finds a battery on battery power and its watcher starts; the
+  # test rewrites STATUS and waits for the watcher's real 30 s polls (AC -> battery -> AC). The game runs in
+  # tools/ci/offline.sh's namespace, which shares the mount.
+  battery-oshi:
+    name: battery OSHI leg (${{ matrix.mc }})
+    needs: [matrix, jars]
+    if: ${{ !cancelled() && inputs.tier == 'release' && needs.matrix.result == 'success' && (needs.jars.result == 'success' || needs.jars.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        mc: ${{ fromJSON(needs.matrix.outputs.nodes) }}
+    env:
+      SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER: skip
+      MC: ${{ matrix.mc }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up the JDK (network)
+        id: jdk
+        uses: actions/setup-java@v6
+        continue-on-error: true
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
+      - name: Wait before the JDK retry (network)
+        if: steps.jdk.outcome == 'failure'
+        run: sleep 30
+      - name: Set up the JDK, retry (network)
+        if: steps.jdk.outcome == 'failure'
+        uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feat/v0.5.0' }}
+      - name: The new jars (the calling run's, never rebuilt)
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ inputs.jars-artifact || 'e2e-new-jars' }}
+          path: ${{ runner.temp }}/new
+      - name: Resolve dependencies (network)
+        run: >-
+          tools/ci/retry.sh ./gradlew --no-daemon ":$MC:prefetchDependencies" ":$MC:downloadAssets"
+          ":$MC:gametestModrinthCatalog" ":$MC:gametestJar" -PgametestClasses=BatteryFlowGameTest
+      - name: A fake battery in /sys/class/power_supply (tmpfs), discharging
+        run: tools/e2e/fake_battery.sh Discharging
+      - name: BatteryFlowGameTest on the fake battery
+        timeout-minutes: 15
+        run: |
+          set -eu
+          mapfile -t found < <(find "$RUNNER_TEMP/new" -name "rigtune-*+mc$MC.jar" ! -name "*-sources.jar")
+          if [ "${#found[@]}" -ne 1 ]; then
+            echo "::error::expected exactly one rigtune-*+mc$MC.jar in the jars artifact, found: ${found[*]:-none}"
+            exit 1
+          fi
+          tools/ci/offline.sh --timeout 14m ./gradlew --no-daemon --offline ":$MC:runProductionClientGameTest" \
+            -PgametestClasses=BatteryFlowGameTest "-PgametestModJar=${found[0]}" \
+            "-PgametestJvmArgs=-Doshi.os.linux.allowudev=false -Drigtune.gametest.fakeBattery=/sys/class/power_supply/BAT0/uevent" \
+            --stacktrace
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: battery-oshi-${{ matrix.mc }}
+          path: |
+            versions/${{ matrix.mc }}/build/run/productionClientGameTest/screenshots/
+            versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs/
+            versions/${{ matrix.mc }}/build/run/productionClientGameTest/crash-reports/
+          if-no-files-found: ignore

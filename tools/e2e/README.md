@@ -18,8 +18,8 @@ python tools/e2e/self_update_e2e.py --name v010-to-dev \
 python -m unittest discover -s tools/e2e/tests
 ```
 
-Windows only (process checks use PowerShell 7, `pwsh`). It opens a game window twice (well under a minute each) and
-needs port 443 free on 127.0.0.1. Exit code 0 means every
+It runs on Windows (process checks use PowerShell 7, `pwsh`) and on Linux (from `/proc`; v0.5, below). It opens a game
+window twice (well under a minute each) and needs port 443 free on 127.0.0.1. Exit code 0 means every
 check passed, 1 a failed check, 3 that the game-test lock is held. For a 0.2 → newer 0.2 run (plan review M12), build
 two jars with `-Pmod_version=...`, pass them as `--old-jar`/`--new-jar`, and pass the v0.1.0 jar as
 `--driver-api-jar`.
@@ -33,6 +33,66 @@ Two more modes (Phase 5):
   `mod-apply` (one Apply: add `e2e-added`, disable `e2e-disable-me`; quit; the helper applies both), `mod-undo` (Undo
   last apply: the plan, a screenshot of the confirmation screen, `undo(plan)`; quit; the helper reverts both),
   `mod-check` (the mods as before, nothing left to undo).
+
+### v0.5: Linux CI (docs/v0.5/SPEC.md 3a-3c; docs/v0.5/design/ws-e.md)
+
+- **Linux.** The harness lists processes from `/proc`, kills with SIGKILL, and records the helper's command lines from a
+  watcher thread. The seed's held jar is made immutable (`sudo -n chattr +i`, lifted after the helper): a Linux rename
+  isn't blocked by an open handle, but an immutable file's rename fails with EPERM, a `FileSystemException` as on
+  Windows.
+  - Under Xvfb the narrator and the sound system log ERROR lines, and GLFW logs its X11 cursor block. The downgrade log
+    check ignores those (`e2e_checks.HARMLESS_ERRORS`, `XVFB_CURSOR`).
+  - The fake Modrinth needs port 443: `sudo sysctl -w net.ipv4.ip_unprivileged_port_start=443`.
+  - Loom wraps the client in `xvfb-run -a` when `CI` is set.
+- **`e2e_matrix.py --tier push|release`** prints the scenarios from one table.
+  - Old jars, tags and sha256 come from `RELEASED`; the nodes from `versions/*/`.
+  - Push: each node's newest release → new.
+  - Release: every released jar → new; the `v010-dh` seed; undo with `--profile-switch profile` and `settings`; `helper-kill`; downgrades to 0.4.0 and 0.3.0.
+- **`.github/workflows/e2e.yml`** (reusable) runs one job per row (at most 6 at once) on the jars artifact the caller names; nothing is rebuilt.
+  - Its one "(network)" step runs ws-ci's `prefetchDependencies` and `downloadAssets` (the Gradle cache gets fabric-api and Sodium, which the harness copies into its instances). It also downloads the old jar on a cache miss (`gh release download`, retried), and checks the jar with `sha256sum -c` either way.
+  - The harness then runs its own Gradle calls `--offline` (`--gradle-arg=--offline`).
+  - The evidence is uploaded as `e2e-<id>-<mc>`. A scenario is never retried.
+  - build.yml runs the push tier on every push (`rigtune-jars`), and the release tier on the release PR (into main from `feat/v*`).
+  - release.yml calls it on the staged release files (build → e2e → publish).
+  - `tools/e2e/release_verify.py` then checks Modrinth's metadata and CDN bytes against the GitHub assets.
+- **Fixtures.** `written.py` composes `v040-written` and then `v050-written` (a 0.5 instance holds both).
+  - A file several sets provide is deep-merged (objects key by key, lists without exact duplicates, the later set's
+    scalar). A different `formatVersion` is refused.
+  - `--written` may repeat. The downgrade checks use `written.new_files_for(<old version>)`.
+- **`compat040.py`** is the released 0.4.0's own classes on those fixtures and the bundled rules (14 checks), like
+  compat030.
+  - Each `v050-written` set's `expect.json` is interpreted by `Compat040.java` on that set alone (a spare copy for the
+    checks that write). A check of a file the set doesn't hold fails.
+- **`--scenario helper-kill`** (AC3f.5), on the new jar's own instance:
+  - An update group of a test mod is staged, with its journal entry: disable 1.0.0, enable the downloaded 1.1.0.
+  - Op 2's source is held from the first start until the helper at its exit has recorded the group in
+    `unfinished-groups.json`. It's killed 1.5 s later, while op 2 retries (a sharing violation to the helper: ~30 s).
+  - The next exit's helper applies the whole group. The start after that loads 1.1.0, and History shows the group
+    APPLIED.
+  - Evidence: `kill.json`, `unfinished-groups-after-kill.json`.
+- **`--scenario stale-seed --seed <folder>`** (AC2H.6), for `tools/e2e/seeds/v010-dh-app-reinstalled` and `-disabled`.
+  The new version starts directly on a seeded state whose staged group can never run: the mod was reinstalled at the
+  group's target name, and RigTune's download is gone. A 0.1.0 helper would mark that group done at its own exit, so the
+  seeded self-update path never hands the state on.
+  - The checks: the group leaves pending.json; the `stale_installed` status line names the mod; History shows the
+    changes ABANDONED or DISCARDED; latest.log has "can never run" and no "will be retried"; no helper runs at exit;
+    mods/ doesn't change.
+- **`--scenario brand`** (AC4j.3): the new version under the Modrinth App's brand (`-Dminecraft.launcher.brand=theseus`)
+  with Sodium and v040-written's ws-a set staged.
+  - Apply everything, then quit: the helper holds the file group, mods/ stays byte-identical, and the settings apply.
+  - On the next start, the held notice's Cancel them drops the group: the download becomes `.rigtune-superseded`, the
+    journal change DISCARDED, and no helper runs at exit.
+- **Downgrade and a full journal.** The downgrade instance keeps the newest 46 composed journal entries, plus every entry
+  a staged op belongs to. The old versions keep 50 and add up to 2 of their own. Over the cap they evict the entries with
+  nothing left to undo first, which would take the checked Undo-last pair with them. compat040 reads each set's journal
+  in full.
+- **`guard-apply`** (AC3f.7), the undo scenario's last phase on its main instance: one start with three Applies through
+  the report's own update rows.
+  - A pinned update is refused with the pin message: the installed `e2e-pinner` needs `e2e-pin-target` 1.0.x.
+  - An addition is staged.
+  - An update the staged addition's Modrinth version declares incompatible is refused. RigTune reads that version back
+    with `GET /v2/versions`, which the check requires.
+  - The driver records each Apply's status line.
 
 ### v0.4 runs (docs/v0.4/plans/ws-h.md)
 

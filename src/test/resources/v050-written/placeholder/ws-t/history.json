@@ -1,0 +1,23 @@
+{
+  "formatVersion": 1,
+  "entries": [
+    {
+      "id": "9e6a1c54-5f71-4092-ad04-000000000901",
+      "at": "2026-09-26T11:10:00Z",
+      "kind": "apply",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mcVersion": "26.2",
+      "changes": [
+        {
+          "id": "9e6a1c54-5f71-4092-ad04-000000000911",
+          "type": "setting",
+          "key": "sodium.performance.chunk_builder_threads",
+          "before": "2",
+          "after": "4",
+          "status": "STAGED",
+          "opId": "9e6a1c54-5f71-4092-ad04-000000000902"
+        }
+      ]
+    }
+  ]
+}

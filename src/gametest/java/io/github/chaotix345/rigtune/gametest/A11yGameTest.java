@@ -11,6 +11,7 @@ import io.github.chaotix345.rigtune.client.ui.BenchmarkHistoryScreen;
 import io.github.chaotix345.rigtune.client.ui.HistoryScreen;
 import io.github.chaotix345.rigtune.client.ui.JvmScreen;
 import io.github.chaotix345.rigtune.client.ui.NoticeScreen;
+import io.github.chaotix345.rigtune.client.ui.Palette;
 import io.github.chaotix345.rigtune.client.ui.PreviewScreen;
 import io.github.chaotix345.rigtune.client.ui.ProfilesScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
@@ -1473,7 +1474,39 @@ public class A11yGameTest implements FabricClientGameTest {
 
 	// ---- WS-E (3f): high contrast in a running game.
 
+	// AC3f.3: the game's own High Contrast option, set as the Accessibility screen's button does (OptionInstance.set runs
+	// its callback: the high_contrast pack is added and the resource packs reload). Palette switches to its high-contrast
+	// set and RigTune's row labels are drawn in it; then off again (the pack removed, another reload) and back to grey.
 	private static void highContrastRunningGame(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		A11yController controller = new A11yController(v05.stub(), v05.real(), v05.configDir());
+		context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(false));
+		boolean before = context.computeOnClient(mc -> mc.options.highContrast().get());
+		try {
+			setHighContrast(context, true);
+			check(context.computeOnClient(mc -> mc.getResourcePackRepository().getSelectedIds().contains("high_contrast")), "the high_contrast pack is selected");
+			check(context.computeOnClient(mc -> Palette.enabled() && Palette.of(0xFFA8A8A8) == 0xFFE6E6E6 && Palette.focus() == 0xFFFFFF00),
+					"Palette's high-contrast set with High Contrast on");
+			openRigTune(context, controller);
+			int[] on = count(context.takeScreenshot("a11y-hc-game-on-854x480-scale2"), LABEL, LABEL_HIGH_CONTRAST);
+			setHighContrast(context, false);
+			check(context.computeOnClient(mc -> !mc.getResourcePackRepository().getSelectedIds().contains("high_contrast")), "the high_contrast pack is removed");
+			check(context.computeOnClient(mc -> !Palette.enabled() && Palette.of(0xFFA8A8A8) == 0xFFA8A8A8), "Palette's own colours with High Contrast off");
+			openRigTune(context, controller);
+			int[] off = count(context.takeScreenshot("a11y-hc-game-off-854x480-scale2"), LABEL, LABEL_HIGH_CONTRAST);
+			RigTune.LOGGER.info("A11yGameTest: High Contrast (pack reloaded) label grey / high-contrast pixels: on {} / {}, off {} / {}", on[0], on[1], off[0], off[1]);
+			check(on[1] >= 200, "High Contrast on: RigTune's row labels are drawn in the high-contrast grey: " + on[0] + " / " + on[1]);
+			check(off[0] >= 200 && off[1] == 0, "High Contrast off: the label grey again: " + off[0] + " / " + off[1]);
+		} finally {
+			setHighContrast(context, before);
+			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
+		}
+	}
+
+	private static void setHighContrast(ClientGameTestContext context, boolean on) {
+		context.runOnClient(mc -> mc.options.highContrast().set(on));
+		context.waitTick();
+		context.waitFor(mc -> mc.gui.overlay() == null, 1200);
 	}
 
 	// --- helpers

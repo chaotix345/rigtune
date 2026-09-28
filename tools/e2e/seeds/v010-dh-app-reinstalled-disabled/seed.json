@@ -1,0 +1,22 @@
+{
+ "description": "As v010-dh-app-reinstalled, with fabric-26.2.jar (DH 3.3.0) disabled instead of removed (AC2H.6's second leg).",
+ "modId": "distanthorizons",
+ "modName": "Distant Horizons",
+ "holdOpenAtOldExit": [],
+ "jars": [
+  {
+   "path": "mods/DistantHorizons-3.3.2-26.2-fabric-neoforge.jar",
+   "id": "distanthorizons",
+   "name": "Distant Horizons",
+   "version": "3.3.2"
+  },
+  {
+   "path": "mods/fabric-26.2.jar.disabled",
+   "id": "distanthorizons",
+   "name": "Distant Horizons",
+   "version": "3.3.0"
+  }
+ ],
+ "holdOpenWhy": "Nothing is held: the group can never run, so the new version drops it at launch (AC2H.6).",
+ "expectStatus": "ABANDONED"
+}

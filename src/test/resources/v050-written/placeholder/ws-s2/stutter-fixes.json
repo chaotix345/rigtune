@@ -1,0 +1,14 @@
+{
+  "formatVersion": 1,
+  "placeholder": "hand-written by WS-E; the real set comes from WS-S2's tests",
+  "fixes": [
+    {
+      "entryId": "6b3d8f21-2c4e-4d6f-9a71-000000000601",
+      "state": "applied"
+    },
+    {
+      "entryId": "6b3d8f21-2c4e-4d6f-9a71-000000000602",
+      "state": "staged"
+    }
+  ]
+}
