@@ -101,8 +101,10 @@ rigtune/core/…`, `gametest/…` = `src/gametest/java/io/github/chaotix345/rigt
 1. **A fourth PF-5 gate.** The audit (and SPEC 2P) name three gates; `ProfileTemplates.inBounds` is a fourth: resolving a
    saved profile for a switch or Preview goes through `ProfileTemplates.clamp`, which dropped a radius above 512 again.
    It uses the same local bound (`ProfileTemplatesTest.pf5ClampKeepsA1024Radius`, run over the pinned r13 and the
-   bundled rules). A template computed over a baseline holding 1024 now keeps 1024 for that key unless a rule sets or
-   clamps it (it never reaches a code).
+   bundled rules). A template computed over a baseline holding 1024 would keep 1024 for that key where no rule sets or
+   clamps it; with the r13 and bundled rules every template sets the radius itself (their DH entries), so none does.
+   `ProfileTemplatesTest.pf5ATemplateOverA1024BaselineCountsWhatItsCodeLeavesOut` checks both (and the rules with those
+   entries removed): a template's code carries the radius only within 32..512 and `ShareCode.leftOut` counts the rest.
 2. **PF-2's row writes profiles.json directly** (`ProfileStore.snoozeBattery` from the screen) rather than through a new
    controller method: RigTuneController is frozen, and the screen already reads its own small files at init (X8), as
    ClientSettings. Consequence: the A11y walk (stub controller) writes the game's profiles.json; it puts the file back.
@@ -113,7 +115,17 @@ rigtune/core/…`, `gametest/…` = `src/gametest/java/io/github/chaotix345/rigt
    wrapped line needs the row to grow, which the details line (clipped to one line) couldn't give at 640×480.
 4. **PF-1/PF-3/PF-2's decisions are core seams** (`BatteryPrompt.previousFor`, `stillOffered`, `offersSnooze`) so each has
    a unit test besides the game test.
-5. **The fixture set's history uses its own keys and later dates** than every v040-written history (biome blend,
+5. **Frozen-file exception (coordinator-approved, 2026-09-27; for the PLAN's Amendments).** PF-5's Copy-code status needs
+   the count on the screen, which only gets the code string: `client/ui/RigTuneController` gained `default int
+   profileCodeLeftOut(String id)` (0) next to the profile defaults, `gametest/ForwardingController` its forward (the
+   every-method check), `client/RealController` a one-line delegation in its profile area, and `client/ui/ProfilesScreen`
+   (WS-P2's from here) three lines in `copySelected`. StubController compiles unchanged.
+6. **PF-1 product decision (coordinator, review L2; for the SPEC's Amendments):** when no profile is in effect at a switch
+   to Battery, "My settings" is first refreshed to the current effective settings (with no profile in effect they are
+   the player's own), so the plug-in offer gives back what they had, never an older snapshot. Covered by
+   `ProfilesGameTest.pf1StaleMySettingsIsRefreshedFirst` (3 legs; red locally with the refresh reverted); the decision
+   itself sits in ProfileService (a client class), so it has no unit test of its own.
+7. **The fixture set's history uses its own keys and later dates** than every v040-written history (biome blend,
    particles, simulation distance, clouds, entity shadows; 2026-09-22/23). The first composition with the v040 sets
    reused v040 ws-p's keys, and compat030's "Undo this on the profile-switch entry reverts each change" then saw SKIPs
    ("changed again by a later apply"): a cross-set artefact, not a compatibility problem.

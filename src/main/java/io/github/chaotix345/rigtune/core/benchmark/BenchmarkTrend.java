@@ -52,7 +52,10 @@ public final class BenchmarkTrend {
 		// Below the median by at least the floor.
 		REGRESSION,
 		// Not comparable with the previous run of the scene, whose 1 % lows differ past the noise: no delta is claimed.
-		DIFFERENT_CONDITIONS
+		DIFFERENT_CONDITIONS,
+		// docs/v0.5/SPEC.md RW-8/RW-6: the run is left out of the trend (excluded(run)); median: the usual of the runs before
+		// it, when there are enough. Never a regression.
+		EXCLUDED
 	}
 
 	public record Regression(double median, double latestLow, double deltaPercent, String baselineRunId) {
@@ -171,6 +174,14 @@ public final class BenchmarkTrend {
 		return differences(a, b).isEmpty();
 	}
 
+	// docs/v0.5/SPEC.md RW-8 and RW-6: a run in a benchmark world it created (the world and its LODs were generated as it
+	// ran), or while Distant Horizons generated terrain, measures the generation too: it stays out of every baseline,
+	// median and comparison, and is never a regression.
+	public static boolean excluded(BenchmarkRecord run) {
+		BenchmarkRecord.Context c = run.context();
+		return c != null && (Boolean.TRUE.equals(c.worldFresh()) || Boolean.TRUE.equals(c.dhGenerating()));
+	}
+
 	// One string per comparable group: two runs are comparable exactly when their keys are equal (the free-text pack name
 	// comes last, so the key can't be ambiguous).
 	public static String contextKey(BenchmarkRecord run) {
@@ -214,11 +225,11 @@ public final class BenchmarkTrend {
 	}
 
 	// The comparable runs with a result before `latest` in `runs` (oldest first; all of them when latest isn't there),
-	// the newest MAX_RUNS, oldest first.
+	// the newest MAX_RUNS, oldest first; never an excluded run.
 	public static List<BenchmarkRecord> baseline(BenchmarkRecord latest, List<BenchmarkRecord> runs) {
 		List<BenchmarkRecord> out = new ArrayList<>();
 		for (BenchmarkRecord r : before(latest, runs)) {
-			if (r.result() != null && comparable(r, latest)) {
+			if (r.result() != null && !excluded(r) && comparable(r, latest)) {
 				out.add(r);
 			}
 		}
@@ -240,6 +251,11 @@ public final class BenchmarkTrend {
 			return new Assessment(Kind.NO_RESULT, latest.id(), 0, null, null, null, null, null, List.of());
 		}
 		List<BenchmarkRecord> baseline = baseline(latest, runs);
+		if (excluded(latest)) {
+			Double usual = baseline.size() < MIN_RUNS ? null : median(baseline.stream().mapToDouble(r -> r.result().onePercentLowFps()).toArray());
+			return new Assessment(Kind.EXCLUDED, latest.id(), baseline.size(), usual, result.onePercentLowFps(), null, null,
+					baseline.isEmpty() ? null : baseline.getLast().id(), List.of());
+		}
 		if (baseline.size() < MIN_RUNS) {
 			BenchmarkRecord previous = previousOfScene(latest, runs);
 			if (previous != null && !comparable(previous, latest)) {
@@ -264,7 +280,7 @@ public final class BenchmarkTrend {
 		List<BenchmarkRecord> before = before(latest, runs);
 		for (int i = before.size() - 1; i >= 0; i--) {
 			BenchmarkRecord r = before.get(i);
-			if (r.result() != null && Objects.equals(r.scene(), latest.scene())) {
+			if (r.result() != null && !excluded(r) && Objects.equals(r.scene(), latest.scene())) {
 				return r;
 			}
 		}

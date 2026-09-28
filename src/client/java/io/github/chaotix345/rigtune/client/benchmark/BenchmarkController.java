@@ -15,11 +15,13 @@ import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecords;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRun;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkSession;
+import io.github.chaotix345.rigtune.core.benchmark.DhGeneration;
 import io.github.chaotix345.rigtune.core.benchmark.FrameStats;
 import io.github.chaotix345.rigtune.core.benchmark.KnobGuard;
 import io.github.chaotix345.rigtune.core.benchmark.Knobs;
 import io.github.chaotix345.rigtune.core.benchmark.PlannerResult;
 import io.github.chaotix345.rigtune.core.benchmark.Protocol;
+import io.github.chaotix345.rigtune.core.benchmark.ResultNotes;
 import io.github.chaotix345.rigtune.core.benchmark.SessionResult;
 import io.github.chaotix345.rigtune.core.benchmark.SettleCheck;
 import io.github.chaotix345.rigtune.core.benchmark.Step;
@@ -123,8 +125,14 @@ public final class BenchmarkController {
 			return session.targetFps();
 		}
 
+		// Null when either run of the pair is left out of the trend (docs/v0.5/SPEC.md RW-8/RW-6, review M4: no verdict).
 		public BenchmarkMath.@Nullable Gain gain() {
-			return record == null || before == null ? null : BenchmarkRecords.gain(before, record);
+			return record == null || before == null || ResultNotes.pairCaveat(before, record) != null ? null : BenchmarkRecords.gain(before, record);
+		}
+
+		// docs/v0.5/SPEC.md RW-15: the steps the benchmark's stutter capture left out (their settle timed out incomplete).
+		public int stepsLeftOut() {
+			return (int) settles.stream().filter(s -> !s.settle().complete()).count();
 		}
 	}
 
@@ -170,6 +178,7 @@ public final class BenchmarkController {
 	private boolean environmentRestored = true;
 	private final Throttle throttle = new Throttle();
 	private boolean throttled;
+	private final StutterSteps stutterSteps = new StutterSteps(StutterSteps.STUTTER_HOOKS);
 
 	private BenchmarkController(Minecraft minecraft, LocalPlayer player, ClientLevel level, BenchmarkRequest request, Config config) {
 		this.minecraft = minecraft;
@@ -207,7 +216,7 @@ public final class BenchmarkController {
 		this.yaw = player.getYRot();
 		this.pitch = player.getXRot();
 		this.wasFlying = player.getAbilities().flying;
-		this.context = withModSet(context(minecraft, original));
+		this.context = withJournal(context(minecraft, original)).withWorldFresh(worldFresh(request));
 	}
 
 	// What else shapes the numbers, as the run starts (docs/v0.3/SPEC.md 8, the `context` of a benchmarks.json run).
@@ -218,9 +227,15 @@ public final class BenchmarkController {
 	}
 
 	// v0.4 (docs/v0.4/SPEC.md 7): the mod-set hash and the newest history.json entry, for the trend's change window and the
-	// "needs a rerun" marker.
-	private static BenchmarkRecord.Context withModSet(BenchmarkRecord.Context context) {
-		return context.withModSet(BenchmarkConditions.modSetHash(), BenchmarkConditions.journalCursor());
+	// "needs a rerun" marker; v0.5 (BH-2): the changes still staged, from the same journal snapshot.
+	private static BenchmarkRecord.Context withJournal(BenchmarkRecord.Context context) {
+		BenchmarkConditions.JournalAtStart journal = BenchmarkConditions.JournalAtStart.current();
+		return context.withModSet(BenchmarkConditions.modSetHash(), journal.cursor()).withStagedAtStart(journal.staged());
+	}
+
+	// docs/v0.5/SPEC.md RW-8: in the benchmark world, whether this run's open created it; null in the player's own world.
+	private static @Nullable Boolean worldFresh(BenchmarkRequest request) {
+		return request.scene() == BenchmarkRequest.Scene.BENCHMARK_WORLD ? BenchmarkWorld.createdThisOpen() : null;
 	}
 
 	// The pack's file name from Iris' own settings file; null when unknown.
@@ -499,7 +514,7 @@ public final class BenchmarkController {
 						listener.accept(step);
 					}
 					FrameTimes.start();
-					stutterSweep(true);
+					stutterSteps.begin(lastSettle == null || lastSettle.complete());
 					throttle.reset();
 					sweep = 0;
 					enter(Phase.SWEEP);
@@ -517,7 +532,7 @@ public final class BenchmarkController {
 						enter(Phase.SWEEP);
 					} else {
 						FrameStats stats = FrameTimes.stop();
-						stutterSweep(false);
+						stutterSteps.end();
 						RigTune.LOGGER.info("Benchmark {} {}: {} frames, avg {} FPS, 1% low {} FPS, client chunks {} (frame limit {}, {})",
 								step.kind(), step.knobs(), stats.frames(), Math.round(stats.avgFps()), Math.round(stats.onePercentLowFps()),
 								level.getChunkSource().getLoadedChunksCount(), minecraft.getFramerateLimitTracker().getFramerateLimit(),
@@ -538,11 +553,6 @@ public final class BenchmarkController {
 		}
 	}
 
-	// v0.4 (docs/v0.4/SPEC.md 5): the Stutter Doctor records the benchmark's sweeps (and only those) into its analyser.
-	private static void stutterSweep(boolean recording) {
-		StutterHooks.benchmarkSweep(recording);
-	}
-
 	private void settled(SettleCheck.Result result) {
 		lastSettle = result;
 		int loaded = level.getChunkSource().getLoadedChunksCount();
@@ -550,7 +560,8 @@ public final class BenchmarkController {
 		String seconds = String.format(Locale.ROOT, "%.1f", result.seconds());
 		if (!result.complete()) {
 			RigTune.LOGGER.warn("Benchmark settle {} {}: timed out after {} s with {} of {} chunks within {} missing (client holds {}); "
-					+ "this step can't count as a pass", step.kind(), step.knobs(), seconds, result.missing(), result.inRange(), result.radius(), loaded);
+					+ "this step is not measured (neither a pass nor a fail) and stays out of the stutter capture", step.kind(), step.knobs(), seconds,
+					result.missing(), result.inRange(), result.radius(), loaded);
 			return;
 		}
 		RigTune.LOGGER.info("Benchmark settle {} {}: {} of {} chunks within {} present, client holds {}, {} s{}", step.kind(), step.knobs(),
@@ -607,6 +618,7 @@ public final class BenchmarkController {
 				FrameTimes.stop();
 			}
 		});
+		stutterSteps.close();
 		StutterHooks.benchmarkFinished(!run.cancelled());
 		safely("show the HUD", () -> {
 			if (minecraft.gui.hud.isHidden() != hudWasHidden) {
@@ -693,9 +705,15 @@ public final class BenchmarkController {
 		BenchmarkRecord.World world = request.scene() == BenchmarkRequest.Scene.BENCHMARK_WORLD
 				? new BenchmarkRecord.World(BenchmarkWorld.LEVEL_ID, BenchmarkWorld.SEED) : null;
 		BenchmarkRecord record = BenchmarkRecords.of(result, request, phase, id, createdAt, rigtuneVersion(), HardwareProbe.minecraftVersion(), world,
-				context);
+				storedContext());
 		BenchmarkStore.add(record);
 		return new Outcome(request, result, false, record, before, restoreOk, false, List.copyOf(settles), serverLimit);
+	}
+
+	// docs/v0.5/SPEC.md RW-6: whether Distant Horizons generated terrain during the sweeps, known once the benchmark capture
+	// was analysed (StutterHooks.benchmarkFinished runs before this).
+	private BenchmarkRecord.Context storedContext() {
+		return context.withDhGenerating(DhGeneration.generating(StutterHooks.lastBenchmarkDhWorldGenCores(), OptionalMods.dhLoaded()));
 	}
 
 	private static String rigtuneVersion() {
