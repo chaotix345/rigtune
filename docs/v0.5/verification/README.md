@@ -7,6 +7,7 @@ files, CI artifact names). UNVERIFIED items are listed with their reason. PROGRE
 ## ci
 Owner: ws-ci (then the coordinator's streaks). SPEC 1a-1g: no live network, FakeModrinth, caches and pins, the frame-hook
 gates, the flakes, "Stream N cancelled", the 5-run streaks (`ci-streak.md`).
+- `ci-streak-1.md`: the first 5-run streak on `a7613410` (ws-ci + WS-K merged). `ci-streak-2.md`: the release candidate's streak on `0a1fd909` (5/5 on attempt 1, split legs, 2026-09-28).
 
 ## footprint
 Owner: ws-ci, WS-K (the X4 render-thread flag), the 1h checkpoint after Wave B. Per-leg numbers per streak.
