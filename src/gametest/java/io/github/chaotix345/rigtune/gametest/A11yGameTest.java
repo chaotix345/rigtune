@@ -24,6 +24,8 @@ import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
 import io.github.chaotix345.rigtune.client.ui.UndoScreen;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
+import io.github.chaotix345.rigtune.core.footprint.StartupTimesStore;
+import io.github.chaotix345.rigtune.core.footprint.StartupTrend;
 import io.github.chaotix345.rigtune.core.hardware.PerfCounterAdvice;
 import io.github.chaotix345.rigtune.core.hardware.PerfCounters;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
@@ -770,6 +772,7 @@ public class A11yGameTest implements FabricClientGameTest {
 			context.runOnClient(mc -> mc.gui.setScreen(found));
 			context.waitTicks(2);
 		}
+		startupRegressionRows(v05);
 	}
 
 	private static void openTools(ClientGameTestContext context, RigTuneController controller) {
@@ -836,6 +839,85 @@ public class A11yGameTest implements FabricClientGameTest {
 		@Override
 		public StartupTimes.View startupTimes() {
 			return trend;
+		}
+	}
+
+	// WS-W2, C18 (AC9.5, X6, X12): with a SLOWER launch (47 % over the usual, 80 → 95 mods) the notice's two lines are rows
+	// right under the startup line, whose median is the trend's usual (review L3), fit at every size (and 1280x720@3), keep
+	// the widgets apart, and are Tab stops that narrate their text; the generic mod-set note gives way to the cause line;
+	// high contrast screenshot; a slow streak's longer cause line fits at 640x480. From fewer than 5 comparable launches
+	// (TOO_FEW), or with no assessment (0.4's view), no row.
+	private static void startupRegressionRows(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		Screen found = context.computeOnClient(mc -> mc.gui.screen());
+		List<StartupTimesStore.Run> runs = new ArrayList<>();
+		for (int i = 0; i < 6; i++) {
+			runs.add(new StartupTimesStore.Run("2026-09-2" + i + "T10:00:00Z", 14_500, "26.2", "0.5.0", 80, "h"));
+		}
+		runs.add(new StartupTimesStore.Run("2026-09-27T10:00:00Z", 21_300, "26.2", "0.5.0", 95, "h2"));
+		StartupTrend.Assessment slower = StartupTrend.assess(runs);
+		ToolsTrend tools = new ToolsTrend(v05.stub(), new StartupTimes.View(21_300L, 14_500L, 7, true, slower));
+		List<String> expected = List.of(Texts.component(StartupTrend.regression(slower)).getString(), Texts.component(StartupTrend.cause(slower)).getString());
+		check(expected.equals(List.of("Launch time 47% higher than usual (21.3 s vs your usual ~14.5 s)",
+				"May be related to your mod set changing (80 → 95 mods) since your last launch")), "the regression lines: " + expected);
+		String note = Component.translatable("rigtune.startup.mod_set_changed").getString();
+		try {
+			int[][] sizes = {SIZES[0], SIZES[1], SIZES[2], {1280, 720, 3}};
+			for (int[] size : sizes) {
+				v05.resize(size[0], size[1], size[2]);
+				String where = size[0] + "x" + size[1] + "@" + size[2];
+				openTools(context, tools);
+				context.runOnClient(mc -> {
+					ToolsScreen screen = (ToolsScreen) mc.gui.screen();
+					check(screen.regressionLines().stream().map(Component::getString).toList().equals(expected), where + ": " + screen.regressionLines());
+					List<String> rows = screen.rowText();
+					check(screen.startupLine().getString().equals("Last launch 21.3 s · median of the last 6: 14.5 s"), where + ": " + screen.startupLine());
+					check(rows.indexOf(expected.get(0)) == 1 && rows.indexOf(expected.get(1)) == 2, where + ": under the startup line: " + rows);
+					check(!rows.contains(note), where + ": the cause line replaces the generic mod-set note: " + rows);
+					check(screen.rowsFit(), where + ": every row's lines fit");
+					checkToolsLayout(screen, where);
+				});
+				context.takeScreenshot("a11y-tools-regression-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			}
+			v05.resize(854, 480, 2);
+			openTools(context, tools);
+			walk(context, "tools regression", expected);
+			checkToolsTabOrder(context);
+			focusRow(context, 1);
+			context.takeScreenshot("a11y-tools-regression-focus-854x480-scale2");
+			focusRow(context, 2);
+			highContrastScreenshot(context, "a11y-tools-regression-hc-854x480-scale2");
+
+			List<StartupTimesStore.Run> streakRuns = new ArrayList<>(runs);
+			streakRuns.add(new StartupTimesStore.Run("2026-09-28T10:00:00Z", 21_900, "26.2", "0.5.0", 95, "h2"));
+			StartupTrend.Assessment streak = StartupTrend.assess(streakRuns);
+			check(streak.streak() == 2, "a slow streak: " + StartupTrend.describe(streak));
+			v05.resize(640, 480, 2);
+			openTools(context, new ToolsTrend(v05.stub(), new StartupTimes.View(21_900L, 14_500L, 8, true, streak)));
+			context.runOnClient(mc -> {
+				ToolsScreen screen = (ToolsScreen) mc.gui.screen();
+				check(screen.regressionLines().get(1).getString().startsWith("Slower for your last 2 launches;"), "the streak's line: " + screen.regressionLines());
+				check(screen.rowsFit(), "640x480@2: the streak's line fits");
+				checkToolsLayout(screen, "640x480@2 (streak)");
+			});
+			context.takeScreenshot("a11y-tools-regression-streak-640x480-scale2");
+			v05.resize(854, 480, 2);
+
+			ToolsTrend tooFew = new ToolsTrend(v05.stub(), new StartupTimes.View(21_300L, 14_500L, 5, true,
+					StartupTrend.assess(runs.subList(runs.size() - 5, runs.size()))));
+			check(tooFew.startupTimes().assessment().kind() == StartupTrend.Kind.TOO_FEW, "four comparable launches: " + tooFew.startupTimes().assessment());
+			for (ToolsTrend none : List.of(tooFew, new ToolsTrend(v05.stub(), new StartupTimes.View(21_300L, 14_500L, 7, true)))) {
+				openTools(context, none);
+				context.runOnClient(mc -> {
+					ToolsScreen screen = (ToolsScreen) mc.gui.screen();
+					check(screen.regressionLines().isEmpty() && screen.rowText().contains(note), "no regression row, the mod-set note: " + screen.rowText());
+				});
+			}
+			RigTune.LOGGER.info("A11yGameTest: Tools' launch-time regression rows at every size, Tab and narration; none from fewer than 5 launches");
+		} finally {
+			v05.resize(854, 480, 2);
+			context.runOnClient(mc -> mc.gui.setScreen(found));
+			context.waitTicks(2);
 		}
 	}
 

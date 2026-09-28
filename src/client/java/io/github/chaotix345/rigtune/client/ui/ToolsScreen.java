@@ -5,8 +5,10 @@ import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.PreloadTimer;
 import io.github.chaotix345.rigtune.core.footprint.StartupTimesStore;
+import io.github.chaotix345.rigtune.core.footprint.StartupTrend;
 import io.github.chaotix345.rigtune.core.hardware.PerfCounterAdvice;
 import io.github.chaotix345.rigtune.core.hardware.PerfCounters;
+import io.github.chaotix345.rigtune.core.model.Text;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -34,6 +36,8 @@ import java.util.Locale;
 // never clips (0.4 cut its notes at about 4 lines at 640x480 GUI scale 2): the startup line, its notes and, while
 // Windows' performance counters are off, 2L's advice (C18's lines go in the same list). Every line is a Tab stop; the
 // Microsoft pages open vanilla's link confirmation. The buttons stay screen widgets above it.
+// C18 (docs/v0.5/SPEC.md 9, WS-W2): while the latest launch is slower than usual, the STARTUP_REGRESSION notice's two lines
+// (the numbers and the one "may be related" cause) under the startup line, in the note colour.
 public class ToolsScreen extends Screen {
 	private static final int BUTTON_WIDTH = 200;
 	private static final int COLOR_LABEL = 0xFFA8A8A8;
@@ -50,6 +54,7 @@ public class ToolsScreen extends Screen {
 	private @Nullable Component startupLine;
 	private List<FormattedCharSequence> startupDetail = new ArrayList<>();
 	private List<Component> perfCounterLines = List.of();
+	private List<Component> regressionLines = List.of();
 	private PerfCounters shownPerfCounters = PerfCounters.NOT_READ;
 	private @Nullable ToolsList list;
 	private double scroll;
@@ -122,6 +127,7 @@ public class ToolsScreen extends Screen {
 		if (startupLine != null) {
 			target.row(startupLine, COLOR_LABEL, null, 1);
 		}
+		regressionLines(target, startup);
 		for (Component line : startupDetail(startup)) {
 			detail.addAll(target.row(line, COLOR_DETAIL, null, 1).lines);
 		}
@@ -145,10 +151,30 @@ public class ToolsScreen extends Screen {
 		perfCounterLines = List.copyOf(shown);
 	}
 
-	// Item 13 (the footprint workstream): "Last launch 14.5 s · median of the last 10: 14.3 s"; null shows nothing.
+	// C18: the regression line and its cause while the latest launch is SLOWER (never from fewer than 5 comparable launches).
+	private void regressionLines(ToolsList target, StartupTimes.View view) {
+		List<Component> shown = new ArrayList<>();
+		StartupTrend.Assessment assessment = view.assessment();
+		if (assessment != null && assessment.slower()) {
+			for (Text line : List.of(StartupTrend.regression(assessment), StartupTrend.cause(assessment))) {
+				Component text = Texts.component(line);
+				target.row(text, COLOR_NOTE, null, 1);
+				shown.add(text);
+			}
+		}
+		regressionLines = List.copyOf(shown);
+	}
+
+	// Item 13 (the footprint workstream): "Last launch 14.5 s · median of the last 10: 14.3 s"; null shows nothing. C18
+	// (review L3): once the trend compares, its "usual" (the comparable launches before the last one) is the median shown.
 	private @Nullable Component startupLine(StartupTimes.View view) {
 		if (view.lastMs() == null) {
 			return null;
+		}
+		StartupTrend.Assessment assessment = view.assessment();
+		if (assessment != null && assessment.rawMedianMs() != null) {
+			return Component.translatable("rigtune.startup.last_median", seconds(view.lastMs()), assessment.baselineRuns(),
+					seconds(Math.round(assessment.rawMedianMs())));
 		}
 		if (view.runs() < 2 || view.medianMs() == null) {
 			return Component.translatable("rigtune.startup.last", seconds(view.lastMs()));
@@ -158,13 +184,19 @@ public class ToolsScreen extends Screen {
 	}
 
 	// Under the line: the mod-set note, then general advice. Never which mod is slow: Fabric Loader times no mod (SPEC 13).
+	// C18: no mod-set note when the regression's cause line already names the same change (a streak's names an earlier one).
 	private List<Component> startupDetail(StartupTimes.View view) {
 		if (view.lastMs() == null) {
 			return List.of();
 		}
-		return view.modSetChanged()
+		return view.modSetChanged() && !modSetCause(view.assessment())
 				? List.of(Component.translatable("rigtune.startup.mod_set_changed").withColor(Palette.of(COLOR_NOTE)), Component.translatable("rigtune.startup.advice"))
 				: List.of(Component.translatable("rigtune.startup.advice"));
+	}
+
+	private static boolean modSetCause(StartupTrend.@Nullable Assessment assessment) {
+		return assessment != null && assessment.slower() && assessment.streak() == 1
+				&& (assessment.cause() == StartupTrend.Cause.MOD_COUNT || assessment.cause() == StartupTrend.Cause.MOD_SET);
 	}
 
 	private static String seconds(long ms) {
@@ -208,6 +240,11 @@ public class ToolsScreen extends Screen {
 	/** For the game tests: 2L's advice lines shown (none while the counters are on or unknown). */
 	public List<Component> perfCounterLines() {
 		return perfCounterLines;
+	}
+
+	/** For the game tests: C18's regression and cause lines shown (none unless the latest launch is SLOWER). */
+	public List<Component> regressionLines() {
+		return regressionLines;
 	}
 
 	/** For the game tests: every row's text, in order. */
