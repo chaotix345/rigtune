@@ -42,8 +42,12 @@ public final class TryItNoticeSource implements NoticeSource {
 	public @Nullable Notice current() {
 		TryItView view = controller.tryIt();
 		TryIt t = view.tryIt();
+		// Review r11 PERF-5: the labels (every option's value and caption) are built only for a try's notice.
+		if (t == null || view.stage().chainRunning()) {
+			return null;
+		}
 		Text message = TryItText.notice(view, controller.settingLabels());
-		if (t == null || message == null) {
+		if (message == null) {
 			return null;
 		}
 		NoticeAction open = new NoticeAction(OPEN, TryItText.noticeOpen());
