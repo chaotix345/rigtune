@@ -89,7 +89,7 @@ check kind it doesn't know, or on a check of a file the set doesn't hold. One fi
 
 - `class`: 0.4.0's class that reads the file (Journal, HistoryModel, UndoPlanner, BenchmarkHistory, PendingActions,
   ApplyHelper, ClientSettings, StutterStore, StutterSummary (the Copy summary renders every session), AwarenessStore,
-  ProfileStore, ServerLimitsStore, RestoreMarker), or
+  ProfileStore, ServerLimitsStore, RestoreMarker, StartupTimesStore), or
   `Unread` for a file 0.4.0 never opens.
 - `file`: the file under `config/rigtune/` it reads.
 - Expectations (each optional; at least one per check): `state` (the load state, `OK`), `entries`/`runs`/`ops`/

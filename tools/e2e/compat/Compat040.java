@@ -10,6 +10,7 @@ import io.github.chaotix345.rigtune.core.awareness.AwarenessStore;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkHistory;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.RestoreMarker;
+import io.github.chaotix345.rigtune.core.footprint.StartupTimesStore;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.JarInfo;
 import io.github.chaotix345.rigtune.core.history.Journal;
@@ -103,7 +104,7 @@ public final class Compat040 {
 
 	private static final Set<String> CLASSES = Set.of("Journal", "HistoryModel", "UndoPlanner", "BenchmarkHistory", "PendingActions",
 			"ApplyHelper", "ClientSettings", "StutterStore", "StutterSummary", "AwarenessStore", "ProfileStore", "ServerLimitsStore", "RestoreMarker",
-			"Unread");
+			"StartupTimesStore", "Unread");
 	private static final Map<String, Set<String>> EXPECTATIONS = Map.ofEntries(
 			Map.entry("Journal", Set.of("state", "entries", "noBad")),
 			Map.entry("HistoryModel", Set.of("entries", "unknownKinds")),
@@ -118,6 +119,7 @@ public final class Compat040 {
 			Map.entry("ProfileStore", Set.of("state", "keeps", "noBad")),
 			Map.entry("ServerLimitsStore", Set.of("state", "keeps", "noBad")),
 			Map.entry("RestoreMarker", Set.of("state")),
+			Map.entry("StartupTimesStore", Set.of("state", "runs", "noBad")),
 			Map.entry("Unread", Set.of("unchanged")));
 
 	void runSet(String set, Path config, Path expectFile, Path spare, Path scratch) throws Exception {
@@ -303,6 +305,12 @@ public final class Compat040 {
 					seen.add("a 0.4.0 write on a copy (" + (wrote ? "written" : "NOT written") + ") lost " + lost);
 					ok &= wrote && lost.isEmpty();
 				}
+			}
+			case "StartupTimesStore" -> {
+				int inFile = json(dir.resolve(file)).getAsJsonArray("runs").size();
+				int runs = new StartupTimesStore(config).runs().size();
+				ok &= expectState(c, runs == inFile, runs + " of " + inFile + " run(s) loaded", seen);
+				ok &= expectInt(c, "runs", runs, seen);
 			}
 			case "RestoreMarker" -> {
 				Path copy = scratch.resolve("marker").resolve(file);
