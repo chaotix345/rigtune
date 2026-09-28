@@ -74,6 +74,13 @@ class TryItTextTest {
 		assertEquals("The benchmark needs an open world.", TryItText.sceneRefusal("rigtune.status.benchmark_unavailable").english());
 	}
 
+	// Review-11 COMPAT-2: the backend and GPU causes are named as the trend names them.
+	@Test
+	void theGraphicsCausesAreNamed() {
+		assertEquals("graphics backend", TryItText.cause(new Cause.Condition(Difference.BACKEND), LABELS).english());
+		assertEquals("GPU", TryItText.cause(new Cause.Condition(Difference.GPU), LABELS).english());
+	}
+
 	// Review L8/L10: what this session saw go wrong comes first, as a warning.
 	@Test
 	void aNoteComesFirst() {
