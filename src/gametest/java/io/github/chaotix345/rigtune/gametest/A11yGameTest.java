@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
+import io.github.chaotix345.rigtune.client.launcher.ModFilesService;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.PreloadTimer;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkHistoryScreen;
@@ -16,6 +17,7 @@ import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneSettingsScreen;
 import io.github.chaotix345.rigtune.client.ui.RowFocus;
+import io.github.chaotix345.rigtune.client.ui.ServerProfilesScreen;
 import io.github.chaotix345.rigtune.client.ui.StutterScreen;
 import io.github.chaotix345.rigtune.client.ui.Texts;
 import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
@@ -29,8 +31,11 @@ import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
 import io.github.chaotix345.rigtune.core.jvm.JvmReport;
+import io.github.chaotix345.rigtune.core.launcher.Launcher;
+import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
+import io.github.chaotix345.rigtune.core.model.ServerLimits;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.notice.NoticeAction;
@@ -573,6 +578,117 @@ public class A11yGameTest implements FabricClientGameTest {
 	// ---- WS-P2 (C16, AC7.11): ServerProfilesScreen with a canned view.
 
 	private static void walkServerProfiles(V05TestContext v05) {
+		// AC7.11 (X6): seven remembered servers, the third this one. Tab reaches, in order, the This-server line, Offer, Stop,
+		// the privacy line, every row (each narrating its text; the current one "This server"), Forget all and Done (Forget
+		// stays inactive, so no stop, until a row is selected); Enter on a row selects it ("Selected") and makes Forget
+		// active; the rows scroll at 1280x720@3 (X12's scroll size, amended); screenshots at X12's sizes and in high contrast.
+		ClientGameTestContext context = v05.context();
+		boolean outline = context.computeOnClient(mc -> mc.options.highContrastBlockOutline().get());
+		CannedViews.serverProfiles(cannedServerProfiles());
+		RigTuneController canned = new ForwardingController(v05.stub()) {
+			@Override
+			public ServerProfilesView serverProfiles() {
+				ServerProfilesView view = CannedViews.serverProfiles();
+				return view != null ? view : super.serverProfiles();
+			}
+		};
+		try {
+			context.runOnClient(mc -> mc.gui.setScreen(new ServerProfilesScreen(new TitleScreen(), canned, null)));
+			context.waitFor(mc -> mc.gui.screen() instanceof ServerProfilesScreen && rows(mc) == 7, 200);
+			context.waitTicks(2);
+			List<String> texts = List.of("Server · Max FPS · last joined 2026-09-27", "LAN game · Evening · last joined 2026-09-26",
+					"Server · Quality · last joined 2026-09-25", "Realm · Battery · last joined 2026-09-24", "Server · a deleted profile · last joined 2026-09-20",
+					"Server · a profile this version doesn't know", "LAN game · Recording · last joined 2026-09-01");
+			List<String> order = new ArrayList<>(List.of("This server: RigTune offers Quality when you join.", "Offer Max FPS here", "Stop offering here",
+					Component.translatable("rigtune.profile.server.privacy").getString()));
+			order.addAll(texts);
+			order.addAll(List.of("Forget all…", Component.translatable("gui.done").getString()));
+			String stops = tabAll(context);
+			int at = -1;
+			for (String text : order) {
+				int next = stops.indexOf(text, at + 1);
+				check(next > at, "server profiles: \"" + text + "\" is a Tab stop after the one before it: " + stops);
+				at = next;
+			}
+			String rowsSaid = walk(context, "server-profiles", texts);
+			check(rowsSaid.contains("This server"), "server profiles: the current row says This server: " + rowsSaid);
+			focusRow(context, 2);
+			context.getInput().pressKey(InputConstants.KEY_RETURN);
+			context.waitTicks(2);
+			check("c".repeat(64).equals(context.computeOnClient(mc -> ((ServerProfilesScreen) mc.gui.screen()).selected())),
+					"server profiles: Enter selected the row");
+			String said = context.computeOnClient(A11yGameTest::narration);
+			check(said.contains(texts.get(2)) && said.contains("This server") && said.contains("Selected"), "server profiles: the selected row: " + said);
+			check(context.computeOnClient(mc -> ((ServerProfilesScreen) mc.gui.screen()).actions().stream()
+					.anyMatch(b -> b.getMessage().getString().equals("Forget") && b.active)), "server profiles: Forget is active once a row is selected");
+			context.takeScreenshot("a11y-server-profiles-enter-854x480-scale2");
+			List<String> lines = List.of(tabAll(context).split("\n"));
+			int last = -1;
+			for (int i = 0; i < lines.size(); i++) {
+				if (lines.get(i).contains(texts.getLast())) {
+					last = i;
+				}
+			}
+			check(last >= 0 && last + 2 < lines.size() && lines.get(last + 1).contains("Forget") && !lines.get(last + 1).contains("Forget all")
+					&& lines.get(last + 2).contains("Forget all…"), "server profiles: with a row selected, Forget is the stop after the last row: " + lines);
+			for (int[] size : V05TestContext.SIZES) {
+				v05.resize(size[0], size[1], size[2]);
+				context.takeScreenshot("a11y-server-profiles-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			}
+			serverProfilesScroll(v05);
+			context.runOnClient(mc -> mc.options.highContrastBlockOutline().set(true));
+			v05.resize(854, 480, 2);
+			context.takeScreenshot("a11y-hc-server-profiles-854x480-scale2");
+			RigTune.LOGGER.info("A11yGameTest: server profiles: Tab order, row narration, Enter and scrolling checked");
+		} finally {
+			CannedViews.clear();
+			context.runOnClient(mc -> {
+				mc.options.highContrastBlockOutline().set(outline);
+				mc.gui.setScreen(new TitleScreen());
+			});
+			v05.resize(854, 480, 2);
+			context.waitForScreen(TitleScreen.class);
+		}
+	}
+
+	// At 1280x720@3 the seven rows don't fit: the list scrolls to its last row.
+	private static void serverProfilesScroll(V05TestContext v05) {
+		ClientGameTestContext context = v05.context();
+		v05.resize(1280, 720, 3);
+		context.runOnClient(mc -> mc.gui.screen().clearFocus());
+		context.waitTicks(1);
+		check(context.computeOnClient(mc -> ((ServerProfilesScreen) mc.gui.screen()).list().maxScrollAmount() > 0),
+				"server profiles: seven rows scroll at 1280x720@3");
+		context.runOnClient(mc -> {
+			ServerProfilesScreen.ServerList rows = ((ServerProfilesScreen) mc.gui.screen()).list();
+			rows.setScrollAmount(rows.maxScrollAmount());
+		});
+		context.waitTicks(2);
+		context.runOnClient(mc -> {
+			ServerProfilesScreen.ServerList rows = ((ServerProfilesScreen) mc.gui.screen()).list();
+			int last = rows.children().size() - 1;
+			check(rows.getRowTop(last) >= rows.getY() && rows.getRowBottom(last) <= rows.getBottom(), "server profiles: the last row shows once scrolled");
+		});
+		context.takeScreenshot("a11y-server-profiles-1280x720-scale3-scrolled");
+		context.runOnClient(mc -> ((ServerProfilesScreen) mc.gui.screen()).list().setScrollAmount(0));
+	}
+
+	// Seven servers of every kind, the third this server; a deleted and an unknown profile; one without a date.
+	private static ServerProfilesView cannedServerProfiles() {
+		ServerLimits.Kind remote = ServerLimits.Kind.REMOTE;
+		ServerLimits.Kind lan = ServerLimits.Kind.LAN_GUEST;
+		Text maxFps = TemplateId.MAX_FPS.displayName();
+		Text quality = TemplateId.QUALITY.displayName();
+		List<ServerProfilesView.Row> rows = List.of(
+				new ServerProfilesView.Row("a".repeat(64), remote, "template:max_fps", maxFps, "2026-09-27", false),
+				new ServerProfilesView.Row("b".repeat(64), lan, "p-evening", Text.literal("Evening"), "2026-09-26", false),
+				new ServerProfilesView.Row("c".repeat(64), remote, "template:quality", quality, "2026-09-25", true),
+				new ServerProfilesView.Row("d".repeat(64), ServerLimits.Kind.REALM, "template:battery", TemplateId.BATTERY.displayName(), "2026-09-24", false),
+				new ServerProfilesView.Row("e".repeat(64), remote, "p-gone", null, "2026-09-20", false),
+				new ServerProfilesView.Row("f".repeat(64), remote, "template:future_mode", null, null, false),
+				new ServerProfilesView.Row("0".repeat(64), lan, "template:recording", TemplateId.RECORDING.displayName(), "2026-09-01", false));
+		return new ServerProfilesView(ServerProfilesView.State.SERVER, remote, "c".repeat(64), "template:quality", quality, false, "template:max_fps", maxFps,
+				rows, true);
 	}
 
 	// ---- WS-F (C02, AC8.12): FirstApplyScreen.
@@ -1069,12 +1185,58 @@ public class A11yGameTest implements FabricClientGameTest {
 		// narrates its label; at every size each widget is inside the screen and its label fits, and where the rows don't all
 		// fit the list scrolls to its last one.
 		try {
-			openSettings(v05);
+			openSettings(v05, v05.stub(), 8);
 			walkSettings(context);
 			for (int[] size : V05TestContext.SIZES) {
 				settingsLayout(v05, size, false);
 			}
 			settingsLayout(v05, V05TestContext.SCROLLING, true);
+
+			// 4e (AC4e.1): where a launcher keeps the mods, the Mod files row is one more Tab stop that narrates its choice.
+			LauncherKeepsMods kept = new LauncherKeepsMods(v05.stub());
+			v05.resize(854, 480, 2);
+			openSettings(v05, kept, 9);
+			String narrated = walkSettings(context);
+			check(narrated.contains("Mod files: Change them in the Modrinth App"), "settings: the Mod files row narrates its choice: " + narrated);
+			for (int[] size : V05TestContext.SIZES) {
+				settingsLayout(v05, size, false);
+			}
+			v05.resize(854, 480, 2);
+			String row = tabUntilNarrates(context, "the Mod files row", "Mod files: Change them in the Modrinth App");
+			context.takeScreenshot("a11y-settings-mod-files-854x480-scale2");
+			// Review L16 (AC4e.1): the row's tooltip is the launcher-list warning, narrated with the row.
+			String tooltip = Component.translatable("rigtune.settings.mod_files.tooltip").getString();
+			check(tooltip.startsWith("Your launcher keeps its own list") && row.contains(tooltip), "the Mod files row's tooltip: " + row);
+
+			// Review L15: the news' Settings… opens the settings on the Mod files row, focused and inside the list, also where
+			// the list scrolls (the row is below the fold).
+			for (int[] size : List.of(new int[]{854, 480, 2}, V05TestContext.SCROLLING)) {
+				v05.resize(size[0], size[1], size[2]);
+				context.runOnClient(mc -> mc.gui.setScreen(new RigTuneSettingsScreen(new TitleScreen(), kept).showingModFiles()));
+				context.waitForScreen(RigTuneSettingsScreen.class);
+				context.waitTicks(2);
+				String shown = context.computeOnClient(mc -> {
+					RigTuneSettingsScreen.SettingsList rows = ((RigTuneSettingsScreen) mc.gui.screen()).list();
+					int focused = rows.focusedRow();
+					check(focused >= 0 && leafText(mc).startsWith("Mod files: "), "news → settings: the Mod files row has the focus: " + leafText(mc));
+					check(rows.getRowTop(focused) >= rows.getY() && rows.getRowBottom(focused) <= rows.getBottom(),
+							"news → settings: the Mod files row is inside the list at " + size[0] + "x" + size[1] + "@" + size[2]);
+					return "row " + focused + " of " + rows.children().size() + ", scroll " + rows.scrollAmount() + " of " + rows.maxScrollAmount()
+							+ ", GUI scale " + mc.getWindow().getGuiScale();
+				});
+				RigTune.LOGGER.info("A11yGameTest: news → settings at {}x{}@{}: {}", size[0], size[1], size[2], shown);
+				context.takeScreenshot("a11y-news-settings-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			}
+			v05.resize(854, 480, 2);
+
+			// 4b (AC4b.6): MOD_FILES_NEWS on NoticeScreen, its message and detail narrated.
+			kept.notices = List.of(ModFilesService.newsNotice(LauncherInfo.of(Launcher.MODRINTH_APP)));
+			context.runOnClient(mc -> mc.gui.setScreen(new NoticeScreen(new TitleScreen(), kept)));
+			context.waitForScreen(NoticeScreen.class);
+			context.waitTicks(2);
+			String news = tabUntilNarrates(context, "the mod-files news", "RigTune now leaves this instance's mod files to the Modrinth App");
+			check(news.contains("the launcher's own steps"), "the news' detail is narrated with it: " + news);
+			context.takeScreenshot("a11y-mod-files-news-854x480-scale2");
 		} finally {
 			v05.resize(854, 480, 2);
 			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
@@ -1082,17 +1244,41 @@ public class A11yGameTest implements FabricClientGameTest {
 		}
 	}
 
-	private static void openSettings(V05TestContext v05) {
-		v05.context().runOnClient(mc -> mc.gui.setScreen(new RigTuneSettingsScreen(new TitleScreen(), v05.stub())));
-		v05.context().waitFor(mc -> mc.gui.screen() instanceof RigTuneSettingsScreen && rows(mc) >= 8, 200);
+	private static void openSettings(V05TestContext v05, RigTuneController controller, int rows) {
+		v05.context().runOnClient(mc -> mc.gui.setScreen(new RigTuneSettingsScreen(new TitleScreen(), controller)));
+		v05.context().waitFor(mc -> mc.gui.screen() instanceof RigTuneSettingsScreen && rows(mc) >= rows, 200);
 		v05.context().getInput().setCursorPos(1, 1);
 		v05.context().waitTicks(2);
+	}
+
+	// The canned world with a launcher that keeps the mods (the Modrinth App), and the notices the walk shows.
+	private static final class LauncherKeepsMods extends ForwardingController {
+		List<Notice> notices = List.of();
+
+		LauncherKeepsMods(RigTuneController delegate) {
+			super(delegate);
+		}
+
+		@Override
+		public ModFilesPolicy modFiles() {
+			return ModFilesPolicy.LAUNCHER;
+		}
+
+		@Override
+		public LauncherInfo launcher() {
+			return LauncherInfo.of(Launcher.MODRINTH_APP);
+		}
+
+		@Override
+		public List<Notice> notices() {
+			return notices;
+		}
 	}
 
 	// As walk(), for a list whose switches can be inactive: this class runs with the network off, which greys out the Rules
 	// updates and Modrinth switches, and vanilla gives an inactive widget no Tab stop (as before the list). Tab visits
 	// exactly the rows whose switch is active (and the note), in order, each narrating its label, then leaves the list.
-	private static void walkSettings(ClientGameTestContext context) {
+	private static String walkSettings(ClientGameTestContext context) {
 		context.runOnClient(mc -> mc.gui.screen().clearFocus());
 		List<Integer> stops = context.computeOnClient(mc -> {
 			List<Integer> out = new ArrayList<>();
@@ -1126,6 +1312,7 @@ public class A11yGameTest implements FabricClientGameTest {
 			check(narrated.toString().contains(text), "settings: \"" + text + "\" is narrated: " + narrated);
 		}
 		RigTune.LOGGER.info("A11yGameTest: settings: Tab reached the {} active rows of {} in order", stops.size(), context.computeOnClient(A11yGameTest::rows));
+		return narrated.toString();
 	}
 
 	// The screen's own widgets inside it and apart, every row's switch label fitting its width, and the last row inside the
@@ -1178,6 +1365,27 @@ public class A11yGameTest implements FabricClientGameTest {
 			check(rows.getRowTop(last) >= rows.getY() && rows.getRowBottom(last) <= rows.getBottom(), name + ": the last row is shown once scrolled");
 		});
 		context.takeScreenshot(shot + "-scrolled");
+		context.runOnClient(mc -> ((RigTuneSettingsScreen) mc.gui.screen()).list().setScrollAmount(0));
+		context.waitTicks(1);
+		if (!scrolls) {
+			return;
+		}
+		// X12 (WS-L1): at the scrolling size the list really scrolls, and the last row, once Tab focuses it, is fully shown.
+		int presses = 0;
+		int last = context.computeOnClient(A11yGameTest::rows) - 1;
+		while (context.computeOnClient(A11yGameTest::rowIndex) != last) {
+			check(presses++ < 40, name + ": Tab never reached the last row");
+			tab(context);
+		}
+		context.waitTicks(2);
+		String scale = context.computeOnClient(mc -> {
+			RigTuneSettingsScreen.SettingsList rows = ((RigTuneSettingsScreen) mc.gui.screen()).list();
+			check(rows.getRowTop(last) >= rows.getY() && rows.getRowBottom(last) <= rows.getBottom(), name + ": the focused last row is fully shown");
+			return "GUI scale " + mc.getWindow().getGuiScale() + ", max scroll " + rows.maxScrollAmount() + ", scroll " + rows.scrollAmount();
+		});
+		RigTune.LOGGER.info("A11yGameTest: {}: the list scrolls ({}); Tab to the last row shows it", name, scale);
+		context.takeScreenshot(shot + "-last-row-focused");
+		context.runOnClient(mc -> mc.gui.screen().clearFocus());
 		context.runOnClient(mc -> ((RigTuneSettingsScreen) mc.gui.screen()).list().setScrollAmount(0));
 		context.waitTicks(1);
 	}

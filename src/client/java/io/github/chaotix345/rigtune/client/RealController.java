@@ -315,11 +315,19 @@ public final class RealController implements RigTuneController {
 	}
 
 	// Only the launcher's name is logged: no instance name, path or property value.
+	// v0.5 WS-L1 (docs/v0.5/SPEC.md 4a; approved frozen-file exception): a probe past its cap answers LauncherProbe.NOT_YET
+	// (PENDING); an answer already in wins over a stale NOT_YET, and a late one is recorded with one rebuild (once per
+	// detection, on Probes.EXECUTOR, dropped after a reset).
 	private void launcherDetected(LauncherInfo detected) {
-		if (!detected.equals(launcher)) {
-			RigTune.LOGGER.info("RigTune: launcher {}", detected.known() ? detected.launcher().displayName() : "not recognised (generic memory advice)");
+		LauncherInfo recorded = LauncherProbe.record(detected);
+		if (!recorded.equals(launcher)) {
+			RigTune.LOGGER.info("RigTune: launcher {}", recorded.known() ? recorded.launcher().displayName() : "not recognised (generic memory advice)");
 		}
-		launcher = detected;
+		launcher = recorded;
+		LauncherProbe.onLateAnswer(late -> {
+			launcherDetected(late);
+			rebuild();
+		});
 	}
 
 	@Override
@@ -710,8 +718,9 @@ public final class RealController implements RigTuneController {
 		String loaderVersion = FabricLoader.getInstance().getModContainer("fabricloader")
 				.map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("?");
 		LauncherInfo detected = launcher();
+		// v0.5 WS-L1 (docs/v0.5/SPEC.md 4b; approved frozen-file exception): the "- Mod files:" line.
 		return ShareReport.format(shown, new ShareReport.Versions(modVersion, shown.hardware().mcVersion(), loaderVersion), latestBenchmark(),
-				detected.known() ? detected.launcher().displayName() : null, jvmService.report());
+				detected.known() ? detected.launcher().displayName() : null, jvmService.report(), v05().modFiles().shareLine());
 	}
 
 	@Override
@@ -988,6 +997,7 @@ public final class RealController implements RigTuneController {
 	@Override
 	public void deleteProfile(String id) {
 		profileService.deleteProfile(id);
+		v05().serverProfiles().forgetProfile(id);
 	}
 
 	@Override
@@ -1083,6 +1093,12 @@ public final class RealController implements RigTuneController {
 	@Override
 	public ModFilesPolicy modFiles() {
 		return v05().modFiles().policy();
+	}
+
+	// v0.5 WS-L1 (review M2; approved frozen-file exception).
+	@Override
+	public boolean modFilesOptedIn() {
+		return v05().modFiles().optedIn();
 	}
 
 	// C20 (WS-S2).

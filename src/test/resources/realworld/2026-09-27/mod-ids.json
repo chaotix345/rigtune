@@ -1,0 +1,16 @@
+{
+  "DistantHorizons-3.3.2-26.2-fabric-neoforge.jar": "distanthorizons",
+  "Ixeris-4.6.8+26.2-fabric.jar": "ixeris",
+  "ResourcefulConfig-5.0.0.jar": "resourcefulconfig",
+  "asynclogger-2.2.2+26.1.2-fabric.jar": "asynclogger",
+  "bbe-fabric-1.3.7+mc26.2.jar": "betterblockentities",
+  "entityculling-fabric-1.11.1-mc26.2.jar.disabled": "entityculling",
+  "entityculling-fabric-1.11.2-mc26.2.jar": "entityculling",
+  "fastquit-3.1.5+mc26.2.jar": "fastquit",
+  "modmenu-20.0.3.jar": "modmenu",
+  "moreculling-fabric-26.2-1.8.1.jar": "moreculling",
+  "rigtune-0.4.0+mc26.2.jar": "rigtune",
+  "structure_layout_optimizer-1.1.4+26.1-fabric.jar": "structure_layout_optimizer",
+  "yet_another_config_lib_v3-3.9.7+26.2-fabric.jar": "yet_another_config_lib_v3",
+  "zoomify-2.16.3+26.2.jar": "zoomify"
+}

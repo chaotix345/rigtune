@@ -33,7 +33,7 @@ public class HowItWorksScreen extends Screen {
 	private @Nullable Paragraphs list;
 	private int focusedRow = -1;
 
-	// optedIn: settings.json modFilesByRigTune, as the guide that opens this page read it (so the two can't disagree).
+	// optedIn: RigTuneController.modFilesOptedIn(), as the guide that opens this page read it (so the two can't disagree).
 	public HowItWorksScreen(@Nullable Screen parent, RigTuneController controller, boolean optedIn) {
 		super(Component.translatable("rigtune.firstrun.how.title"));
 		this.parent = parent;

@@ -1,8 +1,6 @@
 package io.github.chaotix345.rigtune.client;
 
 import io.github.chaotix345.rigtune.core.history.FirstRun;
-import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
-import io.github.chaotix345.rigtune.core.profile.ServerProfilesView;
 import io.github.chaotix345.rigtune.core.tryit.TryItView;
 import org.junit.jupiter.api.Test;
 
@@ -31,10 +29,10 @@ class V05ServicesTest {
 		assertSame(services.tryIt(), services.tryIt());
 		assertSame(services.serverProfiles(), services.serverProfiles());
 		assertSame(services.stutterFixes(), services.stutterFixes());
-		assertEquals(ModFilesPolicy.RIGTUNE, services.modFiles().policy());
 		assertEquals(FirstRun.Status.UNKNOWN, services.firstRun().status());
 		assertEquals(TryItView.EMPTY, services.tryIt().view());
-		assertEquals(ServerProfilesView.EMPTY, services.serverProfiles().view());
+		// WS-P2 (coordinator-approved exception to the frozen file): the filled service reads its files through the controller.
+		assertNull(services.serverProfiles().notice(), "no offer pending: notice() reads nothing");
 		assertEquals(List.of(), services.stutterFixes().holds());
 		assertEquals(Thread.currentThread().getName(), services.createdOn());
 	}

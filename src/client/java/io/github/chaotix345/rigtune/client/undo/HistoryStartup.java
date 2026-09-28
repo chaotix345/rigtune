@@ -9,12 +9,15 @@ import io.github.chaotix345.rigtune.core.apply.ModJars;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
 import io.github.chaotix345.rigtune.core.apply.SodiumConfigPatcher;
+import io.github.chaotix345.rigtune.core.apply.UnfinishedGroups;
 import io.github.chaotix345.rigtune.core.history.HistoryUpdates;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.LegacyImport;
+import io.github.chaotix345.rigtune.core.history.SkippedClaims;
 import io.github.chaotix345.rigtune.core.history.StagedChanges;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -55,8 +58,28 @@ public final class HistoryStartup {
 			}
 			List<ApplyResult.OpResult> results = lastApply == null ? List.of() : lastApply.results();
 			journal.updateExisting(entries -> HistoryUpdates.reconcile(entries, pendingIds, results));
+			relabelSkippedClaims(configDir, journal, lastApply);
 		} catch (Exception e) {
 			RigTune.LOGGER.warn("Could not update {}", Journal.file(configDir), e);
+		}
+	}
+
+	// docs/v0.5/SPEC.md 4f, real world RW-20 (SkippedClaims): a file change the last helper run claimed as already done
+	// with no proof it was RigTune's becomes ABANDONED "installed another way", in the journal first, then in that run's
+	// result (a death in between is completed at the next start). Once: afterwards nothing matches.
+	private static void relabelSkippedClaims(Path configDir, Journal journal, ApplyResult lastApply) throws IOException {
+		if (lastApply == null) {
+			return;
+		}
+		SkippedClaims.Relabel[] found = new SkippedClaims.Relabel[1];
+		boolean updated = journal.updateExisting(entries -> {
+			found[0] = SkippedClaims.of(entries, lastApply, () -> UnfinishedGroups.recorded(configDir));
+			return found[0] == null ? entries : found[0].entries();
+		});
+		if (updated && found[0] != null) {
+			found[0].lastApply().save(ApplyResult.defaultPath(configDir));
+			RigTune.LOGGER.info("RigTune's last helper run counted {} change(s) as already done that it has no record of making; History now shows them "
+					+ "as not applied (installed another way): {}", found[0].opIds().size(), found[0].opIds());
 		}
 	}
 

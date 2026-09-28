@@ -454,6 +454,42 @@ class ServerProfileStoreTest {
 		assertEquals(JsonParser.parseString("{\"z\": [\"w\"]}"), after.getAsJsonObject("servers").getAsJsonObject(store.keyOf(PLAY)).get("more"));
 	}
 
+	// ServerProfileService's notice re-check: the entry a pending offer came from, by its key.
+	@Test
+	void anEntryByItsKey() {
+		ServerProfileStore store = store();
+		assertNull(store.entry("a".repeat(64)));
+		store.remember(PLAY, REMOTE, "p-1", T0);
+		String key = store.keyOf(PLAY);
+		assertEquals(new Entry(key, "p-1", REMOTE, T0, T0), store.entry(key));
+		assertNull(store.entry("b".repeat(64)));
+		assertNull(store.entry(null));
+		store.forget(PLAY);
+		assertNull(store.entry(key));
+	}
+
+	// One read per screen: the snapshot answers from what it read, whatever happens to the file after.
+	@Test
+	void aSnapshotIsOneRead() throws IOException {
+		ServerProfileStore store = store();
+		store.remember(PLAY, REMOTE, "p-1", T0);
+		store.remember(OTHER, REMOTE, "p-2", T1);
+		ServerProfileStore.Snapshot snapshot = store.snapshot();
+		String play = store.keyOf(PLAY);
+		Files.delete(file());
+		assertTrue(snapshot.writable());
+		assertEquals(play, snapshot.keyOf(PLAY));
+		assertEquals(play, snapshot.entries().getLast().key(), "newest first: Other (T1), then Play (T0)");
+		assertEquals(2, snapshot.entries().size());
+		assertEquals("p-1", snapshot.get(PLAY).profile());
+		assertNull(store.keyOf(PLAY), "the file is gone: the store itself answers from the disk");
+		write("{\"formatVersion\": 2, \"future\": 1}");
+		assertFalse(store.snapshot().writable(), "a newer file: read-only");
+		write("{broken");
+		ServerProfileStore.Snapshot corrupt = store.snapshot();
+		assertTrue(corrupt.writable() && corrupt.entries().isEmpty(), "a corrupt file is moved aside: empty, writable");
+	}
+
 	@Test
 	void keyOfWritesNothingAndIsNullWithoutASalt() throws IOException {
 		ServerProfileStore store = store();
