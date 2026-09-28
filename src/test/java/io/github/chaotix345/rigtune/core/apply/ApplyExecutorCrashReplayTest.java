@@ -1,5 +1,8 @@
 package io.github.chaotix345.rigtune.core.apply;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.OpResult;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.Status;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
@@ -78,8 +81,31 @@ class ApplyExecutorCrashReplayTest {
 				JournalChange.file(JournalChange.ENABLE, "sodium", newJar.getFileName().toString(), JournalChange.STAGED, enable.id(), enable.group())));
 	}
 
-	// Moves, and dies right after renaming `source`.
-	private static ApplyExecutor killedAfter(Path source) {
+	// Moves, and dies once the record says `op`'s rename happened (review-11 APPLY-5: each rename is marked done in
+	// unfinished-groups.json right after it).
+	private static ApplyExecutor killedAfter(Op op) {
+		return new ApplyExecutor(2, 1, Files::move, millis -> true, ModJars::readModId, (file, content) -> {
+			UnfinishedGroups.DURABLE.write(file, content);
+			if (marked(content, op.id())) {
+				throw new Killed();
+			}
+		});
+	}
+
+	private static boolean marked(String record, String opId) {
+		for (JsonElement group : JsonParser.parseString(record).getAsJsonObject().getAsJsonArray("groups")) {
+			for (JsonElement rename : group.getAsJsonObject().getAsJsonArray("renames")) {
+				JsonObject r = rename.getAsJsonObject();
+				if (opId.equals(r.get("op").getAsString()) && r.has("done") && r.get("done").getAsBoolean()) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	// Dies right after renaming `source`, before the record can say so.
+	private static ApplyExecutor killedRightAfterTheMove(Path source) {
 		return new ApplyExecutor(2, 1, (from, to) -> {
 			Files.move(from, to);
 			if (from.equals(source)) {
@@ -150,7 +176,7 @@ class ApplyExecutorCrashReplayTest {
 	@Test
 	void killedAfterTheRenamesBeforeTheResult() throws IOException {
 		staged();
-		assertThrows(Killed.class, () -> run(killedAfter(download)));
+		assertThrows(Killed.class, () -> run(killedAfter(enable)));
 		assertEquals(UPDATED, modsListing());
 		assertTrue(Files.exists(record()));
 		assertFalse(Files.exists(ApplyResult.defaultPath(config)));
@@ -167,7 +193,7 @@ class ApplyExecutorCrashReplayTest {
 	@Test
 	void killedAfterTheResultBeforeThePrune() throws IOException {
 		staged();
-		assertThrows(Killed.class, () -> run(killedAfter(download)));
+		assertThrows(Killed.class, () -> run(killedAfter(enable)));
 		lastApplyOfTheDeadRun();
 		nextStart();
 		assertEquals(List.of(JournalChange.APPLIED, JournalChange.APPLIED), journalStatuses());
@@ -175,11 +201,27 @@ class ApplyExecutorCrashReplayTest {
 		assertTheGroupIsDoneAsRigTunes(run(executor()));
 	}
 
+	// (1b) Killed right after the enable's rename, before the record marks it done: nothing of RigTune's proves that
+	// rename, so the group is dropped as installed another way. The folder is right; History says the enable wasn't
+	// applied (the safe side: RigTune never claims a jar it can't prove). The disable, marked done, stays done.
+	@Test
+	void killedBetweenARenameAndItsMarkErrsSafe() throws IOException {
+		staged();
+		assertThrows(Killed.class, () -> run(killedRightAfterTheMove(download)));
+		nextStart();
+
+		ApplyResult next = run(executor());
+
+		assertEquals(List.of(Status.SKIPPED_ALREADY_DONE, Status.ABANDONED), statuses(next));
+		assertEquals(UPDATED, modsListing());
+		assertFalse(Files.exists(pending));
+	}
+
 	// (3) Killed after the prune, before pending.json lost the done ops: only last-apply.json proves it.
 	@Test
 	void killedAfterThePruneBeforePendingJson() throws IOException {
 		staged();
-		assertThrows(Killed.class, () -> run(killedAfter(download)));
+		assertThrows(Killed.class, () -> run(killedAfter(enable)));
 		lastApplyOfTheDeadRun();
 		Files.delete(record());
 		nextStart();
@@ -195,7 +237,7 @@ class ApplyExecutorCrashReplayTest {
 	void killedTwiceInTheSameWindow() throws IOException {
 		staged();
 		String plan = Files.readString(pending);
-		assertThrows(Killed.class, () -> run(killedAfter(download)));
+		assertThrows(Killed.class, () -> run(killedAfter(enable)));
 		lastApplyOfTheDeadRun();
 		Files.delete(record());
 		nextStart();
@@ -284,7 +326,7 @@ class ApplyExecutorCrashReplayTest {
 	@Test
 	void anUnreadableResultProvesNothing() throws IOException {
 		staged();
-		assertThrows(Killed.class, () -> run(killedAfter(download)));
+		assertThrows(Killed.class, () -> run(killedAfter(enable)));
 		Files.delete(record());
 		Files.writeString(ApplyResult.defaultPath(config), "{not json", StandardCharsets.UTF_8);
 
