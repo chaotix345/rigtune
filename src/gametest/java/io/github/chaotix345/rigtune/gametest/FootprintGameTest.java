@@ -10,9 +10,12 @@ import io.github.chaotix345.rigtune.client.FootprintStats;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
+import io.github.chaotix345.rigtune.client.launcher.LauncherRepairService;
 import io.github.chaotix345.rigtune.client.probe.PowerWatcher;
+import io.github.chaotix345.rigtune.client.server.ServerProfileService;
 import io.github.chaotix345.rigtune.client.stutter.StutterHooks;
 import io.github.chaotix345.rigtune.client.stutter.StutterMonitor;
+import io.github.chaotix345.rigtune.client.tryit.TryItService;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
@@ -448,6 +451,17 @@ public class FootprintGameTest implements FabricClientGameTest {
 			context.runOnClient(mc -> mc.gui.setScreen(null));
 			TickTiming tick = context.computeOnClient(mc -> timeTick(mc, playTick(stutterTick)));
 			check(StutterMonitor.session() != null, "still capturing after the tick timing");
+			// X4.4 (SPEC 1h): the v0.5 listeners with their own END_CLIENT_TICK registration, each timed alone the same way, on the
+			// path it takes every tick here: RW-11/RW-17's settings check with a session running; C09's Try It tick, C16's toast
+			// wait and 4d's leftover-toast wait with nothing to do.
+			check(TryItService.idle(), "no try runs: Try It's tick has nothing to do");
+			TickTiming settingsCheck = context.computeOnClient(mc -> timeTick(mc, listener(SETTINGS_WATCH, "tick", null, true)));
+			TickTiming tryItTick = context.computeOnClient(mc -> timeTick(mc, TryItService::tick));
+			TickTiming serverProfileTick = context.computeOnClient(mc -> timeTick(mc,
+					listener(ServerProfileService.class.getName(), "tick", ((RealController) controller).v05().serverProfiles(), true)));
+			TickTiming leftoverTick = context.computeOnClient(mc -> timeTick(mc,
+					listener(LauncherRepairService.class.getName(), "tickLeftover", ((RealController) controller).v05().launcherRepair(), false)));
+			check(StutterMonitor.session() != null, "still capturing after the listeners' timing");
 			long onRetained = StutterMonitor.retainedBytes();
 			long frames = sessionFrames();
 			boolean phaseTimersSeen = StutterMonitor.phaseTiming();
@@ -511,8 +525,20 @@ public class FootprintGameTest implements FabricClientGameTest {
 			measured.put(TICK_TWIN_KEY, tick.twinVsReference());
 			measured.put("tickHookNsPerCallWorld", tickOff.nsPerCall());
 			measured.put("tickHookAllocBytesWorld", tickOff.allocBytes());
+			measured.put("settingsCheckNsPerCall", settingsCheck.nsPerCall());
+			measured.put("settingsCheckAllocBytes", settingsCheck.allocBytes());
+			measured.put("tryItTickNsPerCall", tryItTick.nsPerCall());
+			measured.put("tryItTickAllocBytes", tryItTick.allocBytes());
+			measured.put("serverProfileTickNsPerCall", serverProfileTick.nsPerCall());
+			measured.put("serverProfileTickAllocBytes", serverProfileTick.allocBytes());
+			measured.put("launcherLeftoverTickNsPerCall", leftoverTick.nsPerCall());
+			measured.put("launcherLeftoverTickAllocBytes", leftoverTick.allocBytes());
 			out.put("tickHookTimingOn", tick.detail());
 			out.put("tickHookTimingWorld", tickOff.detail());
+			out.put("settingsCheckTiming", settingsCheck.detail());
+			out.put("tryItTickTiming", tryItTick.detail());
+			out.put("serverProfileTickTiming", serverProfileTick.detail());
+			out.put("launcherLeftoverTickTiming", leftoverTick.detail());
 			out.put("monitorIdleRetainedBytes", idleRetained);
 			out.put("monitorSessionRetainedBytes", onRetained);
 			out.put("monitorBenchmarkRetainedBytes", handover[1]);
@@ -546,6 +572,32 @@ public class FootprintGameTest implements FabricClientGameTest {
 			return MethodHandles.lookup().unreflect(tick);
 		} catch (ReflectiveOperationException e) {
 			throw new AssertionError("the monitor's END_CLIENT_TICK listener StutterHooks.tick(Minecraft)", e);
+		}
+	}
+
+	// SettingsWatch is package-private (client.stutter).
+	private static final String SETTINGS_WATCH = "io.github.chaotix345.rigtune.client.stutter.SettingsWatch";
+
+	// A v0.5 END_CLIENT_TICK listener that isn't public (X4.4), for timing: owner's method name (taking the Minecraft or
+	// nothing), on target (null: static), through a method handle as StutterHooks.tick is.
+	private static TickWork listener(String owner, String name, @Nullable Object target, boolean takesMinecraft) {
+		try {
+			Class<?> type = Class.forName(owner);
+			Method method = takesMinecraft ? type.getDeclaredMethod(name, Minecraft.class) : type.getDeclaredMethod(name);
+			method.setAccessible(true);
+			MethodHandle unbound = MethodHandles.lookup().unreflect(method);
+			MethodHandle handle = target == null ? unbound : unbound.bindTo(target);
+			// Block bodies: an expression body would make invokeExact's symbolic type return Object.
+			if (takesMinecraft) {
+				return mc -> {
+					handle.invokeExact(mc);
+				};
+			}
+			return mc -> {
+				handle.invokeExact();
+			};
+		} catch (ReflectiveOperationException e) {
+			throw new AssertionError("the END_CLIENT_TICK listener " + owner + "." + name, e);
 		}
 	}
 
