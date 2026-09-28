@@ -185,13 +185,14 @@ public final class BenchmarkTrend {
 	}
 
 	// Review-11 COMPAT-2: a backend difference when both are known; a GPU difference when both are known, unless the
-	// backends differ (the same device reads differently under OpenGL and Vulkan). Unknown on either side claims nothing.
+	// backends differ (the same device reads differently under OpenGL and Vulkan), compared as GpuName keys (review-12
+	// R12FEAT-1: Mesa's build versions aside). Unknown on either side claims nothing.
 	private static void graphics(@Nullable String backendA, @Nullable String gpuA, @Nullable String backendB, @Nullable String gpuB,
 			Set<Difference> out) {
 		boolean backends = backendA != null && backendB != null && !backendA.equals(backendB);
 		if (backends) {
 			out.add(Difference.BACKEND);
-		} else if (gpuA != null && gpuB != null && !gpuA.strip().equalsIgnoreCase(gpuB.strip())) {
+		} else if (gpuA != null && gpuB != null && !GpuName.same(gpuA, gpuB)) {
 			out.add(Difference.GPU);
 		}
 	}

@@ -52,6 +52,9 @@ class BenchmarkConditionsTest {
 		assertEquals(new BenchmarkConditions.Graphics(null, null), BenchmarkConditions.Graphics.of(
 				new GpuInfo("unknown", "unknown", "unknown", GraphicsBackend.UNKNOWN, 0)), "the probe's placeholders are unknowns");
 		assertEquals(new BenchmarkConditions.Graphics(null, null), BenchmarkConditions.Graphics.of(null), "not probed yet");
+		// review-12 R12FEAT-1: recorded without Mesa's build versions.
+		assertEquals(new BenchmarkConditions.Graphics("OPENGL", "llvmpipe"), BenchmarkConditions.Graphics.of(
+				new GpuInfo("Mesa", "llvmpipe (LLVM 20.1.2, 256 bits)", "4.5 (Core Profile) Mesa 25.2.8", GraphicsBackend.OPENGL, 0)));
 	}
 
 	// Review (part 1 M3): one journal snapshot gives the run both its cursor and its staged ids.

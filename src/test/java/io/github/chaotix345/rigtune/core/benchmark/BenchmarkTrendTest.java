@@ -115,6 +115,21 @@ class BenchmarkTrendTest {
 				"an unknown backend: the GPU still counts");
 	}
 
+	// review-12 R12FEAT-1: a Mesa/LLVM update changes the renderer's build versions, not the GPU; a run recorded before
+	// the key was cleaned (the raw string) still compares with one after.
+	@Test
+	void r12AMesaUpdateIsNotAnotherGpu() {
+		BenchmarkRecord before = TrendFixtures.run("a").graphics("OPENGL", "AMD Radeon RX 9070 XT (radeonsi, gfx1201, LLVM 20.1.8, DRM 3.64, 6.16.0-rc6-1-cachyos-rc)")
+				.build();
+		BenchmarkRecord after = TrendFixtures.run("b").graphics("OPENGL", "AMD Radeon RX 9070 XT (radeonsi, gfx1201, LLVM 21.1.7, DRM 3.64)").build();
+		assertEquals(List.of(), BenchmarkTrend.differences(before, after));
+		assertEquals(List.of(), BenchmarkTrend.differences(after, TrendFixtures.run("c").graphics("OPENGL", "AMD Radeon RX 9070 XT").build()));
+		assertEquals(List.of(Difference.GPU), BenchmarkTrend.differences(TrendFixtures.run("d").graphics("VULKAN", "Intel(R) Arc(TM) B580 Graphics").build(),
+				TrendFixtures.run("e").graphics("VULKAN", "NVIDIA GeForce RTX 3060").build()));
+		assertEquals(List.of(), BenchmarkTrend.stale(before, new Current("26.2", 12, 8, 2560, 1440, false, false, null, false, "hash-a", "OPENGL",
+				"AMD Radeon RX 9070 XT (radeonsi, gfx1201, LLVM 21.1.7, DRM 3.64)")), "no rerun marker for a driver update");
+	}
+
 	// The finding's scenario for the trend (and Try It, which reads differences): OpenGL runs, then one on Vulkan that is
 	// 40 % faster: no improvement is claimed, "different conditions (graphics backend)" is.
 	@Test
