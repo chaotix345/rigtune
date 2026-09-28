@@ -26,7 +26,7 @@ deleted in the same commit.
 | `ws-w` | WS-W | `awareness.json` | the options snapshot at exit (`optionsAtExit`, 4h) |
 | `ws-w2` | WS-W2 | `awareness.json` | `acknowledgedStartupRegressions` (C18) |
 | `ws-f` | WS-F | `awareness.json` | `firstrun.guide` in `dismissed` (C02) |
-| `ws-h` | WS-H | only if WS-H finds a new write | (none planned) |
+| `ws-h` | WS-H | `history.json`, `last-apply.json` | RW-20's relabel over the user's real instance: the legacy-import entry with the DH pair ABANDONED, and that helper run's two results ABANDONED "installed another way" |
 
 Contracts WS-K landed for these (docs/v0.5/design/ws-k.md): the optional fields `JournalEntry.foldedEntryIds`,
 `BenchmarkRecord.Context.worldFresh`/`dhGenerating`/`stagedAtStart`, `StutterReport.settingsAtStart`/`settingsAtEnd`,

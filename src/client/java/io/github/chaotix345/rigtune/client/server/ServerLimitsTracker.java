@@ -141,7 +141,7 @@ public final class ServerLimitsTracker {
 		return store;
 	}
 
-	static ServerLimits.Kind kind(Minecraft minecraft, @Nullable ServerData data) {
+	public static ServerLimits.Kind kind(Minecraft minecraft, @Nullable ServerData data) {
 		if (minecraft.hasSingleplayerServer()) {
 			return ServerLimits.Kind.SINGLEPLAYER;
 		}
@@ -151,7 +151,7 @@ public final class ServerLimitsTracker {
 		return data != null && data.isLan() ? ServerLimits.Kind.LAN_GUEST : ServerLimits.Kind.REMOTE;
 	}
 
-	static @Nullable String address(ServerLimits.Kind kind, @Nullable ServerData data) {
+	public static @Nullable String address(ServerLimits.Kind kind, @Nullable ServerData data) {
 		if (data == null || kind == ServerLimits.Kind.SINGLEPLAYER) {
 			return null;
 		}
