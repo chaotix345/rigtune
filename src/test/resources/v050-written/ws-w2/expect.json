@@ -1,0 +1,6 @@
+{
+  "set": "ws-w2",
+  "checks": [
+    {"class": "AwarenessStore", "file": "awareness.json", "keeps": ["acknowledgedStartupRegressions"], "noBad": true}
+  ]
+}
