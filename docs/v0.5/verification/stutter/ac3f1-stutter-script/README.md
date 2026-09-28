@@ -21,6 +21,7 @@
 | 36363923151 | 26.3 | **PASS 6/6** | 23 | | afterTeleport 4, chunksLoading 7 | gc 0.96, tick 0.01, unknown 0.03 | none of 10 |
 | [36431601035](https://github.com/chaotix345/rigtune/actions/runs/36431601035) | 26.2 | 5/6 as run; PASS 6/6 under the corrected criterion | 26 | 7 | afterTeleport 5, chunksLoading 6 | gc 0.78, unknown 0.22 | none of 6 |
 | [36435662896](https://github.com/chaotix345/rigtune/actions/runs/36435662896) | 26.2 | 4/6: no spike after the tp was counted (vanilla's AFK limiter; see below) | 24 | 3 | afterTeleport 1, chunksLoading 3 | gc 0.98, unknown 0.02 | none of 3 |
+| [36448687667](https://github.com/chaotix345/rigtune/actions/runs/36448687667) (release, v0.5.0) | 26.2 | 5/6 as run; PASS 6/6 under the capped-list criterion | 31 | 31 (10 listed) | afterTeleport 11, chunksLoading 30 | gc 0.53, tick 0.02, unknown 0.44 | none of 9 |
 
 Evidence per run and node: `run-<id>/mc<node>/` holds `RESULT.md`, `stutter.json` and `log-excerpt.txt`. The GC logs are in the runs' `stutter-script-<node>` artifacts.
 
@@ -49,6 +50,12 @@ Evidence per run and node: `run-<id>/mc<node>/` holds `RESULT.md`, `stutter.json
 - Both 26.2 runs counted over half the session as "idle (throttled)": 31.5 s of 68.2 s, then 36.3 s of 66.0 s (0:20 of gameplay).
 - Without input, vanilla's `FramerateLimitTracker` reports AFK part-way through the script, and when varies per run. Since RW-17 the Stutter Doctor leaves throttled time out, by design. That run lost everything after the tp; the first lost its tail.
 - The dev script now calls `onInputReceived()` every tick while it runs, as a player at the keyboard would (`DevStutter.tick`, inert without `-Drigtune.dev.stutterScript`; the method is public in 26.2's and 26.3's `FramerateLimitTracker`, javap).
+
+**With the AFK fix, the release run (36448687667) counted all 61 s of play: 31 spikes, but a session lists only the 10 worst (`StutterReport.MAX_WORST`).**
+- The only listed spike in the teleport window was at 31.8 s, 0.8 s after the tp and before any chunk arrived. The spikes near 37 s and 42 s were real but unlisted. The window-only criterion found no listed chunk-loading spike and failed.
+- The tags count every spike: 30 carried "chunks loading", 21 of them unlisted.
+- The criterion now judges "chunks loading" over the listed spikes from the tp on (first to last). When the list is full, a tag no listed spike shows is judged by the session's count exceeding the listed ones; "after teleport" gets the same rule.
+- Every recorded run passes except the AFK run (36435662896), which still fails: nothing after the tp was counted. `test_stutter_run.py` pins both cases with this run's data.
 
 **What this doesn't show (UNVERIFIED):**
 - 26.3's millisecond numbers on a real GPU. The local 26.3 client crashes natively (SPEC X9).
