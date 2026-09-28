@@ -169,6 +169,16 @@ class FixTextTest {
 		assertEquals("Your last session didn't count: a setting changed while it ran.", skipped(b, new FixTracker.Skip(FixTracker.CHANGED, List.of())));
 	}
 
+	// review-13 R13-1: a chosen fix that expired before it was applied says so, and keeps "chosen" on its change line.
+	@Test
+	void aChosenFixThatExpiredSaysItWasNeverApplied() {
+		FixTracker.Record b = FixTrackerTest.baseline();
+		FixTracker.Record expired = FixTracker.advance(b, io.github.chaotix345.rigtune.core.history.Journal.State.OK, List.of(), null,
+				b.appliedAt().plus(FixTracker.MAX_AGE).plusSeconds(1));
+		assertEquals("Render Distance: 12 → 10, chosen 2026-09-02", FixText.applied(LABELS, expired, ZoneOffset.UTC).english());
+		assertEquals("Never applied: no session as it is was measured in time, so nothing changed.", FixText.state(LABELS, expired, true).english());
+	}
+
 	private static String skipped(FixTracker.Record m, FixTracker.Skip skip) {
 		FixTracker.Record r = new FixTracker.Record(m.entryId(), m.adviceId(), m.key(), m.from(), m.to(), m.appliedAt(), m.rulesRevision(), m.now(), m.state(),
 				m.before(), m.conditions(), m.after(), 1, skip, m.verdict(), m.dismissed());

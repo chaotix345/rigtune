@@ -190,6 +190,40 @@ class FixTrackerTest {
 		assertEquals(List.of(), FixHold.holds(List.of(r, ready), java.time.ZoneOffset.UTC), "nothing held before the Apply");
 	}
 
+	// review-13: a chosen fix's appliedAt is the triggering session's start; that session's end, arriving late (its save runs
+	// after the restart), never counts, even when the baseline session started in the same second: only a session that
+	// started strictly after it does.
+	@Test
+	void theTriggeringSessionArrivingLateNeverCounts() {
+		FixTracker.Record r = baseline();
+		FixTracker.SessionEnd trigger = new FixTracker.SessionEnd(r.appliedAt(), StutterReport.MONITOR, session(0, 400, 20, RD, "12").outcome(),
+				conditions(RD, "12"), conditions(RD, "12"), false);
+		assertSame(r, FixTracker.advance(r, Journal.State.OK, List.of(), trigger, at(1)));
+		FixTracker.SessionEnd next = new FixTracker.SessionEnd(r.appliedAt().plusSeconds(1), StutterReport.MONITOR, session(0, 400, 16, RD, "12").outcome(),
+				conditions(RD, "12"), conditions(RD, "12"), false);
+		FixTracker.Record ready = FixTracker.advance(r, Journal.State.OK, List.of(), next, at(10));
+		assertEquals(FixTracker.State.READY, ready.state());
+		assertEquals(16, ready.before().hitches());
+	}
+
+	// review-13 R13-1: a fix chosen but never applied that expires (14 days, or 5 skipped baseline sessions) or whose key the
+	// player changed meanwhile has nothing to undo and holds nothing: no history.json entry was ever made for it.
+	@Test
+	void aChosenFixThatWasNeverAppliedHasNothingToUndoOrHold() {
+		FixTracker.Record r = baseline();
+		FixTracker.Record old = FixTracker.advance(r, Journal.State.OK, List.of(), null, r.appliedAt().plus(FixTracker.MAX_AGE).plusSeconds(1));
+		FixTracker.Record skipped = r;
+		for (int i = 0; i < FixTracker.MAX_SKIPPED; i++) {
+			skipped = FixTracker.advance(skipped, Journal.State.OK, List.of(), session(10 + i * 10, 200, 18, RD, "12"), at(10 + i * 10));
+		}
+		FixTracker.Record replaced = FixTracker.advance(r, Journal.State.OK, List.of(), session(10, 400, 18, RD, "16"), at(10));
+		for (FixTracker.Record x : List.of(old, skipped, replaced)) {
+			assertTrue(x.state() == FixTracker.State.EXPIRED || x.state() == FixTracker.State.REPLACED, x.toString());
+			assertFalse(x.undoable(), "nothing to undo: " + x);
+			assertEquals(List.of(), FixHold.holds(List.of(x), java.time.ZoneOffset.UTC), "nothing held: " + x);
+		}
+	}
+
 	// A baseline session that started before the choice (the one that led to the offer) never counts; a short one, an
 	// excluded or idle one is skipped with its reason; the key changed by hand meanwhile ends it (replaced).
 	@Test

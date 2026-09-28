@@ -150,30 +150,35 @@ public class StutterFixGameTest implements FabricClientGameTest {
 		waitForFix(context, CHUNKS, FixOffer.Offer.class);
 
 		// Try this fix… (review-12 R12STUTTER-6): nothing changes; one session as it is is measured first, from a restart of
-		// the running session. The advice row has no "another fix" line (the block explains).
+		// the running session. The advice row has no "another fix" line (the block explains). review-13: the triggering
+		// session's analyses keep their 20 hitches, every later session gets 16, so the ready record shows its before side is
+		// the baseline session, never the trigger (whose end is saved after the restart).
 		int entries = context.computeOnClient(mc -> ClientJournal.get().entries().size());
 		StutterMonitor.Capture trigger = StutterMonitor.session();
-		pressFix(context, "rigtune.stutter.fix.try");
+		chooseFix(context, trigger, session(20, 400, Map.of("chunkLoad", 60.0, "unknown", 40.0), Map.of("chunkLoad", 10), StutterReport.MONITOR),
+				session(16, 400, Map.of("chunkLoad", 60.0, "unknown", 40.0), Map.of("chunkLoad", 10), StutterReport.MONITOR));
 		check(status(context).startsWith("Measuring your play as it is."), "the status: " + status(context));
-		FixTracker.Record chosen = waitForRecord(context, configDir, r -> r.state() == FixTracker.State.BASELINE, "a baseline record");
+		FixTracker.Record chosen = waitForRecord(context, configDir, r -> r.state().beforeApply(), "a chosen fix");
 		check(context.computeOnClient(mc -> mc.options.renderDistance().get()) == 12, "Try this fix… changed nothing");
 		check(context.computeOnClient(mc -> ClientJournal.get().entries().size()) == entries, "Try this fix… wrote no History entry");
 		StutterMonitor.Capture baseline = StutterMonitor.session();
-		check(baseline != null && baseline != trigger && !baseline.startedAt().isBefore(chosen.appliedAt()), "the baseline session started at the choice");
-		context.waitFor(mc -> mc.gui.screen() instanceof StutterScreen s && s.shownView().tracked() != null
-				&& s.shownView().tracked().state() == FixTracker.State.BASELINE, 200);
-		check(shown(context).contains("Nothing has changed yet") && !shown(context).contains("Another fix is still being measured"),
-				"the block, and no busy line under the advice: " + shown(context));
-		context.takeScreenshot("stutterfix-baseline-854x480-scale2");
-		// The baseline session ends (the probe's 20 hitches in 6:40): ready.
+		check(baseline != null && baseline != trigger && baseline.startedAt().isAfter(chosen.appliedAt()), "the baseline session started after the trigger");
+		if (chosen.state() == FixTracker.State.BASELINE) {
+			context.waitFor(mc -> mc.gui.screen() instanceof StutterScreen s && s.shownView().tracked() != null
+					&& s.shownView().tracked().state().beforeApply(), 200);
+			check(shown(context).contains("Nothing has changed yet") || shown(context).contains("Your play as it is"), "the block: " + shown(context));
+			check(!shown(context).contains("Another fix is still being measured"), "no busy line under the advice: " + shown(context));
+			context.takeScreenshot("stutterfix-baseline-854x480-scale2");
+		}
+		// The baseline session ends (16 hitches in 6:40): ready, measured from it.
 		endSession(context, controller);
 		FixTracker.Record ready = waitForRecord(context, configDir, r -> r.state() == FixTracker.State.READY, "a ready record");
-		check(ready.entryId().equals(chosen.entryId()) && ready.before().hitches() == 20, "the baseline measured: " + ready);
+		check(ready.entryId().equals(chosen.entryId()) && ready.before().hitches() == 16, "the baseline session measured, not the trigger: " + ready);
 		freshSession(context, controller);
 		openStutter(context, controller);
 		context.waitFor(mc -> mc.gui.screen() instanceof StutterScreen s && s.shownView().tracked() != null
 				&& s.shownView().tracked().state() == FixTracker.State.READY, 200);
-		check(shown(context).contains("Your play as it is: 3.0 hitches a minute over 6:40."), "the ready block: " + shown(context));
+		check(shown(context).contains("Your play as it is: 2.4 hitches a minute over 6:40."), "the ready block: " + shown(context));
 		context.takeScreenshot("stutterfix-ready-854x480-scale2");
 
 		// Apply the fix…: its preview, then Cancel: nothing written, still ready.
@@ -230,7 +235,7 @@ public class StutterFixGameTest implements FabricClientGameTest {
 		context.waitFor(mc -> mc.gui.screen() instanceof StutterScreen s && s.shownView().tracked() != null
 				&& s.shownView().tracked().state() == FixTracker.State.COMPARED, 400);
 		String text = shown(context);
-		check(text.contains("Less stutter after the change: 0.6 hitches a minute (was 3.0)"), "the verdict with both rates: " + text);
+		check(text.contains("Less stutter after the change: 0.6 hitches a minute (was 2.4)"), "the verdict with both rates: " + text);
 		check(text.contains("Undo this change…") && text.contains("Dismiss"), "the block's buttons: " + text);
 		for (int[] size : V05TestContext.SIZES) {
 			v05.resize(size[0], size[1], size[2]);
@@ -262,10 +267,12 @@ public class StutterFixGameTest implements FabricClientGameTest {
 		openStutter(context, controller);
 		FixOffer.Offer offer = (FixOffer.Offer) waitForFix(context, SODIUM, FixOffer.Offer.class);
 		check(offer.key().equals(DEFER) && "ALWAYS".equals(offer.to()) && !offer.now(), "the Sodium offer, at the next restart: " + offer);
-		pressFix(context, "rigtune.stutter.fix.try");
-		waitForRecord(context, configDir, r -> r.state() == FixTracker.State.BASELINE && r.key().equals(DEFER), "a baseline record");
+		chooseFix(context, StutterMonitor.session(), session(20, 400, Map.of("chunkBuild", 60.0, "unknown", 40.0), Map.of("chunkBuild", 10),
+				StutterReport.MONITOR), session(16, 400, Map.of("chunkBuild", 60.0, "unknown", 40.0), Map.of("chunkBuild", 10), StutterReport.MONITOR));
+		waitForRecord(context, configDir, r -> r.state().beforeApply() && r.key().equals(DEFER), "a chosen fix");
 		endSession(context, controller);
-		waitForRecord(context, configDir, r -> r.state() == FixTracker.State.READY && r.key().equals(DEFER), "a ready record");
+		waitForRecord(context, configDir, r -> r.state() == FixTracker.State.READY && r.key().equals(DEFER) && r.before().hitches() == 16,
+				"a ready record measured from the baseline session");
 		freshSession(context, controller);
 		openStutter(context, controller);
 		context.waitFor(mc -> mc.gui.screen() instanceof StutterScreen s && s.shownView().tracked() != null
@@ -415,6 +422,18 @@ public class StutterFixGameTest implements FabricClientGameTest {
 			}
 			return out.toString();
 		});
+	}
+
+	// Try this fix… on the offer, once the clock is in a later second than the triggering session's start (only a session
+	// that started after it can be the baseline). The triggering session's analyses come from `trigger`, every other
+	// session's from `baseline`.
+	private static void chooseFix(ClientGameTestContext context, StutterMonitor.@Nullable Capture session,
+			BiFunction<StutterAnalyzer.Result, Long, StutterAnalyzer.Result> trigger, BiFunction<StutterAnalyzer.Result, Long, StutterAnalyzer.Result> baseline) {
+		check(session != null, "a running session to choose the fix in");
+		long triggerStart = session.startNanos();
+		StutterHooks.injectAnalysis((real, start) -> (start == triggerStart ? trigger : baseline).apply(real, start));
+		context.waitFor(mc -> Instant.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS).isAfter(session.startedAt()), 100);
+		pressFix(context, "rigtune.stutter.fix.try");
 	}
 
 	private static String status(ClientGameTestContext context) {

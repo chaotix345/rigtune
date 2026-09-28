@@ -134,7 +134,7 @@ public final class FixText {
 
 	// "Render distance: 12 → 10, applied 2026-10-02" ("chosen" before it's applied).
 	public static Text applied(HistoryModel.Labels labels, FixTracker.Record r, ZoneId zone) {
-		return r.state().beforeApply()
+		return r.neverApplied()
 				? Text.of("rigtune.stutter.fix.change.chosen", "%s, chosen %s", change(labels, r.key(), r.from(), r.to()), day(r.appliedAt(), zone))
 				: Text.of("rigtune.stutter.fix.change", "%s, applied %s", change(labels, r.key(), r.from(), r.to()), day(r.appliedAt(), zone));
 	}
@@ -172,7 +172,9 @@ public final class FixText {
 			case NOT_APPLIED -> Text.of("rigtune.stutter.fix.state.not_applied", "The change wasn't applied (it was discarded, or the file couldn't be changed).");
 			case REPLACED -> Text.of("rigtune.stutter.fix.state.replaced", "%s was changed again since, so this comparison stopped.",
 					labels.label(r.key()));
-			case EXPIRED -> Text.of("rigtune.stutter.fix.state.expired", "No comparable play in time, so there's no comparison.");
+			case EXPIRED -> r.neverApplied()
+					? Text.of("rigtune.stutter.fix.state.never_applied", "Never applied: no session as it is was measured in time, so nothing changed.")
+					: Text.of("rigtune.stutter.fix.state.expired", "No comparable play in time, so there's no comparison.");
 		};
 	}
 

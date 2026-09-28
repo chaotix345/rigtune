@@ -39,6 +39,9 @@ public final class FixTracker {
 	public static final String CHANGED = "changed";
 	// Not a session's skip: an expired record's mark that its journal entry is gone (nothing left to undo).
 	public static final String GONE = "gone";
+	// Not a session's skip either (review-13 R13-1): a chosen fix that expired or was replaced before it was applied (no
+	// journal entry was ever made: nothing to undo or hold).
+	public static final String NEVER_APPLIED = "never_applied";
 
 	// review-12 R12STUTTER-6: BASELINE: the player chose to try the fix, and RigTune measures one session as it is first
 	// (nothing changed yet); READY: that session was measured, the change can be applied. The session that led to the
@@ -103,8 +106,19 @@ public final class FixTracker {
 
 		// Its change can still be undone from the block: not undone or not applied, and not expired with its entry gone.
 		public boolean undoable() {
-			return state != State.UNDONE && state != State.NOT_APPLIED && !state.beforeApply()
+			return state != State.UNDONE && state != State.NOT_APPLIED && !neverApplied()
 					&& !(state == State.EXPIRED && lastSkip != null && GONE.equals(lastSkip.reason()));
+		}
+
+		// Chosen but not applied (yet, or ever: expired or replaced before the Apply).
+		public boolean neverApplied() {
+			return state.beforeApply() || lastSkip != null && NEVER_APPLIED.equals(lastSkip.reason());
+		}
+
+		// A chosen fix ends before its Apply (expired, replaced): marked, as nothing was applied.
+		Record endedUnapplied(State next) {
+			return new Record(entryId, adviceId, key, from, to, appliedAt, rulesRevision, now, next, before, conditions, after, skipped,
+					new Skip(NEVER_APPLIED, List.of()), verdict, dismissed);
 		}
 
 		// The baseline session measured: the before side and the conditions the comparison keeps.
@@ -234,11 +248,13 @@ public final class FixTracker {
 	// review-12 R12STUTTER-6: a chosen fix measures one session as it is first. The first monitor session that started after
 	// the choice, with the key at its old value at both ends, not excluded or idle and with at least
 	// FixGate.MIN_GAMEPLAY_SECONDS of compared play, is the before side (READY). The key changed meanwhile: replaced.
+	// review-13: a chosen fix's appliedAt is the triggering session's start, and only a session that started strictly after it
+	// counts, so the triggering session's own end (saved after the restart) never does, even from the same second.
 	private static Record baseline(Record r, @Nullable SessionEnd session, Instant now) {
 		if (Duration.between(r.appliedAt(), now).compareTo(MAX_AGE) > 0) {
-			return r.withState(State.EXPIRED);
+			return r.endedUnapplied(State.EXPIRED);
 		}
-		if (r.state() == State.READY || session == null || session.startedAt().isBefore(r.appliedAt()) || !StutterReport.MONITOR.equals(session.source())) {
+		if (r.state() == State.READY || session == null || !session.startedAt().isAfter(r.appliedAt()) || !StutterReport.MONITOR.equals(session.source())) {
 			return r;
 		}
 		String atStart = session.atStart().settings().get(r.key());
@@ -247,7 +263,7 @@ public final class FixTracker {
 		if (atStart == null || atEnd == null) {
 			skip = new Skip(UNREAD, List.of(r.key()));
 		} else if (!SettingValues.same(atStart, r.from()) || !SettingValues.same(atEnd, r.from())) {
-			return r.withState(State.REPLACED);
+			return r.endedUnapplied(State.REPLACED);
 		} else if (session.excluded()) {
 			skip = new Skip(EXCLUDED, List.of());
 		} else if (session.idle()) {
@@ -260,7 +276,7 @@ public final class FixTracker {
 		}
 		if (skip != null) {
 			Record skipped = r.skip(skip);
-			return skipped.skipped() >= MAX_SKIPPED ? skipped.withState(State.EXPIRED) : skipped;
+			return skipped.skipped() >= MAX_SKIPPED ? skipped.endedUnapplied(State.EXPIRED) : skipped;
 		}
 		return r.ready(session.outcome(), session.atStart());
 	}

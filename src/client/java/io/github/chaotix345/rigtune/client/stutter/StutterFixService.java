@@ -385,8 +385,9 @@ public final class StutterFixService {
 			return Texts.component(FixText.gone());
 		}
 		RulesDocument rules = c.rules();
-		// To the second, as a session's startedAt is (StutterCapture): the session restarted below starts no earlier.
-		Instant chosenAt = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+		// review-13: the triggering session's start (to the second, as a session's startedAt is): only a session that started
+		// after it can be the baseline, never the triggering one, whose end is saved after the restart below.
+		Instant chosenAt = shown.startedAt();
 		FixTracker.Record record = new FixTracker.Record(ChangeRecorder.newEntryId(), offer.adviceId(), offer.key(), offer.from(), offer.to(), chosenAt,
 				rules == null ? 0 : rules.revision, offer.now(), FixTracker.State.BASELINE, SessionOutcome.NONE, shown.conditions(), null, 0, null, null, false);
 		adding = record;

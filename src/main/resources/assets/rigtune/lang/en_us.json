@@ -718,6 +718,7 @@
 	"rigtune.stutter.fix.state.expired": "No comparable play in time, so there's no comparison.",
 	"rigtune.stutter.fix.state.measuring": "Measuring: %s of %s played with the Stutter Doctor on (a session's first 3 minutes don't count).",
 	"rigtune.stutter.fix.state.monitor_off": "Turn the Stutter Doctor on and play to compare.",
+	"rigtune.stutter.fix.state.never_applied": "Never applied: no session as it is was measured in time, so nothing changed.",
 	"rigtune.stutter.fix.state.not_applied": "The change wasn't applied (it was discarded, or the file couldn't be changed).",
 	"rigtune.stutter.fix.state.ready": "Your play as it is: %s over %s. Apply the change to compare it with your play after.",
 	"rigtune.stutter.fix.state.replaced": "%s was changed again since, so this comparison stopped.",
