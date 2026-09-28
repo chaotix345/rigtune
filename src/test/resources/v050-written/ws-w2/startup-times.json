@@ -1,0 +1,59 @@
+{
+  "formatVersion": 1,
+  "runs": [
+    {
+      "at": "2026-09-20T10:00:00Z",
+      "ms": 10000,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mods": 83,
+      "modSetHash": "h",
+      "preloadMs": 1000
+    },
+    {
+      "at": "2026-09-20T11:00:00Z",
+      "ms": 15000,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mods": 83,
+      "modSetHash": "h",
+      "preloadMs": 6000
+    },
+    {
+      "at": "2026-09-20T12:00:00Z",
+      "ms": 10200,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mods": 83,
+      "modSetHash": "h",
+      "preloadMs": 1200
+    },
+    {
+      "at": "2026-09-20T13:00:00Z",
+      "ms": 14800,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mods": 83,
+      "modSetHash": "h",
+      "preloadMs": 5800
+    },
+    {
+      "at": "2026-09-20T14:00:00Z",
+      "ms": 10100,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mods": 83,
+      "modSetHash": "h",
+      "preloadMs": 1100
+    },
+    {
+      "at": "2026-09-20T18:00:00Z",
+      "ms": 15000,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0+mc26.2",
+      "mods": 95,
+      "modSetHash": "h2",
+      "preloadMs": 1000
+    }
+  ]
+}

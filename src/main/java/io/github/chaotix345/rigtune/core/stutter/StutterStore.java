@@ -82,6 +82,22 @@ public final class StutterStore {
 		return loaded.writable() ? file.save(new StutterFile(List.of()), loaded.root()) : JsonStateFile.Saved.READ_ONLY;
 	}
 
+	// v0.5 RW-18: what the Stutter Doctor shows when no session runs: the newest summary with enough data (or a benchmark's
+	// capture, which the player asked for), so a short session saved after it (a quick re-join) doesn't hide it; the newer
+	// short ones are listed as such. Without any such summary, the newest one.
+	public record Shown(@Nullable StutterReport report, List<StutterReport> shortSince) {
+	}
+
+	public static Shown shown(List<StutterReport> sessions) {
+		for (int i = sessions.size() - 1; i >= 0; i--) {
+			StutterReport r = sessions.get(i);
+			if (r.enoughData() || StutterReport.BENCHMARK.equals(r.source())) {
+				return new Shown(r, List.copyOf(sessions.subList(i + 1, sessions.size())));
+			}
+		}
+		return new Shown(sessions.isEmpty() ? null : sessions.getLast(), List.of());
+	}
+
 	private static List<StutterReport> sessions(@Nullable StutterFile value) {
 		return value == null || value.sessions() == null ? List.of() : value.sessions().stream().filter(Objects::nonNull).toList();
 	}
@@ -93,6 +109,6 @@ public final class StutterStore {
 		return new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), r.sessionSeconds(), r.gameplaySeconds(), r.frames(),
 				r.avgFps(), r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(), r.tags(),
 				List.copyOf(r.worst().subList(0, StutterReport.MAX_WORST)), r.facts(), r.advice(), r.enoughData(), r.phaseTiming(), r.hitches(),
-				r.settingsAtStart(), r.settingsAtEnd());
+				r.settingsAtStart(), r.settingsAtEnd(), r.idleSeconds());
 	}
 }

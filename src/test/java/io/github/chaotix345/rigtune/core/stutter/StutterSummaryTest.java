@@ -119,6 +119,18 @@ class StutterSummaryTest {
 		assertFalse(StutterSummary.text(r, List.of()).contains("settings at the end"));
 	}
 
+	// v0.5 RW-17: Copy summary says how much idle (throttled) time wasn't counted.
+	@Test
+	void theIdleTimeIsSpelledOut() {
+		StutterReport r = report(true, true, 21.7);
+		StutterReport idle = new StutterReport(r.startedAt(), r.source(), r.mc(), r.collector(), r.heapMaxMb(), 63_000, 290, r.frames(), r.avgFps(),
+				r.onePercentLowFps(), r.histogramCounts(), r.histogramTimeMs(), r.spikes(), r.lostMs(), r.causes(), r.tags(), r.worst(), r.facts(), r.advice(),
+				true, true, r.hitches(), null, null, 62_700.0);
+		assertTrue(StutterSummary.text(idle, List.of()).contains("17:30:00 (4:50 of gameplay, 17:25:00 idle (throttled) not counted)"),
+				StutterSummary.text(idle, List.of()));
+		assertFalse(StutterSummary.text(r, List.of()).contains("idle"));
+	}
+
 	@Test
 	void caveatsAreSpelledOut() {
 		String text = StutterSummary.text(report(false, false, null), List.of());

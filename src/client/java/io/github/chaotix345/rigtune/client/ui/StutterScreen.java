@@ -174,6 +174,10 @@ public class StutterScreen extends Screen {
 		text(l, Component.translatable(statusKey), COLOR_LABEL, width, 0);
 		if (!view.recording() && view.report() != null) {
 			text(l, Component.translatable("rigtune.stutter.status.saved"), COLOR_LABEL, width, 0);
+			Component shortSince = shortSinceLine(view.shortSince());
+			if (shortSince != null) {
+				text(l, shortSince, COLOR_LABEL, width, 0);
+			}
 		}
 		StutterReport r = view.report();
 		if (r == null) {
@@ -196,6 +200,9 @@ public class StutterScreen extends Screen {
 				: Component.translatable("rigtune.stutter.header.time.monitor", clock(r.sessionSeconds()), clock(r.gameplaySeconds()));
 		text(l, time, COLOR_TEXT, width, ROW_GAP);
 		text(l, framesLine(r), COLOR_TEXT, width, 0);
+		if (r.idleSeconds() != null) {
+			text(l, Component.translatable("rigtune.stutter.header.idle", clock(r.idleSeconds())), COLOR_LABEL, width, 0);
+		}
 		text(l, spikesLine(r), COLOR_TEXT, width, 0);
 		Component settings = settingsLine(r);
 		if (settings != null) {
@@ -219,6 +226,16 @@ public class StutterScreen extends Screen {
 		return window == null
 				? Component.translatable("rigtune.stutter.header.frames", number(r.frames()), number(r.avgFps()), number(r.onePercentLowFps()))
 				: Component.translatable("rigtune.stutter.window.frames", number(r.frames()), number(r.avgFps()), number(r.onePercentLowFps()), clock(window));
+	}
+
+	// v0.5 RW-18: "Saved since: a short session (0:14), too little data to show.", or null.
+	static @Nullable Component shortSinceLine(List<Double> shortSince) {
+		if (shortSince.isEmpty()) {
+			return null;
+		}
+		String lengths = String.join(", ", shortSince.stream().map(StutterScreen::clock).toList());
+		return shortSince.size() == 1 ? Component.translatable("rigtune.stutter.status.short_since.one", lengths)
+				: Component.translatable("rigtune.stutter.status.short_since.many", shortSince.size(), lengths);
 	}
 
 	// v0.5 RW-11: "Settings changed during this session (render distance 32 → 12, shaders on → off)", or null.
