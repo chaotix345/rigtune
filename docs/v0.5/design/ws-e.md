@@ -234,11 +234,11 @@ The fabric client gametest API is the same too: `createServer(Properties)`, `cli
   - compat040 has its CI step (E6);
   - the downgrade checks name the versions they run (4c3b6696);
   - `server-profiles.json` is in `V050.kept` (e1de5575);
+  - the LAN source address in CI: offline.sh's multicast route names `src 127.0.0.1` (5078fb90, the coordinator's decision), run 36377856700 detected `127.0.0.1:<port>` on all 3 legs, and LanGuestGameTest checks 127.0.0.1 in CI again;
   - the local Windows reruns after both review rounds: all PASS (`docs/v0.5/verification/e2e/local-windows-26.2/2026-09-28-*`);
   - the release tier's first Linux run (the coordinator's decision (a)): [36376567978](https://github.com/chaotix345/rigtune/actions/runs/36376567978) on `scratch/ws-e-battery-oshi` @ 112f3a41 (test/v05-e2e @ 46da5e9c with the e2e rows on, max-parallel 6), green on every job: the 21 rows (every upgrade, seeded-v010-dh and both stale-seed legs, undo-profiles/-settings and helper-kill on both nodes, brand-theseus, both downgrades on both nodes), battery-oshi and stutter-script on both nodes.
 - **Open:**
   - `stutter-fixes.json` and `tryit.json` join `V050.kept` when WS-S2's and WS-T's real sets land. Until then their placeholders are only checked byte-identical after a downgrade.
-  - The LAN source address in CI is 0.0.0.0 (offline.sh's multicast route has no `src`). Sent to ws-ci; LanGuestGameTest accepts a loopback or wildcard address until then.
   - The snapshot-canary workflow edit (its resolve step calls `tools/snapshot_canary.py`) is made after the scheduled run on 2026-09-30.
   - Still to do:
     - AC3f.4 (the DH server-note run): the coordinator's decision (c), after the hand-over: a local Loom server task through an init script, on a free ephemeral port.

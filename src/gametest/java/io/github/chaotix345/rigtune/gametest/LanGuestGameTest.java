@@ -35,7 +35,6 @@ import org.jspecify.annotations.Nullable;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -147,9 +146,9 @@ public class LanGuestGameTest implements FabricClientGameTest {
 		check(data != null && data.isLan(), "getCurrentServer().isLan(): " + (data == null ? null : data.ip));
 		ServerAddress address = ServerAddress.parseString(data.ip);
 		check(address.getPort() == port, "the LAN entry is this server's (" + port + "): " + data.ip);
-		// In CI the game runs in a namespace with only loopback (tools/ci/offline.sh), so the pinger's packets come from this
-		// machine: 127.0.0.1, or 0.0.0.0 while the namespace's multicast route on lo names no source address (run 36361989137).
-		check(System.getenv("CI") == null || local(address.getHost()), "detected as a local address in CI: " + data.ip);
+		// In CI the game runs in a namespace with only loopback (tools/ci/offline.sh), whose multicast route on lo names source
+		// 127.0.0.1, so the pinger's packets come from 127.0.0.1 (run 36377856700; 0.0.0.0 before the route had one).
+		check(System.getenv("CI") == null || "127.0.0.1".equals(address.getHost()), "detected as 127.0.0.1 in CI: " + data.ip);
 		RigTune.LOGGER.info("LanGuestGameTest: joined {} ('{}') from the LAN list", data.ip, data.name);
 		return address.getHost();
 	}
@@ -229,15 +228,6 @@ public class LanGuestGameTest implements FabricClientGameTest {
 
 	private static boolean inWorld(Minecraft mc) {
 		return mc.level != null && mc.player != null && mc.gui.screen() == null;
-	}
-
-	private static boolean local(String host) {
-		try {
-			InetAddress address = InetAddress.getByName(host);
-			return address.isLoopbackAddress() || address.isAnyLocalAddress();
-		} catch (IOException e) {
-			return false;
-		}
 	}
 
 	private static void leave(ClientGameTestContext context) {
