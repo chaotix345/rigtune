@@ -338,7 +338,9 @@ public class TryItGameTest implements FabricClientGameTest {
 		} catch (IOException e) {
 			throw new AssertionError(e);
 		}
+		// The derive runs on the service's ordered chain (review M4).
 		real.v05().tryIt().derive();
+		context.waitFor(mc -> real.tryIt().tryIt() != null, 200);
 		TryItView ready = real.tryIt();
 		check(ready.stage() == Stage.READY && !ready.sameSession() && TryItText.toastBody(ready.stage()) != null,
 				"READY after the restart, the toast due: " + ready.stage());
@@ -620,7 +622,7 @@ public class TryItGameTest implements FabricClientGameTest {
 
 	private static TryItView awaitStage(ClientGameTestContext context, int ticks, Stage... stages) {
 		List<Stage> wanted = List.of(stages);
-		context.waitFor(mc -> mc.gui.screen() instanceof TryItScreen screen && wanted.contains(screen.shown().stage()), ticks);
+		context.waitFor(mc -> mc.gui.screen() instanceof TryItScreen screen && wanted.contains(screen.shown().stage()) && !screen.deriving(), ticks);
 		context.waitTicks(2);
 		return context.computeOnClient(mc -> ((TryItScreen) mc.gui.screen()).shown());
 	}

@@ -52,8 +52,10 @@ public class TryItScreen extends Screen {
 	private @Nullable Component change;
 	private @Nullable Lines list;
 	private int focusedRow = -1;
-	// Back from Undo this: the view shown predates it until the derive asked for in init() replaces it.
+	// Back from Undo this: the view shown predates it until the derive asked for in init() replaces it (2 s at most; Keep
+	// itself derives first anyway).
 	private boolean deriving;
+	private int derivingTicks;
 	private final List<Button> footer = new ArrayList<>();
 
 	// rec: the Preview's ticked setting (the intro), or null to show the open try.
@@ -81,6 +83,11 @@ public class TryItScreen extends Screen {
 
 	public TryItView shown() {
 		return shown;
+	}
+
+	// The buttons wait for the derive after Undo this (game tests).
+	public boolean deriving() {
+		return deriving;
 	}
 
 	private boolean intro() {
@@ -200,6 +207,7 @@ public class TryItScreen extends Screen {
 	private void undo(@Nullable TryIt t) {
 		if (t != null) {
 			deriving = true;
+			derivingTicks = 0;
 			minecraft.gui.setScreen(new UndoScreen(this, controller, t.entryId()));
 		}
 	}
@@ -229,7 +237,7 @@ public class TryItScreen extends Screen {
 	@Override
 	public void tick() {
 		super.tick();
-		if (!intro() && controller.tryIt() != shown || intro() && controller.tryIt().tryIt() != null) {
+		if (!intro() && controller.tryIt() != shown || intro() && controller.tryIt().tryIt() != null || deriving && ++derivingTicks > 40) {
 			deriving = false;
 			rebuildWidgets();
 		}
