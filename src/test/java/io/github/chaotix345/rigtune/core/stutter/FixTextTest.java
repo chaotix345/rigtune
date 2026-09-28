@@ -1,11 +1,10 @@
 package io.github.chaotix345.rigtune.core.stutter;
 
-import io.github.chaotix345.rigtune.core.rules.RulesDocument;
+import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import org.junit.jupiter.api.Test;
 
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -14,13 +13,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // AC5.3 (the player-visible blocks' one-line reasons) and AC5.7 (every verdict line shows both rates): the English as
 // en_us.json has it (LangCheckTest ties the two).
 class FixTextTest {
-	private static final Map<String, RulesDocument.SettingLabel> LABELS = Map.of("vanilla.renderDistance", label("Render Distance"));
-
-	private static RulesDocument.SettingLabel label(String name) {
-		RulesDocument.SettingLabel l = new RulesDocument.SettingLabel();
-		l.name = name;
-		return l;
-	}
+	private static final HistoryModel.Labels LABELS = new HistoryModel.Labels() {
+		@Override
+		public String label(String key) {
+			return key.equals("vanilla.renderDistance") ? "Render Distance" : key;
+		}
+	};
 
 	private static String notYet(FixOffer.Reason reason, String... args) {
 		return FixText.notYet(new FixOffer.NotYet("stutter-chunk-loading", reason, List.of(args))).english();

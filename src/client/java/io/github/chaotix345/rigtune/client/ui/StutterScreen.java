@@ -1,11 +1,16 @@
 package io.github.chaotix345.rigtune.client.ui;
 
+import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.stutter.Attributor;
+import io.github.chaotix345.rigtune.core.stutter.FixComparison;
+import io.github.chaotix345.rigtune.core.stutter.FixOffer;
+import io.github.chaotix345.rigtune.core.stutter.FixText;
+import io.github.chaotix345.rigtune.core.stutter.FixTracker;
 import io.github.chaotix345.rigtune.core.stutter.FrameRing;
 import io.github.chaotix345.rigtune.core.stutter.StutterAdvisor;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
@@ -25,10 +30,12 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.FormattedCharSequence;
 import org.jspecify.annotations.Nullable;
 
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 // Stutter Doctor (docs/v0.4/SPEC.md 5), opened from ToolsScreen: the session monitor's controls and the latest analysis
 // (the running session's, refreshed every few seconds, or the last saved summary): a header (session length, gameplay
@@ -143,7 +150,7 @@ public class StutterScreen extends Screen {
 
 	private static boolean same(StutterView a, StutterView b) {
 		return a.monitorOn() == b.monitorOn() && a.recording() == b.recording() && a.paused() == b.paused() && a.analysing() == b.analysing()
-				&& a.live() == b.live() && a.report() == b.report();
+				&& a.live() == b.live() && a.report() == b.report() && a.fixes().equals(b.fixes()) && Objects.equals(a.tracked(), b.tracked());
 	}
 
 	private void copySummary() {
@@ -174,6 +181,9 @@ public class StutterScreen extends Screen {
 		text(l, Component.translatable(statusKey), COLOR_LABEL, width, 0);
 		if (!view.recording() && view.report() != null) {
 			text(l, Component.translatable("rigtune.stutter.status.saved"), COLOR_LABEL, width, 0);
+		}
+		if (view.tracked() != null) {
+			trackedFix(l, view.tracked(), width);
 		}
 		StutterReport r = view.report();
 		if (r == null) {
@@ -385,11 +395,91 @@ public class StutterScreen extends Screen {
 					text(l, steps, COLOR_LABEL, width, 0);
 				}
 			}
+			FixOffer fix = view.fixes().get(f.id());
+			if (fix != null) {
+				fixRows(l, f, fix, width);
+			}
 		}
 	}
 
+	// docs/v0.5/SPEC.md 5 (C20): under an advice, its one-click fix ("Try it in one click: ...", when it takes effect, an active
+	// profile that also sets it, and "Try this fix…", whose narration names the change), or the one line why not (yet).
+	private void fixRows(StutterList l, StutterAdvisor.Fired advice, FixOffer fix, int width) {
+		switch (fix) {
+			case FixOffer.NotYet n -> text(l, Texts.component(FixText.notYet(n)), COLOR_LABEL, width, 2);
+			case FixOffer.Offer o -> {
+				HistoryModel.Labels labels = controller.settingLabels();
+				Text change = FixText.change(labels, o.key(), o.from(), o.to());
+				text(l, Texts.component(FixText.offer(change)), COLOR_TEXT, width, 2);
+				text(l, Texts.component(FixText.takesEffect(o.now())), COLOR_LABEL, width, 0);
+				if (o.profile() != null) {
+					text(l, Texts.component(FixText.profileNote(Text.literal(o.profile()))), COLOR_LABEL, width, 0);
+				}
+				Component narration = Texts.component(FixText.tryNarration(change));
+				Button tryIt = Button.builder(Texts.component(FixText.tryButton()), b -> tryFix(advice, o)).size(Math.min(width, 160), 20)
+						.createNarration(message -> narration.copy()).build();
+				buttons(l, List.of(tryIt));
+			}
+		}
+	}
+
+	private void tryFix(StutterAdvisor.Fired advice, FixOffer.Offer offer) {
+		minecraft.gui.setScreen(new PreviewScreen(this, controller, c -> c.previewStutterFix(offer), new PreviewScreen.Confirm(
+				Texts.component(FixText.previewSubtitle(advice.title())), Texts.component(FixText.previewApply()), () -> {
+					minecraft.gui.setScreen(this);
+					status = controller.applyStutterFix(offer);
+				}, null)));
+	}
+
+	// docs/v0.5/SPEC.md 5 (C20): "Your stutter fix": the change and its date, where it is (or the verdict with both rates),
+	// why the last session didn't count, the Before/After bars once compared, and Undo this change… / Dismiss.
+	private void trackedFix(StutterList l, FixTracker.Record fix, int width) {
+		HistoryModel.Labels labels = controller.settingLabels();
+		heading(l, Texts.component(FixText.heading()), width);
+		text(l, Texts.component(FixText.applied(labels, fix, ZoneId.systemDefault())), COLOR_TEXT, width, 0);
+		FixComparison.Verdict verdict = fix.state() == FixTracker.State.COMPARED ? fix.verdict() : null;
+		int color = verdict == null ? COLOR_LABEL : switch (verdict.kind()) {
+			case LESS -> COLOR_GOOD;
+			case SAME -> COLOR_LABEL;
+			case MORE -> COLOR_BAD;
+		};
+		text(l, Texts.component(FixText.state(labels, fix, view.monitorOn())), color, width, 0);
+		Text skipped = FixText.skipped(labels, fix);
+		if (skipped != null) {
+			text(l, Texts.component(skipped), COLOR_LABEL, width, 0);
+		}
+		if (verdict != null) {
+			double top = Math.max(verdict.beforePerMinute(), verdict.afterPerMinute());
+			bar(l, Texts.component(FixText.before()), top <= 0 ? 0 : verdict.beforePerMinute() / top, COLOR_LABEL,
+					Texts.component(FixText.rate(verdict.beforePerMinute(), verdict.lostBeforePerMinute())));
+			bar(l, Texts.component(FixText.after()), top <= 0 ? 0 : verdict.afterPerMinute() / top, color == COLOR_LABEL ? COLOR_AMBER : color,
+					Texts.component(FixText.rate(verdict.afterPerMinute(), verdict.lostAfterPerMinute())));
+		}
+		List<Button> buttons = new ArrayList<>();
+		int half = Math.min(160, (width - ButtonRow.GAP) / 2);
+		boolean inEffect = fix.state() != FixTracker.State.UNDONE && fix.state() != FixTracker.State.NOT_APPLIED;
+		if (inEffect) {
+			buttons.add(Button.builder(Texts.component(FixText.undo()), b -> minecraft.gui.setScreen(new UndoScreen(this, controller, fix.entryId())))
+					.size(half, 20).build());
+		}
+		buttons.add(Button.builder(Texts.component(FixText.dismiss()), b -> {
+			controller.dismissStutterFix(fix.entryId());
+			rebuildWidgets();
+		}).tooltip(Tooltip.create(Texts.component(FixText.dismissTooltip()))).size(half, 20).build());
+		buttons(l, buttons);
+	}
+
+	private void buttons(StutterList l, List<Button> buttons) {
+		buttons.forEach(b -> shownText.add(b.getMessage()));
+		l.add(new ButtonRow(buttons));
+	}
+
 	private void heading(StutterList l, String key, int width) {
-		text(l, Component.translatable(key).withStyle(ChatFormatting.BOLD), COLOR_HEADING, width, 7);
+		heading(l, Component.translatable(key), width);
+	}
+
+	private void heading(StutterList l, MutableComponent title, int width) {
+		text(l, title.withStyle(ChatFormatting.BOLD), COLOR_HEADING, width, 7);
 	}
 
 	private void text(StutterList l, Component text, int color, int width, int top) {

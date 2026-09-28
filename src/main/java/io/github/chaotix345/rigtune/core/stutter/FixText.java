@@ -1,27 +1,25 @@
 package io.github.chaotix345.rigtune.core.stutter;
 
+import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.model.Text;
-import io.github.chaotix345.rigtune.core.recommend.SettingValues;
-import io.github.chaotix345.rigtune.core.rules.RulesDocument;
 import org.jspecify.annotations.Nullable;
 
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 // docs/v0.5/SPEC.md 5 (C20), sf §2.7: what the Stutter Doctor says about its one-click fixes, built in core so each line
 // is tested. X3: numbers are shown next to every verdict, a comparison is "measured comparison, not proof", "more" may be
-// unrelated, and nothing says a fix fixed, caused or proves anything (WordingTest's rigtune.stutter.fix. list). labels: the
-// rules' settingLabels (null entries fall back to the key's caption); dates are the player's local day, yyyy-MM-dd.
+// unrelated, and nothing says a fix fixed, caused or proves anything (WordingTest's rigtune.stutter.fix. list). labels: how
+// History names settings and values (RigTuneController.settingLabels); dates are the player's local day, yyyy-MM-dd.
 public final class FixText {
 	private FixText() {
 	}
 
 	// "Render distance: 12 → 10".
-	public static Text change(Map<String, RulesDocument.SettingLabel> labels, String key, String from, String to) {
-		return SettingValues.describe(labels.get(key), key, from, to);
+	public static Text change(HistoryModel.Labels labels, String key, String from, String to) {
+		return Text.of("rigtune.rec.setting.title", "%s: %s → %s", labels.label(key), labels.value(key, from), labels.value(key, to));
 	}
 
 	public static Text offer(Text change) {
@@ -105,7 +103,7 @@ public final class FixText {
 	}
 
 	// "Render distance: 12 → 10, applied 2026-10-02".
-	public static Text applied(Map<String, RulesDocument.SettingLabel> labels, FixTracker.Record r, ZoneId zone) {
+	public static Text applied(HistoryModel.Labels labels, FixTracker.Record r, ZoneId zone) {
 		return Text.of("rigtune.stutter.fix.change", "%s, applied %s", change(labels, r.key(), r.from(), r.to()), day(r.appliedAt(), zone));
 	}
 
@@ -115,7 +113,7 @@ public final class FixText {
 
 	// Where the fix is: waiting for a restart, measuring (play so far of the play needed), or how it ended. A compared fix's
 	// line is its verdict. monitorOn: the Stutter Doctor's monitor is on (measuring needs it).
-	public static Text state(Map<String, RulesDocument.SettingLabel> labels, FixTracker.Record r, boolean monitorOn) {
+	public static Text state(HistoryModel.Labels labels, FixTracker.Record r, boolean monitorOn) {
 		return switch (r.state()) {
 			case STAGED -> Text.of("rigtune.stutter.fix.state.staged", "Waiting for a restart: the change takes effect when Minecraft starts again.");
 			case MEASURING -> monitorOn
@@ -127,13 +125,13 @@ public final class FixText {
 			case UNDONE -> Text.of("rigtune.stutter.fix.state.undone", "You undid this change.");
 			case NOT_APPLIED -> Text.of("rigtune.stutter.fix.state.not_applied", "The change wasn't applied (it was discarded, or the file couldn't be changed).");
 			case REPLACED -> Text.of("rigtune.stutter.fix.state.replaced", "%s was changed again since, so this comparison stopped.",
-					SettingValues.name(labels.get(r.key()), r.key()));
+					labels.label(r.key()));
 			case EXPIRED -> Text.of("rigtune.stutter.fix.state.expired", "No comparable play in time, so there's no comparison.");
 		};
 	}
 
 	// "Your last session didn't count: it was shorter than 2 minutes.", or null when the last session counted.
-	public static @Nullable Text skipped(Map<String, RulesDocument.SettingLabel> labels, FixTracker.Record r) {
+	public static @Nullable Text skipped(HistoryModel.Labels labels, FixTracker.Record r) {
 		FixTracker.Skip skip = r.lastSkip();
 		if (skip == null || !r.state().tracking()) {
 			return null;
@@ -141,7 +139,7 @@ public final class FixText {
 		return Text.of("rigtune.stutter.fix.state.skipped", "Your last session didn't count: %s.", skip(labels, skip));
 	}
 
-	static Text skip(Map<String, RulesDocument.SettingLabel> labels, FixTracker.Skip skip) {
+	static Text skip(HistoryModel.Labels labels, FixTracker.Skip skip) {
 		List<String> a = skip.args();
 		if (FixTracker.SHORT.equals(skip.reason())) {
 			return Text.of("rigtune.stutter.fix.skip.short", "it was shorter than 2 minutes");
@@ -162,9 +160,8 @@ public final class FixText {
 			case MEASUREMENT -> Text.of("rigtune.stutter.fix.skip.measurement", "the Stutter Doctor could measure less than before");
 			case SETTING -> {
 				String key = arg(a, 0);
-				RulesDocument.SettingLabel label = labels.get(key);
-				yield Text.of("rigtune.stutter.fix.skip.setting", "%s changed (%s → %s)", SettingValues.name(label, key),
-						SettingValues.valueLabel(label, arg(a, 1)), SettingValues.valueLabel(label, arg(a, 2)));
+				yield Text.of("rigtune.stutter.fix.skip.setting", "%s changed (%s → %s)", labels.label(key), labels.value(key, arg(a, 1)),
+						labels.value(key, arg(a, 2)));
 			}
 		};
 	}
