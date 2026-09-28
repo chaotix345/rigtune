@@ -306,3 +306,25 @@ or frame work; its worker work is one bounded directory listing. The spread acro
 | AC4j.2 (LauncherManagedGameTest on every leg) | verified | CI 36336426845 and 36364315401, 3 legs (the theseus brand, the steps, the refused Apply, mods/ unchanged, Undo's reason, the opt-in, .index/ without a brand, restored) |
 | RW-2, RW-14 | verified | as AC4c.1-AC4c.3 |
 | PLAN-11 (the templated real-world fixtures) | verified | src/test/resources/realworld/ + README; RealWorldFixturesTest |
+
+## Review-11 fixes
+
+| id | result | commit | the test that failed first |
+|---|---|---|---|
+| FEAT-1 (M) | FIXED | e04cde55 | `ModFilesNewsTest.aNewPlayersFirstApplyDoesntBringTheNews`: on the old code, after `FirstRunService.applied()` the notice source's status is RETURNING and `news()` returned MOD_FILES_NEWS ("a new player's first Apply shows the 0.4-upgrade news"). |
+
+- **The fix.** `FirstRunService.loadedStatus()` keeps what `load()` read (UNKNOWN when an Apply came first: no news that
+  session), and `ModFilesNewsNoticeSource` asks `news()` with it, never with the live status an Apply turns RETURNING.
+  A NEW read also stores `launcher.mod_files_news` in awareness.json's dismissals (on `load()`'s worker, as the notice's
+  own x would), so later launches, which read RETURNING from the records this one leaves, stay quiet too.
+- **Deviation from the suggested fix:** the dismissal is stored when `load()` reads NEW, not when an Apply moves NEW to
+  RETURNING. That covers the Apply (and a battery or server-profile switch) and also a new player whose first session
+  only kept a benchmark or a baseline: those journal entries make the next launch RETURNING without any Apply.
+- **Tests.** `FirstRunServiceTest.aNewPlayerNeverGetsTheModFilesNews` (NEW read -> dismissal stored; after `applied()`
+  `loadedStatus()` is still NEW; a next FirstRunService over the same folder reads RETURNING and `NoticeBoard` hides the
+  news), `.aReturningReadStoresNoDismissal`, `.aLoadAfterAnApplyStaysReturning` (+ `loadedStatus()` UNKNOWN);
+  `LauncherManagedGameTest.modFilesNews` (a NEW load stored the dismissal; forced NEW then `applied()`: RETURNING and no
+  news; the dismissal is taken out for the RETURNING check and put back). `forceStatusForTests` now sets the loaded
+  status too.
+- **Owner's file.** `FirstRunService` is WS-F's; the finding names it. The change is marked "v0.5 WS-L1 (review-11
+  FEAT-1)".

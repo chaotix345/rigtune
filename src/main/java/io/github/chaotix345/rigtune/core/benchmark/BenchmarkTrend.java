@@ -16,8 +16,9 @@ import java.util.Set;
 // feeds it benchmarks.json and the current conditions.
 //
 // Comparable = same MC version, scene, render and simulation distance (the knob values) and conditions
-// (Context.sameConditions: resolution, fullscreen, shaders + pack, Distant Horizons, protocol); runs without a context
-// (0.2.x) only with each other. The mod-set hash never splits runs (B-H1): its effect is what a comparison looks for.
+// (Context.sameConditions: resolution, fullscreen, shaders + pack, Distant Horizons, protocol; since v0.5 review-11
+// COMPAT-2 also the graphics backend and the GPU when both runs recorded them); runs without a context (0.2.x) only with
+// each other. The mod-set hash never splits runs (B-H1): its effect is what a comparison looks for.
 //
 // Noise floor (research bench-history-a11y.md A2): 2 x max(latest.cv or 5 %, 1.4826 x MAD / median) of the comparable
 // runs' 1 % lows, from at least 3 of them. Same-session 1 %-low CVs were 1.7-12.3 % (median 4.2 %), so the 5 % default
@@ -33,7 +34,11 @@ public final class BenchmarkTrend {
 
 	// Declaration order is the order they are named in.
 	public enum Difference {
-		MC_VERSION, SCENE, RENDER_DISTANCE, SIMULATION_DISTANCE, RESOLUTION, FULLSCREEN, SHADERS, SHADER_PACK, DISTANT_HORIZONS, PROTOCOL,
+		MC_VERSION, SCENE, RENDER_DISTANCE, SIMULATION_DISTANCE, RESOLUTION, FULLSCREEN, SHADERS, SHADER_PACK, DISTANT_HORIZONS,
+		// Review-11 COMPAT-2: both runs recorded a backend (OpenGL / Vulkan) and they differ; on the same backend (or an
+		// unknown one), both recorded a GPU and they differ (a hybrid laptop's iGPU vs dGPU).
+		BACKEND, GPU,
+		PROTOCOL,
 		// One run has a context and the other doesn't (0.2.x wrote none).
 		NOT_RECORDED,
 		// Only for the marker: the loaded mods differ (both hashes known).
@@ -76,9 +81,13 @@ public final class BenchmarkTrend {
 		}
 	}
 
-	// What the game is set to now, for the marker. modSetHash: null when unknown.
+	// What the game is set to now, for the marker. modSetHash, backend, gpu: null when unknown.
 	public record Current(String mcVersion, int renderDistance, int simulationDistance, int width, int height, boolean fullscreen, boolean shaders,
-			@Nullable String shaderPack, boolean dhRendering, @Nullable String modSetHash) {
+			@Nullable String shaderPack, boolean dhRendering, @Nullable String modSetHash, @Nullable String backend, @Nullable String gpu) {
+		public Current(String mcVersion, int renderDistance, int simulationDistance, int width, int height, boolean fullscreen, boolean shaders,
+				@Nullable String shaderPack, boolean dhRendering, @Nullable String modSetHash) {
+			this(mcVersion, renderDistance, simulationDistance, width, height, fullscreen, shaders, shaderPack, dhRendering, modSetHash, null, null);
+		}
 	}
 
 	// What the Benchmark history screen, the result screen, the notices, the tooltip and the share report show.
@@ -164,6 +173,7 @@ public final class BenchmarkTrend {
 		if (ca.dhRendering() != cb.dhRendering()) {
 			out.add(Difference.DISTANT_HORIZONS);
 		}
+		graphics(ca.backend(), ca.gpu(), cb.backend(), cb.gpu(), out);
 		if (ca.protocol() != cb.protocol()) {
 			out.add(Difference.PROTOCOL);
 		}
@@ -172,6 +182,18 @@ public final class BenchmarkTrend {
 
 	public static boolean comparable(BenchmarkRecord a, BenchmarkRecord b) {
 		return differences(a, b).isEmpty();
+	}
+
+	// Review-11 COMPAT-2: a backend difference when both are known; a GPU difference when both are known, unless the
+	// backends differ (the same device reads differently under OpenGL and Vulkan). Unknown on either side claims nothing.
+	private static void graphics(@Nullable String backendA, @Nullable String gpuA, @Nullable String backendB, @Nullable String gpuB,
+			Set<Difference> out) {
+		boolean backends = backendA != null && backendB != null && !backendA.equals(backendB);
+		if (backends) {
+			out.add(Difference.BACKEND);
+		} else if (gpuA != null && gpuB != null && !gpuA.strip().equalsIgnoreCase(gpuB.strip())) {
+			out.add(Difference.GPU);
+		}
 	}
 
 	// docs/v0.5/SPEC.md RW-8 and RW-6: a run in a benchmark world it created (the world and its LODs were generated as it
@@ -321,6 +343,7 @@ public final class BenchmarkTrend {
 		if (c.dhRendering() != now.dhRendering()) {
 			out.add(Difference.DISTANT_HORIZONS);
 		}
+		graphics(c.backend(), c.gpu(), now.backend(), now.gpu(), out);
 		if (c.modSetHash() != null && now.modSetHash() != null && !c.modSetHash().equals(now.modSetHash())) {
 			out.add(Difference.MOD_SET);
 		}
@@ -355,7 +378,10 @@ public final class BenchmarkTrend {
 		}
 		List<String> keys = List.copyOf(newestByKey.keySet());
 		String shown = contextKey != null && newestByKey.containsKey(contextKey) ? contextKey : keys.getFirst();
-		List<BenchmarkRecord> group = byKey.get(shown).reversed();
+		// The key leaves out the backend and the GPU (a run that didn't record them compares with both); the context shows
+		// the runs comparable with its newest one (review-11 COMPAT-2).
+		BenchmarkRecord newest = newestByKey.get(shown);
+		List<BenchmarkRecord> group = byKey.get(shown).reversed().stream().filter(r -> comparable(r, newest)).toList();
 		List<BenchmarkRecord> points = group.subList(Math.max(0, group.size() - MAX_RUNS), group.size());
 		BenchmarkRecord last = newestByKey.get(keys.getFirst());
 		return new View(shown, keys, group.size(), withResult - group.size(), List.copyOf(newestByKey.values()), points,

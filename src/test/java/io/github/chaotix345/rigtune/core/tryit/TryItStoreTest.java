@@ -81,10 +81,11 @@ class TryItStoreTest {
 
 	@Test
 	void everyFieldRoundTrips() throws IOException {
-		TryIt t = sample("e-1").withAfter(Map.of("vanilla.renderDistance", "12"), "session-b", null).withAfterRun("run-7");
+		TryIt t = sample("e-1").withAfter(Map.of("vanilla.renderDistance", "12"), "session-b", null).withAfterRun("run-7").withUnsettled("run-7");
 		assertTrue(store().open(t));
 		assertEquals(t, store().current());
 		JsonObject current = onDisk().getAsJsonObject("current");
+		assertEquals("run-7", current.getAsJsonArray("unsettledRuns").get(0).getAsString());
 		assertEquals(1, onDisk().get("formatVersion").getAsInt());
 		assertEquals("restart", current.get("kind").getAsString());
 		assertEquals("BENCHMARK_WORLD", current.get("scene").getAsString());

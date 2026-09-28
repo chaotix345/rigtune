@@ -56,11 +56,14 @@ public record BenchmarkRecord(String id, String createdAt, String rigtuneVersion
 	// 0.5.0 on (docs/v0.5/SPEC.md C1, optional; null in older runs, not written when null, dropped if 0.4.x rewrites the
 	// file): worldFresh, whether this run created the benchmark world (RW-8); dhGenerating, whether Distant Horizons was
 	// generating the world during the run (RW-6); stagedAtStart, the ids of the changes staged for the next restart when
-	// the run started (BH-2, at most 64, else left out).
+	// the run started (BH-2, at most 64, else left out). Review-11 COMPAT-2 (same rules): backend, the graphics backend the
+	// run rendered with (GraphicsBackend's name: "OPENGL" or "VULKAN"); gpu, the GPU's renderer string (at most MAX_GPU
+	// characters). Two runs that differ in either aren't compared (BenchmarkTrend.Difference.BACKEND, GPU).
 	public record Context(boolean dhRendering, boolean shaders, @Nullable String shaderPack, int width, int height, boolean fullscreen,
 			int protocol, @Nullable String modSetHash, @Nullable String journalCursor, @Nullable Boolean worldFresh, @Nullable Boolean dhGenerating,
-			@Nullable List<String> stagedAtStart) {
+			@Nullable List<String> stagedAtStart, @Nullable String backend, @Nullable String gpu) {
 		public static final int PROTOCOL = 1;
+		public static final int MAX_GPU = 128;
 
 		public Context(boolean dhRendering, boolean shaders, @Nullable String shaderPack, int width, int height, boolean fullscreen,
 				int protocol) {
@@ -72,28 +75,42 @@ public record BenchmarkRecord(String id, String createdAt, String rigtuneVersion
 			this(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, modSetHash, journalCursor, null, null, null);
 		}
 
+		public Context(boolean dhRendering, boolean shaders, @Nullable String shaderPack, int width, int height, boolean fullscreen,
+				int protocol, @Nullable String modSetHash, @Nullable String journalCursor, @Nullable Boolean worldFresh, @Nullable Boolean dhGenerating,
+				@Nullable List<String> stagedAtStart) {
+			this(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, modSetHash, journalCursor, worldFresh, dhGenerating, stagedAtStart,
+					null, null);
+		}
+
 		public Context {
 			stagedAtStart = stagedAtStart == null ? null : stagedAtStart.stream().filter(Objects::nonNull).toList();
+			backend = backend == null || backend.isBlank() ? null : backend;
+			gpu = gpu == null || gpu.isBlank() ? null : gpu.length() > MAX_GPU ? gpu.substring(0, MAX_GPU) : gpu;
 		}
 
 		public Context withModSet(@Nullable String newModSetHash, @Nullable String newJournalCursor) {
 			return new Context(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, newModSetHash, newJournalCursor, worldFresh,
-					dhGenerating, stagedAtStart);
+					dhGenerating, stagedAtStart, backend, gpu);
 		}
 
 		public Context withWorldFresh(@Nullable Boolean fresh) {
 			return new Context(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, modSetHash, journalCursor, fresh, dhGenerating,
-					stagedAtStart);
+					stagedAtStart, backend, gpu);
 		}
 
 		public Context withDhGenerating(@Nullable Boolean generating) {
 			return new Context(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, modSetHash, journalCursor, worldFresh, generating,
-					stagedAtStart);
+					stagedAtStart, backend, gpu);
 		}
 
 		public Context withStagedAtStart(@Nullable List<String> ids) {
 			return new Context(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, modSetHash, journalCursor, worldFresh,
-					dhGenerating, ids);
+					dhGenerating, ids, backend, gpu);
+		}
+
+		public Context withGraphics(@Nullable String newBackend, @Nullable String newGpu) {
+			return new Context(dhRendering, shaders, shaderPack, width, height, fullscreen, protocol, modSetHash, journalCursor, worldFresh,
+					dhGenerating, stagedAtStart, newBackend, newGpu);
 		}
 
 		// The conditions part (plan review B-H1): everything but modSetHash and journalCursor. Use this, not equals(), to

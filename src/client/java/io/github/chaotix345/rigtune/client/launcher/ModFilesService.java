@@ -74,8 +74,9 @@ public final class ModFilesService {
 	}
 
 	// MOD_FILES_NEWS (4b): what changed for a player who used RigTune before, under LAUNCHER only (never PENDING: nothing is
-	// claimed before detection answers); a new player learns it from C02's guide instead. Null otherwise. The notice line
-	// asks on screen init/rebuild; this reads memory only.
+	// claimed before detection answers); a new player learns it from C02's guide instead. Null otherwise. status: what
+	// FirstRunService.load() read at startup (loadedStatus(), review-11 FEAT-1), never the live status an Apply turns
+	// RETURNING. The notice line asks on screen init/rebuild; this reads memory only.
 	public @Nullable Notice news(FirstRun.Status status) {
 		if (status != FirstRun.Status.RETURNING || policy() != ModFilesPolicy.LAUNCHER) {
 			return null;

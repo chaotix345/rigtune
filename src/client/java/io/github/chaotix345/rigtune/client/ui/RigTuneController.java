@@ -319,6 +319,11 @@ public interface RigTuneController {
 	default void tryItCancel() {
 	}
 
+	/** Why Start or Measure now in this scene waits for the game to settle (the player's own world, a minute), or null. */
+	default @Nullable Text tryItSettling(BenchmarkRequest.Scene scene) {
+		return null;
+	}
+
 	/** Works out the open try's stage again (back from History's Undo this); tryIt() changes when it's done. */
 	default void tryItRefresh() {
 	}
