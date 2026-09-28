@@ -555,7 +555,8 @@ sim4b.py, the model of these fixes on the same grids): false LESS under no real 
   `aSessionWithASettingChangeDoesNotCount`.
 - **R12STUTTER-7 (L), FIXED 7dbcfaaa**: a key missing at both ends reads as the session's own reason (MODS), not UNREAD
   (FixTrackerTest `aRemovedModIsTheModsNotAnUnreadKey`, red).
-- **R12STUTTER-8 (L)**: ws-b's GPU normaliser; FixConditions calls it when ws-b's helper lands (not on feat yet).
+- **R12STUTTER-8 (L)**: done by ws-b (6a20204f, merged here): FixConditions compares GPUs with `GpuName.same` (Mesa's LLVM/DRM/kernel
+  versions aside), a marked edit in this workstream's file.
 - **AC5.14** was run before these fixes (the trigger session as the before side, no settle span); its offer and thresholds
   stand (the evidence side is unchanged), and DevFixCalibration now plays 540 s per step with the baseline step; the run
   isn't repeated (UNVERIFIED under the new flow on real hardware; the game test covers it).
