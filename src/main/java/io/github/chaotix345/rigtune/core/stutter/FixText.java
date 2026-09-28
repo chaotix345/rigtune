@@ -53,8 +53,8 @@ public final class FixText {
 		List<String> a = n.args();
 		return switch (n.reason()) {
 			case LENGTH -> Text.of("rigtune.stutter.fix.not_yet.length",
-					"A one-click fix needs a longer session: at least %s of play and %s hitches (this one: %s, %s).", arg(a, 0), arg(a, 1), arg(a, 2),
-					arg(a, 3));
+					"A one-click fix needs more play to compare: at least %s and %s hitches after a session's first 3 minutes (this one: %s, %s).", arg(a, 0),
+					arg(a, 1), arg(a, 2), arg(a, 3));
 			case EVIDENCE -> Text.of("rigtune.stutter.fix.not_yet.evidence",
 					"The measurements don't point at this clearly enough for a one-click fix; the advice above still applies.");
 			case BENCHMARK -> Text.of("rigtune.stutter.fix.not_yet.benchmark", "One-click fixes are offered for your own play sessions, not for benchmark runs.");
@@ -146,7 +146,8 @@ public final class FixText {
 		};
 	}
 
-	// "Your last session didn't count: it was shorter than 2 minutes.", or null when the last session counted.
+	// "Your last session didn't count: it had less than 2 minutes of play after its first 3 minutes.", or null when the last
+	// session counted.
 	public static @Nullable Text skipped(HistoryModel.Labels labels, FixTracker.Record r) {
 		FixTracker.Skip skip = r.lastSkip();
 		if (skip == null || !r.state().tracking()) {
@@ -158,7 +159,7 @@ public final class FixText {
 	static Text skip(HistoryModel.Labels labels, FixTracker.Skip skip) {
 		List<String> a = skip.args();
 		if (FixTracker.SHORT.equals(skip.reason())) {
-			return Text.of("rigtune.stutter.fix.skip.short", "it was shorter than 2 minutes");
+			return Text.of("rigtune.stutter.fix.skip.short", "it had less than 2 minutes of play after its first 3 minutes");
 		}
 		if (FixTracker.EXCLUDED.equals(skip.reason())) {
 			return Text.of("rigtune.stutter.fix.skip.excluded", "it ran around a benchmark, or Distant Horizons generated terrain in it (or RigTune couldn't tell)");

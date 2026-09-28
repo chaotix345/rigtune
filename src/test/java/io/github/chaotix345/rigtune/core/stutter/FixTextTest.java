@@ -29,7 +29,7 @@ class FixTextTest {
 
 	@Test
 	void eachReasonHasItsOneLine() {
-		assertEquals("A one-click fix needs a longer session: at least 5:00 of play and 8 hitches (this one: 4:12, 5).",
+		assertEquals("A one-click fix needs more play to compare: at least 5:00 and 8 hitches after a session's first 3 minutes (this one: 4:12, 5).",
 				notYet(FixOffer.Reason.LENGTH, "5:00", "8", "4:12", "5"));
 		assertEquals("The measurements don't point at this clearly enough for a one-click fix; the advice above still applies.",
 				notYet(FixOffer.Reason.EVIDENCE));
@@ -123,7 +123,8 @@ class FixTextTest {
 	@Test
 	void whyASessionDidntCount() {
 		FixTracker.Record m = FixTrackerTest.measuring();
-		assertEquals("Your last session didn't count: it was shorter than 2 minutes.", skipped(m, new FixTracker.Skip("short", List.of())));
+		assertEquals("Your last session didn't count: it had less than 2 minutes of play after its first 3 minutes.",
+				skipped(m, new FixTracker.Skip("short", List.of())));
 		assertEquals("Your last session didn't count: Render Distance changed (10 → 12).",
 				skipped(m, new FixTracker.Skip("setting", List.of("vanilla.renderDistance", "10", "12"))));
 		assertEquals("Your last session didn't count: the window size or fullscreen changed.", skipped(m, new FixTracker.Skip("display", List.of())));

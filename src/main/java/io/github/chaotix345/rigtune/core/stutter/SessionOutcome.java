@@ -46,11 +46,11 @@ public record SessionOutcome(int sessions, double gameplaySeconds, int hitches, 
 	}
 
 	// A finished analysis of a capture that started at startNanos. A spike right after a settings change (the settingsChanged
-	// tag, RW-11) is the change's, not play's: it is left out of the hitches and the lost time, on both sides alike. Once the
-	// rings no longer cover the whole capture (review-11 STUTTER-2), the spikes, the gameplay and the bins all come from the
-	// covered window alone.
+	// tag, RW-11) is the change's, not play's: it is left out of the hitches and the lost time, on both sides alike. The
+	// spikes, the gameplay and the bins all come from the analysis' compared span (StutterAnalyzer.Compared: after the
+	// settle span, where the rings still know every spike); a hand-built result without one counts the whole capture.
 	public static SessionOutcome of(StutterAnalyzer.Result result, long startNanos) {
-		StutterAnalyzer.Covered covered = result.covered();
+		StutterAnalyzer.Compared covered = result.compared();
 		long from = covered == null ? startNanos : covered.fromNanos();
 		List<SpikeDetector.Spike> spikes = new ArrayList<>();
 		long lostNanos = 0;

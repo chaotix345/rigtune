@@ -54,22 +54,23 @@ public final class StutterAnalyzer {
 
 	// dhWorldGenCores (v0.5, docs/v0.5/SPEC.md 2S for 2B's RW-6): the core-equivalents Distant Horizons' world generation
 	// used over the sampler windows the capture recorded (dhWorldGenCores(Input)); null without such a window.
-	// covered (review-11 STUTTER-2, for C20's comparison): null when every spike of the capture is known; else the part
-	// that is (Covered). dhWorldGenPeakCores (review-11 STUTTER-4, C20's WS-B rule): the busiest minute of Distant Horizons'
+	// compared (C20's comparison, review-11 STUTTER-2 and review-12 R12STUTTER-1/2): the part of the capture a stutter fix's
+	// comparison takes (Compared); null only in a hand-built result (the whole capture then). dhWorldGenPeakCores (review-11 STUTTER-4, C20's WS-B rule): the busiest minute of Distant Horizons'
 	// world generation over the whole capture (StutterRings.Totals), or over the held samples for a hand-built snapshot;
 	// null when nothing was sampled.
 	public record Result(StutterReport report, StutterFacts facts, List<Attributor.Attribution> attributions, @Nullable Double dhWorldGenCores,
-			@Nullable Covered covered, @Nullable Double dhWorldGenPeakCores) {
+			@Nullable Compared compared, @Nullable Double dhWorldGenPeakCores) {
 		public Result(StutterReport report, StutterFacts facts, List<Attributor.Attribution> attributions, @Nullable Double dhWorldGenCores) {
 			this(report, facts, attributions, dhWorldGenCores, null, dhWorldGenCores);
 		}
 	}
 
-	// Once both the frame ring and the candidate ring wrapped, the spikes before the frame ring's window are known only in
-	// part (the candidates that pushed them out were newer), so only that window is covered: from its first frame, with its
-	// gameplay and its wall length (seconds). Spikes and gameplay must come from the same span, or a long session's rate
-	// is its window's spikes over the whole session's gameplay.
-	public record Covered(long fromNanos, double gameplaySeconds, double seconds) {
+	// From fromNanos to the capture's end, with its gameplay and its wall length (seconds): spikes and gameplay always over
+	// the same span. It starts at the capture's settle mark (SessionOutcome.SETTLE_NANOS: a world join's chunk streaming
+	// never counts, on either side), or later where the rings no longer know every spike: once both the frame ring and the
+	// candidate ring wrapped, from the oldest candidate still held when it is older than the frame ring (its gameplay stamp
+	// says how much play follows it), else from the frame ring's first frame.
+	public record Compared(long fromNanos, double gameplaySeconds, double seconds) {
 	}
 
 	private StutterAnalyzer() {
@@ -201,18 +202,31 @@ public final class StutterAnalyzer {
 		Double dhWorldGen = dhWorldGenCores(in);
 		StutterRings.Totals totals = in.rings().totals();
 		Double dhPeak = totals == null ? dhWorldGen : Double.isNaN(totals.dhWorldGenPeakCores()) ? null : totals.dhWorldGenPeakCores();
-		return new Result(report, stutterFacts, attributions, dhWorldGen, covered(f, ringStart, in.endNanos()), dhPeak);
+		return new Result(report, stutterFacts, attributions, dhWorldGen, compared(f, ringStart, in.startNanos(), in.endNanos()), dhPeak);
 	}
 
-	static @Nullable Covered covered(FrameRing.Snapshot f, long ringStart, long endNanos) {
-		if (f.frames() <= f.ends().length || f.candidateCount() <= f.candidateRecords()) {
-			return null;
+	static Compared compared(FrameRing.Snapshot f, long ringStart, long startNanos, long endNanos) {
+		long total = f.gameplayNanos();
+		long from = startNanos;
+		long after = total;
+		if (f.frames() > f.ends().length && f.candidateCount() > f.candidateRecords()) {
+			long oldest = f.candidateRecords() > 0 ? f.candidate(0, FrameRing.C_END) & ~1L : ringStart;
+			if (oldest - ringStart < 0) {
+				from = oldest;
+				after = total - f.candidate(0, FrameRing.C_GAMEPLAY);
+			} else {
+				from = ringStart;
+				after = 0;
+				for (long d : gameplayDurations(f.ends())) {
+					after += d;
+				}
+			}
 		}
-		long gameplay = 0;
-		for (long d : gameplayDurations(f.ends())) {
-			gameplay += d;
+		if (f.markNanos() != FrameRing.NO_MARK && f.markNanos() - from > 0) {
+			from = f.markNanos();
+			after = f.gameplayAtMark() < 0 ? 0 : total - f.gameplayAtMark();
 		}
-		return new Covered(ringStart, gameplay / 1e9, Math.max(0, endNanos - ringStart) / 1e9);
+		return new Compared(from, Math.max(0, after) / 1e9, Math.max(0, endNanos - from) / 1e9);
 	}
 
 	// review-8 ST-2: the phases of a frame the frame ring still holds, from its own phase word (the excess over the

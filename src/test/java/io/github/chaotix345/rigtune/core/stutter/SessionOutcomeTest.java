@@ -124,6 +124,51 @@ class SessionOutcomeTest {
 		return SessionOutcome.of(r, t0);
 	}
 
+	// A capture of `frames` frames of 16 ms, an 80 ms spike where `spike` says, into rings of the given sizes; the settle
+	// mark `markSeconds` after the start (none when negative), as the session monitor sets it.
+	private static SessionOutcome capture(int frames, int frameCapacity, int candidateCapacity, java.util.function.IntPredicate spike, double markSeconds) {
+		long t0 = 50 * S;
+		FrameRing ring = new FrameRing(frameCapacity, candidateCapacity);
+		if (markSeconds >= 0) {
+			ring.markGameplayAt(t0 + (long) (markSeconds * S));
+		}
+		long now = t0;
+		for (int i = 0; i < frames; i++) {
+			long d = spike.test(i) ? 80 * StutterAnalyzer.MS : 16 * StutterAnalyzer.MS;
+			now += d;
+			ring.frame(now, d, false, 300_000, StutterAnalyzer.MS, d - 2 * StutterAnalyzer.MS, 0);
+		}
+		StutterAnalyzer.Result r = StutterAnalyzer.analyze(new StutterAnalyzer.Input(ring.snapshot(), new StutterRings(10 * S).snapshot(), t0, now,
+				Instant.parse("2026-09-26T10:00:00Z"), StutterReport.MONITOR, "26.2", "g1", 4096, 32768L, 16, true, false));
+		return SessionOutcome.of(r, t0);
+	}
+
+	// review-12 R12STUTTER-1: a capture's first minutes (a world join's chunk streaming) never count, on either side. The
+	// before session joined (a burst of a spike every 30 frames for 3 minutes, then a spike every 200); the after session,
+	// restarted mid-world by an immediate fix, plays the same steady ~17 hitches a minute from its start: no clear change.
+	@Test
+	void aJoinBurstNeverCounts() {
+		int burstFrames = (int) (180 * S / (16 * StutterAnalyzer.MS)) - 1000;
+		SessionOutcome joined = capture(48_000, 1 << 17, 4096, i -> i < burstFrames ? i % 30 == 29 : i % 200 == 199, SessionOutcome.SETTLE_NANOS / 1e9);
+		SessionOutcome restarted = capture(48_000, 1 << 17, 4096, i -> i % 200 == 199, SessionOutcome.SETTLE_NANOS / 1e9);
+		assertEquals(FixComparison.Kind.SAME, FixComparison.compare(joined, restarted).kind(), joined + " vs " + restarted);
+		double ratio = perMinute(restarted) / perMinute(joined);
+		assertTrue(ratio > 0.9 && ratio < 1.1, "the same steady rate: " + perMinute(joined) + " vs " + perMinute(restarted));
+		assertTrue(joined.gameplaySeconds() < 48_000 * 0.0165 - 170, "the first 3 minutes left out: " + joined.gameplaySeconds());
+	}
+
+	// review-12 R12STUTTER-2: once both rings wrapped, the spikes are known back to the oldest candidate the ring still holds
+	// (its gameplay stamp says how much play follows it), not only over the frame ring's window: 64 candidates of a spike
+	// every 200 frames reach back ~12,800 frames where the frame ring holds 1,024.
+	@Test
+	void theComparedPlayReachesBackToTheOldestCandidate() {
+		SessionOutcome o = capture(20_000, 1024, 64, i -> i % 200 == 199, -1);
+		SessionOutcome whole = capture(20_000, 1 << 15, 4096, i -> i % 200 == 199, -1);
+		assertTrue(o.gameplaySeconds() > 150, "the play back to the oldest held candidate: " + o);
+		double ratio = perMinute(o) / perMinute(whole);
+		assertTrue(ratio > 0.9 && ratio < 1.1, perMinute(o) + " vs " + perMinute(whole));
+	}
+
 	private static double perMinute(SessionOutcome o) {
 		return o.hitches() * 60 / o.gameplaySeconds();
 	}
