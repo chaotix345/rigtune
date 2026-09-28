@@ -567,6 +567,9 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 			context.waitFor(mc -> !hasFileOp(pending) && !Files.exists(download), 200);
 			String superseded = download.getFileName().toString().replace(PendingActions.PENDING_SUFFIX, PendingActions.SUPERSEDED_SUFFIX);
 			check(Files.exists(download.resolveSibling(superseded)), "the download is .rigtune-superseded");
+			// review-12 flake (a minimal edit by WS-S2 to WS-L2's test): cancelHeld writes pending.json and retires the download
+			// before it writes the journal on its worker, so the journal is waited for too (run 36394062135 read it in between).
+			context.waitFor(mc -> statuses(held).equals(List.of(JournalChange.DISCARDED, JournalChange.DISCARDED)), 200);
 			List<String> statuses = statuses(held);
 			check(statuses.equals(List.of(JournalChange.DISCARDED, JournalChange.DISCARDED)), "the journal marks them DISCARDED: " + statuses);
 			context.waitFor(mc -> find(real.notices(), LauncherRepairService.HELD_KEY) == null, 200);
