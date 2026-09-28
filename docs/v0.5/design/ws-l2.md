@@ -133,6 +133,12 @@ repair steps are a dynamic family registered in `V05LangFamilies.launcherRepair`
   record's `done` mark. The files alone can't tell RigTune's disable from the launcher's own, so only a rename the
   record marks done (or an op the last run did) counts as started. Under RIGTUNE such a group still runs: its enable is
   dropped as installed another way when only the files say it was done.
+- **Failed record writes around a rollback** (review-12 R12APPLY-4). The not-done mark is written before the move back;
+  when that write fails, `save()` logs it, keeps the record dirty and the move still happens. The next write (another
+  mark, the next pass's record, or the prune after last-apply.json) retries it. Only when every one fails does
+  `done: true` stay on disk over a jar that's back, and only the launcher's own later disable of that jar under the same
+  name then counts as RigTune's. Not moving the jar back when the mark can't be written would leave the group half
+  applied (the mod missing) for a whole session instead.
 - **The leftover listener's footprint keys** (its idle tick: one volatile read, 0 bytes, unit-tested) come with the
   footprint checkpoint after Wave B (SPEC 1h). FootprintGameTest's run never registers the listener.
 - **Stats on screen init/rebuild** (the coordinator's X8 ruling, 2026-09-27): under LAUNCHER or PENDING, the notices'
@@ -303,3 +309,17 @@ it: the file is 0.4's, and no class of the released 0.1.0, 0.2.0 or 0.3.0 jars n
    shape (a rename in effect, no `done`: no result, the files untouched). Without the hold, 0.5 takes such a rename in
    effect as done earlier, as 0.4 does.
 
+
+## Review-12 fixes (branch `fix/v05-r12-ws-l2`)
+
+| id | sev | status | commit | the test that failed first |
+|---|---|---|---|---|
+| R12APPLY-4 (a rollback moved the jar back before marking its rename not done) | L | FIXED | e017f747 | `ApplyExecutorHoldTest.aKillBeforeARollbackMovesTheJarBackIsHeld`, `…aKillRightAfterARollbackMovesTheJarBackStaysHeld` (both red on 49043260: the record kept `done: true`, and without that assertion the group ran instead of being held) |
+
+- `rollBack` marks each rename not done, then moves it back, and marks it done again only when the jar stays under the
+  group's name. A kill before the move leaves `done: false` with the rename in effect: held under LAUNCHER/PENDING, and
+  under RIGTUNE the same as a kill between a rename and its mark (the enable dropped as installed another way). A kill
+  after the move leaves `done: false` over a jar that's back, so the launcher's own later disable proves nothing.
+  `aStuckRollbackStaysDoneAndIsFinished` pins the re-mark: a group whose rollback couldn't move the jar back is finished
+  at the next exit.
+- The failed-write half of the finding is a residual (see Residuals).
