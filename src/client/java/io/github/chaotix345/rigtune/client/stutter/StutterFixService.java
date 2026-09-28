@@ -52,6 +52,7 @@ import net.minecraft.network.chat.Component;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -78,7 +79,8 @@ public final class StutterFixService {
 	private volatile FixTracker.@Nullable Record adding;
 	private volatile boolean writable = true;
 	private volatile boolean loadQueued;
-	private volatile @Nullable RulesDocument specsFor;
+	// The rules the specs were read from, weakly: holding the document would keep a replaced one (and its conditions) alive.
+	private volatile WeakReference<@Nullable RulesDocument> specsFor = new WeakReference<>(null);
 	private volatile List<FixSpec> specs = List.of();
 	// Render thread.
 	private long lastRefresh;
@@ -213,9 +215,9 @@ public final class StutterFixService {
 	}
 
 	private List<FixSpec> specs(@Nullable RulesDocument rules) {
-		if (rules != specsFor) {
+		if (rules != specsFor.get()) {
 			specs = FixSpec.of(rules);
-			specsFor = rules;
+			specsFor = new WeakReference<>(rules);
 		}
 		return specs;
 	}
