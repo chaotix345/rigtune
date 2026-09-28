@@ -132,6 +132,7 @@ public class ProfilesGameTest implements FabricClientGameTest {
 			pf1BatteryOfferFromAFreshStart(context, controller);
 			pf3DeletingTheBackOffersTargetRetiresIt(context, controller);
 			pf1StaleMySettingsIsRefreshedFirst(context, controller);
+			r11BatteryIsBuiltOverTheRefreshedMySettings(context, controller);
 			pf5CopyCodeSaysWhatItLeavesOut(context, controller);
 			l8HistoryIncludesTheFoldedSwitches(context, controller);
 			refusedDuringABenchmark(context, controller);
@@ -581,6 +582,34 @@ public class ProfilesGameTest implements FabricClientGameTest {
 			});
 			context.waitFor(mc -> controller.report() != null, 1200);
 		}
+	}
+
+	// review-11 FEAT-2/FEAT-3 (WS-P2): with no profile in effect, a switch to Battery refreshes "My settings" to the
+	// current values BEFORE Battery is built over it, and says so. Hand changes to keys Battery doesn't set would otherwise
+	// go back to the stale My settings: then a second switch to Battery would still find something to change.
+	private void r11BatteryIsBuiltOverTheRefreshedMySettings(ClientGameTestContext context, RigTuneController controller) {
+		reset(context);
+		Map<String, String> hand = new LinkedHashMap<>();
+		hand.put("vanilla.entityDistanceScaling", "1.5");
+		hand.put("vanilla.biomeBlendRadius", "3");
+		hand.put("vanilla.textureFiltering", "1");
+		hand.put("vanilla.entityShadows", "false");
+		hand.put("vanilla.cutoutLeaves", "false");
+		hand.put("vanilla.prioritizeChunkUpdates", "1");
+		context.runOnClient(mc -> SettingsBridge.applyVanilla(mc.options, hand));
+		check(ProfileStore.shared(configDir).active() == null, "no profile in effect");
+		Component first = context.computeOnClient(mc -> controller.switchProfile(BATTERY));
+		check(text(first).endsWith(Component.translatable("rigtune.profile.status.baseline_refreshed").getString()),
+				"FEAT-3: the status says My settings was updated: " + text(first));
+		Map<String, String> mine = ProfileStore.shared(configDir).baseline().settings();
+		for (Map.Entry<String, String> e : hand.entrySet()) {
+			check(SettingValues.same(e.getValue(), mine.get(e.getKey())), "My settings holds the hand-set " + e.getKey() + ": " + mine);
+		}
+		Component second = context.computeOnClient(mc -> controller.switchProfile(BATTERY));
+		check(key(second).equals("rigtune.profile.status.already"), "FEAT-2: Battery was built over the refreshed My settings, so a second switch "
+				+ "changes nothing: " + text(second));
+		check(!text(second).contains(Component.translatable("rigtune.profile.status.baseline_refreshed").getString()), "no refresh with Battery active");
+		context.runOnClient(mc -> controller.discardPending());
 	}
 
 	// docs/v0.5/SPEC.md PF-5 (AC2P.5): a profile holding a DH LOD radius of 1024 (DH's own range) is copied without it (key

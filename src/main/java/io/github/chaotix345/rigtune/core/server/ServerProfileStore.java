@@ -11,6 +11,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.nio.file.Path;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoUnit;
@@ -49,6 +50,8 @@ public final class ServerProfileStore {
 	// ProfileStore's id shapes (a saved or imported profile, a template), redeclared so ProfileStore doesn't change.
 	private static final Pattern PROFILE_ID = Pattern.compile("p-[A-Za-z0-9-]{1,64}|template:[a-z_]{1,32}");
 	private static final SecureRandom RANDOM = new SecureRandom();
+	private static final Instant EARLIEST = Instant.parse("2000-01-01T00:00:00Z");
+	private static final Duration FUTURE = Duration.ofDays(1);
 	private static final Map<Path, ServerProfileStore> SHARED = new HashMap<>();
 
 	// READ_ONLY: the file is from a newer RigTune; FAILED: refused (not a server, not a profile id), the file can't be read
@@ -342,12 +345,15 @@ public final class ServerProfileStore {
 		return null;
 	}
 
+	// A time this store could have written: from 2000 to a day ahead of now (a clock set back a little is fine).
+	// Anything else, which Instant.parse accepts up to year ±1,000,000,000, reads as unknown (review-11 SEC-2).
 	private static @Nullable Instant instant(@Nullable JsonElement e) {
 		if (!(e instanceof JsonPrimitive p) || !p.isString()) {
 			return null;
 		}
 		try {
-			return Instant.parse(p.getAsString());
+			Instant at = Instant.parse(p.getAsString());
+			return at.isBefore(EARLIEST) || at.isAfter(Instant.now().plus(FUTURE)) ? null : at;
 		} catch (DateTimeParseException ex) {
 			return null;
 		}

@@ -286,3 +286,17 @@ with the screenshots listed in "Phase B as landed".
 
 Stays UNVERIFIED (SPEC 7): whether proxies or reconfiguration fire JOIN again (at most one toast per server per session
 either way; ServerProfileOffers treats a same-identity JOIN as the same connection); a real Realm.
+
+## Review-11 fixes (branch fix/v05-r11-ws-p2)
+
+| id | result | commit | the test that failed first |
+|---|---|---|---|
+| SEC-2 (HIGH) | FIXED: `ServerProfileStore.instant()` reads only times from 2000-01-01 to a day ahead (else unknown, the row without a date, the entry still offered); `ServerProfilesView.of` formats the day through a helper that catches `DateTimeException` | 1bd0508e | `ServerProfilesViewTest.aDateNoDayCanHoldShowsNoDay` (DateTimeException "Invalid value for EpochDay"), `ServerProfileStoreTest.timesOutsideTheSaneRangeReadAsUnknown` (the far-future time was kept) |
+| FEAT-2 (LOW) | FIXED: `switchProfile` refreshes "My settings" before `resolve` builds Battery over it (the refresh left `switchTo`) | 954b462b | `ProfilesGameTest.r11BatteryIsBuiltOverTheRefreshedMySettings`: with the old order swapped back in, a second switch to Battery still changed six hand-set keys ("Switched to Battery.", local 26.2 run) |
+| FEAT-3 (LOW) | FIXED: the decision kept; when the refresh changed "My settings", the switch's status adds "My settings was updated to your current settings before switching." (`rigtune.profile.status.baseline_refreshed`); a refresh with nothing different writes nothing | 954b462b | the same game-test case checks the status line |
+| FEAT-4 (LOW) | FIXED: ServerProfilesScreen's subtitle/status line is a `RowFocus.standalone` stop, first in Tab order; after Offer, Stop, Forget or Forget all the rebuilt screen focuses it and reads it out (`triggerImmediateNarration(false)`; Forget all through the screen's reopening) | 954b462b | `A11yGameTest.walkServerProfiles`: Enter on Offer, then the focused stop narrates the status and is the first Tab stop |
+| FEAT-6 | r-ci's (the toast-wait listener's footprint key, at the checkpoint) | | |
+
+Local 26.2 runs under the lock: ProfilesGameTest passed (AC4.11 and the review-11 case); ServerProfilesGameTest,
+FootprintGameTest ("26 budget(s), 0 over") and A11yGameTest passed. ServerProfilesGameTest's layout check now lets a
+text stop start at y 18, the status line's place under the title.

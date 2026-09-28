@@ -145,6 +145,8 @@ If it's installed, recommend disabling it (impact high). May carry `requires`.
 
 `kind` is one of info, warning or critical. Advice is informational only: it has no action. May carry `requires`.
 
+**Advice for older clients only.** `old-client-launcher-mods` (v0.5, docs/v0.5/SPEC.md 4i) is for RigTune 0.1-0.4: rules-v2.json gates it on `modVersion` (`rigtune` below `0.5.0-`), and rules-v1.json gives it to 0.1.x unconditionally. RigTune 0.5+ drops these ids (`RulesLoader.OLD_CLIENT_ADVICE`) from every document it reads, v1 included, since it still falls back to remote rules-v1.json and reads 0.1.x's `rules-cache.json`.
+
 **The `ram-` id prefix** marks advice whose fix is changing the memory (heap) allocation: RigTune 0.3+ shows the detected launcher's steps for that ("In the Modrinth App: …") under every advice whose id starts with `ram-`. Use the prefix only for such advice, and give every such advice the prefix (in `stutterAdvice` too). Older clients ignore it (it's only an id).
 
 **The `jvm-` id prefix** (0.4+) marks advice about the Java arguments. RigTune 0.4 adds "Found in your Java arguments: <flag names>" (from its own flag table, never the raw arguments) and the detected launcher's Java-arguments steps under every advice whose id starts with `jvm-`. Such advice tests the [jvm- facts](#jvm--facts-v2-04) and carries `"requires": ["jvm-flags"]` and `"v1": false`. Heap advice stays `ram-` (it points at the launcher's memory setting, which for Prism overrides an `-Xmx` typed in the Java arguments).

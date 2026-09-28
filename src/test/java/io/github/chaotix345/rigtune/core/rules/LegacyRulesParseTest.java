@@ -70,14 +70,16 @@ class LegacyRulesParseTest {
 			assertEquals(current.mods.size(), doc.mods.size());
 			assertEquals(current.obsolete.size(), doc.obsolete.size());
 			assertEquals(current.settings.size(), doc.settings.size());
-			assertEquals(current.advice.size(), doc.advice.size());
+			assertEquals(current.advice.size(), doc.advice.stream().filter(a -> !RulesLoader.OLD_CLIENT_ADVICE.contains(a.id)).count());
 			assertEquals(current.gpuTiers.size(), doc.gpuTiers.size());
 			assertEquals(current.cpuTiers.size(), doc.cpuTiers.size());
 			assertEquals(current.heapTiers.size(), doc.heapTiers.size());
 			assertEquals(current.settingLabels.keySet(), doc.settingLabels.keySet());
 			assertEquals(current.availability, doc.availability);
 		}
-		assertEquals(current.advice.stream().map(a -> a.id).toList(), withSections.advice.stream().map(a -> a.id).toList());
+		// This client drops the advice meant only for clients below 0.5 (review-11 SEC-3); 0.2.0/0.3.0 keep it (4i).
+		assertEquals(current.advice.stream().map(a -> a.id).toList(),
+				withSections.advice.stream().map(a -> a.id).filter(id -> !RulesLoader.OLD_CLIENT_ADVICE.contains(id)).toList());
 		assertEquals(current.mods.stream().map(m -> m.slug).toList(), withSections.mods.stream().map(m -> m.slug).toList());
 		assertEquals(current.settings.stream().map(s -> s.key).toList(), withSections.settings.stream().map(s -> s.key).toList());
 		Set<String> legacyFields = Arrays.stream(io.github.chaotix345.rigtune.v030.core.rules.RulesDocument.class.getFields())

@@ -133,8 +133,16 @@ public final class ProfileService {
 		if (refused != null) {
 			return refused;
 		}
+		// v0.5 PF-1 (coordinator decision): a switch to Battery with no profile in effect first refreshes "My settings" to
+		// the current values, as the plug-in offer switches back to it. Before Battery is built over it (review-11 FEAT-2),
+		// and said in the status when that changed it (FEAT-3).
+		boolean refreshed = active() == null && BatteryPrompt.BATTERY.equals(id) && refreshBaseline();
 		Target target = resolve(id);
-		return target == null ? Component.translatable("rigtune.profile.status.unavailable") : switchTo(target, answered);
+		if (target == null) {
+			return Component.translatable("rigtune.profile.status.unavailable");
+		}
+		Component result = switchTo(target, answered);
+		return refreshed ? result.copy().append(" ").append(Component.translatable("rigtune.profile.status.baseline_refreshed")) : result;
 	}
 
 	// Off the render thread (Preview loads in the background).
@@ -350,14 +358,8 @@ public final class ProfileService {
 	// The switch itself: one journal entry of kind apply, labelled in profiles.json.
 	private Component switchTo(Target target, @Nullable Offer answered) {
 		String previous = active();
-		// The way back: "My settings" exists before the first switch, even one made from the battery offer. v0.5 PF-1
-		// (coordinator decision): a switch to Battery with no profile in effect first refreshes it to the current values, as
-		// the plug-in offer switches back to it.
-		if (previous == null && BatteryPrompt.BATTERY.equals(activeId(target))) {
-			refreshBaseline();
-		} else {
-			ensureBaseline();
-		}
+		// The way back: "My settings" exists before the first switch, even one made from the battery offer.
+		ensureBaseline();
 		SettingsSnapshot snapshot = snapshot();
 		List<Recommendation> recs = ProfileSwitch.build(target.values(), snapshot, ModScanner.loadedIds(), labels(), target.english());
 		Component name = Texts.component(target.name());
@@ -392,8 +394,8 @@ public final class ProfileService {
 		String id = activeId(target);
 		store().setActive(id, entryId);
 		if (BatteryPrompt.BATTERY.equals(id) && !BatteryPrompt.BATTERY.equals(previous)) {
-			// v0.5 PF-1: with no profile in effect, "My settings" (refreshed to the current values by switchTo just before this
-			// switch) is the way back.
+			// v0.5 PF-1: with no profile in effect, "My settings" (refreshed to the current values by switchProfile just before
+			// this switch) is the way back.
 			Profile baseline = store().baseline();
 			store().rememberPrevious(BatteryPrompt.previousFor(previous, baseline == null ? null : baseline.id()));
 		}
@@ -460,15 +462,19 @@ public final class ProfileService {
 		return ProfileNotes.of(target.clamps(), newerKeys, notHere, labels());
 	}
 
-	// "My settings" set to the current values (saved when there is none yet), its id, name and creation time kept.
-	private void refreshBaseline() {
+	// "My settings" set to the current values (saved when there is none yet), its id, name and creation time kept. True
+	// when an existing "My settings" changed.
+	private boolean refreshBaseline() {
 		Profile baseline = store().baseline();
 		Map<String, String> values = baseline == null ? Map.of() : current();
 		if (baseline == null || values.isEmpty() || !store().writable()) {
 			ensureBaseline();
-			return;
+			return false;
 		}
-		store().saveProfile(new Profile(baseline.id(), baseline.name(), baseline.templateId(), ProfileStore.SOURCE_BASELINE, baseline.createdAt(),
+		if (values.equals(baseline.settings())) {
+			return false;
+		}
+		return store().saveProfile(new Profile(baseline.id(), baseline.name(), baseline.templateId(), ProfileStore.SOURCE_BASELINE, baseline.createdAt(),
 				controller.modVersion(), HardwareProbe.minecraftVersion(), values));
 	}
 
