@@ -79,6 +79,20 @@ class HistoryStartupRw20Test {
 		assertArrayEquals(last, Files.readAllBytes(ApplyResult.defaultPath(config)));
 	}
 
+	// review 11 PERF-1: preLaunch runs on the render thread, and last-apply.json stays until the next helper run, so every
+	// start reads history.json once (the reconcile's), whether or not it relabels a claim.
+	@Test
+	void everyStartReadsTheJournalOnce() throws IOException {
+		Path config = install();
+		Journal first = journal(config);
+		HistoryStartup.run(config, first, true);
+		assertEquals(1, first.reads());
+
+		Journal next = journal(config);
+		HistoryStartup.run(config, next, true);
+		assertEquals(1, next.reads());
+	}
+
 	// review 11 APPLY-2: 0.5's own helper reports a disable whose jar the player removed by hand as a bare SKIPPED "already
 	// gone"; the starts after it leave that change APPLIED (not "Not applied: installed another way") and its result as is.
 	@Test

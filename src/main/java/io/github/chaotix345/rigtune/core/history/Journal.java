@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
@@ -66,6 +67,8 @@ public final class Journal implements ChangeRecorder {
 	private final Log log;
 	private final Duration lockWait;
 	private final Supplier<JournalEntry> firstEntry;
+	// review 11 PERF-1 (WS-H, a marked edit): how many times this Journal read history.json, for the tests that count reads.
+	private final AtomicInteger reads = new AtomicInteger();
 
 	public Journal(Path configDir, String rigtuneVersion, String mcVersion, Log log) {
 		this(configDir, rigtuneVersion, mcVersion, log, LOCK_WAIT, null);
@@ -100,6 +103,10 @@ public final class Journal implements ChangeRecorder {
 
 	public String mcVersion() {
 		return mcVersion;
+	}
+
+	public int reads() {
+		return reads.get();
 	}
 
 	// Empty when the file is missing, corrupt or from a newer RigTune.
@@ -224,6 +231,7 @@ public final class Journal implements ChangeRecorder {
 		if (!Files.exists(file)) {
 			return new Read(State.MISSING, List.of());
 		}
+		reads.incrementAndGet();
 		String json;
 		try {
 			json = Files.readString(file, StandardCharsets.UTF_8);
