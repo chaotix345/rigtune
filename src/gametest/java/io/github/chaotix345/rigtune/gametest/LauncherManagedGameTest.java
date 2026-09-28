@@ -3,14 +3,17 @@ package io.github.chaotix345.rigtune.gametest;
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.ClientSettings;
+import io.github.chaotix345.rigtune.client.FirstRunService;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.SettingsSaver;
+import io.github.chaotix345.rigtune.client.launcher.ModFilesService;
 import io.github.chaotix345.rigtune.client.probe.LauncherProbe;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.client.ui.RigTuneSettingsScreen;
 import io.github.chaotix345.rigtune.client.ui.UndoScreen;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
+import io.github.chaotix345.rigtune.core.history.FirstRun;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.history.UndoPlan;
@@ -24,6 +27,7 @@ import io.github.chaotix345.rigtune.core.model.Recommendation;
 import io.github.chaotix345.rigtune.core.model.Report;
 import io.github.chaotix345.rigtune.core.model.Text;
 import io.github.chaotix345.rigtune.core.model.UpdateInfo;
+import io.github.chaotix345.rigtune.core.notice.Notice;
 import io.github.chaotix345.rigtune.core.report.LauncherModAdvice;
 import net.fabricmc.fabric.api.client.gametest.v1.FabricClientGameTest;
 import net.fabricmc.fabric.api.client.gametest.v1.context.ClientGameTestContext;
@@ -94,8 +98,7 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 			launcherAdvice(context, real);
 			refusedApply(context, real, v05.configDir());
 			undoSkipsAppliedModFiles(context, real);
-			check(context.computeOnClient(mc -> real.notices()).stream().noneMatch(n -> n.key().equals("launcher.mod_files_news")),
-					"no MOD_FILES_NEWS before FirstRunService says RETURNING (WS-F)");
+			modFilesNews(context, real);
 
 			// AC4e.2: the opt-in brings 0.4's behaviour back, with its line in the header's one warning slot (network on, so the
 			// offline line doesn't take the slot).
@@ -274,6 +277,38 @@ public class LauncherManagedGameTest implements FabricClientGameTest {
 		} finally {
 			ClientJournal.get().update(entries -> entries.stream().filter(e -> !FIXTURE_ENTRY.equals(e.id())).toList());
 		}
+	}
+
+	// AC4b.6 (game): MOD_FILES_NEWS under LAUNCHER for a returning player only (each status forced through WS-F's seam, then
+	// put back); its Settings… opens the settings on the Mod files row (review L15, through the real notice source).
+	private static void modFilesNews(ClientGameTestContext context, RealController real) {
+		FirstRunService firstRun = real.v05().firstRun();
+		FirstRun.Status status = firstRun.status();
+		try {
+			firstRun.forceStatusForTests(FirstRun.Status.NEW);
+			check(news(context, real).isEmpty(), "no MOD_FILES_NEWS for a new player");
+			firstRun.forceStatusForTests(FirstRun.Status.RETURNING);
+			List<Notice> shown = news(context, real);
+			check(shown.size() == 1 && shown.getFirst().message().english().equals("RigTune now leaves this instance's mod files to the Modrinth App"),
+					"MOD_FILES_NEWS for a returning player: " + shown);
+			context.getInput().setCursorPos(1, 1);
+			context.runOnClient(mc -> mc.gui.setScreen(new TitleScreen()));
+			context.waitForScreen(TitleScreen.class);
+			context.runOnClient(mc -> real.noticeAction(ModFilesService.NEWS_KEY, ModFilesService.NEWS_SETTINGS));
+			context.waitForScreen(RigTuneSettingsScreen.class);
+			context.waitTicks(2);
+			String focused = context.computeOnClient(mc -> mc.gui.screen().getCurrentFocusPath() != null
+					&& mc.gui.screen().getCurrentFocusPath().leafComponent() instanceof AbstractWidget w ? w.getMessage().getString() : "");
+			check(focused.equals("Mod files: Change them in the Modrinth App"), "the news' Settings… focuses the Mod files row: " + focused);
+			context.takeScreenshot("launcher-managed-news-settings-854x480-scale2");
+		} finally {
+			firstRun.forceStatusForTests(status);
+		}
+		RigTune.LOGGER.info("LauncherManagedGameTest: MOD_FILES_NEWS for RETURNING only (this instance: {}); Settings… focuses the Mod files row", status);
+	}
+
+	private static List<Notice> news(ClientGameTestContext context, RealController real) {
+		return context.computeOnClient(mc -> real.notices()).stream().filter(n -> n.key().equals(ModFilesService.NEWS_KEY)).toList();
 	}
 
 	// AC4e.1/AC4e.2: the Settings row turns the opt-in on (saved through SettingsSaver): the report is RigTune's again, and
