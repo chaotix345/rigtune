@@ -123,6 +123,11 @@ public final class OutsideOptions {
 		return logArchives.stream().filter(at -> at.isAfter(exitAt)).count() >= 2;
 	}
 
+	// The snapshot's exit time, or null (no stamp, or unreadable).
+	public static @Nullable Instant exitAt(Map<String, String> snapshot) {
+		return instant(snapshot.get(EXIT_AT));
+	}
+
 	private static @Nullable Instant instant(@Nullable String value) {
 		try {
 			return value == null ? null : Instant.parse(value);

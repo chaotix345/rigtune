@@ -21,10 +21,12 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -186,19 +188,47 @@ class OutsideChangesClientTest {
 		assertEquals("The value RigTune last applied.", again.reasonText().english());
 	}
 
-	// Review-11 COMPAT-3: the log archives' times, read from logs/*.log.gz only (no other file, no subfolder).
+	// Review-11 COMPAT-3: the log archives newer than the exit, read from logs/*.log.gz only (no other file, no subfolder).
 	@Test
 	void theLogArchivesAreTheGzippedLogs(@TempDir Path game) throws IOException {
 		Path logs = Files.createDirectories(game.resolve("logs"));
-		Instant first = Instant.parse("2026-09-27T09:00:05Z");
-		Instant second = Instant.parse("2026-09-27T20:00:03Z");
-		Files.setLastModifiedTime(Files.writeString(logs.resolve("2026-09-27-1.log.gz"), "x"), FileTime.from(first));
-		Files.setLastModifiedTime(Files.writeString(logs.resolve("2026-09-27-2.log.gz"), "x"), FileTime.from(second));
+		Instant exit = Instant.parse("2026-09-27T10:00:00Z");
+		Instant older = Instant.parse("2026-09-27T09:00:05Z");
+		Instant newer = Instant.parse("2026-09-27T20:00:03Z");
+		Files.setLastModifiedTime(Files.writeString(logs.resolve("2026-09-27-1.log.gz"), "x"), FileTime.from(older));
+		Files.setLastModifiedTime(Files.writeString(logs.resolve("2026-09-27-2.log.gz"), "x"), FileTime.from(newer));
 		Files.writeString(logs.resolve("latest.log"), "x");
 		Files.writeString(logs.resolve("debug.log"), "x");
 		Files.createDirectories(logs.resolve("nested.log.gz.d"));
-		assertEquals(Set.of(first, second), Set.copyOf(OutsideChanges.logArchives(logs)));
-		assertEquals(List.of(), OutsideChanges.logArchives(game.resolve("missing")));
+		assertEquals(List.of(newer), OutsideChanges.logArchives(logs, exit));
+		assertEquals(List.of(), OutsideChanges.logArchives(game.resolve("missing"), exit));
+	}
+
+	// Review-12 R12X-5: a long-lived instance keeps thousands of archives. Those whose name dates them well before the
+	// exit are never statted, the listing stops at the second archive newer than the exit, and a file whose stat fails
+	// is skipped, not the end of the listing (a partial list read "no launch in between": a false notice).
+	@Test
+	void manyArchivesAreNotStattedAndAFailedStatIsSkipped(@TempDir Path game) throws IOException {
+		Path logs = Files.createDirectories(game.resolve("logs"));
+		for (int i = 1; i <= 400; i++) {
+			Files.writeString(logs.resolve("2025-0" + (1 + i % 9) + "-1" + (i % 9) + "-" + i + ".log.gz"), "x");
+		}
+		Files.writeString(logs.resolve("2026-09-27-40.log.gz"), "unreadable");
+		for (int i = 41; i <= 44; i++) {
+			Files.writeString(logs.resolve("2026-09-27-" + i + ".log.gz"), "x");
+		}
+		Instant exit = Instant.parse("2026-09-27T10:00:00Z");
+		List<Path> statted = new ArrayList<>();
+		List<Instant> found = OutsideChanges.logArchives(logs, exit, file -> {
+			statted.add(file);
+			if (file.getFileName().toString().equals("2026-09-27-40.log.gz")) {
+				throw new AccessDeniedException(file.toString());
+			}
+			return FileTime.from(Instant.parse("2026-09-27T20:00:00Z"));
+		});
+		assertEquals(2, found.size(), "two newer archives are enough");
+		assertTrue(statted.size() <= 3, "only the current archives, stopping at the second newer one: " + statted);
+		assertTrue(statted.stream().allMatch(p -> p.getFileName().toString().startsWith("2026-09-27-")), "no old archive statted: " + statted);
 	}
 
 	@Test

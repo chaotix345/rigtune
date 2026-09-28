@@ -74,6 +74,15 @@ class TryItTextTest {
 		assertEquals("The benchmark needs an open world.", TryItText.sceneRefusal("rigtune.status.benchmark_unavailable").english());
 	}
 
+	// Review R12FEAT-7: a change History couldn't record says so (not "History no longer lists this change").
+	@Test
+	void aChangeHistoryCouldntRecordSaysSo() {
+		List<String> lines = english(TryItText.lines(new TryItView(Stage.ENTRY_MISSING, RESTART.withUnrecorded(), null, null, null, null, null, true), LABELS));
+		assertTrue(lines.contains("History couldn't record this change (see the log), so it can't be reverted from here. It is applied."), lines.toString());
+		assertTrue(lines.stream().noneMatch(l -> l.startsWith("History no longer lists")), lines.toString());
+		assertTrue(english(TryItText.lines(view(Stage.ENTRY_MISSING, true), LABELS)).stream().anyMatch(l -> l.startsWith("History no longer lists")));
+	}
+
 	// Review-11 COMPAT-2: the backend and GPU causes are named as the trend names them.
 	@Test
 	void theGraphicsCausesAreNamed() {

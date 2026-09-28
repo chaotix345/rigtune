@@ -139,10 +139,9 @@ public final class ProfileService {
 		boolean refreshed = active() == null && BatteryPrompt.BATTERY.equals(id) && refreshBaseline();
 		Target target = resolve(id);
 		if (target == null) {
-			return Component.translatable("rigtune.profile.status.unavailable");
+			return withRefresh(Component.translatable("rigtune.profile.status.unavailable"), refreshed, false);
 		}
-		Component result = switchTo(target, answered);
-		return refreshed ? result.copy().append(" ").append(Component.translatable("rigtune.profile.status.baseline_refreshed")) : result;
+		return switchTo(target, answered, refreshed);
 	}
 
 	// Off the render thread (Preview loads in the background).
@@ -209,7 +208,8 @@ public final class ProfileService {
 		boolean saved = store().saveProfile(profile);
 		ProfileTemplates.Result clamped = ProfileTemplates.clamp(imported.values(), controller.rules(), controller.hardwareProfile(), mods(), snapshot(),
 				controller.goal());
-		return switchTo(new Target(name(profile), english(profile), saved ? profile.id() : null, null, clamped.values(), clamped.clamps(), true), offer.get());
+		return switchTo(new Target(name(profile), english(profile), saved ? profile.id() : null, null, clamped.values(), clamped.clamps(), true), offer.get(),
+				false);
 	}
 
 	// Preview's Save only for a code.
@@ -355,8 +355,9 @@ public final class ProfileService {
 		return Text.of("rigtune.battery.back", "You're plugged in again. Switch back to %s?", name == null ? Text.literal("?") : name);
 	}
 
-	// The switch itself: one journal entry of kind apply, labelled in profiles.json.
-	private Component switchTo(Target target, @Nullable Offer answered) {
+	// The switch itself: one journal entry of kind apply, labelled in profiles.json. refreshed: switchProfile refreshed "My
+	// settings" just before.
+	private Component switchTo(Target target, @Nullable Offer answered, boolean refreshed) {
 		String previous = active();
 		// The way back: "My settings" exists before the first switch, even one made from the battery offer.
 		ensureBaseline();
@@ -365,13 +366,13 @@ public final class ProfileService {
 		Component name = Texts.component(target.name());
 		if (recs.isEmpty()) {
 			markActive(target, previous, null);
-			return Component.translatable("rigtune.profile.status.already", name);
+			return withRefresh(Component.translatable("rigtune.profile.status.already", name), refreshed, false);
 		}
 		String entryId = ChangeRecorder.newEntryId();
 		Component result = controller.apply(recs, entryId);
 		JournalEntry entry = entry(entryId);
 		if (entry == null || entry.changes().isEmpty()) {
-			return result;
+			return withRefresh(result, refreshed, false);
 		}
 		store().recordSwitch(new ProfileStore.Switch(entryId, target.profileId(), target.templateId(), target.english()), journalIds());
 		markActive(target, previous, entryId);
@@ -387,7 +388,14 @@ public final class ProfileService {
 		if (!target.clamps().isEmpty()) {
 			message.append(" ").append(Component.translatable("rigtune.profile.status.clamped", target.clamps().size()));
 		}
-		return message;
+		return withRefresh(message, refreshed, true);
+	}
+
+	// A refreshed "My settings" is said (review-11 FEAT-3); "before switching" only when a switch was recorded (review-12
+	// R12FEAT-9: not after "Already on…", a refusal or a switch that changed nothing).
+	private static Component withRefresh(Component message, boolean refreshed, boolean switched) {
+		return !refreshed ? message : message.copy().append(" ").append(Component.translatable(switched ? "rigtune.profile.status.baseline_refreshed"
+				: "rigtune.profile.status.baseline_updated"));
 	}
 
 	private void markActive(Target target, @Nullable String previous, @Nullable String entryId) {

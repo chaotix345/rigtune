@@ -406,6 +406,10 @@ dependencies {
 
 def productionGameTestRunDir = layout.buildDirectory.dir("run/productionClientGameTest")
 
+// review-11 PERF-3: -PgametestSeedConfig=<folder> starts the game with that folder's files in config/rigtune/ (a returning
+// player: tools/gametest/returning_seed.py), each ${INSTANCE} filled in with the run folder.
+def gametestSeedConfig = providers.gradleProperty("gametestSeedConfig").map { rootProject.file(it) }
+
 tasks.register("runProductionClientGameTest", net.fabricmc.loom.task.prod.ClientProductionRunTask) {
 	def fs = objects.newInstance(InjectedFs).fs
 	runDir = productionGameTestRunDir
@@ -414,6 +418,15 @@ tasks.register("runProductionClientGameTest", net.fabricmc.loom.task.prod.Client
 	jvmArgs.add("-Dfabric.client.gametest")
 	doFirst {
 		fs.delete { delete productionGameTestRunDir }
+		if (gametestSeedConfig.present) {
+			String instance = productionGameTestRunDir.get().asFile.absolutePath.replace('\\', '/')
+			fs.copy {
+				from gametestSeedConfig.get()
+				include "*.json"
+				into productionGameTestRunDir.get().dir("config/rigtune")
+				filter { String line -> line.replace('${INSTANCE}', instance) }
+			}
+		}
 	}
 }
 

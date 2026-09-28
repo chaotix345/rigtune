@@ -133,6 +133,7 @@ public class ProfilesGameTest implements FabricClientGameTest {
 			pf3DeletingTheBackOffersTargetRetiresIt(context, controller);
 			pf1StaleMySettingsIsRefreshedFirst(context, controller);
 			r11BatteryIsBuiltOverTheRefreshedMySettings(context, controller);
+			r12NoSwitchNoBeforeSwitching(context, controller);
 			pf5CopyCodeSaysWhatItLeavesOut(context, controller);
 			l8HistoryIncludesTheFoldedSwitches(context, controller);
 			refusedDuringABenchmark(context, controller);
@@ -609,6 +610,23 @@ public class ProfilesGameTest implements FabricClientGameTest {
 		check(key(second).equals("rigtune.profile.status.already"), "FEAT-2: Battery was built over the refreshed My settings, so a second switch "
 				+ "changes nothing: " + text(second));
 		check(!text(second).contains(Component.translatable("rigtune.profile.status.baseline_refreshed").getString()), "no refresh with Battery active");
+		context.runOnClient(mc -> controller.discardPending());
+	}
+
+	// review-12 R12FEAT-9 (WS-P2): when My settings is refreshed but nothing is switched ("Already on Battery"), the status
+	// says My settings was updated, never "before switching". The values are Battery's already, its active marker gone.
+	private void r12NoSwitchNoBeforeSwitching(ClientGameTestContext context, RigTuneController controller) {
+		reset(context);
+		Component switched = context.computeOnClient(mc -> controller.switchProfile(BATTERY));
+		check(key(switched).startsWith("rigtune.profile.status.switched"), "Battery switched to: " + text(switched));
+		check(ProfileStore.shared(configDir).setActive(null, null), "the active marker cleared");
+		check("120".equals(ProfileStore.shared(configDir).baseline().settings().get("vanilla.maxFps"))
+				&& "60".equals(context.computeOnClient(mc -> vanilla(mc.options)).get("vanilla.maxFps")), "My settings is stale (120), Battery's 60 now");
+		Component again = context.computeOnClient(mc -> controller.switchProfile(BATTERY));
+		check(key(again).equals("rigtune.profile.status.already"), "nothing to switch: " + text(again));
+		check(text(again).endsWith(Component.translatable("rigtune.profile.status.baseline_updated").getString())
+				&& !text(again).contains(Component.translatable("rigtune.profile.status.baseline_refreshed").getString()),
+				"My settings was updated, and no switch is claimed: " + text(again));
 		context.runOnClient(mc -> controller.discardPending());
 	}
 

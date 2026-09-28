@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.core.stutter;
 
+import io.github.chaotix345.rigtune.core.benchmark.GpuName;
 import io.github.chaotix345.rigtune.core.profile.ShareKeys;
 import io.github.chaotix345.rigtune.core.recommend.SettingValues;
 import org.jspecify.annotations.Nullable;
@@ -137,7 +138,8 @@ public record FixConditions(@Nullable String mc, @Nullable String modSetHash, lo
 		if (backend != null && other.backend != null && !backend.equals(other.backend)) {
 			return true;
 		}
-		return gpu != null && other.gpu != null && !gpu.equalsIgnoreCase(other.gpu);
+		// ws-b's GpuName (review-12 R12FEAT-1, a marked edit in WS-S2's file): Mesa's build versions aren't another GPU.
+		return gpu != null && other.gpu != null && !GpuName.same(gpu, other.gpu);
 	}
 
 	private Set<String> settingKeys(FixConditions other) {

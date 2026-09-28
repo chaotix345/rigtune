@@ -6,6 +6,7 @@ import io.github.chaotix345.rigtune.client.compat.OptionalMods;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkTrend;
+import io.github.chaotix345.rigtune.core.benchmark.GpuName;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
@@ -110,8 +111,8 @@ public final class BenchmarkConditions {
 				return new Graphics(null, null);
 			}
 			String backend = gpu.backend() == null || gpu.backend() == GraphicsBackend.UNKNOWN ? null : gpu.backend().name();
-			String renderer = gpu.renderer();
-			return new Graphics(backend, renderer == null || renderer.isBlank() || "unknown".equalsIgnoreCase(renderer.strip()) ? null : renderer.strip());
+			String renderer = GpuName.clean(gpu.renderer());
+			return new Graphics(backend, renderer == null || "unknown".equalsIgnoreCase(renderer) ? null : renderer);
 		}
 	}
 

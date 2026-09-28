@@ -310,10 +310,11 @@ amendment): Try It measures only in a settled game.
   TRY_IT notice's action) refuse until the player has been in this world and dimension for 60 s, with the status line
   "Try It measures better once the world has settled. Play for about a minute first (N s left)." The time is the local
   player's age: a join, a dimension change or a respawn creates a new `LocalPlayer` (checked in 26.2's
-  `ClientPacketListener.handleRespawn`), so each starts the minute again. It counts by the player's ticks or by the
-  clock since RigTune first saw that player (back-dated by its ticks then), whichever is further: a RigTune screen pauses
-  a singleplayer game (no entity ticks while paused, checked in `Minecraft.tick`) while the world keeps loading behind
-  it, so the count goes on with the screen open. No listener and no per-tick work: it's read when a screen asks. TryItScreen shows the line above the steps with Start or Measure now inactive (the line
+  `ClientPacketListener.handleRespawn`), so each starts the minute again. In singleplayer (not opened to LAN) it
+  counts the player's ticks only: a RigTune screen pauses the game and its integrated server (no entity ticks, checked
+  in `Minecraft.tick`; no chunk is sent), so paused time settles nothing (review R12FEAT-4; the first version also
+  counted the clock there). On a server, where nothing pauses, it counts by the ticks or by the clock since RigTune first
+  saw that player (back-dated by its ticks then), whichever is further. No listener and no per-tick work: it's read when a screen asks. TryItScreen shows the line above the steps with Start or Measure now inactive (the line
   is also the button's tooltip) and rebuilds once a second while it's shown, so the count goes down and the button comes
   back by itself; the notice's Measure now answers with the line as a toast. Preview's [Try it (measured)] isn't refused
   for it: the intro says why and how long.
@@ -363,3 +364,22 @@ Words: `rigtune.tryit.cause.terrain_loading`, `rigtune.tryit.note.unrecorded`, `
 | PERF-5 (L) | FIXED | 231a7c21 | `TryItNoticeSource.current()` returns before `controller.settingLabels()` while no try is open or its runs are under way (the same conditions `TryItText.notice` answers null for). No test: review. |
 | BENCH-6 (L) | FIXED | 231a7c21 (ws-b's 91d863d8 fixes the same lines; one of the two is enough) | BenchmarkController's current-world cancel branch (WS-B's file, marked "WS-T, review r11 BENCH-6"): a failed restore's overlay comes before `claimed(outcome)`, as `show()` puts its toast before the hook; the cancelled/throttled overlays are unchanged for unclaimed runs. No test: the overlay needs a game; review. |
 | COMPAT-2 | honoured, no code change (ws-b's, merged at 297ef412) | 0e4dc4c5 (fix/v05-r11-ws-t) | ws-b's `Difference.BACKEND`/`GPU` reach `TryItVerdict.causes` through `BenchmarkTrend.differences`: `TryItVerdictTest.anotherGraphicsBackendOrGpuMeansNoVerdict` (OpenGL/iGPU before, Vulkan/dGPU after: `Condition(BACKEND)`, NOT_COMPARABLE; same backend, another GPU: `Condition(GPU)`; a run without them: no cause; no setting's allowed differences include either) and `TryItTextTest.theGraphicsCausesAreNamed` ("graphics backend", "GPU") pass as they are. |
+
+## Review-12 fixes (branch `fix/v05-r12-ws-t`, from feat/v0.5.0 at ac109a2d)
+
+All lows. Test first where a unit test can reach it (the red messages: `expected: <50> but was: <20>`, `nothing applied
+==> expected: <0> but was: <1>`, `expected: not same` for the view, `recorded on the try ... expected: <true>`, and the
+ENTRY_MISSING line); the screen, toast and store changes are checked by the game tests and review.
+
+| id | fix | test |
+|---|---|---|
+| R12FEAT-2 | TryItScreen keeps the list's scroll and a focused footer button or the scene button across a rebuild, and the countdown rebuilds only when its text changes (a paused singleplayer game's doesn't) | `A11yGameTest.walkTryIt`: the intro with a settling controller, Tab to Cancel, 45 ticks (the countdown moves, so the screen was rebuilt), focus still on Cancel; screenshot `a11y-tryit-intro-settling-854x480-scale2` (looked at: Cancel framed, "(58 s left)") |
+| R12FEAT-3 | BenchmarkController (WS-B's file, marked): a claimed cancelled run with a failed restore gets show()'s toast (above screens); an unclaimed one keeps the original overlay. This replaces the r11 BENCH-6 overlay | review |
+| R12FEAT-4 | the settle count in singleplayer (not LAN) is the player's ticks only (`Game.pausesWithScreens`) | `TryItServiceTest.inSingleplayerOnlyUnpausedTimeCounts` |
+| R12FEAT-5 | a RESTART try whose before run's settle timed out stops before the change (CANCELLED) with "The terrain hadn't finished loading during the first measurement, so nothing was changed. Start the try again." | `aRestartTryWhoseBeforeRunDidntSettleStopsBeforeTheChange` |
+| R12FEAT-6 | BenchmarkStore (WS-B's file, marked) reads an unreadable benchmarks.json again, at most once a second, instead of keeping the failed load for the session | review (a failing read can't be made portably in a unit test) |
+| R12FEAT-7 | the BENCH-5 shape is recorded on the try (`unrecorded` in tryit.json, written only when true) and TryItText's ENTRY_MISSING line then says "History couldn't record this change (see the log), so it can't be reverted from here. It is applied." instead of "History no longer lists this change" (the in-memory note is gone) | `TryItTextTest.aChangeHistoryCouldntRecordSaysSo`, `aChangeHistoryCouldntRecordIsntCalledNotApplied` |
+| R12FEAT-8 | when pending.json's answer comes back "nothing waits" after "waiting" was answered for the changed file, the service publishes a new view; TryItScreen (the intro too) and Preview's Try it button (PreviewScreen, marked) rebuild on a new view | `aPendingAnswerThatClearsChangesTheView` |
+
+Before the push: the full build, and TryItGameTest and A11yGameTest locally on 26.2 under the game-test lock (both
+passed).

@@ -13,6 +13,7 @@ import io.github.chaotix345.rigtune.core.preview.ApplyPreview;
 import io.github.chaotix345.rigtune.core.report.LauncherModAdvice;
 import io.github.chaotix345.rigtune.core.tryit.Triable;
 import io.github.chaotix345.rigtune.core.tryit.TryItText;
+import io.github.chaotix345.rigtune.core.tryit.TryItView;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.ComponentPath;
@@ -69,6 +70,8 @@ public class PreviewScreen extends Screen {
 	private @Nullable Button saveOnlyButton;
 	private @Nullable Button cancelButton;
 	private @Nullable Button tryItButton;
+	// The Try it view the button's refusal was worked out with (WS-T, review R12FEAT-8: a new view rebuilds).
+	private @Nullable TryItView tryItView;
 	private @Nullable Component tryItTip;
 	private final Path gameDir = FabricLoader.getInstance().getGameDir();
 	private @Nullable ApplyPreview preview;
@@ -185,6 +188,7 @@ public class PreviewScreen extends Screen {
 		int gap = 4;
 		int buttonWidth = Math.min(120, (column - gap) / 2);
 		int x = (width - (buttonWidth * 2 + gap)) / 2;
+		tryItView = controller.tryIt();
 		Text refused = selected.size() == 1 ? controller.tryItRefusal(selected.getFirst()) : TryItText.refusal(Triable.Refusal.ONE, null);
 		tryItButton = addRenderableWidget(Button.builder(Component.translatable("rigtune.tryit.button"),
 				b -> minecraft.gui.setScreen(new TryItScreen(this, controller, selected.getFirst()))).bounds(x, top, buttonWidth, 20).build());
@@ -240,6 +244,16 @@ public class PreviewScreen extends Screen {
 				rebuildWidgets();
 			}
 		}));
+	}
+
+	// WS-T, review R12FEAT-8: Try It's view changed (e.g. pending.json read again: nothing waits), so the button's refusal
+	// is worked out again.
+	@Override
+	public void tick() {
+		super.tick();
+		if (tryItButton != null && controller.tryIt() != tryItView) {
+			rebuildWidgets();
+		}
 	}
 
 	@Override

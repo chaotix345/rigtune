@@ -765,16 +765,19 @@ public final class ApplyExecutor {
 		return new OpResult(op, Status.SKIPPED_ALREADY_DONE, "Already done earlier: " + done.moved().getFileName(), done.moved().toString());
 	}
 
-	// Undoes the renames, newest first, each with the full retry budget, and marks each one no longer in effect as not
-	// done in the record. False when one stays where the group put it.
+	// Undoes the renames, newest first, each with the full retry budget. Each is marked not done in the record before it's
+	// moved back, so a kill in between leaves it unproven (held), never done over a file that's back (review-12
+	// R12APPLY-4), and marked done again if it stays where the group put it. False when one does.
 	private boolean rollBack(List<Op> ops, List<Undo> undos, String reason, OpResult[] out, UnfinishedGroups unfinished, String group) {
 		boolean all = true;
 		for (int u = undos.size() - 1; u >= 0; u--) {
 			Undo undo = undos.get(u);
+			String op = ops.get(undo.index()).id();
+			unfinished.mark(group, op, false);
 			out[undo.index()] = rollback(ops.get(undo.index()), undo, reason);
 			boolean stuck = leftHalfApplied(out[undo.index()]);
-			if (!stuck) {
-				unfinished.mark(group, ops.get(undo.index()).id(), false);
+			if (stuck) {
+				unfinished.mark(group, op, true);
 			}
 			all &= !stuck;
 		}
