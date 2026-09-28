@@ -17,6 +17,7 @@ import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.benchmark.DhGeneration;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.history.Journal;
+import io.github.chaotix345.rigtune.core.history.JournalCache;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.model.Action;
@@ -86,8 +87,8 @@ public final class StutterFixService {
 	private volatile List<FixSpec> specs = List.of();
 	// Render thread.
 	private long lastRefresh;
-	// history.json (the tests stand in for it).
-	volatile Supplier<Journal.Snapshot> history = () -> ClientJournal.get().snapshot();
+	// history.json, one parse shared while the file is unchanged (review-11 PERF-2: JournalCache; the tests stand in for it).
+	volatile Supplier<Journal.Snapshot> history = () -> JournalCache.snapshot(ClientJournal.get());
 
 	// What an analysis needs from the render thread for the fixes: the rules' fix entries, whether another fix is staged
 	// or measuring, whether the store can be written, the live server limits, whether the capture ran around a benchmark,
