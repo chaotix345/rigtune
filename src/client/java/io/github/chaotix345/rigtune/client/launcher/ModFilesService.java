@@ -83,12 +83,17 @@ public final class ModFilesService {
 		return newsNotice(launcher.get());
 	}
 
-	// The notice itself (also the A11y walk's canned one).
+	// The notice itself (also the A11y walk's canned one). Review L9: where no launcher is named (a packwiz index alone), the
+	// detail promises no launcher steps, which only a named launcher gets.
 	public static Notice newsNotice(@Nullable LauncherInfo launcher) {
+		Text detail = LauncherModText.launcherName(launcher) != null
+				? Text.of("rigtune.launcher.mod_files.news.detail",
+						"Installing, updating and turning off mods now come with the launcher's own steps. Settings → Mod files lets RigTune change them anyway.")
+				: Text.of("rigtune.launcher.mod_files.news.detail.unnamed",
+						"Installing, updating and turning off mods are now left to your launcher. Settings → Mod files lets RigTune change them anyway.");
 		return new Notice(NEWS_KEY, NoticePriority.MOD_FILES_NEWS,
 				Text.of("rigtune.launcher.mod_files.news", "RigTune now leaves this instance's mod files to %s", LauncherModText.nameOrYours(launcher)),
-				Text.of("rigtune.launcher.mod_files.news.detail",
-						"Installing, updating and turning off mods now come with the launcher's own steps. Settings → Mod files lets RigTune change them anyway."),
+				detail,
 				List.of(new NoticeAction(NEWS_SETTINGS, Text.of("rigtune.launcher.mod_files.news.settings", "Settings…"))), true);
 	}
 

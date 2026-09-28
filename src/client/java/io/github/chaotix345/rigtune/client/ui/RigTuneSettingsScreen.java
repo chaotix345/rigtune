@@ -9,6 +9,7 @@ import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Goal;
 import io.github.chaotix345.rigtune.core.profile.ProfileStore;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.client.gui.ComponentPath;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -47,6 +48,8 @@ public class RigTuneSettingsScreen extends Screen {
 	private @Nullable CycleButton<Boolean> remoteRules;
 	private @Nullable CycleButton<Boolean> modrinth;
 	private @Nullable SettingsList list;
+	private @Nullable CycleButton<Boolean> modFiles;
+	private boolean showModFiles;
 
 	public RigTuneSettingsScreen(@Nullable Screen parent, RigTuneController controller) {
 		super(Component.translatable("rigtune.settings.title"));
@@ -142,10 +145,12 @@ public class RigTuneSettingsScreen extends Screen {
 			return;
 		}
 		Component launcher = Texts.component(LauncherModText.nameOrYours(controller.launcher()));
-		rows.add(CycleButton.builder((Boolean rigtune) -> rigtune ? Component.translatable("rigtune.settings.mod_files.rigtune")
+		Component tooltip = modFilesPending(controller.modFiles(), settings.modFilesByRigTune, controller.modFilesOptedIn())
+				? Component.translatable("rigtune.settings.mod_files.tooltip.pending") : Component.translatable("rigtune.settings.mod_files.tooltip");
+		modFiles = rows.add(CycleButton.builder((Boolean rigtune) -> rigtune ? Component.translatable("rigtune.settings.mod_files.rigtune")
 						: Component.translatable("rigtune.settings.mod_files.launcher", launcher), settings.modFilesByRigTune)
 				.withValues(false, true)
-				.withTooltip(v -> Tooltip.create(Component.translatable("rigtune.settings.mod_files.tooltip")))
+				.withTooltip(v -> Tooltip.create(tooltip))
 				.create(0, 0, column, ROW, Component.translatable("rigtune.settings.mod_files"), (b, v) -> {
 					settings.modFilesByRigTune = v;
 					save();
@@ -153,9 +158,39 @@ public class RigTuneSettingsScreen extends Screen {
 				}));
 	}
 
+	// v0.5 (docs/v0.5/SPEC.md 4b, review L15): MOD_FILES_NEWS's Settings… opens the screen on the Mod files row, focused and
+	// scrolled to (below the list's fold at 854x480).
+	public RigTuneSettingsScreen showingModFiles() {
+		showModFiles = true;
+		return this;
+	}
+
+	@Override
+	protected void setInitialFocus() {
+		SettingsList rows = list;
+		CycleButton<Boolean> row = modFiles;
+		if (showModFiles && rows != null && row != null) {
+			showModFiles = false;
+			for (SettingsList.Row entry : rows.children()) {
+				if (entry.children().contains(row)) {
+					changeFocus(ComponentPath.path(row, entry, rows, this));
+					rows.show(entry);
+					return;
+				}
+			}
+		}
+		super.setInitialFocus();
+	}
+
 	// The mod-files row's rule: the policy says the launcher keeps the mods (LAUNCHER, PENDING), or the opt-in is on.
 	static boolean showModFilesRow(ModFilesPolicy policy, boolean optIn) {
 		return optIn || policy.launcherManages();
+	}
+
+	// Review L9: while RigTune still checks which launcher it is (PENDING, or an opt-in not yet known to matter), the tooltip
+	// claims no launcher's list.
+	static boolean modFilesPending(ModFilesPolicy policy, boolean optIn, boolean optedIn) {
+		return optIn ? !optedIn : policy == ModFilesPolicy.PENDING;
 	}
 
 	// v0.5 PF-2 (WS-P): the battery offer on or off, so "Don't offer again" can be undone in game. It is profiles.json's
@@ -228,6 +263,10 @@ public class RigTuneSettingsScreen extends Screen {
 		void note(Component text) {
 			NoteRow row = new NoteRow(text, column);
 			addEntry(row, row.height());
+		}
+
+		void show(Row row) {
+			scrollToEntry(row);
 		}
 
 		public abstract static class Row extends ContainerObjectSelectionList.Entry<Row> {

@@ -764,8 +764,32 @@ public class A11yGameTest implements FabricClientGameTest {
 				settingsLayout(v05, size, false);
 			}
 			v05.resize(854, 480, 2);
-			tabUntilNarrates(context, "the Mod files row", "Mod files: Change them in the Modrinth App");
+			String row = tabUntilNarrates(context, "the Mod files row", "Mod files: Change them in the Modrinth App");
 			context.takeScreenshot("a11y-settings-mod-files-854x480-scale2");
+			// Review L16 (AC4e.1): the row's tooltip is the launcher-list warning, narrated with the row.
+			String tooltip = Component.translatable("rigtune.settings.mod_files.tooltip").getString();
+			check(tooltip.startsWith("Your launcher keeps its own list") && row.contains(tooltip), "the Mod files row's tooltip: " + row);
+
+			// Review L15: the news' Settings… opens the settings on the Mod files row, focused and inside the list, also where
+			// the list scrolls (the row is below the fold).
+			for (int[] size : List.of(new int[]{854, 480, 2}, V05TestContext.SCROLLING)) {
+				v05.resize(size[0], size[1], size[2]);
+				context.runOnClient(mc -> mc.gui.setScreen(new RigTuneSettingsScreen(new TitleScreen(), kept).showingModFiles()));
+				context.waitForScreen(RigTuneSettingsScreen.class);
+				context.waitTicks(2);
+				String shown = context.computeOnClient(mc -> {
+					RigTuneSettingsScreen.SettingsList rows = ((RigTuneSettingsScreen) mc.gui.screen()).list();
+					int focused = rows.focusedRow();
+					check(focused >= 0 && leafText(mc).startsWith("Mod files: "), "news → settings: the Mod files row has the focus: " + leafText(mc));
+					check(rows.getRowTop(focused) >= rows.getY() && rows.getRowBottom(focused) <= rows.getBottom(),
+							"news → settings: the Mod files row is inside the list at " + size[0] + "x" + size[1] + "@" + size[2]);
+					return "row " + focused + " of " + rows.children().size() + ", scroll " + rows.scrollAmount() + " of " + rows.maxScrollAmount()
+							+ ", GUI scale " + mc.getWindow().getGuiScale();
+				});
+				RigTune.LOGGER.info("A11yGameTest: news → settings at {}x{}@{}: {}", size[0], size[1], size[2], shown);
+				context.takeScreenshot("a11y-news-settings-" + size[0] + "x" + size[1] + "-scale" + size[2]);
+			}
+			v05.resize(854, 480, 2);
 
 			// 4b (AC4b.6): MOD_FILES_NEWS on NoticeScreen, its message and detail narrated.
 			kept.notices = List.of(ModFilesService.newsNotice(LauncherInfo.of(Launcher.MODRINTH_APP)));
@@ -903,6 +927,27 @@ public class A11yGameTest implements FabricClientGameTest {
 			check(rows.getRowTop(last) >= rows.getY() && rows.getRowBottom(last) <= rows.getBottom(), name + ": the last row is shown once scrolled");
 		});
 		context.takeScreenshot(shot + "-scrolled");
+		context.runOnClient(mc -> ((RigTuneSettingsScreen) mc.gui.screen()).list().setScrollAmount(0));
+		context.waitTicks(1);
+		if (!scrolls) {
+			return;
+		}
+		// X12 (WS-L1): at the scrolling size the list really scrolls, and the last row, once Tab focuses it, is fully shown.
+		int presses = 0;
+		int last = context.computeOnClient(A11yGameTest::rows) - 1;
+		while (context.computeOnClient(A11yGameTest::rowIndex) != last) {
+			check(presses++ < 40, name + ": Tab never reached the last row");
+			tab(context);
+		}
+		context.waitTicks(2);
+		String scale = context.computeOnClient(mc -> {
+			RigTuneSettingsScreen.SettingsList rows = ((RigTuneSettingsScreen) mc.gui.screen()).list();
+			check(rows.getRowTop(last) >= rows.getY() && rows.getRowBottom(last) <= rows.getBottom(), name + ": the focused last row is fully shown");
+			return "GUI scale " + mc.getWindow().getGuiScale() + ", max scroll " + rows.maxScrollAmount() + ", scroll " + rows.scrollAmount();
+		});
+		RigTune.LOGGER.info("A11yGameTest: {}: the list scrolls ({}); Tab to the last row shows it", name, scale);
+		context.takeScreenshot(shot + "-last-row-focused");
+		context.runOnClient(mc -> mc.gui.screen().clearFocus());
 		context.runOnClient(mc -> ((RigTuneSettingsScreen) mc.gui.screen()).list().setScrollAmount(0));
 		context.waitTicks(1);
 	}

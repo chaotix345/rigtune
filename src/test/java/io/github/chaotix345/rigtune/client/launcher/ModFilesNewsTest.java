@@ -35,6 +35,8 @@ class ModFilesNewsTest {
 		assertEquals(ModFilesService.NEWS_KEY, notice.key());
 		assertEquals(NoticePriority.MOD_FILES_NEWS, notice.priority());
 		assertEquals("RigTune now leaves this instance's mod files to the Modrinth App", notice.message().english());
+		assertEquals("Installing, updating and turning off mods now come with the launcher's own steps. Settings → Mod files lets RigTune change them anyway.",
+				notice.detail().english());
 		assertTrue(notice.dismissible());
 		assertEquals(List.of(ModFilesService.NEWS_SETTINGS), notice.actions().stream().map(a -> a.id()).toList());
 		assertEquals("Settings…", notice.actions().getFirst().label().english());
@@ -59,11 +61,14 @@ class ModFilesNewsTest {
 		assertNull(service.news(FirstRun.Status.RETURNING), "PENDING");
 	}
 
-	// A packwiz index under an unknown launcher: the launcher isn't named.
+	// A packwiz index under an unknown launcher: the launcher isn't named, and no launcher steps are promised (review L9).
 	@Test
 	void anUnnamedLauncher() {
 		launcher.set(LauncherInfo.UNKNOWN);
 		evidence.set(new InstanceEvidence(true));
-		assertEquals("RigTune now leaves this instance's mod files to your launcher", service.news(FirstRun.Status.RETURNING).message().english());
+		Notice notice = service.news(FirstRun.Status.RETURNING);
+		assertEquals("RigTune now leaves this instance's mod files to your launcher", notice.message().english());
+		assertEquals("Installing, updating and turning off mods are now left to your launcher. Settings → Mod files lets RigTune change them anyway.",
+				notice.detail().english());
 	}
 }

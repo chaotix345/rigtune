@@ -16,4 +16,13 @@ class ModFilesRowTest {
 		assertTrue(RigTuneSettingsScreen.showModFilesRow(ModFilesPolicy.RIGTUNE, true));
 		assertFalse(RigTuneSettingsScreen.showModFilesRow(ModFilesPolicy.RIGTUNE, false));
 	}
+
+	// Review L9: the PENDING tooltip names no launcher's list before detection answers, with or without the opt-in.
+	@Test
+	void theTooltipWaitsForTheLauncherCheck() {
+		assertTrue(RigTuneSettingsScreen.modFilesPending(ModFilesPolicy.PENDING, false, false));
+		assertFalse(RigTuneSettingsScreen.modFilesPending(ModFilesPolicy.LAUNCHER, false, false));
+		assertTrue(RigTuneSettingsScreen.modFilesPending(ModFilesPolicy.RIGTUNE, true, false), "opted in while the launcher isn't known yet");
+		assertFalse(RigTuneSettingsScreen.modFilesPending(ModFilesPolicy.RIGTUNE, true, true));
+	}
 }
