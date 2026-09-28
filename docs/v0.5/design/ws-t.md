@@ -249,10 +249,9 @@ AC6.12's own keys (`tryItTickNsPerCall`, `tryItTickAllocBytes`) go to the post-W
   README line "play a minute first" (Docs) covers it for 0.5; a later version could wait for the world to settle or run
   a warm-up pass before a CURRENT-scene before run. docs/v0.5/verification/try-it/README.md has the numbers.
 - **`TryItDevRun` in the jar** (Deviations): the coordinator's call whether it stays for the RC.
-- **UNVERIFIED by WS-T:** compat040 on the `ws-t` set (WS-E's harness; the set's `expect.json` is in place); the real
-  restart with a Distant Horizons or an Iris key (only Sodium ran for real; the other two are the same PATCH_JSON path in
-  the tests); REMOTE_SD on a real server (unit only); AC6.16 ran in the 854x480 development window, not full screen, and
-  in the development client, not the release jar.
+- **UNVERIFIED by WS-T:** the real restart with a Distant Horizons or an Iris key (only Sodium ran for real; the other
+  two are the same PATCH_JSON path in the tests); REMOTE_SD on a real server (unit only); AC6.16 ran in the 854x480
+  development window, not full screen, and in the development client, not the release jar.
 - **Tested by review only:** L10 (a Start whose tryit.json write fails: it needs a failing disk) and L11 (the notice
   without Measure now, Keep's toast: the notice line isn't clicked in a game test). M5's screen half runs in every
   Revert and Cancel try of TryItGameTest (`awaitStage` waits for the buttons' derive) but "inactive meanwhile" isn't
@@ -292,7 +291,7 @@ AC6.12's own keys (`tryItTickNsPerCall`, `tryItTickAllocBytes`) go to the post-W
 | AC6.8 | verified | `TryItFlowTest` (28); block 6 (Esc before: STOPPED_BEFORE, nothing journaled; Esc during the after: READY with Measure again, Keep, Revert) |
 | AC6.9 | verified | `BenchmarkHistoryTest` (the filter), block 3 |
 | AC6.10 | verified | `TryItStoreTest` (15), `V05StoreShellsTest`; review: Try It's own state is only in tryit.json (the pair is benchmarks.json's existing record, the change History's existing entry) |
-| AC6.11 | verified (compat040: WS-E) | `V050WrittenWsTTest` (0.2's BenchmarkHistory loads the pairs, 0.3's Journal/HistoryModel plan Undo this on the open try's entry); compat030 PASS with the released 0.3.0 jar; compat040 reads the set's `expect.json` when WS-E runs it |
+| AC6.11 | verified | `V050WrittenWsTTest` (0.2's BenchmarkHistory loads the pairs, 0.3's Journal/HistoryModel plan Undo this on the open try's entry); compat030 PASS with the released 0.3.0 jar; compat040 (WS-E's, merged at f4da3036, now in CI's java job) PASS with the released 0.4.0 jar over the composed sets, `ws-t`'s three checks included (Journal OK with 3 entries, HistoryModel 0 unknown kinds, UndoPlanner's Undo this on the open try's entry: 1 item, no problem), run locally after the merge |
 | AC6.12 | verified (own keys at the 1h checkpoint) | own END_CLIENT_TICK listener on a static volatile flag; `TryItServiceTest` (idle, 1,000,000 calls under the noise); TryItGameTest (0 bytes, ns per call logged, `idle()` checked first), 3 legs |
 | AC6.13 | verified | block 5 (the verdict screens at 640x480, 854x480, 1280x720 at scale 2 and 1280x720@3), `A11yGameTest.walkTryIt`; colours through `Palette.of` |
 | AC6.14 | verified | TryItGameTest on 3 legs, network off, no FPS number or live verdict kind asserted |
