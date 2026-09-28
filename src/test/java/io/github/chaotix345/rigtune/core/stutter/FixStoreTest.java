@@ -258,6 +258,24 @@ class FixStoreTest {
 		assertEquals(List.of("entry-1", now.plusSeconds(12 * 3600).toString()), ids(FixStore.shared(dir).records()));
 	}
 
+	// review-11 STUTTER-1: an appliedAt before FixStore.PAST (0.5 can't have applied a fix then) is skipped too: a far-past
+	// instant like Instant.MIN has no local date, and would throw where the block or the hold shows its day.
+	@Test
+	void anAppliedAtInTheFarPastIsSkipped() throws IOException {
+		assertTrue(store().add(FixTrackerTest.measuring()));
+		JsonObject root = onDisk();
+		JsonArray fixes = root.getAsJsonArray("fixes");
+		JsonObject good = fixes.get(0).getAsJsonObject();
+		for (String when : List.of("-1000000000-01-01T00:00:00Z", "-1000000000-06-01T00:00:00Z", "1999-12-31T23:59:59Z", "2000-01-01T00:00:00Z")) {
+			JsonObject copy = good.deepCopy();
+			copy.addProperty("entryId", when);
+			copy.addProperty("appliedAt", when);
+			fixes.add(copy);
+		}
+		write(root.toString());
+		assertEquals(List.of("entry-1", "2000-01-01T00:00:00Z"), ids(FixStore.shared(dir).records()));
+	}
+
 	// from and to must be values of the key (ShareKeys): a hand-edited "1e99999999" or "NEVER" drops the record.
 	@Test
 	void fromAndToMustBeValuesOfTheKey() throws IOException {

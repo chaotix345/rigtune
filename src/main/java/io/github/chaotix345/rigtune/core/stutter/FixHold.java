@@ -20,8 +20,13 @@ import java.util.List;
 // target. holds() gives a hold only while the fix's change is in effect, and none once its comparison found more stutter
 // (the main list may then recommend going back).
 public final class FixHold {
-	// The fix moved key from `from` to `to`, applied on appliedOn (yyyy-MM-dd).
-	public record Hold(String key, String from, String to, String appliedOn) {
+	// The fix moved key from `from` to `to`, applied on appliedOn (yyyy-MM-dd). staged: it takes effect at the next restart,
+	// so the files still read `from`; any other hold stands only while the key's current value is `to` (review-11
+	// STUTTER-8: changed by hand since, the value the hold protects isn't in effect).
+	public record Hold(String key, String from, String to, String appliedOn, boolean staged) {
+		public Hold(String key, String from, String to, String appliedOn) {
+			this(key, from, to, appliedOn, false);
+		}
 	}
 
 	private FixHold() {
@@ -39,7 +44,7 @@ public final class FixHold {
 				case UNDONE, NOT_APPLIED, REPLACED -> false;
 			};
 			if (inEffect) {
-				out.add(new Hold(r.key(), r.from(), r.to(), r.appliedAt().atZone(zone).toLocalDate().toString()));
+				out.add(new Hold(r.key(), r.from(), r.to(), FixText.day(r.appliedAt(), zone), r.state() == FixTracker.State.STAGED));
 			}
 		}
 		return out;
@@ -69,7 +74,7 @@ public final class FixHold {
 			return r;
 		}
 		for (Hold hold : holds) {
-			if (hold.key().equals(set.key()) && away(set.newValue(), hold)) {
+			if (hold.key().equals(set.key()) && (hold.staged() || SettingValues.same(set.currentValue(), hold.to())) && away(set.newValue(), hold)) {
 				Text reason = Text.join(" ", r.reasonText(), Text.of("rigtune.stutter.fix.hold_reason",
 						"You set this on %s with the Stutter Doctor's fix; changing it here undoes that fix.", hold.appliedOn()));
 				return Recommendation.of(r.id(), r.category(), r.impact(), r.titleText(), reason, r.action(), false);

@@ -354,3 +354,12 @@ first against skeletons that compiled but didn't act (the red messages below), t
 
 Words: `rigtune.tryit.cause.terrain_loading`, `rigtune.tryit.note.unrecorded`, `.note.fresh_world`, `.note.dh_generating`;
 `stage.history_unreadable` and `notice.history` reworded (92 keys in the block now).
+
+## Review-11 fixes, second batch (the same branch, after its first merge at 4bab7742)
+
+| id | result | commit | test that failed first / evidence |
+|---|---|---|---|
+| APPLY-4 (M) | FIXED | 24946fa8 | `TryItServiceTest.onlyChangesTheNextExitAppliesMakeARestartTryWait`: with only held mod-file ops in pending.json a Sodium try was refused "Other changes are waiting for a restart" (red: `expected: <null> but was: <Translatable[key=rigtune.tryit.refused.pending ...]>`). Now Triable's PENDING is "the next exit would apply something": pending.json's ops minus `ApplyExecutor.held` when `HelperLauncher.holds(policy)`. The render thread only stats the file (its time, size and the policy are the cache key); the read runs on the chain, at each derive and after the stat shows a change; until then a changed file counts as waiting (never a wrong "go"). An unreadable pending.json counts as waiting. |
+| PERF-5 (L) | FIXED | 231a7c21 | `TryItNoticeSource.current()` returns before `controller.settingLabels()` while no try is open or its runs are under way (the same conditions `TryItText.notice` answers null for). No test: review. |
+| BENCH-6 (L) | FIXED | 231a7c21 | BenchmarkController's current-world cancel branch (WS-B's file, marked "WS-T, review r11 BENCH-6"): a failed restore's overlay comes before `claimed(outcome)`, as `show()` puts its toast before the hook; the cancelled/throttled overlays are unchanged for unclaimed runs. No test: the overlay needs a game; review. |
+| COMPAT-2 | nothing to change (ws-b's, not merged yet) | | ws-b adds `Difference.BACKEND` and `GPU` to `BenchmarkTrend.differences`, which `TryItVerdict.causes` already turns into `Condition(...)` causes (NOT_COMPARABLE, named by `TrendText.difference`: "graphics backend", "GPU"); `Triable.allowed` never lists them. A Try It test (an OpenGL/iGPU before and a Vulkan/dGPU after) can follow once their branch is on feat. |

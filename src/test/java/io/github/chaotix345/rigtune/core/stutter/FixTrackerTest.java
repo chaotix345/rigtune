@@ -82,6 +82,27 @@ class FixTrackerTest {
 		assertEquals(s, new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), s.atStart(), s.atEnd(), false), "not idle by default");
 	}
 
+	// review-11 STUTTER-7: a session whose start or end snapshot lacks the fixed key (its file unreadable at that moment, e.g.
+	// mid-write) is skipped, not taken as "replaced": nothing says the key changed.
+	@Test
+	void aKeyMissingFromASnapshotIsUnknownNotReplaced() {
+		FixTracker.SessionEnd s = session(60, 400, 10, RD, "10");
+		Map<String, String> without = new LinkedHashMap<>(s.atEnd().settings());
+		without.remove(RD);
+		FixConditions end = s.atEnd();
+		FixConditions unread = new FixConditions(end.mc(), end.modSetHash(), end.heapMaxMb(), end.collector(), end.width(), end.height(), end.fullscreen(),
+				end.world(), end.phaseTiming(), end.gcMeasured(), without);
+		FixTracker.Record r = advance(measuring(), journal(RD, JournalChange.APPLIED),
+				new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), s.atStart(), unread, false), at(60));
+		assertEquals(FixTracker.State.MEASURING, r.state(), "not replaced: " + r);
+		assertNull(r.after());
+		assertEquals(1, r.skipped());
+		r = advance(measuring(), journal(RD, JournalChange.APPLIED), new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), unread, s.atEnd(),
+				false), at(60));
+		assertEquals(FixTracker.State.MEASURING, r.state(), "at the start either: " + r);
+		assertEquals(1, r.skipped());
+	}
+
 	// C20 review L12: a fix that expired because its journal entry is gone has nothing left to undo; one that expired by
 	// age keeps its Undo; undone and not-applied fixes have none.
 	@Test

@@ -1,14 +1,21 @@
 package io.github.chaotix345.rigtune.client;
 
+import io.github.chaotix345.rigtune.client.launcher.ModFilesService;
 import io.github.chaotix345.rigtune.core.apply.PendingActions;
+import io.github.chaotix345.rigtune.core.awareness.AwarenessStore;
 import io.github.chaotix345.rigtune.core.history.FirstRun;
 import io.github.chaotix345.rigtune.core.history.Journal;
+import io.github.chaotix345.rigtune.core.launcher.Launcher;
+import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
+import io.github.chaotix345.rigtune.core.notice.Notice;
+import io.github.chaotix345.rigtune.core.notice.NoticeBoard;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -60,6 +67,35 @@ class FirstRunServiceTest {
 		assertFalse(service.firstApplyPending());
 	}
 
+	// Review-11 FEAT-1: a NEW read stores MOD_FILES_NEWS's dismissal; after the first Apply loadedStatus() still says NEW,
+	// and the next launch (RETURNING from this one's records) keeps the news hidden. A returning read stores nothing.
+	@Test
+	void aNewPlayerNeverGetsTheModFilesNews(@TempDir Path configDir) {
+		FirstRunService first = new FirstRunService(null, key -> FirstRunService.keepDismissed(configDir, key));
+		first.load(() -> true);
+		assertEquals(FirstRun.Status.NEW, first.loadedStatus());
+		assertTrue(AwarenessStore.shared(configDir).dismissed().contains(ModFilesService.NEWS_KEY));
+		first.applied(facts());
+		assertEquals(FirstRun.Status.RETURNING, first.status());
+		assertEquals(FirstRun.Status.NEW, first.loadedStatus(), "the news goes by what load() read");
+
+		FirstRunService next = new FirstRunService(null, key -> FirstRunService.keepDismissed(configDir, key));
+		next.load(() -> false);
+		assertEquals(FirstRun.Status.RETURNING, next.loadedStatus());
+		Notice news = ModFilesService.newsNotice(LauncherInfo.of(Launcher.MODRINTH_APP));
+		assertEquals(List.of(), NoticeBoard.select(List.of(news), AwarenessStore.shared(configDir).dismissed()).visible(), "not at the next launch either");
+	}
+
+	@Test
+	void aReturningReadStoresNoDismissal() {
+		List<String> dismissed = new ArrayList<>();
+		FirstRunService service = new FirstRunService(null, dismissed::add);
+		service.load(() -> false);
+		assertEquals(FirstRun.Status.RETURNING, service.loadedStatus());
+		service.applied(facts());
+		assertEquals(List.of(), dismissed);
+	}
+
 	// An Apply before the (slow) load finished: the load mustn't make a new player of them again.
 	@Test
 	void aLoadAfterAnApplyStaysReturning() {
@@ -68,6 +104,7 @@ class FirstRunServiceTest {
 		service.load(() -> true);
 		assertEquals(FirstRun.Status.RETURNING, service.status());
 		assertFalse(service.firstApplyPending());
+		assertEquals(FirstRun.Status.UNKNOWN, service.loadedStatus(), "no news in a session whose load came after an Apply");
 	}
 
 	@Test

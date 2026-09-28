@@ -92,6 +92,59 @@ class BenchmarkTrendTest {
 		assertEquals(Kind.TOO_FEW, BenchmarkTrend.assess(latest, runs).kind());
 	}
 
+	// review-11 COMPAT-2: the graphics backend (26.3's OpenGL or Vulkan, chosen in Video Settings or by its own fallback)
+	// and the GPU (a hybrid laptop's iGPU or dGPU) are conditions: two runs that differ in either aren't compared. The GPU
+	// is named only on the same backend (a device's name reads differently under OpenGL and Vulkan); a run that didn't
+	// record them (0.4, or a probe that failed) claims nothing.
+	private static final String IGPU = "Intel(R) UHD Graphics 620";
+	private static final String DGPU_GL = "NVIDIA GeForce RTX 3050 Laptop GPU/PCIe/SSE2";
+	private static final String DGPU_VK = "NVIDIA GeForce RTX 3050 Laptop GPU";
+
+	@Test
+	void compat2AnotherBackendOrGpuIsNotComparable() {
+		BenchmarkRecord glIgpu = TrendFixtures.run("a").graphics("OPENGL", IGPU).build();
+		BenchmarkRecord vkDgpu = TrendFixtures.run("b").graphics("VULKAN", DGPU_VK).build();
+		BenchmarkRecord glDgpu = TrendFixtures.run("c").graphics("OPENGL", DGPU_GL).build();
+		assertEquals(List.of(Difference.BACKEND), BenchmarkTrend.differences(glIgpu, vkDgpu));
+		assertFalse(BenchmarkTrend.comparable(glIgpu, vkDgpu));
+		assertEquals(List.of(Difference.GPU), BenchmarkTrend.differences(glIgpu, glDgpu));
+		assertEquals(List.of(), BenchmarkTrend.differences(glDgpu, TrendFixtures.run("d").graphics("OPENGL", DGPU_GL.toLowerCase()).build()));
+		assertTrue(BenchmarkTrend.comparable(TrendFixtures.run("old").build(), vkDgpu), "a 0.4 run records neither");
+		assertTrue(BenchmarkTrend.comparable(TrendFixtures.run("e").graphics(null, null).build(), glIgpu));
+		assertEquals(List.of(Difference.GPU), BenchmarkTrend.differences(TrendFixtures.run("f").graphics(null, IGPU).build(), glDgpu),
+				"an unknown backend: the GPU still counts");
+	}
+
+	// The finding's scenario for the trend (and Try It, which reads differences): OpenGL runs, then one on Vulkan that is
+	// 40 % faster: no improvement is claimed, "different conditions (graphics backend)" is.
+	@Test
+	void compat2AVulkanRunAfterOpenGlRunsGetsNoVerdict() {
+		List<BenchmarkRecord> runs = new ArrayList<>();
+		for (int i = 0; i < 3; i++) {
+			runs.add(TrendFixtures.run("r" + i).at("2026-09-2" + i + "T10:00:00Z").low(500).graphics("OPENGL", IGPU).build());
+		}
+		BenchmarkRecord vulkan = TrendFixtures.run("latest").at("2026-09-29T10:00:00Z").low(700).graphics("VULKAN", DGPU_VK).build();
+		runs.add(vulkan);
+		Assessment a = BenchmarkTrend.assess(vulkan, runs);
+		assertEquals(Kind.DIFFERENT_CONDITIONS, a.kind());
+		assertEquals(List.of(Difference.BACKEND), a.differences());
+		// Benchmark history shows the runs comparable with the newest one: the others are "not shown".
+		BenchmarkTrend.View view = BenchmarkTrend.view(runs, null, null);
+		assertEquals(1, view.comparableRuns());
+		assertEquals(3, view.otherRuns());
+		assertEquals(List.of("latest"), view.points().stream().map(BenchmarkRecord::id).toList());
+	}
+
+	@Test
+	void compat2TheRerunMarkerNamesABackendOrGpuChange() {
+		BenchmarkRecord last = TrendFixtures.run("a").graphics("OPENGL", IGPU).build();
+		assertEquals(List.of(Difference.BACKEND), BenchmarkTrend.stale(last, new Current("26.2", 12, 8, 2560, 1440, false, false, null, false, "hash-a",
+				"VULKAN", DGPU_VK)));
+		assertEquals(List.of(Difference.GPU), BenchmarkTrend.stale(last, new Current("26.2", 12, 8, 2560, 1440, false, false, null, false, "hash-a",
+				"OPENGL", DGPU_GL)));
+		assertEquals(List.of(), BenchmarkTrend.stale(last, NOW), "unknown now: nothing claimed");
+	}
+
 	@Test
 	void medianOfOddAndEvenCounts() {
 		assertEquals(505, BenchmarkTrend.median(510, 490, 505));

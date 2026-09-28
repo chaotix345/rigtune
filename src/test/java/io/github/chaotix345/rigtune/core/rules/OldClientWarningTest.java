@@ -83,8 +83,9 @@ class OldClientWarningTest {
 				&& io.github.chaotix345.rigtune.v040.core.rules.ConditionEvaluator.matches(rule.when, ctx);
 	}
 
+	// The condition on the current evaluator, under another id: the current parser drops the warning's own id (SEC-3).
 	static boolean current(String when, String rigtune) {
-		var rule = RulesLoader.parse(doc(when)).advice.getFirst();
+		var rule = RulesLoader.parse(doc(when).replace(ID, "condition-probe")).advice.getFirst();
 		var ctx = new EvalContext(hardware(), GPU, TIER, Goal.BALANCED, versions(rigtune).keySet(), versions(rigtune), new SettingsSnapshot(Map.of()));
 		return Recommender.supported(rule.requires) && ConditionEvaluator.matches(rule.when, ctx);
 	}
@@ -111,14 +112,17 @@ class OldClientWarningTest {
 		assertFalse(v030(WHEN, null));
 	}
 
+	// The bundled rule, as 0.4.0 reads it, is the reach-tested one; this client never keeps it (review-11 SEC-3).
 	@Test
 	void theBundledRuleIsTheReachTestedOne() {
-		RulesDocument rules = RulesLoader.loadBundled();
-		RulesDocument.AdviceRule rule = rules.advice.stream().filter(a -> ID.equals(a.id)).findFirst().orElseThrow();
+		var rule = io.github.chaotix345.rigtune.v040.core.rules.V040Parser.parse(bundledJson()).advice.stream().filter(a -> ID.equals(a.id))
+				.findFirst().orElseThrow();
 		assertEquals(Map.of("rigtune", "<0.5.0-"), rule.when.modVersion);
 		assertTrue(rule.when.unknownFields == null || rule.when.unknownFields.isEmpty());
 		assertNull(rule.requires, "no feature: 0.2.0-0.4.0 must not skip it");
 		assertEquals("warning", rule.kind);
+		assertTrue(RulesLoader.OLD_CLIENT_ADVICE.contains(ID));
+		assertTrue(RulesLoader.loadBundled().advice.stream().noneMatch(a -> ID.equals(a.id)));
 		JsonObject json = advice(bundledJson(), ID);
 		assertEquals(Set.of("id", "when", "kind", "impact", "title", "text"), json.keySet());
 		assertEquals(JsonParser.parseString(WHEN), json.get("when"));
@@ -127,7 +131,8 @@ class OldClientWarningTest {
 		assertTrue(legacy.when.unknownFields == null || legacy.when.unknownFields.isEmpty(), "0.2.0/0.3.0 know every key of it");
 	}
 
-	// Through the whole main list: an old client gets the warning, a 0.5 client's list is the same with and without the rule.
+	// Through the whole main list: a 0.5 client's list is the same with and without the rule and never has the warning,
+	// whatever version string the scan reports (the old clients' reach is theConditionReachesExactlyTheReleasedOldClients).
 	@Test
 	void aFiveClientsMainListIsUnchanged() {
 		RulesDocument rules = RulesLoader.loadBundled();
@@ -147,7 +152,7 @@ class OldClientWarningTest {
 							recommend(rules, hw, version, goal).stream().map(Recommendation::toString).toList(), version + " " + goal);
 				}
 				for (String version : V040) {
-					assertTrue(recommend(rules, hw, version, goal).stream().anyMatch(r -> r.id().equals("advice:" + ID)), version);
+					assertFalse(recommend(rules, hw, version, goal).stream().anyMatch(r -> r.id().equals("advice:" + ID)), version);
 				}
 			}
 		}

@@ -1,5 +1,6 @@
 package io.github.chaotix345.rigtune.client.launcher;
 
+import io.github.chaotix345.rigtune.client.FirstRunService;
 import io.github.chaotix345.rigtune.core.history.FirstRun;
 import io.github.chaotix345.rigtune.core.launcher.InstanceEvidence;
 import io.github.chaotix345.rigtune.core.launcher.Launcher;
@@ -42,6 +43,18 @@ class ModFilesNewsTest {
 		assertEquals("Settings…", notice.actions().getFirst().label().english());
 		assertEquals(List.of(notice), NoticeBoard.select(List.of(notice), Set.of()).visible());
 		assertEquals(List.of(), NoticeBoard.select(List.of(notice), Set.of(ModFilesService.NEWS_KEY)).visible(), "not again once dismissed");
+	}
+
+	// Review-11 FEAT-1: a player new to RigTune is RETURNING after their first Apply, but never a 0.4 upgrader: the news
+	// stays away in that session (the notice source asks with what load() read; the red run asked with status()).
+	@Test
+	void aNewPlayersFirstApplyDoesntBringTheNews() {
+		FirstRunService firstRun = new FirstRunService(null);
+		firstRun.forceStatusForTests(FirstRun.Status.NEW);
+		assertNull(service.news(firstRun.loadedStatus()));
+		firstRun.applied(null);
+		assertEquals(FirstRun.Status.RETURNING, firstRun.status());
+		assertNull(service.news(firstRun.loadedStatus()), "a new player's first Apply shows the 0.4-upgrade news");
 	}
 
 	@Test

@@ -4,6 +4,7 @@ import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.model.Text;
 import org.jspecify.annotations.Nullable;
 
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
@@ -58,7 +59,10 @@ public final class FixText {
 					"The measurements don't point at this clearly enough for a one-click fix; the advice above still applies.");
 			case BENCHMARK -> Text.of("rigtune.stutter.fix.not_yet.benchmark", "One-click fixes are offered for your own play sessions, not for benchmark runs.");
 			case EXCLUDED -> Text.of("rigtune.stutter.fix.not_yet.excluded",
-					"This session ran around a benchmark or while Distant Horizons generated terrain, so it can't be compared. Play a session without either.");
+					"This session ran around a benchmark, or Distant Horizons generated terrain in it (or RigTune couldn't tell), so it can't be compared."
+							+ " Play a session without either.");
+			case CHANGED -> Text.of("rigtune.stutter.fix.not_yet.changed",
+					"Settings or the window changed during this session (or RigTune couldn't tell), so it can't be compared. Play a session without changes.");
 			case IDLE -> Text.of("rigtune.stutter.fix.not_yet.idle",
 					"This session was idle (throttled) longer than it was played, so it can't be compared. Play a session without long breaks.");
 			case SERVER -> Text.of("rigtune.stutter.fix.not_yet.server", "This server sends at most %s chunks, so a shorter render distance would change nothing here.",
@@ -114,8 +118,13 @@ public final class FixText {
 		return Text.of("rigtune.stutter.fix.change", "%s, applied %s", change(labels, r.key(), r.from(), r.to()), day(r.appliedAt(), zone));
 	}
 
+	// The local day; "?" for an instant outside the zone's range (a hand edit), as TrendText.date does.
 	static String day(Instant at, ZoneId zone) {
-		return at.atZone(zone).toLocalDate().toString();
+		try {
+			return at.atZone(zone).toLocalDate().toString();
+		} catch (DateTimeException e) {
+			return "?";
+		}
 	}
 
 	// Where the fix is: waiting for a restart, measuring (play so far of the play needed), or how it ended. A compared fix's
@@ -152,7 +161,10 @@ public final class FixText {
 			return Text.of("rigtune.stutter.fix.skip.short", "it was shorter than 2 minutes");
 		}
 		if (FixTracker.EXCLUDED.equals(skip.reason())) {
-			return Text.of("rigtune.stutter.fix.skip.excluded", "it ran around a benchmark or while Distant Horizons generated terrain");
+			return Text.of("rigtune.stutter.fix.skip.excluded", "it ran around a benchmark, or Distant Horizons generated terrain in it (or RigTune couldn't tell)");
+		}
+		if (FixTracker.UNREAD.equals(skip.reason())) {
+			return Text.of("rigtune.stutter.fix.skip.unread", "RigTune couldn't read %s at its start or end", labels.label(arg(a, 0)));
 		}
 		if (FixTracker.IDLE.equals(skip.reason())) {
 			return Text.of("rigtune.stutter.fix.skip.idle", "it was idle (throttled) longer than it was played");
@@ -195,7 +207,7 @@ public final class FixText {
 				whole(v.lostAfterPerMinute()));
 	}
 
-	// Every verdict names both rates; "more" leaves the Undo to the player.
+	// Every verdict names both rates; "more" leaves the Undo to the player. "No clear change" says why (STUTTER-5).
 	public static Text verdict(FixComparison.Verdict v) {
 		String after = decimal(v.afterPerMinute());
 		String before = decimal(v.beforePerMinute());
@@ -203,9 +215,17 @@ public final class FixText {
 			case LESS -> Text.of("rigtune.stutter.fix.verdict.less",
 					"Less stutter after the change: %s hitches a minute (was %s). Play sessions differ, so this is a measured comparison, not proof.", after,
 					before);
-			case SAME -> Text.of("rigtune.stutter.fix.verdict.same",
-					"No clear change: %s hitches a minute (was %s). The difference is within how much play sessions vary. Keep the change or undo it.", after,
-					before);
+			case SAME -> v.fewerHitchesMoreLost()
+					? Text.of("rigtune.stutter.fix.verdict.same_more_lost",
+							"No clear improvement: %s hitches a minute (was %s), but more time lost to stutter (%s ms a minute, was %s). Keep the change or undo it.",
+							after, before, whole(v.lostAfterPerMinute()), whole(v.lostBeforePerMinute()))
+					: v.clearButSmall()
+					? Text.of("rigtune.stutter.fix.verdict.same_small",
+							"A small change: %s hitches a minute (was %s). Measurable, but too small to call better or worse. Keep the change or undo it.", after,
+							before)
+					: Text.of("rigtune.stutter.fix.verdict.same",
+							"No clear change: %s hitches a minute (was %s). The difference is within how much play sessions vary. Keep the change or undo it.",
+							after, before);
 			case MORE -> Text.of("rigtune.stutter.fix.verdict.more",
 					"More stutter after the change: %s hitches a minute (was %s). It may be unrelated, since sessions vary; if it stays worse, undo the change.",
 					after, before);

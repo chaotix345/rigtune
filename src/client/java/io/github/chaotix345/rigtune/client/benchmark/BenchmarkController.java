@@ -219,7 +219,8 @@ public final class BenchmarkController {
 		this.yaw = player.getYRot();
 		this.pitch = player.getXRot();
 		this.wasFlying = player.getAbilities().flying;
-		this.context = withJournal(context(minecraft, original)).withWorldFresh(worldFresh(request));
+		BenchmarkConditions.Graphics graphics = BenchmarkConditions.Graphics.current();
+		this.context = withJournal(context(minecraft, original)).withWorldFresh(worldFresh(request)).withGraphics(graphics.backend(), graphics.gpu());
 	}
 
 	// What else shapes the numbers, as the run starts (docs/v0.3/SPEC.md 8, the `context` of a benchmarks.json run).
@@ -681,12 +682,16 @@ public final class BenchmarkController {
 			return;
 		}
 		if (outcome.cancelled()) {
+			// WS-T, review r11 BENCH-6: a failed restore is said before Try It may claim the run (as show() puts its toast
+			// before the hook).
+			if (!outcome.restoreOk() && minecraft.player != null) {
+				minecraft.player.sendOverlayMessage(Component.translatable("rigtune.benchmark.cancelled.restore_failed"));
+			}
 			if (claimed(outcome)) {
 				return;
 			}
-			if (minecraft.player != null) {
-				minecraft.player.sendOverlayMessage(Component.translatable(!outcome.restoreOk() ? "rigtune.benchmark.cancelled.restore_failed"
-						: outcome.throttled() ? "rigtune.benchmark.throttled" : "rigtune.benchmark.cancelled"));
+			if (outcome.restoreOk() && minecraft.player != null) {
+				minecraft.player.sendOverlayMessage(Component.translatable(outcome.throttled() ? "rigtune.benchmark.throttled" : "rigtune.benchmark.cancelled"));
 			}
 			return;
 		}
