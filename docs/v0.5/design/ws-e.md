@@ -205,6 +205,26 @@ Each Apply's outcome is the status line its downloads leave (`pinStatus`/`addSta
 
 The fabric client gametest API is the same too: `createServer(Properties)`, `clickScreenButton`, `setScreen` in 6.0.2 (26.2) and 6.0.7/6.0.8 (26.3).
 
+## Review round 3 (test/v05-e2e-2: 0 H, 4 M, 8 L; the coordinator's decisions): all fixed in ee6c9470
+
+- **M2** (first): the DH run's server loads only copies in the run's folder (`server-mods/`), never a jar handed in from a
+  player's instance, so `kill_own` matches the server too. The committed runs' jars were scratch copies anyway: the
+  player's instance was only read, once, to make them.
+- **M1:** the client quitting after the last phase's /stop isn't an error; the server gets `SERVER_STOP`.
+- **M3:** `dismissedContains` needs 0.4.0 to have written the file: its digest changed and it holds `compat040.more-9`.
+  Proven both ways: a copy too large for 0.4.0 to write now fails, where the file half used to pass on the unchanged file.
+- **M4:** the read-back check compares a record (tryit.json's `current`) by its id.
+- **L5-L7:** the hand-over's stage checks the journal's changes STAGED, the FAILED cause naming the installed jar, and the
+  download's sha512 against the served jar; verify checks the enabled jar's. A local 26.2 run passed with them
+  (`2026-09-28-handover-26.2-r3-RESULT.md`).
+- **L8:** tests for prepare_handover, held_paths, the stage's updateId, and the DH run's copies, kill_own, last phase and
+  lock.
+- **L9:** the driver's join timeout applies on any screen.
+- **L10:** the view distances (16/6/6) are recorded and checked; the F3 shots are committed; `limited` got 240 s like
+  `dhserver`, and the rerun showed the same pictures.
+- **L11:** dh_server_note takes the game-test lock itself.
+- **L12:** RESULT's Rescan line lists every phase; the ws-e.md fixes; DESIGN.md:370 is in the docs hand-off.
+
 ## Review-11 fixes (reviews/r11-CI.md, r11-SEC.md, r11-COMPAT.md; on test/v05-e2e-2)
 
 | id | outcome | commit | the test that failed first |
