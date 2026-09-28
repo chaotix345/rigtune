@@ -66,6 +66,7 @@ public class PreviewScreen extends Screen {
 	private @Nullable Button saveOnlyButton;
 	private @Nullable Button cancelButton;
 	private @Nullable Button tryItButton;
+	private @Nullable Component tryItTip;
 	private final Path gameDir = FabricLoader.getInstance().getGameDir();
 	private @Nullable ApplyPreview preview;
 	private boolean started;
@@ -185,13 +186,18 @@ public class PreviewScreen extends Screen {
 		tryItButton = addRenderableWidget(Button.builder(Component.translatable("rigtune.tryit.button"),
 				b -> minecraft.gui.setScreen(new TryItScreen(this, controller, selected.getFirst()))).bounds(x, top, buttonWidth, 20).build());
 		tryItButton.active = refused == null;
-		tryItButton.setTooltip(Tooltip.create(Texts.component(refused != null ? refused : TryItText.explain())));
+		tryItTip = Texts.component(refused != null ? refused : TryItText.explain());
+		tryItButton.setTooltip(Tooltip.create(tryItTip));
 		addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> onClose()).bounds(x + buttonWidth + gap, top, buttonWidth, 20).build());
 	}
 
-	// v0.5 (C09): the plain Preview's Try it button (null in the Confirm mode).
+	// v0.5 (C09): the plain Preview's Try it button (null in the Confirm mode) and its tooltip.
 	public @Nullable Button tryItButton() {
 		return tryItButton;
+	}
+
+	public @Nullable Component tryItTooltip() {
+		return tryItTip;
 	}
 
 	// Apply (only once there's something to apply) / Save only / Cancel, in one row.

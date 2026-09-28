@@ -476,8 +476,9 @@ public final class TryItService {
 		return service != null && service.running();
 	}
 
-	// END_CLIENT_TICK (render thread). Without a try between or inside its runs: one volatile read, nothing allocated.
-	static void tick(Minecraft minecraft) {
+	// END_CLIENT_TICK (render thread). Without a try between or inside its runs: one volatile read, nothing allocated
+	// (public for TryItGameTest's timing of the idle call).
+	public static void tick(Minecraft minecraft) {
 		if (!active) {
 			return;
 		}
