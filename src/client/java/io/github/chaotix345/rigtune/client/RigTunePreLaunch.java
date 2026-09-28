@@ -4,6 +4,7 @@ import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.client.undo.HistoryStartup;
 import io.github.chaotix345.rigtune.client.undo.StaleGroups;
+import io.github.chaotix345.rigtune.core.apply.ApplyExecutor;
 import io.github.chaotix345.rigtune.core.apply.ApplyLock;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.apply.InstanceDirs;
@@ -21,6 +22,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +35,7 @@ import java.util.stream.Stream;
 public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 	private static volatile @Nullable ApplyResult unseenResult;
 	private static volatile int leftoverOps;
+	private static volatile int leftoverFileOps;
 	// The ids of staged ops that can never run (readState), whose old failures warnOnce doesn't replay.
 	static volatile Set<String> staleOps = Set.of();
 	private static volatile boolean helperBusy;
@@ -122,17 +125,22 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 
 	private static void readState(Path configDir, boolean stillRunning) {
 		readState(configDir, stillRunning, ClientState.shared(configDir).lastShownApply,
-				() -> StaleGroups.loadedFrom(FabricLoader.getInstance().getAllMods()));
+				() -> StaleGroups.loadedFrom(FabricLoader.getInstance().getAllMods()), line -> RigTune.LOGGER.warn(line));
 	}
 
 	// Every staged op counted, stale or not (0.4's count).
 	static void readState(Path configDir, boolean stillRunning, @Nullable String lastShownApply) {
-		readState(configDir, stillRunning, lastShownApply, null);
+		readState(configDir, stillRunning, lastShownApply, null, line -> RigTune.LOGGER.warn(line));
+	}
+
+	static void readState(Path configDir, boolean stillRunning, @Nullable String lastShownApply, @Nullable Supplier<Map<String, Set<String>>> loadedFrom) {
+		readState(configDir, stillRunning, lastShownApply, loadedFrom, line -> RigTune.LOGGER.warn(line));
 	}
 
 	// loadedFrom: a loaded mod id -> the jar files it was loaded from, asked only when pending.json exists; null: no op is
-	// judged stale.
-	static void readState(Path configDir, boolean stillRunning, @Nullable String lastShownApply, @Nullable Supplier<Map<String, Set<String>>> loadedFrom) {
+	// judged stale. warn: the WARN lines.
+	static void readState(Path configDir, boolean stillRunning, @Nullable String lastShownApply, @Nullable Supplier<Map<String, Set<String>>> loadedFrom,
+			Consumer<String> warn) {
 		try {
 			Path last = ApplyResult.defaultPath(configDir);
 			if (Files.isRegularFile(last)) {
@@ -152,18 +160,22 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 				PendingActions plan = PendingActions.load(pending);
 				Set<String> staleGroups = loadedFrom == null ? Set.of() : staleGroups(plan, pending, loadedFrom);
 				Set<String> staleIds = new HashSet<>();
-				int runnable = 0;
+				List<Op> runnable = new ArrayList<>();
 				for (Op op : plan.ops()) {
 					if (op != null && op.id() != null && staleGroups.contains(op.group() != null ? op.group() : "op:" + op.id())) {
 						staleIds.add(op.id());
 					} else {
-						runnable++;
+						runnable.add(op);
 					}
 				}
 				staleOps = Set.copyOf(staleIds);
-				leftoverOps = runnable;
-				if (runnable > 0) {
-					RigTune.LOGGER.warn("{} staged RigTune change(s) were not applied; they will be retried at the next exit", runnable);
+				leftoverOps = runnable.size();
+				// v0.5 (docs/v0.5/SPEC.md 4d): runnable ops in mod-file groups are retried at the next exit, or held for the
+				// player's choice where the launcher keeps its own list of mods; that is known only after launcher detection, so
+				// their WARN comes with the title screen's toast (LauncherRepairService.leftoverAtTitle).
+				leftoverFileOps = ApplyExecutor.fileGroupOps(runnable).size();
+				if (!runnable.isEmpty() && leftoverFileOps == 0) {
+					warn.accept(runnable.size() + " staged RigTune change(s) were not applied; they will be retried at the next exit");
 				}
 				if (!staleIds.isEmpty()) {
 					RigTune.LOGGER.info("{} staged RigTune change(s) can never run (the download is gone, or the mod is installed another way); "
@@ -219,6 +231,13 @@ public final class RigTunePreLaunch implements PreLaunchEntrypoint {
 	public static int takeLeftoverOps() {
 		int count = leftoverOps;
 		leftoverOps = 0;
+		return count;
+	}
+
+	// The leftover ops in groups with a mod-file op (docs/v0.5/SPEC.md 4d).
+	public static int takeLeftoverFileOps() {
+		int count = leftoverFileOps;
+		leftoverFileOps = 0;
 		return count;
 	}
 }
