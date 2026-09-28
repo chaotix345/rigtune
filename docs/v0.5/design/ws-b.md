@@ -282,3 +282,17 @@ Sent to the coordinator with proposed dispositions; fixed in 03c46c37 (red tests
     lists them) and ws-s2 (C20's `FixConditions` should compare the backend the same way). C18's startup trend is a
     residual (the coordinator's call).
 
+## Review-12 fixes (branch fix/v05-r12-ws-b)
+- **R12FEAT-1 (MEDIUM): FIXED.** COMPAT-2's GPU key was the raw renderer string; on Linux Mesa it carries build versions
+  ("AMD Radeon RX 9070 XT (radeonsi, gfx1201, LLVM 21.1.7, DRM 3.64)", "llvmpipe (LLVM 20.1.2, 256 bits)"), so a
+  Mesa/LLVM/kernel update read as "another GPU": no verdict, a false rerun marker, the chart hiding earlier runs, C20
+  skipping sessions. New `core/benchmark/GpuName`: `clean(renderer)` drops a parenthesised group holding a version number
+  (digits.digits) and collapses spaces (a chip or "(TM)" stays); `same(a, b)` compares the cleaned names case-insensitively.
+  Used when recording (`BenchmarkConditions.Graphics.of`, which C20's StutterFixService also uses) and when comparing
+  (`BenchmarkTrend.graphics`: the trend, Try It's causes, the rerun marker; `FixConditions.otherGraphics`: a marked
+  one-line edit in WS-S2's file), so raw strings already recorded still compare equal. Red first, failing on ac109a2d for
+  the finding's reason: `BenchmarkTrendTest.r12AMesaUpdateIsNotAnotherGpu`, `FixConditionsTest.anotherGraphicsBackendOrGpuDiffers`'s
+  Mesa case, `BenchmarkConditionsTest.compat2TheBackendAndGpuComeFromTheProbe`'s llvmpipe case; plus `GpuNameTest` over
+  real-strings.tsv rows 11, 13, 15, 18, 22, R5 and hardware-tiers.md:41 (the same card across Mesa versions is the same
+  GPU; Intel Arc vs NVIDIA, RX 9060 XT vs 9070 XT, iGPU vs dGPU differ).
+

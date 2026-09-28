@@ -51,6 +51,9 @@ class FixConditionsTest {
 				RD), "another GPU on an unknown backend");
 		assertEquals(List.of(), gl.differences(graphics("OPENGL", null), RD));
 		assertEquals(gl, gl.withMeasurement(true, true), "kept with the measurement flags");
+		// review-12 R12FEAT-1 (ws-b's GpuName): a Mesa/LLVM update is the same GPU, not another.
+		assertEquals(List.of(), graphics("OPENGL", "AMD Radeon RX 9070 XT (radeonsi, gfx1201, LLVM 20.1.8, DRM 3.64)")
+				.differences(graphics("OPENGL", "AMD Radeon RX 9070 XT (radeonsi, gfx1201, LLVM 21.1.7, DRM 3.64)"), RD));
 	}
 
 	private static FixConditions with(String what, Object value) {
