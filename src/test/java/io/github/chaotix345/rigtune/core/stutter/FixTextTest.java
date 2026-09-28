@@ -65,7 +65,9 @@ class FixTextTest {
 		assertTrue(FixText.verdict(new FixComparison.Verdict(FixComparison.Kind.LESS, 4, 1, 300, 80, 1, 0.01, 0.99)).english().endsWith(
 				"measured comparison, not proof."));
 		assertTrue(FixText.verdict(new FixComparison.Verdict(FixComparison.Kind.MORE, 1, 4, 80, 300, 1, 0.99, 0.01)).english().contains("undo the change"));
-		assertEquals("4.8 hitches a minute, 1,310 ms lost a minute", FixText.rate(4.84, 1310.4).english());
+		assertEquals("4.8 hitches a minute", FixText.rate(4.84).english());
+		assertEquals("Time lost to stutter: 1,310 ms a minute before, 80 ms after.",
+				FixText.lost(new FixComparison.Verdict(FixComparison.Kind.LESS, 4.84, 1.2, 1310.4, 80.2, 1, 0.01, 0.99)).english());
 	}
 
 	@Test

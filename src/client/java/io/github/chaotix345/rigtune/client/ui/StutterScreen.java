@@ -191,10 +191,18 @@ public class StutterScreen extends Screen {
 		return status;
 	}
 
+	// The status line under the title ("Copied."); one that doesn't fit there (a stutter fix's) opens the list instead.
+	private boolean statusFitsHeader() {
+		return status != null && font.width(status) <= width - 16;
+	}
+
 	private void populate(StutterList l, int width) {
 		shownText.clear();
 		String statusKey = view.recording() ? (view.paused() ? "rigtune.stutter.status.paused" : "rigtune.stutter.status.recording")
 				: view.monitorOn() ? "rigtune.stutter.status.waiting" : "rigtune.stutter.status.off";
+		if (status != null && !statusFitsHeader()) {
+			text(l, status, COLOR_GOOD, width, 0);
+		}
 		text(l, Component.translatable(statusKey), COLOR_LABEL, width, 0);
 		if (!view.recording() && view.report() != null) {
 			text(l, Component.translatable("rigtune.stutter.status.saved"), COLOR_LABEL, width, 0);
@@ -443,8 +451,8 @@ public class StutterScreen extends Screen {
 	private void tryFix(StutterAdvisor.Fired advice, FixOffer.Offer offer) {
 		minecraft.gui.setScreen(new PreviewScreen(this, controller, c -> c.previewStutterFix(offer), new PreviewScreen.Confirm(
 				Texts.component(FixText.previewSubtitle(advice.title())), Texts.component(FixText.previewApply()), () -> {
-					minecraft.gui.setScreen(this);
 					status = controller.applyStutterFix(offer);
+					minecraft.gui.setScreen(this);
 				}, null)));
 	}
 
@@ -468,9 +476,10 @@ public class StutterScreen extends Screen {
 		if (verdict != null) {
 			double top = Math.max(verdict.beforePerMinute(), verdict.afterPerMinute());
 			bar(l, Texts.component(FixText.before()), top <= 0 ? 0 : verdict.beforePerMinute() / top, COLOR_LABEL,
-					Texts.component(FixText.rate(verdict.beforePerMinute(), verdict.lostBeforePerMinute())));
+					Texts.component(FixText.rate(verdict.beforePerMinute())));
 			bar(l, Texts.component(FixText.after()), top <= 0 ? 0 : verdict.afterPerMinute() / top, color == COLOR_LABEL ? COLOR_AMBER : color,
-					Texts.component(FixText.rate(verdict.afterPerMinute(), verdict.lostAfterPerMinute())));
+					Texts.component(FixText.rate(verdict.afterPerMinute())));
+			text(l, Texts.component(FixText.lost(verdict)), COLOR_LABEL, width, 0);
 		}
 		List<Button> buttons = new ArrayList<>();
 		int half = Math.min(160, (width - ButtonRow.GAP) / 2);
@@ -554,7 +563,7 @@ public class StutterScreen extends Screen {
 	public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		graphics.centeredText(font, title.copy().withStyle(ChatFormatting.BOLD), width / 2, 8, 0xFFFFFFFF);
-		if (status != null) {
+		if (status != null && statusFitsHeader()) {
 			graphics.centeredText(font, status, width / 2, 20, Palette.of(COLOR_GOOD));
 		}
 	}

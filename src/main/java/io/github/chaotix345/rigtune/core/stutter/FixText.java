@@ -174,9 +174,15 @@ public final class FixText {
 		return Text.of("rigtune.stutter.fix.after", "After");
 	}
 
-	// "4.8 hitches a minute, 310 ms lost a minute".
-	public static Text rate(double hitchesPerMinute, double lostMsPerMinute) {
-		return Text.of("rigtune.stutter.fix.rate", "%s hitches a minute, %s ms lost a minute", decimal(hitchesPerMinute), whole(lostMsPerMinute));
+	// A Before/After bar's value: "4.8 hitches a minute".
+	public static Text rate(double hitchesPerMinute) {
+		return Text.of("rigtune.stutter.fix.rate", "%s hitches a minute", decimal(hitchesPerMinute));
+	}
+
+	// Under the bars: "Time lost to stutter: 310 ms a minute before, 80 ms after."
+	public static Text lost(FixComparison.Verdict v) {
+		return Text.of("rigtune.stutter.fix.lost", "Time lost to stutter: %s ms a minute before, %s ms after.", whole(v.lostBeforePerMinute()),
+				whole(v.lostAfterPerMinute()));
 	}
 
 	// Every verdict names both rates; "more" leaves the Undo to the player.

@@ -232,6 +232,9 @@ public class StutterFixGameTest implements FabricClientGameTest {
 		check(ops.size() == 1 && ops.getFirst().type() == PendingActions.Type.PATCH_JSON && ops.getFirst().patches().containsValue("ALWAYS"),
 				"one PATCH_JSON op: " + ops);
 		waitForRecord(context, configDir, r -> r.state() == FixTracker.State.STAGED && r.key().equals(DEFER), "a staged record");
+		context.waitFor(mc -> mc.gui.screen() instanceof StutterScreen s && s.shownView().tracked() != null
+				&& s.shownView().tracked().state() == FixTracker.State.STAGED, 200);
+		check(shown(context).contains("Waiting for a restart"), "the block says staged: " + shown(context));
 		context.takeScreenshot("stutterfix-staged-854x480-scale2");
 		context.runOnClient(mc -> controller.discardPending());
 		openStutter(context, controller);
@@ -260,7 +263,8 @@ public class StutterFixGameTest implements FabricClientGameTest {
 		openStutter(context, controller);
 		waitForFix(context, CHUNKS, FixOffer.NotYet.class);
 		check(shown(context).contains(line), "the one line \"" + line + "\": " + shown(context));
-		check(context.computeOnClient(mc -> ((StutterScreen) mc.gui.screen()).fixButtons().isEmpty()), "no Try button");
+		check(context.computeOnClient(mc -> ((StutterScreen) mc.gui.screen()).fixButtons().stream()
+				.noneMatch(b -> b.getMessage().getContents() instanceof TranslatableContents t && t.getKey().equals("rigtune.stutter.fix.try"))), "no Try button");
 	}
 
 	// AC5.10 on the real main list: a render-distance recommendation that would move the fixed key back up is unticked with
@@ -406,6 +410,7 @@ public class StutterFixGameTest implements FabricClientGameTest {
 			int top = footer.stream().mapToInt(AbstractWidget::getY).min().orElse(screen.height);
 			check(stutter.list().getY() + stutter.list().getHeight() <= top, name + ": the list ends above the buttons");
 			check(stutter.list().getRowRight() <= screen.width, name + ": the rows end inside the screen");
+			check(stutter.list().barsFit(), name + ": every bar's label and value fit their columns");
 			for (Button b : stutter.fixButtons()) {
 				check(mc.font.width(b.getMessage()) <= b.getWidth() - 4, name + ": " + b.getMessage().getString() + " fits its button");
 				check(b.getWidth() <= stutter.list().getRowWidth(), name + ": " + b.getMessage().getString() + " fits the row");
