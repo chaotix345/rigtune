@@ -16,8 +16,10 @@ import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord;
 import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest;
+import io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest.Scene;
 import io.github.chaotix345.rigtune.core.history.ApplyFailures;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
+import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
@@ -53,33 +55,89 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 
 // docs/v0.5/SPEC.md 6 (C09): Measured Try It. Measure -> RealController.apply(List.of(rec), entryId) -> Measure again,
 // with the pair's id prefixed "tryit-", then Keep (tryit.json only) or Revert (TryItScreen opens History's Undo this).
-// The stage is derived (TryItFlow) from tryit.json, benchmarks.json and history.json, never stored; tryit.json is
-// written only here, through one ordered chain on Probes.EXECUTOR (X8). Reached only through RealController.v05() (X4):
-// the constructor only stores the controller, and the first derive is the start hook's, on a worker.
+// The stage is derived (TryItFlow) from tryit.json, benchmarks.json and history.json, never stored; the derivation and
+// every tryit.json write run on one ordered chain on Probes.EXECUTOR (X8). Reached only through RealController.v05() (X4):
+// the constructor only stores the controller, and the first derive is the start hook's.
 // The chain between the runs is driven from this class's own END_CLIENT_TICK listener, registered when a try's first run
-// is queued and otherwise returning at once on a static volatile flag (X4.4, AC6.12); a run starts on a later tick,
-// never inside the benchmark's finish or show. BenchmarkController's outcome hook hands this class its own runs'
-// outcomes (by pair id), so they open no result screen. Busy.tryItRunning answers while the chain runs (C8).
+// is queued and otherwise returning at once on a static volatile flag (X4.4, AC6.12); a run starts on a later tick, never
+// inside the benchmark's finish or show, and a CURRENT-scene run records where the player stands right before it starts.
+// BenchmarkController's outcome hook hands this class its own runs' outcomes (by pair id), so they open no result screen.
+// Busy.tryItRunning answers while the chain runs (C8). Everything that touches the game goes through Game (RealGame
+// below), so the chain is unit-tested (TryItServiceTest).
 // The derivation's contracts (docs/v0.5/design/ws-t.md): TryItFlow.Live.measuring is true from a run's queueing until its
 // outcome is handled; the after snapshot and spot are written only once the try's History entry exists.
 public final class TryItService {
 	// One id per game session: a try records it, so a restart is told apart.
 	public static final String SESSION = UUID.randomUUID().toString();
-	// A queued run waits this long for its scene, and a started one this long to show itself, before the try stops.
-	private static final int WAIT_TICKS = 20 * 30;
+	// A queued run waits this long for its scene, and the chain this long for a run to show itself, before it stops.
+	static final int WAIT_TICKS = 20 * 30;
+	// However busy the benchmark (or its world) stays, a run that hasn't answered in this long is given up (review L8).
+	static final int RUN_CAP_TICKS = 20 * 60 * 20;
 	private static final long REFRESH_NANOS = 1_000_000_000L;
-	private static final SystemToast.SystemToastId TOAST_ID = new SystemToast.SystemToastId(8000L);
 
 	// The tick listener's flag: false, it returns after this one read (0 bytes, AC6.12).
 	private static volatile boolean active;
-	private static boolean registered;
 	private static volatile @Nullable TryItService ticking;
 	private static boolean toastShown;
 
-	private final RealController controller;
+	// What the service needs from the game; RealGame is the real one.
+	interface Game {
+		// The game is up (false only before the client exists).
+		boolean ready();
+
+		Path configDir();
+
+		Executor executor();
+
+		// On the render thread, as a later task.
+		void later(Runnable task);
+
+		@Nullable Text busy();
+
+		Triable.Context context(boolean busy, @Nullable TryIt open, Journal.@Nullable State journal, boolean storeWritable);
+
+		@Nullable String unavailable(Scene scene);
+
+		@Nullable String tryStart(BenchmarkRequest request);
+
+		boolean benchmarkBusy();
+
+		Map<String, String> snapshot();
+
+		TryIt.@Nullable Spot spot();
+
+		void apply(Recommendation rec, String entryId);
+
+		Journal journal();
+
+		List<BenchmarkRecord> runs();
+
+		Map<String, ApplyFailures.Failure> failures();
+
+		void acknowledge(String runId);
+
+		HistoryModel.Labels labels();
+
+		void openScreen();
+
+		void overlay(Text text);
+
+		void toast(Text title, Text body);
+
+		String modVersion();
+
+		String mcVersion();
+
+		// The listener, the outcome hook and Busy's hook (once).
+		void hook();
+	}
+
+	private final @Nullable RealController controller;
+	private final Game game;
 	private volatile TryItView view = TryItView.EMPTY;
 	// The view shows a try this session closed itself (its before stopped, its apply took nothing), until Done.
 	private volatile boolean closedHere;
@@ -96,10 +154,17 @@ public final class TryItService {
 	private volatile @Nullable Object historyStamp;
 	private volatile long lastStaleCheck;
 	private int waitTicks;
+	private int runTicks;
 	private CompletableFuture<Void> io = CompletableFuture.completedFuture(null);
 
 	public TryItService(RealController controller) {
 		this.controller = controller;
+		this.game = new RealGame(controller);
+	}
+
+	TryItService(Game game) {
+		this.controller = null;
+		this.game = game;
 	}
 
 	// The open try's view, in memory. A History change seen by its file's time starts a new derive (at most once a second).
@@ -112,69 +177,58 @@ public final class TryItService {
 		return refusal(rec, null);
 	}
 
-	private @Nullable Text refusal(Recommendation rec, BenchmarkRequest.@Nullable Scene scene) {
-		Minecraft minecraft = controller.minecraft();
-		if (minecraft == null) {
+	private @Nullable Text refusal(Recommendation rec, @Nullable Scene scene) {
+		if (!game.ready()) {
 			return TryItView.UNAVAILABLE;
 		}
-		Text busy = Busy.refusal(controller);
-		Triable.Result result = Triable.check(rec, context(minecraft, busy != null), scene);
+		Text busy = game.busy();
+		Triable.Result result = Triable.check(rec, game.context(busy != null, view.tryIt(), journalState, storeWritable), scene);
 		if (result.refusal() == null) {
 			return null;
 		}
 		return switch (result.refusal()) {
 			case BUSY -> busy;
-			case SCENE -> TryItText.sceneRefusal(Objects.requireNonNullElse(BenchmarkController.unavailable(minecraft, result.scene()), ""));
+			case SCENE -> TryItText.sceneRefusal(Objects.requireNonNullElse(game.unavailable(result.scene()), ""));
 			default -> TryItText.refusal(result.refusal(), openLabel());
 		};
 	}
 
-	private Triable.Context context(Minecraft minecraft, boolean busy) {
-		List<ConfigTargets.Target> targets = ConfigTargets.all(controller.configDir());
-		Journal.State journal = journalState;
-		return new Triable.Context(key -> {
-			ConfigTargets.Target target = ConfigTargets.forKey(targets, key);
-			return target != null && Files.isRegularFile(target.file());
-		}, minecraft.level != null, minecraft.level != null && !minecraft.hasSingleplayerServer(), controller.hasPendingChanges(), busy,
-				scene -> BenchmarkController.unavailable(minecraft, scene) != null, view.tryIt() != null,
-				journal == null || journal == Journal.State.OK || journal == Journal.State.MISSING, !BenchmarkStore.history().unreadable(), storeWritable);
-	}
-
 	private @Nullable String openLabel() {
 		TryIt open = view.tryIt();
-		return open == null ? null : controller.settingLabels().label(open.key());
+		return open == null ? null : game.labels().label(open.key());
 	}
 
 	// TryItScreen's Start (render thread): the try's identity is written, then the before run starts on a later tick.
-	public Component start(Recommendation rec, BenchmarkRequest.Scene scene) {
+	public Component start(Recommendation rec, Scene scene) {
 		Text refused = refusal(rec, scene);
 		if (refused != null) {
 			return Texts.component(refused);
 		}
-		Minecraft minecraft = controller.minecraft();
 		Action.SetSetting set = (Action.SetSetting) rec.action();
-		Triable.Result result = Triable.check(rec, context(minecraft, false), scene);
+		Triable.Result result = Triable.check(rec, game.context(false, null, journalState, storeWritable), scene);
 		TryIt t = TryIt.of(ChangeRecorder.newEntryId(), rec.id(), set.key(), set.currentValue(), set.newValue(), result.kind(), result.scene(), now(),
-				SESSION, controller.modVersion(), HardwareProbe.minecraftVersion(), snapshot(minecraft),
-				result.scene() == BenchmarkRequest.Scene.CURRENT ? spot(minecraft) : null);
+				SESSION, game.modVersion(), game.mcVersion(), game.snapshot(), null);
 		this.rec = rec;
 		closedHere = false;
 		afterRun = false;
 		measuring = true;
+		waitTicks = 0;
+		runTicks = 0;
 		view = new TryItView(Stage.MEASURING_BEFORE, t, null, null, null, null, null, true);
 		hook();
+		// Review M3: the listener runs from here, so a Start whose write never answers ends at the timeout.
+		active = true;
 		io(() -> {
-			if (!TryItStore.shared(controller.configDir()).open(t)) {
+			if (!TryItStore.shared(game.configDir()).open(t)) {
 				RigTune.LOGGER.warn("Try it: could not record the try in {}; not starting it", TryItStore.FILE_NAME);
-				minecraft.execute(() -> {
+				game.later(() -> {
 					measuring = false;
 					this.rec = null;
-					view = TryItView.EMPTY;
+					view = TryItView.EMPTY.withNote(TryItText.refusal(Triable.Refusal.STORAGE, null));
 				});
-				deriveNow();
 				return;
 			}
-			minecraft.execute(() -> queue(new BenchmarkRequest(BenchmarkRequest.Mode.MEASURE, t.scene(), t.pairId())));
+			game.later(() -> queue(new BenchmarkRequest(BenchmarkRequest.Mode.MEASURE, t.scene(), t.pairId())));
 		});
 		return Component.empty();
 	}
@@ -184,29 +238,30 @@ public final class TryItService {
 	public void measureNow() {
 		TryItView v = view;
 		TryIt t = v.tryIt();
-		Minecraft minecraft = controller.minecraft();
-		if (t == null || v.stage() != Stage.READY || minecraft == null || Busy.refusal(controller) != null
-				|| BenchmarkController.unavailable(minecraft, t.scene()) != null) {
+		if (t == null || v.stage() != Stage.READY || !game.ready() || game.busy() != null || game.unavailable(t.scene()) != null) {
 			return;
 		}
 		hook();
-		queueAfter(minecraft, t, v);
+		queueAfter(t, v);
 	}
 
-	// Keep: the try is closed as kept; nothing but tryit.json is written.
+	// Keep: the try is closed as kept, only while its stage (derived again first, on the chain) still offers Keep: a
+	// Revert or an undo meanwhile wins (review M5). Nothing but tryit.json is written. The answer says "Kept" only when
+	// History hasn't changed since the view was derived (else the derive decides, silently).
 	public Component keep() {
 		TryItView v = view;
 		TryIt t = v.tryIt();
 		if (t == null || !v.actions().contains(TryItView.Action.KEEP)) {
-			return Component.translatable("rigtune.status.nothing");
+			return Component.empty();
 		}
-		view = TryItView.EMPTY;
-		closedHere = false;
 		io(() -> {
-			close(t, TryIt.Decision.KEPT, v.verdict());
-			deriveNow();
+			TryItView fresh = deriveNow();
+			if (fresh.tryIt() != null && fresh.tryIt().id().equals(t.id()) && fresh.actions().contains(TryItView.Action.KEEP)) {
+				close(t, TryIt.Decision.KEPT, fresh.verdict());
+				deriveNow();
+			}
 		});
-		return Texts.component(TryItText.kept(t, controller.settingLabels()));
+		return stale() ? Component.empty() : Texts.component(TryItText.kept(t, game.labels()));
 	}
 
 	// Done on a try that has ended: it's closed with its stage's decision (at once if this session closed it already).
@@ -215,6 +270,9 @@ public final class TryItService {
 		TryIt t = v.tryIt();
 		TryIt.Decision decision = v.closing();
 		if (t == null || decision == null) {
+			if (t == null && v.note() != null) {
+				view = TryItView.EMPTY;
+			}
 			return;
 		}
 		view = TryItView.EMPTY;
@@ -228,9 +286,18 @@ public final class TryItService {
 		});
 	}
 
-	// The start hook (V05Services.afterStart), on Probes.EXECUTOR.
+	// TryItScreen, back from History's Undo this: derive again (its footer waits for the new view, review M5).
+	public void refresh() {
+		io(this::deriveNow);
+	}
+
+	// The start hook (V05Services.afterStart), on Probes.EXECUTOR: the derive goes on the ordered chain (review M4). (A
+	// development run, RIGTUNE_DEV_TRYIT, starts here.)
 	public void derive() {
-		deriveNow();
+		io(this::deriveNow);
+		if (controller != null && System.getenv(TryItDevRun.ENV) != null) {
+			TryItDevRun.startIfAsked(controller);
+		}
 	}
 
 	// The title-screen hook (V05Services.titleScreen), on the render thread: once per launch, and only for a try that a
@@ -239,47 +306,55 @@ public final class TryItService {
 		if (toastShown) {
 			return;
 		}
-		if (!derived) {
-			toastWanted = true;
-			return;
+		toastWanted = true;
+		// Review L9: a derive that finished meanwhile has already looked at toastWanted.
+		if (derived) {
+			toastWanted = false;
+			showToast();
 		}
-		showToast(minecraft);
 	}
 
-	private void showToast(Minecraft minecraft) {
+	private void showToast() {
 		TryItView v = view;
 		Text body = v.tryIt() == null || v.sameSession() ? null : TryItText.toastBody(v.stage());
 		if (toastShown || body == null) {
 			return;
 		}
 		toastShown = true;
-		SystemToast.add(minecraft.gui.toastManager(), TOAST_ID, Texts.component(TryItText.toastTitle()), Texts.component(body));
+		game.toast(TryItText.toastTitle(), body);
 	}
 
-	// Executor: derive from the three files, and remember what the refusals need.
+	// The ordered chain: derive from the three files, and remember what the refusals need.
 	private TryItView deriveNow() {
 		try {
-			Path configDir = controller.configDir();
+			Path configDir = game.configDir();
 			TryItStore store = TryItStore.shared(configDir);
 			TryIt t = store.current();
 			storeWritable = store.writable();
-			Journal journal = ClientJournal.get();
+			Journal journal = game.journal();
 			historyStamp = stamp(Journal.file(configDir));
 			Journal.State state = journal.state();
 			journalState = state;
-			List<JournalEntry> entries = state == Journal.State.OK ? journal.entries() : List.of();
-			TryItView derivedView = TryItFlow.derive(t, BenchmarkStore.history().runs(), new TryItFlow.History(state, entries, failures(configDir)),
-					new TryItFlow.Live(SESSION, measuring, applying || applyDue));
+			TryItView derivedView;
+			if (t == null) {
+				// No try open (the usual case, e.g. at the start hook): nothing more to read.
+				derivedView = TryItView.EMPTY;
+			} else {
+				List<JournalEntry> entries = state == Journal.State.OK ? journal.entries() : List.of();
+				derivedView = TryItFlow.derive(t, game.runs(), new TryItFlow.History(state, entries, game.failures()),
+						new TryItFlow.Live(SESSION, measuring, applying || applyDue));
+			}
 			if (!(closedHere && derivedView.tryIt() == null)) {
 				closedHere = false;
-				view = derivedView;
+				TryItView shown = view;
+				view = shown.note() != null && derivedView.tryIt() != null && shown.tryIt() != null && shown.tryIt().id().equals(derivedView.tryIt().id())
+						? derivedView.withNote(shown.note()) : derivedView;
 			}
 			acknowledge(t, derivedView);
 			derived = true;
-			Minecraft minecraft = controller.minecraft();
-			if (toastWanted && minecraft != null) {
+			if (toastWanted) {
 				toastWanted = false;
-				minecraft.execute(() -> showToast(minecraft));
+				game.later(this::showToast);
 			}
 			return derivedView;
 		} catch (RuntimeException e) {
@@ -295,25 +370,14 @@ public final class TryItService {
 		if (t == null || v.stage() != Stage.RESULT || after == null || after.id().equals(t.afterRunId())) {
 			return;
 		}
-		controller.trendService().acknowledge(after.id());
-		TryItStore.shared(controller.configDir()).change(t.id(), x -> x.withAfterRun(after.id()));
-	}
-
-	private static Map<String, ApplyFailures.Failure> failures(Path configDir) {
-		Path last = ApplyResult.defaultPath(configDir);
-		try {
-			ApplyResult result = Files.isRegularFile(last) ? ApplyResult.load(last) : null;
-			return ApplyFailures.byOpId(result, List.of(FabricLoader.getInstance().getGameDir().resolve("mods"), configDir));
-		} catch (IOException | RuntimeException e) {
-			RigTune.LOGGER.warn("Try it: could not read {}", last.getFileName(), e);
-			return Map.of();
-		}
+		game.acknowledge(after.id());
+		TryItStore.shared(game.configDir()).change(t.id(), x -> x.withAfterRun(after.id()));
 	}
 
 	// Render thread: history.json's time changed (an Undo this, a Discard, another Apply): derive again, at most once a
 	// second, only while a try is open and between runs (X8: a stat here, no content read).
 	private void refreshIfStale() {
-		if (controller == null || view.tryIt() == null || running()) {
+		if (view.tryIt() == null || running()) {
 			return;
 		}
 		long now = System.nanoTime();
@@ -321,10 +385,14 @@ public final class TryItService {
 			return;
 		}
 		lastStaleCheck = now;
-		if (!Objects.equals(stamp(Journal.file(controller.configDir())), historyStamp)) {
+		if (stale()) {
 			historyStamp = null;
 			io(this::deriveNow);
 		}
+	}
+
+	private boolean stale() {
+		return !Objects.equals(stamp(Journal.file(game.configDir())), historyStamp);
 	}
 
 	// -- the chain (render thread unless said otherwise)
@@ -333,91 +401,100 @@ public final class TryItService {
 		measuring = true;
 		next = request;
 		waitTicks = 0;
+		runTicks = 0;
 		active = true;
 	}
 
-	private void queueAfter(Minecraft minecraft, TryIt t, TryItView v) {
-		Map<String, String> settings = snapshot(minecraft);
-		TryIt.Spot spot = t.scene() == BenchmarkRequest.Scene.CURRENT ? spot(minecraft) : null;
+	private void queueAfter(TryIt t, TryItView v) {
+		Map<String, String> settings = game.snapshot();
 		measuring = true;
 		afterRun = true;
 		view = new TryItView(Stage.MEASURING_AFTER, t, v.before(), null, null, v.changeStatus(), null, v.sameSession());
+		waitTicks = 0;
+		runTicks = 0;
 		active = true;
 		io(() -> {
-			TryItStore.shared(controller.configDir()).change(t.id(), x -> x.withAfter(settings, SESSION, spot));
-			minecraft.execute(() -> queue(new BenchmarkRequest(BenchmarkRequest.Mode.MEASURE, t.scene(), t.pairId())));
+			TryItStore.shared(game.configDir()).change(t.id(), x -> x.withAfter(settings, SESSION, null));
+			game.later(() -> queue(new BenchmarkRequest(BenchmarkRequest.Mode.MEASURE, t.scene(), t.pairId())));
 		});
 	}
 
 	// BenchmarkController's outcome hook: only this try's runs (its pair id) are claimed.
-	private static boolean claim(BenchmarkController.Outcome outcome) {
+	static boolean claim(BenchmarkController.Outcome outcome) {
 		TryItService service = ticking;
-		return service != null && service.onOutcome(outcome);
+		return service != null && service.onOutcome(outcome.request(), outcome.cancelled() ? null : outcome.record());
 	}
 
-	private boolean onOutcome(BenchmarkController.Outcome outcome) {
+	// record: the stored run, null when it was cancelled or throttled.
+	boolean onOutcome(BenchmarkRequest request, @Nullable BenchmarkRecord record) {
 		TryItView v = view;
 		TryIt t = v.tryIt();
-		if (t == null || !t.pairId().equals(outcome.request().pairId())) {
+		if (t == null || !measuring || !t.pairId().equals(request.pairId())) {
 			return false;
 		}
-		Minecraft minecraft = controller.minecraft();
 		measuring = false;
-		BenchmarkRecord record = outcome.record();
 		if (!afterRun) {
 			if (record != null && BenchmarkRecord.BEFORE.equals(record.phase()) && record.result() != null) {
 				// The before is saved: apply on the next tick, then measure again.
 				applyDue = true;
 				view = new TryItView(Stage.APPLYING, t, record, null, null, null, null, true);
 				active = true;
-				if (minecraft.player != null) {
-					minecraft.player.sendOverlayMessage(Texts.component(TryItText.overlay()));
-				}
+				game.overlay(TryItText.overlay());
 				return true;
 			}
 			// Stopped (or measured nothing) before anything changed.
 			closeHere(t, TryIt.Decision.CANCELLED, new TryItView(Stage.STOPPED_BEFORE, t, record, null, null, null, null, true));
-			openScreen(minecraft);
+			game.openScreen();
 			return true;
 		}
 		io(() -> {
 			deriveNow();
-			minecraft.execute(() -> openScreen(minecraft));
+			game.later(game::openScreen);
 		});
 		return true;
 	}
 
-	private void apply(Minecraft minecraft) {
+	// Review M2: whatever the apply does (an exception included, maybe after journaling), the entry decides: derived again.
+	private void apply() {
 		applyDue = false;
 		applying = true;
 		TryIt t = view.tryIt();
 		Recommendation applied = rec;
-		if (t != null && applied != null) {
-			controller.apply(List.of(applied), t.entryId());
+		try {
+			if (t != null && applied != null) {
+				game.apply(applied, t.entryId());
+			}
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.error("Try it: the apply failed; History decides what was changed", e);
 		}
 		io(() -> {
-			TryItView after = deriveNow();
-			applying = false;
-			minecraft.execute(() -> afterApply(minecraft, t, after));
+			TryItView after;
+			try {
+				after = deriveNow();
+			} finally {
+				applying = false;
+			}
+			game.later(() -> afterApply(t, after));
 		});
 	}
 
-	private void afterApply(Minecraft minecraft, @Nullable TryIt t, TryItView v) {
+	private void afterApply(@Nullable TryIt t, TryItView v) {
 		rec = null;
 		if (t == null) {
 			return;
 		}
-		if (v.changeStatus() == null) {
-			// Nothing was journaled for the key: the apply took nothing.
-			closeHere(t, TryIt.Decision.FAILED, new TryItView(Stage.NOT_APPLIED, t, v.before(), null, null, null, null, true));
-			openScreen(minecraft);
+		if (v.stage() == Stage.APPLYING || v.stage() == Stage.NOT_APPLIED) {
+			// Nothing was journaled for the key: the apply took nothing (review L7: only these; HISTORY_UNREADABLE keeps
+			// the try, and its Revert).
+			closeHere(t, TryIt.Decision.FAILED, new TryItView(Stage.NOT_APPLIED, t, v.before(), null, null, v.changeStatus(), v.failure(), true));
+			game.openScreen();
 			return;
 		}
 		if (t.kind() == TryIt.Kind.NOW && JournalChange.APPLIED.equals(v.changeStatus()) && v.stage() == Stage.READY) {
-			queueAfter(minecraft, t, v);
+			queueAfter(t, v);
 			return;
 		}
-		openScreen(minecraft);
+		game.openScreen();
 	}
 
 	private void closeHere(TryIt t, TryIt.Decision decision, TryItView shown) {
@@ -429,51 +506,49 @@ public final class TryItService {
 
 	private void close(TryIt t, TryIt.Decision decision, TryItVerdict.@Nullable Verdict verdict) {
 		String kind = verdict == null ? null : verdict.kind().name().toLowerCase(Locale.ROOT);
-		if (!TryItStore.shared(controller.configDir()).close(t.id(), TryIt.Closed.of(t, decision, kind, verdict == null ? null : verdict.lowPercent(),
+		if (!TryItStore.shared(game.configDir()).close(t.id(), TryIt.Closed.of(t, decision, kind, verdict == null ? null : verdict.lowPercent(),
 				verdict == null ? null : verdict.avgPercent(), verdict == null ? null : verdict.floorPercent(), now()))) {
 			RigTune.LOGGER.warn("Try it: could not record the closed try in {}", TryItStore.FILE_NAME);
 		}
 	}
 
-	private void openScreen(Minecraft minecraft) {
-		minecraft.gui.setScreen(new TryItScreen(minecraft.gui.screen(), controller, null));
-	}
-
-	// The chain can't go on (a run that couldn't start, or ended without an outcome): before the apply the try stops as
-	// cancelled; afterwards it's derived again (READY: Measure again).
-	private void lost(Minecraft minecraft) {
+	// The chain can't go on (a run that couldn't start, or ended without an outcome; why: the benchmark's refusal or
+	// null): before the apply the try stops as cancelled; afterwards it's derived again (READY: Measure again), with the
+	// reason as its note (review L8).
+	private void lost(@Nullable Text why) {
 		measuring = false;
 		next = null;
 		TryIt t = view.tryIt();
+		Text note = TryItText.lost(why);
 		if (t != null && !afterRun) {
-			closeHere(t, TryIt.Decision.CANCELLED, new TryItView(Stage.STOPPED_BEFORE, t, null, null, null, null, null, true));
-			openScreen(minecraft);
+			closeHere(t, TryIt.Decision.CANCELLED, new TryItView(Stage.STOPPED_BEFORE, t, null, null, null, null, null, true, note));
+			game.openScreen();
 			return;
 		}
 		io(() -> {
-			deriveNow();
-			minecraft.execute(() -> openScreen(minecraft));
+			TryItView derivedView = deriveNow();
+			view = derivedView.withNote(note);
+			game.later(game::openScreen);
 		});
 	}
 
-	// The listener, the outcome hook and Busy's hook, once, when a run is first queued (never at init, X4).
 	private void hook() {
 		ticking = this;
-		if (!registered) {
-			registered = true;
-			ClientTickEvents.END_CLIENT_TICK.register(TryItService::tick);
-			BenchmarkController.setOutcomeHandler(TryItService::claim);
-			Busy.tryItRunning = TryItService::chainRunning;
-		}
+		game.hook();
 	}
 
-	private boolean running() {
+	boolean running() {
 		return next != null || measuring || applyDue || applying;
 	}
 
-	private static boolean chainRunning() {
+	static boolean chainRunning() {
 		TryItService service = ticking;
 		return service != null && service.running();
+	}
+
+	// Review L13: the listener has nothing to do (TryItGameTest checks it before timing the idle call).
+	public static boolean idle() {
+		return !active;
 	}
 
 	// END_CLIENT_TICK (render thread). Without a try between or inside its runs: one volatile read, nothing allocated
@@ -487,48 +562,66 @@ public final class TryItService {
 			active = false;
 			return;
 		}
+		service.tick();
+	}
+
+	void tick() {
 		try {
-			service.onTick(minecraft);
+			onTick();
 		} catch (RuntimeException e) {
 			RigTune.LOGGER.error("Try it: the chain failed; stopping it", e);
-			service.lost(minecraft);
+			lost(null);
 		}
 	}
 
-	private void onTick(Minecraft minecraft) {
+	private void onTick() {
 		if (applyDue) {
-			apply(minecraft);
+			apply();
 			return;
 		}
 		BenchmarkRequest queued = next;
 		if (queued != null) {
-			String unavailable = BenchmarkController.unavailable(minecraft, queued.scene());
+			String unavailable = game.unavailable(queued.scene());
 			if (unavailable == null) {
 				next = null;
 				waitTicks = 0;
-				String refused = BenchmarkController.tryStart(minecraft, queued, BenchmarkController.defaultConfig());
-				if (refused != null) {
+				// Review M6: where the player stands right before the run starts (in the player's own world).
+				recordSpot(queued);
+				String refused = game.tryStart(queued);
+				// Review M1: a start that failed inside the benchmark may have handed its outcome over already.
+				if (refused != null && measuring) {
 					RigTune.LOGGER.warn("Try it: the run couldn't start ({})", refused);
-					lost(minecraft);
+					lost(TryItText.sceneRefusal(refused));
 				}
 			} else if (++waitTicks > WAIT_TICKS) {
 				RigTune.LOGGER.warn("Try it: the run couldn't start in {} s ({})", WAIT_TICKS / 20, unavailable);
-				lost(minecraft);
+				lost(TryItText.sceneRefusal(unavailable));
 			}
 			return;
 		}
 		if (measuring) {
-			if (BenchmarkController.running() || BenchmarkWorld.busy()) {
+			runTicks++;
+			if (game.benchmarkBusy() && runTicks <= RUN_CAP_TICKS) {
 				waitTicks = 0;
-			} else if (++waitTicks > WAIT_TICKS) {
+			} else if (++waitTicks > WAIT_TICKS || runTicks > RUN_CAP_TICKS) {
 				RigTune.LOGGER.warn("Try it: the run ended without an outcome");
-				lost(minecraft);
+				lost(null);
 			}
 			return;
 		}
 		if (!applying) {
 			active = false;
 		}
+	}
+
+	private void recordSpot(BenchmarkRequest request) {
+		TryIt t = view.tryIt();
+		if (t == null || request.scene() != Scene.CURRENT) {
+			return;
+		}
+		TryIt.Spot spot = game.spot();
+		boolean after = afterRun;
+		io(() -> TryItStore.shared(game.configDir()).change(t.id(), x -> after ? x.withAfterSpot(spot) : x.withBeforeSpot(spot)));
 	}
 
 	private void io(Runnable task) {
@@ -539,30 +632,8 @@ public final class TryItService {
 				} catch (RuntimeException e) {
 					RigTune.LOGGER.error("Try it: a step failed", e);
 				}
-			}, Probes.EXECUTOR);
+			}, game.executor());
 		}
-	}
-
-	private static Map<String, String> snapshot(Minecraft minecraft) {
-		return SettingsBridge.read(minecraft).values();
-	}
-
-	// Where the player stands (docs/v0.5/SPEC.md 6, the coordinator's decision): the block, the dimension and this world's
-	// or server's key. Never used to move the player.
-	private static TryIt.@Nullable Spot spot(Minecraft minecraft) {
-		if (minecraft.player == null || minecraft.level == null) {
-			return null;
-		}
-		Vec3 position = minecraft.player.position();
-		String server;
-		if (minecraft.getSingleplayerServer() != null) {
-			Path folder = minecraft.getSingleplayerServer().getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().getFileName();
-			server = "singleplayer:" + folder;
-		} else {
-			server = minecraft.getCurrentServer() == null ? null : "server:" + minecraft.getCurrentServer().ip;
-		}
-		return new TryIt.Spot((int) Math.floor(position.x), (int) Math.floor(position.y), (int) Math.floor(position.z),
-				String.valueOf(minecraft.level.dimension()), server);
 	}
 
 	private static String now() {
@@ -575,6 +646,177 @@ public final class TryItService {
 			return List.of(attributes.lastModifiedTime(), attributes.size());
 		} catch (IOException e) {
 			return "missing";
+		}
+	}
+
+	// The game: RealController, Minecraft, the benchmark and the client's stores.
+	private static final class RealGame implements Game {
+		private static final SystemToast.SystemToastId TOAST_ID = new SystemToast.SystemToastId(8000L);
+		private static boolean registered;
+
+		private final RealController controller;
+
+		RealGame(RealController controller) {
+			this.controller = controller;
+		}
+
+		private Minecraft minecraft() {
+			return Objects.requireNonNull(controller.minecraft(), "the game");
+		}
+
+		@Override
+		public boolean ready() {
+			return controller.minecraft() != null;
+		}
+
+		@Override
+		public Path configDir() {
+			return controller.configDir();
+		}
+
+		@Override
+		public Executor executor() {
+			return Probes.EXECUTOR;
+		}
+
+		@Override
+		public void later(Runnable task) {
+			minecraft().execute(task);
+		}
+
+		@Override
+		public @Nullable Text busy() {
+			return Busy.refusal(controller);
+		}
+
+		@Override
+		public Triable.Context context(boolean busy, @Nullable TryIt open, Journal.@Nullable State journal, boolean storeWritable) {
+			Minecraft minecraft = minecraft();
+			List<ConfigTargets.Target> targets = ConfigTargets.all(controller.configDir());
+			return new Triable.Context(key -> {
+				ConfigTargets.Target target = ConfigTargets.forKey(targets, key);
+				return target != null && Files.isRegularFile(target.file());
+			}, minecraft.level != null, minecraft.level != null && !minecraft.hasSingleplayerServer(), controller.hasPendingChanges(), busy,
+					scene -> BenchmarkController.unavailable(minecraft, scene) != null, open != null,
+					journal == null || journal == Journal.State.OK || journal == Journal.State.MISSING, !BenchmarkStore.history().unreadable(),
+					storeWritable);
+		}
+
+		@Override
+		public @Nullable String unavailable(Scene scene) {
+			return BenchmarkController.unavailable(minecraft(), scene);
+		}
+
+		@Override
+		public @Nullable String tryStart(BenchmarkRequest request) {
+			return BenchmarkController.tryStart(minecraft(), request, BenchmarkController.defaultConfig());
+		}
+
+		@Override
+		public boolean benchmarkBusy() {
+			return BenchmarkController.running() || BenchmarkWorld.busy();
+		}
+
+		@Override
+		public Map<String, String> snapshot() {
+			return SettingsBridge.read(minecraft()).values();
+		}
+
+		// Where the player stands (docs/v0.5/SPEC.md 6, the coordinator's decision): the block, the dimension and this
+		// world's or server's key. Never used to move the player.
+		@Override
+		public TryIt.@Nullable Spot spot() {
+			Minecraft minecraft = minecraft();
+			if (minecraft.player == null || minecraft.level == null) {
+				return null;
+			}
+			Vec3 position = minecraft.player.position();
+			String server;
+			if (minecraft.getSingleplayerServer() != null) {
+				Path folder = minecraft.getSingleplayerServer().getWorldPath(LevelResource.ROOT).toAbsolutePath().normalize().getFileName();
+				server = "singleplayer:" + folder;
+			} else {
+				server = minecraft.getCurrentServer() == null ? null : "server:" + minecraft.getCurrentServer().ip;
+			}
+			return new TryIt.Spot((int) Math.floor(position.x), (int) Math.floor(position.y), (int) Math.floor(position.z),
+					String.valueOf(minecraft.level.dimension()), server);
+		}
+
+		@Override
+		public void apply(Recommendation rec, String entryId) {
+			controller.apply(List.of(rec), entryId);
+		}
+
+		@Override
+		public Journal journal() {
+			return ClientJournal.get();
+		}
+
+		@Override
+		public List<BenchmarkRecord> runs() {
+			return BenchmarkStore.history().runs();
+		}
+
+		@Override
+		public Map<String, ApplyFailures.Failure> failures() {
+			Path last = ApplyResult.defaultPath(configDir());
+			try {
+				ApplyResult result = Files.isRegularFile(last) ? ApplyResult.load(last) : null;
+				return ApplyFailures.byOpId(result, List.of(FabricLoader.getInstance().getGameDir().resolve("mods"), configDir()));
+			} catch (IOException | RuntimeException e) {
+				RigTune.LOGGER.warn("Try it: could not read {}", last.getFileName(), e);
+				return Map.of();
+			}
+		}
+
+		@Override
+		public void acknowledge(String runId) {
+			controller.trendService().acknowledge(runId);
+		}
+
+		@Override
+		public HistoryModel.Labels labels() {
+			return controller.settingLabels();
+		}
+
+		@Override
+		public void openScreen() {
+			Minecraft minecraft = minecraft();
+			minecraft.gui.setScreen(new TryItScreen(minecraft.gui.screen(), controller, null));
+		}
+
+		@Override
+		public void overlay(Text text) {
+			Minecraft minecraft = minecraft();
+			if (minecraft.player != null) {
+				minecraft.player.sendOverlayMessage(Texts.component(text));
+			}
+		}
+
+		@Override
+		public void toast(Text title, Text body) {
+			SystemToast.add(minecraft().gui.toastManager(), TOAST_ID, Texts.component(title), Texts.component(body));
+		}
+
+		@Override
+		public String modVersion() {
+			return controller.modVersion();
+		}
+
+		@Override
+		public String mcVersion() {
+			return HardwareProbe.minecraftVersion();
+		}
+
+		// When a run is first queued (never at init, X4).
+		@Override
+		public void hook() {
+			if (!registered) {
+				registered = true;
+				ClientTickEvents.END_CLIENT_TICK.register(TryItService::tick);
+				BenchmarkController.setOutcomeHandler(TryItService::claim);
+				Busy.tryItRunning = TryItService::chainRunning;
+			}
 		}
 	}
 }

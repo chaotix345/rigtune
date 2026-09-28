@@ -114,6 +114,9 @@ public final class TryItText {
 		}
 		Text change = change(t, labels);
 		List<Line> out = new ArrayList<>();
+		if (view.note() != null) {
+			out.add(warning(view.note()));
+		}
 		Line before = step(view.before(), true);
 		if (before != null) {
 			out.add(before);
@@ -131,7 +134,7 @@ public final class TryItText {
 			case NONE -> {
 			}
 			case MEASURING_BEFORE, APPLYING, MEASURING_AFTER -> out.add(normal(Text.of("rigtune.tryit.stage.measuring", "Measuring…")));
-			case STOPPED_BEFORE -> out.add(normal(Text.of("rigtune.tryit.stage.stopped_before", "Stopped before anything changed. Nothing was changed.")));
+			case STOPPED_BEFORE -> out.add(normal(Text.of("rigtune.tryit.stage.stopped_before", "Stopped before anything changed.")));
 			case AWAITING_RESTART -> out.add(normal(Text.of("rigtune.tryit.stage.restart",
 					"Quit and restart Minecraft. RigTune reminds you to measure again at the next start.")));
 			case RETRYING -> out.add(warning(Text.of("rigtune.tryit.stage.retrying",
@@ -270,6 +273,12 @@ public final class TryItText {
 			case NOT_APPLIED -> Text.of("rigtune.tryit.toast.body.not_applied", "Open RigTune: the change wasn't applied.");
 			default -> null;
 		};
+	}
+
+	// Why the chain stopped before its run (a note): the benchmark's refusal, or a run that ended without its outcome.
+	public static Text lost(@Nullable Text why) {
+		return why == null ? Text.of("rigtune.tryit.lost.run", "The measurement ended without a result.")
+				: Text.of("rigtune.tryit.lost.start", "The measurement couldn't start: %s", why);
 	}
 
 	public static Text overlay() {

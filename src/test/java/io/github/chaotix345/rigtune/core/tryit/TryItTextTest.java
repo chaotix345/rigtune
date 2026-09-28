@@ -74,6 +74,19 @@ class TryItTextTest {
 		assertEquals("The benchmark needs an open world.", TryItText.sceneRefusal("rigtune.status.benchmark_unavailable").english());
 	}
 
+	// Review L8/L10: what this session saw go wrong comes first, as a warning.
+	@Test
+	void aNoteComesFirst() {
+		Text why = TryItText.sceneRefusal("rigtune.benchmark.refused.leave_world");
+		List<Line> lines = TryItText.lines(view(Stage.READY, true).withNote(TryItText.lost(why)), LABELS);
+		assertEquals("The measurement couldn't start: Leave your world first: the benchmark world opens from the title screen.",
+				lines.getFirst().text().english());
+		assertEquals(Tone.WARNING, lines.getFirst().tone());
+		assertEquals("The measurement ended without a result.", TryItText.lost(null).english());
+		assertEquals(List.of("Stopped before anything changed."), english(TryItText.lines(view(Stage.STOPPED_BEFORE, true), LABELS)).stream()
+				.filter(l -> l.startsWith("Stopped")).toList());
+	}
+
 	@Test
 	void theChangeIsNamedWithHistorysLabels() {
 		assertEquals("Chunk Build Defer: Always → One frame", TryItText.change(RESTART, LABELS).english());
