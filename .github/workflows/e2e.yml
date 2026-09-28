@@ -246,3 +246,78 @@ jobs:
           name: stutter-script-${{ matrix.mc }}
           path: ${{ runner.temp }}/evidence/
           if-no-files-found: ignore
+
+  # AC3e.2, release tier only: BatteryFlowGameTest's OSHI block, one job per node, on the caller's RigTune jar
+  # (-PgametestModJar: the staged bytes, never a rebuild; only the gametest jar is built here). The runner's kernel has no
+  # test_power module, so tools/e2e/fake_battery.sh mounts a tmpfs over /sys/class/power_supply with a discharging BAT0; the
+  # game's own OSHI reads it with udev off, its startup probe finds a battery on battery power and its watcher starts; the
+  # test rewrites STATUS and waits for the watcher's real 30 s polls (AC -> battery -> AC). The game runs in
+  # tools/ci/offline.sh's namespace, which shares the mount.
+  battery-oshi:
+    name: battery OSHI leg (${{ matrix.mc }})
+    needs: [matrix, jars]
+    if: ${{ !cancelled() && inputs.tier == 'release' && needs.matrix.result == 'success' && (needs.jars.result == 'success' || needs.jars.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        mc: ${{ fromJSON(needs.matrix.outputs.nodes) }}
+    env:
+      SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER: skip
+      MC: ${{ matrix.mc }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up the JDK (network)
+        id: jdk
+        uses: actions/setup-java@v6
+        continue-on-error: true
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
+      - name: Wait before the JDK retry (network)
+        if: steps.jdk.outcome == 'failure'
+        run: sleep 30
+      - name: Set up the JDK, retry (network)
+        if: steps.jdk.outcome == 'failure'
+        uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feat/v0.5.0' }}
+      - name: The new jars (the calling run's, never rebuilt)
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ inputs.jars-artifact || 'e2e-new-jars' }}
+          path: ${{ runner.temp }}/new
+      - name: Resolve dependencies (network)
+        run: >-
+          tools/ci/retry.sh ./gradlew --no-daemon ":$MC:prefetchDependencies" ":$MC:downloadAssets"
+          ":$MC:gametestModrinthCatalog" ":$MC:gametestJar" -PgametestClasses=BatteryFlowGameTest
+      - name: A fake battery in /sys/class/power_supply (tmpfs), discharging
+        run: tools/e2e/fake_battery.sh Discharging
+      - name: BatteryFlowGameTest on the fake battery
+        timeout-minutes: 15
+        run: |
+          set -eu
+          mapfile -t found < <(find "$RUNNER_TEMP/new" -name "rigtune-*+mc$MC.jar" ! -name "*-sources.jar")
+          if [ "${#found[@]}" -ne 1 ]; then
+            echo "::error::expected exactly one rigtune-*+mc$MC.jar in the jars artifact, found: ${found[*]:-none}"
+            exit 1
+          fi
+          tools/ci/offline.sh --timeout 14m ./gradlew --no-daemon --offline ":$MC:runProductionClientGameTest" \
+            -PgametestClasses=BatteryFlowGameTest "-PgametestModJar=${found[0]}" \
+            "-PgametestJvmArgs=-Doshi.os.linux.allowudev=false -Drigtune.gametest.fakeBattery=/sys/class/power_supply/BAT0/uevent" \
+            --stacktrace
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: battery-oshi-${{ matrix.mc }}
+          path: |
+            versions/${{ matrix.mc }}/build/run/productionClientGameTest/screenshots/
+            versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs/
+            versions/${{ matrix.mc }}/build/run/productionClientGameTest/crash-reports/
+          if-no-files-found: ignore

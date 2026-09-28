@@ -98,4 +98,18 @@ class BatteryPromptTest {
 		assertNull(unknown.poll(true), "the first poll is the baseline, not an edge");
 		assertEquals(Boolean.TRUE, unknown.confirmed());
 	}
+
+	// docs/v0.5/SPEC.md AC3e.3: the cooldown at its edges. An offer exactly 10 minutes ago no longer blocks; a lastPromptAt up
+	// to 1 minute in the future (clock skew) still counts as recent, one second more is ignored.
+	@Test
+	void theCooldownAtTheClockSkewBoundary() {
+		assertEquals(Offer.NONE, BatteryPrompt.onEdge(true, promptedAt(NOW.minusSeconds(10 * 60 - 1)), null, false, NOW).offer());
+		assertEquals(Offer.BATTERY, BatteryPrompt.onEdge(true, promptedAt(NOW.minusSeconds(10 * 60)), null, false, NOW).offer());
+		assertEquals(Offer.NONE, BatteryPrompt.onEdge(true, promptedAt(NOW.plusSeconds(60)), null, false, NOW).offer());
+		assertEquals(Offer.BATTERY, BatteryPrompt.onEdge(true, promptedAt(NOW.plusSeconds(61)), null, false, NOW).offer());
+	}
+
+	private static ProfileStore.Battery promptedAt(Instant at) {
+		return new ProfileStore.Battery(true, null, at.toString(), false);
+	}
 }

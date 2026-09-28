@@ -105,6 +105,25 @@ class E2eWorkflowTest(unittest.TestCase):
         self.assertNotRegex(e2e, r"gradlew[^\n]*\s(build|assemble|jar)\b")
         self.assertIn("if: ${{ !inputs.jars-artifact }}", self.jobs["jars"])
 
+    # AC3e.2: the battery OSHI leg runs in the release tier only, per node, on the tmpfs battery mounted before the game,
+    # and tests the caller's RigTune jar (-PgametestModJar), never a rebuilt one (review M2).
+    def test_the_battery_oshi_leg(self):
+        battery = self.jobs["battery-oshi"]
+        self.assertIn("inputs.tier == 'release'", battery)
+        self.assertIn("mc: ${{ fromJSON(needs.matrix.outputs.nodes) }}", battery)
+        self.assertIn("inputs.jars-artifact", battery)
+        self.assertNotRegex(battery, r"gradlew[^\n]*\s(build|assemble|jar)\b")
+        self.assertNotRegex(battery, r'":\$MC:jar"')
+        mount = next(i for i, s in enumerate(steps(battery)) if "tools/e2e/fake_battery.sh Discharging" in s)
+        game = next(i for i, s in enumerate(steps(battery)) if "runProductionClientGameTest" in s)
+        self.assertLess(mount, game)
+        run = " ".join(steps(battery)[game].split())
+        self.assertRegex(run, r"tools/ci/offline\.sh --timeout \d+m ./gradlew --no-daemon --offline ")
+        self.assertIn('"-PgametestModJar=${found[0]}"', run)
+        self.assertIn("-PgametestClasses=BatteryFlowGameTest", run)
+        self.assertIn("-Doshi.os.linux.allowudev=false -Drigtune.gametest.fakeBattery=/sys/class/power_supply/BAT0/uevent", run)
+        self.assertIn("if: always()", next(s for s in steps(battery) if "upload-artifact" in s))
+
     # AC3f.1: the release tier's stutter-script leg runs the caller's jar (never a rebuilt one) with no network.
     def test_the_stutter_script_leg(self):
         job = self.jobs["stutter-script"]
