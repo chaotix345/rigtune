@@ -27,6 +27,12 @@ Evidence per run and node: `run-<id>/mc<node>/` holds `RESULT.md`, `stutter.json
 - The product tags only `StutterAnalyzer.TELEPORT_WINDOW`: 10 s from the position jump. In v0.4's GPU runs every spike fell in the first 10 s, so the two views agreed there.
 - Here, forced full GCs every 5 s hit on llvmpipe: explicit full GCs of 260-500 ms. They put spikes 10-30 s after the tp, outside the window, and the product rightly leaves them untagged.
 - The criterion now uses the product's window (6156f948). Re-evaluated with it, the first run's evidence passes too. Its RESULT.md is kept as written.
+- Review round 2 tightened it for the log's whole-second stamps (±1 s):
+  - every listed spike surely inside the window (tp + 1 .. tp + 9 s) must carry "after teleport";
+  - at least one tagged spike must lie within tp - 1 .. tp + 11 s;
+  - no tagged spike may lie outside that and the world entry's own window. Entering the world counts as a teleport to the product: C1r's spike at 10.6 s carries the tag too.
+  - "Chunks loading" is judged in the wide window.
+  - All four CI evaluations and v0.4's C1r pass under this criterion (re-evaluated locally from the recorded files).
 
 **What this doesn't show (UNVERIFIED):**
 - 26.3's millisecond numbers on a real GPU. The local 26.3 client crashes natively (SPEC X9).
