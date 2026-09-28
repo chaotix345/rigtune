@@ -38,7 +38,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -46,6 +50,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 // docs/v0.5/SPEC.md 4h: settings changed outside the game (docs/research/v0.5/launcher-managed-mods.md §2), a one-shot
 // start-up comparison, not a monitor (OutsideOptions has the rules). snapshotAtStop: a clean CLIENT_STOPPING
@@ -65,8 +71,10 @@ public final class OutsideChanges {
 	// options.txt larger than this isn't the game's (it is a few KiB).
 	private static final long MAX_OPTIONS_BYTES = 1024 * 1024;
 	private static final String OPTIONS_FILE = "options.txt";
-	// A logs folder keeps every archive vanilla ever made; more than this many isn't listed further.
-	private static final int MAX_LOG_ARCHIVES = 10_000;
+	// A logs folder keeps every archive vanilla ever made: at most this many are listed, and this many statted.
+	private static final int MAX_LOG_ARCHIVES = 20_000;
+	private static final int MAX_LOG_STATS = 64;
+	private static final Pattern ARCHIVE_NAME = Pattern.compile("(\\d{4}-\\d{2}-\\d{2})-\\d+\\.log\\.gz");
 	private static final SystemToast.SystemToastId TOAST_ID = new SystemToast.SystemToastId(6000L);
 
 	// What the start comparison found, until the player acts on it.
@@ -118,8 +126,9 @@ public final class OutsideChanges {
 		// Review L6: a launch of another RigTune version since that exit (0.5 -> 0.4.0 -> 0.5) may have changed options in
 		// game; the snapshot is from before it, so nothing is compared.
 		// Review-11 COMPAT-3: the same for any launch in between (0.3.0 and older record no startup run), from the log archives.
+		Instant exitAt = OutsideOptions.exitAt(snapshot);
 		if (OutsideOptions.anotherVersionSince(snapshot, new StartupTimesStore(controller.configDir()).runs(), controller.modVersion())
-				|| OutsideOptions.anotherLaunchSince(snapshot, logArchives(FabricLoader.getInstance().getGameDir().resolve("logs")))) {
+				|| exitAt != null && OutsideOptions.anotherLaunchSince(snapshot, logArchives(FabricLoader.getInstance().getGameDir().resolve("logs"), exitAt))) {
 			RigTune.LOGGER.info("RigTune: the game ran since the last clean exit of this RigTune; settings changed outside the game aren't checked this time");
 			return;
 		}
@@ -131,19 +140,48 @@ public final class OutsideChanges {
 		found(changes);
 	}
 
-	// The modification times of logs/*.log.gz (one folder, not recursive; at most MAX_LOG_ARCHIVES entries looked at);
-	// nothing when the folder can't be read.
-	static List<Instant> logArchives(Path logs) {
+	// The modification times of logs/*.log.gz newer than exitAt, at most two (all anotherLaunchSince needs). One folder, not
+	// recursive. Review-12 R12X-5: vanilla never deletes its archives, so a long-lived instance has thousands; an archive
+	// named for a date well before the exit ("yyyy-MM-dd-N.log.gz" is the date the log was written) is never statted, a
+	// file whose stat fails is skipped (not the end of the listing), and the listing and the stats have hard caps.
+	static List<Instant> logArchives(Path logs, Instant exitAt) {
+		return logArchives(logs, exitAt, Files::getLastModifiedTime);
+	}
+
+	interface Stat {
+		FileTime modified(Path file) throws IOException;
+	}
+
+	static List<Instant> logArchives(Path logs, Instant exitAt, Stat stat) {
 		List<Instant> out = new ArrayList<>();
 		if (!Files.isDirectory(logs)) {
 			return out;
 		}
+		LocalDate oldest = LocalDate.ofInstant(exitAt, ZoneId.systemDefault()).minusDays(2);
+		int listed = 0;
+		int statted = 0;
 		try (DirectoryStream<Path> archives = Files.newDirectoryStream(logs, "*.log.gz")) {
 			for (Path archive : archives) {
-				if (out.size() >= MAX_LOG_ARCHIVES) {
+				if (out.size() >= 2 || ++listed > MAX_LOG_ARCHIVES || statted >= MAX_LOG_STATS) {
 					break;
 				}
-				out.add(Files.getLastModifiedTime(archive).toInstant());
+				Matcher dated = ARCHIVE_NAME.matcher(archive.getFileName().toString());
+				try {
+					if (dated.matches() && LocalDate.parse(dated.group(1)).isBefore(oldest)) {
+						continue;
+					}
+				} catch (DateTimeParseException e) {
+					// not a date after all: stat it
+				}
+				statted++;
+				try {
+					Instant modified = stat.modified(archive).toInstant();
+					if (modified.isAfter(exitAt)) {
+						out.add(modified);
+					}
+				} catch (IOException | RuntimeException e) {
+					RigTune.LOGGER.debug("Skipping the log archive {}", archive.getFileName(), e);
+				}
 			}
 		} catch (IOException | RuntimeException e) {
 			RigTune.LOGGER.debug("Could not list the log archives", e);
