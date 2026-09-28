@@ -30,12 +30,12 @@ class StutterIdleTest {
 
 	@Test
 	void whatCountsAsThrottled() {
-		assertTrue(StutterHooks.throttled(FramerateThrottleReason.LONG_AFK, 10, 120, true));
-		assertTrue(StutterHooks.throttled(FramerateThrottleReason.SHORT_AFK, 30, 30, true), "a reason, even with the limit unchanged");
-		assertTrue(StutterHooks.throttled(FramerateThrottleReason.WINDOW_ICONIFIED, 10, 260, false));
-		assertFalse(StutterHooks.throttled(FramerateThrottleReason.NONE, 120, 120, true));
-		assertFalse(StutterHooks.throttled(FramerateThrottleReason.NONE, 260, 260, true), "unlimited");
-		assertTrue(StutterHooks.throttled(FramerateThrottleReason.NONE, 15, 120, true), "a lower limit in effect (Dynamic FPS)");
+		assertTrue(SettingsWatch.throttled(FramerateThrottleReason.LONG_AFK, 10, 120, true));
+		assertTrue(SettingsWatch.throttled(FramerateThrottleReason.SHORT_AFK, 30, 30, true), "a reason, even with the limit unchanged");
+		assertTrue(SettingsWatch.throttled(FramerateThrottleReason.WINDOW_ICONIFIED, 10, 260, false));
+		assertFalse(SettingsWatch.throttled(FramerateThrottleReason.NONE, 120, 120, true));
+		assertFalse(SettingsWatch.throttled(FramerateThrottleReason.NONE, 260, 260, true), "unlimited");
+		assertTrue(SettingsWatch.throttled(FramerateThrottleReason.NONE, 15, 120, true), "a lower limit in effect (Dynamic FPS)");
 	}
 
 	// The coordinator's case: 10 minutes of LONG_AFK frames (10 FPS) add no gameplay and no spike, and count as idle.
@@ -47,8 +47,8 @@ class StutterIdleTest {
 			StutterMonitor.onFrame(8 * MS);
 		}
 		long before = session.snapshot().gameplayFrames();
-		// What the tick hook does: throttled -> idle and excluded.
-		boolean idle = StutterHooks.throttled(FramerateThrottleReason.LONG_AFK, 10, 120, true);
+		// What the listeners do: throttled -> idle (SettingsWatch) and excluded (StutterHooks).
+		boolean idle = SettingsWatch.throttled(FramerateThrottleReason.LONG_AFK, 10, 120, true);
 		StutterMonitor.setIdle(idle, t0 + 10 * S);
 		StutterMonitor.setExcluded(idle);
 		for (int i = 0; i < 6_000; i++) {

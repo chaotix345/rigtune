@@ -285,13 +285,16 @@ showed.
 
 **RW-17 (MEDIUM).** While the game throttles its frame rate its frames are excluded like a menu's, and the time is
 counted apart:
-- `StutterHooks.throttled(Minecraft)`: vanilla's `FramerateLimitTracker.getThrottleReason()` is not NONE (SHORT_AFK
+- `SettingsWatch.throttled(Minecraft)`: vanilla's `FramerateLimitTracker.getThrottleReason()` is not NONE (SHORT_AFK
   after 60 s without input, LONG_AFK after 600 s, WINDOW_ICONIFIED, OUT_OF_LEVEL_MENU; javap: the same API on 26.2 and
   26.3, no Stonecutter block), or the limit in effect is below the player's own `framerateLimit` (how Dynamic FPS shows),
   judged by the benchmark's own `core/benchmark/Throttle` (reused, not copied). The pure seam
   `throttled(reason, limitInEffect, playersLimit, windowActive)` is what the unit test drives.
-- It runs in the tick hook only while a capture is on, every 10 ticks (`THROTTLE_EVERY_TICKS`, 0.5 s): O(1), nothing
-  allocated (enum constants, fields and an `Integer` the option already holds). The other 9 ticks add one modulo.
+- It runs in SettingsWatch's own END_CLIENT_TICK listener while a session runs, every 10 ticks (`THROTTLE_EVERY_TICKS`,
+  0.5 s): O(1), nothing allocated (enum constants, fields and an `Integer` the option already holds). The first push had
+  it in StutterHooks' tick hook, and tickHookOnVsReference went over its limit on two legs (run 36367115133: 2.09 and
+  2.13 > 2.05), so it moved off the timed path; the tick hook keeps only a static flag read (`StutterMonitor.idle()`) in
+  the exclusion. A benchmark's capture isn't covered (the benchmark stops a throttled run itself).
 - `StutterMonitor.setIdle(idle, now)` (a change only) opens and closes each capture's idle stretch
   (`Capture.idleNanos(now)`, a capture started while idle counts from its start); `setExcluded` adds `|| idle`. The frame
   hook is unchanged.

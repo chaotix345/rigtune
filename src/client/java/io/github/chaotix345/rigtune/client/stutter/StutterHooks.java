@@ -1,8 +1,6 @@
 package io.github.chaotix345.rigtune.client.stutter;
 
-import com.mojang.blaze3d.platform.FramerateLimitTracker;
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.core.benchmark.Throttle;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import io.github.chaotix345.rigtune.core.stutter.StutterRings;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientChunkEvents;
@@ -36,10 +34,6 @@ public final class StutterHooks {
 	private static boolean fast;
 	private static boolean failed;
 	private static boolean wasActive;
-	// v0.5 RW-17: the throttle check runs every THROTTLE_EVERY_TICKS ticks (0.5 s) while a capture is on.
-	static final int THROTTLE_EVERY_TICKS = 10;
-	private static final Throttle THROTTLE = new Throttle();
-	private static boolean dynamicFps;
 
 	private StutterHooks() {
 	}
@@ -47,7 +41,6 @@ public final class StutterHooks {
 	public static void install(StutterService stutterService) {
 		service = stutterService;
 		sodium = FabricLoader.getInstance().isModLoaded("sodium");
-		dynamicFps = FabricLoader.getInstance().isModLoaded("dynamic_fps");
 		ClientTickEvents.END_CLIENT_TICK.register(StutterHooks::tick);
 		ClientChunkEvents.CHUNK_LOAD.register((level, chunk) -> StutterMonitor.chunkLoaded());
 		ClientLevelEvents.AFTER_CLIENT_LEVEL_CHANGE.register((minecraft, level) -> {
@@ -76,15 +69,12 @@ public final class StutterHooks {
 			if (active && !wasActive) {
 				hadPlayer = false;
 				fast = false;
-				ticks = 0;
 			}
 			wasActive = active;
 			if (!active) {
 				return;
 			}
-			if (ticks % THROTTLE_EVERY_TICKS == 0) {
-				StutterMonitor.setIdle(throttled(minecraft), System.nanoTime());
-			}
+			// v0.5 RW-17: idle (a throttled frame rate) is excluded too; SettingsWatch's own listener decides it.
 			StutterMonitor.setExcluded(minecraft.gui.screen() != null || !minecraft.isWindowActive() || StutterMonitor.idle());
 			movement(minecraft.player);
 			if (++ticks % 5 == 0) {
@@ -124,24 +114,6 @@ public final class StutterHooks {
 		lastX = x;
 		lastY = y;
 		lastZ = z;
-	}
-
-	// v0.5 RW-17: the game throttles its frame rate: vanilla's limiter gives a reason (AFK after 60 s without input,
-	// minimised, a menu outside a level), or the limit in effect is below the player's own, which is how Dynamic FPS shows
-	// (the benchmark's own Throttle check, reused). Every value read is a field or an enum constant: nothing allocated.
-	static boolean throttled(Minecraft minecraft) {
-		FramerateLimitTracker tracker = minecraft.getFramerateLimitTracker();
-		return throttled(tracker.getThrottleReason(), tracker.getFramerateLimit(), minecraft.options.framerateLimit().get(), minecraft.isWindowActive());
-	}
-
-	// The seam StutterHooksThrottleTest drives.
-	static boolean throttled(FramerateLimitTracker.FramerateThrottleReason reason, int limitInEffect, int playersLimit, boolean windowActive) {
-		if (reason != FramerateLimitTracker.FramerateThrottleReason.NONE) {
-			return true;
-		}
-		THROTTLE.reset();
-		THROTTLE.sample(windowActive, limitInEffect);
-		return THROTTLE.throttled(playersLimit, dynamicFps);
 	}
 
 	// Turning the monitor on again after a failed tick tries once more.
