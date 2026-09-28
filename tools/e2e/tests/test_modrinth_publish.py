@@ -77,5 +77,23 @@ class PublishArgsTest(unittest.TestCase):
         self.assertNotIn("--dry-run", seen[0])
 
 
+    def test_the_preflight_reads_every_node_before_anything_is_public(self):
+        # Review-12 R12REL-1/7: read-only, with the token, in a dry run too (no --dry-run passed on).
+        seen = []
+        status = modrinth_publish.publish(self.staged, "v0.5.0", ["26.2"], self.root / "CHANGELOG.md", self.root / "work", dry_run=True,
+                                          preflight=True, run=lambda command: seen.append(command) or 0)
+        self.assertEqual(0, status)
+        self.assertEqual(["tools/ci/retry.sh", "python3", "tools/modrinth_project.py", "preflight", "--file",
+                          str(self.staged / "rigtune-0.5.0+mc26.2.jar"), "--version-number", "0.5.0+mc26.2", "--sha256", "aa11"], seen[0])
+
+    def test_a_missing_or_oversized_changelog_fails_the_preflight_and_warns_in_a_dry_run(self):
+        # Review-12 R12REL-3.
+        for tag, text in (("v0.9.0", CHANGELOG), ("v0.5.0", CHANGELOG.replace("- The DH note.", "x" * (modrinth_publish.MAX_CHANGELOG + 1)))):
+            (self.root / "CHANGELOG.md").write_text(text, encoding="utf-8")
+            args = (self.staged, tag, [], self.root / "CHANGELOG.md", self.root / "work")
+            self.assertEqual(1, modrinth_publish.publish(*args, dry_run=False, preflight=True, run=lambda command: 0))
+            self.assertEqual(0, modrinth_publish.publish(*args, dry_run=True, preflight=True, run=lambda command: 0))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -50,7 +50,10 @@ class WorkflowTest(unittest.TestCase):
         build = (REPO / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
         job = build.split("\n  rules-consistency:\n", 1)[1].split("\n  rules-v1-compat:", 1)[0]
         self.assertIn("if: github.event_name == 'pull_request' && github.base_ref == 'main'", job)
-        self.assertIn("tools/ci/retry.sh git fetch --depth=1 origin main", job)
+        # Review-12 R12REL-5: the base side of GitHub's merge commit, not main's live tip (a re-run stays deterministic).
+        self.assertIn("fetch-depth: 2", job)
+        self.assertIn('git show HEAD^1:rules/rules-v2.json > "$RUNNER_TEMP/main-rules-v2.json"', job)
+        self.assertNotIn("git fetch", job)
         self.assertIn('python3 tools/rules_revision_check.py --base "$RUNNER_TEMP/main-rules-v2.json" --head rules/rules-v2.json', job)
 
 

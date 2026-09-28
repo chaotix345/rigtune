@@ -100,9 +100,14 @@ def encode_multipart(fields, files, boundary=None):
 
 # --- HTTP layer ----------------------------------------------------------
 
-def default_opener(request):
+# A version POST waits longer than Cloudflare's ~100 s origin timeout, so a slow create isn't abandoned client-side and
+# then posted again (review-12 R12REL-7).
+POST_TIMEOUT = 180
+
+
+def default_opener(request, timeout=60):
     try:
-        with urllib.request.urlopen(request, timeout=60) as resp:
+        with urllib.request.urlopen(request, timeout=timeout) as resp:
             return resp.status, resp.read(), {k.lower(): v for k, v in resp.headers.items()}
     except urllib.error.HTTPError as e:
         headers = {k.lower(): v for k, v in (e.headers or {}).items()}
@@ -129,9 +134,9 @@ class Client:
             headers.update(extra)
         return headers
 
-    def _call(self, method, url, *, headers=None, data=None):
+    def _call(self, method, url, *, headers=None, data=None, timeout=None):
         request = urllib.request.Request(url, data=data, headers=self._headers(headers), method=method)
-        status, body, resp_headers = self.opener(request)
+        status, body, resp_headers = self.opener(request) if timeout is None else self.opener(request, timeout=timeout)
         if status >= 400:
             raise ApiError(status, url, body.decode("utf-8", "replace"))
         return status, body, resp_headers
@@ -151,6 +156,17 @@ class Client:
     def list_versions(self, project_id):
         url = f"{self.base_url}/project/{project_id}/version"
         _, body, _ = self._call("GET", url)
+        return json.loads(body)
+
+    def version_by_hash(self, sha512):
+        """The version holding a file with this sha512, or None."""
+        url = f"{self.base_url}/version_file/{sha512}?algorithm=sha512"
+        try:
+            _, body, _ = self._call("GET", url)
+        except ApiError as e:
+            if e.status == 404:
+                return None
+            raise
         return json.loads(body)
 
     # -- writes (each dry-run-safe: logs and returns without calling opener) --
@@ -209,7 +225,7 @@ class Client:
         files = [(file_part_name, Path(file_path).name, "application/java-archive", file_bytes)]
         content_type, body = encode_multipart(fields, files)
         _, resp_body, _ = self._call(
-            "POST", f"{self.base_url}/version", headers={"Content-Type": content_type}, data=body
+            "POST", f"{self.base_url}/version", headers={"Content-Type": content_type}, data=body, timeout=POST_TIMEOUT
         )
         return json.loads(resp_body)
 
@@ -341,6 +357,33 @@ def _sha256_of(path):
     return digest.hexdigest()
 
 
+def _sha512_of(path):
+    digest = hashlib.sha512()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def existing_version(client, project_id, version_number, file_path):
+    """None when neither this version_number nor these bytes are on Modrinth yet; the version when this version_number
+    already holds exactly this file (a retry after a slow or lost response: nothing to do). ModrinthError when the
+    number holds other bytes, or these bytes are another version (review-12 R12REL-7): never "published" over it."""
+    sha512 = _sha512_of(file_path)
+    for existing in client.list_versions(project_id):
+        if existing.get("version_number") == version_number:
+            hashes = {(f.get("hashes") or {}).get("sha512") for f in existing.get("files") or []}
+            if sha512 in hashes:
+                return existing
+            raise ModrinthError(f"version {version_number} already exists (id={existing.get('id')}) with other bytes than {file_path}")
+    found = client.version_by_hash(sha512)
+    if found is not None:
+        if found.get("version_number") == version_number:
+            return found
+        raise ModrinthError(f"{file_path} is already on Modrinth as version {found.get('version_number')} (id={found.get('id')})")
+    return None
+
+
 def cmd_upload_version(client, args):
     if args.sha256:
         actual = _sha256_of(args.file)
@@ -358,7 +401,8 @@ def cmd_upload_version(client, args):
         "game_versions": [v.strip() for v in args.game_versions.split(",") if v.strip()],
         "loaders": [v.strip() for v in args.loaders.split(",") if v.strip()],
         "version_type": args.version_type,
-        "featured": True,
+        # As 0.2.0-0.4.0 went up through Minotaur, which never set it (review-12 R12REL-2).
+        "featured": bool(getattr(args, "featured", False)),
         "dependencies": [{"project_id": "fabric-api", "version_id": None, "file_name": None, "dependency_type": "required"}],
     }
     if not client.dry_run:
@@ -372,15 +416,48 @@ def cmd_upload_version(client, args):
         if fabric_api is None:
             raise ModrinthError("could not resolve the fabric-api project id")
         payload["dependencies"][0]["project_id"] = fabric_api["id"]
-        for existing in client.list_versions(project["id"]):
-            if existing.get("version_number") == args.version_number:
-                print(f"version {args.version_number} already exists: id={existing['id']}")
-                return 0
+        existing = existing_version(client, project["id"], args.version_number, args.file)
+        if existing is not None:
+            print(f"already on Modrinth with the same file: id={existing.get('id')} version_number={args.version_number}")
+            return 0
     result = client.create_version(payload, args.file)
     if client.dry_run:
         print(json.dumps({"would_upload_version": payload, "file": args.file}, indent=2))
     else:
         print(f"created version: id={result['id']} version_number={result.get('version_number')}")
+    return 0
+
+
+def cmd_preflight(client, args):
+    """Read-only, before a release is public (review-12 R12REL-1): the token reaches the project, and this
+    version_number is either free or already holds exactly this file."""
+    if args.sha256 and _sha256_of(args.file).lower() != args.sha256.lower():
+        raise ModrinthError(f"sha256 mismatch for {args.file}: expected {args.sha256}")
+    project = client.get_project(PROJECT_SLUG)
+    if project is None:
+        print(f"project {PROJECT_SLUG!r} not found with this token")
+        return 1
+    existing = existing_version(client, project["id"], args.version_number, args.file)
+    print(f"preflight OK: project id={project['id']} status={project.get('status')}; version {args.version_number} "
+          + ("already holds this file" if existing is not None else "is free"))
+    return 0
+
+
+def cmd_sides(client, args):
+    """Re-applies the project's sides, which sets the v3 environment on every version, the new ones included (labrinth
+    routes/v2/projects.rs). Idempotent; run it after every release, approved or not (review-12 R12REL-6, AC3h.1). Needs a
+    token that may write the project (the release workflow's token can't)."""
+    fields = {"client_side": "required", "server_side": "unsupported"}
+    if client.dry_run:
+        client.patch_project("<dry-run>", fields)
+        print(json.dumps({"would_patch": fields}, indent=2))
+        return 0
+    project = client.get_project(PROJECT_SLUG)
+    if project is None:
+        print(f"project {PROJECT_SLUG!r} does not exist")
+        return 1
+    client.patch_project(project["id"], fields)
+    print(f"sides set: id={project['id']} {fields}")
     return 0
 
 
@@ -455,8 +532,19 @@ def build_parser():
     p_upload.add_argument("--version-type", default="release")
     p_upload.add_argument("--changelog-file")
     p_upload.add_argument("--sha256", help="verify the file's sha256 before uploading")
+    p_upload.add_argument("--featured", action="store_true", help="mark the version featured (default: not, as 0.2-0.4)")
     p_upload.add_argument("--dry-run", action="store_true")
     p_upload.set_defaults(func=cmd_upload_version)
+
+    p_preflight = sub.add_parser("preflight", help="read-only: the token reaches the project; the version is free or holds this file")
+    p_preflight.add_argument("--file", required=True)
+    p_preflight.add_argument("--version-number", required=True)
+    p_preflight.add_argument("--sha256", help="verify the file's sha256 first")
+    p_preflight.set_defaults(func=cmd_preflight)
+
+    p_sides = sub.add_parser("sides", help="re-apply the project's sides (sets every version's environment)")
+    p_sides.add_argument("--dry-run", action="store_true")
+    p_sides.set_defaults(func=cmd_sides)
 
     p_submit = sub.add_parser("submit", help="submit the project for moderator review")
     p_submit.add_argument("--dry-run", action="store_true")
