@@ -62,7 +62,7 @@ class EvaluateTest(unittest.TestCase):
     def test_an_untagged_spike_after_the_first_chunk_load_fails(self):
         stutter = copy.deepcopy(self.stutter)
         session = [s for s in stutter["sessions"] if s["source"] == "monitor"][-1]
-        session["worst"].append({"t": 40.0, "ms": 30.0, "baseMs": 8.3, "causes": ["render:low", "afterTeleport:context"]})
+        session["worst"].append({"t": 30.0, "ms": 30.0, "baseMs": 8.3, "causes": ["render:low", "afterTeleport:context"]})
         self.assertEqual(["\"chunks loading\" from the first chunk load after the teleport on"],
                          failing(stutter_run.evaluate(self.lines, stutter, self.gc)[0]))
 
