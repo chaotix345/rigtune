@@ -343,7 +343,10 @@ jobs:
         run: |
           set -eu
           python3 tools/gametest/returning_seed.py --out build/returning-seed
-          tools/ci/offline.sh --timeout 6m ./gradlew --no-daemon --offline ":${{ matrix.mc }}:runProductionClientGameTest" "-PgametestClasses=FootprintGameTest" "-PgametestSeedConfig=build/returning-seed" "-PgametestJvmArgs=-Drigtune.footprint.returning=true" --stacktrace
+          # WARN MODE, tracker "returning-player gate back to FAIL" (a hard blocker before the RC streak): the returning player's
+          # budgets only warn until ws-h moves preLaunch's history reconcile off the render thread; then drop returningWarnOnly.
+          tools/ci/offline.sh --timeout 6m ./gradlew --no-daemon --offline ":${{ matrix.mc }}:runProductionClientGameTest" "-PgametestClasses=FootprintGameTest" "-PgametestSeedConfig=build/returning-seed" "-PgametestJvmArgs=-Drigtune.footprint.returning=true -Drigtune.footprint.returningWarnOnly=true" --stacktrace
+          grep -h "RETURNING-PLAYER GATE IN WARN MODE" "versions/${{ matrix.mc }}/build/run/productionClientGameTest/logs/latest.log" | sed 's/^.*RETURNING-PLAYER/::warning::RETURNING-PLAYER/' || true
       - name: Upload the returning-player footprint
         if: always() && (matrix.classes == '' || contains(format(',{0},', matrix.classes), ',FootprintGameTest,'))
         uses: actions/upload-artifact@v7

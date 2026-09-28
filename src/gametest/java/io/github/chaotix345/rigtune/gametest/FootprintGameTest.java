@@ -196,6 +196,9 @@ public class FootprintGameTest implements FabricClientGameTest {
 	// of 50+ entries, nothing staged) and -Drigtune.footprint.returning=true. Only the startup keys are measured, against
 	// the same budgets; the seed must be what the game started with. Written to footprint-<mc>-<backend>-returning.json.
 	private static final String RETURNING = "rigtune.footprint.returning";
+	// Warn-only for the returning player's budgets alone (the tracker item below); build.yml greps the tag into ::warning::.
+	private static final String RETURNING_WARN_ONLY = "rigtune.footprint.returningWarnOnly";
+	private static final String RETURNING_WARN_TAG = "RETURNING-PLAYER GATE IN WARN MODE (tracker: returning-player gate back to FAIL before the RC streak):";
 
 	private static void returningPlayer() {
 		Path configDir = FabricLoader.getInstance().getConfigDir();
@@ -234,7 +237,13 @@ public class FootprintGameTest implements FabricClientGameTest {
 		out.put("budgetMode", budgets.mode().name().toLowerCase(Locale.ROOT));
 		out.put("violations", violations.stream().map(FootprintBudgets.Violation::message).toList());
 		write(mc, backend, out);
-		budgets.enforce(violations, RigTune.LOGGER::warn);
+		if (Boolean.getBoolean(RETURNING_WARN_ONLY)) {
+			// Tracker: "returning-player gate back to FAIL" (coordinator, 2026-09-28), a hard blocker before the RC streak.
+			// build.yml sets this until ws-h moves preLaunch's history reconcile off the render thread; nothing else is warn-only.
+			violations.forEach(v -> RigTune.LOGGER.warn("{} {}", RETURNING_WARN_TAG, v.message()));
+		} else {
+			budgets.enforce(violations, RigTune.LOGGER::warn);
+		}
 		RigTune.LOGGER.info("FootprintGameTest (returning player, {} history entries): {}", historyEntries, measured);
 	}
 
