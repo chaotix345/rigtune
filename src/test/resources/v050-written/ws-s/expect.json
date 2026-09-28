@@ -1,6 +1,7 @@
 {
   "set": "ws-s",
   "checks": [
-    {"class": "StutterStore", "file": "stutter.json", "sessions": 1, "noBad": true}
+    {"class": "StutterStore", "file": "stutter.json", "sessions": 1, "noBad": true},
+    {"class": "StutterSummary", "file": "stutter.json", "state": "OK", "sessions": 1}
   ]
 }
