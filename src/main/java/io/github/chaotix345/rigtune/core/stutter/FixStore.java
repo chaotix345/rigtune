@@ -254,6 +254,8 @@ public final class FixStore {
 		o.addProperty("gcMeasured", c.gcMeasured());
 		JsonObject settings = child(o, "settings");
 		c.settings().forEach(settings::addProperty);
+		put(o, "backend", c.backend());
+		put(o, "gpu", c.gpu());
 	}
 
 	private static void put(JsonObject o, String name, @Nullable String value) {
@@ -328,7 +330,7 @@ public final class FixStore {
 		}
 		return new FixConditions(string(o, "mc"), string(o, "modSetHash"), (long) number(o, "heapMaxMb", 0), string(o, "collector"), whole(o, "width", 0),
 				whole(o, "height", 0), bool(o, "fullscreen", false), string(o, "world"), bool(o, "phaseTiming", false), bool(o, "gcMeasured", false),
-				settings);
+				settings, string(o, "backend"), string(o, "gpu"));
 	}
 
 	private static FixTracker.@Nullable Skip skip(@Nullable JsonElement e) {

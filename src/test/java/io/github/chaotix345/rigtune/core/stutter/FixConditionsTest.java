@@ -27,6 +27,32 @@ class FixConditionsTest {
 		return new FixConditions("26.2", "abc123", 4096, "g1", 1920, 1080, true, "SINGLEPLAYER", true, true, settings());
 	}
 
+	private static FixConditions graphics(@org.jspecify.annotations.Nullable String backend, @org.jspecify.annotations.Nullable String gpu) {
+		FixConditions b = base();
+		return new FixConditions(b.mc(), b.modSetHash(), b.heapMaxMb(), b.collector(), b.width(), b.height(), b.fullscreen(), b.world(), b.phaseTiming(),
+				b.gcMeasured(), b.settings(), backend, gpu);
+	}
+
+	// review-11 COMPAT-2 (ws-b's rule for the benchmark, BenchmarkTrend's BACKEND/GPU): sessions on another graphics backend
+	// (vanilla's Graphics API option, or 26.3 falling back to Vulkan) or another GPU aren't the same conditions. Both must be
+	// known and differ; the GPU is compared on the same or an unknown backend only (one device reads differently under
+	// OpenGL and Vulkan), case and outer spaces aside. Unknown on either side claims nothing.
+	@Test
+	void anotherGraphicsBackendOrGpuDiffers() {
+		FixConditions gl = graphics("OPENGL", "AMD Radeon RX 7800 XT");
+		List<FixConditions.Difference> vulkan = gl.differences(graphics("VULKAN", "AMD Radeon RX 7800 XT (RADV NAVI32)"), RD);
+		assertEquals(List.of(new FixConditions.Difference(FixConditions.Reason.GRAPHICS, List.of())), vulkan);
+		assertEquals(List.of(new FixConditions.Difference(FixConditions.Reason.GRAPHICS, List.of())),
+				gl.differences(graphics("OPENGL", "Intel(R) UHD Graphics 620"), RD), "the iGPU on the same backend");
+		assertEquals(List.of(), gl.differences(graphics("OPENGL", "  amd radeon rx 7800 xt "), RD));
+		assertEquals(List.of(), gl.differences(graphics(null, null), RD), "unknown claims nothing");
+		assertEquals(List.of(), graphics(null, null).differences(gl, RD));
+		assertEquals(List.of(new FixConditions.Difference(FixConditions.Reason.GRAPHICS, List.of())), gl.differences(graphics(null, "Intel(R) UHD Graphics 620"),
+				RD), "another GPU on an unknown backend");
+		assertEquals(List.of(), gl.differences(graphics("OPENGL", null), RD));
+		assertEquals(gl, gl.withMeasurement(true, true), "kept with the measurement flags");
+	}
+
 	private static FixConditions with(String what, Object value) {
 		FixConditions b = base();
 		return new FixConditions(what.equals("mc") ? (String) value : b.mc(), what.equals("mods") ? (String) value : b.modSetHash(),

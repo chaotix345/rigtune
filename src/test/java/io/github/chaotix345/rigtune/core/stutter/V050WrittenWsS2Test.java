@@ -49,7 +49,8 @@ class V050WrittenWsS2Test {
 		settings.put("vanilla.simulationDistance", "10");
 		settings.put(DEFER, "ZERO_FRAMES");
 		settings.put(key, value);
-		return new FixConditions("26.2", "3a91c0e4d2b7", 4096, "g1", 1920, 1080, true, "SINGLEPLAYER", true, true, settings);
+		return new FixConditions("26.2", "3a91c0e4d2b7", 4096, "g1", 1920, 1080, true, "SINGLEPLAYER", true, true, settings, "OPENGL",
+				"AMD Radeon RX 7800 XT");
 	}
 
 	// history.json, pending.json and stutter-fixes.json in configDir/rigtune/, as StutterFixService's Apply leaves them.
