@@ -199,6 +199,25 @@ class StutterFixServiceTest {
 		assertTrue(StutterFixService.changedDuring(null, start), "no start conditions: can't tell");
 	}
 
+	// review-11 PERF-2: a player without a tracked fix pays no history.json parse, neither on every rebuild (holds) nor every
+	// 5 s while the Stutter Doctor is open (advanceAll), with or without a session that just ended.
+	@Test
+	void withoutAFixHistoryIsNeverRead(@TempDir Path config) throws ReflectiveOperationException {
+		StutterFixService service = service(config);
+		AtomicInteger reads = new AtomicInteger();
+		service.history = () -> {
+			reads.incrementAndGet();
+			return new Journal.Snapshot(Journal.State.OK, List.of());
+		};
+		assertEquals(List.of(), service.holds());
+		service.advanceAll(null);
+		assertEquals(0, reads.get(), "no fix, no parse");
+		String id = "5c20f1a0-7d3e-4b2a-9c61-0000000000e1";
+		assertTrue(FixStore.shared(config).add(measuring(id)));
+		service.advanceAll(null);
+		assertEquals(1, reads.get(), "one fix: one read");
+	}
+
 	// V05ServicesTest's rule: without a controller, holds() reads no file and holds nothing.
 	@Test
 	void withoutAControllerNothingIsReadOrHeld() {

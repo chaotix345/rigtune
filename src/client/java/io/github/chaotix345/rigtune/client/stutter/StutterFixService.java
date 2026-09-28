@@ -193,15 +193,20 @@ public final class StutterFixService {
 	// io chain: every record that can still change follows the journal and, if one just ended, the session. The state and
 	// the entries come from one read of history.json; a read that fails changes nothing (a fix never expires because the
 	// file couldn't be read for a moment).
+	// Without a record, history.json isn't read at all (review-11 PERF-2).
 	void advanceAll(FixTracker.@Nullable SessionEnd session) {
 		try {
+			FixStore store = store();
+			List<FixTracker.Record> all = store.records();
+			if (all.isEmpty()) {
+				return;
+			}
 			Journal.Snapshot read = history.get();
 			if (read.state() != Journal.State.OK && read.state() != Journal.State.MISSING) {
 				return;
 			}
 			Instant now = Instant.now();
-			FixStore store = store();
-			for (FixTracker.Record r : store.records()) {
+			for (FixTracker.Record r : all) {
 				FixTracker.Record next = FixTracker.advance(r, read.state(), read.entries(), session, now);
 				if (!next.equals(r)) {
 					store.update(r.entryId(), x -> next);
@@ -436,6 +441,9 @@ public final class StutterFixService {
 		List<FixTracker.Record> r = new ArrayList<>(loaded());
 		if (a != null && r.stream().noneMatch(x -> x.entryId().equals(a.entryId()))) {
 			r.add(a);
+		}
+		if (r.isEmpty()) {
+			return List.of();
 		}
 		try {
 			Journal.Snapshot read = history.get();
