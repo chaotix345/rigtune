@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.client.footprint;
 
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.RealController;
+import io.github.chaotix345.rigtune.client.probe.PreloadTimer;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.core.awareness.AwarenessStore;
 import io.github.chaotix345.rigtune.core.footprint.StartupTimesStore;
@@ -29,9 +30,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 // Fabric Loader times no mod, so this is a trend only; nothing here names a mod. RealController delegates
 // startupTimes() here in one line.
 // v0.5 (docs/v0.5/SPEC.md 9, C18): the view also carries StartupTrend's assessment, computed with the summary on the same
-// worker path (startup-times.json unchanged), and this launch's log line names it. The acknowledged launch-time regressions
-// (awareness.json's acknowledgedStartupRegressions) are kept in memory: read with the view, only for a SLOWER launch, so
-// the notice source never reads a file (X8).
+// worker path, and this launch's log line names it; each run also keeps this launch's crash-report setup time (RW-19's
+// optional preloadMs). The acknowledged launch-time regressions (awareness.json's acknowledgedStartupRegressions) are kept
+// in memory: read with the view, only for a SLOWER launch, so the notice source never reads a file (X8). The stored
+// acknowledgement is what keeps a Got it across launches: a slow streak keeps its first launch's key (review H1), and a
+// launch that records no run (a read-only file) shows the same latest run again.
 public final class StartupTimes {
 	private static final AtomicBoolean RECORDED = new AtomicBoolean();
 
@@ -84,13 +87,14 @@ public final class StartupTimes {
 					topLevel++;
 				}
 			}
+			Long preloadMs = PreloadTimer.preloadMs();
 			StartupTimesStore.Run run = new StartupTimesStore.Run(Instant.now().truncatedTo(ChronoUnit.SECONDS).toString(), ms,
-					FabricLoader.getInstance().getRawGameVersion(), controller.modVersion(), topLevel, ModSetHash.ofLoadedMods(mods));
+					FabricLoader.getInstance().getRawGameVersion(), controller.modVersion(), topLevel, ModSetHash.ofLoadedMods(mods), preloadMs);
 			Saved saved = store().record(run);
 			refresh();
 			View view = cached;
-			RigTune.LOGGER.info("Launch to title screen: {} ms ({} mods){}; launch-time trend: {}", ms, topLevel,
-					saved == Saved.OK ? "" : "; not saved to " + StartupTimesStore.FILE_NAME + " (" + saved + ")",
+			RigTune.LOGGER.info("Launch to title screen: {} ms ({} mods; crash-report setup {} ms){}; launch-time trend: {}", ms, topLevel,
+					preloadMs == null ? "not measured" : preloadMs, saved == Saved.OK ? "" : "; not saved to " + StartupTimesStore.FILE_NAME + " (" + saved + ")",
 					view == null || view.assessment() == null ? "none" : StartupTrend.describe(view.assessment()));
 		} catch (RuntimeException e) {
 			RigTune.LOGGER.warn("Could not record this launch's startup time", e);

@@ -165,10 +165,16 @@ public class ToolsScreen extends Screen {
 		regressionLines = List.copyOf(shown);
 	}
 
-	// Item 13 (the footprint workstream): "Last launch 14.5 s · median of the last 10: 14.3 s"; null shows nothing.
+	// Item 13 (the footprint workstream): "Last launch 14.5 s · median of the last 10: 14.3 s"; null shows nothing. C18
+	// (review L3): once the trend compares, its "usual" (the comparable launches before the last one) is the median shown.
 	private @Nullable Component startupLine(StartupTimes.View view) {
 		if (view.lastMs() == null) {
 			return null;
+		}
+		StartupTrend.Assessment assessment = view.assessment();
+		if (assessment != null && assessment.rawMedianMs() != null) {
+			return Component.translatable("rigtune.startup.last_median", seconds(view.lastMs()), assessment.baselineRuns(),
+					seconds(Math.round(assessment.rawMedianMs())));
 		}
 		if (view.runs() < 2 || view.medianMs() == null) {
 			return Component.translatable("rigtune.startup.last", seconds(view.lastMs()));
@@ -178,7 +184,7 @@ public class ToolsScreen extends Screen {
 	}
 
 	// Under the line: the mod-set note, then general advice. Never which mod is slow: Fabric Loader times no mod (SPEC 13).
-	// C18: no mod-set note when the regression's cause line already names the mod set.
+	// C18: no mod-set note when the regression's cause line already names the same change (a streak's names an earlier one).
 	private List<Component> startupDetail(StartupTimes.View view) {
 		if (view.lastMs() == null) {
 			return List.of();
@@ -189,7 +195,7 @@ public class ToolsScreen extends Screen {
 	}
 
 	private static boolean modSetCause(StartupTrend.@Nullable Assessment assessment) {
-		return assessment != null && assessment.slower()
+		return assessment != null && assessment.slower() && assessment.streak() == 1
 				&& (assessment.cause() == StartupTrend.Cause.MOD_COUNT || assessment.cause() == StartupTrend.Cause.MOD_SET);
 	}
 

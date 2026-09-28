@@ -1,11 +1,15 @@
 package io.github.chaotix345.rigtune.core.footprint;
 
+import io.github.chaotix345.rigtune.core.RepoFiles;
 import io.github.chaotix345.rigtune.core.footprint.StartupTimesStore.Run;
 import io.github.chaotix345.rigtune.core.footprint.StartupTrend.Assessment;
 import io.github.chaotix345.rigtune.core.footprint.StartupTrend.Cause;
 import io.github.chaotix345.rigtune.core.footprint.StartupTrend.Kind;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -16,7 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.5/SPEC.md 9 (C18, AC9.1): the launch-time trend. Comparable = the same MC version; the baseline is the newest 10
 // comparable runs before the latest, from 5 of them; the floor is BenchmarkTrend's (at least 10 %); SLOWER only past it;
-// the cause against the newest comparable run before the latest, first match only.
+// the cause against the newest comparable run before the latest, first match only. RW-19: without the crash-report setup
+// when recorded; review H1: a slow streak is one regression.
 class StartupTrendTest {
 	private static int day;
 
@@ -198,10 +203,147 @@ class StartupTrendTest {
 		Assessment slower = StartupTrend.assess(steady(6, latest));
 		assertEquals("startup.regression.2026-09-27T10:00:00Z", StartupTrend.key(slower));
 		assertNull(StartupTrend.key(StartupTrend.assess(List.of())));
-		assertEquals("SLOWER: +45.0 % vs the median 10.0 s of 6 comparable launches (floor 10.0 %); changed since the previous one: MOD_COUNT",
-				StartupTrend.describe(slower));
+		assertEquals("SLOWER: +45.0 % vs the median 10.0 s of 6 comparable launches (floor 10.0 %); cause: MOD_COUNT", StartupTrend.describe(slower));
 		assertEquals("IN_LINE: +0.0 % vs the median 10.0 s of 6 comparable launches (floor 10.0 %)", StartupTrend.describe(StartupTrend.assess(steady(6, run(10_000)))));
 		assertEquals("too few comparable launches (2 of 5)", StartupTrend.describe(StartupTrend.assess(steady(2, run(10_000)))));
 		assertEquals("no launch recorded", StartupTrend.describe(StartupTrend.assess(List.of())));
+	}
+
+	// Review H1: ten launches of 10 s, then 14.5 s from launch N on with 12 more mods. N is SLOWER with the mod count;
+	// N+1..N+4 are the same regression (N's key, N's cause, "slower for your last k launches"); N+5 is in line again.
+	@Test
+	void aSlowStreakIsOneRegression() {
+		List<Run> runs = new ArrayList<>();
+		for (int i = 0; i < 10; i++) {
+			runs.add(run(10_000, 80, "h", "26.2", "0.5.0"));
+		}
+		Run n = run(14_500, 92, "h2", "26.2", "0.5.0");
+		runs.add(n);
+		Assessment first = StartupTrend.assess(runs);
+		assertEquals(Kind.SLOWER, first.kind());
+		assertEquals(1, first.streak());
+		assertSame(n, first.first());
+		assertEquals(Cause.MOD_COUNT, first.cause());
+		String key = StartupTrend.key(first);
+		assertEquals("startup.regression." + n.at(), key);
+		for (int k = 2; k <= 5; k++) {
+			runs.add(run(14_500, 92, "h2", "26.2", "0.5.0"));
+			Assessment a = StartupTrend.assess(runs);
+			assertEquals(Kind.SLOWER, a.kind(), "N+" + (k - 1));
+			assertEquals(k, a.streak());
+			assertEquals(key, StartupTrend.key(a), "one Got it covers the streak");
+			assertEquals(Cause.MOD_COUNT, a.cause(), "the cause before its first launch, though nothing changed since N");
+			assertEquals("Slower for your last " + k + " launches; may be related to your mod set changing (80 → 92 mods) before the first of them",
+					StartupTrend.cause(a).english());
+		}
+		runs.add(run(14_500, 92, "h2", "26.2", "0.5.0"));
+		Assessment after = StartupTrend.assess(runs);
+		assertEquals(Kind.IN_LINE, after.kind(), "half the baseline is at 14.5 s now: " + StartupTrend.describe(after));
+		assertEquals(0, after.streak());
+	}
+
+	@Test
+	void aStreakEndsAtAnInLineLaunchAndTheNextSlowdownIsANewOne() {
+		List<Run> runs = steady(10, run(14_500, 92, "h2", "26.2", "0.5.0"));
+		String earlier = StartupTrend.key(StartupTrend.assess(runs));
+		runs.add(run(10_000, 92, "h2", "26.2", "0.5.0"));
+		assertEquals(Kind.IN_LINE, StartupTrend.assess(runs).kind());
+		Run again = run(15_000, 92, "h2", "26.2", "0.5.0");
+		runs.add(again);
+		Assessment a = StartupTrend.assess(runs);
+		assertEquals(Kind.SLOWER, a.kind());
+		assertEquals(1, a.streak());
+		assertEquals("startup.regression." + again.at(), StartupTrend.key(a));
+		assertTrue(!StartupTrend.key(a).equals(earlier));
+		assertEquals(Cause.NONE, a.cause());
+
+		runs.add(run(15_000, 92, "h2", "26.2", "0.5.0"));
+		Assessment streak = StartupTrend.assess(runs);
+		assertEquals(2, streak.streak());
+		assertEquals("Slower for your last 2 launches; no change recorded before the first of them; possibly another program running, a cold disk cache, "
+				+ "or a driver/OS update", StartupTrend.cause(streak).english(), "a streak whose first launch had no recorded change keeps none");
+		assertEquals(StartupTrend.key(a), StartupTrend.key(streak));
+		assertTrue(StartupTrend.describe(streak).contains("; slower 2 launches in a row, from " + again.at()), StartupTrend.describe(streak));
+	}
+
+	private static Run timed(long ms, long preloadMs) {
+		day++;
+		return new Run(String.format("2026-08-%02dT%02d:00:00Z", 1 + day % 28, day % 24), ms, "26.2", "0.5.0", 80, "h", preloadMs);
+	}
+
+	// RW-19: with Windows' performance counters off, vanilla's crash-report setup is 1 s warm and 5-7 s cold, which widens
+	// the floor past a real slowdown; left out, the same launches show it.
+	@Test
+	void theCrashReportSetupIsLeftOutWhenTheLatestAndFiveBaselineRunsRecordedIt() {
+		List<Run> runs = new ArrayList<>(List.of(timed(16_000, 6_000), timed(11_000, 1_000), timed(16_500, 6_500), timed(11_200, 1_200), timed(15_800, 5_800),
+				timed(11_100, 1_100)));
+		runs.add(timed(15_000, 1_000));
+		Assessment a = StartupTrend.assess(runs);
+		assertTrue(a.preloadSubtracted());
+		assertEquals(Kind.SLOWER, a.kind(), StartupTrend.describe(a));
+		assertEquals(10_000, a.medianMs(), 1e-9);
+		assertEquals(14_000, a.latestMs(), 1e-9);
+		assertEquals(13_500, a.rawMedianMs(), 1e-9, "the same launches' launch to title, for Tools' line");
+		assertEquals("Launch time 40% higher than usual, not counting Minecraft's crash-report setup (14.0 s vs your usual ~10.0 s)",
+				StartupTrend.regression(a).english());
+		assertTrue(StartupTrend.describe(a).contains("comparable launches, crash-report setup left out"), StartupTrend.describe(a));
+
+		List<Run> raw = new ArrayList<>(runs.subList(0, runs.size() - 1));
+		raw.add(new Run("2026-08-30T10:00:00Z", 15_000, "26.2", "0.5.0", 80, "h"));
+		Assessment unmeasured = StartupTrend.assess(raw);
+		assertTrue(!unmeasured.preloadSubtracted(), "the latest didn't record it");
+		assertEquals(Kind.IN_LINE, unmeasured.kind(), "the raw floor is " + unmeasured.floorPercent());
+		assertEquals(13_500, unmeasured.medianMs(), 1e-9);
+
+		List<Run> fourMeasured = new ArrayList<>(List.of(run(16_000), run(11_000)));
+		fourMeasured.addAll(List.of(timed(16_500, 6_500), timed(11_200, 1_200), timed(15_800, 5_800), timed(11_100, 1_100), timed(15_000, 1_000)));
+		assertTrue(!StartupTrend.assess(fourMeasured).preloadSubtracted(), "four baseline runs recorded it, fewer than MIN_RUNS");
+
+		List<Run> broken = new ArrayList<>(runs.subList(0, runs.size() - 1));
+		broken.add(timed(15_000, 15_000));
+		assertTrue(!StartupTrend.assess(broken).preloadSubtracted(), "a preload time as long as the launch is left alone");
+	}
+
+	// RW-19's evidence (docs/research/v0.5/real-world-2026-09-28.md; review M2): the player's 44 real launches of one
+	// instance, 07-09 to 09-27 (launch to title and vanilla's OSHI block from the logs, whole seconds). Compared raw, nothing is
+	// ever SLOWER, even through the real +34-39 % slowdown after the 09-20 mod updates; without the crash-report setup, the
+	// five launches of that stretch are SLOWER and nothing else, and the streak rule makes them two notices (the 09-20-3 and
+	// 09-20-4 launches were in line between them).
+	@Test
+	void thePlayersRealLaunches() throws IOException {
+		List<String> lines = Files.readAllLines(RepoFiles.resolve("src/test/resources/startup/real-launch-times-2026-09-28.tsv"), StandardCharsets.UTF_8);
+		assertEquals("log\tmods\tjvm_to_title_s\toshi_s\ttitle_minus_oshi_s\ttitle_source", lines.getFirst());
+		List<Run> measured = new ArrayList<>();
+		List<Run> raw = new ArrayList<>();
+		for (String line : lines.subList(1, lines.size())) {
+			String[] f = line.split("\t");
+			String at = f[0].replace(".log.gz", "");
+			long ms = Math.round(Double.parseDouble(f[2]) * 1000);
+			int mods = f[1].equals("None") ? 0 : Integer.parseInt(f[1]);
+			measured.add(new Run(at, ms, "26.2", null, mods, null, Long.parseLong(f[3]) * 1000));
+			raw.add(new Run(at, ms, "26.2", null, mods, null));
+		}
+		assertEquals(44, measured.size());
+		assertEquals(List.of(), slower(raw), "raw: the floor hides everything");
+		assertEquals(List.of("2026-09-20-2", "2026-09-21-1", "2026-09-22-1", "2026-09-23-1", "2026-09-24-1"), slower(measured));
+		List<String> keys = new ArrayList<>();
+		for (int i = 1; i <= measured.size(); i++) {
+			Assessment a = StartupTrend.assess(measured.subList(0, i));
+			if (a.slower() && !keys.contains(StartupTrend.key(a))) {
+				keys.add(StartupTrend.key(a));
+			}
+		}
+		assertEquals(List.of("startup.regression.2026-09-20-2", "startup.regression.2026-09-21-1"), keys);
+	}
+
+	private static List<String> slower(List<Run> runs) {
+		List<String> out = new ArrayList<>();
+		for (int i = 1; i <= runs.size(); i++) {
+			Assessment a = StartupTrend.assess(runs.subList(0, i));
+			if (a.slower()) {
+				out.add(a.latest().at());
+			}
+		}
+		return out;
 	}
 }

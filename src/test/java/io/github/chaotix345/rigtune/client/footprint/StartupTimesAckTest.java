@@ -69,7 +69,22 @@ class StartupTimesAckTest {
 		assertFalse(next.acknowledged(key), "read with the view, off the render thread");
 		next.view();
 		assertTrue(next.acknowledged(key));
-		assertFalse(next.acknowledged("startup.regression.2026-09-28T10:00:00Z"), "a later launch has its own key");
+
+		// Review H1 and L6: a slower launch right after is the same streak (the key the stored Got it covers); after an in-line
+		// launch, a slowdown is a new regression with its own key.
+		StartupTimesStore store = new StartupTimesStore(config);
+		store.record(new Run("2026-09-28T10:00:00Z", 15_200, "26.2", "0.5.0", 92, "h2"));
+		next.refresh();
+		assertEquals(key, StartupTrend.key(next.view().assessment()), "the streak's first launch's key");
+		assertTrue(next.acknowledged(key));
+		store.record(new Run("2026-09-29T10:00:00Z", 10_000, "26.2", "0.5.0", 92, "h2"));
+		store.record(new Run("2026-09-30T10:00:00Z", 15_500, "26.2", "0.5.0", 92, "h2"));
+		next.refresh();
+		StartupTrend.Assessment later = next.view().assessment();
+		assertEquals(StartupTrend.Kind.SLOWER, later.kind());
+		assertEquals("startup.regression.2026-09-30T10:00:00Z", StartupTrend.key(later));
+		assertFalse(next.acknowledged(StartupTrend.key(later)), "not covered by the earlier Got it");
+		assertTrue(next.acknowledged(key), "the earlier one still is");
 	}
 
 	@Test

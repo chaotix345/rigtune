@@ -67,21 +67,33 @@ class StartupRegressionNoticeTest {
 		assertNull(StartupRegressionNoticeSource.notice(StartupTrend.assess(List.of()), ON, null), "NO_RUN");
 	}
 
+	// Review L5: one of 2L's lines: this launch's measured crash-report setup, else what the setting is; the rest (and
+	// Microsoft's pages) stay in Tools, which Tools… opens.
 	@Test
-	void withTheCountersOffTheDetailAddsTheLaunchTimeAdvice() {
+	void withTheCountersOffTheDetailAddsOneLaunchTimeAdviceLine() {
 		Assessment slower = assess(6, latest(14_500, 92, "h2", "0.5.0"));
-		String measured = StartupRegressionNoticeSource.notice(slower, OFF, 3135L).detail().english();
+		assertEquals("May be related to your mod set changing (80 → 92 mods) since your last launch\n"
+				+ "Minecraft's crash-report setup took 3.1 s at this launch; about 1 s is usual. It asks Windows for these counters, so part of that time may be "
+				+ "related to this setting.", StartupRegressionNoticeSource.notice(slower, OFF, 3135L).detail().english());
 		assertEquals("May be related to your mod set changing (80 → 92 mods) since your last launch\n"
 				+ "Windows performance counters are turned off on this PC. \"Disable Performance Counters\" is Windows' own Perflib setting; it turns off every "
-				+ "registry-based performance counter on the PC.\n"
-				+ "Minecraft's crash-report setup took 3.1 s at this launch; about 1 s is usual. It asks Windows for these counters, so part of that time may be "
-				+ "related to this setting.\n"
-				+ "0 is Windows' default. Changing it needs an administrator and a Windows restart, and a tuning tool may have set it on purpose. RigTune "
-				+ "doesn't change Windows settings.", measured);
-		String unmeasured = StartupRegressionNoticeSource.notice(slower, OFF, null).detail().english();
-		assertFalse(unmeasured.contains("crash-report setup"), unmeasured);
-		assertFalse(unmeasured.contains("https://"), "Microsoft's pages stay in Tools, which Tools… opens: " + unmeasured);
+				+ "registry-based performance counter on the PC.", StartupRegressionNoticeSource.notice(slower, OFF, null).detail().english());
 		assertEquals("May be related to your mod set changing (80 → 92 mods) since your last launch",
 				StartupRegressionNoticeSource.notice(slower, PerfCounters.NOT_READ, 3135L).detail().english(), "not read (not Windows): no advice");
+	}
+
+	// Review H1: a slow streak keeps its first launch's key and cause, so one Got it covers it.
+	@Test
+	void aSlowStreakKeepsItsFirstKey() {
+		List<Run> runs = new ArrayList<>();
+		for (int i = 0; i < 6; i++) {
+			runs.add(new Run("2026-09-1" + i + "T10:00:00Z", 10_000, "26.2", "0.5.0", 80, "h"));
+		}
+		runs.add(latest(14_500, 92, "h2", "0.5.0"));
+		runs.add(new Run("2026-09-28T10:00:00Z", 14_800, "26.2", "0.5.0", 92, "h2"));
+		Notice notice = StartupRegressionNoticeSource.notice(StartupTrend.assess(runs), ON, null);
+		assertEquals("startup.regression.2026-09-27T10:00:00Z", notice.key());
+		assertEquals("Launch time 48% higher than usual (14.8 s vs your usual ~10.0 s)", notice.message().english());
+		assertEquals("Slower for your last 2 launches; may be related to your mod set changing (80 → 92 mods) before the first of them", notice.detail().english());
 	}
 }

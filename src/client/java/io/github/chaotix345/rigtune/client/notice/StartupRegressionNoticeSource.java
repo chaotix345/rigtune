@@ -20,10 +20,12 @@ import java.util.List;
 
 // NoticePriority.STARTUP_REGRESSION, docs/v0.5/SPEC.md 9 (C18): the latest launch was slower than usual by more than the
 // noise floor (StartupTrend). "Launch time 45% higher than usual (…)" with one "may be related" cause line as the detail
-// and, while Windows' performance counters are off (2L), that advice; Tools… opens ToolsScreen (the same lines and 2L's
-// pages), Got it keeps this launch's key in awareness.json (acknowledgedStartupRegressions), so it isn't dismissible on
-// its own. A later slower launch has its own key. Advice only: nothing is applied. Constructed by the lazy notice list on
-// the first notices() call, never during startup (X4); reads the view StartupTimes' worker computed, no file (X8).
+// and, while Windows' performance counters are off (2L), one line of that advice (this launch's crash-report setup time
+// when measured, else what the setting is); Tools… opens ToolsScreen (the same lines and all of 2L's advice), Got it keeps
+// the key in awareness.json (acknowledgedStartupRegressions), so it isn't dismissible on its own. The key is the slow
+// streak's first launch's (review H1): one Got it covers the streak, and a slowdown after an in-line launch is a new one.
+// Advice only: nothing is applied. Constructed by the lazy notice list on the first notices() call, never during startup
+// (X4); reads the view StartupTimes' worker computed, no file (X8).
 public final class StartupRegressionNoticeSource implements NoticeSource {
 	public static final String TOOLS = "tools";
 	public static final String ACKNOWLEDGE = "acknowledge";
@@ -39,12 +41,10 @@ public final class StartupRegressionNoticeSource implements NoticeSource {
 	public @Nullable Notice current() {
 		StartupTimes times = controller.startupTimesService();
 		StartupTimes.View view = times.computed();
-		Notice notice = view == null || view.assessment() == null ? null : notice(view.assessment(), HardwareProbe.perfCounters(), PreloadTimer.preloadMs());
-		if (notice == null || times.acknowledged(notice.key())) {
-			shownKey = null;
-			return null;
-		}
-		shownKey = notice.key();
+		StartupTrend.Assessment assessment = view == null ? null : view.assessment();
+		String key = assessment == null ? null : StartupTrend.key(assessment);
+		Notice notice = key == null || times.acknowledged(key) ? null : notice(assessment, HardwareProbe.perfCounters(), PreloadTimer.preloadMs());
+		shownKey = notice == null ? null : notice.key();
 		return notice;
 	}
 
@@ -56,11 +56,10 @@ public final class StartupRegressionNoticeSource implements NoticeSource {
 		}
 		List<Text> detail = new ArrayList<>();
 		detail.add(StartupTrend.cause(assessment));
-		for (PerfCounterAdvice.Line line : PerfCounterAdvice.lines(counters, preloadMs)) {
-			if (line.url() == null) {
-				detail.add(line.text());
-			}
-		}
+		// Review L5: one of 2L's lines, this launch's measured time, else what the setting is (lines() starts with it).
+		List<PerfCounterAdvice.Line> advice = PerfCounterAdvice.lines(counters, preloadMs);
+		advice.stream().filter(line -> line.text() instanceof Text.Translatable t && t.key().equals("rigtune.startup.perf_counters.measured")).findFirst()
+				.or(() -> advice.stream().findFirst()).ifPresent(line -> detail.add(line.text()));
 		return new Notice(key, NoticePriority.STARTUP_REGRESSION, StartupTrend.regression(assessment), Text.join("\n", detail),
 				List.of(new NoticeAction(TOOLS, Text.of("rigtune.startup.notice.tools", "Tools…")),
 						new NoticeAction(ACKNOWLEDGE, Text.of("rigtune.startup.notice.acknowledge", "Got it"))), false);

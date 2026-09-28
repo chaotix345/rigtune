@@ -13,6 +13,7 @@ import io.github.chaotix345.rigtune.client.awareness.OutsideChanges;
 import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
 import io.github.chaotix345.rigtune.client.probe.HardwareProbe;
 import io.github.chaotix345.rigtune.client.probe.LauncherProbe;
+import io.github.chaotix345.rigtune.client.probe.PreloadTimer;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
 import io.github.chaotix345.rigtune.client.ui.BenchmarkMenuScreen;
@@ -23,6 +24,7 @@ import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.awareness.WhatsNew;
 import io.github.chaotix345.rigtune.core.footprint.StartupTimesStore;
 import io.github.chaotix345.rigtune.core.footprint.StartupTrend;
+import io.github.chaotix345.rigtune.core.hardware.PerfCounterAdvice;
 import io.github.chaotix345.rigtune.core.hardware.PerfCounters;
 import io.github.chaotix345.rigtune.core.history.Journal;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
@@ -237,10 +239,11 @@ public class AwarenessGameTest implements FabricClientGameTest {
 	// startup-times.json seeded behind the real StartupTimes, which then recomputes (as its worker does after recording a
 	// launch). From 4 comparable launches: no notice, no Tools row. From 5 of 10 s and one of 14.5 s with 12 more mods: the
 	// notice with the numbers and exactly the mod-count line (screenshots at the three sizes); Tools… opens ToolsScreen with
-	// the same two rows and leaves the notice; with Windows' performance counters off (seeded) the detail adds 2L's advice;
-	// Got it: gone on the rebuild, on reopening and after a rescan, the key in awareness.json, and a new StartupTimes (the
-	// next launch's) reads it as acknowledged; a later slower launch fires with its own key. startup-times.json and the view
-	// are put back (FootprintGameTest checks this launch's one run later); awareness.json by runTest.
+	// the same two rows and leaves the notice; with Windows' performance counters off (seeded) the detail adds one line of
+	// 2L's advice; Got it: gone on the rebuild, on reopening and after a rescan, the key in awareness.json, and a new
+	// StartupTimes (the next launch's) reads it as acknowledged; a slower launch right after is the same streak (review H1:
+	// no second notice), while a slowdown after an in-line launch fires with its own key. startup-times.json and the view are
+	// put back (FootprintGameTest checks this launch's one run later); awareness.json by runTest.
 	private static void startupRegression(V05TestContext v05) {
 		ClientGameTestContext context = v05.context();
 		RealController real = v05.realController();
@@ -284,10 +287,14 @@ public class AwarenessGameTest implements FabricClientGameTest {
 			context.waitTicks(2);
 			check(findStartup(context, real) != null, "Tools… doesn't acknowledge it");
 
-			HardwareProbe.seedPerfCounters(new PerfCounters(true, true, List.of(), List.of("PerfOS")));
+			PerfCounters off = new PerfCounters(true, true, List.of(), List.of("PerfOS"));
+			HardwareProbe.seedPerfCounters(off);
 			Notice withAdvice = findStartup(context, real);
-			check(withAdvice != null && withAdvice.detail() != null && withAdvice.detail().english().startsWith(notice.detail().english() + "\n")
-					&& withAdvice.detail().english().contains("Windows performance counters are turned off on this PC."), "2L's advice in the detail: " + withAdvice);
+			// Review L5: this launch's measured crash-report setup (CI's production client measures it), else what the setting is.
+			String adviceLine = PerfCounterAdvice.lines(off, PreloadTimer.preloadMs()).stream().map(l -> l.text().english())
+					.filter(t -> PreloadTimer.preloadMs() == null || t.startsWith("Minecraft's crash-report setup took")).findFirst().orElseThrow();
+			check(withAdvice != null && withAdvice.detail() != null && withAdvice.detail().english().equals(notice.detail().english() + "\n" + adviceLine),
+					"one line of 2L's advice in the detail: " + withAdvice);
 			HardwareProbe.seedPerfCounters(on);
 
 			cycleTo(context, key);
@@ -309,12 +316,17 @@ public class AwarenessGameTest implements FabricClientGameTest {
 			next.refresh();
 			check(next.acknowledged(key), "the next launch's StartupTimes reads it back");
 
-			String later = appendLaunch(real, mcVersion, "2026-09-20T10:31:00Z", 15_000, 82);
+			appendLaunch(real, mcVersion, "2026-09-20T10:31:00Z", 15_000, 82);
+			StartupTrend.Assessment streak = real.startupTimesService().view().assessment();
+			check(streak.slower() && streak.streak() == 2 && key.equals(StartupTrend.key(streak)), "the same slow streak: " + StartupTrend.describe(streak));
+			check(findStartup(context, real) == null, "one Got it covers the streak: " + notices(context, real));
+			appendLaunch(real, mcVersion, "2026-09-20T10:32:00Z", 10_000, 82);
+			String later = appendLaunch(real, mcVersion, "2026-09-20T10:33:00Z", 15_500, 82);
 			Notice again = findStartup(context, real);
-			check(again != null && again.key().equals(later) && !later.equals(key), "a later slower launch has its own key: " + again);
+			check(again != null && again.key().equals(later) && !later.equals(key), "after an in-line launch, a slowdown has its own key: " + again);
 			check(again.detail() != null && again.detail().english().startsWith("No change recorded since your last launch"), "nothing changed since the one before: "
 					+ again.detail());
-			RigTune.LOGGER.info("AwarenessGameTest: C18: none from 4 launches; the notice, Tools…, 2L's line, Got it (kept in awareness.json), a later launch's own key");
+			RigTune.LOGGER.info("AwarenessGameTest: C18: none from 4 launches; the notice, Tools…, 2L's line, Got it (kept, covers the streak), a new slowdown's own key");
 		} finally {
 			write(file, original);
 			real.startupTimesService().refresh();
