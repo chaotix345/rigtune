@@ -61,6 +61,19 @@ Evidence in `local-windows-26.2/` (RESULT.md per run, scrubbed).
   - The first run failed on ws-t's placeholder (its try's patch target already held the value): fixed in the placeholder.
   - 0.5 reads its files back, `server-profiles.json`'s servers included.
 
+## Local runs, Windows 11, 26.2 (2026-09-28, after the review round and the Wave A merges)
+
+`local-windows-26.2/2026-09-28-*` holds the results. The jar was built from 97aaeaef's tree plus the harness changes of 26df47f3.
+
+| run | result | notes |
+|---|---|---|
+| helper-kill | PASS | the loaded e2e-kill is now checked as 1.1.0 (L9) |
+| undo (with guard-apply) | PASS | each Apply waits for its own status key (L4) |
+| downgrade to 0.4.0 | PASS | the real ws-b, f, p, p2, s and w sets plus the placeholders. The composed journal (57 entries) is trimmed to 46 plus the staged entries: without the trim, the old versions' cap evicted the checked Undo-last pair |
+| downgrade to 0.3.0 | PASS | same |
+| stale-seed `v010-dh-app-reinstalled` (AC2H.6) | PASS | dropped with "RigTune dropped its pending change to Distant Horizons: it is already installed (DistantHorizons-3.3.2-26.2-fabric-neoforge.jar)"; both changes ABANDONED; no helper at exit |
+| stale-seed `v010-dh-app-reinstalled-disabled` | PASS | same, with fabric-26.2.jar disabled instead of removed |
+
 ## Static checks
 
 - actionlint 1.7.12 with shellcheck 0.11.0 on e2e.yml and release.yml: clean (local).

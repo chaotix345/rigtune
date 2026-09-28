@@ -170,6 +170,9 @@ Held locally during the coordinator's first CI streak, then pushed in batches.
 | Wave A fixture round (merge c59b8b93) | f355d3f0, 4e3b75ce | `test_written_v05.py` 17 | the real `ws-b/f/p/s/w` sets replace their placeholders. compat040's `StutterSummary` kind is for WS-S (AC2S.13). profiles.json keeps one baseline when composed (WS-P's question: the latest set's, as ProfileStore does). ws-p2's check on an absent file was dropped (a recorded cross-owner edit, the coordinator's decision). compat040 and compat030 PASS locally on all sets |
 | Review round (0 H, 3 M, 7 L; the coordinator's decisions) | bb9aaf14, b8699e8b, 5ecc4edf | as above | M1 is the PowerWatcher source seam. M2: battery-oshi runs the caller's jar (`-PgametestModJar`, the mod jar isn't built). M3: battery-oshi ran once (36362848495). L4: guard-apply waits for each Apply's own status key. L5: LanGuest picks its own server's entry and checks a local address in CI. L6: LanGuest leaves cleanly and restores the store and the network switch (ServerLimitsGameTest's switch restore too). L7: the battery watcher's thread is awaited. L8: offer latency logged per unplug. L9: helper-kill checks the loaded e2e-kill 1.1.0. L10: none |
 | JDK download retry (ws-ci's rule) | c87d7e13 | JdkRetryTests; `test_e2e_workflows.py` allows continue-on-error only there | every setup-java step in e2e.yml and release.yml's publish job |
+| AC2H.6 `stale-seed` (WS-H's RW-3) | 26df47f3 | `test_e2e_stale_seed.py` 4 | seeds `v010-dh-app-reinstalled` and `-disabled`: v010-dh's pending.json and last-apply.json with DH 3.3.2 at the group's target name, no download, no mods/update, `fabric-26.2.jar` removed or disabled. The new version starts on the state directly. Local Windows 26.2, both legs PASS: the group is dropped, the `stale_installed` line names Distant Horizons, History shows both changes ABANDONED, latest.log has "can never run" and no "will be retried", and nothing happens at exit. Release tier, 26.2 |
+| Downgrade with the Wave A sets | 26df47f3 | `test_written_v05.py` (the trim, a staged entry kept) | WS-P's ws-p is at the journal cap (50), so the composed journal had 57 entries. The old versions' own cap (MAX_ENTRIES, entries with nothing left to undo go first) then evicted the Undo-last pair the check looks for. The downgrade instance keeps the newest 46 entries plus every entry a staged op belongs to (`DOWNGRADE_HISTORY`). Local: both targets PASS with the real ws-b/f/p/p2/s/w sets |
+| Local reruns after the review round | (runs) | | helper-kill, the undo scenario with guard-apply, both downgrades and both stale-seed legs: all PASS on 2026-09-28 (`docs/v0.5/verification/e2e/local-windows-26.2/2026-09-28-*`) |
 
 **AC3f.7 (`guard-apply`).** It runs after entry-check on the undo scenario's instance, in one start:
 - The update of `e2e-pin-target` 1.0.0 → 2.0.0 is refused. The installed `e2e-pinner` pins the target to `1.0.x` in its fabric.mod.json.
@@ -216,7 +219,7 @@ The fabric client gametest API is the same too: `createServer(Properties)`, `cli
 | AC3f.7 | guard-apply | local Windows PASS; Linux release tier with the push |
 | AC3f.8 | snapshot_canary.py + fixture test | test in; the workflow edit after 2026-09-30 |
 | AC4j.3 | the launcher-brand leg | after WS-L1/L2 |
-| AC2H.6 | `v010-dh-app-reinstalled` | after WS-H |
+| AC2H.6 | `v010-dh-app-reinstalled`, both legs (`--scenario stale-seed`) | local Windows PASS; Linux release tier to run |
 
 ## Residuals
 - **Fixed since the early part:**
@@ -229,7 +232,13 @@ The fabric client gametest API is the same too: `createServer(Properties)`, `cli
   - The LAN source address in CI is 0.0.0.0 (offline.sh's multicast route has no `src`). Sent to ws-ci; LanGuestGameTest accepts a loopback or wildcard address until then.
   - Local Windows reruns after this round's changes (helper-kill with L9, undo with L4, the downgrade with the real Wave A sets) wait for the game-test lock (the user is playing).
   - The snapshot-canary workflow edit (its resolve step calls `tools/snapshot_canary.py`) is made after the scheduled run on 2026-09-30.
-  - Still to do: AC3f.1 (26.3 stutter-script CI run), AC3f.4 (the DH server-note run), E8's generated seeds (26.2 from 0.4.0, 26.3 from 0.2.0+mc26.3), `v010-dh-app-reinstalled` (after WS-H) and the launcher-brand leg (after WS-L1/L2).
+  - Still to do:
+    - AC3f.4 (the DH server-note run): the coordinator decides the approach.
+    - The launcher-brand leg: after WS-L1/L2.
+    - The first Linux run of the release tier with this round's rows (helper-kill on both nodes, guard-apply, stale-seed, the downgrades with v050 sets): the coordinator schedules it.
+  - **The generated seeds (vg §1.5) as designed can't reproduce v010-dh's shape.** 0.2.0 and later cancel their own pending update once the mod's build is queued in mods/update (`rigtune.status.queued_update_dropped` is in 0.2.0+mc26.3's, 0.3.0's and 0.4.0's lang files). So the old side of a generated seed drops the group itself.
+    - The proposed honest equivalent: the old version's held DH group is carried across the self-update and finished by 0.5 at its exit.
+    - This is waiting for the coordinator's decision.
 - **A note for the docs workstream:** in BatteryFlowGameTest's screenshot at 854×480 the battery notice's text is cut ("You're on battery power. Switch t…") by its two buttons. That is v0.4's notice layout (WS-P's).
 
 ## Stays UNVERIFIED (WS-E's part)
