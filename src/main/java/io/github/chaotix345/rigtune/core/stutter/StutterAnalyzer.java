@@ -34,10 +34,17 @@ public final class StutterAnalyzer {
 	// The capture: its frame ring, the shared rings (filtered to [startNanos, endNanos]), and what the report needs about
 	// the machine. collector: the family (g1, zgc, ...); totalRamMb null when unknown. phaseTiming: the phase timers were
 	// complete (S-M1). deferModeWaits: Sodium's Chunk Updates mode makes frames wait for builds. gcMeasured: a GC listener
-	// ran during the capture.
+	// ran during the capture. idleNanos (v0.5 RW-17): how long the game throttled its frame rate during the capture.
 	public record Input(FrameRing.Snapshot frames, StutterRings.Snapshot rings, long startNanos, long endNanos, Instant startedAt, String source,
 			@Nullable String mc, @Nullable String collector, long heapMaxMb, @Nullable Long totalRamMb, int cores, boolean phaseTiming,
-			boolean deferModeWaits, boolean gcMeasured) {
+			boolean deferModeWaits, boolean gcMeasured, long idleNanos) {
+		public Input(FrameRing.Snapshot frames, StutterRings.Snapshot rings, long startNanos, long endNanos, Instant startedAt, String source,
+				@Nullable String mc, @Nullable String collector, long heapMaxMb, @Nullable Long totalRamMb, int cores, boolean phaseTiming,
+				boolean deferModeWaits, boolean gcMeasured) {
+			this(frames, rings, startNanos, endNanos, startedAt, source, mc, collector, heapMaxMb, totalRamMb, cores, phaseTiming, deferModeWaits, gcMeasured,
+					0);
+		}
+
 		public Input(FrameRing.Snapshot frames, StutterRings.Snapshot rings, long startNanos, long endNanos, Instant startedAt, String source,
 				@Nullable String mc, @Nullable String collector, long heapMaxMb, @Nullable Long totalRamMb, int cores, boolean phaseTiming,
 				boolean deferModeWaits) {
@@ -160,7 +167,7 @@ public final class StutterAnalyzer {
 				round((in.endNanos() - in.startNanos()) / 1e9, 1), round(gameplaySeconds, 1), frames, round(avgFps, 1), round(stats.onePercentLowFps(), 1),
 				f.histogramCounts().clone(),
 				histogramMs, new StutterReport.Spikes(severity[0], severity[1], severity[2], severity[3]), round(lost / 1e6, 1), causes, tags, worst, facts,
-				List.of(), enough, in.phaseTiming(), hitches);
+				List.of(), enough, in.phaseTiming(), hitches, null, null, in.idleNanos() > 0 ? round(in.idleNanos() / 1e9, 1) : null);
 
 		Long room = in.totalRamMb() == null || in.totalRamMb() <= 0 ? null : Math.min(in.totalRamMb() / 2, in.totalRamMb() - 4096) - in.heapMaxMb();
 		Set<String> unmeasured = new HashSet<>(List.of(Attributor.RENDER));

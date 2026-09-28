@@ -18,11 +18,14 @@ import java.util.Objects;
 // v0.5 (docs/v0.5/SPEC.md C1, RW-11; optional): settingsAtStart/settingsAtEnd, the managed settings when the session
 // started and ended (null in older files and when not captured; not written when null; 0.4.0 ignores them and drops them
 // on rewrite).
+// v0.5 RW-17 (optional, the same rules): idleSeconds, the time the game throttled its frame rate (vanilla's AFK or
+// minimised limit, Dynamic FPS) while the capture ran; those frames are excluded like a menu's, so the time isn't
+// gameplay. Null when there was none, and in older files.
 public record StutterReport(String startedAt, String source, @Nullable String mc, @Nullable String collector, long heapMaxMb,
 		double sessionSeconds, double gameplaySeconds, long frames, double avgFps, double onePercentLowFps, long[] histogramCounts,
 		long[] histogramTimeMs, Spikes spikes, double lostMs, Map<String, Double> causes, Map<String, Integer> tags, List<Worst> worst,
 		Facts facts, List<String> advice, boolean enoughData, boolean phaseTiming, int hitches, @Nullable Map<String, String> settingsAtStart,
-		@Nullable Map<String, String> settingsAtEnd) {
+		@Nullable Map<String, String> settingsAtEnd, @Nullable Double idleSeconds) {
 	public static final String MONITOR = "monitor";
 	public static final String BENCHMARK = "benchmark";
 	public static final int MAX_WORST = 10;
@@ -45,6 +48,7 @@ public record StutterReport(String startedAt, String source, @Nullable String mc
 		advice = advice == null ? List.of() : advice.stream().filter(Objects::nonNull).toList();
 		settingsAtStart = settingsAtStart == null ? null : withoutNulls(settingsAtStart);
 		settingsAtEnd = settingsAtEnd == null ? null : withoutNulls(settingsAtEnd);
+		idleSeconds = idleSeconds == null || !(idleSeconds > 0) ? null : idleSeconds;
 	}
 
 	// The map itself when no value is null (its order kept), else a copy without those entries.
@@ -66,7 +70,16 @@ public record StutterReport(String startedAt, String source, @Nullable String mc
 			double lostMs, Map<String, Double> causes, Map<String, Integer> tags, List<Worst> worst, Facts facts, List<String> advice, boolean enoughData,
 			boolean phaseTiming, int hitches) {
 		this(startedAt, source, mc, collector, heapMaxMb, sessionSeconds, gameplaySeconds, frames, avgFps, onePercentLowFps, histogramCounts,
-				histogramTimeMs, spikes, lostMs, causes, tags, worst, facts, advice, enoughData, phaseTiming, hitches, null, null);
+				histogramTimeMs, spikes, lostMs, causes, tags, worst, facts, advice, enoughData, phaseTiming, hitches, null, null, null);
+	}
+
+	// v0.5 (WS-K's, with the RW-11 fields).
+	public StutterReport(String startedAt, String source, @Nullable String mc, @Nullable String collector, long heapMaxMb, double sessionSeconds,
+			double gameplaySeconds, long frames, double avgFps, double onePercentLowFps, long[] histogramCounts, long[] histogramTimeMs, Spikes spikes,
+			double lostMs, Map<String, Double> causes, Map<String, Integer> tags, List<Worst> worst, Facts facts, List<String> advice, boolean enoughData,
+			boolean phaseTiming, int hitches, @Nullable Map<String, String> settingsAtStart, @Nullable Map<String, String> settingsAtEnd) {
+		this(startedAt, source, mc, collector, heapMaxMb, sessionSeconds, gameplaySeconds, frames, avgFps, onePercentLowFps, histogramCounts,
+				histogramTimeMs, spikes, lostMs, causes, tags, worst, facts, advice, enoughData, phaseTiming, hitches, settingsAtStart, settingsAtEnd, null);
 	}
 
 	public record Spikes(int minor, int major, int severe, int freeze) {
@@ -129,11 +142,12 @@ public record StutterReport(String startedAt, String source, @Nullable String mc
 	public StutterReport withAdvice(List<String> ids) {
 		return new StutterReport(startedAt, source, mc, collector, heapMaxMb, sessionSeconds, gameplaySeconds, frames, avgFps, onePercentLowFps,
 				histogramCounts, histogramTimeMs, spikes, lostMs, causes, tags, worst, facts, List.copyOf(ids), enoughData, phaseTiming, hitches,
-				settingsAtStart, settingsAtEnd);
+				settingsAtStart, settingsAtEnd, idleSeconds);
 	}
 
 	public StutterReport withSettings(@Nullable Map<String, String> atStart, @Nullable Map<String, String> atEnd) {
 		return new StutterReport(startedAt, source, mc, collector, heapMaxMb, sessionSeconds, gameplaySeconds, frames, avgFps, onePercentLowFps,
-				histogramCounts, histogramTimeMs, spikes, lostMs, causes, tags, worst, facts, advice, enoughData, phaseTiming, hitches, atStart, atEnd);
+				histogramCounts, histogramTimeMs, spikes, lostMs, causes, tags, worst, facts, advice, enoughData, phaseTiming, hitches, atStart, atEnd,
+				idleSeconds);
 	}
 }
