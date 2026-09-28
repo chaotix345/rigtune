@@ -382,6 +382,8 @@ public final class ApplyExecutor {
 	// back) as in 0.4. Files that only look half done prove nothing (review-11 APPLY-5): the launcher's own disable gives the
 	// same .disabled name as RigTune's, so a record 0.4 wrote (no done mark), a rename recorded but put back, and 0.1-0.3's
 	// failed rollbacks (no record at all) are held, where the notice offers them.
+	// Discard and the start-up's stale check keep a broader set (startedGroups, review-11 APPLY-1): for them keeping a group
+	// is the safe side.
 	private static Set<Integer> heldIndexes(List<Op> ops, Path modsDir, List<Rename> recorded, Map<String, OpResult> doneBefore) {
 		Set<Integer> out = new HashSet<>();
 		for (List<Integer> members : groups(ops).values()) {
@@ -392,6 +394,34 @@ public final class ApplyExecutor {
 					|| members.stream().anyMatch(i -> isFileOp(ops.get(i)) && doneByLastRun(ops.get(i), doneBefore) != null);
 			if (!started) {
 				out.addAll(members);
+			}
+		}
+		return out;
+	}
+
+	// review 11 APPLY-1 (WS-H, a marked edit): a group RigTune's own records show it started (a recorded rename in effect
+	// that isn't recorded as put back, whether or not 0.5 marked it done, or an op the last run did), for startedGroups.
+	// Broader than the hold's rule (heldIndexes counts only done-marked renames, APPLY-5): for Discard and the stale check,
+	// keeping a group is the safe side.
+	private static boolean startedByRecords(List<Op> ops, List<Integer> members, Path modsDir, List<Rename> recorded, Map<String, OpResult> doneBefore) {
+		return !earlierRenames(ops, members, modsDir, recorded, false).isEmpty()
+				|| members.stream().anyMatch(i -> isFileOp(ops.get(i)) && doneByLastRun(ops.get(i), doneBefore) != null);
+	}
+
+	// review 11 APPLY-1 (WS-H, a marked edit): the groups (an op without one: "op:<id>") the records next to pendingFile
+	// show started, by heldIndexes' rule, so neither the start-up's stale check (StaleOps) nor Discard drops them: the next
+	// exit reports them "Already done earlier".
+	public static Set<String> startedGroups(PendingActions plan, Path pendingFile) {
+		Path configDir = InstanceDirs.configDirOf(pendingFile);
+		List<Op> ops = plan.ops();
+		List<Rename> recorded = UnfinishedGroups.recorded(configDir);
+		Map<String, OpResult> doneBefore = doneBefore(ApplyResult.defaultPath(configDir));
+		Set<String> out = new HashSet<>();
+		for (List<Integer> members : groups(ops).values()) {
+			Op first = ops.get(members.getFirst());
+			if (first != null && (first.group() != null || first.id() != null)
+					&& startedByRecords(ops, members, InstanceDirs.modsDirOf(pendingFile), recorded, doneBefore)) {
+				out.add(first.group() != null ? first.group() : "op:" + first.id());
 			}
 		}
 		return out;

@@ -19,6 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -51,7 +52,7 @@ class RangeReaderTest {
 			Duration.ofSeconds(5), Duration.ofSeconds(10), Duration.ofSeconds(30));
 
 	enum Mode {
-		RANGES, WHOLE, STATUS_416, STATUS_500, WRONG_RANGE, WRONG_HEADER, STALL
+		RANGES, WHOLE, STATUS_416, STATUS_500, WRONG_RANGE, WRONG_HEADER, STALL, ONE_BYTE_MORE
 	}
 
 	private HttpServer server;
@@ -145,7 +146,7 @@ class RangeReaderTest {
 			}
 			// WRONG_HEADER: the right bytes, labelled as another range of the same length.
 			String label = mode == Mode.WRONG_HEADER ? "bytes " + (from - 1) + "-" + (to - 1) + "/" + size : "bytes " + from + "-" + to + "/" + size;
-			send(exchange, 206, part, label);
+			send(exchange, 206, mode == Mode.ONE_BYTE_MORE ? Arrays.copyOf(part, part.length + 1) : part, label);
 		}
 	}
 
@@ -418,6 +419,22 @@ class RangeReaderTest {
 			assertFalse(second.ok());
 			assertTrue(served.size() - asked <= 1, served.toString());
 		}
+	}
+
+	// review 11 SEC-4: a request that fails over its cap still costs the budget what it may have taken (its length), so an
+	// origin answering every range with one byte more can't pull more than the budget across a preview's reads.
+	@Test
+	void aFailedRequestCostsTheBudgetItsLength() throws IOException {
+		byte[] jar = jar(300, 5, false, FABRIC_MOD_JSON);
+		RangeReader.Limits budget = new RangeReader.Limits(4096, 256 << 10, ModJars.MAX_FABRIC_MOD_JSON_BYTES, 10_000, Duration.ofSeconds(5),
+				Duration.ofSeconds(10), Duration.ofSeconds(30));
+		mode = Mode.ONE_BYTE_MORE;
+		try (RangeReader reader = reader(budget)) {
+			for (int i = 0; i < 5; i++) {
+				assertFalse(reader.read(file("jar-" + i + ".jar", jar)).ok());
+			}
+		}
+		assertEquals(2, served.size(), served.toString());
 	}
 
 	// AC2H.1: nothing is written to disk; the reader has no file API at all.

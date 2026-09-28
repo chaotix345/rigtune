@@ -17,7 +17,6 @@ import io.github.chaotix345.rigtune.core.history.LegacyImport;
 import io.github.chaotix345.rigtune.core.history.SkippedClaims;
 import io.github.chaotix345.rigtune.core.history.StagedChanges;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -57,8 +56,18 @@ public final class HistoryStartup {
 				plan.ops().stream().filter(Objects::nonNull).map(Op::id).filter(Objects::nonNull).forEach(pendingIds::add);
 			}
 			List<ApplyResult.OpResult> results = lastApply == null ? List.of() : lastApply.results();
-			journal.updateExisting(entries -> HistoryUpdates.reconcile(entries, pendingIds, results));
-			relabelSkippedClaims(configDir, journal, lastApply);
+			// One read of history.json and at most one write, relabel included (review 11 PERF-1: this is the render thread).
+			SkippedClaims.Relabel[] found = new SkippedClaims.Relabel[1];
+			boolean updated = journal.updateExisting(entries -> {
+				List<JournalEntry> reconciled = HistoryUpdates.reconcile(entries, pendingIds, results);
+				found[0] = skippedClaims(configDir, reconciled, lastApply);
+				return found[0] == null ? reconciled : found[0].entries();
+			});
+			if (updated && found[0] != null) {
+				found[0].lastApply().save(ApplyResult.defaultPath(configDir));
+				RigTune.LOGGER.info("RigTune's last helper run counted {} change(s) as already done that it has no record of making; History now shows "
+						+ "them as not applied (installed another way): {}", found[0].opIds().size(), found[0].opIds());
+			}
 		} catch (Exception e) {
 			RigTune.LOGGER.warn("Could not update {}", Journal.file(configDir), e);
 		}
@@ -66,20 +75,14 @@ public final class HistoryStartup {
 
 	// docs/v0.5/SPEC.md 4f, real world RW-20 (SkippedClaims): a file change the last helper run claimed as already done
 	// with no proof it was RigTune's becomes ABANDONED "installed another way", in the journal first, then in that run's
-	// result (a death in between is completed at the next start). Once: afterwards nothing matches.
-	private static void relabelSkippedClaims(Path configDir, Journal journal, ApplyResult lastApply) throws IOException {
-		if (lastApply == null) {
-			return;
-		}
-		SkippedClaims.Relabel[] found = new SkippedClaims.Relabel[1];
-		boolean updated = journal.updateExisting(entries -> {
-			found[0] = SkippedClaims.of(entries, lastApply, () -> UnfinishedGroups.recorded(configDir));
-			return found[0] == null ? entries : found[0].entries();
-		});
-		if (updated && found[0] != null) {
-			found[0].lastApply().save(ApplyResult.defaultPath(configDir));
-			RigTune.LOGGER.info("RigTune's last helper run counted {} change(s) as already done that it has no record of making; History now shows them "
-					+ "as not applied (installed another way): {}", found[0].opIds().size(), found[0].opIds());
+	// result (a death in between is completed at the next start). Once: afterwards nothing matches. A failure here never
+	// costs the reconcile.
+	private static SkippedClaims.Relabel skippedClaims(Path configDir, List<JournalEntry> entries, ApplyResult lastApply) {
+		try {
+			return SkippedClaims.of(entries, lastApply, () -> UnfinishedGroups.recorded(configDir));
+		} catch (RuntimeException e) {
+			RigTune.LOGGER.warn("Could not check RigTune's last helper run for changes it counted as already done", e);
+			return null;
 		}
 	}
 

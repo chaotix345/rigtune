@@ -11,6 +11,7 @@ import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.core.awareness.AwarenessStore;
 import io.github.chaotix345.rigtune.core.awareness.OutsideOptions;
 import io.github.chaotix345.rigtune.core.footprint.StartupTimesStore;
+import io.github.chaotix345.rigtune.core.history.JournalCache;
 import io.github.chaotix345.rigtune.core.launcher.Launcher;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
 import io.github.chaotix345.rigtune.core.model.Action;
@@ -102,7 +103,8 @@ public final class OutsideChanges {
 
 	public static void compareAtStart(RealController controller) {
 		Map<String, String> snapshot = AwarenessStore.shared(controller.configDir()).takeOptionsAtExit();
-		Map<String, String> fromJournal = OutsideOptions.applied(ClientJournal.get().entries());
+		// review 11 PERF-2 (a marked WS-H edit): the start hook's readers share one parse of history.json.
+		Map<String, String> fromJournal = OutsideOptions.applied(JournalCache.snapshot(ClientJournal.get()).entries());
 		Map<String, String> watched = APPLIED.updateAndGet(thisSession -> {
 			Map<String, String> merged = new LinkedHashMap<>(fromJournal);
 			if (thisSession != null) {

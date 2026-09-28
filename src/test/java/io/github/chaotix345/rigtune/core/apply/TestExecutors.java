@@ -24,6 +24,16 @@ public final class TestExecutors {
 		}, millis -> true);
 	}
 
+	// Killed just after it renames a matching file (review 11 APPLY-1): the rename is done, nothing after it runs.
+	public static ApplyExecutor killedAfter(Predicate<Path> after) {
+		return new ApplyExecutor(2, 1, (from, to) -> {
+			Files.move(from, to);
+			if (after.test(from)) {
+				throw new Killed();
+			}
+		}, millis -> true);
+	}
+
 	public static ApplyExecutor failingMovesOf(Predicate<Path> fails) {
 		return new ApplyExecutor(2, 1, (from, to) -> {
 			if (fails.test(from)) {

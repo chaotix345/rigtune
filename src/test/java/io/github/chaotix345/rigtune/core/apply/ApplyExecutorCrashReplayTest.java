@@ -3,6 +3,7 @@ package io.github.chaotix345.rigtune.core.apply;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import io.github.chaotix345.rigtune.client.undo.Staging;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.OpResult;
 import io.github.chaotix345.rigtune.core.apply.ApplyResult.Status;
 import io.github.chaotix345.rigtune.core.apply.PendingActions.Op;
@@ -22,6 +23,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -122,7 +124,8 @@ class ApplyExecutorCrashReplayTest {
 		return executor.run(PendingActions.load(pending), pending);
 	}
 
-	// The next start's preLaunch (HistoryStartup.run): the journal reconciled with pending.json and last-apply.json.
+	// The next start's preLaunch (HistoryStartup.run): the journal reconciled with pending.json and last-apply.json; then
+	// its first rebuild's Staging.dropStale (RW-3), with sodium loaded from the jars the folder has (review 11 APPLY-1).
 	private void nextStart() throws IOException {
 		Set<String> pendingIds = new HashSet<>();
 		if (Files.isRegularFile(pending)) {
@@ -131,6 +134,8 @@ class ApplyExecutorCrashReplayTest {
 		Path lastApply = ApplyResult.defaultPath(config);
 		List<OpResult> results = Files.isRegularFile(lastApply) ? ApplyResult.load(lastApply).results() : List.of();
 		journal().updateExisting(entries -> HistoryUpdates.reconcile(entries, pendingIds, results));
+		Set<String> loaded = Set.copyOf(modsListing().stream().filter(name -> name.endsWith(".jar")).toList());
+		assertEquals(Staging.StaleDrop.NONE, new Staging(config, pending, List.of(), journal()).dropStale(Map.of("sodium", loaded)));
 	}
 
 	private List<String> journalStatuses() {
@@ -187,6 +192,22 @@ class ApplyExecutorCrashReplayTest {
 
 		assertTheGroupIsDoneAsRigTunes(next);
 		assertTrue(next.results().get(1).message().startsWith("Already done earlier"), next.results().get(1).message());
+	}
+
+	// (1), then the player presses Discard pending at the next start (review 11, APPLY-1's cause in Discard): the group the
+	// record shows started is kept (its renames are done) and the next exit reports it done, instead of History saying
+	// DISCARDED over renamed files and an orphaned record.
+	@Test
+	void aDiscardAtTheNextStartKeepsAStartedGroup() throws IOException {
+		staged();
+		assertThrows(Killed.class, () -> run(killedAfter(enable)));
+		nextStart();
+
+		Staging.Discard discard = new Staging(config, pending, List.of(), journal()).discardPending();
+
+		assertEquals(new Staging.Discard(List.of(), true), discard);
+		assertEquals(List.of(JournalChange.STAGED, JournalChange.STAGED), journalStatuses());
+		assertTheGroupIsDoneAsRigTunes(run(executor()));
 	}
 
 	// (2) Killed after last-apply.json, before the record's prune: both records prove it.
