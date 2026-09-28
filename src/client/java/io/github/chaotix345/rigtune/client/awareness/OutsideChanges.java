@@ -34,6 +34,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -63,6 +64,8 @@ public final class OutsideChanges {
 	// options.txt larger than this isn't the game's (it is a few KiB).
 	private static final long MAX_OPTIONS_BYTES = 1024 * 1024;
 	private static final String OPTIONS_FILE = "options.txt";
+	// A logs folder keeps every archive vanilla ever made; more than this many isn't listed further.
+	private static final int MAX_LOG_ARCHIVES = 10_000;
 	private static final SystemToast.SystemToastId TOAST_ID = new SystemToast.SystemToastId(6000L);
 
 	// What the start comparison found, until the player acts on it.
@@ -112,8 +115,10 @@ public final class OutsideChanges {
 		}
 		// Review L6: a launch of another RigTune version since that exit (0.5 -> 0.4.0 -> 0.5) may have changed options in
 		// game; the snapshot is from before it, so nothing is compared.
-		if (OutsideOptions.anotherVersionSince(snapshot, new StartupTimesStore(controller.configDir()).runs(), controller.modVersion())) {
-			RigTune.LOGGER.info("RigTune: another RigTune version ran since the last clean exit; settings changed outside the game aren't checked this time");
+		// Review-11 COMPAT-3: the same for any launch in between (0.3.0 and older record no startup run), from the log archives.
+		if (OutsideOptions.anotherVersionSince(snapshot, new StartupTimesStore(controller.configDir()).runs(), controller.modVersion())
+				|| OutsideOptions.anotherLaunchSince(snapshot, logArchives(FabricLoader.getInstance().getGameDir().resolve("logs")))) {
+			RigTune.LOGGER.info("RigTune: the game ran since the last clean exit of this RigTune; settings changed outside the game aren't checked this time");
 			return;
 		}
 		List<OutsideOptions.Change> changes = OutsideOptions.compare(snapshot, OutsideOptions.parseOptions(options()), watched);
@@ -122,6 +127,26 @@ public final class OutsideChanges {
 					changes.stream().map(OutsideOptions.Change::key).toList());
 		}
 		found(changes);
+	}
+
+	// The modification times of logs/*.log.gz (one folder, not recursive; at most MAX_LOG_ARCHIVES entries looked at);
+	// nothing when the folder can't be read.
+	static List<Instant> logArchives(Path logs) {
+		List<Instant> out = new ArrayList<>();
+		if (!Files.isDirectory(logs)) {
+			return out;
+		}
+		try (DirectoryStream<Path> archives = Files.newDirectoryStream(logs, "*.log.gz")) {
+			for (Path archive : archives) {
+				if (out.size() >= MAX_LOG_ARCHIVES) {
+					break;
+				}
+				out.add(Files.getLastModifiedTime(archive).toInstant());
+			}
+		} catch (IOException | RuntimeException e) {
+			RigTune.LOGGER.debug("Could not list the log archives", e);
+		}
+		return out;
 	}
 
 	// options.txt now; nothing when it can't be read.

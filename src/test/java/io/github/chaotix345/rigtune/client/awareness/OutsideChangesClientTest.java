@@ -18,10 +18,12 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -182,6 +184,21 @@ class OutsideChangesClientTest {
 		Recommendation again = OutsideChanges.reapply(List.of(third), Map.of()).getFirst();
 		assertEquals(new Action.SetSetting("vanilla.renderDistance", "8", "12"), again.action());
 		assertEquals("The value RigTune last applied.", again.reasonText().english());
+	}
+
+	// Review-11 COMPAT-3: the log archives' times, read from logs/*.log.gz only (no other file, no subfolder).
+	@Test
+	void theLogArchivesAreTheGzippedLogs(@TempDir Path game) throws IOException {
+		Path logs = Files.createDirectories(game.resolve("logs"));
+		Instant first = Instant.parse("2026-09-27T09:00:05Z");
+		Instant second = Instant.parse("2026-09-27T20:00:03Z");
+		Files.setLastModifiedTime(Files.writeString(logs.resolve("2026-09-27-1.log.gz"), "x"), FileTime.from(first));
+		Files.setLastModifiedTime(Files.writeString(logs.resolve("2026-09-27-2.log.gz"), "x"), FileTime.from(second));
+		Files.writeString(logs.resolve("latest.log"), "x");
+		Files.writeString(logs.resolve("debug.log"), "x");
+		Files.createDirectories(logs.resolve("nested.log.gz.d"));
+		assertEquals(Set.of(first, second), Set.copyOf(OutsideChanges.logArchives(logs)));
+		assertEquals(List.of(), OutsideChanges.logArchives(game.resolve("missing")));
 	}
 
 	@Test

@@ -841,6 +841,9 @@ public class A11yGameTest implements FabricClientGameTest {
 		RigTune.LOGGER.info("A11yGameTest: this machine: {}; crash-report setup {} ms; Tools shows {} advice row(s)", HardwareProbe.perfCounters().describe(),
 				PreloadTimer.preloadMs(), context.computeOnClient(mc -> ((ToolsScreen) mc.gui.screen()).perfCounterLines().size()));
 		context.takeScreenshot("a11y-tools-startup-this-machine-1280x720-scale2");
+		// Review-11 COMPAT-6: this is a production client on every leg, so CrashReportMixin must have timed Main's
+		// CrashReport.preload() (javap: the call is in client.main.Main on 26.2 and 26.3); C18's RW-19 subtraction needs it.
+		check(PreloadTimer.preloadMs() != null, "the crash-report setup was timed at this launch (CrashReportMixin applied)");
 		PerfCounters off = new PerfCounters(true, true, List.of(), List.of("PerfOS"));
 		HardwareProbe.seedPerfCounters(off);
 		try {
