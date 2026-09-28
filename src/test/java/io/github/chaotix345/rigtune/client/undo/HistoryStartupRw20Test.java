@@ -60,7 +60,11 @@ class HistoryStartupRw20Test {
 		HistoryModel.View view = HistoryModel.build(journal.state(), journal.entries(), ApplyFailures.byOpId(lastApply, List.of(instance.resolve("mods"), config)),
 				HistoryModel.Labels.RAW);
 		List<HistoryModel.Change> abandoned = view.entries().getFirst().changes().stream().filter(c -> JournalChange.ABANDONED.equals(c.status())).toList();
-		assertEquals(List.of("fabric-26.2.jar", "DistantHorizons-3.3.2-26.2-fabric-neoforge.jar"), abandoned.stream().map(HistoryModel.Change::file).toList());
+		// One "Updated" row (review 11 COMPAT-4: History pairs 0.1.0's update although its disable has no mod id).
+		assertEquals(List.of(HistoryModel.Row.UPDATED), abandoned.stream().map(HistoryModel.Change::row).toList());
+		assertEquals(List.of("fabric-26.2.jar"), abandoned.stream().map(HistoryModel.Change::file).toList());
+		assertEquals(List.of("DistantHorizons-3.3.2-26.2-fabric-neoforge.jar"), abandoned.stream().map(HistoryModel.Change::newFile).toList());
+		assertEquals(2, abandoned.getFirst().changeIds().size());
 		for (HistoryModel.Change change : abandoned) {
 			assertEquals("installed another way", change.failure().reason());
 			TranslatableContents text = (TranslatableContents) HistoryScreen.failureText(change).getContents();
