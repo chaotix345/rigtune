@@ -47,7 +47,8 @@ public final class LauncherModText {
 	}
 
 	// AC4b.5: LAUNCHER's sentence, the opted-in sentence (RIGTUNE because of the opt-in), and null for plain RIGTUNE and
-	// for PENDING (nothing is claimed about mod files before detection answers). optedIn: settings.json modFilesByRigTune.
+	// for PENDING (nothing is claimed about mod files before detection answers). optedIn: ModFilesService.optedIn(), the
+	// opt-in where a launcher keeps its own record (review M2: never the bare settings.json flag).
 	public static @Nullable Text guideLine(ModFilesPolicy policy, @Nullable LauncherInfo launcher, boolean optedIn) {
 		return switch (policy) {
 			case LAUNCHER -> Text.of("rigtune.launcher.mod_files.guide", "This instance's mods are managed by %s: RigTune changes settings only.",
