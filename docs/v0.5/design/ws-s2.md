@@ -355,8 +355,12 @@ each medium with a test seen failing first (the failure named):
   side: as the before side `FixGate` answers `FixOffer.Reason.IDLE` ("This session was idle (throttled) longer than it
   was played, so it can't be compared. Play a session without long breaks.", after EXCLUDED, before STORE); as an after
   session it is skipped with `FixTracker.IDLE` ("…it was idle (throttled) longer than it was played."). `Fixes.idle` and
-  `SessionEnd.idle` carry it (the 6-argument SessionEnd constructor kept). FixGateTest `aMostlyIdleSessionIsNoBeforeSide`,
-  FixTrackerTest `aMostlyIdleSessionIsSkipped`, FixTextTest.
+  `SessionEnd.idle` carry it (the 6-argument SessionEnd constructor kept); a session without `idleSeconds` (0.4's, older)
+  counts as no idle. FixGateTest `aMostlyIdleSessionIsNoBeforeSide` and `theRealAfkCaptureIsNoBeforeSide` (the shape of
+  the real 2026-09-28 capture: 17.4 h AFK in 19 h, 96 hitches; 62,640 s idle against 4,569 s played is refused, while
+  the same capture saved before RW-17 as 67,209 s of gameplay would pass), FixTrackerTest `aMostlyIdleSessionIsSkipped`
+  (the same shape as an after session: skipped, where counted it would have diluted the rate to 0.09 hitches a minute
+  and read as "less"), FixTextTest.
 - Local after the fixes: the full `:26.2:test` 323 suites, 2723 tests, 0 failures; `:26.3` client, test and game-test
   sources compile.
 

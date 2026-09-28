@@ -6,7 +6,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // AC5.3 (FixGateTest): the client floor rules can't lower. Each failing condition alone blocks with its reason.
 class FixGateTest {
@@ -51,6 +53,17 @@ class FixGateTest {
 		assertNull(FixGate.check(idle(report(StutterReport.MONITOR, 600, 30), 600), false, false, true));
 		assertEquals(FixOffer.Reason.EXCLUDED, FixGate.check(idle(report(StutterReport.MONITOR, 600, 30), 900), true, false, true));
 		assertEquals(FixOffer.Reason.IDLE, FixGate.check(idle(report(StutterReport.MONITOR, 10, 1), 900), false, true, false));
+	}
+
+	// The real capture behind RW-17 (SPEC.md, "real world 2026-09-28"): 19 h in the world, 17.4 h of it throttled AFK. Saved
+	// before RW-17 as 67,209 s of gameplay with 96 hitches, it passed the floor; with its idle time counted apart (62,640 s
+	// idle, 4,569 s played) it's no before side. A session without idleSeconds (0.4's, older) counts as no idle.
+	@Test
+	void theRealAfkCaptureIsNoBeforeSide() {
+		assertEquals(FixOffer.Reason.IDLE, FixGate.check(idle(report(StutterReport.MONITOR, 4_569, 96), 62_640), false, false, true));
+		assertTrue(FixGate.idle(idle(report(StutterReport.MONITOR, 4_569, 96), 62_640)));
+		assertNull(FixGate.check(report(StutterReport.MONITOR, 67_209, 96), false, false, true), "saved before RW-17: no idle known");
+		assertFalse(FixGate.idle(report(StutterReport.MONITOR, 67_209, 96)));
 	}
 
 	// When several fail, the first of benchmark, excluded, store, busy, length.

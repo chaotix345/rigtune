@@ -67,10 +67,12 @@ class FixTrackerTest {
 		return FixTracker.advance(r, Journal.State.OK, journal, session, now);
 	}
 
-	// RW-17 for C20: an after session the game throttled (idle) for longer than it was played doesn't count.
+	// RW-17 for C20: an after session the game throttled (idle) for longer than it was played doesn't count. The shape is the
+	// real AFK capture's (FixGateTest.theRealAfkCaptureIsNoBeforeSide): 96 hitches in 4,569 s played, 17.4 h idle; counted
+	// with its idle time as gameplay, its rate (0.09 a minute) would have read as "less" against any real play.
 	@Test
 	void aMostlyIdleSessionIsSkipped() {
-		FixTracker.SessionEnd s = session(60, 400, 10, RD, "10");
+		FixTracker.SessionEnd s = session(60, 4_569, 96, RD, "10");
 		FixTracker.SessionEnd idle = new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), s.atStart(), s.atEnd(), false, true);
 		FixTracker.Record r = advance(measuring(), journal(RD, JournalChange.APPLIED), idle, at(60));
 		assertEquals(FixTracker.State.MEASURING, r.state());
