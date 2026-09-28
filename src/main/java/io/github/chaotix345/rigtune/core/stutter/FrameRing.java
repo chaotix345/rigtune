@@ -29,8 +29,9 @@ public final class FrameRing {
 	private static final int CHUNK_SHIFT = 3 * PHASE_BITS;
 	public static final int MAX_FRAME_CHUNKS = 31;
 
-	// Candidate record layout.
-	public static final int STRIDE = 10;
+	// Candidate record layout. C_GAMEPLAY (review-12 R12STUTTER-2): the capture's gameplay (ns) up to and including this
+	// frame, so the spikes the candidates still hold can be set against the play they cover.
+	public static final int STRIDE = 11;
 	public static final int C_END = 0;
 	public static final int C_DURATION = 1;
 	public static final int C_BASELINE = 2;
@@ -42,6 +43,9 @@ public final class FrameRing {
 	public static final int C_RENDER_BASE = 8;
 	// This frame's chunk loads in the low 32 bits, the previous frame's in the high 32.
 	public static final int C_CHUNKS = 9;
+	public static final int C_GAMEPLAY = 10;
+	// No mark (markGameplayAt never called).
+	public static final long NO_MARK = Long.MIN_VALUE;
 
 	// Upper edges of the display buckets: < 4.2 · 4.2-8.3 · 8.3-16.7 · 16.7-33 · 33-50 · 50-100 · 100-250 · 250-1000 · ≥ 1000 ms.
 	public static final long[] EDGES = {4_166_667L, 8_333_333L, 16_666_667L, 33_333_333L, 50 * MS, 100 * MS, 250 * MS, 1000 * MS};
@@ -67,6 +71,10 @@ public final class FrameRing {
 	private long lastGameplayEnd;
 	private boolean afterExcluded;
 	private int warm;
+	// review-12 R12STUTTER-1: the gameplay (ns) before the first frame that ends at or after markAt (-1 before it).
+	private boolean marking;
+	private long markAt = NO_MARK;
+	private long gameplayAtMark = -1;
 
 	public FrameRing(int frameCapacity, int candidateCapacity) {
 		if (Integer.bitCount(frameCapacity) != 1 || candidateCapacity <= 0) {
@@ -79,9 +87,20 @@ public final class FrameRing {
 		this.candidateCapacity = candidateCapacity;
 	}
 
+	// The gameplay up to the moment `nanos` is recorded as the frames pass it (a capture's settle span, SessionOutcome).
+	public void markGameplayAt(long nanos) {
+		markAt = nanos;
+		gameplayAtMark = -1;
+		marking = true;
+	}
+
 	// now: System.nanoTime() at the frame's end; duration: the game's own frame-to-frame time. The phases are this
 	// frame's (0 when phase timing is off).
 	public void frame(long now, long duration, boolean excluded, long packets, long ticks, long render, int chunkLoads) {
+		if (marking && now - markAt >= 0) {
+			gameplayAtMark = gameplayNanos;
+			marking = false;
+		}
 		int slot = (int) (frames++ & mask);
 		ends[slot] = excluded ? now | 1L : now & ~1L;
 		int chunks = Math.min(MAX_FRAME_CHUNKS, Math.max(0, chunkLoads)) << CHUNK_SHIFT;
@@ -124,6 +143,7 @@ public final class FrameRing {
 			candidates[at + C_TICKS_BASE] = Math.max(0, ticksBase);
 			candidates[at + C_RENDER_BASE] = Math.max(0, renderBase);
 			candidates[at + C_CHUNKS] = ((long) lastChunkLoads << 32) | (chunkLoads & 0xFFFFFFFFL);
+			candidates[at + C_GAMEPLAY] = gameplayNanos;
 		}
 		// Warming up: alpha 1/4 for the first frames after a (re)start, then 1/32.
 		int shift = 5;
@@ -230,16 +250,23 @@ public final class FrameRing {
 			System.arraycopy(candidates, (int) ((firstCandidate + i) % candidateCapacity) * STRIDE, cands, i * STRIDE, STRIDE);
 		}
 		return new Snapshot(out, cands, histogramCounts.clone(), histogramNanos.clone(), frames, gameplayFrames, gameplayNanos, excludedFrames,
-				candidateCount, new long[]{Math.max(0, packetsBase), Math.max(0, ticksBase), Math.max(0, renderBase)}, framePhases);
+				candidateCount, new long[]{Math.max(0, packetsBase), Math.max(0, ticksBase), Math.max(0, renderBase)}, framePhases, markAt, gameplayAtMark);
 	}
 
 	// ends: chronological (bit 0 = excluded); candidates: chronological records of STRIDE longs; the histogram and
 	// counters cover the whole capture, even what the rings no longer hold. phaseBaselines: the running packets, ticks and
 	// render baselines (ns) at the snapshot, for the logs. framePhases: each held frame's phase word (packetsExcess,
-	// ticksExcess, renderExcess, chunkLoads), aligned with ends; empty when unknown.
+	// ticksExcess, renderExcess, chunkLoads), aligned with ends; empty when unknown. markNanos: markGameplayAt's moment
+	// (NO_MARK without one); gameplayAtMark: the gameplay before it, -1 while no frame passed it.
 	public record Snapshot(long[] ends, long[] candidates, long[] histogramCounts, long[] histogramNanos, long frames, long gameplayFrames,
-			long gameplayNanos, long excludedFrames, long candidateCount, long[] phaseBaselines, int[] framePhases) {
+			long gameplayNanos, long excludedFrames, long candidateCount, long[] phaseBaselines, int[] framePhases, long markNanos, long gameplayAtMark) {
 		public static final Snapshot EMPTY = new Snapshot(new long[0], new long[0], new long[BUCKETS], new long[BUCKETS], 0, 0, 0, 0, 0, new long[3]);
+
+		public Snapshot(long[] ends, long[] candidates, long[] histogramCounts, long[] histogramNanos, long frames, long gameplayFrames,
+				long gameplayNanos, long excludedFrames, long candidateCount, long[] phaseBaselines, int[] framePhases) {
+			this(ends, candidates, histogramCounts, histogramNanos, frames, gameplayFrames, gameplayNanos, excludedFrames, candidateCount, phaseBaselines,
+					framePhases, NO_MARK, -1);
+		}
 
 		public Snapshot(long[] ends, long[] candidates, long[] histogramCounts, long[] histogramNanos, long frames, long gameplayFrames,
 				long gameplayNanos, long excludedFrames, long candidateCount, long[] phaseBaselines) {

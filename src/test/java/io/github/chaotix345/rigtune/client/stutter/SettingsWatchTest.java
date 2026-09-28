@@ -104,6 +104,29 @@ class SettingsWatchTest {
 		assertTrue(capture.get() == null, "nothing keeps the ended session's capture");
 	}
 
+	// review-12 R12STUTTER-4: a failed session replaced by the next one without a tick in between (an immediate stutter fix's
+	// restart, Clear) isn't kept either.
+	@Test
+	void aFailedSessionReplacedWithoutATickIsReleased() {
+		StutterMonitorAccess.startSession();
+		java.lang.ref.WeakReference<StutterMonitor.Capture> capture = new java.lang.ref.WeakReference<>(StutterMonitor.session());
+		try (io.github.chaotix345.rigtune.core.LogCapture ignored = new io.github.chaotix345.rigtune.core.LogCapture()) {
+			SettingsWatch.tick(null);
+			StutterMonitorAccess.stopAll();
+			StutterMonitorAccess.startSession();
+			for (int i = 0; i < 50 && capture.get() != null; i++) {
+				System.gc();
+				byte[][] churn = new byte[64][];
+				for (int j = 0; j < churn.length; j++) {
+					churn[j] = new byte[64 * 1024];
+				}
+			}
+			assertTrue(capture.get() == null, "nothing keeps the replaced session's capture");
+		} finally {
+			StutterMonitorAccess.stopAll();
+		}
+	}
+
 	// Review fix (M3): a check that throws is off for the rest of that session (one warning), and tries again in the next.
 	@Test
 	void aFailingCheckStaysOffForThatSession() {

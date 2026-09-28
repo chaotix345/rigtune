@@ -1141,6 +1141,11 @@ public final class RealController implements RigTuneController {
 	}
 
 	@Override
+	public Component startStutterFix(FixOffer.Offer offer) {
+		return v05().stutterFixes().start(offer);
+	}
+
+	@Override
 	public void dismissStutterFix(String entryId) {
 		v05().stutterFixes().dismiss(entryId);
 	}

@@ -556,6 +556,26 @@ class StutterAnalyzerTest {
 		assertEquals(Map.of(Attributor.CHUNKS_LOADING, 1), r.report().tags(), "the first hitch's previous frame loaded chunks; nothing loaded near the second");
 	}
 
+	// review-12 R12STUTTER-5: a setting change during the capture counts even when it went back (the whole capture's count);
+	// one dated before the capture's start (an immediate fix's own, which restarts the session) or a resource reload alone
+	// doesn't.
+	@Test
+	void settingChangesDuringTheCaptureAreCounted() {
+		Capture c = new Capture();
+		c.rings.countSettingChangesFrom(T0);
+		c.rings.event(StutterRings.SETTINGS_CHANGED, T0 - S, 1);
+		c.frames(60, Map.of(), false);
+		c.rings.event(StutterRings.SETTINGS_CHANGED, c.now, 1 << 4);
+		c.rings.event(StutterRings.SETTINGS_CHANGED, c.now + S, 1 | (5L << StutterRings.SETTINGS_LEAD_SHIFT));
+		c.rings.event(StutterRings.SETTINGS_CHANGED, c.now + 2 * S, 1);
+		c.frames(60, Map.of(), false);
+		assertEquals(2, c.analyze(true).settingChanges());
+		Capture none = new Capture();
+		none.rings.countSettingChangesFrom(T0);
+		none.frames(60, Map.of(), false);
+		assertEquals(0, none.analyze(true).settingChanges());
+	}
+
 	@Test
 	void collectorDisplayNames() {
 		assertEquals("ZGC", StutterAnalyzer.displayName("zgc"));

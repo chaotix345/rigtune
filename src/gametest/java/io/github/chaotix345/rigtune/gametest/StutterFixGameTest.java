@@ -149,9 +149,35 @@ public class StutterFixGameTest implements FabricClientGameTest {
 		openStutter(context, controller);
 		waitForFix(context, CHUNKS, FixOffer.Offer.class);
 
-		// Preview, then Cancel: nothing written.
+		// Try this fix… (review-12 R12STUTTER-6): nothing changes; one session as it is is measured first, from a restart of
+		// the running session. The advice row has no "another fix" line (the block explains).
 		int entries = context.computeOnClient(mc -> ClientJournal.get().entries().size());
+		StutterMonitor.Capture trigger = StutterMonitor.session();
 		pressFix(context, "rigtune.stutter.fix.try");
+		check(status(context).startsWith("Measuring your play as it is."), "the status: " + status(context));
+		FixTracker.Record chosen = waitForRecord(context, configDir, r -> r.state() == FixTracker.State.BASELINE, "a baseline record");
+		check(context.computeOnClient(mc -> mc.options.renderDistance().get()) == 12, "Try this fix… changed nothing");
+		check(context.computeOnClient(mc -> ClientJournal.get().entries().size()) == entries, "Try this fix… wrote no History entry");
+		StutterMonitor.Capture baseline = StutterMonitor.session();
+		check(baseline != null && baseline != trigger && !baseline.startedAt().isBefore(chosen.appliedAt()), "the baseline session started at the choice");
+		context.waitFor(mc -> mc.gui.screen() instanceof StutterScreen s && s.shownView().tracked() != null
+				&& s.shownView().tracked().state() == FixTracker.State.BASELINE, 200);
+		check(shown(context).contains("Nothing has changed yet") && !shown(context).contains("Another fix is still being measured"),
+				"the block, and no busy line under the advice: " + shown(context));
+		context.takeScreenshot("stutterfix-baseline-854x480-scale2");
+		// The baseline session ends (the probe's 20 hitches in 6:40): ready.
+		endSession(context, controller);
+		FixTracker.Record ready = waitForRecord(context, configDir, r -> r.state() == FixTracker.State.READY, "a ready record");
+		check(ready.entryId().equals(chosen.entryId()) && ready.before().hitches() == 20, "the baseline measured: " + ready);
+		freshSession(context, controller);
+		openStutter(context, controller);
+		context.waitFor(mc -> mc.gui.screen() instanceof StutterScreen s && s.shownView().tracked() != null
+				&& s.shownView().tracked().state() == FixTracker.State.READY, 200);
+		check(shown(context).contains("Your play as it is: 3.0 hitches a minute over 6:40."), "the ready block: " + shown(context));
+		context.takeScreenshot("stutterfix-ready-854x480-scale2");
+
+		// Apply the fix…: its preview, then Cancel: nothing written, still ready.
+		pressFix(context, "rigtune.stutter.fix.apply");
 		ApplyPreview preview = waitForPreview(context);
 		check(preview.now().size() == 1 && preview.atRestart().isEmpty(), "one change, now: " + preview);
 		context.takeScreenshot("stutterfix-preview-854x480-scale2");
@@ -159,11 +185,12 @@ public class StutterFixGameTest implements FabricClientGameTest {
 		context.waitForScreen(StutterScreen.class);
 		check(context.computeOnClient(mc -> mc.options.renderDistance().get()) == 12, "Cancel changed nothing");
 		check(context.computeOnClient(mc -> ClientJournal.get().entries().size()) == entries, "Cancel wrote no History entry");
-		check(FixStore.shared(configDir).records().isEmpty(), "Cancel tracked nothing");
+		check(latest(configDir).state() == FixTracker.State.READY, "Cancel left the fix ready");
 
-		// Apply: one entry, RD 10, one measuring record; the session restarts after appliedAt, at the new value (M4).
+		// Apply: one entry (the chosen fix's id), RD 10, one measuring record with the baseline as its before side; the
+		// session restarts after appliedAt, at the new value (M4).
 		StutterMonitor.Capture before = StutterMonitor.session();
-		pressFix(context, "rigtune.stutter.fix.try");
+		pressFix(context, "rigtune.stutter.fix.apply");
 		waitForPreview(context);
 		Object reportBefore = context.computeOnClient(mc -> {
 			Object report = controller.report();
@@ -172,16 +199,13 @@ public class StutterFixGameTest implements FabricClientGameTest {
 		});
 		context.waitForScreen(StutterScreen.class);
 		check(context.computeOnClient(mc -> mc.options.renderDistance().get()) == 10, "Apply set render distance 10");
-		String status = context.computeOnClient(mc -> {
-			Component s = ((StutterScreen) mc.gui.screen()).status();
-			return s == null ? "" : s.getString();
-		});
-		check(status.startsWith("Fix applied."), "the status: " + status);
+		check(status(context).startsWith("Fix applied."), "the status: " + status(context));
 		JournalEntry entry = context.computeOnClient(mc -> ClientJournal.get().entries().getLast());
 		check(entry.changes().size() == 1 && RD.equals(entry.changes().getFirst().key()) && JournalChange.APPLIED.equals(entry.changes().getFirst().status()),
 				"one apply entry, the change applied: " + entry);
 		FixTracker.Record record = waitForRecord(context, configDir, r -> r.state() == FixTracker.State.MEASURING, "a measuring record");
-		check(record.entryId().equals(entry.id()) && record.before().hitches() == 20 && record.to().equals("10"), "the record: " + record);
+		check(record.entryId().equals(entry.id()) && record.entryId().equals(chosen.entryId()) && record.before().equals(ready.before())
+				&& record.to().equals("10"), "the record: " + record);
 		StutterMonitor.Capture after = StutterMonitor.session();
 		check(after != null && after != before && !after.startedAt().isBefore(record.appliedAt()),
 				"the session restarted after appliedAt: " + (after == null ? null : after.startedAt()) + " vs " + record.appliedAt());
@@ -239,6 +263,14 @@ public class StutterFixGameTest implements FabricClientGameTest {
 		FixOffer.Offer offer = (FixOffer.Offer) waitForFix(context, SODIUM, FixOffer.Offer.class);
 		check(offer.key().equals(DEFER) && "ALWAYS".equals(offer.to()) && !offer.now(), "the Sodium offer, at the next restart: " + offer);
 		pressFix(context, "rigtune.stutter.fix.try");
+		waitForRecord(context, configDir, r -> r.state() == FixTracker.State.BASELINE && r.key().equals(DEFER), "a baseline record");
+		endSession(context, controller);
+		waitForRecord(context, configDir, r -> r.state() == FixTracker.State.READY && r.key().equals(DEFER), "a ready record");
+		freshSession(context, controller);
+		openStutter(context, controller);
+		context.waitFor(mc -> mc.gui.screen() instanceof StutterScreen s && s.shownView().tracked() != null
+				&& s.shownView().tracked().state() == FixTracker.State.READY, 200);
+		pressFix(context, "rigtune.stutter.fix.apply");
 		ApplyPreview preview = waitForPreview(context);
 		check(preview.atRestart().size() == 1 && preview.now().isEmpty(), "one change, at the next restart: " + preview);
 		context.runOnClient(mc -> press(((PreviewScreen) mc.gui.screen()).applyButton()));
@@ -382,6 +414,13 @@ public class StutterFixGameTest implements FabricClientGameTest {
 				}
 			}
 			return out.toString();
+		});
+	}
+
+	private static String status(ClientGameTestContext context) {
+		return context.computeOnClient(mc -> {
+			Component s = mc.gui.screen() instanceof StutterScreen screen ? screen.status() : null;
+			return s == null ? "" : s.getString();
 		});
 	}
 

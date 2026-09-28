@@ -451,9 +451,14 @@ public class StutterScreen extends Screen {
 		}
 	}
 
-	// docs/v0.5/SPEC.md 5 (C20): under an advice, its one-click fix ("Try it in one click: ...", when it takes effect, an active
-	// profile that also sets it, and "Try this fix…", whose narration names the change), or the one line why not (yet).
+	// docs/v0.5/SPEC.md 5 (C20): under an advice, its one-click fix ("Try it in one click: ...", the two steps and when it
+	// takes effect, an active profile that also sets it, and "Try this fix…", whose narration names the change), or the one
+	// line why not (yet). The advice's own fix, already chosen or applied, is the block's business (no "another fix" line).
 	private void fixRows(StutterList l, StutterAdvisor.Fired advice, FixOffer fix, int width) {
+		FixTracker.Record tracked = view.tracked();
+		if (fix instanceof FixOffer.NotYet && tracked != null && tracked.active() && tracked.adviceId().equals(advice.id())) {
+			return;
+		}
 		switch (fix) {
 			case FixOffer.NotYet n -> text(l, Texts.component(FixText.notYet(n)), COLOR_LABEL, width, 2);
 			case FixOffer.Offer o -> {
@@ -465,21 +470,34 @@ public class StutterScreen extends Screen {
 					text(l, Texts.component(FixText.profileNote(Text.literal(o.profile()))), COLOR_LABEL, width, 0);
 				}
 				Component narration = Texts.component(FixText.tryNarration(change));
-				Button tryIt = Button.builder(Texts.component(FixText.tryButton()), b -> tryFix(advice, o)).size(Math.min(width, 160), 20)
+				Button tryIt = Button.builder(Texts.component(FixText.tryButton()), b -> startFix(o)).size(Math.min(width, 160), 20)
 						.createNarration(message -> narration.copy()).build();
 				buttons(l, List.of(tryIt));
 			}
 		}
 	}
 
-	private void tryFix(StutterAdvisor.Fired advice, FixOffer.Offer offer) {
+	// Try this fix… (review-12 R12STUTTER-6): nothing changes yet, the baseline session starts.
+	private void startFix(FixOffer.Offer offer) {
+		FixTracker.Record was = controller.stutter().tracked();
+		status = controller.startStutterFix(offer);
+		FixTracker.Record now = controller.stutter().tracked();
+		// Chosen when the block now shows a new fix; anything else was a refusal.
+		statusColor = now != null && (was == null || !was.entryId().equals(now.entryId())) ? COLOR_GOOD : COLOR_LABEL;
+		rebuildWidgets();
+	}
+
+	// Apply the fix… on a ready fix: its preview, then the Apply.
+	private void applyFix(FixTracker.Record fix) {
+		FixOffer.Offer offer = new FixOffer.Offer(fix.adviceId(), fix.key(), fix.from(), fix.to(), fix.now());
+		String title = view.advice().stream().filter(a -> a.id().equals(fix.adviceId())).map(StutterAdvisor.Fired::title).findFirst()
+				.orElse(Texts.component(FixText.change(controller.settingLabels(), fix.key(), fix.from(), fix.to())).getString());
 		minecraft.gui.setScreen(new PreviewScreen(this, controller, c -> c.previewStutterFix(offer), new PreviewScreen.Confirm(
-				Texts.component(FixText.previewSubtitle(advice.title())), Texts.component(FixText.previewApply()), () -> {
-					FixTracker.Record was = controller.stutter().tracked();
+				Texts.component(FixText.previewSubtitle(title)), Texts.component(FixText.previewApply()), () -> {
 					status = controller.applyStutterFix(offer);
 					FixTracker.Record now = controller.stutter().tracked();
-					// Applied when the block now shows a new fix; anything else was a refusal.
-					statusColor = now != null && (was == null || !was.entryId().equals(now.entryId())) ? COLOR_GOOD : COLOR_LABEL;
+					// Applied when the block's fix left READY; anything else was a refusal.
+					statusColor = now != null && now.entryId().equals(fix.entryId()) && !now.state().beforeApply() ? COLOR_GOOD : COLOR_LABEL;
 					minecraft.gui.setScreen(this);
 				}, null)));
 	}
@@ -511,6 +529,11 @@ public class StutterScreen extends Screen {
 		}
 		List<Button> buttons = new ArrayList<>();
 		int half = Math.min(160, (width - ButtonRow.GAP) / 2);
+		if (fix.state() == FixTracker.State.READY) {
+			Component narration = Texts.component(FixText.applyNarration(FixText.change(labels, fix.key(), fix.from(), fix.to())));
+			buttons.add(Button.builder(Texts.component(FixText.applyButton()), b -> applyFix(fix)).size(half, 20)
+					.createNarration(message -> narration.copy()).build());
+		}
 		boolean inEffect = fix.undoable();
 		if (inEffect) {
 			buttons.add(Button.builder(Texts.component(FixText.undo()), b -> minecraft.gui.setScreen(new UndoScreen(this, controller, fix.entryId())))

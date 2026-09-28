@@ -70,6 +70,24 @@ they stand unchanged; the comparison said "no clear change"** (hitches 34.08 →
   still measures it quits without the Undo, so the next launch plays on. Attempt 2 ran the current jar from a fresh
   record.
 
+## Review-12: false "less stutter" under no real change, simulated (2026-09-28)
+`sims/`: the reviewer's exact model of FixComparison in Python (sim.py: the log-space binomial, pooled phi, h/phi half
+up) and scenarios (sim2.py: a world join's burst on the before side only; sim3.py: the triggering session chosen for being
+worse than usual), run here unchanged (`*.before.txt`), and sim4.py / sim4b.py, the model of review-12's rules on the same
+grids (`sim4.after.txt`, `sim4b.after.txt`): each side leaves out its first 3 minutes (SessionOutcome.SETTLE_NANOS), and
+the before side is a fresh session measured after the player chose the fix, never the triggering one. Run with
+`python sim4.py` (about 2 minutes) and `python sim4b.py` (about 10).
+
+| scenario | false LESS before | after |
+|---|---|---|
+| H0 (sim.py's grid) | up to 7.2 % | up to 5.3 % (mean 2.4 %) |
+| join burst, after side without its own (sim2.py) | 10.2-51.5 % | up to 4.9 % |
+| triggering session >= 1.3x / 1.6x the usual rate (sim3.py) | 12.6-28.1 % / 19.8-65.8 % | up to 5.3 % (every cell, 4,000 pairs: the H0 level) |
+
+A burst that lasts past the 3-minute cut still leaks (7.7 % in a stress case with a 4th burst minute); the model has no
+session-to-session difference in activity (exploring before, building after), which the comparison can't hold equal.
+The real run above predates these rules (its before side was the triggering session).
+
 ## UNVERIFIED
 - One PC, one driver: the verdict is this rig's under teleport play; real play with less teleporting may differ (the
   comparison is a measurement, not proof, as the UI says).

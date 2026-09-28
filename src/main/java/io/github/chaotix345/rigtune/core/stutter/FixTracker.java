@@ -33,11 +33,18 @@ public final class FixTracker {
 	public static final String IDLE = "idle";
 	// review-11 STUTTER-7: the fixed key wasn't in the session's start or end snapshot (its file unreadable then).
 	public static final String UNREAD = "unread";
+	// A baseline session with less than FixGate.MIN_GAMEPLAY_SECONDS of compared play.
+	public static final String SHORT_BEFORE = "short_before";
+	// review-12 R12STUTTER-5: a setting changed during the session (and back, or between its start and end).
+	public static final String CHANGED = "changed";
 	// Not a session's skip: an expired record's mark that its journal entry is gone (nothing left to undo).
 	public static final String GONE = "gone";
 
+	// review-12 R12STUTTER-6: BASELINE: the player chose to try the fix, and RigTune measures one session as it is first
+	// (nothing changed yet); READY: that session was measured, the change can be applied. The session that led to the
+	// offer is never a side of the comparison: it was chosen for being bad, so the next one would look better anyway.
 	public enum State {
-		STAGED, MEASURING, COMPARED, UNDONE, NOT_APPLIED, REPLACED, EXPIRED;
+		STAGED, MEASURING, COMPARED, UNDONE, NOT_APPLIED, REPLACED, EXPIRED, BASELINE, READY;
 
 		public String id() {
 			return name().toLowerCase(Locale.ROOT);
@@ -52,9 +59,14 @@ public final class FixTracker {
 			return null;
 		}
 
-		// Staged or measuring: only one fix at a time.
+		// Staged or measuring, or measuring the play before it (baseline, ready): only one fix at a time.
 		public boolean tracking() {
-			return this == STAGED || this == MEASURING;
+			return this == STAGED || this == MEASURING || this == BASELINE || this == READY;
+		}
+
+		// Chosen but not applied yet: no journal entry, nothing to undo or hold.
+		public boolean beforeApply() {
+			return this == BASELINE || this == READY;
 		}
 	}
 
@@ -79,9 +91,30 @@ public final class FixTracker {
 			return state.tracking() && !dismissed;
 		}
 
+		// It can still change (advance): not dismissed, and tracking or compared (an undo).
+		public boolean open() {
+			return !dismissed && (state.tracking() || state == State.COMPARED);
+		}
+
+		// It can still change with the journal: open and applied (a baseline has no journal entry yet).
+		public boolean followsJournal() {
+			return open() && !state.beforeApply();
+		}
+
 		// Its change can still be undone from the block: not undone or not applied, and not expired with its entry gone.
 		public boolean undoable() {
-			return state != State.UNDONE && state != State.NOT_APPLIED && !(state == State.EXPIRED && lastSkip != null && GONE.equals(lastSkip.reason()));
+			return state != State.UNDONE && state != State.NOT_APPLIED && !state.beforeApply()
+					&& !(state == State.EXPIRED && lastSkip != null && GONE.equals(lastSkip.reason()));
+		}
+
+		// The baseline session measured: the before side and the conditions the comparison keeps.
+		Record ready(SessionOutcome measured, FixConditions at) {
+			return new Record(entryId, adviceId, key, from, to, appliedAt, rulesRevision, now, State.READY, measured, at, null, 0, null, null, dismissed);
+		}
+
+		// The change applied at `at` (READY -> STAGED or MEASURING), its measured before side kept.
+		public Record applied(Instant at, State next) {
+			return new Record(entryId, adviceId, key, from, to, at, rulesRevision, now, next, before, conditions, null, 0, null, null, false);
 		}
 
 		public Record withState(State next) {
@@ -117,9 +150,15 @@ public final class FixTracker {
 
 	// A finished session: when it started, its source (StutterReport.MONITOR or BENCHMARK), its outcome, the conditions at
 	// its start and end, whether it's excluded (around a benchmark run, or Distant Horizons generated terrain in it: WS-B's
-	// M4 rule, no comparison across such a session) and whether it was mostly idle (FixGate.idle, RW-17).
+	// M4 rule, no comparison across such a session), whether it was mostly idle (FixGate.idle, RW-17) and whether a setting
+	// changed during it (review-12 R12STUTTER-5: StutterAnalyzer.Result.settingChanges, a change and back included).
 	public record SessionEnd(Instant startedAt, String source, SessionOutcome outcome, FixConditions atStart, FixConditions atEnd, boolean excluded,
-			boolean idle) {
+			boolean idle, boolean changed) {
+		public SessionEnd(Instant startedAt, String source, SessionOutcome outcome, FixConditions atStart, FixConditions atEnd, boolean excluded,
+				boolean idle) {
+			this(startedAt, source, outcome, atStart, atEnd, excluded, idle, false);
+		}
+
 		public SessionEnd(Instant startedAt, String source, SessionOutcome outcome, FixConditions atStart, FixConditions atEnd, boolean excluded) {
 			this(startedAt, source, outcome, atStart, atEnd, excluded, false);
 		}
@@ -137,7 +176,10 @@ public final class FixTracker {
 	// and entries; one that couldn't be read (not OK and not MISSING) decides nothing. A dismissed or finished record is
 	// returned as it is (a compared one can still become undone).
 	public static Record advance(Record r, Journal.State journal, List<JournalEntry> entries, @Nullable SessionEnd session, Instant now) {
-		if (r.dismissed() || !r.state().tracking() && r.state() != State.COMPARED || journal != Journal.State.OK && journal != Journal.State.MISSING) {
+		if (r.open() && r.state().beforeApply()) {
+			return baseline(r, session, now);
+		}
+		if (!r.followsJournal() || journal != Journal.State.OK && journal != Journal.State.MISSING) {
 			return r;
 		}
 		JournalEntry entry = entries.stream().filter(e -> r.entryId().equals(e.id())).findFirst().orElse(null);
@@ -163,9 +205,12 @@ public final class FixTracker {
 			return r;
 		}
 		String atStart = session.atStart().settings().get(r.key());
-		if (atStart == null || session.atEnd().settings().get(r.key()) == null) {
-			// Unknown (a config file mid-write), never "replaced".
-			Record skipped = r.skip(new Skip(UNREAD, List.of(r.key())));
+		String atEnd = session.atEnd().settings().get(r.key());
+		if (atStart == null || atEnd == null) {
+			// Unknown (a config file mid-write), never "replaced". Missing at both ends is usually its mod removed: the
+			// session's own reason (MODS) wins then (review-12 R12STUTTER-7).
+			Skip why = atStart == null && atEnd == null ? skip(r, session) : null;
+			Record skipped = r.skip(why != null ? why : new Skip(UNREAD, List.of(r.key())));
 			return skipped.skipped() >= MAX_SKIPPED ? skipped.withState(State.EXPIRED) : skipped;
 		}
 		if (!SettingValues.same(atStart, r.to()) && SettingValues.same(atStart, r.from())
@@ -184,6 +229,40 @@ public final class FixTracker {
 		SessionOutcome after = m.after() == null ? session.outcome() : m.after().plus(session.outcome());
 		Record counted = m.count(after);
 		return after.gameplaySeconds() >= afterTarget(m.before()) ? counted.compared(FixComparison.compare(m.before(), after)) : counted;
+	}
+
+	// review-12 R12STUTTER-6: a chosen fix measures one session as it is first. The first monitor session that started after
+	// the choice, with the key at its old value at both ends, not excluded or idle and with at least
+	// FixGate.MIN_GAMEPLAY_SECONDS of compared play, is the before side (READY). The key changed meanwhile: replaced.
+	private static Record baseline(Record r, @Nullable SessionEnd session, Instant now) {
+		if (Duration.between(r.appliedAt(), now).compareTo(MAX_AGE) > 0) {
+			return r.withState(State.EXPIRED);
+		}
+		if (r.state() == State.READY || session == null || session.startedAt().isBefore(r.appliedAt()) || !StutterReport.MONITOR.equals(session.source())) {
+			return r;
+		}
+		String atStart = session.atStart().settings().get(r.key());
+		String atEnd = session.atEnd().settings().get(r.key());
+		Skip skip = null;
+		if (atStart == null || atEnd == null) {
+			skip = new Skip(UNREAD, List.of(r.key()));
+		} else if (!SettingValues.same(atStart, r.from()) || !SettingValues.same(atEnd, r.from())) {
+			return r.withState(State.REPLACED);
+		} else if (session.excluded()) {
+			skip = new Skip(EXCLUDED, List.of());
+		} else if (session.idle()) {
+			skip = new Skip(IDLE, List.of());
+		} else if (session.changed() || session.atStart().differences(session.atEnd(), "").stream().anyMatch(d -> d.reason() != FixConditions.Reason.SETTING
+				|| !d.args().get(1).isEmpty() && !d.args().get(2).isEmpty())) {
+			skip = new Skip(CHANGED, List.of());
+		} else if (session.outcome().gameplaySeconds() < FixGate.MIN_GAMEPLAY_SECONDS) {
+			skip = new Skip(SHORT_BEFORE, List.of());
+		}
+		if (skip != null) {
+			Record skipped = r.skip(skip);
+			return skipped.skipped() >= MAX_SKIPPED ? skipped.withState(State.EXPIRED) : skipped;
+		}
+		return r.ready(session.outcome(), session.atStart());
 	}
 
 	// The entry's last setting change of the key.
@@ -213,6 +292,9 @@ public final class FixTracker {
 		if (d.isEmpty()) {
 			d = r.conditions().differences(session.atEnd(), r.key());
 		}
-		return d.isEmpty() ? null : new Skip(d.getFirst().reason().id(), d.getFirst().args());
+		if (!d.isEmpty()) {
+			return new Skip(d.getFirst().reason().id(), d.getFirst().args());
+		}
+		return session.changed() ? new Skip(CHANGED, List.of()) : null;
 	}
 }

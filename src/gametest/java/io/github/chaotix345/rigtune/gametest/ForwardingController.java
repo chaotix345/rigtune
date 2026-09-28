@@ -336,6 +336,11 @@ abstract class ForwardingController implements RigTuneController {
 	}
 
 	@Override
+	public Component startStutterFix(FixOffer.Offer offer) {
+		return delegate.startStutterFix(offer);
+	}
+
+	@Override
 	public void dismissStutterFix(String entryId) {
 		delegate.dismissStutterFix(entryId);
 	}

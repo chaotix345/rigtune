@@ -2,6 +2,7 @@ package io.github.chaotix345.rigtune.client.stutter;
 
 import io.github.chaotix345.rigtune.core.stutter.FixConditions;
 import io.github.chaotix345.rigtune.core.stutter.FrameRing;
+import io.github.chaotix345.rigtune.core.stutter.SessionOutcome;
 import io.github.chaotix345.rigtune.core.stutter.StutterReport;
 import io.github.chaotix345.rigtune.core.stutter.StutterRings;
 import org.jspecify.annotations.Nullable;
@@ -297,7 +298,9 @@ public final class StutterMonitor {
 			throw new IllegalStateException("a benchmark capture is running");
 		}
 		rings = shared;
+		shared.countSettingChangesFrom(now);
 		Capture c = new Capture(new FrameRing(FrameRing.SESSION_FRAMES, FrameRing.SESSION_CANDIDATES), now, startedAt, StutterReport.MONITOR);
+		c.ring.markGameplayAt(now + SessionOutcome.SETTLE_NANOS);
 		if (idleNow) {
 			c.idle(true, now);
 		}

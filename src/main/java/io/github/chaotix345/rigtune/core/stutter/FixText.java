@@ -27,12 +27,15 @@ public final class FixText {
 		return Text.of("rigtune.stutter.fix.offer", "Try it in one click: %s", change);
 	}
 
+	// review-12 R12STUTTER-6: the two steps, and why the first one (one more session as it is).
 	public static Text takesEffect(boolean now) {
 		return now
 				? Text.of("rigtune.stutter.fix.offer.now",
-						"Takes effect now. You can undo it in History, and RigTune compares your next play with this session.")
+						"First RigTune measures one more session as it is (a bad one alone would make any change look good); then you apply the change here."
+								+ " It takes effect at once, you can undo it in History, and RigTune compares your play before and after.")
 				: Text.of("rigtune.stutter.fix.offer.restart",
-						"Takes effect after you restart Minecraft. You can undo it in History, and RigTune compares your next play with this session.");
+						"First RigTune measures one more session as it is (a bad one alone would make any change look good); then you apply the change here."
+								+ " It takes effect after you restart Minecraft, you can undo it in History, and RigTune compares your play before and after.");
 	}
 
 	public static Text profileNote(Text profileName) {
@@ -45,7 +48,7 @@ public final class FixText {
 	}
 
 	public static Text tryNarration(Text change) {
-		return Text.of("rigtune.stutter.fix.try.narration", "Try this fix: %s. Opens a preview first.", change);
+		return Text.of("rigtune.stutter.fix.try.narration", "Try this fix: %s. RigTune measures one more session as it is first.", change);
 	}
 
 	// The one line under an advice whose fix isn't offered (yet).
@@ -53,8 +56,8 @@ public final class FixText {
 		List<String> a = n.args();
 		return switch (n.reason()) {
 			case LENGTH -> Text.of("rigtune.stutter.fix.not_yet.length",
-					"A one-click fix needs a longer session: at least %s of play and %s hitches (this one: %s, %s).", arg(a, 0), arg(a, 1), arg(a, 2),
-					arg(a, 3));
+					"A one-click fix needs more play to compare: at least %s and %s hitches after a session's first 3 minutes (this one: %s, %s).", arg(a, 0),
+					arg(a, 1), arg(a, 2), arg(a, 3));
 			case EVIDENCE -> Text.of("rigtune.stutter.fix.not_yet.evidence",
 					"The measurements don't point at this clearly enough for a one-click fix; the advice above still applies.");
 			case BENCHMARK -> Text.of("rigtune.stutter.fix.not_yet.benchmark", "One-click fixes are offered for your own play sessions, not for benchmark runs.");
@@ -90,14 +93,30 @@ public final class FixText {
 		return Text.of("rigtune.stutter.fix.reason", "Stutter Doctor: %s", Text.literal(adviceTitle));
 	}
 
+	// After Try this fix… (review-12 R12STUTTER-6): the baseline session starts now.
+	public static Text baselineStarted() {
+		return Text.of("rigtune.stutter.fix.status.baseline", "Measuring your play as it is. Play at least %s with the Stutter Doctor on (a session's"
+				+ " first 3 minutes don't count), then leave the world; \"Apply the fix…\" then appears here.", StutterSummary.clock(FixGate.MIN_GAMEPLAY_SECONDS));
+	}
+
+	public static Text applyButton() {
+		return Text.of("rigtune.stutter.fix.apply", "Apply the fix…");
+	}
+
+	public static Text applyNarration(Text change) {
+		return Text.of("rigtune.stutter.fix.apply.narration", "Apply the fix: %s. Opens a preview first.", change);
+	}
+
 	// After Apply. afterSeconds: how much play the comparison needs.
 	public static Text applied(boolean now, double afterSeconds) {
 		String play = StutterSummary.clock(afterSeconds);
 		return now
 				? Text.of("rigtune.stutter.fix.status.applied",
-						"Fix applied. Keep the Stutter Doctor on and play at least %s; RigTune then compares that play with this session.", play)
+						"Fix applied. Keep the Stutter Doctor on and play at least %s after a session's first 3 minutes; RigTune then compares that play with"
+								+ " your play before.", play)
 				: Text.of("rigtune.stutter.fix.status.staged",
-						"Fix staged: it takes effect after you restart Minecraft. Then play at least %s with the Stutter Doctor on.", play);
+						"Fix staged: it takes effect after you restart Minecraft. Then play at least %s with the Stutter Doctor on (a session's first 3"
+								+ " minutes don't count).", play);
 	}
 
 	// Apply while the analysis the offer came from or the tracked fixes aren't there (yet).
@@ -113,9 +132,11 @@ public final class FixText {
 		return Text.of("rigtune.stutter.fix.heading", "Your stutter fix");
 	}
 
-	// "Render distance: 12 → 10, applied 2026-10-02".
+	// "Render distance: 12 → 10, applied 2026-10-02" ("chosen" before it's applied).
 	public static Text applied(HistoryModel.Labels labels, FixTracker.Record r, ZoneId zone) {
-		return Text.of("rigtune.stutter.fix.change", "%s, applied %s", change(labels, r.key(), r.from(), r.to()), day(r.appliedAt(), zone));
+		return r.state().beforeApply()
+				? Text.of("rigtune.stutter.fix.change.chosen", "%s, chosen %s", change(labels, r.key(), r.from(), r.to()), day(r.appliedAt(), zone))
+				: Text.of("rigtune.stutter.fix.change", "%s, applied %s", change(labels, r.key(), r.from(), r.to()), day(r.appliedAt(), zone));
 	}
 
 	// The local day; "?" for an instant outside the zone's range (a hand edit), as TrendText.date does.
@@ -131,9 +152,18 @@ public final class FixText {
 	// line is its verdict. monitorOn: the Stutter Doctor's monitor is on (measuring needs it).
 	public static Text state(HistoryModel.Labels labels, FixTracker.Record r, boolean monitorOn) {
 		return switch (r.state()) {
+			case BASELINE -> monitorOn
+					? Text.of("rigtune.stutter.fix.state.baseline", "Nothing has changed yet: RigTune measures your play as it is first. Play one session of"
+							+ " at least %s with the Stutter Doctor on (its first 3 minutes don't count), then leave the world.",
+							StutterSummary.clock(FixGate.MIN_GAMEPLAY_SECONDS))
+					: Text.of("rigtune.stutter.fix.state.monitor_off", "Turn the Stutter Doctor on and play to compare.");
+			case READY -> Text.of("rigtune.stutter.fix.state.ready", "Your play as it is: %s over %s. Apply the change to compare it with your play after.",
+					rate(r.before().gameplaySeconds() > 0 ? r.before().hitches() * 60 / r.before().gameplaySeconds() : 0),
+					StutterSummary.clock(r.before().gameplaySeconds()));
 			case STAGED -> Text.of("rigtune.stutter.fix.state.staged", "Waiting for a restart: the change takes effect when Minecraft starts again.");
 			case MEASURING -> monitorOn
-					? Text.of("rigtune.stutter.fix.state.measuring", "Measuring: %s of %s played with the Stutter Doctor on.",
+					? Text.of("rigtune.stutter.fix.state.measuring", "Measuring: %s of %s played with the Stutter Doctor on (a session's first 3 minutes"
+							+ " don't count).",
 							StutterSummary.clock(r.after() == null ? 0 : r.after().gameplaySeconds()), StutterSummary.clock(FixTracker.afterTarget(r.before())))
 					: Text.of("rigtune.stutter.fix.state.monitor_off", "Turn the Stutter Doctor on and play to compare.");
 			case COMPARED -> r.verdict() == null ? Text.of("rigtune.stutter.fix.state.expired", "No comparable play in time, so there's no comparison.")
@@ -146,7 +176,8 @@ public final class FixText {
 		};
 	}
 
-	// "Your last session didn't count: it was shorter than 2 minutes.", or null when the last session counted.
+	// "Your last session didn't count: it had less than 2 minutes of play after its first 3 minutes.", or null when the last
+	// session counted.
 	public static @Nullable Text skipped(HistoryModel.Labels labels, FixTracker.Record r) {
 		FixTracker.Skip skip = r.lastSkip();
 		if (skip == null || !r.state().tracking()) {
@@ -158,10 +189,17 @@ public final class FixText {
 	static Text skip(HistoryModel.Labels labels, FixTracker.Skip skip) {
 		List<String> a = skip.args();
 		if (FixTracker.SHORT.equals(skip.reason())) {
-			return Text.of("rigtune.stutter.fix.skip.short", "it was shorter than 2 minutes");
+			return Text.of("rigtune.stutter.fix.skip.short", "it had less than 2 minutes of play after its first 3 minutes");
 		}
 		if (FixTracker.EXCLUDED.equals(skip.reason())) {
 			return Text.of("rigtune.stutter.fix.skip.excluded", "it ran around a benchmark, or Distant Horizons generated terrain in it (or RigTune couldn't tell)");
+		}
+		if (FixTracker.CHANGED.equals(skip.reason())) {
+			return Text.of("rigtune.stutter.fix.skip.changed", "a setting changed while it ran");
+		}
+		if (FixTracker.SHORT_BEFORE.equals(skip.reason())) {
+			return Text.of("rigtune.stutter.fix.skip.short_before", "it had less than %s of play after its first 3 minutes",
+					StutterSummary.clock(FixGate.MIN_GAMEPLAY_SECONDS));
 		}
 		if (FixTracker.UNREAD.equals(skip.reason())) {
 			return Text.of("rigtune.stutter.fix.skip.unread", "RigTune couldn't read %s at its start or end", labels.label(arg(a, 0)));

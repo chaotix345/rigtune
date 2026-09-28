@@ -103,6 +103,24 @@ class FixTrackerTest {
 		assertEquals(1, r.skipped());
 	}
 
+	// review-12 R12STUTTER-7: the key missing at both ends because its mod was removed reads as the mods changing (MODS wins),
+	// not "RigTune couldn't read" it; missing on one side only stays UNREAD.
+	@Test
+	void aRemovedModIsTheModsNotAnUnreadKey() {
+		FixTracker.SessionEnd s = session(60, 400, 10, RD, "10");
+		Map<String, String> without = new LinkedHashMap<>(s.atEnd().settings());
+		without.remove(RD);
+		FixConditions e = s.atEnd();
+		FixConditions gone = new FixConditions(e.mc(), "other-mods", e.heapMaxMb(), e.collector(), e.width(), e.height(), e.fullscreen(), e.world(),
+				e.phaseTiming(), e.gcMeasured(), without);
+		FixTracker.Record r = advance(measuring(), journal(RD, JournalChange.APPLIED), new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), gone,
+				gone, false), at(60));
+		assertEquals(new FixTracker.Skip(FixConditions.Reason.MODS.id(), List.of()), r.lastSkip());
+		r = advance(measuring(), journal(RD, JournalChange.APPLIED), new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), s.atStart(), gone,
+				false), at(60));
+		assertEquals(new FixTracker.Skip(FixTracker.UNREAD, List.of(RD)), r.lastSkip(), "missing at the end only");
+	}
+
 	// C20 review L12: a fix that expired because its journal entry is gone has nothing left to undo; one that expired by
 	// age keeps its Undo; undone and not-applied fixes have none.
 	@Test
@@ -137,6 +155,80 @@ class FixTrackerTest {
 				false), at(60));
 		assertNull(r.after(), "not counted: " + r);
 		assertEquals(new FixTracker.Skip(FixConditions.Reason.GRAPHICS.id(), List.of()), r.lastSkip());
+	}
+
+	// A chosen render-distance fix measuring its baseline (nothing applied yet): 12 -> 10, chosen at APPLIED_AT.
+	static FixTracker.Record baseline() {
+		FixTracker.Record m = measuring();
+		return new FixTracker.Record(m.entryId(), m.adviceId(), m.key(), m.from(), m.to(), m.appliedAt(), m.rulesRevision(), m.now(),
+				FixTracker.State.BASELINE, SessionOutcome.NONE, m.conditions(), null, 0, null, null, false);
+	}
+
+	// review-12 R12STUTTER-6: the before side is never the session that led to the offer (chosen for being bad). The first
+	// monitor session after the player chose the fix, with the key still at its old value and enough compared play, is
+	// measured as it is: READY, its outcome and start conditions kept. It needs no journal (no entry exists yet).
+	@Test
+	void aChosenFixMeasuresOneSessionAsItIsFirst() {
+		FixTracker.Record r = baseline();
+		FixTracker.SessionEnd s = session(10, 400, 18, RD, "12");
+		FixTracker.Record ready = FixTracker.advance(r, Journal.State.UNREADABLE, List.of(), s, at(10));
+		assertEquals(FixTracker.State.READY, ready.state());
+		assertEquals(s.outcome(), ready.before());
+		assertEquals(s.atStart(), ready.conditions());
+		assertEquals(0, ready.skipped());
+		assertSame(ready, FixTracker.advance(ready, Journal.State.OK, List.of(), session(30, 400, 5, RD, "12"), at(30)), "ready waits for the Apply");
+		assertEquals(FixTracker.State.EXPIRED, FixTracker.advance(ready, Journal.State.OK, List.of(), null, APPLIED_AT.plus(FixTracker.MAX_AGE).plusSeconds(1))
+				.state());
+		// The Apply: the change applied now, the measured before side kept.
+		Instant applyAt = at(40);
+		FixTracker.Record applied = ready.applied(applyAt, FixTracker.State.MEASURING);
+		assertEquals(FixTracker.State.MEASURING, applied.state());
+		assertEquals(applyAt, applied.appliedAt());
+		assertEquals(s.outcome(), applied.before());
+		assertTrue(r.active() && ready.active(), "one fix at a time from the choice on");
+		assertFalse(r.undoable() || ready.undoable(), "nothing to undo before the Apply");
+		assertEquals(List.of(), FixHold.holds(List.of(r, ready), java.time.ZoneOffset.UTC), "nothing held before the Apply");
+	}
+
+	// A baseline session that started before the choice (the one that led to the offer) never counts; a short one, an
+	// excluded or idle one is skipped with its reason; the key changed by hand meanwhile ends it (replaced).
+	@Test
+	void aBaselineSessionMustBeANewFullOneAtTheOldValue() {
+		FixTracker.Record r = baseline();
+		FixTracker.SessionEnd earlier = new FixTracker.SessionEnd(APPLIED_AT.minusSeconds(60), StutterReport.MONITOR, session(0, 400, 18, RD, "12").outcome(),
+				conditions(RD, "12"), conditions(RD, "12"), false);
+		assertSame(r, FixTracker.advance(r, Journal.State.OK, List.of(), earlier, at(10)));
+		FixTracker.Record short_ = FixTracker.advance(r, Journal.State.OK, List.of(), session(10, 299, 18, RD, "12"), at(10));
+		assertEquals(new FixTracker.Skip(FixTracker.SHORT_BEFORE, List.of()), short_.lastSkip());
+		assertEquals(FixTracker.State.BASELINE, short_.state());
+		FixTracker.SessionEnd s = session(10, 400, 18, RD, "12");
+		FixTracker.SessionEnd excluded = new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(), s.atStart(), s.atEnd(), true);
+		assertEquals(new FixTracker.Skip(FixTracker.EXCLUDED, List.of()), FixTracker.advance(r, Journal.State.OK, List.of(), excluded, at(10)).lastSkip());
+		assertEquals(FixTracker.State.REPLACED, FixTracker.advance(r, Journal.State.OK, List.of(), session(10, 400, 18, RD, "16"), at(10)).state());
+	}
+
+	// review-12 R12STUTTER-5: a session in which a setting changed (and went back) doesn't count on either side; a baseline
+	// whose settings moved between its start and end doesn't either.
+	@Test
+	void aSessionWithASettingChangeDoesNotCount() {
+		FixTracker.SessionEnd s = session(60, 400, 10, RD, "10");
+		FixTracker.Record r = advance(measuring(), journal(RD, JournalChange.APPLIED), new FixTracker.SessionEnd(s.startedAt(), s.source(), s.outcome(),
+				s.atStart(), s.atEnd(), false, false, true), at(60));
+		assertNull(r.after());
+		assertEquals(new FixTracker.Skip(FixTracker.CHANGED, List.of()), r.lastSkip());
+		FixTracker.SessionEnd b = session(10, 400, 18, RD, "12");
+		FixTracker.Record base = FixTracker.advance(baseline(), Journal.State.OK, List.of(), new FixTracker.SessionEnd(b.startedAt(), b.source(), b.outcome(),
+				b.atStart(), b.atEnd(), false, false, true), at(10));
+		assertEquals(FixTracker.State.BASELINE, base.state());
+		assertEquals(new FixTracker.Skip(FixTracker.CHANGED, List.of()), base.lastSkip());
+		Map<String, String> moved = new LinkedHashMap<>(b.atEnd().settings());
+		moved.put("vanilla.simulationDistance", "12");
+		FixConditions e = b.atEnd();
+		FixConditions end = new FixConditions(e.mc(), e.modSetHash(), e.heapMaxMb(), e.collector(), e.width(), e.height(), e.fullscreen(), e.world(),
+				e.phaseTiming(), e.gcMeasured(), moved);
+		base = FixTracker.advance(baseline(), Journal.State.OK, List.of(), new FixTracker.SessionEnd(b.startedAt(), b.source(), b.outcome(), b.atStart(), end,
+				false), at(10));
+		assertEquals(new FixTracker.Skip(FixTracker.CHANGED, List.of()), base.lastSkip(), "simulation distance moved during the baseline");
 	}
 
 	@Test

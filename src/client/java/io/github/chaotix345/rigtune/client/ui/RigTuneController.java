@@ -291,6 +291,11 @@ public interface RigTuneController {
 		return Component.translatable("rigtune.status.nothing");
 	}
 
+	/** Try this fix…: nothing changes yet; one session as it is is measured first (review-12 R12STUTTER-6). */
+	default Component startStutterFix(FixOffer.Offer offer) {
+		return Component.translatable("rigtune.status.nothing");
+	}
+
 	default void dismissStutterFix(String entryId) {
 	}
 
