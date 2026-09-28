@@ -167,3 +167,92 @@ TOO_FEW and 0.4's view: no row.
   instance; both are Windows 11 with the performance counters off.
 - compat040 on the ws-w2 set (WS-E's interpreter isn't merged; its `StartupTimesStore` check kind is new): the released
   0.4.0 classes were run by hand instead (below).
+
+## Evidence
+- **CI** (every job and all three legs green): 36360627895 (4cb7a26b, T1-T6), 36369184366 (66c78c13: the review's fixes and
+  RW-19), and **36371077347 (13cb9661: 27303b62's wording fix and AC9.8's record, with origin/feat/v0.5.0 @ f779f1f6
+  merged): 2696 unit tests per node, 3 skipped, 0 failed**, all three game-test legs green, the logs showing
+  "AwarenessGameTest: C18: none from 4 launches; the notice, Tools…, 2L's line, Got it (kept, covers the streak), a new
+  slowdown's own key" and "A11yGameTest: Tools' launch-time regression rows at every size, Tab and narration; none from
+  fewer than 5 launches".
+- **Screenshots looked at** (`gametest-screenshots-26.2-OpenGL`; 26.3-Vulkan's list checked for the same names):
+  run 36360627895 `awareness-startup-regression-{1280x720,640x480}-scale2` (the notice line "Launch time 45% higher than
+  usual (14.5 s vs your usual ~10.0 s)" with Tools… / Got it / +1 more at 1280x720; at 640x480 the message clipped with
+  the "…" button, as other notices), `awareness-startup-tools-1280x720-scale2` (the startup line, the two rows in the note
+  colour, the advice), `a11y-tools-regression-640x480-scale2` (the rows wrap and the list scrolls, Done clear),
+  `…-1280x720-scale3`, `…-hc-854x480-scale2` (the focus frame on the cause row, brighter note colour); run 36369184366
+  `a11y-tools-regression-streak-640x480-scale2` ("Slower for your last 2 launches; …" wraps into the scrolling list),
+  `a11y-tools-regression-hc-854x480-scale2` ("median of the last 6: 14.5 s", the trend's usual).
+- **AC9.8** (docs/v0.5/verification/startup/ac9.8-launch-alerts/, under the game-test lock, this PC): run A (04:06-04:13,
+  before C18's code, the code-deciding run) 7 unchanged launches 10.4-12.0 s, the planned rule in line under floors of
+  18.7/14.0 %, so MIN_RUNS 5 and the ≥ 10 % floor were kept; runs B-D (11:04-11:35, after the player's client exited) the
+  light batch in line, the heavy batch SLOWER +94.7 % with the mod count (28 → 46), shown on the notice line and in Tools;
+  run E (12:21-12:33, the final trend, a fresh history): 3 unchanged launches assessed, none SLOWER (with the setup left
+  out: -2.3 %, -15.0 % (an IMPROVEMENT, never shown), -3.6 %), then the heavy batch SLOWER +46.8 % vs 8.0 s (floor 10.0 %),
+  mod count 7 → 46, on the notice line and in Tools; after its Got it, two more slow launches were the same streak and the
+  line showed no notice. The player's 44 real launches (M2): raw 0 SLOWER; without the setup the 5 launches of the real
+  09-20..09-24 slowdown only (two notices with the streak rule).
+- **Fixtures**: compat030 (`tools/e2e/compat030.py` with the released `rigtune-0.3.0+mc26.2.jar`, v040-written with this
+  set's `acknowledgedStartupRegressions` merged into its awareness.json): all 9 checks PASS, "0.3.0 reading them changed no
+  file" (0.3.0 has no AwarenessStore or startup-times.json). The released `rigtune-0.4.0+mc26.2.jar`'s own classes, as
+  single-file programs (`<scratch>/ws-w2/compat/Keep040.java`, `Runs040.java`): its AwarenessStore rewriting this set's
+  awareness.json (a dismissal and an acknowledged benchmark regression) KEPT `acknowledgedStartupRegressions`, no `.bad`;
+  its StartupTimesStore read all 6 runs of this set's startup-times.json, no `.bad`, and its own rewrite dropped
+  `preloadMs` (expected; Residuals). compat040's interpreter is WS-E's (not merged); expect.json is ready, with a new
+  `StartupTimesStore` check kind (the coordinator was told).
+
+## Footprint deltas (against ws-k.md's per-leg baseline, run 36310249248)
+| leg | renderThreadInitCpuMs | clientStartedWallMs | workerCpuMs5s | tickHookOnVsReference | tickHookAllocBytes |
+|---|---|---|---|---|---|
+| 26.2 OpenGL | 118.0 (base 82.2; range 63.5-112.9) | 51.0 (36.4; 25.5-69.9) | 234.8 (135.5; 132.8-214.1) | 1.577 (1.481) | 0 |
+| 26.3 OpenGL | 98.6 (82.2; 77.8-117.1) | 25.3 (27.0; 20.4-36.0) | 192.0 (153.2; 141.4-200.1) | 1.443 (1.746) | 0 |
+| 26.3 Vulkan | 86.9 (120.0; 74.9-116.6) | 39.3 (39.9; 24.7-49.4) | 192.7 (200.7; 144.6-217.0) | 1.482 (1.535) | 0 |
+
+The final run 36371077347 (13cb9661). The same columns in this branch's earlier runs: 36360627895 (4cb7a26b) 83.3 / 40.6 /
+152.4 / 1.585, 109.1 / 15.8 / 207.1 / 1.533, 110.3 / 45.5 / 229.3 / 1.550; 36369184366 (66c78c13) 112.8 / 34.4 / 212.0 /
+1.522, 114.8 / 31.9 / 229.8 / 1.605, 119.0 / 47.7 / 223.8 / 1.533. The integration branch without C18, run 36370342016
+(f779f1f6): 103.4 / 58.6 / 189.7 / 1.505, 111.9 / 34.4 / 208.9 / 1.596, 115.7 / 47.9 / 214.9 / 1.538. `v05RenderThreadResolve`
+null and `v05HolderCreatedOn` "RigTune worker" on every leg, no violation, `rigtuneClassBytesIdle` 81728/81544/81576 (limit
+109296). Reading: C18 adds no render-thread init work (the notice source is built by the lazy list on the first
+`notices()`; the assessment rides `StartupTimes`' worker task after the first title screen), so the init values sit in
+the runner spread (the same code measured 83.3 and 118.0 on 26.2; the final run is above the integration branch on 26.2
+and below it on both 26.3 legs). The worker adds, in CI's fresh run dir, one assessment of one run (TOO_FEW, no
+awareness.json read); the 26.2 worker rise across this branch's runs (152 → 212 → 235) follows the merges of other
+workstreams (the integration branch alone measures 190), and every value is inside the 300 budget. FootprintGameTest and
+FrameHookBudgetTest are unmodified and green on every leg (AC9.7). No tick work: `tickHookAllocBytes*` 0.
+
+## Docs (for the docs workstream)
+- **CHANGELOG [0.5.0]**: "Launch-time alerts: when a launch is noticeably slower than your usual (at least 5 earlier
+  launches of the same Minecraft version to compare with, and past a noise floor of at least 10 %), RigTune says so once,
+  with the numbers and what changed before it (the mod count, the mod set or RigTune's version), as 'may be related'. A
+  slow streak is one notice; Got it hides it, Tools… shows the same lines. On a PC where Windows' performance counters are
+  switched off, the comparison leaves out Minecraft's crash-report setup, whose time varies a lot there. Advice only:
+  nothing is changed."
+- **README known limits**: "Launch-time alerts compare JVM start to the title screen with the median of your last 10
+  launches of the same Minecraft version; they need 5 of them, and the floor (at least 10 %) and the 5 are estimates from
+  one PC's and one player's launches. They can name a mod-count, mod-set or RigTune change, never a mod, a Java or a driver
+  update (none is recorded). After going back to 0.4.0 and forward again, the crash-report setup is left out again only
+  after 5 new launches."
+- **README Tools text**: "Launch time: the last launch and your usual, and while the latest launch is slower than usual,
+  by how much and what changed before it."
+- **DESIGN.md, footprint/launch time**: "0.5 (C18): StartupTrend (pure) assesses the latest launch against the newest 10
+  comparable (same MC version) launches, from 5, with BenchmarkTrend's floor (2 × max(5 %, 1.4826 × MAD / median)); the
+  crash-report setup (2L's preloadMs, an optional field of each run) is left out when the latest and 5 runs of the window
+  recorded it (RW-19); a slow streak keeps its first launch's key and cause (one notice, one Got it); the cause is the
+  first of mod count, mod-set hash, RigTune version against the launch before the streak. StartupTimes computes it on its
+  worker task after the first title screen and keeps the acknowledgements in memory (awareness.json's
+  acknowledgedStartupRegressions, read only for a SLOWER launch), so StartupRegressionNoticeSource reads no file."
+
+## AC table
+
+| AC | status | evidence |
+|---|---|---|
+| AC9.1 | verified | `StartupTrendTest` (TOO_FEW with no cause; another MC version never in the window; in line at and within the floor; SLOWER and IMPROVEMENT past it; the newest 10; each cause and the first-match order; MAD 0 → 10 %; an extreme outlier leaves the floor at 10 %; plus the streak, RW-19 and the real series) |
+| AC9.2 | verified | `StartupRegressionNoticeTest` (the numbers, exactly one cause line, Tools… then Got it, not dismissible, nothing but SLOWER, nothing from 4 comparable runs); `AwarenessGameTest.startupRegression` on 3 legs (CI runs above); AC9.8's live notice (run E launch 9, run D) |
+| AC9.3 | verified | `StartupTimesAckTest` (kept for the next launch; the streak; a later slowdown after an in-line launch isn't covered); `startupRegression` (gone after the rebuild, reopening and a rescan; the key in awareness.json; a new StartupTimes reads it; the streak keeps it; a new slowdown's own key); AC9.8 run E (no second notice after Got it) |
+| AC9.4 (as amended: startup-times.json gains only the optional `preloadMs`) | verified (compat040 closes with WS-E's interpreter) | `StartupTimesFixtureTest` untouched and green (null not written); `V050WrittenWsW2Test`; `StartupTimesAckTest.aFileFrom040HasNoAcknowledgementsAndKeepsItsFieldsWhenOneIsAdded`; compat030 PASS; the released 0.4.0 AwarenessStore keeps the array and its StartupTimesStore reads the runs (manual) |
+| AC9.5 | verified | `A11yGameTest.walkToolsStartup` → `startupRegressionRows` (3 legs; screenshots above) |
+| AC9.6 | verified | LangCheckTest, WordingTest (`rigtune.startup.` is a correlation prefix), PseudoLocaleTest (CI java job, both nodes) |
+| AC9.7 | verified | FootprintGameTest and FrameHookBudgetTest unmodified, green on 3 legs; `v05RenderThreadResolve` null; no render-thread hook added |
+| AC9.8 | verified | docs/v0.5/verification/startup/ac9.8-launch-alerts/ (runs A-E; the player's real series) |
+| AC2L.2 (C18 half) | verified | `StartupRegressionNoticeTest.withTheCountersOffTheDetailAddsOneLaunchTimeAdviceLine`; `startupRegression`'s seeded counters-off check |
