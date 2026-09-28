@@ -358,6 +358,15 @@ jobs:
             echo "src/main/resources/rigtune/rules-v1.json must not exist: 0.2 bundles rules-v2.json only."
             exit 1
           fi
+      # A pull request into main that changes the rules raises their revision; unchanged rules keep it (review-11 CI-6:
+      # two different files at one revision let an offline client prefer a cached one, RulesLoader's tie order).
+      - name: A rules change into main raises the revision (network)
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        run: |
+          set -eu
+          tools/ci/retry.sh git fetch --depth=1 origin main
+          git show FETCH_HEAD:rules/rules-v2.json > "$RUNNER_TEMP/main-rules-v2.json"
+          python3 tools/rules_revision_check.py --base "$RUNNER_TEMP/main-rules-v2.json" --head rules/rules-v2.json
 
   # rules-v1.json is what 0.1.x clients download: it must stay the safe v1 projection of the v2 rules.
   rules-v1-compat:
