@@ -12,6 +12,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 // Follows the power state on a laptop (docs/v0.4/SPEC.md 4, research profiles.md §6). Runs only when the startup probe
 // found a real battery: one daemon thread "RigTune power" re-reads the real batteries every PERIOD_SECONDS (about half a
@@ -80,6 +81,11 @@ public final class PowerWatcher {
 
 	// In the game: after the startup probe, only when it found a real battery. Idempotent.
 	public static synchronized void startIfBattery(boolean hasBattery, boolean onBattery, Consumer<Boolean> listener) {
+		startIfBattery(hasBattery, onBattery, listener, PowerWatcher::oshiBatteries);
+	}
+
+	// v0.5 WS-E (docs/v0.5/SPEC.md AC3e.3): the batteries come from `sources`, so a test sees whether they were read at all.
+	static synchronized void startIfBattery(boolean hasBattery, boolean onBattery, Consumer<Boolean> listener, Supplier<List<Battery>> sources) {
 		if (!hasBattery || running != null || stopped) {
 			return;
 		}
@@ -89,11 +95,7 @@ public final class PowerWatcher {
 			return thread;
 		});
 		try {
-			List<Battery> sources = new ArrayList<>();
-			for (PowerSource source : new SystemInfo().getHardware().getPowerSources()) {
-				sources.add(oshi(source));
-			}
-			running = start(sources, onBattery, listener, executor, PERIOD_SECONDS);
+			running = start(sources.get(), onBattery, listener, executor, PERIOD_SECONDS);
 		} catch (Throwable t) {
 			RigTune.LOGGER.warn("RigTune can't follow the battery state", t);
 		}
@@ -112,6 +114,20 @@ public final class PowerWatcher {
 
 	public static synchronized boolean isRunning() {
 		return running != null;
+	}
+
+	// v0.5 WS-E: PowerWatcherTest puts the static state back after a test that stopped or started it.
+	static synchronized void resetForTest() {
+		stop();
+		stopped = false;
+	}
+
+	private static List<Battery> oshiBatteries() {
+		List<Battery> sources = new ArrayList<>();
+		for (PowerSource source : new SystemInfo().getHardware().getPowerSources()) {
+			sources.add(oshi(source));
+		}
+		return sources;
 	}
 
 	// One poll: on battery when some real battery is off the mains and discharging.

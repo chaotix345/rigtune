@@ -1,0 +1,21 @@
+# compat040 (docs/v0.5/SPEC.md AC3b.1), early local run, 2026-09-27T04:53Z
+# tools/e2e/compat040.py --old-jar rigtune-0.4.0+mc26.2.jar (sha256 801cd3b8e91c6a27b819d64c5b433bea6d7ac99d4776cb853c873a9cafdd868a, the GitHub release asset), default roots (v040-written only: v050-written doesn't exist yet), JDK 25.0.4.1, Windows 11
+# Also run by hand (not kept): a synthetic v050-written set (awareness.json with acknowledgedStartupRegressions/optionsAtExit, settings.json with modFilesByRigTune, a history entry with foldedEntryIds, tryit.json) and a rules file with a stutterFixes section: RESULT PASS; a pending.json op of an unknown type: FAIL PendingActions (null type), RESULT FAIL.
+
+sets: v040-written/ws-a, v040-written/ws-p, v040-written/ws-b, v040-written/ws-s, v040-written/ws-w, v040-written/ws-f
+files: awareness.json <- ws-w, benchmarks.json <- ws-b, history.json <- ws-a+ws-p, pending.json <- ws-a, profiles.json <- ws-p, server-limits.json <- ws-w, settings.json <- ws-s, startup-times.json <- ws-f, stutter.json <- ws-s
+PASS Journal: history.json state OK with the same entries: state OK, readOnly false, entries 3 of 3, warnings []
+PASS HistoryModel: every entry listed, none of an unknown kind: 3 of 3 entries; unknown kinds: []
+PASS UndoPlanner: Undo this on every entry with a change still applied or staged plans without a problem: planned [5d1c7a90-2e4b-4f6a-8b3c-1a9e0d7f2c11 (apply): 1 item(s), 8a4f0dc3-5b7e-4c9d-9e6f-4d2b3a025f14 (apply): 1 item(s), c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17 (apply): 3 item(s)]; problems []
+PASS UndoPlanner: Undo last and Undo all plan without a problem: Undo last: c3e7a1f6-8d0b-4e2f-9b3c-7f5e6d349c17, 3 item(s), problem null; Undo all: 5 item(s), problem null
+PASS BenchmarkHistory: benchmarks.json loads without a .bad: runs 5 of 5, unreadable false, contexts kept true, .bad files []
+PASS PendingActions: pending.json loads with every op's type, id and mod id: 1 of 1 ops: [ENABLE_FILE e2e-seed]
+PASS ClientSettings: settings.json read as written: privacyNoticeShown true (file true), stutterMonitor true (file true), .bad files []
+PASS StutterStore: every session loads and StutterSummary renders it: 1 of 1 session(s); [2026-09-24T19:30:00Z: 506 chars], .bad files []
+PASS AwarenessStore: loads, and an update on a copy keeps the unknown fields: writable true, dismissed 1 (file 1); update true, top-level fields lost [] of [formatVersion, dismissed, acknowledgedRegressions, fingerprint, lastSeenRulesRevision, lastSeenRecommendationIds]
+PASS ProfileStore: profiles.json loads with every switch's label: profiles 1, switches 1 of 1, labels [Battery], battery Battery[prompt=true, previousProfile=p-2b6d9e41-0c3f-4a15-b8e2-6f1d7c9a3e20, lastPromptAt=2026-09-21T09:59:00Z, snoozed=false]
+PASS ServerLimitsStore: server-limits.json loads writable: writable true, .bad files []
+PASS RestoreMarker: benchmark-restore.json restores what 0.4.0 knows: no benchmark-restore.json in the sets
+PASS RulesLoader: rules-v2.json parses with the same counts as without the sections 0.4.0 doesn't know: revision 16, counts {mods=28, settings=56, advice=34, obsolete=6, gpuTiers=43, cpuTiers=8, heapTiers=5, profileTemplates=5, stutterAdvice=5}; sections 0.4.0 doesn't know: []
+PASS 0.4.0 reading them changed no file: 9 file(s) unchanged
+RESULT PASS

@@ -56,6 +56,8 @@ Contracts WS-K landed for these (docs/v0.5/design/ws-k.md): the optional fields 
 - **`awareness.json`**: the union: `dismissed`, `acknowledgedRegressions`, `acknowledgedStartupRegressions` and every
   other array as the union of the sets' values (exact duplicates once); objects merged key by key.
 - **`benchmarks.json`**: `runs` concatenated (run ids unique across sets).
+- **`profiles.json`**: one baseline, the latest set's: ProfileStore keeps only one, and a new baseline replaces the
+  older. The other `profiles` are merged by `id` (the later set's copy wins); the rest is deep-merged as below.
 - **Any other file two sets provide**: deep-merged (objects key by key, lists without exact duplicates, a scalar from the
   later set, each such override reported as a conflict). A differing `formatVersion` or `schemaVersion` stops the run.
 - **A file only one set provides** keeps its bytes (the `${INSTANCE}` token filled in).
@@ -66,8 +68,8 @@ byte-identical, and what 0.4 must still hold (sessions, runs, servers, dismissal
 ## `expect.json`: what 0.4.0's own classes must do with the set
 
 compat040 (WS-E's `tools/e2e/compat/Compat040.java`) is a data-driven interpreter: it runs each check with the released
-0.4.0 jar's own class on the composed instance and fails on any mismatch or on a check kind it doesn't know. One file
-per set:
+0.4.0 jar's own class on that set's files alone (a spare copy for the checks that write), and fails on any mismatch, on a
+check kind it doesn't know, or on a check of a file the set doesn't hold. One file per set:
 
 ```json
 {
@@ -86,14 +88,15 @@ per set:
 ```
 
 - `class`: 0.4.0's class that reads the file (Journal, HistoryModel, UndoPlanner, BenchmarkHistory, PendingActions,
-  ApplyHelper, ClientSettings, StutterStore, AwarenessStore, ProfileStore, ServerLimitsStore, RestoreMarker), or
+  ApplyHelper, ClientSettings, StutterStore, StutterSummary (the Copy summary renders every session), AwarenessStore,
+  ProfileStore, ServerLimitsStore, RestoreMarker, StartupTimesStore), or
   `Unread` for a file 0.4.0 never opens.
 - `file`: the file under `config/rigtune/` it reads.
 - Expectations (each optional; at least one per check): `state` (the load state, `OK`), `entries`/`runs`/`ops`/
   `sessions` (counts after loading), `unknownKinds` (HistoryModel rows of a kind 0.4.0 doesn't know), `noBad` (no
   `<file>.bad` appears), `undoThis` (Undo this on that entry id plans without a problem) with `problems` (the plan's
   problem count), `appliesGroup` (0.4.0's helper applies that group at its exit, as it does a held group, AC4d.3),
-  `keeps` (top-level fields a 0.4.0 rewrite of the file keeps), `unchanged` (the file is byte-identical after 0.4.0 ran).
+  `keeps` (top-level fields a 0.4.0 rewrite of the file keeps; for ClientSettings, a 0.4.0 save keeps them with their values), `unchanged` (the file is byte-identical after 0.4.0 ran).
 - A new check kind is added to the interpreter by WS-E first (through the coordinator after WS-E has merged).
 
 ## One regeneration switch

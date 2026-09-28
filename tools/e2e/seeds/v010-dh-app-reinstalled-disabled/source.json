@@ -1,0 +1,15 @@
+{
+ "location": "%APPDATA%/ModrinthApp/profiles/Fabric 26.2/config/rigtune",
+ "readAt": "2026-09-25T18:27:18+00:00",
+ "token": "${INSTANCE}",
+ "files": {
+  "pending.json": {
+   "sha256": "5e963d6f030402c2874d732236305109e867db0ccb55365d40de49ab4edbc12d",
+   "bytes": 1058
+  },
+  "last-apply.json": {
+   "sha256": "9b55af7585b044cb063ae28123a9879f179e11e7d4945709d245236c44782d83",
+   "bytes": 9728
+  }
+ }
+}

@@ -1,0 +1,16 @@
+{
+ "description": "The real instance's shape after the Modrinth App reinstalled Distant Horizons (docs/v0.5/SPEC.md AC2H.6, WS-H's RW-3): the same 0.1.0 pending.json and last-apply.json as v010-dh (RigTune's DH update group: disable fabric-26.2.jar, enable its downloaded 3.3.2), but DH 3.3.2 sits at the group's target name, RigTune's download is gone, there is no mods/update, and fabric-26.2.jar is removed. The group can never run: the new version drops it at launch as already installed (ABANDONED).",
+ "modId": "distanthorizons",
+ "modName": "Distant Horizons",
+ "holdOpenAtOldExit": [],
+ "jars": [
+  {
+   "path": "mods/DistantHorizons-3.3.2-26.2-fabric-neoforge.jar",
+   "id": "distanthorizons",
+   "name": "Distant Horizons",
+   "version": "3.3.2"
+  }
+ ],
+ "holdOpenWhy": "Nothing is held: the group can never run, so the new version drops it at launch (AC2H.6).",
+ "expectStatus": "ABANDONED"
+}

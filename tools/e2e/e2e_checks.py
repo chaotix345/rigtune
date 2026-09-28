@@ -304,6 +304,107 @@ def after_seeded_verify(instance, carried, mod_names, driver, log_text, failed_o
     return checks
 
 
+HELD_LINE = re.compile(r"Held (\d+) operation\(s\) of mod-file changes")
+FILE_OPS = ("ENABLE_FILE", "DISABLE_FILE")
+
+
+def after_brand_apply(instance, driver, mods_before, carried, staged_change):
+    """AC4j.3, Apply everything under the Modrinth App's brand and the helper at exit: mods/ byte-identical, the settings
+    changed (the staged settings patch staged_change and every row the Apply took: APPLIED, and the files hold their
+    `after`), the staged file group held (still in pending.json, helper.log says so)."""
+    instance = Path(instance)
+    driver = driver or {}
+    applied = driver.get("applied") or []
+    checks = [Check("the driver ran Apply everything", driver.get("ok") is True and driver.get("applyMessage") is not None,
+                    "error: {}; {} rows: {}; message: {}".format(driver.get("error"), len(applied), applied[:8], driver.get("applyMessage")))]
+    after = listing(instance / "mods", recursive=True)
+    checks.append(Check("mods/ byte-identical", after == mods_before, "unchanged" if after == mods_before else _diff(mods_before, after)))
+    keys = {i[len("set:"):] for i in applied if i.startswith("set:")}
+    changes = [c for e in history_entries(instance) or [] for c in _settings(e) if c.get("id") == staged_change or c.get("key") in keys]
+    values = setting_values(instance)
+    wrong = {c.get("key"): (c.get("status"), c.get("after"), values.get(c.get("key"))) for c in changes
+             if c.get("status") != "APPLIED" or str(values.get(c.get("key"))) != str(c.get("after"))}
+    checks.append(Check("the settings changed", any(c.get("id") == staged_change for c in changes) and not wrong,
+                        "{} change(s) checked; not APPLIED or not holding their value (status, after, now): {}".format(len(changes), wrong)))
+    helper = (instance / "config" / "rigtune" / "helper.log")
+    text = helper.read_text(encoding="utf-8", errors="replace") if helper.is_file() else ""
+    checks.append(Check("the helper applied the settings patch", "OK PATCH_JSON" in text and "All operations done" in text,
+                        "helper.log: {}".format([line[line.find("]") + 1:].strip()[:100] for line in text.splitlines()][-4:])))
+    held = HELD_LINE.search(text)
+    ids = [op.get("id") for op in carried if op.get("type") in FILE_OPS]
+    pending = _pending_ids(instance)
+    checks.append(Check("the staged file group is held (helper.log, pending.json)", held is not None and bool(ids) and all(i in pending for i in ids),
+                        "helper.log: {}; held ops still pending: {} of {}".format(held.group(0) if held else None,
+                                                                                 len([i for i in ids if i in pending]), len(ids))))
+    return checks
+
+
+def after_brand_cancel(instance, driver, mods_before, carried, helper_cmdlines):
+    """AC4j.3, the next start: the held notice, its Cancel them: no file op left, the download superseded, the journal
+    changes DISCARDED, nothing else in mods/ changed and no helper renames at exit."""
+    instance = Path(instance)
+    driver = driver or {}
+    checks = [Check("the held notice is shown with Cancel them", driver.get("ok") is True and "cancel" in (driver.get("heldActions") or [])
+                    and driver.get("cancelled") is True, "error: {}; notice: {}; actions {}".format(driver.get("error"), driver.get("heldNotice"),
+                                                                                                driver.get("heldActions")))]
+    plan = _load(instance / "config" / "rigtune" / "pending.json") or {}
+    left = [op.get("id") for op in plan.get("ops") or [] if op.get("type") in FILE_OPS]
+    checks.append(Check("no mod-file op left in pending.json", not left, "left: {}".format(left)))
+    downloads = [_name(op.get("from")) for op in carried if op.get("type") == "ENABLE_FILE" and (op.get("from") or "").endswith(".rigtune-pending")]
+    mods = instance / "mods"
+    superseded = {d: (mods / (d[:-len(".rigtune-pending")] + ".rigtune-superseded")).exists() and not (mods / d).exists() for d in downloads}
+    after = listing(mods, recursive=True)
+    renamed = {d for d in downloads} | {d[:-len(".rigtune-pending")] + ".rigtune-superseded" for d in downloads}
+    others_changed = {k for k in set(mods_before) | set(after) if k not in renamed and mods_before.get(k) != after.get(k)}
+    checks.append(Check("the download is superseded and nothing else in mods/ changed", all(superseded.values()) and not others_changed
+                        and not helper_cmdlines, "superseded: {}; other changes: {}; helper runs at exit: {}".format(
+                            superseded, sorted(others_changed), len(helper_cmdlines))))
+    ids = {op.get("id") for op in carried if op.get("type") in FILE_OPS}
+    statuses = {c.get("opId"): c.get("status") for e in history_entries(instance) or [] for c in e.get("changes", []) if c.get("opId") in ids}
+    checks.append(Check("History marks the cancelled changes DISCARDED", bool(ids) and set(statuses) == ids
+                        and all(s == "DISCARDED" for s in statuses.values()), "statuses by op id: {}".format(statuses)))
+    checks.append(_bad_or_crash(instance))
+    return checks
+
+
+STALE_KEY = {"ABANDONED": "rigtune.status.stale_installed", "DISCARDED": "rigtune.status.stale_gone"}
+NEVER_RUN = "can never run"
+RETRIED = "they will be retried at the next exit"
+
+
+def after_stale_start(instance, carried, mod_names, driver, log_text, helper_cmdlines, mods_before, expect_status="ABANDONED"):
+    """AC2H.6 (WS-H's RW-3), the new version's first start on a seeded state whose staged group can never run: the group
+    leaves pending.json with the status line for why (expect_status: ABANDONED, installed another way; DISCARDED, its
+    download gone) naming the mod, History marks each of its changes so, latest.log counts it as never runnable (not
+    "will be retried"), and at exit no helper runs and mods/ stays as it was. mod_names: the mod's id and its name."""
+    instance = Path(instance)
+    driver = driver or {}
+    ids = {op.get("id") for op in carried}
+    plan = _load(instance / "config" / "rigtune" / "pending.json")
+    left = sorted(op.get("id") for op in (plan or {}).get("ops") or [] if op.get("id") in ids)
+    checks = [Check("the stale group is dropped", driver.get("ok") is True and bool(ids) and not left,
+                    "driver ok: {}; carried-over ops still in pending.json: {}".format(driver.get("ok"), left))]
+    statuses = driver.get("statuses") or []
+    said = [s for s in statuses if STALE_KEY[expect_status] in (s.get("keys") or []) and mod_names[1] in (s.get("text") or "")]
+    checks.append(Check("the drop is announced (status line)", bool(said), "statuses seen: {}".format([(s.get("keys"), s.get("text")) for s in statuses])))
+    journaled = {}
+    for c in (c for e in history_entries(instance) or [] for c in e.get("changes", []) if c.get("opId") in ids):
+        journaled.setdefault(c.get("opId"), []).append(c.get("status"))
+    checks.append(Check("History marks the dropped changes {}".format(expect_status), set(journaled) == ids
+                        and all(s == expect_status for statuses_ in journaled.values() for s in statuses_),
+                        "statuses by op id: {}".format(journaled)))
+    lines = log_text.splitlines()
+    never = [line for line in lines if NEVER_RUN in line]
+    retried = [line for line in lines if RETRIED in line]
+    checks.append(Check("latest.log: counted as never runnable, not as leftover to retry", bool(never) and not retried,
+                        "never-run lines: {}; will-be-retried lines: {}".format(never[:2], retried[:2])))
+    after = listing(instance / "mods", recursive=True)
+    checks.append(Check("no helper at exit, mods/ unchanged", not helper_cmdlines and after == mods_before,
+                        "helper runs: {}; mods/: {}".format(len(helper_cmdlines), "unchanged" if after == mods_before else _diff(mods_before, after))))
+    checks.append(_bad_or_crash(instance))
+    return checks
+
+
 def _distinct_matches(candidates):
     """candidates[i]: the line numbers op i may use. How many ops get a line of their own (bipartite matching)."""
     owner = {}
@@ -732,9 +833,13 @@ def after_profile_check(instance, driver, entry_ids, originals, mods_before, sta
 # The released 0.3.0 starts on files 0.4 wrote (the v040-written fixture sets, composed by written.py), undoes the last
 # entry, applies a change of its own; then 0.4 starts again on what 0.3.0 left.
 
-# ERROR lines every offline E2E client logs (Mojang's services don't resolve; OSHI's Windows performance counters).
+# ERROR lines every offline E2E client logs (Mojang's services don't resolve; OSHI's Windows performance counters; on
+# Linux CI under Xvfb: no narrator library, no audio device).
 HARMLESS_ERRORS = re.compile(r"Failed to fetch user properties|Failed to request yggdrasil public key|Failed to fetch Realms "
-                             r"feature flags|Couldn't connect to realms|Error reading performance data from registry")
+                             r"feature flags|Couldn't connect to realms|Error reading performance data from registry|"
+                             r"Error while loading the narrator|Error starting SoundSystem")
+# GLFW's three-line report when Xvfb has no cursor theme ("########## GL ERROR ##########", "@ <where>", the message).
+XVFB_CURSOR = "X11: Standard cursor shape unavailable"
 # WARN lines about RigTune's own files that mean a file wasn't read or kept.
 FILE_WARNINGS = re.compile(r"written by a newer RigTune|Could not (read|record|parse|load)|\.bad\b|unreadable", re.IGNORECASE)
 
@@ -743,7 +848,14 @@ def rigtune_log_problems(text):
     """Any ERROR line but the offline client's usual ones (the production log has no logger names), a stack frame in
     RigTune's code (not the E2E drivers'), and any WARN line saying a file wasn't read, kept or accepted."""
     out = []
-    for line in text.splitlines():
+    lines = text.splitlines()
+    skip = set()
+    for index, line in enumerate(lines):
+        if XVFB_CURSOR in line and index >= 2 and "GL ERROR" in lines[index - 2]:
+            skip.update((index - 2, index - 1, index))
+    for index, line in enumerate(lines):
+        if index in skip:
+            continue
         if "/ERROR]" in line and not HARMLESS_ERRORS.search(line):
             out.append(line)
         elif "at io.github.chaotix345.rigtune." in line and ".rigtune.e2e." not in line:
@@ -783,13 +895,14 @@ def after_downgrade_old(instance, driver, seeded, old_version, off_name, log_tex
     instance = Path(instance)
     mods = instance / "mods"
     driver = driver or {}
-    checks = [Check("the driver ran the released 0.3.0", driver.get("ok") is True and driver.get("rigtuneVersion") == old_version,
+    old = old_version.split("+")[0]
+    checks = [Check("the driver ran the released {}".format(old), driver.get("ok") is True and driver.get("rigtuneVersion") == old_version,
                     "error: {}; loaded {}".format(driver.get("error"), driver.get("rigtuneVersion")))]
     checks.append(_log_check(log_text))
     state, ids, unknown = _view(driver)
     seeded_ids = [e.get("id") for e in seeded["entries"]]
     missing = [i for i in seeded_ids if i not in ids]
-    checks.append(Check("History lists every entry 0.4 wrote (state OK)", state == "OK" and not missing and not unknown,
+    checks.append(Check("History lists every entry the newer versions wrote (state OK)", state == "OK" and not missing and not unknown,
                         "state {}; {} of {} listed; missing {}; unknown kinds {}".format(state, len(seeded_ids) - len(missing),
                                                                                       len(seeded_ids), missing, unknown)))
     entries = history_entries(instance) or []
@@ -808,8 +921,8 @@ def after_downgrade_old(instance, driver, seeded, old_version, off_name, log_tex
     ok = (plan.get("undoOf") == undo_of and plan.get("problem") is None and bool(done) and len(undos) == 1
           and all(c.get("status") == "APPLIED" for c in undos[0].get("changes", [])) and undo_of in by_id and not skipped_vanilla
           and not not_undone)
-    checks.append(Check("Undo last reverted the newest undoable entry, recorded by 0.3.0", ok,
-                        "plan undoOf {} (expected {}), problem {}, items {}; 0.3.0 undo entries of it: {}; planned but not undone: {}; "
+    checks.append(Check("Undo last reverted the newest undoable entry, recorded by {}".format(old), ok,
+                        "plan undoOf {} (expected {}), problem {}, items {}; its undo entries of it: {}; planned but not undone: {}; "
                         "vanilla or mod changes skipped: {}".format(
                             plan.get("undoOf"), undo_of, plan.get("problem"),
                             [(i.get("action"), i.get("description") or i.get("changeIds"), i.get("reason")) for i in items],
@@ -819,10 +932,10 @@ def after_downgrade_old(instance, driver, seeded, old_version, off_name, log_tex
     disabled = [r for r in results if (r.get("op") or {}).get("type") == "DISABLE_FILE" and _name((r.get("op") or {}).get("path")) == off_name]
     journaled = [c for e in entries if e.get("kind") == "apply" and e.get("rigtuneVersion") == old_version for c in e.get("changes", [])
                  if c.get("action") == "disable" and c.get("file") == off_name and c.get("status") == "APPLIED"]
-    checks.append(Check("0.3.0's own Apply staged and applied (disable {})".format(off_name),
+    checks.append(Check("{}'s own Apply staged and applied (disable {})".format(old, off_name),
                         [r.get("status") for r in disabled] == ["OK"] and (mods / (off_name + ".disabled")).is_file()
                         and not (mods / off_name).exists() and len(journaled) == 1,
-                        "last-apply: {}; {}.disabled: {}; journaled by 0.3.0: {}".format([r.get("status") for r in disabled], off_name,
+                        "last-apply: {}; {}.disabled: {}; journaled by it: {}".format([r.get("status") for r in disabled], off_name,
                                                                                          (mods / (off_name + ".disabled")).is_file(), len(journaled))))
     ops = seeded.get("pendingOps") or []
     status_by_id = {(r.get("op") or {}).get("id"): r.get("status") for r in results}
@@ -831,16 +944,18 @@ def after_downgrade_old(instance, driver, seeded, old_version, off_name, log_tex
     dropped = {c.get("opId") for c in seeded_target.get("changes", []) if c.get("opId")}
     want = {op.get("id"): ("DISCARDED" if op.get("id") in dropped else "APPLIED") for op in ops}
     got = {cid: [c.get("status") for e in entries for c in e.get("changes", []) if c.get("opId") == cid] for cid in want}
+    # An op with no journal change in the sets (WS-L2's ws-l2 is pending.json alone) has nothing for the old version to mark.
+    journaled = {c.get("opId") for e in seeded["entries"] for c in e.get("changes", [])}
     pending = instance / "config" / "rigtune" / "pending.json"
-    ok = (bool(ops) and not pending.exists() and all(got[i] and all(s == want[i] for s in got[i]) for i in want)
+    ok = (bool(ops) and not pending.exists() and all((got[i] and all(s == want[i] for s in got[i])) if i in journaled else not got[i] for i in want)
           and all((status_by_id.get(i) == "OK") == (want[i] == "APPLIED") for i in want))
-    checks.append(Check("0.4's staged ops (with projectId): applied by 0.3.0's helper, or dropped by its Undo last", ok,
+    checks.append(Check("the newer versions' staged ops (with projectId): applied by {}'s helper, or dropped by its Undo last".format(old), ok,
                         "ops (expected, last-apply, journal): {}; pending.json left: {}".format(
                             {i: (want[i], status_by_id.get(i), got[i]) for i in want}, pending.exists())))
     now = {name: digest(instance / "config" / "rigtune" / name, "sha256") if (instance / "config" / "rigtune" / name).is_file() else None
            for name in seeded["newFiles"]}
     changed = sorted(n for n in now if now[n] != seeded["newFiles"][n])
-    checks.append(Check("the files only 0.4 writes are byte-identical", not changed,
+    checks.append(Check("the files only the newer versions write are byte-identical", not changed,
                         "changed: {}".format(changed) if changed else "{} file(s): {}".format(len(now), sorted(now))))
     checks.append(_bad_or_crash(instance))
     return checks
@@ -875,7 +990,7 @@ def after_downgrade_new(instance, driver, new_jar, seeded, log_text, kept=None):
     driver = driver or {}
     version = e2e_env.mod_json(new_jar)["version"]
     origin = driver.get("rigtuneOrigin") or []
-    checks = [Check("0.4 loaded from mods/ again", driver.get("ok") is True and driver.get("rigtuneVersion") == version
+    checks = [Check("{} loaded from mods/ again".format(version.split("+")[0]), driver.get("ok") is True and driver.get("rigtuneVersion") == version
                     and [_norm(p) for p in origin] == [_norm(instance / "mods" / new_jar.name)],
                     "error: {}; loaded {} from {}".format(driver.get("error"), driver.get("rigtuneVersion"), origin))]
     checks.append(_log_check(log_text))
@@ -888,7 +1003,7 @@ def after_downgrade_new(instance, driver, new_jar, seeded, log_text, kept=None):
     now = _load(config / "profiles.json") or {}
     labels = {s.get("entryId"): s.get("name") for s in now.get("switches") or [] if isinstance(s, dict)}
     expected = {s.get("entryId"): s.get("name") for s in seeded_switches if s.get("entryId") in journal}
-    checks.append(Check("profiles.json still labels the switch entries 0.3.0 kept", bool(expected) and all(labels.get(k) == v for k, v in expected.items()),
+    checks.append(Check("profiles.json still labels the switch entries the old version kept", bool(expected) and all(labels.get(k) == v for k, v in expected.items()),
                         "expected {}; labels now {}".format(expected, labels)))
     lost = {}
     for name, fields in (kept or written.KEPT).items():
@@ -897,6 +1012,98 @@ def after_downgrade_new(instance, driver, new_jar, seeded, log_text, kept=None):
             gone = _lost(seeded["json"][name], current, fields)
             if current is None or gone:
                 lost[name] = gone or "missing"
-    checks.append(Check("0.4 read its own files back (none reset or moved to .bad)", not lost,
+    checks.append(Check("{} read its own files back (none reset or moved to .bad)".format(version.split("+")[0]), not lost,
                         "lost: {}".format(lost) if lost else "{} file(s) kept their items".format(len(seeded.get("json", {})))))
+    return checks
+
+
+# --- helper-kill (docs/v0.5/SPEC.md 3f, AC3f.5; vg §6) ---------------------------------------------------------------
+# A staged two-op group (disable the old jar, enable the new one), op 2 blocked, the helper killed during its retries;
+# then the next exit's helper finishes the group from unfinished-groups.json, and the next start loads the result.
+# kill: what self_update_e2e's kill_helper_in_backoff saw (helpers it killed, the record, last-apply.json before/after).
+
+
+def _record(instance):
+    path = Path(instance) / "config" / "rigtune" / "unfinished-groups.json"
+    return path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
+
+
+def _pending_ids(instance):
+    plan = _load(Path(instance) / "config" / "rigtune" / "pending.json") or {}
+    return [op.get("id") for op in plan.get("ops") or []]
+
+
+def after_helper_kill(instance, kill, group, op_ids, new_name):
+    mods = Path(instance) / "mods"
+    kill = kill or {}
+    checks = [Check("the helper was killed during its retries (it wrote no results)",
+                    bool(kill.get("helpers")) and kill.get("recordHadGroup") is True and kill.get("goneAfterKill") is True
+                    and not kill.get("lastApplyAfter"),
+                    "killed {}; the group in unfinished-groups.json when killed: {}; gone after: {}; last-apply.json after: {}".format(
+                        kill.get("helpers"), kill.get("recordHadGroup"), kill.get("goneAfterKill"), kill.get("lastApplyAfter")))]
+    pending = _pending_ids(instance)
+    checks.append(Check("unfinished-groups.json and pending.json still hold the group", group in _record(instance)
+                        and all(i in pending for i in op_ids), "record holds it: {}; pending ops {}".format(group in _record(instance), pending)))
+    checks.append(Check("the blocked op didn't happen", not (mods / new_name).exists(),
+                        "mods/: {}".format(sorted(listing(mods)))))
+    return checks
+
+
+def after_kill_second(instance, driver, group, op_ids, old_name, new_name):
+    mods = Path(instance) / "mods"
+    driver = driver or {}
+    status = {(r.get("op") or {}).get("id"): r.get("status") for r in _results(instance)}
+    checks = [Check("the game started on what the killed helper left", driver.get("ok") is True,
+                    "error: {}; loaded {}".format(driver.get("error"), driver.get("loadedMods")))]
+    checks.append(Check("the next helper applied the whole group", all(status.get(i) in ("OK", "SKIPPED_ALREADY_DONE") for i in op_ids),
+                        "last-apply: {}".format({i: status.get(i) for i in op_ids})))
+    checks.append(Check("mods/ holds the group's result", (mods / (old_name + ".disabled")).is_file() and not (mods / old_name).exists()
+                        and (mods / new_name).is_file() and not (mods / (new_name + ".rigtune-pending")).exists(),
+                        "mods/: {}".format(sorted(listing(mods)))))
+    checks.append(Check("unfinished-groups.json no longer holds the group, pending.json is done", group not in _record(instance)
+                        and not any(i in _pending_ids(instance) for i in op_ids),
+                        "record holds it: {}; pending ops {}".format(group in _record(instance), _pending_ids(instance))))
+    return checks
+
+
+def after_kill_check(instance, driver, change_ids, mod_id, version):
+    driver = driver or {}
+    statuses = history_statuses(instance)
+    got = [statuses.get(i) for i in change_ids]
+    loaded = (driver.get("modVersions") or {}).get(mod_id)
+    checks = [Check("the next start loads the updated mod", driver.get("ok") is True and loaded == version,
+                    "error: {}; {} loaded: {} (expected {})".format(driver.get("error"), mod_id, loaded, version))]
+    checks.append(Check("History shows the group applied as a whole", got == ["APPLIED"] * len(change_ids),
+                        "the entry's changes: {}".format(dict(zip(change_ids, got)))))
+    checks.append(_bad_or_crash(instance))
+    return checks
+
+
+# --- guard-apply (docs/v0.5/SPEC.md 3f, AC3f.7) ---------------------------------------------------------------------
+# One start after entry-check: a pinned update refused, an addition staged, an update that addition's version declares
+# incompatible refused. driver: the undo driver's pinStatus / addStatus / reverseStatus (each Apply's status line).
+
+
+def after_guard_apply(instance, driver, server_log, installed, added_name, pin, staged_version, refused_ids):
+    mods = Path(instance) / "mods"
+    driver = driver or {}
+    pin_status, reverse_status = driver.get("pinStatus") or "", driver.get("reverseStatus") or ""
+    target, pin_range, pin_version = pin
+    checks = [Check("the driver ran its three Applies", driver.get("ok") is True,
+                    "error: {}; statuses {}".format(driver.get("error"), [driver.get(k) for k in ("pinStatus", "addStatus", "reverseStatus")]))]
+    checks.append(Check("the pinned update is refused with the pin (WS-G1)", "which is installed, needs" in pin_status and pin_range in pin_status
+                        and pin_version in pin_status, pin_status or "no outcome"))
+    checks.append(Check("the update the staged addition declares incompatible is refused (2d's reverse check)",
+                        "which is waiting for a restart, as incompatible with" in reverse_status, reverse_status or "no outcome"))
+    asked = [r for r in server_log or [] if r.get("method") == "GET" and r.get("path") == "/v2/versions" and staged_version in unquote(r.get("query") or "")]
+    checks.append(Check("RigTune read the staged version back from Modrinth", bool(asked),
+                        "GET /v2/versions naming {}: {}".format(staged_version, len(asked))))
+    results = {(r.get("op") or {}).get("modId"): r.get("status") for r in _results(instance)}
+    journaled = [c.get("modId") for e in history_entries(instance) or [] for c in e.get("changes", []) if c.get("modId") in refused_ids]
+    now = sorted(listing(mods))
+    checks.append(Check("only the addition went in; the refused updates changed nothing",
+                        all(n in now for n in installed) and added_name in now and not journaled
+                        and not any(m in results for m in refused_ids)
+                        and not any(n.startswith(refused_ids) and n not in installed and n != added_name for n in now),
+                        "mods/: {}; last-apply: {}; journal changes of {}: {}".format(now, results, list(refused_ids), journaled)))
     return checks

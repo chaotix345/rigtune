@@ -103,14 +103,15 @@ def _utc(moment):
     return moment.astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def test_mod_jar(path, mod_id, version="1.0.0", name=None):
-    """A minimal Fabric mod: a fabric.mod.json and nothing else, which Fabric Loader loads like any other mod."""
+def test_mod_jar(path, mod_id, version="1.0.0", name=None, depends=None):
+    """A minimal Fabric mod: a fabric.mod.json and nothing else, which Fabric Loader loads like any other mod. depends:
+    more fabric.mod.json `depends` entries (mod id -> version range), e.g. a pin on another test mod."""
     path = Path(path)
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("fabric.mod.json", json.dumps({
             "schemaVersion": 1, "id": mod_id, "version": version, "name": name or "RigTune E2E test mod " + mod_id,
             "description": "Test-only mod for tools/e2e; it does nothing.", "license": "MIT", "environment": "*",
-            "depends": {"fabricloader": ">=0.19.5"}}, indent=2))
+            "depends": dict({"fabricloader": ">=0.19.5"}, **(depends or {}))}, indent=2))
     return path
 
 
@@ -118,12 +119,18 @@ def _file(jar):
     return str(Path(jar).resolve()).replace(chr(92), "/")
 
 
-def catalog(old_jar, new_jar, game_version, rules_files, now=None, extra_projects=()):
+def version(version_id, jar, published, game_version, dependencies=()):
+    """One Modrinth version of a catalog project (more_projects)."""
+    return {"id": version_id, "version_number": mod_json(jar)["version"], "version_type": "release", "date_published": _utc(published),
+            "game_versions": [game_version], "loaders": ["fabric"], "file": _file(jar), "dependencies": list(dependencies)}
+
+
+def catalog(old_jar, new_jar, game_version, rules_files, now=None, extra_projects=(), more_projects=()):
     """The fake server's catalog: one RigTune project with the installed (old) version and the update (new), published
     a day later, both for Fabric and game_version, plus the rules files served at their raw.githubusercontent.com
     paths. File URLs use the real CDN host, so downloads are checked against https://cdn.modrinth.com/. Without an old
     jar, RigTune has only the new version (nothing to update to). extra_projects: (project id, slug, jar) of other mods,
-    one version each, with no dependencies."""
+    one version each, with no dependencies; more_projects: (project id, slug, [version(...)]) with any versions."""
     now = now or datetime.datetime.now(datetime.timezone.utc)
     versions = []
     for version_id, jar, published in (("E2Eold01", old_jar, now - datetime.timedelta(days=1)), ("E2Enew01", new_jar, now)):
@@ -146,6 +153,8 @@ def catalog(old_jar, new_jar, game_version, rules_files, now=None, extra_project
             "id": "E2Eext{:02d}".format(index), "version_number": mod_json(jar)["version"], "version_type": "release",
             "date_published": _utc(now - datetime.timedelta(hours=1)), "game_versions": [game_version],
             "loaders": ["fabric"], "file": _file(jar), "dependencies": []}]})
+    for project_id, slug, versions_ in more_projects:
+        projects.append({"id": project_id, "slug": slug, "title": slug, "versions": list(versions_)})
     return {
         "hosts": {"api": API_HOST, "cdn": CDN_HOST},
         "cdnBase": "https://" + CDN_HOST,
