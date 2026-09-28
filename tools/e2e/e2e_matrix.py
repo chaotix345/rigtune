@@ -78,6 +78,9 @@ def rows(root, tier):
         out += [_row("seeded-" + seed, mc, ["--scenario", "stale-seed", "--seed", "tools/e2e/seeds/" + seed])
                 for seed, node in STALE_SEEDS.items() if node == mc]
         out += [_row(row_id, mc, args) for row_id, args in UNDO]
+        if mc == DEFAULT_NODE:
+            # AC4j.3: the launcher-brand leg, 26.2 only (SPEC 3a's release tier).
+            out.append(_row("brand-theseus", mc, ["--scenario", "brand"]))
         for target in DOWNGRADE_TO:
             old = next((v for v in releases if core(v) == target), None)
             if old:

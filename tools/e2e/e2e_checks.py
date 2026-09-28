@@ -304,6 +304,67 @@ def after_seeded_verify(instance, carried, mod_names, driver, log_text, failed_o
     return checks
 
 
+HELD_LINE = re.compile(r"Held (\d+) operation\(s\) of mod-file changes")
+FILE_OPS = ("ENABLE_FILE", "DISABLE_FILE")
+
+
+def after_brand_apply(instance, driver, mods_before, options_before, carried):
+    """AC4j.3, Apply everything under the Modrinth App's brand and the helper at exit: mods/ byte-identical, the settings
+    changed, the staged file group held (still in pending.json, helper.log says so)."""
+    instance = Path(instance)
+    driver = driver or {}
+    applied = driver.get("applied") or []
+    checks = [Check("the driver applied everything the report selects", driver.get("ok") is True and bool(applied),
+                    "error: {}; {} rows: {}; message: {}".format(driver.get("error"), len(applied), applied[:8], driver.get("applyMessage")))]
+    after = listing(instance / "mods", recursive=True)
+    checks.append(Check("mods/ byte-identical", after == mods_before, "unchanged" if after == mods_before else _diff(mods_before, after)))
+    # Each applied setting row: its journal change APPLIED, and a vanilla one's options.txt line changed.
+    keys = [i[len("set:"):] for i in applied if i.startswith("set:")]
+    statuses = {c.get("key"): c.get("status") for e in history_entries(instance) or [] for c in e.get("changes", []) if c.get("key") in keys}
+    options = (instance / "options.txt").read_text(encoding="utf-8") if (instance / "options.txt").is_file() else ""
+    line = lambda text, name: next((l for l in text.splitlines() if l.startswith(name + ":")), None)
+    moved = {k: (line(options_before, k[len(VANILLA):]), line(options, k[len(VANILLA):])) for k in keys if k.startswith(VANILLA)}
+    checks.append(Check("the settings changed", bool(keys) and all(statuses.get(k) == "APPLIED" for k in keys)
+                        and all(before != now for before, now in moved.values()),
+                        "journal {}; options.txt {}".format(statuses, moved)))
+    helper = (instance / "config" / "rigtune" / "helper.log")
+    held = HELD_LINE.search(helper.read_text(encoding="utf-8", errors="replace")) if helper.is_file() else None
+    ids = [op.get("id") for op in carried if op.get("type") in FILE_OPS]
+    pending = _pending_ids(instance)
+    checks.append(Check("the staged file group is held (helper.log, pending.json)", held is not None and bool(ids) and all(i in pending for i in ids),
+                        "helper.log: {}; held ops still pending: {} of {}".format(held.group(0) if held else None,
+                                                                                 len([i for i in ids if i in pending]), len(ids))))
+    return checks
+
+
+def after_brand_cancel(instance, driver, mods_before, carried, helper_cmdlines):
+    """AC4j.3, the next start: the held notice, its Cancel them: no file op left, the download superseded, the journal
+    changes DISCARDED, nothing else in mods/ changed and no helper renames at exit."""
+    instance = Path(instance)
+    driver = driver or {}
+    checks = [Check("the held notice is shown with Cancel them", driver.get("ok") is True and "cancel" in (driver.get("heldActions") or [])
+                    and driver.get("cancelled") is True, "error: {}; notice: {}; actions {}".format(driver.get("error"), driver.get("heldNotice"),
+                                                                                                driver.get("heldActions")))]
+    plan = _load(instance / "config" / "rigtune" / "pending.json") or {}
+    left = [op.get("id") for op in plan.get("ops") or [] if op.get("type") in FILE_OPS]
+    checks.append(Check("no mod-file op left in pending.json", not left, "left: {}".format(left)))
+    downloads = [_name(op.get("from")) for op in carried if op.get("type") == "ENABLE_FILE" and (op.get("from") or "").endswith(".rigtune-pending")]
+    mods = instance / "mods"
+    superseded = {d: (mods / (d[:-len(".rigtune-pending")] + ".rigtune-superseded")).exists() and not (mods / d).exists() for d in downloads}
+    after = listing(mods, recursive=True)
+    renamed = {d for d in downloads} | {d[:-len(".rigtune-pending")] + ".rigtune-superseded" for d in downloads}
+    others_changed = {k for k in set(mods_before) | set(after) if k not in renamed and mods_before.get(k) != after.get(k)}
+    checks.append(Check("the download is superseded and nothing else in mods/ changed", all(superseded.values()) and not others_changed
+                        and not helper_cmdlines, "superseded: {}; other changes: {}; helper runs at exit: {}".format(
+                            superseded, sorted(others_changed), len(helper_cmdlines))))
+    ids = {op.get("id") for op in carried if op.get("type") in FILE_OPS}
+    statuses = {c.get("opId"): c.get("status") for e in history_entries(instance) or [] for c in e.get("changes", []) if c.get("opId") in ids}
+    checks.append(Check("History marks the cancelled changes DISCARDED", bool(ids) and set(statuses) == ids
+                        and all(s == "DISCARDED" for s in statuses.values()), "statuses by op id: {}".format(statuses)))
+    checks.append(_bad_or_crash(instance))
+    return checks
+
+
 STALE_KEYS = ("rigtune.status.stale_installed", "rigtune.status.stale_gone")
 NEVER_RUN = "can never run"
 RETRIED = "they will be retried at the next exit"
@@ -881,8 +942,10 @@ def after_downgrade_old(instance, driver, seeded, old_version, off_name, log_tex
     dropped = {c.get("opId") for c in seeded_target.get("changes", []) if c.get("opId")}
     want = {op.get("id"): ("DISCARDED" if op.get("id") in dropped else "APPLIED") for op in ops}
     got = {cid: [c.get("status") for e in entries for c in e.get("changes", []) if c.get("opId") == cid] for cid in want}
+    # An op with no journal change in the sets (WS-L2's ws-l2 is pending.json alone) has nothing for the old version to mark.
+    journaled = {c.get("opId") for e in seeded["entries"] for c in e.get("changes", [])}
     pending = instance / "config" / "rigtune" / "pending.json"
-    ok = (bool(ops) and not pending.exists() and all(got[i] and all(s == want[i] for s in got[i]) for i in want)
+    ok = (bool(ops) and not pending.exists() and all((got[i] and all(s == want[i] for s in got[i])) if i in journaled else not got[i] for i in want)
           and all((status_by_id.get(i) == "OK") == (want[i] == "APPLIED") for i in want))
     checks.append(Check("the newer versions' staged ops (with projectId): applied by {}'s helper, or dropped by its Undo last".format(old), ok,
                         "ops (expected, last-apply, journal): {}; pending.json left: {}".format(
