@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -34,6 +35,61 @@ class BenchmarkTrendTest {
 		BenchmarkRecord latest = TrendFixtures.run("latest").at("2026-09-29T10:00:00Z").low(latestLow).cv(latestCv).build();
 		runs.add(latest);
 		return BenchmarkTrend.assess(latest, runs);
+	}
+
+	// docs/v0.5/SPEC.md RW-8 (AC2B.7) and RW-6 (AC2B.4): a run in a benchmark world it created, or with Distant Horizons
+	// generating terrain, stays out of the baseline and "your usual", and as the latest run it is never a regression.
+	@Test
+	void rw8AFreshWorldRunIsLeftOutOfTheBaselineAndMedian() {
+		List<BenchmarkRecord> runs = new ArrayList<>();
+		runs.add(TrendFixtures.run("first").at("2026-09-19T10:00:00Z").low(300).fresh().build());
+		runs.addAll(history(500, 500, 500));
+		BenchmarkRecord latest = TrendFixtures.run("latest").at("2026-09-29T10:00:00Z").low(490).build();
+		runs.add(latest);
+		assertEquals(List.of("r0", "r1", "r2"), BenchmarkTrend.baseline(latest, runs).stream().map(BenchmarkRecord::id).toList());
+		Assessment a = BenchmarkTrend.assess(latest, runs);
+		assertEquals(Kind.IN_LINE, a.kind());
+		assertEquals(3, a.baselineRuns());
+		assertEquals(500, a.median());
+	}
+
+	@Test
+	void rw8AFreshLatestRunIsNeverARegression() {
+		List<BenchmarkRecord> runs = history(540, 545, 538, 550);
+		BenchmarkRecord latest = TrendFixtures.run("latest").at("2026-09-29T10:00:00Z").low(300).fresh().build();
+		runs.add(latest);
+		Assessment a = BenchmarkTrend.assess(latest, runs);
+		assertEquals(Kind.EXCLUDED, a.kind());
+		assertNull(a.regression());
+		assertNull(a.deltaPercent());
+		assertEquals(542.5, a.median(), "the chart keeps its usual line from the earlier runs");
+		assertEquals(Kind.EXCLUDED, BenchmarkTrend.view(runs, null, null).assessment().kind());
+	}
+
+	@Test
+	void rw6ADhGeneratingRunIsLeftOutToo() {
+		List<BenchmarkRecord> runs = new ArrayList<>(history(500, 500, 500));
+		runs.add(1, TrendFixtures.run("dh").at("2026-09-20T12:00:00Z").low(200).dhGenerating().build());
+		BenchmarkRecord latest = TrendFixtures.run("latest").at("2026-09-29T10:00:00Z").low(490).build();
+		runs.add(latest);
+		assertEquals(Kind.IN_LINE, BenchmarkTrend.assess(latest, runs).kind());
+		assertEquals(3, BenchmarkTrend.assess(latest, runs).baselineRuns());
+		BenchmarkRecord generating = TrendFixtures.run("latest-dh").at("2026-09-30T10:00:00Z").low(100).dhGenerating().build();
+		runs.add(generating);
+		assertEquals(Kind.EXCLUDED, BenchmarkTrend.assess(generating, runs).kind());
+		assertTrue(BenchmarkTrend.excluded(generating));
+		assertFalse(BenchmarkTrend.excluded(latest));
+		assertFalse(BenchmarkTrend.excluded(TrendFixtures.run("old").context(null).build()), "a 0.2 run has no context");
+	}
+
+	// Nor is an excluded run "the previous run of the scene" that a run under other conditions is compared with.
+	@Test
+	void excludedRunsAreNotThePreviousRunOfTheScene() {
+		List<BenchmarkRecord> runs = new ArrayList<>();
+		runs.add(TrendFixtures.run("first").at("2026-09-19T10:00:00Z").rd(16).low(300).fresh().build());
+		BenchmarkRecord latest = TrendFixtures.run("latest").at("2026-09-29T10:00:00Z").low(500).build();
+		runs.add(latest);
+		assertEquals(Kind.TOO_FEW, BenchmarkTrend.assess(latest, runs).kind());
 	}
 
 	@Test

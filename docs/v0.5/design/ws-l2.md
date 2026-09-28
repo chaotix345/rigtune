@@ -56,9 +56,11 @@ repair steps are a dynamic family registered in `V05LangFamilies.launcherRepair`
 
 ## Questions and dependencies (answered)
 
-- WS-L1: the method "Let RigTune apply them" calls when the opt-in goes on. Until WS-L1 merges, the service does what the
-  settings row does: settings.json through `SettingsSaver`, then a rebuild. The leftover listener reads the policy through
-  the `ModFilesService` it resolved once, never through `V05Services`' synchronized getter per tick.
+- WS-L1: "Let RigTune apply them" calls WS-L1's `ModFilesService.setOptIn(true)` (settings.json through
+  `SettingsSaver`, then one rebuild), the same call the settings row makes. The leftover listener reads the policy
+  through the `ModFilesService` it resolved once, never through `V05Services`' synchronized getter per tick.
+  `ModFilesService.policy()` itself is a live read with no I/O and no allocation: `LauncherProbe`'s uncontended
+  synchronized static getters, `CompletableFuture.getNow`, the volatile opt-in flag and a switch (WS-L1).
 - Coordinator: RealController's carried-over count after Cancel them. The chosen fix is (a), a recorded exception to the
   frozen file: `public void stagedChanged()` (recount + rebuild, on the render thread), called after Cancel them.
 - WS-E (4j.3 prep, agent `r-verify`, relayed by the coordinator): the notice keys and action ids are stable
@@ -103,10 +105,17 @@ repair steps are a dynamic family registered in `V05LangFamilies.launcherRepair`
   as History shows it (`LauncherRepair.modChanges`). The ops count stays in preLaunch's split and helper.log.
 - ws-l2's `pending.json` gives the held group's disable a `modId` too (0.4's own disables carry none). WS-E's rule
   for compat040 (relayed 2026-09-28) is that every op of a set's ApplyHelper group carries one: `written.materialize()`
-  makes each op's stand-in jar from it. compat030 still passes with the set.
+  makes each op's stand-in jar from it. compat030 still passes with the set. The coordinator asked WS-E to derive a
+  stand-in id from the file name instead, then revert this. At the final merge that change hadn't landed:
+  origin/test/v05-e2e's `materialize()` still takes the op's `modId` or a constant `e2e-unknown`. So the `modId` stays,
+  as the coordinator said to do in that case.
 - `LauncherManagedGameTest` can't clear the in-memory dismissal (`AwarenessService`'s session set has no API). Its fixture
   names are new at every run instead, so that key can never match another notice. awareness.json is restored by bytes.
-- The game test uses the forced policy (`LauncherRepairService.overridePolicy`) until WS-L1 merges; see "Still to do".
+- `heldAndRepair` runs under the real policy: the Modrinth App's brand (`theseus`) through the real probe and WS-L1's
+  `redetect` in the same class. It puts the brand and the policy back at the end. Only the leftover-toast check forces
+  the policy through the service's test seam (`overridePolicy`), to hold it at PENDING and then give each answer.
+- `LauncherFilesSourceTest` reads code only, with comments stripped: WS-L1's `ModFilesPolicy` names
+  `minecraftinstance.json` in a comment, and a comment reads no file.
 
 ## Residuals
 
@@ -199,8 +208,9 @@ tick listener exists only after a leftover with mod-file ops. Every value stays 
 - 36334218896 (the review fixes and the stagedChanged hook, merged with feat/v0.5.0 @ 690b8f4c): green on every job and
   leg.
 - 36319156664, 36323550509: green (the core and client tasks). 36325285181 (the game tests) and 36327592019 (merged
-  with feat/v0.5.0): green on every job and all three legs, with 2207 unit tests per node, 3 skipped. One of the three is
-  `LauncherRepairTest.theRealInstance`, which needs WS-L1's fixtures.
+  with feat/v0.5.0): green on every job and all three legs, with 2207 unit tests per node, 3 skipped. One of the three was
+  `LauncherRepairTest.theRealInstance`, which needed WS-L1's fixtures; it runs from the final merge on.
+- 36337663582 (merged with WS-H, WS-W and WS-P) and 36361148396 (ws-l2's set with the disable's `modId`): green.
 - `gametest-screenshots-26.2-OpenGL` of 36325285181 and `-26.3-Vulkan` of 36327592019: `launcher-held-notice-*` (the
   notice line at 1280×720, 640×480 (the "..." button) and 854×480, message cut with "..." and the detail as tooltip,
   inside the screen); `launcher-leftover-toast-launcher` / `-rigtune` (36325285181 caught the toast mid-slide-in; b6bf6e6a
@@ -208,15 +218,15 @@ tick listener exists only after a leftover with mod-file ops. Every value stays 
   today's "2 change(s) not applied"); `a11y-launcher-held-*` (the notice line focused) and `a11y-launcher-notices-*`
   (NoticeScreen with both notices, the focused row framed).
 
-## Still to do before the coordinator merges this branch (after WS-H and WS-L1)
+## The merges with WS-H and WS-L1
 
-- Merge origin/feat/v0.5.0 once WS-H and WS-L1 are in. The `readState` split then goes over WS-H's runnable (non-stale)
-  ops, and its 4-argument overload and mine are resolved into one.
-- Switch `LauncherRepairTest.theRealInstance` and `RealWorldFixTest` to WS-L1's `RealWorldFixtures` (skipped in CI until
-  then; green locally on the scratch copy), and `heldAndRepair` from the forced policy to the real one (the `theseus`
-  brand, a rescan, `modFiles() != PENDING`).
-- Re-run `LauncherFilesSourceTest` with WS-L1's `.index/` listing in (its allow-list names `InstanceEvidence` and
-  `LauncherProbe`).
+- WS-H (33c09219): `RigTunePreLaunch.readState` has one 5-argument form (WS-H's `loadedFrom`, WS-L2's `warn`); both
+  4-argument forms stay. The mod-file split counts WS-H's runnable (non-stale) ops only. Today's "retried" WARN is logged
+  only when none of them is in a mod-file group, and WS-H's stale-ops INFO is unchanged.
+- WS-L1 (the final merge): a conflict in the imports only. `heldAndRepair` now uses the real policy and WS-L1's
+  `check`/`redetect`; WS-L2's duplicate `check` is gone. `RealWorldFixTest` and `LauncherRepairTest.theRealInstance` read
+  WS-L1's `RealWorldFixtures`, so the real-instance case runs in CI. "Let RigTune apply them" calls `setOptIn(true)`.
+  `LauncherFilesSourceTest` sees WS-L1's `.index/` listing in `InstanceEvidence` (allowed) and skips comments.
 
 ## AC table
 
@@ -227,10 +237,10 @@ tick listener exists only after a leftover with mod-file ops. Every value stays 
 | AC4f.3 (failed/dropped toasts over ABANDONED-only, FAILED-only, mixed) | verified | `HelperToastsTest` |
 | AC4f.4 (E2E `v010-dh-app-reinstalled`) | UNVERIFIED here | WS-E's release tier |
 | AC4d.1 (hold: file groups stay, attempts unchanged, patches apply; the property exactly under LAUNCHER/PENDING, classpath our jar + Gson) | verified | `ApplyExecutorHoldTest` (8), `HelperLauncherTest` (the property per policy; a child-JVM helper with our jar and Gson) |
-| AC4d.2 (the notice; Cancel them: no file op, `.rigtune-superseded`, DISCARDED; Let RigTune apply them: opt-in) | verified with the forced policy; with the real policy closes here after WS-L1 merges (Cross-workstream ACs) | `LauncherManagedGameTest.heldAndRepair` (3 legs, 36325285181, 36327592019), `LauncherRepairServiceTest` |
+| AC4d.2 (the notice; Cancel them: no file op, `.rigtune-superseded`, DISCARDED; Let RigTune apply them: opt-in) | verified with the real policy (closes here: WS-L1 merged first, Cross-workstream ACs) | `LauncherManagedGameTest.heldAndRepair` under the `theseus` brand (3 legs, the final run), earlier with the forced policy (36325285181, 36327592019); `LauncherRepairServiceTest` |
 | AC4d.3 (compat040: 0.4.0's helper applies a held group) | set committed (`v050-written/ws-l2` + `expect.json`); closes when WS-E's interpreter merges | compat030 PASS on the set |
 | AC4d.4 (no "will be retried" WARN or toast for held groups, only the waiting wording; nothing in last-apply.json; today's toast under RIGTUNE) | verified | `RigTunePreLaunchTest` (+2), `HelperToastsTest`, `LauncherRepairServiceTest` (the listener), `ApplyExecutorHoldTest` (no result written), `heldAndRepair` (the toasts under LAUNCHER and RIGTUNE, screenshots) |
-| AC4g.1 (findings per kind and repaired; the real instance: 1 pair, 7 added) | verified (the real-instance case locally until WS-L1's fixtures are in) | `LauncherRepairTest` (14) |
+| AC4g.1 (findings per kind and repaired; the real instance: 1 pair, 7 added) | verified | `LauncherRepairTest` (14), the real-instance case on WS-L1's `RealWorldFixtures` |
 | AC4g.2 (only under LAUNCHER with a finding; text per launcher; Copy list names only, escaped; Dismiss until the set changes) | verified | `LauncherRepairTest`, `LauncherRepairServiceTest`, `heldAndRepair` (3 legs) |
 | AC4g.3 (no launcher database or file read beyond InstanceFiles and `.index/`) | verified | `LauncherFilesSourceTest` |
 | AC3f.6 (the record through the forcing writer before the first rename) | verified | `UnfinishedGroupsDurableTest` (4), `ApplyExecutorTest.theRecordIsForcedToDiskBeforeTheFirstRename` |

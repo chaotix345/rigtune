@@ -148,6 +148,29 @@ class LauncherScenarioTest {
 				}
 			}
 		}
+		// v0.5 (docs/v0.5/SPEC.md 4b): the mod-file wording (LauncherModText, LauncherModAdvice) and every launcher's mod steps.
+		keys.put("rigtune.launcher.mod_files.guide", 1);
+		keys.put("rigtune.launcher.mod_files.news", 1);
+		keys.put("rigtune.launcher.mod_files.news.detail", 0);
+		keys.put("rigtune.launcher.mod_files.news.detail.unnamed", 0);
+		keys.put("rigtune.launcher.mod_files.news.settings", 0);
+		keys.put("rigtune.launcher.mod_files.note.add", 1);
+		keys.put("rigtune.launcher.mod_files.note.disable", 1);
+		keys.put("rigtune.launcher.mod_files.note.pending", 0);
+		keys.put("rigtune.launcher.mod_files.note.update", 1);
+		keys.put("rigtune.launcher.mod_files.opted_in", 1);
+		keys.put("rigtune.launcher.mod_files.preview", 2);
+		keys.put("rigtune.launcher.mod_files.preview.heading", 0);
+		keys.put("rigtune.launcher.mod_files.preview.pending", 1);
+		keys.put("rigtune.launcher.mod_files.your_launcher", 0);
+		for (Launcher launcher : Launcher.values()) {
+			for (String kind : LauncherInfo.MOD_KINDS) {
+				String steps = LauncherInfo.of(launcher).modStepsKey(kind);
+				if (steps != null) {
+					keys.put(steps, 0);
+				}
+			}
+		}
 		List<String> launcherKeys = new ArrayList<>(lang.keySet().stream().filter(k -> k.startsWith("rigtune.launcher.")).toList());
 		for (Map.Entry<String, Integer> key : keys.entrySet()) {
 			assertTrue(lang.has(key.getKey()), "missing " + key.getKey());

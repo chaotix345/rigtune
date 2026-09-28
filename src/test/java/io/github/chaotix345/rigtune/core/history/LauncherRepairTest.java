@@ -5,10 +5,8 @@ import io.github.chaotix345.rigtune.core.history.LauncherRepair.Pair;
 import io.github.chaotix345.rigtune.core.launcher.Launcher;
 import io.github.chaotix345.rigtune.core.model.Text;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,7 +16,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 // docs/v0.5/SPEC.md 4g (AC4g.1, AC4g.2's unit part): what an older RigTune's mod-file changes left for the launcher to
 // catch up with, from RigTune's own records only (history.json, the mods folder), and the notice's text per launcher.
@@ -114,17 +111,9 @@ class LauncherRepairTest {
 	// AC4g.1 on the anonymised real instance (the user's history.json after 0.4.0's helper run, with the mods listing):
 	// exactly one pair in effect (Entity Culling 1.11.1 -> 1.11.2) and 7 added jars; the DH group (RW-1) is none of them.
 	@Test
-	void theRealInstance() throws IOException {
-		Path copy = Path.of("C:/Users/Admin/AppData/Local/Temp/claude/C--Dev-Minecraft-Setting-Optimisation-Mod/590d2d3e-58b4-418a-a809-0e625214088f/scratchpad/realworld/instance-copy");
-		assumeTrue(Files.isRegularFile(copy.resolve("config/rigtune/history.json")));
-		List<JournalEntry> entries = new Journal(copy.resolve("config"), "0.4.0+mc26.2", "26.2", (m, e) -> {
-		}).entries();
-		UndoPlannerTest.FakeState real = new UndoPlannerTest.FakeState();
-		for (String line : Files.readAllLines(copy.resolve("mods-listing.txt"), StandardCharsets.UTF_8)) {
-			if (!line.isBlank()) {
-				real.jar(line.strip(), "other:" + line.strip());
-			}
-		}
+	void theRealInstance(@TempDir Path instance) {
+		List<JournalEntry> entries = RealWorldFixtures.history(instance);
+		UndoPlannerTest.FakeState real = RealWorldFixtures.folder(new UndoPlannerTest.FakeState());
 
 		Findings findings = LauncherRepair.find(entries, real);
 

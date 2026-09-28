@@ -23,6 +23,17 @@ final class V05LangFamilies {
 	// ---- WS-L1 (P0.4: rigtune.launcher.mod_steps.*, rigtune.launcher.mod_files.*, rigtune.settings.mod_files*).
 
 	private static void launcherPolicy(List<LangCheckTest.Family> out) {
+		// LauncherInfo.modStepsKey: every launcher's steps for every mod-file kind it is given steps for.
+		java.util.Set<String> steps = new java.util.TreeSet<>();
+		for (io.github.chaotix345.rigtune.core.launcher.Launcher launcher : io.github.chaotix345.rigtune.core.launcher.Launcher.values()) {
+			for (String kind : io.github.chaotix345.rigtune.core.launcher.LauncherInfo.MOD_KINDS) {
+				String key = io.github.chaotix345.rigtune.core.launcher.LauncherInfo.of(launcher).modStepsKey(kind);
+				if (key != null) {
+					steps.add(key);
+				}
+			}
+		}
+		out.add(new LangCheckTest.Family("rigtune.launcher.mod_steps.", List.of(), steps));
 	}
 
 	// ---- WS-L2 (P0.4: rigtune.repair.*, the held-changes notice).

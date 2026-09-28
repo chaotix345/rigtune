@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -48,6 +49,7 @@ public final class StutterService {
 
 	private final RealController controller;
 	private final Path configDir;
+	private final Executor ioExecutor;
 	private @Nullable StutterStore store;
 
 	private record Analysis(StutterMonitor.@Nullable Capture capture, StutterReport report, List<StutterAdvisor.Fired> advice,
@@ -56,9 +58,9 @@ public final class StutterService {
 
 	private enum Saved { UNKNOWN, LOADING, DONE }
 
-	// What the analysis needs about the machine, taken on the render thread.
+	// What the analysis needs about the machine, taken on the render thread; settingsNow: the four RW-11 values.
 	private record Machine(@Nullable RulesDocument rules, @Nullable HardwareProfile hardware, @Nullable List<InstalledMod> mods, SettingsSnapshot settings,
-			Goal goal) {
+			Goal goal, @Nullable Map<String, String> settingsNow) {
 	}
 
 	// Render thread.
@@ -66,6 +68,8 @@ public final class StutterService {
 	private long lastAnalysis;
 	private boolean benchmarkRunning;
 	private boolean resumePaused;
+	// v0.5 RW-15: the current benchmark step is left out of the capture.
+	private boolean stepExcluded;
 	private volatile @Nullable Analysis live;
 	private volatile @Nullable Analysis saved;
 	private volatile Saved savedState = Saved.UNKNOWN;
@@ -79,8 +83,14 @@ public final class StutterService {
 	private final AtomicInteger sessionsEnded = new AtomicInteger();
 
 	public StutterService(RealController controller, Path configDir) {
+		this(controller, configDir, Probes.EXECUTOR);
+	}
+
+	// ioExecutor: where stutter.json's ordered chain runs (StutterServiceTest drains its own).
+	StutterService(RealController controller, Path configDir, Executor ioExecutor) {
 		this.controller = controller;
 		this.configDir = configDir;
+		this.ioExecutor = ioExecutor;
 	}
 
 	private synchronized StutterStore store() {
@@ -136,8 +146,13 @@ public final class StutterService {
 	public void clear() {
 		StutterMonitor.Capture session = StutterMonitor.session();
 		if (session != null) {
-			StutterCapture.stop(session);
-			StutterCapture.startSession();
+			try {
+				StutterCapture.stop(session);
+			} catch (RuntimeException e) {
+				// L1's guard: detached anyway (stop's finally); Clear drops this session's data in any case.
+				RigTune.LOGGER.warn("Stutter Doctor: the cleared session's capture couldn't be copied", e);
+			}
+			startSession(controller.minecraft());
 		}
 		live = null;
 		saved = null;
@@ -147,7 +162,7 @@ public final class StutterService {
 	}
 
 	private synchronized void io(Runnable task) {
-		io = io.handle((ignored, error) -> null).thenRunAsync(() -> safely(task), Probes.EXECUTOR);
+		io = io.handle((ignored, error) -> null).thenRunAsync(() -> safely(task), ioExecutor);
 	}
 
 	public String summary() {
@@ -161,11 +176,18 @@ public final class StutterService {
 		boolean want = controller.settings().stutterMonitor && minecraft.level != null;
 		StutterMonitor.Capture session = StutterMonitor.session();
 		if (want && session == null && !benchmarkRunning && StutterMonitor.benchmark() == null) {
-			StutterCapture.startSession();
+			startSession(minecraft);
 			live = null;
 		} else if (!want && session != null) {
 			end(session, minecraft, false);
 		}
+	}
+
+	// v0.5 RW-11: a session starts with the settings it starts with (SettingsWatch registers its listener the first time).
+	private static StutterMonitor.Capture startSession(@Nullable Minecraft minecraft) {
+		StutterMonitor.Capture session = StutterCapture.startSession();
+		session.settingsAtStart = SettingsWatch.sessionStarted(minecraft);
+		return session;
 	}
 
 	// CLIENT_STOPPING: the running session is saved right away, on this thread, after any save still queued (leaving the
@@ -188,14 +210,27 @@ public final class StutterService {
 		}
 		StutterMonitor.Capture bench = StutterMonitor.benchmark();
 		if (bench != null) {
-			StutterCapture.stop(bench);
+			try {
+				StutterCapture.stop(bench);
+			} catch (RuntimeException e) {
+				RigTune.LOGGER.warn("Stutter Doctor: the benchmark's capture couldn't be copied at quit", e);
+			}
 		}
 	}
 
 	private void end(StutterMonitor.Capture session, Minecraft minecraft, boolean now) {
-		StutterCapture.Copy copy = StutterCapture.stop(session);
+		StutterCapture.Copy copy;
+		try {
+			copy = StutterCapture.stop(session);
+		} catch (RuntimeException e) {
+			// docs/v0.5/SPEC.md 2S L1 (review-10 R10-1): the capture is detached anyway (stop's finally); only this session's
+			// summary is lost, and a benchmark starting or the world being left goes on.
+			live = null;
+			sessionsEnded.incrementAndGet();
+			RigTune.LOGGER.warn("Stutter Doctor: the running session's summary was lost: its capture couldn't be copied", e);
+			return;
+		}
 		live = null;
-		savedState = Saved.DONE;
 		Machine machine = machine(minecraft);
 		int gen = generation;
 		boolean aroundBenchmark = session.aroundBenchmark;
@@ -208,8 +243,10 @@ public final class StutterService {
 					return;
 				}
 				JsonStateFile.Saved result = store().add(a.report());
+				// SD-3: known only once this session is in `saved`; an unsaved one leaves the saved summaries to loadSaved().
 				if (result == JsonStateFile.Saved.OK && gen == generation) {
 					saved = a;
+					savedState = Saved.DONE;
 				}
 				RigTune.LOGGER.info("Stutter Doctor: session saved ({}): {} spikes in {} s of gameplay, {}, GC offset {} ms", result,
 						a.report().spikes().total(), Math.round(a.report().gameplaySeconds()), phases(copy), a.report().facts().gcOffsetMs());
@@ -230,6 +267,7 @@ public final class StutterService {
 	// run's sweeps aren't play either).
 	void benchmarkStarted(Minecraft minecraft) {
 		benchmarkRunning = true;
+		stepExcluded = false;
 		endSessionForBenchmark(minecraft);
 	}
 
@@ -241,9 +279,22 @@ public final class StutterService {
 			benchmarkRunning = true;
 			endSessionForBenchmark(minecraft);
 			bench = StutterCapture.startBenchmark();
+			// Created paused, like every gap between sweeps.
+			StutterMonitor.event(StutterRings.PAUSE_BEGIN, System.nanoTime(), 0);
 		}
 		if (bench != null) {
-			pauseBenchmark(bench, !recording);
+			pauseBenchmark(bench, !recording || stepExcluded);
+		}
+	}
+
+	// docs/v0.5/SPEC.md 2B RW-15 (the contracts' seam; StutterHooks.benchmarkStepExcluded says how BenchmarkController calls
+	// it): true for a step left out, false at its end. It never starts or resumes the capture: the capture stays paused
+	// through the step, and the next benchmarkSweep(true) records again.
+	void benchmarkStepExcluded(boolean excluded) {
+		stepExcluded = excluded;
+		StutterMonitor.Capture bench = StutterMonitor.benchmark();
+		if (bench != null && excluded) {
+			pauseBenchmark(bench, true);
 		}
 	}
 
@@ -274,13 +325,22 @@ public final class StutterService {
 		StutterMonitor.Capture bench = StutterMonitor.benchmark();
 		lastBenchmark = null;
 		lastBenchmarkDhWorldGen = null;
-		StutterCapture.Copy copy = bench == null ? null : StutterCapture.stop(bench);
+		stepExcluded = false;
+		StutterCapture.Copy copy = null;
+		if (bench != null) {
+			try {
+				copy = StutterCapture.stop(bench);
+			} catch (RuntimeException e) {
+				// L1's guard: detached anyway; only the run's stutter line is lost, and a session can still start.
+				RigTune.LOGGER.warn("Stutter Doctor: the benchmark's capture couldn't be copied; its summary is lost", e);
+			}
+		}
 		boolean paused = resumePaused;
 		resumePaused = false;
 		// Not after a failed tick: StutterHooks.tick, which ends a session on leaving the world, is off until the monitor is
 		// turned on again.
 		if (!StutterHooks.failed() && controller.settings().stutterMonitor && minecraft.level != null && StutterMonitor.session() == null) {
-			StutterCapture.startSession().aroundBenchmark = true;
+			startSession(minecraft).aroundBenchmark = true;
 			live = null;
 			if (paused) {
 				pause(true);
@@ -310,6 +370,8 @@ public final class StutterService {
 	@Nullable Double lastBenchmarkDhWorldGenCores() {
 		return lastBenchmarkDhWorldGen;
 	}
+
+
 
 	int sessionsEnded() {
 		return sessionsEnded.get();
@@ -342,10 +404,14 @@ public final class StutterService {
 			return;
 		}
 		savedState = Saved.LOADING;
+		// SD-4: a Clear pressed while this load waits in the queue wins.
+		int gen = generation;
 		io(() -> {
 			try {
 				StutterReport latest = store().latest();
-				saved = latest == null ? null : new Analysis(null, latest, adviceFor(latest.advice(), controller.rules()), null);
+				if (gen == generation) {
+					saved = latest == null ? null : new Analysis(null, latest, adviceFor(latest.advice(), controller.rules()), null);
+				}
 			} catch (RuntimeException e) {
 				RigTune.LOGGER.warn("Stutter Doctor: could not read the saved sessions", e);
 			} finally {
@@ -374,7 +440,7 @@ public final class StutterService {
 		} catch (RuntimeException e) {
 			settings = new SettingsSnapshot(Map.of());
 		}
-		return new Machine(controller.rules(), controller.hardwareProfile(), controller.mods(), settings, controller.goal());
+		return new Machine(controller.rules(), controller.hardwareProfile(), controller.mods(), settings, controller.goal(), SettingsWatch.values(minecraft));
 	}
 
 	private static Analysis analyze(StutterCapture.Copy c, Machine m) {
@@ -389,6 +455,11 @@ public final class StutterService {
 				: StutterAdvisor.evaluate(m.rules(), StutterAdvisor.context(m.rules(), hw, m.mods(), m.settings(), m.goal(), result.facts()),
 						result.report().enoughData());
 		StutterReport report = result.report().withAdvice(advice.stream().map(StutterAdvisor.Fired::id).toList());
+		// v0.5 RW-11: a session's settings at its start and now (its end, or the live view's moment); the advice above used
+		// the ones now.
+		if (c.settingsAtStart() != null) {
+			report = report.withSettings(c.settingsAtStart(), m.settingsNow());
+		}
 		return new Analysis(null, report, advice, result.dhWorldGenCores());
 	}
 

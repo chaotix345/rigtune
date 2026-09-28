@@ -36,7 +36,11 @@ public final class Attributor {
 	// review-8 P5A-F2: chunks loaded within CHUNK_NEAR of the spike (the client's CHUNK_LOAD count, not a measurement of
 	// what they cost).
 	public static final String CHUNKS_LOADING = "chunksLoading";
-	public static final List<String> TAGS = List.of(WORLD_SAVE, DH, CPU_CONTENTION, AFTER_TELEPORT, CHUNKS_LOADING, MOVING_FAST);
+	// v0.5 RW-11 (docs/v0.5/SPEC.md 2S): the spikes ending in the 10 s after a setting changed (render or simulation
+	// distance, shaders, Distant Horizons rendering) or resources reloaded. Like afterTeleport it never claims. In the rules'
+	// vocabulary too (tools/update_rules.py); 0.4.0 doesn't know it, so a condition on it fails closed there.
+	public static final String SETTINGS_CHANGED = "settingsChanged";
+	public static final List<String> TAGS = List.of(WORLD_SAVE, DH, CPU_CONTENTION, AFTER_TELEPORT, CHUNKS_LOADING, MOVING_FAST, SETTINGS_CHANGED);
 
 	static final long STALL_NEAR = 100 * MS;
 	static final long SAVE_NEAR = 50 * MS;
@@ -111,9 +115,15 @@ public final class Attributor {
 
 	// The capture's evidence. phaseTiming: the phase timers were complete (S-M1); otherwise the phases are ignored.
 	// deferModeWaits: Sodium's Chunk Updates mode makes frames wait for builds (ZERO_FRAMES/ONE_FRAME). chunkLoading: the
-	// spans in which the client loaded chunks (review-8 P5A-F2).
+	// spans in which the client loaded chunks (review-8 P5A-F2). settingsChanged (v0.5 RW-11): from each change's time
+	// (start, excluded) to 10 s after it (end).
 	public record Context(List<GcEvent> gc, List<Interval> saves, List<Interval> afterTeleport, List<Interval> movingFast, List<Sample> samples,
-			int cores, boolean phaseTiming, boolean deferModeWaits, List<Interval> chunkLoading) {
+			int cores, boolean phaseTiming, boolean deferModeWaits, List<Interval> chunkLoading, List<Interval> settingsChanged) {
+		public Context(List<GcEvent> gc, List<Interval> saves, List<Interval> afterTeleport, List<Interval> movingFast, List<Sample> samples, int cores,
+				boolean phaseTiming, boolean deferModeWaits, List<Interval> chunkLoading) {
+			this(gc, saves, afterTeleport, movingFast, samples, cores, phaseTiming, deferModeWaits, chunkLoading, List.of());
+		}
+
 		public Context(List<GcEvent> gc, List<Interval> saves, List<Interval> afterTeleport, List<Interval> movingFast, List<Sample> samples, int cores,
 				boolean phaseTiming, boolean deferModeWaits) {
 			this(gc, saves, afterTeleport, movingFast, samples, cores, phaseTiming, deferModeWaits, List.of());
@@ -251,6 +261,13 @@ public final class Attributor {
 			if (f.overlaps(from, to)) {
 				tags.add(MOVING_FAST);
 				notes.add(MOVING_FAST + ":" + CONTEXT);
+				break;
+			}
+		}
+		for (Interval c : ctx.settingsChanged()) {
+			if (to > c.start() && to <= c.end()) {
+				tags.add(SETTINGS_CHANGED);
+				notes.add(SETTINGS_CHANGED + ":" + CONTEXT);
 				break;
 			}
 		}

@@ -557,12 +557,17 @@ class UndoPlannerTest {
 		assertTrue(only(all(), Action.SKIP).reason().contains("already exists"), only(all(), Action.SKIP).reason());
 	}
 
+	// v0.5 RW-14 (docs/v0.5/SPEC.md 4c): a disable without a resultFile was no rename of RigTune's, so the <file>.disabled
+	// there isn't RigTune's to re-enable (0.4 guessed that name).
 	@Test
-	void aDisableWithoutAResultFileIsReEnabledFromTheDefaultName() {
+	void aDisableWithoutAResultFileIsNotReEnabledFromAGuessedName() {
 		state.jar("indium.jar.disabled", "indium");
 		entry("e1", disabled("indium", "indium.jar", null, null));
 
-		assertEquals(List.of("enable indium.jar.disabled -> indium.jar (indium)"), all().script().fileOps().stream().map(UndoPlannerTest::describe).toList());
+		Result result = all();
+
+		assertEquals(List.of(), result.script().fileOps());
+		assertEquals("RigTune didn't disable indium.jar (it was already gone)", only(result, Action.SKIP).reason());
 	}
 
 	@Test

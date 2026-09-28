@@ -1,42 +1,24 @@
 package io.github.chaotix345.rigtune.core;
 
 import io.github.chaotix345.rigtune.core.history.FirstRun;
-import io.github.chaotix345.rigtune.core.launcher.InstanceEvidence;
-import io.github.chaotix345.rigtune.core.launcher.Launcher;
-import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
-import io.github.chaotix345.rigtune.core.launcher.LauncherModText;
 import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.profile.ServerProfilesView;
 import io.github.chaotix345.rigtune.core.stutter.FixOffer;
 import io.github.chaotix345.rigtune.core.tryit.TryItView;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.5/PLAN.md contracts item 8: the type stubs answer 0.4's behaviour until their owners fill them in.
 class V05StubsTest {
+	// The policy table itself is WS-L1's (ModFilesPolicyTest, LauncherModTextTest); the three values stay.
 	@Test
-	void theModFilesPolicyStubIsRigTuneEverywhere() {
+	void theModFilesPolicyValues() {
 		assertEquals(List.of(ModFilesPolicy.RIGTUNE, ModFilesPolicy.LAUNCHER, ModFilesPolicy.PENDING), Arrays.asList(ModFilesPolicy.values()));
-		List<LauncherInfo> launchers = new ArrayList<>();
-		launchers.add(null);
-		Arrays.stream(Launcher.values()).map(LauncherInfo::of).forEach(launchers::add);
-		for (LauncherInfo launcher : launchers) {
-			for (InstanceEvidence evidence : List.of(InstanceEvidence.NONE, new InstanceEvidence(true))) {
-				for (boolean optIn : new boolean[]{false, true}) {
-					assertEquals(ModFilesPolicy.RIGTUNE, ModFilesPolicy.of(launcher, evidence, optIn), launcher + " " + evidence + " " + optIn);
-					for (ModFilesPolicy policy : ModFilesPolicy.values()) {
-						assertNull(LauncherModText.guideLine(policy, launcher, optIn));
-					}
-				}
-			}
-		}
 	}
 
 	@Test

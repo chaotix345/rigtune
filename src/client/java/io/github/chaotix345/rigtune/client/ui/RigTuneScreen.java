@@ -3,7 +3,10 @@ package io.github.chaotix345.rigtune.client.ui;
 import com.mojang.blaze3d.platform.InputConstants;
 import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.probe.SettingsBridge;
+import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.launcher.LauncherInfo;
+import io.github.chaotix345.rigtune.core.launcher.LauncherModText;
+import io.github.chaotix345.rigtune.core.launcher.ModFilesPolicy;
 import io.github.chaotix345.rigtune.core.model.Action;
 import io.github.chaotix345.rigtune.core.model.Category;
 import io.github.chaotix345.rigtune.core.model.DisplayInfo;
@@ -309,6 +312,11 @@ public class RigTuneScreen extends Screen {
 			lines.add(Component.translatable("rigtune.screen.header.network_off").withStyle(ChatFormatting.GOLD));
 		} else if (!settings.modrinth) {
 			lines.add(Component.translatable("rigtune.screen.header.modrinth_off").withStyle(ChatFormatting.GOLD));
+		} else if (controller.modFilesOptedIn()) {
+			// v0.5 (docs/v0.5/SPEC.md 4e, WS-L1): the per-instance opt-in, where a launcher keeps the mods (review M2), shares
+			// this one warning line, after the two above.
+			lines.add(Texts.component(Objects.requireNonNull(LauncherModText.guideLine(ModFilesPolicy.RIGTUNE, shownLauncher, true)))
+					.withStyle(ChatFormatting.GOLD));
 		}
 		return lines;
 	}
@@ -566,8 +574,14 @@ public class RigTuneScreen extends Screen {
 		if (chosen.isEmpty()) {
 			return;
 		}
-		status = controller.apply(chosen);
+		// v0.5 (docs/v0.5/SPEC.md 8, C02): a new player's first press of this button shows what that Apply's entry holds.
+		boolean first = controller.firstApplyPending();
+		String entryId = ChangeRecorder.newEntryId();
+		status = controller.apply(chosen, entryId);
 		updateApplyButton();
+		if (first) {
+			minecraft.gui.setScreen(new FirstApplyScreen(this, controller, entryId, status));
+		}
 	}
 
 	private void updateApplyButton() {

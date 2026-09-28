@@ -38,6 +38,7 @@ public class BenchmarkHistoryScreen extends Screen {
 	private int linesTop;
 	private int chartTop;
 	private boolean chartDrawn;
+	private @Nullable Component chartNarration;
 
 	private record Row(FormattedCharSequence text, int color) {
 	}
@@ -81,7 +82,8 @@ public class BenchmarkHistoryScreen extends Screen {
 		}
 		chartTop = linesTop + rows.size() * LINE + 4;
 		// review-8 UV-3: each line (the note, the trend or regression, its changes, the last benchmark) is a Tab stop the
-		// narrator reads, over the rows it wraps to. The chart itself stays painted (v0.5).
+		// narrator reads, over the rows it wraps to. The chart stays painted, with its textual equivalent as a stop over it
+		// (docs/v0.5/SPEC.md 2A, L3).
 		int row = 0;
 		for (TrendText.Line line : lines) {
 			Component text = Texts.component(line.text());
@@ -90,6 +92,10 @@ public class BenchmarkHistoryScreen extends Screen {
 				addRenderableWidget(RowFocus.standalone(text, 8, linesTop + row * LINE - 1, Math.max(1, width - 16), count * LINE));
 			}
 			row += count;
+		}
+		chartNarration = chartNarration();
+		if (chartNarration != null) {
+			addRenderableWidget(RowFocus.standalone(chartNarration, (width - chartWidth()) / 2, chartTop - 1, chartWidth(), height - 34 - chartTop + 1));
 		}
 		int buttonWidth = Math.min(200, width - 16);
 		addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, b -> onClose()).bounds((width - buttonWidth) / 2, height - 28, buttonWidth, 20).build());
@@ -143,6 +149,31 @@ public class BenchmarkHistoryScreen extends Screen {
 		return view;
 	}
 
+	private int chartWidth() {
+		return Math.min(Math.min(width - 16, 460), BenchmarkTrend.MAX_RUNS * 24);
+	}
+
+	private Component chartTitle(BenchmarkRecord latest) {
+		return Component.translatable("rigtune.benchmark.chart.title", Texts.component(TrendText.scene(latest.scene())));
+	}
+
+	// L3: the chart's title, its runs' numbers and "your usual", and the trend line; null when no chart is drawn.
+	private @Nullable Component chartNarration() {
+		BenchmarkRecord latest = view.latest();
+		if (latest == null || !TrendChart.fits(view.points(), chartTop, chartWidth(), height - 34)) {
+			return null;
+		}
+		Text summary = TrendText.chartSummary(view.points(), view.median(), ZoneId.systemDefault());
+		List<TrendText.Line> trend = TrendText.assessment(view, ZoneId.systemDefault(), BenchmarkTrendLines::describe, 0);
+		return RowFocus.join(chartTitle(latest), summary == null ? null : Texts.component(summary),
+				trend.isEmpty() ? null : Texts.component(trend.getFirst().text()));
+	}
+
+	/** For the game tests (docs/v0.5/SPEC.md AC2A.2): what the chart's Tab stop narrates, or null. */
+	public @Nullable Component chartSummary() {
+		return chartNarration;
+	}
+
 	/** For the game tests: the chart fitted and was drawn in the last frame. */
 	public boolean chartDrawn() {
 		return chartDrawn;
@@ -157,13 +188,11 @@ public class BenchmarkHistoryScreen extends Screen {
 			graphics.centeredText(font, row.text(), width / 2, y, Palette.of(row.color()));
 			y += LINE;
 		}
-		int area = Math.min(width - 16, 460);
-		int chartWidth = Math.min(area, BenchmarkTrend.MAX_RUNS * 24);
+		int chartWidth = chartWidth();
 		BenchmarkRecord latest = view.latest();
 		if (latest != null) {
-			Component scene = Texts.component(TrendText.scene(latest.scene()));
-			chartDrawn = TrendChart.draw(graphics, font, Component.translatable("rigtune.benchmark.chart.title", scene), view.points(), view.median(), null,
-					(width - chartWidth) / 2, chartTop, chartWidth, height - 34);
+			chartDrawn = TrendChart.draw(graphics, font, chartTitle(latest), view.points(), view.median(), null, (width - chartWidth) / 2, chartTop, chartWidth,
+					height - 34);
 		}
 	}
 

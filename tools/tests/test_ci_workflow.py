@@ -75,6 +75,34 @@ def gradle_commands(run):
     return commands
 
 
+def jdk_retry_problems(jobs):
+    """Where a workflow breaks the JDK download rule: continue-on-error only on a setup-java step with an id, followed by
+    a wait and a retry that run only when it failed (and can't be ignored); every setup-java step is one of the two."""
+    problems = []
+    for name, job in jobs.items():
+        steps = job["steps"]
+        retries = set()
+        for i, s in enumerate(steps):
+            java = s.get("uses", "").startswith("actions/setup-java@")
+            if "continue-on-error" not in s:
+                if java and i not in retries:
+                    problems.append(f"{name} / {s.get('name')}: a JDK download with no retry")
+                continue
+            ident = s.get("id")
+            if not java or not ident or s.get("continue-on-error") != "true":
+                problems.append(f"{name} / {s.get('name')}: continue-on-error outside the JDK download's first try")
+                continue
+            later = steps[i + 1:i + 3]
+            conditional = [re.fullmatch(r"steps\.(\w+)\.outcome == 'failure'?", r.get("if", "")) for r in later]
+            if (len(later) != 2 or not all(m and m.group(1) == ident for m in conditional)
+                    or later[0].get("run", "").strip() != "sleep 30"
+                    or not later[1].get("uses", "").startswith("actions/setup-java@") or "continue-on-error" in later[1]):
+                problems.append(f"{name} / {s.get('name')}: no wait and retry after the first try")
+                continue
+            retries.add(i + 2)
+    return problems
+
+
 class BuildWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -137,8 +165,9 @@ class BuildWorkflowTests(unittest.TestCase):
         self.assertIn("new MulticastSocket(4445)", source)
         self.assertIn("{1, 1, 1, 1}), 443", source, "and something off the machine stays unreachable")
 
+    # No step ignores its failure; the JDK download's first try is the one exception (JdkRetryTests).
     def test_no_step_ignores_its_failure(self):
-        self.assertNotIn("continue-on-error", self.text)
+        self.assertEqual([], jdk_retry_problems(self.jobs))
 
     # SPEC 1e / 1g: the game-test step times out at 15 min or more, inside a longer job timeout, and dumps threads first.
     def test_game_test_timeouts_and_thread_dump(self):
@@ -214,6 +243,30 @@ class StreakWorkflowsTests(unittest.TestCase):
                     continue
                 for command in gradle_commands(s.get("run", "")):
                     self.assertIn("--offline", command, f"e2e.yml {name} / {s.get('name')}: {command}")
+
+
+class JdkRetryTests(unittest.TestCase):
+    FILES = StreakWorkflowsTests.FILES
+
+    def test_every_jdk_download_has_one_retry(self):
+        for file in self.FILES:
+            self.assertEqual([], jdk_retry_problems(parse_jobs(file.read_text(encoding="utf-8"))), file.name)
+
+    def test_the_rule_catches_a_bare_download_an_ignored_step_and_a_missing_retry(self):
+        bare = {"j": {"keys": {}, "steps": [{"uses": "actions/setup-java@v6"}]}}
+        ignored = {"j": {"keys": {}, "steps": [{"name": "Tests", "run": "./gradlew test", "continue-on-error": "true"}]}}
+        no_retry = {"j": {"keys": {}, "steps": [{"uses": "actions/setup-java@v6", "id": "jdk", "continue-on-error": "true"}]}}
+        unguarded = {"j": {"keys": {}, "steps": [
+            {"uses": "actions/setup-java@v6", "id": "jdk", "continue-on-error": "true"},
+            {"if": "steps.jdk.outcome == 'failure", "run": "sleep 30"},
+            {"uses": "actions/setup-java@v6", "if": "steps.jdk.outcome == 'failure", "continue-on-error": "true"}]}}
+        good = {"j": {"keys": {}, "steps": [
+            {"uses": "actions/setup-java@v6", "id": "jdk", "continue-on-error": "true"},
+            {"if": "steps.jdk.outcome == 'failure", "run": "sleep 30"},
+            {"uses": "actions/setup-java@v6", "if": "steps.jdk.outcome == 'failure"}]}}
+        for jobs in (bare, ignored, no_retry, unguarded):
+            self.assertNotEqual([], jdk_retry_problems(jobs), jobs)
+        self.assertEqual([], jdk_retry_problems(good))
 
 
 class CheckFakeModrinthTests(unittest.TestCase):

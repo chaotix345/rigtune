@@ -13,8 +13,9 @@ import java.nio.file.Path;
 // canned screens, the game's own controller, the config dir, and X12's sizes with the resize helper.
 record V05TestContext(ClientGameTestContext context, StubController stub, RigTuneController real, Path configDir) {
 	// X12: {width, height, GUI scale} at which every new screen must fit, and the extra size for a list that must scroll.
+	// WS-L1 / X12 (approved frozen-file exception): the game caps 854x480 at GUI scale 2, so the scale-3 size is 1280x720.
 	static final int[][] SIZES = {{1280, 720, 2}, {640, 480, 2}, {854, 480, 2}};
-	static final int[] SCROLLING = {854, 480, 3};
+	static final int[] SCROLLING = {1280, 720, 3};
 
 	static V05TestContext of(ClientGameTestContext context) {
 		return new V05TestContext(context, new StubController(RigTuneClient::hardware), RigTuneClient.controller(),

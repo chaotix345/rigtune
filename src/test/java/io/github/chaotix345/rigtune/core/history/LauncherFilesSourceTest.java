@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -24,6 +25,9 @@ class LauncherFilesSourceTest {
 	static final List<String> LAUNCHER_FILES = List.of("app.db", ".sqlite", "sqlite3", "instance.cfg", "mmc-pack.json", "minecraftinstance.json",
 			"instance.json", "launcher_profiles.json", "launcher_settings.json", "launcher_accounts", ".pw.toml", "pack.toml", "modrinthapp",
 			"gdlauncher_carbon");
+
+	// Line and block comments (a "//" inside a string literal is rare enough here not to matter).
+	static final Pattern COMMENTS = Pattern.compile("//[^\n]*|/\\*.*?\\*/", Pattern.DOTALL);
 
 	static final Map<String, Set<String>> ALLOWED = Map.of(
 			"src/main/java/io/github/chaotix345/rigtune/core/launcher/InstanceFiles.java", Set.of("instance.cfg", "mmc-pack.json", "minecraftinstance.json",
@@ -39,7 +43,8 @@ class LauncherFilesSourceTest {
 			try (Stream<Path> files = Files.walk(root.resolve(dir))) {
 				for (Path file : files.filter(f -> f.toString().endsWith(".java")).toList()) {
 					String relative = root.relativize(file).toString().replace('\\', '/');
-					String source = Files.readString(file, StandardCharsets.UTF_8).toLowerCase(Locale.ROOT);
+					// The code only: a comment may name a launcher's file to say what the code does or doesn't read.
+					String source = COMMENTS.matcher(Files.readString(file, StandardCharsets.UTF_8)).replaceAll(" ").toLowerCase(Locale.ROOT);
 					for (String name : LAUNCHER_FILES) {
 						if (source.contains(name) && !ALLOWED.getOrDefault(relative, Set.of()).contains(name)) {
 							found.add(relative + ": " + name);

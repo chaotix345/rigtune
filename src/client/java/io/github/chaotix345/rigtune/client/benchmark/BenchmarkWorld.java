@@ -94,6 +94,11 @@ public final class BenchmarkWorld {
 		ticks = 0;
 	}
 
+	/** docs/v0.5/SPEC.md RW-8: the last open() created the save (a run in it also measures the world's generation). */
+	public static boolean createdThisOpen() {
+		return created;
+	}
+
 	/** Where the camera is held; null until the world is set up. */
 	public static @Nullable Vec3 cameraPosition() {
 		return target;

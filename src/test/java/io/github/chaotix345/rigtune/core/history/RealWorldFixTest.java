@@ -25,18 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // docs/v0.5/SPEC.md 4f, RW-1 (docs/research/v0.5/real-world-2026-09-27.md §2): the user's 0.1.0 -> 0.4.0 instance on
 // 2026-09-27, where the Modrinth App had installed DH 3.3.2 under the exact name RigTune 0.1.0 had staged, and the 0.4.0
 // helper called that jar RigTune's ("is already enabled"). An enable that only looks done counts as RigTune's only when
-// RigTune's own records prove the rename; otherwise the group is dropped as installed another way.
+// RigTune's own records prove the rename; otherwise the group is dropped as installed another way. 0.1.0's pending.json
+// in that instance is WS-L1's templated fixture (src/test/resources/realworld/, RealWorldFixtures.seededPending).
 class RealWorldFixTest {
-	static final String DH = "DistantHorizons-3.3.2-26.2-fabric-neoforge.jar";
+	static final String DH = RealWorldFixtures.DH;
 	static final String GROUP = "7b8043de-f5c3-4881-8309-27265240f39e";
 	static final String ENABLE_ID = "db7f487d-6371-43c5-944e-c053428ad70d";
-
-	// 0.1.0's pending.json in that instance (the op ids of docs/smoke/self-update/final-v010-seeded-to-040's seed).
-	static final String PENDING = """
-			{"createdAt":"2026-09-24T23:08:50.954378200Z","gamePid":12228,"modsDir":"<mods>","configDir":"<config>","ops":[
-			{"type":"DISABLE_FILE","path":"<mods>/fabric-26.2.jar","id":"041919d9-18c9-4b04-89c4-f15e4e4a80c5","group":"7b8043de-f5c3-4881-8309-27265240f39e","attempts":1},
-			{"type":"ENABLE_FILE","from":"<mods>/DistantHorizons-3.3.2-26.2-fabric-neoforge.jar.rigtune-pending","to":"<mods>/DistantHorizons-3.3.2-26.2-fabric-neoforge.jar","id":"db7f487d-6371-43c5-944e-c053428ad70d","group":"7b8043de-f5c3-4881-8309-27265240f39e","modId":"distanthorizons","attempts":1}]}
-			""";
 
 	@TempDir
 	Path dir;
@@ -97,7 +91,7 @@ class RealWorldFixTest {
 	@Test
 	void theRealCaseIsDroppedAsInstalledAnotherWay() throws IOException {
 		TestJars.modJar(mods().resolve(DH), "distanthorizons", "Distant Horizons");
-		Path pending = writePending(PENDING);
+		Path pending = RealWorldFixtures.seededPending(dir);
 		Journal journal = legacyJournal(pending);
 		List<String> before = modsListing();
 
@@ -117,7 +111,7 @@ class RealWorldFixTest {
 	void withTheDownloadStillThereTheGroupIsDroppedAsBefore() throws IOException {
 		TestJars.modJar(mods().resolve(DH), "distanthorizons", "Distant Horizons");
 		TestJars.modJar(mods().resolve(DH + PendingActions.PENDING_SUFFIX), "distanthorizons", "Distant Horizons");
-		Path pending = writePending(PENDING);
+		Path pending = RealWorldFixtures.seededPending(dir);
 
 		ApplyResult result = new ApplyExecutor(2, 1).run(PendingActions.load(pending), pending);
 
@@ -151,7 +145,7 @@ class RealWorldFixTest {
 	@Test
 	void aRecordedRenameStaysDone() throws IOException {
 		TestJars.modJar(mods().resolve(DH), "distanthorizons", "Distant Horizons");
-		Path pending = writePending(PENDING);
+		Path pending = RealWorldFixtures.seededPending(dir);
 		Path record = config().resolve("rigtune").resolve("unfinished-groups.json");
 		String modsPath = mods().toString().replace('\\', '/');
 		Files.writeString(record, "{\"groups\":[{\"group\":\"" + GROUP + "\",\"renames\":[{\"op\":\"" + ENABLE_ID + "\",\"from\":\"" + modsPath + "/" + DH
@@ -166,7 +160,7 @@ class RealWorldFixTest {
 	// The redo 0.4 must keep: the last run did the renames itself (OK in last-apply.json) and died before pending.json.
 	@Test
 	void aRedoOfTheLastRunsOwnRenamesStaysDone() throws IOException {
-		Path pending = writePending(PENDING);
+		Path pending = RealWorldFixtures.seededPending(dir);
 		TestJars.modJar(mods().resolve("fabric-26.2.jar"), "distanthorizons");
 		TestJars.modJar(mods().resolve(DH + PendingActions.PENDING_SUFFIX), "distanthorizons");
 		String saved = Files.readString(pending);

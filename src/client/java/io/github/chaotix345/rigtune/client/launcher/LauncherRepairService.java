@@ -1,10 +1,8 @@
 package io.github.chaotix345.rigtune.client.launcher;
 
 import io.github.chaotix345.rigtune.RigTune;
-import io.github.chaotix345.rigtune.client.ClientSettings;
 import io.github.chaotix345.rigtune.client.HelperToasts;
 import io.github.chaotix345.rigtune.client.RealController;
-import io.github.chaotix345.rigtune.client.SettingsSaver;
 import io.github.chaotix345.rigtune.client.probe.Probes;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
 import io.github.chaotix345.rigtune.client.undo.ModsFolder;
@@ -126,13 +124,10 @@ public final class LauncherRepairService {
 		policyOverride = policy;
 	}
 
-	// "Let RigTune apply them": what the settings row's "Let RigTune change them anyway" does (settings.json through
+	// "Let RigTune apply them": the settings row's "Let RigTune change them anyway" (WS-L1's setOptIn: settings.json through
 	// SettingsSaver, then a rebuild under the new policy).
 	private static void optIn(RealController controller) {
-		ClientSettings settings = controller.settings();
-		settings.modFilesByRigTune = true;
-		SettingsSaver.shared().save(settings, controller.configDir());
-		controller.rebuild();
+		controller.v05().modFiles().setOptIn(true);
 	}
 
 	private static void show(List<HelperToasts.Toast> toasts) {
