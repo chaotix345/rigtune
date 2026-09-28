@@ -58,10 +58,14 @@ class E2eWorkflowTest(unittest.TestCase):
         self.assertIn('python3 tools/e2e/e2e_matrix.py --tier "$TIER"', self.jobs["matrix"])
 
     def test_no_automatic_retry_of_a_scenario(self):
-        self.assertNotRegex(self.workflow.lower(), r"continue-on-error|max[_-]attempts|nick-fields/retry")
+        self.assertNotRegex(self.workflow.lower(), r"max[_-]attempts|nick-fields/retry")
         self.assertEqual(1, self.workflow.count("tools/e2e/self_update_e2e.py"), "the harness runs once per job")
         for job in self.jobs.values():
             for step in steps(job):
+                # The one failure a job carries on after: the JDK download's first try, which its retry step repeats.
+                if "continue-on-error" in step:
+                    self.assertIn("name: Set up the JDK (network)", step.split("\n", 1)[0])
+                    self.assertIn("uses: actions/setup-java@", step)
                 if "retry.sh" in step:
                     self.assertIn("(network)", step.split("\n", 1)[0], "only a download step retries: " + step[:80])
         self.assertIn("fail-fast: false", self.jobs["e2e"])
@@ -88,7 +92,7 @@ class E2eWorkflowTest(unittest.TestCase):
         e2e = self.jobs["e2e"]
         cache = next(s for s in steps(e2e) if "actions/cache" in s)
         self.assertIn("key: e2e-old-${{ matrix.asset }}-${{ matrix.sha256 }}", cache)
-        network = next(s for s in steps(e2e) if "(network)" in s.split("\n", 1)[0])
+        network = next(s for s in steps(e2e) if "name: Resolve dependencies (network)" in s.split("\n", 1)[0])
         self.assertIn('tools/ci/retry.sh ./gradlew --no-daemon ":$MC:prefetchDependencies" ":$MC:downloadAssets"', network)
         self.assertRegex(network, r'\[ -s "\$RUNNER_TEMP/old/\$OLD_ASSET" \] \\\n\s+\|\| tools/ci/retry\.sh gh release download')
         self.assertRegex(network, r'echo "\$OLD_SHA256  \$RUNNER_TEMP/old/\$OLD_ASSET" \| sha256sum -c -')
@@ -100,6 +104,20 @@ class E2eWorkflowTest(unittest.TestCase):
         self.assertIn("inputs.jars-artifact", e2e)
         self.assertNotRegex(e2e, r"gradlew[^\n]*\s(build|assemble|jar)\b")
         self.assertIn("if: ${{ !inputs.jars-artifact }}", self.jobs["jars"])
+
+    # AC3f.1: the release tier's stutter-script leg runs the caller's jar (never a rebuilt one) with no network.
+    def test_the_stutter_script_leg(self):
+        job = self.jobs["stutter-script"]
+        self.assertIn("inputs.tier == 'release'", job)
+        self.assertIn("mc: ${{ fromJSON(needs.matrix.outputs.nodes) }}", job)
+        self.assertIn("python3 tools/e2e/e2e_matrix.py --nodes", self.jobs["matrix"])
+        self.assertIn("inputs.jars-artifact", job)
+        self.assertNotRegex(job, r"gradlew[^\n]*\s(build|assemble|jar)\b")
+        run = " ".join(next(s for s in steps(job) if "stutter_run.py" in s).split())
+        self.assertRegex(run, r"tools/ci/offline\.sh --timeout \d+m python3 tools/e2e/stutter_run\.py ")
+        self.assertIn('--new-jar "${found[0]}"', run)
+        self.assertIn("--gradle-arg=--offline", run)
+        self.assertIn("if: always()", next(s for s in steps(job) if "upload-artifact" in s))
 
     def test_the_evidence_is_uploaded_on_success_and_failure(self):
         upload = next(s for s in steps(self.jobs["e2e"]) if "upload-artifact" in s)

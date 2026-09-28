@@ -96,6 +96,15 @@ class MatrixTest(unittest.TestCase):
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             e2e_matrix.main(["--tier", "nightly"])
 
+    def test_nodes_alone_for_the_per_node_legs(self):
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            e2e_matrix.main(["--nodes", "--root", str(REPO)])
+        self.assertEqual(e2e_matrix.gametest_matrix.nodes(REPO), json.loads(out.getvalue()))
+        self.assertIn("26.2", json.loads(out.getvalue()))
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            e2e_matrix.main(["--nodes", "--tier", "push"])
+
 
 if __name__ == "__main__":
     unittest.main()

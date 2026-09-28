@@ -7,6 +7,7 @@ row (a superset of push). `args` is shell-quoted for the harness (tools/e2e/self
 --name, --mc, --new-jar, --work, --evidence, --lock none and, for a row with an old jar, --old-jar.
 
     python tools/e2e/e2e_matrix.py --tier push|release [--root <repo>]
+    python tools/e2e/e2e_matrix.py --nodes   ->  ["26.2","26.3"]
     ->  {"include": [{"id": "upgrade-from-0.4.0", "mc": "26.2", "old": "0.4.0+mc26.2", "tag": "v0.4.0",
                       "asset": "rigtune-0.4.0+mc26.2.jar", "sha256": "…", "args": "--expect-history auto"}, ...]}
 """
@@ -82,9 +83,15 @@ def rows(root, tier):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--tier", required=True, choices=TIERS)
+    what = parser.add_mutually_exclusive_group(required=True)
+    what.add_argument("--tier", choices=TIERS)
+    # The nodes alone, for the release tier's one-job-per-node legs (e2e.yml's stutter script).
+    what.add_argument("--nodes", action="store_true")
     parser.add_argument("--root", default=str(HERE.parent.parent), help="repository root")
     args = parser.parse_args(argv)
+    if args.nodes:
+        print(json.dumps(gametest_matrix.nodes(args.root), separators=(",", ":")))
+        return
     print(json.dumps({"include": rows(args.root, args.tier)}, separators=(",", ":")))
 
 

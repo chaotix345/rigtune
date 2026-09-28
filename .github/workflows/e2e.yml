@@ -35,6 +35,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      nodes: ${{ steps.matrix.outputs.nodes }}
     steps:
       - uses: actions/checkout@v7
       - id: matrix
@@ -46,6 +47,7 @@ jobs:
           matrix=$(python3 tools/e2e/e2e_matrix.py --tier "$TIER")
           echo "$matrix"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "nodes=$(python3 tools/e2e/e2e_matrix.py --nodes)" >> "$GITHUB_OUTPUT"
 
   # Only a dispatch builds jars; a caller passes the ones its run built (and, in release.yml, staged for publishing).
   jars:
@@ -54,7 +56,19 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - name: Set up the JDK (network)
+        id: jdk
+        uses: actions/setup-java@v6
+        continue-on-error: true
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
+      - name: Wait before the JDK retry (network)
+        if: steps.jdk.outcome == 'failure'
+        run: sleep 30
+      - name: Set up the JDK, retry (network)
+        if: steps.jdk.outcome == 'failure'
+        uses: actions/setup-java@v6
         with:
           distribution: microsoft
           java-version: '25.0.3'
@@ -94,7 +108,19 @@ jobs:
       HARNESS_ARGS: ${{ matrix.args }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
+      - name: Set up the JDK (network)
+        id: jdk
+        uses: actions/setup-java@v6
+        continue-on-error: true
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
+      - name: Wait before the JDK retry (network)
+        if: steps.jdk.outcome == 'failure'
+        run: sleep 30
+      - name: Set up the JDK, retry (network)
+        if: steps.jdk.outcome == 'failure'
+        uses: actions/setup-java@v6
         with:
           distribution: microsoft
           java-version: '25.0.3'
@@ -155,4 +181,68 @@ jobs:
             ${{ runner.temp }}/e2e/*/gradle-*.log
             ${{ runner.temp }}/e2e/*/instance*/logs/
             ${{ runner.temp }}/e2e/*/instance*/crash-reports/
+          if-no-files-found: ignore
+
+  # AC3f.1, release tier only: the Stutter Doctor's dev script (tools/e2e/stutter_run.py: monitor on, benchmark world,
+  # teleport to never-generated terrain, save-all, forced GCs every 5 s) once per node in a production client on the
+  # caller's jar, in tools/ci/offline.sh's namespace (it needs no network). Its evaluation is qualitative (tags, GC claims
+  # against -Xlog:gc pauses, the remainder shown); llvmpipe's milliseconds aren't judged.
+  stutter-script:
+    name: stutter script (${{ matrix.mc }})
+    needs: [matrix, jars]
+    if: ${{ !cancelled() && inputs.tier == 'release' && needs.matrix.result == 'success' && (needs.jars.result == 'success' || needs.jars.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        mc: ${{ fromJSON(needs.matrix.outputs.nodes) }}
+    env:
+      SDL_OPENGL_FORCE_SRGB_FRAMEBUFFER: skip
+      MC: ${{ matrix.mc }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up the JDK (network)
+        id: jdk
+        uses: actions/setup-java@v6
+        continue-on-error: true
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
+      - name: Wait before the JDK retry (network)
+        if: steps.jdk.outcome == 'failure'
+        run: sleep 30
+      - name: Set up the JDK, retry (network)
+        if: steps.jdk.outcome == 'failure'
+        uses: actions/setup-java@v6
+        with:
+          distribution: microsoft
+          java-version: '25.0.3'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/feat/v0.5.0' }}
+      - name: The new jars (the calling run's, never rebuilt)
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ inputs.jars-artifact || 'e2e-new-jars' }}
+          path: ${{ runner.temp }}/new
+      - name: Resolve dependencies (network)
+        run: tools/ci/retry.sh ./gradlew --no-daemon ":$MC:prefetchDependencies" ":$MC:downloadAssets"
+      - name: The dev script in a production client
+        timeout-minutes: 16
+        run: |
+          set -eu
+          mapfile -t found < <(find "$RUNNER_TEMP/new" -name "rigtune-*+mc$MC.jar" ! -name "*-sources.jar")
+          if [ "${#found[@]}" -ne 1 ]; then
+            echo "::error::expected exactly one rigtune-*+mc$MC.jar in the jars artifact, found: ${found[*]:-none}"
+            exit 1
+          fi
+          tools/ci/offline.sh --timeout 14m python3 tools/e2e/stutter_run.py --mc "$MC" --new-jar "${found[0]}" \
+            --work "$RUNNER_TEMP/stutter" --evidence "$RUNNER_TEMP/evidence/stutter-$MC" --gradle-arg=--offline --gradle-arg=--no-daemon
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: stutter-script-${{ matrix.mc }}
+          path: ${{ runner.temp }}/evidence/
           if-no-files-found: ignore
