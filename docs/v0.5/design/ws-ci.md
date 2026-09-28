@@ -284,3 +284,38 @@ Loom 1.17.21's command line and the Actions expressions checked fine):
   resolving thread is recorded there by WS-K; FootprintGameTest (ws-ci, then WS-K) is ready for its assertion.
 - Branches for you to delete (I delete none): `scratch/ws-ci-proof-slowdown`, `scratch/ws-ci-proof-hang`,
   `scratch/ws-ci-proof-helper`, and once this is merged `research/v05-ci`; worktrees `C:/Dev/Worktrees/rigtune-r-ci` and `C:/Dev/Worktrees/rigtune-ci-proofs`.
+
+## The post-Wave-B footprint checkpoint (SPEC 1h; r-ci follow-up, 2026-09-28)
+
+Branch `fix/v05-footprint-checkpoint`. The formula re-applied to the ten per-call ns budgets (the six v0.5 keys and X4.4's
+four listener keys, added to FootprintGameTest: `settingsCheck…`, `tryItTick…`, `serverProfileTick…`,
+`launcherLeftoverTick…`, each with a strict 0-byte key). Limits: frameHookNsPerCallOff 10 (was 20; the 10 ns floor for keys observed under 10 ns), frameHookNsPerCallOn 164
+(157), OnPhases 400 (the ceiling), tickHookNsPerCall 27 (276), World 62 (393), On 201 (653), settingsCheck 185,
+tryItTick 19, serverProfileTick 32, launcherLeftoverTick 32. Nothing else changed. Data, run ids, the split/pre-split
+comparison and the listener inventory: docs/v0.5/verification/footprint/README.md "The post-Wave-B checkpoint".
+
+## Review-11 fixes (r-ci)
+
+- CI-1 (M) FIXED: `tools/ci_streak.py` treats e2e.yml's design-skipped jobs (`e2e / jars`, `e2e / stutter script`,
+  `e2e / battery OSHI leg`) as neutral when skipped and not required; any other skipped job still breaks; with the split
+  each leg needs all its parts. Test on run 36380625735's real job list (`test_a_post_e6_run_with_its_design_skipped_e2e_jobs_counts`,
+  red first), plus `test_only_the_design_skipped_e2e_jobs_may_be_skipped` and `test_a_split_leg_needs_every_part`. On
+  feat/v0.5.0 the split runs of 111cb2be and e4acccfd now count.
+- PERF-3 (M) FIXED: a returning player's startup, in the split part that runs FootprintGameTest: a seeded config/rigtune
+  (tools/gametest/returning_seed.py, 0.4's and 0.5's written sets, 50+ history entries, nothing staged; build.gradle's
+  `-PgametestSeedConfig`), one more JVM with only FootprintGameTest in its returning mode, the four startup keys gated by
+  the same budgets. Chosen over the unit-level read counter: it measures the real startup on every leg and catches work
+  added anywhere, including static startup code outside the lazy holder (the finding's case b). The failing-first evidence
+  is the finding's own: PERF-1/PERF-2 passed green with the empty folder; the returning run is what now measures that path
+  (footprint README "A returning player's startup").
+- PERF-6 FIXED: the C16 toast-wait and WS-L2 leftover listeners have their own keys (above).
+- PERF-7 UNVERIFIED: whether Distant Horizons' `graphics().renderingEnabled()` allocates. The repository has only DH's API
+  jar (interfaces, compileOnly); the implementation that would allocate isn't in it, and CI runs without DH (X9).
+- PERF-8 measured locally, not changed (HardwareProbe is WS-W's): `PerfCounters.detect` on this Windows 11 PC through
+  `WindowsRegistry`, in a fresh JVM (a JUnit harness in a build slot, not committed): 92.7 ms for the first call (JNA's
+  Advapi32 binding and classes loaded then), 0.43 ms median and 0.75 ms max for the next 20. In the game OSHI has usually
+  bound Advapi32 by then on the same worker, so the cost is nearer the warm figure; "microseconds" in HardwareProbe's comment
+  is off by about 100x. Result on this PC: counters off, PerfOS unusual.
+- The four 26.2 OpenGL time-outs of 2026-09-28 (36378908079, 36379964103, 36380027246, 36382354908) were unsplit runs out of
+  time in A11yGameTest, not a GL hang (verification/ci/README.md "Flakes found after the first streak"; r-ci's first
+  reading of the dump as a GL spin was wrong).

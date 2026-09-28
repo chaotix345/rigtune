@@ -10,9 +10,12 @@ import io.github.chaotix345.rigtune.client.FootprintStats;
 import io.github.chaotix345.rigtune.client.RealController;
 import io.github.chaotix345.rigtune.client.RigTuneClient;
 import io.github.chaotix345.rigtune.client.footprint.StartupTimes;
+import io.github.chaotix345.rigtune.client.launcher.LauncherRepairService;
 import io.github.chaotix345.rigtune.client.probe.PowerWatcher;
+import io.github.chaotix345.rigtune.client.server.ServerProfileService;
 import io.github.chaotix345.rigtune.client.stutter.StutterHooks;
 import io.github.chaotix345.rigtune.client.stutter.StutterMonitor;
+import io.github.chaotix345.rigtune.client.tryit.TryItService;
 import io.github.chaotix345.rigtune.client.ui.RigTuneController;
 import io.github.chaotix345.rigtune.client.ui.RigTuneScreen;
 import io.github.chaotix345.rigtune.client.ui.ToolsScreen;
@@ -122,6 +125,10 @@ public class FootprintGameTest implements FabricClientGameTest {
 		context.waitForScreen(TitleScreen.class);
 		context.waitFor(mc -> RigTuneClient.hardware() != null && RigTuneClient.controller().report() != null, 1200);
 		context.waitFor(mc -> FootprintStats.snapshot().windowCpuNs() != null, 400);
+		if (Boolean.getBoolean(RETURNING)) {
+			returningPlayer();
+			return;
+		}
 		RigTuneController controller = RigTuneClient.controller();
 		check(controller instanceof RealController, "the real controller is back after the earlier tests: " + controller);
 		HardwareProfile hardware = RigTuneClient.hardware();
@@ -182,6 +189,62 @@ public class FootprintGameTest implements FabricClientGameTest {
 			RigTune.LOGGER.warn("WARN-ONLY {}", blind);
 		}
 		RigTune.LOGGER.info("FootprintGameTest: {} budget(s), {} over (mode {})", budgets.budgets().size(), violations.size(), budgets.mode());
+	}
+
+	// review-11 PERF-3: a returning player's startup. build.yml starts one more JVM with only this class, a seeded
+	// config/rigtune (tools/gametest/returning_seed.py through -PgametestSeedConfig: 0.4's and 0.5's written files, a history
+	// of 50+ entries, nothing staged) and -Drigtune.footprint.returning=true. Only the startup keys are measured, against
+	// the same budgets; the seed must be what the game started with. Written to footprint-<mc>-<backend>-returning.json.
+	private static final String RETURNING = "rigtune.footprint.returning";
+	// Warn-only for the returning player's budgets alone (the tracker item below); build.yml greps the tag into ::warning::.
+	private static final String RETURNING_WARN_ONLY = "rigtune.footprint.returningWarnOnly";
+	private static final String RETURNING_WARN_TAG = "RETURNING-PLAYER GATE IN WARN MODE (tracker: returning-player gate back to FAIL before the RC streak):";
+
+	private static void returningPlayer() {
+		Path configDir = FabricLoader.getInstance().getConfigDir();
+		Map<String, Object> out = new LinkedHashMap<>();
+		Map<String, Number> measured = new LinkedHashMap<>();
+		String mc = FabricLoader.getInstance().getRawGameVersion();
+		String backend = backendName(RigTuneClient.hardware().gpu().backend()) + "-returning";
+		out.put("mcVersion", mc);
+		out.put("backend", backend);
+		List<String> seeded = new ArrayList<>();
+		try (var files = Files.list(configDir.resolve("rigtune"))) {
+			files.map(p -> p.getFileName().toString()).filter(n -> n.endsWith(".json")).sorted().forEach(seeded::add);
+		} catch (IOException e) {
+			throw new AssertionError("config/rigtune of the returning player", e);
+		}
+		out.put("configFiles", seeded);
+		int historyEntries;
+		try {
+			historyEntries = com.google.gson.JsonParser.parseString(Files.readString(configDir.resolve("rigtune").resolve("history.json")))
+					.getAsJsonObject().getAsJsonArray("entries").size();
+		} catch (IOException | RuntimeException e) {
+			throw new AssertionError("the seeded history.json", e);
+		}
+		out.put("historyEntries", historyEntries);
+		check(historyEntries >= 50 && seeded.containsAll(List.of("last-apply.json", "awareness.json", "stutter-fixes.json", "tryit.json")),
+				"started as a returning player (history " + historyEntries + " entries): " + seeded);
+		startup(out, measured);
+		FootprintBudgets budgets;
+		try {
+			budgets = FootprintBudgets.load().forCompressedOops(!Boolean.FALSE.equals(compressedOops()));
+		} catch (IOException e) {
+			throw new AssertionError("Could not read the footprint budgets", e);
+		}
+		List<FootprintBudgets.Violation> violations = budgets.check(measured);
+		out.put("measured", measured);
+		out.put("budgetMode", budgets.mode().name().toLowerCase(Locale.ROOT));
+		out.put("violations", violations.stream().map(FootprintBudgets.Violation::message).toList());
+		write(mc, backend, out);
+		if (Boolean.getBoolean(RETURNING_WARN_ONLY)) {
+			// Tracker: "returning-player gate back to FAIL" (coordinator, 2026-09-28), a hard blocker before the RC streak.
+			// build.yml sets this until ws-h moves preLaunch's history reconcile off the render thread; nothing else is warn-only.
+			violations.forEach(v -> RigTune.LOGGER.warn("{} {}", RETURNING_WARN_TAG, v.message()));
+		} else {
+			budgets.enforce(violations, RigTune.LOGGER::warn);
+		}
+		RigTune.LOGGER.info("FootprintGameTest (returning player, {} history entries): {}", historyEntries, measured);
 	}
 
 	// What RigTune measured about its own startup (FootprintStats).
@@ -448,6 +511,17 @@ public class FootprintGameTest implements FabricClientGameTest {
 			context.runOnClient(mc -> mc.gui.setScreen(null));
 			TickTiming tick = context.computeOnClient(mc -> timeTick(mc, playTick(stutterTick)));
 			check(StutterMonitor.session() != null, "still capturing after the tick timing");
+			// X4.4 (SPEC 1h): the v0.5 listeners with their own END_CLIENT_TICK registration, each timed alone the same way, on the
+			// path it takes every tick here: RW-11/RW-17's settings check with a session running; C09's Try It tick, C16's toast
+			// wait and 4d's leftover-toast wait with nothing to do.
+			check(TryItService.idle(), "no try runs: Try It's tick has nothing to do");
+			TickTiming settingsCheck = context.computeOnClient(mc -> timeTick(mc, listener(SETTINGS_WATCH, "tick", null, true)));
+			TickTiming tryItTick = context.computeOnClient(mc -> timeTick(mc, TryItService::tick));
+			TickTiming serverProfileTick = context.computeOnClient(mc -> timeTick(mc,
+					listener(ServerProfileService.class.getName(), "tick", ((RealController) controller).v05().serverProfiles(), true)));
+			TickTiming leftoverTick = context.computeOnClient(mc -> timeTick(mc,
+					listener(LauncherRepairService.class.getName(), "tickLeftover", ((RealController) controller).v05().launcherRepair(), false)));
+			check(StutterMonitor.session() != null, "still capturing after the listeners' timing");
 			long onRetained = StutterMonitor.retainedBytes();
 			long frames = sessionFrames();
 			boolean phaseTimersSeen = StutterMonitor.phaseTiming();
@@ -511,8 +585,20 @@ public class FootprintGameTest implements FabricClientGameTest {
 			measured.put(TICK_TWIN_KEY, tick.twinVsReference());
 			measured.put("tickHookNsPerCallWorld", tickOff.nsPerCall());
 			measured.put("tickHookAllocBytesWorld", tickOff.allocBytes());
+			measured.put("settingsCheckNsPerCall", settingsCheck.nsPerCall());
+			measured.put("settingsCheckAllocBytes", settingsCheck.allocBytes());
+			measured.put("tryItTickNsPerCall", tryItTick.nsPerCall());
+			measured.put("tryItTickAllocBytes", tryItTick.allocBytes());
+			measured.put("serverProfileTickNsPerCall", serverProfileTick.nsPerCall());
+			measured.put("serverProfileTickAllocBytes", serverProfileTick.allocBytes());
+			measured.put("launcherLeftoverTickNsPerCall", leftoverTick.nsPerCall());
+			measured.put("launcherLeftoverTickAllocBytes", leftoverTick.allocBytes());
 			out.put("tickHookTimingOn", tick.detail());
 			out.put("tickHookTimingWorld", tickOff.detail());
+			out.put("settingsCheckTiming", settingsCheck.detail());
+			out.put("tryItTickTiming", tryItTick.detail());
+			out.put("serverProfileTickTiming", serverProfileTick.detail());
+			out.put("launcherLeftoverTickTiming", leftoverTick.detail());
 			out.put("monitorIdleRetainedBytes", idleRetained);
 			out.put("monitorSessionRetainedBytes", onRetained);
 			out.put("monitorBenchmarkRetainedBytes", handover[1]);
@@ -546,6 +632,32 @@ public class FootprintGameTest implements FabricClientGameTest {
 			return MethodHandles.lookup().unreflect(tick);
 		} catch (ReflectiveOperationException e) {
 			throw new AssertionError("the monitor's END_CLIENT_TICK listener StutterHooks.tick(Minecraft)", e);
+		}
+	}
+
+	// SettingsWatch is package-private (client.stutter).
+	private static final String SETTINGS_WATCH = "io.github.chaotix345.rigtune.client.stutter.SettingsWatch";
+
+	// A v0.5 END_CLIENT_TICK listener that isn't public (X4.4), for timing: owner's method name (taking the Minecraft or
+	// nothing), on target (null: static), through a method handle as StutterHooks.tick is.
+	private static TickWork listener(String owner, String name, @Nullable Object target, boolean takesMinecraft) {
+		try {
+			Class<?> type = Class.forName(owner);
+			Method method = takesMinecraft ? type.getDeclaredMethod(name, Minecraft.class) : type.getDeclaredMethod(name);
+			method.setAccessible(true);
+			MethodHandle unbound = MethodHandles.lookup().unreflect(method);
+			MethodHandle handle = target == null ? unbound : unbound.bindTo(target);
+			// Block bodies: an expression body would make invokeExact's symbolic type return Object.
+			if (takesMinecraft) {
+				return mc -> {
+					handle.invokeExact(mc);
+				};
+			}
+			return mc -> {
+				handle.invokeExact();
+			};
+		} catch (ReflectiveOperationException e) {
+			throw new AssertionError("the END_CLIENT_TICK listener " + owner + "." + name, e);
 		}
 	}
 
