@@ -31,6 +31,8 @@ public final class FixTracker {
 	public static final String SHORT = "short";
 	public static final String EXCLUDED = "excluded";
 	public static final String IDLE = "idle";
+	// review-11 STUTTER-7: the fixed key wasn't in the session's start or end snapshot (its file unreadable then).
+	public static final String UNREAD = "unread";
 	// Not a session's skip: an expired record's mark that its journal entry is gone (nothing left to undo).
 	public static final String GONE = "gone";
 
@@ -161,6 +163,11 @@ public final class FixTracker {
 			return r;
 		}
 		String atStart = session.atStart().settings().get(r.key());
+		if (atStart == null || session.atEnd().settings().get(r.key()) == null) {
+			// Unknown (a config file mid-write), never "replaced".
+			Record skipped = r.skip(new Skip(UNREAD, List.of(r.key())));
+			return skipped.skipped() >= MAX_SKIPPED ? skipped.withState(State.EXPIRED) : skipped;
+		}
 		if (!SettingValues.same(atStart, r.to()) && SettingValues.same(atStart, r.from())
 				&& Duration.between(r.appliedAt(), session.startedAt()).compareTo(SETTLE) <= 0) {
 			return r;

@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // docs/v0.5/SPEC.md 5: a session's outcome for the comparison (hitches per 60 s of wall time, by each hitch's start).
 class SessionOutcomeTest {
@@ -105,5 +106,39 @@ class SessionOutcomeTest {
 		assertEquals(2, o.hitches());
 		close(60, o.lostMs());
 		close(80, o.gameplaySeconds());
+	}
+
+	// The same play (per 200 frames: one 80 ms spike, nineteen 28 ms near-spikes, which are candidates but not spikes, the
+	// rest 16 ms) for `frames` frames, captured into a ring of the given sizes.
+	private static SessionOutcome play(int frames, int frameCapacity, int candidateCapacity) {
+		long t0 = 50 * S;
+		FrameRing ring = new FrameRing(frameCapacity, candidateCapacity);
+		long now = t0;
+		for (int i = 0; i < frames; i++) {
+			long d = i % 200 == 199 ? 80 * StutterAnalyzer.MS : i % 10 == 9 ? 28 * StutterAnalyzer.MS : 16 * StutterAnalyzer.MS;
+			now += d;
+			ring.frame(now, d, false, 300_000, StutterAnalyzer.MS, d - 2 * StutterAnalyzer.MS, 0);
+		}
+		StutterAnalyzer.Result r = StutterAnalyzer.analyze(new StutterAnalyzer.Input(ring.snapshot(), new StutterRings(10 * S).snapshot(), t0, now,
+				Instant.parse("2026-09-26T10:00:00Z"), StutterReport.MONITOR, "26.2", "g1", 4096, 32768L, 16, true, false));
+		return SessionOutcome.of(r, t0);
+	}
+
+	private static double perMinute(SessionOutcome o) {
+		return o.hitches() * 60 / o.gameplaySeconds();
+	}
+
+	// review-11 STUTTER-2: hitches are known only where the rings still cover the capture. Once both the frame ring and the
+	// candidate ring wrapped, the outcome counts the frame ring's window alone, over that window's gameplay: the same play
+	// gives the same rate, however much of it the rings kept.
+	@Test
+	void theRateCountsOnlyTheCoveredWindow() {
+		SessionOutcome whole = play(20_000, 1 << 15, 4096);
+		SessionOutcome wrapped = play(20_000, 2048, 16);
+		assertEquals(100, whole.hitches());
+		double ratio = perMinute(wrapped) / perMinute(whole);
+		assertTrue(ratio > 0.8 && ratio < 1.25, "the same rate: " + perMinute(wrapped) + " vs " + perMinute(whole) + " (" + wrapped + ")");
+		assertTrue(wrapped.gameplaySeconds() < 40, "the frame ring's window: " + wrapped.gameplaySeconds());
+		assertEquals(FixComparison.Kind.SAME, FixComparison.compare(whole, wrapped).kind());
 	}
 }

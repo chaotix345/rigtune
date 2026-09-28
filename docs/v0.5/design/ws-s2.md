@@ -433,3 +433,64 @@ a stale jar in the calibration instance and a window that lost focus (127 s of g
 | AC5.15 | verified (client side); the updater's side is WS-R's | FixSpecTest, FixStoreTest |
 | AC5.16 | FootprintGameTest and FrameHookBudgetTest pass with no budget change (CI, all legs) | CI |
 | AC5.1, AC5.2 | WS-R | |
+
+## Review-11 fixes (branch fix/v05-r11-ws-s2 from 111cb2be)
+Findings in the coordinator's reviews/r11-STUTTER.md and r11-PERF.md; every HIGH/MEDIUM with a test seen failing on the
+old code for the stated reason first.
+- **STUTTER-1 / SEC-1 (HIGH), FIXED 811d1da1**: `FixStore.decode` skips an `appliedAt` before `FixStore.PAST`
+  (2000-01-01, next to the FUTURE check); `FixText.day` reads "?" for an instant outside the zone's range (as
+  `TrendText.date`), and `FixHold` dates its holds through it. Red: FixStoreTest `anAppliedAtInTheFarPastIsSkipped`,
+  FixTextTest `aDateOutsideTheZonesRangeReadsAsUnknown`, FixHoldTest `aDateOutsideTheZonesRangeStillHolds`
+  (DateTimeException: Invalid value for EpochDay).
+- **STUTTER-2 (M), FIXED 22de3d01**: once both the frame ring and the candidate ring wrapped, only the frame ring's window
+  has every spike, so `StutterAnalyzer.Result.covered` (a minimal edit to WS-S's analyzer, the 4-argument constructor
+  kept) gives that window (its first frame, gameplay and wall length) and `SessionOutcome.of` counts spikes, gameplay and
+  bins over it alone. FixGate's floor and FixTracker then see the same numbers. Red: SessionOutcomeTest
+  `theRateCountsOnlyTheCoveredWindow` (the same play: 1.89 hitches a minute in wrapped rings, 17.18 in whole ones; with
+  the fix the rates agree and the comparison is SAME). AC5.14's runs never wrapped the candidate ring (~250 candidates).
+- **STUTTER-3 (M), FIXED 15ad31d3**: the before side is one setup. `FixOffer.Reason.CHANGED` ("Settings or the window
+  changed during this session (or RigTune couldn't tell), so it can't be compared. Play a session without changes.")
+  after IDLE: RW-11's start and end settings differ, or `StutterFixService.changedDuring(Capture.fixAtStart, now)` (a key
+  read on one side only isn't a change; unknown start conditions fail closed). `Inputs.atStart` carries the capture's
+  start conditions. StutterFixGameTest starts a fresh session after each resize before it expects the offer. Red:
+  FixOffersTest `aSessionThatChangedItsSetupIsNoBeforeSide` (render distance 20 -> 12 during the session still gave both
+  offers).
+- **STUTTER-4 (M), FIXED 0582e35d**: WS-B's rule over the whole capture: `StutterRings` keeps the busiest 60-s block of
+  Distant Horizons' world generation outside pauses as samples arrive (`Totals.dhWorldGenPeakCores`, pause state from its
+  own PAUSE events; minimal edits to WS-S's rings and analyzer, `Result.dhWorldGenPeakCores`; the benchmark's
+  `dhWorldGenCores` unchanged); `StutterFixService.excluded` fails closed when DH is loaded and nothing was sampled. The
+  excluded lines now say "(or RigTune couldn't tell)". Red: StutterFixServiceTest
+  `distantHorizonsGeneratingAnywhereInTheSessionExcludesIt` (40 minutes of generation early in an hour weren't excluded).
+- **STUTTER-5 (M), FIXED 7fd8fc21**: "no clear change" says why (X3): `Verdict.fewerHitchesMoreLost` -> "No clear
+  improvement: %s hitches a minute (was %s), but more time lost to stutter (%s ms a minute, was %s)…"; `clearButSmall`
+  (a p-value <= 0.05 with the rate between 2/3 and 3/2) -> "A small change: … Measurable, but too small to call better or
+  worse…"; the "within how much play sessions vary" line only when neither p-value is significant. Red: FixTextTest
+  `noClearChangeSaysWhy`.
+- **STUTTER-6 (L), FIXED 15ad31d3**: the floor (and LENGTH's numbers) goes by the outcome the comparison would take
+  (settingsChanged spikes left out, the covered window): FixOffersTest `theFloorHoldsForTheOutcome`.
+- **STUTTER-7 (L), FIXED 7c1bf887**: a session whose start or end snapshot lacks the fixed key is skipped
+  (`FixTracker.UNREAD`, "RigTune couldn't read %s at its start or end"), never "replaced" (FixTrackerTest
+  `aKeyMissingFromASnapshotIsUnknownNotReplaced`, red: REPLACED).
+- **STUTTER-8 (L), FIXED 7c1bf887**: a hold stands only while the key's current value is the fix's target
+  (`FixHold.Hold.staged` keeps it for a fix waiting for the restart) (FixHoldTest `noHoldOnceTheValueChangedByHand`, red:
+  held).
+- **STUTTER-9 (L), NOT FIXED**: the AFK onset's up to 0.5 s of throttled frames before SettingsWatch's check notices
+  (one hitch per AFK break, on both sides alike) needs an IDLE event dated at the previous check and the analyzer to drop
+  the spikes in between: WS-S's SettingsWatch and analyzer, not a cheap change. Residual.
+- **STUTTER-10 (L), NOT FIXED**: counting "a setting changed and back" in an after session needs a whole-capture count of
+  SETTINGS_CHANGED events (the event ring wraps like the sample ring) that leaves out the immediate fix's own change (its
+  event lands in the restarted session, dated before its start). Not cheap or safe for a low. Residual; the start/end
+  comparison and the settingsChanged tag stay.
+- **STUTTER-11 (L), residual**: regression to the mean (the before side is chosen for being stuttery). The smallest honest
+  mitigation, a second qualifying before session pooled with the triggering one, needs each session's outcome and
+  conditions kept until a fix is offered: not small. The X3 wording check: the "less" line says "Play sessions differ, so
+  this is a measured comparison, not proof."; "more" says "It may be unrelated, since sessions vary"; "no clear change"
+  now says why. Recorded for the docs' known limits.
+- **PERF-2 (M), FIXED bd7f1087**: without a tracked fix, `holds()` (every rebuild) and `advanceAll` (every 5 s while the
+  Stutter Doctor is open) read no history.json; with one, once per call (JournalCache isn't on feat/v0.5.0 yet). Red:
+  StutterFixServiceTest `withoutAFixHistoryIsNeverRead` (2 parses with no fix). The start hook's parses (PERF-2 c) are
+  other owners' files.
+- **PERF-4 (L), FIXED 9b7a909c**: SettingsWatch forgets the failed session once it ended (a minimal edit to WS-S's file)
+  (SettingsWatchTest `aFailedSessionIsReleasedWhenItEnds`, red: the capture stayed reachable).
+- New keys: `rigtune.stutter.fix.not_yet.changed`, `.skip.unread`, `.verdict.same_more_lost`, `.verdict.same_small`; the
+  two excluded lines reworded.
