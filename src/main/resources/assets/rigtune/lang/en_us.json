@@ -538,6 +538,7 @@
 	"rigtune.profile.source.template": "Template",
 	"rigtune.profile.status.already": "Already on %s: nothing to change.",
 	"rigtune.profile.status.baseline_refreshed": "My settings was updated to your current settings before switching.",
+	"rigtune.profile.status.baseline_updated": "My settings was updated to your current settings.",
 	"rigtune.profile.status.benchmark": "Profiles can't switch while a benchmark is running.",
 	"rigtune.profile.status.clamped": "%s values were limited for this PC (Preview shows why).",
 	"rigtune.profile.status.copied": "Copied the code for %s (%s characters).",
