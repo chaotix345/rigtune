@@ -337,3 +337,10 @@ throttle that doesn't lower `getFramerateLimit()` isn't seen. A throttle is noti
 limit, Dynamic FPS) are excluded like a menu's; the session stores that time as idleSeconds and the report says how much
 wasn't counted. With no session running, the screen shows the newest summary with enough data and lists the short
 sessions saved since."
+
+**CI.** Run 36367115133 (79f7c3ef, the check in the tick hook): red on two legs, tickHookOnVsReference 2.09 (26.2 GL) and
+2.13 (26.3 Vulkan) > 2.05; everything else green. Run 36369105549 (5dec8c64, the check in SettingsWatch's listener,
+after merging feat/v0.5.0 with WS-L1, WS-P2 and WS-L2's sets): 8/8 green on attempt 1; tickHookOnVsReference 1.469 /
+1.567 / 1.32 (26.2 GL / 26.3 GL / 26.3 Vulkan), tickHookAllocBytes, -On and -World 0 on every leg; the settings check
+44.2 / 40.8 / 28.1 ns per call with 0 bytes (control 0); the AFK block ran on every leg ("AFK after 20 / 19 / 28 s
+(SHORT_AFK); over the next 5 s 180 frames, 0 ms more gameplay"); unit tests 2671 per version, 0 failures.
