@@ -16,6 +16,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public final class RulesLoader {
 	// This client reads schemaVersion 1 (rules-v1.json, a subset of v2) and 2. A future v3 lives in its own file.
@@ -26,6 +27,10 @@ public final class RulesLoader {
 	public static final String SOURCE_CACHE = "cache";
 	public static final String SOURCE_REMOTE = "remote";
 	public static final long MAX_RULES_BYTES = 2L << 20;
+	// Advice written for clients below 0.5 only (docs/v0.5/SPEC.md 4i). rules-v1.json gives it to 0.1.x unconditionally,
+	// and this client still reads v1 documents (the remote fallback, 0.1.x's rules-cache.json), so every document it
+	// parses drops these ids (review-11 SEC-3).
+	public static final Set<String> OLD_CLIENT_ADVICE = Set.of("old-client-launcher-mods");
 
 	// Highest revision; on a tie the newer schema, then remote > cache > bundled.
 	private static final Comparator<Candidate> NEWEST = Comparator
@@ -57,6 +62,7 @@ public final class RulesLoader {
 			throw new IllegalArgumentException("Unsupported rules schemaVersion " + doc.schemaVersion);
 		}
 		doc.fillDefaults();
+		doc.advice.removeIf(rule -> OLD_CLIENT_ADVICE.contains(rule.id));
 		doc.gpuTiers.removeIf(rule -> invalidPattern("gpuTiers", rule));
 		doc.cpuTiers.removeIf(rule -> invalidPattern("cpuTiers", rule));
 		return doc;

@@ -169,3 +169,13 @@ workerCpuMs5s 132.8-214.1 on near-identical code); every value keeps its budget 
 | AC4i.3 (README/body-0.5 known-issue text) | the docs workstream's | "Docs" above |
 | AC2T.1 (PROGRESS lists each bot PR and canary run) | in progress | the r17 fold (R1) recorded here; the 2026-09-28 bot PR pending; PROGRESS line handed to the coordinator |
 | AC2T.2 (R > main's revision; the branch carries the last bot PR's upstream changes) | tool verified; closes at the last regeneration before the release PR | `rules_upstream_diff.py` + `UpstreamDiffTests`; R = 17 > main's 16 today |
+
+## Review-11 fixes (branch fix/v05-r11-ws-r from 111cb2be)
+| id | result | the test that failed first | change |
+|---|---|---|---|
+| SEC-3 (M) | FIXED | `OldClientWarningV1PathsTest.aRemoteV1FallbackNeverShowsIt` (rules-v2.json 503, rules-v1.json at the bundled revision + 1: the 0.5.0 main list showed `advice:old-client-launcher-mods`), `.aLeftover01CacheNeverShowsIt` (0.1.x's rules-cache.json at the bundled revision + 1, remote rules off: shown on every launch), `.everyDocumentThisClientParsesDropsIt` | `RulesLoader.parse` drops `RulesLoader.OLD_CLIENT_ADVICE` (`old-client-launcher-mods`) from every document; rules-v1.json unchanged for 0.1.x. Tests that compared the current parser's advice with 0.3.0's/0.4.0's now leave that id out of the old side (`LegacyRulesParseTest`, `v040.LegacyParserTest`, and WS-K's `PinnedCopiesTest`, one marked line); `OldClientWarningTest` evaluates the condition on the current evaluator under another id and reads the bundled rule through 0.4.0's parser |
+| SEC-5 (L) | FIXED | `LongThresholdStringsTest.aTwoMillionDigitThresholdCostsNothing` (timed out after 2 s: a 2-million-digit `stutterShareAtLeast`/`causeSpikesAtLeast` string went to BigDecimal), `.aLongerThresholdIsUnknown` | `ConditionEvaluator.MAX_NUMBER_CHARS` = 32: both `wholeNumber` helpers (ConditionEvaluator, and WS-S2's `FixEvidence`, one marked line) return null (UNKNOWN) above it before parsing |
+
+Not taken: the reviewer's optional "prefer any v2 candidate over a higher-revision v1 one" (a v1 fallback still loses
+stutterAdvice, stutterFixes, profileTemplates and settingLabels for that session); it changes RulesLoader's pick order
+for every client and wasn't asked for. RULES_SCHEMA.md documents the dropped id.

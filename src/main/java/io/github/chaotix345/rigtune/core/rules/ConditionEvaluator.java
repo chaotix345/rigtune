@@ -395,8 +395,12 @@ public final class ConditionEvaluator {
 		return t;
 	}
 
+	// A threshold string longer than this is UNKNOWN before any parsing: remote rules are untrusted, and BigDecimal's cost
+	// grows with the length (review-11 SEC-5). Every real threshold is a whole number of at most 10 digits.
+	public static final int MAX_NUMBER_CHARS = 32;
+
 	private static @Nullable Integer wholeNumber(@Nullable String text) {
-		if (text == null) {
+		if (text == null || text.length() > MAX_NUMBER_CHARS) {
 			return null;
 		}
 		try {
