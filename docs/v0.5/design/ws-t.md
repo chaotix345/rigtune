@@ -337,3 +337,20 @@ amendment): Try It measures only in a settled game.
 Before the push, TryItGameTest ran locally on 26.2 (Windows, under the game-test lock, 83b2350f): passed in 106 s; the
 screenshot `tryit-intro-settling` shows the status line "... (60 s left)." in the warning colour above the intro and
 Start inactive; idle tick 0.26 ns per call, 0 bytes.
+
+## Review r11 (BENCH, round 1): 2 M and 4 L for Try It (the coordinator's decisions: fix all on `fix/v05-try-it-2`)
+
+(BENCH-6 and BENCH-8 are WS-B's BenchmarkController and BenchmarkConditions.) Commit f1de45ea; the 7 new tests failed
+first against skeletons that compiled but didn't act (the red messages below), then green.
+
+| item | fix | test (the red failure) |
+|---|---|---|
+| BENCH-1 (M) two reads of history.json per derive | the Game seam gives `Journal.Snapshot history()` (WS-S2's `Journal.snapshot()`), read once: a failed read is UNREADABLE, so HISTORY_UNREADABLE and nothing closes | `TryItServiceTest.aHistoryReadThatFailsAfterTheApplyClosesNothing` (the try was closed as FAILED) |
+| BENCH-2 (M) a verdict on a run whose settle timed out | `claim` passes `stepsLeftOut() > 0`; the run's id goes to the try's `unsettledRuns` (tryit.json, optional, written only when not empty; benchmarks.json keeps its schema), on the chain before the verdict's derive; `TryItVerdict` names `Excluded(TERRAIN_LOADING)` after the fresh world and DH: NOT_COMPARABLE, "the terrain hadn't finished loading" | `TryItVerdictTest.aRunOnTerrainThatHadntLoadedMeansNoVerdict` (no cause), `TryItServiceTest.anAfterRunOnTerrainThatHadntLoadedGetsNoVerdict` (nothing recorded); `TryItStoreTest.everyFieldRoundTrips` covers the field |
+| BENCH-3 (L) a queued derive emptying a new try | a derive that finds no try while this session's chain runs a try doesn't replace its view | `aDeriveQueuedBeforeStartKeepsTheNewTry` (NONE instead of MEASURING_BEFORE) |
+| BENCH-4 (L) unreadable or newer benchmarks.json read as "no runs" | `TryItFlow.derive(t, runs, runsReadable, history, live)` (the old overload passes true): HISTORY_UNREADABLE, nothing closes; the stage line and the notice now say "History or the benchmark results can't be read right now"; `BenchmarkHistory.newerOnDisk()` (an accessor, WS-B's class) | `TryItFlowTest.unreadableBenchmarkResultsCloseNothing` (NO_BEFORE) |
+| BENCH-5 (L) "wasn't applied" when History's write failed | a NOW try with no entry after the apply whose option now holds the tried value: the after snapshot is written as the proof (the one exception to "settingsAfter only once the entry exists": the entry can't exist), so the stage is ENTRY_MISSING (Keep only) with the note "History couldn't record this change (see the log), so it can't be reverted from here. It is applied." | `aChangeHistoryCouldntRecordIsntCalledNotApplied` (closed as FAILED) |
+| BENCH-7 (L) a first RESTART try in a new benchmark world | a RESTART try whose before run is left out of the trend (it created the benchmark world, or DH generated) stops before the change (CANCELLED, nothing applied, no restart needed), with a note saying why and to start it again | `aRestartTryWhoseBeforeRunCreatedTheWorldStopsBeforeTheChange` (applied anyway) |
+
+Words: `rigtune.tryit.cause.terrain_loading`, `rigtune.tryit.note.unrecorded`, `.note.fresh_world`, `.note.dh_generating`;
+`stage.history_unreadable` and `notice.history` reworded (92 keys in the block now).
