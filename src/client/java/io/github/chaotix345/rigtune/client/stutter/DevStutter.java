@@ -76,6 +76,9 @@ final class DevStutter {
 			return;
 		}
 		ticks++;
+		// A player at the keyboard: without input, vanilla's AFK limiter throttles the run part-way (when varies per run),
+		// and the Stutter Doctor leaves throttled time out (RW-17), spikes after the teleport included.
+		minecraft.getFramerateLimitTracker().onInputReceived();
 		if (++total > GIVE_UP_TICKS) {
 			finish(minecraft, "FAILED: gave up after 5 minutes");
 			return;
