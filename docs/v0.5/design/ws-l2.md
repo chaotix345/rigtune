@@ -101,6 +101,9 @@ repair steps are a dynamic family registered in `V05LangFamilies.launcherRepair`
   exactly what `actionable()` counts (review item 4).
 - "Mod changes" in the held notice and toast counts an update pair (a disable and an enable of one group) as one change,
   as History shows it (`LauncherRepair.modChanges`). The ops count stays in preLaunch's split and helper.log.
+- ws-l2's `pending.json` gives the held group's disable a `modId` too (0.4's own disables carry none). WS-E's rule
+  for compat040 (relayed 2026-09-28) is that every op of a set's ApplyHelper group carries one: `written.materialize()`
+  makes each op's stand-in jar from it. compat030 still passes with the set.
 - `LauncherManagedGameTest` can't clear the in-memory dismissal (`AwarenessService`'s session set has no API). Its fixture
   names are new at every run instead, so that key can never match another notice. awareness.json is restored by bytes.
 - The game test uses the forced policy (`LauncherRepairService.overridePolicy`) until WS-L1 merges; see "Still to do".

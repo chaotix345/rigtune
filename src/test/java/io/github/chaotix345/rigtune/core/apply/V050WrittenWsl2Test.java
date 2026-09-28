@@ -55,7 +55,10 @@ class V050WrittenWsl2Test {
 		Path old = TestJars.modJar(mods.resolve("e2e-held-1.0.0.jar"), "e2e-held");
 		Path download = TestJars.modJar(mods.resolve("e2e-held-1.1.0.jar" + PendingActions.PENDING_SUFFIX), "e2e-held");
 		Path sodium = Files.writeString(config.resolve("sodium-options.json"), "{\"performance\":{\"chunk_builder_threads\":0}}");
-		List<Op> group = PendingActions.group(Op.disableFile(old), Op.enableFile(download, mods.resolve("e2e-held-1.1.0.jar")).withModId("e2e-held"));
+		// The disable carries the mod id too (0.4's own disables don't): compat040's written.materialize() makes each op's
+		// jar from it (WS-E's rule: every op of the set's ApplyHelper group has a modId).
+		List<Op> group = PendingActions.group(Op.disableFile(old).withModId("e2e-held"),
+				Op.enableFile(download, mods.resolve("e2e-held-1.1.0.jar")).withModId("e2e-held"));
 		PendingActions.create(4242, mods, config, List.of(group.get(0), group.get(1),
 				Op.patchJson(sodium, Map.of("performance.chunk_builder_threads", "4")))).save(pending);
 
@@ -87,7 +90,8 @@ class V050WrittenWsl2Test {
 		JsonArray ops = plan.getAsJsonArray("ops");
 		assertEquals(2, ops.size());
 		String groupId = ops.get(0).getAsJsonObject().get("group").getAsString();
-		assertTrue(ops.asList().stream().allMatch(op -> op.getAsJsonObject().get("attempts").getAsInt() == 0), ops.toString());
+		assertTrue(ops.asList().stream().allMatch(op -> op.getAsJsonObject().get("attempts").getAsInt() == 0
+				&& "e2e-held".equals(op.getAsJsonObject().get("modId").getAsString())), ops.toString());
 		JsonObject expect = JsonParser.parseString(Files.readString(committed.resolve("expect.json"), StandardCharsets.UTF_8)).getAsJsonObject();
 		assertEquals("ws-l2", expect.get("set").getAsString());
 		assertTrue(expect.getAsJsonArray("checks").asList().stream().anyMatch(c -> c.getAsJsonObject().has("appliesGroup")

@@ -9,6 +9,7 @@
       "path": "${INSTANCE}/mods/e2e-held-1.0.0.jar",
       "id": "a1b2c3d4-5e6f-4a0b-8c1d-2e3f4a5b6c01",
       "group": "a1b2c3d4-5e6f-4a0b-8c1d-2e3f4a5b6c02",
+      "modId": "e2e-held",
       "attempts": 0
     },
     {
