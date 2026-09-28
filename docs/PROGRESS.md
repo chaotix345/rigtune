@@ -2,6 +2,33 @@
 
 Source of truth for resuming after context compaction. Update and commit after every milestone. After a compaction, reread this file before acting.
 
+## v0.5.0: RELEASED 2026-09-28 (UTC)
+- PR #13 (feat/v0.5.0) merged to main as a20c8eac; main CI 36446997261 green on attempt 1.
+  - The release PR first exposed two test-only flakes, both fixed before the merge: the stutter dev script's AFK throttling (DevStutter reports input; stutter_run's chunk-loading rule is judged first to last) and the returning-player gate's single sample (limit still 80 ms; one re-measure in a new JVM, only on a returningAdded* failure).
+  - Streaks: ci-streak-2 on 0a1fd909 and ci-streak-3 on 55852dc4, 5/5 on attempt 1 each.
+- The first v0.5.0 tag run (36448687667) failed only `e2e / stutter script (26.2)`: the evaluator vs a capped worst list (31 spikes, 10 listed). Nothing was published.
+  - PR #14 fixed the evaluator (merged as 30172a51; main CI 36494471307 green on attempt 1).
+  - With the user's approval, the unpublished tag was moved from a20c8eac to 30172a51. No release or version had been made from the old tag.
+- Release run 36495627973 green: build, the E2E release tier on the staged jars, preflight, GitHub release, Modrinth publish, verify.
+  - GitHub release v0.5.0 has both jars and their sources jars; the notes were edited to the v0.4 format.
+  - Modrinth oBN6pcGa: 0.5.0+mc26.2 (B13Pp9AK) and 0.5.0+mc26.3 (NDQ9zJTR), listed.
+  - Byte-identical: preflight finds each version holding the GitHub jar by sha512. sha256: 26.2 bd7eddb7..., 26.3 416a066e....
+  - sync-body pushed docs/modrinth/body-0.5.md. No new gallery images. The project is still processing (under moderator review), so no re-submit.
+- Rules r17 live: the raw rules-v1.json and rules-v2.json on main return 200 at revision 17.
+  - The Monday bot run's PR #12 (main r16 -> r17, already in feat's r17) was closed by the user with a link.
+  - update-rules was dispatched on main (36497782938): success, no PR.
+- Final numbers: Python tools 442 tests, e2e tools 368.
+- FOR THE USER:
+  - (1) The returning-player gate re-measures once in a new JVM (the limit stays 80 ms); overrule it if you want a single sample.
+  - (2) UNVERIFIED unless you run them: the laptop kit and the Modrinth App check (filled kits in the local rc-0.5.0/ folder).
+  - (3) The upstream Fabric API issue for the client game-test deadlock is written but not filed (docs/v0.5/design/gametest-deadlock.md).
+- v0.6 backlog:
+  - the preLaunch history reconcile off the render thread (returning-player ~50 ms, inherited from 0.4.0);
+  - review-12/13 lows R12FEAT-2..9, R12X-4/5, R12APPLY-4, R12REL-3/5/6, R12STUTTER-4/5/7, R13-2;
+  - STUTTER-9/10/11; PERF-7;
+  - the AC5.14 re-run under the fresh-baseline C20 flow;
+  - MC 26.4 when it and Sodium are stable.
+
 ## v0.5.0 working log (started 2026-09-27)
 
 Brief: the user's v0.5.0 prompt (full autonomy: research -> release incl. GitHub merges/tags/releases and Modrinth publishing). Theme: rock-solid (zero flaky CI, every v0.4 leftover fixed, verification gaps closed) + 4-6 new features picked by a judged brainstorm. MC 26.4 is OUT of scope (the weekly canary keeps running). Scope: P0.1 rock-solid CI (no live Modrinth in game tests/CI, cached jars, robust footprint ns gates, known flakes fixed; acceptance = 5 consecutive full CI runs green on feat/v0.5.0 with no re-runs), P0.2 every deferred v0.4 issue/low with a test, P0.3 verification gaps (self-update E2E on 26.2 AND 26.3 incl. downgrade 0.5 -> 0.4, LAN guest, PowerWatcher with a simulated battery, more driver strings, byte-identical publish); P1 = brainstorm picks; P2 = next-ranked + controller polish + per-screen a11y sweep. docs/v0.5/SPEC.md once written.
@@ -51,8 +78,8 @@ Brief: the user's v0.5.0 prompt (full autonomy: research -> release incl. GitHub
 - [x] Phase 4: features and fixes (Wave A/B).
 - [x] Phase 5: verification (UNVERIFIED: the laptop kit, the Modrinth App check).
 - [x] Phase 6: review rounds (review-11, review-12, review-13).
-- [ ] Phase 7: release.
-- [ ] Phase 8: wrap-up.
+- [x] Phase 7: release (see v0.5.0: RELEASED above).
+- [x] Phase 8: wrap-up.
 
 ### Agents (v0.5)
 | name | branch | worktree | status |
