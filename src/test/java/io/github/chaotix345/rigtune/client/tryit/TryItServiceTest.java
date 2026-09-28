@@ -44,6 +44,7 @@ import java.util.function.Function;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -300,7 +301,7 @@ class TryItServiceTest {
 		game.drain();
 		assertNotNull(store().current(), "not closed: " + store().recent());
 		assertEquals(Stage.ENTRY_MISSING, service.view().stage());
-		assertNotNull(service.view().note());
+		assertTrue(store().current().unrecorded(), "recorded on the try (review R12FEAT-7), not only on this session's screen");
 		service.refresh();
 		game.drain();
 		assertEquals(Stage.ENTRY_MISSING, service.view().stage(), "a later derive agrees");
@@ -327,6 +328,42 @@ class TryItServiceTest {
 		assertEquals(TryIt.Decision.CANCELLED, store().recent().getFirst().decision());
 		assertEquals(Stage.STOPPED_BEFORE, service.view().stage());
 		assertNotNull(service.view().note());
+	}
+
+	// Review R12FEAT-5: a RESTART try whose before run didn't settle (terrain still loading) stops before the change, as
+	// BENCH-7 does for a fresh world.
+	@Test
+	void aRestartTryWhoseBeforeRunDidntSettleStopsBeforeTheChange() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		TryIt t = start(game, sodium(), Scene.BENCHMARK_WORLD);
+		TryItService.tick(null);
+		game.drain();
+		BenchmarkRecord before = run("before", BenchmarkRecord.BEFORE, t);
+		game.runs.add(before);
+		assertTrue(service.onOutcome(game.started.getLast(), before, true));
+		game.drain();
+		TryItService.tick(null);
+		game.drain();
+		assertEquals(0, game.applies, "nothing applied");
+		assertEquals(TryIt.Decision.CANCELLED, store().recent().getFirst().decision());
+		assertEquals(Stage.STOPPED_BEFORE, service.view().stage());
+		assertEquals(TryItText.terrainLoadingBefore(), service.view().note());
+	}
+
+	// Review R12FEAT-8: when pending.json's answer comes back "nothing waits" after a refusal was served for the changed
+	// file, the view changes, so an open TryItScreen or Preview rebuilds and drops the stale line.
+	@Test
+	void aPendingAnswerThatClearsChangesTheView() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		game.pendingOps = 2;
+		game.heldOps = 2;
+		assertNotNull(service.refusal(sodium()), "not read yet: waiting");
+		TryItView shown = service.view();
+		game.drain();
+		assertNull(service.refusal(sodium()));
+		assertNotSame(shown, service.view(), "a screen showing the refusal rebuilds");
 	}
 
 	// The cold-start rule: in the player's own world, Start waits until they've been there a minute (their time in this
@@ -366,6 +403,21 @@ class TryItServiceTest {
 		assertEquals(TryItService.SETTLE_SECONDS, service.settleLeft(Scene.CURRENT), "a new dimension");
 		game.nanos += 60_000_000_000L;
 		assertEquals(0, service.settleLeft(Scene.CURRENT));
+	}
+
+	// Review R12FEAT-4: in singleplayer a RigTune screen pauses the integrated server too (nothing loads), so only the
+	// player's unpaused ticks count there.
+	@Test
+	void inSingleplayerOnlyUnpausedTimeCounts() {
+		FakeGame game = new FakeGame(dir);
+		TryItService service = game.service;
+		game.pausesWithScreens = true;
+		game.playerTicks = 20 * 10 + 5;
+		assertEquals(50, service.settleLeft(Scene.CURRENT));
+		game.nanos += 30_000_000_000L;
+		assertEquals(50, service.settleLeft(Scene.CURRENT), "30 s paused count nothing");
+		game.playerTicks += 20 * 30;
+		assertEquals(20, service.settleLeft(Scene.CURRENT));
 	}
 
 	// The benchmark world (every RESTART try) isn't refused: its runs wait until a minute after this launch's first title
@@ -509,6 +561,7 @@ class TryItServiceTest {
 		TryIt.Spot spot = HERE;
 		int playerTicks = 20 * 120;
 		int playerId = 1;
+		boolean pausesWithScreens;
 		long nanos;
 		int screens;
 		int historyReads;
@@ -546,6 +599,11 @@ class TryItServiceTest {
 		@Override
 		public int playerId() {
 			return playerId;
+		}
+
+		@Override
+		public boolean pausesWithScreens() {
+			return pausesWithScreens;
 		}
 
 		@Override

@@ -577,7 +577,8 @@ public class A11yGameTest implements FabricClientGameTest {
 
 	// Over a canned result (the change, the two runs, the apply, the verdict and its caveat) every line is a Tab stop that
 	// narrates its text, in order, and the Tab after the last line reaches the footer's buttons; a focused line and high
-	// contrast in the screenshots. Preview's plain footer: [Try it (measured)] is a Tab stop that narrates its label.
+	// contrast in the screenshots. The intro while the world settles keeps focus through its countdown's rebuilds (review
+	// R12FEAT-2). Preview's plain footer: [Try it (measured)] is a Tab stop that narrates its label.
 	private static void walkTryIt(V05TestContext v05) {
 		ClientGameTestContext context = v05.context();
 		Screen found = context.computeOnClient(mc -> mc.gui.screen());
@@ -601,6 +602,24 @@ public class A11yGameTest implements FabricClientGameTest {
 			focusRow(context, 4);
 			context.takeScreenshot("a11y-tryit-focus-854x480-scale2");
 			highContrastScreenshot(context, "a11y-hc-tryit-854x480-scale2");
+
+			// Review R12FEAT-2: the intro while the world settles. Its countdown line changes every second (the screen is
+			// rebuilt), and focus stays on the button Tab reached (Cancel).
+			Settling settling = new Settling(controller);
+			io.github.chaotix345.rigtune.core.model.Recommendation rd = new io.github.chaotix345.rigtune.core.model.Recommendation("a11y:rd",
+					io.github.chaotix345.rigtune.core.model.Category.SETTING, io.github.chaotix345.rigtune.core.model.Impact.LOW, "Render distance", "",
+					new io.github.chaotix345.rigtune.core.model.Action.SetSetting("vanilla.renderDistance", "12", "10"), true);
+			context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.TryItScreen(new TitleScreen(), settling, rd)));
+			context.waitForScreen(io.github.chaotix345.rigtune.client.ui.TryItScreen.class);
+			context.waitTicks(2);
+			String countdown = settleRow(context);
+			tabUntilNarrates(context, "try-it intro", Component.translatable("gui.cancel").getString());
+			context.waitTicks(45);
+			String later = settleRow(context);
+			check(!later.equals(countdown), "the countdown moved (the screen was rebuilt): " + countdown + " / " + later);
+			String said = context.computeOnClient(A11yGameTest::focusedNarration);
+			check(said.contains(Component.translatable("gui.cancel").getString()), "focus stayed on Cancel through the rebuilds: " + said);
+			context.takeScreenshot("a11y-tryit-intro-settling-854x480-scale2");
 
 			TryItAvailable available = new TryItAvailable(controller);
 			context.runOnClient(mc -> mc.gui.setScreen(new io.github.chaotix345.rigtune.client.ui.PreviewScreen(new TitleScreen(), available, List.of(
@@ -628,6 +647,38 @@ public class A11yGameTest implements FabricClientGameTest {
 				io.github.chaotix345.rigtune.core.model.Recommendation rec) {
 			return null;
 		}
+	}
+
+	// No try open, Try it available, and a world that settles in 60 s from now (review R12FEAT-2's walk).
+	private static final class Settling extends ForwardingController {
+		private final long since = System.nanoTime();
+
+		Settling(io.github.chaotix345.rigtune.client.ui.RigTuneController delegate) {
+			super(delegate);
+		}
+
+		@Override
+		public TryItView tryIt() {
+			return TryItView.EMPTY;
+		}
+
+		@Override
+		public io.github.chaotix345.rigtune.core.model.@org.jspecify.annotations.Nullable Text tryItRefusal(
+				io.github.chaotix345.rigtune.core.model.Recommendation rec) {
+			return null;
+		}
+
+		@Override
+		public io.github.chaotix345.rigtune.core.model.@org.jspecify.annotations.Nullable Text tryItSettling(
+				io.github.chaotix345.rigtune.core.benchmark.BenchmarkRequest.Scene scene) {
+			return io.github.chaotix345.rigtune.core.tryit.TryItText.settleRefusal(Math.max(1, 60 - (int) ((System.nanoTime() - since) / 1_000_000_000L)));
+		}
+	}
+
+	private static String settleRow(ClientGameTestContext context) {
+		return context.computeOnClient(mc -> ((io.github.chaotix345.rigtune.client.ui.TryItScreen) mc.gui.screen()).rowText().stream()
+				.filter(line -> line.startsWith("Try It measures better once the world has settled")).findFirst()
+				.orElseThrow(() -> new AssertionError("no settle line: " + ((io.github.chaotix345.rigtune.client.ui.TryItScreen) mc.gui.screen()).rowText())));
 	}
 
 	private static io.github.chaotix345.rigtune.core.benchmark.BenchmarkRecord tryItRun(String id, double low, double avg, String pairId, boolean before) {

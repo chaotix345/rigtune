@@ -168,7 +168,7 @@ public final class TryItText {
 					"No verdict: the first measurement is no longer in the benchmark history.")));
 			case NO_ENTRY -> out.add(normal(Text.of("rigtune.tryit.stage.no_entry",
 					"History folded this change into an older entry, so it can't be reverted from here. It stays applied.")));
-			case ENTRY_MISSING -> out.add(warning(Text.of("rigtune.tryit.stage.entry_missing",
+			case ENTRY_MISSING -> out.add(warning(t.unrecorded() ? unrecorded() : Text.of("rigtune.tryit.stage.entry_missing",
 					"History no longer lists this change, so RigTune can't tell whether it's in effect or revert it from here.")));
 			case HISTORY_UNREADABLE -> out.add(warning(Text.of("rigtune.tryit.stage.history_unreadable",
 					"History or the benchmark results can't be read right now, so this Try it waits. Try again in a moment.")));
@@ -281,6 +281,11 @@ public final class TryItText {
 	// Review BENCH-5: the option changed, but History's write failed.
 	public static Text unrecorded() {
 		return Text.of("rigtune.tryit.note.unrecorded", "History couldn't record this change (see the log), so it can't be reverted from here. It is applied.");
+	}
+
+	// Review R12FEAT-5: a RESTART try's before run settled on terrain that hadn't loaded, so it stopped before the change.
+	public static Text terrainLoadingBefore() {
+		return Text.of("rigtune.tryit.note.terrain_loading", "The terrain hadn't finished loading during the first measurement, so nothing was changed. Start the try again.");
 	}
 
 	// Review BENCH-7: a RESTART try's before run was left out of the trend, so it stopped before the change.
