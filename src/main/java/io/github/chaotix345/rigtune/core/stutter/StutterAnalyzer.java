@@ -175,7 +175,7 @@ public final class StutterAnalyzer {
 		}
 		StutterFacts stutterFacts = new StutterFacts(claimedShares, taggedShares, gc.fullPauses(), gc.stalls(), gc.explicit(), gc.liveSetPercent(), room,
 				contentionShare(in, samples), gameplaySeconds > 0 ? spikes.size() / (gameplaySeconds / 60) : 0, in.collector(), in.gcMeasured(),
-				unmeasured);
+				unmeasured, FixEvidence.dominatedSpikes(attributions));
 		return new Result(report, stutterFacts, attributions, dhWorldGenCores(in));
 	}
 
