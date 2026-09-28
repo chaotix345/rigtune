@@ -1,0 +1,25 @@
+runA launch 1: [04:07:10] [RigTune worker/INFO]: Launch to title screen: 11780 ms (7 mods)
+runA launch 2: [04:08:04] [RigTune worker/INFO]: Launch to title screen: 11192 ms (7 mods)
+runA launch 3: [04:09:00] [RigTune worker/INFO]: Launch to title screen: 10488 ms (7 mods)
+runA launch 4: [04:10:00] [RigTune worker/INFO]: Launch to title screen: 12036 ms (7 mods)
+runA launch 5: [04:11:02] [RigTune worker/INFO]: Launch to title screen: 10386 ms (7 mods)
+runA launch 6: [04:12:03] [RigTune worker/INFO]: Launch to title screen: 11553 ms (7 mods)
+runA launch 7: [04:13:01] [RigTune worker/INFO]: Launch to title screen: 10580 ms (7 mods)
+runB launch 1: [11:04:41] [RigTune worker/INFO]: Launch to title screen: 11241 ms (7 mods); launch-time trend: IN_LINE: +0.4 % vs the median 11.2 s of 7 comparable launches (floor 16.2 %)
+runB launch 2: [11:05:45] [RigTune worker/INFO]: Launch to title screen: 9633 ms (7 mods); launch-time trend: IN_LINE: -14.1 % vs the median 11.2 s of 8 comparable launches (floor 15.9 %)
+runB launch 3: [11:06:43] [RigTune worker/INFO]: Launch to title screen: 11476 ms (28 mods); launch-time trend: IN_LINE: +2.5 % vs the median 11.2 s of 9 comparable launches (floor 16.2 %); changed since the previous one: MOD_COUNT
+runB launch 4: [11:07:35] [RigTune worker/INFO]: Launch to title screen: 10461 ms (28 mods); launch-time trend: IN_LINE: -6.7 % vs the median 11.2 s of 10 comparable launches (floor 15.9 %)
+runC launch 1: [11:20:47] [RigTune worker/INFO]: Launch to title screen: 21194 ms (46 mods); launch-time trend: SLOWER: +94.7 % vs the median 10.9 s of 10 comparable launches (floor 12.6 %); changed since the previous one: MOD_COUNT
+runC launch 2: [11:22:02] [RigTune worker/INFO]: Launch to title screen: 15527 ms (46 mods); launch-time trend: SLOWER: +42.3 % vs the median 10.9 s of 10 comparable launches (floor 14.8 %)
+runD launch 1: [11:34:37] [RigTune worker/INFO]: Launch to title screen: 23709 ms (46 mods); launch-time trend: SLOWER: +108.7 % vs the median 11.4 s of 10 comparable launches (floor 21.9 %)
+runE1 launch 1: [12:21:27] [RigTune worker/INFO]: Launch to title screen: 17577 ms (7 mods; crash-report setup 8133 ms); launch-time trend: too few comparable launches (0 of 5)
+runE1 launch 2: [12:22:33] [RigTune worker/INFO]: Launch to title screen: 12372 ms (7 mods; crash-report setup 2865 ms); launch-time trend: too few comparable launches (1 of 5)
+runE1 launch 3: [12:23:42] [RigTune worker/INFO]: Launch to title screen: 11240 ms (7 mods; crash-report setup 3147 ms); launch-time trend: too few comparable launches (2 of 5)
+runE1 launch 4: [12:24:36] [RigTune worker/INFO]: Launch to title screen: 9449 ms (7 mods; crash-report setup 1711 ms); launch-time trend: too few comparable launches (3 of 5)
+runE1 launch 5: [12:25:53] [RigTune worker/INFO]: Launch to title screen: 10555 ms (7 mods; crash-report setup 2494 ms); launch-time trend: too few comparable launches (4 of 5)
+runE1 launch 6: [12:27:08] [RigTune worker/INFO]: Launch to title screen: 11677 ms (7 mods; crash-report setup 3772 ms); launch-time trend: IN_LINE: -2.3 % vs the median 8.1 s of 5 comparable launches, crash-report setup left out (floor 13.0 %)
+runE1 launch 7: [12:28:12] [RigTune worker/INFO]: Launch to title screen: 9523 ms (7 mods; crash-report setup 2659 ms); launch-time trend: IMPROVEMENT: -15.0 % vs the median 8.1 s of 6 comparable launches, crash-report setup left out (floor 10.0 %)
+runE1 launch 8: [12:29:27] [RigTune worker/INFO]: Launch to title screen: 10761 ms (7 mods; crash-report setup 2989 ms); launch-time trend: IN_LINE: -3.6 % vs the median 8.1 s of 7 comparable launches, crash-report setup left out (floor 11.9 %)
+runE1 launch 9: [12:30:53] [RigTune worker/INFO]: Launch to title screen: 14791 ms (46 mods; crash-report setup 3075 ms); launch-time trend: SLOWER: +46.8 % vs the median 8.0 s of 8 comparable launches, crash-report setup left out (floor 10.0 %); cause: MOD_COUNT
+runE2 launch 1: [12:32:05] [RigTune worker/INFO]: Launch to title screen: 14354 ms (46 mods; crash-report setup 3227 ms); launch-time trend: SLOWER: +38.0 % vs the median 8.1 s of 9 comparable launches, crash-report setup left out (floor 11.9 %); slower 2 launches in a row, from 2026-09-28T02:30:53Z; cause: MOD_COUNT
+runE2 launch 2: [12:33:07] [RigTune worker/INFO]: Launch to title screen: 14225 ms (46 mods; crash-report setup 2712 ms); launch-time trend: SLOWER: +42.5 % vs the median 8.1 s of 10 comparable launches, crash-report setup left out (floor 28.5 %); slower 3 launches in a row, from 2026-09-28T02:30:53Z; cause: MOD_COUNT

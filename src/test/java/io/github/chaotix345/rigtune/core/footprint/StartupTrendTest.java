@@ -284,7 +284,7 @@ class StartupTrendTest {
 		assertEquals(10_000, a.medianMs(), 1e-9);
 		assertEquals(14_000, a.latestMs(), 1e-9);
 		assertEquals(13_500, a.rawMedianMs(), 1e-9, "the same launches' launch to title, for Tools' line");
-		assertEquals("Launch time 40% higher than usual, not counting Minecraft's crash-report setup (14.0 s vs your usual ~10.0 s)",
+		assertEquals("Launch time 40% higher than usual (14.0 s vs your usual ~10.0 s, not counting Minecraft's crash-report setup)",
 				StartupTrend.regression(a).english());
 		assertTrue(StartupTrend.describe(a).contains("comparable launches, crash-report setup left out"), StartupTrend.describe(a));
 

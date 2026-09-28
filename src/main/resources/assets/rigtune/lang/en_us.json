@@ -303,7 +303,7 @@
 	"rigtune.startup.regression.streak.mod_set_changed": "Slower for your last %s launches; may be related to your mod set changing before the first of them",
 	"rigtune.startup.regression.streak.no_change": "Slower for your last %s launches; no change recorded before the first of them; possibly another program running, a cold disk cache, or a driver/OS update",
 	"rigtune.startup.regression.streak.rigtune_changed": "Slower for your last %s launches; RigTune %s → %s before the first of them",
-	"rigtune.startup.regression.without_preload": "Launch time %s%% higher than usual, not counting Minecraft's crash-report setup (%s s vs your usual ~%s s)",
+	"rigtune.startup.regression.without_preload": "Launch time %s%% higher than usual (%s s vs your usual ~%s s, not counting Minecraft's crash-report setup)",
 	"rigtune.button": "RigTune",
 	"rigtune.button.tooltip": "Hardware-aware performance suggestions",
 	"rigtune.toast.title": "RigTune: %s suggestions",

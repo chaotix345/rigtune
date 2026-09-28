@@ -177,14 +177,14 @@ public final class StartupTrend {
 	}
 
 	// The notice's message and Tools' first regression row: "Launch time 45% higher than usual (21.3 s vs your usual ~14.7 s)",
-	// or, compared without the crash-report setup (RW-19), those numbers so named.
+	// or, compared without the crash-report setup (RW-19), those numbers so named (after them: the notice line clips its end).
 	public static Text regression(Assessment a) {
 		String percent = a.deltaPercent() == null ? "?" : Long.toString(Math.round(a.deltaPercent()));
 		String latest = a.latestMs() == null ? "?" : seconds(a.latestMs());
 		String usual = a.medianMs() == null ? "?" : seconds(a.medianMs());
 		return a.preloadSubtracted()
-				? Text.of("rigtune.startup.regression.without_preload", "Launch time %s%% higher than usual, not counting Minecraft's crash-report setup "
-						+ "(%s s vs your usual ~%s s)", percent, latest, usual)
+				? Text.of("rigtune.startup.regression.without_preload", "Launch time %s%% higher than usual (%s s vs your usual ~%s s, not counting "
+						+ "Minecraft's crash-report setup)", percent, latest, usual)
 				: Text.of("rigtune.startup.regression", "Launch time %s%% higher than usual (%s s vs your usual ~%s s)", percent, latest, usual);
 	}
 

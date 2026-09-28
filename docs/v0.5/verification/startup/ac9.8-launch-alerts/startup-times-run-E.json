@@ -1,0 +1,104 @@
+{
+  "formatVersion": 1,
+  "runs": [
+    {
+      "at": "2026-09-28T02:21:27Z",
+      "ms": 17577,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0-dev+mc26.2",
+      "mods": 7,
+      "modSetHash": "614a4704a4a26eda22a5c4cb1791aa1ad2efb707b94de9ed112365bfcc9e4770",
+      "preloadMs": 8133
+    },
+    {
+      "at": "2026-09-28T02:22:33Z",
+      "ms": 12372,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0-dev+mc26.2",
+      "mods": 7,
+      "modSetHash": "614a4704a4a26eda22a5c4cb1791aa1ad2efb707b94de9ed112365bfcc9e4770",
+      "preloadMs": 2865
+    },
+    {
+      "at": "2026-09-28T02:23:42Z",
+      "ms": 11240,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0-dev+mc26.2",
+      "mods": 7,
+      "modSetHash": "614a4704a4a26eda22a5c4cb1791aa1ad2efb707b94de9ed112365bfcc9e4770",
+      "preloadMs": 3147
+    },
+    {
+      "at": "2026-09-28T02:24:36Z",
+      "ms": 9449,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0-dev+mc26.2",
+      "mods": 7,
+      "modSetHash": "614a4704a4a26eda22a5c4cb1791aa1ad2efb707b94de9ed112365bfcc9e4770",
+      "preloadMs": 1711
+    },
+    {
+      "at": "2026-09-28T02:25:53Z",
+      "ms": 10555,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0-dev+mc26.2",
+      "mods": 7,
+      "modSetHash": "614a4704a4a26eda22a5c4cb1791aa1ad2efb707b94de9ed112365bfcc9e4770",
+      "preloadMs": 2494
+    },
+    {
+      "at": "2026-09-28T02:27:08Z",
+      "ms": 11677,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0-dev+mc26.2",
+      "mods": 7,
+      "modSetHash": "614a4704a4a26eda22a5c4cb1791aa1ad2efb707b94de9ed112365bfcc9e4770",
+      "preloadMs": 3772
+    },
+    {
+      "at": "2026-09-28T02:28:12Z",
+      "ms": 9523,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0-dev+mc26.2",
+      "mods": 7,
+      "modSetHash": "614a4704a4a26eda22a5c4cb1791aa1ad2efb707b94de9ed112365bfcc9e4770",
+      "preloadMs": 2659
+    },
+    {
+      "at": "2026-09-28T02:29:27Z",
+      "ms": 10761,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0-dev+mc26.2",
+      "mods": 7,
+      "modSetHash": "614a4704a4a26eda22a5c4cb1791aa1ad2efb707b94de9ed112365bfcc9e4770",
+      "preloadMs": 2989
+    },
+    {
+      "at": "2026-09-28T02:30:53Z",
+      "ms": 14791,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0-dev+mc26.2",
+      "mods": 46,
+      "modSetHash": "837184dbd81c224c86fe580dcc89afa11d923f92c69f107b6e3c43de8893a4ee",
+      "preloadMs": 3075
+    },
+    {
+      "at": "2026-09-28T02:32:05Z",
+      "ms": 14354,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0-dev+mc26.2",
+      "mods": 46,
+      "modSetHash": "837184dbd81c224c86fe580dcc89afa11d923f92c69f107b6e3c43de8893a4ee",
+      "preloadMs": 3227
+    },
+    {
+      "at": "2026-09-28T02:33:07Z",
+      "ms": 14225,
+      "mcVersion": "26.2",
+      "rigtuneVersion": "0.5.0-dev+mc26.2",
+      "mods": 46,
+      "modSetHash": "837184dbd81c224c86fe580dcc89afa11d923f92c69f107b6e3c43de8893a4ee",
+      "preloadMs": 2712
+    }
+  ]
+}
