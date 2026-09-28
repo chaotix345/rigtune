@@ -73,6 +73,8 @@ Evidence in `local-windows-26.2/` (RESULT.md per run, scrubbed).
 | downgrade to 0.3.0 | PASS | same |
 | stale-seed `v010-dh-app-reinstalled` (AC2H.6) | PASS | dropped with "RigTune dropped its pending change to Distant Horizons: it is already installed (DistantHorizons-3.3.2-26.2-fabric-neoforge.jar)"; both changes ABANDONED; no helper at exit |
 | stale-seed `v010-dh-app-reinstalled-disabled` | PASS | same, with fabric-26.2.jar disabled instead of removed |
+| brand theseus (AC4j.3) | PASS | Apply everything held the 0.4 file group ("Held 1 operation(s)") with mods/ unchanged and maxFps applied; the next start's held notice → Cancel them: download superseded, change DISCARDED (`2026-09-28-brand-held-notice.png`) |
+| downgrades again, with WS-L2's ws-l2 | PASS, PASS | its held group has no journal entry; the check expects none |
 
 ## Static checks
 

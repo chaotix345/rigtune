@@ -173,6 +173,9 @@ Held locally during the coordinator's first CI streak, then pushed in batches.
 | AC2H.6 `stale-seed` (WS-H's RW-3) | 26df47f3 | `test_e2e_stale_seed.py` 4 | seeds `v010-dh-app-reinstalled` and `-disabled`: v010-dh's pending.json and last-apply.json with DH 3.3.2 at the group's target name, no download, no mods/update, `fabric-26.2.jar` removed or disabled. The new version starts on the state directly. Local Windows 26.2, both legs PASS: the group is dropped, the `stale_installed` line names Distant Horizons, History shows both changes ABANDONED, latest.log has "can never run" and no "will be retried", and nothing happens at exit. Release tier, 26.2 |
 | Downgrade with the Wave A sets | 26df47f3 | `test_written_v05.py` (the trim, a staged entry kept) | WS-P's ws-p is at the journal cap (50), so the composed journal had 57 entries. The old versions' own cap (MAX_ENTRIES, entries with nothing left to undo go first) then evicted the Undo-last pair the check looks for. The downgrade instance keeps the newest 46 entries plus every entry a staged op belongs to (`DOWNGRADE_HISTORY`). Local: both targets PASS with the real ws-b/f/p/p2/s/w sets |
 | Local reruns after the review round | (runs) | | helper-kill, the undo scenario with guard-apply, both downgrades and both stale-seed legs: all PASS on 2026-09-28 (`docs/v0.5/verification/e2e/local-windows-26.2/2026-09-28-*`) |
+| Merge of WS-L1, WS-L2, WS-H's RW-20 and WS-P2 (feat 1226a7e9) | fb8a36a3 | `test_written_v05.py` (stand_in_id) | compat040's ClientSettings gains "keeps", for WS-L1's ws-l1 set: a 0.4.0 save on the spare copy keeps the listed fields with their values. Proven both ways. `written.materialize` names a stand-in jar from its file when an op has no modId, so ws-l2's held-group disable goes back to 0.4's shape (no modId). That is the coordinator's decision, a recorded cross-owner edit of WS-L2's set and of `V050WrittenWsl2Test`, which stays green on both nodes. The real ws-l1 and ws-l2 sets replace their placeholders. compat040 and compat030 PASS on every set. CI 36369961853 is green |
+| AC4j.3 the launcher-brand leg | 0dd69766 | `test_e2e_brand.py` 5 | `--scenario brand`: the new jar, fabric-api, Sodium and v040-written's ws-a set (0.4's own staged file group), with `-Dminecraft.launcher.brand=theseus`. Apply everything, then quit: the helper holds the group ("Held 1 operation(s)", now in HELPER_DONE), mods/ is byte-identical, and the applied settings are APPLIED in the journal and in options.txt. On the next start the held notice appears with [Cancel them, Let RigTune apply them]. Cancel them leaves no file op, the download becomes `.rigtune-superseded`, the change is DISCARDED, and no helper runs at exit. Local Windows 26.2: PASS. Release tier, 26.2 |
+| Downgrade with WS-L2's ws-l2 | 0dd69766, fc22d701 | | ws-l2 is pending.json alone (no journal). The staged-ops check now expects no journal record for an op the sets journal nowhere. Both targets PASS locally |
 
 **AC3f.7 (`guard-apply`).** It runs after entry-check on the undo scenario's instance, in one start:
 - The update of `e2e-pin-target` 1.0.0 → 2.0.0 is refused. The installed `e2e-pinner` pins the target to `1.0.x` in its fabric.mod.json.
@@ -218,7 +221,7 @@ The fabric client gametest API is the same too: `createServer(Properties)`, `cli
 | AC3f.5 | helper-kill | local Windows PASS; Linux release tier with the push |
 | AC3f.7 | guard-apply | local Windows PASS; Linux release tier with the push |
 | AC3f.8 | snapshot_canary.py + fixture test | test in; the workflow edit after 2026-09-30 |
-| AC4j.3 | the launcher-brand leg | after WS-L1/L2 |
+| AC4j.3 | the launcher-brand leg (`--scenario brand`) | local Windows PASS; Linux release tier to run |
 | AC2H.6 | `v010-dh-app-reinstalled`, both legs (`--scenario stale-seed`) | local Windows PASS; Linux release tier to run |
 
 ## Residuals
@@ -234,7 +237,6 @@ The fabric client gametest API is the same too: `createServer(Properties)`, `cli
   - The snapshot-canary workflow edit (its resolve step calls `tools/snapshot_canary.py`) is made after the scheduled run on 2026-09-30.
   - Still to do:
     - AC3f.4 (the DH server-note run): the coordinator decides the approach.
-    - The launcher-brand leg: after WS-L1/L2.
     - The first Linux run of the release tier with this round's rows (helper-kill on both nodes, guard-apply, stale-seed, the downgrades with v050 sets): the coordinator schedules it.
   - **The generated seeds (vg §1.5) as designed can't reproduce v010-dh's shape.** 0.2.0 and later cancel their own pending update once the mod's build is queued in mods/update (`rigtune.status.queued_update_dropped` is in 0.2.0+mc26.3's, 0.3.0's and 0.4.0's lang files). So the old side of a generated seed drops the group itself.
     - The proposed honest equivalent: the old version's held DH group is carried across the self-update and finished by 0.5 at its exit.

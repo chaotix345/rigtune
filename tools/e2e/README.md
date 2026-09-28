@@ -77,6 +77,11 @@ Two more modes (Phase 5):
   - The checks: the group leaves pending.json; the `stale_installed` status line names the mod; History shows the
     changes ABANDONED or DISCARDED; latest.log has "can never run" and no "will be retried"; no helper runs at exit;
     mods/ doesn't change.
+- **`--scenario brand`** (AC4j.3): the new version under the Modrinth App's brand (`-Dminecraft.launcher.brand=theseus`)
+  with Sodium and v040-written's ws-a set staged.
+  - Apply everything, then quit: the helper holds the file group, mods/ stays byte-identical, and the settings apply.
+  - On the next start, the held notice's Cancel them drops the group: the download becomes `.rigtune-superseded`, the
+    journal change DISCARDED, and no helper runs at exit.
 - **Downgrade and a full journal.** The downgrade instance keeps the newest 46 composed journal entries, plus every entry
   a staged op belongs to. The old versions keep 50 and add up to 2 of their own. Over the cap they evict the entries with
   nothing left to undo first, which would take the checked Undo-last pair with them. compat040 reads each set's journal
