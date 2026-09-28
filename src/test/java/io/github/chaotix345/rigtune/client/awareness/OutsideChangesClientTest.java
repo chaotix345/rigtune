@@ -167,6 +167,23 @@ class OutsideChangesClientTest {
 		assertTrue(again.stream().allMatch(r -> r.category() == Category.SETTING && r.selectedByDefault()));
 	}
 
+	// Review-11 FEAT-5: RigTune applied 12, the player set 20 in game, the app's sync wrote 8. "Apply RigTune's values
+	// again" applies 12, so the notice shows 12 wherever the value before the outside change isn't RigTune's; the reason
+	// names the value RigTune last applied, not "the value before".
+	@Test
+	void theValueApplyAgainWillSetIsShownWhenItIsNotTheOneBefore() {
+		OutsideOptions.Change third = new OutsideOptions.Change("vanilla.renderDistance", "20", "8", "12");
+		Notice notice = OutsideChanges.notice("settings-changed-outside:1", List.of(third), Map.of(), LauncherInfo.UNKNOWN);
+		assertEquals("A setting was changed outside the game since you last played (Render distance: 20 → 8; RigTune's value: 12).",
+				notice.message().english());
+		assertTrue(notice.detail().english().startsWith("Changed: Render distance: 20 → 8; RigTune's value: 12."), notice.detail().english());
+		Notice usual = OutsideChanges.notice("settings-changed-outside:2", CHANGES.subList(0, 1), Map.of(), LauncherInfo.UNKNOWN);
+		assertFalse(usual.message().english().contains("RigTune's value:"), "the value before was RigTune's: " + usual.message().english());
+		Recommendation again = OutsideChanges.reapply(List.of(third), Map.of()).getFirst();
+		assertEquals(new Action.SetSetting("vanilla.renderDistance", "8", "12"), again.action());
+		assertEquals("The value RigTune last applied.", again.reasonText().english());
+	}
+
 	@Test
 	void keepOrApplyRetiresTheNoticeOnce() {
 		OutsideChanges.found(CHANGES);

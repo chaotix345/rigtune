@@ -178,6 +178,11 @@ which reads as runner spread; the first streak after merging gives the medians. 
 | L9 | Tools opened before the probe finished never showed the advice | `ToolsScreen.tick()` rebuilds when `HardwareProbe.perfCounters()` changes; checked in the walk | f9919dc8 |
 | L10 | This file | this section, the deviations, the evidence | this commit |
 
+## Review-11 fixes (branch fix/v05-r11-ws-w)
+| id | sev | finding | fix | test (red first) |
+|---|---|---|---|---|
+| FEAT-5 | L | RigTune applied 12, the player set 20 in game, the sync wrote 8: the notice said "Render distance: 20 → 8" while "Apply RigTune's values again" sets 12, shown nowhere; the reapply reason ("RigTune's value before it was changed outside the game") was untrue there | when the value before the outside change isn't RigTune's and Apply again would set RigTune's, the change reads "Render distance: 20 → 8; RigTune's value: 12" (new key `rigtune.outside.change_and_rigtune`) in the message's example and the detail; `rigtune.outside.reason` is now "The value RigTune last applied." | `OutsideChangesClientTest.theValueApplyAgainWillSetIsShownWhenItIsNotTheOneBefore` (failed on the old message) |
+
 ## Residuals (not fixed, with why)
 - A snapshot written by a 0.5 build before the exit stamp (a pre-release) has no `$exitAt`, so the 0.4-in-between check
   can't tell and compares as before.

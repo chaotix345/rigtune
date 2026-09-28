@@ -192,7 +192,14 @@ public final class OutsideChanges {
 	static Notice notice(String key, List<OutsideOptions.Change> changes, Map<String, SettingLabel> labels, LauncherInfo launcher) {
 		List<Text> names = new ArrayList<>();
 		for (OutsideOptions.Change change : changes.subList(0, Math.min(MAX_NAMES, changes.size()))) {
-			names.add(SettingValues.describe(labels.get(change.key()), change.key(), change.before(), change.now()));
+			SettingLabel label = labels.get(change.key());
+			Text described = SettingValues.describe(label, change.key(), change.before(), change.now());
+			// Review-11 FEAT-5: "Apply RigTune's values again" sets RigTune's value, which the player may have changed in game
+			// before the outside change: then it is named too (when Apply again would set it).
+			boolean third = !SettingValues.same(change.before(), change.rigtune()) && !SettingValues.same(change.now(), change.rigtune());
+			names.add(!third ? described
+					: Text.of("rigtune.outside.change_and_rigtune", "%s; RigTune's value: %s", described,
+							Text.literal(SettingValues.valueLabel(label, change.rigtune()))));
 		}
 		if (changes.size() > MAX_NAMES) {
 			names.add(Text.literal("…"));
@@ -244,7 +251,7 @@ public final class OutsideChanges {
 			}
 			out.add(Recommendation.of("set:" + change.key(), Category.SETTING, Impact.LOW,
 					SettingValues.describe(labels.get(change.key()), change.key(), change.now(), change.rigtune()),
-					Text.of("rigtune.outside.reason", "RigTune's value before it was changed outside the game."),
+					Text.of("rigtune.outside.reason", "The value RigTune last applied."),
 					new Action.SetSetting(change.key(), change.now(), change.rigtune()), true));
 		}
 		return out;
