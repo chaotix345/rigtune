@@ -3,10 +3,15 @@ package io.github.chaotix345.rigtune.client;
 import io.github.chaotix345.rigtune.RigTune;
 import io.github.chaotix345.rigtune.client.launcher.ModFilesService;
 import io.github.chaotix345.rigtune.client.undo.ClientJournal;
+import io.github.chaotix345.rigtune.core.apply.ApplyResult;
+import io.github.chaotix345.rigtune.core.apply.PendingActions;
 import io.github.chaotix345.rigtune.core.awareness.AwarenessStore;
 import io.github.chaotix345.rigtune.core.history.FirstRun;
+import io.github.chaotix345.rigtune.core.history.Journal;
+import io.github.chaotix345.rigtune.core.history.JournalCache;
 import org.jspecify.annotations.Nullable;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
@@ -54,7 +59,10 @@ public final class FirstRunService {
 	public void load() {
 		load(() -> {
 			Path configDir = controller.configDir();
-			return FirstRun.isNew(ClientJournal.get(), configDir);
+			// review 11 PERF-2 (a marked WS-H edit): the start hook's readers share one parse of history.json.
+			Journal.Snapshot history = JournalCache.snapshot(ClientJournal.get());
+			return FirstRun.isNew(history.state(), history.entries(), Files.exists(ApplyResult.defaultPath(configDir)),
+					Files.exists(PendingActions.defaultPath(configDir)));
 		});
 	}
 

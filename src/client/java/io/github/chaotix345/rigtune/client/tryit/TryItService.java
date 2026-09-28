@@ -26,6 +26,7 @@ import io.github.chaotix345.rigtune.core.history.ApplyFailures;
 import io.github.chaotix345.rigtune.core.history.ChangeRecorder;
 import io.github.chaotix345.rigtune.core.history.HistoryModel;
 import io.github.chaotix345.rigtune.core.history.Journal;
+import io.github.chaotix345.rigtune.core.history.JournalCache;
 import io.github.chaotix345.rigtune.core.history.JournalChange;
 import io.github.chaotix345.rigtune.core.history.JournalEntry;
 import io.github.chaotix345.rigtune.core.model.Action;
@@ -943,7 +944,8 @@ public final class TryItService {
 
 		@Override
 		public Journal.Snapshot history() {
-			return ClientJournal.get().snapshot();
+			// review 11 PERF-2 (a marked WS-H edit): shared with the worker's other readers while history.json is unchanged.
+			return JournalCache.snapshot(ClientJournal.get());
 		}
 
 		@Override
