@@ -117,6 +117,40 @@ class StreakTests(unittest.TestCase):
         finally:
             cs.gh_text = original
 
+    # review-11 CI-1: build.yml calls e2e.yml, whose `jars` job and release-tier legs are skipped by design in every push or
+    # dispatch run. The real job list of run 36380625735 (feat/v0.5.0 111cb2be, the split on) counts.
+    POST_E6 = [("rules-consistency", "success"), ("java", "success"), ("rules-v1-compat", "success"), ("gametest-matrix", "success"),
+               ("python", "success"), ("client game tests (26.3, Vulkan, part 1/2)", "success"),
+               ("client game tests (26.3, OpenGL, part 1/2)", "success"), ("client game tests (26.3, Vulkan, part 2/2)", "success"),
+               ("client game tests (26.2, OpenGL, part 2/2)", "success"), ("client game tests (26.3, OpenGL, part 2/2)", "success"),
+               ("client game tests (26.2, OpenGL, part 1/2)", "success"), ("e2e / matrix", "success"), ("e2e / jars", "skipped"),
+               ("e2e / e2e upgrade-from-0.4.0 (26.2)", "success"), ("e2e / e2e upgrade-from-0.4.0 (26.3)", "success"),
+               ("e2e / battery OSHI leg (${{ matrix.mc }})", "skipped"), ("e2e / stutter script (${{ matrix.mc }})", "skipped")]
+
+    def post_e6(self, **changes):
+        jobs = [dict(GREEN_JOBS[0], name=name, conclusion=changes.get(name, conclusion)) for name, conclusion in self.POST_E6]
+        return [j for j in jobs if j["conclusion"] != "missing"]
+
+    def test_a_post_e6_run_with_its_design_skipped_e2e_jobs_counts(self):
+        ids, kinds = self.count([run(1, 1)], {1: self.post_e6()})
+        self.assertEqual([1], ids, kinds)
+        # The RC streak also requires the E2E push jobs.
+        ids, _ = self.count([run(1, 1)], {1: self.post_e6()}, extra=("e2e / e2e upgrade-from-0.4.0 (26.2)", "e2e / e2e upgrade-from-0.4.0 (26.3)"))
+        self.assertEqual([1], ids)
+
+    def test_only_the_design_skipped_e2e_jobs_may_be_skipped(self):
+        for name in ("client game tests (26.2, OpenGL, part 2/2)", "e2e / e2e upgrade-from-0.4.0 (26.3)", "e2e / matrix", "java"):
+            with self.subTest(name=name):
+                _, kinds = self.count([run(1, 1)], {1: self.post_e6(**{name: "skipped"})})
+                self.assertEqual("break", kinds[1])
+        # A required job that is one of the design-skipped names still has to succeed.
+        _, kinds = self.count([run(1, 1)], {1: self.post_e6()}, extra=("e2e / jars",))
+        self.assertEqual("break", kinds[1])
+
+    def test_a_split_leg_needs_every_part(self):
+        _, kinds = self.count([run(1, 1)], {1: self.post_e6(**{"client game tests (26.3, OpenGL, part 2/2)": "missing"})})
+        self.assertEqual("break", kinds[1])
+
     def test_runs_are_taken_oldest_first_whatever_the_listing_order(self):
         ids, _ = self.count([run(3, 3), run(1, 1, conclusion="failure"), run(2, 2)])
         self.assertEqual([2, 3], ids)

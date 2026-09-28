@@ -4,8 +4,9 @@
                               [--write docs/v0.5/verification/ci-streak.md]
 
 A run counts when its event is push or workflow_dispatch, its attempt is 1, every job it has concluded success (none
-skipped), and it has ws-ci's minimum set: REQUIRED_JOBS and a job for each of REQUIRED_LEGS (with the split on, a leg's
-parts count as that leg), plus any --require job (the RC streak adds WS-E's E2E push jobs). Runs are taken oldest first:
+skipped, except DESIGN_SKIPPED: e2e.yml's jobs that every build.yml push or dispatch skips by design), and it has ws-ci's
+minimum set: REQUIRED_JOBS and each of REQUIRED_LEGS (with the split on, every part of the leg), plus any --require job
+(the RC streak adds WS-E's E2E push jobs), each concluded success. Runs are taken oldest first:
 - a cancelled run neither counts nor breaks the streak (a newer push or dispatch cancels an overlapping one);
 - a run from another event (pull_request, ...) neither counts nor breaks it;
 - any other completed run that doesn't qualify (a failure, a re-run, a skipped or missing job) breaks it;
@@ -26,6 +27,9 @@ from pathlib import Path
 
 REQUIRED_JOBS = ("java", "python", "gametest-matrix", "rules-consistency", "rules-v1-compat")
 REQUIRED_LEGS = ("26.2, OpenGL", "26.3, OpenGL", "26.3, Vulkan")
+# review-11 CI-1: jobs of the reusable e2e.yml that build.yml's runs skip by design: `jars` (build.yml passes its own jars)
+# and the release tier's legs. Skipped, they neither count against a run nor for it; any other skipped job breaks.
+DESIGN_SKIPPED = ("e2e / jars", "e2e / stutter script", "e2e / battery OSHI leg")
 GAME_TEST_PREFIX = "client game tests ("
 COUNTED_EVENTS = ("push", "workflow_dispatch")
 CLASS_LINE = re.compile(r"Game-test class (\w+) runTest (returned|threw) in (\d+) ms")
@@ -64,6 +68,17 @@ def job_log(job_id, repo=None):
         return None
 
 
+def part_of(name):
+    """(k, n) for "client game tests (26.2, OpenGL, part k/n)", None otherwise."""
+    m = re.search(r", part (\d+)/(\d+)\)$", name)
+    return (int(m.group(1)), int(m.group(2))) if m and name.startswith(GAME_TEST_PREFIX) else None
+
+
+def design_skipped(job, required):
+    name = job.get("name", "")
+    return job.get("conclusion") == "skipped" and name not in required and name.startswith(DESIGN_SKIPPED)
+
+
 def leg_of(name):
     """"26.2, OpenGL" for "client game tests (26.2, OpenGL)" and its parts ("…, part 1/2)"); None for other jobs."""
     if not name.startswith(GAME_TEST_PREFIX) or not name.endswith(")"):
@@ -83,16 +98,26 @@ def verdict(run, jobs, extra=()):
         return "break", "attempt %s (re-run)" % run.get("attempt")
     if run.get("conclusion") != "success":
         return "break", "conclusion " + str(run.get("conclusion"))
+    required = REQUIRED_JOBS + tuple(extra)
     names = [j.get("name", "") for j in jobs]
-    not_green = [j.get("name") + "=" + str(j.get("conclusion")) for j in jobs if j.get("conclusion") != "success"]
+    not_green = [j.get("name") + "=" + str(j.get("conclusion")) for j in jobs
+                 if j.get("conclusion") != "success" and not design_skipped(j, required)]
     if not_green:
         return "break", "jobs not green: " + ", ".join(not_green)
     legs = {leg_of(name) for name in names}
-    missing = [name for name in REQUIRED_JOBS + tuple(extra) if name not in names]
+    missing = [name for name in required if name not in names]
     missing += [GAME_TEST_PREFIX + leg + ")" for leg in REQUIRED_LEGS if leg not in legs]
+    parts = {}
+    for name in names:
+        part = part_of(name)
+        if part:
+            parts.setdefault((leg_of(name), part[1]), set()).add(part[0])
+    missing += ["%s%s, part %d/%d)" % (GAME_TEST_PREFIX, leg, k, n) for (leg, n), seen in sorted(parts.items())
+                for k in range(1, n + 1) if k not in seen]
     if missing:
         return "break", "missing jobs: " + ", ".join(missing)
-    return "count", "all %d jobs green" % len(jobs)
+    skipped = sum(1 for j in jobs if j.get("conclusion") == "skipped")
+    return "count", "all %d jobs green%s" % (len(jobs) - skipped, " (%d skipped by design)" % skipped if skipped else "")
 
 
 def streak(runs, jobs_of, sha=None, extra=()):
