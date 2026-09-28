@@ -123,11 +123,13 @@ repair steps are a dynamic family registered in `V05LangFamilies.launcherRepair`
   that run). The 0.5 helper drops the group as installed another way. The folder is already right (the new jar is
   enabled), but History says "Not applied" and Undo won't offer it. This is the documented residual of AC4f.2 and the
   safe side: RigTune never claims a jar it can't prove.
-- **A group half done with no record** (a 0.1.0-0.3.x helper killed between the two renames of a group with no
-  download left, or a failed write of a 0.4+ record) is held under LAUNCHER, with the mod missing until the player
-  chooses. Cancel them then makes it permanent, which looks the same as the launcher disabling the mod. Discard pending
-  does the same in 0.4. The common form, a failed rollback of 0.1-0.3 (`PartlyApplied`), and every recorded 0.4+ group
-  are finished instead of held.
+- **A group half done without a record that proves it** is held under LAUNCHER/PENDING, with the mod missing until the
+  player chooses; Cancel them then makes it permanent, which looks the same as the launcher disabling the mod (Discard
+  pending does the same in 0.4). Since review-11 (APPLY-5) this covers a 0.1-0.3 failed rollback (`PartlyApplied`'s
+  inference from the files), a record 0.4 wrote (no `done` mark), and a 0.5 helper killed between a rename and the
+  record's `done` mark. The files alone can't tell RigTune's disable from the launcher's own, so only a rename the
+  record marks done (or an op the last run did) counts as started. Under RIGTUNE such a group still runs: its enable is
+  dropped as installed another way when only the files say it was done.
 - **The leftover listener's footprint keys** (its idle tick: one volatile read, 0 bytes, unit-tested) come with the
   footprint checkpoint after Wave B (SPEC 1h). FootprintGameTest's run never registers the listener.
 - **Stats on screen init/rebuild** (the coordinator's X8 ruling, 2026-09-27): under LAUNCHER or PENDING, the notices'
@@ -252,3 +254,24 @@ tick listener exists only after a leftover with mod-file ops. Every value stays 
 | AC3f.6 (the record through the forcing writer before the first rename) | verified | `UnfinishedGroupsDurableTest` (4), `ApplyExecutorTest.theRecordIsForcedToDiskBeforeTheFirstRename` |
 | AC2V.2 (the vanished-file rollback message; name-taken keeps its own) | verified | `ApplyExecutorTest` (4 rollback cases) |
 | X6 for the two notices (Tab stops, narration, the three sizes) | verified | `A11yGameTest.walkLauncherNotices` (3 legs) |
+
+## Review-11 fixes (branch `fix/v05-r11-ws-l2`)
+
+| id | sev | status | commit | the test that failed first |
+|---|---|---|---|---|
+| APPLY-5 (a killed helper's record plus the launcher's own disable skipped the hold) | M | FIXED | 9b05907d | `ApplyExecutorHoldTest.aRolledBackRenameAndTheLaunchersOwnDisableStayHeld`, `…aRolledBackRenameIsNeverClaimedAsDoneEarlier`, `…a04RecordIsNoProofUnderTheHold`, `…aFailedRollbackOfAnOldHelperIsHeld` (all four red on 111cb2be: the group ran, and the app's disable came back "Already done earlier" with a resultPath) |
+| APPLY-3 ("restart to apply N" counted held ops) | M | FIXED | badc0e00 | the old `heldAndRepair` assertion "restart count == 2" under LAUNCHER, which passed in CI 36366836591 (the old code counted the held group); now no restart part and the held line; `LauncherRepairServiceTest.theHeldOpsAreTheOnesARestartNeverApplies` |
+| APPLY-6 (Cancel re-derives held, no policy check, silent busy lock) | L | FIXED | badc0e00 | `LauncherRepairServiceTest.cancelUnderAPolicyThatNoLongerHoldsCancelsNothing`, `…cancelTakesOnlyWhatTheNoticeCounted`, `…cancelWithTheLockBusySaysSo` |
+| APPLY-7 (an unlistable .index failed open) | L | FIXED (a minimal edit in WS-L1's `InstanceEvidence`; ws-l1 told) | 07f70afa | `InstanceEvidenceTest.anIndexThatIsAFileIsNoEvidenceAndAnUnreadableOneFailsClosed` (POSIX; runs in CI) |
+| APPLY-8 (an Error around modFiles() at exit) | L | FIXED | 07f70afa | none (an Error in the lazy service creation can't be provoked in a unit test); `catch (Throwable)` with a log line, then PENDING |
+
+- APPLY-5's design: `UnfinishedGroups.Rename` gets `done` (`Boolean`; the 3-argument constructor kept, null = a 0.4
+  record). The helper writes a pass's renames not done, marks each done right after it happens and not done after its
+  rollback (each through the forcing writer). `heldIndexes` counts a group as started only by a rename marked done and
+  still in effect, or an op the last run did. `runGroup` still takes an unmarked 0.4 rename in effect as done earlier
+  (without the hold, as in 0.4), never one marked put back. 0.4.0 reads the file with the field ignored.
+- The crash-replay tests now kill after the rename's mark (the recording writer); `killedBetweenARenameAndItsMarkErrsSafe`
+  pins the window between a rename and its mark: the enable is dropped as installed another way, the folder stays right.
+- APPLY-3's count: `RealController.pendingChanges()` leaves out `staged.unowned(heldOps())`, the service's last read of
+  the held ops (in memory, live against the policy; none before its first read). `restartParts` adds
+  `rigtune.repair.held.status` for them. RealController is WS-K's frozen file; the finding names these lines.
