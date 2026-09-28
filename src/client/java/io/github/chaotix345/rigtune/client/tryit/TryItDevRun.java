@@ -46,7 +46,8 @@ import java.util.UUID;
 //   aa            from the title screen: a warm-up Measure, then 5 Measure pairs in the benchmark world with nothing
 //                 changed, each judged as Try it would (the floor, the kind).
 //   now:<save>    opens that singleplayer save, tries render distance 2 lower where the player stands (the real chain),
-//                 reverts it, then measures a manual pair with the same change at the same spot.
+//                 reverts it, then measures a manual pair with the same change at the same spot. now:<save>:warm runs
+//                 one plain Measure run there first (as a player who has been in the world a while).
 //   restart1..3   a Sodium defer-mode try across real restarts: 1 starts it (before run, staged) and quits; 2 measures
 //                 after the restart and reverts (staged again) and quits; 3 logs the file and History.
 // It starts from the start hook's derive (TryItService.derive, which loads this class only when the variable is set) and
@@ -102,7 +103,8 @@ final class TryItDevRun {
 			if ("aa".equals(MODE)) {
 				aa(minecraft);
 			} else if (MODE.startsWith("now:")) {
-				now(minecraft, MODE.substring("now:".length()));
+				String[] save = MODE.substring("now:".length()).split(":");
+				now(minecraft, save[0], save.length > 1 && "warm".equals(save[1]));
 			} else if (MODE.startsWith("restart")) {
 				restart(minecraft, MODE);
 			} else {
@@ -205,7 +207,7 @@ final class TryItDevRun {
 
 	// ---- now:<save>
 
-	private void now(Minecraft minecraft, String save) {
+	private void now(Minecraft minecraft, String save, boolean warm) {
 		TryItView view = controller.tryIt();
 		switch (step) {
 			case 0 -> {
@@ -221,8 +223,18 @@ final class TryItDevRun {
 				if (minecraft.player == null || minecraft.level == null || minecraft.gui.screen() != null) {
 					return;
 				}
-				step = 2;
+				step = warm ? 10 : 2;
 				wait = 20 * 20;
+				if (warm) {
+					log("a warm-up Measure run here first");
+					queue.add(new BenchmarkRequest(BenchmarkRequest.Mode.MEASURE, Scene.CURRENT, null));
+				}
+			}
+			case 10 -> {
+				if (runHere(minecraft)) {
+					step = 2;
+					wait = 20 * 5;
+				}
 			}
 			case 2 -> {
 				rd = minecraft.options.renderDistance().get();
