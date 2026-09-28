@@ -32,7 +32,8 @@ jobs:
           echo "801cd3b8e91c6a27b819d64c5b433bea6d7ac99d4776cb853c873a9cafdd868a  build/baseline/rigtune-0.4.0+mc26.2.jar" | sha256sum -c -
           ./gradlew --no-daemon :26.2:jar :26.2:downloadAssets :26.2:prefetchDependencies :26.2:e2eDriverJar "-Pe2e.oldJar=$PWD/build/baseline/rigtune-0.4.0+mc26.2.jar"
       - name: Runner
-        run: echo "image $ImageOS $ImageVersion; $(lscpu | sed -n 's/^Model name: *//p'); $(nproc) CPUs"
+        run: |
+          echo "image $ImageOS $ImageVersion; $(lscpu | sed -n 's/^Model name: *//p'); $(nproc) CPUs"
       - name: Startup, 0.4.0 and this build, fresh and returning
         timeout-minutes: 25
         run: bash tools/ci/baseline040.sh 26.2
